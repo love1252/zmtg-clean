@@ -5,6 +5,12 @@ import {
   institutionStats,
   institutionSuggestions,
 } from '@/modules/workspace/domain/institution-dashboard';
+import {
+  platformCapabilityCards,
+  platformHealthItems,
+  platformMetrics,
+  platformNavItems,
+} from '@/modules/workspace/domain/platform-dashboard';
 
 describe('workspace dashboard domain', () => {
   it('keeps institution navigation unique with one active entry', () => {
@@ -24,5 +30,21 @@ describe('workspace dashboard domain', () => {
     expect(institutionStats.map((item) => item.label)).toEqual(
       expect.arrayContaining(['累计客户数', '活跃旅程数', '预约转化率', '待处理随访']),
     );
+  });
+
+  it('keeps platform navigation unique with one active entry', () => {
+    const labels = platformNavItems.map((item) => item.label);
+
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(platformNavItems.filter((item) => item.active)).toHaveLength(1);
+    expect(labels).toEqual(
+      expect.arrayContaining(['平台总览', '租户管理', '产品与套餐', '开放连接中心', '权限与组织']),
+    );
+  });
+
+  it('keeps platform operational cards meaningful', () => {
+    expect(platformMetrics).toHaveLength(6);
+    expect(platformHealthItems).toHaveLength(4);
+    expect(platformCapabilityCards.map((item) => item.title)).toEqual(['开放接口', '连接器治理', '权限审计']);
   });
 });
