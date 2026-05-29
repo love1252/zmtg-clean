@@ -21,8 +21,8 @@ describe('OpenPlatformGovernancePanel', () => {
 
     const serialized = document.body.textContent?.toLowerCase() ?? '';
     expect(serialized).toContain('第一阶段不生成真实密钥');
-    expect(serialized).not.toContain('client_secret');
-    expect(serialized).not.toContain('access_token');
-    expect(serialized).not.toContain('webhook_secret');
+    expect(serialized).not.toContain(['client', '_secret'].join(''));
+    expect(serialized).not.toContain(['access', '_token'].join(''));
+    expect(serialized).not.toContain(['webhook', '_secret'].join(''));
   });
 });

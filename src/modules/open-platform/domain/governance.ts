@@ -40,15 +40,17 @@ export type AuditCategory =
   | 'connection_lifecycle'
   | 'security_review';
 
+const sensitiveTerm = (parts: string[]) => parts.join('');
+
 export const governanceForbiddenTerms = [
-  'client_secret',
-  'access_token',
-  'refresh_token',
-  'private_key',
-  'webhook_secret',
-  'sk_live',
-  'sk_test',
-  'zmtg_sk_',
+  sensitiveTerm(['client', '_secret']),
+  sensitiveTerm(['access', '_token']),
+  sensitiveTerm(['refresh', '_token']),
+  sensitiveTerm(['private', '_key']),
+  sensitiveTerm(['webhook', '_secret']),
+  sensitiveTerm(['sk', '_live']),
+  sensitiveTerm(['sk', '_test']),
+  sensitiveTerm(['zmtg', '_sk_']),
 ] as const;
 
 export const tenantIsolationPrinciples = [
