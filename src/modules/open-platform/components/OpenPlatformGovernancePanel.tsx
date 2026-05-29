@@ -28,6 +28,25 @@ const resourceLabels: Record<string, string> = {
   platform_health: '平台健康',
 };
 
+const auditActionLabels: Record<string, string> = {
+  'tenant.aggregate.read': '读取租户聚合态势',
+  'permission.policy.review': '审查权限策略',
+  'connection.lifecycle.transition': '变更开放连接状态',
+  'security.review.complete': '完成安全审查',
+};
+
+const auditFieldLabels: Record<string, string> = {
+  eventId: '事件编号',
+  actorId: '操作者编号',
+  actorRole: '操作者角色',
+  tenantScope: '租户范围',
+  resourceType: '资源类型',
+  resourceId: '资源编号',
+  action: '动作',
+  result: '结果',
+  occurredAt: '发生时间',
+};
+
 export function OpenPlatformGovernancePanel() {
   return (
     <section className="space-y-5" aria-labelledby="open-platform-governance-heading">
@@ -36,7 +55,7 @@ export function OpenPlatformGovernancePanel() {
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/[0.08] px-3.5 py-1.5 text-xs font-semibold text-cyan-100">
               <ShieldCheck className="h-4 w-4" />
-              Phase 1 Governance Baseline
+              第一阶段治理基线
             </div>
             <h2 id="open-platform-governance-heading" className="mt-4 text-2xl font-semibold tracking-normal text-white sm:text-3xl">
               开放平台基础治理
@@ -184,12 +203,14 @@ export function OpenPlatformGovernancePanel() {
               <div key={event.category} className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h4 className="text-sm font-semibold tracking-normal text-white">{event.title}</h4>
-                  <span className="rounded-full border border-violet-300/20 bg-violet-300/[0.08] px-2.5 py-1 text-xs font-semibold text-violet-100">{event.exampleAction}</span>
+                  <span className="rounded-full border border-violet-300/20 bg-violet-300/[0.08] px-2.5 py-1 text-xs font-semibold text-violet-100">
+                    {auditActionLabels[event.exampleAction] ?? event.title}
+                  </span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {event.requiredFields.slice(0, 6).map((field) => (
                     <span key={field} className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-slate-300">
-                      {field}
+                      {auditFieldLabels[field] ?? field}
                     </span>
                   ))}
                 </div>
