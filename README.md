@@ -51,6 +51,20 @@ See:
 docs/architecture/zmtg-new-project-architecture-design.md
 ```
 
+## Autonomous Workflow
+
+Codex 按仓库内的自主执行规则推进分支、测试、PR、开发日志和风险升级：
+
+```text
+docs/operations/codex-autonomous-workflow.md
+```
+
+开发日志记录在：
+
+```text
+docs/devlog/
+```
+
 ## Engineering Rules
 
 - Do not trust tenant IDs from browser localStorage or arbitrary request headers.

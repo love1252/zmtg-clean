@@ -6,9 +6,12 @@ describe('MarketingHome', () => {
   it('renders the ZMTG brand promise and primary actions', () => {
     render(<MarketingHome />);
 
-    expect(screen.getByAltText('智美天工')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '让医美经营拥有智能体驱动' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: '立即试用' })[0]).toHaveAttribute('href', '/login');
-    expect(screen.getByRole('link', { name: '平台登录' })).toHaveAttribute('href', '/platform-login');
+    expect(document.querySelector('[aria-label="智美天工 ZHIMEI TIANGONG"]')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /让医美经营\s*更懂每位客户/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '预约演示' })).toHaveAttribute('href', '/login');
+    screen.getAllByRole('link', { name: '预约增长诊断 →' }).forEach((link) => {
+      expect(link).toHaveAttribute('href', '/login');
+    });
+    expect(screen.getByRole('link', { name: '查看客户旅程' })).toHaveAttribute('href', '#journey');
   });
 });
