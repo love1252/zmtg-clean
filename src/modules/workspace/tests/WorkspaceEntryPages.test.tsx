@@ -32,6 +32,7 @@ describe('workspace entry pages', () => {
     expect(screen.getByRole('button', { name: '客户中心' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '机构端移动导航' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：客户中心' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '退出工作台' })).toBeInTheDocument();
     expect(screen.getByText('AI 经营副驾驶建议')).toBeInTheDocument();
     expect(screen.getByText('累计客户资产')).toBeInTheDocument();
     expect(screen.getByText('客户旅程看板')).toBeInTheDocument();
@@ -49,6 +50,7 @@ describe('workspace entry pages', () => {
     expect(screen.getByRole('button', { name: '权限与审计' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '平台端移动导航' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：开放连接中心' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '退出平台' })).toBeInTheDocument();
     expect(screen.getByText('平台增长与调用趋势')).toBeInTheDocument();
     expect(screen.getByText('开放接口治理')).toBeInTheDocument();
   });

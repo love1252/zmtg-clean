@@ -92,6 +92,12 @@ export function PlatformConsole() {
               <button type="button" aria-label="通知" className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/[0.06] text-slate-300">
                 <Bell className="h-5 w-5" />
               </button>
+              <LogoutButton
+                redirectTo="/platform-login"
+                className="h-10 shrink-0 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-xs font-semibold text-slate-300 md:hidden"
+              >
+                退出平台
+              </LogoutButton>
               <span className="hidden items-center gap-2 rounded-full border border-blue-300/20 bg-blue-300/[0.08] px-3 py-1.5 font-semibold text-cyan-100 sm:inline-flex">
                 <span className="grid h-6 w-6 place-items-center rounded-full bg-cyan-300/20 text-xs text-cyan-100">超</span>
                 超级管理员

@@ -104,7 +104,15 @@ export function InstitutionWorkspace() {
           <nav aria-label="机构端移动导航" className="sticky top-0 z-20 border-b border-white/70 bg-white/84 px-4 py-3 shadow-sm shadow-slate-200/50 backdrop-blur-xl md:hidden">
             <div className="mb-2 flex items-center justify-between gap-3">
               <span className="text-xs font-semibold text-slate-500">机构导航</span>
-              <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700">今日高意向 18</span>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700">今日高意向 18</span>
+                <LogoutButton
+                  redirectTo="/login"
+                  className="h-8 shrink-0 rounded-full border border-rose-200 bg-rose-50 px-2.5 text-xs font-semibold text-rose-600"
+                >
+                  退出工作台
+                </LogoutButton>
+              </div>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {institutionNavItems.map((item) => (
