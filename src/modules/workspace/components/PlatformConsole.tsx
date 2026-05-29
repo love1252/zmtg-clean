@@ -10,6 +10,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
+import { OpenPlatformGovernancePanel } from '@/modules/open-platform/components/OpenPlatformGovernancePanel';
 import {
   platformCapabilityCards,
   platformHealthItems,
@@ -22,7 +23,7 @@ const trendBars = [48, 56, 63, 68, 74, 82, 88, 93, 98, 108];
 
 export function PlatformConsole() {
   return (
-    <main className="min-h-screen overflow-hidden bg-[#06111f] text-white">
+    <main className="min-h-screen overflow-x-hidden bg-[#06111f] text-white">
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(37,99,235,0.28),transparent_34%),radial-gradient(circle_at_82%_20%,rgba(20,184,166,0.18),transparent_30%),linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[length:auto,auto,44px_44px,44px_44px]" />
       <div className="relative flex min-h-screen">
         <aside className="hidden w-[286px] shrink-0 border-r border-white/10 bg-[#071322]/88 text-slate-200 shadow-2xl shadow-black/30 backdrop-blur-xl md:flex md:flex-col">
@@ -264,6 +265,8 @@ export function PlatformConsole() {
                 </article>
               ))}
             </section>
+
+            <OpenPlatformGovernancePanel />
           </div>
         </section>
       </div>

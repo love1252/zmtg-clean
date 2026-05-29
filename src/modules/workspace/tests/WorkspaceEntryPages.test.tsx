@@ -53,5 +53,9 @@ describe('workspace entry pages', () => {
     expect(screen.getByRole('button', { name: '退出平台' })).toBeInTheDocument();
     expect(screen.getByText('平台增长与调用趋势')).toBeInTheDocument();
     expect(screen.getByText('开放接口治理')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '开放平台基础治理' })).toBeInTheDocument();
+    expect(screen.getByText('服务端租户上下文')).toBeInTheDocument();
+    expect(screen.getByText('权限样例矩阵')).toBeInTheDocument();
+    expect(screen.getByText('审计事件词汇')).toBeInTheDocument();
   });
 });
