@@ -10,6 +10,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
+import { OpenPlatformGovernancePanel } from '@/modules/open-platform/components/OpenPlatformGovernancePanel';
 import {
   platformCapabilityCards,
   platformHealthItems,
@@ -264,6 +265,8 @@ export function PlatformConsole() {
                 </article>
               ))}
             </section>
+
+            <OpenPlatformGovernancePanel />
           </div>
         </section>
       </div>
