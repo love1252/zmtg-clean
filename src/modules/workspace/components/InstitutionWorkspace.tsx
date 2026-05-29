@@ -1,4 +1,7 @@
+'use client';
+
 import Image from 'next/image';
+import { useState } from 'react';
 import {
   Activity,
   ArrowRight,
@@ -8,6 +11,9 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
+import { AppointmentCenterShell } from '@/modules/institution/components/AppointmentCenterShell';
+import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
+import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 import {
   institutionActionQueue,
   institutionJourneyLanes,
@@ -15,6 +21,7 @@ import {
   institutionStats,
   institutionSuggestions,
 } from '@/modules/workspace/domain/institution-dashboard';
+import type { InstitutionViewId } from '@/modules/workspace/domain/institution-dashboard';
 import { cn } from '@/shared/utils/cn';
 
 const statToneClasses = {
@@ -31,6 +38,9 @@ const suggestionToneClasses = {
 };
 
 export function InstitutionWorkspace() {
+  const [activeView, setActiveView] = useState<InstitutionViewId>('dashboard');
+  const activeNavItem = institutionNavItems.find((item) => item.id === activeView) ?? institutionNavItems[0];
+
   return (
     <main
       className="min-h-screen bg-[#eef4fb] bg-cover bg-center text-slate-950"
@@ -65,9 +75,11 @@ export function InstitutionWorkspace() {
               <button
                 key={item.label}
                 type="button"
+                onClick={() => setActiveView(item.id)}
+                aria-current={activeView === item.id ? 'page' : undefined}
                 className={cn(
                   'flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium tracking-normal transition',
-                  item.active ? 'bg-blue-500/20 text-cyan-200 ring-1 ring-cyan-300/20' : 'text-slate-300 hover:bg-white/8 hover:text-white',
+                  activeView === item.id ? 'bg-blue-500/20 text-cyan-200 ring-1 ring-cyan-300/20' : 'text-slate-300 hover:bg-white/8 hover:text-white',
                 )}
               >
                 <item.icon className="h-5 w-5 shrink-0" />
@@ -120,9 +132,11 @@ export function InstitutionWorkspace() {
                   key={item.label}
                   type="button"
                   aria-label={`移动导航：${item.label}`}
+                  onClick={() => setActiveView(item.id)}
+                  aria-current={activeView === item.id ? 'page' : undefined}
                   className={cn(
                     'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold tracking-normal',
-                    item.active ? 'border-blue-200 bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'border-slate-200 bg-white/76 text-slate-600',
+                    activeView === item.id ? 'border-blue-200 bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'border-slate-200 bg-white/76 text-slate-600',
                   )}
                 >
                   <item.icon className="h-3.5 w-3.5 shrink-0" />
@@ -133,6 +147,8 @@ export function InstitutionWorkspace() {
           </nav>
 
           <div className="mx-auto w-full max-w-[1740px] space-y-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-7">
+            {activeView === 'dashboard' ? (
+              <>
             <header className="overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-5 shadow-[0_24px_80px_rgba(32,61,104,0.12)] backdrop-blur-xl lg:p-7">
               <div className="flex flex-col gap-6 2xl:flex-row 2xl:items-start 2xl:justify-between">
                 <div className="max-w-4xl">
@@ -307,9 +323,31 @@ export function InstitutionWorkspace() {
                 </div>
               </article>
             </section>
+              </>
+            ) : activeView === 'customers' ? (
+              <CustomerCenterShell />
+            ) : activeView === 'appointments' ? (
+              <AppointmentCenterShell />
+            ) : activeView === 'followups' ? (
+              <SmartFollowUpShell />
+            ) : (
+              <PlaceholderInstitutionView label={activeNavItem.label} />
+            )}
           </div>
         </section>
       </div>
     </main>
+  );
+}
+
+function PlaceholderInstitutionView({ label }: { label: string }) {
+  return (
+    <section className="rounded-[24px] border border-white/80 bg-white/78 p-6 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
+      <p className="text-sm font-semibold text-slate-500">模块占位</p>
+      <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">{label}</h2>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+        该模块会在后续阶段接入真实业务壳。本阶段优先完成客户中心、预约中心和智能随访。
+      </p>
+    </section>
   );
 }

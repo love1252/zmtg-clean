@@ -81,7 +81,7 @@ export default function LoginPage() {
       <div className="rounded-[30px] border border-white/80 bg-white/78 p-5 shadow-[0_30px_80px_rgba(23,44,56,0.16)] backdrop-blur-2xl sm:p-7">
         <div className="mb-7 flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-[#0d6a76]">Institution Access</p>
+            <p className="text-sm font-semibold text-[#0d6a76]">机构入口</p>
             <h2 className="mt-2 text-3xl font-semibold leading-tight tracking-normal text-slate-950">
               机构工作台登录
             </h2>
@@ -167,7 +167,7 @@ export default function LoginPage() {
           onClick={fillDemoAccount}
           className="mt-4 h-12 w-full rounded-2xl border border-[#d6e1e1] bg-white/65 text-sm font-semibold text-slate-700 transition hover:border-[#9fb8bb] hover:bg-white"
         >
-          填入 Demo 账号
+          填入演示账号
         </button>
 
         <p className="mt-6 text-center text-sm leading-6 text-slate-500">

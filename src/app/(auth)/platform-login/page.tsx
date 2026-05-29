@@ -74,7 +74,7 @@ export default function PlatformLoginPage() {
       <div className="rounded-[30px] border border-white/80 bg-white/80 p-5 shadow-[0_30px_80px_rgba(23,44,56,0.18)] backdrop-blur-2xl sm:p-7">
         <div className="mb-7 flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-[#0d6a76]">Platform Admin</p>
+            <p className="text-sm font-semibold text-[#0d6a76]">平台管理入口</p>
             <h2 className="mt-2 text-3xl font-semibold leading-tight tracking-normal text-slate-950">
               平台管理员登录
             </h2>
@@ -155,7 +155,7 @@ export default function PlatformLoginPage() {
             平台入口已与机构入口隔离
           </div>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            登录将携带 platform scope，不会进入机构租户工作台。
+            登录将携带平台权限范围，不会进入机构租户工作台。
           </p>
         </div>
 
