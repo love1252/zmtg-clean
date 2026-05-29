@@ -7,8 +7,10 @@
 当前阶段只包含：
 
 - 官网首页
-- 机构登录页壳
-- 平台登录页壳
+- 机构登录页与本地 demo 登录
+- 平台登录页与本地 demo 登录
+- 机构工作台首屏
+- 平台管理后台首屏
 - 品牌素材
 - 工程规范
 - 架构文档
@@ -33,6 +35,19 @@ Open:
 
 ```text
 http://localhost:5010
+```
+
+本地 demo 账号：
+
+```text
+机构端：admin / admin123
+平台端：platform / admin123
+```
+
+demo auth 默认只在非生产环境启用。生产环境如需临时演示，必须显式设置：
+
+```text
+ZMTG_ENABLE_DEMO_AUTH=true
 ```
 
 ## Verification
