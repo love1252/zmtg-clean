@@ -1,13 +1,30 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import HospitalPage from '@/app/hospital/page';
 import OpenPlatformPage from '@/app/open-platform/page';
 
+function mockSession(role: 'tenant_admin' | 'platform_admin') {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      new Response(JSON.stringify({ authenticated: true, user: { role } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ),
+  );
+}
+
 describe('workspace entry pages', () => {
-  it('renders the institution dashboard shell', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('renders the institution dashboard shell', async () => {
+    mockSession('tenant_admin');
     render(<HospitalPage />);
 
-    expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '欢迎回来' })).toBeInTheDocument();
     expect(screen.getAllByText('智美天工').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '工作台' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '智能体中心' })).toBeInTheDocument();
@@ -15,10 +32,11 @@ describe('workspace entry pages', () => {
     expect(screen.getByText('累计客户数')).toBeInTheDocument();
   });
 
-  it('renders the platform console shell', () => {
+  it('renders the platform console shell', async () => {
+    mockSession('platform_admin');
     render(<OpenPlatformPage />);
 
-    expect(screen.getAllByRole('heading', { name: '智美天工管理后台' }).length).toBeGreaterThan(0);
+    expect((await screen.findAllByRole('heading', { name: '智美天工管理后台' })).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Platform Console').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '平台总览' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '租户管理' })).toBeInTheDocument();
