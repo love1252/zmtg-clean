@@ -24,23 +24,34 @@ describe('workspace entry pages', () => {
     mockSession('tenant_admin');
     render(<HospitalPage />);
 
-    expect(await screen.findByRole('heading', { name: '欢迎回来' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /让咨询团队/ })).toBeInTheDocument();
+    expect(screen.getByText('先看到增长机会')).toBeInTheDocument();
+    expect(screen.getByText('今日高意向客户 18 位')).toBeInTheDocument();
     expect(screen.getAllByText('智美天工').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '工作台' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '智能体中心' })).toBeInTheDocument();
-    expect(screen.getByText('AI经营副驾驶建议')).toBeInTheDocument();
-    expect(screen.getByText('累计客户数')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '客户中心' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: '机构端移动导航' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '移动导航：客户中心' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '退出工作台' })).toBeInTheDocument();
+    expect(screen.getByText('AI 经营副驾驶建议')).toBeInTheDocument();
+    expect(screen.getByText('累计客户资产')).toBeInTheDocument();
+    expect(screen.getByText('客户旅程看板')).toBeInTheDocument();
+    expect(screen.getByText('今日行动队列')).toBeInTheDocument();
   });
 
   it('renders the platform console shell', async () => {
     mockSession('platform_admin');
     render(<OpenPlatformPage />);
 
-    expect((await screen.findAllByRole('heading', { name: '智美天工管理后台' })).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Platform Console').length).toBeGreaterThan(0);
+    expect(await screen.findByRole('heading', { name: /掌控租户、模型与接口/ })).toBeInTheDocument();
+    expect(screen.getByText('让平台运营可观测')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '平台总览' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '租户管理' })).toBeInTheDocument();
-    expect(screen.getByText('Agent调用总量')).toBeInTheDocument();
-    expect(screen.getByText('系统健康状态')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '首页与品牌' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '权限与审计' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: '平台端移动导航' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '移动导航：开放连接中心' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '退出平台' })).toBeInTheDocument();
+    expect(screen.getByText('平台增长与调用趋势')).toBeInTheDocument();
+    expect(screen.getByText('开放接口治理')).toBeInTheDocument();
   });
 });

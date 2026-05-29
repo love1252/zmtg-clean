@@ -1,8 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
-  BarChart3,
-  BookOpen,
   Boxes,
   Building2,
   CreditCard,
@@ -14,10 +12,8 @@ import {
   LayoutDashboard,
   Plug,
   RefreshCw,
-  Settings,
   Shield,
   Users,
-  WalletCards,
 } from 'lucide-react';
 
 export type PlatformNavItem = {
@@ -36,26 +32,21 @@ export type PlatformMetric = {
 
 export const platformNavItems: PlatformNavItem[] = [
   { label: '平台总览', icon: LayoutDashboard, active: true },
-  { label: '首页编辑', icon: FileText },
+  { label: '首页与品牌', icon: FileText },
   { label: '租户管理', icon: Building2 },
   { label: '产品与套餐', icon: Boxes },
-  { label: 'AI模型', icon: Database },
-  { label: 'AI用量与费用', icon: WalletCards },
-  { label: '知识库管理', icon: BookOpen },
+  { label: 'AI 模型', icon: Database },
   { label: '开放连接中心', icon: Plug },
-  { label: '智能体运行监控', icon: Activity },
-  { label: '平台数据分析', icon: BarChart3 },
+  { label: '权限与审计', icon: Shield },
   { label: '计费与订单', icon: CreditCard },
-  { label: '权限与组织', icon: Shield },
-  { label: '系统设置', icon: Settings },
 ];
 
 export const platformMetrics: PlatformMetric[] = [
-  { label: '累计入驻医院', value: '156', change: '↗ 8.2%', icon: Building2, tone: 'bg-blue-50 text-blue-600' },
+  { label: '入驻医院', value: '156', change: '↗ 8.2%', icon: Building2, tone: 'bg-blue-50 text-blue-600' },
   { label: '活跃机构', value: '142', change: '↗ 5.8%', icon: Users, tone: 'bg-emerald-50 text-emerald-600' },
-  { label: 'Agent调用总量', value: '2.6M', change: '↗ 18.5%', icon: Boxes, tone: 'bg-violet-50 text-violet-600' },
-  { label: '服务用户数', value: '125.0K', change: '↗ 12.3%', icon: Globe2, tone: 'bg-cyan-50 text-cyan-600' },
-  { label: 'MRR', value: '¥258,000', change: '↗ 6.8%', icon: DollarSign, tone: 'bg-amber-50 text-amber-600' },
+  { label: 'Agent 调用', value: '2.6M', change: '↗ 18.5%', icon: Boxes, tone: 'bg-violet-50 text-violet-600' },
+  { label: '服务用户', value: '125K', change: '↗ 12.3%', icon: Globe2, tone: 'bg-cyan-50 text-cyan-600' },
+  { label: 'MRR', value: '¥258K', change: '↗ 6.8%', icon: DollarSign, tone: 'bg-amber-50 text-amber-600' },
   { label: '续费率', value: '94.2%', change: '↗ 1.2%', icon: RefreshCw, tone: 'bg-emerald-50 text-emerald-600' },
 ];
 
@@ -67,7 +58,7 @@ export const platformHealthItems = [
 ] as const;
 
 export const platformCapabilityCards = [
-  { icon: KeyRound, title: '开放接口', detail: 'API Key、OAuth、Webhook 后续接入' },
-  { icon: Plug, title: '连接器治理', detail: '企微、HIS、CRM、投放平台统一管理' },
-  { icon: Shield, title: '权限审计', detail: '平台操作留痕与租户边界核查' },
+  { icon: KeyRound, title: '开放接口治理', detail: 'API Key、OAuth、Webhook 作为后续独立规划。' },
+  { icon: Activity, title: '模型与智能体监控', detail: '按租户、模型、工具调用量观测成本与风险。' },
+  { icon: Shield, title: '权限审计', detail: '平台操作留痕，避免越权查看机构敏感数据。' },
 ] as const;
