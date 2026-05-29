@@ -103,7 +103,7 @@ export function InstitutionWorkspace() {
         <section className="min-w-0 flex-1 overflow-hidden">
           <div className="mx-auto w-full max-w-[1740px] space-y-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-7">
             <header className="overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-5 shadow-[0_24px_80px_rgba(32,61,104,0.12)] backdrop-blur-xl lg:p-7">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex flex-col gap-6 2xl:flex-row 2xl:items-start 2xl:justify-between">
                 <div className="max-w-4xl">
                   <div className="flex items-center gap-3 md:hidden">
                     <Image src="/brand/logo-mark.png" alt="" width={46} height={46} className="h-11 w-11 rounded-xl bg-white object-contain p-1" />
@@ -116,9 +116,9 @@ export function InstitutionWorkspace() {
                     <Sparkles className="h-4 w-4" />
                     AI 驱动的医美增长中台
                   </div>
-                  <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-normal text-slate-950 sm:text-5xl lg:text-[64px]">
+                  <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-normal text-slate-950 sm:text-5xl lg:text-[60px] xl:text-[64px]">
                     <span className="block">让咨询团队</span>
-                    <span className="block bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 bg-clip-text text-transparent">
+                    <span className="block whitespace-nowrap bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 bg-clip-text text-transparent">
                       先看到增长机会
                     </span>
                   </h1>
@@ -127,7 +127,7 @@ export function InstitutionWorkspace() {
                   </p>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-3 lg:w-[520px]">
+                <div className="grid gap-3 sm:grid-cols-3 2xl:w-[520px]">
                   {[
                     { label: '数据安全保障', value: '租户隔离' },
                     { label: 'SLA 服务承诺', value: '99.9%' },
@@ -135,7 +135,7 @@ export function InstitutionWorkspace() {
                   ].map((item) => (
                     <div key={item.label} className="rounded-2xl border border-white/80 bg-white/70 p-4 shadow-sm">
                       <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                      <div className="mt-3 text-lg font-semibold tracking-normal text-slate-950">{item.value}</div>
+                      <div className="mt-3 whitespace-nowrap text-base font-semibold tracking-normal text-slate-950 sm:text-lg">{item.value}</div>
                       <div className="mt-1 text-xs text-slate-500">{item.label}</div>
                     </div>
                   ))}
