@@ -101,6 +101,29 @@ export function InstitutionWorkspace() {
         </aside>
 
         <section className="min-w-0 flex-1 overflow-hidden">
+          <nav aria-label="机构端移动导航" className="sticky top-0 z-20 border-b border-white/70 bg-white/84 px-4 py-3 shadow-sm shadow-slate-200/50 backdrop-blur-xl md:hidden">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold text-slate-500">机构导航</span>
+              <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700">今日高意向 18</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {institutionNavItems.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  aria-label={`移动导航：${item.label}`}
+                  className={cn(
+                    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold tracking-normal',
+                    item.active ? 'border-blue-200 bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'border-slate-200 bg-white/76 text-slate-600',
+                  )}
+                >
+                  <item.icon className="h-3.5 w-3.5 shrink-0" />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </nav>
+
           <div className="mx-auto w-full max-w-[1740px] space-y-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-7">
             <header className="overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-5 shadow-[0_24px_80px_rgba(32,61,104,0.12)] backdrop-blur-xl lg:p-7">
               <div className="flex flex-col gap-6 2xl:flex-row 2xl:items-start 2xl:justify-between">
@@ -127,16 +150,16 @@ export function InstitutionWorkspace() {
                   </p>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-3 2xl:w-[520px]">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 2xl:w-[520px]">
                   {[
                     { label: '数据安全保障', value: '租户隔离' },
                     { label: 'SLA 服务承诺', value: '99.9%' },
                     { label: 'AI 在线', value: '24/7' },
                   ].map((item) => (
-                    <div key={item.label} className="rounded-2xl border border-white/80 bg-white/70 p-4 shadow-sm">
-                      <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                      <div className="mt-3 whitespace-nowrap text-base font-semibold tracking-normal text-slate-950 sm:text-lg">{item.value}</div>
-                      <div className="mt-1 text-xs text-slate-500">{item.label}</div>
+                    <div key={item.label} className="rounded-2xl border border-white/80 bg-white/70 p-3 shadow-sm sm:p-4">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 sm:h-5 sm:w-5" />
+                      <div className="mt-2 text-sm font-semibold tracking-normal text-slate-950 sm:mt-3 sm:text-lg">{item.value}</div>
+                      <div className="mt-1 text-[11px] leading-4 text-slate-500 sm:text-xs">{item.label}</div>
                     </div>
                   ))}
                 </div>

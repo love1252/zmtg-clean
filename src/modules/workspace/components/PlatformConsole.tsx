@@ -99,6 +99,29 @@ export function PlatformConsole() {
             </div>
           </header>
 
+          <nav aria-label="平台端移动导航" className="border-b border-white/10 bg-[#071322]/82 px-4 py-3 backdrop-blur-xl md:hidden">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold text-slate-400">平台导航</span>
+              <span className="rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-2.5 py-1 text-xs font-semibold text-emerald-200">服务正常</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {platformNavItems.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  aria-label={`移动导航：${item.label}`}
+                  className={cn(
+                    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold tracking-normal',
+                    item.active ? 'border-cyan-300/25 bg-cyan-300/[0.16] text-cyan-100' : 'border-white/10 bg-white/[0.06] text-slate-300',
+                  )}
+                >
+                  <item.icon className="h-3.5 w-3.5 shrink-0" />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </nav>
+
           <div className="mx-auto w-full max-w-[1740px] space-y-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
             <section className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.07] p-5 shadow-[0_28px_90px_rgba(0,0,0,0.28)] backdrop-blur-xl lg:p-7">
               <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
@@ -107,7 +130,7 @@ export function PlatformConsole() {
                     <RadioTower className="h-4 w-4" />
                     企业 AI 业务开放平台
                   </div>
-                  <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-normal text-white sm:text-5xl lg:text-[62px]">
+                  <h1 className="mt-5 text-[2.15rem] font-semibold leading-[1.12] tracking-normal text-white sm:text-5xl lg:text-[62px]">
                     <span className="block">掌控租户、模型与接口</span>
                     <span className="block bg-gradient-to-r from-cyan-300 via-blue-400 to-violet-400 bg-clip-text text-transparent">
                       让平台运营可观测
