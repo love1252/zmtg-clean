@@ -40,11 +40,12 @@ describe('workspace entry pages', () => {
     mockSession('platform_admin');
     render(<OpenPlatformPage />);
 
-    expect((await screen.findAllByRole('heading', { name: '智美天工管理后台' })).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Platform Console').length).toBeGreaterThan(0);
+    expect(await screen.findByRole('heading', { name: /掌控租户、模型与接口/ })).toBeInTheDocument();
+    expect(screen.getByText('让平台运营可观测')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '平台总览' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '租户管理' })).toBeInTheDocument();
-    expect(screen.getByText('Agent调用总量')).toBeInTheDocument();
-    expect(screen.getByText('系统健康状态')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '首页与品牌' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '权限与审计' })).toBeInTheDocument();
+    expect(screen.getByText('平台增长与调用趋势')).toBeInTheDocument();
+    expect(screen.getByText('开放接口治理')).toBeInTheDocument();
   });
 });
