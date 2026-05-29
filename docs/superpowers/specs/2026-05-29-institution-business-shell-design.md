@@ -1,81 +1,81 @@
-# Institution Business Shell Phase 1 Design
+# 机构端业务壳第一阶段设计
 
-## Goal
+## 目标
 
-Build the first institution-side business module shell inside `/hospital` so the clean project moves beyond a static dashboard and becomes a navigable demo workspace for customers, appointments, and follow-up operations.
+在 `/hospital` 机构工作台内补齐第一批核心业务模块壳，让当前项目从静态经营看板升级为可导航、可演示的机构运营工作台。
 
-This phase is intentionally a frontend/domain boundary phase. It does not add real database models, real customer records, production authentication, formal RBAC, API routes, external integrations, AI calls, or persistent storage.
+本阶段聚焦前端展示与静态领域数据边界，只做以下三块：
 
-## Current State
+- 客户中心
+- 预约中心
+- 智能随访
 
-The current `/hospital` page renders `InstitutionWorkspace` behind `DemoSessionGate`. It shows a polished institution dashboard, side navigation, mobile navigation, stats, AI suggestions, action queue, and journey lanes.
+本阶段不接真实数据库，不新增正式接口，不实现真实租户数据读取，不处理生产级权限模型，不调用外部 AI、企微、短信、Webhook、OAuth 或 API Key 能力。
 
-The navigation items are static buttons. They do not switch the main content. Demo data lives in `src/modules/workspace/domain/institution-dashboard.ts`, and the component owns most layout decisions.
+## 当前状态
 
-## Scope
+`/hospital` 页面由 `InstitutionWorkspace` 渲染，并通过 `DemoSessionGate` 做演示登录拦截。现有工作台已经包含机构端侧边栏、移动端导航、经营指标、AI 建议、今日行动队列和客户旅程看板。
 
-Add three institution business shells:
+之前的问题是导航按钮只展示样式，不切换主内容区；业务数据也集中在工作台领域文件里，后续扩展机构模块时边界不够清楚。
 
-- Customer Center
-- Appointment Center
-- Smart Follow-up
+## 范围
 
-Each shell should use static, typed domain data and render inside the existing `/hospital` workspace. The existing dashboard remains the default view.
+第一阶段只增加三类业务壳：
 
-The phase should also establish a clean pattern for future institution modules:
+- 客户中心：展示客户分层、客户优先级队列、负责人、下一步动作和数据边界提醒。
+- 预约中心：展示待确认、已确认、已到院、改约跟进四类预约流转和运营提醒。
+- 智能随访：展示术后关怀、复购召回、沉默唤醒旅程，随访任务和演示话术建议。
 
-- Domain data stays in focused files under `src/modules/institution/domain/`.
-- Feature panels live under `src/modules/institution/components/`.
-- The workspace component owns navigation state and shared shell layout.
-- Tests cover navigation, visible module content, and domain constraints.
+工作台默认仍停留在首页看板。点击侧边栏或移动端导航后，在同一个 `/hospital` 页面内切换内容。
 
-## Non-Goals
+## 非目标
 
-Do not implement:
+本阶段明确不做：
 
-- PostgreSQL, Drizzle schema, migrations, or seed scripts.
-- Real tenant lookup, tenant switching, or cross-tenant data access.
-- Customer CRUD APIs.
-- Appointment write flows.
-- Follow-up execution engine.
-- WeCom, SMS, webhook, OAuth, or API Key behavior.
-- LocalStorage business persistence.
-- AI provider calls or RAG retrieval.
+- 数据库模型、迁移脚本、种子数据。
+- 真实客户资料、真实预约写入、真实随访执行。
+- 租户切换、跨租户查询、正式 RBAC。
+- 客户增删改查接口。
+- 企微、短信、Webhook、OAuth、API Key。
+- 本地存储业务状态。
+- AI 供应商调用或知识库检索。
 
-## UX Design
+## 体验设计
 
-The `/hospital` page should behave like a real operations console:
+`/hospital` 应该像一个机构运营控制台，而不是营销落地页。
 
-- Desktop sidebar navigation can switch between dashboard, customer center, appointment center, and smart follow-up.
-- Mobile horizontal navigation exposes the same views.
-- The active nav item is visually distinct.
-- The top dashboard hero remains only on the dashboard view.
-- Business module views use dense operational layouts rather than landing-page hero sections.
+交互要求：
 
-Customer Center should show:
+- 桌面端侧边栏可以切换工作台、客户中心、预约中心、智能随访。
+- 移动端横向导航提供同样的切换能力。
+- 当前激活导航项需要有明确视觉状态。
+- 首页大标题和经营概览只出现在工作台首页。
+- 业务模块使用信息密度更高的运营布局，不使用大面积宣传式首屏。
 
-- Segment summary cards.
-- A searchable-looking customer list shell.
-- Customer priority, lifecycle stage, next action, and owner.
-- A right-side insight panel for tags, risk, and AI next-best-action copy.
+客户中心需要展示：
 
-Appointment Center should show:
+- 客户分层指标卡。
+- 看起来可搜索的客户列表壳。
+- 客户优先级、生命周期、兴趣项目、负责人和下一步动作。
+- 侧栏提醒：演示规则、人工承接建议、敏感信息边界。
 
-- Today's appointment pipeline.
-- Status groups such as pending confirmation, confirmed, arrived, and rescheduled.
-- Appointment cards with customer, project, consultant, and time.
-- Operational alerts for no-show risk and schedule conflicts.
+预约中心需要展示：
 
-Smart Follow-up should show:
+- 今日预约流转。
+- 待确认、已确认、已到院、改约跟进四类状态。
+- 每张预约卡包含客户、项目、时间、负责人和备注。
+- 爽约风险、专家档期冲突等运营提醒。
 
-- Follow-up journey overview.
-- Task queue by customer stage.
-- Follow-up templates or message suggestions.
-- Risk reminders that clearly state they are demo guidance only.
+智能随访需要展示：
 
-## Architecture
+- 随访旅程概览。
+- 按客户阶段排列的任务队列。
+- 演示话术建议。
+- 明确提示这些话术只是演示建议，不代表真实自动触达或医疗判断。
 
-Introduce an `institution` module for institution business shells:
+## 代码结构
+
+新增机构业务模块目录：
 
 ```text
 src/modules/institution/
@@ -88,23 +88,24 @@ src/modules/institution/
     customers.ts
     followups.ts
   tests/
-    InstitutionBusinessShells.test.tsx
     InstitutionBusinessDomain.test.ts
+    InstitutionBusinessShells.test.tsx
 ```
 
-Update workspace files:
+调整工作台相关文件：
 
 ```text
 src/modules/workspace/domain/institution-dashboard.ts
 src/modules/workspace/components/InstitutionWorkspace.tsx
+src/modules/workspace/tests/WorkspaceDashboardDomain.test.ts
 src/modules/workspace/tests/WorkspaceEntryPages.test.tsx
 ```
 
-`InstitutionWorkspace` should hold a small `activeView` state with a union type derived from nav item IDs. Navigation buttons update that state. The dashboard content should be extracted into an internal `DashboardView` function inside the same file unless the file becomes too large during implementation. If it grows beyond easy review, split the dashboard to `src/modules/workspace/components/InstitutionDashboardView.tsx`.
+`InstitutionWorkspace` 负责保存当前视图状态。导航项需要稳定的 `id`，页面通过 `activeView` 判断渲染工作台首页、客户中心、预约中心、智能随访或其他模块占位。
 
-## Data Model Boundary
+## 数据边界
 
-All demo business records must be typed and static:
+所有业务记录都是静态演示数据，并且需要有类型约束：
 
 - `CustomerSummary`
 - `CustomerSegment`
@@ -113,32 +114,30 @@ All demo business records must be typed and static:
 - `FollowUpJourneySummary`
 - `FollowUpTask`
 
-Demo objects may include customer names, but they must be fictional and must not resemble real PII. Do not add phone numbers, ID numbers, medical record numbers, or real clinic identifiers.
+演示数据可以出现虚构客户姓名，但不能出现手机号、身份证号、病历号、真实机构名称或任何看起来像真实客户隐私的数据。
 
-## Security Boundary
+## 安全边界
 
-This phase continues to rely on `DemoSessionGate` for role-level demo access. It must not create a real authorization model.
+本阶段继续使用 `DemoSessionGate` 做演示角色入口控制，不新增正式授权模型。
 
-The UI copy should avoid implying that real API Keys, OAuth, Webhooks, customer records, or AI decisions are active. Any AI wording should be framed as demo suggestions.
+界面文案必须避免让用户误以为真实 API Key、OAuth、Webhook、客户数据或 AI 决策已经生效。涉及 AI 或话术的内容都要明确是演示建议。
 
-## Testing
+## 测试设计
 
-Add tests for:
+需要覆盖以下内容：
 
-- Institution nav items have stable IDs and exactly one default active dashboard item.
-- Customer demo records include owner, lifecycle, priority, and next action.
-- Appointment groups cover the expected status labels.
-- Follow-up tasks include stage, due label, and suggested action.
-- `/hospital` renders dashboard by default.
-- Clicking Customer Center shows customer shell content.
-- Clicking Appointment Center shows appointment shell content.
-- Clicking Smart Follow-up shows follow-up shell content.
+- 机构导航项拥有稳定 `id`，默认激活工作台。
+- 客户演示记录包含负责人、生命周期、优先级、下一步动作，并且不包含敏感标识字段。
+- 预约流转覆盖待确认、已确认、已到院、改约跟进。
+- 随访任务包含阶段、截止时间和建议动作。
+- `/hospital` 默认渲染工作台首页。
+- 点击客户中心后显示客户业务壳。
+- 点击预约中心后显示预约业务壳。
+- 点击智能随访后显示随访业务壳。
 
-Existing login/session tests should keep passing.
+## 验收方式
 
-## Verification
-
-Run:
+命令验收：
 
 ```bash
 ./node_modules/.bin/eslint .
@@ -147,20 +146,20 @@ node scripts/run-vitest.mjs run
 node scripts/run-next.mjs build --webpack
 ```
 
-Browser verification:
+浏览器验收：
 
-- Open `http://localhost:5010/login`.
-- Log in with `admin / admin123`.
-- Confirm redirect to `/hospital`.
-- Click Customer Center, Appointment Center, and Smart Follow-up on desktop.
-- Check mobile width around `390px` for horizontal overflow and readable cards.
+- 打开 `http://localhost:5010/login`。
+- 使用 `admin / admin123` 登录。
+- 确认进入 `/hospital`。
+- 桌面端点击客户中心、预约中心、智能随访，确认内容切换正常。
+- 在约 `390px` 移动端宽度检查横向导航、卡片排版和是否存在横向溢出。
 
-## Risks
+## 风险
 
-- The workspace component may become too large. If that happens, split dashboard and view switching into smaller components during implementation.
-- Static demo data can accidentally look like production data. Keep it obviously demo-oriented and avoid sensitive identifiers.
-- Navigation state is client-side only. That is acceptable for this phase; URL-level routes can come later if the product direction needs deep linking.
+- `InstitutionWorkspace` 继续变大，后续如果新增更多模块，应拆出工作台首页组件。
+- 静态演示数据容易被误解为真实业务结果，所以文案必须持续强调演示边界。
+- 当前是页面内状态切换，不支持深链接。后续接真实数据和权限时，可以再升级为 `/hospital/customers`、`/hospital/appointments`、`/hospital/followups` 等路由。
 
-## Open Decision
+## 决策
 
-This design chooses client-side in-page view switching for speed and demo continuity. A later phase can promote these shells to separate routes such as `/hospital/customers`, `/hospital/appointments`, and `/hospital/followups` after real data and permission boundaries are designed.
+第一阶段选择页面内切换，而不是新增多级路由。这样能最快验证机构端业务信息架构，也不会在真实数据、租户隔离和权限模型尚未设计完成前过早固化接口边界。
