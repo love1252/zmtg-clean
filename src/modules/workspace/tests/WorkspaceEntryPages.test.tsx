@@ -24,12 +24,16 @@ describe('workspace entry pages', () => {
     mockSession('tenant_admin');
     render(<HospitalPage />);
 
-    expect(await screen.findByRole('heading', { name: '欢迎回来' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /让咨询团队/ })).toBeInTheDocument();
+    expect(screen.getByText('先看到增长机会')).toBeInTheDocument();
+    expect(screen.getByText('今日高意向客户 18 位')).toBeInTheDocument();
     expect(screen.getAllByText('智美天工').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '工作台' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '智能体中心' })).toBeInTheDocument();
-    expect(screen.getByText('AI经营副驾驶建议')).toBeInTheDocument();
-    expect(screen.getByText('累计客户数')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '客户中心' })).toBeInTheDocument();
+    expect(screen.getByText('AI 经营副驾驶建议')).toBeInTheDocument();
+    expect(screen.getByText('累计客户资产')).toBeInTheDocument();
+    expect(screen.getByText('客户旅程看板')).toBeInTheDocument();
+    expect(screen.getByText('今日行动队列')).toBeInTheDocument();
   });
 
   it('renders the platform console shell', async () => {
