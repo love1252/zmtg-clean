@@ -91,7 +91,7 @@ export const demoCustomers: CustomerSummary[] = [
 
 export const customerInsightItems: CustomerInsightItem[] = [
   {
-    title: '客户分层来自 demo 规则',
+    title: '客户分层来自演示规则',
     description: '当前仅用于演示优先级，不代表真实客户画像或医疗判断。',
   },
   {

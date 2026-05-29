@@ -14,10 +14,10 @@ export function AppointmentCenterShell() {
   return (
     <section className="space-y-5">
       <div className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-        <p className="text-sm font-semibold text-emerald-600">Appointment Pipeline</p>
+        <p className="text-sm font-semibold text-emerald-600">预约流转</p>
         <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">预约中心</h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-          聚合今日预约确认、到院、改约与风险提醒。当前为 demo 预约队列，不写入真实日程。
+          聚合今日预约确认、到院、改约与风险提醒。当前为演示预约队列，不写入真实日程。
         </p>
       </div>
 

@@ -15,10 +15,10 @@ export function SmartFollowUpShell() {
   return (
     <section className="space-y-5">
       <div className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-        <p className="text-sm font-semibold text-violet-600">Smart Follow-up</p>
+        <p className="text-sm font-semibold text-violet-600">智能随访旅程</p>
         <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">智能随访</h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-          展示术后关怀、复购召回和沉默激活的 demo 旅程。当前不执行真实自动触达。
+          展示术后关怀、复购召回和沉默激活的演示旅程。当前不执行真实自动触达。
         </p>
       </div>
 
@@ -70,7 +70,7 @@ export function SmartFollowUpShell() {
         <aside className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <MessageSquareText className="h-5 w-5 text-violet-600" />
-            <h3 className="text-lg font-semibold text-slate-950">Demo 话术建议</h3>
+            <h3 className="text-lg font-semibold text-slate-950">演示话术建议</h3>
           </div>
           <div className="mt-4 space-y-3">
             {followUpMessageSuggestions.map((suggestion) => (

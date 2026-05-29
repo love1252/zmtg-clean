@@ -36,14 +36,14 @@ export const followUpTasks: FollowUpTask[] = [
 export const followUpMessageSuggestions: FollowUpMessageSuggestion[] = [
   {
     title: '术后关怀提醒',
-    content: '这是 demo 话术：请根据客户真实恢复情况由专业人员确认后再发送。',
+    content: '这是演示话术：请根据客户真实恢复情况由专业人员确认后再发送。',
   },
   {
     title: '复购窗口提醒',
-    content: '这是 demo 话术：可邀请客户预约复查，不承诺具体医疗效果。',
+    content: '这是演示话术：可邀请客户预约复查，不承诺具体医疗效果。',
   },
   {
     title: '沉默客户唤醒',
-    content: '这是 demo 话术：保持低频、轻量、可退出的沟通方式。',
+    content: '这是演示话术：保持低频、轻量、可退出的沟通方式。',
   },
 ];

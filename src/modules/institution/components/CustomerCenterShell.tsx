@@ -19,10 +19,10 @@ export function CustomerCenterShell() {
       <div className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm font-semibold text-blue-600">Customer Operations</p>
+            <p className="text-sm font-semibold text-blue-600">客户运营</p>
             <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">客户中心</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              用 demo 客户资产展示分层、优先级、负责人和下一步动作，真实客户数据将在后续数据库与权限阶段接入。
+              用演示客户资产展示分层、优先级、负责人和下一步动作，真实客户数据将在后续数据库与权限阶段接入。
             </p>
           </div>
           <label className="relative block w-full lg:w-[320px]" aria-label="客户搜索">
@@ -51,7 +51,7 @@ export function CustomerCenterShell() {
         <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-slate-950">客户优先级队列</h3>
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">Demo records</span>
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">演示客户</span>
           </div>
           <div className="mt-4 space-y-3">
             {demoCustomers.map((customer) => (
@@ -92,7 +92,7 @@ export function CustomerCenterShell() {
             </div>
             <div>
               <h3 className="text-lg font-semibold">客户数据边界</h3>
-              <p className="mt-1 text-sm text-slate-400">本阶段只展示虚构 demo 信息。</p>
+              <p className="mt-1 text-sm text-slate-400">本阶段只展示虚构演示信息。</p>
             </div>
           </div>
           <div className="mt-5 space-y-3">

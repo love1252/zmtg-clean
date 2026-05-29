@@ -11,7 +11,7 @@ describe('institution business shells', () => {
     expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
     expect(screen.getByText('高意向待承接')).toBeInTheDocument();
     expect(screen.getByText('王女士')).toBeInTheDocument();
-    expect(screen.getByText('客户分层来自 demo 规则')).toBeInTheDocument();
+    expect(screen.getByText('客户分层来自演示规则')).toBeInTheDocument();
   });
 
   it('renders the appointment center shell', () => {
@@ -29,6 +29,6 @@ describe('institution business shells', () => {
     expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();
     expect(screen.getByText('术后 D0-D30 关怀')).toBeInTheDocument();
     expect(screen.getByText('D3 异常反馈')).toBeInTheDocument();
-    expect(screen.getByText('这是 demo 话术：请根据客户真实恢复情况由专业人员确认后再发送。')).toBeInTheDocument();
+    expect(screen.getByText('这是演示话术：请根据客户真实恢复情况由专业人员确认后再发送。')).toBeInTheDocument();
   });
 });

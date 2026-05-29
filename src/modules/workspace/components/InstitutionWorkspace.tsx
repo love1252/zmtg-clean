@@ -343,7 +343,7 @@ export function InstitutionWorkspace() {
 function PlaceholderInstitutionView({ label }: { label: string }) {
   return (
     <section className="rounded-[24px] border border-white/80 bg-white/78 p-6 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
-      <p className="text-sm font-semibold text-slate-500">Module placeholder</p>
+      <p className="text-sm font-semibold text-slate-500">模块占位</p>
       <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">{label}</h2>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
         该模块会在后续阶段接入真实业务壳。本阶段优先完成客户中心、预约中心和智能随访。
