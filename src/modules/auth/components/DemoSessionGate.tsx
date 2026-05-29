@@ -2,22 +2,16 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
-
-type DemoSessionRole = 'tenant_admin' | 'platform_admin';
+import type { AuthRole, AuthSessionPayload } from '@/modules/auth/domain/session';
 
 type DemoSessionGateProps = {
-  allowedRole: DemoSessionRole;
+  allowedRole: AuthRole;
   loginHref: string;
   wrongRoleHref: string;
   children: ReactNode;
 };
 
-type SessionPayload = {
-  authenticated?: boolean;
-  user?: {
-    role?: string;
-  } | null;
-};
+type SessionPayload = Partial<AuthSessionPayload>;
 
 export function DemoSessionGate({ allowedRole, loginHref, wrongRoleHref, children }: DemoSessionGateProps) {
   const [authorized, setAuthorized] = useState(false);
