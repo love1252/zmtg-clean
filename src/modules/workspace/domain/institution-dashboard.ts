@@ -12,10 +12,20 @@ import {
 } from 'lucide-react';
 
 export type InstitutionNavItem = {
+  id: InstitutionViewId;
   label: string;
   icon: LucideIcon;
   active?: boolean;
 };
+
+export type InstitutionViewId =
+  | 'dashboard'
+  | 'customers'
+  | 'followups'
+  | 'conversations'
+  | 'appointments'
+  | 'knowledge'
+  | 'analytics';
 
 export type InstitutionStatItem = {
   label: string;
@@ -26,13 +36,13 @@ export type InstitutionStatItem = {
 };
 
 export const institutionNavItems: InstitutionNavItem[] = [
-  { label: '工作台', icon: LayoutDashboard, active: true },
-  { label: '客户中心', icon: Users },
-  { label: '智能随访', icon: Workflow },
-  { label: '客服工作台', icon: MessageCircle },
-  { label: '预约中心', icon: CalendarCheck },
-  { label: '知识库', icon: BookOpen },
-  { label: '数据分析', icon: BarChart3 },
+  { id: 'dashboard', label: '工作台', icon: LayoutDashboard, active: true },
+  { id: 'customers', label: '客户中心', icon: Users },
+  { id: 'followups', label: '智能随访', icon: Workflow },
+  { id: 'conversations', label: '客服工作台', icon: MessageCircle },
+  { id: 'appointments', label: '预约中心', icon: CalendarCheck },
+  { id: 'knowledge', label: '知识库', icon: BookOpen },
+  { id: 'analytics', label: '数据分析', icon: BarChart3 },
 ];
 
 export const institutionStats: InstitutionStatItem[] = [

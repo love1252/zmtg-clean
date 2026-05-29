@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import HospitalPage from '@/app/hospital/page';
 import OpenPlatformPage from '@/app/open-platform/page';
@@ -37,6 +37,18 @@ describe('workspace entry pages', () => {
     expect(screen.getByText('累计客户资产')).toBeInTheDocument();
     expect(screen.getByText('客户旅程看板')).toBeInTheDocument();
     expect(screen.getByText('今日行动队列')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
+    expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
+    expect(screen.getByText('客户优先级队列')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '预约中心' }));
+    expect(screen.getByRole('heading', { name: '预约中心' })).toBeInTheDocument();
+    expect(screen.getByText('运营提醒')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '智能随访' }));
+    expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();
+    expect(screen.getByText('今日随访任务')).toBeInTheDocument();
   });
 
   it('renders the platform console shell', async () => {

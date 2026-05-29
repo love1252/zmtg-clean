@@ -18,7 +18,17 @@ describe('workspace dashboard domain', () => {
     const labels = institutionNavItems.map((item) => item.label);
 
     expect(new Set(labels).size).toBe(labels.length);
+    expect(institutionNavItems.map((item) => item.id)).toEqual([
+      'dashboard',
+      'customers',
+      'followups',
+      'conversations',
+      'appointments',
+      'knowledge',
+      'analytics',
+    ]);
     expect(institutionNavItems.filter((item) => item.active)).toHaveLength(1);
+    expect(institutionNavItems.find((item) => item.active)?.id).toBe('dashboard');
     expect(labels).toEqual(
       expect.arrayContaining(['工作台', '客户中心', '智能随访', '客服工作台', '预约中心', '知识库', '数据分析']),
     );
