@@ -49,10 +49,34 @@ export const institutionSuggestions = [
 ] as const;
 
 export const institutionJourneyLanes = [
-  { title: '新客咨询', items: [{ title: '玻尿酸咨询', detail: '高预算 · 需人工', hot: true }, { title: '水光项目禁忌', detail: 'AI 已提示注意事项' }] },
-  { title: '预约到院', items: [{ title: '明日到院提醒', detail: '12 位待确认' }, { title: '高意向客户改约', detail: '需协调专家档期', hot: true }] },
-  { title: '术后关怀', items: [{ title: 'D3 红肿反馈', detail: 'AI 已记录恢复情况' }, { title: '异常症状转人工', detail: '3 位客户需回访', hot: true }] },
-  { title: '复购召回', items: [{ title: '补水修复窗口', detail: '18 位客户进入窗口', hot: true }, { title: '会员生日关怀', detail: '本周 9 位' }] },
+  {
+    title: '新客咨询',
+    items: [
+      { title: '玻尿酸咨询', detail: '高预算 · 需人工', hot: true },
+      { title: '水光项目禁忌', detail: 'AI 已提示注意事项', hot: false },
+    ],
+  },
+  {
+    title: '预约到院',
+    items: [
+      { title: '明日到院提醒', detail: '12 位待确认', hot: false },
+      { title: '高意向客户改约', detail: '需协调专家档期', hot: true },
+    ],
+  },
+  {
+    title: '术后关怀',
+    items: [
+      { title: 'D3 红肿反馈', detail: 'AI 已记录恢复情况', hot: false },
+      { title: '异常症状转人工', detail: '3 位客户需回访', hot: true },
+    ],
+  },
+  {
+    title: '复购召回',
+    items: [
+      { title: '补水修复窗口', detail: '18 位客户进入窗口', hot: true },
+      { title: '会员生日关怀', detail: '本周 9 位', hot: false },
+    ],
+  },
 ] as const;
 
 export const institutionActionQueue = [
