@@ -1,5 +1,4 @@
 import Image from 'next/image';
-import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
@@ -12,7 +11,6 @@ import {
   Clock3,
   Database,
   LayoutDashboard,
-  LogOut,
   MessageCircle,
   Search,
   Settings,
@@ -21,6 +19,7 @@ import {
   Users,
   Workflow,
 } from 'lucide-react';
+import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { cn } from '@/shared/utils/cn';
 
 type NavItem = {
@@ -126,10 +125,10 @@ export function InstitutionWorkspace() {
                 <div className="text-xs text-slate-400">机构账号</div>
               </div>
             </div>
-            <Link href="/login" className="flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-red-300 hover:bg-red-500/10">
-              <LogOut className="h-4 w-4" />
-              退出登录
-            </Link>
+            <LogoutButton
+              redirectTo="/login"
+              className="flex h-10 w-full rounded-xl text-sm font-semibold text-red-300 hover:bg-red-500/10"
+            />
           </div>
         </aside>
 

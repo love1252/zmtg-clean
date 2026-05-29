@@ -1,5 +1,4 @@
 import Image from 'next/image';
-import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
@@ -16,7 +15,6 @@ import {
   Globe2,
   KeyRound,
   LayoutDashboard,
-  LogOut,
   PanelLeftClose,
   Plug,
   RefreshCw,
@@ -25,6 +23,7 @@ import {
   Users,
   WalletCards,
 } from 'lucide-react';
+import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { cn } from '@/shared/utils/cn';
 
 type PlatformNavItem = {
@@ -121,10 +120,12 @@ export function PlatformConsole() {
               <Bell className="h-5 w-5" />
               <span className="grid h-8 w-8 place-items-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">超</span>
               <span className="hidden font-semibold sm:inline">超级管理员</span>
-              <Link href="/platform-login" className="inline-flex items-center gap-2 font-medium text-slate-500 hover:text-slate-950">
-                <LogOut className="h-4 w-4" />
+              <LogoutButton
+                redirectTo="/platform-login"
+                className="font-medium text-slate-500 hover:text-slate-950"
+              >
                 退出
-              </Link>
+              </LogoutButton>
             </div>
           </header>
 
