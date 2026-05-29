@@ -1,0 +1,28 @@
+import { describe, expect, it } from 'vitest';
+import {
+  institutionNavItems,
+  institutionSegmentItems,
+  institutionStats,
+  institutionSuggestions,
+} from '@/modules/workspace/domain/institution-dashboard';
+
+describe('workspace dashboard domain', () => {
+  it('keeps institution navigation unique with one active entry', () => {
+    const labels = institutionNavItems.map((item) => item.label);
+
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(institutionNavItems.filter((item) => item.active)).toHaveLength(1);
+    expect(labels).toEqual(
+      expect.arrayContaining(['工作台', '客户中心', '智能随访', '客服工作台', '预约中心', '知识库']),
+    );
+  });
+
+  it('keeps institution dashboard cards meaningful', () => {
+    expect(institutionStats).toHaveLength(4);
+    expect(institutionSuggestions).toHaveLength(4);
+    expect(institutionSegmentItems).toHaveLength(4);
+    expect(institutionStats.map((item) => item.label)).toEqual(
+      expect.arrayContaining(['累计客户数', '活跃旅程数', '预约转化率', '待处理随访']),
+    );
+  });
+});
