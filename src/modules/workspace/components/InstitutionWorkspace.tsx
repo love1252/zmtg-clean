@@ -1,75 +1,17 @@
 import Image from 'next/image';
-import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
-  BarChart3,
-  BookOpen,
-  Bot,
-  BriefcaseBusiness,
-  CalendarCheck,
-  CheckCircle2,
-  Clock3,
-  Database,
-  LayoutDashboard,
-  MessageCircle,
   Search,
-  Settings,
   Sparkles,
-  Trophy,
-  Users,
-  Workflow,
 } from 'lucide-react';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
+import {
+  institutionNavItems,
+  institutionSegmentItems,
+  institutionStats,
+  institutionSuggestions,
+} from '@/modules/workspace/domain/institution-dashboard';
 import { cn } from '@/shared/utils/cn';
-
-type NavItem = {
-  label: string;
-  icon: LucideIcon;
-  active?: boolean;
-};
-
-type StatItem = {
-  label: string;
-  value: string;
-  change: string;
-  tone: 'blue' | 'violet' | 'emerald' | 'amber';
-  icon: LucideIcon;
-};
-
-const navItems: NavItem[] = [
-  { label: '工作台', icon: LayoutDashboard, active: true },
-  { label: '智能体中心', icon: Bot },
-  { label: '客户接入中心', icon: Database },
-  { label: '客户中心', icon: Users },
-  { label: '智能随访', icon: Workflow },
-  { label: '客服工作台', icon: MessageCircle },
-  { label: '预约中心', icon: CalendarCheck },
-  { label: '知识库', icon: BookOpen },
-  { label: '数据分析', icon: BarChart3 },
-  { label: '员工绩效', icon: Trophy },
-  { label: '系统设置', icon: Settings },
-];
-
-const stats: StatItem[] = [
-  { label: '累计客户数', value: '13', change: '↗ 100%', tone: 'blue', icon: Users },
-  { label: '活跃旅程数', value: '6', change: '↘ 25%', tone: 'violet', icon: BriefcaseBusiness },
-  { label: '预约转化率', value: '25%', change: '↗ 8%', tone: 'emerald', icon: CalendarCheck },
-  { label: '待处理随访', value: '10', change: '↘ 5%', tone: 'amber', icon: Clock3 },
-];
-
-const suggestions = [
-  { type: '复购', title: '今日复购提醒', description: '打开率提升18%，建议跟进12位高意向用户' },
-  { type: '转化', title: '沉默用户激活', description: '检测到32位30天未互动用户，建议发送激活旅程' },
-  { type: '服务', title: '术后随访优化', description: '水光项目D7随访响应率偏低，建议调整话术' },
-  { type: '营销', title: '活动预热提醒', description: '端午节活动将于3天后开始，建议提前启动预热流程' },
-];
-
-const segmentItems = [
-  { label: '高价值活跃', value: '1250', color: '#10b981' },
-  { label: '高价值沉默', value: '680', color: '#f59e0b' },
-  { label: '低价值活跃', value: '3200', color: '#3b82f6' },
-  { label: '低价值沉默', value: '890', color: '#64748b' },
-];
 
 const toneClasses = {
   blue: 'bg-blue-50 text-blue-600',
@@ -102,7 +44,7 @@ export function InstitutionWorkspace() {
           </div>
 
           <nav className="flex-1 space-y-1 overflow-y-auto px-3">
-            {navItems.map((item) => (
+            {institutionNavItems.map((item) => (
               <button
                 key={item.label}
                 type="button"
@@ -153,7 +95,7 @@ export function InstitutionWorkspace() {
             </header>
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {stats.map((stat) => (
+              {institutionStats.map((stat) => (
                 <article key={stat.label} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="flex items-start justify-between gap-4">
                     <div className={cn('grid h-11 w-11 place-items-center rounded-2xl', toneClasses[stat.tone])}>
@@ -177,7 +119,7 @@ export function InstitutionWorkspace() {
                 <h2 className="text-lg font-semibold tracking-normal text-slate-950">AI经营副驾驶建议</h2>
               </div>
               <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {suggestions.map((suggestion) => (
+                {institutionSuggestions.map((suggestion) => (
                   <article key={suggestion.title} className="rounded-xl border border-slate-200 bg-white p-4">
                     <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-500">{suggestion.type}</span>
                     <h3 className="mt-3 text-base font-semibold text-slate-950">{suggestion.title}</h3>
@@ -205,7 +147,7 @@ export function InstitutionWorkspace() {
                 <h2 className="text-lg font-semibold tracking-normal text-slate-950">用户分层</h2>
                 <div className="mx-auto mt-8 h-32 w-32 rounded-full" style={{ background: 'conic-gradient(#3b82f6 0 48%, #f59e0b 48% 60%, #10b981 60% 82%, #64748b 82% 100%)' }} />
                 <div className="mt-8 space-y-3">
-                  {segmentItems.map((item) => (
+                  {institutionSegmentItems.map((item) => (
                     <div key={item.label} className="flex items-center justify-between text-sm">
                       <span className="flex items-center gap-2 text-slate-500">
                         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />

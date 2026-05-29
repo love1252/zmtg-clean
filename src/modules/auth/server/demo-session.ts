@@ -1,19 +1,10 @@
+import type { AuthRole, AuthSession, AuthSessionUser } from '@/modules/auth/domain/session';
+
 export const DEMO_SESSION_COOKIE = 'zmtg_demo_session';
 
-export type DemoUserRole = 'tenant_admin' | 'platform_admin';
-
-export type DemoSessionUser = {
-  id: string;
-  username: string;
-  name: string;
-  role: DemoUserRole;
-  tenantId: string | null;
-};
-
-export type DemoSession = {
-  user: DemoSessionUser;
-  expiresAt: number;
-};
+export type DemoUserRole = AuthRole;
+export type DemoSessionUser = AuthSessionUser;
+export type DemoSession = AuthSession;
 
 type LoginInput = {
   username: string;
