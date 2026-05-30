@@ -1,12 +1,22 @@
 import {
+  foreignKey,
   index,
   jsonb,
   pgEnum,
   pgTable,
   text,
   timestamp,
+  unique,
+  uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
+
+import type { AuditReason } from '@/modules/audit/domain/audit-events';
+import type {
+  AccessContext,
+  ProtectedAction,
+  ProtectedResource,
+} from '@/modules/security/domain/access-control';
 
 export const tenantStatusEnum = pgEnum('tenant_status', ['active', 'suspended']);
 export const authRoleEnum = pgEnum('auth_role', [
@@ -70,7 +80,10 @@ export const tenantMembers = pgTable(
     ...timestamps,
   },
   (table) => ({
-    tenantUserIdx: index('tenant_members_tenant_user_idx').on(table.tenantId, table.userId),
+    tenantUserUniqueIdx: uniqueIndex('tenant_members_tenant_user_unique_idx').on(
+      table.tenantId,
+      table.userId,
+    ),
     tenantRoleIdx: index('tenant_members_tenant_role_idx').on(table.tenantId, table.role),
   }),
 );
@@ -95,6 +108,7 @@ export const customers = pgTable(
     ...timestamps,
   },
   (table) => ({
+    tenantIdIdUnique: unique('customers_tenant_id_id_unique').on(table.tenantId, table.id),
     tenantIdx: index('customers_tenant_idx').on(table.tenantId),
     tenantPriorityIdx: index('customers_tenant_priority_idx').on(table.tenantId, table.priority),
   }),
@@ -117,6 +131,11 @@ export const appointments = pgTable(
     ...timestamps,
   },
   (table) => ({
+    customerFk: foreignKey({
+      name: 'appointments_tenant_customer_fk',
+      columns: [table.tenantId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.id],
+    }),
     tenantStatusIdx: index('appointments_tenant_status_idx').on(table.tenantId, table.status),
   }),
 );
@@ -141,6 +160,11 @@ export const followUpTasks = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    customerFk: foreignKey({
+      name: 'follow_up_tasks_tenant_customer_fk',
+      columns: [table.tenantId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.id],
+    }),
     tenantStatusIdx: index('follow_up_tasks_tenant_status_idx').on(table.tenantId, table.status),
   }),
 );
@@ -152,13 +176,13 @@ export const auditEvents = pgTable(
     actorId: varchar('actor_id', { length: 96 }).notNull(),
     actorRole: authRoleEnum('actor_role').notNull(),
     tenantId: varchar('tenant_id', { length: 64 }),
-    scope: varchar('scope', { length: 24 }).notNull(),
-    resource: varchar('resource', { length: 64 }).notNull(),
-    action: varchar('action', { length: 64 }).notNull(),
+    scope: varchar('scope', { length: 24 }).$type<AccessContext['scope']>().notNull(),
+    resource: varchar('resource', { length: 64 }).$type<ProtectedResource>().notNull(),
+    action: varchar('action', { length: 64 }).$type<ProtectedAction>().notNull(),
     result: auditResultEnum('result').notNull(),
-    reason: varchar('reason', { length: 80 }).notNull(),
+    reason: varchar('reason', { length: 80 }).$type<AuditReason>().notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
-    source: varchar('source', { length: 48 }).notNull(),
+    source: varchar('source', { length: 48 }).$type<AccessContext['source']>().notNull(),
   },
   (table) => ({
     tenantOccurredIdx: index('audit_events_tenant_occurred_idx').on(

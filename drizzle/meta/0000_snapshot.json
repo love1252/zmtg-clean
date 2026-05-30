@@ -1,5 +1,5 @@
 {
-  "id": "15ab7e05-fc9b-4981-b585-4b0bcf8c90af",
+  "id": "ed0243c0-90ac-4fe8-86a0-398106efac5a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -110,6 +110,21 @@
             "tenant_id"
           ],
           "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "appointments_tenant_customer_fk": {
+          "name": "appointments_tenant_customer_fk",
+          "tableFrom": "appointments",
+          "tableTo": "customers",
+          "columnsFrom": [
+            "tenant_id",
+            "customer_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -394,7 +409,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "customers_tenant_id_id_unique": {
+          "name": "customers_tenant_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tenant_id",
+            "id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -521,6 +545,21 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "follow_up_tasks_tenant_customer_fk": {
+          "name": "follow_up_tasks_tenant_customer_fk",
+          "tableFrom": "follow_up_tasks",
+          "tableTo": "customers",
+          "columnsFrom": [
+            "tenant_id",
+            "customer_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -580,8 +619,8 @@
         }
       },
       "indexes": {
-        "tenant_members_tenant_user_idx": {
-          "name": "tenant_members_tenant_user_idx",
+        "tenant_members_tenant_user_unique_idx": {
+          "name": "tenant_members_tenant_user_unique_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -596,7 +635,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}

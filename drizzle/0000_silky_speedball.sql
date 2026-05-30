@@ -48,7 +48,8 @@ CREATE TABLE "customers" (
 	"next_action" text NOT NULL,
 	"tags" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "customers_tenant_id_id_unique" UNIQUE("tenant_id","id")
 );
 --> statement-breakpoint
 CREATE TABLE "follow_up_tasks" (
@@ -86,8 +87,10 @@ CREATE TABLE "tenants" (
 );
 --> statement-breakpoint
 ALTER TABLE "appointments" ADD CONSTRAINT "appointments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "appointments" ADD CONSTRAINT "appointments_tenant_customer_fk" FOREIGN KEY ("tenant_id","customer_id") REFERENCES "public"."customers"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "customers" ADD CONSTRAINT "customers_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "follow_up_tasks" ADD CONSTRAINT "follow_up_tasks_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "follow_up_tasks" ADD CONSTRAINT "follow_up_tasks_tenant_customer_fk" FOREIGN KEY ("tenant_id","customer_id") REFERENCES "public"."customers"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenant_members" ADD CONSTRAINT "tenant_members_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "appointments_tenant_status_idx" ON "appointments" USING btree ("tenant_id","status");--> statement-breakpoint
 CREATE INDEX "audit_events_tenant_occurred_idx" ON "audit_events" USING btree ("tenant_id","occurred_at");--> statement-breakpoint
@@ -95,5 +98,5 @@ CREATE INDEX "audit_events_actor_occurred_idx" ON "audit_events" USING btree ("a
 CREATE INDEX "customers_tenant_idx" ON "customers" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "customers_tenant_priority_idx" ON "customers" USING btree ("tenant_id","priority");--> statement-breakpoint
 CREATE INDEX "follow_up_tasks_tenant_status_idx" ON "follow_up_tasks" USING btree ("tenant_id","status");--> statement-breakpoint
-CREATE INDEX "tenant_members_tenant_user_idx" ON "tenant_members" USING btree ("tenant_id","user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "tenant_members_tenant_user_unique_idx" ON "tenant_members" USING btree ("tenant_id","user_id");--> statement-breakpoint
 CREATE INDEX "tenant_members_tenant_role_idx" ON "tenant_members" USING btree ("tenant_id","role");
