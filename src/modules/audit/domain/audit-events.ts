@@ -7,7 +7,11 @@ import type {
 
 export type AuditResult = 'allowed' | 'denied' | 'transitioned';
 
-export type AuditReason = AccessDecision['reason'] | 'invalid_transition';
+export type AuditReason =
+  | AccessDecision['reason']
+  | 'invalid_transition'
+  | 'stale_transition'
+  | 'not_found_or_not_owned';
 
 export type TenantAuditEvent = {
   eventId: string;

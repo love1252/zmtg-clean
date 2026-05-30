@@ -2,11 +2,13 @@ import { NextResponse } from 'next/server';
 import {
   createAuditEvent,
   createDeniedAccessAuditEvent,
+  type TenantAuditEvent,
 } from '@/modules/audit/domain/audit-events';
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import {
   canAccessResource,
   type AccessContext,
+  type ProtectedAction,
   type ProtectedResource,
 } from '@/modules/security/domain/access-control';
 
@@ -17,6 +19,24 @@ type TenantBusinessListRequest<Item> = {
   resource: TenantBusinessResource;
   list: (tenantId: string) => Promise<Item[]>;
   auditRepository: Pick<AuditEventRepository, 'record'>;
+};
+
+export type TenantBusinessMutationResult<Item> =
+  | { kind: 'success'; record: Item }
+  | { kind: 'not_found' }
+  | { kind: 'conflict'; reason: 'stale_transition' }
+  | { kind: 'invalid_transition'; from: string; to: string };
+
+export type TenantBusinessMutationRequest<Item> = {
+  context: AccessContext | null;
+  resource: TenantBusinessResource;
+  action: Extract<ProtectedAction, 'create' | 'update'>;
+  mutate: (input: {
+    tenantId: string;
+    successAuditEvent: TenantAuditEvent;
+  }) => Promise<TenantBusinessMutationResult<Item>>;
+  auditRepository: Pick<AuditEventRepository, 'record'>;
+  successStatus?: 200 | 201;
 };
 
 function createAuditEventId() {
@@ -90,4 +110,116 @@ export async function handleTenantBusinessListRequest<Item>({
   );
 
   return NextResponse.json({ records });
+}
+
+export async function handleTenantBusinessMutationRequest<Item>({
+  context,
+  resource,
+  action,
+  mutate,
+  auditRepository,
+  successStatus = 200,
+}: TenantBusinessMutationRequest<Item>) {
+  if (!context) {
+    return NextResponse.json({ error: '请先登录' }, { status: 401 });
+  }
+
+  const occurredAt = new Date().toISOString();
+  const decision = canAccessResource({
+    context,
+    resource,
+    action,
+    targetTenantId: context.tenantId,
+  });
+
+  if (!decision.allowed) {
+    await auditRepository.record(
+      createDeniedAccessAuditEvent({
+        eventId: createAuditEventId(),
+        context,
+        resource,
+        action,
+        reason: decision.reason,
+        occurredAt,
+      }),
+    );
+
+    return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
+  }
+
+  if (!context.tenantId) {
+    await auditRepository.record(
+      createDeniedAccessAuditEvent({
+        eventId: createAuditEventId(),
+        context,
+        resource,
+        action,
+        reason: 'missing_tenant',
+        occurredAt,
+      }),
+    );
+
+    return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
+  }
+
+  const successAuditEvent = createAuditEvent({
+    eventId: createAuditEventId(),
+    context,
+    resource,
+    action,
+    result: 'allowed',
+    reason: decision.reason,
+    occurredAt,
+  });
+  const result = await mutate({ tenantId: context.tenantId, successAuditEvent });
+
+  if (result.kind === 'not_found') {
+    await auditRepository.record(
+      createAuditEvent({
+        eventId: createAuditEventId(),
+        context,
+        resource,
+        action,
+        result: 'denied',
+        reason: 'not_found_or_not_owned',
+        occurredAt,
+      }),
+    );
+
+    return NextResponse.json({ error: '记录不存在' }, { status: 404 });
+  }
+
+  if (result.kind === 'invalid_transition') {
+    await auditRepository.record(
+      createAuditEvent({
+        eventId: createAuditEventId(),
+        context,
+        resource,
+        action,
+        result: 'denied',
+        reason: 'invalid_transition',
+        occurredAt,
+      }),
+    );
+
+    return NextResponse.json({ error: '随访状态不允许这样流转' }, { status: 409 });
+  }
+
+  if (result.kind === 'conflict') {
+    await auditRepository.record(
+      createAuditEvent({
+        eventId: createAuditEventId(),
+        context,
+        resource,
+        action,
+        result: 'denied',
+        reason: result.reason,
+        occurredAt,
+      }),
+    );
+
+    return NextResponse.json({ error: '随访状态已变化，请刷新后重试' }, { status: 409 });
+  }
+
+  return NextResponse.json({ record: result.record }, { status: successStatus });
 }
