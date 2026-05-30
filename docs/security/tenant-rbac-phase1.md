@@ -58,3 +58,17 @@ const decision = canAccessResource({
 ## 后续真实实现准入
 
 进入客户资料、预约、随访、API Key、OAuth、Webhook 或审计落库前，必须复用本阶段访问上下文和守卫函数。
+
+## 第二阶段领域模型约束
+
+第二阶段允许新增客户、预约、随访和审计事件的 TypeScript 领域模型，但仍不接真实数据库、不新增真实业务 API、不保存真实敏感数据。
+
+客户、预约和随访读取函数必须：
+
+1. 接收服务端 `AccessContext`。
+2. 调用 `canAccessResource`。
+3. 只返回 `context.tenantId` 对应的记录。
+4. 跨租户拒绝时不返回任何业务记录。
+5. 只暴露脱敏展示字段。
+
+审计事件模型必须记录操作者、角色、租户、资源、动作、结果、原因、时间和来源。审计事件不能包含 API Key、OAuth token、Webhook secret 或其他凭证明文。
