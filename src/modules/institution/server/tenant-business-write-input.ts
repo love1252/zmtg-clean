@@ -175,12 +175,12 @@ function parseOptionalString(
 }
 
 function countDigits(value: string) {
-  return value.replace(/\D/g, '').length;
+  return value.match(/\p{Decimal_Number}/gu)?.length ?? 0;
 }
 
 function isMaskedDisplayValue(key: string, value: string) {
   const normalized = value.trim();
-  if (/\d{6,}/.test(normalized) || /raw/i.test(normalized)) {
+  if (/\p{Decimal_Number}{6,}/u.test(normalized) || /raw/i.test(normalized)) {
     return false;
   }
 

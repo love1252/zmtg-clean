@@ -87,6 +87,8 @@ describe('租户业务写入 payload 校验', () => {
       '1380*0000*000',
       '13800*0000*00',
       'masked-demo-13800-0000-00',
+      '１３８００００００００*',
+      '١٣٨٠٠٠٠٠٠٠٠*',
     ]) {
       expect(
         parseCreateCustomerPayload({
@@ -118,6 +120,11 @@ describe('租户业务写入 payload 校验', () => {
     });
 
     expect(parseUpdateCustomerPayload({ id: 'cust_001', maskedMedicalRecordNo: 'demo-mr-12345-6789' })).toEqual({
+      ok: false,
+      error: '字段 maskedMedicalRecordNo 必须是脱敏展示值',
+    });
+
+    expect(parseUpdateCustomerPayload({ id: 'cust_001', maskedMedicalRecordNo: 'MR****００１２３４５' })).toEqual({
       ok: false,
       error: '字段 maskedMedicalRecordNo 必须是脱敏展示值',
     });
