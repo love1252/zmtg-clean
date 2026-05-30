@@ -184,9 +184,13 @@ function isMaskedDisplayValue(key: string, value: string) {
     return false;
   }
 
+  const maxVisibleDigits = key === 'maskedPhone' ? 7 : 4;
+  if (countDigits(normalized) > maxVisibleDigits) {
+    return false;
+  }
+
   if (normalized.includes('*')) {
-    const maxVisibleDigits = key === 'maskedPhone' ? 7 : 4;
-    return countDigits(normalized) <= maxVisibleDigits;
+    return true;
   }
 
   return (
