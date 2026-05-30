@@ -31,8 +31,8 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe('demo auth routes', () => {
-  it('encodes demo sessions as signed tokens that can be decoded', () => {
+describe('演示认证路由', () => {
+  it('把演示会话编码为可解码的签名令牌', () => {
     const session = {
       user: {
         id: 'demo-user-admin',
@@ -52,7 +52,7 @@ describe('demo auth routes', () => {
     expect(decodeDemoSession(encoded)).toEqual(session);
   });
 
-  it('rejects demo sessions when the signed payload is tampered', () => {
+  it('拒绝签名载荷被篡改的演示会话', () => {
     const session = {
       user: {
         id: 'demo-user-admin',
@@ -82,7 +82,7 @@ describe('demo auth routes', () => {
     expect(decodeDemoSession(payload)).toBeNull();
   });
 
-  it('requires a configured demo session secret before encoding in production', () => {
+  it('生产环境编码前必须配置演示会话密钥', () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('ZMTG_ENABLE_DEMO_AUTH', 'true');
     vi.stubEnv('ZMTG_DEMO_SESSION_SECRET', '');
@@ -101,7 +101,7 @@ describe('demo auth routes', () => {
     ).toThrow('ZMTG_DEMO_SESSION_SECRET');
   });
 
-  it('returns a controlled error when production demo auth cannot sign sessions', async () => {
+  it('生产环境演示认证无法签名会话时返回受控错误', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('ZMTG_ENABLE_DEMO_AUTH', 'true');
     vi.stubEnv('ZMTG_DEMO_SESSION_SECRET', '');
@@ -112,12 +112,12 @@ describe('demo auth routes', () => {
     expect(response.status).toBe(503);
     expect(payload).toEqual({
       code: 503,
-      message: 'Demo auth is not configured',
+      message: '演示登录未配置',
     });
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 
-  it('logs in an institution demo user and exposes the session', async () => {
+  it('登录机构演示用户并返回会话', async () => {
     const loginResponse = await loginPost(jsonRequest({ username: 'admin', password: 'admin123' }));
     const loginPayload = await loginResponse.json();
     const cookie = readCookie(loginResponse.headers.get('set-cookie'));
@@ -149,7 +149,7 @@ describe('demo auth routes', () => {
     });
   });
 
-  it('logs in a platform demo user only with platform scope', async () => {
+  it('只允许平台作用域登录平台演示用户', async () => {
     const wrongScopeResponse = await loginPost(jsonRequest({ username: 'platform', password: 'admin123' }));
     expect(wrongScopeResponse.status).toBe(401);
 
@@ -169,7 +169,7 @@ describe('demo auth routes', () => {
     });
   });
 
-  it('rejects bad credentials and clears sessions on logout', async () => {
+  it('拒绝错误凭据并在退出时清理会话', async () => {
     const rejectedResponse = await loginPost(jsonRequest({ username: 'admin', password: 'wrong-password' }));
     expect(rejectedResponse.status).toBe(401);
     await expect(rejectedResponse.json()).resolves.toMatchObject({

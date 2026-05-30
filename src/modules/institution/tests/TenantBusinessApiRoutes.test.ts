@@ -289,8 +289,8 @@ describe('租户业务只读 API 流程', () => {
   });
 });
 
-describe('租户业务写入 API handler', () => {
-  it('写入 handler 使用访问上下文租户并记录允许审计', async () => {
+describe('租户业务写入 API 处理器', () => {
+  it('写入处理器使用访问上下文租户并记录允许审计', async () => {
     const auditRepository = { record: vi.fn(async (_event: unknown) => undefined) };
     const mutate = vi.fn(async ({ successAuditEvent }) => {
       await auditRepository.record(successAuditEvent);
@@ -330,7 +330,7 @@ describe('租户业务写入 API handler', () => {
     }));
   });
 
-  it('写入 handler 对非法随访流转返回 409 并写 denied 审计', async () => {
+  it('写入处理器对非法随访流转返回 409 并写拒绝审计', async () => {
     const auditRepository = { record: vi.fn(async () => undefined) };
 
     const response = await handleTenantBusinessMutationRequest({
@@ -355,7 +355,7 @@ describe('租户业务写入 API handler', () => {
     }));
   });
 
-  it('写入 handler 对随访状态冲突返回 409 并写 denied 审计', async () => {
+  it('写入处理器对随访状态冲突返回 409 并写拒绝审计', async () => {
     const auditRepository = { record: vi.fn(async () => undefined) };
 
     const response = await handleTenantBusinessMutationRequest({
@@ -397,7 +397,7 @@ describe('租户业务写入 API handler', () => {
     expect(auditRepository.record).not.toHaveBeenCalled();
   });
 
-  it('平台上下文创建客户时返回 403 denied 审计且不调用写入', async () => {
+  it('平台上下文创建客户时返回 403 拒绝审计且不调用写入', async () => {
     const auditRepository = { record: vi.fn(async () => undefined) };
     const mutate = vi.fn();
 
@@ -420,7 +420,7 @@ describe('租户业务写入 API handler', () => {
     }));
   });
 
-  it('租户上下文缺少 tenantId 时返回 403 missing_tenant 审计且不调用写入', async () => {
+  it('租户上下文缺少 tenantId 时返回 403 缺少租户审计且不调用写入', async () => {
     const auditRepository = { record: vi.fn(async () => undefined) };
     const mutate = vi.fn();
 
@@ -443,7 +443,7 @@ describe('租户业务写入 API handler', () => {
     }));
   });
 
-  it('写入目标不存在时返回 404 并记录 denied 审计', async () => {
+  it('写入目标不存在时返回 404 并记录拒绝审计', async () => {
     const auditRepository = { record: vi.fn(async () => undefined) };
 
     const response = await handleTenantBusinessMutationRequest({
@@ -465,7 +465,7 @@ describe('租户业务写入 API handler', () => {
   });
 });
 
-describe('租户业务只读 API route', () => {
+describe('租户业务只读 API 路由', () => {
   it('未登录时优先返回 401 且不初始化数据库', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
     routeMocks.getDatabase.mockImplementation(() => {
@@ -483,7 +483,7 @@ describe('租户业务只读 API route', () => {
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
   });
 
-  it('伪造未签名 cookie 请求客户 route 时返回 401 且不初始化数据库', async () => {
+  it('伪造未签名 cookie 请求客户路由时返回 401 且不初始化数据库', async () => {
     const actualAccessContext = await vi.importActual<typeof import('@/modules/security/server/access-context')>(
       '@/modules/security/server/access-context',
     );
@@ -516,7 +516,7 @@ describe('租户业务只读 API route', () => {
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
   });
 
-  it('带恶意 URL 和 header tenant 时仍使用访问上下文 tenant', async () => {
+  it('带恶意 URL 和请求头租户时仍使用访问上下文租户', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
 
     const response = await customersGet(
@@ -533,7 +533,7 @@ describe('租户业务只读 API route', () => {
     expect(routeMocks.repository.listCustomersByTenant).not.toHaveBeenCalledWith('other-tenant');
   });
 
-  it('权限拒绝时返回 403 且不被 route catch 成 503', async () => {
+  it('权限拒绝时返回 403 且不被路由捕获为 503', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
 
     const response = await customersGet(new Request('http://localhost/api/institution/customers'));
@@ -548,7 +548,7 @@ describe('租户业务只读 API route', () => {
     }));
   });
 
-  it('三个 route 绑定各自的列表方法和审计资源', async () => {
+  it('三个路由绑定各自的列表方法和审计资源', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
 
     const routeCases = [
@@ -608,7 +608,7 @@ describe('租户业务只读 API route', () => {
     }
   });
 
-  it('审计写入失败时 fail-closed 返回 503 且不泄露错误详情', async () => {
+  it('审计写入失败时失败关闭并返回 503 且不泄露错误详情', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.auditRecord.mockRejectedValue(
       new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg'),
@@ -626,7 +626,7 @@ describe('租户业务只读 API route', () => {
   });
 });
 
-describe('租户业务写入 API route', () => {
+describe('租户业务写入 API 路由', () => {
   it('未登录创建客户时返回 401 且不初始化数据库', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
     routeMocks.getDatabase.mockImplementation(() => {
@@ -742,7 +742,7 @@ describe('租户业务写入 API route', () => {
     }));
   });
 
-  it('更新客户目标不存在时返回 404 并记录 denied 审计', async () => {
+  it('更新客户目标不存在时返回 404 并记录拒绝审计', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.repository.updateCustomer.mockResolvedValueOnce(null);
 
@@ -819,7 +819,7 @@ describe('租户业务写入 API route', () => {
     }));
   });
 
-  it('预约创建和更新绑定对应 repository 方法并使用上下文 tenantId', async () => {
+  it('预约创建和更新绑定对应仓储方法并使用上下文 tenantId', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
 
     const createResponse = await appointmentsPost(
@@ -852,7 +852,7 @@ describe('租户业务写入 API route', () => {
     });
   });
 
-  it('预约创建客户不属于当前租户时返回 404 并记录 denied 审计', async () => {
+  it('预约创建客户不属于当前租户时返回 404 并记录拒绝审计', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.repository.customerExistsByTenant.mockResolvedValueOnce(false);
 
@@ -878,7 +878,7 @@ describe('租户业务写入 API route', () => {
     }));
   });
 
-  it('预约创建遇到客户外键竞态时返回 404 并记录 denied 审计', async () => {
+  it('预约创建遇到客户外键竞态时返回 404 并记录拒绝审计', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.repository.createAppointment.mockRejectedValueOnce(
       Object.assign(new Error('insert violates appointment customer foreign key'), {
@@ -904,7 +904,7 @@ describe('租户业务写入 API route', () => {
     }));
   });
 
-  it('随访状态流转绑定 repository 方法、操作者和上下文 tenantId', async () => {
+  it('随访状态流转绑定仓储方法、操作者和上下文 tenantId', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
 
     const response = await followupsPatch(
@@ -927,7 +927,7 @@ describe('租户业务写入 API route', () => {
     });
   });
 
-  it('随访非法流转返回 409 并记录 denied 审计', async () => {
+  it('随访非法流转返回 409 并记录拒绝审计', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.repository.transitionFollowUpTask.mockResolvedValueOnce({
       kind: 'invalid_transition',
@@ -952,7 +952,7 @@ describe('租户业务写入 API route', () => {
     }));
   });
 
-  it('随访状态冲突返回 409 并记录 denied 审计', async () => {
+  it('随访状态冲突返回 409 并记录拒绝审计', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.repository.transitionFollowUpTask.mockResolvedValueOnce({
       kind: 'conflict',

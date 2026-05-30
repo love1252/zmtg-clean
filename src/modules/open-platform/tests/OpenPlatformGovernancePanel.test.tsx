@@ -2,8 +2,8 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { OpenPlatformGovernancePanel } from '@/modules/open-platform/components/OpenPlatformGovernancePanel';
 
-describe('OpenPlatformGovernancePanel', () => {
-  it('renders the governance baseline without exposing real integrations', () => {
+describe('开放平台治理面板', () => {
+  it('渲染治理基线且不暴露真实集成能力', () => {
     render(<OpenPlatformGovernancePanel />);
 
     expect(screen.getByRole('heading', { name: '开放平台基础治理' })).toBeInTheDocument();

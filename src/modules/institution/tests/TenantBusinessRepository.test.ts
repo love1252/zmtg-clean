@@ -268,7 +268,7 @@ describe('租户业务仓储映射', () => {
     expect(JSON.stringify(record)).not.toMatch(/phoneNumber|idNumber|medicalRecordNo/);
   });
 
-  it('updateCustomer 按 tenantId + id 更新客户且无返回行时返回 null', async () => {
+  it('更新客户方法按 tenantId + id 更新客户且无返回行时返回 null', async () => {
     const mutation = createMutationDatabase(null);
 
     const record = await createTenantBusinessRepository(mutation.database).updateCustomer({
@@ -304,7 +304,7 @@ describe('租户业务仓储映射', () => {
     expect(record).toBeNull();
   });
 
-  it('updateCustomer 即使收到不安全入参也不会写入 createdAt、tenantId 或 id', async () => {
+  it('更新客户方法即使收到不安全入参也不会写入 createdAt、tenantId 或 id', async () => {
     const mutation = createMutationDatabase(customerRow);
     const repository = createTenantBusinessRepository(mutation.database);
 
@@ -367,7 +367,7 @@ describe('租户业务仓储映射', () => {
     });
   });
 
-  it('更新预约使用 appointments 设置状态和备注并返回映射记录', async () => {
+  it('更新预约方法设置 appointments 状态和备注并返回映射记录', async () => {
     const mutation = createMutationDatabase({
       ...appointmentRow,
       status: 'confirmed',
@@ -403,7 +403,7 @@ describe('租户业务仓储映射', () => {
     );
   });
 
-  it('随访状态流转先按 tenantId + id 查询，查不到时返回 not_found', async () => {
+  it('随访状态流转先按 tenantId + id 查询，查不到时返回未找到结果', async () => {
     const mutation = createFollowUpTransitionDatabase(null, null);
 
     const result = await createTenantBusinessRepository(mutation.database).transitionFollowUpTask({
@@ -426,7 +426,7 @@ describe('租户业务仓储映射', () => {
     expect(result).toEqual({ kind: 'not_found' });
   });
 
-  it('随访状态非法流转返回 invalid_transition 且不写库', async () => {
+  it('随访状态非法流转返回非法流转结果且不写库', async () => {
     const mutation = createFollowUpTransitionDatabase(followUpTaskRow, null);
 
     const result = await createTenantBusinessRepository(mutation.database).transitionFollowUpTask({
@@ -478,7 +478,7 @@ describe('租户业务仓储映射', () => {
     });
   });
 
-  it('随访状态合法但写入时状态已变化则返回 conflict', async () => {
+  it('随访状态合法但写入时状态已变化则返回冲突结果', async () => {
     const mutation = createFollowUpTransitionDatabase(followUpTaskRow, null);
 
     const result = await createTenantBusinessRepository(mutation.database).transitionFollowUpTask({

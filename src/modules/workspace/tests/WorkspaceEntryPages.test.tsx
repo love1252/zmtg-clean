@@ -15,12 +15,12 @@ function mockSession(role: 'tenant_admin' | 'platform_admin') {
   );
 }
 
-describe('workspace entry pages', () => {
+describe('工作台入口页面', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('renders the institution dashboard shell', async () => {
+  it('渲染机构工作台页面壳', async () => {
     mockSession('tenant_admin');
     render(<HospitalPage />);
 
@@ -51,7 +51,7 @@ describe('workspace entry pages', () => {
     expect(screen.getByText('今日随访任务')).toBeInTheDocument();
   });
 
-  it('renders the platform console shell', async () => {
+  it('渲染平台控制台页面壳', async () => {
     mockSession('platform_admin');
     render(<OpenPlatformPage />);
 

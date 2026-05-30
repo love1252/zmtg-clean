@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import LoginPage from '@/app/(auth)/login/page';
 import PlatformLoginPage from '@/app/(auth)/platform-login/page';
 
-describe('LoginShell', () => {
-  it('renders institution login copy', () => {
+describe('登录页外壳', () => {
+  it('渲染机构登录文案', () => {
     render(<LoginPage />);
 
     expect(screen.getByRole('heading', { name: '机构工作台登录' })).toBeInTheDocument();
@@ -15,7 +15,7 @@ describe('LoginShell', () => {
     });
   });
 
-  it('renders platform login copy', () => {
+  it('渲染平台登录文案', () => {
     render(<PlatformLoginPage />);
 
     expect(screen.getByRole('heading', { name: '平台管理员登录' })).toBeInTheDocument();

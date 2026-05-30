@@ -4,8 +4,8 @@ import { AppointmentCenterShell } from '@/modules/institution/components/Appoint
 import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 
-describe('institution business shells', () => {
-  it('renders the customer center shell', () => {
+describe('机构业务页面壳', () => {
+  it('渲染客户中心页面壳', () => {
     render(<CustomerCenterShell />);
 
     expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
@@ -14,7 +14,7 @@ describe('institution business shells', () => {
     expect(screen.getByText('客户分层来自演示规则')).toBeInTheDocument();
   });
 
-  it('renders the appointment center shell', () => {
+  it('渲染预约中心页面壳', () => {
     render(<AppointmentCenterShell />);
 
     expect(screen.getByRole('heading', { name: '预约中心' })).toBeInTheDocument();
@@ -23,7 +23,7 @@ describe('institution business shells', () => {
     expect(screen.getByText('3 位客户存在爽约风险')).toBeInTheDocument();
   });
 
-  it('renders the smart follow-up shell', () => {
+  it('渲染智能随访页面壳', () => {
     render(<SmartFollowUpShell />);
 
     expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();

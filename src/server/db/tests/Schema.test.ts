@@ -35,7 +35,7 @@ function tenantCustomerKey(record: { tenantId: string; customerId: string }) {
   return `${record.tenantId}:${record.customerId}`;
 }
 
-describe('数据库 schema', () => {
+describe('数据库结构', () => {
   it('数据库连接错误提示不泄露连接串', () => {
     expect(createDatabaseUrlErrorMessage()).toBe(
       'DATABASE_URL is required to use tenant persistence',
@@ -52,7 +52,7 @@ describe('数据库 schema', () => {
     expect(auditEvents).toBeDefined();
   });
 
-  it('客户 schema 只包含脱敏字段', () => {
+  it('客户表结构只包含脱敏字段', () => {
     expect(customers.maskedPhone).toBeDefined();
     expect(customers.maskedMedicalRecordNo).toBeDefined();
     expect('phoneNumber' in customers).toBe(false);
@@ -111,7 +111,7 @@ describe('数据库 schema', () => {
     expect(columnNames(followUpReference?.foreignColumns ?? [])).toEqual(['tenant_id', 'id']);
   });
 
-  it('演示 seed 覆盖预约和随访任务引用的同租户客户', () => {
+  it('演示种子数据覆盖预约和随访任务引用的同租户客户', () => {
     const customerKeys = new Set(
       getDemoCustomerSeedRecords().map((record) => `${record.tenantId}:${record.id}`),
     );
@@ -123,7 +123,7 @@ describe('数据库 schema', () => {
     expect(referencedCustomerKeys.filter((key) => !customerKeys.has(key))).toEqual([]);
   });
 
-  it('迁移不包含真实 PII 字段名', () => {
+  it('迁移不包含真实个人信息字段名', () => {
     const migrationSql = readMigrationSql();
 
     expect(migrationSql).not.toContain('"phone_number"');
