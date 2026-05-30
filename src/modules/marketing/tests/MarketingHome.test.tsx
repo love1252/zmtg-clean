@@ -2,8 +2,8 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { MarketingHome } from '@/modules/marketing/components/MarketingHome';
 
-describe('MarketingHome', () => {
-  it('renders the ZMTG brand promise and primary actions', () => {
+describe('官网首页', () => {
+  it('渲染智美天工品牌承诺和主要操作入口', () => {
     render(<MarketingHome />);
 
     expect(document.querySelector('[aria-label="智美天工 ZHIMEI TIANGONG"]')).toBeInTheDocument();

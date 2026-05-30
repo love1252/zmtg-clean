@@ -13,8 +13,8 @@ import {
   platformNavItems,
 } from '@/modules/workspace/domain/platform-dashboard';
 
-describe('workspace dashboard domain', () => {
-  it('keeps institution navigation unique with one active entry', () => {
+describe('工作台看板领域模型', () => {
+  it('保持机构导航唯一且只有一个激活入口', () => {
     const labels = institutionNavItems.map((item) => item.label);
 
     expect(new Set(labels).size).toBe(labels.length);
@@ -34,7 +34,7 @@ describe('workspace dashboard domain', () => {
     );
   });
 
-  it('keeps institution dashboard cards meaningful', () => {
+  it('保持机构看板卡片具备业务含义', () => {
     expect(institutionStats).toHaveLength(4);
     expect(institutionStats.map((item) => item.label)).toEqual(
       expect.arrayContaining(['累计客户资产', '今日待承接', '预约转化率', '复购窗口客户']),
@@ -45,7 +45,7 @@ describe('workspace dashboard domain', () => {
     expect(institutionActionQueue[0]).toMatchObject({ name: '王女士', score: 98 });
   });
 
-  it('keeps platform navigation unique with one active entry', () => {
+  it('保持平台导航唯一且只有一个激活入口', () => {
     const labels = platformNavItems.map((item) => item.label);
 
     expect(new Set(labels).size).toBe(labels.length);
@@ -55,7 +55,7 @@ describe('workspace dashboard domain', () => {
     );
   });
 
-  it('keeps platform operational cards meaningful', () => {
+  it('保持平台运营卡片具备业务含义', () => {
     expect(platformMetrics).toHaveLength(6);
     expect(platformMetrics.map((item) => item.label)).toEqual(
       expect.arrayContaining(['入驻医院', '活跃机构', 'Agent 调用', '服务用户', 'MRR', '续费率']),

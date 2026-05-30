@@ -13,8 +13,8 @@ import {
   followUpTasks,
 } from '@/modules/institution/domain/followups';
 
-describe('institution business domain', () => {
-  it('defines customer records with operational next actions', () => {
+describe('机构业务领域模型', () => {
+  it('定义包含运营下一步动作的客户记录', () => {
     expect(demoCustomers.length).toBeGreaterThanOrEqual(5);
 
     for (const customer of demoCustomers) {
@@ -30,7 +30,7 @@ describe('institution business domain', () => {
     }
   });
 
-  it('defines customer segment and insight summaries', () => {
+  it('定义客户分层和洞察摘要', () => {
     expect(customerSegments.map((item) => item.label)).toEqual([
       '高意向待承接',
       '术后关怀中',
@@ -40,7 +40,7 @@ describe('institution business domain', () => {
     expect(customerInsightItems.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('covers the expected appointment pipeline statuses', () => {
+  it('覆盖预期的预约流转状态', () => {
     expect(appointmentPipelineGroups.map((group) => group.status)).toEqual([
       '待确认',
       '已确认',
@@ -50,7 +50,7 @@ describe('institution business domain', () => {
     expect(appointmentAlerts.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('defines follow-up journeys and due tasks', () => {
+  it('定义随访旅程和到期任务', () => {
     expect(followUpJourneys.map((journey) => journey.name)).toContain('术后 D0-D30 关怀');
     expect(followUpTasks.length).toBeGreaterThanOrEqual(4);
 

@@ -1,18 +1,18 @@
-# Local Development
+# 本地开发
 
-## Requirements
+## 环境要求
 
-- Node.js 20 or newer
-- pnpm 9 or newer
+- Node.js 20 或更新版本
+- pnpm 9 或更新版本
 
-## Start
+## 启动
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-Open:
+打开地址：
 
 ```text
 http://localhost:5010
@@ -36,7 +36,7 @@ pnpm db:seed
 
 ### 写入 API 验证
 
-设置 `DATABASE_URL` 并完成迁移、种子后，可以用 demo 账号登录，再验证写入 API：
+设置 `DATABASE_URL` 并完成迁移、种子后，可以用演示账号登录，再验证写入 API：
 
 ```bash
 curl -i -X POST http://localhost:5010/api/auth/login \
@@ -59,22 +59,22 @@ curl -i -X POST http://localhost:5010/api/institution/customers \
 docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md
 ```
 
-## Demo Accounts
+## 演示账号
 
-本地 demo auth 默认在 `development` 和 `test` 环境启用：
+本地演示认证默认在 `development` 和 `test` 环境启用：
 
 ```text
 机构端：admin / admin123
 平台端：platform / admin123
 ```
 
-生产环境默认禁用 demo auth。若仅用于临时演示，需要显式设置：
+生产环境默认禁用演示认证。若仅用于临时演示，需要显式设置：
 
 ```text
 ZMTG_ENABLE_DEMO_AUTH=true
 ```
 
-## Verification
+## 验证
 
 ```bash
 pnpm typecheck
@@ -82,9 +82,9 @@ pnpm test
 pnpm build
 ```
 
-## Rules
+## 规则
 
-- Do not store business data in localStorage.
-- Do not add production fallback accounts.
-- Do not trust tenant IDs sent from the browser.
-- Keep mock providers limited to development and tests.
+- 不要把业务数据存入 localStorage。
+- 不要添加生产备用账号。
+- 不要信任浏览器发送的租户编号。
+- mock provider 仅限 development 和 test 环境使用。

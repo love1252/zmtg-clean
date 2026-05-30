@@ -1,14 +1,14 @@
 # 智美天工 Clean
 
-智美天工 Clean 是一套重新搭建的 AI 驱动医美智能运营中台。它以旧项目为功能参考，但不直接继承旧项目的临时代码、mock fallback、巨型页面和混乱数据源。
+智美天工 Clean 是一套重新搭建的 AI 驱动医美智能运营中台。它以旧项目为功能参考，但不直接继承旧项目的临时代码、mock 降级逻辑、巨型页面和混乱数据源。
 
-## Current Scope
+## 当前范围
 
 当前已经完成：
 
 - 官网首页
-- 机构登录页与本地 demo 登录
-- 平台登录页与本地 demo 登录
+- 机构登录页与本地演示登录
+- 平台登录页与本地演示登录
 - 机构工作台首屏
 - 平台管理后台首屏
 - 租户隔离与 RBAC 权限底座
@@ -31,33 +31,33 @@
 docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md
 ```
 
-## Development
+## 开发
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-Open:
+打开地址：
 
 ```text
 http://localhost:5010
 ```
 
-本地 demo 账号：
+本地演示账号：
 
 ```text
 机构端：admin / admin123
 平台端：platform / admin123
 ```
 
-demo auth 默认只在非生产环境启用。生产环境如需临时演示，必须显式设置：
+演示认证默认只在非生产环境启用。生产环境如需临时演示，必须显式设置：
 
 ```text
 ZMTG_ENABLE_DEMO_AUTH=true
 ```
 
-## Verification
+## 验证
 
 ```bash
 pnpm typecheck
@@ -65,15 +65,15 @@ pnpm test
 pnpm build
 ```
 
-## Architecture
+## 架构
 
-See:
+参见：
 
 ```text
 docs/architecture/zmtg-new-project-architecture-design.md
 ```
 
-## Autonomous Workflow
+## 自主执行工作流
 
 Codex 按仓库内的自主执行规则推进分支、测试、PR、开发日志和风险升级：
 
@@ -87,10 +87,10 @@ docs/operations/codex-autonomous-workflow.md
 docs/devlog/
 ```
 
-## Engineering Rules
+## 工程规则
 
-- Do not trust tenant IDs from browser localStorage or arbitrary request headers.
-- Do not add production fallback accounts.
-- Do not store business data in localStorage.
-- Do not hide TypeScript build errors.
-- Keep mock providers limited to development and tests.
+- 不要信任浏览器 localStorage 或任意请求头中的租户编号。
+- 不要添加生产备用账号。
+- 不要把业务数据存入 localStorage。
+- 不要隐藏 TypeScript 构建错误。
+- mock provider 仅限 development 和 test 环境使用。

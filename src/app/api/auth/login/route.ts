@@ -17,7 +17,7 @@ type LoginPayload = {
 
 export async function POST(request: Request) {
   if (!isDemoAuthEnabled()) {
-    return NextResponse.json({ code: 503, message: 'Demo auth is disabled' }, { status: 503 });
+    return NextResponse.json({ code: 503, message: '演示登录已禁用' }, { status: 503 });
   }
 
   let payload: LoginPayload;
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     encodedSession = encodeDemoSession(session);
   } catch (error) {
     if (isMissingDemoSessionSecretError(error)) {
-      return NextResponse.json({ code: 503, message: 'Demo auth is not configured' }, { status: 503 });
+      return NextResponse.json({ code: 503, message: '演示登录未配置' }, { status: 503 });
     }
     throw error;
   }

@@ -7,7 +7,7 @@ import {
   parseUpdateCustomerPayload,
 } from '@/modules/institution/server/tenant-business-write-input';
 
-describe('租户业务写入 payload 校验', () => {
+describe('租户业务写入请求载荷校验', () => {
   it('接受脱敏客户创建字段并拒绝 tenantId 注入', () => {
     expect(
       parseCreateCustomerPayload({
@@ -46,7 +46,7 @@ describe('租户业务写入 payload 校验', () => {
     ).toEqual({ ok: false, error: '请求包含不允许的字段: tenantId' });
   });
 
-  it('拒绝原始 PII 字段和非脱敏病历字段', () => {
+  it('拒绝原始个人信息字段和非脱敏病历字段', () => {
     expect(parseCreateCustomerPayload({ phoneNumber: '13800000000' })).toEqual({
       ok: false,
       error: '请求包含不允许的字段: phoneNumber',
@@ -307,7 +307,7 @@ describe('租户业务写入 payload 校验', () => {
     });
   });
 
-  it('校验随访状态流转 payload', () => {
+  it('校验随访状态流转请求载荷', () => {
     expect(parseFollowUpTransitionPayload({ id: 'fu_001', nextStatus: 'in_progress' })).toEqual({
       ok: true,
       value: {
@@ -322,7 +322,7 @@ describe('租户业务写入 payload 校验', () => {
     });
   });
 
-  it('拒绝非白名单字段和非 JSON object 请求体', () => {
+  it('拒绝非白名单字段和非 JSON 对象请求体', () => {
     expect(
       parseUpdateAppointmentPayload({ id: 'appt_001', status: 'arrived', note: '已到院', x: 1 }),
     ).toEqual({
