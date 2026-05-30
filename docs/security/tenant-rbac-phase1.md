@@ -95,3 +95,13 @@ const decision = canAccessResource({
 4. 随访状态变更必须复用 `transitionFollowUpTask` 状态机。
 5. 允许写入必须与业务写入在同一数据库事务内写入 `audit_events`；权限拒绝、目标不存在或不属于当前租户、非法随访流转也必须写入 denied 审计。
 6. 数据库异常必须返回稳定错误，不能泄露连接串、凭证明文或 SQL 细节。
+
+## 后续路线引用
+
+旧项目功能取舍、Phase 5 页面真实化建议和高风险模块边界记录在：
+
+```text
+docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md
+```
+
+后续进入治疗记录、知识库/RAG、AI provider、Agent、企业微信、API Key、OAuth、Webhook 或计费前，必须单独进入 Plan Mode，不应混入普通页面开发。
