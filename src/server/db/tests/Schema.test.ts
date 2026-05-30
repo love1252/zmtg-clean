@@ -12,6 +12,12 @@ import {
   tenants,
 } from '@/server/db/schema';
 
+type NamedColumn = { name: string };
+
+function columnNames(columns: readonly NamedColumn[]) {
+  return columns.map((column) => column.name);
+}
+
 function readMigrationSql() {
   const drizzleDir = join(process.cwd(), 'drizzle');
   return readdirSync(drizzleDir)
@@ -42,31 +48,52 @@ describe('数据库 schema', () => {
   });
 
   it('定义租户内唯一约束和唯一索引', () => {
-    const customerUniqueConstraintNames = getTableConfig(customers).uniqueConstraints.map(
-      (constraint) => constraint.getName(),
+    const customerUniqueConstraint = getTableConfig(customers).uniqueConstraints.find(
+      (constraint) => constraint.getName() === 'customers_tenant_id_id_unique',
     );
-    const tenantMemberIndexes = getTableConfig(tenantMembers).indexes.map((index) => index.config);
+    const tenantMemberIndexes = getTableConfig(tenantMembers).indexes.map((index) => ({
+      name: index.config.name,
+      unique: index.config.unique,
+      columns: columnNames(index.config.columns as NamedColumn[]),
+    }));
 
-    expect(customerUniqueConstraintNames).toContain('customers_tenant_id_id_unique');
+    expect(customerUniqueConstraint).toBeDefined();
+    expect(columnNames(customerUniqueConstraint?.columns ?? [])).toEqual(['tenant_id', 'id']);
     expect(tenantMemberIndexes).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
+        {
           name: 'tenant_members_tenant_user_unique_idx',
           unique: true,
-        }),
-        expect.objectContaining({
+          columns: ['tenant_id', 'user_id'],
+        },
+        {
           name: 'tenant_members_tenant_role_idx',
           unique: false,
-        }),
+          columns: ['tenant_id', 'role'],
+        },
       ]),
     );
   });
 
   it('预约和随访任务通过租户加客户复合外键关联客户', () => {
-    expect(getTableConfig(appointments).foreignKeys.map((foreignKey) => foreignKey.getName()))
-      .toContain('appointments_tenant_customer_fk');
-    expect(getTableConfig(followUpTasks).foreignKeys.map((foreignKey) => foreignKey.getName()))
-      .toContain('follow_up_tasks_tenant_customer_fk');
+    const appointmentCustomerFk = getTableConfig(appointments).foreignKeys.find(
+      (foreignKey) => foreignKey.getName() === 'appointments_tenant_customer_fk',
+    );
+    const followUpCustomerFk = getTableConfig(followUpTasks).foreignKeys.find(
+      (foreignKey) => foreignKey.getName() === 'follow_up_tasks_tenant_customer_fk',
+    );
+    const appointmentReference = appointmentCustomerFk?.reference();
+    const followUpReference = followUpCustomerFk?.reference();
+
+    expect(appointmentCustomerFk).toBeDefined();
+    expect(columnNames(appointmentReference?.columns ?? [])).toEqual(['tenant_id', 'customer_id']);
+    expect(getTableConfig(appointmentReference?.foreignTable ?? tenants).name).toBe('customers');
+    expect(columnNames(appointmentReference?.foreignColumns ?? [])).toEqual(['tenant_id', 'id']);
+
+    expect(followUpCustomerFk).toBeDefined();
+    expect(columnNames(followUpReference?.columns ?? [])).toEqual(['tenant_id', 'customer_id']);
+    expect(getTableConfig(followUpReference?.foreignTable ?? tenants).name).toBe('customers');
+    expect(columnNames(followUpReference?.foreignColumns ?? [])).toEqual(['tenant_id', 'id']);
   });
 
   it('迁移不包含真实 PII 字段名', () => {
@@ -82,10 +109,11 @@ describe('数据库 schema', () => {
   it('迁移包含租户客户一致性的复合外键', () => {
     const migrationSql = readMigrationSql();
 
-    expect(migrationSql).toContain('appointments_tenant_customer_fk');
     expect(migrationSql).toContain(
-      'foreign key ("tenant_id","customer_id") references "public"."customers"("tenant_id","id")',
+      'alter table "appointments" add constraint "appointments_tenant_customer_fk" foreign key ("tenant_id","customer_id") references "public"."customers"("tenant_id","id")',
     );
-    expect(migrationSql).toContain('follow_up_tasks_tenant_customer_fk');
+    expect(migrationSql).toContain(
+      'alter table "follow_up_tasks" add constraint "follow_up_tasks_tenant_customer_fk" foreign key ("tenant_id","customer_id") references "public"."customers"("tenant_id","id")',
+    );
   });
 });
