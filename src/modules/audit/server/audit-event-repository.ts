@@ -4,8 +4,17 @@ import { auditEvents } from '@/server/db/schema';
 
 export function mapAuditEventToInsert(event: TenantAuditEvent): typeof auditEvents.$inferInsert {
   return {
-    ...event,
+    eventId: event.eventId,
+    actorId: event.actorId,
+    actorRole: event.actorRole,
+    tenantId: event.tenantId,
+    scope: event.scope,
+    resource: event.resource,
+    action: event.action,
+    result: event.result,
+    reason: event.reason,
     occurredAt: new Date(event.occurredAt),
+    source: event.source,
   };
 }
 
@@ -16,3 +25,5 @@ export function createAuditEventRepository(database: TenantDatabase) {
     },
   };
 }
+
+export type AuditEventRepository = ReturnType<typeof createAuditEventRepository>;

@@ -21,6 +21,20 @@ const event: TenantAuditEvent = {
   source: 'demo_session',
 };
 
+const expectedInsertRow = {
+  eventId: 'audit_evt_001',
+  actorId: 'demo-user-admin',
+  actorRole: 'tenant_admin',
+  tenantId: 'demo-tenant-001',
+  scope: 'tenant',
+  resource: 'customer',
+  action: 'read_own_tenant',
+  result: 'allowed',
+  reason: 'allowed_by_policy',
+  occurredAt: new Date('2026-05-30T09:00:00.000Z'),
+  source: 'demo_session',
+};
+
 function createInsertDatabase() {
   const values = vi.fn(async () => undefined);
   const insert = vi.fn(() => ({ values }));
@@ -34,10 +48,19 @@ function createInsertDatabase() {
 
 describe('审计事件仓储映射', () => {
   it('把审计事件映射为数据库写入行', () => {
-    expect(mapAuditEventToInsert(event)).toEqual({
+    expect(mapAuditEventToInsert(event)).toEqual(expectedInsertRow);
+  });
+
+  it('映射审计事件时不会把额外字段带入写入行', () => {
+    const eventWithExtraField: TenantAuditEvent & { accessToken: string } = {
       ...event,
-      occurredAt: new Date('2026-05-30T09:00:00.000Z'),
-    });
+      accessToken: 'sk_test_should_not_persist',
+    };
+
+    const insertRow = mapAuditEventToInsert(eventWithExtraField);
+
+    expect(insertRow).toEqual(expectedInsertRow);
+    expect(insertRow).not.toHaveProperty('accessToken');
   });
 
   it('把审计事件写入 audit_events 表', async () => {
@@ -46,9 +69,6 @@ describe('审计事件仓储映射', () => {
     await createAuditEventRepository(query.database).record(event);
 
     expect(query.insert).toHaveBeenCalledWith(auditEvents);
-    expect(query.values).toHaveBeenCalledWith({
-      ...event,
-      occurredAt: new Date('2026-05-30T09:00:00.000Z'),
-    });
+    expect(query.values).toHaveBeenCalledWith(expectedInsertRow);
   });
 });

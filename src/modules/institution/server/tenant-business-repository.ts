@@ -79,3 +79,5 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
     },
   };
 }
+
+export type TenantBusinessRepository = ReturnType<typeof createTenantBusinessRepository>;

@@ -56,10 +56,19 @@ describe('租户业务仓储映射', () => {
       updatedAt: new Date('2026-05-30T00:00:00.000Z'),
     });
 
-    expect(record).toMatchObject({
+    expect(record).toEqual({
       id: 'cust_001',
       tenantId: 'demo-tenant-001',
+      displayName: '王女士',
+      lifecycle: 'repurchase_window',
+      priority: 'high',
+      ownerUserId: 'consultant-lin',
+      projectInterest: '热玛吉修复组合',
       maskedPhone: '138****1208',
+      maskedMedicalRecordNo: 'MR****001',
+      lastTouchSummary: '术后第 28 天',
+      nextAction: '人工回访',
+      tags: ['高价值'],
     });
     expect(JSON.stringify(record)).not.toMatch(/phoneNumber|idNumber|medicalRecordNo/);
     expect(record).not.toHaveProperty('createdAt');
@@ -67,39 +76,65 @@ describe('租户业务仓储映射', () => {
   });
 
   it('把预约和随访行映射为领域记录', () => {
-    expect(
-      mapAppointmentRowToRecord({
-        id: 'appt_001',
-        tenantId: 'demo-tenant-001',
-        customerId: 'cust_001',
-        customerDisplayName: '王女士',
-        project: '水光补水',
-        scheduledAt: new Date('2026-06-01T02:30:00.000Z'),
-        consultantUserId: 'consultant-xu',
-        status: 'pending_confirmation',
-        note: '待确认',
-        createdAt: new Date('2026-05-30T00:00:00.000Z'),
-        updatedAt: new Date('2026-05-30T00:00:00.000Z'),
-      }),
-    ).toMatchObject({ id: 'appt_001', status: 'pending_confirmation' });
+    const appointment = mapAppointmentRowToRecord({
+      id: 'appt_001',
+      tenantId: 'demo-tenant-001',
+      customerId: 'cust_001',
+      customerDisplayName: '王女士',
+      project: '水光补水',
+      scheduledAt: new Date('2026-06-01T02:30:00.000Z'),
+      consultantUserId: 'consultant-xu',
+      status: 'pending_confirmation',
+      note: '待确认',
+      createdAt: new Date('2026-05-30T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-30T00:00:00.000Z'),
+    });
 
-    expect(
-      mapFollowUpTaskRowToRecord({
-        id: 'fu_001',
-        tenantId: 'demo-tenant-001',
-        customerId: 'cust_001',
-        customerDisplayName: '王女士',
-        journeyId: 'journey_repurchase',
-        stage: 'D28 复购建议',
-        status: 'due',
-        dueAt: new Date('2026-05-30T10:00:00.000Z'),
-        suggestedAction: '人工回访',
-        riskLevel: 'urgent',
-        updatedBy: null,
-        updatedAt: null,
-        createdAt: new Date('2026-05-30T00:00:00.000Z'),
-      }),
-    ).toMatchObject({ id: 'fu_001', status: 'due', riskLevel: 'urgent' });
+    expect(appointment).toEqual({
+      id: 'appt_001',
+      tenantId: 'demo-tenant-001',
+      customerId: 'cust_001',
+      customerDisplayName: '王女士',
+      project: '水光补水',
+      scheduledAt: '2026-06-01T02:30:00.000Z',
+      consultantUserId: 'consultant-xu',
+      status: 'pending_confirmation',
+      note: '待确认',
+    });
+    expect(appointment).not.toHaveProperty('createdAt');
+    expect(appointment).not.toHaveProperty('updatedAt');
+
+    const followUpTask = mapFollowUpTaskRowToRecord({
+      id: 'fu_001',
+      tenantId: 'demo-tenant-001',
+      customerId: 'cust_001',
+      customerDisplayName: '王女士',
+      journeyId: 'journey_repurchase',
+      stage: 'D28 复购建议',
+      status: 'due',
+      dueAt: new Date('2026-05-30T10:00:00.000Z'),
+      suggestedAction: '人工回访',
+      riskLevel: 'urgent',
+      updatedBy: null,
+      updatedAt: null,
+      createdAt: new Date('2026-05-30T00:00:00.000Z'),
+    });
+
+    expect(followUpTask).toEqual({
+      id: 'fu_001',
+      tenantId: 'demo-tenant-001',
+      customerId: 'cust_001',
+      customerDisplayName: '王女士',
+      journeyId: 'journey_repurchase',
+      stage: 'D28 复购建议',
+      status: 'due',
+      dueAt: '2026-05-30T10:00:00.000Z',
+      suggestedAction: '人工回访',
+      riskLevel: 'urgent',
+      updatedBy: null,
+      updatedAt: null,
+    });
+    expect(followUpTask).not.toHaveProperty('createdAt');
   });
 
   it('列表查询按 tenantId 过滤客户、预约和随访任务', async () => {
