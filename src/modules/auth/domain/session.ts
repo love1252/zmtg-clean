@@ -1,4 +1,12 @@
-export const AUTH_ROLES = ['tenant_admin', 'platform_admin'] as const;
+export const AUTH_ROLES = [
+  'tenant_admin',
+  'tenant_operator',
+  'consultant',
+  'customer_service',
+  'platform_admin',
+  'platform_operator',
+  'security_auditor',
+] as const;
 
 export type AuthRole = (typeof AUTH_ROLES)[number];
 

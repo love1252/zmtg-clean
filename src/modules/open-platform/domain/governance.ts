@@ -1,5 +1,5 @@
 export type PlatformRoleId =
-  | 'platform_super_admin'
+  | 'platform_admin'
   | 'platform_operator'
   | 'security_auditor'
   | 'tenant_admin';
@@ -82,7 +82,7 @@ export const platformRoleCatalog: Array<{
   description: string;
 }> = [
   {
-    id: 'platform_super_admin',
+    id: 'platform_admin',
     name: '平台超级管理员',
     description: '负责租户状态、平台策略、开放连接治理和高风险操作审批。',
   },
@@ -110,13 +110,13 @@ export const openPlatformPermissions: Array<{
   boundary: string;
 }> = [
   {
-    roleId: 'platform_super_admin',
+    roleId: 'platform_admin',
     resource: 'tenant',
     actions: ['read_aggregate', 'read_detail', 'manage_status'],
     boundary: '可管理租户运营状态，但第一阶段不能读取租户客户 PII。',
   },
   {
-    roleId: 'platform_super_admin',
+    roleId: 'platform_admin',
     resource: 'permission_policy',
     actions: ['read_detail', 'manage_policy', 'review'],
     boundary: '可定义策略草案，并在审查后审批高风险策略变更。',

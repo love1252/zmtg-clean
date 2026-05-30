@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ACCESS_ACTIONS,
+  ACCESS_RESOURCES,
+  ACCESS_ROLES,
+} from '@/modules/security/domain/access-control';
+import {
   auditEventCatalog,
   capabilityLifecycleGroups,
   governanceForbiddenTerms,
@@ -22,14 +27,14 @@ describe('开放平台治理领域模型', () => {
 
   it('保持角色权限显式且有边界', () => {
     expect(platformRoleCatalog.map((role) => role.id)).toEqual([
-      'platform_super_admin',
+      'platform_admin',
       'platform_operator',
       'security_auditor',
       'tenant_admin',
     ]);
 
     expect(openPlatformPermissions).toContainEqual({
-      roleId: 'platform_super_admin',
+      roleId: 'platform_admin',
       resource: 'tenant',
       actions: ['read_aggregate', 'read_detail', 'manage_status'],
       boundary: '可管理租户运营状态，但第一阶段不能读取租户客户 PII。',
@@ -39,6 +44,20 @@ describe('开放平台治理领域模型', () => {
       resource: 'open_connection',
       actions: ['read_own_tenant'],
       boundary: '只能查看本租户开放连接态势，不能管理平台级策略。',
+    });
+  });
+
+  it('与访问控制领域的角色、资源、动作保持一致', () => {
+    platformRoleCatalog.forEach((role) => {
+      expect(ACCESS_ROLES).toContain(role.id);
+    });
+
+    openPlatformPermissions.forEach((permission) => {
+      expect(ACCESS_ROLES).toContain(permission.roleId);
+      expect(ACCESS_RESOURCES).toContain(permission.resource);
+      permission.actions.forEach((action) => {
+        expect(ACCESS_ACTIONS).toContain(action);
+      });
     });
   });
 
