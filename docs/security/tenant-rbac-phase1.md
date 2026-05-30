@@ -72,3 +72,15 @@ const decision = canAccessResource({
 5. 只暴露脱敏展示字段。
 
 审计事件模型必须记录操作者、角色、租户、资源、动作、结果、原因、时间和来源。审计事件不能包含 API Key、OAuth token、Webhook secret 或其他凭证明文。
+
+## 第三阶段真实落库约束
+
+第三阶段允许新增 PostgreSQL、Drizzle schema、迁移、seed、只读仓储和只读 API route。
+
+真实落库必须遵守：
+
+1. 客户、预约、随访读取只使用服务端 `AccessContext` 推导租户。
+2. API route 不接受查询参数、请求体或 header 中的租户编号作为最终授权依据。
+3. 客户表只保存脱敏展示字段，不保存手机号、身份证号、病历号、治疗记录正文或咨询对话。
+4. 权限拒绝、跨租户拒绝和允许读取都可以写入 `audit_events`。
+5. 数据库连接错误不能向前端暴露连接串。

@@ -15,14 +15,19 @@
     "typecheck": "tsc --noEmit",
     "test": "node scripts/run-vitest.mjs run",
     "test:watch": "node scripts/run-vitest.mjs",
-    "preflight": "pnpm typecheck && pnpm test && pnpm build"
+    "preflight": "pnpm typecheck && pnpm test && pnpm build",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx src/server/db/seed-demo-data.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.2",
     "lucide-react": "^0.468.0",
     "next": "16.1.1",
+    "postgres": "^3.4.9",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tailwind-merge": "^2.6.0",
@@ -36,10 +41,12 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^4.7.0",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
+    "tsx": "^4.22.3",
     "typescript": "^5",
     "vite": "6.3.5",
     "vitest": "^3.2.4"

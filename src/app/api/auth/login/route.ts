@@ -4,6 +4,7 @@ import {
   createDemoSession,
   DEMO_SESSION_COOKIE,
   encodeDemoSession,
+  isMissingDemoSessionSecretError,
   isDemoAuthEnabled,
   sessionMaxAgeSeconds,
 } from '@/modules/auth/server/demo-session';
@@ -40,8 +41,18 @@ export async function POST(request: Request) {
   }
 
   const session = createDemoSession(user);
+  let encodedSession: string;
+  try {
+    encodedSession = encodeDemoSession(session);
+  } catch (error) {
+    if (isMissingDemoSessionSecretError(error)) {
+      return NextResponse.json({ code: 503, message: 'Demo auth is not configured' }, { status: 503 });
+    }
+    throw error;
+  }
+
   const response = NextResponse.json({ code: 0, data: { user } });
-  response.cookies.set(DEMO_SESSION_COOKIE, encodeDemoSession(session), {
+  response.cookies.set(DEMO_SESSION_COOKIE, encodedSession, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',

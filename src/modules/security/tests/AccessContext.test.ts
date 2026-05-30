@@ -10,6 +10,10 @@ function requestWithSession(sessionValue: string) {
   });
 }
 
+function unsignedSession(session: unknown) {
+  return Buffer.from(JSON.stringify(session), 'utf8').toString('base64url');
+}
+
 describe('访问上下文', () => {
   it('把机构管理员演示会话转换为租户访问上下文', () => {
     const session = encodeDemoSession({
@@ -76,6 +80,21 @@ describe('访问上下文', () => {
 
   it('请求没有有效会话时返回空值', () => {
     expect(getDemoAccessContextFromRequest(new Request('http://localhost/api/example'))).toBeNull();
+  });
+
+  it('拒绝伪造的未签名演示会话 cookie', () => {
+    const forged = unsignedSession({
+      user: {
+        id: 'forged-platform-user',
+        username: 'forged',
+        name: '伪造平台管理员',
+        role: 'platform_admin',
+        tenantId: null,
+      },
+      expiresAt: Date.now() + 60_000,
+    });
+
+    expect(getDemoAccessContextFromRequest(requestWithSession(forged))).toBeNull();
   });
 
   it('请求会话已过期时返回空值', () => {

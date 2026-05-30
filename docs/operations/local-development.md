@@ -18,6 +18,22 @@ Open:
 http://localhost:5010
 ```
 
+## 本地数据库
+
+第三阶段使用 PostgreSQL + Drizzle。需要在本地 shell 中设置 `DATABASE_URL`，不要把真实连接串提交到仓库。
+
+常用命令：
+
+```bash
+pnpm db:generate
+pnpm db:migrate
+pnpm db:seed
+```
+
+如果本机没有把裸 `pnpm` 放进 PATH，也可以使用本机的完整 `pnpm` 路径执行等价命令。
+
+如果没有配置 `DATABASE_URL`，应用中的真实落库 API 会返回稳定错误，不应泄露连接串。
+
 ## Demo Accounts
 
 本地 demo auth 默认在 `development` 和 `test` 环境启用：
