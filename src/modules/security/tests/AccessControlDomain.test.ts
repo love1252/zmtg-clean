@@ -76,6 +76,27 @@ describe('访问控制领域', () => {
     ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
   });
 
+  it('允许机构管理员在本租户创建和更新客户、预约、随访', () => {
+    const writeCases = [
+      { resource: 'customer', action: 'create' },
+      { resource: 'customer', action: 'update' },
+      { resource: 'appointment', action: 'create' },
+      { resource: 'appointment', action: 'update' },
+      { resource: 'follow_up', action: 'update' },
+    ] as const;
+
+    for (const writeCase of writeCases) {
+      expect(
+        canAccessResource({
+          context: tenantAdminContext,
+          resource: writeCase.resource,
+          action: writeCase.action,
+          targetTenantId: 'demo-tenant-001',
+        }),
+      ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+    }
+  });
+
   it('拒绝机构管理员读取其他租户', () => {
     expect(
       canAccessResource({
@@ -130,6 +151,17 @@ describe('访问控制领域', () => {
         containsSensitiveDetail: true,
       }),
     ).toEqual({ allowed: false, reason: 'sensitive_detail_denied' });
+  });
+
+  it('拒绝平台管理员直接写入租户业务数据', () => {
+    expect(
+      canAccessResource({
+        context: platformAdminContext,
+        resource: 'customer',
+        action: 'create',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
   });
 
   it('允许平台管理员管理租户状态', () => {
