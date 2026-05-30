@@ -51,6 +51,14 @@ curl -i -X POST http://localhost:5010/api/institution/customers \
 
 不要把真实 `DATABASE_URL`、cookie 或业务数据写入文档、提交记录或截图。
 
+## 路线图
+
+当前 clean 项目的已完成阶段、旧项目功能取舍和 Phase 5 建议范围记录在：
+
+```text
+docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md
+```
+
 ## Demo Accounts
 
 本地 demo auth 默认在 `development` 和 `test` 环境启用：
