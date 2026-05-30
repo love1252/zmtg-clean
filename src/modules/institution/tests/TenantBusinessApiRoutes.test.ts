@@ -1,7 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { GET as appointmentsGet } from '@/app/api/institution/appointments/route';
-import { GET as customersGet } from '@/app/api/institution/customers/route';
-import { GET as followupsGet } from '@/app/api/institution/followups/route';
+import {
+  GET as appointmentsGet,
+  PATCH as appointmentsPatch,
+  POST as appointmentsPost,
+} from '@/app/api/institution/appointments/route';
+import {
+  GET as customersGet,
+  PATCH as customersPatch,
+  POST as customersPost,
+} from '@/app/api/institution/customers/route';
+import {
+  GET as followupsGet,
+  PATCH as followupsPatch,
+} from '@/app/api/institution/followups/route';
 import { DEMO_SESSION_COOKIE } from '@/modules/auth/server/demo-session';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import {
@@ -14,6 +25,11 @@ const routeMocks = vi.hoisted(() => {
     listCustomersByTenant: vi.fn(),
     listAppointmentsByTenant: vi.fn(),
     listFollowUpTasksByTenant: vi.fn(),
+    createCustomer: vi.fn(),
+    updateCustomer: vi.fn(),
+    createAppointment: vi.fn(),
+    updateAppointment: vi.fn(),
+    transitionFollowUpTask: vi.fn(),
   };
   const auditRecord = vi.fn();
 
@@ -102,7 +118,77 @@ beforeEach(() => {
   routeMocks.repository.listFollowUpTasksByTenant.mockResolvedValue([
     { id: 'fu_001', tenantId: 'demo-tenant-001' },
   ]);
+  routeMocks.repository.createCustomer.mockReset();
+  routeMocks.repository.createCustomer.mockResolvedValue({
+    id: 'cust_created',
+    tenantId: 'demo-tenant-001',
+    displayName: '王女士',
+  });
+  routeMocks.repository.updateCustomer.mockReset();
+  routeMocks.repository.updateCustomer.mockResolvedValue({
+    id: 'cust_001',
+    tenantId: 'demo-tenant-001',
+    displayName: '王女士更新',
+  });
+  routeMocks.repository.createAppointment.mockReset();
+  routeMocks.repository.createAppointment.mockResolvedValue({
+    id: 'appt_created',
+    tenantId: 'demo-tenant-001',
+    customerId: 'cust_001',
+    scheduledAt: '2026-06-01T02:30:00.000Z',
+  });
+  routeMocks.repository.updateAppointment.mockReset();
+  routeMocks.repository.updateAppointment.mockResolvedValue({
+    id: 'appt_001',
+    tenantId: 'demo-tenant-001',
+    status: 'confirmed',
+    note: '已确认',
+  });
+  routeMocks.repository.transitionFollowUpTask.mockReset();
+  routeMocks.repository.transitionFollowUpTask.mockResolvedValue({
+    kind: 'updated',
+    task: { id: 'fu_001', tenantId: 'demo-tenant-001', status: 'in_progress' },
+  });
 });
+
+const validCreateCustomerPayload = {
+  displayName: '王女士',
+  lifecycle: 'consulting',
+  priority: 'high',
+  ownerUserId: 'consultant-lin',
+  projectInterest: '皮肤管理',
+  maskedPhone: '138****0000',
+  maskedMedicalRecordNo: 'MR****001',
+  lastTouchSummary: '初次咨询',
+  nextAction: '预约到店',
+  tags: ['新客'],
+};
+
+const validUpdateCustomerPayload = {
+  id: 'cust_001',
+  displayName: '王女士更新',
+};
+
+const validCreateAppointmentPayload = {
+  customerId: 'cust_001',
+  customerDisplayName: '王女士',
+  project: '皮肤管理',
+  scheduledAt: '2026-06-01T10:30:00+08:00',
+  consultantUserId: 'consultant-lin',
+  status: 'pending_confirmation',
+  note: '首次预约',
+};
+
+const validUpdateAppointmentPayload = {
+  id: 'appt_001',
+  status: 'confirmed',
+  note: '已确认',
+};
+
+const validFollowUpTransitionPayload = {
+  id: 'fu_001',
+  nextStatus: 'in_progress',
+};
 
 describe('租户业务只读 API 流程', () => {
   it('使用访问上下文租户读取客户', async () => {
@@ -473,6 +559,243 @@ describe('租户业务只读 API route', () => {
     );
 
     const response = await customersGet(new Request('http://localhost/api/institution/customers'));
+    const payload = await response.json();
+    const serializedPayload = JSON.stringify(payload);
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({ error: '数据服务暂时不可用' });
+    expect(serializedPayload).not.toContain('DATABASE_URL');
+    expect(serializedPayload).not.toContain('postgres://');
+    expect(serializedPayload).not.toContain('secret');
+  });
+});
+
+describe('租户业务写入 API route', () => {
+  it('未登录创建客户时返回 401 且不初始化数据库', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
+    routeMocks.getDatabase.mockImplementation(() => {
+      throw new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg');
+    });
+
+    const response = await customersPost(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'POST',
+        body: JSON.stringify(validCreateCustomerPayload),
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: '请先登录' });
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
+  });
+
+  it('创建客户请求体含 tenantId 时返回解析错误且不初始化数据库', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await customersPost(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...validCreateCustomerPayload,
+          tenantId: 'other-tenant',
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: '请求包含不允许的字段: tenantId' });
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
+  });
+
+  it('非法 JSON 返回 400 且不初始化数据库', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await customersPost(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'POST',
+        body: '{bad-json',
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: '请求格式不正确' });
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
+  });
+
+  it('创建客户使用访问上下文 tenantId 并记录允许审计', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await customersPost(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'POST',
+        headers: { 'x-tenant-id': 'other-tenant' },
+        body: JSON.stringify(validCreateCustomerPayload),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({
+      record: { id: 'cust_created', tenantId: 'demo-tenant-001', displayName: '王女士' },
+    });
+    expect(routeMocks.repository.createCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.any(String),
+        tenantId: 'demo-tenant-001',
+        displayName: '王女士',
+      }),
+    );
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'other-tenant' }),
+    );
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'create',
+      resource: 'customer',
+      result: 'allowed',
+      tenantId: 'demo-tenant-001',
+    }));
+  });
+
+  it('更新客户目标不存在时返回 404', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.repository.updateCustomer.mockResolvedValueOnce(null);
+
+    const response = await customersPatch(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'PATCH',
+        body: JSON.stringify(validUpdateCustomerPayload),
+      }),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
+    expect(routeMocks.repository.updateCustomer).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      ...validUpdateCustomerPayload,
+    });
+    expect(routeMocks.auditRecord).not.toHaveBeenCalledWith(expect.objectContaining({
+      result: 'allowed',
+      resource: 'customer',
+    }));
+  });
+
+  it('平台上下文写入返回 403 且不调用客户写入方法', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
+
+    const response = await customersPost(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'POST',
+        body: JSON.stringify(validCreateCustomerPayload),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
+    expect(routeMocks.getDatabase).toHaveBeenCalled();
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'create',
+      resource: 'customer',
+      result: 'denied',
+      reason: 'role_denied',
+    }));
+  });
+
+  it('预约创建和更新绑定对应 repository 方法并使用上下文 tenantId', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const createResponse = await appointmentsPost(
+      new Request('http://localhost/api/institution/appointments?tenantId=other-tenant', {
+        method: 'POST',
+        body: JSON.stringify(validCreateAppointmentPayload),
+      }),
+    );
+    const patchResponse = await appointmentsPatch(
+      new Request('http://localhost/api/institution/appointments', {
+        method: 'PATCH',
+        headers: { 'x-tenant-id': 'other-tenant' },
+        body: JSON.stringify(validUpdateAppointmentPayload),
+      }),
+    );
+
+    expect(createResponse.status).toBe(201);
+    expect(patchResponse.status).toBe(200);
+    expect(routeMocks.repository.createAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.any(String),
+        tenantId: 'demo-tenant-001',
+        customerId: 'cust_001',
+        scheduledAt: new Date('2026-06-01T10:30:00+08:00'),
+      }),
+    );
+    expect(routeMocks.repository.updateAppointment).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      ...validUpdateAppointmentPayload,
+    });
+  });
+
+  it('随访状态流转绑定 repository 方法、操作者和上下文 tenantId', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await followupsPatch(
+      new Request('http://localhost/api/institution/followups?tenantId=other-tenant', {
+        method: 'PATCH',
+        body: JSON.stringify(validFollowUpTransitionPayload),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      record: { id: 'fu_001', tenantId: 'demo-tenant-001', status: 'in_progress' },
+    });
+    expect(routeMocks.repository.transitionFollowUpTask).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      id: 'fu_001',
+      nextStatus: 'in_progress',
+      actorId: 'demo-user-admin',
+      occurredAt: expect.any(String),
+    });
+  });
+
+  it('随访非法流转返回 409 并记录 denied 审计', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.repository.transitionFollowUpTask.mockResolvedValueOnce({
+      kind: 'invalid_transition',
+      from: 'completed',
+      to: 'in_progress',
+    });
+
+    const response = await followupsPatch(
+      new Request('http://localhost/api/institution/followups', {
+        method: 'PATCH',
+        body: JSON.stringify(validFollowUpTransitionPayload),
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: '随访状态不允许这样流转' });
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'update',
+      resource: 'follow_up',
+      result: 'denied',
+      reason: 'invalid_transition',
+    }));
+  });
+
+  it('写入链路异常返回 503 且不泄露数据库或密钥信息', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.repository.createCustomer.mockRejectedValueOnce(
+      new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg'),
+    );
+
+    const response = await customersPost(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'POST',
+        body: JSON.stringify(validCreateCustomerPayload),
+      }),
+    );
     const payload = await response.json();
     const serializedPayload = JSON.stringify(payload);
 
