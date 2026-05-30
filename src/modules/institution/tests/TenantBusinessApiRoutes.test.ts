@@ -27,6 +27,7 @@ const routeMocks = vi.hoisted(() => {
     listFollowUpTasksByTenant: vi.fn(),
     createCustomer: vi.fn(),
     updateCustomer: vi.fn(),
+    customerExistsByTenant: vi.fn(),
     createAppointment: vi.fn(),
     updateAppointment: vi.fn(),
     transitionFollowUpTask: vi.fn(),
@@ -143,6 +144,8 @@ beforeEach(() => {
     tenantId: 'demo-tenant-001',
     displayName: '王女士更新',
   });
+  routeMocks.repository.customerExistsByTenant.mockReset();
+  routeMocks.repository.customerExistsByTenant.mockResolvedValue(true);
   routeMocks.repository.createAppointment.mockReset();
   routeMocks.repository.createAppointment.mockResolvedValue({
     id: 'appt_created',
@@ -847,6 +850,58 @@ describe('租户业务写入 API route', () => {
       tenantId: 'demo-tenant-001',
       ...validUpdateAppointmentPayload,
     });
+  });
+
+  it('预约创建客户不属于当前租户时返回 404 并记录 denied 审计', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.repository.customerExistsByTenant.mockResolvedValueOnce(false);
+
+    const response = await appointmentsPost(
+      new Request('http://localhost/api/institution/appointments', {
+        method: 'POST',
+        body: JSON.stringify(validCreateAppointmentPayload),
+      }),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
+    expect(routeMocks.repository.customerExistsByTenant).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      id: 'cust_001',
+    });
+    expect(routeMocks.repository.createAppointment).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'create',
+      resource: 'appointment',
+      result: 'denied',
+      reason: 'not_found_or_not_owned',
+    }));
+  });
+
+  it('预约创建遇到客户外键竞态时返回 404 并记录 denied 审计', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.repository.createAppointment.mockRejectedValueOnce(
+      Object.assign(new Error('insert violates appointment customer foreign key'), {
+        code: '23503',
+        constraint_name: 'appointments_tenant_customer_fk',
+      }),
+    );
+
+    const response = await appointmentsPost(
+      new Request('http://localhost/api/institution/appointments', {
+        method: 'POST',
+        body: JSON.stringify(validCreateAppointmentPayload),
+      }),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'create',
+      resource: 'appointment',
+      result: 'denied',
+      reason: 'not_found_or_not_owned',
+    }));
   });
 
   it('随访状态流转绑定 repository 方法、操作者和上下文 tenantId', async () => {

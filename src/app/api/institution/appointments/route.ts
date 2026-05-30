@@ -21,6 +21,23 @@ async function readJsonBody(request: Request) {
   }
 }
 
+function isAppointmentCustomerReferenceError(error: unknown) {
+  const databaseError = error as {
+    code?: unknown;
+    constraint?: unknown;
+    constraint_name?: unknown;
+    message?: unknown;
+  };
+  const constraintName = databaseError.constraint_name ?? databaseError.constraint;
+
+  return (
+    databaseError.code === '23503' &&
+    (constraintName === 'appointments_tenant_customer_fk' ||
+      (typeof databaseError.message === 'string' &&
+        databaseError.message.includes('appointments_tenant_customer_fk')))
+  );
+}
+
 export async function GET(request: Request) {
   const context = getDemoAccessContextFromRequest(request);
   if (!context) {
@@ -67,19 +84,39 @@ export async function POST(request: Request) {
       context,
       resource: 'appointment',
       action: 'create',
-      mutate: ({ tenantId, successAuditEvent }) =>
-        runTenantBusinessAuditTransaction(db, async ({ repository, auditRepository }) => {
-          const record = await repository.createAppointment({
-            ...parsed.value,
-            id: globalThis.crypto.randomUUID(),
-            tenantId,
-            scheduledAt: new Date(parsed.value.scheduledAt),
-          });
+      mutate: async ({ tenantId, successAuditEvent }) => {
+        try {
+          return await runTenantBusinessAuditTransaction(
+            db,
+            async ({ repository, auditRepository }) => {
+              const customerExists = await repository.customerExistsByTenant({
+                tenantId,
+                id: parsed.value.customerId,
+              });
+              if (!customerExists) {
+                return { kind: 'not_found' };
+              }
 
-          await auditRepository.record(successAuditEvent);
+              const record = await repository.createAppointment({
+                ...parsed.value,
+                id: globalThis.crypto.randomUUID(),
+                tenantId,
+                scheduledAt: new Date(parsed.value.scheduledAt),
+              });
 
-          return { kind: 'success', record };
-        }),
+              await auditRepository.record(successAuditEvent);
+
+              return { kind: 'success', record };
+            },
+          );
+        } catch (error) {
+          if (isAppointmentCustomerReferenceError(error)) {
+            return { kind: 'not_found' };
+          }
+
+          throw error;
+        }
+      },
       auditRepository,
       successStatus: 201,
     });

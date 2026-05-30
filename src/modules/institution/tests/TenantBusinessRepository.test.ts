@@ -348,6 +348,25 @@ describe('租户业务仓储映射', () => {
     });
   });
 
+  it('按 tenantId + id 检查客户是否属于当前租户', async () => {
+    const query = createSelectDatabase([{ id: 'cust_001' }]);
+
+    const exists = await createTenantBusinessRepository(query.database).customerExistsByTenant({
+      tenantId: 'demo-tenant-001',
+      id: 'cust_001',
+    });
+
+    expect(exists).toBe(true);
+    expect(query.from).toHaveBeenCalledWith(customers);
+    expect(query.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: customers.id, operator: 'eq', value: 'cust_001' },
+      ],
+      operator: 'and',
+    });
+  });
+
   it('更新预约使用 appointments 设置状态和备注并返回映射记录', async () => {
     const mutation = createMutationDatabase({
       ...appointmentRow,

@@ -34,6 +34,10 @@ type UpdateCustomerInput = Partial<MutableCustomerUpdateValues> & {
   id: string;
 };
 type CreateAppointmentInput = typeof appointments.$inferInsert;
+type CustomerLookupInput = {
+  tenantId: string;
+  id: string;
+};
 type UpdateAppointmentInput = {
   tenantId: string;
   id: string;
@@ -143,6 +147,14 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
     async createAppointment(input: CreateAppointmentInput): Promise<AppointmentRecordSummary> {
       const [row] = await database.insert(appointments).values(input).returning();
       return mapAppointmentRowToRecord(row);
+    },
+    async customerExistsByTenant(input: CustomerLookupInput): Promise<boolean> {
+      const [row] = await database
+        .select({ id: customers.id })
+        .from(customers)
+        .where(and(eq(customers.tenantId, input.tenantId), eq(customers.id, input.id)));
+
+      return Boolean(row);
     },
     async updateAppointment(
       input: UpdateAppointmentInput,
