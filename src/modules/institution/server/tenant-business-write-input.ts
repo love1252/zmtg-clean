@@ -175,7 +175,16 @@ function parseOptionalString(
 }
 
 function isMaskedDisplayValue(value: string) {
-  return value.includes('*') || /^masked[-_]/i.test(value) || /^demo[-_]/i.test(value);
+  const normalized = value.trim();
+  if (/\d{6,}/.test(normalized) || /raw/i.test(normalized)) {
+    return false;
+  }
+
+  return (
+    normalized.includes('*') ||
+    /^masked[-_][a-z][a-z0-9_-]*$/i.test(normalized) ||
+    /^demo[-_][a-z][a-z0-9_-]*$/i.test(normalized)
+  );
 }
 
 function parseCustomerString(
