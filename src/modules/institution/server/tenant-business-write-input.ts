@@ -118,6 +118,9 @@ const createAppointmentStringKeys = [
   'note',
 ] as const;
 
+const isoLikeTimestampPattern =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
+
 function isPlainJsonObject(input: unknown): input is Record<string, unknown> {
   return Object.prototype.toString.call(input) === '[object Object]';
 }
@@ -219,11 +222,49 @@ function parseScheduledAt(input: Record<string, unknown>): TenantBusinessWritePa
     return scheduledAt;
   }
 
-  if (Number.isNaN(new Date(scheduledAt.value).getTime())) {
+  if (!isValidIsoLikeTimestamp(scheduledAt.value)) {
     return { ok: false, error: '字段 scheduledAt 必须是有效时间字符串' };
   }
 
   return scheduledAt;
+}
+
+function isValidIsoLikeTimestamp(value: string): boolean {
+  const match = isoLikeTimestampPattern.exec(value);
+  if (!match) {
+    return false;
+  }
+
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, zoneText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = secondText === undefined ? 0 : Number(secondText);
+
+  if (month < 1 || month > 12) {
+    return false;
+  }
+
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (day < 1 || day > daysInMonth) {
+    return false;
+  }
+
+  if (hour > 23 || minute > 59 || second > 59) {
+    return false;
+  }
+
+  if (zoneText !== 'Z') {
+    const zoneHour = Number(zoneText.slice(1, 3));
+    const zoneMinute = Number(zoneText.slice(4, 6));
+    if (zoneHour > 23 || zoneMinute > 59) {
+      return false;
+    }
+  }
+
+  return !Number.isNaN(new Date(value).getTime());
 }
 
 export function parseCreateCustomerPayload(

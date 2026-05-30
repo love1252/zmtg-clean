@@ -93,6 +93,13 @@ describe('租户业务写入 payload 校验', () => {
     });
 
     expect(
+      parseCreateAppointmentPayload({ scheduledAt: '2026-02-31T10:30:00+08:00' }),
+    ).toEqual({
+      ok: false,
+      error: '字段 scheduledAt 必须是有效时间字符串',
+    });
+
+    expect(
       parseUpdateAppointmentPayload({
         id: 'appt_001',
         status: 'arrived',
