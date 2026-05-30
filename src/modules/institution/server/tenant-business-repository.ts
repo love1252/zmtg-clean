@@ -16,7 +16,20 @@ type CustomerRow = typeof customers.$inferSelect;
 type AppointmentRow = typeof appointments.$inferSelect;
 type FollowUpTaskRow = typeof followUpTasks.$inferSelect;
 type CreateCustomerInput = typeof customers.$inferInsert;
-type UpdateCustomerInput = Partial<Omit<typeof customers.$inferInsert, 'tenantId' | 'id'>> & {
+type MutableCustomerUpdateValues = Pick<
+  typeof customers.$inferInsert,
+  | 'displayName'
+  | 'lifecycle'
+  | 'priority'
+  | 'ownerUserId'
+  | 'projectInterest'
+  | 'maskedPhone'
+  | 'maskedMedicalRecordNo'
+  | 'lastTouchSummary'
+  | 'nextAction'
+  | 'tags'
+>;
+type UpdateCustomerInput = Partial<MutableCustomerUpdateValues> & {
   tenantId: string;
   id: string;
 };
@@ -43,6 +56,21 @@ function omitUndefinedValues<T extends Record<string, unknown>>(values: T): Part
   return Object.fromEntries(
     Object.entries(values).filter(([, value]) => value !== undefined),
   ) as Partial<T>;
+}
+
+function pickCustomerUpdateValues(input: UpdateCustomerInput): Partial<MutableCustomerUpdateValues> {
+  return omitUndefinedValues({
+    displayName: input.displayName,
+    lifecycle: input.lifecycle,
+    priority: input.priority,
+    ownerUserId: input.ownerUserId,
+    projectInterest: input.projectInterest,
+    maskedPhone: input.maskedPhone,
+    maskedMedicalRecordNo: input.maskedMedicalRecordNo,
+    lastTouchSummary: input.lastTouchSummary,
+    nextAction: input.nextAction,
+    tags: input.tags,
+  });
 }
 
 export function mapCustomerRowToRecord(row: CustomerRow): CustomerRecordSummary {
@@ -100,14 +128,13 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
       return mapCustomerRowToRecord(row);
     },
     async updateCustomer(input: UpdateCustomerInput): Promise<CustomerRecordSummary | null> {
-      const { tenantId, id, ...changes } = input;
       const [row] = await database
         .update(customers)
         .set({
-          ...omitUndefinedValues(changes),
+          ...pickCustomerUpdateValues(input),
           updatedAt: new Date(),
         })
-        .where(and(eq(customers.tenantId, tenantId), eq(customers.id, id)))
+        .where(and(eq(customers.tenantId, input.tenantId), eq(customers.id, input.id)))
         .returning();
 
       return row ? mapCustomerRowToRecord(row) : null;
@@ -165,7 +192,13 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
           updatedBy: transition.task.updatedBy,
           updatedAt: transition.task.updatedAt ? new Date(transition.task.updatedAt) : null,
         })
-        .where(and(eq(followUpTasks.tenantId, input.tenantId), eq(followUpTasks.id, input.id)))
+        .where(
+          and(
+            eq(followUpTasks.tenantId, input.tenantId),
+            eq(followUpTasks.id, input.id),
+            eq(followUpTasks.status, currentRow.status),
+          ),
+        )
         .returning();
 
       return updatedRow

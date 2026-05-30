@@ -304,6 +304,30 @@ describe('租户业务仓储映射', () => {
     expect(record).toBeNull();
   });
 
+  it('updateCustomer 即使收到不安全入参也不会写入 createdAt、tenantId 或 id', async () => {
+    const mutation = createMutationDatabase(customerRow);
+    const repository = createTenantBusinessRepository(mutation.database);
+
+    await repository.updateCustomer({
+      tenantId: 'demo-tenant-001',
+      id: 'cust_001',
+      displayName: '王女士更新',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    } as unknown as Parameters<typeof repository.updateCustomer>[0]);
+
+    expect(mutation.set).toHaveBeenCalled();
+    const updateValues = mutation.set.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(updateValues).toEqual(
+      expect.objectContaining({
+        displayName: '王女士更新',
+        updatedAt: expect.any(Date),
+      }),
+    );
+    expect(updateValues).not.toHaveProperty('createdAt');
+    expect(updateValues).not.toHaveProperty('tenantId');
+    expect(updateValues).not.toHaveProperty('id');
+  });
+
   it('创建预约写入调用方 tenantId 并映射 scheduledAt', async () => {
     const mutation = createMutationDatabase(appointmentRow);
 
@@ -425,6 +449,7 @@ describe('租户业务仓储映射', () => {
       conditions: [
         { column: followUpTasks.tenantId, operator: 'eq', value: 'demo-tenant-001' },
         { column: followUpTasks.id, operator: 'eq', value: 'fu_001' },
+        { column: followUpTasks.status, operator: 'eq', value: 'due' },
       ],
       operator: 'and',
     });
