@@ -4,7 +4,10 @@ import { GET as customersGet } from '@/app/api/institution/customers/route';
 import { GET as followupsGet } from '@/app/api/institution/followups/route';
 import { DEMO_SESSION_COOKIE } from '@/modules/auth/server/demo-session';
 import type { AccessContext } from '@/modules/security/domain/access-control';
-import { handleTenantBusinessListRequest } from '@/modules/institution/server/tenant-business-api';
+import {
+  handleTenantBusinessListRequest,
+  handleTenantBusinessMutationRequest,
+} from '@/modules/institution/server/tenant-business-api';
 
 const routeMocks = vi.hoisted(() => {
   const repository = {
@@ -181,6 +184,142 @@ describe('租户业务只读 API 流程', () => {
       result: 'denied',
       reason: 'missing_tenant',
     }));
+  });
+});
+
+describe('租户业务写入 API handler', () => {
+  it('写入 handler 使用访问上下文租户并记录允许审计', async () => {
+    const auditRepository = { record: vi.fn(async () => undefined) };
+    const mutate = vi.fn(async () => ({
+      kind: 'success' as const,
+      record: { id: 'cust_created', tenantId: 'demo-tenant-001' },
+    }));
+
+    const response = await handleTenantBusinessMutationRequest({
+      context: tenantContext,
+      resource: 'customer',
+      action: 'create',
+      mutate,
+      auditRepository,
+      successStatus: 201,
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({
+      record: { id: 'cust_created', tenantId: 'demo-tenant-001' },
+    });
+    expect(mutate).toHaveBeenCalledWith('demo-tenant-001');
+    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'create',
+      resource: 'customer',
+      result: 'allowed',
+      tenantId: 'demo-tenant-001',
+    }));
+  });
+
+  it('写入 handler 对非法随访流转返回 409 并写 denied 审计', async () => {
+    const auditRepository = { record: vi.fn(async () => undefined) };
+
+    const response = await handleTenantBusinessMutationRequest({
+      context: tenantContext,
+      resource: 'follow_up',
+      action: 'update',
+      mutate: vi.fn(async () => ({
+        kind: 'invalid_transition' as const,
+        from: 'completed',
+        to: 'in_progress',
+      })),
+      auditRepository,
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: '随访状态不允许这样流转' });
+    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+      result: 'denied',
+      reason: 'invalid_transition',
+      resource: 'follow_up',
+      action: 'update',
+    }));
+  });
+
+  it('没有访问上下文时返回 401 且不调用写入或审计', async () => {
+    const auditRepository = { record: vi.fn(async () => undefined) };
+    const mutate = vi.fn();
+
+    const response = await handleTenantBusinessMutationRequest({
+      context: null,
+      resource: 'customer',
+      action: 'create',
+      mutate,
+      auditRepository,
+    });
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: '请先登录' });
+    expect(mutate).not.toHaveBeenCalled();
+    expect(auditRepository.record).not.toHaveBeenCalled();
+  });
+
+  it('平台上下文创建客户时返回 403 denied 审计且不调用写入', async () => {
+    const auditRepository = { record: vi.fn(async () => undefined) };
+    const mutate = vi.fn();
+
+    const response = await handleTenantBusinessMutationRequest({
+      context: platformContext,
+      resource: 'customer',
+      action: 'create',
+      mutate,
+      auditRepository,
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
+    expect(mutate).not.toHaveBeenCalled();
+    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+      result: 'denied',
+      reason: 'role_denied',
+      resource: 'customer',
+      action: 'create',
+    }));
+  });
+
+  it('租户上下文缺少 tenantId 时返回 403 missing_tenant 审计且不调用写入', async () => {
+    const auditRepository = { record: vi.fn(async () => undefined) };
+    const mutate = vi.fn();
+
+    const response = await handleTenantBusinessMutationRequest({
+      context: { ...tenantContext, tenantId: null },
+      resource: 'appointment',
+      action: 'update',
+      mutate,
+      auditRepository,
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
+    expect(mutate).not.toHaveBeenCalled();
+    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+      result: 'denied',
+      reason: 'missing_tenant',
+      resource: 'appointment',
+      action: 'update',
+    }));
+  });
+
+  it('写入目标不存在时返回 404 且不记录允许审计', async () => {
+    const auditRepository = { record: vi.fn(async () => undefined) };
+
+    const response = await handleTenantBusinessMutationRequest({
+      context: tenantContext,
+      resource: 'customer',
+      action: 'update',
+      mutate: vi.fn(async () => ({ kind: 'not_found' as const })),
+      auditRepository,
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
+    expect(auditRepository.record).not.toHaveBeenCalled();
   });
 });
 
