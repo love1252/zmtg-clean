@@ -173,7 +173,7 @@ window.localStorage.setItem('zmtg_tenant_id', String(tenantId));
 export type AccessScope = 'platform' | 'tenant';
 
 export type AccessRole =
-  | 'platform_super_admin'
+  | 'platform_admin'
   | 'platform_operator'
   | 'security_auditor'
   | 'tenant_admin'
