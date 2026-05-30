@@ -3,6 +3,10 @@ import {
   demoTenantCustomerRecords,
   listCustomerRecordsForAccess,
 } from '@/modules/institution/domain/customer-records';
+import {
+  demoTenantAppointmentRecords,
+  listAppointmentRecordsForAccess,
+} from '@/modules/institution/domain/appointment-records';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
 const tenantAdminContext: AccessContext = {
@@ -59,5 +63,38 @@ describe('租户业务领域模型', () => {
     });
 
     expect(result).toEqual({ allowed: false, reason: 'role_denied' });
+  });
+
+  it('机构管理员只能读取本租户预约记录', () => {
+    const result = listAppointmentRecordsForAccess({
+      context: tenantAdminContext,
+      targetTenantId: 'demo-tenant-001',
+      records: demoTenantAppointmentRecords,
+    });
+
+    expect(result.allowed).toBe(true);
+    if (!result.allowed) throw new Error(result.reason);
+
+    expect(result.records.map((record) => record.id)).toEqual([
+      'appt_liu_precheck',
+      'appt_qin_arrived',
+      'appt_tang_reschedule',
+    ]);
+    expect(result.records.every((record) => record.tenantId === 'demo-tenant-001')).toBe(true);
+    expect(result.records.map((record) => record.status)).toEqual([
+      'pending_confirmation',
+      'arrived',
+      'reschedule_requested',
+    ]);
+  });
+
+  it('机构管理员跨租户读取预约时被拒绝', () => {
+    const result = listAppointmentRecordsForAccess({
+      context: tenantAdminContext,
+      targetTenantId: 'demo-tenant-002',
+      records: demoTenantAppointmentRecords,
+    });
+
+    expect(result).toEqual({ allowed: false, reason: 'cross_tenant_denied' });
   });
 });
