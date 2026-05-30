@@ -57,6 +57,31 @@ describe('租户业务写入 payload 校验', () => {
     });
   });
 
+  it('拒绝伪装成脱敏字段的原始客户标识', () => {
+    expect(
+      parseCreateCustomerPayload({
+        displayName: '王女士',
+        lifecycle: 'consulting',
+        priority: 'high',
+        ownerUserId: 'consultant-lin',
+        projectInterest: '热玛吉修复组合',
+        maskedPhone: '13800000000',
+        maskedMedicalRecordNo: 'MR****001',
+        lastTouchSummary: '术后第 28 天',
+        nextAction: '人工回访',
+        tags: ['高价值'],
+      }),
+    ).toEqual({
+      ok: false,
+      error: '字段 maskedPhone 必须是脱敏展示值',
+    });
+
+    expect(parseUpdateCustomerPayload({ id: 'cust_001', maskedMedicalRecordNo: 'MR-RAW-001' })).toEqual({
+      ok: false,
+      error: '字段 maskedMedicalRecordNo 必须是脱敏展示值',
+    });
+  });
+
   it('校验客户更新必须包含 id 且至少包含一个可更新字段', () => {
     expect(parseUpdateCustomerPayload({ displayName: '王女士' })).toEqual({
       ok: false,

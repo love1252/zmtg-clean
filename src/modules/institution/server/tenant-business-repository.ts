@@ -50,6 +50,7 @@ type TransitionFollowUpTaskInput = {
 type TransitionFollowUpTaskPersistenceResult =
   | { kind: 'updated'; task: TenantFollowUpTask }
   | { kind: 'not_found' }
+  | { kind: 'conflict'; reason: 'stale_transition' }
   | { kind: 'invalid_transition'; from: FollowUpStatus; to: FollowUpStatus };
 
 function omitUndefinedValues<T extends Record<string, unknown>>(values: T): Partial<T> {
@@ -203,7 +204,7 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
 
       return updatedRow
         ? { kind: 'updated', task: mapFollowUpTaskRowToRecord(updatedRow) }
-        : { kind: 'not_found' };
+        : { kind: 'conflict', reason: 'stale_transition' };
     },
     async listCustomersByTenant(tenantId: string) {
       const rows = await database.select().from(customers).where(eq(customers.tenantId, tenantId));

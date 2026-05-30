@@ -328,6 +328,30 @@ describe('租户业务写入 API handler', () => {
     }));
   });
 
+  it('写入 handler 对随访状态冲突返回 409 并写 denied 审计', async () => {
+    const auditRepository = { record: vi.fn(async () => undefined) };
+
+    const response = await handleTenantBusinessMutationRequest({
+      context: tenantContext,
+      resource: 'follow_up',
+      action: 'update',
+      mutate: vi.fn(async () => ({
+        kind: 'conflict' as const,
+        reason: 'stale_transition' as const,
+      })),
+      auditRepository,
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: '随访状态已变化，请刷新后重试' });
+    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+      result: 'denied',
+      reason: 'stale_transition',
+      resource: 'follow_up',
+      action: 'update',
+    }));
+  });
+
   it('没有访问上下文时返回 401 且不调用写入或审计', async () => {
     const auditRepository = { record: vi.fn(async () => undefined) };
     const mutate = vi.fn();
@@ -625,6 +649,27 @@ describe('租户业务写入 API route', () => {
     expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
   });
 
+  it('创建客户请求体含原始手机号时返回解析错误且不初始化数据库', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await customersPost(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...validCreateCustomerPayload,
+          maskedPhone: '13800000000',
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: '字段 maskedPhone 必须是脱敏展示值',
+    });
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
+  });
+
   it('创建客户使用访问上下文 tenantId 并记录允许审计', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
 
@@ -781,6 +826,30 @@ describe('租户业务写入 API route', () => {
       resource: 'follow_up',
       result: 'denied',
       reason: 'invalid_transition',
+    }));
+  });
+
+  it('随访状态冲突返回 409 并记录 denied 审计', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.repository.transitionFollowUpTask.mockResolvedValueOnce({
+      kind: 'conflict',
+      reason: 'stale_transition',
+    });
+
+    const response = await followupsPatch(
+      new Request('http://localhost/api/institution/followups', {
+        method: 'PATCH',
+        body: JSON.stringify(validFollowUpTransitionPayload),
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: '随访状态已变化，请刷新后重试' });
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'update',
+      resource: 'follow_up',
+      result: 'denied',
+      reason: 'stale_transition',
     }));
   });
 

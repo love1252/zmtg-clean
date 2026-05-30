@@ -23,6 +23,7 @@ type TenantBusinessListRequest<Item> = {
 export type TenantBusinessMutationResult<Item> =
   | { kind: 'success'; record: Item }
   | { kind: 'not_found' }
+  | { kind: 'conflict'; reason: 'stale_transition' }
   | { kind: 'invalid_transition'; from: string; to: string };
 
 export type TenantBusinessMutationRequest<Item> = {
@@ -177,6 +178,22 @@ export async function handleTenantBusinessMutationRequest<Item>({
     );
 
     return NextResponse.json({ error: '随访状态不允许这样流转' }, { status: 409 });
+  }
+
+  if (result.kind === 'conflict') {
+    await auditRepository.record(
+      createAuditEvent({
+        eventId: createAuditEventId(),
+        context,
+        resource,
+        action,
+        result: 'denied',
+        reason: result.reason,
+        occurredAt,
+      }),
+    );
+
+    return NextResponse.json({ error: '随访状态已变化，请刷新后重试' }, { status: 409 });
   }
 
   await auditRepository.record(

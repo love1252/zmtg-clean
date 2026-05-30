@@ -109,6 +109,8 @@ const customerStringKeys = [
   'nextAction',
 ] as const;
 
+const maskedCustomerStringKeys = new Set<string>(['maskedPhone', 'maskedMedicalRecordNo']);
+
 const createAppointmentStringKeys = [
   'customerId',
   'customerDisplayName',
@@ -170,6 +172,37 @@ function parseOptionalString(
   }
 
   return parseRequiredString(input, key);
+}
+
+function isMaskedDisplayValue(value: string) {
+  return value.includes('*') || /^masked[-_]/i.test(value) || /^demo[-_]/i.test(value);
+}
+
+function parseCustomerString(
+  input: Record<string, unknown>,
+  key: string,
+): TenantBusinessWriteParseResult<string> {
+  const parsed = parseRequiredString(input, key);
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  if (maskedCustomerStringKeys.has(key) && !isMaskedDisplayValue(parsed.value)) {
+    return { ok: false, error: `字段 ${key} 必须是脱敏展示值` };
+  }
+
+  return parsed;
+}
+
+function parseOptionalCustomerString(
+  input: Record<string, unknown>,
+  key: string,
+): TenantBusinessWriteParseResult<string | undefined> {
+  if (!(key in input)) {
+    return { ok: true, value: undefined };
+  }
+
+  return parseCustomerString(input, key);
 }
 
 function parseEnum<T extends string>(
@@ -293,7 +326,7 @@ export function parseCreateCustomerPayload(
 
   const strings = {} as Pick<CreateCustomerPayload, (typeof customerStringKeys)[number]>;
   for (const key of customerStringKeys) {
-    const value = parseRequiredString(object, key);
+    const value = parseCustomerString(object, key);
     if (!value.ok) {
       return value;
     }
@@ -348,7 +381,7 @@ export function parseUpdateCustomerPayload(
   }
 
   for (const key of customerStringKeys) {
-    const field = parseOptionalString(object, key);
+    const field = parseOptionalCustomerString(object, key);
     if (!field.ok) {
       return field;
     }

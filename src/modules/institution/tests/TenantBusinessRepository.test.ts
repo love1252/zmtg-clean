@@ -458,4 +458,26 @@ describe('租户业务仓储映射', () => {
       task: mapFollowUpTaskRowToRecord(updatedRow),
     });
   });
+
+  it('随访状态合法但写入时状态已变化则返回 conflict', async () => {
+    const mutation = createFollowUpTransitionDatabase(followUpTaskRow, null);
+
+    const result = await createTenantBusinessRepository(mutation.database).transitionFollowUpTask({
+      tenantId: 'demo-tenant-001',
+      id: 'fu_001',
+      nextStatus: 'in_progress',
+      actorId: 'consultant-lin',
+      occurredAt: '2026-05-30T11:00:00.000Z',
+    });
+
+    expect(mutation.updateWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: followUpTasks.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: followUpTasks.id, operator: 'eq', value: 'fu_001' },
+        { column: followUpTasks.status, operator: 'eq', value: 'due' },
+      ],
+      operator: 'and',
+    });
+    expect(result).toEqual({ kind: 'conflict', reason: 'stale_transition' });
+  });
 });
