@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { AuthRole, AuthSession, AuthSessionUser } from '@/modules/auth/domain/session';
 
 export const DEMO_SESSION_COOKIE = 'zmtg_demo_session';
@@ -13,6 +14,9 @@ type LoginInput = {
 };
 
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
+const DEV_DEMO_SESSION_SECRET = 'zmtg-local-demo-session-secret';
+const MISSING_DEMO_SESSION_SECRET_ERROR =
+  'ZMTG_DEMO_SESSION_SECRET is required to sign demo session cookies in production';
 
 const demoUsers: Array<DemoSessionUser & { password: string; scope: 'institution' | 'platform' }> = [
   {
@@ -66,15 +70,62 @@ export function createDemoSession(user: DemoSessionUser, now = Date.now()): Demo
   };
 }
 
+function getDemoSessionSecret(mode: 'encode'): string;
+function getDemoSessionSecret(mode: 'decode'): string | null;
+function getDemoSessionSecret(mode: 'encode' | 'decode') {
+  const configuredSecret = process.env.ZMTG_DEMO_SESSION_SECRET;
+  if (configuredSecret && configuredSecret.trim().length > 0) {
+    return configuredSecret;
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    return DEV_DEMO_SESSION_SECRET;
+  }
+
+  if (mode === 'encode') {
+    throw new Error(MISSING_DEMO_SESSION_SECRET_ERROR);
+  }
+
+  return null;
+}
+
+function signPayload(payload: string, secret: string) {
+  return createHmac('sha256', secret).update(payload).digest('base64url');
+}
+
+function signatureMatches(actualSignature: string, expectedSignature: string) {
+  const actual = Buffer.from(actualSignature, 'utf8');
+  const expected = Buffer.from(expectedSignature, 'utf8');
+
+  if (actual.length !== expected.length) return false;
+  return timingSafeEqual(actual, expected);
+}
+
 export function encodeDemoSession(session: DemoSession) {
-  return Buffer.from(JSON.stringify(session), 'utf8').toString('base64url');
+  const payload = Buffer.from(JSON.stringify(session), 'utf8').toString('base64url');
+  const secret = getDemoSessionSecret('encode');
+  const signature = signPayload(payload, secret);
+
+  return `${payload}.${signature}`;
 }
 
 export function decodeDemoSession(value: string | undefined | null, now = Date.now()): DemoSession | null {
   if (!value) return null;
 
+  const parts = value.split('.');
+  if (parts.length !== 2) return null;
+
+  const [payload, signature] = parts;
+  if (!payload || !signature) return null;
+
+  const secret = getDemoSessionSecret('decode');
+  if (!secret) return null;
+
+  const expectedSignature = signPayload(payload, secret);
+  if (!signatureMatches(signature, expectedSignature)) return null;
+
   try {
-    const raw = Buffer.from(value, 'base64url').toString('utf8');
+    const raw = Buffer.from(payload, 'base64url').toString('utf8');
     const parsed = JSON.parse(raw) as Partial<DemoSession>;
     if (!parsed.user || typeof parsed.expiresAt !== 'number') return null;
     if (parsed.expiresAt <= now) return null;

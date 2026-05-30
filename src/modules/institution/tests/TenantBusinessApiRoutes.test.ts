@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as appointmentsGet } from '@/app/api/institution/appointments/route';
 import { GET as customersGet } from '@/app/api/institution/customers/route';
 import { GET as followupsGet } from '@/app/api/institution/followups/route';
+import { DEMO_SESSION_COOKIE } from '@/modules/auth/server/demo-session';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import { handleTenantBusinessListRequest } from '@/modules/institution/server/tenant-business-api';
 
@@ -72,6 +73,10 @@ const platformContext: AccessContext = {
   tenantId: null,
   source: 'demo_session',
 };
+
+function unsignedSession(session: unknown) {
+  return Buffer.from(JSON.stringify(session), 'utf8').toString('base64url');
+}
 
 beforeEach(() => {
   routeMocks.getDatabase.mockReset();
@@ -194,6 +199,39 @@ describe('租户业务只读 API route', () => {
       expect(response.status).toBe(401);
       await expect(response.json()).resolves.toEqual({ error: '请先登录' });
     }
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+  });
+
+  it('伪造未签名 cookie 请求客户 route 时返回 401 且不初始化数据库', async () => {
+    const actualAccessContext = await vi.importActual<typeof import('@/modules/security/server/access-context')>(
+      '@/modules/security/server/access-context',
+    );
+    routeMocks.getDemoAccessContextFromRequest.mockImplementation((request: Request) =>
+      actualAccessContext.getDemoAccessContextFromRequest(request),
+    );
+    routeMocks.getDatabase.mockImplementation(() => {
+      throw new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg');
+    });
+
+    const forged = unsignedSession({
+      user: {
+        id: 'forged-user-admin',
+        username: 'forged',
+        name: '伪造机构管理员',
+        role: 'tenant_admin',
+        tenantId: 'demo-tenant-001',
+      },
+      expiresAt: Date.now() + 60_000,
+    });
+
+    const response = await customersGet(
+      new Request('http://localhost/api/institution/customers', {
+        headers: { cookie: `${DEMO_SESSION_COOKIE}=${forged}` },
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: '请先登录' });
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
   });
 
