@@ -195,6 +195,44 @@ describe('租户业务写入 payload 校验', () => {
       error: '字段 tags 不允许包含原始个人信息',
     });
 
+    expect(parseUpdateCustomerPayload({ id: 'cust_001', tags: ['13800', '000000'] })).toEqual({
+      ok: false,
+      error: '字段 tags 不允许包含原始个人信息',
+    });
+
+    expect(
+      parseCreateCustomerPayload({
+        displayName: '王女士',
+        lifecycle: 'consulting',
+        priority: 'high',
+        ownerUserId: '13800000000',
+        projectInterest: '热玛吉修复组合',
+        maskedPhone: '138****1208',
+        maskedMedicalRecordNo: 'MR****001',
+        lastTouchSummary: '术后第 28 天',
+        nextAction: '人工回访',
+        tags: ['高价值'],
+      }),
+    ).toEqual({
+      ok: false,
+      error: '字段 ownerUserId 不允许包含原始个人信息',
+    });
+
+    expect(
+      parseCreateAppointmentPayload({
+        customerId: 'cust_001',
+        customerDisplayName: '王女士',
+        project: '水光补水',
+        scheduledAt: '2026-06-01T10:30:00+08:00',
+        consultantUserId: '13800000000',
+        status: 'pending_confirmation',
+        note: '待确认',
+      }),
+    ).toEqual({
+      ok: false,
+      error: '字段 consultantUserId 不允许包含原始个人信息',
+    });
+
     expect(
       parseCreateAppointmentPayload({
         customerId: 'cust_001',

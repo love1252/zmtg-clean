@@ -112,6 +112,7 @@ const customerStringKeys = [
 const maskedCustomerStringKeys = new Set<string>(['maskedPhone', 'maskedMedicalRecordNo']);
 const rawPiiProtectedCustomerStringKeys = new Set<string>([
   'displayName',
+  'ownerUserId',
   'projectInterest',
   'lastTouchSummary',
   'nextAction',
@@ -119,6 +120,7 @@ const rawPiiProtectedCustomerStringKeys = new Set<string>([
 const rawPiiProtectedAppointmentStringKeys = new Set<string>([
   'customerDisplayName',
   'project',
+  'consultantUserId',
   'note',
 ]);
 
@@ -316,7 +318,7 @@ function parseTags(
     return { ok: false, error: '字段 tags 必须是非空字符串数组' };
   }
 
-  if (tags.some(containsRawPersonalInfo)) {
+  if (tags.some(containsRawPersonalInfo) || containsRawPersonalInfo(tags.join(' '))) {
     return { ok: false, error: '字段 tags 不允许包含原始个人信息' };
   }
 
