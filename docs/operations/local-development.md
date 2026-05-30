@@ -34,6 +34,23 @@ pnpm db:seed
 
 如果没有配置 `DATABASE_URL`，应用中的真实落库 API 会返回稳定错误，不应泄露连接串。
 
+### 写入 API 验证
+
+设置 `DATABASE_URL` 并完成迁移、种子后，可以用 demo 账号登录，再验证写入 API：
+
+```bash
+curl -i -X POST http://localhost:5010/api/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"admin","password":"admin123"}'
+
+curl -i -X POST http://localhost:5010/api/institution/customers \
+  -H 'content-type: application/json' \
+  -H 'cookie: zmtg_demo_session=<从登录响应复制 cookie 值>' \
+  -d '{"displayName":"测试客户","lifecycle":"consulting","priority":"observe","ownerUserId":"demo-user-admin","projectInterest":"皮肤管理","maskedPhone":"masked-demo","maskedMedicalRecordNo":"DEMO-MR-WRITE","lastTouchSummary":"本地写入验证","nextAction":"继续跟进","tags":["本地验证"]}'
+```
+
+不要把真实 `DATABASE_URL`、cookie 或业务数据写入文档、提交记录或截图。
+
 ## Demo Accounts
 
 本地 demo auth 默认在 `development` 和 `test` 环境启用：
