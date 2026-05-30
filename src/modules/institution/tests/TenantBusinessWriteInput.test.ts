@@ -68,6 +68,31 @@ describe('租户业务写入 payload 校验', () => {
     });
   });
 
+  it('拒绝空白客户标签写入', () => {
+    expect(
+      parseCreateCustomerPayload({
+        displayName: '王女士',
+        lifecycle: 'consulting',
+        priority: 'high',
+        ownerUserId: 'consultant-lin',
+        projectInterest: '热玛吉修复组合',
+        maskedPhone: '138****1208',
+        maskedMedicalRecordNo: 'MR****001',
+        lastTouchSummary: '术后第 28 天',
+        nextAction: '人工回访',
+        tags: [' '],
+      }),
+    ).toEqual({
+      ok: false,
+      error: '字段 tags 必须是非空字符串数组',
+    });
+
+    expect(parseUpdateCustomerPayload({ id: 'cust_001', tags: [' '] })).toEqual({
+      ok: false,
+      error: '字段 tags 必须是非空字符串数组',
+    });
+  });
+
   it('校验预约创建和更新字段', () => {
     expect(
       parseCreateAppointmentPayload({

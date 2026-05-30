@@ -210,9 +210,14 @@ function parseTags(
     return { ok: false, error: '字段 tags 必须是字符串数组' };
   }
 
+  const tags = value.map((tag) => tag.trim());
+  if (tags.some((tag) => tag.length === 0)) {
+    return { ok: false, error: '字段 tags 必须是非空字符串数组' };
+  }
+
   return {
     ok: true,
-    value: value.map((tag) => tag.trim()).filter((tag) => tag.length > 0),
+    value: tags,
   };
 }
 
