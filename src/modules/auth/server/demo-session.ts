@@ -15,7 +15,7 @@ type LoginInput = {
 
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 const DEV_DEMO_SESSION_SECRET = 'zmtg-local-demo-session-secret';
-const MISSING_DEMO_SESSION_SECRET_ERROR =
+export const MISSING_DEMO_SESSION_SECRET_ERROR =
   'ZMTG_DEMO_SESSION_SECRET is required to sign demo session cookies in production';
 
 const demoUsers: Array<DemoSessionUser & { password: string; scope: 'institution' | 'platform' }> = [
@@ -107,6 +107,10 @@ export function encodeDemoSession(session: DemoSession) {
   const signature = signPayload(payload, secret);
 
   return `${payload}.${signature}`;
+}
+
+export function isMissingDemoSessionSecretError(error: unknown) {
+  return error instanceof Error && error.message === MISSING_DEMO_SESSION_SECRET_ERROR;
 }
 
 export function decodeDemoSession(value: string | undefined | null, now = Date.now()): DemoSession | null {

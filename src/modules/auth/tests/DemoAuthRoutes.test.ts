@@ -101,6 +101,22 @@ describe('demo auth routes', () => {
     ).toThrow('ZMTG_DEMO_SESSION_SECRET');
   });
 
+  it('returns a controlled error when production demo auth cannot sign sessions', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('ZMTG_ENABLE_DEMO_AUTH', 'true');
+    vi.stubEnv('ZMTG_DEMO_SESSION_SECRET', '');
+
+    const response = await loginPost(jsonRequest({ username: 'admin', password: 'admin123' }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      code: 503,
+      message: 'Demo auth is not configured',
+    });
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
   it('logs in an institution demo user and exposes the session', async () => {
     const loginResponse = await loginPost(jsonRequest({ username: 'admin', password: 'admin123' }));
     const loginPayload = await loginResponse.json();
