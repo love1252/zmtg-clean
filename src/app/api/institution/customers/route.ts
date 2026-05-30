@@ -4,6 +4,7 @@ import {
   handleTenantBusinessListRequest,
   handleTenantBusinessMutationRequest,
 } from '@/modules/institution/server/tenant-business-api';
+import { runTenantBusinessAuditTransaction } from '@/modules/institution/server/tenant-business-audit-transaction';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 import {
   parseCreateCustomerPayload,
@@ -60,21 +61,24 @@ export async function POST(request: Request) {
 
   try {
     const db = getDatabase();
-    const repository = createTenantBusinessRepository(db);
     const auditRepository = createAuditEventRepository(db);
 
     return await handleTenantBusinessMutationRequest({
       context,
       resource: 'customer',
       action: 'create',
-      mutate: async (tenantId) => ({
-        kind: 'success',
-        record: await repository.createCustomer({
-          id: globalThis.crypto.randomUUID(),
-          tenantId,
-          ...parsed.value,
+      mutate: ({ tenantId, successAuditEvent }) =>
+        runTenantBusinessAuditTransaction(db, async ({ repository, auditRepository }) => {
+          const record = await repository.createCustomer({
+            id: globalThis.crypto.randomUUID(),
+            tenantId,
+            ...parsed.value,
+          });
+
+          await auditRepository.record(successAuditEvent);
+
+          return { kind: 'success', record };
         }),
-      }),
       auditRepository,
       successStatus: 201,
     });
@@ -101,21 +105,27 @@ export async function PATCH(request: Request) {
 
   try {
     const db = getDatabase();
-    const repository = createTenantBusinessRepository(db);
     const auditRepository = createAuditEventRepository(db);
 
     return await handleTenantBusinessMutationRequest({
       context,
       resource: 'customer',
       action: 'update',
-      mutate: async (tenantId) => {
-        const record = await repository.updateCustomer({
-          tenantId,
-          ...parsed.value,
-        });
+      mutate: ({ tenantId, successAuditEvent }) =>
+        runTenantBusinessAuditTransaction(db, async ({ repository, auditRepository }) => {
+          const record = await repository.updateCustomer({
+            tenantId,
+            ...parsed.value,
+          });
 
-        return record ? { kind: 'success', record } : { kind: 'not_found' };
-      },
+          if (!record) {
+            return { kind: 'not_found' };
+          }
+
+          await auditRepository.record(successAuditEvent);
+
+          return { kind: 'success', record };
+        }),
       auditRepository,
     });
   } catch {

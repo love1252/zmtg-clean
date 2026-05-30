@@ -32,14 +32,23 @@ const routeMocks = vi.hoisted(() => {
     transitionFollowUpTask: vi.fn(),
   };
   const auditRecord = vi.fn();
+  const transactionDatabase = { database: 'transaction-db' };
+  const database = {
+    database: 'test-db',
+    transaction: vi.fn(async (operation: (tx: typeof transactionDatabase) => unknown) =>
+      operation(transactionDatabase),
+    ),
+  };
 
   return {
     auditRecord,
     createAuditEventRepository: vi.fn(() => ({ record: auditRecord })),
     createTenantBusinessRepository: vi.fn(() => repository),
+    database,
     getDatabase: vi.fn(),
     getDemoAccessContextFromRequest: vi.fn(),
     repository,
+    transactionDatabase,
   };
 });
 
@@ -99,7 +108,11 @@ function unsignedSession(session: unknown) {
 
 beforeEach(() => {
   routeMocks.getDatabase.mockReset();
-  routeMocks.getDatabase.mockReturnValue({ database: 'test-db' });
+  routeMocks.database.transaction.mockReset();
+  routeMocks.database.transaction.mockImplementation(async (operation) =>
+    operation(routeMocks.transactionDatabase),
+  );
+  routeMocks.getDatabase.mockReturnValue(routeMocks.database);
   routeMocks.getDemoAccessContextFromRequest.mockReset();
   routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
   routeMocks.createTenantBusinessRepository.mockClear();
@@ -275,11 +288,14 @@ describe('租户业务只读 API 流程', () => {
 
 describe('租户业务写入 API handler', () => {
   it('写入 handler 使用访问上下文租户并记录允许审计', async () => {
-    const auditRepository = { record: vi.fn(async () => undefined) };
-    const mutate = vi.fn(async () => ({
-      kind: 'success' as const,
-      record: { id: 'cust_created', tenantId: 'demo-tenant-001' },
-    }));
+    const auditRepository = { record: vi.fn(async (_event: unknown) => undefined) };
+    const mutate = vi.fn(async ({ successAuditEvent }) => {
+      await auditRepository.record(successAuditEvent);
+      return {
+        kind: 'success' as const,
+        record: { id: 'cust_created', tenantId: 'demo-tenant-001' },
+      };
+    });
 
     const response = await handleTenantBusinessMutationRequest({
       context: tenantContext,
@@ -294,7 +310,15 @@ describe('租户业务写入 API handler', () => {
     await expect(response.json()).resolves.toEqual({
       record: { id: 'cust_created', tenantId: 'demo-tenant-001' },
     });
-    expect(mutate).toHaveBeenCalledWith('demo-tenant-001');
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'demo-tenant-001',
+      successAuditEvent: expect.objectContaining({
+        action: 'create',
+        resource: 'customer',
+        result: 'allowed',
+        tenantId: 'demo-tenant-001',
+      }),
+    }));
     expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
       action: 'create',
       resource: 'customer',
@@ -416,7 +440,7 @@ describe('租户业务写入 API handler', () => {
     }));
   });
 
-  it('写入目标不存在时返回 404 且不记录允许审计', async () => {
+  it('写入目标不存在时返回 404 并记录 denied 审计', async () => {
     const auditRepository = { record: vi.fn(async () => undefined) };
 
     const response = await handleTenantBusinessMutationRequest({
@@ -429,7 +453,12 @@ describe('租户业务写入 API handler', () => {
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(auditRepository.record).not.toHaveBeenCalled();
+    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+      result: 'denied',
+      reason: 'not_found_or_not_owned',
+      resource: 'customer',
+      action: 'update',
+    }));
   });
 });
 
@@ -695,6 +724,13 @@ describe('租户业务写入 API route', () => {
     expect(routeMocks.repository.createCustomer).not.toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: 'other-tenant' }),
     );
+    expect(routeMocks.database.transaction).toHaveBeenCalledTimes(1);
+    expect(routeMocks.createTenantBusinessRepository).toHaveBeenCalledWith(
+      routeMocks.transactionDatabase,
+    );
+    expect(routeMocks.createAuditEventRepository).toHaveBeenCalledWith(
+      routeMocks.transactionDatabase,
+    );
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
       action: 'create',
       resource: 'customer',
@@ -703,7 +739,7 @@ describe('租户业务写入 API route', () => {
     }));
   });
 
-  it('更新客户目标不存在时返回 404', async () => {
+  it('更新客户目标不存在时返回 404 并记录 denied 审计', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.repository.updateCustomer.mockResolvedValueOnce(null);
 
@@ -720,9 +756,41 @@ describe('租户业务写入 API route', () => {
       tenantId: 'demo-tenant-001',
       ...validUpdateCustomerPayload,
     });
-    expect(routeMocks.auditRecord).not.toHaveBeenCalledWith(expect.objectContaining({
-      result: 'allowed',
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      result: 'denied',
+      reason: 'not_found_or_not_owned',
       resource: 'customer',
+    }));
+  });
+
+  it('创建客户和允许审计在同一事务中执行，审计失败时返回 503', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.auditRecord.mockRejectedValueOnce(
+      new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg'),
+    );
+
+    const response = await customersPost(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'POST',
+        body: JSON.stringify(validCreateCustomerPayload),
+      }),
+    );
+    const payload = await response.json();
+    const serializedPayload = JSON.stringify(payload);
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({ error: '数据服务暂时不可用' });
+    expect(serializedPayload).not.toContain('DATABASE_URL');
+    expect(serializedPayload).not.toContain('postgres://');
+    expect(serializedPayload).not.toContain('secret');
+    expect(routeMocks.database.transaction).toHaveBeenCalledTimes(1);
+    expect(routeMocks.repository.createCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'demo-tenant-001' }),
+    );
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'create',
+      resource: 'customer',
+      result: 'allowed',
     }));
   });
 

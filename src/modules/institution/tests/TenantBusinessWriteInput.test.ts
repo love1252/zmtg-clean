@@ -166,6 +166,62 @@ describe('租户业务写入 payload 校验', () => {
     });
   });
 
+  it('拒绝自由文本字段中的原始个人信息', () => {
+    expect(
+      parseCreateCustomerPayload({
+        displayName: '王女士',
+        lifecycle: 'consulting',
+        priority: 'high',
+        ownerUserId: 'consultant-lin',
+        projectInterest: '热玛吉修复组合',
+        maskedPhone: '138****1208',
+        maskedMedicalRecordNo: 'MR****001',
+        lastTouchSummary: '客户电话 13800000000',
+        nextAction: '人工回访',
+        tags: ['高价值'],
+      }),
+    ).toEqual({
+      ok: false,
+      error: '字段 lastTouchSummary 不允许包含原始个人信息',
+    });
+
+    expect(parseUpdateCustomerPayload({ id: 'cust_001', nextAction: '联系 １３８００００００００' })).toEqual({
+      ok: false,
+      error: '字段 nextAction 不允许包含原始个人信息',
+    });
+
+    expect(parseUpdateCustomerPayload({ id: 'cust_001', tags: ['MR-RAW-001'] })).toEqual({
+      ok: false,
+      error: '字段 tags 不允许包含原始个人信息',
+    });
+
+    expect(
+      parseCreateAppointmentPayload({
+        customerId: 'cust_001',
+        customerDisplayName: '王女士',
+        project: '水光补水',
+        scheduledAt: '2026-06-01T10:30:00+08:00',
+        consultantUserId: 'consultant-xu',
+        status: 'pending_confirmation',
+        note: '客户电话 ١٣٨٠٠٠٠٠٠٠٠',
+      }),
+    ).toEqual({
+      ok: false,
+      error: '字段 note 不允许包含原始个人信息',
+    });
+
+    expect(
+      parseUpdateAppointmentPayload({
+        id: 'appt_001',
+        status: 'arrived',
+        note: '病历号 MR-RAW-001',
+      }),
+    ).toEqual({
+      ok: false,
+      error: '字段 note 不允许包含原始个人信息',
+    });
+  });
+
   it('校验预约创建和更新字段', () => {
     expect(
       parseCreateAppointmentPayload({

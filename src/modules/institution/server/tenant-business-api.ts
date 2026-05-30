@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import {
   createAuditEvent,
   createDeniedAccessAuditEvent,
+  type TenantAuditEvent,
 } from '@/modules/audit/domain/audit-events';
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import {
@@ -30,7 +31,10 @@ export type TenantBusinessMutationRequest<Item> = {
   context: AccessContext | null;
   resource: TenantBusinessResource;
   action: Extract<ProtectedAction, 'create' | 'update'>;
-  mutate: (tenantId: string) => Promise<TenantBusinessMutationResult<Item>>;
+  mutate: (input: {
+    tenantId: string;
+    successAuditEvent: TenantAuditEvent;
+  }) => Promise<TenantBusinessMutationResult<Item>>;
   auditRepository: Pick<AuditEventRepository, 'record'>;
   successStatus?: 200 | 201;
 };
@@ -158,9 +162,30 @@ export async function handleTenantBusinessMutationRequest<Item>({
     return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
   }
 
-  const result = await mutate(context.tenantId);
+  const successAuditEvent = createAuditEvent({
+    eventId: createAuditEventId(),
+    context,
+    resource,
+    action,
+    result: 'allowed',
+    reason: decision.reason,
+    occurredAt,
+  });
+  const result = await mutate({ tenantId: context.tenantId, successAuditEvent });
 
   if (result.kind === 'not_found') {
+    await auditRepository.record(
+      createAuditEvent({
+        eventId: createAuditEventId(),
+        context,
+        resource,
+        action,
+        result: 'denied',
+        reason: 'not_found_or_not_owned',
+        occurredAt,
+      }),
+    );
+
     return NextResponse.json({ error: '记录不存在' }, { status: 404 });
   }
 
@@ -195,18 +220,6 @@ export async function handleTenantBusinessMutationRequest<Item>({
 
     return NextResponse.json({ error: '随访状态已变化，请刷新后重试' }, { status: 409 });
   }
-
-  await auditRepository.record(
-    createAuditEvent({
-      eventId: createAuditEventId(),
-      context,
-      resource,
-      action,
-      result: 'allowed',
-      reason: decision.reason,
-      occurredAt,
-    }),
-  );
 
   return NextResponse.json({ record: result.record }, { status: successStatus });
 }

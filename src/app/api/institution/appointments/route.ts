@@ -4,6 +4,7 @@ import {
   handleTenantBusinessListRequest,
   handleTenantBusinessMutationRequest,
 } from '@/modules/institution/server/tenant-business-api';
+import { runTenantBusinessAuditTransaction } from '@/modules/institution/server/tenant-business-audit-transaction';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 import {
   parseCreateAppointmentPayload,
@@ -60,22 +61,25 @@ export async function POST(request: Request) {
 
   try {
     const db = getDatabase();
-    const repository = createTenantBusinessRepository(db);
     const auditRepository = createAuditEventRepository(db);
 
     return await handleTenantBusinessMutationRequest({
       context,
       resource: 'appointment',
       action: 'create',
-      mutate: async (tenantId) => ({
-        kind: 'success',
-        record: await repository.createAppointment({
-          ...parsed.value,
-          id: globalThis.crypto.randomUUID(),
-          tenantId,
-          scheduledAt: new Date(parsed.value.scheduledAt),
+      mutate: ({ tenantId, successAuditEvent }) =>
+        runTenantBusinessAuditTransaction(db, async ({ repository, auditRepository }) => {
+          const record = await repository.createAppointment({
+            ...parsed.value,
+            id: globalThis.crypto.randomUUID(),
+            tenantId,
+            scheduledAt: new Date(parsed.value.scheduledAt),
+          });
+
+          await auditRepository.record(successAuditEvent);
+
+          return { kind: 'success', record };
         }),
-      }),
       auditRepository,
       successStatus: 201,
     });
@@ -102,21 +106,27 @@ export async function PATCH(request: Request) {
 
   try {
     const db = getDatabase();
-    const repository = createTenantBusinessRepository(db);
     const auditRepository = createAuditEventRepository(db);
 
     return await handleTenantBusinessMutationRequest({
       context,
       resource: 'appointment',
       action: 'update',
-      mutate: async (tenantId) => {
-        const record = await repository.updateAppointment({
-          tenantId,
-          ...parsed.value,
-        });
+      mutate: ({ tenantId, successAuditEvent }) =>
+        runTenantBusinessAuditTransaction(db, async ({ repository, auditRepository }) => {
+          const record = await repository.updateAppointment({
+            tenantId,
+            ...parsed.value,
+          });
 
-        return record ? { kind: 'success', record } : { kind: 'not_found' };
-      },
+          if (!record) {
+            return { kind: 'not_found' };
+          }
+
+          await auditRepository.record(successAuditEvent);
+
+          return { kind: 'success', record };
+        }),
       auditRepository,
     });
   } catch {

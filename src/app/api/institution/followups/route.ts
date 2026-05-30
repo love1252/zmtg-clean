@@ -4,6 +4,7 @@ import {
   handleTenantBusinessListRequest,
   handleTenantBusinessMutationRequest,
 } from '@/modules/institution/server/tenant-business-api';
+import { runTenantBusinessAuditTransaction } from '@/modules/institution/server/tenant-business-audit-transaction';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 import { parseFollowUpTransitionPayload } from '@/modules/institution/server/tenant-business-write-input';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
@@ -57,26 +58,30 @@ export async function PATCH(request: Request) {
 
   try {
     const db = getDatabase();
-    const repository = createTenantBusinessRepository(db);
     const auditRepository = createAuditEventRepository(db);
 
     return await handleTenantBusinessMutationRequest({
       context,
       resource: 'follow_up',
       action: 'update',
-      mutate: async (tenantId) => {
-        const result = await repository.transitionFollowUpTask({
-          tenantId,
-          id: parsed.value.id,
-          nextStatus: parsed.value.nextStatus,
-          actorId: context.userId,
-          occurredAt: new Date().toISOString(),
-        });
+      mutate: ({ tenantId, successAuditEvent }) =>
+        runTenantBusinessAuditTransaction(db, async ({ repository, auditRepository }) => {
+          const result = await repository.transitionFollowUpTask({
+            tenantId,
+            id: parsed.value.id,
+            nextStatus: parsed.value.nextStatus,
+            actorId: context.userId,
+            occurredAt: new Date().toISOString(),
+          });
 
-        return result.kind === 'updated'
-          ? { kind: 'success', record: result.task }
-          : result;
-      },
+          if (result.kind !== 'updated') {
+            return result;
+          }
+
+          await auditRepository.record(successAuditEvent);
+
+          return { kind: 'success', record: result.task };
+        }),
       auditRepository,
     });
   } catch {

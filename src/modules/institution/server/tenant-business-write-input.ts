@@ -110,6 +110,17 @@ const customerStringKeys = [
 ] as const;
 
 const maskedCustomerStringKeys = new Set<string>(['maskedPhone', 'maskedMedicalRecordNo']);
+const rawPiiProtectedCustomerStringKeys = new Set<string>([
+  'displayName',
+  'projectInterest',
+  'lastTouchSummary',
+  'nextAction',
+]);
+const rawPiiProtectedAppointmentStringKeys = new Set<string>([
+  'customerDisplayName',
+  'project',
+  'note',
+]);
 
 const createAppointmentStringKeys = [
   'customerId',
@@ -178,6 +189,22 @@ function countDigits(value: string) {
   return value.match(/\p{Decimal_Number}/gu)?.length ?? 0;
 }
 
+function containsRawPersonalInfo(value: string) {
+  const normalized = value.normalize('NFKC');
+  if (countDigits(normalized) >= 11) {
+    return true;
+  }
+
+  return (
+    /(?:\bmr\b|病历号|病歷號|medical\s*record)[^\n\r]{0,32}\p{Decimal_Number}/iu.test(
+      normalized,
+    ) ||
+    /(?:身份证|身分證|id\s*(?:card|number))[^\n\r]{0,32}\p{Decimal_Number}/iu.test(
+      normalized,
+    )
+  );
+}
+
 function isMaskedDisplayValue(key: string, value: string) {
   const normalized = value.trim();
   if (/\p{Decimal_Number}{6,}/u.test(normalized) || /raw/i.test(normalized)) {
@@ -210,6 +237,26 @@ function parseCustomerString(
 
   if (maskedCustomerStringKeys.has(key) && !isMaskedDisplayValue(key, parsed.value)) {
     return { ok: false, error: `字段 ${key} 必须是脱敏展示值` };
+  }
+
+  if (rawPiiProtectedCustomerStringKeys.has(key) && containsRawPersonalInfo(parsed.value)) {
+    return { ok: false, error: `字段 ${key} 不允许包含原始个人信息` };
+  }
+
+  return parsed;
+}
+
+function parseAppointmentString(
+  input: Record<string, unknown>,
+  key: string,
+): TenantBusinessWriteParseResult<string> {
+  const parsed = parseRequiredString(input, key);
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  if (rawPiiProtectedAppointmentStringKeys.has(key) && containsRawPersonalInfo(parsed.value)) {
+    return { ok: false, error: `字段 ${key} 不允许包含原始个人信息` };
   }
 
   return parsed;
@@ -267,6 +314,10 @@ function parseTags(
   const tags = value.map((tag) => tag.trim());
   if (tags.some((tag) => tag.length === 0)) {
     return { ok: false, error: '字段 tags 必须是非空字符串数组' };
+  }
+
+  if (tags.some(containsRawPersonalInfo)) {
+    return { ok: false, error: '字段 tags 不允许包含原始个人信息' };
   }
 
   return {
@@ -446,7 +497,7 @@ export function parseCreateAppointmentPayload(
   const strings = {} as Pick<CreateAppointmentPayload, (typeof createAppointmentStringKeys)[number]>;
   for (const key of createAppointmentStringKeys) {
     const value =
-      key === 'scheduledAt' ? scheduledAt ?? parseScheduledAt(object) : parseRequiredString(object, key);
+      key === 'scheduledAt' ? scheduledAt ?? parseScheduledAt(object) : parseAppointmentString(object, key);
     if (!value.ok) {
       return value;
     }
@@ -486,7 +537,7 @@ export function parseUpdateAppointmentPayload(
     return status;
   }
 
-  const note = parseRequiredString(object, 'note');
+  const note = parseAppointmentString(object, 'note');
   if (!note.ok) {
     return note;
   }
