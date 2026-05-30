@@ -174,14 +174,22 @@ function parseOptionalString(
   return parseRequiredString(input, key);
 }
 
-function isMaskedDisplayValue(value: string) {
+function countDigits(value: string) {
+  return value.replace(/\D/g, '').length;
+}
+
+function isMaskedDisplayValue(key: string, value: string) {
   const normalized = value.trim();
   if (/\d{6,}/.test(normalized) || /raw/i.test(normalized)) {
     return false;
   }
 
+  if (normalized.includes('*')) {
+    const maxVisibleDigits = key === 'maskedPhone' ? 7 : 4;
+    return countDigits(normalized) <= maxVisibleDigits;
+  }
+
   return (
-    normalized.includes('*') ||
     /^masked[-_][a-z][a-z0-9_-]*$/i.test(normalized) ||
     /^demo[-_][a-z][a-z0-9_-]*$/i.test(normalized)
   );
@@ -196,7 +204,7 @@ function parseCustomerString(
     return parsed;
   }
 
-  if (maskedCustomerStringKeys.has(key) && !isMaskedDisplayValue(parsed.value)) {
+  if (maskedCustomerStringKeys.has(key) && !isMaskedDisplayValue(key, parsed.value)) {
     return { ok: false, error: `字段 ${key} 必须是脱敏展示值` };
   }
 
