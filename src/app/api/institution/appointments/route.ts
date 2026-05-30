@@ -6,14 +6,18 @@ import { getDemoAccessContextFromRequest } from '@/modules/security/server/acces
 import { getDatabase } from '@/server/db/client';
 
 export async function GET(request: Request) {
+  const context = getDemoAccessContextFromRequest(request);
+  if (!context) {
+    return NextResponse.json({ error: '请先登录' }, { status: 401 });
+  }
+
   try {
     const db = getDatabase();
     const repository = createTenantBusinessRepository(db);
     const auditRepository = createAuditEventRepository(db);
 
     return await handleTenantBusinessListRequest({
-      request,
-      context: getDemoAccessContextFromRequest(request),
+      context,
       resource: 'appointment',
       list: repository.listAppointmentsByTenant,
       auditRepository,

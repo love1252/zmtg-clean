@@ -13,7 +13,6 @@ import {
 type TenantBusinessResource = Extract<ProtectedResource, 'customer' | 'appointment' | 'follow_up'>;
 
 type TenantBusinessListRequest<Item> = {
-  request: Request;
   context: AccessContext | null;
   resource: TenantBusinessResource;
   list: (tenantId: string) => Promise<Item[]>;
@@ -28,14 +27,11 @@ function createAuditEventId() {
 }
 
 export async function handleTenantBusinessListRequest<Item>({
-  request,
   context,
   resource,
   list,
   auditRepository,
 }: TenantBusinessListRequest<Item>) {
-  void request;
-
   if (!context) {
     return NextResponse.json({ error: '请先登录' }, { status: 401 });
   }
