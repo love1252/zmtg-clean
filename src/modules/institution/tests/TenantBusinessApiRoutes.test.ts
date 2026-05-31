@@ -33,6 +33,7 @@ const routeMocks = vi.hoisted(() => {
     transitionFollowUpTask: vi.fn(),
   };
   const auditRecord = vi.fn();
+  const checkTenantQuotaForCreate = vi.fn();
   const transactionDatabase = { database: 'transaction-db' };
   const database = {
     database: 'test-db',
@@ -43,6 +44,7 @@ const routeMocks = vi.hoisted(() => {
 
   return {
     auditRecord,
+    checkTenantQuotaForCreate,
     createAuditEventRepository: vi.fn(() => ({ record: auditRecord })),
     createTenantBusinessRepository: vi.fn(() => repository),
     database,
@@ -87,6 +89,16 @@ vi.mock('@/modules/audit/server/audit-event-repository', async (importOriginal) 
   };
 });
 
+vi.mock('@/modules/institution/server/tenant-quota-enforcement', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@/modules/institution/server/tenant-quota-enforcement')
+  >();
+  return {
+    ...actual,
+    checkTenantQuotaForCreate: routeMocks.checkTenantQuotaForCreate,
+  };
+});
+
 const tenantContext: AccessContext = {
   userId: 'demo-user-admin',
   role: 'tenant_admin',
@@ -116,6 +128,15 @@ beforeEach(() => {
   routeMocks.getDatabase.mockReturnValue(routeMocks.database);
   routeMocks.getDemoAccessContextFromRequest.mockReset();
   routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
+  routeMocks.checkTenantQuotaForCreate.mockReset();
+  routeMocks.checkTenantQuotaForCreate.mockImplementation(
+    async ({ resource }: { resource: 'customers' | 'appointments' }) => ({
+      allowed: true,
+      current: resource === 'customers' ? 24 : 12,
+      limit: resource === 'customers' ? 5000 : 2000,
+      resource,
+    }),
+  );
   routeMocks.createTenantBusinessRepository.mockClear();
   routeMocks.createAuditEventRepository.mockClear();
   routeMocks.auditRecord.mockReset();
@@ -481,6 +502,40 @@ describe('租户业务写入 API 处理器', () => {
       action: 'update',
     }));
   });
+
+  it('写入处理器对配额拒绝返回 409 并写入稳定拒绝审计', async () => {
+    const auditRepository = { record: vi.fn(async () => undefined) };
+
+    const response = await handleTenantBusinessMutationRequest({
+      context: tenantContext,
+      resource: 'customer',
+      action: 'create',
+      mutate: vi.fn(async () => ({
+        kind: 'quota_denied' as const,
+        decision: {
+          allowed: false as const,
+          current: 1000,
+          limit: 1000,
+          reason: 'quota_exceeded_customers' as const,
+          resource: 'customers' as const,
+        },
+      })),
+      auditRepository,
+      successStatus: 201,
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: '客户配额已达上限，请联系平台管理员调整套餐',
+    });
+    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'create',
+      reason: 'quota_exceeded_customers',
+      resource: 'customer',
+      result: 'denied',
+      tenantId: 'demo-tenant-001',
+    }));
+  });
 });
 
 describe('租户业务只读 API 路由', () => {
@@ -745,6 +800,14 @@ describe('租户业务写入 API 路由', () => {
     expect(routeMocks.repository.createCustomer).not.toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: 'other-tenant' }),
     );
+    expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledWith({
+      database: routeMocks.database,
+      resource: 'customers',
+      tenantId: 'demo-tenant-001',
+    });
+    expect(routeMocks.checkTenantQuotaForCreate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'other-tenant' }),
+    );
     expect(routeMocks.database.transaction).toHaveBeenCalledTimes(1);
     expect(routeMocks.createTenantBusinessRepository).toHaveBeenCalledWith(
       routeMocks.transactionDatabase,
@@ -764,6 +827,13 @@ describe('租户业务写入 API 路由', () => {
 
   it('更新客户使用已确认记录 id 写入允许审计', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.checkTenantQuotaForCreate.mockResolvedValue({
+      allowed: false,
+      current: 5000,
+      limit: 5000,
+      reason: 'quota_exceeded_customers',
+      resource: 'customers',
+    });
 
     const response = await customersPatch(
       new Request('http://localhost/api/institution/customers', {
@@ -783,7 +853,110 @@ describe('租户业务写入 API 路由', () => {
       result: 'allowed',
       tenantId: 'demo-tenant-001',
     }));
+    expect(routeMocks.checkTenantQuotaForCreate).not.toHaveBeenCalled();
     expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
+  });
+
+  it('客户已达配额时拒绝创建、不写业务表并记录拒绝审计', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.checkTenantQuotaForCreate.mockResolvedValueOnce({
+      allowed: false,
+      current: 5000,
+      limit: 5000,
+      reason: 'quota_exceeded_customers',
+      resource: 'customers',
+    });
+
+    const response = await customersPost(
+      new Request('http://localhost/api/institution/customers?tenantId=other-tenant', {
+        method: 'POST',
+        headers: { 'x-tenant-id': 'other-tenant' },
+        body: JSON.stringify(validCreateCustomerPayload),
+      }),
+    );
+    const payload = await response.json();
+    const serializedPayload = JSON.stringify(payload);
+
+    expect(response.status).toBe(409);
+    expect(payload).toEqual({ error: '客户配额已达上限，请联系平台管理员调整套餐' });
+    expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledWith({
+      database: routeMocks.database,
+      resource: 'customers',
+      tenantId: 'demo-tenant-001',
+    });
+    expect(routeMocks.checkTenantQuotaForCreate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'other-tenant' }),
+    );
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'create',
+      reason: 'quota_exceeded_customers',
+      resource: 'customer',
+      result: 'denied',
+      tenantId: 'demo-tenant-001',
+    }));
+    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
+    expect(serializedPayload).not.toContain('DATABASE_URL');
+    expect(serializedPayload).not.toContain('postgres://');
+    expect(serializedPayload).not.toContain('token');
+    expect(serializedPayload).not.toContain('secret');
+    expect(serializedPayload).not.toContain('stack');
+  });
+
+  it('无 active plan 时拒绝创建客户并 fail closed', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.checkTenantQuotaForCreate.mockResolvedValueOnce({
+      allowed: false,
+      current: null,
+      limit: null,
+      reason: 'missing_active_plan',
+      resource: 'customers',
+    });
+
+    const response = await customersPost(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'POST',
+        body: JSON.stringify(validCreateCustomerPayload),
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: '当前租户未配置有效套餐，暂时无法新增记录',
+    });
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      reason: 'missing_active_plan',
+      result: 'denied',
+    }));
+  });
+
+  it('无 quota limit 时拒绝创建预约并 fail closed', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.checkTenantQuotaForCreate.mockResolvedValueOnce({
+      allowed: false,
+      current: null,
+      limit: null,
+      reason: 'missing_quota_limit',
+      resource: 'appointments',
+    });
+
+    const response = await appointmentsPost(
+      new Request('http://localhost/api/institution/appointments', {
+        method: 'POST',
+        body: JSON.stringify(validCreateAppointmentPayload),
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: '当前租户套餐配额未配置，暂时无法新增记录',
+    });
+    expect(routeMocks.repository.createAppointment).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      reason: 'missing_quota_limit',
+      result: 'denied',
+    }));
   });
 
   it('更新客户目标不存在时返回 404 并记录拒绝审计', async () => {
@@ -895,6 +1068,12 @@ describe('租户业务写入 API 路由', () => {
       tenantId: 'demo-tenant-001',
       ...validUpdateAppointmentPayload,
     });
+    expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledTimes(1);
+    expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledWith({
+      database: routeMocks.database,
+      resource: 'appointments',
+      tenantId: 'demo-tenant-001',
+    });
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
       action: 'create',
       resource: 'appointment',
@@ -913,6 +1092,97 @@ describe('租户业务写入 API 路由', () => {
     routeMocks.auditRecord.mock.calls.forEach(([event]) =>
       expectAuditEventDoesNotContainPrivateBody(event),
     );
+  });
+
+  it('无 quota snapshot 但 helper 按 active plan limit 和 live count 放行时继续创建预约', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.checkTenantQuotaForCreate.mockResolvedValueOnce({
+      allowed: true,
+      current: 399,
+      limit: 400,
+      resource: 'appointments',
+    });
+
+    const response = await appointmentsPost(
+      new Request('http://localhost/api/institution/appointments', {
+        method: 'POST',
+        body: JSON.stringify(validCreateAppointmentPayload),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(routeMocks.repository.createAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'demo-tenant-001' }),
+    );
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'create',
+      resource: 'appointment',
+      result: 'allowed',
+    }));
+  });
+
+  it('预约已达配额时拒绝创建、不写业务表并记录拒绝审计', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.checkTenantQuotaForCreate.mockResolvedValueOnce({
+      allowed: false,
+      current: 2000,
+      limit: 2000,
+      reason: 'quota_exceeded_appointments',
+      resource: 'appointments',
+    });
+
+    const response = await appointmentsPost(
+      new Request('http://localhost/api/institution/appointments?tenantId=other-tenant', {
+        method: 'POST',
+        headers: { 'x-tenant-id': 'other-tenant' },
+        body: JSON.stringify(validCreateAppointmentPayload),
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: '预约配额已达上限，请联系平台管理员调整套餐',
+    });
+    expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledWith({
+      database: routeMocks.database,
+      resource: 'appointments',
+      tenantId: 'demo-tenant-001',
+    });
+    expect(routeMocks.repository.customerExistsByTenant).not.toHaveBeenCalled();
+    expect(routeMocks.repository.createAppointment).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'create',
+      reason: 'quota_exceeded_appointments',
+      resource: 'appointment',
+      result: 'denied',
+      tenantId: 'demo-tenant-001',
+    }));
+    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
+  });
+
+  it('更新预约不受数量配额阻断', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.checkTenantQuotaForCreate.mockResolvedValue({
+      allowed: false,
+      current: 2000,
+      limit: 2000,
+      reason: 'quota_exceeded_appointments',
+      resource: 'appointments',
+    });
+
+    const response = await appointmentsPatch(
+      new Request('http://localhost/api/institution/appointments', {
+        method: 'PATCH',
+        body: JSON.stringify(validUpdateAppointmentPayload),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.repository.updateAppointment).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      ...validUpdateAppointmentPayload,
+    });
+    expect(routeMocks.checkTenantQuotaForCreate).not.toHaveBeenCalled();
   });
 
   it('预约创建客户不属于当前租户时返回 404 并记录拒绝审计', async () => {
@@ -971,6 +1241,13 @@ describe('租户业务写入 API 路由', () => {
 
   it('随访状态流转绑定仓储方法、操作者和上下文 tenantId', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.checkTenantQuotaForCreate.mockResolvedValue({
+      allowed: false,
+      current: 2000,
+      limit: 2000,
+      reason: 'quota_exceeded_appointments',
+      resource: 'appointments',
+    });
 
     const response = await followupsPatch(
       new Request('http://localhost/api/institution/followups?tenantId=other-tenant', {
@@ -990,6 +1267,7 @@ describe('租户业务写入 API 路由', () => {
       actorId: 'demo-user-admin',
       occurredAt: expect.any(String),
     });
+    expect(routeMocks.checkTenantQuotaForCreate).not.toHaveBeenCalled();
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
       action: 'update',
       resource: 'follow_up',

@@ -6,6 +6,7 @@ import {
 } from '@/modules/institution/server/tenant-business-api';
 import { runTenantBusinessAuditTransaction } from '@/modules/institution/server/tenant-business-audit-transaction';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
+import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 import {
   parseCreateCustomerPayload,
   parseUpdateCustomerPayload,
@@ -67,8 +68,17 @@ export async function POST(request: Request) {
       context,
       resource: 'customer',
       action: 'create',
-      mutate: ({ tenantId, successAuditEvent }) =>
-        runTenantBusinessAuditTransaction(db, async ({ repository, auditRepository }) => {
+      mutate: async ({ tenantId, successAuditEvent }) => {
+        const quotaDecision = await checkTenantQuotaForCreate({
+          database: db,
+          tenantId,
+          resource: 'customers',
+        });
+        if (!quotaDecision.allowed) {
+          return { kind: 'quota_denied', decision: quotaDecision };
+        }
+
+        return runTenantBusinessAuditTransaction(db, async ({ repository, auditRepository }) => {
           const record = await repository.createCustomer({
             id: globalThis.crypto.randomUUID(),
             tenantId,
@@ -78,7 +88,8 @@ export async function POST(request: Request) {
           await auditRepository.record({ ...successAuditEvent, resourceId: record.id });
 
           return { kind: 'success', record };
-        }),
+        });
+      },
       auditRepository,
       successStatus: 201,
     });

@@ -5,6 +5,10 @@ import {
   type TenantAuditEvent,
 } from '@/modules/audit/domain/audit-events';
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
+import type {
+  TenantQuotaDecision,
+  TenantQuotaDenialReason,
+} from '@/modules/institution/domain/quota-enforcement';
 import {
   canAccessResource,
   type AccessContext,
@@ -25,7 +29,8 @@ export type TenantBusinessMutationResult<Item> =
   | { kind: 'success'; record: Item }
   | { kind: 'not_found'; resourceId?: string | null }
   | { kind: 'conflict'; reason: 'stale_transition'; resourceId?: string | null }
-  | { kind: 'invalid_transition'; from: string; to: string; resourceId?: string | null };
+  | { kind: 'invalid_transition'; from: string; to: string; resourceId?: string | null }
+  | { kind: 'quota_denied'; decision: Extract<TenantQuotaDecision, { allowed: false }> };
 
 export type TenantBusinessMutationRequest<Item> = {
   context: AccessContext | null;
@@ -44,6 +49,17 @@ function createAuditEventId() {
     globalThis.crypto?.randomUUID?.() ??
     `audit_${Date.now()}_${Math.random().toString(36).slice(2)}`
   );
+}
+
+const tenantQuotaDenialMessages: Record<TenantQuotaDenialReason, string> = {
+  missing_active_plan: '当前租户未配置有效套餐，暂时无法新增记录',
+  missing_quota_limit: '当前租户套餐配额未配置，暂时无法新增记录',
+  quota_exceeded_appointments: '预约配额已达上限，请联系平台管理员调整套餐',
+  quota_exceeded_customers: '客户配额已达上限，请联系平台管理员调整套餐',
+};
+
+function getTenantQuotaDenialMessage(reason: TenantQuotaDenialReason) {
+  return tenantQuotaDenialMessages[reason];
 }
 
 export async function handleTenantBusinessListRequest<Item>({
@@ -222,6 +238,25 @@ export async function handleTenantBusinessMutationRequest<Item>({
     );
 
     return NextResponse.json({ error: '随访状态已变化，请刷新后重试' }, { status: 409 });
+  }
+
+  if (result.kind === 'quota_denied') {
+    await auditRepository.record(
+      createAuditEvent({
+        eventId: createAuditEventId(),
+        context,
+        resource,
+        action,
+        result: 'denied',
+        reason: result.decision.reason,
+        occurredAt,
+      }),
+    );
+
+    return NextResponse.json(
+      { error: getTenantQuotaDenialMessage(result.decision.reason) },
+      { status: 409 },
+    );
   }
 
   return NextResponse.json({ record: result.record }, { status: successStatus });
