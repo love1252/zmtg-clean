@@ -31,6 +31,21 @@ const appointmentRecord = {
   note: '待电话确认到院',
 };
 
+const followUpRecord = {
+  id: 'fu_wang_d28',
+  tenantId: 'demo-tenant-001',
+  customerId: 'cust_wang_repurchase',
+  customerDisplayName: '王女士',
+  journeyId: 'journey_repurchase',
+  stage: 'D28 复购建议',
+  status: 'due',
+  dueAt: '2026-05-30T18:00:00+08:00',
+  suggestedAction: '人工回访并推荐修复组合',
+  riskLevel: 'urgent',
+  updatedBy: null,
+  updatedAt: null,
+};
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
@@ -474,12 +489,158 @@ describe('机构业务页面壳', () => {
     expect(await screen.findByText('字段 scheduledAt 必须是有效时间字符串')).toBeInTheDocument();
   });
 
-  it('渲染智能随访页面壳', () => {
+  it('智能随访从真实 API 加载并按风险和到期时间排序展示 records', async () => {
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/followups': [
+        jsonResponse({
+          records: [
+            {
+              ...followUpRecord,
+              id: 'fu_li_silent',
+              customerDisplayName: '李女士',
+              stage: '48h 沉默唤醒',
+              status: 'scheduled',
+              dueAt: '2026-05-31T10:00:00+08:00',
+              suggestedAction: '发送轻量唤醒话术',
+              riskLevel: 'normal',
+            },
+            followUpRecord,
+            {
+              ...followUpRecord,
+              id: 'fu_zhao_d3',
+              customerDisplayName: '赵女士',
+              stage: 'D3 异常反馈',
+              dueAt: '2026-05-30T09:30:00+08:00',
+              suggestedAction: '客服回访并记录恢复情况',
+              riskLevel: 'urgent',
+            },
+          ],
+        }),
+      ],
+    });
+
     render(<SmartFollowUpShell />);
 
     expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();
-    expect(screen.getByText('术后 D0-D30 关怀')).toBeInTheDocument();
+    expect(screen.getByText('正在加载随访任务...')).toBeInTheDocument();
+    expect(await screen.findByText('王女士')).toBeInTheDocument();
+    expect(screen.getAllByText('状态：待处理').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('风险：优先').length).toBeGreaterThan(0);
+    expect(screen.getByText(/2026-05-30 18:00/)).toBeInTheDocument();
     expect(screen.getByText('D3 异常反馈')).toBeInTheDocument();
+    expect(screen.getByText('48h 沉默唤醒')).toBeInTheDocument();
+
+    const taskCards = screen.getAllByTestId('followup-task-card');
+    expect(taskCards.map((card) => card.textContent)).toEqual([
+      expect.stringContaining('赵女士'),
+      expect.stringContaining('王女士'),
+      expect.stringContaining('李女士'),
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith('/api/institution/followups', { cache: 'no-store' });
+  });
+
+  it('智能随访展示空状态和静态话术安全说明', async () => {
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/followups': [jsonResponse({ records: [] })],
+    });
+
+    render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('暂无随访任务')).toBeInTheDocument();
     expect(screen.getByText('这是演示话术：请根据客户真实恢复情况由专业人员确认后再发送。')).toBeInTheDocument();
+    expect(screen.getByText('不会调用 AI provider，也不会自动触达客户。')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual([
+      '/api/institution/followups',
+    ]);
+  });
+
+  it.each([
+    [401, '请先登录', '登录状态已失效，请重新登录'],
+    [403, '没有访问权限', '当前账号没有访问随访任务的权限'],
+    [503, '数据服务暂时不可用', '数据服务暂时不可用'],
+  ])('智能随访处理 %s 错误态', async (status, apiMessage, visibleMessage) => {
+    mockInstitutionFetch({
+      '/api/institution/followups': [jsonResponse({ error: apiMessage }, { status })],
+    });
+
+    render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText(visibleMessage)).toBeInTheDocument();
+  });
+
+  it('智能随访只展示当前状态允许的流转按钮', async () => {
+    mockInstitutionFetch({
+      '/api/institution/followups': [jsonResponse({ records: [followUpRecord] })],
+    });
+
+    render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('王女士')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '流转 王女士 到 处理中' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '流转 王女士 到 已升级' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '流转 王女士 到 已取消' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '流转 王女士 到 已完成' })).not.toBeInTheDocument();
+  });
+
+  it('智能随访状态流转只提交 id 和 nextStatus 并更新界面', async () => {
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/followups': [
+        jsonResponse({ records: [followUpRecord] }),
+        jsonResponse({ record: { ...followUpRecord, status: 'in_progress' } }),
+      ],
+    });
+
+    render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('王女士')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '流转 王女士 到 处理中' }));
+
+    expect(await screen.findByText('状态：处理中')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '流转 王女士 到 已完成' })).toBeInTheDocument();
+    const body = mutationBody(fetchMock, '/api/institution/followups', 'PATCH');
+    const serializedBody = JSON.stringify(body);
+
+    expect(body).toEqual({
+      id: 'fu_wang_d28',
+      nextStatus: 'in_progress',
+    });
+    expect(serializedBody).not.toContain('tenantId');
+    expect(serializedBody).not.toContain('phoneNumber');
+    expect(serializedBody).not.toContain('idNumber');
+    expect(serializedBody).not.toContain('medicalRecordNo');
+    expect(serializedBody).not.toContain('treatmentRecord');
+    expect(serializedBody).not.toContain('consultationTranscript');
+  });
+
+  it('智能随访 409 冲突时提示刷新', async () => {
+    mockInstitutionFetch({
+      '/api/institution/followups': [
+        jsonResponse({ records: [followUpRecord] }),
+        jsonResponse({ error: '随访状态已变化，请刷新后重试' }, { status: 409 }),
+      ],
+    });
+
+    render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('王女士')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '流转 王女士 到 处理中' }));
+
+    expect(await screen.findByText('随访状态已变化，请刷新后重试')).toBeInTheDocument();
+  });
+
+  it('智能随访提交失败时展示错误提示', async () => {
+    mockInstitutionFetch({
+      '/api/institution/followups': [
+        jsonResponse({ records: [followUpRecord] }),
+        jsonResponse({ error: '数据服务暂时不可用' }, { status: 503 }),
+      ],
+    });
+
+    render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('王女士')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '流转 王女士 到 处理中' }));
+
+    expect(await screen.findByText('数据服务暂时不可用')).toBeInTheDocument();
   });
 });
