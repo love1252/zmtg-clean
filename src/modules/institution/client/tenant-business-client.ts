@@ -110,6 +110,94 @@ function isJsonObject(input: unknown): input is Record<string, unknown> {
   return Object.prototype.toString.call(input) === '[object Object]';
 }
 
+const tenantQuotaClientMessages = {
+  missing_active_plan: '当前机构暂无有效套餐，暂不能新增数据，请联系平台管理员。',
+  missing_quota_limit: '当前机构套餐配额未配置完整，暂不能新增数据，请联系平台管理员。',
+  quota_exceeded_appointments: '当前套餐的预约数量已达上限，请联系平台管理员调整套餐或配额。',
+  quota_exceeded_customers: '当前套餐的客户数量已达上限，请联系平台管理员调整套餐或配额。',
+} as const;
+
+type TenantQuotaClientReason = keyof typeof tenantQuotaClientMessages;
+
+const tenantQuotaMessagePatterns: Array<{
+  message: string;
+  patterns: string[];
+  reason: TenantQuotaClientReason;
+}> = [
+  {
+    reason: 'quota_exceeded_customers',
+    message: tenantQuotaClientMessages.quota_exceeded_customers,
+    patterns: ['quota_exceeded_customers', '客户配额已达上限'],
+  },
+  {
+    reason: 'quota_exceeded_appointments',
+    message: tenantQuotaClientMessages.quota_exceeded_appointments,
+    patterns: ['quota_exceeded_appointments', '预约配额已达上限'],
+  },
+  {
+    reason: 'missing_active_plan',
+    message: tenantQuotaClientMessages.missing_active_plan,
+    patterns: ['missing_active_plan', '未配置有效套餐', '暂无有效套餐'],
+  },
+  {
+    reason: 'missing_quota_limit',
+    message: tenantQuotaClientMessages.missing_quota_limit,
+    patterns: ['missing_quota_limit', '套餐配额未配置'],
+  },
+];
+
+const forbiddenErrorDetailPatterns = [
+  /DATABASE_URL/iu,
+  /postgres:\/\//iu,
+  /\bselect\s+\*/iu,
+  /\bsql\b/iu,
+  /\bstack\b/iu,
+  /\btoken\b/iu,
+  /\bsecret\b/iu,
+  /sk_(?:live|test)/iu,
+  /zmtg_sk_/iu,
+];
+
+function firstPayloadString(payload: unknown, keys: readonly string[]) {
+  if (!isJsonObject(payload)) return null;
+
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === 'string') {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function getTenantQuotaClientMessage(payload: unknown, message: string | null) {
+  const searchable = [
+    message,
+    firstPayloadString(payload, ['reason', 'code']),
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(' ');
+
+  return (
+    tenantQuotaMessagePatterns.find(({ patterns }) =>
+      patterns.some((pattern) => searchable.includes(pattern)),
+    )?.message ?? null
+  );
+}
+
+function containsForbiddenErrorDetails(message: string) {
+  return forbiddenErrorDetailPatterns.some((pattern) => pattern.test(message));
+}
+
+function fallbackMessageFromStatus(status: number, fallbackMessage?: string) {
+  if (status === 401) return '请先登录';
+  if (status === 403) return '没有访问权限';
+  if (status === 404) return '记录不存在';
+  if (status === 503) return '数据服务暂时不可用';
+  return fallbackMessage ?? '请求失败';
+}
+
 async function readJson(response: Response): Promise<unknown> {
   try {
     return await response.json();
@@ -123,10 +211,16 @@ function createClientError(input: {
   payload: unknown;
   fallbackMessage?: string;
 }): TenantBusinessClientError {
-  const message =
+  const rawMessage =
     isJsonObject(input.payload) && typeof input.payload.error === 'string'
       ? input.payload.error
       : input.fallbackMessage ?? '请求失败';
+  const quotaMessage = getTenantQuotaClientMessage(input.payload, rawMessage);
+  const message =
+    quotaMessage ??
+    (containsForbiddenErrorDetails(rawMessage)
+      ? fallbackMessageFromStatus(input.status, input.fallbackMessage)
+      : rawMessage);
 
   return {
     kind: errorKindFromStatus(input.status),
