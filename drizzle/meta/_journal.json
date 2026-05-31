@@ -15,6 +15,13 @@
       "when": 1780212542442,
       "tag": "0001_wise_fantastic_four",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780227450267,
+      "tag": "0002_watery_roxanne_simpson",
+      "breakpoints": true
     }
   ]
 }

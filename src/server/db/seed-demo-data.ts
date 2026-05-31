@@ -6,6 +6,9 @@ import {
   appointments,
   customers,
   followUpTasks,
+  tenantPlanAssignments,
+  tenantPlans,
+  tenantQuotaSnapshots,
   tenantMembers,
   tenants,
 } from '@/server/db/schema';
@@ -82,8 +85,87 @@ type DemoCustomerReference = {
   customerId: string;
 };
 
+const demoTenantPlanRecords: Array<typeof tenantPlans.$inferInsert> = [
+  {
+    id: 'plan-starter-care',
+    name: '标准版',
+    code: 'starter-care',
+    description: '适合起步机构的基础运营演示套餐。',
+    status: 'active',
+  },
+  {
+    id: 'plan-growth-care',
+    name: '成长版',
+    code: 'growth-care',
+    description: '适合增长期机构的进阶运营演示套餐。',
+    status: 'active',
+  },
+];
+
+const demoTenantPlanAssignmentRecords: Array<typeof tenantPlanAssignments.$inferInsert> = [
+  {
+    id: 'assign-demo-tenant-001-growth',
+    tenantId: 'demo-tenant-001',
+    planId: 'plan-growth-care',
+    status: 'active',
+    startedAt: new Date('2026-05-31T00:00:00.000Z'),
+    expiresAt: null,
+  },
+  {
+    id: 'assign-demo-tenant-002-starter',
+    tenantId: 'demo-tenant-002',
+    planId: 'plan-starter-care',
+    status: 'active',
+    startedAt: new Date('2026-05-31T00:00:00.000Z'),
+    expiresAt: null,
+  },
+];
+
+const demoTenantQuotaSnapshotRecords: Array<typeof tenantQuotaSnapshots.$inferInsert> = [
+  {
+    id: 'quota-demo-tenant-001-current',
+    tenantId: 'demo-tenant-001',
+    planAssignmentId: 'assign-demo-tenant-001-growth',
+    maxCustomers: 5000,
+    maxAppointments: 2000,
+    maxFollowUps: 10000,
+    maxAiCalls: 50000,
+    currentCustomers: 7,
+    currentAppointments: 5,
+    currentFollowUps: 5,
+    currentAiCalls: 0,
+    snapshotAt: new Date('2026-05-31T08:00:00.000Z'),
+  },
+  {
+    id: 'quota-demo-tenant-002-current',
+    tenantId: 'demo-tenant-002',
+    planAssignmentId: 'assign-demo-tenant-002-starter',
+    maxCustomers: 1000,
+    maxAppointments: 400,
+    maxFollowUps: 2000,
+    maxAiCalls: 0,
+    currentCustomers: 1,
+    currentAppointments: 0,
+    currentFollowUps: 0,
+    currentAiCalls: 0,
+    snapshotAt: new Date('2026-05-31T08:00:00.000Z'),
+  },
+];
+
 export function getDemoCustomerSeedRecords() {
   return [...demoTenantCustomerRecords, ...supplementalDemoCustomerRecords];
+}
+
+export function getDemoTenantPlanSeedRecords() {
+  return [...demoTenantPlanRecords];
+}
+
+export function getDemoTenantPlanAssignmentSeedRecords() {
+  return [...demoTenantPlanAssignmentRecords];
+}
+
+export function getDemoTenantQuotaSnapshotSeedRecords() {
+  return [...demoTenantQuotaSnapshotRecords];
 }
 
 export function findMissingDemoCustomerReferences(
@@ -155,6 +237,18 @@ export async function seedDemoData(db: TenantDatabase) {
       { id: 'demo-tenant-001', name: '智美天工演示机构', status: 'active' },
       { id: 'demo-tenant-002', name: '跨租户隔离演示机构', status: 'active' },
     ])
+    .onConflictDoNothing();
+
+  await db.insert(tenantPlans).values(getDemoTenantPlanSeedRecords()).onConflictDoNothing();
+
+  await db
+    .insert(tenantPlanAssignments)
+    .values(getDemoTenantPlanAssignmentSeedRecords())
+    .onConflictDoNothing();
+
+  await db
+    .insert(tenantQuotaSnapshots)
+    .values(getDemoTenantQuotaSnapshotSeedRecords())
     .onConflictDoNothing();
 
   await db

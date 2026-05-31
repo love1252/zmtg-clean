@@ -1,6 +1,7 @@
 import {
   foreignKey,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -54,6 +55,12 @@ export const followUpStatusEnum = pgEnum('follow_up_status', [
 ]);
 export const followUpRiskLevelEnum = pgEnum('follow_up_risk_level', ['normal', 'watch', 'urgent']);
 export const auditResultEnum = pgEnum('audit_result', ['allowed', 'denied', 'transitioned']);
+export const tenantPlanStatusEnum = pgEnum('tenant_plan_status', ['active', 'retired']);
+export const tenantPlanAssignmentStatusEnum = pgEnum('tenant_plan_assignment_status', [
+  'active',
+  'scheduled',
+  'expired',
+]);
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -66,6 +73,81 @@ export const tenants = pgTable('tenants', {
   status: tenantStatusEnum('status').notNull().default('active'),
   ...timestamps,
 });
+
+export const tenantPlans = pgTable(
+  'tenant_plans',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    name: varchar('name', { length: 120 }).notNull(),
+    code: varchar('code', { length: 64 }).notNull(),
+    description: text('description').notNull(),
+    status: tenantPlanStatusEnum('status').notNull().default('active'),
+    ...timestamps,
+  },
+  (table) => ({
+    codeUniqueIdx: uniqueIndex('tenant_plans_code_unique_idx').on(table.code),
+    statusIdx: index('tenant_plans_status_idx').on(table.status),
+  }),
+);
+
+export const tenantPlanAssignments = pgTable(
+  'tenant_plan_assignments',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    planId: varchar('plan_id', { length: 64 })
+      .notNull()
+      .references(() => tenantPlans.id),
+    status: tenantPlanAssignmentStatusEnum('status').notNull().default('active'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantStatusIdx: index('tenant_plan_assignments_tenant_status_idx').on(
+      table.tenantId,
+      table.status,
+    ),
+    planStatusIdx: index('tenant_plan_assignments_plan_status_idx').on(
+      table.planId,
+      table.status,
+    ),
+  }),
+);
+
+export const tenantQuotaSnapshots = pgTable(
+  'tenant_quota_snapshots',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    planAssignmentId: varchar('plan_assignment_id', { length: 64 })
+      .notNull()
+      .references(() => tenantPlanAssignments.id),
+    maxCustomers: integer('max_customers').notNull(),
+    maxAppointments: integer('max_appointments').notNull(),
+    maxFollowUps: integer('max_follow_ups').notNull(),
+    maxAiCalls: integer('max_ai_calls').notNull(),
+    currentCustomers: integer('current_customers').notNull(),
+    currentAppointments: integer('current_appointments').notNull(),
+    currentFollowUps: integer('current_follow_ups').notNull(),
+    currentAiCalls: integer('current_ai_calls').notNull(),
+    snapshotAt: timestamp('snapshot_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantSnapshotIdx: index('tenant_quota_snapshots_tenant_snapshot_idx').on(
+      table.tenantId,
+      table.snapshotAt,
+    ),
+    planAssignmentSnapshotIdx: index(
+      'tenant_quota_snapshots_plan_assignment_snapshot_idx',
+    ).on(table.planAssignmentId, table.snapshotAt),
+  }),
+);
 
 export const tenantMembers = pgTable(
   'tenant_members',
