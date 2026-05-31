@@ -1,27 +1,37 @@
 'use client';
 
 import Image from 'next/image';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Activity,
-  ArrowRight,
+  AlertTriangle,
   Bell,
+  BriefcaseBusiness,
+  CalendarCheck,
   CheckCircle2,
+  Clock3,
+  Loader2,
   Search,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { AppointmentCenterShell } from '@/modules/institution/components/AppointmentCenterShell';
 import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 import {
-  institutionActionQueue,
-  institutionJourneyLanes,
-  institutionNavItems,
-  institutionStats,
-  institutionSuggestions,
-} from '@/modules/workspace/domain/institution-dashboard';
+  listAppointments,
+  listCustomers,
+  listFollowUpTasks,
+  type TenantBusinessClientError,
+} from '@/modules/institution/client/tenant-business-client';
+import { institutionNavItems } from '@/modules/workspace/domain/institution-dashboard';
 import type { InstitutionViewId } from '@/modules/workspace/domain/institution-dashboard';
+import {
+  buildInstitutionDashboardSummary,
+  type InstitutionDashboardMetricKey,
+  type InstitutionDashboardSummary,
+} from '@/modules/workspace/domain/institution-dashboard-view-models';
 import { cn } from '@/shared/utils/cn';
 
 const statToneClasses = {
@@ -31,15 +41,98 @@ const statToneClasses = {
   amber: 'border-amber-200/80 bg-amber-50/80 text-amber-700',
 };
 
-const suggestionToneClasses = {
-  复购: 'border-rose-200/80 bg-rose-50 text-rose-600',
-  转化: 'border-amber-200/80 bg-amber-50 text-amber-600',
-  服务: 'border-sky-200/80 bg-sky-50 text-sky-600',
-};
+const metricIcons = {
+  customer_total: Users,
+  high_priority_customers: BriefcaseBusiness,
+  pending_appointments: CalendarCheck,
+  due_followups: Clock3,
+} satisfies Record<InstitutionDashboardMetricKey, typeof Users>;
+
+const emptyDashboardSummary = buildInstitutionDashboardSummary({
+  customers: [],
+  appointments: [],
+  followUpTasks: [],
+});
+
+type DashboardLoadStatus = 'loading' | 'success' | 'error';
+
+function visibleDashboardErrorMessage(error: TenantBusinessClientError) {
+  if (error.kind === 'unauthorized') {
+    return '登录状态已失效，请重新登录';
+  }
+
+  if (error.kind === 'forbidden') {
+    return '当前账号没有访问机构首页数据的权限';
+  }
+
+  if (error.kind === 'service_unavailable') {
+    return '数据服务暂时不可用';
+  }
+
+  return error.message || '机构首页数据请求失败';
+}
+
+function firstDashboardError(
+  results: Array<{ ok: true } | { ok: false; error: TenantBusinessClientError }>,
+) {
+  return results.find(
+    (result): result is { ok: false; error: TenantBusinessClientError } => !result.ok,
+  )?.error;
+}
 
 export function InstitutionWorkspace() {
   const [activeView, setActiveView] = useState<InstitutionViewId>('dashboard');
+  const [dashboardSummary, setDashboardSummary] = useState<InstitutionDashboardSummary>(
+    emptyDashboardSummary,
+  );
+  const [dashboardStatus, setDashboardStatus] = useState<DashboardLoadStatus>('loading');
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const activeNavItem = institutionNavItems.find((item) => item.id === activeView) ?? institutionNavItems[0];
+  const highPriorityMetric = dashboardSummary.metrics.find(
+    (metric) => metric.key === 'high_priority_customers',
+  );
+  const highPriorityLabel =
+    dashboardStatus === 'loading' ? '--' : highPriorityMetric?.value ?? '0';
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadDashboardSummary() {
+      setDashboardStatus('loading');
+      setDashboardError(null);
+
+      const [customerResult, appointmentResult, followUpResult] = await Promise.all([
+        listCustomers(),
+        listAppointments(),
+        listFollowUpTasks(),
+      ]);
+
+      if (!isActive) return;
+
+      const error = firstDashboardError([customerResult, appointmentResult, followUpResult]);
+      if (error) {
+        setDashboardSummary(emptyDashboardSummary);
+        setDashboardError(visibleDashboardErrorMessage(error));
+        setDashboardStatus('error');
+        return;
+      }
+
+      setDashboardSummary(
+        buildInstitutionDashboardSummary({
+          customers: customerResult.ok ? customerResult.records : [],
+          appointments: appointmentResult.ok ? appointmentResult.records : [],
+          followUpTasks: followUpResult.ok ? followUpResult.records : [],
+        }),
+      );
+      setDashboardStatus('success');
+    }
+
+    void loadDashboardSummary();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   return (
     <main
@@ -92,8 +185,10 @@ export function InstitutionWorkspace() {
             <div className="rounded-2xl border border-white/10 bg-white/8 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold text-white">今日高意向客户 18 位</div>
-                  <div className="mt-1 text-xs text-slate-400">AI 已按承接优先级排序</div>
+                  <div className="text-sm font-semibold text-white">
+                    高优先级客户 {highPriorityLabel} 位
+                  </div>
+                  <div className="mt-1 text-xs text-slate-400">来自客户 API 摘要</div>
                 </div>
                 <Bell className="h-5 w-5 text-cyan-300" />
               </div>
@@ -117,7 +212,9 @@ export function InstitutionWorkspace() {
             <div className="mb-2 flex items-center justify-between gap-3">
               <span className="text-xs font-semibold text-slate-500">机构导航</span>
               <div className="flex shrink-0 items-center gap-2">
-                <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700">今日高意向 18</span>
+                <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700">
+                  高优先级 {highPriorityLabel}
+                </span>
                 <LogoutButton
                   redirectTo="/login"
                   className="h-8 shrink-0 rounded-full border border-rose-200 bg-rose-50 px-2.5 text-xs font-semibold text-rose-600"
@@ -148,182 +245,11 @@ export function InstitutionWorkspace() {
 
           <div className="mx-auto w-full max-w-[1740px] space-y-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-7">
             {activeView === 'dashboard' ? (
-              <>
-            <header className="overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-5 shadow-[0_24px_80px_rgba(32,61,104,0.12)] backdrop-blur-xl lg:p-7">
-              <div className="flex flex-col gap-6 2xl:flex-row 2xl:items-start 2xl:justify-between">
-                <div className="max-w-4xl">
-                  <div className="flex items-center gap-3 md:hidden">
-                    <Image src="/brand/logo-mark.png" alt="" width={46} height={46} className="h-11 w-11 rounded-xl bg-white object-contain p-1" />
-                    <div>
-                      <div className="font-semibold tracking-normal text-slate-950">智美天工</div>
-                      <div className="text-xs text-slate-500">机构工作台</div>
-                    </div>
-                  </div>
-                  <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-cyan-200/80 bg-cyan-50/80 px-3.5 py-1.5 text-xs font-semibold text-cyan-700 md:mt-0">
-                    <Sparkles className="h-4 w-4" />
-                    AI 驱动的医美增长中台
-                  </div>
-                  <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-normal text-slate-950 sm:text-5xl lg:text-[60px] xl:text-[64px]">
-                    <span className="block">让咨询团队</span>
-                    <span className="block whitespace-nowrap bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 bg-clip-text text-transparent">
-                      先看到增长机会
-                    </span>
-                  </h1>
-                  <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-                    把客户画像、预约转化、术后关怀和复购召回放到同一张经营地图里，让机构运营每天先处理最值得处理的客户。
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 sm:gap-3 2xl:w-[520px]">
-                  {[
-                    { label: '数据安全保障', value: '租户隔离' },
-                    { label: 'SLA 服务承诺', value: '99.9%' },
-                    { label: 'AI 在线', value: '24/7' },
-                  ].map((item) => (
-                    <div key={item.label} className="rounded-2xl border border-white/80 bg-white/70 p-3 shadow-sm sm:p-4">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500 sm:h-5 sm:w-5" />
-                      <div className="mt-2 text-sm font-semibold tracking-normal text-slate-950 sm:mt-3 sm:text-lg">{item.value}</div>
-                      <div className="mt-1 text-[11px] leading-4 text-slate-500 sm:text-xs">{item.label}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </header>
-
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {institutionStats.map((stat) => (
-                <article key={stat.label} className="rounded-[22px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className={cn('grid h-12 w-12 place-items-center rounded-2xl border', statToneClasses[stat.tone])}>
-                      <stat.icon className="h-5 w-5" />
-                    </div>
-                    <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600">
-                      {stat.change}
-                    </span>
-                  </div>
-                  <div className="mt-5 text-4xl font-semibold tracking-normal text-slate-950">{stat.value}</div>
-                  <div className="mt-1 text-sm font-medium text-slate-500">{stat.label}</div>
-                </article>
-              ))}
-            </section>
-
-            <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-              <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
-                      <Sparkles className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-semibold tracking-normal text-slate-950">AI 经营副驾驶建议</h2>
-                      <p className="mt-1 text-sm text-slate-500">按转化概率、服务风险和复购窗口自动排序。</p>
-                    </div>
-                  </div>
-                  <button type="button" className="inline-flex h-10 items-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800">
-                    查看全部
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="mt-5 grid gap-3 lg:grid-cols-3">
-                  {institutionSuggestions.map((suggestion) => (
-                    <article key={suggestion.title} className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
-                      <span className={cn('inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold', suggestionToneClasses[suggestion.type])}>
-                        {suggestion.type}
-                      </span>
-                      <h3 className="mt-3 text-base font-semibold tracking-normal text-slate-950">{suggestion.title}</h3>
-                      <p className="mt-2 min-h-[72px] text-sm leading-6 text-slate-500">{suggestion.description}</p>
-                      <button type="button" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-blue-600">
-                        {suggestion.action}
-                        <ArrowRight className="h-4 w-4" />
-                      </button>
-                    </article>
-                  ))}
-                </div>
-              </article>
-
-              <article className="rounded-[24px] border border-slate-900/90 bg-[#071322] p-5 text-white shadow-[0_24px_80px_rgba(3,15,33,0.22)] lg:p-6">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-semibold tracking-normal">今日行动队列</h2>
-                    <p className="mt-1 text-sm text-slate-400">AI 评分越高，越建议优先人工承接。</p>
-                  </div>
-                  <Activity className="h-5 w-5 text-cyan-300" />
-                </div>
-                <div className="mt-5 space-y-3">
-                  {institutionActionQueue.map((item, index) => (
-                    <div key={item.name} className="rounded-2xl border border-white/10 bg-white/8 p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-cyan-400/16 text-xs font-semibold text-cyan-200">
-                              {index + 1}
-                            </span>
-                            <span className="truncate text-sm font-semibold text-white">{item.name}</span>
-                          </div>
-                          <div className="mt-2 text-sm font-medium text-slate-200">{item.title}</div>
-                          <div className="mt-1 text-xs leading-5 text-slate-400">{item.detail}</div>
-                        </div>
-                        <div className="rounded-full bg-cyan-300/14 px-2.5 py-1 text-sm font-semibold text-cyan-200">{item.score}</div>
-                      </div>
-                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-                        <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-blue-500" style={{ width: `${item.score}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </article>
-            </section>
-
-            <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-              <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-semibold tracking-normal text-slate-950">客户旅程看板</h2>
-                    <p className="mt-1 text-sm text-slate-500">从咨询到复购，把关键节点压到一屏可判断。</p>
-                  </div>
-                  <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">实时同步</span>
-                </div>
-                <div className="mt-5 grid gap-3 lg:grid-cols-4">
-                  {institutionJourneyLanes.map((lane) => (
-                    <section key={lane.title} className="rounded-2xl border border-slate-200/80 bg-white/84 p-4">
-                      <h3 className="text-sm font-semibold tracking-normal text-slate-950">{lane.title}</h3>
-                      <div className="mt-4 space-y-3">
-                        {lane.items.map((item) => (
-                          <div key={item.title} className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="text-sm font-semibold text-slate-800">{item.title}</div>
-                              {item.hot && <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-500">高优</span>}
-                            </div>
-                            <div className="mt-1 text-xs leading-5 text-slate-500">{item.detail}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                </div>
-              </article>
-
-              <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-                <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold tracking-normal text-slate-950">触达趋势</h2>
-                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">本周 +18%</span>
-                </div>
-                <div className="mt-5 h-[280px] rounded-2xl border border-slate-200/80 bg-[linear-gradient(#e7eef7_1px,transparent_1px),linear-gradient(90deg,#e7eef7_1px,transparent_1px)] bg-[length:25%_25%] p-3">
-                  <svg viewBox="0 0 420 250" className="h-full w-full" role="img" aria-label="触达趋势折线图">
-                    <defs>
-                      <linearGradient id="institutionTrendFill" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.35" />
-                        <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
-                    <polygon points="18,178 82,154 145,138 208,116 272,126 338,74 402,88 402,232 18,232" fill="url(#institutionTrendFill)" />
-                    <polyline points="18,178 82,154 145,138 208,116 272,126 338,74 402,88" fill="none" stroke="#0ea5e9" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-              </article>
-            </section>
-              </>
+              <InstitutionDashboardHome
+                errorMessage={dashboardError}
+                status={dashboardStatus}
+                summary={dashboardSummary}
+              />
             ) : activeView === 'customers' ? (
               <CustomerCenterShell />
             ) : activeView === 'appointments' ? (
@@ -337,6 +263,267 @@ export function InstitutionWorkspace() {
         </section>
       </div>
     </main>
+  );
+}
+
+function InstitutionDashboardHome({
+  errorMessage,
+  status,
+  summary,
+}: {
+  errorMessage: string | null;
+  status: DashboardLoadStatus;
+  summary: InstitutionDashboardSummary;
+}) {
+  return (
+    <>
+      <header className="overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-5 shadow-[0_24px_80px_rgba(32,61,104,0.12)] backdrop-blur-xl lg:p-7">
+        <div className="flex flex-col gap-6 2xl:flex-row 2xl:items-start 2xl:justify-between">
+          <div className="max-w-4xl">
+            <div className="flex items-center gap-3 md:hidden">
+              <Image
+                src="/brand/logo-mark.png"
+                alt=""
+                width={46}
+                height={46}
+                className="h-11 w-11 rounded-xl bg-white object-contain p-1"
+              />
+              <div>
+                <div className="font-semibold tracking-normal text-slate-950">智美天工</div>
+                <div className="text-xs text-slate-500">机构工作台</div>
+              </div>
+            </div>
+            <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-cyan-200/80 bg-cyan-50/80 px-3.5 py-1.5 text-xs font-semibold text-cyan-700 md:mt-0">
+              <Sparkles className="h-4 w-4" />
+              当前租户 API 摘要
+            </div>
+            <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-normal text-slate-950 sm:text-5xl lg:text-[60px] xl:text-[64px]">
+              <span className="block">让咨询团队</span>
+              <span className="block whitespace-nowrap bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 bg-clip-text text-transparent">
+                先看到增长机会
+              </span>
+            </h1>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
+              首页只读取当前租户的客户、预约和随访 GET API，派生可解释的运营摘要，不发送租户编号或写入请求。
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 2xl:w-[520px]">
+            {[
+              { label: '数据范围', value: '当前租户' },
+              { label: '数据来源', value: 'GET API' },
+              { label: '写入动作', value: '无 mutation' },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="rounded-2xl border border-white/80 bg-white/70 p-3 shadow-sm sm:p-4"
+              >
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 sm:h-5 sm:w-5" />
+                <div className="mt-2 text-sm font-semibold tracking-normal text-slate-950 sm:mt-3 sm:text-lg">
+                  {item.value}
+                </div>
+                <div className="mt-1 text-[11px] leading-4 text-slate-500 sm:text-xs">
+                  {item.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      {status === 'loading' ? (
+        <section className="flex items-center gap-2 rounded-[24px] border border-blue-100 bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-700 shadow-sm">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          正在加载机构运营摘要...
+        </section>
+      ) : null}
+
+      {status === 'error' && errorMessage ? (
+        <section className="flex items-start gap-3 rounded-[24px] border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-700 shadow-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          {errorMessage}
+        </section>
+      ) : null}
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {summary.metrics.map((metric) => {
+          const MetricIcon = metricIcons[metric.key];
+
+          return (
+            <article
+              key={metric.key}
+              className="rounded-[22px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div
+                  className={cn(
+                    'grid h-12 w-12 place-items-center rounded-2xl border',
+                    statToneClasses[metric.tone],
+                  )}
+                >
+                  <MetricIcon className="h-5 w-5" />
+                </div>
+                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                  {metric.helper}
+                </span>
+              </div>
+              <div className="mt-5 text-4xl font-semibold tracking-normal text-slate-950">
+                {status === 'loading' ? '--' : metric.value}
+              </div>
+              <div className="mt-1 text-sm font-medium text-slate-500">{metric.label}</div>
+            </article>
+          );
+        })}
+      </section>
+
+      {status === 'success' && summary.isEmpty ? (
+        <section className="rounded-[24px] border border-dashed border-slate-300 bg-white/78 px-5 py-8 text-center shadow-sm backdrop-blur-xl">
+          <div className="text-base font-semibold text-slate-950">暂无可计算运营摘要</div>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            当前客户、预约和随访 records 为空。
+          </p>
+        </section>
+      ) : null}
+
+      <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold tracking-normal text-slate-950">
+                  近期需要人工处理
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  从随访、预约和客户 records 派生，不生成自动触达内容。
+                </p>
+              </div>
+            </div>
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
+              现有 records 派生
+            </span>
+          </div>
+
+          {status === 'success' && summary.actionItems.length === 0 ? (
+            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm font-semibold text-slate-500">
+              当前没有可展示的待处理行动。
+            </div>
+          ) : null}
+
+          {summary.actionItems.length > 0 ? (
+            <div className="mt-5 grid gap-3 lg:grid-cols-2">
+              {summary.actionItems.map((item) => (
+                <article
+                  key={item.id}
+                  className="rounded-2xl border border-slate-200/80 bg-white/86 p-4"
+                >
+                  <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600">
+                    {item.badge}
+                  </span>
+                  <h3 className="mt-3 text-base font-semibold tracking-normal text-slate-950">
+                    {item.title}
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">{item.detail}</p>
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </article>
+
+        <article className="rounded-[24px] border border-slate-900/90 bg-[#071322] p-5 text-white shadow-[0_24px_80px_rgba(3,15,33,0.22)] lg:p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal">当前行动队列</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                数量来自当前租户客户、预约和随访 records。
+              </p>
+            </div>
+            <Activity className="h-5 w-5 text-cyan-300" />
+          </div>
+          <div className="mt-5 space-y-3">
+            {summary.supportingStats.map((item) => (
+              <div key={item.key} className="rounded-2xl border border-white/10 bg-white/8 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-white">{item.label}</div>
+                    <div className="mt-1 text-xs leading-5 text-slate-400">{item.helper}</div>
+                  </div>
+                  <div className="rounded-full bg-cyan-300/14 px-2.5 py-1 text-sm font-semibold text-cyan-200">
+                    {status === 'loading' ? '--' : item.value}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+        <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">
+                客户旅程看板
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                按客户 lifecycle 字段聚合，帮助判断当前客户结构。
+              </p>
+            </div>
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
+              客户 API 摘要
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3 lg:grid-cols-4">
+            {summary.journeyLanes.map((lane) => (
+              <section
+                key={lane.key}
+                className="rounded-2xl border border-slate-200/80 bg-white/84 p-4"
+              >
+                <h3 className="text-sm font-semibold tracking-normal text-slate-950">
+                  {lane.title}
+                </h3>
+                <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-2xl font-semibold text-slate-950">
+                      {status === 'loading' ? '--' : lane.count}
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+                      records
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-slate-500">{lane.detail}</div>
+                </div>
+              </section>
+            ))}
+          </div>
+        </article>
+
+        <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold tracking-normal text-slate-950">数据边界</h2>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
+              只读
+            </span>
+          </div>
+          <div className="mt-5 space-y-3">
+            {[
+              '只调用客户、预约、随访 GET API。',
+              '首页不提交 tenantId，也不发送 POST / PATCH / DELETE。',
+              '摘要只基于当前返回 records 派生，无法计算时显示空态。',
+            ].map((item) => (
+              <div
+                key={item}
+                className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-sm leading-6 text-slate-600"
+              >
+                {item}
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+    </>
   );
 }
 
