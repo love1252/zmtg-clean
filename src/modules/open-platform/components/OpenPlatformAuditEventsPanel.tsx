@@ -1,0 +1,518 @@
+'use client';
+
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Filter, Loader2, Search, ShieldCheck } from 'lucide-react';
+import {
+  AUDIT_REASON_VALUES,
+  AUDIT_RESULT_VALUES,
+} from '@/modules/audit/domain/audit-event-query';
+import {
+  listOpenPlatformAuditEvents,
+  type OpenPlatformAuditEventRecord,
+  type OpenPlatformAuditEventsClientError,
+  type OpenPlatformAuditEventsPageInfo,
+  type OpenPlatformAuditEventsQuery,
+} from '@/modules/audit/client/open-platform-audit-events-client';
+import {
+  ACCESS_ACTIONS,
+  ACCESS_RESOURCES,
+} from '@/modules/security/domain/access-control';
+
+type AuditFilterForm = {
+  from: string;
+  to: string;
+  tenantId: string;
+  resource: string;
+  resourceId: string;
+  action: string;
+  result: string;
+  reason: string;
+  actorId: string;
+  limit: string;
+};
+
+type PlatformAuditStateProps = {
+  title: string;
+  description?: string;
+  kind: 'loading' | 'empty' | 'error' | 'forbidden' | 'unavailable';
+};
+
+const emptyAuditFilterForm: AuditFilterForm = {
+  from: '',
+  to: '',
+  tenantId: '',
+  resource: '',
+  resourceId: '',
+  action: '',
+  result: '',
+  reason: '',
+  actorId: '',
+  limit: '',
+};
+
+const resultToneClasses = {
+  allowed: 'border-emerald-300/20 bg-emerald-300/[0.10] text-emerald-100',
+  denied: 'border-rose-300/20 bg-rose-300/[0.10] text-rose-100',
+  transitioned: 'border-cyan-300/20 bg-cyan-300/[0.10] text-cyan-100',
+} as const;
+
+function trimOrUndefined(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function toIsoDateTime(value: string) {
+  if (!value) return undefined;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+  return new Date(timestamp).toISOString();
+}
+
+function formToAuditQuery(form: AuditFilterForm): OpenPlatformAuditEventsQuery {
+  return {
+    from: toIsoDateTime(form.from),
+    to: toIsoDateTime(form.to),
+    tenantId: trimOrUndefined(form.tenantId),
+    resource: trimOrUndefined(form.resource),
+    resourceId: trimOrUndefined(form.resourceId),
+    action: trimOrUndefined(form.action),
+    result: trimOrUndefined(form.result),
+    reason: trimOrUndefined(form.reason),
+    actorId: trimOrUndefined(form.actorId),
+    limit: trimOrUndefined(form.limit),
+  };
+}
+
+function visibleAuditErrorState(error: OpenPlatformAuditEventsClientError): PlatformAuditStateProps {
+  if (error.kind === 'unauthorized') {
+    return {
+      kind: 'error',
+      title: '登录状态已失效，请重新登录',
+    };
+  }
+
+  if (error.kind === 'forbidden') {
+    return {
+      kind: 'forbidden',
+      title: '当前账号没有查看平台审计日志的权限',
+    };
+  }
+
+  if (error.kind === 'service_unavailable') {
+    return {
+      kind: 'unavailable',
+      title: '平台审计日志数据暂时不可用',
+    };
+  }
+
+  return {
+    kind: 'error',
+    title: error.message || '平台审计日志请求失败',
+  };
+}
+
+function formatAuditTime(value: string) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    hour12: false,
+  }).format(new Date(timestamp));
+}
+
+function PlatformAuditState({ title, description, kind }: PlatformAuditStateProps) {
+  const isLoading = kind === 'loading';
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-8 text-center">
+      <div className="mx-auto grid h-11 w-11 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.10] text-cyan-100">
+        {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ShieldCheck className="h-5 w-5" />}
+      </div>
+      <div className="mt-3 text-sm font-semibold text-white">{title}</div>
+      {description ? <p className="mt-1 text-sm text-slate-400">{description}</p> : null}
+    </div>
+  );
+}
+
+function auditField(label: string, value: string | null) {
+  return (
+    <span className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs font-semibold text-slate-300">
+      {label}：{value ?? '-'}
+    </span>
+  );
+}
+
+export function OpenPlatformAuditEventsPanel() {
+  const [records, setRecords] = useState<OpenPlatformAuditEventRecord[]>([]);
+  const [pageInfo, setPageInfo] = useState<OpenPlatformAuditEventsPageInfo | null>(null);
+  const [form, setForm] = useState<AuditFilterForm>(emptyAuditFilterForm);
+  const [activeQuery, setActiveQuery] = useState<OpenPlatformAuditEventsQuery>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [errorState, setErrorState] = useState<PlatformAuditStateProps | null>(null);
+
+  async function loadAuditEvents(input: {
+    query: OpenPlatformAuditEventsQuery;
+    mode: 'replace' | 'append';
+  }) {
+    const { mode, query } = input;
+    if (mode === 'append') {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
+    setErrorState(null);
+
+    const result = await listOpenPlatformAuditEvents(query);
+
+    if (result.ok) {
+      setRecords((current) =>
+        mode === 'append' ? [...current, ...result.records] : result.records,
+      );
+      setPageInfo(result.pageInfo);
+    } else {
+      if (mode === 'replace') {
+        setRecords([]);
+        setPageInfo(null);
+      }
+      setErrorState(visibleAuditErrorState(result.error));
+    }
+
+    if (mode === 'append') {
+      setIsLoadingMore(false);
+    } else {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadInitialAuditEvents() {
+      setIsLoading(true);
+      setErrorState(null);
+      const result = await listOpenPlatformAuditEvents();
+
+      if (!isActive) return;
+
+      if (result.ok) {
+        setRecords(result.records);
+        setPageInfo(result.pageInfo);
+      } else {
+        setRecords([]);
+        setPageInfo(null);
+        setErrorState(visibleAuditErrorState(result.error));
+      }
+
+      setIsLoading(false);
+    }
+
+    void loadInitialAuditEvents();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const resultCounts = useMemo(
+    () =>
+      AUDIT_RESULT_VALUES.map((result) => ({
+        result,
+        count: records.filter((record) => record.result === result).length,
+      })),
+    [records],
+  );
+
+  function handleFieldChange(key: keyof AuditFilterForm, value: string) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function handleApplyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextQuery = formToAuditQuery(form);
+    setActiveQuery(nextQuery);
+    void loadAuditEvents({ query: nextQuery, mode: 'replace' });
+  }
+
+  function handleResetFilters() {
+    setForm(emptyAuditFilterForm);
+    setActiveQuery({});
+    void loadAuditEvents({ query: {}, mode: 'replace' });
+  }
+
+  function handleLoadMore() {
+    if (!pageInfo?.nextCursor) return;
+    void loadAuditEvents({
+      query: { ...activeQuery, cursor: pageInfo.nextCursor },
+      mode: 'append',
+    });
+  }
+
+  return (
+    <section className="space-y-5">
+      <section className="rounded-[24px] border border-cyan-300/16 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/[0.08] px-3 py-1 text-xs font-semibold text-cyan-100">
+              <ShieldCheck className="h-4 w-4" />
+              平台只读
+            </div>
+            <h2 className="mt-4 text-2xl font-semibold tracking-normal text-white">审计日志</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+              按平台访问上下文读取审计事件，只展示安全 DTO 字段。tenantId 仅作为平台端筛选条件使用。
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-3 text-sm font-semibold text-cyan-100">
+            GET /api/open-platform/audit-events
+          </div>
+        </div>
+      </section>
+
+      <form
+        className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl"
+        onSubmit={handleApplyFilters}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="grid h-9 w-9 place-items-center rounded-2xl bg-cyan-300/[0.12] text-cyan-100">
+              <Filter className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-white">筛选</h3>
+              <p className="mt-0.5 text-xs text-slate-400">仅支持平台审计字段白名单。</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="inline-flex h-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-slate-300"
+            >
+              重置筛选
+            </button>
+            <button
+              type="submit"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-cyan-300 px-3 text-sm font-semibold text-[#06111f]"
+            >
+              <Search className="h-4 w-4" />
+              应用筛选
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <label className="text-sm font-semibold text-slate-300">
+            开始时间
+            <input
+              type="datetime-local"
+              value={form.from}
+              onChange={(event) => handleFieldChange('from', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/40"
+            />
+          </label>
+          <label className="text-sm font-semibold text-slate-300">
+            结束时间
+            <input
+              type="datetime-local"
+              value={form.to}
+              onChange={(event) => handleFieldChange('to', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/40"
+            />
+          </label>
+          <label className="text-sm font-semibold text-slate-300">
+            租户 ID
+            <input
+              value={form.tenantId}
+              onChange={(event) => handleFieldChange('tenantId', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/40"
+            />
+          </label>
+          <label className="text-sm font-semibold text-slate-300">
+            资源类型
+            <select
+              value={form.resource}
+              onChange={(event) => handleFieldChange('resource', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/40"
+            >
+              <option value="">全部</option>
+              {ACCESS_RESOURCES.map((resource) => (
+                <option key={resource} value={resource}>
+                  {resource}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-slate-300">
+            资源 ID
+            <input
+              value={form.resourceId}
+              onChange={(event) => handleFieldChange('resourceId', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/40"
+            />
+          </label>
+          <label className="text-sm font-semibold text-slate-300">
+            操作
+            <select
+              value={form.action}
+              onChange={(event) => handleFieldChange('action', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/40"
+            >
+              <option value="">全部</option>
+              {ACCESS_ACTIONS.map((action) => (
+                <option key={action} value={action}>
+                  {action}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-slate-300">
+            结果
+            <select
+              value={form.result}
+              onChange={(event) => handleFieldChange('result', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/40"
+            >
+              <option value="">全部</option>
+              {AUDIT_RESULT_VALUES.map((result) => (
+                <option key={result} value={result}>
+                  {result}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-slate-300">
+            原因
+            <select
+              value={form.reason}
+              onChange={(event) => handleFieldChange('reason', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/40"
+            >
+              <option value="">全部</option>
+              {AUDIT_REASON_VALUES.map((reason) => (
+                <option key={reason} value={reason}>
+                  {reason}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-slate-300">
+            操作者 ID
+            <input
+              value={form.actorId}
+              onChange={(event) => handleFieldChange('actorId', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/40"
+            />
+          </label>
+          <label className="text-sm font-semibold text-slate-300">
+            每页条数
+            <select
+              value={form.limit}
+              onChange={(event) => handleFieldChange('limit', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/40"
+            >
+              <option value="">默认</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+        </div>
+      </form>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        {resultCounts.map((item) => (
+          <article
+            key={item.result}
+            className={`rounded-[22px] border p-4 shadow-[0_18px_60px_rgba(0,0,0,0.12)] ${resultToneClasses[item.result]}`}
+          >
+            <div className="text-xs font-semibold opacity-80">{item.result}</div>
+            <div className="mt-2 text-2xl font-semibold">{isLoading ? '--' : item.count}</div>
+          </article>
+        ))}
+      </section>
+
+      <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold tracking-normal text-white">审计事件列表</h3>
+            <p className="mt-1 text-sm text-slate-400">按发生时间倒序排列。</p>
+          </div>
+          <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-semibold text-slate-300">
+            {pageInfo ? `limit ${pageInfo.limit}` : 'limit 默认'}
+          </span>
+        </div>
+
+        {isLoading ? (
+          <PlatformAuditState
+            kind="loading"
+            title="正在加载平台审计事件..."
+          />
+        ) : null}
+
+        {!isLoading && errorState ? (
+          <PlatformAuditState {...errorState} />
+        ) : null}
+
+        {!isLoading && !errorState && records.length === 0 ? (
+          <PlatformAuditState
+            kind="empty"
+            title="暂无平台审计事件"
+            description="当前筛选条件下没有可展示的平台审计事件。"
+          />
+        ) : null}
+
+        {!isLoading && !errorState && records.length > 0 ? (
+          <div className="mt-4 space-y-3">
+            {records.map((record) => (
+              <section
+                key={record.id}
+                className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4"
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-base font-semibold text-white">
+                        {record.id}
+                      </span>
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${resultToneClasses[record.result]}`}>
+                        结果：{record.result}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {auditField('租户 ID', record.tenantId)}
+                      {auditField('资源类型', record.resource)}
+                      {auditField('资源 ID', record.resourceId)}
+                      {auditField('操作', record.action)}
+                      {auditField('原因', record.reason)}
+                      {auditField('操作者', record.actorId)}
+                      {auditField('角色', record.actorRole)}
+                    </div>
+                  </div>
+                  <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-semibold text-slate-300">
+                    时间：{formatAuditTime(record.occurredAt)}
+                  </div>
+                </div>
+              </section>
+            ))}
+
+            {pageInfo?.hasMore && pageInfo.nextCursor ? (
+              <div className="flex justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={handleLoadMore}
+                  disabled={isLoadingMore}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-semibold text-slate-200 disabled:cursor-not-allowed disabled:text-slate-500"
+                >
+                  {isLoadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  加载更多平台审计事件
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </article>
+    </section>
+  );
+}

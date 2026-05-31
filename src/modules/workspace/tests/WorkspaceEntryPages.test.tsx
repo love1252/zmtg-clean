@@ -97,6 +97,27 @@ const auditEventRecord = {
   token: 'sk_test_phase8_should_not_render',
 };
 
+const platformAuditEventRecord = {
+  id: 'audit_phase8_platform',
+  tenantId: 'demo-tenant-001',
+  resource: 'customer',
+  resourceId: 'cust_phase5_closeout',
+  action: 'update',
+  result: 'allowed',
+  reason: 'allowed_by_policy',
+  actorId: 'demo-user-admin',
+  actorRole: 'tenant_admin',
+  occurredAt: '2026-05-31T09:00:00.000Z',
+  requestBody: { phoneNumber: '13800001252' },
+  metadata: { sql: 'select * from audit_events' },
+  stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+  token: 'sk_test_phase8_platform_should_not_render',
+  idNumber: '110101199001010011',
+  medicalRecordNo: 'MR202605310001',
+  treatmentRecord: '完整治疗记录正文不应展示',
+  consultationTranscript: '咨询对话全文不应展示',
+};
+
 const customerTimelineResponse = {
   customer: {
     id: 'cust_phase5_closeout',
@@ -207,6 +228,7 @@ type WorkspaceFetchOptions = {
   appointments?: unknown[];
   followups?: unknown[];
   auditEvents?: unknown[];
+  platformAuditEvents?: unknown[];
   timeline?: unknown;
   institutionError?: {
     path:
@@ -226,6 +248,7 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     appointments = [appointmentRecord, rescheduleAppointmentRecord],
     followups = [urgentFollowUpRecord, { ...followUpRecord, status: 'scheduled' }],
     auditEvents = [auditEventRecord],
+    platformAuditEvents = [platformAuditEventRecord],
     timeline = customerTimelineResponse,
     institutionError,
   } = options;
@@ -258,6 +281,17 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
       if (path === '/api/institution/audit-events') {
         return jsonResponse({
           records: auditEvents,
+          pageInfo: {
+            hasMore: false,
+            limit: 50,
+            nextCursor: null,
+          },
+        });
+      }
+
+      if (path.startsWith('/api/open-platform/audit-events')) {
+        return jsonResponse({
+          records: platformAuditEvents,
           pageInfo: {
             hasMore: false,
             limit: 50,
@@ -337,6 +371,25 @@ function expectNoSensitiveAuditContent(container: HTMLElement) {
   expect(text).not.toContain('token');
   expect(text).not.toContain('secret');
   expect(text).not.toContain('sk_test_phase8_should_not_render');
+}
+
+function expectNoSensitivePlatformAuditContent(container: HTMLElement) {
+  const text = container.textContent ?? '';
+
+  expect(text).not.toContain('13800001252');
+  expect(text).not.toContain('110101199001010011');
+  expect(text).not.toContain('MR202605310001');
+  expect(text).not.toContain('完整治疗记录正文不应展示');
+  expect(text).not.toContain('咨询对话全文不应展示');
+  expect(text).not.toContain('requestBody');
+  expect(text).not.toContain('metadata');
+  expect(text).not.toContain('select * from audit_events');
+  expect(text).not.toContain('DATABASE_URL');
+  expect(text).not.toContain('postgres://');
+  expect(text).not.toContain('stack');
+  expect(text).not.toContain('token');
+  expect(text).not.toContain('secret');
+  expect(text).not.toContain('sk_test_phase8_platform_should_not_render');
 }
 
 describe('工作台入口页面', () => {
@@ -570,5 +623,28 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('服务端租户上下文')).toBeInTheDocument();
     expect(screen.getByText('权限样例矩阵')).toBeInTheDocument();
     expect(screen.getByText('审计事件词汇')).toBeInTheDocument();
+  });
+
+  it('平台端权限与审计入口展示审计日志并保持敏感字段边界', async () => {
+    const fetchMock = mockWorkspaceFetch({ role: 'platform_admin' });
+    const { container } = render(<OpenPlatformPage />);
+
+    expect(await screen.findByRole('heading', { name: /掌控租户、模型与接口/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '权限与审计' }));
+
+    expect(await screen.findByRole('heading', { name: '审计日志' })).toBeInTheDocument();
+    expect(screen.getByText('audit_phase8_platform')).toBeInTheDocument();
+    expect(screen.getByText('租户 ID：demo-tenant-001')).toBeInTheDocument();
+    expect(screen.getByText('资源类型：customer')).toBeInTheDocument();
+    expect(screen.getByText('结果：allowed')).toBeInTheDocument();
+
+    const auditCall = fetchMock.mock.calls.find(
+      ([input]) => fetchPath(input) === '/api/open-platform/audit-events',
+    );
+    expect(auditCall).toBeDefined();
+    expect(auditCall?.[1]).toEqual({ cache: 'no-store' });
+    expect(auditCall?.[1]?.method).toBeUndefined();
+    expect(auditCall?.[1]?.body).toBeUndefined();
+    expectNoSensitivePlatformAuditContent(container);
   });
 });
