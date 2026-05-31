@@ -11,7 +11,11 @@ export type AuditReason =
   | AccessDecision['reason']
   | 'invalid_transition'
   | 'stale_transition'
-  | 'not_found_or_not_owned';
+  | 'not_found_or_not_owned'
+  | 'quota_exceeded_customers'
+  | 'quota_exceeded_appointments'
+  | 'missing_active_plan'
+  | 'missing_quota_limit';
 
 export type TenantAuditEvent = {
   eventId: string;

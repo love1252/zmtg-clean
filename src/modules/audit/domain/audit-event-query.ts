@@ -33,6 +33,10 @@ export const AUDIT_REASON_VALUES = [
   'invalid_transition',
   'stale_transition',
   'not_found_or_not_owned',
+  'quota_exceeded_customers',
+  'quota_exceeded_appointments',
+  'missing_active_plan',
+  'missing_quota_limit',
 ] as const satisfies readonly AuditReason[];
 
 export type AuditEventQueryFilters = {
