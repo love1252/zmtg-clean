@@ -311,10 +311,10 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
   return fetchMock;
 }
 
-function expectMetric(label: string, value: string) {
+async function expectMetric(label: string, value: string) {
   const metricCard = screen.getByText(label).closest('article');
   expect(metricCard).not.toBeNull();
-  expect(within(metricCard as HTMLElement).getByText(value)).toBeInTheDocument();
+  expect(await within(metricCard as HTMLElement).findByText(value)).toBeInTheDocument();
 }
 
 function expectNoInstitutionMutation(fetchMock: ReturnType<typeof mockWorkspaceFetch>) {
@@ -406,10 +406,10 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('正在加载机构运营摘要...')).toBeInTheDocument();
     expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/session', { cache: 'no-store' });
-    expectMetric('当前客户摘要', '2');
-    expectMetric('高优先级客户', '1');
-    expectMetric('待确认预约', '1');
-    expectMetric('待处理随访', '1');
+    await expectMetric('当前客户摘要', '2');
+    await expectMetric('高优先级客户', '1');
+    await expectMetric('待确认预约', '1');
+    await expectMetric('待处理随访', '1');
     expect(screen.getByText('高风险随访')).toBeInTheDocument();
     expect(screen.getByText('Phase6 客户B：Phase6 D3 异常反馈')).toBeInTheDocument();
     expect(screen.getByText('Phase5 客户A：Phase5 预约复诊')).toBeInTheDocument();
@@ -596,10 +596,10 @@ describe('工作台入口页面', () => {
 
     expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
     expect(await screen.findByText('暂无可计算运营摘要')).toBeInTheDocument();
-    expectMetric('当前客户摘要', '0');
-    expectMetric('高优先级客户', '0');
-    expectMetric('待确认预约', '0');
-    expectMetric('待处理随访', '0');
+    await expectMetric('当前客户摘要', '0');
+    await expectMetric('高优先级客户', '0');
+    await expectMetric('待确认预约', '0');
+    await expectMetric('待处理随访', '0');
     expect(screen.getByText('当前客户、预约和随访 records 为空。')).toBeInTheDocument();
     expect(screen.getByText('当前没有可展示的待处理行动。')).toBeInTheDocument();
     expectNoInstitutionMutation(fetchMock);
