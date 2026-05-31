@@ -10,6 +10,12 @@ import {
   type CreateAppointmentClientPayload,
   type TenantBusinessClientError,
 } from '@/modules/institution/client/tenant-business-client';
+import {
+  InstitutionPageState,
+  getInstitutionPageStateFromClientError,
+  type InstitutionPageStateProps,
+} from '@/modules/institution/components/InstitutionPageState';
+import { InstitutionSectionHeader } from '@/modules/institution/components/InstitutionSectionHeader';
 import type {
   AppointmentRecordSummary,
   AppointmentStatus,
@@ -106,6 +112,19 @@ function visibleErrorMessage(error: TenantBusinessClientError, resource: 'appoin
   return error.message || '预约数据请求失败';
 }
 
+function visibleListErrorState(
+  error: TenantBusinessClientError,
+  resource: 'appointment' | 'customer',
+): InstitutionPageStateProps {
+  return getInstitutionPageStateFromClientError(error, {
+    forbiddenMessage:
+      resource === 'appointment'
+        ? '当前账号没有访问预约数据的权限'
+        : '当前账号没有访问客户数据的权限',
+    fallbackMessage: resource === 'appointment' ? '预约数据请求失败' : '客户数据请求失败',
+  });
+}
+
 function toAppointmentPayload(
   form: AppointmentFormState,
   customers: CustomerRecordSummary[],
@@ -168,7 +187,7 @@ export function AppointmentCenterShell() {
   const [appointments, setAppointments] = useState<AppointmentRecordSummary[]>([]);
   const [customers, setCustomers] = useState<CustomerRecordSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
+  const [listErrorState, setListErrorState] = useState<InstitutionPageStateProps | null>(null);
   const [form, setForm] = useState<AppointmentFormState>(emptyAppointmentForm);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -180,7 +199,7 @@ export function AppointmentCenterShell() {
 
     async function loadAppointmentCenterData() {
       setIsLoading(true);
-      setListError(null);
+      setListErrorState(null);
 
       const [appointmentResult, customerResult] = await Promise.all([
         listAppointments(),
@@ -192,7 +211,7 @@ export function AppointmentCenterShell() {
       if (!appointmentResult.ok) {
         setAppointments([]);
         setCustomers([]);
-        setListError(visibleErrorMessage(appointmentResult.error, 'appointment'));
+        setListErrorState(visibleListErrorState(appointmentResult.error, 'appointment'));
         setIsLoading(false);
         return;
       }
@@ -200,7 +219,7 @@ export function AppointmentCenterShell() {
       if (!customerResult.ok) {
         setAppointments([]);
         setCustomers([]);
-        setListError(visibleErrorMessage(customerResult.error, 'customer'));
+        setListErrorState(visibleListErrorState(customerResult.error, 'customer'));
         setIsLoading(false);
         return;
       }
@@ -293,36 +312,29 @@ export function AppointmentCenterShell() {
 
   return (
     <section className="space-y-5">
-      <div className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-        <p className="text-sm font-semibold text-emerald-600">预约流转</p>
-        <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">预约中心</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-          从机构预约 API 加载当前租户预约，并用已加载客户列表创建新的预约摘要。
-        </p>
-      </div>
+      <InstitutionSectionHeader
+        eyebrow="预约流转"
+        title="预约中心"
+        description="从机构预约 API 加载当前租户预约，并用已加载客户列表创建新的预约摘要。"
+        tone="emerald"
+      />
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="space-y-5">
           {isLoading ? (
-            <div className="flex items-center gap-2 rounded-[24px] border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-700">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              正在加载预约数据...
-            </div>
+            <InstitutionPageState kind="loading" title="正在加载预约数据..." />
           ) : null}
 
-          {!isLoading && listError ? (
-            <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-700">
-              {listError}
-            </div>
+          {!isLoading && listErrorState ? (
+            <InstitutionPageState {...listErrorState} />
           ) : null}
 
-          {!isLoading && !listError && appointments.length === 0 ? (
-            <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/78 px-5 py-8 text-center shadow-sm backdrop-blur-xl">
-              <div className="text-base font-semibold text-slate-950">暂无预约记录</div>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                可以从右侧选择当前客户列表中的客户创建预约。
-              </p>
-            </div>
+          {!isLoading && !listErrorState && appointments.length === 0 ? (
+            <InstitutionPageState
+              kind="empty"
+              title="暂无预约记录"
+              description="可以从右侧选择当前客户列表中的客户创建预约。"
+            />
           ) : null}
 
           <div className="grid gap-4 xl:grid-cols-3">
@@ -342,7 +354,7 @@ export function AppointmentCenterShell() {
                 </div>
 
                 <div className="mt-4 space-y-3">
-                  {!isLoading && !listError && group.records.length === 0 ? (
+                  {!isLoading && !listErrorState && group.records.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 px-3 py-4 text-sm text-slate-400">
                       暂无{group.label}预约
                     </div>
@@ -419,7 +431,10 @@ export function AppointmentCenterShell() {
                         <button
                           type="submit"
                           className="mt-3 inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-slate-950 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-                          disabled={updatingAppointmentId === appointment.id || Boolean(listError)}
+                          disabled={
+                            updatingAppointmentId === appointment.id ||
+                            Boolean(listErrorState)
+                          }
                         >
                           {updatingAppointmentId === appointment.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -458,7 +473,7 @@ export function AppointmentCenterShell() {
                   className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-300"
                   value={form.customerId}
                   onChange={(event) => updateFormField('customerId', event.target.value)}
-                  disabled={customers.length === 0 || Boolean(listError)}
+                  disabled={customers.length === 0 || Boolean(listErrorState)}
                 >
                   <option value="">选择当前客户</option>
                   {customers.map((customer) => (
@@ -548,7 +563,7 @@ export function AppointmentCenterShell() {
             <button
               type="submit"
               className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-              disabled={isSubmitting || customers.length === 0 || Boolean(listError)}
+              disabled={isSubmitting || customers.length === 0 || Boolean(listErrorState)}
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {isSubmitting ? '提交中...' : '新建预约'}
