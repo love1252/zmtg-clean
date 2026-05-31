@@ -862,6 +862,9 @@ describe('工作台入口页面', () => {
 
     expect(screen.getByText('正在加载租户管理数据...')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '商业化健康' })).toBeInTheDocument();
+    expect(screen.getByText('套餐覆盖率')).toBeInTheDocument();
+    expect(screen.getByText('暂无商业化健康信号')).toBeInTheDocument();
     expect(screen.getByText('智美天工演示机构')).toBeInTheDocument();
     expect(screen.getByText('租户状态：active')).toBeInTheDocument();
     expect(screen.getByText('套餐名称：成长版')).toBeInTheDocument();
@@ -879,6 +882,11 @@ describe('工作台入口页面', () => {
     expect(tenantCall?.[1]).toEqual({ cache: 'no-store' });
     expect(tenantCall?.[1]?.method).toBeUndefined();
     expect(tenantCall?.[1]?.body).toBeUndefined();
+    const commercialHealthAuditCall = fetchMock.mock.calls.find(
+      ([input]) => fetchPath(input) === '/api/open-platform/audit-events?result=denied&limit=100',
+    );
+    expect(commercialHealthAuditCall).toBeDefined();
+    expect(commercialHealthAuditCall?.[1]).toEqual({ cache: 'no-store' });
     expectNoPlatformTenantMutation(fetchMock);
     expectNoSensitivePlatformTenantContent(container);
   });
