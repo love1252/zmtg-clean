@@ -1,9 +1,10 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Loader2, Pencil, Search, ShieldCheck, Tags } from 'lucide-react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowRight, Eye, Loader2, Pencil, Search, ShieldCheck, Tags } from 'lucide-react';
 import {
   createCustomer,
+  getCustomerTimeline,
   listCustomers,
   updateCustomer,
   type CreateCustomerClientPayload,
@@ -15,11 +16,13 @@ import {
   type InstitutionPageStateProps,
 } from '@/modules/institution/components/InstitutionPageState';
 import { InstitutionSectionHeader } from '@/modules/institution/components/InstitutionSectionHeader';
+import { CustomerTimelineDrawer } from '@/modules/institution/components/CustomerTimelineDrawer';
 import type {
   CustomerLifecycleStage,
   CustomerPriority,
   CustomerRecordSummary,
 } from '@/modules/institution/domain/customer-records';
+import type { CustomerTimelineResponse } from '@/modules/institution/domain/customer-timeline';
 import {
   buildCustomerSegmentStats,
   customerLifecycleLabels,
@@ -219,6 +222,41 @@ function visibleListErrorState(error: TenantBusinessClientError): InstitutionPag
   });
 }
 
+function visibleTimelineErrorState(error: TenantBusinessClientError): InstitutionPageStateProps {
+  if (error.kind === 'unauthorized') {
+    return {
+      kind: 'error',
+      title: '登录状态已失效，请重新登录',
+    };
+  }
+
+  if (error.kind === 'forbidden') {
+    return {
+      kind: 'forbidden',
+      title: '当前账号没有访问客户详情的权限',
+    };
+  }
+
+  if (error.kind === 'not_found') {
+    return {
+      kind: 'error',
+      title: '客户不存在或不属于当前租户',
+    };
+  }
+
+  if (error.kind === 'service_unavailable') {
+    return {
+      kind: 'unavailable',
+      title: '数据服务暂时不可用',
+    };
+  }
+
+  return {
+    kind: 'error',
+    title: '客户详情请求失败',
+  };
+}
+
 function visibleErrorMessage(error: TenantBusinessClientError) {
   if (error.kind === 'unauthorized') {
     return '登录状态已失效，请重新登录';
@@ -244,6 +282,13 @@ export function CustomerCenterShell() {
   const [form, setForm] = useState<CustomerFormState>(emptyCustomerForm);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedTimelineCustomer, setSelectedTimelineCustomer] =
+    useState<CustomerRecordSummary | null>(null);
+  const [customerTimeline, setCustomerTimeline] = useState<CustomerTimelineResponse | null>(null);
+  const [isTimelineLoading, setIsTimelineLoading] = useState(false);
+  const [timelineErrorState, setTimelineErrorState] =
+    useState<InstitutionPageStateProps | null>(null);
+  const timelineRequestIdRef = useRef(0);
 
   useEffect(() => {
     let isActive = true;
@@ -312,6 +357,34 @@ export function CustomerCenterShell() {
     setEditingCustomerId(null);
     setForm(emptyCustomerForm);
     setSubmitError(null);
+  }
+
+  async function openCustomerTimeline(customer: CustomerRecordSummary) {
+    const requestId = timelineRequestIdRef.current + 1;
+    timelineRequestIdRef.current = requestId;
+    setSelectedTimelineCustomer(customer);
+    setCustomerTimeline(null);
+    setTimelineErrorState(null);
+    setIsTimelineLoading(true);
+
+    const result = await getCustomerTimeline(customer.id);
+    if (timelineRequestIdRef.current !== requestId) return;
+
+    if (result.ok) {
+      setCustomerTimeline(result.timeline);
+    } else {
+      setTimelineErrorState(visibleTimelineErrorState(result.error));
+    }
+
+    setIsTimelineLoading(false);
+  }
+
+  function closeCustomerTimeline() {
+    timelineRequestIdRef.current += 1;
+    setSelectedTimelineCustomer(null);
+    setCustomerTimeline(null);
+    setTimelineErrorState(null);
+    setIsTimelineLoading(false);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -466,14 +539,26 @@ export function CustomerCenterShell() {
                       <div className="mt-2 text-xs text-slate-500">
                         负责人：{customer.ownerUserId}
                       </div>
-                      <button
-                        type="button"
-                        className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700"
-                        onClick={() => startEditing(customer)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        编辑 {customer.displayName}
-                      </button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700"
+                          onClick={() => {
+                            void openCustomerTimeline(customer);
+                          }}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          查看详情 {customer.displayName}
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700"
+                          onClick={() => startEditing(customer)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          编辑 {customer.displayName}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -697,6 +782,15 @@ export function CustomerCenterShell() {
           </div>
         </aside>
       </div>
+      {selectedTimelineCustomer ? (
+        <CustomerTimelineDrawer
+          customerName={selectedTimelineCustomer.displayName}
+          errorState={timelineErrorState}
+          isLoading={isTimelineLoading}
+          onClose={closeCustomerTimeline}
+          timeline={customerTimeline}
+        />
+      ) : null}
     </section>
   );
 }
