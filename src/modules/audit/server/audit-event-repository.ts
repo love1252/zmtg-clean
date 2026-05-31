@@ -1,5 +1,12 @@
-import { and, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, isNull, lt, lte, or } from 'drizzle-orm';
 import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import {
+  createAuditEventQueryCursor,
+  type AuditEventQuery,
+  type AuditEventQueryResult,
+  type AuditEventQueryScope,
+} from '@/modules/audit/domain/audit-event-query';
+import { mapAuditEventRowToListItem } from '@/modules/audit/server/audit-event-dto';
 import type { TenantDatabase } from '@/server/db/client';
 import { auditEvents } from '@/server/db/schema';
 
@@ -61,6 +68,96 @@ function sortAuditEventSummaries(events: CustomerAuditEventSummary[]) {
   });
 }
 
+function buildAuditEventQueryConditions(input: {
+  scope: AuditEventQueryScope;
+  query: AuditEventQuery;
+}) {
+  const conditions = [];
+  const { filters } = input.query;
+
+  if (input.scope.kind === 'institution') {
+    conditions.push(eq(auditEvents.tenantId, input.scope.tenantId));
+  } else {
+    const platformTenantId = input.scope.tenantId;
+    if (platformTenantId === null) {
+      conditions.push(isNull(auditEvents.tenantId));
+    } else if (typeof platformTenantId === 'string') {
+      conditions.push(eq(auditEvents.tenantId, platformTenantId));
+    }
+  }
+
+  if (filters.from) {
+    conditions.push(gte(auditEvents.occurredAt, new Date(filters.from)));
+  }
+
+  if (filters.to) {
+    conditions.push(lte(auditEvents.occurredAt, new Date(filters.to)));
+  }
+
+  if (filters.resource) {
+    conditions.push(eq(auditEvents.resource, filters.resource));
+  }
+
+  if (filters.resourceId) {
+    conditions.push(eq(auditEvents.resourceId, filters.resourceId));
+  }
+
+  if (filters.action) {
+    conditions.push(eq(auditEvents.action, filters.action));
+  }
+
+  if (filters.result) {
+    conditions.push(eq(auditEvents.result, filters.result));
+  }
+
+  if (filters.reason) {
+    conditions.push(eq(auditEvents.reason, filters.reason));
+  }
+
+  if (filters.actorId) {
+    conditions.push(eq(auditEvents.actorId, filters.actorId));
+  }
+
+  if (input.query.cursor) {
+    const cursorOccurredAt = new Date(input.query.cursor.occurredAt);
+    conditions.push(
+      or(
+        lt(auditEvents.occurredAt, cursorOccurredAt),
+        and(
+          eq(auditEvents.occurredAt, cursorOccurredAt),
+          gt(auditEvents.eventId, input.query.cursor.eventId),
+        ),
+      ),
+    );
+  }
+
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+function mapRowsToAuditQueryResult(
+  rows: AuditEventRow[],
+  limit: number,
+): AuditEventQueryResult {
+  const visibleRows = rows.slice(0, limit);
+  const records = visibleRows.map(mapAuditEventRowToListItem);
+  const lastRecord = records.at(-1);
+
+  return {
+    records,
+    pageInfo: {
+      hasMore: rows.length > limit,
+      limit,
+      nextCursor:
+        rows.length > limit && lastRecord
+          ? createAuditEventQueryCursor({
+              id: lastRecord.id,
+              occurredAt: lastRecord.occurredAt,
+            })
+          : null,
+    },
+  };
+}
+
 export function createAuditEventRepository(database: TenantDatabase) {
   return {
     async record(event: TenantAuditEvent) {
@@ -82,6 +179,19 @@ export function createAuditEventRepository(database: TenantDatabase) {
         );
 
       return sortAuditEventSummaries(rows.map(mapAuditEventRowToSummary));
+    },
+    async listAuditEvents(input: {
+      scope: AuditEventQueryScope;
+      query: AuditEventQuery;
+    }): Promise<AuditEventQueryResult> {
+      const rows = await database
+        .select()
+        .from(auditEvents)
+        .where(buildAuditEventQueryConditions(input))
+        .orderBy(desc(auditEvents.occurredAt), asc(auditEvents.eventId))
+        .limit(input.query.limit + 1);
+
+      return mapRowsToAuditQueryResult(rows, input.query.limit);
     },
   };
 }
