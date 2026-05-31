@@ -1,3 +1,11 @@
+import {
+  listOpenPlatformAuditEvents,
+  type OpenPlatformAuditEventsClientErrorKind,
+} from '@/modules/audit/client/open-platform-audit-events-client';
+import {
+  buildPlatformCommercialHealthViewModel,
+  type PlatformCommercialHealthViewModel,
+} from '@/modules/open-platform/domain/platform-commercial-health';
 import type { TenantManagementListItem } from '@/modules/open-platform/domain/tenant-management';
 
 export type OpenPlatformTenantRecord = TenantManagementListItem;
@@ -18,9 +26,23 @@ export type OpenPlatformTenantListResult =
   | { ok: true; records: OpenPlatformTenantRecord[] }
   | { ok: false; error: OpenPlatformTenantClientError };
 
-type OpenPlatformTenantClientOptions = {
+export type OpenPlatformTenantClientOptions = {
   fetcher?: typeof fetch;
 };
+
+export type OpenPlatformCommercialHealthClientOptions = OpenPlatformTenantClientOptions & {
+  now?: Date | string;
+};
+
+export type OpenPlatformCommercialHealthClientError = {
+  kind: OpenPlatformTenantClientErrorKind | OpenPlatformAuditEventsClientErrorKind;
+  message: string;
+  status: number;
+};
+
+export type OpenPlatformCommercialHealthClientResult =
+  | { ok: true; health: PlatformCommercialHealthViewModel }
+  | { ok: false; error: OpenPlatformCommercialHealthClientError };
 
 function getFetcher(options?: OpenPlatformTenantClientOptions) {
   return options?.fetcher ?? globalThis.fetch;
@@ -97,4 +119,30 @@ export async function listOpenPlatformTenants(
       error: { kind: 'unknown', message: '请求失败', status: 0 },
     };
   }
+}
+
+export async function getOpenPlatformCommercialHealth(
+  options?: OpenPlatformCommercialHealthClientOptions,
+): Promise<OpenPlatformCommercialHealthClientResult> {
+  const tenantsResult = await listOpenPlatformTenants(options);
+  if (!tenantsResult.ok) {
+    return { ok: false, error: tenantsResult.error };
+  }
+
+  const auditEventsResult = await listOpenPlatformAuditEvents(
+    { result: 'denied', limit: 100 },
+    options,
+  );
+  if (!auditEventsResult.ok) {
+    return { ok: false, error: auditEventsResult.error };
+  }
+
+  return {
+    ok: true,
+    health: buildPlatformCommercialHealthViewModel({
+      tenants: tenantsResult.records,
+      auditEvents: auditEventsResult.records,
+      now: options?.now,
+    }),
+  };
 }
