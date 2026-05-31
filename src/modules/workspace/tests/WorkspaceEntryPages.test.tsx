@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import HospitalPage from '@/app/hospital/page';
 import OpenPlatformPage from '@/app/open-platform/page';
@@ -311,10 +311,10 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
   return fetchMock;
 }
 
-function expectMetric(label: string, value: string) {
+async function expectMetric(label: string, value: string) {
   const metricCard = screen.getByText(label).closest('article');
   expect(metricCard).not.toBeNull();
-  expect(within(metricCard as HTMLElement).getByText(value)).toBeInTheDocument();
+  expect(await within(metricCard as HTMLElement).findByText(value)).toBeInTheDocument();
 }
 
 function expectNoInstitutionMutation(fetchMock: ReturnType<typeof mockWorkspaceFetch>) {
@@ -406,10 +406,10 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('正在加载机构运营摘要...')).toBeInTheDocument();
     expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/session', { cache: 'no-store' });
-    expectMetric('当前客户摘要', '2');
-    expectMetric('高优先级客户', '1');
-    expectMetric('待确认预约', '1');
-    expectMetric('待处理随访', '1');
+    await expectMetric('当前客户摘要', '2');
+    await expectMetric('高优先级客户', '1');
+    await expectMetric('待确认预约', '1');
+    await expectMetric('待处理随访', '1');
     expect(screen.getByText('高风险随访')).toBeInTheDocument();
     expect(screen.getByText('Phase6 客户B：Phase6 D3 异常反馈')).toBeInTheDocument();
     expect(screen.getByText('Phase5 客户A：Phase5 预约复诊')).toBeInTheDocument();
@@ -552,6 +552,7 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('资源类型：customer')).toBeInTheDocument();
     expect(screen.getByText('操作：update')).toBeInTheDocument();
     expect(screen.getByText('结果：allowed')).toBeInTheDocument();
+    expect(screen.queryByText('租户 ID：demo-tenant-001')).not.toBeInTheDocument();
 
     const auditCall = fetchMock.mock.calls.find(
       ([input]) => fetchPath(input) === '/api/institution/audit-events',
@@ -561,6 +562,26 @@ describe('工作台入口页面', () => {
     expect(fetchPath(auditCall![0])).not.toContain('tenantId');
     expect(auditCall?.[1]?.method).toBeUndefined();
     expect(auditCall?.[1]?.body).toBeUndefined();
+
+    fireEvent.change(screen.getByLabelText('资源 ID'), { target: { value: 'cust_phase5_closeout' } });
+    fireEvent.change(screen.getByLabelText('操作者 ID'), { target: { value: 'demo-user-admin' } });
+    fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          fetchPath(input).startsWith('/api/institution/audit-events?'),
+        ),
+      ).toBe(true),
+    );
+    const filteredAuditCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).startsWith('/api/institution/audit-events?'),
+    );
+    const filteredAuditPath = fetchPath(filteredAuditCall![0]);
+    expect(filteredAuditPath).toContain('resourceId=cust_phase5_closeout');
+    expect(filteredAuditPath).toContain('actorId=demo-user-admin');
+    expect(filteredAuditPath).not.toContain('tenantId');
+    expect(filteredAuditCall?.[1]).toEqual({ cache: 'no-store' });
     expectOnlyInstitutionReadCalls(fetchMock);
     expectNoSensitiveAuditContent(container);
   });
@@ -575,10 +596,10 @@ describe('工作台入口页面', () => {
 
     expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
     expect(await screen.findByText('暂无可计算运营摘要')).toBeInTheDocument();
-    expectMetric('当前客户摘要', '0');
-    expectMetric('高优先级客户', '0');
-    expectMetric('待确认预约', '0');
-    expectMetric('待处理随访', '0');
+    await expectMetric('当前客户摘要', '0');
+    await expectMetric('高优先级客户', '0');
+    await expectMetric('待确认预约', '0');
+    await expectMetric('待处理随访', '0');
     expect(screen.getByText('当前客户、预约和随访 records 为空。')).toBeInTheDocument();
     expect(screen.getByText('当前没有可展示的待处理行动。')).toBeInTheDocument();
     expectNoInstitutionMutation(fetchMock);
@@ -637,6 +658,7 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('租户 ID：demo-tenant-001')).toBeInTheDocument();
     expect(screen.getByText('资源类型：customer')).toBeInTheDocument();
     expect(screen.getByText('结果：allowed')).toBeInTheDocument();
+    expect(screen.getByLabelText('租户 ID')).toBeInTheDocument();
 
     const auditCall = fetchMock.mock.calls.find(
       ([input]) => fetchPath(input) === '/api/open-platform/audit-events',
@@ -645,6 +667,25 @@ describe('工作台入口页面', () => {
     expect(auditCall?.[1]).toEqual({ cache: 'no-store' });
     expect(auditCall?.[1]?.method).toBeUndefined();
     expect(auditCall?.[1]?.body).toBeUndefined();
+
+    fireEvent.change(screen.getByLabelText('租户 ID'), { target: { value: 'demo-tenant-001' } });
+    fireEvent.change(screen.getByLabelText('资源类型'), { target: { value: 'customer' } });
+    fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          fetchPath(input).includes('tenantId=demo-tenant-001'),
+        ),
+      ).toBe(true),
+    );
+    const filteredAuditCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).includes('tenantId=demo-tenant-001'),
+    );
+    const filteredAuditPath = fetchPath(filteredAuditCall![0]);
+    expect(filteredAuditPath).toContain('/api/open-platform/audit-events?');
+    expect(filteredAuditPath).toContain('resource=customer');
+    expect(filteredAuditCall?.[1]).toEqual({ cache: 'no-store' });
     expectNoSensitivePlatformAuditContent(container);
   });
 });

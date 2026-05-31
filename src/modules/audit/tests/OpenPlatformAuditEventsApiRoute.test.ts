@@ -57,6 +57,14 @@ const securityAuditorContext: AccessContext = {
   source: 'demo_session',
 };
 
+const platformOperatorContext: AccessContext = {
+  userId: 'demo-user-operator',
+  role: 'platform_operator',
+  scope: 'platform',
+  tenantId: null,
+  source: 'demo_session',
+};
+
 const tenantContext: AccessContext = {
   userId: 'demo-user-admin',
   role: 'tenant_admin',
@@ -246,8 +254,11 @@ describe('平台端审计日志只读 API', () => {
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
   });
 
-  it('非平台角色返回 403 且不初始化数据库', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+  it.each([
+    ['platform_operator', platformOperatorContext],
+    ['tenant_admin', tenantContext],
+  ])('%s 访问平台审计 API 返回 403 且不初始化数据库', async (_role, context) => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(context);
 
     const response = await openPlatformAuditEventsGet(auditRequest());
 
