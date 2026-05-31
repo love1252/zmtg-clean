@@ -12,22 +12,13 @@
 
 ## 当前 PR 状态
 
-本文属于 Phase 9 PR 1：spec / plan 文档。
+Phase 9 PR 1-5 已完成。本文保留原始执行计划，并记录 Phase 9 最终完成状态：
 
-PR 1 只做：
-
-- 新增 `docs/superpowers/specs/2026-05-31-phase9-platform-tenant-management-v1-design.md`。
-- 新增 `docs/superpowers/plans/2026-05-31-phase9-platform-tenant-management-v1.md`。
-
-PR 1 不做：
-
-- 业务代码。
-- 页面。
-- 测试。
-- API route。
-- 数据库 schema / migration。
-- 权限、认证或租户隔离修改。
-- Phase 9 PR 2/3/4/5 的代码执行。
+- PR 1：Phase 9 spec / plan 文档。
+- PR 2：租户套餐 / 配额最小 schema、migration、seed、repository、domain 和测试。
+- PR 3：平台端租户只读 API、DTO、角色边界和错误脱敏测试。
+- PR 4：平台端租户管理 UI。
+- PR 5：smoke / 文档收尾。
 
 ## 总边界
 
@@ -41,6 +32,7 @@ Phase 9 做：
 - 预约数上限展示。
 - 随访任务上限展示。
 - AI 调用上限展示，先仅作为字段，不做 enforcement。
+- 当前用量聚合快照展示。
 - 平台端角色边界测试。
 - 敏感字段不返回、不展示测试。
 - smoke 和文档收尾。
@@ -82,15 +74,15 @@ PR 1 新增：
 PR 2 预计涉及：
 
 - `src/server/db/schema.ts`
-  - 新增 `tenantPlans`、`tenantPlanAssignments` 表定义和索引。
+  - 新增 `tenantPlans`、`tenantPlanAssignments`、`tenantQuotaSnapshots` 表定义和索引。
 - `drizzle/*.sql`
   - 新增 migration。
 - `src/server/db/seed-demo-data.ts`
-  - 为 demo 租户写入套餐和套餐分配。
+  - 为 demo 租户写入套餐、套餐分配和配额快照。
 - `src/modules/open-platform/domain/tenant-management.ts`
   - 定义租户管理 DTO、配额字段和安全 mapper。
 - `src/modules/open-platform/server/tenant-management-repository.ts`
-  - 查询租户、套餐和配额上限。
+  - 查询租户、套餐、配额上限和聚合用量快照。
 - `src/server/db/tests/Schema.test.ts`
   - 覆盖新增表和索引。
 - `src/server/db/tests/SeedDemoData.test.ts`
@@ -109,7 +101,7 @@ PR 3 预计涉及：
 
 PR 4 预计涉及：
 
-- `src/modules/open-platform/client/open-platform-tenants-client.ts`
+- `src/modules/open-platform/client/platform-tenant-management-client.ts`
   - 封装 `GET /api/open-platform/tenants`。
 - `src/modules/open-platform/components/OpenPlatformTenantManagementPanel.tsx`
   - 平台端租户管理 UI。
@@ -141,17 +133,26 @@ PR 5 预计涉及：
 
 允许 DTO 字段：
 
-- `id`
-- `name`
-- `status`
+- `tenantId`
+- `tenantName`
+- `tenantStatus`
 - `createdAt`
 - `updatedAt`
-- `plan.id`
-- `plan.name`
-- `quotas.customerLimit`
-- `quotas.appointmentLimit`
-- `quotas.followUpTaskLimit`
-- `quotas.aiCallLimit`
+- `planName`
+- `planCode`
+- `planStatus`
+- `assignmentStatus`
+- `startedAt`
+- `expiresAt`
+- `maxCustomers`
+- `maxAppointments`
+- `maxFollowUps`
+- `maxAiCalls`
+- `currentCustomers`
+- `currentAppointments`
+- `currentFollowUps`
+- `currentAiCalls`
+- `snapshotAt`
 
 禁止 DTO 字段：
 
@@ -334,11 +335,12 @@ PR 描述必须说明：
 
 **实现要求：**
 
-- 新增 `tenant_plans` 表，保存套餐名称和配额上限。
+- 新增 `tenant_plans` 表，保存套餐名称、code、状态和基础描述。
 - 新增 `tenant_plan_assignments` 表，保存租户到套餐的只读分配关系。
-- 为 `demo-tenant-001` 和 `demo-tenant-002` 写入 demo 套餐分配。
+- 新增 `tenant_quota_snapshots` 表，保存配额上限和聚合用量快照。
+- 为 `demo-tenant-001` 和 `demo-tenant-002` 写入 demo 套餐分配和配额快照。
 - DTO mapper 只输出租户运营元数据。
-- Phase 9 v1 不新增 `tenant_quota_snapshots`；当前用量摘要不进入本阶段实现。
+- 当前用量摘要只读取配额快照聚合字段，不读取客户、预约、随访或治疗业务明细。
 - 不读取客户、预约、随访明细来构造 DTO。
 
 **风险：**
@@ -349,8 +351,8 @@ PR 描述必须说明：
 
 **控制：**
 
-- schema 只保存套餐和配额上限。
-- repository 只 join `tenants`、`tenant_plans`、`tenant_plan_assignments`。
+- schema 只保存套餐、配额上限和聚合用量快照。
+- repository 只 join `tenants`、`tenant_plans`、`tenant_plan_assignments`、`tenant_quota_snapshots`。
 - 测试显式断言 DTO 不包含客户、预约、随访、治疗、病历、咨询、SQL、stack、token、secret 和 `DATABASE_URL`。
 
 **验证：**
@@ -424,7 +426,7 @@ node scripts/run-next.mjs build --webpack
 
 **建议涉及文件：**
 
-- 新增：`src/modules/open-platform/client/open-platform-tenants-client.ts`
+- 新增：`src/modules/open-platform/client/platform-tenant-management-client.ts`
 - 新增：`src/modules/open-platform/components/OpenPlatformTenantManagementPanel.tsx`
 - 修改：`src/modules/workspace/components/PlatformConsole.tsx`
 - 新增：`src/modules/open-platform/tests/OpenPlatformTenantManagementPanel.test.tsx`
@@ -509,12 +511,14 @@ node scripts/run-next.mjs build --webpack
 
 ## 执行交接
 
-Phase 9 PR 1 完成并合并后，下一步进入 PR 2：租户套餐 / 配额最小 schema、seed、repository、domain 测试。
+Phase 9 已完成，下一步建议进入 Phase 10 Plan Mode。
 
-执行 PR 2 前请先确认：
+Phase 10 不应直接进入实现。建议先重新评估：
 
-- 是否采用 `tenant_plans` + `tenant_plan_assignments` 两表模型。
-- 是否继续不实现当前用量摘要。
-- 是否保持 `platform_operator` 不访问完整租户详情。
-
-确认后使用 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 按本计划逐项执行。
+- 治疗记录结构化摘要 v1。
+- 平台租户状态管理和状态变更审计。
+- 套餐权益 enforcement。
+- 知识库 / RAG 基础准备。
+- AI provider、调用日志和 Agent。
+- 企业微信、OAuth、Webhook、API Key。
+- 支付、合同、发票和计费。
