@@ -3,16 +3,85 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import HospitalPage from '@/app/hospital/page';
 import OpenPlatformPage from '@/app/open-platform/page';
 
-function mockSession(role: 'tenant_admin' | 'platform_admin') {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () =>
-      new Response(JSON.stringify({ authenticated: true, user: { role } }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    ),
-  );
+const customerRecord = {
+  id: 'cust_phase5_closeout',
+  tenantId: 'demo-tenant-001',
+  displayName: 'Phase5 客户A',
+  lifecycle: 'repurchase_window',
+  priority: 'high',
+  ownerUserId: 'consultant-phase5',
+  projectInterest: 'Phase5 修复项目',
+  maskedPhone: '138****1252',
+  maskedMedicalRecordNo: 'MR****525',
+  lastTouchSummary: 'Phase5 验收触达',
+  nextAction: 'Phase5 收尾回访',
+  tags: ['Phase5', '验收'],
+};
+
+const appointmentRecord = {
+  id: 'appt_phase5_closeout',
+  tenantId: 'demo-tenant-001',
+  customerId: 'cust_phase5_closeout',
+  customerDisplayName: 'Phase5 客户A',
+  project: 'Phase5 预约复诊',
+  scheduledAt: '2026-06-01T10:30:00+08:00',
+  consultantUserId: 'consultant-phase5',
+  status: 'pending_confirmation',
+  note: 'Phase5 验收预约',
+};
+
+const followUpRecord = {
+  id: 'fu_phase5_closeout',
+  tenantId: 'demo-tenant-001',
+  customerId: 'cust_phase5_closeout',
+  customerDisplayName: 'Phase5 客户A',
+  journeyId: 'journey_repurchase',
+  stage: 'Phase5 D7 回访',
+  status: 'due',
+  dueAt: '2026-05-31T10:30:00+08:00',
+  suggestedAction: 'Phase5 收尾人工回访',
+  riskLevel: 'watch',
+  updatedBy: null,
+  updatedAt: null,
+};
+
+function jsonResponse(body: unknown, init?: ResponseInit) {
+  return new Response(JSON.stringify(body), {
+    status: init?.status ?? 200,
+    headers: { 'content-type': 'application/json', ...init?.headers },
+  });
+}
+
+function fetchPath(input: Parameters<typeof fetch>[0]) {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
+function mockWorkspaceFetch(role: 'tenant_admin' | 'platform_admin') {
+  const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+    const path = fetchPath(input);
+
+    if (path === '/api/auth/session') {
+      return jsonResponse({ authenticated: true, user: { role } });
+    }
+
+    if (path === '/api/institution/customers') {
+      return jsonResponse({ records: [customerRecord] });
+    }
+
+    if (path === '/api/institution/appointments') {
+      return jsonResponse({ records: [appointmentRecord] });
+    }
+
+    if (path === '/api/institution/followups') {
+      return jsonResponse({ records: [followUpRecord] });
+    }
+
+    throw new Error(`没有为 ${path} 配置 fetch mock`);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
 }
 
 describe('工作台入口页面', () => {
@@ -21,7 +90,7 @@ describe('工作台入口页面', () => {
   });
 
   it('渲染机构工作台页面壳', async () => {
-    mockSession('tenant_admin');
+    const fetchMock = mockWorkspaceFetch('tenant_admin');
     render(<HospitalPage />);
 
     expect(await screen.findByRole('heading', { name: /让咨询团队/ })).toBeInTheDocument();
@@ -41,18 +110,27 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
     expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
     expect(screen.getByText('客户优先级队列')).toBeInTheDocument();
+    expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
+    expect(screen.getByText('脱敏手机号：138****1252')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '预约中心' }));
     expect(screen.getByRole('heading', { name: '预约中心' })).toBeInTheDocument();
-    expect(screen.getByText('运营提醒')).toBeInTheDocument();
+    expect(await screen.findByText('Phase5 预约复诊')).toBeInTheDocument();
+    expect(screen.getByText('数据边界')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Phase5 客户A' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '智能随访' }));
     expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();
     expect(screen.getByText('今日随访任务')).toBeInTheDocument();
+    expect(await screen.findByText('Phase5 D7 回访')).toBeInTheDocument();
+    expect(screen.getByText('不会调用 AI provider，也不会自动触达客户。')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/institution/customers', { cache: 'no-store' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/institution/appointments', { cache: 'no-store' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/institution/followups', { cache: 'no-store' });
   });
 
   it('渲染平台控制台页面壳', async () => {
-    mockSession('platform_admin');
+    mockWorkspaceFetch('platform_admin');
     render(<OpenPlatformPage />);
 
     expect(await screen.findByRole('heading', { name: /掌控租户、模型与接口/ })).toBeInTheDocument();
