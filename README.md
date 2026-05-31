@@ -18,6 +18,7 @@
 - 机构端客户中心、预约中心、智能随访接入真实 API
 - Phase 6：机构工作台首页真实 API 摘要、共享页面状态组件、机构端导航边界和 workspace smoke 测试
 - Phase 7：客户详情时间线 v1，包括 audit `resource_id` enrich、timeline 后端 API、客户中心详情抽屉和 smoke 覆盖
+- Phase 8：审计日志只读查询基础版，包括底层查询能力、机构端审计 API/UI、平台端审计 API/UI 和 smoke / 文档收尾
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -35,10 +36,19 @@ Phase 7 已完成：
 - 客户详情 v1 展示客户脱敏摘要、预约摘要、随访摘要、结构化时间线和安全审计摘要
 - workspace / customer detail smoke 覆盖客户中心打开详情、关闭后列表保留、敏感信息不展示
 
+Phase 8 已完成：
+
+- 审计查询底层能力已完成：查询条件类型、白名单 parser、repository 查询方法、分页 DTO 和安全 DTO mapper
+- `GET /api/institution/audit-events` 已提供机构端本租户审计事件只读查询，不接受前端 `tenantId` 切换租户
+- 机构端「审计日志」入口已接入基础列表、筛选、分页、loading、empty、error、403 和 503
+- `GET /api/open-platform/audit-events` 已提供平台端受控审计事件只读查询，支持平台端 `tenantId` 筛选
+- 平台端「权限与审计」已接入审计日志只读 UI，平台端可展示 `tenantId` 作为审计归属字段
+- workspace smoke 覆盖机构端和平台端审计入口、筛选请求、可见范围和敏感字段不展示
+
 后续阶段会依次加入：
 
-- 审计日志只读查询
 - 治疗记录与客服会话
+- 平台租户管理与套餐权益
 - AI 与知识库
 - 企业微信、开放平台凭证和计费
 

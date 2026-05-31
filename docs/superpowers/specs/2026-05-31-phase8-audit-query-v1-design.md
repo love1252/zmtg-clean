@@ -1,7 +1,7 @@
 # Phase 8 审计日志只读查询 v1 设计
 
 > 日期：2026-05-31
-> 状态：Phase 8 PR 1 规划文档。本文只定义审计日志只读查询基础版的目标、边界、API 建议、安全约束和 PR 拆分，不进入代码实现。
+> 状态：Phase 8 已完成。本文记录审计日志只读查询基础版的目标、最终实现范围、API 边界、安全约束和 PR 拆分。
 
 ## 1. Phase 8 目标
 
@@ -55,13 +55,25 @@ Phase 8 v1 包含：
 - 审计查询领域类型、筛选参数 parser 和 DTO mapper。
 - 审计查询 repository 方法。
 - 机构端只读 API：`GET /api/institution/audit-events`。
-- 平台端只读 API：优先建议 `GET /api/open-platform/audit-events`，并在 PR 4 中最终确认。
+- 平台端只读 API：`GET /api/open-platform/audit-events`。
 - 机构端基础 UI：列表、筛选、分页、loading、empty、error、403、503。
 - 平台端基础 UI：受控只读列表或平台级事件视图，不做导出和告警。
 - 测试覆盖筛选白名单、租户隔离、角色边界、敏感字段不返回、错误脱敏和分页。
 - README、roadmap、devlog 和 Phase 8 文档收尾。
 
 Phase 8 v1 不追求完整安全运营中心，只做可验证、可审计、可延展的基础只读查询。
+
+### Phase 8 最终实现结果
+
+截至 PR 5 收尾，Phase 8 已完成：
+
+- 审计查询底层能力：domain 类型、白名单 query parser、repository `listAuditEvents()`、分页 DTO 和安全 DTO mapper。
+- 机构端审计只读 API 与 UI：`GET /api/institution/audit-events` 和机构端「审计日志」入口。
+- 平台端审计 API 与 UI：`GET /api/open-platform/audit-events` 和平台端「权限与审计」下的审计日志只读面板。
+- 入口 smoke：覆盖机构端和平台端审计入口、基础筛选、可见范围、错误态和敏感字段不展示。
+- 文档收尾：README、roadmap、devlog、Phase 8 spec / plan 已同步完成状态。
+
+Phase 8 未新增 schema / migration，未新增 `metadata jsonb`，未改权限、认证或租户隔离模型。
 
 ## 5. 不纳入本阶段
 
@@ -123,16 +135,19 @@ Phase 8 不做：
 平台端 v1 推荐分为两类视图：
 
 - `security_auditor`：适合查看跨租户安全事件明细，包括安全拒绝、权限边界、平台级审计、租户边界事件和高风险资源的只读审计摘要。
-- `platform_admin`：v1 默认只看平台级事件、平台聚合或受控安全摘要，不默认放开全部租户审计明细。
+- `platform_admin`：v1 可访问平台审计只读列表，但必须限制为安全 DTO，不允许查看业务正文、导出、告警、批量操作或租户业务详情下钻。
 
 平台端即使允许跨租户查看，也只能返回审计 DTO，不返回租户客户、预约、随访、治疗记录或业务正文。
 
-如果当前演示环境没有可用的 `security_auditor` 登录入口，Phase 8 v1 应先限定为平台管理员的受控只读范围：
+当前实现没有新增 `security_auditor` 演示账号，也没有重构权限模型。Phase 8 v1 允许现有 `platform_admin` 和 `security_auditor` 访问平台审计只读 API，但仅返回安全 DTO，并通过测试确保 `platform_operator` 与机构角色不能访问。
 
-- 可查看平台级事件。
-- 可查看不包含租户业务正文的安全摘要。
-- 不默认展示全部 `tenant_id` 明细。
-- 在文档和 UI 中明确“跨租户明细建议由 security_auditor 承接”。
+平台管理员的受控只读范围要求：
+
+- 可查看平台审计只读列表。
+- 可使用 `tenantId` 作为平台端筛选和审计归属字段。
+- 不返回租户客户、预约、随访、治疗记录或咨询对话正文。
+- 不提供导出、告警、批量操作、风险规则或业务详情下钻。
+- 后续若要开放更细的跨租户安全运营能力，建议由 `security_auditor` 承接并单独进入 Plan Mode。
 
 平台端 API 不应允许前端用 `tenantId` 任意切换到某个机构看业务审计。后续若确实需要平台按租户 drill-down，必须单独评审角色、审批流、审计二次留痕和敏感字段范围。
 
@@ -149,8 +164,8 @@ Phase 8 不做：
 
 - 资源：平台治理相关资源。
 - 动作：v1 可查看平台级事件或聚合摘要。
-- 默认不允许：查看所有租户审计明细。
-- 如因没有 `security_auditor` 演示账号而临时开放受控只读范围，必须限制 DTO 字段，不显示业务正文，不允许按任意租户深挖客户/预约/随访明细，并在 PR 描述中记录风险。
+- 默认不允许：查看租户业务正文、导出审计报告、批量操作或下钻客户/预约/随访/治疗记录详情。
+- Phase 8 v1 可访问平台端审计只读列表，但必须限制 DTO 字段，不显示业务正文，不允许按任意租户深挖客户/预约/随访明细，并在 PR 描述中记录风险。
 
 此边界应尽量复用现有 `canAccessResource` 和 `audit_log` 资源语义。若发现现有 RBAC 无法表达 Phase 8 v1 所需边界，先在文档和测试中明确缺口，不在普通 UI PR 中顺手做权限模型重构。
 
@@ -198,15 +213,15 @@ GET /api/open-platform/audit-events
 - 当前开放平台治理模块位于 `src/modules/open-platform`。
 - 与现有平台治理语义更一致。
 
-如果后续平台 API 统一采用 `/api/platform/*` 命名，可在 Phase 8 PR 4 中改为 `/api/platform/audit-events`，但必须在文档和测试中保持一致。
+Phase 8 PR 4 最终采用 `GET /api/open-platform/audit-events`，因为当前平台页面入口是 `/open-platform`，当前开放平台治理模块位于 `src/modules/open-platform`，且项目中没有既有 `/api/platform/*` API 命名体系。
 
 平台端 API 要求：
 
 - 角色边界明确。
 - 默认不泄露租户业务正文。
-- 不默认允许 `platform_admin` 查看全部租户明细。
-- `security_auditor` 可以承接跨租户安全事件查询。
-- 如果无 `security_auditor` 可用，先使用平台管理员受控只读范围，并记录风险。
+- `platform_admin` 与 `security_auditor` 可访问安全 DTO。
+- `platform_operator` 与机构角色不可访问平台审计 API。
+- `security_auditor` 仍建议承接后续更细粒度跨租户安全运营能力。
 
 ## 10. 筛选参数白名单
 
@@ -341,9 +356,9 @@ Phase 8 必须延续现有规则：
 Phase 8 需要新增 API：
 
 - `GET /api/institution/audit-events`
-- `GET /api/open-platform/audit-events` 或 `GET /api/platform/audit-events`
+- `GET /api/open-platform/audit-events`
 
-PR 3 先实现机构端 API。PR 4 再实现平台端 API，并最终确认平台 API 命名。
+PR 3 已实现机构端 API。PR 4 已实现平台端 API，并最终确认使用 `/api/open-platform/audit-events`。
 
 ## 16. 是否新增 schema / migration
 
@@ -455,7 +470,7 @@ node scripts/run-next.mjs build --webpack
 
 风险：
 
-- `platform_admin` 默认获得全部租户审计明细。
+- 平台端审计列表被误扩展成租户业务详情下钻。
 - 平台端可通过 tenantId 任意下钻租户业务。
 - 当前演示登录没有 `security_auditor` 时边界被临时放大。
 

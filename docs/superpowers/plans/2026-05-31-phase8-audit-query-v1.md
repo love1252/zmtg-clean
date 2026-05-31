@@ -12,17 +12,16 @@
 
 ## 当前 PR 状态
 
-本文件属于 Phase 8 PR 1：只新增 spec / plan 文档。
+Phase 8 已在 PR 1-5 中完成。本文件最初属于 Phase 8 PR 1；PR 5 将其更新为收尾状态记录。
 
-本 PR 不做：
+PR 5 只做 smoke / 文档收尾，不做：
 
-- 业务代码。
-- 页面。
-- 测试。
+- 新增业务功能。
 - API route。
 - 数据库 schema / migration。
 - 权限、认证或租户隔离修改。
-- Phase 8 PR 2/3/4/5 的代码执行。
+- 机构端或平台端审计业务逻辑修改。
+- Phase 9 实现。
 
 ## 总边界
 
@@ -72,28 +71,30 @@ PR 1 只新增：
 - `docs/superpowers/plans/2026-05-31-phase8-audit-query-v1.md`
   - 后续 PR 执行计划、风险和验证方式。
 
-后续 PR 预计涉及：
+Phase 8 后续 PR 实际涉及：
 
-- `src/modules/audit/domain/audit-query.ts`
+- `src/modules/audit/domain/audit-event-query.ts`
   - 定义审计查询参数、DTO、分页和可见范围类型。
-- `src/modules/audit/server/audit-query-parser.ts`
+- `src/modules/audit/server/audit-event-query-parser.ts`
   - 白名单解析 `from`、`to`、`resource`、`resourceId`、`action`、`result`、`reason`、`actorId`、`limit`、`cursor`。
 - `src/modules/audit/server/audit-event-repository.ts`
   - 新增只读查询方法，保持写入能力不变。
-- `src/modules/audit/tests/AuditQueryParser.test.ts`
+- `src/modules/audit/tests/AuditEventQueryParser.test.ts`
   - 覆盖筛选白名单、非法参数、limit 和 cursor。
 - `src/modules/audit/tests/AuditEventRepository.test.ts`
   - 覆盖 tenant 查询、平台可见范围和 DTO 脱敏。
 - `src/app/api/institution/audit-events/route.ts`
   - PR 3 新增机构端审计查询 API。
-- `src/modules/institution/client/audit-events-client.ts`
+- `src/modules/audit/client/institution-audit-events-client.ts`
   - PR 3 封装机构端审计查询 fetch。
-- `src/modules/institution/components/AuditEventsPanel.tsx`
+- `src/modules/institution/components/InstitutionAuditEventsShell.tsx`
   - PR 3 新增机构端只读 UI。
 - `src/modules/workspace/components/InstitutionWorkspace.tsx`
   - PR 3 增加审计日志入口或轻量面板，不做大规模 UI 重构。
 - `src/app/api/open-platform/audit-events/route.ts`
-  - PR 4 新增平台端审计查询 API，若最终采用 `/api/platform/audit-events`，需在 PR 中同步文档和测试。
+  - PR 4 新增平台端审计查询 API。
+- `src/modules/audit/client/open-platform-audit-events-client.ts`
+  - PR 4 封装平台端审计查询 fetch。
 - `src/modules/open-platform/components/OpenPlatformAuditEventsPanel.tsx`
   - PR 4 新增平台端只读 UI。
 - `src/modules/open-platform/tests/*`
@@ -120,8 +121,9 @@ PR 1 只新增：
 平台端：
 
 - `security_auditor` 适合查看跨租户安全事件。
-- `platform_admin` v1 默认只看平台级事件或聚合，不默认放开全部租户明细。
-- 如果没有 `security_auditor` 角色可用，v1 先限定为平台管理员的受控只读范围，并在 PR 描述中记录风险。
+- `platform_admin` v1 可访问平台审计只读列表，但只返回安全 DTO，不允许查看业务正文、导出、告警、批量操作或下钻租户业务详情。
+- `platform_operator` 与机构角色不可访问平台审计 API。
+- 如果后续需要更细粒度跨租户安全运营能力，应由 `security_auditor` 承接并单独进入 Plan Mode。
 
 所有端：
 
@@ -149,7 +151,7 @@ PR 1 只新增：
 **风险：**
 
 - 文档边界不清，导致后续 PR 混入平台租户管理、治疗记录、AI、企微、OAuth、Webhook、支付或套餐权益。
-- 平台端角色边界写得过宽，误导后续实现默认放开全部租户审计明细。
+- 平台端角色边界写得过宽，误导后续实现成租户业务详情下钻或导出能力。
 - 忽略 `security_auditor` 与 `platform_admin` 的差异。
 
 **控制：**
@@ -158,7 +160,7 @@ PR 1 只新增：
 - 明确平台端租户管理和治疗记录后置。
 - 明确机构端只能看本租户审计事件。
 - 明确 `security_auditor` 承接跨租户安全事件。
-- 明确 `platform_admin` v1 不默认看全部租户明细。
+- 明确 `platform_admin` v1 只能查看安全 DTO，不可查看业务正文、导出、告警、批量操作或下钻租户业务详情。
 - 明确不新增 schema / migration、不新增 `metadata jsonb`、不存请求体。
 
 **步骤：**
@@ -273,10 +275,10 @@ PR 描述必须说明：
 
 **建议涉及文件：**
 
-- 新建：`src/modules/audit/domain/audit-query.ts`
-- 新建：`src/modules/audit/server/audit-query-parser.ts`
+- 新建：`src/modules/audit/domain/audit-event-query.ts`
+- 新建：`src/modules/audit/server/audit-event-query-parser.ts`
 - 修改：`src/modules/audit/server/audit-event-repository.ts`
-- 新建：`src/modules/audit/tests/AuditQueryParser.test.ts`
+- 新建：`src/modules/audit/tests/AuditEventQueryParser.test.ts`
 - 修改：`src/modules/audit/tests/AuditEventRepository.test.ts`
 
 **实现要求：**
@@ -329,12 +331,12 @@ node scripts/run-next.mjs build --webpack
 **建议涉及文件：**
 
 - 新建：`src/app/api/institution/audit-events/route.ts`
-- 新建：`src/modules/institution/client/audit-events-client.ts`
-- 新建：`src/modules/institution/components/AuditEventsPanel.tsx`
+- 新建：`src/modules/audit/client/institution-audit-events-client.ts`
+- 新建：`src/modules/institution/components/InstitutionAuditEventsShell.tsx`
 - 修改：`src/modules/workspace/domain/institution-dashboard.ts`
 - 修改：`src/modules/workspace/components/InstitutionWorkspace.tsx`
-- 新建或修改：`src/modules/institution/tests/AuditEventsApiRoutes.test.ts`
-- 新建或修改：`src/modules/institution/tests/AuditEventsPanel.test.tsx`
+- 新建或修改：`src/modules/audit/tests/InstitutionAuditEventsApiRoute.test.ts`
+- 新建或修改：`src/modules/institution/tests/InstitutionBusinessShells.test.tsx`
 - 修改：`src/modules/workspace/tests/WorkspaceEntryPages.test.tsx`
 
 **实现要求：**
@@ -377,8 +379,7 @@ node scripts/run-next.mjs build --webpack
 **范围：**
 
 - 新增平台端审计查询 API。
-- 推荐优先使用 `GET /api/open-platform/audit-events`。
-- 如决定采用 `GET /api/platform/audit-events`，同步文档和测试。
+- 使用 `GET /api/open-platform/audit-events`。
 - 明确 `security_auditor` / `platform_admin` 可见范围。
 - 平台 UI 只读展示。
 - 不做导出。
@@ -389,25 +390,24 @@ node scripts/run-next.mjs build --webpack
 **建议涉及文件：**
 
 - 新建：`src/app/api/open-platform/audit-events/route.ts`
-- 新建：`src/modules/open-platform/client/open-platform-audit-client.ts`
+- 新建：`src/modules/audit/client/open-platform-audit-events-client.ts`
 - 新建：`src/modules/open-platform/components/OpenPlatformAuditEventsPanel.tsx`
 - 修改：`src/modules/workspace/components/PlatformConsole.tsx`
-- 新建或修改：`src/modules/open-platform/tests/OpenPlatformAuditEventsApiRoutes.test.ts`
+- 新建或修改：`src/modules/audit/tests/OpenPlatformAuditEventsApiRoute.test.ts`
 - 新建或修改：`src/modules/open-platform/tests/OpenPlatformAuditEventsPanel.test.tsx`
-- 修改：`src/modules/security/tests/AccessControlDomain.test.ts`
 - 修改：`src/modules/workspace/tests/WorkspaceEntryPages.test.tsx`
 
 **实现要求：**
 
 - `security_auditor` 可查看跨租户安全事件和平台级审计事件。
-- `platform_admin` v1 默认只看平台级事件或受控安全摘要，不默认查看全部租户明细。
-- 如果演示环境没有 `security_auditor` 登录入口，平台管理员只获得受控只读范围，并在 PR 描述中记录风险。
+- `platform_admin` v1 可访问平台审计只读列表，但只返回安全 DTO。
+- 当前演示环境没有新增 `security_auditor` 登录入口，也不重构权限模型。
 - 平台端返回 `tenantId` 必须由角色边界控制。
 - 平台 UI 不提供按任意租户读取业务详情的能力。
 
 **风险：**
 
-- `platform_admin` 被默认放开全部审计明细。
+- 平台端审计列表被误扩展成租户业务详情下钻。
 - 平台 UI 泄露租户业务正文。
 - 没有 `security_auditor` 登录时为了演示方便扩大权限。
 - 平台 API 通过 `tenantId` query 变成任意租户下钻接口。
@@ -453,9 +453,9 @@ node scripts/run-next.mjs build --webpack
 **实现要求：**
 
 - smoke 覆盖机构入口进入审计日志页面。
-- smoke 覆盖机构端只请求本租户审计 API，不发送 mutation。
-- smoke 覆盖平台端审计页面角色边界。
-- smoke 覆盖敏感字段不展示。
+- smoke 覆盖机构端只请求本租户审计 API，不发送 mutation，不携带 `tenantId`，页面不展示租户 ID。
+- smoke 覆盖平台端审计页面入口、平台 `tenantId` 筛选和受控角色边界。
+- smoke 覆盖请求体、metadata、SQL、stack、token、secret、DATABASE_URL、连接串、手机号原文、身份证号、病历号原文、治疗记录正文、咨询对话全文和业务正文不展示。
 - 文档明确 Phase 8 完成范围，不宣称审计导出、告警、复杂风控、平台租户管理或治疗记录完成。
 
 **风险：**
@@ -475,14 +475,15 @@ node scripts/run-next.mjs build --webpack
 
 ```bash
 git diff --check
-node scripts/run-vitest.mjs run
+node scripts/run-vitest.mjs run src/modules/audit/tests src/modules/institution/tests src/modules/open-platform/tests src/modules/workspace/tests
 ./node_modules/.bin/tsc --noEmit
 node scripts/run-next.mjs build --webpack
+node scripts/run-vitest.mjs run
 ```
 
 ## Phase 8 完成交接标准
 
-Phase 8 最终合并前必须满足：
+Phase 8 PR 5 收尾时必须满足：
 
 - 机构端只能查看当前租户审计事件。
 - 平台端可见范围符合 `security_auditor` / `platform_admin` 边界。
@@ -490,9 +491,12 @@ Phase 8 最终合并前必须满足：
 - 分页和 limit 行为稳定。
 - API 不接受客户端 `tenantId` 切换租户。
 - DTO 不返回敏感字段。
+- README、roadmap、devlog、Phase 8 spec / plan 标记 Phase 8 完成，并明确未做导出、告警、复杂风控、平台租户管理、治疗记录、AI / RAG / Agent、企微、OAuth、Webhook 或支付。
 - 全量验证通过：
 
 ```bash
+git diff --check
+node scripts/run-vitest.mjs run src/modules/audit/tests src/modules/institution/tests src/modules/open-platform/tests src/modules/workspace/tests
 node scripts/run-vitest.mjs run
 ./node_modules/.bin/tsc --noEmit
 node scripts/run-next.mjs build --webpack
