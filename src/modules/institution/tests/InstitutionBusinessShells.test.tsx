@@ -106,6 +106,34 @@ const customerTimelineResponse = {
       sql: 'select * from customers',
     },
   ],
+  treatmentSummaries: [
+    {
+      id: 'trt_wang_d7',
+      appointmentId: 'appt_wang_pending',
+      treatmentDate: '2026-06-01T12:10:00+08:00',
+      treatmentProject: '光电修复',
+      treatmentCategory: 'laser_repair',
+      treatmentStage: 'D7 复诊',
+      recoveryStage: 'D7',
+      riskLevel: 'watch',
+      ownerUserId: 'doctor-lin',
+      summary: '结构化摘要：红肿减轻，安排补水护理。',
+      nextCareAction: 'D14 人工回访恢复阶段。',
+      tags: ['结构化摘要', '术后关怀'],
+      createdAt: '2026-06-01T12:10:00+08:00',
+      updatedAt: '2026-06-01T12:10:00+08:00',
+      phoneNumber: '13800000000',
+      idNumber: '110101199001010011',
+      medicalRecordNo: 'MR-RAW-001',
+      treatmentRecord: '完整治疗记录正文',
+      medicalRecordBody: '完整病历正文',
+      consultationTranscript: '咨询对话全文',
+      sql: 'select * from treatment_summaries',
+      stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+      token: 'sk_test_should_not_render',
+      secret: 'raw-secret',
+    },
+  ],
   auditEvents: [
     {
       id: 'audit_evt_001',
@@ -140,6 +168,25 @@ const customerTimelineResponse = {
       status: 'pending_confirmation',
       source: 'appointment',
       relatedRecordId: 'appt_wang_pending',
+    },
+    {
+      id: 'treatment_summary:trt_wang_d7',
+      type: 'treatment_summary',
+      occurredAt: '2026-06-01T12:10:00+08:00',
+      title: '光电修复 · D7 复诊',
+      summary: '结构化摘要：红肿减轻，安排补水护理。',
+      status: 'watch',
+      source: 'treatment_summary',
+      relatedRecordId: 'trt_wang_d7',
+      riskLevel: 'watch',
+      tags: ['结构化摘要', '术后关怀'],
+      treatmentRecord: '完整治疗记录正文',
+      medicalRecordBody: '完整病历正文',
+      consultationTranscript: '咨询对话全文',
+      sql: 'select * from treatment_summaries',
+      stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+      token: 'sk_test_should_not_render',
+      secret: 'raw-secret',
     },
     {
       id: 'follow_up:fu_wang_d28',
@@ -226,8 +273,13 @@ function expectNoSensitiveTimelineContent(container: HTMLElement) {
 
   expect(text).not.toContain('13800000000');
   expect(text).not.toContain('110101199001010011');
+  expect(text).not.toContain('MR-RAW-001');
+  expect(text).not.toContain('完整治疗记录正文');
+  expect(text).not.toContain('完整病历正文');
+  expect(text).not.toContain('咨询对话全文');
   expect(text).not.toContain('requestBody');
   expect(text).not.toContain('select * from customers');
+  expect(text).not.toContain('select * from treatment_summaries');
   expect(text).not.toContain('DATABASE_URL');
   expect(text).not.toContain('postgres://');
   expect(text).not.toContain('sk_test_should_not_render');
@@ -603,6 +655,18 @@ describe('机构业务页面壳', () => {
     expect(screen.getAllByText('待电话确认到院').length).toBeGreaterThan(0);
     expect(screen.getAllByText('D28 复购建议').length).toBeGreaterThan(0);
     expect(screen.getAllByText('人工回访并推荐修复组合').length).toBeGreaterThan(0);
+    expect(screen.getByText('治疗结构化摘要')).toBeInTheDocument();
+    expect(screen.getAllByText('光电修复').length).toBeGreaterThan(0);
+    expect(screen.getByText('类别：laser_repair')).toBeInTheDocument();
+    expect(screen.getAllByText('阶段：D7 复诊').length).toBeGreaterThan(0);
+    expect(screen.getByText('恢复：D7')).toBeInTheDocument();
+    expect(screen.getAllByText('风险：关注').length).toBeGreaterThan(0);
+    expect(screen.getByText('负责人：doctor-lin')).toBeInTheDocument();
+    expect(screen.getAllByText('结构化摘要：红肿减轻，安排补水护理。').length).toBeGreaterThan(0);
+    expect(screen.getByText('下一步护理：D14 人工回访恢复阶段。')).toBeInTheDocument();
+    expect(screen.getAllByText('结构化摘要').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('术后关怀').length).toBeGreaterThan(0);
+    expect(screen.getByText('光电修复 · D7 复诊')).toBeInTheDocument();
     expect(screen.getByText('审计：update')).toBeInTheDocument();
     expect(screen.getByText('audit_evt_001')).toBeInTheDocument();
     expect(screen.getAllByText('allowed / allowed_by_policy').length).toBeGreaterThan(0);
@@ -652,12 +716,14 @@ describe('机构业务页面壳', () => {
         ...customerTimelineResponse,
         appointments: [],
         followups: [],
+        treatmentSummaries: [],
         auditEvents: [],
         timeline: [],
       }),
     );
 
     expect(await screen.findByText('暂无预约摘要')).toBeInTheDocument();
+    expect(screen.getByText('暂无治疗摘要')).toBeInTheDocument();
     expect(screen.getByText('暂无随访任务')).toBeInTheDocument();
     expect(screen.getByText('暂无安全审计摘要')).toBeInTheDocument();
     expect(screen.getByText('暂无时间线事件')).toBeInTheDocument();
