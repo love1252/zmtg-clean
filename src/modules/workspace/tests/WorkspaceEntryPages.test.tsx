@@ -146,8 +146,11 @@ const platformTenantRecord = {
   consultationTranscript: '咨询对话全文不应展示',
   idNumber: '110101199001010011',
   medicalRecordNo: 'MR202605310001',
+  sql: 'select * from tenant_plans',
+  requestBody: { phoneNumber: '13800001252' },
   stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
   token: 'sk_test_phase9_platform_should_not_render',
+  secret: 'phase9-raw-secret',
 };
 
 const customerTimelineResponse = {
@@ -262,6 +265,10 @@ type WorkspaceFetchOptions = {
   auditEvents?: unknown[];
   platformAuditEvents?: unknown[];
   platformTenants?: unknown[];
+  platformTenantError?: {
+    status: number;
+    message: string;
+  };
   timeline?: unknown;
   institutionError?: {
     path:
@@ -283,6 +290,7 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     auditEvents = [auditEventRecord],
     platformAuditEvents = [platformAuditEventRecord],
     platformTenants = [platformTenantRecord],
+    platformTenantError,
     timeline = customerTimelineResponse,
     institutionError,
   } = options;
@@ -335,6 +343,13 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
       }
 
       if (path === '/api/open-platform/tenants') {
+        if (platformTenantError) {
+          return jsonResponse(
+            { error: platformTenantError.message },
+            { status: platformTenantError.status },
+          );
+        }
+
         return jsonResponse({ records: platformTenants });
       }
 
@@ -433,17 +448,51 @@ function expectNoSensitivePlatformAuditContent(container: HTMLElement) {
 function expectNoSensitivePlatformTenantContent(container: HTMLElement) {
   const text = container.textContent ?? '';
 
+  expect(text).not.toContain('customers');
+  expect(text).not.toContain('客户明细');
+  expect(text).not.toContain('appointments');
+  expect(text).not.toContain('预约明细');
+  expect(text).not.toContain('followUpTasks');
+  expect(text).not.toContain('随访任务明细');
+  expect(text).not.toContain('phoneNumber');
+  expect(text).not.toContain('手机号原文');
   expect(text).not.toContain('13800001252');
+  expect(text).not.toContain('idNumber');
+  expect(text).not.toContain('身份证号');
   expect(text).not.toContain('110101199001010011');
+  expect(text).not.toContain('medicalRecordNo');
+  expect(text).not.toContain('病历号原文');
   expect(text).not.toContain('MR202605310001');
+  expect(text).not.toContain('treatmentRecord');
+  expect(text).not.toContain('治疗记录');
+  expect(text).not.toContain('病历正文');
   expect(text).not.toContain('完整治疗记录正文不应展示');
+  expect(text).not.toContain('consultationTranscript');
+  expect(text).not.toContain('咨询对话');
   expect(text).not.toContain('咨询对话全文不应展示');
+  expect(text).not.toContain('requestBody');
+  expect(text).not.toContain('SQL');
+  expect(text).not.toContain('select * from tenant_plans');
   expect(text).not.toContain('DATABASE_URL');
   expect(text).not.toContain('postgres://');
+  expect(text).not.toContain('连接串');
   expect(text).not.toContain('stack');
   expect(text).not.toContain('token');
   expect(text).not.toContain('secret');
   expect(text).not.toContain('sk_test_phase9_platform_should_not_render');
+  expect(text).not.toContain('phase9-raw-secret');
+}
+
+function expectNoPlatformTenantMutation(fetchMock: ReturnType<typeof mockWorkspaceFetch>) {
+  const tenantCalls = fetchMock.mock.calls.filter(
+    ([input]) => fetchPath(input) === '/api/open-platform/tenants',
+  );
+
+  expect(tenantCalls.length).toBeGreaterThan(0);
+  for (const [, init] of tenantCalls) {
+    expect(init?.method ?? 'GET').toBe('GET');
+    expect(init?.body).toBeUndefined();
+  }
 }
 
 describe('工作台入口页面', () => {
@@ -707,6 +756,7 @@ describe('工作台入口页面', () => {
     expect(await screen.findByRole('heading', { name: /掌控租户、模型与接口/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
 
+    expect(screen.getByText('正在加载租户管理数据...')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
     expect(screen.getByText('智美天工演示机构')).toBeInTheDocument();
     expect(screen.getByText('租户状态：active')).toBeInTheDocument();
@@ -725,6 +775,38 @@ describe('工作台入口页面', () => {
     expect(tenantCall?.[1]).toEqual({ cache: 'no-store' });
     expect(tenantCall?.[1]?.method).toBeUndefined();
     expect(tenantCall?.[1]?.body).toBeUndefined();
+    expectNoPlatformTenantMutation(fetchMock);
+    expectNoSensitivePlatformTenantContent(container);
+  });
+
+  it('平台端租户管理入口展示 empty 状态', async () => {
+    const fetchMock = mockWorkspaceFetch({ role: 'platform_admin', platformTenants: [] });
+    const { container } = render(<OpenPlatformPage />);
+
+    expect(await screen.findByRole('heading', { name: /掌控租户、模型与接口/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
+
+    expect(await screen.findByText('暂无租户运营元数据')).toBeInTheDocument();
+    expect(screen.getByText('当前没有可展示的租户套餐和配额数据。')).toBeInTheDocument();
+    expectNoPlatformTenantMutation(fetchMock);
+    expectNoSensitivePlatformTenantContent(container);
+  });
+
+  it.each([
+    [403, '没有访问权限', '当前账号没有查看租户管理的权限'],
+    [503, '数据服务暂时不可用', '租户管理数据暂时不可用'],
+  ])('平台端租户管理入口处理 %s 错误态', async (status, apiMessage, visibleMessage) => {
+    const fetchMock = mockWorkspaceFetch({
+      role: 'platform_admin',
+      platformTenantError: { status, message: apiMessage },
+    });
+    const { container } = render(<OpenPlatformPage />);
+
+    expect(await screen.findByRole('heading', { name: /掌控租户、模型与接口/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
+
+    expect(await screen.findByText(visibleMessage)).toBeInTheDocument();
+    expectNoPlatformTenantMutation(fetchMock);
     expectNoSensitivePlatformTenantContent(container);
   });
 

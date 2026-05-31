@@ -1,7 +1,7 @@
 # Phase 9 平台端租户管理基础版设计
 
 > 日期：2026-05-31
-> 状态：Phase 9 PR 1 文档阶段。本文只定义平台端租户管理基础版 v1 的目标、边界、数据模型建议、API 建议和 PR 拆分，不进入代码实现。
+> 状态：Phase 9 已完成。本文保留原始设计边界，并记录 PR 1-5 的实际完成结果：套餐 / 配额数据底座、平台端租户只读 API、平台端租户管理 UI、smoke 和文档收尾。
 
 ## 1. Phase 9 目标
 
@@ -80,8 +80,7 @@ v1 可以展示：
 - 预约数上限。
 - 随访任务上限。
 - AI 调用上限，先仅作为字段展示，不做 enforcement。
-
-当前用量摘要不强制进入 Phase 9 v1。若后续安全派生，只能展示聚合计数，不能展示客户、预约、随访或治疗明细。建议把当前用量摘要放到 Phase 9 之后的独立小阶段，或在 Phase 9 PR 2 中只预留轻量模型讨论，不实现业务计数聚合。
+- 当前用量摘要，以配额快照中的聚合计数字段展示，不读取或展示客户、预约、随访、治疗或咨询明细。
 
 ## 5. 不纳入本阶段
 
@@ -172,21 +171,26 @@ Phase 9 也不重构权限模型、认证模型或租户隔离模型。如果现
 
 ```ts
 type OpenPlatformTenantListItem = {
-  id: string;
-  name: string;
-  status: 'active' | 'suspended';
+  tenantId: string;
+  tenantName: string;
+  tenantStatus: string;
   createdAt: string;
   updatedAt: string;
-  plan: {
-    id: string;
-    name: string;
-  };
-  quotas: {
-    customerLimit: number;
-    appointmentLimit: number;
-    followUpTaskLimit: number;
-    aiCallLimit: number;
-  };
+  planName: string | null;
+  planCode: string | null;
+  planStatus: string | null;
+  assignmentStatus: string | null;
+  startedAt: string | null;
+  expiresAt: string | null;
+  maxCustomers: number | null;
+  maxAppointments: number | null;
+  maxFollowUps: number | null;
+  maxAiCalls: number | null;
+  currentCustomers: number | null;
+  currentAppointments: number | null;
+  currentFollowUps: number | null;
+  currentAiCalls: number | null;
+  snapshotAt: string | null;
 };
 
 type OpenPlatformTenantListResponse = {
@@ -213,6 +217,9 @@ DTO 不包含：
 - `tenant_plans`
   - `id`
   - `name`
+  - `code`
+  - `description`
+  - `status`
   - `customer_limit`
   - `appointment_limit`
   - `follow_up_task_limit`
@@ -224,22 +231,26 @@ DTO 不包含：
   - `tenant_id`
   - `plan_id`
   - `status`
-  - `assigned_at`
+  - `started_at`
+  - `expires_at`
   - `created_at`
   - `updated_at`
-
-`tenant_quota_snapshots` 不建议作为 Phase 9 v1 必需表。原因是当前用量摘要不是 v1 强制目标，而且真实用量派生会触及客户、预约、随访和 AI 调用聚合。若后续需要当前用量摘要，可以单独新增：
-
 - `tenant_quota_snapshots`
   - `id`
   - `tenant_id`
-  - `customer_count`
-  - `appointment_count`
-  - `follow_up_task_count`
-  - `ai_call_count`
-  - `captured_at`
+  - `plan_assignment_id`
+  - `max_customers`
+  - `max_appointments`
+  - `max_follow_ups`
+  - `max_ai_calls`
+  - `current_customers`
+  - `current_appointments`
+  - `current_follow_ups`
+  - `current_ai_calls`
+  - `snapshot_at`
+  - `created_at`
 
-即使后续新增 `tenant_quota_snapshots`，也只能存聚合计数，不得存业务明细、客户标识集合、治疗记录正文、咨询全文或外部凭证。
+`tenant_quota_snapshots` 只存聚合计数和展示型上限，不存业务明细、客户标识集合、治疗记录正文、咨询全文或外部凭证。当前用量字段用于平台端只读展示，不参与套餐 enforcement。
 
 Phase 9 v1 不做套餐 enforcement。配额字段仅用于展示和后续规划，不用于拦截客户创建、预约创建、随访任务流转或 AI 调用。
 
@@ -289,8 +300,9 @@ API 权限建议：
 
 - `tenant_plans` 表。
 - `tenant_plan_assignments` 表。
+- `tenant_quota_snapshots` 表，仅保存聚合配额快照。
 - `tenant_id + status` 或 `tenant_id` 查询索引。
-- demo seed：至少为 `demo-tenant-001` 和 `demo-tenant-002` 分配套餐。
+- demo seed：至少为 `demo-tenant-001` 和 `demo-tenant-002` 分配套餐和配额快照。
 
 不建议在 Phase 9 v1 中修改 `tenants` 表直接塞入所有套餐字段。使用独立套餐表和分配表更容易后续扩展套餐版本、状态变更、审计和计费，但本阶段只做只读展示。
 
@@ -349,6 +361,7 @@ git diff --check
 
 - 新增最小 schema / migration。
 - 新增 demo seed 套餐和租户套餐分配。
+- 新增 demo seed 配额快照。
 - 新增租户管理 domain / DTO。
 - 新增 repository 查询。
 - 新增 domain、schema、repository 测试。

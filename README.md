@@ -19,6 +19,7 @@
 - Phase 6：机构工作台首页真实 API 摘要、共享页面状态组件、机构端导航边界和 workspace smoke 测试
 - Phase 7：客户详情时间线 v1，包括 audit `resource_id` enrich、timeline 后端 API、客户中心详情抽屉和 smoke 覆盖
 - Phase 8：审计日志只读查询基础版，包括底层查询能力、机构端审计 API/UI、平台端审计 API/UI 和 smoke / 文档收尾
+- Phase 9：平台端租户管理基础版，包括租户套餐 / 配额数据底座、平台端租户只读 API、租户管理 UI 和 smoke / 文档收尾
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -45,10 +46,20 @@ Phase 8 已完成：
 - 平台端「权限与审计」已接入审计日志只读 UI，平台端可展示 `tenantId` 作为审计归属字段
 - workspace smoke 覆盖机构端和平台端审计入口、筛选请求、可见范围和敏感字段不展示
 
+Phase 9 已完成：
+
+- 新增租户套餐、租户套餐分配和租户配额快照最小数据底座
+- demo seed 已写入套餐、分配和配额快照演示数据
+- open-platform tenant-management repository / domain 已提供安全 DTO，只返回租户运营元数据
+- `GET /api/open-platform/tenants` 已提供平台端租户只读 API，`platform_admin` 可访问，`platform_operator` 按当前 RBAC 保守返回 403
+- 平台端「租户管理」已接入真实 API，展示租户列表、状态、套餐、配额上限、当前用量和快照时间
+- UI 与 smoke 覆盖 loading、empty、403、503、成功态、只读请求和敏感字段不展示
+- Phase 9 不包含租户创建、编辑、删除、冻结 / 恢复、套餐 enforcement、计费、支付、合同、发票或客户 / 预约 / 随访业务明细下钻
+
 后续阶段会依次加入：
 
 - 治疗记录与客服会话
-- 平台租户管理与套餐权益
+- 平台租户状态管理、套餐权益 enforcement 与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费
 
