@@ -81,6 +81,22 @@ const urgentFollowUpRecord = {
   riskLevel: 'urgent',
 };
 
+const auditEventRecord = {
+  id: 'audit_phase8_institution',
+  tenantId: 'demo-tenant-001',
+  resource: 'customer',
+  resourceId: 'cust_phase5_closeout',
+  action: 'update',
+  result: 'allowed',
+  reason: 'allowed_by_policy',
+  actorId: 'demo-user-admin',
+  actorRole: 'tenant_admin',
+  occurredAt: '2026-05-31T09:00:00.000Z',
+  sql: 'select * from audit_events',
+  stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+  token: 'sk_test_phase8_should_not_render',
+};
+
 const customerTimelineResponse = {
   customer: {
     id: 'cust_phase5_closeout',
@@ -190,9 +206,14 @@ type WorkspaceFetchOptions = {
   customers?: unknown[];
   appointments?: unknown[];
   followups?: unknown[];
+  auditEvents?: unknown[];
   timeline?: unknown;
   institutionError?: {
-    path: '/api/institution/customers' | '/api/institution/appointments' | '/api/institution/followups';
+    path:
+      | '/api/institution/customers'
+      | '/api/institution/appointments'
+      | '/api/institution/followups'
+      | '/api/institution/audit-events';
     status: number;
     message: string;
   };
@@ -204,6 +225,7 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     customers = [customerRecord, postCareCustomerRecord],
     appointments = [appointmentRecord, rescheduleAppointmentRecord],
     followups = [urgentFollowUpRecord, { ...followUpRecord, status: 'scheduled' }],
+    auditEvents = [auditEventRecord],
     timeline = customerTimelineResponse,
     institutionError,
   } = options;
@@ -231,6 +253,17 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
 
       if (path === '/api/institution/followups') {
         return jsonResponse({ records: followups });
+      }
+
+      if (path === '/api/institution/audit-events') {
+        return jsonResponse({
+          records: auditEvents,
+          pageInfo: {
+            hasMore: false,
+            limit: 50,
+            nextCursor: null,
+          },
+        });
       }
 
       if (path === '/api/institution/customers/cust_phase5_closeout/timeline') {
@@ -293,6 +326,19 @@ function expectNoSensitiveCustomerTimelineContent(container: HTMLElement) {
   expect(text).not.toContain('sk_test_phase7_should_not_render');
 }
 
+function expectNoSensitiveAuditContent(container: HTMLElement) {
+  const text = container.textContent ?? '';
+
+  expect(text).not.toContain('tenantId');
+  expect(text).not.toContain('select * from audit_events');
+  expect(text).not.toContain('DATABASE_URL');
+  expect(text).not.toContain('postgres://');
+  expect(text).not.toContain('stack');
+  expect(text).not.toContain('token');
+  expect(text).not.toContain('secret');
+  expect(text).not.toContain('sk_test_phase8_should_not_render');
+}
+
 describe('工作台入口页面', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -350,6 +396,12 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('今日随访任务')).toBeInTheDocument();
     expect(await screen.findByText('Phase5 D7 回访')).toBeInTheDocument();
     expect(screen.getByText('不会调用 AI provider，也不会自动触达客户。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '审计日志' }));
+    expect(screen.getByRole('heading', { name: '审计日志' })).toBeInTheDocument();
+    expect(await screen.findByText('audit_phase8_institution')).toBeInTheDocument();
+    expect(screen.getByText('资源 ID：cust_phase5_closeout')).toBeInTheDocument();
+    expectOnlyInstitutionReadCalls(fetchMock);
   });
 
   it('机构入口 smoke 覆盖客户中心查看详情时间线', async () => {
@@ -400,7 +452,7 @@ describe('工作台入口页面', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '客服工作台' }));
     expect(screen.getByText('客服工作台仍为后续占位')).toBeInTheDocument();
-    expect(screen.getByText('已真实接入：工作台、客户中心、预约中心、智能随访。')).toBeInTheDocument();
+    expect(screen.getByText('已真实接入：工作台、客户中心、预约中心、智能随访、审计日志。')).toBeInTheDocument();
     expect(screen.getByText('后续占位：客服工作台、知识库、数据分析。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '知识库' }));
@@ -429,7 +481,35 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByRole('button', { name: '移动导航：智能随访' }));
     expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();
     expect(await screen.findByText('Phase5 D7 回访')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '移动导航：审计日志' }));
+    expect(screen.getByRole('heading', { name: '审计日志' })).toBeInTheDocument();
+    expect(await screen.findByText('audit_phase8_institution')).toBeInTheDocument();
     expectOnlyInstitutionReadCalls(fetchMock);
+  });
+
+  it('机构入口 smoke 覆盖审计日志入口和敏感字段边界', async () => {
+    const fetchMock = mockWorkspaceFetch();
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '审计日志' }));
+
+    expect(await screen.findByText('audit_phase8_institution')).toBeInTheDocument();
+    expect(screen.getByText('资源类型：customer')).toBeInTheDocument();
+    expect(screen.getByText('操作：update')).toBeInTheDocument();
+    expect(screen.getByText('结果：allowed')).toBeInTheDocument();
+
+    const auditCall = fetchMock.mock.calls.find(
+      ([input]) => fetchPath(input) === '/api/institution/audit-events',
+    );
+    expect(auditCall).toBeDefined();
+    expect(auditCall?.[1]).toEqual({ cache: 'no-store' });
+    expect(fetchPath(auditCall![0])).not.toContain('tenantId');
+    expect(auditCall?.[1]?.method).toBeUndefined();
+    expect(auditCall?.[1]?.body).toBeUndefined();
+    expectOnlyInstitutionReadCalls(fetchMock);
+    expectNoSensitiveAuditContent(container);
   });
 
   it('机构工作台首页展示空状态', async () => {

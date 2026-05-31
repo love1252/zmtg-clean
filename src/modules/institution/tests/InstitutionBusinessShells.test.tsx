@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppointmentCenterShell } from '@/modules/institution/components/AppointmentCenterShell';
+import { InstitutionAuditEventsShell } from '@/modules/institution/components/InstitutionAuditEventsShell';
 import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 
@@ -44,6 +45,24 @@ const followUpRecord = {
   riskLevel: 'urgent',
   updatedBy: null,
   updatedAt: null,
+};
+
+const auditEventRecord = {
+  id: 'audit_evt_customer',
+  tenantId: 'demo-tenant-001',
+  resource: 'customer',
+  resourceId: 'cust_wang_repurchase',
+  action: 'update',
+  result: 'allowed',
+  reason: 'allowed_by_policy',
+  actorId: 'demo-user-admin',
+  actorRole: 'tenant_admin',
+  occurredAt: '2026-05-31T09:00:00.000Z',
+  requestBody: { phoneNumber: '13800000000' },
+  metadata: { sql: 'select * from audit_events' },
+  stack: 'Error: DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+  token: 'sk_test_should_not_render',
+  secret: 'raw-secret',
 };
 
 const customerTimelineResponse = {
@@ -176,6 +195,19 @@ function mockInstitutionFetch(responsesByPath: Record<string, Response[]>) {
   return fetchMock;
 }
 
+function mockAuditEventsFetch(responses: Response[]) {
+  const fetchMock = vi.fn(async (_input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
+    const response = responses.shift();
+    if (!response) {
+      throw new Error('没有配置更多审计日志 fetch 响应');
+    }
+
+    return response;
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
 function deferredResponse() {
   let resolve!: (response: Response) => void;
   const promise = new Promise<Response>((next) => {
@@ -185,6 +217,10 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+function auditEventsResponse(records: unknown[], pageInfo = { hasMore: false, limit: 50, nextCursor: null }) {
+  return jsonResponse({ records, pageInfo });
+}
+
 function expectNoSensitiveTimelineContent(container: HTMLElement) {
   const text = container.textContent ?? '';
 
@@ -192,6 +228,26 @@ function expectNoSensitiveTimelineContent(container: HTMLElement) {
   expect(text).not.toContain('110101199001010011');
   expect(text).not.toContain('requestBody');
   expect(text).not.toContain('select * from customers');
+  expect(text).not.toContain('DATABASE_URL');
+  expect(text).not.toContain('postgres://');
+  expect(text).not.toContain('sk_test_should_not_render');
+  expect(text).not.toContain('token');
+  expect(text).not.toContain('stack');
+  expect(text).not.toContain('secret');
+}
+
+function expectNoSensitiveAuditContent(container: HTMLElement) {
+  const text = container.textContent ?? '';
+
+  expect(text).not.toContain('tenantId');
+  expect(text).not.toContain('13800000000');
+  expect(text).not.toContain('110101199001010011');
+  expect(text).not.toContain('MR-RAW-001');
+  expect(text).not.toContain('完整治疗记录正文');
+  expect(text).not.toContain('咨询对话全文');
+  expect(text).not.toContain('requestBody');
+  expect(text).not.toContain('metadata');
+  expect(text).not.toContain('select * from audit_events');
   expect(text).not.toContain('DATABASE_URL');
   expect(text).not.toContain('postgres://');
   expect(text).not.toContain('sk_test_should_not_render');
@@ -228,6 +284,78 @@ function mutationBody(
 describe('机构业务页面壳', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('审计日志页面从机构审计 API 加载并展示安全字段', async () => {
+    const pending = deferredResponse();
+    const fetchMock = vi.fn(async () => pending.promise);
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = render(<InstitutionAuditEventsShell />);
+
+    expect(screen.getByRole('heading', { name: '审计日志' })).toBeInTheDocument();
+    expect(screen.getByText('正在加载审计事件...')).toBeInTheDocument();
+    pending.resolve(auditEventsResponse([auditEventRecord]));
+
+    expect(await screen.findByText('audit_evt_customer')).toBeInTheDocument();
+    expect(screen.getByText('资源类型：customer')).toBeInTheDocument();
+    expect(screen.getByText('资源 ID：cust_wang_repurchase')).toBeInTheDocument();
+    expect(screen.getByText('操作：update')).toBeInTheDocument();
+    expect(screen.getByText('结果：allowed')).toBeInTheDocument();
+    expect(screen.getByText('原因：allowed_by_policy')).toBeInTheDocument();
+    expect(screen.getByText('操作者：demo-user-admin')).toBeInTheDocument();
+    expect(screen.getByText('角色：tenant_admin')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/institution/audit-events', { cache: 'no-store' });
+    expectNoSensitiveAuditContent(container);
+  });
+
+  it('审计日志页面提供白名单筛选控件并只发送筛选参数', async () => {
+    const fetchMock = mockAuditEventsFetch([
+      auditEventsResponse([]),
+      auditEventsResponse([{ ...auditEventRecord, id: 'audit_evt_filtered' }]),
+    ]);
+
+    render(<InstitutionAuditEventsShell />);
+
+    expect(await screen.findByText('暂无审计事件')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('资源类型'), { target: { value: 'customer' } });
+    fireEvent.change(screen.getByLabelText('资源 ID'), { target: { value: 'cust_wang_repurchase' } });
+    fireEvent.change(screen.getByLabelText('操作'), { target: { value: 'update' } });
+    fireEvent.change(screen.getByLabelText('结果'), { target: { value: 'allowed' } });
+    fireEvent.change(screen.getByLabelText('原因'), { target: { value: 'allowed_by_policy' } });
+    fireEvent.change(screen.getByLabelText('操作者 ID'), { target: { value: 'demo-user-admin' } });
+    fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
+
+    expect(await screen.findByText('audit_evt_filtered')).toBeInTheDocument();
+    const secondPath = fetchPath(fetchMock.mock.calls[1]?.[0] ?? '');
+    expect(secondPath).toContain('/api/institution/audit-events?');
+    expect(secondPath).toContain('resource=customer');
+    expect(secondPath).toContain('resourceId=cust_wang_repurchase');
+    expect(secondPath).toContain('action=update');
+    expect(secondPath).toContain('result=allowed');
+    expect(secondPath).toContain('reason=allowed_by_policy');
+    expect(secondPath).toContain('actorId=demo-user-admin');
+    expect(secondPath).not.toContain('tenantId');
+    expect(fetchMock.mock.calls[1]?.[1]).toEqual({ cache: 'no-store' });
+  });
+
+  it('审计日志页面展示空状态', async () => {
+    mockAuditEventsFetch([auditEventsResponse([])]);
+
+    render(<InstitutionAuditEventsShell />);
+
+    expect(await screen.findByText('暂无审计事件')).toBeInTheDocument();
+    expect(screen.getByText('当前筛选条件下没有可展示的审计事件。')).toBeInTheDocument();
+  });
+
+  it.each([
+    [403, '没有访问权限', '当前账号没有查看审计日志的权限'],
+    [503, '数据服务暂时不可用', '审计日志数据暂时不可用'],
+  ])('审计日志页面处理 %s 错误态', async (status, apiMessage, visibleMessage) => {
+    mockAuditEventsFetch([jsonResponse({ error: apiMessage }, { status })]);
+
+    render(<InstitutionAuditEventsShell />);
+
+    expect(await screen.findByText(visibleMessage)).toBeInTheDocument();
   });
 
   it('客户中心从真实 API 加载并展示客户 records', async () => {
