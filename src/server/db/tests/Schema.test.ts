@@ -12,6 +12,7 @@ import {
   getDemoTenantPlanSeedRecords,
   getDemoTenantQuotaSnapshotSeedRecords,
 } from '@/server/db/seed-demo-data';
+import * as seedDemoData from '@/server/db/seed-demo-data';
 import * as schema from '@/server/db/schema';
 import {
   appointments,
@@ -28,10 +29,11 @@ function columnNames(columns: readonly NamedColumn[]) {
   return columns.map((column) => column.name);
 }
 
-function readMigrationSql() {
+function readMigrationSql(fileNameIncludes?: string) {
   const drizzleDir = join(process.cwd(), 'drizzle');
   return readdirSync(drizzleDir)
     .filter((fileName) => fileName.endsWith('.sql'))
+    .filter((fileName) => !fileNameIncludes || fileName.includes(fileNameIncludes))
     .map((fileName) => readFileSync(join(drizzleDir, fileName), 'utf8'))
     .join('\n')
     .toLowerCase();
@@ -168,6 +170,97 @@ describe('数据库结构', () => {
     expect(columnNames(followUpReference?.foreignColumns ?? [])).toEqual(['tenant_id', 'id']);
   });
 
+  it('定义治疗结构化摘要表且只包含安全白名单字段', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const treatmentSummaries = schemaModule.treatmentSummaries;
+
+    expect(treatmentSummaries).toBeDefined();
+
+    const treatmentConfig = getTableConfig(treatmentSummaries as never);
+    const treatmentColumns = columnNames(treatmentConfig.columns);
+    const treatmentForeignKeys = treatmentConfig.foreignKeys.map((foreignKey) => {
+      const reference = foreignKey.reference();
+
+      return {
+        name: foreignKey.getName(),
+        columns: columnNames(reference.columns),
+        foreignTable: getTableConfig(reference.foreignTable).name,
+        foreignColumns: columnNames(reference.foreignColumns),
+      };
+    });
+    const treatmentIndexes = treatmentConfig.indexes.map((index) => ({
+      name: index.config.name,
+      columns: columnNames(index.config.columns as NamedColumn[]),
+    }));
+
+    expect(treatmentColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'customer_id',
+        'appointment_id',
+        'treatment_date',
+        'treatment_project',
+        'treatment_category',
+        'treatment_stage',
+        'recovery_stage',
+        'risk_level',
+        'owner_user_id',
+        'summary',
+        'next_care_action',
+        'tags',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+    expect(treatmentColumns).toHaveLength(16);
+    expect(JSON.stringify(treatmentColumns)).not.toMatch(
+      /treatment_record|medical_record|diagnosis_text|clinical_note|consultation_transcript|phone_number|id_number|request_body|metadata|raw_payload|ai_generated|external_sync|token|secret|database_url/i,
+    );
+    expect(treatmentSummaries.appointmentId.notNull).toBe(false);
+    expect(treatmentForeignKeys).toEqual(
+      expect.arrayContaining([
+        {
+          name: 'treatment_summaries_tenant_customer_fk',
+          columns: ['tenant_id', 'customer_id'],
+          foreignTable: 'customers',
+          foreignColumns: ['tenant_id', 'id'],
+        },
+        {
+          name: 'treatment_summaries_tenant_appointment_fk',
+          columns: ['tenant_id', 'appointment_id'],
+          foreignTable: 'appointments',
+          foreignColumns: ['tenant_id', 'id'],
+        },
+      ]),
+    );
+    expect(treatmentIndexes).toEqual(
+      expect.arrayContaining([
+        {
+          name: 'treatment_summaries_tenant_customer_date_idx',
+          columns: ['tenant_id', 'customer_id', 'treatment_date'],
+        },
+        {
+          name: 'treatment_summaries_tenant_risk_date_idx',
+          columns: ['tenant_id', 'risk_level', 'treatment_date'],
+        },
+        {
+          name: 'treatment_summaries_tenant_appointment_idx',
+          columns: ['tenant_id', 'appointment_id'],
+        },
+      ]),
+    );
+  });
+
+  it('预约表提供租户加预约 ID 复合唯一约束供治疗摘要校验同租户预约', () => {
+    const appointmentUniqueConstraint = getTableConfig(appointments).uniqueConstraints.find(
+      (constraint) => constraint.getName() === 'appointments_tenant_id_id_unique',
+    );
+
+    expect(appointmentUniqueConstraint).toBeDefined();
+    expect(columnNames(appointmentUniqueConstraint?.columns ?? [])).toEqual(['tenant_id', 'id']);
+  });
+
   it('审计事件支持最小 resource_id 关联和租户内目标资源索引', () => {
     const auditConfig = getTableConfig(auditEvents);
     const auditColumns = columnNames(auditConfig.columns);
@@ -220,6 +313,48 @@ describe('数据库结构', () => {
     );
     expect(JSON.stringify({ plans, assignments, snapshots })).not.toMatch(
       /phoneNumber|idNumber|medicalRecordNo|treatmentRecord|consultationTranscript|DATABASE_URL|secret|token/i,
+    );
+  });
+
+  it('演示种子数据包含安全的治疗结构化摘要并保持同租户引用', () => {
+    const seedModule = seedDemoData as typeof seedDemoData & Record<string, unknown>;
+    const getDemoTreatmentSummarySeedRecords =
+      seedModule.getDemoTreatmentSummarySeedRecords as
+        | (() => Array<Record<string, unknown>>)
+        | undefined;
+
+    expect(getDemoTreatmentSummarySeedRecords).toBeDefined();
+
+    const treatmentSummaries = getDemoTreatmentSummarySeedRecords?.() ?? [];
+    const customerKeys = new Set(
+      getDemoCustomerSeedRecords().map((record) => `${record.tenantId}:${record.id}`),
+    );
+    const appointmentKeys = new Set(
+      demoTenantAppointmentRecords.map((record) => `${record.tenantId}:${record.id}`),
+    );
+    const serialized = JSON.stringify(treatmentSummaries);
+
+    expect(treatmentSummaries.length).toBeGreaterThan(0);
+    expect(
+      treatmentSummaries.every(
+        (summary) =>
+          typeof summary.tenantId === 'string' &&
+          typeof summary.customerId === 'string' &&
+          typeof summary.treatmentProject === 'string' &&
+          typeof summary.summary === 'string' &&
+          customerKeys.has(`${summary.tenantId}:${summary.customerId}`),
+      ),
+    ).toBe(true);
+    expect(
+      treatmentSummaries
+        .filter((summary) => summary.appointmentId)
+        .every((summary) =>
+          appointmentKeys.has(`${summary.tenantId}:${summary.appointmentId as string}`),
+        ),
+    ).toBe(true);
+    expect(serialized).not.toMatch(/1[3-9]\d{9}|\d{17}[\dxX]/);
+    expect(serialized).not.toMatch(
+      /完整治疗记录正文|完整病历正文|诊疗原文|咨询对话全文|phoneNumber|idNumber|medicalRecordNo|treatmentRecord|medicalRecordBody|diagnosisText|clinicalNote|consultationTranscript|requestBody|rawPayload|aiGenerated|externalSync|DATABASE_URL|secret|token/i,
     );
   });
 
@@ -280,6 +415,40 @@ describe('数据库结构', () => {
     );
     expect(migrationSql).toContain(
       'alter table "follow_up_tasks" add constraint "follow_up_tasks_tenant_customer_fk" foreign key ("tenant_id","customer_id") references "public"."customers"("tenant_id","id")',
+    );
+  });
+
+  it('迁移只新增治疗摘要表、必要索引和外键且不包含敏感字段', () => {
+    const migrationSql = readMigrationSql('phase12_treatment_summaries');
+
+    expect(migrationSql).toContain('create table "treatment_summaries"');
+    expect(migrationSql).toContain(
+      'alter table "appointments" add constraint "appointments_tenant_id_id_unique" unique("tenant_id","id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "treatment_summaries" add constraint "treatment_summaries_tenant_id_tenants_id_fk" foreign key ("tenant_id") references "public"."tenants"("id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "treatment_summaries" add constraint "treatment_summaries_tenant_customer_fk" foreign key ("tenant_id","customer_id") references "public"."customers"("tenant_id","id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "treatment_summaries" add constraint "treatment_summaries_tenant_appointment_fk" foreign key ("tenant_id","appointment_id") references "public"."appointments"("tenant_id","id")',
+    );
+    expect(migrationSql).toContain(
+      'create index "treatment_summaries_tenant_customer_date_idx" on "treatment_summaries" using btree ("tenant_id","customer_id","treatment_date")',
+    );
+    expect(migrationSql).toContain(
+      'create index "treatment_summaries_tenant_risk_date_idx" on "treatment_summaries" using btree ("tenant_id","risk_level","treatment_date")',
+    );
+    expect(migrationSql).toContain(
+      'create index "treatment_summaries_tenant_appointment_idx" on "treatment_summaries" using btree ("tenant_id","appointment_id")',
+    );
+    expect(migrationSql.indexOf('appointments_tenant_id_id_unique')).toBeLessThan(
+      migrationSql.indexOf('treatment_summaries_tenant_appointment_fk'),
+    );
+    expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
+    expect(migrationSql).not.toMatch(
+      /phone_number|id_number|medical_record_no|treatment_record|medical_record_body|diagnosis_text|clinical_note|consultation_transcript|request_body|metadata|raw_payload|ai_generated|external_sync|token|secret|database_url/i,
     );
   });
 });
