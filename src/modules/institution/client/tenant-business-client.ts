@@ -1,5 +1,6 @@
 import type { AppointmentRecordSummary } from '@/modules/institution/domain/appointment-records';
 import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
+import type { CustomerTimelineResponse } from '@/modules/institution/domain/customer-timeline';
 import type {
   FollowUpStatus,
   TenantFollowUpTask,
@@ -53,6 +54,10 @@ export type TenantBusinessListResult<T> =
 
 export type TenantBusinessMutationResult<T> =
   | { ok: true; record: T }
+  | { ok: false; error: TenantBusinessClientError };
+
+export type CustomerTimelineClientResult =
+  | { ok: true; timeline: CustomerTimelineResponse }
   | { ok: false; error: TenantBusinessClientError };
 
 type TenantBusinessClientOptions = {
@@ -225,6 +230,54 @@ async function requestRecord<T>(
 
 export function listCustomers(options?: TenantBusinessClientOptions) {
   return requestRecords<CustomerRecordSummary>('/api/institution/customers', options);
+}
+
+export async function getCustomerTimeline(
+  customerId: string,
+  options?: TenantBusinessClientOptions,
+): Promise<CustomerTimelineClientResult> {
+  const fetcher = getFetcher(options);
+  if (!fetcher) {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+
+  try {
+    const response = await fetcher(
+      `/api/institution/customers/${encodeURIComponent(customerId)}/timeline`,
+      { cache: 'no-store' },
+    );
+    const payload = await readJson(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: createClientError({ status: response.status, payload }),
+      };
+    }
+
+    if (
+      !isJsonObject(payload) ||
+      !isJsonObject(payload.customer) ||
+      !Array.isArray(payload.appointments) ||
+      !Array.isArray(payload.followups) ||
+      !Array.isArray(payload.auditEvents) ||
+      !Array.isArray(payload.timeline)
+    ) {
+      return {
+        ok: false,
+        error: { kind: 'unknown', message: '请求失败', status: response.status },
+      };
+    }
+
+    return { ok: true, timeline: payload as CustomerTimelineResponse };
+  } catch {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
 }
 
 export function createCustomer(

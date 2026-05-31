@@ -46,6 +46,95 @@ const followUpRecord = {
   updatedAt: null,
 };
 
+const customerTimelineResponse = {
+  customer: {
+    id: 'cust_wang_repurchase',
+    displayName: '王女士',
+    lifecycle: 'repurchase_window',
+    priority: 'high',
+    projectInterest: '热玛吉修复组合',
+    maskedPhone: '138****1208',
+    maskedMedicalRecordNo: 'MR****001',
+    ownerUserId: 'consultant-lin',
+    tags: ['高价值', '近期咨询补水'],
+    lastTouchSummary: '术后第 28 天',
+    nextAction: '安排资深咨询师人工回访',
+    phoneNumber: '13800000000',
+    idNumber: '110101199001010011',
+  },
+  appointments: [
+    {
+      id: 'appt_wang_pending',
+      project: '热玛吉复诊',
+      scheduledAt: '2026-06-01T10:30:00+08:00',
+      consultantUserId: 'consultant-lin',
+      status: 'pending_confirmation',
+      note: '待电话确认到院',
+      requestBody: { phoneNumber: '13800000000' },
+    },
+  ],
+  followups: [
+    {
+      id: 'fu_wang_d28',
+      journeyId: 'journey_repurchase',
+      stage: 'D28 复购建议',
+      status: 'due',
+      dueAt: '2026-05-30T18:00:00+08:00',
+      suggestedAction: '人工回访并推荐修复组合',
+      riskLevel: 'urgent',
+      updatedBy: null,
+      updatedAt: null,
+      sql: 'select * from customers',
+    },
+  ],
+  auditEvents: [
+    {
+      id: 'audit_evt_001',
+      action: 'update',
+      result: 'allowed',
+      reason: 'allowed_by_policy',
+      actor: { id: 'demo-user-admin', role: 'tenant_admin' },
+      occurredAt: '2026-06-03T09:00:00.000Z',
+      resource: 'customer',
+      resourceId: 'cust_wang_repurchase',
+      stack: 'Error: DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+      token: 'sk_test_should_not_render',
+    },
+  ],
+  timeline: [
+    {
+      id: 'audit:audit_evt_001',
+      type: 'audit',
+      occurredAt: '2026-06-03T09:00:00.000Z',
+      title: '审计：update',
+      summary: 'allowed / allowed_by_policy',
+      status: 'allowed',
+      source: 'customer',
+      relatedRecordId: 'cust_wang_repurchase',
+    },
+    {
+      id: 'appointment:appt_wang_pending',
+      type: 'appointment',
+      occurredAt: '2026-06-01T10:30:00+08:00',
+      title: '热玛吉复诊预约',
+      summary: '待电话确认到院',
+      status: 'pending_confirmation',
+      source: 'appointment',
+      relatedRecordId: 'appt_wang_pending',
+    },
+    {
+      id: 'follow_up:fu_wang_d28',
+      type: 'follow_up',
+      occurredAt: '2026-05-30T18:00:00+08:00',
+      title: 'D28 复购建议',
+      summary: '人工回访并推荐修复组合',
+      status: 'due',
+      source: 'follow_up',
+      relatedRecordId: 'fu_wang_d28',
+    },
+  ],
+};
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
@@ -85,6 +174,30 @@ function mockInstitutionFetch(responsesByPath: Record<string, Response[]>) {
   });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
+}
+
+function deferredResponse() {
+  let resolve!: (response: Response) => void;
+  const promise = new Promise<Response>((next) => {
+    resolve = next;
+  });
+
+  return { promise, resolve };
+}
+
+function expectNoSensitiveTimelineContent(container: HTMLElement) {
+  const text = container.textContent ?? '';
+
+  expect(text).not.toContain('13800000000');
+  expect(text).not.toContain('110101199001010011');
+  expect(text).not.toContain('requestBody');
+  expect(text).not.toContain('select * from customers');
+  expect(text).not.toContain('DATABASE_URL');
+  expect(text).not.toContain('postgres://');
+  expect(text).not.toContain('sk_test_should_not_render');
+  expect(text).not.toContain('token');
+  expect(text).not.toContain('stack');
+  expect(text).not.toContain('secret');
 }
 
 function requestBody(fetchMock: ReturnType<typeof mockCustomerFetch>, callIndex: number) {
@@ -294,6 +407,136 @@ describe('机构业务页面壳', () => {
     fireEvent.click(screen.getByRole('button', { name: '创建客户' }));
 
     expect(await screen.findByText('字段 nextAction 不允许包含原始个人信息')).toBeInTheDocument();
+  });
+
+  it('客户中心可打开详情时间线并只读取安全摘要', async () => {
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/customers': [jsonResponse({ records: [customerRecord] })],
+      '/api/institution/customers/cust_wang_repurchase/timeline': [
+        jsonResponse(customerTimelineResponse),
+      ],
+    });
+
+    const { container } = render(<CustomerCenterShell />);
+
+    expect(await screen.findByText('王女士')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '查看详情 王女士' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 王女士' }));
+
+    expect(await screen.findByRole('dialog', { name: '客户详情时间线' })).toBeInTheDocument();
+    expect(screen.getAllByText('客户详情时间线').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('脱敏手机号：138****1208').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('脱敏病历号：MR****001').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('热玛吉复诊').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('待电话确认到院').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('D28 复购建议').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('人工回访并推荐修复组合').length).toBeGreaterThan(0);
+    expect(screen.getByText('审计：update')).toBeInTheDocument();
+    expect(screen.getByText('audit_evt_001')).toBeInTheDocument();
+    expect(screen.getAllByText('allowed / allowed_by_policy').length).toBeGreaterThan(0);
+
+    const timelineCall = fetchMock.mock.calls.find(
+      ([input]) =>
+        fetchPath(input) === '/api/institution/customers/cust_wang_repurchase/timeline',
+    );
+    expect(timelineCall).toBeDefined();
+    expect(timelineCall?.[1]).toEqual({ cache: 'no-store' });
+    expect(fetchPath(timelineCall![0])).not.toContain('tenantId');
+    expect(timelineCall?.[1]?.method).toBeUndefined();
+    expect(timelineCall?.[1]?.body).toBeUndefined();
+    expect(
+      fetchMock.mock.calls.some(([, init]) =>
+        ['POST', 'PATCH', 'DELETE'].includes(String(init?.method)),
+      ),
+    ).toBe(false);
+    expectNoSensitiveTimelineContent(container);
+  });
+
+  it('客户详情时间线展示加载态和空态', async () => {
+    const detailResponse = deferredResponse();
+    const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+      const path = fetchPath(input);
+      if (path === '/api/institution/customers') {
+        return jsonResponse({ records: [customerRecord] });
+      }
+
+      if (path === '/api/institution/customers/cust_wang_repurchase/timeline') {
+        return detailResponse.promise;
+      }
+
+      throw new Error(`没有为 ${path} 配置 fetch 响应`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CustomerCenterShell />);
+
+    expect(await screen.findByText('王女士')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 王女士' }));
+
+    expect(screen.getByText('正在加载客户详情...')).toBeInTheDocument();
+
+    detailResponse.resolve(
+      jsonResponse({
+        ...customerTimelineResponse,
+        appointments: [],
+        followups: [],
+        auditEvents: [],
+        timeline: [],
+      }),
+    );
+
+    expect(await screen.findByText('暂无预约摘要')).toBeInTheDocument();
+    expect(screen.getByText('暂无随访任务')).toBeInTheDocument();
+    expect(screen.getByText('暂无安全审计摘要')).toBeInTheDocument();
+    expect(screen.getByText('暂无时间线事件')).toBeInTheDocument();
+  });
+
+  it.each([
+    [401, '请先登录', '登录状态已失效，请重新登录'],
+    [403, '没有访问权限', '当前账号没有访问客户详情的权限'],
+    [404, 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg', '客户不存在或不属于当前租户'],
+    [503, 'Error: stack includes sk_test_should_not_render', '数据服务暂时不可用'],
+  ])('客户详情时间线处理 %s 错误态且不泄露服务端细节', async (status, apiMessage, visibleMessage) => {
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/customers': [jsonResponse({ records: [customerRecord] })],
+      '/api/institution/customers/cust_wang_repurchase/timeline': [
+        jsonResponse({ error: apiMessage }, { status }),
+      ],
+    });
+
+    const { container } = render(<CustomerCenterShell />);
+
+    expect(await screen.findByText('王女士')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 王女士' }));
+
+    expect(await screen.findByText(visibleMessage)).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([, init]) =>
+        ['POST', 'PATCH', 'DELETE'].includes(String(init?.method)),
+      ),
+    ).toBe(false);
+    expectNoSensitiveTimelineContent(container);
+  });
+
+  it('关闭客户详情后客户列表状态保持不变', async () => {
+    mockInstitutionFetch({
+      '/api/institution/customers': [jsonResponse({ records: [customerRecord] })],
+      '/api/institution/customers/cust_wang_repurchase/timeline': [
+        jsonResponse(customerTimelineResponse),
+      ],
+    });
+
+    render(<CustomerCenterShell />);
+
+    expect(await screen.findByText('王女士')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 王女士' }));
+    expect(await screen.findByRole('dialog', { name: '客户详情时间线' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭客户详情' }));
+
+    expect(screen.queryByRole('dialog', { name: '客户详情时间线' })).not.toBeInTheDocument();
+    expect(screen.getByText('王女士')).toBeInTheDocument();
+    expect(screen.getByText('客户优先级队列')).toBeInTheDocument();
   });
 
   it('预约中心从真实 API 加载预约和客户 records', async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createAppointment,
   createCustomer,
+  getCustomerTimeline,
   listAppointments,
   listCustomers,
   listFollowUpTasks,
@@ -61,6 +62,50 @@ describe('机构业务页面 client helper', () => {
     });
   });
 
+  it('读取客户详情 timeline 时只发送 GET 请求且不包含 tenantId', async () => {
+    const timelineFetcher = createFetchMock(
+      jsonResponse({
+        customer: {
+          id: 'cust_001',
+          displayName: '王女士',
+          lifecycle: 'repurchase_window',
+          priority: 'high',
+          projectInterest: '热玛吉修复组合',
+          maskedPhone: '138****1208',
+          maskedMedicalRecordNo: 'MR****001',
+          ownerUserId: 'consultant-lin',
+          tags: ['高价值'],
+          lastTouchSummary: '术后第 28 天',
+          nextAction: '安排资深咨询师人工回访',
+        },
+        appointments: [],
+        followups: [],
+        auditEvents: [],
+        timeline: [],
+      }),
+    );
+
+    await expect(getCustomerTimeline('cust_001', { fetcher: timelineFetcher })).resolves.toEqual({
+      ok: true,
+      timeline: expect.objectContaining({
+        customer: expect.objectContaining({ id: 'cust_001', maskedPhone: '138****1208' }),
+        appointments: [],
+        followups: [],
+        auditEvents: [],
+        timeline: [],
+      }),
+    });
+
+    expect(timelineFetcher).toHaveBeenCalledWith(
+      '/api/institution/customers/cust_001/timeline',
+      { cache: 'no-store' },
+    );
+    const [path, init] = vi.mocked(timelineFetcher).mock.calls[0] ?? [];
+    expect(String(path)).not.toContain('tenantId');
+    expect(init?.method).toBeUndefined();
+    expect(init?.body).toBeUndefined();
+  });
+
   it('解析错误响应为稳定错误结构', async () => {
     const forbiddenFetcher = createFetchMock(
       jsonResponse({ error: '没有访问权限' }, { status: 403 }),
@@ -69,6 +114,9 @@ describe('机构业务页面 client helper', () => {
       jsonResponse({ error: '数据服务暂时不可用' }, { status: 503 }),
     );
     const invalidJsonFetcher = createFetchMock(new Response('bad-json', { status: 502 }));
+    const timelineForbiddenFetcher = createFetchMock(
+      jsonResponse({ error: '没有访问权限' }, { status: 403 }),
+    );
 
     await expect(listCustomers({ fetcher: forbiddenFetcher })).resolves.toEqual({
       ok: false,
@@ -92,6 +140,16 @@ describe('机构业务页面 client helper', () => {
         kind: 'unknown',
         message: '请求失败',
         status: 502,
+      },
+    });
+    await expect(
+      getCustomerTimeline('missing_customer', { fetcher: timelineForbiddenFetcher }),
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        kind: 'forbidden',
+        message: '没有访问权限',
+        status: 403,
       },
     });
   });
