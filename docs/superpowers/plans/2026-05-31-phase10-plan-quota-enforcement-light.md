@@ -1,6 +1,6 @@
 # Phase 10 平台套餐 enforcement 轻量版实施计划
 
-> **给后续执行 Agent 的要求：** 必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项执行本计划。步骤使用 `- [ ]` 复选框语法跟踪。
+> **执行记录：** 本计划按 PR 1-5 拆分执行，Phase 10 收尾时保留 checklist 作为历史记录。
 
 **目标：** 基于 Phase 9 的租户套餐 / 配额数据底座，为机构端新增客户和新增预约增加轻量服务端套餐配额 enforcement。
 
@@ -12,12 +12,15 @@
 
 ## 当前 PR 状态
 
-本计划用于 Phase 10 PR 1-5。当前 PR 1 只新增文档：
+本计划用于 Phase 10 PR 1-5。当前 Phase 10 已完成：
 
-- `docs/superpowers/specs/2026-05-31-phase10-plan-quota-enforcement-light-design.md`
-- `docs/superpowers/plans/2026-05-31-phase10-plan-quota-enforcement-light.md`
+- PR 1：Phase 10 spec / plan 文档。
+- PR 2：quota enforcement domain / repository / helper。
+- PR 3：客户 / 预约创建 API 接入 enforcement。
+- PR 4：前端 client / UI 错误态与 smoke。
+- PR 5：全量验证、workspace smoke 强化和文档收尾。
 
-当前 PR 1 不执行 PR 2/3/4/5 的代码任务。
+Phase 10 最终状态是“平台套餐配额 enforcement 轻量版”完成，不代表完整套餐商业化后台完成。
 
 ## 总边界
 
@@ -68,7 +71,7 @@ PR 1 新增：
 - `docs/superpowers/plans/2026-05-31-phase10-plan-quota-enforcement-light.md`
   - 后续 PR 执行计划、文件范围、风险和验证方式。
 
-PR 2 预计涉及：
+PR 2 已完成涉及：
 
 - 新增：`src/modules/institution/server/tenant-quota-enforcement.ts`
   - 内部 quota enforcement helper，返回允许 / 拒绝原因。
@@ -81,7 +84,7 @@ PR 2 预计涉及：
 - 测试：`src/modules/audit/tests/AuditEventsDomain.test.ts`
   - 覆盖新增 reason 不含敏感数据，并可被审计查询白名单识别。
 
-PR 3 预计涉及：
+PR 3 已完成涉及：
 
 - 修改：`src/app/api/institution/customers/route.ts`
   - `POST` 创建客户前接入客户数 quota enforcement。
@@ -92,7 +95,7 @@ PR 3 预计涉及：
 - 测试：`src/modules/institution/tests/TenantBusinessApiRoutes.test.ts`
   - 覆盖允许写入、超额拒绝、无 active plan、无 quota limit、审计 reason、敏感字段禁区。
 
-PR 4 预计涉及：
+PR 4 已完成涉及：
 
 - 修改：`src/modules/institution/client/tenant-business-client.ts`
   - 确认 `409` 映射为 `conflict`，稳定读取 quota 错误文案。
@@ -105,7 +108,7 @@ PR 4 预计涉及：
 - 测试：`src/modules/workspace/tests/WorkspaceEntryPages.test.tsx`
   - 覆盖 workspace smoke 和敏感字段不展示。
 
-PR 5 预计涉及：
+PR 5 已完成涉及：
 
 - 修改：`README.md`
   - 标记 Phase 10 完成范围。
@@ -162,7 +165,7 @@ PR 5 预计涉及：
 - 明确不新增公开 API。
 - 明确不新增 schema / migration。
 
-- [ ] **步骤 1：确认分支和工作区**
+- [x] **步骤 1：确认分支和工作区**
 
 运行：
 
@@ -178,7 +181,7 @@ git branch --show-current
 docs/phase10-plan-quota-enforcement-light
 ```
 
-- [ ] **步骤 2：新增 Phase 10 设计文档**
+- [x] **步骤 2：新增 Phase 10 设计文档**
 
 新增 `docs/superpowers/specs/2026-05-31-phase10-plan-quota-enforcement-light-design.md`，必须包含：
 
@@ -200,7 +203,7 @@ docs/phase10-plan-quota-enforcement-light
 - 推荐 PR 拆分。
 - 每个 PR 的范围、风险和验证方式。
 
-- [ ] **步骤 3：新增 Phase 10 实施计划**
+- [x] **步骤 3：新增 Phase 10 实施计划**
 
 新增 `docs/superpowers/plans/2026-05-31-phase10-plan-quota-enforcement-light.md`，必须包含：
 
@@ -212,7 +215,7 @@ docs/phase10-plan-quota-enforcement-light
 - PR 1 到 PR 5 的范围、风险、控制和验证方式。
 - 后续执行 agent 的检查清单。
 
-- [ ] **步骤 4：验证 PR 1**
+- [x] **步骤 4：验证 PR 1**
 
 运行：
 
@@ -231,7 +234,7 @@ docs/superpowers/plans/2026-05-31-phase10-plan-quota-enforcement-light.md
 
 本 PR 只修改 Markdown，不运行完整 test/typecheck/build。原因：未修改 TypeScript、页面、测试、API route、数据库 schema / migration、权限、认证或租户隔离。
 
-- [ ] **步骤 5：提交、推送并创建 Draft PR**
+- [x] **步骤 5：提交、推送并创建 Draft PR**
 
 运行：
 
@@ -409,8 +412,9 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/TenantBusinessClie
 
 **范围：**
 
-- 全量测试。
-- 更新 README / roadmap / devlog。
+- 全量验证 Phase 10 套餐配额 enforcement。
+- 强化 workspace smoke，覆盖客户 / 预约创建配额错误态。
+- 更新 README / roadmap / devlog / Phase 10 spec / plan。
 - 标记 Phase 10 完成。
 - 明确未进入治疗记录、RAG、AI provider、Agent、企微、OAuth、Webhook、支付、合同、发票或完整套餐商业化后台。
 
@@ -427,19 +431,35 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/TenantBusinessClie
 - 文档把 Phase 10 误描述为完整套餐商业化后台。
 - 收尾遗漏无套餐、无 quota limit 或超额场景。
 - 忘记说明 `tenant_quota_snapshots.current*` 不是强一致 enforcement 依据。
+- smoke 只覆盖单页组件，遗漏 workspace 入口表单路径。
 
 **验证方式：**
 
 ```bash
 git diff --check
-node scripts/run-vitest.mjs run
+node scripts/run-vitest.mjs run src/modules/institution/tests src/modules/open-platform/tests src/modules/workspace/tests src/server/db/tests
 ./node_modules/.bin/tsc --noEmit
 node scripts/run-next.mjs build --webpack
+node scripts/run-vitest.mjs run
 ```
+
+**最终完成项：**
+
+- 套餐 / 配额 enforcement 地基已完成。
+- 客户创建配额 enforcement 已完成。
+- 预约创建配额 enforcement 已完成。
+- 前端稳定错误态已完成。
+- denied 审计 reason 稳定，覆盖 `quota_exceeded_customers`、`quota_exceeded_appointments`、`missing_active_plan`、`missing_quota_limit`。
+- 客户更新、预约更新、随访状态流转、审计写入和只读 API 不受数量配额阻断。
+- 前端不发送 `tenantId`，错误响应和 UI 不展示 SQL、stack、`DATABASE_URL`、连接串、token、secret、PII 或医疗正文。
+- 未新增公开 API。
+- 未新增 schema / migration。
+- 未改权限、认证或租户隔离模型。
+- 未进入套餐购买 / 变更 / 续费、支付、合同、发票、租户冻结 / 恢复、完整套餐商业化后台、治疗记录、AI / RAG / Agent、企微、OAuth、Webhook 或 API Key。
 
 ## 后续阶段建议
 
-Phase 10 完成后，建议重新进入 Plan Mode 评估：
+Phase 10 完成后，建议进入 Phase 11 Plan Mode 评估：
 
 1. 治疗记录结构化摘要 v1。
 2. 平台租户状态管理和状态变更审计。

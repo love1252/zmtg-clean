@@ -1,6 +1,6 @@
 # Phase 10 平台套餐 enforcement 轻量版设计
 
-> 状态：Phase 10 PR 1 文档阶段。本文只固化平台套餐 / 配额 enforcement 轻量版的目标、范围、安全边界和 PR 拆分，不包含业务代码实现。
+> 状态：Phase 10 已完成。PR 1-5 已完成 spec / plan、quota enforcement helper、客户 / 预约创建 API 接入、前端稳定错误态、smoke 和文档收尾。
 
 ## 1. Phase 10 目标
 
@@ -488,3 +488,38 @@ Phase 10 完成时应满足：
 - 不新增 schema / migration。
 - 不返回或展示 PII、医疗正文、SQL、stack、连接串、token 或 secret。
 - README、roadmap、devlog 和 Phase 10 spec / plan 与实际完成范围一致。
+
+## 18. Phase 10 收尾状态
+
+Phase 10 已完成，最终范围保持为“平台套餐配额 enforcement 轻量版”：
+
+- 已完成套餐 / 配额 enforcement 地基：内部 helper 读取 active plan / quota limit，并按当前租户 live count 判断客户数和预约数。
+- 已完成客户创建配额 enforcement：`POST /api/institution/customers` 在创建前校验客户数量配额。
+- 已完成预约创建配额 enforcement：`POST /api/institution/appointments` 在创建前校验预约数量配额。
+- 已完成 denied 审计：超额、无 active plan、无 quota limit 均使用稳定 reason 写入 denied 审计。
+- 已完成前端稳定错误态：客户中心和预约中心展示安全中文提示，失败后保留表单输入，前端不发送 `tenantId`。
+- 已完成 smoke / 文档收尾：workspace 入口 smoke 覆盖客户和预约配额错误态，README、roadmap、devlog 和 Phase 10 spec / plan 已同步。
+
+最终明确未纳入 Phase 10：
+
+- 套餐购买、套餐变更、续费、支付、合同、发票。
+- 租户创建、租户编辑、租户删除、租户冻结 / 恢复。
+- 完整套餐商业化后台、严格一致计数器、计费流水。
+- 治疗记录结构化摘要实现、完整治疗记录正文、完整病历正文。
+- 知识库 / RAG 真实能力、AI provider、Agent。
+- 企业微信、HIS / CRM / OTA、API Key、OAuth、Webhook。
+- 自动触达客户或大规模 UI 重构。
+
+最终验证覆盖：
+
+- 客户创建未超额成功、客户创建超额拒绝。
+- 预约创建未超额成功、预约创建超额拒绝。
+- 无 active plan 拒绝、无 quota limit 拒绝。
+- 无 quota snapshot 但有 active plan / quota limit 时按 live count 判断。
+- denied 时不写业务表，denied 时写审计，审计 reason 稳定。
+- 客户更新、预约更新、随访状态流转不受数量配额阻断。
+- 前端客户 / 预约表单展示稳定配额错误，失败后输入内容保留。
+- 前端不发送 `tenantId`。
+- 错误响应和 UI 不展示 SQL、stack、`DATABASE_URL`、连接串、token、secret、PII 或医疗正文。
+
+后续建议进入 Phase 11 Plan Mode，重新评估治疗记录结构化摘要 v1、平台租户状态管理和状态变更审计、知识库 / RAG 基础准备、审计高级治理等方向。本设计不包含 Phase 11 实现。
