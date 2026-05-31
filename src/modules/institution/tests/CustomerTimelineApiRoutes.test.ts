@@ -11,16 +11,21 @@ const routeMocks = vi.hoisted(() => {
   const auditRepository = {
     listCustomerAuditEventsByResourceId: vi.fn(),
   };
+  const treatmentSummaryRepository = {
+    listTreatmentSummariesByTenantAndCustomer: vi.fn(),
+  };
   const database = { database: 'test-db' };
 
   return {
     auditRepository,
     createAuditEventRepository: vi.fn(() => auditRepository),
     createTenantBusinessRepository: vi.fn(() => repository),
+    createTreatmentSummaryRepository: vi.fn(() => treatmentSummaryRepository),
     database,
     getDatabase: vi.fn(),
     getDemoAccessContextFromRequest: vi.fn(),
     repository,
+    treatmentSummaryRepository,
   };
 });
 
@@ -55,6 +60,16 @@ vi.mock('@/modules/audit/server/audit-event-repository', async (importOriginal) 
   return {
     ...actual,
     createAuditEventRepository: routeMocks.createAuditEventRepository,
+  };
+});
+
+vi.mock('@/modules/institution/server/treatment-summary-repository', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@/modules/institution/server/treatment-summary-repository')
+  >();
+  return {
+    ...actual,
+    createTreatmentSummaryRepository: routeMocks.createTreatmentSummaryRepository,
   };
 });
 
@@ -136,6 +151,30 @@ const auditEventSummary = {
   stack: 'Error: DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
 };
 
+const treatmentSummaryRecord = {
+  id: 'trt_001',
+  tenantId: 'demo-tenant-001',
+  customerId: 'cust_001',
+  appointmentId: 'appt_001',
+  treatmentDate: '2026-06-01T12:00:00.000Z',
+  treatmentProject: '光电修复',
+  treatmentCategory: 'laser_repair',
+  treatmentStage: 'D7 复诊',
+  recoveryStage: 'D7',
+  riskLevel: 'watch',
+  ownerUserId: 'doctor-lin',
+  summary: '结构化摘要：红肿减轻，安排补水护理。',
+  nextCareAction: 'D14 人工回访恢复阶段。',
+  tags: ['结构化摘要', '术后关怀'],
+  createdAt: '2026-06-01T12:00:00.000Z',
+  updatedAt: '2026-06-01T12:00:00.000Z',
+  treatmentRecord: '完整治疗记录正文',
+  medicalRecordBody: '完整病历正文',
+  consultationTranscript: '咨询对话全文',
+  sql: 'select * from treatment_summaries',
+  stack: 'blocked-stack-value',
+};
+
 function routeContext(customerId = 'cust_001') {
   return { params: Promise.resolve({ customerId }) };
 }
@@ -151,16 +190,20 @@ function expectNoPrivateData(payload: unknown) {
   const serialized = JSON.stringify(payload);
 
   expect(serialized).not.toContain('tenantId');
+  expect(serialized).not.toContain('customerId');
   expect(serialized).not.toContain('13800000000');
   expect(serialized).not.toContain('110101199001010011');
   expect(serialized).not.toContain('MR-RAW-001');
   expect(serialized).not.toContain('完整治疗记录正文');
+  expect(serialized).not.toContain('完整病历正文');
   expect(serialized).not.toContain('咨询对话全文');
   expect(serialized).not.toContain('requestBody');
   expect(serialized).not.toContain('metadata');
   expect(serialized).not.toContain('select * from customers');
+  expect(serialized).not.toContain('select * from treatment_summaries');
   expect(serialized).not.toContain('DATABASE_URL');
   expect(serialized).not.toContain('postgres://');
+  expect(serialized).not.toContain('blocked-stack-value');
   expect(serialized).not.toContain('sk_test');
   expect(serialized).not.toContain('access_token');
 }
@@ -172,6 +215,7 @@ beforeEach(() => {
   routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
   routeMocks.createTenantBusinessRepository.mockClear();
   routeMocks.createAuditEventRepository.mockClear();
+  routeMocks.createTreatmentSummaryRepository.mockClear();
   routeMocks.repository.getCustomerByTenant.mockReset();
   routeMocks.repository.getCustomerByTenant.mockResolvedValue(customerRecord);
   routeMocks.repository.listAppointmentsByTenantAndCustomer.mockReset();
@@ -182,10 +226,14 @@ beforeEach(() => {
   routeMocks.auditRepository.listCustomerAuditEventsByResourceId.mockResolvedValue([
     auditEventSummary,
   ]);
+  routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer.mockReset();
+  routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer.mockResolvedValue(
+    [treatmentSummaryRecord],
+  );
 });
 
 describe('客户详情 timeline API', () => {
-  it('成功返回客户、预约、随访、审计和结构化 timeline 摘要', async () => {
+  it('成功返回客户、预约、随访、治疗摘要、审计和结构化 timeline 摘要', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
 
     const response = await customerTimelineGet(timelineRequest(), routeContext());
@@ -205,6 +253,12 @@ describe('客户详情 timeline API', () => {
       customerId: 'cust_001',
     });
     expect(routeMocks.auditRepository.listCustomerAuditEventsByResourceId).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      customerId: 'cust_001',
+    });
+    expect(
+      routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer,
+    ).toHaveBeenCalledWith({
       tenantId: 'demo-tenant-001',
       customerId: 'cust_001',
     });
@@ -235,12 +289,47 @@ describe('客户详情 timeline API', () => {
         resourceId: 'cust_001',
       },
     ]);
+    expect(payload.treatmentSummaries).toEqual([
+      {
+        id: 'trt_001',
+        appointmentId: 'appt_001',
+        treatmentDate: '2026-06-01T12:00:00.000Z',
+        treatmentProject: '光电修复',
+        treatmentCategory: 'laser_repair',
+        treatmentStage: 'D7 复诊',
+        recoveryStage: 'D7',
+        riskLevel: 'watch',
+        ownerUserId: 'doctor-lin',
+        summary: '结构化摘要：红肿减轻，安排补水护理。',
+        nextCareAction: 'D14 人工回访恢复阶段。',
+        tags: ['结构化摘要', '术后关怀'],
+        createdAt: '2026-06-01T12:00:00.000Z',
+        updatedAt: '2026-06-01T12:00:00.000Z',
+      },
+    ]);
     expect(payload.timeline.map((event: { id: string }) => event.id)).toEqual([
       'audit:audit_evt_001',
       'appointment:appt_001',
+      'treatment_summary:trt_001',
       'follow_up:fu_001',
       'customer:cust_001',
     ]);
+    expect(payload.timeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'treatment_summary:trt_001',
+          type: 'treatment_summary',
+          occurredAt: '2026-06-01T12:00:00.000Z',
+          title: '光电修复 · D7 复诊',
+          summary: '结构化摘要：红肿减轻，安排补水护理。',
+          status: 'watch',
+          source: 'treatment_summary',
+          relatedRecordId: 'trt_001',
+          riskLevel: 'watch',
+          tags: ['结构化摘要', '术后关怀'],
+        }),
+      ]),
+    );
     expectNoPrivateData(payload);
   });
 
@@ -255,6 +344,7 @@ describe('客户详情 timeline API', () => {
     expect(payload.auditEvents).toEqual([]);
     expect(payload.timeline.map((event: { type: string }) => event.type)).toEqual([
       'appointment',
+      'treatment_summary',
       'follow_up',
       'customer_summary',
     ]);
@@ -296,6 +386,9 @@ describe('客户详情 timeline API', () => {
     });
     expect(routeMocks.repository.listAppointmentsByTenantAndCustomer).not.toHaveBeenCalled();
     expect(routeMocks.repository.listFollowUpTasksByTenantAndCustomer).not.toHaveBeenCalled();
+    expect(
+      routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer,
+    ).not.toHaveBeenCalled();
     expect(routeMocks.auditRepository.listCustomerAuditEventsByResourceId).not.toHaveBeenCalled();
 
     routeMocks.repository.getCustomerByTenant.mockResolvedValueOnce(null);
@@ -337,6 +430,20 @@ describe('客户详情 timeline API', () => {
     routeMocks.getDatabase.mockImplementation(() => {
       throw new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg');
     });
+
+    const response = await customerTimelineGet(timelineRequest(), routeContext());
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({ error: '数据服务暂时不可用' });
+    expectNoPrivateData(payload);
+  });
+
+  it('治疗摘要查询异常时返回稳定 503 且不泄露错误详情', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer.mockRejectedValueOnce(
+      new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg'),
+    );
 
     const response = await customerTimelineGet(timelineRequest(), routeContext());
     const payload = await response.json();

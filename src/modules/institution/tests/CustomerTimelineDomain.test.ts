@@ -6,6 +6,7 @@ import {
 import type { AppointmentRecordSummary } from '@/modules/institution/domain/appointment-records';
 import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
 import type { TenantFollowUpTask } from '@/modules/institution/domain/followup-workflow';
+import type { TreatmentSummaryRecord } from '@/modules/institution/domain/treatment-summaries';
 
 const customer = {
   id: 'cust_001',
@@ -84,12 +85,41 @@ const auditEvents = [
   },
 ];
 
+const treatmentSummaries = [
+  {
+    id: 'trt_001',
+    tenantId: 'demo-tenant-001',
+    customerId: 'cust_001',
+    appointmentId: 'appt_001',
+    treatmentDate: '2026-06-01T12:00:00.000Z',
+    treatmentProject: '光电修复',
+    treatmentCategory: 'laser_repair',
+    treatmentStage: 'D7 复诊',
+    recoveryStage: 'D7',
+    riskLevel: 'watch',
+    ownerUserId: 'doctor-lin',
+    summary: '结构化摘要：红肿减轻，安排补水护理。',
+    nextCareAction: 'D14 人工回访恢复阶段。',
+    tags: ['结构化摘要', '术后关怀'],
+    createdAt: '2026-06-01T12:00:00.000Z',
+    updatedAt: '2026-06-01T12:00:00.000Z',
+    treatmentRecord: '完整治疗记录正文',
+    medicalRecordBody: '完整病历正文',
+    consultationTranscript: '咨询对话全文',
+  } satisfies TreatmentSummaryRecord & {
+    treatmentRecord: string;
+    medicalRecordBody: string;
+    consultationTranscript: string;
+  },
+];
+
 describe('客户详情时间线领域模型', () => {
   it('构建客户详情时间线响应且只保留脱敏结构化摘要', () => {
     const response = buildCustomerTimelineResponse({
       customer,
       appointments,
       followups,
+      treatmentSummaries,
       auditEvents,
     });
     const serialized = JSON.stringify(response);
@@ -142,11 +172,30 @@ describe('客户详情时间线领域模型', () => {
         resourceId: 'cust_001',
       },
     ]);
+    expect(response.treatmentSummaries).toEqual([
+      {
+        id: 'trt_001',
+        appointmentId: 'appt_001',
+        treatmentDate: '2026-06-01T12:00:00.000Z',
+        treatmentProject: '光电修复',
+        treatmentCategory: 'laser_repair',
+        treatmentStage: 'D7 复诊',
+        recoveryStage: 'D7',
+        riskLevel: 'watch',
+        ownerUserId: 'doctor-lin',
+        summary: '结构化摘要：红肿减轻，安排补水护理。',
+        nextCareAction: 'D14 人工回访恢复阶段。',
+        tags: ['结构化摘要', '术后关怀'],
+        createdAt: '2026-06-01T12:00:00.000Z',
+        updatedAt: '2026-06-01T12:00:00.000Z',
+      },
+    ]);
     expect(serialized).not.toContain('tenantId');
     expect(serialized).not.toContain('13800000000');
     expect(serialized).not.toContain('110101199001010011');
     expect(serialized).not.toContain('MR-RAW-001');
     expect(serialized).not.toContain('完整治疗记录正文');
+    expect(serialized).not.toContain('完整病历正文');
     expect(serialized).not.toContain('咨询对话全文');
     expect(serialized).not.toContain('requestBody');
     expect(serialized).not.toContain('metadata');
@@ -160,12 +209,14 @@ describe('客户详情时间线领域模型', () => {
       customer,
       appointments,
       followups,
+      treatmentSummaries,
       auditEvents,
     });
 
     expect(response.timeline.map((event) => event.id)).toEqual([
       'audit:audit_evt_001',
       'appointment:appt_001',
+      'treatment_summary:trt_001',
       'follow_up:fu_001',
       'customer:cust_001',
     ]);
@@ -181,6 +232,17 @@ describe('客户详情时间线领域模型', () => {
         occurredAt: '2026-06-02T02:30:00.000Z',
         source: 'appointment',
         relatedRecordId: 'appt_001',
+      }),
+      expect.objectContaining({
+        type: 'treatment_summary',
+        occurredAt: '2026-06-01T12:00:00.000Z',
+        title: '光电修复 · D7 复诊',
+        summary: '结构化摘要：红肿减轻，安排补水护理。',
+        status: 'watch',
+        source: 'treatment_summary',
+        relatedRecordId: 'trt_001',
+        riskLevel: 'watch',
+        tags: ['结构化摘要', '术后关怀'],
       }),
       expect.objectContaining({
         type: 'follow_up',
