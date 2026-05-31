@@ -10,6 +10,24 @@
 
 ---
 
+## 收尾验收状态（2026-05-31）
+
+Phase 5 A/B/C/D 已完成：
+
+- A：已建立 `tenant-business-client.ts` 和 `tenant-business-view-models.ts`，统一客户、预约、随访 API client、错误结构、payload 白名单、中文标签、分组和随访状态流转 view model。
+- B：客户中心已接入 `GET /api/institution/customers`、`POST /api/institution/customers`、`PATCH /api/institution/customers`，并具备加载态、空状态、错误态、新建、编辑和白名单提交。
+- C：预约中心已接入 `GET /api/institution/appointments`、`POST /api/institution/appointments`、`PATCH /api/institution/appointments`，并读取 `GET /api/institution/customers` 作为当前租户客户来源，`customerDisplayName` 由客户记录派生。
+- D：智能随访 / 随访任务已接入 `GET /api/institution/followups`、`PATCH /api/institution/followups`，并具备加载态、空状态、错误态、409 冲突提示和状态流转。
+
+收尾确认：
+
+- 客户中心、预约中心、智能随访三大业务页面不再直接使用本地 demo 数组作为业务列表数据源。
+- 三大业务页面的 GET / POST / PATCH 均通过 `src/modules/institution/client/tenant-business-client.ts`。
+- 前端 mutation payload 不发送 `tenantId`，并由 client/helper 和页面测试覆盖未脱敏 PII 字段不进入请求 body。
+- `src/modules/workspace/tests/WorkspaceEntryPages.test.tsx` 已更新为 Phase 5 后的真实 API 页面入口测试，覆盖工作台切换到客户、预约、随访后展示 API mock records。
+- 保留的静态内容仅限于工作台经营展示、随访旅程说明和静态安全话术提示；这些内容不作为三大业务页面的客户、预约、随访任务列表数据源，不阻塞 Phase 5 完成。
+- 本阶段仍不进入 AI provider、Agent、RAG / 知识库、企业微信、HIS / CRM / OTA 连接器、API Key、OAuth、Webhook、支付、合同、发票、套餐权益 enforcement、平台租户管理、治疗记录完整病历正文或客户详情完整时间线。
+
 ## 范围
 
 Phase 5 包含：
@@ -70,10 +88,10 @@ Phase 5 不包含：
 ## 当前机构端页面现状
 
 - `src/modules/workspace/components/InstitutionWorkspace.tsx` 使用 `activeView` 本地 state 切换页面。
-- `src/modules/institution/components/CustomerCenterShell.tsx` 使用静态 `demoCustomers`。
-- `src/modules/institution/components/AppointmentCenterShell.tsx` 使用静态 `appointmentPipelineGroups`。
-- `src/modules/institution/components/SmartFollowUpShell.tsx` 使用静态 `followUpTasks`。
-- 三个页面尚无真实 API loading、empty、error、forbidden、mutation UI。
+- `src/modules/institution/components/CustomerCenterShell.tsx` 已使用 `tenant-business-client.ts` 读取和写入客户 records。
+- `src/modules/institution/components/AppointmentCenterShell.tsx` 已使用 `tenant-business-client.ts` 读取预约和客户 records，并写入预约创建 / 状态更新。
+- `src/modules/institution/components/SmartFollowUpShell.tsx` 已使用 `tenant-business-client.ts` 读取随访任务 records，并执行随访状态流转。
+- 三个页面已具备真实 API loading、empty、error / forbidden、mutation UI。
 - `/hospital` 已通过 `DemoSessionGate` 限制 `tenant_admin`，业务授权仍需由 API 服务端执行。
 
 ## 文件级修改清单
