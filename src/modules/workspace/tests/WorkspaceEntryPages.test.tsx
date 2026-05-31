@@ -118,6 +118,38 @@ const platformAuditEventRecord = {
   consultationTranscript: '咨询对话全文不应展示',
 };
 
+const platformTenantRecord = {
+  tenantId: 'demo-tenant-001',
+  tenantName: '智美天工演示机构',
+  tenantStatus: 'active',
+  createdAt: '2026-05-30T00:00:00.000Z',
+  updatedAt: '2026-05-31T00:00:00.000Z',
+  planName: '成长版',
+  planCode: 'growth-care',
+  planStatus: 'active',
+  assignmentStatus: 'active',
+  startedAt: '2026-05-31T00:00:00.000Z',
+  expiresAt: null,
+  maxCustomers: 5000,
+  maxAppointments: 2000,
+  maxFollowUps: 10000,
+  maxAiCalls: 50000,
+  currentCustomers: 24,
+  currentAppointments: 12,
+  currentFollowUps: 36,
+  currentAiCalls: 0,
+  snapshotAt: '2026-05-31T08:00:00.000Z',
+  customers: [{ phoneNumber: '13800001252' }],
+  appointments: [{ customerId: 'cust_phase5_closeout' }],
+  followUpTasks: [{ customerId: 'cust_phase5_closeout' }],
+  treatmentRecord: '完整治疗记录正文不应展示',
+  consultationTranscript: '咨询对话全文不应展示',
+  idNumber: '110101199001010011',
+  medicalRecordNo: 'MR202605310001',
+  stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+  token: 'sk_test_phase9_platform_should_not_render',
+};
+
 const customerTimelineResponse = {
   customer: {
     id: 'cust_phase5_closeout',
@@ -229,6 +261,7 @@ type WorkspaceFetchOptions = {
   followups?: unknown[];
   auditEvents?: unknown[];
   platformAuditEvents?: unknown[];
+  platformTenants?: unknown[];
   timeline?: unknown;
   institutionError?: {
     path:
@@ -249,6 +282,7 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     followups = [urgentFollowUpRecord, { ...followUpRecord, status: 'scheduled' }],
     auditEvents = [auditEventRecord],
     platformAuditEvents = [platformAuditEventRecord],
+    platformTenants = [platformTenantRecord],
     timeline = customerTimelineResponse,
     institutionError,
   } = options;
@@ -298,6 +332,10 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
             nextCursor: null,
           },
         });
+      }
+
+      if (path === '/api/open-platform/tenants') {
+        return jsonResponse({ records: platformTenants });
       }
 
       if (path === '/api/institution/customers/cust_phase5_closeout/timeline') {
@@ -390,6 +428,22 @@ function expectNoSensitivePlatformAuditContent(container: HTMLElement) {
   expect(text).not.toContain('token');
   expect(text).not.toContain('secret');
   expect(text).not.toContain('sk_test_phase8_platform_should_not_render');
+}
+
+function expectNoSensitivePlatformTenantContent(container: HTMLElement) {
+  const text = container.textContent ?? '';
+
+  expect(text).not.toContain('13800001252');
+  expect(text).not.toContain('110101199001010011');
+  expect(text).not.toContain('MR202605310001');
+  expect(text).not.toContain('完整治疗记录正文不应展示');
+  expect(text).not.toContain('咨询对话全文不应展示');
+  expect(text).not.toContain('DATABASE_URL');
+  expect(text).not.toContain('postgres://');
+  expect(text).not.toContain('stack');
+  expect(text).not.toContain('token');
+  expect(text).not.toContain('secret');
+  expect(text).not.toContain('sk_test_phase9_platform_should_not_render');
 }
 
 describe('工作台入口页面', () => {
@@ -644,6 +698,34 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('服务端租户上下文')).toBeInTheDocument();
     expect(screen.getByText('权限样例矩阵')).toBeInTheDocument();
     expect(screen.getByText('审计事件词汇')).toBeInTheDocument();
+  });
+
+  it('平台端租户管理入口接入租户 API 并展示套餐配额摘要', async () => {
+    const fetchMock = mockWorkspaceFetch({ role: 'platform_admin' });
+    const { container } = render(<OpenPlatformPage />);
+
+    expect(await screen.findByRole('heading', { name: /掌控租户、模型与接口/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
+
+    expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
+    expect(screen.getByText('智美天工演示机构')).toBeInTheDocument();
+    expect(screen.getByText('租户状态：active')).toBeInTheDocument();
+    expect(screen.getByText('套餐名称：成长版')).toBeInTheDocument();
+    expect(screen.getByText('套餐 code：growth-care')).toBeInTheDocument();
+    expect(screen.getByText('24 / 5000')).toBeInTheDocument();
+    expect(screen.getByText('12 / 2000')).toBeInTheDocument();
+    expect(screen.getByText('36 / 10000')).toBeInTheDocument();
+    expect(screen.getByText('0 / 50000')).toBeInTheDocument();
+    expect(screen.getByText('快照时间：2026年5月31日 16:00')).toBeInTheDocument();
+
+    const tenantCall = fetchMock.mock.calls.find(
+      ([input]) => fetchPath(input) === '/api/open-platform/tenants',
+    );
+    expect(tenantCall).toBeDefined();
+    expect(tenantCall?.[1]).toEqual({ cache: 'no-store' });
+    expect(tenantCall?.[1]?.method).toBeUndefined();
+    expect(tenantCall?.[1]?.body).toBeUndefined();
+    expectNoSensitivePlatformTenantContent(container);
   });
 
   it('平台端权限与审计入口展示审计日志并保持敏感字段边界', async () => {
