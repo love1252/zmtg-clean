@@ -9,6 +9,12 @@ import {
   type CreateCustomerClientPayload,
   type TenantBusinessClientError,
 } from '@/modules/institution/client/tenant-business-client';
+import {
+  InstitutionPageState,
+  getInstitutionPageStateFromClientError,
+  type InstitutionPageStateProps,
+} from '@/modules/institution/components/InstitutionPageState';
+import { InstitutionSectionHeader } from '@/modules/institution/components/InstitutionSectionHeader';
 import type {
   CustomerLifecycleStage,
   CustomerPriority,
@@ -206,6 +212,13 @@ function validateCustomerPayload(payload: CreateCustomerClientPayload) {
   return null;
 }
 
+function visibleListErrorState(error: TenantBusinessClientError): InstitutionPageStateProps {
+  return getInstitutionPageStateFromClientError(error, {
+    forbiddenMessage: '当前账号没有访问客户数据的权限',
+    fallbackMessage: '客户数据请求失败',
+  });
+}
+
 function visibleErrorMessage(error: TenantBusinessClientError) {
   if (error.kind === 'unauthorized') {
     return '登录状态已失效，请重新登录';
@@ -225,7 +238,7 @@ function visibleErrorMessage(error: TenantBusinessClientError) {
 export function CustomerCenterShell() {
   const [customers, setCustomers] = useState<CustomerRecordSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
+  const [listErrorState, setListErrorState] = useState<InstitutionPageStateProps | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [form, setForm] = useState<CustomerFormState>(emptyCustomerForm);
@@ -237,7 +250,7 @@ export function CustomerCenterShell() {
 
     async function loadCustomerRecords() {
       setIsLoading(true);
-      setListError(null);
+      setListErrorState(null);
       const result = await listCustomers();
 
       if (!isActive) return;
@@ -246,7 +259,7 @@ export function CustomerCenterShell() {
         setCustomers(result.records);
       } else {
         setCustomers([]);
-        setListError(visibleErrorMessage(result.error));
+        setListErrorState(visibleListErrorState(result.error));
       }
 
       setIsLoading(false);
@@ -338,17 +351,11 @@ export function CustomerCenterShell() {
 
   return (
     <section className="space-y-5">
-      <div className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-blue-600">客户运营</p>
-            <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">
-              客户中心
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              从机构客户 API 加载脱敏客户摘要，展示分层、优先级、负责人和下一步动作。
-            </p>
-          </div>
+      <InstitutionSectionHeader
+        eyebrow="客户运营"
+        title="客户中心"
+        description="从机构客户 API 加载脱敏客户摘要，展示分层、优先级、负责人和下一步动作。"
+        action={
           <label className="relative block w-full lg:w-[320px]" aria-label="客户搜索">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -358,8 +365,8 @@ export function CustomerCenterShell() {
               onChange={(event) => setSearchQuery(event.target.value)}
             />
           </label>
-        </div>
-      </div>
+        }
+      />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {segmentStats.map((segment) => (
@@ -393,28 +400,27 @@ export function CustomerCenterShell() {
           </div>
 
           {isLoading ? (
-            <div className="mt-4 flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-5 text-sm font-semibold text-blue-700">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              正在加载客户数据...
-            </div>
+            <InstitutionPageState
+              kind="loading"
+              title="正在加载客户数据..."
+              className="mt-4"
+            />
           ) : null}
 
-          {!isLoading && listError ? (
-            <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-5 text-sm font-semibold text-rose-700">
-              {listError}
-            </div>
+          {!isLoading && listErrorState ? (
+            <InstitutionPageState {...listErrorState} className="mt-4" />
           ) : null}
 
-          {!isLoading && !listError && filteredCustomers.length === 0 ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center">
-              <div className="text-base font-semibold text-slate-950">暂无客户摘要</div>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                可以先创建一条只包含脱敏展示字段的客户摘要。
-              </p>
-            </div>
+          {!isLoading && !listErrorState && filteredCustomers.length === 0 ? (
+            <InstitutionPageState
+              kind="empty"
+              title="暂无客户摘要"
+              description="可以先创建一条只包含脱敏展示字段的客户摘要。"
+              className="mt-4"
+            />
           ) : null}
 
-          {!isLoading && !listError && filteredCustomers.length > 0 ? (
+          {!isLoading && !listErrorState && filteredCustomers.length > 0 ? (
             <div className="mt-4 space-y-3">
               {filteredCustomers.map((customer) => (
                 <div
@@ -653,7 +659,7 @@ export function CustomerCenterShell() {
             <button
               type="submit"
               className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-              disabled={isSubmitting || Boolean(listError)}
+              disabled={isSubmitting || Boolean(listErrorState)}
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {isSubmitting ? '提交中...' : editingCustomerId ? '保存客户' : '创建客户'}

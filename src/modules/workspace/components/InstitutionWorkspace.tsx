@@ -4,13 +4,11 @@ import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import {
   Activity,
-  AlertTriangle,
   Bell,
   BriefcaseBusiness,
   CalendarCheck,
   CheckCircle2,
   Clock3,
-  Loader2,
   Search,
   Sparkles,
   Users,
@@ -18,6 +16,11 @@ import {
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { AppointmentCenterShell } from '@/modules/institution/components/AppointmentCenterShell';
 import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
+import {
+  InstitutionPageState,
+  getInstitutionPageStateFromClientError,
+  type InstitutionPageStateProps,
+} from '@/modules/institution/components/InstitutionPageState';
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 import {
   listAppointments,
@@ -56,20 +59,11 @@ const emptyDashboardSummary = buildInstitutionDashboardSummary({
 
 type DashboardLoadStatus = 'loading' | 'success' | 'error';
 
-function visibleDashboardErrorMessage(error: TenantBusinessClientError) {
-  if (error.kind === 'unauthorized') {
-    return '登录状态已失效，请重新登录';
-  }
-
-  if (error.kind === 'forbidden') {
-    return '当前账号没有访问机构首页数据的权限';
-  }
-
-  if (error.kind === 'service_unavailable') {
-    return '数据服务暂时不可用';
-  }
-
-  return error.message || '机构首页数据请求失败';
+function visibleDashboardErrorState(error: TenantBusinessClientError): InstitutionPageStateProps {
+  return getInstitutionPageStateFromClientError(error, {
+    forbiddenMessage: '当前账号没有访问机构首页数据的权限',
+    fallbackMessage: '机构首页数据请求失败',
+  });
 }
 
 function firstDashboardError(
@@ -86,7 +80,8 @@ export function InstitutionWorkspace() {
     emptyDashboardSummary,
   );
   const [dashboardStatus, setDashboardStatus] = useState<DashboardLoadStatus>('loading');
-  const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [dashboardErrorState, setDashboardErrorState] =
+    useState<InstitutionPageStateProps | null>(null);
   const activeNavItem = institutionNavItems.find((item) => item.id === activeView) ?? institutionNavItems[0];
   const highPriorityMetric = dashboardSummary.metrics.find(
     (metric) => metric.key === 'high_priority_customers',
@@ -99,7 +94,7 @@ export function InstitutionWorkspace() {
 
     async function loadDashboardSummary() {
       setDashboardStatus('loading');
-      setDashboardError(null);
+      setDashboardErrorState(null);
 
       const [customerResult, appointmentResult, followUpResult] = await Promise.all([
         listCustomers(),
@@ -112,7 +107,7 @@ export function InstitutionWorkspace() {
       const error = firstDashboardError([customerResult, appointmentResult, followUpResult]);
       if (error) {
         setDashboardSummary(emptyDashboardSummary);
-        setDashboardError(visibleDashboardErrorMessage(error));
+        setDashboardErrorState(visibleDashboardErrorState(error));
         setDashboardStatus('error');
         return;
       }
@@ -246,7 +241,7 @@ export function InstitutionWorkspace() {
           <div className="mx-auto w-full max-w-[1740px] space-y-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-7">
             {activeView === 'dashboard' ? (
               <InstitutionDashboardHome
-                errorMessage={dashboardError}
+                errorState={dashboardErrorState}
                 status={dashboardStatus}
                 summary={dashboardSummary}
               />
@@ -267,11 +262,11 @@ export function InstitutionWorkspace() {
 }
 
 function InstitutionDashboardHome({
-  errorMessage,
+  errorState,
   status,
   summary,
 }: {
-  errorMessage: string | null;
+  errorState: InstitutionPageStateProps | null;
   status: DashboardLoadStatus;
   summary: InstitutionDashboardSummary;
 }) {
@@ -332,17 +327,11 @@ function InstitutionDashboardHome({
       </header>
 
       {status === 'loading' ? (
-        <section className="flex items-center gap-2 rounded-[24px] border border-blue-100 bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-700 shadow-sm">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          正在加载机构运营摘要...
-        </section>
+        <InstitutionPageState kind="loading" title="正在加载机构运营摘要..." />
       ) : null}
 
-      {status === 'error' && errorMessage ? (
-        <section className="flex items-start gap-3 rounded-[24px] border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-700 shadow-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          {errorMessage}
-        </section>
+      {status === 'error' && errorState ? (
+        <InstitutionPageState {...errorState} />
       ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -377,12 +366,11 @@ function InstitutionDashboardHome({
       </section>
 
       {status === 'success' && summary.isEmpty ? (
-        <section className="rounded-[24px] border border-dashed border-slate-300 bg-white/78 px-5 py-8 text-center shadow-sm backdrop-blur-xl">
-          <div className="text-base font-semibold text-slate-950">暂无可计算运营摘要</div>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            当前客户、预约和随访 records 为空。
-          </p>
-        </section>
+        <InstitutionPageState
+          kind="empty"
+          title="暂无可计算运营摘要"
+          description="当前客户、预约和随访 records 为空。"
+        />
       ) : null}
 
       <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
@@ -529,12 +517,11 @@ function InstitutionDashboardHome({
 
 function PlaceholderInstitutionView({ label }: { label: string }) {
   return (
-    <section className="rounded-[24px] border border-white/80 bg-white/78 p-6 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
-      <p className="text-sm font-semibold text-slate-500">模块占位</p>
-      <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">{label}</h2>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-        该模块会在后续阶段接入真实业务壳。本阶段优先完成客户中心、预约中心和智能随访。
-      </p>
-    </section>
+    <InstitutionPageState
+      kind="placeholder"
+      title={label}
+      description="该模块会在后续阶段接入真实业务壳。本阶段优先完成客户中心、预约中心和智能随访。"
+      className="items-start text-left"
+    />
   );
 }

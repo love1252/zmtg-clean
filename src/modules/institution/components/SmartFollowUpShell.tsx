@@ -15,6 +15,12 @@ import {
   type TenantBusinessClientError,
 } from '@/modules/institution/client/tenant-business-client';
 import {
+  InstitutionPageState,
+  getInstitutionPageStateFromClientError,
+  type InstitutionPageStateProps,
+} from '@/modules/institution/components/InstitutionPageState';
+import { InstitutionSectionHeader } from '@/modules/institution/components/InstitutionSectionHeader';
+import {
   followUpJourneys,
   followUpMessageSuggestions,
 } from '@/modules/institution/domain/followups';
@@ -61,6 +67,13 @@ function visibleErrorMessage(error: TenantBusinessClientError) {
   return error.message || '随访任务请求失败';
 }
 
+function visibleListErrorState(error: TenantBusinessClientError): InstitutionPageStateProps {
+  return getInstitutionPageStateFromClientError(error, {
+    forbiddenMessage: '当前账号没有访问随访任务的权限',
+    fallbackMessage: '随访任务请求失败',
+  });
+}
+
 function buildStatusCounts(tasks: TenantFollowUpTask[]) {
   return statusOptions.map(([status, label]) => ({
     status,
@@ -72,7 +85,7 @@ function buildStatusCounts(tasks: TenantFollowUpTask[]) {
 export function SmartFollowUpShell() {
   const [tasks, setTasks] = useState<TenantFollowUpTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
+  const [listErrorState, setListErrorState] = useState<InstitutionPageStateProps | null>(null);
   const [taskErrors, setTaskErrors] = useState<Record<string, string>>({});
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
 
@@ -81,7 +94,7 @@ export function SmartFollowUpShell() {
 
     async function loadFollowUpTasks() {
       setIsLoading(true);
-      setListError(null);
+      setListErrorState(null);
       const result = await listFollowUpTasks();
 
       if (!isActive) return;
@@ -90,7 +103,7 @@ export function SmartFollowUpShell() {
         setTasks(result.records);
       } else {
         setTasks([]);
-        setListError(visibleErrorMessage(result.error));
+        setListErrorState(visibleListErrorState(result.error));
       }
 
       setIsLoading(false);
@@ -133,23 +146,18 @@ export function SmartFollowUpShell() {
 
   return (
     <section className="space-y-5">
-      <div className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-violet-600">智能随访</p>
-            <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">
-              智能随访
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              从机构随访任务 API 加载当前租户任务，按风险等级和到期时间排列人工工作队列。
-            </p>
-          </div>
+      <InstitutionSectionHeader
+        eyebrow="智能随访"
+        title="智能随访"
+        description="从机构随访任务 API 加载当前租户任务，按风险等级和到期时间排列人工工作队列。"
+        tone="violet"
+        action={
           <div className="inline-flex items-center gap-2 rounded-full border border-violet-100 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700">
             <ShieldCheck className="h-4 w-4" />
             PATCH 仅提交 id 与 nextStatus
           </div>
-        </div>
-      </div>
+        }
+      />
 
       <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         {statusCounts.map((item) => (
@@ -178,28 +186,27 @@ export function SmartFollowUpShell() {
           </div>
 
           {isLoading ? (
-            <div className="mt-4 flex items-center gap-2 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-5 text-sm font-semibold text-violet-700">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              正在加载随访任务...
-            </div>
+            <InstitutionPageState
+              kind="loading"
+              title="正在加载随访任务..."
+              className="mt-4"
+            />
           ) : null}
 
-          {!isLoading && listError ? (
-            <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-5 text-sm font-semibold text-rose-700">
-              {listError}
-            </div>
+          {!isLoading && listErrorState ? (
+            <InstitutionPageState {...listErrorState} className="mt-4" />
           ) : null}
 
-          {!isLoading && !listError && sortedTasks.length === 0 ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center">
-              <div className="text-base font-semibold text-slate-950">暂无随访任务</div>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                当前租户没有需要处理的随访任务。
-              </p>
-            </div>
+          {!isLoading && !listErrorState && sortedTasks.length === 0 ? (
+            <InstitutionPageState
+              kind="empty"
+              title="暂无随访任务"
+              description="当前租户没有需要处理的随访任务。"
+              className="mt-4"
+            />
           ) : null}
 
-          {!isLoading && !listError && sortedTasks.length > 0 ? (
+          {!isLoading && !listErrorState && sortedTasks.length > 0 ? (
             <div className="mt-4 space-y-3">
               {sortedTasks.map((task) => {
                 const nextStatuses = getAllowedFollowUpNextStatuses(task.status);
