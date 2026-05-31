@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AUDIT_REASON_VALUES } from '@/modules/audit/domain/audit-event-query';
 import {
   auditForbiddenTerms,
   createAuditEvent,
@@ -96,6 +97,33 @@ describe('审计事件领域模型', () => {
       action: 'update',
       result: 'denied',
       reason: 'invalid_transition',
+    });
+  });
+
+  it('支持套餐配额 enforcement 的稳定拒绝 reason', () => {
+    expect(AUDIT_REASON_VALUES).toEqual(
+      expect.arrayContaining([
+        'quota_exceeded_customers',
+        'quota_exceeded_appointments',
+        'missing_active_plan',
+        'missing_quota_limit',
+      ]),
+    );
+
+    expect(
+      createDeniedAccessAuditEvent({
+        eventId: 'audit_evt_denied_quota_001',
+        context: tenantAdminContext,
+        resource: 'customer',
+        action: 'create',
+        reason: 'quota_exceeded_customers',
+        occurredAt: '2026-05-31T09:00:00.000Z',
+      }),
+    ).toMatchObject({
+      action: 'create',
+      reason: 'quota_exceeded_customers',
+      resource: 'customer',
+      result: 'denied',
     });
   });
 
