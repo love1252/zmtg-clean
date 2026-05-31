@@ -4,11 +4,39 @@
 
 **目标：** 建设机构端客户详情时间线 v1，让用户从客户中心进入单客户详情，查看脱敏客户摘要、相关预约、相关随访和结构化时间线。
 
-**架构方案：** Phase 7 采用 A-first 路线，先围绕客户详情时间线组织现有客户、预约、随访真实数据。后续 PR 允许对 `audit_events` 增加最小 `resource_id` 字段，以便客户时间线关联关键操作事件；不增加自由 `metadata jsonb`，不存请求体或隐私正文。
+**架构方案：** Phase 7 采用 A-first 路线，围绕客户详情时间线组织现有客户、预约、随访真实数据。本阶段已对 `audit_events` 增加最小 `resource_id` 字段，以便客户时间线关联关键操作事件；未增加自由 `metadata jsonb`，未存请求体或隐私正文。
 
 **技术栈：** Next.js App Router、React client components、TypeScript、Vitest、Testing Library、Drizzle、PostgreSQL、现有 `AccessContext` / RBAC / `tenant-business-client` / `InstitutionPageState`。
 
 ---
+
+## 完成状态
+
+Phase 7 已完成：
+
+- PR 1：客户详情时间线 v1 spec / plan 已完成。
+- PR 2：最小 audit `resource_id` enrich 已完成。
+- PR 3：客户详情 timeline 后端 API 已完成。
+- PR 4：客户详情时间线 UI 已完成。
+- PR 5：smoke / 文档收尾已完成。
+
+客户详情时间线 v1 当前具备：
+
+- 客户脱敏摘要。
+- 预约摘要。
+- 随访摘要。
+- 结构化时间线。
+- 安全审计摘要。
+
+Phase 7 仍未做：
+
+- 审计日志完整查询页面。
+- AI / RAG / Agent。
+- 企业微信。
+- OAuth / Webhook / 支付。
+- 完整治疗记录、完整病历正文或咨询对话全文。
+
+后续建议进入 Phase 8 Plan Mode，单独评估审计日志只读查询基础版。
 
 ## 总边界
 
@@ -172,7 +200,7 @@ git diff --check
 
 预期：退出码 0，无 trailing whitespace。
 
-- [ ] **步骤 5：提交并创建 Draft PR**
+- [x] **步骤 5：提交并创建 Draft PR**
 
 运行：
 
@@ -200,6 +228,8 @@ PR 描述必须说明：
 - 不进入审计日志查询页面开发。
 
 ## PR 2：最小 audit resource_id enrich
+
+**状态：已完成。**
 
 **范围：**
 
@@ -250,6 +280,8 @@ node scripts/run-next.mjs build --webpack
 
 ## PR 3：客户详情 timeline 后端 API
 
+**状态：已完成。**
+
 **范围：**
 
 - 新增 `GET /api/institution/customers/[customerId]/timeline`。
@@ -294,6 +326,8 @@ node scripts/run-next.mjs build --webpack
 ```
 
 ## PR 4：客户详情时间线 UI
+
+**状态：已完成。**
 
 **范围：**
 
@@ -340,12 +374,23 @@ node scripts/run-next.mjs build --webpack
 
 ## PR 5：Phase 7 smoke / 文档收尾
 
+**状态：已完成。**
+
 **范围：**
 
 - 补充 workspace / customer detail smoke。
 - 更新 README / roadmap / devlog。
 - 标记 Phase 7 完成。
 - 不进入审计日志完整查询页面。
+
+**完成结果：**
+
+- workspace entry smoke 覆盖从机构入口进入客户中心并打开客户详情时间线。
+- smoke 覆盖客户脱敏摘要、预约摘要、随访摘要、结构化时间线和安全审计摘要。
+- smoke 覆盖详情关闭后客户列表仍保留。
+- smoke 覆盖 timeline 请求不携带 `tenantId`，不发送 mutation。
+- smoke 覆盖手机号原文、身份证号、病历号原文、完整治疗记录正文、咨询对话全文、SQL、DATABASE_URL、连接串、stack、token 和 secret 不展示。
+- README、roadmap、devlog、Phase 7 spec / plan 已更新为 Phase 7 完成状态。
 
 **建议涉及文件：**
 

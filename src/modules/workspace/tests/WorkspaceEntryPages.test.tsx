@@ -81,6 +81,97 @@ const urgentFollowUpRecord = {
   riskLevel: 'urgent',
 };
 
+const customerTimelineResponse = {
+  customer: {
+    id: 'cust_phase5_closeout',
+    displayName: 'Phase5 客户A',
+    lifecycle: 'repurchase_window',
+    priority: 'high',
+    projectInterest: 'Phase5 修复项目',
+    maskedPhone: '138****1252',
+    maskedMedicalRecordNo: 'MR****525',
+    ownerUserId: 'consultant-phase5',
+    tags: ['Phase5', '验收'],
+    lastTouchSummary: 'Phase5 验收触达',
+    nextAction: 'Phase5 收尾回访',
+    phoneNumber: '13800001252',
+    idNumber: '110101199001010011',
+    medicalRecordNo: 'MR202605310001',
+  },
+  appointments: [
+    {
+      id: 'appt_phase5_closeout',
+      project: 'Phase5 预约复诊',
+      scheduledAt: '2026-06-01T10:30:00+08:00',
+      consultantUserId: 'consultant-phase5',
+      status: 'pending_confirmation',
+      note: 'Phase5 验收预约',
+      treatmentRecord: '完整治疗记录正文不应展示',
+    },
+  ],
+  followups: [
+    {
+      id: 'fu_phase5_closeout',
+      journeyId: 'journey_repurchase',
+      stage: 'Phase5 D7 回访',
+      status: 'due',
+      dueAt: '2026-05-31T10:30:00+08:00',
+      suggestedAction: 'Phase5 收尾人工回访',
+      riskLevel: 'watch',
+      updatedBy: null,
+      updatedAt: null,
+      consultationTranscript: '咨询对话全文不应展示',
+    },
+  ],
+  auditEvents: [
+    {
+      id: 'audit_phase7_smoke',
+      action: 'read',
+      result: 'allowed',
+      reason: 'allowed_by_policy',
+      actor: { id: 'demo-user-admin', role: 'tenant_admin' },
+      occurredAt: '2026-06-03T09:00:00.000Z',
+      resource: 'customer',
+      resourceId: 'cust_phase5_closeout',
+      sql: 'select * from audit_events',
+      stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+      token: 'sk_test_phase7_should_not_render',
+    },
+  ],
+  timeline: [
+    {
+      id: 'audit:audit_phase7_smoke',
+      type: 'audit',
+      occurredAt: '2026-06-03T09:00:00.000Z',
+      title: '审计：read',
+      summary: 'allowed / allowed_by_policy',
+      status: 'allowed',
+      source: 'customer',
+      relatedRecordId: 'cust_phase5_closeout',
+    },
+    {
+      id: 'appointment:appt_phase5_closeout',
+      type: 'appointment',
+      occurredAt: '2026-06-01T10:30:00+08:00',
+      title: 'Phase5 预约复诊预约',
+      summary: 'Phase5 验收预约',
+      status: 'pending_confirmation',
+      source: 'appointment',
+      relatedRecordId: 'appt_phase5_closeout',
+    },
+    {
+      id: 'follow_up:fu_phase5_closeout',
+      type: 'follow_up',
+      occurredAt: '2026-05-31T10:30:00+08:00',
+      title: 'Phase5 D7 回访',
+      summary: 'Phase5 收尾人工回访',
+      status: 'due',
+      source: 'follow_up',
+      relatedRecordId: 'fu_phase5_closeout',
+    },
+  ],
+};
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
@@ -99,6 +190,7 @@ type WorkspaceFetchOptions = {
   customers?: unknown[];
   appointments?: unknown[];
   followups?: unknown[];
+  timeline?: unknown;
   institutionError?: {
     path: '/api/institution/customers' | '/api/institution/appointments' | '/api/institution/followups';
     status: number;
@@ -112,6 +204,7 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     customers = [customerRecord, postCareCustomerRecord],
     appointments = [appointmentRecord, rescheduleAppointmentRecord],
     followups = [urgentFollowUpRecord, { ...followUpRecord, status: 'scheduled' }],
+    timeline = customerTimelineResponse,
     institutionError,
   } = options;
 
@@ -138,6 +231,10 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
 
       if (path === '/api/institution/followups') {
         return jsonResponse({ records: followups });
+      }
+
+      if (path === '/api/institution/customers/cust_phase5_closeout/timeline') {
+        return jsonResponse(timeline);
       }
 
       throw new Error(`没有为 ${path} 配置 fetch mock`);
@@ -177,6 +274,23 @@ function expectOnlyInstitutionReadCalls(fetchMock: ReturnType<typeof mockWorkspa
     expect(init?.method ?? 'GET').toBe('GET');
     expect(init?.body ? String(init.body) : '').not.toContain('tenantId');
   }
+}
+
+function expectNoSensitiveCustomerTimelineContent(container: HTMLElement) {
+  const text = container.textContent ?? '';
+
+  expect(text).not.toContain('13800001252');
+  expect(text).not.toContain('110101199001010011');
+  expect(text).not.toContain('MR202605310001');
+  expect(text).not.toContain('完整治疗记录正文不应展示');
+  expect(text).not.toContain('咨询对话全文不应展示');
+  expect(text).not.toContain('select * from audit_events');
+  expect(text).not.toContain('DATABASE_URL');
+  expect(text).not.toContain('postgres://');
+  expect(text).not.toContain('stack');
+  expect(text).not.toContain('token');
+  expect(text).not.toContain('secret');
+  expect(text).not.toContain('sk_test_phase7_should_not_render');
 }
 
 describe('工作台入口页面', () => {
@@ -236,6 +350,44 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('今日随访任务')).toBeInTheDocument();
     expect(await screen.findByText('Phase5 D7 回访')).toBeInTheDocument();
     expect(screen.getByText('不会调用 AI provider，也不会自动触达客户。')).toBeInTheDocument();
+  });
+
+  it('机构入口 smoke 覆盖客户中心查看详情时间线', async () => {
+    const fetchMock = mockWorkspaceFetch();
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
+    expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
+    expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
+
+    expect(await screen.findByRole('dialog', { name: '客户详情时间线' })).toBeInTheDocument();
+    expect(screen.getAllByText('脱敏手机号：138****1252').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('脱敏病历号：MR****525').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Phase5 预约复诊').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Phase5 D7 回访').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Phase5 收尾人工回访').length).toBeGreaterThan(0);
+    expect(screen.getByText('审计：read')).toBeInTheDocument();
+    expect(screen.getByText('audit_phase7_smoke')).toBeInTheDocument();
+    expect(screen.getAllByText('allowed / allowed_by_policy').length).toBeGreaterThan(0);
+
+    const timelineCall = fetchMock.mock.calls.find(
+      ([input]) => fetchPath(input) === '/api/institution/customers/cust_phase5_closeout/timeline',
+    );
+    expect(timelineCall).toBeDefined();
+    expect(timelineCall?.[1]).toEqual({ cache: 'no-store' });
+    expect(fetchPath(timelineCall![0])).not.toContain('tenantId');
+    expect(timelineCall?.[1]?.method).toBeUndefined();
+    expect(timelineCall?.[1]?.body).toBeUndefined();
+    expectOnlyInstitutionReadCalls(fetchMock);
+    expectNoSensitiveCustomerTimelineContent(container);
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭客户详情' }));
+    expect(screen.queryByRole('dialog', { name: '客户详情时间线' })).not.toBeInTheDocument();
+    expect(screen.getByText('Phase5 客户A')).toBeInTheDocument();
   });
 
   it('机构导航清晰标注已接入和后续占位入口', async () => {
