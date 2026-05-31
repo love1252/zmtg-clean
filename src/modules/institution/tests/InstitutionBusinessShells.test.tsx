@@ -538,6 +538,49 @@ describe('机构业务页面壳', () => {
     expect(await screen.findByText('字段 nextAction 不允许包含原始个人信息')).toBeInTheDocument();
   });
 
+  it.each([
+    [
+      'quota_exceeded_customers DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg stack token secret',
+      '当前套餐的客户数量已达上限，请联系平台管理员调整套餐或配额。',
+    ],
+    [
+      'missing_active_plan',
+      '当前机构暂无有效套餐，暂不能新增数据，请联系平台管理员。',
+    ],
+  ])('客户创建遇到配额限制时展示稳定中文提示并保留输入', async (apiMessage, visibleMessage) => {
+    const fetchMock = mockCustomerFetch([
+      jsonResponse({ records: [] }),
+      jsonResponse({ error: apiMessage }, { status: 409 }),
+    ]);
+
+    const { container } = render(<CustomerCenterShell />);
+
+    expect(await screen.findByText('暂无客户摘要')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
+    fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-lin' } });
+    fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: '皮肤管理' } });
+    fireEvent.change(screen.getByLabelText('脱敏手机号展示值'), { target: { value: '138****1208' } });
+    fireEvent.change(screen.getByLabelText('脱敏病历号展示值'), { target: { value: 'MR****001' } });
+    fireEvent.change(screen.getByLabelText('最近触达摘要'), { target: { value: '初次咨询' } });
+    fireEvent.change(screen.getByLabelText('下一步动作'), { target: { value: '预约到店' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建客户' }));
+
+    expect(await screen.findByText(visibleMessage)).toBeInTheDocument();
+    expect(screen.getByLabelText('客户姓名')).toHaveValue('林女士');
+    const body = requestBody(fetchMock, 1);
+    const serializedBody = JSON.stringify(body);
+    const text = container.textContent ?? '';
+
+    expect(serializedBody).not.toContain('tenantId');
+    expect(text).not.toContain('quota_exceeded_customers');
+    expect(text).not.toContain('missing_active_plan');
+    expect(text).not.toContain('DATABASE_URL');
+    expect(text).not.toContain('postgres://');
+    expect(text).not.toContain('stack');
+    expect(text).not.toContain('token');
+    expect(text).not.toContain('secret');
+  });
+
   it('客户中心可打开详情时间线并只读取安全摘要', async () => {
     const fetchMock = mockInstitutionFetch({
       '/api/institution/customers': [jsonResponse({ records: [customerRecord] })],
@@ -859,6 +902,50 @@ describe('机构业务页面壳', () => {
     fireEvent.click(screen.getByRole('button', { name: '新建预约' }));
 
     expect(await screen.findByText('字段 scheduledAt 必须是有效时间字符串')).toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      'quota_exceeded_appointments DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg stack token secret',
+      '当前套餐的预约数量已达上限，请联系平台管理员调整套餐或配额。',
+    ],
+    [
+      'missing_quota_limit',
+      '当前机构套餐配额未配置完整，暂不能新增数据，请联系平台管理员。',
+    ],
+  ])('预约创建遇到配额限制时展示稳定中文提示并保留输入', async (apiMessage, visibleMessage) => {
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/appointments': [
+        jsonResponse({ records: [] }),
+        jsonResponse({ error: apiMessage }, { status: 409 }),
+      ],
+      '/api/institution/customers': [jsonResponse({ records: [customerRecord] })],
+    });
+
+    const { container } = render(<AppointmentCenterShell />);
+
+    expect(await screen.findByText('暂无预约记录')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('预约客户'), { target: { value: 'cust_wang_repurchase' } });
+    fireEvent.change(screen.getByLabelText('预约项目'), { target: { value: '热玛吉复诊' } });
+    fireEvent.change(screen.getByLabelText('预约时间'), { target: { value: '2026-06-01T10:30:00+08:00' } });
+    fireEvent.change(screen.getByLabelText('顾问 ID'), { target: { value: 'consultant-lin' } });
+    fireEvent.change(screen.getByLabelText('预约备注'), { target: { value: '待电话确认到院' } });
+    fireEvent.click(screen.getByRole('button', { name: '新建预约' }));
+
+    expect(await screen.findByText(visibleMessage)).toBeInTheDocument();
+    expect(screen.getByLabelText('预约项目')).toHaveValue('热玛吉复诊');
+    const body = mutationBody(fetchMock, '/api/institution/appointments', 'POST');
+    const serializedBody = JSON.stringify(body);
+    const text = container.textContent ?? '';
+
+    expect(serializedBody).not.toContain('tenantId');
+    expect(text).not.toContain('quota_exceeded_appointments');
+    expect(text).not.toContain('missing_quota_limit');
+    expect(text).not.toContain('DATABASE_URL');
+    expect(text).not.toContain('postgres://');
+    expect(text).not.toContain('stack');
+    expect(text).not.toContain('token');
+    expect(text).not.toContain('secret');
   });
 
   it('智能随访从真实 API 加载并按风险和到期时间排序展示 records', async () => {

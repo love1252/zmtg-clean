@@ -154,6 +154,98 @@ describe('机构业务页面 client helper', () => {
     });
   });
 
+  it.each([
+    [
+      'quota_exceeded_customers',
+      createCustomer,
+      {
+        displayName: '王女士',
+        lifecycle: 'consulting',
+        priority: 'high',
+        ownerUserId: 'consultant-lin',
+        projectInterest: '皮肤管理',
+        maskedPhone: '138****0000',
+        maskedMedicalRecordNo: 'MR****001',
+        lastTouchSummary: '初次咨询',
+        nextAction: '预约到店',
+        tags: ['新客'],
+      },
+      '当前套餐的客户数量已达上限，请联系平台管理员调整套餐或配额。',
+    ],
+    [
+      'quota_exceeded_appointments',
+      createAppointment,
+      {
+        customerId: 'cust_001',
+        customerDisplayName: '王女士',
+        project: '皮肤管理',
+        scheduledAt: '2026-06-01T10:30:00+08:00',
+        consultantUserId: 'consultant-lin',
+        status: 'pending_confirmation',
+        note: '首次预约',
+      },
+      '当前套餐的预约数量已达上限，请联系平台管理员调整套餐或配额。',
+    ],
+    [
+      'missing_active_plan',
+      createCustomer,
+      {
+        displayName: '王女士',
+        lifecycle: 'consulting',
+        priority: 'high',
+        ownerUserId: 'consultant-lin',
+        projectInterest: '皮肤管理',
+        maskedPhone: '138****0000',
+        maskedMedicalRecordNo: 'MR****001',
+        lastTouchSummary: '初次咨询',
+        nextAction: '预约到店',
+        tags: ['新客'],
+      },
+      '当前机构暂无有效套餐，暂不能新增数据，请联系平台管理员。',
+    ],
+    [
+      'missing_quota_limit',
+      createAppointment,
+      {
+        customerId: 'cust_001',
+        customerDisplayName: '王女士',
+        project: '皮肤管理',
+        scheduledAt: '2026-06-01T10:30:00+08:00',
+        consultantUserId: 'consultant-lin',
+        status: 'pending_confirmation',
+        note: '首次预约',
+      },
+      '当前机构套餐配额未配置完整，暂不能新增数据，请联系平台管理员。',
+    ],
+  ])('将套餐配额错误 %s 映射为安全中文提示', async (reason, mutation, payload, message) => {
+    const fetcher = createFetchMock(
+      jsonResponse(
+        {
+          error: `${reason} DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg stack token secret`,
+        },
+        { status: 409 },
+      ),
+    );
+
+    const result = await mutation(payload as never, { fetcher });
+    const serialized = JSON.stringify(result);
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'conflict',
+        message,
+        status: 409,
+      },
+    });
+    expect(serialized).not.toContain(reason);
+    expect(serialized).not.toContain('DATABASE_URL');
+    expect(serialized).not.toContain('postgres://');
+    expect(serialized).not.toContain('stack');
+    expect(serialized).not.toContain('token');
+    expect(serialized).not.toContain('secret');
+  });
+
   it('封装所有写入 API 并只发送白名单字段', async () => {
     const customerCreateFetcher = createFetchMock(
       jsonResponse({ record: { id: 'cust_created', tenantId: 'demo-tenant-001' } }, { status: 201 }),
