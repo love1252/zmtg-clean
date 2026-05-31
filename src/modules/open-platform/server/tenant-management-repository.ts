@@ -31,6 +31,8 @@ function mapTenantManagementQueryRowToRecord(
     tenantId: row.tenant.id,
     tenantName: row.tenant.name,
     tenantStatus: row.tenant.status,
+    createdAt: row.tenant.createdAt,
+    updatedAt: row.tenant.updatedAt,
     planName: row.plan?.name ?? null,
     planCode: row.plan?.code ?? null,
     planStatus: row.plan?.status ?? null,

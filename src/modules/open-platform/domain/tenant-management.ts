@@ -2,6 +2,8 @@ export const tenantManagementDtoFields = [
   'tenantId',
   'tenantName',
   'tenantStatus',
+  'createdAt',
+  'updatedAt',
   'planName',
   'planCode',
   'planStatus',
@@ -25,6 +27,8 @@ export type TenantManagementRecord = {
   tenantId: string;
   tenantName: string;
   tenantStatus: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
   planName: string | null;
   planCode: string | null;
   planStatus: string | null;
@@ -58,6 +62,8 @@ export type TenantManagementListItem = {
   tenantId: string;
   tenantName: string;
   tenantStatus: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 function toIsoString(value: Date | string | null) {
@@ -72,6 +78,8 @@ export function mapTenantManagementRecordToDto(
     tenantId: record.tenantId,
     tenantName: record.tenantName,
     tenantStatus: record.tenantStatus,
+    createdAt: toIsoString(record.createdAt) ?? '',
+    updatedAt: toIsoString(record.updatedAt) ?? '',
     planName: record.planName,
     planCode: record.planCode,
     planStatus: record.planStatus,
