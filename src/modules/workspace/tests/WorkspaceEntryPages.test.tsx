@@ -279,6 +279,11 @@ type WorkspaceFetchOptions = {
     status: number;
     message: string;
   };
+  institutionMutationError?: {
+    path: '/api/institution/customers' | '/api/institution/appointments';
+    status: number;
+    message: string;
+  };
 };
 
 function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
@@ -293,12 +298,13 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     platformTenantError,
     timeline = customerTimelineResponse,
     institutionError,
+    institutionMutationError,
   } = options;
 
   const fetchMock = vi.fn(
     async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-      void init;
       const path = fetchPath(input);
+      const method = init?.method ?? 'GET';
 
       if (path === '/api/auth/session') {
         return jsonResponse({ authenticated: true, user: { role } });
@@ -306,6 +312,13 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
 
       if (institutionError?.path === path) {
         return jsonResponse({ error: institutionError.message }, { status: institutionError.status });
+      }
+
+      if (institutionMutationError?.path === path && method === 'POST') {
+        return jsonResponse(
+          { error: institutionMutationError.message },
+          { status: institutionMutationError.status },
+        );
       }
 
       if (path === '/api/institution/customers') {
@@ -362,6 +375,16 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
   );
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
+}
+
+function mutationBody(fetchMock: ReturnType<typeof mockWorkspaceFetch>, path: string) {
+  const call = fetchMock.mock.calls.find(
+    ([input, init]) => fetchPath(input) === path && init?.method === 'POST',
+  );
+
+  expect(call).toBeDefined();
+  const [, init] = call!;
+  return JSON.parse(String(init?.body)) as Record<string, unknown>;
 }
 
 async function expectMetric(label: string, value: string) {
@@ -596,6 +619,87 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByRole('button', { name: '关闭客户详情' }));
     expect(screen.queryByRole('dialog', { name: '客户详情时间线' })).not.toBeInTheDocument();
     expect(screen.getByText('Phase5 客户A')).toBeInTheDocument();
+  });
+
+  it('机构入口 smoke 覆盖客户创建配额错误态', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      customers: [],
+      institutionMutationError: {
+        path: '/api/institution/customers',
+        status: 409,
+        message:
+          'quota_exceeded_customers DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg stack token secret',
+      },
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
+
+    expect(await screen.findByText('暂无客户摘要')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: 'Phase10 客户' } });
+    fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-phase10' } });
+    fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: 'Phase10 修复项目' } });
+    fireEvent.change(screen.getByLabelText('脱敏手机号展示值'), { target: { value: '138****1010' } });
+    fireEvent.change(screen.getByLabelText('脱敏病历号展示值'), { target: { value: 'MR****010' } });
+    fireEvent.change(screen.getByLabelText('最近触达摘要'), { target: { value: 'Phase10 收尾验证' } });
+    fireEvent.change(screen.getByLabelText('下一步动作'), { target: { value: '联系平台管理员' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建客户' }));
+
+    expect(
+      await screen.findByText('当前套餐的客户数量已达上限，请联系平台管理员调整套餐或配额。'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('客户姓名')).toHaveValue('Phase10 客户');
+
+    const serializedBody = JSON.stringify(mutationBody(fetchMock, '/api/institution/customers'));
+    const text = container.textContent ?? '';
+
+    expect(serializedBody).not.toContain('tenantId');
+    expect(text).not.toContain('quota_exceeded_customers');
+    expect(text).not.toContain('DATABASE_URL');
+    expect(text).not.toContain('postgres://');
+    expect(text).not.toContain('stack');
+    expect(text).not.toContain('token');
+    expect(text).not.toContain('secret');
+  });
+
+  it('机构入口 smoke 覆盖预约创建配额错误态', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      appointments: [],
+      institutionMutationError: {
+        path: '/api/institution/appointments',
+        status: 409,
+        message: 'missing_quota_limit DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg stack token secret',
+      },
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '预约中心' }));
+
+    expect(await screen.findByText('暂无预约记录')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('预约客户'), { target: { value: 'cust_phase5_closeout' } });
+    fireEvent.change(screen.getByLabelText('预约项目'), { target: { value: 'Phase10 复诊' } });
+    fireEvent.change(screen.getByLabelText('预约时间'), { target: { value: '2026-06-01T10:30:00+08:00' } });
+    fireEvent.change(screen.getByLabelText('顾问 ID'), { target: { value: 'consultant-phase10' } });
+    fireEvent.change(screen.getByLabelText('预约备注'), { target: { value: 'Phase10 收尾验证' } });
+    fireEvent.click(screen.getByRole('button', { name: '新建预约' }));
+
+    expect(
+      await screen.findByText('当前机构套餐配额未配置完整，暂不能新增数据，请联系平台管理员。'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('预约项目')).toHaveValue('Phase10 复诊');
+
+    const serializedBody = JSON.stringify(mutationBody(fetchMock, '/api/institution/appointments'));
+    const text = container.textContent ?? '';
+
+    expect(serializedBody).not.toContain('tenantId');
+    expect(text).not.toContain('missing_quota_limit');
+    expect(text).not.toContain('DATABASE_URL');
+    expect(text).not.toContain('postgres://');
+    expect(text).not.toContain('stack');
+    expect(text).not.toContain('token');
+    expect(text).not.toContain('secret');
   });
 
   it('机构导航清晰标注已接入和后续占位入口', async () => {

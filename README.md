@@ -20,6 +20,7 @@
 - Phase 7：客户详情时间线 v1，包括 audit `resource_id` enrich、timeline 后端 API、客户中心详情抽屉和 smoke 覆盖
 - Phase 8：审计日志只读查询基础版，包括底层查询能力、机构端审计 API/UI、平台端审计 API/UI 和 smoke / 文档收尾
 - Phase 9：平台端租户管理基础版，包括租户套餐 / 配额数据底座、平台端租户只读 API、租户管理 UI 和 smoke / 文档收尾
+- Phase 10：平台套餐配额 enforcement 轻量版，包括配额 helper、客户 / 预约创建 API 阻断、前端稳定错误态和 smoke / 文档收尾
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -56,10 +57,22 @@ Phase 9 已完成：
 - UI 与 smoke 覆盖 loading、empty、403、503、成功态、只读请求和敏感字段不展示
 - Phase 9 不包含租户创建、编辑、删除、冻结 / 恢复、套餐 enforcement、计费、支付、合同、发票或客户 / 预约 / 随访业务明细下钻
 
+Phase 10 已完成：
+
+- 新增内部套餐配额 enforcement helper，读取当前租户 active plan / quota limit
+- 新增客户数和预约数按 `tenantId` 实时 live count，不把 `tenant_quota_snapshots.current*` 作为强一致判断
+- `POST /api/institution/customers` 已接入客户数量配额 enforcement
+- `POST /api/institution/appointments` 已接入预约数量配额 enforcement
+- 超额、无 active plan、无 quota limit 时 fail closed，返回稳定中文 `409` 错误并写 denied 审计
+- 客户更新、预约更新、随访状态流转、审计写入和只读 API 不受数量配额阻断
+- 客户中心和预约中心已展示稳定套餐配额错误态，失败后保留表单输入，前端不发送 `tenantId`
+- smoke / 单元测试覆盖配额允许、拒绝、无套餐、无 limit、无 snapshot、租户隔离、PII / SQL / stack / token / secret 不泄露
+- Phase 10 不包含套餐购买、套餐变更、续费、支付、合同、发票、租户冻结 / 恢复、完整套餐商业化后台、治疗记录、AI / RAG / Agent、企微、OAuth 或 Webhook
+
 后续阶段会依次加入：
 
-- 治疗记录与客服会话
-- 平台租户状态管理、套餐权益 enforcement 与计费能力
+- 治疗记录结构化摘要与客服会话
+- 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费
 
