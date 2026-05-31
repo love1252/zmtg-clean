@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
   Building2,
   Database,
   Loader2,
@@ -10,10 +13,18 @@ import {
   CalendarClock,
 } from 'lucide-react';
 import {
+  getOpenPlatformCommercialHealth,
   listOpenPlatformTenants,
+  type OpenPlatformCommercialHealthClientError,
   type OpenPlatformTenantClientError,
   type OpenPlatformTenantRecord,
 } from '@/modules/open-platform/client/platform-tenant-management-client';
+import type {
+  CommercialQuotaKey,
+  PlatformCommercialHealthViewModel,
+  PlatformCommercialMissingConfigurationReason,
+  PlatformCommercialQuotaRiskTenant,
+} from '@/modules/open-platform/domain/platform-commercial-health';
 
 type TenantManagementStateProps = {
   title: string;
@@ -28,7 +39,9 @@ const quotaItems = [
   { key: 'aiCalls', label: 'AI 调用', currentKey: 'currentAiCalls', maxKey: 'maxAiCalls' },
 ] as const;
 
-function visibleTenantErrorState(error: OpenPlatformTenantClientError): TenantManagementStateProps {
+function visibleTenantErrorState(
+  error: OpenPlatformTenantClientError | OpenPlatformCommercialHealthClientError,
+): TenantManagementStateProps {
   if (error.kind === 'unauthorized') {
     return {
       kind: 'error',
@@ -56,6 +69,13 @@ function visibleTenantErrorState(error: OpenPlatformTenantClientError): TenantMa
   };
 }
 
+const quotaLabels: Record<CommercialQuotaKey, string> = {
+  customers: '客户',
+  appointments: '预约',
+  followUps: '随访',
+  aiCalls: 'AI 调用',
+};
+
 function formatDateTime(value: string | null) {
   if (!value) return '-';
   const timestamp = Date.parse(value);
@@ -70,6 +90,26 @@ function formatDateTime(value: string | null) {
 
 function quotaValue(value: number | null) {
   return typeof value === 'number' ? String(value) : '-';
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatUsagePercent(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
+function quotaRiskStatusLabel(status: PlatformCommercialQuotaRiskTenant['status']) {
+  return status === 'limit_reached' ? '已达上限' : '接近上限';
+}
+
+function missingReasonLabel(reason: PlatformCommercialMissingConfigurationReason) {
+  if (!reason.quotaKeys || reason.quotaKeys.length === 0) {
+    return reason.label;
+  }
+
+  return `${reason.label}：${reason.quotaKeys.map((key) => quotaLabels[key]).join('、')}`;
 }
 
 function tenantField(label: string, value: string | null) {
@@ -114,8 +154,208 @@ function TenantQuotaGrid({ tenant }: { tenant: OpenPlatformTenantRecord }) {
   );
 }
 
+function CommercialHealthMetricCard({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: string | number;
+  helper: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+      <div className="text-xs font-semibold text-slate-400">{label}</div>
+      <div className="mt-2 text-2xl font-semibold tracking-normal text-white">{value}</div>
+      <div className="mt-1 text-xs leading-5 text-slate-500">{helper}</div>
+    </div>
+  );
+}
+
+function EmptyCommercialHealthSignal() {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-5 text-sm text-slate-400">
+      暂无商业化健康信号
+    </div>
+  );
+}
+
+function CommercialHealthPanel({ health }: { health: PlatformCommercialHealthViewModel | null }) {
+  if (!health) {
+    return (
+      <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
+        <TenantManagementState kind="loading" title="正在加载平台商业化健康摘要..." />
+      </article>
+    );
+  }
+
+  const hasSignals =
+    health.riskTenants.length > 0 ||
+    health.missingConfigurationTenants.length > 0 ||
+    health.quotaDeniedSignals.totalCount > 0;
+
+  return (
+    <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/[0.10] px-3 py-1 text-xs font-semibold text-emerald-100">
+            <Activity className="h-4 w-4" />
+            只读运营辅助
+          </div>
+          <h3 className="mt-3 text-lg font-semibold tracking-normal text-white">商业化健康</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+            以下配额快照仅作运营参考，用于识别套餐覆盖、配置缺失和近期 quota denied 信号，不作为计费或创建拦截依据。
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-3 py-2 text-xs font-semibold leading-5 text-slate-300">
+          最近更新：{formatDateTime(health.lastUpdatedAt)}
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <CommercialHealthMetricCard
+          label="套餐覆盖率"
+          value={formatPercent(health.planCoverage.coverageRate)}
+          helper={`${health.planCoverage.activePlanTenantCount} / ${health.planCoverage.tenantTotal} 个租户有 active plan`}
+        />
+        <CommercialHealthMetricCard
+          label="无 active plan"
+          value={health.planCoverage.missingActivePlanTenantCount}
+          helper="需人工补齐套餐分配"
+        />
+        <CommercialHealthMetricCard
+          label="配额风险项"
+          value={health.riskTenants.length}
+          helper="基于配额快照的运营参考"
+        />
+        <CommercialHealthMetricCard
+          label="配置缺失租户"
+          value={health.missingConfigurationTenants.length}
+          helper="active plan、quota limit、snapshot"
+        />
+        <CommercialHealthMetricCard
+          label="近期 quota denied"
+          value={health.quotaDeniedSignals.totalCount}
+          helper={`最近：${formatDateTime(health.quotaDeniedSignals.latestOccurredAt)}`}
+        />
+      </div>
+
+      {!hasSignals ? (
+        <div className="mt-5">
+          <EmptyCommercialHealthSignal />
+        </div>
+      ) : (
+        <div className="mt-5 grid gap-4 xl:grid-cols-3">
+          <section className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <AlertTriangle className="h-4 w-4 text-amber-200" />
+              配额风险租户
+            </div>
+            <div className="mt-3 space-y-2">
+              {health.riskTenants.length > 0 ? (
+                health.riskTenants.slice(0, 5).map((risk) => (
+                  <div
+                    key={`${risk.tenantId}-${risk.quotaKey}`}
+                    className="rounded-xl border border-white/10 bg-white/[0.05] p-3"
+                  >
+                    <div className="text-sm font-semibold text-white">{risk.tenantName}</div>
+                    <div className="mt-1 text-xs leading-5 text-slate-400">
+                      {risk.quotaLabel}：{risk.currentSnapshotUsage} / {risk.quotaLimit}，
+                      {formatUsagePercent(risk.usageRatio)}，{quotaRiskStatusLabel(risk.status)}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      配额快照时间：{formatDateTime(risk.snapshotAt)} · 运营参考
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <EmptyCommercialHealthSignal />
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Database className="h-4 w-4 text-cyan-100" />
+              配置缺失租户
+            </div>
+            <div className="mt-3 space-y-2">
+              {health.missingConfigurationTenants.length > 0 ? (
+                health.missingConfigurationTenants.slice(0, 5).map((tenant) => (
+                  <div key={tenant.tenantId} className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                    <div className="text-sm font-semibold text-white">{tenant.tenantName}</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {tenant.reasons.map((reason) => (
+                        <span
+                          key={`${tenant.tenantId}-${reason.key}`}
+                          className="rounded-full border border-amber-300/20 bg-amber-300/[0.10] px-2.5 py-1 text-xs font-semibold text-amber-100"
+                        >
+                          {missingReasonLabel(reason)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <EmptyCommercialHealthSignal />
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <BarChart3 className="h-4 w-4 text-emerald-100" />
+              quota denied 信号
+            </div>
+            {health.quotaDeniedSignals.totalCount > 0 ? (
+              <div className="mt-3 space-y-3">
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                  <div className="text-xs font-semibold text-slate-400">reason 聚合</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {health.quotaDeniedSignals.byReason.map((item) => (
+                      <span
+                        key={item.reason}
+                        className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs font-semibold text-slate-200"
+                      >
+                        {item.reason} · {item.count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                  <div className="text-xs font-semibold text-slate-400">resource 聚合</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {health.quotaDeniedSignals.byResource.map((item) => (
+                      <span
+                        key={item.resource}
+                        className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs font-semibold text-slate-200"
+                      >
+                        {item.resource} · {item.count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3">
+                <EmptyCommercialHealthSignal />
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      <div className="mt-4 flex items-center gap-2 text-xs leading-5 text-slate-500">
+        <CalendarClock className="h-4 w-4" />
+        snapshot current usage 来自 tenant_quota_snapshots.current*，页面仅使用“配额快照 / 运营参考”口径。
+      </div>
+    </article>
+  );
+}
+
 export function OpenPlatformTenantManagementPanel() {
   const [records, setRecords] = useState<OpenPlatformTenantRecord[]>([]);
+  const [commercialHealth, setCommercialHealth] = useState<PlatformCommercialHealthViewModel | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorState, setErrorState] = useState<TenantManagementStateProps | null>(null);
 
@@ -125,15 +365,25 @@ export function OpenPlatformTenantManagementPanel() {
     async function loadTenants() {
       setIsLoading(true);
       setErrorState(null);
-      const result = await listOpenPlatformTenants();
+      setCommercialHealth(null);
+      const [tenantResult, commercialHealthResult] = await Promise.all([
+        listOpenPlatformTenants(),
+        getOpenPlatformCommercialHealth(),
+      ]);
 
       if (!isActive) return;
 
-      if (result.ok) {
-        setRecords(result.records);
-      } else {
+      if (tenantResult.ok && commercialHealthResult.ok) {
+        setRecords(tenantResult.records);
+        setCommercialHealth(commercialHealthResult.health);
+      } else if (!tenantResult.ok) {
         setRecords([]);
-        setErrorState(visibleTenantErrorState(result.error));
+        setCommercialHealth(null);
+        setErrorState(visibleTenantErrorState(tenantResult.error));
+      } else if (!commercialHealthResult.ok) {
+        setRecords([]);
+        setCommercialHealth(null);
+        setErrorState(visibleTenantErrorState(commercialHealthResult.error));
       }
 
       setIsLoading(false);
@@ -194,6 +444,8 @@ export function OpenPlatformTenantManagementPanel() {
           </article>
         ))}
       </section>
+
+      {!errorState ? <CommercialHealthPanel health={commercialHealth} /> : null}
 
       <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
