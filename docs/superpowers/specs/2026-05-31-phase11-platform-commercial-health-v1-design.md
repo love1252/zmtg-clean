@@ -1,7 +1,7 @@
 # Phase 11 平台套餐商业化管理增强 v1 设计
 
 > 日期：2026-05-31
-> 状态：Phase 11 PR 1 规划文档。本文只固化设计边界，不包含代码实现。
+> 状态：Phase 11 已完成。本文记录平台商业化健康 v1 的设计边界、完成范围和后续 Phase 12 建议。
 
 ## 1. Phase 11 目标
 
@@ -19,6 +19,14 @@ Phase 11 推荐选择“平台套餐商业化管理增强 v1”，目标是在 P
 - 不实现套餐购买、套餐变更、续费、支付、合同、发票、租户冻结 / 恢复或完整商业化后台。
 
 Phase 11 v1 仍遵守当前项目的核心安全原则：机构端租户编号只能来自服务端访问上下文；平台端只展示租户运营元数据和审计安全 DTO；不能下钻客户、预约、随访、治疗记录、病历正文或咨询对话全文。
+
+完成状态：
+
+- PR 1 已完成 Phase 11 spec / plan 文档。
+- PR 2 已完成平台商业化健康 view model / client 派生逻辑与测试。
+- PR 3 已完成平台端商业化健康 UI 展示。
+- PR 4 已完成 workspace smoke / 文档收尾。
+- Phase 11 未新增 API，未新增 schema / migration，未改权限、认证、租户隔离或 Phase 10 enforcement。
 
 ## 2. 为什么优先做平台套餐商业化管理增强
 
@@ -428,6 +436,8 @@ Phase 11 推荐拆成 4 个 PR。
 
 ### PR 1：Phase 11 spec / plan 文档
 
+状态：已完成。
+
 范围：
 
 - 新增 Phase 11 design spec。
@@ -450,6 +460,8 @@ git diff --check
 本 PR 只修改 Markdown，不运行完整 test / typecheck / build。
 
 ### PR 2：平台商业化健康 view model / client 派生逻辑与测试
+
+状态：已完成。
 
 范围：
 
@@ -478,6 +490,8 @@ node scripts/run-vitest.mjs run src/modules/open-platform/tests
 
 ### PR 3：平台端租户管理 UI 增强
 
+状态：已完成。
+
 范围：
 
 - 在平台租户管理或平台总览中展示商业化健康摘要。
@@ -502,6 +516,8 @@ node scripts/run-vitest.mjs run src/modules/open-platform/tests src/modules/work
 
 ### PR 4：Phase 11 smoke / 文档收尾
 
+状态：已完成。
+
 范围：
 
 - 补 workspace smoke 测试。
@@ -522,6 +538,7 @@ node scripts/run-vitest.mjs run src/modules/open-platform/tests src/modules/work
 
 ```bash
 git diff --check
+node scripts/run-vitest.mjs run src/modules/open-platform/tests src/modules/workspace/tests
 node scripts/run-vitest.mjs run
 ./node_modules/.bin/tsc --noEmit
 node scripts/run-next.mjs build --webpack

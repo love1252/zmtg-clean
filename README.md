@@ -21,6 +21,7 @@
 - Phase 8：审计日志只读查询基础版，包括底层查询能力、机构端审计 API/UI、平台端审计 API/UI 和 smoke / 文档收尾
 - Phase 9：平台端租户管理基础版，包括租户套餐 / 配额数据底座、平台端租户只读 API、租户管理 UI 和 smoke / 文档收尾
 - Phase 10：平台套餐配额 enforcement 轻量版，包括配额 helper、客户 / 预约创建 API 阻断、前端稳定错误态和 smoke / 文档收尾
+- Phase 11：平台商业化健康只读运营辅助，包括商业化健康派生逻辑、平台端摘要 UI、配额快照风险 / 配置缺失 / quota denied 信号展示和 smoke / 文档收尾
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -68,6 +69,14 @@ Phase 10 已完成：
 - 客户中心和预约中心已展示稳定套餐配额错误态，失败后保留表单输入，前端不发送 `tenantId`
 - smoke / 单元测试覆盖配额允许、拒绝、无套餐、无 limit、无 snapshot、租户隔离、PII / SQL / stack / token / secret 不泄露
 - Phase 10 不包含套餐购买、套餐变更、续费、支付、合同、发票、租户冻结 / 恢复、完整套餐商业化后台、治疗记录、AI / RAG / Agent、企微、OAuth 或 Webhook
+
+Phase 11 已完成：
+
+- 平台商业化健康 view model / client 派生逻辑已完成，复用现有 `GET /api/open-platform/tenants` 和 `GET /api/open-platform/audit-events`
+- 平台端「租户管理」已展示商业化健康摘要、套餐覆盖率、配额风险、配置缺失租户和近期 quota denied 审计信号
+- 配额风险基于 `tenant_quota_snapshots.current*` 做“配额快照 / 运营参考”展示，不作为计费、创建拦截或 Phase 10 enforcement 的强一致依据
+- smoke / 单元测试覆盖平台入口展示、套餐覆盖、配额风险、缺失配置、quota denied 聚合、只读请求和敏感字段不展示
+- Phase 11 不包含套餐购买、套餐变更、续费、支付、合同、发票、租户冻结 / 恢复、自动升级套餐、自动触达客户或租户、治疗记录、AI / RAG / Agent、企微、OAuth 或 Webhook
 
 后续阶段会依次加入：
 

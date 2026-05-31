@@ -2,6 +2,8 @@
 
 > **给后续执行 Agent 的要求：** 必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项执行本计划。步骤使用 `- [ ]` 复选框语法跟踪。
 
+**状态：** Phase 11 已完成。
+
 **目标：** 在 Phase 9 / Phase 10 基础上，为平台端增加只读商业化运营辅助视图，展示套餐覆盖、配额快照风险、缺失配置和近期 quota denied 审计信号。
 
 **架构方案：** Phase 11 v1 默认不新增 API、schema 或 migration。PR 2 先在 open-platform 模块内基于现有平台租户 API 和平台审计 API 派生商业化健康 view model；PR 3 再把派生结果接入平台租户管理或平台总览 UI；PR 4 做 smoke 和文档收尾。
@@ -25,6 +27,16 @@ Phase 11 v1 的核心边界：
 - 不修改权限、认证或租户隔离。
 - 不修改 Phase 10 enforcement 逻辑。
 - 不进入治疗记录、知识库 / RAG、AI provider、Agent、企微、支付、合同或发票。
+
+## 完成摘要
+
+- PR 1 已完成 Phase 11 spec / plan 文档。
+- PR 2 已完成平台商业化健康 view model / client 派生逻辑与测试。
+- PR 3 已完成平台端租户管理商业化健康 UI。
+- PR 4 已完成平台商业化健康 workspace smoke 和文档收尾。
+- Phase 11 复用现有 `GET /api/open-platform/tenants` 和 `GET /api/open-platform/audit-events`。
+- Phase 11 未新增 API、schema、migration，未改权限、认证、租户隔离或 Phase 10 enforcement。
+- 页面和测试明确 `tenant_quota_snapshots.current*` 仅作配额快照 / 运营参考，不作为强一致计费或 enforcement 依据。
 
 ## 文件职责规划
 
@@ -119,6 +131,8 @@ PR 2 / PR 3 应围绕以下只读指标：
 
 ## PR 1：Phase 11 spec / plan 文档
 
+状态：已完成。
+
 **范围：**
 
 - 新增 Phase 11 设计文档。
@@ -156,6 +170,8 @@ git diff --check
 本 PR 只修改 Markdown，不运行完整 test / typecheck / build。原因：未修改 TypeScript、React 页面、测试、API route、数据库 schema / migration、权限、认证或租户隔离。
 
 ## PR 2：平台商业化健康 view model / client 派生逻辑与测试
+
+状态：已完成。
 
 **范围：**
 
@@ -238,6 +254,8 @@ node scripts/run-vitest.mjs run src/modules/open-platform/tests
 
 ## PR 3：平台端租户管理 UI 增强
 
+状态：已完成。
+
 **范围：**
 
 - 在平台租户管理或平台总览中展示商业化健康摘要。
@@ -308,6 +326,8 @@ node scripts/run-vitest.mjs run src/modules/open-platform/tests src/modules/work
 
 ## PR 4：Phase 11 smoke / 文档收尾
 
+状态：已完成。
+
 **范围：**
 
 - 补 workspace smoke 测试。
@@ -358,6 +378,7 @@ node scripts/run-vitest.mjs run src/modules/open-platform/tests src/modules/work
 
 ```bash
 git diff --check
+node scripts/run-vitest.mjs run src/modules/open-platform/tests src/modules/workspace/tests
 node scripts/run-vitest.mjs run
 ./node_modules/.bin/tsc --noEmit
 node scripts/run-next.mjs build --webpack
@@ -398,10 +419,10 @@ Phase 11 全阶段不做：
 
 ## 执行顺序
 
-1. 先合并 PR 1 文档。
-2. 再执行 PR 2 view model / client 派生逻辑。
-3. PR 2 合并后执行 PR 3 UI 增强。
-4. PR 3 合并后执行 PR 4 smoke / 文档收尾。
+1. [x] 先合并 PR 1 文档。
+2. [x] 再执行 PR 2 view model / client 派生逻辑。
+3. [x] PR 2 合并后执行 PR 3 UI 增强。
+4. [x] PR 3 合并后执行 PR 4 smoke / 文档收尾。
 
 不得跳过 PR 1 直接进入代码实现。
 
@@ -419,6 +440,8 @@ Phase 11 完成时应满足：
 - 不改权限、认证或租户隔离。
 - 不改 Phase 10 enforcement。
 - 不展示业务明细、PII、医疗正文、SQL、stack、token、secret 或 `DATABASE_URL`。
+
+Phase 11 PR 4 收尾后，上述完成标准均已满足；后续只进入 Phase 12 Plan Mode，不在 Phase 11 分支继续扩展实现。
 
 ## Phase 12 建议
 
