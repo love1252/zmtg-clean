@@ -153,6 +153,53 @@ const platformTenantRecord = {
   secret: 'phase9-raw-secret',
 };
 
+const platformCommercialRiskTenant = {
+  ...platformTenantRecord,
+  tenantId: 'tenant_phase11_risk',
+  tenantName: 'Phase11 配额风险机构',
+  maxCustomers: 100,
+  currentCustomers: 88,
+  snapshotAt: '2026-05-31T10:00:00.000Z',
+};
+
+const platformCommercialMissingTenant = {
+  ...platformTenantRecord,
+  tenantId: 'tenant_phase11_missing',
+  tenantName: 'Phase11 配置缺失机构',
+  planName: null,
+  planCode: null,
+  planStatus: null,
+  assignmentStatus: null,
+  startedAt: null,
+  expiresAt: null,
+  maxCustomers: null,
+  maxAppointments: null,
+  maxFollowUps: null,
+  maxAiCalls: null,
+  currentCustomers: null,
+  currentAppointments: null,
+  currentFollowUps: null,
+  currentAiCalls: null,
+  snapshotAt: null,
+};
+
+const platformQuotaDeniedAuditEventRecord = {
+  ...platformAuditEventRecord,
+  id: 'audit_phase11_quota_denied',
+  tenantId: 'tenant_phase11_risk',
+  resource: 'customer',
+  resourceId: 'cust_phase11_raw_should_not_render',
+  action: 'create',
+  result: 'denied',
+  reason: 'quota_exceeded_customers',
+  occurredAt: '2026-05-31T10:30:00.000Z',
+  requestBody: { phoneNumber: '13800001252' },
+  metadata: { sql: 'select * from tenant_quota_snapshots' },
+  stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+  token: 'sk_test_phase11_platform_should_not_render',
+  secret: 'phase11-raw-secret',
+};
+
 const customerTimelineResponse = {
   customer: {
     id: 'cust_phase5_closeout',
@@ -471,9 +518,7 @@ function expectNoSensitivePlatformAuditContent(container: HTMLElement) {
 function expectNoSensitivePlatformTenantContent(container: HTMLElement) {
   const text = container.textContent ?? '';
 
-  expect(text).not.toContain('customers');
   expect(text).not.toContain('客户明细');
-  expect(text).not.toContain('appointments');
   expect(text).not.toContain('预约明细');
   expect(text).not.toContain('followUpTasks');
   expect(text).not.toContain('随访任务明细');
@@ -503,7 +548,10 @@ function expectNoSensitivePlatformTenantContent(container: HTMLElement) {
   expect(text).not.toContain('token');
   expect(text).not.toContain('secret');
   expect(text).not.toContain('sk_test_phase9_platform_should_not_render');
+  expect(text).not.toContain('sk_test_phase11_platform_should_not_render');
   expect(text).not.toContain('phase9-raw-secret');
+  expect(text).not.toContain('phase11-raw-secret');
+  expect(text).not.toContain('cust_phase11_raw_should_not_render');
 }
 
 function expectNoPlatformTenantMutation(fetchMock: ReturnType<typeof mockWorkspaceFetch>) {
@@ -887,6 +935,48 @@ describe('工作台入口页面', () => {
     );
     expect(commercialHealthAuditCall).toBeDefined();
     expect(commercialHealthAuditCall?.[1]).toEqual({ cache: 'no-store' });
+    expectNoPlatformTenantMutation(fetchMock);
+    expectNoSensitivePlatformTenantContent(container);
+  });
+
+  it('平台端租户管理入口 smoke 覆盖商业化健康信号和安全边界', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      role: 'platform_admin',
+      platformTenants: [platformCommercialRiskTenant, platformCommercialMissingTenant],
+      platformAuditEvents: [platformQuotaDeniedAuditEventRecord],
+    });
+    const { container } = render(<OpenPlatformPage />);
+
+    expect(await screen.findByRole('heading', { name: /掌控租户、模型与接口/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
+
+    expect(await screen.findByRole('heading', { name: '商业化健康' })).toBeInTheDocument();
+    const commercialHealthSection = screen.getByRole('heading', { name: '商业化健康' }).closest('article');
+    expect(commercialHealthSection).not.toBeNull();
+    const commercialHealth = commercialHealthSection as HTMLElement;
+
+    expect(within(commercialHealth).getByText('套餐覆盖率')).toBeInTheDocument();
+    expect(within(commercialHealth).getByText('50%')).toBeInTheDocument();
+    expect(within(commercialHealth).getByText('配额风险项')).toBeInTheDocument();
+    expect(within(commercialHealth).getAllByText('配置缺失租户').length).toBeGreaterThan(0);
+    expect(within(commercialHealth).getByText('近期 quota denied')).toBeInTheDocument();
+    expect(within(commercialHealth).getByText('Phase11 配额风险机构')).toBeInTheDocument();
+    expect(within(commercialHealth).getByText(/客户.*88 \/ 100/)).toBeInTheDocument();
+    expect(within(commercialHealth).getByText('Phase11 配置缺失机构')).toBeInTheDocument();
+    expect(within(commercialHealth).getByText('缺少 active plan')).toBeInTheDocument();
+    expect(within(commercialHealth).getByText(/缺少 quota limit/)).toBeInTheDocument();
+    expect(within(commercialHealth).getByText('缺少 quota snapshot')).toBeInTheDocument();
+    expect(within(commercialHealth).getByText(/quota_exceeded_customers/)).toBeInTheDocument();
+    expect(within(commercialHealth).getAllByText(/customer/).length).toBeGreaterThan(0);
+    expect(within(commercialHealth).getAllByText(/运营参考/).length).toBeGreaterThan(0);
+    expect(within(commercialHealth).getAllByText(/配额快照/).length).toBeGreaterThan(0);
+    expect(commercialHealth.textContent ?? '').not.toContain('强一致');
+    expect(commercialHealth.textContent ?? '').not.toContain('enforcement');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/tenants', { cache: 'no-store' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/audit-events?result=denied&limit=100', {
+      cache: 'no-store',
+    });
     expectNoPlatformTenantMutation(fetchMock);
     expectNoSensitivePlatformTenantContent(container);
   });
