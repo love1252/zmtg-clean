@@ -1,0 +1,2 @@
+ALTER TABLE "audit_events" ADD COLUMN "resource_id" varchar(96);--> statement-breakpoint
+CREATE INDEX "audit_events_tenant_resource_id_occurred_idx" ON "audit_events" USING btree ("tenant_id","resource","resource_id","occurred_at");

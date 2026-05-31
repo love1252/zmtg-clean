@@ -23,9 +23,9 @@ type TenantBusinessListRequest<Item> = {
 
 export type TenantBusinessMutationResult<Item> =
   | { kind: 'success'; record: Item }
-  | { kind: 'not_found' }
-  | { kind: 'conflict'; reason: 'stale_transition' }
-  | { kind: 'invalid_transition'; from: string; to: string };
+  | { kind: 'not_found'; resourceId?: string | null }
+  | { kind: 'conflict'; reason: 'stale_transition'; resourceId?: string | null }
+  | { kind: 'invalid_transition'; from: string; to: string; resourceId?: string | null };
 
 export type TenantBusinessMutationRequest<Item> = {
   context: AccessContext | null;
@@ -179,6 +179,7 @@ export async function handleTenantBusinessMutationRequest<Item>({
         eventId: createAuditEventId(),
         context,
         resource,
+        resourceId: result.resourceId,
         action,
         result: 'denied',
         reason: 'not_found_or_not_owned',
@@ -195,6 +196,7 @@ export async function handleTenantBusinessMutationRequest<Item>({
         eventId: createAuditEventId(),
         context,
         resource,
+        resourceId: result.resourceId,
         action,
         result: 'denied',
         reason: 'invalid_transition',
@@ -211,6 +213,7 @@ export async function handleTenantBusinessMutationRequest<Item>({
         eventId: createAuditEventId(),
         context,
         resource,
+        resourceId: result.resourceId,
         action,
         result: 'denied',
         reason: result.reason,

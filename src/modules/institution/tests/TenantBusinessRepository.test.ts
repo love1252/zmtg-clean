@@ -438,7 +438,12 @@ describe('租户业务仓储映射', () => {
     });
 
     expect(mutation.update).not.toHaveBeenCalled();
-    expect(result).toEqual({ kind: 'invalid_transition', from: 'due', to: 'completed' });
+    expect(result).toEqual({
+      kind: 'invalid_transition',
+      resourceId: 'fu_001',
+      from: 'due',
+      to: 'completed',
+    });
   });
 
   it('随访状态合法流转按 tenantId + id 更新状态、操作人和更新时间', async () => {
@@ -497,6 +502,10 @@ describe('租户业务仓储映射', () => {
       ],
       operator: 'and',
     });
-    expect(result).toEqual({ kind: 'conflict', reason: 'stale_transition' });
+    expect(result).toEqual({
+      kind: 'conflict',
+      resourceId: 'fu_001',
+      reason: 'stale_transition',
+    });
   });
 });

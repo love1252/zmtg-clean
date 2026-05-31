@@ -10,6 +10,7 @@ export function mapAuditEventToInsert(event: TenantAuditEvent): typeof auditEven
     tenantId: event.tenantId,
     scope: event.scope,
     resource: event.resource,
+    resourceId: event.resourceId ?? null,
     action: event.action,
     result: event.result,
     reason: event.reason,

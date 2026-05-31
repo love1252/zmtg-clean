@@ -111,6 +111,27 @@ describe('数据库结构', () => {
     expect(columnNames(followUpReference?.foreignColumns ?? [])).toEqual(['tenant_id', 'id']);
   });
 
+  it('审计事件支持最小 resource_id 关联和租户内目标资源索引', () => {
+    const auditConfig = getTableConfig(auditEvents);
+    const auditColumns = columnNames(auditConfig.columns);
+    const auditIndexes = auditConfig.indexes.map((index) => ({
+      name: index.config.name,
+      columns: columnNames(index.config.columns as NamedColumn[]),
+    }));
+
+    expect(auditColumns).toContain('resource_id');
+    expect(auditEvents.resourceId).toBeDefined();
+    expect(auditEvents.resourceId.notNull).toBe(false);
+    expect(auditIndexes).toEqual(
+      expect.arrayContaining([
+        {
+          name: 'audit_events_tenant_resource_id_occurred_idx',
+          columns: ['tenant_id', 'resource', 'resource_id', 'occurred_at'],
+        },
+      ]),
+    );
+  });
+
   it('演示种子数据覆盖预约和随访任务引用的同租户客户', () => {
     const customerKeys = new Set(
       getDemoCustomerSeedRecords().map((record) => `${record.tenantId}:${record.id}`),
@@ -131,6 +152,19 @@ describe('数据库结构', () => {
     expect(migrationSql).not.toContain('"medical_record_no"');
     expect(migrationSql).not.toContain('"treatment_record"');
     expect(migrationSql).not.toContain('"consultation_transcript"');
+    expect(migrationSql).not.toContain('"metadata" jsonb');
+    expect(migrationSql).not.toContain('"request_body"');
+  });
+
+  it('迁移包含审计 resource_id 字段和查询索引', () => {
+    const migrationSql = readMigrationSql();
+
+    expect(migrationSql).toContain(
+      'alter table "audit_events" add column "resource_id" varchar(96)',
+    );
+    expect(migrationSql).toContain(
+      'create index "audit_events_tenant_resource_id_occurred_idx" on "audit_events" using btree ("tenant_id","resource","resource_id","occurred_at")',
+    );
   });
 
   it('迁移包含租户客户一致性的复合外键', () => {

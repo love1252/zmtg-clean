@@ -59,6 +59,46 @@ describe('审计事件领域模型', () => {
     });
   });
 
+  it('创建允许访问审计事件时可携带目标资源 id', () => {
+    expect(
+      createAuditEvent({
+        eventId: 'audit_evt_002',
+        context: tenantAdminContext,
+        resource: 'customer',
+        resourceId: 'cust_001',
+        action: 'update',
+        result: 'allowed',
+        reason: 'allowed_by_policy',
+        occurredAt: '2026-05-30T09:02:00.000Z',
+      }),
+    ).toMatchObject({
+      resource: 'customer',
+      resourceId: 'cust_001',
+      action: 'update',
+      result: 'allowed',
+    });
+  });
+
+  it('创建拒绝访问审计事件时可携带已确认的目标资源 id', () => {
+    expect(
+      createDeniedAccessAuditEvent({
+        eventId: 'audit_evt_denied_002',
+        context: tenantAdminContext,
+        resource: 'follow_up',
+        resourceId: 'fu_001',
+        action: 'update',
+        reason: 'invalid_transition',
+        occurredAt: '2026-05-30T09:03:00.000Z',
+      }),
+    ).toMatchObject({
+      resource: 'follow_up',
+      resourceId: 'fu_001',
+      action: 'update',
+      result: 'denied',
+      reason: 'invalid_transition',
+    });
+  });
+
   it('审计事件风险词列表覆盖凭证明文模式', () => {
     expect(auditForbiddenTerms).toEqual([
       'client_secret',

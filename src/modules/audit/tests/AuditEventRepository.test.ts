@@ -28,6 +28,7 @@ const expectedInsertRow = {
   tenantId: 'demo-tenant-001',
   scope: 'tenant',
   resource: 'customer',
+  resourceId: null,
   action: 'read_own_tenant',
   result: 'allowed',
   reason: 'allowed_by_policy',
@@ -51,16 +52,46 @@ describe('审计事件仓储映射', () => {
     expect(mapAuditEventToInsert(event)).toEqual(expectedInsertRow);
   });
 
+  it('把目标资源 id 映射为固定 resource_id 列', () => {
+    expect(mapAuditEventToInsert({ ...event, resourceId: 'cust_001' })).toEqual({
+      ...expectedInsertRow,
+      resourceId: 'cust_001',
+    });
+  });
+
   it('映射审计事件时不会把额外字段带入写入行', () => {
-    const eventWithExtraField: TenantAuditEvent & { accessToken: string } = {
+    const eventWithExtraField: TenantAuditEvent & {
+      accessToken: string;
+      consultationTranscript: string;
+      idNumber: string;
+      medicalRecordNo: string;
+      metadata: Record<string, unknown>;
+      phoneNumber: string;
+      requestBody: Record<string, unknown>;
+      treatmentRecord: string;
+    } = {
       ...event,
       accessToken: 'sk_test_should_not_persist',
+      consultationTranscript: '咨询对话全文',
+      idNumber: '110101199001010011',
+      medicalRecordNo: 'MR-RAW-001',
+      metadata: { requestBody: { maskedPhone: '13800000000' } },
+      phoneNumber: '13800000000',
+      requestBody: { maskedPhone: '13800000000' },
+      treatmentRecord: '完整治疗记录正文',
     };
 
     const insertRow = mapAuditEventToInsert(eventWithExtraField);
 
     expect(insertRow).toEqual(expectedInsertRow);
     expect(insertRow).not.toHaveProperty('accessToken');
+    expect(insertRow).not.toHaveProperty('consultationTranscript');
+    expect(insertRow).not.toHaveProperty('idNumber');
+    expect(insertRow).not.toHaveProperty('medicalRecordNo');
+    expect(insertRow).not.toHaveProperty('metadata');
+    expect(insertRow).not.toHaveProperty('phoneNumber');
+    expect(insertRow).not.toHaveProperty('requestBody');
+    expect(insertRow).not.toHaveProperty('treatmentRecord');
   });
 
   it('把审计事件写入 audit_events 表', async () => {

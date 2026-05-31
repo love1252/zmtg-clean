@@ -206,6 +206,20 @@ const validFollowUpTransitionPayload = {
   nextStatus: 'in_progress',
 };
 
+function expectAuditEventDoesNotContainPrivateBody(event: unknown) {
+  const serialized = JSON.stringify(event);
+
+  expect(event).not.toHaveProperty('metadata');
+  expect(event).not.toHaveProperty('requestBody');
+  expect(serialized).not.toContain('13800000000');
+  expect(serialized).not.toContain('110101199001010011');
+  expect(serialized).not.toContain('MR-RAW-001');
+  expect(serialized).not.toContain('完整治疗记录正文');
+  expect(serialized).not.toContain('咨询对话全文');
+  expect(serialized).not.toContain('DATABASE_URL');
+  expect(serialized).not.toContain('postgres://');
+}
+
 describe('租户业务只读 API 流程', () => {
   it('使用访问上下文租户读取客户', async () => {
     const repository = {
@@ -339,6 +353,7 @@ describe('租户业务写入 API 处理器', () => {
       action: 'update',
       mutate: vi.fn(async () => ({
         kind: 'invalid_transition' as const,
+        resourceId: 'fu_001',
         from: 'completed',
         to: 'in_progress',
       })),
@@ -351,6 +366,7 @@ describe('租户业务写入 API 处理器', () => {
       result: 'denied',
       reason: 'invalid_transition',
       resource: 'follow_up',
+      resourceId: 'fu_001',
       action: 'update',
     }));
   });
@@ -364,6 +380,7 @@ describe('租户业务写入 API 处理器', () => {
       action: 'update',
       mutate: vi.fn(async () => ({
         kind: 'conflict' as const,
+        resourceId: 'fu_001',
         reason: 'stale_transition' as const,
       })),
       auditRepository,
@@ -375,6 +392,7 @@ describe('租户业务写入 API 处理器', () => {
       result: 'denied',
       reason: 'stale_transition',
       resource: 'follow_up',
+      resourceId: 'fu_001',
       action: 'update',
     }));
   });
@@ -737,9 +755,35 @@ describe('租户业务写入 API 路由', () => {
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
       action: 'create',
       resource: 'customer',
+      resourceId: 'cust_created',
       result: 'allowed',
       tenantId: 'demo-tenant-001',
     }));
+    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
+  });
+
+  it('更新客户使用已确认记录 id 写入允许审计', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await customersPatch(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'PATCH',
+        body: JSON.stringify(validUpdateCustomerPayload),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      record: { id: 'cust_001', tenantId: 'demo-tenant-001', displayName: '王女士更新' },
+    });
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'update',
+      resource: 'customer',
+      resourceId: 'cust_001',
+      result: 'allowed',
+      tenantId: 'demo-tenant-001',
+    }));
+    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
   });
 
   it('更新客户目标不存在时返回 404 并记录拒绝审计', async () => {
@@ -764,6 +808,7 @@ describe('租户业务写入 API 路由', () => {
       reason: 'not_found_or_not_owned',
       resource: 'customer',
     }));
+    expect(routeMocks.auditRecord.mock.lastCall?.[0]).not.toHaveProperty('resourceId');
   });
 
   it('创建客户和允许审计在同一事务中执行，审计失败时返回 503', async () => {
@@ -850,6 +895,24 @@ describe('租户业务写入 API 路由', () => {
       tenantId: 'demo-tenant-001',
       ...validUpdateAppointmentPayload,
     });
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'create',
+      resource: 'appointment',
+      resourceId: 'appt_created',
+      result: 'allowed',
+      tenantId: 'demo-tenant-001',
+    }));
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'update',
+      resource: 'appointment',
+      resourceId: 'appt_001',
+      result: 'allowed',
+      tenantId: 'demo-tenant-001',
+    }));
+    expect(routeMocks.auditRecord.mock.calls).toHaveLength(2);
+    routeMocks.auditRecord.mock.calls.forEach(([event]) =>
+      expectAuditEventDoesNotContainPrivateBody(event),
+    );
   });
 
   it('预约创建客户不属于当前租户时返回 404 并记录拒绝审计', async () => {
@@ -876,6 +939,7 @@ describe('租户业务写入 API 路由', () => {
       result: 'denied',
       reason: 'not_found_or_not_owned',
     }));
+    expect(routeMocks.auditRecord.mock.lastCall?.[0]).not.toHaveProperty('resourceId');
   });
 
   it('预约创建遇到客户外键竞态时返回 404 并记录拒绝审计', async () => {
@@ -902,6 +966,7 @@ describe('租户业务写入 API 路由', () => {
       result: 'denied',
       reason: 'not_found_or_not_owned',
     }));
+    expect(routeMocks.auditRecord.mock.lastCall?.[0]).not.toHaveProperty('resourceId');
   });
 
   it('随访状态流转绑定仓储方法、操作者和上下文 tenantId', async () => {
@@ -925,12 +990,21 @@ describe('租户业务写入 API 路由', () => {
       actorId: 'demo-user-admin',
       occurredAt: expect.any(String),
     });
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'update',
+      resource: 'follow_up',
+      resourceId: 'fu_001',
+      result: 'allowed',
+      tenantId: 'demo-tenant-001',
+    }));
+    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
   });
 
   it('随访非法流转返回 409 并记录拒绝审计', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.repository.transitionFollowUpTask.mockResolvedValueOnce({
       kind: 'invalid_transition',
+      resourceId: 'fu_001',
       from: 'completed',
       to: 'in_progress',
     });
@@ -947,15 +1021,18 @@ describe('租户业务写入 API 路由', () => {
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
       action: 'update',
       resource: 'follow_up',
+      resourceId: 'fu_001',
       result: 'denied',
       reason: 'invalid_transition',
     }));
+    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
   });
 
   it('随访状态冲突返回 409 并记录拒绝审计', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.repository.transitionFollowUpTask.mockResolvedValueOnce({
       kind: 'conflict',
+      resourceId: 'fu_001',
       reason: 'stale_transition',
     });
 
@@ -971,9 +1048,11 @@ describe('租户业务写入 API 路由', () => {
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
       action: 'update',
       resource: 'follow_up',
+      resourceId: 'fu_001',
       result: 'denied',
       reason: 'stale_transition',
     }));
+    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
   });
 
   it('写入链路异常返回 503 且不泄露数据库或密钥信息', async () => {
