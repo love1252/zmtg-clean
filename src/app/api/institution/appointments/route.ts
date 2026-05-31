@@ -6,6 +6,7 @@ import {
 } from '@/modules/institution/server/tenant-business-api';
 import { runTenantBusinessAuditTransaction } from '@/modules/institution/server/tenant-business-audit-transaction';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
+import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 import {
   parseCreateAppointmentPayload,
   parseUpdateAppointmentPayload,
@@ -85,6 +86,15 @@ export async function POST(request: Request) {
       resource: 'appointment',
       action: 'create',
       mutate: async ({ tenantId, successAuditEvent }) => {
+        const quotaDecision = await checkTenantQuotaForCreate({
+          database: db,
+          tenantId,
+          resource: 'appointments',
+        });
+        if (!quotaDecision.allowed) {
+          return { kind: 'quota_denied', decision: quotaDecision };
+        }
+
         try {
           return await runTenantBusinessAuditTransaction(
             db,
