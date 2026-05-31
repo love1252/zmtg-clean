@@ -25,7 +25,7 @@ export type CustomerInsightItem = {
 };
 
 export const customerSegments: CustomerSegment[] = [
-  { label: '高意向待承接', value: '18', trend: 'AI 已排序', tone: 'blue' },
+  { label: '高意向待承接', value: '18', trend: '人工优先承接', tone: 'blue' },
   { label: '术后关怀中', value: '126', trend: '7 位需人工', tone: 'emerald' },
   { label: '复购窗口期', value: '42', trend: '本周 +9', tone: 'amber' },
   { label: '沉默待激活', value: '73', trend: '话术已生成', tone: 'rose' },
