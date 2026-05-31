@@ -6,7 +6,13 @@ import { describe, expect, it } from 'vitest';
 import { demoTenantAppointmentRecords } from '@/modules/institution/domain/appointment-records';
 import { demoTenantFollowUpTasks } from '@/modules/institution/domain/followup-workflow';
 import { createDatabaseUrlErrorMessage } from '@/server/db/client';
-import { getDemoCustomerSeedRecords } from '@/server/db/seed-demo-data';
+import {
+  getDemoCustomerSeedRecords,
+  getDemoTenantPlanAssignmentSeedRecords,
+  getDemoTenantPlanSeedRecords,
+  getDemoTenantQuotaSnapshotSeedRecords,
+} from '@/server/db/seed-demo-data';
+import * as schema from '@/server/db/schema';
 import {
   appointments,
   auditEvents,
@@ -50,6 +56,57 @@ describe('数据库结构', () => {
     expect(appointments).toBeDefined();
     expect(followUpTasks).toBeDefined();
     expect(auditEvents).toBeDefined();
+  });
+
+  it('定义平台租户套餐、套餐分配和配额快照表', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const tenantPlans = schemaModule.tenantPlans;
+    const tenantPlanAssignments = schemaModule.tenantPlanAssignments;
+    const tenantQuotaSnapshots = schemaModule.tenantQuotaSnapshots;
+
+    expect(tenantPlans).toBeDefined();
+    expect(tenantPlanAssignments).toBeDefined();
+    expect(tenantQuotaSnapshots).toBeDefined();
+
+    const planColumns = columnNames(getTableConfig(tenantPlans as never).columns);
+    const assignmentColumns = columnNames(getTableConfig(tenantPlanAssignments as never).columns);
+    const quotaColumns = columnNames(getTableConfig(tenantQuotaSnapshots as never).columns);
+
+    expect(planColumns).toEqual(
+      expect.arrayContaining(['id', 'name', 'code', 'description', 'status', 'created_at', 'updated_at']),
+    );
+    expect(assignmentColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'plan_id',
+        'status',
+        'started_at',
+        'expires_at',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+    expect(quotaColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'plan_assignment_id',
+        'max_customers',
+        'max_appointments',
+        'max_follow_ups',
+        'max_ai_calls',
+        'current_customers',
+        'current_appointments',
+        'current_follow_ups',
+        'current_ai_calls',
+        'snapshot_at',
+        'created_at',
+      ]),
+    );
+    expect(JSON.stringify({ planColumns, assignmentColumns, quotaColumns })).not.toMatch(
+      /phone_number|id_number|medical_record_no|treatment_record|consultation_transcript|request_body|metadata/i,
+    );
   });
 
   it('客户表结构只包含脱敏字段', () => {
@@ -144,6 +201,28 @@ describe('数据库结构', () => {
     expect(referencedCustomerKeys.filter((key) => !customerKeys.has(key))).toEqual([]);
   });
 
+  it('演示种子数据包含租户套餐、套餐分配和配额快照', () => {
+    const plans = getDemoTenantPlanSeedRecords();
+    const assignments = getDemoTenantPlanAssignmentSeedRecords();
+    const snapshots = getDemoTenantQuotaSnapshotSeedRecords();
+
+    expect(plans.map((plan) => plan.code)).toEqual(['starter-care', 'growth-care']);
+    expect(assignments.map((assignment) => assignment.tenantId)).toEqual([
+      'demo-tenant-001',
+      'demo-tenant-002',
+    ]);
+    expect(snapshots.map((snapshot) => snapshot.tenantId)).toEqual([
+      'demo-tenant-001',
+      'demo-tenant-002',
+    ]);
+    expect(snapshots.every((snapshot) => snapshot.currentCustomers <= snapshot.maxCustomers)).toBe(
+      true,
+    );
+    expect(JSON.stringify({ plans, assignments, snapshots })).not.toMatch(
+      /phoneNumber|idNumber|medicalRecordNo|treatmentRecord|consultationTranscript|DATABASE_URL|secret|token/i,
+    );
+  });
+
   it('迁移不包含真实个人信息字段名', () => {
     const migrationSql = readMigrationSql();
 
@@ -164,6 +243,32 @@ describe('数据库结构', () => {
     );
     expect(migrationSql).toContain(
       'create index "audit_events_tenant_resource_id_occurred_idx" on "audit_events" using btree ("tenant_id","resource","resource_id","occurred_at")',
+    );
+  });
+
+  it('迁移包含平台租户套餐、分配和配额快照表', () => {
+    const migrationSql = readMigrationSql();
+
+    expect(migrationSql).toContain('create table "tenant_plans"');
+    expect(migrationSql).toContain('create table "tenant_plan_assignments"');
+    expect(migrationSql).toContain('create table "tenant_quota_snapshots"');
+    expect(migrationSql).toContain(
+      'alter table "tenant_plan_assignments" add constraint "tenant_plan_assignments_tenant_id_tenants_id_fk" foreign key ("tenant_id") references "public"."tenants"("id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "tenant_plan_assignments" add constraint "tenant_plan_assignments_plan_id_tenant_plans_id_fk" foreign key ("plan_id") references "public"."tenant_plans"("id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "tenant_quota_snapshots" add constraint "tenant_quota_snapshots_tenant_id_tenants_id_fk" foreign key ("tenant_id") references "public"."tenants"("id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "tenant_quota_snapshots" add constraint "tenant_quota_snapshots_plan_assignment_id_tenant_plan_assignments_id_fk" foreign key ("plan_assignment_id") references "public"."tenant_plan_assignments"("id")',
+    );
+    expect(migrationSql).toContain(
+      'create index "tenant_plan_assignments_tenant_status_idx" on "tenant_plan_assignments" using btree ("tenant_id","status")',
+    );
+    expect(migrationSql).toContain(
+      'create index "tenant_quota_snapshots_tenant_snapshot_idx" on "tenant_quota_snapshots" using btree ("tenant_id","snapshot_at")',
     );
   });
 
