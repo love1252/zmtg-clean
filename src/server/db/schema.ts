@@ -213,12 +213,62 @@ export const appointments = pgTable(
     ...timestamps,
   },
   (table) => ({
+    tenantIdIdUnique: unique('appointments_tenant_id_id_unique').on(table.tenantId, table.id),
     customerFk: foreignKey({
       name: 'appointments_tenant_customer_fk',
       columns: [table.tenantId, table.customerId],
       foreignColumns: [customers.tenantId, customers.id],
     }),
     tenantStatusIdx: index('appointments_tenant_status_idx').on(table.tenantId, table.status),
+  }),
+);
+
+export const treatmentSummaries = pgTable(
+  'treatment_summaries',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    appointmentId: varchar('appointment_id', { length: 64 }),
+    treatmentDate: timestamp('treatment_date', { withTimezone: true }).notNull(),
+    treatmentProject: varchar('treatment_project', { length: 160 }).notNull(),
+    treatmentCategory: varchar('treatment_category', { length: 96 }).notNull(),
+    treatmentStage: varchar('treatment_stage', { length: 120 }).notNull(),
+    recoveryStage: varchar('recovery_stage', { length: 120 }).notNull(),
+    riskLevel: followUpRiskLevelEnum('risk_level').notNull(),
+    ownerUserId: varchar('owner_user_id', { length: 96 }).notNull(),
+    summary: text('summary').notNull(),
+    nextCareAction: text('next_care_action').notNull(),
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    ...timestamps,
+  },
+  (table) => ({
+    customerFk: foreignKey({
+      name: 'treatment_summaries_tenant_customer_fk',
+      columns: [table.tenantId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.id],
+    }),
+    appointmentFk: foreignKey({
+      name: 'treatment_summaries_tenant_appointment_fk',
+      columns: [table.tenantId, table.appointmentId],
+      foreignColumns: [appointments.tenantId, appointments.id],
+    }),
+    tenantCustomerDateIdx: index('treatment_summaries_tenant_customer_date_idx').on(
+      table.tenantId,
+      table.customerId,
+      table.treatmentDate,
+    ),
+    tenantRiskDateIdx: index('treatment_summaries_tenant_risk_date_idx').on(
+      table.tenantId,
+      table.riskLevel,
+      table.treatmentDate,
+    ),
+    tenantAppointmentIdx: index('treatment_summaries_tenant_appointment_idx').on(
+      table.tenantId,
+      table.appointmentId,
+    ),
   }),
 );
 

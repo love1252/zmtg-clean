@@ -9,6 +9,7 @@ import {
   tenantPlanAssignments,
   tenantPlans,
   tenantQuotaSnapshots,
+  treatmentSummaries,
   tenantMembers,
   tenants,
 } from '@/server/db/schema';
@@ -18,6 +19,10 @@ import {
   type TenantCustomerRecord,
 } from '@/modules/institution/domain/customer-records';
 import { demoTenantFollowUpTasks } from '@/modules/institution/domain/followup-workflow';
+import {
+  demoTenantTreatmentSummaryRecords,
+  type TreatmentSummaryRecord,
+} from '@/modules/institution/domain/treatment-summaries';
 
 const supplementalDemoCustomerRecords: TenantCustomerRecord[] = [
   {
@@ -79,10 +84,17 @@ const supplementalDemoCustomerRecords: TenantCustomerRecord[] = [
 ];
 
 type DemoCustomerReference = {
-  source: 'appointment' | 'follow_up_task';
+  source: 'appointment' | 'follow_up_task' | 'treatment_summary';
   recordId: string;
   tenantId: string;
   customerId: string;
+};
+
+type DemoTreatmentAppointmentReference = {
+  source: 'treatment_summary';
+  recordId: string;
+  tenantId: string;
+  appointmentId: string;
 };
 
 const demoTenantPlanRecords: Array<typeof tenantPlans.$inferInsert> = [
@@ -168,6 +180,13 @@ export function getDemoTenantQuotaSnapshotSeedRecords() {
   return [...demoTenantQuotaSnapshotRecords];
 }
 
+export function getDemoTreatmentSummarySeedRecords() {
+  return demoTenantTreatmentSummaryRecords.map((record) => ({
+    ...record,
+    tags: [...record.tags],
+  }));
+}
+
 export function findMissingDemoCustomerReferences(
   customerRecords: TenantCustomerRecord[] = getDemoCustomerSeedRecords(),
 ) {
@@ -187,10 +206,35 @@ export function findMissingDemoCustomerReferences(
       tenantId: task.tenantId,
       customerId: task.customerId,
     })),
+    ...demoTenantTreatmentSummaryRecords.map((record) => ({
+      source: 'treatment_summary' as const,
+      recordId: record.id,
+      tenantId: record.tenantId,
+      customerId: record.customerId,
+    })),
   ];
 
   return references.filter(
     (reference) => !customerKeys.has(`${reference.tenantId}:${reference.customerId}`),
+  );
+}
+
+export function findMissingDemoTreatmentAppointmentReferences() {
+  const appointmentKeys = new Set(
+    demoTenantAppointmentRecords.map((record) => `${record.tenantId}:${record.id}`),
+  );
+  const references: DemoTreatmentAppointmentReference[] = demoTenantTreatmentSummaryRecords
+    .filter((record) => record.appointmentId)
+    .map((record) => ({
+      source: 'treatment_summary',
+      recordId: record.id,
+      tenantId: record.tenantId,
+      appointmentId: record.appointmentId as string,
+    }));
+
+  return references.filter(
+    (reference) =>
+      !appointmentKeys.has(`${reference.tenantId}:${reference.appointmentId}`),
   );
 }
 
@@ -205,6 +249,21 @@ export function assertDemoCustomerReferenceCoverage(
         .map(
           (reference) =>
             `${reference.source}/${reference.recordId}->${reference.tenantId}:${reference.customerId}`,
+        )
+        .join(', ')}`,
+    );
+  }
+}
+
+export function assertDemoTreatmentAppointmentReferenceCoverage() {
+  const missingReferences = findMissingDemoTreatmentAppointmentReferences();
+
+  if (missingReferences.length > 0) {
+    throw new Error(
+      `Demo seed treatment appointment references missing: ${missingReferences
+        .map(
+          (reference) =>
+            `${reference.source}/${reference.recordId}->${reference.tenantId}:${reference.appointmentId}`,
         )
         .join(', ')}`,
     );
@@ -228,8 +287,30 @@ function toCustomerSeedValue(record: TenantCustomerRecord) {
   };
 }
 
+function toTreatmentSummarySeedValue(record: TreatmentSummaryRecord) {
+  return {
+    id: record.id,
+    tenantId: record.tenantId,
+    customerId: record.customerId,
+    appointmentId: record.appointmentId,
+    treatmentDate: new Date(record.treatmentDate),
+    treatmentProject: record.treatmentProject,
+    treatmentCategory: record.treatmentCategory,
+    treatmentStage: record.treatmentStage,
+    recoveryStage: record.recoveryStage,
+    riskLevel: record.riskLevel,
+    ownerUserId: record.ownerUserId,
+    summary: record.summary,
+    nextCareAction: record.nextCareAction,
+    tags: record.tags,
+    createdAt: new Date(record.createdAt),
+    updatedAt: new Date(record.updatedAt),
+  };
+}
+
 export async function seedDemoData(db: TenantDatabase) {
   assertDemoCustomerReferenceCoverage();
+  assertDemoTreatmentAppointmentReferenceCoverage();
 
   await db
     .insert(tenants)
@@ -277,6 +358,11 @@ export async function seedDemoData(db: TenantDatabase) {
         scheduledAt: new Date(record.scheduledAt),
       })),
     )
+    .onConflictDoNothing();
+
+  await db
+    .insert(treatmentSummaries)
+    .values(getDemoTreatmentSummarySeedRecords().map(toTreatmentSummarySeedValue))
     .onConflictDoNothing();
 
   await db
