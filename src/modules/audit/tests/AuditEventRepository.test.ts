@@ -7,6 +7,29 @@ import {
 } from '@/modules/audit/server/audit-event-repository';
 import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
 
+const eqMock = vi.hoisted(() =>
+  vi.fn((column: unknown, value: unknown) => ({
+    column,
+    operator: 'eq',
+    value,
+  })),
+);
+const andMock = vi.hoisted(() =>
+  vi.fn((...conditions: unknown[]) => ({
+    conditions,
+    operator: 'and',
+  })),
+);
+
+vi.mock('drizzle-orm', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('drizzle-orm')>();
+  return {
+    ...actual,
+    and: andMock,
+    eq: eqMock,
+  };
+});
+
 const event: TenantAuditEvent = {
   eventId: 'audit_evt_001',
   actorId: 'demo-user-admin',
@@ -46,6 +69,44 @@ function createInsertDatabase() {
     values,
   };
 }
+
+function createSelectDatabase(rows: unknown[] = []) {
+  const where = vi.fn(async (condition: unknown) => {
+    void condition;
+    return rows;
+  });
+  const from = vi.fn(() => ({ where }));
+  const select = vi.fn(() => ({ from }));
+
+  return {
+    database: { select } as unknown as TenantDatabase,
+    from,
+    select,
+    where,
+  };
+}
+
+const auditEventRow = {
+  eventId: 'audit_evt_001',
+  actorId: 'demo-user-admin',
+  actorRole: 'tenant_admin',
+  tenantId: 'demo-tenant-001',
+  scope: 'tenant',
+  resource: 'customer',
+  resourceId: 'cust_001',
+  action: 'update',
+  result: 'allowed',
+  reason: 'allowed_by_policy',
+  occurredAt: new Date('2026-05-30T09:00:00.000Z'),
+  source: 'demo_session',
+  metadata: { requestBody: { phoneNumber: '13800000000' } },
+  requestBody: { phoneNumber: '13800000000' },
+  stack: 'Error: DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+} satisfies typeof auditEvents.$inferSelect & {
+  metadata: Record<string, unknown>;
+  requestBody: Record<string, unknown>;
+  stack: string;
+};
 
 describe('审计事件仓储映射', () => {
   it('把审计事件映射为数据库写入行', () => {
@@ -101,5 +162,43 @@ describe('审计事件仓储映射', () => {
 
     expect(query.insert).toHaveBeenCalledWith(auditEvents);
     expect(query.values).toHaveBeenCalledWith(expectedInsertRow);
+  });
+
+  it('按当前租户和 customer resourceId 查询安全审计摘要', async () => {
+    const query = createSelectDatabase([auditEventRow]);
+
+    const result = await createAuditEventRepository(
+      query.database,
+    ).listCustomerAuditEventsByResourceId({
+      tenantId: 'demo-tenant-001',
+      customerId: 'cust_001',
+    });
+
+    expect(query.from).toHaveBeenCalledWith(auditEvents);
+    expect(query.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: auditEvents.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: auditEvents.resource, operator: 'eq', value: 'customer' },
+        { column: auditEvents.resourceId, operator: 'eq', value: 'cust_001' },
+      ],
+      operator: 'and',
+    });
+    expect(result).toEqual([
+      {
+        id: 'audit_evt_001',
+        action: 'update',
+        result: 'allowed',
+        reason: 'allowed_by_policy',
+        actor: { id: 'demo-user-admin', role: 'tenant_admin' },
+        occurredAt: '2026-05-30T09:00:00.000Z',
+        resource: 'customer',
+        resourceId: 'cust_001',
+      },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('metadata');
+    expect(JSON.stringify(result)).not.toContain('requestBody');
+    expect(JSON.stringify(result)).not.toContain('13800000000');
+    expect(JSON.stringify(result)).not.toContain('DATABASE_URL');
+    expect(JSON.stringify(result)).not.toContain('postgres://');
   });
 });
