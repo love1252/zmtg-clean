@@ -367,6 +367,71 @@ describe('租户业务仓储映射', () => {
     });
   });
 
+  it('按 tenantId + id 读取单客户详情摘要，查不到时返回 null', async () => {
+    const foundQuery = createSelectDatabase([customerRow]);
+
+    const record = await createTenantBusinessRepository(foundQuery.database).getCustomerByTenant({
+      tenantId: 'demo-tenant-001',
+      id: 'cust_001',
+    });
+
+    expect(foundQuery.from).toHaveBeenCalledWith(customers);
+    expect(foundQuery.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: customers.id, operator: 'eq', value: 'cust_001' },
+      ],
+      operator: 'and',
+    });
+    expect(record).toEqual(mapCustomerRowToRecord(customerRow));
+
+    const missingQuery = createSelectDatabase([]);
+    await expect(
+      createTenantBusinessRepository(missingQuery.database).getCustomerByTenant({
+        tenantId: 'demo-tenant-001',
+        id: 'missing_customer',
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('按 tenantId + customerId 读取客户相关预约和随访任务', async () => {
+    const appointmentQuery = createSelectDatabase([appointmentRow]);
+    const appointmentsResult = await createTenantBusinessRepository(
+      appointmentQuery.database,
+    ).listAppointmentsByTenantAndCustomer({
+      tenantId: 'demo-tenant-001',
+      customerId: 'cust_001',
+    });
+
+    expect(appointmentQuery.from).toHaveBeenCalledWith(appointments);
+    expect(appointmentQuery.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: appointments.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: appointments.customerId, operator: 'eq', value: 'cust_001' },
+      ],
+      operator: 'and',
+    });
+    expect(appointmentsResult).toEqual([mapAppointmentRowToRecord(appointmentRow)]);
+
+    const followUpQuery = createSelectDatabase([followUpTaskRow]);
+    const followUpsResult = await createTenantBusinessRepository(
+      followUpQuery.database,
+    ).listFollowUpTasksByTenantAndCustomer({
+      tenantId: 'demo-tenant-001',
+      customerId: 'cust_001',
+    });
+
+    expect(followUpQuery.from).toHaveBeenCalledWith(followUpTasks);
+    expect(followUpQuery.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: followUpTasks.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: followUpTasks.customerId, operator: 'eq', value: 'cust_001' },
+      ],
+      operator: 'and',
+    });
+    expect(followUpsResult).toEqual([mapFollowUpTaskRowToRecord(followUpTaskRow)]);
+  });
+
   it('更新预约方法设置 appointments 状态和备注并返回映射记录', async () => {
     const mutation = createMutationDatabase({
       ...appointmentRow,

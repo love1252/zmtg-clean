@@ -38,6 +38,10 @@ type CustomerLookupInput = {
   tenantId: string;
   id: string;
 };
+type CustomerTimelineRelatedLookupInput = {
+  tenantId: string;
+  customerId: string;
+};
 type UpdateAppointmentInput = {
   tenantId: string;
   id: string;
@@ -155,6 +159,44 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         .where(and(eq(customers.tenantId, input.tenantId), eq(customers.id, input.id)));
 
       return Boolean(row);
+    },
+    async getCustomerByTenant(input: CustomerLookupInput): Promise<CustomerRecordSummary | null> {
+      const [row] = await database
+        .select()
+        .from(customers)
+        .where(and(eq(customers.tenantId, input.tenantId), eq(customers.id, input.id)));
+
+      return row ? mapCustomerRowToRecord(row) : null;
+    },
+    async listAppointmentsByTenantAndCustomer(
+      input: CustomerTimelineRelatedLookupInput,
+    ): Promise<AppointmentRecordSummary[]> {
+      const rows = await database
+        .select()
+        .from(appointments)
+        .where(
+          and(
+            eq(appointments.tenantId, input.tenantId),
+            eq(appointments.customerId, input.customerId),
+          ),
+        );
+
+      return rows.map(mapAppointmentRowToRecord);
+    },
+    async listFollowUpTasksByTenantAndCustomer(
+      input: CustomerTimelineRelatedLookupInput,
+    ): Promise<TenantFollowUpTask[]> {
+      const rows = await database
+        .select()
+        .from(followUpTasks)
+        .where(
+          and(
+            eq(followUpTasks.tenantId, input.tenantId),
+            eq(followUpTasks.customerId, input.customerId),
+          ),
+        );
+
+      return rows.map(mapFollowUpTaskRowToRecord);
     },
     async updateAppointment(
       input: UpdateAppointmentInput,
