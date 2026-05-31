@@ -1,19 +1,43 @@
 # Phase 6 运营页面一致性与 workspace 入口真实化设计
 
 > 日期：2026-05-31
-> 状态：Plan Mode 已确认，PR 1 只固化文档，不进入代码开发。
+> 状态：Phase 6 PR 1/2/3 已合并，PR 4 收尾导航边界、smoke 测试和文档。
 
 ## 背景
 
 Phase 5 已完成机构业务页面真实化：客户中心、预约中心、智能随访 / 随访任务均已通过 `src/modules/institution/client/tenant-business-client.ts` 接入现有真实 API。
 
-当前剩余问题集中在入口层和一致性层：
+Plan Mode 时剩余问题集中在入口层和一致性层：
 
 - 机构工作台首页仍主要使用静态经营展示数据。
 - 三大业务页已经具备 loading、error、empty、mutation 状态，但实现分散，后续扩展会重复。
 - 机构端导航同时包含已真实接入页面和后续占位页面，边界需要更清楚。
 - workspace 入口测试已覆盖三大业务页切换，但还需要补充首页真实指标、占位入口和状态一致性 smoke。
-- README 和路线图需要同步 Phase 5 已完成、Phase 6 正在规划的事实。
+- README 和路线图当时需要同步 Phase 5 已完成、Phase 6 规划启动的事实；PR 4 已进一步更新为 Phase 6 完成状态。
+
+## Phase 6 执行结果
+
+Phase 6 按四个 PR 拆分完成：
+
+- PR 1：固化 Phase 6 spec / plan，并同步 README、roadmap、devlog。
+- PR 2：机构工作台首页接入现有客户、预约、随访 GET API，派生关键指标、行动摘要、loading、empty、401 / 403 / 503 错误态。
+- PR 3：新增共享页面状态组件和业务页标题组件，客户中心、预约中心、智能随访和工作台首页复用统一状态展示。
+- PR 4：机构端导航标注已接入 / 后续占位边界，补 workspace smoke 测试，并收尾 Phase 6 文档。
+
+已真实接入页面：
+
+- 工作台。
+- 客户中心。
+- 预约中心。
+- 智能随访。
+
+后续占位页面：
+
+- 客服工作台。
+- 知识库。
+- 数据分析。
+
+Phase 6 未新增 API、数据库 schema / migration、权限、认证、租户隔离、AI、RAG、Agent、企业微信、OAuth、Webhook、支付、API Key、平台租户管理、套餐权益或治疗记录完整正文。
 
 ## 目标
 
@@ -91,10 +115,9 @@ Phase 6 必须避免以下情况：
 
 三大业务页面已经各自实现 loading、error、empty 和边界说明。Phase 6 推荐抽小型共享组件，不做大型 UI 框架：
 
-- `BusinessPageHeader`：统一业务页标题、说明和状态徽标。
-- `BusinessStateBlock`：统一 loading、error、empty 呈现。
-- `BusinessBoundaryPanel`：统一数据边界和静态说明卡片。
-- `PlaceholderInstitutionView` 或同类组件：统一后续占位页面说明。
+- `InstitutionSectionHeader`：统一业务页标题、说明和操作区基础布局。
+- `InstitutionPageState`：统一 loading、error、empty、forbidden、unavailable 和 placeholder 呈现。
+- `PlaceholderInstitutionView`：统一后续占位页面说明。
 
 组件只服务 workspace / institution 当前页面，不抽成跨产品设计系统。
 
@@ -148,5 +171,5 @@ Phase 6 完成时应满足：
 - 首页、三大业务页和占位页的加载、错误、空态呈现一致。
 - 机构端导航明确区分真实接入页面和后续占位页面。
 - workspace / business 页面 smoke 测试覆盖入口切换、真实数据展示、错误态和空态。
-- README、roadmap、devlog 反映 Phase 5 已完成和 Phase 6 实施状态。
+- README、roadmap、devlog 反映 Phase 5 和 Phase 6 完成状态。
 - 不新增 API、数据库、权限、认证、租户隔离或高风险集成能力。
