@@ -10,6 +10,11 @@ import type {
   FollowUpStatus,
   TenantFollowUpTask,
 } from '@/modules/institution/domain/followup-workflow';
+import {
+  mapTreatmentSummaryRecordToTimelineDto,
+  type CustomerTimelineTreatmentSummary,
+  type TreatmentSummaryRecord,
+} from '@/modules/institution/domain/treatment-summaries';
 import type {
   AccessContext,
   ProtectedAction,
@@ -67,19 +72,22 @@ export type CustomerTimelineAuditSummary = {
 
 export type CustomerTimelineEvent = {
   id: string;
-  type: 'customer_summary' | 'appointment' | 'follow_up' | 'audit';
+  type: 'customer_summary' | 'appointment' | 'follow_up' | 'treatment_summary' | 'audit';
   occurredAt: string | null;
   title: string;
   summary: string;
   status: string;
-  source: ProtectedResource;
+  source: ProtectedResource | 'treatment_summary';
   relatedRecordId: string;
+  riskLevel?: FollowUpRiskLevel;
+  tags?: string[];
 };
 
 export type CustomerTimelineResponse = {
   customer: CustomerTimelineCustomerSummary;
   appointments: CustomerTimelineAppointmentSummary[];
   followups: CustomerTimelineFollowUpSummary[];
+  treatmentSummaries: CustomerTimelineTreatmentSummary[];
   auditEvents: CustomerTimelineAuditSummary[];
   timeline: CustomerTimelineEvent[];
 };
@@ -88,6 +96,7 @@ type CustomerTimelineInput = {
   customer: CustomerRecordSummary;
   appointments: AppointmentRecordSummary[];
   followups: TenantFollowUpTask[];
+  treatmentSummaries: TreatmentSummaryRecord[];
   auditEvents: CustomerTimelineAuditSummary[];
 };
 
@@ -170,6 +179,9 @@ export function buildCustomerTimelineResponse(input: CustomerTimelineInput): Cus
   const customer = toCustomerSummary(input.customer);
   const appointments = input.appointments.map(toAppointmentSummary);
   const followups = input.followups.map(toFollowUpSummary);
+  const treatmentSummaries = input.treatmentSummaries.map(
+    mapTreatmentSummaryRecordToTimelineDto,
+  );
   const auditEvents = input.auditEvents.map(toAuditSummary).sort((left, right) => {
     const timeDiff = Date.parse(right.occurredAt) - Date.parse(left.occurredAt);
     if (timeDiff !== 0) return timeDiff;
@@ -208,6 +220,18 @@ export function buildCustomerTimelineResponse(input: CustomerTimelineInput): Cus
       source: 'follow_up',
       relatedRecordId: followUp.id,
     })),
+    ...treatmentSummaries.map((treatment): CustomerTimelineEvent => ({
+      id: `treatment_summary:${treatment.id}`,
+      type: 'treatment_summary',
+      occurredAt: treatment.treatmentDate,
+      title: `${treatment.treatmentProject} · ${treatment.treatmentStage}`,
+      summary: treatment.summary,
+      status: treatment.riskLevel,
+      source: 'treatment_summary',
+      relatedRecordId: treatment.id,
+      riskLevel: treatment.riskLevel,
+      tags: [...treatment.tags],
+    })),
     {
       id: `customer:${customer.id}`,
       type: 'customer_summary',
@@ -224,6 +248,7 @@ export function buildCustomerTimelineResponse(input: CustomerTimelineInput): Cus
     customer,
     appointments,
     followups,
+    treatmentSummaries,
     auditEvents,
     timeline,
   };

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import { buildCustomerTimelineResponse } from '@/modules/institution/domain/customer-timeline';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
+import { createTreatmentSummaryRepository } from '@/modules/institution/server/treatment-summary-repository';
 import { canAccessResource } from '@/modules/security/domain/access-control';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
@@ -41,6 +42,7 @@ export async function GET(request: Request, context: CustomerTimelineRouteContex
     const db = getDatabase();
     const repository = createTenantBusinessRepository(db);
     const auditRepository = createAuditEventRepository(db);
+    const treatmentSummaryRepository = createTreatmentSummaryRepository(db);
     const tenantId = accessContext.tenantId;
     const customer = await repository.getCustomerByTenant({
       tenantId,
@@ -51,9 +53,13 @@ export async function GET(request: Request, context: CustomerTimelineRouteContex
       return NextResponse.json({ error: '记录不存在' }, { status: 404 });
     }
 
-    const [appointments, followups, auditEvents] = await Promise.all([
+    const [appointments, followups, treatmentSummaries, auditEvents] = await Promise.all([
       repository.listAppointmentsByTenantAndCustomer({ tenantId, customerId }),
       repository.listFollowUpTasksByTenantAndCustomer({ tenantId, customerId }),
+      treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer({
+        tenantId,
+        customerId,
+      }),
       auditRepository.listCustomerAuditEventsByResourceId({ tenantId, customerId }),
     ]);
 
@@ -62,6 +68,7 @@ export async function GET(request: Request, context: CustomerTimelineRouteContex
         customer,
         appointments,
         followups,
+        treatmentSummaries,
         auditEvents,
       }),
     );
