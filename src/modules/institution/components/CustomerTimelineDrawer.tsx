@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarClock, ClipboardList, History, ShieldCheck, X } from 'lucide-react';
+import { CalendarClock, ClipboardList, HeartPulse, History, ShieldCheck, X } from 'lucide-react';
 import {
   InstitutionPageState,
   type InstitutionPageStateProps,
@@ -12,6 +12,7 @@ import type {
   CustomerTimelineFollowUpSummary,
   CustomerTimelineResponse,
 } from '@/modules/institution/domain/customer-timeline';
+import type { CustomerTimelineTreatmentSummary } from '@/modules/institution/domain/treatment-summaries';
 import {
   appointmentStatusLabels,
   customerLifecycleLabels,
@@ -90,6 +91,47 @@ function FollowUpSummary({ followUp }: { followUp: CustomerTimelineFollowUpSumma
   );
 }
 
+function TreatmentSummary({ treatment }: { treatment: CustomerTimelineTreatmentSummary }) {
+  return (
+    <li className="rounded-2xl border border-slate-200 bg-white p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-slate-950">
+          {treatment.treatmentProject}
+        </span>
+        <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">
+          {followUpRiskLevelLabels[treatment.riskLevel]}
+        </span>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{treatment.summary}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-500">
+        下一步护理：{displayText(treatment.nextCareAction)}
+      </p>
+      <div className="mt-2 grid gap-1 text-xs text-slate-500 sm:grid-cols-2">
+        <span>治疗时间：{formatBusinessDateTime(treatment.treatmentDate)}</span>
+        <span>类别：{displayText(treatment.treatmentCategory)}</span>
+        <span>阶段：{displayText(treatment.treatmentStage)}</span>
+        <span>恢复：{displayText(treatment.recoveryStage)}</span>
+        <span>风险：{followUpRiskLevelLabels[treatment.riskLevel]}</span>
+        <span>负责人：{displayText(treatment.ownerUserId)}</span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {treatment.tags.length > 0 ? (
+          treatment.tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full border border-rose-100 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700"
+            >
+              {tag}
+            </span>
+          ))
+        ) : (
+          <span className="text-sm text-slate-400">暂无标签</span>
+        )}
+      </div>
+    </li>
+  );
+}
+
 function TimelineEventItem({ event }: { event: CustomerTimelineEvent }) {
   return (
     <li className="relative pl-5">
@@ -106,7 +148,22 @@ function TimelineEventItem({ event }: { event: CustomerTimelineEvent }) {
           <span>状态：{event.status}</span>
           <span>来源：{event.source}</span>
           <span>关联：{event.relatedRecordId}</span>
+          {event.riskLevel ? (
+            <span>风险：{followUpRiskLevelLabels[event.riskLevel]}</span>
+          ) : null}
         </div>
+        {event.tags && event.tags.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {event.tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
     </li>
   );
@@ -143,6 +200,7 @@ export function CustomerTimelineDrawer({
   timeline,
 }: CustomerTimelineDrawerProps) {
   const customer = timeline?.customer;
+  const treatmentSummaries = timeline?.treatmentSummaries ?? [];
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -247,6 +305,19 @@ export function CustomerTimelineDrawer({
                   </ul>
                 ) : (
                   <InstitutionPageState kind="empty" title="暂无随访任务" />
+                )}
+              </section>
+
+              <section className="space-y-3">
+                <SectionHeader icon={HeartPulse} title="治疗结构化摘要" />
+                {treatmentSummaries.length > 0 ? (
+                  <ul className="space-y-3">
+                    {treatmentSummaries.map((treatment) => (
+                      <TreatmentSummary key={treatment.id} treatment={treatment} />
+                    ))}
+                  </ul>
+                ) : (
+                  <InstitutionPageState kind="empty" title="暂无治疗摘要" />
                 )}
               </section>
 
