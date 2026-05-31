@@ -16,6 +16,7 @@ import {
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { AppointmentCenterShell } from '@/modules/institution/components/AppointmentCenterShell';
 import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
+import { InstitutionAuditEventsShell } from '@/modules/institution/components/InstitutionAuditEventsShell';
 import {
   InstitutionPageState,
   getInstitutionPageStateFromClientError,
@@ -64,6 +65,7 @@ const realInstitutionViews = [
   'customers',
   'appointments',
   'followups',
+  'audit',
 ] as const satisfies readonly InstitutionViewId[];
 
 function isRealInstitutionView(viewId: InstitutionViewId) {
@@ -298,6 +300,8 @@ export function InstitutionWorkspace() {
               <AppointmentCenterShell />
             ) : activeView === 'followups' ? (
               <SmartFollowUpShell />
+            ) : activeView === 'audit' ? (
+              <InstitutionAuditEventsShell />
             ) : (
               <PlaceholderInstitutionView label={activeNavItem.label} />
             )}
@@ -570,7 +574,7 @@ function PlaceholderInstitutionView({ label }: { label: string }) {
       description="本入口不会在 Phase 6 触发客服、知识库或数据分析真实功能请求。"
       action={
         <div className="space-y-2 text-sm leading-6 text-slate-500">
-          <p>已真实接入：工作台、客户中心、预约中心、智能随访。</p>
+          <p>已真实接入：工作台、客户中心、预约中心、智能随访、审计日志。</p>
           <p>后续占位：客服工作台、知识库、数据分析。</p>
         </div>
       }

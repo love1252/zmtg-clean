@@ -107,6 +107,7 @@ describe('工作台看板领域模型', () => {
       'dashboard',
       'customers',
       'followups',
+      'audit',
       'conversations',
       'appointments',
       'knowledge',
@@ -115,7 +116,16 @@ describe('工作台看板领域模型', () => {
     expect(institutionNavItems.filter((item) => item.active)).toHaveLength(1);
     expect(institutionNavItems.find((item) => item.active)?.id).toBe('dashboard');
     expect(labels).toEqual(
-      expect.arrayContaining(['工作台', '客户中心', '智能随访', '客服工作台', '预约中心', '知识库', '数据分析']),
+      expect.arrayContaining([
+        '工作台',
+        '客户中心',
+        '智能随访',
+        '审计日志',
+        '客服工作台',
+        '预约中心',
+        '知识库',
+        '数据分析',
+      ]),
     );
   });
 

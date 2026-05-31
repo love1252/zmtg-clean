@@ -3,6 +3,7 @@ import {
   BarChart3,
   BookOpen,
   CalendarCheck,
+  FileSearch,
   LayoutDashboard,
   MessageCircle,
   Users,
@@ -20,6 +21,7 @@ export type InstitutionViewId =
   | 'dashboard'
   | 'customers'
   | 'followups'
+  | 'audit'
   | 'conversations'
   | 'appointments'
   | 'knowledge'
@@ -29,6 +31,7 @@ export const institutionNavItems: InstitutionNavItem[] = [
   { id: 'dashboard', label: '工作台', icon: LayoutDashboard, active: true },
   { id: 'customers', label: '客户中心', icon: Users },
   { id: 'followups', label: '智能随访', icon: Workflow },
+  { id: 'audit', label: '审计日志', icon: FileSearch },
   { id: 'conversations', label: '客服工作台', icon: MessageCircle },
   { id: 'appointments', label: '预约中心', icon: CalendarCheck },
   { id: 'knowledge', label: '知识库', icon: BookOpen },
