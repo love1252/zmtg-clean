@@ -166,6 +166,19 @@ function expectNoInstitutionMutation(fetchMock: ReturnType<typeof mockWorkspaceF
   }
 }
 
+function expectOnlyInstitutionReadCalls(fetchMock: ReturnType<typeof mockWorkspaceFetch>) {
+  const institutionCalls = fetchMock.mock.calls.filter(([input]) =>
+    fetchPath(input).startsWith('/api/institution/'),
+  );
+
+  expect(institutionCalls.length).toBeGreaterThan(0);
+  for (const [input, init] of institutionCalls) {
+    expect(fetchPath(input)).not.toContain('tenantId');
+    expect(init?.method ?? 'GET').toBe('GET');
+    expect(init?.body ? String(init.body) : '').not.toContain('tenantId');
+  }
+}
+
 describe('工作台入口页面', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -179,6 +192,7 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('先看到增长机会')).toBeInTheDocument();
     expect(screen.getByText('正在加载机构运营摘要...')).toBeInTheDocument();
     expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/session', { cache: 'no-store' });
     expectMetric('当前客户摘要', '2');
     expectMetric('高优先级客户', '1');
     expectMetric('待确认预约', '1');
@@ -222,6 +236,48 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('今日随访任务')).toBeInTheDocument();
     expect(await screen.findByText('Phase5 D7 回访')).toBeInTheDocument();
     expect(screen.getByText('不会调用 AI provider，也不会自动触达客户。')).toBeInTheDocument();
+  });
+
+  it('机构导航清晰标注已接入和后续占位入口', async () => {
+    const fetchMock = mockWorkspaceFetch();
+    render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(screen.getAllByText('已接入').length).toBeGreaterThanOrEqual(8);
+    expect(screen.getAllByText('后续占位').length).toBeGreaterThanOrEqual(6);
+
+    fireEvent.click(screen.getByRole('button', { name: '客服工作台' }));
+    expect(screen.getByText('客服工作台仍为后续占位')).toBeInTheDocument();
+    expect(screen.getByText('已真实接入：工作台、客户中心、预约中心、智能随访。')).toBeInTheDocument();
+    expect(screen.getByText('后续占位：客服工作台、知识库、数据分析。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '知识库' }));
+    expect(screen.getByText('知识库仍为后续占位')).toBeInTheDocument();
+    expect(screen.getByText('本入口不会在 Phase 6 触发客服、知识库或数据分析真实功能请求。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '数据分析' }));
+    expect(screen.getByText('数据分析仍为后续占位')).toBeInTheDocument();
+    expectNoInstitutionMutation(fetchMock);
+  });
+
+  it('机构端移动导航可切换已接入业务页', async () => {
+    const fetchMock = mockWorkspaceFetch();
+    render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '移动导航：客户中心' }));
+    expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
+    expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '移动导航：预约中心' }));
+    expect(screen.getByRole('heading', { name: '预约中心' })).toBeInTheDocument();
+    expect(await screen.findByText('Phase5 预约复诊')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '移动导航：智能随访' }));
+    expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();
+    expect(await screen.findByText('Phase5 D7 回访')).toBeInTheDocument();
+    expectOnlyInstitutionReadCalls(fetchMock);
   });
 
   it('机构工作台首页展示空状态', async () => {

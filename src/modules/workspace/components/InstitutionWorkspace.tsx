@@ -59,6 +59,27 @@ const emptyDashboardSummary = buildInstitutionDashboardSummary({
 
 type DashboardLoadStatus = 'loading' | 'success' | 'error';
 
+const realInstitutionViews = [
+  'dashboard',
+  'customers',
+  'appointments',
+  'followups',
+] as const satisfies readonly InstitutionViewId[];
+
+function isRealInstitutionView(viewId: InstitutionViewId) {
+  return (realInstitutionViews as readonly InstitutionViewId[]).includes(viewId);
+}
+
+function navigationBoundaryLabel(viewId: InstitutionViewId) {
+  return isRealInstitutionView(viewId) ? '已接入' : '后续占位';
+}
+
+function navigationBoundaryClasses(viewId: InstitutionViewId) {
+  return isRealInstitutionView(viewId)
+    ? 'border-emerald-300/30 bg-emerald-300/12 text-emerald-100'
+    : 'border-amber-300/30 bg-amber-300/12 text-amber-100';
+}
+
 function visibleDashboardErrorState(error: TenantBusinessClientError): InstitutionPageStateProps {
   return getInstitutionPageStateFromClientError(error, {
     forbiddenMessage: '当前账号没有访问机构首页数据的权限',
@@ -149,11 +170,11 @@ export function InstitutionWorkspace() {
           </div>
 
           <div className="relative px-5 py-5">
-            <label className="relative block" aria-label="搜索功能">
+            <label className="relative block" aria-label="搜索占位">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
                 className="h-10 w-full rounded-xl border border-white/10 bg-white/8 pl-9 pr-3 text-sm text-slate-200 outline-none placeholder:text-slate-500 focus:border-cyan-300/70"
-                placeholder="搜索功能..."
+                placeholder="搜索暂未接入"
               />
             </label>
           </div>
@@ -166,12 +187,23 @@ export function InstitutionWorkspace() {
                 onClick={() => setActiveView(item.id)}
                 aria-current={activeView === item.id ? 'page' : undefined}
                 className={cn(
-                  'flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium tracking-normal transition',
+                  'flex h-11 w-full items-center justify-between gap-3 rounded-xl px-3 text-left text-sm font-medium tracking-normal transition',
                   activeView === item.id ? 'bg-blue-500/20 text-cyan-200 ring-1 ring-cyan-300/20' : 'text-slate-300 hover:bg-white/8 hover:text-white',
                 )}
               >
-                <item.icon className="h-5 w-5 shrink-0" />
-                {item.label}
+                <span className="flex min-w-0 items-center gap-3">
+                  <item.icon className="h-5 w-5 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </span>
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold',
+                    navigationBoundaryClasses(item.id),
+                  )}
+                >
+                  {navigationBoundaryLabel(item.id)}
+                </span>
               </button>
             ))}
           </nav>
@@ -233,6 +265,21 @@ export function InstitutionWorkspace() {
                 >
                   <item.icon className="h-3.5 w-3.5 shrink-0" />
                   {item.label}
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'ml-0.5 rounded-full border px-1.5 py-0.5 text-[10px]',
+                      isRealInstitutionView(item.id)
+                        ? activeView === item.id
+                          ? 'border-white/30 bg-white/16 text-white'
+                          : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : activeView === item.id
+                          ? 'border-white/30 bg-white/16 text-white'
+                          : 'border-amber-200 bg-amber-50 text-amber-700',
+                    )}
+                  >
+                    {navigationBoundaryLabel(item.id)}
+                  </span>
                 </button>
               ))}
             </div>
@@ -519,8 +566,14 @@ function PlaceholderInstitutionView({ label }: { label: string }) {
   return (
     <InstitutionPageState
       kind="placeholder"
-      title={label}
-      description="该模块会在后续阶段接入真实业务壳。本阶段优先完成客户中心、预约中心和智能随访。"
+      title={`${label}仍为后续占位`}
+      description="本入口不会在 Phase 6 触发客服、知识库或数据分析真实功能请求。"
+      action={
+        <div className="space-y-2 text-sm leading-6 text-slate-500">
+          <p>已真实接入：工作台、客户中心、预约中心、智能随访。</p>
+          <p>后续占位：客服工作台、知识库、数据分析。</p>
+        </div>
+      }
       className="items-start text-left"
     />
   );

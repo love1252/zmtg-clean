@@ -10,6 +10,13 @@
 
 ---
 
+## 执行状态
+
+- PR 1 已完成：Phase 6 spec / plan 文档与 README / roadmap / devlog 状态更新。
+- PR 2 已完成：机构工作台首页接入现有客户、预约、随访 GET API，并派生指标、行动摘要、loading、empty、401 / 403 / 503 错误态。
+- PR 3 已完成：新增 `InstitutionPageState` 和 `InstitutionSectionHeader`，统一工作台首页与三大业务页状态展示。
+- PR 4 已完成：机构端导航标注已接入 / 后续占位边界，补 workspace smoke 测试并收尾文档。
+
 ## 总边界
 
 Phase 6 不做：
@@ -48,10 +55,10 @@ Phase 6 不做：
 
 ## PR 拆分
 
-1. PR 1：Phase 6 spec/plan 文档与 README/roadmap/devlog 状态更新。
-2. PR 2：机构工作台首页接入现有三类真实 API，派生指标、行动摘要、首页 loading/error/empty。
-3. PR 3：抽小型共享页面状态组件，统一三大业务页 header/state/boundary 展示。
-4. PR 4：导航与 smoke 稳定化，补测试和收尾文档。
+1. PR 1：Phase 6 spec/plan 文档与 README/roadmap/devlog 状态更新。已完成。
+2. PR 2：机构工作台首页接入现有三类真实 API，派生指标、行动摘要、首页 loading/error/empty。已完成。
+3. PR 3：抽小型共享页面状态组件，统一三大业务页 header/state/boundary 展示。已完成。
+4. PR 4：导航与 smoke 稳定化，补测试和收尾文档。已完成。
 
 ## PR 1：Phase 6 文档和状态同步
 
@@ -269,14 +276,14 @@ node scripts/run-next.mjs build --webpack
 **涉及文件：**
 
 - 修改：`src/modules/workspace/components/InstitutionWorkspace.tsx`
-- 修改：`src/modules/workspace/domain/institution-dashboard.ts`
 - 修改：`src/modules/workspace/tests/WorkspaceEntryPages.test.tsx`
-- 修改：`src/modules/workspace/tests/WorkspaceDashboardDomain.test.ts`
 - 修改：`README.md`
 - 修改：`docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md`
-- 修改：`docs/devlog/2026-05-31.md` 或新日期 devlog
+- 修改：`docs/superpowers/plans/2026-05-31-phase6-workspace-entry-consistency.md`
+- 修改：`docs/superpowers/specs/2026-05-31-phase6-workspace-entry-consistency-design.md`
+- 修改：`docs/devlog/2026-05-31.md`
 
-- [ ] **步骤 1：补导航领域模型测试**
+- [x] **步骤 1：补导航边界 smoke 测试**
 
 覆盖：
 
@@ -285,15 +292,9 @@ node scripts/run-next.mjs build --webpack
 - 导航 label 唯一。
 - 默认入口仍为 `dashboard`。
 
-运行：
+实际落点：`WorkspaceEntryPages.test.tsx` 覆盖导航标记、占位入口、移动端切换和旧静态文案边界。
 
-```bash
-node scripts/run-vitest.mjs run src/modules/workspace/tests/WorkspaceDashboardDomain.test.ts
-```
-
-预期：新增断言先失败。
-
-- [ ] **步骤 2：整理导航和占位状态**
+- [x] **步骤 2：整理导航和占位状态**
 
 要求：
 
@@ -301,7 +302,7 @@ node scripts/run-vitest.mjs run src/modules/workspace/tests/WorkspaceDashboardDo
 - 占位页明确“后续阶段接入”，不得触发 AI、知识库、客服、数据分析真实请求。
 - 搜索输入如暂不实现，应避免暗示全局业务搜索已可用。
 
-- [ ] **步骤 3：补 workspace smoke 测试**
+- [x] **步骤 3：补 workspace smoke 测试**
 
 覆盖：
 
@@ -311,15 +312,9 @@ node scripts/run-vitest.mjs run src/modules/workspace/tests/WorkspaceDashboardDo
 - 切换智能随访展示随访 API records。
 - 切换客服工作台、知识库、数据分析展示占位边界。
 
-运行：
+实际覆盖：登录后进入机构端、首页加载真实 API 摘要、桌面 / 移动导航切换三大业务页、占位入口不新增机构业务请求、旧静态文案不出现。
 
-```bash
-node scripts/run-vitest.mjs run src/modules/workspace/tests/WorkspaceEntryPages.test.tsx
-```
-
-预期：新增断言先失败。
-
-- [ ] **步骤 4：更新收尾文档**
+- [x] **步骤 4：更新收尾文档**
 
 文档需要说明：
 
@@ -327,20 +322,21 @@ node scripts/run-vitest.mjs run src/modules/workspace/tests/WorkspaceEntryPages.
 - 仍未进入高风险模块。
 - 后续阶段可再单独规划客户详情时间线、审计查询、平台租户管理等。
 
-- [ ] **步骤 5：Phase 6 总体验证**
+- [x] **步骤 5：Phase 6 总体验证**
 
 运行：
 
 ```bash
 git diff --check
-node scripts/run-vitest.mjs run
+node scripts/run-vitest.mjs run src/modules/workspace/tests src/modules/institution/tests
 ./node_modules/.bin/tsc --noEmit
 node scripts/run-next.mjs build --webpack
+node scripts/run-vitest.mjs run
 ```
 
 预期：
 
-- 21 个以上测试文件全部通过。
+- 22 个以上测试文件全部通过。
 - TypeScript 无错误。
 - Next build 成功。
 
