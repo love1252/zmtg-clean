@@ -17,6 +17,7 @@
 - 客户、预约、随访只读和受控写入 API
 - 机构端客户中心、预约中心、智能随访接入真实 API
 - Phase 6：机构工作台首页真实 API 摘要、共享页面状态组件、机构端导航边界和 workspace smoke 测试
+- Phase 7：客户详情时间线 v1，包括 audit `resource_id` enrich、timeline 后端 API、客户中心详情抽屉和 smoke 覆盖
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -26,12 +27,20 @@ Phase 6 已完成：
 - 机构端导航明确标注已接入页面与后续占位页面
 - workspace entry smoke 覆盖首页、三大业务页和占位入口切换
 
+Phase 7 已完成：
+
+- audit events 已补充最小 `resource_id`，支持客户、预约、随访相关审计事件关联目标记录
+- `GET /api/institution/customers/[customerId]/timeline` 已提供客户详情时间线只读 API
+- 客户中心已增加“查看详情”入口和右侧客户详情时间线抽屉
+- 客户详情 v1 展示客户脱敏摘要、预约摘要、随访摘要、结构化时间线和安全审计摘要
+- workspace / customer detail smoke 覆盖客户中心打开详情、关闭后列表保留、敏感信息不展示
+
 后续阶段会依次加入：
 
-- 客户详情时间线
+- 审计日志只读查询
 - 治疗记录与客服会话
 - AI 与知识库
-- 企业微信、开放平台凭证、计费和审计查询
+- 企业微信、开放平台凭证和计费
 
 路线图参考：
 

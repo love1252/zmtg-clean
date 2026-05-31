@@ -1,7 +1,35 @@
 # Phase 7 客户详情时间线 v1 设计
 
 > 日期：2026-05-31
-> 状态：PR 1 规划文档。本文只定义 Phase 7 目标、边界和 PR 拆分，不修改业务代码、API、数据库、权限、认证或租户隔离。
+> 状态：Phase 7 已完成。本文记录客户详情时间线 v1 的目标、边界、实现拆分和 Phase 8 衔接。
+
+## 0. Phase 7 完成状态
+
+Phase 7 已按 A-first 路线完成客户详情时间线 v1：
+
+- PR 1 已完成客户详情时间线 v1 spec / plan。
+- PR 2 已完成最小 audit `resource_id` enrich。
+- PR 3 已完成客户详情 timeline 后端 API。
+- PR 4 已完成客户详情时间线 UI。
+- PR 5 已完成 smoke / 文档收尾。
+
+当前能力包括：
+
+- 客户脱敏摘要。
+- 预约摘要。
+- 随访摘要。
+- 结构化时间线。
+- 安全审计摘要。
+
+仍未进入：
+
+- 审计日志完整查询页面。
+- AI / RAG / Agent。
+- 企业微信。
+- OAuth / Webhook / 支付。
+- 完整治疗记录、完整病历正文或咨询对话全文。
+
+后续建议进入 Phase 8 Plan Mode，单独评估审计日志只读查询基础版。
 
 ## 1. Phase 7 目标
 
@@ -9,7 +37,7 @@ Phase 7 采用 A-first 路线：先建设“客户详情时间线 v1”，让机
 
 本阶段目标是把 Phase 5/6 已完成的客户、预约、随访真实 API 能力组织成“单客户经营视角”。v1 只做摘要和结构化时间线，不做完整病历、完整治疗记录、咨询对话全文、AI、企微、支付或外部连接器。
 
-Phase 7 同时允许在后续 PR 中对 `audit_events` 做最小 `resource_id` enrich，用于让客户时间线能够关联到客户、预约或随访任务上的关键操作事件。该 enrich 只增加目标资源编号，不增加自由 `metadata jsonb`，不存请求体，不存隐私正文。
+Phase 7 同时已对 `audit_events` 完成最小 `resource_id` enrich，用于让客户时间线能够关联到客户、预约或随访任务上的关键操作事件。该 enrich 只增加目标资源编号，不增加自由 `metadata jsonb`，不存请求体，不存隐私正文。
 
 ## 2. 为什么优先做客户详情时间线 v1
 
@@ -128,9 +156,9 @@ API 设计原则：
 type CustomerTimelineResponse = {
   customer: CustomerTimelineCustomerSummary;
   appointments: CustomerTimelineAppointmentSummary[];
-  followUpTasks: CustomerTimelineFollowUpSummary[];
+  followups: CustomerTimelineFollowUpSummary[];
   auditEvents: CustomerTimelineAuditSummary[];
-  timelineEvents: CustomerTimelineEvent[];
+  timeline: CustomerTimelineEvent[];
 };
 ```
 
@@ -228,6 +256,8 @@ Phase 7 必须延续现有规则：
 
 ### PR 1：Phase 7 spec/plan 文档
 
+状态：已完成。
+
 范围：
 
 - 新增 Phase 7 design spec。
@@ -254,6 +284,8 @@ git diff --check
 ```
 
 ### PR 2：最小 audit resource_id enrich
+
+状态：已完成。
 
 范围：
 
@@ -287,6 +319,8 @@ node scripts/run-next.mjs build --webpack
 ```
 
 ### PR 3：客户详情 timeline 后端 API
+
+状态：已完成。
 
 范围：
 
@@ -323,6 +357,8 @@ node scripts/run-next.mjs build --webpack
 
 ### PR 4：客户详情时间线 UI
 
+状态：已完成。
+
 范围：
 
 - 客户中心增加“查看详情”入口。
@@ -358,6 +394,8 @@ node scripts/run-next.mjs build --webpack
 
 ### PR 5：Phase 7 smoke / 文档收尾
 
+状态：已完成。
+
 范围：
 
 - 补充 workspace / customer detail smoke。
@@ -389,7 +427,7 @@ node scripts/run-vitest.mjs run
 
 ## 13. Phase 8 审计日志只读查询衔接
 
-Phase 8 可以在 Phase 7 的基础上建设审计日志只读查询基础版：
+Phase 8 建议在 Phase 7 的基础上进入 Plan Mode，建设审计日志只读查询基础版：
 
 - 复用 `audit_events.resource_id` 作为目标资源筛选字段。
 - 新增审计查询 repository。
