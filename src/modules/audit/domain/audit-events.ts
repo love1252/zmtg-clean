@@ -20,6 +20,7 @@ export type TenantAuditEvent = {
   tenantId: string | null;
   scope: AccessContext['scope'];
   resource: ProtectedResource;
+  resourceId?: string | null;
   action: ProtectedAction;
   result: AuditResult;
   reason: AuditReason;
@@ -42,6 +43,7 @@ export function createAuditEvent(input: {
   eventId: string;
   context: AccessContext;
   resource: ProtectedResource;
+  resourceId?: string | null;
   action: ProtectedAction;
   result: AuditResult;
   reason: AuditReason;
@@ -54,6 +56,7 @@ export function createAuditEvent(input: {
     tenantId: input.context.tenantId,
     scope: input.context.scope,
     resource: input.resource,
+    ...(input.resourceId == null ? {} : { resourceId: input.resourceId }),
     action: input.action,
     result: input.result,
     reason: input.reason,
@@ -66,14 +69,16 @@ export function createDeniedAccessAuditEvent(input: {
   eventId: string;
   context: AccessContext;
   resource: ProtectedResource;
+  resourceId?: string | null;
   action: ProtectedAction;
-  reason: Extract<AccessDecision, { allowed: false }>['reason'];
+  reason: Extract<AccessDecision, { allowed: false }>['reason'] | AuditReason;
   occurredAt: string;
 }): TenantAuditEvent {
   return createAuditEvent({
     eventId: input.eventId,
     context: input.context,
     resource: input.resource,
+    resourceId: input.resourceId,
     action: input.action,
     result: 'denied',
     reason: input.reason,

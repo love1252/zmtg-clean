@@ -75,7 +75,7 @@ export async function POST(request: Request) {
             ...parsed.value,
           });
 
-          await auditRepository.record(successAuditEvent);
+          await auditRepository.record({ ...successAuditEvent, resourceId: record.id });
 
           return { kind: 'success', record };
         }),
@@ -122,7 +122,7 @@ export async function PATCH(request: Request) {
             return { kind: 'not_found' };
           }
 
-          await auditRepository.record(successAuditEvent);
+          await auditRepository.record({ ...successAuditEvent, resourceId: record.id });
 
           return { kind: 'success', record };
         }),

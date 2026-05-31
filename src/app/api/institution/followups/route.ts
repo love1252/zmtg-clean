@@ -78,7 +78,7 @@ export async function PATCH(request: Request) {
             return result;
           }
 
-          await auditRepository.record(successAuditEvent);
+          await auditRepository.record({ ...successAuditEvent, resourceId: result.task.id });
 
           return { kind: 'success', record: result.task };
         }),

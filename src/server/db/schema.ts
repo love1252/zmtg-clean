@@ -178,6 +178,7 @@ export const auditEvents = pgTable(
     tenantId: varchar('tenant_id', { length: 64 }),
     scope: varchar('scope', { length: 24 }).$type<AccessContext['scope']>().notNull(),
     resource: varchar('resource', { length: 64 }).$type<ProtectedResource>().notNull(),
+    resourceId: varchar('resource_id', { length: 96 }),
     action: varchar('action', { length: 64 }).$type<ProtectedAction>().notNull(),
     result: auditResultEnum('result').notNull(),
     reason: varchar('reason', { length: 80 }).$type<AuditReason>().notNull(),
@@ -190,5 +191,11 @@ export const auditEvents = pgTable(
       table.occurredAt,
     ),
     actorOccurredIdx: index('audit_events_actor_occurred_idx').on(table.actorId, table.occurredAt),
+    tenantResourceIdOccurredIdx: index('audit_events_tenant_resource_id_occurred_idx').on(
+      table.tenantId,
+      table.resource,
+      table.resourceId,
+      table.occurredAt,
+    ),
   }),
 );
