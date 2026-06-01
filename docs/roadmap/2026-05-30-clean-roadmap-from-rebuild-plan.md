@@ -22,13 +22,14 @@
 - 平台端租户管理第九阶段：租户套餐 / 配额数据底座、平台端租户只读 API、平台租户管理 UI、入口 smoke 和文档收尾已完成。
 - 平台套餐配额 enforcement 第十阶段：内部 quota enforcement helper、客户 / 预约创建 API 阻断、denied 审计、前端稳定错误态、入口 smoke 和文档收尾已完成。
 - 平台商业化健康第十一阶段：平台商业化健康 view model / client 派生、平台端只读摘要 UI、配额快照风险 / 配置缺失 / quota denied 信号展示、入口 smoke 和文档收尾已完成。
+- 治疗记录结构化摘要第十二阶段：治疗摘要 schema / migration / seed / repository / DTO 白名单、customer timeline API 接入、客户详情抽屉展示、入口 smoke 和文档收尾已完成。
 - 开放平台治理第一阶段：API Key、OAuth、Webhook 和审计的治理词汇、生命周期和安全边界展示。
 
 当前主要缺口：
 
 - 平台端已有只读租户列表、租户状态、套餐 / 配额、用量快照和商业化健康运营摘要；机构端新增客户 / 预约已具备轻量套餐配额 enforcement，但尚未具备租户创建、编辑、删除、冻结 / 恢复、完整套餐商业化后台、计费、支付、合同或发票能力。
 - 审计日志只读查询基础版已完成，但导出、告警和复杂风控仍未进入真实实现。
-- 治疗记录、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
+- 治疗记录结构化摘要 v1 已完成；完整治疗记录正文、治疗写入 UI、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
 
 ## 2. 旧 REBUILD_PLAN.md 中仍有价值的功能
 
@@ -65,6 +66,7 @@
 - 平台端租户管理基础版：租户套餐 / 配额最小 schema、demo seed、repository、domain DTO、`GET /api/open-platform/tenants` 只读 API、平台租户管理 UI 和入口 smoke。
 - 套餐配额 enforcement 轻量版：客户 / 预约创建前读取 active plan / quota limit，按当前租户业务表 live count 判断是否允许写入，拒绝时返回稳定 `409`、写 denied 审计并保留前端安全错误态。
 - 平台商业化健康只读运营辅助：复用现有平台租户 / 审计 API，派生并展示套餐覆盖、配额快照风险、配置缺失和近期 quota denied 信号，明确“运营参考 / 配额快照”边界。
+- 治疗记录结构化摘要 v1：最小 `treatment_summaries` 数据底座、tenant-scoped repository、DTO 白名单、客户详情 timeline API `treatmentSummaries` / `treatment_summary` 节点、客户详情抽屉展示和入口 smoke。
 - 开放平台 API Key、OAuth、Webhook 生命周期和安全治理词汇。
 
 ## 4. 不建议迁移的旧功能
@@ -85,7 +87,7 @@
 
 建议进入后续路线的功能：
 
-- 治疗记录模块：先做结构化摘要和租户隔离，不保存完整病历正文。
+- 治疗记录模块：结构化摘要 v1 和租户隔离已完成；后续写入 / 编辑、客服会话联动和完整治疗记录能力需单独规划，仍不保存完整病历正文。
 - 平台租户后续能力：租户创建、状态变更审计、完整套餐商业化后台、计费、合同、发票和支付。
 - 审计高级治理：只读查询基础版之后再单独评估导出、告警和复杂风控。
 - 套餐权益与配额 enforcement：客户数和预约数创建阻断已完成轻量版，后续可单独评估员工数、随访任务、AI 调用、严格一致计数器和套餐变更流程。
@@ -98,11 +100,11 @@
 
 推荐优先级：
 
-1. Phase 12 Plan Mode：在治疗记录结构化摘要 v1、平台租户状态管理和状态变更审计、知识库 / RAG 基础准备、审计高级治理之间重新评估优先级。
-2. 治疗记录结构化摘要 v1 的 schema、API 和安全计划。
-3. 平台租户状态管理、更多资源配额 enforcement 与完整套餐商业化后台规划。
-4. 审计高级治理：导出、告警和复杂风控。
-5. 知识库/RAG 基础版。
+1. Phase 13 Plan Mode：在平台租户状态管理和状态变更审计、更多资源配额 enforcement、知识库 / RAG 基础准备、审计高级治理、平台套餐商业化管理继续增强之间重新评估优先级。
+2. 平台租户状态管理、更多资源配额 enforcement 与完整套餐商业化后台规划。
+3. 审计高级治理：导出、告警和复杂风控。
+4. 知识库/RAG 基础版。
+5. 客服会话和治疗摘要写入 / 编辑能力。
 6. AI provider、调用日志和 Agent。
 7. 企业微信、Webhook、OAuth、API Key。
 8. 计费、合同、发票和支付。
@@ -168,4 +170,7 @@ Phase 5 的成功标准：
 - Phase 11 复用现有 `GET /api/open-platform/tenants` 和 `GET /api/open-platform/audit-events`，未新增 API，未新增数据库 schema / migration，未改权限、认证或租户隔离模型，未改 Phase 10 enforcement。
 - Phase 11 页面明确 `tenant_quota_snapshots.current*` 仅为配额快照 / 运营参考，不作为强一致计费、创建拦截或 live enforcement 依据；UI 和 smoke 均确认不展示客户 / 预约 / 随访业务明细、治疗记录、病历正文、咨询对话、PII、SQL、stack、token、secret、`DATABASE_URL` 或连接串。
 - Phase 11 未做套餐购买 / 变更 / 续费、支付、合同、发票、租户冻结 / 恢复、自动升级套餐、自动触达客户或租户、治疗记录、AI / RAG / Agent、企业微信、OAuth、Webhook 或 API Key。
-- 后续建议进入 Phase 12 Plan Mode，在治疗记录结构化摘要 v1、平台租户状态管理和状态变更审计、更多资源配额 enforcement、知识库 / RAG 基础准备、审计高级治理之间重新评估优先级；当前不进入 Phase 12 实现。
+- Phase 12 已完成治疗记录结构化摘要 v1：Phase 12 spec / plan、`treatment_summaries` schema / migration / seed / repository / DTO 白名单、customer timeline API `treatmentSummaries` 与 `treatment_summary` 事件、客户详情抽屉 UI、workspace smoke 和文档收尾均已完成。
+- Phase 12 未保存或展示完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、手机号原文、身份证号、病历号原文、图片 / 文件原文、AI 生成内容、外部系统同步原文、SQL、stack、token、secret、`DATABASE_URL` 或连接串。
+- Phase 12 未新增独立治疗 API，未新增治疗写入 UI，未改权限、认证或租户隔离模型，未进入 AI provider、AI 生成治疗建议、Agent、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付、合同、发票或外部系统同步。
+- 后续建议进入 Phase 13 Plan Mode，在平台租户状态管理和状态变更审计、更多资源配额 enforcement、知识库 / RAG 基础准备、审计高级治理、平台套餐商业化管理继续增强之间重新评估优先级；当前不进入 Phase 13 实现。

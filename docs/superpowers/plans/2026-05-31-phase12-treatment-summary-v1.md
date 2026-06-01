@@ -2,11 +2,11 @@
 
 > **给后续执行 Agent 的要求：** 必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项执行本计划。步骤使用 `- [ ]` 复选框语法跟踪。
 
-**状态：** Phase 12 PR 1 文档阶段。
+**状态：** Phase 12 已完成。
 
 **目标：** 为客户详情时间线补充治疗记录结构化摘要 v1，只展示安全摘要和治疗节点，不保存或返回完整治疗记录正文、完整病历正文、咨询对话全文、AI 生成内容或外部系统原文。
 
-**架构方案：** Phase 12 v1 分 5 个 PR 推进。PR 2 新增 `treatment_summaries` 最小 schema / migration / seed / repository / DTO 白名单；PR 3 扩展现有 customer timeline domain 与 API；PR 4 在客户详情抽屉中展示治疗摘要；PR 5 做 smoke 和文档收尾。Phase 12 不新增独立治疗详情页，不新增治疗写入 UI，不接 AI 或外部系统。
+**架构方案：** Phase 12 v1 已按 5 个 PR 完成。PR 2 新增 `treatment_summaries` 最小 schema / migration / seed / repository / DTO 白名单；PR 3 扩展现有 customer timeline domain 与 API；PR 4 在客户详情抽屉中展示治疗摘要；PR 5 做 smoke 和文档收尾。Phase 12 未新增独立治疗详情页，未新增治疗写入 UI，未接 AI 或外部系统。
 
 **技术栈：** Next.js 16、React 19、TypeScript、Vitest、Testing Library、Drizzle ORM、PostgreSQL、现有 `GET /api/institution/customers/[customerId]/timeline`。
 
@@ -93,7 +93,7 @@ Phase 12 的核心边界：
 
 - `src/modules/institution/domain/customer-timeline.ts`
   - `CustomerTimelineResponse` 增加 `treatmentSummaries`。
-  - `CustomerTimelineEvent.type` 增加 `'treatment'`。
+  - `CustomerTimelineEvent.type` 增加 `'treatment_summary'`。
   - `buildCustomerTimelineResponse()` 接入治疗摘要事件。
 - `src/app/api/institution/customers/[customerId]/timeline/route.ts`
   - 查询治疗摘要 repository。
@@ -114,11 +114,9 @@ Phase 12 的核心边界：
 
 建议修改：
 
-- `src/modules/institution/client/tenant-business-client.ts`
-  - 校验 timeline response 中的 `treatmentSummaries`。
 - `src/modules/institution/components/CustomerTimelineDrawer.tsx`
   - 新增治疗摘要 section。
-  - 结构化时间线中显示 treatment event。
+  - 结构化时间线中显示 `treatment_summary` event。
 - `src/modules/institution/tests/InstitutionBusinessShells.test.tsx`
   - 客户详情抽屉治疗摘要展示测试。
 - `src/modules/workspace/tests/WorkspaceEntryPages.test.tsx`
@@ -246,7 +244,7 @@ secret
 
 ## PR 1：Phase 12 spec / plan 文档
 
-状态：本次执行。
+状态：已完成。
 
 **范围：**
 
@@ -269,7 +267,7 @@ secret
 
 **步骤：**
 
-- [ ] **步骤 1：确认工作区和分支**
+- [x] **步骤 1：确认工作区和分支**
 
 运行：
 
@@ -285,7 +283,7 @@ git log -1 --oneline
 - 当前从 `main` 创建 `docs/phase12-treatment-summary-plan`。
 - 最新提交为 Phase 11 合并后的 `main`。
 
-- [ ] **步骤 2：新增 Phase 12 design spec**
+- [x] **步骤 2：新增 Phase 12 design spec**
 
 创建：
 
@@ -310,7 +308,7 @@ docs/superpowers/specs/2026-05-31-phase12-treatment-summary-v1-design.md
 - PII / 医疗隐私风险。
 - PR 1-5 拆分，每个 PR 的范围、风险和验证方式。
 
-- [ ] **步骤 3：新增 Phase 12 implementation plan**
+- [x] **步骤 3：新增 Phase 12 implementation plan**
 
 创建：
 
@@ -328,7 +326,7 @@ docs/superpowers/plans/2026-05-31-phase12-treatment-summary-v1.md
 - 每个 PR 的涉及文件、步骤、风险、控制和验证方式。
 - 明确 PR 1 只改 Markdown。
 
-- [ ] **步骤 4：运行 Markdown diff 校验**
+- [x] **步骤 4：运行 Markdown diff 校验**
 
 运行：
 
@@ -338,7 +336,7 @@ git diff --check
 
 预期：无 trailing whitespace 或 patch 格式问题。
 
-- [ ] **步骤 5：提交 PR 1 文档**
+- [x] **步骤 5：提交 PR 1 文档**
 
 运行：
 
@@ -374,7 +372,7 @@ git diff --check
 
 ## PR 2：schema / migration / seed / repository / DTO 白名单测试
 
-状态：待执行。必须等 PR 1 合并后再执行。
+状态：已完成。
 
 **范围：**
 
@@ -401,7 +399,7 @@ git diff --check
 
 **步骤：**
 
-- [ ] **步骤 1：编写 schema 失败测试**
+- [x] **步骤 1：编写 schema 失败测试**
 
 在 `src/server/db/tests/Schema.test.ts` 增加断言：
 
@@ -447,7 +445,7 @@ node scripts/run-vitest.mjs run src/server/db/tests/Schema.test.ts
 
 预期：失败，因为 `treatmentSummaries` 尚不存在。
 
-- [ ] **步骤 2：实现最小 schema 和 migration**
+- [x] **步骤 2：实现最小 schema 和 migration**
 
 在 `src/server/db/schema.ts` 新增 `treatmentSummaries`，字段和索引按 spec 白名单实现。
 
@@ -501,7 +499,7 @@ export const treatmentSummaries = pgTable(
 
 如果 PR 2 选择数据库级预约复合外键，先为 `appointments` 新增 `(tenant_id, id)` unique constraint，再增加 `treatment_summaries_tenant_appointment_fk`。
 
-- [ ] **步骤 3：编写 domain DTO 白名单失败测试**
+- [x] **步骤 3：编写 domain DTO 白名单失败测试**
 
 新增 `src/modules/institution/tests/TreatmentSummaryDomain.test.ts`，验证 DTO 不返回危险字段：
 
@@ -554,7 +552,7 @@ it('治疗摘要 DTO 只返回白名单字段', () => {
 });
 ```
 
-- [ ] **步骤 4：实现 domain 和 repository**
+- [x] **步骤 4：实现 domain 和 repository**
 
 新增 domain mapper 和 repository 查询：
 
@@ -578,7 +576,7 @@ async listTreatmentSummariesByTenantAndCustomer(input: {
 }
 ```
 
-- [ ] **步骤 5：运行 PR 2 验证**
+- [x] **步骤 5：运行 PR 2 验证**
 
 运行：
 
@@ -605,14 +603,14 @@ node scripts/run-vitest.mjs run src/server/db/tests/Schema.test.ts src/modules/i
 
 ## PR 3：扩展 customer timeline domain 与 API
 
-状态：待执行。必须等 PR 2 合并后再执行。
+状态：已完成。
 
 **范围：**
 
 - 扩展 customer timeline domain。
 - 扩展现有 timeline API。
 - 增加 `treatmentSummaries`。
-- 增加 treatment timeline events。
+- 增加 `treatment_summary` timeline events。
 - 强制 tenant scope。
 - 不返回敏感正文。
 - 不新增独立治疗 API。
@@ -627,9 +625,9 @@ node scripts/run-vitest.mjs run src/server/db/tests/Schema.test.ts src/modules/i
 
 **步骤：**
 
-- [ ] **步骤 1：编写 timeline domain 失败测试**
+- [x] **步骤 1：编写 timeline domain 失败测试**
 
-在 `CustomerTimelineDomain.test.ts` 增加治疗摘要输入，期望 response 包含 `treatmentSummaries` 和 treatment event。
+在 `CustomerTimelineDomain.test.ts` 增加治疗摘要输入，期望 response 包含 `treatmentSummaries` 和 `treatment_summary` event。
 
 运行：
 
@@ -639,7 +637,7 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/CustomerTimelineDo
 
 预期：失败，因为 domain 尚未支持 treatment summaries。
 
-- [ ] **步骤 2：扩展 timeline domain**
+- [x] **步骤 2：扩展 timeline domain**
 
 增加类型：
 
@@ -662,9 +660,9 @@ export type CustomerTimelineTreatmentSummary = {
 };
 ```
 
-`CustomerTimelineEvent.type` 增加 `'treatment'`，并在 `buildCustomerTimelineResponse()` 中加入 treatment event。
+`CustomerTimelineEvent.type` 增加 `'treatment_summary'`，并在 `buildCustomerTimelineResponse()` 中加入 `treatment_summary` event。
 
-- [ ] **步骤 3：编写 timeline API 失败测试**
+- [x] **步骤 3：编写 timeline API 失败测试**
 
 在 `CustomerTimelineApiRoutes.test.ts` 增加：
 
@@ -673,7 +671,7 @@ export type CustomerTimelineTreatmentSummary = {
 - response 不包含 `tenantId`、`customerId`、完整治疗正文、完整病历正文、咨询全文、SQL、stack、token、secret。
 - URL / header / body 中伪造 `tenantId` 不影响查询。
 
-- [ ] **步骤 4：扩展 timeline API route**
+- [x] **步骤 4：扩展 timeline API route**
 
 在 route 中接入 treatment summary repository：
 
@@ -686,7 +684,7 @@ const [appointments, followups, treatmentSummaries, auditEvents] = await Promise
 ]);
 ```
 
-- [ ] **步骤 5：运行 PR 3 验证**
+- [x] **步骤 5：运行 PR 3 验证**
 
 运行：
 
@@ -702,7 +700,7 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/CustomerTimelineDo
 
 - timeline response 返回内部 `tenantId` 或 `customerId`。
 - API route 在客户不存在时仍查询治疗摘要。
-- treatment event 排序破坏现有客户摘要排最后规则。
+- `treatment_summary` event 排序破坏现有客户摘要排最后规则。
 - route 错误泄露数据库细节。
 
 **控制：**
@@ -713,7 +711,7 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/CustomerTimelineDo
 
 ## PR 4：客户详情抽屉 UI 展示治疗摘要
 
-状态：待执行。必须等 PR 3 合并后再执行。
+状态：已完成。
 
 **范围：**
 
@@ -724,14 +722,13 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/CustomerTimelineDo
 
 **涉及文件：**
 
-- 修改：`src/modules/institution/client/tenant-business-client.ts`
 - 修改：`src/modules/institution/components/CustomerTimelineDrawer.tsx`
 - 修改：`src/modules/institution/tests/InstitutionBusinessShells.test.tsx`
 - 修改：`src/modules/workspace/tests/WorkspaceEntryPages.test.tsx`
 
 **步骤：**
 
-- [ ] **步骤 1：编写 client / UI 失败测试**
+- [x] **步骤 1：编写 UI 失败测试**
 
 在 UI 测试中 mock timeline response：
 
@@ -760,11 +757,7 @@ treatmentSummaries: [
 
 期望 UI 展示治疗项目、阶段、风险、摘要和下一步动作，同时不展示危险字段。
 
-- [ ] **步骤 2：更新 client response 校验**
-
-`getCustomerTimeline()` 校验 payload 时要求 `treatmentSummaries` 为数组。
-
-- [ ] **步骤 3：扩展 CustomerTimelineDrawer**
+- [x] **步骤 2：扩展 CustomerTimelineDrawer**
 
 增加治疗摘要 section：
 
@@ -773,7 +766,7 @@ treatmentSummaries: [
 - 节点展示项目、阶段、恢复阶段、风险、负责人、摘要、下一步动作和标签。
 - 文案不得出现“完整病历”“完整治疗记录”“AI 生成建议”。
 
-- [ ] **步骤 4：运行 PR 4 验证**
+- [x] **步骤 3：运行 PR 4 验证**
 
 运行：
 
@@ -800,7 +793,7 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/InstitutionBusines
 
 ## PR 5：Phase 12 smoke / 文档收尾
 
-状态：待执行。必须等 PR 4 合并后再执行。
+状态：已完成。
 
 **范围：**
 
@@ -820,19 +813,19 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/InstitutionBusines
 
 **步骤：**
 
-- [ ] **步骤 1：补 workspace smoke**
+- [x] **步骤 1：补 workspace smoke**
 
 在 `WorkspaceEntryPages.test.tsx` 中覆盖：
 
 - 机构端进入客户中心。
 - 打开客户详情时间线。
 - 展示治疗结构化摘要。
-- 展示 treatment timeline event。
+- 展示 `treatment_summary` timeline event。
 - 请求不携带 `tenantId`。
 - 不发送 mutation。
 - 不展示完整治疗记录正文、完整病历正文、诊疗原文、咨询全文、手机号原文、身份证号、病历号原文、图片 / 文件原文、AI 生成内容、外部系统同步原文、请求体、SQL、stack、token、secret、`DATABASE_URL` 或连接串。
 
-- [ ] **步骤 2：更新 README**
+- [x] **步骤 2：更新 README**
 
 在当前范围中新增 Phase 12 完成摘要，明确：
 
@@ -842,15 +835,15 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/InstitutionBusines
 - 不做 AI。
 - 不接外部系统。
 
-- [ ] **步骤 3：更新 roadmap**
+- [x] **步骤 3：更新 roadmap**
 
 更新路线图已完成阶段和后续阶段，明确知识库 / RAG、AI、企微、外部系统和商业化写入能力仍后置。
 
-- [ ] **步骤 4：更新 devlog**
+- [x] **步骤 4：更新 devlog**
 
 记录 PR 1-5 的范围、验证结果和边界。
 
-- [ ] **步骤 5：运行全量验证**
+- [x] **步骤 5：运行全量验证**
 
 运行：
 
@@ -906,11 +899,11 @@ Phase 12 明确不做：
 
 ## 执行顺序
 
-1. [ ] 先合并 PR 1 文档。
-2. [ ] PR 1 合并后执行 PR 2 schema / migration / seed / repository / DTO 白名单测试。
-3. [ ] PR 2 合并后执行 PR 3 customer timeline domain 与 API 扩展。
-4. [ ] PR 3 合并后执行 PR 4 客户详情抽屉 UI 展示。
-5. [ ] PR 4 合并后执行 PR 5 smoke / 文档收尾。
+1. [x] 先合并 PR 1 文档。
+2. [x] PR 1 合并后执行 PR 2 schema / migration / seed / repository / DTO 白名单测试。
+3. [x] PR 2 合并后执行 PR 3 customer timeline domain 与 API 扩展。
+4. [x] PR 3 合并后执行 PR 4 客户详情抽屉 UI 展示。
+5. [x] PR 4 合并后执行 PR 5 smoke / 文档收尾。
 
 不得跳过 PR 1 直接进入代码实现。不得在 PR 1 修改业务代码。不得在 PR 2 同时做 API 或 UI。不得在 PR 3 同时做 UI。不得在 PR 4 新增治疗写入 UI。
 
@@ -922,7 +915,7 @@ Phase 12 完成后应满足：
 - 治疗摘要通过 `tenant_id + customer_id` 关联当前租户客户。
 - 可选 `appointment_id` 不允许跨租户。
 - 客户详情 timeline API 返回 `treatmentSummaries`。
-- 客户详情 `timeline` 包含 treatment event。
+- 客户详情 `timeline` 包含 `type: "treatment_summary"` event。
 - 客户详情抽屉展示治疗结构化摘要。
 - 治疗摘要读取不接受前端传入 `tenantId`。
 - 不新增独立治疗详情 API。
@@ -931,4 +924,4 @@ Phase 12 完成后应满足：
 - 不保存或返回完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、手机号原文、身份证号、病历号原文、图片 / 文件原文、AI 生成内容、外部系统同步原文、请求体、SQL、stack、token、secret、`DATABASE_URL` 或连接串。
 - README、roadmap、devlog 和 Phase 12 spec / plan 与实际完成范围一致。
 
-Phase 12 PR 5 收尾后，后续只进入 Phase 13 Plan Mode，不在 Phase 12 分支继续扩展 AI、RAG、企微、外部系统、商业化写入或治疗正文能力。
+Phase 12 PR 5 收尾完成后，后续只进入 Phase 13 Plan Mode，不在 Phase 12 分支继续扩展 AI、RAG、企微、外部系统、商业化写入或治疗正文能力。

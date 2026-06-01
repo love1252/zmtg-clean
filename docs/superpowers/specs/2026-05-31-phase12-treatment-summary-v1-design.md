@@ -1,7 +1,7 @@
 # Phase 12 治疗记录结构化摘要 v1 设计
 
 > 日期：2026-05-31
-> 状态：Phase 12 PR 1 文档阶段。本文固化治疗记录结构化摘要 v1 的目标、范围、字段白名单、安全边界、API / schema 决策、租户隔离和 PR 拆分。
+> 状态：Phase 12 已完成。本文固化治疗记录结构化摘要 v1 的目标、范围、字段白名单、安全边界、API / schema 决策、租户隔离、PR 拆分和完成状态。
 
 ## 1. Phase 12 目标
 
@@ -165,7 +165,7 @@ Phase 12 不做：
 
 - `TreatmentSummaryRecord`：服务端 repository 返回的内部记录，可以包含 `tenantId` 和 `customerId`。
 - `CustomerTimelineTreatmentSummary`：timeline response 中的安全 DTO，不返回 `tenantId` 和 `customerId`。
-- `CustomerTimelineEvent.type` 增加 `'treatment'`。
+- `CustomerTimelineEvent.type` 增加 `'treatment_summary'`。
 
 `summary` 和 `nextCareAction` 必须是短摘要字段。它们可以描述“D7 复诊后安排补水护理”这种安全摘要，但不能保存“完整诊疗记录”“问诊原文”“医生病历正文”。
 
@@ -374,13 +374,13 @@ Phase 12 v1 应扩展现有 customer timeline，而不是新增平行页面。
 推荐扩展：
 
 - `CustomerTimelineResponse` 增加 `treatmentSummaries`。
-- `CustomerTimelineEvent.type` 增加 `'treatment'`。
-- `CustomerTimelineEvent.source` 可使用现有 `ProtectedResource` 扩展后的 `'treatment_summary'`，或在 Phase 12 明确新增受保护资源枚举。
-- treatment event 的 `occurredAt` 使用 `treatmentDate`。
-- treatment event 的 `title` 使用 `${treatmentProject}治疗摘要` 或 `${treatmentStage}：${treatmentProject}`。
-- treatment event 的 `summary` 使用安全 `summary` 或 `nextCareAction` 拼接的短摘要。
-- treatment event 的 `status` 使用 `recoveryStage` 或 `riskLevel` 的稳定标签。
-- treatment event 的 `relatedRecordId` 使用治疗摘要 `id`。
+- `CustomerTimelineEvent.type` 增加 `'treatment_summary'`。
+- `CustomerTimelineEvent.source` 使用 `'treatment_summary'`。
+- `treatment_summary` event 的 `occurredAt` 使用 `treatmentDate`。
+- `treatment_summary` event 的 `title` 使用 `${treatmentProject} · ${treatmentStage}`。
+- `treatment_summary` event 的 `summary` 使用安全 `summary` 或 `nextCareAction` 拼接的短摘要。
+- `treatment_summary` event 的 `status` 使用 `riskLevel`。
+- `treatment_summary` event 的 `relatedRecordId` 使用治疗摘要 `id`。
 
 排序规则保持现有策略：
 
@@ -520,7 +520,7 @@ node scripts/run-vitest.mjs run src/server/db/tests/Schema.test.ts src/modules/i
 - 扩展 `src/modules/institution/domain/customer-timeline.ts`。
 - 扩展 `GET /api/institution/customers/[customerId]/timeline`。
 - response 增加 `treatmentSummaries`。
-- `timeline` 增加 treatment event。
+- `timeline` 增加 `treatment_summary` event。
 - API route 查询治疗摘要时强制使用当前 `tenantId + customerId`。
 - 不新增独立治疗 API。
 - 不新增 UI。
@@ -529,7 +529,7 @@ node scripts/run-vitest.mjs run src/server/db/tests/Schema.test.ts src/modules/i
 
 - timeline API 返回 `tenantId` 或 `customerId`。
 - 治疗摘要未按当前租户过滤。
-- treatment event 排序影响现有预约、随访、审计事件。
+- `treatment_summary` event 排序影响现有预约、随访、审计事件。
 - 错误响应泄露数据库或敏感字段。
 
 验证方式：
@@ -544,7 +544,6 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/CustomerTimelineDo
 范围：
 
 - 扩展 `src/modules/institution/components/CustomerTimelineDrawer.tsx`。
-- 扩展 `src/modules/institution/client/tenant-business-client.ts` 的 response 校验。
 - 在客户详情抽屉中展示治疗结构化摘要。
 - 在结构化时间线中展示治疗节点。
 - 覆盖 loading、empty、error、敏感字段不展示和请求不携带 `tenantId`。
@@ -592,13 +591,13 @@ node scripts/run-next.mjs build --webpack
 
 ## 16. Phase 12 完成标准
 
-Phase 12 完成后应满足：
+Phase 12 已完成，并满足：
 
 - 存在最小治疗结构化摘要数据底座。
 - 治疗摘要通过 `tenant_id + customer_id` 复合关系绑定当前租户客户。
 - 可选 `appointment_id` 不允许跨租户。
 - 客户详情 timeline API 返回 `treatmentSummaries`。
-- 客户详情 `timeline` 包含 treatment event 节点。
+- 客户详情 `timeline` 包含 `type: "treatment_summary"` event 节点。
 - 客户详情抽屉展示治疗结构化摘要。
 - 所有机构端治疗摘要读取均由服务端租户上下文限定。
 - 不新增治疗写入 UI。
@@ -606,6 +605,7 @@ Phase 12 完成后应满足：
 - 不新增独立治疗详情 API。
 - 不保存或返回完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、手机号原文、身份证号、病历号原文、图片 / 文件原文、AI 生成内容、外部系统同步原文、请求体、SQL、stack、token、secret、`DATABASE_URL` 或连接串。
 - README、roadmap、devlog 和 Phase 12 spec / plan 与实际完成范围一致。
+- PR 5 smoke 已覆盖客户中心进入客户详情、治疗摘要字段展示、`treatment_summary` 节点、无治疗摘要空态和敏感字段不展示。
 
 ## 17. Phase 13 建议
 
