@@ -27,6 +27,7 @@
 - Phase 14：治疗摘要管理能力 v1，包括 `GET /api/institution/treatment-summaries`、query parser、repository list、DTO 白名单、机构端治疗摘要管理 UI、筛选、加载更多、安全详情和 smoke / 文档收尾
 - Phase 15：治疗后护理 / 随访联动 v1，包括确定性护理 / 随访建议规则、`follow_up_tasks` 来源关联、幂等 / 去重、人工确认 API、治疗摘要管理 UI 联动和 smoke / 文档收尾
 - Phase 16：随访任务来源治理增强 v1，包括 follow-up 来源筛选、安全来源 DTO、智能随访来源标签 / 来源筛选、治疗摘要管理页重复任务提示和 smoke / 文档收尾
+- Phase 17：HIS 接入标准模型 / 标准治疗事件 v1，包括 spec / plan 文档、domain-only 标准治疗事件类型、`sourceSystem` 稳定集合、mapper 输入 / 输出契约、字段白名单、禁止字段边界和 institution 测试
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -129,9 +130,18 @@ Phase 16 已完成：
 - workspace smoke / institution 测试覆盖来源标签、来源筛选、重复提示、不自动创建、不自动触达和敏感字段不展示
 - Phase 16 不包含治疗摘要编辑、治疗摘要作废、自动创建随访任务、自动触达客户、企业微信、短信、电话外呼、AI provider、Agent、RAG、HIS / CRM / OTA、OAuth、Webhook、支付、完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件原文或外部系统同步
 
+Phase 17 已完成：
+
+- Phase 17 HIS 接入标准模型 / 标准治疗事件 v1 spec / plan 已完成，明确标准治疗事件是未来 HIS / 导入 / 外部系统进入智美天工后的内部标准化事件，不是数据库 schema
+- 已新增 domain-only 标准治疗事件类型、`sourceSystem` 稳定集合、`treatmentStatus` / `riskLevel` 等稳定枚举、mapper 输入 / 输出契约、字段白名单和禁止字段边界
+- mapper 明确外部 `tenantId` 不可信，`tenantId` / `eventId` / `receivedAt` 只能来自服务端可信上下文；输入不接受 raw payload、未知字段或手机号原文
+- 已明确标准治疗事件不会自动生成或修改 `treatment_summaries`；`treatment_summaries` 仍是机构端可查看和运营使用的结构化摘要
+- institution 测试覆盖合法输入、`sourceSystem`、`sourceEventId`、`customerMatchKey`、`maskedPhone`、治疗项目 / 分类 / 阶段、金额 / 币种、tags 标准化、字段白名单和禁止字段
+- Phase 17 不包含真实 HIS 接入、Webhook、文件导入、外部系统同步、数据库 schema / migration、API route、UI、企业微信 / 个人微信、AI / RAG / Agent、业务事件埋点实现或经营智能中心实现
+
 后续阶段会依次加入：
 
-- Phase 17 Plan Mode：建议重新评估治疗摘要编辑能力 v1、治疗摘要作废能力 v1、follow-up 配额 enforcement、知识库 / RAG 安全基础准备、平台商业化增强、平台租户状态管理和审计高级治理
+- Phase 18 Plan Mode：优先评估治疗摘要编辑能力 v1；可并行候选为 HIS 标准治疗事件 mapper 继续增强和业务事件埋点体系 spec
 - 客服会话、治疗摘要编辑 / 作废和完整治疗记录能力需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库

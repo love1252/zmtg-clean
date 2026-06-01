@@ -1,7 +1,7 @@
 # Phase 17 HIS 接入标准模型 / 治疗事件标准化 v1 设计
 
 > 日期：2026-06-02
-> 状态：Phase 17 PR 1 文档阶段。本阶段只固化 HIS 接入标准模型 / 治疗事件标准化的设计与计划，不进入业务代码、API、schema、migration、UI 或外部系统接入实现。
+> 状态：Phase 17 已完成。PR 1 已固化 HIS 接入标准模型 / 治疗事件标准化 spec / plan；PR 2 已完成 domain-only 标准治疗事件类型、mapper 契约和测试；PR 3 仅做文档收尾。Phase 17 不代表真实 HIS 接入完成，仍不包含 API、schema、migration、UI 或外部系统接入实现。
 
 ## 1. Phase 17 目标
 
@@ -70,7 +70,7 @@ HIS 是智美天工长期最关键的数据来源之一。它承载客户治疗�
 - 架构稳定性最高：先定义标准事件，再决定落库和同步。
 - 隐私风险可控：不接真实系统、不保存 raw payload、不展示敏感正文。
 - 后续扩展清晰：能支撑路径引擎、身份匹配、业务事件和经营分析。
-- 当前实现风险低：PR 1 只做文档，PR 2 如执行也只建议 domain-only 类型与测试。
+- 当前实现风险低：PR 1 只做文档，PR 2 已执行且仅做 domain-only 类型、mapper 契约和测试。
 
 ## 3. 为什么其他方向后置
 
@@ -209,7 +209,7 @@ Phase 17 不做：
 | --- | --- | --- | --- |
 | `eventId` | `string` | 否 | 智美天工内部标准事件 ID，未来如落库由服务端生成 |
 | `tenantId` | `string` | 否 | 当前租户归属，只能来自服务端上下文或可信同步任务上下文 |
-| `sourceSystem` | enum/string | 视场景 | 来源系统，例如 `his`、`manual_entry`、`import`、`other_system` |
+| `sourceSystem` | enum/string | 视场景 | 来源系统，例如 `his`、`manual`、`import`、`other` |
 | `sourceEventId` | `string | null` | 否 | 外部事件追踪 ID，只用于 adapter 幂等和排障，不应暴露给普通机构端用户 |
 | `sourceCustomerId` | `string | null` | 否 | 外部系统客户 ID，只用于身份匹配，不作为当前系统授权依据 |
 | `customerMatchKey` | `string | null` | 否 | 身份匹配 key，可为 hash 或脱敏组合，不应保存原始敏感信息 |
@@ -240,10 +240,9 @@ Phase 17 v1 建议保留以下来源语义：
 | 值 | 含义 |
 | --- | --- |
 | `his` | 来自 HIS adapter 标准化后的事件 |
-| `manual_entry` | 来自机构端人工录入或人工整理 |
+| `manual` | 来自机构端人工录入或人工整理 |
 | `import` | 来自后续受控文件导入或批量导入 |
-| `crm` | 来自后续 CRM / SCRM adapter |
-| `other_system` | 其他已授权外部系统 |
+| `other` | 其他已授权外部系统 |
 
 本阶段不实现这些来源，只定义语义。
 
@@ -659,7 +658,7 @@ Phase 17 推荐拆成 3 个 PR。
 - 不改 schema / migration。
 - 不改权限、认证或租户隔离。
 
-### PR 2：可选 domain-only 标准治疗事件类型与测试
+### PR 2：domain-only 标准治疗事件类型与测试
 
 范围：
 
@@ -672,7 +671,7 @@ Phase 17 推荐拆成 3 个 PR。
 - 不接真实 HIS。
 - 不保存 raw payload。
 
-PR 2 是可选项。如果 Phase 17 的目标只是完成产品和架构对齐，可以在 PR 1 后直接进入 PR 3 文档收尾。只有当后续阶段需要编译期锁定字段和 mapper 语义时，才建议执行 PR 2。
+PR 2 已执行，且保持 domain-only 边界。它只锁定 TypeScript 类型、`sourceSystem` 稳定集合、mapper 输入 / 输出契约、字段白名单、禁止字段边界和 institution 测试，不新增 API、schema、migration、repository、UI 或真实 HIS adapter。
 
 ### PR 3：文档收尾
 
@@ -687,19 +686,17 @@ PR 2 是可选项。如果 Phase 17 的目标只是完成产品和架构对齐�
 
 建议 Phase 18 候选：
 
-1. 治疗摘要编辑能力 v1。
-2. 治疗摘要作废能力 v1。
-3. 标准治疗事件 domain-only 类型落地。
-4. 业务事件埋点体系 v1 设计。
-5. 随访路径运营分析 v1 设计。
+1. 治疗摘要编辑能力 v1：允许机构端对白名单结构化字段受控编辑，写审计，不允许完整治疗记录正文、完整病历正文或咨询全文，不做删除。
+2. HIS 标准治疗事件 mapper 继续增强：继续完善 mapper 契约、错误语义和测试覆盖，仍不接真实 HIS、不写 API、不落库。
+3. 业务事件埋点体系 spec：只做事件模型规划，不做真实采集，不记录 raw payload、完整医疗正文或 PII。
 
 ## 20. 每个 PR 的范围、风险和验证方式
 
 | PR | 范围 | 主要风险 | 验证方式 |
 | --- | --- | --- | --- |
 | PR 1 | spec / plan 文档 | 文档范围不清导致后续误进入真实 HIS、Webhook、外部同步、AI、企微或 schema | `git diff --check` |
-| PR 2 | 可选 domain-only 类型与测试 | 类型字段过早模拟 schema、mapper 接受 raw payload、测试未覆盖禁止字段 | 相关 Vitest、`tsc --noEmit`、`git diff --check` |
-| PR 3 | README / roadmap / devlog 收尾 | 文档宣称已完成未实现能力，或遗漏不纳入边界 | 全量文档检查、`git diff --check`；如 PR 2 未执行，无需完整 test/typecheck/build |
+| PR 2 | domain-only 类型与测试 | 类型字段过早模拟 schema、mapper 接受 raw payload、测试未覆盖禁止字段 | 相关 Vitest、`tsc --noEmit`、Next build、全量 Vitest、`git diff --check` |
+| PR 3 | README / roadmap / devlog 收尾 | 文档宣称已完成未实现能力，或遗漏不纳入边界 | 全量文档检查、`git diff --check`；只改 Markdown，无需完整 test/typecheck/build |
 
 PR 1 只改 Markdown，不需要运行完整 test / typecheck / build。原因：未修改 TypeScript、React 页面、API route、数据库 schema / migration、权限、认证或租户隔离。
 
@@ -718,3 +715,34 @@ PR 1 完成后应满足：
 - 文档明确与后续路径引擎、身份匹配、业务事件、经营智能的关系。
 - 文档明确字段白名单、禁止字段、租户隔离和 PII / 医疗隐私边界。
 - `git diff --check` 通过。
+
+## 22. Phase 17 最终状态
+
+Phase 17 已完成：
+
+- HIS 接入标准模型 / 标准治疗事件 v1 spec / plan。
+- domain-only 标准治疗事件类型。
+- `sourceSystem` 稳定集合：`his`、`manual`、`import`、`other`。
+- mapper 输入 / 输出契约。
+- 字段白名单。
+- 禁止字段边界。
+- 外部 `tenantId` 不可信的服务端上下文边界。
+- raw payload、完整医疗正文、PII、token、secret、SQL、stack 和 request body 原文拒绝边界。
+- 不自动生成或修改 `treatment_summaries` 的关系边界。
+- institution 测试。
+
+Phase 17 未完成、也不宣称完成：
+
+- 真实 HIS 接入。
+- Webhook。
+- 文件导入。
+- 外部系统同步。
+- 数据库 schema / migration。
+- API route。
+- UI。
+- 企业微信 / 个人微信。
+- AI / RAG / Agent。
+- 业务事件埋点实现。
+- 经营智能中心实现。
+
+后续进入 Phase 18 前应重新 Plan Mode。优先建议评估治疗摘要编辑能力 v1；HIS 标准治疗事件 mapper 继续增强和业务事件埋点体系 spec 可作为候选方向，但当前文档不进入 Phase 18 实现。
