@@ -1,12 +1,12 @@
 # Phase 17 HIS 接入标准模型 / 治疗事件标准化 v1 Implementation Plan
 
-> 状态：Phase 17 PR 1 文档阶段。本计划用于后续执行 Agent 按 PR 分步推进。当前 PR 只新增 spec / plan 文档，不改业务代码、页面、测试、API、数据库、权限、认证或租户隔离。
+> 状态：Phase 17 已完成。PR 1 已新增 spec / plan 文档；PR 2 已完成 domain-only 标准治疗事件类型、mapper 契约和 institution 测试；PR 3 仅做 README / roadmap / devlog / Phase 17 spec-plan 文档收尾。
 
 **目标：** 固化 HIS 接入标准模型 / 治疗事件标准化 v1 的范围、字段、边界、风险和后续 PR 拆分，为后续不同 HIS adapter、治疗项目路径引擎、客户身份匹配、随访路径运营分析、业务事件埋点和经营智能中心提供统一标准。
 
-**架构方案：** Phase 17 v1 先以文档定义智美天工内部标准治疗事件模型。后续如需要，可选 PR 2 只做 domain-only TypeScript 类型和测试；默认不新增 HTTP API、不新增数据库 schema / migration、不接真实 HIS、不保存 raw payload、不进入 Webhook / OAuth / 企微 / AI / RAG / Agent / 自动触达。
+**架构方案：** Phase 17 v1 先以文档定义智美天工内部标准治疗事件模型，再以 domain-only TypeScript 类型和 mapper 契约锁定字段语义。Phase 17 不新增 HTTP API、不新增数据库 schema / migration、不接真实 HIS、不保存 raw payload、不进入 Webhook / OAuth / 企微 / AI / RAG / Agent / 自动触达。
 
-**技术栈：** 当前 PR 只涉及 Markdown。后续可选 domain-only PR 如执行，才涉及 TypeScript、Vitest 和现有领域模块。
+**技术栈：** PR 1 和 PR 3 只涉及 Markdown；PR 2 已涉及 TypeScript、Vitest 和现有机构领域模块。
 
 ## 1. 当前上下文
 
@@ -46,7 +46,7 @@ Phase 17 可以做：
 - 与预约、客户、随访任务、客户时间线的关系。
 - 与后续路径引擎、身份匹配、业务事件、经营智能的衔接。
 - 后续 PR 拆分建议。
-- 可选 domain-only TypeScript 类型与测试。
+- domain-only TypeScript 类型与测试。
 
 Phase 17 不做：
 
@@ -102,19 +102,26 @@ Phase 17 不做：
 - migration
 - 权限、认证、租户隔离
 
-### PR 2 可选文件
+### PR 2 已完成文件
 
-如果执行 domain-only PR，可考虑新增：
+已新增：
 
-- `src/modules/institution/domain/standard-treatment-events.ts`
-- `src/modules/institution/tests/StandardTreatmentEventsDomain.test.ts`
+- `src/modules/institution/domain/standard-treatment-event.ts`
+- `src/modules/institution/server/standard-treatment-event-mapper.ts`
+- `src/modules/institution/tests/StandardTreatmentEventMapper.test.ts`
 
-或选择更贴近后续 HIS adapter 的模块名：
+PR 2 已完成：
 
-- `src/modules/institution/domain/treatment-events.ts`
-- `src/modules/institution/tests/TreatmentEventsDomain.test.ts`
+- 标准治疗事件 domain 类型。
+- `sourceSystem` 稳定集合：`his`、`manual`、`import`、`other`。
+- `treatmentStatus`、`riskLevel` 等稳定集合。
+- mapper 输入 / 输出契约。
+- 字段白名单和禁止字段边界。
+- 外部 `tenantId` 不可信，`tenantId` / `eventId` / `receivedAt` 由服务端可信上下文提供。
+- raw payload、完整医疗正文、PII、token、secret、SQL、stack 和 request body 原文拒绝测试。
+- 明确不自动生成或修改 `treatment_summaries`。
 
-PR 2 不应新增：
+PR 2 未新增：
 
 - API route。
 - server adapter。
@@ -126,11 +133,11 @@ PR 2 不应新增：
 
 ### PR 3 文档收尾文件
 
-如果 Phase 17 完成，PR 3 可更新：
+Phase 17 完成时，PR 3 更新：
 
 - `README.md`
 - `docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md`
-- `docs/devlog/2026-06-02.md`
+- `docs/devlog/2026-05-31.md`
 - Phase 17 spec / plan 完成状态。
 
 PR 3 只做收尾文档，不进入真实 HIS 或业务代码。
@@ -169,7 +176,7 @@ PR 1 文档中定义的标准治疗事件模型是建议模型，不是数据库
 
 核心解释：
 
-- `sourceSystem` 用于区分 HIS / 手工录入 / 导入 / 其他系统。
+- `sourceSystem` 用于区分 HIS / 手工录入 / 导入 / 其他系统；PR 2 稳定集合为 `his`、`manual`、`import`、`other`。
 - `sourceEventId` 只做外部事件追踪，不应暴露给普通机构端用户。
 - `customerMatchKey` 只用于身份匹配，不应保存原始敏感信息。
 - `amount` / `currency` 只定义语义，不进入支付、合同、发票或收入归因实现。
@@ -289,9 +296,9 @@ git diff --check
 
 本 PR 只改 Markdown，不运行完整 test / typecheck / build。原因：未修改 TypeScript、React 页面、API route、数据库 schema / migration、权限、认证或租户隔离。
 
-## 8. PR 2：可选 domain-only 标准治疗事件类型与测试
+## 8. PR 2：domain-only 标准治疗事件类型与测试
 
-PR 2 是否执行需要在 PR 1 合并后再次确认。
+PR 2 已执行并合并。
 
 **执行 PR 2 的理由：**
 
@@ -299,7 +306,7 @@ PR 2 是否执行需要在 PR 1 合并后再次确认。
 - 需要为后续 HIS adapter 提供编译期契约。
 - 需要用测试扫描禁止字段，防止 raw payload、PII 或完整正文进入模型。
 
-**不执行 PR 2 的理由：**
+**原本不执行 PR 2 的理由：**
 
 - Phase 17 的目标可能只需要产品和架构对齐。
 - 尚未确定真实 HIS adapter 输入差异，过早写类型可能需要反复修改。
@@ -312,6 +319,8 @@ PR 2 是否执行需要在 PR 1 合并后再次确认。
 - 新增字段白名单常量。
 - 新增禁止字段检测测试。
 - 定义 mapper 输入输出契约，但不实现具体 HIS adapter。
+- 明确外部 `tenantId` 不可信，服务端上下文提供 `tenantId`、`eventId` 和 `receivedAt`。
+- 明确不自动生成或修改 `treatment_summaries`。
 
 **不做：**
 
@@ -341,15 +350,19 @@ PR 2 是否执行需要在 PR 1 合并后再次确认。
 
 **验证：**
 
+PR 2 已执行验证：
+
 ```bash
-node scripts/run-vitest.mjs run src/modules/institution/tests/StandardTreatmentEventsDomain.test.ts
-./node_modules/.bin/tsc --noEmit
 git diff --check
+node scripts/run-vitest.mjs run src/modules/institution/tests
+./node_modules/.bin/tsc --noEmit
+node scripts/run-next.mjs build --webpack
+node scripts/run-vitest.mjs run
 ```
 
 ## 9. PR 3：Phase 17 文档收尾
 
-PR 3 在 PR 1 合并后执行。如果 PR 2 被跳过，PR 3 可以直接标记 Phase 17 为 docs-only 完成。
+PR 3 在 PR 1 和 PR 2 合并后执行，用于标记 Phase 17 完成。
 
 **范围：**
 
@@ -358,22 +371,22 @@ PR 3 在 PR 1 合并后执行。如果 PR 2 被跳过，PR 3 可以直接标记 
 - 更新 devlog。
 - 更新 Phase 17 spec / plan 完成状态。
 - 明确 Phase 17 已完成标准治疗事件模型文档。
+- 明确 Phase 17 已完成 domain-only 标准治疗事件类型、`sourceSystem` 稳定集合、mapper 输入 / 输出契约、字段白名单、禁止字段边界和 institution 测试。
+- 明确外部 `tenantId` 不可信，不接受 raw payload，不自动生成或修改 `treatment_summaries`。
 - 明确未进入真实 HIS、Webhook、同步、AI、RAG、企微、自动触达。
 - 给出 Phase 18 建议。
 
 **Phase 18 建议候选：**
 
-1. 治疗摘要编辑能力 v1。
-2. 治疗摘要作废能力 v1。
-3. 标准治疗事件 domain-only 类型与测试。
-4. 业务事件埋点体系 v1 设计。
-5. 随访路径运营分析 v1 设计。
+1. 治疗摘要编辑能力 v1：只允许编辑白名单结构化字段，写审计，不允许完整治疗记录正文、完整病历正文或咨询全文，不做删除。
+2. HIS 标准治疗事件 mapper 继续增强：继续完善 mapper 契约，仍不接真实 HIS、不写 API、不落库。
+3. 业务事件埋点体系 spec：只做事件模型规划，不做真实采集，不记录 raw payload、完整医疗正文或 PII。
 
 **风险：**
 
 - README / roadmap 宣称完成真实 HIS 接入。
 - 收尾文档遗漏 raw payload、完整病历正文、外部系统同步等未做边界。
-- devlog 没有说明 PR 2 是否执行。
+- devlog 没有说明 PR 2 是否执行；本次 PR 3 收尾已补充执行结果。
 
 **验证：**
 
@@ -383,14 +396,7 @@ PR 3 在 PR 1 合并后执行。如果 PR 2 被跳过，PR 3 可以直接标记 
 git diff --check
 ```
 
-如果 PR 2 执行过且 PR 3 同时更新代码状态，应运行：
-
-```bash
-node scripts/run-vitest.mjs run
-./node_modules/.bin/tsc --noEmit
-node scripts/run-next.mjs build --webpack
-git diff --check
-```
+本 PR 只改 Markdown，不运行完整 test / typecheck / build。原因：PR 2 的 TypeScript、Vitest、typecheck、build 和全量测试已在 PR 2 合并前通过；PR 3 不修改 TypeScript、React 页面、API route、数据库 schema / migration、权限、认证或租户隔离。
 
 ## 10. 禁止字段清单
 
@@ -473,9 +479,9 @@ PR 1 只在文档中定义这些要求，不实现。
 
 ## 13. Phase 17 完成判断
 
-Phase 17 可以有两种完成方式。
+Phase 17 原计划可以有两种完成方式，最终选择方式 B。
 
-### 方式 A：docs-only 完成
+### 方式 A：docs-only 完成（原计划选项，最终未采用）
 
 适用条件：
 
@@ -483,7 +489,7 @@ Phase 17 可以有两种完成方式。
 - 暂不需要 TypeScript 类型约束。
 - 下一阶段优先做治疗摘要编辑或作废。
 
-完成标准：
+原完成标准：
 
 - PR 1 合并。
 - PR 3 更新 README / roadmap / devlog 并标记 Phase 17 文档完成。
@@ -503,6 +509,35 @@ Phase 17 可以有两种完成方式。
 - PR 3 收尾文档合并。
 
 两种方式都不代表真实 HIS 接入完成。
+
+### 最终完成状态
+
+Phase 17 已完成：
+
+- HIS 标准治疗事件 spec / plan。
+- domain-only 标准治疗事件类型。
+- `sourceSystem` 稳定集合。
+- mapper 输入 / 输出契约。
+- 字段白名单。
+- 禁止字段边界。
+- 外部 `tenantId` 不可信边界。
+- raw payload 拒绝边界。
+- 不自动生成或修改 `treatment_summaries`。
+- institution 测试。
+
+Phase 17 不包含：
+
+- 真实 HIS 接入。
+- Webhook。
+- 文件导入。
+- 外部系统同步。
+- 数据库 schema / migration。
+- API route。
+- UI。
+- 企业微信 / 个人微信。
+- AI / RAG / Agent。
+- 业务事件埋点实现。
+- 经营智能中心实现。
 
 ## 14. PR 描述要求
 
@@ -528,12 +563,12 @@ PR 1 描述必须明确：
 - 不进入真实 HIS / Webhook / 外部系统同步。
 - 不进入 AI / RAG / 企微 / 自动触达实现。
 
-## 15. 当前 PR 1 验证命令
+## 15. 当前 PR 3 验证命令
 
-当前 PR 只运行：
+当前 PR 3 只运行：
 
 ```bash
 git diff --check
 ```
 
-不运行完整 test / typecheck / build。原因：当前 PR 只新增 Markdown 文档，没有修改 TypeScript、React 页面、API route、数据库 schema / migration、权限、认证或租户隔离。
+不运行完整 test / typecheck / build。原因：PR 3 只修改 README、roadmap、devlog 和 Phase 17 spec / plan Markdown 文档，没有修改 TypeScript、React 页面、API route、数据库 schema / migration、权限、认证或租户隔离。PR 2 的 institution 测试、typecheck、Next build 和全量 Vitest 已在合并前通过。
