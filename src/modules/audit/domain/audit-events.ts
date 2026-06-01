@@ -13,6 +13,7 @@ export type AuditReason =
   | 'stale_transition'
   | 'not_found_or_not_owned'
   | 'invalid_treatment_summary_reference'
+  | 'invalid_treatment_summary_payload'
   | 'quota_exceeded_customers'
   | 'quota_exceeded_appointments'
   | 'missing_active_plan'
