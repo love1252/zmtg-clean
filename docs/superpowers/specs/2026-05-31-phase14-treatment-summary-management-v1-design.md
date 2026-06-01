@@ -1,11 +1,20 @@
 # Phase 14 治疗摘要管理能力 v1 设计
 
 > 日期：2026-05-31
-> 状态：Phase 14 PR 1 文档规划。本文只固化设计和后续 PR 拆分，不包含业务代码、页面、测试、API 路由、数据库 schema、migration、权限、认证或租户隔离修改。
+> 状态：Phase 14 已完成。PR 1 完成 spec / plan 文档，PR 2 完成治疗摘要列表 API、query parser、repository list 和 DTO，PR 3 完成机构端治疗摘要管理 UI，PR 4 完成 smoke / 文档收尾。
 
 ## 1. Phase 14 目标
 
 Phase 14 默认选择“治疗摘要管理能力 v1”。目标是在 Phase 12 已完成治疗结构化摘要读路径、Phase 13 已完成治疗摘要人工录入闭环之后，为机构端提供跨客户的治疗摘要只读管理能力。
+
+完成状态：
+
+- 已完成 `GET /api/institution/treatment-summaries`。
+- 已完成治疗摘要 query parser、repository `listTreatmentSummariesByTenant`、cursor / limit 校验和 DTO 白名单。
+- 已完成机构端治疗摘要管理 UI。
+- 已完成治疗摘要列表、筛选、分页 / 加载更多和安全详情查看。
+- 已完成 workspace smoke 和 README、roadmap、devlog、Phase 14 spec / plan 文档收尾。
+- 未新增 schema / migration，未改权限、认证或租户隔离模型。
 
 本阶段 v1 目标：
 
@@ -588,7 +597,7 @@ Phase 14 推荐拆成 4 个 PR：
 
 ## 16. Phase 14 完成标准
 
-Phase 14 完成时应满足：
+Phase 14 已满足：
 
 - 机构端存在治疗摘要只读管理入口。
 - `GET /api/institution/treatment-summaries` 只查询当前租户治疗摘要。
@@ -604,7 +613,7 @@ Phase 14 完成时应满足：
 
 ## 17. Phase 14 后续建议
 
-Phase 14 完成后，后续优先级建议：
+Phase 14 已完成。后续建议进入 Phase 15 Plan Mode，重新评估以下方向；当前不进入 Phase 15 实现：
 
 1. 治疗后护理 / 随访联动 v1：只做结构化任务建议和人工确认，不自动触达客户。
 2. 平台商业化继续增强：继续保持只读运营辅助，避免支付、合同和发票。

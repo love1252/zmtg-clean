@@ -114,6 +114,9 @@ const treatmentSummaryManagementRecord = {
   createdAt: '2026-06-02T16:30:00+08:00',
   updatedAt: '2026-06-02T17:00:00+08:00',
   tenantId: 'demo-tenant-001',
+  customerDisplayName: 'Phase14 客户明细不应展示',
+  appointmentNote: 'Phase14 预约明细不应展示',
+  followUpSuggestedAction: 'Phase14 随访明细不应展示',
   phoneNumber: '13800001252',
   idNumber: '110101199001010011',
   medicalRecordNo: 'MR202605310001',
@@ -129,6 +132,32 @@ const treatmentSummaryManagementRecord = {
   stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
   token: 'sk_test_phase14_should_not_render',
   secret: 'phase14-raw-secret',
+};
+
+const filteredTreatmentSummaryManagementRecord = {
+  ...treatmentSummaryManagementRecord,
+  id: 'trt_phase14_filtered',
+  customerId: 'cust_phase14_filtered',
+  treatmentProject: 'Phase14 筛选后治疗摘要',
+  treatmentCategory: 'phase14_filtered_repair',
+  treatmentStage: 'Phase14 D21 复诊',
+  recoveryStage: 'Phase14 D21',
+  summary: 'Phase14 筛选摘要：风险已复核，继续观察。',
+  nextCareAction: 'Phase14 D28 人工确认恢复状态。',
+};
+
+const nextTreatmentSummaryManagementRecord = {
+  ...treatmentSummaryManagementRecord,
+  id: 'trt_phase14_next_page',
+  customerId: 'cust_phase14_next',
+  appointmentId: null,
+  treatmentProject: 'Phase14 下一页治疗摘要',
+  treatmentCategory: 'phase14_next_repair',
+  treatmentStage: 'Phase14 D28 复诊',
+  recoveryStage: 'Phase14 D28',
+  riskLevel: 'normal',
+  summary: 'Phase14 下一页摘要：恢复稳定。',
+  nextCareAction: 'Phase14 结束本轮人工观察。',
 };
 
 const platformAuditEventRecord = {
@@ -458,6 +487,11 @@ function fetchPath(input: Parameters<typeof fetch>[0]) {
   return input.url;
 }
 
+type WorkspaceTreatmentSummaryPage = {
+  records: unknown[];
+  pageInfo: unknown;
+};
+
 type WorkspaceFetchOptions = {
   role?: 'tenant_admin' | 'platform_admin';
   customers?: unknown[];
@@ -465,6 +499,7 @@ type WorkspaceFetchOptions = {
   followups?: unknown[];
   treatmentSummaries?: unknown[];
   treatmentSummaryPageInfo?: unknown;
+  treatmentSummaryPages?: WorkspaceTreatmentSummaryPage[];
   auditEvents?: unknown[];
   platformAuditEvents?: unknown[];
   platformTenants?: unknown[];
@@ -506,6 +541,7 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
       limit: 50,
       nextCursor: null,
     },
+    treatmentSummaryPages,
     auditEvents = [auditEventRecord],
     platformAuditEvents = [platformAuditEventRecord],
     platformTenants = [platformTenantRecord],
@@ -518,6 +554,13 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
   } = options;
   const timelineQueue = Array.isArray(timeline) ? [...timeline] : [timeline];
   const fallbackTimeline = timelineQueue[timelineQueue.length - 1] ?? timeline;
+  const treatmentSummaryPageQueue = treatmentSummaryPages ? [...treatmentSummaryPages] : null;
+  const fallbackTreatmentSummaryPage = treatmentSummaryPageQueue?.[
+    treatmentSummaryPageQueue.length - 1
+  ] ?? {
+    records: treatmentSummaries,
+    pageInfo: treatmentSummaryPageInfo,
+  };
 
   const fetchMock = vi.fn(
     async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -552,10 +595,9 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
       }
 
       if (path.startsWith('/api/institution/treatment-summaries')) {
-        return jsonResponse({
-          records: treatmentSummaries,
-          pageInfo: treatmentSummaryPageInfo,
-        });
+        return jsonResponse(
+          treatmentSummaryPageQueue?.shift() ?? fallbackTreatmentSummaryPage,
+        );
       }
 
       if (path === '/api/institution/audit-events') {
@@ -776,6 +818,12 @@ function expectNoSensitiveTreatmentSummaryManagementContent(container: HTMLEleme
   const text = container.textContent ?? '';
 
   expect(text).not.toContain('tenantId');
+  expect(text).not.toContain('customerDisplayName');
+  expect(text).not.toContain('appointmentNote');
+  expect(text).not.toContain('followUpSuggestedAction');
+  expect(text).not.toContain('Phase14 客户明细不应展示');
+  expect(text).not.toContain('Phase14 预约明细不应展示');
+  expect(text).not.toContain('Phase14 随访明细不应展示');
   expect(text).not.toContain('13800001252');
   expect(text).not.toContain('110101199001010011');
   expect(text).not.toContain('MR202605310001');
@@ -944,6 +992,116 @@ describe('工作台入口页面', () => {
     expect(await screen.findByText('audit_phase8_institution')).toBeInTheDocument();
     expect(screen.getByText('资源 ID：cust_phase5_closeout')).toBeInTheDocument();
     expectOnlyInstitutionReadCalls(fetchMock);
+  });
+
+  it('机构入口 smoke 覆盖治疗摘要管理筛选、分页、安全详情和敏感字段边界', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      treatmentSummaryPages: [
+        {
+          records: [treatmentSummaryManagementRecord],
+          pageInfo: {
+            hasMore: false,
+            limit: 50,
+            nextCursor: null,
+          },
+        },
+        {
+          records: [filteredTreatmentSummaryManagementRecord],
+          pageInfo: {
+            hasMore: true,
+            limit: 1,
+            nextCursor: 'cursor_phase14_next',
+          },
+        },
+        {
+          records: [nextTreatmentSummaryManagementRecord],
+          pageInfo: {
+            hasMore: false,
+            limit: 1,
+            nextCursor: null,
+          },
+        },
+      ],
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
+
+    expect(screen.getByRole('heading', { name: '治疗摘要管理' })).toBeInTheDocument();
+    expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
+    const initialCall = fetchMock.mock.calls.find(
+      ([input]) => fetchPath(input) === '/api/institution/treatment-summaries',
+    );
+    expect(initialCall).toBeDefined();
+    expect(initialCall?.[1]).toEqual({ cache: 'no-store' });
+
+    fireEvent.change(screen.getByLabelText('客户 ID'), {
+      target: { value: 'cust_phase14_filtered' },
+    });
+    fireEvent.change(screen.getByLabelText('治疗项目'), {
+      target: { value: 'Phase14 筛选后治疗摘要' },
+    });
+    fireEvent.change(screen.getByLabelText('风险等级'), { target: { value: 'watch' } });
+    fireEvent.change(screen.getByLabelText('开始时间'), {
+      target: { value: '2026-06-01T00:00' },
+    });
+    fireEvent.change(screen.getByLabelText('结束时间'), {
+      target: { value: '2026-06-04T23:59' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
+
+    expect(await screen.findByText('Phase14 筛选后治疗摘要')).toBeInTheDocument();
+    const filteredCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).startsWith('/api/institution/treatment-summaries?'),
+    );
+    expect(filteredCall).toBeDefined();
+    const filteredUrl = new URL(fetchPath(filteredCall![0]), 'http://localhost');
+    expect(filteredUrl.pathname).toBe('/api/institution/treatment-summaries');
+    expect([...filteredUrl.searchParams.keys()]).toEqual([
+      'customerId',
+      'treatmentProject',
+      'riskLevel',
+      'from',
+      'to',
+    ]);
+    expect(filteredUrl.searchParams.get('customerId')).toBe('cust_phase14_filtered');
+    expect(filteredUrl.searchParams.get('treatmentProject')).toBe('Phase14 筛选后治疗摘要');
+    expect(filteredUrl.searchParams.get('riskLevel')).toBe('watch');
+    expect(filteredUrl.searchParams.get('from')).toBeTruthy();
+    expect(filteredUrl.searchParams.get('to')).toBeTruthy();
+    expect(filteredUrl.searchParams.get('tenantId')).toBeNull();
+    expect(filteredCall?.[1]).toEqual({ cache: 'no-store' });
+
+    fireEvent.click(screen.getByRole('button', { name: '加载更多治疗摘要' }));
+    expect(await screen.findByText('Phase14 下一页治疗摘要')).toBeInTheDocument();
+    const loadMoreCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).includes('cursor=cursor_phase14_next'),
+    );
+    expect(loadMoreCall).toBeDefined();
+    expect(fetchPath(loadMoreCall![0])).not.toContain('tenantId');
+    expect(loadMoreCall?.[1]).toEqual({ cache: 'no-store' });
+
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_filtered' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+    expect(within(dialog).getAllByText('Phase14 筛选后治疗摘要').length).toBeGreaterThan(0);
+    expect(within(dialog).getByText('客户 ID')).toBeInTheDocument();
+    expect(within(dialog).getByText('cust_phase14_filtered')).toBeInTheDocument();
+    expect(within(dialog).getByText('预约 ID')).toBeInTheDocument();
+    expect(within(dialog).getByText('appt_phase5_closeout')).toBeInTheDocument();
+    expect(within(dialog).getByText('下一步护理建议')).toBeInTheDocument();
+
+    const treatmentSummaryCalls = fetchMock.mock.calls.filter(([input]) =>
+      fetchPath(input).startsWith('/api/institution/treatment-summaries'),
+    );
+    expect(treatmentSummaryCalls).toHaveLength(3);
+    for (const [input, init] of treatmentSummaryCalls) {
+      expect(fetchPath(input)).not.toContain('tenantId');
+      expect(init?.method ?? 'GET').toBe('GET');
+      expect(init?.body).toBeUndefined();
+    }
+    expect(screen.queryByRole('button', { name: /新增|编辑|删除/u })).not.toBeInTheDocument();
+    expectNoSensitiveTreatmentSummaryManagementContent(container);
   });
 
   it('机构入口 smoke 覆盖客户中心查看详情时间线', async () => {
