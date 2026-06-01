@@ -35,6 +35,8 @@ export const AUDIT_REASON_VALUES = [
   'not_found_or_not_owned',
   'invalid_treatment_summary_reference',
   'invalid_treatment_summary_payload',
+  'invalid_follow_up_suggestion',
+  'active_source_follow_up_exists',
   'quota_exceeded_customers',
   'quota_exceeded_appointments',
   'missing_active_plan',

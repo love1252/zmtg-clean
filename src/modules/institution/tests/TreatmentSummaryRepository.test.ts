@@ -109,6 +109,22 @@ function createTreatmentSummarySelectDatabase(rows: unknown[] = []) {
   };
 }
 
+function createTreatmentSummaryLookupDatabase(rows: unknown[] = []) {
+  const where = vi.fn(async (condition: unknown) => {
+    void condition;
+    return rows;
+  });
+  const from = vi.fn(() => ({ where }));
+  const select = vi.fn(() => ({ from }));
+
+  return {
+    database: { select } as unknown as TenantDatabase,
+    from,
+    select,
+    where,
+  };
+}
+
 function createTreatmentSummaryListDatabase(rows: unknown[] = []) {
   const limit = vi.fn(async (value: number) => {
     void value;
@@ -290,6 +306,43 @@ describe('治疗结构化摘要仓储', () => {
     });
 
     expect(records).toEqual([mapTreatmentSummaryRowToRecord(treatmentSummaryRow)]);
+  });
+
+  it('按 tenantId + id 读取单条治疗摘要且不跨租户返回', async () => {
+    const query = createTreatmentSummaryLookupDatabase([
+      treatmentSummaryRow,
+      {
+        ...treatmentSummaryRow,
+        id: 'trt_other_tenant',
+        tenantId: 'demo-tenant-002',
+      },
+    ]);
+
+    const record = await createTreatmentSummaryRepository(query.database).getTreatmentSummaryByTenant({
+      tenantId: 'demo-tenant-001',
+      id: 'trt_001',
+    });
+
+    expect(query.from).toHaveBeenCalledWith(treatmentSummaries);
+    expect(query.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: treatmentSummaries.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: treatmentSummaries.id, operator: 'eq', value: 'trt_001' },
+      ],
+      operator: 'and',
+    });
+    expect(record).toEqual(mapTreatmentSummaryRowToRecord(treatmentSummaryRow));
+  });
+
+  it('单条治疗摘要 lookup 查不到时返回 null', async () => {
+    const query = createTreatmentSummaryLookupDatabase([]);
+
+    await expect(
+      createTreatmentSummaryRepository(query.database).getTreatmentSummaryByTenant({
+        tenantId: 'demo-tenant-001',
+        id: 'trt_missing',
+      }),
+    ).resolves.toBeNull();
   });
 
   it('按 tenantId、白名单筛选、治疗时间倒序和 limit + 1 查询治疗摘要列表', async () => {

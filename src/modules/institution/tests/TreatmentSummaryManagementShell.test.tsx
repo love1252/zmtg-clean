@@ -50,6 +50,44 @@ const secondTreatmentSummaryRecord = {
   nextCareAction: 'Phase14 D28 人工确认恢复阶段。',
 };
 
+const followUpSuggestion = {
+  suggestionKey: 'trt_phase14_main:watch_risk_followup:3d',
+  ruleKey: 'watch_risk_followup',
+  title: '关注风险治疗后随访',
+  description: '请安排人工随访，确认恢复反馈和护理执行情况。',
+  recommendedDueAt: '2026-06-05T08:30:00.000Z',
+  priority: 'medium',
+  riskLevel: 'watch',
+  sourceTreatmentSummaryId: 'trt_phase14_main',
+  sourceCustomerId: 'cust_phase14_main',
+  sourceAppointmentId: 'appt_phase14_main',
+  tags: ['护理随访'],
+  reason: 'riskLevel 为 watch，需要在观察周期内人工跟进',
+  sourceFields: ['riskLevel', 'treatmentDate'],
+};
+
+const createdFollowUpTask = {
+  id: 'fu_phase15_confirmed',
+  customerId: 'cust_phase14_main',
+  customerDisplayName: '王女士',
+  journeyId: 'treatment_followup_watch_risk_followup',
+  stage: '关注风险治疗后随访',
+  status: 'scheduled',
+  dueAt: '2026-06-05T08:30:00.000Z',
+  suggestedAction: '请安排人工随访，确认恢复反馈和护理执行情况。',
+  riskLevel: 'watch',
+  updatedBy: null,
+  updatedAt: null,
+  sourceTreatmentSummaryId: 'trt_phase14_main',
+  sourceSuggestionKey: 'trt_phase14_main:watch_risk_followup:3d',
+  phoneNumber: '13800001252',
+  consultationTranscript: '咨询对话全文不应展示',
+  sql: 'select * from follow_up_tasks',
+  stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+  token: 'sk_test_phase15_should_not_render',
+  secret: 'phase15-secret',
+};
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
@@ -74,18 +112,36 @@ function fetchPath(input: Parameters<typeof fetch>[0]) {
   return input.url;
 }
 
-function mockTreatmentSummaryFetch(responses: Response[]) {
+function mockTreatmentSummaryFetch(
+  responses: Response[],
+  options: {
+    followUpSuggestionResponses?: Response[];
+    followUpTaskResponses?: Response[];
+  } = {},
+) {
   const queue = [...responses];
   const fallback = queue[queue.length - 1] ?? treatmentSummariesResponse([]);
+  const suggestionQueue = [...(options.followUpSuggestionResponses ?? [])];
+  const followUpTaskQueue = [...(options.followUpTaskResponses ?? [])];
 
-  const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
-    const path = fetchPath(input);
-    if (path.startsWith('/api/institution/treatment-summaries')) {
-      return queue.shift() ?? fallback;
-    }
+  const fetchMock = vi.fn(
+    async (input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
+      const path = fetchPath(input);
+      if (path.includes('/follow-up-suggestions')) {
+        return suggestionQueue.shift() ?? jsonResponse({ suggestions: [] });
+      }
 
-    throw new Error(`没有为 ${path} 配置 fetch mock`);
-  });
+      if (path.includes('/follow-up-tasks')) {
+        return followUpTaskQueue.shift() ?? jsonResponse({ error: '请求失败' }, { status: 503 });
+      }
+
+      if (path.startsWith('/api/institution/treatment-summaries')) {
+        return queue.shift() ?? fallback;
+      }
+
+      throw new Error(`没有为 ${path} 配置 fetch mock`);
+    },
+  );
 
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
@@ -119,12 +175,19 @@ function expectNoSensitiveTreatmentSummaryContent(container: HTMLElement) {
   expect(text).not.toContain('外部系统同步原文不应展示');
   expect(text).not.toContain('requestBody');
   expect(text).not.toContain('select * from treatment_summaries');
+  expect(text).not.toContain('select * from follow_up_tasks');
   expect(text).not.toContain('DATABASE_URL');
   expect(text).not.toContain('postgres://');
   expect(text).not.toContain('stack');
   expect(text).not.toContain('token');
   expect(text).not.toContain('secret');
   expect(text).not.toContain('sk_test_phase14_should_not_render');
+  expect(text).not.toContain('sk_test_phase15_should_not_render');
+  expect(text).not.toContain('自动发送');
+  expect(text).not.toContain('自动推送');
+  expect(text).not.toContain('企微触达');
+  expect(text).not.toContain('短信发送');
+  expect(text).not.toContain('电话外呼');
 }
 
 describe('治疗摘要管理页面', () => {
@@ -253,6 +316,81 @@ describe('治疗摘要管理页面', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: '关闭安全详情' }));
     expect(screen.queryByRole('dialog', { name: '治疗摘要安全详情' })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it('安全详情中可查看随访建议并人工确认创建任务', async () => {
+    const fetchMock = mockTreatmentSummaryFetch(
+      [treatmentSummariesResponse([treatmentSummaryRecord])],
+      {
+        followUpSuggestionResponses: [jsonResponse({ suggestions: [followUpSuggestion] })],
+        followUpTaskResponses: [jsonResponse({ record: createdFollowUpTask }, { status: 201 })],
+      },
+    );
+    const { container } = render(<TreatmentSummaryManagementShell />);
+
+    expect(await screen.findByText('Phase14 光电修复')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_main' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看随访建议' }));
+
+    expect(await within(dialog).findByText('关注风险治疗后随访')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('建议仅供机构内部参考，需要人工确认后才会创建内部随访任务。'),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText('请安排人工随访，确认恢复反馈和护理执行情况。')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认创建随访任务' }));
+
+    expect(await within(dialog).findByText('已创建内部随访任务')).toBeInTheDocument();
+    const suggestionCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).endsWith('/follow-up-suggestions'),
+    );
+    const createCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).endsWith('/follow-up-tasks'),
+    );
+    expect(suggestionCall).toBeDefined();
+    expect(createCall).toBeDefined();
+    expect(fetchPath(suggestionCall![0])).toBe(
+      '/api/institution/treatment-summaries/trt_phase14_main/follow-up-suggestions',
+    );
+    expect(fetchPath(createCall![0])).toBe(
+      '/api/institution/treatment-summaries/trt_phase14_main/follow-up-tasks',
+    );
+    expect(createCall![1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ suggestionKey: 'trt_phase14_main:watch_risk_followup:3d' }),
+      }),
+    );
+    expectNoSensitiveTreatmentSummaryContent(container);
+  });
+
+  it('重复确认随访任务时展示稳定冲突提示', async () => {
+    const fetchMock = mockTreatmentSummaryFetch(
+      [treatmentSummariesResponse([treatmentSummaryRecord])],
+      {
+        followUpSuggestionResponses: [jsonResponse({ suggestions: [followUpSuggestion] })],
+        followUpTaskResponses: [
+          jsonResponse({ error: '该护理随访任务已存在，请勿重复创建' }, { status: 409 }),
+        ],
+      },
+    );
+    render(<TreatmentSummaryManagementShell />);
+
+    expect(await screen.findByText('Phase14 光电修复')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_main' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看随访建议' }));
+    expect(await within(dialog).findByText('关注风险治疗后随访')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认创建随访任务' }));
+
+    expect(
+      await within(dialog).findByText('该护理随访任务已存在，请勿重复创建'),
+    ).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalled();
   });
 

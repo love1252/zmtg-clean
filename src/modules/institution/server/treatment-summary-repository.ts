@@ -14,6 +14,10 @@ type TreatmentSummaryLookupInput = {
   tenantId: string;
   customerId: string;
 };
+type TreatmentSummaryByTenantInput = {
+  tenantId: string;
+  id: string;
+};
 type TreatmentSummaryListInput = {
   tenantId: string;
   query: TreatmentSummaryListQuery;
@@ -220,6 +224,23 @@ export function createTreatmentSummaryRepository(database: TenantDatabase) {
           (row) => row.tenantId === input.tenantId && row.customerId === input.customerId,
         )
         .map(mapTreatmentSummaryRowToRecord);
+    },
+
+    async getTreatmentSummaryByTenant(
+      input: TreatmentSummaryByTenantInput,
+    ): Promise<TreatmentSummaryRecord | null> {
+      const rows = await database
+        .select()
+        .from(treatmentSummaries)
+        .where(
+          and(
+            eq(treatmentSummaries.tenantId, input.tenantId),
+            eq(treatmentSummaries.id, input.id),
+          ),
+        );
+      const row = rows.find((candidate) => candidate.tenantId === input.tenantId && candidate.id === input.id);
+
+      return row ? mapTreatmentSummaryRowToRecord(row) : null;
     },
 
     async listTreatmentSummariesByTenant(
