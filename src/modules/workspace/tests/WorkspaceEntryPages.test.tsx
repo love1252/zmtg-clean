@@ -853,6 +853,10 @@ function expectNoSensitiveCustomerTimelineContent(container: HTMLElement) {
   expect(text).not.toContain('图片文件原文不应展示');
   expect(text).not.toContain('AI 生成内容不应展示');
   expect(text).not.toContain('外部系统同步原文不应展示');
+  expect(text).not.toContain('AI provider');
+  expect(text).not.toContain('RAG');
+  expect(text).not.toContain('Agent');
+  expect(text).not.toContain('外部系统同步');
   expect(text).not.toContain('requestBody');
   expect(text).not.toContain('select * from audit_events');
   expect(text).not.toContain('select * from treatment_summaries');
@@ -914,8 +918,12 @@ function expectNoSensitiveTreatmentSummaryManagementContent(container: HTMLEleme
   expect(text).not.toContain('phase15-raw-secret');
   expect(text).not.toContain('自动发送');
   expect(text).not.toContain('自动推送');
+  expect(text).not.toContain('自动触达客户');
+  expect(text).not.toContain('微信');
+  expect(text).not.toContain('企业微信');
   expect(text).not.toContain('企微触达');
   expect(text).not.toContain('短信发送');
+  expect(text).not.toContain('发送短信');
   expect(text).not.toContain('电话外呼');
 }
 
@@ -1215,6 +1223,49 @@ describe('工作台入口页面', () => {
     expect(fetchPath(createCall![0])).toBe(
       '/api/institution/treatment-summaries/trt_phase14_management/follow-up-tasks',
     );
+    expect(createCall![1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          suggestionKey: 'trt_phase14_management:watch_risk_followup:3d',
+        }),
+      }),
+    );
+    expect(String(createCall![1]?.body)).not.toContain('tenantId');
+    expect(String(createCall![1]?.body)).not.toContain('customerId');
+    expect(String(createCall![1]?.body)).not.toContain('suggestedAction');
+    expectNoSensitiveTreatmentSummaryManagementContent(container);
+  });
+
+  it('机构入口 smoke 覆盖重复确认随访任务时展示稳定冲突提示', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      followUpTaskError: {
+        status: 409,
+        message: '该护理随访任务已存在，请勿重复创建',
+      },
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
+
+    expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_management' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看随访建议' }));
+    expect(await within(dialog).findByText('Phase15 关注风险治疗后随访')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认创建随访任务' }));
+
+    expect(
+      await within(dialog).findByText('该护理随访任务已存在，请勿重复创建'),
+    ).toBeInTheDocument();
+    const createCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).endsWith('/follow-up-tasks'),
+    );
+    expect(createCall).toBeDefined();
     expect(createCall![1]).toEqual(
       expect.objectContaining({
         method: 'POST',

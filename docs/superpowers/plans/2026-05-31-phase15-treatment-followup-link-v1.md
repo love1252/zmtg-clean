@@ -1,6 +1,6 @@
 # Phase 15 治疗后护理 / 随访联动 v1 实施计划
 
-> 状态：Phase 15 PR 1 文档阶段。本文用于后续 PR 2-5 执行，不代表代码已实现。
+> 状态：Phase 15 已完成。PR 1-5 已完成 spec / plan、确定性建议、来源关联、人工确认 API + UI 联动、workspace smoke 和文档收尾。
 
 > **给后续执行 Agent 的要求：** 必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项执行本计划。步骤使用 `- [ ]` 复选框语法跟踪；每个 PR 只做本 PR 范围，不顺手进入后续 PR。
 
@@ -22,16 +22,14 @@ Phase 14 已完成：
 - Phase 14 smoke、README、roadmap、devlog 收尾已完成。
 - 当前 main 已同步并通过全量验证。
 
-Phase 15 当前只执行 PR 1：
+Phase 15 已完成：
 
-- 新增 Phase 15 design spec。
-- 新增 Phase 15 implementation plan。
-- 不改业务代码。
-- 不改页面。
-- 不改测试。
-- 不改 API route。
-- 不改数据库 schema / migration。
-- 不改权限、认证或租户隔离。
+- PR 1：Phase 15 design spec / implementation plan。
+- PR 2：确定性护理 / 随访建议 domain、parser / mapper、DTO、`suggestionKey` 稳定生成和测试。
+- PR 3：`follow_up_tasks` 来源关联字段、Drizzle migration / meta、repository create 地基、来源幂等 / 去重测试。
+- PR 4：只读建议 API、人工确认创建 API、审计封装、client helper、治疗摘要管理 UI 联动和 API / UI / smoke 测试。
+- PR 5：workspace smoke 加强、README / roadmap / devlog / Phase 15 spec / plan 文档收尾。
+- 当前分支不进入 Phase 16 实现。
 
 ## 总边界
 
@@ -42,8 +40,8 @@ Phase 15 做：
 - 人工确认创建 API。
 - 来源追溯字段。
 - 去重 / 幂等。
-- follow-up 创建配额 enforcement 决策和接入。
-- RBAC、租户隔离和审计。
+- follow-up 创建配额 enforcement 风险记录；本阶段未改 Phase 10 quota enforcement。
+- 租户校验、来源校验和审计。
 - 治疗摘要管理 UI 中的建议展示与人工确认创建。
 - workspace smoke 和文档收尾。
 
@@ -146,10 +144,8 @@ Phase 15 不做：
   - 新增 `createFollowUpTaskFromTreatmentSummarySuggestion()`。
   - 创建前按 `tenantId + sourceTreatmentSummaryId + sourceSuggestionKey` 查重。
   - 创建时不从客户端接收 `customerId`、`stage`、`dueAt`、`riskLevel` 或 `suggestedAction`。
-- `src/modules/institution/server/tenant-quota-enforcement.ts`
-  - 扩展 follow-up 创建配额 enforcement，按 `follow_up_tasks` 实时 count，使用 `maxFollowUps`。
 - `src/modules/audit/domain/audit-events.ts`
-  - 增加 `invalid_follow_up_suggestion`、`duplicate_follow_up_task`、`quota_exceeded_followups`。
+  - 增加 `invalid_follow_up_suggestion`、`active_source_follow_up_exists`。
 - `src/modules/audit/domain/audit-event-query.ts`
   - 增加新增 reason 的查询白名单。
 
@@ -158,8 +154,6 @@ Phase 15 不做：
 - migration SQL 文件。
 - `src/modules/institution/tests/TreatmentFollowUpTaskRepository.test.ts`
   - 覆盖创建、来源字段、去重、终态后允许重新创建、跨租户拒绝。
-- `src/modules/institution/tests/TenantQuotaEnforcement.test.ts`
-  - 扩展 follow-up quota enforcement 覆盖。
 - `src/modules/audit/tests/AuditEventsDomain.test.ts`
   - 覆盖新增 audit reason。
 
@@ -179,14 +173,17 @@ Phase 15 不做：
 - `src/modules/institution/tests/TreatmentFollowUpSuggestionApiRoutes.test.ts`
   - 覆盖 200、400、401、403、404、503、跨租户、DTO 白名单和不写入。
 - `src/modules/institution/tests/TreatmentFollowUpTaskCreateApiRoutes.test.ts`
-  - 覆盖人工确认创建、重复创建 409、配额拒绝、非法 key、跨租户拒绝、审计和敏感字段不返回。
+  - 覆盖人工确认创建、重复创建 409、非法 key、跨租户拒绝、审计和敏感字段不返回。
+
+实际边界：
+
+- 未修改 `src/modules/security/domain/access-control.ts`。
+- 未新增 `follow_up/create` 权限模型。
+- 人工确认创建沿用现有 `follow_up/update` 审计动作和现有访问控制边界。
+- 未接入 follow-up quota enforcement，后续进入 Phase 16 Plan Mode 单独评估。
 
 建议修改：
 
-- `src/modules/security/domain/access-control.ts`
-  - 为 `tenant_admin` 的 `follow_up` 增加 `create` action。
-- `src/modules/security/tests/AccessControlDomain.test.ts`
-  - 覆盖 `follow_up/create`。
 - `src/modules/institution/client/tenant-business-client.ts`
   - 增加 `listTreatmentFollowUpSuggestions()`。
   - 增加 `createFollowUpTaskFromTreatmentSummary()`。
@@ -195,11 +192,11 @@ Phase 15 不做：
   - 在摘要安全详情中展示护理 / 随访建议。
   - 创建前展示建议内容。
   - 人工确认后创建任务。
-  - 显示 409 重复、quota、403 和 503 稳定状态。
+  - 显示 409 重复、403 和 503 稳定状态。
 - `src/modules/institution/tests/TenantBusinessClient.test.ts`
   - 覆盖建议 API 和创建 API 请求体不含 `tenantId`、`customerId`、`dueAt`、`riskLevel`、`suggestedAction`。
 - `src/modules/institution/tests/TreatmentSummaryManagementShell.test.tsx`
-  - 覆盖建议展示、人工确认、重复提示、配额错误、敏感字段不展示和不自动触达。
+  - 覆盖建议展示、人工确认、重复提示、敏感字段不展示和不自动触达。
 
 不修改：
 
@@ -274,11 +271,9 @@ Phase 15 不做：
 ### 配额规则
 
 - Phase 10 当前只覆盖客户 / 预约创建。
-- Phase 15 新增随访任务创建时，推荐纳入 follow-up quota enforcement。
-- 读取 `maxFollowUps`，实时 count 当前租户 `follow_up_tasks`。
-- 超额返回 `409 Conflict`。
-- 无 active plan 或无 follow-up quota limit 时 fail closed。
-- 如果 follow-up quota enforcement 拆出单独 PR，必须在 PR 描述和文档里记录绕过 `maxFollowUps` 的风险。
+- Phase 15 新增随访任务创建时，最终未改 Phase 10 quota enforcement。
+- 本阶段记录风险：治疗摘要来源的随访任务创建暂未受 `maxFollowUps` 阻断。
+- 后续建议在 Phase 16 Plan Mode 单独评估 follow-up quota enforcement，避免在 Phase 15 收尾阶段扩大套餐逻辑。
 
 ## PR 1：Phase 15 spec / plan 文档
 
@@ -409,7 +404,7 @@ git diff --check
 - 增加随访任务来源字段。
 - 增加来源索引和幂等策略。
 - 新增 repository 创建方法。
-- 接入 follow-up quota enforcement helper。
+- 记录 follow-up quota enforcement 后续风险，不改 Phase 10 enforcement。
 - 不做 UI。
 
 **涉及文件：**
@@ -418,11 +413,9 @@ git diff --check
 - 新增：migration SQL 文件。
 - 修改：`src/modules/institution/domain/followup-workflow.ts`
 - 修改或新增：随访任务 repository 文件。
-- 修改：`src/modules/institution/server/tenant-quota-enforcement.ts`
 - 修改：`src/modules/audit/domain/audit-events.ts`
 - 修改：`src/modules/audit/domain/audit-event-query.ts`
 - 新增：`src/modules/institution/tests/TreatmentFollowUpTaskRepository.test.ts`
-- 修改：`src/modules/institution/tests/TenantQuotaEnforcement.test.ts`
 - 修改：`src/modules/audit/tests/AuditEventsDomain.test.ts`
 
 **风险：**
@@ -430,7 +423,7 @@ git diff --check
 - migration 影响历史随访任务。
 - 并发请求绕过去重。
 - 来源治疗摘要跨租户引用。
-- follow-up quota enforcement 漏接导致绕过 `maxFollowUps`。
+- follow-up quota enforcement 暂未纳入，后续需要单独评估是否接入 `maxFollowUps`。
 
 **控制：**
 
@@ -438,11 +431,11 @@ git diff --check
 - repository 查重必须包含 `tenantId`。
 - 优先增加部分唯一索引兜底。
 - 创建任务时 `customerId`、`riskLevel`、`stage`、`dueAt`、`suggestedAction` 全部来自服务端生成结果。
-- quota 失败返回稳定 `409`，并写 denied 审计。
+- PR 描述和收尾文档记录 follow-up quota enforcement 未纳入 Phase 15。
 
 **验证：**
 
-- `node scripts/run-vitest.mjs run src/modules/institution/tests/TreatmentFollowUpTaskRepository.test.ts src/modules/institution/tests/TenantQuotaEnforcement.test.ts src/modules/audit/tests/AuditEventsDomain.test.ts`
+- `node scripts/run-vitest.mjs run src/modules/institution/tests src/server/db/tests src/modules/audit/tests`
 - `./node_modules/.bin/tsc --noEmit`
 - `git diff --check`
 
@@ -460,12 +453,9 @@ git diff --check
 
 - 新增：`src/app/api/institution/treatment-summaries/[summaryId]/follow-up-suggestions/route.ts`
 - 新增：`src/app/api/institution/treatment-summaries/[summaryId]/follow-up-tasks/route.ts`
-- 修改：`src/modules/security/domain/access-control.ts`
-- 修改：`src/modules/security/tests/AccessControlDomain.test.ts`
 - 修改：`src/modules/institution/client/tenant-business-client.ts`
 - 修改：`src/modules/institution/components/TreatmentSummaryManagementShell.tsx`
-- 新增：`src/modules/institution/tests/TreatmentFollowUpSuggestionApiRoutes.test.ts`
-- 新增：`src/modules/institution/tests/TreatmentFollowUpTaskCreateApiRoutes.test.ts`
+- 新增：`src/modules/institution/tests/TreatmentFollowUpLinkApiRoutes.test.ts`
 - 修改：`src/modules/institution/tests/TenantBusinessClient.test.ts`
 - 修改：`src/modules/institution/tests/TreatmentSummaryManagementShell.test.tsx`
 
@@ -473,7 +463,7 @@ git diff --check
 
 - UI 未展示建议就允许创建。
 - POST 允许客户端覆盖服务端建议字段。
-- RBAC 未加 `follow_up/create`。
+- 访问控制边界被误改或扩大。
 - 审计记录包含敏感正文。
 - 重复确认创建重复任务。
 
@@ -482,12 +472,12 @@ git diff --check
 - UI 只有在建议成功加载后显示确认按钮。
 - POST 请求体只允许 `suggestionKey`。
 - API 服务端重新计算建议。
-- 创建前检查 `treatment_summary/read_own_tenant` 和 `follow_up/create`。
+- 创建前检查 `treatment_summary/read_own_tenant` 和现有 `follow_up/update` 访问边界。
 - 审计只记录资源、动作、结果和 reason，不记录 request body。
 
 **验证：**
 
-- `node scripts/run-vitest.mjs run src/modules/institution/tests/TreatmentFollowUpSuggestionApiRoutes.test.ts src/modules/institution/tests/TreatmentFollowUpTaskCreateApiRoutes.test.ts src/modules/institution/tests/TenantBusinessClient.test.ts src/modules/institution/tests/TreatmentSummaryManagementShell.test.tsx src/modules/security/tests/AccessControlDomain.test.ts`
+- `node scripts/run-vitest.mjs run src/modules/institution/tests/TreatmentFollowUpLinkApiRoutes.test.ts src/modules/institution/tests/TenantBusinessClient.test.ts src/modules/institution/tests/TreatmentSummaryManagementShell.test.tsx`
 - `./node_modules/.bin/tsc --noEmit`
 - `git diff --check`
 
@@ -529,15 +519,29 @@ git diff --check
 
 ## 后续执行检查清单
 
-- [ ] PR 2 不写入 `follow_up_tasks`。
-- [ ] PR 2 不新增 UI。
-- [ ] PR 2 不接 AI。
-- [ ] PR 3 来源字段允许历史任务为 `null`。
-- [ ] PR 3 去重包含 `tenantId`。
-- [ ] PR 3 follow-up quota enforcement 有明确测试。
-- [ ] PR 4 GET 建议 API 不写入。
-- [ ] PR 4 POST 创建 API 只接受 `suggestionKey`。
-- [ ] PR 4 UI 必须先展示建议再允许确认。
-- [ ] PR 4 不自动触达客户。
-- [ ] PR 4 审计不记录 request body 或敏感正文。
-- [ ] PR 5 全量验证通过后再标记 Phase 15 完成。
+- [x] PR 2 不写入 `follow_up_tasks`。
+- [x] PR 2 不新增 UI。
+- [x] PR 2 不接 AI。
+- [x] PR 3 来源字段允许历史任务为 `null`。
+- [x] PR 3 去重包含 `tenantId`。
+- [x] PR 3 未改 Phase 10 quota enforcement，follow-up quota enforcement 记录为后续风险。
+- [x] PR 4 GET 建议 API 不写入。
+- [x] PR 4 POST 创建 API 只接受 `suggestionKey`。
+- [x] PR 4 UI 必须先展示建议再允许确认。
+- [x] PR 4 不自动触达客户。
+- [x] PR 4 审计不记录 request body 或敏感正文。
+- [x] PR 5 全量验证通过后标记 Phase 15 完成。
+
+## Phase 15 最终状态
+
+- Phase 15 已完成。
+- 已完成确定性护理 / 随访建议规则。
+- 已完成 `follow_up_tasks` 来源关联和幂等 / 去重。
+- 已完成人工确认 API。
+- 已完成治疗摘要管理 UI 联动。
+- 已完成 workspace smoke / 文档收尾。
+- 未进入 AI provider、AI 生成护理建议、Agent、RAG、企微、短信、电话外呼、自动触达客户、HIS / CRM / OTA、OAuth / Webhook / 支付、完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件原文或外部系统同步。
+
+## Phase 16 建议
+
+后续建议进入 Phase 16 Plan Mode，优先重新评估治疗摘要编辑能力 v1、治疗摘要作废能力 v1、follow-up 配额 enforcement、知识库 / RAG 安全基础准备、平台商业化增强、平台租户状态管理和审计高级治理。当前不进入 Phase 16 实现。

@@ -1,7 +1,7 @@
 # Phase 15 治疗后护理 / 随访联动 v1 设计
 
 > 日期：2026-05-31
-> 状态：Phase 15 PR 1 文档阶段。本文只固化治疗后护理 / 随访联动 v1 的设计边界与 PR 拆分，不代表代码已实现。
+> 状态：Phase 15 已完成。PR 1-5 已完成 spec / plan、确定性建议、来源关联、人工确认 API + UI 联动、workspace smoke 和文档收尾。
 
 ## 1. Phase 15 目标
 
@@ -84,7 +84,7 @@ Phase 15 v1 包含：
 - 为 `follow_up_tasks` 增加来源追溯字段。
 - 实现同一来源建议的去重 / 幂等。
 - 创建随访任务时写审计。
-- 创建随访任务时做 RBAC、租户隔离和配额 enforcement 决策。
+- 创建随访任务时做访问控制、租户隔离和来源幂等；follow-up 配额 enforcement 记录为 Phase 16 风险。
 - 在治疗摘要管理 UI 中展示建议，并允许机构人员人工确认创建。
 - 补充 workspace smoke 和文档收尾。
 
@@ -136,7 +136,7 @@ Phase 15 不做：
 3. 机构人员明确点击确认创建。
 4. UI 调用人工确认创建 API。
 5. 服务端重新读取治疗摘要并重新计算建议，不信任客户端传回的完整建议内容。
-6. 服务端校验 RBAC、租户、配额、去重 / 幂等后写入 `follow_up_tasks`。
+6. 服务端校验访问控制、租户、来源建议、去重 / 幂等后写入 `follow_up_tasks`。
 7. 服务端写审计并返回安全 DTO。
 
 不推荐只做“建议展示不创建任务”，因为那会让 Phase 15 无法真正补齐治疗摘要到智能随访的运营闭环。但创建必须是人工确认后的服务端写入，不允许自动创建。
@@ -269,7 +269,7 @@ Phase 10 当前只对客户创建和预约创建做数量 enforcement：
 
 当前随访任务只有读取和状态流转，没有公开创建 API，因此 Phase 10 未覆盖 follow-up 创建。
 
-Phase 15 如果新增人工确认创建随访任务，就会产生新的 `follow_up_tasks` 记录。推荐在 Phase 15 v1 的创建 API 中纳入 follow-up 配额 enforcement：
+Phase 15 如果新增人工确认创建随访任务，就会产生新的 `follow_up_tasks` 记录。设计阶段曾推荐在 Phase 15 v1 的创建 API 中纳入 follow-up 配额 enforcement：
 
 - 创建前读取当前租户 active plan / quota limit。
 - 使用 `follow_up_tasks` 按当前 `tenantId` 实时 count。
@@ -278,7 +278,12 @@ Phase 15 如果新增人工确认创建随访任务，就会产生新的 `follow
 - 拒绝时返回稳定 `409 Conflict`。
 - 拒绝时写 denied 审计，reason 推荐新增 `quota_exceeded_followups`，缺少配置继续复用 `missing_active_plan` / `missing_quota_limit`。
 
-如果实现阶段判断 follow-up 配额 enforcement 需要单独拆 PR，Phase 15 不能直接跳过而不记录。必须在 PR 描述和 Phase 15 文档中说明风险：未纳入 enforcement 会让随访任务创建绕过套餐中的 `maxFollowUps`。
+最终实现决策：
+
+- Phase 15 PR 3 / PR 4 没有修改 Phase 10 quota enforcement 逻辑。
+- 人工确认创建随访任务暂未接入 `maxFollowUps` enforcement。
+- 风险已记录：未纳入 enforcement 会让治疗摘要来源的随访任务创建不受套餐 `maxFollowUps` 阻断。
+- 建议在 Phase 16 Plan Mode 单独评估 follow-up 配额 enforcement，避免在 Phase 15 收尾阶段扩展套餐逻辑。
 
 ## 12. API 路径设计
 
@@ -321,14 +326,14 @@ POST /api/institution/treatment-summaries/[summaryId]/follow-up-tasks
 
 - 机构人员人工确认后创建结构化随访任务。
 - 服务端重新生成建议并匹配 `suggestionKey`。
-- 做 RBAC、租户校验、配额校验、去重 / 幂等。
+- 做访问控制、租户校验、去重 / 幂等。
 - 写审计。
 - 不触达客户。
 
 权限：
 
 - 需要 `treatment_summary/read_own_tenant`。
-- 需要 `follow_up/create`。
+- 最终实现未新增 `follow_up/create` 权限模型，沿用现有 `follow_up/update` 访问边界和审计动作。
 
 不推荐把两个 API 合并为一个“POST 即生成并创建”，因为 v1 必须先展示建议内容，再由机构人员人工确认。
 
@@ -353,12 +358,12 @@ Phase 15 不新增新的 access resource。继续复用：
 - `treatment_summary`
 - `follow_up`
 
-需要的 action：
+最终使用的 action：
 
 - 只读建议 API：`treatment_summary/read_own_tenant`
-- 人工确认创建 API：`treatment_summary/read_own_tenant` + `follow_up/create`
+- 人工确认创建 API：`treatment_summary/read_own_tenant` + 现有 `follow_up/update` 访问边界
 
-当前 `tenant_admin` 已具备 `treatment_summary/read_own_tenant`，但 `follow_up` 目前只有 `read_own_tenant` 和 `update`。后续 PR 4 需要为 `tenant_admin` 增加 `follow_up/create`，并补访问控制测试。
+当前 `tenant_admin` 已具备 `treatment_summary/read_own_tenant`，`follow_up` 目前只有 `read_own_tenant` 和 `update`。最终实现未新增 `follow_up/create`，人工确认创建 API 使用现有 `follow_up/update` 访问边界与审计动作，避免在 Phase 15 PR 4 扩大权限模型主结构。
 
 不新增平台端权限，不允许平台账号创建机构随访任务，不重构认证或租户隔离模型。
 
@@ -370,16 +375,16 @@ Phase 15 不新增新的 access resource。继续复用：
 | --- | --- | --- | --- | --- |
 | 读取建议成功 | `treatment_summary` | `read_own_tenant` | `allowed` | `allowed_by_policy` |
 | 治疗摘要不存在或不属于租户 | `treatment_summary` | `read_own_tenant` | `denied` | `not_found_or_not_owned` |
-| 建议 key 非法 | `follow_up` | `create` | `denied` | `invalid_follow_up_suggestion` |
-| 已有活跃来源任务 | `follow_up` | `create` | `denied` | `duplicate_follow_up_task` |
-| follow-up 配额超额 | `follow_up` | `create` | `denied` | `quota_exceeded_followups` |
-| 创建随访任务成功 | `follow_up` | `create` | `allowed` | `allowed_by_policy` |
+| 建议 key 非法 | `follow_up` | `update` | `denied` | `invalid_follow_up_suggestion` |
+| 已有活跃来源任务 | `follow_up` | `update` | `denied` | `active_source_follow_up_exists` |
+| 创建随访任务成功 | `follow_up` | `update` | `allowed` | `allowed_by_policy` |
 
-后续实现需要扩展 `AuditReason` 和审计查询 reason 白名单：
+最终实现已扩展 `AuditReason` 和审计查询 reason 白名单：
 
 - `invalid_follow_up_suggestion`
-- `duplicate_follow_up_task`
-- `quota_exceeded_followups`
+- `active_source_follow_up_exists`
+
+未新增 `quota_exceeded_followups`，因为 Phase 15 未改 Phase 10 quota enforcement。
 
 审计事件禁止记录：
 
@@ -523,14 +528,14 @@ Phase 15 推荐拆成 5 个 PR：
 - 新增只读建议 API。
 - 新增人工确认创建 API。
 - 在治疗摘要管理 UI 展示建议并允许人工确认创建。
-- 创建时做 RBAC、租户校验、配额校验、去重 / 幂等和审计。
+- 创建时做访问控制、租户校验、去重 / 幂等和审计。
 - 不自动触达客户。
 
 风险：
 
 - UI 在未展示建议时创建任务。
 - 客户端传入 `dueAt`、`riskLevel` 或 `suggestedAction` 并覆盖服务端计算结果。
-- `follow_up/create` 权限或 follow-up quota enforcement 漏接。
+- follow-up quota enforcement 未纳入 Phase 15，后续需要单独评估 `maxFollowUps` 风险。
 
 验证：
 
@@ -565,4 +570,30 @@ Phase 15 推荐拆成 5 个 PR：
 
 ## 20. 下一步建议
 
-本 PR 1 合并后，进入 PR 2。PR 2 只实现确定性建议 domain、parser 和测试，不写入随访任务、不新增 UI、不接 AI。PR 2 完成后再进入 PR 3 的 schema / migration 和 repository create。
+Phase 15 已完成，不继续在本阶段追加业务能力。
+
+已完成范围：
+
+- 确定性护理 / 随访建议规则，基于 `riskLevel`、`recoveryStage`、`treatmentStage`、`nextCareAction`、`treatmentCategory`、`treatmentProject`、`treatmentDate`、`tags` 等结构化字段生成稳定建议。
+- `suggestionKey` 稳定生成，便于后续来源去重 / 幂等。
+- `follow_up_tasks` 来源关联字段、Drizzle migration / meta、repository create 地基、同租户幂等 / 去重测试。
+- `GET /api/institution/treatment-summaries/[summaryId]/follow-up-suggestions` 只读建议 API。
+- `POST /api/institution/treatment-summaries/[summaryId]/follow-up-tasks` 人工确认创建 API。
+- 治疗摘要管理 UI 中的建议展示、人工确认创建、成功提示和重复确认冲突提示。
+- API / UI / workspace smoke / 文档收尾。
+
+最终边界：
+
+- 不接 AI provider。
+- 不做 AI 生成护理建议。
+- 不做 Agent。
+- 不做 RAG。
+- 不接企微。
+- 不发送短信。
+- 不电话外呼。
+- 不自动触达客户。
+- 不接 HIS / CRM / OTA。
+- 不进入 OAuth / Webhook / 支付。
+- 不保存完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、图片 / 文件原文或外部系统同步原文。
+
+后续建议进入 Phase 16 Plan Mode，优先重新评估治疗摘要编辑能力 v1、治疗摘要作废能力 v1、follow-up 配额 enforcement、知识库 / RAG 安全基础准备、平台商业化增强、平台租户状态管理和审计高级治理。Phase 16 不应在本阶段分支中实现。

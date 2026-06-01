@@ -25,6 +25,7 @@
 - Phase 12：治疗记录结构化摘要 v1，包括治疗摘要数据底座、客户详情 timeline API 接入、客户详情抽屉展示和 smoke / 文档收尾
 - Phase 13：治疗摘要人工录入 v1，包括 payload parser、repository create、`POST /api/institution/customers/[customerId]/treatment-summaries`、客户详情抽屉结构化录入 UI、timeline 刷新和 smoke / 文档收尾
 - Phase 14：治疗摘要管理能力 v1，包括 `GET /api/institution/treatment-summaries`、query parser、repository list、DTO 白名单、机构端治疗摘要管理 UI、筛选、加载更多、安全详情和 smoke / 文档收尾
+- Phase 15：治疗后护理 / 随访联动 v1，包括确定性护理 / 随访建议规则、`follow_up_tasks` 来源关联、幂等 / 去重、人工确认 API、治疗摘要管理 UI 联动和 smoke / 文档收尾
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -108,10 +109,20 @@ Phase 14 已完成：
 - Phase 14 不新增 schema / migration，不改权限、认证或租户隔离，不做治疗摘要新增 / 编辑 / 删除
 - Phase 14 不包含完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、图片 / 文件上传、AI provider、Agent、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付、合同、发票或外部系统同步
 
+Phase 15 已完成：
+
+- 新增确定性护理 / 随访建议 domain、parser / mapper 和稳定 `suggestionKey`，只基于 `riskLevel`、`recoveryStage`、`treatmentStage`、`nextCareAction`、`treatmentCategory`、`treatmentProject`、`treatmentDate`、`tags` 等结构化字段
+- `follow_up_tasks` 已增加 `source_treatment_summary_id` 和 `source_suggestion_key` 来源关联字段，并完成 Drizzle migration / meta、repository create 地基和同租户来源幂等 / 去重测试
+- 新增 `GET /api/institution/treatment-summaries/[summaryId]/follow-up-suggestions`，服务端从 access context 推导 `tenantId`，返回确定性建议，不写数据库、不创建随访任务
+- 新增 `POST /api/institution/treatment-summaries/[summaryId]/follow-up-tasks`，机构人员人工确认后创建结构化随访任务，服务端重新校验 summary / suggestionKey / tenant，并写稳定审计
+- 治疗摘要管理 UI 已支持查看随访建议、展示“人工确认”边界、人工确认创建内部随访任务、成功提示和重复确认冲突提示
+- workspace smoke / API / UI / repository 测试覆盖建议展示、人工确认创建、重复冲突、来源关联、租户隔离、敏感字段不展示和不自动触达边界
+- Phase 15 不包含 AI provider、AI 生成护理建议、Agent、RAG、企微、短信、电话外呼、自动触达客户、HIS / CRM / OTA、OAuth、Webhook、支付、完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件原文或外部系统同步
+
 后续阶段会依次加入：
 
-- Phase 15 Plan Mode：重新评估治疗后护理 / 随访联动 v1、知识库 / RAG 安全基础准备、平台商业化继续增强、平台租户状态管理和审计高级治理
-- 客服会话、治疗摘要编辑和完整治疗记录能力需单独规划
+- Phase 16 Plan Mode：建议重新评估治疗摘要编辑能力 v1、治疗摘要作废能力 v1、follow-up 配额 enforcement、知识库 / RAG 安全基础准备、平台商业化增强、平台租户状态管理和审计高级治理
+- 客服会话、治疗摘要编辑 / 作废和完整治疗记录能力需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费

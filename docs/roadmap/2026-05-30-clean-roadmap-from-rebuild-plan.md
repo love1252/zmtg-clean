@@ -25,13 +25,14 @@
 - 治疗记录结构化摘要第十二阶段：治疗摘要 schema / migration / seed / repository / DTO 白名单、customer timeline API 接入、客户详情抽屉展示、入口 smoke 和文档收尾已完成。
 - 治疗摘要人工录入第十三阶段：payload parser、repository create、`treatment_summary` RBAC / audit 决策、POST API route、客户详情抽屉结构化录入 UI、timeline 刷新、入口 smoke 和文档收尾已完成。
 - 治疗摘要管理第十四阶段：治疗摘要列表 query parser / repository / DTO / API、机构端治疗摘要管理 UI、筛选、加载更多、安全详情、入口 smoke 和文档收尾已完成。
+- 治疗后护理 / 随访联动第十五阶段：确定性护理 / 随访建议规则、`follow_up_tasks` 来源关联、幂等 / 去重、人工确认 API、治疗摘要管理 UI 联动、入口 smoke 和文档收尾已完成。
 - 开放平台治理第一阶段：API Key、OAuth、Webhook 和审计的治理词汇、生命周期和安全边界展示。
 
 当前主要缺口：
 
 - 平台端已有只读租户列表、租户状态、套餐 / 配额、用量快照和商业化健康运营摘要；机构端新增客户 / 预约已具备轻量套餐配额 enforcement，但尚未具备租户创建、编辑、删除、冻结 / 恢复、完整套餐商业化后台、计费、支付、合同或发票能力。
 - 审计日志只读查询基础版已完成，但导出、告警和复杂风控仍未进入真实实现。
-- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1 和治疗摘要管理 v1 已完成；完整治疗记录正文、治疗摘要编辑、治疗后护理 / 随访联动、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
+- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1 和治疗后护理 / 随访联动 v1 已完成；完整治疗记录正文、治疗摘要编辑 / 作废、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
 
 ## 2. 旧 REBUILD_PLAN.md 中仍有价值的功能
 
@@ -71,6 +72,7 @@
 - 治疗记录结构化摘要 v1：最小 `treatment_summaries` 数据底座、tenant-scoped repository、DTO 白名单、客户详情 timeline API `treatmentSummaries` / `treatment_summary` 节点、客户详情抽屉展示和入口 smoke。
 - 治疗摘要人工录入 v1：结构化 payload parser、repository create、`treatment_summary` RBAC / audit 语义、客户子路径 POST API、客户详情抽屉结构化表单、提交后 timeline 刷新和入口 smoke。
 - 治疗摘要管理 v1：`GET /api/institution/treatment-summaries`、白名单 query parser、tenant-scoped repository list、安全 DTO、机构端只读管理 UI、筛选、加载更多、安全详情和入口 smoke。
+- 治疗后护理 / 随访联动 v1：确定性建议 domain / parser、安全 `suggestionKey`、`follow_up_tasks` 来源关联、同租户幂等 / 去重、建议只读 API、人工确认创建 API、治疗摘要管理 UI 联动和入口 smoke。
 - 开放平台 API Key、OAuth、Webhook 生命周期和安全治理词汇。
 
 ## 4. 不建议迁移的旧功能
@@ -91,7 +93,7 @@
 
 建议进入后续路线的功能：
 
-- 治疗记录模块：结构化摘要 v1、租户隔离、人工录入 v1 和只读管理 v1 已完成；后续治疗摘要编辑、客服会话联动和完整治疗记录能力需单独规划，仍不保存完整病历正文。
+- 治疗记录模块：结构化摘要 v1、租户隔离、人工录入 v1、只读管理 v1 和治疗后护理 / 随访联动 v1 已完成；后续治疗摘要编辑、作废、客服会话联动和完整治疗记录能力需单独规划，仍不保存完整病历正文。
 - 平台租户后续能力：租户创建、状态变更审计、完整套餐商业化后台、计费、合同、发票和支付。
 - 审计高级治理：只读查询基础版之后再单独评估导出、告警和复杂风控。
 - 套餐权益与配额 enforcement：客户数和预约数创建阻断已完成轻量版，后续可单独评估员工数、随访任务、AI 调用、严格一致计数器和套餐变更流程。
@@ -104,15 +106,17 @@
 
 推荐优先级：
 
-1. Phase 15 Plan Mode：在治疗后护理 / 随访联动 v1、知识库 / RAG 安全基础准备、平台套餐商业化继续增强、平台租户状态管理和审计高级治理之间重新评估优先级。
-2. 治疗后护理 / 随访联动 v1：只做结构化任务建议和人工确认，不自动触达客户。
-3. 平台租户状态管理、更多资源配额 enforcement 与完整套餐商业化后台规划。
-4. 审计高级治理：导出、告警和复杂风控。
-5. 知识库 / RAG 基础版，优先元数据规划，不保存医疗隐私正文。
-6. 客服会话和治疗摘要编辑能力。
-7. AI provider、调用日志和 Agent。
-8. 企业微信、Webhook、OAuth、API Key。
-9. 计费、合同、发票和支付。
+1. Phase 16 Plan Mode：建议在治疗摘要编辑能力 v1、治疗摘要作废能力 v1、follow-up 配额 enforcement、知识库 / RAG 安全基础准备、平台商业化增强、平台租户状态管理和审计高级治理之间重新评估优先级。
+2. 治疗摘要编辑能力 v1：只允许白名单结构化字段，写审计，不编辑完整正文。
+3. 治疗摘要作废能力 v1：软作废、可追溯、写审计，不硬删除。
+4. follow-up 配额 enforcement：单独评估是否将 Phase 15 的人工确认创建接入 `maxFollowUps`。
+5. 平台租户状态管理、更多资源配额 enforcement 与完整套餐商业化后台规划。
+6. 审计高级治理：导出、告警和复杂风控。
+7. 知识库 / RAG 基础版，优先元数据规划，不保存医疗隐私正文。
+8. 客服会话和完整治疗记录能力。
+9. AI provider、调用日志和 Agent。
+10. 企业微信、Webhook、OAuth、API Key。
+11. 计费、合同、发票和支付。
 
 ## 7. 高风险模块提醒
 
@@ -183,4 +187,6 @@ Phase 5 的成功标准：
 - Phase 13 未新增数据库 schema / migration，未改认证或租户隔离模型，未进入治疗摘要管理 / 编辑、完整治疗记录正文、图片 / 文件上传、AI provider、AI 生成治疗建议、Agent、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付、合同、发票或外部系统同步。
 - Phase 14 已完成治疗摘要管理能力 v1：Phase 14 spec / plan、治疗摘要列表 query parser、repository list、`GET /api/institution/treatment-summaries`、安全 DTO、机构端治疗摘要管理 UI、筛选、加载更多、安全详情、workspace smoke 和文档收尾均已完成。
 - Phase 14 未新增数据库 schema / migration，未改权限、认证或租户隔离模型，未进入治疗摘要新增 / 编辑 / 删除、完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、图片 / 文件上传、AI provider、AI 生成治疗建议、Agent、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付、合同、发票或外部系统同步。
-- 后续建议进入 Phase 15 Plan Mode，在治疗后护理 / 随访联动 v1、知识库 / RAG 安全基础准备、平台套餐商业化继续增强、平台租户状态管理和审计高级治理之间重新评估优先级；当前不进入 Phase 15 实现。
+- Phase 15 已完成治疗后护理 / 随访联动 v1：Phase 15 spec / plan、确定性护理 / 随访建议 domain / parser、`follow_up_tasks` 来源关联和幂等 / 去重、人工确认 API、治疗摘要管理 UI 联动、workspace smoke 和文档收尾均已完成。
+- Phase 15 未进入 AI provider、AI 生成护理建议、Agent、RAG、企微、短信、电话外呼、自动触达客户、HIS / CRM / OTA、OAuth、Webhook、支付、完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、图片 / 文件原文或外部系统同步。
+- 后续建议进入 Phase 16 Plan Mode，在治疗摘要编辑能力 v1、治疗摘要作废能力 v1、follow-up 配额 enforcement、知识库 / RAG 安全基础准备、平台商业化增强、平台租户状态管理和审计高级治理之间重新评估优先级；当前不进入 Phase 16 实现。
