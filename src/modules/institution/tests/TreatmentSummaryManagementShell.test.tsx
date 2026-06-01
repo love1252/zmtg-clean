@@ -117,16 +117,31 @@ function mockTreatmentSummaryFetch(
   options: {
     followUpSuggestionResponses?: Response[];
     followUpTaskResponses?: Response[];
+    followUpListResponses?: Record<string, Response[]>;
   } = {},
 ) {
   const queue = [...responses];
   const fallback = queue[queue.length - 1] ?? treatmentSummariesResponse([]);
   const suggestionQueue = [...(options.followUpSuggestionResponses ?? [])];
   const followUpTaskQueue = [...(options.followUpTaskResponses ?? [])];
+  const followUpListResponses = Object.fromEntries(
+    Object.entries(options.followUpListResponses ?? {}).map(([path, queue]) => [
+      path,
+      [...queue],
+    ]),
+  );
 
   const fetchMock = vi.fn(
     async (input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
       const path = fetchPath(input);
+      if (path.startsWith('/api/institution/followups')) {
+        const queue = followUpListResponses[path];
+        if (queue) {
+          return queue.shift() ?? jsonResponse({ records: [] });
+        }
+        return jsonResponse({ records: [] });
+      }
+
       if (path.includes('/follow-up-suggestions')) {
         return suggestionQueue.shift() ?? jsonResponse({ suggestions: [] });
       }
@@ -392,6 +407,96 @@ describe('治疗摘要管理页面', () => {
       await within(dialog).findByText('该护理随访任务已存在，请勿重复创建'),
     ).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it('加载建议后展示同来源活跃随访任务只读提示且不会自动创建或触达', async () => {
+    const activeSourceTask = {
+      ...createdFollowUpTask,
+      status: 'in_progress',
+      source: 'treatment_summary',
+      sourceTreatmentSummaryId: 'trt_phase14_main',
+      sourceSuggestionKey: 'trt_phase14_main:watch_risk_followup:3d',
+    };
+    const fetchMock = mockTreatmentSummaryFetch(
+      [treatmentSummariesResponse([treatmentSummaryRecord])],
+      {
+        followUpSuggestionResponses: [jsonResponse({ suggestions: [followUpSuggestion] })],
+        followUpListResponses: {
+          '/api/institution/followups?source=treatment_summary&sourceTreatmentSummaryId=trt_phase14_main': [
+            jsonResponse({ records: [activeSourceTask] }),
+          ],
+        },
+      },
+    );
+    const { container } = render(<TreatmentSummaryManagementShell />);
+
+    expect(await screen.findByText('Phase14 光电修复')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_main' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看随访建议' }));
+
+    expect(await within(dialog).findByText('关注风险治疗后随访')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('该建议已有进行中的随访任务，请在智能随访中继续处理。'),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText('活跃任务状态：处理中')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '已存在活跃随访任务' })).toBeDisabled();
+
+    const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
+    expect(requestPaths).toContain(
+      '/api/institution/followups?source=treatment_summary&sourceTreatmentSummaryId=trt_phase14_main',
+    );
+    expect(requestPaths.join('\n')).not.toContain('tenantId');
+    expect(requestPaths.some((path) => path.endsWith('/follow-up-tasks'))).toBe(false);
+
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('自动发送微信');
+    expect(text).not.toContain('自动短信');
+    expect(text).not.toContain('电话外呼');
+    expect(text).not.toContain('自动触达');
+    expectNoSensitiveTreatmentSummaryContent(container);
+  });
+
+  it('已完成或已取消的同来源任务不阻断人工确认创建', async () => {
+    const completedSourceTask = {
+      ...createdFollowUpTask,
+      status: 'completed',
+      source: 'treatment_summary',
+      sourceTreatmentSummaryId: 'trt_phase14_main',
+      sourceSuggestionKey: 'trt_phase14_main:watch_risk_followup:3d',
+    };
+    const fetchMock = mockTreatmentSummaryFetch(
+      [treatmentSummariesResponse([treatmentSummaryRecord])],
+      {
+        followUpSuggestionResponses: [jsonResponse({ suggestions: [followUpSuggestion] })],
+        followUpTaskResponses: [jsonResponse({ record: createdFollowUpTask }, { status: 201 })],
+        followUpListResponses: {
+          '/api/institution/followups?source=treatment_summary&sourceTreatmentSummaryId=trt_phase14_main': [
+            jsonResponse({ records: [completedSourceTask] }),
+          ],
+        },
+      },
+    );
+    render(<TreatmentSummaryManagementShell />);
+
+    expect(await screen.findByText('Phase14 光电修复')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_main' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看随访建议' }));
+
+    expect(await within(dialog).findByText('关注风险治疗后随访')).toBeInTheDocument();
+    expect(
+      within(dialog).queryByText('该建议已有进行中的随访任务，请在智能随访中继续处理。'),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认创建随访任务' }));
+
+    expect(await within(dialog).findByText('已创建内部随访任务')).toBeInTheDocument();
+    const createCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).endsWith('/follow-up-tasks'),
+    );
+    expect(createCall).toBeDefined();
   });
 
   it('展示 loading 和 empty 状态', async () => {
