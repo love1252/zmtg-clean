@@ -379,6 +379,21 @@ export function CustomerCenterShell() {
     setIsTimelineLoading(false);
   }
 
+  async function refreshCustomerTimeline(customerId: string) {
+    const requestId = timelineRequestIdRef.current + 1;
+    timelineRequestIdRef.current = requestId;
+    setTimelineErrorState(null);
+
+    const result = await getCustomerTimeline(customerId);
+    if (timelineRequestIdRef.current !== requestId) return;
+
+    if (result.ok) {
+      setCustomerTimeline(result.timeline);
+    } else {
+      setTimelineErrorState(visibleTimelineErrorState(result.error));
+    }
+  }
+
   function closeCustomerTimeline() {
     timelineRequestIdRef.current += 1;
     setSelectedTimelineCustomer(null);
@@ -784,10 +799,12 @@ export function CustomerCenterShell() {
       </div>
       {selectedTimelineCustomer ? (
         <CustomerTimelineDrawer
+          customerId={selectedTimelineCustomer.id}
           customerName={selectedTimelineCustomer.displayName}
           errorState={timelineErrorState}
           isLoading={isTimelineLoading}
           onClose={closeCustomerTimeline}
+          onTimelineRefresh={() => refreshCustomerTimeline(selectedTimelineCustomer.id)}
           timeline={customerTimeline}
         />
       ) : null}

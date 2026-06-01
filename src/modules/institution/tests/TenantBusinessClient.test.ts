@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createAppointment,
   createCustomer,
+  createTreatmentSummary,
   getCustomerTimeline,
   listAppointments,
   listCustomers,
@@ -259,6 +260,12 @@ describe('机构业务页面 client helper', () => {
     const appointmentUpdateFetcher = createFetchMock(
       jsonResponse({ record: { id: 'appt_001', tenantId: 'demo-tenant-001' } }),
     );
+    const treatmentSummaryCreateFetcher = createFetchMock(
+      jsonResponse(
+        { record: { id: 'trt_created', treatmentProject: '水光补水复诊' } },
+        { status: 201 },
+      ),
+    );
     const followUpTransitionFetcher = createFetchMock(
       jsonResponse({ record: { id: 'fu_001', tenantId: 'demo-tenant-001', status: 'in_progress' } }),
     );
@@ -327,6 +334,35 @@ describe('机构业务页面 client helper', () => {
       } as never,
       { fetcher: appointmentUpdateFetcher },
     );
+    await createTreatmentSummary(
+      'cust_001',
+      {
+        treatmentDate: '2026-06-02T16:30:00+08:00',
+        treatmentProject: '水光补水复诊',
+        treatmentCategory: 'skin_repair',
+        treatmentStage: 'D14 复诊',
+        recoveryStage: 'D14',
+        riskLevel: 'watch',
+        ownerUserId: 'doctor-lin',
+        summary: '结构化摘要：恢复稳定，安排补水。',
+        nextCareAction: 'D21 人工回访恢复阶段。',
+        tags: ['结构化摘要', '复诊'],
+        appointmentId: 'appt_001',
+        tenantId: 'other-tenant',
+        fullTreatmentRecord: '完整治疗记录正文',
+        medicalRecordText: '完整病历正文',
+        diagnosisText: '诊疗原文',
+        consultationTranscript: '咨询对话全文',
+        phoneNumber: '13800000000',
+        idNumber: '110101199001010011',
+        rawMedicalRecordNo: 'MR-RAW-001',
+        imageUrl: 'https://example.test/raw-image.png',
+        fileUrl: 'https://example.test/raw-file.pdf',
+        aiGeneratedContent: 'AI 生成内容',
+        externalSystemPayload: { raw: true },
+      } as never,
+      { fetcher: treatmentSummaryCreateFetcher },
+    );
     await transitionFollowUpTask(
       {
         id: 'fu_001',
@@ -349,15 +385,36 @@ describe('机构业务页面 client helper', () => {
     expect(appointmentUpdateFetcher).toHaveBeenCalledWith('/api/institution/appointments', expect.objectContaining({
       method: 'PATCH',
     }));
+    expect(treatmentSummaryCreateFetcher).toHaveBeenCalledWith(
+      '/api/institution/customers/cust_001/treatment-summaries',
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    );
     expect(followUpTransitionFetcher).toHaveBeenCalledWith('/api/institution/followups', expect.objectContaining({
       method: 'PATCH',
     }));
+
+    expect(requestBody(treatmentSummaryCreateFetcher)).toEqual({
+      treatmentDate: '2026-06-02T16:30:00+08:00',
+      treatmentProject: '水光补水复诊',
+      treatmentCategory: 'skin_repair',
+      treatmentStage: 'D14 复诊',
+      recoveryStage: 'D14',
+      riskLevel: 'watch',
+      ownerUserId: 'doctor-lin',
+      summary: '结构化摘要：恢复稳定，安排补水。',
+      nextCareAction: 'D21 人工回访恢复阶段。',
+      tags: ['结构化摘要', '复诊'],
+      appointmentId: 'appt_001',
+    });
 
     const serializedBodies = [
       requestBody(customerCreateFetcher),
       requestBody(customerUpdateFetcher),
       requestBody(appointmentCreateFetcher),
       requestBody(appointmentUpdateFetcher),
+      requestBody(treatmentSummaryCreateFetcher),
       requestBody(followUpTransitionFetcher),
     ].map((body) => JSON.stringify(body));
 
@@ -367,14 +424,26 @@ describe('机构业务页面 client helper', () => {
       expect(serializedBody).not.toContain('idNumber');
       expect(serializedBody).not.toContain('medicalRecordNo');
       expect(serializedBody).not.toContain('treatmentRecord');
+      expect(serializedBody).not.toContain('fullTreatmentRecord');
+      expect(serializedBody).not.toContain('medicalRecordText');
+      expect(serializedBody).not.toContain('diagnosisText');
       expect(serializedBody).not.toContain('consultationTranscript');
+      expect(serializedBody).not.toContain('rawMedicalRecordNo');
+      expect(serializedBody).not.toContain('imageUrl');
+      expect(serializedBody).not.toContain('fileUrl');
+      expect(serializedBody).not.toContain('aiGeneratedContent');
+      expect(serializedBody).not.toContain('externalSystemPayload');
       expect(serializedBody).not.toContain('rawPhone');
       expect(serializedBody).not.toContain('rawIdCard');
       expect(serializedBody).not.toContain('13800000000');
       expect(serializedBody).not.toContain('110101199001010011');
       expect(serializedBody).not.toContain('MR-RAW-001');
       expect(serializedBody).not.toContain('完整治疗记录正文');
+      expect(serializedBody).not.toContain('完整病历正文');
+      expect(serializedBody).not.toContain('诊疗原文');
       expect(serializedBody).not.toContain('咨询对话正文');
+      expect(serializedBody).not.toContain('咨询对话全文');
+      expect(serializedBody).not.toContain('AI 生成内容');
     }
   });
 });
