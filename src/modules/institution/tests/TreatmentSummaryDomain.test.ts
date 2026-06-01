@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 import {
+  mapTreatmentSummaryRecordToListItem,
   mapTreatmentSummaryRecordToTimelineDto,
   type TreatmentSummaryRecord,
 } from '@/modules/institution/domain/treatment-summaries';
@@ -31,6 +32,9 @@ const forbiddenTextPattern =
 
 const forbiddenFieldPattern =
   /tenantId|customerId|phoneNumber|idNumber|medicalRecordNo|treatmentRecord|treatmentRecordBody|medicalRecord|medicalRecordBody|diagnosisText|clinicalNote|consultationTranscript|imageUrl|fileUrl|requestBody|sql|stack|token|secret|databaseUrl|rawPayload|aiGeneratedContent|externalSyncPayload/i;
+
+const listForbiddenFieldPattern =
+  /tenantId|phoneNumber|idNumber|medicalRecordNo|customerDisplayName|maskedPhone|maskedMedicalRecordNo|appointmentNote|followUpSuggestedAction|treatmentRecord|treatmentRecordBody|medicalRecord|medicalRecordBody|diagnosisText|clinicalNote|consultationTranscript|imageUrl|fileUrl|requestBody|sql|stack|token|secret|databaseUrl|rawPayload|aiGeneratedContent|externalSyncPayload/i;
 
 function listFiles(root: string): string[] {
   return readdirSync(root).flatMap((entry) => {
@@ -102,10 +106,74 @@ describe('治疗结构化摘要领域模型', () => {
     expect(dto.tags).toEqual(['术后关怀']);
   });
 
-  it('Phase 13 PR 3 只新增治疗摘要创建 API route，不新增 UI 文件', () => {
+  it('治疗摘要列表 DTO 只返回管理列表允许的白名单字段', () => {
+    const dto = mapTreatmentSummaryRecordToListItem({
+      ...treatmentSummaryRecord,
+      treatmentRecord: 'blocked-treatment-record-value',
+      medicalRecordBody: 'blocked-medical-record-value',
+      phoneNumber: 'blocked-phone-value',
+      idNumber: 'blocked-id-value',
+      customerDisplayName: '客户姓名',
+      appointmentNote: '预约详情',
+      followUpSuggestedAction: '随访明细',
+      stack: 'blocked-stack-value',
+    } as TreatmentSummaryRecord & Record<string, unknown>);
+    const serialized = JSON.stringify(dto);
+
+    expect(dto).toEqual({
+      id: 'trt_001',
+      customerId: 'cust_qin_review',
+      appointmentId: 'appt_qin_arrived',
+      treatmentDate: '2026-05-30T03:45:00.000Z',
+      treatmentProject: '玻尿酸复诊',
+      treatmentCategory: 'injection_review',
+      treatmentStage: 'D7 复诊',
+      recoveryStage: 'D7',
+      riskLevel: 'watch',
+      ownerUserId: 'doctor-lin',
+      summary: '结构化摘要：恢复进展稳定，安排补水护理观察。',
+      nextCareAction: 'D14 人工回访恢复阶段。',
+      tags: ['结构化摘要', '复诊'],
+      createdAt: '2026-05-30T03:45:00.000Z',
+      updatedAt: '2026-05-30T03:45:00.000Z',
+    });
+    expect(Object.keys(dto)).toEqual([
+      'id',
+      'customerId',
+      'appointmentId',
+      'treatmentDate',
+      'treatmentProject',
+      'treatmentCategory',
+      'treatmentStage',
+      'recoveryStage',
+      'riskLevel',
+      'ownerUserId',
+      'summary',
+      'nextCareAction',
+      'tags',
+      'createdAt',
+      'updatedAt',
+    ]);
+    expect(serialized).not.toMatch(forbiddenTextPattern);
+    expect(serialized).not.toMatch(listForbiddenFieldPattern);
+  });
+
+  it('治疗摘要列表 DTO 克隆 tags，避免外部修改影响响应', () => {
+    const record = {
+      ...treatmentSummaryRecord,
+      tags: ['结构化摘要'],
+    };
+    const dto = mapTreatmentSummaryRecordToListItem(record);
+
+    record.tags.push('不应影响 DTO');
+
+    expect(dto.tags).toEqual(['结构化摘要']);
+  });
+
+  it('Phase 14 PR 2 只允许治疗摘要创建和列表 API route，不新增 UI 文件', () => {
     const apiFiles = listFiles(join(process.cwd(), 'src/app/api')).filter((file) =>
       /treatment-summary|treatment-summaries/i.test(file),
-    );
+    ).sort();
     const uiFiles = listFiles(join(process.cwd(), 'src/modules/institution/components')).filter(
       (file) => /treatment-summary|treatment-summaries/i.test(file),
     );
@@ -115,6 +183,7 @@ describe('治疗结构化摘要领域模型', () => {
         process.cwd(),
         'src/app/api/institution/customers/[customerId]/treatment-summaries/route.ts',
       ),
+      join(process.cwd(), 'src/app/api/institution/treatment-summaries/route.ts'),
     ]);
     expect(uiFiles).toEqual([]);
   });

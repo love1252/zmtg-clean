@@ -24,6 +24,38 @@ export type CustomerTimelineTreatmentSummary = Omit<
   'tenantId' | 'customerId'
 >;
 
+export type InstitutionTreatmentSummaryListItem = Omit<TreatmentSummaryRecord, 'tenantId'>;
+
+export type TreatmentSummaryListFilters = {
+  customerId?: string;
+  treatmentProject?: string;
+  riskLevel?: FollowUpRiskLevel;
+  from?: string;
+  to?: string;
+};
+
+export type TreatmentSummaryListCursor = {
+  treatmentDate: string;
+  id: string;
+};
+
+export type TreatmentSummaryListQuery = {
+  filters: TreatmentSummaryListFilters;
+  limit: number;
+  cursor?: TreatmentSummaryListCursor;
+};
+
+export type TreatmentSummaryListPageInfo = {
+  hasMore: boolean;
+  limit: number;
+  nextCursor: string | null;
+};
+
+export type InstitutionTreatmentSummaryListResponse = {
+  records: InstitutionTreatmentSummaryListItem[];
+  pageInfo: TreatmentSummaryListPageInfo;
+};
+
 export type CreateTreatmentSummaryDraft = Pick<
   TreatmentSummaryRecord,
   | 'appointmentId'
@@ -101,6 +133,28 @@ export function mapTreatmentSummaryRecordToTimelineDto(
 ): CustomerTimelineTreatmentSummary {
   return {
     id: record.id,
+    appointmentId: record.appointmentId,
+    treatmentDate: record.treatmentDate,
+    treatmentProject: record.treatmentProject,
+    treatmentCategory: record.treatmentCategory,
+    treatmentStage: record.treatmentStage,
+    recoveryStage: record.recoveryStage,
+    riskLevel: record.riskLevel,
+    ownerUserId: record.ownerUserId,
+    summary: record.summary,
+    nextCareAction: record.nextCareAction,
+    tags: [...record.tags],
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+export function mapTreatmentSummaryRecordToListItem(
+  record: TreatmentSummaryRecord,
+): InstitutionTreatmentSummaryListItem {
+  return {
+    id: record.id,
+    customerId: record.customerId,
     appointmentId: record.appointmentId,
     treatmentDate: record.treatmentDate,
     treatmentProject: record.treatmentProject,
