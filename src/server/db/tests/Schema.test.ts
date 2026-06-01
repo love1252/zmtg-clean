@@ -21,6 +21,7 @@ import {
   followUpTasks,
   tenantMembers,
   tenants,
+  treatmentSummaries,
 } from '@/server/db/schema';
 
 type NamedColumn = { name: string };
@@ -168,6 +169,59 @@ describe('数据库结构', () => {
     expect(columnNames(followUpReference?.columns ?? [])).toEqual(['tenant_id', 'customer_id']);
     expect(getTableConfig(followUpReference?.foreignTable ?? tenants).name).toBe('customers');
     expect(columnNames(followUpReference?.foreignColumns ?? [])).toEqual(['tenant_id', 'id']);
+  });
+
+  it('随访任务支持治疗摘要建议来源关联且保持租户隔离', () => {
+    const followUpConfig = getTableConfig(followUpTasks);
+    const treatmentConfig = getTableConfig(treatmentSummaries);
+    const followUpColumns = columnNames(followUpConfig.columns);
+    const sourceSummaryFk = followUpConfig.foreignKeys.find(
+      (foreignKey) => foreignKey.getName() === 'follow_up_tasks_tenant_source_treatment_summary_fk',
+    );
+    const sourceSummaryReference = sourceSummaryFk?.reference();
+    const sourceIndexes = followUpConfig.indexes.map((index) => ({
+      name: index.config.name,
+      unique: index.config.unique,
+      columns: columnNames(index.config.columns as NamedColumn[]),
+    }));
+    const treatmentSummaryUnique = treatmentConfig.uniqueConstraints.find(
+      (constraint) => constraint.getName() === 'treatment_summaries_tenant_id_id_unique',
+    );
+
+    expect(followUpColumns).toEqual(
+      expect.arrayContaining(['source_treatment_summary_id', 'source_suggestion_key']),
+    );
+    expect(followUpTasks.sourceTreatmentSummaryId.notNull).toBe(false);
+    expect(followUpTasks.sourceSuggestionKey.notNull).toBe(false);
+
+    expect(treatmentSummaryUnique).toBeDefined();
+    expect(columnNames(treatmentSummaryUnique?.columns ?? [])).toEqual(['tenant_id', 'id']);
+    expect(sourceSummaryFk).toBeDefined();
+    expect(columnNames(sourceSummaryReference?.columns ?? [])).toEqual([
+      'tenant_id',
+      'source_treatment_summary_id',
+    ]);
+    expect(getTableConfig(sourceSummaryReference?.foreignTable ?? tenants).name).toBe(
+      'treatment_summaries',
+    );
+    expect(columnNames(sourceSummaryReference?.foreignColumns ?? [])).toEqual(['tenant_id', 'id']);
+    expect(sourceIndexes).toEqual(
+      expect.arrayContaining([
+        {
+          name: 'follow_up_tasks_tenant_source_treatment_summary_idx',
+          unique: false,
+          columns: ['tenant_id', 'source_treatment_summary_id'],
+        },
+        {
+          name: 'follow_up_tasks_active_source_unique_idx',
+          unique: true,
+          columns: ['tenant_id', 'source_treatment_summary_id', 'source_suggestion_key'],
+        },
+      ]),
+    );
+    expect(JSON.stringify(followUpColumns)).not.toMatch(
+      /phone_number|id_number|medical_record_no|treatment_record|medical_record_body|consultation_transcript|request_body|metadata|raw_payload|ai_generated|external_sync|token|secret|database_url/i,
+    );
   });
 
   it('定义治疗结构化摘要表且只包含安全白名单字段', () => {
@@ -445,6 +499,53 @@ describe('数据库结构', () => {
     );
     expect(migrationSql.indexOf('appointments_tenant_id_id_unique')).toBeLessThan(
       migrationSql.indexOf('treatment_summaries_tenant_appointment_fk'),
+    );
+    expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
+    expect(migrationSql).not.toMatch(
+      /phone_number|id_number|medical_record_no|treatment_record|medical_record_body|diagnosis_text|clinical_note|consultation_transcript|request_body|metadata|raw_payload|ai_generated|external_sync|token|secret|database_url/i,
+    );
+  });
+
+  it('Phase 15 迁移只新增随访来源关联字段、约束和索引', () => {
+    const migrationSql = readMigrationSql('phase15_followup_source_link');
+    const journal = JSON.parse(readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8')) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+    const latestSnapshot = readFileSync(
+      join(process.cwd(), 'drizzle/meta/0004_snapshot.json'),
+      'utf8',
+    ).toLowerCase();
+
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ idx: 4, tag: '0004_phase15_followup_source_link' }),
+      ]),
+    );
+    expect(latestSnapshot).toContain('"source_treatment_summary_id"');
+    expect(latestSnapshot).toContain('"source_suggestion_key"');
+    expect(migrationSql).toContain(
+      'alter table "treatment_summaries" add constraint "treatment_summaries_tenant_id_id_unique" unique("tenant_id","id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "follow_up_tasks" add column "source_treatment_summary_id" varchar(64)',
+    );
+    expect(migrationSql).toContain(
+      'alter table "follow_up_tasks" add column "source_suggestion_key" varchar(180)',
+    );
+    expect(migrationSql).toContain(
+      'alter table "follow_up_tasks" add constraint "follow_up_tasks_tenant_source_treatment_summary_fk" foreign key ("tenant_id","source_treatment_summary_id") references "public"."treatment_summaries"("tenant_id","id")',
+    );
+    expect(migrationSql).toContain(
+      'create index "follow_up_tasks_tenant_source_treatment_summary_idx" on "follow_up_tasks" using btree ("tenant_id","source_treatment_summary_id")',
+    );
+    expect(migrationSql).toContain(
+      'create unique index "follow_up_tasks_active_source_unique_idx" on "follow_up_tasks" using btree ("tenant_id","source_treatment_summary_id","source_suggestion_key")',
+    );
+    expect(migrationSql).toContain(
+      'where "follow_up_tasks"."source_treatment_summary_id" is not null and "follow_up_tasks"."source_suggestion_key" is not null and "follow_up_tasks"."status" not in (\'completed\',\'cancelled\')',
+    );
+    expect(migrationSql.indexOf('treatment_summaries_tenant_id_id_unique')).toBeLessThan(
+      migrationSql.indexOf('follow_up_tasks_tenant_source_treatment_summary_fk'),
     );
     expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
     expect(migrationSql).not.toMatch(

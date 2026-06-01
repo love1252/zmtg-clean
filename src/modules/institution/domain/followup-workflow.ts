@@ -26,6 +26,14 @@ export type TenantFollowUpTask = {
   updatedAt: string | null;
 };
 
+export type TenantFollowUpTaskSource = {
+  sourceTreatmentSummaryId: string;
+  sourceSuggestionKey: string;
+};
+
+export type TenantFollowUpTaskFromTreatmentSummarySuggestion = TenantFollowUpTask &
+  TenantFollowUpTaskSource;
+
 export type FollowUpTransitionResult =
   | { allowed: true; task: TenantFollowUpTask }
   | { allowed: false; reason: 'invalid_transition'; from: FollowUpStatus; to: FollowUpStatus };
