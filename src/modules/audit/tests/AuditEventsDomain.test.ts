@@ -188,6 +188,48 @@ describe('审计事件领域模型', () => {
     );
   });
 
+  it('支持治疗摘要随访联动的稳定审计 reason', () => {
+    expect(AUDIT_REASON_VALUES).toEqual(
+      expect.arrayContaining([
+        'active_source_follow_up_exists',
+        'invalid_follow_up_suggestion',
+      ]),
+    );
+
+    const duplicateEvent = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_follow_up_duplicate_001',
+      context: tenantAdminContext,
+      resource: 'follow_up',
+      resourceId: 'fu_phase15_confirm',
+      action: 'update',
+      reason: 'active_source_follow_up_exists',
+      occurredAt: '2026-06-01T09:00:00.000Z',
+    });
+    const invalidSuggestionEvent = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_follow_up_invalid_001',
+      context: tenantAdminContext,
+      resource: 'follow_up',
+      action: 'update',
+      reason: 'invalid_follow_up_suggestion',
+      occurredAt: '2026-06-01T09:01:00.000Z',
+    });
+
+    expect(duplicateEvent).toMatchObject({
+      resource: 'follow_up',
+      resourceId: 'fu_phase15_confirm',
+      result: 'denied',
+      reason: 'active_source_follow_up_exists',
+    });
+    expect(invalidSuggestionEvent).toMatchObject({
+      resource: 'follow_up',
+      result: 'denied',
+      reason: 'invalid_follow_up_suggestion',
+    });
+    expect(JSON.stringify([duplicateEvent, invalidSuggestionEvent])).not.toMatch(
+      /requestBody|完整治疗记录正文|完整病历正文|咨询对话全文|13800000000|select \*|DATABASE_URL|stack|token|secret/i,
+    );
+  });
+
   it('审计事件风险词列表覆盖凭证明文模式', () => {
     expect(auditForbiddenTerms).toEqual([
       'client_secret',

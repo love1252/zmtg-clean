@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   CalendarClock,
+  CheckCircle2,
   ClipboardList,
   Filter,
   Loader2,
@@ -11,10 +12,13 @@ import {
   X,
 } from 'lucide-react';
 import {
+  createFollowUpTaskFromTreatmentSummary,
   listTreatmentSummaries,
+  listTreatmentFollowUpSuggestions,
   type TenantBusinessClientError,
   type TreatmentSummaryListClientQuery,
 } from '@/modules/institution/client/tenant-business-client';
+import type { TreatmentFollowUpSuggestion } from '@/modules/institution/domain/treatment-followup-suggestions';
 import {
   type InstitutionTreatmentSummaryListItem,
   type TreatmentSummaryListPageInfo,
@@ -53,6 +57,18 @@ const riskLevelToneClasses = {
   watch: 'border-amber-200 bg-amber-50 text-amber-700',
   urgent: 'border-rose-200 bg-rose-50 text-rose-700',
 } as const satisfies Record<FollowUpRiskLevel, string>;
+
+const suggestionPriorityLabels = {
+  low: '低',
+  medium: '中',
+  high: '高',
+} as const satisfies Record<TreatmentFollowUpSuggestion['priority'], string>;
+
+const suggestionPriorityToneClasses = {
+  low: 'border-slate-200 bg-slate-50 text-slate-600',
+  medium: 'border-amber-200 bg-amber-50 text-amber-700',
+  high: 'border-rose-200 bg-rose-50 text-rose-700',
+} as const satisfies Record<TreatmentFollowUpSuggestion['priority'], string>;
 
 const riskLevelOptions = Object.entries(followUpRiskLevelLabels) as [
   FollowUpRiskLevel,
@@ -116,6 +132,19 @@ function TreatmentSummaryDetailDialog({
   onClose: () => void;
   record: InstitutionTreatmentSummaryListItem;
 }) {
+  const [followUpSuggestions, setFollowUpSuggestions] = useState<TreatmentFollowUpSuggestion[]>(
+    [],
+  );
+  const [suggestionStatus, setSuggestionStatus] = useState<
+    'idle' | 'loading' | 'loaded' | 'error'
+  >('idle');
+  const [suggestionError, setSuggestionError] = useState<string | null>(null);
+  const [creatingSuggestionKey, setCreatingSuggestionKey] = useState<string | null>(null);
+  const [createMessage, setCreateMessage] = useState<{
+    kind: 'success' | 'error';
+    text: string;
+  } | null>(null);
+
   const rows = [
     ['摘要 ID', record.id],
     ['客户 ID', record.customerId],
@@ -133,6 +162,40 @@ function TreatmentSummaryDetailDialog({
     ['创建时间', formatBusinessDateTime(record.createdAt)],
     ['更新时间', formatBusinessDateTime(record.updatedAt)],
   ] as const;
+
+  async function handleLoadFollowUpSuggestions() {
+    setSuggestionStatus('loading');
+    setSuggestionError(null);
+    setCreateMessage(null);
+
+    const result = await listTreatmentFollowUpSuggestions(record.id);
+    if (result.ok) {
+      setFollowUpSuggestions(result.suggestions);
+      setSuggestionStatus('loaded');
+      return;
+    }
+
+    setFollowUpSuggestions([]);
+    setSuggestionError(result.error.message);
+    setSuggestionStatus('error');
+  }
+
+  async function handleCreateFollowUpTask(suggestion: TreatmentFollowUpSuggestion) {
+    setCreatingSuggestionKey(suggestion.suggestionKey);
+    setCreateMessage(null);
+
+    const result = await createFollowUpTaskFromTreatmentSummary(record.id, {
+      suggestionKey: suggestion.suggestionKey,
+    });
+
+    if (result.ok) {
+      setCreateMessage({ kind: 'success', text: '已创建内部随访任务' });
+    } else {
+      setCreateMessage({ kind: 'error', text: result.error.message });
+    }
+
+    setCreatingSuggestionKey(null);
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 px-3 py-4 backdrop-blur-sm sm:items-center">
@@ -162,22 +225,136 @@ function TreatmentSummaryDetailDialog({
           </button>
         </div>
 
-        <dl className="grid max-h-[62vh] gap-3 overflow-y-auto px-5 py-5 sm:grid-cols-2">
-          {rows.map(([label, value]) => (
-            <div
-              key={label}
-              className={cn(
-                'rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4',
-                label === '摘要' || label === '下一步护理建议' ? 'sm:col-span-2' : '',
-              )}
-            >
-              <dt className="text-xs font-semibold text-slate-500">{label}</dt>
-              <dd className="mt-2 break-words text-sm font-semibold leading-6 text-slate-800">
-                {value}
-              </dd>
+        <div className="max-h-[68vh] overflow-y-auto">
+          <dl className="grid gap-3 px-5 py-5 sm:grid-cols-2">
+            {rows.map(([label, value]) => (
+              <div
+                key={label}
+                className={cn(
+                  'rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4',
+                  label === '摘要' || label === '下一步护理建议' ? 'sm:col-span-2' : '',
+                )}
+              >
+                <dt className="text-xs font-semibold text-slate-500">{label}</dt>
+                <dd className="mt-2 break-words text-sm font-semibold leading-6 text-slate-800">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          <section className="border-t border-slate-100 px-5 py-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 className="text-base font-semibold text-slate-950">
+                  治疗后护理随访建议
+                </h4>
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  建议仅供机构内部参考，需要人工确认后才会创建内部随访任务。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleLoadFollowUpSuggestions}
+                disabled={suggestionStatus === 'loading'}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 text-sm font-semibold text-blue-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                {suggestionStatus === 'loading' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ClipboardList className="h-4 w-4" />
+                )}
+                查看随访建议
+              </button>
             </div>
-          ))}
-        </dl>
+
+            {suggestionStatus === 'error' && suggestionError ? (
+              <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                {suggestionError}
+              </div>
+            ) : null}
+
+            {createMessage ? (
+              <div
+                className={cn(
+                  'mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold',
+                  createMessage.kind === 'success'
+                    ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                    : 'border-rose-100 bg-rose-50 text-rose-700',
+                )}
+              >
+                {createMessage.text}
+              </div>
+            ) : null}
+
+            {suggestionStatus === 'loaded' && followUpSuggestions.length === 0 ? (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
+                暂无可创建的随访建议
+              </div>
+            ) : null}
+
+            {followUpSuggestions.length > 0 ? (
+              <div className="mt-4 space-y-3">
+                {followUpSuggestions.map((suggestion) => (
+                  <article
+                    key={suggestion.suggestionKey}
+                    className="rounded-2xl border border-slate-200 bg-white p-4"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h5 className="text-sm font-semibold text-slate-950">
+                            {suggestion.title}
+                          </h5>
+                          <span
+                            className={cn(
+                              'rounded-full border px-2.5 py-1 text-xs font-semibold',
+                              suggestionPriorityToneClasses[suggestion.priority],
+                            )}
+                          >
+                            优先级：{suggestionPriorityLabels[suggestion.priority]}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
+                          {suggestion.description}
+                        </p>
+                        <p className="mt-2 text-xs font-semibold text-slate-500">
+                          建议时间：{formatBusinessDateTime(suggestion.recommendedDueAt)}
+                        </p>
+                        <p className="mt-2 text-xs leading-5 text-slate-500">
+                          {suggestion.reason}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {safeTagList(suggestion.tags).map((tag) => (
+                            <span
+                              key={`${suggestion.suggestionKey}:${tag}`}
+                              className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleCreateFollowUpTask(suggestion)}
+                        disabled={creatingSuggestionKey === suggestion.suggestionKey}
+                        className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                      >
+                        {creatingSuggestionKey === suggestion.suggestionKey ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4" />
+                        )}
+                        确认创建随访任务
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        </div>
       </section>
     </div>
   );

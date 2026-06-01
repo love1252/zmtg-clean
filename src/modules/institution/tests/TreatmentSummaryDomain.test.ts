@@ -170,7 +170,7 @@ describe('治疗结构化摘要领域模型', () => {
     expect(dto.tags).toEqual(['结构化摘要']);
   });
 
-  it('Phase 14 PR 2 只允许治疗摘要创建和列表 API route，不新增 UI 文件', () => {
+  it('治疗摘要 API route 只允许结构化摘要与 Phase 15 随访联动入口', () => {
     const apiFiles = listFiles(join(process.cwd(), 'src/app/api')).filter((file) =>
       /treatment-summary|treatment-summaries/i.test(file),
     ).sort();
@@ -182,6 +182,14 @@ describe('治疗结构化摘要领域模型', () => {
       join(
         process.cwd(),
         'src/app/api/institution/customers/[customerId]/treatment-summaries/route.ts',
+      ),
+      join(
+        process.cwd(),
+        'src/app/api/institution/treatment-summaries/[summaryId]/follow-up-suggestions/route.ts',
+      ),
+      join(
+        process.cwd(),
+        'src/app/api/institution/treatment-summaries/[summaryId]/follow-up-tasks/route.ts',
       ),
       join(process.cwd(), 'src/app/api/institution/treatment-summaries/route.ts'),
     ]);

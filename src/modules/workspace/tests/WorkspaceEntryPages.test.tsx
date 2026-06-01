@@ -160,6 +160,44 @@ const nextTreatmentSummaryManagementRecord = {
   nextCareAction: 'Phase14 结束本轮人工观察。',
 };
 
+const treatmentFollowUpSuggestion = {
+  suggestionKey: 'trt_phase14_management:watch_risk_followup:3d',
+  ruleKey: 'watch_risk_followup',
+  title: 'Phase15 关注风险治疗后随访',
+  description: '请安排人工随访，确认恢复反馈和护理执行情况。',
+  recommendedDueAt: '2026-06-05T08:30:00.000Z',
+  priority: 'medium',
+  riskLevel: 'watch',
+  sourceTreatmentSummaryId: 'trt_phase14_management',
+  sourceCustomerId: 'cust_phase5_closeout',
+  sourceAppointmentId: 'appt_phase5_closeout',
+  tags: ['护理随访'],
+  reason: 'riskLevel 为 watch，需要在观察周期内人工跟进',
+  sourceFields: ['riskLevel', 'treatmentDate'],
+};
+
+const treatmentFollowUpCreatedTask = {
+  id: 'fu_phase15_confirmed',
+  customerId: 'cust_phase5_closeout',
+  customerDisplayName: 'Phase15 客户不应展示',
+  journeyId: 'treatment_followup_watch_risk_followup',
+  stage: 'Phase15 关注风险治疗后随访',
+  status: 'scheduled',
+  dueAt: '2026-06-05T08:30:00.000Z',
+  suggestedAction: '请安排人工随访，确认恢复反馈和护理执行情况。',
+  riskLevel: 'watch',
+  updatedBy: null,
+  updatedAt: null,
+  sourceTreatmentSummaryId: 'trt_phase14_management',
+  sourceSuggestionKey: 'trt_phase14_management:watch_risk_followup:3d',
+  phoneNumber: '13800001252',
+  consultationTranscript: '咨询对话全文不应展示',
+  sql: 'select * from follow_up_tasks',
+  stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+  token: 'sk_test_phase15_should_not_render',
+  secret: 'phase15-raw-secret',
+};
+
 const platformAuditEventRecord = {
   id: 'audit_phase8_platform',
   tenantId: 'demo-tenant-001',
@@ -513,6 +551,12 @@ type WorkspaceFetchOptions = {
     status: number;
     message: string;
   };
+  followUpSuggestions?: unknown[];
+  followUpTaskRecord?: unknown;
+  followUpTaskError?: {
+    status: number;
+    message: string;
+  };
   institutionError?: {
     path:
       | '/api/institution/customers'
@@ -549,12 +593,16 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     timeline = customerTimelineResponse,
     treatmentSummaryRecord = phase13CreatedTreatmentSummary,
     treatmentSummaryMutationError,
+    followUpSuggestions = [treatmentFollowUpSuggestion],
+    followUpTaskRecord = treatmentFollowUpCreatedTask,
+    followUpTaskError,
     institutionError,
     institutionMutationError,
   } = options;
   const timelineQueue = Array.isArray(timeline) ? [...timeline] : [timeline];
   const fallbackTimeline = timelineQueue[timelineQueue.length - 1] ?? timeline;
   const treatmentSummaryPageQueue = treatmentSummaryPages ? [...treatmentSummaryPages] : null;
+  let didReadFollowUpSuggestions = false;
   const fallbackTreatmentSummaryPage = treatmentSummaryPageQueue?.[
     treatmentSummaryPageQueue.length - 1
   ] ?? {
@@ -592,6 +640,23 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
 
       if (path === '/api/institution/followups') {
         return jsonResponse({ records: followups });
+      }
+
+      if (path.includes('/follow-up-suggestions')) {
+        const suggestions = didReadFollowUpSuggestions ? [] : followUpSuggestions;
+        didReadFollowUpSuggestions = true;
+        return jsonResponse({ suggestions });
+      }
+
+      if (path.includes('/follow-up-tasks') && method === 'POST') {
+        if (followUpTaskError) {
+          return jsonResponse(
+            { error: followUpTaskError.message },
+            { status: followUpTaskError.status },
+          );
+        }
+
+        return jsonResponse({ record: followUpTaskRecord }, { status: 201 });
       }
 
       if (path.startsWith('/api/institution/treatment-summaries')) {
@@ -824,6 +889,7 @@ function expectNoSensitiveTreatmentSummaryManagementContent(container: HTMLEleme
   expect(text).not.toContain('Phase14 客户明细不应展示');
   expect(text).not.toContain('Phase14 预约明细不应展示');
   expect(text).not.toContain('Phase14 随访明细不应展示');
+  expect(text).not.toContain('Phase15 客户不应展示');
   expect(text).not.toContain('13800001252');
   expect(text).not.toContain('110101199001010011');
   expect(text).not.toContain('MR202605310001');
@@ -836,13 +902,21 @@ function expectNoSensitiveTreatmentSummaryManagementContent(container: HTMLEleme
   expect(text).not.toContain('外部系统同步原文不应展示');
   expect(text).not.toContain('requestBody');
   expect(text).not.toContain('select * from treatment_summaries');
+  expect(text).not.toContain('select * from follow_up_tasks');
   expect(text).not.toContain('DATABASE_URL');
   expect(text).not.toContain('postgres://');
   expect(text).not.toContain('stack');
   expect(text).not.toContain('token');
   expect(text).not.toContain('secret');
   expect(text).not.toContain('sk_test_phase14_should_not_render');
+  expect(text).not.toContain('sk_test_phase15_should_not_render');
   expect(text).not.toContain('phase14-raw-secret');
+  expect(text).not.toContain('phase15-raw-secret');
+  expect(text).not.toContain('自动发送');
+  expect(text).not.toContain('自动推送');
+  expect(text).not.toContain('企微触达');
+  expect(text).not.toContain('短信发送');
+  expect(text).not.toContain('电话外呼');
 }
 
 function expectNoSensitivePlatformAuditContent(container: HTMLElement) {
@@ -1101,6 +1175,58 @@ describe('工作台入口页面', () => {
       expect(init?.body).toBeUndefined();
     }
     expect(screen.queryByRole('button', { name: /新增|编辑|删除/u })).not.toBeInTheDocument();
+    expectNoSensitiveTreatmentSummaryManagementContent(container);
+  });
+
+  it('机构入口 smoke 覆盖治疗摘要随访建议人工确认创建', async () => {
+    const fetchMock = mockWorkspaceFetch();
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
+
+    expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_management' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看随访建议' }));
+
+    expect(await within(dialog).findByText('Phase15 关注风险治疗后随访')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('建议仅供机构内部参考，需要人工确认后才会创建内部随访任务。'),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText('请安排人工随访，确认恢复反馈和护理执行情况。')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认创建随访任务' }));
+
+    expect(await within(dialog).findByText('已创建内部随访任务')).toBeInTheDocument();
+    const suggestionCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).endsWith('/follow-up-suggestions'),
+    );
+    const createCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).endsWith('/follow-up-tasks'),
+    );
+    expect(suggestionCall).toBeDefined();
+    expect(createCall).toBeDefined();
+    expect(fetchPath(suggestionCall![0])).toBe(
+      '/api/institution/treatment-summaries/trt_phase14_management/follow-up-suggestions',
+    );
+    expect(suggestionCall![1]).toEqual({ cache: 'no-store' });
+    expect(fetchPath(createCall![0])).toBe(
+      '/api/institution/treatment-summaries/trt_phase14_management/follow-up-tasks',
+    );
+    expect(createCall![1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          suggestionKey: 'trt_phase14_management:watch_risk_followup:3d',
+        }),
+      }),
+    );
+    expect(String(createCall![1]?.body)).not.toContain('tenantId');
+    expect(String(createCall![1]?.body)).not.toContain('customerId');
+    expect(String(createCall![1]?.body)).not.toContain('suggestedAction');
     expectNoSensitiveTreatmentSummaryManagementContent(container);
   });
 

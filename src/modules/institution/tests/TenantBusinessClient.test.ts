@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createAppointment,
   createCustomer,
+  createFollowUpTaskFromTreatmentSummary,
   createTreatmentSummary,
   getCustomerTimeline,
   listAppointments,
   listCustomers,
   listFollowUpTasks,
+  listTreatmentFollowUpSuggestions,
   listTreatmentSummaries,
   transitionFollowUpTask,
   updateAppointment,
@@ -152,6 +154,48 @@ describe('机构业务页面 client helper', () => {
     expect(url.searchParams.get('limit')).toBe('25');
     expect(url.searchParams.get('tenantId')).toBeNull();
     expect(url.searchParams.get('sql')).toBeNull();
+  });
+
+  it('读取治疗摘要随访建议时只发送 summaryId 并解析 suggestions', async () => {
+    const fetcher = createFetchMock(
+      jsonResponse({
+        suggestions: [
+          {
+            suggestionKey: 'trt_001:watch_risk_followup:3d',
+            ruleKey: 'watch_risk_followup',
+            title: '关注风险治疗后随访',
+            description: '请安排人工随访，确认恢复反馈和护理执行情况。',
+            recommendedDueAt: '2026-06-05T16:30:00.000Z',
+            priority: 'medium',
+            riskLevel: 'watch',
+            sourceTreatmentSummaryId: 'trt_001',
+            sourceCustomerId: 'cust_001',
+            sourceAppointmentId: 'appt_001',
+            tags: ['护理随访'],
+            reason: 'riskLevel 为 watch，需要在观察周期内人工跟进',
+            sourceFields: ['riskLevel', 'treatmentDate'],
+          },
+        ],
+      }),
+    );
+
+    await expect(
+      listTreatmentFollowUpSuggestions('trt_001', { fetcher }),
+    ).resolves.toEqual({
+      ok: true,
+      suggestions: [
+        expect.objectContaining({
+          suggestionKey: 'trt_001:watch_risk_followup:3d',
+          sourceTreatmentSummaryId: 'trt_001',
+          sourceCustomerId: 'cust_001',
+        }),
+      ],
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/institution/treatment-summaries/trt_001/follow-up-suggestions',
+      { cache: 'no-store' },
+    );
+    expect(requestPath(fetcher)).not.toContain('tenantId');
   });
 
   it('读取客户详情 timeline 时只发送 GET 请求且不包含 tenantId', async () => {
@@ -402,6 +446,12 @@ describe('机构业务页面 client helper', () => {
     const followUpTransitionFetcher = createFetchMock(
       jsonResponse({ record: { id: 'fu_001', tenantId: 'demo-tenant-001', status: 'in_progress' } }),
     );
+    const followUpConfirmFetcher = createFetchMock(
+      jsonResponse(
+        { record: { id: 'fu_created', sourceTreatmentSummaryId: 'trt_created' } },
+        { status: 201 },
+      ),
+    );
 
     await expect(
       createCustomer(
@@ -505,6 +555,20 @@ describe('机构业务页面 client helper', () => {
       } as never,
       { fetcher: followUpTransitionFetcher },
     );
+    await createFollowUpTaskFromTreatmentSummary(
+      'trt_created',
+      {
+        suggestionKey: 'trt_created:watch_risk_followup:3d',
+        tenantId: 'other-tenant',
+        customerId: 'cust_001',
+        dueAt: '2026-01-01T00:00:00.000Z',
+        riskLevel: 'urgent',
+        suggestedAction: '客户端不应提交完整建议',
+        fullTreatmentRecord: '完整治疗记录正文',
+        consultationTranscript: '咨询对话正文',
+      } as never,
+      { fetcher: followUpConfirmFetcher },
+    );
 
     expect(customerCreateFetcher).toHaveBeenCalledWith('/api/institution/customers', expect.objectContaining({
       method: 'POST',
@@ -527,6 +591,12 @@ describe('机构业务页面 client helper', () => {
     expect(followUpTransitionFetcher).toHaveBeenCalledWith('/api/institution/followups', expect.objectContaining({
       method: 'PATCH',
     }));
+    expect(followUpConfirmFetcher).toHaveBeenCalledWith(
+      '/api/institution/treatment-summaries/trt_created/follow-up-tasks',
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    );
 
     expect(requestBody(treatmentSummaryCreateFetcher)).toEqual({
       treatmentDate: '2026-06-02T16:30:00+08:00',
@@ -541,6 +611,9 @@ describe('机构业务页面 client helper', () => {
       tags: ['结构化摘要', '复诊'],
       appointmentId: 'appt_001',
     });
+    expect(requestBody(followUpConfirmFetcher)).toEqual({
+      suggestionKey: 'trt_created:watch_risk_followup:3d',
+    });
 
     const serializedBodies = [
       requestBody(customerCreateFetcher),
@@ -549,6 +622,7 @@ describe('机构业务页面 client helper', () => {
       requestBody(appointmentUpdateFetcher),
       requestBody(treatmentSummaryCreateFetcher),
       requestBody(followUpTransitionFetcher),
+      requestBody(followUpConfirmFetcher),
     ].map((body) => JSON.stringify(body));
 
     for (const serializedBody of serializedBodies) {

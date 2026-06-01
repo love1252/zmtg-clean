@@ -3,8 +3,10 @@ import type { CustomerRecordSummary } from '@/modules/institution/domain/custome
 import type { CustomerTimelineResponse } from '@/modules/institution/domain/customer-timeline';
 import type {
   FollowUpStatus,
+  TenantFollowUpTaskSource,
   TenantFollowUpTask,
 } from '@/modules/institution/domain/followup-workflow';
+import type { TreatmentFollowUpSuggestion } from '@/modules/institution/domain/treatment-followup-suggestions';
 import type {
   CreateTreatmentSummaryDraft,
   CustomerTimelineTreatmentSummary,
@@ -38,6 +40,16 @@ export type FollowUpTransitionClientPayload = {
   id: string;
   nextStatus: FollowUpStatus;
 };
+
+export type TreatmentFollowUpTaskConfirmationClientPayload = {
+  suggestionKey: string;
+};
+
+export type TreatmentFollowUpTaskConfirmationClientRecord = Omit<
+  TenantFollowUpTask,
+  'tenantId'
+> &
+  TenantFollowUpTaskSource;
 
 export type CreateTreatmentSummaryClientPayload = Omit<
   CreateTreatmentSummaryDraft,
@@ -91,6 +103,10 @@ export type TreatmentSummaryListClientResult =
     }
   | { ok: false; error: TenantBusinessClientError };
 
+export type TreatmentFollowUpSuggestionListClientResult =
+  | { ok: true; suggestions: TreatmentFollowUpSuggestion[] }
+  | { ok: false; error: TenantBusinessClientError };
+
 type TenantBusinessClientOptions = {
   fetcher?: typeof fetch;
 };
@@ -122,6 +138,7 @@ const createAppointmentPayloadKeys = [
 
 const updateAppointmentPayloadKeys = ['id', 'status', 'note'] as const;
 const followUpTransitionPayloadKeys = ['id', 'nextStatus'] as const;
+const treatmentFollowUpTaskConfirmationPayloadKeys = ['suggestionKey'] as const;
 const createTreatmentSummaryPayloadKeys = [
   'treatmentDate',
   'treatmentProject',
@@ -406,6 +423,50 @@ export async function listTreatmentSummaries(
   }
 }
 
+export async function listTreatmentFollowUpSuggestions(
+  summaryId: string,
+  options?: TenantBusinessClientOptions,
+): Promise<TreatmentFollowUpSuggestionListClientResult> {
+  const fetcher = getFetcher(options);
+  if (!fetcher) {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+
+  try {
+    const response = await fetcher(
+      `/api/institution/treatment-summaries/${encodeURIComponent(summaryId)}/follow-up-suggestions`,
+      { cache: 'no-store' },
+    );
+    const payload = await readJson(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: createClientError({ status: response.status, payload }),
+      };
+    }
+
+    if (!isJsonObject(payload) || !Array.isArray(payload.suggestions)) {
+      return {
+        ok: false,
+        error: { kind: 'unknown', message: '请求失败', status: response.status },
+      };
+    }
+
+    return {
+      ok: true,
+      suggestions: payload.suggestions as TreatmentFollowUpSuggestion[],
+    };
+  } catch {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+}
+
 async function requestRecord<T>(
   path: string,
   method: 'POST' | 'PATCH',
@@ -582,6 +643,22 @@ export function transitionFollowUpTask(
     '/api/institution/followups',
     'PATCH',
     pickPayload(payload as unknown as Record<string, unknown>, followUpTransitionPayloadKeys),
+    options,
+  );
+}
+
+export function createFollowUpTaskFromTreatmentSummary(
+  summaryId: string,
+  payload: TreatmentFollowUpTaskConfirmationClientPayload,
+  options?: TenantBusinessClientOptions,
+) {
+  return requestRecord<TreatmentFollowUpTaskConfirmationClientRecord>(
+    `/api/institution/treatment-summaries/${encodeURIComponent(summaryId)}/follow-up-tasks`,
+    'POST',
+    pickPayload(
+      payload as unknown as Record<string, unknown>,
+      treatmentFollowUpTaskConfirmationPayloadKeys,
+    ),
     options,
   );
 }
