@@ -4,6 +4,7 @@ import {
   handleTenantBusinessListRequest,
   handleTenantBusinessMutationRequest,
 } from '@/modules/institution/server/tenant-business-api';
+import { parseFollowUpTaskListQuery } from '@/modules/institution/server/follow-up-task-query-parser';
 import { runTenantBusinessAuditTransaction } from '@/modules/institution/server/tenant-business-audit-transaction';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 import { parseFollowUpTransitionPayload } from '@/modules/institution/server/tenant-business-write-input';
@@ -24,6 +25,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: '请先登录' }, { status: 401 });
   }
 
+  const parsedQuery = parseFollowUpTaskListQuery(new URL(request.url).searchParams);
+  if (!parsedQuery.ok) {
+    return NextResponse.json({ error: parsedQuery.error }, { status: 400 });
+  }
+
   try {
     const db = getDatabase();
     const repository = createTenantBusinessRepository(db);
@@ -32,7 +38,11 @@ export async function GET(request: Request) {
     return await handleTenantBusinessListRequest({
       context,
       resource: 'follow_up',
-      list: repository.listFollowUpTasksByTenant,
+      list: (tenantId) =>
+        repository.listFollowUpTasksByTenant({
+          tenantId,
+          filters: parsedQuery.filters,
+        }),
       auditRepository,
     });
   } catch {

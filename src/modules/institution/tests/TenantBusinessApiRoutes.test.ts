@@ -241,6 +241,27 @@ function expectAuditEventDoesNotContainPrivateBody(event: unknown) {
   expect(serialized).not.toContain('postgres://');
 }
 
+function expectSerializedDoesNotContainFollowUpPrivateData(input: unknown) {
+  const serialized = JSON.stringify(input);
+
+  expect(serialized).not.toContain('13800000000');
+  expect(serialized).not.toContain('110101199001010011');
+  expect(serialized).not.toContain('MR-RAW-001');
+  expect(serialized).not.toContain('完整治疗记录正文');
+  expect(serialized).not.toContain('完整病历正文');
+  expect(serialized).not.toContain('诊疗原文');
+  expect(serialized).not.toContain('咨询对话全文');
+  expect(serialized).not.toContain('图片文件原文');
+  expect(serialized).not.toContain('AI 生成内容');
+  expect(serialized).not.toContain('外部系统同步原文');
+  expect(serialized).not.toContain('DATABASE_URL');
+  expect(serialized).not.toContain('postgres://');
+  expect(serialized).not.toContain('select *');
+  expect(serialized).not.toContain('stack');
+  expect(serialized).not.toContain('token');
+  expect(serialized).not.toContain('secret');
+}
+
 describe('租户业务只读 API 流程', () => {
   it('使用访问上下文租户读取客户', async () => {
     const repository = {
@@ -642,6 +663,13 @@ describe('租户业务只读 API 路由', () => {
         path: '/api/institution/followups',
         list: routeMocks.repository.listFollowUpTasksByTenant,
         resource: 'follow_up',
+        expectedListArg: {
+          tenantId: 'demo-tenant-001',
+          filters: {
+            source: null,
+            sourceTreatmentSummaryId: null,
+          },
+        },
       },
     ] as const;
 
@@ -650,7 +678,9 @@ describe('租户业务只读 API 路由', () => {
       const response = await routeCase.handler(new Request(`http://localhost${routeCase.path}`));
 
       expect(response.status).toBe(200);
-      expect(routeCase.list).toHaveBeenCalledWith('demo-tenant-001');
+      expect(routeCase.list).toHaveBeenCalledWith(
+        'expectedListArg' in routeCase ? routeCase.expectedListArg : 'demo-tenant-001',
+      );
       expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
         action: 'read_own_tenant',
         resource: routeCase.resource,
@@ -658,6 +688,141 @@ describe('租户业务只读 API 路由', () => {
         tenantId: 'demo-tenant-001',
       }));
     }
+  });
+
+  it('随访列表不带来源参数时保持读取当前租户全部任务', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.repository.listFollowUpTasksByTenant.mockResolvedValueOnce([
+      {
+        id: 'fu_plain',
+        tenantId: 'demo-tenant-001',
+        source: null,
+        sourceTreatmentSummaryId: null,
+        sourceSuggestionKey: null,
+      },
+      {
+        id: 'fu_from_summary',
+        tenantId: 'demo-tenant-001',
+        source: 'treatment_summary',
+        sourceTreatmentSummaryId: 'trt_001',
+        sourceSuggestionKey: 'trt_001:watch_risk_followup:3d',
+      },
+    ]);
+
+    const response = await followupsGet(new Request('http://localhost/api/institution/followups'));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      records: [
+        {
+          id: 'fu_plain',
+          tenantId: 'demo-tenant-001',
+          source: null,
+          sourceTreatmentSummaryId: null,
+          sourceSuggestionKey: null,
+        },
+        {
+          id: 'fu_from_summary',
+          tenantId: 'demo-tenant-001',
+          source: 'treatment_summary',
+          sourceTreatmentSummaryId: 'trt_001',
+          sourceSuggestionKey: 'trt_001:watch_risk_followup:3d',
+        },
+      ],
+    });
+    expect(routeMocks.repository.listFollowUpTasksByTenant).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      filters: {
+        source: null,
+        sourceTreatmentSummaryId: null,
+      },
+    });
+    expectSerializedDoesNotContainFollowUpPrivateData(payload);
+  });
+
+  it('随访列表支持治疗摘要来源筛选并返回安全来源字段', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.repository.listFollowUpTasksByTenant.mockResolvedValueOnce([
+      {
+        id: 'fu_from_summary',
+        tenantId: 'demo-tenant-001',
+        source: 'treatment_summary',
+        sourceTreatmentSummaryId: 'trt_001',
+        sourceSuggestionKey: 'trt_001:watch_risk_followup:3d',
+      },
+    ]);
+
+    const response = await followupsGet(
+      new Request('http://localhost/api/institution/followups?source=treatment_summary'),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      records: [
+        {
+          id: 'fu_from_summary',
+          tenantId: 'demo-tenant-001',
+          source: 'treatment_summary',
+          sourceTreatmentSummaryId: 'trt_001',
+          sourceSuggestionKey: 'trt_001:watch_risk_followup:3d',
+        },
+      ],
+    });
+    expect(routeMocks.repository.listFollowUpTasksByTenant).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      filters: {
+        source: 'treatment_summary',
+        sourceTreatmentSummaryId: null,
+      },
+    });
+    expectSerializedDoesNotContainFollowUpPrivateData(payload);
+  });
+
+  it('随访列表支持 sourceTreatmentSummaryId 并不允许跨租户探测', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.repository.listFollowUpTasksByTenant.mockResolvedValueOnce([]);
+
+    const response = await followupsGet(
+      new Request('http://localhost/api/institution/followups?sourceTreatmentSummaryId=trt_other_tenant'),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({ records: [] });
+    expect(routeMocks.repository.listFollowUpTasksByTenant).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      filters: {
+        source: null,
+        sourceTreatmentSummaryId: 'trt_other_tenant',
+      },
+    });
+    expect(routeMocks.repository.listFollowUpTasksByTenant).not.toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'demo-tenant-002' }),
+    );
+  });
+
+  it('随访列表拒绝 tenantId、未知参数和未定义 source 类型且不初始化数据库', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const requests = [
+      'http://localhost/api/institution/followups?tenantId=other-tenant',
+      'http://localhost/api/institution/followups?source=ai',
+      'http://localhost/api/institution/followups?sort=dueAt',
+      'http://localhost/api/institution/followups?source=treatment_summary&source=ai',
+    ];
+
+    for (const requestUrl of requests) {
+      const response = await followupsGet(new Request(requestUrl));
+      const payload = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(payload).toHaveProperty('error');
+    }
+
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.repository.listFollowUpTasksByTenant).not.toHaveBeenCalled();
   });
 
   it('数据库异常返回 503 且不泄露连接信息', async () => {

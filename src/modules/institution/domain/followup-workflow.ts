@@ -11,6 +11,8 @@ export type FollowUpStatus = 'scheduled' | 'due' | 'in_progress' | 'escalated' |
 
 export type FollowUpRiskLevel = 'normal' | 'watch' | 'urgent';
 
+export type FollowUpTaskSource = 'treatment_summary' | null;
+
 export type TenantFollowUpTask = {
   id: string;
   tenantId: string;
@@ -24,9 +26,13 @@ export type TenantFollowUpTask = {
   riskLevel: FollowUpRiskLevel;
   updatedBy: string | null;
   updatedAt: string | null;
+  source?: FollowUpTaskSource;
+  sourceTreatmentSummaryId?: string | null;
+  sourceSuggestionKey?: string | null;
 };
 
 export type TenantFollowUpTaskSource = {
+  source?: 'treatment_summary';
   sourceTreatmentSummaryId: string;
   sourceSuggestionKey: string;
 };
