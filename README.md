@@ -24,6 +24,7 @@
 - Phase 11：平台商业化健康只读运营辅助，包括商业化健康派生逻辑、平台端摘要 UI、配额快照风险 / 配置缺失 / quota denied 信号展示和 smoke / 文档收尾
 - Phase 12：治疗记录结构化摘要 v1，包括治疗摘要数据底座、客户详情 timeline API 接入、客户详情抽屉展示和 smoke / 文档收尾
 - Phase 13：治疗摘要人工录入 v1，包括 payload parser、repository create、`POST /api/institution/customers/[customerId]/treatment-summaries`、客户详情抽屉结构化录入 UI、timeline 刷新和 smoke / 文档收尾
+- Phase 14：治疗摘要管理能力 v1，包括 `GET /api/institution/treatment-summaries`、query parser、repository list、DTO 白名单、机构端治疗摘要管理 UI、筛选、加载更多、安全详情和 smoke / 文档收尾
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -98,10 +99,19 @@ Phase 13 已完成：
 - workspace / customer detail smoke 覆盖打开客户详情、打开结构化表单、提交成功刷新 timeline、提交失败保留输入、请求 body 不含 `tenantId` / 未知字段 / PII / 完整正文，以及 SQL / stack / token / secret / `DATABASE_URL` / 连接串不展示
 - Phase 13 不包含完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件上传、AI 生成、Agent、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付、外部系统同步或治疗摘要管理 / 编辑
 
+Phase 14 已完成：
+
+- 新增 `GET /api/institution/treatment-summaries`，服务端从 access context 推导 `tenantId`，不接受前端 `tenantId` 切换租户
+- 新增治疗摘要列表 query parser、repository `listTreatmentSummariesByTenant`、cursor / limit 校验和安全 DTO 白名单 mapper
+- 机构端新增「治疗摘要管理」入口，展示治疗摘要只读列表、基础筛选、加载更多和安全详情查看
+- UI 与 smoke 覆盖 loading、empty、403、503、筛选白名单、分页 / 加载更多、安全详情、只读请求和敏感字段不展示
+- Phase 14 不新增 schema / migration，不改权限、认证或租户隔离，不做治疗摘要新增 / 编辑 / 删除
+- Phase 14 不包含完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、图片 / 文件上传、AI provider、Agent、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付、合同、发票或外部系统同步
+
 后续阶段会依次加入：
 
-- Phase 14 Plan Mode：重新评估治疗摘要管理能力 v1、知识库 / RAG 安全基础准备、平台商业化继续增强、平台租户状态管理和审计高级治理
-- 客服会话、治疗摘要管理 / 编辑和完整治疗记录能力需单独规划
+- Phase 15 Plan Mode：重新评估治疗后护理 / 随访联动 v1、知识库 / RAG 安全基础准备、平台商业化继续增强、平台租户状态管理和审计高级治理
+- 客服会话、治疗摘要编辑和完整治疗记录能力需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费

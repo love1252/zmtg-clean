@@ -1,5 +1,7 @@
 # Phase 14 治疗摘要管理能力 v1 实施计划
 
+> 状态：Phase 14 已完成。PR 1 完成 spec / plan 文档，PR 2 完成治疗摘要列表 API、query parser、repository list 和 DTO，PR 3 完成机构端治疗摘要管理 UI，PR 4 完成 smoke / 文档收尾。
+
 > **给后续执行 Agent 的要求：** 必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项执行本计划。步骤使用 `- [ ]` 复选框语法跟踪。
 
 **目标：** 为机构端建设治疗摘要只读管理能力，支持跨客户列表、白名单筛选、分页和安全详情查看。
@@ -12,16 +14,14 @@
 
 ## 当前状态
 
-Phase 13 已完成：
+Phase 14 已完成：
 
-- 治疗摘要写入 payload 解析器。
-- 治疗摘要仓储层创建方法。
-- `POST /api/institution/customers/[customerId]/treatment-summaries`。
-- 客户详情抽屉结构化录入 UI。
-- `treatment_summary` 访问资源和最小 create / read 权限。
-- 工作区入口冒烟测试（smoke）、README、roadmap、devlog 和 Phase 13 文档收尾。
+- PR 1：Phase 14 spec / plan 文档已完成。
+- PR 2：治疗摘要列表 query parser、repository `listTreatmentSummariesByTenant`、DTO 白名单和 `GET /api/institution/treatment-summaries` 已完成。
+- PR 3：机构端治疗摘要管理 UI 已完成，支持列表、基础筛选、加载更多和安全详情查看。
+- PR 4：工作区入口冒烟测试（smoke）、README、roadmap、devlog 和 Phase 14 文档收尾已完成。
 
-Phase 14 PR 1 只新增本文档和设计文档，不进入 API、UI、测试或数据库开发。
+Phase 14 未新增 schema / migration，未改权限、认证或租户隔离模型，未进入治疗摘要新增 / 编辑 / 删除、完整治疗记录正文、完整病历正文、咨询对话全文、AI、RAG、企微或外部系统。
 
 ## 总边界
 
@@ -650,7 +650,7 @@ git diff --check
 
 ## Phase 14 完成标准
 
-Phase 14 完成时应满足：
+Phase 14 已满足以下完成标准：
 
 - 机构端有治疗摘要只读管理入口。
 - `GET /api/institution/treatment-summaries` 已完成。
@@ -666,6 +666,7 @@ Phase 14 完成时应满足：
 - 未新增 schema / migration。
 - 未修改权限、认证或租户隔离模型。
 - 未进入治疗后护理 / 随访联动、AI、RAG、企微、外部系统、支付、合同或发票。
+- 后续建议进入 Phase 15 Plan Mode，优先重新评估治疗后护理 / 随访联动 v1、知识库 / RAG 安全基础准备、平台商业化继续增强、平台租户状态管理和审计高级治理，不在 Phase 14 PR 4 中实现 Phase 15。
 
 ## PR 描述要求
 
