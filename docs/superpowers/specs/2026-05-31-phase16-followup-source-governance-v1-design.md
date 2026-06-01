@@ -1,7 +1,7 @@
 # Phase 16 随访任务来源治理增强 v1 设计
 
 > 日期：2026-05-31
-> 状态：Phase 16 PR 1 规划文档。当前阶段默认选择“随访任务创建后的治理增强 v1”，本 PR 只固化 spec / plan，不修改业务代码、API、schema、权限、页面或测试。
+> 状态：已完成。Phase 16 PR 1-4 已完成随访任务来源治理增强 v1；本阶段仅覆盖来源筛选、安全来源 DTO、机构端来源展示 / 筛选、治疗摘要管理页重复任务只读提示、smoke 和文档收尾。
 
 ## 1. Phase 16 目标
 
@@ -18,6 +18,17 @@ Phase 16 默认选择“随访任务创建后的治理增强 v1”。目标是�
 - Phase 16 v1 默认不新增 schema / migration，复用 Phase 15 已完成的 `follow_up_tasks` 来源字段。
 
 Phase 16 v1 是治理增强，不是新触达系统，也不是治疗摘要生命周期管理。本阶段不自动创建任务、不自动触达客户、不接外部渠道、不做治疗摘要编辑或作废。
+
+## 1.1 Phase 16 完成摘要
+
+Phase 16 已完成：
+
+- PR 1：完成随访任务来源治理增强 v1 spec / plan。
+- PR 2：扩展 `GET /api/institution/followups`，支持 `source=treatment_summary` 和 `sourceTreatmentSummaryId` 白名单筛选，返回安全来源字段。
+- PR 3：智能随访列表展示治疗摘要来源标签与安全来源字段，支持“全部来源 / 治疗摘要来源”筛选；治疗摘要管理页展示同来源活跃随访任务只读重复提示。
+- PR 4：补充 workspace smoke / entry 覆盖来源标签、来源筛选、duplicate hint、不自动创建、不自动触达和敏感字段不展示，并更新 README、roadmap、devlog 和 Phase 16 文档状态。
+
+Phase 16 未进入治疗摘要编辑、治疗摘要作废、自动创建随访任务、自动触达客户、企业微信、短信、电话外呼、AI provider、Agent、RAG、HIS / CRM / OTA、OAuth、Webhook、支付、完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件原文或外部系统同步。
 
 ## 2. 为什么优先做随访任务创建后的治理增强
 
@@ -191,7 +202,7 @@ v1 新增或评估以下查询参数：
 
 响应 DTO 中与来源相关的白名单字段建议为：
 
-- `sourceType`
+- `source`
 - `sourceTreatmentSummaryId`
 - `sourceSuggestionKey`
 
@@ -199,7 +210,7 @@ v1 新增或评估以下查询参数：
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `sourceType` | `'treatment_summary' \| null` | 当任务来自治疗摘要时为 `treatment_summary`，普通任务为 `null` |
+| `source` | `'treatment_summary' \| null` | 当任务来自治疗摘要时为 `treatment_summary`，普通任务为 `null` |
 | `sourceTreatmentSummaryId` | `string \| null` | 来源治疗摘要 ID；普通任务为 `null` |
 | `sourceSuggestionKey` | `string \| null` | Phase 15 确定性建议 key；普通任务为 `null` |
 
@@ -364,7 +375,7 @@ Phase 16 v1 只处理来源关系，不扩大医疗内容处理范围。
 - 随访任务现有运营字段。
 - `sourceTreatmentSummaryId`。
 - `sourceSuggestionKey`。
-- `sourceType = treatment_summary`。
+- `source = treatment_summary`。
 
 禁止引入：
 
@@ -423,7 +434,7 @@ Phase 16 v1 默认不新增 schema / migration。
 - PR 1 不修改数据结构。
 - PR 2 / PR 3 默认不修改数据结构。
 - 如果后续发现索引不足，只记录为后续性能优化，不在 PR 1 中实现。
-- 如果后续需要新增 `sourceType` 持久化字段，应停止并重新进入 Plan Mode，因为这会改变 v1 的“只复用 Phase 15 来源字段”前提。
+- 如果后续需要新增 `source` 持久化字段，应停止并重新进入 Plan Mode，因为这会改变 v1 的“只复用 Phase 15 来源字段”前提。
 
 ## 16. 推荐 PR 拆分
 
@@ -521,4 +532,28 @@ Phase 16 v1 默认不新增 schema / migration。
 | PR 3 | 随访来源标签、duplicate hint、前端测试 | 中 | UI tests，client tests，`tsc --noEmit` |
 | PR 4 | smoke / README / roadmap / devlog 收尾 | 低到中 | full vitest，typecheck，Next build |
 
-Phase 16 完成后，建议 Phase 17 重新评估治疗摘要编辑能力 v1；治疗摘要作废能力和知识库 / RAG 继续后置，并分别进入独立 Plan Mode。
+## 18. Phase 16 最终边界与 Phase 17 建议
+
+Phase 16 最终完成范围：
+
+- follow-up 来源筛选已完成。
+- 安全来源 DTO 已完成。
+- 智能随访来源标签展示已完成。
+- 治疗摘要来源筛选已完成。
+- 治疗摘要管理页重复任务提示已完成。
+- smoke / 文档收尾已完成。
+
+Phase 16 最终未包含：
+
+- 治疗摘要编辑。
+- 治疗摘要作废。
+- 自动创建随访任务。
+- 自动触达客户。
+- 企业微信、短信、电话外呼。
+- AI provider、Agent、RAG。
+- HIS / CRM / OTA。
+- OAuth、Webhook、支付。
+- 完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件原文。
+- 外部系统同步。
+
+后续建议进入 Phase 17 Plan Mode，优先重新评估治疗摘要编辑能力 v1；治疗摘要作废能力、follow-up 配额 enforcement 和知识库 / RAG 安全基础准备继续分别独立规划，当前不进入 Phase 17 实现。

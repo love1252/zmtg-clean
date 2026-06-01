@@ -26,6 +26,7 @@
 - Phase 13：治疗摘要人工录入 v1，包括 payload parser、repository create、`POST /api/institution/customers/[customerId]/treatment-summaries`、客户详情抽屉结构化录入 UI、timeline 刷新和 smoke / 文档收尾
 - Phase 14：治疗摘要管理能力 v1，包括 `GET /api/institution/treatment-summaries`、query parser、repository list、DTO 白名单、机构端治疗摘要管理 UI、筛选、加载更多、安全详情和 smoke / 文档收尾
 - Phase 15：治疗后护理 / 随访联动 v1，包括确定性护理 / 随访建议规则、`follow_up_tasks` 来源关联、幂等 / 去重、人工确认 API、治疗摘要管理 UI 联动和 smoke / 文档收尾
+- Phase 16：随访任务来源治理增强 v1，包括 follow-up 来源筛选、安全来源 DTO、智能随访来源标签 / 来源筛选、治疗摘要管理页重复任务提示和 smoke / 文档收尾
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -119,9 +120,18 @@ Phase 15 已完成：
 - workspace smoke / API / UI / repository 测试覆盖建议展示、人工确认创建、重复冲突、来源关联、租户隔离、敏感字段不展示和不自动触达边界
 - Phase 15 不包含 AI provider、AI 生成护理建议、Agent、RAG、企微、短信、电话外呼、自动触达客户、HIS / CRM / OTA、OAuth、Webhook、支付、完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件原文或外部系统同步
 
+Phase 16 已完成：
+
+- `GET /api/institution/followups` 已支持 `source=treatment_summary` 和 `sourceTreatmentSummaryId` 白名单筛选，继续从 access context 推导 `tenantId`，拒绝前端传入 `tenantId`、未知参数和未定义 `source`
+- follow-up DTO 已返回安全来源字段 `source`、`sourceTreatmentSummaryId` 和 `sourceSuggestionKey`，不返回 `tenantId`、完整治疗摘要正文、完整病历正文、咨询全文、PII、SQL、stack、token、secret、`DATABASE_URL` 或连接串
+- 智能随访列表已展示“来源：治疗摘要”、来源摘要 ID、建议 key，并支持“全部来源 / 治疗摘要来源”筛选
+- 治疗摘要管理页已在加载建议后查询同来源活跃随访任务，展示只读重复任务提示，并在存在活跃同来源任务时禁用重复创建
+- workspace smoke / institution 测试覆盖来源标签、来源筛选、重复提示、不自动创建、不自动触达和敏感字段不展示
+- Phase 16 不包含治疗摘要编辑、治疗摘要作废、自动创建随访任务、自动触达客户、企业微信、短信、电话外呼、AI provider、Agent、RAG、HIS / CRM / OTA、OAuth、Webhook、支付、完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件原文或外部系统同步
+
 后续阶段会依次加入：
 
-- Phase 16 Plan Mode：建议重新评估治疗摘要编辑能力 v1、治疗摘要作废能力 v1、follow-up 配额 enforcement、知识库 / RAG 安全基础准备、平台商业化增强、平台租户状态管理和审计高级治理
+- Phase 17 Plan Mode：建议重新评估治疗摘要编辑能力 v1、治疗摘要作废能力 v1、follow-up 配额 enforcement、知识库 / RAG 安全基础准备、平台商业化增强、平台租户状态管理和审计高级治理
 - 客服会话、治疗摘要编辑 / 作废和完整治疗记录能力需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库

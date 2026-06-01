@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > 日期：2026-05-31
-> 状态：Phase 16 PR 1 规划文档。当前 PR 只新增 spec / plan，不进入业务代码开发。
+> 状态：已完成。Phase 16 PR 1-4 已完成随访任务来源治理增强 v1；当前文档记录最终范围、验证方式和 Phase 17 建议。
 
 **Goal:** 补齐 Phase 15 之后的随访任务来源治理能力，让机构端能按治疗摘要来源筛选随访任务、查看来源标签，并在治疗摘要管理页看到同来源活跃任务的只读重复提示。
 
@@ -34,6 +34,14 @@ Phase 16 PR 1 只创建文档，不修改：
 - API route。
 - 数据库 schema / migration。
 - 权限、认证或租户隔离。
+
+Phase 16 最终状态：
+
+- PR 1 已完成 spec / plan 文档。
+- PR 2 已完成 `GET /api/institution/followups` 来源筛选、当前租户安全查询、安全来源 DTO 和 API / repository / client 测试。
+- PR 3 已完成智能随访来源标签、来源筛选、治疗摘要管理页 duplicate hint 和前端测试。
+- PR 4 已完成 workspace smoke / entry 覆盖、README / roadmap / devlog / Phase 16 文档收尾。
+- Phase 16 未新增 API route，未改数据库 schema / migration，未改权限、认证、租户隔离，未改随访任务创建逻辑，未进入治疗摘要编辑 / 作废、自动创建、自动触达、AI / RAG / Agent、企微 / 短信 / 电话或外部系统。
 
 ## 总边界
 
@@ -123,7 +131,7 @@ Phase 16 v1 不做：
   - 跨租户 / 不存在来源统一返回空列表。
   - mapper 返回安全来源字段。
 - `src/modules/institution/domain/followup-workflow.ts`
-  - 扩展 `TenantFollowUpTask` 或新增 safe DTO 类型，包含 `sourceType`、`sourceTreatmentSummaryId`、`sourceSuggestionKey`。
+  - 扩展 `TenantFollowUpTask` 或新增 safe DTO 类型，包含 `source`、`sourceTreatmentSummaryId`、`sourceSuggestionKey`。
   - 普通任务来源字段为 `null`，治疗摘要来源任务为对应字段。
 - `src/modules/institution/client/tenant-business-client.ts`
   - 扩展 `listFollowUpTasks()` 支持白名单 query。
@@ -240,19 +248,19 @@ Phase 16 v1 不做：
 
 来源字段只允许：
 
-- `sourceType`
+- `source`
 - `sourceTreatmentSummaryId`
 - `sourceSuggestionKey`
 
 普通任务：
 
-- `sourceType = null`
+- `source = null`
 - `sourceTreatmentSummaryId = null`
 - `sourceSuggestionKey = null`
 
 治疗摘要来源任务：
 
-- `sourceType = 'treatment_summary'`
+- `source = 'treatment_summary'`
 - `sourceTreatmentSummaryId = '<summary id>'`
 - `sourceSuggestionKey = '<suggestion key>'`
 
@@ -726,6 +734,29 @@ Phase 16 v1 不做：
 
 - 文档收尾不能声明未实现的治疗摘要编辑、作废、AI、RAG 或外部触达能力。
 - smoke 不能依赖真实外部服务。
+
+## Phase 16 PR 4 完成摘要
+
+PR 4 收尾覆盖：
+
+- workspace smoke 可进入智能随访页面并展示“来源：治疗摘要”。
+- workspace smoke 覆盖来源摘要 ID 和建议 key 等安全来源字段。
+- workspace smoke 覆盖“全部来源 / 治疗摘要来源”切换，并确认请求 `GET /api/institution/followups?source=treatment_summary` 不包含 `tenantId`。
+- workspace smoke 覆盖治疗摘要管理页加载建议后查询同来源随访任务，展示“该建议已有进行中的随访任务”只读提示。
+- workspace smoke 覆盖有活跃同来源任务时禁用重复创建。
+- workspace smoke 覆盖不自动创建随访任务、不自动触达客户。
+- workspace smoke 覆盖 UI 不展示手机号原文、身份证号、病历号原文、完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、图片 / 文件原文、AI 生成内容、外部系统同步原文、SQL、stack、token、secret、`DATABASE_URL` 或连接串。
+- README、roadmap、devlog、Phase 16 spec / plan 已更新为 Phase 16 完成状态。
+
+PR 4 验证命令：
+
+```bash
+git diff --check
+node scripts/run-vitest.mjs run src/modules/institution/tests src/modules/workspace/tests src/server/db/tests
+./node_modules/.bin/tsc --noEmit
+node scripts/run-next.mjs build --webpack
+node scripts/run-vitest.mjs run
+```
 
 ## Phase 17 建议
 
