@@ -1,6 +1,6 @@
 # Phase 13 治疗摘要人工录入 v1 设计
 
-> 状态：Phase 13 PR 1 规划文档。本文只固化治疗摘要人工录入 v1 的目标、范围、安全边界、API / RBAC / 审计决策和 PR 拆分，不包含业务代码实现。
+> 状态：Phase 13 已完成。PR 1-5 已完成治疗摘要人工录入 v1 的设计、写入地基、POST API、客户详情抽屉结构化录入 UI、workspace smoke 和文档收尾。
 
 ## 1. Phase 13 目标
 
@@ -18,7 +18,17 @@ Phase 13 默认选择“治疗摘要人工录入 v1”。目标是在 Phase 12 �
 - 成功写入 allowed 审计；安全可确认的拒绝场景写 denied 审计。
 - 不保存或返回完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、图片 / 文件原文、AI 生成内容或外部系统同步原文。
 
-Phase 13 PR 1 只新增本设计文档和实施计划，不修改业务代码、页面、测试、API route、数据库 schema / migration、权限、认证或租户隔离。
+Phase 13 最终已完成：
+
+- 治疗摘要写入 payload parser。
+- 治疗摘要 repository create。
+- `treatment_summary` access resource、`tenant_admin` 必要 create / read 权限和稳定 audit reason。
+- `POST /api/institution/customers/[customerId]/treatment-summaries`。
+- 客户详情抽屉“添加治疗摘要”结构化录入 UI。
+- 提交成功后刷新客户详情 timeline，新摘要进入治疗摘要区域和 `treatment_summary` 时间线节点。
+- workspace smoke / README / roadmap / devlog / Phase 13 spec / plan 收尾。
+
+Phase 13 未新增数据库 schema / migration，未改认证或租户隔离模型，未进入完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件上传、AI、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付、合同、发票或外部系统同步。
 
 ## 2. 为什么优先做治疗摘要人工录入 v1
 
@@ -649,20 +659,29 @@ Phase 13 推荐拆成 5 个 PR。
 
 ## 16. Phase 13 完成标准
 
-Phase 13 完成时应满足：
+Phase 13 已满足：
 
-- 机构端可在客户详情上下文创建结构化治疗摘要。
-- 创建请求不发送也不接受 `tenantId`。
-- body 只允许治疗摘要字段白名单。
-- 服务端校验 customer 属于当前 tenant。
-- 服务端校验 appointment 同租户 / 同 customer。
-- 成功创建后返回安全 DTO。
-- 成功创建后现有 timeline API 可读取并展示新摘要。
-- 成功写入 allowed 审计，安全拒绝场景写 denied 审计。
-- 审计不包含请求体、完整正文、PII、SQL、stack、token、secret 或连接串。
-- UI 不提供完整病历、完整治疗正文、文件上传、AI 或外部同步入口。
-- 不新增 schema / migration。
-- 不改认证模型。
-- 不改租户推导方式。
-- 不进入 AI provider、Agent、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付、合同或发票。
-- README、roadmap、devlog 和 Phase 13 spec / plan 与实际完成范围一致。
+- [x] 机构端可在客户详情上下文创建结构化治疗摘要。
+- [x] 创建请求不发送也不接受 `tenantId`。
+- [x] body 只允许治疗摘要字段白名单。
+- [x] 服务端校验 customer 属于当前 tenant。
+- [x] 服务端校验 appointment 同租户 / 同 customer。
+- [x] 成功创建后返回安全 DTO。
+- [x] 成功创建后现有 timeline API 可读取并展示新摘要。
+- [x] 成功写入 allowed 审计，安全拒绝场景写 denied 审计。
+- [x] 审计不包含请求体、完整正文、PII、SQL、stack、token、secret 或连接串。
+- [x] UI 不提供完整病历、完整治疗正文、文件上传、AI 或外部同步入口。
+- [x] 不新增 schema / migration。
+- [x] 不改认证模型。
+- [x] 不改租户推导方式。
+- [x] 不进入 AI provider、Agent、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付、合同或发票。
+- [x] README、roadmap、devlog 和 Phase 13 spec / plan 与实际完成范围一致。
+
+## 17. Phase 14 建议
+
+Phase 13 完成后，建议先进入 Phase 14 Plan Mode，不直接实现 Phase 14。候选方向：
+
+- 治疗摘要管理能力 v1：只读列表、筛选和详情查看，不做新增 / 编辑 / 删除，不展示完整正文。
+- 知识库 / RAG 安全基础准备：只做规划或最小结构，不接真实 AI provider，不上传或保存医疗隐私正文。
+- 平台套餐商业化继续增强：继续只读运营辅助，不做支付、合同、发票或复杂计费。
+- 平台租户状态管理和审计高级治理：单独评估状态变更、导出、告警和风控边界。

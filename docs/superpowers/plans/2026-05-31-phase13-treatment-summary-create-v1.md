@@ -10,19 +10,17 @@
 
 ---
 
-## 当前 PR 状态
+## 当前状态
 
-当前是 Phase 13 PR 1，只做文档：
+Phase 13 已完成，PR 1-5 均已落地：
 
-- 新增 `docs/superpowers/specs/2026-05-31-phase13-treatment-summary-create-v1-design.md`。
-- 新增 `docs/superpowers/plans/2026-05-31-phase13-treatment-summary-create-v1.md`。
-- 不改业务代码。
-- 不改页面。
-- 不改测试。
-- 不改 API route。
-- 不改数据库 schema / migration。
-- 不改权限、认证或租户隔离。
-- 不进入 Phase 13 PR 2/3/4/5 的代码执行。
+- PR 1：新增 Phase 13 spec / plan 文档。
+- PR 2：完成治疗摘要写入 payload parser、domain input、repository create、`treatment_summary` RBAC / audit 决策测试。
+- PR 3：完成 `POST /api/institution/customers/[customerId]/treatment-summaries`。
+- PR 4：完成客户详情抽屉“添加治疗摘要”结构化录入 UI。
+- PR 5：完成 workspace smoke / README / roadmap / devlog / Phase 13 spec / plan 收尾。
+
+最终边界保持不变：未新增数据库 schema / migration，未改认证或租户隔离模型，未进入完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件上传、AI、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付、合同、发票或外部系统同步。
 
 ## 总边界
 
@@ -315,7 +313,7 @@ git diff --check
 
 **步骤：**
 
-- [ ] **步骤 1：编写 payload parser 失败测试**
+- [x] **步骤 1：编写 payload parser 失败测试**
 
   修改 `src/modules/institution/tests/TreatmentSummaryWriteInput.test.ts`，覆盖：
 
@@ -342,7 +340,7 @@ git diff --check
 
   同文件必须覆盖拒绝 `tenantId`、`customerId`、`treatmentRecordBody`、`medicalRecordBody`、手机号原文、身份证号、`DATABASE_URL`、`postgres://`、`token`、`secret`。
 
-- [ ] **步骤 2：运行 parser 测试并确认失败**
+- [x] **步骤 2：运行 parser 测试并确认失败**
 
   运行：
 
@@ -352,7 +350,7 @@ git diff --check
 
   预期：因为 `treatment-summary-write-input.ts` 尚不存在而失败。
 
-- [ ] **步骤 3：实现 parser**
+- [x] **步骤 3：实现 parser**
 
   新增 `src/modules/institution/server/treatment-summary-write-input.ts`，实现：
 
@@ -380,7 +378,7 @@ git diff --check
 
   实现时可复用 `tenant-business-write-input.ts` 中 ISO-like timestamp、PII 检测和 tags 校验思路，但不要把 parser 混进客户 / 预约 parser。
 
-- [ ] **步骤 4：编写 repository create 失败测试**
+- [x] **步骤 4：编写 repository create 失败测试**
 
   扩展 `src/modules/institution/tests/TreatmentSummaryRepository.test.ts`，验证：
 
@@ -390,7 +388,7 @@ git diff --check
   - 返回 `mapTreatmentSummaryRowToRecord()`。
   - 不写入或返回禁止字段。
 
-- [ ] **步骤 5：实现 repository create**
+- [x] **步骤 5：实现 repository create**
 
   修改 `src/modules/institution/server/treatment-summary-repository.ts`：
 
@@ -403,7 +401,7 @@ git diff --check
 
   如果需要更窄输入类型，定义 `CreateTreatmentSummaryInput`，不要暴露任意 `Record<string, unknown>`。
 
-- [ ] **步骤 6：编写 RBAC / audit 失败测试**
+- [x] **步骤 6：编写 RBAC / audit 失败测试**
 
   修改：
 
@@ -418,7 +416,7 @@ git diff --check
   - audit 支持 `resource=treatment_summary`。
   - audit reason 支持 `invalid_treatment_summary_reference`。
 
-- [ ] **步骤 7：实现 RBAC / audit 最小扩展**
+- [x] **步骤 7：实现 RBAC / audit 最小扩展**
 
   修改：
 
@@ -428,7 +426,7 @@ git diff --check
 
   只新增资源、最小 policy、sensitive resource 和新 reason，不改权限模型主结构。
 
-- [ ] **步骤 8：运行 PR 2 定向验证**
+- [x] **步骤 8：运行 PR 2 定向验证**
 
   运行：
 
@@ -469,7 +467,7 @@ git diff --check
 
 **步骤：**
 
-- [ ] **步骤 1：编写 API route 失败测试**
+- [x] **步骤 1：编写 API route 失败测试**
 
   新增 `src/modules/institution/tests/TreatmentSummaryApiRoutes.test.ts`，覆盖：
 
@@ -483,7 +481,7 @@ git diff --check
   - 无权限 `403` 且写 denied 审计。
   - 数据异常 `503` 且不泄露 SQL / stack / token / secret / `DATABASE_URL`。
 
-- [ ] **步骤 2：运行 API route 测试并确认失败**
+- [x] **步骤 2：运行 API route 测试并确认失败**
 
   运行：
 
@@ -493,7 +491,7 @@ git diff --check
 
   预期：route 文件尚不存在而失败。
 
-- [ ] **步骤 3：补 appointment 归属查询方法**
+- [x] **步骤 3：补 appointment 归属查询方法**
 
   修改 `src/modules/institution/server/tenant-business-repository.ts`，新增最小方法：
 
@@ -508,7 +506,7 @@ git diff --check
   }
   ```
 
-- [ ] **步骤 4：实现 POST route**
+- [x] **步骤 4：实现 POST route**
 
   新增 `src/app/api/institution/customers/[customerId]/treatment-summaries/route.ts`，按以下顺序处理：
 
@@ -523,11 +521,11 @@ git diff --check
   9. 返回 `{ record: safeDto }`，status `201`。
   10. catch 中返回稳定 `503`。
 
-- [ ] **步骤 5：确认 existing timeline 可读新摘要**
+- [x] **步骤 5：确认 existing timeline 可读新摘要**
 
   扩展 `src/modules/institution/tests/CustomerTimelineApiRoutes.test.ts` 或新增集成式 route mock 测试，确认 POST 返回的 DTO 字段与 timeline DTO 一致，且不包含 `tenantId` / `customerId`。
 
-- [ ] **步骤 6：运行 PR 3 定向验证**
+- [x] **步骤 6：运行 PR 3 定向验证**
 
   运行：
 
@@ -566,7 +564,7 @@ git diff --check
 
 **步骤：**
 
-- [ ] **步骤 1：编写 client helper 失败测试**
+- [x] **步骤 1：编写 client helper 失败测试**
 
   修改 `src/modules/institution/tests/TenantBusinessClient.test.ts`，覆盖：
 
@@ -588,7 +586,7 @@ git diff --check
 
   断言 fetch path 为 `/api/institution/customers/cust_001/treatment-summaries`，method 为 `POST`，body 不包含 `tenantId`、`customerId`、完整正文或敏感字段。
 
-- [ ] **步骤 2：实现 client helper**
+- [x] **步骤 2：实现 client helper**
 
   修改 `src/modules/institution/client/tenant-business-client.ts`：
 
@@ -596,7 +594,7 @@ git diff --check
   - 新增 `createTreatmentSummary(customerId, payload, options)`。
   - 使用白名单 pick，禁止发送服务端生成字段。
 
-- [ ] **步骤 3：编写 UI 失败测试**
+- [x] **步骤 3：编写 UI 失败测试**
 
   修改 `src/modules/institution/tests/InstitutionBusinessShells.test.tsx`，覆盖：
 
@@ -608,7 +606,7 @@ git diff --check
   - 请求 body 不含 `tenantId` / `customerId`。
   - UI 不展示完整正文、图片、文件、AI 或外部系统入口。
 
-- [ ] **步骤 4：实现 UI**
+- [x] **步骤 4：实现 UI**
 
   修改 `src/modules/institution/components/CustomerTimelineDrawer.tsx`：
 
@@ -621,7 +619,7 @@ git diff --check
 
   如刷新逻辑在父组件更自然，则修改 `src/modules/institution/components/CustomerCenterShell.tsx`，给 drawer 传入 `onTreatmentSummaryCreated` 或 `refreshTimeline`。
 
-- [ ] **步骤 5：运行 PR 4 定向验证**
+- [x] **步骤 5：运行 PR 4 定向验证**
 
   运行：
 
@@ -658,7 +656,7 @@ git diff --check
 
 **步骤：**
 
-- [ ] **步骤 1：补 workspace smoke**
+- [x] **步骤 1：补 workspace smoke**
 
   修改 `src/modules/workspace/tests/WorkspaceEntryPages.test.tsx`，新增 smoke 覆盖：
 
@@ -669,7 +667,7 @@ git diff --check
   - 成功后刷新 timeline。
   - 显示 `treatment_summary` 节点和新摘要。
 
-- [ ] **步骤 2：补敏感字段 smoke**
+- [x] **步骤 2：补敏感字段 smoke**
 
   同文件或现有 UI 测试确认页面不展示：
 
@@ -685,7 +683,7 @@ git diff --check
   - 外部系统同步原文。
   - SQL / stack / token / secret / `DATABASE_URL` / 连接串。
 
-- [ ] **步骤 3：更新 README**
+- [x] **步骤 3：更新 README**
 
   修改 `README.md`，加入 Phase 13 完成摘要：
 
@@ -695,14 +693,14 @@ git diff --check
   - 写入后进入 timeline。
   - 不包含完整正文、文件、AI、RAG、外部系统。
 
-- [ ] **步骤 4：更新 roadmap**
+- [x] **步骤 4：更新 roadmap**
 
   修改 `docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md`：
 
   - 标记 Phase 13 已完成。
   - 后续建议治疗摘要管理 v1、知识库/RAG 安全 Plan Mode、平台商业化后续增强继续后置。
 
-- [ ] **步骤 5：更新 devlog**
+- [x] **步骤 5：更新 devlog**
 
   修改 `docs/devlog/2026-05-31.md`：
 
@@ -710,7 +708,7 @@ git diff --check
   - 记录验证结果。
   - 记录未进入内容。
 
-- [ ] **步骤 6：更新 Phase 13 spec / plan 完成状态**
+- [x] **步骤 6：更新 Phase 13 spec / plan 完成状态**
 
   修改本 spec / plan：
 
@@ -718,7 +716,7 @@ git diff --check
   - 标记 PR 1-5 完成摘要。
   - 保持实际范围与代码一致。
 
-- [ ] **步骤 7：运行全量验证**
+- [x] **步骤 7：运行全量验证**
 
   运行：
 
@@ -747,29 +745,29 @@ git diff --check
 ## 执行顺序
 
 1. [x] PR 1：Phase 13 spec / plan 文档。
-2. [ ] PR 2：payload parser、domain、repository create、RBAC / audit 决策测试。
-3. [ ] PR 3：新增 POST API route。
-4. [ ] PR 4：客户详情抽屉结构化录入 UI。
-5. [ ] PR 5：smoke / 文档收尾。
+2. [x] PR 2：payload parser、domain、repository create、RBAC / audit 决策测试。
+3. [x] PR 3：新增 POST API route。
+4. [x] PR 4：客户详情抽屉结构化录入 UI。
+5. [x] PR 5：smoke / 文档收尾。
 
 ## Phase 13 完成标准
 
-- 机构端可在客户详情上下文创建结构化治疗摘要。
-- 创建请求不发送也不接受 `tenantId`。
-- body 只允许治疗摘要字段白名单。
-- 服务端校验 customer 属于当前 tenant。
-- 服务端校验 appointment 同租户 / 同 customer。
-- 成功创建后返回安全 DTO。
-- 成功创建后现有 timeline API 可读取并展示新摘要。
-- 成功写入 allowed 审计。
-- 安全拒绝场景写 denied 审计。
-- 审计不包含请求体、完整正文、PII、SQL、stack、token、secret 或连接串。
-- UI 不提供完整病历、完整治疗正文、文件上传、AI 或外部同步入口。
-- 不新增 schema / migration。
-- 不改认证模型。
-- 不改租户推导方式。
-- 不进入 AI provider、Agent、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付、合同或发票。
-- README、roadmap、devlog 和 Phase 13 spec / plan 与实际完成范围一致。
+- [x] 机构端可在客户详情上下文创建结构化治疗摘要。
+- [x] 创建请求不发送也不接受 `tenantId`。
+- [x] body 只允许治疗摘要字段白名单。
+- [x] 服务端校验 customer 属于当前 tenant。
+- [x] 服务端校验 appointment 同租户 / 同 customer。
+- [x] 成功创建后返回安全 DTO。
+- [x] 成功创建后现有 timeline API 可读取并展示新摘要。
+- [x] 成功写入 allowed 审计。
+- [x] 安全拒绝场景写 denied 审计。
+- [x] 审计不包含请求体、完整正文、PII、SQL、stack、token、secret 或连接串。
+- [x] UI 不提供完整病历、完整治疗正文、文件上传、AI 或外部同步入口。
+- [x] 不新增 schema / migration。
+- [x] 不改认证模型。
+- [x] 不改租户推导方式。
+- [x] 不进入 AI provider、Agent、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付、合同或发票。
+- [x] README、roadmap、devlog 和 Phase 13 spec / plan 与实际完成范围一致。
 
 ## PR 1 验证说明
 
@@ -780,3 +778,12 @@ git diff --check
 ```
 
 不运行完整 `node scripts/run-vitest.mjs run`、`./node_modules/.bin/tsc --noEmit` 或 `node scripts/run-next.mjs build --webpack`。原因：PR 1 未修改 TypeScript、React 页面、测试、API route、数据库 schema / migration、权限、认证或租户隔离。
+
+## Phase 14 建议
+
+Phase 13 完成后建议先进入 Phase 14 Plan Mode，不直接进入实现。建议优先评估：
+
+- 治疗摘要管理能力 v1：只读列表、筛选、详情查看；不做新增 / 编辑 / 删除，不展示完整治疗记录正文、完整病历正文或咨询对话全文。
+- 知识库 / RAG 安全基础准备：只做规划或最小结构；不接真实 AI provider，不上传或保存医疗隐私正文，不做自动问答。
+- 平台套餐商业化继续增强：继续聚焦只读运营辅助；不做支付、合同、发票或复杂计费。
+- 平台租户状态管理和审计高级治理：单独评估状态变更、导出、告警和复杂风控。
