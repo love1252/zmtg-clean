@@ -5,6 +5,10 @@ import type {
   FollowUpStatus,
   TenantFollowUpTask,
 } from '@/modules/institution/domain/followup-workflow';
+import type {
+  CreateTreatmentSummaryDraft,
+  CustomerTimelineTreatmentSummary,
+} from '@/modules/institution/domain/treatment-summaries';
 
 export type CreateCustomerClientPayload = Omit<CustomerRecordSummary, 'id' | 'tenantId'>;
 
@@ -31,6 +35,13 @@ export type UpdateAppointmentClientPayload = Pick<
 export type FollowUpTransitionClientPayload = {
   id: string;
   nextStatus: FollowUpStatus;
+};
+
+export type CreateTreatmentSummaryClientPayload = Omit<
+  CreateTreatmentSummaryDraft,
+  'appointmentId'
+> & {
+  appointmentId?: string | null;
 };
 
 export type TenantBusinessClientErrorKind =
@@ -91,6 +102,19 @@ const createAppointmentPayloadKeys = [
 
 const updateAppointmentPayloadKeys = ['id', 'status', 'note'] as const;
 const followUpTransitionPayloadKeys = ['id', 'nextStatus'] as const;
+const createTreatmentSummaryPayloadKeys = [
+  'treatmentDate',
+  'treatmentProject',
+  'treatmentCategory',
+  'treatmentStage',
+  'recoveryStage',
+  'riskLevel',
+  'ownerUserId',
+  'summary',
+  'nextCareAction',
+  'tags',
+  'appointmentId',
+] as const;
 
 function getFetcher(options?: TenantBusinessClientOptions) {
   return options?.fetcher ?? globalThis.fetch;
@@ -422,6 +446,22 @@ export function updateAppointment(
     '/api/institution/appointments',
     'PATCH',
     pickPayload(payload as unknown as Record<string, unknown>, updateAppointmentPayloadKeys),
+    options,
+  );
+}
+
+export function createTreatmentSummary(
+  customerId: string,
+  payload: CreateTreatmentSummaryClientPayload,
+  options?: TenantBusinessClientOptions,
+) {
+  return requestRecord<CustomerTimelineTreatmentSummary>(
+    `/api/institution/customers/${encodeURIComponent(customerId)}/treatment-summaries`,
+    'POST',
+    pickPayload(
+      payload as unknown as Record<string, unknown>,
+      createTreatmentSummaryPayloadKeys,
+    ),
     options,
   );
 }

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppointmentCenterShell } from '@/modules/institution/components/AppointmentCenterShell';
 import { InstitutionAuditEventsShell } from '@/modules/institution/components/InstitutionAuditEventsShell';
@@ -201,6 +201,46 @@ const customerTimelineResponse = {
   ],
 };
 
+const createdTreatmentSummaryRecord = {
+  id: 'trt_wang_created',
+  appointmentId: 'appt_wang_pending',
+  treatmentDate: '2026-06-02T16:30:00+08:00',
+  treatmentProject: '水光补水复诊',
+  treatmentCategory: 'skin_repair',
+  treatmentStage: 'D14 复诊',
+  recoveryStage: 'D14',
+  riskLevel: 'watch',
+  ownerUserId: 'doctor-lin',
+  summary: '结构化摘要：恢复稳定，安排补水。',
+  nextCareAction: 'D21 人工回访恢复阶段。',
+  tags: ['结构化摘要', '复诊'],
+  createdAt: '2026-06-02T16:30:00+08:00',
+  updatedAt: '2026-06-02T16:30:00+08:00',
+};
+
+const customerTimelineAfterTreatmentSummaryCreate = {
+  ...customerTimelineResponse,
+  treatmentSummaries: [
+    createdTreatmentSummaryRecord,
+    ...customerTimelineResponse.treatmentSummaries,
+  ],
+  timeline: [
+    {
+      id: 'treatment_summary:trt_wang_created',
+      type: 'treatment_summary',
+      occurredAt: '2026-06-02T16:30:00+08:00',
+      title: '水光补水复诊 · D14 复诊',
+      summary: '结构化摘要：恢复稳定，安排补水。',
+      status: 'watch',
+      source: 'treatment_summary',
+      relatedRecordId: 'trt_wang_created',
+      riskLevel: 'watch',
+      tags: ['结构化摘要', '复诊'],
+    },
+    ...customerTimelineResponse.timeline,
+  ],
+};
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
@@ -331,6 +371,44 @@ function mutationBody(
   }
 
   return JSON.parse(String(call[1]?.body)) as Record<string, unknown>;
+}
+
+function fillTreatmentSummaryForm(drawer: HTMLElement) {
+  const drawerView = within(drawer);
+
+  fireEvent.change(drawerView.getByLabelText('治疗时间'), {
+    target: { value: '2026-06-02T16:30:00+08:00' },
+  });
+  fireEvent.change(drawerView.getByLabelText('治疗项目'), {
+    target: { value: '水光补水复诊' },
+  });
+  fireEvent.change(drawerView.getByLabelText('治疗类别'), {
+    target: { value: 'skin_repair' },
+  });
+  fireEvent.change(drawerView.getByLabelText('治疗阶段'), {
+    target: { value: 'D14 复诊' },
+  });
+  fireEvent.change(drawerView.getByLabelText('恢复阶段'), {
+    target: { value: 'D14' },
+  });
+  fireEvent.change(drawerView.getByLabelText('风险等级'), {
+    target: { value: 'watch' },
+  });
+  fireEvent.change(drawerView.getByLabelText('负责人 ID'), {
+    target: { value: 'doctor-lin' },
+  });
+  fireEvent.change(drawerView.getByLabelText('摘要'), {
+    target: { value: '结构化摘要：恢复稳定，安排补水。' },
+  });
+  fireEvent.change(drawerView.getByLabelText('下一步护理'), {
+    target: { value: 'D21 人工回访恢复阶段。' },
+  });
+  fireEvent.change(drawerView.getByLabelText('标签'), {
+    target: { value: '结构化摘要, 复诊' },
+  });
+  fireEvent.change(drawerView.getByLabelText('关联预约 ID（可选）'), {
+    target: { value: 'appt_wang_pending' },
+  });
 }
 
 describe('机构业务页面壳', () => {
@@ -686,6 +764,149 @@ describe('机构业务页面壳', () => {
       ),
     ).toBe(false);
     expectNoSensitiveTimelineContent(container);
+  });
+
+  it('客户详情抽屉可新增结构化治疗摘要并刷新时间线', async () => {
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/customers': [jsonResponse({ records: [customerRecord] })],
+      '/api/institution/customers/cust_wang_repurchase/timeline': [
+        jsonResponse(customerTimelineResponse),
+        jsonResponse(customerTimelineAfterTreatmentSummaryCreate),
+      ],
+      '/api/institution/customers/cust_wang_repurchase/treatment-summaries': [
+        jsonResponse({ record: createdTreatmentSummaryRecord }, { status: 201 }),
+      ],
+    });
+
+    const { container } = render(<CustomerCenterShell />);
+
+    expect(await screen.findByText('王女士')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 王女士' }));
+
+    const drawer = await screen.findByRole('dialog', { name: '客户详情时间线' });
+    const drawerView = within(drawer);
+
+    expect(drawerView.getByRole('button', { name: '添加治疗摘要' })).toBeInTheDocument();
+    fireEvent.click(drawerView.getByRole('button', { name: '添加治疗摘要' }));
+    expect(drawerView.getByLabelText('治疗时间')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('治疗项目')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('治疗类别')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('治疗阶段')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('恢复阶段')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('风险等级')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('负责人 ID')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('摘要')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('下一步护理')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('标签')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('关联预约 ID（可选）')).toBeInTheDocument();
+
+    const openedDrawerText = drawer.textContent ?? '';
+    expect(openedDrawerText).not.toContain('完整治疗记录');
+    expect(openedDrawerText).not.toContain('完整病历正文');
+    expect(openedDrawerText).not.toContain('咨询全文');
+    expect(openedDrawerText).not.toContain('图片');
+    expect(openedDrawerText).not.toContain('文件');
+    expect(openedDrawerText).not.toContain('AI');
+
+    fillTreatmentSummaryForm(drawer);
+    fireEvent.click(drawerView.getByRole('button', { name: '保存治疗摘要' }));
+
+    expect(await screen.findByText('治疗摘要已添加')).toBeInTheDocument();
+    expect(await screen.findByText('水光补水复诊 · D14 复诊')).toBeInTheDocument();
+    expect(screen.getAllByText('结构化摘要：恢复稳定，安排补水。').length).toBeGreaterThan(0);
+
+    const body = mutationBody(
+      fetchMock,
+      '/api/institution/customers/cust_wang_repurchase/treatment-summaries',
+      'POST',
+    );
+    const serializedBody = JSON.stringify(body);
+
+    expect(body).toEqual({
+      treatmentDate: '2026-06-02T16:30:00+08:00',
+      treatmentProject: '水光补水复诊',
+      treatmentCategory: 'skin_repair',
+      treatmentStage: 'D14 复诊',
+      recoveryStage: 'D14',
+      riskLevel: 'watch',
+      ownerUserId: 'doctor-lin',
+      summary: '结构化摘要：恢复稳定，安排补水。',
+      nextCareAction: 'D21 人工回访恢复阶段。',
+      tags: ['结构化摘要', '复诊'],
+      appointmentId: 'appt_wang_pending',
+    });
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) =>
+          fetchPath(input) === '/api/institution/customers/cust_wang_repurchase/timeline',
+      ),
+    ).toHaveLength(2);
+    expect(serializedBody).not.toContain('tenantId');
+    expect(serializedBody).not.toContain('unknownField');
+    expect(serializedBody).not.toContain('fullTreatmentRecord');
+    expect(serializedBody).not.toContain('medicalRecordText');
+    expect(serializedBody).not.toContain('consultationTranscript');
+    expect(serializedBody).not.toContain('phoneNumber');
+    expect(serializedBody).not.toContain('idNumber');
+    expect(serializedBody).not.toContain('rawMedicalRecordNo');
+    expect(serializedBody).not.toContain('完整治疗记录正文');
+    expect(serializedBody).not.toContain('完整病历正文');
+    expect(serializedBody).not.toContain('咨询对话全文');
+    expect(serializedBody).not.toContain('13800000000');
+    expect(serializedBody).not.toContain('110101199001010011');
+    expect(serializedBody).not.toContain('MR-RAW-001');
+    expectNoSensitiveTimelineContent(container);
+  });
+
+  it.each([
+    [400, '字段 summary 不允许包含敏感信息', '字段 summary 不允许包含敏感信息'],
+    [401, '请先登录', '登录状态已失效，请重新登录'],
+    [403, '没有访问权限', '当前账号没有添加治疗摘要的权限'],
+    [404, '记录不存在', '客户不存在或不属于当前租户'],
+    [409, '预约不属于当前客户', '关联预约不属于当前客户或不可用'],
+    [
+      503,
+      'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg stack token secret',
+      '数据服务暂时不可用',
+    ],
+  ])('客户详情抽屉处理治疗摘要创建 %s 错误态且保留输入', async (status, apiMessage, visibleMessage) => {
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/customers': [jsonResponse({ records: [customerRecord] })],
+      '/api/institution/customers/cust_wang_repurchase/timeline': [
+        jsonResponse(customerTimelineResponse),
+      ],
+      '/api/institution/customers/cust_wang_repurchase/treatment-summaries': [
+        jsonResponse({ error: apiMessage }, { status }),
+      ],
+    });
+
+    const { container } = render(<CustomerCenterShell />);
+
+    expect(await screen.findByText('王女士')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 王女士' }));
+
+    const drawer = await screen.findByRole('dialog', { name: '客户详情时间线' });
+    const drawerView = within(drawer);
+    fireEvent.click(drawerView.getByRole('button', { name: '添加治疗摘要' }));
+    fillTreatmentSummaryForm(drawer);
+    fireEvent.click(drawerView.getByRole('button', { name: '保存治疗摘要' }));
+
+    expect(await screen.findByText(visibleMessage)).toBeInTheDocument();
+    expect(drawerView.getByLabelText('治疗项目')).toHaveValue('水光补水复诊');
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) =>
+          fetchPath(input) === '/api/institution/customers/cust_wang_repurchase/timeline',
+      ),
+    ).toHaveLength(1);
+
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('DATABASE_URL');
+    expect(text).not.toContain('postgres://');
+    expect(text).not.toContain('stack');
+    expect(text).not.toContain('token');
+    expect(text).not.toContain('secret');
+    expect(text).not.toContain('select *');
   });
 
   it('客户详情时间线展示加载态和空态', async () => {
