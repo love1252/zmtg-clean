@@ -6,11 +6,13 @@ import type {
 import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
 import {
   transitionFollowUpTask as transitionFollowUpTaskDomain,
+  type FollowUpRiskLevel,
   type FollowUpStatus,
+  type TenantFollowUpTaskFromTreatmentSummarySuggestion,
   type TenantFollowUpTask,
 } from '@/modules/institution/domain/followup-workflow';
 import type { TenantDatabase } from '@/server/db/client';
-import { appointments, customers, followUpTasks } from '@/server/db/schema';
+import { appointments, customers, followUpTasks, treatmentSummaries } from '@/server/db/schema';
 
 type CustomerRow = typeof customers.$inferSelect;
 type AppointmentRow = typeof appointments.$inferSelect;
@@ -55,11 +57,36 @@ type TransitionFollowUpTaskInput = {
   actorId: string;
   occurredAt: string;
 };
+type CreateFollowUpTaskFromTreatmentSummarySuggestionInput = {
+  id: string;
+  tenantId: string;
+  customerId: string;
+  customerDisplayName: string;
+  journeyId: string;
+  stage: string;
+  status?: Extract<FollowUpStatus, 'scheduled' | 'due'>;
+  dueAt: string;
+  suggestedAction: string;
+  riskLevel: FollowUpRiskLevel;
+  sourceTreatmentSummaryId: string;
+  sourceSuggestionKey: string;
+};
 type TransitionFollowUpTaskPersistenceResult =
   | { kind: 'updated'; task: TenantFollowUpTask }
   | { kind: 'not_found' }
   | { kind: 'conflict'; resourceId: string; reason: 'stale_transition' }
   | { kind: 'invalid_transition'; resourceId: string; from: FollowUpStatus; to: FollowUpStatus };
+type CreateFollowUpTaskFromTreatmentSummarySuggestionResult =
+  | { kind: 'created'; task: TenantFollowUpTaskFromTreatmentSummarySuggestion }
+  | { kind: 'conflict'; resourceId: string; reason: 'active_source_follow_up_exists' }
+  | { kind: 'invalid_source'; reason: 'source_treatment_summary_not_found_or_cross_tenant' };
+
+const activeSourceFollowUpStatuses = new Set<FollowUpStatus>([
+  'scheduled',
+  'due',
+  'in_progress',
+  'escalated',
+]);
 
 function omitUndefinedValues<T extends Record<string, unknown>>(values: T): Partial<T> {
   return Object.fromEntries(
@@ -130,6 +157,16 @@ export function mapFollowUpTaskRowToRecord(row: FollowUpTaskRow): TenantFollowUp
   };
 }
 
+export function mapFollowUpTaskSourceRowToRecord(
+  row: FollowUpTaskRow,
+): TenantFollowUpTaskFromTreatmentSummarySuggestion {
+  return {
+    ...mapFollowUpTaskRowToRecord(row),
+    sourceTreatmentSummaryId: row.sourceTreatmentSummaryId ?? '',
+    sourceSuggestionKey: row.sourceSuggestionKey ?? '',
+  };
+}
+
 export function createTenantBusinessRepository(database: TenantDatabase) {
   return {
     async createCustomer(input: CreateCustomerInput): Promise<CustomerRecordSummary> {
@@ -151,6 +188,74 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
     async createAppointment(input: CreateAppointmentInput): Promise<AppointmentRecordSummary> {
       const [row] = await database.insert(appointments).values(input).returning();
       return mapAppointmentRowToRecord(row);
+    },
+    async createFollowUpTaskFromTreatmentSummarySuggestion(
+      input: CreateFollowUpTaskFromTreatmentSummarySuggestionInput,
+    ): Promise<CreateFollowUpTaskFromTreatmentSummarySuggestionResult> {
+      const [sourceSummary] = await database
+        .select({ id: treatmentSummaries.id, customerId: treatmentSummaries.customerId })
+        .from(treatmentSummaries)
+        .where(
+          and(
+            eq(treatmentSummaries.tenantId, input.tenantId),
+            eq(treatmentSummaries.id, input.sourceTreatmentSummaryId),
+            eq(treatmentSummaries.customerId, input.customerId),
+          ),
+        );
+
+      if (!sourceSummary) {
+        return {
+          kind: 'invalid_source',
+          reason: 'source_treatment_summary_not_found_or_cross_tenant',
+        };
+      }
+
+      const existingSourceRows = await database
+        .select()
+        .from(followUpTasks)
+        .where(
+          and(
+            eq(followUpTasks.tenantId, input.tenantId),
+            eq(followUpTasks.sourceTreatmentSummaryId, input.sourceTreatmentSummaryId),
+            eq(followUpTasks.sourceSuggestionKey, input.sourceSuggestionKey),
+          ),
+        );
+      const activeSourceTask = existingSourceRows.find(
+        (row) =>
+          row.tenantId === input.tenantId &&
+          row.sourceTreatmentSummaryId === input.sourceTreatmentSummaryId &&
+          row.sourceSuggestionKey === input.sourceSuggestionKey &&
+          activeSourceFollowUpStatuses.has(row.status),
+      );
+
+      if (activeSourceTask) {
+        return {
+          kind: 'conflict',
+          resourceId: activeSourceTask.id,
+          reason: 'active_source_follow_up_exists',
+        };
+      }
+
+      // Phase 15 PR3 只提供 repository 地基；真实 API 接入前必须单独决定 follow-up quota。
+      const [row] = await database
+        .insert(followUpTasks)
+        .values({
+          id: input.id,
+          tenantId: input.tenantId,
+          customerId: input.customerId,
+          customerDisplayName: input.customerDisplayName,
+          journeyId: input.journeyId,
+          stage: input.stage,
+          status: input.status ?? 'scheduled',
+          dueAt: new Date(input.dueAt),
+          suggestedAction: input.suggestedAction,
+          riskLevel: input.riskLevel,
+          sourceTreatmentSummaryId: input.sourceTreatmentSummaryId,
+          sourceSuggestionKey: input.sourceSuggestionKey,
+        })
+        .returning();
+
+      return { kind: 'created', task: mapFollowUpTaskSourceRowToRecord(row) };
     },
     async customerExistsByTenant(input: CustomerLookupInput): Promise<boolean> {
       const [row] = await database

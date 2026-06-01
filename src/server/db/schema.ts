@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   foreignKey,
   index,
@@ -245,6 +246,7 @@ export const treatmentSummaries = pgTable(
     ...timestamps,
   },
   (table) => ({
+    tenantIdIdUnique: unique('treatment_summaries_tenant_id_id_unique').on(table.tenantId, table.id),
     customerFk: foreignKey({
       name: 'treatment_summaries_tenant_customer_fk',
       columns: [table.tenantId, table.customerId],
@@ -287,6 +289,8 @@ export const followUpTasks = pgTable(
     dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
     suggestedAction: text('suggested_action').notNull(),
     riskLevel: followUpRiskLevelEnum('risk_level').notNull(),
+    sourceTreatmentSummaryId: varchar('source_treatment_summary_id', { length: 64 }),
+    sourceSuggestionKey: varchar('source_suggestion_key', { length: 180 }),
     updatedBy: varchar('updated_by', { length: 96 }),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -297,7 +301,20 @@ export const followUpTasks = pgTable(
       columns: [table.tenantId, table.customerId],
       foreignColumns: [customers.tenantId, customers.id],
     }),
+    sourceTreatmentSummaryFk: foreignKey({
+      name: 'follow_up_tasks_tenant_source_treatment_summary_fk',
+      columns: [table.tenantId, table.sourceTreatmentSummaryId],
+      foreignColumns: [treatmentSummaries.tenantId, treatmentSummaries.id],
+    }),
     tenantStatusIdx: index('follow_up_tasks_tenant_status_idx').on(table.tenantId, table.status),
+    tenantSourceTreatmentSummaryIdx: index(
+      'follow_up_tasks_tenant_source_treatment_summary_idx',
+    ).on(table.tenantId, table.sourceTreatmentSummaryId),
+    activeSourceUniqueIdx: uniqueIndex('follow_up_tasks_active_source_unique_idx')
+      .on(table.tenantId, table.sourceTreatmentSummaryId, table.sourceSuggestionKey)
+      .where(
+        sql`${table.sourceTreatmentSummaryId} is not null and ${table.sourceSuggestionKey} is not null and ${table.status} not in ('completed','cancelled')`,
+      ),
   }),
 );
 
