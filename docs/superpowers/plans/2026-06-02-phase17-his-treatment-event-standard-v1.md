@@ -86,8 +86,8 @@ Phase 17 不做：
 
 新增：
 
-- `docs/superpowers/specs/2026-05-31-phase17-his-treatment-event-standard-v1-design.md`
-- `docs/superpowers/plans/2026-05-31-phase17-his-treatment-event-standard-v1.md`
+- `docs/superpowers/specs/2026-06-02-phase17-his-treatment-event-standard-v1-design.md`
+- `docs/superpowers/plans/2026-06-02-phase17-his-treatment-event-standard-v1.md`
 
 不修改：
 
@@ -130,7 +130,7 @@ PR 2 不应新增：
 
 - `README.md`
 - `docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md`
-- `docs/devlog/2026-05-31.md`
+- `docs/devlog/2026-06-02.md`
 - Phase 17 spec / plan 完成状态。
 
 PR 3 只做收尾文档，不进入真实 HIS 或业务代码。
