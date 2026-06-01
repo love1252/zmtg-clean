@@ -1,0 +1,543 @@
+'use client';
+
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import {
+  CalendarClock,
+  ClipboardList,
+  Filter,
+  Loader2,
+  Search,
+  ShieldCheck,
+  X,
+} from 'lucide-react';
+import {
+  listTreatmentSummaries,
+  type TenantBusinessClientError,
+  type TreatmentSummaryListClientQuery,
+} from '@/modules/institution/client/tenant-business-client';
+import {
+  type InstitutionTreatmentSummaryListItem,
+  type TreatmentSummaryListPageInfo,
+} from '@/modules/institution/domain/treatment-summaries';
+import {
+  followUpRiskLevelLabels,
+  formatBusinessDateTime,
+} from '@/modules/institution/domain/tenant-business-view-models';
+import type { FollowUpRiskLevel } from '@/modules/institution/domain/followup-workflow';
+import {
+  InstitutionPageState,
+  getInstitutionPageStateFromClientError,
+  type InstitutionPageStateProps,
+} from '@/modules/institution/components/InstitutionPageState';
+import { InstitutionSectionHeader } from '@/modules/institution/components/InstitutionSectionHeader';
+import { cn } from '@/shared/utils/cn';
+
+type TreatmentSummaryFilterForm = {
+  customerId: string;
+  treatmentProject: string;
+  riskLevel: '' | FollowUpRiskLevel;
+  from: string;
+  to: string;
+};
+
+const emptyTreatmentSummaryFilterForm: TreatmentSummaryFilterForm = {
+  customerId: '',
+  treatmentProject: '',
+  riskLevel: '',
+  from: '',
+  to: '',
+};
+
+const riskLevelToneClasses = {
+  normal: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  watch: 'border-amber-200 bg-amber-50 text-amber-700',
+  urgent: 'border-rose-200 bg-rose-50 text-rose-700',
+} as const satisfies Record<FollowUpRiskLevel, string>;
+
+const riskLevelOptions = Object.entries(followUpRiskLevelLabels) as [
+  FollowUpRiskLevel,
+  string,
+][];
+
+function toIsoDateTime(value: string) {
+  if (!value) return undefined;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+  return new Date(timestamp).toISOString();
+}
+
+function trimOrUndefined(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function formToTreatmentSummaryQuery(
+  form: TreatmentSummaryFilterForm,
+): TreatmentSummaryListClientQuery {
+  return {
+    customerId: trimOrUndefined(form.customerId),
+    treatmentProject: trimOrUndefined(form.treatmentProject),
+    riskLevel: form.riskLevel || undefined,
+    from: toIsoDateTime(form.from),
+    to: toIsoDateTime(form.to),
+  };
+}
+
+function visibleTreatmentSummaryErrorState(
+  error: TenantBusinessClientError,
+): InstitutionPageStateProps {
+  return getInstitutionPageStateFromClientError(error, {
+    forbiddenMessage: '当前账号没有查看治疗摘要的权限',
+    fallbackMessage: '治疗摘要请求失败',
+    unavailableMessage: '治疗摘要数据暂时不可用',
+  });
+}
+
+function displayValue(value: string | null | undefined) {
+  return value && value.trim().length > 0 ? value : '-';
+}
+
+function safeTagList(tags: string[]) {
+  return tags.length > 0 ? tags : ['未标记'];
+}
+
+function SummaryField({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+      {label}：{displayValue(value)}
+    </span>
+  );
+}
+
+function TreatmentSummaryDetailDialog({
+  onClose,
+  record,
+}: {
+  onClose: () => void;
+  record: InstitutionTreatmentSummaryListItem;
+}) {
+  const rows = [
+    ['摘要 ID', record.id],
+    ['客户 ID', record.customerId],
+    ['预约 ID', record.appointmentId ?? '-'],
+    ['治疗时间', formatBusinessDateTime(record.treatmentDate)],
+    ['治疗项目', record.treatmentProject],
+    ['治疗类别', record.treatmentCategory],
+    ['治疗阶段', record.treatmentStage],
+    ['恢复阶段', record.recoveryStage],
+    ['风险等级', followUpRiskLevelLabels[record.riskLevel]],
+    ['负责人', record.ownerUserId],
+    ['摘要', record.summary],
+    ['下一步护理建议', record.nextCareAction],
+    ['标签', safeTagList(record.tags).join('、')],
+    ['创建时间', formatBusinessDateTime(record.createdAt)],
+    ['更新时间', formatBusinessDateTime(record.updatedAt)],
+  ] as const;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 px-3 py-4 backdrop-blur-sm sm:items-center">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label="治疗摘要安全详情"
+        className="max-h-[88vh] w-full max-w-3xl overflow-hidden rounded-[24px] border border-white/80 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.24)]"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+          <div>
+            <p className="text-sm font-semibold text-blue-600">安全详情</p>
+            <h3 className="mt-1 text-xl font-semibold text-slate-950">
+              {record.treatmentProject}
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              仅展示治疗摘要列表 DTO 字段，不展示完整正文或原始隐私信息。
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="关闭安全详情"
+            onClick={onClose}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <dl className="grid max-h-[62vh] gap-3 overflow-y-auto px-5 py-5 sm:grid-cols-2">
+          {rows.map(([label, value]) => (
+            <div
+              key={label}
+              className={cn(
+                'rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4',
+                label === '摘要' || label === '下一步护理建议' ? 'sm:col-span-2' : '',
+              )}
+            >
+              <dt className="text-xs font-semibold text-slate-500">{label}</dt>
+              <dd className="mt-2 break-words text-sm font-semibold leading-6 text-slate-800">
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    </div>
+  );
+}
+
+export function TreatmentSummaryManagementShell() {
+  const [records, setRecords] = useState<InstitutionTreatmentSummaryListItem[]>([]);
+  const [pageInfo, setPageInfo] = useState<TreatmentSummaryListPageInfo | null>(null);
+  const [form, setForm] = useState<TreatmentSummaryFilterForm>(
+    emptyTreatmentSummaryFilterForm,
+  );
+  const [activeQuery, setActiveQuery] = useState<TreatmentSummaryListClientQuery>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [errorState, setErrorState] = useState<InstitutionPageStateProps | null>(null);
+  const [selectedRecord, setSelectedRecord] =
+    useState<InstitutionTreatmentSummaryListItem | null>(null);
+
+  async function loadTreatmentSummaries(input: {
+    query: TreatmentSummaryListClientQuery;
+    mode: 'replace' | 'append';
+  }) {
+    const { mode, query } = input;
+    if (mode === 'append') {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
+    setErrorState(null);
+
+    const result = await listTreatmentSummaries(query);
+
+    if (result.ok) {
+      setRecords((current) =>
+        mode === 'append' ? [...current, ...result.records] : result.records,
+      );
+      setPageInfo(result.pageInfo);
+    } else {
+      if (mode === 'replace') {
+        setRecords([]);
+        setPageInfo(null);
+      }
+      setErrorState(visibleTreatmentSummaryErrorState(result.error));
+    }
+
+    if (mode === 'append') {
+      setIsLoadingMore(false);
+    } else {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadInitialTreatmentSummaries() {
+      setIsLoading(true);
+      setErrorState(null);
+      const result = await listTreatmentSummaries();
+
+      if (!isActive) return;
+
+      if (result.ok) {
+        setRecords(result.records);
+        setPageInfo(result.pageInfo);
+      } else {
+        setRecords([]);
+        setPageInfo(null);
+        setErrorState(visibleTreatmentSummaryErrorState(result.error));
+      }
+
+      setIsLoading(false);
+    }
+
+    void loadInitialTreatmentSummaries();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const riskCounts = useMemo(
+    () =>
+      riskLevelOptions.map(([riskLevel, label]) => ({
+        riskLevel,
+        label,
+        count: records.filter((record) => record.riskLevel === riskLevel).length,
+      })),
+    [records],
+  );
+
+  function handleFieldChange(key: keyof TreatmentSummaryFilterForm, value: string) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function handleApplyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextQuery = formToTreatmentSummaryQuery(form);
+    setActiveQuery(nextQuery);
+    void loadTreatmentSummaries({ query: nextQuery, mode: 'replace' });
+  }
+
+  function handleResetFilters() {
+    setForm(emptyTreatmentSummaryFilterForm);
+    setActiveQuery({});
+    void loadTreatmentSummaries({ query: {}, mode: 'replace' });
+  }
+
+  function handleLoadMore() {
+    if (!pageInfo?.nextCursor) return;
+    void loadTreatmentSummaries({
+      query: { ...activeQuery, cursor: pageInfo.nextCursor },
+      mode: 'append',
+    });
+  }
+
+  return (
+    <section className="space-y-5">
+      <InstitutionSectionHeader
+        eyebrow="治疗摘要"
+        title="治疗摘要管理"
+        description="按当前机构上下文读取结构化治疗摘要，只展示安全 DTO 字段，用于列表筛选、分页和安全详情查看。"
+        tone="blue"
+        action={
+          <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+            <ShieldCheck className="h-4 w-4" />
+            当前机构只读
+          </div>
+        }
+      />
+
+      <form
+        className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl"
+        onSubmit={handleApplyFilters}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="grid h-9 w-9 place-items-center rounded-2xl bg-blue-50 text-blue-600">
+              <Filter className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-slate-950">筛选</h3>
+              <p className="mt-0.5 text-xs text-slate-500">
+                仅支持 customerId、treatmentProject、riskLevel、from、to。
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600"
+            >
+              重置筛选
+            </button>
+            <button
+              type="submit"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-slate-950 px-3 text-sm font-semibold text-white"
+            >
+              <Search className="h-4 w-4" />
+              应用筛选
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <label className="text-sm font-semibold text-slate-600">
+            客户 ID
+            <input
+              value={form.customerId}
+              onChange={(event) => handleFieldChange('customerId', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+            />
+          </label>
+          <label className="text-sm font-semibold text-slate-600">
+            治疗项目
+            <input
+              value={form.treatmentProject}
+              onChange={(event) => handleFieldChange('treatmentProject', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+            />
+          </label>
+          <label className="text-sm font-semibold text-slate-600">
+            风险等级
+            <select
+              value={form.riskLevel}
+              onChange={(event) => handleFieldChange('riskLevel', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+            >
+              <option value="">全部</option>
+              {riskLevelOptions.map(([riskLevel, label]) => (
+                <option key={riskLevel} value={riskLevel}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-slate-600">
+            开始时间
+            <input
+              type="datetime-local"
+              value={form.from}
+              onChange={(event) => handleFieldChange('from', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+            />
+          </label>
+          <label className="text-sm font-semibold text-slate-600">
+            结束时间
+            <input
+              type="datetime-local"
+              value={form.to}
+              onChange={(event) => handleFieldChange('to', event.target.value)}
+              className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+            />
+          </label>
+        </div>
+      </form>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        {riskCounts.map((item) => (
+          <article
+            key={item.riskLevel}
+            className={cn(
+              'rounded-[22px] border p-4 shadow-sm',
+              riskLevelToneClasses[item.riskLevel],
+            )}
+          >
+            <div className="text-xs font-semibold opacity-80">{item.label}</div>
+            <div className="mt-2 text-2xl font-semibold">{isLoading ? '--' : item.count}</div>
+          </article>
+        ))}
+      </section>
+
+      <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-slate-950 text-white">
+              <ClipboardList className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-950">治疗摘要列表</h3>
+              <p className="mt-1 text-sm text-slate-500">按治疗时间倒序排列。</p>
+            </div>
+          </div>
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
+            {pageInfo ? `limit ${pageInfo.limit}` : 'limit 默认'}
+          </span>
+        </div>
+
+        {isLoading ? (
+          <InstitutionPageState
+            kind="loading"
+            title="正在加载治疗摘要..."
+            className="mt-4"
+          />
+        ) : null}
+
+        {!isLoading && errorState ? (
+          <InstitutionPageState {...errorState} className="mt-4" />
+        ) : null}
+
+        {!isLoading && !errorState && records.length === 0 ? (
+          <InstitutionPageState
+            kind="empty"
+            title="暂无治疗摘要"
+            description="当前筛选条件下没有可展示的治疗摘要。"
+            className="mt-4"
+          />
+        ) : null}
+
+        {!isLoading && !errorState && records.length > 0 ? (
+          <div className="mt-4 space-y-3">
+            {records.map((record) => (
+              <section
+                key={record.id}
+                className="rounded-2xl border border-slate-200/80 bg-white/86 p-4"
+              >
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-base font-semibold text-slate-950">
+                        {record.treatmentProject}
+                      </span>
+                      <span
+                        className={cn(
+                          'rounded-full border px-2.5 py-1 text-xs font-semibold',
+                          riskLevelToneClasses[record.riskLevel],
+                        )}
+                      >
+                        风险：{followUpRiskLevelLabels[record.riskLevel]}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <SummaryField
+                        label="治疗日期"
+                        value={formatBusinessDateTime(record.treatmentDate)}
+                      />
+                      <SummaryField label="治疗类别" value={record.treatmentCategory} />
+                      <SummaryField label="治疗阶段" value={record.treatmentStage} />
+                      <SummaryField label="恢复阶段" value={record.recoveryStage} />
+                      <SummaryField label="负责人" value={record.ownerUserId} />
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">
+                      摘要：{displayValue(record.summary)}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      下一步护理建议：{displayValue(record.nextCareAction)}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {safeTagList(record.tags).map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col gap-2 lg:items-end">
+                    <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600">
+                      <CalendarClock className="h-4 w-4" />
+                      {formatBusinessDateTime(record.updatedAt)}
+                    </div>
+                    <button
+                      type="button"
+                      aria-label={`查看安全详情 ${record.id}`}
+                      onClick={() => setSelectedRecord(record)}
+                      className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      查看安全详情
+                    </button>
+                  </div>
+                </div>
+              </section>
+            ))}
+
+            {pageInfo?.hasMore && pageInfo.nextCursor ? (
+              <div className="flex justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={handleLoadMore}
+                  disabled={isLoadingMore}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                >
+                  {isLoadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  加载更多治疗摘要
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </article>
+
+      {selectedRecord ? (
+        <TreatmentSummaryDetailDialog
+          record={selectedRecord}
+          onClose={() => setSelectedRecord(null)}
+        />
+      ) : null}
+    </section>
+  );
+}

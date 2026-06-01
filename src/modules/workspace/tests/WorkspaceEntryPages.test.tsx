@@ -97,6 +97,40 @@ const auditEventRecord = {
   token: 'sk_test_phase8_should_not_render',
 };
 
+const treatmentSummaryManagementRecord = {
+  id: 'trt_phase14_management',
+  customerId: 'cust_phase5_closeout',
+  appointmentId: 'appt_phase5_closeout',
+  treatmentDate: '2026-06-02T16:30:00+08:00',
+  treatmentProject: 'Phase14 治疗摘要管理项目',
+  treatmentCategory: 'phase14_skin_repair',
+  treatmentStage: 'Phase14 D14 复诊',
+  recoveryStage: 'Phase14 D14',
+  riskLevel: 'watch',
+  ownerUserId: 'doctor-phase14',
+  summary: 'Phase14 结构化摘要：恢复稳定，安排补水。',
+  nextCareAction: 'Phase14 D21 人工回访恢复阶段。',
+  tags: ['Phase14 结构化摘要', '复诊'],
+  createdAt: '2026-06-02T16:30:00+08:00',
+  updatedAt: '2026-06-02T17:00:00+08:00',
+  tenantId: 'demo-tenant-001',
+  phoneNumber: '13800001252',
+  idNumber: '110101199001010011',
+  medicalRecordNo: 'MR202605310001',
+  fullTreatmentRecord: '完整治疗记录正文不应展示',
+  medicalRecordText: '完整病历正文不应展示',
+  diagnosisText: '诊疗原文不应展示',
+  consultationTranscript: '咨询对话全文不应展示',
+  imageFileOriginal: '图片文件原文不应展示',
+  aiGeneratedContent: 'AI 生成内容不应展示',
+  externalSyncPayload: '外部系统同步原文不应展示',
+  requestBody: { phoneNumber: '13800001252' },
+  sql: 'select * from treatment_summaries',
+  stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+  token: 'sk_test_phase14_should_not_render',
+  secret: 'phase14-raw-secret',
+};
+
 const platformAuditEventRecord = {
   id: 'audit_phase8_platform',
   tenantId: 'demo-tenant-001',
@@ -429,6 +463,8 @@ type WorkspaceFetchOptions = {
   customers?: unknown[];
   appointments?: unknown[];
   followups?: unknown[];
+  treatmentSummaries?: unknown[];
+  treatmentSummaryPageInfo?: unknown;
   auditEvents?: unknown[];
   platformAuditEvents?: unknown[];
   platformTenants?: unknown[];
@@ -464,6 +500,12 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     customers = [customerRecord, postCareCustomerRecord],
     appointments = [appointmentRecord, rescheduleAppointmentRecord],
     followups = [urgentFollowUpRecord, { ...followUpRecord, status: 'scheduled' }],
+    treatmentSummaries = [treatmentSummaryManagementRecord],
+    treatmentSummaryPageInfo = {
+      hasMore: false,
+      limit: 50,
+      nextCursor: null,
+    },
     auditEvents = [auditEventRecord],
     platformAuditEvents = [platformAuditEventRecord],
     platformTenants = [platformTenantRecord],
@@ -507,6 +549,13 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
 
       if (path === '/api/institution/followups') {
         return jsonResponse({ records: followups });
+      }
+
+      if (path.startsWith('/api/institution/treatment-summaries')) {
+        return jsonResponse({
+          records: treatmentSummaries,
+          pageInfo: treatmentSummaryPageInfo,
+        });
       }
 
       if (path === '/api/institution/audit-events') {
@@ -723,6 +772,31 @@ function expectNoSensitiveAuditContent(container: HTMLElement) {
   expect(text).not.toContain('sk_test_phase8_should_not_render');
 }
 
+function expectNoSensitiveTreatmentSummaryManagementContent(container: HTMLElement) {
+  const text = container.textContent ?? '';
+
+  expect(text).not.toContain('tenantId');
+  expect(text).not.toContain('13800001252');
+  expect(text).not.toContain('110101199001010011');
+  expect(text).not.toContain('MR202605310001');
+  expect(text).not.toContain('完整治疗记录正文不应展示');
+  expect(text).not.toContain('完整病历正文不应展示');
+  expect(text).not.toContain('诊疗原文不应展示');
+  expect(text).not.toContain('咨询对话全文不应展示');
+  expect(text).not.toContain('图片文件原文不应展示');
+  expect(text).not.toContain('AI 生成内容不应展示');
+  expect(text).not.toContain('外部系统同步原文不应展示');
+  expect(text).not.toContain('requestBody');
+  expect(text).not.toContain('select * from treatment_summaries');
+  expect(text).not.toContain('DATABASE_URL');
+  expect(text).not.toContain('postgres://');
+  expect(text).not.toContain('stack');
+  expect(text).not.toContain('token');
+  expect(text).not.toContain('secret');
+  expect(text).not.toContain('sk_test_phase14_should_not_render');
+  expect(text).not.toContain('phase14-raw-secret');
+}
+
 function expectNoSensitivePlatformAuditContent(container: HTMLElement) {
   const text = container.textContent ?? '';
 
@@ -800,7 +874,7 @@ describe('工作台入口页面', () => {
 
   it('机构工作台首页从真实 API 派生指标和行动摘要', async () => {
     const fetchMock = mockWorkspaceFetch();
-    render(<HospitalPage />);
+    const { container } = render(<HospitalPage />);
 
     expect(await screen.findByRole('heading', { name: /让咨询团队/ })).toBeInTheDocument();
     expect(screen.getByText('先看到增长机会')).toBeInTheDocument();
@@ -850,6 +924,20 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('今日随访任务')).toBeInTheDocument();
     expect(await screen.findByText('Phase5 D7 回访')).toBeInTheDocument();
     expect(screen.getByText('不会调用 AI provider，也不会自动触达客户。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
+    expect(screen.getByRole('heading', { name: '治疗摘要管理' })).toBeInTheDocument();
+    expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
+    expect(screen.getByText('治疗类别：phase14_skin_repair')).toBeInTheDocument();
+    expect(screen.getByText('摘要：Phase14 结构化摘要：恢复稳定，安排补水。')).toBeInTheDocument();
+    const treatmentSummaryCall = fetchMock.mock.calls.find(
+      ([input]) => fetchPath(input) === '/api/institution/treatment-summaries',
+    );
+    expect(treatmentSummaryCall).toBeDefined();
+    expect(treatmentSummaryCall?.[1]).toEqual({ cache: 'no-store' });
+    expect(treatmentSummaryCall?.[1]?.method).toBeUndefined();
+    expect(treatmentSummaryCall?.[1]?.body).toBeUndefined();
+    expectNoSensitiveTreatmentSummaryManagementContent(container);
 
     fireEvent.click(screen.getByRole('button', { name: '审计日志' }));
     expect(screen.getByRole('heading', { name: '审计日志' })).toBeInTheDocument();
@@ -1123,7 +1211,7 @@ describe('工作台入口页面', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '客服工作台' }));
     expect(screen.getByText('客服工作台仍为后续占位')).toBeInTheDocument();
-    expect(screen.getByText('已真实接入：工作台、客户中心、预约中心、智能随访、审计日志。')).toBeInTheDocument();
+    expect(screen.getByText('已真实接入：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志。')).toBeInTheDocument();
     expect(screen.getByText('后续占位：客服工作台、知识库、数据分析。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '知识库' }));
@@ -1152,6 +1240,10 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByRole('button', { name: '移动导航：智能随访' }));
     expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();
     expect(await screen.findByText('Phase5 D7 回访')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '移动导航：治疗摘要管理' }));
+    expect(screen.getByRole('heading', { name: '治疗摘要管理' })).toBeInTheDocument();
+    expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '移动导航：审计日志' }));
     expect(screen.getByRole('heading', { name: '审计日志' })).toBeInTheDocument();
