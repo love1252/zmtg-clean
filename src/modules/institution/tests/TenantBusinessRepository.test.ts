@@ -25,6 +25,12 @@ const andMock = vi.hoisted(() =>
     operator: 'and',
   })),
 );
+const isNotNullMock = vi.hoisted(() =>
+  vi.fn((column: unknown) => ({
+    column,
+    operator: 'isNotNull',
+  })),
+);
 
 vi.mock('drizzle-orm', async (importOriginal) => {
   const actual = await importOriginal<typeof import('drizzle-orm')>();
@@ -32,6 +38,7 @@ vi.mock('drizzle-orm', async (importOriginal) => {
     ...actual,
     and: andMock,
     eq: eqMock,
+    isNotNull: isNotNullMock,
   };
 });
 
@@ -290,6 +297,9 @@ describe('租户业务仓储映射', () => {
       riskLevel: 'urgent',
       updatedBy: null,
       updatedAt: null,
+      source: null,
+      sourceTreatmentSummaryId: null,
+      sourceSuggestionKey: null,
     });
     expect(followUpTask).not.toHaveProperty('createdAt');
   });
@@ -333,6 +343,56 @@ describe('租户业务仓储映射', () => {
       operator: 'eq',
       value: 'demo-tenant-001',
     });
+  });
+
+  it('按来源筛选随访任务时始终绑定当前 tenantId 并返回安全来源字段', async () => {
+    const sourceQuery = createSelectDatabase([sourceFollowUpTaskRow]);
+
+    const sourceRecords = await createTenantBusinessRepository(
+      sourceQuery.database,
+    ).listFollowUpTasksByTenant({
+      tenantId: 'demo-tenant-001',
+      filters: {
+        source: 'treatment_summary',
+        sourceTreatmentSummaryId: null,
+      },
+    });
+
+    expect(sourceQuery.from).toHaveBeenCalledWith(followUpTasks);
+    expect(sourceQuery.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: followUpTasks.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: followUpTasks.sourceTreatmentSummaryId, operator: 'isNotNull' },
+        { column: followUpTasks.sourceSuggestionKey, operator: 'isNotNull' },
+      ],
+      operator: 'and',
+    });
+    expect(sourceRecords).toEqual([mapFollowUpTaskRowToRecord(sourceFollowUpTaskRow)]);
+    expect(JSON.stringify(sourceRecords)).not.toMatch(
+      /phoneNumber|idNumber|medicalRecordNo|完整治疗记录正文|完整病历正文|咨询对话全文|sql|stack|token|secret|DATABASE_URL/i,
+    );
+
+    const summaryQuery = createSelectDatabase([sourceFollowUpTaskRow]);
+
+    const summaryRecords = await createTenantBusinessRepository(
+      summaryQuery.database,
+    ).listFollowUpTasksByTenant({
+      tenantId: 'demo-tenant-001',
+      filters: {
+        source: null,
+        sourceTreatmentSummaryId: 'ts_001',
+      },
+    });
+
+    expect(summaryQuery.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: followUpTasks.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: followUpTasks.sourceTreatmentSummaryId, operator: 'eq', value: 'ts_001' },
+        { column: followUpTasks.sourceSuggestionKey, operator: 'isNotNull' },
+      ],
+      operator: 'and',
+    });
+    expect(summaryRecords).toEqual([mapFollowUpTaskRowToRecord(sourceFollowUpTaskRow)]);
   });
 
   it('创建客户写入 customers、使用调用方 tenantId 并返回脱敏记录', async () => {
@@ -665,6 +725,7 @@ describe('租户业务仓储映射', () => {
 
     expect(record).toEqual({
       ...mapFollowUpTaskRowToRecord(sourceFollowUpTaskRow),
+      source: 'treatment_summary',
       sourceTreatmentSummaryId: 'ts_001',
       sourceSuggestionKey: 'ts_001:risk-fast-check:offset-1d',
     });

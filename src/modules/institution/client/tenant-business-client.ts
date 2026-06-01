@@ -68,6 +68,11 @@ export type TreatmentSummaryListClientQuery = {
   cursor?: string | number | null;
 };
 
+export type FollowUpTaskListClientQuery = {
+  source?: string | number | null;
+  sourceTreatmentSummaryId?: string | number | null;
+};
+
 export type TenantBusinessClientErrorKind =
   | 'unauthorized'
   | 'forbidden'
@@ -161,6 +166,7 @@ const treatmentSummaryListQueryKeys = [
   'limit',
   'cursor',
 ] as const;
+const followUpTaskListQueryKeys = ['source', 'sourceTreatmentSummaryId'] as const;
 
 function getFetcher(options?: TenantBusinessClientOptions) {
   return options?.fetcher ?? globalThis.fetch;
@@ -364,6 +370,26 @@ function buildTreatmentSummaryListPath(query: TreatmentSummaryListClientQuery = 
   return queryString.length > 0
     ? `/api/institution/treatment-summaries?${queryString}`
     : '/api/institution/treatment-summaries';
+}
+
+function buildFollowUpTaskListPath(query: FollowUpTaskListClientQuery = {}) {
+  const params = new URLSearchParams();
+
+  for (const key of followUpTaskListQueryKeys) {
+    const value = query[key];
+    if (value === undefined || value === null) continue;
+
+    const normalized = String(value).trim();
+    if (normalized.length === 0) continue;
+    if (key === 'source' && normalized !== 'treatment_summary') continue;
+
+    params.set(key, normalized);
+  }
+
+  const queryString = params.toString();
+  return queryString.length > 0
+    ? `/api/institution/followups?${queryString}`
+    : '/api/institution/followups';
 }
 
 function isTreatmentSummaryListPageInfo(input: unknown): input is TreatmentSummaryListPageInfo {
@@ -631,8 +657,27 @@ export function createTreatmentSummary(
   );
 }
 
-export function listFollowUpTasks(options?: TenantBusinessClientOptions) {
-  return requestRecords<TenantFollowUpTask>('/api/institution/followups', options);
+export function listFollowUpTasks(options?: TenantBusinessClientOptions): Promise<TenantBusinessListResult<TenantFollowUpTask>>;
+export function listFollowUpTasks(
+  query?: FollowUpTaskListClientQuery,
+  options?: TenantBusinessClientOptions,
+): Promise<TenantBusinessListResult<TenantFollowUpTask>>;
+export function listFollowUpTasks(
+  queryOrOptions?: FollowUpTaskListClientQuery | TenantBusinessClientOptions,
+  options?: TenantBusinessClientOptions,
+) {
+  const firstArgIsOptions =
+    isJsonObject(queryOrOptions) &&
+    Object.prototype.hasOwnProperty.call(queryOrOptions, 'fetcher') &&
+    options === undefined;
+  const query = firstArgIsOptions
+    ? undefined
+    : (queryOrOptions as FollowUpTaskListClientQuery | undefined);
+  const clientOptions = firstArgIsOptions
+    ? (queryOrOptions as TenantBusinessClientOptions)
+    : options;
+
+  return requestRecords<TenantFollowUpTask>(buildFollowUpTaskListPath(query), clientOptions);
 }
 
 export function transitionFollowUpTask(

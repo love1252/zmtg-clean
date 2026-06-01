@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import type {
   AppointmentRecordSummary,
   AppointmentStatus,
@@ -13,6 +13,7 @@ import {
 } from '@/modules/institution/domain/followup-workflow';
 import type { TenantDatabase } from '@/server/db/client';
 import { appointments, customers, followUpTasks, treatmentSummaries } from '@/server/db/schema';
+import type { FollowUpTaskListFilters } from '@/modules/institution/server/follow-up-task-query-parser';
 
 type CustomerRow = typeof customers.$inferSelect;
 type AppointmentRow = typeof appointments.$inferSelect;
@@ -71,6 +72,12 @@ type CreateFollowUpTaskFromTreatmentSummarySuggestionInput = {
   sourceTreatmentSummaryId: string;
   sourceSuggestionKey: string;
 };
+type ListFollowUpTasksByTenantInput =
+  | string
+  | {
+      tenantId: string;
+      filters?: FollowUpTaskListFilters;
+    };
 type TransitionFollowUpTaskPersistenceResult =
   | { kind: 'updated'; task: TenantFollowUpTask }
   | { kind: 'not_found' }
@@ -141,6 +148,8 @@ export function mapAppointmentRowToRecord(row: AppointmentRow): AppointmentRecor
 }
 
 export function mapFollowUpTaskRowToRecord(row: FollowUpTaskRow): TenantFollowUpTask {
+  const hasTreatmentSummarySource = Boolean(row.sourceTreatmentSummaryId && row.sourceSuggestionKey);
+
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -154,6 +163,9 @@ export function mapFollowUpTaskRowToRecord(row: FollowUpTaskRow): TenantFollowUp
     riskLevel: row.riskLevel,
     updatedBy: row.updatedBy,
     updatedAt: row.updatedAt?.toISOString() ?? null,
+    source: hasTreatmentSummarySource ? 'treatment_summary' : null,
+    sourceTreatmentSummaryId: hasTreatmentSummarySource ? row.sourceTreatmentSummaryId : null,
+    sourceSuggestionKey: hasTreatmentSummarySource ? row.sourceSuggestionKey : null,
   };
 }
 
@@ -162,9 +174,54 @@ export function mapFollowUpTaskSourceRowToRecord(
 ): TenantFollowUpTaskFromTreatmentSummarySuggestion {
   return {
     ...mapFollowUpTaskRowToRecord(row),
+    source: 'treatment_summary',
     sourceTreatmentSummaryId: row.sourceTreatmentSummaryId ?? '',
     sourceSuggestionKey: row.sourceSuggestionKey ?? '',
   };
+}
+
+function normalizeFollowUpTaskListInput(input: ListFollowUpTasksByTenantInput): {
+  tenantId: string;
+  filters: FollowUpTaskListFilters;
+} {
+  if (typeof input === 'string') {
+    return {
+      tenantId: input,
+      filters: {
+        source: null,
+        sourceTreatmentSummaryId: null,
+      },
+    };
+  }
+
+  return {
+    tenantId: input.tenantId,
+    filters: input.filters ?? {
+      source: null,
+      sourceTreatmentSummaryId: null,
+    },
+  };
+}
+
+function buildFollowUpTaskListWhere(input: {
+  tenantId: string;
+  filters: FollowUpTaskListFilters;
+}) {
+  const conditions = [eq(followUpTasks.tenantId, input.tenantId)];
+
+  if (input.filters.sourceTreatmentSummaryId) {
+    conditions.push(
+      eq(followUpTasks.sourceTreatmentSummaryId, input.filters.sourceTreatmentSummaryId),
+      isNotNull(followUpTasks.sourceSuggestionKey),
+    );
+  } else if (input.filters.source === 'treatment_summary') {
+    conditions.push(
+      isNotNull(followUpTasks.sourceTreatmentSummaryId),
+      isNotNull(followUpTasks.sourceSuggestionKey),
+    );
+  }
+
+  return conditions.length === 1 ? conditions[0] : and(...conditions);
 }
 
 export function createTenantBusinessRepository(database: TenantDatabase) {
@@ -377,11 +434,12 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         .where(eq(appointments.tenantId, tenantId));
       return rows.map(mapAppointmentRowToRecord);
     },
-    async listFollowUpTasksByTenant(tenantId: string) {
+    async listFollowUpTasksByTenant(input: ListFollowUpTasksByTenantInput) {
+      const normalized = normalizeFollowUpTaskListInput(input);
       const rows = await database
         .select()
         .from(followUpTasks)
-        .where(eq(followUpTasks.tenantId, tenantId));
+        .where(buildFollowUpTaskListWhere(normalized));
       return rows.map(mapFollowUpTaskRowToRecord);
     },
   };

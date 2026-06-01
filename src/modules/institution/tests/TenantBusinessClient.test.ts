@@ -156,6 +156,63 @@ describe('机构业务页面 client helper', () => {
     expect(url.searchParams.get('sql')).toBeNull();
   });
 
+  it('读取随访来源列表时只发送 source 白名单 query', async () => {
+    const fetcher = createFetchMock(
+      jsonResponse({
+        records: [
+          {
+            id: 'fu_from_summary',
+            customerId: 'cust_001',
+            customerDisplayName: '王女士',
+            journeyId: 'treatment_followup_watch_risk_followup',
+            stage: '关注风险治疗后随访',
+            status: 'scheduled',
+            dueAt: '2026-06-05T08:30:00.000Z',
+            suggestedAction: '人工确认恢复情况',
+            riskLevel: 'watch',
+            updatedBy: null,
+            updatedAt: null,
+            source: 'treatment_summary',
+            sourceTreatmentSummaryId: 'trt_001',
+            sourceSuggestionKey: 'trt_001:watch_risk_followup:3d',
+          },
+        ],
+      }),
+    );
+
+    const result = await listFollowUpTasks(
+      {
+        source: 'treatment_summary',
+        sourceTreatmentSummaryId: 'trt_001',
+        tenantId: 'other-tenant',
+        sql: 'select * from follow_up_tasks',
+        token: 'sk_test_should_not_send',
+      } as never,
+      { fetcher },
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      records: [
+        expect.objectContaining({
+          id: 'fu_from_summary',
+          source: 'treatment_summary',
+          sourceTreatmentSummaryId: 'trt_001',
+          sourceSuggestionKey: 'trt_001:watch_risk_followup:3d',
+        }),
+      ],
+    });
+
+    const url = new URL(requestPath(fetcher), 'http://localhost');
+    expect(url.pathname).toBe('/api/institution/followups');
+    expect([...url.searchParams.keys()]).toEqual(['source', 'sourceTreatmentSummaryId']);
+    expect(url.searchParams.get('source')).toBe('treatment_summary');
+    expect(url.searchParams.get('sourceTreatmentSummaryId')).toBe('trt_001');
+    expect(url.searchParams.get('tenantId')).toBeNull();
+    expect(url.searchParams.get('sql')).toBeNull();
+    expect(url.searchParams.get('token')).toBeNull();
+  });
+
   it('读取治疗摘要随访建议时只发送 summaryId 并解析 suggestions', async () => {
     const fetcher = createFetchMock(
       jsonResponse({
