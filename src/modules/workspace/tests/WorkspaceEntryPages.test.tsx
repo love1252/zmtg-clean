@@ -242,6 +242,39 @@ const customerTimelineResponse = {
       consultationTranscript: '咨询对话全文不应展示',
     },
   ],
+  treatmentSummaries: [
+    {
+      id: 'trt_phase12_closeout',
+      appointmentId: 'appt_phase5_closeout',
+      treatmentDate: '2026-06-01T12:10:00+08:00',
+      treatmentProject: 'Phase12 光电修复',
+      treatmentCategory: 'phase12_laser_repair',
+      treatmentStage: 'Phase12 D7 复诊',
+      recoveryStage: 'Phase12 D7',
+      riskLevel: 'watch',
+      ownerUserId: 'doctor-phase12',
+      summary: 'Phase12 结构化摘要：恢复稳定，安排补水护理。',
+      nextCareAction: 'Phase12 D14 人工回访恢复阶段。',
+      tags: ['Phase12 结构化摘要', '术后关怀'],
+      createdAt: '2026-06-01T12:10:00+08:00',
+      updatedAt: '2026-06-01T12:10:00+08:00',
+      phoneNumber: '13800001252',
+      idNumber: '110101199001010011',
+      medicalRecordNo: 'MR202605310001',
+      treatmentRecord: '完整治疗记录正文不应展示',
+      medicalRecordBody: '完整病历正文不应展示',
+      diagnosisText: '诊疗原文不应展示',
+      consultationTranscript: '咨询对话全文不应展示',
+      imageFileOriginal: '图片文件原文不应展示',
+      aiGeneratedContent: 'AI 生成内容不应展示',
+      externalSyncPayload: '外部系统同步原文不应展示',
+      requestBody: { phoneNumber: '13800001252' },
+      sql: 'select * from treatment_summaries',
+      stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+      token: 'sk_test_phase12_should_not_render',
+      secret: 'phase12-raw-secret',
+    },
+  ],
   auditEvents: [
     {
       id: 'audit_phase7_smoke',
@@ -277,6 +310,30 @@ const customerTimelineResponse = {
       status: 'pending_confirmation',
       source: 'appointment',
       relatedRecordId: 'appt_phase5_closeout',
+    },
+    {
+      id: 'treatment_summary:trt_phase12_closeout',
+      type: 'treatment_summary',
+      occurredAt: '2026-06-01T12:10:00+08:00',
+      title: 'Phase12 光电修复 · Phase12 D7 复诊',
+      summary: 'Phase12 结构化摘要：恢复稳定，安排补水护理。',
+      status: 'watch',
+      source: 'treatment_summary',
+      relatedRecordId: 'trt_phase12_closeout',
+      riskLevel: 'watch',
+      tags: ['Phase12 结构化摘要', '术后关怀'],
+      treatmentRecord: '完整治疗记录正文不应展示',
+      medicalRecordBody: '完整病历正文不应展示',
+      diagnosisText: '诊疗原文不应展示',
+      consultationTranscript: '咨询对话全文不应展示',
+      imageFileOriginal: '图片文件原文不应展示',
+      aiGeneratedContent: 'AI 生成内容不应展示',
+      externalSyncPayload: '外部系统同步原文不应展示',
+      requestBody: { phoneNumber: '13800001252' },
+      sql: 'select * from treatment_summaries',
+      stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+      token: 'sk_test_phase12_should_not_render',
+      secret: 'phase12-raw-secret',
     },
     {
       id: 'follow_up:fu_phase5_closeout',
@@ -473,14 +530,23 @@ function expectNoSensitiveCustomerTimelineContent(container: HTMLElement) {
   expect(text).not.toContain('110101199001010011');
   expect(text).not.toContain('MR202605310001');
   expect(text).not.toContain('完整治疗记录正文不应展示');
+  expect(text).not.toContain('完整病历正文不应展示');
+  expect(text).not.toContain('诊疗原文不应展示');
   expect(text).not.toContain('咨询对话全文不应展示');
+  expect(text).not.toContain('图片文件原文不应展示');
+  expect(text).not.toContain('AI 生成内容不应展示');
+  expect(text).not.toContain('外部系统同步原文不应展示');
+  expect(text).not.toContain('requestBody');
   expect(text).not.toContain('select * from audit_events');
+  expect(text).not.toContain('select * from treatment_summaries');
   expect(text).not.toContain('DATABASE_URL');
   expect(text).not.toContain('postgres://');
   expect(text).not.toContain('stack');
   expect(text).not.toContain('token');
   expect(text).not.toContain('secret');
   expect(text).not.toContain('sk_test_phase7_should_not_render');
+  expect(text).not.toContain('sk_test_phase12_should_not_render');
+  expect(text).not.toContain('phase12-raw-secret');
 }
 
 function expectNoSensitiveAuditContent(container: HTMLElement) {
@@ -649,6 +715,21 @@ describe('工作台入口页面', () => {
     expect(screen.getAllByText('Phase5 预约复诊').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Phase5 D7 回访').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Phase5 收尾人工回访').length).toBeGreaterThan(0);
+    expect(screen.getByText('治疗结构化摘要')).toBeInTheDocument();
+    expect(screen.getAllByText('Phase12 光电修复').length).toBeGreaterThan(0);
+    expect(screen.getByText('治疗时间：2026-06-01 12:10')).toBeInTheDocument();
+    expect(screen.getByText('类别：phase12_laser_repair')).toBeInTheDocument();
+    expect(screen.getAllByText('阶段：Phase12 D7 复诊').length).toBeGreaterThan(0);
+    expect(screen.getByText('恢复：Phase12 D7')).toBeInTheDocument();
+    expect(screen.getAllByText('风险：关注').length).toBeGreaterThan(0);
+    expect(screen.getByText('负责人：doctor-phase12')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('Phase12 结构化摘要：恢复稳定，安排补水护理。').length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText('下一步护理：Phase12 D14 人工回访恢复阶段。')).toBeInTheDocument();
+    expect(screen.getAllByText('Phase12 结构化摘要').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('术后关怀').length).toBeGreaterThan(0);
+    expect(screen.getByText('Phase12 光电修复 · Phase12 D7 复诊')).toBeInTheDocument();
     expect(screen.getByText('审计：read')).toBeInTheDocument();
     expect(screen.getByText('audit_phase7_smoke')).toBeInTheDocument();
     expect(screen.getAllByText('allowed / allowed_by_policy').length).toBeGreaterThan(0);
@@ -667,6 +748,28 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByRole('button', { name: '关闭客户详情' }));
     expect(screen.queryByRole('dialog', { name: '客户详情时间线' })).not.toBeInTheDocument();
     expect(screen.getByText('Phase5 客户A')).toBeInTheDocument();
+  });
+
+  it('机构入口 smoke 覆盖客户详情治疗摘要空态', async () => {
+    mockWorkspaceFetch({
+      timeline: {
+        ...customerTimelineResponse,
+        treatmentSummaries: [],
+        timeline: customerTimelineResponse.timeline.filter(
+          (event) => event.type !== 'treatment_summary',
+        ),
+      },
+    });
+    render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
+    expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
+
+    expect(await screen.findByRole('dialog', { name: '客户详情时间线' })).toBeInTheDocument();
+    expect(screen.getByText('治疗结构化摘要')).toBeInTheDocument();
+    expect(screen.getByText('暂无治疗摘要')).toBeInTheDocument();
   });
 
   it('机构入口 smoke 覆盖客户创建配额错误态', async () => {

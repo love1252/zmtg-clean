@@ -22,6 +22,7 @@
 - Phase 9：平台端租户管理基础版，包括租户套餐 / 配额数据底座、平台端租户只读 API、租户管理 UI 和 smoke / 文档收尾
 - Phase 10：平台套餐配额 enforcement 轻量版，包括配额 helper、客户 / 预约创建 API 阻断、前端稳定错误态和 smoke / 文档收尾
 - Phase 11：平台商业化健康只读运营辅助，包括商业化健康派生逻辑、平台端摘要 UI、配额快照风险 / 配置缺失 / quota denied 信号展示和 smoke / 文档收尾
+- Phase 12：治疗记录结构化摘要 v1，包括治疗摘要数据底座、客户详情 timeline API 接入、客户详情抽屉展示和 smoke / 文档收尾
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -78,9 +79,18 @@ Phase 11 已完成：
 - smoke / 单元测试覆盖平台入口展示、套餐覆盖、配额风险、缺失配置、quota denied 聚合、只读请求和敏感字段不展示
 - Phase 11 不包含套餐购买、套餐变更、续费、支付、合同、发票、租户冻结 / 恢复、自动升级套餐、自动触达客户或租户、治疗记录、AI / RAG / Agent、企微、OAuth 或 Webhook
 
+Phase 12 已完成：
+
+- 新增最小 `treatment_summaries` 治疗结构化摘要数据底座、Drizzle migration、demo seed、repository 和 DTO 白名单
+- `GET /api/institution/customers/[customerId]/timeline` 已返回 `treatmentSummaries`，并在 `timeline` 中增加 `type: "treatment_summary"` 节点
+- 客户详情抽屉已展示治疗时间、项目、类别、阶段、恢复阶段、风险等级、负责人、摘要、下一步护理建议和标签
+- workspace / customer detail smoke 覆盖客户中心进入详情、治疗摘要展示、治疗节点展示、无治疗摘要空态和敏感字段不展示
+- Phase 12 不包含完整治疗记录正文、完整病历正文、咨询对话全文、治疗写入 UI、AI provider、AI 生成治疗建议、Agent、RAG、企微、HIS / CRM / OTA、OAuth、Webhook、支付或外部系统同步
+
 后续阶段会依次加入：
 
-- 治疗记录结构化摘要与客服会话
+- Phase 13 Plan Mode：重新评估平台租户状态管理、更多资源配额 enforcement、知识库 / RAG 基础准备、审计高级治理和商业化管理增强
+- 客服会话、治疗摘要写入 / 编辑和完整治疗记录能力需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费
