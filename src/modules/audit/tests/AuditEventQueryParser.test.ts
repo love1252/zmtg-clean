@@ -93,6 +93,28 @@ describe('审计查询参数 parser', () => {
         limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
       },
     });
+
+    expect(
+      parseAuditEventQueryParams(
+        params({
+          resource: 'treatment_summary',
+          action: 'create',
+          result: 'denied',
+          reason: 'invalid_treatment_summary_payload',
+        }),
+      ),
+    ).toEqual({
+      ok: true,
+      query: {
+        filters: {
+          resource: 'treatment_summary',
+          action: 'create',
+          result: 'denied',
+          reason: 'invalid_treatment_summary_payload',
+        },
+        limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
+      },
+    });
   });
 
   it('拒绝非白名单字段，避免 tenantId 或任意 SQL 参数进入查询', () => {

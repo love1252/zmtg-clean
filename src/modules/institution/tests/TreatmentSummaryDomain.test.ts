@@ -102,7 +102,7 @@ describe('治疗结构化摘要领域模型', () => {
     expect(dto.tags).toEqual(['术后关怀']);
   });
 
-  it('Phase 12 PR 2 不新增治疗摘要 API route 或 UI 文件', () => {
+  it('Phase 13 PR 3 只新增治疗摘要创建 API route，不新增 UI 文件', () => {
     const apiFiles = listFiles(join(process.cwd(), 'src/app/api')).filter((file) =>
       /treatment-summary|treatment-summaries/i.test(file),
     );
@@ -110,7 +110,12 @@ describe('治疗结构化摘要领域模型', () => {
       (file) => /treatment-summary|treatment-summaries/i.test(file),
     );
 
-    expect(apiFiles).toEqual([]);
+    expect(apiFiles).toEqual([
+      join(
+        process.cwd(),
+        'src/app/api/institution/customers/[customerId]/treatment-summaries/route.ts',
+      ),
+    ]);
     expect(uiFiles).toEqual([]);
   });
 });
