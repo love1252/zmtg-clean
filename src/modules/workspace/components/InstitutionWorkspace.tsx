@@ -23,6 +23,7 @@ import {
   type InstitutionPageStateProps,
 } from '@/modules/institution/components/InstitutionPageState';
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
+import { TreatmentSummaryManagementShell } from '@/modules/institution/components/TreatmentSummaryManagementShell';
 import {
   listAppointments,
   listCustomers,
@@ -65,6 +66,7 @@ const realInstitutionViews = [
   'customers',
   'appointments',
   'followups',
+  'treatmentSummaries',
   'audit',
 ] as const satisfies readonly InstitutionViewId[];
 
@@ -300,6 +302,8 @@ export function InstitutionWorkspace() {
               <AppointmentCenterShell />
             ) : activeView === 'followups' ? (
               <SmartFollowUpShell />
+            ) : activeView === 'treatmentSummaries' ? (
+              <TreatmentSummaryManagementShell />
             ) : activeView === 'audit' ? (
               <InstitutionAuditEventsShell />
             ) : (
@@ -548,7 +552,7 @@ function InstitutionDashboardHome({
           </div>
           <div className="mt-5 space-y-3">
             {[
-              '只调用客户、预约、随访 GET API。',
+              '只调用客户、预约、随访 GET API，治疗摘要管理页另行读取治疗摘要 GET API。',
               '首页不提交 tenantId，也不发送 POST / PATCH / DELETE。',
               '摘要只基于当前返回 records 派生，无法计算时显示空态。',
             ].map((item) => (
@@ -574,7 +578,7 @@ function PlaceholderInstitutionView({ label }: { label: string }) {
       description="本入口不会在 Phase 6 触发客服、知识库或数据分析真实功能请求。"
       action={
         <div className="space-y-2 text-sm leading-6 text-slate-500">
-          <p>已真实接入：工作台、客户中心、预约中心、智能随访、审计日志。</p>
+          <p>已真实接入：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志。</p>
           <p>后续占位：客服工作台、知识库、数据分析。</p>
         </div>
       }

@@ -7,6 +7,7 @@ import {
   listAppointments,
   listCustomers,
   listFollowUpTasks,
+  listTreatmentSummaries,
   transitionFollowUpTask,
   updateAppointment,
   updateCustomer,
@@ -26,6 +27,11 @@ function createFetchMock(response: Response) {
 function requestBody(fetcher: typeof fetch) {
   const [, init] = vi.mocked(fetcher).mock.calls[0] ?? [];
   return JSON.parse(String(init?.body)) as Record<string, unknown>;
+}
+
+function requestPath(fetcher: typeof fetch) {
+  const [input] = vi.mocked(fetcher).mock.calls[0] ?? [];
+  return String(input);
 }
 
 describe('机构业务页面 client helper', () => {
@@ -61,6 +67,91 @@ describe('机构业务页面 client helper', () => {
     expect(followUpFetcher).toHaveBeenCalledWith('/api/institution/followups', {
       cache: 'no-store',
     });
+  });
+
+  it('读取治疗摘要列表时只发送白名单 query 并解析分页信息', async () => {
+    const fetcher = createFetchMock(
+      jsonResponse({
+        records: [
+          {
+            id: 'trt_001',
+            customerId: 'cust_001',
+            appointmentId: 'appt_001',
+            treatmentDate: '2026-06-02T16:30:00+08:00',
+            treatmentProject: '水光补水复诊',
+            treatmentCategory: 'skin_repair',
+            treatmentStage: 'D14 复诊',
+            recoveryStage: 'D14',
+            riskLevel: 'watch',
+            ownerUserId: 'doctor-lin',
+            summary: '结构化摘要：恢复稳定，安排补水。',
+            nextCareAction: 'D21 人工回访恢复阶段。',
+            tags: ['结构化摘要', '复诊'],
+            createdAt: '2026-06-02T16:30:00+08:00',
+            updatedAt: '2026-06-02T16:30:00+08:00',
+          },
+        ],
+        pageInfo: {
+          hasMore: true,
+          limit: 25,
+          nextCursor: 'cursor_next',
+        },
+      }),
+    );
+
+    const result = await listTreatmentSummaries(
+      {
+        customerId: 'cust_001',
+        treatmentProject: '水光补水复诊',
+        riskLevel: 'watch',
+        from: '2026-06-01T00:00:00.000Z',
+        to: '2026-06-03T00:00:00.000Z',
+        limit: 25,
+        cursor: 'cursor_current',
+        tenantId: 'other-tenant',
+        sql: 'select * from treatment_summaries',
+      } as never,
+      { fetcher },
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      records: [
+        expect.objectContaining({
+          id: 'trt_001',
+          customerId: 'cust_001',
+          treatmentProject: '水光补水复诊',
+          riskLevel: 'watch',
+        }),
+      ],
+      pageInfo: {
+        hasMore: true,
+        limit: 25,
+        nextCursor: 'cursor_next',
+      },
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining('/api/institution/treatment-summaries?'),
+      { cache: 'no-store' },
+    );
+
+    const url = new URL(requestPath(fetcher), 'http://localhost');
+    expect(url.pathname).toBe('/api/institution/treatment-summaries');
+    expect([...url.searchParams.keys()]).toEqual([
+      'customerId',
+      'treatmentProject',
+      'riskLevel',
+      'from',
+      'to',
+      'limit',
+      'cursor',
+    ]);
+    expect(url.searchParams.get('customerId')).toBe('cust_001');
+    expect(url.searchParams.get('treatmentProject')).toBe('水光补水复诊');
+    expect(url.searchParams.get('riskLevel')).toBe('watch');
+    expect(url.searchParams.get('limit')).toBe('25');
+    expect(url.searchParams.get('tenantId')).toBeNull();
+    expect(url.searchParams.get('sql')).toBeNull();
   });
 
   it('读取客户详情 timeline 时只发送 GET 请求且不包含 tenantId', async () => {
@@ -105,6 +196,48 @@ describe('机构业务页面 client helper', () => {
     expect(String(path)).not.toContain('tenantId');
     expect(init?.method).toBeUndefined();
     expect(init?.body).toBeUndefined();
+  });
+
+  it('治疗摘要列表错误响应保持稳定且不透出敏感细节', async () => {
+    const forbiddenFetcher = createFetchMock(
+      jsonResponse({ error: '没有访问权限' }, { status: 403 }),
+    );
+    const unavailableFetcher = createFetchMock(
+      jsonResponse(
+        {
+          error:
+            'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg stack token secret select * from treatment_summaries',
+        },
+        { status: 503 },
+      ),
+    );
+
+    await expect(listTreatmentSummaries({}, { fetcher: forbiddenFetcher })).resolves.toEqual({
+      ok: false,
+      error: {
+        kind: 'forbidden',
+        message: '没有访问权限',
+        status: 403,
+      },
+    });
+
+    const unavailableResult = await listTreatmentSummaries({}, { fetcher: unavailableFetcher });
+    const serialized = JSON.stringify(unavailableResult);
+
+    expect(unavailableResult).toEqual({
+      ok: false,
+      error: {
+        kind: 'service_unavailable',
+        message: '数据服务暂时不可用',
+        status: 503,
+      },
+    });
+    expect(serialized).not.toContain('DATABASE_URL');
+    expect(serialized).not.toContain('postgres://');
+    expect(serialized).not.toContain('select *');
+    expect(serialized).not.toContain('stack');
+    expect(serialized).not.toContain('token');
+    expect(serialized).not.toContain('secret');
   });
 
   it('解析错误响应为稳定错误结构', async () => {

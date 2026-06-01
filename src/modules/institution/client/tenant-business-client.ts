@@ -8,6 +8,8 @@ import type {
 import type {
   CreateTreatmentSummaryDraft,
   CustomerTimelineTreatmentSummary,
+  InstitutionTreatmentSummaryListItem,
+  TreatmentSummaryListPageInfo,
 } from '@/modules/institution/domain/treatment-summaries';
 
 export type CreateCustomerClientPayload = Omit<CustomerRecordSummary, 'id' | 'tenantId'>;
@@ -44,6 +46,16 @@ export type CreateTreatmentSummaryClientPayload = Omit<
   appointmentId?: string | null;
 };
 
+export type TreatmentSummaryListClientQuery = {
+  customerId?: string | number | null;
+  treatmentProject?: string | number | null;
+  riskLevel?: string | number | null;
+  from?: string | number | null;
+  to?: string | number | null;
+  limit?: string | number | null;
+  cursor?: string | number | null;
+};
+
 export type TenantBusinessClientErrorKind =
   | 'unauthorized'
   | 'forbidden'
@@ -69,6 +81,14 @@ export type TenantBusinessMutationResult<T> =
 
 export type CustomerTimelineClientResult =
   | { ok: true; timeline: CustomerTimelineResponse }
+  | { ok: false; error: TenantBusinessClientError };
+
+export type TreatmentSummaryListClientResult =
+  | {
+      ok: true;
+      records: InstitutionTreatmentSummaryListItem[];
+      pageInfo: TreatmentSummaryListPageInfo;
+    }
   | { ok: false; error: TenantBusinessClientError };
 
 type TenantBusinessClientOptions = {
@@ -114,6 +134,15 @@ const createTreatmentSummaryPayloadKeys = [
   'nextCareAction',
   'tags',
   'appointmentId',
+] as const;
+const treatmentSummaryListQueryKeys = [
+  'customerId',
+  'treatmentProject',
+  'riskLevel',
+  'from',
+  'to',
+  'limit',
+  'cursor',
 ] as const;
 
 function getFetcher(options?: TenantBusinessClientOptions) {
@@ -294,6 +323,81 @@ async function requestRecords<T>(
     }
 
     return { ok: true, records: payload.records as T[] };
+  } catch {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+}
+
+function buildTreatmentSummaryListPath(query: TreatmentSummaryListClientQuery = {}) {
+  const params = new URLSearchParams();
+
+  for (const key of treatmentSummaryListQueryKeys) {
+    const value = query[key];
+    if (value === undefined || value === null) continue;
+
+    const normalized = String(value).trim();
+    if (normalized.length === 0) continue;
+    params.set(key, normalized);
+  }
+
+  const queryString = params.toString();
+  return queryString.length > 0
+    ? `/api/institution/treatment-summaries?${queryString}`
+    : '/api/institution/treatment-summaries';
+}
+
+function isTreatmentSummaryListPageInfo(input: unknown): input is TreatmentSummaryListPageInfo {
+  return (
+    isJsonObject(input) &&
+    typeof input.hasMore === 'boolean' &&
+    typeof input.limit === 'number' &&
+    (typeof input.nextCursor === 'string' || input.nextCursor === null)
+  );
+}
+
+export async function listTreatmentSummaries(
+  query?: TreatmentSummaryListClientQuery,
+  options?: TenantBusinessClientOptions,
+): Promise<TreatmentSummaryListClientResult> {
+  const fetcher = getFetcher(options);
+  if (!fetcher) {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+
+  try {
+    const response = await fetcher(buildTreatmentSummaryListPath(query), {
+      cache: 'no-store',
+    });
+    const payload = await readJson(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: createClientError({ status: response.status, payload }),
+      };
+    }
+
+    if (
+      !isJsonObject(payload) ||
+      !Array.isArray(payload.records) ||
+      !isTreatmentSummaryListPageInfo(payload.pageInfo)
+    ) {
+      return {
+        ok: false,
+        error: { kind: 'unknown', message: '请求失败', status: response.status },
+      };
+    }
+
+    return {
+      ok: true,
+      records: payload.records as InstitutionTreatmentSummaryListItem[],
+      pageInfo: payload.pageInfo,
+    };
   } catch {
     return {
       ok: false,
