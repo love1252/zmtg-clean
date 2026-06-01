@@ -18,6 +18,7 @@ export const ACCESS_RESOURCES = [
   'customer',
   'appointment',
   'follow_up',
+  'treatment_summary',
   'open_connection',
   'permission_policy',
   'audit_log',
@@ -108,9 +109,19 @@ const accessPolicies: AccessPolicy[] = [
     resource: 'follow_up',
     actions: ['read_own_tenant', 'update'],
   },
+  {
+    role: 'tenant_admin',
+    resource: 'treatment_summary',
+    actions: ['read_own_tenant', 'create'],
+  },
 ];
 
-const sensitiveResources: ProtectedResource[] = ['customer', 'appointment', 'follow_up'];
+const sensitiveResources: ProtectedResource[] = [
+  'customer',
+  'appointment',
+  'follow_up',
+  'treatment_summary',
+];
 
 function hasPolicy(role: AccessRole, resource: ProtectedResource, action: ProtectedAction) {
   return accessPolicies.some(

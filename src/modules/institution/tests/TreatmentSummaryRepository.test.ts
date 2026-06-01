@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TenantDatabase } from '@/server/db/client';
-import { treatmentSummaries } from '@/server/db/schema';
+import { appointments, treatmentSummaries } from '@/server/db/schema';
 import {
   createTreatmentSummaryRepository,
   mapTreatmentSummaryRowToRecord,
 } from '@/modules/institution/server/treatment-summary-repository';
+
+type TreatmentSummaryRow = typeof treatmentSummaries.$inferSelect;
 
 const eqMock = vi.hoisted(() =>
   vi.fn((column: unknown, value: unknown) => ({
@@ -59,6 +61,41 @@ function createTreatmentSummarySelectDatabase(rows: unknown[] = []) {
     database: { select } as unknown as TenantDatabase,
     from,
     orderBy,
+    select,
+    where,
+  };
+}
+
+function createTreatmentSummaryInsertDatabase(row: TreatmentSummaryRow) {
+  const returning = vi.fn(async () => [row]);
+  const values = vi.fn((value: unknown) => {
+    void value;
+    return { returning };
+  });
+  const insert = vi.fn((table: unknown) => {
+    void table;
+    return { values };
+  });
+
+  return {
+    database: { insert } as unknown as TenantDatabase,
+    insert,
+    returning,
+    values,
+  };
+}
+
+function createAppointmentOwnershipDatabase(rows: Array<{ customerId: string }> = []) {
+  const where = vi.fn(async (condition: unknown) => {
+    void condition;
+    return rows;
+  });
+  const from = vi.fn(() => ({ where }));
+  const select = vi.fn(() => ({ from }));
+
+  return {
+    database: { select } as unknown as TenantDatabase,
+    from,
     select,
     where,
   };
@@ -158,5 +195,106 @@ describe('治疗结构化摘要仓储', () => {
     });
 
     expect(records).toEqual([mapTreatmentSummaryRowToRecord(treatmentSummaryRow)]);
+  });
+
+  it('创建治疗摘要时只写入服务端确认的 tenantId、customerId 和白名单字段', async () => {
+    const insertedRow = {
+      ...treatmentSummaryRow,
+      id: 'trt_created_001',
+      appointmentId: null,
+      tags: ['结构化摘要', '术后关怀'],
+    };
+    const query = createTreatmentSummaryInsertDatabase(insertedRow);
+
+    const record = await createTreatmentSummaryRepository(query.database).createTreatmentSummary({
+      id: 'trt_created_001',
+      tenantId: 'demo-tenant-001',
+      customerId: 'cust_qin_review',
+      appointmentId: null,
+      treatmentDate: new Date('2026-05-31T01:30:00.000Z'),
+      treatmentProject: '水光补水复诊',
+      treatmentCategory: 'injection_review',
+      treatmentStage: 'D7 复诊',
+      recoveryStage: 'D7',
+      riskLevel: 'watch',
+      ownerUserId: 'doctor-lin',
+      summary: '恢复稳定，局部泛红已缓解。',
+      nextCareAction: 'D14 人工复诊提醒。',
+      tags: ['结构化摘要', '术后关怀'],
+      phoneNumber: '13800000000',
+      fullTreatmentRecord: '完整治疗记录正文',
+      DATABASE_URL: 'postgres://example',
+    } as Parameters<
+      ReturnType<typeof createTreatmentSummaryRepository>['createTreatmentSummary']
+    >[0]);
+
+    expect(query.insert).toHaveBeenCalledWith(treatmentSummaries);
+    expect(query.values).toHaveBeenCalledWith({
+      id: 'trt_created_001',
+      tenantId: 'demo-tenant-001',
+      customerId: 'cust_qin_review',
+      appointmentId: null,
+      treatmentDate: new Date('2026-05-31T01:30:00.000Z'),
+      treatmentProject: '水光补水复诊',
+      treatmentCategory: 'injection_review',
+      treatmentStage: 'D7 复诊',
+      recoveryStage: 'D7',
+      riskLevel: 'watch',
+      ownerUserId: 'doctor-lin',
+      summary: '恢复稳定，局部泛红已缓解。',
+      nextCareAction: 'D14 人工复诊提醒。',
+      tags: ['结构化摘要', '术后关怀'],
+    });
+    expect(JSON.stringify(query.values.mock.calls[0]?.[0])).not.toMatch(
+      /phoneNumber|fullTreatmentRecord|DATABASE_URL|tenantIdFromPayload|secret|token/i,
+    );
+    expect(record).toEqual(mapTreatmentSummaryRowToRecord(insertedRow));
+    expect(JSON.stringify(record)).not.toMatch(/phoneNumber|fullTreatmentRecord|DATABASE_URL|secret|token/i);
+  });
+
+  it('提供 appointmentId 归属校验 helper，区分同租户同客户、客户不匹配和不可见预约', async () => {
+    const matchedQuery = createAppointmentOwnershipDatabase([{ customerId: 'cust_qin_review' }]);
+    const mismatchQuery = createAppointmentOwnershipDatabase([{ customerId: 'cust_other' }]);
+    const notFoundQuery = createAppointmentOwnershipDatabase([]);
+
+    await expect(
+      createTreatmentSummaryRepository(
+        matchedQuery.database,
+      ).checkAppointmentBelongsToTenantAndCustomer({
+        tenantId: 'demo-tenant-001',
+        customerId: 'cust_qin_review',
+        appointmentId: 'appt_qin_arrived',
+      }),
+    ).resolves.toEqual({ kind: 'matched' });
+
+    expect(matchedQuery.select).toHaveBeenCalledWith({ customerId: appointments.customerId });
+    expect(matchedQuery.from).toHaveBeenCalledWith(appointments);
+    expect(matchedQuery.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: appointments.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: appointments.id, operator: 'eq', value: 'appt_qin_arrived' },
+      ],
+      operator: 'and',
+    });
+
+    await expect(
+      createTreatmentSummaryRepository(
+        mismatchQuery.database,
+      ).checkAppointmentBelongsToTenantAndCustomer({
+        tenantId: 'demo-tenant-001',
+        customerId: 'cust_qin_review',
+        appointmentId: 'appt_other_customer',
+      }),
+    ).resolves.toEqual({ kind: 'customer_mismatch' });
+
+    await expect(
+      createTreatmentSummaryRepository(
+        notFoundQuery.database,
+      ).checkAppointmentBelongsToTenantAndCustomer({
+        tenantId: 'demo-tenant-001',
+        customerId: 'cust_qin_review',
+        appointmentId: 'appt_other_tenant',
+      }),
+    ).resolves.toEqual({ kind: 'not_found_or_not_owned' });
   });
 });
