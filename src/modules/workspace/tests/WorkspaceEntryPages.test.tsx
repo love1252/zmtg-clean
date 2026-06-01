@@ -1053,7 +1053,7 @@ describe('工作台入口页面', () => {
     expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();
     expect(screen.getByText('今日随访任务')).toBeInTheDocument();
     expect(await screen.findByText('Phase5 D7 回访')).toBeInTheDocument();
-    expect(screen.getByText('不会调用 AI provider，也不会自动触达客户。')).toBeInTheDocument();
+    expect(screen.getByText('不会调用 AI provider，客户沟通需由人员确认执行。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
     expect(screen.getByRole('heading', { name: '治疗摘要管理' })).toBeInTheDocument();

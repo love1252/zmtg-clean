@@ -26,6 +26,7 @@ import {
 } from '@/modules/institution/domain/followups';
 import type {
   FollowUpStatus,
+  FollowUpTaskSource,
   TenantFollowUpTask,
 } from '@/modules/institution/domain/followup-workflow';
 import {
@@ -40,6 +41,8 @@ const statusOptions = Object.entries(followUpStatusLabels) as [
   FollowUpStatus,
   string,
 ][];
+
+type FollowUpSourceFilter = 'all' | 'treatment_summary';
 
 const riskToneClasses = {
   urgent: 'border-rose-200 bg-rose-50 text-rose-700',
@@ -82,8 +85,13 @@ function buildStatusCounts(tasks: TenantFollowUpTask[]) {
   }));
 }
 
+function sourceLabel(source: FollowUpTaskSource | undefined) {
+  return source === 'treatment_summary' ? '治疗摘要' : null;
+}
+
 export function SmartFollowUpShell() {
   const [tasks, setTasks] = useState<TenantFollowUpTask[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<FollowUpSourceFilter>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [listErrorState, setListErrorState] = useState<InstitutionPageStateProps | null>(null);
   const [taskErrors, setTaskErrors] = useState<Record<string, string>>({});
@@ -95,7 +103,11 @@ export function SmartFollowUpShell() {
     async function loadFollowUpTasks() {
       setIsLoading(true);
       setListErrorState(null);
-      const result = await listFollowUpTasks();
+      const result = await listFollowUpTasks(
+        sourceFilter === 'treatment_summary'
+          ? { source: 'treatment_summary' }
+          : undefined,
+      );
 
       if (!isActive) return;
 
@@ -114,7 +126,7 @@ export function SmartFollowUpShell() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [sourceFilter]);
 
   const sortedTasks = useMemo(() => sortFollowUpTasksForWorkQueue(tasks), [tasks]);
 
@@ -180,9 +192,24 @@ export function SmartFollowUpShell() {
               <h3 className="text-lg font-semibold text-slate-950">今日随访任务</h3>
               <p className="mt-1 text-sm text-slate-500">优先处理高风险、临近到期任务。</p>
             </div>
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
-              真实 API
-            </span>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <label className="text-xs font-semibold text-slate-500">
+                来源筛选
+                <select
+                  value={sourceFilter}
+                  onChange={(event) =>
+                    setSourceFilter(event.target.value as FollowUpSourceFilter)
+                  }
+                  className="ml-2 h-9 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 outline-none focus:border-violet-300"
+                >
+                  <option value="all">全部来源</option>
+                  <option value="treatment_summary">治疗摘要来源</option>
+                </select>
+              </label>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
+                真实 API
+              </span>
+            </div>
           </div>
 
           {isLoading ? (
@@ -210,6 +237,7 @@ export function SmartFollowUpShell() {
             <div className="mt-4 space-y-3">
               {sortedTasks.map((task) => {
                 const nextStatuses = getAllowedFollowUpNextStatuses(task.status);
+                const currentSourceLabel = sourceLabel(task.source);
 
                 return (
                   <div
@@ -231,6 +259,11 @@ export function SmartFollowUpShell() {
                           >
                             风险：{followUpRiskLevelLabels[task.riskLevel]}
                           </span>
+                          {currentSourceLabel ? (
+                            <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                              来源：{currentSourceLabel}
+                            </span>
+                          ) : null}
                         </div>
                         <p className="mt-3 text-sm font-semibold text-slate-800">
                           {task.stage}
@@ -241,6 +274,20 @@ export function SmartFollowUpShell() {
                         <p className="mt-2 text-xs font-semibold text-slate-400">
                           到期时间：{formatBusinessDateTime(task.dueAt)}
                         </p>
+                        {currentSourceLabel ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {task.sourceTreatmentSummaryId ? (
+                              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                                来源摘要：{task.sourceTreatmentSummaryId}
+                              </span>
+                            ) : null}
+                            {task.sourceSuggestionKey ? (
+                              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                                建议 key：{task.sourceSuggestionKey}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="min-w-[220px] rounded-2xl bg-slate-50 p-3">
@@ -337,7 +384,7 @@ export function SmartFollowUpShell() {
             </div>
 
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-800">
-              不会调用 AI provider，也不会自动触达客户。
+              不会调用 AI provider，客户沟通需由人员确认执行。
             </div>
           </article>
         </aside>

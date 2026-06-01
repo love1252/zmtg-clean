@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppointmentCenterShell } from '@/modules/institution/components/AppointmentCenterShell';
 import { InstitutionAuditEventsShell } from '@/modules/institution/components/InstitutionAuditEventsShell';
@@ -45,6 +45,30 @@ const followUpRecord = {
   riskLevel: 'urgent',
   updatedBy: null,
   updatedAt: null,
+};
+
+const treatmentSummaryFollowUpRecord = {
+  ...followUpRecord,
+  id: 'fu_treatment_summary_source',
+  customerDisplayName: '陈女士',
+  stage: '治疗摘要 D3 护理随访',
+  status: 'scheduled',
+  dueAt: '2026-05-31T09:00:00+08:00',
+  suggestedAction: '根据治疗摘要建议，人工确认恢复情况。',
+  riskLevel: 'watch',
+  source: 'treatment_summary',
+  sourceTreatmentSummaryId: 'trt_source_001',
+  sourceSuggestionKey: 'trt_source_001:watch_risk_followup:3d',
+  phoneNumber: '13800000000',
+  idNumber: '110101199001010011',
+  medicalRecordNo: 'MR-RAW-001',
+  treatmentRecord: '完整治疗记录正文',
+  medicalRecordBody: '完整病历正文',
+  consultationTranscript: '咨询对话全文',
+  sql: 'select * from follow_up_tasks',
+  stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+  token: 'sk_test_should_not_render',
+  secret: 'raw-secret',
 };
 
 const auditEventRecord = {
@@ -1285,6 +1309,60 @@ describe('机构业务页面壳', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/institution/followups', { cache: 'no-store' });
   });
 
+  it('智能随访展示治疗摘要来源标签并支持来源筛选', async () => {
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/followups': [
+        jsonResponse({ records: [followUpRecord, treatmentSummaryFollowUpRecord] }),
+      ],
+      '/api/institution/followups?source=treatment_summary': [
+        jsonResponse({ records: [treatmentSummaryFollowUpRecord] }),
+      ],
+    });
+    const { container } = render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('陈女士')).toBeInTheDocument();
+    expect(screen.getByText('来源：治疗摘要')).toBeInTheDocument();
+    expect(screen.getByText('来源摘要：trt_source_001')).toBeInTheDocument();
+    expect(screen.getByText('建议 key：trt_source_001:watch_risk_followup:3d')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('来源筛选'), {
+      target: { value: 'treatment_summary' },
+    });
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/institution/followups?source=treatment_summary',
+        { cache: 'no-store' },
+      ),
+    );
+    expect(await screen.findByText('治疗摘要 D3 护理随访')).toBeInTheDocument();
+    expect(screen.queryByText('D28 复购建议')).not.toBeInTheDocument();
+
+    const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
+    expect(requestPaths).toEqual([
+      '/api/institution/followups',
+      '/api/institution/followups?source=treatment_summary',
+    ]);
+    expect(requestPaths.join('\n')).not.toContain('tenantId');
+
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('13800000000');
+    expect(text).not.toContain('110101199001010011');
+    expect(text).not.toContain('MR-RAW-001');
+    expect(text).not.toContain('完整治疗记录正文');
+    expect(text).not.toContain('完整病历正文');
+    expect(text).not.toContain('咨询对话全文');
+    expect(text).not.toContain('select * from follow_up_tasks');
+    expect(text).not.toContain('DATABASE_URL');
+    expect(text).not.toContain('stack');
+    expect(text).not.toContain('token');
+    expect(text).not.toContain('secret');
+    expect(text).not.toContain('自动发送微信');
+    expect(text).not.toContain('自动短信');
+    expect(text).not.toContain('电话外呼');
+    expect(text).not.toContain('自动触达');
+  });
+
   it('智能随访展示空状态和静态话术安全说明', async () => {
     const fetchMock = mockInstitutionFetch({
       '/api/institution/followups': [jsonResponse({ records: [] })],
@@ -1294,7 +1372,7 @@ describe('机构业务页面壳', () => {
 
     expect(await screen.findByText('暂无随访任务')).toBeInTheDocument();
     expect(screen.getByText('这是演示话术：请根据客户真实恢复情况由专业人员确认后再发送。')).toBeInTheDocument();
-    expect(screen.getByText('不会调用 AI provider，也不会自动触达客户。')).toBeInTheDocument();
+    expect(screen.getByText('不会调用 AI provider，客户沟通需由人员确认执行。')).toBeInTheDocument();
     expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual([
       '/api/institution/followups',
     ]);
