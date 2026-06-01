@@ -348,6 +348,69 @@ const customerTimelineResponse = {
   ],
 };
 
+const phase13CreatedTreatmentSummary = {
+  id: 'trt_phase13_closeout',
+  appointmentId: 'appt_phase5_closeout',
+  treatmentDate: '2026-06-02T16:30:00+08:00',
+  treatmentProject: 'Phase13 水光补水复诊',
+  treatmentCategory: 'phase13_skin_repair',
+  treatmentStage: 'Phase13 D14 复诊',
+  recoveryStage: 'Phase13 D14',
+  riskLevel: 'watch',
+  ownerUserId: 'doctor-phase13',
+  summary: 'Phase13 结构化摘要：恢复稳定，安排补水。',
+  nextCareAction: 'Phase13 D21 人工回访恢复阶段。',
+  tags: ['Phase13 结构化摘要', '复诊'],
+  createdAt: '2026-06-02T16:30:00+08:00',
+  updatedAt: '2026-06-02T16:30:00+08:00',
+};
+
+const customerTimelineAfterPhase13Create = {
+  ...customerTimelineResponse,
+  treatmentSummaries: [
+    {
+      ...phase13CreatedTreatmentSummary,
+      phoneNumber: '13800001252',
+      idNumber: '110101199001010011',
+      rawMedicalRecordNo: 'MR202605310001',
+      fullTreatmentRecord: '完整治疗记录正文不应展示',
+      medicalRecordText: '完整病历正文不应展示',
+      consultationTranscript: '咨询对话全文不应展示',
+      imageUrl: 'https://example.test/raw-image.png',
+      fileUrl: 'https://example.test/raw-file.pdf',
+      aiGeneratedContent: 'AI 生成内容不应展示',
+      externalSystemPayload: { raw: true },
+      sql: 'select * from treatment_summaries',
+      stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+      token: 'sk_test_phase13_should_not_render',
+      secret: 'phase13-raw-secret',
+    },
+    ...customerTimelineResponse.treatmentSummaries,
+  ],
+  timeline: [
+    {
+      id: 'treatment_summary:trt_phase13_closeout',
+      type: 'treatment_summary',
+      occurredAt: '2026-06-02T16:30:00+08:00',
+      title: 'Phase13 水光补水复诊 · Phase13 D14 复诊',
+      summary: 'Phase13 结构化摘要：恢复稳定，安排补水。',
+      status: 'watch',
+      source: 'treatment_summary',
+      relatedRecordId: 'trt_phase13_closeout',
+      riskLevel: 'watch',
+      tags: ['Phase13 结构化摘要', '复诊'],
+      fullTreatmentRecord: '完整治疗记录正文不应展示',
+      medicalRecordText: '完整病历正文不应展示',
+      consultationTranscript: '咨询对话全文不应展示',
+      sql: 'select * from treatment_summaries',
+      stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+      token: 'sk_test_phase13_should_not_render',
+      secret: 'phase13-raw-secret',
+    },
+    ...customerTimelineResponse.timeline,
+  ],
+};
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
@@ -374,6 +437,11 @@ type WorkspaceFetchOptions = {
     message: string;
   };
   timeline?: unknown;
+  treatmentSummaryRecord?: unknown;
+  treatmentSummaryMutationError?: {
+    status: number;
+    message: string;
+  };
   institutionError?: {
     path:
       | '/api/institution/customers'
@@ -401,9 +469,13 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     platformTenants = [platformTenantRecord],
     platformTenantError,
     timeline = customerTimelineResponse,
+    treatmentSummaryRecord = phase13CreatedTreatmentSummary,
+    treatmentSummaryMutationError,
     institutionError,
     institutionMutationError,
   } = options;
+  const timelineQueue = Array.isArray(timeline) ? [...timeline] : [timeline];
+  const fallbackTimeline = timelineQueue[timelineQueue.length - 1] ?? timeline;
 
   const fetchMock = vi.fn(
     async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -470,8 +542,22 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
         return jsonResponse({ records: platformTenants });
       }
 
+      if (
+        path === '/api/institution/customers/cust_phase5_closeout/treatment-summaries' &&
+        method === 'POST'
+      ) {
+        if (treatmentSummaryMutationError) {
+          return jsonResponse(
+            { error: treatmentSummaryMutationError.message },
+            { status: treatmentSummaryMutationError.status },
+          );
+        }
+
+        return jsonResponse({ record: treatmentSummaryRecord }, { status: 201 });
+      }
+
       if (path === '/api/institution/customers/cust_phase5_closeout/timeline') {
-        return jsonResponse(timeline);
+        return jsonResponse(timelineQueue.shift() ?? fallbackTimeline);
       }
 
       throw new Error(`没有为 ${path} 配置 fetch mock`);
@@ -489,6 +575,81 @@ function mutationBody(fetchMock: ReturnType<typeof mockWorkspaceFetch>, path: st
   expect(call).toBeDefined();
   const [, init] = call!;
   return JSON.parse(String(init?.body)) as Record<string, unknown>;
+}
+
+function fillTreatmentSummaryForm(drawer: HTMLElement) {
+  const drawerView = within(drawer);
+
+  fireEvent.change(drawerView.getByLabelText('治疗时间'), {
+    target: { value: '2026-06-02T16:30:00+08:00' },
+  });
+  fireEvent.change(drawerView.getByLabelText('治疗项目'), {
+    target: { value: 'Phase13 水光补水复诊' },
+  });
+  fireEvent.change(drawerView.getByLabelText('治疗类别'), {
+    target: { value: 'phase13_skin_repair' },
+  });
+  fireEvent.change(drawerView.getByLabelText('治疗阶段'), {
+    target: { value: 'Phase13 D14 复诊' },
+  });
+  fireEvent.change(drawerView.getByLabelText('恢复阶段'), {
+    target: { value: 'Phase13 D14' },
+  });
+  fireEvent.change(drawerView.getByLabelText('风险等级'), {
+    target: { value: 'watch' },
+  });
+  fireEvent.change(drawerView.getByLabelText('负责人 ID'), {
+    target: { value: 'doctor-phase13' },
+  });
+  fireEvent.change(drawerView.getByLabelText('摘要'), {
+    target: { value: 'Phase13 结构化摘要：恢复稳定，安排补水。' },
+  });
+  fireEvent.change(drawerView.getByLabelText('下一步护理'), {
+    target: { value: 'Phase13 D21 人工回访恢复阶段。' },
+  });
+  fireEvent.change(drawerView.getByLabelText('标签'), {
+    target: { value: 'Phase13 结构化摘要, 复诊' },
+  });
+  fireEvent.change(drawerView.getByLabelText('关联预约 ID（可选）'), {
+    target: { value: 'appt_phase5_closeout' },
+  });
+}
+
+function expectSafeTreatmentSummaryBody(body: Record<string, unknown>) {
+  const serializedBody = JSON.stringify(body);
+
+  expect(body).toEqual({
+    treatmentDate: '2026-06-02T16:30:00+08:00',
+    treatmentProject: 'Phase13 水光补水复诊',
+    treatmentCategory: 'phase13_skin_repair',
+    treatmentStage: 'Phase13 D14 复诊',
+    recoveryStage: 'Phase13 D14',
+    riskLevel: 'watch',
+    ownerUserId: 'doctor-phase13',
+    summary: 'Phase13 结构化摘要：恢复稳定，安排补水。',
+    nextCareAction: 'Phase13 D21 人工回访恢复阶段。',
+    tags: ['Phase13 结构化摘要', '复诊'],
+    appointmentId: 'appt_phase5_closeout',
+  });
+  expect(serializedBody).not.toContain('tenantId');
+  expect(serializedBody).not.toContain('customerId');
+  expect(serializedBody).not.toContain('unknownField');
+  expect(serializedBody).not.toContain('phoneNumber');
+  expect(serializedBody).not.toContain('idNumber');
+  expect(serializedBody).not.toContain('rawMedicalRecordNo');
+  expect(serializedBody).not.toContain('fullTreatmentRecord');
+  expect(serializedBody).not.toContain('medicalRecordText');
+  expect(serializedBody).not.toContain('consultationTranscript');
+  expect(serializedBody).not.toContain('imageUrl');
+  expect(serializedBody).not.toContain('fileUrl');
+  expect(serializedBody).not.toContain('aiGeneratedContent');
+  expect(serializedBody).not.toContain('externalSystemPayload');
+  expect(serializedBody).not.toContain('13800001252');
+  expect(serializedBody).not.toContain('110101199001010011');
+  expect(serializedBody).not.toContain('MR202605310001');
+  expect(serializedBody).not.toContain('完整治疗记录正文');
+  expect(serializedBody).not.toContain('完整病历正文');
+  expect(serializedBody).not.toContain('咨询对话全文');
 }
 
 async function expectMetric(label: string, value: string) {
@@ -770,6 +931,105 @@ describe('工作台入口页面', () => {
     expect(await screen.findByRole('dialog', { name: '客户详情时间线' })).toBeInTheDocument();
     expect(screen.getByText('治疗结构化摘要')).toBeInTheDocument();
     expect(screen.getByText('暂无治疗摘要')).toBeInTheDocument();
+  });
+
+  it('机构入口 smoke 覆盖治疗摘要结构化录入成功后刷新时间线', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      timeline: [customerTimelineResponse, customerTimelineAfterPhase13Create],
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
+    expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
+
+    const drawer = await screen.findByRole('dialog', { name: '客户详情时间线' });
+    const drawerView = within(drawer);
+    fireEvent.click(drawerView.getByRole('button', { name: '添加治疗摘要' }));
+
+    expect(drawerView.getByLabelText('治疗时间')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('治疗项目')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('治疗类别')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('治疗阶段')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('恢复阶段')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('风险等级')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('负责人 ID')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('摘要')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('下一步护理')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('标签')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('关联预约 ID（可选）')).toBeInTheDocument();
+    expect(drawer.textContent ?? '').not.toContain('完整治疗记录正文入口');
+    expect(drawer.textContent ?? '').not.toContain('完整病历正文入口');
+    expect(drawer.textContent ?? '').not.toContain('咨询全文入口');
+    expect(drawer.querySelector('input[type="file"]')).toBeNull();
+    expect(drawer.textContent ?? '').not.toContain('AI 生成');
+
+    fillTreatmentSummaryForm(drawer);
+    fireEvent.click(drawerView.getByRole('button', { name: '保存治疗摘要' }));
+
+    expect(await screen.findByText('治疗摘要已添加')).toBeInTheDocument();
+    expect(await screen.findByText('Phase13 水光补水复诊 · Phase13 D14 复诊')).toBeInTheDocument();
+    expect(screen.getAllByText('Phase13 水光补水复诊').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Phase13 结构化摘要：恢复稳定，安排补水。').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Phase13 结构化摘要').length).toBeGreaterThan(0);
+
+    expectSafeTreatmentSummaryBody(
+      mutationBody(
+        fetchMock,
+        '/api/institution/customers/cust_phase5_closeout/treatment-summaries',
+      ),
+    );
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => fetchPath(input) === '/api/institution/customers/cust_phase5_closeout/timeline',
+      ),
+    ).toHaveLength(2);
+    expectNoSensitiveCustomerTimelineContent(container);
+  });
+
+  it('机构入口 smoke 覆盖治疗摘要提交失败后保留输入并隐藏敏感错误', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      treatmentSummaryMutationError: {
+        status: 503,
+        message:
+          'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg stack token secret 连接串',
+      },
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
+    expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
+
+    const drawer = await screen.findByRole('dialog', { name: '客户详情时间线' });
+    const drawerView = within(drawer);
+    fireEvent.click(drawerView.getByRole('button', { name: '添加治疗摘要' }));
+    fillTreatmentSummaryForm(drawer);
+    fireEvent.click(drawerView.getByRole('button', { name: '保存治疗摘要' }));
+
+    expect(await screen.findByText('数据服务暂时不可用')).toBeInTheDocument();
+    expect(drawerView.getByLabelText('治疗项目')).toHaveValue('Phase13 水光补水复诊');
+    expectSafeTreatmentSummaryBody(
+      mutationBody(
+        fetchMock,
+        '/api/institution/customers/cust_phase5_closeout/treatment-summaries',
+      ),
+    );
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => fetchPath(input) === '/api/institution/customers/cust_phase5_closeout/timeline',
+      ),
+    ).toHaveLength(1);
+
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('DATABASE_URL');
+    expect(text).not.toContain('postgres://');
+    expect(text).not.toContain('stack');
+    expect(text).not.toContain('token');
+    expect(text).not.toContain('secret');
+    expect(text).not.toContain('连接串');
   });
 
   it('机构入口 smoke 覆盖客户创建配额错误态', async () => {
