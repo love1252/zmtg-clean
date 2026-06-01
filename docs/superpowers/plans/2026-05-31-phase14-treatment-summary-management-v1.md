@@ -1,12 +1,12 @@
-# Phase 14 治疗摘要管理能力 v1 Implementation Plan
+# Phase 14 治疗摘要管理能力 v1 实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **给后续执行 Agent 的要求：** 必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项执行本计划。步骤使用 `- [ ]` 复选框语法跟踪。
 
-**Goal:** 为机构端建设治疗摘要只读管理能力，支持跨客户列表、白名单筛选、分页和安全详情查看。
+**目标：** 为机构端建设治疗摘要只读管理能力，支持跨客户列表、白名单筛选、分页和安全详情查看。
 
-**Architecture:** Phase 14 v1 复用 Phase 12 的 `treatment_summaries` 表和 Phase 13 的 `treatment_summary` RBAC resource，不新增 schema / migration。实现顺序为：先固化 spec / plan，再新增只读 API 地基，随后接入机构端 UI，最后补 workspace smoke 和文档收尾。
+**架构方案：** Phase 14 v1 复用 Phase 12 的 `treatment_summaries` 表和 Phase 13 的 `treatment_summary` RBAC 资源，不新增 schema / migration。实现顺序为：先固化设计 / 计划文档，再新增只读 API 地基，随后接入机构端 UI，最后补工作区入口冒烟测试（smoke）和文档收尾。
 
-**Tech Stack:** Next.js 16 App Router、React 19、TypeScript、Vitest、Testing Library、Drizzle ORM、PostgreSQL、现有 demo access context、现有 `InstitutionPageState`、现有 audit repository。
+**技术栈：** Next.js 16 App Router、React 19、TypeScript、Vitest、Testing Library、Drizzle ORM、PostgreSQL、现有 demo 访问上下文、现有 `InstitutionPageState`、现有审计仓储层。
 
 ---
 
@@ -14,12 +14,12 @@
 
 Phase 13 已完成：
 
-- 治疗摘要写入 payload parser。
-- 治疗摘要 repository create。
+- 治疗摘要写入 payload 解析器。
+- 治疗摘要仓储层创建方法。
 - `POST /api/institution/customers/[customerId]/treatment-summaries`。
 - 客户详情抽屉结构化录入 UI。
-- `treatment_summary` access resource 和最小 create / read 权限。
-- workspace smoke / README / roadmap / devlog / Phase 13 文档收尾。
+- `treatment_summary` 访问资源和最小 create / read 权限。
+- 工作区入口冒烟测试（smoke）、README、roadmap、devlog 和 Phase 13 文档收尾。
 
 Phase 14 PR 1 只新增本文档和设计文档，不进入 API、UI、测试或数据库开发。
 
@@ -33,8 +33,8 @@ Phase 14 做：
 - 安全详情查看。
 - 当前租户范围查询。
 - API DTO 白名单。
-- loading / empty / error / 403 / 503。
-- smoke 和文档收尾。
+- 加载态 / 空态 / 错误态 / 403 / 503。
+- 冒烟测试（smoke）和文档收尾。
 
 Phase 14 不做：
 
@@ -78,7 +78,7 @@ Phase 14 不做：
 - TypeScript 业务代码。
 - React 页面。
 - 测试文件。
-- API route。
+- API 路由。
 - 数据库 schema。
 - migration。
 - 权限、认证或租户隔离。
@@ -90,10 +90,10 @@ Phase 14 不做：
 - `src/modules/institution/server/treatment-summary-query-parser.ts`
   - 解析 `customerId`、`treatmentProject`、`riskLevel`、`from`、`to`、`limit`、`cursor`。
   - 拒绝 `tenantId` 和所有未知参数。
-  - 生成稳定 query object 和 opaque cursor。
+  - 生成稳定查询对象和不透明游标。
 - `src/app/api/institution/treatment-summaries/route.ts`
   - 新增机构端治疗摘要只读列表 API。
-  - 从 access context 推导 `tenantId`。
+  - 从访问上下文推导 `tenantId`。
   - 返回 `{ records, pageInfo }`。
 - `src/modules/institution/tests/TreatmentSummaryQueryParser.test.ts`
   - 覆盖筛选白名单、重复参数、未知参数、`tenantId` 拒绝、日期范围、limit 和 cursor。
@@ -104,12 +104,12 @@ Phase 14 不做：
 
 - `src/modules/institution/domain/treatment-summaries.ts`
   - 增加 `InstitutionTreatmentSummaryListItem`、`TreatmentSummaryListQuery`、`TreatmentSummaryListPageInfo`。
-  - 增加 list DTO mapper，不能直接返回数据库行。
+  - 增加列表 DTO 映射器，不能直接返回数据库行。
 - `src/modules/institution/server/treatment-summary-repository.ts`
   - 增加 `listTreatmentSummariesByTenant()`。
   - 查询必须按 `tenantId` 过滤，支持白名单筛选和 cursor 分页。
 - `src/modules/institution/tests/TreatmentSummaryDomain.test.ts`
-  - 补 list DTO 白名单和禁止字段扫描。
+  - 补列表 DTO 白名单和禁止字段扫描。
 - `src/modules/institution/tests/TreatmentSummaryRepository.test.ts`
   - 补 list 查询条件、排序、分页、跨租户过滤和治疗项目筛选测试。
 - `src/modules/audit/tests/AuditEventsDomain.test.ts`
@@ -130,13 +130,13 @@ Phase 14 不做：
   - 治疗摘要只读列表、筛选表单、分页按钮和安全详情抽屉。
   - 复用 `InstitutionPageState` 和 `InstitutionSectionHeader`。
 - `src/modules/institution/tests/TreatmentSummaryManagementShell.test.tsx`
-  - 覆盖 loading、empty、error、403、503、筛选、分页、详情和敏感字段不展示。
+  - 覆盖加载态、空态、错误态、403、503、筛选、分页、详情和敏感字段不展示。
 
 建议修改：
 
 - `src/modules/institution/client/tenant-business-client.ts`
-  - 增加 `listTreatmentSummaries()` client helper。
-  - 只拼接白名单 query 参数，不发送 `tenantId`。
+  - 增加 `listTreatmentSummaries()` 客户端辅助方法。
+  - 只拼接白名单查询参数，不发送 `tenantId`。
 - `src/modules/workspace/domain/institution-dashboard.ts`
   - 增加机构端导航 view id，例如 `treatmentSummaries`。
   - 增加“治疗摘要”导航项。
@@ -144,7 +144,7 @@ Phase 14 不做：
   - 把治疗摘要加入已接入页面列表。
   - 渲染 `TreatmentSummaryManagementShell`。
 - `src/modules/institution/tests/TenantBusinessClient.test.ts`
-  - 覆盖 client helper 只发送白名单参数、不发送 `tenantId`、隐藏敏感错误。
+  - 覆盖客户端辅助方法只发送白名单参数、不发送 `tenantId`、隐藏敏感错误。
 - `src/modules/institution/tests/InstitutionBusinessShells.test.tsx`
   - 覆盖治疗摘要管理 UI 行为。
 - `src/modules/workspace/tests/WorkspaceDashboardDomain.test.ts`
@@ -152,7 +152,7 @@ Phase 14 不做：
 
 不修改：
 
-- API route 行为，除非 PR 3 UI 测试发现 PR 2 的返回结构缺陷；这种缺陷应单独回到 PR 2 修正。
+- API 路由行为，除非 PR 3 UI 测试发现 PR 2 的返回结构缺陷；这种缺陷应单独回到 PR 2 修正。
 - 数据库 schema / migration。
 - 权限、认证或租户隔离。
 
@@ -179,18 +179,18 @@ Phase 14 不做：
 不修改：
 
 - 治疗摘要业务逻辑。
-- API route。
+- API 路由。
 - 数据库 schema / migration。
 - 权限、认证或租户隔离。
 
-## PR 1：Phase 14 spec / plan 文档
+## PR 1：Phase 14 设计 / 计划文档
 
-**Files:**
+**文件：**
 
-- Create: `docs/superpowers/specs/2026-05-31-phase14-treatment-summary-management-v1-design.md`
-- Create: `docs/superpowers/plans/2026-05-31-phase14-treatment-summary-management-v1.md`
+- 新建：`docs/superpowers/specs/2026-05-31-phase14-treatment-summary-management-v1-design.md`
+- 新建：`docs/superpowers/plans/2026-05-31-phase14-treatment-summary-management-v1.md`
 
-- [ ] **Step 1: 创建 design spec**
+- [ ] **步骤 1：创建设计规格文档**
 
 写入 `docs/superpowers/specs/2026-05-31-phase14-treatment-summary-management-v1-design.md`，必须包含：
 
@@ -210,11 +210,11 @@ Phase 14 不做：
 - 推荐 PR 拆分。
 - 每个 PR 的范围、风险和验证方式。
 
-- [ ] **Step 2: 创建 implementation plan**
+- [ ] **步骤 2：创建实施计划文档**
 
 写入 `docs/superpowers/plans/2026-05-31-phase14-treatment-summary-management-v1.md`，必须包含：
 
-- 计划 header。
+- 计划页头。
 - 当前状态。
 - 总边界。
 - 文件职责规划。
@@ -223,53 +223,53 @@ Phase 14 不做：
 - 每个 PR 的验证命令。
 - Phase 14 完成标准。
 
-- [ ] **Step 3: 验证 Markdown diff**
+- [ ] **步骤 3：验证 Markdown 差异**
 
-Run:
+运行：
 
 ```bash
 git diff --check
 ```
 
-Expected:
+预期：
 
 ```text
 无输出，exit 0
 ```
 
-- [ ] **Step 4: 提交 PR 1 文档**
+- [ ] **步骤 4：提交 PR 1 文档**
 
-Run:
+运行：
 
 ```bash
 git add docs/superpowers/specs/2026-05-31-phase14-treatment-summary-management-v1-design.md docs/superpowers/plans/2026-05-31-phase14-treatment-summary-management-v1.md
 git commit -m "docs: 固化 Phase 14 治疗摘要管理计划"
 ```
 
-Expected:
+预期：
 
 ```text
 2 files changed
 ```
 
-## PR 2：治疗摘要列表 domain / query parser / repository / API
+## PR 2：治疗摘要列表领域类型 / 查询参数解析器 / 仓储层 / API
 
-**Files:**
+**文件：**
 
-- Modify: `src/modules/institution/domain/treatment-summaries.ts`
-- Create: `src/modules/institution/server/treatment-summary-query-parser.ts`
-- Modify: `src/modules/institution/server/treatment-summary-repository.ts`
-- Create: `src/app/api/institution/treatment-summaries/route.ts`
-- Create: `src/modules/institution/tests/TreatmentSummaryQueryParser.test.ts`
-- Modify: `src/modules/institution/tests/TreatmentSummaryDomain.test.ts`
-- Modify: `src/modules/institution/tests/TreatmentSummaryRepository.test.ts`
-- Create: `src/modules/institution/tests/TreatmentSummaryListApiRoutes.test.ts`
+- 修改：`src/modules/institution/domain/treatment-summaries.ts`
+- 新建：`src/modules/institution/server/treatment-summary-query-parser.ts`
+- 修改：`src/modules/institution/server/treatment-summary-repository.ts`
+- 新建：`src/app/api/institution/treatment-summaries/route.ts`
+- 新建：`src/modules/institution/tests/TreatmentSummaryQueryParser.test.ts`
+- 修改：`src/modules/institution/tests/TreatmentSummaryDomain.test.ts`
+- 修改：`src/modules/institution/tests/TreatmentSummaryRepository.test.ts`
+- 新建：`src/modules/institution/tests/TreatmentSummaryListApiRoutes.test.ts`
 
-- [ ] **Step 1: 写 query parser 失败测试**
+- [ ] **步骤 1：写查询参数解析器失败测试**
 
 在 `src/modules/institution/tests/TreatmentSummaryQueryParser.test.ts` 覆盖：
 
-- 空参数返回默认 query。
+- 空参数返回默认查询对象。
 - `customerId`、`treatmentProject`、`riskLevel`、`from`、`to`、`limit`、`cursor` 正常解析。
 - `tenantId` 返回 400 错误。
 - 未知参数返回 400 错误。
@@ -278,19 +278,19 @@ Expected:
 - `limit` 小于 1 或大于 100 返回 400 错误。
 - `treatmentProject` 包含 `DATABASE_URL`、`postgres://`、`token`、`secret` 返回 400 错误。
 
-Run:
+运行：
 
 ```bash
 node scripts/run-vitest.mjs run src/modules/institution/tests/TreatmentSummaryQueryParser.test.ts
 ```
 
-Expected:
+预期：
 
 ```text
-FAIL because treatment-summary-query-parser.ts does not exist yet
+预期失败：`treatment-summary-query-parser.ts` 尚不存在
 ```
 
-- [ ] **Step 2: 实现 query parser**
+- [ ] **步骤 2：实现查询参数解析器**
 
 创建 `src/modules/institution/server/treatment-summary-query-parser.ts`：
 
@@ -302,16 +302,16 @@ FAIL because treatment-summary-query-parser.ts does not exist yet
 
 实现必须拒绝 `tenantId`，并且只接受白名单参数。
 
-- [ ] **Step 3: 补 domain DTO 和 mapper 测试**
+- [ ] **步骤 3：补领域 DTO 和映射器测试**
 
 修改 `src/modules/institution/tests/TreatmentSummaryDomain.test.ts`：
 
-- 验证 list DTO 只包含白名单字段。
-- 验证 list DTO 不包含 `tenantId`。
-- 验证 list DTO 不包含客户、预约、随访明细。
-- 验证 list DTO 不包含完整正文、PII、SQL、stack、token、secret。
+- 验证列表 DTO 只包含白名单字段。
+- 验证列表 DTO 不包含 `tenantId`。
+- 验证列表 DTO 不包含客户、预约、随访明细。
+- 验证列表 DTO 不包含完整正文、PII、SQL、stack、token、secret。
 
-- [ ] **Step 4: 实现 domain DTO**
+- [ ] **步骤 4：实现 domain DTO**
 
 修改 `src/modules/institution/domain/treatment-summaries.ts`：
 
@@ -319,7 +319,7 @@ FAIL because treatment-summary-query-parser.ts does not exist yet
 - 增加 `InstitutionTreatmentSummaryListResponse`。
 - 增加 `mapTreatmentSummaryRecordToListItem()`。
 
-mapper 只返回：
+映射器只返回：
 
 - `id`
 - `customerId`
@@ -337,7 +337,7 @@ mapper 只返回：
 - `createdAt`
 - `updatedAt`
 
-- [ ] **Step 5: 写 repository list 失败测试**
+- [ ] **步骤 5：写仓储层列表查询失败测试**
 
 修改 `src/modules/institution/tests/TreatmentSummaryRepository.test.ts`，覆盖：
 
@@ -350,19 +350,19 @@ mapper 只返回：
 - cursor 分页。
 - 混入跨租户数据时不返回。
 
-Run:
+运行：
 
 ```bash
 node scripts/run-vitest.mjs run src/modules/institution/tests/TreatmentSummaryRepository.test.ts
 ```
 
-Expected:
+预期：
 
 ```text
-FAIL because listTreatmentSummariesByTenant is not implemented yet
+预期失败：`listTreatmentSummariesByTenant` 尚未实现
 ```
 
-- [ ] **Step 6: 实现 repository list**
+- [ ] **步骤 6：实现仓储层列表查询**
 
 修改 `src/modules/institution/server/treatment-summary-repository.ts`：
 
@@ -370,9 +370,9 @@ FAIL because listTreatmentSummariesByTenant is not implemented yet
 - 查询条件必须包含 `eq(treatmentSummaries.tenantId, input.tenantId)`。
 - 默认排序 `treatmentDate desc, id asc`。
 - 查询 `limit + 1` 条生成 `pageInfo`。
-- 返回 list DTO 和 `pageInfo`。
+- 返回列表 DTO 和 `pageInfo`。
 
-- [ ] **Step 7: 写 API route 失败测试**
+- [ ] **步骤 7：写 API 路由失败测试**
 
 创建 `src/modules/institution/tests/TreatmentSummaryListApiRoutes.test.ts`，覆盖：
 
@@ -380,38 +380,38 @@ FAIL because listTreatmentSummariesByTenant is not implemented yet
 - 401 未登录。
 - 403 平台角色或无治疗摘要读权限。
 - 400 `tenantId` 或未知参数。
-- 503 repository 异常。
-- route 从 access context 推导 `tenantId`。
+- 503 仓储层异常。
+- API 路由从访问上下文推导 `tenantId`。
 - DTO 不返回 `tenantId`、客户 / 预约 / 随访明细、完整正文或敏感字段。
 - allowed / denied 审计不包含请求体或敏感内容。
 
-Run:
+运行：
 
 ```bash
 node scripts/run-vitest.mjs run src/modules/institution/tests/TreatmentSummaryListApiRoutes.test.ts
 ```
 
-Expected:
+预期：
 
 ```text
-FAIL because src/app/api/institution/treatment-summaries/route.ts does not exist yet
+预期失败：`src/app/api/institution/treatment-summaries/route.ts` 尚不存在
 ```
 
-- [ ] **Step 8: 实现 API route**
+- [ ] **步骤 8：实现 API 路由**
 
 创建 `src/app/api/institution/treatment-summaries/route.ts`：
 
-- GET only。
+- 仅实现 GET。
 - 未登录返回 401。
 - `treatment_summary/read_own_tenant` 拒绝返回 403。
 - 缺少 `context.tenantId` 返回 403。
-- parser 错误返回 400。
-- repository 异常返回 503。
+- 解析器错误返回 400。
+- 仓储层异常返回 503。
 - 成功返回安全 DTO。
 
-- [ ] **Step 9: PR 2 验证**
+- [ ] **步骤 9：PR 2 验证**
 
-Run:
+运行：
 
 ```bash
 node scripts/run-vitest.mjs run src/modules/institution/tests/TreatmentSummaryQueryParser.test.ts
@@ -422,36 +422,36 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/TreatmentSummaryLi
 git diff --check
 ```
 
-Expected:
+预期：
 
 ```text
-All listed commands exit 0
+以上命令均以 exit 0 结束
 ```
 
 ## PR 3：机构端治疗摘要管理 UI
 
-**Files:**
+**文件：**
 
-- Modify: `src/modules/institution/client/tenant-business-client.ts`
-- Create: `src/modules/institution/components/TreatmentSummaryManagementShell.tsx`
-- Create: `src/modules/institution/tests/TreatmentSummaryManagementShell.test.tsx`
-- Modify: `src/modules/institution/tests/TenantBusinessClient.test.ts`
-- Modify: `src/modules/institution/tests/InstitutionBusinessShells.test.tsx`
-- Modify: `src/modules/workspace/domain/institution-dashboard.ts`
-- Modify: `src/modules/workspace/components/InstitutionWorkspace.tsx`
-- Modify: `src/modules/workspace/tests/WorkspaceDashboardDomain.test.ts`
+- 修改：`src/modules/institution/client/tenant-business-client.ts`
+- 新建：`src/modules/institution/components/TreatmentSummaryManagementShell.tsx`
+- 新建：`src/modules/institution/tests/TreatmentSummaryManagementShell.test.tsx`
+- 修改：`src/modules/institution/tests/TenantBusinessClient.test.ts`
+- 修改：`src/modules/institution/tests/InstitutionBusinessShells.test.tsx`
+- 修改：`src/modules/workspace/domain/institution-dashboard.ts`
+- 修改：`src/modules/workspace/components/InstitutionWorkspace.tsx`
+- 修改：`src/modules/workspace/tests/WorkspaceDashboardDomain.test.ts`
 
-- [ ] **Step 1: 写 client helper 测试**
+- [ ] **步骤 1：写客户端辅助方法测试**
 
 修改 `src/modules/institution/tests/TenantBusinessClient.test.ts`，覆盖：
 
 - `listTreatmentSummaries()` 请求 `/api/institution/treatment-summaries`。
-- 只发送白名单 query 参数。
+- 只发送白名单查询参数。
 - 不发送 `tenantId`。
-- 400 / 401 / 403 / 503 映射为稳定 UI error。
+- 400 / 401 / 403 / 503 映射为稳定 UI 错误。
 - 错误响应中的 SQL、stack、token、secret、`DATABASE_URL` 被隐藏。
 
-- [ ] **Step 2: 实现 client helper**
+- [ ] **步骤 2：实现客户端辅助方法**
 
 修改 `src/modules/institution/client/tenant-business-client.ts`：
 
@@ -460,12 +460,12 @@ All listed commands exit 0
 - 使用 `URLSearchParams` 只拼接白名单参数。
 - 读取 `{ records, pageInfo }`。
 
-- [ ] **Step 3: 写 UI shell 测试**
+- [ ] **步骤 3：写 UI 容器测试**
 
 创建 `src/modules/institution/tests/TreatmentSummaryManagementShell.test.tsx`，覆盖：
 
-- loading。
-- empty。
+- 加载态。
+- 空态。
 - 403。
 - 503。
 - 成功列表。
@@ -476,7 +476,7 @@ All listed commands exit 0
 - 不展示敏感字段。
 - 不出现新增、编辑、删除按钮。
 
-- [ ] **Step 4: 实现 UI shell**
+- [ ] **步骤 4：实现 UI 容器**
 
 创建 `src/modules/institution/components/TreatmentSummaryManagementShell.tsx`：
 
@@ -485,10 +485,10 @@ All listed commands exit 0
 - 展示筛选控件：客户 ID、治疗项目、风险等级、from、to。
 - 展示列表。
 - 展示分页按钮。
-- 使用本地 state 打开安全详情。
-- 不提供 mutation。
+- 使用本地状态打开安全详情。
+- 不提供写入操作。
 
-- [ ] **Step 5: 接入 workspace 导航**
+- [ ] **步骤 5：接入工作区导航**
 
 修改：
 
@@ -504,9 +504,9 @@ All listed commands exit 0
 - 渲染 `TreatmentSummaryManagementShell`。
 - 不影响客户中心、预约中心、智能随访和审计日志现有入口。
 
-- [ ] **Step 6: PR 3 验证**
+- [ ] **步骤 6：PR 3 验证**
 
-Run:
+运行：
 
 ```bash
 node scripts/run-vitest.mjs run src/modules/institution/tests/TenantBusinessClient.test.ts
@@ -517,24 +517,24 @@ node scripts/run-vitest.mjs run src/modules/workspace/tests/WorkspaceDashboardDo
 git diff --check
 ```
 
-Expected:
+预期：
 
 ```text
-All listed commands exit 0
+以上命令均以 exit 0 结束
 ```
 
-## PR 4：smoke / 文档收尾
+## PR 4：冒烟测试（smoke）/ 文档收尾
 
-**Files:**
+**文件：**
 
-- Modify: `src/modules/workspace/tests/WorkspaceEntryPages.test.tsx`
-- Modify: `README.md`
-- Modify: `docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md`
-- Modify: `docs/devlog/2026-05-31.md`
-- Modify: `docs/superpowers/specs/2026-05-31-phase14-treatment-summary-management-v1-design.md`
-- Modify: `docs/superpowers/plans/2026-05-31-phase14-treatment-summary-management-v1.md`
+- 修改：`src/modules/workspace/tests/WorkspaceEntryPages.test.tsx`
+- 修改：`README.md`
+- 修改：`docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md`
+- 修改：`docs/devlog/2026-05-31.md`
+- 修改：`docs/superpowers/specs/2026-05-31-phase14-treatment-summary-management-v1-design.md`
+- 修改：`docs/superpowers/plans/2026-05-31-phase14-treatment-summary-management-v1.md`
 
-- [ ] **Step 1: 补 workspace smoke**
+- [ ] **步骤 1：补工作区入口冒烟测试（smoke）**
 
 修改 `src/modules/workspace/tests/WorkspaceEntryPages.test.tsx`，覆盖：
 
@@ -547,7 +547,7 @@ All listed commands exit 0
 - 不展示 `tenantId`、PII、完整正文、SQL、stack、token、secret、`DATABASE_URL`。
 - 不发送 POST / PATCH / DELETE。
 
-- [ ] **Step 2: 更新 README**
+- [ ] **步骤 2：更新 README**
 
 修改 `README.md`：
 
@@ -555,7 +555,7 @@ All listed commands exit 0
 - 明确治疗摘要管理 v1 是只读列表、筛选、分页和安全详情。
 - 明确不包含新增、编辑、删除、完整治疗正文、AI、RAG、外部系统。
 
-- [ ] **Step 3: 更新 roadmap**
+- [ ] **步骤 3：更新 roadmap**
 
 修改 `docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md`：
 
@@ -563,7 +563,7 @@ All listed commands exit 0
 - 把治疗后护理 / 随访联动、知识库 / RAG、安全基础准备、平台商业化增强继续列为后续。
 - 保持完整治疗记录正文、图片 / 文件、AI、外部系统、支付、合同、发票后置。
 
-- [ ] **Step 4: 更新 devlog**
+- [ ] **步骤 4：更新 devlog**
 
 修改 `docs/devlog/2026-05-31.md`：
 
@@ -571,7 +571,7 @@ All listed commands exit 0
 - 写清每个 PR 的范围、边界和验证。
 - 写清 Phase 14 未新增 schema / migration，未改权限、认证或租户隔离。
 
-- [ ] **Step 5: 更新 Phase 14 文档状态**
+- [ ] **步骤 5：更新 Phase 14 文档状态**
 
 修改：
 
@@ -585,9 +585,9 @@ All listed commands exit 0
 - 保留不纳入范围。
 - 保留后续建议。
 
-- [ ] **Step 6: PR 4 验证**
+- [ ] **步骤 6：PR 4 验证**
 
-Run:
+运行：
 
 ```bash
 node scripts/run-vitest.mjs run src/modules/workspace/tests/WorkspaceEntryPages.test.tsx
@@ -597,10 +597,10 @@ node scripts/run-next.mjs build --webpack
 git diff --check
 ```
 
-Expected:
+预期：
 
 ```text
-All listed commands exit 0
+以上命令均以 exit 0 结束
 ```
 
 ## Phase 14 风险清单
@@ -613,7 +613,7 @@ All listed commands exit 0
 - API 只按当前 `tenantId` 查询。
 - DTO 不返回 `tenantId`。
 - UI 只展示安全字段。
-- smoke 扫描敏感字段。
+- 冒烟测试（smoke）扫描敏感字段。
 
 ### 风险 2：列表 API 被用作客户 / 预约 / 随访下钻
 
@@ -627,8 +627,8 @@ All listed commands exit 0
 
 控制：
 
-- query parser 限制长度和敏感词。
-- repository 使用 Drizzle 参数化查询。
+- 查询参数解析器限制长度和敏感词。
+- 仓储层使用 Drizzle 参数化查询。
 - 不拼接 SQL 字符串。
 - 测试覆盖 SQL / token / secret 字样不进入输出。
 
@@ -644,9 +644,9 @@ All listed commands exit 0
 
 控制：
 
-- Phase 14 spec / plan 明确禁止。
+- Phase 14 设计 / 计划文档明确禁止。
 - PR 描述必须重复边界。
-- smoke 确认没有 AI、RAG、企微、外部系统请求。
+- 冒烟测试（smoke）确认没有 AI、RAG、企微、外部系统请求。
 
 ## Phase 14 完成标准
 
@@ -654,15 +654,15 @@ Phase 14 完成时应满足：
 
 - 机构端有治疗摘要只读管理入口。
 - `GET /api/institution/treatment-summaries` 已完成。
-- API 只接受白名单 query 参数。
+- API 只接受白名单查询参数。
 - API 不接受 `tenantId`。
 - API 只返回当前租户治疗摘要。
 - API DTO 不返回 `tenantId`。
 - API DTO 不返回客户、预约、随访明细。
 - UI 支持列表、筛选、分页和安全详情。
 - UI 不做新增、编辑、删除。
-- smoke 确认不展示 PII、医疗正文、SQL、stack、token、secret、`DATABASE_URL` 或连接串。
-- README、roadmap、devlog、Phase 14 spec / plan 已更新完成状态。
+- 冒烟测试（smoke）确认不展示 PII、医疗正文、SQL、stack、token、secret、`DATABASE_URL` 或连接串。
+- README、roadmap、devlog、Phase 14 设计 / 计划文档已更新完成状态。
 - 未新增 schema / migration。
 - 未修改权限、认证或租户隔离模型。
 - 未进入治疗后护理 / 随访联动、AI、RAG、企微、外部系统、支付、合同或发票。
@@ -682,7 +682,7 @@ Phase 14 完成时应满足：
 
 PR 1 描述必须明确：
 
-- 只新增 spec / plan 文档。
+- 只新增设计 / 计划文档。
 - 不改代码。
 - 不改 API。
 - 不改数据库。

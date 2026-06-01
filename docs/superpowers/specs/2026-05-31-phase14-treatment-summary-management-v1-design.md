@@ -1,7 +1,7 @@
 # Phase 14 治疗摘要管理能力 v1 设计
 
 > 日期：2026-05-31
-> 状态：Phase 14 PR 1 文档规划。本文只固化设计和后续 PR 拆分，不包含业务代码、页面、测试、API route、数据库 schema、migration、权限、认证或租户隔离修改。
+> 状态：Phase 14 PR 1 文档规划。本文只固化设计和后续 PR 拆分，不包含业务代码、页面、测试、API 路由、数据库 schema、migration、权限、认证或租户隔离修改。
 
 ## 1. Phase 14 目标
 
@@ -13,14 +13,14 @@ Phase 14 默认选择“治疗摘要管理能力 v1”。目标是在 Phase 12 �
 - 支持按客户、治疗项目、风险等级和时间范围筛选。
 - 支持分页读取。
 - 支持查看治疗摘要安全详情。
-- 服务端从 session / access context 推导 `tenantId`。
+- 服务端从会话 / 访问上下文推导 `tenantId`。
 - 机构端只能查看当前租户治疗摘要。
 - API DTO 不返回 `tenantId`。
 - 不返回客户、预约、随访明细。
 - 不返回完整治疗记录正文、完整病历正文、诊疗原文或咨询对话全文。
 - 不做新增、编辑、删除、AI、RAG、外部系统或自动触达。
 
-Phase 14 v1 延续当前项目的核心安全原则：机构端租户编号只能来自服务端访问上下文；前端不能通过 URL、query、header、body、localStorage 或任意浏览器状态切换租户；治疗摘要只能以结构化短摘要形式展示，不能扩大为完整病历或治疗正文。
+Phase 14 v1 延续当前项目的核心安全原则：机构端租户编号只能来自服务端访问上下文；前端不能通过 URL、查询参数、请求头、请求体、localStorage 或任意浏览器状态切换租户；治疗摘要只能以结构化短摘要形式展示，不能扩大为完整病历或治疗正文。
 
 ## 2. 为什么优先做治疗摘要管理能力 v1
 
@@ -29,16 +29,16 @@ Phase 13 已经完成治疗摘要人工录入 v1：
 - `treatment_summaries` 数据底座来自 Phase 12。
 - `GET /api/institution/customers/[customerId]/timeline` 已能读取治疗摘要。
 - `POST /api/institution/customers/[customerId]/treatment-summaries` 已能在客户详情上下文新增结构化治疗摘要。
-- 客户详情抽屉已能新增治疗摘要并刷新 timeline。
-- `treatment_summary` access resource 已存在，`tenant_admin` 具备必要 create / read 权限。
-- payload parser、repository create、DTO 白名单和敏感字段拒绝已完成。
+- 客户详情抽屉已能新增治疗摘要并刷新时间线。
+- `treatment_summary` 访问资源已存在，`tenant_admin` 具备必要 create / read 权限。
+- payload 解析器、仓储层创建方法、DTO 白名单和敏感字段拒绝已完成。
 
 当前缺口是“录入之后如何管理”。如果治疗摘要只能在单个客户详情抽屉里查看，机构运营人员无法快速检索近期高风险摘要、某个治疗项目的恢复反馈、某个时间范围内的护理建议，也难以做日常复核和运营排班。
 
 优先做治疗摘要管理 v1 的理由：
 
 - 业务承接最自然：它直接承接 Phase 13 的真实录入闭环。
-- 工程准备度高：复用现有 `treatment_summaries`、DTO mapper、RBAC resource、timeline 展示字段和页面状态组件。
+- 工程准备度高：复用现有 `treatment_summaries`、DTO 映射器、RBAC 资源、时间线展示字段和页面状态组件。
 - 风险可控：只读列表和详情比编辑、删除、随访联动、RAG、AI 或外部系统集成更稳。
 - 商业演示价值高：机构端可以从“单客户治疗节点”升级到“治疗摘要运营视图”。
 - 后续扩展清晰：治疗后护理 / 随访联动可在列表筛选和详情复核之后继续推进。
@@ -65,7 +65,7 @@ Phase 13 已经完成治疗摘要人工录入 v1：
 - 文件来源和文件上传。
 - 正文保存或正文解析。
 - 文档分块。
-- embedding 和检索命中。
+- 向量嵌入（embedding）和检索命中。
 - 内容安全和租户隔离。
 - 后续 AI provider 成本、调用日志和提示词注入边界。
 
@@ -81,17 +81,17 @@ Phase 9 到 Phase 11 已完成平台租户管理基础版、套餐配额 enforce
 
 Phase 14 v1 包含：
 
-- 新增机构端治疗摘要列表查询 domain 类型。
-- 新增治疗摘要列表 query parser。
-- 新增 repository list 方法。
+- 新增机构端治疗摘要列表查询领域类型。
+- 新增治疗摘要列表查询参数解析器。
+- 新增仓储层列表查询方法。
 - 新增 `GET /api/institution/treatment-summaries`。
 - API 只返回安全 DTO 和分页信息。
 - API 支持白名单筛选参数。
 - 机构端新增治疗摘要管理页面或入口。
 - UI 展示治疗摘要列表、基础筛选、分页和安全详情。
-- UI 覆盖 loading、empty、error、403 和 503。
-- smoke 覆盖机构端入口、筛选请求、分页、详情查看和敏感字段不展示。
-- README、roadmap、devlog、Phase 14 spec / plan 收尾。
+- UI 覆盖加载态、空态、错误态、403 和 503。
+- 冒烟测试（smoke）覆盖机构端入口、筛选请求、分页、详情查看和敏感字段不展示。
+- README、roadmap、devlog、Phase 14 设计 / 计划文档收尾。
 
 推荐 UI 入口：
 
@@ -175,27 +175,27 @@ Phase 14 不做：
 
 列表状态：
 
-- `loading`：正在加载治疗摘要。
-- `empty`：当前筛选下暂无治疗摘要。
-- `error`：请求失败或筛选参数非法。
+- 加载态：正在加载治疗摘要。
+- 空态：当前筛选下暂无治疗摘要。
+- 错误态：请求失败或筛选参数非法。
 - `403`：当前账号没有查看治疗摘要的权限。
 - `503`：数据服务暂时不可用。
 
 ## 7. 筛选参数白名单
 
-`GET /api/institution/treatment-summaries` 只允许以下 query 参数：
+`GET /api/institution/treatment-summaries` 只允许以下查询参数：
 
 | 参数 | 规则 | 说明 |
 | --- | --- | --- |
 | `customerId` | 字符集 `A-Za-z0-9_:-`，长度 1-96 | 只作为当前租户内客户引用筛选，不能作为授权依据 |
 | `treatmentProject` | trim 后 1-160 字符，拒绝敏感内容和 SQL / token / secret 字样 | v1 基于现有字段做安全参数化筛选 |
-| `riskLevel` | `normal`、`watch`、`urgent` | 复用现有 follow-up risk enum |
+| `riskLevel` | `normal`、`watch`、`urgent` | 复用现有随访风险枚举（follow-up risk enum） |
 | `from` | 有效时间字符串 | 对应 `treatmentDate >= from` |
 | `to` | 有效时间字符串 | 对应 `treatmentDate <= to` |
 | `limit` | 正整数，默认 50，最大 100 | 防止大范围一次性返回 |
-| `cursor` | opaque cursor | 编码上一页最后一条的治疗时间和 ID |
+| `cursor` | 不透明游标 | 编码上一页最后一条的治疗时间和 ID |
 
-禁止 query 参数：
+禁止查询参数：
 
 - `tenantId`
 - `page`
@@ -215,7 +215,7 @@ Phase 14 不做：
 - 出现未知参数时返回 `400`。
 - 同一参数重复出现时返回 `400`。
 - `from > to` 时返回 `400`。
-- `tenantId` 出现在 query 中时返回 `400`，不静默忽略。
+- `tenantId` 出现在查询参数中时返回 `400`，不静默忽略。
 - 参数错误文案必须稳定，不暴露 SQL、stack、连接串或内部调试对象。
 
 ## 8. 详情查看边界
@@ -268,14 +268,14 @@ GET /api/institution/treatment-summaries
 
 API 要求：
 
-- 从 `getDemoAccessContextFromRequest()` 或后续真实 access context 推导登录上下文。
+- 从 `getDemoAccessContextFromRequest()` 或后续真实访问上下文推导登录上下文。
 - 使用 `canAccessResource({ resource: 'treatment_summary', action: 'read_own_tenant' })`。
 - 必须存在 `context.tenantId`。
 - 不接受前端传入 `tenantId`。
 - 只能查询 `tenant_id = context.tenantId` 的治疗摘要。
 - 返回安全 DTO 和 `pageInfo`。
-- 成功读取可写 allowed 审计：`resource = treatment_summary`、`action = read_own_tenant`、`result = allowed`。
-- 权限拒绝可写 denied 审计。
+- 成功读取可写 allowed 审计记录：`resource = treatment_summary`、`action = read_own_tenant`、`result = allowed`。
+- 权限拒绝可写 denied 审计记录。
 - 审计事件不得包含请求体、筛选原文中的敏感值、SQL、stack、token、secret 或连接串。
 
 状态码建议：
@@ -283,8 +283,8 @@ API 要求：
 | 场景 | 状态码 | 文案 |
 | --- | --- | --- |
 | 未登录 | `401` | `请先登录` |
-| 无权限或缺少 tenant context | `403` | `没有访问权限` |
-| 筛选参数非法 | `400` | parser 返回稳定中文错误 |
+| 无权限或缺少租户上下文 | `403` | `没有访问权限` |
+| 筛选参数非法 | `400` | 解析器返回稳定中文错误 |
 | 成功 | `200` | `{ records, pageInfo }` |
 | 数据服务异常 | `503` | `数据服务暂时不可用` |
 
@@ -355,33 +355,33 @@ DTO 禁止返回：
 - `secret`
 - `databaseUrl`
 
-DTO 必须通过白名单 mapper 生成，不得直接返回数据库行。
+DTO 必须通过白名单映射器生成，不得直接返回数据库行。
 
 ## 11. 租户隔离设计
 
 Phase 14 v1 必须延续现有租户隔离规则：
 
 - 租户编号只来自服务端 `AccessContext.tenantId`。
-- API 不接受 query、header、body 或 localStorage 中的 `tenantId`。
+- API 不接受查询参数、请求头、请求体或 localStorage 中的 `tenantId`。
 - 机构端角色只能读取当前租户治疗摘要。
 - 平台角色默认不能通过机构端 API 读取治疗摘要。
-- repository list 方法必须把 `tenantId` 作为必填输入。
-- repository 查询必须包含 `eq(treatmentSummaries.tenantId, tenantId)`。
+- 仓储层列表方法必须把 `tenantId` 作为必填输入。
+- 仓储层查询必须包含 `eq(treatmentSummaries.tenantId, tenantId)`。
 - API DTO 不返回 `tenantId`。
-- 跨租户记录即使被数据库 mock 混入，也必须在 mapper 或 repository 层过滤掉。
+- 跨租户记录即使被数据库 mock 混入，也必须在映射器或仓储层过滤掉。
 - 403、404、400 和 503 文案不能泄露目标记录是否属于其他租户。
 
 测试必须覆盖：
 
-- query 中传入 `tenantId=other-tenant` 返回 400，且不参与查询。
-- header `x-tenant-id: other-tenant` 不影响查询租户。
+- 查询参数中传入 `tenantId=other-tenant` 返回 400，且不参与查询。
+- 请求头 `x-tenant-id: other-tenant` 不影响查询租户。
 - 机构端只读取 `context.tenantId`。
 - 平台角色访问机构端治疗摘要 API 返回 403。
 - DTO 和 UI 不展示 `tenantId`。
 
 ## 12. PII / 医疗隐私禁区
 
-Phase 14 schema、repository、query parser、DTO、API response、UI、测试快照、日志和审计中均禁止保存、返回或展示：
+Phase 14 schema、仓储层、查询参数解析器、DTO、API 响应、UI、测试快照、日志和审计中均禁止保存、返回或展示：
 
 - 手机号原文。
 - 身份证号。
@@ -455,7 +455,7 @@ Phase 14 v1 默认不新增 schema / migration。
 
 - Phase 12 已新增 `treatment_summaries` 表。
 - 现有表已包含 Phase 14 v1 所需字段。
-- 现有索引优先满足 customer / risk / date 查询：
+- 现有索引优先满足客户 / 风险 / 日期查询：
   - `treatment_summaries_tenant_customer_date_idx`
   - `treatment_summaries_tenant_risk_date_idx`
   - `treatment_summaries_tenant_appointment_idx`
@@ -469,7 +469,7 @@ Phase 14 v1 默认不新增 schema / migration。
 - 新文件表。
 - 新知识库表。
 - 新搜索索引表。
-- 新 project index migration。
+- 新项目索引 migration。
 - 新 metadata jsonb。
 
 后续如果治疗摘要规模变大，且项目筛选成为主要性能瓶颈，再单独评估是否新增 `(tenant_id, treatment_project, treatment_date)` 索引。该评估应作为独立 migration PR，不混入 Phase 14 v1。
@@ -478,27 +478,27 @@ Phase 14 v1 默认不新增 schema / migration。
 
 Phase 14 推荐拆成 4 个 PR：
 
-1. PR 1：Phase 14 spec / plan 文档。
-2. PR 2：治疗摘要列表 domain / query parser / repository / API。
+1. PR 1：Phase 14 设计 / 计划文档。
+2. PR 2：治疗摘要列表领域类型 / 查询参数解析器 / 仓储层 / API。
 3. PR 3：机构端治疗摘要管理 UI。
-4. PR 4：smoke / 文档收尾。
+4. PR 4：冒烟测试（smoke）/ 文档收尾。
 
 拆分原则：
 
 - PR 1 只做文档，不改业务代码。
 - PR 2 只做后端只读列表能力，不做 UI。
 - PR 3 只做机构端 UI，不做新增、编辑、删除。
-- PR 4 只做 smoke 和文档状态收尾。
+- PR 4 只做冒烟测试（smoke）和文档状态收尾。
 
 ## 15. 每个 PR 的范围、风险和验证方式
 
-### PR 1：Phase 14 spec / plan 文档
+### PR 1：Phase 14 设计 / 计划文档
 
 范围：
 
-- 新增 Phase 14 design spec。
-- 新增 Phase 14 implementation plan。
-- 不修改业务代码、页面、测试、API route、数据库 schema / migration、权限、认证或租户隔离。
+- 新增 Phase 14 设计规格文档。
+- 新增 Phase 14 实施计划文档。
+- 不修改业务代码、页面、测试、API 路由、数据库 schema / migration、权限、认证或租户隔离。
 
 风险：
 
@@ -509,21 +509,21 @@ Phase 14 推荐拆成 4 个 PR：
 - `git diff --check`
 - 人工检查文档是否覆盖目标、范围、API、DTO、隐私禁区、租户隔离和 PR 拆分。
 
-### PR 2：治疗摘要列表 domain / query parser / repository / API
+### PR 2：治疗摘要列表领域类型 / 查询参数解析器 / 仓储层 / API
 
 范围：
 
-- 新增治疗摘要列表 query 类型和 DTO 类型。
-- 新增白名单 query parser。
-- 扩展 treatment summary repository 的 list 方法。
+- 新增治疗摘要列表查询类型和 DTO 类型。
+- 新增白名单查询参数解析器。
+- 扩展治疗摘要仓储层的列表查询方法。
 - 新增 `GET /api/institution/treatment-summaries`。
 - 返回安全 DTO 和分页信息。
-- 补 API、parser、repository、DTO 白名单和租户隔离测试。
+- 补 API、解析器、仓储层、DTO 白名单和租户隔离测试。
 
 风险：
 
 - 筛选参数接受未知字段或 `tenantId`。
-- repository 查询遗漏 `tenantId`。
+- 仓储层查询遗漏 `tenantId`。
 - DTO 直接返回数据库行，泄露 `tenantId` 或敏感字段。
 - 项目筛选实现为不安全字符串拼接。
 - 审计事件误存请求体或筛选敏感值。
@@ -540,11 +540,11 @@ Phase 14 推荐拆成 4 个 PR：
 范围：
 
 - 新增机构端治疗摘要管理页面或入口。
-- 新增 client helper 调用 `GET /api/institution/treatment-summaries`。
+- 新增客户端辅助方法调用 `GET /api/institution/treatment-summaries`。
 - 支持筛选、分页、安全详情查看。
 - 复用 `InstitutionPageState` 和 `InstitutionSectionHeader`。
 - 不提供新增、编辑、删除入口。
-- 补 UI 和 client 测试。
+- 补 UI 和客户端测试。
 
 风险：
 
@@ -561,20 +561,20 @@ Phase 14 推荐拆成 4 个 PR：
 - `node scripts/run-vitest.mjs run src/modules/workspace/tests/WorkspaceDashboardDomain.test.ts`
 - `./node_modules/.bin/tsc --noEmit`
 
-### PR 4：smoke / 文档收尾
+### PR 4：冒烟测试（smoke）/ 文档收尾
 
 范围：
 
-- 补 workspace smoke 覆盖治疗摘要管理入口。
-- smoke 覆盖列表、筛选、分页、安全详情和敏感字段不展示。
+- 补工作区入口冒烟测试（smoke），覆盖治疗摘要管理入口。
+- 冒烟测试（smoke）覆盖列表、筛选、分页、安全详情和敏感字段不展示。
 - 更新 README。
 - 更新 roadmap。
 - 更新 devlog。
-- 更新 Phase 14 spec / plan 状态为完成。
+- 更新 Phase 14 设计 / 计划文档状态为完成。
 
 风险：
 
-- smoke 只验证入口，不验证敏感字段不展示。
+- 冒烟测试（smoke）只验证入口，不验证敏感字段不展示。
 - 文档遗漏“不做新增 / 编辑 / 删除”和“不进入 AI / RAG / 外部系统”边界。
 - 收尾文档误写成已经完成后续联动或完整治疗记录。
 
@@ -592,12 +592,12 @@ Phase 14 完成时应满足：
 
 - 机构端存在治疗摘要只读管理入口。
 - `GET /api/institution/treatment-summaries` 只查询当前租户治疗摘要。
-- API query 参数只接受白名单。
+- API 查询参数只接受白名单。
 - API DTO 不返回 `tenantId`、客户 / 预约 / 随访明细或敏感正文。
 - UI 支持列表、筛选、分页和安全详情查看。
 - UI 不提供新增、编辑、删除入口。
-- smoke 覆盖入口和敏感字段不展示。
-- README、roadmap、devlog、Phase 14 spec / plan 已同步完成状态。
+- 冒烟测试（smoke）覆盖入口和敏感字段不展示。
+- README、roadmap、devlog、Phase 14 设计 / 计划文档已同步完成状态。
 - 未新增 schema / migration。
 - 未修改权限、认证或租户隔离模型。
 - 未进入治疗后护理 / 随访联动、AI、RAG、企微、外部系统、支付、合同或发票。
@@ -608,5 +608,5 @@ Phase 14 完成后，后续优先级建议：
 
 1. 治疗后护理 / 随访联动 v1：只做结构化任务建议和人工确认，不自动触达客户。
 2. 平台商业化继续增强：继续保持只读运营辅助，避免支付、合同和发票。
-3. 知识库 / RAG 安全基础准备：单独 Plan Mode，优先 metadata-only，不保存医疗隐私正文。
+3. 知识库 / RAG 安全基础准备：单独 Plan Mode，优先只保留元数据（metadata-only），不保存医疗隐私正文。
 4. 治疗摘要编辑能力：单独 Plan Mode，必须设计审计、权限、版本和敏感字段二次拦截。
