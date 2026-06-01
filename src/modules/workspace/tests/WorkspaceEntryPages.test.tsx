@@ -198,6 +198,24 @@ const treatmentFollowUpCreatedTask = {
   secret: 'phase15-raw-secret',
 };
 
+const phase16SourceFollowUpTask = {
+  ...treatmentFollowUpCreatedTask,
+  id: 'fu_phase16_source_active',
+  customerDisplayName: 'Phase16 来源客户',
+  stage: 'Phase16 治疗摘要来源随访',
+  status: 'in_progress',
+  source: 'treatment_summary',
+  sourceTreatmentSummaryId: 'trt_phase14_management',
+  sourceSuggestionKey: 'trt_phase14_management:watch_risk_followup:3d',
+  medicalRecordNo: 'MR202605310001',
+  fullTreatmentRecord: '完整治疗记录正文不应展示',
+  medicalRecordText: '完整病历正文不应展示',
+  diagnosisText: '诊疗原文不应展示',
+  imageFileOriginal: '图片文件原文不应展示',
+  aiGeneratedContent: 'AI 生成内容不应展示',
+  externalSyncPayload: '外部系统同步原文不应展示',
+};
+
 const platformAuditEventRecord = {
   id: 'audit_phase8_platform',
   tenantId: 'demo-tenant-001',
@@ -535,6 +553,7 @@ type WorkspaceFetchOptions = {
   customers?: unknown[];
   appointments?: unknown[];
   followups?: unknown[];
+  followUpSourceResponses?: Record<string, unknown[]>;
   treatmentSummaries?: unknown[];
   treatmentSummaryPageInfo?: unknown;
   treatmentSummaryPages?: WorkspaceTreatmentSummaryPage[];
@@ -579,6 +598,7 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     customers = [customerRecord, postCareCustomerRecord],
     appointments = [appointmentRecord, rescheduleAppointmentRecord],
     followups = [urgentFollowUpRecord, { ...followUpRecord, status: 'scheduled' }],
+    followUpSourceResponses,
     treatmentSummaries = [treatmentSummaryManagementRecord],
     treatmentSummaryPageInfo = {
       hasMore: false,
@@ -636,6 +656,10 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
 
       if (path === '/api/institution/appointments') {
         return jsonResponse({ records: appointments });
+      }
+
+      if (path.startsWith('/api/institution/followups?')) {
+        return jsonResponse({ records: followUpSourceResponses?.[path] ?? [] });
       }
 
       if (path === '/api/institution/followups') {
@@ -1278,6 +1302,73 @@ describe('工作台入口页面', () => {
     expect(String(createCall![1]?.body)).not.toContain('tenantId');
     expect(String(createCall![1]?.body)).not.toContain('customerId');
     expect(String(createCall![1]?.body)).not.toContain('suggestedAction');
+    expectNoSensitiveTreatmentSummaryManagementContent(container);
+  });
+
+  it('机构入口 smoke 覆盖 Phase16 随访来源筛选和重复任务只读提示', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      followups: [followUpRecord, phase16SourceFollowUpTask],
+      followUpSourceResponses: {
+        '/api/institution/followups?source=treatment_summary': [phase16SourceFollowUpTask],
+        '/api/institution/followups?source=treatment_summary&sourceTreatmentSummaryId=trt_phase14_management': [
+          phase16SourceFollowUpTask,
+        ],
+      },
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '智能随访' }));
+
+    expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();
+    expect(await screen.findByText('Phase16 治疗摘要来源随访')).toBeInTheDocument();
+    expect(screen.getByText('来源：治疗摘要')).toBeInTheDocument();
+    expect(screen.getByText('来源摘要：trt_phase14_management')).toBeInTheDocument();
+    expect(
+      screen.getByText('建议 key：trt_phase14_management:watch_risk_followup:3d'),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('来源筛选'), {
+      target: { value: 'treatment_summary' },
+    });
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/institution/followups?source=treatment_summary',
+        { cache: 'no-store' },
+      ),
+    );
+    expect(await screen.findByText('Phase16 治疗摘要来源随访')).toBeInTheDocument();
+    expect(screen.queryByText('Phase5 D7 回访')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
+    expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_management' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看随访建议' }));
+
+    expect(await within(dialog).findByText('Phase15 关注风险治疗后随访')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('该建议已有进行中的随访任务，请在智能随访中继续处理。'),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText('活跃任务状态：处理中')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '已存在活跃随访任务' })).toBeDisabled();
+
+    const sourceRequestPaths = fetchMock.mock.calls
+      .map(([input]) => fetchPath(input))
+      .filter((path) => path.startsWith('/api/institution/followups?source='));
+    expect(sourceRequestPaths).toContain('/api/institution/followups?source=treatment_summary');
+    expect(sourceRequestPaths).toContain(
+      '/api/institution/followups?source=treatment_summary&sourceTreatmentSummaryId=trt_phase14_management',
+    );
+    expect(sourceRequestPaths.join('\n')).not.toContain('tenantId');
+    expect(
+      fetchMock.mock.calls.some(([input]) => fetchPath(input).endsWith('/follow-up-tasks')),
+    ).toBe(false);
+    expect(container.textContent ?? '').not.toContain('自动发送微信');
+    expect(container.textContent ?? '').not.toContain('自动短信');
+    expect(container.textContent ?? '').not.toContain('电话外呼');
+    expect(container.textContent ?? '').not.toContain('自动触达');
     expectNoSensitiveTreatmentSummaryManagementContent(container);
   });
 
