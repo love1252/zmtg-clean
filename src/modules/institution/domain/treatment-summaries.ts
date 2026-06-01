@@ -24,6 +24,21 @@ export type CustomerTimelineTreatmentSummary = Omit<
   'tenantId' | 'customerId'
 >;
 
+export type CreateTreatmentSummaryDraft = Pick<
+  TreatmentSummaryRecord,
+  | 'appointmentId'
+  | 'treatmentDate'
+  | 'treatmentProject'
+  | 'treatmentCategory'
+  | 'treatmentStage'
+  | 'recoveryStage'
+  | 'riskLevel'
+  | 'ownerUserId'
+  | 'summary'
+  | 'nextCareAction'
+  | 'tags'
+>;
+
 export const demoTenantTreatmentSummaryRecords: TreatmentSummaryRecord[] = [
   {
     id: 'trt_qin_d7_review',

@@ -127,6 +127,50 @@ describe('审计事件领域模型', () => {
     });
   });
 
+  it('支持治疗摘要创建审计决策，且不携带请求体、正文、PII 或内部敏感信息', () => {
+    expect(AUDIT_REASON_VALUES).toContain('invalid_treatment_summary_reference');
+
+    expect(
+      createAuditEvent({
+        eventId: 'audit_evt_treatment_summary_create_001',
+        context: tenantAdminContext,
+        resource: 'treatment_summary',
+        resourceId: 'trt_001',
+        action: 'create',
+        result: 'allowed',
+        reason: 'allowed_by_policy',
+        occurredAt: '2026-05-31T09:10:00.000Z',
+      }),
+    ).toMatchObject({
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'create',
+      result: 'allowed',
+      reason: 'allowed_by_policy',
+    });
+
+    const denied = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_treatment_summary_denied_001',
+      context: tenantAdminContext,
+      resource: 'treatment_summary',
+      action: 'create',
+      reason: 'invalid_treatment_summary_reference',
+      occurredAt: '2026-05-31T09:11:00.000Z',
+    });
+
+    expect(denied).toMatchObject({
+      resource: 'treatment_summary',
+      action: 'create',
+      result: 'denied',
+      reason: 'invalid_treatment_summary_reference',
+    });
+
+    const serialized = JSON.stringify(denied);
+    expect(serialized).not.toMatch(
+      /requestBody|完整治疗记录正文|完整病历正文|咨询对话全文|13800000000|select \*|DATABASE_URL|stack|token|secret/i,
+    );
+  });
+
   it('审计事件风险词列表覆盖凭证明文模式', () => {
     expect(auditForbiddenTerms).toEqual([
       'client_secret',

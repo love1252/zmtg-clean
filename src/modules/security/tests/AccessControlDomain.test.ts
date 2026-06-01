@@ -55,6 +55,7 @@ describe('访问控制领域', () => {
       'customer',
       'appointment',
       'follow_up',
+      'treatment_summary',
       'open_connection',
       'permission_policy',
       'audit_log',
@@ -95,6 +96,35 @@ describe('访问控制领域', () => {
         }),
       ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
     }
+  });
+
+  it('允许机构管理员在本租户创建和读取治疗摘要，且不扩大编辑权限', () => {
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'treatment_summary',
+        action: 'create',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'treatment_summary',
+        action: 'read_own_tenant',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'treatment_summary',
+        action: 'update',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
   });
 
   it('拒绝机构管理员读取其他租户', () => {
@@ -146,6 +176,18 @@ describe('访问控制领域', () => {
       canAccessResource({
         context: platformAdminContext,
         resource: 'customer',
+        action: 'read_detail',
+        targetTenantId: 'demo-tenant-001',
+        containsSensitiveDetail: true,
+      }),
+    ).toEqual({ allowed: false, reason: 'sensitive_detail_denied' });
+  });
+
+  it('默认拒绝平台角色读取治疗摘要敏感明细', () => {
+    expect(
+      canAccessResource({
+        context: platformAdminContext,
+        resource: 'treatment_summary',
         action: 'read_detail',
         targetTenantId: 'demo-tenant-001',
         containsSensitiveDetail: true,
