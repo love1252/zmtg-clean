@@ -2,6 +2,30 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import HospitalPage from '@/app/hospital/page';
 import OpenPlatformPage from '@/app/open-platform/page';
+import type { AuditEventListItem } from '@/modules/audit/domain/audit-event-query';
+import type { AppointmentRecordSummary } from '@/modules/institution/domain/appointment-records';
+import {
+  buildCustomerTimelineResponse,
+  type CustomerTimelineAuditSummary,
+} from '@/modules/institution/domain/customer-timeline';
+import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
+import type { TenantFollowUpTask } from '@/modules/institution/domain/followup-workflow';
+import {
+  mapTreatmentSummaryRecordToListItem,
+  type TreatmentSummaryRecord,
+} from '@/modules/institution/domain/treatment-summaries';
+import type { OpenPlatformTenantRecord } from '@/modules/open-platform/client/platform-tenant-management-client';
+import {
+  getDemoAppointmentSeedRecords,
+  getDemoAuditEventSeedRecords,
+  getDemoCustomerSeedRecords,
+  getDemoFollowUpTaskSeedRecords,
+  getDemoTenantPlanAssignmentSeedRecords,
+  getDemoTenantPlanSeedRecords,
+  getDemoTenantQuotaSnapshotSeedRecords,
+  getDemoTenantSeedRecords,
+  getDemoTreatmentSummarySeedRecords,
+} from '@/server/db/seed-demo-data';
 
 const customerRecord = {
   id: 'cust_phase5_closeout',
@@ -852,7 +876,7 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
         return jsonResponse({ record: treatmentSummaryRecord }, { status: 201 });
       }
 
-      if (path === '/api/institution/customers/cust_phase5_closeout/timeline') {
+      if (path.startsWith('/api/institution/customers/') && path.endsWith('/timeline')) {
         return jsonResponse(timelineQueue.shift() ?? fallbackTimeline);
       }
 
@@ -1040,6 +1064,232 @@ function expectOnlyInstitutionReadCalls(fetchMock: ReturnType<typeof mockWorkspa
     expect(init?.method ?? 'GET').toBe('GET');
     expect(init?.body ? String(init.body) : '').not.toContain('tenantId');
   }
+}
+
+type DemoCustomerSeed = ReturnType<typeof getDemoCustomerSeedRecords>[number];
+type DemoAppointmentSeed = ReturnType<typeof getDemoAppointmentSeedRecords>[number];
+type DemoTreatmentSummarySeed = ReturnType<typeof getDemoTreatmentSummarySeedRecords>[number];
+type DemoFollowUpTaskSeed = ReturnType<typeof getDemoFollowUpTaskSeedRecords>[number];
+type DemoAuditEventSeed = ReturnType<typeof getDemoAuditEventSeedRecords>[number];
+
+function toIsoStringForDemoSmoke(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function requireIsoStringForDemoSmoke(value: Date | string | null | undefined) {
+  return toIsoStringForDemoSmoke(value) ?? '';
+}
+
+function mapDemoCustomerSeed(record: DemoCustomerSeed): CustomerRecordSummary {
+  return {
+    id: record.id,
+    tenantId: record.tenantId,
+    displayName: record.displayName,
+    lifecycle: record.lifecycle,
+    priority: record.priority,
+    ownerUserId: record.ownerUserId,
+    projectInterest: record.projectInterest,
+    maskedPhone: record.maskedPhone,
+    maskedMedicalRecordNo: record.maskedMedicalRecordNo,
+    lastTouchSummary: record.lastTouchSummary,
+    nextAction: record.nextAction,
+    tags: [...(record.tags ?? [])],
+  };
+}
+
+function mapDemoAppointmentSeed(record: DemoAppointmentSeed): AppointmentRecordSummary {
+  return {
+    id: record.id,
+    tenantId: record.tenantId,
+    customerId: record.customerId,
+    customerDisplayName: record.customerDisplayName,
+    project: record.project,
+    scheduledAt: requireIsoStringForDemoSmoke(record.scheduledAt),
+    consultantUserId: record.consultantUserId,
+    status: record.status,
+    note: record.note,
+  };
+}
+
+function mapDemoTreatmentSummarySeed(record: DemoTreatmentSummarySeed): TreatmentSummaryRecord {
+  const voidedAt = toIsoStringForDemoSmoke(record.voidedAt);
+
+  return {
+    id: record.id,
+    tenantId: record.tenantId,
+    customerId: record.customerId,
+    appointmentId: record.appointmentId ?? null,
+    treatmentDate: requireIsoStringForDemoSmoke(record.treatmentDate),
+    treatmentProject: record.treatmentProject,
+    treatmentCategory: record.treatmentCategory,
+    treatmentStage: record.treatmentStage,
+    recoveryStage: record.recoveryStage,
+    riskLevel: record.riskLevel,
+    ownerUserId: record.ownerUserId,
+    summary: record.summary,
+    nextCareAction: record.nextCareAction,
+    tags: [...(record.tags ?? [])],
+    status: voidedAt ? 'voided' : 'active',
+    voidedAt,
+    voidedBy: record.voidedBy ?? null,
+    voidReasonCode: record.voidReasonCode ?? null,
+    voidReason: record.voidReason ?? null,
+    createdAt: requireIsoStringForDemoSmoke(record.createdAt),
+    updatedAt: requireIsoStringForDemoSmoke(record.updatedAt),
+  };
+}
+
+function mapDemoFollowUpTaskSeed(record: DemoFollowUpTaskSeed): TenantFollowUpTask {
+  const sourceTreatmentSummaryId = record.sourceTreatmentSummaryId ?? null;
+
+  return {
+    id: record.id,
+    tenantId: record.tenantId,
+    customerId: record.customerId,
+    customerDisplayName: record.customerDisplayName,
+    journeyId: record.journeyId,
+    stage: record.stage,
+    status: record.status,
+    dueAt: requireIsoStringForDemoSmoke(record.dueAt),
+    suggestedAction: record.suggestedAction,
+    riskLevel: record.riskLevel,
+    updatedBy: record.updatedBy ?? null,
+    updatedAt: toIsoStringForDemoSmoke(record.updatedAt),
+    source: sourceTreatmentSummaryId ? 'treatment_summary' : null,
+    sourceTreatmentSummaryId,
+    sourceSuggestionKey: record.sourceSuggestionKey ?? null,
+  };
+}
+
+function mapDemoAuditEventSeed(record: DemoAuditEventSeed): AuditEventListItem {
+  return {
+    id: record.eventId,
+    tenantId: record.tenantId ?? null,
+    resource: record.resource,
+    resourceId: record.resourceId ?? null,
+    action: record.action,
+    result: record.result,
+    reason: record.reason,
+    actorId: record.actorId,
+    actorRole: record.actorRole,
+    occurredAt: requireIsoStringForDemoSmoke(record.occurredAt),
+  };
+}
+
+function mapDemoTimelineAuditEvent(record: AuditEventListItem): CustomerTimelineAuditSummary {
+  return {
+    id: record.id,
+    action: record.action,
+    result: record.result,
+    reason: record.reason,
+    actor: {
+      id: record.actorId,
+      role: record.actorRole,
+    },
+    occurredAt: record.occurredAt,
+    resource: record.resource,
+    resourceId: record.resourceId,
+  };
+}
+
+function buildDemoPlatformTenants(): OpenPlatformTenantRecord[] {
+  const plansById = new Map(getDemoTenantPlanSeedRecords().map((record) => [record.id, record]));
+  const assignmentsByTenantId = new Map(
+    getDemoTenantPlanAssignmentSeedRecords().map((record) => [record.tenantId, record]),
+  );
+  const quotaSnapshotsByTenantId = new Map(
+    getDemoTenantQuotaSnapshotSeedRecords().map((record) => [record.tenantId, record]),
+  );
+
+  return getDemoTenantSeedRecords().map((tenant) => {
+    const assignment = assignmentsByTenantId.get(tenant.id);
+    const plan = assignment ? plansById.get(assignment.planId) : undefined;
+    const quota = quotaSnapshotsByTenantId.get(tenant.id);
+
+    return {
+      tenantId: tenant.id,
+      tenantName: tenant.name,
+      tenantStatus: tenant.status ?? 'active',
+      createdAt: '2026-06-01T01:00:00.000Z',
+      updatedAt: '2026-06-02T01:00:00.000Z',
+      planName: plan?.name ?? null,
+      planCode: plan?.code ?? null,
+      planStatus: plan?.status ?? null,
+      assignmentStatus: assignment?.status ?? null,
+      startedAt: toIsoStringForDemoSmoke(assignment?.startedAt),
+      expiresAt: toIsoStringForDemoSmoke(assignment?.expiresAt),
+      maxCustomers: quota?.maxCustomers ?? null,
+      maxAppointments: quota?.maxAppointments ?? null,
+      maxFollowUps: quota?.maxFollowUps ?? null,
+      maxAiCalls: quota?.maxAiCalls ?? null,
+      currentCustomers: quota?.currentCustomers ?? null,
+      currentAppointments: quota?.currentAppointments ?? null,
+      currentFollowUps: quota?.currentFollowUps ?? null,
+      currentAiCalls: quota?.currentAiCalls ?? null,
+      snapshotAt: toIsoStringForDemoSmoke(quota?.snapshotAt),
+    };
+  });
+}
+
+function buildDemoFollowUpSourceResponses(followups: TenantFollowUpTask[]) {
+  return getDemoTreatmentSummarySeedRecords().reduce<Record<string, TenantFollowUpTask[]>>(
+    (responses, summary) => {
+      const path = `/api/institution/followups?source=treatment_summary&sourceTreatmentSummaryId=${summary.id}`;
+      responses[path] = followups.filter((task) => task.sourceTreatmentSummaryId === summary.id);
+      return responses;
+    },
+    {},
+  );
+}
+
+function buildDemoSeedWorkspaceSmokeFixtures() {
+  const customers = getDemoCustomerSeedRecords()
+    .filter((record) => record.tenantId === 'demo-tenant-001')
+    .map(mapDemoCustomerSeed);
+  const appointments = getDemoAppointmentSeedRecords()
+    .filter((record) => record.tenantId === 'demo-tenant-001')
+    .map(mapDemoAppointmentSeed);
+  const followups = getDemoFollowUpTaskSeedRecords()
+    .filter((record) => record.tenantId === 'demo-tenant-001')
+    .map(mapDemoFollowUpTaskSeed);
+  const treatmentSummaryRecords = getDemoTreatmentSummarySeedRecords()
+    .filter((record) => record.tenantId === 'demo-tenant-001')
+    .map(mapDemoTreatmentSummarySeed);
+  const treatmentSummaries = treatmentSummaryRecords.map(mapTreatmentSummaryRecordToListItem);
+  const auditEvents = getDemoAuditEventSeedRecords()
+    .filter((record) => record.scope === 'tenant' && record.tenantId === 'demo-tenant-001')
+    .map(mapDemoAuditEventSeed);
+  const platformAuditEvents = getDemoAuditEventSeedRecords()
+    .filter((record) => record.scope === 'platform' || record.result === 'denied')
+    .map(mapDemoAuditEventSeed);
+  const shenZhixiaTimeline = buildCustomerTimelineResponse({
+    customer: customers.find((record) => record.id === 'demo-customer-shen-zhixia') ?? customers[0],
+    appointments: appointments.filter((record) => record.customerId === 'demo-customer-shen-zhixia'),
+    followups: followups.filter((record) => record.customerId === 'demo-customer-shen-zhixia'),
+    treatmentSummaries: treatmentSummaryRecords.filter(
+      (record) => record.customerId === 'demo-customer-shen-zhixia',
+    ),
+    auditEvents: auditEvents
+      .filter((record) =>
+        ['demo-customer-shen-zhixia', 'demo-appt-shen-treatment', 'TS-001'].includes(
+          record.resourceId ?? '',
+        ),
+      )
+      .map(mapDemoTimelineAuditEvent),
+  });
+
+  return {
+    customers,
+    appointments,
+    followups,
+    treatmentSummaries,
+    auditEvents,
+    platformAuditEvents,
+    platformTenants: buildDemoPlatformTenants(),
+    shenZhixiaTimeline,
+    followUpSourceResponses: buildDemoFollowUpSourceResponses(followups),
+  };
 }
 
 function expectNoSensitiveCustomerTimelineContent(container: HTMLElement) {
@@ -1278,6 +1528,122 @@ describe('工作台入口页面', () => {
     expect(await screen.findByText('audit_phase8_institution')).toBeInTheDocument();
     expect(screen.getByText('资源 ID：cust_phase5_closeout')).toBeInTheDocument();
     expectOnlyInstitutionReadCalls(fetchMock);
+  });
+
+  it('demo seed smoke 支撑机构端演示主线入口、客户、预约、时间线、摘要、随访和审计', async () => {
+    const demoSeed = buildDemoSeedWorkspaceSmokeFixtures();
+    const fetchMock = mockWorkspaceFetch({
+      customers: demoSeed.customers,
+      appointments: demoSeed.appointments,
+      followups: demoSeed.followups,
+      treatmentSummaries: demoSeed.treatmentSummaries,
+      auditEvents: demoSeed.auditEvents,
+      timeline: demoSeed.shenZhixiaTimeline,
+      followUpSourceResponses: demoSeed.followUpSourceResponses,
+      followUpSuggestions: [],
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByRole('heading', { name: /让咨询团队/ })).toBeInTheDocument();
+    await expectMetric('当前客户摘要', '8');
+    await expectMetric('待确认预约', '1');
+    await expectMetric('待处理随访', '2');
+    expect(await screen.findByText('顾安然：D2 术后重点关怀')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
+    expect(await screen.findByText('沈知夏')).toBeInTheDocument();
+    expect(screen.getByText('叶舒颜')).toBeInTheDocument();
+    expect(screen.getByText('唐以沫')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 沈知夏' }));
+    const drawer = await screen.findByRole('dialog', { name: '客户详情时间线' });
+    expect(within(drawer).getAllByText('沈知夏').length).toBeGreaterThan(0);
+    expect(within(drawer).getByText('光子嫩肤治疗预约')).toBeInTheDocument();
+    expect(within(drawer).getByText('光子嫩肤 · 术后即时护理')).toBeInTheDocument();
+    expect(within(drawer).getAllByText('D3 光子术后回访').length).toBeGreaterThan(0);
+    fireEvent.click(within(drawer).getByRole('button', { name: '关闭客户详情' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '预约中心' }));
+    expect(await screen.findByText('光子嫩肤治疗')).toBeInTheDocument();
+    expect(screen.getByText('水光复诊')).toBeInTheDocument();
+    expect(screen.getByText('面诊预约')).toBeInTheDocument();
+    expect(screen.getByText('皮肤管理复购面诊')).toBeInTheDocument();
+    expect(screen.getAllByText('已完成').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已确认').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('待确认').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已取消').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
+    expect(await screen.findByText('光子嫩肤')).toBeInTheDocument();
+    expect(screen.getByText('射频修复')).toBeInTheDocument();
+    expect(screen.getByText('水光术后复查')).toBeInTheDocument();
+    expect(screen.getAllByText('状态：正常').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已编辑').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已作废').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 TS-005' }));
+    const summaryDialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+    expect(within(summaryDialog).getAllByText('已作废').length).toBeGreaterThan(0);
+    expect(within(summaryDialog).getByText('作废时间')).toBeInTheDocument();
+    expect(within(summaryDialog).getByText('作废人')).toBeInTheDocument();
+    expect(within(summaryDialog).getAllByText('demo-user-admin').length).toBeGreaterThan(0);
+    expect(within(summaryDialog).getByText('作废原因')).toBeInTheDocument();
+    expect(within(summaryDialog).getByText('摘要录入依据不完整，仅保留历史追溯')).toBeInTheDocument();
+    fireEvent.click(within(summaryDialog).getByRole('button', { name: '查看随访建议' }));
+    expect(
+      within(summaryDialog).getByText('治疗摘要已作废，不能继续生成随访建议或来源随访任务。'),
+    ).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('/follow-up-tasks'))).toBe(
+      false,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '智能随访' }));
+    expect(await screen.findByText('D3 光子术后回访')).toBeInTheDocument();
+    expect(screen.getAllByText('来源：治疗摘要').length).toBeGreaterThan(0);
+    expect(screen.getByText('建议 key：TS-006:watch_risk_followup:3d')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '审计日志' }));
+    expect(await screen.findByText('demo-audit-customer-created-shen')).toBeInTheDocument();
+    expect(screen.getByText('demo-audit-treatment-edited-ts004')).toBeInTheDocument();
+    expect(await screen.findByText('demo-audit-treatment-voided-ts005')).toBeInTheDocument();
+    expect(screen.getByText('原因：treatment_summary_voided')).toBeInTheDocument();
+    expect(screen.getByText('demo-audit-follow-up-created-shen')).toBeInTheDocument();
+    expect(screen.getByText('demo-audit-role-denied-export')).toBeInTheDocument();
+    expect(screen.getByText('demo-audit-quota-denied-appointment')).toBeInTheDocument();
+    expectNoSensitiveTreatmentSummaryManagementContent(container);
+  });
+
+  it('demo seed smoke 支撑平台端 4 个租户、4 个套餐、商业化健康和 AI 配额边界', async () => {
+    const demoSeed = buildDemoSeedWorkspaceSmokeFixtures();
+    const fetchMock = mockWorkspaceFetch({
+      role: 'platform_admin',
+      platformTenants: demoSeed.platformTenants,
+      platformAuditEvents: demoSeed.platformAuditEvents,
+    });
+    const { container } = render(<OpenPlatformPage />);
+
+    expect(await screen.findByRole('heading', { name: /掌控租户、模型与接口/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
+
+    expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
+    expect(screen.getAllByText('星澜医美中心').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('青禾皮肤管理').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('澄镜医疗美容').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('远山医美连锁').length).toBeGreaterThan(0);
+    expect(screen.getByText('套餐 code：growth-care')).toBeInTheDocument();
+    expect(screen.getByText('套餐 code：starter-care')).toBeInTheDocument();
+    expect(screen.getByText('套餐 code：trial-care')).toBeInTheDocument();
+    expect(screen.getByText('套餐 code：enterprise-care')).toBeInTheDocument();
+    expect(screen.getAllByText('0 / 0').length).toBeGreaterThanOrEqual(4);
+    expect(screen.queryByText('AI 已接入')).not.toBeInTheDocument();
+    expect(screen.queryByText('AI 自动客服')).not.toBeInTheDocument();
+
+    expect(await screen.findByRole('heading', { name: '商业化健康' })).toBeInTheDocument();
+    expect(screen.getAllByText(/quota_exceeded_appointments/).length).toBeGreaterThan(0);
+    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/tenants', { cache: 'no-store' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/audit-events?result=denied&limit=100', {
+      cache: 'no-store',
+    });
+    expectNoPlatformTenantMutation(fetchMock);
+    expectNoSensitivePlatformTenantContent(container);
   });
 
   it('机构入口 smoke 覆盖治疗摘要管理筛选、分页、安全详情和敏感字段边界', async () => {
