@@ -3,8 +3,6 @@ import { join } from 'node:path';
 
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
-import { demoTenantAppointmentRecords } from '@/modules/institution/domain/appointment-records';
-import { demoTenantFollowUpTasks } from '@/modules/institution/domain/followup-workflow';
 import { createDatabaseUrlErrorMessage } from '@/server/db/client';
 import {
   getDemoCustomerSeedRecords,
@@ -43,6 +41,20 @@ function readMigrationSql(fileNameIncludes?: string) {
 function tenantCustomerKey(record: { tenantId: string; customerId: string }) {
   return `${record.tenantId}:${record.customerId}`;
 }
+
+function getSeedRecords<T>(getterName: string): T[] {
+  const getter = (seedDemoData as unknown as Record<string, unknown>)[getterName];
+
+  expect(typeof getter).toBe('function');
+  return (getter as () => T[])();
+}
+
+function serializeSeedRecords(records: unknown[]) {
+  return JSON.stringify(records);
+}
+
+const sensitiveDemoSeedPattern =
+  /(1[3-9]\d{9}|[1-9]\d{16}[\dXx]|DATABASE_URL|token|secret|password|Bearer\s+|mysql:\/\/|postgres:\/\/|stack trace|SQLSTATE|完整治疗记录|完整病历|咨询对话全文|图片原文|文件原文)/i;
 
 describe('数据库结构', () => {
   it('数据库连接错误提示不泄露连接串', () => {
@@ -352,9 +364,15 @@ describe('数据库结构', () => {
     const customerKeys = new Set(
       getDemoCustomerSeedRecords().map((record) => `${record.tenantId}:${record.id}`),
     );
+    const appointments = getSeedRecords<{ tenantId: string; customerId: string }>(
+      'getDemoAppointmentSeedRecords',
+    );
+    const followUpTasks = getSeedRecords<{ tenantId: string; customerId: string }>(
+      'getDemoFollowUpTaskSeedRecords',
+    );
     const referencedCustomerKeys = [
-      ...demoTenantAppointmentRecords.map(tenantCustomerKey),
-      ...demoTenantFollowUpTasks.map(tenantCustomerKey),
+      ...appointments.map(tenantCustomerKey),
+      ...followUpTasks.map(tenantCustomerKey),
     ];
 
     expect(referencedCustomerKeys.filter((key) => !customerKeys.has(key))).toEqual([]);
@@ -364,22 +382,259 @@ describe('数据库结构', () => {
     const plans = getDemoTenantPlanSeedRecords();
     const assignments = getDemoTenantPlanAssignmentSeedRecords();
     const snapshots = getDemoTenantQuotaSnapshotSeedRecords();
+    const demoTenantIds = [
+      'demo-tenant-001',
+      'demo-tenant-002',
+      'demo-tenant-003',
+      'demo-tenant-004',
+    ];
 
-    expect(plans.map((plan) => plan.code)).toEqual(['starter-care', 'growth-care']);
-    expect(assignments.map((assignment) => assignment.tenantId)).toEqual([
-      'demo-tenant-001',
-      'demo-tenant-002',
-    ]);
-    expect(snapshots.map((snapshot) => snapshot.tenantId)).toEqual([
-      'demo-tenant-001',
-      'demo-tenant-002',
-    ]);
+    expect(plans.map((plan) => plan.code)).toEqual(
+      expect.arrayContaining([
+        'starter-care',
+        'growth-care',
+        'trial-care',
+        'enterprise-care',
+      ]),
+    );
+    expect(assignments.map((assignment) => assignment.tenantId)).toEqual(
+      expect.arrayContaining(demoTenantIds),
+    );
+    expect(snapshots.map((snapshot) => snapshot.tenantId)).toEqual(
+      expect.arrayContaining(demoTenantIds),
+    );
     expect(snapshots.every((snapshot) => snapshot.currentCustomers <= snapshot.maxCustomers)).toBe(
       true,
     );
+    expect(snapshots.every((snapshot) => snapshot.maxAiCalls === 0)).toBe(true);
+    expect(snapshots.every((snapshot) => snapshot.currentAiCalls === 0)).toBe(true);
     expect(JSON.stringify({ plans, assignments, snapshots })).not.toMatch(
       /phoneNumber|idNumber|medicalRecordNo|treatmentRecord|consultationTranscript|DATABASE_URL|secret|token/i,
     );
+  });
+
+  it('演示种子数据包含星澜医美中心、演示角色和 Growth Plan 配额', () => {
+    const tenants = getSeedRecords<{ id: string; name: string }>('getDemoTenantSeedRecords');
+    const tenantMembers = getSeedRecords<{
+      userId: string;
+      displayName: string;
+      role: string;
+      tenantId: string;
+    }>('getDemoTenantMemberSeedRecords');
+    const plans = getDemoTenantPlanSeedRecords();
+    const assignments = getDemoTenantPlanAssignmentSeedRecords();
+    const quotaSnapshots = getDemoTenantQuotaSnapshotSeedRecords();
+
+    expect(tenants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'demo-tenant-001',
+          name: '星澜医美中心',
+        }),
+        expect.objectContaining({
+          id: 'demo-tenant-002',
+          name: '青禾皮肤管理',
+        }),
+        expect.objectContaining({
+          id: 'demo-tenant-003',
+          name: '澄镜医疗美容',
+        }),
+        expect.objectContaining({
+          id: 'demo-tenant-004',
+          name: '远山医美连锁',
+        }),
+      ]),
+    );
+    expect(plans).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'growth-care',
+          name: 'Growth Plan',
+        }),
+        expect.objectContaining({
+          code: 'trial-care',
+          name: 'Trial Plan',
+        }),
+        expect.objectContaining({
+          code: 'enterprise-care',
+          name: 'Enterprise Plan',
+        }),
+      ]),
+    );
+    expect(assignments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tenantId: 'demo-tenant-001',
+          planId: 'plan-growth-care',
+        }),
+        expect.objectContaining({
+          tenantId: 'demo-tenant-002',
+          planId: 'plan-starter-care',
+        }),
+        expect.objectContaining({
+          tenantId: 'demo-tenant-003',
+          planId: 'plan-trial-care',
+        }),
+        expect.objectContaining({
+          tenantId: 'demo-tenant-004',
+          planId: 'plan-enterprise-care',
+        }),
+      ]),
+    );
+    expect(quotaSnapshots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tenantId: 'demo-tenant-001',
+          maxCustomers: expect.any(Number),
+          maxAppointments: expect.any(Number),
+          maxFollowUps: expect.any(Number),
+        }),
+        expect.objectContaining({ tenantId: 'demo-tenant-002' }),
+        expect.objectContaining({ tenantId: 'demo-tenant-003' }),
+        expect.objectContaining({ tenantId: 'demo-tenant-004' }),
+      ]),
+    );
+    expect(tenantMembers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ displayName: '林院长', role: 'tenant_admin' }),
+        expect.objectContaining({ displayName: '周运营', role: 'tenant_operator' }),
+        expect.objectContaining({ displayName: '许咨询', role: 'consultant' }),
+        expect.objectContaining({ displayName: '赵客服', role: 'customer_service' }),
+        expect.objectContaining({ displayName: '陈医助', tenantId: 'demo-tenant-001' }),
+      ]),
+    );
+  });
+
+  it('演示种子数据包含虚构客户和预约演示场景', () => {
+    const customers = getDemoCustomerSeedRecords();
+    const appointments = getSeedRecords<{
+      tenantId: string;
+      customerId: string;
+      status: string;
+      project: string;
+    }>('getDemoAppointmentSeedRecords');
+
+    expect(customers.map((customer) => customer.displayName)).toEqual(
+      expect.arrayContaining([
+        '沈知夏',
+        '许若宁',
+        '顾安然',
+        '梁思语',
+        '陆清禾',
+        '程晚晴',
+        '叶舒颜',
+        '唐以沫',
+      ]),
+    );
+    expect(appointments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ project: '面诊预约', status: 'pending_confirmation' }),
+        expect.objectContaining({ project: '光子嫩肤治疗', status: 'completed' }),
+        expect.objectContaining({ project: '水光复诊', status: 'confirmed' }),
+        expect.objectContaining({ status: 'cancelled' }),
+      ]),
+    );
+  });
+
+  it('演示种子数据覆盖 active、edited、voided 治疗摘要和来源随访任务', () => {
+    const summaries = seedDemoData.getDemoTreatmentSummarySeedRecords();
+    const followUpTasks = getSeedRecords<{
+      id: string;
+      tenantId: string;
+      customerId: string;
+      status: string;
+      sourceTreatmentSummaryId: string | null;
+      sourceSuggestionKey: string | null;
+    }>('getDemoFollowUpTaskSeedRecords');
+
+    expect(summaries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'TS-001',
+          customerId: 'demo-customer-shen-zhixia',
+          treatmentProject: '光子嫩肤',
+          voidedAt: null,
+        }),
+        expect.objectContaining({
+          id: 'TS-005',
+          customerId: 'demo-customer-ye-shuyan',
+          voidedAt: expect.any(Date),
+          voidedBy: 'demo-user-admin',
+          voidReason: expect.stringContaining('保留历史追溯'),
+        }),
+        expect.objectContaining({
+          id: 'TS-006',
+          customerId: 'demo-customer-tang-yimo',
+          riskLevel: 'watch',
+        }),
+      ]),
+    );
+    expect(followUpTasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceTreatmentSummaryId: 'TS-001',
+          status: 'due',
+        }),
+        expect.objectContaining({
+          sourceTreatmentSummaryId: 'TS-006',
+          sourceSuggestionKey: expect.stringContaining('TS-006:'),
+        }),
+        expect.objectContaining({ status: 'completed' }),
+        expect.objectContaining({ status: 'due' }),
+      ]),
+    );
+  });
+
+  it('演示种子数据包含安全审计事件且不含敏感字段', () => {
+    const auditSeedEvents = getSeedRecords<{
+      eventId: string;
+      resource: string;
+      action: string;
+      result: string;
+      reason: string;
+    }>('getDemoAuditEventSeedRecords');
+    const allSeedRecords = [
+      ...getSeedRecords('getDemoTenantSeedRecords'),
+      ...getDemoCustomerSeedRecords(),
+      ...getSeedRecords('getDemoAppointmentSeedRecords'),
+      ...seedDemoData.getDemoTreatmentSummarySeedRecords(),
+      ...getSeedRecords('getDemoFollowUpTaskSeedRecords'),
+      ...auditSeedEvents,
+    ];
+
+    expect(auditSeedEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ resource: 'customer', action: 'create', result: 'allowed' }),
+        expect.objectContaining({ resource: 'appointment', action: 'create', result: 'allowed' }),
+        expect.objectContaining({
+          resource: 'treatment_summary',
+          action: 'create',
+          result: 'allowed',
+        }),
+        expect.objectContaining({
+          resource: 'treatment_summary',
+          action: 'update',
+          result: 'allowed',
+        }),
+        expect.objectContaining({
+          resource: 'treatment_summary',
+          action: 'update',
+          result: 'allowed',
+          reason: 'treatment_summary_voided',
+        }),
+        expect.objectContaining({ resource: 'follow_up', action: 'update', result: 'allowed' }),
+        expect.objectContaining({ result: 'denied', reason: 'role_denied' }),
+        expect.objectContaining({ result: 'denied', reason: 'quota_exceeded_appointments' }),
+      ]),
+    );
+    expect(serializeSeedRecords(allSeedRecords)).not.toMatch(sensitiveDemoSeedPattern);
+  });
+
+  it('演示 seed 入口采用可重复执行的 upsert 策略', () => {
+    const seedSource = readFileSync(join(process.cwd(), 'src/server/db/seed-demo-data.ts'), 'utf8');
+
+    expect(seedSource).toContain('onConflictDoUpdate');
+    expect(seedSource).not.toContain('onConflictDoNothing');
   });
 
   it('演示种子数据包含安全的治疗结构化摘要并保持同租户引用', () => {
@@ -396,7 +651,9 @@ describe('数据库结构', () => {
       getDemoCustomerSeedRecords().map((record) => `${record.tenantId}:${record.id}`),
     );
     const appointmentKeys = new Set(
-      demoTenantAppointmentRecords.map((record) => `${record.tenantId}:${record.id}`),
+      getSeedRecords<{ tenantId: string; id: string }>('getDemoAppointmentSeedRecords').map(
+        (record) => `${record.tenantId}:${record.id}`,
+      ),
     );
     const serialized = JSON.stringify(treatmentSummaries);
 
