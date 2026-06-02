@@ -19,11 +19,13 @@ export type TreatmentFollowUpTaskConfirmationDto = Omit<
 
 export type TreatmentFollowUpSuggestionsForSummaryResult =
   | { kind: 'success'; summary: TreatmentSummaryRecord; suggestions: TreatmentFollowUpSuggestion[] }
-  | { kind: 'not_found' };
+  | { kind: 'not_found' }
+  | { kind: 'voided'; summary: TreatmentSummaryRecord };
 
 export type ConfirmTreatmentFollowUpTaskResult =
   | { kind: 'created'; task: TreatmentFollowUpTaskConfirmationDto }
   | { kind: 'not_found' }
+  | { kind: 'voided' }
   | { kind: 'invalid_suggestion' }
   | { kind: 'conflict'; resourceId: string; reason: 'active_source_follow_up_exists' };
 
@@ -73,6 +75,10 @@ export async function getTreatmentFollowUpSuggestionsForSummary(input: {
     return { kind: 'not_found' };
   }
 
+  if (summary.status === 'voided') {
+    return { kind: 'voided', summary };
+  }
+
   return {
     kind: 'success',
     summary,
@@ -98,6 +104,10 @@ export async function confirmTreatmentFollowUpTask(input: {
 
   if (suggestionResult.kind === 'not_found') {
     return { kind: 'not_found' };
+  }
+
+  if (suggestionResult.kind === 'voided') {
+    return { kind: 'voided' };
   }
 
   const suggestion = suggestionResult.suggestions.find(

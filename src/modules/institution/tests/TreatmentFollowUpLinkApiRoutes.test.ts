@@ -130,6 +130,15 @@ const treatmentSummaryRecord = {
   secret: 'phase15-secret',
 };
 
+const voidedTreatmentSummaryRecord = {
+  ...treatmentSummaryRecord,
+  status: 'voided',
+  voidedAt: '2026-06-02T09:00:00.000Z',
+  voidedBy: 'demo-user-admin',
+  voidReasonCode: 'duplicate_summary',
+  voidReason: '重复录入，保留较新的治疗摘要',
+};
+
 const customerRecord = {
   id: 'cust_phase15_confirm',
   tenantId: 'demo-tenant-001',
@@ -282,6 +291,26 @@ describe('治疗摘要随访建议 GET API', () => {
     await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
     expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalled();
     expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+  });
+
+  it('已作废 summary 返回 409 且不返回随访建议、不创建任务、不写审计', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant.mockResolvedValueOnce(
+      voidedTreatmentSummaryRecord,
+    );
+
+    const response = await suggestionsGet(
+      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-suggestions'),
+      routeContext(),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(payload).toEqual({ error: '治疗摘要已作废，不能继续生成随访建议' });
+    expect(payload).not.toHaveProperty('suggestions');
+    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+    expectNoPrivateData(payload);
   });
 
   it('未登录返回 401，且不初始化数据库', async () => {
@@ -462,6 +491,35 @@ describe('治疗摘要人工确认创建随访任务 POST API', () => {
       result: 'denied',
       reason: 'not_found_or_not_owned',
     }));
+  });
+
+  it('已作废 summary 不允许创建来源随访任务，返回 409 并写稳定 denied audit', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant.mockResolvedValueOnce(
+      voidedTreatmentSummaryRecord,
+    );
+
+    const response = await followUpTasksPost(
+      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks', {
+        method: 'POST',
+        body: JSON.stringify({ suggestionKey: 'trt_phase15_confirm:urgent_risk_followup:1d' }),
+      }),
+      routeContext(),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(payload).toEqual({ error: '治疗摘要已作废，不能继续创建来源随访任务' });
+    expect(routeMocks.tenantBusinessRepository.getCustomerByTenant).not.toHaveBeenCalled();
+    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      resource: 'follow_up',
+      result: 'denied',
+      reason: 'voided_treatment_summary_follow_up_blocked',
+      tenantId: 'demo-tenant-001',
+    }));
+    expectNoPrivateData(payload);
+    expectNoPrivateData(routeMocks.auditRecord.mock.lastCall?.[0], { allowAuditTenant: true });
   });
 
   it('未登录返回 401，且不初始化数据库', async () => {

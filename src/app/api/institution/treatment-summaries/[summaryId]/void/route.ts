@@ -5,19 +5,20 @@ import {
   type AuditReason,
 } from '@/modules/audit/domain/audit-events';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
-import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
-import { confirmTreatmentFollowUpTask } from '@/modules/institution/server/treatment-followup-confirmation';
-import { parseTreatmentFollowUpSuggestionSelection } from '@/modules/institution/server/treatment-followup-suggestions';
+import type { InstitutionTreatmentSummaryListItem } from '@/modules/institution/domain/treatment-summaries';
 import { createTreatmentSummaryRepository } from '@/modules/institution/server/treatment-summary-repository';
+import { parseVoidTreatmentSummaryPayload } from '@/modules/institution/server/treatment-summary-write-input';
 import { canAccessResource, type AccessContext } from '@/modules/security/domain/access-control';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase, type TenantDatabase } from '@/server/db/client';
 
-type TreatmentFollowUpTaskRouteContext = {
+type TreatmentSummaryVoidRouteContext = {
   params: Promise<{ summaryId: string }>;
 };
 
-async function getSummaryId(context: TreatmentFollowUpTaskRouteContext) {
+type TreatmentSummaryVoidDto = Omit<InstitutionTreatmentSummaryListItem, 'customerId'>;
+
+async function getSummaryId(context: TreatmentSummaryVoidRouteContext) {
   const params = await context.params;
   return params.summaryId.trim();
 }
@@ -37,7 +38,7 @@ function createAuditEventId() {
   );
 }
 
-function createDeniedFollowUpAuditEvent(input: {
+function createDeniedTreatmentSummaryVoidAuditEvent(input: {
   context: AccessContext;
   reason: AuditReason;
   occurredAt: string;
@@ -46,7 +47,7 @@ function createDeniedFollowUpAuditEvent(input: {
   return createDeniedAccessAuditEvent({
     eventId: createAuditEventId(),
     context: input.context,
-    resource: 'follow_up',
+    resource: 'treatment_summary',
     resourceId: input.resourceId,
     action: 'update',
     reason: input.reason,
@@ -54,7 +55,36 @@ function createDeniedFollowUpAuditEvent(input: {
   });
 }
 
-export async function POST(request: Request, context: TreatmentFollowUpTaskRouteContext) {
+function mapTreatmentSummaryVoidDto(
+  record: InstitutionTreatmentSummaryListItem,
+): TreatmentSummaryVoidDto {
+  return {
+    id: record.id,
+    appointmentId: record.appointmentId,
+    treatmentDate: record.treatmentDate,
+    treatmentProject: record.treatmentProject,
+    treatmentCategory: record.treatmentCategory,
+    treatmentStage: record.treatmentStage,
+    recoveryStage: record.recoveryStage,
+    riskLevel: record.riskLevel,
+    ownerUserId: record.ownerUserId,
+    summary: record.summary,
+    nextCareAction: record.nextCareAction,
+    tags: [...record.tags],
+    status: record.status,
+    voidedAt: record.voidedAt,
+    voidedBy: record.voidedBy,
+    voidReasonCode: record.voidReasonCode,
+    voidReason: record.voidReason,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+export async function POST(
+  request: Request,
+  context: TreatmentSummaryVoidRouteContext,
+) {
   const accessContext = getDemoAccessContextFromRequest(request);
   if (!accessContext) {
     return NextResponse.json({ error: '请先登录' }, { status: 401 });
@@ -64,19 +94,21 @@ export async function POST(request: Request, context: TreatmentFollowUpTaskRoute
     const db = getDatabase();
     const auditRepository = createAuditEventRepository(db);
     const occurredAt = new Date().toISOString();
+    const summaryId = await getSummaryId(context);
     const decision = canAccessResource({
       context: accessContext,
-      resource: 'follow_up',
+      resource: 'treatment_summary',
       action: 'update',
       targetTenantId: accessContext.tenantId,
     });
 
     if (!decision.allowed) {
       await auditRepository.record(
-        createDeniedFollowUpAuditEvent({
+        createDeniedTreatmentSummaryVoidAuditEvent({
           context: accessContext,
           reason: decision.reason,
           occurredAt,
+          resourceId: summaryId || null,
         }),
       );
 
@@ -85,113 +117,92 @@ export async function POST(request: Request, context: TreatmentFollowUpTaskRoute
 
     if (!accessContext.tenantId) {
       await auditRepository.record(
-        createDeniedFollowUpAuditEvent({
+        createDeniedTreatmentSummaryVoidAuditEvent({
           context: accessContext,
           reason: 'missing_tenant',
           occurredAt,
+          resourceId: summaryId || null,
         }),
       );
 
       return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
     }
 
-    const tenantId = accessContext.tenantId;
     const body = await readJsonBody(request);
     if (!body.ok) {
       await auditRepository.record(
-        createDeniedFollowUpAuditEvent({
+        createDeniedTreatmentSummaryVoidAuditEvent({
           context: accessContext,
-          reason: 'invalid_follow_up_suggestion',
+          reason: 'invalid_treatment_summary_void_payload',
           occurredAt,
+          resourceId: summaryId || null,
         }),
       );
 
       return NextResponse.json({ error: '请求格式不正确' }, { status: 400 });
     }
 
-    const parsed = parseTreatmentFollowUpSuggestionSelection(body.value);
+    const parsed = parseVoidTreatmentSummaryPayload(body.value);
     if (!parsed.ok) {
       await auditRepository.record(
-        createDeniedFollowUpAuditEvent({
+        createDeniedTreatmentSummaryVoidAuditEvent({
           context: accessContext,
-          reason: 'invalid_follow_up_suggestion',
+          reason: 'invalid_treatment_summary_void_payload',
           occurredAt,
+          resourceId: summaryId || null,
         }),
       );
 
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
 
-    const summaryId = await getSummaryId(context);
+    const tenantId = accessContext.tenantId;
 
     return await db.transaction(async (transactionDatabase) => {
       const transactionTenantDatabase = transactionDatabase as unknown as TenantDatabase;
       const treatmentSummaryRepository =
         createTreatmentSummaryRepository(transactionTenantDatabase);
-      const tenantBusinessRepository = createTenantBusinessRepository(transactionTenantDatabase);
       const transactionAuditRepository = createAuditEventRepository(transactionTenantDatabase);
-      const result = await confirmTreatmentFollowUpTask({
+      const result = await treatmentSummaryRepository.voidTreatmentSummaryByTenant({
         tenantId,
         summaryId,
-        selection: parsed.value,
-        treatmentSummaryRepository,
-        tenantBusinessRepository,
+        voidedBy: accessContext.userId,
+        reasonCode: parsed.value.reasonCode,
+        reasonText: parsed.value.reasonText,
       });
 
-      if (result.kind === 'not_found') {
+      if (result.kind === 'not_found_or_not_owned') {
         await transactionAuditRepository.record(
-          createDeniedFollowUpAuditEvent({
+          createDeniedTreatmentSummaryVoidAuditEvent({
             context: accessContext,
             reason: 'not_found_or_not_owned',
             occurredAt,
+            resourceId: summaryId || null,
           }),
         );
 
         return NextResponse.json({ error: '记录不存在' }, { status: 404 });
       }
 
-      if (result.kind === 'voided') {
+      if (result.kind === 'already_voided') {
         await transactionAuditRepository.record(
-          createDeniedFollowUpAuditEvent({
+          createAuditEvent({
+            eventId: createAuditEventId(),
             context: accessContext,
-            reason: 'voided_treatment_summary_follow_up_blocked',
+            resource: 'treatment_summary',
+            resourceId: result.record.id,
+            action: 'update',
+            result: 'allowed',
+            reason: 'treatment_summary_already_voided',
             occurredAt,
           }),
         );
 
         return NextResponse.json(
-          { error: '治疗摘要已作废，不能继续创建来源随访任务' },
-          { status: 409 },
-        );
-      }
-
-      if (result.kind === 'invalid_suggestion') {
-        await transactionAuditRepository.record(
-          createDeniedFollowUpAuditEvent({
-            context: accessContext,
-            reason: 'invalid_follow_up_suggestion',
-            occurredAt,
-          }),
-        );
-
-        return NextResponse.json(
-          { error: '随访建议已失效，请重新生成后再确认' },
-          { status: 409 },
-        );
-      }
-
-      if (result.kind === 'conflict') {
-        await transactionAuditRepository.record(
-          createDeniedFollowUpAuditEvent({
-            context: accessContext,
-            resourceId: result.resourceId,
-            reason: result.reason,
-            occurredAt,
-          }),
-        );
-
-        return NextResponse.json(
-          { error: '该护理随访任务已存在，请勿重复创建' },
+          {
+            error: '治疗摘要已作废',
+            record: mapTreatmentSummaryVoidDto(result.record),
+          },
           { status: 409 },
         );
       }
@@ -200,16 +211,18 @@ export async function POST(request: Request, context: TreatmentFollowUpTaskRoute
         createAuditEvent({
           eventId: createAuditEventId(),
           context: accessContext,
-          resource: 'follow_up',
-          resourceId: result.task.id,
+          resource: 'treatment_summary',
+          resourceId: result.record.id,
           action: 'update',
           result: 'allowed',
-          reason: decision.reason,
+          reason: 'treatment_summary_voided',
           occurredAt,
         }),
       );
 
-      return NextResponse.json({ record: result.task }, { status: 201 });
+      return NextResponse.json({
+        record: mapTreatmentSummaryVoidDto(result.record),
+      });
     });
   } catch {
     return NextResponse.json({ error: '数据服务暂时不可用' }, { status: 503 });

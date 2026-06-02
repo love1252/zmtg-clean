@@ -46,6 +46,13 @@ export async function GET(
       return NextResponse.json({ error: '记录不存在' }, { status: 404 });
     }
 
+    if (result.kind === 'voided') {
+      return NextResponse.json(
+        { error: '治疗摘要已作废，不能继续生成随访建议' },
+        { status: 409 },
+      );
+    }
+
     return NextResponse.json({ suggestions: result.suggestions });
   } catch {
     return NextResponse.json({ error: '数据服务暂时不可用' }, { status: 503 });
