@@ -1,9 +1,12 @@
 import { and, asc, desc, eq, gt, gte, lt, lte, or } from 'drizzle-orm';
 import {
+  deriveTreatmentSummaryStatus,
   mapTreatmentSummaryRecordToListItem,
+  type InstitutionTreatmentSummaryListItem,
   type InstitutionTreatmentSummaryListResponse,
   type TreatmentSummaryListQuery,
   type TreatmentSummaryRecord,
+  type TreatmentSummaryVoidReasonCode,
 } from '@/modules/institution/domain/treatment-summaries';
 import { createTreatmentSummaryCursor } from '@/modules/institution/server/treatment-summary-query-parser';
 import type { TenantDatabase } from '@/server/db/client';
@@ -24,7 +27,14 @@ type TreatmentSummaryListInput = {
 };
 export type CreateTreatmentSummaryInput = Omit<
   TreatmentSummaryRecord,
-  'createdAt' | 'updatedAt' | 'treatmentDate'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'treatmentDate'
+  | 'status'
+  | 'voidedAt'
+  | 'voidedBy'
+  | 'voidReasonCode'
+  | 'voidReason'
 > & {
   treatmentDate: Date;
 };
@@ -43,6 +53,17 @@ export type UpdateTreatmentSummaryResult =
       kind: 'invalid_reference';
       reason: Exclude<TreatmentSummaryAppointmentOwnershipResult['kind'], 'matched'>;
     };
+export type VoidTreatmentSummaryInput = {
+  tenantId: string;
+  summaryId: string;
+  voidedBy: string;
+  reasonCode: TreatmentSummaryVoidReasonCode;
+  reasonText: string;
+};
+export type VoidTreatmentSummaryResult =
+  | { kind: 'voided'; record: InstitutionTreatmentSummaryListItem }
+  | { kind: 'already_voided'; record: InstitutionTreatmentSummaryListItem }
+  | { kind: 'not_found_or_not_owned' };
 
 export type TreatmentSummaryAppointmentOwnershipInput = {
   tenantId: string;
@@ -56,6 +77,8 @@ export type TreatmentSummaryAppointmentOwnershipResult =
   | { kind: 'not_found_or_not_owned' };
 
 export function mapTreatmentSummaryRowToRecord(row: TreatmentSummaryRow): TreatmentSummaryRecord {
+  const voidedAt = row.voidedAt?.toISOString() ?? null;
+
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -71,6 +94,11 @@ export function mapTreatmentSummaryRowToRecord(row: TreatmentSummaryRow): Treatm
     summary: row.summary,
     nextCareAction: row.nextCareAction,
     tags: [...row.tags],
+    status: deriveTreatmentSummaryStatus(voidedAt),
+    voidedAt,
+    voidedBy: row.voidedBy,
+    voidReasonCode: row.voidReasonCode,
+    voidReason: row.voidReason,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -345,6 +373,61 @@ export function createTreatmentSummaryRepository(database: TenantDatabase) {
       }
 
       return { kind: 'updated', record: mapTreatmentSummaryRowToRecord(row) };
+    },
+
+    async voidTreatmentSummaryByTenant(
+      input: VoidTreatmentSummaryInput,
+    ): Promise<VoidTreatmentSummaryResult> {
+      const rows = await database
+        .select()
+        .from(treatmentSummaries)
+        .where(
+          and(
+            eq(treatmentSummaries.tenantId, input.tenantId),
+            eq(treatmentSummaries.id, input.summaryId),
+          ),
+        );
+      const currentRow = rows.find(
+        (candidate) => candidate.tenantId === input.tenantId && candidate.id === input.summaryId,
+      );
+
+      if (!currentRow) {
+        return { kind: 'not_found_or_not_owned' };
+      }
+
+      if (currentRow.voidedAt) {
+        return {
+          kind: 'already_voided',
+          record: mapTreatmentSummaryRecordToListItem(mapTreatmentSummaryRowToRecord(currentRow)),
+        };
+      }
+
+      const now = new Date();
+      const [row] = await database
+        .update(treatmentSummaries)
+        .set({
+          voidedAt: now,
+          voidedBy: input.voidedBy,
+          voidReasonCode: input.reasonCode,
+          voidReason: input.reasonText,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(treatmentSummaries.tenantId, input.tenantId),
+            eq(treatmentSummaries.id, input.summaryId),
+          ),
+        )
+        .returning();
+
+      if (!row) {
+        return { kind: 'not_found_or_not_owned' };
+      }
+
+      return {
+        kind: 'voided',
+        record: mapTreatmentSummaryRecordToListItem(mapTreatmentSummaryRowToRecord(row)),
+      };
     },
 
     async listTreatmentSummariesByTenant(

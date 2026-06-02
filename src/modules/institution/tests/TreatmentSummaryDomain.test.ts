@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 import {
+  deriveTreatmentSummaryStatus,
   mapTreatmentSummaryRecordToListItem,
   mapTreatmentSummaryRecordToTimelineDto,
   type TreatmentSummaryRecord,
@@ -23,6 +24,11 @@ const treatmentSummaryRecord = {
   summary: '结构化摘要：恢复进展稳定，安排补水护理观察。',
   nextCareAction: 'D14 人工回访恢复阶段。',
   tags: ['结构化摘要', '复诊'],
+  status: 'active',
+  voidedAt: null,
+  voidedBy: null,
+  voidReasonCode: null,
+  voidReason: null,
   createdAt: '2026-05-30T03:45:00.000Z',
   updatedAt: '2026-05-30T03:45:00.000Z',
 } satisfies TreatmentSummaryRecord;
@@ -69,6 +75,11 @@ describe('治疗结构化摘要领域模型', () => {
       summary: '结构化摘要：恢复进展稳定，安排补水护理观察。',
       nextCareAction: 'D14 人工回访恢复阶段。',
       tags: ['结构化摘要', '复诊'],
+      status: 'active',
+      voidedAt: null,
+      voidedBy: null,
+      voidReasonCode: null,
+      voidReason: null,
       createdAt: '2026-05-30T03:45:00.000Z',
       updatedAt: '2026-05-30T03:45:00.000Z',
     });
@@ -85,6 +96,11 @@ describe('治疗结构化摘要领域模型', () => {
       'summary',
       'nextCareAction',
       'tags',
+      'status',
+      'voidedAt',
+      'voidedBy',
+      'voidReasonCode',
+      'voidReason',
       'createdAt',
       'updatedAt',
     ]);
@@ -134,6 +150,11 @@ describe('治疗结构化摘要领域模型', () => {
       summary: '结构化摘要：恢复进展稳定，安排补水护理观察。',
       nextCareAction: 'D14 人工回访恢复阶段。',
       tags: ['结构化摘要', '复诊'],
+      status: 'active',
+      voidedAt: null,
+      voidedBy: null,
+      voidReasonCode: null,
+      voidReason: null,
       createdAt: '2026-05-30T03:45:00.000Z',
       updatedAt: '2026-05-30T03:45:00.000Z',
     });
@@ -151,6 +172,11 @@ describe('治疗结构化摘要领域模型', () => {
       'summary',
       'nextCareAction',
       'tags',
+      'status',
+      'voidedAt',
+      'voidedBy',
+      'voidReasonCode',
+      'voidReason',
       'createdAt',
       'updatedAt',
     ]);
@@ -168,6 +194,29 @@ describe('治疗结构化摘要领域模型', () => {
     record.tags.push('不应影响 DTO');
 
     expect(dto.tags).toEqual(['结构化摘要']);
+  });
+
+  it('根据 voidedAt 派生治疗摘要 active / voided 状态', () => {
+    expect(deriveTreatmentSummaryStatus(null)).toBe('active');
+    expect(deriveTreatmentSummaryStatus('2026-06-02T09:00:00.000Z')).toBe('voided');
+
+    const dto = mapTreatmentSummaryRecordToListItem({
+      ...treatmentSummaryRecord,
+      status: 'voided',
+      voidedAt: '2026-06-02T09:00:00.000Z',
+      voidedBy: 'demo-user-admin',
+      voidReasonCode: 'duplicate_summary',
+      voidReason: '重复录入，保留较新的治疗摘要',
+    });
+
+    expect(dto).toMatchObject({
+      status: 'voided',
+      voidedAt: '2026-06-02T09:00:00.000Z',
+      voidedBy: 'demo-user-admin',
+      voidReasonCode: 'duplicate_summary',
+      voidReason: '重复录入，保留较新的治疗摘要',
+    });
+    expect(JSON.stringify(dto)).not.toMatch(listForbiddenFieldPattern);
   });
 
   it('治疗摘要 API route 只允许结构化摘要、受控编辑与 Phase 15 随访联动入口', () => {

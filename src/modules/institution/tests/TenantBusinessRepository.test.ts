@@ -216,6 +216,10 @@ const sourceTreatmentSummaryRow = {
   summary: '结构化安全摘要',
   nextCareAction: '确认术后护理情况',
   tags: ['术后护理'],
+  voidedAt: null,
+  voidedBy: null,
+  voidReasonCode: null,
+  voidReason: null,
   createdAt: new Date('2026-05-30T00:00:00.000Z'),
   updatedAt: new Date('2026-05-30T00:00:00.000Z'),
 } satisfies typeof treatmentSummaries.$inferSelect;

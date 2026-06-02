@@ -117,6 +117,37 @@ describe('审计查询参数 parser', () => {
     });
   });
 
+  it('接受治疗摘要作废的稳定 reason 查询', () => {
+    for (const reason of [
+      'treatment_summary_voided',
+      'treatment_summary_already_voided',
+      'invalid_treatment_summary_void_payload',
+      'voided_treatment_summary_follow_up_blocked',
+    ] as const) {
+      expect(
+        parseAuditEventQueryParams(
+          params({
+            resource: 'treatment_summary',
+            action: 'update',
+            result: reason.includes('invalid') || reason.includes('blocked') ? 'denied' : 'allowed',
+            reason,
+          }),
+        ),
+      ).toEqual({
+        ok: true,
+        query: {
+          filters: {
+            resource: 'treatment_summary',
+            action: 'update',
+            result: reason.includes('invalid') || reason.includes('blocked') ? 'denied' : 'allowed',
+            reason,
+          },
+          limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
+        },
+      });
+    }
+  });
+
   it('拒绝非白名单字段，避免 tenantId 或任意 SQL 参数进入查询', () => {
     expectParseError({ tenantId: 'other-tenant' }, '不支持的筛选参数: tenantId');
     expectParseError({ orderBy: 'occurred_at desc' }, '不支持的筛选参数: orderBy');

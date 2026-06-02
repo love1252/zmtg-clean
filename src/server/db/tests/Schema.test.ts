@@ -263,15 +263,23 @@ describe('数据库结构', () => {
         'summary',
         'next_care_action',
         'tags',
+        'voided_at',
+        'voided_by',
+        'void_reason_code',
+        'void_reason',
         'created_at',
         'updated_at',
       ]),
     );
-    expect(treatmentColumns).toHaveLength(16);
+    expect(treatmentColumns).toHaveLength(20);
     expect(JSON.stringify(treatmentColumns)).not.toMatch(
       /treatment_record|medical_record|diagnosis_text|clinical_note|consultation_transcript|phone_number|id_number|request_body|metadata|raw_payload|ai_generated|external_sync|token|secret|database_url/i,
     );
     expect(treatmentSummaries.appointmentId.notNull).toBe(false);
+    expect(treatmentSummaries.voidedAt.notNull).toBe(false);
+    expect(treatmentSummaries.voidedBy.notNull).toBe(false);
+    expect(treatmentSummaries.voidReasonCode.notNull).toBe(false);
+    expect(treatmentSummaries.voidReason.notNull).toBe(false);
     expect(treatmentForeignKeys).toEqual(
       expect.arrayContaining([
         {
@@ -301,6 +309,10 @@ describe('数据库结构', () => {
         {
           name: 'treatment_summaries_tenant_appointment_idx',
           columns: ['tenant_id', 'appointment_id'],
+        },
+        {
+          name: 'treatment_summaries_tenant_voided_date_idx',
+          columns: ['tenant_id', 'voided_at', 'treatment_date'],
         },
       ]),
     );
@@ -548,6 +560,47 @@ describe('数据库结构', () => {
       migrationSql.indexOf('follow_up_tasks_tenant_source_treatment_summary_fk'),
     );
     expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
+    expect(migrationSql).not.toMatch(
+      /phone_number|id_number|medical_record_no|treatment_record|medical_record_body|diagnosis_text|clinical_note|consultation_transcript|request_body|metadata|raw_payload|ai_generated|external_sync|token|secret|database_url/i,
+    );
+  });
+
+  it('Phase 19 迁移只新增治疗摘要作废字段和必要索引', () => {
+    const migrationSql = readMigrationSql('phase19_treatment_summary_void');
+    const journal = JSON.parse(readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8')) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+    const latestSnapshot = readFileSync(
+      join(process.cwd(), 'drizzle/meta/0005_snapshot.json'),
+      'utf8',
+    ).toLowerCase();
+
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ idx: 5, tag: '0005_phase19_treatment_summary_void' }),
+      ]),
+    );
+    expect(latestSnapshot).toContain('"voided_at"');
+    expect(latestSnapshot).toContain('"voided_by"');
+    expect(latestSnapshot).toContain('"void_reason_code"');
+    expect(latestSnapshot).toContain('"void_reason"');
+    expect(migrationSql).toContain(
+      'alter table "treatment_summaries" add column "voided_at" timestamp with time zone',
+    );
+    expect(migrationSql).toContain(
+      'alter table "treatment_summaries" add column "voided_by" varchar(96)',
+    );
+    expect(migrationSql).toContain(
+      'alter table "treatment_summaries" add column "void_reason_code" varchar(64)',
+    );
+    expect(migrationSql).toContain(
+      'alter table "treatment_summaries" add column "void_reason" varchar(200)',
+    );
+    expect(migrationSql).toContain(
+      'create index "treatment_summaries_tenant_voided_date_idx" on "treatment_summaries" using btree ("tenant_id","voided_at","treatment_date")',
+    );
+    expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
+    expect(migrationSql).not.toMatch(/\bdelete\s+from\b|\bupdate\s+treatment_summaries\b/i);
     expect(migrationSql).not.toMatch(
       /phone_number|id_number|medical_record_no|treatment_record|medical_record_body|diagnosis_text|clinical_note|consultation_transcript|request_body|metadata|raw_payload|ai_generated|external_sync|token|secret|database_url/i,
     );
