@@ -28,6 +28,21 @@ export type CreateTreatmentSummaryInput = Omit<
 > & {
   treatmentDate: Date;
 };
+export type UpdateTreatmentSummaryValues = Partial<
+  Omit<CreateTreatmentSummaryInput, 'id' | 'tenantId' | 'customerId'>
+>;
+export type UpdateTreatmentSummaryInput = {
+  tenantId: string;
+  summaryId: string;
+  values: UpdateTreatmentSummaryValues;
+};
+export type UpdateTreatmentSummaryResult =
+  | { kind: 'updated'; record: TreatmentSummaryRecord }
+  | { kind: 'not_found_or_not_owned' }
+  | {
+      kind: 'invalid_reference';
+      reason: Exclude<TreatmentSummaryAppointmentOwnershipResult['kind'], 'matched'>;
+    };
 
 export type TreatmentSummaryAppointmentOwnershipInput = {
   tenantId: string;
@@ -59,6 +74,55 @@ export function mapTreatmentSummaryRowToRecord(row: TreatmentSummaryRow): Treatm
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+function omitUndefinedValues<T extends Record<string, unknown>>(values: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(values).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
+}
+
+function pickTreatmentSummaryUpdateValues(
+  values: UpdateTreatmentSummaryValues,
+): Partial<Omit<CreateTreatmentSummaryInput, 'id' | 'tenantId' | 'customerId'>> {
+  return omitUndefinedValues({
+    appointmentId: values.appointmentId,
+    treatmentDate: values.treatmentDate,
+    treatmentProject: values.treatmentProject,
+    treatmentCategory: values.treatmentCategory,
+    treatmentStage: values.treatmentStage,
+    recoveryStage: values.recoveryStage,
+    riskLevel: values.riskLevel,
+    ownerUserId: values.ownerUserId,
+    summary: values.summary,
+    nextCareAction: values.nextCareAction,
+    tags: values.tags,
+  });
+}
+
+async function checkAppointmentBelongsToTenantAndCustomer(
+  database: TenantDatabase,
+  input: TreatmentSummaryAppointmentOwnershipInput,
+): Promise<TreatmentSummaryAppointmentOwnershipResult> {
+  const [appointment] = await database
+    .select({ customerId: appointments.customerId })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.tenantId, input.tenantId),
+        eq(appointments.id, input.appointmentId),
+      ),
+    );
+
+  if (!appointment) {
+    return { kind: 'not_found_or_not_owned' };
+  }
+
+  if (appointment.customerId !== input.customerId) {
+    return { kind: 'customer_mismatch' };
+  }
+
+  return { kind: 'matched' };
 }
 
 function buildTreatmentSummaryListConditions(input: TreatmentSummaryListInput) {
@@ -184,25 +248,7 @@ export function createTreatmentSummaryRepository(database: TenantDatabase) {
     async checkAppointmentBelongsToTenantAndCustomer(
       input: TreatmentSummaryAppointmentOwnershipInput,
     ): Promise<TreatmentSummaryAppointmentOwnershipResult> {
-      const [appointment] = await database
-        .select({ customerId: appointments.customerId })
-        .from(appointments)
-        .where(
-          and(
-            eq(appointments.tenantId, input.tenantId),
-            eq(appointments.id, input.appointmentId),
-          ),
-        );
-
-      if (!appointment) {
-        return { kind: 'not_found_or_not_owned' };
-      }
-
-      if (appointment.customerId !== input.customerId) {
-        return { kind: 'customer_mismatch' };
-      }
-
-      return { kind: 'matched' };
+      return checkAppointmentBelongsToTenantAndCustomer(database, input);
     },
 
     async listTreatmentSummariesByTenantAndCustomer(
@@ -241,6 +287,64 @@ export function createTreatmentSummaryRepository(database: TenantDatabase) {
       const row = rows.find((candidate) => candidate.tenantId === input.tenantId && candidate.id === input.id);
 
       return row ? mapTreatmentSummaryRowToRecord(row) : null;
+    },
+
+    async updateTreatmentSummaryByTenant(
+      input: UpdateTreatmentSummaryInput,
+    ): Promise<UpdateTreatmentSummaryResult> {
+      const values = pickTreatmentSummaryUpdateValues(input.values);
+
+      if (typeof values.appointmentId === 'string') {
+        const [summary] = await database
+          .select({ customerId: treatmentSummaries.customerId })
+          .from(treatmentSummaries)
+          .where(
+            and(
+              eq(treatmentSummaries.tenantId, input.tenantId),
+              eq(treatmentSummaries.id, input.summaryId),
+            ),
+          );
+
+        if (!summary) {
+          return { kind: 'not_found_or_not_owned' };
+        }
+
+        const appointmentOwnership = await checkAppointmentBelongsToTenantAndCustomer(
+          database,
+          {
+            tenantId: input.tenantId,
+            customerId: summary.customerId,
+            appointmentId: values.appointmentId,
+          },
+        );
+
+        if (appointmentOwnership.kind !== 'matched') {
+          return {
+            kind: 'invalid_reference',
+            reason: appointmentOwnership.kind,
+          };
+        }
+      }
+
+      const [row] = await database
+        .update(treatmentSummaries)
+        .set({
+          ...values,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(treatmentSummaries.tenantId, input.tenantId),
+            eq(treatmentSummaries.id, input.summaryId),
+          ),
+        )
+        .returning();
+
+      if (!row) {
+        return { kind: 'not_found_or_not_owned' };
+      }
+
+      return { kind: 'updated', record: mapTreatmentSummaryRowToRecord(row) };
     },
 
     async listTreatmentSummariesByTenant(

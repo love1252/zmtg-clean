@@ -98,7 +98,7 @@ describe('访问控制领域', () => {
     }
   });
 
-  it('允许机构管理员在本租户创建和读取治疗摘要，且不扩大编辑权限', () => {
+  it('允许机构管理员在本租户创建、读取和最小编辑治疗摘要，且不开放删除', () => {
     expect(
       canAccessResource({
         context: tenantAdminContext,
@@ -124,7 +124,44 @@ describe('访问控制领域', () => {
         action: 'update',
         targetTenantId: 'demo-tenant-001',
       }),
+    ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'treatment_summary',
+        action: 'delete',
+        targetTenantId: 'demo-tenant-001',
+      }),
     ).toEqual({ allowed: false, reason: 'role_denied' });
+  });
+
+  it('治疗摘要 update 权限不影响 customer、appointment、follow_up 既有权限边界', () => {
+    const unchangedCases = [
+      { resource: 'customer', action: 'create', allowed: true },
+      { resource: 'customer', action: 'update', allowed: true },
+      { resource: 'appointment', action: 'create', allowed: true },
+      { resource: 'appointment', action: 'update', allowed: true },
+      { resource: 'follow_up', action: 'update', allowed: true },
+      { resource: 'follow_up', action: 'delete', allowed: false },
+      { resource: 'customer', action: 'delete', allowed: false },
+      { resource: 'appointment', action: 'delete', allowed: false },
+    ] as const;
+
+    for (const testCase of unchangedCases) {
+      expect(
+        canAccessResource({
+          context: tenantAdminContext,
+          resource: testCase.resource,
+          action: testCase.action,
+          targetTenantId: 'demo-tenant-001',
+        }),
+      ).toEqual(
+        testCase.allowed
+          ? { allowed: true, reason: 'allowed_by_policy' }
+          : { allowed: false, reason: 'role_denied' },
+      );
+    }
   });
 
   it('拒绝机构管理员读取其他租户', () => {

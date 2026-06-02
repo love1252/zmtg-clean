@@ -188,6 +188,66 @@ describe('审计事件领域模型', () => {
     );
   });
 
+  it('支持治疗摘要编辑审计决策，且不携带请求体、正文、PII 或内部敏感信息', () => {
+    expect(AUDIT_REASON_VALUES).toContain('invalid_treatment_summary_reference');
+    expect(AUDIT_REASON_VALUES).toContain('invalid_treatment_summary_payload');
+
+    const allowed = createAuditEvent({
+      eventId: 'audit_evt_treatment_summary_update_001',
+      context: tenantAdminContext,
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'update',
+      result: 'allowed',
+      reason: 'allowed_by_policy',
+      occurredAt: '2026-06-02T09:10:00.000Z',
+    });
+    const invalidPayload = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_treatment_summary_update_denied_001',
+      context: tenantAdminContext,
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'update',
+      reason: 'invalid_treatment_summary_payload',
+      occurredAt: '2026-06-02T09:11:00.000Z',
+    });
+    const invalidReference = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_treatment_summary_update_denied_002',
+      context: tenantAdminContext,
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'update',
+      reason: 'invalid_treatment_summary_reference',
+      occurredAt: '2026-06-02T09:12:00.000Z',
+    });
+
+    expect(allowed).toMatchObject({
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'update',
+      result: 'allowed',
+      reason: 'allowed_by_policy',
+    });
+    expect(invalidPayload).toMatchObject({
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'update',
+      result: 'denied',
+      reason: 'invalid_treatment_summary_payload',
+    });
+    expect(invalidReference).toMatchObject({
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'update',
+      result: 'denied',
+      reason: 'invalid_treatment_summary_reference',
+    });
+
+    expect(JSON.stringify([allowed, invalidPayload, invalidReference])).not.toMatch(
+      /requestBody|完整治疗记录正文|完整病历正文|咨询对话全文|13800000000|select \*|DATABASE_URL|stack|token|secret/i,
+    );
+  });
+
   it('支持治疗摘要随访联动的稳定审计 reason', () => {
     expect(AUDIT_REASON_VALUES).toEqual(
       expect.arrayContaining([
