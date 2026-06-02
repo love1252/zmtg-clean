@@ -51,6 +51,11 @@ function mapTreatmentSummaryListItemToSafeDto(
     summary: item.summary,
     nextCareAction: item.nextCareAction,
     tags: [...item.tags],
+    status: item.status,
+    voidedAt: item.voidedAt,
+    voidedBy: item.voidedBy,
+    voidReasonCode: item.voidReasonCode,
+    voidReason: item.voidReason,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
   };

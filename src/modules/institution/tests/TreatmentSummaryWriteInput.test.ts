@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseCreateTreatmentSummaryPayload,
   parseUpdateTreatmentSummaryPayload,
+  parseVoidTreatmentSummaryPayload,
 } from '@/modules/institution/server/treatment-summary-write-input';
 
 const validPayload = {
@@ -265,5 +266,125 @@ describe('治疗结构化摘要写入 payload parser', () => {
       ok: false,
       error: '字段 tags 必须是非空字符串数组',
     });
+  });
+
+  it('作废 parser 接受稳定 reason code 和安全短说明', () => {
+    expect(
+      parseVoidTreatmentSummaryPayload({
+        reasonCode: 'duplicate_summary',
+        reasonText: ' 重复录入，保留较新的治疗摘要 ',
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        reasonCode: 'duplicate_summary',
+        reasonText: '重复录入，保留较新的治疗摘要',
+      },
+    });
+
+    expect(
+      parseVoidTreatmentSummaryPayload({
+        reasonCode: 'manual_governance_review',
+        reasonText: '人工复核后不再作为运营依据',
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        reasonCode: 'manual_governance_review',
+        reasonText: '人工复核后不再作为运营依据',
+      },
+    });
+  });
+
+  it('作废 parser 拒绝未知字段、tenantId 注入、非法 reason code 和过长说明', () => {
+    expect(
+      parseVoidTreatmentSummaryPayload({
+        reasonCode: 'duplicate_summary',
+        reasonText: '重复录入',
+        tenantId: 'other-tenant',
+      }),
+    ).toEqual({
+      ok: false,
+      error: '请求包含不允许的字段: tenantId',
+    });
+    expect(
+      parseVoidTreatmentSummaryPayload({
+        reasonCode: 'delete_forever',
+        reasonText: '非法 code',
+      }),
+    ).toEqual({
+      ok: false,
+      error: '字段 reasonCode 值不在允许范围内',
+    });
+    expect(
+      parseVoidTreatmentSummaryPayload({
+        reasonCode: 'duplicate_summary',
+        reasonText: 'x'.repeat(161),
+      }),
+    ).toEqual({
+      ok: false,
+      error: '字段 reasonText 长度不能超过 160',
+    });
+    expect(parseVoidTreatmentSummaryPayload({ reasonCode: 'other', reasonText: ' ' })).toEqual({
+      ok: false,
+      error: '字段 reasonText 必须是非空字符串',
+    });
+  });
+
+  it('作废 parser 明确拒绝完整正文、PII、图片文件、AI、外部系统原文和内部敏感字段', () => {
+    for (const field of [
+      'fullTreatmentRecord',
+      'medicalRecordText',
+      'diagnosisText',
+      'consultationTranscript',
+      'phoneNumber',
+      'idNumber',
+      'rawMedicalRecordNo',
+      'imageUrl',
+      'fileUrl',
+      'aiGeneratedContent',
+      'externalSystemPayload',
+      'requestBody',
+      'sql',
+      'stack',
+      'token',
+      'secret',
+      'DATABASE_URL',
+    ]) {
+      expect(parseVoidTreatmentSummaryPayload({ [field]: 'raw-value' })).toEqual({
+        ok: false,
+        error: `请求包含不允许的字段: ${field}`,
+      });
+    }
+  });
+
+  it('作废 parser 拒绝 reasonText 中夹带完整正文、PII、图片文件、AI、外部系统原文或内部敏感信息', () => {
+    const blockedValues = [
+      '完整治疗记录正文：逐字治疗记录',
+      '完整病历正文：主诉和病史原文',
+      '诊疗原文：医生原始记录',
+      '咨询对话全文：客户逐字回复',
+      '手机号原文 13800000000',
+      '身份证号 110101199001010011',
+      '病历号原文 MR-RAW-001',
+      '图片 / 文件原文 imageUrl=https://example.test/a.png',
+      'AI 生成内容 aiGeneratedContent',
+      '外部系统同步原文 externalSystemPayload',
+      '请求体 requestBody',
+      'SQL select * from treatment_summaries',
+      'stack trace token secret DATABASE_URL=postgres://example',
+    ];
+
+    for (const reasonText of blockedValues) {
+      expect(
+        parseVoidTreatmentSummaryPayload({
+          reasonCode: 'duplicate_summary',
+          reasonText,
+        }),
+      ).toEqual({
+        ok: false,
+        error: '字段 reasonText 不允许包含敏感信息',
+      });
+    }
   });
 });

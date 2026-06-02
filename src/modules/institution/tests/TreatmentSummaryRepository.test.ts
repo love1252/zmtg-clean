@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TenantDatabase } from '@/server/db/client';
 import { appointments, treatmentSummaries } from '@/server/db/schema';
+import { mapTreatmentSummaryRecordToListItem } from '@/modules/institution/domain/treatment-summaries';
 import {
   decodeTreatmentSummaryCursor,
   encodeTreatmentSummaryCursor,
@@ -233,6 +234,44 @@ function createTreatmentSummaryUpdateDatabase(input: {
   };
 }
 
+function createTreatmentSummaryVoidDatabase(input: {
+  lookupRows?: TreatmentSummaryRow[];
+  voidedRow?: TreatmentSummaryRow | null;
+} = {}) {
+  const lookupWhere = vi.fn(async (condition: unknown) => {
+    void condition;
+    return input.lookupRows ?? [];
+  });
+  const lookupFrom = vi.fn(() => ({ where: lookupWhere }));
+  const select = vi.fn(() => ({ from: lookupFrom }));
+  const returning = vi.fn(async () => (input.voidedRow ? [input.voidedRow] : []));
+  const where = vi.fn((condition: unknown) => {
+    void condition;
+    return { returning };
+  });
+  const set = vi.fn((values: Record<string, unknown>) => {
+    void values;
+    return { where };
+  });
+  const update = vi.fn((table: unknown) => {
+    void table;
+    return { set };
+  });
+  const deleteMock = vi.fn();
+
+  return {
+    database: { delete: deleteMock, select, update } as unknown as TenantDatabase,
+    deleteMock,
+    lookupFrom,
+    lookupWhere,
+    returning,
+    select,
+    set,
+    update,
+    where,
+  };
+}
+
 const treatmentSummaryRow = {
   id: 'trt_001',
   tenantId: 'demo-tenant-001',
@@ -248,6 +287,10 @@ const treatmentSummaryRow = {
   summary: '结构化摘要：恢复进展稳定，安排补水护理观察。',
   nextCareAction: 'D14 人工回访恢复阶段。',
   tags: ['结构化摘要', '复诊'],
+  voidedAt: null,
+  voidedBy: null,
+  voidReasonCode: null,
+  voidReason: null,
   createdAt: new Date('2026-05-30T03:45:00.000Z'),
   updatedAt: new Date('2026-05-30T03:45:00.000Z'),
 } satisfies typeof treatmentSummaries.$inferSelect;
@@ -297,6 +340,11 @@ describe('治疗结构化摘要仓储', () => {
       summary: '结构化摘要：恢复进展稳定，安排补水护理观察。',
       nextCareAction: 'D14 人工回访恢复阶段。',
       tags: ['结构化摘要', '复诊'],
+      status: 'active',
+      voidedAt: null,
+      voidedBy: null,
+      voidReasonCode: null,
+      voidReason: null,
       createdAt: '2026-05-30T03:45:00.000Z',
       updatedAt: '2026-05-30T03:45:00.000Z',
     });
@@ -447,6 +495,11 @@ describe('治疗结构化摘要仓储', () => {
         summary: '结构化摘要：恢复进展稳定，安排补水护理观察。',
         nextCareAction: 'D14 人工回访恢复阶段。',
         tags: ['结构化摘要', '复诊'],
+        status: 'active',
+        voidedAt: null,
+        voidedBy: null,
+        voidReasonCode: null,
+        voidReason: null,
         createdAt: '2026-05-30T03:45:00.000Z',
         updatedAt: '2026-05-30T03:45:00.000Z',
       },
@@ -775,6 +828,116 @@ describe('治疗结构化摘要仓储', () => {
       }),
     ).resolves.toEqual({ kind: 'not_found_or_not_owned' });
     expect(missingSummaryQuery.update).not.toHaveBeenCalled();
+  });
+
+  it('按服务端 tenantId + summaryId 作废治疗摘要并只写入作废白名单字段', async () => {
+    const voidedRow = {
+      ...treatmentSummaryRow,
+      voidedAt: new Date('2026-06-02T09:00:00.000Z'),
+      voidedBy: 'demo-user-admin',
+      voidReasonCode: 'duplicate_summary',
+      voidReason: '重复录入，保留较新的治疗摘要',
+      updatedAt: new Date('2026-06-02T09:00:00.000Z'),
+    } satisfies typeof treatmentSummaries.$inferSelect;
+    const query = createTreatmentSummaryVoidDatabase({
+      lookupRows: [treatmentSummaryRow],
+      voidedRow,
+    });
+
+    const result = await createTreatmentSummaryRepository(query.database).voidTreatmentSummaryByTenant({
+      tenantId: 'demo-tenant-001',
+      summaryId: 'trt_001',
+      voidedBy: 'demo-user-admin',
+      reasonCode: 'duplicate_summary',
+      reasonText: '重复录入，保留较新的治疗摘要',
+    });
+
+    expect(query.lookupFrom).toHaveBeenCalledWith(treatmentSummaries);
+    expect(query.lookupWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: treatmentSummaries.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: treatmentSummaries.id, operator: 'eq', value: 'trt_001' },
+      ],
+      operator: 'and',
+    });
+    expect(query.update).toHaveBeenCalledWith(treatmentSummaries);
+    expect(query.set).toHaveBeenCalledWith({
+      voidedAt: expect.any(Date),
+      voidedBy: 'demo-user-admin',
+      voidReasonCode: 'duplicate_summary',
+      voidReason: '重复录入，保留较新的治疗摘要',
+      updatedAt: expect.any(Date),
+    });
+    expect(query.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: treatmentSummaries.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: treatmentSummaries.id, operator: 'eq', value: 'trt_001' },
+      ],
+      operator: 'and',
+    });
+    expect(query.deleteMock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      kind: 'voided',
+      record: mapTreatmentSummaryRecordToListItem(mapTreatmentSummaryRowToRecord(voidedRow)),
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      /tenantId|phoneNumber|idNumber|medicalRecordNo|完整治疗记录正文|完整病历正文|咨询对话全文|requestBody|DATABASE_URL|secret|token/i,
+    );
+  });
+
+  it('重复作废返回稳定 already_voided 结果且不再次更新', async () => {
+    const alreadyVoidedRow = {
+      ...treatmentSummaryRow,
+      voidedAt: new Date('2026-06-02T09:00:00.000Z'),
+      voidedBy: 'demo-user-admin',
+      voidReasonCode: 'duplicate_summary',
+      voidReason: '重复录入，保留较新的治疗摘要',
+    } satisfies typeof treatmentSummaries.$inferSelect;
+    const query = createTreatmentSummaryVoidDatabase({
+      lookupRows: [alreadyVoidedRow],
+    });
+
+    await expect(
+      createTreatmentSummaryRepository(query.database).voidTreatmentSummaryByTenant({
+        tenantId: 'demo-tenant-001',
+        summaryId: 'trt_001',
+        voidedBy: 'demo-user-admin',
+        reasonCode: 'duplicate_summary',
+        reasonText: '重复录入',
+      }),
+    ).resolves.toEqual({
+      kind: 'already_voided',
+      record: mapTreatmentSummaryRecordToListItem(
+        mapTreatmentSummaryRowToRecord(alreadyVoidedRow),
+      ),
+    });
+
+    expect(query.update).not.toHaveBeenCalled();
+    expect(query.deleteMock).not.toHaveBeenCalled();
+  });
+
+  it('治疗摘要作废不会跨租户，查不到时不更新、不硬删除、不触碰来源随访任务', async () => {
+    const query = createTreatmentSummaryVoidDatabase({ lookupRows: [] });
+
+    await expect(
+      createTreatmentSummaryRepository(query.database).voidTreatmentSummaryByTenant({
+        tenantId: 'demo-tenant-001',
+        summaryId: 'trt_other_tenant',
+        voidedBy: 'demo-user-admin',
+        reasonCode: 'wrong_customer_or_appointment',
+        reasonText: '误关联其他客户或预约',
+      }),
+    ).resolves.toEqual({ kind: 'not_found_or_not_owned' });
+
+    expect(query.lookupWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: treatmentSummaries.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: treatmentSummaries.id, operator: 'eq', value: 'trt_other_tenant' },
+      ],
+      operator: 'and',
+    });
+    expect(query.update).not.toHaveBeenCalled();
+    expect(query.deleteMock).not.toHaveBeenCalled();
   });
 
   it('提供 appointmentId 归属校验 helper，区分同租户同客户、客户不匹配和不可见预约', async () => {

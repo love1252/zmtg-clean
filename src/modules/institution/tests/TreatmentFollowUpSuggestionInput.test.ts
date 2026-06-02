@@ -19,6 +19,11 @@ const treatmentSummaryListItem = {
   summary: '结构化摘要：红肿减轻，安排补水护理。',
   nextCareAction: 'D3 人工确认红肿和补水护理执行情况。',
   tags: ['结构化摘要', '术后关怀'],
+  status: 'active',
+  voidedAt: null,
+  voidedBy: null,
+  voidReasonCode: null,
+  voidReason: null,
   createdAt: '2026-06-01T04:01:00.000Z',
   updatedAt: '2026-06-01T04:01:00.000Z',
 } satisfies InstitutionTreatmentSummaryListItem;

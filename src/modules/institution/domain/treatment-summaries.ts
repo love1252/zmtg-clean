@@ -1,5 +1,25 @@
 import type { FollowUpRiskLevel } from '@/modules/institution/domain/followup-workflow';
 
+export const treatmentSummaryVoidReasonCodes = [
+  'duplicate_summary',
+  'created_by_mistake',
+  'wrong_customer_or_appointment',
+  'entered_wrong_treatment',
+  'manual_governance_review',
+  'other',
+] as const;
+
+export type TreatmentSummaryVoidReasonCode = (typeof treatmentSummaryVoidReasonCodes)[number];
+export type TreatmentSummaryStatus = 'active' | 'voided';
+
+export type TreatmentSummaryVoidFields = {
+  status: TreatmentSummaryStatus;
+  voidedAt: string | null;
+  voidedBy: string | null;
+  voidReasonCode: TreatmentSummaryVoidReasonCode | null;
+  voidReason: string | null;
+};
+
 export type TreatmentSummaryRecord = {
   id: string;
   tenantId: string;
@@ -15,6 +35,7 @@ export type TreatmentSummaryRecord = {
   summary: string;
   nextCareAction: string;
   tags: string[];
+} & TreatmentSummaryVoidFields & {
   createdAt: string;
   updatedAt: string;
 };
@@ -73,6 +94,17 @@ export type CreateTreatmentSummaryDraft = Pick<
 
 export type UpdateTreatmentSummaryDraft = Partial<CreateTreatmentSummaryDraft>;
 
+export type VoidTreatmentSummaryDraft = {
+  reasonCode: TreatmentSummaryVoidReasonCode;
+  reasonText: string;
+};
+
+export function deriveTreatmentSummaryStatus(
+  voidedAt: string | null | undefined,
+): TreatmentSummaryStatus {
+  return voidedAt ? 'voided' : 'active';
+}
+
 export const demoTenantTreatmentSummaryRecords: TreatmentSummaryRecord[] = [
   {
     id: 'trt_qin_d7_review',
@@ -89,6 +121,11 @@ export const demoTenantTreatmentSummaryRecords: TreatmentSummaryRecord[] = [
     summary: '结构化摘要：恢复进展稳定，安排补水护理观察。',
     nextCareAction: 'D14 人工回访恢复阶段。',
     tags: ['结构化摘要', '复诊'],
+    status: 'active',
+    voidedAt: null,
+    voidedBy: null,
+    voidReasonCode: null,
+    voidReason: null,
     createdAt: '2026-05-30T12:10:00+08:00',
     updatedAt: '2026-05-30T12:10:00+08:00',
   },
@@ -107,6 +144,11 @@ export const demoTenantTreatmentSummaryRecords: TreatmentSummaryRecord[] = [
     summary: '结构化摘要：恢复窗口进入复购建议期，适合人工承接。',
     nextCareAction: '安排顾问跟进修复组合意向。',
     tags: ['结构化摘要', '复购窗口'],
+    status: 'active',
+    voidedAt: null,
+    voidedBy: null,
+    voidReasonCode: null,
+    voidReason: null,
     createdAt: '2026-05-29T16:30:00+08:00',
     updatedAt: '2026-05-29T16:30:00+08:00',
   },
@@ -125,6 +167,11 @@ export const demoTenantTreatmentSummaryRecords: TreatmentSummaryRecord[] = [
     summary: '结构化摘要：跨租户演示摘要，仅用于隔离测试。',
     nextCareAction: '保持当前租户内可见。',
     tags: ['结构化摘要', '隔离演示'],
+    status: 'active',
+    voidedAt: null,
+    voidedBy: null,
+    voidReasonCode: null,
+    voidReason: null,
     createdAt: '2026-06-02T14:40:00+08:00',
     updatedAt: '2026-06-02T14:40:00+08:00',
   },
@@ -146,6 +193,11 @@ export function mapTreatmentSummaryRecordToTimelineDto(
     summary: record.summary,
     nextCareAction: record.nextCareAction,
     tags: [...record.tags],
+    status: record.status,
+    voidedAt: record.voidedAt,
+    voidedBy: record.voidedBy,
+    voidReasonCode: record.voidReasonCode,
+    voidReason: record.voidReason,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
@@ -168,6 +220,11 @@ export function mapTreatmentSummaryRecordToListItem(
     summary: record.summary,
     nextCareAction: record.nextCareAction,
     tags: [...record.tags],
+    status: record.status,
+    voidedAt: record.voidedAt,
+    voidedBy: record.voidedBy,
+    voidReasonCode: record.voidReasonCode,
+    voidReason: record.voidReason,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };

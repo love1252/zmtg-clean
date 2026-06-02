@@ -248,6 +248,72 @@ describe('审计事件领域模型', () => {
     );
   });
 
+  it('预留治疗摘要作废审计 reason，且不携带请求体、正文、PII 或内部敏感信息', () => {
+    expect(AUDIT_REASON_VALUES).toEqual(
+      expect.arrayContaining([
+        'treatment_summary_voided',
+        'treatment_summary_already_voided',
+        'invalid_treatment_summary_void_payload',
+        'voided_treatment_summary_follow_up_blocked',
+      ]),
+    );
+
+    const allowed = createAuditEvent({
+      eventId: 'audit_evt_treatment_summary_void_001',
+      context: tenantAdminContext,
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'update',
+      result: 'allowed',
+      reason: 'treatment_summary_voided',
+      occurredAt: '2026-06-02T09:20:00.000Z',
+    });
+    const repeated = createAuditEvent({
+      eventId: 'audit_evt_treatment_summary_void_002',
+      context: tenantAdminContext,
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'update',
+      result: 'allowed',
+      reason: 'treatment_summary_already_voided',
+      occurredAt: '2026-06-02T09:21:00.000Z',
+    });
+    const invalidPayload = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_treatment_summary_void_denied_001',
+      context: tenantAdminContext,
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'update',
+      reason: 'invalid_treatment_summary_void_payload',
+      occurredAt: '2026-06-02T09:22:00.000Z',
+    });
+
+    expect(allowed).toMatchObject({
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'update',
+      result: 'allowed',
+      reason: 'treatment_summary_voided',
+    });
+    expect(repeated).toMatchObject({
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'update',
+      result: 'allowed',
+      reason: 'treatment_summary_already_voided',
+    });
+    expect(invalidPayload).toMatchObject({
+      resource: 'treatment_summary',
+      resourceId: 'trt_001',
+      action: 'update',
+      result: 'denied',
+      reason: 'invalid_treatment_summary_void_payload',
+    });
+    expect(JSON.stringify([allowed, repeated, invalidPayload])).not.toMatch(
+      /requestBody|完整治疗记录正文|完整病历正文|咨询对话全文|13800000000|select \*|DATABASE_URL|stack|token|secret/i,
+    );
+  });
+
   it('支持治疗摘要随访联动的稳定审计 reason', () => {
     expect(AUDIT_REASON_VALUES).toEqual(
       expect.arrayContaining([

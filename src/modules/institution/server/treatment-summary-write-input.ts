@@ -1,14 +1,20 @@
 import type { FollowUpRiskLevel } from '@/modules/institution/domain/followup-workflow';
 import type {
   CreateTreatmentSummaryDraft,
+  TreatmentSummaryVoidReasonCode,
   UpdateTreatmentSummaryDraft,
+  VoidTreatmentSummaryDraft,
 } from '@/modules/institution/domain/treatment-summaries';
+import { treatmentSummaryVoidReasonCodes } from '@/modules/institution/domain/treatment-summaries';
 
 export type ParseCreateTreatmentSummaryPayloadResult =
   | { ok: true; value: CreateTreatmentSummaryDraft }
   | { ok: false; error: string };
 export type ParseUpdateTreatmentSummaryPayloadResult =
   | { ok: true; value: UpdateTreatmentSummaryDraft }
+  | { ok: false; error: string };
+export type ParseVoidTreatmentSummaryPayloadResult =
+  | { ok: true; value: VoidTreatmentSummaryDraft }
   | { ok: false; error: string };
 
 const ALLOWED_CREATE_TREATMENT_SUMMARY_KEYS = [
@@ -31,6 +37,7 @@ const allowedCreateTreatmentSummaryKeys = new Set<string>(
 const allowedUpdateTreatmentSummaryKeys = new Set<string>(
   ALLOWED_CREATE_TREATMENT_SUMMARY_KEYS,
 );
+const allowedVoidTreatmentSummaryKeys = new Set<string>(['reasonCode', 'reasonText']);
 
 const treatmentSummaryStringFieldLimits = {
   treatmentProject: 160,
@@ -51,6 +58,7 @@ const treatmentSummaryRiskLevels = [
 ] as const satisfies readonly FollowUpRiskLevel[];
 
 const treatmentSummaryRiskLevelSet = new Set<string>(treatmentSummaryRiskLevels);
+const treatmentSummaryVoidReasonCodeSet = new Set<string>(treatmentSummaryVoidReasonCodes);
 
 const isoLikeTimestampPattern =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/u;
@@ -428,4 +436,70 @@ export function parseUpdateTreatmentSummaryPayload(
   }
 
   return { ok: true, value };
+}
+
+function parseVoidReasonCode(
+  input: Record<string, unknown>,
+): { ok: true; value: TreatmentSummaryVoidReasonCode } | { ok: false; error: string } {
+  const raw = input.reasonCode;
+
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return { ok: false, error: '字段 reasonCode 必须是非空字符串' };
+  }
+
+  const value = raw.trim();
+  if (!treatmentSummaryVoidReasonCodeSet.has(value)) {
+    return { ok: false, error: '字段 reasonCode 值不在允许范围内' };
+  }
+
+  return { ok: true, value: value as TreatmentSummaryVoidReasonCode };
+}
+
+function parseVoidReasonText(
+  input: Record<string, unknown>,
+): { ok: true; value: string } | { ok: false; error: string } {
+  const raw = input.reasonText;
+
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return { ok: false, error: '字段 reasonText 必须是非空字符串' };
+  }
+
+  const value = raw.trim();
+
+  if (value.length > 160) {
+    return { ok: false, error: '字段 reasonText 长度不能超过 160' };
+  }
+
+  if (containsDisallowedTreatmentSummaryContent(value)) {
+    return { ok: false, error: '字段 reasonText 不允许包含敏感信息' };
+  }
+
+  return { ok: true, value };
+}
+
+export function parseVoidTreatmentSummaryPayload(
+  input: unknown,
+): ParseVoidTreatmentSummaryPayloadResult {
+  const object = parseObject(input, allowedVoidTreatmentSummaryKeys);
+  if (!object.ok) {
+    return object;
+  }
+
+  const reasonCode = parseVoidReasonCode(object.value);
+  if (!reasonCode.ok) {
+    return reasonCode;
+  }
+
+  const reasonText = parseVoidReasonText(object.value);
+  if (!reasonText.ok) {
+    return reasonText;
+  }
+
+  return {
+    ok: true,
+    value: {
+      reasonCode: reasonCode.value,
+      reasonText: reasonText.value,
+    },
+  };
 }

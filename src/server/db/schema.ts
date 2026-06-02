@@ -14,6 +14,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import type { AuditReason } from '@/modules/audit/domain/audit-events';
+import type { TreatmentSummaryVoidReasonCode } from '@/modules/institution/domain/treatment-summaries';
 import type {
   AccessContext,
   ProtectedAction,
@@ -243,6 +244,10 @@ export const treatmentSummaries = pgTable(
     summary: text('summary').notNull(),
     nextCareAction: text('next_care_action').notNull(),
     tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidedBy: varchar('voided_by', { length: 96 }),
+    voidReasonCode: varchar('void_reason_code', { length: 64 }).$type<TreatmentSummaryVoidReasonCode>(),
+    voidReason: varchar('void_reason', { length: 200 }),
     ...timestamps,
   },
   (table) => ({
@@ -270,6 +275,11 @@ export const treatmentSummaries = pgTable(
     tenantAppointmentIdx: index('treatment_summaries_tenant_appointment_idx').on(
       table.tenantId,
       table.appointmentId,
+    ),
+    tenantVoidedDateIdx: index('treatment_summaries_tenant_voided_date_idx').on(
+      table.tenantId,
+      table.voidedAt,
+      table.treatmentDate,
     ),
   }),
 );
