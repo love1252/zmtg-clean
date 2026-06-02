@@ -219,7 +219,7 @@ describe('治疗结构化摘要领域模型', () => {
     expect(JSON.stringify(dto)).not.toMatch(listForbiddenFieldPattern);
   });
 
-  it('治疗摘要 API route 只允许结构化摘要、受控编辑与 Phase 15 随访联动入口', () => {
+  it('治疗摘要 API route 只允许结构化摘要、受控编辑、Phase 15 随访联动与 Phase 19 作废入口', () => {
     const apiFiles = listFiles(join(process.cwd(), 'src/app/api')).filter((file) =>
       /treatment-summary|treatment-summaries/i.test(file),
     ).sort();
@@ -243,6 +243,10 @@ describe('治疗结构化摘要领域模型', () => {
       join(
         process.cwd(),
         'src/app/api/institution/treatment-summaries/[summaryId]/route.ts',
+      ),
+      join(
+        process.cwd(),
+        'src/app/api/institution/treatment-summaries/[summaryId]/void/route.ts',
       ),
       join(process.cwd(), 'src/app/api/institution/treatment-summaries/route.ts'),
     ]);

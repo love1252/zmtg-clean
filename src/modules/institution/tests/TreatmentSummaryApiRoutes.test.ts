@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as treatmentSummariesPost } from '@/app/api/institution/customers/[customerId]/treatment-summaries/route';
 import { PATCH as treatmentSummaryPatch } from '@/app/api/institution/treatment-summaries/[summaryId]/route';
+import { POST as treatmentSummaryVoidPost } from '@/app/api/institution/treatment-summaries/[summaryId]/void/route';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
 const routeMocks = vi.hoisted(() => {
@@ -12,6 +13,7 @@ const routeMocks = vi.hoisted(() => {
     createTreatmentSummary: vi.fn(),
     getTreatmentSummaryByTenant: vi.fn(),
     updateTreatmentSummaryByTenant: vi.fn(),
+    voidTreatmentSummaryByTenant: vi.fn(),
   };
   const auditRecord = vi.fn();
   const transactionDatabase = { database: 'transaction-db' };
@@ -178,6 +180,37 @@ const updatedTreatmentSummaryRecord = {
   token: 'sk_test_should_not_return',
 };
 
+const voidedTreatmentSummaryRecord = {
+  id: 'trt_void_001',
+  customerId: 'cust_001',
+  appointmentId: 'appt_001',
+  treatmentDate: '2026-06-01T04:00:00.000Z',
+  treatmentProject: '光电修复',
+  treatmentCategory: 'laser_repair',
+  treatmentStage: 'D7 复诊',
+  recoveryStage: 'D7',
+  riskLevel: 'watch',
+  ownerUserId: 'doctor-lin',
+  summary: '结构化摘要：红肿减轻，安排补水护理。',
+  nextCareAction: 'D14 人工回访恢复阶段。',
+  tags: ['结构化摘要', '术后关怀'],
+  status: 'voided',
+  voidedAt: '2026-06-02T09:00:00.000Z',
+  voidedBy: 'demo-user-admin',
+  voidReasonCode: 'duplicate_summary',
+  voidReason: '重复录入，保留较新的治疗摘要',
+  createdAt: '2026-06-01T04:01:00.000Z',
+  updatedAt: '2026-06-02T09:00:00.000Z',
+  tenantId: 'demo-tenant-001',
+  phoneNumber: '13800000000',
+  fullTreatmentRecord: '完整治疗记录正文',
+  medicalRecordText: '完整病历正文',
+  consultationTranscript: '咨询对话全文',
+  requestBody: { tenantId: 'other-tenant' },
+  stack: 'Error: DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+  token: 'sk_test_should_not_return',
+};
+
 function routeContext(customerId = 'cust_001') {
   return { params: Promise.resolve({ customerId }) };
 }
@@ -203,6 +236,22 @@ function patchRequest(payload: unknown, init?: RequestInit) {
     'http://localhost/api/institution/treatment-summaries/trt_edit_001?tenantId=other-tenant',
     {
       method: 'PATCH',
+      headers: { 'x-tenant-id': 'other-tenant', ...(init?.headers ?? {}) },
+      body: JSON.stringify(payload),
+      ...init,
+    },
+  );
+}
+
+function voidRouteContext(summaryId = 'trt_void_001') {
+  return { params: Promise.resolve({ summaryId }) };
+}
+
+function voidRequest(payload: unknown, init?: RequestInit) {
+  return new Request(
+    'http://localhost/api/institution/treatment-summaries/trt_void_001/void?tenantId=other-tenant',
+    {
+      method: 'POST',
       headers: { 'x-tenant-id': 'other-tenant', ...(init?.headers ?? {}) },
       body: JSON.stringify(payload),
       ...init,
@@ -283,6 +332,11 @@ beforeEach(() => {
   routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant.mockResolvedValue({
     kind: 'updated',
     record: updatedTreatmentSummaryRecord,
+  });
+  routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant.mockReset();
+  routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant.mockResolvedValue({
+    kind: 'voided',
+    record: voidedTreatmentSummaryRecord,
   });
 });
 
@@ -601,6 +655,268 @@ describe('治疗摘要创建 API route', () => {
     const response = await treatmentSummariesPost(
       postRequest(validCreateTreatmentSummaryPayload),
       routeContext(),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({ error: '数据服务暂时不可用' });
+    expectNoPrivateData(payload);
+  });
+});
+
+describe('治疗摘要作废 API route', () => {
+  it('合法 payload 作废成功，返回安全 DTO，并写 allowed audit', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await treatmentSummaryVoidPost(
+      voidRequest({
+        reasonCode: 'duplicate_summary',
+        reasonText: '重复录入，保留较新的治疗摘要',
+      }),
+      voidRouteContext(),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      record: {
+        id: 'trt_void_001',
+        appointmentId: 'appt_001',
+        treatmentDate: '2026-06-01T04:00:00.000Z',
+        treatmentProject: '光电修复',
+        treatmentCategory: 'laser_repair',
+        treatmentStage: 'D7 复诊',
+        recoveryStage: 'D7',
+        riskLevel: 'watch',
+        ownerUserId: 'doctor-lin',
+        summary: '结构化摘要：红肿减轻，安排补水护理。',
+        nextCareAction: 'D14 人工回访恢复阶段。',
+        tags: ['结构化摘要', '术后关怀'],
+        status: 'voided',
+        voidedAt: '2026-06-02T09:00:00.000Z',
+        voidedBy: 'demo-user-admin',
+        voidReasonCode: 'duplicate_summary',
+        voidReason: '重复录入，保留较新的治疗摘要',
+        createdAt: '2026-06-01T04:01:00.000Z',
+        updatedAt: '2026-06-02T09:00:00.000Z',
+      },
+    });
+    expectNoPrivateData(payload);
+    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      summaryId: 'trt_void_001',
+      voidedBy: 'demo-user-admin',
+      reasonCode: 'duplicate_summary',
+      reasonText: '重复录入，保留较新的治疗摘要',
+    });
+    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).not.toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'other-tenant' }),
+    );
+    expect(routeMocks.database.transaction).toHaveBeenCalledTimes(1);
+    expect(routeMocks.createTreatmentSummaryRepository).toHaveBeenCalledWith(
+      routeMocks.transactionDatabase,
+    );
+    expect(routeMocks.createAuditEventRepository).toHaveBeenCalledWith(
+      routeMocks.transactionDatabase,
+    );
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'update',
+      reason: 'treatment_summary_voided',
+      resource: 'treatment_summary',
+      resourceId: 'trt_void_001',
+      result: 'allowed',
+      tenantId: 'demo-tenant-001',
+    }));
+    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
+  });
+
+  it('未登录返回 401，且不初始化数据库', async () => {
+    const response = await treatmentSummaryVoidPost(
+      voidRequest({
+        reasonCode: 'duplicate_summary',
+        reasonText: '重复录入',
+      }),
+      voidRouteContext(),
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: '请先登录' });
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).not.toHaveBeenCalled();
+  });
+
+  it('无权限返回 403，写 denied audit，且不作废治疗摘要', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
+
+    const response = await treatmentSummaryVoidPost(
+      voidRequest({
+        reasonCode: 'duplicate_summary',
+        reasonText: '重复录入',
+      }),
+      voidRouteContext(),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
+    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'update',
+      reason: 'role_denied',
+      resource: 'treatment_summary',
+      result: 'denied',
+    }));
+    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
+  });
+
+  it('summary 不存在或跨租户时返回 404，并写 not_found audit', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant.mockResolvedValueOnce({
+      kind: 'not_found_or_not_owned',
+    });
+
+    const response = await treatmentSummaryVoidPost(
+      voidRequest({
+        reasonCode: 'wrong_customer_or_appointment',
+        reasonText: '误关联其他客户或预约',
+      }),
+      voidRouteContext('trt_other_tenant'),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
+    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      summaryId: 'trt_other_tenant',
+      voidedBy: 'demo-user-admin',
+      reasonCode: 'wrong_customer_or_appointment',
+      reasonText: '误关联其他客户或预约',
+    });
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'update',
+      reason: 'not_found_or_not_owned',
+      resource: 'treatment_summary',
+      resourceId: 'trt_other_tenant',
+      result: 'denied',
+      tenantId: 'demo-tenant-001',
+    }));
+  });
+
+  it('已作废 summary 重复作废返回稳定 409，并写 already voided audit', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant.mockResolvedValueOnce({
+      kind: 'already_voided',
+      record: voidedTreatmentSummaryRecord,
+    });
+
+    const response = await treatmentSummaryVoidPost(
+      voidRequest({
+        reasonCode: 'duplicate_summary',
+        reasonText: '重复录入',
+      }),
+      voidRouteContext(),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(payload).toEqual({
+      error: '治疗摘要已作废',
+      record: expect.objectContaining({
+        id: 'trt_void_001',
+        status: 'voided',
+        voidedAt: '2026-06-02T09:00:00.000Z',
+      }),
+    });
+    expectNoPrivateData(payload);
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'update',
+      reason: 'treatment_summary_already_voided',
+      resource: 'treatment_summary',
+      resourceId: 'trt_void_001',
+      result: 'allowed',
+      tenantId: 'demo-tenant-001',
+    }));
+  });
+
+  it.each([
+    ['tenantId 注入', { tenantId: 'other-tenant' }],
+    ['未知字段', { unexpectedField: 'x' }],
+    ['完整治疗正文', { reasonText: '完整治疗记录正文：逐字治疗记录' }],
+    ['完整病历正文', { reasonText: '完整病历正文：主诉和病史原文' }],
+    ['诊疗原文', { reasonText: '诊疗原文：医生原始记录' }],
+    ['咨询全文', { reasonText: '咨询对话全文：客户逐字回复' }],
+    ['手机号原文', { reasonText: '手机号原文 13800000000' }],
+    ['身份证号', { reasonText: '身份证号 110101199001010011' }],
+    ['病历号原文', { reasonText: '病历号原文 MR-RAW-001' }],
+    ['图片原文', { reasonText: '图片 / 文件原文 imageUrl=https://example.test/a.png' }],
+    ['文件原文', { reasonText: '图片 / 文件原文 fileUrl=https://example.test/a.pdf' }],
+    ['AI 生成内容', { reasonText: 'AI 生成内容 aiGeneratedContent' }],
+    ['外部系统原文', { reasonText: '外部系统同步原文 externalSystemPayload' }],
+    ['请求体', { reasonText: '请求体 requestBody' }],
+    ['SQL', { reasonText: 'SQL select * from treatment_summaries' }],
+    ['stack / token / secret / DATABASE_URL', { reasonText: 'stack trace token secret DATABASE_URL=postgres://example' }],
+  ])('作废原因含 %s 时返回 400，并写 invalid void payload audit', async (_label, patch) => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await treatmentSummaryVoidPost(
+      voidRequest({
+        reasonCode: 'duplicate_summary',
+        reasonText: '重复录入',
+        ...patch,
+      }),
+      voidRouteContext(),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload).toHaveProperty('error');
+    expectNoPrivateData(payload, {
+      allowRejectedFieldNames: true,
+      allowTenantBoundaryFields: true,
+    });
+    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'update',
+      reason: 'invalid_treatment_summary_void_payload',
+      resource: 'treatment_summary',
+      resourceId: 'trt_void_001',
+      result: 'denied',
+      tenantId: 'demo-tenant-001',
+    }));
+    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
+  });
+
+  it('非法 JSON 返回 400，并写 invalid void payload audit', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await treatmentSummaryVoidPost(
+      new Request('http://localhost/api/institution/treatment-summaries/trt_void_001/void', {
+        method: 'POST',
+        body: '{not-json',
+      }),
+      voidRouteContext(),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: '请求格式不正确' });
+    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      reason: 'invalid_treatment_summary_void_payload',
+      result: 'denied',
+    }));
+  });
+
+  it('数据异常返回 503，错误响应不泄露 SQL、stack、DATABASE_URL、token 或 secret', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant.mockRejectedValueOnce(
+      new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg token stack'),
+    );
+
+    const response = await treatmentSummaryVoidPost(
+      voidRequest({
+        reasonCode: 'duplicate_summary',
+        reasonText: '重复录入',
+      }),
+      voidRouteContext(),
     );
     const payload = await response.json();
 
