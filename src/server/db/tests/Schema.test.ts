@@ -382,19 +382,32 @@ describe('数据库结构', () => {
     const plans = getDemoTenantPlanSeedRecords();
     const assignments = getDemoTenantPlanAssignmentSeedRecords();
     const snapshots = getDemoTenantQuotaSnapshotSeedRecords();
+    const demoTenantIds = [
+      'demo-tenant-001',
+      'demo-tenant-002',
+      'demo-tenant-003',
+      'demo-tenant-004',
+    ];
 
     expect(plans.map((plan) => plan.code)).toEqual(
-      expect.arrayContaining(['starter-care', 'growth-care']),
+      expect.arrayContaining([
+        'starter-care',
+        'growth-care',
+        'trial-care',
+        'enterprise-care',
+      ]),
     );
     expect(assignments.map((assignment) => assignment.tenantId)).toEqual(
-      expect.arrayContaining(['demo-tenant-001', 'demo-tenant-002']),
+      expect.arrayContaining(demoTenantIds),
     );
     expect(snapshots.map((snapshot) => snapshot.tenantId)).toEqual(
-      expect.arrayContaining(['demo-tenant-001', 'demo-tenant-002']),
+      expect.arrayContaining(demoTenantIds),
     );
     expect(snapshots.every((snapshot) => snapshot.currentCustomers <= snapshot.maxCustomers)).toBe(
       true,
     );
+    expect(snapshots.every((snapshot) => snapshot.maxAiCalls === 0)).toBe(true);
+    expect(snapshots.every((snapshot) => snapshot.currentAiCalls === 0)).toBe(true);
     expect(JSON.stringify({ plans, assignments, snapshots })).not.toMatch(
       /phoneNumber|idNumber|medicalRecordNo|treatmentRecord|consultationTranscript|DATABASE_URL|secret|token/i,
     );
@@ -418,6 +431,18 @@ describe('数据库结构', () => {
           id: 'demo-tenant-001',
           name: '星澜医美中心',
         }),
+        expect.objectContaining({
+          id: 'demo-tenant-002',
+          name: '青禾皮肤管理',
+        }),
+        expect.objectContaining({
+          id: 'demo-tenant-003',
+          name: '澄镜医疗美容',
+        }),
+        expect.objectContaining({
+          id: 'demo-tenant-004',
+          name: '远山医美连锁',
+        }),
       ]),
     );
     expect(plans).toEqual(
@@ -426,6 +451,14 @@ describe('数据库结构', () => {
           code: 'growth-care',
           name: 'Growth Plan',
         }),
+        expect.objectContaining({
+          code: 'trial-care',
+          name: 'Trial Plan',
+        }),
+        expect.objectContaining({
+          code: 'enterprise-care',
+          name: 'Enterprise Plan',
+        }),
       ]),
     );
     expect(assignments).toEqual(
@@ -433,6 +466,18 @@ describe('数据库结构', () => {
         expect.objectContaining({
           tenantId: 'demo-tenant-001',
           planId: 'plan-growth-care',
+        }),
+        expect.objectContaining({
+          tenantId: 'demo-tenant-002',
+          planId: 'plan-starter-care',
+        }),
+        expect.objectContaining({
+          tenantId: 'demo-tenant-003',
+          planId: 'plan-trial-care',
+        }),
+        expect.objectContaining({
+          tenantId: 'demo-tenant-004',
+          planId: 'plan-enterprise-care',
         }),
       ]),
     );
@@ -444,6 +489,9 @@ describe('数据库结构', () => {
           maxAppointments: expect.any(Number),
           maxFollowUps: expect.any(Number),
         }),
+        expect.objectContaining({ tenantId: 'demo-tenant-002' }),
+        expect.objectContaining({ tenantId: 'demo-tenant-003' }),
+        expect.objectContaining({ tenantId: 'demo-tenant-004' }),
       ]),
     );
     expect(tenantMembers).toEqual(

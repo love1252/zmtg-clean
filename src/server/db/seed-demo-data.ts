@@ -18,7 +18,8 @@ import {
 
 const demoTenantId = 'demo-tenant-001';
 const secondaryTenantId = 'demo-tenant-002';
-const suspendedTenantId = 'demo-tenant-003';
+const trialTenantId = 'demo-tenant-003';
+const suspendedTenantId = 'demo-tenant-004';
 const demoSeedStartedAt = new Date('2026-06-01T09:00:00+08:00');
 const demoSeedSnapshotAt = new Date('2026-06-02T09:00:00+08:00');
 
@@ -58,6 +59,11 @@ const demoTenantRecords: Array<typeof tenants.$inferInsert> = [
     status: 'active',
   },
   {
+    id: trialTenantId,
+    name: '澄镜医疗美容',
+    status: 'active',
+  },
+  {
     id: suspendedTenantId,
     name: '远山医美连锁',
     status: 'suspended',
@@ -77,6 +83,13 @@ const demoTenantPlanRecords: Array<typeof tenantPlans.$inferInsert> = [
     name: 'Growth Plan',
     code: 'growth-care',
     description: '适合增长期机构演示治疗后运营闭环、配额管控和多角色协作。',
+    status: 'active',
+  },
+  {
+    id: 'plan-trial-care',
+    name: 'Trial Plan',
+    code: 'trial-care',
+    description: '适合受控外部演示和试用评估的轻量套餐。',
     status: 'active',
   },
   {
@@ -106,7 +119,15 @@ const demoTenantPlanAssignmentRecords: Array<typeof tenantPlanAssignments.$infer
     expiresAt: null,
   },
   {
-    id: 'assign-demo-tenant-003-enterprise-expired',
+    id: 'assign-demo-tenant-003-trial',
+    tenantId: trialTenantId,
+    planId: 'plan-trial-care',
+    status: 'active',
+    startedAt: demoSeedStartedAt,
+    expiresAt: null,
+  },
+  {
+    id: 'assign-demo-tenant-004-enterprise',
     tenantId: suspendedTenantId,
     planId: 'plan-enterprise-care',
     status: 'expired',
@@ -146,8 +167,22 @@ const demoTenantQuotaSnapshotRecords: Array<typeof tenantQuotaSnapshots.$inferIn
   },
   {
     id: 'quota-demo-tenant-003-current',
+    tenantId: trialTenantId,
+    planAssignmentId: 'assign-demo-tenant-003-trial',
+    maxCustomers: 50,
+    maxAppointments: 80,
+    maxFollowUps: 120,
+    maxAiCalls: 0,
+    currentCustomers: 38,
+    currentAppointments: 51,
+    currentFollowUps: 44,
+    currentAiCalls: 0,
+    snapshotAt: demoSeedSnapshotAt,
+  },
+  {
+    id: 'quota-demo-tenant-004-current',
     tenantId: suspendedTenantId,
-    planAssignmentId: 'assign-demo-tenant-003-enterprise-expired',
+    planAssignmentId: 'assign-demo-tenant-004-enterprise',
     maxCustomers: 5000,
     maxAppointments: 6000,
     maxFollowUps: 10000,
