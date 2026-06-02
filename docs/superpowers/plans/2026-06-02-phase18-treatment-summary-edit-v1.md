@@ -10,6 +10,48 @@
 
 ---
 
+## 0. Phase 18 完成状态
+
+Phase 18 治疗摘要编辑能力 v1 已完成：
+
+- PR 1 已完成治疗摘要编辑能力 v1 spec / plan 文档。
+- PR 2 已完成编辑 payload parser、`UpdateTreatmentSummaryDraft`、`treatment_summary:update` 最小权限、repository update、`appointmentId` 同租户 / 同 customer 校验和单元测试。
+- PR 3 已完成 `PATCH /api/institution/treatment-summaries/[summaryId]` 与 API 测试。
+- PR 4 已完成机构端治疗摘要编辑 UI，安全详情中提供“编辑治疗摘要”入口，编辑表单只提交白名单字段。
+- PR 5 已完成 workspace smoke / 文档收尾，覆盖治疗摘要管理入口、安全详情、编辑入口、白名单 PATCH body、成功刷新列表 / 详情、失败保留输入和敏感字段不展示。
+
+Phase 18 最终确认：
+
+- 已完成治疗摘要编辑 spec / plan。
+- 已完成编辑 payload parser。
+- 已完成 `treatment_summary:update` 最小权限。
+- 已完成 repository update。
+- 已完成 `PATCH /api/institution/treatment-summaries/[summaryId]`。
+- 已完成机构端治疗摘要编辑 UI。
+- 已完成 smoke / 文档收尾。
+- 编辑治疗摘要不会自动修改既有随访任务。
+- 编辑治疗摘要不会重新生成随访建议。
+
+Phase 18 不包含：
+
+- 治疗摘要删除。
+- 治疗摘要作废。
+- 版本历史。
+- diff 展示。
+- 完整治疗记录正文。
+- 完整病历正文。
+- 咨询对话全文。
+- 图片 / 文件上传。
+- AI provider。
+- Agent。
+- RAG。
+- 企业微信。
+- HIS / CRM / OTA 真实接入。
+- OAuth / Webhook / 支付。
+- 外部系统同步。
+
+后续建议进入 Phase 19 Plan Mode，先评估治疗摘要作废能力 v1、HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec 和随访路径运营分析 v1，不在 Phase 18 中继续扩展实现。
+
 ## 1. 当前上下文
 
 当前已完成：
@@ -293,10 +335,10 @@ git diff --check
 
 - [x] 新增 `docs/superpowers/specs/2026-06-02-phase18-treatment-summary-edit-v1-design.md`
 - [x] 新增 `docs/superpowers/plans/2026-06-02-phase18-treatment-summary-edit-v1.md`
-- [ ] 运行 `git diff --check`
-- [ ] 提交 PR 1 文档
-- [ ] 推送 `docs/phase18-treatment-summary-edit-plan`
-- [ ] 创建 Draft PR
+- [x] 运行 `git diff --check`
+- [x] 提交 PR 1 文档
+- [x] 推送 `docs/phase18-treatment-summary-edit-plan`
+- [x] 创建 Draft PR
 
 ## 7. PR 2：编辑 payload parser、RBAC、repository update、单元测试
 

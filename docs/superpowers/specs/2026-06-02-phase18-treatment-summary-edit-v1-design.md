@@ -1,7 +1,37 @@
 # Phase 18 治疗摘要编辑能力 v1 设计
 
 > 日期：2026-06-02
-> 状态：Phase 18 PR 1 文档阶段。本文只固化治疗摘要编辑能力 v1 的目标、范围、API 设计、权限、审计、隐私边界和后续 PR 拆分；不代表编辑能力已经实现。
+> 状态：Phase 18 已完成。本文固化治疗摘要编辑能力 v1 的目标、范围、API 设计、权限、审计、隐私边界和 PR 拆分，并记录最终完成边界。
+
+## 0. Phase 18 完成状态
+
+Phase 18 治疗摘要编辑能力 v1 已按 PR 1-5 完成：
+
+- PR 1 已完成 spec / plan 文档。
+- PR 2 已完成编辑 payload parser、`UpdateTreatmentSummaryDraft`、`treatment_summary:update` 最小权限、repository update、`appointmentId` 同租户 / 同 customer 校验和单元测试。
+- PR 3 已完成 `PATCH /api/institution/treatment-summaries/[summaryId]` 与 API 测试，服务端从 access context 推导 `tenantId`，成功返回安全 DTO 并写 `treatment_summary/update allowed` audit。
+- PR 4 已完成机构端治疗摘要编辑 UI，安全详情中提供“编辑治疗摘要”入口，表单只提交白名单字段，成功后刷新列表和详情，失败后保留输入。
+- PR 5 已完成 workspace smoke / 文档收尾，覆盖治疗摘要管理入口、安全详情、编辑入口、白名单 PATCH body、成功刷新、失败保留输入、不会自动修改既有随访任务、不会重新生成随访建议和敏感字段不展示。
+
+Phase 18 最终仍不包含：
+
+- 治疗摘要删除。
+- 治疗摘要作废。
+- 版本历史。
+- diff 展示。
+- 完整治疗记录正文。
+- 完整病历正文。
+- 咨询对话全文。
+- 图片 / 文件上传。
+- AI provider。
+- Agent。
+- RAG。
+- 企业微信。
+- HIS / CRM / OTA 真实接入。
+- OAuth / Webhook / 支付。
+- 外部系统同步。
+
+后续建议进入 Phase 19 Plan Mode，先评估治疗摘要作废能力 v1、HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec 和随访路径运营分析 v1，不在 Phase 18 中继续扩展实现。
 
 ## 1. Phase 18 目标
 

@@ -160,6 +160,22 @@ const nextTreatmentSummaryManagementRecord = {
   nextCareAction: 'Phase14 结束本轮人工观察。',
 };
 
+const editedTreatmentSummaryManagementRecord = {
+  ...treatmentSummaryManagementRecord,
+  treatmentDate: '2026-06-03T10:00:00+08:00',
+  treatmentProject: 'Phase18 编辑后治疗摘要',
+  treatmentCategory: 'phase18_safe_edit',
+  treatmentStage: 'Phase18 D21 复诊',
+  recoveryStage: 'Phase18 D21',
+  riskLevel: 'normal',
+  ownerUserId: 'doctor-phase18',
+  summary: 'Phase18 编辑摘要：结构化字段已修正。',
+  nextCareAction: 'Phase18 D28 人工确认恢复状态。',
+  tags: ['Phase18 编辑', '安全字段'],
+  appointmentId: 'appt_phase18_edit',
+  updatedAt: '2026-06-03T10:05:00+08:00',
+};
+
 const treatmentFollowUpSuggestion = {
   suggestionKey: 'trt_phase14_management:watch_risk_followup:3d',
   ruleKey: 'watch_risk_followup',
@@ -570,6 +586,11 @@ type WorkspaceFetchOptions = {
     status: number;
     message: string;
   };
+  treatmentSummaryUpdateRecord?: unknown;
+  treatmentSummaryUpdateError?: {
+    status: number;
+    message: string;
+  };
   followUpSuggestions?: unknown[];
   followUpTaskRecord?: unknown;
   followUpTaskError?: {
@@ -613,6 +634,8 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     timeline = customerTimelineResponse,
     treatmentSummaryRecord = phase13CreatedTreatmentSummary,
     treatmentSummaryMutationError,
+    treatmentSummaryUpdateRecord = editedTreatmentSummaryManagementRecord,
+    treatmentSummaryUpdateError,
     followUpSuggestions = [treatmentFollowUpSuggestion],
     followUpTaskRecord = treatmentFollowUpCreatedTask,
     followUpTaskError,
@@ -683,6 +706,20 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
         return jsonResponse({ record: followUpTaskRecord }, { status: 201 });
       }
 
+      if (
+        path === '/api/institution/treatment-summaries/trt_phase14_management' &&
+        method === 'PATCH'
+      ) {
+        if (treatmentSummaryUpdateError) {
+          return jsonResponse(
+            { error: treatmentSummaryUpdateError.message },
+            { status: treatmentSummaryUpdateError.status },
+          );
+        }
+
+        return jsonResponse({ record: treatmentSummaryUpdateRecord });
+      }
+
       if (path.startsWith('/api/institution/treatment-summaries')) {
         return jsonResponse(
           treatmentSummaryPageQueue?.shift() ?? fallbackTreatmentSummaryPage,
@@ -750,6 +787,20 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
 function mutationBody(fetchMock: ReturnType<typeof mockWorkspaceFetch>, path: string) {
   const call = fetchMock.mock.calls.find(
     ([input, init]) => fetchPath(input) === path && init?.method === 'POST',
+  );
+
+  expect(call).toBeDefined();
+  const [, init] = call!;
+  return JSON.parse(String(init?.body)) as Record<string, unknown>;
+}
+
+function requestBodyByMethod(
+  fetchMock: ReturnType<typeof mockWorkspaceFetch>,
+  path: string,
+  method: 'POST' | 'PATCH',
+) {
+  const call = fetchMock.mock.calls.find(
+    ([input, init]) => fetchPath(input) === path && init?.method === method,
   );
 
   expect(call).toBeDefined();
@@ -829,6 +880,54 @@ function expectSafeTreatmentSummaryBody(body: Record<string, unknown>) {
   expect(serializedBody).not.toContain('MR202605310001');
   expect(serializedBody).not.toContain('完整治疗记录正文');
   expect(serializedBody).not.toContain('完整病历正文');
+  expect(serializedBody).not.toContain('咨询对话全文');
+}
+
+function expectSafeTreatmentSummaryEditBody(body: Record<string, unknown>) {
+  const serializedBody = JSON.stringify(body);
+
+  expect(body).toEqual({
+    treatmentDate: '2026-06-03T10:00:00+08:00',
+    treatmentProject: 'Phase18 编辑后治疗摘要',
+    treatmentCategory: 'phase18_safe_edit',
+    treatmentStage: 'Phase18 D21 复诊',
+    recoveryStage: 'Phase18 D21',
+    riskLevel: 'normal',
+    ownerUserId: 'doctor-phase18',
+    summary: 'Phase18 编辑摘要：结构化字段已修正。',
+    nextCareAction: 'Phase18 D28 人工确认恢复状态。',
+    tags: ['Phase18 编辑', '安全字段'],
+    appointmentId: 'appt_phase18_edit',
+  });
+  expect(body).not.toHaveProperty('tenantId');
+  expect(body).not.toHaveProperty('customerId');
+  expect(body).not.toHaveProperty('id');
+  expect(body).not.toHaveProperty('createdAt');
+  expect(body).not.toHaveProperty('updatedAt');
+  expect(serializedBody).not.toContain('unknownField');
+  expect(serializedBody).not.toContain('fullTreatmentRecord');
+  expect(serializedBody).not.toContain('medicalRecordText');
+  expect(serializedBody).not.toContain('diagnosisText');
+  expect(serializedBody).not.toContain('consultationTranscript');
+  expect(serializedBody).not.toContain('phoneNumber');
+  expect(serializedBody).not.toContain('idNumber');
+  expect(serializedBody).not.toContain('rawMedicalRecordNo');
+  expect(serializedBody).not.toContain('imageUrl');
+  expect(serializedBody).not.toContain('fileUrl');
+  expect(serializedBody).not.toContain('aiGeneratedContent');
+  expect(serializedBody).not.toContain('externalSystemPayload');
+  expect(serializedBody).not.toContain('sql');
+  expect(serializedBody).not.toContain('stack');
+  expect(serializedBody).not.toContain('token');
+  expect(serializedBody).not.toContain('secret');
+  expect(serializedBody).not.toContain('DATABASE_URL');
+  expect(serializedBody).not.toContain('postgres://');
+  expect(serializedBody).not.toContain('13800001252');
+  expect(serializedBody).not.toContain('110101199001010011');
+  expect(serializedBody).not.toContain('MR202605310001');
+  expect(serializedBody).not.toContain('完整治疗记录正文');
+  expect(serializedBody).not.toContain('完整病历正文');
+  expect(serializedBody).not.toContain('诊疗原文');
   expect(serializedBody).not.toContain('咨询对话全文');
 }
 
@@ -1209,6 +1308,156 @@ describe('工作台入口页面', () => {
     expect(within(dialog).getByRole('button', { name: '编辑治疗摘要' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /新增|删除|作废/u })).not.toBeInTheDocument();
     expectNoSensitiveTreatmentSummaryManagementContent(container);
+  });
+
+  it('机构入口 smoke 覆盖治疗摘要编辑成功、刷新和安全 payload 边界', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      treatmentSummaryPages: [
+        {
+          records: [treatmentSummaryManagementRecord],
+          pageInfo: {
+            hasMore: false,
+            limit: 50,
+            nextCursor: null,
+          },
+        },
+        {
+          records: [editedTreatmentSummaryManagementRecord],
+          pageInfo: {
+            hasMore: false,
+            limit: 50,
+            nextCursor: null,
+          },
+        },
+      ],
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
+    expect(screen.getByRole('heading', { name: '治疗摘要管理' })).toBeInTheDocument();
+    expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_management' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+    expect(within(dialog).getByRole('button', { name: '编辑治疗摘要' })).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '编辑治疗摘要' }));
+    expect(within(dialog).getByRole('form', { name: '编辑治疗摘要表单' })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('治疗时间')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('治疗项目')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('治疗类别')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('治疗阶段')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('恢复阶段')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('风险等级')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('负责人 ID')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('摘要')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('下一步护理建议')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('标签')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('预约 ID')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('编辑治疗摘要不会自动修改既有随访任务，也不会重新生成随访建议。'),
+    ).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText('治疗时间'), {
+      target: { value: '2026-06-03T10:00' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('治疗项目'), {
+      target: { value: 'Phase18 编辑后治疗摘要' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('治疗类别'), {
+      target: { value: 'phase18_safe_edit' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('治疗阶段'), {
+      target: { value: 'Phase18 D21 复诊' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('恢复阶段'), {
+      target: { value: 'Phase18 D21' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('风险等级'), {
+      target: { value: 'normal' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('负责人 ID'), {
+      target: { value: 'doctor-phase18' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('摘要'), {
+      target: { value: 'Phase18 编辑摘要：结构化字段已修正。' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('下一步护理建议'), {
+      target: { value: 'Phase18 D28 人工确认恢复状态。' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('标签'), {
+      target: { value: 'Phase18 编辑，安全字段，Phase18 编辑' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('预约 ID'), {
+      target: { value: 'appt_phase18_edit' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: '保存编辑' }));
+
+    expect(await within(dialog).findByText('治疗摘要已更新')).toBeInTheDocument();
+    expect((await screen.findAllByText('Phase18 编辑后治疗摘要')).length).toBeGreaterThan(1);
+    expect(within(dialog).getAllByText('Phase18 编辑后治疗摘要').length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText('Phase18 编辑摘要：结构化字段已修正。').length).toBeGreaterThan(
+      1,
+    );
+
+    expectSafeTreatmentSummaryEditBody(
+      requestBodyByMethod(
+        fetchMock,
+        '/api/institution/treatment-summaries/trt_phase14_management',
+        'PATCH',
+      ),
+    );
+
+    const treatmentSummaryListCalls = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        fetchPath(input) === '/api/institution/treatment-summaries' &&
+        init?.method === undefined,
+    );
+    expect(treatmentSummaryListCalls).toHaveLength(2);
+
+    const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
+    expect(requestPaths.some((path) => path.endsWith('/follow-up-suggestions'))).toBe(false);
+    expect(requestPaths.some((path) => path.endsWith('/follow-up-tasks'))).toBe(false);
+    expect(screen.queryByRole('button', { name: /删除|作废/u })).not.toBeInTheDocument();
+    expectNoSensitiveTreatmentSummaryManagementContent(container);
+  });
+
+  it('机构入口 smoke 覆盖治疗摘要编辑失败后保留输入并隐藏敏感错误', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      treatmentSummaryUpdateError: {
+        status: 503,
+        message:
+          'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg sql stack token secret',
+      },
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
+    expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_management' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '编辑治疗摘要' }));
+
+    const summaryInput = within(dialog).getByLabelText('摘要');
+    fireEvent.change(summaryInput, {
+      target: { value: 'Phase18 失败后仍保留的摘要输入' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: '保存编辑' }));
+
+    expect(await within(dialog).findByText('数据服务暂时不可用')).toBeInTheDocument();
+    expect(summaryInput).toHaveValue('Phase18 失败后仍保留的摘要输入');
+
+    expectNoSensitiveTreatmentSummaryManagementContent(container);
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('DATABASE_URL');
+    expect(text).not.toContain('postgres://');
+    expect(text).not.toContain('sql stack');
+    expect(text).not.toContain('token');
+    expect(text).not.toContain('secret');
+    expect(fetchMock).toHaveBeenCalled();
   });
 
   it('机构入口 smoke 覆盖治疗摘要随访建议人工确认创建', async () => {
