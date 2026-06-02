@@ -28,6 +28,7 @@
 - Phase 15：治疗后护理 / 随访联动 v1，包括确定性护理 / 随访建议规则、`follow_up_tasks` 来源关联、幂等 / 去重、人工确认 API、治疗摘要管理 UI 联动和 smoke / 文档收尾
 - Phase 16：随访任务来源治理增强 v1，包括 follow-up 来源筛选、安全来源 DTO、智能随访来源标签 / 来源筛选、治疗摘要管理页重复任务提示和 smoke / 文档收尾
 - Phase 17：HIS 接入标准模型 / 标准治疗事件 v1，包括 spec / plan 文档、domain-only 标准治疗事件类型、`sourceSystem` 稳定集合、mapper 输入 / 输出契约、字段白名单、禁止字段边界和 institution 测试
+- Phase 18：治疗摘要编辑能力 v1，包括 spec / plan 文档、编辑 payload parser、`treatment_summary:update` 最小权限、repository update、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端受控编辑 UI、入口 smoke 和文档收尾
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -139,10 +140,21 @@ Phase 17 已完成：
 - institution 测试覆盖合法输入、`sourceSystem`、`sourceEventId`、`customerMatchKey`、`maskedPhone`、治疗项目 / 分类 / 阶段、金额 / 币种、tags 标准化、字段白名单和禁止字段
 - Phase 17 不包含真实 HIS 接入、Webhook、文件导入、外部系统同步、数据库 schema / migration、API route、UI、企业微信 / 个人微信、AI / RAG / Agent、业务事件埋点实现或经营智能中心实现
 
+Phase 18 已完成：
+
+- Phase 18 治疗摘要编辑能力 v1 spec / plan 已完成，明确只允许机构端编辑白名单结构化字段，不允许完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、图片 / 文件原文或外部系统原文
+- 已新增治疗摘要编辑 payload parser，拒绝未知字段、外部 `tenantId` / `customerId` / `id` / 时间戳字段、PII、完整正文、AI 生成内容、外部系统 payload、SQL、stack、token、secret、`DATABASE_URL` 和连接串
+- 已为 `tenant_admin` 增加最小 `treatment_summary:update` 权限，未开放 `treatment_summary:delete`
+- 已新增 `updateTreatmentSummaryByTenant`，按服务端确认的 `tenantId + summaryId` 更新，`appointmentId` 更新前校验同租户且属于同一 customer
+- 已新增 `PATCH /api/institution/treatment-summaries/[summaryId]`，服务端从 access context 推导 `tenantId`，成功返回安全 DTO 并写 `treatment_summary/update allowed` audit
+- 机构端治疗摘要管理安全详情已新增“编辑治疗摘要”入口和受控编辑表单，提交只发送白名单字段，成功后刷新列表和详情，失败后保留输入并展示稳定中文错误
+- workspace smoke 覆盖治疗摘要管理页进入、安全详情打开、编辑入口、白名单 PATCH body、成功刷新、失败保留输入、不会自动修改既有随访任务、不会重新生成随访建议和敏感字段不展示
+- Phase 18 不包含治疗摘要删除、治疗摘要作废、版本历史、diff 展示、完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件上传、AI provider、Agent、RAG、企业微信、真实 HIS / CRM / OTA 接入、OAuth、Webhook、支付、合同、发票或外部系统同步
+
 后续阶段会依次加入：
 
-- Phase 18 Plan Mode：优先评估治疗摘要编辑能力 v1；可并行候选为 HIS 标准治疗事件 mapper 继续增强和业务事件埋点体系 spec
-- 客服会话、治疗摘要编辑 / 作废和完整治疗记录能力需单独规划
+- Phase 19 Plan Mode：建议优先评估治疗摘要作废能力 v1、HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec 或随访路径运营分析 v1，进入实现前必须单独定界
+- 客服会话、治疗摘要作废、版本历史 / diff 展示和完整治疗记录能力需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费
