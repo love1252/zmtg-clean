@@ -118,6 +118,25 @@ const treatmentSummaries = [
   },
 ];
 
+const voidedTreatmentSummary = {
+  ...treatmentSummaries[0],
+  id: 'trt_voided_001',
+  treatmentDate: '2026-06-02T12:00:00.000Z',
+  treatmentProject: '光电修复作废记录',
+  treatmentStage: 'D7 复核',
+  summary: '结构化摘要：误录入，保留历史追溯。',
+  status: 'voided',
+  voidedAt: '2026-06-02T13:00:00.000Z',
+  voidedBy: 'demo-user-admin',
+  voidReasonCode: 'duplicate_summary',
+  voidReason: '重复录入，保留较新的治疗摘要',
+  updatedAt: '2026-06-02T13:00:00.000Z',
+} satisfies TreatmentSummaryRecord & {
+  treatmentRecord: string;
+  medicalRecordBody: string;
+  consultationTranscript: string;
+};
+
 describe('客户详情时间线领域模型', () => {
   it('构建客户详情时间线响应且只保留脱敏结构化摘要', () => {
     const response = buildCustomerTimelineResponse({
@@ -267,5 +286,46 @@ describe('客户详情时间线领域模型', () => {
         relatedRecordId: 'cust_001',
       }),
     ]);
+  });
+
+  it('作废治疗摘要 timeline 节点标记已作废且保留历史追溯', () => {
+    const response = buildCustomerTimelineResponse({
+      customer,
+      appointments,
+      followups,
+      treatmentSummaries: [voidedTreatmentSummary],
+      auditEvents: [],
+    });
+    const serialized = JSON.stringify(response);
+
+    expect(response.treatmentSummaries).toEqual([
+      expect.objectContaining({
+        id: 'trt_voided_001',
+        status: 'voided',
+        voidedAt: '2026-06-02T13:00:00.000Z',
+        voidedBy: 'demo-user-admin',
+        voidReasonCode: 'duplicate_summary',
+        voidReason: '重复录入，保留较新的治疗摘要',
+      }),
+    ]);
+    expect(response.timeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'treatment_summary:trt_voided_001',
+          type: 'treatment_summary',
+          title: '光电修复作废记录 · D7 复核',
+          summary: '结构化摘要：误录入，保留历史追溯。',
+          status: 'voided',
+          source: 'treatment_summary',
+          relatedRecordId: 'trt_voided_001',
+          riskLevel: 'watch',
+          tags: ['已作废', '结构化摘要', '术后关怀'],
+        }),
+      ]),
+    );
+    expect(serialized).not.toContain('tenantId');
+    expect(serialized).not.toContain('完整治疗记录正文');
+    expect(serialized).not.toContain('完整病历正文');
+    expect(serialized).not.toContain('咨询对话全文');
   });
 });

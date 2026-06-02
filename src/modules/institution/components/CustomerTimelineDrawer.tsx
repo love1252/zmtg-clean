@@ -99,6 +99,18 @@ function displayText(value: string | null | undefined, fallback = '未记录') {
   return value && value.trim().length > 0 ? value : fallback;
 }
 
+function treatmentSummaryStatusLabel(status: CustomerTimelineTreatmentSummary['status']) {
+  return status === 'voided' ? '已作废' : '正常';
+}
+
+function timelineEventStatusLabel(event: CustomerTimelineEvent) {
+  if (event.type === 'treatment_summary' && event.status === 'voided') {
+    return '已作废';
+  }
+
+  return event.status;
+}
+
 function splitTreatmentSummaryTags(tagsText: string) {
   return tagsText
     .split(/[,，]/)
@@ -247,6 +259,8 @@ function FollowUpSummary({ followUp }: { followUp: CustomerTimelineFollowUpSumma
 }
 
 function TreatmentSummary({ treatment }: { treatment: CustomerTimelineTreatmentSummary }) {
+  const isVoided = treatment.status === 'voided';
+
   return (
     <li className="rounded-2xl border border-slate-200 bg-white p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -254,9 +268,15 @@ function TreatmentSummary({ treatment }: { treatment: CustomerTimelineTreatmentS
           {treatment.treatmentProject}
         </span>
         <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">
-          {followUpRiskLevelLabels[treatment.riskLevel]}
+          {isVoided ? '已作废' : followUpRiskLevelLabels[treatment.riskLevel]}
         </span>
       </div>
+      {isVoided ? (
+        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold leading-6 text-amber-800">
+          <p>该治疗摘要已作废</p>
+          <p className="mt-1 text-xs">仅保留历史追溯，不再作为后续运营依据。</p>
+        </div>
+      ) : null}
       <p className="mt-2 text-sm leading-6 text-slate-600">{treatment.summary}</p>
       <p className="mt-2 text-sm leading-6 text-slate-500">
         下一步护理：{displayText(treatment.nextCareAction)}
@@ -267,7 +287,14 @@ function TreatmentSummary({ treatment }: { treatment: CustomerTimelineTreatmentS
         <span>阶段：{displayText(treatment.treatmentStage)}</span>
         <span>恢复：{displayText(treatment.recoveryStage)}</span>
         <span>风险：{followUpRiskLevelLabels[treatment.riskLevel]}</span>
+        <span>状态：{treatmentSummaryStatusLabel(treatment.status)}</span>
         <span>负责人：{displayText(treatment.ownerUserId)}</span>
+        {isVoided ? (
+          <>
+            <span>作废时间：{formatBusinessDateTime(treatment.voidedAt ?? '')}</span>
+            <span>作废人：{displayText(treatment.voidedBy)}</span>
+          </>
+        ) : null}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {treatment.tags.length > 0 ? (
@@ -300,7 +327,7 @@ function TimelineEventItem({ event }: { event: CustomerTimelineEvent }) {
         </div>
         <p className="mt-2 text-sm leading-6 text-slate-600">{event.summary}</p>
         <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-          <span>状态：{event.status}</span>
+          <span>状态：{timelineEventStatusLabel(event)}</span>
           <span>来源：{event.source}</span>
           <span>关联：{event.relatedRecordId}</span>
           {event.riskLevel ? (

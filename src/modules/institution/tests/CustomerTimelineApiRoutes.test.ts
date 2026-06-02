@@ -166,6 +166,11 @@ const treatmentSummaryRecord = {
   summary: '结构化摘要：红肿减轻，安排补水护理。',
   nextCareAction: 'D14 人工回访恢复阶段。',
   tags: ['结构化摘要', '术后关怀'],
+  status: 'active',
+  voidedAt: null,
+  voidedBy: null,
+  voidReasonCode: null,
+  voidReason: null,
   createdAt: '2026-06-01T12:00:00.000Z',
   updatedAt: '2026-06-01T12:00:00.000Z',
   treatmentRecord: '完整治疗记录正文',
@@ -173,6 +178,20 @@ const treatmentSummaryRecord = {
   consultationTranscript: '咨询对话全文',
   sql: 'select * from treatment_summaries',
   stack: 'blocked-stack-value',
+};
+
+const voidedTreatmentSummaryRecord = {
+  ...treatmentSummaryRecord,
+  id: 'trt_voided_001',
+  treatmentProject: '光电修复作废记录',
+  treatmentStage: 'D7 复核',
+  summary: '结构化摘要：误录入，保留历史追溯。',
+  status: 'voided',
+  voidedAt: '2026-06-02T13:00:00.000Z',
+  voidedBy: 'demo-user-admin',
+  voidReasonCode: 'duplicate_summary',
+  voidReason: '重复录入，保留较新的治疗摘要',
+  updatedAt: '2026-06-02T13:00:00.000Z',
 };
 
 function routeContext(customerId = 'cust_001') {
@@ -303,6 +322,11 @@ describe('客户详情 timeline API', () => {
         summary: '结构化摘要：红肿减轻，安排补水护理。',
         nextCareAction: 'D14 人工回访恢复阶段。',
         tags: ['结构化摘要', '术后关怀'],
+        status: 'active',
+        voidedAt: null,
+        voidedBy: null,
+        voidReasonCode: null,
+        voidReason: null,
         createdAt: '2026-06-01T12:00:00.000Z',
         updatedAt: '2026-06-01T12:00:00.000Z',
       },
@@ -327,6 +351,40 @@ describe('客户详情 timeline API', () => {
           relatedRecordId: 'trt_001',
           riskLevel: 'watch',
           tags: ['结构化摘要', '术后关怀'],
+        }),
+      ]),
+    );
+    expectNoPrivateData(payload);
+  });
+
+  it('作废治疗摘要在 timeline 中返回作废状态且不泄露敏感正文', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer.mockResolvedValueOnce([
+      voidedTreatmentSummaryRecord,
+    ]);
+
+    const response = await customerTimelineGet(timelineRequest(), routeContext());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.treatmentSummaries).toEqual([
+      expect.objectContaining({
+        id: 'trt_voided_001',
+        status: 'voided',
+        voidedAt: '2026-06-02T13:00:00.000Z',
+        voidedBy: 'demo-user-admin',
+        voidReasonCode: 'duplicate_summary',
+        voidReason: '重复录入，保留较新的治疗摘要',
+      }),
+    ]);
+    expect(payload.timeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'treatment_summary:trt_voided_001',
+          type: 'treatment_summary',
+          title: '光电修复作废记录 · D7 复核',
+          status: 'voided',
+          tags: ['已作废', '结构化摘要', '术后关怀'],
         }),
       ]),
     );

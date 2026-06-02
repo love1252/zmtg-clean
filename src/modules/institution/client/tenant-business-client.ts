@@ -13,6 +13,7 @@ import type {
   InstitutionTreatmentSummaryListItem,
   TreatmentSummaryListPageInfo,
   UpdateTreatmentSummaryDraft,
+  VoidTreatmentSummaryDraft,
 } from '@/modules/institution/domain/treatment-summaries';
 
 export type CreateCustomerClientPayload = Omit<CustomerRecordSummary, 'id' | 'tenantId'>;
@@ -64,6 +65,8 @@ export type UpdateTreatmentSummaryClientPayload = Partial<
 > & {
   appointmentId?: string | null;
 };
+
+export type VoidTreatmentSummaryClientPayload = VoidTreatmentSummaryDraft;
 
 export type TreatmentSummaryListClientQuery = {
   customerId?: string | number | null;
@@ -165,6 +168,7 @@ const createTreatmentSummaryPayloadKeys = [
   'appointmentId',
 ] as const;
 const updateTreatmentSummaryPayloadKeys = createTreatmentSummaryPayloadKeys;
+const voidTreatmentSummaryPayloadKeys = ['reasonCode', 'reasonText'] as const;
 const treatmentSummaryListQueryKeys = [
   'customerId',
   'treatmentProject',
@@ -676,6 +680,22 @@ export function updateTreatmentSummary(
     pickPayload(
       payload as unknown as Record<string, unknown>,
       updateTreatmentSummaryPayloadKeys,
+    ),
+    options,
+  );
+}
+
+export function voidTreatmentSummary(
+  summaryId: string,
+  payload: VoidTreatmentSummaryClientPayload,
+  options?: TenantBusinessClientOptions,
+) {
+  return requestRecord<Omit<InstitutionTreatmentSummaryListItem, 'customerId'>>(
+    `/api/institution/treatment-summaries/${encodeURIComponent(summaryId)}/void`,
+    'POST',
+    pickPayload(
+      payload as unknown as Record<string, unknown>,
+      voidTreatmentSummaryPayloadKeys,
     ),
     options,
   );
