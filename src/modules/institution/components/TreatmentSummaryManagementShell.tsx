@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
+  AlertTriangle,
+  Ban,
   CalendarClock,
   CheckCircle2,
   ClipboardList,
@@ -18,14 +20,18 @@ import {
   listTreatmentSummaries,
   listTreatmentFollowUpSuggestions,
   updateTreatmentSummary,
+  voidTreatmentSummary,
   type TenantBusinessClientError,
   type TreatmentSummaryListClientQuery,
   type UpdateTreatmentSummaryClientPayload,
+  type VoidTreatmentSummaryClientPayload,
 } from '@/modules/institution/client/tenant-business-client';
 import type { TreatmentFollowUpSuggestion } from '@/modules/institution/domain/treatment-followup-suggestions';
 import {
   type InstitutionTreatmentSummaryListItem,
+  type TreatmentSummaryVoidReasonCode,
   type TreatmentSummaryListPageInfo,
+  treatmentSummaryVoidReasonCodes,
 } from '@/modules/institution/domain/treatment-summaries';
 import {
   followUpRiskLevelLabels,
@@ -67,12 +73,22 @@ type TreatmentSummaryEditForm = {
   appointmentId: string;
 };
 
+type TreatmentSummaryVoidForm = {
+  reasonCode: TreatmentSummaryVoidReasonCode;
+  reasonText: string;
+};
+
 const emptyTreatmentSummaryFilterForm: TreatmentSummaryFilterForm = {
   customerId: '',
   treatmentProject: '',
   riskLevel: '',
   from: '',
   to: '',
+};
+
+const emptyTreatmentSummaryVoidForm: TreatmentSummaryVoidForm = {
+  reasonCode: 'manual_governance_review',
+  reasonText: '',
 };
 
 const riskLevelToneClasses = {
@@ -92,6 +108,25 @@ const suggestionPriorityToneClasses = {
   medium: 'border-amber-200 bg-amber-50 text-amber-700',
   high: 'border-rose-200 bg-rose-50 text-rose-700',
 } as const satisfies Record<TreatmentFollowUpSuggestion['priority'], string>;
+
+const voidReasonCodeLabels = {
+  duplicate_summary: '重复录入',
+  created_by_mistake: '误创建',
+  wrong_customer_or_appointment: '关联客户或预约错误',
+  entered_wrong_treatment: '治疗项目录入错误',
+  manual_governance_review: '人工治理复核',
+  other: '其他',
+} as const satisfies Record<TreatmentSummaryVoidReasonCode, string>;
+
+const sensitiveVoidReasonPatterns = [
+  /完整治疗记录正文|完整治疗记录|完整病历正文|完整病历|诊疗原文|咨询对话全文|咨询全文/iu,
+  /fullTreatmentRecord|medicalRecordText|diagnosisText|consultationTranscript/iu,
+  /phoneNumber|idNumber|rawMedicalRecordNo|手机号原文|身份证号|病历号原文/iu,
+  /(?:\p{Decimal_Number}[\s-]?){11,}/u,
+  /DATABASE_URL|postgres:\/\/|\bsql\b|\bstack\b|\btoken\b|\bsecret\b/iu,
+  /imageUrl|fileUrl|aiGeneratedContent|externalSystemPayload|requestBody/iu,
+  /https?:\/\/[^\s]+(?:\.(?:png|jpe?g|gif|pdf|docx?|zip)|\/raw-(?:image|file))/iu,
+];
 
 const activeFollowUpStatuses = new Set<FollowUpStatus>([
   'scheduled',
@@ -241,6 +276,39 @@ function displayValue(value: string | null | undefined) {
   return value && value.trim().length > 0 ? value : '-';
 }
 
+function treatmentSummaryStatusLabel(record: Pick<InstitutionTreatmentSummaryListItem, 'status'>) {
+  return record.status === 'voided' ? '已作废' : '正常';
+}
+
+function isTreatmentSummaryVoided(record: Pick<InstitutionTreatmentSummaryListItem, 'status' | 'voidedAt'>) {
+  return record.status === 'voided' || Boolean(record.voidedAt);
+}
+
+function visibleTreatmentSummaryVoidErrorMessage(error: TenantBusinessClientError) {
+  if (error.kind === 'unauthorized') return '请先登录';
+  if (error.kind === 'forbidden') return '当前账号没有作废治疗摘要的权限';
+  if (error.kind === 'not_found') return '治疗摘要不存在或不可见';
+  if (error.kind === 'conflict') return error.message || '治疗摘要已作废';
+  if (error.kind === 'service_unavailable') return '数据服务暂时不可用';
+  if (error.kind === 'validation_error') {
+    return error.message || '字段非法，请检查作废原因';
+  }
+  return error.message || '治疗摘要作废失败';
+}
+
+function validateVoidTreatmentSummaryForm(form: TreatmentSummaryVoidForm) {
+  const reasonText = form.reasonText.trim();
+  if (reasonText.length === 0) return '作废原因必须填写';
+  if (reasonText.length > 120) return '作废原因最多 120 个字';
+  if (!treatmentSummaryVoidReasonCodes.includes(form.reasonCode)) {
+    return '作废原因分类不合法';
+  }
+  if (sensitiveVoidReasonPatterns.some((pattern) => pattern.test(reasonText.normalize('NFKC')))) {
+    return '作废原因包含敏感信息，请改为短说明';
+  }
+  return null;
+}
+
 function safeTagList(tags: string[]) {
   return tags.length > 0 ? tags : ['未标记'];
 }
@@ -285,6 +353,15 @@ function TreatmentSummaryDetailDialog({
     kind: 'success' | 'error';
     text: string;
   } | null>(null);
+  const [isVoidFormOpen, setIsVoidFormOpen] = useState(false);
+  const [voidForm, setVoidForm] = useState<TreatmentSummaryVoidForm>(
+    emptyTreatmentSummaryVoidForm,
+  );
+  const [isSubmittingVoid, setIsSubmittingVoid] = useState(false);
+  const [voidMessage, setVoidMessage] = useState<{
+    kind: 'success' | 'error';
+    text: string;
+  } | null>(null);
   const [followUpSuggestions, setFollowUpSuggestions] = useState<TreatmentFollowUpSuggestion[]>(
     [],
   );
@@ -304,10 +381,13 @@ function TreatmentSummaryDetailDialog({
     setEditForm(recordToEditForm(record));
   }, [record]);
 
+  const isVoided = isTreatmentSummaryVoided(detailRecord);
+
   const rows = [
     ['摘要 ID', detailRecord.id],
     ['客户 ID', detailRecord.customerId],
     ['预约 ID', detailRecord.appointmentId ?? '-'],
+    ['状态', treatmentSummaryStatusLabel(detailRecord)],
     ['治疗时间', formatBusinessDateTime(detailRecord.treatmentDate)],
     ['治疗项目', detailRecord.treatmentProject],
     ['治疗类别', detailRecord.treatmentCategory],
@@ -318,9 +398,36 @@ function TreatmentSummaryDetailDialog({
     ['摘要', detailRecord.summary],
     ['下一步护理建议', detailRecord.nextCareAction],
     ['标签', safeTagList(detailRecord.tags).join('、')],
+    ...(isVoided
+      ? ([
+          ['作废时间', detailRecord.voidedAt ? formatBusinessDateTime(detailRecord.voidedAt) : '-'],
+          ['作废人', detailRecord.voidedBy ?? '-'],
+          ['作废原因', detailRecord.voidReason ?? '-'],
+        ] as const)
+      : []),
     ['创建时间', formatBusinessDateTime(detailRecord.createdAt)],
     ['更新时间', formatBusinessDateTime(detailRecord.updatedAt)],
   ] as const;
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadVoidedSourceTasks() {
+      if (!isVoided) return;
+      const result = await listFollowUpTasks({
+        source: 'treatment_summary',
+        sourceTreatmentSummaryId: detailRecord.id,
+      });
+      if (!isActive) return;
+      setSourceFollowUpTasks(result.ok ? result.records : []);
+    }
+
+    void loadVoidedSourceTasks();
+
+    return () => {
+      isActive = false;
+    };
+  }, [detailRecord.id, isVoided]);
 
   function handleEditFieldChange(
     key: keyof TreatmentSummaryEditForm,
@@ -333,6 +440,57 @@ function TreatmentSummaryDetailDialog({
     setEditForm(recordToEditForm(detailRecord));
     setEditMessage(null);
     setIsEditFormOpen(true);
+  }
+
+  function handleOpenVoidForm() {
+    setVoidForm(emptyTreatmentSummaryVoidForm);
+    setVoidMessage(null);
+    setIsVoidFormOpen(true);
+  }
+
+  function handleVoidFieldChange<Key extends keyof TreatmentSummaryVoidForm>(
+    key: Key,
+    value: TreatmentSummaryVoidForm[Key],
+  ) {
+    setVoidForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function handleSubmitVoid(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const validationError = validateVoidTreatmentSummaryForm(voidForm);
+    if (validationError) {
+      setVoidMessage({ kind: 'error', text: validationError });
+      return;
+    }
+
+    setIsSubmittingVoid(true);
+    setVoidMessage(null);
+
+    const payload: VoidTreatmentSummaryClientPayload = {
+      reasonCode: voidForm.reasonCode,
+      reasonText: voidForm.reasonText.trim(),
+    };
+    const result = await voidTreatmentSummary(detailRecord.id, payload);
+
+    if (result.ok) {
+      const nextRecord: InstitutionTreatmentSummaryListItem = {
+        ...detailRecord,
+        ...result.record,
+        customerId: detailRecord.customerId,
+      };
+      setDetailRecord(nextRecord);
+      setIsVoidFormOpen(false);
+      setVoidMessage({ kind: 'success', text: '治疗摘要已作废' });
+      onRecordUpdated(nextRecord);
+    } else {
+      setVoidMessage({
+        kind: 'error',
+        text: visibleTreatmentSummaryVoidErrorMessage(result.error),
+      });
+    }
+
+    setIsSubmittingVoid(false);
   }
 
   async function handleSubmitEdit(event: FormEvent<HTMLFormElement>) {
@@ -366,6 +524,13 @@ function TreatmentSummaryDetailDialog({
   }
 
   async function handleLoadFollowUpSuggestions() {
+    if (isVoided) {
+      setSuggestionStatus('error');
+      setSuggestionError('治疗摘要已作废，不能继续生成随访建议或来源随访任务。');
+      setFollowUpSuggestions([]);
+      return;
+    }
+
     setSuggestionStatus('loading');
     setSuggestionError(null);
     setCreateMessage(null);
@@ -393,6 +558,14 @@ function TreatmentSummaryDetailDialog({
   }
 
   async function handleCreateFollowUpTask(suggestion: TreatmentFollowUpSuggestion) {
+    if (isVoided) {
+      setCreateMessage({
+        kind: 'error',
+        text: '治疗摘要已作废，不能继续创建来源随访任务。',
+      });
+      return;
+    }
+
     setCreatingSuggestionKey(suggestion.suggestionKey);
     setCreateMessage(null);
 
@@ -426,14 +599,36 @@ function TreatmentSummaryDetailDialog({
             <p className="mt-1 text-sm text-slate-500">
               仅展示治疗摘要列表 DTO 字段，不展示完整正文或原始隐私信息。
             </p>
-            <button
-              type="button"
-              onClick={handleOpenEditForm}
-              className="mt-3 inline-flex h-9 items-center justify-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100"
-            >
-              <Pencil className="h-4 w-4" />
-              编辑治疗摘要
-            </button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span
+                className={cn(
+                  'inline-flex h-9 items-center justify-center rounded-full border px-3 text-sm font-semibold',
+                  isVoided
+                    ? 'border-amber-200 bg-amber-50 text-amber-800'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                )}
+              >
+                {treatmentSummaryStatusLabel(detailRecord)}
+              </span>
+              <button
+                type="button"
+                onClick={handleOpenEditForm}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+              >
+                <Pencil className="h-4 w-4" />
+                编辑治疗摘要
+              </button>
+              {!isVoided ? (
+                <button
+                  type="button"
+                  onClick={handleOpenVoidForm}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+                >
+                  <Ban className="h-4 w-4" />
+                  作废治疗摘要
+                </button>
+              ) : null}
+            </div>
           </div>
           <button
             type="button"
@@ -446,6 +641,27 @@ function TreatmentSummaryDetailDialog({
         </div>
 
         <div className="max-h-[68vh] overflow-y-auto">
+          {isVoided ? (
+            <div className="mx-5 mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
+              <p>该治疗摘要已作废，仅保留历史追溯。</p>
+              <p>作废摘要不会继续生成新的随访建议或来源随访任务。</p>
+              <p>已存在的来源随访任务不会被自动取消，仍保留来源追溯。</p>
+            </div>
+          ) : null}
+
+          {voidMessage ? (
+            <div
+              className={cn(
+                'mx-5 mt-5 rounded-2xl border px-4 py-3 text-sm font-semibold',
+                voidMessage.kind === 'success'
+                  ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                  : 'border-rose-100 bg-rose-50 text-rose-700',
+              )}
+            >
+              {voidMessage.text}
+            </div>
+          ) : null}
+
           <dl className="grid gap-3 px-5 py-5 sm:grid-cols-2">
             {rows.map(([label, value]) => (
               <div
@@ -462,6 +678,84 @@ function TreatmentSummaryDetailDialog({
               </div>
             ))}
           </dl>
+
+          {isVoidFormOpen ? (
+            <section className="border-t border-slate-100 px-5 py-5">
+              <form
+                role="form"
+                aria-label="作废治疗摘要表单"
+                className="rounded-2xl border border-amber-100 bg-amber-50/45 p-4"
+                onSubmit={handleSubmitVoid}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-base font-semibold text-slate-950">
+                      作废治疗摘要
+                    </h4>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                      作废不是删除，记录会保留历史追溯；系统不会自动取消既有来源随访任务。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsVoidFormOpen(false);
+                      setVoidMessage(null);
+                      setVoidForm(emptyTreatmentSummaryVoidForm);
+                    }}
+                    className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600"
+                  >
+                    取消作废
+                  </button>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <label className="text-sm font-semibold text-slate-600">
+                    作废原因分类
+                    <select
+                      value={voidForm.reasonCode}
+                      onChange={(event) =>
+                        handleVoidFieldChange(
+                          'reasonCode',
+                          event.target.value as TreatmentSummaryVoidReasonCode,
+                        )
+                      }
+                      className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-amber-300"
+                    >
+                      {treatmentSummaryVoidReasonCodes.map((code) => (
+                        <option key={code} value={code}>
+                          {voidReasonCodeLabels[code]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600 md:col-span-2">
+                    作废原因说明
+                    <textarea
+                      value={voidForm.reasonText}
+                      onChange={(event) =>
+                        handleVoidFieldChange('reasonText', event.target.value)
+                      }
+                      rows={3}
+                      maxLength={120}
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-300"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isSubmittingVoid}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {isSubmittingVoid ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    确认作废
+                  </button>
+                </div>
+              </form>
+            </section>
+          ) : null}
 
           {isEditFormOpen ? (
             <section className="border-t border-slate-100 px-5 py-5">
@@ -683,6 +977,18 @@ function TreatmentSummaryDetailDialog({
                 )}
               >
                 {createMessage.text}
+              </div>
+            ) : null}
+
+            {isVoided && sourceFollowUpTasks.length > 0 ? (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span>来源治疗摘要已作废</span>
+                </div>
+                <p className="mt-1">
+                  既有来源随访任务仍保留，不会自动取消或修改任务状态。
+                </p>
               </div>
             ) : null}
 
@@ -1070,6 +1376,18 @@ export function TreatmentSummaryManagementShell() {
                         )}
                       >
                         风险：{followUpRiskLevelLabels[record.riskLevel]}
+                      </span>
+                      <span
+                        className={cn(
+                          'rounded-full border px-2.5 py-1 text-xs font-semibold',
+                          isTreatmentSummaryVoided(record)
+                            ? 'border-amber-200 bg-amber-50 text-amber-800'
+                            : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                        )}
+                      >
+                        {isTreatmentSummaryVoided(record)
+                          ? '已作废'
+                          : `状态：${treatmentSummaryStatusLabel(record)}`}
                       </span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">

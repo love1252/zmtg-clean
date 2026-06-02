@@ -226,11 +226,11 @@ export function buildCustomerTimelineResponse(input: CustomerTimelineInput): Cus
       occurredAt: treatment.treatmentDate,
       title: `${treatment.treatmentProject} · ${treatment.treatmentStage}`,
       summary: treatment.summary,
-      status: treatment.riskLevel,
+      status: treatment.status === 'voided' ? 'voided' : treatment.riskLevel,
       source: 'treatment_summary',
       relatedRecordId: treatment.id,
       riskLevel: treatment.riskLevel,
-      tags: [...treatment.tags],
+      tags: treatment.status === 'voided' ? ['已作废', ...treatment.tags] : [...treatment.tags],
     })),
     {
       id: `customer:${customer.id}`,

@@ -14,6 +14,7 @@ import {
   updateAppointment,
   updateCustomer,
   updateTreatmentSummary,
+  voidTreatmentSummary,
 } from '@/modules/institution/client/tenant-business-client';
 
 function jsonResponse(body: unknown, init?: ResponseInit) {
@@ -504,6 +505,9 @@ describe('机构业务页面 client helper', () => {
     const treatmentSummaryUpdateFetcher = createFetchMock(
       jsonResponse({ record: { id: 'trt_created', treatmentProject: '水光补水复诊更新' } }),
     );
+    const treatmentSummaryVoidFetcher = createFetchMock(
+      jsonResponse({ record: { id: 'trt_created', status: 'voided' } }),
+    );
     const followUpTransitionFetcher = createFetchMock(
       jsonResponse({ record: { id: 'fu_001', tenantId: 'demo-tenant-001', status: 'in_progress' } }),
     );
@@ -645,6 +649,32 @@ describe('机构业务页面 client helper', () => {
       } as never,
       { fetcher: treatmentSummaryUpdateFetcher },
     );
+    await voidTreatmentSummary(
+      'trt_created',
+      {
+        reasonCode: 'duplicate_summary',
+        reasonText: '重复录入，保留较新的治疗摘要',
+        tenantId: 'other-tenant',
+        customerId: 'cust_001',
+        fullTreatmentRecord: '完整治疗记录正文',
+        medicalRecordText: '完整病历正文',
+        diagnosisText: '诊疗原文',
+        consultationTranscript: '咨询对话全文',
+        phoneNumber: '13800000000',
+        idNumber: '110101199001010011',
+        rawMedicalRecordNo: 'MR-RAW-001',
+        imageUrl: 'https://example.test/raw-image.png',
+        fileUrl: 'https://example.test/raw-file.pdf',
+        aiGeneratedContent: 'AI 生成内容',
+        externalSystemPayload: { raw: true },
+        requestBody: { tenantId: 'other-tenant' },
+        sql: 'select * from treatment_summaries',
+        stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+        token: 'sk_test_should_not_send',
+        secret: 'phase19-secret',
+      } as never,
+      { fetcher: treatmentSummaryVoidFetcher },
+    );
     await transitionFollowUpTask(
       {
         id: 'fu_001',
@@ -693,6 +723,12 @@ describe('机构业务页面 client helper', () => {
         method: 'PATCH',
       }),
     );
+    expect(treatmentSummaryVoidFetcher).toHaveBeenCalledWith(
+      '/api/institution/treatment-summaries/trt_created/void',
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    );
     expect(followUpTransitionFetcher).toHaveBeenCalledWith('/api/institution/followups', expect.objectContaining({
       method: 'PATCH',
     }));
@@ -729,6 +765,10 @@ describe('机构业务页面 client helper', () => {
       tags: ['复诊', '稳定'],
       appointmentId: 'appt_001',
     });
+    expect(requestBody(treatmentSummaryVoidFetcher)).toEqual({
+      reasonCode: 'duplicate_summary',
+      reasonText: '重复录入，保留较新的治疗摘要',
+    });
     expect(requestBody(followUpConfirmFetcher)).toEqual({
       suggestionKey: 'trt_created:watch_risk_followup:3d',
     });
@@ -740,6 +780,7 @@ describe('机构业务页面 client helper', () => {
       requestBody(appointmentUpdateFetcher),
       requestBody(treatmentSummaryCreateFetcher),
       requestBody(treatmentSummaryUpdateFetcher),
+      requestBody(treatmentSummaryVoidFetcher),
       requestBody(followUpTransitionFetcher),
       requestBody(followUpConfirmFetcher),
     ].map((body) => JSON.stringify(body));

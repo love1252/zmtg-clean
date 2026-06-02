@@ -176,6 +176,16 @@ const editedTreatmentSummaryManagementRecord = {
   updatedAt: '2026-06-03T10:05:00+08:00',
 };
 
+const voidedTreatmentSummaryManagementRecord = {
+  ...treatmentSummaryManagementRecord,
+  status: 'voided',
+  voidedAt: '2026-06-02T19:00:00+08:00',
+  voidedBy: 'demo-user-admin',
+  voidReasonCode: 'duplicate_summary',
+  voidReason: '重复录入，保留较新的治疗摘要',
+  updatedAt: '2026-06-02T19:00:00+08:00',
+};
+
 const treatmentFollowUpSuggestion = {
   suggestionKey: 'trt_phase14_management:watch_risk_followup:3d',
   ruleKey: 'watch_risk_followup',
@@ -591,6 +601,7 @@ type WorkspaceFetchOptions = {
     status: number;
     message: string;
   };
+  treatmentSummaryVoidRecord?: unknown;
   followUpSuggestions?: unknown[];
   followUpTaskRecord?: unknown;
   followUpTaskError?: {
@@ -636,6 +647,7 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     treatmentSummaryMutationError,
     treatmentSummaryUpdateRecord = editedTreatmentSummaryManagementRecord,
     treatmentSummaryUpdateError,
+    treatmentSummaryVoidRecord = voidedTreatmentSummaryManagementRecord,
     followUpSuggestions = [treatmentFollowUpSuggestion],
     followUpTaskRecord = treatmentFollowUpCreatedTask,
     followUpTaskError,
@@ -718,6 +730,13 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
         }
 
         return jsonResponse({ record: treatmentSummaryUpdateRecord });
+      }
+
+      if (
+        path === '/api/institution/treatment-summaries/trt_phase14_management/void' &&
+        method === 'POST'
+      ) {
+        return jsonResponse({ record: treatmentSummaryVoidRecord });
       }
 
       if (path.startsWith('/api/institution/treatment-summaries')) {
@@ -1306,7 +1325,8 @@ describe('工作台入口页面', () => {
       expect(init?.body).toBeUndefined();
     }
     expect(within(dialog).getByRole('button', { name: '编辑治疗摘要' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /新增|删除|作废/u })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '作废治疗摘要' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /新增|删除|批量作废/u })).not.toBeInTheDocument();
     expectNoSensitiveTreatmentSummaryManagementContent(container);
   });
 
@@ -1419,7 +1439,93 @@ describe('工作台入口页面', () => {
     const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
     expect(requestPaths.some((path) => path.endsWith('/follow-up-suggestions'))).toBe(false);
     expect(requestPaths.some((path) => path.endsWith('/follow-up-tasks'))).toBe(false);
-    expect(screen.queryByRole('button', { name: /删除|作废/u })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /删除|批量作废/u })).not.toBeInTheDocument();
+    expectNoSensitiveTreatmentSummaryManagementContent(container);
+  });
+
+  it('机构入口 smoke 覆盖治疗摘要作废状态展示、来源任务提示和建议阻断', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      treatmentSummaryPages: [
+        {
+          records: [treatmentSummaryManagementRecord],
+          pageInfo: {
+            hasMore: false,
+            limit: 50,
+            nextCursor: null,
+          },
+        },
+        {
+          records: [voidedTreatmentSummaryManagementRecord],
+          pageInfo: {
+            hasMore: false,
+            limit: 50,
+            nextCursor: null,
+          },
+        },
+      ],
+      followUpSourceResponses: {
+        '/api/institution/followups?source=treatment_summary&sourceTreatmentSummaryId=trt_phase14_management': [
+          phase16SourceFollowUpTask,
+        ],
+      },
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
+    expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_management' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '作废治疗摘要' }));
+    fireEvent.change(within(dialog).getByLabelText('作废原因分类'), {
+      target: { value: 'duplicate_summary' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('作废原因说明'), {
+      target: { value: '重复录入，保留较新的治疗摘要' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认作废' }));
+
+    expect(await within(dialog).findByText('治疗摘要已作废')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('已作废').length).toBeGreaterThan(0);
+    expect(within(dialog).getByText('该治疗摘要已作废，仅保留历史追溯。')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('作废摘要不会继续生成新的随访建议或来源随访任务。'),
+    ).toBeInTheDocument();
+    expect(await within(dialog).findByText('来源治疗摘要已作废')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('既有来源随访任务仍保留，不会自动取消或修改任务状态。'),
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看随访建议' }));
+    expect(
+      within(dialog).getByText('治疗摘要已作废，不能继续生成随访建议或来源随访任务。'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: '确认创建随访任务' })).not.toBeInTheDocument();
+
+    const voidBody = requestBodyByMethod(
+      fetchMock,
+      '/api/institution/treatment-summaries/trt_phase14_management/void',
+      'POST',
+    );
+    expect(voidBody).toEqual({
+      reasonCode: 'duplicate_summary',
+      reasonText: '重复录入，保留较新的治疗摘要',
+    });
+    const serializedBody = JSON.stringify(voidBody);
+    expect(serializedBody).not.toContain('tenantId');
+    expect(serializedBody).not.toContain('完整治疗记录正文');
+    expect(serializedBody).not.toContain('完整病历正文');
+    expect(serializedBody).not.toContain('咨询对话全文');
+    expect(serializedBody).not.toContain('DATABASE_URL');
+
+    const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
+    expect(requestPaths).toContain(
+      '/api/institution/followups?source=treatment_summary&sourceTreatmentSummaryId=trt_phase14_management',
+    );
+    expect(requestPaths.some((path) => path.endsWith('/follow-up-suggestions'))).toBe(false);
+    expect(requestPaths.some((path) => path.endsWith('/follow-up-tasks'))).toBe(false);
+    expect(screen.queryByRole('button', { name: /删除|批量作废/u })).not.toBeInTheDocument();
     expectNoSensitiveTreatmentSummaryManagementContent(container);
   });
 

@@ -16,6 +16,11 @@ const treatmentSummaryRecord = {
   summary: 'Phase14 结构化摘要：恢复稳定，安排补水。',
   nextCareAction: 'Phase14 D21 人工回访恢复阶段。',
   tags: ['Phase14 结构化摘要', '复诊'],
+  status: 'active',
+  voidedAt: null,
+  voidedBy: null,
+  voidReasonCode: null,
+  voidReason: null,
   createdAt: '2026-06-02T16:30:00+08:00',
   updatedAt: '2026-06-02T17:00:00+08:00',
   tenantId: 'demo-tenant-001',
@@ -48,6 +53,35 @@ const secondTreatmentSummaryRecord = {
   riskLevel: 'normal',
   summary: 'Phase14 结构化摘要：补水后恢复稳定。',
   nextCareAction: 'Phase14 D28 人工确认恢复阶段。',
+};
+
+const voidedTreatmentSummaryRecord = {
+  ...treatmentSummaryRecord,
+  id: 'trt_phase19_voided',
+  treatmentProject: 'Phase19 已作废治疗摘要',
+  treatmentCategory: 'phase19_voided_category',
+  treatmentStage: 'Phase19 D7 复核',
+  recoveryStage: 'Phase19 D7',
+  riskLevel: 'watch',
+  summary: 'Phase19 结构化摘要：误录入，后续仅保留追溯。',
+  nextCareAction: '不再基于该摘要生成随访建议。',
+  tags: ['Phase19 作废治理'],
+  status: 'voided',
+  voidedAt: '2026-06-02T18:00:00+08:00',
+  voidedBy: 'demo-user-admin',
+  voidReasonCode: 'duplicate_summary',
+  voidReason: '重复录入，保留较新的治疗摘要',
+  updatedAt: '2026-06-02T18:00:00+08:00',
+};
+
+const voidedTreatmentSummaryAfterMutation = {
+  ...treatmentSummaryRecord,
+  status: 'voided',
+  voidedAt: '2026-06-02T19:00:00+08:00',
+  voidedBy: 'demo-user-admin',
+  voidReasonCode: 'duplicate_summary',
+  voidReason: '重复录入，保留较新的治疗摘要',
+  updatedAt: '2026-06-02T19:00:00+08:00',
 };
 
 const updatedTreatmentSummaryRecord = {
@@ -139,6 +173,7 @@ function mockTreatmentSummaryFetch(
     followUpTaskResponses?: Response[];
     followUpListResponses?: Record<string, Response[]>;
     updateTreatmentSummaryResponses?: Response[];
+    voidTreatmentSummaryResponses?: Response[];
   } = {},
 ) {
   const queue = [...responses];
@@ -146,6 +181,7 @@ function mockTreatmentSummaryFetch(
   const suggestionQueue = [...(options.followUpSuggestionResponses ?? [])];
   const followUpTaskQueue = [...(options.followUpTaskResponses ?? [])];
   const updateQueue = [...(options.updateTreatmentSummaryResponses ?? [])];
+  const voidQueue = [...(options.voidTreatmentSummaryResponses ?? [])];
   const followUpListResponses = Object.fromEntries(
     Object.entries(options.followUpListResponses ?? {}).map(([path, queue]) => [
       path,
@@ -171,6 +207,13 @@ function mockTreatmentSummaryFetch(
 
       if (path.includes('/follow-up-tasks')) {
         return followUpTaskQueue.shift() ?? jsonResponse({ error: '请求失败' }, { status: 503 });
+      }
+
+      if (
+        method === 'POST' &&
+        path.endsWith('/void')
+      ) {
+        return voidQueue.shift() ?? jsonResponse({ record: voidedTreatmentSummaryAfterMutation });
       }
 
       if (
@@ -254,16 +297,52 @@ describe('治疗摘要管理页面', () => {
     expect(screen.getByText('治疗阶段：Phase14 D14 复诊')).toBeInTheDocument();
     expect(screen.getByText('恢复阶段：Phase14 D14')).toBeInTheDocument();
     expect(screen.getByText('风险：关注')).toBeInTheDocument();
+    expect(screen.getByText('状态：正常')).toBeInTheDocument();
     expect(screen.getByText('负责人：doctor-phase14')).toBeInTheDocument();
     expect(screen.getByText('摘要：Phase14 结构化摘要：恢复稳定，安排补水。')).toBeInTheDocument();
     expect(screen.getByText('下一步护理建议：Phase14 D21 人工回访恢复阶段。')).toBeInTheDocument();
     expect(screen.getByText('Phase14 结构化摘要')).toBeInTheDocument();
     expect(screen.getByText('复诊')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /新增|编辑|删除/u })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /新增|删除|批量作废/u })).not.toBeInTheDocument();
 
     expect(fetchMock).toHaveBeenCalledWith('/api/institution/treatment-summaries', {
       cache: 'no-store',
     });
+    expectNoSensitiveTreatmentSummaryContent(container);
+  });
+
+  it('治疗摘要列表展示 active 与 voided 状态，作废摘要仍可查看安全详情', async () => {
+    const fetchMock = mockTreatmentSummaryFetch([
+      treatmentSummariesResponse([treatmentSummaryRecord, voidedTreatmentSummaryRecord]),
+    ]);
+    const { container } = render(<TreatmentSummaryManagementShell />);
+
+    expect(await screen.findByText('Phase14 光电修复')).toBeInTheDocument();
+    expect(screen.getByText('Phase19 已作废治疗摘要')).toBeInTheDocument();
+    expect(screen.getByText('状态：正常')).toBeInTheDocument();
+    expect(screen.getByText('已作废')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase19_voided' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+
+    expect(within(dialog).getAllByText('已作废').length).toBeGreaterThan(0);
+    expect(within(dialog).getByText('作废时间')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('2026-06-02 18:00').length).toBeGreaterThan(0);
+    expect(within(dialog).getByText('作废人')).toBeInTheDocument();
+    expect(within(dialog).getByText('demo-user-admin')).toBeInTheDocument();
+    expect(within(dialog).getByText('作废原因')).toBeInTheDocument();
+    expect(within(dialog).getByText('重复录入，保留较新的治疗摘要')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('该治疗摘要已作废，仅保留历史追溯。'),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('作废摘要不会继续生成新的随访建议或来源随访任务。'),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('已存在的来源随访任务不会被自动取消，仍保留来源追溯。'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: '作废治疗摘要' })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalled();
     expectNoSensitiveTreatmentSummaryContent(container);
   });
 
@@ -401,7 +480,7 @@ describe('治疗摘要管理页面', () => {
     expect(dialogText).not.toContain('图片上传');
     expect(dialogText).not.toContain('文件上传');
     expect(dialogText).not.toContain('AI 生成');
-    expect(screen.queryByRole('button', { name: /删除|作废/u })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /删除|批量作废/u })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalled();
     expectNoSensitiveTreatmentSummaryContent(container);
   });
@@ -569,6 +648,184 @@ describe('治疗摘要管理页面', () => {
     expect(text).not.toContain('secret');
     expectNoSensitiveTreatmentSummaryContent(container);
     expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it('作废入口只发送短原因白名单 payload，成功后刷新列表和当前详情', async () => {
+    const sourceTaskFromVoidedSummary = {
+      ...createdFollowUpTask,
+      status: 'scheduled',
+      source: 'treatment_summary',
+      sourceTreatmentSummaryId: 'trt_phase14_main',
+      sourceSuggestionKey: 'trt_phase14_main:watch_risk_followup:3d',
+    };
+    const fetchMock = mockTreatmentSummaryFetch(
+      [
+        treatmentSummariesResponse([treatmentSummaryRecord]),
+        treatmentSummariesResponse([voidedTreatmentSummaryAfterMutation]),
+      ],
+      {
+        voidTreatmentSummaryResponses: [
+          jsonResponse({ record: voidedTreatmentSummaryAfterMutation }),
+        ],
+        followUpListResponses: {
+          '/api/institution/followups?source=treatment_summary&sourceTreatmentSummaryId=trt_phase14_main': [
+            jsonResponse({ records: [sourceTaskFromVoidedSummary] }),
+          ],
+        },
+      },
+    );
+    const { container } = render(<TreatmentSummaryManagementShell />);
+
+    expect(await screen.findByText('Phase14 光电修复')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_main' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '作废治疗摘要' }));
+
+    expect(within(dialog).getByRole('form', { name: '作废治疗摘要表单' })).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('作废原因分类'), {
+      target: { value: 'duplicate_summary' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('作废原因说明'), {
+      target: { value: '重复录入，保留较新的治疗摘要' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认作废' }));
+
+    expect(await within(dialog).findByText('治疗摘要已作废')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('已作废').length).toBeGreaterThan(0);
+    expect(within(dialog).getByText('作废时间')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('2026-06-02 19:00').length).toBeGreaterThan(0);
+    expect(
+      await within(dialog).findByText('来源治疗摘要已作废'),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('既有来源随访任务仍保留，不会自动取消或修改任务状态。'),
+    ).toBeInTheDocument();
+
+    const voidCall = fetchMock.mock.calls.find(([input, init]) =>
+      fetchPath(input).endsWith('/void') && init?.method === 'POST',
+    );
+    expect(voidCall).toBeDefined();
+    expect(fetchPath(voidCall![0])).toBe(
+      '/api/institution/treatment-summaries/trt_phase14_main/void',
+    );
+    expect(requestBody(voidCall![1])).toEqual({
+      reasonCode: 'duplicate_summary',
+      reasonText: '重复录入，保留较新的治疗摘要',
+    });
+    const serializedBody = JSON.stringify(requestBody(voidCall![1]));
+    expect(serializedBody).not.toContain('tenantId');
+    expect(serializedBody).not.toContain('完整治疗记录正文');
+    expect(serializedBody).not.toContain('完整病历正文');
+    expect(serializedBody).not.toContain('咨询对话全文');
+    expect(serializedBody).not.toContain('13800001252');
+    expect(serializedBody).not.toContain('110101199001010011');
+    expect(serializedBody).not.toContain('MR202605310001');
+    expect(serializedBody).not.toContain('imageUrl');
+    expect(serializedBody).not.toContain('fileUrl');
+    expect(serializedBody).not.toContain('sql');
+    expect(serializedBody).not.toContain('stack');
+    expect(serializedBody).not.toContain('token');
+    expect(serializedBody).not.toContain('secret');
+    expect(serializedBody).not.toContain('DATABASE_URL');
+
+    const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
+    expect(requestPaths.filter((path) => path === '/api/institution/treatment-summaries')).toHaveLength(2);
+    expect(requestPaths.some((path) => path.endsWith('/follow-up-suggestions'))).toBe(false);
+    expect(requestPaths.some((path) => path.endsWith('/follow-up-tasks'))).toBe(false);
+    expectNoSensitiveTreatmentSummaryContent(container);
+  });
+
+  it.each([
+    [400, '字段非法，请检查作废原因'],
+    [401, '请先登录'],
+    [403, '当前账号没有作废治疗摘要的权限'],
+    [404, '治疗摘要不存在或不可见'],
+    [409, '治疗摘要已作废'],
+    [503, '数据服务暂时不可用'],
+  ])('作废失败时展示 %s 稳定错误并保留输入', async (status, visibleMessage) => {
+    const fetchMock = mockTreatmentSummaryFetch(
+      [treatmentSummariesResponse([treatmentSummaryRecord])],
+      {
+        voidTreatmentSummaryResponses: [
+          jsonResponse(
+            {
+              error:
+                status === 503
+                  ? 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg sql stack token secret'
+                  : visibleMessage,
+            },
+            { status },
+          ),
+        ],
+      },
+    );
+    const { container } = render(<TreatmentSummaryManagementShell />);
+
+    expect(await screen.findByText('Phase14 光电修复')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_main' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '作废治疗摘要' }));
+
+    const reasonInput = within(dialog).getByLabelText('作废原因说明');
+    fireEvent.change(reasonInput, {
+      target: { value: `作废失败后保留输入 ${status}` },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认作废' }));
+
+    expect(await within(dialog).findByText(visibleMessage)).toBeInTheDocument();
+    expect(reasonInput).toHaveValue(`作废失败后保留输入 ${status}`);
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('DATABASE_URL');
+    expect(text).not.toContain('postgres://');
+    expect(text).not.toContain('sql stack');
+    expect(text).not.toContain('token');
+    expect(text).not.toContain('secret');
+    expectNoSensitiveTreatmentSummaryContent(container);
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it('已作废摘要阻断随访建议和来源任务创建，且不调用建议或创建任务 API', async () => {
+    const sourceTaskFromVoidedSummary = {
+      ...createdFollowUpTask,
+      status: 'in_progress',
+      source: 'treatment_summary',
+      sourceTreatmentSummaryId: 'trt_phase19_voided',
+      sourceSuggestionKey: 'trt_phase19_voided:watch_risk_followup:3d',
+    };
+    const fetchMock = mockTreatmentSummaryFetch(
+      [treatmentSummariesResponse([voidedTreatmentSummaryRecord])],
+      {
+        followUpSuggestionResponses: [jsonResponse({ suggestions: [followUpSuggestion] })],
+        followUpTaskResponses: [jsonResponse({ record: createdFollowUpTask }, { status: 201 })],
+        followUpListResponses: {
+          '/api/institution/followups?source=treatment_summary&sourceTreatmentSummaryId=trt_phase19_voided': [
+            jsonResponse({ records: [sourceTaskFromVoidedSummary] }),
+          ],
+        },
+      },
+    );
+    const { container } = render(<TreatmentSummaryManagementShell />);
+
+    expect(await screen.findByText('Phase19 已作废治疗摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase19_voided' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+
+    expect(await within(dialog).findByText('来源治疗摘要已作废')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看随访建议' }));
+
+    expect(
+      within(dialog).getByText('治疗摘要已作废，不能继续生成随访建议或来源随访任务。'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: '确认创建随访任务' })).not.toBeInTheDocument();
+
+    const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
+    expect(requestPaths).toContain(
+      '/api/institution/followups?source=treatment_summary&sourceTreatmentSummaryId=trt_phase19_voided',
+    );
+    expect(requestPaths.some((path) => path.endsWith('/follow-up-suggestions'))).toBe(false);
+    expect(requestPaths.some((path) => path.endsWith('/follow-up-tasks'))).toBe(false);
+    expect(container.textContent ?? '').not.toContain('自动触达');
+    expectNoSensitiveTreatmentSummaryContent(container);
   });
 
   it('安全详情中可查看随访建议并人工确认创建任务', async () => {
