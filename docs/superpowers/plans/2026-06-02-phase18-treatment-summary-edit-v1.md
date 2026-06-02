@@ -1,12 +1,12 @@
-# Phase 18 治疗摘要编辑能力 v1 Implementation Plan
+# Phase 18 治疗摘要编辑能力 v1 实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **给自主执行协作者：** 执行本计划时必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，并按任务逐项推进。步骤使用复选框（`- [ ]`）语法跟踪。
 
-**Goal:** 为机构端提供治疗摘要结构化字段的受控编辑能力，只允许白名单字段，写审计，不保存完整医疗正文，不做删除或作废。
+**目标：** 为机构端提供治疗摘要结构化字段的受控编辑能力，只允许白名单字段，写审计，不保存完整医疗正文，不做删除或作废。
 
-**Architecture:** Phase 18 v1 复用现有 `treatment_summaries` schema、Phase 13 payload parser 安全口径、Phase 14 列表 DTO、Phase 15/16 随访来源治理和现有审计仓储。实现顺序为：先固化 spec / plan 文档，再做 parser / RBAC / repository update 地基，再新增 PATCH API，随后接入机构端编辑 UI，最后做 smoke 和文档收尾。
+**架构：** Phase 18 v1 复用现有 `treatment_summaries` schema、Phase 13 payload parser 安全口径、Phase 14 列表 DTO、Phase 15/16 随访来源治理和现有审计仓储。实现顺序为：先固化 spec / plan 文档，再做 parser / RBAC / repository update 地基，再新增 PATCH API，随后接入机构端编辑 UI，最后做 smoke 和文档收尾。
 
-**Tech Stack:** Next.js 16 App Router、React 19、TypeScript、Vitest、Testing Library、Drizzle ORM、PostgreSQL、现有 demo access context、现有 audit repository、现有 Institution workspace。
+**技术栈：** Next.js 16 App Router、React 19、TypeScript、Vitest、Testing Library、Drizzle ORM、PostgreSQL、现有 demo access context、现有 audit repository、现有 Institution workspace。
 
 ---
 

@@ -216,3 +216,44 @@ docs/devlog/
 - 不要把业务数据存入 localStorage。
 - 不要隐藏 TypeScript 构建错误。
 - mock provider 仅限 development 和 test 环境使用。
+
+## 文档语言规范
+
+后续所有面向人阅读的项目文档，原则上使用中文撰写，包括 README、roadmap、devlog、产品文档、spec 文档、plan 文档、PR 说明中的功能范围描述、团队交接说明、测试描述中面向人阅读的场景说明、页面文案和错误提示。
+
+允许保留英文的内容：
+
+- API 路径。
+- 文件路径。
+- 字段名。
+- 变量名。
+- 函数名。
+- 类型名。
+- 表名。
+- 枚举值。
+- 代码标识符。
+- 命令。
+- 技术缩写，例如 API、DTO、RBAC、PII、SQL、HIS、CRM、SCRM、AI、RAG、Webhook、OAuth。
+- 与代码保持一致的 `resource` / `action` / `reason` / `status` 等值。
+
+禁止后续文档继续出现无必要英文模板残留，例如：
+
+- `Implementation Plan`
+- `Goal:`
+- `Architecture:`
+- `Tech Stack:`
+- `For agentic workers...`
+- 其他纯英文模板说明。
+
+历史文档处理原则：
+
+- 已合并的历史文档文件名不主动大规模重命名。
+- 历史文档中的英文模板残留，可在后续触碰时顺手中文化。
+- 如果专门做历史文档清理，必须单独 docs-only PR。
+- 不应把历史文档清理和功能开发混在同一个 PR 中。
+
+日期命名规则：
+
+- 后续新建 spec / plan 文档时，文件名前缀日期必须使用当前实际日期。
+- 不得继续复用旧模板日期。
+- 如需确认日期，可执行 `date +%F`。
