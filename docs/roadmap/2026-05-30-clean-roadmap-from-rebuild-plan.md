@@ -35,7 +35,7 @@
 
 - 平台端已有只读租户列表、租户状态、套餐 / 配额、用量快照和商业化健康运营摘要；机构端新增客户 / 预约已具备轻量套餐配额 enforcement，但尚未具备租户创建、编辑、删除、冻结 / 恢复、完整套餐商业化后台、计费、支付、合同或发票能力。
 - 审计日志只读查询基础版已完成，但导出、告警和复杂风控仍未进入真实实现。
-- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约和治疗摘要编辑能力 v1 已完成；真实 HIS 接入、Webhook、文件导入、外部系统同步、完整治疗记录正文、治疗摘要作废、版本历史 / diff 展示、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
+- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1 和治疗摘要作废能力 v1 已完成；真实 HIS 接入、Webhook、文件导入、外部系统同步、完整治疗记录正文、版本历史 / diff 展示、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
 
 ## 2. 旧 REBUILD_PLAN.md 中仍有价值的功能
 
@@ -99,7 +99,7 @@
 
 建议进入后续路线的功能：
 
-- 治疗记录模块：结构化摘要 v1、租户隔离、人工录入 v1、只读管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约和治疗摘要编辑能力 v1 已完成；后续治疗摘要作废、版本历史 / diff 展示、客服会话联动和完整治疗记录能力需单独规划，仍不保存完整病历正文。
+- 治疗记录模块：结构化摘要 v1、租户隔离、人工录入 v1、只读管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1 和治疗摘要作废能力 v1 已完成；后续版本历史 / diff 展示、客服会话联动、完整治疗记录能力和外部系统接入需单独规划，仍不保存完整病历正文。
 - 平台租户后续能力：租户创建、状态变更审计、完整套餐商业化后台、计费、合同、发票和支付。
 - 审计高级治理：只读查询基础版之后再单独评估导出、告警和复杂风控。
 - 套餐权益与配额 enforcement：客户数和预约数创建阻断已完成轻量版，后续可单独评估员工数、随访任务、AI 调用、严格一致计数器和套餐变更流程。
@@ -112,8 +112,8 @@
 
 推荐优先级：
 
-1. Phase 19 Plan Mode：优先重新评估治疗摘要作废能力 v1、HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec 和随访路径运营分析 v1，先做范围、隐私、schema / API 风险判断，不直接进入实现。
-2. 治疗摘要作废能力 v1：软作废、可追溯、写审计，不硬删除；如需要 lifecycle 字段或 revision 表，必须单独规划 schema / migration。
+1. 产品可演示性验收：优先完整走查机构端客户中心、治疗摘要创建 / 编辑 / 作废、随访建议阻断、来源任务追溯、客户 timeline 和平台端只读治理页面，确认 Phase 5-19 是否已经能支撑一次稳定演示。
+2. Phase 20 Plan Mode：在演示验收之后，再评估 HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec、随访路径运营分析 v1 和经营智能中心 v1，先做范围、隐私、schema / API 风险判断，不直接进入实现。
 3. HIS 标准治疗事件 mapper 继续增强：继续完善 mapper 契约、错误语义和测试覆盖，仍不接真实 HIS、不写 API、不落库。
 4. 业务事件埋点体系 spec：只做事件模型规划，不做真实采集，不记录 raw payload、完整医疗正文或 PII。
 5. 随访路径运营分析 v1：先确认事件口径和统计边界，不做复杂归因模型或自动触达。
@@ -204,4 +204,7 @@ Phase 5 的成功标准：
 - Phase 18 已完成治疗摘要编辑能力 v1：Phase 18 spec / plan、编辑 payload parser、`treatment_summary:update` 最小权限、`updateTreatmentSummaryByTenant`、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端治疗摘要编辑 UI、workspace smoke 和文档收尾均已完成。
 - Phase 18 编辑请求只允许白名单结构化字段，服务端从 access context 推导 `tenantId`，不接受外部 `tenantId` / `customerId` 更新，`appointmentId` 更新前校验同租户且属于同一 customer，成功返回安全 DTO 并写 allowed audit。
 - Phase 18 未新增数据库 schema / migration，未改认证或租户隔离模型，未进入治疗摘要删除 / 作废、版本历史、diff 展示、完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、图片 / 文件上传、AI provider、Agent、RAG、企业微信、真实 HIS / CRM / OTA 接入、OAuth、Webhook、支付、合同、发票或外部系统同步。
-- 后续建议进入 Phase 19 Plan Mode，优先评估治疗摘要作废能力 v1、HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec 和随访路径运营分析 v1；当前不进入 Phase 19 实现。
+- Phase 19 已完成治疗摘要作废能力 v1：Phase 19 spec / plan、nullable 作废字段、Drizzle migration、domain / DTO `status` 派生、作废原因 parser、`voidTreatmentSummaryByTenant`、作废 audit reason、`POST /api/institution/treatment-summaries/[summaryId]/void`、作废后随访建议 / 来源任务创建阻断、机构端列表 / 详情 / 客户 timeline / 来源任务提示和 workspace smoke / 文档收尾均已完成。
+- Phase 19 作废不是删除：不硬删除治疗摘要，不删除客户时间线，不删除来源随访任务；已存在来源随访任务不自动取消、不自动修改状态，仍保留来源追溯。
+- Phase 19 未进入批量作废、版本历史、diff 展示、自动触达客户、完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、图片 / 文件上传、AI provider、Agent、RAG、企业微信、真实 HIS / CRM / OTA 接入、OAuth、Webhook、支付、合同、发票或外部系统同步。
+- 后续建议先进入产品可演示性验收，再决定 Phase 20 Plan Mode；Phase 20 候选方向可重新评估 HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec、随访路径运营分析 v1 和经营智能中心 v1，当前不进入 Phase 20 实现。

@@ -556,6 +556,66 @@ const customerTimelineAfterPhase13Create = {
   ],
 };
 
+const customerTimelineWithVoidedTreatmentSummary = {
+  ...customerTimelineResponse,
+  treatmentSummaries: [
+    {
+      ...customerTimelineResponse.treatmentSummaries[0],
+      id: 'trt_phase19_timeline_voided',
+      treatmentProject: 'Phase19 作废时间线摘要',
+      treatmentStage: 'Phase19 D7 复核',
+      summary: 'Phase19 作废摘要：仅保留历史追溯。',
+      nextCareAction: '不再基于该摘要生成随访建议。',
+      tags: ['已作废', 'Phase19 作废治理'],
+      status: 'voided',
+      voidedAt: '2026-06-02T19:00:00+08:00',
+      voidedBy: 'demo-user-admin',
+      voidReasonCode: 'duplicate_summary',
+      voidReason: '重复录入，保留较新的治疗摘要',
+      phoneNumber: '13800001252',
+      idNumber: '110101199001010011',
+      medicalRecordNo: 'MR202605310001',
+      fullTreatmentRecord: '完整治疗记录正文不应展示',
+      medicalRecordText: '完整病历正文不应展示',
+      diagnosisText: '诊疗原文不应展示',
+      consultationTranscript: '咨询对话全文不应展示',
+      imageFileOriginal: '图片文件原文不应展示',
+      aiGeneratedContent: 'AI 生成内容不应展示',
+      externalSyncPayload: '外部系统同步原文不应展示',
+      sql: 'select * from treatment_summaries',
+      stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+      token: 'sk_test_phase19_timeline_should_not_render',
+      secret: 'phase19-timeline-secret',
+    },
+  ],
+  timeline: [
+    {
+      id: 'treatment_summary:trt_phase19_timeline_voided',
+      type: 'treatment_summary',
+      occurredAt: '2026-06-02T19:00:00+08:00',
+      title: 'Phase19 作废时间线摘要 · Phase19 D7 复核',
+      summary: 'Phase19 作废摘要：仅保留历史追溯。',
+      status: 'voided',
+      source: 'treatment_summary',
+      relatedRecordId: 'trt_phase19_timeline_voided',
+      riskLevel: 'watch',
+      tags: ['已作废', 'Phase19 作废治理'],
+      fullTreatmentRecord: '完整治疗记录正文不应展示',
+      medicalRecordText: '完整病历正文不应展示',
+      diagnosisText: '诊疗原文不应展示',
+      consultationTranscript: '咨询对话全文不应展示',
+      imageFileOriginal: '图片文件原文不应展示',
+      aiGeneratedContent: 'AI 生成内容不应展示',
+      externalSyncPayload: '外部系统同步原文不应展示',
+      sql: 'select * from treatment_summaries',
+      stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+      token: 'sk_test_phase19_timeline_should_not_render',
+      secret: 'phase19-timeline-secret',
+    },
+    ...customerTimelineResponse.timeline.filter((event) => event.type !== 'treatment_summary'),
+  ],
+};
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
@@ -1009,7 +1069,9 @@ function expectNoSensitiveCustomerTimelineContent(container: HTMLElement) {
   expect(text).not.toContain('secret');
   expect(text).not.toContain('sk_test_phase7_should_not_render');
   expect(text).not.toContain('sk_test_phase12_should_not_render');
+  expect(text).not.toContain('sk_test_phase19_timeline_should_not_render');
   expect(text).not.toContain('phase12-raw-secret');
+  expect(text).not.toContain('phase19-timeline-secret');
 }
 
 function expectNoSensitiveAuditContent(container: HTMLElement) {
@@ -1488,6 +1550,12 @@ describe('工作台入口页面', () => {
 
     expect(await within(dialog).findByText('治疗摘要已作废')).toBeInTheDocument();
     expect(within(dialog).getAllByText('已作废').length).toBeGreaterThan(0);
+    expect(within(dialog).getByText('作废时间')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('2026-06-02 19:00').length).toBeGreaterThan(0);
+    expect(within(dialog).getByText('作废人')).toBeInTheDocument();
+    expect(within(dialog).getByText('demo-user-admin')).toBeInTheDocument();
+    expect(within(dialog).getByText('作废原因')).toBeInTheDocument();
+    expect(within(dialog).getByText('重复录入，保留较新的治疗摘要')).toBeInTheDocument();
     expect(within(dialog).getByText('该治疗摘要已作废，仅保留历史追溯。')).toBeInTheDocument();
     expect(
       within(dialog).getByText('作废摘要不会继续生成新的随访建议或来源随访任务。'),
@@ -1527,6 +1595,39 @@ describe('工作台入口页面', () => {
     expect(requestPaths.some((path) => path.endsWith('/follow-up-tasks'))).toBe(false);
     expect(screen.queryByRole('button', { name: /删除|批量作废/u })).not.toBeInTheDocument();
     expectNoSensitiveTreatmentSummaryManagementContent(container);
+  });
+
+  it('机构入口 smoke 覆盖客户 timeline 作废治疗摘要节点和历史追溯提示', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      timeline: customerTimelineWithVoidedTreatmentSummary,
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
+    expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
+
+    const dialog = await screen.findByRole('dialog', { name: '客户详情时间线' });
+    const drawer = within(dialog);
+    expect(drawer.getByText('治疗结构化摘要')).toBeInTheDocument();
+    expect(drawer.getAllByText('Phase19 作废时间线摘要').length).toBeGreaterThan(0);
+    expect(drawer.getAllByText('已作废').length).toBeGreaterThan(0);
+    expect(drawer.getByText('该治疗摘要已作废')).toBeInTheDocument();
+    expect(drawer.getByText('仅保留历史追溯，不再作为后续运营依据。')).toBeInTheDocument();
+    expect(drawer.getAllByText('状态：已作废').length).toBeGreaterThan(0);
+    expect(drawer.getByText('Phase19 作废时间线摘要 · Phase19 D7 复核')).toBeInTheDocument();
+
+    const timelineCall = fetchMock.mock.calls.find(
+      ([input]) => fetchPath(input) === '/api/institution/customers/cust_phase5_closeout/timeline',
+    );
+    expect(timelineCall).toBeDefined();
+    expect(timelineCall?.[1]).toEqual({ cache: 'no-store' });
+    expect(fetchPath(timelineCall![0])).not.toContain('tenantId');
+    expect(timelineCall?.[1]?.method).toBeUndefined();
+    expect(timelineCall?.[1]?.body).toBeUndefined();
+    expectOnlyInstitutionReadCalls(fetchMock);
+    expectNoSensitiveCustomerTimelineContent(container);
   });
 
   it('机构入口 smoke 覆盖治疗摘要编辑失败后保留输入并隐藏敏感错误', async () => {
