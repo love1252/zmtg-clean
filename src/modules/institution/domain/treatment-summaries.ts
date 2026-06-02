@@ -71,6 +71,8 @@ export type CreateTreatmentSummaryDraft = Pick<
   | 'tags'
 >;
 
+export type UpdateTreatmentSummaryDraft = Partial<CreateTreatmentSummaryDraft>;
+
 export const demoTenantTreatmentSummaryRecords: TreatmentSummaryRecord[] = [
   {
     id: 'trt_qin_d7_review',

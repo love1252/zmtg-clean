@@ -186,6 +186,53 @@ function createAppointmentOwnershipDatabase(rows: Array<{ customerId: string }> 
   };
 }
 
+function createTreatmentSummaryUpdateDatabase(input: {
+  updatedRow?: TreatmentSummaryRow | null;
+  summaryRows?: Array<{ customerId: string }>;
+  appointmentRows?: Array<{ customerId: string }>;
+} = {}) {
+  const summaryWhere = vi.fn(async (condition: unknown) => {
+    void condition;
+    return input.summaryRows ?? [];
+  });
+  const summaryFrom = vi.fn(() => ({ where: summaryWhere }));
+  const appointmentWhere = vi.fn(async (condition: unknown) => {
+    void condition;
+    return input.appointmentRows ?? [];
+  });
+  const appointmentFrom = vi.fn(() => ({ where: appointmentWhere }));
+  const select = vi
+    .fn()
+    .mockReturnValueOnce({ from: summaryFrom })
+    .mockReturnValueOnce({ from: appointmentFrom });
+  const returning = vi.fn(async () => (input.updatedRow ? [input.updatedRow] : []));
+  const where = vi.fn((condition: unknown) => {
+    void condition;
+    return { returning };
+  });
+  const set = vi.fn((values: Record<string, unknown>) => {
+    void values;
+    return { where };
+  });
+  const update = vi.fn((table: unknown) => {
+    void table;
+    return { set };
+  });
+
+  return {
+    database: { select, update } as unknown as TenantDatabase,
+    appointmentFrom,
+    appointmentWhere,
+    returning,
+    select,
+    set,
+    summaryFrom,
+    summaryWhere,
+    update,
+    where,
+  };
+}
+
 const treatmentSummaryRow = {
   id: 'trt_001',
   tenantId: 'demo-tenant-001',
@@ -559,6 +606,175 @@ describe('治疗结构化摘要仓储', () => {
     );
     expect(record).toEqual(mapTreatmentSummaryRowToRecord(insertedRow));
     expect(JSON.stringify(record)).not.toMatch(/phoneNumber|fullTreatmentRecord|DATABASE_URL|secret|token/i);
+  });
+
+  it('按服务端 tenantId + summaryId 更新治疗摘要，并只写入编辑白名单字段', async () => {
+    const updatedRow = {
+      ...treatmentSummaryRow,
+      riskLevel: 'urgent',
+      summary: '复诊后恢复稳定，提醒人工观察。',
+      tags: ['复诊', '风险观察'],
+      updatedAt: new Date('2026-06-02T02:30:00.000Z'),
+    } satisfies typeof treatmentSummaries.$inferSelect;
+    const query = createTreatmentSummaryUpdateDatabase({ updatedRow });
+
+    const result = await createTreatmentSummaryRepository(query.database).updateTreatmentSummaryByTenant({
+      tenantId: 'demo-tenant-001',
+      summaryId: 'trt_001',
+      values: {
+        riskLevel: 'urgent',
+        summary: '复诊后恢复稳定，提醒人工观察。',
+        tags: ['复诊', '风险观察'],
+        tenantId: 'demo-tenant-002',
+        customerId: 'cust_other',
+        fullTreatmentRecord: '完整治疗记录正文',
+      } as Parameters<
+        ReturnType<typeof createTreatmentSummaryRepository>['updateTreatmentSummaryByTenant']
+      >[0]['values'],
+    });
+
+    expect(query.update).toHaveBeenCalledWith(treatmentSummaries);
+    expect(query.set).toHaveBeenCalledWith({
+      riskLevel: 'urgent',
+      summary: '复诊后恢复稳定，提醒人工观察。',
+      tags: ['复诊', '风险观察'],
+      updatedAt: expect.any(Date),
+    });
+    expect(query.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: treatmentSummaries.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: treatmentSummaries.id, operator: 'eq', value: 'trt_001' },
+      ],
+      operator: 'and',
+    });
+    expect(JSON.stringify(query.set.mock.calls[0]?.[0])).not.toMatch(
+      /tenantId|customerId|fullTreatmentRecord|medicalRecordText|consultationTranscript|phoneNumber|DATABASE_URL|secret|token/i,
+    );
+    expect(result).toEqual({
+      kind: 'updated',
+      record: mapTreatmentSummaryRowToRecord(updatedRow),
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      /fullTreatmentRecord|medicalRecordText|consultationTranscript|phoneNumber|idNumber|rawMedicalRecordNo|imageUrl|fileUrl|requestBody|DATABASE_URL|secret|token/i,
+    );
+  });
+
+  it('治疗摘要更新不会跨租户，按 tenantId + summaryId 查不到时返回 not_found_or_not_owned', async () => {
+    const query = createTreatmentSummaryUpdateDatabase({ updatedRow: null });
+
+    await expect(
+      createTreatmentSummaryRepository(query.database).updateTreatmentSummaryByTenant({
+        tenantId: 'demo-tenant-001',
+        summaryId: 'trt_other_tenant',
+        values: { summary: '只允许当前租户更新。' },
+      }),
+    ).resolves.toEqual({ kind: 'not_found_or_not_owned' });
+
+    expect(query.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: treatmentSummaries.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: treatmentSummaries.id, operator: 'eq', value: 'trt_other_tenant' },
+      ],
+      operator: 'and',
+    });
+  });
+
+  it('更新 appointmentId 前校验预约同租户且属于摘要客户', async () => {
+    const updatedRow = {
+      ...treatmentSummaryRow,
+      appointmentId: 'appt_qin_arrived',
+      nextCareAction: 'D14 人工复诊提醒。',
+    } satisfies typeof treatmentSummaries.$inferSelect;
+    const query = createTreatmentSummaryUpdateDatabase({
+      summaryRows: [{ customerId: 'cust_qin_review' }],
+      appointmentRows: [{ customerId: 'cust_qin_review' }],
+      updatedRow,
+    });
+
+    const result = await createTreatmentSummaryRepository(query.database).updateTreatmentSummaryByTenant({
+      tenantId: 'demo-tenant-001',
+      summaryId: 'trt_001',
+      values: {
+        appointmentId: 'appt_qin_arrived',
+        nextCareAction: 'D14 人工复诊提醒。',
+      },
+    });
+
+    expect(query.select).toHaveBeenNthCalledWith(1, {
+      customerId: treatmentSummaries.customerId,
+    });
+    expect(query.summaryFrom).toHaveBeenCalledWith(treatmentSummaries);
+    expect(query.summaryWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: treatmentSummaries.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: treatmentSummaries.id, operator: 'eq', value: 'trt_001' },
+      ],
+      operator: 'and',
+    });
+    expect(query.select).toHaveBeenNthCalledWith(2, { customerId: appointments.customerId });
+    expect(query.appointmentFrom).toHaveBeenCalledWith(appointments);
+    expect(query.appointmentWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: appointments.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: appointments.id, operator: 'eq', value: 'appt_qin_arrived' },
+      ],
+      operator: 'and',
+    });
+    expect(result).toEqual({
+      kind: 'updated',
+      record: mapTreatmentSummaryRowToRecord(updatedRow),
+    });
+  });
+
+  it('appointmentId 不属于同一客户或当前租户时拒绝更新', async () => {
+    const mismatchQuery = createTreatmentSummaryUpdateDatabase({
+      summaryRows: [{ customerId: 'cust_qin_review' }],
+      appointmentRows: [{ customerId: 'cust_other' }],
+      updatedRow: treatmentSummaryRow,
+    });
+    const notFoundQuery = createTreatmentSummaryUpdateDatabase({
+      summaryRows: [{ customerId: 'cust_qin_review' }],
+      appointmentRows: [],
+      updatedRow: treatmentSummaryRow,
+    });
+    const missingSummaryQuery = createTreatmentSummaryUpdateDatabase({
+      summaryRows: [],
+      appointmentRows: [{ customerId: 'cust_qin_review' }],
+      updatedRow: treatmentSummaryRow,
+    });
+
+    await expect(
+      createTreatmentSummaryRepository(mismatchQuery.database).updateTreatmentSummaryByTenant({
+        tenantId: 'demo-tenant-001',
+        summaryId: 'trt_001',
+        values: { appointmentId: 'appt_other_customer' },
+      }),
+    ).resolves.toEqual({
+      kind: 'invalid_reference',
+      reason: 'customer_mismatch',
+    });
+    expect(mismatchQuery.update).not.toHaveBeenCalled();
+
+    await expect(
+      createTreatmentSummaryRepository(notFoundQuery.database).updateTreatmentSummaryByTenant({
+        tenantId: 'demo-tenant-001',
+        summaryId: 'trt_001',
+        values: { appointmentId: 'appt_other_tenant' },
+      }),
+    ).resolves.toEqual({
+      kind: 'invalid_reference',
+      reason: 'not_found_or_not_owned',
+    });
+    expect(notFoundQuery.update).not.toHaveBeenCalled();
+
+    await expect(
+      createTreatmentSummaryRepository(missingSummaryQuery.database).updateTreatmentSummaryByTenant({
+        tenantId: 'demo-tenant-001',
+        summaryId: 'trt_missing',
+        values: { appointmentId: 'appt_qin_arrived' },
+      }),
+    ).resolves.toEqual({ kind: 'not_found_or_not_owned' });
+    expect(missingSummaryQuery.update).not.toHaveBeenCalled();
   });
 
   it('提供 appointmentId 归属校验 helper，区分同租户同客户、客户不匹配和不可见预约', async () => {

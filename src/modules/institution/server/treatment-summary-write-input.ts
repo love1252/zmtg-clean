@@ -1,8 +1,14 @@
 import type { FollowUpRiskLevel } from '@/modules/institution/domain/followup-workflow';
-import type { CreateTreatmentSummaryDraft } from '@/modules/institution/domain/treatment-summaries';
+import type {
+  CreateTreatmentSummaryDraft,
+  UpdateTreatmentSummaryDraft,
+} from '@/modules/institution/domain/treatment-summaries';
 
 export type ParseCreateTreatmentSummaryPayloadResult =
   | { ok: true; value: CreateTreatmentSummaryDraft }
+  | { ok: false; error: string };
+export type ParseUpdateTreatmentSummaryPayloadResult =
+  | { ok: true; value: UpdateTreatmentSummaryDraft }
   | { ok: false; error: string };
 
 const ALLOWED_CREATE_TREATMENT_SUMMARY_KEYS = [
@@ -20,6 +26,9 @@ const ALLOWED_CREATE_TREATMENT_SUMMARY_KEYS = [
 ] as const satisfies readonly (keyof CreateTreatmentSummaryDraft)[];
 
 const allowedCreateTreatmentSummaryKeys = new Set<string>(
+  ALLOWED_CREATE_TREATMENT_SUMMARY_KEYS,
+);
+const allowedUpdateTreatmentSummaryKeys = new Set<string>(
   ALLOWED_CREATE_TREATMENT_SUMMARY_KEYS,
 );
 
@@ -75,13 +84,17 @@ function containsDisallowedTreatmentSummaryContent(input: string) {
 
   return (
     containsRawIdentifier(normalized) ||
-    /完整治疗记录正文|完整病历正文|诊疗原文|咨询对话全文/u.test(normalized) ||
+    /完整治疗记录正文|完整病历正文|诊疗原文|咨询对话全文|手机号原文|身份证号|病历号原文|图片\s*\/\s*文件原文|图片原文|文件原文|AI\s*生成内容|外部系统\s*payload|外部系统原文|请求体/u.test(
+      normalized,
+    ) ||
     /full\s*treatment\s*record|medical\s*record\s*text|diagnosis\s*text|consultation\s*transcript/iu.test(
       normalized,
     ) ||
-    /imageUrl|fileUrl|图片原文|文件原文|image\s*url|file\s*url/iu.test(normalized) ||
+    /imageUrl|fileUrl|image\s*url|file\s*url/iu.test(normalized) ||
     /aiGeneratedContent|AI\s*生成|ai\s*generated/iu.test(normalized) ||
-    /externalSystemPayload|外部系统同步原文|external\s*system/iu.test(normalized) ||
+    /externalSystemPayload|外部系统同步原文|external\s*system|requestBody/iu.test(
+      normalized,
+    ) ||
     /DATABASE_URL|database_url|postgres:\/\/|mysql:\/\/|mongodb:\/\/|redis:\/\//iu.test(
       normalized,
     ) ||
@@ -90,13 +103,13 @@ function containsDisallowedTreatmentSummaryContent(input: string) {
   );
 }
 
-function parseObject(input: unknown) {
+function parseObject(input: unknown, allowedKeys: ReadonlySet<string>) {
   if (!isPlainObject(input)) {
     return { ok: false as const, error: '请求体必须是 JSON object' };
   }
 
   for (const key of Object.keys(input)) {
-    if (!allowedCreateTreatmentSummaryKeys.has(key)) {
+    if (!allowedKeys.has(key)) {
       return { ok: false as const, error: `请求包含不允许的字段: ${key}` };
     }
   }
@@ -272,7 +285,7 @@ function parseTags(input: Record<string, unknown>) {
 export function parseCreateTreatmentSummaryPayload(
   input: unknown,
 ): ParseCreateTreatmentSummaryPayloadResult {
-  const object = parseObject(input);
+  const object = parseObject(input, allowedCreateTreatmentSummaryKeys);
   if (!object.ok) {
     return object;
   }
@@ -348,4 +361,71 @@ export function parseCreateTreatmentSummaryPayload(
       appointmentId: appointmentId.value,
     },
   };
+}
+
+export function parseUpdateTreatmentSummaryPayload(
+  input: unknown,
+): ParseUpdateTreatmentSummaryPayloadResult {
+  const object = parseObject(input, allowedUpdateTreatmentSummaryKeys);
+  if (!object.ok) {
+    return object;
+  }
+
+  if (Object.keys(object.value).length === 0) {
+    return { ok: false, error: '至少需要提供一个可更新字段' };
+  }
+
+  const value: UpdateTreatmentSummaryDraft = {};
+
+  if ('treatmentDate' in object.value) {
+    const treatmentDate = parseTreatmentDate(object.value);
+    if (!treatmentDate.ok) {
+      return treatmentDate;
+    }
+    value.treatmentDate = treatmentDate.value;
+  }
+
+  for (const field of [
+    'treatmentProject',
+    'treatmentCategory',
+    'treatmentStage',
+    'recoveryStage',
+    'ownerUserId',
+    'summary',
+    'nextCareAction',
+  ] as const satisfies readonly TreatmentSummaryStringField[]) {
+    if (field in object.value) {
+      const parsed = parseRequiredStringField(object.value, field);
+      if (!parsed.ok) {
+        return parsed;
+      }
+      value[field] = parsed.value;
+    }
+  }
+
+  if ('riskLevel' in object.value) {
+    const riskLevel = parseRiskLevel(object.value);
+    if (!riskLevel.ok) {
+      return riskLevel;
+    }
+    value.riskLevel = riskLevel.value;
+  }
+
+  if ('tags' in object.value) {
+    const tags = parseTags(object.value);
+    if (!tags.ok) {
+      return tags;
+    }
+    value.tags = tags.value;
+  }
+
+  if ('appointmentId' in object.value) {
+    const appointmentId = parseAppointmentId(object.value);
+    if (!appointmentId.ok) {
+      return appointmentId;
+    }
+    value.appointmentId = appointmentId.value;
+  }
+
+  return { ok: true, value };
 }
