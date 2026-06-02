@@ -151,10 +151,22 @@ Phase 18 已完成：
 - workspace smoke 覆盖治疗摘要管理页进入、安全详情打开、编辑入口、白名单 PATCH body、成功刷新、失败保留输入、不会自动修改既有随访任务、不会重新生成随访建议和敏感字段不展示
 - Phase 18 不包含治疗摘要删除、治疗摘要作废、版本历史、diff 展示、完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件上传、AI provider、Agent、RAG、企业微信、真实 HIS / CRM / OTA 接入、OAuth、Webhook、支付、合同、发票或外部系统同步
 
+Phase 19 已完成：
+
+- Phase 19 治疗摘要作废能力 v1 spec / plan 已完成，明确作废不是删除，作废信息必须可审计、可追溯
+- `treatment_summaries` 已新增 nullable 作废字段和 Drizzle migration，历史摘要默认视为 active，不 drop 表、不删除字段、不修改已有字段类型
+- 治疗摘要 domain / DTO 已派生 `status: "active" | "voided"`，repository 已新增 `voidTreatmentSummaryByTenant`，按服务端确认的 `tenantId + summaryId` 软作废
+- 作废原因 parser 已覆盖稳定 reason code、短文本限制和敏感字段拒绝，不接受完整治疗记录正文、完整病历正文、诊疗原文、咨询全文、手机号原文、身份证号、病历号原文、图片 / 文件原文、AI 生成内容、外部系统原文、SQL、stack、token、secret、`DATABASE_URL` 或连接串
+- 已新增 `POST /api/institution/treatment-summaries/[summaryId]/void`，服务端从 access context 推导 `tenantId`，不接受前端传入 `tenantId`，成功和拒绝路径写稳定 audit
+- 已作废摘要会阻断新的随访建议和新的来源随访任务创建；已存在来源随访任务不自动取消、不自动修改状态，仍保留来源追溯
+- 机构端治疗摘要列表、详情、客户 timeline 和来源任务提示已展示作废状态，作废详情显示作废时间、作废人和作废原因
+- workspace smoke / institution / audit / db 测试覆盖作废字段、parser、repository、API、随访阻断、UI 展示、来源任务提示、客户 timeline、不会硬删除、不会自动取消既有任务和敏感字段不展示
+- Phase 19 不包含治疗摘要硬删除、批量作废、版本历史、diff 展示、自动取消既有随访任务、自动触达客户、完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件上传、AI provider、Agent、RAG、企业微信、HIS / CRM / OTA 真实接入、OAuth、Webhook、支付、外部系统同步
+
 后续阶段会依次加入：
 
-- Phase 19 Plan Mode：建议优先评估治疗摘要作废能力 v1、HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec 或随访路径运营分析 v1，进入实现前必须单独定界
-- 客服会话、治疗摘要作废、版本历史 / diff 展示和完整治疗记录能力需单独规划
+- 产品可演示性验收：建议先完整走查机构端治疗摘要创建、编辑、作废、随访建议阻断、来源任务追溯和客户 timeline 展示，再决定 Phase 20 Plan Mode
+- HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec、随访路径运营分析 v1、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费

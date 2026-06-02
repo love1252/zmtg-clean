@@ -12,25 +12,17 @@
 
 ## 0. 当前 PR 状态
 
-当前 PR 是 **Phase 19 PR 1：spec / plan 文档**。
+Phase 19 已完成。本计划已通过 PR 1 到 PR 5 落地：
 
-本 PR 只新增：
+- PR 1：spec / plan 文档。
+- PR 2：schema / migration / domain / parser / repository 作废地基。
+- PR 3：作废 API，并阻断作废摘要继续生成建议或创建来源随访任务。
+- PR 4：机构端列表、详情、客户 timeline、来源任务提示展示作废状态。
+- PR 5：smoke / 文档收尾。
 
-- `docs/superpowers/specs/2026-06-02-phase19-treatment-summary-void-v1-design.md`
-- `docs/superpowers/plans/2026-06-02-phase19-treatment-summary-void-v1.md`
+最终完成范围包括作废字段和 migration、`status: "active" | "voided"` DTO 派生、作废原因 parser、`voidTreatmentSummaryByTenant`、`POST /api/institution/treatment-summaries/[summaryId]/void`、作废 audit、作废后随访建议 / 来源任务创建阻断、机构端列表 / 详情 / 客户 timeline / 来源任务提示展示，以及 workspace smoke / 文档收尾。
 
-本 PR 不修改：
-
-- TypeScript 代码。
-- React 页面。
-- 测试。
-- API route。
-- 数据库 schema。
-- migration。
-- 权限、认证或租户隔离。
-- README、roadmap、devlog。
-
-后续实现需按 PR 2 到 PR 5 分步推进，不在 PR 1 中提前写代码。
+最终边界保持不变：不硬删除治疗摘要，不批量作废，不做版本历史或 diff 展示，不自动取消既有随访任务，不自动触达客户，不保存或展示完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件原文，不进入 AI / RAG / Agent、企业微信、真实 HIS / CRM / OTA、OAuth、Webhook、支付、合同、发票或外部系统同步。
 
 ## 1. 当前上下文
 
@@ -444,7 +436,7 @@ createAuditEvent({
 
 ### 步骤
 
-- [ ] 确认当前分支从最新 `main` 创建。
+- [x] 确认当前分支从最新 `main` 创建。
 
   命令：
 
@@ -459,7 +451,7 @@ createAuditEvent({
   - 基底为 `051f7e1` 或更新的 `origin/main`。
   - 工作区没有无关改动。
 
-- [ ] 新增 spec 文档。
+- [x] 新增 spec 文档。
 
   文件：
 
@@ -485,7 +477,7 @@ createAuditEvent({
   - PII / 医疗隐私。
   - PR 拆分。
 
-- [ ] 新增 plan 文档。
+- [x] 新增 plan 文档。
 
   文件：
 
@@ -500,7 +492,7 @@ createAuditEvent({
   - 每个 PR 的范围、风险和验证方式。
   - 作废字段、parser、API、audit 和随访联动约定。
 
-- [ ] 运行 Markdown diff 检查。
+- [x] 运行 Markdown diff 检查。
 
   命令：
 
@@ -543,17 +535,17 @@ git diff --check
 
 ### 步骤
 
-- [ ] 写 schema 测试，断言 `treatment_summaries` 包含 `voided_at`、`voided_by`、`void_reason_code`、`void_reason`。
-- [ ] 写 migration SQL 测试，断言只新增 nullable 字段和必要索引。
-- [ ] 更新 `src/server/db/schema.ts`。
-- [ ] 新增 migration 和 meta snapshot。
-- [ ] 扩展 `TreatmentSummaryRecord` 和 DTO mapper，派生 `status`。
-- [ ] 写 parser 测试，覆盖合法 reason code、`other` 必填说明、未知字段、`tenantId` 注入和敏感字段拒绝。
-- [ ] 实现 `parseVoidTreatmentSummaryPayload`。
-- [ ] 写 repository 测试，覆盖 tenant-scoped void、重复作废、跨租户不更新和安全 DTO。
-- [ ] 实现 `voidTreatmentSummaryByTenant`。
-- [ ] 更新 audit reason union、query 白名单和测试。
-- [ ] 运行验证命令。
+- [x] 写 schema 测试，断言 `treatment_summaries` 包含 `voided_at`、`voided_by`、`void_reason_code`、`void_reason`。
+- [x] 写 migration SQL 测试，断言只新增 nullable 字段和必要索引。
+- [x] 更新 `src/server/db/schema.ts`。
+- [x] 新增 migration 和 meta snapshot。
+- [x] 扩展 `TreatmentSummaryRecord` 和 DTO mapper，派生 `status`。
+- [x] 写 parser 测试，覆盖合法 reason code、`other` 必填说明、未知字段、`tenantId` 注入和敏感字段拒绝。
+- [x] 实现 `parseVoidTreatmentSummaryPayload`。
+- [x] 写 repository 测试，覆盖 tenant-scoped void、重复作废、跨租户不更新和安全 DTO。
+- [x] 实现 `voidTreatmentSummaryByTenant`。
+- [x] 更新 audit reason union、query 白名单和测试。
+- [x] 运行验证命令。
 
 ### 风险
 
@@ -585,13 +577,13 @@ node scripts/run-vitest.mjs run src/modules/audit/tests/AuditEventsDomain.test.t
 
 ### 步骤
 
-- [ ] 写作废 API route 测试，覆盖成功、未登录、无权限、缺少 tenant、not found、invalid payload、重复作废和服务异常。
-- [ ] 新增 `src/app/api/institution/treatment-summaries/[summaryId]/void/route.ts`。
-- [ ] 写 follow-up suggestions 作废阻断测试。
-- [ ] 修改 suggestions route 或 confirmation helper，作废摘要返回稳定阻断结果。
-- [ ] 写 follow-up task 创建作废阻断测试。
-- [ ] 修改 follow-up tasks route 或 confirmation helper，作废摘要不创建任务并写 denied audit。
-- [ ] 运行验证命令。
+- [x] 写作废 API route 测试，覆盖成功、未登录、无权限、缺少 tenant、not found、invalid payload、重复作废和服务异常。
+- [x] 新增 `src/app/api/institution/treatment-summaries/[summaryId]/void/route.ts`。
+- [x] 写 follow-up suggestions 作废阻断测试。
+- [x] 修改 suggestions route 或 confirmation helper，作废摘要返回稳定阻断结果。
+- [x] 写 follow-up task 创建作废阻断测试。
+- [x] 修改 follow-up tasks route 或 confirmation helper，作废摘要不创建任务并写 denied audit。
+- [x] 运行验证命令。
 
 ### 风险
 
@@ -624,14 +616,14 @@ node scripts/run-vitest.mjs run src/modules/audit/tests
 
 ### 步骤
 
-- [ ] 写 client helper 测试，确认 `voidTreatmentSummary` 只发送 `reasonCode` 和 `reasonText`，不发送 `tenantId`。
-- [ ] 实现 `voidTreatmentSummary(summaryId, payload)`。
-- [ ] 写治疗摘要管理 UI 测试，覆盖列表作废标签、详情作废信息、作废入口、成功刷新、重复作废提示和敏感字段不展示。
-- [ ] 更新 `TreatmentSummaryManagementShell`。
-- [ ] 写客户时间线 domain / API 测试，覆盖作废状态 DTO 和 timeline 节点。
-- [ ] 更新 `customer-timeline` domain 和 `CustomerTimelineDrawer`。
-- [ ] 写 workspace smoke，覆盖机构入口打开治疗摘要管理、作废单条摘要、列表和详情刷新、建议被阻断、来源任务提示。
-- [ ] 运行验证命令。
+- [x] 写 client helper 测试，确认 `voidTreatmentSummary` 只发送 `reasonCode` 和 `reasonText`，不发送 `tenantId`。
+- [x] 实现 `voidTreatmentSummary(summaryId, payload)`。
+- [x] 写治疗摘要管理 UI 测试，覆盖列表作废标签、详情作废信息、作废入口、成功刷新、重复作废提示和敏感字段不展示。
+- [x] 更新 `TreatmentSummaryManagementShell`。
+- [x] 写客户时间线 domain / API 测试，覆盖作废状态 DTO 和 timeline 节点。
+- [x] 更新 `customer-timeline` domain 和 `CustomerTimelineDrawer`。
+- [x] 写 workspace smoke，覆盖机构入口打开治疗摘要管理、作废单条摘要、列表和详情刷新、建议被阻断、来源任务提示。
+- [x] 运行验证命令。
 
 ### 风险
 
@@ -662,13 +654,13 @@ node scripts/run-vitest.mjs run src/modules/workspace/tests/WorkspaceEntryPages.
 
 ### 步骤
 
-- [ ] 强化 workspace smoke，覆盖作废状态展示、建议阻断、任务创建阻断和来源任务提示。
-- [ ] 强化敏感字段 smoke，确认页面和错误文案不展示 SQL、stack、token、secret、`DATABASE_URL`、PII 或完整医疗正文。
-- [ ] 更新 `README.md`，标记 Phase 19 完成。
-- [ ] 更新 roadmap，记录 Phase 19 完成范围和未进入事项。
-- [ ] 更新 devlog，记录 PR 1 到 PR 5。
-- [ ] 更新 Phase 19 spec / plan 状态。
-- [ ] 运行全量验证。
+- [x] 强化 workspace smoke，覆盖作废状态展示、建议阻断、任务创建阻断和来源任务提示。
+- [x] 强化敏感字段 smoke，确认页面和错误文案不展示 SQL、stack、token、secret、`DATABASE_URL`、PII 或完整医疗正文。
+- [x] 更新 `README.md`，标记 Phase 19 完成。
+- [x] 更新 roadmap，记录 Phase 19 完成范围和未进入事项。
+- [x] 更新 devlog，记录 PR 1 到 PR 5。
+- [x] 更新 Phase 19 spec / plan 状态。
+- [x] 运行全量验证。
 
 ### 风险
 

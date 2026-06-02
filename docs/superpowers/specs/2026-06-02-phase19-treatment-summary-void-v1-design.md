@@ -1,7 +1,19 @@
 # Phase 19 治疗摘要作废能力 v1 设计
 
 > 日期：2026-06-02
-> 状态：Phase 19 PR 1 规划文档。本文只固化治疗摘要作废能力 v1 的目标、范围、API / schema / RBAC / 审计 / UI / 随访联动边界和 PR 拆分，不进入代码实现。
+> 状态：Phase 19 已完成。本文最初固化治疗摘要作废能力 v1 的目标、范围、API / schema / RBAC / 审计 / UI / 随访联动边界和 PR 拆分；PR 1-5 已按本文完成 spec / plan、数据地基、作废 API、机构端展示和 smoke / 文档收尾。
+
+## 0. Phase 19 最终状态
+
+Phase 19 已完成治疗摘要作废能力 v1：
+
+- PR 1 已完成 Phase 19 spec / plan 文档。
+- PR 2 已完成 `treatment_summaries` nullable 作废字段、Drizzle migration / meta、domain / DTO `status` 派生、作废原因 parser、repository `voidTreatmentSummaryByTenant` 和 audit reason 预留。
+- PR 3 已完成 `POST /api/institution/treatment-summaries/[summaryId]/void`，并完成作废后阻断新的 `follow-up-suggestions` 和新的来源 `follow-up-tasks` 创建。
+- PR 4 已完成机构端治疗摘要列表、详情、客户 timeline 和来源随访任务提示中的作废状态展示，并使用既有作废 API。
+- PR 5 已完成 workspace smoke 强化、README / roadmap / devlog 和 Phase 19 spec / plan 收尾。
+
+最终边界保持不变：Phase 19 不做治疗摘要硬删除、批量作废、版本历史、diff 展示、自动取消既有随访任务、自动触达客户、完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件上传、AI provider、Agent、RAG、企业微信、HIS / CRM / OTA 真实接入、OAuth、Webhook、支付或外部系统同步。
 
 ## 1. Phase 19 目标
 
