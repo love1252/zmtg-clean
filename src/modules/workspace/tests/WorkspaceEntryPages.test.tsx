@@ -1206,7 +1206,8 @@ describe('工作台入口页面', () => {
       expect(init?.method ?? 'GET').toBe('GET');
       expect(init?.body).toBeUndefined();
     }
-    expect(screen.queryByRole('button', { name: /新增|编辑|删除/u })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '编辑治疗摘要' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /新增|删除|作废/u })).not.toBeInTheDocument();
     expectNoSensitiveTreatmentSummaryManagementContent(container);
   });
 

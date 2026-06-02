@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Filter,
   Loader2,
+  Pencil,
   Search,
   ShieldCheck,
   X,
@@ -16,8 +17,10 @@ import {
   listFollowUpTasks,
   listTreatmentSummaries,
   listTreatmentFollowUpSuggestions,
+  updateTreatmentSummary,
   type TenantBusinessClientError,
   type TreatmentSummaryListClientQuery,
+  type UpdateTreatmentSummaryClientPayload,
 } from '@/modules/institution/client/tenant-business-client';
 import type { TreatmentFollowUpSuggestion } from '@/modules/institution/domain/treatment-followup-suggestions';
 import {
@@ -48,6 +51,20 @@ type TreatmentSummaryFilterForm = {
   riskLevel: '' | FollowUpRiskLevel;
   from: string;
   to: string;
+};
+
+type TreatmentSummaryEditForm = {
+  treatmentDate: string;
+  treatmentProject: string;
+  treatmentCategory: string;
+  treatmentStage: string;
+  recoveryStage: string;
+  riskLevel: FollowUpRiskLevel;
+  ownerUserId: string;
+  summary: string;
+  nextCareAction: string;
+  tagsText: string;
+  appointmentId: string;
 };
 
 const emptyTreatmentSummaryFilterForm: TreatmentSummaryFilterForm = {
@@ -100,6 +117,90 @@ function trimOrUndefined(value: string) {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function padDatePart(value: number) {
+  return String(value).padStart(2, '0');
+}
+
+function toDateTimeLocalInput(value: string) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return value.slice(0, 16);
+  }
+
+  const date = new Date(timestamp);
+  return [
+    date.getFullYear(),
+    '-',
+    padDatePart(date.getMonth() + 1),
+    '-',
+    padDatePart(date.getDate()),
+    'T',
+    padDatePart(date.getHours()),
+    ':',
+    padDatePart(date.getMinutes()),
+  ].join('');
+}
+
+function toStableTreatmentDate(value: string) {
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/u.test(trimmed)) {
+    return `${trimmed}:00+08:00`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/u.test(trimmed)) {
+    return `${trimmed}+08:00`;
+  }
+  return trimmed;
+}
+
+function normalizeTagsText(value: string) {
+  return [
+    ...new Set(
+      value
+        .split(/[,\n，、]/u)
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0),
+    ),
+  ];
+}
+
+function recordToEditForm(
+  record: InstitutionTreatmentSummaryListItem,
+): TreatmentSummaryEditForm {
+  return {
+    treatmentDate: toDateTimeLocalInput(record.treatmentDate),
+    treatmentProject: record.treatmentProject,
+    treatmentCategory: record.treatmentCategory,
+    treatmentStage: record.treatmentStage,
+    recoveryStage: record.recoveryStage,
+    riskLevel: record.riskLevel,
+    ownerUserId: record.ownerUserId,
+    summary: record.summary,
+    nextCareAction: record.nextCareAction,
+    tagsText: record.tags.join('，'),
+    appointmentId: record.appointmentId ?? '',
+  };
+}
+
+function formToUpdateTreatmentSummaryPayload(
+  form: TreatmentSummaryEditForm,
+): UpdateTreatmentSummaryClientPayload {
+  const appointmentId = form.appointmentId.trim();
+
+  return {
+    treatmentDate: toStableTreatmentDate(form.treatmentDate),
+    treatmentProject: form.treatmentProject.trim(),
+    treatmentCategory: form.treatmentCategory.trim(),
+    treatmentStage: form.treatmentStage.trim(),
+    recoveryStage: form.recoveryStage.trim(),
+    riskLevel: form.riskLevel,
+    ownerUserId: form.ownerUserId.trim(),
+    summary: form.summary.trim(),
+    nextCareAction: form.nextCareAction.trim(),
+    tags: normalizeTagsText(form.tagsText),
+    appointmentId: appointmentId.length > 0 ? appointmentId : null,
+  };
+}
+
 function formToTreatmentSummaryQuery(
   form: TreatmentSummaryFilterForm,
 ): TreatmentSummaryListClientQuery {
@@ -120,6 +221,20 @@ function visibleTreatmentSummaryErrorState(
     fallbackMessage: '治疗摘要请求失败',
     unavailableMessage: '治疗摘要数据暂时不可用',
   });
+}
+
+function visibleTreatmentSummaryEditErrorMessage(error: TenantBusinessClientError) {
+  if (error.kind === 'unauthorized') return '请先登录';
+  if (error.kind === 'forbidden') return '当前账号没有编辑治疗摘要的权限';
+  if (error.kind === 'not_found') return '治疗摘要不存在或不可见';
+  if (error.kind === 'conflict') {
+    return error.message || 'appointmentId 归属不合法，请选择同客户预约';
+  }
+  if (error.kind === 'service_unavailable') return '数据服务暂时不可用';
+  if (error.kind === 'validation_error') {
+    return error.message || '字段非法，请检查治疗摘要编辑内容';
+  }
+  return error.message || '治疗摘要编辑失败';
 }
 
 function displayValue(value: string | null | undefined) {
@@ -153,11 +268,23 @@ function SummaryField({ label, value }: { label: string; value: string | null | 
 
 function TreatmentSummaryDetailDialog({
   onClose,
+  onRecordUpdated,
   record,
 }: {
   onClose: () => void;
+  onRecordUpdated: (record: InstitutionTreatmentSummaryListItem) => void;
   record: InstitutionTreatmentSummaryListItem;
 }) {
+  const [detailRecord, setDetailRecord] = useState(record);
+  const [isEditFormOpen, setIsEditFormOpen] = useState(false);
+  const [editForm, setEditForm] = useState<TreatmentSummaryEditForm>(() =>
+    recordToEditForm(record),
+  );
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+  const [editMessage, setEditMessage] = useState<{
+    kind: 'success' | 'error';
+    text: string;
+  } | null>(null);
   const [followUpSuggestions, setFollowUpSuggestions] = useState<TreatmentFollowUpSuggestion[]>(
     [],
   );
@@ -172,23 +299,71 @@ function TreatmentSummaryDetailDialog({
     text: string;
   } | null>(null);
 
+  useEffect(() => {
+    setDetailRecord(record);
+    setEditForm(recordToEditForm(record));
+  }, [record]);
+
   const rows = [
-    ['摘要 ID', record.id],
-    ['客户 ID', record.customerId],
-    ['预约 ID', record.appointmentId ?? '-'],
-    ['治疗时间', formatBusinessDateTime(record.treatmentDate)],
-    ['治疗项目', record.treatmentProject],
-    ['治疗类别', record.treatmentCategory],
-    ['治疗阶段', record.treatmentStage],
-    ['恢复阶段', record.recoveryStage],
-    ['风险等级', followUpRiskLevelLabels[record.riskLevel]],
-    ['负责人', record.ownerUserId],
-    ['摘要', record.summary],
-    ['下一步护理建议', record.nextCareAction],
-    ['标签', safeTagList(record.tags).join('、')],
-    ['创建时间', formatBusinessDateTime(record.createdAt)],
-    ['更新时间', formatBusinessDateTime(record.updatedAt)],
+    ['摘要 ID', detailRecord.id],
+    ['客户 ID', detailRecord.customerId],
+    ['预约 ID', detailRecord.appointmentId ?? '-'],
+    ['治疗时间', formatBusinessDateTime(detailRecord.treatmentDate)],
+    ['治疗项目', detailRecord.treatmentProject],
+    ['治疗类别', detailRecord.treatmentCategory],
+    ['治疗阶段', detailRecord.treatmentStage],
+    ['恢复阶段', detailRecord.recoveryStage],
+    ['风险等级', followUpRiskLevelLabels[detailRecord.riskLevel]],
+    ['负责人', detailRecord.ownerUserId],
+    ['摘要', detailRecord.summary],
+    ['下一步护理建议', detailRecord.nextCareAction],
+    ['标签', safeTagList(detailRecord.tags).join('、')],
+    ['创建时间', formatBusinessDateTime(detailRecord.createdAt)],
+    ['更新时间', formatBusinessDateTime(detailRecord.updatedAt)],
   ] as const;
+
+  function handleEditFieldChange(
+    key: keyof TreatmentSummaryEditForm,
+    value: string,
+  ) {
+    setEditForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function handleOpenEditForm() {
+    setEditForm(recordToEditForm(detailRecord));
+    setEditMessage(null);
+    setIsEditFormOpen(true);
+  }
+
+  async function handleSubmitEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSubmittingEdit(true);
+    setEditMessage(null);
+
+    const result = await updateTreatmentSummary(
+      detailRecord.id,
+      formToUpdateTreatmentSummaryPayload(editForm),
+    );
+
+    if (result.ok) {
+      const nextRecord: InstitutionTreatmentSummaryListItem = {
+        ...detailRecord,
+        ...result.record,
+        customerId: detailRecord.customerId,
+      };
+      setDetailRecord(nextRecord);
+      setEditForm(recordToEditForm(nextRecord));
+      setEditMessage({ kind: 'success', text: '治疗摘要已更新' });
+      onRecordUpdated(nextRecord);
+    } else {
+      setEditMessage({
+        kind: 'error',
+        text: visibleTreatmentSummaryEditErrorMessage(result.error),
+      });
+    }
+
+    setIsSubmittingEdit(false);
+  }
 
   async function handleLoadFollowUpSuggestions() {
     setSuggestionStatus('loading');
@@ -197,10 +372,10 @@ function TreatmentSummaryDetailDialog({
     setSourceFollowUpTasks([]);
 
     const [suggestionsResult, sourceTasksResult] = await Promise.all([
-      listTreatmentFollowUpSuggestions(record.id),
+      listTreatmentFollowUpSuggestions(detailRecord.id),
       listFollowUpTasks({
         source: 'treatment_summary',
-        sourceTreatmentSummaryId: record.id,
+        sourceTreatmentSummaryId: detailRecord.id,
       }),
     ]);
 
@@ -221,7 +396,7 @@ function TreatmentSummaryDetailDialog({
     setCreatingSuggestionKey(suggestion.suggestionKey);
     setCreateMessage(null);
 
-    const result = await createFollowUpTaskFromTreatmentSummary(record.id, {
+    const result = await createFollowUpTaskFromTreatmentSummary(detailRecord.id, {
       suggestionKey: suggestion.suggestionKey,
     });
 
@@ -246,11 +421,19 @@ function TreatmentSummaryDetailDialog({
           <div>
             <p className="text-sm font-semibold text-blue-600">安全详情</p>
             <h3 className="mt-1 text-xl font-semibold text-slate-950">
-              {record.treatmentProject}
+              {detailRecord.treatmentProject}
             </h3>
             <p className="mt-1 text-sm text-slate-500">
               仅展示治疗摘要列表 DTO 字段，不展示完整正文或原始隐私信息。
             </p>
+            <button
+              type="button"
+              onClick={handleOpenEditForm}
+              className="mt-3 inline-flex h-9 items-center justify-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              <Pencil className="h-4 w-4" />
+              编辑治疗摘要
+            </button>
           </div>
           <button
             type="button"
@@ -279,6 +462,185 @@ function TreatmentSummaryDetailDialog({
               </div>
             ))}
           </dl>
+
+          {isEditFormOpen ? (
+            <section className="border-t border-slate-100 px-5 py-5">
+              <form
+                role="form"
+                aria-label="编辑治疗摘要表单"
+                className="rounded-2xl border border-blue-100 bg-blue-50/45 p-4"
+                onSubmit={handleSubmitEdit}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-base font-semibold text-slate-950">
+                      编辑治疗摘要
+                    </h4>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                      编辑治疗摘要不会自动修改既有随访任务，也不会重新生成随访建议。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditFormOpen(false);
+                      setEditMessage(null);
+                      setEditForm(recordToEditForm(detailRecord));
+                    }}
+                    className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600"
+                  >
+                    取消编辑
+                  </button>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <label className="text-sm font-semibold text-slate-600">
+                    治疗时间
+                    <input
+                      type="datetime-local"
+                      value={editForm.treatmentDate}
+                      onChange={(event) =>
+                        handleEditFieldChange('treatmentDate', event.target.value)
+                      }
+                      className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+                    />
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600">
+                    治疗项目
+                    <input
+                      value={editForm.treatmentProject}
+                      onChange={(event) =>
+                        handleEditFieldChange('treatmentProject', event.target.value)
+                      }
+                      className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+                    />
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600">
+                    治疗类别
+                    <input
+                      value={editForm.treatmentCategory}
+                      onChange={(event) =>
+                        handleEditFieldChange('treatmentCategory', event.target.value)
+                      }
+                      className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+                    />
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600">
+                    治疗阶段
+                    <input
+                      value={editForm.treatmentStage}
+                      onChange={(event) =>
+                        handleEditFieldChange('treatmentStage', event.target.value)
+                      }
+                      className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+                    />
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600">
+                    恢复阶段
+                    <input
+                      value={editForm.recoveryStage}
+                      onChange={(event) =>
+                        handleEditFieldChange('recoveryStage', event.target.value)
+                      }
+                      className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+                    />
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600">
+                    风险等级
+                    <select
+                      value={editForm.riskLevel}
+                      onChange={(event) =>
+                        handleEditFieldChange('riskLevel', event.target.value)
+                      }
+                      className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+                    >
+                      {riskLevelOptions.map(([riskLevel, label]) => (
+                        <option key={riskLevel} value={riskLevel}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600">
+                    负责人 ID
+                    <input
+                      value={editForm.ownerUserId}
+                      onChange={(event) =>
+                        handleEditFieldChange('ownerUserId', event.target.value)
+                      }
+                      className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+                    />
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600">
+                    预约 ID
+                    <input
+                      value={editForm.appointmentId}
+                      onChange={(event) =>
+                        handleEditFieldChange('appointmentId', event.target.value)
+                      }
+                      className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+                    />
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600 md:col-span-2">
+                    摘要
+                    <textarea
+                      value={editForm.summary}
+                      onChange={(event) =>
+                        handleEditFieldChange('summary', event.target.value)
+                      }
+                      rows={3}
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-300"
+                    />
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600 md:col-span-2">
+                    下一步护理建议
+                    <textarea
+                      value={editForm.nextCareAction}
+                      onChange={(event) =>
+                        handleEditFieldChange('nextCareAction', event.target.value)
+                      }
+                      rows={3}
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-300"
+                    />
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600 md:col-span-2">
+                    标签
+                    <input
+                      value={editForm.tagsText}
+                      onChange={(event) =>
+                        handleEditFieldChange('tagsText', event.target.value)
+                      }
+                      className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
+                    />
+                  </label>
+                </div>
+
+                {editMessage ? (
+                  <div
+                    className={cn(
+                      'mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold',
+                      editMessage.kind === 'success'
+                        ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                        : 'border-rose-100 bg-rose-50 text-rose-700',
+                    )}
+                  >
+                    {editMessage.text}
+                  </div>
+                ) : null}
+
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isSubmittingEdit}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {isSubmittingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    保存编辑
+                  </button>
+                </div>
+              </form>
+            </section>
+          ) : null}
 
           <section className="border-t border-slate-100 px-5 py-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -526,6 +888,14 @@ export function TreatmentSummaryManagementShell() {
     });
   }
 
+  function handleTreatmentSummaryUpdated(record: InstitutionTreatmentSummaryListItem) {
+    setSelectedRecord(record);
+    setRecords((current) =>
+      current.map((item) => (item.id === record.id ? { ...item, ...record } : item)),
+    );
+    void loadTreatmentSummaries({ query: activeQuery, mode: 'replace' });
+  }
+
   return (
     <section className="space-y-5">
       <InstitutionSectionHeader
@@ -768,6 +1138,7 @@ export function TreatmentSummaryManagementShell() {
         <TreatmentSummaryDetailDialog
           record={selectedRecord}
           onClose={() => setSelectedRecord(null)}
+          onRecordUpdated={handleTreatmentSummaryUpdated}
         />
       ) : null}
     </section>

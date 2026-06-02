@@ -12,6 +12,7 @@ import type {
   CustomerTimelineTreatmentSummary,
   InstitutionTreatmentSummaryListItem,
   TreatmentSummaryListPageInfo,
+  UpdateTreatmentSummaryDraft,
 } from '@/modules/institution/domain/treatment-summaries';
 
 export type CreateCustomerClientPayload = Omit<CustomerRecordSummary, 'id' | 'tenantId'>;
@@ -54,6 +55,12 @@ export type TreatmentFollowUpTaskConfirmationClientRecord = Omit<
 export type CreateTreatmentSummaryClientPayload = Omit<
   CreateTreatmentSummaryDraft,
   'appointmentId'
+> & {
+  appointmentId?: string | null;
+};
+
+export type UpdateTreatmentSummaryClientPayload = Partial<
+  Omit<UpdateTreatmentSummaryDraft, 'appointmentId'>
 > & {
   appointmentId?: string | null;
 };
@@ -157,6 +164,7 @@ const createTreatmentSummaryPayloadKeys = [
   'tags',
   'appointmentId',
 ] as const;
+const updateTreatmentSummaryPayloadKeys = createTreatmentSummaryPayloadKeys;
 const treatmentSummaryListQueryKeys = [
   'customerId',
   'treatmentProject',
@@ -652,6 +660,22 @@ export function createTreatmentSummary(
     pickPayload(
       payload as unknown as Record<string, unknown>,
       createTreatmentSummaryPayloadKeys,
+    ),
+    options,
+  );
+}
+
+export function updateTreatmentSummary(
+  summaryId: string,
+  payload: UpdateTreatmentSummaryClientPayload,
+  options?: TenantBusinessClientOptions,
+) {
+  return requestRecord<CustomerTimelineTreatmentSummary>(
+    `/api/institution/treatment-summaries/${encodeURIComponent(summaryId)}`,
+    'PATCH',
+    pickPayload(
+      payload as unknown as Record<string, unknown>,
+      updateTreatmentSummaryPayloadKeys,
     ),
     options,
   );

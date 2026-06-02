@@ -13,6 +13,7 @@ import {
   transitionFollowUpTask,
   updateAppointment,
   updateCustomer,
+  updateTreatmentSummary,
 } from '@/modules/institution/client/tenant-business-client';
 
 function jsonResponse(body: unknown, init?: ResponseInit) {
@@ -500,6 +501,9 @@ describe('机构业务页面 client helper', () => {
         { status: 201 },
       ),
     );
+    const treatmentSummaryUpdateFetcher = createFetchMock(
+      jsonResponse({ record: { id: 'trt_created', treatmentProject: '水光补水复诊更新' } }),
+    );
     const followUpTransitionFetcher = createFetchMock(
       jsonResponse({ record: { id: 'fu_001', tenantId: 'demo-tenant-001', status: 'in_progress' } }),
     );
@@ -603,6 +607,44 @@ describe('机构业务页面 client helper', () => {
       } as never,
       { fetcher: treatmentSummaryCreateFetcher },
     );
+    await updateTreatmentSummary(
+      'trt_created',
+      {
+        treatmentDate: '2026-06-03T10:00:00+08:00',
+        treatmentProject: '水光补水复诊更新',
+        treatmentCategory: 'skin_repair',
+        treatmentStage: 'D21 复诊',
+        recoveryStage: 'D21',
+        riskLevel: 'normal',
+        ownerUserId: 'doctor-lin',
+        summary: '结构化摘要更新：恢复稳定。',
+        nextCareAction: 'D28 人工确认恢复阶段。',
+        tags: ['复诊', '稳定'],
+        appointmentId: 'appt_001',
+        tenantId: 'other-tenant',
+        customerId: 'cust_001',
+        id: 'trt_injected',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        unknownField: '不应发送',
+        fullTreatmentRecord: '完整治疗记录正文',
+        medicalRecordText: '完整病历正文',
+        diagnosisText: '诊疗原文',
+        consultationTranscript: '咨询对话全文',
+        phoneNumber: '13800000000',
+        idNumber: '110101199001010011',
+        rawMedicalRecordNo: 'MR-RAW-001',
+        imageUrl: 'https://example.test/raw-image.png',
+        fileUrl: 'https://example.test/raw-file.pdf',
+        aiGeneratedContent: 'AI 生成内容',
+        externalSystemPayload: { raw: true },
+        sql: 'select * from treatment_summaries',
+        stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+        token: 'sk_test_should_not_send',
+        secret: 'phase18-secret',
+      } as never,
+      { fetcher: treatmentSummaryUpdateFetcher },
+    );
     await transitionFollowUpTask(
       {
         id: 'fu_001',
@@ -645,6 +687,12 @@ describe('机构业务页面 client helper', () => {
         method: 'POST',
       }),
     );
+    expect(treatmentSummaryUpdateFetcher).toHaveBeenCalledWith(
+      '/api/institution/treatment-summaries/trt_created',
+      expect.objectContaining({
+        method: 'PATCH',
+      }),
+    );
     expect(followUpTransitionFetcher).toHaveBeenCalledWith('/api/institution/followups', expect.objectContaining({
       method: 'PATCH',
     }));
@@ -668,6 +716,19 @@ describe('机构业务页面 client helper', () => {
       tags: ['结构化摘要', '复诊'],
       appointmentId: 'appt_001',
     });
+    expect(requestBody(treatmentSummaryUpdateFetcher)).toEqual({
+      treatmentDate: '2026-06-03T10:00:00+08:00',
+      treatmentProject: '水光补水复诊更新',
+      treatmentCategory: 'skin_repair',
+      treatmentStage: 'D21 复诊',
+      recoveryStage: 'D21',
+      riskLevel: 'normal',
+      ownerUserId: 'doctor-lin',
+      summary: '结构化摘要更新：恢复稳定。',
+      nextCareAction: 'D28 人工确认恢复阶段。',
+      tags: ['复诊', '稳定'],
+      appointmentId: 'appt_001',
+    });
     expect(requestBody(followUpConfirmFetcher)).toEqual({
       suggestionKey: 'trt_created:watch_risk_followup:3d',
     });
@@ -678,6 +739,7 @@ describe('机构业务页面 client helper', () => {
       requestBody(appointmentCreateFetcher),
       requestBody(appointmentUpdateFetcher),
       requestBody(treatmentSummaryCreateFetcher),
+      requestBody(treatmentSummaryUpdateFetcher),
       requestBody(followUpTransitionFetcher),
       requestBody(followUpConfirmFetcher),
     ].map((body) => JSON.stringify(body));
@@ -697,6 +759,14 @@ describe('机构业务页面 client helper', () => {
       expect(serializedBody).not.toContain('fileUrl');
       expect(serializedBody).not.toContain('aiGeneratedContent');
       expect(serializedBody).not.toContain('externalSystemPayload');
+      expect(serializedBody).not.toContain('createdAt');
+      expect(serializedBody).not.toContain('updatedAt');
+      expect(serializedBody).not.toContain('unknownField');
+      expect(serializedBody).not.toContain('sql');
+      expect(serializedBody).not.toContain('stack');
+      expect(serializedBody).not.toContain('DATABASE_URL');
+      expect(serializedBody).not.toContain('token');
+      expect(serializedBody).not.toContain('secret');
       expect(serializedBody).not.toContain('rawPhone');
       expect(serializedBody).not.toContain('rawIdCard');
       expect(serializedBody).not.toContain('13800000000');
