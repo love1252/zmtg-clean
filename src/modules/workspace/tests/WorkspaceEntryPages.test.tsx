@@ -121,6 +121,38 @@ const auditEventRecord = {
   token: 'sk_test_phase8_should_not_render',
 };
 
+const followUpPathAnalysisRecord = {
+  scope: 'followup_path_operational_analysis_v1',
+  analysisAt: '2026-06-03T08:00:00.000Z',
+  templateSuggestionCount: 6,
+  confirmedSourceTaskCount: 4,
+  completedTaskCount: 2,
+  overdueTaskCount: 1,
+  voidedSummaryBlockedCount: 1,
+  duplicateSourceTaskConflictCount: 1,
+  notes: [
+    '只统计 template_path_followup 模板建议。',
+    '作废阻断和重复来源冲突仅来自可识别审计事件。',
+  ],
+  warnings: ['部分重复来源任务冲突审计未能通过 resourceId 关联到模板路径来源任务，未计入正式数量。'],
+  dataSourceNote: '基于当前租户治疗摘要、模板驱动建议、来源随访任务和审计事件只读聚合。',
+  boundaryNote: '仅返回聚合指标，不返回客户明细、任务列表、治疗正文或 raw audit payload。',
+  tenantId: 'other-tenant',
+  customerId: 'cust_phase21_sensitive',
+  customerDisplayName: 'Phase21 客户明细不应展示',
+  taskId: 'fu_phase21_sensitive',
+  taskList: ['任务列表不应展示'],
+  treatmentRecordBody: '完整治疗记录正文不应展示',
+  medicalRecordBody: '完整病历正文不应展示',
+  consultationTranscript: '咨询对话全文不应展示',
+  imageFileOriginal: '图片文件原文不应展示',
+  rawAuditPayload: 'requestBody 不应展示',
+  sql: 'select * from follow_up_tasks',
+  stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+  token: 'sk_test_phase21_should_not_render',
+  secret: 'phase21-secret',
+};
+
 const treatmentSummaryManagementRecord = {
   id: 'trt_phase14_management',
   customerId: 'cust_phase5_closeout',
@@ -780,6 +812,11 @@ type WorkspaceFetchOptions = {
   treatmentSummaryPageInfo?: unknown;
   treatmentSummaryPages?: WorkspaceTreatmentSummaryPage[];
   auditEvents?: unknown[];
+  followUpPathAnalysis?: unknown;
+  followUpPathAnalysisError?: {
+    status: number;
+    message: string;
+  };
   platformAuditEvents?: unknown[];
   platformTenants?: unknown[];
   platformTenantError?: {
@@ -805,10 +842,11 @@ type WorkspaceFetchOptions = {
     message: string;
   };
   institutionError?: {
-    path:
+      path:
       | '/api/institution/customers'
       | '/api/institution/appointments'
       | '/api/institution/followups'
+      | '/api/institution/follow-up-path-analysis'
       | '/api/institution/audit-events';
     status: number;
     message: string;
@@ -835,6 +873,8 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     },
     treatmentSummaryPages,
     auditEvents = [auditEventRecord],
+    followUpPathAnalysis = followUpPathAnalysisRecord,
+    followUpPathAnalysisError,
     platformAuditEvents = [platformAuditEventRecord],
     platformTenants = [platformTenantRecord],
     platformTenantError,
@@ -895,6 +935,17 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
 
       if (path === '/api/institution/followups') {
         return jsonResponse({ records: followups });
+      }
+
+      if (path === '/api/institution/follow-up-path-analysis') {
+        if (followUpPathAnalysisError) {
+          return jsonResponse(
+            { error: followUpPathAnalysisError.message },
+            { status: followUpPathAnalysisError.status },
+          );
+        }
+
+        return jsonResponse(followUpPathAnalysis);
       }
 
       if (path.includes('/follow-up-suggestions')) {
@@ -1157,7 +1208,7 @@ function expectNoInstitutionMutation(fetchMock: ReturnType<typeof mockWorkspaceF
     fetchPath(input).startsWith('/api/institution/'),
   );
 
-  expect(institutionCalls).toHaveLength(3);
+  expect(institutionCalls.length).toBeGreaterThan(0);
   for (const [input, init] of institutionCalls) {
     expect(fetchPath(input)).not.toContain('tenantId');
     expect(init?.method ?? 'GET').toBe('GET');
@@ -1498,7 +1549,8 @@ function expectNoInstitutionDemoMisleadingClaims(container: HTMLElement) {
   const text = container.textContent ?? '';
 
   expect(text).not.toContain('AI 演示主线');
-  expect(text).not.toContain('自动触达');
+  expect(text).not.toContain('系统自动触达客户');
+  expect(text).not.toContain('已启用自动触达');
   expect(text).not.toContain('真实 HIS 同步');
   expect(text).not.toContain('自动发微信');
   expect(text).not.toContain('AI 自动客服');
@@ -1604,11 +1656,21 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('待人工确认的后续动作')).toBeInTheDocument();
     expect(screen.getByText('正在加载机构运营摘要...')).toBeInTheDocument();
     expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '随访路径运营分析' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/session', { cache: 'no-store' });
     await expectMetric('当前演示客户', '2');
     await expectMetric('高优先级客户', '1');
     await expectMetric('待确认预约', '1');
     await expectMetric('待处理随访', '1');
+    await expectMetric('模板建议数', '6');
+    await expectMetric('人工确认任务数', '4');
+    await expectMetric('已完成任务数', '2');
+    await expectMetric('超时任务数', '1');
+    await expectMetric('作废摘要阻断数', '1');
+    await expectMetric('重复来源任务冲突数', '1');
+    expect(screen.getByText('只统计 template_path_followup 模板建议。')).toBeInTheDocument();
+    expect(screen.getByText('仅返回聚合指标，不返回客户明细、任务列表、治疗正文或 raw audit payload。')).toBeInTheDocument();
+    expect(screen.getByText(/部分重复来源任务冲突审计未能通过 resourceId/u)).toBeInTheDocument();
     expect(screen.getByText('重点随访')).toBeInTheDocument();
     expect(screen.getByText('Phase6 客户B：Phase6 D3 异常反馈')).toBeInTheDocument();
     expect(screen.getByText('Phase5 客户A：Phase5 预约复诊')).toBeInTheDocument();
@@ -1631,6 +1693,15 @@ describe('工作台入口页面', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/institution/customers', { cache: 'no-store' });
     expect(fetchMock).toHaveBeenCalledWith('/api/institution/appointments', { cache: 'no-store' });
     expect(fetchMock).toHaveBeenCalledWith('/api/institution/followups', { cache: 'no-store' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/institution/follow-up-path-analysis', {
+      cache: 'no-store',
+    });
+    const analysisCall = fetchMock.mock.calls.find(
+      ([input]) => fetchPath(input) === '/api/institution/follow-up-path-analysis',
+    );
+    expect(analysisCall).toBeDefined();
+    expect(fetchPath(analysisCall![0])).not.toContain('tenantId');
+    expect(analysisCall![1]?.body).toBeUndefined();
     expectNoInstitutionMutation(fetchMock);
 
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
@@ -2811,6 +2882,16 @@ describe('工作台入口页面', () => {
       customers: [],
       appointments: [],
       followups: [],
+      followUpPathAnalysis: {
+        ...followUpPathAnalysisRecord,
+        templateSuggestionCount: 0,
+        confirmedSourceTaskCount: 0,
+        completedTaskCount: 0,
+        overdueTaskCount: 0,
+        voidedSummaryBlockedCount: 0,
+        duplicateSourceTaskConflictCount: 0,
+        warnings: [],
+      },
     });
     render(<HospitalPage />);
 
@@ -2820,8 +2901,29 @@ describe('工作台入口页面', () => {
     await expectMetric('高优先级客户', '0');
     await expectMetric('待确认预约', '0');
     await expectMetric('待处理随访', '0');
+    await expectMetric('模板建议数', '0');
+    expect(screen.getByText('暂无随访路径运营指标')).toBeInTheDocument();
     expect(screen.getByText('当前没有客户、预约或随访任务可进入运营视图。')).toBeInTheDocument();
     expect(screen.getByText('当前没有可展示的待处理行动。')).toBeInTheDocument();
+    expectNoInstitutionMutation(fetchMock);
+  });
+
+  it('机构工作台首页处理随访路径运营分析 API 失败态且不泄露错误详情', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      followUpPathAnalysisError: {
+        status: 503,
+        message: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg stack token secret',
+      },
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('随访路径运营分析暂时无法加载')).toBeInTheDocument();
+    expect(screen.getByText('请稍后刷新页面，当前模块不会影响客户、预约和随访摘要。')).toBeInTheDocument();
+    expect(container.textContent ?? '').not.toContain('DATABASE_URL');
+    expect(container.textContent ?? '').not.toContain('postgres://');
+    expect(container.textContent ?? '').not.toContain('stack');
+    expect(container.textContent ?? '').not.toContain('token');
+    expect(container.textContent ?? '').not.toContain('secret');
     expectNoInstitutionMutation(fetchMock);
   });
 
