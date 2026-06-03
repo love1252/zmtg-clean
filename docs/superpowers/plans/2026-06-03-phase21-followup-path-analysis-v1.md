@@ -148,6 +148,14 @@ git diff --cached --check
 
 ### PR 2：分析口径 domain-only 最小实现
 
+状态：
+
+- 已完成。
+- 新增 `src/modules/institution/domain/followup-path-analysis.ts`。
+- 新增 `src/modules/institution/tests/FollowUpPathAnalysis.test.ts`。
+- 输出六个最小指标和安全说明，不返回客户明细、完整治疗正文、PII 或 raw audit payload。
+- 未新增 API、未改数据库、未改 UI、未改权限、认证或租户隔离。
+
 前提：
 
 - 用户明确要求进入 Phase 21 实现。
