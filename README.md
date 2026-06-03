@@ -35,6 +35,7 @@
 - Phase 22 Plan Mode：HIS 标准治疗事件 mapper v1 spec / plan 已完成，明确只规划未来 HIS / 机构系统治疗事件到内部标准治疗事件结构的 mapper，不接真实 HIS、不保存 raw payload、不做患者身份匹配、自动摘要、自动任务、AI 解析或自动触达
 - 真实 HIS adapter 前置评估 Plan Mode 已完成，规划未来接入真实 HIS / 机构系统前必须先评估租户绑定、连接配置、凭证安全、Webhook / 同步 / 手动导入、幂等、重试、错误降级、审计、raw payload 默认不保存、字段白名单、患者身份匹配、人工复核、自动摘要 / 自动任务禁止和自动触达禁止边界；本阶段不接真实 HIS、不新增 API、不改 schema / 权限
 - 连接配置与凭证边界 Plan Mode 已完成，规划未来真实 HIS / 机构系统接入前的连接配置字段、凭证类型、凭证明文展示禁止、生命周期、权限可见性、审计事件、错误降级和后续 PR A-G 拆分；本阶段不实现连接配置 / 凭证存储 / 测试连接，不接真实 HIS，不保存真实凭证
+- 连接配置 schema / API Plan Mode 已完成，规划未来 HIS / 机构系统连接配置实体字段、API 边界、权限与租户隔离、审计事件、DTO、稳定错误态、凭证引用和后续 PR A-H 拆分；本阶段不实现 schema / migration / API / 凭证存储 / 测试连接，不接真实 HIS，不保存 raw payload 或真实凭证
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -200,12 +201,13 @@ Phase 22 HIS 标准治疗事件 mapper v1 当前状态：
 - Phase 22 当前不接真实 HIS / 机构系统 / 企微 / AI / RAG / Agent，不导入真实客户数据，不保存 raw HIS payload，不保存完整治疗正文、完整病历正文、咨询全文、图片 / 文件原文，不做患者身份匹配、自动摘要、自动任务、AI 解析、自动触达、经营智能中心、图表或导出
 - 真实 HIS adapter 前置评估 Plan Mode 已完成：当前只规划未来 adapter 的租户绑定、连接配置、凭证安全、输入方式、幂等、重试、错误降级、审计、raw payload 默认不保存、字段白名单、患者身份匹配、人工复核、自动摘要 / 自动任务禁止和自动触达禁止边界；仍不实现 adapter、不接真实 HIS、不处理真实客户数据
 - 连接配置与凭证边界 Plan Mode 已完成：当前只规划未来连接配置字段、凭证类型、凭证明文展示禁止、创建 / 测试 / 启用 / 暂停 / 轮换 / 过期 / 撤销 / 删除生命周期、权限可见性、审计事件、错误降级和真实 adapter 前置关系；仍不实现连接配置 / 凭证存储 / 测试连接，不新增 API、不改 schema / 权限、不保存真实凭证、不接真实 HIS
-- 后续如需 adapter spec / plan、连接配置 schema / API、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
+- 连接配置 schema / API Plan Mode 已完成：当前只规划未来连接配置实体字段、API 边界、权限与租户隔离、审计事件、DTO、错误态、凭证引用和安全禁止项；仍不实现 schema / migration / API，不新增权限，不保存真实凭证，不做测试连接，不接真实 HIS，不保存 raw HIS payload
+- 后续如需 adapter spec / plan、连接配置 schema / migration 实现、连接配置只读 / 写入 / 状态 API、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
 
 后续阶段会依次加入：
 
 - Phase 20 / Phase 21 后续扩展评估：路径模板 schema / API、租户自定义 SOP、平台端模板管理、路径效果分析、图表、导出、经营归因、外部系统输入或触达能力必须单独规划
-- HIS 标准治疗事件 mapper 后续扩展、真实 HIS adapter 连接配置 schema / API、凭证加密、健康检查、Webhook / 同步任务和 PR A-G 后续拆分、业务事件埋点体系 spec、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
+- HIS 标准治疗事件 mapper 后续扩展、真实 HIS adapter、连接配置 schema / migration 和 API 实现、凭证加密、健康检查、Webhook / 同步任务和 PR A-H 后续拆分、业务事件埋点体系 spec、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费

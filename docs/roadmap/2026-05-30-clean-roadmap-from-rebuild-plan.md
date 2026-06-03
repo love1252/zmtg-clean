@@ -36,13 +36,14 @@
 - HIS 标准治疗事件 mapper 第二十二阶段：Phase 22 spec / plan、PR 2 契约差异评估、PR 3A 标准事件缺口字段 domain-only 契约补齐、PR 3B mapper 解析器安全测试和 PR 3C 文档 / smoke 收尾已完成，明确 v1 优先保留 Phase 17 `source*` 内部命名，只补 `recoveryStage`、`rawSourceType`、`mappingWarnings`，不接真实 HIS、不保存 raw payload、不做患者身份匹配、自动摘要、自动任务、AI 解析或自动触达。
 - 真实 HIS adapter 前置评估 Plan Mode 已完成：只做 docs-only 规划，明确未来接真实 HIS / 机构系统前必须先评估租户绑定、连接配置、凭证安全、Webhook / 同步 / 手动导入、幂等、重试、错误降级、审计、raw payload 默认不保存、字段白名单、患者身份匹配、人工复核、自动摘要 / 自动任务禁止和自动触达禁止边界；尚未进入 adapter 实现、外部连接或真实数据处理。
 - 连接配置与凭证边界 Plan Mode 已完成：只做 docs-only 规划，明确未来连接配置字段、凭证类型、凭证明文展示禁止、凭证生命周期、权限可见性、审计事件、错误降级和后续 PR A-G 拆分；尚未进入连接配置实现、凭证存储实现、测试连接实现或真实 HIS adapter。
+- 连接配置 schema / API Plan Mode 已完成：只做 docs-only 规划，明确未来连接配置实体字段、API 边界、权限与租户隔离、审计事件、DTO、稳定错误态、凭证引用和后续 PR A-H 拆分；尚未进入 schema / migration、API、凭证存储、测试连接或真实 HIS adapter 实现。
 - 开放平台治理第一阶段：API Key、OAuth、Webhook 和审计的治理词汇、生命周期和安全边界展示。
 
 当前主要缺口：
 
 - 平台端已有只读租户列表、租户状态、套餐 / 配额、用量快照和商业化健康运营摘要；机构端新增客户 / 预约已具备轻量套餐配额 enforcement，但尚未具备租户创建、编辑、删除、冻结 / 恢复、完整套餐商业化后台、计费、支付、合同或发票能力。
 - 审计日志只读查询基础版已完成，但导出、告警和复杂风控仍未进入真实实现。
-- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1、治疗项目路径模板 v1 和随访路径运营分析 v1 最小闭环已完成；HIS 标准治疗事件 mapper v1 已完成 Plan Mode、契约差异评估、标准事件缺口字段 domain-only 契约补齐、解析器安全测试和文档 / smoke 收尾，真实 HIS adapter 前置评估和连接配置与凭证边界也已完成 docs-only 规划，但尚未进入真实 adapter 实现、连接配置 schema / API、凭证存储 / 加密、测试连接 / 健康检查、Webhook / 同步任务、患者身份匹配、自动摘要或自动任务；随访路径运营分析仍不包含图表、导出、经营智能中心、收入 / 复购 / 转化归因或路径效果分析；真实 HIS 接入、Webhook、文件导入、外部系统同步、完整治疗记录正文、版本历史 / diff 展示、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
+- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1、治疗项目路径模板 v1 和随访路径运营分析 v1 最小闭环已完成；HIS 标准治疗事件 mapper v1 已完成 Plan Mode、契约差异评估、标准事件缺口字段 domain-only 契约补齐、解析器安全测试和文档 / smoke 收尾，真实 HIS adapter 前置评估、连接配置与凭证边界、连接配置 schema / API 边界也已完成 docs-only 规划，但尚未进入真实 adapter 实现、连接配置 schema / migration、连接配置 API、凭证存储 / 加密、测试连接 / 健康检查、Webhook / 同步任务、患者身份匹配、自动摘要或自动任务；随访路径运营分析仍不包含图表、导出、经营智能中心、收入 / 复购 / 转化归因或路径效果分析；真实 HIS 接入、Webhook、文件导入、外部系统同步、完整治疗记录正文、版本历史 / diff 展示、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
 
 ## 2. 旧 REBUILD_PLAN.md 中仍有价值的功能
 
@@ -88,6 +89,7 @@
 - HIS 标准治疗事件 mapper v1：Phase 22 spec / plan 已规划 `externalEventId`、`externalSource`、`tenantId`、`customerExternalId`、`appointmentExternalId`、`treatmentDate`、`treatmentProject`、`treatmentCategory`、`treatmentStage`、`recoveryStage`、`riskLevel`、`nextCareAction`、`tags`、`rawSourceType` 和 `mappingWarnings` 等字段语义；PR 2 契约差异评估建议内部核心 DTO 继续使用 Phase 17 `sourceSystem`、`sourceEventId`、`sourceCustomerId` 和 `appointmentRef`，`external*` 只作为 adapter 输入层别名或文档映射；PR 3A 已补齐 `recoveryStage`、`rawSourceType` 和 `mappingWarnings` 的 domain-only 契约与单元测试；PR 3B 已补强解析器安全边界回归测试；PR 3C 已补充 mapper domain-only 最小闭环 smoke 与文档收尾，未改解析器 / domain。
 - 真实 HIS adapter 前置评估：已完成 docs-only spec / plan，明确 adapter 只应把未来外部系统输入转换为 Phase 22 mapper 可接受的安全输入，不应绕过 mapper 直接写治疗摘要、随访任务或运营分析；raw HIS payload 默认不保存，连接配置、凭证、Webhook / 同步、患者身份匹配、人工复核和真实 PoC 均需后续单独 PR。
 - 连接配置与凭证边界：已完成 docs-only spec / plan，明确未来连接配置字段、凭证类型、凭证明文永不返回前端 / 写审计 / 写日志 / 进错误信息 / 进 PR 或 demo seed、凭证生命周期、权限可见性、审计允许和禁止项、错误降级展示边界，以及后续连接配置 schema / API、凭证加密、健康检查、Webhook / 同步和真实 PoC 拆分。
+- 连接配置 schema / API 边界：已完成 docs-only spec / plan，明确未来连接配置只能保存安全元数据和 `credentialRef`，`tenantId` 只能来自服务端可信上下文或平台受控选择，API 不返回凭证明文、raw payload、外部系统错误响应全文、SQL、stack 或 `DATABASE_URL`；schema / migration、API 实现、凭证引用集成、测试连接和真实 adapter 均需后续单独 PR。
 - 治疗摘要编辑能力 v1：编辑 payload parser、`treatment_summary:update` 最小权限、tenant-scoped repository update、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端受控编辑 UI、成功刷新列表 / 详情、失败保留输入、审计和入口 smoke。
 - 治疗项目路径模板 v1：首批光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理的 domain-only catalog，确定性随访建议接入模板，机构端轻量展示路径类型 / 建议处理角色 / 人工确认边界，人工确认来源任务、重复治理、作废阻断和 smoke / 文档收尾。
 - 随访路径运营分析 v1：基于治疗摘要、路径模板建议、来源随访任务、任务状态和审计记录的最小聚合口径、审计关联补强、机构端只读 API、轻量指标展示和 workspace smoke / 文档收尾。
@@ -111,7 +113,7 @@
 
 建议进入后续路线的功能：
 
-- 治疗记录模块：结构化摘要 v1、租户隔离、人工录入 v1、只读管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1、治疗项目路径模板 v1、随访路径运营分析 v1 最小闭环、HIS 标准治疗事件 mapper v1 Plan Mode / 契约差异评估 / 缺口字段 domain-only 契约 / 解析器安全测试 / 文档 smoke 收尾、真实 HIS adapter 前置评估和连接配置与凭证边界均已完成；后续版本历史 / diff 展示、客服会话联动、完整治疗记录能力、真实 HIS adapter spec / plan、连接配置 schema / API、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 预览、adapter domain-only 输入 DTO / parser、路径模板 schema / API、随访路径图表 / 导出 / 归因 / 路径效果分析和外部系统接入需单独规划，仍不保存完整病历正文。
+- 治疗记录模块：结构化摘要 v1、租户隔离、人工录入 v1、只读管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1、治疗项目路径模板 v1、随访路径运营分析 v1 最小闭环、HIS 标准治疗事件 mapper v1 Plan Mode / 契约差异评估 / 缺口字段 domain-only 契约 / 解析器安全测试 / 文档 smoke 收尾、真实 HIS adapter 前置评估、连接配置与凭证边界、连接配置 schema / API Plan Mode 均已完成；后续版本历史 / diff 展示、客服会话联动、完整治疗记录能力、真实 HIS adapter spec / plan、连接配置 schema / migration、连接配置 API 实现、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 预览、adapter domain-only 输入 DTO / parser、路径模板 schema / API、随访路径图表 / 导出 / 归因 / 路径效果分析和外部系统接入需单独规划，仍不保存完整病历正文。
 - 平台租户后续能力：租户创建、状态变更审计、完整套餐商业化后台、计费、合同、发票和支付。
 - 审计高级治理：只读查询基础版之后再单独评估导出、告警和复杂风控。
 - 套餐权益与配额 enforcement：客户数和预约数创建阻断已完成轻量版，后续可单独评估员工数、随访任务、AI 调用、严格一致计数器和套餐变更流程。
@@ -126,7 +128,7 @@
 
 1. 产品可演示性验收：优先完整走查机构端客户中心、治疗摘要创建 / 编辑 / 作废、路径模板随访建议、来源任务追溯、客户 timeline 和平台端只读治理页面，确认 Phase 5-20 是否已经能支撑一次稳定演示。
 2. Phase 20 后续扩展评估：治疗项目路径模板 v1 已完成最小闭环；后续如需 schema / API、租户自定义 SOP、路径编辑器、平台端模板管理、HIS、企微、AI 或自动触达，必须单独进入 Plan Mode。
-3. HIS 标准治疗事件 mapper / 真实 HIS adapter 后续评估：Phase 22 已完成 Plan Mode、契约差异评估、缺口字段 domain-only 契约补齐、解析器安全测试和文档 / smoke 收尾；真实 HIS adapter 前置评估和连接配置与凭证边界也已完成 docs-only 规划。后续如进入 adapter spec / plan、连接配置 schema / API、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 预览、adapter domain-only 输入 DTO / parser、治疗摘要创建来源治理或真实外部系统接入 PoC，仍需单独规划，不接真实 HIS、不保存 raw payload、不自动摘要、不自动任务、不自动触达。
+3. HIS 标准治疗事件 mapper / 真实 HIS adapter 后续评估：Phase 22 已完成 Plan Mode、契约差异评估、缺口字段 domain-only 契约补齐、解析器安全测试和文档 / smoke 收尾；真实 HIS adapter 前置评估、连接配置与凭证边界、连接配置 schema / API Plan Mode 也已完成 docs-only 规划。后续如进入 adapter spec / plan、连接配置 schema / migration、连接配置只读 / 写入 / 状态 API、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 预览、adapter domain-only 输入 DTO / parser、治疗摘要创建来源治理或真实外部系统接入 PoC，仍需单独规划，不接真实 HIS、不保存 raw payload、不自动摘要、不自动任务、不自动触达。
 4. 业务事件埋点体系 spec：只做事件模型规划，不做真实采集，不记录 raw payload、完整医疗正文或 PII。
 5. 随访路径运营分析 v1：Phase 21 最小闭环已完成；后续如进入图表、导出、经营归因、路径效果分析、历史趋势或指标落库，必须单独进入 Plan Mode，不做自动触达。
 6. follow-up 配额 enforcement：单独评估是否将 Phase 15 的人工确认创建接入 `maxFollowUps`。
@@ -235,3 +237,4 @@ Phase 5 的成功标准：
 - Phase 22 PR 3C 标准治疗事件 mapper 文档 / smoke 收尾已补充 domain-only 最小闭环 smoke，确认新增字段输出、`source*` 命名保留、`external*` 核心字段拒绝、context 可信边界、`mappingWarnings` 安全代码、无外部调用、无数据库写入、无治疗摘要 / 随访任务创建和无自动触达；仍不新增 API、schema / migration、权限、UI、真实 HIS、企微、AI、患者身份匹配、自动摘要、自动任务或自动触达。
 - 真实 HIS adapter 前置评估 Plan Mode 已完成：新增 spec / plan 文档，明确当前不是 adapter 实现，不连接真实 HIS，不保存 raw HIS payload，不导入真实客户数据，不新增 API，不改 schema / migration，不改权限、认证或租户隔离；后续建议拆为真实 adapter spec / plan、连接配置与凭证边界、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 和真实外部系统接入 PoC。
 - 连接配置与凭证边界 Plan Mode 已完成：新增 spec / plan 文档，明确当前不是连接配置实现、凭证存储实现、测试连接实现或 HIS adapter 实现，不连接真实 HIS，不保存真实凭证，不新增 API，不改 schema / migration，不改权限、认证或租户隔离；后续建议拆为连接配置 schema / API、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、真实 HIS adapter PoC 和真实外部系统接入 PoC。
+- 连接配置 schema / API Plan Mode 已完成：新增 spec / plan 文档，明确当前不是 schema 实现、migration、API 实现、凭证存储、测试连接或 HIS adapter；规划未来字段、机构端 / 平台端 API 边界、权限与租户隔离、审计事件、DTO、错误态、凭证引用和后续 PR A-H 拆分；仍不保存 raw HIS payload 或真实凭证，不新增 API，不改 schema / migration，不改权限、认证或租户隔离。
