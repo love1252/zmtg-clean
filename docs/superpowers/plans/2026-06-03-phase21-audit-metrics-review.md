@@ -5,7 +5,7 @@
 
 **目标：** 只读核对当前审计事件是否足够支撑 Phase 21 随访路径运营分析 v1 的两个审计依赖指标：`voidedSummaryBlockedCount` 和 `duplicateSourceTaskConflictCount`。
 
-**结论摘要：** 当前已有稳定 reason 可以识别部分场景，但两个指标都只能“部分稳定支撑”。作废摘要阻断已有来源任务创建阻断 reason，但缺少可关联治疗摘要的 `resourceId`，且随访建议 GET 的作废阻断不写 audit。重复来源任务冲突已有稳定 reason 和已存在 follow-up task 的 `resourceId`，但 audit 事件本身不携带 `sourceTreatmentSummaryId + sourceSuggestionKey`，不能只靠 audit 事件还原来源建议粒度。
+**结论摘要：** 当前已有稳定 reason 可以识别部分场景，但两个指标都只能“部分稳定支撑 / warning 口径”。作废摘要阻断已有来源任务创建阻断 reason，但缺少可关联治疗摘要的 `resourceId`，且随访建议 GET 的作废阻断不写 audit。重复来源任务冲突已有稳定 reason 和已存在 follow-up task 的 `resourceId`，但 audit 事件本身不携带 `sourceTreatmentSummaryId + sourceSuggestionKey`，不能只靠 audit 事件还原来源建议粒度。当前不进入 Phase 21 分析 API / UI 实现；在审计口径补强前，这两个指标不得作为正式统计指标对外展示。
 
 ---
 
@@ -26,6 +26,8 @@
 - 不改审计模型。
 - 不新增 audit reason。
 - 不新增 API。
+- 不进入 Phase 21 分析 API 实现。
+- 不进入 Phase 21 分析 UI 实现。
 - 不改数据库 schema / migration。
 - 不改权限、认证或租户隔离。
 - 不接 HIS。
@@ -50,7 +52,7 @@ Phase 21 PR 2 已实现的两个审计依赖指标：
   - 不能用任务表重复行推断，因为去重治理的目标正是避免产生重复 active 来源任务。
   - 不能把普通 409、非法 suggestionKey、跨租户 not found 或权限拒绝算作重复来源任务冲突。
 
-因此，这两个指标必须依赖可识别审计事件，或在审计不足时明确降级为“暂不可稳定计算”，并输出 warning。
+因此，这两个指标必须依赖可识别审计事件，或在审计不足时明确降级为“暂不可稳定计算”，并输出 warning。在审计口径补强前，`voidedSummaryBlockedCount` 和 `duplicateSourceTaskConflictCount` 都只能作为“部分支撑 / warning 口径”，不得作为正式统计指标对外展示。
 
 ## 3. 当前已有审计事件核对
 
@@ -172,8 +174,8 @@ Phase 21 PR 2 已实现的两个审计依赖指标：
 
 | 指标 | 当前是否可稳定支撑 | 依赖字段 | 风险 | 建议 |
 | --- | --- | --- | --- | --- |
-| 作废摘要阻断数 | 部分 | 来源任务 POST audit 的 `resource: "follow_up"`、`result: "denied"`、`reason: "voided_treatment_summary_follow_up_blocked"` | 建议 GET 作废阻断不写 audit；来源任务 POST 阻断 audit 缺少 `resourceId: <treatmentSummaryId>`；无法只靠 audit 事件关联 voided summary。 | v1 若没有补强，应输出 warning 或标记“暂不可稳定计算”；后续单独 PR 补强作废阻断 audit 口径。 |
-| 重复来源任务冲突数 | 部分 | 来源任务 POST audit 的 `resource: "follow_up"`、`resourceId: <existingFollowUpTaskId>`、`result: "denied"`、`reason: "active_source_follow_up_exists"` | audit 本身不带 `sourceTreatmentSummaryId + sourceSuggestionKey`；只能关联已存在 follow-up task，不能只靠 audit DTO 还原来源建议粒度。 | v1 可按 reason 统计冲突事件总数；如需来源建议粒度，后续单独 PR 评估回查 follow-up task 或补强 audit 上下文。 |
+| 作废摘要阻断数 | 部分 | 来源任务 POST audit 的 `resource: "follow_up"`、`result: "denied"`、`reason: "voided_treatment_summary_follow_up_blocked"` | 建议 GET 作废阻断不写 audit；来源任务 POST 阻断 audit 缺少 `resourceId: <treatmentSummaryId>`；无法只靠 audit 事件关联 voided summary。 | 审计补强前只能作为 warning 口径，不得正式对外展示；后续单独 PR 补强作废阻断 audit reason / 关联口径。 |
+| 重复来源任务冲突数 | 部分 | 来源任务 POST audit 的 `resource: "follow_up"`、`resourceId: <existingFollowUpTaskId>`、`result: "denied"`、`reason: "active_source_follow_up_exists"` | audit 本身不带 `sourceTreatmentSummaryId + sourceSuggestionKey`；只能关联已存在 follow-up task，不能只靠 audit DTO 还原来源建议粒度。 | 审计补强前只能作为 warning 口径，不得正式对外展示；后续单独 PR 补强重复来源任务冲突 audit reason / 关联口径。 |
 
 ## 5. 不足时的降级口径
 
@@ -185,17 +187,26 @@ Phase 21 PR 2 已实现的两个审计依赖指标：
 - 不得把 `not_found_or_not_owned`、`invalid_follow_up_suggestion`、`role_denied` 或普通 409 当作重复来源任务冲突。
 - 可以先输出 warning，说明审计事件不足。
 - 可以把指标降级为“暂不可稳定计算”，或者在 v1 输出为 0 并配套 warning。
+- 在审计口径补强前，`voidedSummaryBlockedCount` 只能作为“部分支撑 / warning 口径”，不得作为正式统计指标对外展示。
+- 在审计口径补强前，`duplicateSourceTaskConflictCount` 只能作为“部分支撑 / warning 口径”，不得作为正式统计指标对外展示。
+- 当前不进入 Phase 21 分析 API / UI 实现；如果后续 API / UI 阶段需要出现这两个指标，必须先单独做审计补强 PR，或者明确降级为 warning，不做正式展示。
 - 如果后续需要稳定计算，必须单独进入补强 PR。
 
 ## 6. 后续 PR 建议
 
-如果需要补强，不在本 PR 实现。建议拆为小步 PR：
+如果需要正式展示 `voidedSummaryBlockedCount` 或 `duplicateSourceTaskConflictCount`，不在本 PR 实现，必须先拆为小步补强 PR。Phase 21 下一步应优先选择以下路线之一：
 
-- PR A：补充作废摘要阻断 audit 口径。
+- `PR A：补强作废摘要阻断 audit reason`。
+- `PR B：补强重复来源任务冲突 audit reason`。
+- 或者在后续 UI / API 阶段先将这两个指标降级为 warning，不做正式展示。
+
+建议拆分：
+
+- PR A：补强作废摘要阻断 audit reason。
   - 至少评估来源任务 POST 的 voided 阻断 audit 是否应写入 `resourceId: <treatmentSummaryId>`。
   - 如需要统计随访建议 GET 的作废阻断，单独评估是否新增稳定 reason，例如只用于“作废摘要阻断随访建议”的 reason。
   - 补充 route tests，确保能区分权限拒绝、not found、非法 suggestionKey 和作废阻断。
-- PR B：补充重复来源任务冲突 audit 口径。
+- PR B：补强重复来源任务冲突 audit reason。
   - 明确 `resourceId` 指向已存在 follow-up task 是否作为 v1 固定约定。
   - 如需要按来源建议粒度统计，评估从 follow-up task 回查 `sourceTreatmentSummaryId + sourceSuggestionKey`，或补强 audit 上下文。
   - 保持不写 raw payload、不写客户明细、不写完整治疗正文。

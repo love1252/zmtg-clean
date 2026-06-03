@@ -195,7 +195,9 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/FollowupPathAnalys
 
 - 已进入 docs-only 审计口径核对评估。
 - 新增 `docs/superpowers/plans/2026-06-03-phase21-audit-metrics-review.md`。
-- 当前结论：`voidedSummaryBlockedCount` 和 `duplicateSourceTaskConflictCount` 都只能部分稳定支撑；如需补强，必须单独 PR。
+- 当前结论：`voidedSummaryBlockedCount` 和 `duplicateSourceTaskConflictCount` 都只能部分稳定支撑。
+- 在审计口径补强前，这两个指标只能作为 warning 口径，不得作为正式统计指标对外展示。
+- 当前不进入 Phase 21 分析 API / UI 实现；如需正式展示这两个指标，必须先单独做审计补强 PR。
 
 前提：
 
@@ -205,8 +207,16 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/FollowupPathAnalys
 
 - 只读核对现有审计 resource / action / reason。
 - 如需新增 reason、补 `resourceId` 约定或增加来源上下文，单独规划 parser、repository、API 写入和测试。
+- 不得用 voided 摘要数量冒充作废摘要阻断次数。
+- 不得用任务表重复行推断重复来源任务冲突次数。
 - 不混入分析 UI。
 - 不新增经营智能中心。
+
+建议下一步：
+
+- `PR A：补强作废摘要阻断 audit reason`。
+- `PR B：补强重复来源任务冲突 audit reason`。
+- 或者在后续 UI / API 阶段先将这两个指标降级为 warning，不做正式展示。
 
 建议验证：
 
@@ -220,6 +230,8 @@ git diff --cached --check
 前提：
 
 - domain-only 口径已稳定。
+- 审计口径补强前，`voidedSummaryBlockedCount` 和 `duplicateSourceTaskConflictCount` 不得作为正式统计指标对外展示。
+- 如果 PR 4 仍需暴露这两个指标，只能降级为 warning 口径；如需正式展示，必须先完成作废摘要阻断和重复来源任务冲突的审计补强 PR。
 - 用户明确需要真实 API。
 
 建议范围：
