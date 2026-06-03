@@ -1,11 +1,15 @@
 import {
   STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS,
+  STANDARD_TREATMENT_EVENT_MAPPING_WARNING_CODES,
+  STANDARD_TREATMENT_EVENT_RAW_SOURCE_TYPES,
   STANDARD_TREATMENT_EVENT_RISK_LEVELS,
   STANDARD_TREATMENT_EVENT_SOURCE_SYSTEMS,
   STANDARD_TREATMENT_EVENT_STATUSES,
 } from '@/modules/institution/domain/standard-treatment-event';
 import type {
   StandardTreatmentEvent,
+  StandardTreatmentEventMappingWarningCode,
+  StandardTreatmentEventRawSourceType,
   StandardTreatmentEventRiskLevel,
   StandardTreatmentEventSourceSystem,
   StandardTreatmentEventStatus,
@@ -24,7 +28,9 @@ export type NormalizeStandardTreatmentEventResult =
 const allowedInputKeys = new Set<string>(STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS);
 const sourceSystemSet = new Set<string>(STANDARD_TREATMENT_EVENT_SOURCE_SYSTEMS);
 const treatmentStatusSet = new Set<string>(STANDARD_TREATMENT_EVENT_STATUSES);
+const rawSourceTypeSet = new Set<string>(STANDARD_TREATMENT_EVENT_RAW_SOURCE_TYPES);
 const riskLevelSet = new Set<string>(STANDARD_TREATMENT_EVENT_RISK_LEVELS);
+const mappingWarningCodeSet = new Set<string>(STANDARD_TREATMENT_EVENT_MAPPING_WARNING_CODES);
 
 const isoLikeTimestampPattern =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/u;
@@ -37,6 +43,7 @@ const stringFieldLimits = {
   treatmentProject: 160,
   treatmentCategory: 96,
   treatmentStage: 120,
+  recoveryStage: 80,
   appointmentRef: 120,
   doctorRef: 120,
   operatorRef: 120,
@@ -257,6 +264,27 @@ function parseTreatmentStatus(input: Record<string, unknown>) {
   return { ok: true as const, value: value as StandardTreatmentEventStatus };
 }
 
+function parseRawSourceType(input: Record<string, unknown>) {
+  if (!('rawSourceType' in input) || input.rawSourceType == null) {
+    return { ok: true as const, value: null };
+  }
+
+  if (typeof input.rawSourceType !== 'string') {
+    return { ok: false as const, error: '字段 rawSourceType 必须是字符串' };
+  }
+
+  const value = input.rawSourceType.trim();
+  if (value.length === 0) {
+    return { ok: true as const, value: null };
+  }
+
+  if (!rawSourceTypeSet.has(value)) {
+    return { ok: false as const, error: '字段 rawSourceType 值不在允许范围内' };
+  }
+
+  return { ok: true as const, value: value as StandardTreatmentEventRawSourceType };
+}
+
 function parseRiskLevel(input: Record<string, unknown>) {
   const raw = input.riskLevel;
 
@@ -270,6 +298,55 @@ function parseRiskLevel(input: Record<string, unknown>) {
   }
 
   return { ok: true as const, value: value as StandardTreatmentEventRiskLevel };
+}
+
+function parseMappingWarnings(input: Record<string, unknown>) {
+  if (!('mappingWarnings' in input)) {
+    return { ok: true as const, value: [] };
+  }
+
+  if (!Array.isArray(input.mappingWarnings)) {
+    return { ok: false as const, error: '字段 mappingWarnings 必须是字符串数组' };
+  }
+
+  const warningCodes: string[] = [];
+  for (const warningCode of input.mappingWarnings) {
+    if (typeof warningCode !== 'string') {
+      return { ok: false as const, error: '字段 mappingWarnings 必须是字符串数组' };
+    }
+
+    const value = warningCode.trim();
+    if (value.length === 0) {
+      return { ok: false as const, error: '字段 mappingWarnings 只能包含安全 warning code' };
+    }
+
+    if (value.length > 80) {
+      return { ok: false as const, error: '字段 mappingWarnings 单个 code 长度不能超过 80' };
+    }
+
+    warningCodes.push(value);
+  }
+
+  const normalizedWarningCodes = [...new Set(warningCodes)];
+  if (normalizedWarningCodes.length > 12) {
+    return { ok: false as const, error: '字段 mappingWarnings 数量不能超过 12' };
+  }
+
+  if (
+    normalizedWarningCodes.some(
+      (warningCode) =>
+        !/^[a-z][a-z0-9_]{1,79}$/u.test(warningCode) ||
+        containsSensitiveContent(warningCode) ||
+        !mappingWarningCodeSet.has(warningCode),
+    )
+  ) {
+    return { ok: false as const, error: '字段 mappingWarnings 只能包含安全 warning code' };
+  }
+
+  return {
+    ok: true as const,
+    value: normalizedWarningCodes as StandardTreatmentEventMappingWarningCode[],
+  };
 }
 
 function parseMaskedPhone(input: Record<string, unknown>) {
@@ -444,9 +521,19 @@ export function normalizeStandardTreatmentEvent(
     return treatmentStage;
   }
 
+  const recoveryStage = parseOptionalString(object.value, 'recoveryStage');
+  if (!recoveryStage.ok) {
+    return recoveryStage;
+  }
+
   const treatmentStatus = parseTreatmentStatus(object.value);
   if (!treatmentStatus.ok) {
     return treatmentStatus;
+  }
+
+  const rawSourceType = parseRawSourceType(object.value);
+  if (!rawSourceType.ok) {
+    return rawSourceType;
   }
 
   const appointmentRef = parseOptionalString(object.value, 'appointmentRef');
@@ -499,6 +586,11 @@ export function normalizeStandardTreatmentEvent(
     return tags;
   }
 
+  const mappingWarnings = parseMappingWarnings(object.value);
+  if (!mappingWarnings.ok) {
+    return mappingWarnings;
+  }
+
   const occurredAt = parseTimestamp(object.value, 'occurredAt');
   if (!occurredAt.ok) {
     return occurredAt;
@@ -519,7 +611,9 @@ export function normalizeStandardTreatmentEvent(
       treatmentProject: treatmentProject.value,
       treatmentCategory: treatmentCategory.value,
       treatmentStage: treatmentStage.value,
+      recoveryStage: recoveryStage.value,
       treatmentStatus: treatmentStatus.value,
+      rawSourceType: rawSourceType.value,
       appointmentRef: appointmentRef.value,
       doctorRef: doctorRef.value,
       operatorRef: operatorRef.value,
@@ -530,6 +624,7 @@ export function normalizeStandardTreatmentEvent(
       summary: summary.value,
       nextCareAction: nextCareAction.value,
       tags: tags.value,
+      mappingWarnings: mappingWarnings.value,
       occurredAt: occurredAt.value,
       receivedAt: receivedAt.value,
     },

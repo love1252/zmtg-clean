@@ -30,6 +30,32 @@ export const STANDARD_TREATMENT_EVENT_RISK_LEVELS = [
 export type StandardTreatmentEventRiskLevel =
   (typeof STANDARD_TREATMENT_EVENT_RISK_LEVELS)[number];
 
+export const STANDARD_TREATMENT_EVENT_RAW_SOURCE_TYPES = [
+  'treatment_record',
+  'appointment',
+  'order',
+  'course_progress',
+  'manual_review',
+  'other',
+] as const;
+
+export type StandardTreatmentEventRawSourceType =
+  (typeof STANDARD_TREATMENT_EVENT_RAW_SOURCE_TYPES)[number];
+
+export const STANDARD_TREATMENT_EVENT_MAPPING_WARNING_CODES = [
+  'unknown_treatment_category',
+  'missing_recovery_stage',
+  'external_event_id_missing',
+  'appointment_external_id_missing',
+  'customer_external_id_missing',
+  'manual_review_required',
+  'category_mapped_by_alias',
+  'external_status_mapped_to_default',
+] as const;
+
+export type StandardTreatmentEventMappingWarningCode =
+  (typeof STANDARD_TREATMENT_EVENT_MAPPING_WARNING_CODES)[number];
+
 export const STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS = [
   'sourceSystem',
   'sourceEventId',
@@ -41,7 +67,9 @@ export const STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS = [
   'treatmentProject',
   'treatmentCategory',
   'treatmentStage',
+  'recoveryStage',
   'treatmentStatus',
+  'rawSourceType',
   'appointmentRef',
   'doctorRef',
   'operatorRef',
@@ -52,6 +80,7 @@ export const STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS = [
   'summary',
   'nextCareAction',
   'tags',
+  'mappingWarnings',
   'occurredAt',
 ] as const;
 
@@ -121,7 +150,9 @@ export type StandardTreatmentEvent = {
   treatmentProject: string;
   treatmentCategory: string;
   treatmentStage: string;
+  recoveryStage: string | null;
   treatmentStatus: StandardTreatmentEventStatus;
+  rawSourceType: StandardTreatmentEventRawSourceType | null;
   appointmentRef: string | null;
   doctorRef: string | null;
   operatorRef: string | null;
@@ -132,6 +163,7 @@ export type StandardTreatmentEvent = {
   summary: string;
   nextCareAction: string;
   tags: string[];
+  mappingWarnings: StandardTreatmentEventMappingWarningCode[];
   occurredAt: string;
   receivedAt: string;
 };
