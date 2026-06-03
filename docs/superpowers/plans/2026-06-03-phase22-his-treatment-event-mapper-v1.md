@@ -4,13 +4,13 @@
 
 **Goal:** 规划如何把未来 HIS / 机构系统中的治疗事件映射为智美天工内部可识别的标准治疗事件结构。
 
-**Architecture:** 当前 PR 不改架构，只做 Plan Mode 文档。后续如进入实现，应承接 Phase 17 `StandardTreatmentEvent` domain-only 契约，用字段白名单、确定性 mapper 和安全 warning code 隔离外部系统差异，不让 raw HIS payload、完整医疗正文或外部系统字段扩散到治疗摘要、路径模板、随访任务和运营分析。
+**Architecture:** PR 1 不改架构，只做 Plan Mode 文档。后续如进入实现，应承接 Phase 17 `StandardTreatmentEvent` domain-only 契约，用字段白名单、确定性 mapper 和安全 warning code 隔离外部系统差异，不让 raw HIS payload、完整医疗正文或外部系统字段扩散到治疗摘要、路径模板、随访任务和运营分析。PR 3A 已在独立分支按 PR 2 结论补齐 `recoveryStage`、`rawSourceType` 和 `mappingWarnings` 的 domain-only 契约。
 
 **Tech Stack:** 当前 PR 只涉及 Markdown。后续实现如单独批准，才可能涉及 TypeScript、Vitest 和现有机构领域模块。
 
 ---
 
-## 0. 当前 PR 范围
+## 0. PR 1 范围
 
 新增：
 
@@ -75,7 +75,7 @@ git diff --cached --check
 
 ## 2. 文件职责规划
 
-### 当前 PR 文件
+### PR 1 文件
 
 - `docs/superpowers/specs/2026-06-03-phase22-his-treatment-event-mapper-v1-design.md`
   - 说明 Phase 22 定位、mapper v1 目标、字段建议、与现有治疗摘要 / 路径模板 / 随访建议 / 来源任务 / 运营分析的关系、非目标、安全边界和后续 PR 拆分。
@@ -127,7 +127,7 @@ git diff --cached --check
 | `treatmentProject` | 安全项目短文本 | 禁止完整治疗正文、完整病历正文、咨询全文或 raw payload。 |
 | `treatmentCategory` | 标准类别 | 用于路径模板匹配；未知时 warning 或 fatal 策略需实现前明确。 |
 | `treatmentStage` | 安全阶段短文本 | 用于疗程、复诊和恢复判断。 |
-| `recoveryStage` | 标准恢复阶段或安全短文本 | 用于路径模板节点匹配；当前 Phase 17 标准事件未单列，需单独评估。 |
+| `recoveryStage` | 标准恢复阶段或安全短文本 | 用于路径模板节点匹配；PR 3A 已补入标准事件 domain-only 契约。 |
 | `riskLevel` | `normal | watch | urgent` | 复用现有随访风险等级。 |
 | `nextCareAction` | 结构化下一步动作 | 只能是短文本，不做 AI 生成长文。 |
 | `tags` | 安全标签数组 | 限制数量和长度，不包含 PII、raw payload、token、secret、SQL 或 stack。 |
@@ -156,14 +156,14 @@ git diff --cached --check
 - 新增 `docs/superpowers/plans/2026-06-03-phase22-standard-event-contract-gap-review.md`。
 - 当前结论：v1 优先保留 Phase 17 既有 `sourceSystem`、`sourceEventId`、`sourceCustomerId` 和 `appointmentRef` 内部命名，避免再引入 `externalSource`、`externalEventId`、`customerExternalId` 和 `appointmentExternalId` 作为核心 DTO 同义字段。
 - 当前结论：`external*` 命名如需兼容，应只作为 adapter 输入层别名或文档映射，不进入内部核心 DTO、普通机构端 DTO、数据库 schema 或审计 payload。
-- 当前结论：后续如进入实现，优先只补缺字段 `recoveryStage`、`rawSourceType` 和 `mappingWarnings`，不整体重命名。
+- 当前结论：PR 3A 已按该策略只补缺字段 `recoveryStage`、`rawSourceType` 和 `mappingWarnings`，不整体重命名。
 - 当前结论：`tenantId` 仍必须来自服务端可信上下文；`mappingWarnings` 必须是安全 code，不包含 raw payload、PII、完整正文、SQL、stack、token、secret 或连接串。
 
 建议范围：
 
 - 对比 Phase 17 现有 `StandardTreatmentEvent` 和 Phase 22 字段建议。
 - 决定是否沿用 `sourceSystem` / `sourceEventId`，或新增 `externalSource` / `externalEventId` 兼容层。
-- 决定是否新增 `recoveryStage`、`rawSourceType`、`mappingWarnings`。
+- PR 3A 已决定并补齐 `recoveryStage`、`rawSourceType`、`mappingWarnings`。
 - 只做 docs-only 或 domain-only 契约评估。
 - 不接真实 HIS。
 - 不新增 API、schema、migration 或 UI。
@@ -181,21 +181,27 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/StandardTreatmentE
 ./node_modules/.bin/tsc --noEmit
 ```
 
-### PR 3：确定性 mapper v1 domain-only 实现
+### PR 3A：标准事件缺口字段 domain-only 契约
 
 状态：
 
-- 未开始。
-- 依赖 PR 2 明确字段契约。
+- 已进入本次 domain-only 契约补齐。
+- 只补 Phase 22 PR 2 确认的缺口字段：`recoveryStage`、`rawSourceType`、`mappingWarnings`。
+- 继续保留 Phase 17 `sourceSystem`、`sourceEventId`、`sourceCustomerId` 和 `appointmentRef` 命名。
+- 不新增 `externalEventId`、`externalSource`、`customerExternalId` 或 `appointmentExternalId` 核心 DTO 字段。
 
-建议范围：
+范围：
 
-- 扩展或新增纯函数 mapper。
-- 校验治疗时间、项目、类别、阶段、恢复阶段、风险等级、下一步动作和 tags。
-- 输出稳定 `mappingWarnings`。
-- 覆盖 raw payload、完整正文、PII、图片 / 文件原文、AI 内容、token、secret、SQL、stack 和数据库连接串拒绝。
+- 扩展 `StandardTreatmentEvent` domain 类型。
+- 扩展 `normalizeStandardTreatmentEvent` parser / mapper 契约。
+- 补充 `StandardTreatmentEventMapper.test.ts`。
+- 覆盖 `recoveryStage`、`rawSourceType`、`mappingWarnings` 的合法、缺省、非法和敏感内容边界。
+- 覆盖 `tenantId`、`eventId`、`receivedAt` 继续只来自 context。
+- 覆盖 `external*` 同义字段继续被拒绝。
 - 不写数据库。
 - 不新增 API。
+- 不改 schema / migration。
+- 不改权限、认证或租户隔离。
 - 不接真实 HIS。
 - 不创建治疗摘要。
 - 不创建随访任务。
@@ -206,8 +212,28 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/StandardTreatmentE
 ```bash
 git diff --check
 node scripts/run-vitest.mjs run src/modules/institution/tests/StandardTreatmentEventMapper.test.ts
+node scripts/run-vitest.mjs run src/modules/institution/tests
 ./node_modules/.bin/tsc --noEmit
 ```
+
+### PR 3B：确定性 mapper 业务扩展评估
+
+状态：
+
+- 未开始。
+- 只有当需要类别 alias、状态降级、人工复核 warning 策略或真实 adapter 输入层别名时才进入。
+
+建议范围：
+
+- 评估是否需要 adapter 输入层兼容 `external*` 别名，但仍不进入核心 DTO。
+- 评估治疗类别 alias、外部状态映射和 warning 生成策略。
+- 继续覆盖 raw payload、完整正文、PII、图片 / 文件原文、AI 内容、token、secret、SQL、stack 和数据库连接串拒绝。
+- 不写数据库。
+- 不新增 API。
+- 不接真实 HIS。
+- 不创建治疗摘要。
+- 不创建随访任务。
+- 不自动触达。
 
 ### PR 4：人工复核 / 预览流程 Plan Mode
 

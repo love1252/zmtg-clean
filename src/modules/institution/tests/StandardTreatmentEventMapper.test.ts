@@ -23,7 +23,9 @@ const validInput = {
   treatmentProject: '玻尿酸复诊',
   treatmentCategory: 'injection_review',
   treatmentStage: 'D7 复诊',
+  recoveryStage: ' D7 ',
   treatmentStatus: 'performed',
+  rawSourceType: 'treatment_record',
   appointmentRef: 'appt_qin_arrived',
   doctorRef: 'doctor-lin',
   operatorRef: 'consultant-chen',
@@ -34,6 +36,11 @@ const validInput = {
   summary: '标准化事件短摘要：恢复稳定，局部泛红已缓解。',
   nextCareAction: 'D14 人工复诊提醒。',
   tags: [' 结构化事件 ', '术后护理', '结构化事件'],
+  mappingWarnings: [
+    'manual_review_required',
+    'missing_recovery_stage',
+    'manual_review_required',
+  ],
   occurredAt: '2026-06-02T15:25:00+08:00',
 };
 
@@ -58,7 +65,9 @@ describe('标准治疗事件 domain-only mapper', () => {
         treatmentProject: '玻尿酸复诊',
         treatmentCategory: 'injection_review',
         treatmentStage: 'D7 复诊',
+        recoveryStage: 'D7',
         treatmentStatus: 'performed',
+        rawSourceType: 'treatment_record',
         appointmentRef: 'appt_qin_arrived',
         doctorRef: 'doctor-lin',
         operatorRef: 'consultant-chen',
@@ -69,6 +78,7 @@ describe('标准治疗事件 domain-only mapper', () => {
         summary: '标准化事件短摘要：恢复稳定，局部泛红已缓解。',
         nextCareAction: 'D14 人工复诊提醒。',
         tags: ['结构化事件', '术后护理'],
+        mappingWarnings: ['manual_review_required', 'missing_recovery_stage'],
         occurredAt: '2026-06-02T07:25:00.000Z',
         receivedAt: '2026-06-02T08:30:00.000Z',
       },
@@ -102,6 +112,10 @@ describe('标准治疗事件 domain-only mapper', () => {
     expect(STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS).not.toContain('tenantId');
     expect(STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS).not.toContain('eventId');
     expect(STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS).not.toContain('receivedAt');
+    expect(STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS).not.toContain('externalEventId');
+    expect(STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS).not.toContain('externalSource');
+    expect(STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS).not.toContain('customerExternalId');
+    expect(STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS).not.toContain('appointmentExternalId');
 
     expectInvalid(
       { ...validInput, tenantId: 'other-tenant' },
@@ -114,6 +128,22 @@ describe('标准治疗事件 domain-only mapper', () => {
     expectInvalid(
       { ...validInput, extraField: 'x' },
       '请求包含不允许的字段: extraField',
+    );
+    expectInvalid(
+      { ...validInput, externalEventId: 'his_evt_external' },
+      '请求包含不允许的字段: externalEventId',
+    );
+    expectInvalid(
+      { ...validInput, externalSource: 'his' },
+      '请求包含不允许的字段: externalSource',
+    );
+    expectInvalid(
+      { ...validInput, customerExternalId: 'his_cust_external' },
+      '请求包含不允许的字段: customerExternalId',
+    );
+    expectInvalid(
+      { ...validInput, appointmentExternalId: 'his_appt_external' },
+      '请求包含不允许的字段: appointmentExternalId',
     );
   });
 
@@ -166,6 +196,121 @@ describe('标准治疗事件 domain-only mapper', () => {
         }),
       }),
     );
+  });
+
+  it('允许缺省 recoveryStage、rawSourceType 和 mappingWarnings，并输出安全默认值', () => {
+    const inputWithoutNewFields: Record<string, unknown> = { ...validInput };
+    delete inputWithoutNewFields.recoveryStage;
+    delete inputWithoutNewFields.rawSourceType;
+    delete inputWithoutNewFields.mappingWarnings;
+
+    expect(normalizeStandardTreatmentEvent(inputWithoutNewFields, context)).toEqual(
+      expect.objectContaining({
+        ok: true,
+        value: expect.objectContaining({
+          recoveryStage: null,
+          rawSourceType: null,
+          mappingWarnings: [],
+        }),
+      }),
+    );
+  });
+
+  it('拒绝 recoveryStage 中的超长文本、敏感内容或 raw payload 线索', () => {
+    expectInvalid(
+      { ...validInput, recoveryStage: 'D'.repeat(81) },
+      '字段 recoveryStage 长度不能超过 80',
+    );
+    expectInvalid(
+      { ...validInput, recoveryStage: 'raw payload: hisRawPayload' },
+      '字段 recoveryStage 不允许包含敏感信息',
+    );
+    expectInvalid(
+      { ...validInput, recoveryStage: '客户手机号 13800008888' },
+      '字段 recoveryStage 不允许包含敏感信息',
+    );
+  });
+
+  it('只允许 rawSourceType 使用安全粗粒度来源类型', () => {
+    expect(
+      normalizeStandardTreatmentEvent(
+        { ...validInput, rawSourceType: 'course_progress' },
+        context,
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        ok: true,
+        value: expect.objectContaining({
+          rawSourceType: 'course_progress',
+        }),
+      }),
+    );
+
+    expectInvalid(
+      { ...validInput, rawSourceType: 'his_treatment_records_2026' },
+      '字段 rawSourceType 值不在允许范围内',
+    );
+    expectInvalid(
+      { ...validInput, rawSourceType: '/api/his/treatments/raw-response' },
+      '字段 rawSourceType 值不在允许范围内',
+    );
+  });
+
+  it('只允许 mappingWarnings 输出安全 code，并去重、限制数量和长度', () => {
+    expect(
+      normalizeStandardTreatmentEvent(
+        {
+          ...validInput,
+          mappingWarnings: [
+            'unknown_treatment_category',
+            'category_mapped_by_alias',
+            'unknown_treatment_category',
+          ],
+        },
+        context,
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        ok: true,
+        value: expect.objectContaining({
+          mappingWarnings: ['unknown_treatment_category', 'category_mapped_by_alias'],
+        }),
+      }),
+    );
+
+    expectInvalid(
+      {
+        ...validInput,
+        mappingWarnings: Array.from({ length: 13 }, (_, index) => `safe_warning_${index}`),
+      },
+      '字段 mappingWarnings 数量不能超过 12',
+    );
+    expectInvalid(
+      { ...validInput, mappingWarnings: [`${'a'.repeat(81)}`] },
+      '字段 mappingWarnings 单个 code 长度不能超过 80',
+    );
+  });
+
+  it('拒绝 mappingWarnings 中的 raw payload、PII、完整正文、SQL、stack、token、secret、DATABASE_URL 或连接串', () => {
+    const blockedWarnings = [
+      'raw_payload',
+      'phone_13800008888',
+      'id_110101199001010011',
+      'full_treatment_record',
+      'select_from_treatment_summaries',
+      'stack_trace',
+      'token_leaked',
+      'secret_leaked',
+      'DATABASE_URL',
+      'postgres://tenant:secret@localhost/db',
+    ];
+
+    for (const warning of blockedWarnings) {
+      expectInvalid(
+        { ...validInput, mappingWarnings: [warning] },
+        '字段 mappingWarnings 只能包含安全 warning code',
+      );
+    }
   });
 
   it('拒绝 HIS raw payload、完整正文、PII、文件原文、AI 内容和内部敏感字段', () => {

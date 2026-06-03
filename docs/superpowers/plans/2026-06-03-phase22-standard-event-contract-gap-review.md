@@ -4,13 +4,13 @@
 
 **Goal:** 评估 Phase 17 `StandardTreatmentEvent` 契约和 Phase 22 HIS mapper 建议字段之间的差异，明确后续是否需要调整命名、补字段或保持兼容策略。
 
-**Architecture:** 当前 PR 只做 docs-only 契约差异评估，不修改 TypeScript 契约、mapper、测试、API、schema 或业务流程。评估结论优先保护 Phase 17 已落地的内部核心 DTO 命名，避免 `source*` 与 `external*` 两套同义字段并存，并把真实 HIS adapter、患者身份匹配、自动摘要和自动任务继续挡在后续独立 Plan Mode 外。
+**Architecture:** PR 2 只做 docs-only 契约差异评估，不修改 TypeScript 契约、mapper、测试、API、schema 或业务流程。评估结论优先保护 Phase 17 已落地的内部核心 DTO 命名，避免 `source*` 与 `external*` 两套同义字段并存，并把真实 HIS adapter、患者身份匹配、自动摘要和自动任务继续挡在后续独立 Plan Mode 外。PR 3A 已在独立分支按该结论补齐 `recoveryStage`、`rawSourceType` 和 `mappingWarnings`。
 
 **Tech Stack:** Markdown only。后续如单独批准实现，才可能涉及 TypeScript、Vitest 和现有机构领域模块。
 
 ---
 
-## 0. 当前 PR 范围
+## 0. PR 2 范围
 
 新增：
 
@@ -23,7 +23,7 @@
 - `README.md`
 - `docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md`
 
-当前 PR 不做：
+PR 2 不做：
 
 - 不写代码。
 - 不改测试。
@@ -75,15 +75,15 @@ git diff --cached --check
 
 实际文件路径与预期一致，无需额外搜索替代路径。
 
-已确认的现状：
+PR 2 评估时已确认的现状：
 
 - Phase 17 已存在 domain-only `StandardTreatmentEvent`、`StandardTreatmentEventMapperInput`、字段白名单和禁止字段集合。
 - `normalizeStandardTreatmentEvent(input, context)` 已要求 `tenantId`、`eventId`、`receivedAt` 来自服务端可信 context，不接受外部输入。
-- 当前输入白名单不包含 `tenantId`、`eventId`、`receivedAt`、`externalEventId`、`externalSource`、`customerExternalId`、`appointmentExternalId`、`recoveryStage`、`rawSourceType` 或 `mappingWarnings`。
-- 当前标准事件已包含 `sourceSystem`、`sourceEventId`、`sourceCustomerId`、`appointmentRef` 等来源命名。
-- 当前标准事件已包含 `treatmentStatus`、`summary`、`occurredAt`、`customerMatchKey`、`customerName`、`maskedPhone`、`doctorRef`、`operatorRef`、`departmentRef`、`amount` 和 `currency` 等 Phase 22 建议字段未重点列出的既有字段。
-- `treatment_summaries`、路径模板和随访建议都已经使用 `recoveryStage`，但标准治疗事件尚未单列该字段。
-- 当前 mapper 对 raw payload、完整正文、PII、图片 / 文件原文、AI 内容、token、secret、SQL、stack 和数据库连接串已有拒绝边界。
+- PR 2 评估时输入白名单尚不包含 `tenantId`、`eventId`、`receivedAt`、`externalEventId`、`externalSource`、`customerExternalId`、`appointmentExternalId`、`recoveryStage`、`rawSourceType` 或 `mappingWarnings`；PR 3A 后仅新增 `recoveryStage`、`rawSourceType` 和 `mappingWarnings`。
+- PR 2 评估时标准事件已包含 `sourceSystem`、`sourceEventId`、`sourceCustomerId`、`appointmentRef` 等来源命名；PR 3A 继续保留这些命名，不新增 `external*` 核心 DTO 字段。
+- PR 2 评估时标准事件已包含 `treatmentStatus`、`summary`、`occurredAt`、`customerMatchKey`、`customerName`、`maskedPhone`、`doctorRef`、`operatorRef`、`departmentRef`、`amount` 和 `currency` 等 Phase 22 建议字段未重点列出的既有字段。
+- `treatment_summaries`、路径模板和随访建议都已经使用 `recoveryStage`；PR 3A 已将该字段补入标准治疗事件契约。
+- mapper 对 raw payload、完整正文、PII、图片 / 文件原文、AI 内容、token、secret、SQL、stack 和数据库连接串已有拒绝边界；PR 3A 继续覆盖新增字段的相同安全边界。
 
 ## 2. Phase 17 现有契约字段
 
@@ -117,7 +117,7 @@ git diff --cached --check
 | `occurredAt` | mapper input | 业务事实发生时间，必须是可解析 ISO-like 时间字符串。 |
 | `receivedAt` | `StandardTreatmentEventMapperContext` | 智美天工接收或标准化时间，由服务端可信上下文提供，不接受外部输入。 |
 
-当前输入白名单为：
+PR 2 评估时输入白名单为：
 
 ```text
 sourceSystem
@@ -164,9 +164,11 @@ Phase 22 HIS mapper v1 文档建议字段为：
 - `rawSourceType`
 - `mappingWarnings`
 
-这些字段是 Phase 22 对未来 HIS mapper 输出结构的产品 / 架构建议，不是当前 TypeScript 契约，也不是数据库 schema。
+这些字段是 Phase 22 对未来 HIS mapper 输出结构的产品 / 架构建议。PR 3A 后，`recoveryStage`、`rawSourceType` 和 `mappingWarnings` 已进入 domain-only TypeScript 契约；`externalEventId`、`externalSource`、`customerExternalId` 和 `appointmentExternalId` 仍只作为 adapter 输入层别名或文档映射，不进入内部核心 DTO，也不是数据库 schema。
 
 ## 4. 差异结论表
+
+下表保留 PR 2 评估时的差异结论；PR 3A 已按该结论只补齐 `recoveryStage`、`rawSourceType` 和 `mappingWarnings`。
 
 | Phase 22 建议字段 | Phase 17 现有字段 | 当前是否已有 | 差异 | 建议 |
 | --- | --- | --- | --- | --- |
@@ -208,7 +210,7 @@ Phase 22 HIS mapper v1 文档建议字段为：
    - 不把 Phase 22 文档中的 `externalEventId`、`externalSource`、`customerExternalId`、`appointmentExternalId` 直接复制进核心 DTO。
 
 2. 只补缺字段，不整体重命名。
-   - 后续如进入实现，优先评估补 `recoveryStage`、`rawSourceType`、`mappingWarnings`。
+   - PR 3A 已按该策略补齐 `recoveryStage`、`rawSourceType`、`mappingWarnings`。
    - 不改已有 `source*` 字段名，避免影响现有 mapper、测试和文档语义。
 
 3. 避免同时存在两套同义字段。
@@ -235,7 +237,7 @@ Phase 22 HIS mapper v1 文档建议字段为：
 7. `recoveryStage` 是优先级最高的补缺字段。
    - 治疗摘要、路径模板和随访建议都已经依赖 `recoveryStage`。
    - 标准事件如果缺少 `recoveryStage`，后续从 HIS 标准事件直接进入路径模板时会丢失关键恢复阶段信号。
-   - 建议后续 PR 3A 先补该字段，再评估 mapper parser。
+   - PR 3A 已先补该字段，并覆盖 mapper parser / 单元测试。
 
 8. `rawSourceType` 可以补，但必须保持粗粒度。
    - 它只能表达来源记录类型，例如 `treatment_record`、`appointment`、`order`、`course_progress`、`manual_review`、`other`。
@@ -245,12 +247,18 @@ Phase 22 HIS mapper v1 文档建议字段为：
 
 ### PR 3A：只补标准事件缺口字段 domain-only 契约
 
-建议范围：
+状态：
 
-- 在 `StandardTreatmentEvent` 中评估新增 `recoveryStage`。
-- 评估新增 `rawSourceType` 安全集合。
-- 评估新增 `mappingWarnings` 安全 code 集合。
-- 决定 `mappingWarnings` 是否只出现在 mapper 输出，不出现在 external input 白名单。
+- 已进入本次 domain-only 契约补齐。
+- 仅新增 `recoveryStage`、`rawSourceType` 和 `mappingWarnings` 三个缺口字段。
+- 不新增 `externalEventId`、`externalSource`、`customerExternalId` 或 `appointmentExternalId` 核心 DTO 字段。
+
+范围：
+
+- 在 `StandardTreatmentEvent` 中新增 `recoveryStage`。
+- 新增 `rawSourceType` 安全集合。
+- 新增 `mappingWarnings` 安全 code 集合。
+- `mappingWarnings` 可作为 mapper 输入契约中的安全 code 数组进入标准事件输出，但必须去重、限制数量和长度，不接受 raw payload、PII、完整正文、SQL、stack、token、secret、`DATABASE_URL` 或连接串。
 - 不新增 API。
 - 不改 schema / migration。
 - 不接真实 HIS。
@@ -264,12 +272,12 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/StandardTreatmentE
 ./node_modules/.bin/tsc --noEmit
 ```
 
-### PR 3B：补 mapper parser 和安全测试
+### PR 3B：确定性 mapper 业务扩展评估
 
 建议范围：
 
-- 扩展 `normalizeStandardTreatmentEvent` 解析 `recoveryStage` 和 `rawSourceType`。
-- 由 mapper 生成或透出安全 `mappingWarnings` code。
+- 评估类别 alias、外部状态降级和 warning 生成策略。
+- 如需兼容 `external*` 命名，只能作为 adapter 输入层别名或文档映射，不进入核心 DTO。
 - 测试 unknown field 仍被拒绝。
 - 测试 `tenantId`、`eventId`、`receivedAt` 仍只来自 context。
 - 测试 `mappingWarnings` 不包含 raw payload、PII、完整正文、SQL、stack、token、secret 或连接串。
@@ -306,7 +314,7 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/StandardTreatmentE
 
 ## 7. 验收清单
 
-当前 docs-only PR 验收：
+PR 2 docs-only PR 验收：
 
 - 已列出现有 Phase 17 `StandardTreatmentEvent` / mapper 契约字段。
 - 已对比 Phase 22 建议字段。
