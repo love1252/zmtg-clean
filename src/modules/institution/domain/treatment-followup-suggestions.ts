@@ -1,8 +1,14 @@
 import type { FollowUpRiskLevel } from '@/modules/institution/domain/followup-workflow';
+import {
+  matchTreatmentPathTemplate,
+  type TreatmentPathHandlerRole,
+  type TreatmentPathTemplateNode,
+} from '@/modules/institution/domain/treatment-path-templates';
 
 export type TreatmentFollowUpSuggestionPriority = 'low' | 'medium' | 'high';
 
 export type TreatmentFollowUpSuggestionRuleKey =
+  | 'template_path_followup'
   | 'urgent_risk_followup'
   | 'watch_risk_followup'
   | 'early_recovery_care_check'
@@ -67,6 +73,24 @@ type SuggestionDraft = {
 
 const millisecondsPerDay = 24 * 60 * 60 * 1000;
 const fallbackTimestamp = Date.parse('1970-01-01T00:00:00.000Z');
+
+const handlerRoleLabels = {
+  customer_service: '客服',
+  medical_assistant: '医助',
+  nursing_staff: '护理人员',
+  consultant: '咨询师',
+  operations_lead: '运营负责人',
+} as const satisfies Record<TreatmentPathHandlerRole, string>;
+
+const templateSourceFields = [
+  'treatmentCategory',
+  'treatmentProject',
+  'treatmentStage',
+  'recoveryStage',
+  'riskLevel',
+  'treatmentDate',
+  'tags',
+] as const satisfies TreatmentFollowUpSuggestionSourceField[];
 
 const categoryRules = {
   laser_repair: {
@@ -142,6 +166,8 @@ export function containsDisallowedTreatmentFollowUpSuggestionContent(input: stri
     /DATABASE_URL|database_url|postgres:\/\/|mysql:\/\/|mongodb:\/\/|redis:\/\//iu.test(
       normalized,
     ) ||
+    /\bselect\s+.+\s+from\b/iu.test(normalized) ||
+    /\b(?:insert|update|delete)\s+\w+\b/iu.test(normalized) ||
     /\b(?:sql|stack|token|secret)\b/iu.test(normalized) ||
     /sk_(?:live|test|proj)_|zmtg_sk_/iu.test(normalized)
   );
@@ -328,6 +354,58 @@ function createCategorySuggestion(input: TreatmentFollowUpSuggestionInput): Sugg
   };
 }
 
+function templateNodePriority(
+  input: TreatmentFollowUpSuggestionInput,
+): TreatmentFollowUpSuggestionPriority {
+  if (input.riskLevel === 'urgent') {
+    return 'high';
+  }
+
+  if (input.riskLevel === 'watch') {
+    return 'medium';
+  }
+
+  return 'low';
+}
+
+function createTemplateSuggestionDescription(node: TreatmentPathTemplateNode) {
+  const title = safeText(node.taskTitle, '治疗路径模板人工确认', 80);
+  const handlerRoleLabel = handlerRoleLabels[node.handlerRole];
+
+  return `请人工确认“${title}”。建议处理角色：${handlerRoleLabel}。禁止自动触达。`;
+}
+
+function createTemplateSuggestionDrafts(input: TreatmentFollowUpSuggestionInput): SuggestionDraft[] {
+  const match = matchTreatmentPathTemplate(input);
+
+  if (!match) {
+    return [];
+  }
+
+  return match.nodes
+    .filter((node) => node.requiresHumanConfirmation && node.forbidAutoReachOut)
+    .map((node) => {
+      const title = safeText(node.taskTitle, '治疗路径模板人工确认', 80);
+
+      return {
+        ruleKey: 'template_path_followup',
+        title,
+        description: createTemplateSuggestionDescription(node),
+        offsetDays: node.offsetDays,
+        priority: templateNodePriority(input),
+        reason: `路径模板 ${match.template.templateKey} 命中节点 ${node.nodeKey}，要求人工确认并禁止自动触达`,
+        tags: [
+          '路径模板',
+          match.template.templateKey,
+          node.recoveryStage,
+          handlerRoleLabels[node.handlerRole],
+        ],
+        sourceFields: [...templateSourceFields],
+        keySuffix: `${match.template.templateKey}:${node.nodeKey}`,
+      } satisfies SuggestionDraft;
+    });
+}
+
 function createLightweightSuggestion(input: TreatmentFollowUpSuggestionInput): SuggestionDraft {
   return {
     ruleKey: 'lightweight_post_care_check',
@@ -345,6 +423,7 @@ export function buildTreatmentFollowUpSuggestions(
   input: TreatmentFollowUpSuggestionInput,
 ): TreatmentFollowUpSuggestion[] {
   const drafts = [
+    ...createTemplateSuggestionDrafts(input),
     createRiskSuggestion(input),
     createEarlyRecoverySuggestion(input),
     createNextCareActionSuggestion(input),
