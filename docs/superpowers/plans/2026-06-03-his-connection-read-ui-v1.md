@@ -1,12 +1,12 @@
-# HIS 连接配置只读 UI / workspace 入口 v1 Implementation Plan
+# HIS 连接配置只读 UI / workspace 入口 v1 实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **给执行 agent 的说明：** 实施本计划时需使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项推进。步骤使用 checkbox（`- [ ]`）语法跟踪。
 
-**Goal:** 只做 HIS 连接配置只读 UI / workspace 入口 Plan Mode，规划未来机构端如何安全展示连接配置列表与详情状态。
+**目标：** 只做 HIS 连接配置只读 UI / workspace 入口 Plan Mode，规划未来机构端如何安全展示连接配置列表与详情状态。
 
-**Architecture:** 当前 PR 不改系统架构，只新增和同步 Markdown。未来 UI 只能消费现有 list / detail 只读 API，继续由服务端 access context 决定租户边界，前端只展示安全 DTO 字段和稳定状态文案。
+**架构说明：** 当前 PR 不改系统架构，只新增和同步 Markdown。未来 UI 只能消费现有 list / detail 只读 API，继续由服务端 access context 决定租户边界，前端只展示安全 DTO 字段和稳定状态文案。
 
-**Tech Stack:** 当前 PR 只涉及 Markdown。后续如单独批准 UI 实现，才可能涉及 Next.js App Router、React、TypeScript、lucide-react、现有 workspace shell、InstitutionPageState、InstitutionSectionHeader 和 workspace smoke 测试。
+**技术栈：** 当前 PR 只涉及 Markdown。后续如单独批准 UI 实现，才可能涉及 Next.js App Router、React、TypeScript、lucide-react、现有 workspace shell、InstitutionPageState、InstitutionSectionHeader 和 workspace smoke 测试。
 
 ---
 
