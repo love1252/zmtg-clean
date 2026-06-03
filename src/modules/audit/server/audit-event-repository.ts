@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, gt, gte, isNull, lt, lte, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or } from 'drizzle-orm';
 import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import type { FollowUpPathAnalysisAuditEvent } from '@/modules/institution/domain/followup-path-analysis';
 import {
   createAuditEventQueryCursor,
   type AuditEventQuery,
@@ -192,6 +193,38 @@ export function createAuditEventRepository(database: TenantDatabase) {
         .limit(input.query.limit + 1);
 
       return mapRowsToAuditQueryResult(rows, input.query.limit);
+    },
+    async listFollowUpPathAnalysisAuditEventsByTenant(
+      tenantId: string,
+    ): Promise<FollowUpPathAnalysisAuditEvent[]> {
+      const rows = await database
+        .select({
+          tenantId: auditEvents.tenantId,
+          resource: auditEvents.resource,
+          resourceId: auditEvents.resourceId,
+          result: auditEvents.result,
+          reason: auditEvents.reason,
+        })
+        .from(auditEvents)
+        .where(
+          and(
+            eq(auditEvents.tenantId, tenantId),
+            eq(auditEvents.resource, 'follow_up'),
+            inArray(auditEvents.reason, [
+              'voided_treatment_summary_follow_up_blocked',
+              'active_source_follow_up_exists',
+            ]),
+          ),
+        );
+
+      return rows
+        .filter((row) => row.tenantId === tenantId)
+        .map((row) => ({
+          auditResource: row.resource,
+          auditResult: row.result,
+          auditReason: row.reason,
+          resourceId: row.resourceId,
+        }));
     },
   };
 }

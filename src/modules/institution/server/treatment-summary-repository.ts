@@ -25,6 +25,22 @@ type TreatmentSummaryListInput = {
   tenantId: string;
   query: TreatmentSummaryListQuery;
 };
+export type FollowUpPathAnalysisTreatmentSummaryReadModel = {
+  summaryId: string;
+  tenantId: string;
+  status: TreatmentSummaryRecord['status'];
+  voidedAt: string | null;
+  customerId: string;
+  appointmentId: string | null;
+  treatmentDate: string;
+  treatmentProject: string;
+  treatmentCategory: string;
+  treatmentStage: string;
+  recoveryStage: string;
+  riskLevel: TreatmentSummaryRecord['riskLevel'];
+  nextCareAction: string;
+  tags: string[];
+};
 export type CreateTreatmentSummaryInput = Omit<
   TreatmentSummaryRecord,
   | 'createdAt'
@@ -442,5 +458,53 @@ export function createTreatmentSummaryRepository(database: TenantDatabase) {
 
       return mapRowsToTreatmentSummaryListResponse(rows, input);
     },
+
+    async listFollowUpPathAnalysisTreatmentSummariesByTenant(
+      tenantId: string,
+    ): Promise<FollowUpPathAnalysisTreatmentSummaryReadModel[]> {
+      const rows = await database
+        .select({
+          id: treatmentSummaries.id,
+          tenantId: treatmentSummaries.tenantId,
+          customerId: treatmentSummaries.customerId,
+          appointmentId: treatmentSummaries.appointmentId,
+          treatmentDate: treatmentSummaries.treatmentDate,
+          treatmentProject: treatmentSummaries.treatmentProject,
+          treatmentCategory: treatmentSummaries.treatmentCategory,
+          treatmentStage: treatmentSummaries.treatmentStage,
+          recoveryStage: treatmentSummaries.recoveryStage,
+          riskLevel: treatmentSummaries.riskLevel,
+          nextCareAction: treatmentSummaries.nextCareAction,
+          tags: treatmentSummaries.tags,
+          voidedAt: treatmentSummaries.voidedAt,
+        })
+        .from(treatmentSummaries)
+        .where(eq(treatmentSummaries.tenantId, tenantId));
+
+      return rows
+        .filter((row) => row.tenantId === tenantId)
+        .map((row) => {
+          const voidedAt = row.voidedAt?.toISOString() ?? null;
+
+          return {
+            summaryId: row.id,
+            tenantId: row.tenantId,
+            status: deriveTreatmentSummaryStatus(voidedAt),
+            voidedAt,
+            customerId: row.customerId,
+            appointmentId: row.appointmentId,
+            treatmentDate: row.treatmentDate.toISOString(),
+            treatmentProject: row.treatmentProject,
+            treatmentCategory: row.treatmentCategory,
+            treatmentStage: row.treatmentStage,
+            recoveryStage: row.recoveryStage,
+            riskLevel: row.riskLevel,
+            nextCareAction: row.nextCareAction,
+            tags: [...row.tags],
+          };
+        });
+    },
   };
 }
+
+export type TreatmentSummaryRepository = ReturnType<typeof createTreatmentSummaryRepository>;

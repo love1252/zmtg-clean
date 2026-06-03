@@ -78,6 +78,16 @@ type ListFollowUpTasksByTenantInput =
       tenantId: string;
       filters?: FollowUpTaskListFilters;
     };
+export type FollowUpPathAnalysisSourceTaskReadModel = {
+  taskId: string;
+  tenantId: string;
+  source: 'treatment_summary';
+  sourceTreatmentSummaryId: string;
+  sourceSuggestionKey: string;
+  taskStatus: FollowUpStatus;
+  dueAt: string;
+  updatedAt: string | null;
+};
 type TransitionFollowUpTaskPersistenceResult =
   | { kind: 'updated'; task: TenantFollowUpTask }
   | { kind: 'not_found' }
@@ -441,6 +451,45 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         .from(followUpTasks)
         .where(buildFollowUpTaskListWhere(normalized));
       return rows.map(mapFollowUpTaskRowToRecord);
+    },
+    async listFollowUpPathAnalysisSourceTasksByTenant(
+      tenantId: string,
+    ): Promise<FollowUpPathAnalysisSourceTaskReadModel[]> {
+      const rows = await database
+        .select({
+          id: followUpTasks.id,
+          tenantId: followUpTasks.tenantId,
+          sourceTreatmentSummaryId: followUpTasks.sourceTreatmentSummaryId,
+          sourceSuggestionKey: followUpTasks.sourceSuggestionKey,
+          status: followUpTasks.status,
+          dueAt: followUpTasks.dueAt,
+          updatedAt: followUpTasks.updatedAt,
+        })
+        .from(followUpTasks)
+        .where(
+          and(
+            eq(followUpTasks.tenantId, tenantId),
+            isNotNull(followUpTasks.sourceTreatmentSummaryId),
+            isNotNull(followUpTasks.sourceSuggestionKey),
+          ),
+        );
+
+      return rows
+        .filter((row) => (
+          row.tenantId === tenantId &&
+          row.sourceTreatmentSummaryId !== null &&
+          row.sourceSuggestionKey !== null
+        ))
+        .map((row) => ({
+          taskId: row.id,
+          tenantId: row.tenantId,
+          source: 'treatment_summary',
+          sourceTreatmentSummaryId: row.sourceTreatmentSummaryId ?? '',
+          sourceSuggestionKey: row.sourceSuggestionKey ?? '',
+          taskStatus: row.status,
+          dueAt: row.dueAt.toISOString(),
+          updatedAt: row.updatedAt?.toISOString() ?? null,
+        }));
     },
   };
 }
