@@ -32,13 +32,14 @@
 - 治疗摘要作废能力第十九阶段：软作废字段、作废 API、作废后随访建议 / 来源任务阻断、机构端状态展示和入口 smoke 已完成。
 - 治疗项目路径模板第二十阶段：Phase 20 spec / plan、domain-only catalog、确定性随访建议接入、机构端轻量展示、workspace smoke 和文档收尾已完成。
 - 随访路径运营分析第二十一阶段：最小闭环已完成，覆盖 spec / plan、domain-only 口径、审计关联口径补强、只读分析 API、机构端轻量指标展示、workspace smoke 和文档收尾。
+- HIS 标准治疗事件 mapper 第二十二阶段 Plan Mode：Phase 22 spec / plan 已完成，明确只规划未来 HIS / 机构系统治疗事件到内部标准治疗事件结构的 mapper，不接真实 HIS、不保存 raw payload、不做患者身份匹配、自动摘要、自动任务、AI 解析或自动触达。
 - 开放平台治理第一阶段：API Key、OAuth、Webhook 和审计的治理词汇、生命周期和安全边界展示。
 
 当前主要缺口：
 
 - 平台端已有只读租户列表、租户状态、套餐 / 配额、用量快照和商业化健康运营摘要；机构端新增客户 / 预约已具备轻量套餐配额 enforcement，但尚未具备租户创建、编辑、删除、冻结 / 恢复、完整套餐商业化后台、计费、支付、合同或发票能力。
 - 审计日志只读查询基础版已完成，但导出、告警和复杂风控仍未进入真实实现。
-- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1、治疗项目路径模板 v1 和随访路径运营分析 v1 最小闭环已完成；随访路径运营分析仍不包含图表、导出、经营智能中心、收入 / 复购 / 转化归因或路径效果分析；真实 HIS 接入、Webhook、文件导入、外部系统同步、完整治疗记录正文、版本历史 / diff 展示、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
+- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1、治疗项目路径模板 v1 和随访路径运营分析 v1 最小闭环已完成；HIS 标准治疗事件 mapper v1 已完成 Plan Mode 规划但尚未进入实现；随访路径运营分析仍不包含图表、导出、经营智能中心、收入 / 复购 / 转化归因或路径效果分析；真实 HIS 接入、Webhook、文件导入、外部系统同步、完整治疗记录正文、版本历史 / diff 展示、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
 
 ## 2. 旧 REBUILD_PLAN.md 中仍有价值的功能
 
@@ -81,6 +82,7 @@
 - 治疗后护理 / 随访联动 v1：确定性建议 domain / parser、安全 `suggestionKey`、`follow_up_tasks` 来源关联、同租户幂等 / 去重、建议只读 API、人工确认创建 API、治疗摘要管理 UI 联动和入口 smoke。
 - 随访任务来源治理增强 v1：follow-up 来源 query 白名单、安全来源 DTO、当前租户内 `source=treatment_summary` / `sourceTreatmentSummaryId` 筛选、智能随访来源标签 / 来源筛选、治疗摘要管理页同来源活跃任务只读重复提示和入口 smoke。
 - HIS 接入标准模型 / 标准治疗事件 v1：Phase 17 spec / plan、domain-only 类型、`sourceSystem` 稳定集合、mapper 输入 / 输出契约、字段白名单、禁止字段边界、外部 `tenantId` 不可信、raw payload 拒绝、不自动生成或修改 `treatment_summaries` 和 institution 测试。
+- HIS 标准治疗事件 mapper v1 Plan Mode：Phase 22 spec / plan 已规划 `externalEventId`、`externalSource`、`tenantId`、`customerExternalId`、`appointmentExternalId`、`treatmentDate`、`treatmentProject`、`treatmentCategory`、`treatmentStage`、`recoveryStage`、`riskLevel`、`nextCareAction`、`tags`、`rawSourceType` 和 `mappingWarnings` 等字段语义，并明确不接真实 HIS、不保存 raw payload、不做患者身份匹配、自动摘要、自动任务、AI 解析或自动触达。
 - 治疗摘要编辑能力 v1：编辑 payload parser、`treatment_summary:update` 最小权限、tenant-scoped repository update、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端受控编辑 UI、成功刷新列表 / 详情、失败保留输入、审计和入口 smoke。
 - 治疗项目路径模板 v1：首批光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理的 domain-only catalog，确定性随访建议接入模板，机构端轻量展示路径类型 / 建议处理角色 / 人工确认边界，人工确认来源任务、重复治理、作废阻断和 smoke / 文档收尾。
 - 随访路径运营分析 v1：基于治疗摘要、路径模板建议、来源随访任务、任务状态和审计记录的最小聚合口径、审计关联补强、机构端只读 API、轻量指标展示和 workspace smoke / 文档收尾。
@@ -104,7 +106,7 @@
 
 建议进入后续路线的功能：
 
-- 治疗记录模块：结构化摘要 v1、租户隔离、人工录入 v1、只读管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1、治疗项目路径模板 v1 和随访路径运营分析 v1 最小闭环已完成；后续版本历史 / diff 展示、客服会话联动、完整治疗记录能力、路径模板 schema / API、随访路径图表 / 导出 / 归因 / 路径效果分析和外部系统接入需单独规划，仍不保存完整病历正文。
+- 治疗记录模块：结构化摘要 v1、租户隔离、人工录入 v1、只读管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1、治疗项目路径模板 v1、随访路径运营分析 v1 最小闭环和 HIS 标准治疗事件 mapper v1 Plan Mode 已完成；后续版本历史 / diff 展示、客服会话联动、完整治疗记录能力、标准事件 mapper 实现、路径模板 schema / API、随访路径图表 / 导出 / 归因 / 路径效果分析和外部系统接入需单独规划，仍不保存完整病历正文。
 - 平台租户后续能力：租户创建、状态变更审计、完整套餐商业化后台、计费、合同、发票和支付。
 - 审计高级治理：只读查询基础版之后再单独评估导出、告警和复杂风控。
 - 套餐权益与配额 enforcement：客户数和预约数创建阻断已完成轻量版，后续可单独评估员工数、随访任务、AI 调用、严格一致计数器和套餐变更流程。
@@ -119,7 +121,7 @@
 
 1. 产品可演示性验收：优先完整走查机构端客户中心、治疗摘要创建 / 编辑 / 作废、路径模板随访建议、来源任务追溯、客户 timeline 和平台端只读治理页面，确认 Phase 5-20 是否已经能支撑一次稳定演示。
 2. Phase 20 后续扩展评估：治疗项目路径模板 v1 已完成最小闭环；后续如需 schema / API、租户自定义 SOP、路径编辑器、平台端模板管理、HIS、企微、AI 或自动触达，必须单独进入 Plan Mode。
-3. HIS 标准治疗事件 mapper 继续增强：继续完善 mapper 契约、错误语义和测试覆盖，仍不接真实 HIS、不写 API、不落库。
+3. HIS 标准治疗事件 mapper 后续实现评估：Phase 22 已完成 Plan Mode；后续如进入 domain-only 契约差异评估、确定性 mapper 实现、人工复核 / 预览、患者身份匹配、治疗摘要创建来源治理或真实 HIS adapter，仍需单独规划，不接真实 HIS、不写 API、不落库。
 4. 业务事件埋点体系 spec：只做事件模型规划，不做真实采集，不记录 raw payload、完整医疗正文或 PII。
 5. 随访路径运营分析 v1：Phase 21 最小闭环已完成；后续如进入图表、导出、经营归因、路径效果分析、历史趋势或指标落库，必须单独进入 Plan Mode，不做自动触达。
 6. follow-up 配额 enforcement：单独评估是否将 Phase 15 的人工确认创建接入 `maxFollowUps`。
@@ -221,3 +223,5 @@ Phase 5 的成功标准：
 - `GET /api/institution/follow-up-path-analysis` 只读返回聚合指标、notes / warnings 和边界说明；机构端工作台只轻量展示指标，不展示客户明细、任务列表、治疗正文、病历正文、咨询全文、图片 / 文件原文或 raw audit payload。
 - Phase 21 v1 未新增数据库 schema / migration，未改权限、认证或租户隔离，未接 HIS / 企微 / AI / RAG / Agent，未做自动触达，未做复杂经营智能中心、图表 UI、报表导出、收入 / 复购 / 转化归因或 demo seed 修改。
 - 后续如需分析指标落库、历史趋势、报表 API、图表 UI、导出、经营归因、路径效果分析或外部系统接入，必须单独进入 Plan Mode。
+- Phase 22 HIS 标准治疗事件 mapper v1 已完成 Plan Mode：新增 spec / plan 文档，规划未来 HIS / 机构系统治疗事件映射为内部标准治疗事件结构的目标、建议字段、mapping warning、与治疗摘要 / 路径模板 / 随访建议 / 来源任务 / 运营分析的关系和后续 PR 拆分。
+- Phase 22 当前不写代码，不改测试，不新增或修改 API，不改数据库 schema / migration，不改权限、认证或租户隔离，不接真实 HIS / 机构系统 / 企微 / AI / RAG / Agent，不导入真实客户数据，不保存 raw HIS payload、完整治疗正文、完整病历正文、咨询全文、图片 / 文件原文，不做患者身份匹配、自动创建治疗摘要、自动创建随访任务、AI 解析、自动触达、经营智能中心、图表或导出。
