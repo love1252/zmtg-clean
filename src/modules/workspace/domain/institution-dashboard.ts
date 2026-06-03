@@ -7,6 +7,7 @@ import {
   FileSearch,
   LayoutDashboard,
   MessageCircle,
+  Server,
   Users,
   Workflow,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ export type InstitutionViewId =
   | 'followups'
   | 'treatmentSummaries'
   | 'audit'
+  | 'hisConnections'
   | 'conversations'
   | 'appointments'
   | 'knowledge'
@@ -35,6 +37,7 @@ export const institutionNavItems: InstitutionNavItem[] = [
   { id: 'followups', label: '智能随访', icon: Workflow },
   { id: 'treatmentSummaries', label: '治疗摘要管理', icon: ClipboardList },
   { id: 'audit', label: '审计日志', icon: FileSearch },
+  { id: 'hisConnections', label: 'HIS 连接配置', icon: Server },
   { id: 'conversations', label: '客服工作台', icon: MessageCircle },
   { id: 'appointments', label: '预约中心', icon: CalendarCheck },
   { id: 'knowledge', label: '知识库', icon: BookOpen },

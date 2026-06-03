@@ -153,6 +153,51 @@ const followUpPathAnalysisRecord = {
   secret: 'phase21-secret',
 };
 
+const hisConnectionRecord = {
+  connectionId: 'his_conn_active',
+  connectionName: '星澜 HIS 只读连接',
+  sourceSystem: 'his',
+  vendorType: 'demo_vendor',
+  systemType: 'his',
+  status: 'active',
+  credentialConfigured: true,
+  healthStatus: 'healthy',
+  lastCheckedAt: '2026-06-03T08:30:00.000Z',
+  lastErrorCode: 'SAFE_TIMEOUT',
+  createdAt: '2026-06-03T08:00:00.000Z',
+  updatedAt: '2026-06-03T08:20:00.000Z',
+  revokedAt: null,
+  tenantId: 'tenant_should_not_render',
+  deletedAt: '2026-06-03T09:00:00.000Z',
+  credentialRef: 'cred_ref_internal_only',
+  token: 'token_should_not_render',
+  secret: 'secret_should_not_render',
+  apiKey: 'sk_test_should_not_render',
+  oauthToken: 'oauth_should_not_render',
+  basicAuth: 'basic_auth_should_not_render',
+  signingKey: 'signing_key_should_not_render',
+  privateKey: 'private_key_should_not_render',
+  connectionString: 'postgres://tenant:secret@localhost:5432/zmtg',
+  rawHisPayload: 'raw HIS payload should not render',
+  requestBody: '完整请求体不应展示',
+  responseBody: '完整响应体不应展示',
+  sql: 'select * from his_connections',
+  stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+};
+
+const draftHisConnectionRecord = {
+  ...hisConnectionRecord,
+  connectionId: 'his_conn_draft',
+  connectionName: '草稿 HIS 连接',
+  status: 'draft',
+  credentialConfigured: false,
+  healthStatus: 'unknown',
+  lastCheckedAt: null,
+  lastErrorCode: null,
+  createdAt: '2026-06-03T08:05:00.000Z',
+  updatedAt: '2026-06-03T08:05:00.000Z',
+};
+
 const treatmentSummaryManagementRecord = {
   id: 'trt_phase14_management',
   customerId: 'cust_phase5_closeout',
@@ -817,6 +862,16 @@ type WorkspaceFetchOptions = {
     status: number;
     message: string;
   };
+  hisConnections?: unknown[];
+  hisConnectionDetails?: Record<string, unknown>;
+  hisConnectionListError?: {
+    status: number;
+    message: string;
+  };
+  hisConnectionDetailError?: {
+    status: number;
+    message: string;
+  };
   platformAuditEvents?: unknown[];
   platformTenants?: unknown[];
   platformTenantError?: {
@@ -875,6 +930,10 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     auditEvents = [auditEventRecord],
     followUpPathAnalysis = followUpPathAnalysisRecord,
     followUpPathAnalysisError,
+    hisConnections = [hisConnectionRecord, draftHisConnectionRecord],
+    hisConnectionDetails,
+    hisConnectionListError,
+    hisConnectionDetailError,
     platformAuditEvents = [platformAuditEventRecord],
     platformTenants = [platformTenantRecord],
     platformTenantError,
@@ -946,6 +1005,43 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
         }
 
         return jsonResponse(followUpPathAnalysis);
+      }
+
+      if (path === '/api/institution/his-connections') {
+        if (hisConnectionListError) {
+          return jsonResponse(
+            { error: hisConnectionListError.message },
+            { status: hisConnectionListError.status },
+          );
+        }
+
+        return jsonResponse({ records: hisConnections });
+      }
+
+      if (path.startsWith('/api/institution/his-connections/')) {
+        if (hisConnectionDetailError) {
+          return jsonResponse(
+            { error: hisConnectionDetailError.message },
+            { status: hisConnectionDetailError.status },
+          );
+        }
+
+        const connectionId = decodeURIComponent(path.split('/').at(-1) ?? '');
+        const record =
+          hisConnectionDetails?.[connectionId] ??
+          hisConnections.find(
+            (connection) =>
+              typeof connection === 'object' &&
+              connection !== null &&
+              'connectionId' in connection &&
+              connection.connectionId === connectionId,
+          );
+
+        if (!record) {
+          return jsonResponse({ error: 'not_found' }, { status: 404 });
+        }
+
+        return jsonResponse({ record });
       }
 
       if (path.includes('/follow-up-suggestions')) {
@@ -1226,6 +1322,52 @@ function expectOnlyInstitutionReadCalls(fetchMock: ReturnType<typeof mockWorkspa
     expect(fetchPath(input)).not.toContain('tenantId');
     expect(init?.method ?? 'GET').toBe('GET');
     expect(init?.body ? String(init.body) : '').not.toContain('tenantId');
+  }
+}
+
+function expectOnlyHisConnectionReadCalls(fetchMock: ReturnType<typeof mockWorkspaceFetch>) {
+  const hisConnectionCalls = fetchMock.mock.calls.filter(([input]) =>
+    fetchPath(input).startsWith('/api/institution/his-connections'),
+  );
+
+  expect(hisConnectionCalls.length).toBeGreaterThan(0);
+  for (const [input, init] of hisConnectionCalls) {
+    const path = fetchPath(input);
+
+    expect(path).toMatch(/^\/api\/institution\/his-connections(?:\/[^/?#]+)?$/u);
+    expect(path).not.toContain('tenantId');
+    expect(init?.method ?? 'GET').toBe('GET');
+    expect(init?.body).toBeUndefined();
+    expect(JSON.stringify(init ?? {})).not.toContain('tenantId');
+  }
+}
+
+function expectNoSensitiveHisConnectionContent(container: HTMLElement) {
+  const content = container.textContent ?? '';
+
+  expect(content).not.toContain('tenant_should_not_render');
+  expect(content).not.toContain('deletedAt');
+  expect(content).not.toContain('credentialRef');
+  expect(content).not.toContain('cred_ref_internal_only');
+  expect(content).not.toContain('token_should_not_render');
+  expect(content).not.toContain('secret_should_not_render');
+  expect(content).not.toContain('sk_test_should_not_render');
+  expect(content).not.toContain('oauth_should_not_render');
+  expect(content).not.toContain('basic_auth_should_not_render');
+  expect(content).not.toContain('signing_key_should_not_render');
+  expect(content).not.toContain('private_key_should_not_render');
+  expect(content).not.toContain('postgres://');
+  expect(content).not.toContain('raw HIS payload should not render');
+  expect(content).not.toContain('完整请求体不应展示');
+  expect(content).not.toContain('完整响应体不应展示');
+  expect(content).not.toContain('select * from his_connections');
+  expect(content).not.toContain('DATABASE_URL');
+  expect(content).not.toContain('stack');
+}
+
+function expectNoHisConnectionWriteActionButtons() {
+  for (const label of ['创建', '编辑', '删除', '暂停', '恢复', '撤销', '配置凭证', '测试连接']) {
+    expect(screen.queryByRole('button', { name: new RegExp(label, 'u') })).not.toBeInTheDocument();
   }
 }
 
@@ -2818,7 +2960,9 @@ describe('工作台入口页面', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '客服工作台' }));
     expect(screen.getByText('客服工作台暂不进入本次演示主线')).toBeInTheDocument();
-    expect(screen.getByText('本次主线：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志。')).toBeInTheDocument();
+    expect(
+      screen.getByText('本次主线：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志、HIS 连接配置。'),
+    ).toBeInTheDocument();
     expect(screen.getByText('后续：客服工作台、知识库、数据分析。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '知识库' }));
@@ -2856,6 +3000,88 @@ describe('工作台入口页面', () => {
     expect(screen.getByRole('heading', { name: '审计日志' })).toBeInTheDocument();
     expect(await screen.findByText('audit_phase8_institution')).toBeInTheDocument();
     expectOnlyInstitutionReadCalls(fetchMock);
+  });
+
+  it('机构入口 smoke 覆盖 HIS 连接配置只读入口、安全摘要和敏感字段边界', async () => {
+    const fetchMock = mockWorkspaceFetch();
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'HIS 连接配置' }));
+
+    expect(await screen.findByRole('heading', { name: 'HIS 连接配置' })).toBeInTheDocument();
+    expect((await screen.findAllByText('星澜 HIS 只读连接')).length).toBeGreaterThan(0);
+    expect(screen.getByText('草稿 HIS 连接')).toBeInTheDocument();
+    expect(screen.getAllByText('来源系统：his').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('厂商类型：demo_vendor').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('系统类型：his').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已启用').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('草稿').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('正常').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('未检查').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('凭证已配置').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('凭证未配置').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('最近检查：2026-06-03T08:30:00.000Z').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('最近错误码：SAFE_TIMEOUT').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('创建时间：2026-06-03T08:00:00.000Z').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('更新时间：2026-06-03T08:20:00.000Z').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('撤销时间：未记录').length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: '安全详情' })).toBeInTheDocument();
+    expect(screen.getByText('配置凭证、测试连接、启停连接需后续单独实现。')).toBeInTheDocument();
+    expect(
+      screen.getByText('这些状态只是后端只读状态展示，不代表测试连接或真实 HIS 调用已实现。'),
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/institution/his-connections', {
+        cache: 'no-store',
+      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/institution/his-connections/his_conn_active',
+        { cache: 'no-store' },
+      );
+    });
+    expectOnlyHisConnectionReadCalls(fetchMock);
+    expectNoSensitiveHisConnectionContent(container);
+    expectNoHisConnectionWriteActionButtons();
+    expect(
+      fetchMock.mock.calls.some(([input]) => /^https?:\/\//u.test(fetchPath(input))),
+    ).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        /wecom|wechat|openai|rag|agent|follow-up-tasks/u.test(fetchPath(input)),
+      ),
+    ).toBe(false);
+  });
+
+  it('机构入口 smoke 覆盖 HIS 连接配置空态', async () => {
+    const fetchMock = mockWorkspaceFetch({ hisConnections: [] });
+    render(<HospitalPage />);
+
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'HIS 连接配置' }));
+    expect(await screen.findByText('暂无 HIS 连接配置')).toBeInTheDocument();
+    expect(
+      screen.getByText('当前机构尚未登记连接配置。配置凭证、测试连接和启停连接需后续单独实现。'),
+    ).toBeInTheDocument();
+    expectOnlyHisConnectionReadCalls(fetchMock);
+  });
+
+  it('机构入口 smoke 覆盖 HIS 连接配置加载失败稳定文案', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      hisConnectionListError: {
+        status: 503,
+        message: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg stack token secret',
+      },
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'HIS 连接配置' }));
+    expect(await screen.findByText('HIS 连接配置暂时不可用')).toBeInTheDocument();
+    expectNoSensitiveHisConnectionContent(container);
+    expectOnlyHisConnectionReadCalls(fetchMock);
   });
 
   it('机构入口 smoke 覆盖审计日志入口和敏感字段边界', async () => {

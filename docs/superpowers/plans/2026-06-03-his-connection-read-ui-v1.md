@@ -10,6 +10,34 @@
 
 ---
 
+## 2026-06-04 实现补充
+
+> 本文档最初用于 PR #121 的 docs-only Plan Mode。当前 `codex/his-connection-read-ui` 分支已按该边界推进轻量 UI 实现和 smoke 覆盖，但仍不进入写入 API、凭证管理、测试连接或真实 HIS adapter。
+
+本次已完成：
+
+- 机构端 workspace 新增「HIS 连接配置」入口。
+- 新增 `src/modules/institution/components/HisConnectionReadOnlyPanel.tsx`，只调用现有 list / detail GET API。
+- UI 只展示安全摘要字段和中文状态文案，不展示 `tenantId`、`deletedAt`、`credentialRef`、凭证明文、raw payload、完整请求 / 响应体、SQL、stack、`DATABASE_URL` 或外部错误全文。
+- UI 不传可信 `tenantId`，不拼接 query / header tenantId，不设置请求 body，不直接访问 repository。
+- 补充空态、列表加载失败、未登录 / 无权限稳定提示和详情 `not_found` 稳定提示。
+- 补充 `src/modules/institution/tests/HisConnectionReadOnlyPanel.test.tsx`。
+- 扩展 `src/modules/workspace/tests/WorkspaceEntryPages.test.tsx`。
+- 轻量同步 README、roadmap 和 devlog。
+
+本次仍不包含：
+
+- create / update / delete API。
+- pause / resume / revoke API。
+- 写入 repository。
+- 数据库 schema / migration。
+- 权限、认证或租户隔离修改。
+- 凭证写入、读取明文或返回 `credentialRef`。
+- 测试连接。
+- 真实 HIS adapter、机构系统、企微、AI / RAG / Agent 或自动触达。
+- raw HIS payload 保存或展示。
+- demo seed 修改。
+
 ## 0. 当前 PR 范围
 
 新增：
