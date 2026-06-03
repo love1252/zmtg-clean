@@ -42,6 +42,7 @@
 - 连接配置只读 UI / workspace 入口轻量实现已完成，机构端新增「HIS 连接配置」入口和 `HisConnectionReadOnlyPanel`，只调用现有 list / detail GET API，展示安全摘要、中文状态文案、空态 / 错误态和只读边界，并补充组件测试与 workspace smoke；本阶段不做写入 API / 凭证管理 / 测试连接 / 真实 HIS adapter，不展示 `tenantId`、`deletedAt`、`credentialRef`、凭证明文、raw payload 或外部错误全文
 - 连接配置只读 UI smoke / 文档收尾已完成，确认 schema -> repository -> list / detail API -> workspace「HIS 连接配置」入口 -> `HisConnectionReadOnlyPanel` -> 组件测试 / workspace smoke 闭环；现有 smoke 已覆盖入口、只读面板、列表 / 详情安全摘要、状态 / 健康 / 凭证中文文案、空态、错误态、敏感字段不展示、无写入按钮、不调用外部系统和不修改 demo seed；后续 create / update / pause / resume / revoke API、凭证管理、测试连接和真实 HIS adapter 必须单独进入 Plan Mode / 独立 PR
 - Phase 23 Plan Mode：HIS 连接配置写入 API 与状态流转边界已完成，规划未来 create / update / pause / resume / revoke / delete API、写入 repository、权限、审计、状态流转、错误态和数据最小化边界；本阶段不写代码、不新增 API、不做写入 repository、不改 schema / migration、不改权限、认证或租户隔离，不处理凭证明文、不返回 `credentialRef`、不做测试连接、不接真实 HIS
+- Phase 23 Plan Mode：HIS 连接配置写入 repository 边界已完成，规划未来 create / update / pause / resume / revoke / softDelete repository 方法、输入模型、状态流转、租户边界、审计衔接、稳定结果和数据最小化；本阶段不写代码、不新增 repository 方法、不新增 API、不改 schema / migration、不改权限、认证或租户隔离，不处理凭证、不做测试连接、不接真实 HIS
 - 开放平台基础治理基线
 
 Phase 6 已完成：
