@@ -1,7 +1,7 @@
 # HIS 连接配置 schema / API v1 实施计划
 
 > **给自动化执行者：** 必需子技能：使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans` 按任务逐步执行本计划。步骤使用复选框（`- [ ]`）语法跟踪。
-> 实现同步：后续分支 `codex/his-connection-read-repository` 已按本计划中的 list / detail 前置数据访问边界进入只读 repository 最小实现；仍不新增 API、写入 repository、权限改动、凭证存储、测试连接或真实 HIS adapter。
+> 实现同步：后续分支 `codex/his-connection-read-repository` 已按本计划中的 list / detail 前置数据访问边界进入只读 repository 最小实现；后续分支 `codex/his-connection-read-api` 已进入机构端 list / detail 只读 API 最小实现；仍不新增 schema / migration、写入 API、写入 repository、权限模型改动、凭证存储、测试连接或真实 HIS adapter。
 
 **目标：** 只做 HIS / 机构系统连接配置 schema / API Plan Mode，明确未来连接配置能力进入实现前的 schema、API、权限、审计、DTO、错误态、凭证引用和租户隔离边界。
 
