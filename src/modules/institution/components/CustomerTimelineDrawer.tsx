@@ -100,7 +100,7 @@ function displayText(value: string | null | undefined, fallback = '未记录') {
 }
 
 function treatmentSummaryStatusLabel(status: CustomerTimelineTreatmentSummary['status']) {
-  return status === 'voided' ? '已作废' : '正常';
+  return status === 'voided' ? '已作废' : '可作为运营依据';
 }
 
 function timelineEventStatusLabel(event: CustomerTimelineEvent) {
@@ -273,8 +273,8 @@ function TreatmentSummary({ treatment }: { treatment: CustomerTimelineTreatmentS
       </div>
       {isVoided ? (
         <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold leading-6 text-amber-800">
-          <p>该治疗摘要已作废</p>
-          <p className="mt-1 text-xs">仅保留历史追溯，不再作为后续运营依据。</p>
+          <p>作废不是删除，该治疗摘要仅保留历史追溯。</p>
+          <p className="mt-1 text-xs">不再作为后续运营依据，也不会主动向客户发送消息。</p>
         </div>
       ) : null}
       <p className="mt-2 text-sm leading-6 text-slate-600">{treatment.summary}</p>
@@ -329,7 +329,7 @@ function TimelineEventItem({ event }: { event: CustomerTimelineEvent }) {
         <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
           <span>状态：{timelineEventStatusLabel(event)}</span>
           <span>来源：{event.source}</span>
-          <span>关联：{event.relatedRecordId}</span>
+          <span>关联记录：{event.relatedRecordId}</span>
           {event.riskLevel ? (
             <span>风险：{followUpRiskLevelLabels[event.riskLevel]}</span>
           ) : null}
@@ -458,6 +458,9 @@ export function CustomerTimelineDrawer({
               <p className="text-xs font-semibold text-blue-600">客户详情</p>
               <h2 className="mt-1 text-xl font-semibold text-slate-950">客户详情时间线</h2>
               <p className="mt-1 text-sm text-slate-500">{customer?.displayName ?? customerName}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                服务过程沉淀：预约、治疗摘要、随访任务和关键操作记录。这里展示结构化摘要，不展示原始诊疗内容。
+              </p>
             </div>
             <button
               type="button"
@@ -524,7 +527,7 @@ export function CustomerTimelineDrawer({
               </section>
 
               <section className="space-y-3">
-                <SectionHeader icon={CalendarClock} title="预约摘要" />
+                <SectionHeader icon={CalendarClock} title="预约记录" />
                 {timeline.appointments.length > 0 ? (
                   <ul className="space-y-3">
                     {timeline.appointments.map((appointment) => (
@@ -532,12 +535,12 @@ export function CustomerTimelineDrawer({
                     ))}
                   </ul>
                 ) : (
-                  <InstitutionPageState kind="empty" title="暂无预约摘要" />
+                  <InstitutionPageState kind="empty" title="暂无预约记录" />
                 )}
               </section>
 
               <section className="space-y-3">
-                <SectionHeader icon={ClipboardList} title="随访摘要" />
+                <SectionHeader icon={ClipboardList} title="随访任务" />
                 {timeline.followups.length > 0 ? (
                   <ul className="space-y-3">
                     {timeline.followups.map((followUp) => (
@@ -551,7 +554,7 @@ export function CustomerTimelineDrawer({
 
               <section className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <SectionHeader icon={HeartPulse} title="治疗结构化摘要" />
+                  <SectionHeader icon={HeartPulse} title="治疗后结构化摘要" />
                   <button
                     type="button"
                     className="inline-flex h-9 items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 text-xs font-semibold text-rose-700"
@@ -828,12 +831,12 @@ export function CustomerTimelineDrawer({
                     ))}
                   </ul>
                 ) : (
-                  <InstitutionPageState kind="empty" title="暂无治疗摘要" />
+                  <InstitutionPageState kind="empty" title="暂无治疗后结构化摘要" />
                 )}
               </section>
 
               <section className="space-y-3">
-                <SectionHeader icon={History} title="结构化时间线" />
+                <SectionHeader icon={History} title="服务过程时间线" />
                 {timeline.timeline.length > 0 ? (
                   <ol className="space-y-3 border-l border-slate-200 pl-3">
                     {timeline.timeline.map((event) => (
@@ -846,7 +849,7 @@ export function CustomerTimelineDrawer({
               </section>
 
               <section className="space-y-3">
-                <SectionHeader icon={ShieldCheck} title="安全审计摘要" />
+                <SectionHeader icon={ShieldCheck} title="关键操作记录" />
                 {timeline.auditEvents.length > 0 ? (
                   <ul className="space-y-3">
                     {timeline.auditEvents.map((auditEvent) => (
@@ -854,7 +857,7 @@ export function CustomerTimelineDrawer({
                     ))}
                   </ul>
                 ) : (
-                  <InstitutionPageState kind="empty" title="暂无安全审计摘要" />
+                  <InstitutionPageState kind="empty" title="暂无关键操作记录" />
                 )}
               </section>
             </div>

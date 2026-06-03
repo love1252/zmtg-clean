@@ -52,8 +52,8 @@ const statusOptions = Object.entries(appointmentStatusLabels) as [
 
 const boundaryItems = [
   {
-    title: '预约来自租户 API',
-    description: '页面读取当前租户可访问的预约 records，不在前端传递 tenantId。',
+    title: '预约用于串联客户旅程',
+    description: '预约数据用于串联客户旅程，不代表外部 HIS 已完成同步。',
     tone: 'blue',
   },
   {
@@ -63,7 +63,7 @@ const boundaryItems = [
   },
   {
     title: '状态更新保持最小 payload',
-    description: '预约状态流转只提交 id、status、note，不提交扩展字段或原始个人信息。',
+    description: '预约状态流转只提交必要状态和备注，不提交扩展字段或原始个人信息。',
     tone: 'amber',
   },
 ] as const;
@@ -122,6 +122,7 @@ function visibleListErrorState(
         ? '当前账号没有访问预约数据的权限'
         : '当前账号没有访问客户数据的权限',
     fallbackMessage: resource === 'appointment' ? '预约数据请求失败' : '客户数据请求失败',
+    unavailableMessage: '数据服务暂时不可用，请稍后刷新或切换演示备份',
   });
 }
 
@@ -315,7 +316,7 @@ export function AppointmentCenterShell() {
       <InstitutionSectionHeader
         eyebrow="预约流转"
         title="预约中心"
-        description="从机构预约 API 加载当前租户预约，并用已加载客户列表创建新的预约摘要。"
+        description="预约数据用于串联客户旅程，不代表外部 HIS 已完成同步。这里用于口头串起面诊、治疗、复诊、待确认和取消状态。"
         tone="emerald"
       />
 
@@ -332,8 +333,8 @@ export function AppointmentCenterShell() {
           {!isLoading && !listErrorState && appointments.length === 0 ? (
             <InstitutionPageState
               kind="empty"
-              title="暂无预约记录"
-              description="可以从右侧选择当前客户列表中的客户创建预约。"
+              title="暂无可串联的预约记录"
+              description="当前没有预约可放入客户旅程，可从右侧选择演示客户创建预约摘要。"
             />
           ) : null}
 
@@ -356,7 +357,7 @@ export function AppointmentCenterShell() {
                 <div className="mt-4 space-y-3">
                   {!isLoading && !listErrorState && group.records.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 px-3 py-4 text-sm text-slate-400">
-                      暂无{group.label}预约
+                      暂无{group.label}预约，可在演示中跳过该状态
                     </div>
                   ) : null}
 

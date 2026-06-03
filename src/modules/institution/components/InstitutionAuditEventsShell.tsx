@@ -97,13 +97,13 @@ function visibleAuditErrorState(error: InstitutionAuditEventsClientError): Insti
   if (error.kind === 'service_unavailable') {
     return {
       kind: 'unavailable',
-      title: '审计日志数据暂时不可用',
+      title: '关键操作记录暂时不可用',
     };
   }
 
   return {
     kind: 'error',
-    title: error.message || '审计日志请求失败',
+    title: error.message || '关键操作记录请求失败',
   };
 }
 
@@ -235,9 +235,9 @@ export function InstitutionAuditEventsShell() {
   return (
     <section className="space-y-5">
       <InstitutionSectionHeader
-        eyebrow="审计日志"
+        eyebrow="关键操作可追踪"
         title="审计日志"
-        description="按当前机构上下文读取审计事件，只展示资源、动作、结果、原因、操作者和发生时间。"
+        description="用于复盘创建、编辑、作废、随访任务创建和拒绝事件，只展示资源、动作、结果、原因、操作者和发生时间。"
         tone="emerald"
         action={
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
@@ -258,7 +258,7 @@ export function InstitutionAuditEventsShell() {
             </div>
             <div>
               <h3 className="text-base font-semibold text-slate-950">筛选</h3>
-              <p className="mt-0.5 text-xs text-slate-500">仅支持审计字段白名单。</p>
+              <p className="mt-0.5 text-xs text-slate-500">仅支持关键操作字段白名单。</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -405,8 +405,8 @@ export function InstitutionAuditEventsShell() {
       <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold text-slate-950">审计事件列表</h3>
-            <p className="mt-1 text-sm text-slate-500">按发生时间倒序排列。</p>
+            <h3 className="text-lg font-semibold text-slate-950">关键操作记录</h3>
+            <p className="mt-1 text-sm text-slate-500">按发生时间倒序排列，不展示请求体或服务端错误细节。</p>
           </div>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
             {pageInfo ? `limit ${pageInfo.limit}` : 'limit 默认'}
@@ -429,7 +429,7 @@ export function InstitutionAuditEventsShell() {
           <InstitutionPageState
             kind="empty"
             title="暂无审计事件"
-            description="当前筛选条件下没有可展示的审计事件。"
+            description="当前筛选条件下没有可展示的关键操作记录。"
             className="mt-4"
           />
         ) : null}

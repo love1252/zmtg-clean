@@ -152,19 +152,19 @@ function buildJourneyLanes(customers: readonly CustomerRecordSummary[]) {
       key: 'consulting',
       title: '咨询转化',
       count: countCustomers(customers, (customer) => customer.lifecycle === 'consulting'),
-      detail: '来自客户 API 的咨询阶段摘要',
+      detail: '客户仍在方案沟通阶段',
     },
     {
       key: 'scheduled',
       title: '预约到院',
       count: countCustomers(customers, (customer) => customer.lifecycle === 'scheduled'),
-      detail: '来自客户 API 的预约阶段摘要',
+      detail: '预约作为客户旅程节点沉淀',
     },
     {
       key: 'post_care',
       title: '术后关怀',
       count: countCustomers(customers, (customer) => customer.lifecycle === 'post_care'),
-      detail: '来自客户 API 的关怀阶段摘要',
+      detail: '治疗后服务重点客户',
     },
     {
       key: 'repurchase_window',
@@ -173,7 +173,7 @@ function buildJourneyLanes(customers: readonly CustomerRecordSummary[]) {
         customers,
         (customer) => customer.lifecycle === 'repurchase_window',
       ),
-      detail: '来自客户 API 的复购窗口摘要',
+      detail: '需人工判断复诊和复购机会',
     },
   ];
 
@@ -200,30 +200,30 @@ export function buildInstitutionDashboardSummary(
     metrics: [
       {
         key: 'customer_total',
-        label: '当前客户摘要',
+        label: '当前演示客户',
         value: formatCount(input.customers.length),
-        helper: '来自客户 GET API',
+        helper: '受控 demo 数据',
         tone: 'blue',
       },
       {
         key: 'high_priority_customers',
         label: '高优先级客户',
         value: formatCount(highPriorityCustomers),
-        helper: '按客户 priority 字段派生',
+        helper: '待人工承接',
         tone: 'violet',
       },
       {
         key: 'pending_appointments',
         label: '待确认预约',
         value: formatCount(pendingAppointments),
-        helper: '按预约 status 字段派生',
+        helper: '客户旅程节点',
         tone: 'emerald',
       },
       {
         key: 'due_followups',
         label: '待处理随访',
         value: formatCount(dueFollowUps),
-        helper: '按随访 status 字段派生',
+        helper: '今日运营重点',
         tone: 'amber',
       },
     ],
@@ -237,7 +237,7 @@ export function buildInstitutionDashboardSummary(
             (customer) => customer.lifecycle === 'repurchase_window',
           ),
         ),
-        helper: '客户 lifecycle',
+        helper: '客户旅程分层',
       },
       {
         key: 'post_care',
@@ -245,7 +245,7 @@ export function buildInstitutionDashboardSummary(
         value: formatCount(
           countCustomers(input.customers, (customer) => customer.lifecycle === 'post_care'),
         ),
-        helper: '客户 lifecycle',
+        helper: '治疗后服务',
       },
       {
         key: 'reschedule_appointments',
@@ -256,15 +256,15 @@ export function buildInstitutionDashboardSummary(
             (appointment) => appointment.status === 'reschedule_requested',
           ),
         ),
-        helper: '预约 status',
+        helper: '需人工协调',
       },
       {
         key: 'urgent_followups',
-        label: '高风险随访',
+        label: '重点随访',
         value: formatCount(
           countFollowUps(input.followUpTasks, (task) => task.riskLevel === 'urgent'),
         ),
-        helper: '随访 riskLevel',
+        helper: '优先处理',
       },
     ],
     actionItems: buildActionItems(input),
