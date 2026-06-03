@@ -1,12 +1,12 @@
-# Phase 22 Standard Event Contract Gap Review Implementation Plan
+# Phase 22 标准事件契约差异评估实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **给自动化执行者：** 必需子技能：使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans` 按任务逐步执行本计划。步骤使用复选框（`- [ ]`）语法跟踪。
 
-**Goal:** 评估 Phase 17 `StandardTreatmentEvent` 契约和 Phase 22 HIS mapper 建议字段之间的差异，明确后续是否需要调整命名、补字段或保持兼容策略。
+**目标：** 评估 Phase 17 `StandardTreatmentEvent` 契约和 Phase 22 HIS mapper 建议字段之间的差异，明确后续是否需要调整命名、补字段或保持兼容策略。
 
-**Architecture:** PR 2 只做 docs-only 契约差异评估，不修改 TypeScript 契约、mapper、测试、API、schema 或业务流程。评估结论优先保护 Phase 17 已落地的内部核心 DTO 命名，避免 `source*` 与 `external*` 两套同义字段并存，并把真实 HIS adapter、患者身份匹配、自动摘要和自动任务继续挡在后续独立 Plan Mode 外。PR 3A 已在独立分支按该结论补齐 `recoveryStage`、`rawSourceType` 和 `mappingWarnings`。
+**架构：** PR 2 只做 docs-only 契约差异评估，不修改 TypeScript 契约、mapper、测试、API、schema 或业务流程。评估结论优先保护 Phase 17 已落地的内部核心 DTO 命名，避免 `source*` 与 `external*` 两套同义字段并存，并把真实 HIS adapter、患者身份匹配、自动摘要和自动任务继续挡在后续独立 Plan Mode 外。PR 3A 已在独立分支按该结论补齐 `recoveryStage`、`rawSourceType` 和 `mappingWarnings`。
 
-**Tech Stack:** Markdown only。后续如单独批准实现，才可能涉及 TypeScript、Vitest 和现有机构领域模块。
+**技术栈：** 仅 Markdown。后续如单独批准实现，才可能涉及 TypeScript、Vitest 和现有机构领域模块。
 
 ---
 
@@ -186,7 +186,7 @@ Phase 22 HIS mapper v1 文档建议字段为：
 | `nextCareAction` | `nextCareAction` | 已有 | 无字段差异。 | 保持现状。 |
 | `tags` | `tags` | 已有 | 无字段差异。 | 保持现状，继续限制数量、长度和敏感内容。 |
 | `rawSourceType` | 无 | 缺失 | Phase 17 只有 `sourceSystem`，不能表达外部记录粗类型；但 raw payload 仍禁止保存。 | 可在 PR 3A 评估补一个安全 code 字段，例如 `treatment_record | appointment | order | course_progress | manual_review | other`，不得保存外部原文。 |
-| `mappingWarnings` | 无 | 缺失 | 当前 mapper 只返回 fatal error 或标准事件，没有 warning code 输出。 | 可在 PR 3A/3B 评估补安全 warning code 数组；建议由 mapper 生成，不接受外部输入。 |
+| `mappingWarnings` | 无 | 缺失 | 当前 mapper 只返回 fatal error 或标准事件，没有告警代码输出。 | 可在 PR 3A/3B 评估补安全告警代码数组；建议由 mapper 生成，不接受外部输入。 |
 
 补充差异：
 
@@ -231,13 +231,13 @@ Phase 22 HIS mapper v1 文档建议字段为：
 
 6. `mappingWarnings` 必须是安全 code。
    - 推荐由 mapper 生成，不接受外部系统原样传入。
-   - warning code 示例：`unknown_treatment_category`、`missing_recovery_stage`、`external_event_id_missing`、`manual_review_required`、`category_mapped_by_alias`。
+   - 告警代码示例：`unknown_treatment_category`、`missing_recovery_stage`、`external_event_id_missing`、`manual_review_required`、`category_mapped_by_alias`。
    - 不得包含 raw payload、PII、手机号原文、身份证号、病历号原文、完整治疗正文、完整病历正文、咨询全文、图片 / 文件原文、SQL、stack、token、secret、`DATABASE_URL` 或连接串。
 
 7. `recoveryStage` 是优先级最高的补缺字段。
    - 治疗摘要、路径模板和随访建议都已经依赖 `recoveryStage`。
    - 标准事件如果缺少 `recoveryStage`，后续从 HIS 标准事件直接进入路径模板时会丢失关键恢复阶段信号。
-   - PR 3A 已先补该字段，并覆盖 mapper parser / 单元测试。
+   - PR 3A 已先补该字段，并覆盖 mapper 解析器 / 单元测试。
 
 8. `rawSourceType` 可以补，但必须保持粗粒度。
    - 它只能表达来源记录类型，例如 `treatment_record`、`appointment`、`order`、`course_progress`、`manual_review`、`other`。
@@ -272,13 +272,13 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/StandardTreatmentE
 ./node_modules/.bin/tsc --noEmit
 ```
 
-### PR 3B：mapper parser 与安全测试收尾
+### PR 3B：mapper 解析器与安全测试收尾
 
 状态：
 
-- 已进入本次 parser 安全测试收尾。
+- 已进入本次解析器安全测试收尾。
 - 仅补充回归测试和轻量文档同步。
-- 新增测试直接通过，parser / domain 无需改动。
+- 新增测试直接通过，解析器 / domain 无需改动。
 
 范围：
 
