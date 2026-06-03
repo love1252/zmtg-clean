@@ -4,12 +4,15 @@ import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import {
   Activity,
+  AlertTriangle,
   Bell,
   BriefcaseBusiness,
   CalendarCheck,
   CheckCircle2,
   Clock3,
+  Route,
   Search,
+  ShieldCheck,
   Sparkles,
   Users,
 } from 'lucide-react';
@@ -53,6 +56,63 @@ const metricIcons = {
   due_followups: Clock3,
 } satisfies Record<InstitutionDashboardMetricKey, typeof Users>;
 
+const followUpPathAnalysisMetricItems = [
+  {
+    key: 'templateSuggestionCount',
+    label: '模板建议数',
+    helper: '模板路径建议',
+    tone: 'blue',
+  },
+  {
+    key: 'confirmedSourceTaskCount',
+    label: '人工确认任务数',
+    helper: '来源任务',
+    tone: 'violet',
+  },
+  {
+    key: 'completedTaskCount',
+    label: '已完成任务数',
+    helper: '已完成',
+    tone: 'emerald',
+  },
+  {
+    key: 'overdueTaskCount',
+    label: '超时任务数',
+    helper: '待处理超时',
+    tone: 'amber',
+  },
+  {
+    key: 'voidedSummaryBlockedCount',
+    label: '作废摘要阻断数',
+    helper: '审计阻断',
+    tone: 'rose',
+  },
+  {
+    key: 'duplicateSourceTaskConflictCount',
+    label: '重复来源任务冲突数',
+    helper: '审计冲突',
+    tone: 'cyan',
+  },
+] as const;
+
+const followUpPathAnalysisToneClasses = {
+  blue: 'border-blue-200 bg-blue-50 text-blue-700',
+  violet: 'border-violet-200 bg-violet-50 text-violet-700',
+  emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  amber: 'border-amber-200 bg-amber-50 text-amber-700',
+  rose: 'border-rose-200 bg-rose-50 text-rose-700',
+  cyan: 'border-cyan-200 bg-cyan-50 text-cyan-700',
+} satisfies Record<(typeof followUpPathAnalysisMetricItems)[number]['tone'], string>;
+
+const followUpPathBoundaryLabels = [
+  '当前为只读聚合指标',
+  '不展示客户明细',
+  '不展示任务列表',
+  '不展示治疗正文、病历正文、咨询全文',
+  '不自动触达客户',
+  '不接 AI',
+] as const;
+
 const emptyDashboardSummary = buildInstitutionDashboardSummary({
   customers: [],
   appointments: [],
@@ -60,6 +120,16 @@ const emptyDashboardSummary = buildInstitutionDashboardSummary({
 });
 
 type DashboardLoadStatus = 'loading' | 'success' | 'error';
+type FollowUpPathAnalysisMetricKey = (typeof followUpPathAnalysisMetricItems)[number]['key'];
+
+type FollowUpPathAnalysisApiResponse = Record<FollowUpPathAnalysisMetricKey, number> & {
+  scope: string;
+  analysisAt: string;
+  notes: string[];
+  warnings: string[];
+  dataSourceNote?: string;
+  boundaryNote?: string;
+};
 
 const realInstitutionViews = [
   'dashboard',
@@ -100,6 +170,69 @@ function firstDashboardError(
   )?.error;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function safeNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function safeOptionalString(value: unknown) {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
+function safeStringList(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    .slice(0, 6);
+}
+
+function parseFollowUpPathAnalysisPayload(payload: unknown): FollowUpPathAnalysisApiResponse {
+  const record = isRecord(payload) ? payload : {};
+
+  return {
+    scope:
+      safeOptionalString(record.scope) ?? 'followup_path_operational_analysis_v1',
+    analysisAt: safeOptionalString(record.analysisAt) ?? '',
+    templateSuggestionCount: safeNumber(record.templateSuggestionCount),
+    confirmedSourceTaskCount: safeNumber(record.confirmedSourceTaskCount),
+    completedTaskCount: safeNumber(record.completedTaskCount),
+    overdueTaskCount: safeNumber(record.overdueTaskCount),
+    voidedSummaryBlockedCount: safeNumber(record.voidedSummaryBlockedCount),
+    duplicateSourceTaskConflictCount: safeNumber(record.duplicateSourceTaskConflictCount),
+    notes: safeStringList(record.notes),
+    warnings: safeStringList(record.warnings),
+    dataSourceNote: safeOptionalString(record.dataSourceNote),
+    boundaryNote: safeOptionalString(record.boundaryNote),
+  };
+}
+
+async function loadFollowUpPathAnalysis(): Promise<
+  | { ok: true; analysis: FollowUpPathAnalysisApiResponse }
+  | { ok: false }
+> {
+  try {
+    const response = await fetch('/api/institution/follow-up-path-analysis', {
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      return { ok: false };
+    }
+
+    const payload: unknown = await response.json();
+    return {
+      ok: true,
+      analysis: parseFollowUpPathAnalysisPayload(payload),
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export function InstitutionWorkspace() {
   const [activeView, setActiveView] = useState<InstitutionViewId>('dashboard');
   const [dashboardSummary, setDashboardSummary] = useState<InstitutionDashboardSummary>(
@@ -108,6 +241,10 @@ export function InstitutionWorkspace() {
   const [dashboardStatus, setDashboardStatus] = useState<DashboardLoadStatus>('loading');
   const [dashboardErrorState, setDashboardErrorState] =
     useState<InstitutionPageStateProps | null>(null);
+  const [followUpPathAnalysis, setFollowUpPathAnalysis] =
+    useState<FollowUpPathAnalysisApiResponse | null>(null);
+  const [followUpPathAnalysisStatus, setFollowUpPathAnalysisStatus] =
+    useState<DashboardLoadStatus>('loading');
   const activeNavItem = institutionNavItems.find((item) => item.id === activeView) ?? institutionNavItems[0];
   const highPriorityMetric = dashboardSummary.metrics.find(
     (metric) => metric.key === 'high_priority_customers',
@@ -121,14 +258,25 @@ export function InstitutionWorkspace() {
     async function loadDashboardSummary() {
       setDashboardStatus('loading');
       setDashboardErrorState(null);
+      setFollowUpPathAnalysisStatus('loading');
+      setFollowUpPathAnalysis(null);
 
-      const [customerResult, appointmentResult, followUpResult] = await Promise.all([
+      const [customerResult, appointmentResult, followUpResult, pathAnalysisResult] = await Promise.all([
         listCustomers(),
         listAppointments(),
         listFollowUpTasks(),
+        loadFollowUpPathAnalysis(),
       ]);
 
       if (!isActive) return;
+
+      if (pathAnalysisResult.ok) {
+        setFollowUpPathAnalysis(pathAnalysisResult.analysis);
+        setFollowUpPathAnalysisStatus('success');
+      } else {
+        setFollowUpPathAnalysis(null);
+        setFollowUpPathAnalysisStatus('error');
+      }
 
       const error = firstDashboardError([customerResult, appointmentResult, followUpResult]);
       if (error) {
@@ -294,6 +442,8 @@ export function InstitutionWorkspace() {
             {activeView === 'dashboard' ? (
               <InstitutionDashboardHome
                 errorState={dashboardErrorState}
+                followUpPathAnalysis={followUpPathAnalysis}
+                followUpPathAnalysisStatus={followUpPathAnalysisStatus}
                 status={dashboardStatus}
                 summary={dashboardSummary}
               />
@@ -319,10 +469,14 @@ export function InstitutionWorkspace() {
 
 function InstitutionDashboardHome({
   errorState,
+  followUpPathAnalysis,
+  followUpPathAnalysisStatus,
   status,
   summary,
 }: {
   errorState: InstitutionPageStateProps | null;
+  followUpPathAnalysis: FollowUpPathAnalysisApiResponse | null;
+  followUpPathAnalysisStatus: DashboardLoadStatus;
   status: DashboardLoadStatus;
   summary: InstitutionDashboardSummary;
 }) {
@@ -428,6 +582,11 @@ function InstitutionDashboardHome({
           description="当前没有客户、预约或随访任务可进入运营视图。"
         />
       ) : null}
+
+      <FollowUpPathAnalysisPanel
+        analysis={followUpPathAnalysis}
+        status={followUpPathAnalysisStatus}
+      />
 
       <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
         <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
@@ -568,6 +727,144 @@ function InstitutionDashboardHome({
         </article>
       </section>
     </>
+  );
+}
+
+function FollowUpPathAnalysisPanel({
+  analysis,
+  status,
+}: {
+  analysis: FollowUpPathAnalysisApiResponse | null;
+  status: DashboardLoadStatus;
+}) {
+  const hasNoData =
+    status === 'success' &&
+    analysis !== null &&
+    followUpPathAnalysisMetricItems.every((item) => analysis[item.key] === 0);
+
+  return (
+    <section className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-cyan-600 text-white shadow-lg shadow-cyan-600/20">
+            <Route className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold tracking-normal text-slate-950">
+              随访路径运营分析
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              基于既有只读 API 的聚合口径，用于运营负责人快速扫一眼。
+            </p>
+          </div>
+        </div>
+        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
+          只读聚合
+        </span>
+      </div>
+
+      {status === 'loading' ? (
+        <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm font-semibold text-slate-500">
+          正在加载随访路径运营分析...
+        </div>
+      ) : null}
+
+      {status === 'error' ? (
+        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <h3 className="text-sm font-semibold text-amber-900">
+                随访路径运营分析暂时无法加载
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-amber-800">
+                请稍后刷新页面，当前模块不会影响客户、预约和随访摘要。
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {status === 'success' && analysis ? (
+        <>
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            {followUpPathAnalysisMetricItems.map((item) => (
+              <article
+                key={item.key}
+                className="rounded-2xl border border-slate-200/80 bg-white/86 p-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span
+                    className={cn(
+                      'rounded-full border px-2.5 py-1 text-[11px] font-semibold',
+                      followUpPathAnalysisToneClasses[item.tone],
+                    )}
+                  >
+                    {item.helper}
+                  </span>
+                  <ShieldCheck className="h-4 w-4 text-slate-400" />
+                </div>
+                <div className="mt-4 text-3xl font-semibold tracking-normal text-slate-950">
+                  {analysis[item.key]}
+                </div>
+                <div className="mt-1 text-sm font-medium text-slate-500">{item.label}</div>
+              </article>
+            ))}
+          </div>
+
+          {hasNoData ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm font-semibold text-slate-500">
+              暂无随访路径运营指标
+            </div>
+          ) : null}
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_1fr]">
+            <article className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
+              <h3 className="text-sm font-semibold tracking-normal text-slate-950">口径说明</h3>
+              <div className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+                {analysis.notes.length > 0 ? (
+                  analysis.notes.map((note) => <p key={note}>{note}</p>)
+                ) : (
+                  <p>当前仅展示随访路径运营聚合结果。</p>
+                )}
+                {analysis.dataSourceNote ? <p>{analysis.dataSourceNote}</p> : null}
+                {analysis.boundaryNote ? <p>{analysis.boundaryNote}</p> : null}
+              </div>
+            </article>
+
+            <article className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
+              <h3 className="text-sm font-semibold tracking-normal text-slate-950">边界</h3>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {followUpPathBoundaryLabels.map((label) => (
+                  <span
+                    key={label}
+                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </article>
+          </div>
+
+          {analysis.warnings.length > 0 ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                <div>
+                  <h3 className="text-sm font-semibold text-amber-900">提示</h3>
+                  <div className="mt-1 space-y-1 text-sm leading-6 text-amber-800">
+                    {analysis.warnings.map((warning) => (
+                      <p key={warning}>{warning}</p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </section>
   );
 }
 

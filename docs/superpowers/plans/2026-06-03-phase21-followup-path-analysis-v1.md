@@ -285,6 +285,16 @@ node scripts/run-vitest.mjs run src/modules/institution/tests
 
 ### PR 5：机构端轻量指标展示
 
+状态：
+
+- 已进入轻量实现。
+- 机构端工作台新增 `随访路径运营分析` 小模块，读取既有 `GET /api/institution/follow-up-path-analysis`。
+- 页面展示模板建议数、人工确认任务数、已完成任务数、超时任务数、作废摘要阻断数和重复来源任务冲突数。
+- 页面只消费聚合响应、`notes`、`warnings`、`dataSourceNote` 和 `boundaryNote`，不传 `tenantId`，不传客户 id、任务 id 或治疗摘要 id。
+- 页面提供加载中、API 失败和全 0 空态；错误态只展示稳定文案，不渲染后端错误详情。
+- 明确只读边界：不展示客户明细、任务列表、治疗正文、病历正文、咨询全文，不自动触达客户，不接 AI。
+- 不新增 API，不改 DTO，不改 schema / migration，不改权限、认证或租户隔离，不做图表、报表导出或经营智能中心。
+
 前提：
 
 - 只读 API 或安全客户端派生已稳定。
