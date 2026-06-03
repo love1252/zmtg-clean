@@ -38,6 +38,7 @@
 - 连接配置 schema / API Plan Mode 已完成，规划未来 HIS / 机构系统连接配置实体字段、API 边界、权限与租户隔离、审计事件、DTO、稳定错误态、凭证引用和后续 PR A-H 拆分；本阶段不实现 schema / migration / API / 凭证存储 / 测试连接，不接真实 HIS，不保存 raw payload 或真实凭证
 - 连接配置 schema / migration 最小实现已完成，新增 `his_connections` 安全元数据表、状态 / 健康状态枚举、租户外键、租户内索引、软删除连接名唯一约束和 schema / migration 测试；本阶段不新增 API / repository / UI / 凭证存储 / 测试连接，不接真实 HIS，不保存 raw payload 或真实凭证，不修改 demo seed
 - 连接配置只读 repository 最小实现已完成，新增按可信 `tenantId` 列表 / 按 `tenantId + connectionId` 详情读取能力和 repository 测试；本阶段不新增 API / 写入 repository / UI / 权限改动 / 凭证存储 / 测试连接，不接真实 HIS，不保存 raw payload 或真实凭证，不修改 demo seed
+- 连接配置 list / detail 只读 API 最小实现已完成，新增机构端 `GET /api/institution/his-connections` 与 `GET /api/institution/his-connections/[connectionId]`，复用 `open_connection:read_own_tenant` 既有权限边界并返回安全 DTO；本阶段不做写入 API / 写入 repository / UI / 权限模型改动 / 凭证存储 / 测试连接，不接真实 HIS，不返回 raw payload、`credentialRef` 或真实凭证，不修改 demo seed
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -206,12 +207,13 @@ Phase 22 HIS 标准治疗事件 mapper v1 当前状态：
 - 连接配置 schema / API Plan Mode 已完成：当前只规划未来连接配置实体字段、API 边界、权限与租户隔离、审计事件、DTO、错误态、凭证引用和安全禁止项；仍不实现 schema / migration / API，不新增权限，不保存真实凭证，不做测试连接，不接真实 HIS，不保存 raw HIS payload
 - 连接配置 schema / migration 最小实现已完成：当前仅新增 `his_connections` 表、状态 / 健康状态枚举、租户外键、租户内查询索引、`credentialRef` nullable 引用字段、`revokedAt` / `deletedAt` 生命周期字段、软删除连接名唯一约束和 schema / migration 测试；仍不新增 API / repository，不改权限、认证或租户隔离，不保存真实凭证，不做测试连接，不接真实 HIS，不保存 raw HIS payload，不修改 demo seed
 - 连接配置只读 repository 最小实现已完成：当前仅新增 repository 层安全 read model、按可信 `tenantId` 列表读取、按 `tenantId + connectionId` 详情读取、默认过滤软删除、派生 `credentialConfigured` 和只读边界测试；仍不新增 API / 写入 repository，不改权限、认证或租户隔离，不保存真实凭证，不做测试连接，不接真实 HIS，不保存 raw HIS payload，不修改 demo seed
-- 后续如需 adapter spec / plan、连接配置只读 API、写入 / 状态 API、凭证引用集成、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
+- 连接配置 list / detail 只读 API 最小实现已完成：当前仅新增机构端 list / detail GET route、复用既有 `open_connection:read_own_tenant` 权限、不接受 query / header tenantId 切换租户、默认过滤软删除、详情跨租户 / 不存在 / 已删除统一 `not_found`、返回不含 `tenantId`、`deletedAt`、`credentialRef`、凭证明文或 raw payload 的安全 DTO；仍不新增写入 API / 写入 repository，不改权限、认证或租户隔离，不保存真实凭证，不做测试连接，不接真实 HIS，不保存 raw HIS payload，不修改 demo seed
+- 后续如需 adapter spec / plan、连接配置写入 / 状态 API、凭证引用集成、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
 
 后续阶段会依次加入：
 
 - Phase 20 / Phase 21 后续扩展评估：路径模板 schema / API、租户自定义 SOP、平台端模板管理、路径效果分析、图表、导出、经营归因、外部系统输入或触达能力必须单独规划
-- HIS 标准治疗事件 mapper 后续扩展、真实 HIS adapter、连接配置 API、写入 repository、凭证引用集成、凭证加密、健康检查、Webhook / 同步任务和 PR A-J 后续拆分、业务事件埋点体系 spec、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
+- HIS 标准治疗事件 mapper 后续扩展、真实 HIS adapter、连接配置写入 / 状态 API、写入 repository、凭证引用集成、凭证加密、健康检查、Webhook / 同步任务和 PR A-J 后续拆分、业务事件埋点体系 spec、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费
