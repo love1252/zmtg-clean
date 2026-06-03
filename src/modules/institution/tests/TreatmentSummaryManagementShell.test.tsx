@@ -116,6 +116,31 @@ const followUpSuggestion = {
   sourceFields: ['riskLevel', 'treatmentDate'],
 };
 
+const templateFollowUpSuggestion = {
+  suggestionKey:
+    'trt_phase14_main:template_path_followup:1d:post_surgery_repair:post_surgery_d1_urgent',
+  ruleKey: 'template_path_followup',
+  title: '术后修复 D1 高风险人工处理',
+  description: '请人工确认“术后修复 D1 高风险人工处理”。建议处理角色：运营负责人。禁止自动触达。',
+  recommendedDueAt: '2026-06-03T08:30:00.000Z',
+  priority: 'high',
+  riskLevel: 'urgent',
+  sourceTreatmentSummaryId: 'trt_phase14_main',
+  sourceCustomerId: 'cust_phase14_main',
+  sourceAppointmentId: 'appt_phase14_main',
+  tags: ['路径模板', 'post_surgery_repair', 'D1', '运营负责人'],
+  reason: '路径模板 post_surgery_repair 命中节点 post_surgery_d1_urgent，要求人工确认并禁止自动触达',
+  sourceFields: [
+    'treatmentCategory',
+    'treatmentProject',
+    'treatmentStage',
+    'recoveryStage',
+    'riskLevel',
+    'treatmentDate',
+    'tags',
+  ],
+};
+
 const createdFollowUpTask = {
   id: 'fu_phase15_confirmed',
   customerId: 'cust_phase14_main',
@@ -881,6 +906,67 @@ describe('治疗摘要管理页面', () => {
         body: JSON.stringify({ suggestionKey: 'trt_phase14_main:watch_risk_followup:3d' }),
       }),
     );
+    expectNoSensitiveTreatmentSummaryContent(container);
+  });
+
+  it('模板驱动建议轻量展示路径信息、人工确认边界并保留创建任务操作', async () => {
+    const fetchMock = mockTreatmentSummaryFetch(
+      [treatmentSummariesResponse([treatmentSummaryRecord])],
+      {
+        followUpSuggestionResponses: [
+          jsonResponse({ suggestions: [templateFollowUpSuggestion, followUpSuggestion] }),
+        ],
+        followUpTaskResponses: [jsonResponse({ record: createdFollowUpTask }, { status: 201 })],
+      },
+    );
+    const { container } = render(<TreatmentSummaryManagementShell />);
+
+    expect(await screen.findByText('Phase14 光电修复')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_main' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看随访建议' }));
+
+    const templateTitle = await within(dialog).findByText('术后修复 D1 高风险人工处理');
+    const templateCard = templateTitle.closest('article');
+    expect(templateCard).not.toBeNull();
+    const templateCardView = within(templateCard as HTMLElement);
+
+    expect(templateCardView.getByText('路径模板建议')).toBeInTheDocument();
+    expect(templateCardView.getByText('来源：治疗项目路径模板')).toBeInTheDocument();
+    expect(templateCardView.getByText('路径类型：术后修复')).toBeInTheDocument();
+    expect(templateCardView.getByText('建议处理角色：运营负责人')).toBeInTheDocument();
+    expect(templateCardView.getByText('系统只生成内部随访建议')).toBeInTheDocument();
+    expect(templateCardView.getByText('人工确认后创建内部随访任务')).toBeInTheDocument();
+    expect(templateCardView.getByText('禁止自动触达客户')).toBeInTheDocument();
+    expect(templateCardView.getByText('不自动回复客户')).toBeInTheDocument();
+    expect(templateCardView.getByText('不接 AI')).toBeInTheDocument();
+    expect(within(dialog).getByText('关注风险治疗后随访')).toBeInTheDocument();
+
+    fireEvent.click(templateCardView.getByRole('button', { name: '确认创建随访任务' }));
+
+    expect(await within(dialog).findByText('已创建内部随访任务')).toBeInTheDocument();
+    const createCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).endsWith('/follow-up-tasks'),
+    );
+    expect(createCall).toBeDefined();
+    expect(createCall![1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          suggestionKey:
+            'trt_phase14_main:template_path_followup:1d:post_surgery_repair:post_surgery_d1_urgent',
+        }),
+      }),
+    );
+
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('AI 已接入');
+    expect(text).not.toContain('AI 自动客服');
+    expect(text).not.toContain('自动发微信');
+    expect(text).not.toContain('已接 HIS');
+    expect(text).not.toContain('已接企微');
     expectNoSensitiveTreatmentSummaryContent(container);
   });
 

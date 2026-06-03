@@ -109,6 +109,23 @@ const suggestionPriorityToneClasses = {
   high: 'border-rose-200 bg-rose-50 text-rose-700',
 } as const satisfies Record<TreatmentFollowUpSuggestion['priority'], string>;
 
+const templatePathTypeLabels = {
+  photoelectric_care: '光子 / 光电治疗',
+  hydro_injection_care: '水光 / 注射护理',
+  post_surgery_repair: '术后修复',
+  skin_management: '皮肤管理',
+} as const satisfies Record<string, string>;
+
+type TemplatePathTypeKey = keyof typeof templatePathTypeLabels;
+
+const templateHandlerRoleLabels = new Set([
+  '客服',
+  '医助',
+  '护理人员',
+  '咨询师',
+  '运营负责人',
+]);
+
 const voidReasonCodeLabels = {
   duplicate_summary: '重复录入',
   created_by_mistake: '误创建',
@@ -317,6 +334,27 @@ function validateVoidTreatmentSummaryForm(form: TreatmentSummaryVoidForm) {
 
 function safeTagList(tags: string[]) {
   return tags.length > 0 ? tags : ['未标记'];
+}
+
+function isTemplatePathSuggestion(suggestion: TreatmentFollowUpSuggestion) {
+  return suggestion.ruleKey === 'template_path_followup';
+}
+
+function isTemplatePathTypeKey(tag: string): tag is TemplatePathTypeKey {
+  return Object.prototype.hasOwnProperty.call(templatePathTypeLabels, tag);
+}
+
+function getTemplatePathTypeLabel(suggestion: TreatmentFollowUpSuggestion) {
+  const templateKey = suggestion.tags.find(isTemplatePathTypeKey);
+
+  return templateKey ? templatePathTypeLabels[templateKey] : '治疗项目路径模板';
+}
+
+function getTemplateHandlerRoleLabel(suggestion: TreatmentFollowUpSuggestion) {
+  return (
+    suggestion.tags.find((tag) => templateHandlerRoleLabels.has(tag)) ??
+    '人工确认后分配'
+  );
 }
 
 function findActiveSourceTask(
@@ -1021,6 +1059,7 @@ function TreatmentSummaryDetailDialog({
                     sourceFollowUpTasks,
                     suggestion,
                   );
+                  const isTemplateSuggestion = isTemplatePathSuggestion(suggestion);
 
                   return (
                     <article
@@ -1045,6 +1084,31 @@ function TreatmentSummaryDetailDialog({
                           <p className="mt-2 text-sm leading-6 text-slate-600">
                             {suggestion.description}
                           </p>
+                          {isTemplateSuggestion ? (
+                            <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50/60 px-3 py-3 text-xs font-semibold leading-5 text-blue-800">
+                              <div className="flex flex-wrap gap-2">
+                                <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1">
+                                  路径模板建议
+                                </span>
+                                <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1">
+                                  来源：治疗项目路径模板
+                                </span>
+                                <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1">
+                                  路径类型：{getTemplatePathTypeLabel(suggestion)}
+                                </span>
+                                <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1">
+                                  建议处理角色：{getTemplateHandlerRoleLabel(suggestion)}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2 text-blue-700">
+                                <span>系统只生成内部随访建议</span>
+                                <span>人工确认后创建内部随访任务</span>
+                                <span>禁止自动触达客户</span>
+                                <span>不自动回复客户</span>
+                                <span>不接 AI</span>
+                              </div>
+                            </div>
+                          ) : null}
                           <p className="mt-2 text-xs font-semibold text-slate-500">
                             建议时间：{formatBusinessDateTime(suggestion.recommendedDueAt)}
                           </p>
