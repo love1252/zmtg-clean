@@ -42,13 +42,14 @@
 - 连接配置 list / detail 只读 API 最小实现已完成：新增机构端 `GET /api/institution/his-connections` 与 `GET /api/institution/his-connections/[connectionId]`，只使用服务端 access context 的 `tenantId`，返回安全 DTO，不返回 `credentialRef`、凭证明文或 raw payload；尚未进入写入 API、写入 repository、凭证存储、测试连接或真实 HIS adapter 实现。
 - 连接配置只读 UI / workspace 入口轻量实现已完成：机构端新增「HIS 连接配置」只读入口和 `HisConnectionReadOnlyPanel`，只调用现有 list / detail GET API，展示安全摘要、中文状态文案、空态 / 错误态和只读边界，并补充组件测试与 workspace smoke；尚未进入写入 API、凭证管理、测试连接或真实 HIS adapter 实现。
 - 连接配置只读 UI smoke / 文档收尾已完成：确认 `his_connections` schema / migration -> 只读 repository -> 机构端 list / detail GET API -> workspace「HIS 连接配置」入口 -> 只读 UI -> 组件测试 / workspace smoke 闭环；现有测试已覆盖入口、只读面板、列表安全摘要、状态 / 健康 / 凭证中文文案、空态、错误态、敏感字段不展示、无写入按钮、不调用外部系统和 demo seed 不修改；后续写入 API、凭证管理、测试连接和真实 HIS adapter 仍未实现，必须单独 Plan Mode / 独立 PR。
+- Phase 23 HIS 连接配置写入 API 与状态流转边界 Plan Mode 已完成：只规划未来 create / update / pause / resume / revoke / delete API、写入 repository、权限、审计、状态流转、错误态和数据最小化边界；尚未进入写入 API 实现、写入 repository 实现、凭证管理、测试连接或真实 HIS adapter。
 - 开放平台治理第一阶段：API Key、OAuth、Webhook 和审计的治理词汇、生命周期和安全边界展示。
 
 当前主要缺口：
 
 - 平台端已有只读租户列表、租户状态、套餐 / 配额、用量快照和商业化健康运营摘要；机构端新增客户 / 预约已具备轻量套餐配额 enforcement，但尚未具备租户创建、编辑、删除、冻结 / 恢复、完整套餐商业化后台、计费、支付、合同或发票能力。
 - 审计日志只读查询基础版已完成，但导出、告警和复杂风控仍未进入真实实现。
-- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1、治疗项目路径模板 v1 和随访路径运营分析 v1 最小闭环已完成；HIS 标准治疗事件 mapper v1 已完成 Plan Mode、契约差异评估、标准事件缺口字段 domain-only 契约补齐、解析器安全测试和文档 / smoke 收尾，真实 HIS adapter 前置评估、连接配置与凭证边界、连接配置 schema / API 边界、连接配置 schema / migration 最小实现、连接配置只读 repository 最小实现、连接配置 list / detail 只读 API 最小实现、连接配置只读 UI / workspace 入口轻量实现和只读 UI smoke / 文档收尾也已完成，但尚未进入真实 adapter 实现、连接配置写入 / 状态 API、写入 repository、凭证存储 / 加密、测试连接 / 健康检查、Webhook / 同步任务、患者身份匹配、自动摘要或自动任务；随访路径运营分析仍不包含图表、导出、经营智能中心、收入 / 复购 / 转化归因或路径效果分析；真实 HIS 接入、Webhook、文件导入、外部系统同步、完整治疗记录正文、版本历史 / diff 展示、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
+- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1、治疗项目路径模板 v1 和随访路径运营分析 v1 最小闭环已完成；HIS 标准治疗事件 mapper v1 已完成 Plan Mode、契约差异评估、标准事件缺口字段 domain-only 契约补齐、解析器安全测试和文档 / smoke 收尾，真实 HIS adapter 前置评估、连接配置与凭证边界、连接配置 schema / API 边界、连接配置 schema / migration 最小实现、连接配置只读 repository 最小实现、连接配置 list / detail 只读 API 最小实现、连接配置只读 UI / workspace 入口轻量实现、只读 UI smoke / 文档收尾和 Phase 23 写入 API 与状态流转边界 Plan Mode 也已完成，但尚未进入真实 adapter 实现、连接配置写入 API 实现、写入 repository 实现、凭证存储 / 加密、测试连接 / 健康检查、Webhook / 同步任务、患者身份匹配、自动摘要或自动任务；随访路径运营分析仍不包含图表、导出、经营智能中心、收入 / 复购 / 转化归因或路径效果分析；真实 HIS 接入、Webhook、文件导入、外部系统同步、完整治疗记录正文、版本历史 / diff 展示、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
 
 ## 2. 旧 REBUILD_PLAN.md 中仍有价值的功能
 
@@ -99,6 +100,7 @@
 - 连接配置只读 repository 最小实现：已新增机构侧只读 repository，读取条件绑定可信 `tenantId`，详情读取绑定 `tenantId + connectionId`，默认过滤软删除记录，返回安全 read model 并派生 `credentialConfigured`；API、写入 repository、凭证引用集成、测试连接和真实 adapter 均需后续独立 PR。
 - 连接配置 list / detail 只读 API 最小实现：已新增机构端 list / detail GET route，复用既有 `open_connection:read_own_tenant` 权限，`tenantId` 只来自服务端 access context，list 和 detail 均默认不返回软删除记录，API DTO 不返回 `tenantId`、`deletedAt`、`credentialRef`、凭证明文、raw payload 或外部错误全文；写入 API、写入 repository、凭证引用集成、测试连接和真实 adapter 均需后续独立 PR。
 - 连接配置只读 UI / workspace 入口轻量实现：已新增机构端「HIS 连接配置」入口，UI 只调用现有 list / detail 只读 API，只展示安全字段和稳定状态文案，覆盖空态、加载失败、未登录 / 无权限、详情 `not_found`、敏感字段不展示、无写入按钮和无写入 API；写入 API、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
+- Phase 23 HIS 连接配置写入 API 与状态流转边界：已完成 docs-only spec / plan，明确未来 create / update 只允许安全元数据，`tenantId` 只来自服务端 access context，`credentialRef` v1 不允许写入也不返回，pause / resume / revoke / delete 必须审计且不代表测试连接或真实 HIS 调用已实现；写入 repository、API 实现、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
 - 治疗摘要编辑能力 v1：编辑 payload parser、`treatment_summary:update` 最小权限、tenant-scoped repository update、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端受控编辑 UI、成功刷新列表 / 详情、失败保留输入、审计和入口 smoke。
 - 治疗项目路径模板 v1：首批光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理的 domain-only catalog，确定性随访建议接入模板，机构端轻量展示路径类型 / 建议处理角色 / 人工确认边界，人工确认来源任务、重复治理、作废阻断和 smoke / 文档收尾。
 - 随访路径运营分析 v1：基于治疗摘要、路径模板建议、来源随访任务、任务状态和审计记录的最小聚合口径、审计关联补强、机构端只读 API、轻量指标展示和 workspace smoke / 文档收尾。
@@ -252,3 +254,4 @@ Phase 5 的成功标准：
 - 连接配置 list / detail 只读 API 最小实现已完成：新增机构端 `GET /api/institution/his-connections` 与 `GET /api/institution/his-connections/[connectionId]`、安全 DTO 和 API route 测试；仍不新增 schema / migration，不做写入 API / 写入 repository，不改权限、认证或租户隔离，不返回 raw payload、`credentialRef` 或真实凭证，不修改 demo seed。
 - 连接配置只读 UI / workspace 入口轻量实现已完成：新增机构端「HIS 连接配置」入口、`HisConnectionReadOnlyPanel`、组件测试和 workspace smoke，UI 只调用既有 list / detail GET API，只展示安全摘要字段、中文状态文案、凭证是否已配置、空态 / 稳定错误态、详情 `not_found` 和只读边界；仍不新增 API / schema / migration，不改权限 / 认证 / 租户隔离，不做写入 API、凭证管理、测试连接或真实 HIS adapter，不返回或展示 raw payload、`credentialRef` 或真实凭证。
 - 连接配置只读 UI smoke / 文档收尾已完成：确认 schema、repository、API、UI 和 workspace smoke 已形成只读闭环，现有 smoke 已覆盖安全摘要、状态中文文案、健康状态中文文案、凭证已配置 / 未配置、空态、加载失败、敏感字段不展示、无写入按钮、不调用 HIS / 企微 / AI / RAG / Agent 和不修改 demo seed；仍不做 create / update / pause / resume / revoke API、凭证管理、测试连接、真实 HIS adapter 或任何写入能力。
+- Phase 23 HIS 连接配置写入 API 与状态流转边界 Plan Mode 已完成：新增 spec / plan 文档，只规划未来 create / update / pause / resume / revoke / delete API、写入 repository、权限、审计、状态流转、错误态和数据最小化；仍不写代码、不新增 API、不做写入 repository、不改 schema / migration、不改权限、认证或租户隔离，不处理凭证明文、不返回 `credentialRef`、不做测试连接、不接真实 HIS。

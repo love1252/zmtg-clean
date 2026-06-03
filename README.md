@@ -41,6 +41,7 @@
 - 连接配置 list / detail 只读 API 最小实现已完成，新增机构端 `GET /api/institution/his-connections` 与 `GET /api/institution/his-connections/[connectionId]`，复用 `open_connection:read_own_tenant` 既有权限边界并返回安全 DTO；本阶段不做写入 API / 写入 repository / UI / 权限模型改动 / 凭证存储 / 测试连接，不接真实 HIS，不返回 raw payload、`credentialRef` 或真实凭证，不修改 demo seed
 - 连接配置只读 UI / workspace 入口轻量实现已完成，机构端新增「HIS 连接配置」入口和 `HisConnectionReadOnlyPanel`，只调用现有 list / detail GET API，展示安全摘要、中文状态文案、空态 / 错误态和只读边界，并补充组件测试与 workspace smoke；本阶段不做写入 API / 凭证管理 / 测试连接 / 真实 HIS adapter，不展示 `tenantId`、`deletedAt`、`credentialRef`、凭证明文、raw payload 或外部错误全文
 - 连接配置只读 UI smoke / 文档收尾已完成，确认 schema -> repository -> list / detail API -> workspace「HIS 连接配置」入口 -> `HisConnectionReadOnlyPanel` -> 组件测试 / workspace smoke 闭环；现有 smoke 已覆盖入口、只读面板、列表 / 详情安全摘要、状态 / 健康 / 凭证中文文案、空态、错误态、敏感字段不展示、无写入按钮、不调用外部系统和不修改 demo seed；后续 create / update / pause / resume / revoke API、凭证管理、测试连接和真实 HIS adapter 必须单独进入 Plan Mode / 独立 PR
+- Phase 23 Plan Mode：HIS 连接配置写入 API 与状态流转边界已完成，规划未来 create / update / pause / resume / revoke / delete API、写入 repository、权限、审计、状态流转、错误态和数据最小化边界；本阶段不写代码、不新增 API、不做写入 repository、不改 schema / migration、不改权限、认证或租户隔离，不处理凭证明文、不返回 `credentialRef`、不做测试连接、不接真实 HIS
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -212,12 +213,13 @@ Phase 22 HIS 标准治疗事件 mapper v1 当前状态：
 - 连接配置 list / detail 只读 API 最小实现已完成：当前仅新增机构端 list / detail GET route、复用既有 `open_connection:read_own_tenant` 权限、不接受 query / header tenantId 切换租户、默认过滤软删除、详情跨租户 / 不存在 / 已删除统一 `not_found`、返回不含 `tenantId`、`deletedAt`、`credentialRef`、凭证明文或 raw payload 的安全 DTO；仍不新增写入 API / 写入 repository，不改权限、认证或租户隔离，不保存真实凭证，不做测试连接，不接真实 HIS，不保存 raw HIS payload，不修改 demo seed
 - 连接配置只读 UI / workspace 入口轻量实现已完成：当前机构端 workspace 已新增「HIS 连接配置」只读入口，UI 只调用现有 list / detail GET API，只展示 `connectionName`、`sourceSystem`、`vendorType`、`systemType`、`status`、`credentialConfigured`、`healthStatus`、`lastCheckedAt`、`lastErrorCode`、`createdAt`、`updatedAt`、`revokedAt` 等安全字段，覆盖空态、稳定错误态、详情 `not_found`、敏感字段不展示和无写入按钮 / API；仍不新增 API，不做写入 API / 凭证管理 / 测试连接 / 真实 HIS adapter，不展示 `tenantId`、`deletedAt`、`credentialRef`、凭证明文、raw payload、外部错误全文或客户业务明细
 - 连接配置只读 UI smoke / 文档收尾已完成：当前链路已从 schema / migration、只读 repository、list / detail 只读 API 收口到机构端 workspace 只读入口和 smoke 覆盖；状态文案仅代表后端只读状态展示，不代表测试连接或真实 HIS 调用已实现；后续写入 API、凭证加密 / 凭证管理、测试连接 / 健康检查和真实 HIS adapter 仍需单独 Plan Mode / 独立 PR
-- 后续如需 adapter spec / plan、连接配置写入 / 状态 API、凭证引用集成、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
+- Phase 23 HIS 连接配置写入 API 与状态流转边界 Plan Mode 已完成：当前只规划未来 create / update / pause / resume / revoke / delete API、写入 repository、权限、审计、状态流转、错误态和数据最小化；create / update 只允许安全元数据，`tenantId` 只来自服务端 access context，`credentialRef` v1 不允许写入也不返回，凭证管理、测试连接和真实 HIS adapter 必须单独 Plan Mode；仍不新增 API、不做写入 repository、不改 schema / migration、不改权限、认证或租户隔离、不处理真实凭证、不接真实 HIS
+- 后续如需 adapter spec / plan、连接配置写入 repository、create / update API 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
 
 后续阶段会依次加入：
 
 - Phase 20 / Phase 21 后续扩展评估：路径模板 schema / API、租户自定义 SOP、平台端模板管理、路径效果分析、图表、导出、经营归因、外部系统输入或触达能力必须单独规划
-- HIS 标准治疗事件 mapper 后续扩展、真实 HIS adapter、连接配置写入 / 状态 API、写入 repository、凭证引用集成、凭证加密、健康检查 / 测试连接、Webhook / 同步任务和 PR A-J 后续拆分、业务事件埋点体系 spec、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
+- HIS 标准治疗事件 mapper 后续扩展、真实 HIS adapter、连接配置写入 repository、create / update API 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密、健康检查 / 测试连接、Webhook / 同步任务和后续拆分、业务事件埋点体系 spec、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费
