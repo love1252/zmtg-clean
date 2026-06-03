@@ -4,7 +4,7 @@
 
 **目标：** 规划如何把未来 HIS / 机构系统中的治疗事件映射为智美天工内部可识别的标准治疗事件结构。
 
-**架构：** PR 1 不改架构，只做 Plan Mode 文档。后续如进入实现，应承接 Phase 17 `StandardTreatmentEvent` domain-only 契约，用字段白名单、确定性 mapper 和安全告警代码隔离外部系统差异，不让 raw HIS payload、完整医疗正文或外部系统字段扩散到治疗摘要、路径模板、随访任务和运营分析。PR 3A 已在独立分支按 PR 2 结论补齐 `recoveryStage`、`rawSourceType` 和 `mappingWarnings` 的 domain-only 契约。
+**架构：** PR 1 不改架构，只做 Plan Mode 文档。后续如进入实现，应承接 Phase 17 `StandardTreatmentEvent` domain-only 契约，用字段白名单、确定性 mapper 和安全告警代码隔离外部系统差异，不让 raw HIS payload、完整医疗正文或外部系统字段扩散到治疗摘要、路径模板、随访任务和运营分析。PR 3A 已按 PR 2 结论补齐 `recoveryStage`、`rawSourceType` 和 `mappingWarnings` 的 domain-only 契约，PR 3B 已补强解析器安全测试，PR 3C 已补充 mapper domain-only 最小闭环 smoke 与文档收尾。
 
 **技术栈：** 当前 PR 只涉及 Markdown。后续实现如单独批准，才可能涉及 TypeScript、Vitest 和现有机构领域模块。
 
@@ -220,7 +220,7 @@ node scripts/run-vitest.mjs run src/modules/institution/tests
 
 状态：
 
-- 已进入本次解析器安全边界回归测试收尾。
+- 已完成解析器安全边界回归测试收尾。
 - 新增测试直接通过，说明 PR 3A 的解析器 / domain 契约无需修正。
 - 本 PR 不进入类别 alias、状态降级、人工复核 warning 策略或真实 adapter 输入层别名。
 
@@ -236,6 +236,38 @@ node scripts/run-vitest.mjs run src/modules/institution/tests
 - 不创建治疗摘要。
 - 不创建随访任务。
 - 不自动触达。
+
+### PR 3C：文档 / smoke 收尾
+
+状态：
+
+- 已完成本次文档 / smoke 收尾。
+- 补充 mapper domain-only 最小闭环 smoke。
+- README、roadmap、devlog、spec 和 plan 轻量同步 Phase 22 PR 3C 收口状态。
+
+范围：
+
+- 确认 `StandardTreatmentEvent` 输出包含 `recoveryStage`、`rawSourceType`、`mappingWarnings`。
+- 确认 `sourceSystem`、`sourceEventId`、`sourceCustomerId`、`appointmentRef` 命名仍保留。
+- 确认 `externalEventId`、`externalSource`、`customerExternalId`、`appointmentExternalId` 仍不进入核心 DTO。
+- 确认 `tenantId`、`eventId`、`receivedAt` 仍只来自 context。
+- 确认 `mappingWarnings` 仍为安全告警代码数组。
+- 沿用 PR 3B 源码扫描测试，确认 mapper 不调用 HIS / 企微 / AI / RAG / Agent，不写数据库，不创建治疗摘要或随访任务。
+- 不新增 API。
+- 不改 schema / migration。
+- 不接真实 HIS。
+- 不自动创建治疗摘要。
+- 不自动创建随访任务。
+- 不自动触达。
+
+建议验证：
+
+```bash
+git diff --check
+node scripts/run-vitest.mjs run src/modules/institution/tests/StandardTreatmentEventMapper.test.ts
+node scripts/run-vitest.mjs run src/modules/institution/tests
+./node_modules/.bin/tsc --noEmit
+```
 
 ### PR 4：人工复核 / 预览流程 Plan Mode
 

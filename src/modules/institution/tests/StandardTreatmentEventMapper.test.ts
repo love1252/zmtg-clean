@@ -89,6 +89,42 @@ describe('标准治疗事件 domain-only mapper', () => {
     });
   });
 
+  it('smoke 锁定 Phase 22 mapper domain-only 最小闭环', () => {
+    const trustedContext = {
+      tenantId: 'trusted-tenant-smoke',
+      eventId: 'trusted-event-smoke',
+      receivedAt: '2026-06-03T09:00:00.000Z',
+    };
+    const result = normalizeStandardTreatmentEvent(validInput, trustedContext);
+
+    expect(result).toEqual(expect.objectContaining({ ok: true }));
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+
+    expect(result.value).toEqual(
+      expect.objectContaining({
+        tenantId: 'trusted-tenant-smoke',
+        eventId: 'trusted-event-smoke',
+        receivedAt: '2026-06-03T09:00:00.000Z',
+        sourceSystem: 'his',
+        sourceEventId: 'his_evt_7788',
+        sourceCustomerId: 'his_cust_123',
+        appointmentRef: 'appt_qin_arrived',
+        recoveryStage: 'D7',
+        rawSourceType: 'treatment_record',
+        mappingWarnings: ['manual_review_required', 'missing_recovery_stage'],
+      }),
+    );
+    expect(result.value).not.toHaveProperty('externalEventId');
+    expect(result.value).not.toHaveProperty('externalSource');
+    expect(result.value).not.toHaveProperty('customerExternalId');
+    expect(result.value).not.toHaveProperty('appointmentExternalId');
+    expect(result.value.mappingWarnings.every((warningCode) =>
+      STANDARD_TREATMENT_EVENT_MAPPING_WARNING_CODES.includes(warningCode),
+    )).toBe(true);
+  });
+
   it('只允许稳定 sourceSystem 集合，并保留 sourceEventId 用于外部事件追踪', () => {
     expect(STANDARD_TREATMENT_EVENT_SOURCE_SYSTEMS).toEqual([
       'his',

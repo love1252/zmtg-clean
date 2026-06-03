@@ -293,10 +293,18 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/StandardTreatmentE
 
 ### PR 3C：补文档 / smoke 收尾
 
-建议范围：
+状态：
+
+- 已完成本次文档 / smoke 收尾。
+- 补充 mapper domain-only 最小闭环 smoke。
+- README、roadmap、devlog、Phase 22 spec / plan 和本契约差异评估文档轻量同步。
+
+范围：
 
 - 更新 Phase 22 spec / plan，标记 PR 3A / 3B 的 domain-only 契约实现状态。
 - README、roadmap、devlog 轻量同步。
+- 确认新增字段输出、`source*` 命名保留、`external*` 核心字段拒绝、context 可信边界和 `mappingWarnings` 安全代码数组。
+- 沿用 PR 3B 源码扫描测试，确认 mapper 不调用 HIS / 企微 / AI / RAG / Agent / 外部系统，不写数据库，不创建治疗摘要或随访任务。
 - 不新增功能。
 - 不接真实 HIS、企微、AI 或自动触达。
 
