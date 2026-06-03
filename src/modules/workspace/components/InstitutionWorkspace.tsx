@@ -19,6 +19,7 @@ import {
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { AppointmentCenterShell } from '@/modules/institution/components/AppointmentCenterShell';
 import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
+import { HisConnectionReadOnlyPanel } from '@/modules/institution/components/HisConnectionReadOnlyPanel';
 import { InstitutionAuditEventsShell } from '@/modules/institution/components/InstitutionAuditEventsShell';
 import {
   InstitutionPageState,
@@ -138,6 +139,7 @@ const realInstitutionViews = [
   'followups',
   'treatmentSummaries',
   'audit',
+  'hisConnections',
 ] as const satisfies readonly InstitutionViewId[];
 
 function isRealInstitutionView(viewId: InstitutionViewId) {
@@ -457,6 +459,8 @@ export function InstitutionWorkspace() {
               <TreatmentSummaryManagementShell />
             ) : activeView === 'audit' ? (
               <InstitutionAuditEventsShell />
+            ) : activeView === 'hisConnections' ? (
+              <HisConnectionReadOnlyPanel />
             ) : (
               <PlaceholderInstitutionView label={activeNavItem.label} />
             )}
@@ -876,7 +880,10 @@ function PlaceholderInstitutionView({ label }: { label: string }) {
       description="本入口不会触发客服、知识库或数据分析真实功能请求。"
       action={
         <div className="space-y-2 text-sm leading-6 text-slate-500">
-          <p>本次主线：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志。</p>
+          <p>
+            本次主线：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志、HIS
+            连接配置。
+          </p>
           <p>后续：客服工作台、知识库、数据分析。</p>
         </div>
       }
