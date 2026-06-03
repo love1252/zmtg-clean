@@ -63,6 +63,20 @@ export const tenantPlanAssignmentStatusEnum = pgEnum('tenant_plan_assignment_sta
   'scheduled',
   'expired',
 ]);
+export const hisConnectionStatusEnum = pgEnum('his_connection_status', [
+  'draft',
+  'active',
+  'paused',
+  'revoked',
+  'deleted',
+  'error',
+]);
+export const hisConnectionHealthStatusEnum = pgEnum('his_connection_health_status', [
+  'unknown',
+  'healthy',
+  'degraded',
+  'failed',
+]);
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -169,6 +183,60 @@ export const tenantMembers = pgTable(
       table.userId,
     ),
     tenantRoleIdx: index('tenant_members_tenant_role_idx').on(table.tenantId, table.role),
+  }),
+);
+
+export const hisConnections = pgTable(
+  'his_connections',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    connectionName: varchar('connection_name', { length: 160 }).notNull(),
+    sourceSystem: varchar('source_system', { length: 64 }).notNull(),
+    vendorType: varchar('vendor_type', { length: 64 }).notNull(),
+    systemType: varchar('system_type', { length: 64 }).notNull(),
+    status: hisConnectionStatusEnum('status').notNull().default('draft'),
+    credentialRef: varchar('credential_ref', { length: 128 }),
+    healthStatus: hisConnectionHealthStatusEnum('health_status').notNull().default('unknown'),
+    lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+    lastErrorCode: varchar('last_error_code', { length: 96 }),
+    createdBy: varchar('created_by', { length: 96 }).notNull(),
+    updatedBy: varchar('updated_by', { length: 96 }),
+    ...timestamps,
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('his_connections_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    tenantIdx: index('his_connections_tenant_idx').on(table.tenantId),
+    tenantStatusIdx: index('his_connections_tenant_status_idx').on(
+      table.tenantId,
+      table.status,
+    ),
+    tenantSourceSystemIdx: index('his_connections_tenant_source_system_idx').on(
+      table.tenantId,
+      table.sourceSystem,
+    ),
+    tenantDeletedAtIdx: index('his_connections_tenant_deleted_at_idx').on(
+      table.tenantId,
+      table.deletedAt,
+    ),
+    tenantCredentialRefIdx: index('his_connections_tenant_credential_ref_idx').on(
+      table.tenantId,
+      table.credentialRef,
+    ),
+    tenantLastCheckedAtIdx: index('his_connections_tenant_last_checked_at_idx').on(
+      table.tenantId,
+      table.lastCheckedAt,
+    ),
+    activeNameUniqueIdx: uniqueIndex('his_connections_active_name_unique_idx')
+      .on(table.tenantId, table.connectionName)
+      .where(sql`${table.deletedAt} is null`),
   }),
 );
 
