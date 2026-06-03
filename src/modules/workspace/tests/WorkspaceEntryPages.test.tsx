@@ -226,6 +226,107 @@ const treatmentFollowUpSuggestion = {
   sourceFields: ['riskLevel', 'treatmentDate'],
 };
 
+const phase20PostSurgeryTemplateSuggestion = {
+  suggestionKey:
+    'trt_phase14_management:template_path_followup:1d:post_surgery_repair:post_surgery_d1_urgent',
+  ruleKey: 'template_path_followup',
+  title: '术后修复 D1 高风险人工处理',
+  description: '请人工确认“术后修复 D1 高风险人工处理”。建议处理角色：运营负责人。禁止自动触达。',
+  recommendedDueAt: '2026-06-03T08:30:00.000Z',
+  priority: 'high',
+  riskLevel: 'urgent',
+  sourceTreatmentSummaryId: 'trt_phase14_management',
+  sourceCustomerId: 'cust_phase5_closeout',
+  sourceAppointmentId: 'appt_phase5_closeout',
+  tags: ['路径模板', 'post_surgery_repair', 'D1', '运营负责人'],
+  reason: '路径模板 post_surgery_repair 命中节点 post_surgery_d1_urgent，要求人工确认并禁止自动触达',
+  sourceFields: [
+    'treatmentCategory',
+    'treatmentProject',
+    'treatmentStage',
+    'recoveryStage',
+    'riskLevel',
+    'treatmentDate',
+    'tags',
+  ],
+};
+
+const phase20TemplateFollowUpSuggestions = [
+  {
+    suggestionKey:
+      'trt_phase14_management:template_path_followup:1d:photoelectric_care:photoelectric_d1_watch',
+    ruleKey: 'template_path_followup',
+    title: '光电治疗 D1 反应人工确认',
+    description: '请人工确认“光电治疗 D1 反应人工确认”。建议处理角色：医助。禁止自动触达。',
+    recommendedDueAt: '2026-06-03T08:30:00.000Z',
+    priority: 'medium',
+    riskLevel: 'watch',
+    sourceTreatmentSummaryId: 'trt_phase14_management',
+    sourceCustomerId: 'cust_phase5_closeout',
+    sourceAppointmentId: 'appt_phase5_closeout',
+    tags: ['路径模板', 'photoelectric_care', 'D1', '医助'],
+    reason: '路径模板 photoelectric_care 命中节点 photoelectric_d1_watch，要求人工确认并禁止自动触达',
+    sourceFields: [
+      'treatmentCategory',
+      'treatmentProject',
+      'treatmentStage',
+      'recoveryStage',
+      'riskLevel',
+      'treatmentDate',
+      'tags',
+    ],
+  },
+  {
+    suggestionKey:
+      'trt_phase14_management:template_path_followup:3d:hydro_injection_care:hydro_injection_d3_care',
+    ruleKey: 'template_path_followup',
+    title: '水光注射 D3 护理完成确认',
+    description: '请人工确认“水光注射 D3 护理完成确认”。建议处理角色：客服。禁止自动触达。',
+    recommendedDueAt: '2026-06-05T08:30:00.000Z',
+    priority: 'medium',
+    riskLevel: 'watch',
+    sourceTreatmentSummaryId: 'trt_phase14_management',
+    sourceCustomerId: 'cust_phase5_closeout',
+    sourceAppointmentId: 'appt_phase5_closeout',
+    tags: ['路径模板', 'hydro_injection_care', 'D3', '客服'],
+    reason: '路径模板 hydro_injection_care 命中节点 hydro_injection_d3_care，要求人工确认并禁止自动触达',
+    sourceFields: [
+      'treatmentCategory',
+      'treatmentProject',
+      'treatmentStage',
+      'recoveryStage',
+      'riskLevel',
+      'treatmentDate',
+      'tags',
+    ],
+  },
+  phase20PostSurgeryTemplateSuggestion,
+  {
+    suggestionKey:
+      'trt_phase14_management:template_path_followup:14d:skin_management:skin_management_stable',
+    ruleKey: 'template_path_followup',
+    title: '皮肤管理稳定期复购前人工确认',
+    description: '请人工确认“皮肤管理稳定期复购前人工确认”。建议处理角色：咨询师。禁止自动触达。',
+    recommendedDueAt: '2026-06-16T08:30:00.000Z',
+    priority: 'low',
+    riskLevel: 'normal',
+    sourceTreatmentSummaryId: 'trt_phase14_management',
+    sourceCustomerId: 'cust_phase5_closeout',
+    sourceAppointmentId: 'appt_phase5_closeout',
+    tags: ['路径模板', 'skin_management', 'stable', '咨询师'],
+    reason: '路径模板 skin_management 命中节点 skin_management_stable，要求人工确认并禁止自动触达',
+    sourceFields: [
+      'treatmentCategory',
+      'treatmentProject',
+      'treatmentStage',
+      'recoveryStage',
+      'riskLevel',
+      'treatmentDate',
+      'tags',
+    ],
+  },
+];
+
 const treatmentFollowUpCreatedTask = {
   id: 'fu_phase15_confirmed',
   customerId: 'cust_phase5_closeout',
@@ -246,6 +347,17 @@ const treatmentFollowUpCreatedTask = {
   stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
   token: 'sk_test_phase15_should_not_render',
   secret: 'phase15-raw-secret',
+};
+
+const phase20TemplateFollowUpCreatedTask = {
+  ...treatmentFollowUpCreatedTask,
+  id: 'fu_phase20_template_confirmed',
+  journeyId: 'treatment_followup_template_path_followup',
+  stage: '术后修复 D1 高风险人工处理',
+  dueAt: '2026-06-03T08:30:00.000Z',
+  suggestedAction: phase20PostSurgeryTemplateSuggestion.description,
+  riskLevel: 'urgent',
+  sourceSuggestionKey: phase20PostSurgeryTemplateSuggestion.suggestionKey,
 };
 
 const phase16SourceFollowUpTask = {
@@ -1372,7 +1484,8 @@ function expectNoSensitiveTreatmentSummaryManagementContent(container: HTMLEleme
   expect(text).not.toContain('phase15-raw-secret');
   expect(text).not.toContain('自动发送');
   expect(text).not.toContain('自动推送');
-  expect(text).not.toContain('自动触达客户');
+  expect(text).not.toContain('系统自动触达客户');
+  expect(text).not.toContain('已启用自动触达');
   expect(text).not.toContain('微信');
   expect(text).not.toContain('企业微信');
   expect(text).not.toContain('企微触达');
@@ -2112,6 +2225,118 @@ describe('工作台入口页面', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           suggestionKey: 'trt_phase14_management:watch_risk_followup:3d',
+        }),
+      }),
+    );
+    expect(String(createCall![1]?.body)).not.toContain('tenantId');
+    expect(String(createCall![1]?.body)).not.toContain('customerId');
+    expect(String(createCall![1]?.body)).not.toContain('suggestedAction');
+    expectNoSensitiveTreatmentSummaryManagementContent(container);
+  });
+
+  it('机构入口 smoke 覆盖治疗路径模板建议展示和人工确认创建', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      followUpSuggestions: [...phase20TemplateFollowUpSuggestions, treatmentFollowUpSuggestion],
+      followUpTaskRecord: phase20TemplateFollowUpCreatedTask,
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
+
+    expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_management' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看随访建议' }));
+
+    expect(await within(dialog).findByText('术后修复 D1 高风险人工处理')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('路径模板建议').length).toBeGreaterThanOrEqual(4);
+    expect(within(dialog).getAllByText('来源：治疗项目路径模板').length).toBeGreaterThanOrEqual(4);
+    expect(within(dialog).getByText('路径类型：光子 / 光电治疗')).toBeInTheDocument();
+    expect(within(dialog).getByText('路径类型：水光 / 注射护理')).toBeInTheDocument();
+    expect(within(dialog).getByText('路径类型：术后修复')).toBeInTheDocument();
+    expect(within(dialog).getByText('路径类型：皮肤管理')).toBeInTheDocument();
+    expect(within(dialog).getByText('Phase15 关注风险治疗后随访')).toBeInTheDocument();
+
+    const templateCard = within(dialog)
+      .getByText('术后修复 D1 高风险人工处理')
+      .closest('article');
+    expect(templateCard).not.toBeNull();
+    const templateCardView = within(templateCard as HTMLElement);
+    expect(templateCardView.getByText('建议处理角色：运营负责人')).toBeInTheDocument();
+    expect(templateCardView.getByText('系统只生成内部随访建议')).toBeInTheDocument();
+    expect(templateCardView.getByText('人工确认后创建内部随访任务')).toBeInTheDocument();
+    expect(templateCardView.getByText('禁止自动触达客户')).toBeInTheDocument();
+    expect(templateCardView.getByText('不自动回复客户')).toBeInTheDocument();
+    expect(templateCardView.getByText('不接 AI')).toBeInTheDocument();
+    fireEvent.click(
+      templateCardView.getByRole('button', { name: '确认创建随访任务' }),
+    );
+
+    expect(await within(dialog).findByText('已创建内部随访任务')).toBeInTheDocument();
+    const createCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).endsWith('/follow-up-tasks'),
+    );
+    expect(createCall).toBeDefined();
+    expect(fetchPath(createCall![0])).toBe(
+      '/api/institution/treatment-summaries/trt_phase14_management/follow-up-tasks',
+    );
+    expect(createCall![1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          suggestionKey: phase20PostSurgeryTemplateSuggestion.suggestionKey,
+        }),
+      }),
+    );
+    expect(String(createCall![1]?.body)).not.toContain('tenantId');
+    expect(String(createCall![1]?.body)).not.toContain('customerId');
+    expect(String(createCall![1]?.body)).not.toContain('suggestedAction');
+    expect(container.textContent ?? '').not.toContain('AI 已接入');
+    expect(container.textContent ?? '').not.toContain('AI 自动客服');
+    expect(container.textContent ?? '').not.toContain('自动发微信');
+    expect(container.textContent ?? '').not.toContain('已接 HIS');
+    expect(container.textContent ?? '').not.toContain('已接企微');
+    expectNoSensitiveTreatmentSummaryManagementContent(container);
+  });
+
+  it('机构入口 smoke 覆盖模板建议重复确认时走来源任务去重治理', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      followUpSuggestions: [phase20PostSurgeryTemplateSuggestion],
+      followUpTaskError: {
+        status: 409,
+        message: '该护理随访任务已存在，请勿重复创建',
+      },
+    });
+    const { container } = render(<HospitalPage />);
+
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
+
+    expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase14_management' }));
+    const dialog = await screen.findByRole('dialog', { name: '治疗摘要安全详情' });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看随访建议' }));
+    expect(await within(dialog).findByText('术后修复 D1 高风险人工处理')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认创建随访任务' }));
+
+    expect(
+      await within(dialog).findByText('该护理随访任务已存在，请勿重复创建'),
+    ).toBeInTheDocument();
+    const createCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).endsWith('/follow-up-tasks'),
+    );
+    expect(createCall).toBeDefined();
+    expect(createCall![1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          suggestionKey: phase20PostSurgeryTemplateSuggestion.suggestionKey,
         }),
       }),
     );
