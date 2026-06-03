@@ -25,6 +25,14 @@ Phase 22 建议聚焦 **HIS 标准治疗事件 mapper v1**。
 - 不改权限、认证或租户隔离。
 - 不修改 demo seed 数据。
 
+后续收口状态：
+
+- PR 2 已完成标准事件 mapper 契约差异评估，结论是内部核心 DTO 继续沿用 Phase 17 `sourceSystem`、`sourceEventId`、`sourceCustomerId` 和 `appointmentRef` 命名，`external*` 只作为 adapter 输入层别名或文档映射。
+- PR 3A 已补齐 `recoveryStage`、`rawSourceType` 和 `mappingWarnings` 三个 domain-only 契约缺口。
+- PR 3B 已补强新增字段的解析器安全测试，覆盖空值、非法值、敏感内容、raw payload 线索、外部调用和数据库写入禁止边界。
+- PR 3C 已补充 mapper domain-only 最小闭环 smoke 与文档收尾。
+- 截至 PR 3C，Phase 22 仍不接真实 HIS、不新增 API、不改 schema / migration、不做患者身份匹配、不自动创建治疗摘要、不自动创建随访任务、不自动触达、不接 AI / RAG / Agent。
+
 如果后续发现必须新增代码、schema、API、权限、外部系统接入、AI 解析、身份匹配、自动摘要、自动任务或自动触达能力，必须停止当前 docs-only 范围并单独进入对应 Plan Mode。
 
 ## 1. 只读检查结论
@@ -318,6 +326,13 @@ Phase 22 v1 当前不做：
 - 不保存 raw payload。
 - 不接真实 HIS。
 - 不创建摘要、任务或触达。
+
+实际收口：
+
+- PR 3A 已完成缺口字段 domain-only 契约补齐。
+- PR 3B 已完成解析器安全测试收尾。
+- PR 3C 已完成文档 / smoke 收尾。
+- 真实 HIS adapter、人工复核 / 预览、患者身份匹配、自动摘要和自动随访任务仍未进入，必须后续单独 Plan Mode。
 
 ### PR 4：人工复核 / 预览流程 Plan Mode
 
