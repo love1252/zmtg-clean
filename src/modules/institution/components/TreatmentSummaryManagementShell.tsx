@@ -253,7 +253,7 @@ function visibleTreatmentSummaryErrorState(
 ): InstitutionPageStateProps {
   return getInstitutionPageStateFromClientError(error, {
     forbiddenMessage: '当前账号没有查看治疗摘要的权限',
-    fallbackMessage: '治疗摘要请求失败',
+    fallbackMessage: '治疗摘要运营视图暂时无法加载',
     unavailableMessage: '治疗摘要数据暂时不可用',
   });
 }
@@ -277,11 +277,17 @@ function displayValue(value: string | null | undefined) {
 }
 
 function treatmentSummaryStatusLabel(record: Pick<InstitutionTreatmentSummaryListItem, 'status'>) {
-  return record.status === 'voided' ? '已作废' : '正常';
+  return record.status === 'voided' ? '已作废' : '可作为运营依据';
 }
 
 function isTreatmentSummaryVoided(record: Pick<InstitutionTreatmentSummaryListItem, 'status' | 'voidedAt'>) {
   return record.status === 'voided' || Boolean(record.voidedAt);
+}
+
+function isTreatmentSummaryEdited(
+  record: Pick<InstitutionTreatmentSummaryListItem, 'createdAt' | 'updatedAt'>,
+) {
+  return record.createdAt !== record.updatedAt;
 }
 
 function visibleTreatmentSummaryVoidErrorMessage(error: TenantBusinessClientError) {
@@ -597,7 +603,7 @@ function TreatmentSummaryDetailDialog({
               {detailRecord.treatmentProject}
             </h3>
             <p className="mt-1 text-sm text-slate-500">
-              仅展示治疗摘要列表 DTO 字段，不展示完整正文或原始隐私信息。
+              展示结构化摘要，不展示原始诊疗内容或隐私原文。
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <span
@@ -610,6 +616,11 @@ function TreatmentSummaryDetailDialog({
               >
                 {treatmentSummaryStatusLabel(detailRecord)}
               </span>
+              {!isVoided && isTreatmentSummaryEdited(detailRecord) ? (
+                <span className="inline-flex h-9 items-center justify-center rounded-full border border-blue-100 bg-blue-50 px-3 text-sm font-semibold text-blue-700">
+                  已编辑
+                </span>
+              ) : null}
               <button
                 type="button"
                 onClick={handleOpenEditForm}
@@ -643,9 +654,11 @@ function TreatmentSummaryDetailDialog({
         <div className="max-h-[68vh] overflow-y-auto">
           {isVoided ? (
             <div className="mx-5 mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
+              <p>作废不是删除。</p>
               <p>该治疗摘要已作废，仅保留历史追溯。</p>
               <p>作废摘要不会继续生成新的随访建议或来源随访任务。</p>
               <p>已存在的来源随访任务不会被自动取消，仍保留来源追溯。</p>
+              <p>系统不会主动向客户发送消息。</p>
             </div>
           ) : null}
 
@@ -693,7 +706,7 @@ function TreatmentSummaryDetailDialog({
                       作废治疗摘要
                     </h4>
                     <p className="mt-1 text-sm leading-6 text-slate-600">
-                      作废不是删除，记录会保留历史追溯；系统不会自动取消既有来源随访任务。
+                      作废不是删除，记录会保留历史追溯；作废后不再作为后续运营依据，也不会主动向客户发送消息。
                     </p>
                   </div>
                   <button
@@ -945,6 +958,9 @@ function TreatmentSummaryDetailDialog({
                 <p className="mt-1 text-sm leading-6 text-slate-500">
                   建议仅供机构内部参考，需要人工确认后才会创建内部随访任务。
                 </p>
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  建议 key 用于来源追踪和避免重复创建。
+                </p>
               </div>
               <button
                 type="button"
@@ -1034,6 +1050,9 @@ function TreatmentSummaryDetailDialog({
                           </p>
                           <p className="mt-2 text-xs leading-5 text-slate-500">
                             {suggestion.reason}
+                          </p>
+                          <p className="mt-2 text-xs leading-5 text-slate-500">
+                            建议 key 用于来源追踪和避免重复创建。
                           </p>
                           {activeSourceTask ? (
                             <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-800">
@@ -1207,7 +1226,7 @@ export function TreatmentSummaryManagementShell() {
       <InstitutionSectionHeader
         eyebrow="治疗摘要"
         title="治疗摘要管理"
-        description="按当前机构上下文读取结构化治疗摘要，只展示安全 DTO 字段，用于列表筛选、分页和安全详情查看。"
+        description="集中查看治疗后结构化摘要，区分可作为运营依据、已编辑和已作废状态，并把随访建议交给人工确认。"
         tone="blue"
         action={
           <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
@@ -1229,7 +1248,7 @@ export function TreatmentSummaryManagementShell() {
             <div>
               <h3 className="text-base font-semibold text-slate-950">筛选</h3>
               <p className="mt-0.5 text-xs text-slate-500">
-                仅支持 customerId、treatmentProject、riskLevel、from、to。
+                仅按客户、治疗项目、风险等级和时间范围筛选。
               </p>
             </div>
           </div>
@@ -1327,7 +1346,7 @@ export function TreatmentSummaryManagementShell() {
             </div>
             <div>
               <h3 className="text-lg font-semibold text-slate-950">治疗摘要列表</h3>
-              <p className="mt-1 text-sm text-slate-500">按治疗时间倒序排列。</p>
+              <p className="mt-1 text-sm text-slate-500">按治疗时间倒序排列，展示结构化摘要而不是原始诊疗内容。</p>
             </div>
           </div>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
@@ -1351,7 +1370,7 @@ export function TreatmentSummaryManagementShell() {
           <InstitutionPageState
             kind="empty"
             title="暂无治疗摘要"
-            description="当前筛选条件下没有可展示的治疗摘要。"
+            description="当前筛选条件下没有可用于运营复盘的治疗摘要。"
             className="mt-4"
           />
         ) : null}
@@ -1387,8 +1406,13 @@ export function TreatmentSummaryManagementShell() {
                       >
                         {isTreatmentSummaryVoided(record)
                           ? '已作废'
-                          : `状态：${treatmentSummaryStatusLabel(record)}`}
+                          : treatmentSummaryStatusLabel(record)}
                       </span>
+                      {!isTreatmentSummaryVoided(record) && isTreatmentSummaryEdited(record) ? (
+                        <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                          已编辑
+                        </span>
+                      ) : null}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <SummaryField

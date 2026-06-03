@@ -75,7 +75,7 @@ function isRealInstitutionView(viewId: InstitutionViewId) {
 }
 
 function navigationBoundaryLabel(viewId: InstitutionViewId) {
-  return isRealInstitutionView(viewId) ? '已接入' : '后续占位';
+  return isRealInstitutionView(viewId) ? '演示主线' : '后续';
 }
 
 function navigationBoundaryClasses(viewId: InstitutionViewId) {
@@ -87,7 +87,8 @@ function navigationBoundaryClasses(viewId: InstitutionViewId) {
 function visibleDashboardErrorState(error: TenantBusinessClientError): InstitutionPageStateProps {
   return getInstitutionPageStateFromClientError(error, {
     forbiddenMessage: '当前账号没有访问机构首页数据的权限',
-    fallbackMessage: '机构首页数据请求失败',
+    fallbackMessage: '机构运营视图暂时无法加载',
+    unavailableMessage: '数据服务暂时不可用，请稍后刷新或切换演示备份',
   });
 }
 
@@ -219,7 +220,7 @@ export function InstitutionWorkspace() {
                   <div className="text-sm font-semibold text-white">
                     高优先级客户 {highPriorityLabel} 位
                   </div>
-                  <div className="mt-1 text-xs text-slate-400">来自客户 API 摘要</div>
+                  <div className="mt-1 text-xs text-slate-400">待人工承接客户</div>
                 </div>
                 <Bell className="h-5 w-5 text-cyan-300" />
               </div>
@@ -345,24 +346,24 @@ function InstitutionDashboardHome({
             </div>
             <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-cyan-200/80 bg-cyan-50/80 px-3.5 py-1.5 text-xs font-semibold text-cyan-700 md:mt-0">
               <Sparkles className="h-4 w-4" />
-              当前租户 API 摘要
+              当前为受控 demo 数据
             </div>
             <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-normal text-slate-950 sm:text-5xl lg:text-[60px] xl:text-[64px]">
-              <span className="block">让咨询团队</span>
+              <span className="block">今日治疗后随访重点</span>
               <span className="block whitespace-nowrap bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 bg-clip-text text-transparent">
-                先看到增长机会
+                待人工确认的后续动作
               </span>
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-              首页只读取当前租户的客户、预约和随访 GET API，派生可解释的运营摘要，不发送租户编号或写入请求。
+              客户、预约、随访任务统一进入运营视图，用于演示治疗后服务闭环；当前为受控 demo 数据，不代表外部系统已完成同步。
             </p>
           </div>
 
           <div className="grid grid-cols-3 gap-2 sm:gap-3 2xl:w-[520px]">
             {[
               { label: '数据范围', value: '当前租户' },
-              { label: '数据来源', value: 'GET API' },
-              { label: '写入动作', value: '无 mutation' },
+              { label: '演示口径', value: '受控 demo' },
+              { label: '后续动作', value: '人工确认' },
             ].map((item) => (
               <div
                 key={item.label}
@@ -424,7 +425,7 @@ function InstitutionDashboardHome({
         <InstitutionPageState
           kind="empty"
           title="暂无可计算运营摘要"
-          description="当前客户、预约和随访 records 为空。"
+          description="当前没有客户、预约或随访任务可进入运营视图。"
         />
       ) : null}
 
@@ -440,12 +441,12 @@ function InstitutionDashboardHome({
                   近期需要人工处理
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  从随访、预约和客户 records 派生，不生成自动触达内容。
+                  客户、预约、随访任务统一进入运营视图。
                 </p>
               </div>
             </div>
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
-              现有 records 派生
+              人工确认后处理
             </span>
           </div>
 
@@ -480,7 +481,7 @@ function InstitutionDashboardHome({
             <div>
               <h2 className="text-lg font-semibold tracking-normal">当前行动队列</h2>
               <p className="mt-1 text-sm text-slate-400">
-                数量来自当前租户客户、预约和随访 records。
+                运营负责人可先看谁要跟、为什么跟、下一步由谁处理。
               </p>
             </div>
             <Activity className="h-5 w-5 text-cyan-300" />
@@ -511,11 +512,11 @@ function InstitutionDashboardHome({
                 客户旅程看板
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                按客户 lifecycle 字段聚合，帮助判断当前客户结构。
+                按客户旅程阶段聚合，帮助判断治疗后服务和复诊机会。
               </p>
             </div>
             <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
-              客户 API 摘要
+              运营视图
             </span>
           </div>
           <div className="mt-5 grid gap-3 lg:grid-cols-4">
@@ -533,7 +534,7 @@ function InstitutionDashboardHome({
                       {status === 'loading' ? '--' : lane.count}
                     </div>
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
-                      records
+                      条
                     </span>
                   </div>
                   <div className="mt-1 text-xs leading-5 text-slate-500">{lane.detail}</div>
@@ -545,16 +546,16 @@ function InstitutionDashboardHome({
 
         <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold tracking-normal text-slate-950">数据边界</h2>
+            <h2 className="text-lg font-semibold tracking-normal text-slate-950">演示边界</h2>
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
               只读
             </span>
           </div>
           <div className="mt-5 space-y-3">
             {[
-              '只调用客户、预约、随访 GET API，治疗摘要管理页另行读取治疗摘要 GET API。',
-              '首页不提交 tenantId，也不发送 POST / PATCH / DELETE。',
-              '摘要只基于当前返回 records 派生，无法计算时显示空态。',
+              '工作台用于串联治疗后运营闭环，不展示原始诊疗、沟通或附件内容。',
+              '首页不提交 tenantId，也不创建、修改或删除业务记录。',
+              '当前为受控 demo 数据，页面仅展示可解释的运营摘要。',
             ].map((item) => (
               <div
                 key={item}
@@ -574,12 +575,12 @@ function PlaceholderInstitutionView({ label }: { label: string }) {
   return (
     <InstitutionPageState
       kind="placeholder"
-      title={`${label}仍为后续占位`}
-      description="本入口不会在 Phase 6 触发客服、知识库或数据分析真实功能请求。"
+      title={`${label}暂不进入本次演示主线`}
+      description="本入口不会触发客服、知识库或数据分析真实功能请求。"
       action={
         <div className="space-y-2 text-sm leading-6 text-slate-500">
-          <p>已真实接入：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志。</p>
-          <p>后续占位：客服工作台、知识库、数据分析。</p>
+          <p>本次主线：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志。</p>
+          <p>后续：客服工作台、知识库、数据分析。</p>
         </div>
       }
       className="items-start text-left"

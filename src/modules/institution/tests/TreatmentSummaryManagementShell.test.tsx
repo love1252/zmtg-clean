@@ -297,7 +297,7 @@ describe('治疗摘要管理页面', () => {
     expect(screen.getByText('治疗阶段：Phase14 D14 复诊')).toBeInTheDocument();
     expect(screen.getByText('恢复阶段：Phase14 D14')).toBeInTheDocument();
     expect(screen.getByText('风险：关注')).toBeInTheDocument();
-    expect(screen.getByText('状态：正常')).toBeInTheDocument();
+    expect(screen.getByText('可作为运营依据')).toBeInTheDocument();
     expect(screen.getByText('负责人：doctor-phase14')).toBeInTheDocument();
     expect(screen.getByText('摘要：Phase14 结构化摘要：恢复稳定，安排补水。')).toBeInTheDocument();
     expect(screen.getByText('下一步护理建议：Phase14 D21 人工回访恢复阶段。')).toBeInTheDocument();
@@ -319,7 +319,7 @@ describe('治疗摘要管理页面', () => {
 
     expect(await screen.findByText('Phase14 光电修复')).toBeInTheDocument();
     expect(screen.getByText('Phase19 已作废治疗摘要')).toBeInTheDocument();
-    expect(screen.getByText('状态：正常')).toBeInTheDocument();
+    expect(screen.getByText('可作为运营依据')).toBeInTheDocument();
     expect(screen.getByText('已作废')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '查看安全详情 trt_phase19_voided' }));
@@ -335,11 +335,15 @@ describe('治疗摘要管理页面', () => {
     expect(
       within(dialog).getByText('该治疗摘要已作废，仅保留历史追溯。'),
     ).toBeInTheDocument();
+    expect(within(dialog).getByText('作废不是删除。')).toBeInTheDocument();
     expect(
       within(dialog).getByText('作废摘要不会继续生成新的随访建议或来源随访任务。'),
     ).toBeInTheDocument();
     expect(
       within(dialog).getByText('已存在的来源随访任务不会被自动取消，仍保留来源追溯。'),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('系统不会主动向客户发送消息。'),
     ).toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: '作废治疗摘要' })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalled();
@@ -848,6 +852,9 @@ describe('治疗摘要管理页面', () => {
     expect(
       within(dialog).getByText('建议仅供机构内部参考，需要人工确认后才会创建内部随访任务。'),
     ).toBeInTheDocument();
+    expect(
+      within(dialog).getAllByText('建议 key 用于来源追踪和避免重复创建。').length,
+    ).toBeGreaterThan(0);
     expect(within(dialog).getByText('请安排人工随访，确认恢复反馈和护理执行情况。')).toBeInTheDocument();
 
     fireEvent.click(within(dialog).getByRole('button', { name: '确认创建随访任务' }));
@@ -934,6 +941,9 @@ describe('治疗摘要管理页面', () => {
     expect(
       within(dialog).getByText('该建议已有进行中的随访任务，请在智能随访中继续处理。'),
     ).toBeInTheDocument();
+    expect(
+      within(dialog).getAllByText('建议 key 用于来源追踪和避免重复创建。').length,
+    ).toBeGreaterThan(0);
     expect(within(dialog).getByText('活跃任务状态：处理中')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: '已存在活跃随访任务' })).toBeDisabled();
 
@@ -1003,7 +1013,7 @@ describe('治疗摘要管理页面', () => {
     deferred.resolve(treatmentSummariesResponse([]));
 
     expect(await screen.findByText('暂无治疗摘要')).toBeInTheDocument();
-    expect(screen.getByText('当前筛选条件下没有可展示的治疗摘要。')).toBeInTheDocument();
+    expect(screen.getByText('当前筛选条件下没有可用于运营复盘的治疗摘要。')).toBeInTheDocument();
   });
 
   it.each([

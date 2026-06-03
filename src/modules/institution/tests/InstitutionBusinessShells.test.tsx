@@ -447,6 +447,7 @@ describe('机构业务页面壳', () => {
     const { container } = render(<InstitutionAuditEventsShell />);
 
     expect(screen.getByRole('heading', { name: '审计日志' })).toBeInTheDocument();
+    expect(screen.getByText('关键操作可追踪')).toBeInTheDocument();
     expect(screen.getByText('正在加载审计事件...')).toBeInTheDocument();
     pending.resolve(auditEventsResponse([auditEventRecord]));
 
@@ -498,13 +499,13 @@ describe('机构业务页面壳', () => {
     render(<InstitutionAuditEventsShell />);
 
     expect(await screen.findByText('暂无审计事件')).toBeInTheDocument();
-    expect(screen.getByText('当前筛选条件下没有可展示的审计事件。')).toBeInTheDocument();
+    expect(screen.getByText('当前筛选条件下没有可展示的关键操作记录。')).toBeInTheDocument();
   });
 
   it.each([
     [401, '请先登录', '登录状态已失效，请重新登录'],
     [403, '没有访问权限', '当前账号没有查看审计日志的权限'],
-    [503, '数据服务暂时不可用', '审计日志数据暂时不可用'],
+    [503, '数据服务暂时不可用', '关键操作记录暂时不可用'],
   ])('审计日志页面处理 %s 错误态', async (status, apiMessage, visibleMessage) => {
     mockAuditEventsFetch([jsonResponse({ error: apiMessage }, { status })]);
 
@@ -535,6 +536,7 @@ describe('机构业务页面壳', () => {
     render(<CustomerCenterShell />);
 
     expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
+    expect(screen.getByText(/客户、预约、随访任务统一进入运营视图/u)).toBeInTheDocument();
     expect(screen.getByText('正在加载客户数据...')).toBeInTheDocument();
     expect(await screen.findByText('王女士')).toBeInTheDocument();
     expect(screen.getAllByText('赵女士').length).toBeGreaterThan(0);
@@ -552,7 +554,7 @@ describe('机构业务页面壳', () => {
 
     render(<CustomerCenterShell />);
 
-    expect(await screen.findByText('暂无客户摘要')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可讲述的演示客户')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '创建客户' })).toBeInTheDocument();
     expect(screen.getByLabelText('脱敏手机号展示值')).toBeInTheDocument();
     expect(screen.getByLabelText('脱敏病历号展示值')).toBeInTheDocument();
@@ -561,7 +563,7 @@ describe('机构业务页面壳', () => {
   it.each([
     [401, '请先登录', '登录状态已失效，请重新登录'],
     [403, '没有访问权限', '当前账号没有访问客户数据的权限'],
-    [503, '数据服务暂时不可用', '数据服务暂时不可用'],
+    [503, '数据服务暂时不可用', '数据服务暂时不可用，请稍后刷新或切换演示备份'],
   ])('客户中心处理 %s 错误态', async (status, apiMessage, visibleMessage) => {
     mockCustomerFetch([jsonResponse({ error: apiMessage }, { status })]);
 
@@ -578,7 +580,7 @@ describe('机构业务页面壳', () => {
 
     render(<CustomerCenterShell />);
 
-    expect(await screen.findByText('暂无客户摘要')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可讲述的演示客户')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
     fireEvent.change(screen.getByLabelText('生命周期'), { target: { value: 'consulting' } });
     fireEvent.change(screen.getByLabelText('优先级'), { target: { value: 'high' } });
@@ -657,7 +659,7 @@ describe('机构业务页面壳', () => {
 
     render(<CustomerCenterShell />);
 
-    expect(await screen.findByText('暂无客户摘要')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可讲述的演示客户')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
     fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-lin' } });
     fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: '皮肤管理' } });
@@ -679,7 +681,7 @@ describe('机构业务页面壳', () => {
 
     render(<CustomerCenterShell />);
 
-    expect(await screen.findByText('暂无客户摘要')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可讲述的演示客户')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
     fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-lin' } });
     fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: '皮肤管理' } });
@@ -709,7 +711,7 @@ describe('机构业务页面壳', () => {
 
     const { container } = render(<CustomerCenterShell />);
 
-    expect(await screen.findByText('暂无客户摘要')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可讲述的演示客户')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
     fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-lin' } });
     fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: '皮肤管理' } });
@@ -757,7 +759,7 @@ describe('机构业务页面壳', () => {
     expect(screen.getAllByText('待电话确认到院').length).toBeGreaterThan(0);
     expect(screen.getAllByText('D28 复购建议').length).toBeGreaterThan(0);
     expect(screen.getAllByText('人工回访并推荐修复组合').length).toBeGreaterThan(0);
-    expect(screen.getByText('治疗结构化摘要')).toBeInTheDocument();
+    expect(screen.getByText('治疗后结构化摘要')).toBeInTheDocument();
     expect(screen.getAllByText('光电修复').length).toBeGreaterThan(0);
     expect(screen.getByText('类别：laser_repair')).toBeInTheDocument();
     expect(screen.getAllByText('阶段：D7 复诊').length).toBeGreaterThan(0);
@@ -967,10 +969,10 @@ describe('机构业务页面壳', () => {
       }),
     );
 
-    expect(await screen.findByText('暂无预约摘要')).toBeInTheDocument();
-    expect(screen.getByText('暂无治疗摘要')).toBeInTheDocument();
+    expect(await screen.findByText('暂无预约记录')).toBeInTheDocument();
+    expect(screen.getByText('暂无治疗后结构化摘要')).toBeInTheDocument();
     expect(screen.getByText('暂无随访任务')).toBeInTheDocument();
-    expect(screen.getByText('暂无安全审计摘要')).toBeInTheDocument();
+    expect(screen.getByText('暂无关键操作记录')).toBeInTheDocument();
     expect(screen.getByText('暂无时间线事件')).toBeInTheDocument();
   });
 
@@ -1055,6 +1057,7 @@ describe('机构业务页面壳', () => {
     render(<AppointmentCenterShell />);
 
     expect(screen.getByRole('heading', { name: '预约中心' })).toBeInTheDocument();
+    expect(screen.getByText('预约数据用于串联客户旅程，不代表外部 HIS 已完成同步。')).toBeInTheDocument();
     expect(screen.getByText('正在加载预约数据...')).toBeInTheDocument();
     expect((await screen.findAllByText('王女士')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('赵女士').length).toBeGreaterThan(0);
@@ -1079,7 +1082,7 @@ describe('机构业务页面壳', () => {
 
     render(<AppointmentCenterShell />);
 
-    expect(await screen.findByText('暂无预约记录')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可串联的预约记录')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '新建预约' })).toBeInTheDocument();
     expect(screen.getByLabelText('预约客户')).toBeInTheDocument();
   });
@@ -1087,7 +1090,7 @@ describe('机构业务页面壳', () => {
   it.each([
     [401, '请先登录', '登录状态已失效，请重新登录'],
     [403, '没有访问权限', '当前账号没有访问预约数据的权限'],
-    [503, '数据服务暂时不可用', '数据服务暂时不可用'],
+    [503, '数据服务暂时不可用', '数据服务暂时不可用，请稍后刷新或切换演示备份'],
   ])('预约中心处理 %s 错误态', async (status, apiMessage, visibleMessage) => {
     mockInstitutionFetch({
       '/api/institution/appointments': [jsonResponse({ error: apiMessage }, { status })],
@@ -1110,7 +1113,7 @@ describe('机构业务页面壳', () => {
 
     render(<AppointmentCenterShell />);
 
-    expect(await screen.findByText('暂无预约记录')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可串联的预约记录')).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: '不存在客户' })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('预约客户'), { target: { value: 'cust_wang_repurchase' } });
     fireEvent.change(screen.getByLabelText('预约项目'), { target: { value: '热玛吉复诊' } });
@@ -1181,7 +1184,7 @@ describe('机构业务页面壳', () => {
 
     render(<AppointmentCenterShell />);
 
-    expect(await screen.findByText('暂无预约记录')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可串联的预约记录')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('预约客户'), { target: { value: 'cust_wang_repurchase' } });
     fireEvent.change(screen.getByLabelText('预约项目'), { target: { value: '热玛吉复诊' } });
     fireEvent.change(screen.getByLabelText('预约时间'), { target: { value: '2026-06-01T10:30:00+08:00' } });
@@ -1204,7 +1207,7 @@ describe('机构业务页面壳', () => {
 
     render(<AppointmentCenterShell />);
 
-    expect(await screen.findByText('暂无预约记录')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可串联的预约记录')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('预约客户'), { target: { value: 'cust_wang_repurchase' } });
     fireEvent.change(screen.getByLabelText('预约项目'), { target: { value: '热玛吉复诊' } });
     fireEvent.change(screen.getByLabelText('预约时间'), { target: { value: 'not-a-date' } });
@@ -1235,7 +1238,7 @@ describe('机构业务页面壳', () => {
 
     const { container } = render(<AppointmentCenterShell />);
 
-    expect(await screen.findByText('暂无预约记录')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可串联的预约记录')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('预约客户'), { target: { value: 'cust_wang_repurchase' } });
     fireEvent.change(screen.getByLabelText('预约项目'), { target: { value: '热玛吉复诊' } });
     fireEvent.change(screen.getByLabelText('预约时间'), { target: { value: '2026-06-01T10:30:00+08:00' } });
@@ -1322,6 +1325,7 @@ describe('机构业务页面壳', () => {
 
     expect(await screen.findByText('陈女士')).toBeInTheDocument();
     expect(screen.getByText('来源：治疗摘要')).toBeInTheDocument();
+    expect(screen.getAllByText('建议 key 用于来源追踪和避免重复创建。').length).toBeGreaterThan(0);
     expect(screen.getByText('来源摘要：trt_source_001')).toBeInTheDocument();
     expect(screen.getByText('建议 key：trt_source_001:watch_risk_followup:3d')).toBeInTheDocument();
 
@@ -1372,7 +1376,7 @@ describe('机构业务页面壳', () => {
 
     expect(await screen.findByText('暂无随访任务')).toBeInTheDocument();
     expect(screen.getByText('这是演示话术：请根据客户真实恢复情况由专业人员确认后再发送。')).toBeInTheDocument();
-    expect(screen.getByText('不会调用 AI provider，客户沟通需由人员确认执行。')).toBeInTheDocument();
+    expect(screen.getByText('任务需人工处理，不会主动向客户发送消息。')).toBeInTheDocument();
     expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual([
       '/api/institution/followups',
     ]);
@@ -1381,7 +1385,7 @@ describe('机构业务页面壳', () => {
   it.each([
     [401, '请先登录', '登录状态已失效，请重新登录'],
     [403, '没有访问权限', '当前账号没有访问随访任务的权限'],
-    [503, '数据服务暂时不可用', '数据服务暂时不可用'],
+    [503, '数据服务暂时不可用', '数据服务暂时不可用，请稍后刷新或切换演示备份'],
   ])('智能随访处理 %s 错误态', async (status, apiMessage, visibleMessage) => {
     mockInstitutionFetch({
       '/api/institution/followups': [jsonResponse({ error: apiMessage }, { status })],

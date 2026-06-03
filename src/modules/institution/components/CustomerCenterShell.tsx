@@ -75,16 +75,16 @@ const segmentToneClasses: Record<CustomerSegmentKey, string> = {
 };
 
 const segmentTrendLabels: Record<CustomerSegmentKey, string> = {
-  high_priority: '真实 API',
+  high_priority: '演示客户',
   post_care: '脱敏摘要',
-  repurchase_window: '实时分层',
+  repurchase_window: '运营分层',
   silent_reactivation: '待人工确认',
 };
 
 const customerBoundaryItems = [
   {
-    title: '列表来自租户客户 API',
-    description: '页面只读取当前登录租户可访问的客户 records，不在前端传递 tenantId。',
+    title: '客户用于讲述服务故事',
+    description: '沈知夏、叶舒颜、顾安然、唐以沫等客户用于演示治疗后运营闭环。',
   },
   {
     title: '表单只提交白名单字段',
@@ -92,7 +92,7 @@ const customerBoundaryItems = [
   },
   {
     title: '只展示脱敏标识',
-    description: '手机号和病历号字段必须是 maskedPhone、maskedMedicalRecordNo 这类脱敏展示值。',
+    description: '手机号和病历号只使用脱敏展示值，不展示原始号码或完整咨询内容。',
   },
 ];
 
@@ -218,7 +218,8 @@ function validateCustomerPayload(payload: CreateCustomerClientPayload) {
 function visibleListErrorState(error: TenantBusinessClientError): InstitutionPageStateProps {
   return getInstitutionPageStateFromClientError(error, {
     forbiddenMessage: '当前账号没有访问客户数据的权限',
-    fallbackMessage: '客户数据请求失败',
+    fallbackMessage: '客户运营视图暂时无法加载',
+    unavailableMessage: '数据服务暂时不可用，请稍后刷新或切换演示备份',
   });
 }
 
@@ -442,7 +443,7 @@ export function CustomerCenterShell() {
       <InstitutionSectionHeader
         eyebrow="客户运营"
         title="客户中心"
-        description="从机构客户 API 加载脱敏客户摘要，展示分层、优先级、负责人和下一步动作。"
+        description="客户、预约、随访任务统一进入运营视图。这里展示虚构 demo 客户的状态、负责人、优先级和下一步动作。"
         action={
           <label className="relative block w-full lg:w-[320px]" aria-label="客户搜索">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -483,7 +484,7 @@ export function CustomerCenterShell() {
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-slate-950">客户优先级队列</h3>
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
-              真实 API
+              受控 demo
             </span>
           </div>
 
@@ -502,8 +503,8 @@ export function CustomerCenterShell() {
           {!isLoading && !listErrorState && filteredCustomers.length === 0 ? (
             <InstitutionPageState
               kind="empty"
-              title="暂无客户摘要"
-              description="可以先创建一条只包含脱敏展示字段的客户摘要。"
+              title="暂无可讲述的演示客户"
+              description="当前没有可展示的客户旅程记录，可先创建只包含脱敏展示字段的客户摘要。"
               className="mt-4"
             />
           ) : null}
@@ -772,8 +773,8 @@ export function CustomerCenterShell() {
                 <ShieldCheck className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold">客户数据边界</h3>
-                <p className="mt-1 text-sm text-slate-400">只展示脱敏客户摘要。</p>
+                  <h3 className="text-lg font-semibold">客户演示边界</h3>
+                <p className="mt-1 text-sm text-slate-400">只展示脱敏客户摘要和下一步人工动作。</p>
               </div>
             </div>
             <div className="mt-5 space-y-3">
@@ -787,13 +788,10 @@ export function CustomerCenterShell() {
                 </div>
               ))}
             </div>
-            <button
-              type="button"
-              className="mt-5 inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-slate-950"
-            >
-              查看客户分层规则
+            <div className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950">
+              演示客户均为虚构脱敏数据
               <ArrowRight className="h-4 w-4" />
-            </button>
+            </div>
           </div>
         </aside>
       </div>

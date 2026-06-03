@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  Bot,
   Loader2,
   MessageSquareText,
   ShieldCheck,
@@ -73,7 +72,8 @@ function visibleErrorMessage(error: TenantBusinessClientError) {
 function visibleListErrorState(error: TenantBusinessClientError): InstitutionPageStateProps {
   return getInstitutionPageStateFromClientError(error, {
     forbiddenMessage: '当前账号没有访问随访任务的权限',
-    fallbackMessage: '随访任务请求失败',
+    fallbackMessage: '随访任务视图暂时无法加载',
+    unavailableMessage: '数据服务暂时不可用，请稍后刷新或切换演示备份',
   });
 }
 
@@ -161,12 +161,12 @@ export function SmartFollowUpShell() {
       <InstitutionSectionHeader
         eyebrow="智能随访"
         title="智能随访"
-        description="从机构随访任务 API 加载当前租户任务，按风险等级和到期时间排列人工工作队列。"
+        description="运营负责人可一眼看懂今天谁要跟、为什么要跟、任务来自哪里。任务需人工处理，不会主动向客户发送消息。"
         tone="violet"
         action={
           <div className="inline-flex items-center gap-2 rounded-full border border-violet-100 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700">
             <ShieldCheck className="h-4 w-4" />
-            PATCH 仅提交 id 与 nextStatus
+            任务需人工处理
           </div>
         }
       />
@@ -190,7 +190,9 @@ export function SmartFollowUpShell() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold text-slate-950">今日随访任务</h3>
-              <p className="mt-1 text-sm text-slate-500">优先处理高风险、临近到期任务。</p>
+              <p className="mt-1 text-sm text-slate-500">
+                优先处理高风险、临近到期和来源为治疗摘要的任务。
+              </p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <label className="text-xs font-semibold text-slate-500">
@@ -207,7 +209,7 @@ export function SmartFollowUpShell() {
                 </select>
               </label>
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
-                真实 API
+                人工队列
               </span>
             </div>
           </div>
@@ -228,7 +230,7 @@ export function SmartFollowUpShell() {
             <InstitutionPageState
               kind="empty"
               title="暂无随访任务"
-              description="当前租户没有需要处理的随访任务。"
+              description="当前没有需要人工处理的随访任务，可回到治疗摘要管理查看建议来源。"
               className="mt-4"
             />
           ) : null}
@@ -276,6 +278,9 @@ export function SmartFollowUpShell() {
                         </p>
                         {currentSourceLabel ? (
                           <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                              建议 key 用于来源追踪和避免重复创建。
+                            </span>
                             {task.sourceTreatmentSummaryId ? (
                               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
                                 来源摘要：{task.sourceTreatmentSummaryId}
@@ -337,7 +342,7 @@ export function SmartFollowUpShell() {
               <Workflow className="h-5 w-5 text-violet-600" />
               <div>
                 <h3 className="text-lg font-semibold text-slate-950">随访旅程</h3>
-                <p className="mt-1 text-sm text-slate-500">旅程定义仍为静态说明。</p>
+                <p className="mt-1 text-sm text-slate-500">仅用于说明运营路径，不代表外部客服接入能力。</p>
               </div>
             </div>
             <div className="mt-4 space-y-3">
@@ -373,7 +378,7 @@ export function SmartFollowUpShell() {
                   className="rounded-2xl border border-slate-200 bg-white p-3"
                 >
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-                    <Bot className="h-4 w-4 text-emerald-600" />
+                    <MessageSquareText className="h-4 w-4 text-emerald-600" />
                     {suggestion.title}
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
@@ -384,7 +389,7 @@ export function SmartFollowUpShell() {
             </div>
 
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-800">
-              不会调用 AI provider，客户沟通需由人员确认执行。
+              任务需人工处理，不会主动向客户发送消息。
             </div>
           </article>
         </aside>

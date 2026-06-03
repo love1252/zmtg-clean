@@ -92,8 +92,10 @@ describe('客户详情时间线抽屉', () => {
     const dialog = screen.getByRole('dialog', { name: '客户详情时间线' });
     expect(within(dialog).getByText('光电修复作废记录')).toBeInTheDocument();
     expect(within(dialog).getAllByText('已作废').length).toBeGreaterThan(0);
-    expect(within(dialog).getByText('该治疗摘要已作废')).toBeInTheDocument();
-    expect(within(dialog).getByText('仅保留历史追溯，不再作为后续运营依据。')).toBeInTheDocument();
+    expect(within(dialog).getByText('作废不是删除，该治疗摘要仅保留历史追溯。')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('不再作为后续运营依据，也不会主动向客户发送消息。'),
+    ).toBeInTheDocument();
     expect(within(dialog).getAllByText('状态：已作废').length).toBeGreaterThan(0);
     expectNoSensitiveTimelineContent(container);
   });

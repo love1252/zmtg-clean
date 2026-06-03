@@ -1381,6 +1381,16 @@ function expectNoSensitiveTreatmentSummaryManagementContent(container: HTMLEleme
   expect(text).not.toContain('电话外呼');
 }
 
+function expectNoInstitutionDemoMisleadingClaims(container: HTMLElement) {
+  const text = container.textContent ?? '';
+
+  expect(text).not.toContain('AI 演示主线');
+  expect(text).not.toContain('自动触达');
+  expect(text).not.toContain('真实 HIS 同步');
+  expect(text).not.toContain('自动发微信');
+  expect(text).not.toContain('AI 自动客服');
+}
+
 function expectNoSensitivePlatformAuditContent(container: HTMLElement) {
   const text = container.textContent ?? '';
 
@@ -1460,16 +1470,16 @@ describe('工作台入口页面', () => {
     const fetchMock = mockWorkspaceFetch();
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByRole('heading', { name: /让咨询团队/ })).toBeInTheDocument();
-    expect(screen.getByText('先看到增长机会')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /今日治疗后随访重点/ })).toBeInTheDocument();
+    expect(screen.getByText('待人工确认的后续动作')).toBeInTheDocument();
     expect(screen.getByText('正在加载机构运营摘要...')).toBeInTheDocument();
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/session', { cache: 'no-store' });
-    await expectMetric('当前客户摘要', '2');
+    await expectMetric('当前演示客户', '2');
     await expectMetric('高优先级客户', '1');
     await expectMetric('待确认预约', '1');
     await expectMetric('待处理随访', '1');
-    expect(screen.getByText('高风险随访')).toBeInTheDocument();
+    expect(screen.getByText('重点随访')).toBeInTheDocument();
     expect(screen.getByText('Phase6 客户B：Phase6 D3 异常反馈')).toBeInTheDocument();
     expect(screen.getByText('Phase5 客户A：Phase5 预约复诊')).toBeInTheDocument();
     expect(screen.getByText('Phase5 客户A：Phase5 修复项目')).toBeInTheDocument();
@@ -1484,8 +1494,10 @@ describe('工作台入口页面', () => {
     expect(screen.getByRole('button', { name: '移动导航：客户中心' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出工作台' })).toBeInTheDocument();
     expect(screen.getByText('近期需要人工处理')).toBeInTheDocument();
+    expect(screen.getAllByText(/客户、预约、随访任务统一进入运营视图/u).length).toBeGreaterThan(0);
     expect(screen.getByText('客户旅程看板')).toBeInTheDocument();
     expect(screen.getByText('当前行动队列')).toBeInTheDocument();
+    expectNoInstitutionDemoMisleadingClaims(container);
     expect(fetchMock).toHaveBeenCalledWith('/api/institution/customers', { cache: 'no-store' });
     expect(fetchMock).toHaveBeenCalledWith('/api/institution/appointments', { cache: 'no-store' });
     expect(fetchMock).toHaveBeenCalledWith('/api/institution/followups', { cache: 'no-store' });
@@ -1507,7 +1519,7 @@ describe('工作台入口页面', () => {
     expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();
     expect(screen.getByText('今日随访任务')).toBeInTheDocument();
     expect(await screen.findByText('Phase5 D7 回访')).toBeInTheDocument();
-    expect(screen.getByText('不会调用 AI provider，客户沟通需由人员确认执行。')).toBeInTheDocument();
+    expect(screen.getByText('任务需人工处理，不会主动向客户发送消息。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
     expect(screen.getByRole('heading', { name: '治疗摘要管理' })).toBeInTheDocument();
@@ -1544,8 +1556,9 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByRole('heading', { name: /让咨询团队/ })).toBeInTheDocument();
-    await expectMetric('当前客户摘要', '8');
+    expect(await screen.findByRole('heading', { name: /今日治疗后随访重点/ })).toBeInTheDocument();
+    expect(screen.getByText('待人工确认的后续动作')).toBeInTheDocument();
+    await expectMetric('当前演示客户', '8');
     await expectMetric('待确认预约', '1');
     await expectMetric('待处理随访', '2');
     expect(await screen.findByText('顾安然：D2 术后重点关怀')).toBeInTheDocument();
@@ -1564,6 +1577,7 @@ describe('工作台入口页面', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '预约中心' }));
     expect(await screen.findByText('光子嫩肤治疗')).toBeInTheDocument();
+    expect(screen.getByText('预约数据用于串联客户旅程，不代表外部 HIS 已完成同步。')).toBeInTheDocument();
     expect(screen.getByText('水光复诊')).toBeInTheDocument();
     expect(screen.getByText('面诊预约')).toBeInTheDocument();
     expect(screen.getByText('皮肤管理复购面诊')).toBeInTheDocument();
@@ -1576,7 +1590,7 @@ describe('工作台入口页面', () => {
     expect(await screen.findByText('光子嫩肤')).toBeInTheDocument();
     expect(screen.getByText('射频修复')).toBeInTheDocument();
     expect(screen.getByText('水光术后复查')).toBeInTheDocument();
-    expect(screen.getAllByText('状态：正常').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('可作为运营依据').length).toBeGreaterThan(0);
     expect(screen.getAllByText('已编辑').length).toBeGreaterThan(0);
     expect(screen.getAllByText('已作废').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: '查看安全详情 TS-005' }));
@@ -1598,9 +1612,11 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByRole('button', { name: '智能随访' }));
     expect(await screen.findByText('D3 光子术后回访')).toBeInTheDocument();
     expect(screen.getAllByText('来源：治疗摘要').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('建议 key 用于来源追踪和避免重复创建。').length).toBeGreaterThan(0);
     expect(screen.getByText('建议 key：TS-006:watch_risk_followup:3d')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '审计日志' }));
+    expect(screen.getByText('关键操作可追踪')).toBeInTheDocument();
     expect(await screen.findByText('demo-audit-customer-created-shen')).toBeInTheDocument();
     expect(screen.getByText('demo-audit-treatment-edited-ts004')).toBeInTheDocument();
     expect(await screen.findByText('demo-audit-treatment-voided-ts005')).toBeInTheDocument();
@@ -1609,6 +1625,7 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('demo-audit-role-denied-export')).toBeInTheDocument();
     expect(screen.getByText('demo-audit-quota-denied-appointment')).toBeInTheDocument();
     expectNoSensitiveTreatmentSummaryManagementContent(container);
+    expectNoInstitutionDemoMisleadingClaims(container);
   });
 
   it('demo seed smoke 支撑平台端 4 个租户、4 个套餐、商业化健康和 AI 配额边界', async () => {
@@ -1633,7 +1650,7 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('套餐 code：trial-care')).toBeInTheDocument();
     expect(screen.getByText('套餐 code：enterprise-care')).toBeInTheDocument();
     expect(screen.getAllByText('0 / 0').length).toBeGreaterThanOrEqual(4);
-    expect(screen.queryByText('AI 已接入')).not.toBeInTheDocument();
+    expect(screen.queryByText('AI 演示主线')).not.toBeInTheDocument();
     expect(screen.queryByText('AI 自动客服')).not.toBeInTheDocument();
 
     expect(await screen.findByRole('heading', { name: '商业化健康' })).toBeInTheDocument();
@@ -1677,7 +1694,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
 
     expect(screen.getByRole('heading', { name: '治疗摘要管理' })).toBeInTheDocument();
@@ -1781,7 +1798,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
     expect(screen.getByRole('heading', { name: '治疗摘要管理' })).toBeInTheDocument();
     expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
@@ -1899,7 +1916,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
     expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
 
@@ -1969,18 +1986,18 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
     expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
 
     const dialog = await screen.findByRole('dialog', { name: '客户详情时间线' });
     const drawer = within(dialog);
-    expect(drawer.getByText('治疗结构化摘要')).toBeInTheDocument();
+    expect(drawer.getByText('治疗后结构化摘要')).toBeInTheDocument();
     expect(drawer.getAllByText('Phase19 作废时间线摘要').length).toBeGreaterThan(0);
     expect(drawer.getAllByText('已作废').length).toBeGreaterThan(0);
-    expect(drawer.getByText('该治疗摘要已作废')).toBeInTheDocument();
-    expect(drawer.getByText('仅保留历史追溯，不再作为后续运营依据。')).toBeInTheDocument();
+    expect(drawer.getByText('作废不是删除，该治疗摘要仅保留历史追溯。')).toBeInTheDocument();
+    expect(drawer.getByText('不再作为后续运营依据，也不会主动向客户发送消息。')).toBeInTheDocument();
     expect(drawer.getAllByText('状态：已作废').length).toBeGreaterThan(0);
     expect(drawer.getByText('Phase19 作废时间线摘要 · Phase19 D7 复核')).toBeInTheDocument();
 
@@ -2006,7 +2023,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
     expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
 
@@ -2037,7 +2054,7 @@ describe('工作台入口页面', () => {
     const fetchMock = mockWorkspaceFetch();
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
 
     expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
@@ -2094,7 +2111,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
 
     expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
@@ -2140,7 +2157,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '智能随访' }));
 
     expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();
@@ -2199,7 +2216,7 @@ describe('工作台入口页面', () => {
     const fetchMock = mockWorkspaceFetch();
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
     expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
@@ -2213,7 +2230,7 @@ describe('工作台入口页面', () => {
     expect(screen.getAllByText('Phase5 预约复诊').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Phase5 D7 回访').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Phase5 收尾人工回访').length).toBeGreaterThan(0);
-    expect(screen.getByText('治疗结构化摘要')).toBeInTheDocument();
+    expect(screen.getByText('治疗后结构化摘要')).toBeInTheDocument();
     expect(screen.getAllByText('Phase12 光电修复').length).toBeGreaterThan(0);
     expect(screen.getByText('治疗时间：2026-06-01 12:10')).toBeInTheDocument();
     expect(screen.getByText('类别：phase12_laser_repair')).toBeInTheDocument();
@@ -2260,14 +2277,14 @@ describe('工作台入口页面', () => {
     });
     render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
     expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
 
     expect(await screen.findByRole('dialog', { name: '客户详情时间线' })).toBeInTheDocument();
-    expect(screen.getByText('治疗结构化摘要')).toBeInTheDocument();
-    expect(screen.getByText('暂无治疗摘要')).toBeInTheDocument();
+    expect(screen.getByText('治疗后结构化摘要')).toBeInTheDocument();
+    expect(screen.getByText('暂无治疗后结构化摘要')).toBeInTheDocument();
   });
 
   it('机构入口 smoke 覆盖治疗摘要结构化录入成功后刷新时间线', async () => {
@@ -2276,7 +2293,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
     expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
@@ -2335,7 +2352,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
     expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
@@ -2381,10 +2398,10 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
 
-    expect(await screen.findByText('暂无客户摘要')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可讲述的演示客户')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: 'Phase10 客户' } });
     fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-phase10' } });
     fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: 'Phase10 修复项目' } });
@@ -2422,10 +2439,10 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '预约中心' }));
 
-    expect(await screen.findByText('暂无预约记录')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可串联的预约记录')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('预约客户'), { target: { value: 'cust_phase5_closeout' } });
     fireEvent.change(screen.getByLabelText('预约项目'), { target: { value: 'Phase10 复诊' } });
     fireEvent.change(screen.getByLabelText('预约时间'), { target: { value: '2026-06-01T10:30:00+08:00' } });
@@ -2450,33 +2467,33 @@ describe('工作台入口页面', () => {
     expect(text).not.toContain('secret');
   });
 
-  it('机构导航清晰标注已接入和后续占位入口', async () => {
+  it('机构导航清晰标注演示主线和后续入口', async () => {
     const fetchMock = mockWorkspaceFetch();
     render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
-    expect(screen.getAllByText('已接入').length).toBeGreaterThanOrEqual(8);
-    expect(screen.getAllByText('后续占位').length).toBeGreaterThanOrEqual(6);
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(screen.getAllByText('演示主线').length).toBeGreaterThanOrEqual(8);
+    expect(screen.getAllByText('后续').length).toBeGreaterThanOrEqual(6);
 
     fireEvent.click(screen.getByRole('button', { name: '客服工作台' }));
-    expect(screen.getByText('客服工作台仍为后续占位')).toBeInTheDocument();
-    expect(screen.getByText('已真实接入：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志。')).toBeInTheDocument();
-    expect(screen.getByText('后续占位：客服工作台、知识库、数据分析。')).toBeInTheDocument();
+    expect(screen.getByText('客服工作台暂不进入本次演示主线')).toBeInTheDocument();
+    expect(screen.getByText('本次主线：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志。')).toBeInTheDocument();
+    expect(screen.getByText('后续：客服工作台、知识库、数据分析。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '知识库' }));
-    expect(screen.getByText('知识库仍为后续占位')).toBeInTheDocument();
-    expect(screen.getByText('本入口不会在 Phase 6 触发客服、知识库或数据分析真实功能请求。')).toBeInTheDocument();
+    expect(screen.getByText('知识库暂不进入本次演示主线')).toBeInTheDocument();
+    expect(screen.getByText('本入口不会触发客服、知识库或数据分析真实功能请求。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '数据分析' }));
-    expect(screen.getByText('数据分析仍为后续占位')).toBeInTheDocument();
+    expect(screen.getByText('数据分析暂不进入本次演示主线')).toBeInTheDocument();
     expectNoInstitutionMutation(fetchMock);
   });
 
-  it('机构端移动导航可切换已接入业务页', async () => {
+  it('机构端移动导航可切换演示主线业务页', async () => {
     const fetchMock = mockWorkspaceFetch();
     render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '移动导航：客户中心' }));
     expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
@@ -2504,7 +2521,7 @@ describe('工作台入口页面', () => {
     const fetchMock = mockWorkspaceFetch();
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '审计日志' }));
 
     expect(await screen.findByText('audit_phase8_institution')).toBeInTheDocument();
@@ -2553,13 +2570,13 @@ describe('工作台入口页面', () => {
     });
     render(<HospitalPage />);
 
-    expect(await screen.findByText('当前租户 API 摘要')).toBeInTheDocument();
+    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     expect(await screen.findByText('暂无可计算运营摘要')).toBeInTheDocument();
-    await expectMetric('当前客户摘要', '0');
+    await expectMetric('当前演示客户', '0');
     await expectMetric('高优先级客户', '0');
     await expectMetric('待确认预约', '0');
     await expectMetric('待处理随访', '0');
-    expect(screen.getByText('当前客户、预约和随访 records 为空。')).toBeInTheDocument();
+    expect(screen.getByText('当前没有客户、预约或随访任务可进入运营视图。')).toBeInTheDocument();
     expect(screen.getByText('当前没有可展示的待处理行动。')).toBeInTheDocument();
     expectNoInstitutionMutation(fetchMock);
   });
@@ -2567,7 +2584,7 @@ describe('工作台入口页面', () => {
   it.each([
     [401, '请先登录', '登录状态已失效，请重新登录'],
     [403, '没有访问权限', '当前账号没有访问机构首页数据的权限'],
-    [503, '数据服务暂时不可用', '数据服务暂时不可用'],
+    [503, '数据服务暂时不可用', '数据服务暂时不可用，请稍后刷新或切换演示备份'],
   ])('机构工作台首页处理 %s 错误态', async (status, apiMessage, visibleMessage) => {
     const fetchMock = mockWorkspaceFetch({
       institutionError: {

@@ -28,7 +28,7 @@ export const customerSegments: CustomerSegment[] = [
   { label: '高意向待承接', value: '18', trend: '人工优先承接', tone: 'blue' },
   { label: '术后关怀中', value: '126', trend: '7 位需人工', tone: 'emerald' },
   { label: '复购窗口期', value: '42', trend: '本周 +9', tone: 'amber' },
-  { label: '沉默待激活', value: '73', trend: '话术已生成', tone: 'rose' },
+  { label: '沉默待激活', value: '73', trend: '待人工唤醒', tone: 'rose' },
 ];
 
 export const demoCustomers: CustomerSummary[] = [
@@ -81,11 +81,11 @@ export const demoCustomers: CustomerSummary[] = [
     name: '李女士',
     lifecycle: '沉默激活',
     priority: '观察',
-    owner: 'AI 助手',
+    owner: '客服 A 组',
     projectInterest: '面部年轻化',
     lastTouch: '48 小时未回复',
-    nextAction: '发送轻量唤醒话术',
-    tags: ['沉默', '可自动触达', '低风险'],
+    nextAction: '准备轻量唤醒话术，人工确认后处理',
+    tags: ['沉默', '需人工唤醒', '低风险'],
   },
 ];
 

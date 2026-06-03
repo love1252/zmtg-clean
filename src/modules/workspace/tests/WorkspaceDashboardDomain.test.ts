@@ -131,7 +131,7 @@ describe('工作台看板领域模型', () => {
     );
   });
 
-  it('基于真实 API records 派生机构首页指标', () => {
+  it('基于演示数据派生机构首页指标', () => {
     const summary = buildInstitutionDashboardSummary({
       customers: [...customerRecords],
       appointments: [...appointmentRecords],
@@ -139,7 +139,7 @@ describe('工作台看板领域模型', () => {
     });
 
     expect(summary.metrics).toEqual([
-      expect.objectContaining({ key: 'customer_total', label: '当前客户摘要', value: '2' }),
+      expect.objectContaining({ key: 'customer_total', label: '当前演示客户', value: '2' }),
       expect.objectContaining({ key: 'high_priority_customers', label: '高优先级客户', value: '1' }),
       expect.objectContaining({ key: 'pending_appointments', label: '待确认预约', value: '1' }),
       expect.objectContaining({ key: 'due_followups', label: '待处理随访', value: '1' }),
@@ -148,7 +148,7 @@ describe('工作台看板领域模型', () => {
       expect.objectContaining({ key: 'repurchase_window', label: '复购窗口期', value: '1' }),
       expect.objectContaining({ key: 'post_care', label: '术后关怀中', value: '1' }),
       expect.objectContaining({ key: 'reschedule_appointments', label: '改约跟进', value: '1' }),
-      expect.objectContaining({ key: 'urgent_followups', label: '高风险随访', value: '1' }),
+      expect.objectContaining({ key: 'urgent_followups', label: '重点随访', value: '1' }),
     ]);
     expect(summary.isEmpty).toBe(false);
     expect(JSON.stringify(summary)).not.toContain('tenantId');
@@ -156,7 +156,7 @@ describe('工作台看板领域模型', () => {
     expect(JSON.stringify(summary)).not.toContain('实时同步');
   });
 
-  it('基于真实 API records 派生近期行动摘要', () => {
+  it('基于演示数据派生近期行动摘要', () => {
     const summary = buildInstitutionDashboardSummary({
       customers: [...customerRecords],
       appointments: [...appointmentRecords],

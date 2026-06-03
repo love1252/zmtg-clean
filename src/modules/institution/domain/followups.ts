@@ -29,8 +29,8 @@ export const followUpJourneys: FollowUpJourneySummary[] = [
 export const followUpTasks: FollowUpTask[] = [
   { id: 'task_wang_d28', customerName: '王女士', stage: 'D28 复购建议', dueLabel: '今天 18:00 前', suggestedAction: '人工回访并推荐修复组合', riskLevel: '优先' },
   { id: 'task_zhao_d3', customerName: '赵女士', stage: 'D3 异常反馈', dueLabel: '30 分钟内', suggestedAction: '客服回访并记录恢复情况', riskLevel: '优先' },
-  { id: 'task_li_silent', customerName: '李女士', stage: '48h 沉默唤醒', dueLabel: '今天', suggestedAction: '发送轻量唤醒话术', riskLevel: '普通' },
-  { id: 'task_han_new', customerName: '韩女士', stage: '首次到院前提醒', dueLabel: '明早 09:30', suggestedAction: '发送到院路线与注意事项', riskLevel: '关注' },
+  { id: 'task_li_silent', customerName: '李女士', stage: '48h 沉默唤醒', dueLabel: '今天', suggestedAction: '准备轻量唤醒话术，人工确认后处理', riskLevel: '普通' },
+  { id: 'task_han_new', customerName: '韩女士', stage: '首次到院前提醒', dueLabel: '明早 09:30', suggestedAction: '准备到院路线与注意事项，人工确认后处理', riskLevel: '关注' },
 ];
 
 export const followUpMessageSuggestions: FollowUpMessageSuggestion[] = [
