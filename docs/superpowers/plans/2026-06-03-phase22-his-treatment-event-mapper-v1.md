@@ -152,8 +152,12 @@ git diff --cached --check
 
 状态：
 
-- 未开始。
-- 只有用户明确要求进入 Phase 22 后续工作时才执行。
+- 已进入 docs-only 契约差异评估。
+- 新增 `docs/superpowers/plans/2026-06-03-phase22-standard-event-contract-gap-review.md`。
+- 当前结论：v1 优先保留 Phase 17 既有 `sourceSystem`、`sourceEventId`、`sourceCustomerId` 和 `appointmentRef` 内部命名，避免再引入 `externalSource`、`externalEventId`、`customerExternalId` 和 `appointmentExternalId` 作为核心 DTO 同义字段。
+- 当前结论：`external*` 命名如需兼容，应只作为 adapter 输入层别名或文档映射，不进入内部核心 DTO、普通机构端 DTO、数据库 schema 或审计 payload。
+- 当前结论：后续如进入实现，优先只补缺字段 `recoveryStage`、`rawSourceType` 和 `mappingWarnings`，不整体重命名。
+- 当前结论：`tenantId` 仍必须来自服务端可信上下文；`mappingWarnings` 必须是安全 code，不包含 raw payload、PII、完整正文、SQL、stack、token、secret 或连接串。
 
 建议范围：
 

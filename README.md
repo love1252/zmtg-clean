@@ -189,6 +189,7 @@ Phase 22 HIS 标准治疗事件 mapper v1 Plan Mode 已完成：
 
 - Phase 22 只做 spec / plan 文档，承接 Phase 17 标准治疗事件 domain-only 契约，规划未来 HIS / 机构系统治疗事件如何先转换成智美天工内部可识别的标准治疗事件结构
 - 建议字段包括 `externalEventId`、`externalSource`、`tenantId`、`customerExternalId`、`appointmentExternalId`、`treatmentDate`、`treatmentProject`、`treatmentCategory`、`treatmentStage`、`recoveryStage`、`riskLevel`、`nextCareAction`、`tags`、`rawSourceType` 和 `mappingWarnings`
+- Phase 22 PR 2 标准事件 mapper 契约差异评估已完成 docs-only 结论：v1 优先保留 Phase 17 `sourceSystem`、`sourceEventId`、`sourceCustomerId` 和 `appointmentRef` 内部命名，`external*` 仅作为 adapter 输入层别名或文档映射；后续优先只补 `recoveryStage`、`rawSourceType` 和 `mappingWarnings`
 - 文档明确 mapper v1 与现有治疗摘要、路径模板、随访建议、来源任务和运营分析的关系，标准事件未来可作为稳定输入，但当前不写入业务表、不创建摘要或任务
 - Phase 22 当前不写代码、不改测试、不新增 API、不改现有 API、不改 schema / migration、不改权限、认证或租户隔离
 - Phase 22 当前不接真实 HIS / 机构系统 / 企微 / AI / RAG / Agent，不导入真实客户数据，不保存 raw HIS payload，不保存完整治疗正文、完整病历正文、咨询全文、图片 / 文件原文，不做患者身份匹配、自动摘要、自动任务、AI 解析、自动触达、经营智能中心、图表或导出
