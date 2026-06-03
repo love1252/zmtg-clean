@@ -579,6 +579,9 @@ describe('治疗摘要人工确认创建随访任务 POST API', () => {
       result: 'denied',
       reason: 'invalid_follow_up_suggestion',
     }));
+    expect(routeMocks.auditRecord).not.toHaveBeenCalledWith(expect.objectContaining({
+      reason: 'voided_treatment_summary_follow_up_blocked',
+    }));
   });
 
   it('summary 不存在或跨租户时返回 404 并写 not_found audit', async () => {
@@ -600,6 +603,9 @@ describe('治疗摘要人工确认创建随访任务 POST API', () => {
       resource: 'follow_up',
       result: 'denied',
       reason: 'not_found_or_not_owned',
+    }));
+    expect(routeMocks.auditRecord).not.toHaveBeenCalledWith(expect.objectContaining({
+      reason: 'voided_treatment_summary_follow_up_blocked',
     }));
   });
 
@@ -624,6 +630,7 @@ describe('治疗摘要人工确认创建随访任务 POST API', () => {
     expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalled();
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
       resource: 'follow_up',
+      resourceId: 'trt_phase15_confirm',
       result: 'denied',
       reason: 'voided_treatment_summary_follow_up_blocked',
       tenantId: 'demo-tenant-001',
@@ -664,6 +671,9 @@ describe('治疗摘要人工确认创建随访任务 POST API', () => {
       resource: 'follow_up',
       result: 'denied',
       reason: 'role_denied',
+    }));
+    expect(routeMocks.auditRecord).not.toHaveBeenCalledWith(expect.objectContaining({
+      reason: 'voided_treatment_summary_follow_up_blocked',
     }));
   });
 

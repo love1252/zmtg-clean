@@ -101,11 +101,12 @@ Phase 21 PR 2 已实现的两个审计依赖指标：
   - `action: "update"`
   - `result: "denied"`
   - `reason: "voided_treatment_summary_follow_up_blocked"`
-  - `resourceId: null`
+  - `resourceId: <treatmentSummaryId>`
 
 可区分性：
 
 - 可以通过 `reason: "voided_treatment_summary_follow_up_blocked"` 区分来源任务创建的作废阻断。
+- 可以通过 `resourceId: <treatmentSummaryId>` 将来源任务创建的作废阻断关联到具体治疗摘要。
 - 可以通过 `reason: "role_denied"` 区分普通权限拒绝。
 - 可以通过 `reason: "not_found_or_not_owned"` 区分目标不存在或跨租户。
 - 可以通过 `reason: "invalid_follow_up_suggestion"` 区分非法 suggestionKey。
@@ -113,15 +114,14 @@ Phase 21 PR 2 已实现的两个审计依赖指标：
 不足：
 
 - 随访建议 GET 的作废阻断没有 audit，不能统计“作废摘要阻断随访建议”的发生次数。
-- 来源任务 POST 的作废阻断 audit 不带 `resourceId: <treatmentSummaryId>`，也不带 `sourceTreatmentSummaryId` 或 `sourceSuggestionKey`。
+- 来源任务 POST 的作废阻断 audit 不带 `sourceTreatmentSummaryId` 或 `sourceSuggestionKey`，后续如果需要来源建议粒度仍需单独评估。
 - 当前 audit repository / DTO 只返回安全字段：`resource`、`resourceId`、`action`、`result`、`reason`、`actorId`、`actorRole`、`occurredAt` 等；没有 raw payload，也没有来源建议上下文字段。
-- Phase 21 PR 2 domain 口径要求作废阻断事件可关联到 voided summary；当前真实 audit 事件只靠 `reason` 能识别阻断类型，但不能稳定关联具体治疗摘要。
 
 结论：
 
 - 当前只能部分支撑 `voidedSummaryBlockedCount`。
-- 如只统计“所有来源任务创建作废阻断尝试”，可以基于 `reason` 粗略计数。
-- 如按 Phase 21 PR 2 的安全口径要求关联 voided summary，则当前真实 audit 输入不足，应降级为 warning 或后续补强。
+- 如只统计“来源任务创建因作废摘要被阻断”的次数，可以基于 `reason` + `resourceId` 稳定关联 treatment summary。
+- 如要统计“作废摘要阻断随访建议 GET”或来源建议粒度，当前真实 audit 输入仍不足，应降级为 warning 或后续补强。
 
 ### 3.2 重复来源任务冲突
 
@@ -174,7 +174,7 @@ Phase 21 PR 2 已实现的两个审计依赖指标：
 
 | 指标 | 当前是否可稳定支撑 | 依赖字段 | 风险 | 建议 |
 | --- | --- | --- | --- | --- |
-| 作废摘要阻断数 | 部分 | 来源任务 POST audit 的 `resource: "follow_up"`、`result: "denied"`、`reason: "voided_treatment_summary_follow_up_blocked"` | 建议 GET 作废阻断不写 audit；来源任务 POST 阻断 audit 缺少 `resourceId: <treatmentSummaryId>`；无法只靠 audit 事件关联 voided summary。 | 审计补强前只能作为 warning 口径，不得正式对外展示；后续单独 PR 补强作废阻断 audit reason / 关联口径。 |
+| 作废摘要阻断数 | 部分 | 来源任务 POST audit 的 `resource: "follow_up"`、`resourceId: <treatmentSummaryId>`、`result: "denied"`、`reason: "voided_treatment_summary_follow_up_blocked"` | 建议 GET 作废阻断不写 audit；来源任务 POST 阻断不带来源建议上下文，不能覆盖建议 GET 或 suggestion 粒度。 | 来源任务创建阻断可按 `reason + resourceId` 稳定关联 treatment summary；如需建议 GET 或更细粒度，后续单独补强。 |
 | 重复来源任务冲突数 | 部分 | 来源任务 POST audit 的 `resource: "follow_up"`、`resourceId: <existingFollowUpTaskId>`、`result: "denied"`、`reason: "active_source_follow_up_exists"` | audit 本身不带 `sourceTreatmentSummaryId + sourceSuggestionKey`；只能关联已存在 follow-up task，不能只靠 audit DTO 还原来源建议粒度。 | 审计补强前只能作为 warning 口径，不得正式对外展示；后续单独 PR 补强重复来源任务冲突 audit reason / 关联口径。 |
 
 ## 5. 不足时的降级口径
@@ -196,14 +196,15 @@ Phase 21 PR 2 已实现的两个审计依赖指标：
 
 如果需要正式展示 `voidedSummaryBlockedCount` 或 `duplicateSourceTaskConflictCount`，不在本 PR 实现，必须先拆为小步补强 PR。Phase 21 下一步应优先选择以下路线之一：
 
-- `PR A：补强作废摘要阻断 audit reason`。
+- `PR A：补强作废摘要阻断 audit 关联口径`。
 - `PR B：补强重复来源任务冲突 audit reason`。
 - 或者在后续 UI / API 阶段先将这两个指标降级为 warning，不做正式展示。
 
 建议拆分：
 
-- PR A：补强作废摘要阻断 audit reason。
-  - 至少评估来源任务 POST 的 voided 阻断 audit 是否应写入 `resourceId: <treatmentSummaryId>`。
+- PR A：补强作废摘要阻断 audit 关联口径。
+  - 来源任务 POST 的 voided 阻断 audit 写入 `resourceId: <treatmentSummaryId>`。
+  - 保持 `reason: "voided_treatment_summary_follow_up_blocked"` 不变，不新增 audit reason、不改 audit model / schema。
   - 如需要统计随访建议 GET 的作废阻断，单独评估是否新增稳定 reason，例如只用于“作废摘要阻断随访建议”的 reason。
   - 补充 route tests，确保能区分权限拒绝、not found、非法 suggestionKey 和作废阻断。
 - PR B：补强重复来源任务冲突 audit reason。

@@ -66,12 +66,12 @@ function auditEvent(
   patch: Partial<FollowUpPathAnalysisAuditEvent> = {},
 ): FollowUpPathAnalysisAuditEvent {
   return {
-    auditResource: 'treatment_summary/follow_up_task',
+    auditResource: 'follow_up',
     auditResult: 'denied',
     auditReason: 'voided_treatment_summary_follow_up_blocked',
     resourceId: voidedSummary.summaryId,
-    sourceTreatmentSummaryId: voidedSummary.summaryId,
-    sourceSuggestionKey: voidedTemplateSuggestion.suggestionKey,
+    sourceTreatmentSummaryId: null,
+    sourceSuggestionKey: null,
     ...patch,
   };
 }
@@ -191,7 +191,7 @@ describe('随访路径运营分析 domain 口径', () => {
     expect(analysis.overdueTaskCount).toBe(0);
   });
 
-  it('从审计事件统计作废摘要阻断数', () => {
+  it('从 resourceId 可关联治疗摘要的审计事件统计作废摘要阻断数', () => {
     const analysis = buildAnalysis({
       auditEvents: [
         auditEvent(),
@@ -199,6 +199,8 @@ describe('随访路径运营分析 domain 口径', () => {
         auditEvent({ auditReason: 'voided_summary_follow_up_conflict' }),
         auditEvent({ resourceId: activeSummary.summaryId, sourceTreatmentSummaryId: activeSummary.summaryId }),
         auditEvent({ auditReason: 'role_denied' }),
+        auditEvent({ auditReason: 'not_found_or_not_owned' }),
+        auditEvent({ auditReason: 'invalid_follow_up_suggestion' }),
       ],
     });
 
