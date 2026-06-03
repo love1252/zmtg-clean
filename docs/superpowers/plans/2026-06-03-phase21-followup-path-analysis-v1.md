@@ -191,6 +191,12 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/FollowupPathAnalys
 
 ### PR 3：审计口径核对 / 补强评估
 
+状态：
+
+- 已进入 docs-only 审计口径核对评估。
+- 新增 `docs/superpowers/plans/2026-06-03-phase21-audit-metrics-review.md`。
+- 当前结论：`voidedSummaryBlockedCount` 和 `duplicateSourceTaskConflictCount` 都只能部分稳定支撑；如需补强，必须单独 PR。
+
 前提：
 
 - PR 2 发现现有审计无法稳定支撑阻断次数或冲突次数。
@@ -198,7 +204,7 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/FollowupPathAnalys
 建议范围：
 
 - 只读核对现有审计 resource / action / reason。
-- 如需新增 reason，单独规划 parser、repository、API 写入和测试。
+- 如需新增 reason、补 `resourceId` 约定或增加来源上下文，单独规划 parser、repository、API 写入和测试。
 - 不混入分析 UI。
 - 不新增经营智能中心。
 
@@ -206,7 +212,7 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/FollowupPathAnalys
 
 ```bash
 git diff --check
-node scripts/run-vitest.mjs run src/modules/institution/tests src/modules/security/tests
+git diff --cached --check
 ```
 
 ### PR 4：机构端只读分析 API
