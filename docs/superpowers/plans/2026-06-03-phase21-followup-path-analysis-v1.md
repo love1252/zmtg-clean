@@ -214,15 +214,26 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/FollowupPathAnalys
 
 建议下一步：
 
-- `PR A：补强作废摘要阻断 audit reason`。
+- `PR A：补强作废摘要阻断 audit 关联口径`。
 - `PR B：补强重复来源任务冲突 audit reason`。
 - 或者在后续 UI / API 阶段先将这两个指标降级为 warning，不做正式展示。
+
+### PR A：作废摘要阻断 audit 关联口径补强
+
+状态：
+
+- 已进入实现。
+- 来源任务 POST 遇到 voided treatment summary 时，继续写 `reason: "voided_treatment_summary_follow_up_blocked"`。
+- 该 denied audit 使用现有 `resourceId` 字段写入当前 treatment summary id，用于后续 `voidedSummaryBlockedCount` 稳定关联具体治疗摘要。
+- 不新增 audit reason，不改 audit model / schema，不改 API route / DTO，不改权限、认证或租户隔离。
 
 建议验证：
 
 ```bash
 git diff --check
-git diff --cached --check
+node scripts/run-vitest.mjs run src/modules/institution/tests/TreatmentFollowUpLinkApiRoutes.test.ts src/modules/institution/tests/FollowUpPathAnalysis.test.ts
+node scripts/run-vitest.mjs run src/modules/institution/tests
+./node_modules/.bin/tsc --noEmit
 ```
 
 ### PR 4：机构端只读分析 API
@@ -230,8 +241,8 @@ git diff --cached --check
 前提：
 
 - domain-only 口径已稳定。
-- 审计口径补强前，`voidedSummaryBlockedCount` 和 `duplicateSourceTaskConflictCount` 不得作为正式统计指标对外展示。
-- 如果 PR 4 仍需暴露这两个指标，只能降级为 warning 口径；如需正式展示，必须先完成作废摘要阻断和重复来源任务冲突的审计补强 PR。
+- 来源任务创建作废阻断 audit 已能通过 `reason + resourceId` 关联 treatment summary；如要统计随访建议 GET 阻断或来源建议粒度，仍需单独补强。
+- `duplicateSourceTaskConflictCount` 在重复来源任务冲突 audit 补强前不得作为正式统计指标对外展示；如需暴露，只能降级为 warning 口径。
 - 用户明确需要真实 API。
 
 建议范围：

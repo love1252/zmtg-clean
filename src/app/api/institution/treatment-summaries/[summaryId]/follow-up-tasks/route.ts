@@ -154,6 +154,7 @@ export async function POST(request: Request, context: TreatmentFollowUpTaskRoute
         await transactionAuditRepository.record(
           createDeniedFollowUpAuditEvent({
             context: accessContext,
+            resourceId: summaryId,
             reason: 'voided_treatment_summary_follow_up_blocked',
             occurredAt,
           }),
