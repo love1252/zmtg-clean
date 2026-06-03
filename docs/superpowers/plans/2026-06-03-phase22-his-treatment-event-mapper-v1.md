@@ -1,12 +1,12 @@
-# Phase 22 HIS 标准治疗事件 mapper v1 Implementation Plan
+# Phase 22 HIS 标准治疗事件 mapper v1 实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **给自动化执行者：** 必需子技能：使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans` 按任务逐步执行本计划。步骤使用复选框（`- [ ]`）语法跟踪。
 
-**Goal:** 规划如何把未来 HIS / 机构系统中的治疗事件映射为智美天工内部可识别的标准治疗事件结构。
+**目标：** 规划如何把未来 HIS / 机构系统中的治疗事件映射为智美天工内部可识别的标准治疗事件结构。
 
-**Architecture:** PR 1 不改架构，只做 Plan Mode 文档。后续如进入实现，应承接 Phase 17 `StandardTreatmentEvent` domain-only 契约，用字段白名单、确定性 mapper 和安全 warning code 隔离外部系统差异，不让 raw HIS payload、完整医疗正文或外部系统字段扩散到治疗摘要、路径模板、随访任务和运营分析。PR 3A 已在独立分支按 PR 2 结论补齐 `recoveryStage`、`rawSourceType` 和 `mappingWarnings` 的 domain-only 契约。
+**架构：** PR 1 不改架构，只做 Plan Mode 文档。后续如进入实现，应承接 Phase 17 `StandardTreatmentEvent` domain-only 契约，用字段白名单、确定性 mapper 和安全告警代码隔离外部系统差异，不让 raw HIS payload、完整医疗正文或外部系统字段扩散到治疗摘要、路径模板、随访任务和运营分析。PR 3A 已在独立分支按 PR 2 结论补齐 `recoveryStage`、`rawSourceType` 和 `mappingWarnings` 的 domain-only 契约。
 
-**Tech Stack:** 当前 PR 只涉及 Markdown。后续实现如单独批准，才可能涉及 TypeScript、Vitest 和现有机构领域模块。
+**技术栈：** 当前 PR 只涉及 Markdown。后续实现如单独批准，才可能涉及 TypeScript、Vitest 和现有机构领域模块。
 
 ---
 
@@ -95,9 +95,9 @@ git diff --cached --check
 - 可修改：`src/modules/institution/domain/standard-treatment-event.ts`
   - 评估是否新增 `recoveryStage`、`rawSourceType`、`mappingWarnings` 或 `external*` 兼容字段。
 - 可修改：`src/modules/institution/server/standard-treatment-event-mapper.ts`
-  - 评估是否扩展 mapper 输入 / 输出、warning code 和字段校验。
+  - 评估是否扩展 mapper 输入 / 输出、告警代码和字段校验。
 - 可修改：`src/modules/institution/tests/StandardTreatmentEventMapper.test.ts`
-  - 覆盖新字段、warning code、禁止字段、租户上下文和 raw payload 拒绝。
+  - 覆盖新字段、告警代码、禁止字段、租户上下文和 raw payload 拒绝。
 - 可新增：`docs/superpowers/plans/2026-06-xx-phase22-standard-event-contract-gap-review.md`
   - 如果需要先做契约差异评估，可单独用 docs-only PR 处理。
 
@@ -132,7 +132,7 @@ git diff --cached --check
 | `nextCareAction` | 结构化下一步动作 | 只能是短文本，不做 AI 生成长文。 |
 | `tags` | 安全标签数组 | 限制数量和长度，不包含 PII、raw payload、token、secret、SQL 或 stack。 |
 | `rawSourceType` | 粗粒度记录类型 | 只保存类型，例如治疗记录、预约、订单或疗程进度；不保存 raw payload。 |
-| `mappingWarnings` | 安全 warning code 数组 | 只保存 code，不保存外部字段原文或 PII。 |
+| `mappingWarnings` | 安全告警代码数组 | 只保存代码，不保存外部字段原文或 PII。 |
 
 ## 4. 后续 PR 拆分
 
@@ -216,18 +216,20 @@ node scripts/run-vitest.mjs run src/modules/institution/tests
 ./node_modules/.bin/tsc --noEmit
 ```
 
-### PR 3B：确定性 mapper 业务扩展评估
+### PR 3B：mapper 解析器与安全测试收尾
 
 状态：
 
-- 未开始。
-- 只有当需要类别 alias、状态降级、人工复核 warning 策略或真实 adapter 输入层别名时才进入。
+- 已进入本次解析器安全边界回归测试收尾。
+- 新增测试直接通过，说明 PR 3A 的解析器 / domain 契约无需修正。
+- 本 PR 不进入类别 alias、状态降级、人工复核 warning 策略或真实 adapter 输入层别名。
 
-建议范围：
+范围：
 
-- 评估是否需要 adapter 输入层兼容 `external*` 别名，但仍不进入核心 DTO。
-- 评估治疗类别 alias、外部状态映射和 warning 生成策略。
-- 继续覆盖 raw payload、完整正文、PII、图片 / 文件原文、AI 内容、token、secret、SQL、stack 和数据库连接串拒绝。
+- 补强 `recoveryStage` 空字符串、手机号、身份证号、病历号原文、raw payload、完整正文、图片 / 文件原文、SQL、stack、token、secret、`DATABASE_URL` 和连接串拒绝测试。
+- 补强 `rawSourceType` 全安全集合、缺省 / 空字符串、非法来源、外部表名、接口路径、请求体、响应体、字段原文和 raw payload 线索拒绝测试。
+- 补强 `mappingWarnings` 全安全 code、缺省、去重、数量限制、长度限制、非字符串、空字符串、未知 code、raw payload、PII、完整正文、SQL、stack、token、secret、`DATABASE_URL` 和连接串拒绝测试。
+- 补强源码扫描，确认 mapper 不调用 HIS / 企微 / AI / RAG / Agent / fetch / axios / Webhook，不写数据库，不创建治疗摘要或随访任务。
 - 不写数据库。
 - 不新增 API。
 - 不接真实 HIS。

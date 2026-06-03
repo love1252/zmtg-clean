@@ -1,7 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   STANDARD_TREATMENT_EVENT_ALLOWED_INPUT_KEYS,
   STANDARD_TREATMENT_EVENT_FORBIDDEN_FIELDS,
+  STANDARD_TREATMENT_EVENT_MAPPING_WARNING_CODES,
+  STANDARD_TREATMENT_EVENT_RAW_SOURCE_TYPES,
   STANDARD_TREATMENT_EVENT_SOURCE_SYSTEMS,
 } from '@/modules/institution/domain/standard-treatment-event';
 import { normalizeStandardTreatmentEvent } from '@/modules/institution/server/standard-treatment-event-mapper';
@@ -216,6 +220,17 @@ describe('标准治疗事件 domain-only mapper', () => {
     );
   });
 
+  it('允许 recoveryStage 空字符串按缺省值安全处理', () => {
+    expect(normalizeStandardTreatmentEvent({ ...validInput, recoveryStage: '   ' }, context)).toEqual(
+      expect.objectContaining({
+        ok: true,
+        value: expect.objectContaining({
+          recoveryStage: null,
+        }),
+      }),
+    );
+  });
+
   it('拒绝 recoveryStage 中的超长文本、敏感内容或 raw payload 线索', () => {
     expectInvalid(
       { ...validInput, recoveryStage: 'D'.repeat(81) },
@@ -229,19 +244,55 @@ describe('标准治疗事件 domain-only mapper', () => {
       { ...validInput, recoveryStage: '客户手机号 13800008888' },
       '字段 recoveryStage 不允许包含敏感信息',
     );
+
+    const sensitiveRecoveryStages = [
+      '身份证号 110101199001010011',
+      '病历号 MR123456',
+      '完整治疗记录正文：逐字记录...',
+      '完整病历正文：既往史原文...',
+      '咨询对话全文：客户逐字反馈...',
+      'imageUrl=https://his.example/files/before.jpg',
+      'select * from treatment_summaries',
+      'stack trace',
+      'token sk_test_123',
+      'secret zmtg_sk_123',
+      'DATABASE_URL=postgres://tenant:secret@localhost/db',
+    ];
+
+    for (const recoveryStage of sensitiveRecoveryStages) {
+      expectInvalid(
+        { ...validInput, recoveryStage },
+        '字段 recoveryStage 不允许包含敏感信息',
+      );
+    }
   });
 
   it('只允许 rawSourceType 使用安全粗粒度来源类型', () => {
-    expect(
-      normalizeStandardTreatmentEvent(
-        { ...validInput, rawSourceType: 'course_progress' },
-        context,
-      ),
-    ).toEqual(
+    expect(STANDARD_TREATMENT_EVENT_RAW_SOURCE_TYPES).toEqual([
+      'treatment_record',
+      'appointment',
+      'order',
+      'course_progress',
+      'manual_review',
+      'other',
+    ]);
+
+    for (const rawSourceType of STANDARD_TREATMENT_EVENT_RAW_SOURCE_TYPES) {
+      expect(normalizeStandardTreatmentEvent({ ...validInput, rawSourceType }, context)).toEqual(
+        expect.objectContaining({
+          ok: true,
+          value: expect.objectContaining({
+            rawSourceType,
+          }),
+        }),
+      );
+    }
+
+    expect(normalizeStandardTreatmentEvent({ ...validInput, rawSourceType: '   ' }, context)).toEqual(
       expect.objectContaining({
         ok: true,
         value: expect.objectContaining({
-          rawSourceType: 'course_progress',
+          rawSourceType: null,
         }),
       }),
     );
@@ -254,9 +305,57 @@ describe('标准治疗事件 domain-only mapper', () => {
       { ...validInput, rawSourceType: '/api/his/treatments/raw-response' },
       '字段 rawSourceType 值不在允许范围内',
     );
+    expectInvalid(
+      { ...validInput, rawSourceType: { table: 'his_treatment_records' } },
+      '字段 rawSourceType 必须是字符串',
+    );
+
+    const unsafeRawSourceTypes = [
+      'his_treatment_records',
+      'POST /his/treatments',
+      'requestBody',
+      'hisRawResponse',
+      'field:fullTreatmentRecord',
+      'raw payload',
+    ];
+
+    for (const rawSourceType of unsafeRawSourceTypes) {
+      expectInvalid(
+        { ...validInput, rawSourceType },
+        '字段 rawSourceType 值不在允许范围内',
+      );
+    }
   });
 
   it('只允许 mappingWarnings 输出安全 code，并去重、限制数量和长度', () => {
+    expect(STANDARD_TREATMENT_EVENT_MAPPING_WARNING_CODES).toEqual([
+      'unknown_treatment_category',
+      'missing_recovery_stage',
+      'external_event_id_missing',
+      'appointment_external_id_missing',
+      'customer_external_id_missing',
+      'manual_review_required',
+      'category_mapped_by_alias',
+      'external_status_mapped_to_default',
+    ]);
+
+    expect(
+      normalizeStandardTreatmentEvent(
+        {
+          ...validInput,
+          mappingWarnings: STANDARD_TREATMENT_EVENT_MAPPING_WARNING_CODES,
+        },
+        context,
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        ok: true,
+        value: expect.objectContaining({
+          mappingWarnings: [...STANDARD_TREATMENT_EVENT_MAPPING_WARNING_CODES],
+        }),
+      }),
+    );
+
     expect(
       normalizeStandardTreatmentEvent(
         {
@@ -289,6 +388,22 @@ describe('标准治疗事件 domain-only mapper', () => {
       { ...validInput, mappingWarnings: [`${'a'.repeat(81)}`] },
       '字段 mappingWarnings 单个 code 长度不能超过 80',
     );
+    expectInvalid(
+      { ...validInput, mappingWarnings: ['manual_review_required', 42] },
+      '字段 mappingWarnings 必须是字符串数组',
+    );
+    expectInvalid(
+      { ...validInput, mappingWarnings: ['manual_review_required', '   '] },
+      '字段 mappingWarnings 只能包含安全 warning code',
+    );
+    expectInvalid(
+      { ...validInput, mappingWarnings: ['safe_but_unknown_warning'] },
+      '字段 mappingWarnings 只能包含安全 warning code',
+    );
+    expectInvalid(
+      { ...validInput, mappingWarnings: ['需要人工复核'] },
+      '字段 mappingWarnings 只能包含安全 warning code',
+    );
   });
 
   it('拒绝 mappingWarnings 中的 raw payload、PII、完整正文、SQL、stack、token、secret、DATABASE_URL 或连接串', () => {
@@ -320,6 +435,39 @@ describe('标准治疗事件 domain-only mapper', () => {
         `请求包含不允许的字段: ${field}`,
       );
     }
+  });
+
+  it('mapper 保持纯解析：不调用外部系统、不写数据库、不创建摘要或随访任务', () => {
+    const mapperSource = readFileSync(
+      join(process.cwd(), 'src/modules/institution/server/standard-treatment-event-mapper.ts'),
+      'utf8',
+    );
+    const domainSource = readFileSync(
+      join(process.cwd(), 'src/modules/institution/domain/standard-treatment-event.ts'),
+      'utf8',
+    );
+    const source = `${mapperSource}\n${domainSource}`;
+    const blockedSourceTerms = [
+      ['fetch', '('].join(''),
+      ['XMLHttpRequest'].join(''),
+      ['axios'].join(''),
+      ['open', 'ai'].join(''),
+      ['r', 'ag'].join(''),
+      ['a', 'gent'].join(''),
+      ['we', 'com'].join(''),
+      ['we', 'chat'].join(''),
+      ['createTreatment', 'Summary'].join(''),
+      ['createFollow', 'Up'].join(''),
+      ['insert', '('].join(''),
+      ['update', '('].join(''),
+      ['delete', '('].join(''),
+      ['drizzle'].join(''),
+    ];
+
+    for (const term of blockedSourceTerms) {
+      expect(source.toLowerCase()).not.toContain(term.toLowerCase());
+    }
+    expect(source).not.toMatch(/\bdb\s*\./u);
   });
 
   it('拒绝结构化字段中夹带完整病历、治疗正文、诊疗原文、咨询全文、手机号、身份证、token、secret、SQL、stack 或数据库连接串', () => {
