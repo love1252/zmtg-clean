@@ -215,7 +215,7 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/FollowupPathAnalys
 建议下一步：
 
 - `PR A：补强作废摘要阻断 audit 关联口径`。
-- `PR B：补强重复来源任务冲突 audit reason`。
+- `PR B：补强重复来源任务冲突 audit 关联口径`。
 - 或者在后续 UI / API 阶段先将这两个指标降级为 warning，不做正式展示。
 
 ### PR A：作废摘要阻断 audit 关联口径补强
@@ -227,11 +227,22 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/FollowupPathAnalys
 - 该 denied audit 使用现有 `resourceId` 字段写入当前 treatment summary id，用于后续 `voidedSummaryBlockedCount` 稳定关联具体治疗摘要。
 - 不新增 audit reason，不改 audit model / schema，不改 API route / DTO，不改权限、认证或租户隔离。
 
+### PR B：重复来源任务冲突 audit 关联口径补强
+
+状态：
+
+- 已进入实现。
+- 重复来源任务冲突继续写 `reason: "active_source_follow_up_exists"`。
+- audit `resourceId` 继续指向已存在 follow-up task id，不改成 treatment summary id。
+- analysis domain 通过 `audit.resourceId -> sourceTasks.taskId` 关联安全来源任务输入，再确认 `source === "treatment_summary"`、存在 `sourceTreatmentSummaryId` / `sourceSuggestionKey`，且 `sourceSuggestionKey` 包含 `template_path_followup`。
+- 无法匹配来源任务、匹配到非治疗摘要来源任务、缺来源字段或非模板路径 key 时，不计入 `duplicateSourceTaskConflictCount`。
+- 不新增 audit reason，不改 audit model / schema，不改 API route / DTO，不改权限、认证或租户隔离。
+
 建议验证：
 
 ```bash
 git diff --check
-node scripts/run-vitest.mjs run src/modules/institution/tests/TreatmentFollowUpLinkApiRoutes.test.ts src/modules/institution/tests/FollowUpPathAnalysis.test.ts
+node scripts/run-vitest.mjs run src/modules/institution/tests/FollowUpPathAnalysis.test.ts src/modules/institution/tests/TreatmentFollowUpLinkApiRoutes.test.ts
 node scripts/run-vitest.mjs run src/modules/institution/tests
 ./node_modules/.bin/tsc --noEmit
 ```
@@ -242,7 +253,7 @@ node scripts/run-vitest.mjs run src/modules/institution/tests
 
 - domain-only 口径已稳定。
 - 来源任务创建作废阻断 audit 已能通过 `reason + resourceId` 关联 treatment summary；如要统计随访建议 GET 阻断或来源建议粒度，仍需单独补强。
-- `duplicateSourceTaskConflictCount` 在重复来源任务冲突 audit 补强前不得作为正式统计指标对外展示；如需暴露，只能降级为 warning 口径。
+- `duplicateSourceTaskConflictCount` 只能基于 `audit.resourceId -> sourceTasks.taskId` 成功关联到模板路径治疗摘要来源任务的冲突事件正式展示；未关联事件只能 warning 降级。
 - 用户明确需要真实 API。
 
 建议范围：

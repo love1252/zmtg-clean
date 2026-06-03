@@ -207,29 +207,75 @@ describe('随访路径运营分析 domain 口径', () => {
     expect(analysis.voidedSummaryBlockedCount).toBe(3);
   });
 
-  it('从审计事件统计重复来源任务冲突数', () => {
+  it('通过 audit resourceId 关联既有模板路径来源任务后统计重复来源任务冲突数', () => {
     const analysis = buildAnalysis({
+      sourceTasks: [
+        templateTask({
+          taskId: 'fu_phase20_template_confirm',
+          taskStatus: 'scheduled',
+        }),
+        templateTask({
+          taskId: 'fu_non_treatment_source',
+          source: null,
+        }),
+        templateTask({
+          taskId: 'fu_missing_summary_source',
+          sourceTreatmentSummaryId: null,
+        }),
+        templateTask({
+          taskId: 'fu_missing_suggestion_source',
+          sourceSuggestionKey: null,
+        }),
+        templateTask({
+          taskId: 'fu_non_template_source',
+          sourceSuggestionKey: 'trt_active_template:watch_risk_followup:3d',
+        }),
+      ],
       auditEvents: [
         auditEvent({
           auditReason: 'active_source_follow_up_exists',
-          auditResult: 'conflict',
-          resourceId: activeSummary.summaryId,
-          sourceTreatmentSummaryId: activeSummary.summaryId,
-          sourceSuggestionKey: templateSuggestion.suggestionKey,
-        }),
-        auditEvent({
-          auditReason: 'duplicate_source_follow_up_conflict',
-          auditResult: 'conflict',
-          resourceId: activeSummary.summaryId,
-          sourceTreatmentSummaryId: activeSummary.summaryId,
-          sourceSuggestionKey: templateSuggestion.suggestionKey,
+          auditResult: 'denied',
+          resourceId: 'fu_phase20_template_confirm',
         }),
         auditEvent({
           auditReason: 'active_source_follow_up_exists',
-          auditResult: 'conflict',
-          resourceId: null,
-          sourceTreatmentSummaryId: null,
-          sourceSuggestionKey: templateSuggestion.suggestionKey,
+          auditResult: 'denied',
+          resourceId: 'fu_missing_task',
+        }),
+        auditEvent({
+          auditReason: 'active_source_follow_up_exists',
+          auditResult: 'denied',
+          resourceId: 'fu_non_treatment_source',
+        }),
+        auditEvent({
+          auditReason: 'active_source_follow_up_exists',
+          auditResult: 'denied',
+          resourceId: 'fu_missing_summary_source',
+        }),
+        auditEvent({
+          auditReason: 'active_source_follow_up_exists',
+          auditResult: 'denied',
+          resourceId: 'fu_missing_suggestion_source',
+        }),
+        auditEvent({
+          auditReason: 'active_source_follow_up_exists',
+          auditResult: 'denied',
+          resourceId: 'fu_non_template_source',
+        }),
+        auditEvent({
+          auditReason: 'invalid_follow_up_suggestion',
+          auditResult: 'denied',
+          resourceId: 'fu_phase20_template_confirm',
+        }),
+        auditEvent({
+          auditReason: 'not_found_or_not_owned',
+          auditResult: 'denied',
+          resourceId: 'fu_phase20_template_confirm',
+        }),
+        auditEvent({
+          auditReason: 'role_denied',
+          auditResult: 'denied',
+          resourceId: 'fu_phase20_template_confirm',
         }),
         auditEvent({
           auditReason: 'voided_treatment_summary_follow_up_blocked',
@@ -240,7 +286,10 @@ describe('随访路径运营分析 domain 口径', () => {
       ],
     });
 
-    expect(analysis.duplicateSourceTaskConflictCount).toBe(2);
+    expect(analysis.duplicateSourceTaskConflictCount).toBe(1);
+    expect(analysis.warnings).toContain(
+      '部分重复来源任务冲突审计未能通过 resourceId 关联到模板路径来源任务，未计入正式数量。',
+    );
   });
 
   it('审计不足时不猜测阻断次数或重复冲突次数', () => {

@@ -126,6 +126,18 @@ function auditSummaryId(event: FollowUpPathAnalysisAuditEvent) {
   return hasValue(event.resourceId) ? event.resourceId : null;
 }
 
+function sourceTaskById(tasks: readonly FollowUpPathAnalysisSourceTask[]) {
+  const entries: [string, FollowUpPathAnalysisSourceTask][] = [];
+
+  for (const task of tasks) {
+    if (hasValue(task.taskId)) {
+      entries.push([task.taskId, task]);
+    }
+  }
+
+  return new Map(entries);
+}
+
 function isVoidedFollowUpBlockReason(input: string | null | undefined) {
   const reason = normalized(input);
 
@@ -172,15 +184,37 @@ function isDuplicateSourceTaskConflictReason(input: string | null | undefined) {
   );
 }
 
-function analysisWarnings(input: FollowUpPathAnalysisInput, analysisTimestamp: number | null) {
+function isLinkedTemplatePathDuplicateConflict(input: {
+  event: FollowUpPathAnalysisAuditEvent;
+  tasksById: ReadonlyMap<string, FollowUpPathAnalysisSourceTask>;
+}) {
+  if (!isDuplicateSourceTaskConflictReason(input.event.auditReason) || !hasValue(input.event.resourceId)) {
+    return false;
+  }
+
+  const task = input.tasksById.get(input.event.resourceId);
+
+  return task ? isTemplatePathSourceTask(task) : false;
+}
+
+function analysisWarnings(input: {
+  analysis: FollowUpPathAnalysisInput;
+  analysisTimestamp: number | null;
+  duplicateConflictAuditCount: number;
+  linkedDuplicateConflictCount: number;
+}) {
   const warnings: string[] = [];
 
-  if (input.auditEvents.length === 0) {
+  if (input.analysis.auditEvents.length === 0) {
     warnings.push('审计事件为空，作废阻断数和重复来源任务冲突数不会被猜测。');
   }
 
-  if (analysisTimestamp === null) {
+  if (input.analysisTimestamp === null) {
     warnings.push('analysisAt 无法解析，任务超时数按 0 处理。');
+  }
+
+  if (input.duplicateConflictAuditCount > input.linkedDuplicateConflictCount) {
+    warnings.push('部分重复来源任务冲突审计未能通过 resourceId 关联到模板路径来源任务，未计入正式数量。');
   }
 
   return warnings;
@@ -196,7 +230,14 @@ export function buildFollowUpPathAnalysis(
     input.treatmentSummaries.filter(isVoidedSummary).map((summary) => summary.summaryId),
   );
   const templatePathTasks = input.sourceTasks.filter(isTemplatePathSourceTask);
+  const tasksById = sourceTaskById(input.sourceTasks);
   const analysisTimestamp = timestamp(input.analysisAt);
+  const duplicateConflictAuditEvents = input.auditEvents.filter((event) =>
+    isDuplicateSourceTaskConflictReason(event.auditReason),
+  );
+  const linkedDuplicateConflictEvents = duplicateConflictAuditEvents.filter((event) =>
+    isLinkedTemplatePathDuplicateConflict({ event, tasksById }),
+  );
 
   return {
     scope: 'followup_path_operational_analysis_v1',
@@ -217,15 +258,17 @@ export function buildFollowUpPathAnalysis(
         isVoidedFollowUpBlockReason(event.auditReason)
       );
     }).length,
-    duplicateSourceTaskConflictCount: input.auditEvents.filter((event) => (
-      hasValue(auditSummaryId(event)) &&
-      isDuplicateSourceTaskConflictReason(event.auditReason)
-    )).length,
+    duplicateSourceTaskConflictCount: linkedDuplicateConflictEvents.length,
     notes: [
       '只统计 template_path_followup 模板建议。',
       '任务超时数使用传入的固定 analysisAt，不读取本地时间。',
       '作废阻断和重复来源冲突仅来自可识别审计事件。',
     ],
-    warnings: analysisWarnings(input, analysisTimestamp),
+    warnings: analysisWarnings({
+      analysis: input,
+      analysisTimestamp,
+      duplicateConflictAuditCount: duplicateConflictAuditEvents.length,
+      linkedDuplicateConflictCount: linkedDuplicateConflictEvents.length,
+    }),
   };
 }
