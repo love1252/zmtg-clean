@@ -184,6 +184,55 @@ function createHisConnectionUpdateDatabase(input: {
   };
 }
 
+function createHisConnectionStateTransitionDatabase(input: {
+  currentRow?: HisConnectionRow | null;
+  updatedRow?: HisConnectionRow | null;
+  updateError?: unknown;
+} = {}) {
+  const returning = vi.fn(async () => {
+    if (input.updateError) throw input.updateError;
+    return input.updatedRow ? [input.updatedRow] : [];
+  });
+  const updateWhere = vi.fn((condition: unknown) => {
+    void condition;
+    return { returning };
+  });
+  const set = vi.fn((values: Record<string, unknown>) => {
+    void values;
+    return { where: updateWhere };
+  });
+  const update = vi.fn((table: unknown) => {
+    void table;
+    return { set };
+  });
+  const lookupWhere = vi.fn(async (condition: unknown) => {
+    void condition;
+    return input.currentRow ? [input.currentRow] : [];
+  });
+  const from = vi.fn(() => ({ where: lookupWhere }));
+  const select = vi.fn(() => ({ from }));
+  const insert = vi.fn();
+  const deleteMock = vi.fn();
+
+  return {
+    database: {
+      delete: deleteMock,
+      insert,
+      select,
+      update,
+    } as unknown as TenantDatabase,
+    deleteMock,
+    from,
+    insert,
+    lookupWhere,
+    returning,
+    select,
+    set,
+    update,
+    updateWhere,
+  };
+}
+
 const hisConnectionRow = {
   id: 'his_conn_001',
   tenantId: 'demo-tenant-001',
@@ -232,6 +281,38 @@ const updatedHisConnectionRow = {
   systemType: 'clinic_system',
   updatedBy: 'demo-user-operator',
   updatedAt: new Date('2026-06-03T11:00:00.000Z'),
+} satisfies typeof hisConnections.$inferSelect;
+
+const pausedHisConnectionRow = {
+  ...hisConnectionRow,
+  status: 'paused',
+  updatedBy: 'demo-user-operator',
+  updatedAt: new Date('2026-06-03T12:00:00.000Z'),
+} satisfies typeof hisConnections.$inferSelect;
+
+const errorHisConnectionRow = {
+  ...hisConnectionRow,
+  id: 'his_conn_error',
+  connectionName: '错误态连接',
+  status: 'error',
+  healthStatus: 'failed',
+  lastErrorCode: 'his_timeout',
+  updatedAt: new Date('2026-06-03T12:10:00.000Z'),
+} satisfies typeof hisConnections.$inferSelect;
+
+const resumedHisConnectionRow = {
+  ...pausedHisConnectionRow,
+  status: 'active',
+  updatedBy: 'demo-user-operator',
+  updatedAt: new Date('2026-06-03T12:20:00.000Z'),
+} satisfies typeof hisConnections.$inferSelect;
+
+const revokedHisConnectionRow = {
+  ...hisConnectionRow,
+  status: 'revoked',
+  updatedBy: 'demo-user-admin',
+  updatedAt: new Date('2026-06-03T12:30:00.000Z'),
+  revokedAt: new Date('2026-06-03T12:30:00.000Z'),
 } satisfies typeof hisConnections.$inferSelect;
 
 const draftHisConnectionRow = {
@@ -291,6 +372,14 @@ const deletedHisConnectionRow = {
   connectionName: '已软删除连接',
   status: 'deleted',
   deletedAt: new Date('2026-06-03T09:00:00.000Z'),
+} satisfies typeof hisConnections.$inferSelect;
+
+const softDeletedHisConnectionRow = {
+  ...hisConnectionRow,
+  status: 'deleted',
+  updatedBy: 'demo-user-admin',
+  updatedAt: new Date('2026-06-03T12:40:00.000Z'),
+  deletedAt: new Date('2026-06-03T12:40:00.000Z'),
 } satisfies typeof hisConnections.$inferSelect;
 
 beforeEach(() => {
@@ -714,10 +803,313 @@ describe('HIS 连接配置写入 repository', () => {
     expect(query.update).not.toHaveBeenCalled();
   });
 
+  it('pause 允许 active / error 进入 paused，并只写状态和更新 actor 字段', async () => {
+    const query = createHisConnectionStateTransitionDatabase({
+      currentRow: errorHisConnectionRow,
+      updatedRow: {
+        ...errorHisConnectionRow,
+        status: 'paused',
+        updatedBy: 'demo-user-operator',
+        updatedAt: new Date('2026-06-03T12:15:00.000Z'),
+      },
+    });
+
+    const result = await createHisConnectionRepository(query.database).pauseHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_error',
+      actorUserId: 'demo-user-operator',
+      reasonCode: 'operator_pause',
+    });
+
+    expect(query.lookupWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: hisConnections.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: hisConnections.id, operator: 'eq', value: 'his_conn_error' },
+        { column: hisConnections.deletedAt, operator: 'isNull' },
+      ],
+      operator: 'and',
+    });
+    expect(query.update).toHaveBeenCalledWith(hisConnections);
+    expect(query.set).toHaveBeenCalledWith({
+      status: 'paused',
+      updatedAt: expect.any(Date),
+      updatedBy: 'demo-user-operator',
+    });
+    expect(query.updateWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: hisConnections.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: hisConnections.id, operator: 'eq', value: 'his_conn_error' },
+        { column: hisConnections.deletedAt, operator: 'isNull' },
+      ],
+      operator: 'and',
+    });
+    expect(result).toEqual({
+      status: 'ok',
+      record: mapHisConnectionRowToReadModel({
+        ...errorHisConnectionRow,
+        status: 'paused',
+        updatedBy: 'demo-user-operator',
+        updatedAt: new Date('2026-06-03T12:15:00.000Z'),
+      }),
+    });
+    expect(JSON.stringify(query.set.mock.calls[0]?.[0])).not.toMatch(/reasonCode|operator_pause/i);
+  });
+
+  it('pause 禁止 draft 进入 paused，重复 pause 返回 conflict，且不写数据库', async () => {
+    const draftQuery = createHisConnectionStateTransitionDatabase({
+      currentRow: draftHisConnectionRow,
+      updatedRow: pausedHisConnectionRow,
+    });
+    const pausedQuery = createHisConnectionStateTransitionDatabase({
+      currentRow: pausedHisConnectionRow,
+      updatedRow: pausedHisConnectionRow,
+    });
+
+    await expect(
+      createHisConnectionRepository(draftQuery.database).pauseHisConnectionForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_draft',
+        actorUserId: 'demo-user-admin',
+      }),
+    ).resolves.toEqual({ status: 'invalid_state_transition' });
+    await expect(
+      createHisConnectionRepository(pausedQuery.database).pauseHisConnectionForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        actorUserId: 'demo-user-admin',
+      }),
+    ).resolves.toEqual({ status: 'conflict' });
+
+    expect(draftQuery.update).not.toHaveBeenCalled();
+    expect(pausedQuery.update).not.toHaveBeenCalled();
+  });
+
+  it('resume 只允许 paused 进入 active，不测试连接也不刷新健康状态', async () => {
+    const query = createHisConnectionStateTransitionDatabase({
+      currentRow: pausedHisConnectionRow,
+      updatedRow: resumedHisConnectionRow,
+    });
+
+    const result = await createHisConnectionRepository(query.database).resumeHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      actorUserId: 'demo-user-operator',
+      reasonCode: 'manual_resume',
+    });
+
+    expect(query.set).toHaveBeenCalledWith({
+      status: 'active',
+      updatedAt: expect.any(Date),
+      updatedBy: 'demo-user-operator',
+    });
+    expect(JSON.stringify(query.set.mock.calls[0]?.[0])).not.toMatch(
+      /healthStatus|lastCheckedAt|lastErrorCode|reasonCode|manual_resume/i,
+    );
+    expect(result).toEqual({
+      status: 'ok',
+      record: mapHisConnectionRowToReadModel(resumedHisConnectionRow),
+    });
+  });
+
+  it('resume 禁止 draft / error / revoked 直接进入 active', async () => {
+    const draftQuery = createHisConnectionStateTransitionDatabase({
+      currentRow: draftHisConnectionRow,
+      updatedRow: resumedHisConnectionRow,
+    });
+    const errorQuery = createHisConnectionStateTransitionDatabase({
+      currentRow: errorHisConnectionRow,
+      updatedRow: resumedHisConnectionRow,
+    });
+    const revokedQuery = createHisConnectionStateTransitionDatabase({
+      currentRow: revokedHisConnectionRow,
+      updatedRow: resumedHisConnectionRow,
+    });
+
+    await expect(
+      createHisConnectionRepository(draftQuery.database).resumeHisConnectionForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_draft',
+        actorUserId: 'demo-user-admin',
+      }),
+    ).resolves.toEqual({ status: 'invalid_state_transition' });
+    await expect(
+      createHisConnectionRepository(errorQuery.database).resumeHisConnectionForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_error',
+        actorUserId: 'demo-user-admin',
+      }),
+    ).resolves.toEqual({ status: 'invalid_state_transition' });
+    await expect(
+      createHisConnectionRepository(revokedQuery.database).resumeHisConnectionForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        actorUserId: 'demo-user-admin',
+      }),
+    ).resolves.toEqual({ status: 'invalid_state_transition' });
+
+    expect(draftQuery.update).not.toHaveBeenCalled();
+    expect(errorQuery.update).not.toHaveBeenCalled();
+    expect(revokedQuery.update).not.toHaveBeenCalled();
+  });
+
+  it('revoke 允许 draft / active / paused / error 进入 revoked，并写 revokedAt / updatedAt / updatedBy', async () => {
+    const query = createHisConnectionStateTransitionDatabase({
+      currentRow: hisConnectionRow,
+      updatedRow: revokedHisConnectionRow,
+    });
+
+    const result = await createHisConnectionRepository(query.database).revokeHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      actorUserId: 'demo-user-admin',
+      reasonCode: 'admin_revoke',
+    });
+
+    expect(query.set).toHaveBeenCalledWith({
+      status: 'revoked',
+      revokedAt: expect.any(Date),
+      updatedAt: expect.any(Date),
+      updatedBy: 'demo-user-admin',
+    });
+    expect(result).toEqual({
+      status: 'ok',
+      record: mapHisConnectionRowToReadModel(revokedHisConnectionRow),
+    });
+    expect(JSON.stringify(query.set.mock.calls[0]?.[0])).not.toMatch(/reasonCode|admin_revoke/i);
+  });
+
+  it('revoke 重复撤销返回 conflict，且不处理凭证撤销或外部系统', async () => {
+    const query = createHisConnectionStateTransitionDatabase({
+      currentRow: revokedHisConnectionRow,
+      updatedRow: revokedHisConnectionRow,
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+
+    await expect(
+      createHisConnectionRepository(query.database).revokeHisConnectionForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        actorUserId: 'demo-user-admin',
+      }),
+    ).resolves.toEqual({ status: 'conflict' });
+
+    expect(query.update).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    fetchSpy.mockRestore();
+  });
+
+  it('softDelete 允许未删除状态进入 deleted，并写 deletedAt / updatedAt / updatedBy', async () => {
+    const query = createHisConnectionStateTransitionDatabase({
+      currentRow: revokedHisConnectionRow,
+      updatedRow: softDeletedHisConnectionRow,
+    });
+
+    const result = await createHisConnectionRepository(query.database).softDeleteHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      actorUserId: 'demo-user-admin',
+      reasonCode: 'archive_connection',
+    });
+
+    expect(query.set).toHaveBeenCalledWith({
+      status: 'deleted',
+      deletedAt: expect.any(Date),
+      updatedAt: expect.any(Date),
+      updatedBy: 'demo-user-admin',
+    });
+    expect(query.updateWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: hisConnections.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: hisConnections.id, operator: 'eq', value: 'his_conn_001' },
+        { column: hisConnections.deletedAt, operator: 'isNull' },
+      ],
+      operator: 'and',
+    });
+    expect(result).toEqual({
+      status: 'ok',
+      record: mapHisConnectionRowToReadModel(softDeletedHisConnectionRow),
+    });
+    expect(JSON.stringify(query.set.mock.calls[0]?.[0])).not.toMatch(
+      /reasonCode|archive_connection/i,
+    );
+  });
+
+  it('状态方法对跨租户、不存在或已软删除目标统一返回 not_found', async () => {
+    const query = createHisConnectionStateTransitionDatabase({ currentRow: null });
+
+    await expect(
+      createHisConnectionRepository(query.database).pauseHisConnectionForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_other_tenant',
+        actorUserId: 'demo-user-admin',
+      }),
+    ).resolves.toEqual({ status: 'not_found' });
+
+    expect(query.lookupWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: hisConnections.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: hisConnections.id, operator: 'eq', value: 'his_conn_other_tenant' },
+        { column: hisConnections.deletedAt, operator: 'isNull' },
+      ],
+      operator: 'and',
+    });
+    expect(query.update).not.toHaveBeenCalled();
+  });
+
+  it('状态方法输入字段为空时返回 validation_failed 且不读写数据库', async () => {
+    const query = createHisConnectionStateTransitionDatabase({
+      currentRow: pausedHisConnectionRow,
+      updatedRow: resumedHisConnectionRow,
+    });
+
+    const result = await createHisConnectionRepository(query.database).resumeHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      actorUserId: '   ',
+    });
+
+    expect(result).toEqual({ status: 'validation_failed' });
+    expect(query.select).not.toHaveBeenCalled();
+    expect(query.update).not.toHaveBeenCalled();
+  });
+
+  it('softDelete 后 list / detail 默认不可见，且不会硬删除记录', async () => {
+    const deleteQuery = createHisConnectionStateTransitionDatabase({
+      currentRow: hisConnectionRow,
+      updatedRow: softDeletedHisConnectionRow,
+    });
+    const listQuery = createHisConnectionSelectDatabase([softDeletedHisConnectionRow]);
+    const detailQuery = createHisConnectionLookupDatabase([softDeletedHisConnectionRow]);
+
+    await createHisConnectionRepository(deleteQuery.database).softDeleteHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      actorUserId: 'demo-user-admin',
+    });
+    await expect(
+      createHisConnectionRepository(listQuery.database).listHisConnectionsByTenant(
+        'demo-tenant-001',
+      ),
+    ).resolves.toEqual([]);
+    await expect(
+      createHisConnectionRepository(detailQuery.database).getHisConnectionByTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+      }),
+    ).resolves.toBeNull();
+
+    expect(deleteQuery.deleteMock).not.toHaveBeenCalled();
+  });
+
   it('repository 写入不调用外部系统、不创建摘要、任务或自动触达', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
     const createQuery = createHisConnectionInsertDatabase({ insertedRow: createdHisConnectionRow });
     const updateQuery = createHisConnectionUpdateDatabase({ updatedRow: updatedHisConnectionRow });
+    const pauseQuery = createHisConnectionStateTransitionDatabase({
+      currentRow: hisConnectionRow,
+      updatedRow: pausedHisConnectionRow,
+    });
 
     await createHisConnectionRepository(createQuery.database).createHisConnectionForTenant({
       tenantId: 'demo-tenant-001',
@@ -733,6 +1125,11 @@ describe('HIS 连接配置写入 repository', () => {
       values: { connectionName: '更新后的 HIS 连接' },
       actorUserId: 'demo-user-admin',
     });
+    await createHisConnectionRepository(pauseQuery.database).pauseHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      actorUserId: 'demo-user-admin',
+    });
 
     expect(createQuery.insert).toHaveBeenCalledWith(hisConnections);
     expect(createQuery.insert).not.toHaveBeenCalledWith(treatmentSummaries);
@@ -744,6 +1141,11 @@ describe('HIS 连接配置写入 repository', () => {
     expect(updateQuery.update).not.toHaveBeenCalledWith(followUpTasks);
     expect(updateQuery.insert).not.toHaveBeenCalled();
     expect(updateQuery.deleteMock).not.toHaveBeenCalled();
+    expect(pauseQuery.update).toHaveBeenCalledWith(hisConnections);
+    expect(pauseQuery.update).not.toHaveBeenCalledWith(treatmentSummaries);
+    expect(pauseQuery.update).not.toHaveBeenCalledWith(followUpTasks);
+    expect(pauseQuery.insert).not.toHaveBeenCalled();
+    expect(pauseQuery.deleteMock).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
 
     fetchSpy.mockRestore();
