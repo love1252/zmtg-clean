@@ -38,6 +38,38 @@
 - raw HIS payload 保存或展示。
 - demo seed 修改。
 
+## 2026-06-04 smoke / 文档收尾补充
+
+> 本次 `docs/his-connection-read-ui-closeout` 分支只做文档收尾，不改生产代码、不改 UI、不新增测试、不新增 API、不改 schema / migration、不改权限、认证或租户隔离。
+
+只读 UI 闭环结论：
+
+- PR #118 已完成 `his_connections` schema / migration 最小实现。
+- PR #119 已完成连接配置只读 repository 最小实现。
+- PR #120 已完成机构端 list / detail 只读 API。
+- PR #122 已完成机构端 workspace「HIS 连接配置」入口和 `HisConnectionReadOnlyPanel`。
+- 当前链路已形成 schema -> repository -> `GET /api/institution/his-connections` / `GET /api/institution/his-connections/[connectionId]` -> workspace 入口 -> 只读 UI -> 组件测试 / workspace smoke 闭环。
+
+已有 smoke 覆盖结论：
+
+- `src/modules/workspace/tests/WorkspaceDashboardDomain.test.ts` 已覆盖机构导航中存在 `hisConnections` / `HIS 连接配置` 入口。
+- `src/modules/workspace/tests/WorkspaceEntryPages.test.tsx` 已覆盖 workspace 中打开「HIS 连接配置」入口、渲染只读面板、展示连接列表安全摘要、展示安全详情、只调用既有 list / detail GET API、不拼接 query / header / body `tenantId`、不调用外部系统、空态、加载失败和敏感字段不展示。
+- `src/modules/institution/tests/HisConnectionReadOnlyPanel.test.tsx` 已覆盖组件层列表 / 详情安全摘要、连接状态中文文案、健康状态中文文案、`凭证已配置` / `凭证未配置`、空态、401 / 403 / 503 / 通用失败稳定错误态、详情 `not_found`、只读请求、无写入按钮和敏感字段不展示。
+- 上述覆盖已经满足本次 smoke 判断，不需要重复新增测试。
+
+当前仍未实现：
+
+- create / update / delete API。
+- pause / resume / revoke API。
+- 写入 repository 或任何写入能力。
+- 凭证管理、凭证加密、凭证写入、凭证明文读取或返回 `credentialRef`。
+- 测试连接、健康检查或真实 HIS 调用。
+- 真实 HIS adapter、机构系统、企微、AI / RAG / Agent 或自动触达。
+- raw HIS payload 保存或展示。
+- demo seed 修改。
+
+后续写入 API、凭证管理、测试连接和真实 HIS adapter 必须单独进入 Plan Mode / 独立 PR。
+
 ## 0. 当前 PR 范围
 
 新增：
@@ -207,9 +239,9 @@ git diff --cached --check
 
 建议后续拆分为：
 
-- PR A：只读 UI Plan Mode（当前 PR）。
-- PR B：workspace 入口轻量 UI 实现。
-- PR C：只读 UI smoke / 文档收尾。
+- PR A：只读 UI Plan Mode（已完成）。
+- PR B：workspace 入口轻量 UI 实现（已完成）。
+- PR C：只读 UI smoke / 文档收尾（当前 docs-only 收口）。
 - PR D：create / update API Plan Mode。
 - PR E：凭证管理 Plan Mode。
 - PR F：测试连接 Plan Mode。
