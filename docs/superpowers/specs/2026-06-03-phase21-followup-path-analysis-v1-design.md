@@ -22,6 +22,42 @@ Phase 21 建议聚焦 **随访路径运营分析 v1**。
 
 如果后续发现必须新增 schema、API、权限、外部集成、图表 UI、导出或经营归因能力，必须单独评估并重新进入对应 Plan Mode。
 
+## 0.1 v1 收尾状态
+
+Phase 21 v1 已通过 PR #100-#106 完成最小闭环：
+
+```text
+治疗摘要 / 路径模板建议 / 来源随访任务 / audit
+-> domain-only 分析口径
+-> 只读分析 API
+-> 机构端轻量指标展示
+-> workspace smoke / 文档状态收尾
+```
+
+已完成范围：
+
+- Phase 21 spec / plan 文档规划。
+- `buildFollowUpPathAnalysis` domain-only 纯函数口径和单元测试。
+- 作废摘要阻断 audit `resourceId` 关联 treatment summary。
+- 重复来源任务冲突通过 `active_source_follow_up_exists` 的 `resourceId -> source task` 关联模板路径来源任务。
+- `GET /api/institution/follow-up-path-analysis` 机构端只读聚合 API。
+- 机构端工作台轻量展示六个聚合指标、notes / warnings 和只读边界。
+- workspace smoke 覆盖指标展示、API 失败、tenantId 不由客户端传入、敏感字段不展示和误导表达不出现。
+
+仍不包含：
+
+- 不新增数据库 schema / migration。
+- 不改权限、认证或租户隔离。
+- 不接 HIS / 企微 / AI / RAG / Agent。
+- 不自动触达。
+- 不做图表。
+- 不做报表导出。
+- 不做经营智能中心。
+- 不做收入、复购、转化归因或路径效果分析。
+- 不修改 demo seed 数据。
+
+后续如需图表、导出、经营归因、路径效果分析、指标落库、历史趋势、报表 API 或外部系统接入，必须单独进入 Plan Mode。
+
 ## 1. 只读检查结论
 
 本次按要求只读检查了：

@@ -9,6 +9,8 @@
 
 **技术边界：** 当前 PR 只新增 / 修改 Markdown 文档；不写代码、不改 UI、不改测试、不新增 API、不改 Drizzle schema / migration、不改 RBAC / auth / tenant isolation、不接 HIS / 企微 / AI、不做自动触达。
 
+**收尾状态：** Phase 21 已通过 PR #100-#106 完成最小闭环：治疗摘要 / 路径模板建议 / 来源随访任务 / audit -> domain-only 分析口径 -> 只读分析 API -> 机构端轻量指标展示 -> workspace smoke / 文档状态收尾。当前仍不包含图表、导出、经营智能中心、收入 / 复购 / 转化归因、路径效果分析、HIS / 企微 / AI 或自动触达。
+
 ---
 
 ## 0. 当前 PR 范围
@@ -317,6 +319,14 @@ node scripts/run-vitest.mjs run src/modules/workspace/tests src/modules/institut
 ```
 
 ### PR 6：smoke / 文档收尾
+
+状态：
+
+- 已进入 smoke / 文档收尾。
+- workspace smoke 明确覆盖机构端工作台展示 `随访路径运营分析`、六个聚合指标、只读聚合、边界说明、warning、API 失败稳定错误态、API 请求不携带 `tenantId`、敏感字段不展示和误导表达不出现。
+- API route 测试继续覆盖 `tenantId` 只来自 access context、只返回聚合指标、不写数据库、不创建任务、不调用 AI / RAG / Agent / 外部系统。
+- README、roadmap、devlog、Phase 21 spec / plan 轻量同步 Phase 21 v1 最小闭环完成状态。
+- 本收尾 PR 不新增业务功能，不新增 API，不改 DTO，不改 schema / migration，不改权限、认证或租户隔离，不接 HIS / 企微 / AI，不做自动触达、图表、导出或经营智能中心。
 
 建议范围：
 
