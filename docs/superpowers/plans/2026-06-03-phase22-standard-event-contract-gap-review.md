@@ -272,15 +272,22 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/StandardTreatmentE
 ./node_modules/.bin/tsc --noEmit
 ```
 
-### PR 3B：确定性 mapper 业务扩展评估
+### PR 3B：mapper parser 与安全测试收尾
 
-建议范围：
+状态：
 
-- 评估类别 alias、外部状态降级和 warning 生成策略。
-- 如需兼容 `external*` 命名，只能作为 adapter 输入层别名或文档映射，不进入核心 DTO。
-- 测试 unknown field 仍被拒绝。
+- 已进入本次 parser 安全测试收尾。
+- 仅补充回归测试和轻量文档同步。
+- 新增测试直接通过，parser / domain 无需改动。
+
+范围：
+
+- 测试 `recoveryStage` 合法、缺省、空字符串、超长、PII、raw payload、完整正文、图片 / 文件原文、SQL、stack、token、secret、`DATABASE_URL` 和连接串边界。
+- 测试 `rawSourceType` 全安全集合、缺省 / 空字符串、非法值、外部表名、接口路径、请求体、响应体、字段原文和 raw payload 线索拒绝。
+- 测试 `mappingWarnings` 合法 code、缺省、去重、数量限制、长度限制、非字符串、空字符串、未知 code、raw payload、PII、完整正文、SQL、stack、token、secret、`DATABASE_URL` 和连接串拒绝。
 - 测试 `tenantId`、`eventId`、`receivedAt` 仍只来自 context。
-- 测试 `mappingWarnings` 不包含 raw payload、PII、完整正文、SQL、stack、token、secret 或连接串。
+- 测试 `externalEventId`、`externalSource`、`customerExternalId`、`appointmentExternalId` 仍不进入核心 DTO。
+- 源码扫描确认不调用 HIS / 企微 / AI / RAG / Agent / fetch / axios / 外部系统，不写数据库，不创建治疗摘要或随访任务。
 - 不接真实 HIS。
 - 不新增 API、schema、migration 或 UI。
 

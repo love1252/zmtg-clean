@@ -216,18 +216,20 @@ node scripts/run-vitest.mjs run src/modules/institution/tests
 ./node_modules/.bin/tsc --noEmit
 ```
 
-### PR 3B：确定性 mapper 业务扩展评估
+### PR 3B：mapper parser 与安全测试收尾
 
 状态：
 
-- 未开始。
-- 只有当需要类别 alias、状态降级、人工复核 warning 策略或真实 adapter 输入层别名时才进入。
+- 已进入本次 parser 安全边界回归测试收尾。
+- 新增测试直接通过，说明 PR 3A 的 parser / domain 契约无需修正。
+- 本 PR 不进入类别 alias、状态降级、人工复核 warning 策略或真实 adapter 输入层别名。
 
-建议范围：
+范围：
 
-- 评估是否需要 adapter 输入层兼容 `external*` 别名，但仍不进入核心 DTO。
-- 评估治疗类别 alias、外部状态映射和 warning 生成策略。
-- 继续覆盖 raw payload、完整正文、PII、图片 / 文件原文、AI 内容、token、secret、SQL、stack 和数据库连接串拒绝。
+- 补强 `recoveryStage` 空字符串、手机号、身份证号、病历号原文、raw payload、完整正文、图片 / 文件原文、SQL、stack、token、secret、`DATABASE_URL` 和连接串拒绝测试。
+- 补强 `rawSourceType` 全安全集合、缺省 / 空字符串、非法来源、外部表名、接口路径、请求体、响应体、字段原文和 raw payload 线索拒绝测试。
+- 补强 `mappingWarnings` 全安全 code、缺省、去重、数量限制、长度限制、非字符串、空字符串、未知 code、raw payload、PII、完整正文、SQL、stack、token、secret、`DATABASE_URL` 和连接串拒绝测试。
+- 补强源码扫描，确认 mapper 不调用 HIS / 企微 / AI / RAG / Agent / fetch / axios / Webhook，不写数据库，不创建治疗摘要或随访任务。
 - 不写数据库。
 - 不新增 API。
 - 不接真实 HIS。
