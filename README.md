@@ -33,6 +33,7 @@
 - Phase 20：治疗项目路径模板 v1，包括 domain-only catalog、确定性随访建议接入、机构端模板建议轻量展示和 smoke / 文档收尾
 - Phase 21：随访路径运营分析 v1 最小闭环已完成，包括 spec / plan、domain-only 口径、审计关联口径补强、只读分析 API、机构端轻量指标展示和 smoke / 文档收尾
 - Phase 22 Plan Mode：HIS 标准治疗事件 mapper v1 spec / plan 已完成，明确只规划未来 HIS / 机构系统治疗事件到内部标准治疗事件结构的 mapper，不接真实 HIS、不保存 raw payload、不做患者身份匹配、自动摘要、自动任务、AI 解析或自动触达
+- 真实 HIS adapter 前置评估 Plan Mode 已完成，规划未来接入真实 HIS / 机构系统前必须先评估租户绑定、连接配置、凭证安全、Webhook / 同步 / 手动导入、幂等、重试、错误降级、审计、raw payload 默认不保存、字段白名单、患者身份匹配、人工复核、自动摘要 / 自动任务禁止和自动触达禁止边界；本阶段不接真实 HIS、不新增 API、不改 schema / 权限
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -196,12 +197,13 @@ Phase 22 HIS 标准治疗事件 mapper v1 当前状态：
 - 文档明确 mapper v1 与现有治疗摘要、路径模板、随访建议、来源任务和运营分析的关系，标准事件未来可作为稳定输入，但当前不写入业务表、不创建摘要或任务
 - Phase 22 PR 3A 只改 domain 类型 / parser / mapper 契约、单元测试和轻量文档，不新增 API、不改现有 API、不改 schema / migration、不改权限、认证或租户隔离
 - Phase 22 当前不接真实 HIS / 机构系统 / 企微 / AI / RAG / Agent，不导入真实客户数据，不保存 raw HIS payload，不保存完整治疗正文、完整病历正文、咨询全文、图片 / 文件原文，不做患者身份匹配、自动摘要、自动任务、AI 解析、自动触达、经营智能中心、图表或导出
-- 后续如需 domain-only mapper 契约差异评估、确定性 mapper 实现、人工复核 / 预览、患者身份匹配、治疗摘要创建来源治理或真实 HIS adapter，必须单独进入 Plan Mode 或独立 PR
+- 真实 HIS adapter 前置评估 Plan Mode 已完成：当前只规划未来 adapter 的租户绑定、连接配置、凭证安全、输入方式、幂等、重试、错误降级、审计、raw payload 默认不保存、字段白名单、患者身份匹配、人工复核、自动摘要 / 自动任务禁止和自动触达禁止边界；仍不实现 adapter、不接真实 HIS、不处理真实客户数据
+- 后续如需 adapter spec / plan、连接配置与凭证边界、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
 
 后续阶段会依次加入：
 
 - Phase 20 / Phase 21 后续扩展评估：路径模板 schema / API、租户自定义 SOP、平台端模板管理、路径效果分析、图表、导出、经营归因、外部系统输入或触达能力必须单独规划
-- HIS 标准治疗事件 mapper 后续实现、业务事件埋点体系 spec、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
+- HIS 标准治疗事件 mapper 后续扩展、真实 HIS adapter PR A-G 拆分、业务事件埋点体系 spec、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费
