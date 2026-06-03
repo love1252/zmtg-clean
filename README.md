@@ -31,8 +31,7 @@
 - Phase 18：治疗摘要编辑能力 v1，包括 spec / plan 文档、编辑 payload parser、`treatment_summary:update` 最小权限、repository update、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端受控编辑 UI、入口 smoke 和文档收尾
 - Phase 19：治疗摘要作废能力 v1，包括作废字段、软作废 API、作废后随访建议 / 来源任务阻断、机构端状态展示和 smoke / 文档收尾
 - Phase 20：治疗项目路径模板 v1，包括 domain-only catalog、确定性随访建议接入、机构端模板建议轻量展示和 smoke / 文档收尾
-- Phase 21 Plan Mode：随访路径运营分析 v1 spec / plan 文档规划已完成；当前只是 docs-only 口径规划，不进入功能实现
-- Phase 21 PR 2：随访路径运营分析 domain-only 口径，包括最小安全输入 / 输出类型、纯函数指标计算和 institution 单元测试
+- Phase 21：随访路径运营分析 v1 最小闭环已完成，包括 spec / plan、domain-only 口径、审计关联口径补强、只读分析 API、机构端轻量指标展示和 smoke / 文档收尾
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -175,24 +174,20 @@ Phase 20 治疗项目路径模板 v1 已完成：
 - Phase 20 v1 未新增 API、未改 DTO、未改 schema / migration、未改权限、认证或租户隔离，不接 HIS / 企微 / AI，不做自动触达，也不修改 demo seed 数据
 - 后续如需路径模板 schema / API、租户自定义模板、路径编辑器、平台端模板管理、HIS 输入、企微触达、AI 生成建议或路径效果分析，必须单独进入 Plan Mode
 
-Phase 21 随访路径运营分析 v1 Plan Mode 已完成：
+Phase 21 随访路径运营分析 v1 已完成最小闭环：
 
-- Phase 21 仅规划如何基于现有治疗摘要、路径模板建议、来源随访任务、任务状态和审计记录形成最小运营分析口径，不是功能实现
-- 最小指标建议包括模板建议数、人工确认任务数、任务完成数、任务超时数、作废摘要阻断数和重复来源任务冲突数
-- 当前不新增 API，不改 schema / migration，不改权限、认证或租户隔离，不接 HIS / 企微 / AI，不做自动触达，不做复杂经营智能中心、图表 UI、报表导出或经营归因
-- 后续如需落库、报表 API、图表 UI、导出、经营归因、审计口径补强或外部系统接入，必须单独评估
-
-Phase 21 PR 2 随访路径运营分析 domain-only 口径已完成：
-
-- 新增随访路径运营分析最小输入 / 输出类型和纯函数，基于治疗摘要、模板建议、来源随访任务、任务状态、固定 `analysisAt` 和审计事件计算六个最小指标
-- 指标包括模板建议数、人工确认任务数、任务完成数、任务超时数、作废摘要阻断数和重复来源任务冲突数
-- 作废阻断和重复来源冲突只从可识别审计事件统计；审计不足时返回 0 和 warning，不用作废摘要数量或任务重复行猜测
-- 本阶段仍不新增 API、不改 UI、不改 schema / migration、不改权限、认证或租户隔离，不接 HIS / 企微 / AI，不做自动触达、图表 UI、报表导出或经营归因
+- Phase 21 已从 Plan Mode 收口到最小只读闭环：治疗摘要 / 路径模板建议 / 来源随访任务 / audit -> domain-only 分析口径 -> 只读分析 API -> 机构端轻量指标展示 -> workspace smoke / 文档收尾
+- 最小指标包括模板建议数、人工确认任务数、任务完成数、任务超时数、作废摘要阻断数和重复来源任务冲突数
+- `voidedSummaryBlockedCount` 已通过作废摘要阻断 audit `resourceId` 关联具体 treatment summary；`duplicateSourceTaskConflictCount` 已通过 `active_source_follow_up_exists` 的 `resourceId -> source task` 关联模板路径来源任务
+- `GET /api/institution/follow-up-path-analysis` 只从 access context 推导 `tenantId`，只返回聚合指标、notes / warnings 和边界说明，不返回客户明细、任务列表、治疗正文、病历正文、咨询全文、图片 / 文件原文或 raw audit payload
+- 机构端工作台仅轻量展示聚合指标、warning 和只读边界，不做图表、报表导出或经营智能中心
+- Phase 21 v1 未新增数据库 schema / migration，未改权限、认证或租户隔离，未接 HIS / 企微 / AI / RAG / Agent，未做自动触达，未修改 demo seed 数据
+- 后续如需图表、导出、经营归因、路径效果分析、指标落库、历史趋势、报表 API 或外部系统接入，必须单独进入 Plan Mode
 
 后续阶段会依次加入：
 
-- Phase 20 后续扩展评估：路径模板 schema / API、租户自定义 SOP、平台端模板管理、路径效果分析、外部系统输入或触达能力必须单独规划
-- HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec、随访路径运营分析 v1 实现评估、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
+- Phase 20 / Phase 21 后续扩展评估：路径模板 schema / API、租户自定义 SOP、平台端模板管理、路径效果分析、图表、导出、经营归因、外部系统输入或触达能力必须单独规划
+- HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费
