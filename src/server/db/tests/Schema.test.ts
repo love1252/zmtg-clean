@@ -124,6 +124,130 @@ describe('数据库结构', () => {
     );
   });
 
+  it('定义 HIS 连接配置安全元数据表、状态枚举和租户内索引约束', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const hisConnections = schemaModule.hisConnections;
+    const hisConnectionStatusEnum = schemaModule.hisConnectionStatusEnum as
+      | { enumValues?: string[] }
+      | undefined;
+    const hisConnectionHealthStatusEnum = schemaModule.hisConnectionHealthStatusEnum as
+      | { enumValues?: string[] }
+      | undefined;
+
+    expect(hisConnections).toBeDefined();
+    expect(hisConnectionStatusEnum?.enumValues).toEqual([
+      'draft',
+      'active',
+      'paused',
+      'revoked',
+      'deleted',
+      'error',
+    ]);
+    expect(hisConnectionHealthStatusEnum?.enumValues).toEqual([
+      'unknown',
+      'healthy',
+      'degraded',
+      'failed',
+    ]);
+
+    const hisConfig = getTableConfig(hisConnections as never);
+    const hisColumns = columnNames(hisConfig.columns);
+    const hisIndexes = hisConfig.indexes.map((index) => ({
+      name: index.config.name,
+      unique: index.config.unique,
+      columns: columnNames(index.config.columns as NamedColumn[]),
+    }));
+    const hisColumnsByProperty = hisConnections as unknown as {
+      credentialRef: { notNull: boolean };
+      revokedAt: { notNull: boolean };
+      deletedAt: { notNull: boolean };
+    };
+    const hisUniqueConstraint = hisConfig.uniqueConstraints.find(
+      (constraint) => constraint.getName() === 'his_connections_tenant_id_id_unique',
+    );
+    const hisTenantFk = hisConfig.foreignKeys.find(
+      (foreignKey) => foreignKey.getName() === 'his_connections_tenant_id_tenants_id_fk',
+    );
+    const hisTenantReference = hisTenantFk?.reference();
+
+    expect(getTableConfig(hisConnections as never).name).toBe('his_connections');
+    expect(hisColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'connection_name',
+        'source_system',
+        'vendor_type',
+        'system_type',
+        'status',
+        'credential_ref',
+        'health_status',
+        'last_checked_at',
+        'last_error_code',
+        'created_by',
+        'updated_by',
+        'created_at',
+        'updated_at',
+        'revoked_at',
+        'deleted_at',
+      ]),
+    );
+    expect(hisColumns).toHaveLength(17);
+    expect(hisColumnsByProperty.credentialRef.notNull).toBe(false);
+    expect(hisColumnsByProperty.revokedAt.notNull).toBe(false);
+    expect(hisColumnsByProperty.deletedAt.notNull).toBe(false);
+
+    expect(hisTenantFk).toBeDefined();
+    expect(columnNames(hisTenantReference?.columns ?? [])).toEqual(['tenant_id']);
+    expect(getTableConfig(hisTenantReference?.foreignTable ?? tenants).name).toBe('tenants');
+    expect(columnNames(hisTenantReference?.foreignColumns ?? [])).toEqual(['id']);
+    expect(hisUniqueConstraint).toBeDefined();
+    expect(columnNames(hisUniqueConstraint?.columns ?? [])).toEqual(['tenant_id', 'id']);
+    expect(hisIndexes).toEqual(
+      expect.arrayContaining([
+        {
+          name: 'his_connections_tenant_idx',
+          unique: false,
+          columns: ['tenant_id'],
+        },
+        {
+          name: 'his_connections_tenant_status_idx',
+          unique: false,
+          columns: ['tenant_id', 'status'],
+        },
+        {
+          name: 'his_connections_tenant_source_system_idx',
+          unique: false,
+          columns: ['tenant_id', 'source_system'],
+        },
+        {
+          name: 'his_connections_tenant_deleted_at_idx',
+          unique: false,
+          columns: ['tenant_id', 'deleted_at'],
+        },
+        {
+          name: 'his_connections_tenant_credential_ref_idx',
+          unique: false,
+          columns: ['tenant_id', 'credential_ref'],
+        },
+        {
+          name: 'his_connections_tenant_last_checked_at_idx',
+          unique: false,
+          columns: ['tenant_id', 'last_checked_at'],
+        },
+        {
+          name: 'his_connections_active_name_unique_idx',
+          unique: true,
+          columns: ['tenant_id', 'connection_name'],
+        },
+      ]),
+    );
+
+    expect(JSON.stringify(hisColumns)).not.toMatch(
+      /raw_payload|request_body|response_body|treatment_record|medical_record_body|diagnosis_text|clinical_note|consultation_transcript|image_original|file_original|credential_secret|credential_value|credential_plaintext|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string|database_url|"sql"|"stack"/i,
+    );
+  });
+
   it('客户表结构只包含脱敏字段', () => {
     expect(customers.maskedPhone).toBeDefined();
     expect(customers.maskedMedicalRecordNo).toBeDefined();
@@ -637,6 +761,14 @@ describe('数据库结构', () => {
     expect(seedSource).not.toContain('onConflictDoNothing');
   });
 
+  it('演示 seed 不写入 HIS 连接配置或凭证引用数据', () => {
+    const seedSource = readFileSync(join(process.cwd(), 'src/server/db/seed-demo-data.ts'), 'utf8');
+
+    expect(seedSource).not.toMatch(
+      /hisConnections|his_connections|credentialRef|credential_ref|raw_payload|request_body|response_body|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string/i,
+    );
+  });
+
   it('演示种子数据包含安全的治疗结构化摘要并保持同租户引用', () => {
     const seedModule = seedDemoData as typeof seedDemoData & Record<string, unknown>;
     const getDemoTreatmentSummarySeedRecords =
@@ -860,6 +992,70 @@ describe('数据库结构', () => {
     expect(migrationSql).not.toMatch(/\bdelete\s+from\b|\bupdate\s+treatment_summaries\b/i);
     expect(migrationSql).not.toMatch(
       /phone_number|id_number|medical_record_no|treatment_record|medical_record_body|diagnosis_text|clinical_note|consultation_transcript|request_body|metadata|raw_payload|ai_generated|external_sync|token|secret|database_url/i,
+    );
+  });
+
+  it('HIS 连接配置迁移只新增安全元数据表、状态枚举、索引和约束', () => {
+    const migrationSql = readMigrationSql('his_connections');
+    const journal = JSON.parse(readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8')) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+    const latestSnapshot = readFileSync(
+      join(process.cwd(), 'drizzle/meta/0006_snapshot.json'),
+      'utf8',
+    ).toLowerCase();
+
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ idx: 6, tag: '0006_his_connections' }),
+      ]),
+    );
+    expect(latestSnapshot).toContain('"his_connections"');
+    expect(latestSnapshot).toContain('"credential_ref"');
+    expect(latestSnapshot).toContain('"revoked_at"');
+    expect(latestSnapshot).toContain('"deleted_at"');
+    expect(migrationSql).toContain(
+      'create type "public"."his_connection_status" as enum(\'draft\', \'active\', \'paused\', \'revoked\', \'deleted\', \'error\')',
+    );
+    expect(migrationSql).toContain(
+      'create type "public"."his_connection_health_status" as enum(\'unknown\', \'healthy\', \'degraded\', \'failed\')',
+    );
+    expect(migrationSql).toContain('create table "his_connections"');
+    expect(migrationSql).toContain('"credential_ref" varchar(128)');
+    expect(migrationSql).toContain('"revoked_at" timestamp with time zone');
+    expect(migrationSql).toContain('"deleted_at" timestamp with time zone');
+    expect(migrationSql).toContain(
+      'constraint "his_connections_tenant_id_id_unique" unique("tenant_id","id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "his_connections" add constraint "his_connections_tenant_id_tenants_id_fk" foreign key ("tenant_id") references "public"."tenants"("id")',
+    );
+    expect(migrationSql).toContain(
+      'create index "his_connections_tenant_idx" on "his_connections" using btree ("tenant_id")',
+    );
+    expect(migrationSql).toContain(
+      'create index "his_connections_tenant_status_idx" on "his_connections" using btree ("tenant_id","status")',
+    );
+    expect(migrationSql).toContain(
+      'create index "his_connections_tenant_source_system_idx" on "his_connections" using btree ("tenant_id","source_system")',
+    );
+    expect(migrationSql).toContain(
+      'create index "his_connections_tenant_deleted_at_idx" on "his_connections" using btree ("tenant_id","deleted_at")',
+    );
+    expect(migrationSql).toContain(
+      'create index "his_connections_tenant_credential_ref_idx" on "his_connections" using btree ("tenant_id","credential_ref")',
+    );
+    expect(migrationSql).toContain(
+      'create index "his_connections_tenant_last_checked_at_idx" on "his_connections" using btree ("tenant_id","last_checked_at")',
+    );
+    expect(migrationSql).toContain(
+      'create unique index "his_connections_active_name_unique_idx" on "his_connections" using btree ("tenant_id","connection_name")',
+    );
+    expect(migrationSql).toContain('where "his_connections"."deleted_at" is null');
+    expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
+    expect(migrationSql).not.toMatch(/\bdelete\s+from\b|\binsert\s+into\b|(^|;)\s*update\s+/i);
+    expect(migrationSql).not.toMatch(
+      /phone_number|id_number|medical_record_no|raw_payload|request_body|response_body|treatment_record|medical_record_body|diagnosis_text|clinical_note|consultation_transcript|image_original|file_original|credential_secret|credential_value|credential_plaintext|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string|database_url|"sql"|"stack"/i,
     );
   });
 });
