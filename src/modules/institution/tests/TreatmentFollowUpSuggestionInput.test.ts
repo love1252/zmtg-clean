@@ -105,6 +105,18 @@ describe('治疗后护理 / 随访建议输入 mapper 和 parser', () => {
         suggestionKey: 'trt_phase15_map:urgent_risk_followup:1d',
       },
     });
+    expect(
+      parseTreatmentFollowUpSuggestionSelection({
+        suggestionKey:
+          'trt_phase15_map:template_path_followup:1d:photoelectric_care:photoelectric_d1_watch',
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        suggestionKey:
+          'trt_phase15_map:template_path_followup:1d:photoelectric_care:photoelectric_d1_watch',
+      },
+    });
   });
 
   it('parser 拒绝 tenantId、customerId、dueAt、riskLevel、suggestedAction 和未知字段', () => {

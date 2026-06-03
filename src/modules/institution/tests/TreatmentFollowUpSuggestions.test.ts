@@ -62,6 +62,12 @@ function suggestionsFor(input: Partial<TreatmentFollowUpSuggestionInput> = {}) {
   });
 }
 
+function templateSuggestionsFor(input: Partial<TreatmentFollowUpSuggestionInput> = {}) {
+  return suggestionsFor(input).filter(
+    (suggestion) => suggestion.ruleKey === 'template_path_followup',
+  );
+}
+
 describe('治疗后护理 / 随访建议确定性规则', () => {
   it('高风险治疗摘要生成高优先级随访建议', () => {
     const suggestions = suggestionsFor({ riskLevel: 'urgent' });
@@ -132,6 +138,147 @@ describe('治疗后护理 / 随访建议确定性规则', () => {
       title: '注射类治疗复诊提醒',
     });
     expect(skinRepair?.suggestionKey).not.toBe(injection?.suggestionKey);
+  });
+
+  it('光子 / 光电治疗能生成模板驱动内部建议', () => {
+    const [templateSuggestion] = templateSuggestionsFor({
+      treatmentCategory: 'laser_repair',
+      treatmentProject: '光电治疗',
+      recoveryStage: 'D1',
+      riskLevel: 'watch',
+      tags: ['光子'],
+    });
+
+    expect(templateSuggestion).toMatchObject({
+      suggestionKey:
+        'trt_phase15_base:template_path_followup:1d:photoelectric_care:photoelectric_d1_watch',
+      ruleKey: 'template_path_followup',
+      title: '光电治疗 D1 反应人工确认',
+      description: '请人工确认“光电治疗 D1 反应人工确认”。建议处理角色：医助。禁止自动触达。',
+      recommendedDueAt: '2026-06-02T04:00:00.000Z',
+      priority: 'medium',
+      riskLevel: 'watch',
+      sourceFields: expect.arrayContaining([
+        'treatmentCategory',
+        'recoveryStage',
+        'riskLevel',
+        'treatmentDate',
+      ]),
+    });
+    expect(templateSuggestion?.reason).toContain('photoelectric_care');
+    expect(templateSuggestion?.reason).toContain('photoelectric_d1_watch');
+  });
+
+  it('水光 / 注射护理能生成模板驱动内部建议', () => {
+    const [templateSuggestion] = templateSuggestionsFor({
+      treatmentCategory: 'injection_review',
+      treatmentProject: '水光注射护理',
+      recoveryStage: 'D3',
+      riskLevel: 'watch',
+      tags: ['注射复诊'],
+    });
+
+    expect(templateSuggestion).toMatchObject({
+      suggestionKey:
+        'trt_phase15_base:template_path_followup:3d:hydro_injection_care:hydro_injection_d3_care',
+      title: '水光注射 D3 护理完成确认',
+      recommendedDueAt: '2026-06-04T04:00:00.000Z',
+      priority: 'medium',
+    });
+    expect(templateSuggestion?.description).toContain('禁止自动触达');
+  });
+
+  it('术后修复能生成模板驱动内部建议', () => {
+    const [templateSuggestion] = templateSuggestionsFor({
+      treatmentCategory: 'skin_repair',
+      treatmentProject: '术后修复',
+      recoveryStage: 'D7',
+      riskLevel: 'watch',
+      tags: ['修复护理'],
+    });
+
+    expect(templateSuggestion).toMatchObject({
+      suggestionKey:
+        'trt_phase15_base:template_path_followup:7d:post_surgery_repair:post_surgery_d7_repair',
+      title: '术后修复 D7 护理路径复核',
+      recommendedDueAt: '2026-06-08T04:00:00.000Z',
+      priority: 'medium',
+    });
+  });
+
+  it('皮肤管理能生成模板驱动内部建议', () => {
+    const [templateSuggestion] = templateSuggestionsFor({
+      treatmentCategory: 'skin_check',
+      treatmentProject: '皮肤管理',
+      treatmentStage: '稳定期护理',
+      recoveryStage: '稳定期',
+      riskLevel: 'normal',
+      tags: ['皮肤检测'],
+    });
+
+    expect(templateSuggestion).toMatchObject({
+      suggestionKey:
+        'trt_phase15_base:template_path_followup:14d:skin_management:skin_management_stable',
+      title: '皮肤管理稳定期复购前人工确认',
+      recommendedDueAt: '2026-06-15T04:00:00.000Z',
+      priority: 'low',
+    });
+  });
+
+  it('urgent 风险能生成高优先级模板人工处理建议', () => {
+    const [templateSuggestion] = templateSuggestionsFor({
+      treatmentCategory: 'skin_repair',
+      treatmentProject: '术后修复',
+      recoveryStage: 'D1',
+      riskLevel: 'urgent',
+      tags: ['术后重点观察'],
+    });
+
+    expect(templateSuggestion).toMatchObject({
+      suggestionKey:
+        'trt_phase15_base:template_path_followup:1d:post_surgery_repair:post_surgery_d1_urgent',
+      title: '术后修复 D1 高风险人工处理',
+      priority: 'high',
+      riskLevel: 'urgent',
+      recommendedDueAt: '2026-06-02T04:00:00.000Z',
+    });
+    expect(templateSuggestion?.description).toContain('运营负责人');
+    expect(templateSuggestion?.description).toContain('禁止自动触达');
+  });
+
+  it('ambiguous 输入不猜测项目，仍走安全 fallback', () => {
+    const suggestions = buildTreatmentFollowUpSuggestions({
+      ...baseTreatmentSummary,
+      treatmentCategory: '',
+      treatmentProject: '光子水光联合护理',
+      treatmentStage: '',
+      recoveryStage: '',
+      riskLevel: 'normal',
+      nextCareAction: '',
+      tags: ['光电', '注射'],
+    });
+
+    expect(suggestions).toEqual([
+      expect.objectContaining({
+        ruleKey: 'lightweight_post_care_check',
+        suggestionKey: 'trt_phase15_base:lightweight_post_care_check:7d',
+      }),
+    ]);
+  });
+
+  it('模板建议 key 稳定且保留旧规则 key 并存', () => {
+    const suggestionKeys = suggestionsFor().map((suggestion) => suggestion.suggestionKey);
+
+    expect(suggestionKeys).toEqual(
+      expect.arrayContaining([
+        'trt_phase15_base:template_path_followup:1d:photoelectric_care:photoelectric_d1_watch',
+        'trt_phase15_base:watch_risk_followup:3d',
+        'trt_phase15_base:early_recovery_care_check:2d',
+        'trt_phase15_base:next_care_action_followup:3d',
+        'trt_phase15_base:category_laser_repair_care:3d:laser_repair',
+      ]),
+    );
+    expect(new Set(suggestionKeys).size).toBe(suggestionKeys.length);
   });
 
   it('信息不足时返回稳定轻量建议', () => {
@@ -224,6 +371,44 @@ describe('治疗后护理 / 随访建议确定性规则', () => {
         'sourceFields',
       ]);
     }
+  });
+
+  it('模板建议 DTO 不包含隐私正文、图片文件原文或连接串类内容', () => {
+    const suggestions = buildTreatmentFollowUpSuggestions({
+      ...baseTreatmentSummary,
+      treatmentCategory: 'laser_repair',
+      treatmentProject: [
+        blockedSamples.phone,
+        blockedSamples.idNumber,
+        blockedSamples.medicalRecord,
+        blockedSamples.treatmentBody,
+      ].join(' '),
+      treatmentStage: [
+        blockedSamples.medicalBody,
+        blockedSamples.consultationBody,
+        blockedSamples.errorTraceWord,
+      ].join(' '),
+      recoveryStage: 'D1',
+      riskLevel: 'urgent',
+      nextCareAction: [
+        blockedSamples.imageBody,
+        blockedSamples.fileBody,
+        blockedSamples.databaseName,
+        blockedSamples.connectionText,
+      ].join(' '),
+      tags: [
+        blockedSamples.queryText,
+        blockedSamples.credentialWord,
+        blockedSamples.privateWord,
+        blockedSamples.apiKeyLike,
+      ],
+    });
+    const templateSuggestions = suggestions.filter(
+      (suggestion) => suggestion.ruleKey === 'template_path_followup',
+    );
+
+    expect(templateSuggestions.length).toBeGreaterThan(0);
+    expectNoPrivateData(suggestions);
   });
 
   it('建议规则不调用 AI、RAG、Agent，不写数据库，也不创建随访任务', () => {

@@ -139,6 +139,9 @@ const voidedTreatmentSummaryRecord = {
   voidReason: '重复录入，保留较新的治疗摘要',
 };
 
+const templateSuggestionKey =
+  'trt_phase15_confirm:template_path_followup:1d:post_surgery_repair:post_surgery_d1_urgent';
+
 const customerRecord = {
   id: 'cust_phase15_confirm',
   tenantId: 'demo-tenant-001',
@@ -175,6 +178,16 @@ const createdFollowUpTask = {
   stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
   token: 'sk_test_phase15_should_not_return',
   secret: 'phase15-secret',
+};
+
+const createdTemplateFollowUpTask = {
+  ...createdFollowUpTask,
+  id: 'fu_phase20_template_confirm',
+  journeyId: 'treatment_followup_template_path_followup',
+  stage: '术后修复 D1 高风险人工处理',
+  dueAt: '2026-06-03T08:30:00.000Z',
+  suggestedAction: '请人工确认“术后修复 D1 高风险人工处理”。建议处理角色：运营负责人。禁止自动触达。',
+  sourceSuggestionKey: templateSuggestionKey,
 };
 
 function routeContext(summaryId = 'trt_phase15_confirm') {
@@ -257,6 +270,16 @@ describe('治疗摘要随访建议 GET API', () => {
         expect.objectContaining({
           suggestionKey: 'trt_phase15_confirm:urgent_risk_followup:1d',
           title: '高风险治疗后随访',
+          recommendedDueAt: '2026-06-03T08:30:00.000Z',
+          priority: 'high',
+          riskLevel: 'urgent',
+          sourceTreatmentSummaryId: 'trt_phase15_confirm',
+          sourceCustomerId: 'cust_phase15_confirm',
+          sourceAppointmentId: 'appt_phase15_confirm',
+        }),
+        expect.objectContaining({
+          suggestionKey: templateSuggestionKey,
+          title: '术后修复 D1 高风险人工处理',
           recommendedDueAt: '2026-06-03T08:30:00.000Z',
           priority: 'high',
           riskLevel: 'urgent',
@@ -419,6 +442,58 @@ describe('治疗摘要人工确认创建随访任务 POST API', () => {
     expectNoPrivateData(routeMocks.auditRecord.mock.lastCall?.[0], { allowAuditTenant: true });
   });
 
+  it('人工确认后可使用模板建议 key 创建来源任务', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion.mockResolvedValueOnce({
+      kind: 'created',
+      task: createdTemplateFollowUpTask,
+    });
+
+    const response = await followUpTasksPost(
+      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          suggestionKey: templateSuggestionKey,
+        }),
+      }),
+      routeContext(),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(payload).toEqual({
+      record: {
+        id: 'fu_phase20_template_confirm',
+        customerId: 'cust_phase15_confirm',
+        customerDisplayName: '王女士',
+        journeyId: 'treatment_followup_template_path_followup',
+        stage: '术后修复 D1 高风险人工处理',
+        status: 'scheduled',
+        dueAt: '2026-06-03T08:30:00.000Z',
+        suggestedAction:
+          '请人工确认“术后修复 D1 高风险人工处理”。建议处理角色：运营负责人。禁止自动触达。',
+        riskLevel: 'urgent',
+        updatedBy: null,
+        updatedAt: null,
+        sourceTreatmentSummaryId: 'trt_phase15_confirm',
+        sourceSuggestionKey: templateSuggestionKey,
+      },
+    });
+    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        journeyId: 'treatment_followup_template_path_followup',
+        stage: '术后修复 D1 高风险人工处理',
+        dueAt: '2026-06-03T08:30:00.000Z',
+        suggestedAction:
+          '请人工确认“术后修复 D1 高风险人工处理”。建议处理角色：运营负责人。禁止自动触达。',
+        sourceTreatmentSummaryId: 'trt_phase15_confirm',
+        sourceSuggestionKey: templateSuggestionKey,
+      }),
+    );
+    expectNoPrivateData(payload);
+  });
+
   it('重复确认返回稳定冲突提示并写 duplicate audit', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion.mockResolvedValueOnce({
@@ -442,6 +517,41 @@ describe('治疗摘要人工确认创建随访任务 POST API', () => {
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
       resource: 'follow_up',
       resourceId: 'fu_phase15_confirm',
+      result: 'denied',
+      reason: 'active_source_follow_up_exists',
+      tenantId: 'demo-tenant-001',
+    }));
+  });
+
+  it('模板建议重复确认仍走来源任务去重治理', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion.mockResolvedValueOnce({
+      kind: 'conflict',
+      resourceId: 'fu_phase20_template_confirm',
+      reason: 'active_source_follow_up_exists',
+    });
+
+    const response = await followUpTasksPost(
+      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks', {
+        method: 'POST',
+        body: JSON.stringify({ suggestionKey: templateSuggestionKey }),
+      }),
+      routeContext(),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: '该护理随访任务已存在，请勿重复创建',
+    });
+    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTreatmentSummaryId: 'trt_phase15_confirm',
+        sourceSuggestionKey: templateSuggestionKey,
+      }),
+    );
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      resource: 'follow_up',
+      resourceId: 'fu_phase20_template_confirm',
       result: 'denied',
       reason: 'active_source_follow_up_exists',
       tenantId: 'demo-tenant-001',
