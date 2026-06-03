@@ -249,6 +249,16 @@ node scripts/run-vitest.mjs run src/modules/institution/tests
 
 ### PR 4：机构端只读分析 API
 
+状态：
+
+- 已进入最小实现。
+- 新增 `GET /api/institution/follow-up-path-analysis`。
+- API 只从 access context 推导 `tenantId`，不接受客户端 query / header 指定租户。
+- 新增 `src/modules/institution/server/followup-path-analysis-service.ts`，只读聚合当前租户治疗摘要、模板驱动建议、治疗摘要来源随访任务和 follow-up audit。
+- repository 仅新增最小只读读取方法，select analysis domain 所需字段，不读取客户明细、治疗正文、任务正文或 raw audit payload。
+- 返回 `scope`、`analysisAt`、六个最小指标、`notes`、`warnings`、`dataSourceNote` 和 `boundaryNote`。
+- 不新增 schema / migration，不改权限、认证或租户隔离，不写数据库，不创建随访任务，不自动触达。
+
 前提：
 
 - domain-only 口径已稳定。
@@ -268,7 +278,9 @@ node scripts/run-vitest.mjs run src/modules/institution/tests
 
 ```bash
 git diff --check
+node scripts/run-vitest.mjs run src/modules/institution/tests/FollowUpPathAnalysisApiRoutes.test.ts src/modules/institution/tests/FollowUpPathAnalysis.test.ts
 node scripts/run-vitest.mjs run src/modules/institution/tests
+./node_modules/.bin/tsc --noEmit
 ```
 
 ### PR 5：机构端轻量指标展示
