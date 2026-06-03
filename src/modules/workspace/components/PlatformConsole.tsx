@@ -48,7 +48,7 @@ export function PlatformConsole() {
                 <Command className="h-4 w-4" />
                 平台治理模式
               </div>
-              <p className="mt-2 text-sm leading-6 text-slate-400">租户、模型、接口与审计统一在平台侧观测。</p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">租户、套餐、配额、商业化健康与审计统一在平台侧观测。</p>
             </div>
           </div>
 
@@ -94,7 +94,7 @@ export function PlatformConsole() {
               <Image src="/brand/logo-mark.png" alt="" width={42} height={42} className="h-10 w-10 rounded-xl bg-white object-contain p-1 md:hidden" />
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-white md:text-base">智美天工平台运营中枢</div>
-                <div className="mt-0.5 text-xs text-slate-400">租户增长、接口开放、模型成本与安全审计</div>
+                <div className="mt-0.5 text-xs text-slate-400">租户、套餐、配额与安全审计</div>
               </div>
             </div>
             <div className="flex items-center gap-3 text-sm text-slate-300">
@@ -153,24 +153,24 @@ export function PlatformConsole() {
                     <div className="max-w-4xl">
                       <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/[0.08] px-3.5 py-1.5 text-xs font-semibold text-cyan-100">
                         <RadioTower className="h-4 w-4" />
-                        企业 AI 业务开放平台
+                        平台收尾治理视图
                       </div>
                       <h1 className="mt-5 text-[2.15rem] font-semibold leading-[1.12] tracking-normal text-white sm:text-5xl lg:text-[62px]">
-                        <span className="block">掌控租户、模型与接口</span>
+                        <span className="block">掌控租户、套餐与配额</span>
                         <span className="block bg-gradient-to-r from-cyan-300 via-blue-400 to-violet-400 bg-clip-text text-transparent">
-                          让平台运营可观测
+                          让平台治理可复盘
                         </span>
                       </h1>
                       <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
-                        用一张平台总览串联租户增长、Agent 调用、开放连接、计费收入与系统健康状态，先服务运营决策，再承接后续开放平台能力。
+                        当前收尾页只展示受控 demo 租户、套餐、配额快照、商业化健康和平台审计；开放连接、AI、计费属于后续路线，当前未启用。
                       </p>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-3 xl:w-[560px]">
                       {[
-                        { icon: PlugZap, label: '开放连接', value: 'API / OAuth / Webhook' },
+                        { icon: PlugZap, label: '开放连接', value: '长期路线' },
                         { icon: ShieldCheck, label: '权限审计', value: '可追踪' },
-                        { icon: LockKeyhole, label: '安全边界', value: '租户隔离' },
+                        { icon: LockKeyhole, label: 'AI 配额', value: '0 / 0' },
                       ].map((item) => (
                         <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.07] p-4">
                           <item.icon className="h-5 w-5 text-cyan-200" />
@@ -201,10 +201,10 @@ export function PlatformConsole() {
                   <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <h2 className="text-lg font-semibold tracking-normal text-white">平台增长与调用趋势</h2>
-                        <p className="mt-1 text-sm text-slate-400">同时观察租户数、调用量和收入增长节奏。</p>
+                        <h2 className="text-lg font-semibold tracking-normal text-white">平台收尾健康概览</h2>
+                        <p className="mt-1 text-sm text-slate-400">围绕租户、套餐、配额和审计做演示收尾。</p>
                       </div>
-                      <span className="rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-1 text-xs font-semibold text-emerald-200">本月 +18.5%</span>
+                      <span className="rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-1 text-xs font-semibold text-emerald-200">受控 demo</span>
                     </div>
 
                     <div className="mt-6 grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
@@ -226,7 +226,7 @@ export function PlatformConsole() {
                       </div>
 
                       <div className="rounded-2xl border border-white/10 bg-[#071322]/75 p-4">
-                        <div className="text-sm font-semibold text-white">收入趋势</div>
+                        <div className="text-sm font-semibold text-white">配额使用参考</div>
                         <div className="mt-5 flex h-[236px] items-end gap-2">
                           {trendBars.map((height, index) => (
                             <div key={height} className="flex flex-1 flex-col items-center gap-2">
@@ -242,8 +242,8 @@ export function PlatformConsole() {
                   <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <h2 className="text-lg font-semibold tracking-normal text-white">系统健康状态</h2>
-                        <p className="mt-1 text-sm text-slate-400">平台基础设施与核心服务监控。</p>
+                        <h2 className="text-lg font-semibold tracking-normal text-white">演示视图状态</h2>
+                        <p className="mt-1 text-sm text-slate-400">标注当前可演示能力和后续路线边界。</p>
                       </div>
                       <span className="rounded-full bg-emerald-300/[0.10] px-3 py-1 text-xs font-semibold text-emerald-200">全部正常</span>
                     </div>

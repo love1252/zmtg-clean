@@ -82,6 +82,20 @@ function expectNoSensitiveAuditContent(container: HTMLElement) {
   expect(text).not.toContain('secret');
 }
 
+function expectNoPlatformDemoMisleadingClaims(container: HTMLElement) {
+  const text = container.textContent ?? '';
+
+  expect(text).not.toContain('AI 已接入');
+  expect(text).not.toContain('AI 自动客服');
+  expect(text).not.toContain('RAG 已完成');
+  expect(text).not.toContain('Agent 已上线');
+  expect(text).not.toContain('支付已完成');
+  expect(text).not.toContain('合同已完成');
+  expect(text).not.toContain('发票已完成');
+  expect(text).not.toContain('Webhook 已接入');
+  expect(text).not.toContain('OAuth 已接入');
+}
+
 describe('平台端审计日志面板', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -93,7 +107,8 @@ describe('平台端审计日志面板', () => {
     vi.stubGlobal('fetch', fetchMock);
     const { container } = render(<OpenPlatformAuditEventsPanel />);
 
-    expect(screen.getByRole('heading', { name: '审计日志' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '平台审计日志' })).toBeInTheDocument();
+    expect(screen.getByText('平台操作可审计')).toBeInTheDocument();
     expect(screen.getByText('正在加载平台审计事件...')).toBeInTheDocument();
     pending.resolve(auditEventsResponse([auditEventRecord]));
 
@@ -108,6 +123,7 @@ describe('平台端审计日志面板', () => {
     expect(screen.getByText('角色：tenant_admin')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/audit-events', { cache: 'no-store' });
     expectNoSensitiveAuditContent(container);
+    expectNoPlatformDemoMisleadingClaims(container);
   });
 
   it('提供平台端白名单筛选控件并把 tenantId 作为筛选条件发送', async () => {
@@ -118,7 +134,7 @@ describe('平台端审计日志面板', () => {
 
     render(<OpenPlatformAuditEventsPanel />);
 
-    expect(await screen.findByText('暂无平台审计事件')).toBeInTheDocument();
+    expect(await screen.findByText('暂无平台关键操作记录')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('租户 ID'), { target: { value: 'demo-tenant-001' } });
     fireEvent.change(screen.getByLabelText('资源类型'), { target: { value: 'customer' } });
     fireEvent.change(screen.getByLabelText('资源 ID'), { target: { value: 'cust_001' } });
@@ -146,14 +162,14 @@ describe('平台端审计日志面板', () => {
 
     render(<OpenPlatformAuditEventsPanel />);
 
-    expect(await screen.findByText('暂无平台审计事件')).toBeInTheDocument();
-    expect(screen.getByText('当前筛选条件下没有可展示的平台审计事件。')).toBeInTheDocument();
+    expect(await screen.findByText('暂无平台关键操作记录')).toBeInTheDocument();
+    expect(screen.getByText('当前筛选条件下没有可展示的平台关键操作。')).toBeInTheDocument();
   });
 
   it.each([
     [401, '请先登录', '登录状态已失效，请重新登录'],
     [403, '没有访问权限', '当前账号没有查看平台审计日志的权限'],
-    [503, '数据服务暂时不可用', '平台审计日志数据暂时不可用'],
+    [503, '数据服务暂时不可用', '平台关键操作记录暂时不可用'],
   ])('处理 %s 错误态', async (status, apiMessage, visibleMessage) => {
     mockAuditEventsFetch([jsonResponse({ error: apiMessage }, { status })]);
 

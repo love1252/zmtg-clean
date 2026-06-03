@@ -101,13 +101,13 @@ function visibleAuditErrorState(error: OpenPlatformAuditEventsClientError): Plat
   if (error.kind === 'service_unavailable') {
     return {
       kind: 'unavailable',
-      title: '平台审计日志数据暂时不可用',
+      title: '平台关键操作记录暂时不可用',
     };
   }
 
   return {
     kind: 'error',
-    title: error.message || '平台审计日志请求失败',
+    title: error.message || '平台关键操作记录请求失败',
   };
 }
 
@@ -257,15 +257,18 @@ export function OpenPlatformAuditEventsPanel() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/[0.08] px-3 py-1 text-xs font-semibold text-cyan-100">
               <ShieldCheck className="h-4 w-4" />
-              平台只读
+              平台操作可审计
             </div>
-            <h2 className="mt-4 text-2xl font-semibold tracking-normal text-white">审计日志</h2>
+            <h2 className="mt-4 text-2xl font-semibold tracking-normal text-white">平台审计日志</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-              按平台访问上下文读取审计事件，只展示安全 DTO 字段。tenantId 仅作为平台端筛选条件使用。
+              展示平台管理员查看租户、查看商业化健康和配额拒绝等关键操作，只展示白名单字段。
+            </p>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+              不展示请求体、服务端错误细节、凭证、连接信息或机构业务敏感内容。
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-3 text-sm font-semibold text-cyan-100">
-            GET /api/open-platform/audit-events
+            关键操作可追踪
           </div>
         </div>
       </section>
@@ -281,7 +284,7 @@ export function OpenPlatformAuditEventsPanel() {
             </div>
             <div>
               <h3 className="text-base font-semibold text-white">筛选</h3>
-              <p className="mt-0.5 text-xs text-slate-400">仅支持平台审计字段白名单。</p>
+              <p className="mt-0.5 text-xs text-slate-400">仅支持平台审计白名单字段，租户 ID 只用于平台侧筛选。</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -436,8 +439,8 @@ export function OpenPlatformAuditEventsPanel() {
       <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold tracking-normal text-white">审计事件列表</h3>
-            <p className="mt-1 text-sm text-slate-400">按发生时间倒序排列。</p>
+            <h3 className="text-lg font-semibold tracking-normal text-white">平台关键操作记录</h3>
+            <p className="mt-1 text-sm text-slate-400">租户、套餐、商业化健康和拒绝事件按时间倒序排列。</p>
           </div>
           <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-semibold text-slate-300">
             {pageInfo ? `limit ${pageInfo.limit}` : 'limit 默认'}
@@ -458,8 +461,8 @@ export function OpenPlatformAuditEventsPanel() {
         {!isLoading && !errorState && records.length === 0 ? (
           <PlatformAuditState
             kind="empty"
-            title="暂无平台审计事件"
-            description="当前筛选条件下没有可展示的平台审计事件。"
+            title="暂无平台关键操作记录"
+            description="当前筛选条件下没有可展示的平台关键操作。"
           />
         ) : null}
 

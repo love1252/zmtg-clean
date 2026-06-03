@@ -55,13 +55,13 @@ export function OpenPlatformGovernancePanel() {
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/[0.08] px-3.5 py-1.5 text-xs font-semibold text-cyan-100">
               <ShieldCheck className="h-4 w-4" />
-              第一阶段治理基线
+              长期路线治理词汇
             </div>
             <h2 id="open-platform-governance-heading" className="mt-4 text-2xl font-semibold tracking-normal text-white sm:text-3xl">
               开放平台基础治理
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400 sm:text-base">
-              先把租户隔离、权限边界、连接生命周期和审计词汇固定为可视化基准。第一阶段不生成真实密钥、不执行授权回调、不投递外部事件。
+              先把租户隔离、权限边界、连接生命周期和审计词汇固定为可视化基准，不代表真实生产能力已完成。第一阶段不生成真实密钥、不执行授权回调、不投递外部事件。
             </p>
           </div>
 
@@ -150,7 +150,7 @@ export function OpenPlatformGovernancePanel() {
             </div>
             <div>
               <h3 className="text-lg font-semibold tracking-normal text-white">连接生命周期</h3>
-              <p className="mt-1 text-sm text-slate-400">API Key、OAuth、Webhook 先约束状态，不启用外部能力。</p>
+              <p className="mt-1 text-sm text-slate-400">API Key、OAuth、Webhook 仅作为长期路线治理词汇，不启用外部能力。</p>
             </div>
           </div>
 

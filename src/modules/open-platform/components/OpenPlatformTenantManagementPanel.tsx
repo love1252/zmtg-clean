@@ -59,13 +59,13 @@ function visibleTenantErrorState(
   if (error.kind === 'service_unavailable') {
     return {
       kind: 'unavailable',
-      title: '租户管理数据暂时不可用',
+      title: '租户治理视图暂时不可用，请稍后刷新或切换演示备份',
     };
   }
 
   return {
     kind: 'error',
-    title: error.message || '租户管理请求失败',
+    title: error.message || '租户治理视图请求失败',
   };
 }
 
@@ -140,6 +140,7 @@ function TenantQuotaGrid({ tenant }: { tenant: OpenPlatformTenantRecord }) {
       {quotaItems.map((item) => {
         const current = tenant[item.currentKey];
         const max = tenant[item.maxKey];
+        const isAiQuotaDisabled = item.key === 'aiCalls' && current === 0 && max === 0;
 
         return (
           <div key={item.key} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
@@ -147,6 +148,11 @@ function TenantQuotaGrid({ tenant }: { tenant: OpenPlatformTenantRecord }) {
             <div className="mt-2 text-xl font-semibold tracking-normal text-white">
               {quotaValue(current)} / {quotaValue(max)}
             </div>
+            {isAiQuotaDisabled ? (
+              <div className="mt-2 text-xs leading-5 text-slate-500">当前未启用 AI 调用配额</div>
+            ) : (
+              <div className="mt-2 text-xs leading-5 text-slate-500">配额快照用于运营参考</div>
+            )}
           </div>
         );
       })}
@@ -175,7 +181,7 @@ function CommercialHealthMetricCard({
 function EmptyCommercialHealthSignal() {
   return (
     <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-5 text-sm text-slate-400">
-      暂无商业化健康信号
+      暂无需要收尾关注的商业化健康信号
     </div>
   );
 }
@@ -204,7 +210,13 @@ function CommercialHealthPanel({ health }: { health: PlatformCommercialHealthVie
           </div>
           <h3 className="mt-3 text-lg font-semibold tracking-normal text-white">商业化健康</h3>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
-            以下配额快照仅作运营参考，用于识别套餐覆盖、配置缺失和近期 quota denied 信号，不作为计费或创建拦截依据。
+            商业化健康是运营辅助，不是完整计费系统。
+          </p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+            配额快照仅作运营参考，用于识别套餐覆盖、配置缺失和 Trial 租户转化跟进机会。
+          </p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+            quota denied 是演示审计信号，不会自行变更套餐或发起触达动作。
           </p>
         </div>
         <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-3 py-2 text-xs font-semibold leading-5 text-slate-300">
@@ -347,7 +359,7 @@ function CommercialHealthPanel({ health }: { health: PlatformCommercialHealthVie
 
       <div className="mt-4 flex items-center gap-2 text-xs leading-5 text-slate-500">
         <CalendarClock className="h-4 w-4" />
-        snapshot current usage 来自 tenant_quota_snapshots.current*，页面仅使用“配额快照 / 运营参考”口径。
+        配额使用率来自受控 demo 快照，仅作运营参考，不作为正式计费或自行变更套餐依据。
       </div>
     </article>
   );
@@ -413,22 +425,28 @@ export function OpenPlatformTenantManagementPanel() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/[0.08] px-3 py-1 text-xs font-semibold text-cyan-100">
               <Building2 className="h-4 w-4" />
-              平台只读
+              平台只读治理视图
             </div>
             <h2 className="mt-4 text-2xl font-semibold tracking-normal text-white">租户管理</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-              查看租户运营元数据、套餐分配和配额快照，不进入客户、预约或随访业务明细。
+              平台侧查看机构、套餐和配额边界
+            </p>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+              当前展示为受控 demo 租户，不代表正式计费后台。
+            </p>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+              仅展示运营元数据、套餐分配和配额快照，不提供租户创建、冻结、恢复或删除流程。
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-3 text-sm font-semibold text-cyan-100">
-            GET /api/open-platform/tenants
+            受控 demo 租户
           </div>
         </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: '租户总数', value: totals.tenants, icon: Building2 },
+          { label: 'demo 租户', value: totals.tenants, icon: Building2 },
           { label: '运行中租户', value: totals.activeTenants, icon: ShieldCheck },
           { label: '已分配套餐', value: totals.assignedPlans, icon: Database },
           { label: '配额快照', value: totals.snapshots, icon: CalendarClock },
@@ -451,7 +469,7 @@ export function OpenPlatformTenantManagementPanel() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold tracking-normal text-white">租户列表</h3>
-            <p className="mt-1 text-sm text-slate-400">展示租户基础状态、套餐信息和配额用量。</p>
+            <p className="mt-1 text-sm text-slate-400">展示受控 demo 租户的基础状态、套餐信息和配额快照。</p>
           </div>
           <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-semibold text-slate-300">
             只读
@@ -474,8 +492,8 @@ export function OpenPlatformTenantManagementPanel() {
           <div className="mt-4">
             <TenantManagementState
               kind="empty"
-              title="暂无租户运营元数据"
-              description="当前没有可展示的租户套餐和配额数据。"
+              title="暂无受控 demo 租户"
+              description="当前没有可展示的 demo 租户、套餐或配额快照。"
             />
           </div>
         ) : null}
@@ -499,7 +517,7 @@ export function OpenPlatformTenantManagementPanel() {
                     <div className="mt-3 flex flex-wrap gap-2">
                       {tenantField('租户 ID', tenant.tenantId)}
                       {tenantField('套餐名称', tenant.planName ?? '未分配')}
-                      {tenantField('套餐 code', tenant.planCode)}
+                      {tenantField('套餐编号', tenant.planCode)}
                       {tenantField('套餐状态', tenant.planStatus)}
                       {tenantField('分配状态', tenant.assignmentStatus)}
                     </div>

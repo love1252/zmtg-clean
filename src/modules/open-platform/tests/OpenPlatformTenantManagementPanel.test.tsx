@@ -137,6 +137,23 @@ function expectNoSensitiveTenantContent(container: HTMLElement) {
   expect(text).not.toContain('sk_test_should_not_render');
 }
 
+function expectNoPlatformDemoMisleadingClaims(container: HTMLElement) {
+  const text = container.textContent ?? '';
+
+  expect(text).not.toContain('AI 已接入');
+  expect(text).not.toContain('AI 自动客服');
+  expect(text).not.toContain('RAG 已完成');
+  expect(text).not.toContain('Agent 已上线');
+  expect(text).not.toContain('支付已完成');
+  expect(text).not.toContain('合同已完成');
+  expect(text).not.toContain('发票已完成');
+  expect(text).not.toContain('Webhook 已接入');
+  expect(text).not.toContain('OAuth 已接入');
+  expect(text).not.toContain('完整计费后台');
+  expect(text).not.toContain('自动升级套餐');
+  expect(text).not.toContain('自动触达');
+}
+
 function commercialHealthSection() {
   const heading = screen.getByRole('heading', { name: '商业化健康' });
   const section = heading.closest('article');
@@ -154,12 +171,14 @@ describe('平台端租户管理面板', () => {
     const { container } = render(<OpenPlatformTenantManagementPanel />);
 
     expect(screen.getByRole('heading', { name: '租户管理' })).toBeInTheDocument();
+    expect(screen.getByText('平台侧查看机构、套餐和配额边界')).toBeInTheDocument();
+    expect(screen.getByText('当前展示为受控 demo 租户，不代表正式计费后台。')).toBeInTheDocument();
     expect(screen.getByText('正在加载租户管理数据...')).toBeInTheDocument();
     expect(await screen.findByText('智美天工演示机构')).toBeInTheDocument();
     expect(screen.getByText('租户状态：active')).toBeInTheDocument();
     expect(screen.getByText('租户 ID：demo-tenant-001')).toBeInTheDocument();
     expect(screen.getByText('套餐名称：成长版')).toBeInTheDocument();
-    expect(screen.getByText('套餐 code：growth-care')).toBeInTheDocument();
+    expect(screen.getByText('套餐编号：growth-care')).toBeInTheDocument();
     expect(screen.getByText('套餐状态：active')).toBeInTheDocument();
     expect(screen.getByText('分配状态：active')).toBeInTheDocument();
     expect(screen.getByText('客户数')).toBeInTheDocument();
@@ -174,6 +193,7 @@ describe('平台端租户管理面板', () => {
     expect(fetchPath(fetchMock.mock.calls[0]?.[0] ?? '')).toBe('/api/open-platform/tenants');
     expect(fetchMock.mock.calls[0]?.[1]).toEqual({ cache: 'no-store' });
     expectNoSensitiveTenantContent(container);
+    expectNoPlatformDemoMisleadingClaims(container);
   });
 
   it('展示商业化健康摘要、配额风险、配置缺失和 quota denied 信号', async () => {
@@ -237,6 +257,12 @@ describe('平台端租户管理面板', () => {
     const section = commercialHealthSection();
 
     expect(within(section).getByText('套餐覆盖率')).toBeInTheDocument();
+    expect(
+      within(section).getByText('商业化健康是运营辅助，不是完整计费系统。'),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText('quota denied 是演示审计信号，不会自行变更套餐或发起触达动作。'),
+    ).toBeInTheDocument();
     expect(within(section).getByText('50%')).toBeInTheDocument();
     expect(within(section).getByText('配额风险项')).toBeInTheDocument();
     expect(within(section).getAllByText('配置缺失租户').length).toBeGreaterThan(0);
@@ -260,6 +286,7 @@ describe('平台端租户管理面板', () => {
       ]),
     );
     expectNoSensitiveTenantContent(container);
+    expectNoPlatformDemoMisleadingClaims(container);
     expect(container.textContent ?? '').not.toContain('requestBody');
     expect(container.textContent ?? '').not.toContain('metadata');
     expect(container.textContent ?? '').not.toContain('cust_raw_should_not_render');
@@ -279,14 +306,14 @@ describe('平台端租户管理面板', () => {
 
     render(<OpenPlatformTenantManagementPanel />);
 
-    expect(await screen.findByText('暂无租户运营元数据')).toBeInTheDocument();
-    expect(screen.getByText('当前没有可展示的租户套餐和配额数据。')).toBeInTheDocument();
-    expect(screen.getByText('暂无商业化健康信号')).toBeInTheDocument();
+    expect(await screen.findByText('暂无受控 demo 租户')).toBeInTheDocument();
+    expect(screen.getByText('当前没有可展示的 demo 租户、套餐或配额快照。')).toBeInTheDocument();
+    expect(screen.getByText('暂无需要收尾关注的商业化健康信号')).toBeInTheDocument();
   });
 
   it.each([
     [403, '没有访问权限', '当前账号没有查看租户管理的权限'],
-    [503, '数据服务暂时不可用', '租户管理数据暂时不可用'],
+    [503, '数据服务暂时不可用', '租户治理视图暂时不可用，请稍后刷新或切换演示备份'],
   ])('展示 %s 错误态', async (status, apiMessage, visibleMessage) => {
     mockTenantFetch([jsonResponse({ error: apiMessage }, { status })]);
 
@@ -330,5 +357,26 @@ describe('平台端租户管理面板', () => {
     expect(screen.getByText('套餐名称：未分配')).toBeInTheDocument();
     expect(screen.getAllByText('- / -')).toHaveLength(4);
     expect(screen.getByText('快照时间：-')).toBeInTheDocument();
+  });
+
+  it('AI 调用配额为 0 / 0 时明确当前未启用 AI 调用配额', async () => {
+    mockTenantFetch([
+      jsonResponse({
+        records: [
+          {
+            ...tenantRecord,
+            maxAiCalls: 0,
+            currentAiCalls: 0,
+          },
+        ],
+      }),
+    ]);
+
+    const { container } = render(<OpenPlatformTenantManagementPanel />);
+
+    expect(await screen.findByText('智美天工演示机构')).toBeInTheDocument();
+    expect(screen.getByText('0 / 0')).toBeInTheDocument();
+    expect(screen.getByText('当前未启用 AI 调用配额')).toBeInTheDocument();
+    expectNoPlatformDemoMisleadingClaims(container);
   });
 });

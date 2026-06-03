@@ -200,16 +200,32 @@ describe('工作台看板领域模型', () => {
     expect(new Set(labels).size).toBe(labels.length);
     expect(platformNavItems.filter((item) => item.active)).toHaveLength(1);
     expect(labels).toEqual(
-      expect.arrayContaining(['平台总览', '首页与品牌', '租户管理', '产品与套餐', '开放连接中心', '权限与审计']),
+      expect.arrayContaining([
+        '平台总览',
+        '首页与品牌',
+        '租户管理',
+        '产品与套餐',
+        'AI 配额边界',
+        '开放连接路线',
+        '权限与审计',
+        '商业化边界',
+      ]),
     );
   });
 
   it('保持平台运营卡片具备业务含义', () => {
     expect(platformMetrics).toHaveLength(6);
     expect(platformMetrics.map((item) => item.label)).toEqual(
-      expect.arrayContaining(['入驻医院', '活跃机构', 'Agent 调用', '服务用户', 'MRR', '续费率']),
+      expect.arrayContaining(['demo 租户', '演示套餐', 'AI 配额', '配额快照', '商业化信号', '平台审计']),
     );
     expect(platformHealthItems).toHaveLength(4);
-    expect(platformCapabilityCards.map((item) => item.title)).toEqual(['开放接口治理', '模型与智能体监控', '权限审计']);
+    expect(platformHealthItems.map((item) => item.detail)).toEqual(
+      expect.arrayContaining(['当前未启用 AI 调用配额', '运营辅助，不做正式计费']),
+    );
+    expect(platformCapabilityCards.map((item) => item.title)).toEqual([
+      '开放连接治理边界',
+      '商业化健康收尾',
+      '平台操作可审计',
+    ]);
   });
 });
