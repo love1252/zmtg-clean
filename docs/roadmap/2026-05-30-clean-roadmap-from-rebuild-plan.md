@@ -29,13 +29,15 @@
 - 随访任务来源治理增强第十六阶段：`GET /api/institution/followups` 来源筛选、安全来源 DTO、智能随访来源标签 / 来源筛选、治疗摘要管理页重复任务提示、入口 smoke 和文档收尾已完成。
 - HIS 接入标准模型 / 标准治疗事件第十七阶段：Phase 17 spec / plan、domain-only 标准治疗事件类型、`sourceSystem` 稳定集合、mapper 输入 / 输出契约、字段白名单、禁止字段边界和 institution 测试已完成。
 - 治疗摘要编辑能力第十八阶段：Phase 18 spec / plan、编辑 payload parser、`treatment_summary:update` 最小权限、repository update、PATCH API、机构端受控编辑 UI、入口 smoke 和文档收尾已完成。
+- 治疗摘要作废能力第十九阶段：软作废字段、作废 API、作废后随访建议 / 来源任务阻断、机构端状态展示和入口 smoke 已完成。
+- 治疗项目路径模板第二十阶段：Phase 20 spec / plan、domain-only catalog、确定性随访建议接入、机构端轻量展示、workspace smoke 和文档收尾已完成。
 - 开放平台治理第一阶段：API Key、OAuth、Webhook 和审计的治理词汇、生命周期和安全边界展示。
 
 当前主要缺口：
 
 - 平台端已有只读租户列表、租户状态、套餐 / 配额、用量快照和商业化健康运营摘要；机构端新增客户 / 预约已具备轻量套餐配额 enforcement，但尚未具备租户创建、编辑、删除、冻结 / 恢复、完整套餐商业化后台、计费、支付、合同或发票能力。
 - 审计日志只读查询基础版已完成，但导出、告警和复杂风控仍未进入真实实现。
-- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1 和治疗摘要作废能力 v1 已完成；真实 HIS 接入、Webhook、文件导入、外部系统同步、完整治疗记录正文、版本历史 / diff 展示、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
+- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1 和治疗项目路径模板 v1 已完成；真实 HIS 接入、Webhook、文件导入、外部系统同步、完整治疗记录正文、版本历史 / diff 展示、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
 
 ## 2. 旧 REBUILD_PLAN.md 中仍有价值的功能
 
@@ -79,6 +81,7 @@
 - 随访任务来源治理增强 v1：follow-up 来源 query 白名单、安全来源 DTO、当前租户内 `source=treatment_summary` / `sourceTreatmentSummaryId` 筛选、智能随访来源标签 / 来源筛选、治疗摘要管理页同来源活跃任务只读重复提示和入口 smoke。
 - HIS 接入标准模型 / 标准治疗事件 v1：Phase 17 spec / plan、domain-only 类型、`sourceSystem` 稳定集合、mapper 输入 / 输出契约、字段白名单、禁止字段边界、外部 `tenantId` 不可信、raw payload 拒绝、不自动生成或修改 `treatment_summaries` 和 institution 测试。
 - 治疗摘要编辑能力 v1：编辑 payload parser、`treatment_summary:update` 最小权限、tenant-scoped repository update、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端受控编辑 UI、成功刷新列表 / 详情、失败保留输入、审计和入口 smoke。
+- 治疗项目路径模板 v1：首批光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理的 domain-only catalog，确定性随访建议接入模板，机构端轻量展示路径类型 / 建议处理角色 / 人工确认边界，人工确认来源任务、重复治理、作废阻断和 smoke / 文档收尾。
 - 开放平台 API Key、OAuth、Webhook 生命周期和安全治理词汇。
 
 ## 4. 不建议迁移的旧功能
@@ -99,7 +102,7 @@
 
 建议进入后续路线的功能：
 
-- 治疗记录模块：结构化摘要 v1、租户隔离、人工录入 v1、只读管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1 和治疗摘要作废能力 v1 已完成；后续版本历史 / diff 展示、客服会话联动、完整治疗记录能力和外部系统接入需单独规划，仍不保存完整病历正文。
+- 治疗记录模块：结构化摘要 v1、租户隔离、人工录入 v1、只读管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1 和治疗项目路径模板 v1 已完成；后续版本历史 / diff 展示、客服会话联动、完整治疗记录能力、路径模板 schema / API 和外部系统接入需单独规划，仍不保存完整病历正文。
 - 平台租户后续能力：租户创建、状态变更审计、完整套餐商业化后台、计费、合同、发票和支付。
 - 审计高级治理：只读查询基础版之后再单独评估导出、告警和复杂风控。
 - 套餐权益与配额 enforcement：客户数和预约数创建阻断已完成轻量版，后续可单独评估员工数、随访任务、AI 调用、严格一致计数器和套餐变更流程。
@@ -112,20 +115,19 @@
 
 推荐优先级：
 
-1. 产品可演示性验收：优先完整走查机构端客户中心、治疗摘要创建 / 编辑 / 作废、随访建议阻断、来源任务追溯、客户 timeline 和平台端只读治理页面，确认 Phase 5-19 是否已经能支撑一次稳定演示。
-2. Phase 20 Plan Mode：已选择治疗项目路径模板 / 随访路径模板 v1 做 spec / plan，先规划光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理的标准随访路径，不直接进入实现。
-3. Phase 20 后续实现评估：如继续推进，优先评估 domain-only 静态模板 catalog、确定性随访建议接入模板、机构端轻量展示和 smoke / 文档收尾；schema / API、HIS、企微、AI 和自动触达必须单独评估。
-4. HIS 标准治疗事件 mapper 继续增强：继续完善 mapper 契约、错误语义和测试覆盖，仍不接真实 HIS、不写 API、不落库。
-5. 业务事件埋点体系 spec：只做事件模型规划，不做真实采集，不记录 raw payload、完整医疗正文或 PII。
-6. 随访路径运营分析 v1：先确认事件口径和统计边界，不做复杂归因模型或自动触达。
-7. follow-up 配额 enforcement：单独评估是否将 Phase 15 的人工确认创建接入 `maxFollowUps`。
-8. 平台租户状态管理、更多资源配额 enforcement 与完整套餐商业化后台规划。
-9. 审计高级治理：导出、告警和复杂风控。
-10. 知识库 / RAG 基础版，优先元数据规划，不保存医疗隐私正文。
-11. 客服会话和完整治疗记录能力。
-12. AI provider、调用日志和 Agent。
-13. 企业微信、Webhook、OAuth、API Key。
-14. 计费、合同、发票和支付。
+1. 产品可演示性验收：优先完整走查机构端客户中心、治疗摘要创建 / 编辑 / 作废、路径模板随访建议、来源任务追溯、客户 timeline 和平台端只读治理页面，确认 Phase 5-20 是否已经能支撑一次稳定演示。
+2. Phase 20 后续扩展评估：治疗项目路径模板 v1 已完成最小闭环；后续如需 schema / API、租户自定义 SOP、路径编辑器、平台端模板管理、HIS、企微、AI 或自动触达，必须单独进入 Plan Mode。
+3. HIS 标准治疗事件 mapper 继续增强：继续完善 mapper 契约、错误语义和测试覆盖，仍不接真实 HIS、不写 API、不落库。
+4. 业务事件埋点体系 spec：只做事件模型规划，不做真实采集，不记录 raw payload、完整医疗正文或 PII。
+5. 随访路径运营分析 v1：先确认事件口径和统计边界，不做复杂归因模型或自动触达。
+6. follow-up 配额 enforcement：单独评估是否将 Phase 15 的人工确认创建接入 `maxFollowUps`。
+7. 平台租户状态管理、更多资源配额 enforcement 与完整套餐商业化后台规划。
+8. 审计高级治理：导出、告警和复杂风控。
+9. 知识库 / RAG 基础版，优先元数据规划，不保存医疗隐私正文。
+10. 客服会话和完整治疗记录能力。
+11. AI provider、调用日志和 Agent。
+12. 企业微信、Webhook、OAuth、API Key。
+13. 计费、合同、发票和支付。
 
 ## 7. 高风险模块提醒
 
@@ -208,5 +210,7 @@ Phase 5 的成功标准：
 - Phase 19 已完成治疗摘要作废能力 v1：Phase 19 spec / plan、nullable 作废字段、Drizzle migration、domain / DTO `status` 派生、作废原因 parser、`voidTreatmentSummaryByTenant`、作废 audit reason、`POST /api/institution/treatment-summaries/[summaryId]/void`、作废后随访建议 / 来源任务创建阻断、机构端列表 / 详情 / 客户 timeline / 来源任务提示和 workspace smoke / 文档收尾均已完成。
 - Phase 19 作废不是删除：不硬删除治疗摘要，不删除客户时间线，不删除来源随访任务；已存在来源随访任务不自动取消、不自动修改状态，仍保留来源追溯。
 - Phase 19 未进入批量作废、版本历史、diff 展示、自动触达客户、完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、图片 / 文件上传、AI provider、Agent、RAG、企业微信、真实 HIS / CRM / OTA 接入、OAuth、Webhook、支付、合同、发票或外部系统同步。
-- Phase 20 Plan Mode 已完成治疗项目路径模板 / 随访路径模板 v1 spec / plan：当前只规划，不写代码、不改 UI、不改测试、不新增 API、不改 schema / migration、不接 HIS / 企微 / AI、不做自动触达、不修改 demo seed 数据。
-- Phase 20 v1 首批规划覆盖光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理；路径模板建议包含项目类型、恢复阶段、风险等级、建议随访节点、建议任务标题、建议处理角色、是否需要人工确认和禁止自动触达。
+- Phase 20 治疗项目路径模板 v1 已完成：spec / plan、domain-only 静态模板 catalog、保守 matcher、确定性随访建议接入、机构端模板建议轻量展示、workspace smoke 和文档收尾均已完成。
+- Phase 20 v1 首批覆盖光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理；路径模板建议继续只基于结构化字段生成内部随访建议，人工确认后才创建来源任务，并保留重复来源任务治理和作废摘要阻断。
+- Phase 20 v1 未新增 API route，未改 DTO、数据库 schema / migration、权限、认证或租户隔离，未接 HIS / 企微 / AI / RAG / Agent，未做自动触达，未修改 demo seed 数据。
+- 后续如需路径模板 schema / API、租户自定义模板、路径编辑器、平台端模板管理、HIS 输入、企微触达、AI 生成建议、自动触达或路径效果分析，必须单独 Plan Mode。

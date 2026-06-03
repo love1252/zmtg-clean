@@ -1,19 +1,29 @@
 # Phase 20 治疗项目路径模板 / 随访路径模板 v1 计划
 
 > 日期：2026-06-03
-> 状态：Phase 20 Plan Mode 文档。本 PR 只做 spec / plan，不进入实现。
+> 原始状态：Phase 20 Plan Mode 文档。PR #95 只做 spec / plan，不进入实现。
+> 执行状态更新：Phase 20 v1 已按 PR #95-#98 和 PR 5 拆分完成；本文件保留原始 PR 拆分计划，并补充最终 smoke / 文档收尾状态。
 
 **目标：** 规划如何把现有治疗摘要和确定性随访建议升级为治疗项目路径模板 / 随访路径模板 v1，让首批常见项目能对应更标准的恢复阶段、随访节点和人工任务建议。
 
-**架构：** 当前 PR 不改架构，只规划后续方向。若后续进入实现，建议优先采用 domain-only 静态模板 catalog，读取现有治疗摘要安全结构化字段，生成确定性内部随访建议，并继续通过人工确认创建来源随访任务。
+**架构：** PR #95 不改架构，只规划后续方向。后续实现已按该计划采用 domain-only 静态模板 catalog，读取现有治疗摘要安全结构化字段，生成确定性内部随访建议，并继续通过人工确认创建来源随访任务。
 
-**技术边界：** 当前 PR 只新增 Markdown 文档；不写 TypeScript、不改 React、不改测试、不新增 API、不改 Drizzle schema / migration、不改 RBAC / auth / tenant isolation、不接 HIS / 企微 / AI、不做自动触达。
+**技术边界：** PR #95 只新增 Markdown 文档；Phase 20 v1 后续实现和收尾仍不新增 API、不改 DTO、不改 Drizzle schema / migration、不改 RBAC / auth / tenant isolation、不接 HIS / 企微 / AI、不做自动触达。
 
 ---
 
 ## 0. 当前 PR 范围
 
-当前 PR 是 Phase 20 PR 1：治疗项目路径模板 / 随访路径模板 v1 spec / plan。
+本文档最初对应 Phase 20 PR 1：治疗项目路径模板 / 随访路径模板 v1 spec / plan。
+
+收尾更新：
+
+- PR #96 已完成路径模板 domain-only catalog 和保守 matcher。
+- PR #97 已完成确定性随访建议接入路径模板，模板建议 key 保持稳定。
+- PR #98 已完成机构端治疗摘要管理页模板建议信息轻量展示。
+- PR 5 已补充 workspace smoke / 回归测试并同步 README、roadmap、devlog、Phase 20 spec / plan 状态。
+- Phase 20 v1 最小闭环为：治疗摘要结构化字段 → 路径模板 catalog 匹配 → 模板驱动随访建议 → 治疗摘要管理页轻量展示 → 人工确认创建来源任务 → 重复来源任务治理 → 作废摘要阻断。
+- Phase 20 v1 未新增 API，未改 DTO，未改 schema / migration，未改权限、认证或租户隔离，未接 HIS / 企微 / AI，不做自动触达，也未修改 demo seed 数据。
 
 新增：
 
@@ -26,7 +36,7 @@
 - `docs/roadmap/2026-05-30-clean-roadmap-from-rebuild-plan.md`
 - `docs/devlog/2026-05-31.md`
 
-当前 PR 不做：
+PR #95 不做：
 
 - 不写代码。
 - 不改 UI。
@@ -151,7 +161,7 @@ git diff --cached --check
 
 ### PR 1：Phase 20 spec / plan 文档
 
-当前 PR。
+PR #95。
 
 完成标准：
 
@@ -253,6 +263,15 @@ node scripts/run-vitest.mjs run src/modules/institution/tests/TreatmentSummaryMa
 - 覆盖重复来源任务提示。
 - 覆盖敏感字段不展示。
 - 更新 README、roadmap、devlog 和 Phase 20 spec / plan 最终状态。
+
+完成状态：
+
+- workspace smoke 已覆盖模板驱动建议展示、四类路径类型、建议处理角色、人工确认、禁止自动触达客户、不自动回复客户和不接 AI。
+- workspace smoke 已覆盖模板建议通过既有人工确认操作创建来源任务，请求 body 只包含 `suggestionKey`。
+- workspace smoke 已覆盖模板建议重复确认时仍走来源任务去重治理。
+- 既有 institution / workspace 测试继续覆盖作废摘要阻断、旧规则建议展示、来源任务提示和敏感字段不展示。
+- README、roadmap、devlog 和 Phase 20 spec 已同步 Phase 20 v1 最终状态。
+- 本收尾不新增 API route，不改 DTO，不改 schema / migration，不改权限 / 认证 / 租户隔离，不接 HIS / 企微 / AI / 自动触达，不修改 demo seed 数据。
 
 建议验证：
 

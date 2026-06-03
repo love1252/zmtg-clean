@@ -29,6 +29,8 @@
 - Phase 16：随访任务来源治理增强 v1，包括 follow-up 来源筛选、安全来源 DTO、智能随访来源标签 / 来源筛选、治疗摘要管理页重复任务提示和 smoke / 文档收尾
 - Phase 17：HIS 接入标准模型 / 标准治疗事件 v1，包括 spec / plan 文档、domain-only 标准治疗事件类型、`sourceSystem` 稳定集合、mapper 输入 / 输出契约、字段白名单、禁止字段边界和 institution 测试
 - Phase 18：治疗摘要编辑能力 v1，包括 spec / plan 文档、编辑 payload parser、`treatment_summary:update` 最小权限、repository update、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端受控编辑 UI、入口 smoke 和文档收尾
+- Phase 19：治疗摘要作废能力 v1，包括作废字段、软作废 API、作废后随访建议 / 来源任务阻断、机构端状态展示和 smoke / 文档收尾
+- Phase 20：治疗项目路径模板 v1，包括 domain-only catalog、确定性随访建议接入、机构端模板建议轻量展示和 smoke / 文档收尾
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -163,16 +165,17 @@ Phase 19 已完成：
 - workspace smoke / institution / audit / db 测试覆盖作废字段、parser、repository、API、随访阻断、UI 展示、来源任务提示、客户 timeline、不会硬删除、不会自动取消既有任务和敏感字段不展示
 - Phase 19 不包含治疗摘要硬删除、批量作废、版本历史、diff 展示、自动取消既有随访任务、自动触达客户、完整治疗记录正文、完整病历正文、咨询对话全文、图片 / 文件上传、AI provider、Agent、RAG、企业微信、HIS / CRM / OTA 真实接入、OAuth、Webhook、支付、外部系统同步
 
-Phase 20 Plan Mode 已完成：
+Phase 20 治疗项目路径模板 v1 已完成：
 
-- Phase 20 治疗项目路径模板 / 随访路径模板 v1 spec / plan 已完成，当前只规划如何把现有治疗摘要和确定性随访建议升级为更清晰的治疗项目路径模板
-- 首批规划覆盖光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理，建议模板包含项目类型、恢复阶段、风险等级、建议随访节点、建议任务标题、建议处理角色、是否需要人工确认和禁止自动触达
-- Phase 20 当前不落库、不新增 API、不改 schema / migration、不改权限、认证或租户隔离，不接 HIS / 企微 / AI，不做自动触达，也不修改 demo seed 数据
-- 后续如需路径模板 schema / API、租户自定义模板、HIS 输入、企微触达、AI 生成建议或路径效果分析，必须单独评估
+- Phase 20 治疗项目路径模板 / 随访路径模板 v1 已形成最小闭环：治疗摘要结构化字段 → domain-only 路径模板 catalog 匹配 → 模板驱动确定性随访建议 → 治疗摘要管理页轻量展示 → 人工确认创建来源任务 → 重复来源任务治理 → 作废摘要阻断
+- 首批覆盖光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理；模板节点包含恢复阶段、风险等级、建议随访节点、建议任务标题、建议处理角色、人工确认和禁止自动触达边界
+- 机构端治疗摘要管理页已能轻量展示“路径模板建议”、路径类型、建议处理角色、人工确认后创建内部随访任务、禁止自动触达客户、不自动回复客户和不接 AI
+- Phase 20 v1 未新增 API、未改 DTO、未改 schema / migration、未改权限、认证或租户隔离，不接 HIS / 企微 / AI，不做自动触达，也不修改 demo seed 数据
+- 后续如需路径模板 schema / API、租户自定义模板、路径编辑器、平台端模板管理、HIS 输入、企微触达、AI 生成建议或路径效果分析，必须单独进入 Plan Mode
 
 后续阶段会依次加入：
 
-- Phase 20 后续实现评估：治疗项目路径模板 domain-only catalog、确定性随访建议接入模板、机构端轻量展示和 smoke / 文档收尾需拆小 PR 推进
+- Phase 20 后续扩展评估：路径模板 schema / API、租户自定义 SOP、平台端模板管理、路径效果分析、外部系统输入或触达能力必须单独规划
 - HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec、随访路径运营分析 v1、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
