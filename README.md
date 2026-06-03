@@ -44,6 +44,7 @@
 - Phase 23 Plan Mode：HIS 连接配置写入 API 与状态流转边界已完成，规划未来 create / update / pause / resume / revoke / delete API、写入 repository、权限、审计、状态流转、错误态和数据最小化边界；本阶段不写代码、不新增 API、不做写入 repository、不改 schema / migration、不改权限、认证或租户隔离，不处理凭证明文、不返回 `credentialRef`、不做测试连接、不接真实 HIS
 - Phase 23 Plan Mode：HIS 连接配置写入 repository 边界已完成，规划未来 create / update / pause / resume / revoke / softDelete repository 方法、输入模型、状态流转、租户边界、审计衔接、稳定结果和数据最小化；本阶段不写代码、不新增 repository 方法、不新增 API、不改 schema / migration、不改权限、认证或租户隔离，不处理凭证、不做测试连接、不接真实 HIS
 - Phase 23 PR B：HIS 连接配置 create / update repository 最小实现已完成，新增 `createHisConnectionForTenant` / `updateHisConnectionForTenant`，只写安全元数据，默认 `draft` / `unknown`，绑定可信 `tenantId` 与 `tenantId + connectionId`，返回稳定 `ok` / `not_found` / `conflict` / `validation_failed` 结果并复用安全 read model；本阶段不新增 API、不做状态流转 repository、不改 schema / migration、不改权限、认证或租户隔离，不处理凭证、不接真实 HIS、不修改 demo seed
+- Phase 23 PR C：HIS 连接配置状态流转 repository 最小实现已完成，新增 `pauseHisConnectionForTenant` / `resumeHisConnectionForTenant` / `revokeHisConnectionForTenant` / `softDeleteHisConnectionForTenant`，绑定 `tenantId + connectionId + deletedAt is null`，返回稳定 `ok` / `not_found` / `conflict` / `invalid_state_transition` / `validation_failed` 结果；本阶段不新增 API、不写审计、不改 schema / migration、不改权限、认证或租户隔离，不处理凭证、不做测试连接、不接真实 HIS、不修改 demo seed
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -217,12 +218,13 @@ Phase 22 HIS 标准治疗事件 mapper v1 当前状态：
 - 连接配置只读 UI smoke / 文档收尾已完成：当前链路已从 schema / migration、只读 repository、list / detail 只读 API 收口到机构端 workspace 只读入口和 smoke 覆盖；状态文案仅代表后端只读状态展示，不代表测试连接或真实 HIS 调用已实现；后续写入 API、凭证加密 / 凭证管理、测试连接 / 健康检查和真实 HIS adapter 仍需单独 Plan Mode / 独立 PR
 - Phase 23 HIS 连接配置写入 API 与状态流转边界 Plan Mode 已完成：当前只规划未来 create / update / pause / resume / revoke / delete API、写入 repository、权限、审计、状态流转、错误态和数据最小化；create / update 只允许安全元数据，`tenantId` 只来自服务端 access context，`credentialRef` v1 不允许写入也不返回，凭证管理、测试连接和真实 HIS adapter 必须单独 Plan Mode；仍不新增 API、不做写入 repository、不改 schema / migration、不改权限、认证或租户隔离、不处理真实凭证、不接真实 HIS
 - Phase 23 HIS 连接配置 create / update repository 最小实现已完成：当前仅新增 repository 层 create / update 方法和测试，create 由 repository 生成 `id` 并固定写入 `status = draft`、`healthStatus = unknown`、`createdBy` / `updatedBy`，update 只允许低风险元数据且绑定 `tenantId + connectionId + deletedAt is null`；仍不新增 API、不做 pause / resume / revoke / delete 状态 repository、不改 schema / migration、不改权限、认证或租户隔离、不处理凭证、不接真实 HIS、不修改 demo seed
-- 后续如需 adapter spec / plan、连接配置状态流转 repository、create / update API 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
+- Phase 23 HIS 连接配置状态流转 repository 最小实现已完成：当前仅新增 repository 层 pause / resume / revoke / softDelete 方法和测试，状态方法先按可信 `tenantId + connectionId + deletedAt is null` 查当前行，再执行保守状态机；softDelete 设置 `status = deleted` 和 `deletedAt`，删除后 list / detail 默认不可见；仍不新增 API、不写审计、不改 schema / migration、不改权限、认证或租户隔离、不处理凭证、不接真实 HIS、不修改 demo seed
+- 后续如需 adapter spec / plan、create / update API 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
 
 后续阶段会依次加入：
 
 - Phase 20 / Phase 21 后续扩展评估：路径模板 schema / API、租户自定义 SOP、平台端模板管理、路径效果分析、图表、导出、经营归因、外部系统输入或触达能力必须单独规划
-- HIS 标准治疗事件 mapper 后续扩展、真实 HIS adapter、连接配置状态流转 repository、create / update API 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密、健康检查 / 测试连接、Webhook / 同步任务和后续拆分、业务事件埋点体系 spec、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
+- HIS 标准治疗事件 mapper 后续扩展、真实 HIS adapter、create / update API 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密、健康检查 / 测试连接、Webhook / 同步任务和后续拆分、业务事件埋点体系 spec、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费
