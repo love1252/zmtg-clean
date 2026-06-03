@@ -197,7 +197,7 @@ git diff --cached --check
 建议后续拆分为：
 
 - PR A：写入 repository Plan Mode（当前 PR）。
-- PR B：create / update repository 实现。
+- PR B：create / update repository 实现（已由 `codex/phase23-his-connection-create-update-repository` 完成最小实现）。
 - PR C：状态流转 repository 实现。
 - PR D：repository 写入测试收尾。
 - PR E：create / update API 实现。

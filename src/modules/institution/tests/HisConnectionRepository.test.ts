@@ -9,6 +9,8 @@ import {
   mapHisConnectionRowToReadModel,
 } from '@/modules/institution/server/his-connection-repository';
 
+type HisConnectionRow = typeof hisConnections.$inferSelect;
+
 const andMock = vi.hoisted(() =>
   vi.fn((...conditions: unknown[]) => ({
     conditions,
@@ -105,6 +107,83 @@ function createHisConnectionLookupDatabase(rows: unknown[] = []) {
   };
 }
 
+function createHisConnectionInsertDatabase(input: {
+  insertedRow?: HisConnectionRow | null;
+  error?: unknown;
+} = {}) {
+  const returning = vi.fn(async () => {
+    if (input.error) throw input.error;
+    return input.insertedRow ? [input.insertedRow] : [];
+  });
+  const values = vi.fn((value: unknown) => {
+    void value;
+    return { returning };
+  });
+  const insert = vi.fn((table: unknown) => {
+    void table;
+    return { values };
+  });
+  const update = vi.fn();
+  const select = vi.fn();
+  const deleteMock = vi.fn();
+
+  return {
+    database: {
+      delete: deleteMock,
+      insert,
+      select,
+      update,
+    } as unknown as TenantDatabase,
+    deleteMock,
+    insert,
+    returning,
+    select,
+    update,
+    values,
+  };
+}
+
+function createHisConnectionUpdateDatabase(input: {
+  updatedRow?: HisConnectionRow | null;
+  error?: unknown;
+} = {}) {
+  const returning = vi.fn(async () => {
+    if (input.error) throw input.error;
+    return input.updatedRow ? [input.updatedRow] : [];
+  });
+  const where = vi.fn((condition: unknown) => {
+    void condition;
+    return { returning };
+  });
+  const set = vi.fn((values: Record<string, unknown>) => {
+    void values;
+    return { where };
+  });
+  const update = vi.fn((table: unknown) => {
+    void table;
+    return { set };
+  });
+  const insert = vi.fn();
+  const select = vi.fn();
+  const deleteMock = vi.fn();
+
+  return {
+    database: {
+      delete: deleteMock,
+      insert,
+      select,
+      update,
+    } as unknown as TenantDatabase,
+    deleteMock,
+    insert,
+    returning,
+    select,
+    set,
+    update,
+    where,
+  };
+}
+
 const hisConnectionRow = {
   id: 'his_conn_001',
   tenantId: 'demo-tenant-001',
@@ -125,6 +204,36 @@ const hisConnectionRow = {
   deletedAt: null,
 } satisfies typeof hisConnections.$inferSelect;
 
+const createdHisConnectionRow = {
+  ...hisConnectionRow,
+  id: 'his_conn_created',
+  connectionName: '新建 HIS 连接',
+  sourceSystem: 'his',
+  vendorType: 'demo_vendor',
+  systemType: 'his',
+  status: 'draft',
+  credentialRef: null,
+  healthStatus: 'unknown',
+  lastCheckedAt: null,
+  lastErrorCode: null,
+  createdBy: 'demo-user-admin',
+  updatedBy: 'demo-user-admin',
+  createdAt: new Date('2026-06-03T10:00:00.000Z'),
+  updatedAt: new Date('2026-06-03T10:00:00.000Z'),
+  revokedAt: null,
+  deletedAt: null,
+} satisfies typeof hisConnections.$inferSelect;
+
+const updatedHisConnectionRow = {
+  ...hisConnectionRow,
+  connectionName: '更新后的 HIS 连接',
+  sourceSystem: 'clinic_his',
+  vendorType: 'updated_vendor',
+  systemType: 'clinic_system',
+  updatedBy: 'demo-user-operator',
+  updatedAt: new Date('2026-06-03T11:00:00.000Z'),
+} satisfies typeof hisConnections.$inferSelect;
+
 const draftHisConnectionRow = {
   ...hisConnectionRow,
   id: 'his_conn_draft',
@@ -137,6 +246,44 @@ const draftHisConnectionRow = {
   createdAt: new Date('2026-06-03T08:05:00.000Z'),
   updatedAt: new Date('2026-06-03T08:05:00.000Z'),
 } satisfies typeof hisConnections.$inferSelect;
+
+const uniqueNameConflictError = {
+  code: '23505',
+  constraint: 'his_connections_active_name_unique_idx',
+  detail: 'Key (tenant_id, connection_name) already exists.',
+};
+
+const forbiddenWriteFields = {
+  credentialRef: 'cred_ref_should_not_write',
+  status: 'active',
+  healthStatus: 'healthy',
+  lastCheckedAt: new Date('2026-06-03T12:00:00.000Z'),
+  lastErrorCode: 'raw_external_error',
+  createdAt: new Date('2026-06-03T12:03:00.000Z'),
+  updatedAt: new Date('2026-06-03T12:04:00.000Z'),
+  revokedAt: new Date('2026-06-03T12:01:00.000Z'),
+  deletedAt: new Date('2026-06-03T12:02:00.000Z'),
+  token: 'token_should_not_write',
+  secret: 'secret_should_not_write',
+  apiKey: 'sk_should_not_write',
+  oauthToken: 'oauth_should_not_write',
+  basicAuth: 'user:password',
+  signingKey: 'signing_should_not_write',
+  privateKey: 'private_should_not_write',
+  connectionString: 'postgres://tenant:secret@localhost:5432/zmtg',
+  rawPayload: { external: true },
+  requestBody: { endpoint: '/external/his' },
+  responseBody: { ok: false },
+  sql: 'select * from his_connections',
+  stack: 'Error: DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+};
+
+const forbiddenUpdateValues = {
+  id: 'forged_connection_id',
+  tenantId: 'forged-tenant',
+  createdBy: 'forged-user',
+  ...forbiddenWriteFields,
+};
 
 const deletedHisConnectionRow = {
   ...hisConnectionRow,
@@ -321,5 +468,284 @@ describe('HIS 连接配置只读 repository', () => {
     const seedSource = readFileSync(join(process.cwd(), 'src/server/db/seed-demo-data.ts'), 'utf8');
 
     expect(seedSource).not.toMatch(/hisConnections|his_connections|credentialRef|credential_ref/i);
+  });
+});
+
+describe('HIS 连接配置写入 repository', () => {
+  it('create 能为当前租户创建连接并默认写入 draft / unknown / actor 字段', async () => {
+    const query = createHisConnectionInsertDatabase({ insertedRow: createdHisConnectionRow });
+
+    const result = await createHisConnectionRepository(query.database).createHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionName: '新建 HIS 连接',
+      sourceSystem: 'his',
+      vendorType: 'demo_vendor',
+      systemType: 'his',
+      actorUserId: 'demo-user-admin',
+    });
+
+    expect(query.insert).toHaveBeenCalledWith(hisConnections);
+    expect(query.values).toHaveBeenCalledWith({
+      id: expect.any(String),
+      tenantId: 'demo-tenant-001',
+      connectionName: '新建 HIS 连接',
+      sourceSystem: 'his',
+      vendorType: 'demo_vendor',
+      systemType: 'his',
+      status: 'draft',
+      healthStatus: 'unknown',
+      createdAt: expect.any(Date),
+      updatedAt: expect.any(Date),
+      createdBy: 'demo-user-admin',
+      updatedBy: 'demo-user-admin',
+    });
+    expect(result).toEqual({
+      status: 'ok',
+      record: mapHisConnectionRowToReadModel(createdHisConnectionRow),
+    });
+    expect(JSON.stringify(result)).not.toMatch(/credentialRef|credential_ref/);
+  });
+
+  it('create 只 pick 允许字段，不写 credentialRef、raw payload 或任何凭证材料', async () => {
+    const query = createHisConnectionInsertDatabase({ insertedRow: createdHisConnectionRow });
+
+    await createHisConnectionRepository(query.database).createHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionName: '新建 HIS 连接',
+      sourceSystem: 'his',
+      vendorType: 'demo_vendor',
+      systemType: 'his',
+      actorUserId: 'demo-user-admin',
+      ...forbiddenWriteFields,
+    } as Parameters<
+      ReturnType<typeof createHisConnectionRepository>['createHisConnectionForTenant']
+    >[0]);
+
+    const written = JSON.stringify(query.values.mock.calls[0]?.[0]);
+
+    expect(written).toMatch(/"status":"draft"/);
+    expect(written).toMatch(/"healthStatus":"unknown"/);
+    expect(written).not.toMatch(
+      /credentialRef|credential_ref|cred_ref_should_not_write|2026-06-03T12:03:00.000Z|2026-06-03T12:04:00.000Z|lastCheckedAt|lastErrorCode|revokedAt|deletedAt|token_should_not_write|secret_should_not_write|sk_should_not_write|oauth_should_not_write|user:password|signing_should_not_write|private_should_not_write|postgres:\/\/|rawPayload|requestBody|responseBody|select \* from|DATABASE_URL|stack/i,
+    );
+  });
+
+  it('create 同一租户未删除连接名冲突返回稳定 conflict', async () => {
+    const query = createHisConnectionInsertDatabase({ error: uniqueNameConflictError });
+
+    await expect(
+      createHisConnectionRepository(query.database).createHisConnectionForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionName: '星澜 HIS 只读连接',
+        sourceSystem: 'his',
+        vendorType: 'demo_vendor',
+        systemType: 'his',
+        actorUserId: 'demo-user-admin',
+      }),
+    ).resolves.toEqual({ status: 'conflict' });
+  });
+
+  it('create 不因其他租户同名连接冲突', async () => {
+    const query = createHisConnectionInsertDatabase({
+      insertedRow: { ...createdHisConnectionRow, connectionName: '共享连接名' },
+    });
+
+    const result = await createHisConnectionRepository(query.database).createHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionName: '共享连接名',
+      sourceSystem: 'his',
+      vendorType: 'demo_vendor',
+      systemType: 'his',
+      actorUserId: 'demo-user-admin',
+    });
+
+    expect(query.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'demo-tenant-001',
+        connectionName: '共享连接名',
+      }),
+    );
+    expect(result.status).toBe('ok');
+  });
+
+  it('create 字段为空时返回 validation_failed 且不写数据库', async () => {
+    const query = createHisConnectionInsertDatabase({ insertedRow: createdHisConnectionRow });
+
+    const result = await createHisConnectionRepository(query.database).createHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionName: '   ',
+      sourceSystem: 'his',
+      vendorType: 'demo_vendor',
+      systemType: 'his',
+      actorUserId: 'demo-user-admin',
+    });
+
+    expect(result).toEqual({ status: 'validation_failed' });
+    expect(query.insert).not.toHaveBeenCalled();
+  });
+
+  it('update 只能按 tenantId + connectionId 更新当前租户未软删除连接的低风险元数据', async () => {
+    const query = createHisConnectionUpdateDatabase({ updatedRow: updatedHisConnectionRow });
+
+    const result = await createHisConnectionRepository(query.database).updateHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      values: {
+        connectionName: '更新后的 HIS 连接',
+        sourceSystem: 'clinic_his',
+        vendorType: 'updated_vendor',
+        systemType: 'clinic_system',
+      },
+      actorUserId: 'demo-user-operator',
+    });
+
+    expect(query.update).toHaveBeenCalledWith(hisConnections);
+    expect(query.set).toHaveBeenCalledWith({
+      connectionName: '更新后的 HIS 连接',
+      sourceSystem: 'clinic_his',
+      vendorType: 'updated_vendor',
+      systemType: 'clinic_system',
+      updatedAt: expect.any(Date),
+      updatedBy: 'demo-user-operator',
+    });
+    expect(query.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: hisConnections.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: hisConnections.id, operator: 'eq', value: 'his_conn_001' },
+        { column: hisConnections.deletedAt, operator: 'isNull' },
+      ],
+      operator: 'and',
+    });
+    expect(result).toEqual({
+      status: 'ok',
+      record: mapHisConnectionRowToReadModel(updatedHisConnectionRow),
+    });
+  });
+
+  it('update 跨租户、不存在或已软删除记录统一返回 not_found', async () => {
+    const query = createHisConnectionUpdateDatabase({ updatedRow: null });
+
+    await expect(
+      createHisConnectionRepository(query.database).updateHisConnectionForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_other_tenant',
+        values: { connectionName: '跨租户尝试' },
+        actorUserId: 'demo-user-admin',
+      }),
+    ).resolves.toEqual({ status: 'not_found' });
+
+    expect(query.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: hisConnections.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: hisConnections.id, operator: 'eq', value: 'his_conn_other_tenant' },
+        { column: hisConnections.deletedAt, operator: 'isNull' },
+      ],
+      operator: 'and',
+    });
+  });
+
+  it('update 不修改 status、credentialRef、健康状态、检查字段和生命周期字段', async () => {
+    const query = createHisConnectionUpdateDatabase({ updatedRow: updatedHisConnectionRow });
+
+    await createHisConnectionRepository(query.database).updateHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      values: {
+        connectionName: '更新后的 HIS 连接',
+        ...forbiddenUpdateValues,
+      },
+      actorUserId: 'demo-user-operator',
+    } as Parameters<
+      ReturnType<typeof createHisConnectionRepository>['updateHisConnectionForTenant']
+    >[0]);
+
+    const written = JSON.stringify(query.set.mock.calls[0]?.[0]);
+
+    expect(written).not.toMatch(
+      /forged_connection_id|forged-tenant|forged-user|tenantId|credentialRef|credential_ref|cred_ref_should_not_write|status|healthStatus|lastCheckedAt|lastErrorCode|createdBy|createdAt|revokedAt|deletedAt|token_should_not_write|secret_should_not_write|sk_should_not_write|oauth_should_not_write|user:password|signing_should_not_write|private_should_not_write|postgres:\/\/|rawPayload|requestBody|responseBody|select \* from|DATABASE_URL|stack/i,
+    );
+  });
+
+  it('update 同一租户未删除连接名冲突返回稳定 conflict', async () => {
+    const query = createHisConnectionUpdateDatabase({ error: uniqueNameConflictError });
+
+    await expect(
+      createHisConnectionRepository(query.database).updateHisConnectionForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        values: { connectionName: '星澜 HIS 只读连接' },
+        actorUserId: 'demo-user-admin',
+      }),
+    ).resolves.toEqual({ status: 'conflict' });
+  });
+
+  it('update 不因其他租户同名连接冲突', async () => {
+    const query = createHisConnectionUpdateDatabase({
+      updatedRow: { ...updatedHisConnectionRow, connectionName: '共享连接名' },
+    });
+
+    const result = await createHisConnectionRepository(query.database).updateHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      values: { connectionName: '共享连接名' },
+      actorUserId: 'demo-user-admin',
+    });
+
+    expect(query.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connectionName: '共享连接名',
+        updatedBy: 'demo-user-admin',
+      }),
+    );
+    expect(result.status).toBe('ok');
+  });
+
+  it('update values 为空时返回 validation_failed 且不写数据库', async () => {
+    const query = createHisConnectionUpdateDatabase({ updatedRow: updatedHisConnectionRow });
+
+    const result = await createHisConnectionRepository(query.database).updateHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      values: {},
+      actorUserId: 'demo-user-admin',
+    });
+
+    expect(result).toEqual({ status: 'validation_failed' });
+    expect(query.update).not.toHaveBeenCalled();
+  });
+
+  it('repository 写入不调用外部系统、不创建摘要、任务或自动触达', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+    const createQuery = createHisConnectionInsertDatabase({ insertedRow: createdHisConnectionRow });
+    const updateQuery = createHisConnectionUpdateDatabase({ updatedRow: updatedHisConnectionRow });
+
+    await createHisConnectionRepository(createQuery.database).createHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionName: '新建 HIS 连接',
+      sourceSystem: 'his',
+      vendorType: 'demo_vendor',
+      systemType: 'his',
+      actorUserId: 'demo-user-admin',
+    });
+    await createHisConnectionRepository(updateQuery.database).updateHisConnectionForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      values: { connectionName: '更新后的 HIS 连接' },
+      actorUserId: 'demo-user-admin',
+    });
+
+    expect(createQuery.insert).toHaveBeenCalledWith(hisConnections);
+    expect(createQuery.insert).not.toHaveBeenCalledWith(treatmentSummaries);
+    expect(createQuery.insert).not.toHaveBeenCalledWith(followUpTasks);
+    expect(createQuery.update).not.toHaveBeenCalled();
+    expect(createQuery.deleteMock).not.toHaveBeenCalled();
+    expect(updateQuery.update).toHaveBeenCalledWith(hisConnections);
+    expect(updateQuery.update).not.toHaveBeenCalledWith(treatmentSummaries);
+    expect(updateQuery.update).not.toHaveBeenCalledWith(followUpTasks);
+    expect(updateQuery.insert).not.toHaveBeenCalled();
+    expect(updateQuery.deleteMock).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    fetchSpy.mockRestore();
   });
 });
