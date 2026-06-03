@@ -113,18 +113,19 @@
 推荐优先级：
 
 1. 产品可演示性验收：优先完整走查机构端客户中心、治疗摘要创建 / 编辑 / 作废、随访建议阻断、来源任务追溯、客户 timeline 和平台端只读治理页面，确认 Phase 5-19 是否已经能支撑一次稳定演示。
-2. Phase 20 Plan Mode：在演示验收之后，再评估 HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec、随访路径运营分析 v1 和经营智能中心 v1，先做范围、隐私、schema / API 风险判断，不直接进入实现。
-3. HIS 标准治疗事件 mapper 继续增强：继续完善 mapper 契约、错误语义和测试覆盖，仍不接真实 HIS、不写 API、不落库。
-4. 业务事件埋点体系 spec：只做事件模型规划，不做真实采集，不记录 raw payload、完整医疗正文或 PII。
-5. 随访路径运营分析 v1：先确认事件口径和统计边界，不做复杂归因模型或自动触达。
-6. follow-up 配额 enforcement：单独评估是否将 Phase 15 的人工确认创建接入 `maxFollowUps`。
-7. 平台租户状态管理、更多资源配额 enforcement 与完整套餐商业化后台规划。
-8. 审计高级治理：导出、告警和复杂风控。
-9. 知识库 / RAG 基础版，优先元数据规划，不保存医疗隐私正文。
-10. 客服会话和完整治疗记录能力。
-11. AI provider、调用日志和 Agent。
-12. 企业微信、Webhook、OAuth、API Key。
-13. 计费、合同、发票和支付。
+2. Phase 20 Plan Mode：已选择治疗项目路径模板 / 随访路径模板 v1 做 spec / plan，先规划光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理的标准随访路径，不直接进入实现。
+3. Phase 20 后续实现评估：如继续推进，优先评估 domain-only 静态模板 catalog、确定性随访建议接入模板、机构端轻量展示和 smoke / 文档收尾；schema / API、HIS、企微、AI 和自动触达必须单独评估。
+4. HIS 标准治疗事件 mapper 继续增强：继续完善 mapper 契约、错误语义和测试覆盖，仍不接真实 HIS、不写 API、不落库。
+5. 业务事件埋点体系 spec：只做事件模型规划，不做真实采集，不记录 raw payload、完整医疗正文或 PII。
+6. 随访路径运营分析 v1：先确认事件口径和统计边界，不做复杂归因模型或自动触达。
+7. follow-up 配额 enforcement：单独评估是否将 Phase 15 的人工确认创建接入 `maxFollowUps`。
+8. 平台租户状态管理、更多资源配额 enforcement 与完整套餐商业化后台规划。
+9. 审计高级治理：导出、告警和复杂风控。
+10. 知识库 / RAG 基础版，优先元数据规划，不保存医疗隐私正文。
+11. 客服会话和完整治疗记录能力。
+12. AI provider、调用日志和 Agent。
+13. 企业微信、Webhook、OAuth、API Key。
+14. 计费、合同、发票和支付。
 
 ## 7. 高风险模块提醒
 
@@ -207,4 +208,5 @@ Phase 5 的成功标准：
 - Phase 19 已完成治疗摘要作废能力 v1：Phase 19 spec / plan、nullable 作废字段、Drizzle migration、domain / DTO `status` 派生、作废原因 parser、`voidTreatmentSummaryByTenant`、作废 audit reason、`POST /api/institution/treatment-summaries/[summaryId]/void`、作废后随访建议 / 来源任务创建阻断、机构端列表 / 详情 / 客户 timeline / 来源任务提示和 workspace smoke / 文档收尾均已完成。
 - Phase 19 作废不是删除：不硬删除治疗摘要，不删除客户时间线，不删除来源随访任务；已存在来源随访任务不自动取消、不自动修改状态，仍保留来源追溯。
 - Phase 19 未进入批量作废、版本历史、diff 展示、自动触达客户、完整治疗记录正文、完整病历正文、诊疗原文、咨询对话全文、图片 / 文件上传、AI provider、Agent、RAG、企业微信、真实 HIS / CRM / OTA 接入、OAuth、Webhook、支付、合同、发票或外部系统同步。
-- 后续建议先进入产品可演示性验收，再决定 Phase 20 Plan Mode；Phase 20 候选方向可重新评估 HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec、随访路径运营分析 v1 和经营智能中心 v1，当前不进入 Phase 20 实现。
+- Phase 20 Plan Mode 已完成治疗项目路径模板 / 随访路径模板 v1 spec / plan：当前只规划，不写代码、不改 UI、不改测试、不新增 API、不改 schema / migration、不接 HIS / 企微 / AI、不做自动触达、不修改 demo seed 数据。
+- Phase 20 v1 首批规划覆盖光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理；路径模板建议包含项目类型、恢复阶段、风险等级、建议随访节点、建议任务标题、建议处理角色、是否需要人工确认和禁止自动触达。
