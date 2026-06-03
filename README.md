@@ -31,6 +31,7 @@
 - Phase 18：治疗摘要编辑能力 v1，包括 spec / plan 文档、编辑 payload parser、`treatment_summary:update` 最小权限、repository update、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端受控编辑 UI、入口 smoke 和文档收尾
 - Phase 19：治疗摘要作废能力 v1，包括作废字段、软作废 API、作废后随访建议 / 来源任务阻断、机构端状态展示和 smoke / 文档收尾
 - Phase 20：治疗项目路径模板 v1，包括 domain-only catalog、确定性随访建议接入、机构端模板建议轻量展示和 smoke / 文档收尾
+- Phase 21 Plan Mode：随访路径运营分析 v1 spec / plan 文档规划已完成；当前只是 docs-only 口径规划，不进入功能实现
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -173,10 +174,17 @@ Phase 20 治疗项目路径模板 v1 已完成：
 - Phase 20 v1 未新增 API、未改 DTO、未改 schema / migration、未改权限、认证或租户隔离，不接 HIS / 企微 / AI，不做自动触达，也不修改 demo seed 数据
 - 后续如需路径模板 schema / API、租户自定义模板、路径编辑器、平台端模板管理、HIS 输入、企微触达、AI 生成建议或路径效果分析，必须单独进入 Plan Mode
 
+Phase 21 随访路径运营分析 v1 Plan Mode 已完成：
+
+- Phase 21 仅规划如何基于现有治疗摘要、路径模板建议、来源随访任务、任务状态和审计记录形成最小运营分析口径，不是功能实现
+- 最小指标建议包括模板建议数、人工确认任务数、任务完成数、任务超时数、作废摘要阻断数和重复来源任务冲突数
+- 当前不新增 API，不改 schema / migration，不改权限、认证或租户隔离，不接 HIS / 企微 / AI，不做自动触达，不做复杂经营智能中心、图表 UI、报表导出或经营归因
+- 后续如需落库、报表 API、图表 UI、导出、经营归因、审计口径补强或外部系统接入，必须单独评估
+
 后续阶段会依次加入：
 
 - Phase 20 后续扩展评估：路径模板 schema / API、租户自定义 SOP、平台端模板管理、路径效果分析、外部系统输入或触达能力必须单独规划
-- HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec、随访路径运营分析 v1、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
+- HIS 标准治疗事件 mapper 增强、业务事件埋点体系 spec、随访路径运营分析 v1 实现评估、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
 - AI 与知识库
 - 企业微信、开放平台凭证和计费
