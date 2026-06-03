@@ -1,6 +1,6 @@
 # HIS 连接配置 schema / migration v1 实施计划
 
-> 实现同步：后续分支 `codex/his-connection-schema-migration` 已按本计划进入最小实现，只新增 `his_connections` schema、Drizzle migration、schema / migration 测试和轻量文档同步；仍不新增 API、repository、UI、凭证存储、测试连接、真实 HIS adapter，不修改 demo seed。
+> 实现同步：后续分支 `codex/his-connection-schema-migration` 已按本计划进入最小实现，只新增 `his_connections` schema、Drizzle migration、schema / migration 测试和轻量文档同步；后续分支 `codex/his-connection-read-repository` 已进入只读 repository 最小实现；仍不新增 API、写入 repository、UI、凭证存储、测试连接、真实 HIS adapter，不修改 demo seed。
 
 **目标：** 只做 HIS / 机构系统连接配置 schema / migration 实现 Plan Mode，明确未来 `his_connections` 表、状态枚举、索引 / 唯一约束、软删除、凭证引用、审计关系、migration 顺序和安全边界。
 
