@@ -192,14 +192,117 @@ git diff --cached --check
 - 没有 whitespace error。
 - diff 仅包含 Markdown 文档。
 
-## 4. 后续 PR 拆分建议
+## 4. PR D：repository 写入闭环收尾记录
+
+Phase 23 PR B 和 PR C 已完成 HIS 连接配置 repository 写入闭环的最小实现。PR D 只做 docs-only 收尾，不新增测试、不新增 repository 方法、不修改生产 repository、不新增 API、不改 schema / migration、不改权限 / 认证 / 租户隔离。
+
+### 4.1 当前已完成 repository 方法
+
+当前 `createHisConnectionRepository(database)` 已提供：
+
+- `createHisConnectionForTenant`
+- `updateHisConnectionForTenant`
+- `pauseHisConnectionForTenant`
+- `resumeHisConnectionForTenant`
+- `revokeHisConnectionForTenant`
+- `softDeleteHisConnectionForTenant`
+
+这些方法的共同边界是：
+
+- repository command 显式接收可信 `tenantId`。
+- detail / update / status 方法绑定 `tenantId + connectionId`。
+- 状态方法先按 `tenantId + connectionId + deletedAt is null` 查当前行。
+- 跨租户、不存在和已软删除目标统一返回 `not_found`。
+- 软删除记录默认从 list / detail 中不可见。
+- 成功结果复用安全 read model，派生 `credentialConfigured`，不返回 `credentialRef` 给前端 DTO。
+
+### 4.2 写入与状态边界
+
+当前 repository 写入闭环保持以下数据最小化和状态边界：
+
+- create 固定写入 `status = draft`、`healthStatus = unknown`、`createdBy`、`updatedBy`、`createdAt` 和 `updatedAt`。
+- create / update 只写 `connectionName`、`sourceSystem`、`vendorType`、`systemType` 等安全元数据。
+- update 不修改 `status`、`credentialRef`、健康检查字段或生命周期字段。
+- pause 允许 `active / error -> paused`，`draft -> paused` 返回 `invalid_state_transition`，重复 pause 返回 `conflict`。
+- resume 只允许 `paused -> active`，不表示测试连接成功，不调用真实 HIS，不刷新 `healthStatus`。
+- revoke 允许 `draft / active / paused / error -> revoked`，写入 `revokedAt`、`updatedAt` 和 `updatedBy`，重复 revoke 返回 `conflict`。
+- softDelete 允许未删除状态进入 `deleted`，写入 `deletedAt`、`updatedAt` 和 `updatedBy`，删除后 list / detail 默认不可见。
+- 状态流转只修改状态、必要生命周期时间戳和 actor 字段，不保存 `reasonCode`、外部错误全文、raw payload 或凭证材料。
+
+当前 repository 仍明确不做：
+
+- 不新增 API。
+- 不解析 HTTP payload。
+- 不判断权限。
+- 不写审计。
+- 不处理凭证。
+- 不做测试连接。
+- 不调用真实 HIS。
+- 不创建治疗摘要。
+- 不创建随访任务。
+- 不自动触达。
+- 不修改 demo seed。
+
+### 4.3 测试覆盖确认
+
+现有 `src/modules/institution/tests/HisConnectionRepository.test.ts` 已由 PR #126 和 PR #127 覆盖以下边界，本 PR 不重复新增测试：
+
+- create 默认 `draft / unknown`。
+- create / update 只 pick 白名单字段。
+- create / update 唯一约束冲突返回稳定 `conflict`。
+- create / update 输入非法返回 `validation_failed`。
+- update 跨租户、不存在或已软删除返回 `not_found`。
+- update 不修改 `status`、`credentialRef`、健康状态、检查字段和生命周期字段。
+- pause / resume / revoke / softDelete 状态流转。
+- `draft -> paused` 禁止。
+- 重复 pause 返回 `conflict`。
+- `paused -> active` 允许。
+- `draft / error / revoked -> active` 禁止。
+- `draft / active / paused / error -> revoked` 允许。
+- 重复 revoke 返回 `conflict`。
+- softDelete 写入 `status = deleted` 和 `deletedAt`。
+- 状态方法跨租户、不存在或已软删除统一 `not_found`。
+- 状态方法输入非法返回 `validation_failed` 且不读写数据库。
+- softDelete 后 list / detail 默认不可见。
+- 返回模型和写入字段不包含 `credentialRef`、raw payload、真实凭证、SQL、stack、`DATABASE_URL` 或连接串。
+- repository 不调用外部系统。
+- repository 不创建治疗摘要。
+- repository 不创建随访任务。
+- repository 不自动触达。
+- demo seed 不写入 `hisConnections`、`his_connections`、`credentialRef` 或 `credential_ref`。
+
+### 4.4 API / service 接入前置边界
+
+下一步如进入 API / service 实现，必须单独处理并测试：
+
+- HTTP payload parser。
+- 权限判断。
+- API 错误映射。
+- 审计写入。
+- service 层事务边界。
+- DTO 数据最小化。
+- create / update API。
+- pause / resume / revoke / delete API。
+
+下一步仍不得混入：
+
+- 凭证管理。
+- 测试连接。
+- 真实 HIS adapter。
+- Webhook / 同步任务。
+- 患者身份匹配。
+- 自动治疗摘要。
+- 自动随访任务。
+- 自动触达。
+
+## 5. 后续 PR 拆分建议
 
 建议后续拆分为：
 
 - PR A：写入 repository Plan Mode（当前 PR）。
 - PR B：create / update repository 实现（已由 `codex/phase23-his-connection-create-update-repository` 完成最小实现）。
 - PR C：状态流转 repository 实现（已由 `codex/phase23-his-connection-status-repository` 完成最小实现）。
-- PR D：repository 写入测试收尾。
+- PR D：repository 写入闭环收尾（当前 docs-only PR）。
 - PR E：create / update API 实现。
 - PR F：pause / resume / revoke / delete API 实现。
 - PR G：审计补强。
@@ -209,7 +312,7 @@ git diff --cached --check
 
 凭证录入、加密、轮换、撤销、测试连接、健康检查、真实 HIS adapter、Webhook / 同步、患者身份匹配、自动摘要、自动任务和自动触达都不得混入当前 Phase 23 docs-only PR。
 
-## 5. 验收清单
+## 6. 验收清单
 
 - 设计文档明确当前 PR 是 Phase 23 写入 repository Plan Mode，不是 repository、API、schema / migration、凭证管理、测试连接或真实 HIS adapter。
 - 设计文档明确不写代码、不改测试、不新增 repository 方法、不新增 API、不改 schema / migration、不改权限、认证或租户隔离。
@@ -231,7 +334,7 @@ git diff --cached --check
 - `git diff --check` 通过。
 - `git diff --cached --check` 通过。
 
-## 6. 停止条件
+## 7. 停止条件
 
 当前 PR 或后续执行中出现以下情况，必须停止并回报：
 
