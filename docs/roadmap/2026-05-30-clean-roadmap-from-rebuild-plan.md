@@ -125,6 +125,7 @@
 - Phase 23 HIS 连接配置审计 reason 与 service denied audit：已最小补强 reason 并接入 service repository 失败路径 denied audit；route 层权限拒绝、parser 失败、HTTP 映射和 API route 测试仍需后续独立 PR，不处理凭证、测试连接或真实 adapter。
 - Phase 23 HIS 连接配置创建更新 API route Plan Mode：已完成 docs-only spec / plan，明确后续 POST / PATCH route 的 access context、权限判断、parser、service result 映射、route denied audit、DTO 和错误响应边界；API route 实现、route tests、状态流转 API、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
 - Phase 23 HIS 连接配置状态 API Plan Mode：已完成 docs-only spec / plan，明确后续 pause / resume / revoke / delete API 路径、可信输入、权限边界、状态流转、service 边界、审计边界、DTO 最小化和测试拆分；状态 API 权限、service、route、route tests、审计补强、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
+- Phase 23 HIS 连接配置状态权限 Plan Mode：已完成 docs-only spec / plan，明确 v1 推荐 pause / resume / revoke 使用 `open_connection:manage_status`，delete / softDelete 使用 `open_connection:delete`；默认仅 `tenant_admin` 可写，其他机构角色、平台角色和审计角色默认拒绝，平台代管写入不进入 v1；状态 API 权限实现、service、route、route tests、审计补强、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
 - 治疗摘要编辑能力 v1：编辑 payload parser、`treatment_summary:update` 最小权限、tenant-scoped repository update、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端受控编辑 UI、成功刷新列表 / 详情、失败保留输入、审计和入口 smoke。
 - 治疗项目路径模板 v1：首批光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理的 domain-only catalog，确定性随访建议接入模板，机构端轻量展示路径类型 / 建议处理角色 / 人工确认边界，人工确认来源任务、重复治理、作废阻断和 smoke / 文档收尾。
 - 随访路径运营分析 v1：基于治疗摘要、路径模板建议、来源随访任务、任务状态和审计记录的最小聚合口径、审计关联补强、机构端只读 API、轻量指标展示和 workspace smoke / 文档收尾。
