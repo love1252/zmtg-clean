@@ -50,13 +50,15 @@
 - Phase 23 HIS 连接配置写入权限 v1 Plan Mode 已完成：docs-only 规划后续 create / update API 所需写入权限，明确当前 `tenant_admin` 只有 `open_connection:read_own_tenant`，不得复用只读权限放行写入，后续应单独实现 `open_connection:create` 和 `open_connection:update`；当前仍未修改权限实现、未新增 API、未写审计、未处理凭证或真实 HIS adapter。
 - Phase 23 HIS 连接配置写入权限模型最小实现已完成：`tenant_admin` 已具备 `open_connection:create` 和 `open_connection:update`，并保留 `open_connection:read_own_tenant`；普通机构人员、顾问、客服、平台角色和审计角色仍默认拒绝写入；当前仍未新增 API、route、service、审计实现、凭证管理、测试连接或真实 HIS adapter。
 - Phase 23 HIS 连接配置写入 service v1 Plan Mode 已完成：docs-only 规划后续 create / update service 的可信输入、事务边界、repository 结果映射、审计写入边界、DTO 最小化和 API 错误响应；当前仍未写 service 代码、未新增 API route、未改 parser / repository / 权限 / schema / migration、未写审计实现、未处理凭证或真实 HIS adapter。
+- Phase 23 HIS 连接配置写入 service 最小实现已完成：新增 create / update service，在同一事务内编排 repository 写入与成功 allowed audit，返回 `{ ok: true }` 最小 DTO；当前仍未新增 API route、未实现 denied audit、未处理凭证或真实 HIS adapter。
+- Phase 23 HIS 连接配置审计 reason 补强 Plan Mode 已完成：docs-only 规划后续 create / update 失败路径 reason，评估 `invalid_his_connection_payload`、`his_connection_name_conflict`、`invalid_his_connection_repository_result` 和 `not_found_or_not_owned` 复用边界；当前仍未修改 audit domain / reason、未实现 denied audit、未新增 API route。
 - 开放平台治理第一阶段：API Key、OAuth、Webhook 和审计的治理词汇、生命周期和安全边界展示。
 
 当前主要缺口：
 
 - 平台端已有只读租户列表、租户状态、套餐 / 配额、用量快照和商业化健康运营摘要；机构端新增客户 / 预约已具备轻量套餐配额 enforcement，但尚未具备租户创建、编辑、删除、冻结 / 恢复、完整套餐商业化后台、计费、支付、合同或发票能力。
 - 审计日志只读查询基础版已完成，但导出、告警和复杂风控仍未进入真实实现。
-- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1、治疗项目路径模板 v1 和随访路径运营分析 v1 最小闭环已完成；HIS 标准治疗事件 mapper v1 已完成 Plan Mode、契约差异评估、标准事件缺口字段 domain-only 契约补齐、解析器安全测试和文档 / smoke 收尾，真实 HIS adapter 前置评估、连接配置与凭证边界、连接配置 schema / API 边界、连接配置 schema / migration 最小实现、连接配置只读 repository 最小实现、连接配置 list / detail 只读 API 最小实现、连接配置只读 UI / workspace 入口轻量实现、只读 UI smoke / 文档收尾、Phase 23 写入 API 与状态流转边界 Plan Mode、状态流转 repository 最小实现、repository 写入闭环收尾、写入 payload parser / DTO helper、写入权限 Plan Mode、写入权限模型最小实现和写入 service Plan Mode 也已完成，但尚未进入真实 adapter 实现、连接配置写入 API 实现、service 代码实现、凭证存储 / 加密、测试连接 / 健康检查、Webhook / 同步任务、患者身份匹配、自动摘要或自动任务；随访路径运营分析仍不包含图表、导出、经营智能中心、收入 / 复购 / 转化归因或路径效果分析；真实 HIS 接入、Webhook、文件导入、外部系统同步、完整治疗记录正文、版本历史 / diff 展示、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
+- 治疗记录结构化摘要 v1、治疗摘要人工录入 v1、治疗摘要管理 v1、治疗后护理 / 随访联动 v1、随访任务来源治理增强 v1、标准治疗事件 domain-only 契约、治疗摘要编辑能力 v1、治疗摘要作废能力 v1、治疗项目路径模板 v1 和随访路径运营分析 v1 最小闭环已完成；HIS 标准治疗事件 mapper v1 已完成 Plan Mode、契约差异评估、标准事件缺口字段 domain-only 契约补齐、解析器安全测试和文档 / smoke 收尾，真实 HIS adapter 前置评估、连接配置与凭证边界、连接配置 schema / API 边界、连接配置 schema / migration 最小实现、连接配置只读 repository 最小实现、连接配置 list / detail 只读 API 最小实现、连接配置只读 UI / workspace 入口轻量实现、只读 UI smoke / 文档收尾、Phase 23 写入 API 与状态流转边界 Plan Mode、状态流转 repository 最小实现、repository 写入闭环收尾、写入 payload parser / DTO helper、写入权限 Plan Mode、写入权限模型最小实现、写入 service Plan Mode、写入 service 最小实现和审计 reason 补强 Plan Mode 也已完成，但尚未进入真实 adapter 实现、连接配置写入 API route 实现、denied audit 接入、凭证存储 / 加密、测试连接 / 健康检查、Webhook / 同步任务、患者身份匹配、自动摘要或自动任务；随访路径运营分析仍不包含图表、导出、经营智能中心、收入 / 复购 / 转化归因或路径效果分析；真实 HIS 接入、Webhook、文件导入、外部系统同步、完整治疗记录正文、版本历史 / diff 展示、客服会话、知识库、AI、企业微信、开放平台凭证和计费仍未进入真实实现。
 
 ## 2. 旧 REBUILD_PLAN.md 中仍有价值的功能
 
@@ -116,6 +118,7 @@
 - Phase 23 HIS 连接配置写入 payload parser / DTO helper：已新增 create / update parser 和最小 DTO helper，parser 只接受普通 JSON object、四个安全元数据字段、trim 后非空字符串和长度限制；DTO helper 只返回四个安全元数据字段；API route、权限实现、审计实现、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
 - Phase 23 HIS 连接配置写入权限 v1 边界和最小实现：已完成 docs-only spec / plan，并已为 `tenant_admin` 最小授予 `open_connection:create` 和 `open_connection:update`，同时保留 `open_connection:read_own_tenant`；普通机构人员、顾问、客服、平台角色和审计角色仍默认不具备 create / update，平台代管写入不进入 v1；API route、service 实现、审计实现、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
 - Phase 23 HIS 连接配置写入 service v1 边界：已完成 docs-only spec / plan，明确后续 create / update service 只接收服务端 access context、path `connectionId` 和 parser 输出，规划事务内 repository 写入与 allowed audit、repository result 到 HTTP 错误映射、denied audit reason 补强缺口和 DTO 最小化；API route、service 实现、审计 reason 补强、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
+- Phase 23 HIS 连接配置写入 service 最小实现和审计 reason Plan Mode：service 已最小实现 create / update 事务编排与成功 allowed audit；审计 reason 补强已规划 payload 非法、连接名冲突、repository validation_failed 和 not found 复用边界；API route、denied audit 接入、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
 - 治疗摘要编辑能力 v1：编辑 payload parser、`treatment_summary:update` 最小权限、tenant-scoped repository update、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端受控编辑 UI、成功刷新列表 / 详情、失败保留输入、审计和入口 smoke。
 - 治疗项目路径模板 v1：首批光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理的 domain-only catalog，确定性随访建议接入模板，机构端轻量展示路径类型 / 建议处理角色 / 人工确认边界，人工确认来源任务、重复治理、作废阻断和 smoke / 文档收尾。
 - 随访路径运营分析 v1：基于治疗摘要、路径模板建议、来源随访任务、任务状态和审计记录的最小聚合口径、审计关联补强、机构端只读 API、轻量指标展示和 workspace smoke / 文档收尾。
