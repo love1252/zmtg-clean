@@ -6,6 +6,8 @@ import {
   GET as hisConnectionDetailGet,
   PATCH as hisConnectionUpdatePatch,
 } from '@/app/api/institution/his-connections/[connectionId]/route';
+import { POST as hisConnectionPausePost } from '@/app/api/institution/his-connections/[connectionId]/pause/route';
+import { POST as hisConnectionResumePost } from '@/app/api/institution/his-connections/[connectionId]/resume/route';
 import {
   GET as hisConnectionListGet,
   POST as hisConnectionCreatePost,
@@ -38,6 +40,10 @@ const routeMocks = vi.hoisted(() => {
     getDatabase: vi.fn(),
     getDemoAccessContextFromRequest: vi.fn(),
     hisConnectionRepository,
+    pauseHisConnectionForTenantService: vi.fn(),
+    resumeHisConnectionForTenantService: vi.fn(),
+    revokeHisConnectionForTenantService: vi.fn(),
+    softDeleteHisConnectionForTenantService: vi.fn(),
     updateHisConnectionForTenantService: vi.fn(),
   };
 });
@@ -86,6 +92,19 @@ vi.mock('@/modules/institution/server/his-connection-write-service', async (impo
     ...actual,
     createHisConnectionForTenantService: routeMocks.createHisConnectionForTenantService,
     updateHisConnectionForTenantService: routeMocks.updateHisConnectionForTenantService,
+  };
+});
+
+vi.mock('@/modules/institution/server/his-connection-status-service', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@/modules/institution/server/his-connection-status-service')
+  >();
+  return {
+    ...actual,
+    pauseHisConnectionForTenantService: routeMocks.pauseHisConnectionForTenantService,
+    resumeHisConnectionForTenantService: routeMocks.resumeHisConnectionForTenantService,
+    revokeHisConnectionForTenantService: routeMocks.revokeHisConnectionForTenantService,
+    softDeleteHisConnectionForTenantService: routeMocks.softDeleteHisConnectionForTenantService,
   };
 });
 
@@ -262,6 +281,44 @@ function updateRawRequest(rawBody: string) {
   });
 }
 
+function statusRequest(
+  payload: unknown = { reasonCode: '  manual_status_change  ' },
+  url = 'http://localhost/api/institution/his-connections/his_conn_001/pause?tenantId=demo-tenant-002',
+) {
+  return new Request(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-tenant-id': 'other-tenant-should-not-be-trusted',
+      'x-his-tenant-id': 'other-his-tenant-should-not-be-trusted',
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+function statusEmptyBodyRequest(
+  url = 'http://localhost/api/institution/his-connections/his_conn_001/pause?tenantId=demo-tenant-002',
+) {
+  return new Request(url, {
+    method: 'POST',
+    headers: {
+      'x-tenant-id': 'other-tenant-should-not-be-trusted',
+      'x-his-tenant-id': 'other-his-tenant-should-not-be-trusted',
+    },
+  });
+}
+
+function statusRawRequest(rawBody: string) {
+  return new Request('http://localhost/api/institution/his-connections/his_conn_001/pause', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-tenant-id': 'other-tenant-should-not-be-trusted',
+    },
+    body: rawBody,
+  });
+}
+
 function detailContext(connectionId = 'his_conn_001') {
   return { params: Promise.resolve({ connectionId }) };
 }
@@ -398,6 +455,26 @@ beforeEach(() => {
   routeMocks.updateHisConnectionForTenantService.mockReset();
   routeMocks.updateHisConnectionForTenantService.mockResolvedValue({
     status: 'updated',
+    dto: { ok: true },
+  });
+  routeMocks.pauseHisConnectionForTenantService.mockReset();
+  routeMocks.pauseHisConnectionForTenantService.mockResolvedValue({
+    status: 'paused',
+    dto: { ok: true },
+  });
+  routeMocks.resumeHisConnectionForTenantService.mockReset();
+  routeMocks.resumeHisConnectionForTenantService.mockResolvedValue({
+    status: 'resumed',
+    dto: { ok: true },
+  });
+  routeMocks.revokeHisConnectionForTenantService.mockReset();
+  routeMocks.revokeHisConnectionForTenantService.mockResolvedValue({
+    status: 'revoked',
+    dto: { ok: true },
+  });
+  routeMocks.softDeleteHisConnectionForTenantService.mockReset();
+  routeMocks.softDeleteHisConnectionForTenantService.mockResolvedValue({
+    status: 'deleted',
     dto: { ok: true },
   });
 });
@@ -681,6 +758,319 @@ describe('机构端 HIS 连接配置只读 API route', () => {
     const seedSource = readFileSync(join(process.cwd(), 'src/server/db/seed-demo-data.ts'), 'utf8');
 
     expect(seedSource).not.toMatch(/hisConnections|his_connections|credentialRef|credential_ref/i);
+  });
+});
+
+describe('机构端 HIS 连接配置 pause / resume 状态 API route', () => {
+  it('pause 成功：使用 manage_status 权限、trim 后 path ID 和 reasonCode，并只返回最小 DTO', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await hisConnectionPausePost(
+      statusRequest({ reasonCode: '  manual_pause  ' }),
+      detailContext('  his_conn_001  '),
+    );
+    const payload = await response.json();
+    const serviceInput = routeMocks.pauseHisConnectionForTenantService.mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({ ok: true });
+    expect(serviceInput).toBeDefined();
+    expect(Object.keys(serviceInput ?? {}).sort()).toEqual(
+      ['accessContext', 'connectionId', 'database', 'reasonCode'].sort(),
+    );
+    expect(serviceInput).toMatchObject({
+      accessContext: tenantContext,
+      connectionId: 'his_conn_001',
+      database: routeMocks.database,
+      reasonCode: 'manual_pause',
+    });
+    expect(JSON.stringify(serviceInput)).not.toContain('other-tenant-should-not-be-trusted');
+    expect(JSON.stringify(serviceInput)).not.toContain('demo-tenant-002');
+    expect(routeMocks.resumeHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.revokeHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.softDeleteHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expectNoHisPrivateData(payload);
+  });
+
+  it('resume 成功：调用 resume service，空 body 与 {} 可通过且不传 reasonCode', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const emptyBodyResponse = await hisConnectionResumePost(
+      statusEmptyBodyRequest(
+        'http://localhost/api/institution/his-connections/his_conn_001/resume?tenantId=demo-tenant-002',
+      ),
+      detailContext('his_conn_001'),
+    );
+    const emptyBodyPayload = await emptyBodyResponse.json();
+    const emptyBodyServiceInput = routeMocks.resumeHisConnectionForTenantService.mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+
+    const emptyObjectResponse = await hisConnectionResumePost(
+      statusRequest(
+        {},
+        'http://localhost/api/institution/his-connections/his_conn_001/resume?tenantId=demo-tenant-002',
+      ),
+      detailContext('his_conn_001'),
+    );
+    const emptyObjectPayload = await emptyObjectResponse.json();
+    const emptyObjectServiceInput = routeMocks.resumeHisConnectionForTenantService.mock.calls[1]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+
+    expect(emptyBodyResponse.status).toBe(200);
+    expect(emptyBodyPayload).toEqual({ ok: true });
+    expect(Object.keys(emptyBodyServiceInput ?? {}).sort()).toEqual(
+      ['accessContext', 'connectionId', 'database'].sort(),
+    );
+    expect(emptyBodyServiceInput).toMatchObject({
+      accessContext: tenantContext,
+      connectionId: 'his_conn_001',
+      database: routeMocks.database,
+    });
+    expect(emptyObjectResponse.status).toBe(200);
+    expect(emptyObjectPayload).toEqual({ ok: true });
+    expect(Object.keys(emptyObjectServiceInput ?? {}).sort()).toEqual(
+      ['accessContext', 'connectionId', 'database'].sort(),
+    );
+    expect(routeMocks.pauseHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.revokeHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.softDeleteHisConnectionForTenantService).not.toHaveBeenCalled();
+    expectNoHisPrivateData(emptyBodyPayload);
+    expectNoHisPrivateData(emptyObjectPayload);
+  });
+
+  it('body tenantId 注入、非白名单字段、非 string reasonCode 和 malformed JSON 返回 validation_failed 且不调用 service', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const bodyTenantResponse = await hisConnectionPausePost(
+      statusRequest({ tenantId: 'demo-tenant-002', reasonCode: 'manual_pause' }),
+      detailContext('his_conn_001'),
+    );
+    const forbiddenFieldResponse = await hisConnectionPausePost(
+      statusRequest({
+        reasonCode: 'manual_pause',
+        credentialRef: 'cred_ref_should_not_echo',
+      }),
+      detailContext('his_conn_001'),
+    );
+    const invalidReasonResponse = await hisConnectionResumePost(
+      statusRequest(
+        { reasonCode: 123 },
+        'http://localhost/api/institution/his-connections/his_conn_001/resume',
+      ),
+      detailContext('his_conn_001'),
+    );
+    const malformedResponse = await hisConnectionPausePost(
+      statusRawRequest('{"reasonCode":"sk_test_should_not_echo"'),
+      detailContext('his_conn_001'),
+    );
+
+    for (const response of [
+      bodyTenantResponse,
+      forbiddenFieldResponse,
+      invalidReasonResponse,
+      malformedResponse,
+    ]) {
+      const payload = await expectValidationFailedResponse(response);
+
+      expect(JSON.stringify(payload)).not.toContain('demo-tenant-002');
+      expect(JSON.stringify(payload)).not.toContain('cred_ref_should_not_echo');
+      expect(JSON.stringify(payload)).not.toContain('sk_test_should_not_echo');
+    }
+    expect(routeMocks.pauseHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.resumeHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+  });
+
+  it('空 connectionId 返回 404，且不读取 access context、不读取 body、不调用 service', async () => {
+    const response = await hisConnectionPausePost(
+      statusRawRequest('{"reasonCode":"malformed"'),
+      detailContext('   '),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      code: 'not_found',
+      error: '记录不存在',
+    });
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.pauseHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.resumeHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('未登录返回 401，无权限返回 403，且均不读取 body 或调用 service', async () => {
+    const unauthorizedResponse = await hisConnectionPausePost(
+      statusRawRequest('{"reasonCode":"malformed"'),
+      detailContext('his_conn_001'),
+    );
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
+    const forbiddenResponse = await hisConnectionResumePost(
+      statusRawRequest('{"reasonCode":"malformed"'),
+      detailContext('his_conn_001'),
+    );
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(platformContext);
+    const platformForbiddenResponse = await hisConnectionPausePost(
+      statusRawRequest('{"reasonCode":"malformed"'),
+      detailContext('his_conn_001'),
+    );
+
+    expect(unauthorizedResponse.status).toBe(401);
+    await expect(unauthorizedResponse.json()).resolves.toEqual({
+      code: 'unauthorized',
+      error: '请先登录',
+    });
+    expect(forbiddenResponse.status).toBe(403);
+    await expect(forbiddenResponse.json()).resolves.toEqual({
+      code: 'forbidden',
+      error: '没有访问权限',
+    });
+    expect(platformForbiddenResponse.status).toBe(403);
+    await expect(platformForbiddenResponse.json()).resolves.toEqual({
+      code: 'forbidden',
+      error: '没有访问权限',
+    });
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.pauseHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.resumeHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+  });
+
+  it('pause / resume 只能使用 open_connection:manage_status，read_own_tenant 或 update 不能作为状态权限', () => {
+    const pauseRouteSource = readFileSync(
+      join(process.cwd(), 'src/app/api/institution/his-connections/[connectionId]/pause/route.ts'),
+      'utf8',
+    );
+    const resumeRouteSource = readFileSync(
+      join(process.cwd(), 'src/app/api/institution/his-connections/[connectionId]/resume/route.ts'),
+      'utf8',
+    );
+    const routeSource = `${pauseRouteSource}\n${resumeRouteSource}`;
+
+    expect(routeSource).toMatch(/resource:\s*'open_connection'/);
+    expect(routeSource).toMatch(/action:\s*'manage_status'/);
+    expect(routeSource).not.toMatch(/action:\s*'read_own_tenant'/);
+    expect(routeSource).not.toMatch(/action:\s*'update'/);
+    expect(routeSource).not.toMatch(/platform_admin.*manage_status|scope:\s*'platform'/);
+  });
+
+  it('service result 映射为稳定 HTTP 响应，且错误响应不泄露敏感信息', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.pauseHisConnectionForTenantService
+      .mockResolvedValueOnce({ status: 'not_found' })
+      .mockResolvedValueOnce({ status: 'conflict' })
+      .mockResolvedValueOnce({ status: 'invalid_transition' })
+      .mockResolvedValueOnce({ status: 'validation_failed' })
+      .mockResolvedValueOnce({ status: 'service_unavailable' });
+
+    const notFoundResponse = await hisConnectionPausePost(statusRequest(), detailContext('his_conn_001'));
+    const conflictResponse = await hisConnectionPausePost(statusRequest(), detailContext('his_conn_001'));
+    const invalidTransitionResponse = await hisConnectionPausePost(
+      statusRequest(),
+      detailContext('his_conn_001'),
+    );
+    const validationResponse = await hisConnectionPausePost(
+      statusRequest(),
+      detailContext('his_conn_001'),
+    );
+    const unavailableResponse = await hisConnectionPausePost(
+      statusRequest(),
+      detailContext('his_conn_001'),
+    );
+
+    expect(notFoundResponse.status).toBe(404);
+    const notFoundPayload = await notFoundResponse.json();
+    expect(notFoundPayload).toEqual({
+      code: 'not_found',
+      error: '记录不存在',
+    });
+    expect(conflictResponse.status).toBe(409);
+    const conflictPayload = await conflictResponse.json();
+    expect(conflictPayload).toEqual({
+      code: 'conflict',
+      error: '当前状态不允许执行该操作',
+    });
+    expect(invalidTransitionResponse.status).toBe(409);
+    const invalidTransitionPayload = await invalidTransitionResponse.json();
+    expect(invalidTransitionPayload).toEqual({
+      code: 'invalid_transition',
+      error: '当前状态不允许执行该操作',
+    });
+    expect(validationResponse.status).toBe(400);
+    const validationPayload = await validationResponse.json();
+    expect(validationPayload).toEqual({
+      code: 'validation_failed',
+      error: '请求格式不正确',
+    });
+    expect(unavailableResponse.status).toBe(503);
+    const unavailablePayload = await unavailableResponse.json();
+    expect(unavailablePayload).toEqual({
+      code: 'service_unavailable',
+      error: '数据服务暂时不可用',
+    });
+    for (const payload of [
+      notFoundPayload,
+      conflictPayload,
+      invalidTransitionPayload,
+      validationPayload,
+      unavailablePayload,
+    ]) {
+      expectNoHisPrivateData(payload);
+    }
+    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+  });
+
+  it('pause / resume route 不调用 fetch、localStorage、真实 HIS、测试连接、凭证处理、摘要、任务或自动触达', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+    const localStorage = {
+      clear: vi.fn(),
+      getItem: vi.fn(),
+      removeItem: vi.fn(),
+      setItem: vi.fn(),
+    };
+    vi.stubGlobal('localStorage', localStorage);
+
+    await hisConnectionPausePost(statusRequest(), detailContext('his_conn_001'));
+    await hisConnectionResumePost(
+      statusRequest(
+        {},
+        'http://localhost/api/institution/his-connections/his_conn_001/resume',
+      ),
+      detailContext('his_conn_001'),
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(localStorage.getItem).not.toHaveBeenCalled();
+    expect(localStorage.setItem).not.toHaveBeenCalled();
+    expect(routeMocks.database.insert).not.toHaveBeenCalled();
+    expect(routeMocks.database.update).not.toHaveBeenCalled();
+    expect(routeMocks.database.delete).not.toHaveBeenCalled();
+    expect(routeMocks.database.transaction).not.toHaveBeenCalled();
+
+    const routeSource = [
+      readFileSync(
+        join(process.cwd(), 'src/app/api/institution/his-connections/[connectionId]/pause/route.ts'),
+        'utf8',
+      ),
+      readFileSync(
+        join(process.cwd(), 'src/app/api/institution/his-connections/[connectionId]/resume/route.ts'),
+        'utf8',
+      ),
+    ].join('\n');
+
+    expect(routeSource).not.toMatch(
+      /fetch\(|localStorage|真实 HIS|测试连接|机构系统|企微|\bAI\b|\bRAG\b|\bAgent\b|自动触达|treatmentSummary|treatment-summary|followUp|follow-up|follow_up|credentialRef|credentialConfigured|rawPayload|requestBody|responseBody|DATABASE_URL|select \* from|SQL|stack/i,
+    );
+
+    fetchSpy.mockRestore();
+    vi.unstubAllGlobals();
   });
 });
 
