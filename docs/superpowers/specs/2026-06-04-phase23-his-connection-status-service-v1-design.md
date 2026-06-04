@@ -230,9 +230,9 @@ audit metadata 如需记录操作种类，应先评估是否需要安全短字�
 | repository result | service result | denied reason 规划 | 说明 |
 | --- | --- | --- | --- |
 | `not_found` | `not_found` | `not_found_or_not_owned` | 不存在、跨租户、已删除统一不可见。 |
-| `conflict` | `conflict` | 待评估 | 当前 PR 不新增 reason；后续可评估复用或新增状态冲突 reason。 |
+| `conflict` | `conflict` | `invalid_transition` | 状态 API 中 conflict 本质为当前状态不适合重复或继续执行该生命周期动作，v1 先复用既有 `invalid_transition`，不新增 status conflict reason。 |
 | `invalid_state_transition` | `invalid_transition` | `invalid_transition` | repository 结果命名与 service 结果命名需要映射。 |
-| `validation_failed` | `validation_failed` | 待评估 | 可先规划复用 `invalid_his_connection_payload`，或后续补强专用 reason。 |
+| `validation_failed` | `validation_failed` | `invalid_his_connection_payload` | 状态 service 只接收安全解析后的 path / reasonCode / access context；validation failed 复用既有 HIS payload / input 非法 reason，不记录 payload 原文。 |
 
 额外约束：
 
@@ -241,6 +241,7 @@ audit metadata 如需记录操作种类，应先评估是否需要安全短字�
 - route 权限拒绝的 denied audit 不由状态 service 负责，应由 route / access layer 按权限决策写入。
 - parser 失败的 denied audit 是否进入 route 层，需要后续 route PR 独立确认。
 - 当前 PR 不新增 audit action、reason、query whitelist 或 audit repository。
+- 状态 service audit reason 映射已由 `docs/superpowers/specs/2026-06-04-phase23-his-connection-status-service-audit-reason-v1-design.md` 收敛；如果后续产品需要区分“重复动作冲突”和“非法流转”，再单独进入 audit reason / query whitelist 增强 PR。
 
 ## service result 规划
 
@@ -341,9 +342,9 @@ revoke 不处理凭证撤销：
 - revoke 成功：调用 `revokeHisConnectionForTenant`，写 `manage_status` allowed audit，不处理凭证撤销。
 - delete 成功：调用 `softDeleteHisConnectionForTenant`，写 `delete` allowed audit，只 softDelete。
 - `not_found`：返回稳定 not found，并写 `not_found_or_not_owned` denied audit。
-- `conflict`：返回稳定 conflict，reason 是否复用或新增在后续实现前确认。
+- `conflict`：返回稳定 conflict，并写 `invalid_transition` denied audit。
 - `invalid_state_transition`：映射为 `invalid_transition`，HTTP 规划为 409。
-- `validation_failed`：返回稳定 validation failed，reason 可评估 `invalid_his_connection_payload` 或后续补强。
+- `validation_failed`：返回稳定 validation failed，并写 `invalid_his_connection_payload` denied audit。
 - repository thrown error：返回 `service_unavailable`，不写包含异常细节的 audit。
 - audit 写入失败：返回 `service_unavailable`。
 - 缺失 `tenantId`：返回 `validation_failed`，不调用 repository。
@@ -384,7 +385,7 @@ revoke 不处理凭证撤销：
 - [x] 明确 repository 写入与 allowed / denied audit 同事务。
 - [x] 明确 audit 失败和 repository thrown error 返回 `service_unavailable`。
 - [x] 明确 allowed audit 使用 `manage_status` 与 `delete`。
-- [x] 明确 denied audit 的 not found、invalid transition 和待评估 reason 边界。
+- [x] 明确 denied audit 的 not found、conflict、invalid transition 和 validation failed reason 边界。
 - [x] 明确 service result 与 HTTP 映射参考。
 - [x] 明确成功响应只返回 `{ ok: true }`。
 - [x] 明确 revoke 不处理凭证撤销。
