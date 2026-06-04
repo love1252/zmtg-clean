@@ -121,6 +121,47 @@ function expectNoPrivateWriteData(payload: unknown) {
   );
 }
 
+function expectNoSensitiveAuditData(event: unknown) {
+  const serialized = JSON.stringify(event);
+
+  expect(serialized).not.toMatch(
+    /requestBody|request_body|responseBody|response_body|credentialRef|credentialConfigured|token|secret|apiKey|api_key|oauth|basicAuth|basic_auth|signingKey|signing_key|privateKey|private_key|connectionString|connection_string|rawPayload|raw_payload|raw HIS payload|DATABASE_URL|postgres:\/\/|select \* from|SQL|stack|constraint|index|冲突行详情|完整病历|完整治疗正文|咨询全文|图片 \/ 文件原文/i,
+  );
+}
+
+function expectDeniedAuditEvent(
+  event: unknown,
+  input: {
+    action: 'create' | 'update';
+    reason:
+      | 'invalid_his_connection_payload'
+      | 'his_connection_name_conflict'
+      | 'not_found_or_not_owned';
+    resourceId?: string;
+  },
+) {
+  expect(event).toMatchObject({
+    actorId: 'demo-user-admin',
+    actorRole: 'tenant_admin',
+    tenantId: 'demo-tenant-001',
+    scope: 'tenant',
+    source: 'demo_session',
+    resource: 'open_connection',
+    action: input.action,
+    result: 'denied',
+    reason: input.reason,
+    occurredAt: expect.any(String),
+  });
+
+  if (input.resourceId === undefined) {
+    expect(event).not.toHaveProperty('resourceId');
+  } else {
+    expect(event).toMatchObject({ resourceId: input.resourceId });
+  }
+
+  expectNoSensitiveAuditData(event);
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -267,32 +308,80 @@ describe('HIS 连接配置写入 service', () => {
     });
   });
 
-  it('稳定映射 repository validation_failed、conflict 和 not_found 结果', async () => {
-    const validationHarness = createServiceHarness({
+  it('repository 非 ok 结果在同一事务中写 denied audit，并返回原有稳定结果', async () => {
+    const createValidationHarness = createServiceHarness({
       createResult: { status: 'validation_failed' },
     });
-    const conflictHarness = createServiceHarness({ createResult: { status: 'conflict' } });
+    const createConflictHarness = createServiceHarness({ createResult: { status: 'conflict' } });
+    const updateValidationHarness = createServiceHarness({
+      updateResult: { status: 'validation_failed' },
+    });
+    const updateConflictHarness = createServiceHarness({ updateResult: { status: 'conflict' } });
     const notFoundHarness = createServiceHarness({ updateResult: { status: 'not_found' } });
 
     await expect(
       createHisConnectionForTenantService({
         accessContext,
-        database: validationHarness.database,
+        database: createValidationHarness.database,
         metadata: createMetadata,
-        hisConnectionRepositoryFactory: validationHarness.hisConnectionRepositoryFactory,
-        auditEventRepositoryFactory: validationHarness.auditEventRepositoryFactory,
+        hisConnectionRepositoryFactory: createValidationHarness.hisConnectionRepositoryFactory,
+        auditEventRepositoryFactory: createValidationHarness.auditEventRepositoryFactory,
       }),
     ).resolves.toEqual({ status: 'validation_failed' });
+    expect(createValidationHarness.auditRepository.record).toHaveBeenCalledTimes(1);
+    expectDeniedAuditEvent(createValidationHarness.auditRepository.record.mock.calls[0]?.[0], {
+      action: 'create',
+      reason: 'invalid_his_connection_payload',
+    });
 
     await expect(
       createHisConnectionForTenantService({
         accessContext,
-        database: conflictHarness.database,
+        database: createConflictHarness.database,
         metadata: createMetadata,
-        hisConnectionRepositoryFactory: conflictHarness.hisConnectionRepositoryFactory,
-        auditEventRepositoryFactory: conflictHarness.auditEventRepositoryFactory,
+        hisConnectionRepositoryFactory: createConflictHarness.hisConnectionRepositoryFactory,
+        auditEventRepositoryFactory: createConflictHarness.auditEventRepositoryFactory,
       }),
     ).resolves.toEqual({ status: 'conflict' });
+    expect(createConflictHarness.auditRepository.record).toHaveBeenCalledTimes(1);
+    expectDeniedAuditEvent(createConflictHarness.auditRepository.record.mock.calls[0]?.[0], {
+      action: 'create',
+      reason: 'his_connection_name_conflict',
+    });
+
+    await expect(
+      updateHisConnectionForTenantService({
+        accessContext,
+        connectionId: 'his_conn_invalid',
+        database: updateValidationHarness.database,
+        metadata: updateMetadata,
+        hisConnectionRepositoryFactory: updateValidationHarness.hisConnectionRepositoryFactory,
+        auditEventRepositoryFactory: updateValidationHarness.auditEventRepositoryFactory,
+      }),
+    ).resolves.toEqual({ status: 'validation_failed' });
+    expect(updateValidationHarness.auditRepository.record).toHaveBeenCalledTimes(1);
+    expectDeniedAuditEvent(updateValidationHarness.auditRepository.record.mock.calls[0]?.[0], {
+      action: 'update',
+      reason: 'invalid_his_connection_payload',
+      resourceId: 'his_conn_invalid',
+    });
+
+    await expect(
+      updateHisConnectionForTenantService({
+        accessContext,
+        connectionId: 'his_conn_conflict',
+        database: updateConflictHarness.database,
+        metadata: updateMetadata,
+        hisConnectionRepositoryFactory: updateConflictHarness.hisConnectionRepositoryFactory,
+        auditEventRepositoryFactory: updateConflictHarness.auditEventRepositoryFactory,
+      }),
+    ).resolves.toEqual({ status: 'conflict' });
+    expect(updateConflictHarness.auditRepository.record).toHaveBeenCalledTimes(1);
+    expectDeniedAuditEvent(updateConflictHarness.auditRepository.record.mock.calls[0]?.[0], {
+      action: 'update',
+      reason: 'his_connection_name_conflict',
+      resourceId: 'his_conn_conflict',
+    });
 
     await expect(
       updateHisConnectionForTenantService({
@@ -304,6 +393,12 @@ describe('HIS 连接配置写入 service', () => {
         auditEventRepositoryFactory: notFoundHarness.auditEventRepositoryFactory,
       }),
     ).resolves.toEqual({ status: 'not_found' });
+    expect(notFoundHarness.auditRepository.record).toHaveBeenCalledTimes(1);
+    expectDeniedAuditEvent(notFoundHarness.auditRepository.record.mock.calls[0]?.[0], {
+      action: 'update',
+      reason: 'not_found_or_not_owned',
+      resourceId: 'his_conn_missing',
+    });
   });
 
   it('repository thrown error 映射为 service_unavailable，且不泄露内部异常', async () => {
@@ -326,11 +421,15 @@ describe('HIS 连接配置写入 service', () => {
     expect(harness.auditRepository.record).not.toHaveBeenCalled();
   });
 
-  it('audit 失败时 create / update 返回 service_unavailable，且不返回业务成功', async () => {
+  it('audit 失败时 create / update 返回 service_unavailable，且不返回业务成功或原失败结果', async () => {
     const createHarness = createServiceHarness({
       auditError: new Error('audit insert failed DATABASE_URL stack'),
     });
     const updateHarness = createServiceHarness({
+      auditError: new Error('audit insert failed DATABASE_URL stack'),
+    });
+    const deniedHarness = createServiceHarness({
+      createResult: { status: 'conflict' },
       auditError: new Error('audit insert failed DATABASE_URL stack'),
     });
 
@@ -353,6 +452,23 @@ describe('HIS 连接配置写入 service', () => {
         auditEventRepositoryFactory: updateHarness.auditEventRepositoryFactory,
       }),
     ).resolves.toEqual({ status: 'service_unavailable' });
+    await expect(
+      createHisConnectionForTenantService({
+        accessContext,
+        database: deniedHarness.database,
+        metadata: createMetadata,
+        hisConnectionRepositoryFactory: deniedHarness.hisConnectionRepositoryFactory,
+        auditEventRepositoryFactory: deniedHarness.auditEventRepositoryFactory,
+      }),
+    ).resolves.toEqual({ status: 'service_unavailable' });
+    expect(deniedHarness.auditRepository.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resource: 'open_connection',
+        action: 'create',
+        result: 'denied',
+        reason: 'his_connection_name_conflict',
+      }),
+    );
   });
 
   it('service 不调用 fetch、localStorage、真实 HIS、治疗摘要、随访任务或自动触达', async () => {
