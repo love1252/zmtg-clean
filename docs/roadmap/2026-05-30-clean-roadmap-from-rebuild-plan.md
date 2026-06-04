@@ -54,6 +54,7 @@
 - Phase 23 HIS 连接配置审计 reason 补强 Plan Mode 已完成：docs-only 规划后续 create / update 失败路径 reason，评估 `invalid_his_connection_payload`、`his_connection_name_conflict`、`invalid_his_connection_repository_result` 和 `not_found_or_not_owned` 复用边界；当前仍未修改 audit domain / reason、未实现 denied audit、未新增 API route。
 - Phase 23 HIS 连接配置审计 reason 与 service denied audit 最小接入已完成：已补强 `invalid_his_connection_payload`、`his_connection_name_conflict` 并复用 `not_found_or_not_owned`，service 已覆盖 repository 失败路径 denied audit；当前仍未新增 API route、未处理凭证或真实 HIS adapter。
 - Phase 23 HIS 连接配置创建更新 API route Plan Mode 已完成：docs-only 规划后续 `POST /api/institution/his-connections` 与 `PATCH /api/institution/his-connections/[connectionId]` 的 access context、权限、parser、service 映射、route denied audit、DTO 和测试边界；当前仍未新增 API route、未修改 `src/**`、未处理凭证或真实 HIS adapter。
+- Phase 23 HIS 连接配置状态 API Plan Mode 已完成：docs-only 规划后续 pause / resume / revoke / delete API 的路径、可信输入、权限边界、状态流转、service 边界、审计边界、DTO 最小化和测试拆分；当前仍未新增状态 API route、未修改 `src/**`、未处理凭证、测试连接或真实 HIS adapter。
 - 开放平台治理第一阶段：API Key、OAuth、Webhook 和审计的治理词汇、生命周期和安全边界展示。
 
 当前主要缺口：
@@ -123,6 +124,7 @@
 - Phase 23 HIS 连接配置写入 service 最小实现和审计 reason Plan Mode：service 已最小实现 create / update 事务编排与成功 allowed audit；审计 reason 补强已规划 payload 非法、连接名冲突、repository validation_failed 和 not found 复用边界；API route、route 层 denied audit、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
 - Phase 23 HIS 连接配置审计 reason 与 service denied audit：已最小补强 reason 并接入 service repository 失败路径 denied audit；route 层权限拒绝、parser 失败、HTTP 映射和 API route 测试仍需后续独立 PR，不处理凭证、测试连接或真实 adapter。
 - Phase 23 HIS 连接配置创建更新 API route Plan Mode：已完成 docs-only spec / plan，明确后续 POST / PATCH route 的 access context、权限判断、parser、service result 映射、route denied audit、DTO 和错误响应边界；API route 实现、route tests、状态流转 API、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
+- Phase 23 HIS 连接配置状态 API Plan Mode：已完成 docs-only spec / plan，明确后续 pause / resume / revoke / delete API 路径、可信输入、权限边界、状态流转、service 边界、审计边界、DTO 最小化和测试拆分；状态 API 权限、service、route、route tests、审计补强、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
 - 治疗摘要编辑能力 v1：编辑 payload parser、`treatment_summary:update` 最小权限、tenant-scoped repository update、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端受控编辑 UI、成功刷新列表 / 详情、失败保留输入、审计和入口 smoke。
 - 治疗项目路径模板 v1：首批光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理的 domain-only catalog，确定性随访建议接入模板，机构端轻量展示路径类型 / 建议处理角色 / 人工确认边界，人工确认来源任务、重复治理、作废阻断和 smoke / 文档收尾。
 - 随访路径运营分析 v1：基于治疗摘要、路径模板建议、来源随访任务、任务状态和审计记录的最小聚合口径、审计关联补强、机构端只读 API、轻量指标展示和 workspace smoke / 文档收尾。
@@ -282,3 +284,4 @@ Phase 5 的成功标准：
 - Phase 23 HIS 连接配置状态流转 repository 最小实现已完成：新增 repository pause / resume / revoke / softDelete 最小状态流转能力和测试；仍不新增 API、不写审计、不改 schema / migration、不改权限 / 认证 / 租户隔离，不处理凭证、不做测试连接、不接真实 HIS、不修改 demo seed。
 - Phase 23 HIS 连接配置 repository 写入闭环收尾已完成：docs-only 确认 repository 写入方法、现有测试覆盖、数据最小化、状态边界和 API / service 前置事项；仍不新增 API、不新增 repository 方法、不改生产 repository、不写审计、不处理凭证、不做测试连接、不接真实 HIS、不修改 demo seed。
 - Phase 23 HIS 连接配置创建更新 API route Plan Mode 已完成：新增 spec / plan 文档，只规划后续 `POST /api/institution/his-connections` 和 `PATCH /api/institution/his-connections/[connectionId]` 的服务端 access context、写入权限、parser、service result 映射、route denied audit、DTO 和测试边界；仍不新增 API、不修改 `src/**`、不处理凭证、不做测试连接、不接真实 HIS、不修改 demo seed。
+- Phase 23 HIS 连接配置状态 API Plan Mode 已完成：新增 spec / plan 文档，只规划后续 pause / resume / revoke / delete API 的路径、可信输入、权限边界、状态流转、service 边界、审计边界、DTO 最小化和测试拆分；仍不新增 API、不修改 `src/**`、不处理凭证、不做测试连接、不接真实 HIS、不修改 demo seed。
