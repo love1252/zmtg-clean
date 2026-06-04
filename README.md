@@ -53,6 +53,8 @@
 - Phase 23 Plan Mode：HIS 连接配置写入 service v1 已完成规划，明确后续 create / update service 的可信输入、事务边界、repository 结果映射、审计写入边界、DTO 最小化和 API 错误响应；当前 PR 仅文档，不写 service 代码、不新增 API route、不改 parser / repository / 权限 / schema / migration，不写审计实现、不处理凭证、不做测试连接、不接真实 HIS
 - Phase 23 PR G：HIS 连接配置写入 service 最小实现已完成，新增 `createHisConnectionForTenantService` / `updateHisConnectionForTenantService`，在事务内编排 repository 写入和成功 allowed audit，返回 `{ ok: true }` 最小 DTO；本阶段不新增 API route、不改 parser / repository / 权限 / schema / migration，不实现 denied audit、不处理凭证、不做测试连接、不接真实 HIS
 - Phase 23 Plan Mode：HIS 连接配置审计 reason 补强已进入规划，评估 `invalid_his_connection_payload`、`his_connection_name_conflict`、`invalid_his_connection_repository_result` 与 `not_found_or_not_owned` 复用边界；当前 PR 仅文档，不修改 `src/**`，不修改 audit domain / reason，不实现 denied audit，不新增 API route，不改 service
+- Phase 23 PR H：HIS 连接配置写入 service denied audit 最小接入已完成，service 已在 repository `validation_failed`、`conflict` 和 update `not_found` 失败路径写安全 denied audit，并继续保持成功 `{ ok: true }` 与 allowed audit；本阶段不新增 API route、不改 parser / repository / 权限 / audit domain / schema / migration，不处理凭证、不做测试连接、不接真实 HIS
+- Phase 23 Plan Mode：HIS 连接配置创建更新 API route 已完成规划，明确后续 `POST /api/institution/his-connections` 与 `PATCH /api/institution/his-connections/[connectionId]` 的 access context、权限、parser、service 映射、route denied audit、DTO 和测试边界；当前 PR 仅文档，不新增 API、不修改 `src/**`、不处理凭证、不做测试连接、不接真实 HIS
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -233,7 +235,9 @@ Phase 22 HIS 标准治疗事件 mapper v1 当前状态：
 - Phase 23 HIS 连接配置写入权限 v1 Plan Mode 和权限模型最小实现已完成：`tenant_admin` 已具备 `open_connection:create` 与 `open_connection:update`，并保留 `open_connection:read_own_tenant`；普通机构人员、顾问、客服、平台角色和审计角色仍默认不具备 create / update，平台代管写入不进入 v1；仍不新增 API、不改 route / service / repository / parser / schema / migration、不写审计、不接真实 HIS
 - Phase 23 HIS 连接配置写入 service v1 Plan Mode 和最小实现已完成：当前 create / update service 只接收 access context、path `connectionId` 和 parser 输出，在事务内编排 repository 写入和成功 allowed audit，并返回 `{ ok: true }`；denied audit reason 补强、API route、凭证管理、测试连接和真实 HIS adapter 均需后续独立 PR
 - Phase 23 HIS 连接配置审计 reason 补强 Plan Mode 已完成规划：当前仅规划后续 create / update 失败路径 reason，明确权限拒绝复用 access decision reason、目标不可见优先复用 `not_found_or_not_owned`，并评估 HIS 专用 payload / conflict / repository validation reason；仍不修改 `src/**`、不修改 audit domain / reason、不实现 denied audit、不新增 API
-- 后续如需 adapter spec / plan、create / update service 最小实现、create / update API route 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
+- Phase 23 HIS 连接配置审计 reason 与 service denied audit 最小接入已完成：新增并复用安全 reason 后，service 已覆盖 repository `validation_failed`、`conflict` 和 update `not_found` 的 denied audit，route 层仍待单独接入权限拒绝与 parser 失败 audit；仍不新增 API、不处理凭证、不做测试连接、不接真实 HIS
+- Phase 23 HIS 连接配置创建更新 API route Plan Mode 已完成：当前仅规划后续 POST / PATCH route 接入顺序、`tenantId` 可信来源、权限判断、parser 边界、service result 到 HTTP 映射、route denied audit、DTO 最小化和 route 测试；仍不新增 API、不修改 `src/**`、不处理凭证、不做测试连接、不接真实 HIS
+- 后续如需 adapter spec / plan、create / update API route 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
 
 后续阶段会依次加入：
 
