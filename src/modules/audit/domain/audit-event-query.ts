@@ -33,6 +33,8 @@ export const AUDIT_REASON_VALUES = [
   'invalid_transition',
   'stale_transition',
   'not_found_or_not_owned',
+  'invalid_his_connection_payload',
+  'his_connection_name_conflict',
   'invalid_treatment_summary_reference',
   'invalid_treatment_summary_payload',
   'treatment_summary_voided',
