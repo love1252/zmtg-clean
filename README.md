@@ -49,6 +49,8 @@
 - Phase 23 Plan Mode：HIS 连接配置 create / update API v1 已完成规划，明确未来 HTTP 载荷解析器、权限判断、服务层事务、审计写入、DTO 数据最小化、API 错误映射和 create / update API 测试；当前 PR 仅文档，不新增 API、不改 route / service / repository / schema / migration / 权限 / 认证 / 租户隔离，不处理凭证、不做测试连接、不接真实 HIS、不返回 `credentialRef`、raw payload 或真实凭证
 - Phase 23 PR E：HIS 连接配置写入 payload parser / DTO helper 已完成，新增 `parseCreateHisConnectionInput`、`parseUpdateHisConnectionInput` 和最小 DTO helper；create / update 只接受 `connectionName`、`sourceSystem`、`vendorType`、`systemType`，拒绝 `tenantId`、状态、凭证、raw payload、SQL、stack 和 `DATABASE_URL`；本阶段不新增 API、不改 route / service / repository / schema / migration / 权限 / 认证 / 租户隔离，不写审计、不处理凭证、不做测试连接、不接真实 HIS
 - Phase 23 Plan Mode：HIS 连接配置写入权限 v1 已完成规划，明确当前 `tenant_admin` 只有 `open_connection:read_own_tenant`，不得复用只读权限放行 create / update，后续应单独评审 `open_connection:create` 和 `open_connection:update`；当前 PR 仅文档，不修改权限实现、不新增 API、不改 parser / repository / schema / migration，不写审计、不处理凭证、不做测试连接、不接真实 HIS
+- Phase 23 PR F：HIS 连接配置写入权限模型最小实现已完成，`tenant_admin` 已具备 `open_connection:create` / `open_connection:update`，并保留 `open_connection:read_own_tenant`；其他机构普通角色、平台角色和审计角色仍默认拒绝写入，缺失 tenantId 与跨租户 targetTenantId 继续拒绝；本阶段不新增 API、不改 route / service / repository / parser / schema / migration，不写审计、不处理凭证、不做测试连接、不接真实 HIS
+- Phase 23 Plan Mode：HIS 连接配置写入 service v1 已完成规划，明确后续 create / update service 的可信输入、事务边界、repository 结果映射、审计写入边界、DTO 最小化和 API 错误响应；当前 PR 仅文档，不写 service 代码、不新增 API route、不改 parser / repository / 权限 / schema / migration，不写审计实现、不处理凭证、不做测试连接、不接真实 HIS
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -226,8 +228,9 @@ Phase 22 HIS 标准治疗事件 mapper v1 当前状态：
 - Phase 23 HIS 连接配置 repository 写入闭环收尾已完成：当前仅同步文档，确认 PR #126 / #127 已覆盖 create / update / pause / resume / revoke / softDelete、可信 `tenantId` 绑定、软删除不可见、安全 read model、敏感字段拒绝、无外部调用、无治疗摘要 / 随访任务 / 自动触达和 demo seed 不修改；下一步 API / service 接入前必须单独处理 HTTP payload parser、权限判断、API 错误映射、审计写入、service 层事务边界和 DTO 数据最小化
 - Phase 23 HIS 连接配置 create / update API v1 Plan Mode 已完成：当前仅规划后续 create / update API 接入前的 HTTP 载荷解析器、权限判断、服务层事务、审计写入、DTO 数据最小化、错误映射和测试；create / update 只处理 `connectionName`、`sourceSystem`、`vendorType`、`systemType`，`tenantId` 只来自服务端 access context，仍不新增 API、不改 route / service / repository / schema / 权限 / 审计实现、不处理凭证、不做测试连接、不接真实 HIS、不修改 demo seed
 - Phase 23 HIS 连接配置写入 payload parser / DTO helper 已完成：当前仅新增 create / update HTTP payload parser、最小 DTO helper 和 parser 单元测试；create 四个安全元数据字段全部必填，update 允许四个字段非空子集，DTO helper 只返回四个安全元数据字段；仍不新增 API、不改 route / service / repository / schema / 权限 / 审计实现、不处理凭证、不做测试连接、不接真实 HIS、不修改 demo seed
-- Phase 23 HIS 连接配置写入权限 v1 Plan Mode 已完成：当前仅规划后续 create / update API 所需写入权限，明确 `open_connection:read_own_tenant` 不得放行写入，后续应评审 `open_connection:create` 与 `open_connection:update`，普通机构人员、顾问、客服、平台代管写入默认不进入 v1；仍不修改权限实现、不新增 API、不改 parser / repository / schema / migration、不写审计、不接真实 HIS
-- 后续如需 adapter spec / plan、写入权限模型实现、create / update API 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
+- Phase 23 HIS 连接配置写入权限 v1 Plan Mode 和权限模型最小实现已完成：`tenant_admin` 已具备 `open_connection:create` 与 `open_connection:update`，并保留 `open_connection:read_own_tenant`；普通机构人员、顾问、客服、平台角色和审计角色仍默认不具备 create / update，平台代管写入不进入 v1；仍不新增 API、不改 route / service / repository / parser / schema / migration、不写审计、不接真实 HIS
+- Phase 23 HIS 连接配置写入 service v1 Plan Mode 已完成：当前仅规划后续 create / update service 层事务、repository 结果映射、审计写入边界、DTO 最小化和 API 错误响应；service 输入只来自 access context、path `connectionId` 和 parser 输出，仍不写 service 代码、不新增 API、不处理凭证、不做测试连接、不接真实 HIS
+- 后续如需 adapter spec / plan、create / update service 最小实现、create / update API route 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
 
 后续阶段会依次加入：
 
