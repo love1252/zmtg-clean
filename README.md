@@ -56,6 +56,7 @@
 - Phase 23 PR H：HIS 连接配置写入 service denied audit 最小接入已完成，service 已在 repository `validation_failed`、`conflict` 和 update `not_found` 失败路径写安全 denied audit，并继续保持成功 `{ ok: true }` 与 allowed audit；本阶段不新增 API route、不改 parser / repository / 权限 / audit domain / schema / migration，不处理凭证、不做测试连接、不接真实 HIS
 - Phase 23 Plan Mode：HIS 连接配置创建更新 API route 已完成规划，明确后续 `POST /api/institution/his-connections` 与 `PATCH /api/institution/his-connections/[connectionId]` 的 access context、权限、parser、service 映射、route denied audit、DTO 和测试边界；当前 PR 仅文档，不新增 API、不修改 `src/**`、不处理凭证、不做测试连接、不接真实 HIS
 - Phase 23 Plan Mode：HIS 连接配置状态 API 已完成规划，明确后续 pause / resume / revoke / delete 的路径、可信输入、权限边界、状态流转、service 边界、审计边界、DTO 最小化和测试拆分；当前 PR 仅文档，不新增 API、不修改 `src/**`、不处理凭证、不做测试连接、不接真实 HIS
+- Phase 23 Plan Mode：HIS 连接配置状态权限已完成规划，明确 v1 推荐 pause / resume / revoke 使用 `open_connection:manage_status`、delete / softDelete 使用 `open_connection:delete`，默认仅 `tenant_admin` 可写，其他机构角色、平台角色和审计角色默认拒绝；当前 PR 仅文档，不新增 API、不修改 `src/**`、不修改权限实现、不处理凭证、不做测试连接、不接真实 HIS
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -239,6 +240,7 @@ Phase 22 HIS 标准治疗事件 mapper v1 当前状态：
 - Phase 23 HIS 连接配置审计 reason 与 service denied audit 最小接入已完成：新增并复用安全 reason 后，service 已覆盖 repository `validation_failed`、`conflict` 和 update `not_found` 的 denied audit，route 层仍待单独接入权限拒绝与 parser 失败 audit；仍不新增 API、不处理凭证、不做测试连接、不接真实 HIS
 - Phase 23 HIS 连接配置创建更新 API route Plan Mode 已完成：当前仅规划后续 POST / PATCH route 接入顺序、`tenantId` 可信来源、权限判断、parser 边界、service result 到 HTTP 映射、route denied audit、DTO 最小化和 route 测试；仍不新增 API、不修改 `src/**`、不处理凭证、不做测试连接、不接真实 HIS
 - Phase 23 HIS 连接配置状态 API Plan Mode 已完成：当前仅规划后续 pause / resume / revoke / delete API 的路径、可信输入、权限边界、状态流转、service 边界、审计边界、DTO 最小化和测试拆分；仍不新增 API、不修改 `src/**`、不处理凭证、不做测试连接、不接真实 HIS
+- Phase 23 HIS 连接配置状态权限 Plan Mode 已完成：当前仅规划后续状态 API 权限，推荐 v1 使用 `open_connection:manage_status` 承载 pause / resume / revoke，使用 `open_connection:delete` 承载 delete / softDelete；`tenant_admin` 为唯一默认授权角色，普通机构角色、平台角色和审计角色默认拒绝，平台代管写入不进入 v1；仍不新增 API、不修改 `src/**`、不修改权限实现或 audit domain，不处理凭证、不做测试连接、不接真实 HIS
 - 后续如需 adapter spec / plan、create / update API route 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
 
 后续阶段会依次加入：
