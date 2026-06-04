@@ -2,8 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { GET as hisConnectionDetailGet } from '@/app/api/institution/his-connections/[connectionId]/route';
-import { GET as hisConnectionListGet } from '@/app/api/institution/his-connections/route';
+import {
+  GET as hisConnectionDetailGet,
+  PATCH as hisConnectionUpdatePatch,
+} from '@/app/api/institution/his-connections/[connectionId]/route';
+import {
+  GET as hisConnectionListGet,
+  POST as hisConnectionCreatePost,
+} from '@/app/api/institution/his-connections/route';
 import type { HisConnectionReadModel } from '@/modules/institution/server/his-connection-repository';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
@@ -20,11 +26,13 @@ const routeMocks = vi.hoisted(() => {
   };
 
   return {
+    createHisConnectionForTenantService: vi.fn(),
     createHisConnectionRepository: vi.fn(() => hisConnectionRepository),
     database,
     getDatabase: vi.fn(),
     getDemoAccessContextFromRequest: vi.fn(),
     hisConnectionRepository,
+    updateHisConnectionForTenantService: vi.fn(),
   };
 });
 
@@ -51,6 +59,17 @@ vi.mock('@/modules/institution/server/his-connection-repository', async (importO
   return {
     ...actual,
     createHisConnectionRepository: routeMocks.createHisConnectionRepository,
+  };
+});
+
+vi.mock('@/modules/institution/server/his-connection-write-service', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@/modules/institution/server/his-connection-write-service')
+  >();
+  return {
+    ...actual,
+    createHisConnectionForTenantService: routeMocks.createHisConnectionForTenantService,
+    updateHisConnectionForTenantService: routeMocks.updateHisConnectionForTenantService,
   };
 });
 
@@ -116,6 +135,18 @@ const deletedHisConnectionRecord = {
   deletedAt: '2026-06-03T09:00:00.000Z',
 } satisfies HisConnectionReadModel;
 
+const validCreatePayload = {
+  connectionName: '  星澜 HIS 写入连接  ',
+  sourceSystem: '  his  ',
+  vendorType: '  demo_vendor  ',
+  systemType: '  his  ',
+};
+
+const validUpdatePayload = {
+  connectionName: '  星澜 HIS 写入连接更新  ',
+  sourceSystem: '  clinic_his  ',
+};
+
 function listRequest(url = 'http://localhost/api/institution/his-connections') {
   return new Request(url, {
     method: 'GET',
@@ -123,6 +154,32 @@ function listRequest(url = 'http://localhost/api/institution/his-connections') {
       'x-tenant-id': 'other-tenant-should-not-be-trusted',
       'x-his-tenant-id': 'other-his-tenant-should-not-be-trusted',
     },
+  });
+}
+
+function createRequest(
+  payload: unknown = validCreatePayload,
+  url = 'http://localhost/api/institution/his-connections?tenantId=demo-tenant-002',
+) {
+  return new Request(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-tenant-id': 'other-tenant-should-not-be-trusted',
+      'x-his-tenant-id': 'other-his-tenant-should-not-be-trusted',
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+function createRawRequest(rawBody: string) {
+  return new Request('http://localhost/api/institution/his-connections', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-tenant-id': 'other-tenant-should-not-be-trusted',
+    },
+    body: rawBody,
   });
 }
 
@@ -135,6 +192,32 @@ function detailRequest(
       'x-tenant-id': 'other-tenant-should-not-be-trusted',
       'x-his-tenant-id': 'other-his-tenant-should-not-be-trusted',
     },
+  });
+}
+
+function updateRequest(
+  payload: unknown = validUpdatePayload,
+  url = 'http://localhost/api/institution/his-connections/his_conn_001?tenantId=demo-tenant-002',
+) {
+  return new Request(url, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      'x-tenant-id': 'other-tenant-should-not-be-trusted',
+      'x-his-tenant-id': 'other-his-tenant-should-not-be-trusted',
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+function updateRawRequest(rawBody: string) {
+  return new Request('http://localhost/api/institution/his-connections/his_conn_001', {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      'x-tenant-id': 'other-tenant-should-not-be-trusted',
+    },
+    body: rawBody,
   });
 }
 
@@ -174,6 +257,11 @@ beforeEach(() => {
   routeMocks.database.update.mockReset();
   routeMocks.getDemoAccessContextFromRequest.mockReset();
   routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
+  routeMocks.createHisConnectionForTenantService.mockReset();
+  routeMocks.createHisConnectionForTenantService.mockResolvedValue({
+    status: 'created',
+    dto: { ok: true },
+  });
   routeMocks.createHisConnectionRepository.mockClear();
   routeMocks.hisConnectionRepository.getHisConnectionByTenant.mockReset();
   routeMocks.hisConnectionRepository.getHisConnectionByTenant.mockResolvedValue(hisConnectionRecord);
@@ -182,6 +270,11 @@ beforeEach(() => {
     hisConnectionRecord,
     draftHisConnectionRecord,
   ]);
+  routeMocks.updateHisConnectionForTenantService.mockReset();
+  routeMocks.updateHisConnectionForTenantService.mockResolvedValue({
+    status: 'updated',
+    dto: { ok: true },
+  });
 });
 
 describe('机构端 HIS 连接配置只读 API route', () => {
@@ -463,5 +556,223 @@ describe('机构端 HIS 连接配置只读 API route', () => {
     const seedSource = readFileSync(join(process.cwd(), 'src/server/db/seed-demo-data.ts'), 'utf8');
 
     expect(seedSource).not.toMatch(/hisConnections|his_connections|credentialRef|credential_ref/i);
+  });
+});
+
+describe('机构端 HIS 连接配置创建更新 API route', () => {
+  it('create API 使用写入权限、parser 输出和 access context 租户，并只返回最小成功 DTO', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await hisConnectionCreatePost(createRequest());
+    const payload = await response.json();
+    const serviceInput = routeMocks.createHisConnectionForTenantService.mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+
+    expect(response.status).toBe(201);
+    expect(payload).toEqual({ ok: true });
+    expect(serviceInput).toBeDefined();
+    expect(Object.keys(serviceInput ?? {}).sort()).toEqual(
+      ['accessContext', 'database', 'metadata'].sort(),
+    );
+    expect(serviceInput).toMatchObject({
+      accessContext: tenantContext,
+      database: routeMocks.database,
+      metadata: {
+        connectionName: '星澜 HIS 写入连接',
+        sourceSystem: 'his',
+        vendorType: 'demo_vendor',
+        systemType: 'his',
+      },
+    });
+    expect(JSON.stringify(serviceInput)).not.toContain('other-tenant-should-not-be-trusted');
+    expectNoHisPrivateData(payload);
+  });
+
+  it('update API 使用 path connectionId、写入权限、parser 输出和 access context 租户', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await hisConnectionUpdatePatch(
+      updateRequest(),
+      detailContext('  his_conn_001  '),
+    );
+    const payload = await response.json();
+    const serviceInput = routeMocks.updateHisConnectionForTenantService.mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({ ok: true });
+    expect(serviceInput).toBeDefined();
+    expect(Object.keys(serviceInput ?? {}).sort()).toEqual(
+      ['accessContext', 'connectionId', 'database', 'metadata'].sort(),
+    );
+    expect(serviceInput).toMatchObject({
+      accessContext: tenantContext,
+      connectionId: 'his_conn_001',
+      database: routeMocks.database,
+      metadata: {
+        connectionName: '星澜 HIS 写入连接更新',
+        sourceSystem: 'clinic_his',
+      },
+    });
+    expect(JSON.stringify(serviceInput)).not.toContain('other-tenant-should-not-be-trusted');
+    expectNoHisPrivateData(payload);
+  });
+
+  it('create / update 未登录或无写入权限时返回 401 / 403，且不读取 body 或调用 service', async () => {
+    const unauthorizedCreateResponse = await hisConnectionCreatePost(
+      createRawRequest('{"connectionName":"malformed"'),
+    );
+    const unauthorizedUpdateResponse = await hisConnectionUpdatePatch(
+      updateRawRequest('{"connectionName":"malformed"'),
+      detailContext('his_conn_001'),
+    );
+
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(platformContext);
+    const forbiddenCreateResponse = await hisConnectionCreatePost(
+      createRawRequest('{"connectionName":"malformed"'),
+    );
+
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
+    const forbiddenUpdateResponse = await hisConnectionUpdatePatch(
+      updateRawRequest('{"connectionName":"malformed"'),
+      detailContext('his_conn_001'),
+    );
+
+    expect(unauthorizedCreateResponse.status).toBe(401);
+    await expect(unauthorizedCreateResponse.json()).resolves.toEqual({
+      code: 'unauthorized',
+      error: '请先登录',
+    });
+    expect(unauthorizedUpdateResponse.status).toBe(401);
+    await expect(unauthorizedUpdateResponse.json()).resolves.toEqual({
+      code: 'unauthorized',
+      error: '请先登录',
+    });
+    expect(forbiddenCreateResponse.status).toBe(403);
+    await expect(forbiddenCreateResponse.json()).resolves.toEqual({
+      code: 'forbidden',
+      error: '没有访问权限',
+    });
+    expect(forbiddenUpdateResponse.status).toBe(403);
+    await expect(forbiddenUpdateResponse.json()).resolves.toEqual({
+      code: 'forbidden',
+      error: '没有访问权限',
+    });
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('update API 空 connectionId 返回稳定 not_found，且不读取 access context 或调用 service', async () => {
+    const response = await hisConnectionUpdatePatch(updateRequest(), detailContext('   '));
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      code: 'not_found',
+      error: '记录不存在',
+    });
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('malformed JSON 或 parser 失败返回 validation_failed，且不回显原始 payload 或敏感值', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const malformedCreateResponse = await hisConnectionCreatePost(
+      createRawRequest('{"connectionName":"星澜 sk_test_should_not_echo"'),
+    );
+    const forbiddenFieldUpdateResponse = await hisConnectionUpdatePatch(
+      updateRequest({ credentialRef: 'cred_ref_should_not_echo' }),
+      detailContext('his_conn_001'),
+    );
+    const malformedCreatePayload = await malformedCreateResponse.json();
+    const forbiddenFieldUpdatePayload = await forbiddenFieldUpdateResponse.json();
+
+    expect(malformedCreateResponse.status).toBe(400);
+    expect(malformedCreatePayload).toEqual({
+      code: 'validation_failed',
+      error: '请求格式不正确',
+    });
+    expect(forbiddenFieldUpdateResponse.status).toBe(400);
+    expect(forbiddenFieldUpdatePayload).toEqual({
+      code: 'validation_failed',
+      error: '请求格式不正确',
+    });
+    expect(JSON.stringify(malformedCreatePayload)).not.toContain('sk_test_should_not_echo');
+    expect(JSON.stringify(forbiddenFieldUpdatePayload)).not.toContain('cred_ref_should_not_echo');
+    expect(routeMocks.createHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('service result 映射为稳定 HTTP 响应', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.createHisConnectionForTenantService
+      .mockResolvedValueOnce({ status: 'validation_failed' })
+      .mockResolvedValueOnce({ status: 'conflict' })
+      .mockResolvedValueOnce({ status: 'service_unavailable' });
+    routeMocks.updateHisConnectionForTenantService
+      .mockResolvedValueOnce({ status: 'validation_failed' })
+      .mockResolvedValueOnce({ status: 'conflict' })
+      .mockResolvedValueOnce({ status: 'not_found' })
+      .mockResolvedValueOnce({ status: 'service_unavailable' });
+
+    const createValidationResponse = await hisConnectionCreatePost(createRequest());
+    const createConflictResponse = await hisConnectionCreatePost(createRequest());
+    const createUnavailableResponse = await hisConnectionCreatePost(createRequest());
+    const updateValidationResponse = await hisConnectionUpdatePatch(
+      updateRequest(),
+      detailContext('his_conn_001'),
+    );
+    const updateConflictResponse = await hisConnectionUpdatePatch(
+      updateRequest(),
+      detailContext('his_conn_001'),
+    );
+    const updateNotFoundResponse = await hisConnectionUpdatePatch(
+      updateRequest(),
+      detailContext('his_conn_001'),
+    );
+    const updateUnavailableResponse = await hisConnectionUpdatePatch(
+      updateRequest(),
+      detailContext('his_conn_001'),
+    );
+
+    expect(createValidationResponse.status).toBe(400);
+    await expect(createValidationResponse.json()).resolves.toEqual({
+      code: 'validation_failed',
+      error: '请求格式不正确',
+    });
+    expect(createConflictResponse.status).toBe(409);
+    await expect(createConflictResponse.json()).resolves.toEqual({
+      code: 'conflict',
+      error: '连接名称已存在',
+    });
+    expect(createUnavailableResponse.status).toBe(503);
+    await expect(createUnavailableResponse.json()).resolves.toEqual({
+      code: 'service_unavailable',
+      error: '数据服务暂时不可用',
+    });
+    expect(updateValidationResponse.status).toBe(400);
+    await expect(updateValidationResponse.json()).resolves.toEqual({
+      code: 'validation_failed',
+      error: '请求格式不正确',
+    });
+    expect(updateConflictResponse.status).toBe(409);
+    await expect(updateConflictResponse.json()).resolves.toEqual({
+      code: 'conflict',
+      error: '连接名称已存在',
+    });
+    expect(updateNotFoundResponse.status).toBe(404);
+    await expect(updateNotFoundResponse.json()).resolves.toEqual({
+      code: 'not_found',
+      error: '记录不存在',
+    });
+    expect(updateUnavailableResponse.status).toBe(503);
+    await expect(updateUnavailableResponse.json()).resolves.toEqual({
+      code: 'service_unavailable',
+      error: '数据服务暂时不可用',
+    });
   });
 });
