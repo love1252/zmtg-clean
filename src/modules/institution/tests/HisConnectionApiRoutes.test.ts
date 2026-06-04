@@ -10,10 +10,14 @@ import {
   GET as hisConnectionListGet,
   POST as hisConnectionCreatePost,
 } from '@/app/api/institution/his-connections/route';
+import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
 import type { HisConnectionReadModel } from '@/modules/institution/server/his-connection-repository';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
 const routeMocks = vi.hoisted(() => {
+  const auditEventRepository = {
+    record: vi.fn(),
+  };
   const hisConnectionRepository = {
     getHisConnectionByTenant: vi.fn(),
     listHisConnectionsByTenant: vi.fn(),
@@ -26,6 +30,8 @@ const routeMocks = vi.hoisted(() => {
   };
 
   return {
+    auditEventRepository,
+    createAuditEventRepository: vi.fn(() => auditEventRepository),
     createHisConnectionForTenantService: vi.fn(),
     createHisConnectionRepository: vi.fn(() => hisConnectionRepository),
     database,
@@ -33,6 +39,16 @@ const routeMocks = vi.hoisted(() => {
     getDemoAccessContextFromRequest: vi.fn(),
     hisConnectionRepository,
     updateHisConnectionForTenantService: vi.fn(),
+  };
+});
+
+vi.mock('@/modules/audit/server/audit-event-repository', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@/modules/audit/server/audit-event-repository')
+  >();
+  return {
+    ...actual,
+    createAuditEventRepository: routeMocks.createAuditEventRepository,
   };
 });
 
@@ -95,6 +111,11 @@ const tenantOperatorContext: AccessContext = {
   scope: 'tenant',
   tenantId: 'demo-tenant-001',
   source: 'demo_session',
+};
+
+const tenantAdminWithoutTenantContext: AccessContext = {
+  ...tenantContext,
+  tenantId: null,
 };
 
 const hisConnectionRecord = {
@@ -268,6 +289,74 @@ function expectNoHisPrivateData(payload: unknown) {
   expect(serialized).not.toMatch(/select \* from|DATABASE_URL|stack/i);
 }
 
+function expectNoRouteAuditSensitiveData(event: unknown) {
+  const serialized = JSON.stringify(event);
+
+  expect(serialized).not.toContain('demo-tenant-002');
+  expect(serialized).not.toContain('other-tenant-should-not-be-trusted');
+  expect(serialized).not.toMatch(
+    /credentialRef|credentialConfigured|token|secret|apiKey|api_key|oauth|basicAuth|basic_auth|signingKey|signing_key|privateKey|private_key|connectionString|connection_string|rawPayload|raw_payload|requestBody|request_body|responseBody|response_body|DATABASE_URL|postgres:\/\/|select \* from|SQL|stack|constraint|index|冲突行详情|完整病历|完整治疗正文|咨询全文|图片 \/ 文件原文|imageOriginal|fileOriginal/i,
+  );
+}
+
+function expectRouteDeniedAuditEvent(
+  event: unknown,
+  input: {
+    actorId: string;
+    actorRole: AccessContext['role'];
+    tenantId: string | null;
+    action: 'create' | 'update';
+    reason:
+      | 'role_denied'
+      | 'missing_tenant'
+      | 'cross_tenant_denied'
+      | 'invalid_his_connection_payload';
+    resourceId?: string;
+  },
+) {
+  const eventRecord = event as TenantAuditEvent;
+  const expectedKeys = [
+    'eventId',
+    'actorId',
+    'actorRole',
+    'tenantId',
+    'scope',
+    'resource',
+    'action',
+    'result',
+    'reason',
+    'occurredAt',
+    'source',
+  ];
+
+  if (input.resourceId !== undefined) {
+    expectedKeys.push('resourceId');
+  }
+
+  expect(Object.keys(eventRecord).sort()).toEqual(expectedKeys.sort());
+  expect(eventRecord).toMatchObject({
+    actorId: input.actorId,
+    actorRole: input.actorRole,
+    tenantId: input.tenantId,
+    scope: 'tenant',
+    source: 'demo_session',
+    resource: 'open_connection',
+    action: input.action,
+    result: 'denied',
+    reason: input.reason,
+    occurredAt: expect.any(String),
+  });
+  expect(eventRecord.eventId).toEqual(expect.any(String));
+
+  if (input.resourceId === undefined) {
+    expect(eventRecord).not.toHaveProperty('resourceId');
+  } else {
+    expect(eventRecord.resourceId).toBe(input.resourceId);
+  }
+
+  expectNoRouteAuditSensitiveData(eventRecord);
+}
+
 async function expectValidationFailedResponse(response: Response) {
   const payload = await response.json();
 
@@ -282,6 +371,9 @@ async function expectValidationFailedResponse(response: Response) {
 }
 
 beforeEach(() => {
+  routeMocks.auditEventRepository.record.mockReset();
+  routeMocks.auditEventRepository.record.mockResolvedValue(undefined);
+  routeMocks.createAuditEventRepository.mockClear();
   routeMocks.getDatabase.mockReset();
   routeMocks.getDatabase.mockReturnValue(routeMocks.database);
   routeMocks.database.delete.mockReset();
@@ -665,22 +757,11 @@ describe('机构端 HIS 连接配置创建更新 API route', () => {
     expectNoHisPrivateData(payload);
   });
 
-  it('create / update 未登录或无写入权限时返回 401 / 403，且不读取 body 或调用 service', async () => {
+  it('create / update 未登录时返回 401，且不写 tenant audit、不读取 body 或调用 service', async () => {
     const unauthorizedCreateResponse = await hisConnectionCreatePost(
       createRawRequest('{"connectionName":"malformed"'),
     );
     const unauthorizedUpdateResponse = await hisConnectionUpdatePatch(
-      updateRawRequest('{"connectionName":"malformed"'),
-      detailContext('his_conn_001'),
-    );
-
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(platformContext);
-    const forbiddenCreateResponse = await hisConnectionCreatePost(
-      createRawRequest('{"connectionName":"malformed"'),
-    );
-
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
-    const forbiddenUpdateResponse = await hisConnectionUpdatePatch(
       updateRawRequest('{"connectionName":"malformed"'),
       detailContext('his_conn_001'),
     );
@@ -695,18 +776,108 @@ describe('机构端 HIS 连接配置创建更新 API route', () => {
       code: 'unauthorized',
       error: '请先登录',
     });
-    expect(forbiddenCreateResponse.status).toBe(403);
-    await expect(forbiddenCreateResponse.json()).resolves.toEqual({
-      code: 'forbidden',
-      error: '没有访问权限',
-    });
-    expect(forbiddenUpdateResponse.status).toBe(403);
-    await expect(forbiddenUpdateResponse.json()).resolves.toEqual({
-      code: 'forbidden',
-      error: '没有访问权限',
-    });
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
     expect(routeMocks.createHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('create API 权限拒绝返回 403 并写 denied audit，且不读取 body 或调用 service', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
+
+    const response = await hisConnectionCreatePost(
+      createRawRequest('{"connectionName":"malformed"'),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(payload).toEqual({
+      code: 'forbidden',
+      error: '没有访问权限',
+    });
+    expect(routeMocks.createAuditEventRepository).toHaveBeenCalledWith(routeMocks.database);
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expectRouteDeniedAuditEvent(routeMocks.auditEventRepository.record.mock.calls[0]?.[0], {
+      actorId: 'demo-user-operator',
+      actorRole: 'tenant_operator',
+      tenantId: 'demo-tenant-001',
+      action: 'create',
+      reason: 'role_denied',
+    });
+    expect(routeMocks.createHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('create API 缺失 tenantId 返回 403 并写 missing_tenant denied audit', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantAdminWithoutTenantContext);
+
+    const response = await hisConnectionCreatePost(
+      createRawRequest('{"connectionName":"malformed"'),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      code: 'forbidden',
+      error: '没有访问权限',
+    });
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expectRouteDeniedAuditEvent(routeMocks.auditEventRepository.record.mock.calls[0]?.[0], {
+      actorId: 'demo-user-admin',
+      actorRole: 'tenant_admin',
+      tenantId: null,
+      action: 'create',
+      reason: 'missing_tenant',
+    });
+    expect(routeMocks.createHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('update API 权限拒绝返回 403 并写 denied audit，且 resourceId 使用 trim 后 path ID', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
+
+    const response = await hisConnectionUpdatePatch(
+      updateRawRequest('{"connectionName":"malformed"'),
+      detailContext('  his_conn_001  '),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      code: 'forbidden',
+      error: '没有访问权限',
+    });
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expectRouteDeniedAuditEvent(routeMocks.auditEventRepository.record.mock.calls[0]?.[0], {
+      actorId: 'demo-user-operator',
+      actorRole: 'tenant_operator',
+      tenantId: 'demo-tenant-001',
+      action: 'update',
+      reason: 'role_denied',
+      resourceId: 'his_conn_001',
+    });
+    expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('update API 缺失 tenantId 返回 403 并写 missing_tenant denied audit', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantAdminWithoutTenantContext);
+
+    const response = await hisConnectionUpdatePatch(
+      updateRawRequest('{"connectionName":"malformed"'),
+      detailContext('his_conn_001'),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      code: 'forbidden',
+      error: '没有访问权限',
+    });
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expectRouteDeniedAuditEvent(routeMocks.auditEventRepository.record.mock.calls[0]?.[0], {
+      actorId: 'demo-user-admin',
+      actorRole: 'tenant_admin',
+      tenantId: null,
+      action: 'update',
+      reason: 'missing_tenant',
+      resourceId: 'his_conn_001',
+    });
     expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
   });
 
@@ -746,6 +917,8 @@ describe('机构端 HIS 连接配置创建更新 API route', () => {
       error: '记录不存在',
     });
     expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
     expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
   });
@@ -813,6 +986,108 @@ describe('机构端 HIS 连接配置创建更新 API route', () => {
     });
     expect(JSON.stringify(malformedCreatePayload)).not.toContain('sk_test_should_not_echo');
     expect(JSON.stringify(forbiddenFieldUpdatePayload)).not.toContain('cred_ref_should_not_echo');
+    expect(routeMocks.createHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('create API malformed JSON 或 parser 失败返回 400 并写 invalid payload denied audit', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const malformedResponse = await hisConnectionCreatePost(
+      createRawRequest('{"connectionName":"星澜 sk_test_should_not_echo"'),
+    );
+    const forbiddenFieldResponse = await hisConnectionCreatePost(
+      createRequest({
+        ...validCreatePayload,
+        credentialRef: 'cred_ref_should_not_echo',
+        token: 'token_should_not_echo',
+      }),
+    );
+
+    await expectValidationFailedResponse(malformedResponse);
+    await expectValidationFailedResponse(forbiddenFieldResponse);
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(2);
+    for (const call of routeMocks.auditEventRepository.record.mock.calls) {
+      expectRouteDeniedAuditEvent(call[0], {
+        actorId: 'demo-user-admin',
+        actorRole: 'tenant_admin',
+        tenantId: 'demo-tenant-001',
+        action: 'create',
+        reason: 'invalid_his_connection_payload',
+      });
+      expect(JSON.stringify(call[0])).not.toContain('sk_test_should_not_echo');
+      expect(JSON.stringify(call[0])).not.toContain('cred_ref_should_not_echo');
+      expect(JSON.stringify(call[0])).not.toContain('token_should_not_echo');
+    }
+    expect(routeMocks.createHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('update API malformed JSON 或 parser 失败返回 400 并写带 resourceId 的 invalid payload denied audit', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const malformedResponse = await hisConnectionUpdatePatch(
+      updateRawRequest('{"connectionName":"星澜 sk_test_patch_should_not_echo"'),
+      detailContext('  his_conn_001  '),
+    );
+    const forbiddenFieldResponse = await hisConnectionUpdatePatch(
+      updateRequest({
+        credentialRef: 'cred_ref_patch_should_not_echo',
+        secret: 'secret_patch_should_not_echo',
+      }),
+      detailContext('  his_conn_001  '),
+    );
+
+    await expectValidationFailedResponse(malformedResponse);
+    await expectValidationFailedResponse(forbiddenFieldResponse);
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(2);
+    for (const call of routeMocks.auditEventRepository.record.mock.calls) {
+      expectRouteDeniedAuditEvent(call[0], {
+        actorId: 'demo-user-admin',
+        actorRole: 'tenant_admin',
+        tenantId: 'demo-tenant-001',
+        action: 'update',
+        reason: 'invalid_his_connection_payload',
+        resourceId: 'his_conn_001',
+      });
+      expect(JSON.stringify(call[0])).not.toContain('sk_test_patch_should_not_echo');
+      expect(JSON.stringify(call[0])).not.toContain('cred_ref_patch_should_not_echo');
+      expect(JSON.stringify(call[0])).not.toContain('secret_patch_should_not_echo');
+    }
+    expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('route denied audit 写入失败时返回 503，且不泄露 audit repository 异常', async () => {
+    routeMocks.auditEventRepository.record.mockRejectedValueOnce(
+      new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg audit stack'),
+    );
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
+
+    const forbiddenAuditFailureResponse = await hisConnectionCreatePost(createRequest());
+    const forbiddenAuditFailurePayload = await forbiddenAuditFailureResponse.json();
+
+    routeMocks.auditEventRepository.record.mockRejectedValueOnce(
+      new Error('select * from audit_events token stack'),
+    );
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantContext);
+
+    const parserAuditFailureResponse = await hisConnectionUpdatePatch(
+      updateRequest({ credentialRef: 'cred_ref_should_not_echo' }),
+      detailContext('his_conn_001'),
+    );
+    const parserAuditFailurePayload = await parserAuditFailureResponse.json();
+
+    expect(forbiddenAuditFailureResponse.status).toBe(503);
+    expect(forbiddenAuditFailurePayload).toEqual({
+      code: 'service_unavailable',
+      error: '数据服务暂时不可用',
+    });
+    expect(parserAuditFailureResponse.status).toBe(503);
+    expect(parserAuditFailurePayload).toEqual({
+      code: 'service_unavailable',
+      error: '数据服务暂时不可用',
+    });
+    expectNoHisPrivateData(forbiddenAuditFailurePayload);
+    expectNoHisPrivateData(parserAuditFailurePayload);
     expect(routeMocks.createHisConnectionForTenantService).not.toHaveBeenCalled();
     expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
   });
@@ -939,5 +1214,6 @@ describe('机构端 HIS 连接配置创建更新 API route', () => {
       error: '数据服务暂时不可用',
     });
     expectNoHisPrivateData(updateUnavailablePayload);
+    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
   });
 });

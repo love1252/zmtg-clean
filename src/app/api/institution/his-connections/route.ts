@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { createDeniedAccessAuditEvent } from '@/modules/audit/domain/audit-events';
+import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import {
   createHisConnectionRepository,
   type HisConnectionReadModel,
@@ -8,7 +10,11 @@ import {
   createHisConnectionForTenantService,
   type CreateHisConnectionForTenantServiceResult,
 } from '@/modules/institution/server/his-connection-write-service';
-import { canAccessResource, type AccessContext } from '@/modules/security/domain/access-control';
+import {
+  canAccessResource,
+  type AccessContext,
+  type AccessDecision,
+} from '@/modules/security/domain/access-control';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
 
@@ -28,6 +34,9 @@ type HisConnectionApiDto = {
   revokedAt: string | null;
 };
 
+type AccessDeniedReason = Extract<AccessDecision, { allowed: false }>['reason'];
+type HisConnectionRouteDeniedReason = AccessDeniedReason | 'invalid_his_connection_payload';
+
 function canReadHisConnections(
   context: AccessContext,
 ): context is AccessContext & { tenantId: string } {
@@ -41,9 +50,9 @@ function canReadHisConnections(
   return decision.allowed && Boolean(context.tenantId);
 }
 
-function canCreateHisConnections(
+function getCreateHisConnectionsDeniedReason(
   context: AccessContext,
-): context is AccessContext & { tenantId: string } {
+): HisConnectionRouteDeniedReason | null {
   const decision = canAccessResource({
     context,
     resource: 'open_connection',
@@ -51,7 +60,11 @@ function canCreateHisConnections(
     targetTenantId: context.tenantId,
   });
 
-  return decision.allowed && Boolean(context.tenantId);
+  if (!decision.allowed) {
+    return decision.reason;
+  }
+
+  return context.tenantId ? null : 'missing_tenant';
 }
 
 function isVisibleToTenant(record: HisConnectionReadModel, tenantId: string) {
@@ -110,6 +123,37 @@ async function readJsonBody(request: Request) {
   }
 }
 
+function createAuditEventId() {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `audit_${Date.now()}_${Math.random().toString(36).slice(2)}`
+  );
+}
+
+async function recordHisConnectionRouteDeniedAudit(input: {
+  accessContext: AccessContext;
+  action: 'create';
+  reason: HisConnectionRouteDeniedReason;
+}) {
+  try {
+    const auditRepository = createAuditEventRepository(getDatabase());
+    await auditRepository.record(
+      createDeniedAccessAuditEvent({
+        eventId: createAuditEventId(),
+        context: input.accessContext,
+        resource: 'open_connection',
+        action: input.action,
+        reason: input.reason,
+        occurredAt: new Date().toISOString(),
+      }),
+    );
+
+    return { ok: true as const };
+  } catch {
+    return { ok: false as const };
+  }
+}
+
 function mapCreateServiceResultToResponse(result: CreateHisConnectionForTenantServiceResult) {
   switch (result.status) {
     case 'created':
@@ -153,17 +197,45 @@ export async function POST(request: Request) {
     return unauthorizedResponse();
   }
 
-  if (!canCreateHisConnections(accessContext)) {
+  const deniedReason = getCreateHisConnectionsDeniedReason(accessContext);
+  if (deniedReason) {
+    const auditResult = await recordHisConnectionRouteDeniedAudit({
+      accessContext,
+      action: 'create',
+      reason: deniedReason,
+    });
+    if (!auditResult.ok) {
+      return serviceUnavailableResponse();
+    }
+
     return forbiddenResponse();
   }
 
   const body = await readJsonBody(request);
   if (!body.ok) {
+    const auditResult = await recordHisConnectionRouteDeniedAudit({
+      accessContext,
+      action: 'create',
+      reason: 'invalid_his_connection_payload',
+    });
+    if (!auditResult.ok) {
+      return serviceUnavailableResponse();
+    }
+
     return validationFailedResponse();
   }
 
   const parsed = parseCreateHisConnectionInput(body.value);
   if (!parsed.ok) {
+    const auditResult = await recordHisConnectionRouteDeniedAudit({
+      accessContext,
+      action: 'create',
+      reason: 'invalid_his_connection_payload',
+    });
+    if (!auditResult.ok) {
+      return serviceUnavailableResponse();
+    }
+
     return validationFailedResponse();
   }
 
