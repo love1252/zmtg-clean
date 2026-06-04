@@ -85,7 +85,7 @@ update API 建议路径：
 PATCH /api/institution/his-connections/[connectionId]
 ```
 
-create 成功建议返回 `201`，update 成功建议返回 `200`。两者都只返回安全 DTO，不回显完整请求体，不返回内部 repository command。
+create 成功建议返回 `201`，update 成功建议返回 `200`。两者只返回本轮安全元数据或最小成功结果，不回显完整请求体，不返回内部 repository command，也不沿用现有 list / detail 响应结构。
 
 create 不接受客户端传入 `status`、`healthStatus`、`credentialRef`、`createdBy`、`updatedBy`、`createdAt`、`updatedAt`、`revokedAt` 或 `deletedAt`。初始状态继续由服务端 / repository 固定为 `draft`，健康状态固定为 `unknown`。
 
@@ -115,7 +115,7 @@ create / update API、错误响应、审计事件、日志、测试 fixture 和�
 - 咨询全文
 - 图片 / 文件原文
 
-允许对外返回的凭证相关信息只限现有派生布尔值 `credentialConfigured`。该字段只表达是否已有凭证引用，不泄露引用值、凭证类型或凭证明文。
+create / update API v1 不返回任何凭证相关字段。现有只读链路中的凭证配置展示能力不自动进入 create / update 成功响应；如后续需要返回凭证配置状态，必须单独评审并进入独立 Plan Mode。
 
 ## HTTP 载荷解析器规划
 
@@ -254,27 +254,42 @@ src/modules/institution/server/his-connection-write-service.ts
 
 ## DTO 数据最小化规划
 
-create / update 成功响应应复用当前只读安全 DTO 形状，允许字段为：
+create / update v1 成功响应只允许返回本轮安全元数据，或返回不含业务字段的最小成功结果。
 
-- `connectionId`
+安全元数据响应允许字段仅限：
+
 - `connectionName`
 - `sourceSystem`
 - `vendorType`
 - `systemType`
+
+最小成功结果可只表达请求已被服务端接受并完成，例如：
+
+```json
+{
+  "ok": true
+}
+```
+
+如果后续需要在 create / update 成功响应中返回连接标识、状态、健康状态、凭证配置状态、时间字段或当前只读 DTO，必须单独评审并进入独立 Plan Mode，不得在本轮 create / update API v1 中默认放开。
+
+响应不得包含：
+
+- `connectionId`
+- `id`
+- `tenantId`
 - `status`
+- `credentialRef`
 - `credentialConfigured`
 - `healthStatus`
 - `lastCheckedAt`
 - `lastErrorCode`
 - `createdAt`
 - `updatedAt`
+- `createdBy`
+- `updatedBy`
 - `revokedAt`
-
-响应不得包含：
-
-- `tenantId`
 - `deletedAt`
-- `credentialRef`
 - actor 字段
 - 内部数据库列名
 - 原始 request body
@@ -302,8 +317,8 @@ create / update 成功响应应复用当前只读安全 DTO 形状，允许字�
 
 后续测试 PR 建议覆盖：
 
-- create 合法 payload 返回 `201` 和安全 DTO。
-- update 合法 payload 返回 `200` 和安全 DTO。
+- create 合法 payload 返回 `201` 和安全元数据或最小成功结果。
+- update 合法 payload 返回 `200` 和安全元数据或最小成功结果。
 - create / update 只把服务端 access context 的 `tenantId` 传给 repository。
 - body / query / header 中的 `tenantId` 不生效。
 - 未登录返回 `401`，不初始化数据库，不调用 repository。
