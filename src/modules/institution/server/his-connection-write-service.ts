@@ -124,6 +124,30 @@ function createAllowedAuditEvent(input: {
   });
 }
 
+function createDeniedAuditEvent(input: {
+  accessContext: AccessContext;
+  tenantId: string;
+  actorUserId: string;
+  resourceId?: string;
+  action: 'create' | 'update';
+  reason: 'invalid_his_connection_payload' | 'his_connection_name_conflict' | 'not_found_or_not_owned';
+}) {
+  return createAuditEvent({
+    eventId: createAuditEventId(),
+    context: {
+      ...input.accessContext,
+      tenantId: input.tenantId,
+      userId: input.actorUserId,
+    },
+    resource: 'open_connection',
+    resourceId: input.resourceId,
+    action: input.action,
+    result: 'denied',
+    reason: input.reason,
+    occurredAt: new Date().toISOString(),
+  });
+}
+
 function createSuccessDto(): HisConnectionWriteSuccessDto {
   return { ok: true };
 }
@@ -158,10 +182,30 @@ export async function createHisConnectionForTenantService(
       });
 
       if (result.status === 'validation_failed') {
+        await auditEventRepository.record(
+          createDeniedAuditEvent({
+            accessContext: input.accessContext,
+            tenantId,
+            actorUserId,
+            action: 'create',
+            reason: 'invalid_his_connection_payload',
+          }),
+        );
+
         return { status: 'validation_failed' };
       }
 
       if (result.status === 'conflict') {
+        await auditEventRepository.record(
+          createDeniedAuditEvent({
+            accessContext: input.accessContext,
+            tenantId,
+            actorUserId,
+            action: 'create',
+            reason: 'his_connection_name_conflict',
+          }),
+        );
+
         return { status: 'conflict' };
       }
 
@@ -215,14 +259,47 @@ export async function updateHisConnectionForTenantService(
       });
 
       if (result.status === 'validation_failed') {
+        await auditEventRepository.record(
+          createDeniedAuditEvent({
+            accessContext: input.accessContext,
+            tenantId,
+            actorUserId,
+            resourceId: connectionId,
+            action: 'update',
+            reason: 'invalid_his_connection_payload',
+          }),
+        );
+
         return { status: 'validation_failed' };
       }
 
       if (result.status === 'conflict') {
+        await auditEventRepository.record(
+          createDeniedAuditEvent({
+            accessContext: input.accessContext,
+            tenantId,
+            actorUserId,
+            resourceId: connectionId,
+            action: 'update',
+            reason: 'his_connection_name_conflict',
+          }),
+        );
+
         return { status: 'conflict' };
       }
 
       if (result.status === 'not_found') {
+        await auditEventRepository.record(
+          createDeniedAuditEvent({
+            accessContext: input.accessContext,
+            tenantId,
+            actorUserId,
+            resourceId: connectionId,
+            action: 'update',
+            reason: 'not_found_or_not_owned',
+          }),
+        );
+
         return { status: 'not_found' };
       }
 
