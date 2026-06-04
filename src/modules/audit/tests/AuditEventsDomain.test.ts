@@ -356,6 +356,120 @@ describe('审计事件领域模型', () => {
     );
   });
 
+  it('支持 HIS 连接配置写入拒绝审计 reason，且不携带 payload、凭证或内部错误信息', () => {
+    expect(AUDIT_REASON_VALUES).toEqual(
+      expect.arrayContaining([
+        'invalid_his_connection_payload',
+        'his_connection_name_conflict',
+      ]),
+    );
+    expect(AUDIT_REASON_VALUES).not.toContain('his_connection_not_found_or_not_owned');
+    expect(AUDIT_REASON_VALUES).not.toContain('invalid_his_connection_repository_result');
+
+    const invalidPayload = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_his_connection_invalid_payload_001',
+      context: tenantAdminContext,
+      resource: 'open_connection',
+      action: 'create',
+      reason: 'invalid_his_connection_payload',
+      occurredAt: '2026-06-04T09:30:00.000Z',
+    });
+    const nameConflict = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_his_connection_name_conflict_001',
+      context: tenantAdminContext,
+      resource: 'open_connection',
+      resourceId: 'his_conn_001',
+      action: 'update',
+      reason: 'his_connection_name_conflict',
+      occurredAt: '2026-06-04T09:31:00.000Z',
+    });
+    const notFoundOrNotOwned = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_his_connection_not_found_001',
+      context: tenantAdminContext,
+      resource: 'open_connection',
+      resourceId: 'his_conn_002',
+      action: 'update',
+      reason: 'not_found_or_not_owned',
+      occurredAt: '2026-06-04T09:32:00.000Z',
+    });
+    const roleDenied = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_his_connection_role_denied_001',
+      context: tenantAdminContext,
+      resource: 'open_connection',
+      action: 'create',
+      reason: 'role_denied',
+      occurredAt: '2026-06-04T09:33:00.000Z',
+    });
+    const missingTenant = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_his_connection_missing_tenant_001',
+      context: { ...tenantAdminContext, tenantId: null },
+      resource: 'open_connection',
+      action: 'create',
+      reason: 'missing_tenant',
+      occurredAt: '2026-06-04T09:34:00.000Z',
+    });
+    const crossTenantDenied = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_his_connection_cross_tenant_001',
+      context: tenantAdminContext,
+      resource: 'open_connection',
+      action: 'update',
+      reason: 'cross_tenant_denied',
+      occurredAt: '2026-06-04T09:35:00.000Z',
+    });
+
+    expect(invalidPayload).toMatchObject({
+      resource: 'open_connection',
+      action: 'create',
+      result: 'denied',
+      reason: 'invalid_his_connection_payload',
+    });
+    expect(nameConflict).toMatchObject({
+      resource: 'open_connection',
+      resourceId: 'his_conn_001',
+      action: 'update',
+      result: 'denied',
+      reason: 'his_connection_name_conflict',
+    });
+    expect(notFoundOrNotOwned).toMatchObject({
+      resource: 'open_connection',
+      resourceId: 'his_conn_002',
+      action: 'update',
+      result: 'denied',
+      reason: 'not_found_or_not_owned',
+    });
+    expect(roleDenied).toMatchObject({
+      resource: 'open_connection',
+      action: 'create',
+      result: 'denied',
+      reason: 'role_denied',
+    });
+    expect(missingTenant).toMatchObject({
+      resource: 'open_connection',
+      action: 'create',
+      result: 'denied',
+      reason: 'missing_tenant',
+    });
+    expect(crossTenantDenied).toMatchObject({
+      resource: 'open_connection',
+      action: 'update',
+      result: 'denied',
+      reason: 'cross_tenant_denied',
+    });
+
+    expect(
+      JSON.stringify([
+        invalidPayload,
+        nameConflict,
+        notFoundOrNotOwned,
+        roleDenied,
+        missingTenant,
+        crossTenantDenied,
+      ]),
+    ).not.toMatch(
+      /requestBody|responseBody|credentialRef|token|secret|API key|OAuth token|basic auth|签名密钥|私钥|连接串|raw HIS payload|SQL|select \*|stack|DATABASE_URL|数据库约束|冲突细节/i,
+    );
+  });
+
   it('审计事件风险词列表覆盖凭证明文模式', () => {
     expect(auditForbiddenTerms).toEqual([
       'client_secret',

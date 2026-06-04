@@ -148,6 +148,66 @@ describe('审计查询参数 parser', () => {
     }
   });
 
+  it('接受 HIS 连接配置写入拒绝 reason 查询', () => {
+    for (const reason of [
+      'invalid_his_connection_payload',
+      'his_connection_name_conflict',
+    ] as const) {
+      expect(
+        parseAuditEventQueryParams(
+          params({
+            resource: 'open_connection',
+            action: reason === 'invalid_his_connection_payload' ? 'create' : 'update',
+            result: 'denied',
+            reason,
+          }),
+        ),
+      ).toEqual({
+        ok: true,
+        query: {
+          filters: {
+            resource: 'open_connection',
+            action: reason === 'invalid_his_connection_payload' ? 'create' : 'update',
+            result: 'denied',
+            reason,
+          },
+          limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
+        },
+      });
+    }
+
+    expect(
+      parseAuditEventQueryParams(
+        params({
+          resource: 'open_connection',
+          action: 'update',
+          result: 'denied',
+          reason: 'not_found_or_not_owned',
+        }),
+      ),
+    ).toEqual({
+      ok: true,
+      query: {
+        filters: {
+          resource: 'open_connection',
+          action: 'update',
+          result: 'denied',
+          reason: 'not_found_or_not_owned',
+        },
+        limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
+      },
+    });
+
+    expectParseError(
+      { resource: 'open_connection', reason: 'his_connection_not_found_or_not_owned' },
+      'reason 不在允许范围内',
+    );
+    expectParseError(
+      { resource: 'open_connection', reason: 'invalid_his_connection_repository_result' },
+      'reason 不在允许范围内',
+    );
+  });
+
   it('拒绝非白名单字段，避免 tenantId 或任意 SQL 参数进入查询', () => {
     expectParseError({ tenantId: 'other-tenant' }, '不支持的筛选参数: tenantId');
     expectParseError({ orderBy: 'occurred_at desc' }, '不支持的筛选参数: orderBy');
