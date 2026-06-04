@@ -147,6 +147,26 @@ const validUpdatePayload = {
   sourceSystem: '  clinic_his  ',
 };
 
+const writableCreateFields = [
+  'connectionName',
+  'sourceSystem',
+  'vendorType',
+  'systemType',
+] as const;
+
+const forbiddenWritePayloadFields = [
+  'credentialRef',
+  'token',
+  'secret',
+  'apiKey',
+  'rawPayload',
+  'requestBody',
+  'responseBody',
+  'SQL',
+  'stack',
+  'DATABASE_URL',
+] as const;
+
 function listRequest(url = 'http://localhost/api/institution/his-connections') {
   return new Request(url, {
     method: 'GET',
@@ -246,6 +266,19 @@ function expectNoHisPrivateData(payload: unknown) {
   expect(serialized).not.toContain('imageOriginal');
   expect(serialized).not.toContain('fileOriginal');
   expect(serialized).not.toMatch(/select \* from|DATABASE_URL|stack/i);
+}
+
+async function expectValidationFailedResponse(response: Response) {
+  const payload = await response.json();
+
+  expect(response.status).toBe(400);
+  expect(payload).toEqual({
+    code: 'validation_failed',
+    error: '请求格式不正确',
+  });
+  expectNoHisPrivateData(payload);
+
+  return payload;
 }
 
 beforeEach(() => {
@@ -585,7 +618,13 @@ describe('机构端 HIS 连接配置创建更新 API route', () => {
         systemType: 'his',
       },
     });
+    expect(Object.keys((serviceInput?.metadata as Record<string, unknown>) ?? {}).sort()).toEqual(
+      [...writableCreateFields].sort(),
+    );
     expect(JSON.stringify(serviceInput)).not.toContain('other-tenant-should-not-be-trusted');
+    expect(JSON.stringify(serviceInput?.metadata)).not.toMatch(
+      /tenantId|credentialRef|token|secret|apiKey|rawPayload|requestBody|responseBody|DATABASE_URL|select \* from|stack/i,
+    );
     expectNoHisPrivateData(payload);
   });
 
@@ -616,7 +655,13 @@ describe('机构端 HIS 连接配置创建更新 API route', () => {
         sourceSystem: 'clinic_his',
       },
     });
+    expect(Object.keys((serviceInput?.metadata as Record<string, unknown>) ?? {}).sort()).toEqual(
+      ['connectionName', 'sourceSystem'].sort(),
+    );
     expect(JSON.stringify(serviceInput)).not.toContain('other-tenant-should-not-be-trusted');
+    expect(JSON.stringify(serviceInput?.metadata)).not.toMatch(
+      /tenantId|credentialRef|token|secret|apiKey|rawPayload|requestBody|responseBody|DATABASE_URL|select \* from|stack/i,
+    );
     expectNoHisPrivateData(payload);
   });
 
@@ -665,6 +710,33 @@ describe('机构端 HIS 连接配置创建更新 API route', () => {
     expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
   });
 
+  it('create API 拒绝 body tenantId 注入和敏感字段，且 parser 失败不调用 service', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    await expectValidationFailedResponse(
+      await hisConnectionCreatePost(
+        createRequest({
+          ...validCreatePayload,
+          tenantId: 'demo-tenant-002',
+        }),
+      ),
+    );
+
+    for (const field of forbiddenWritePayloadFields) {
+      const response = await hisConnectionCreatePost(
+        createRequest({
+          ...validCreatePayload,
+          [field]: `forbidden_${field}_should_not_echo`,
+        }),
+      );
+      const payload = await expectValidationFailedResponse(response);
+
+      expect(JSON.stringify(payload)).not.toContain(`forbidden_${field}_should_not_echo`);
+    }
+
+    expect(routeMocks.createHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
   it('update API 空 connectionId 返回稳定 not_found，且不读取 access context 或调用 service', async () => {
     const response = await hisConnectionUpdatePatch(updateRequest(), detailContext('   '));
 
@@ -675,6 +747,44 @@ describe('机构端 HIS 连接配置创建更新 API route', () => {
     });
     expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('update API 拒绝 body tenantId 注入、敏感字段、空更新和 malformed JSON，且 parser 失败不调用 service', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    await expectValidationFailedResponse(
+      await hisConnectionUpdatePatch(
+        updateRequest({
+          ...validUpdatePayload,
+          tenantId: 'demo-tenant-002',
+        }),
+        detailContext('his_conn_001'),
+      ),
+    );
+
+    for (const field of forbiddenWritePayloadFields) {
+      const response = await hisConnectionUpdatePatch(
+        updateRequest({
+          ...validUpdatePayload,
+          [field]: `forbidden_${field}_should_not_echo`,
+        }),
+        detailContext('his_conn_001'),
+      );
+      const payload = await expectValidationFailedResponse(response);
+
+      expect(JSON.stringify(payload)).not.toContain(`forbidden_${field}_should_not_echo`);
+    }
+
+    await expectValidationFailedResponse(
+      await hisConnectionUpdatePatch(updateRequest({}), detailContext('his_conn_001')),
+    );
+    await expectValidationFailedResponse(
+      await hisConnectionUpdatePatch(
+        updateRawRequest('{"connectionName":"星澜 sk_test_patch_should_not_echo"'),
+        detailContext('his_conn_001'),
+      ),
+    );
     expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
   });
 
@@ -705,6 +815,47 @@ describe('机构端 HIS 连接配置创建更新 API route', () => {
     expect(JSON.stringify(forbiddenFieldUpdatePayload)).not.toContain('cred_ref_should_not_echo');
     expect(routeMocks.createHisConnectionForTenantService).not.toHaveBeenCalled();
     expect(routeMocks.updateHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('create / update route 不调用真实 HIS、fetch、测试连接、摘要、任务或自动触达', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+    const localStorage = {
+      clear: vi.fn(),
+      getItem: vi.fn(),
+      removeItem: vi.fn(),
+      setItem: vi.fn(),
+    };
+    vi.stubGlobal('localStorage', localStorage);
+
+    await hisConnectionCreatePost(createRequest());
+    await hisConnectionUpdatePatch(updateRequest(), detailContext('his_conn_001'));
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(localStorage.getItem).not.toHaveBeenCalled();
+    expect(localStorage.setItem).not.toHaveBeenCalled();
+    expect(routeMocks.database.insert).not.toHaveBeenCalled();
+    expect(routeMocks.database.update).not.toHaveBeenCalled();
+    expect(routeMocks.database.delete).not.toHaveBeenCalled();
+    expect(routeMocks.database.transaction).not.toHaveBeenCalled();
+
+    const routeSource = [
+      readFileSync(
+        join(process.cwd(), 'src/app/api/institution/his-connections/route.ts'),
+        'utf8',
+      ),
+      readFileSync(
+        join(process.cwd(), 'src/app/api/institution/his-connections/[connectionId]/route.ts'),
+        'utf8',
+      ),
+    ].join('\n');
+
+    expect(routeSource).not.toMatch(
+      /fetch\(|localStorage|真实 HIS|测试连接|机构系统|企微|RAG|Agent|自动触达|treatmentSummary|treatment-summary|followUp|follow-up|follow_up|credentialRef|rawPayload|requestBody|responseBody|DATABASE_URL|select \* from|stack/i,
+    );
+
+    fetchSpy.mockRestore();
+    vi.unstubAllGlobals();
   });
 
   it('service result 映射为稳定 HTTP 响应', async () => {
@@ -740,39 +891,53 @@ describe('机构端 HIS 连接配置创建更新 API route', () => {
     );
 
     expect(createValidationResponse.status).toBe(400);
-    await expect(createValidationResponse.json()).resolves.toEqual({
+    const createValidationPayload = await createValidationResponse.json();
+    expect(createValidationPayload).toEqual({
       code: 'validation_failed',
       error: '请求格式不正确',
     });
+    expectNoHisPrivateData(createValidationPayload);
     expect(createConflictResponse.status).toBe(409);
-    await expect(createConflictResponse.json()).resolves.toEqual({
+    const createConflictPayload = await createConflictResponse.json();
+    expect(createConflictPayload).toEqual({
       code: 'conflict',
       error: '连接名称已存在',
     });
+    expectNoHisPrivateData(createConflictPayload);
     expect(createUnavailableResponse.status).toBe(503);
-    await expect(createUnavailableResponse.json()).resolves.toEqual({
+    const createUnavailablePayload = await createUnavailableResponse.json();
+    expect(createUnavailablePayload).toEqual({
       code: 'service_unavailable',
       error: '数据服务暂时不可用',
     });
+    expectNoHisPrivateData(createUnavailablePayload);
     expect(updateValidationResponse.status).toBe(400);
-    await expect(updateValidationResponse.json()).resolves.toEqual({
+    const updateValidationPayload = await updateValidationResponse.json();
+    expect(updateValidationPayload).toEqual({
       code: 'validation_failed',
       error: '请求格式不正确',
     });
+    expectNoHisPrivateData(updateValidationPayload);
     expect(updateConflictResponse.status).toBe(409);
-    await expect(updateConflictResponse.json()).resolves.toEqual({
+    const updateConflictPayload = await updateConflictResponse.json();
+    expect(updateConflictPayload).toEqual({
       code: 'conflict',
       error: '连接名称已存在',
     });
+    expectNoHisPrivateData(updateConflictPayload);
     expect(updateNotFoundResponse.status).toBe(404);
-    await expect(updateNotFoundResponse.json()).resolves.toEqual({
+    const updateNotFoundPayload = await updateNotFoundResponse.json();
+    expect(updateNotFoundPayload).toEqual({
       code: 'not_found',
       error: '记录不存在',
     });
+    expectNoHisPrivateData(updateNotFoundPayload);
     expect(updateUnavailableResponse.status).toBe(503);
-    await expect(updateUnavailableResponse.json()).resolves.toEqual({
+    const updateUnavailablePayload = await updateUnavailableResponse.json();
+    expect(updateUnavailablePayload).toEqual({
       code: 'service_unavailable',
       error: '数据服务暂时不可用',
     });
+    expectNoHisPrivateData(updateUnavailablePayload);
   });
 });
