@@ -14,6 +14,30 @@ const tenantAdminContext = {
   source: 'demo_session',
 } as const;
 
+const tenantOperatorContext = {
+  userId: 'demo-user-operator',
+  role: 'tenant_operator',
+  scope: 'tenant',
+  tenantId: 'demo-tenant-001',
+  source: 'demo_session',
+} as const;
+
+const consultantContext = {
+  userId: 'demo-user-consultant',
+  role: 'consultant',
+  scope: 'tenant',
+  tenantId: 'demo-tenant-001',
+  source: 'demo_session',
+} as const;
+
+const customerServiceContext = {
+  userId: 'demo-user-customer-service',
+  role: 'customer_service',
+  scope: 'tenant',
+  tenantId: 'demo-tenant-001',
+  source: 'demo_session',
+} as const;
+
 const platformAdminContext = {
   userId: 'demo-user-platform',
   role: 'platform_admin',
@@ -95,6 +119,87 @@ describe('访问控制领域', () => {
           targetTenantId: 'demo-tenant-001',
         }),
       ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+    }
+  });
+
+  it('允许机构管理员在本租户创建和更新 HIS 连接配置，且保留只读权限', () => {
+    const openConnectionActions = ['create', 'update', 'read_own_tenant'] as const;
+
+    for (const action of openConnectionActions) {
+      expect(
+        canAccessResource({
+          context: tenantAdminContext,
+          resource: 'open_connection',
+          action,
+          targetTenantId: 'demo-tenant-001',
+        }),
+      ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+    }
+  });
+
+  it('拒绝未授权角色创建或更新 HIS 连接配置', () => {
+    const deniedContexts = [
+      tenantOperatorContext,
+      consultantContext,
+      customerServiceContext,
+      platformAdminContext,
+      platformOperatorContext,
+      securityAuditorContext,
+    ] as const;
+    const writeActions = ['create', 'update'] as const;
+
+    for (const context of deniedContexts) {
+      for (const action of writeActions) {
+        expect(
+          canAccessResource({
+            context,
+            resource: 'open_connection',
+            action,
+            targetTenantId: 'demo-tenant-001',
+          }),
+        ).toEqual({ allowed: false, reason: 'role_denied' });
+      }
+    }
+  });
+
+  it('HIS 连接配置只读动作不会替代未授权写入动作', () => {
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'open_connection',
+        action: 'delete',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
+  });
+
+  it('拒绝缺少租户编号的机构管理员创建或更新 HIS 连接配置', () => {
+    const writeActions = ['create', 'update'] as const;
+
+    for (const action of writeActions) {
+      expect(
+        canAccessResource({
+          context: { ...tenantAdminContext, tenantId: null },
+          resource: 'open_connection',
+          action,
+          targetTenantId: 'demo-tenant-001',
+        }),
+      ).toEqual({ allowed: false, reason: 'missing_tenant' });
+    }
+  });
+
+  it('拒绝机构管理员跨租户创建或更新 HIS 连接配置', () => {
+    const writeActions = ['create', 'update'] as const;
+
+    for (const action of writeActions) {
+      expect(
+        canAccessResource({
+          context: tenantAdminContext,
+          resource: 'open_connection',
+          action,
+          targetTenantId: 'other-tenant-001',
+        }),
+      ).toEqual({ allowed: false, reason: 'cross_tenant_denied' });
     }
   });
 
