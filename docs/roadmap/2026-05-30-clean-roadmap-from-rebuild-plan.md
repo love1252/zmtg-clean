@@ -45,6 +45,7 @@
 - Phase 23 HIS 连接配置写入 API 与状态流转边界 Plan Mode 已完成：只规划未来 create / update / pause / resume / revoke / delete API、写入 repository、权限、审计、状态流转、错误态和数据最小化边界；repository create / update 和状态流转已分阶段完成最小实现，尚未进入写入 API、凭证管理、测试连接或真实 HIS adapter。
 - Phase 23 HIS 连接配置状态流转 repository 最小实现已完成：新增 pause / resume / revoke / softDelete repository 方法和状态流转测试，状态方法绑定 `tenantId + connectionId + deletedAt is null`，跨租户 / 不存在 / 已软删除统一 `not_found`；尚未进入写入 API、审计补强、权限补强、凭证管理、测试连接或真实 HIS adapter。
 - Phase 23 HIS 连接配置 repository 写入闭环收尾已完成：docs-only 确认 create / update / pause / resume / revoke / softDelete repository、测试覆盖、数据最小化和状态边界已闭环；下一步 API / service 接入前仍需单独处理 HTTP payload parser、权限判断、API 错误映射、审计写入、service 层事务边界和 DTO 数据最小化。
+- Phase 23 HIS 连接配置 create / update API v1 Plan Mode 已完成：docs-only 规划未来 create / update API 接入前的 HTTP 载荷解析器、权限判断、服务层事务、审计写入、DTO 数据最小化、错误映射和 API 测试；当前仍未新增 API、route、service、权限、审计实现、凭证管理、测试连接或真实 HIS adapter。
 - 开放平台治理第一阶段：API Key、OAuth、Webhook 和审计的治理词汇、生命周期和安全边界展示。
 
 当前主要缺口：
@@ -107,6 +108,7 @@
 - Phase 23 HIS 连接配置 create / update repository 最小实现：已新增 `createHisConnectionForTenant` 和 `updateHisConnectionForTenant`，create 固定写入 `draft` / `unknown` 和 actor 字段，update 只允许连接名称、来源系统、厂商类型、系统类型等低风险元数据，写入条件绑定可信租户且默认不可更新软删除记录；状态流转 repository 已由后续 PR C 完成，写入 API、权限补强、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
 - Phase 23 HIS 连接配置状态流转 repository 最小实现：已新增 `pauseHisConnectionForTenant`、`resumeHisConnectionForTenant`、`revokeHisConnectionForTenant` 和 `softDeleteHisConnectionForTenant`，覆盖 active / error -> paused、paused -> active、draft / active / paused / error -> revoked、未删除状态 -> deleted，跨租户 / 不存在 / 已软删除统一 `not_found`；写入 API、权限补强、审计补强、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
 - Phase 23 HIS 连接配置 repository 写入闭环收尾：已确认 PR #126 / #127 的 repository 测试覆盖 create 默认 `draft / unknown`、create / update 白名单字段、conflict、validation_failed、not_found、pause / resume / revoke / softDelete 状态流转、softDelete 后 list / detail 不可见、敏感字段不写入、无外部系统、无治疗摘要 / 随访任务 / 自动触达和 demo seed 不修改；下一步 API / service 接入必须单独处理 payload parser、权限、错误映射、审计、事务边界和 DTO 最小化。
+- Phase 23 HIS 连接配置 create / update API v1 边界：已完成 docs-only spec / plan，明确 create / update API 只处理安全元数据，`tenantId` 只来自服务端 access context，严禁返回 `credentialRef`、凭证、连接串、raw payload、完整请求 / 响应体、SQL、stack 或 `DATABASE_URL`；API route、权限补强、审计实现、凭证管理、测试连接和真实 adapter 均需后续独立 PR。
 - 治疗摘要编辑能力 v1：编辑 payload parser、`treatment_summary:update` 最小权限、tenant-scoped repository update、`PATCH /api/institution/treatment-summaries/[summaryId]`、机构端受控编辑 UI、成功刷新列表 / 详情、失败保留输入、审计和入口 smoke。
 - 治疗项目路径模板 v1：首批光子 / 光电治疗、水光 / 注射护理、术后修复和皮肤管理的 domain-only catalog，确定性随访建议接入模板，机构端轻量展示路径类型 / 建议处理角色 / 人工确认边界，人工确认来源任务、重复治理、作废阻断和 smoke / 文档收尾。
 - 随访路径运营分析 v1：基于治疗摘要、路径模板建议、来源随访任务、任务状态和审计记录的最小聚合口径、审计关联补强、机构端只读 API、轻量指标展示和 workspace smoke / 文档收尾。

@@ -46,6 +46,7 @@
 - Phase 23 PR B：HIS 连接配置 create / update repository 最小实现已完成，新增 `createHisConnectionForTenant` / `updateHisConnectionForTenant`，只写安全元数据，默认 `draft` / `unknown`，绑定可信 `tenantId` 与 `tenantId + connectionId`，返回稳定 `ok` / `not_found` / `conflict` / `validation_failed` 结果并复用安全 read model；本阶段不新增 API、不做状态流转 repository、不改 schema / migration、不改权限、认证或租户隔离，不处理凭证、不接真实 HIS、不修改 demo seed
 - Phase 23 PR C：HIS 连接配置状态流转 repository 最小实现已完成，新增 `pauseHisConnectionForTenant` / `resumeHisConnectionForTenant` / `revokeHisConnectionForTenant` / `softDeleteHisConnectionForTenant`，绑定 `tenantId + connectionId + deletedAt is null`，返回稳定 `ok` / `not_found` / `conflict` / `invalid_state_transition` / `validation_failed` 结果；本阶段不新增 API、不写审计、不改 schema / migration、不改权限、认证或租户隔离，不处理凭证、不做测试连接、不接真实 HIS、不修改 demo seed
 - Phase 23 PR D：HIS 连接配置 repository 写入闭环收尾已完成，确认 create / update / pause / resume / revoke / softDelete repository 方法、测试覆盖、数据最小化和状态边界已闭环；本阶段 docs-only，不新增 API、不新增 repository 方法、不改生产 repository、不改 schema / migration、不改权限、认证或租户隔离，不写审计、不处理凭证、不做测试连接、不接真实 HIS、不修改 demo seed
+- Phase 23 Plan Mode：HIS 连接配置 create / update API v1 已完成规划，明确未来 HTTP 载荷解析器、权限判断、服务层事务、审计写入、DTO 数据最小化、API 错误映射和 create / update API 测试；当前 PR 仅文档，不新增 API、不改 route / service / repository / schema / migration / 权限 / 认证 / 租户隔离，不处理凭证、不做测试连接、不接真实 HIS、不返回 `credentialRef`、raw payload 或真实凭证
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -221,6 +222,7 @@ Phase 22 HIS 标准治疗事件 mapper v1 当前状态：
 - Phase 23 HIS 连接配置 create / update repository 最小实现已完成：当前仅新增 repository 层 create / update 方法和测试，create 由 repository 生成 `id` 并固定写入 `status = draft`、`healthStatus = unknown`、`createdBy` / `updatedBy`，update 只允许低风险元数据且绑定 `tenantId + connectionId + deletedAt is null`；仍不新增 API、不做 pause / resume / revoke / delete 状态 repository、不改 schema / migration、不改权限、认证或租户隔离、不处理凭证、不接真实 HIS、不修改 demo seed
 - Phase 23 HIS 连接配置状态流转 repository 最小实现已完成：当前仅新增 repository 层 pause / resume / revoke / softDelete 方法和测试，状态方法先按可信 `tenantId + connectionId + deletedAt is null` 查当前行，再执行保守状态机；softDelete 设置 `status = deleted` 和 `deletedAt`，删除后 list / detail 默认不可见；仍不新增 API、不写审计、不改 schema / migration、不改权限、认证或租户隔离、不处理凭证、不接真实 HIS、不修改 demo seed
 - Phase 23 HIS 连接配置 repository 写入闭环收尾已完成：当前仅同步文档，确认 PR #126 / #127 已覆盖 create / update / pause / resume / revoke / softDelete、可信 `tenantId` 绑定、软删除不可见、安全 read model、敏感字段拒绝、无外部调用、无治疗摘要 / 随访任务 / 自动触达和 demo seed 不修改；下一步 API / service 接入前必须单独处理 HTTP payload parser、权限判断、API 错误映射、审计写入、service 层事务边界和 DTO 数据最小化
+- Phase 23 HIS 连接配置 create / update API v1 Plan Mode 已完成：当前仅规划后续 create / update API 接入前的 HTTP 载荷解析器、权限判断、服务层事务、审计写入、DTO 数据最小化、错误映射和测试；create / update 只处理 `connectionName`、`sourceSystem`、`vendorType`、`systemType`，`tenantId` 只来自服务端 access context，仍不新增 API、不改 route / service / repository / schema / 权限 / 审计实现、不处理凭证、不做测试连接、不接真实 HIS、不修改 demo seed
 - 后续如需 adapter spec / plan、create / update API 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密与密钥管理、连接健康检查 / 测试连接、Webhook / 同步任务、患者身份匹配、人工复核 / 标准事件预览、adapter domain-only 输入 DTO / parser 或真实外部系统接入 PoC，必须单独进入 Plan Mode 或独立 PR
 
 后续阶段会依次加入：
