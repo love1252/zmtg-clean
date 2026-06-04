@@ -122,8 +122,14 @@ describe('访问控制领域', () => {
     }
   });
 
-  it('允许机构管理员在本租户创建和更新 HIS 连接配置，且保留只读权限', () => {
-    const openConnectionActions = ['create', 'update', 'read_own_tenant'] as const;
+  it('允许机构管理员在本租户读取、创建、更新和管理 HIS 连接配置状态', () => {
+    const openConnectionActions = [
+      'read_own_tenant',
+      'create',
+      'update',
+      'manage_status',
+      'delete',
+    ] as const;
 
     for (const action of openConnectionActions) {
       expect(
@@ -162,15 +168,103 @@ describe('访问控制领域', () => {
     }
   });
 
-  it('HIS 连接配置只读动作不会替代未授权写入动作', () => {
+  it('拒绝非机构管理员角色管理或删除 HIS 连接配置状态', () => {
+    const deniedContexts = [
+      tenantOperatorContext,
+      consultantContext,
+      customerServiceContext,
+      platformAdminContext,
+      platformOperatorContext,
+      securityAuditorContext,
+    ] as const;
+    const statusActions = ['manage_status', 'delete'] as const;
+
+    for (const context of deniedContexts) {
+      for (const action of statusActions) {
+        expect(
+          canAccessResource({
+            context,
+            resource: 'open_connection',
+            action,
+            targetTenantId: 'demo-tenant-001',
+          }),
+        ).toEqual({ allowed: false, reason: 'role_denied' });
+      }
+    }
+  });
+
+  it('拒绝缺少租户编号的机构管理员管理或删除 HIS 连接配置状态', () => {
+    const statusActions = ['manage_status', 'delete'] as const;
+
+    for (const action of statusActions) {
+      expect(
+        canAccessResource({
+          context: { ...tenantAdminContext, tenantId: null },
+          resource: 'open_connection',
+          action,
+          targetTenantId: 'demo-tenant-001',
+        }),
+      ).toEqual({ allowed: false, reason: 'missing_tenant' });
+    }
+  });
+
+  it('拒绝机构管理员跨租户管理或删除 HIS 连接配置状态', () => {
+    const statusActions = ['manage_status', 'delete'] as const;
+
+    for (const action of statusActions) {
+      expect(
+        canAccessResource({
+          context: tenantAdminContext,
+          resource: 'open_connection',
+          action,
+          targetTenantId: 'other-tenant-001',
+        }),
+      ).toEqual({ allowed: false, reason: 'cross_tenant_denied' });
+    }
+  });
+
+  it('只读或更新动作不会替代状态管理或删除动作', () => {
     expect(
       canAccessResource({
         context: tenantAdminContext,
-        resource: 'open_connection',
+        resource: 'treatment_summary',
+        action: 'read_own_tenant',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'treatment_summary',
+        action: 'update',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'treatment_summary',
+        action: 'manage_status',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'treatment_summary',
         action: 'delete',
         targetTenantId: 'demo-tenant-001',
       }),
     ).toEqual({ allowed: false, reason: 'role_denied' });
+  });
+
+  it('不新增 HIS 连接配置状态细分动作', () => {
+    expect(ACCESS_ACTIONS).toContain('manage_status');
+    expect(ACCESS_ACTIONS).toContain('delete');
+    expect(ACCESS_ACTIONS).not.toContain('pause');
+    expect(ACCESS_ACTIONS).not.toContain('resume');
+    expect(ACCESS_ACTIONS).not.toContain('revoke');
+    expect(ACCESS_ACTIONS).not.toContain('soft_delete');
   });
 
   it('拒绝缺少租户编号的机构管理员创建或更新 HIS 连接配置', () => {
