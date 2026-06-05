@@ -370,7 +370,7 @@ function expectRouteDeniedAuditEvent(
     actorId: string;
     actorRole: AccessContext['role'];
     tenantId: string | null;
-    action: 'create' | 'update';
+    action: 'create' | 'update' | 'manage_status' | 'delete';
     reason:
       | 'role_denied'
       | 'missing_tenant'
@@ -912,20 +912,23 @@ describe('机构端 HIS 连接配置 pause / resume 状态 API route', () => {
     expect(routeMocks.resumeHisConnectionForTenantService).not.toHaveBeenCalled();
   });
 
-  it('未登录返回 401，无权限返回 403，且均不读取 body 或调用 service', async () => {
+  it('未登录返回 401 不写 audit；权限拒绝返回 403 并写 manage_status denied audit，且不读取 body 或调用 service', async () => {
     const unauthorizedResponse = await hisConnectionPausePost(
       statusRawRequest('{"reasonCode":"malformed"'),
       detailContext('his_conn_001'),
     );
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+
     routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
     const forbiddenResponse = await hisConnectionResumePost(
       statusRawRequest('{"reasonCode":"malformed"'),
-      detailContext('his_conn_001'),
+      detailContext('  his_conn_001  '),
     );
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(platformContext);
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantAdminWithoutTenantContext);
     const platformForbiddenResponse = await hisConnectionPausePost(
       statusRawRequest('{"reasonCode":"malformed"'),
-      detailContext('his_conn_001'),
+      detailContext('his_conn_missing_tenant'),
     );
 
     expect(unauthorizedResponse.status).toBe(401);
@@ -943,11 +946,55 @@ describe('机构端 HIS 连接配置 pause / resume 状态 API route', () => {
       code: 'forbidden',
       error: '没有访问权限',
     });
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(2);
+    expectRouteDeniedAuditEvent(routeMocks.auditEventRepository.record.mock.calls[0]?.[0], {
+      actorId: 'demo-user-operator',
+      actorRole: 'tenant_operator',
+      tenantId: 'demo-tenant-001',
+      action: 'manage_status',
+      reason: 'role_denied',
+      resourceId: 'his_conn_001',
+    });
+    expectRouteDeniedAuditEvent(routeMocks.auditEventRepository.record.mock.calls[1]?.[0], {
+      actorId: 'demo-user-admin',
+      actorRole: 'tenant_admin',
+      tenantId: null,
+      action: 'manage_status',
+      reason: 'missing_tenant',
+      resourceId: 'his_conn_missing_tenant',
+    });
     expect(routeMocks.pauseHisConnectionForTenantService).not.toHaveBeenCalled();
     expect(routeMocks.resumeHisConnectionForTenantService).not.toHaveBeenCalled();
-    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
-    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+  });
+
+  it('pause 权限拒绝 audit 写入失败时返回 503，且不调用 status service 或泄露异常', async () => {
+    routeMocks.auditEventRepository.record.mockRejectedValueOnce(
+      new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg audit stack'),
+    );
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
+
+    const response = await hisConnectionPausePost(
+      statusRawRequest('{"reasonCode":"malformed"'),
+      detailContext('his_conn_001'),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      code: 'service_unavailable',
+      error: '数据服务暂时不可用',
+    });
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expectRouteDeniedAuditEvent(routeMocks.auditEventRepository.record.mock.calls[0]?.[0], {
+      actorId: 'demo-user-operator',
+      actorRole: 'tenant_operator',
+      tenantId: 'demo-tenant-001',
+      action: 'manage_status',
+      reason: 'role_denied',
+      resourceId: 'his_conn_001',
+    });
+    expectNoHisPrivateData(payload);
+    expect(routeMocks.pauseHisConnectionForTenantService).not.toHaveBeenCalled();
   });
 
   it('pause / resume 只能使用 open_connection:manage_status，read_own_tenant 或 update 不能作为状态权限', () => {
@@ -1254,7 +1301,7 @@ describe('机构端 HIS 连接配置 revoke / DELETE 状态 API route', () => {
     expect(routeMocks.softDeleteHisConnectionForTenantService).not.toHaveBeenCalled();
   });
 
-  it('未登录返回 401，无权限返回 403，且均不读取 body 或调用 service', async () => {
+  it('未登录返回 401 不写 audit；权限拒绝返回 403 并写状态 route denied audit，且不读取 body 或调用 service', async () => {
     const unauthorizedResponse = await hisConnectionRevokePost(
       statusRawRequest(
         '{"reasonCode":"malformed"',
@@ -1262,22 +1309,25 @@ describe('机构端 HIS 连接配置 revoke / DELETE 状态 API route', () => {
       ),
       detailContext('his_conn_001'),
     );
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+
     routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
     const revokeForbiddenResponse = await hisConnectionRevokePost(
       statusRawRequest(
         '{"reasonCode":"malformed"',
         'http://localhost/api/institution/his-connections/his_conn_001/revoke',
       ),
-      detailContext('his_conn_001'),
+      detailContext('  his_conn_revoke  '),
     );
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(platformContext);
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
     const deleteForbiddenResponse = await hisConnectionSoftDeleteDelete(
       statusRawRequest(
         '{"reasonCode":"malformed"',
         'http://localhost/api/institution/his-connections/his_conn_001',
         'DELETE',
       ),
-      detailContext('his_conn_001'),
+      detailContext('  his_conn_delete  '),
     );
 
     expect(unauthorizedResponse.status).toBe(401);
@@ -1292,11 +1342,59 @@ describe('机构端 HIS 连接配置 revoke / DELETE 状态 API route', () => {
         error: '没有访问权限',
       });
     }
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(2);
+    expectRouteDeniedAuditEvent(routeMocks.auditEventRepository.record.mock.calls[0]?.[0], {
+      actorId: 'demo-user-operator',
+      actorRole: 'tenant_operator',
+      tenantId: 'demo-tenant-001',
+      action: 'manage_status',
+      reason: 'role_denied',
+      resourceId: 'his_conn_revoke',
+    });
+    expectRouteDeniedAuditEvent(routeMocks.auditEventRepository.record.mock.calls[1]?.[0], {
+      actorId: 'demo-user-operator',
+      actorRole: 'tenant_operator',
+      tenantId: 'demo-tenant-001',
+      action: 'delete',
+      reason: 'role_denied',
+      resourceId: 'his_conn_delete',
+    });
     expect(routeMocks.revokeHisConnectionForTenantService).not.toHaveBeenCalled();
     expect(routeMocks.softDeleteHisConnectionForTenantService).not.toHaveBeenCalled();
-    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
-    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+  });
+
+  it('DELETE 权限拒绝 audit 写入失败时返回 503，且不调用 status service 或泄露异常', async () => {
+    routeMocks.auditEventRepository.record.mockRejectedValueOnce(
+      new Error('select * from audit_events token stack constraint'),
+    );
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
+
+    const response = await hisConnectionSoftDeleteDelete(
+      statusRawRequest(
+        '{"reasonCode":"malformed"',
+        'http://localhost/api/institution/his-connections/his_conn_001',
+        'DELETE',
+      ),
+      detailContext('  his_conn_delete  '),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      code: 'service_unavailable',
+      error: '数据服务暂时不可用',
+    });
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expectRouteDeniedAuditEvent(routeMocks.auditEventRepository.record.mock.calls[0]?.[0], {
+      actorId: 'demo-user-operator',
+      actorRole: 'tenant_operator',
+      tenantId: 'demo-tenant-001',
+      action: 'delete',
+      reason: 'role_denied',
+      resourceId: 'his_conn_delete',
+    });
+    expectNoHisPrivateData(payload);
+    expect(routeMocks.softDeleteHisConnectionForTenantService).not.toHaveBeenCalled();
   });
 
   it('revoke / DELETE 使用各自权限动作，read_own_tenant、update 或错误状态动作不能替代', () => {
@@ -1309,7 +1407,7 @@ describe('机构端 HIS 连接配置 revoke / DELETE 状态 API route', () => {
       'utf8',
     );
     const deletePermissionSource = detailRouteSource.slice(
-      detailRouteSource.indexOf('function canDeleteHisConnection'),
+      detailRouteSource.indexOf('function getDeleteHisConnectionDeniedReason'),
       detailRouteSource.indexOf('function isVisibleToTenant'),
     );
     const deleteHandlerSource = detailRouteSource.slice(

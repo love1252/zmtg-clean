@@ -83,9 +83,9 @@ function getUpdateHisConnectionDeniedReason(
   return context.tenantId ? null : 'missing_tenant';
 }
 
-function canDeleteHisConnection(
+function getDeleteHisConnectionDeniedReason(
   context: AccessContext,
-): context is AccessContext & { tenantId: string } {
+): AccessDeniedReason | null {
   const decision = canAccessResource({
     context,
     resource: 'open_connection',
@@ -93,7 +93,11 @@ function canDeleteHisConnection(
     targetTenantId: context.tenantId,
   });
 
-  return decision.allowed && Boolean(context.tenantId);
+  if (!decision.allowed) {
+    return decision.reason;
+  }
+
+  return context.tenantId ? null : 'missing_tenant';
 }
 
 function isVisibleToTenant(record: HisConnectionReadModel, tenantId: string) {
@@ -215,7 +219,7 @@ function createAuditEventId() {
 async function recordHisConnectionRouteDeniedAudit(input: {
   accessContext: AccessContext;
   connectionId: string;
-  action: 'update';
+  action: 'update' | 'delete';
   reason: HisConnectionRouteDeniedReason;
 }) {
   try {
@@ -316,7 +320,18 @@ export async function DELETE(request: Request, context: HisConnectionDetailRoute
     return unauthorizedResponse();
   }
 
-  if (!canDeleteHisConnection(accessContext)) {
+  const deleteDeniedReason = getDeleteHisConnectionDeniedReason(accessContext);
+  if (deleteDeniedReason) {
+    const auditResult = await recordHisConnectionRouteDeniedAudit({
+      accessContext,
+      connectionId,
+      action: 'delete',
+      reason: deleteDeniedReason,
+    });
+    if (!auditResult.ok) {
+      return serviceUnavailableResponse();
+    }
+
     return forbiddenResponse();
   }
 
