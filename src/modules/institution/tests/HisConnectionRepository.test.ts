@@ -1267,6 +1267,36 @@ describe('HIS 连接配置凭证 repository 最小边界', () => {
     expect(query.update).not.toHaveBeenCalled();
   });
 
+  it('set credential reference 拒绝带安全前缀伪装的 sk_live / sk_test / raw credential', async () => {
+    const forbiddenRefs = [
+      'cred_ref_sk_test_should_not_pass',
+      'cred_ref_sk_live_should_not_pass',
+      'cred_ref_raw_credential_should_not_pass',
+    ];
+
+    for (const credentialRef of forbiddenRefs) {
+      const query = createHisConnectionStateTransitionDatabase({
+        currentRow: draftHisConnectionRow,
+        updatedRow: {
+          ...draftHisConnectionRow,
+          credentialRef,
+        },
+      });
+
+      await expect(
+        createHisConnectionRepository(query.database).setHisConnectionCredentialReferenceForTenant({
+          tenantId: 'demo-tenant-001',
+          connectionId: 'his_conn_draft',
+          actorUserId: 'demo-user-admin',
+          credentialRef,
+        }),
+      ).resolves.toEqual({ status: 'validation_failed' });
+      expect(query.select).not.toHaveBeenCalled();
+      expect(query.update).not.toHaveBeenCalled();
+      expect(query.set).not.toHaveBeenCalled();
+    }
+  });
+
   it('clear / revoke credential reference 后 credentialConfigured=false，且不写 audit metadata 或明文', async () => {
     const clearQuery = createHisConnectionStateTransitionDatabase({
       currentRow: hisConnectionRow,

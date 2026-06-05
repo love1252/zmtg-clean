@@ -106,7 +106,7 @@ const hisConnectionFieldLimits = {
 
 const safeCredentialRefPattern = /^cred_ref_[a-zA-Z0-9_-]{12,}$/;
 const forbiddenCredentialRefPattern =
-  /token|secret|api[_-]?key|connection[_-]?string|password|oauth|basic[_-]?auth|private[_-]?key|raw[_-]?payload|DATABASE_URL|postgres:\/\/|mysql:\/\/|select \* from|stack/i;
+  /sk_live|sk_test|token|secret|api[_-]?key|connection[_-]?string|password|oauth|basic[_-]?auth|private[_-]?key|raw[_-]?credential|raw[_-]?payload|DATABASE_URL|postgres:\/\/|mysql:\/\/|select \* from|SQL|stack/i;
 
 function isVisibleHisConnectionRow(row: HisConnectionRow, tenantId: string) {
   return row.tenantId === tenantId && row.deletedAt === null;

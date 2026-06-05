@@ -104,6 +104,14 @@ function digestCredentialRef(credentialRef: string) {
   return createHash('sha256').update(credentialRef).digest('hex');
 }
 
+function createScopedIdempotencyKey(input: {
+  tenantId: string;
+  connectionId: string;
+  idempotencyKey: string;
+}) {
+  return `${input.tenantId}:${input.connectionId}:${input.idempotencyKey}`;
+}
+
 function mapStoredCredentialReferenceToMetadata(
   entry: StoredCredentialReference,
 ): HisConnectionCredentialStorageMetadata {
@@ -135,7 +143,12 @@ export function createInMemoryHisConnectionCredentialStorage() {
       }
 
       if (idempotencyKey !== undefined) {
-        const existingRef = refsByIdempotencyKey.get(idempotencyKey);
+        const scopedIdempotencyKey = createScopedIdempotencyKey({
+          tenantId,
+          connectionId,
+          idempotencyKey,
+        });
+        const existingRef = refsByIdempotencyKey.get(scopedIdempotencyKey);
         const existingEntry = existingRef ? entriesByRef.get(existingRef) : undefined;
 
         if (existingEntry) {
@@ -160,7 +173,14 @@ export function createInMemoryHisConnectionCredentialStorage() {
       });
 
       if (idempotencyKey !== undefined) {
-        refsByIdempotencyKey.set(idempotencyKey, credentialRef);
+        refsByIdempotencyKey.set(
+          createScopedIdempotencyKey({
+            tenantId,
+            connectionId,
+            idempotencyKey,
+          }),
+          credentialRef,
+        );
       }
 
       return {
