@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { createDeniedAccessAuditEvent } from '@/modules/audit/domain/audit-events';
+import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import {
   resumeHisConnectionForTenantService,
   type HisConnectionStatusServiceResult,
@@ -6,6 +8,7 @@ import {
 import {
   canAccessResource,
   type AccessContext,
+  type AccessDecision,
 } from '@/modules/security/domain/access-control';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
@@ -18,14 +21,14 @@ type StatusRouteInput = {
   reasonCode?: string;
 };
 
+type AccessDeniedReason = Extract<AccessDecision, { allowed: false }>['reason'];
+
 async function getConnectionId(context: HisConnectionStatusRouteContext) {
   const params = await context.params;
   return params.connectionId.trim();
 }
 
-function canManageHisConnectionStatus(
-  context: AccessContext,
-): context is AccessContext & { tenantId: string } {
+function getManageStatusDeniedReason(context: AccessContext): AccessDeniedReason | null {
   const decision = canAccessResource({
     context,
     resource: 'open_connection',
@@ -33,7 +36,11 @@ function canManageHisConnectionStatus(
     targetTenantId: context.tenantId,
   });
 
-  return decision.allowed && Boolean(context.tenantId);
+  if (!decision.allowed) {
+    return decision.reason;
+  }
+
+  return context.tenantId ? null : 'missing_tenant';
 }
 
 function isJsonObject(input: unknown): input is Record<string, unknown> {
@@ -111,6 +118,38 @@ function serviceUnavailableResponse() {
   );
 }
 
+function createAuditEventId() {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `audit_${Date.now()}_${Math.random().toString(36).slice(2)}`
+  );
+}
+
+async function recordStatusRouteDeniedAudit(input: {
+  accessContext: AccessContext;
+  connectionId: string;
+  reason: AccessDeniedReason;
+}) {
+  try {
+    const auditRepository = createAuditEventRepository(getDatabase());
+    await auditRepository.record(
+      createDeniedAccessAuditEvent({
+        eventId: createAuditEventId(),
+        context: input.accessContext,
+        resource: 'open_connection',
+        resourceId: input.connectionId,
+        action: 'manage_status',
+        reason: input.reason,
+        occurredAt: new Date().toISOString(),
+      }),
+    );
+
+    return { ok: true as const };
+  } catch {
+    return { ok: false as const };
+  }
+}
+
 function mapStatusServiceResultToResponse(result: HisConnectionStatusServiceResult) {
   switch (result.status) {
     case 'paused':
@@ -142,7 +181,17 @@ export async function POST(request: Request, context: HisConnectionStatusRouteCo
     return unauthorizedResponse();
   }
 
-  if (!canManageHisConnectionStatus(accessContext)) {
+  const deniedReason = getManageStatusDeniedReason(accessContext);
+  if (deniedReason) {
+    const auditResult = await recordStatusRouteDeniedAudit({
+      accessContext,
+      connectionId,
+      reason: deniedReason,
+    });
+    if (!auditResult.ok) {
+      return serviceUnavailableResponse();
+    }
+
     return forbiddenResponse();
   }
 
