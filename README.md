@@ -59,6 +59,7 @@
 - Phase 23 Plan Mode：HIS 连接配置状态权限已完成规划，明确 v1 推荐 pause / resume / revoke 使用 `open_connection:manage_status`、delete / softDelete 使用 `open_connection:delete`，默认仅 `tenant_admin` 可写，其他机构角色、平台角色和审计角色默认拒绝；当前 PR 仅文档，不新增 API、不修改 `src/**`、不修改权限实现、不处理凭证、不做测试连接、不接真实 HIS
 - Phase 23 Plan Mode：HIS 连接配置状态 service 已完成规划，明确后续 `pauseHisConnectionForTenantService` / `resumeHisConnectionForTenantService` / `revokeHisConnectionForTenantService` / `softDeleteHisConnectionForTenantService` 的可信输入、repository 调用、事务边界、allowed / denied audit、service result、DTO 最小化和测试拆分；当前 PR 仅文档，不新增 service、不新增 API、不修改 `src/**`、不处理凭证、不做测试连接、不接真实 HIS
 - Phase 23 Plan Mode：HIS 连接配置状态 service audit reason 映射已完成规划，明确 repository `not_found`、`invalid_state_transition`、`validation_failed`、`conflict` 和 thrown error 到状态 service result 与既有 denied audit reason 的映射；当前 PR 仅文档，不新增 audit reason、不修改 audit domain / query whitelist、不新增 service 或 API route、不修改 `src/**`
+- Phase 23 Plan Mode：HIS 连接配置状态 API route denied audit 已完成规划，明确 pause / resume / revoke / DELETE route 层权限拒绝和 parser 失败的 denied audit 口径、action / reason 映射、resourceId 边界、audit 失败处理和禁止重复审计边界；当前 PR 仅文档，不新增 API、不修改 `src/**`、不新增 audit reason 或 action、不处理凭证、不做测试连接、不接真实 HIS
 - 开放平台基础治理基线
 
 Phase 6 已完成：
