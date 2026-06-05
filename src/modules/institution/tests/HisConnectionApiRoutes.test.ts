@@ -3,11 +3,13 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  DELETE as hisConnectionSoftDeleteDelete,
   GET as hisConnectionDetailGet,
   PATCH as hisConnectionUpdatePatch,
 } from '@/app/api/institution/his-connections/[connectionId]/route';
 import { POST as hisConnectionPausePost } from '@/app/api/institution/his-connections/[connectionId]/pause/route';
 import { POST as hisConnectionResumePost } from '@/app/api/institution/his-connections/[connectionId]/resume/route';
+import { POST as hisConnectionRevokePost } from '@/app/api/institution/his-connections/[connectionId]/revoke/route';
 import {
   GET as hisConnectionListGet,
   POST as hisConnectionCreatePost,
@@ -284,9 +286,10 @@ function updateRawRequest(rawBody: string) {
 function statusRequest(
   payload: unknown = { reasonCode: '  manual_status_change  ' },
   url = 'http://localhost/api/institution/his-connections/his_conn_001/pause?tenantId=demo-tenant-002',
+  method = 'POST',
 ) {
   return new Request(url, {
-    method: 'POST',
+    method,
     headers: {
       'content-type': 'application/json',
       'x-tenant-id': 'other-tenant-should-not-be-trusted',
@@ -298,9 +301,10 @@ function statusRequest(
 
 function statusEmptyBodyRequest(
   url = 'http://localhost/api/institution/his-connections/his_conn_001/pause?tenantId=demo-tenant-002',
+  method = 'POST',
 ) {
   return new Request(url, {
-    method: 'POST',
+    method,
     headers: {
       'x-tenant-id': 'other-tenant-should-not-be-trusted',
       'x-his-tenant-id': 'other-his-tenant-should-not-be-trusted',
@@ -308,9 +312,13 @@ function statusEmptyBodyRequest(
   });
 }
 
-function statusRawRequest(rawBody: string) {
-  return new Request('http://localhost/api/institution/his-connections/his_conn_001/pause', {
-    method: 'POST',
+function statusRawRequest(
+  rawBody: string,
+  url = 'http://localhost/api/institution/his-connections/his_conn_001/pause',
+  method = 'POST',
+) {
+  return new Request(url, {
+    method,
     headers: {
       'content-type': 'application/json',
       'x-tenant-id': 'other-tenant-should-not-be-trusted',
@@ -1062,6 +1070,427 @@ describe('机构端 HIS 连接配置 pause / resume 状态 API route', () => {
       readFileSync(
         join(process.cwd(), 'src/app/api/institution/his-connections/[connectionId]/resume/route.ts'),
         'utf8',
+      ),
+    ].join('\n');
+
+    expect(routeSource).not.toMatch(
+      /fetch\(|localStorage|真实 HIS|测试连接|机构系统|企微|\bAI\b|\bRAG\b|\bAgent\b|自动触达|treatmentSummary|treatment-summary|followUp|follow-up|follow_up|credentialRef|credentialConfigured|rawPayload|requestBody|responseBody|DATABASE_URL|select \* from|SQL|stack/i,
+    );
+
+    fetchSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('机构端 HIS 连接配置 revoke / DELETE 状态 API route', () => {
+  it('revoke 成功：使用 manage_status 权限、trim 后 path ID 和 reasonCode，并只返回最小 DTO', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await hisConnectionRevokePost(
+      statusRequest(
+        { reasonCode: '  manual_revoke  ' },
+        'http://localhost/api/institution/his-connections/his_conn_001/revoke?tenantId=demo-tenant-002',
+      ),
+      detailContext('  his_conn_001  '),
+    );
+    const payload = await response.json();
+    const serviceInput = routeMocks.revokeHisConnectionForTenantService.mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({ ok: true });
+    expect(serviceInput).toBeDefined();
+    expect(Object.keys(serviceInput ?? {}).sort()).toEqual(
+      ['accessContext', 'connectionId', 'database', 'reasonCode'].sort(),
+    );
+    expect(serviceInput).toMatchObject({
+      accessContext: tenantContext,
+      connectionId: 'his_conn_001',
+      database: routeMocks.database,
+      reasonCode: 'manual_revoke',
+    });
+    expect(JSON.stringify(serviceInput)).not.toContain('other-tenant-should-not-be-trusted');
+    expect(JSON.stringify(serviceInput)).not.toContain('demo-tenant-002');
+    expect(routeMocks.pauseHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.resumeHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.softDeleteHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expectNoHisPrivateData(payload);
+  });
+
+  it('DELETE 成功：使用 delete 权限、调用 softDelete service，空 body 与 {} 可通过且不传 reasonCode', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const emptyBodyResponse = await hisConnectionSoftDeleteDelete(
+      statusEmptyBodyRequest(
+        'http://localhost/api/institution/his-connections/his_conn_001?tenantId=demo-tenant-002',
+        'DELETE',
+      ),
+      detailContext('his_conn_001'),
+    );
+    const emptyBodyPayload = await emptyBodyResponse.json();
+    const emptyBodyServiceInput = routeMocks.softDeleteHisConnectionForTenantService.mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+
+    const emptyObjectResponse = await hisConnectionSoftDeleteDelete(
+      statusRequest(
+        {},
+        'http://localhost/api/institution/his-connections/his_conn_001?tenantId=demo-tenant-002',
+        'DELETE',
+      ),
+      detailContext('his_conn_001'),
+    );
+    const emptyObjectPayload = await emptyObjectResponse.json();
+    const emptyObjectServiceInput = routeMocks.softDeleteHisConnectionForTenantService.mock.calls[1]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+
+    expect(emptyBodyResponse.status).toBe(200);
+    expect(emptyBodyPayload).toEqual({ ok: true });
+    expect(Object.keys(emptyBodyServiceInput ?? {}).sort()).toEqual(
+      ['accessContext', 'connectionId', 'database'].sort(),
+    );
+    expect(emptyBodyServiceInput).toMatchObject({
+      accessContext: tenantContext,
+      connectionId: 'his_conn_001',
+      database: routeMocks.database,
+    });
+    expect(emptyObjectResponse.status).toBe(200);
+    expect(emptyObjectPayload).toEqual({ ok: true });
+    expect(Object.keys(emptyObjectServiceInput ?? {}).sort()).toEqual(
+      ['accessContext', 'connectionId', 'database'].sort(),
+    );
+    expect(routeMocks.pauseHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.resumeHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.revokeHisConnectionForTenantService).not.toHaveBeenCalled();
+    expectNoHisPrivateData(emptyBodyPayload);
+    expectNoHisPrivateData(emptyObjectPayload);
+  });
+
+  it('body tenantId 注入、非白名单字段、非 string reasonCode 和 malformed JSON 返回 validation_failed 且不调用 service', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const bodyTenantResponse = await hisConnectionRevokePost(
+      statusRequest(
+        { tenantId: 'demo-tenant-002', reasonCode: 'manual_revoke' },
+        'http://localhost/api/institution/his-connections/his_conn_001/revoke',
+      ),
+      detailContext('his_conn_001'),
+    );
+    const forbiddenFieldResponse = await hisConnectionSoftDeleteDelete(
+      statusRequest(
+        {
+          reasonCode: 'manual_delete',
+          credentialRef: 'cred_ref_delete_should_not_echo',
+        },
+        'http://localhost/api/institution/his-connections/his_conn_001',
+        'DELETE',
+      ),
+      detailContext('his_conn_001'),
+    );
+    const invalidReasonResponse = await hisConnectionRevokePost(
+      statusRequest(
+        { reasonCode: 123 },
+        'http://localhost/api/institution/his-connections/his_conn_001/revoke',
+      ),
+      detailContext('his_conn_001'),
+    );
+    const malformedResponse = await hisConnectionSoftDeleteDelete(
+      statusRawRequest(
+        '{"reasonCode":"sk_test_delete_should_not_echo"',
+        'http://localhost/api/institution/his-connections/his_conn_001',
+        'DELETE',
+      ),
+      detailContext('his_conn_001'),
+    );
+
+    for (const response of [
+      bodyTenantResponse,
+      forbiddenFieldResponse,
+      invalidReasonResponse,
+      malformedResponse,
+    ]) {
+      const payload = await expectValidationFailedResponse(response);
+
+      expect(JSON.stringify(payload)).not.toContain('demo-tenant-002');
+      expect(JSON.stringify(payload)).not.toContain('cred_ref_delete_should_not_echo');
+      expect(JSON.stringify(payload)).not.toContain('sk_test_delete_should_not_echo');
+    }
+    expect(routeMocks.revokeHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.softDeleteHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+  });
+
+  it('空 connectionId 返回 404，且不读取 access context、不读取 body、不调用 service', async () => {
+    const revokeResponse = await hisConnectionRevokePost(
+      statusRawRequest(
+        '{"reasonCode":"malformed"',
+        'http://localhost/api/institution/his-connections/his_conn_001/revoke',
+      ),
+      detailContext('   '),
+    );
+    const deleteResponse = await hisConnectionSoftDeleteDelete(
+      statusRawRequest(
+        '{"reasonCode":"malformed"',
+        'http://localhost/api/institution/his-connections/his_conn_001',
+        'DELETE',
+      ),
+      detailContext('   '),
+    );
+
+    for (const response of [revokeResponse, deleteResponse]) {
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toEqual({
+        code: 'not_found',
+        error: '记录不存在',
+      });
+    }
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.revokeHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.softDeleteHisConnectionForTenantService).not.toHaveBeenCalled();
+  });
+
+  it('未登录返回 401，无权限返回 403，且均不读取 body 或调用 service', async () => {
+    const unauthorizedResponse = await hisConnectionRevokePost(
+      statusRawRequest(
+        '{"reasonCode":"malformed"',
+        'http://localhost/api/institution/his-connections/his_conn_001/revoke',
+      ),
+      detailContext('his_conn_001'),
+    );
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
+    const revokeForbiddenResponse = await hisConnectionRevokePost(
+      statusRawRequest(
+        '{"reasonCode":"malformed"',
+        'http://localhost/api/institution/his-connections/his_conn_001/revoke',
+      ),
+      detailContext('his_conn_001'),
+    );
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(platformContext);
+    const deleteForbiddenResponse = await hisConnectionSoftDeleteDelete(
+      statusRawRequest(
+        '{"reasonCode":"malformed"',
+        'http://localhost/api/institution/his-connections/his_conn_001',
+        'DELETE',
+      ),
+      detailContext('his_conn_001'),
+    );
+
+    expect(unauthorizedResponse.status).toBe(401);
+    await expect(unauthorizedResponse.json()).resolves.toEqual({
+      code: 'unauthorized',
+      error: '请先登录',
+    });
+    for (const response of [revokeForbiddenResponse, deleteForbiddenResponse]) {
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({
+        code: 'forbidden',
+        error: '没有访问权限',
+      });
+    }
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.revokeHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.softDeleteHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+  });
+
+  it('revoke / DELETE 使用各自权限动作，read_own_tenant、update 或错误状态动作不能替代', () => {
+    const revokeRouteSource = readFileSync(
+      join(process.cwd(), 'src/app/api/institution/his-connections/[connectionId]/revoke/route.ts'),
+      'utf8',
+    );
+    const detailRouteSource = readFileSync(
+      join(process.cwd(), 'src/app/api/institution/his-connections/[connectionId]/route.ts'),
+      'utf8',
+    );
+    const deletePermissionSource = detailRouteSource.slice(
+      detailRouteSource.indexOf('function canDeleteHisConnection'),
+      detailRouteSource.indexOf('function isVisibleToTenant'),
+    );
+    const deleteHandlerSource = detailRouteSource.slice(
+      detailRouteSource.indexOf('export async function DELETE'),
+      detailRouteSource.indexOf('export async function PATCH'),
+    );
+
+    expect(revokeRouteSource).toMatch(/resource:\s*'open_connection'/);
+    expect(revokeRouteSource).toMatch(/action:\s*'manage_status'/);
+    expect(revokeRouteSource).not.toMatch(/action:\s*'read_own_tenant'/);
+    expect(revokeRouteSource).not.toMatch(/action:\s*'update'/);
+    expect(revokeRouteSource).not.toMatch(/action:\s*'delete'/);
+    expect(deletePermissionSource).toMatch(/resource:\s*'open_connection'/);
+    expect(deletePermissionSource).toMatch(/action:\s*'delete'/);
+    expect(deletePermissionSource).not.toMatch(/action:\s*'read_own_tenant'/);
+    expect(deletePermissionSource).not.toMatch(/action:\s*'update'/);
+    expect(deletePermissionSource).not.toMatch(/action:\s*'manage_status'/);
+    expect(deleteHandlerSource).toMatch(/softDeleteHisConnectionForTenantService/);
+    expect(`${revokeRouteSource}\n${detailRouteSource}`).not.toMatch(
+      /platform_admin.*manage_status|platform_admin.*delete|scope:\s*'platform'/,
+    );
+  });
+
+  it('service result 映射为稳定 HTTP 响应，且错误响应不泄露敏感信息', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.revokeHisConnectionForTenantService
+      .mockResolvedValueOnce({ status: 'not_found' })
+      .mockResolvedValueOnce({ status: 'conflict' })
+      .mockResolvedValueOnce({ status: 'invalid_transition' })
+      .mockResolvedValueOnce({ status: 'validation_failed' })
+      .mockResolvedValueOnce({ status: 'service_unavailable' });
+
+    const notFoundResponse = await hisConnectionRevokePost(
+      statusRequest({}, 'http://localhost/api/institution/his-connections/his_conn_001/revoke'),
+      detailContext('his_conn_001'),
+    );
+    const conflictResponse = await hisConnectionRevokePost(
+      statusRequest({}, 'http://localhost/api/institution/his-connections/his_conn_001/revoke'),
+      detailContext('his_conn_001'),
+    );
+    const invalidTransitionResponse = await hisConnectionRevokePost(
+      statusRequest({}, 'http://localhost/api/institution/his-connections/his_conn_001/revoke'),
+      detailContext('his_conn_001'),
+    );
+    const validationResponse = await hisConnectionRevokePost(
+      statusRequest({}, 'http://localhost/api/institution/his-connections/his_conn_001/revoke'),
+      detailContext('his_conn_001'),
+    );
+    const unavailableResponse = await hisConnectionRevokePost(
+      statusRequest({}, 'http://localhost/api/institution/his-connections/his_conn_001/revoke'),
+      detailContext('his_conn_001'),
+    );
+
+    expect(notFoundResponse.status).toBe(404);
+    const notFoundPayload = await notFoundResponse.json();
+    expect(notFoundPayload).toEqual({
+      code: 'not_found',
+      error: '记录不存在',
+    });
+    expect(conflictResponse.status).toBe(409);
+    const conflictPayload = await conflictResponse.json();
+    expect(conflictPayload).toEqual({
+      code: 'conflict',
+      error: '当前状态不允许执行该操作',
+    });
+    expect(invalidTransitionResponse.status).toBe(409);
+    const invalidTransitionPayload = await invalidTransitionResponse.json();
+    expect(invalidTransitionPayload).toEqual({
+      code: 'invalid_transition',
+      error: '当前状态不允许执行该操作',
+    });
+    expect(validationResponse.status).toBe(400);
+    const validationPayload = await validationResponse.json();
+    expect(validationPayload).toEqual({
+      code: 'validation_failed',
+      error: '请求格式不正确',
+    });
+    expect(unavailableResponse.status).toBe(503);
+    const unavailablePayload = await unavailableResponse.json();
+    expect(unavailablePayload).toEqual({
+      code: 'service_unavailable',
+      error: '数据服务暂时不可用',
+    });
+    for (const payload of [
+      notFoundPayload,
+      conflictPayload,
+      invalidTransitionPayload,
+      validationPayload,
+      unavailablePayload,
+    ]) {
+      expectNoHisPrivateData(payload);
+    }
+    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+  });
+
+  it('DELETE service result 映射为稳定 HTTP 响应', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.softDeleteHisConnectionForTenantService
+      .mockResolvedValueOnce({ status: 'not_found' })
+      .mockResolvedValueOnce({ status: 'conflict' })
+      .mockResolvedValueOnce({ status: 'invalid_transition' })
+      .mockResolvedValueOnce({ status: 'validation_failed' })
+      .mockResolvedValueOnce({ status: 'service_unavailable' });
+
+    const responses = [];
+    for (let index = 0; index < 5; index += 1) {
+      responses.push(
+        await hisConnectionSoftDeleteDelete(
+          statusRequest(
+            {},
+            'http://localhost/api/institution/his-connections/his_conn_001',
+            'DELETE',
+          ),
+          detailContext('his_conn_001'),
+        ),
+      );
+    }
+
+    const payloads = [];
+    for (const response of responses) {
+      payloads.push(await response.json());
+    }
+
+    expect(responses.map((response) => response.status)).toEqual([404, 409, 409, 400, 503]);
+    expect(payloads).toEqual([
+      { code: 'not_found', error: '记录不存在' },
+      { code: 'conflict', error: '当前状态不允许执行该操作' },
+      { code: 'invalid_transition', error: '当前状态不允许执行该操作' },
+      { code: 'validation_failed', error: '请求格式不正确' },
+      { code: 'service_unavailable', error: '数据服务暂时不可用' },
+    ]);
+    for (const payload of payloads) {
+      expectNoHisPrivateData(payload);
+    }
+    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+  });
+
+  it('revoke / DELETE route 不调用 fetch、localStorage、真实 HIS、测试连接、凭证处理、摘要、任务或自动触达', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+    const localStorage = {
+      clear: vi.fn(),
+      getItem: vi.fn(),
+      removeItem: vi.fn(),
+      setItem: vi.fn(),
+    };
+    vi.stubGlobal('localStorage', localStorage);
+
+    await hisConnectionRevokePost(
+      statusRequest({}, 'http://localhost/api/institution/his-connections/his_conn_001/revoke'),
+      detailContext('his_conn_001'),
+    );
+    await hisConnectionSoftDeleteDelete(
+      statusRequest(
+        {},
+        'http://localhost/api/institution/his-connections/his_conn_001',
+        'DELETE',
+      ),
+      detailContext('his_conn_001'),
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(localStorage.getItem).not.toHaveBeenCalled();
+    expect(localStorage.setItem).not.toHaveBeenCalled();
+    expect(routeMocks.database.insert).not.toHaveBeenCalled();
+    expect(routeMocks.database.update).not.toHaveBeenCalled();
+    expect(routeMocks.database.delete).not.toHaveBeenCalled();
+    expect(routeMocks.database.transaction).not.toHaveBeenCalled();
+
+    const detailRouteSource = readFileSync(
+      join(process.cwd(), 'src/app/api/institution/his-connections/[connectionId]/route.ts'),
+      'utf8',
+    );
+    const routeSource = [
+      readFileSync(
+        join(process.cwd(), 'src/app/api/institution/his-connections/[connectionId]/revoke/route.ts'),
+        'utf8',
+      ),
+      detailRouteSource.slice(
+        detailRouteSource.indexOf('export async function DELETE'),
+        detailRouteSource.indexOf('export async function PATCH'),
       ),
     ].join('\n');
 
