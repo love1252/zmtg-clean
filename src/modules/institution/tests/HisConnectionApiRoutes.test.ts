@@ -851,12 +851,19 @@ describe('机构端 HIS 连接配置 pause / resume 状态 API route', () => {
     expectNoHisPrivateData(emptyObjectPayload);
   });
 
-  it('body tenantId 注入、非白名单字段、非 string reasonCode 和 malformed JSON 返回 validation_failed 且不调用 service', async () => {
+  it('body tenantId 注入、body 非 object、非白名单字段、非 string reasonCode 和 malformed JSON 返回 validation_failed、写 audit 且不调用 service', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
 
     const bodyTenantResponse = await hisConnectionPausePost(
       statusRequest({ tenantId: 'demo-tenant-002', reasonCode: 'manual_pause' }),
       detailContext('his_conn_001'),
+    );
+    const bodyNotObjectResponse = await hisConnectionResumePost(
+      statusRequest(
+        ['not_object'],
+        'http://localhost/api/institution/his-connections/his_conn_001/resume',
+      ),
+      detailContext('  his_conn_001  '),
     );
     const forbiddenFieldResponse = await hisConnectionPausePost(
       statusRequest({
@@ -879,6 +886,7 @@ describe('机构端 HIS 连接配置 pause / resume 状态 API route', () => {
 
     for (const response of [
       bodyTenantResponse,
+      bodyNotObjectResponse,
       forbiddenFieldResponse,
       invalidReasonResponse,
       malformedResponse,
@@ -891,8 +899,54 @@ describe('机构端 HIS 连接配置 pause / resume 状态 API route', () => {
     }
     expect(routeMocks.pauseHisConnectionForTenantService).not.toHaveBeenCalled();
     expect(routeMocks.resumeHisConnectionForTenantService).not.toHaveBeenCalled();
-    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
-    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(5);
+    for (const call of routeMocks.auditEventRepository.record.mock.calls) {
+      expectRouteDeniedAuditEvent(call[0], {
+        actorId: 'demo-user-admin',
+        actorRole: 'tenant_admin',
+        tenantId: 'demo-tenant-001',
+        action: 'manage_status',
+        reason: 'invalid_his_connection_payload',
+        resourceId: 'his_conn_001',
+      });
+      expect(JSON.stringify(call[0])).not.toContain('demo-tenant-002');
+      expect(JSON.stringify(call[0])).not.toContain('cred_ref_should_not_echo');
+      expect(JSON.stringify(call[0])).not.toContain('sk_test_should_not_echo');
+    }
+  });
+
+  it('pause parser audit 写入失败时返回 503，且不调用 status service 或泄露异常', async () => {
+    routeMocks.auditEventRepository.record.mockRejectedValueOnce(
+      new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg audit stack'),
+    );
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantContext);
+
+    const response = await hisConnectionPausePost(
+      statusRawRequest('{"reasonCode":"sk_test_should_not_echo"'),
+      detailContext('  his_conn_001  '),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      code: 'service_unavailable',
+      error: '数据服务暂时不可用',
+    });
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expectRouteDeniedAuditEvent(routeMocks.auditEventRepository.record.mock.calls[0]?.[0], {
+      actorId: 'demo-user-admin',
+      actorRole: 'tenant_admin',
+      tenantId: 'demo-tenant-001',
+      action: 'manage_status',
+      reason: 'invalid_his_connection_payload',
+      resourceId: 'his_conn_001',
+    });
+    expect(JSON.stringify(routeMocks.auditEventRepository.record.mock.calls[0]?.[0])).not.toContain(
+      'sk_test_should_not_echo',
+    );
+    expectNoHisPrivateData(payload);
+    expect(routeMocks.pauseHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.resumeHisConnectionForTenantService).not.toHaveBeenCalled();
   });
 
   it('空 connectionId 返回 404，且不读取 access context、不读取 body、不调用 service', async () => {
@@ -1216,7 +1270,7 @@ describe('机构端 HIS 连接配置 revoke / DELETE 状态 API route', () => {
     expectNoHisPrivateData(emptyObjectPayload);
   });
 
-  it('body tenantId 注入、非白名单字段、非 string reasonCode 和 malformed JSON 返回 validation_failed 且不调用 service', async () => {
+  it('body tenantId 注入、body 非 object、非白名单字段、非 string reasonCode 和 malformed JSON 返回 validation_failed、写 audit 且不调用 service', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
 
     const bodyTenantResponse = await hisConnectionRevokePost(
@@ -1225,6 +1279,13 @@ describe('机构端 HIS 连接配置 revoke / DELETE 状态 API route', () => {
         'http://localhost/api/institution/his-connections/his_conn_001/revoke',
       ),
       detailContext('his_conn_001'),
+    );
+    const bodyNotObjectResponse = await hisConnectionRevokePost(
+      statusRequest(
+        ['not_object'],
+        'http://localhost/api/institution/his-connections/his_conn_001/revoke',
+      ),
+      detailContext('  his_conn_001  '),
     );
     const forbiddenFieldResponse = await hisConnectionSoftDeleteDelete(
       statusRequest(
@@ -1255,6 +1316,7 @@ describe('机构端 HIS 连接配置 revoke / DELETE 状态 API route', () => {
 
     for (const response of [
       bodyTenantResponse,
+      bodyNotObjectResponse,
       forbiddenFieldResponse,
       invalidReasonResponse,
       malformedResponse,
@@ -1267,8 +1329,58 @@ describe('机构端 HIS 连接配置 revoke / DELETE 状态 API route', () => {
     }
     expect(routeMocks.revokeHisConnectionForTenantService).not.toHaveBeenCalled();
     expect(routeMocks.softDeleteHisConnectionForTenantService).not.toHaveBeenCalled();
-    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
-    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(5);
+    for (const [index, call] of routeMocks.auditEventRepository.record.mock.calls.entries()) {
+      expectRouteDeniedAuditEvent(call[0], {
+        actorId: 'demo-user-admin',
+        actorRole: 'tenant_admin',
+        tenantId: 'demo-tenant-001',
+        action: index === 2 || index === 4 ? 'delete' : 'manage_status',
+        reason: 'invalid_his_connection_payload',
+        resourceId: 'his_conn_001',
+      });
+      expect(JSON.stringify(call[0])).not.toContain('demo-tenant-002');
+      expect(JSON.stringify(call[0])).not.toContain('cred_ref_delete_should_not_echo');
+      expect(JSON.stringify(call[0])).not.toContain('sk_test_delete_should_not_echo');
+    }
+  });
+
+  it('DELETE parser audit 写入失败时返回 503，且不调用 status service 或泄露异常', async () => {
+    routeMocks.auditEventRepository.record.mockRejectedValueOnce(
+      new Error('select * from audit_events token stack constraint'),
+    );
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantContext);
+
+    const response = await hisConnectionSoftDeleteDelete(
+      statusRawRequest(
+        '{"reasonCode":"sk_test_delete_should_not_echo"',
+        'http://localhost/api/institution/his-connections/his_conn_001',
+        'DELETE',
+      ),
+      detailContext('  his_conn_delete  '),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      code: 'service_unavailable',
+      error: '数据服务暂时不可用',
+    });
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expectRouteDeniedAuditEvent(routeMocks.auditEventRepository.record.mock.calls[0]?.[0], {
+      actorId: 'demo-user-admin',
+      actorRole: 'tenant_admin',
+      tenantId: 'demo-tenant-001',
+      action: 'delete',
+      reason: 'invalid_his_connection_payload',
+      resourceId: 'his_conn_delete',
+    });
+    expect(JSON.stringify(routeMocks.auditEventRepository.record.mock.calls[0]?.[0])).not.toContain(
+      'sk_test_delete_should_not_echo',
+    );
+    expectNoHisPrivateData(payload);
+    expect(routeMocks.revokeHisConnectionForTenantService).not.toHaveBeenCalled();
+    expect(routeMocks.softDeleteHisConnectionForTenantService).not.toHaveBeenCalled();
   });
 
   it('空 connectionId 返回 404，且不读取 access context、不读取 body、不调用 service', async () => {
