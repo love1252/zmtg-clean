@@ -35,6 +35,7 @@ export const ACCESS_ACTIONS = [
   'update',
   'delete',
   'manage_status',
+  'manage_credentials',
   'manage_policy',
   'review',
   'export_report',
@@ -92,7 +93,14 @@ const accessPolicies: AccessPolicy[] = [
   {
     role: 'tenant_admin',
     resource: 'open_connection',
-    actions: ['read_own_tenant', 'create', 'update', 'manage_status', 'delete'],
+    actions: [
+      'read_own_tenant',
+      'create',
+      'update',
+      'manage_status',
+      'manage_credentials',
+      'delete',
+    ],
   },
   {
     role: 'tenant_admin',

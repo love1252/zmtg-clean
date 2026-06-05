@@ -67,6 +67,7 @@
 - Phase 23 HIS 连接配置凭证 parser / service / DTO Plan Mode 进入规划：凭证 repository / storage 最小边界已完成，下一步只规划凭证 payload parser、service 编排和 DTO 最小响应；当前仍未新增 API，仍未实现 parser / service / DTO，测试连接和真实 HIS adapter 仍未开始
 - Phase 23 HIS 连接配置凭证 parser / service / DTO 最小实现已完成：新增凭证 create / update / rotate / clear / revoke payload parser、service 编排和 DTO helper，复用 fake in-memory storage 与 repository 安全 `credentialRef` set / rotate / clear / revoke；不新增 API route、不修改权限、不新增 audit action / reason / domain、不改 schema / migration、不处理真实凭证、不做测试连接、不接真实 HIS，下一步进入凭证 API route / permission / audit Plan Mode
 - Phase 23 HIS 连接配置凭证 API route / permission / audit Plan Mode 进入规划：凭证 parser / service / DTO 最小实现已完成，下一步只规划凭证 API route、权限动作、route denied audit、allowed audit、DTO / error mapping 和测试拆分；当前仍未新增 API route、仍未修改权限、仍未接入 audit action / reason / domain，测试连接和真实 HIS adapter 仍未开始
+- Phase 23 HIS 连接配置凭证 API route / permission / audit 最小实现已完成：新增 create / update / rotate / clear / revoke 凭证 API route，接入 `open_connection:manage_credentials`、route denied audit、service allowed audit、稳定 DTO / error mapping 和 route tests；不新增 schema / migration，不处理真实凭证，不保存 token / secret / API key / connection string，不做测试连接，不接真实 HIS
 - 开放平台基础治理基线
 
 Phase 6 已完成：
