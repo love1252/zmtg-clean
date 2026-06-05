@@ -64,6 +64,7 @@
 - Phase 23 当前下一步进入 HIS 连接配置凭证管理 Plan Mode：本阶段只规划凭证创建、更新、轮换、删除 / 撤销、`credentialRef`、`credentialConfigured`、权限、service、repository / storage、audit、DTO 和 parser 边界；凭证管理仍未实现，测试连接和真实 HIS adapter 仍未开始
 - Phase 23 HIS 连接配置凭证管理总边界 Plan Mode 已完成，下一步进入凭证 repository / storage 边界 Plan Mode；当前仍不实现凭证管理，不写 repository / storage，不做测试连接，不接真实 HIS adapter
 - Phase 23 HIS 连接配置凭证 repository / storage 最小边界已完成：当前仅实现安全 `credentialRef` 写入、清空 / 撤销、轮换为新安全引用、`credentialConfigured` 安全派生和 fake in-memory storage 测试抽象；不新增 API、不修改 route / service / parser / 权限 / audit domain / schema / migration，不保存真实凭证，不接真实 secret manager，不做测试连接，不接真实 HIS
+- Phase 23 HIS 连接配置凭证 parser / service / DTO Plan Mode 进入规划：凭证 repository / storage 最小边界已完成，下一步只规划凭证 payload parser、service 编排和 DTO 最小响应；当前仍未新增 API，仍未实现 parser / service / DTO，测试连接和真实 HIS adapter 仍未开始
 - 开放平台基础治理基线
 
 Phase 6 已完成：
