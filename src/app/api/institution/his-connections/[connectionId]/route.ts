@@ -337,6 +337,16 @@ export async function DELETE(request: Request, context: HisConnectionDetailRoute
 
   const parsed = await readStatusJson(request);
   if (!parsed.ok) {
+    const auditResult = await recordHisConnectionRouteDeniedAudit({
+      accessContext,
+      connectionId,
+      action: 'delete',
+      reason: 'invalid_his_connection_payload',
+    });
+    if (!auditResult.ok) {
+      return serviceUnavailableResponse();
+    }
+
     return validationFailedResponse();
   }
 

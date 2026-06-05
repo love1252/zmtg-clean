@@ -22,6 +22,9 @@ type StatusRouteInput = {
 };
 
 type AccessDeniedReason = Extract<AccessDecision, { allowed: false }>['reason'];
+type HisConnectionStatusRouteDeniedReason =
+  | AccessDeniedReason
+  | 'invalid_his_connection_payload';
 
 async function getConnectionId(context: HisConnectionStatusRouteContext) {
   const params = await context.params;
@@ -128,7 +131,7 @@ function createAuditEventId() {
 async function recordStatusRouteDeniedAudit(input: {
   accessContext: AccessContext;
   connectionId: string;
-  reason: AccessDeniedReason;
+  reason: HisConnectionStatusRouteDeniedReason;
 }) {
   try {
     const auditRepository = createAuditEventRepository(getDatabase());
@@ -197,6 +200,15 @@ export async function POST(request: Request, context: HisConnectionStatusRouteCo
 
   const parsed = await readStatusJson(request);
   if (!parsed.ok) {
+    const auditResult = await recordStatusRouteDeniedAudit({
+      accessContext,
+      connectionId,
+      reason: 'invalid_his_connection_payload',
+    });
+    if (!auditResult.ok) {
+      return serviceUnavailableResponse();
+    }
+
     return validationFailedResponse();
   }
 
