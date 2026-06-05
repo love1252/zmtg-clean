@@ -62,6 +62,7 @@
 - Phase 23 Plan Mode：HIS 连接配置状态 API route denied audit 已完成规划，明确 pause / resume / revoke / DELETE route 层权限拒绝和 parser 失败的 denied audit 口径、action / reason 映射、resourceId 边界、audit 失败处理和禁止重复审计边界；当前 PR 仅文档，不新增 API、不修改 `src/**`、不新增 audit reason 或 action、不处理凭证、不做测试连接、不接真实 HIS
 - Phase 23 HIS 连接配置状态 API 已闭环：状态权限、状态 service、pause / resume route、revoke / DELETE route、403 权限拒绝 route denied audit、parser 失败 route denied audit、route tests、status service tests 和权限 / audit domain 回归均已完成；状态 API 包含 `POST /pause`、`POST /resume`、`POST /revoke` 和 `DELETE /api/institution/his-connections/[connectionId]`，成功响应仍只返回 `{ ok: true }`，不返回凭证、状态 read model 或敏感字段；下一步进入凭证管理 Plan Mode，测试连接和真实 HIS adapter 仍未开始
 - Phase 23 当前下一步进入 HIS 连接配置凭证管理 Plan Mode：本阶段只规划凭证创建、更新、轮换、删除 / 撤销、`credentialRef`、`credentialConfigured`、权限、service、repository / storage、audit、DTO 和 parser 边界；凭证管理仍未实现，测试连接和真实 HIS adapter 仍未开始
+- Phase 23 HIS 连接配置凭证管理总边界 Plan Mode 已完成，下一步进入凭证 repository / storage 边界 Plan Mode；当前仍不实现凭证管理，不写 repository / storage，不做测试连接，不接真实 HIS adapter
 - 开放平台基础治理基线
 
 Phase 6 已完成：
