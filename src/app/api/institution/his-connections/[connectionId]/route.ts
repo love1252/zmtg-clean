@@ -7,6 +7,10 @@ import {
 } from '@/modules/institution/server/his-connection-repository';
 import { parseUpdateHisConnectionInput } from '@/modules/institution/server/his-connection-write-input';
 import {
+  softDeleteHisConnectionForTenantService,
+  type HisConnectionStatusServiceResult,
+} from '@/modules/institution/server/his-connection-status-service';
+import {
   updateHisConnectionForTenantService,
   type UpdateHisConnectionForTenantServiceResult,
 } from '@/modules/institution/server/his-connection-write-service';
@@ -40,6 +44,9 @@ type HisConnectionApiDto = {
 
 type AccessDeniedReason = Extract<AccessDecision, { allowed: false }>['reason'];
 type HisConnectionRouteDeniedReason = AccessDeniedReason | 'invalid_his_connection_payload';
+type StatusRouteInput = {
+  reasonCode?: string;
+};
 
 async function getConnectionId(context: HisConnectionDetailRouteContext) {
   const params = await context.params;
@@ -74,6 +81,19 @@ function getUpdateHisConnectionDeniedReason(
   }
 
   return context.tenantId ? null : 'missing_tenant';
+}
+
+function canDeleteHisConnection(
+  context: AccessContext,
+): context is AccessContext & { tenantId: string } {
+  const decision = canAccessResource({
+    context,
+    resource: 'open_connection',
+    action: 'delete',
+    targetTenantId: context.tenantId,
+  });
+
+  return decision.allowed && Boolean(context.tenantId);
 }
 
 function isVisibleToTenant(record: HisConnectionReadModel, tenantId: string) {
@@ -128,11 +148,60 @@ function conflictResponse() {
   return NextResponse.json({ code: 'conflict', error: '连接名称已存在' }, { status: 409 });
 }
 
+function statusConflictResponse(code: 'conflict' | 'invalid_transition') {
+  return NextResponse.json(
+    { code, error: '当前状态不允许执行该操作' },
+    { status: 409 },
+  );
+}
+
 async function readJsonBody(request: Request) {
   try {
     return { ok: true as const, value: await request.json() };
   } catch {
     return { ok: false as const };
+  }
+}
+
+function isJsonObject(input: unknown): input is Record<string, unknown> {
+  return Object.prototype.toString.call(input) === '[object Object]';
+}
+
+async function readStatusJson(request: Request): Promise<
+  | { ok: true; value: StatusRouteInput }
+  | { ok: false }
+> {
+  if (request.body === null) {
+    return { ok: true, value: {} };
+  }
+
+  try {
+    const value: unknown = await request.json();
+
+    if (!isJsonObject(value)) {
+      return { ok: false };
+    }
+
+    const keys = Object.keys(value);
+    if (keys.some((key) => key !== 'reasonCode')) {
+      return { ok: false };
+    }
+
+    if (value.reasonCode === undefined) {
+      return { ok: true, value: {} };
+    }
+
+    if (typeof value.reasonCode !== 'string') {
+      return { ok: false };
+    }
+
+    const reasonCode = value.reasonCode.trim();
+    return {
+      ok: true,
+      value: reasonCode.length > 0 ? { reasonCode } : {},
+    };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -184,6 +253,26 @@ function mapUpdateServiceResultToResponse(result: UpdateHisConnectionForTenantSe
   }
 }
 
+function mapSoftDeleteServiceResultToResponse(result: HisConnectionStatusServiceResult) {
+  switch (result.status) {
+    case 'deleted':
+      return NextResponse.json(result.dto);
+    case 'validation_failed':
+      return validationFailedResponse();
+    case 'not_found':
+      return notFoundResponse();
+    case 'conflict':
+      return statusConflictResponse('conflict');
+    case 'invalid_transition':
+      return statusConflictResponse('invalid_transition');
+    case 'service_unavailable':
+    case 'paused':
+    case 'resumed':
+    case 'revoked':
+      return serviceUnavailableResponse();
+  }
+}
+
 export async function GET(request: Request, context: HisConnectionDetailRouteContext) {
   const accessContext = getDemoAccessContextFromRequest(request);
   if (!accessContext) {
@@ -211,6 +300,40 @@ export async function GET(request: Request, context: HisConnectionDetailRouteCon
     }
 
     return NextResponse.json({ record: mapHisConnectionToApiDto(record) });
+  } catch {
+    return serviceUnavailableResponse();
+  }
+}
+
+export async function DELETE(request: Request, context: HisConnectionDetailRouteContext) {
+  const connectionId = await getConnectionId(context);
+  if (!connectionId) {
+    return notFoundResponse();
+  }
+
+  const accessContext = getDemoAccessContextFromRequest(request);
+  if (!accessContext) {
+    return unauthorizedResponse();
+  }
+
+  if (!canDeleteHisConnection(accessContext)) {
+    return forbiddenResponse();
+  }
+
+  const parsed = await readStatusJson(request);
+  if (!parsed.ok) {
+    return validationFailedResponse();
+  }
+
+  try {
+    const result = await softDeleteHisConnectionForTenantService({
+      accessContext,
+      connectionId,
+      database: getDatabase(),
+      ...(parsed.value.reasonCode === undefined ? {} : { reasonCode: parsed.value.reasonCode }),
+    });
+
+    return mapSoftDeleteServiceResultToResponse(result);
   } catch {
     return serviceUnavailableResponse();
   }
