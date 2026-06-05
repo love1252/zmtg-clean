@@ -6,6 +6,7 @@ import type { TenantDatabase } from '@/server/db/client';
 import { followUpTasks, hisConnections, treatmentSummaries } from '@/server/db/schema';
 import {
   createHisConnectionRepository,
+  mapHisConnectionRowToCredentialSummary,
   mapHisConnectionRowToReadModel,
 } from '@/modules/institution/server/his-connection-repository';
 
@@ -253,6 +254,9 @@ const hisConnectionRow = {
   deletedAt: null,
 } satisfies typeof hisConnections.$inferSelect;
 
+const safeCredentialRef = 'cred_ref_20260605_safe_reference_001';
+const rotatedSafeCredentialRef = 'cred_ref_20260605_safe_reference_002';
+
 const createdHisConnectionRow = {
   ...hisConnectionRow,
   id: 'his_conn_created',
@@ -420,6 +424,42 @@ describe('HIS 连接配置只读 repository', () => {
 
     expect(record.credentialConfigured).toBe(false);
     expect(JSON.stringify(record)).not.toMatch(/credentialRef|credential_ref/);
+  });
+
+  it('连接 revoked / deleted 时 credentialConfigured=false，且凭证 summary 不暴露内部引用', () => {
+    const activeSummary = mapHisConnectionRowToCredentialSummary(hisConnectionRow);
+    const revokedRecord = mapHisConnectionRowToReadModel(revokedHisConnectionRow);
+    const revokedSummary = mapHisConnectionRowToCredentialSummary(revokedHisConnectionRow);
+    const deletedSummary = mapHisConnectionRowToCredentialSummary(deletedHisConnectionRow);
+
+    expect(activeSummary).toEqual({
+      connectionId: 'his_conn_001',
+      tenantId: 'demo-tenant-001',
+      status: 'active',
+      credentialConfigured: true,
+      credentialStatus: 'configured',
+      updatedAt: '2026-06-03T08:20:00.000Z',
+      revokedAt: null,
+      deletedAt: null,
+    });
+    expect(revokedRecord.credentialConfigured).toBe(false);
+    expect(revokedSummary).toMatchObject({
+      connectionId: 'his_conn_001',
+      tenantId: 'demo-tenant-001',
+      status: 'revoked',
+      credentialConfigured: false,
+      credentialStatus: 'revoked',
+    });
+    expect(deletedSummary).toMatchObject({
+      connectionId: 'his_conn_deleted',
+      tenantId: 'demo-tenant-001',
+      status: 'deleted',
+      credentialConfigured: false,
+      credentialStatus: 'deleted',
+    });
+    expect(JSON.stringify([activeSummary, revokedSummary, deletedSummary])).not.toMatch(
+      /credentialRef|credential_ref|cred_ref_internal_only|token|secret|apiKey|connectionString|rawPayload/i,
+    );
   });
 
   it('按可信 tenantId 列出未软删除连接配置并按名称稳定排序', async () => {
@@ -1149,5 +1189,263 @@ describe('HIS 连接配置写入 repository', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
 
     fetchSpy.mockRestore();
+  });
+});
+
+describe('HIS 连接配置凭证 repository 最小边界', () => {
+  it('set credential reference 只写安全引用和安全更新时间，不返回 credentialRef', async () => {
+    const query = createHisConnectionStateTransitionDatabase({
+      currentRow: draftHisConnectionRow,
+      updatedRow: {
+        ...draftHisConnectionRow,
+        credentialRef: safeCredentialRef,
+        updatedBy: 'demo-user-admin',
+        updatedAt: new Date('2026-06-05T08:00:00.000Z'),
+      },
+    });
+
+    const result = await createHisConnectionRepository(
+      query.database,
+    ).setHisConnectionCredentialReferenceForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_draft',
+      actorUserId: 'demo-user-admin',
+      credentialRef: safeCredentialRef,
+    });
+
+    expect(query.lookupWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: hisConnections.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: hisConnections.id, operator: 'eq', value: 'his_conn_draft' },
+        { column: hisConnections.deletedAt, operator: 'isNull' },
+      ],
+      operator: 'and',
+    });
+    expect(query.set).toHaveBeenCalledWith({
+      credentialRef: safeCredentialRef,
+      updatedAt: expect.any(Date),
+      updatedBy: 'demo-user-admin',
+    });
+    expect(result).toMatchObject({
+      status: 'ok',
+      record: {
+        connectionId: 'his_conn_draft',
+        credentialConfigured: true,
+      },
+      summary: {
+        connectionId: 'his_conn_draft',
+        tenantId: 'demo-tenant-001',
+        credentialConfigured: true,
+        credentialStatus: 'configured',
+      },
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      new RegExp(`${safeCredentialRef}|credentialRef|credential_ref|token|secret|apiKey|connectionString|rawPayload`, 'i'),
+    );
+  });
+
+  it('set credential reference 拒绝 raw credential、token、secret、API key 或连接串形态输入', async () => {
+    const query = createHisConnectionStateTransitionDatabase({
+      currentRow: draftHisConnectionRow,
+      updatedRow: {
+        ...draftHisConnectionRow,
+        credentialRef: safeCredentialRef,
+      },
+    });
+
+    const result = await createHisConnectionRepository(
+      query.database,
+    ).setHisConnectionCredentialReferenceForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_draft',
+      actorUserId: 'demo-user-admin',
+      credentialRef: 'sk_test_should_not_be_written_secret',
+    });
+
+    expect(result).toEqual({ status: 'validation_failed' });
+    expect(query.select).not.toHaveBeenCalled();
+    expect(query.update).not.toHaveBeenCalled();
+  });
+
+  it('set credential reference 拒绝带安全前缀伪装的 sk_live / sk_test / raw credential', async () => {
+    const forbiddenRefs = [
+      'cred_ref_sk_test_should_not_pass',
+      'cred_ref_sk_live_should_not_pass',
+      'cred_ref_raw_credential_should_not_pass',
+    ];
+
+    for (const credentialRef of forbiddenRefs) {
+      const query = createHisConnectionStateTransitionDatabase({
+        currentRow: draftHisConnectionRow,
+        updatedRow: {
+          ...draftHisConnectionRow,
+          credentialRef,
+        },
+      });
+
+      await expect(
+        createHisConnectionRepository(query.database).setHisConnectionCredentialReferenceForTenant({
+          tenantId: 'demo-tenant-001',
+          connectionId: 'his_conn_draft',
+          actorUserId: 'demo-user-admin',
+          credentialRef,
+        }),
+      ).resolves.toEqual({ status: 'validation_failed' });
+      expect(query.select).not.toHaveBeenCalled();
+      expect(query.update).not.toHaveBeenCalled();
+      expect(query.set).not.toHaveBeenCalled();
+    }
+  });
+
+  it('clear / revoke credential reference 后 credentialConfigured=false，且不写 audit metadata 或明文', async () => {
+    const clearQuery = createHisConnectionStateTransitionDatabase({
+      currentRow: hisConnectionRow,
+      updatedRow: {
+        ...hisConnectionRow,
+        credentialRef: null,
+        updatedBy: 'demo-user-admin',
+        updatedAt: new Date('2026-06-05T08:10:00.000Z'),
+      },
+    });
+    const revokeQuery = createHisConnectionStateTransitionDatabase({
+      currentRow: hisConnectionRow,
+      updatedRow: {
+        ...hisConnectionRow,
+        credentialRef: null,
+        updatedBy: 'demo-user-admin',
+        updatedAt: new Date('2026-06-05T08:11:00.000Z'),
+      },
+    });
+
+    const clearResult = await createHisConnectionRepository(
+      clearQuery.database,
+    ).clearHisConnectionCredentialReferenceForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      actorUserId: 'demo-user-admin',
+      reasonCode: 'operator_clear',
+    });
+    const revokeResult = await createHisConnectionRepository(
+      revokeQuery.database,
+    ).revokeHisConnectionCredentialReferenceForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      actorUserId: 'demo-user-admin',
+      reasonCode: 'operator_revoke',
+    });
+
+    expect(clearQuery.set).toHaveBeenCalledWith({
+      credentialRef: null,
+      updatedAt: expect.any(Date),
+      updatedBy: 'demo-user-admin',
+    });
+    expect(revokeQuery.set).toHaveBeenCalledWith({
+      credentialRef: null,
+      updatedAt: expect.any(Date),
+      updatedBy: 'demo-user-admin',
+    });
+    expect(clearResult).toMatchObject({
+      status: 'ok',
+      record: { credentialConfigured: false },
+      summary: { credentialConfigured: false, credentialStatus: 'missing' },
+    });
+    expect(revokeResult).toMatchObject({
+      status: 'ok',
+      record: { credentialConfigured: false },
+      summary: { credentialConfigured: false, credentialStatus: 'missing' },
+    });
+    expect(clearQuery.insert).not.toHaveBeenCalled();
+    expect(revokeQuery.insert).not.toHaveBeenCalled();
+    expect(JSON.stringify([clearResult, revokeResult, clearQuery.set.mock.calls, revokeQuery.set.mock.calls])).not.toMatch(
+      /operator_clear|operator_revoke|token|secret|apiKey|connectionString|rawPayload|DATABASE_URL|select \* from|stack/i,
+    );
+  });
+
+  it('rotate credential reference 仅替换为新的安全引用，不暴露旧引用或新引用', async () => {
+    const query = createHisConnectionStateTransitionDatabase({
+      currentRow: hisConnectionRow,
+      updatedRow: {
+        ...hisConnectionRow,
+        credentialRef: rotatedSafeCredentialRef,
+        updatedBy: 'demo-user-admin',
+        updatedAt: new Date('2026-06-05T08:20:00.000Z'),
+      },
+    });
+
+    const result = await createHisConnectionRepository(
+      query.database,
+    ).rotateHisConnectionCredentialReferenceForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      actorUserId: 'demo-user-admin',
+      credentialRef: rotatedSafeCredentialRef,
+    });
+
+    expect(query.set).toHaveBeenCalledWith({
+      credentialRef: rotatedSafeCredentialRef,
+      updatedAt: expect.any(Date),
+      updatedBy: 'demo-user-admin',
+    });
+    expect(result).toMatchObject({
+      status: 'ok',
+      record: { credentialConfigured: true },
+      summary: { credentialConfigured: true, credentialStatus: 'configured' },
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      /cred_ref_internal_only|cred_ref_20260605_safe_reference_002|credentialRef|credential_ref/i,
+    );
+  });
+
+  it('set / rotate 不允许对 revoked 连接重新配置凭证引用', async () => {
+    const setQuery = createHisConnectionStateTransitionDatabase({
+      currentRow: revokedHisConnectionRow,
+      updatedRow: {
+        ...revokedHisConnectionRow,
+        credentialRef: safeCredentialRef,
+      },
+    });
+    const rotateQuery = createHisConnectionStateTransitionDatabase({
+      currentRow: revokedHisConnectionRow,
+      updatedRow: {
+        ...revokedHisConnectionRow,
+        credentialRef: rotatedSafeCredentialRef,
+      },
+    });
+
+    await expect(
+      createHisConnectionRepository(setQuery.database).setHisConnectionCredentialReferenceForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        actorUserId: 'demo-user-admin',
+        credentialRef: safeCredentialRef,
+      }),
+    ).resolves.toEqual({ status: 'invalid_state_transition' });
+    await expect(
+      createHisConnectionRepository(rotateQuery.database).rotateHisConnectionCredentialReferenceForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        actorUserId: 'demo-user-admin',
+        credentialRef: rotatedSafeCredentialRef,
+      }),
+    ).resolves.toEqual({ status: 'invalid_state_transition' });
+
+    expect(setQuery.update).not.toHaveBeenCalled();
+    expect(rotateQuery.update).not.toHaveBeenCalled();
+  });
+
+  it('read credential configured summary 只返回安全摘要，不返回 credentialRef', async () => {
+    const query = createHisConnectionLookupDatabase([hisConnectionRow]);
+
+    const summary = await createHisConnectionRepository(
+      query.database,
+    ).getHisConnectionCredentialSummaryByTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+    });
+
+    expect(summary).toEqual(mapHisConnectionRowToCredentialSummary(hisConnectionRow));
+    expect(JSON.stringify(summary)).not.toMatch(
+      /credentialRef|credential_ref|cred_ref_internal_only|token|secret|apiKey|connectionString|rawPayload/i,
+    );
   });
 });

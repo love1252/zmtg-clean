@@ -27,6 +27,17 @@ export type HisConnectionReadModel = {
   deletedAt: string | null;
 };
 
+export type HisConnectionCredentialStatus = 'configured' | 'missing' | 'revoked' | 'deleted';
+export type HisConnectionCredentialSummary = {
+  connectionId: string;
+  tenantId: string;
+  status: HisConnectionRow['status'];
+  credentialConfigured: boolean;
+  credentialStatus: HisConnectionCredentialStatus;
+  updatedAt: string;
+  revokedAt: string | null;
+  deletedAt: string | null;
+};
 export type HisConnectionLookupInput = {
   tenantId: string;
   connectionId: string;
@@ -48,6 +59,14 @@ export type HisConnectionStatusTransitionCommand = {
   actorUserId: string;
   reasonCode?: string;
 };
+export type HisConnectionCredentialReferenceCommand = HisConnectionLookupInput & {
+  actorUserId: string;
+  credentialRef: string;
+};
+export type HisConnectionCredentialClearCommand = HisConnectionLookupInput & {
+  actorUserId: string;
+  reasonCode?: string;
+};
 export type CreateHisConnectionResult =
   | { status: 'ok'; record: HisConnectionReadModel }
   | { status: 'conflict' }
@@ -63,6 +82,15 @@ export type HisConnectionStatusTransitionResult =
   | { status: 'conflict' }
   | { status: 'invalid_state_transition' }
   | { status: 'validation_failed' };
+export type HisConnectionCredentialReferenceResult =
+  | {
+      status: 'ok';
+      record: HisConnectionReadModel;
+      summary: HisConnectionCredentialSummary;
+    }
+  | { status: 'not_found' }
+  | { status: 'invalid_state_transition' }
+  | { status: 'validation_failed' };
 
 const hisConnectionFieldLimits = {
   tenantId: 64,
@@ -73,7 +101,12 @@ const hisConnectionFieldLimits = {
   systemType: 64,
   actorUserId: 96,
   reasonCode: 96,
+  credentialRef: 128,
 } as const;
+
+const safeCredentialRefPattern = /^cred_ref_[a-zA-Z0-9_-]{12,}$/;
+const forbiddenCredentialRefPattern =
+  /sk_live|sk_test|token|secret|api[_-]?key|connection[_-]?string|password|oauth|basic[_-]?auth|private[_-]?key|raw[_-]?credential|raw[_-]?payload|DATABASE_URL|postgres:\/\/|mysql:\/\/|select \* from|SQL|stack/i;
 
 function isVisibleHisConnectionRow(row: HisConnectionRow, tenantId: string) {
   return row.tenantId === tenantId && row.deletedAt === null;
@@ -95,6 +128,16 @@ function normalizeRequiredText(value: unknown, maxLength: number): string | null
 function isValidOptionalText(value: unknown, maxLength: number): boolean {
   if (value === undefined) return true;
   return normalizeRequiredText(value, maxLength) !== null;
+}
+
+function normalizeCredentialRef(value: unknown): string | null {
+  const credentialRef = normalizeRequiredText(value, hisConnectionFieldLimits.credentialRef);
+
+  if (!credentialRef) return null;
+  if (!safeCredentialRefPattern.test(credentialRef)) return null;
+  if (forbiddenCredentialRefPattern.test(credentialRef)) return null;
+
+  return credentialRef;
 }
 
 function pickCreateHisConnectionValues(input: CreateHisConnectionForTenantCommand) {
@@ -181,6 +224,56 @@ function pickStatusTransitionCommand(input: HisConnectionStatusTransitionCommand
   };
 }
 
+function pickCredentialReferenceCommand(input: HisConnectionCredentialReferenceCommand) {
+  const tenantId = normalizeRequiredText(input.tenantId, hisConnectionFieldLimits.tenantId);
+  const connectionId = normalizeRequiredText(
+    input.connectionId,
+    hisConnectionFieldLimits.connectionId,
+  );
+  const actorUserId = normalizeRequiredText(
+    input.actorUserId,
+    hisConnectionFieldLimits.actorUserId,
+  );
+  const credentialRef = normalizeCredentialRef(input.credentialRef);
+
+  if (!tenantId || !connectionId || !actorUserId || !credentialRef) {
+    return null;
+  }
+
+  return {
+    tenantId,
+    connectionId,
+    actorUserId,
+    credentialRef,
+  };
+}
+
+function pickCredentialClearCommand(input: HisConnectionCredentialClearCommand) {
+  const tenantId = normalizeRequiredText(input.tenantId, hisConnectionFieldLimits.tenantId);
+  const connectionId = normalizeRequiredText(
+    input.connectionId,
+    hisConnectionFieldLimits.connectionId,
+  );
+  const actorUserId = normalizeRequiredText(
+    input.actorUserId,
+    hisConnectionFieldLimits.actorUserId,
+  );
+  const reasonCodeIsValid = isValidOptionalText(
+    input.reasonCode,
+    hisConnectionFieldLimits.reasonCode,
+  );
+
+  if (!tenantId || !connectionId || !actorUserId || !reasonCodeIsValid) {
+    return null;
+  }
+
+  return {
+    tenantId,
+    connectionId,
+    actorUserId,
+  };
+}
+
 function isUniqueViolation(error: unknown) {
   return (
     typeof error === 'object' &&
@@ -190,7 +283,9 @@ function isUniqueViolation(error: unknown) {
   );
 }
 
-function createSanitizedWriteError(action: 'create' | 'update' | 'change status') {
+function createSanitizedWriteError(
+  action: 'create' | 'update' | 'change status' | 'change credential reference',
+) {
   return new Error(`Failed to ${action} HIS connection`);
 }
 
@@ -356,6 +451,36 @@ async function updateHisConnectionStatusForTenant(
   }
 }
 
+function getHisConnectionCredentialStatus(row: HisConnectionRow): HisConnectionCredentialStatus {
+  if (row.deletedAt !== null || row.status === 'deleted') return 'deleted';
+  if (row.revokedAt !== null || row.status === 'revoked') return 'revoked';
+
+  return row.credentialRef === null ? 'missing' : 'configured';
+}
+
+function isHisConnectionCredentialConfigured(row: HisConnectionRow): boolean {
+  return getHisConnectionCredentialStatus(row) === 'configured';
+}
+
+function canSetHisConnectionCredentialReference(row: HisConnectionRow): boolean {
+  return row.deletedAt === null && row.status !== 'deleted' && row.status !== 'revoked';
+}
+
+export function mapHisConnectionRowToCredentialSummary(
+  row: HisConnectionRow,
+): HisConnectionCredentialSummary {
+  return {
+    connectionId: row.id,
+    tenantId: row.tenantId,
+    status: row.status,
+    credentialConfigured: isHisConnectionCredentialConfigured(row),
+    credentialStatus: getHisConnectionCredentialStatus(row),
+    updatedAt: row.updatedAt.toISOString(),
+    revokedAt: row.revokedAt?.toISOString() ?? null,
+    deletedAt: row.deletedAt?.toISOString() ?? null,
+  };
+}
+
 export function mapHisConnectionRowToReadModel(row: HisConnectionRow): HisConnectionReadModel {
   return {
     connectionId: row.id,
@@ -365,7 +490,7 @@ export function mapHisConnectionRowToReadModel(row: HisConnectionRow): HisConnec
     vendorType: row.vendorType,
     systemType: row.systemType,
     status: row.status,
-    credentialConfigured: row.credentialRef !== null,
+    credentialConfigured: isHisConnectionCredentialConfigured(row),
     healthStatus: row.healthStatus,
     lastCheckedAt: row.lastCheckedAt?.toISOString() ?? null,
     lastErrorCode: row.lastErrorCode,
@@ -374,6 +499,110 @@ export function mapHisConnectionRowToReadModel(row: HisConnectionRow): HisConnec
     revokedAt: row.revokedAt?.toISOString() ?? null,
     deletedAt: row.deletedAt?.toISOString() ?? null,
   };
+}
+
+async function updateHisConnectionCredentialReferenceForTenant(
+  database: TenantDatabase,
+  input: HisConnectionCredentialReferenceCommand,
+): Promise<HisConnectionCredentialReferenceResult> {
+  const command = pickCredentialReferenceCommand(input);
+
+  if (!command) {
+    return { status: 'validation_failed' };
+  }
+
+  const currentRow = await findVisibleHisConnectionRowByTenant(database, {
+    tenantId: command.tenantId,
+    connectionId: command.connectionId,
+  });
+
+  if (!currentRow) {
+    return { status: 'not_found' };
+  }
+
+  if (!canSetHisConnectionCredentialReference(currentRow)) {
+    return { status: 'invalid_state_transition' };
+  }
+
+  try {
+    const [row] = await database
+      .update(hisConnections)
+      .set({
+        credentialRef: command.credentialRef,
+        updatedAt: new Date(),
+        updatedBy: command.actorUserId,
+      })
+      .where(
+        and(
+          eq(hisConnections.tenantId, command.tenantId),
+          eq(hisConnections.id, command.connectionId),
+          isNull(hisConnections.deletedAt),
+        ),
+      )
+      .returning();
+
+    if (!row || row.id !== command.connectionId || !isVisibleHisConnectionRow(row, command.tenantId)) {
+      return { status: 'not_found' };
+    }
+
+    return {
+      status: 'ok',
+      record: mapHisConnectionRowToReadModel(row),
+      summary: mapHisConnectionRowToCredentialSummary(row),
+    };
+  } catch {
+    throw createSanitizedWriteError('change credential reference');
+  }
+}
+
+async function clearHisConnectionCredentialReferenceForTenantInDatabase(
+  database: TenantDatabase,
+  input: HisConnectionCredentialClearCommand,
+): Promise<HisConnectionCredentialReferenceResult> {
+  const command = pickCredentialClearCommand(input);
+
+  if (!command) {
+    return { status: 'validation_failed' };
+  }
+
+  const currentRow = await findVisibleHisConnectionRowByTenant(database, {
+    tenantId: command.tenantId,
+    connectionId: command.connectionId,
+  });
+
+  if (!currentRow) {
+    return { status: 'not_found' };
+  }
+
+  try {
+    const [row] = await database
+      .update(hisConnections)
+      .set({
+        credentialRef: null,
+        updatedAt: new Date(),
+        updatedBy: command.actorUserId,
+      })
+      .where(
+        and(
+          eq(hisConnections.tenantId, command.tenantId),
+          eq(hisConnections.id, command.connectionId),
+          isNull(hisConnections.deletedAt),
+        ),
+      )
+      .returning();
+
+    if (!row || row.id !== command.connectionId || !isVisibleHisConnectionRow(row, command.tenantId)) {
+      return { status: 'not_found' };
+    }
+
+    return {
+      status: 'ok',
+      record: mapHisConnectionRowToReadModel(row),
+      summary: mapHisConnectionRowToCredentialSummary(row),
+    };
+  } catch {
+    throw createSanitizedWriteError('change credential reference');
+  }
 }
 
 export function createHisConnectionRepository(database: TenantDatabase) {
@@ -495,6 +724,30 @@ export function createHisConnectionRepository(database: TenantDatabase) {
       return updateHisConnectionStatusForTenant(database, input, decideSoftDeleteTransition);
     },
 
+    async setHisConnectionCredentialReferenceForTenant(
+      input: HisConnectionCredentialReferenceCommand,
+    ): Promise<HisConnectionCredentialReferenceResult> {
+      return updateHisConnectionCredentialReferenceForTenant(database, input);
+    },
+
+    async rotateHisConnectionCredentialReferenceForTenant(
+      input: HisConnectionCredentialReferenceCommand,
+    ): Promise<HisConnectionCredentialReferenceResult> {
+      return updateHisConnectionCredentialReferenceForTenant(database, input);
+    },
+
+    async clearHisConnectionCredentialReferenceForTenant(
+      input: HisConnectionCredentialClearCommand,
+    ): Promise<HisConnectionCredentialReferenceResult> {
+      return clearHisConnectionCredentialReferenceForTenantInDatabase(database, input);
+    },
+
+    async revokeHisConnectionCredentialReferenceForTenant(
+      input: HisConnectionCredentialClearCommand,
+    ): Promise<HisConnectionCredentialReferenceResult> {
+      return clearHisConnectionCredentialReferenceForTenantInDatabase(database, input);
+    },
+
     async listHisConnectionsByTenant(tenantId: string): Promise<HisConnectionReadModel[]> {
       const rows = await database
         .select()
@@ -528,6 +781,14 @@ export function createHisConnectionRepository(database: TenantDatabase) {
       );
 
       return row ? mapHisConnectionRowToReadModel(row) : null;
+    },
+
+    async getHisConnectionCredentialSummaryByTenant(
+      input: HisConnectionLookupInput,
+    ): Promise<HisConnectionCredentialSummary | null> {
+      const row = await findVisibleHisConnectionRowByTenant(database, input);
+
+      return row ? mapHisConnectionRowToCredentialSummary(row) : null;
     },
   };
 }
