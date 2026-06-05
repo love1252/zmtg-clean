@@ -88,6 +88,7 @@ describe('访问控制领域', () => {
     expect(ACCESS_ACTIONS).toContain('read_own_tenant');
     expect(ACCESS_ACTIONS).toContain('read_aggregate');
     expect(ACCESS_ACTIONS).toContain('export_report');
+    expect(ACCESS_ACTIONS).toContain('manage_credentials');
   });
 
   it('允许机构管理员读取本租户资源', () => {
@@ -128,6 +129,7 @@ describe('访问控制领域', () => {
       'create',
       'update',
       'manage_status',
+      'manage_credentials',
       'delete',
     ] as const;
 
@@ -168,7 +170,7 @@ describe('访问控制领域', () => {
     }
   });
 
-  it('拒绝非机构管理员角色管理或删除 HIS 连接配置状态', () => {
+  it('拒绝非机构管理员角色管理状态、凭证或删除 HIS 连接配置', () => {
     const deniedContexts = [
       tenantOperatorContext,
       consultantContext,
@@ -177,7 +179,7 @@ describe('访问控制领域', () => {
       platformOperatorContext,
       securityAuditorContext,
     ] as const;
-    const statusActions = ['manage_status', 'delete'] as const;
+    const statusActions = ['manage_status', 'manage_credentials', 'delete'] as const;
 
     for (const context of deniedContexts) {
       for (const action of statusActions) {
@@ -193,8 +195,8 @@ describe('访问控制领域', () => {
     }
   });
 
-  it('拒绝缺少租户编号的机构管理员管理或删除 HIS 连接配置状态', () => {
-    const statusActions = ['manage_status', 'delete'] as const;
+  it('拒绝缺少租户编号的机构管理员管理状态、凭证或删除 HIS 连接配置', () => {
+    const statusActions = ['manage_status', 'manage_credentials', 'delete'] as const;
 
     for (const action of statusActions) {
       expect(
@@ -208,8 +210,8 @@ describe('访问控制领域', () => {
     }
   });
 
-  it('拒绝机构管理员跨租户管理或删除 HIS 连接配置状态', () => {
-    const statusActions = ['manage_status', 'delete'] as const;
+  it('拒绝机构管理员跨租户管理状态、凭证或删除 HIS 连接配置', () => {
+    const statusActions = ['manage_status', 'manage_credentials', 'delete'] as const;
 
     for (const action of statusActions) {
       expect(
@@ -253,6 +255,37 @@ describe('访问控制领域', () => {
         context: tenantAdminContext,
         resource: 'treatment_summary',
         action: 'delete',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
+  });
+
+  it('HIS 连接配置凭证管理使用独立动作，平台管理员默认不能代管写入', () => {
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'open_connection',
+        action: 'manage_credentials',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+
+    for (const action of ['read_own_tenant', 'update', 'manage_status'] as const) {
+      expect(
+        canAccessResource({
+          context: tenantOperatorContext,
+          resource: 'open_connection',
+          action,
+          targetTenantId: 'demo-tenant-001',
+        }),
+      ).toEqual({ allowed: false, reason: 'role_denied' });
+    }
+
+    expect(
+      canAccessResource({
+        context: platformAdminContext,
+        resource: 'open_connection',
+        action: 'manage_credentials',
         targetTenantId: 'demo-tenant-001',
       }),
     ).toEqual({ allowed: false, reason: 'role_denied' });

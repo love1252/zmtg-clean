@@ -208,6 +208,47 @@ describe('审计查询参数 parser', () => {
     );
   });
 
+  it('接受 HIS 连接配置凭证管理 action 和稳定 reason 查询', () => {
+    for (const query of [
+      {
+        resource: 'open_connection',
+        resourceId: 'his_conn_001',
+        action: 'manage_credentials',
+        result: 'allowed',
+        reason: 'allowed_by_policy',
+      },
+      {
+        resource: 'open_connection',
+        resourceId: 'his_conn_001',
+        action: 'manage_credentials',
+        result: 'denied',
+        reason: 'invalid_his_connection_payload',
+      },
+      {
+        resource: 'open_connection',
+        resourceId: 'his_conn_001',
+        action: 'manage_credentials',
+        result: 'denied',
+        reason: 'not_found_or_not_owned',
+      },
+      {
+        resource: 'open_connection',
+        resourceId: 'his_conn_001',
+        action: 'manage_credentials',
+        result: 'denied',
+        reason: 'invalid_transition',
+      },
+    ] as const) {
+      expect(parseAuditEventQueryParams(params(query))).toEqual({
+        ok: true,
+        query: {
+          filters: query,
+          limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
+        },
+      });
+    }
+  });
+
   it('拒绝非白名单字段，避免 tenantId 或任意 SQL 参数进入查询', () => {
     expectParseError({ tenantId: 'other-tenant' }, '不支持的筛选参数: tenantId');
     expectParseError({ orderBy: 'occurred_at desc' }, '不支持的筛选参数: orderBy');

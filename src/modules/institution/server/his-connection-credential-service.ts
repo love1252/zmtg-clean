@@ -2,6 +2,8 @@ import {
   mapHisConnectionCredentialSuccessToDto,
   type HisConnectionCredentialSuccessDto,
 } from '@/modules/institution/server/his-connection-credential-dto';
+import { createAuditEvent } from '@/modules/audit/domain/audit-events';
+import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import type {
   HisConnectionCredentialMutationInput,
   HisConnectionCredentialReasonInput,
@@ -46,6 +48,8 @@ type HisConnectionCredentialRepository = Pick<
   | 'revokeHisConnectionCredentialReferenceForTenant'
 >;
 
+type HisConnectionCredentialAuditRepository = Pick<AuditEventRepository, 'record'>;
+
 type HisConnectionCredentialStorage = {
   storeSyntheticCredentialReference(
     input: StoreSyntheticCredentialReferenceInput,
@@ -56,6 +60,8 @@ type HisConnectionCredentialServiceDependencies = {
   database: TenantDatabase;
   hisConnectionRepository?: HisConnectionCredentialRepository;
   hisConnectionRepositoryFactory?: (database: TenantDatabase) => HisConnectionCredentialRepository;
+  auditEventRepository?: HisConnectionCredentialAuditRepository;
+  auditEventRepositoryFactory?: (database: TenantDatabase) => HisConnectionCredentialAuditRepository;
 };
 
 type HisConnectionCredentialMutationServiceInput =
@@ -120,6 +126,50 @@ function getRepository(
   );
 }
 
+function getAuditRepository(
+  input: HisConnectionCredentialServiceDependencies,
+  database: TenantDatabase,
+): HisConnectionCredentialAuditRepository | null {
+  return (
+    input.auditEventRepository ??
+    input.auditEventRepositoryFactory?.(database) ??
+    null
+  );
+}
+
+function createAuditEventId() {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `audit_${Date.now()}_${Math.random().toString(36).slice(2)}`
+  );
+}
+
+async function recordAllowedCredentialAudit(input: {
+  dependencies: HisConnectionCredentialServiceDependencies;
+  database: TenantDatabase;
+  accessContext: AccessContext;
+  connectionId: string;
+}) {
+  const auditRepository = getAuditRepository(input.dependencies, input.database);
+
+  if (!auditRepository) {
+    return;
+  }
+
+  await auditRepository.record(
+    createAuditEvent({
+      eventId: createAuditEventId(),
+      context: input.accessContext,
+      resource: 'open_connection',
+      resourceId: input.connectionId,
+      action: 'manage_credentials',
+      result: 'allowed',
+      reason: 'allowed_by_policy',
+      occurredAt: new Date().toISOString(),
+    }),
+  );
+}
+
 async function storeSyntheticCredentialReference(input: {
   tenantId: string;
   connectionId: string;
@@ -175,6 +225,15 @@ async function runStoredCredentialReferenceService(
         credentialRef: stored.credentialRef,
       });
 
+      if (result.status === 'ok') {
+        await recordAllowedCredentialAudit({
+          dependencies: input,
+          database: transactionDatabase,
+          accessContext: input.accessContext,
+          connectionId,
+        });
+      }
+
       return mapRepositoryResult(result, config.successStatus);
     });
   } catch {
@@ -210,6 +269,15 @@ async function runClearCredentialReferenceService(
           ? {}
           : { reasonCode: input.credentialInput.reasonCode }),
       });
+
+      if (result.status === 'ok') {
+        await recordAllowedCredentialAudit({
+          dependencies: input,
+          database: transactionDatabase,
+          accessContext: input.accessContext,
+          connectionId,
+        });
+      }
 
       return mapRepositoryResult(result, config.successStatus);
     });

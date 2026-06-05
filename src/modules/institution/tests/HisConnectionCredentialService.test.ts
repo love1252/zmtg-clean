@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
 import type { HisConnectionCredentialReferenceResult } from '@/modules/institution/server/his-connection-repository';
 import type {
   StoreSyntheticCredentialReferenceInput,
@@ -71,6 +72,7 @@ function createServiceHarness(input: {
   repositoryResult?: HisConnectionCredentialReferenceResult;
   storageError?: unknown;
   repositoryError?: unknown;
+  auditError?: unknown;
 } = {}) {
   const transactionDatabase = { kind: 'transaction-database' } as unknown as TenantDatabase;
   const database = {
@@ -127,8 +129,17 @@ function createServiceHarness(input: {
     ),
   };
   const hisConnectionRepositoryFactory = vi.fn(() => hisConnectionRepository);
+  const auditEventRepository = {
+    record: vi.fn(async (event: TenantAuditEvent) => {
+      void event;
+      if (input.auditError) throw input.auditError;
+    }),
+  };
+  const auditEventRepositoryFactory = vi.fn(() => auditEventRepository);
 
   return {
+    auditEventRepository,
+    auditEventRepositoryFactory,
     credentialStorage,
     database,
     hisConnectionRepository,
@@ -362,6 +373,62 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
     });
 
     expect(result).toEqual({ status: 'not_found' });
+    expectNoCredentialLeak(result);
+  });
+
+  it('repository 成功后写入 allowed audit，且 metadata 不包含 placeholder、idempotencyKey 或 credentialRef', async () => {
+    const harness = createServiceHarness();
+
+    const result = await createHisConnectionCredentialForTenantService({
+      accessContext,
+      connectionId: 'his_conn_001',
+      database: harness.database,
+      credentialStorage: harness.credentialStorage,
+      credentialInput: parsedCredentialInput,
+      hisConnectionRepositoryFactory: harness.hisConnectionRepositoryFactory,
+      auditEventRepositoryFactory: harness.auditEventRepositoryFactory,
+    });
+
+    expect(result).toEqual({
+      status: 'created',
+      dto: { ok: true, credentialConfigured: true },
+    });
+    expect(harness.auditEventRepositoryFactory).toHaveBeenCalledWith(
+      harness.transactionDatabase,
+    );
+    expect(harness.auditEventRepository.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'demo-user-admin',
+        actorRole: 'tenant_admin',
+        tenantId: 'demo-tenant-001',
+        resource: 'open_connection',
+        resourceId: 'his_conn_001',
+        action: 'manage_credentials',
+        result: 'allowed',
+        reason: 'allowed_by_policy',
+        source: 'demo_session',
+      }),
+    );
+    expectNoCredentialLeak(harness.auditEventRepository.record.mock.calls);
+  });
+
+  it('allowed audit 写入失败时 fail closed 为 service_unavailable，且不泄露敏感信息', async () => {
+    const harness = createServiceHarness({
+      auditError: new Error('credentialRef=cred_ref_service_demo_safe_001 sk_live stack'),
+    });
+
+    const result = await rotateHisConnectionCredentialForTenantService({
+      accessContext,
+      connectionId: 'his_conn_001',
+      database: harness.database,
+      credentialStorage: harness.credentialStorage,
+      credentialInput: parsedCredentialInput,
+      hisConnectionRepositoryFactory: harness.hisConnectionRepositoryFactory,
+      auditEventRepositoryFactory: harness.auditEventRepositoryFactory,
+    });
+
+    expect(result).toEqual({ status: 'service_unavailable' });
+    expect(harness.auditEventRepository.record).toHaveBeenCalledTimes(1);
     expectNoCredentialLeak(result);
   });
 

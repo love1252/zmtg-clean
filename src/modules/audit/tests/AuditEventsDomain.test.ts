@@ -470,6 +470,80 @@ describe('审计事件领域模型', () => {
     );
   });
 
+  it('支持 HIS 连接配置凭证管理审计 action，且不携带凭证明文或内部引用', () => {
+    const allowed = createAuditEvent({
+      eventId: 'audit_evt_his_connection_credentials_allowed_001',
+      context: tenantAdminContext,
+      resource: 'open_connection',
+      resourceId: 'his_conn_001',
+      action: 'manage_credentials',
+      result: 'allowed',
+      reason: 'allowed_by_policy',
+      occurredAt: '2026-06-06T09:30:00.000Z',
+    });
+    const invalidPayload = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_his_connection_credentials_denied_001',
+      context: tenantAdminContext,
+      resource: 'open_connection',
+      resourceId: 'his_conn_001',
+      action: 'manage_credentials',
+      reason: 'invalid_his_connection_payload',
+      occurredAt: '2026-06-06T09:31:00.000Z',
+    });
+    const notFoundOrNotOwned = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_his_connection_credentials_denied_002',
+      context: tenantAdminContext,
+      resource: 'open_connection',
+      resourceId: 'his_conn_002',
+      action: 'manage_credentials',
+      reason: 'not_found_or_not_owned',
+      occurredAt: '2026-06-06T09:32:00.000Z',
+    });
+    const invalidTransition = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_his_connection_credentials_denied_003',
+      context: tenantAdminContext,
+      resource: 'open_connection',
+      resourceId: 'his_conn_003',
+      action: 'manage_credentials',
+      reason: 'invalid_transition',
+      occurredAt: '2026-06-06T09:33:00.000Z',
+    });
+
+    expect(allowed).toMatchObject({
+      resource: 'open_connection',
+      resourceId: 'his_conn_001',
+      action: 'manage_credentials',
+      result: 'allowed',
+      reason: 'allowed_by_policy',
+    });
+    expect(invalidPayload).toMatchObject({
+      resource: 'open_connection',
+      resourceId: 'his_conn_001',
+      action: 'manage_credentials',
+      result: 'denied',
+      reason: 'invalid_his_connection_payload',
+    });
+    expect(notFoundOrNotOwned).toMatchObject({
+      resource: 'open_connection',
+      resourceId: 'his_conn_002',
+      action: 'manage_credentials',
+      result: 'denied',
+      reason: 'not_found_or_not_owned',
+    });
+    expect(invalidTransition).toMatchObject({
+      resource: 'open_connection',
+      resourceId: 'his_conn_003',
+      action: 'manage_credentials',
+      result: 'denied',
+      reason: 'invalid_transition',
+    });
+
+    expect(JSON.stringify([allowed, invalidPayload, notFoundOrNotOwned, invalidTransition]))
+      .not.toMatch(
+        /requestBody|responseBody|credentialRef|credential_ref|idempotencyKey|synthetic_placeholder|sk_live|sk_test|token|secret|API key|connection string|raw credential|raw HIS payload|SQL|select \*|stack|DATABASE_URL/i,
+      );
+  });
+
   it('审计事件风险词列表覆盖凭证明文模式', () => {
     expect(auditForbiddenTerms).toEqual([
       'client_secret',
