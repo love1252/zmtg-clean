@@ -34,6 +34,74 @@ const parsedCredentialInput = {
 
 const safeCredentialRef = 'cred_ref_service_demo_safe_001';
 
+const providerFailureAuditCases = [
+  {
+    category: 'provider_unavailable',
+    expectedReason: 'provider_unavailable',
+    expectedStatus: 'service_unavailable',
+  },
+  {
+    category: 'timeout',
+    expectedReason: 'provider_timeout',
+    expectedStatus: 'service_unavailable',
+  },
+  {
+    category: 'retry_exhausted',
+    expectedReason: 'provider_retry_exhausted',
+    expectedStatus: 'service_unavailable',
+  },
+  {
+    category: 'circuit_open',
+    expectedReason: 'provider_circuit_open',
+    expectedStatus: 'service_unavailable',
+  },
+  {
+    category: 'validation_failed',
+    expectedReason: 'provider_validation_failed',
+    expectedStatus: 'validation_failed',
+  },
+  {
+    category: 'provider_write_failed',
+    expectedReason: 'provider_write_failed',
+    expectedStatus: 'service_unavailable',
+  },
+  {
+    category: 'provider_describe_failed',
+    expectedReason: 'provider_describe_failed',
+    expectedStatus: 'service_unavailable',
+  },
+  {
+    category: 'provider_health_failed',
+    expectedReason: 'provider_health_failed',
+    expectedStatus: 'service_unavailable',
+  },
+  {
+    category: 'repository_after_provider_failed',
+    expectedReason: 'repository_after_provider_failed',
+    expectedStatus: 'service_unavailable',
+  },
+  {
+    category: 'audit_after_provider_failed',
+    expectedReason: 'audit_after_provider_failed',
+    expectedStatus: 'service_unavailable',
+  },
+  {
+    category: 'tenant_connection_mismatch',
+    expectedReason: 'not_found_or_not_owned',
+    expectedStatus: 'service_unavailable',
+  },
+  {
+    category: 'idempotency_conflict',
+    expectedReason: 'provider_validation_failed',
+    expectedStatus: 'service_unavailable',
+  },
+  {
+    category: 'invalid_state',
+    expectedReason: 'invalid_transition',
+    expectedStatus: 'invalid_state_transition',
+  },
+] as const;
+
 function createOkCredentialResult(input: {
   credentialConfigured: boolean;
 }): HisConnectionCredentialReferenceResult {
@@ -168,6 +236,24 @@ function expectNoCredentialLeak(payload: unknown) {
   expect(JSON.stringify(payload)).not.toMatch(
     /cred_ref_service_demo_safe_001|credentialRef|credential_ref|scoped|tenant:connection|idempotencyKey|idem_service_demo|synthetic_placeholder_service_demo|token|secret|apiKey|api_key|connectionString|connection_string|rawCredential|raw_credential|rawPayload|raw_payload|DATABASE_URL|postgres:\/\/|select \* from|SQL|stack/i,
   );
+}
+
+function expectProviderFailureAuditEvent(
+  event: TenantAuditEvent,
+  reason: TenantAuditEvent['reason'],
+) {
+  expect(event).toMatchObject({
+    actorId: 'demo-user-admin',
+    actorRole: 'tenant_admin',
+    tenantId: 'demo-tenant-001',
+    resource: 'open_connection',
+    resourceId: 'his_conn_001',
+    action: 'manage_credentials',
+    result: 'denied',
+    reason,
+    source: 'demo_session',
+  });
+  expectNoCredentialLeak(event);
 }
 
 beforeEach(() => {
@@ -489,16 +575,8 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
     ).resolves.toEqual({ status: 'service_unavailable' });
   });
 
-  it('已知 provider failure 按稳定 mapping 返回，不泄露 provider 原始错误', async () => {
-    const cases = [
-      { category: 'provider_unavailable', expectedStatus: 'service_unavailable' },
-      { category: 'timeout', expectedStatus: 'service_unavailable' },
-      { category: 'retry_exhausted', expectedStatus: 'service_unavailable' },
-      { category: 'circuit_open', expectedStatus: 'service_unavailable' },
-      { category: 'validation_failed', expectedStatus: 'validation_failed' },
-    ] as const;
-
-    for (const { category, expectedStatus } of cases) {
+  it('已知 provider failure 写一条 denied audit，按稳定 mapping 返回，且不写 allowed audit', async () => {
+    for (const { category, expectedReason, expectedStatus } of providerFailureAuditCases) {
       const harness = createServiceHarness({
         storageError: createHisConnectionCredentialProviderFailure({
           category,
@@ -517,11 +595,102 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
         credentialStorage: harness.credentialStorage,
         credentialInput: parsedCredentialInput,
         hisConnectionRepositoryFactory: harness.hisConnectionRepositoryFactory,
+        auditEventRepositoryFactory: harness.auditEventRepositoryFactory,
       });
 
       expect(result).toEqual({ status: expectedStatus });
       expect(harness.database.transaction).not.toHaveBeenCalled();
+      expect(harness.auditEventRepository.record).toHaveBeenCalledTimes(1);
+      expectProviderFailureAuditEvent(
+        harness.auditEventRepository.record.mock.calls[0][0] as TenantAuditEvent,
+        expectedReason,
+      );
+      expect(harness.auditEventRepository.record.mock.calls[0][0]).not.toMatchObject({
+        result: 'allowed',
+        reason: 'allowed_by_policy',
+      });
       expectNoCredentialLeak(result);
     }
+  });
+
+  it('provider revoke failure 写 provider_revoke_failed audit，且不暴露 provider / repository 原始错误', async () => {
+    const harness = createServiceHarness({
+      repositoryError: createHisConnectionCredentialProviderFailure({
+        category: 'provider_revoke_failed',
+        operation: 'revoke',
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        unsafeMessage:
+          'providerPath=/vault/his/secret credentialRef=cred_ref_service_demo_safe_001 stack',
+      }),
+    });
+
+    const result = await revokeHisConnectionCredentialForTenantService({
+      accessContext,
+      connectionId: 'his_conn_001',
+      database: harness.database,
+      credentialInput: { reasonCode: 'operator_revoke' },
+      hisConnectionRepositoryFactory: harness.hisConnectionRepositoryFactory,
+      auditEventRepositoryFactory: harness.auditEventRepositoryFactory,
+    });
+
+    expect(result).toEqual({ status: 'service_unavailable' });
+    expect(harness.database.transaction).toHaveBeenCalledTimes(1);
+    expect(harness.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expectProviderFailureAuditEvent(
+      harness.auditEventRepository.record.mock.calls[0][0] as TenantAuditEvent,
+      'provider_revoke_failed',
+    );
+    expectNoCredentialLeak(harness.auditEventRepository.record.mock.calls);
+  });
+
+  it('provider failure audit 写入失败时 fail closed 为 service_unavailable，且不泄露 audit 原始错误', async () => {
+    const harness = createServiceHarness({
+      storageError: createHisConnectionCredentialProviderFailure({
+        category: 'validation_failed',
+        operation: 'store',
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+      }),
+      auditError: new Error(
+        'audit insert failed credentialRef=cred_ref_service_demo_safe_001 DATABASE_URL stack',
+      ),
+    });
+
+    const result = await createHisConnectionCredentialForTenantService({
+      accessContext,
+      connectionId: 'his_conn_001',
+      database: harness.database,
+      credentialStorage: harness.credentialStorage,
+      credentialInput: parsedCredentialInput,
+      hisConnectionRepositoryFactory: harness.hisConnectionRepositoryFactory,
+      auditEventRepositoryFactory: harness.auditEventRepositoryFactory,
+    });
+
+    expect(result).toEqual({ status: 'service_unavailable' });
+    expect(harness.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expectNoCredentialLeak(result);
+  });
+
+  it('未知 thrown error 不写 provider failure audit，只返回 service_unavailable', async () => {
+    const harness = createServiceHarness({
+      storageError: new Error(
+        'credentialRef=cred_ref_service_demo_safe_001 DATABASE_URL=postgres://tenant:secret@localhost stack',
+      ),
+    });
+
+    const result = await createHisConnectionCredentialForTenantService({
+      accessContext,
+      connectionId: 'his_conn_001',
+      database: harness.database,
+      credentialStorage: harness.credentialStorage,
+      credentialInput: parsedCredentialInput,
+      hisConnectionRepositoryFactory: harness.hisConnectionRepositoryFactory,
+      auditEventRepositoryFactory: harness.auditEventRepositoryFactory,
+    });
+
+    expect(result).toEqual({ status: 'service_unavailable' });
+    expect(harness.auditEventRepository.record).not.toHaveBeenCalled();
+    expectNoCredentialLeak(result);
   });
 });
