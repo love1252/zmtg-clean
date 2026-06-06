@@ -71,6 +71,7 @@
 - Phase 23 HIS 连接配置凭证加密与真实 secret manager Plan Mode 进入规划：凭证 API route / permission / audit 最小实现已完成，下一步只规划凭证加密、provider 抽象、真实 secret manager、密钥轮换、审计和回滚边界；当前仍未接真实 secret manager，仍未保存真实凭证，测试连接和真实 HIS adapter 仍未开始
 - Phase 23 HIS 连接配置凭证 provider 抽象接口最小边界已完成：在现有 fake in-memory storage 上抽象 `HisConnectionCredentialProvider`，补充 test-only health / describe 安全摘要并保持 route 兼容；不接真实 KMS / Vault / secret manager，不保存真实凭证，不做测试连接，不接真实 HIS，不新增 schema / migration
 - Phase 23 HIS 连接配置凭证 provider failure / compensation / audit Plan Mode 进入规划：provider 抽象接口最小边界已完成，下一步只规划 provider 失败分类、补偿一致性、audit reason / action、audit metadata、DTO / error mapping 和测试拆分；当前仍未接真实 provider，仍未处理真实凭证，测试连接和真实 HIS adapter 仍未开始
+- Phase 23 HIS 连接配置凭证 provider failure / compensation domain 最小边界已完成：新增 provider failure 白名单分类、domain-only compensation summary 和稳定 service result mapping，service 仅识别 safe provider failure 对象并映射到现有 DTO code；不新增 audit reason / action，不改 audit query whitelist / repository，不新增 schema / migration，不实现 job queue / outbox / cleanup，不接真实 provider，不处理真实凭证，不做测试连接，不接真实 HIS
 - 开放平台基础治理基线
 
 Phase 6 已完成：

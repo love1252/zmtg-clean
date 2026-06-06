@@ -12,6 +12,10 @@ import type {
   HisConnectionCredentialProvider,
 } from '@/modules/institution/server/his-connection-credential-storage';
 import {
+  isHisConnectionCredentialProviderFailure,
+  mapHisConnectionCredentialProviderFailureToServiceStatus,
+} from '@/modules/institution/server/his-connection-credential-provider-failure';
+import {
   createHisConnectionRepository,
   type HisConnectionCredentialReferenceResult,
   type HisConnectionRepository,
@@ -234,7 +238,11 @@ async function runStoredCredentialReferenceService(
 
       return mapRepositoryResult(result, config.successStatus);
     });
-  } catch {
+  } catch (error) {
+    if (isHisConnectionCredentialProviderFailure(error)) {
+      return { status: mapHisConnectionCredentialProviderFailureToServiceStatus(error) };
+    }
+
     return { status: 'service_unavailable' };
   }
 }
@@ -279,7 +287,11 @@ async function runClearCredentialReferenceService(
 
       return mapRepositoryResult(result, config.successStatus);
     });
-  } catch {
+  } catch (error) {
+    if (isHisConnectionCredentialProviderFailure(error)) {
+      return { status: mapHisConnectionCredentialProviderFailureToServiceStatus(error) };
+    }
+
     return { status: 'service_unavailable' };
   }
 }
