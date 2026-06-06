@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 export const hisConnectionCredentialProviderFailureCategories = [
   'provider_unavailable',
   'timeout',
@@ -145,21 +147,18 @@ const compensationOperationIdPattern = /^his_cred_comp_op_[a-z0-9]{32}$/;
 
 function normalizeOperationIdEntropy(value: string): string | null {
   const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (normalized.length < 24) return null;
+  if (normalized.length < 32) return null;
   if (forbiddenSafeSummaryPattern.test(normalized)) return null;
 
-  return normalized.slice(0, 32).padEnd(32, '0');
+  return normalized.slice(0, 32);
 }
 
-function createFallbackOperationIdEntropy() {
-  const randomUUID = globalThis.crypto?.randomUUID?.();
-  if (randomUUID) {
-    return randomUUID;
+function createSecureOperationIdEntropy() {
+  try {
+    return randomUUID();
+  } catch {
+    throw new Error('his_connection_credential_compensation_operation_id_entropy_unavailable');
   }
-
-  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random()
-    .toString(36)
-    .slice(2)}`;
 }
 
 export function isSafeHisConnectionCredentialCompensationOperationId(
@@ -173,21 +172,20 @@ export function isSafeHisConnectionCredentialCompensationOperationId(
 }
 
 export function createHisConnectionCredentialCompensationOperationId(
-  operationIdFactory: () => string = createFallbackOperationIdEntropy,
+  operationIdFactory: () => string = createSecureOperationIdEntropy,
 ): string {
   const generated = normalizeOperationIdEntropy(operationIdFactory());
 
-  if (generated) {
-    const operationId = `${compensationOperationIdPrefix}${generated}`;
-    if (isSafeHisConnectionCredentialCompensationOperationId(operationId)) {
-      return operationId;
-    }
+  if (!generated) {
+    throw new Error('his_connection_credential_compensation_operation_id_invalid_entropy');
   }
 
-  const fallback = normalizeOperationIdEntropy(createFallbackOperationIdEntropy()) ??
-    '00000000000000000000000000000000';
+  const operationId = `${compensationOperationIdPrefix}${generated}`;
+  if (!isSafeHisConnectionCredentialCompensationOperationId(operationId)) {
+    throw new Error('his_connection_credential_compensation_operation_id_invalid_entropy');
+  }
 
-  return `${compensationOperationIdPrefix}${fallback}`;
+  return operationId;
 }
 
 export function createHisConnectionCredentialProviderFailure(input: {

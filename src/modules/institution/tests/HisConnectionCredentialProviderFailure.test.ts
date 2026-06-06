@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   createHisConnectionCredentialCompensationOperationId,
@@ -159,6 +160,51 @@ describe('HIS 连接配置凭证 provider failure / compensation domain 最小�
     expectNoSensitiveFailureData(metadata);
   });
 
+  it('compensation operationId 默认使用安全随机 entropy 且不拼接敏感上下文', () => {
+    const tenantId = 'demo-tenant-001';
+    const connectionId = 'his_conn_001';
+    const operationId = createHisConnectionCredentialCompensationOperationId();
+
+    expect(operationId).toMatch(/^his_cred_comp_op_[a-z0-9]{32}$/);
+    expect(isSafeHisConnectionCredentialCompensationOperationId(operationId)).toBe(true);
+    for (const forbiddenPart of [
+      tenantId,
+      connectionId,
+      'credentialRef',
+      'cred_ref_demo_secret',
+      '/vault/his/secret',
+      'providerPath',
+      'secretPath',
+      'idempotencyKey',
+      'idem_demo',
+      'token',
+      'secret',
+      'apiKey',
+      'connectionString',
+      'select * from',
+      'stack',
+      'DATABASE_URL',
+    ]) {
+      expect(operationId).not.toContain(forbiddenPart);
+    }
+  });
+
+  it('compensation operationId 源码不再使用时间戳或伪随机 fallback', () => {
+    const source = readFileSync(
+      `${process.cwd()}/src/modules/institution/server/his-connection-credential-provider-failure.ts`,
+      'utf8',
+    );
+
+    expect(source).toContain('node:crypto');
+    expect(source).toContain('randomUUID');
+    for (const unsafeFallbackToken of [
+      ['Date', 'now'].join('.'),
+      ['Math', 'random'].join('.'),
+    ]) {
+      expect(source).not.toContain(unsafeFallbackToken);
+    }
+  });
+
   it('compensation operationId 拒绝 request / query / header / credentialRef / provider path 等危险来源', () => {
     for (const value of [
       '',
@@ -184,7 +230,6 @@ describe('HIS 连接配置凭证 provider failure / compensation domain 最小�
       failureCategory: 'credentialRef=cred_ref_demo_secret stack' as never,
       retryCount: 1234,
       manualReviewRequired: true,
-      operationIdFactory: () => 'credentialRef=cred_ref_demo_secret',
     });
 
     expect(metadata).toMatchObject({
