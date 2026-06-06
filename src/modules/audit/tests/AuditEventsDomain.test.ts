@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { AUDIT_REASON_VALUES } from '@/modules/audit/domain/audit-event-query';
+import {
+  AUDIT_REASON_VALUES,
+  AUDIT_RESULT_VALUES,
+} from '@/modules/audit/domain/audit-event-query';
 import {
   auditForbiddenTerms,
   createAuditEvent,
@@ -14,6 +17,25 @@ const tenantAdminContext: AccessContext = {
   tenantId: 'demo-tenant-001',
   source: 'demo_session',
 };
+
+const hisCredentialProviderFailureCompensationReasons = [
+  'provider_unavailable',
+  'provider_timeout',
+  'provider_retry_exhausted',
+  'provider_circuit_open',
+  'provider_validation_failed',
+  'provider_write_failed',
+  'provider_revoke_failed',
+  'provider_describe_failed',
+  'provider_health_failed',
+  'repository_after_provider_failed',
+  'audit_after_provider_failed',
+  'compensation_pending',
+  'compensation_running',
+  'compensation_succeeded',
+  'compensation_failed',
+  'manual_review_required',
+] as const;
 
 describe('审计事件领域模型', () => {
   it('创建允许访问审计事件并包含完整字段', () => {
@@ -542,6 +564,43 @@ describe('审计事件领域模型', () => {
       .not.toMatch(
         /requestBody|responseBody|credentialRef|credential_ref|idempotencyKey|synthetic_placeholder|sk_live|sk_test|token|secret|API key|connection string|raw credential|raw HIS payload|SQL|select \*|stack|DATABASE_URL/i,
       );
+  });
+
+  it('预留 HIS 连接配置凭证 provider 失败与补偿审计 reason，且不扩展 result 或敏感材料', () => {
+    expect(AUDIT_REASON_VALUES).toEqual(
+      expect.arrayContaining([...hisCredentialProviderFailureCompensationReasons]),
+    );
+    expect(AUDIT_RESULT_VALUES).toEqual(['allowed', 'denied', 'transitioned']);
+    expect(AUDIT_RESULT_VALUES).not.toContain('failure');
+
+    const events = hisCredentialProviderFailureCompensationReasons.map((reason, index) =>
+      createAuditEvent({
+        eventId: `audit_evt_his_connection_provider_reason_${index}`,
+        context: tenantAdminContext,
+        resource: 'open_connection',
+        resourceId: 'his_conn_001',
+        action: 'manage_credentials',
+        result: reason === 'compensation_succeeded' ? 'allowed' : 'denied',
+        reason,
+        occurredAt: `2026-06-06T10:${String(index).padStart(2, '0')}:00.000Z`,
+      }),
+    );
+
+    expect(events).toEqual(
+      hisCredentialProviderFailureCompensationReasons.map((reason, index) =>
+        expect.objectContaining({
+          eventId: `audit_evt_his_connection_provider_reason_${index}`,
+          resource: 'open_connection',
+          resourceId: 'his_conn_001',
+          action: 'manage_credentials',
+          result: reason === 'compensation_succeeded' ? 'allowed' : 'denied',
+          reason,
+        }),
+      ),
+    );
+    expect(JSON.stringify(events)).not.toMatch(
+      /requestBody|responseBody|credentialRef|credential_ref|providerPath|secretPath|idempotencyKey|synthetic_placeholder|sk_live|sk_test|token|secret|API key|connection string|raw credential|raw HIS payload|SQL|select \*|stack|DATABASE_URL|vault|kms|keyId/i,
+    );
   });
 
   it('审计事件风险词列表覆盖凭证明文模式', () => {

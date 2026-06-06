@@ -68,6 +68,7 @@
 - Phase 23 HIS 连接配置凭证 provider failure / compensation / audit Plan Mode 进入规划：当前只规划 provider 失败分类、补偿一致性、audit reason / action、audit metadata、transaction / consistency、route / service / provider 调用顺序、DTO / error mapping 和测试拆分；provider 抽象接口最小边界已完成，但 real credential parser / service、测试连接和真实 HIS adapter 仍需单独规划。
 - Phase 23 HIS 连接配置凭证 provider failure / compensation domain 最小边界已完成：当前只实现内部 server-side provider failure 白名单分类、domain-only compensation summary 和稳定 service result mapping；service 成功路径、route、parser、DTO 响应形态、权限、audit domain / reason / query whitelist、audit repository、schema / migration 均不改，仍不实现 job queue / outbox / cleanup，不接真实 provider，不处理真实凭证，不做测试连接，不接真实 HIS。
 - Phase 23 HIS 连接配置凭证 audit reason / query whitelist 扩展 Plan Mode 进入规划：当前只规划 provider failure / compensation 相关 audit action、候选 reason、query whitelist、metadata、route / service audit、一致性和测试拆分；provider failure / compensation domain 最小边界已完成，real credential parser / service、测试连接和真实 HIS adapter 仍需单独规划。
+- Phase 23 HIS 连接配置凭证 audit reason / query whitelist 最小边界已完成：当前仅补充 provider failure / compensation 相关稳定 audit reason，并复用现有 `reason` query whitelist；继续复用 `open_connection:manage_credentials` action 和 `allowed` / `denied` / `transitioned` result，不新增 audit action / result / metadata schema / audit repository，不修改 route / service / parser / DTO / provider / repository / schema / migration，不实现 provider failure audit 或 compensation audit，不接真实 provider，不处理真实凭证，不做测试连接，不接真实 HIS。
 - 开放平台治理第一阶段：API Key、OAuth、Webhook 和审计的治理词汇、生命周期和安全边界展示。
 
 当前主要缺口：
