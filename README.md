@@ -74,6 +74,7 @@
 - Phase 23 HIS 连接配置凭证 provider failure / compensation domain 最小边界已完成：新增 provider failure 白名单分类、domain-only compensation summary 和稳定 service result mapping，service 仅识别 safe provider failure 对象并映射到现有 DTO code；不新增 audit reason / action，不改 audit query whitelist / repository，不新增 schema / migration，不实现 job queue / outbox / cleanup，不接真实 provider，不处理真实凭证，不做测试连接，不接真实 HIS
 - Phase 23 HIS 连接配置凭证 audit reason / query whitelist 扩展 Plan Mode 进入规划：provider failure / compensation domain 最小边界已完成，下一步只规划凭证 provider failure / compensation 相关 audit reason、action、query whitelist、metadata 和 route / service audit 边界；当前仍未新增 audit reason / action，仍未修改 audit query whitelist，仍未接真实 provider，仍未处理真实凭证，测试连接和真实 HIS adapter 仍未开始
 - Phase 23 HIS 连接配置凭证 audit reason / query whitelist 最小边界已完成：新增 provider failure / compensation 稳定 audit reason，并将其纳入现有 `reason` 查询白名单；继续复用 `open_connection:manage_credentials` action 和既有 `allowed` / `denied` / `transitioned` result，不新增 audit action / result / metadata schema / audit repository，不修改 route / service / parser / DTO / provider / repository / schema / migration，不实现 provider failure audit 或 compensation audit，不处理真实凭证、不做测试连接、不接真实 HIS
+- Phase 23 HIS 连接配置凭证 provider failure audit / service audit Plan Mode 进入规划：audit reason / query whitelist 最小边界已完成，下一步只规划 provider failure audit 写入职责、service audit fail closed、route audit 去重、compensation audit 后续边界和测试拆分；当前仍未实现 provider failure audit 或 compensation audit，仍未新增 metadata schema，仍未接真实 provider，仍未处理真实凭证，测试连接和真实 HIS adapter 仍未开始
 - 开放平台基础治理基线
 
 Phase 6 已完成：
