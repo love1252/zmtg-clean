@@ -242,6 +242,10 @@ function canCompleteRunningOperation(state: HisConnectionCredentialCompensationS
   return state === 'compensation_running';
 }
 
+function canIncrementRetryCount(state: HisConnectionCredentialCompensationState) {
+  return state === 'compensation_failed' || state === 'manual_review_required';
+}
+
 async function updateCompensationOperation(
   database: TenantDatabase,
   input: CredentialCompensationOperationConnectionLookupInput,
@@ -494,7 +498,7 @@ export function createHisConnectionCredentialCompensationOperationRepository(
       input: CredentialCompensationOperationConnectionLookupInput,
     ): Promise<CredentialCompensationOperationMutationResult> {
       return transitionCompensationOperation(database, input, (current) => {
-        if (current.retryCount < 0) {
+        if (!canIncrementRetryCount(current.state) || current.retryCount < 0) {
           return { status: 'invalid_state_transition' };
         }
 

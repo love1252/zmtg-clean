@@ -465,7 +465,7 @@ describe('HIS 连接配置凭证补偿 operation repository 最小边界', () =>
     expect(rollbackQuery.update).not.toHaveBeenCalled();
   });
 
-  it('retry count 只能显式递增，并在 retry 时更新 lastAttemptAt', async () => {
+  it('failed 状态可以显式递增 retry count，并在 retry 时更新 lastAttemptAt', async () => {
     const query = createStateDatabase({
       currentRow: failedOperationRow,
       updatedRow: { ...failedOperationRow, retryCount: 2, lastAttemptAt: later },
@@ -486,6 +486,53 @@ describe('HIS 连接配置凭证补偿 operation repository 最小边界', () =>
     });
     expect(result).toMatchObject({ status: 'ok' });
     expect(JSON.stringify(query.set.mock.calls)).not.toMatch(/maxRetry|retryLimit/i);
+  });
+
+  it('manual_review_required 状态可以显式递增 retry count', async () => {
+    const query = createStateDatabase({
+      currentRow: manualReviewOperationRow,
+      updatedRow: { ...manualReviewOperationRow, retryCount: 1, lastAttemptAt: later },
+    });
+
+    const result = await createHisConnectionCredentialCompensationOperationRepository(
+      query.database,
+    ).incrementCredentialCompensationOperationRetryCount({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      operationId: safeOperationId,
+    });
+
+    expect(query.set).toHaveBeenCalledWith({
+      retryCount: 1,
+      updatedAt: expect.any(Date),
+      lastAttemptAt: expect.any(Date),
+    });
+    expect(result).toMatchObject({ status: 'ok' });
+  });
+
+  it('pending、running、succeeded 状态不能递增 retry count，且不写数据库', async () => {
+    for (const currentRow of [
+      compensationOperationRow,
+      runningOperationRow,
+      succeededOperationRow,
+    ]) {
+      const query = createStateDatabase({
+        currentRow,
+        updatedRow: { ...currentRow, retryCount: currentRow.retryCount + 1 },
+      });
+
+      await expect(
+        createHisConnectionCredentialCompensationOperationRepository(
+          query.database,
+        ).incrementCredentialCompensationOperationRetryCount({
+          tenantId: 'demo-tenant-001',
+          connectionId: 'his_conn_001',
+          operationId: safeOperationId,
+        }),
+      ).resolves.toEqual({ status: 'invalid_state_transition' });
+
+      expect(query.update).not.toHaveBeenCalled();
+    }
   });
 
   it('manual review required 设置终态、completedAt 和 manualReviewRequired=true', async () => {
