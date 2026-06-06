@@ -9,8 +9,7 @@ import type {
   HisConnectionCredentialReasonInput,
 } from '@/modules/institution/server/his-connection-credential-input';
 import type {
-  StoreSyntheticCredentialReferenceInput,
-  StoreSyntheticCredentialReferenceResult,
+  HisConnectionCredentialProvider,
 } from '@/modules/institution/server/his-connection-credential-storage';
 import {
   createHisConnectionRepository,
@@ -50,11 +49,10 @@ type HisConnectionCredentialRepository = Pick<
 
 type HisConnectionCredentialAuditRepository = Pick<AuditEventRepository, 'record'>;
 
-type HisConnectionCredentialStorage = {
-  storeSyntheticCredentialReference(
-    input: StoreSyntheticCredentialReferenceInput,
-  ): Promise<StoreSyntheticCredentialReferenceResult>;
-};
+type HisConnectionCredentialStorage = Pick<
+  HisConnectionCredentialProvider,
+  'storeSyntheticCredentialReference'
+>;
 
 type HisConnectionCredentialServiceDependencies = {
   database: TenantDatabase;

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
 import type { HisConnectionCredentialReferenceResult } from '@/modules/institution/server/his-connection-repository';
 import type {
+  HisConnectionCredentialProvider,
   StoreSyntheticCredentialReferenceInput,
   StoreSyntheticCredentialReferenceResult,
 } from '@/modules/institution/server/his-connection-credential-storage';
@@ -80,7 +81,10 @@ function createServiceHarness(input: {
       callback(transactionDatabase),
     ),
   } as unknown as TenantDatabase;
-  const credentialStorage = {
+  const credentialStorage: Pick<
+    HisConnectionCredentialProvider,
+    'storeSyntheticCredentialReference' | 'health' | 'describeCredentialReference'
+  > = {
     storeSyntheticCredentialReference: vi.fn(
       async (
         command: StoreSyntheticCredentialReferenceInput,
@@ -97,6 +101,17 @@ function createServiceHarness(input: {
         );
       },
     ),
+    health: vi.fn(async () => ({
+      status: 'available' as const,
+      provider: 'in_memory_test_only' as const,
+      mode: 'test_only' as const,
+      acceptsRealCredentialMaterial: false as const,
+      storesRawCredentialMaterial: false as const,
+      supportsTestConnection: false as const,
+      connectedProvider: false as const,
+      checkedAt: '2026-06-06T00:00:00.000Z',
+    })),
+    describeCredentialReference: vi.fn(async () => ({ status: 'not_found' as const })),
   };
   const hisConnectionRepository = {
     setHisConnectionCredentialReferenceForTenant: vi.fn(
@@ -185,6 +200,8 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
       placeholder: 'synthetic_placeholder_service_demo',
       idempotencyKey: 'idem_service_demo',
     });
+    expect(harness.credentialStorage.health).not.toHaveBeenCalled();
+    expect(harness.credentialStorage.describeCredentialReference).not.toHaveBeenCalled();
     expect(harness.database.transaction).toHaveBeenCalledTimes(1);
     expect(harness.hisConnectionRepositoryFactory).toHaveBeenCalledWith(
       harness.transactionDatabase,
@@ -219,6 +236,9 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
     expect(
       harness.hisConnectionRepository.setHisConnectionCredentialReferenceForTenant,
     ).toHaveBeenCalledTimes(1);
+    expect(harness.credentialStorage.storeSyntheticCredentialReference).toHaveBeenCalledTimes(1);
+    expect(harness.credentialStorage.health).not.toHaveBeenCalled();
+    expect(harness.credentialStorage.describeCredentialReference).not.toHaveBeenCalled();
   });
 
   it('rotate credential 调用 storage + repository rotate', async () => {
@@ -245,6 +265,9 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
       actorUserId: 'demo-user-admin',
       credentialRef: safeCredentialRef,
     });
+    expect(harness.credentialStorage.storeSyntheticCredentialReference).toHaveBeenCalledTimes(1);
+    expect(harness.credentialStorage.health).not.toHaveBeenCalled();
+    expect(harness.credentialStorage.describeCredentialReference).not.toHaveBeenCalled();
   });
 
   it('clear / revoke credential 只调用 repository clear / revoke，不强制读取内部 credentialRef', async () => {
@@ -278,6 +301,10 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
 
     expect(clearHarness.credentialStorage.storeSyntheticCredentialReference).not.toHaveBeenCalled();
     expect(revokeHarness.credentialStorage.storeSyntheticCredentialReference).not.toHaveBeenCalled();
+    expect(clearHarness.credentialStorage.health).not.toHaveBeenCalled();
+    expect(revokeHarness.credentialStorage.health).not.toHaveBeenCalled();
+    expect(clearHarness.credentialStorage.describeCredentialReference).not.toHaveBeenCalled();
+    expect(revokeHarness.credentialStorage.describeCredentialReference).not.toHaveBeenCalled();
     expect(
       clearHarness.hisConnectionRepository.clearHisConnectionCredentialReferenceForTenant,
     ).toHaveBeenCalledWith({
