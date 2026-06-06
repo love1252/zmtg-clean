@@ -115,6 +115,31 @@ export const hisConnectionCredentialProviderFailureCategoryEnum = pgEnum(
     'audit_after_provider_failed',
   ],
 );
+export const hisConnectionCredentialCompensationJobStateEnum = pgEnum(
+  'his_connection_credential_compensation_job_state',
+  [
+    'queued',
+    'claimed',
+    'running',
+    'succeeded',
+    'failed',
+    'dead_lettered',
+    'manual_review_required',
+    'cancelled',
+  ],
+);
+export const hisConnectionCredentialCompensationDeadLetterReasonEnum = pgEnum(
+  'his_connection_credential_compensation_dead_letter_reason',
+  [
+    'retry_exhausted',
+    'claim_conflict',
+    'stale_recovery_conflict',
+    'provider_result_unknown',
+    'audit_write_unavailable',
+    'operation_state_conflict',
+    'unsafe_payload_summary',
+  ],
+);
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -315,6 +340,9 @@ export const hisConnectionCredentialCompensationOperations = pgTable(
     operationIdUniqueIdx: uniqueIndex('his_conn_cred_comp_ops_operation_id_unique_idx').on(
       table.operationId,
     ),
+    tenantConnectionOperationUniqueIdx: uniqueIndex(
+      'his_conn_cred_comp_ops_tenant_connection_operation_unique_idx',
+    ).on(table.tenantId, table.connectionId, table.operationId),
     tenantConnectionStateIdx: index(
       'his_conn_cred_comp_ops_tenant_connection_state_idx',
     ).on(table.tenantId, table.connectionId, table.state),
@@ -322,6 +350,79 @@ export const hisConnectionCredentialCompensationOperations = pgTable(
       table.tenantId,
       table.state,
       table.updatedAt,
+    ),
+  }),
+);
+
+export const hisConnectionCredentialCompensationJobs = pgTable(
+  'his_connection_credential_compensation_jobs',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    connectionId: varchar('connection_id', { length: 64 }).notNull(),
+    operationId: varchar('operation_id', { length: 96 }).notNull(),
+    operationType: hisConnectionCredentialCompensationOperationTypeEnum(
+      'operation_type',
+    ).notNull().default('credential_compensation'),
+    jobState: hisConnectionCredentialCompensationJobStateEnum('job_state')
+      .notNull()
+      .default('queued'),
+    failureCategory: hisConnectionCredentialProviderFailureCategoryEnum(
+      'failure_category',
+    ).$type<HisConnectionCredentialProviderFailureCategory>().notNull(),
+    retryCount: integer('retry_count').notNull().default(0),
+    maxRetryCount: integer('max_retry_count').notNull().default(3),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
+    claimId: varchar('claim_id', { length: 96 }),
+    claimVersion: integer('claim_version').notNull().default(0),
+    claimedBy: varchar('claimed_by', { length: 96 }),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    lastHeartbeatAt: timestamp('last_heartbeat_at', { withTimezone: true }),
+    deadLetterReason: hisConnectionCredentialCompensationDeadLetterReasonEnum(
+      'dead_letter_reason',
+    ),
+    manualReviewRequired: boolean('manual_review_required')
+      .notNull()
+      .default(false),
+    ...timestamps,
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => ({
+    tenantFk: foreignKey({
+      name: 'his_conn_cred_comp_jobs_tenant_fk',
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+    }),
+    connectionFk: foreignKey({
+      name: 'his_conn_cred_comp_jobs_connection_fk',
+      columns: [table.tenantId, table.connectionId],
+      foreignColumns: [hisConnections.tenantId, hisConnections.id],
+    }),
+    operationFk: foreignKey({
+      name: 'his_conn_cred_comp_jobs_operation_scope_fk',
+      columns: [table.tenantId, table.connectionId, table.operationId],
+      foreignColumns: [
+        hisConnectionCredentialCompensationOperations.tenantId,
+        hisConnectionCredentialCompensationOperations.connectionId,
+        hisConnectionCredentialCompensationOperations.operationId,
+      ],
+    }),
+    operationIdUniqueIdx: uniqueIndex('his_conn_cred_comp_jobs_operation_id_unique_idx').on(
+      table.operationId,
+    ),
+    tenantConnectionOperationIdx: index(
+      'his_conn_cred_comp_jobs_tenant_connection_operation_idx',
+    ).on(table.tenantId, table.connectionId, table.operationId),
+    tenantStateNextAttemptIdx: index(
+      'his_conn_cred_comp_jobs_tenant_state_next_attempt_idx',
+    ).on(table.tenantId, table.jobState, table.nextAttemptAt),
+    lockIdx: index('his_conn_cred_comp_jobs_lock_idx').on(
+      table.jobState,
+      table.lockedUntil,
+      table.claimVersion,
     ),
   }),
 );

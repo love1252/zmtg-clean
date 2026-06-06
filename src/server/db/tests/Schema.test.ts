@@ -24,9 +24,26 @@ import {
 } from '@/server/db/schema';
 
 type NamedColumn = { name: string };
+type NamedForeignKey = {
+  getName(): string;
+  reference(): {
+    columns: readonly NamedColumn[];
+    foreignColumns: readonly NamedColumn[];
+  };
+};
 
 function columnNames(columns: readonly NamedColumn[]) {
   return columns.map((column) => column.name);
+}
+
+function foreignKeyColumns(foreignKey: NamedForeignKey | undefined) {
+  expect(foreignKey).toBeDefined();
+  const reference = foreignKey?.reference();
+
+  return {
+    columns: columnNames(reference?.columns ?? []),
+    foreignColumns: columnNames(reference?.foreignColumns ?? []),
+  };
 }
 
 function readMigrationSql(fileNameIncludes?: string) {
@@ -339,6 +356,11 @@ describe('数据库结构', () => {
           columns: ['operation_id'],
         },
         {
+          name: 'his_conn_cred_comp_ops_tenant_connection_operation_unique_idx',
+          unique: true,
+          columns: ['tenant_id', 'connection_id', 'operation_id'],
+        },
+        {
           name: 'his_conn_cred_comp_ops_tenant_connection_state_idx',
           unique: false,
           columns: ['tenant_id', 'connection_id', 'state'],
@@ -352,6 +374,152 @@ describe('数据库结构', () => {
     );
     expect(JSON.stringify({ columns, indexes })).not.toMatch(
       /credential_ref|credentialref|idempotency|synthetic_placeholder|provider_path|secret_path|raw_payload|raw_credential|request_body|response_body|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string|database_url|"sql"|"stack"/i,
+    );
+  });
+
+  it('定义 HIS 连接配置凭证补偿 job queue 安全调度表、状态枚举和 claim 字段', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const compensationJobs = schemaModule.hisConnectionCredentialCompensationJobs;
+    const compensationJobStateEnum = schemaModule.hisConnectionCredentialCompensationJobStateEnum as
+      | { enumValues?: string[] }
+      | undefined;
+    const compensationDeadLetterReasonEnum = schemaModule.hisConnectionCredentialCompensationDeadLetterReasonEnum as
+      | { enumValues?: string[] }
+      | undefined;
+
+    expect(compensationJobs).toBeDefined();
+    expect(compensationJobStateEnum?.enumValues).toEqual([
+      'queued',
+      'claimed',
+      'running',
+      'succeeded',
+      'failed',
+      'dead_lettered',
+      'manual_review_required',
+      'cancelled',
+    ]);
+    expect(compensationDeadLetterReasonEnum?.enumValues).toEqual([
+      'retry_exhausted',
+      'claim_conflict',
+      'stale_recovery_conflict',
+      'provider_result_unknown',
+      'audit_write_unavailable',
+      'operation_state_conflict',
+      'unsafe_payload_summary',
+    ]);
+
+    const tableConfig = getTableConfig(compensationJobs as never);
+    const columns = columnNames(tableConfig.columns);
+    const indexes = tableConfig.indexes.map((index) => ({
+      name: index.config.name,
+      unique: index.config.unique,
+      columns: columnNames(index.config.columns as NamedColumn[]),
+    }));
+    const columnsByProperty = compensationJobs as unknown as {
+      operationId: { notNull: boolean };
+      jobState: { notNull: boolean };
+      retryCount: { notNull: boolean };
+      maxRetryCount: { notNull: boolean };
+      nextAttemptAt: { notNull: boolean };
+      lockedUntil: { notNull: boolean };
+      claimId: { notNull: boolean };
+      claimVersion: { notNull: boolean };
+      claimedBy: { notNull: boolean };
+      claimedAt: { notNull: boolean };
+      lastHeartbeatAt: { notNull: boolean };
+      deadLetterReason: { notNull: boolean };
+      manualReviewRequired: { notNull: boolean };
+      completedAt: { notNull: boolean };
+    };
+    const tenantFk = tableConfig.foreignKeys.find(
+      (foreignKey) => foreignKey.getName() === 'his_conn_cred_comp_jobs_tenant_fk',
+    );
+    const connectionFk = tableConfig.foreignKeys.find(
+      (foreignKey) => foreignKey.getName() === 'his_conn_cred_comp_jobs_connection_fk',
+    );
+    const operationFk = tableConfig.foreignKeys.find(
+      (foreignKey) => foreignKey.getName() === 'his_conn_cred_comp_jobs_operation_scope_fk',
+    );
+
+    expect(tableConfig.name).toBe('his_connection_credential_compensation_jobs');
+    expect(columns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'connection_id',
+        'operation_id',
+        'operation_type',
+        'job_state',
+        'failure_category',
+        'retry_count',
+        'max_retry_count',
+        'next_attempt_at',
+        'locked_until',
+        'claim_id',
+        'claim_version',
+        'claimed_by',
+        'claimed_at',
+        'last_heartbeat_at',
+        'dead_letter_reason',
+        'manual_review_required',
+        'created_at',
+        'updated_at',
+        'completed_at',
+      ]),
+    );
+    expect(columns).toHaveLength(21);
+    expect(columnsByProperty.operationId.notNull).toBe(true);
+    expect(columnsByProperty.jobState.notNull).toBe(true);
+    expect(columnsByProperty.retryCount.notNull).toBe(true);
+    expect(columnsByProperty.maxRetryCount.notNull).toBe(true);
+    expect(columnsByProperty.nextAttemptAt.notNull).toBe(true);
+    expect(columnsByProperty.lockedUntil.notNull).toBe(false);
+    expect(columnsByProperty.claimId.notNull).toBe(false);
+    expect(columnsByProperty.claimVersion.notNull).toBe(true);
+    expect(columnsByProperty.claimedBy.notNull).toBe(false);
+    expect(columnsByProperty.claimedAt.notNull).toBe(false);
+    expect(columnsByProperty.lastHeartbeatAt.notNull).toBe(false);
+    expect(columnsByProperty.deadLetterReason.notNull).toBe(false);
+    expect(columnsByProperty.manualReviewRequired.notNull).toBe(true);
+    expect(columnsByProperty.completedAt.notNull).toBe(false);
+    expect(foreignKeyColumns(tenantFk)).toEqual({
+      columns: ['tenant_id'],
+      foreignColumns: ['id'],
+    });
+    expect(foreignKeyColumns(connectionFk)).toEqual({
+      columns: ['tenant_id', 'connection_id'],
+      foreignColumns: ['tenant_id', 'id'],
+    });
+    expect(foreignKeyColumns(operationFk)).toEqual({
+      columns: ['tenant_id', 'connection_id', 'operation_id'],
+      foreignColumns: ['tenant_id', 'connection_id', 'operation_id'],
+    });
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        {
+          name: 'his_conn_cred_comp_jobs_operation_id_unique_idx',
+          unique: true,
+          columns: ['operation_id'],
+        },
+        {
+          name: 'his_conn_cred_comp_jobs_tenant_connection_operation_idx',
+          unique: false,
+          columns: ['tenant_id', 'connection_id', 'operation_id'],
+        },
+        {
+          name: 'his_conn_cred_comp_jobs_tenant_state_next_attempt_idx',
+          unique: false,
+          columns: ['tenant_id', 'job_state', 'next_attempt_at'],
+        },
+        {
+          name: 'his_conn_cred_comp_jobs_lock_idx',
+          unique: false,
+          columns: ['job_state', 'locked_until', 'claim_version'],
+        },
+      ]),
+    );
+    expect(JSON.stringify({ columns, indexes })).not.toMatch(
+      /credential_ref|credentialref|idempotency_key|idempotencykey|scoped_idempotency|synthetic_placeholder|provider_path|secret_path|raw_payload|raw_credential|request_body|response_body|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string|database_url|"sql"|"stack"/i,
     );
   });
 
@@ -1217,6 +1385,90 @@ describe('数据库结构', () => {
     );
     expect(migrationSql).toContain(
       'create index "his_conn_cred_comp_ops_tenant_connection_state_idx" on "his_connection_credential_compensation_operations" using btree ("tenant_id","connection_id","state")',
+    );
+    expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
+    expect(migrationSql).not.toMatch(/\bdelete\s+from\b|\binsert\s+into\b|(^|;)\s*update\s+/i);
+    expect(migrationSql).not.toMatch(
+      /credential_ref|credentialref|idempotency_key|idempotencykey|scoped_idempotency|synthetic_placeholder|provider_path|secret_path|raw_payload|raw_credential|request_body|response_body|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string|database_url|"sql"|"stack"/i,
+    );
+  });
+
+  it('HIS 连接配置凭证补偿 job queue 迁移只新增安全调度表', () => {
+    const migrationSql = readMigrationSql('compensation_job_queue_schema_min');
+    const journal = JSON.parse(readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8')) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+    const latestSnapshot = readFileSync(
+      join(process.cwd(), 'drizzle/meta/0008_snapshot.json'),
+      'utf8',
+    ).toLowerCase();
+
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          idx: 8,
+          tag: '0008_phase23_his_connection_credential_compensation_job_queue_schema_min',
+        }),
+      ]),
+    );
+    expect(latestSnapshot).toContain(
+      '"his_connection_credential_compensation_jobs"',
+    );
+    expect(latestSnapshot).toContain('"job_state"');
+    expect(latestSnapshot).toContain('"dead_letter_reason"');
+    expect(migrationSql).toContain(
+      'create type "public"."his_connection_credential_compensation_job_state" as enum(\'queued\', \'claimed\', \'running\', \'succeeded\', \'failed\', \'dead_lettered\', \'manual_review_required\', \'cancelled\')',
+    );
+    expect(migrationSql).toContain(
+      'create type "public"."his_connection_credential_compensation_dead_letter_reason" as enum(\'retry_exhausted\', \'claim_conflict\', \'stale_recovery_conflict\', \'provider_result_unknown\', \'audit_write_unavailable\', \'operation_state_conflict\', \'unsafe_payload_summary\')',
+    );
+    expect(migrationSql).toContain(
+      'create table "his_connection_credential_compensation_jobs"',
+    );
+    expect(migrationSql).toContain('"operation_id" varchar(96) not null');
+    expect(migrationSql).toContain(
+      '"job_state" "his_connection_credential_compensation_job_state" default \'queued\' not null',
+    );
+    expect(migrationSql).toContain('"retry_count" integer default 0 not null');
+    expect(migrationSql).toContain('"max_retry_count" integer default 3 not null');
+    expect(migrationSql).toContain('"next_attempt_at" timestamp with time zone default now() not null');
+    expect(migrationSql).toContain('"locked_until" timestamp with time zone');
+    expect(migrationSql).toContain('"claim_id" varchar(96)');
+    expect(migrationSql).toContain('"claim_version" integer default 0 not null');
+    expect(migrationSql).toContain('"claimed_by" varchar(96)');
+    expect(migrationSql).toContain('"last_heartbeat_at" timestamp with time zone');
+    expect(migrationSql).toContain(
+      '"dead_letter_reason" "his_connection_credential_compensation_dead_letter_reason"',
+    );
+    expect(migrationSql).toContain(
+      '"manual_review_required" boolean default false not null',
+    );
+    expect(migrationSql).toContain(
+      'alter table "his_connection_credential_compensation_jobs" add constraint "his_conn_cred_comp_jobs_tenant_fk" foreign key ("tenant_id") references "public"."tenants"("id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "his_connection_credential_compensation_jobs" add constraint "his_conn_cred_comp_jobs_connection_fk" foreign key ("tenant_id","connection_id") references "public"."his_connections"("tenant_id","id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "his_connection_credential_compensation_jobs" add constraint "his_conn_cred_comp_jobs_operation_scope_fk" foreign key ("tenant_id","connection_id","operation_id") references "public"."his_connection_credential_compensation_operations"("tenant_id","connection_id","operation_id")',
+    );
+    expect(migrationSql).not.toContain(
+      'foreign key ("operation_id") references "public"."his_connection_credential_compensation_operations"("operation_id")',
+    );
+    expect(migrationSql).toContain(
+      'create unique index "his_conn_cred_comp_ops_tenant_connection_operation_unique_idx" on "his_connection_credential_compensation_operations" using btree ("tenant_id","connection_id","operation_id")',
+    );
+    expect(migrationSql).toContain(
+      'create unique index "his_conn_cred_comp_jobs_operation_id_unique_idx" on "his_connection_credential_compensation_jobs" using btree ("operation_id")',
+    );
+    expect(migrationSql).toContain(
+      'create index "his_conn_cred_comp_jobs_tenant_connection_operation_idx" on "his_connection_credential_compensation_jobs" using btree ("tenant_id","connection_id","operation_id")',
+    );
+    expect(migrationSql).toContain(
+      'create index "his_conn_cred_comp_jobs_tenant_state_next_attempt_idx" on "his_connection_credential_compensation_jobs" using btree ("tenant_id","job_state","next_attempt_at")',
+    );
+    expect(migrationSql).toContain(
+      'create index "his_conn_cred_comp_jobs_lock_idx" on "his_connection_credential_compensation_jobs" using btree ("job_state","locked_until","claim_version")',
     );
     expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
     expect(migrationSql).not.toMatch(/\bdelete\s+from\b|\binsert\s+into\b|(^|;)\s*update\s+/i);
