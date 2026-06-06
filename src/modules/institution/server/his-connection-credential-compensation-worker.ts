@@ -8,6 +8,9 @@ import type {
   HisConnectionCredentialCompensationOperationReadModel,
   HisConnectionCredentialCompensationOperationRepository,
 } from '@/modules/institution/server/his-connection-credential-compensation-operation-repository';
+import {
+  decideHisConnectionCredentialCompensationRetry,
+} from '@/modules/institution/server/his-connection-credential-compensation-retry-policy';
 
 export type HisConnectionCredentialCompensationWorkerResultStatus =
   | 'ok'
@@ -131,6 +134,7 @@ const fieldLimits = {
 const defaultWorkerId = 'his-credential-compensation-worker';
 const defaultLockDurationMs = 60_000;
 const defaultMaxBatchSize = 10;
+const defaultRetryBaseDelayMs = 60_000;
 
 function createDefaultClaimId() {
   return `his_cred_comp_claim_${randomUUID()}`;
@@ -250,6 +254,12 @@ function repositoryStatusToItemStatus(status: RepositoryMutationStatus) {
   return status;
 }
 
+function resolveRetryNextAttemptAt(value: string | undefined) {
+  if (!value) return null;
+
+  return normalizeDate(new Date(value));
+}
+
 function isProviderExecutionResultStatus(
   value: unknown,
 ): value is HisConnectionCredentialCompensationProviderExecutionResultStatus {
@@ -310,6 +320,66 @@ export function createHisConnectionCredentialCompensationWorker(
     }
 
     return createItemResult(scope, repositoryStatusToItemStatus(result.status));
+  }
+
+  async function maybeRequeueFailedCredentialCompensationJob(
+    scope: HisConnectionCredentialCompensationWorkerScope,
+    claim: { claimId: string; claimVersion: number },
+    providerResult: Extract<
+      HisConnectionCredentialCompensationProviderExecutionResultStatus,
+      'retryable_failure' | 'provider_unavailable'
+    >,
+    failedJob: HisConnectionCredentialCompensationJobReadModel,
+    now: Date,
+  ): Promise<HisConnectionCredentialCompensationWorkerItemResult | null> {
+    const failedScope = scopeFromJob(failedJob, scope.tenantId);
+    if (
+      !failedScope ||
+      failedScope.connectionId !== scope.connectionId ||
+      failedScope.operationId !== scope.operationId
+    ) {
+      return createItemResult(scope, 'validation_failed', claim, providerResult);
+    }
+
+    const retryDecision = decideHisConnectionCredentialCompensationRetry({
+      providerResult,
+      jobState: failedJob.jobState,
+      retryCount: failedJob.retryCount,
+      maxRetryCount: failedJob.maxRetryCount,
+      now,
+      baseDelayMs: defaultRetryBaseDelayMs,
+    });
+
+    if (retryDecision.decision === 'validation_failed') {
+      return createItemResult(scope, 'validation_failed', claim, providerResult);
+    }
+    if (retryDecision.decision !== 'requeue') {
+      return null;
+    }
+
+    const nextAttemptAt = resolveRetryNextAttemptAt(retryDecision.nextAttemptAt);
+    if (!nextAttemptAt) {
+      return createItemResult(scope, 'validation_failed', claim, providerResult);
+    }
+
+    const requeueResult = await safelyCallRepository(() =>
+      dependencies.jobQueueRepository.requeueCredentialCompensationJob({
+        ...scope,
+        ...claim,
+        nextAttemptAt,
+        now,
+      }),
+    );
+    if (requeueResult.status !== 'ok') {
+      return createItemResult(
+        scope,
+        repositoryStatusToItemStatus(requeueResult.status),
+        claim,
+        providerResult,
+      );
+    }
+
+    return createItemResult(scope, 'ok', claim, providerResult);
   }
 
   return {
@@ -594,6 +664,17 @@ export function createHisConnectionCredentialCompensationWorker(
             claim,
             providerResult,
           );
+        }
+
+        const requeueResult = await maybeRequeueFailedCredentialCompensationJob(
+          scope,
+          { claimId, claimVersion },
+          providerResult,
+          jobFailedResult.record,
+          now,
+        );
+        if (requeueResult) {
+          return requeueResult;
         }
 
         return createItemResult(scope, 'ok', claim, providerResult);
