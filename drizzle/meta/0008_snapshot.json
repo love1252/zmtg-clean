@@ -963,14 +963,18 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "his_conn_cred_comp_jobs_operation_fk": {
-          "name": "his_conn_cred_comp_jobs_operation_fk",
+        "his_conn_cred_comp_jobs_operation_scope_fk": {
+          "name": "his_conn_cred_comp_jobs_operation_scope_fk",
           "tableFrom": "his_connection_credential_compensation_jobs",
           "tableTo": "his_connection_credential_compensation_operations",
           "columnsFrom": [
+            "tenant_id",
+            "connection_id",
             "operation_id"
           ],
           "columnsTo": [
+            "tenant_id",
+            "connection_id",
             "operation_id"
           ],
           "onDelete": "no action",
@@ -1079,6 +1083,33 @@
         "his_conn_cred_comp_ops_operation_id_unique_idx": {
           "name": "his_conn_cred_comp_ops_operation_id_unique_idx",
           "columns": [
+            {
+              "expression": "operation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "his_conn_cred_comp_ops_tenant_connection_operation_unique_idx": {
+          "name": "his_conn_cred_comp_ops_tenant_connection_operation_unique_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "connection_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "operation_id",
               "isExpression": false,

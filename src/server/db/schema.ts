@@ -340,6 +340,9 @@ export const hisConnectionCredentialCompensationOperations = pgTable(
     operationIdUniqueIdx: uniqueIndex('his_conn_cred_comp_ops_operation_id_unique_idx').on(
       table.operationId,
     ),
+    tenantConnectionOperationUniqueIdx: uniqueIndex(
+      'his_conn_cred_comp_ops_tenant_connection_operation_unique_idx',
+    ).on(table.tenantId, table.connectionId, table.operationId),
     tenantConnectionStateIdx: index(
       'his_conn_cred_comp_ops_tenant_connection_state_idx',
     ).on(table.tenantId, table.connectionId, table.state),
@@ -399,9 +402,13 @@ export const hisConnectionCredentialCompensationJobs = pgTable(
       foreignColumns: [hisConnections.tenantId, hisConnections.id],
     }),
     operationFk: foreignKey({
-      name: 'his_conn_cred_comp_jobs_operation_fk',
-      columns: [table.operationId],
-      foreignColumns: [hisConnectionCredentialCompensationOperations.operationId],
+      name: 'his_conn_cred_comp_jobs_operation_scope_fk',
+      columns: [table.tenantId, table.connectionId, table.operationId],
+      foreignColumns: [
+        hisConnectionCredentialCompensationOperations.tenantId,
+        hisConnectionCredentialCompensationOperations.connectionId,
+        hisConnectionCredentialCompensationOperations.operationId,
+      ],
     }),
     operationIdUniqueIdx: uniqueIndex('his_conn_cred_comp_jobs_operation_id_unique_idx').on(
       table.operationId,

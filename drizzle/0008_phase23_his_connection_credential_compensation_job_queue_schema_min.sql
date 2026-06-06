@@ -24,9 +24,10 @@ CREATE TABLE "his_connection_credential_compensation_jobs" (
 	"completed_at" timestamp with time zone
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX "his_conn_cred_comp_ops_tenant_connection_operation_unique_idx" ON "his_connection_credential_compensation_operations" USING btree ("tenant_id","connection_id","operation_id");--> statement-breakpoint
 ALTER TABLE "his_connection_credential_compensation_jobs" ADD CONSTRAINT "his_conn_cred_comp_jobs_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "his_connection_credential_compensation_jobs" ADD CONSTRAINT "his_conn_cred_comp_jobs_connection_fk" FOREIGN KEY ("tenant_id","connection_id") REFERENCES "public"."his_connections"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "his_connection_credential_compensation_jobs" ADD CONSTRAINT "his_conn_cred_comp_jobs_operation_fk" FOREIGN KEY ("operation_id") REFERENCES "public"."his_connection_credential_compensation_operations"("operation_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "his_connection_credential_compensation_jobs" ADD CONSTRAINT "his_conn_cred_comp_jobs_operation_scope_fk" FOREIGN KEY ("tenant_id","connection_id","operation_id") REFERENCES "public"."his_connection_credential_compensation_operations"("tenant_id","connection_id","operation_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "his_conn_cred_comp_jobs_operation_id_unique_idx" ON "his_connection_credential_compensation_jobs" USING btree ("operation_id");--> statement-breakpoint
 CREATE INDEX "his_conn_cred_comp_jobs_tenant_connection_operation_idx" ON "his_connection_credential_compensation_jobs" USING btree ("tenant_id","connection_id","operation_id");--> statement-breakpoint
 CREATE INDEX "his_conn_cred_comp_jobs_tenant_state_next_attempt_idx" ON "his_connection_credential_compensation_jobs" USING btree ("tenant_id","job_state","next_attempt_at");--> statement-breakpoint

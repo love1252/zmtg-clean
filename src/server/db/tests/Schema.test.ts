@@ -24,9 +24,26 @@ import {
 } from '@/server/db/schema';
 
 type NamedColumn = { name: string };
+type NamedForeignKey = {
+  getName(): string;
+  reference(): {
+    columns: readonly NamedColumn[];
+    foreignColumns: readonly NamedColumn[];
+  };
+};
 
 function columnNames(columns: readonly NamedColumn[]) {
   return columns.map((column) => column.name);
+}
+
+function foreignKeyColumns(foreignKey: NamedForeignKey | undefined) {
+  expect(foreignKey).toBeDefined();
+  const reference = foreignKey?.reference();
+
+  return {
+    columns: columnNames(reference?.columns ?? []),
+    foreignColumns: columnNames(reference?.foreignColumns ?? []),
+  };
 }
 
 function readMigrationSql(fileNameIncludes?: string) {
@@ -339,6 +356,11 @@ describe('数据库结构', () => {
           columns: ['operation_id'],
         },
         {
+          name: 'his_conn_cred_comp_ops_tenant_connection_operation_unique_idx',
+          unique: true,
+          columns: ['tenant_id', 'connection_id', 'operation_id'],
+        },
+        {
           name: 'his_conn_cred_comp_ops_tenant_connection_state_idx',
           unique: false,
           columns: ['tenant_id', 'connection_id', 'state'],
@@ -416,7 +438,7 @@ describe('数据库结构', () => {
       (foreignKey) => foreignKey.getName() === 'his_conn_cred_comp_jobs_connection_fk',
     );
     const operationFk = tableConfig.foreignKeys.find(
-      (foreignKey) => foreignKey.getName() === 'his_conn_cred_comp_jobs_operation_fk',
+      (foreignKey) => foreignKey.getName() === 'his_conn_cred_comp_jobs_operation_scope_fk',
     );
 
     expect(tableConfig.name).toBe('his_connection_credential_compensation_jobs');
@@ -460,9 +482,18 @@ describe('数据库结构', () => {
     expect(columnsByProperty.deadLetterReason.notNull).toBe(false);
     expect(columnsByProperty.manualReviewRequired.notNull).toBe(true);
     expect(columnsByProperty.completedAt.notNull).toBe(false);
-    expect(tenantFk).toBeDefined();
-    expect(connectionFk).toBeDefined();
-    expect(operationFk).toBeDefined();
+    expect(foreignKeyColumns(tenantFk)).toEqual({
+      columns: ['tenant_id'],
+      foreignColumns: ['id'],
+    });
+    expect(foreignKeyColumns(connectionFk)).toEqual({
+      columns: ['tenant_id', 'connection_id'],
+      foreignColumns: ['tenant_id', 'id'],
+    });
+    expect(foreignKeyColumns(operationFk)).toEqual({
+      columns: ['tenant_id', 'connection_id', 'operation_id'],
+      foreignColumns: ['tenant_id', 'connection_id', 'operation_id'],
+    });
     expect(indexes).toEqual(
       expect.arrayContaining([
         {
@@ -1419,7 +1450,13 @@ describe('数据库结构', () => {
       'alter table "his_connection_credential_compensation_jobs" add constraint "his_conn_cred_comp_jobs_connection_fk" foreign key ("tenant_id","connection_id") references "public"."his_connections"("tenant_id","id")',
     );
     expect(migrationSql).toContain(
-      'alter table "his_connection_credential_compensation_jobs" add constraint "his_conn_cred_comp_jobs_operation_fk" foreign key ("operation_id") references "public"."his_connection_credential_compensation_operations"("operation_id")',
+      'alter table "his_connection_credential_compensation_jobs" add constraint "his_conn_cred_comp_jobs_operation_scope_fk" foreign key ("tenant_id","connection_id","operation_id") references "public"."his_connection_credential_compensation_operations"("tenant_id","connection_id","operation_id")',
+    );
+    expect(migrationSql).not.toContain(
+      'foreign key ("operation_id") references "public"."his_connection_credential_compensation_operations"("operation_id")',
+    );
+    expect(migrationSql).toContain(
+      'create unique index "his_conn_cred_comp_ops_tenant_connection_operation_unique_idx" on "his_connection_credential_compensation_operations" using btree ("tenant_id","connection_id","operation_id")',
     );
     expect(migrationSql).toContain(
       'create unique index "his_conn_cred_comp_jobs_operation_id_unique_idx" on "his_connection_credential_compensation_jobs" using btree ("operation_id")',
