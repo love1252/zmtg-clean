@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   foreignKey,
   index,
   integer,
@@ -14,6 +15,10 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import type { AuditReason } from '@/modules/audit/domain/audit-events';
+import type {
+  HisConnectionCredentialCompensationState,
+  HisConnectionCredentialProviderFailureCategory,
+} from '@/modules/institution/server/his-connection-credential-provider-failure';
 import type { TreatmentSummaryVoidReasonCode } from '@/modules/institution/domain/treatment-summaries';
 import type {
   AccessContext,
@@ -77,6 +82,39 @@ export const hisConnectionHealthStatusEnum = pgEnum('his_connection_health_statu
   'degraded',
   'failed',
 ]);
+export const hisConnectionCredentialCompensationStateEnum = pgEnum(
+  'his_connection_credential_compensation_state',
+  [
+    'compensation_pending',
+    'compensation_running',
+    'compensation_succeeded',
+    'compensation_failed',
+    'manual_review_required',
+  ],
+);
+export const hisConnectionCredentialCompensationOperationTypeEnum = pgEnum(
+  'his_connection_credential_compensation_operation_type',
+  ['credential_compensation'],
+);
+export const hisConnectionCredentialProviderFailureCategoryEnum = pgEnum(
+  'his_connection_credential_provider_failure_category',
+  [
+    'provider_unavailable',
+    'timeout',
+    'retry_exhausted',
+    'circuit_open',
+    'validation_failed',
+    'tenant_connection_mismatch',
+    'idempotency_conflict',
+    'invalid_state',
+    'provider_write_failed',
+    'provider_revoke_failed',
+    'provider_describe_failed',
+    'provider_health_failed',
+    'repository_after_provider_failed',
+    'audit_after_provider_failed',
+  ],
+);
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -237,6 +275,54 @@ export const hisConnections = pgTable(
     activeNameUniqueIdx: uniqueIndex('his_connections_active_name_unique_idx')
       .on(table.tenantId, table.connectionName)
       .where(sql`${table.deletedAt} is null`),
+  }),
+);
+
+export const hisConnectionCredentialCompensationOperations = pgTable(
+  'his_connection_credential_compensation_operations',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    connectionId: varchar('connection_id', { length: 64 }).notNull(),
+    operationId: varchar('operation_id', { length: 96 }).notNull(),
+    operationType: hisConnectionCredentialCompensationOperationTypeEnum(
+      'operation_type',
+    ).notNull().default('credential_compensation'),
+    state: hisConnectionCredentialCompensationStateEnum('state')
+      .$type<HisConnectionCredentialCompensationState>()
+      .notNull()
+      .default('compensation_pending'),
+    failureCategory: hisConnectionCredentialProviderFailureCategoryEnum(
+      'failure_category',
+    ).$type<HisConnectionCredentialProviderFailureCategory>().notNull(),
+    retryCount: integer('retry_count').notNull().default(0),
+    manualReviewRequired: boolean('manual_review_required').notNull().default(false),
+    ...timestamps,
+    lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => ({
+    tenantFk: foreignKey({
+      name: 'his_conn_cred_comp_ops_tenant_fk',
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+    }),
+    connectionFk: foreignKey({
+      name: 'his_conn_cred_comp_ops_connection_fk',
+      columns: [table.tenantId, table.connectionId],
+      foreignColumns: [hisConnections.tenantId, hisConnections.id],
+    }),
+    operationIdUniqueIdx: uniqueIndex('his_conn_cred_comp_ops_operation_id_unique_idx').on(
+      table.operationId,
+    ),
+    tenantConnectionStateIdx: index(
+      'his_conn_cred_comp_ops_tenant_connection_state_idx',
+    ).on(table.tenantId, table.connectionId, table.state),
+    tenantStateUpdatedIdx: index('his_conn_cred_comp_ops_tenant_state_updated_idx').on(
+      table.tenantId,
+      table.state,
+      table.updatedAt,
+    ),
   }),
 );
 

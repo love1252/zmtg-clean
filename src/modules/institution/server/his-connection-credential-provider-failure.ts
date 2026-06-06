@@ -29,6 +29,13 @@ export const hisConnectionCredentialCompensationStates = [
 export type HisConnectionCredentialCompensationState =
   (typeof hisConnectionCredentialCompensationStates)[number];
 
+export const hisConnectionCredentialCompensationOperationTypes = [
+  'credential_compensation',
+] as const;
+
+export type HisConnectionCredentialCompensationOperationType =
+  (typeof hisConnectionCredentialCompensationOperationTypes)[number];
+
 export type HisConnectionCredentialProviderFailureOperation =
   | 'store'
   | 'rotate'
@@ -60,6 +67,18 @@ export type HisConnectionCredentialCompensationSummary = {
   failureCategory: HisConnectionCredentialProviderFailureCategory;
   provider?: string;
   retryCount?: number;
+};
+
+export type HisConnectionCredentialCompensationOperationMetadata = {
+  kind: 'his_connection_credential_compensation_operation_metadata';
+  operationId: string;
+  operationType: HisConnectionCredentialCompensationOperationType;
+  tenantId: string;
+  connectionId: string;
+  state: HisConnectionCredentialCompensationState;
+  failureCategory: HisConnectionCredentialProviderFailureCategory;
+  retryCount: number;
+  manualReviewRequired: boolean;
 };
 
 export type HisConnectionCredentialProviderFailureServiceStatus =
@@ -119,6 +138,56 @@ function normalizeRetryCount(value: unknown): number | undefined {
   if (!Number.isInteger(value) || value < 0 || value > 99) return undefined;
 
   return value;
+}
+
+const compensationOperationIdPrefix = 'his_cred_comp_op_';
+const compensationOperationIdPattern = /^his_cred_comp_op_[a-z0-9]{32}$/;
+
+function normalizeOperationIdEntropy(value: string): string | null {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (normalized.length < 24) return null;
+  if (forbiddenSafeSummaryPattern.test(normalized)) return null;
+
+  return normalized.slice(0, 32).padEnd(32, '0');
+}
+
+function createFallbackOperationIdEntropy() {
+  const randomUUID = globalThis.crypto?.randomUUID?.();
+  if (randomUUID) {
+    return randomUUID;
+  }
+
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
+
+export function isSafeHisConnectionCredentialCompensationOperationId(
+  value: unknown,
+): value is string {
+  if (typeof value !== 'string') return false;
+  if (!compensationOperationIdPattern.test(value)) return false;
+  if (forbiddenSafeSummaryPattern.test(value)) return false;
+
+  return true;
+}
+
+export function createHisConnectionCredentialCompensationOperationId(
+  operationIdFactory: () => string = createFallbackOperationIdEntropy,
+): string {
+  const generated = normalizeOperationIdEntropy(operationIdFactory());
+
+  if (generated) {
+    const operationId = `${compensationOperationIdPrefix}${generated}`;
+    if (isSafeHisConnectionCredentialCompensationOperationId(operationId)) {
+      return operationId;
+    }
+  }
+
+  const fallback = normalizeOperationIdEntropy(createFallbackOperationIdEntropy()) ??
+    '00000000000000000000000000000000';
+
+  return `${compensationOperationIdPrefix}${fallback}`;
 }
 
 export function createHisConnectionCredentialProviderFailure(input: {
@@ -214,6 +283,36 @@ export function createHisConnectionCredentialCompensationSummary(input: {
     failureCategory,
     ...(provider === undefined ? {} : { provider }),
     ...(retryCount === undefined ? {} : { retryCount }),
+  };
+}
+
+export function createHisConnectionCredentialCompensationOperationMetadata(input: {
+  tenantId: string;
+  connectionId: string;
+  state: HisConnectionCredentialCompensationState;
+  failureCategory: HisConnectionCredentialProviderFailureCategory;
+  retryCount?: number;
+  manualReviewRequired?: boolean;
+  operationIdFactory?: () => string;
+}): HisConnectionCredentialCompensationOperationMetadata {
+  const operationId = createHisConnectionCredentialCompensationOperationId(
+    input.operationIdFactory,
+  );
+  const state = isCompensationState(input.state) ? input.state : 'manual_review_required';
+  const failureCategory = isProviderFailureCategory(input.failureCategory)
+    ? input.failureCategory
+    : 'provider_write_failed';
+
+  return {
+    kind: 'his_connection_credential_compensation_operation_metadata',
+    operationId,
+    operationType: 'credential_compensation',
+    tenantId: normalizeRequiredTrustedText(input.tenantId, 'unknown_tenant'),
+    connectionId: normalizeRequiredTrustedText(input.connectionId, 'unknown_connection'),
+    state,
+    failureCategory,
+    retryCount: normalizeRetryCount(input.retryCount) ?? 0,
+    manualReviewRequired: input.manualReviewRequired === true,
   };
 }
 
