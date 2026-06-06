@@ -6,6 +6,7 @@ import type {
   StoreSyntheticCredentialReferenceInput,
   StoreSyntheticCredentialReferenceResult,
 } from '@/modules/institution/server/his-connection-credential-storage';
+import { createHisConnectionCredentialProviderFailure } from '@/modules/institution/server/his-connection-credential-provider-failure';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import type { TenantDatabase } from '@/server/db/client';
 import {
@@ -486,5 +487,41 @@ describe('HIS 连接配置凭证 service 最小边界', () => {
         hisConnectionRepositoryFactory: repositoryHarness.hisConnectionRepositoryFactory,
       }),
     ).resolves.toEqual({ status: 'service_unavailable' });
+  });
+
+  it('已知 provider failure 按稳定 mapping 返回，不泄露 provider 原始错误', async () => {
+    const cases = [
+      { category: 'provider_unavailable', expectedStatus: 'service_unavailable' },
+      { category: 'timeout', expectedStatus: 'service_unavailable' },
+      { category: 'retry_exhausted', expectedStatus: 'service_unavailable' },
+      { category: 'circuit_open', expectedStatus: 'service_unavailable' },
+      { category: 'validation_failed', expectedStatus: 'validation_failed' },
+    ] as const;
+
+    for (const { category, expectedStatus } of cases) {
+      const harness = createServiceHarness({
+        storageError: createHisConnectionCredentialProviderFailure({
+          category,
+          operation: 'store',
+          tenantId: 'demo-tenant-001',
+          connectionId: 'his_conn_001',
+          unsafeMessage:
+            'credentialRef=cred_ref_service_demo_safe_001 idempotencyKey=idem_service_demo sk_live stack',
+        }),
+      });
+
+      const result = await createHisConnectionCredentialForTenantService({
+        accessContext,
+        connectionId: 'his_conn_001',
+        database: harness.database,
+        credentialStorage: harness.credentialStorage,
+        credentialInput: parsedCredentialInput,
+        hisConnectionRepositoryFactory: harness.hisConnectionRepositoryFactory,
+      });
+
+      expect(result).toEqual({ status: expectedStatus });
+      expect(harness.database.transaction).not.toHaveBeenCalled();
+      expectNoCredentialLeak(result);
+    }
   });
 });
