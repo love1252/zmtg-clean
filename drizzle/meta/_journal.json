@@ -50,6 +50,13 @@
       "when": 1780495290617,
       "tag": "0006_his_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780732979551,
+      "tag": "0007_phase23_his_connection_credential_compensation_metadata_operationid",
+      "breakpoints": true
     }
   ]
 }

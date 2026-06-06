@@ -1,10 +1,15 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  createHisConnectionCredentialCompensationOperationId,
+  createHisConnectionCredentialCompensationOperationMetadata,
   createHisConnectionCredentialCompensationSummary,
   createHisConnectionCredentialProviderFailure,
+  hisConnectionCredentialCompensationOperationTypes,
   hisConnectionCredentialCompensationStates,
   hisConnectionCredentialProviderFailureCategories,
   isHisConnectionCredentialProviderFailure,
+  isSafeHisConnectionCredentialCompensationOperationId,
   mapHisConnectionCredentialProviderFailureToServiceStatus,
   mapUnknownHisConnectionCredentialProviderFailure,
 } from '@/modules/institution/server/his-connection-credential-provider-failure';
@@ -119,6 +124,122 @@ describe('HIS 连接配置凭证 provider failure / compensation domain 最小�
       retryCount: 3,
     });
     expectNoSensitiveFailureData(summary);
+  });
+
+  it('compensation operation metadata 只使用安全 operationId、状态和 failure category 白名单', () => {
+    expect(hisConnectionCredentialCompensationOperationTypes).toEqual([
+      'credential_compensation',
+    ]);
+
+    const operationId = createHisConnectionCredentialCompensationOperationId(() =>
+      '123e4567-e89b-12d3-a456-426614174000',
+    );
+    const metadata = createHisConnectionCredentialCompensationOperationMetadata({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      state: 'compensation_pending',
+      failureCategory: 'repository_after_provider_failed',
+      retryCount: 1,
+      manualReviewRequired: false,
+      operationIdFactory: () => '123e4567-e89b-12d3-a456-426614174000',
+    });
+
+    expect(operationId).toBe('his_cred_comp_op_123e4567e89b12d3a456426614174000');
+    expect(isSafeHisConnectionCredentialCompensationOperationId(operationId)).toBe(true);
+    expect(metadata).toEqual({
+      kind: 'his_connection_credential_compensation_operation_metadata',
+      operationId,
+      operationType: 'credential_compensation',
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      state: 'compensation_pending',
+      failureCategory: 'repository_after_provider_failed',
+      retryCount: 1,
+      manualReviewRequired: false,
+    });
+    expectNoSensitiveFailureData(metadata);
+  });
+
+  it('compensation operationId 默认使用安全随机 entropy 且不拼接敏感上下文', () => {
+    const tenantId = 'demo-tenant-001';
+    const connectionId = 'his_conn_001';
+    const operationId = createHisConnectionCredentialCompensationOperationId();
+
+    expect(operationId).toMatch(/^his_cred_comp_op_[a-z0-9]{32}$/);
+    expect(isSafeHisConnectionCredentialCompensationOperationId(operationId)).toBe(true);
+    for (const forbiddenPart of [
+      tenantId,
+      connectionId,
+      'credentialRef',
+      'cred_ref_demo_secret',
+      '/vault/his/secret',
+      'providerPath',
+      'secretPath',
+      'idempotencyKey',
+      'idem_demo',
+      'token',
+      'secret',
+      'apiKey',
+      'connectionString',
+      'select * from',
+      'stack',
+      'DATABASE_URL',
+    ]) {
+      expect(operationId).not.toContain(forbiddenPart);
+    }
+  });
+
+  it('compensation operationId 源码不再使用时间戳或伪随机 fallback', () => {
+    const source = readFileSync(
+      `${process.cwd()}/src/modules/institution/server/his-connection-credential-provider-failure.ts`,
+      'utf8',
+    );
+
+    expect(source).toContain('node:crypto');
+    expect(source).toContain('randomUUID');
+    for (const unsafeFallbackToken of [
+      ['Date', 'now'].join('.'),
+      ['Math', 'random'].join('.'),
+    ]) {
+      expect(source).not.toContain(unsafeFallbackToken);
+    }
+  });
+
+  it('compensation operationId 拒绝 request / query / header / credentialRef / provider path 等危险来源', () => {
+    for (const value of [
+      '',
+      'demo-tenant-001:his_conn_001',
+      'his_cred_comp_op_demo-tenant-001',
+      'his_cred_comp_op_his_conn_001',
+      'his_cred_comp_op_cred_ref_service_demo_safe_001',
+      'his_cred_comp_op_idempotencyKey_demo',
+      'his_cred_comp_op_providerPath_vault_his_secret',
+      'his_cred_comp_op_sk_live_token',
+      'his_cred_comp_op_raw_payload',
+      'his_cred_comp_op_select * from audit_events',
+      'his_cred_comp_op_DATABASE_URL_postgres',
+      '123e4567-e89b-12d3-a456-426614174000',
+    ]) {
+      expect(isSafeHisConnectionCredentialCompensationOperationId(value)).toBe(false);
+    }
+
+    const metadata = createHisConnectionCredentialCompensationOperationMetadata({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      state: 'not_a_state' as never,
+      failureCategory: 'credentialRef=cred_ref_demo_secret stack' as never,
+      retryCount: 1234,
+      manualReviewRequired: true,
+    });
+
+    expect(metadata).toMatchObject({
+      operationId: expect.stringMatching(/^his_cred_comp_op_[a-z0-9]{32}$/),
+      state: 'manual_review_required',
+      failureCategory: 'provider_write_failed',
+      retryCount: 0,
+      manualReviewRequired: true,
+    });
+    expectNoSensitiveFailureData(metadata);
   });
 
   it('provider failure 到 service result 的映射只使用现有稳定 code', () => {

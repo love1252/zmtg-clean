@@ -17,6 +17,7 @@ import {
   auditEvents,
   customers,
   followUpTasks,
+  hisConnectionCredentialCompensationOperations,
   tenantMembers,
   tenants,
   treatmentSummaries,
@@ -245,6 +246,112 @@ describe('数据库结构', () => {
 
     expect(JSON.stringify(hisColumns)).not.toMatch(
       /raw_payload|request_body|response_body|treatment_record|medical_record_body|diagnosis_text|clinical_note|consultation_transcript|image_original|file_original|credential_secret|credential_value|credential_plaintext|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string|database_url|"sql"|"stack"/i,
+    );
+  });
+
+  it('定义 HIS 连接配置凭证补偿 operation 安全 metadata 表、状态枚举和 operationId 约束', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const compensationOperations = schemaModule.hisConnectionCredentialCompensationOperations;
+    const compensationStateEnum = schemaModule.hisConnectionCredentialCompensationStateEnum as
+      | { enumValues?: string[] }
+      | undefined;
+    const compensationOperationTypeEnum = schemaModule.hisConnectionCredentialCompensationOperationTypeEnum as
+      | { enumValues?: string[] }
+      | undefined;
+    const providerFailureCategoryEnum = schemaModule.hisConnectionCredentialProviderFailureCategoryEnum as
+      | { enumValues?: string[] }
+      | undefined;
+
+    expect(compensationOperations).toBeDefined();
+    expect(compensationStateEnum?.enumValues).toEqual([
+      'compensation_pending',
+      'compensation_running',
+      'compensation_succeeded',
+      'compensation_failed',
+      'manual_review_required',
+    ]);
+    expect(compensationOperationTypeEnum?.enumValues).toEqual([
+      'credential_compensation',
+    ]);
+    expect(providerFailureCategoryEnum?.enumValues).toEqual([
+      'provider_unavailable',
+      'timeout',
+      'retry_exhausted',
+      'circuit_open',
+      'validation_failed',
+      'tenant_connection_mismatch',
+      'idempotency_conflict',
+      'invalid_state',
+      'provider_write_failed',
+      'provider_revoke_failed',
+      'provider_describe_failed',
+      'provider_health_failed',
+      'repository_after_provider_failed',
+      'audit_after_provider_failed',
+    ]);
+
+    const tableConfig = getTableConfig(compensationOperations as never);
+    const columns = columnNames(tableConfig.columns);
+    const indexes = tableConfig.indexes.map((index) => ({
+      name: index.config.name,
+      unique: index.config.unique,
+      columns: columnNames(index.config.columns as NamedColumn[]),
+    }));
+    const columnsByProperty = compensationOperations as unknown as {
+      operationId: { notNull: boolean };
+      state: { notNull: boolean };
+      retryCount: { notNull: boolean };
+      manualReviewRequired: { notNull: boolean };
+      lastAttemptAt: { notNull: boolean };
+      completedAt: { notNull: boolean };
+    };
+
+    expect(tableConfig.name).toBe('his_connection_credential_compensation_operations');
+    expect(columns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'connection_id',
+        'operation_id',
+        'operation_type',
+        'state',
+        'failure_category',
+        'retry_count',
+        'manual_review_required',
+        'created_at',
+        'updated_at',
+        'last_attempt_at',
+        'completed_at',
+      ]),
+    );
+    expect(columns).toHaveLength(13);
+    expect(columnsByProperty.operationId.notNull).toBe(true);
+    expect(columnsByProperty.state.notNull).toBe(true);
+    expect(columnsByProperty.retryCount.notNull).toBe(true);
+    expect(columnsByProperty.manualReviewRequired.notNull).toBe(true);
+    expect(columnsByProperty.lastAttemptAt.notNull).toBe(false);
+    expect(columnsByProperty.completedAt.notNull).toBe(false);
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        {
+          name: 'his_conn_cred_comp_ops_operation_id_unique_idx',
+          unique: true,
+          columns: ['operation_id'],
+        },
+        {
+          name: 'his_conn_cred_comp_ops_tenant_connection_state_idx',
+          unique: false,
+          columns: ['tenant_id', 'connection_id', 'state'],
+        },
+        {
+          name: 'his_conn_cred_comp_ops_tenant_state_updated_idx',
+          unique: false,
+          columns: ['tenant_id', 'state', 'updated_at'],
+        },
+      ]),
+    );
+    expect(JSON.stringify({ columns, indexes })).not.toMatch(
+      /credential_ref|credentialref|idempotency|synthetic_placeholder|provider_path|secret_path|raw_payload|raw_credential|request_body|response_body|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string|database_url|"sql"|"stack"/i,
     );
   });
 
@@ -1056,6 +1163,65 @@ describe('数据库结构', () => {
     expect(migrationSql).not.toMatch(/\bdelete\s+from\b|\binsert\s+into\b|(^|;)\s*update\s+/i);
     expect(migrationSql).not.toMatch(
       /phone_number|id_number|medical_record_no|raw_payload|request_body|response_body|treatment_record|medical_record_body|diagnosis_text|clinical_note|consultation_transcript|image_original|file_original|credential_secret|credential_value|credential_plaintext|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string|database_url|"sql"|"stack"/i,
+    );
+  });
+
+  it('HIS 连接配置凭证补偿 metadata / operationId 迁移只新增安全状态承载表', () => {
+    const migrationSql = readMigrationSql('compensation_metadata_operationid');
+    const journal = JSON.parse(readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8')) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+    const latestSnapshot = readFileSync(
+      join(process.cwd(), 'drizzle/meta/0007_snapshot.json'),
+      'utf8',
+    ).toLowerCase();
+
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          idx: 7,
+          tag: '0007_phase23_his_connection_credential_compensation_metadata_operationid',
+        }),
+      ]),
+    );
+    expect(latestSnapshot).toContain(
+      '"his_connection_credential_compensation_operations"',
+    );
+    expect(latestSnapshot).toContain('"operation_id"');
+    expect(latestSnapshot).toContain('"manual_review_required"');
+    expect(migrationSql).toContain(
+      'create type "public"."his_connection_credential_compensation_state" as enum(\'compensation_pending\', \'compensation_running\', \'compensation_succeeded\', \'compensation_failed\', \'manual_review_required\')',
+    );
+    expect(migrationSql).toContain(
+      'create type "public"."his_connection_credential_compensation_operation_type" as enum(\'credential_compensation\')',
+    );
+    expect(migrationSql).toContain(
+      'create type "public"."his_connection_credential_provider_failure_category" as enum(\'provider_unavailable\', \'timeout\', \'retry_exhausted\', \'circuit_open\', \'validation_failed\', \'tenant_connection_mismatch\', \'idempotency_conflict\', \'invalid_state\', \'provider_write_failed\', \'provider_revoke_failed\', \'provider_describe_failed\', \'provider_health_failed\', \'repository_after_provider_failed\', \'audit_after_provider_failed\')',
+    );
+    expect(migrationSql).toContain(
+      'create table "his_connection_credential_compensation_operations"',
+    );
+    expect(migrationSql).toContain('"operation_id" varchar(96) not null');
+    expect(migrationSql).toContain('"retry_count" integer default 0 not null');
+    expect(migrationSql).toContain(
+      '"manual_review_required" boolean default false not null',
+    );
+    expect(migrationSql).toContain(
+      'alter table "his_connection_credential_compensation_operations" add constraint "his_conn_cred_comp_ops_tenant_fk" foreign key ("tenant_id") references "public"."tenants"("id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "his_connection_credential_compensation_operations" add constraint "his_conn_cred_comp_ops_connection_fk" foreign key ("tenant_id","connection_id") references "public"."his_connections"("tenant_id","id")',
+    );
+    expect(migrationSql).toContain(
+      'create unique index "his_conn_cred_comp_ops_operation_id_unique_idx" on "his_connection_credential_compensation_operations" using btree ("operation_id")',
+    );
+    expect(migrationSql).toContain(
+      'create index "his_conn_cred_comp_ops_tenant_connection_state_idx" on "his_connection_credential_compensation_operations" using btree ("tenant_id","connection_id","state")',
+    );
+    expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
+    expect(migrationSql).not.toMatch(/\bdelete\s+from\b|\binsert\s+into\b|(^|;)\s*update\s+/i);
+    expect(migrationSql).not.toMatch(
+      /credential_ref|credentialref|idempotency_key|idempotencykey|scoped_idempotency|synthetic_placeholder|provider_path|secret_path|raw_payload|raw_credential|request_body|response_body|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string|database_url|"sql"|"stack"/i,
     );
   });
 });
