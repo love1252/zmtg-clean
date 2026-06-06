@@ -419,15 +419,16 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).not.toHaveBeenCalled();
   });
 
-  it('expired running job recovery 不重复 provider，并进入 manual review', async () => {
+  it('expired running job recovery 先标记 job manual review，再标记 operation manual review', async () => {
     const jobQueueRepository = createJobQueueRepositoryMock({
       listExpiredLockedCredentialCompensationJobs: vi.fn(async () => ({
         status: 'ok',
         records: [expiredRunningJob],
       })),
     });
+    const operationRepository = createOperationRepositoryMock();
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
-    const { worker } = createWorker({ jobQueueRepository });
+    const { worker } = createWorker({ jobQueueRepository, operationRepository });
 
     const result = await worker.recoverExpiredLockedCredentialCompensationJobs({ tenantId });
 
@@ -439,6 +440,18 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
       claimVersion: 7,
       now,
     });
+    expect(operationRepository.markCredentialCompensationOperationManualReviewRequired).toHaveBeenCalledWith({
+      tenantId,
+      connectionId,
+      operationId,
+    });
+    expect(
+      vi.mocked(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).mock
+        .invocationCallOrder[0],
+    ).toBeLessThan(
+      vi.mocked(operationRepository.markCredentialCompensationOperationManualReviewRequired).mock
+        .invocationCallOrder[0],
+    );
     expect(result.items).toEqual([
       expect.objectContaining({
         status: 'manual_review_required',
@@ -448,6 +461,72 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
       }),
     ]);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('expired running job manual review 失败时不推进 operation manual review', async () => {
+    const jobQueueRepository = createJobQueueRepositoryMock({
+      listExpiredLockedCredentialCompensationJobs: vi.fn(async () => ({
+        status: 'ok',
+        records: [expiredRunningJob],
+      })),
+      markCredentialCompensationJobManualReviewRequired: vi.fn(async () => ({
+        status: 'repository_error',
+      })),
+    });
+    const operationRepository = createOperationRepositoryMock();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+    const { worker } = createWorker({ jobQueueRepository, operationRepository });
+
+    const result = await worker.recoverExpiredLockedCredentialCompensationJobs({ tenantId });
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ status: 'repository_error', tenantId, connectionId, operationId }),
+    ]);
+    expect(operationRepository.markCredentialCompensationOperationManualReviewRequired).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expectNoSensitiveData(result);
+  });
+
+  it('expired running operation manual review 失败时返回稳定结果', async () => {
+    const jobQueueRepository = createJobQueueRepositoryMock({
+      listExpiredLockedCredentialCompensationJobs: vi.fn(async () => ({
+        status: 'ok',
+        records: [expiredRunningJob],
+      })),
+    });
+    const operationRepository = createOperationRepositoryMock({
+      markCredentialCompensationOperationManualReviewRequired: vi.fn(async () => ({
+        status: 'invalid_state_transition',
+      })),
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+    const { worker } = createWorker({ jobQueueRepository, operationRepository });
+
+    const result = await worker.recoverExpiredLockedCredentialCompensationJobs({ tenantId });
+
+    expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).toHaveBeenCalledWith({
+      tenantId,
+      connectionId,
+      operationId,
+      claimId: 'claim-returned',
+      claimVersion: 7,
+      now,
+    });
+    expect(operationRepository.markCredentialCompensationOperationManualReviewRequired).toHaveBeenCalledWith({
+      tenantId,
+      connectionId,
+      operationId,
+    });
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        status: 'invalid_state_transition',
+        tenantId,
+        connectionId,
+        operationId,
+      }),
+    ]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expectNoSensitiveData(result);
   });
 
   it('stale running operation 找不到 job 时进入 manual review', async () => {

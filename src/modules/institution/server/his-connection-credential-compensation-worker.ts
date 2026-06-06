@@ -413,6 +413,21 @@ export function createHisConnectionCredentialCompensationWorker(
           }),
         );
         if (manualReviewResult.status === 'ok') {
+          const operationManualReviewResult = await safelyCallRepository(() =>
+            dependencies.operationRepository.markCredentialCompensationOperationManualReviewRequired(scope),
+          );
+          if (operationManualReviewResult.status !== 'ok') {
+            items.push(createItemResult(
+              scope,
+              repositoryStatusToItemStatus(operationManualReviewResult.status),
+              {
+                claimId: runningClaimId,
+                claimVersion: job.claimVersion,
+              },
+            ));
+            continue;
+          }
+
           items.push(createItemResult(scope, 'manual_review_required', {
             claimId: runningClaimId,
             claimVersion: job.claimVersion,
