@@ -25,7 +25,23 @@ export type AuditReason =
   | 'quota_exceeded_customers'
   | 'quota_exceeded_appointments'
   | 'missing_active_plan'
-  | 'missing_quota_limit';
+  | 'missing_quota_limit'
+  | 'provider_unavailable'
+  | 'provider_timeout'
+  | 'provider_retry_exhausted'
+  | 'provider_circuit_open'
+  | 'provider_validation_failed'
+  | 'provider_write_failed'
+  | 'provider_revoke_failed'
+  | 'provider_describe_failed'
+  | 'provider_health_failed'
+  | 'repository_after_provider_failed'
+  | 'audit_after_provider_failed'
+  | 'compensation_pending'
+  | 'compensation_running'
+  | 'compensation_succeeded'
+  | 'compensation_failed'
+  | 'manual_review_required';
 
 export type TenantAuditEvent = {
   eventId: string;

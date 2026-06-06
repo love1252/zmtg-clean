@@ -20,6 +20,25 @@ function expectParseError(input: Record<string, string>, message: string) {
   }
 }
 
+const hisCredentialProviderFailureCompensationReasons = [
+  'provider_unavailable',
+  'provider_timeout',
+  'provider_retry_exhausted',
+  'provider_circuit_open',
+  'provider_validation_failed',
+  'provider_write_failed',
+  'provider_revoke_failed',
+  'provider_describe_failed',
+  'provider_health_failed',
+  'repository_after_provider_failed',
+  'audit_after_provider_failed',
+  'compensation_pending',
+  'compensation_running',
+  'compensation_succeeded',
+  'compensation_failed',
+  'manual_review_required',
+] as const;
+
 describe('审计查询参数 parser', () => {
   it('只接受白名单字段并解析完整查询条件', () => {
     const cursor = encodeAuditEventQueryCursor({
@@ -249,10 +268,59 @@ describe('审计查询参数 parser', () => {
     }
   });
 
+  it('接受 HIS 连接配置凭证 provider 失败与补偿稳定 reason 查询', () => {
+    for (const reason of hisCredentialProviderFailureCompensationReasons) {
+      const result = reason === 'compensation_succeeded' ? 'allowed' : 'denied';
+      const query = {
+        resource: 'open_connection',
+        resourceId: 'his_conn_001',
+        action: 'manage_credentials',
+        result,
+        reason,
+      } as const;
+
+      expect(parseAuditEventQueryParams(params(query))).toEqual({
+        ok: true,
+        query: {
+          filters: query,
+          limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
+        },
+      });
+    }
+  });
+
   it('拒绝非白名单字段，避免 tenantId 或任意 SQL 参数进入查询', () => {
     expectParseError({ tenantId: 'other-tenant' }, '不支持的筛选参数: tenantId');
     expectParseError({ orderBy: 'occurred_at desc' }, '不支持的筛选参数: orderBy');
     expectParseError({ sql: 'select * from audit_events' }, '不支持的筛选参数: sql');
+  });
+
+  it('拒绝 provider 失败与补偿越界查询字段，避免凭证引用或内部状态进入查询', () => {
+    for (const key of [
+      'failureCategory',
+      'compensationState',
+      'metadata',
+      'providerPath',
+      'secretPath',
+      'credentialRef',
+      'idempotencyKey',
+      'rawProviderFilter',
+    ]) {
+      expectParseError({ [key]: 'not-allowed' }, `不支持的筛选参数: ${key}`);
+    }
+
+    expectParseError(
+      { resource: 'open_connection', action: 'manage_credentials', result: 'failure' },
+      'result 不在允许范围内',
+    );
+    expectParseError(
+      { resource: 'open_connection', action: 'manage_credentials', reason: 'provider_secret_path_leaked' },
+      'reason 不在允许范围内',
+    );
+    expectParseError(
+      { resource: 'open_connection', action: 'manage_credentials', reason: 'provider_path_/vault/his' },
+      'reason 不在允许范围内',
+    );
   });
 
   it('使用默认 limit，允许最大 limit，并拒绝非法 limit', () => {
