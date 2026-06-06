@@ -2,6 +2,17 @@ import { createHash, randomUUID } from 'node:crypto';
 
 export type HisConnectionCredentialStorageProvider = 'in_memory_test_only';
 
+export type HisConnectionCredentialProviderHealth = {
+  status: 'available';
+  provider: HisConnectionCredentialStorageProvider;
+  mode: 'test_only';
+  acceptsRealCredentialMaterial: false;
+  storesRawCredentialMaterial: false;
+  supportsTestConnection: false;
+  connectedProvider: false;
+  checkedAt: string;
+};
+
 export type HisConnectionCredentialStorageMetadata = {
   tenantId: string;
   connectionId: string;
@@ -37,6 +48,37 @@ export type RevokeCredentialReferenceResult =
   | { status: 'revoked'; revokedAt: string }
   | { status: 'not_found' }
   | { status: 'validation_failed' };
+
+export type DescribeCredentialReferenceInput = {
+  tenantId: string;
+  connectionId: string;
+  credentialRef: string;
+};
+
+export type DescribeCredentialReferenceResult =
+  | {
+      status: 'found';
+      summary: HisConnectionCredentialStorageMetadata;
+    }
+  | { status: 'not_found' }
+  | { status: 'validation_failed' };
+
+export type HisConnectionCredentialProvider = {
+  storeSyntheticCredentialReference(
+    input: StoreSyntheticCredentialReferenceInput,
+  ): Promise<StoreSyntheticCredentialReferenceResult>;
+  revokeCredentialReference(
+    input: RevokeCredentialReferenceInput,
+  ): Promise<RevokeCredentialReferenceResult>;
+  describeCredentialReference(
+    input: DescribeCredentialReferenceInput,
+  ): Promise<DescribeCredentialReferenceResult>;
+  health(): Promise<HisConnectionCredentialProviderHealth>;
+};
+
+export type InMemoryHisConnectionCredentialProvider = HisConnectionCredentialProvider & {
+  listStoredCredentialMetadataForTests(): HisConnectionCredentialStorageMetadata[];
+};
 
 type StoredCredentialReference = {
   tenantId: string;
@@ -125,11 +167,24 @@ function mapStoredCredentialReferenceToMetadata(
   };
 }
 
-export function createInMemoryHisConnectionCredentialStorage() {
+export function createInMemoryHisConnectionCredentialProvider(): InMemoryHisConnectionCredentialProvider {
   const entriesByRef = new Map<string, StoredCredentialReference>();
   const refsByIdempotencyKey = new Map<string, string>();
 
   return {
+    async health(): Promise<HisConnectionCredentialProviderHealth> {
+      return {
+        status: 'available',
+        provider,
+        mode: 'test_only',
+        acceptsRealCredentialMaterial: false,
+        storesRawCredentialMaterial: false,
+        supportsTestConnection: false,
+        connectedProvider: false,
+        checkedAt: new Date().toISOString(),
+      };
+    },
+
     async storeSyntheticCredentialReference(
       input: StoreSyntheticCredentialReferenceInput,
     ): Promise<StoreSyntheticCredentialReferenceResult> {
@@ -191,6 +246,29 @@ export function createInMemoryHisConnectionCredentialStorage() {
       };
     },
 
+    async describeCredentialReference(
+      input: DescribeCredentialReferenceInput,
+    ): Promise<DescribeCredentialReferenceResult> {
+      const tenantId = normalizeTenantId(input.tenantId);
+      const connectionId = normalizeConnectionId(input.connectionId);
+      const credentialRef = normalizeSafeCredentialRef(input.credentialRef);
+
+      if (!tenantId || !connectionId || !credentialRef) {
+        return { status: 'validation_failed' };
+      }
+
+      const entry = entriesByRef.get(credentialRef);
+
+      if (!entry || entry.tenantId !== tenantId || entry.connectionId !== connectionId) {
+        return { status: 'not_found' };
+      }
+
+      return {
+        status: 'found',
+        summary: mapStoredCredentialReferenceToMetadata(entry),
+      };
+    },
+
     async revokeCredentialReference(
       input: RevokeCredentialReferenceInput,
     ): Promise<RevokeCredentialReferenceResult> {
@@ -220,4 +298,8 @@ export function createInMemoryHisConnectionCredentialStorage() {
       return Array.from(entriesByRef.values()).map(mapStoredCredentialReferenceToMetadata);
     },
   };
+}
+
+export function createInMemoryHisConnectionCredentialStorage() {
+  return createInMemoryHisConnectionCredentialProvider();
 }

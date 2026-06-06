@@ -64,6 +64,7 @@
 - Phase 23 HIS 连接配置凭证 API route / permission / audit Plan Mode 进入规划：当前只规划凭证 create / update / rotate / clear / revoke route、`open_connection:manage_credentials` 权限候选、route denied audit、service allowed audit、DTO / error mapping 和测试拆分；不新增 API route、不修改 `src/**`、不修改权限实现、不新增 audit action / reason / domain / query whitelist、不处理真实凭证、不做测试连接、不接真实 HIS。下一步是凭证 API route / permission / audit 最小实现。
 - Phase 23 HIS 连接配置凭证 API route / permission / audit 最小实现已完成：当前新增 `POST /credentials`、`PATCH /credentials`、`POST /credentials/rotate`、`POST /credentials/clear`、`POST /credentials/revoke`，接入 `open_connection:manage_credentials`、route denied audit、service allowed audit、稳定 DTO / error mapping 和权限 / audit / route 测试；仍不新增 schema / migration，不接真实 secret manager，不保存真实凭证，不做测试连接，不接真实 HIS。
 - Phase 23 HIS 连接配置凭证加密与真实 secret manager Plan Mode 进入规划：当前只规划凭证加密、真实 secret manager、provider 抽象、密钥轮换、审计和回滚边界；凭证 API route / permission / audit 最小实现已完成，但仍不接真实 secret manager，不保存真实凭证，测试连接和真实 HIS adapter 仍需单独规划。
+- Phase 23 HIS 连接配置凭证 provider 抽象接口最小边界已完成：当前在 fake in-memory storage 上抽象 `HisConnectionCredentialProvider`，保留 `createInMemoryHisConnectionCredentialStorage()` route 兼容入口，新增 test-only health 和 describe 安全摘要；仍不接真实 KMS / Vault / secret manager，不保存真实凭证，不做测试连接，不接真实 HIS，不新增 schema / migration。
 - 开放平台治理第一阶段：API Key、OAuth、Webhook 和审计的治理词汇、生命周期和安全边界展示。
 
 当前主要缺口：

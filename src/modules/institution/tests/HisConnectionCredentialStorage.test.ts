@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createInMemoryHisConnectionCredentialStorage } from '@/modules/institution/server/his-connection-credential-storage';
+import {
+  createInMemoryHisConnectionCredentialProvider,
+  createInMemoryHisConnectionCredentialStorage,
+  type HisConnectionCredentialProvider,
+} from '@/modules/institution/server/his-connection-credential-storage';
 
 function expectNoSensitiveCredentialData(payload: unknown) {
   expect(JSON.stringify(payload)).not.toMatch(
@@ -7,7 +11,23 @@ function expectNoSensitiveCredentialData(payload: unknown) {
   );
 }
 
-describe('HIS 连接配置凭证 fake storage 最小边界', () => {
+describe('HIS 连接配置凭证 fake provider 最小边界', () => {
+  it('暴露 test-only provider health，不声明真实 secret manager、真实 HIS 或测试连接能力', async () => {
+    const provider: HisConnectionCredentialProvider =
+      createInMemoryHisConnectionCredentialProvider();
+
+    await expect(provider.health()).resolves.toEqual({
+      status: 'available',
+      provider: 'in_memory_test_only',
+      mode: 'test_only',
+      acceptsRealCredentialMaterial: false,
+      storesRawCredentialMaterial: false,
+      supportsTestConnection: false,
+      connectedProvider: false,
+      checkedAt: expect.any(String),
+    });
+  });
+
   it('只接受合成 placeholder，返回安全 credentialRef，不保存或输出明文', async () => {
     const storage = createInMemoryHisConnectionCredentialStorage();
 
@@ -39,6 +59,79 @@ describe('HIS 连接配置凭证 fake storage 最小边界', () => {
     expect(JSON.stringify(storage.listStoredCredentialMetadataForTests())).not.toContain(
       'synthetic_placeholder_demo_his_reference',
     );
+  });
+
+  it('describeCredentialReference 只返回安全 summary，不输出 credentialRef、scoped key 或 provider 内部路径', async () => {
+    const provider = createInMemoryHisConnectionCredentialProvider();
+
+    const stored = await provider.storeSyntheticCredentialReference({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      placeholder: 'synthetic_placeholder_demo_describe',
+      idempotencyKey: 'idem_describe_001',
+    });
+
+    if (stored.status !== 'stored') {
+      throw new Error('expected stored result');
+    }
+
+    const described = await provider.describeCredentialReference({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      credentialRef: stored.credentialRef,
+    });
+
+    expect(described).toEqual({
+      status: 'found',
+      summary: {
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        credentialRefDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+        provider: 'in_memory_test_only',
+        storedAt: expect.any(String),
+        revokedAt: null,
+      },
+    });
+    expectNoSensitiveCredentialData(described);
+    expect(JSON.stringify(described)).not.toContain(stored.credentialRef);
+    expect(JSON.stringify(described)).not.toMatch(/demo-tenant-001:his_conn_001:idem_describe_001/);
+    expect(JSON.stringify(described)).not.toMatch(/path|vault|kms|secretPath|externalSecret/i);
+  });
+
+  it('describeCredentialReference 不跨 tenant / connection 暴露 summary，且拒绝敏感引用形态', async () => {
+    const provider = createInMemoryHisConnectionCredentialProvider();
+    const stored = await provider.storeSyntheticCredentialReference({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      placeholder: 'synthetic_placeholder_demo_describe_scope',
+      idempotencyKey: 'idem_describe_scope_001',
+    });
+
+    if (stored.status !== 'stored') {
+      throw new Error('expected stored result');
+    }
+
+    await expect(
+      provider.describeCredentialReference({
+        tenantId: 'demo-tenant-002',
+        connectionId: 'his_conn_001',
+        credentialRef: stored.credentialRef,
+      }),
+    ).resolves.toEqual({ status: 'not_found' });
+    await expect(
+      provider.describeCredentialReference({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_002',
+        credentialRef: stored.credentialRef,
+      }),
+    ).resolves.toEqual({ status: 'not_found' });
+    await expect(
+      provider.describeCredentialReference({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        credentialRef: 'sk_live_should_not_be_a_reference_secret',
+      }),
+    ).resolves.toEqual({ status: 'validation_failed' });
   });
 
   it('同一 idempotencyKey 重试返回同一安全引用，且不生成明文副本', async () => {
