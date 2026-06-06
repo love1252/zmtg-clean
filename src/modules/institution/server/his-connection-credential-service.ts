@@ -2,7 +2,7 @@ import {
   mapHisConnectionCredentialSuccessToDto,
   type HisConnectionCredentialSuccessDto,
 } from '@/modules/institution/server/his-connection-credential-dto';
-import { createAuditEvent } from '@/modules/audit/domain/audit-events';
+import { createAuditEvent, type AuditReason } from '@/modules/audit/domain/audit-events';
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import type {
   HisConnectionCredentialMutationInput,
@@ -14,6 +14,7 @@ import type {
 import {
   isHisConnectionCredentialProviderFailure,
   mapHisConnectionCredentialProviderFailureToServiceStatus,
+  type HisConnectionCredentialProviderFailure,
 } from '@/modules/institution/server/his-connection-credential-provider-failure';
 import {
   createHisConnectionRepository,
@@ -80,6 +81,26 @@ type HisConnectionCredentialReasonServiceInput =
     connectionId: string;
     credentialInput: HisConnectionCredentialReasonInput;
   };
+
+const providerFailureAuditReasonByCategory: Record<
+  HisConnectionCredentialProviderFailure['category'],
+  AuditReason
+> = {
+  provider_unavailable: 'provider_unavailable',
+  timeout: 'provider_timeout',
+  retry_exhausted: 'provider_retry_exhausted',
+  circuit_open: 'provider_circuit_open',
+  validation_failed: 'provider_validation_failed',
+  tenant_connection_mismatch: 'not_found_or_not_owned',
+  idempotency_conflict: 'provider_validation_failed',
+  invalid_state: 'invalid_transition',
+  provider_write_failed: 'provider_write_failed',
+  provider_revoke_failed: 'provider_revoke_failed',
+  provider_describe_failed: 'provider_describe_failed',
+  provider_health_failed: 'provider_health_failed',
+  repository_after_provider_failed: 'repository_after_provider_failed',
+  audit_after_provider_failed: 'audit_after_provider_failed',
+};
 
 function normalizeTrustedText(value: unknown) {
   if (typeof value !== 'string') return null;
@@ -172,6 +193,57 @@ async function recordAllowedCredentialAudit(input: {
   );
 }
 
+async function recordProviderFailureCredentialAudit(input: {
+  dependencies: HisConnectionCredentialServiceDependencies;
+  database: TenantDatabase;
+  accessContext: AccessContext;
+  connectionId: string;
+  failure: HisConnectionCredentialProviderFailure;
+}) {
+  try {
+    const auditRepository = getAuditRepository(input.dependencies, input.database);
+
+    if (!auditRepository) {
+      return { ok: true as const };
+    }
+
+    await auditRepository.record(
+      createAuditEvent({
+        eventId: createAuditEventId(),
+        context: input.accessContext,
+        resource: 'open_connection',
+        resourceId: input.connectionId,
+        action: 'manage_credentials',
+        result: 'denied',
+        reason: providerFailureAuditReasonByCategory[input.failure.category],
+        occurredAt: new Date().toISOString(),
+      }),
+    );
+
+    return { ok: true as const };
+  } catch {
+    return { ok: false as const };
+  }
+}
+
+async function mapProviderFailureToServiceResult(input: {
+  dependencies: HisConnectionCredentialServiceDependencies;
+  database: TenantDatabase;
+  accessContext: AccessContext;
+  connectionId: string;
+  failure: HisConnectionCredentialProviderFailure;
+}): Promise<HisConnectionCredentialServiceResult> {
+  const auditResult = await recordProviderFailureCredentialAudit(input);
+
+  if (!auditResult.ok) {
+    return { status: 'service_unavailable' };
+  }
+
+  return {
+    status: mapHisConnectionCredentialProviderFailureToServiceStatus(input.failure),
+  };
+}
+
 async function storeSyntheticCredentialReference(input: {
   tenantId: string;
   connectionId: string;
@@ -240,7 +312,13 @@ async function runStoredCredentialReferenceService(
     });
   } catch (error) {
     if (isHisConnectionCredentialProviderFailure(error)) {
-      return { status: mapHisConnectionCredentialProviderFailureToServiceStatus(error) };
+      return mapProviderFailureToServiceResult({
+        dependencies: input,
+        database: input.database,
+        accessContext: input.accessContext,
+        connectionId,
+        failure: error,
+      });
     }
 
     return { status: 'service_unavailable' };
@@ -289,7 +367,13 @@ async function runClearCredentialReferenceService(
     });
   } catch (error) {
     if (isHisConnectionCredentialProviderFailure(error)) {
-      return { status: mapHisConnectionCredentialProviderFailureToServiceStatus(error) };
+      return mapProviderFailureToServiceResult({
+        dependencies: input,
+        database: input.database,
+        accessContext: input.accessContext,
+        connectionId,
+        failure: error,
+      });
     }
 
     return { status: 'service_unavailable' };
