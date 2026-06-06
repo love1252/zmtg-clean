@@ -19,17 +19,49 @@ export type HisConnectionCredentialCompensationWorkerResultStatus =
   | 'repository_error'
   | 'validation_failed';
 
+export const hisConnectionCredentialCompensationProviderExecutionResultStatuses = [
+  'success',
+  'retryable_failure',
+  'unsafe_unknown',
+  'validation_failed',
+  'provider_unavailable',
+  'timeout',
+  'repository_error',
+] as const;
+
+export type HisConnectionCredentialCompensationProviderExecutionResultStatus =
+  (typeof hisConnectionCredentialCompensationProviderExecutionResultStatuses)[number];
+
 export type HisConnectionCredentialCompensationWorkerScope = {
   tenantId: string;
   connectionId: string;
   operationId: string;
 };
 
+export type HisConnectionCredentialCompensationProviderExecutorInput =
+  HisConnectionCredentialCompensationWorkerScope & {
+    claimId: string;
+    claimVersion: number;
+    workerId: string;
+    now: Date;
+  };
+
+export type HisConnectionCredentialCompensationProviderExecutionResult = {
+  status: HisConnectionCredentialCompensationProviderExecutionResultStatus;
+};
+
+export type HisConnectionCredentialCompensationProviderExecutor = (
+  input: HisConnectionCredentialCompensationProviderExecutorInput,
+) =>
+  | Promise<HisConnectionCredentialCompensationProviderExecutionResult>
+  | HisConnectionCredentialCompensationProviderExecutionResult;
+
 export type HisConnectionCredentialCompensationWorkerItemResult =
   HisConnectionCredentialCompensationWorkerScope & {
     status: HisConnectionCredentialCompensationWorkerResultStatus;
     claimId?: string;
     claimVersion?: number;
+    providerResult?: HisConnectionCredentialCompensationProviderExecutionResultStatus;
   };
 
 export type HisConnectionCredentialCompensationWorkerBatchResult = {
@@ -61,9 +93,18 @@ export type RecoverStaleRunningCredentialCompensationOperationsInput = {
   limit?: number;
 };
 
+export type ExecuteClaimedCredentialCompensationJobInput =
+  HisConnectionCredentialCompensationWorkerScope & {
+    claimId: string;
+    claimVersion: number;
+    workerId?: string;
+    now?: Date;
+  };
+
 export type HisConnectionCredentialCompensationWorkerDependencies = {
   operationRepository: HisConnectionCredentialCompensationOperationRepository;
   jobQueueRepository: HisConnectionCredentialCompensationJobQueueRepository;
+  providerExecutor?: HisConnectionCredentialCompensationProviderExecutor;
   nowProvider?: () => Date;
   claimIdFactory?: (input: HisConnectionCredentialCompensationWorkerScope & {
     now: Date;
@@ -116,6 +157,15 @@ function normalizeClaimId(value: unknown) {
   return normalizeTrustedText(value, fieldLimits.claimId);
 }
 
+function normalizeClaimVersion(value: unknown) {
+  if (typeof value !== 'number') return null;
+  if (!Number.isInteger(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) {
+    return null;
+  }
+
+  return value;
+}
+
 function normalizeScope(value: {
   tenantId: unknown;
   connectionId: unknown;
@@ -166,11 +216,13 @@ function createItemResult(
   scope: HisConnectionCredentialCompensationWorkerScope,
   status: HisConnectionCredentialCompensationWorkerResultStatus,
   claim?: { claimId: string | null; claimVersion: number },
+  providerResult?: HisConnectionCredentialCompensationProviderExecutionResultStatus,
 ): HisConnectionCredentialCompensationWorkerItemResult {
   return {
     ...scope,
     status,
     ...(claim?.claimId ? { claimId: claim.claimId, claimVersion: claim.claimVersion } : {}),
+    ...(providerResult ? { providerResult } : {}),
   };
 }
 
@@ -196,6 +248,16 @@ function scopeFromOperation(
 
 function repositoryStatusToItemStatus(status: RepositoryMutationStatus) {
   return status;
+}
+
+function isProviderExecutionResultStatus(
+  value: unknown,
+): value is HisConnectionCredentialCompensationProviderExecutionResultStatus {
+  return (
+    typeof value === 'string' &&
+    (hisConnectionCredentialCompensationProviderExecutionResultStatuses as readonly string[])
+      .includes(value)
+  );
 }
 
 async function safelyCallRepository<T extends { status: string }>(
@@ -356,6 +418,217 @@ export function createHisConnectionCredentialCompensationWorker(
       }
 
       return createBatchResult('ok', items);
+    },
+
+    async executeClaimedCredentialCompensationJob(
+      input: ExecuteClaimedCredentialCompensationJobInput,
+    ): Promise<HisConnectionCredentialCompensationWorkerItemResult> {
+      const scope = normalizeScope(input);
+      const claimId = normalizeClaimId(input.claimId);
+      const claimVersion = normalizeClaimVersion(input.claimVersion);
+      const now = resolveNow(input.now);
+      const workerId = normalizeWorkerId(input.workerId) ?? configuredWorkerId;
+
+      if (!scope) {
+        return {
+          tenantId: '',
+          connectionId: '',
+          operationId: '',
+          status: 'validation_failed',
+        };
+      }
+
+      const claim = claimId && claimVersion !== null
+        ? { claimId, claimVersion }
+        : undefined;
+
+      if (!claimId || claimVersion === null || !now || !workerId) {
+        return createItemResult(scope, 'validation_failed');
+      }
+
+      if (!dependencies.providerExecutor) {
+        return createItemResult(
+          scope,
+          'validation_failed',
+          claim,
+          'validation_failed',
+        );
+      }
+
+      const jobResult = await safelyCallRepository(() =>
+        dependencies.jobQueueRepository.getCredentialCompensationJobByConnection(scope),
+      );
+      if (jobResult.status !== 'ok') {
+        return createItemResult(
+          scope,
+          repositoryStatusToItemStatus(jobResult.status),
+          claim,
+        );
+      }
+
+      const jobScope = scopeFromJob(jobResult.record, scope.tenantId);
+      if (
+        !jobScope ||
+        jobScope.connectionId !== scope.connectionId ||
+        jobScope.operationId !== scope.operationId
+      ) {
+        return createItemResult(scope, 'validation_failed', claim);
+      }
+      if (jobResult.record.jobState !== 'running') {
+        return createItemResult(scope, 'invalid_state_transition', claim);
+      }
+      if (
+        jobResult.record.claimId !== claimId ||
+        jobResult.record.claimVersion !== claimVersion
+      ) {
+        return createItemResult(scope, 'conflict', claim);
+      }
+
+      const operationResult = await safelyCallRepository(() =>
+        dependencies.operationRepository.getCredentialCompensationOperationByConnection(scope),
+      );
+      if (operationResult.status !== 'ok') {
+        return createItemResult(
+          scope,
+          repositoryStatusToItemStatus(operationResult.status),
+          claim,
+        );
+      }
+
+      const operationScope = scopeFromOperation(operationResult.record, scope.tenantId);
+      if (
+        !operationScope ||
+        operationScope.connectionId !== scope.connectionId ||
+        operationScope.operationId !== scope.operationId
+      ) {
+        return createItemResult(scope, 'validation_failed', claim);
+      }
+      if (operationResult.record.state !== 'compensation_running') {
+        return createItemResult(scope, 'invalid_state_transition', claim);
+      }
+
+      let providerResult: HisConnectionCredentialCompensationProviderExecutionResultStatus;
+      try {
+        const result = await dependencies.providerExecutor({
+          ...scope,
+          claimId,
+          claimVersion,
+          workerId,
+          now,
+        });
+        providerResult = isProviderExecutionResultStatus(result.status)
+          ? result.status
+          : 'validation_failed';
+      } catch {
+        providerResult = 'provider_unavailable';
+      }
+
+      if (providerResult === 'validation_failed') {
+        return createItemResult(scope, 'validation_failed', claim, providerResult);
+      }
+      if (providerResult === 'repository_error') {
+        return createItemResult(scope, 'repository_error', claim, providerResult);
+      }
+
+      if (providerResult === 'success') {
+        const jobSucceededResult = await safelyCallRepository(() =>
+          dependencies.jobQueueRepository.markCredentialCompensationJobSucceeded({
+            ...scope,
+            claimId,
+            claimVersion,
+            now,
+          }),
+        );
+        if (jobSucceededResult.status !== 'ok') {
+          return createItemResult(
+            scope,
+            repositoryStatusToItemStatus(jobSucceededResult.status),
+            claim,
+            providerResult,
+          );
+        }
+
+        const operationSucceededResult = await safelyCallRepository(() =>
+          dependencies.operationRepository.markCredentialCompensationOperationSucceeded(scope),
+        );
+        if (operationSucceededResult.status !== 'ok') {
+          return createItemResult(
+            scope,
+            repositoryStatusToItemStatus(operationSucceededResult.status),
+            claim,
+            providerResult,
+          );
+        }
+
+        return createItemResult(scope, 'ok', claim, providerResult);
+      }
+
+      if (
+        providerResult === 'retryable_failure' ||
+        providerResult === 'provider_unavailable'
+      ) {
+        const jobFailedResult = await safelyCallRepository(() =>
+          dependencies.jobQueueRepository.markCredentialCompensationJobFailed({
+            ...scope,
+            claimId,
+            claimVersion,
+            now,
+          }),
+        );
+        if (jobFailedResult.status !== 'ok') {
+          return createItemResult(
+            scope,
+            repositoryStatusToItemStatus(jobFailedResult.status),
+            claim,
+            providerResult,
+          );
+        }
+
+        const operationFailedResult = await safelyCallRepository(() =>
+          dependencies.operationRepository.markCredentialCompensationOperationFailed(scope),
+        );
+        if (operationFailedResult.status !== 'ok') {
+          return createItemResult(
+            scope,
+            repositoryStatusToItemStatus(operationFailedResult.status),
+            claim,
+            providerResult,
+          );
+        }
+
+        return createItemResult(scope, 'ok', claim, providerResult);
+      }
+
+      const manualReviewResult = await safelyCallRepository(() =>
+        dependencies.jobQueueRepository.markCredentialCompensationJobManualReviewRequired({
+          ...scope,
+          claimId,
+          claimVersion,
+          now,
+        }),
+      );
+      if (manualReviewResult.status !== 'ok') {
+        return createItemResult(
+          scope,
+          repositoryStatusToItemStatus(manualReviewResult.status),
+          claim,
+          providerResult,
+        );
+      }
+
+      const operationManualReviewResult = await safelyCallRepository(() =>
+        dependencies.operationRepository.markCredentialCompensationOperationManualReviewRequired(scope),
+      );
+      if (operationManualReviewResult.status !== 'ok') {
+        return createItemResult(
+          scope,
+          repositoryStatusToItemStatus(operationManualReviewResult.status),
+          claim,
+          providerResult,
+        );
+      }
+
+      return createItemResult(scope, 'manual_review_required', claim, providerResult);
     },
 
     async recoverExpiredLockedCredentialCompensationJobs(
