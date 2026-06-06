@@ -603,16 +603,21 @@ describe('HIS 连接配置凭证补偿 job queue repository 最小边界', () =>
     });
   });
 
-  it('requeue failed job 递增 retryCount 并写入 nextAttemptAt', async () => {
+  it('retryCount 小于 maxRetryCount 时允许 requeue 并清理 claim 元数据', async () => {
     const requeuedRow = {
       ...failedJobRow,
       jobState: 'queued',
       retryCount: 1,
       nextAttemptAt: future,
+      claimId: null,
+      claimedBy: null,
+      claimedAt: null,
+      lastHeartbeatAt: null,
       lockedUntil: null,
       completedAt: null,
     } satisfies CompensationJobRow;
     const query = createStateDatabase({ currentRow: failedJobRow, updatedRow: requeuedRow });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
 
     const result = await createHisConnectionCredentialCompensationJobQueueRepository(
       query.database,
@@ -630,6 +635,10 @@ describe('HIS 连接配置凭证补偿 job queue repository 最小边界', () =>
       jobState: 'queued',
       retryCount: 1,
       nextAttemptAt: future,
+      claimId: null,
+      claimedBy: null,
+      claimedAt: null,
+      lastHeartbeatAt: null,
       lockedUntil: null,
       deadLetterReason: null,
       manualReviewRequired: false,
@@ -637,6 +646,48 @@ describe('HIS 连接配置凭证补偿 job queue repository 最小边界', () =>
       completedAt: null,
     });
     expect(result).toMatchObject({ status: 'ok' });
+    expect(query.set).not.toHaveBeenCalledWith(expect.objectContaining({
+      jobState: 'dead_lettered',
+    }));
+    expect(query.update).not.toHaveBeenCalledWith(auditEvents);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    fetchSpy.mockRestore();
+  });
+
+  it('retryCount 达到或超过 maxRetryCount 时 requeue 返回 invalid_state_transition 且不写回', async () => {
+    for (const currentRow of [
+      { ...failedJobRow, retryCount: 3, maxRetryCount: 3 },
+      { ...failedJobRow, retryCount: 4, maxRetryCount: 3 },
+    ] satisfies CompensationJobRow[]) {
+      const query = createStateDatabase({
+        currentRow,
+        updatedRow: { ...currentRow, jobState: 'queued' },
+      });
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+
+      const result = await createHisConnectionCredentialCompensationJobQueueRepository(
+        query.database,
+      ).requeueCredentialCompensationJob({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        operationId: safeOperationId,
+        claimId: 'claim-001',
+        claimVersion: 1,
+        nextAttemptAt: future,
+        now,
+      });
+
+      expect(result).toEqual({ status: 'invalid_state_transition' });
+      expect(query.update).not.toHaveBeenCalled();
+      expect(query.set).not.toHaveBeenCalledWith(expect.objectContaining({
+        jobState: 'dead_lettered',
+      }));
+      expect(query.insert).not.toHaveBeenCalledWith(auditEvents);
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+    }
   });
 
   it('mark dead letter 和 manual review 使用 claim 校验并写入安全枚举', async () => {

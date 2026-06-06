@@ -724,16 +724,35 @@ export function createHisConnectionCredentialCompensationJobQueueRepository(
       const command = normalizeRequeueInput(input);
       if (!command) return { status: 'validation_failed' };
 
-      return transitionClaimedJob(database, command, failedOnlyStates, (current) => ({
-        jobState: 'queued',
-        retryCount: current.retryCount + 1,
-        nextAttemptAt: command.nextAttemptAt,
-        lockedUntil: null,
-        deadLetterReason: null,
-        manualReviewRequired: false,
-        updatedAt: command.now,
-        completedAt: null,
-      }));
+      return withCurrentJob(database, command, (current) => {
+        if (!failedOnlyStates.has(current.jobState)) {
+          return { status: 'invalid_state_transition' };
+        }
+        if (!claimMatches(current, command)) {
+          return { status: 'conflict' };
+        }
+        if (current.retryCount >= current.maxRetryCount) {
+          return { status: 'invalid_state_transition' };
+        }
+
+        return {
+          status: 'ok',
+          values: {
+            jobState: 'queued',
+            retryCount: current.retryCount + 1,
+            nextAttemptAt: command.nextAttemptAt,
+            claimId: null,
+            claimedBy: null,
+            claimedAt: null,
+            lastHeartbeatAt: null,
+            lockedUntil: null,
+            deadLetterReason: null,
+            manualReviewRequired: false,
+            updatedAt: command.now,
+            completedAt: null,
+          },
+        };
+      });
     },
 
     async markCredentialCompensationJobDeadLettered(
