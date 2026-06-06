@@ -251,6 +251,48 @@ describe('his connection credential compensation retry policy', () => {
     });
   });
 
+  it('baseDelayMs date overflow returns validation_failed', () => {
+    expect(
+      decideHisConnectionCredentialCompensationRetry({
+        ...baseInput,
+        baseDelayMs: Number.MAX_SAFE_INTEGER,
+      }),
+    ).toEqual({
+      decision: 'validation_failed',
+      reason: 'invalid_backoff_config',
+      retryable: false,
+    });
+  });
+
+  it('maxDelayMs date overflow returns validation_failed', () => {
+    expect(
+      decideHisConnectionCredentialCompensationRetry({
+        ...baseInput,
+        baseDelayMs: Number.MAX_SAFE_INTEGER,
+        maxDelayMs: Number.MAX_SAFE_INTEGER,
+      }),
+    ).toEqual({
+      decision: 'validation_failed',
+      reason: 'invalid_backoff_config',
+      retryable: false,
+    });
+  });
+
+  it('jitterMs plus jitterValue date overflow returns validation_failed', () => {
+    expect(
+      decideHisConnectionCredentialCompensationRetry({
+        ...baseInput,
+        baseDelayMs: 1,
+        jitterMs: Number.MAX_SAFE_INTEGER,
+        jitterValue: 1,
+      }),
+    ).toEqual({
+      decision: 'validation_failed',
+      reason: 'invalid_backoff_config',
+      retryable: false,
+    });
+  });
+
   it('requeue nextAttemptAt is not earlier than now and jitter only changes nextAttemptAt', () => {
     const withoutJitter = decideHisConnectionCredentialCompensationRetry(baseInput);
     const withJitter = decideHisConnectionCredentialCompensationRetry({
@@ -286,16 +328,24 @@ describe('his connection credential compensation retry policy', () => {
   });
 
   it('result does not contain unsafe diagnostic fields', () => {
-    const result = decideHisConnectionCredentialCompensationRetry(baseInput);
-    const serialized = JSON.stringify(result);
+    const results = [
+      decideHisConnectionCredentialCompensationRetry(baseInput),
+      decideHisConnectionCredentialCompensationRetry({
+        ...baseInput,
+        baseDelayMs: Number.MAX_SAFE_INTEGER,
+      }),
+    ];
     const forbiddenFragments = [
       ['S', 'QL'].join(''),
       ['sta', 'ck'].join(''),
       ['DATABASE', 'URL'].join('_'),
     ];
 
-    for (const fragment of forbiddenFragments) {
-      expect(serialized).not.toContain(fragment);
+    for (const result of results) {
+      const serialized = JSON.stringify(result);
+      for (const fragment of forbiddenFragments) {
+        expect(serialized).not.toContain(fragment);
+      }
     }
   });
 });

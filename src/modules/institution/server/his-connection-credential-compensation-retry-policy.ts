@@ -150,6 +150,20 @@ function resolveBackoffDelayMs(input: DecideHisConnectionCredentialCompensationR
   return boundedDelayMs;
 }
 
+function resolveNextAttemptAt(now: Date, delayMs: number) {
+  const targetTime = now.getTime() + delayMs;
+  if (!Number.isFinite(targetTime)) return null;
+
+  const nextAttemptAt = new Date(targetTime);
+  if (!isValidDate(nextAttemptAt)) return null;
+
+  try {
+    return nextAttemptAt.toISOString();
+  } catch {
+    return null;
+  }
+}
+
 function createRequeueResult(
   now: Date,
   delayMs: number,
@@ -158,11 +172,16 @@ function createRequeueResult(
     'retryable_failure_below_limit' | 'provider_unavailable_below_limit'
   >,
 ) {
+  const nextAttemptAt = resolveNextAttemptAt(now, delayMs);
+  if (!nextAttemptAt) {
+    return createValidationFailedResult('invalid_backoff_config');
+  }
+
   return createResult(
     'requeue',
     reason,
     true,
-    new Date(now.getTime() + delayMs).toISOString(),
+    nextAttemptAt,
   );
 }
 
