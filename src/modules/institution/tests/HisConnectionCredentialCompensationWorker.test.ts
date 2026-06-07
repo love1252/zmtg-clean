@@ -218,6 +218,10 @@ function createOperationRepositoryMock(
       status: 'ok',
       record: manualReviewOperation,
     })),
+    markFailedCredentialCompensationOperationManualReviewRequired: vi.fn(async () => ({
+      status: 'ok',
+      record: manualReviewOperation,
+    })),
     incrementCredentialCompensationOperationRetryCount: vi.fn(async () => ({
       status: 'ok',
       record: runningOperation,
@@ -774,6 +778,9 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     );
     expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).not.toHaveBeenCalled();
+    expect(
+      operationRepository.markFailedCredentialCompensationOperationManualReviewRequired,
+    ).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
       status: 'ok',
       providerResult: 'retryable_failure',
@@ -804,6 +811,9 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     });
     expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).not.toHaveBeenCalled();
+    expect(
+      operationRepository.markFailedCredentialCompensationOperationManualReviewRequired,
+    ).not.toHaveBeenCalled();
   });
 
   it('provider result unsafe_unknown 时 job manual review 后 operation manual review 且不 dead letter', async () => {
@@ -837,6 +847,9 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     expect(jobQueueRepository.requeueCredentialCompensationJob).not.toHaveBeenCalled();
     expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
+    expect(
+      operationRepository.markFailedCredentialCompensationOperationManualReviewRequired,
+    ).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
       status: 'manual_review_required',
       providerResult: 'unsafe_unknown',
@@ -906,6 +919,9 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
       operationId,
     });
     expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
+    expect(
+      operationRepository.markFailedCredentialCompensationOperationManualReviewRequired,
+    ).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
       status: 'ok',
       providerResult: 'provider_unavailable',
@@ -967,6 +983,21 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).not.toHaveBeenCalled();
     expect(operationRepository.markCredentialCompensationOperationManualReviewRequired).not.toHaveBeenCalled();
+    expect(
+      operationRepository.markFailedCredentialCompensationOperationManualReviewRequired,
+    ).toHaveBeenCalledWith({
+      tenantId,
+      connectionId,
+      operationId,
+    });
+    expect(
+      vi.mocked(jobQueueRepository.markCredentialCompensationJobDeadLettered).mock
+        .invocationCallOrder[0],
+    ).toBeLessThan(
+      vi.mocked(
+        operationRepository.markFailedCredentialCompensationOperationManualReviewRequired,
+      ).mock.invocationCallOrder[0],
+    );
     expect(result).toEqual(expect.objectContaining({
       status: 'ok',
       providerResult: 'retryable_failure',
@@ -1010,6 +1041,13 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).not.toHaveBeenCalled();
     expect(operationRepository.markCredentialCompensationOperationManualReviewRequired).not.toHaveBeenCalled();
+    expect(
+      operationRepository.markFailedCredentialCompensationOperationManualReviewRequired,
+    ).toHaveBeenCalledWith({
+      tenantId,
+      connectionId,
+      operationId,
+    });
     expect(result).toEqual(expect.objectContaining({
       status: 'ok',
       providerResult: 'provider_unavailable',
@@ -1069,8 +1107,74 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
       expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
       expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).not.toHaveBeenCalled();
       expect(operationRepository.markCredentialCompensationOperationManualReviewRequired).not.toHaveBeenCalled();
+      expect(
+        operationRepository.markFailedCredentialCompensationOperationManualReviewRequired,
+      ).not.toHaveBeenCalled();
       expect(result).toEqual(expect.objectContaining({
         status: deadLetterStatus,
+        providerResult: 'retryable_failure',
+      }));
+      expectNoSensitiveData(result);
+    });
+  }
+
+  for (const operationManualReviewStatus of [
+    'repository_error',
+    'invalid_state_transition',
+    'not_found',
+    'conflict',
+    'validation_failed',
+  ] as const) {
+    it(`retry exhausted operation manual review ${operationManualReviewStatus} 时不回滚 dead letter`, async () => {
+      const providerExecutor = vi.fn(async () => ({ status: 'retryable_failure' as const }));
+      const jobQueueRepository = createJobQueueRepositoryMock({
+        markCredentialCompensationJobFailed: vi.fn(async () => ({
+          status: 'ok',
+          record: {
+            ...failedJob,
+            retryCount: 3,
+            maxRetryCount: 3,
+          },
+        })),
+      });
+      const operationRepository = createOperationRepositoryMock({
+        markFailedCredentialCompensationOperationManualReviewRequired: vi.fn(async () => ({
+          status: operationManualReviewStatus,
+        })),
+      });
+      const { worker } = createWorker({ jobQueueRepository, operationRepository, providerExecutor });
+
+      const result = await worker.executeClaimedCredentialCompensationJob({
+        tenantId,
+        connectionId,
+        operationId,
+        claimId: 'claim-returned',
+        claimVersion: 7,
+        now,
+      });
+
+      expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).toHaveBeenCalledWith({
+        tenantId,
+        connectionId,
+        operationId,
+        claimId: 'claim-returned',
+        claimVersion: 7,
+        now,
+        deadLetterReason: 'retry_exhausted',
+      });
+      expect(
+        operationRepository.markFailedCredentialCompensationOperationManualReviewRequired,
+      ).toHaveBeenCalledWith({
+        tenantId,
+        connectionId,
+        operationId,
+      });
+      expect(jobQueueRepository.requeueCredentialCompensationJob).not.toHaveBeenCalled();
+      expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
+      expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).not.toHaveBeenCalled();
+      expect(operationRepository.markCredentialCompensationOperationManualReviewRequired).not.toHaveBeenCalled();
+      expect(result).toEqual(expect.objectContaining({
+        status: operationManualReviewStatus,
         providerResult: 'retryable_failure',
       }));
       expectNoSensitiveData(result);
@@ -1097,6 +1201,9 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     expect(operationRepository.markCredentialCompensationOperationFailed).not.toHaveBeenCalled();
     expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
+    expect(
+      operationRepository.markFailedCredentialCompensationOperationManualReviewRequired,
+    ).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
       status: 'validation_failed',
       providerResult: 'validation_failed',
@@ -1126,6 +1233,9 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     expect(jobQueueRepository.requeueCredentialCompensationJob).not.toHaveBeenCalled();
     expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
+    expect(
+      operationRepository.markFailedCredentialCompensationOperationManualReviewRequired,
+    ).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
       status: 'validation_failed',
       providerResult: 'retryable_failure',
@@ -1335,6 +1445,9 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     expect(jobQueueRepository.requeueCredentialCompensationJob).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
     expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
+    expect(
+      operationRepository.markFailedCredentialCompensationOperationManualReviewRequired,
+    ).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
       status: 'manual_review_required',
       providerResult: 'timeout',
