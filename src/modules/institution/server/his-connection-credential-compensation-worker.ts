@@ -379,6 +379,18 @@ export function createHisConnectionCredentialCompensationWorker(
       );
     }
 
+    const retryCountResult = await safelyCallRepository(() =>
+      dependencies.operationRepository.incrementCredentialCompensationOperationRetryCount(scope),
+    );
+    if (retryCountResult.status !== 'ok') {
+      return createItemResult(
+        scope,
+        repositoryStatusToItemStatus(retryCountResult.status),
+        claim,
+        providerResult,
+      );
+    }
+
     return createItemResult(scope, 'ok', claim, providerResult);
   }
 

@@ -761,7 +761,17 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
       now,
       nextAttemptAt: retryNextAttemptAt,
     });
-    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).toHaveBeenCalledWith({
+      tenantId,
+      connectionId,
+      operationId,
+    });
+    expect(
+      vi.mocked(jobQueueRepository.requeueCredentialCompensationJob).mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      vi.mocked(operationRepository.incrementCredentialCompensationOperationRetryCount).mock
+        .invocationCallOrder[0],
+    );
     expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
@@ -770,7 +780,7 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     }));
   });
 
-  it('requeue 成功后不直接修改 retryCount 且不 dead letter / manual review', async () => {
+  it('requeue 成功后只对齐 operation retry count 且不 dead letter / manual review', async () => {
     const providerExecutor = vi.fn(async () => ({ status: 'retryable_failure' as const }));
     const jobQueueRepository = createJobQueueRepositoryMock();
     const operationRepository = createOperationRepositoryMock();
@@ -786,7 +796,12 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     });
 
     expect(jobQueueRepository.requeueCredentialCompensationJob).toHaveBeenCalledTimes(1);
-    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).toHaveBeenCalledTimes(1);
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).toHaveBeenCalledWith({
+      tenantId,
+      connectionId,
+      operationId,
+    });
     expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).not.toHaveBeenCalled();
   });
@@ -820,6 +835,7 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
       operationId,
     });
     expect(jobQueueRepository.requeueCredentialCompensationJob).not.toHaveBeenCalled();
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
       status: 'manual_review_required',
@@ -855,6 +871,7 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     expect(operationRepository.markCredentialCompensationOperationSucceeded).not.toHaveBeenCalled();
     expect(operationRepository.markCredentialCompensationOperationFailed).not.toHaveBeenCalled();
     expect(operationRepository.markCredentialCompensationOperationManualReviewRequired).not.toHaveBeenCalled();
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
   });
 
   it('provider_unavailable 低于上限时接入 retry policy 并 requeue', async () => {
@@ -882,6 +899,11 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
       claimVersion: 7,
       now,
       nextAttemptAt: retryNextAttemptAt,
+    });
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).toHaveBeenCalledWith({
+      tenantId,
+      connectionId,
+      operationId,
     });
     expect(result).toEqual(expect.objectContaining({
       status: 'ok',
@@ -914,6 +936,7 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     });
 
     expect(jobQueueRepository.requeueCredentialCompensationJob).not.toHaveBeenCalled();
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
@@ -940,6 +963,7 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     expect(jobQueueRepository.requeueCredentialCompensationJob).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobFailed).not.toHaveBeenCalled();
     expect(operationRepository.markCredentialCompensationOperationFailed).not.toHaveBeenCalled();
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
       status: 'validation_failed',
       providerResult: 'validation_failed',
@@ -967,6 +991,7 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     });
 
     expect(jobQueueRepository.requeueCredentialCompensationJob).not.toHaveBeenCalled();
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
       status: 'validation_failed',
       providerResult: 'retryable_failure',
@@ -1003,6 +1028,31 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
   });
 
+  it('requeue invalid_state_transition 时不调用 operation retry count', async () => {
+    const providerExecutor = vi.fn(async () => ({ status: 'retryable_failure' as const }));
+    const jobQueueRepository = createJobQueueRepositoryMock({
+      requeueCredentialCompensationJob: vi.fn(async () => ({ status: 'invalid_state_transition' })),
+    });
+    const operationRepository = createOperationRepositoryMock();
+    const { worker } = createWorker({ jobQueueRepository, operationRepository, providerExecutor });
+
+    const result = await worker.executeClaimedCredentialCompensationJob({
+      tenantId,
+      connectionId,
+      operationId,
+      claimId: 'claim-returned',
+      claimVersion: 7,
+      now,
+    });
+
+    expect(jobQueueRepository.requeueCredentialCompensationJob).toHaveBeenCalled();
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({
+      status: 'invalid_state_transition',
+      providerResult: 'retryable_failure',
+    }));
+  });
+
   it('requeue repository_error 时 worker 收敛为 repository_error', async () => {
     const providerExecutor = vi.fn(async () => ({ status: 'provider_unavailable' as const }));
     const jobQueueRepository = createJobQueueRepositoryMock({
@@ -1024,8 +1074,111 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
       status: 'repository_error',
       providerResult: 'provider_unavailable',
     }));
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
     expectNoSensitiveData(result);
   });
+
+  it('operation retry count repository_error 时不回滚 requeue 并返回稳定结果', async () => {
+    const providerExecutor = vi.fn(async () => ({ status: 'retryable_failure' as const }));
+    const jobQueueRepository = createJobQueueRepositoryMock();
+    const operationRepository = createOperationRepositoryMock({
+      incrementCredentialCompensationOperationRetryCount: vi.fn(async () => ({
+        status: 'repository_error',
+      })),
+    });
+    const { worker } = createWorker({ jobQueueRepository, operationRepository, providerExecutor });
+
+    const result = await worker.executeClaimedCredentialCompensationJob({
+      tenantId,
+      connectionId,
+      operationId,
+      claimId: 'claim-returned',
+      claimVersion: 7,
+      now,
+    });
+
+    expect(jobQueueRepository.requeueCredentialCompensationJob).toHaveBeenCalled();
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).toHaveBeenCalledWith({
+      tenantId,
+      connectionId,
+      operationId,
+    });
+    expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
+    expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({
+      status: 'repository_error',
+      providerResult: 'retryable_failure',
+    }));
+    expectNoSensitiveData(result);
+  });
+
+  it('operation retry count invalid_state_transition 时不回滚 requeue 并返回稳定结果', async () => {
+    const providerExecutor = vi.fn(async () => ({ status: 'provider_unavailable' as const }));
+    const jobQueueRepository = createJobQueueRepositoryMock();
+    const operationRepository = createOperationRepositoryMock({
+      incrementCredentialCompensationOperationRetryCount: vi.fn(async () => ({
+        status: 'invalid_state_transition',
+      })),
+    });
+    const { worker } = createWorker({ jobQueueRepository, operationRepository, providerExecutor });
+
+    const result = await worker.executeClaimedCredentialCompensationJob({
+      tenantId,
+      connectionId,
+      operationId,
+      claimId: 'claim-returned',
+      claimVersion: 7,
+      now,
+    });
+
+    expect(jobQueueRepository.requeueCredentialCompensationJob).toHaveBeenCalled();
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).toHaveBeenCalledWith({
+      tenantId,
+      connectionId,
+      operationId,
+    });
+    expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
+    expect(jobQueueRepository.markCredentialCompensationJobManualReviewRequired).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({
+      status: 'invalid_state_transition',
+      providerResult: 'provider_unavailable',
+    }));
+    expectNoSensitiveData(result);
+  });
+
+  for (const retryCountStatus of ['not_found', 'conflict', 'validation_failed'] as const) {
+    it(`operation retry count ${retryCountStatus} 时返回稳定结果且不暴露敏感信息`, async () => {
+      const providerExecutor = vi.fn(async () => ({ status: 'retryable_failure' as const }));
+      const jobQueueRepository = createJobQueueRepositoryMock();
+      const operationRepository = createOperationRepositoryMock({
+        incrementCredentialCompensationOperationRetryCount: vi.fn(async () => ({
+          status: retryCountStatus,
+        })),
+      });
+      const { worker } = createWorker({ jobQueueRepository, operationRepository, providerExecutor });
+
+      const result = await worker.executeClaimedCredentialCompensationJob({
+        tenantId,
+        connectionId,
+        operationId,
+        claimId: 'claim-returned',
+        claimVersion: 7,
+        now,
+      });
+
+      expect(jobQueueRepository.requeueCredentialCompensationJob).toHaveBeenCalled();
+      expect(operationRepository.incrementCredentialCompensationOperationRetryCount).toHaveBeenCalledWith({
+        tenantId,
+        connectionId,
+        operationId,
+      });
+      expect(result).toEqual(expect.objectContaining({
+        status: retryCountStatus,
+        providerResult: 'retryable_failure',
+      }));
+      expectNoSensitiveData(result);
+    });
+  }
 
   it('timeout 收口为 manual review 且不重复 provider 动作', async () => {
     const providerExecutor = vi.fn(async () => ({ status: 'timeout' as const }));
@@ -1047,6 +1200,7 @@ describe('HIS 连接配置凭证补偿 worker claim / lock / stale recovery 最�
     expect(operationRepository.markCredentialCompensationOperationManualReviewRequired).toHaveBeenCalled();
     expect(jobQueueRepository.requeueCredentialCompensationJob).not.toHaveBeenCalled();
     expect(jobQueueRepository.markCredentialCompensationJobDeadLettered).not.toHaveBeenCalled();
+    expect(operationRepository.incrementCredentialCompensationOperationRetryCount).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
       status: 'manual_review_required',
       providerResult: 'timeout',
