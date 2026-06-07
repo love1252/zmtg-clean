@@ -242,6 +242,12 @@ function canCompleteRunningOperation(state: HisConnectionCredentialCompensationS
   return state === 'compensation_running';
 }
 
+function canTransitionFailedOperationToManualReview(
+  state: HisConnectionCredentialCompensationState,
+) {
+  return state === 'compensation_failed';
+}
+
 function canIncrementRetryCount(state: HisConnectionCredentialCompensationState) {
   return state === 'compensation_failed' || state === 'manual_review_required';
 }
@@ -478,6 +484,27 @@ export function createHisConnectionCredentialCompensationOperationRepository(
     ): Promise<CredentialCompensationOperationMutationResult> {
       return transitionCompensationOperation(database, input, (current) => {
         if (!canCompleteRunningOperation(current.state)) {
+          return { status: 'invalid_state_transition' };
+        }
+
+        const now = new Date();
+        return {
+          status: 'ok',
+          values: {
+            state: 'manual_review_required',
+            manualReviewRequired: true,
+            updatedAt: now,
+            completedAt: now,
+          },
+        };
+      });
+    },
+
+    async markFailedCredentialCompensationOperationManualReviewRequired(
+      input: CredentialCompensationOperationConnectionLookupInput,
+    ): Promise<CredentialCompensationOperationMutationResult> {
+      return transitionCompensationOperation(database, input, (current) => {
+        if (!canTransitionFailedOperationToManualReview(current.state)) {
           return { status: 'invalid_state_transition' };
         }
 
