@@ -89,6 +89,7 @@ describe('访问控制领域', () => {
     expect(ACCESS_ACTIONS).toContain('read_aggregate');
     expect(ACCESS_ACTIONS).toContain('export_report');
     expect(ACCESS_ACTIONS).toContain('manage_credentials');
+    expect(ACCESS_ACTIONS).toContain('test_connection');
   });
 
   it('允许机构管理员读取本租户资源', () => {
@@ -130,6 +131,7 @@ describe('访问控制领域', () => {
       'update',
       'manage_status',
       'manage_credentials',
+      'test_connection',
       'delete',
     ] as const;
 
@@ -289,6 +291,78 @@ describe('访问控制领域', () => {
         targetTenantId: 'demo-tenant-001',
       }),
     ).toEqual({ allowed: false, reason: 'role_denied' });
+  });
+
+  it('HIS 连接配置测试连接使用独立动作，默认仅机构管理员允许触发', () => {
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'open_connection',
+        action: 'test_connection',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+
+    const ordinaryTenantContexts = [
+      tenantOperatorContext,
+      consultantContext,
+      customerServiceContext,
+    ] as const;
+    const platformContexts = [platformAdminContext, platformOperatorContext] as const;
+
+    for (const context of ordinaryTenantContexts) {
+      expect(
+        canAccessResource({
+          context,
+          resource: 'open_connection',
+          action: 'test_connection',
+          targetTenantId: 'demo-tenant-001',
+        }),
+      ).toEqual({ allowed: false, reason: 'role_denied' });
+    }
+
+    for (const context of platformContexts) {
+      expect(
+        canAccessResource({
+          context,
+          resource: 'open_connection',
+          action: 'test_connection',
+          targetTenantId: 'demo-tenant-001',
+        }),
+      ).toEqual({ allowed: false, reason: 'role_denied' });
+    }
+
+    expect(
+      canAccessResource({
+        context: securityAuditorContext,
+        resource: 'open_connection',
+        action: 'test_connection',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
+  });
+
+  it('只读、凭证、状态、更新和删除动作不会替代 HIS 连接测试动作', () => {
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'open_connection',
+        action: 'read_own_tenant',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+
+    for (const existingAction of [
+      'manage_credentials',
+      'manage_status',
+      'update',
+      'delete',
+    ] as const) {
+      expect(existingAction).not.toBe('test_connection');
+      expect(ACCESS_ACTIONS).toContain(existingAction);
+    }
+
+    expect(ACCESS_ACTIONS).toContain('test_connection');
   });
 
   it('不新增 HIS 连接配置状态细分动作', () => {
