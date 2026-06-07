@@ -375,6 +375,19 @@ export function createHisConnectionCredentialCompensationWorker(
         );
       }
 
+      const operationManualReviewResult = await safelyCallRepository(() =>
+        dependencies.operationRepository
+          .markFailedCredentialCompensationOperationManualReviewRequired(scope),
+      );
+      if (operationManualReviewResult.status !== 'ok') {
+        return createItemResult(
+          scope,
+          repositoryStatusToItemStatus(operationManualReviewResult.status),
+          claim,
+          providerResult,
+        );
+      }
+
       return createItemResult(scope, 'ok', claim, providerResult);
     }
     if (retryDecision.decision !== 'requeue') {
