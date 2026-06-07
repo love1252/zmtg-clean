@@ -353,6 +353,30 @@ export function createHisConnectionCredentialCompensationWorker(
     if (retryDecision.decision === 'validation_failed') {
       return createItemResult(scope, 'validation_failed', claim, providerResult);
     }
+    if (retryDecision.decision === 'dead_letter') {
+      if (retryDecision.reason !== 'retry_exhausted') {
+        return createItemResult(scope, 'validation_failed', claim, providerResult);
+      }
+
+      const deadLetterResult = await safelyCallRepository(() =>
+        dependencies.jobQueueRepository.markCredentialCompensationJobDeadLettered({
+          ...scope,
+          ...claim,
+          now,
+          deadLetterReason: 'retry_exhausted',
+        }),
+      );
+      if (deadLetterResult.status !== 'ok') {
+        return createItemResult(
+          scope,
+          repositoryStatusToItemStatus(deadLetterResult.status),
+          claim,
+          providerResult,
+        );
+      }
+
+      return createItemResult(scope, 'ok', claim, providerResult);
+    }
     if (retryDecision.decision !== 'requeue') {
       return null;
     }
