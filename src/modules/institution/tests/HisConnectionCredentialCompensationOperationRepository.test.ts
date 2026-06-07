@@ -558,6 +558,208 @@ describe('HIS 连接配置凭证补偿 operation repository 最小边界', () =>
     expect(result).toMatchObject({ status: 'ok' });
   });
 
+  it('failed operation 可以通过专用方法推进 manual review，且不修改 retryCount 或 lastAttemptAt', async () => {
+    const failedManualReviewRow = {
+      ...failedOperationRow,
+      state: 'manual_review_required',
+      manualReviewRequired: true,
+      updatedAt: new Date('2026-06-06T08:25:00.000Z'),
+      completedAt: new Date('2026-06-06T08:25:00.000Z'),
+    } satisfies CompensationOperationRow;
+    const query = createStateDatabase({
+      currentRow: failedOperationRow,
+      updatedRow: failedManualReviewRow,
+    });
+
+    const result = await createHisConnectionCredentialCompensationOperationRepository(
+      query.database,
+    ).markFailedCredentialCompensationOperationManualReviewRequired({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      operationId: safeOperationId,
+    });
+
+    expect(query.lookupWhere).toHaveBeenCalledWith({
+      conditions: [
+        {
+          column: hisConnectionCredentialCompensationOperations.tenantId,
+          operator: 'eq',
+          value: 'demo-tenant-001',
+        },
+        {
+          column: hisConnectionCredentialCompensationOperations.connectionId,
+          operator: 'eq',
+          value: 'his_conn_001',
+        },
+        {
+          column: hisConnectionCredentialCompensationOperations.operationId,
+          operator: 'eq',
+          value: safeOperationId,
+        },
+      ],
+      operator: 'and',
+    });
+    expect(query.set).toHaveBeenCalledWith({
+      state: 'manual_review_required',
+      manualReviewRequired: true,
+      updatedAt: expect.any(Date),
+      completedAt: expect.any(Date),
+    });
+    expect(query.updateWhere).toHaveBeenCalledWith({
+      conditions: [
+        {
+          column: hisConnectionCredentialCompensationOperations.tenantId,
+          operator: 'eq',
+          value: 'demo-tenant-001',
+        },
+        {
+          column: hisConnectionCredentialCompensationOperations.connectionId,
+          operator: 'eq',
+          value: 'his_conn_001',
+        },
+        {
+          column: hisConnectionCredentialCompensationOperations.operationId,
+          operator: 'eq',
+          value: safeOperationId,
+        },
+        {
+          column: hisConnectionCredentialCompensationOperations.state,
+          operator: 'eq',
+          value: 'compensation_failed',
+        },
+      ],
+      operator: 'and',
+    });
+    expect(result).toEqual({
+      status: 'ok',
+      record: mapHisConnectionCredentialCompensationOperationRowToReadModel(
+        failedManualReviewRow,
+      ),
+    });
+    if (result.status === 'ok') {
+      expect(result.record.retryCount).toBe(failedOperationRow.retryCount);
+      expect(result.record.lastAttemptAt).toBe(failedOperationRow.lastAttemptAt.toISOString());
+    }
+    expect(JSON.stringify(query.set.mock.calls)).not.toMatch(/retryCount|lastAttemptAt|claimId|claimVersion/i);
+    expectNoSensitiveData(result);
+  });
+
+  it('failed operation manual review 专用方法跨 tenant / connection / operationId 统一 not_found 且不写数据库', async () => {
+    for (const currentRow of [
+      { ...failedOperationRow, tenantId: 'other-tenant' },
+      { ...failedOperationRow, connectionId: 'his_conn_other' },
+      { ...failedOperationRow, operationId: secondSafeOperationId },
+    ]) {
+      const query = createStateDatabase({
+        currentRow,
+        updatedRow: manualReviewOperationRow,
+      });
+
+      const result = await createHisConnectionCredentialCompensationOperationRepository(
+        query.database,
+      ).markFailedCredentialCompensationOperationManualReviewRequired({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        operationId: safeOperationId,
+      });
+
+      expect(result).toEqual({ status: 'not_found' });
+      expect(query.update).not.toHaveBeenCalled();
+    }
+  });
+
+  it('failed operation manual review 专用方法拒绝非 failed 状态', async () => {
+    for (const currentRow of [
+      compensationOperationRow,
+      runningOperationRow,
+      succeededOperationRow,
+      manualReviewOperationRow,
+    ]) {
+      const query = createStateDatabase({
+        currentRow,
+        updatedRow: manualReviewOperationRow,
+      });
+
+      const result = await createHisConnectionCredentialCompensationOperationRepository(
+        query.database,
+      ).markFailedCredentialCompensationOperationManualReviewRequired({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        operationId: safeOperationId,
+      });
+
+      expect(result).toEqual({ status: 'invalid_state_transition' });
+      expect(query.update).not.toHaveBeenCalled();
+    }
+  });
+
+  it('failed operation manual review 专用方法非法输入返回 validation_failed 且不查库不写库', async () => {
+    for (const input of [
+      { tenantId: '', connectionId: 'his_conn_001', operationId: safeOperationId },
+      {
+        tenantId: 'demo-tenant-001',
+        connectionId: 'x'.repeat(65),
+        operationId: safeOperationId,
+      },
+      {
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        operationId: 'his_cred_comp_op_credentialRef_raw_payload_stack',
+      },
+    ]) {
+      const query = createStateDatabase({
+        currentRow: failedOperationRow,
+        updatedRow: manualReviewOperationRow,
+      });
+
+      const result = await createHisConnectionCredentialCompensationOperationRepository(
+        query.database,
+      ).markFailedCredentialCompensationOperationManualReviewRequired(input);
+
+      expect(result).toEqual({ status: 'validation_failed' });
+      expect(query.select).not.toHaveBeenCalled();
+      expect(query.update).not.toHaveBeenCalled();
+    }
+  });
+
+  it('failed operation manual review 专用方法 repository_error 不暴露 SQL / stack / DATABASE_URL', async () => {
+    const query = createStateDatabase({
+      currentRow: failedOperationRow,
+      updateError: new Error(
+        'DATABASE_URL=postgres://tenant:secret@localhost select * from audit_events stack',
+      ),
+    });
+
+    const result = await createHisConnectionCredentialCompensationOperationRepository(
+      query.database,
+    ).markFailedCredentialCompensationOperationManualReviewRequired({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      operationId: safeOperationId,
+    });
+
+    expect(result).toEqual({ status: 'repository_error' });
+    expectNoSensitiveData(result);
+  });
+
+  it('现有 running manual review 方法保持不变，不接受 failed 状态', async () => {
+    const query = createStateDatabase({
+      currentRow: failedOperationRow,
+      updatedRow: manualReviewOperationRow,
+    });
+
+    const result = await createHisConnectionCredentialCompensationOperationRepository(
+      query.database,
+    ).markCredentialCompensationOperationManualReviewRequired({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      operationId: safeOperationId,
+    });
+
+    expect(result).toEqual({ status: 'invalid_state_transition' });
+    expect(query.update).not.toHaveBeenCalled();
+  });
+
   it('pending query 和 stale running query 只按 tenant / state 安全读取', async () => {
     const pendingQuery = createListDatabase([
       compensationOperationRow,
