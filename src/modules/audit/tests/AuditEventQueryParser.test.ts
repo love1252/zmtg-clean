@@ -39,6 +39,18 @@ const hisCredentialProviderFailureCompensationReasons = [
   'manual_review_required',
 ] as const;
 
+const hisTestConnectionAuditReasons = [
+  'test_connection_requested',
+  'test_connection_provider_healthy',
+  'test_connection_missing_credential',
+  'test_connection_unsupported_vendor',
+  'test_connection_limited_health_probe',
+  'test_connection_external_unreachable',
+  'test_connection_provider_timeout',
+  'test_connection_connection_not_active',
+  'test_connection_completed',
+] as const;
+
 describe('审计查询参数 parser', () => {
   it('只接受白名单字段并解析完整查询条件', () => {
     const cursor = encodeAuditEventQueryCursor({
@@ -276,6 +288,55 @@ describe('审计查询参数 parser', () => {
         resourceId: 'his_conn_001',
         action: 'manage_credentials',
         result,
+        reason,
+      } as const;
+
+      expect(parseAuditEventQueryParams(params(query))).toEqual({
+        ok: true,
+        query: {
+          filters: query,
+          limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
+        },
+      });
+    }
+  });
+
+  it('接受 HIS 测试连接 audit action 与稳定 reason 查询', () => {
+    for (const reason of hisTestConnectionAuditReasons) {
+      const result =
+        reason === 'test_connection_requested' ||
+        reason === 'test_connection_provider_healthy' ||
+        reason === 'test_connection_completed'
+          ? 'allowed'
+          : 'denied';
+      const query = {
+        resource: 'open_connection',
+        resourceId: 'his_conn_001',
+        action: 'test_connection',
+        result,
+        reason,
+      } as const;
+
+      expect(parseAuditEventQueryParams(params(query))).toEqual({
+        ok: true,
+        query: {
+          filters: query,
+          limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
+        },
+      });
+    }
+
+    for (const reason of [
+      'invalid_his_connection_payload',
+      'not_found_or_not_owned',
+      'provider_validation_failed',
+      'repository_after_provider_failed',
+    ] as const) {
+      const query = {
+        resource: 'open_connection',
+        resourceId: 'his_conn_001',
+        action: 'test_connection',
+        result: 'denied',
         reason,
       } as const;
 

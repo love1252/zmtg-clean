@@ -1,6 +1,12 @@
+import { createAuditEvent, type AuditReason } from '@/modules/audit/domain/audit-events';
+import {
+  createAuditEventRepository,
+  type AuditEventRepository,
+} from '@/modules/audit/server/audit-event-repository';
 import {
   createHisConnectionRepository,
   type HisConnectionHealthErrorCode,
+  type HisConnectionHealthSummaryWriteResult,
   type HisConnectionReadModel,
   type HisConnectionRepository,
 } from '@/modules/institution/server/his-connection-repository';
@@ -38,10 +44,14 @@ export type HisConnectionTestConnectionRepository = Pick<
   'getHisConnectionByTenant' | 'writeHisConnectionHealthSummaryForTenant'
 >;
 
+type HisConnectionTestConnectionAuditRepository = Pick<AuditEventRepository, 'record'>;
+
 type HisConnectionTestConnectionServiceDependencies = {
   database: TenantDatabase;
   hisConnectionRepository?: HisConnectionTestConnectionRepository;
   hisConnectionRepositoryFactory?: (database: TenantDatabase) => HisConnectionTestConnectionRepository;
+  auditEventRepository?: HisConnectionTestConnectionAuditRepository;
+  auditEventRepositoryFactory?: (database: TenantDatabase) => HisConnectionTestConnectionAuditRepository;
   fakeProvider?: (
     input: FakeHisConnectionTestProviderInput,
   ) => Promise<FakeHisConnectionTestProviderResult>;
@@ -62,6 +72,13 @@ function normalizeTrustedText(value: unknown) {
 
 function isVisibleTenantRecord(record: HisConnectionReadModel, tenantId: string) {
   return record.tenantId === tenantId && record.deletedAt === null && record.status !== 'deleted';
+}
+
+function createAuditEventId() {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `audit_${Date.now()}_${Math.random().toString(36).slice(2)}`
+  );
 }
 
 function createFailureDto(input: {
@@ -106,6 +123,15 @@ function getRepository(
   );
 }
 
+function getAuditRepository(
+  input: HisConnectionTestConnectionServiceDependencies,
+): HisConnectionTestConnectionAuditRepository {
+  return (
+    input.auditEventRepository ??
+    (input.auditEventRepositoryFactory ?? createAuditEventRepository)(input.database)
+  );
+}
+
 function getFakeProvider(input: HisConnectionTestConnectionServiceDependencies) {
   return input.fakeProvider ?? runFakeHisConnectionTestProvider;
 }
@@ -125,6 +151,60 @@ function createFakeProviderInput(
   };
 }
 
+function mapProviderResultAuditReason(
+  result: FakeHisConnectionTestProviderResult,
+): AuditReason {
+  if (result.ok) {
+    return 'test_connection_provider_healthy';
+  }
+
+  switch (result.errorCode) {
+    case 'missing_credential':
+      return 'test_connection_missing_credential';
+    case 'unsupported_vendor':
+      return 'test_connection_unsupported_vendor';
+    case 'limited_health_probe':
+      return 'test_connection_limited_health_probe';
+    case 'external_unreachable':
+      return 'test_connection_external_unreachable';
+    case 'provider_timeout':
+      return 'test_connection_provider_timeout';
+    case 'validation_failed':
+      return 'provider_validation_failed';
+    case 'connection_not_active':
+      return 'test_connection_connection_not_active';
+    default:
+      return 'provider_health_failed';
+  }
+}
+
+async function recordTestConnectionAudit(input: {
+  auditRepository: HisConnectionTestConnectionAuditRepository;
+  accessContext: AccessContext;
+  tenantId: string;
+  actorUserId: string;
+  connectionId: string;
+  result: 'allowed' | 'denied';
+  reason: AuditReason;
+}) {
+  await input.auditRepository.record(
+    createAuditEvent({
+      eventId: createAuditEventId(),
+      context: {
+        ...input.accessContext,
+        tenantId: input.tenantId,
+        userId: input.actorUserId,
+      },
+      resource: 'open_connection',
+      resourceId: input.connectionId,
+      action: 'test_connection',
+      result: input.result,
+      reason: input.reason,
+      occurredAt: new Date().toISOString(),
+    }),
+  );
+}
+
 export async function testHisConnectionForTenantService(
   input: HisConnectionTestConnectionServiceInput,
 ): Promise<HisConnectionTestConnectionServiceResult> {
@@ -138,13 +218,45 @@ export async function testHisConnectionForTenantService(
 
   try {
     const repository = getRepository(input);
+    const auditRepository = getAuditRepository(input);
+
+    await recordTestConnectionAudit({
+      auditRepository,
+      accessContext: input.accessContext,
+      tenantId,
+      actorUserId,
+      connectionId,
+      result: 'allowed',
+      reason: 'test_connection_requested',
+    });
+
     const record = await repository.getHisConnectionByTenant({ tenantId, connectionId });
 
     if (!record || !isVisibleTenantRecord(record, tenantId)) {
+      await recordTestConnectionAudit({
+        auditRepository,
+        accessContext: input.accessContext,
+        tenantId,
+        actorUserId,
+        connectionId,
+        result: 'denied',
+        reason: 'not_found_or_not_owned',
+      });
+
       return { status: 'not_found' };
     }
 
     if (record.status !== 'active') {
+      await recordTestConnectionAudit({
+        auditRepository,
+        accessContext: input.accessContext,
+        tenantId,
+        actorUserId,
+        connectionId,
+        result: 'denied',
+        reason: 'test_connection_connection_not_active',
+      });
+
       return {
         status: 'connection_not_active',
         dto: createFailureDto({
@@ -156,6 +268,15 @@ export async function testHisConnectionForTenantService(
     }
 
     const providerResult = await getFakeProvider(input)(createFakeProviderInput(tenantId, record));
+    await recordTestConnectionAudit({
+      auditRepository,
+      accessContext: input.accessContext,
+      tenantId,
+      actorUserId,
+      connectionId,
+      result: providerResult.ok ? 'allowed' : 'denied',
+      reason: mapProviderResultAuditReason(providerResult),
+    });
 
     if (!providerResult.ok && providerResult.errorCode === 'validation_failed') {
       return { status: 'validation_failed' };
@@ -165,18 +286,53 @@ export async function testHisConnectionForTenantService(
       ? null
       : (providerResult.errorCode as HisConnectionHealthErrorCode);
 
-    const writeResult = await repository.writeHisConnectionHealthSummaryForTenant({
-      tenantId,
-      connectionId,
-      healthStatus: providerResult.healthStatus,
-      checkedAt: providerResult.checkedAt,
-      lastErrorCode,
-      actorUserId,
-    });
+    let writeResult: HisConnectionHealthSummaryWriteResult;
+    try {
+      writeResult = await repository.writeHisConnectionHealthSummaryForTenant({
+        tenantId,
+        connectionId,
+        healthStatus: providerResult.healthStatus,
+        checkedAt: providerResult.checkedAt,
+        lastErrorCode,
+        actorUserId,
+      });
+    } catch {
+      await recordTestConnectionAudit({
+        auditRepository,
+        accessContext: input.accessContext,
+        tenantId,
+        actorUserId,
+        connectionId,
+        result: 'denied',
+        reason: 'repository_after_provider_failed',
+      });
 
-    if (writeResult.status !== 'ok') {
       return { status: 'service_unavailable' };
     }
+
+    if (writeResult.status !== 'ok') {
+      await recordTestConnectionAudit({
+        auditRepository,
+        accessContext: input.accessContext,
+        tenantId,
+        actorUserId,
+        connectionId,
+        result: 'denied',
+        reason: 'repository_after_provider_failed',
+      });
+
+      return { status: 'service_unavailable' };
+    }
+
+    await recordTestConnectionAudit({
+      auditRepository,
+      accessContext: input.accessContext,
+      tenantId,
+      actorUserId,
+      connectionId,
+      result: 'allowed',
+      reason: 'test_connection_completed',
+    });
 
     return {
       status: 'tested',
