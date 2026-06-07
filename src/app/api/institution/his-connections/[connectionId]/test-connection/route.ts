@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
+import { createDeniedAccessAuditEvent } from '@/modules/audit/domain/audit-events';
+import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import {
   testHisConnectionForTenantService,
   type HisConnectionTestConnectionDto,
   type HisConnectionTestConnectionServiceResult,
 } from '@/modules/institution/server/his-connection-test-connection-service';
-import { canAccessResource, type AccessContext } from '@/modules/security/domain/access-control';
+import {
+  canAccessResource,
+  type AccessContext,
+  type AccessDecision,
+} from '@/modules/security/domain/access-control';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
 
@@ -12,14 +18,17 @@ type HisConnectionTestConnectionRouteContext = {
   params: Promise<{ connectionId: string }>;
 };
 
+type AccessDeniedReason = Extract<AccessDecision, { allowed: false }>['reason'];
+type TestConnectionRouteDeniedReason =
+  | AccessDeniedReason
+  | 'invalid_his_connection_payload';
+
 async function getConnectionId(context: HisConnectionTestConnectionRouteContext) {
   const params = await context.params;
   return params.connectionId.trim();
 }
 
-function canTestHisConnection(
-  context: AccessContext,
-): context is AccessContext & { tenantId: string } {
+function getTestConnectionDeniedReason(context: AccessContext): AccessDeniedReason | null {
   const decision = canAccessResource({
     context,
     resource: 'open_connection',
@@ -27,7 +36,11 @@ function canTestHisConnection(
     targetTenantId: context.tenantId,
   });
 
-  return decision.allowed && Boolean(context.tenantId);
+  if (!decision.allowed) {
+    return decision.reason;
+  }
+
+  return context.tenantId ? null : 'missing_tenant';
 }
 
 function isJsonObject(input: unknown): input is Record<string, unknown> {
@@ -100,6 +113,38 @@ function serviceUnavailableResponse() {
   );
 }
 
+function createAuditEventId() {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `audit_${Date.now()}_${Math.random().toString(36).slice(2)}`
+  );
+}
+
+async function recordTestConnectionRouteDeniedAudit(input: {
+  accessContext: AccessContext;
+  connectionId: string;
+  reason: TestConnectionRouteDeniedReason;
+}) {
+  try {
+    const auditRepository = createAuditEventRepository(getDatabase());
+    await auditRepository.record(
+      createDeniedAccessAuditEvent({
+        eventId: createAuditEventId(),
+        context: input.accessContext,
+        resource: 'open_connection',
+        resourceId: input.connectionId,
+        action: 'test_connection',
+        reason: input.reason,
+        occurredAt: new Date().toISOString(),
+      }),
+    );
+
+    return { ok: true as const };
+  } catch {
+    return { ok: false as const };
+  }
+}
+
 function mapServiceResultToResponse(result: HisConnectionTestConnectionServiceResult) {
   switch (result.status) {
     case 'tested':
@@ -129,12 +174,31 @@ export async function POST(
     return unauthorizedResponse();
   }
 
-  if (!canTestHisConnection(accessContext)) {
+  const deniedReason = getTestConnectionDeniedReason(accessContext);
+  if (deniedReason) {
+    const auditResult = await recordTestConnectionRouteDeniedAudit({
+      accessContext,
+      connectionId,
+      reason: deniedReason,
+    });
+    if (!auditResult.ok) {
+      return serviceUnavailableResponse();
+    }
+
     return forbiddenResponse();
   }
 
   const parsed = await readEmptyJsonBody(request);
   if (!parsed.ok) {
+    const auditResult = await recordTestConnectionRouteDeniedAudit({
+      accessContext,
+      connectionId,
+      reason: 'invalid_his_connection_payload',
+    });
+    if (!auditResult.ok) {
+      return serviceUnavailableResponse();
+    }
+
     return validationFailedResponse();
   }
 

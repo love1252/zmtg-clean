@@ -37,6 +37,18 @@ const hisCredentialProviderFailureCompensationReasons = [
   'manual_review_required',
 ] as const;
 
+const hisTestConnectionAuditReasons = [
+  'test_connection_requested',
+  'test_connection_provider_healthy',
+  'test_connection_missing_credential',
+  'test_connection_unsupported_vendor',
+  'test_connection_limited_health_probe',
+  'test_connection_external_unreachable',
+  'test_connection_provider_timeout',
+  'test_connection_connection_not_active',
+  'test_connection_completed',
+] as const;
+
 describe('审计事件领域模型', () => {
   it('创建允许访问审计事件并包含完整字段', () => {
     expect(
@@ -600,6 +612,68 @@ describe('审计事件领域模型', () => {
     );
     expect(JSON.stringify(events)).not.toMatch(
       /requestBody|responseBody|credentialRef|credential_ref|providerPath|secretPath|idempotencyKey|synthetic_placeholder|sk_live|sk_test|token|secret|API key|connection string|raw credential|raw HIS payload|SQL|select \*|stack|DATABASE_URL|vault|kms|keyId/i,
+    );
+  });
+
+  it('支持 HIS 测试连接审计 action / reason，且不携带 raw provider 或凭证材料', () => {
+    expect(AUDIT_REASON_VALUES).toEqual(
+      expect.arrayContaining([...hisTestConnectionAuditReasons]),
+    );
+    expect(AUDIT_RESULT_VALUES).toEqual(['allowed', 'denied', 'transitioned']);
+
+    const requested = createAuditEvent({
+      eventId: 'audit_evt_his_test_connection_requested_001',
+      context: tenantAdminContext,
+      resource: 'open_connection',
+      resourceId: 'his_conn_001',
+      action: 'test_connection',
+      result: 'allowed',
+      reason: 'test_connection_requested',
+      occurredAt: '2026-06-07T09:30:00.000Z',
+    });
+    const providerFailed = createDeniedAccessAuditEvent({
+      eventId: 'audit_evt_his_test_connection_provider_001',
+      context: tenantAdminContext,
+      resource: 'open_connection',
+      resourceId: 'his_conn_001',
+      action: 'test_connection',
+      reason: 'test_connection_missing_credential',
+      occurredAt: '2026-06-07T09:31:00.000Z',
+    });
+    const completed = createAuditEvent({
+      eventId: 'audit_evt_his_test_connection_completed_001',
+      context: tenantAdminContext,
+      resource: 'open_connection',
+      resourceId: 'his_conn_001',
+      action: 'test_connection',
+      result: 'allowed',
+      reason: 'test_connection_completed',
+      occurredAt: '2026-06-07T09:32:00.000Z',
+    });
+
+    expect(requested).toMatchObject({
+      resource: 'open_connection',
+      resourceId: 'his_conn_001',
+      action: 'test_connection',
+      result: 'allowed',
+      reason: 'test_connection_requested',
+    });
+    expect(providerFailed).toMatchObject({
+      resource: 'open_connection',
+      resourceId: 'his_conn_001',
+      action: 'test_connection',
+      result: 'denied',
+      reason: 'test_connection_missing_credential',
+    });
+    expect(completed).toMatchObject({
+      resource: 'open_connection',
+      resourceId: 'his_conn_001',
+      action: 'test_connection',
+      result: 'allowed',
+      reason: 'test_connection_completed',
+    });
+    expect(JSON.stringify([requested, providerFailed, completed])).not.toMatch(
+      /requestBody|responseBody|credentialRef|credential_ref|providerCode|providerRawError|endpoint|headers|sk_live|sk_test|token|secret|API key|connection string|raw credential|raw HIS payload|SQL|select \*|stack|DATABASE_URL|vault|kms|keyId/i,
     );
   });
 

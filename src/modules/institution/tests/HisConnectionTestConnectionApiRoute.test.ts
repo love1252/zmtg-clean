@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as hisConnectionTestConnectionPost } from '@/app/api/institution/his-connections/[connectionId]/test-connection/route';
+import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import type { TenantDatabase } from '@/server/db/client';
 
@@ -151,6 +152,40 @@ function expectNoSensitiveRoutePayload(payload: unknown) {
   );
 }
 
+function expectNoSensitiveRouteAuditData(event: unknown) {
+  expect(JSON.stringify(event)).not.toMatch(
+    /requestBody|body|credentialRef|credential_ref|cred_ref_|token|secret|apiKey|api_key|endpoint|headers|providerCode|providerRawError|rawPayload|raw_payload|rawHisPayload|externalResponseBody|DATABASE_URL|postgres:\/\/|select \* from|SQL|stack/i,
+  );
+}
+
+function expectTestConnectionRouteDeniedAuditEvent(
+  event: unknown,
+  input: {
+    actorId: string;
+    actorRole: AccessContext['role'];
+    tenantId: string | null;
+    reason: TenantAuditEvent['reason'];
+    resourceId?: string;
+  },
+) {
+  expect(event).toMatchObject({
+    actorId: input.actorId,
+    actorRole: input.actorRole,
+    tenantId: input.tenantId,
+    resource: 'open_connection',
+    action: 'test_connection',
+    result: 'denied',
+    reason: input.reason,
+    source: 'demo_session',
+  });
+  if (input.resourceId !== undefined) {
+    expect(event).toMatchObject({ resourceId: input.resourceId });
+  }
+  expect((event as TenantAuditEvent).eventId).toEqual(expect.any(String));
+  expect(Number.isFinite(Date.parse((event as TenantAuditEvent).occurredAt))).toBe(true);
+  expectNoSensitiveRouteAuditData(event);
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -228,7 +263,7 @@ describe('HIS 测试连接 API route 最小 runtime', () => {
     expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
   });
 
-  it('无 test_connection 权限返回 403，且不读取 body、不调用 service、不写 audit', async () => {
+  it('无 test_connection 权限返回 403，且不读取 body、不调用 service，并写 route denied audit', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantOperatorContext);
     const request = requestWithJsonSpy();
 
@@ -241,20 +276,44 @@ describe('HIS 测试连接 API route 最小 runtime', () => {
     });
     expect(request.json).not.toHaveBeenCalled();
     expect(routeMocks.testHisConnectionForTenantService).not.toHaveBeenCalled();
-    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).toHaveBeenCalledWith(routeMocks.database);
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expectTestConnectionRouteDeniedAuditEvent(
+      routeMocks.auditEventRepository.record.mock.calls[0]?.[0],
+      {
+        actorId: 'demo-user-operator',
+        actorRole: 'tenant_operator',
+        tenantId: 'demo-tenant-001',
+        reason: 'role_denied',
+        resourceId: 'his_conn_001',
+      },
+    );
   });
 
-  it('平台角色不能用其他权限替代 test_connection', async () => {
+  it('平台角色不能用其他权限替代 test_connection，并只使用可信 access context 写 audit', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
 
     const response = await hisConnectionTestConnectionPost(testConnectionRequest(), routeContext());
 
     expect(response.status).toBe(403);
     expect(routeMocks.testHisConnectionForTenantService).not.toHaveBeenCalled();
-    expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+    expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(1);
+    expectTestConnectionRouteDeniedAuditEvent(
+      routeMocks.auditEventRepository.record.mock.calls[0]?.[0],
+      {
+        actorId: 'demo-user-platform',
+        actorRole: 'platform_admin',
+        tenantId: null,
+        reason: 'role_denied',
+        resourceId: 'his_conn_001',
+      },
+    );
+    expect(JSON.stringify(routeMocks.auditEventRepository.record.mock.calls[0]?.[0])).not.toContain(
+      'forged',
+    );
   });
 
-  it('body 中的 tenantId、健康字段、provider result 或凭证字段会被拒绝', async () => {
+  it('body 中的 tenantId、健康字段、provider result 或凭证字段会被拒绝并写 parser failure audit', async () => {
     const forbiddenPayloads = [
       { tenantId: 'forged-tenant' },
       { healthStatus: 'healthy' },
@@ -268,6 +327,7 @@ describe('HIS 测试连接 API route 最小 runtime', () => {
 
     for (const payload of forbiddenPayloads) {
       routeMocks.testHisConnectionForTenantService.mockClear();
+      routeMocks.auditEventRepository.record.mockClear();
 
       const response = await hisConnectionTestConnectionPost(
         testConnectionRequest(payload),
@@ -281,9 +341,62 @@ describe('HIS 测试连接 API route 最小 runtime', () => {
         error: '请求格式不正确',
       });
       expect(routeMocks.testHisConnectionForTenantService).not.toHaveBeenCalled();
-      expect(routeMocks.auditEventRepository.record).not.toHaveBeenCalled();
+      expect(routeMocks.auditEventRepository.record).toHaveBeenCalledTimes(1);
+      expectTestConnectionRouteDeniedAuditEvent(
+        routeMocks.auditEventRepository.record.mock.calls[0]?.[0],
+        {
+          actorId: 'demo-user-admin',
+          actorRole: 'tenant_admin',
+          tenantId: 'demo-tenant-001',
+          reason: 'invalid_his_connection_payload',
+          resourceId: 'his_conn_001',
+        },
+      );
+      expect(JSON.stringify(routeMocks.auditEventRepository.record.mock.calls[0]?.[0])).not.toContain(
+        JSON.stringify(payload),
+      );
       expectNoSensitiveRoutePayload(body);
     }
+  });
+
+  it('route denied 或 parser failure audit 写入失败时返回 503，且不调用 service 或泄露异常', async () => {
+    routeMocks.auditEventRepository.record.mockRejectedValueOnce(
+      new Error('DATABASE_URL=postgres://tenant:secret@localhost stack'),
+    );
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValueOnce(tenantOperatorContext);
+
+    const deniedResponse = await hisConnectionTestConnectionPost(
+      requestWithJsonSpy(),
+      routeContext(),
+    );
+    const deniedPayload = await expectJson(deniedResponse);
+
+    expect(deniedResponse.status).toBe(503);
+    expect(deniedPayload).toEqual({
+      code: 'service_unavailable',
+      error: '数据服务暂时不可用',
+    });
+    expect(routeMocks.testHisConnectionForTenantService).not.toHaveBeenCalled();
+    expectNoSensitiveRoutePayload(deniedPayload);
+
+    routeMocks.auditEventRepository.record.mockReset();
+    routeMocks.auditEventRepository.record.mockRejectedValueOnce(
+      new Error('audit insert failed credentialRef=cred_ref DATABASE_URL stack'),
+    );
+
+    const parserResponse = await hisConnectionTestConnectionPost(
+      testConnectionRequest({ credentialRef: 'cred_ref_should_not_pass' }),
+      routeContext(),
+    );
+    const parserPayload = await expectJson(parserResponse);
+
+    expect(parserResponse.status).toBe(503);
+    expect(parserPayload).toEqual({
+      code: 'service_unavailable',
+      error: '数据服务暂时不可用',
+    });
+    expect(routeMocks.testHisConnectionForTenantService).not.toHaveBeenCalled();
+    expectNoSensitiveRoutePayload(parserPayload);
   });
 
   it('service result 映射为稳定 HTTP / DTO，且不重复写 route audit', async () => {
