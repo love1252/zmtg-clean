@@ -843,6 +843,292 @@ describe('HIS 连接配置写入 repository', () => {
     expect(query.update).not.toHaveBeenCalled();
   });
 
+  it('health summary 写回 healthy 时只写健康摘要字段和服务端 actor', async () => {
+    const checkedAt = new Date('2026-06-07T08:30:00.000Z');
+    const healthyRow = {
+      ...hisConnectionRow,
+      healthStatus: 'healthy',
+      lastCheckedAt: checkedAt,
+      lastErrorCode: null,
+      updatedBy: 'demo-user-operator',
+      updatedAt: new Date('2026-06-07T08:30:01.000Z'),
+    } satisfies typeof hisConnections.$inferSelect;
+    const query = createHisConnectionUpdateDatabase({ updatedRow: healthyRow });
+
+    const result = await createHisConnectionRepository(
+      query.database,
+    ).writeHisConnectionHealthSummaryForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      healthStatus: 'healthy',
+      checkedAt,
+      lastErrorCode: null,
+      actorUserId: 'demo-user-operator',
+    });
+
+    expect(query.update).toHaveBeenCalledWith(hisConnections);
+    expect(query.set).toHaveBeenCalledWith({
+      healthStatus: 'healthy',
+      lastCheckedAt: checkedAt,
+      lastErrorCode: null,
+      updatedAt: expect.any(Date),
+      updatedBy: 'demo-user-operator',
+    });
+    expect(query.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: hisConnections.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: hisConnections.id, operator: 'eq', value: 'his_conn_001' },
+        { column: hisConnections.deletedAt, operator: 'isNull' },
+      ],
+      operator: 'and',
+    });
+    expect(result).toEqual({
+      status: 'ok',
+      record: mapHisConnectionRowToReadModel(healthyRow),
+    });
+    expect(Object.keys(query.set.mock.calls[0]?.[0] ?? {}).sort()).toEqual([
+      'healthStatus',
+      'lastCheckedAt',
+      'lastErrorCode',
+      'updatedAt',
+      'updatedBy',
+    ]);
+    expect(JSON.stringify(query.set.mock.calls[0]?.[0])).not.toMatch(
+      /connectionName|sourceSystem|vendorType|systemType|credentialRef|credential_ref|createdAt|createdBy|revokedAt|deletedAt|rawPayload|requestBody|responseBody|DATABASE_URL|select \* from|stack/i,
+    );
+  });
+
+  it('health summary 写回 failed / degraded 时要求内部稳定错误码', async () => {
+    const failedCheckedAt = new Date('2026-06-07T08:40:00.000Z');
+    const degradedCheckedAt = new Date('2026-06-07T08:41:00.000Z');
+    const failedQuery = createHisConnectionUpdateDatabase({
+      updatedRow: {
+        ...hisConnectionRow,
+        healthStatus: 'failed',
+        lastCheckedAt: failedCheckedAt,
+        lastErrorCode: 'provider_timeout',
+      },
+    });
+    const degradedQuery = createHisConnectionUpdateDatabase({
+      updatedRow: {
+        ...hisConnectionRow,
+        healthStatus: 'degraded',
+        lastCheckedAt: degradedCheckedAt,
+        lastErrorCode: 'limited_health_probe',
+      },
+    });
+
+    await expect(
+      createHisConnectionRepository(failedQuery.database).writeHisConnectionHealthSummaryForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        healthStatus: 'failed',
+        checkedAt: failedCheckedAt,
+        lastErrorCode: 'provider_timeout',
+      }),
+    ).resolves.toMatchObject({
+      status: 'ok',
+      record: {
+        healthStatus: 'failed',
+        lastCheckedAt: '2026-06-07T08:40:00.000Z',
+        lastErrorCode: 'provider_timeout',
+      },
+    });
+    await expect(
+      createHisConnectionRepository(
+        degradedQuery.database,
+      ).writeHisConnectionHealthSummaryForTenant({
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        healthStatus: 'degraded',
+        checkedAt: degradedCheckedAt,
+        lastErrorCode: 'limited_health_probe',
+      }),
+    ).resolves.toMatchObject({
+      status: 'ok',
+      record: {
+        healthStatus: 'degraded',
+        lastCheckedAt: '2026-06-07T08:41:00.000Z',
+        lastErrorCode: 'limited_health_probe',
+      },
+    });
+    expect(failedQuery.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        healthStatus: 'failed',
+        lastCheckedAt: failedCheckedAt,
+        lastErrorCode: 'provider_timeout',
+      }),
+    );
+    expect(degradedQuery.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        healthStatus: 'degraded',
+        lastCheckedAt: degradedCheckedAt,
+        lastErrorCode: 'limited_health_probe',
+      }),
+    );
+  });
+
+  it('health summary reset 为 unknown 时清空检查时间和错误码', async () => {
+    const query = createHisConnectionUpdateDatabase({
+      updatedRow: {
+        ...hisConnectionRow,
+        healthStatus: 'unknown',
+        lastCheckedAt: null,
+        lastErrorCode: null,
+      },
+    });
+
+    const result = await createHisConnectionRepository(
+      query.database,
+    ).writeHisConnectionHealthSummaryForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      healthStatus: 'unknown',
+      checkedAt: null,
+      lastErrorCode: null,
+    });
+
+    expect(query.set).toHaveBeenCalledWith({
+      healthStatus: 'unknown',
+      lastCheckedAt: null,
+      lastErrorCode: null,
+      updatedAt: expect.any(Date),
+    });
+    expect(result).toMatchObject({
+      status: 'ok',
+      record: {
+        healthStatus: 'unknown',
+        lastCheckedAt: null,
+        lastErrorCode: null,
+      },
+    });
+  });
+
+  it('health summary 跨租户、不存在或已软删除连接统一返回 not_found', async () => {
+    const query = createHisConnectionUpdateDatabase({ updatedRow: null });
+
+    const result = await createHisConnectionRepository(
+      query.database,
+    ).writeHisConnectionHealthSummaryForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_other_tenant',
+      healthStatus: 'healthy',
+      checkedAt: new Date('2026-06-07T08:50:00.000Z'),
+      lastErrorCode: null,
+    });
+
+    expect(result).toEqual({ status: 'not_found' });
+    expect(query.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: hisConnections.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: hisConnections.id, operator: 'eq', value: 'his_conn_other_tenant' },
+        { column: hisConnections.deletedAt, operator: 'isNull' },
+      ],
+      operator: 'and',
+    });
+  });
+
+  it('health summary 不接受外部 raw error / raw payload，也不修改连接元数据或 credentialRef', async () => {
+    const query = createHisConnectionUpdateDatabase({
+      updatedRow: {
+        ...hisConnectionRow,
+        healthStatus: 'failed',
+        lastCheckedAt: new Date('2026-06-07T09:00:00.000Z'),
+        lastErrorCode: 'external_unreachable',
+      },
+    });
+
+    await createHisConnectionRepository(query.database).writeHisConnectionHealthSummaryForTenant({
+      tenantId: 'demo-tenant-001',
+      connectionId: 'his_conn_001',
+      healthStatus: 'failed',
+      checkedAt: new Date('2026-06-07T09:00:00.000Z'),
+      lastErrorCode: 'external_unreachable',
+      actorUserId: 'demo-user-operator',
+      connectionName: '不应写入的名称',
+      sourceSystem: 'forged_source',
+      vendorType: 'forged_vendor',
+      systemType: 'forged_system',
+      status: 'active',
+      credentialRef: 'cred_ref_should_not_write',
+      providerRawError: 'connect ETIMEDOUT token=secret stack DATABASE_URL=postgres://secret',
+      rawHisPayload: { patientName: '不应保存' },
+      externalResponseBody: { error: 'raw body' },
+    } as Parameters<
+      ReturnType<typeof createHisConnectionRepository>['writeHisConnectionHealthSummaryForTenant']
+    >[0]);
+
+    const written = JSON.stringify(query.set.mock.calls[0]?.[0]);
+
+    expect(Object.keys(query.set.mock.calls[0]?.[0] ?? {}).sort()).toEqual([
+      'healthStatus',
+      'lastCheckedAt',
+      'lastErrorCode',
+      'updatedAt',
+      'updatedBy',
+    ]);
+    expect(written).toMatch(/"healthStatus":"failed"/);
+    expect(written).toMatch(/"lastErrorCode":"external_unreachable"/);
+    expect(written).not.toMatch(
+      /不应写入的名称|forged_source|forged_vendor|forged_system|credentialRef|credential_ref|cred_ref_should_not_write|providerRawError|rawHisPayload|externalResponseBody|token=secret|DATABASE_URL|postgres:\/\/|patientName|raw body|stack/i,
+    );
+  });
+
+  it('health summary 输入状态、时间或错误码不满足白名单时返回 validation_failed 且不写数据库', async () => {
+    const invalidCommands = [
+      {
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        healthStatus: 'connected',
+        checkedAt: new Date('2026-06-07T09:10:00.000Z'),
+        lastErrorCode: null,
+      },
+      {
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        healthStatus: 'failed',
+        checkedAt: new Date('2026-06-07T09:10:00.000Z'),
+        lastErrorCode: null,
+      },
+      {
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        healthStatus: 'healthy',
+        checkedAt: new Date('2026-06-07T09:10:00.000Z'),
+        lastErrorCode: 'provider_timeout',
+      },
+      {
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        healthStatus: 'failed',
+        checkedAt: new Date('2026-06-07T09:10:00.000Z'),
+        lastErrorCode: 'connect ETIMEDOUT token=secret',
+      },
+      {
+        tenantId: 'demo-tenant-001',
+        connectionId: 'his_conn_001',
+        healthStatus: 'unknown',
+        checkedAt: new Date('2026-06-07T09:10:00.000Z'),
+        lastErrorCode: null,
+      },
+    ];
+
+    for (const command of invalidCommands) {
+      const query = createHisConnectionUpdateDatabase({ updatedRow: hisConnectionRow });
+
+      await expect(
+        createHisConnectionRepository(query.database).writeHisConnectionHealthSummaryForTenant(
+          command as Parameters<
+            ReturnType<
+              typeof createHisConnectionRepository
+            >['writeHisConnectionHealthSummaryForTenant']
+          >[0],
+        ),
+      ).resolves.toEqual({ status: 'validation_failed' });
+      expect(query.update).not.toHaveBeenCalled();
+    }
+  });
+
   it('pause 允许 active / error 进入 paused，并只写状态和更新 actor 字段', async () => {
     const query = createHisConnectionStateTransitionDatabase({
       currentRow: errorHisConnectionRow,

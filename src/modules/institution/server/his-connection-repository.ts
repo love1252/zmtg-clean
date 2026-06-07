@@ -67,6 +67,30 @@ export type HisConnectionCredentialClearCommand = HisConnectionLookupInput & {
   actorUserId: string;
   reasonCode?: string;
 };
+export type HisConnectionHealthErrorCode =
+  | 'missing_credential'
+  | 'credential_provider_unavailable'
+  | 'credential_unavailable'
+  | 'credential_revoked'
+  | 'provider_timeout'
+  | 'external_unreachable'
+  | 'external_auth_failed'
+  | 'external_rate_limited'
+  | 'external_service_unavailable'
+  | 'unsupported_vendor'
+  | 'unsafe_external_response'
+  | 'connection_not_active'
+  | 'service_unavailable'
+  | 'partial_capability_unavailable'
+  | 'provider_retry_succeeded'
+  | 'provider_warning'
+  | 'limited_health_probe';
+export type WriteHisConnectionHealthSummaryForTenantCommand = HisConnectionLookupInput & {
+  healthStatus: HisConnectionRow['healthStatus'];
+  checkedAt: Date | null;
+  lastErrorCode: HisConnectionHealthErrorCode | null;
+  actorUserId?: string;
+};
 export type CreateHisConnectionResult =
   | { status: 'ok'; record: HisConnectionReadModel }
   | { status: 'conflict' }
@@ -91,6 +115,10 @@ export type HisConnectionCredentialReferenceResult =
   | { status: 'not_found' }
   | { status: 'invalid_state_transition' }
   | { status: 'validation_failed' };
+export type HisConnectionHealthSummaryWriteResult =
+  | { status: 'ok'; record: HisConnectionReadModel }
+  | { status: 'not_found' }
+  | { status: 'validation_failed' };
 
 const hisConnectionFieldLimits = {
   tenantId: 64,
@@ -104,6 +132,26 @@ const hisConnectionFieldLimits = {
   credentialRef: 128,
 } as const;
 
+const hisConnectionHealthStatuses = ['unknown', 'healthy', 'degraded', 'failed'] as const;
+const allowedHisConnectionHealthErrorCodes = new Set<HisConnectionHealthErrorCode>([
+  'missing_credential',
+  'credential_provider_unavailable',
+  'credential_unavailable',
+  'credential_revoked',
+  'provider_timeout',
+  'external_unreachable',
+  'external_auth_failed',
+  'external_rate_limited',
+  'external_service_unavailable',
+  'unsupported_vendor',
+  'unsafe_external_response',
+  'connection_not_active',
+  'service_unavailable',
+  'partial_capability_unavailable',
+  'provider_retry_succeeded',
+  'provider_warning',
+  'limited_health_probe',
+]);
 const safeCredentialRefPattern = /^cred_ref_[a-zA-Z0-9_-]{12,}$/;
 const forbiddenCredentialRefPattern =
   /sk_live|sk_test|token|secret|api[_-]?key|connection[_-]?string|password|oauth|basic[_-]?auth|private[_-]?key|raw[_-]?credential|raw[_-]?payload|DATABASE_URL|postgres:\/\/|mysql:\/\/|select \* from|SQL|stack/i;
@@ -128,6 +176,10 @@ function normalizeRequiredText(value: unknown, maxLength: number): string | null
 function isValidOptionalText(value: unknown, maxLength: number): boolean {
   if (value === undefined) return true;
   return normalizeRequiredText(value, maxLength) !== null;
+}
+
+function isValidDate(value: unknown): value is Date {
+  return value instanceof Date && !Number.isNaN(value.getTime());
 }
 
 function normalizeCredentialRef(value: unknown): string | null {
@@ -274,6 +326,84 @@ function pickCredentialClearCommand(input: HisConnectionCredentialClearCommand) 
   };
 }
 
+function isHisConnectionHealthStatus(value: unknown): value is HisConnectionRow['healthStatus'] {
+  return (
+    typeof value === 'string' &&
+    hisConnectionHealthStatuses.includes(value as (typeof hisConnectionHealthStatuses)[number])
+  );
+}
+
+function isHisConnectionHealthErrorCode(value: unknown): value is HisConnectionHealthErrorCode {
+  return (
+    typeof value === 'string' &&
+    allowedHisConnectionHealthErrorCodes.has(value as HisConnectionHealthErrorCode)
+  );
+}
+
+function pickHealthSummaryCommand(input: WriteHisConnectionHealthSummaryForTenantCommand) {
+  const tenantId = normalizeRequiredText(input.tenantId, hisConnectionFieldLimits.tenantId);
+  const connectionId = normalizeRequiredText(
+    input.connectionId,
+    hisConnectionFieldLimits.connectionId,
+  );
+  const actorUserId =
+    input.actorUserId === undefined
+      ? undefined
+      : normalizeRequiredText(input.actorUserId, hisConnectionFieldLimits.actorUserId);
+
+  if (
+    !tenantId ||
+    !connectionId ||
+    !isHisConnectionHealthStatus(input.healthStatus) ||
+    (input.actorUserId !== undefined && !actorUserId)
+  ) {
+    return null;
+  }
+
+  if (input.healthStatus === 'unknown') {
+    if (input.checkedAt !== null || input.lastErrorCode !== null) return null;
+
+    return {
+      tenantId,
+      connectionId,
+      healthStatus: input.healthStatus,
+      checkedAt: null,
+      lastErrorCode: null,
+      actorUserId,
+    };
+  }
+
+  if (!isValidDate(input.checkedAt)) {
+    return null;
+  }
+
+  if (input.healthStatus === 'healthy') {
+    if (input.lastErrorCode !== null) return null;
+
+    return {
+      tenantId,
+      connectionId,
+      healthStatus: input.healthStatus,
+      checkedAt: input.checkedAt,
+      lastErrorCode: null,
+      actorUserId,
+    };
+  }
+
+  if (!isHisConnectionHealthErrorCode(input.lastErrorCode)) {
+    return null;
+  }
+
+  return {
+    tenantId,
+    connectionId,
+    healthStatus: input.healthStatus,
+    checkedAt: input.checkedAt,
+    lastErrorCode: input.lastErrorCode,
+    actorUserId,
+  };
+}
+
 function isUniqueViolation(error: unknown) {
   return (
     typeof error === 'object' &&
@@ -284,8 +414,17 @@ function isUniqueViolation(error: unknown) {
 }
 
 function createSanitizedWriteError(
-  action: 'create' | 'update' | 'change status' | 'change credential reference',
+  action:
+    | 'create'
+    | 'update'
+    | 'change status'
+    | 'change credential reference'
+    | 'write health summary',
 ) {
+  if (action === 'write health summary') {
+    return new Error('Failed to write HIS connection health summary');
+  }
+
   return new Error(`Failed to ${action} HIS connection`);
 }
 
@@ -697,6 +836,53 @@ export function createHisConnectionRepository(database: TenantDatabase) {
         }
 
         throw createSanitizedWriteError('update');
+      }
+    },
+
+    async writeHisConnectionHealthSummaryForTenant(
+      input: WriteHisConnectionHealthSummaryForTenantCommand,
+    ): Promise<HisConnectionHealthSummaryWriteResult> {
+      const command = pickHealthSummaryCommand(input);
+
+      if (!command) {
+        return { status: 'validation_failed' };
+      }
+
+      const values: Partial<typeof hisConnections.$inferInsert> = {
+        healthStatus: command.healthStatus,
+        lastCheckedAt: command.checkedAt,
+        lastErrorCode: command.lastErrorCode,
+        updatedAt: new Date(),
+      };
+
+      if (command.actorUserId !== undefined) {
+        values.updatedBy = command.actorUserId;
+      }
+
+      try {
+        const [row] = await database
+          .update(hisConnections)
+          .set(values)
+          .where(
+            and(
+              eq(hisConnections.tenantId, command.tenantId),
+              eq(hisConnections.id, command.connectionId),
+              isNull(hisConnections.deletedAt),
+            ),
+          )
+          .returning();
+
+        if (
+          !row ||
+          row.id !== command.connectionId ||
+          !isVisibleHisConnectionRow(row, command.tenantId)
+        ) {
+          return { status: 'not_found' };
+        }
+
+        return { status: 'ok', record: mapHisConnectionRowToReadModel(row) };
+      } catch {
+        throw createSanitizedWriteError('write health summary');
       }
     },
 
