@@ -173,10 +173,11 @@ const revisitReminderBoundaryTags = [
   'UI mock',
   '不调用 API',
   '不创建真实预约',
-  '不创建随访任务',
+  '不创建真实随访任务',
   '不连接 HIS',
   '不自动约诊',
   '不自动触达客户',
+  '不生成医疗诊断',
 ] as const;
 
 const emptyDashboardSummary = buildInstitutionDashboardSummary({
