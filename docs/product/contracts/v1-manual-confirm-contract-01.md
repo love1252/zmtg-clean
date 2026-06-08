@@ -438,7 +438,6 @@
 
 本次只读检查和文档新增过程中执行过以下命令：
 
-- `sed -n '261,520p' /Users/dongxiaolong/.codex/attachments/e748dbc0-3721-4335-a5ec-a547a732c3c1/pasted-text.txt`
 - `date "+%Y-%m-%d %Z %z"`
 - `git status --short`
 - `git branch --show-current`
@@ -447,7 +446,6 @@
 - `git rev-parse main`
 - `git rev-parse origin/main`
 - `git switch -c docs/v1-manual-confirm-contract-01`
-- `sed -n '521,1040p' /Users/dongxiaolong/.codex/attachments/e748dbc0-3721-4335-a5ec-a547a732c3c1/pasted-text.txt`
 - `wc -l docs/product/zhimeitiangong-product-source-of-truth.md`
 - `wc -l docs/product/zhimeitiangong-module-map.md`
 - `wc -l docs/product/zhimeitiangong-v1-scope.md`
