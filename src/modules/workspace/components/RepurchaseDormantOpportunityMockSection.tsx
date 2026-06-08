@@ -128,12 +128,15 @@ const opportunityExceptionStates = [
 ] as const;
 
 const automationBoundaryTags = [
+  '不调用 API',
   '不自动营销',
   '不自动触达',
   '不发送外部消息',
   '不创建真实成交',
   '不生成医疗诊断',
+  '不连接 HIS',
   '不读取真实 HIS',
+  '沉睡客户观察不等于自动唤醒',
   '不处理真实客户数据',
 ] as const;
 
