@@ -497,6 +497,6 @@
 - `git diff --stat`
 - `git diff -- docs/product/test-plans/v1-opportunity-test-plan-01.md`
 - `git diff --name-only origin/main..HEAD`
-- `rg -n "<本地临时附件路径或粘贴文件名匹配模式>" docs/product/test-plans/v1-opportunity-test-plan-01.md`
+- `rg -n ".codex/attachments|/Users/dongxiaolong/.codex/attachments|pasted-text.txt" docs/product/test-plans/v1-opportunity-test-plan-01.md`
 
 本次未运行测试，未运行 runtime，未启动服务，未连接外部业务系统，未连接真实 HIS，未读取真实 credential，未执行 migration，未运行 scheduler / cron / queue / worker，未新增 schema，未新增测试文件，未修复任何发现的问题。
