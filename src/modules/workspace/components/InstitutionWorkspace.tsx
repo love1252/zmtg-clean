@@ -114,6 +114,72 @@ const followUpPathBoundaryLabels = [
   '不接 AI',
 ] as const;
 
+type RevisitReminderMockItem = {
+  id: string;
+  customerDisplayName: string;
+  opportunityType: '复诊提醒';
+  sourceSummary: string;
+  handlingWindow: string;
+  priority: '低' | '中' | '高';
+  status: '待人工确认' | '已转内部随访' | '已形成预约意向';
+  demoFlag: string;
+  lowSensitiveNotes: string;
+};
+
+const revisitReminderMockItems: RevisitReminderMockItem[] = [
+  {
+    id: 'revisit-demo-xu-d5',
+    customerDisplayName: '客户甲',
+    opportunityType: '复诊提醒',
+    sourceSummary: '治疗后摘要 · D5 保湿观察 · 水光复诊',
+    handlingWindow: '今日',
+    priority: '高',
+    status: '待人工确认',
+    demoFlag: 'mock',
+    lowSensitiveNotes: '复诊前状态确认，仅展示低敏摘要。',
+  },
+  {
+    id: 'revisit-demo-qin-d7',
+    customerDisplayName: 'CUST-DEMO-001',
+    opportunityType: '复诊提醒',
+    sourceSummary: '路径模板 · D7 复查窗口 · 恢复阶段反馈',
+    handlingWindow: 'D7',
+    priority: '中',
+    status: '已转内部随访',
+    demoFlag: 'demo',
+    lowSensitiveNotes: '内部随访任务说明，不代表外部消息发送。',
+  },
+  {
+    id: 'revisit-demo-zhao-week',
+    customerDisplayName: '客户乙',
+    opportunityType: '复诊提醒',
+    sourceSummary: '预约状态 · 本周复查 · 随访结果摘要',
+    handlingWindow: '本周',
+    priority: '低',
+    status: '已形成预约意向',
+    demoFlag: 'seed',
+    lowSensitiveNotes: '预约意向仅为内部方向，不是真实预约。',
+  },
+];
+
+const revisitReminderExceptionStates = [
+  '来源信息不完整，仅作内部参考',
+  '缺少处理日期，未计入时间窗口指标',
+  '状态异常，暂不计入正式指标',
+  '当前包含演示 / mock 数据，仅用于内部验证',
+] as const;
+
+const revisitReminderBoundaryTags = [
+  'UI mock',
+  '不调用 API',
+  '不创建真实预约',
+  '不创建真实随访任务',
+  '不连接 HIS',
+  '不自动约诊',
+  '不自动触达客户',
+  '不生成医疗诊断',
+] as const;
+
 const emptyDashboardSummary = buildInstitutionDashboardSummary({
   customers: [],
   appointments: [],
@@ -587,6 +653,8 @@ function InstitutionDashboardHome({
         />
       ) : null}
 
+      <RevisitReminderMockSection />
+
       <FollowUpPathAnalysisPanel
         analysis={followUpPathAnalysis}
         status={followUpPathAnalysisStatus}
@@ -731,6 +799,151 @@ function InstitutionDashboardHome({
         </article>
       </section>
     </>
+  );
+}
+
+function RevisitReminderMockSection() {
+  return (
+    <section className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+            <Bell className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold tracking-normal text-slate-950">复诊提醒</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              仅用于内部复诊 / 复查 / 状态确认，不会自动约诊或触达客户。
+            </p>
+          </div>
+        </div>
+        <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
+          演示 / mock 数据
+        </span>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-cyan-200 bg-cyan-50/80 px-4 py-3 text-sm leading-6 text-cyan-800">
+        当前为演示 / mock 数据，仅用于内部验证，不代表生产数据。复诊提醒入口只展示前端
+        mock 状态，不会调用接口或产生业务动作。
+      </div>
+
+      <div className="mt-5 grid gap-3 xl:grid-cols-3">
+        {revisitReminderMockItems.map((item) => (
+          <article
+            key={item.id}
+            className="rounded-2xl border border-slate-200/80 bg-white/86 p-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600">
+                {item.opportunityType}
+              </span>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600">
+                {item.demoFlag}
+              </span>
+            </div>
+            <h3 className="mt-4 text-base font-semibold tracking-normal text-slate-950">
+              {item.customerDisplayName}
+            </h3>
+            <dl className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+              <div>
+                <dt className="text-xs font-semibold text-slate-400">来源摘要</dt>
+                <dd>{item.sourceSummary}</dd>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <dt className="text-xs font-semibold text-slate-400">处理窗口</dt>
+                  <dd>{item.handlingWindow}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold text-slate-400">优先级</dt>
+                  <dd>{item.priority}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold text-slate-400">状态</dt>
+                  <dd>{item.status}</dd>
+                </div>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold text-slate-400">低敏备注</dt>
+                <dd>{item.lowSensitiveNotes}</dd>
+              </div>
+            </dl>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                可转内部随访任务
+              </span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                可形成预约意向
+              </span>
+            </div>
+            <button
+              type="button"
+              disabled
+              className="mt-4 h-10 w-full rounded-xl border border-slate-200 bg-slate-100 text-sm font-semibold text-slate-500"
+            >
+              进入人工确认（演示）
+            </button>
+          </article>
+        ))}
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr]">
+        <article className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-5">
+          <h3 className="text-sm font-semibold tracking-normal text-slate-950">
+            暂无待处理复诊提醒
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            当前没有需要内部人员处理的复诊 / 复查 / 状态确认提醒。
+          </p>
+        </article>
+
+        <article className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <h3 className="text-sm font-semibold tracking-normal text-amber-900">
+                异常态 mock
+              </h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {revisitReminderExceptionStates.map((item) => (
+                  <span
+                    key={item}
+                    className="rounded-full border border-amber-200 bg-white/70 px-2.5 py-1 text-xs font-semibold text-amber-800"
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr]">
+        <article className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
+          <h3 className="text-sm font-semibold tracking-normal text-slate-950">
+            人工确认边界
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            人工确认仅表示内部人员选择处理方向，不代表客户已被触达。内部随访任务不是外部消息发送，预约意向不是真实预约，也不是外部系统同步。
+          </p>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
+          <h3 className="text-sm font-semibold tracking-normal text-slate-950">边界标签</h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {revisitReminderBoundaryTags.map((label) => (
+              <span
+                key={label}
+                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        </article>
+      </div>
+    </section>
   );
 }
 
