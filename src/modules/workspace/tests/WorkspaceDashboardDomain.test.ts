@@ -4,6 +4,7 @@ import type { CustomerRecordSummary } from '@/modules/institution/domain/custome
 import type { TenantFollowUpTask } from '@/modules/institution/domain/followup-workflow';
 import { institutionNavItems } from '@/modules/workspace/domain/institution-dashboard';
 import { buildInstitutionDashboardSummary } from '@/modules/workspace/domain/institution-dashboard-view-models';
+import { buildV1OpportunityReadonlySummary } from '@/modules/workspace/domain/v1-opportunity-readonly-view-models';
 import {
   platformCapabilityCards,
   platformHealthItems,
@@ -96,6 +97,39 @@ const followUpTasks: TenantFollowUpTask[] = [
     updatedBy: null,
     updatedAt: null,
   },
+];
+
+const enabledOpportunityPolicy = {
+  featureEnabled: true,
+  canReadOpportunities: true,
+  tenantScopeMatched: true,
+};
+
+const forbiddenOpportunityFieldFragments = [
+  'phone',
+  'mobile',
+  'contact',
+  'idCard',
+  'medicalRecord',
+  'diagnosis',
+  'treatmentRaw',
+  'consultationRaw',
+  'address',
+  'amount',
+  'revenue',
+  'roi',
+  'payment',
+  'contract',
+  'invoice',
+  'credential',
+  'token',
+  'secret',
+  'rawPayload',
+  'sql',
+  'stack',
+  'dbUrl',
+  'tenantId',
+  'fullName',
 ];
 
 describe('工作台看板领域模型', () => {
@@ -229,5 +263,280 @@ describe('工作台看板领域模型', () => {
       '商业化健康收尾',
       '平台操作可审计',
     ]);
+  });
+});
+
+describe('V1 opportunity readonly 领域模型', () => {
+  it('feature flag disabled 时返回安全空态且不返回候选对象', () => {
+    const summary = buildV1OpportunityReadonlySummary(
+      {
+        candidates: [
+          {
+            opportunityType: 'revisit_reminder',
+            sourceType: 'treatment_summary',
+            sourceSummary: '治疗后摘要 D7 复诊窗口',
+            triggerReason: '复诊窗口进入人工确认范围',
+            suggestedAction: '内部人员人工确认是否转随访',
+            priority: 'high',
+            dueDateWindow: 'D7',
+            mockSeedDemoFlag: 'demo',
+          },
+        ],
+      },
+      {
+        ...enabledOpportunityPolicy,
+        featureEnabled: false,
+      },
+    );
+
+    expect(summary).toMatchObject({
+      status: 'disabled',
+      reasonCode: 'feature_flag_disabled',
+      resultCode: 'skipped',
+      opportunities: [],
+    });
+    expect(JSON.stringify(summary)).not.toContain('创建任务');
+    expect(JSON.stringify(summary)).not.toContain('创建预约');
+    expect(JSON.stringify(summary)).not.toContain('创建成交');
+  });
+
+  it('tenant 或 RBAC 不满足时返回低敏 denied 且不暴露对象存在性', () => {
+    const tenantDeniedSummary = buildV1OpportunityReadonlySummary(
+      {
+        candidates: [
+          {
+            opportunityType: 'repurchase',
+            sourceType: 'customer_lifecycle',
+            sourceSummary: '项目周期进入复购观察窗口',
+            triggerReason: '复购窗口试运行',
+            suggestedAction: '人工判断是否继续内部跟进',
+            priority: 'medium',
+            mockSeedDemoFlag: 'seed',
+            tenantId: 'demo-tenant-001',
+            institutionId: 'institution-001',
+          },
+        ],
+      },
+      {
+        ...enabledOpportunityPolicy,
+        tenantScopeMatched: false,
+      },
+    );
+    const rbacDeniedSummary = buildV1OpportunityReadonlySummary(
+      {
+        candidates: [
+          {
+            opportunityType: 'dormant_customer',
+            sourceType: 'last_interaction',
+            sourceSummary: '60 天未互动观察层级',
+            triggerReason: '沉睡阈值试运行',
+            suggestedAction: '人工判断是否继续观察',
+            priority: 'low',
+            mockSeedDemoFlag: 'mock',
+          },
+        ],
+      },
+      {
+        ...enabledOpportunityPolicy,
+        canReadOpportunities: false,
+      },
+    );
+
+    expect(tenantDeniedSummary).toMatchObject({
+      status: 'denied',
+      reasonCode: 'tenant_scope_mismatch',
+      resultCode: 'denied',
+      opportunities: [],
+    });
+    expect(rbacDeniedSummary).toMatchObject({
+      status: 'denied',
+      reasonCode: 'permission_denied',
+      resultCode: 'denied',
+      opportunities: [],
+    });
+    expect(JSON.stringify(tenantDeniedSummary)).not.toContain('tenantId');
+    expect(JSON.stringify(tenantDeniedSummary)).not.toContain('institutionId');
+  });
+
+  it('无候选机会时返回稳定空态且不误导为历史任务全部完成', () => {
+    const summary = buildV1OpportunityReadonlySummary(
+      {
+        candidates: [],
+      },
+      enabledOpportunityPolicy,
+    );
+
+    expect(summary).toMatchObject({
+      status: 'empty',
+      reasonCode: 'no_candidate_opportunities',
+      resultCode: 'empty',
+      opportunities: [],
+    });
+    expect(summary.emptyCopy).toBe('暂无待处理机会');
+    expect(summary.emptyCopy).not.toContain('历史任务全部完成');
+    expect(JSON.stringify(summary)).not.toContain('真实统计');
+  });
+
+  it('来源缺失时返回低敏异常态且不猜测 raw source', () => {
+    const summary = buildV1OpportunityReadonlySummary(
+      {
+        candidates: [
+          {
+            opportunityType: 'revisit_reminder',
+            triggerReason: '复诊窗口进入人工确认范围',
+            suggestedAction: '内部人员人工确认是否转随访',
+            priority: 'high',
+            mockSeedDemoFlag: 'demo',
+            rawPayload: 'HIS raw payload should not render',
+            sql: 'select * from opportunities',
+            stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
+          },
+        ],
+      },
+      enabledOpportunityPolicy,
+    );
+
+    expect(summary).toMatchObject({
+      status: 'exception',
+      reasonCode: 'source_missing',
+      resultCode: 'unavailable',
+    });
+    expect(summary.opportunities).toEqual([]);
+    expect(summary.exceptionCopy).toBe('机会来源不完整，仅作内部参考');
+    expect(JSON.stringify(summary)).not.toContain('raw payload');
+    expect(JSON.stringify(summary)).not.toContain('select *');
+    expect(JSON.stringify(summary)).not.toContain('DATABASE_URL');
+  });
+
+  it('只返回低敏字段且 forbidden fields 不出现在序列化结果中', () => {
+    const summary = buildV1OpportunityReadonlySummary(
+      {
+        candidates: [
+          {
+            opportunityType: 'repurchase',
+            sourceType: 'treatment_summary',
+            sourceSummary: '治疗后摘要 · D28 稳定期 · 项目周期',
+            triggerReason: '复购窗口为试运行口径',
+            suggestedAction: '人工判断是否转内部跟进',
+            priority: 'high',
+            dueDateWindow: 'D28',
+            status: 'pending_confirmation',
+            mockSeedDemoFlag: 'seed',
+            fullName: '真实姓名不应展示',
+            phone: '13800001252',
+            mobile: '13800001252',
+            contact: '完整联系方式不应展示',
+            idCard: '110101199001010011',
+            medicalRecord: '完整病历正文不应展示',
+            diagnosis: '诊断正文不应展示',
+            treatmentRaw: '治疗原文不应展示',
+            consultationRaw: '咨询原文不应展示',
+            address: '完整地址不应展示',
+            amount: '100000',
+            revenue: '100000',
+            roi: '900%',
+            payment: '支付数据不应展示',
+            contract: '合同数据不应展示',
+            invoice: '发票数据不应展示',
+            credential: 'credential_should_not_render',
+            token: 'token_should_not_render',
+            secret: 'secret_should_not_render',
+            rawPayload: 'raw payload should not render',
+            sql: 'select * from customers',
+            stack: 'stack should not render',
+            dbUrl: 'postgres://tenant:secret@localhost:5432/zmtg',
+            tenantId: 'demo-tenant-001',
+          },
+        ],
+      },
+      enabledOpportunityPolicy,
+    );
+
+    const serialized = JSON.stringify(summary);
+
+    expect(summary.status).toBe('ready');
+    expect(summary.opportunities).toHaveLength(1);
+    expect(summary.opportunities[0]).toEqual({
+      opportunityType: 'repurchase',
+      sourceType: 'treatment_summary',
+      sourceSummary: '治疗后摘要 · D28 稳定期 · 项目周期',
+      triggerReason: '复购窗口为试运行口径',
+      suggestedAction: '人工判断是否转内部跟进',
+      priority: 'high',
+      dueDateWindow: 'D28',
+      status: 'pending_confirmation',
+      mockSeedDemoFlag: 'seed',
+      reasonCode: 'candidate_ready',
+      resultCode: 'readonly',
+    });
+    forbiddenOpportunityFieldFragments.forEach((fragment) => {
+      expect(serialized).not.toContain(fragment);
+    });
+  });
+
+  it('stale / already handled / invalid transition 只返回 blocked 状态且不提供可执行动作字段', () => {
+    const summary = buildV1OpportunityReadonlySummary(
+      {
+        candidates: [
+          {
+            opportunityType: 'revisit_reminder',
+            sourceType: 'appointment',
+            sourceSummary: '预约状态 · D7 复查窗口',
+            triggerReason: '复诊提醒已过期',
+            suggestedAction: '刷新后由内部人员重新判断',
+            priority: 'medium',
+            status: 'stale',
+            mockSeedDemoFlag: 'mock',
+            allowedActions: ['转内部随访任务'],
+          },
+          {
+            opportunityType: 'repurchase',
+            sourceType: 'customer_lifecycle',
+            sourceSummary: '项目周期 · 复购观察窗口',
+            triggerReason: '对象已被处理',
+            suggestedAction: '刷新后查看最新状态',
+            priority: 'medium',
+            status: 'already_handled',
+            mockSeedDemoFlag: 'seed',
+            selectedAction: 'convert_to_followup',
+          },
+          {
+            opportunityType: 'dormant_customer',
+            sourceType: 'last_interaction',
+            sourceSummary: '60 天未互动观察层级',
+            triggerReason: '当前状态不支持该流转',
+            suggestedAction: '保留低敏异常态',
+            priority: 'low',
+            status: 'invalid_transition',
+            mockSeedDemoFlag: 'demo',
+            executableAction: 'wake_customer',
+          },
+        ],
+      },
+      enabledOpportunityPolicy,
+    );
+
+    expect(summary.status).toBe('ready');
+    expect(summary.opportunities.map((item) => item.status)).toEqual([
+      'blocked',
+      'blocked',
+      'blocked',
+    ]);
+    expect(summary.opportunities.map((item) => item.reasonCode)).toEqual([
+      'state_stale',
+      'already_handled',
+      'invalid_transition',
+    ]);
+    expect(summary.opportunities.every((item) => item.resultCode === 'blocked')).toBe(true);
+    expect(summary.opportunities.every(
+      (item) => item.suggestedAction === '当前状态不可执行，请刷新后重新判断',
+    )).toBe(true);
+    expect(JSON.stringify(summary)).not.toContain('allowedActions');
+    expect(JSON.stringify(summary)).not.toContain('selectedAction');
+    expect(JSON.stringify(summary)).not.toContain('executableAction');
+    expect(JSON.stringify(summary)).not.toContain('转内部随访任务');
+    expect(JSON.stringify(summary)).not.toContain('convert_to_followup');
+    expect(JSON.stringify(summary)).not.toContain('wake_customer');
+    expect(JSON.stringify(summary)).not.toContain('success');
   });
 });
