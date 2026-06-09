@@ -358,6 +358,52 @@ describe('V1 opportunity readonly 领域模型', () => {
     expect(JSON.stringify(tenantDeniedSummary)).not.toContain('institutionId');
   });
 
+  it('guard denied 或 disabled 时不返回候选详情、数量或来源摘要', () => {
+    const guardedInput = {
+      candidates: [
+        {
+          opportunityType: 'repurchase' as const,
+          sourceType: 'customer_lifecycle',
+          sourceSummary: '项目周期进入复购观察窗口',
+          triggerReason: '复购窗口试运行',
+          suggestedAction: '人工判断是否继续内部跟进',
+          priority: 'high' as const,
+          mockSeedDemoFlag: 'demo' as const,
+          candidateCount: 1,
+        },
+      ],
+    };
+    const summaries = [
+      buildV1OpportunityReadonlySummary(guardedInput, {
+        ...enabledOpportunityPolicy,
+        featureEnabled: false,
+      }),
+      buildV1OpportunityReadonlySummary(guardedInput, {
+        ...enabledOpportunityPolicy,
+        tenantScopeMatched: false,
+      }),
+      buildV1OpportunityReadonlySummary(guardedInput, {
+        ...enabledOpportunityPolicy,
+        canReadOpportunities: false,
+      }),
+    ];
+
+    expect(summaries.map((summary) => summary.opportunities)).toEqual([[], [], []]);
+    expect(summaries.map((summary) => summary.reasonCode)).toEqual([
+      'feature_flag_disabled',
+      'tenant_scope_mismatch',
+      'permission_denied',
+    ]);
+    summaries.forEach((summary) => {
+      const serialized = JSON.stringify(summary);
+
+      expect(serialized).not.toContain('项目周期进入复购观察窗口');
+      expect(serialized).not.toContain('复购窗口试运行');
+      expect(serialized).not.toContain('人工判断是否继续内部跟进');
+      expect(serialized).not.toContain('candidateCount');
+    });
+  });
+
   it('无候选机会时返回稳定空态且不误导为历史任务全部完成', () => {
     const summary = buildV1OpportunityReadonlySummary(
       {
@@ -472,6 +518,70 @@ describe('V1 opportunity readonly 领域模型', () => {
     forbiddenOpportunityFieldFragments.forEach((fragment) => {
       expect(serialized).not.toContain(fragment);
     });
+  });
+
+  it('混合候选只返回允许的低敏 readonly opportunity 且 dueDateWindow 可选', () => {
+    const summary = buildV1OpportunityReadonlySummary(
+      {
+        candidates: [
+          {
+            opportunityType: 'revisit_reminder',
+            sourceType: 'treatment_summary',
+            sourceSummary: '治疗后摘要 · D7 复查窗口',
+            triggerReason: '复诊窗口进入人工确认范围',
+            suggestedAction: '内部人员人工确认是否转随访',
+            priority: 'medium',
+            mockSeedDemoFlag: 'demo',
+            rawPayload: 'raw payload should not render',
+            token: 'token_should_not_render',
+          },
+          {
+            opportunityType: 'repurchase',
+            sourceType: '',
+            sourceSummary: '来源缺失候选不应出现在结果中',
+            triggerReason: '缺失来源类型',
+            suggestedAction: '不应展示',
+            priority: 'high',
+            mockSeedDemoFlag: 'seed',
+          },
+          {
+            opportunityType: 'dormant_customer',
+            sourceType: 'customer_lifecycle',
+            sourceSummary: '缺少演示标记候选不应出现在结果中',
+            triggerReason: '缺少 mock seed demo 标记',
+            suggestedAction: '不应展示',
+            priority: 'low',
+          },
+        ],
+      },
+      enabledOpportunityPolicy,
+    );
+
+    const serialized = JSON.stringify(summary);
+
+    expect(summary).toMatchObject({
+      status: 'ready',
+      reasonCode: 'candidate_ready',
+      resultCode: 'readonly',
+    });
+    expect(summary.opportunities).toHaveLength(1);
+    expect(summary.opportunities[0]).toEqual({
+      opportunityType: 'revisit_reminder',
+      sourceType: 'treatment_summary',
+      sourceSummary: '治疗后摘要 · D7 复查窗口',
+      triggerReason: '复诊窗口进入人工确认范围',
+      suggestedAction: '内部人员人工确认是否转随访',
+      priority: 'medium',
+      status: 'pending_confirmation',
+      mockSeedDemoFlag: 'demo',
+      reasonCode: 'candidate_ready',
+      resultCode: 'readonly',
+    });
+    expect(summary.opportunities[0]).not.toHaveProperty('dueDateWindow');
+    expect(serialized).not.toContain('来源缺失候选不应出现在结果中');
+    expect(serialized).not.toContain('缺少演示标记候选不应出现在结果中');
+    expect(serialized).not.toContain('raw payload');
+    expect(serialized).not.toContain('token_should_not_render');
   });
 
   it('stale / already handled / invalid transition 只返回 blocked 状态且不提供可执行动作字段', () => {
