@@ -28,6 +28,7 @@ import {
 } from '@/modules/institution/components/InstitutionPageState';
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 import { TreatmentSummaryManagementShell } from '@/modules/institution/components/TreatmentSummaryManagementShell';
+import { DashboardMetricsMockSection } from '@/modules/workspace/components/DashboardMetricsMockSection';
 import { ManualConfirmMockSection } from '@/modules/workspace/components/ManualConfirmMockSection';
 import { RepurchaseDormantOpportunityMockSection } from '@/modules/workspace/components/RepurchaseDormantOpportunityMockSection';
 import {
@@ -658,6 +659,7 @@ function InstitutionDashboardHome({
       <RevisitReminderMockSection />
       <RepurchaseDormantOpportunityMockSection />
       <ManualConfirmMockSection />
+      <DashboardMetricsMockSection />
 
       <FollowUpPathAnalysisPanel
         analysis={followUpPathAnalysis}
