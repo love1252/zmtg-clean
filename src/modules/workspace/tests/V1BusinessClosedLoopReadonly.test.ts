@@ -227,4 +227,119 @@ describe('V1 主业务闭环 readonly 边界', () => {
       expect(JSON.stringify(summary)).not.toContain('复诊窗口进入内部人工确认范围');
     });
   });
+
+  it('readonly opportunity 不应被解释为真实 dashboard aggregation 或真实业务动作', () => {
+    const opportunitySummary = buildV1OpportunityReadonlySummary(
+      {
+        candidates: [
+          {
+            opportunityType: 'revisit_reminder',
+            sourceType: 'treatment_summary',
+            sourceSummary: 'demo 治疗摘要 · D14 复查观察窗口',
+            triggerReason: 'mock 复诊观察进入内部只读提示范围',
+            suggestedAction: '内部人员人工查看低敏摘要',
+            priority: 'medium',
+            dueDateWindow: 'D14',
+            mockSeedDemoFlag: 'demo',
+            dashboardAggregation: 'real-metric-should-not-render',
+            realDashboardMetrics: { opportunityCount: 3 },
+            convertedAppointmentCount: 1,
+            createAppointment: 'real-appointment-action-should-not-render',
+          },
+          {
+            opportunityType: 'repurchase',
+            sourceType: 'customer_lifecycle',
+            sourceSummary: 'mock 项目周期 · 复购观察窗口',
+            triggerReason: 'seed 周期提示仅用于内部只读判断',
+            suggestedAction: '内部人员人工判断是否继续观察',
+            priority: 'high',
+            status: 'stale',
+            mockSeedDemoFlag: 'seed',
+            opportunityRuntime: 'real-runtime-should-not-render',
+            allowedActions: ['createTask'],
+            selectedAction: 'createOrder',
+            actionToken: 'mutation-token-should-not-render',
+            mutationPayload: { createPayment: true },
+          },
+        ],
+      },
+      readonlyPolicy,
+    );
+    const readonlyDashboardBoundary = {
+      boundary: 'internal_mock_demo_readonly_dashboard_boundary',
+      scope: 'readonly opportunity summary only',
+      opportunities: opportunitySummary,
+    };
+    const serialized = JSON.stringify(readonlyDashboardBoundary);
+    const forbiddenDashboardBoundaryTerms = [
+      'dashboardAggregation',
+      'dashboardAggregationRuntime',
+      'aggregationRuntime',
+      'realAggregation',
+      'realDashboardMetrics',
+      'opportunityAggregation',
+      'opportunityRuntime',
+      'realOpportunityRuntime',
+      'opportunityCount',
+      'convertedAppointmentCount',
+      'dealCount',
+      'paymentCount',
+      'contractCount',
+      'invoiceCount',
+      'createTask',
+      'createAppointment',
+      'createOrder',
+      'createPayment',
+      'createContract',
+      'createInvoice',
+      'autoMarketing',
+      'autoTouch',
+      '真实 dashboard aggregation',
+      '真实机会聚合',
+      '真实机会总数',
+      '真实转预约数',
+      '真实成交数',
+      '真实任务创建',
+      '真实预约创建',
+      '真实支付',
+      '真实合同',
+      '真实发票',
+      '自动营销',
+      '自动触达',
+      '可试点',
+      '可上线',
+      '客户上线',
+      '生产数据',
+      'allowedActions',
+      'selectedAction',
+      'executableAction',
+      'actionToken',
+      'mutationPayload',
+    ];
+
+    expect(opportunitySummary).toMatchObject({
+      status: 'ready',
+      reasonCode: 'candidate_ready',
+      resultCode: 'readonly',
+    });
+    expect(opportunitySummary.opportunities.map((opportunity) => opportunity.opportunityType)).toEqual([
+      'revisit_reminder',
+      'repurchase',
+    ]);
+    expect(opportunitySummary.opportunities.map((opportunity) => opportunity.resultCode)).toEqual([
+      'readonly',
+      'blocked',
+    ]);
+    expect(
+      opportunitySummary.opportunities.every((opportunity) =>
+        ['readonly', 'blocked', 'skipped', 'denied'].includes(opportunity.resultCode),
+      ),
+    ).toBe(true);
+    expect(serialized).toContain('internal_mock_demo_readonly_dashboard_boundary');
+    expect(serialized).toContain('demo 治疗摘要');
+    expect(serialized).toContain('mock 项目周期');
+    forbiddenDashboardBoundaryTerms.forEach((term) => {
+      expect(serialized).not.toContain(term);
+    });
+  });
 });
