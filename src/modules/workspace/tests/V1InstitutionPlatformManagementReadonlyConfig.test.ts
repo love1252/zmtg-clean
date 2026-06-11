@@ -4,6 +4,7 @@ import {
   defaultV1ManagementReadonlyConfigPolicy,
   v1ManagementReadonlyConfigItemFields,
 } from '@/modules/workspace/domain/v1-management-readonly-config-view-models';
+import { validateV1LowSensitivityFieldWhitelist } from '@/modules/workspace/domain/v1-low-sensitivity-field-whitelist';
 
 const enabledPolicy = {
   featureEnabled: true,
@@ -11,62 +12,29 @@ const enabledPolicy = {
   tenantScopeMatched: true,
 };
 
-const forbiddenConfigFragments = [
-  'phone',
-  'mobile',
-  'contact',
-  'idCard',
-  'identityCard',
-  'medicalRecord',
-  'diagnosis',
-  'treatmentRaw',
-  'hisRawPayload',
-  'credential',
-  'credentials',
-  'token',
-  'secret',
-  'password',
-  'DATABASE_URL',
-  'DB_URL',
-  'SQL',
-  'stack',
-  'tenantId',
-  'customerId',
-  'realCustomerData',
-  'modelApiKey',
-  'prompt',
-  'completion',
-  'payment',
-  'contract',
-  'invoice',
-  'allowedActions',
-  'selectedAction',
-  'executableAction',
-  'mutationPayload',
-  'createTask',
-  'createAppointment',
-  'createDeal',
-  'autoMarketing',
-  'autoTouch',
-  '真实 HIS',
-  '真实客户数据',
-  '真实模型',
-  '自动营销',
-  '自动触达',
-  '创建任务',
-  '创建预约',
-  '创建成交',
-  '支付',
-  '合同',
-  '发票',
+const managementReadonlySummaryFields = [
+  'status',
+  'reasonCode',
+  'resultCode',
+  'emptyCopy',
+  'exceptionCopy',
+  'items',
 ];
 
-function expectNoForbiddenConfigFragments(payload: unknown) {
-  const serialized = JSON.stringify(payload);
+const managementReadonlyLowSensitiveFields = [
+  ...managementReadonlySummaryFields,
+  ...v1ManagementReadonlyConfigItemFields,
+];
 
-  forbiddenConfigFragments.forEach((fragment) => {
-    expect(serialized).not.toContain(fragment);
+function expectManagementReadonlyLowSensitiveWhitelist(payload: unknown) {
+  const result = validateV1LowSensitivityFieldWhitelist(payload, {
+    allowedFields: managementReadonlyLowSensitiveFields,
   });
+
+  expect(result.valid).toBe(true);
+  expect(result.unknownFields).toEqual([]);
+  expect(result.forbiddenFields).toEqual([]);
+  expect(result.forbiddenValues).toEqual([]);
 }
 
 describe('V1 机构端与平台端管理只读配置 view model', () => {
@@ -100,7 +68,7 @@ describe('V1 机构端与平台端管理只读配置 view model', () => {
     });
     expect(JSON.stringify(summary)).not.toContain('机构随访 SOP 配置');
     expect(JSON.stringify(summary)).not.toContain('demo 机构内随访配置只读摘要');
-    expectNoForbiddenConfigFragments(summary);
+    expectManagementReadonlyLowSensitiveWhitelist(summary);
   });
 
   it('tenant mismatch 或 RBAC denied 时不泄露候选对象、数量或配置详情', () => {
@@ -143,7 +111,7 @@ describe('V1 机构端与平台端管理只读配置 view model', () => {
       expect(serialized).not.toContain('平台 AI 配置边界');
       expect(serialized).not.toContain('seed 平台 AI 只读配置摘要');
       expect(serialized).not.toContain('candidateCount');
-      expectNoForbiddenConfigFragments(summary);
+      expectManagementReadonlyLowSensitiveWhitelist(summary);
     });
   });
 
@@ -233,7 +201,7 @@ describe('V1 机构端与平台端管理只读配置 view model', () => {
       expect(Object.keys(item).sort()).toEqual([...v1ManagementReadonlyConfigItemFields].sort());
       expect(item.readonly).toBe(true);
     });
-    expectNoForbiddenConfigFragments(summary);
+    expectManagementReadonlyLowSensitiveWhitelist(summary);
   });
 
   it('混合候选只保留 mock / seed / demo 来源完整的低敏配置', () => {
@@ -310,6 +278,6 @@ describe('V1 机构端与平台端管理只读配置 view model', () => {
     expect(JSON.stringify(summary)).not.toContain('缺少配置 key');
     expect(JSON.stringify(summary)).not.toContain('select *');
     expect(JSON.stringify(summary)).not.toContain('DATABASE_URL');
-    expectNoForbiddenConfigFragments(summary);
+    expectManagementReadonlyLowSensitiveWhitelist(summary);
   });
 });
