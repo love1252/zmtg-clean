@@ -661,6 +661,7 @@ function InstitutionDashboardHome({
       <RepurchaseDormantOpportunityMockSection />
       <ManualConfirmMockSection />
       <DashboardMetricsMockSection />
+      <KnowledgeBaseDemoReadonlyEntrySection />
       <AuditTraceMockSection />
 
       <FollowUpPathAnalysisPanel
@@ -807,6 +808,60 @@ function InstitutionDashboardHome({
         </article>
       </section>
     </>
+  );
+}
+
+function KnowledgeBaseDemoReadonlyEntrySection() {
+  const boundaryItems = [
+    '不新增 API',
+    '不接 DB',
+    '不接真实 HIS',
+    '不读取 credential',
+    '不使用真实客户数据',
+    '不展示模型推理细节',
+  ];
+
+  return (
+    <section className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold tracking-normal text-slate-950">
+              知识库 demo readonly
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              机构工作台中的知识库只读入口，后续仅消费现有 demo readonly API。
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
+            只读入口
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
+            mock / seed / demo
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm leading-6 text-emerald-800">
+        当前只展示知识库 demo readonly 入口壳层；不会新增 API、写入数据或触发外部动作。
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {boundaryItems.map((item) => (
+          <div
+            key={item}
+            className="rounded-2xl border border-slate-200/80 bg-white/86 px-4 py-3 text-sm font-semibold text-slate-600"
+          >
+            {item}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
