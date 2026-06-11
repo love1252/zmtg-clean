@@ -32,6 +32,7 @@ import { AuditTraceMockSection } from '@/modules/workspace/components/AuditTrace
 import { DashboardMetricsMockSection } from '@/modules/workspace/components/DashboardMetricsMockSection';
 import { ManualConfirmMockSection } from '@/modules/workspace/components/ManualConfirmMockSection';
 import { RepurchaseDormantOpportunityMockSection } from '@/modules/workspace/components/RepurchaseDormantOpportunityMockSection';
+import type { V1KnowledgeBaseDemoReadonlyApiContractResponse } from '@/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-api-contract';
 import {
   listAppointments,
   listCustomers,
@@ -108,6 +109,11 @@ const followUpPathAnalysisToneClasses = {
   rose: 'border-rose-200 bg-rose-50 text-rose-700',
   cyan: 'border-cyan-200 bg-cyan-50 text-cyan-700',
 } satisfies Record<(typeof followUpPathAnalysisMetricItems)[number]['tone'], string>;
+
+type KnowledgeBaseDemoReadonlyEntryState =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'loaded'; response: V1KnowledgeBaseDemoReadonlyApiContractResponse };
 
 const followUpPathBoundaryLabels = [
   '当前为只读聚合指标',
@@ -812,7 +818,11 @@ function InstitutionDashboardHome({
 }
 
 function KnowledgeBaseDemoReadonlyEntrySection() {
+  const [entryState, setEntryState] = useState<KnowledgeBaseDemoReadonlyEntryState>({
+    status: 'loading',
+  });
   const boundaryItems = [
+    '只调用现有 GET API',
     '不新增 API',
     '不接 DB',
     '不接真实 HIS',
@@ -820,6 +830,39 @@ function KnowledgeBaseDemoReadonlyEntrySection() {
     '不使用真实客户数据',
     '不展示模型推理细节',
   ];
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadKnowledgeBaseDemoReadonly() {
+      try {
+        const response = await fetch('/api/v1/knowledge-base/demo-readonly', {
+          cache: 'no-store',
+        });
+
+        if (!response.ok) {
+          throw new Error('knowledge_base_demo_readonly_unavailable');
+        }
+
+        const payload =
+          (await response.json()) as V1KnowledgeBaseDemoReadonlyApiContractResponse;
+
+        if (isMounted) {
+          setEntryState({ status: 'loaded', response: payload });
+        }
+      } catch {
+        if (isMounted) {
+          setEntryState({ status: 'error' });
+        }
+      }
+    }
+
+    void loadKnowledgeBaseDemoReadonly();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <section className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
@@ -833,7 +876,7 @@ function KnowledgeBaseDemoReadonlyEntrySection() {
               知识库 demo readonly
             </h2>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              机构工作台中的知识库只读入口，后续仅消费现有 demo readonly API。
+              机构工作台中的知识库只读入口，仅消费现有 demo readonly API。
             </p>
           </div>
         </div>
@@ -848,7 +891,7 @@ function KnowledgeBaseDemoReadonlyEntrySection() {
       </div>
 
       <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm leading-6 text-emerald-800">
-        当前只展示知识库 demo readonly 入口壳层；不会新增 API、写入数据或触发外部动作。
+        当前仅调用 GET /api/v1/knowledge-base/demo-readonly；不会新增 API、写入数据或触发外部动作。
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -861,8 +904,95 @@ function KnowledgeBaseDemoReadonlyEntrySection() {
           </div>
         ))}
       </div>
+
+      <KnowledgeBaseDemoReadonlyEntryBody state={entryState} />
     </section>
   );
+}
+
+function KnowledgeBaseDemoReadonlyEntryBody({
+  state,
+}: {
+  state: KnowledgeBaseDemoReadonlyEntryState;
+}) {
+  if (state.status === 'loading') {
+    return (
+      <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm font-semibold text-slate-500">
+        正在加载知识库 demo readonly...
+      </div>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-5">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div>
+            <h3 className="text-sm font-semibold text-amber-900">
+              知识库 demo readonly 暂时不可用
+            </h3>
+            <p className="mt-1 text-sm leading-6 text-amber-800">
+              请稍后刷新页面，当前不会影响机构工作台其他只读摘要。
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const { response } = state;
+
+  return (
+    <div className="mt-5 rounded-2xl border border-slate-200/80 bg-white/86 px-4 py-4">
+      <div className="mb-3 text-xs font-semibold uppercase tracking-normal text-slate-400">
+        api status
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold tracking-normal text-slate-950">
+            {knowledgeBaseDemoReadonlyStatusLabel(response)}
+          </h3>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            {response.summary.description}
+          </p>
+        </div>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+          {response.summary.statusText}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function knowledgeBaseDemoReadonlyStatusLabel(
+  response: V1KnowledgeBaseDemoReadonlyApiContractResponse,
+) {
+  if (response.status === 'disabled') {
+    return '知识库 demo readonly 暂未开启';
+  }
+
+  if (response.status === 'denied') {
+    return '当前账号没有知识库 demo readonly 访问权限';
+  }
+
+  if (response.status === 'empty') {
+    return '暂无可展示知识库 demo readonly 内容';
+  }
+
+  if (response.status === 'exception') {
+    return '知识库 demo readonly 来源不完整';
+  }
+
+  if (response.status === 'partial') {
+    return '知识库 demo readonly 部分可用';
+  }
+
+  if (response.status === 'stale') {
+    return '知识库 demo readonly 可能已过期';
+  }
+
+  return '知识库 demo readonly 已就绪';
 }
 
 function RevisitReminderMockSection() {

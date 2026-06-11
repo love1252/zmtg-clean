@@ -842,6 +842,57 @@ function fetchPath(input: Parameters<typeof fetch>[0]) {
   return input.url;
 }
 
+type KnowledgeBaseDemoReadonlyMockStatus = 'disabled' | 'denied' | 'empty' | 'ready';
+
+function buildKnowledgeBaseDemoReadonlyMockResponse(status: KnowledgeBaseDemoReadonlyMockStatus) {
+  const statusTextByStatus = {
+    disabled: 'disabled / skipped',
+    denied: 'denied / denied',
+    empty: 'empty / empty',
+    ready: 'ready / readonly',
+  } satisfies Record<KnowledgeBaseDemoReadonlyMockStatus, string>;
+  const descriptionByStatus = {
+    disabled: '该知识库 demo readonly API 暂未开启',
+    denied: '当前账号没有访问知识库 demo readonly API 的权限',
+    empty: '暂无可展示知识库 demo readonly 内容',
+    ready: '知识库 demo readonly API 可用于低敏只读演示',
+  } satisfies Record<KnowledgeBaseDemoReadonlyMockStatus, string>;
+
+  return {
+    requestId: `mock-demo-readonly-${status}`,
+    tenantId: 'demo-tenant-a',
+    institutionId: 'demo-inst-a',
+    workspaceId: 'demo-workspace-a',
+    status,
+    summary: {
+      title: '知识库 demo readonly API 契约',
+      statusText: statusTextByStatus[status],
+      description: descriptionByStatus[status],
+    },
+    categories: [],
+    folders: [],
+    knowledgeItems: [],
+    taskRecords: [],
+    searchPreview: {
+      mode: 'mock_demo_preview',
+      query: '知识库 demo 只读预览',
+      resultCount: 0,
+      results: [],
+      readonly: true,
+    },
+    facade: {
+      status,
+      facadeStatus: status,
+      governanceSummary: 'not_available',
+      demoSourceSummary: 'not_available',
+      readonly: true,
+    },
+    riskFlags: [],
+    recommendedReadonlyActions: [],
+    readonly: true,
+  };
+}
+
 type WorkspaceTreatmentSummaryPage = {
   records: unknown[];
   pageInfo: unknown;
@@ -878,6 +929,12 @@ type WorkspaceFetchOptions = {
     status: number;
     message: string;
   };
+  knowledgeBaseDemoReadonlyResponse?: unknown;
+  knowledgeBaseDemoReadonlyError?: {
+    status: number;
+    message: string;
+  };
+  knowledgeBaseDemoReadonlyPending?: boolean;
   timeline?: unknown;
   treatmentSummaryRecord?: unknown;
   treatmentSummaryMutationError?: {
@@ -937,6 +994,9 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     platformAuditEvents = [platformAuditEventRecord],
     platformTenants = [platformTenantRecord],
     platformTenantError,
+    knowledgeBaseDemoReadonlyResponse = buildKnowledgeBaseDemoReadonlyMockResponse('ready'),
+    knowledgeBaseDemoReadonlyError,
+    knowledgeBaseDemoReadonlyPending = false,
     timeline = customerTimelineResponse,
     treatmentSummaryRecord = phase13CreatedTreatmentSummary,
     treatmentSummaryMutationError,
@@ -967,6 +1027,21 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
 
       if (path === '/api/auth/session') {
         return jsonResponse({ authenticated: true, user: { role } });
+      }
+
+      if (path === '/api/v1/knowledge-base/demo-readonly') {
+        if (knowledgeBaseDemoReadonlyPending) {
+          return new Promise<Response>(() => {});
+        }
+
+        if (knowledgeBaseDemoReadonlyError) {
+          return jsonResponse(
+            { error: knowledgeBaseDemoReadonlyError.message },
+            { status: knowledgeBaseDemoReadonlyError.status },
+          );
+        }
+
+        return jsonResponse(knowledgeBaseDemoReadonlyResponse);
       }
 
       if (institutionError?.path === path) {
@@ -1823,12 +1898,16 @@ describe('工作台入口页面', () => {
     expect(screen.getByRole('heading', { name: '知识库 demo readonly' })).toBeInTheDocument();
     expect(screen.getByText('只读入口')).toBeInTheDocument();
     expect(screen.getByText('mock / seed / demo')).toBeInTheDocument();
+    expect(screen.getByText('只调用现有 GET API')).toBeInTheDocument();
     expect(screen.getByText('不新增 API')).toBeInTheDocument();
     expect(screen.getByText('不接 DB')).toBeInTheDocument();
     expect(screen.getByText('不接真实 HIS')).toBeInTheDocument();
     expect(screen.getByText('不读取 credential')).toBeInTheDocument();
     expect(screen.getByText('不使用真实客户数据')).toBeInTheDocument();
     expect(screen.getByText('不展示模型推理细节')).toBeInTheDocument();
+    expect(await screen.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
+    expect(screen.getByText('ready / readonly')).toBeInTheDocument();
+    expect(screen.getByText('知识库 demo readonly API 可用于低敏只读演示')).toBeInTheDocument();
     expect(screen.getByText(/部分重复来源任务冲突审计未能通过 resourceId/u)).toBeInTheDocument();
     expect(container.textContent ?? '').not.toContain('Phase21 客户明细不应展示');
     expect(container.textContent ?? '').not.toContain('fu_phase21_sensitive');
@@ -1873,6 +1952,15 @@ describe('工作台入口页面', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/institution/follow-up-path-analysis', {
       cache: 'no-store',
     });
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/knowledge-base/demo-readonly', {
+      cache: 'no-store',
+    });
+    const knowledgeBaseDemoReadonlyCall = fetchMock.mock.calls.find(
+      ([input]) => fetchPath(input) === '/api/v1/knowledge-base/demo-readonly',
+    );
+    expect(knowledgeBaseDemoReadonlyCall).toBeDefined();
+    expect(knowledgeBaseDemoReadonlyCall?.[1]?.method).toBeUndefined();
+    expect(knowledgeBaseDemoReadonlyCall?.[1]?.body).toBeUndefined();
     const analysisCall = fetchMock.mock.calls.find(
       ([input]) => fetchPath(input) === '/api/institution/follow-up-path-analysis',
     );
@@ -1919,6 +2007,74 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('资源 ID：cust_phase5_closeout')).toBeInTheDocument();
     expectOnlyInstitutionReadCalls(fetchMock);
   });
+
+  it('机构工作台知识库 demo readonly 入口展示 loading 状态', async () => {
+    mockWorkspaceFetch({ knowledgeBaseDemoReadonlyPending: true });
+    render(<HospitalPage />);
+
+    const knowledgeBaseEntry = (await screen.findByRole('heading', {
+      name: '知识库 demo readonly',
+    })).closest('section');
+
+    expect(knowledgeBaseEntry).not.toBeNull();
+    expect(
+      within(knowledgeBaseEntry as HTMLElement).getByText('正在加载知识库 demo readonly...'),
+    ).toBeInTheDocument();
+  });
+
+  it('机构工作台知识库 demo readonly 入口展示低敏 error 状态', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      knowledgeBaseDemoReadonlyError: {
+        status: 503,
+        message: 'worker stack /tmp/demo dependency error',
+      },
+    });
+    render(<HospitalPage />);
+
+    const knowledgeBaseEntry = (await screen.findByRole('heading', {
+      name: '知识库 demo readonly',
+    })).closest('section');
+    const knowledgeBaseEntryView = within(knowledgeBaseEntry as HTMLElement);
+
+    expect(await knowledgeBaseEntryView.findByText('知识库 demo readonly 暂时不可用')).toBeInTheDocument();
+    expect(knowledgeBaseEntry?.textContent ?? '').not.toContain('worker');
+    expect(knowledgeBaseEntry?.textContent ?? '').not.toContain('/tmp/demo');
+    expect(knowledgeBaseEntry?.textContent ?? '').not.toContain('dependency error');
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => fetchPath(input) === '/api/v1/knowledge-base/demo-readonly',
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    ['disabled', '知识库 demo readonly 暂未开启', 'disabled / skipped'],
+    ['denied', '当前账号没有知识库 demo readonly 访问权限', 'denied / denied'],
+    ['empty', '暂无可展示知识库 demo readonly 内容', 'empty / empty'],
+  ] as const)(
+    '机构工作台知识库 demo readonly 入口展示 %s 状态',
+    async (status, label, statusText) => {
+      const fetchMock = mockWorkspaceFetch({
+        knowledgeBaseDemoReadonlyResponse: buildKnowledgeBaseDemoReadonlyMockResponse(status),
+      });
+      render(<HospitalPage />);
+
+      const knowledgeBaseEntry = (await screen.findByRole('heading', {
+        name: '知识库 demo readonly',
+      })).closest('section');
+      const knowledgeBaseEntryView = within(knowledgeBaseEntry as HTMLElement);
+
+      expect((await knowledgeBaseEntryView.findAllByText(label)).length).toBeGreaterThan(0);
+      expect(knowledgeBaseEntryView.getByText(statusText)).toBeInTheDocument();
+      expect(
+        fetchMock.mock.calls.every(
+          ([input, init]) =>
+            fetchPath(input) !== '/api/v1/knowledge-base/demo-readonly' ||
+            ((init?.method ?? 'GET') === 'GET' && init?.body === undefined),
+        ),
+      ).toBe(true);
+    },
+  );
 
   it('demo seed smoke 支撑机构端演示主线入口、客户、预约、时间线、摘要、随访和审计', async () => {
     const demoSeed = buildDemoSeedWorkspaceSmokeFixtures();
