@@ -1818,8 +1818,17 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('不展示客户明细')).toBeInTheDocument();
     expect(screen.getByText('不展示任务列表')).toBeInTheDocument();
     expect(screen.getByText('不展示治疗正文、病历正文、咨询全文')).toBeInTheDocument();
-    expect(screen.getByText('不自动触达客户')).toBeInTheDocument();
+    expect(screen.getAllByText('不自动触达客户').length).toBeGreaterThan(0);
     expect(screen.getByText('不接 AI')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '知识库 demo readonly' })).toBeInTheDocument();
+    expect(screen.getByText('只读入口')).toBeInTheDocument();
+    expect(screen.getByText('mock / seed / demo')).toBeInTheDocument();
+    expect(screen.getByText('不新增 API')).toBeInTheDocument();
+    expect(screen.getByText('不接 DB')).toBeInTheDocument();
+    expect(screen.getByText('不接真实 HIS')).toBeInTheDocument();
+    expect(screen.getByText('不读取 credential')).toBeInTheDocument();
+    expect(screen.getByText('不使用真实客户数据')).toBeInTheDocument();
+    expect(screen.getByText('不展示模型推理细节')).toBeInTheDocument();
     expect(screen.getByText(/部分重复来源任务冲突审计未能通过 resourceId/u)).toBeInTheDocument();
     expect(container.textContent ?? '').not.toContain('Phase21 客户明细不应展示');
     expect(container.textContent ?? '').not.toContain('fu_phase21_sensitive');
@@ -3231,8 +3240,8 @@ describe('工作台入口页面', () => {
     expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '商业化健康' })).toBeInTheDocument();
     expect(screen.getByText('套餐覆盖率')).toBeInTheDocument();
-    expect(screen.getByText('暂无需要收尾关注的商业化健康信号')).toBeInTheDocument();
-    expect(screen.getByText('智美天工演示机构')).toBeInTheDocument();
+    expect(screen.getAllByText('暂无需要收尾关注的商业化健康信号').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('智美天工演示机构').length).toBeGreaterThan(0);
     expect(screen.getByText('租户状态：active')).toBeInTheDocument();
     expect(screen.getByText('套餐名称：成长版')).toBeInTheDocument();
     expect(screen.getByText('套餐编号：growth-care')).toBeInTheDocument();
@@ -3285,7 +3294,7 @@ describe('工作台入口页面', () => {
     expect(within(commercialHealth).getByText('配额风险项')).toBeInTheDocument();
     expect(within(commercialHealth).getAllByText('配置缺失租户').length).toBeGreaterThan(0);
     expect(within(commercialHealth).getByText('近期 quota denied')).toBeInTheDocument();
-    expect(within(commercialHealth).getByText('Phase11 配额风险机构')).toBeInTheDocument();
+    expect(within(commercialHealth).getAllByText('Phase11 配额风险机构').length).toBeGreaterThan(0);
     expect(within(commercialHealth).getByText(/客户.*88 \/ 100/)).toBeInTheDocument();
     expect(within(commercialHealth).getByText('Phase11 配置缺失机构')).toBeInTheDocument();
     expect(within(commercialHealth).getByText('缺少 active plan')).toBeInTheDocument();
