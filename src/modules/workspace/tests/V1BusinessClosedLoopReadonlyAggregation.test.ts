@@ -4,6 +4,7 @@ import {
   defaultV1BusinessClosedLoopReadonlyAggregationPolicy,
   v1BusinessClosedLoopReadonlyAggregationItemFields,
 } from '@/modules/workspace/domain/v1-business-closed-loop-readonly-aggregation-view-models';
+import { validateV1LowSensitivityFieldWhitelist } from '@/modules/workspace/domain/v1-low-sensitivity-field-whitelist';
 
 const enabledPolicy = {
   featureEnabled: true,
@@ -11,68 +12,29 @@ const enabledPolicy = {
   tenantScopeMatched: true,
 };
 
-const forbiddenAggregationFragments = [
-  'phone',
-  'mobile',
-  'contact',
-  'idCard',
-  'identityCard',
-  'medicalRecord',
-  'diagnosis',
-  'treatmentRaw',
-  'consultationRaw',
-  'hisConnection',
-  'hisRawPayload',
-  'credential',
-  'credentials',
-  'token',
-  'secret',
-  'password',
-  'DATABASE_URL',
-  'DB_URL',
-  'SQL',
-  'stack',
-  'tenantId',
-  'customerId',
-  'customerList',
-  'realCustomerData',
-  'modelApiKey',
-  'prompt',
-  'completion',
-  'payment',
-  'contract',
-  'invoice',
-  'allowedActions',
-  'selectedAction',
-  'executableAction',
-  'actionToken',
-  'mutationPayload',
-  'createTask',
-  'createAppointment',
-  'createDeal',
-  'autoMarketing',
-  'autoTouch',
-  '真实 HIS',
-  '真实客户数据',
-  '真实模型',
-  '自动营销',
-  '自动触达',
-  '创建任务',
-  '创建预约',
-  '创建成交',
-  '支付',
-  '合同',
-  '发票',
-  '可试点',
-  '可上线',
+const closedLoopAggregationSummaryFields = [
+  'status',
+  'reasonCode',
+  'resultCode',
+  'emptyCopy',
+  'exceptionCopy',
+  'items',
 ];
 
-function expectNoForbiddenAggregationFragments(payload: unknown) {
-  const serialized = JSON.stringify(payload);
+const closedLoopAggregationLowSensitiveFields = [
+  ...closedLoopAggregationSummaryFields,
+  ...v1BusinessClosedLoopReadonlyAggregationItemFields,
+];
 
-  forbiddenAggregationFragments.forEach((fragment) => {
-    expect(serialized).not.toContain(fragment);
+function expectClosedLoopAggregationLowSensitiveWhitelist(payload: unknown) {
+  const result = validateV1LowSensitivityFieldWhitelist(payload, {
+    allowedFields: closedLoopAggregationLowSensitiveFields,
   });
+
+  expect(result.valid).toBe(true);
+  expect(result.unknownFields).toEqual([]);
+  expect(result.forbiddenFields).toEqual([]);
+  expect(result.forbiddenValues).toEqual([]);
 }
 
 describe('V1 主业务闭环只读聚合 view model', () => {
@@ -106,7 +68,7 @@ describe('V1 主业务闭环只读聚合 view model', () => {
     });
     expect(JSON.stringify(summary)).not.toContain('机会只读候选');
     expect(JSON.stringify(summary)).not.toContain('demo 机会只读摘要');
-    expectNoForbiddenAggregationFragments(summary);
+    expectClosedLoopAggregationLowSensitiveWhitelist(summary);
   });
 
   it('tenant mismatch 或 RBAC denied 时返回低敏 denied 且不泄露候选数量或来源摘要', () => {
@@ -149,7 +111,7 @@ describe('V1 主业务闭环只读聚合 view model', () => {
       expect(serialized).not.toContain('机构管理配置');
       expect(serialized).not.toContain('seed 管理配置只读摘要');
       expect(serialized).not.toContain('candidateCount');
-      expectNoForbiddenAggregationFragments(summary);
+      expectClosedLoopAggregationLowSensitiveWhitelist(summary);
     });
   });
 
@@ -280,7 +242,7 @@ describe('V1 主业务闭环只读聚合 view model', () => {
       expect(item.readonly).toBe(true);
       expect(item.resultCode).toBe('readonly');
     });
-    expectNoForbiddenAggregationFragments(summary);
+    expectClosedLoopAggregationLowSensitiveWhitelist(summary);
   });
 
   it('混合候选只保留 mock / seed / demo 来源完整的低敏聚合项', () => {
@@ -377,6 +339,6 @@ describe('V1 主业务闭环只读聚合 view model', () => {
     expect(JSON.stringify(summary)).not.toContain('真实模型输出不应展示');
     expect(JSON.stringify(summary)).not.toContain('select *');
     expect(JSON.stringify(summary)).not.toContain('DATABASE_URL');
-    expectNoForbiddenAggregationFragments(summary);
+    expectClosedLoopAggregationLowSensitiveWhitelist(summary);
   });
 });
