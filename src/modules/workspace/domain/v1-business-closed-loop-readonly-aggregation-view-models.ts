@@ -1,3 +1,5 @@
+import { evaluateV1ReadonlyFeaturePolicy } from './v1-readonly-feature-policy';
+
 export type V1BusinessClosedLoopReadonlyAggregationPolicy = {
   featureEnabled: boolean;
   canReadClosedLoopAggregation: boolean;
@@ -109,6 +111,17 @@ const disabledCopy = '该主业务闭环只读聚合能力暂未开启';
 const emptyCopy = '暂无可展示主业务闭环聚合';
 const deniedCopy = '当前账号没有访问权限';
 const sourceMissingCopy = '主业务闭环聚合来源不完整，仅作内部参考';
+const closedLoopAggregationPolicyReasonCodes = {
+  empty: 'no_closed_loop_aggregation_candidates',
+  exception: 'closed_loop_aggregation_source_missing',
+  ready: 'closed_loop_aggregation_ready',
+} as const;
+const closedLoopAggregationPolicyCopies = {
+  disabled: disabledCopy,
+  denied: deniedCopy,
+  empty: emptyCopy,
+  exception: sourceMissingCopy,
+} as const;
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -196,70 +209,63 @@ function toReadonlyAggregationItem(
   };
 }
 
+function evaluateClosedLoopReadonlyAggregationPolicy(
+  policy: V1BusinessClosedLoopReadonlyAggregationPolicy,
+  candidateCount: number,
+  readonlyItemCount?: number,
+) {
+  return evaluateV1ReadonlyFeaturePolicy({
+    featureEnabled: policy.featureEnabled,
+    tenantScopeMatched: policy.tenantScopeMatched,
+    canRead: policy.canReadClosedLoopAggregation,
+    candidateCount,
+    ...(readonlyItemCount === undefined ? {} : { readonlyItemCount }),
+    reasonCodes: closedLoopAggregationPolicyReasonCodes,
+    copies: closedLoopAggregationPolicyCopies,
+  });
+}
+
+function toClosedLoopReadonlyAggregationEmptySummary(
+  result: ReturnType<typeof evaluateClosedLoopReadonlyAggregationPolicy>,
+): V1BusinessClosedLoopReadonlyAggregationSummary {
+  return {
+    status: result.status,
+    reasonCode: result.reasonCode,
+    resultCode: result.resultCode,
+    ...(result.emptyCopy === undefined ? {} : { emptyCopy: result.emptyCopy }),
+    ...(result.exceptionCopy === undefined ? {} : { exceptionCopy: result.exceptionCopy }),
+    items: [],
+  };
+}
+
 export function buildV1BusinessClosedLoopReadonlyAggregationSummary(
   input: V1BusinessClosedLoopReadonlyAggregationInput,
   policy: V1BusinessClosedLoopReadonlyAggregationPolicy,
 ): V1BusinessClosedLoopReadonlyAggregationSummary {
-  if (!policy.featureEnabled) {
-    return {
-      status: 'disabled',
-      reasonCode: 'feature_flag_disabled',
-      resultCode: 'skipped',
-      emptyCopy: disabledCopy,
-      items: [],
-    };
-  }
-
-  if (!policy.tenantScopeMatched) {
-    return {
-      status: 'denied',
-      reasonCode: 'tenant_scope_mismatch',
-      resultCode: 'denied',
-      exceptionCopy: deniedCopy,
-      items: [],
-    };
-  }
-
-  if (!policy.canReadClosedLoopAggregation) {
-    return {
-      status: 'denied',
-      reasonCode: 'permission_denied',
-      resultCode: 'denied',
-      exceptionCopy: deniedCopy,
-      items: [],
-    };
-  }
-
   const candidates = input.candidates ?? [];
+  const guardResult = evaluateClosedLoopReadonlyAggregationPolicy(policy, candidates.length);
 
-  if (candidates.length === 0) {
-    return {
-      status: 'empty',
-      reasonCode: 'no_closed_loop_aggregation_candidates',
-      resultCode: 'empty',
-      emptyCopy,
-      items: [],
-    };
+  if (guardResult.status !== 'ready') {
+    return toClosedLoopReadonlyAggregationEmptySummary(guardResult);
   }
 
   const items = candidates
     .map((candidate) => toReadonlyAggregationItem(candidate))
     .filter((item): item is V1BusinessClosedLoopReadonlyAggregationItem => item !== null);
+  const finalPolicyResult = evaluateClosedLoopReadonlyAggregationPolicy(
+    policy,
+    candidates.length,
+    items.length,
+  );
 
-  if (items.length === 0) {
-    return {
-      status: 'exception',
-      reasonCode: 'closed_loop_aggregation_source_missing',
-      resultCode: 'unavailable',
-      exceptionCopy: sourceMissingCopy,
-      items: [],
-    };
+  if (finalPolicyResult.status !== 'ready') {
+    return toClosedLoopReadonlyAggregationEmptySummary(finalPolicyResult);
   }
 
   return {
-    status: 'ready',
-    reasonCode: 'closed_loop_aggregation_ready',
-    resultCode: 'readonly',
+    status: finalPolicyResult.status,
+    reasonCode: finalPolicyResult.reasonCode,
+    resultCode: finalPolicyResult.resultCode,
     items,
   };
 }
