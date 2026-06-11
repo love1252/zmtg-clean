@@ -942,26 +942,183 @@ function KnowledgeBaseDemoReadonlyEntryBody({
   }
 
   const { response } = state;
+  const statusLabel = knowledgeBaseDemoReadonlyStatusLabel(response);
+  const hasLowSensitiveSummary =
+    response.categories.length > 0 ||
+    response.folders.length > 0 ||
+    response.knowledgeItems.length > 0;
 
   return (
-    <div className="mt-5 rounded-2xl border border-slate-200/80 bg-white/86 px-4 py-4">
-      <div className="mb-3 text-xs font-semibold uppercase tracking-normal text-slate-400">
-        api status
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold tracking-normal text-slate-950">
-            {knowledgeBaseDemoReadonlyStatusLabel(response)}
-          </h3>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
-            {response.summary.description}
-          </p>
+    <div className="mt-5 space-y-4">
+      <div className="rounded-2xl border border-slate-200/80 bg-white/86 px-4 py-4">
+        <div className="mb-3 text-xs font-semibold uppercase tracking-normal text-slate-400">
+          summary
         </div>
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-          {response.summary.statusText}
-        </span>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold tracking-normal text-slate-950">
+              {statusLabel}
+            </h3>
+            <div className="mt-1 text-sm font-semibold text-slate-700">
+              {toKnowledgeBaseDemoReadonlySafeText(response.summary.title)}
+            </div>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              {toKnowledgeBaseDemoReadonlySafeText(response.summary.description)}
+            </p>
+          </div>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+            {toKnowledgeBaseDemoReadonlySafeText(response.summary.statusText)}
+          </span>
+        </div>
+      </div>
+
+      {hasLowSensitiveSummary ? (
+        <>
+          <div className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
+            <div className="text-xs font-semibold uppercase tracking-normal text-slate-400">
+              categories
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              {response.categories.map((category) => (
+                <article
+                  key={category.categoryId}
+                  className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4"
+                >
+                  <h4 className="text-sm font-semibold tracking-normal text-slate-950">
+                    {toKnowledgeBaseDemoReadonlySafeText(category.label)}
+                  </h4>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {toKnowledgeBaseDemoReadonlySafeText(category.summary)}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
+            <div className="text-xs font-semibold uppercase tracking-normal text-slate-400">
+              folders
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              {response.folders.map((folder) => (
+                <article
+                  key={folder.folderId}
+                  className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4"
+                >
+                  <h4 className="text-sm font-semibold tracking-normal text-slate-950">
+                    {toKnowledgeBaseDemoReadonlySafeText(folder.label)}
+                  </h4>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {toKnowledgeBaseDemoReadonlySafeText(folder.summary)}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
+            <div className="text-xs font-semibold uppercase tracking-normal text-slate-400">
+              knowledgeItems
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-3">
+              {response.knowledgeItems.map((item) => (
+                <article
+                  key={item.itemId}
+                  className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4"
+                >
+                  <h4 className="text-sm font-semibold tracking-normal text-slate-950">
+                    {toKnowledgeBaseDemoReadonlySafeText(item.title)}
+                  </h4>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {toKnowledgeBaseDemoReadonlySafeText(item.summary)}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm font-semibold text-slate-500">
+          暂无可展示低敏知识库摘要
+        </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
+          <div className="text-xs font-semibold uppercase tracking-normal text-slate-400">
+            taskRecords
+          </div>
+          <div className="mt-3 space-y-3">
+            {response.taskRecords.map((record) => (
+              <div
+                key={record.recordId}
+                className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-semibold tracking-normal text-slate-950">
+                    {toKnowledgeBaseDemoReadonlySafeText(record.title)}
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                    {toKnowledgeBaseDemoReadonlySafeText(record.status)}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {toKnowledgeBaseDemoReadonlySafeText(record.failureReason)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
+          <div className="text-xs font-semibold uppercase tracking-normal text-slate-400">
+            searchPreview
+          </div>
+          <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+            <div className="text-sm font-semibold tracking-normal text-slate-950">
+              {toKnowledgeBaseDemoReadonlySafeText(response.searchPreview.mode)}
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {toKnowledgeBaseDemoReadonlySafeText(response.searchPreview.query)}
+            </p>
+          </div>
+          <div className="mt-3 space-y-3">
+            {response.searchPreview.results.map((result) => (
+              <article
+                key={result.previewId}
+                className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-sm font-semibold tracking-normal text-slate-950">
+                    {toKnowledgeBaseDemoReadonlySafeText(result.title)}
+                  </h4>
+                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                    {toKnowledgeBaseDemoReadonlySafeText(result.sourceKind)}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {toKnowledgeBaseDemoReadonlySafeText(result.snippet)}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
+  );
+}
+
+function toKnowledgeBaseDemoReadonlySafeText(value: string) {
+  if (isKnowledgeBaseDemoReadonlyUnsafeText(value)) {
+    return '低敏摘要已隐藏';
+  }
+
+  return value;
+}
+
+function isKnowledgeBaseDemoReadonlyUnsafeText(value: string) {
+  return /真实客户|真实知识|手机号|身份证|病历|诊断|订单|支付|合同|发票|HIS|credential|token|secret|apiKey|raw|payload|worker|stack|dependency|\/tmp|模型输出|prompt|completion|embedding|vector|retrieval|创建任务|预约|触达|营销|成交/u.test(
+    value,
   );
 }
 

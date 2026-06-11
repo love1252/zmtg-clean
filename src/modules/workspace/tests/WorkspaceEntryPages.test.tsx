@@ -845,6 +845,7 @@ function fetchPath(input: Parameters<typeof fetch>[0]) {
 type KnowledgeBaseDemoReadonlyMockStatus = 'disabled' | 'denied' | 'empty' | 'ready';
 
 function buildKnowledgeBaseDemoReadonlyMockResponse(status: KnowledgeBaseDemoReadonlyMockStatus) {
+  const hasContent = status === 'ready';
   const statusTextByStatus = {
     disabled: 'disabled / skipped',
     denied: 'denied / denied',
@@ -869,27 +870,166 @@ function buildKnowledgeBaseDemoReadonlyMockResponse(status: KnowledgeBaseDemoRea
       statusText: statusTextByStatus[status],
       description: descriptionByStatus[status],
     },
-    categories: [],
-    folders: [],
-    knowledgeItems: [],
-    taskRecords: [],
+    categories: hasContent
+      ? [
+          {
+            categoryId: 'platform-knowledge-base',
+            label: '平台知识库',
+            summary: 'platform:1 / published:1 / draft:0 / archived:0 / disabled:0',
+            readonly: true,
+          },
+          {
+            categoryId: 'institution-knowledge-base',
+            label: '机构知识库',
+            summary: 'institution:1 / published:0 / draft:1 / archived:0 / disabled:0',
+            readonly: true,
+          },
+        ]
+      : [],
+    folders: hasContent
+      ? [
+          {
+            folderId: 'catalog-summary',
+            label: '目录总览',
+            summary: '平台知识库 / FAQ；机构知识库 / FAQ',
+            readonly: true,
+          },
+          {
+            folderId: 'visibility-summary',
+            label: '可见范围',
+            summary: 'specified_institution:demo-inst-a；institution_private:demo-inst-a',
+            readonly: true,
+          },
+        ]
+      : [],
+    knowledgeItems: hasContent
+      ? [
+          {
+            itemId: 'publish-status-summary',
+            title: '发布状态总览',
+            summary: 'published:1 / draft:1',
+            status,
+            readonly: true,
+          },
+          {
+            itemId: 'version-summary',
+            title: '版本总览',
+            summary: 'v1；v2-review',
+            status,
+            readonly: true,
+          },
+          {
+            itemId: 'audit-summary',
+            title: '审计总览',
+            summary: 'approved:1 / pending:1',
+            status,
+            readonly: true,
+          },
+        ]
+      : [],
+    taskRecords: [
+      {
+        recordId: `demo-readonly-facade-${status}`,
+        status: hasContent ? 'ready' : status,
+        title: '知识库 demo readonly facade',
+        failureReason: hasContent ? 'not_available' : descriptionByStatus[status],
+        readonly: true,
+      },
+    ],
     searchPreview: {
       mode: 'mock_demo_preview',
       query: '知识库 demo 只读预览',
-      resultCount: 0,
-      results: [],
+      resultCount: hasContent ? 2 : 0,
+      results: hasContent
+        ? [
+            {
+              previewId: 'platform-knowledge-base-preview',
+              title: '平台知识库 demo 预览',
+              snippet: 'platform:1 / published:1 / draft:0 / archived:0 / disabled:0',
+              sourceKind: 'demo',
+              readonly: true,
+            },
+            {
+              previewId: 'institution-knowledge-base-preview',
+              title: '机构知识库 seed 预览',
+              snippet: 'institution:1 / published:0 / draft:1 / archived:0 / disabled:0',
+              sourceKind: 'seed',
+              readonly: true,
+            },
+          ]
+        : [],
       readonly: true,
     },
     facade: {
       status,
       facadeStatus: status,
-      governanceSummary: 'not_available',
-      demoSourceSummary: 'not_available',
+      governanceSummary: hasContent ? '治理总览：ready demo readonly' : 'not_available',
+      demoSourceSummary: hasContent ? 'demo source ready' : 'not_available',
       readonly: true,
     },
-    riskFlags: [],
-    recommendedReadonlyActions: [],
+    riskFlags: hasContent ? ['none'] : [],
+    recommendedReadonlyActions: hasContent ? ['review_demo_readonly_summary'] : [],
     readonly: true,
+  };
+}
+
+function buildKnowledgeBaseDemoReadonlyUnsafeMockResponse() {
+  const response = buildKnowledgeBaseDemoReadonlyMockResponse('ready');
+
+  return {
+    ...response,
+    summary: {
+      ...response.summary,
+      title: '真实客户姓名 张三 知识库',
+      description: 'raw HIS payload credentialRef 模型输出 支付已完成 合同已完成 发票已完成',
+    },
+    categories: [
+      {
+        categoryId: 'platform-knowledge-base',
+        label: '真实客户标签 张三',
+        summary: '手机号 13800001252 身份证 110101199001010011',
+        readonly: true,
+      },
+    ],
+    folders: [
+      {
+        folderId: 'catalog-summary',
+        label: 'HIS 原始目录',
+        summary: 'credential token secret apiKey',
+        readonly: true,
+      },
+    ],
+    knowledgeItems: [
+      {
+        itemId: 'publish-status-summary',
+        title: '模型输出摘要',
+        summary: 'embedding vector retrieval 真实检索召回',
+        status: 'ready',
+        readonly: true,
+      },
+    ],
+    taskRecords: [
+      {
+        recordId: 'demo-readonly-facade-ready',
+        status: 'ready',
+        title: '创建任务 预约 触达 营销 成交',
+        failureReason: 'worker stack /tmp/demo dependency error',
+        readonly: true,
+      },
+    ],
+    searchPreview: {
+      ...response.searchPreview,
+      query: 'AI 问答入口 retrieval',
+      results: [
+        {
+          previewId: 'platform-knowledge-base-preview',
+          title: '真实知识正文',
+          snippet: '完整病历正文 embedding vector retrieval',
+          sourceKind: 'demo',
+          readonly: true,
+        },
+      ],
+    },
   };
 }
 
@@ -1908,6 +2048,24 @@ describe('工作台入口页面', () => {
     expect(await screen.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
     expect(screen.getByText('ready / readonly')).toBeInTheDocument();
     expect(screen.getByText('知识库 demo readonly API 可用于低敏只读演示')).toBeInTheDocument();
+    expect(screen.getByText('知识库 demo readonly API 契约')).toBeInTheDocument();
+    expect(screen.getByText('categories')).toBeInTheDocument();
+    expect(screen.getByText('folders')).toBeInTheDocument();
+    expect(screen.getByText('knowledgeItems')).toBeInTheDocument();
+    expect(screen.getByText('taskRecords')).toBeInTheDocument();
+    expect(screen.getByText('searchPreview')).toBeInTheDocument();
+    expect(screen.getByText('平台知识库')).toBeInTheDocument();
+    expect(screen.getByText('机构知识库')).toBeInTheDocument();
+    expect(screen.getByText('目录总览')).toBeInTheDocument();
+    expect(screen.getByText('可见范围')).toBeInTheDocument();
+    expect(screen.getByText('发布状态总览')).toBeInTheDocument();
+    expect(screen.getByText('版本总览')).toBeInTheDocument();
+    expect(screen.getByText('审计总览')).toBeInTheDocument();
+    expect(screen.getByText('知识库 demo readonly facade')).toBeInTheDocument();
+    expect(screen.getByText('mock_demo_preview')).toBeInTheDocument();
+    expect(screen.getByText('知识库 demo 只读预览')).toBeInTheDocument();
+    expect(screen.getByText('平台知识库 demo 预览')).toBeInTheDocument();
+    expect(screen.getByText('机构知识库 seed 预览')).toBeInTheDocument();
     expect(screen.getByText(/部分重复来源任务冲突审计未能通过 resourceId/u)).toBeInTheDocument();
     expect(container.textContent ?? '').not.toContain('Phase21 客户明细不应展示');
     expect(container.textContent ?? '').not.toContain('fu_phase21_sensitive');
@@ -2045,6 +2203,42 @@ describe('工作台入口页面', () => {
         ([input]) => fetchPath(input) === '/api/v1/knowledge-base/demo-readonly',
       ),
     ).toBe(true);
+  });
+
+  it('机构工作台知识库 demo readonly 入口不渲染敏感字段或行动按钮', async () => {
+    mockWorkspaceFetch({
+      knowledgeBaseDemoReadonlyResponse: buildKnowledgeBaseDemoReadonlyUnsafeMockResponse(),
+    });
+    render(<HospitalPage />);
+
+    const knowledgeBaseEntry = (await screen.findByRole('heading', {
+      name: '知识库 demo readonly',
+    })).closest('section');
+
+    expect(await within(knowledgeBaseEntry as HTMLElement).findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
+    const knowledgeBaseEntryText = knowledgeBaseEntry?.textContent ?? '';
+    expect(knowledgeBaseEntryText).toContain('低敏摘要已隐藏');
+    expect(knowledgeBaseEntryText).not.toContain('真实客户姓名');
+    expect(knowledgeBaseEntryText).not.toContain('张三');
+    expect(knowledgeBaseEntryText).not.toContain('13800001252');
+    expect(knowledgeBaseEntryText).not.toContain('110101199001010011');
+    expect(knowledgeBaseEntryText).not.toContain('HIS 原始目录');
+    expect(knowledgeBaseEntryText).not.toContain('credential token secret apiKey');
+    expect(knowledgeBaseEntryText).not.toContain('token');
+    expect(knowledgeBaseEntryText).not.toContain('secret');
+    expect(knowledgeBaseEntryText).not.toContain('apiKey');
+    expect(knowledgeBaseEntryText).not.toContain('worker');
+    expect(knowledgeBaseEntryText).not.toContain('/tmp/demo');
+    expect(knowledgeBaseEntryText).not.toContain('dependency error');
+    expect(knowledgeBaseEntryText).not.toContain('模型输出');
+    expect(knowledgeBaseEntryText).not.toContain('真实知识正文');
+    expect(knowledgeBaseEntryText).not.toContain('embedding');
+    expect(knowledgeBaseEntryText).not.toContain('vector');
+    expect(knowledgeBaseEntryText).not.toContain('retrieval');
+    expect(knowledgeBaseEntryText).not.toContain('支付已完成');
+    expect(knowledgeBaseEntryText).not.toContain('合同已完成');
+    expect(knowledgeBaseEntryText).not.toContain('发票已完成');
+    expect(within(knowledgeBaseEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
   });
 
   it.each([
