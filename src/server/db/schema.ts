@@ -140,6 +140,20 @@ export const hisConnectionCredentialCompensationDeadLetterReasonEnum = pgEnum(
     'unsafe_payload_summary',
   ],
 );
+export const knowledgeBaseRuntimeSourceKindEnum = pgEnum(
+  'knowledge_base_runtime_source_kind',
+  ['mock', 'seed', 'demo'],
+);
+export const knowledgeBaseRuntimeStatusEnum = pgEnum('knowledge_base_runtime_status', [
+  'disabled',
+  'denied',
+  'empty',
+  'ready',
+]);
+export const knowledgeBaseRuntimeReadonlyStatusEnum = pgEnum(
+  'knowledge_base_runtime_readonly_status',
+  ['readonly', 'blocked'],
+);
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -423,6 +437,170 @@ export const hisConnectionCredentialCompensationJobs = pgTable(
       table.jobState,
       table.lockedUntil,
       table.claimVersion,
+    ),
+  }),
+);
+
+export const knowledgeSources = pgTable(
+  'knowledge_sources',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    workspaceId: varchar('workspace_id', { length: 64 }).notNull(),
+    sourceKind: knowledgeBaseRuntimeSourceKindEnum('source_kind')
+      .notNull()
+      .default('demo'),
+    status: knowledgeBaseRuntimeStatusEnum('status').notNull().default('ready'),
+    readonlyStatus: knowledgeBaseRuntimeReadonlyStatusEnum('readonly_status')
+      .notNull()
+      .default('readonly'),
+    sourceLabel: varchar('source_label', { length: 160 }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('knowledge_sources_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    tenantWorkspaceStatusIdx: index('knowledge_sources_tenant_workspace_status_idx').on(
+      table.tenantId,
+      table.workspaceId,
+      table.status,
+    ),
+    tenantInstitutionWorkspaceIdx: index(
+      'knowledge_sources_tenant_institution_workspace_idx',
+    ).on(table.tenantId, table.institutionId, table.workspaceId),
+  }),
+);
+
+export const knowledgeDocuments = pgTable(
+  'knowledge_documents',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    workspaceId: varchar('workspace_id', { length: 64 }).notNull(),
+    sourceId: varchar('source_id', { length: 64 }).notNull(),
+    sourceKind: knowledgeBaseRuntimeSourceKindEnum('source_kind')
+      .notNull()
+      .default('demo'),
+    status: knowledgeBaseRuntimeStatusEnum('status').notNull().default('ready'),
+    readonlyStatus: knowledgeBaseRuntimeReadonlyStatusEnum('readonly_status')
+      .notNull()
+      .default('readonly'),
+    title: varchar('title', { length: 200 }).notNull(),
+    version: varchar('version', { length: 64 }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('knowledge_documents_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    sourceFk: foreignKey({
+      name: 'knowledge_documents_tenant_source_fk',
+      columns: [table.tenantId, table.sourceId],
+      foreignColumns: [knowledgeSources.tenantId, knowledgeSources.id],
+    }),
+    tenantWorkspaceStatusIdx: index('knowledge_documents_tenant_workspace_status_idx').on(
+      table.tenantId,
+      table.workspaceId,
+      table.status,
+    ),
+    tenantSourceIdx: index('knowledge_documents_tenant_source_idx').on(
+      table.tenantId,
+      table.sourceId,
+    ),
+  }),
+);
+
+export const knowledgeChunks = pgTable(
+  'knowledge_chunks',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    workspaceId: varchar('workspace_id', { length: 64 }).notNull(),
+    documentId: varchar('document_id', { length: 64 }).notNull(),
+    sourceKind: knowledgeBaseRuntimeSourceKindEnum('source_kind')
+      .notNull()
+      .default('demo'),
+    status: knowledgeBaseRuntimeStatusEnum('status').notNull().default('ready'),
+    readonlyStatus: knowledgeBaseRuntimeReadonlyStatusEnum('readonly_status')
+      .notNull()
+      .default('readonly'),
+    chunkLabel: varchar('chunk_label', { length: 160 }).notNull(),
+    chunkIndex: integer('chunk_index').notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('knowledge_chunks_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    documentFk: foreignKey({
+      name: 'knowledge_chunks_tenant_document_fk',
+      columns: [table.tenantId, table.documentId],
+      foreignColumns: [knowledgeDocuments.tenantId, knowledgeDocuments.id],
+    }),
+    tenantDocumentIdx: index('knowledge_chunks_tenant_document_idx').on(
+      table.tenantId,
+      table.documentId,
+    ),
+    tenantWorkspaceStatusIdx: index('knowledge_chunks_tenant_workspace_status_idx').on(
+      table.tenantId,
+      table.workspaceId,
+      table.status,
+    ),
+  }),
+);
+
+export const knowledgeIndexJobs = pgTable(
+  'knowledge_index_jobs',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    workspaceId: varchar('workspace_id', { length: 64 }).notNull(),
+    documentId: varchar('document_id', { length: 64 }).notNull(),
+    sourceKind: knowledgeBaseRuntimeSourceKindEnum('source_kind')
+      .notNull()
+      .default('demo'),
+    status: knowledgeBaseRuntimeStatusEnum('status').notNull().default('ready'),
+    readonlyStatus: knowledgeBaseRuntimeReadonlyStatusEnum('readonly_status')
+      .notNull()
+      .default('readonly'),
+    jobKind: varchar('job_kind', { length: 64 }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('knowledge_index_jobs_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    documentFk: foreignKey({
+      name: 'knowledge_index_jobs_tenant_document_fk',
+      columns: [table.tenantId, table.documentId],
+      foreignColumns: [knowledgeDocuments.tenantId, knowledgeDocuments.id],
+    }),
+    tenantDocumentStatusIdx: index('knowledge_index_jobs_tenant_document_status_idx').on(
+      table.tenantId,
+      table.documentId,
+      table.status,
+    ),
+    tenantWorkspaceStatusIdx: index('knowledge_index_jobs_tenant_workspace_status_idx').on(
+      table.tenantId,
+      table.workspaceId,
+      table.status,
     ),
   }),
 );
