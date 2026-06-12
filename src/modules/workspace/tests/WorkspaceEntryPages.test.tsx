@@ -1237,10 +1237,42 @@ const readonlyDashboardDemoForbiddenFragments = [
   'HIS',
   '真实客户',
   '模型',
-  'embedding',
-  'vector',
-  'retrieval',
 ] as const;
+
+const knowledgeBaseSearchReadyResponse = {
+  status: 'ready',
+  readonly: true,
+  tenantId: 'demo-tenant-a',
+  institutionId: 'demo-inst-a',
+  workspaceId: 'demo-workspace-a',
+  query: '水光 护理',
+  mode: 'demo_search_mock_embedding',
+  resultCount: 2,
+  results: [
+    {
+      resultId: 'kb-search-result-hydro-care',
+      chunkId: 'kb-chunk-hydro-care',
+      documentId: 'kb-document-hydro-care',
+      title: '水光术后护理 demo 知识',
+      snippet: 'chunk:0 / chars:128',
+      scoreBand: 'high',
+      sourceKind: 'demo',
+      chunkIndex: 0,
+      readonly: true,
+    },
+    {
+      resultId: 'kb-search-result-photoelectric-care',
+      chunkId: 'kb-chunk-photoelectric-care',
+      documentId: 'kb-document-photoelectric-care',
+      title: '光电治疗恢复 seed 知识',
+      snippet: 'chunk:1 / chars:96',
+      scoreBand: 'medium',
+      sourceKind: 'seed',
+      chunkIndex: 1,
+      readonly: true,
+    },
+  ],
+} as const;
 
 type WorkspaceTreatmentSummaryPage = {
   records: unknown[];
@@ -1284,6 +1316,12 @@ type WorkspaceFetchOptions = {
     message: string;
   };
   knowledgeBaseDemoReadonlyPending?: boolean;
+  knowledgeBaseSearchResponse?: unknown;
+  knowledgeBaseSearchError?: {
+    status: number;
+    message: string;
+  };
+  knowledgeBaseSearchPending?: boolean;
   workspaceDashboardReadonlyAggregationResponse?: unknown;
   workspaceDashboardReadonlyAggregationError?: {
     status: number;
@@ -1352,6 +1390,9 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     knowledgeBaseDemoReadonlyResponse = buildKnowledgeBaseDemoReadonlyMockResponse('ready'),
     knowledgeBaseDemoReadonlyError,
     knowledgeBaseDemoReadonlyPending = false,
+    knowledgeBaseSearchResponse = knowledgeBaseSearchReadyResponse,
+    knowledgeBaseSearchError,
+    knowledgeBaseSearchPending = false,
     workspaceDashboardReadonlyAggregationResponse =
       buildWorkspaceDashboardReadonlyAggregationMockResponse('ready'),
     workspaceDashboardReadonlyAggregationError,
@@ -1401,6 +1442,21 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
         }
 
         return jsonResponse(knowledgeBaseDemoReadonlyResponse);
+      }
+
+      if (path.startsWith('/api/v1/knowledge-base/runtime/search')) {
+        if (knowledgeBaseSearchPending) {
+          return new Promise<Response>(() => {});
+        }
+
+        if (knowledgeBaseSearchError) {
+          return jsonResponse(
+            { error: knowledgeBaseSearchError.message },
+            { status: knowledgeBaseSearchError.status },
+          );
+        }
+
+        return jsonResponse(knowledgeBaseSearchResponse);
       }
 
       if (path === '/api/v1/workspace-dashboard/readonly-aggregation') {
@@ -2273,7 +2329,8 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('只读入口')).toBeInTheDocument();
     expect(screen.getAllByText('mock / seed / demo').length).toBeGreaterThan(0);
     expect(screen.getByText('只调用现有 GET API')).toBeInTheDocument();
-    expect(screen.getByText('不新增 API')).toBeInTheDocument();
+    expect(screen.getByText('只读 search API')).toBeInTheDocument();
+    expect(screen.getByText('demo search / mock embedding / readonly')).toBeInTheDocument();
     expect(screen.getByText('不接 DB')).toBeInTheDocument();
     expect(screen.getByText('不接真实外部院内系统')).toBeInTheDocument();
     expect(screen.getByText('不读取凭证')).toBeInTheDocument();
@@ -2484,9 +2541,7 @@ describe('工作台入口页面', () => {
     expect(knowledgeBaseEntryText).not.toContain('dependency error');
     expect(knowledgeBaseEntryText).not.toContain('模型输出');
     expect(knowledgeBaseEntryText).not.toContain('真实知识正文');
-    expect(knowledgeBaseEntryText).not.toContain('embedding');
-    expect(knowledgeBaseEntryText).not.toContain('vector');
-    expect(knowledgeBaseEntryText).not.toContain('retrieval');
+    expect(knowledgeBaseEntryText).not.toContain('真实检索召回');
     expect(knowledgeBaseEntryText).not.toContain('支付已完成');
     expect(knowledgeBaseEntryText).not.toContain('合同已完成');
     expect(knowledgeBaseEntryText).not.toContain('发票已完成');
@@ -2545,6 +2600,100 @@ describe('工作台入口页面', () => {
     expect(knowledgeBaseEntryView.getByText('demo 预览 searchPreview')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getByText('仅展示 demo 预览，不进行真实查找')).toBeInTheDocument();
     expect(within(knowledgeBaseEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('机构工作台知识库 demo readonly 搜索展示 ready / empty / error / loading 且只调用 GET', async () => {
+    const fetchMock = mockWorkspaceFetch();
+    render(<HospitalPage />);
+
+    const knowledgeBaseEntry = (await screen.findByRole('heading', {
+      name: '知识库 demo readonly',
+    })).closest('section');
+    const knowledgeBaseEntryView = within(knowledgeBaseEntry as HTMLElement);
+
+    expect(await knowledgeBaseEntryView.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('demo search / mock embedding / readonly')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByLabelText('知识库 demo search 查询')).toBeInTheDocument();
+
+    fireEvent.change(knowledgeBaseEntryView.getByLabelText('知识库 demo search 查询'), {
+      target: { value: '水光 护理' },
+    });
+
+    expect(await knowledgeBaseEntryView.findByText('正在加载知识库 demo search...')).toBeInTheDocument();
+    expect(await knowledgeBaseEntryView.findByText('水光术后护理 demo 知识')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('光电治疗恢复 seed 知识')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('scoreBand: high')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getAllByText(/readonly/u).length).toBeGreaterThan(0);
+
+    const searchCall = fetchMock.mock.calls.find(([input]) =>
+      fetchPath(input).startsWith('/api/v1/knowledge-base/runtime/search?q='),
+    );
+    expect(searchCall).toBeDefined();
+    expect(new URL(fetchPath(searchCall![0]), 'http://localhost').searchParams.get('q')).toBe(
+      '水光 护理',
+    );
+    expect(searchCall?.[1]).toEqual({ cache: 'no-store' });
+    expect(searchCall?.[1]?.method).toBeUndefined();
+    expect(searchCall?.[1]?.body).toBeUndefined();
+    expect(within(knowledgeBaseEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+    mockWorkspaceFetch({
+      knowledgeBaseSearchResponse: {
+        status: 'empty',
+        readonly: true,
+        tenantId: 'demo-tenant-a',
+        institutionId: 'demo-inst-a',
+        workspaceId: 'demo-workspace-a',
+        query: '无结果',
+        mode: 'demo_search_mock_embedding',
+        resultCount: 0,
+        results: [],
+      },
+    });
+    render(<HospitalPage />);
+    const emptyEntry = (await screen.findAllByRole('heading', {
+      name: '知识库 demo readonly',
+    })).at(-1)?.closest('section');
+    const emptyEntryView = within(emptyEntry as HTMLElement);
+    fireEvent.change(emptyEntryView.getByLabelText('知识库 demo search 查询'), {
+      target: { value: '无结果' },
+    });
+    expect(await emptyEntryView.findByText('暂无 demo search 结果')).toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+    mockWorkspaceFetch({
+      knowledgeBaseSearchError: {
+        status: 503,
+        message: 'worker stack /tmp/demo dependency error',
+      },
+    });
+    render(<HospitalPage />);
+    const errorEntry = (await screen.findAllByRole('heading', {
+      name: '知识库 demo readonly',
+    })).at(-1)?.closest('section');
+    const errorEntryView = within(errorEntry as HTMLElement);
+    fireEvent.change(errorEntryView.getByLabelText('知识库 demo search 查询'), {
+      target: { value: '错误' },
+    });
+    expect(await errorEntryView.findByText('知识库 demo search 暂时不可用')).toBeInTheDocument();
+    expect(errorEntry?.textContent ?? '').not.toContain('worker');
+    expect(errorEntry?.textContent ?? '').not.toContain('/tmp/demo');
+    expect(errorEntry?.textContent ?? '').not.toContain('dependency error');
+
+    vi.unstubAllGlobals();
+    const pendingFetchMock = mockWorkspaceFetch({ knowledgeBaseSearchPending: true });
+    const { unmount } = render(<HospitalPage />);
+    const pendingEntry = (await screen.findAllByRole('heading', {
+      name: '知识库 demo readonly',
+    })).at(-1)?.closest('section');
+    const pendingEntryView = within(pendingEntry as HTMLElement);
+    fireEvent.change(pendingEntryView.getByLabelText('知识库 demo search 查询'), {
+      target: { value: '等待' },
+    });
+    expect(await pendingEntryView.findByText('正在加载知识库 demo search...')).toBeInTheDocument();
+    expect(pendingFetchMock).toHaveBeenCalled();
+    unmount();
   });
 
   it('机构工作台 workspace dashboard readonly aggregation ready 入口展示状态和治理分组', async () => {

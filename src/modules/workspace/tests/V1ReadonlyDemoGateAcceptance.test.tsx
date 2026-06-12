@@ -44,9 +44,6 @@ const forbiddenReadonlyDemoFragments = [
   'HIS',
   '真实客户',
   '模型',
-  'embedding',
-  'vector',
-  'retrieval',
 ] as const;
 
 function jsonResponse(body: unknown, init?: ResponseInit) {
@@ -471,6 +468,7 @@ describe('V1 readonly demo 总验收门禁', () => {
     ).toBeInTheDocument();
 
     expect(knowledgeBaseView.getByText('只调用现有 GET API')).toBeInTheDocument();
+    expect(knowledgeBaseView.getByText('demo search / mock embedding / readonly')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('只读入口')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('低敏字段')).toBeInTheDocument();
     expect(workspaceAggregationView.getByText('只调用既有 GET route')).toBeInTheDocument();
