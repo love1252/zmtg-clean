@@ -3,7 +3,9 @@ export type V1KnowledgeBaseRuntimeFoundationStatus =
   | 'disabled'
   | 'denied'
   | 'empty'
-  | 'ready';
+  | 'pending'
+  | 'ready'
+  | 'failed';
 export type V1KnowledgeBaseRuntimeFoundationReadonlyStatus = 'readonly' | 'blocked';
 
 export type V1KnowledgeBaseRuntimeFoundationSourceSummary = {
@@ -173,6 +175,8 @@ function statusText(status: V1KnowledgeBaseRuntimeFoundationStatus): string {
   if (status === 'disabled') return 'disabled / skipped';
   if (status === 'denied') return 'denied / blocked';
   if (status === 'empty') return 'empty / readonly';
+  if (status === 'pending') return 'pending / readonly';
+  if (status === 'failed') return 'failed / readonly';
 
   return 'ready / readonly';
 }

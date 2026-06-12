@@ -71,6 +71,13 @@
       "when": 1781283600000,
       "tag": "0009_v1_knowledge_base_runtime_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781288100000,
+      "tag": "0010_v1_knowledge_base_embedding_vector_index_runtime",
+      "breakpoints": true
     }
   ]
 }

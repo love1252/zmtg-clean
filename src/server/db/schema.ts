@@ -148,7 +148,9 @@ export const knowledgeBaseRuntimeStatusEnum = pgEnum('knowledge_base_runtime_sta
   'disabled',
   'denied',
   'empty',
+  'pending',
   'ready',
+  'failed',
 ]);
 export const knowledgeBaseRuntimeReadonlyStatusEnum = pgEnum(
   'knowledge_base_runtime_readonly_status',
@@ -602,6 +604,50 @@ export const knowledgeIndexJobs = pgTable(
       table.workspaceId,
       table.status,
     ),
+  }),
+);
+
+export const knowledgeChunkEmbeddings = pgTable(
+  'knowledge_chunk_embeddings',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    chunkId: varchar('chunk_id', { length: 64 }).notNull(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    workspaceId: varchar('workspace_id', { length: 64 }).notNull(),
+    embeddingProvider: varchar('embedding_provider', { length: 64 })
+      .notNull()
+      .default('mock_demo_embedding'),
+    embeddingModel: varchar('embedding_model', { length: 96 })
+      .notNull()
+      .default('mock-demo-embedding-v1'),
+    embeddingDimensions: integer('embedding_dimensions').notNull(),
+    embeddingVectorJson: jsonb('embedding_vector_json').$type<number[]>().notNull(),
+    status: knowledgeBaseRuntimeStatusEnum('status').notNull().default('ready'),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('knowledge_chunk_embeddings_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    chunkFk: foreignKey({
+      name: 'knowledge_chunk_embeddings_tenant_chunk_fk',
+      columns: [table.tenantId, table.chunkId],
+      foreignColumns: [knowledgeChunks.tenantId, knowledgeChunks.id],
+    }),
+    tenantChunkIdx: index('knowledge_chunk_embeddings_tenant_chunk_idx').on(
+      table.tenantId,
+      table.chunkId,
+    ),
+    tenantWorkspaceStatusIdx: index(
+      'knowledge_chunk_embeddings_tenant_workspace_status_idx',
+    ).on(table.tenantId, table.workspaceId, table.status),
+    tenantProviderModelIdx: index(
+      'knowledge_chunk_embeddings_tenant_provider_model_idx',
+    ).on(table.tenantId, table.embeddingProvider, table.embeddingModel),
   }),
 );
 
