@@ -33,6 +33,7 @@ import { DashboardMetricsMockSection } from '@/modules/workspace/components/Dash
 import { ManualConfirmMockSection } from '@/modules/workspace/components/ManualConfirmMockSection';
 import { RepurchaseDormantOpportunityMockSection } from '@/modules/workspace/components/RepurchaseDormantOpportunityMockSection';
 import type { V1KnowledgeBaseDemoReadonlyApiContractResponse } from '@/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-api-contract';
+import type { V1WorkspaceDashboardReadonlyAggregationApiContractResponse } from '@/modules/workspace/domain/v1-workspace-dashboard-readonly-api-contract';
 import {
   listAppointments,
   listCustomers,
@@ -114,6 +115,11 @@ type KnowledgeBaseDemoReadonlyEntryState =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'loaded'; response: V1KnowledgeBaseDemoReadonlyApiContractResponse };
+
+type WorkspaceDashboardReadonlyAggregationEntryState =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'loaded'; response: V1WorkspaceDashboardReadonlyAggregationApiContractResponse };
 
 const followUpPathBoundaryLabels = [
   '当前为只读聚合指标',
@@ -667,6 +673,7 @@ function InstitutionDashboardHome({
       <RepurchaseDormantOpportunityMockSection />
       <ManualConfirmMockSection />
       <DashboardMetricsMockSection />
+      <WorkspaceDashboardReadonlyAggregationEntrySection />
       <KnowledgeBaseDemoReadonlyEntrySection />
       <AuditTraceMockSection />
 
@@ -908,6 +915,321 @@ function KnowledgeBaseDemoReadonlyEntrySection() {
       <KnowledgeBaseDemoReadonlyEntryBody state={entryState} />
     </section>
   );
+}
+
+function WorkspaceDashboardReadonlyAggregationEntrySection() {
+  const [entryState, setEntryState] =
+    useState<WorkspaceDashboardReadonlyAggregationEntryState>({
+      status: 'loading',
+    });
+  const boundaryItems = [
+    '只调用既有 GET route',
+    '只读摘要',
+    '低敏字段',
+    '不写入数据',
+    '不触发外部动作',
+    '不展示明细',
+  ];
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadWorkspaceDashboardReadonlyAggregation() {
+      try {
+        const response = await fetch('/api/v1/workspace-dashboard/readonly-aggregation', {
+          cache: 'no-store',
+        });
+
+        if (!response.ok) {
+          throw new Error('workspace_dashboard_readonly_aggregation_unavailable');
+        }
+
+        const payload =
+          (await response.json()) as V1WorkspaceDashboardReadonlyAggregationApiContractResponse;
+
+        if (isMounted) {
+          setEntryState({ status: 'loaded', response: payload });
+        }
+      } catch {
+        if (isMounted) {
+          setEntryState({ status: 'error' });
+        }
+      }
+    }
+
+    void loadWorkspaceDashboardReadonlyAggregation();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  return (
+    <section className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+            <Activity className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold tracking-normal text-slate-950">
+              workspace dashboard readonly aggregation
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              机构工作台只读聚合入口，仅消费既有 readonly aggregation GET route。
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
+            readonly aggregation
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
+            mock / seed / demo
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50/80 px-4 py-3 text-sm leading-6 text-blue-800">
+        当前仅调用 GET /api/v1/workspace-dashboard/readonly-aggregation；不会写入数据或触发外部动作。
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {boundaryItems.map((item) => (
+          <div
+            key={item}
+            className="rounded-2xl border border-slate-200/80 bg-white/86 px-4 py-3 text-sm font-semibold text-slate-600"
+          >
+            {item}
+          </div>
+        ))}
+      </div>
+
+      <WorkspaceDashboardReadonlyAggregationEntryBody state={entryState} />
+    </section>
+  );
+}
+
+function WorkspaceDashboardReadonlyAggregationEntryBody({
+  state,
+}: {
+  state: WorkspaceDashboardReadonlyAggregationEntryState;
+}) {
+  if (state.status === 'loading') {
+    return (
+      <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm font-semibold text-slate-500">
+        正在加载 workspace dashboard readonly aggregation...
+      </div>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-5">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div>
+            <h3 className="text-sm font-semibold text-amber-900">
+              workspace dashboard readonly aggregation 暂时不可用
+            </h3>
+            <p className="mt-1 text-sm leading-6 text-amber-800">
+              请稍后刷新页面，当前不会影响机构工作台其他只读摘要。
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const { response } = state;
+  const statusLabel = workspaceDashboardReadonlyAggregationStatusLabel(response);
+  const summaryItems = [
+    {
+      key: 'businessLoopSummary',
+      label: 'businessLoopSummary',
+      value: response.aggregation.businessLoopSummary,
+    },
+    {
+      key: 'managementConfigSummary',
+      label: 'managementConfigSummary',
+      value: response.aggregation.managementConfigSummary,
+    },
+    {
+      key: 'knowledgeGovernanceSummary',
+      label: 'knowledgeGovernanceSummary',
+      value: response.aggregation.knowledgeGovernanceSummary,
+    },
+    {
+      key: 'fieldWhitelistSummary',
+      label: 'fieldWhitelistSummary',
+      value: response.aggregation.fieldWhitelistSummary,
+    },
+    {
+      key: 'readonlyFeaturePolicySummary',
+      label: 'readonlyFeaturePolicySummary',
+      value: response.aggregation.readonlyFeaturePolicySummary,
+    },
+  ];
+
+  return (
+    <div className="mt-5 space-y-4">
+      <div className="rounded-2xl border border-slate-200/80 bg-white/86 px-4 py-4">
+        <div className="mb-3 text-xs font-semibold uppercase tracking-normal text-slate-400">
+          summary
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold tracking-normal text-slate-950">
+              {statusLabel}
+            </h3>
+            <div className="mt-1 text-sm font-semibold text-slate-700">
+              {toWorkspaceDashboardReadonlyAggregationSafeText(response.summary.title)}
+            </div>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              {toWorkspaceDashboardReadonlyAggregationSafeText(response.summary.description)}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+              {toWorkspaceDashboardReadonlyAggregationSafeText(response.summary.statusText)}
+            </span>
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
+              {toWorkspaceDashboardReadonlyAggregationSafeText(response.dashboardStatus)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        {summaryItems.map((item) => (
+          <article
+            key={item.key}
+            className="rounded-2xl border border-slate-200/80 bg-white/86 p-4"
+          >
+            <div className="text-xs font-semibold uppercase tracking-normal text-slate-400">
+              {item.label}
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {toWorkspaceDashboardReadonlyAggregationSafeText(item.value)}
+            </p>
+          </article>
+        ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <WorkspaceDashboardReadonlyAggregationList
+          emptyText="暂无风险提示"
+          items={response.riskFlags}
+          title="riskFlags"
+        />
+        <WorkspaceDashboardReadonlyAggregationList
+          emptyText="暂无只读提示"
+          items={response.recommendedReadonlyActions}
+          title="recommendedReadonlyActions"
+        />
+      </div>
+
+      <div className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
+        <div className="text-xs font-semibold uppercase tracking-normal text-slate-400">
+          taskRecords
+        </div>
+        <div className="mt-3 space-y-3">
+          {response.taskRecords.map((record) => (
+            <div
+              key={record.recordId}
+              className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-semibold tracking-normal text-slate-950">
+                  {toWorkspaceDashboardReadonlyAggregationSafeText(record.title)}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                  {toWorkspaceDashboardReadonlyAggregationSafeText(record.status)}
+                </span>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {toWorkspaceDashboardReadonlyAggregationSafeText(record.failureReason)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WorkspaceDashboardReadonlyAggregationList({
+  emptyText,
+  items,
+  title,
+}: {
+  emptyText: string;
+  items: readonly string[];
+  title: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
+      <div className="text-xs font-semibold uppercase tracking-normal text-slate-400">
+        {title}
+      </div>
+      {items.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {items.map((item) => (
+            <span
+              key={item}
+              className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600"
+            >
+              {toWorkspaceDashboardReadonlyAggregationSafeText(item)}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 text-center text-sm font-semibold text-slate-500">
+          {emptyText}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function toWorkspaceDashboardReadonlyAggregationSafeText(value: string) {
+  if (isWorkspaceDashboardReadonlyAggregationUnsafeText(value)) {
+    return '低敏摘要已隐藏';
+  }
+
+  return value;
+}
+
+function isWorkspaceDashboardReadonlyAggregationUnsafeText(value: string) {
+  return /真实客户|手机号|身份证|病历|诊断|订单|支付|合同|发票|HIS|credential|token|secret|apiKey|raw|payload|worker|stack|dependency|\/tmp|模型|prompt|completion|embedding|vector|retrieval|upload|parse|chunk|runtime|创建任务|预约|触达|营销|成交|createTask|autoMarketing/u.test(
+    value,
+  );
+}
+
+function workspaceDashboardReadonlyAggregationStatusLabel(
+  response: V1WorkspaceDashboardReadonlyAggregationApiContractResponse,
+) {
+  if (response.status === 'disabled') {
+    return 'workspace dashboard readonly aggregation 暂未开启';
+  }
+
+  if (response.status === 'denied') {
+    return '当前账号没有 workspace dashboard readonly aggregation 访问权限';
+  }
+
+  if (response.status === 'empty') {
+    return '暂无可展示 workspace dashboard readonly aggregation';
+  }
+
+  if (response.status === 'partial') {
+    return 'workspace dashboard readonly aggregation 部分可用';
+  }
+
+  if (response.status === 'stale') {
+    return 'workspace dashboard readonly aggregation 可能已过期';
+  }
+
+  return 'workspace dashboard readonly aggregation 已就绪';
 }
 
 function KnowledgeBaseDemoReadonlyEntryBody({

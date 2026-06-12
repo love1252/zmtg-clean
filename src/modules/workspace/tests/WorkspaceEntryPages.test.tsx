@@ -973,6 +973,187 @@ function buildKnowledgeBaseDemoReadonlyMockResponse(status: KnowledgeBaseDemoRea
   };
 }
 
+type WorkspaceDashboardReadonlyAggregationMockStatus =
+  | 'disabled'
+  | 'denied'
+  | 'empty'
+  | 'partial'
+  | 'stale'
+  | 'ready';
+
+function buildWorkspaceDashboardReadonlyAggregationMockResponse(
+  status: WorkspaceDashboardReadonlyAggregationMockStatus,
+) {
+  const hasContent = status === 'partial' || status === 'stale' || status === 'ready';
+  const statusTextByStatus = {
+    disabled: 'disabled / skipped',
+    denied: 'denied / denied',
+    empty: 'empty / empty',
+    partial: 'partial / partial',
+    stale: 'stale / stale',
+    ready: 'ready / readonly',
+  } satisfies Record<WorkspaceDashboardReadonlyAggregationMockStatus, string>;
+  const dashboardStatusByStatus = {
+    disabled: 'disabled',
+    denied: 'denied',
+    empty: 'empty',
+    partial: 'partial',
+    stale: 'stale',
+    ready: 'ready',
+  } satisfies Record<WorkspaceDashboardReadonlyAggregationMockStatus, string>;
+  const descriptionByStatus = {
+    disabled: '该 workspace dashboard 只读聚合能力暂未开启',
+    denied: '当前账号没有访问权限',
+    empty: '暂无可展示 workspace dashboard 只读聚合',
+    partial: 'workspace dashboard 部分来源不完整，仅展示可用只读摘要',
+    stale: 'workspace dashboard 只读聚合可能已过期',
+    ready: 'workspace dashboard 只读聚合可用于 demo 摘要展示',
+  } satisfies Record<WorkspaceDashboardReadonlyAggregationMockStatus, string>;
+  const sectionSummary = hasContent ? 'ready / items:2 / blocked:1 / exception:0' : 'not_available';
+  const knowledgeSummary =
+    status === 'partial'
+      ? 'partial / audit_source_missing,reviewing_version_present'
+      : status === 'stale'
+        ? 'stale / reviewing_version_present,stale_audit_present'
+        : hasContent
+          ? 'ready / reviewing_version_present'
+          : 'not_available';
+  const readonlyPolicySummary = hasContent ? 'ready / readonly' : 'not_available';
+  const riskFlags = hasContent
+    ? ['business_loop_blocked', 'management_config_blocked', 'reviewing_version_present']
+    : [];
+  const recommendedReadonlyActions = hasContent
+    ? [
+        'review_business_loop_blockers_readonly',
+        'review_management_config_blockers_readonly',
+        'review_knowledge_governance_risks_readonly',
+      ]
+    : [];
+
+  return {
+    requestId: `mock-workspace-dashboard-readonly-${status}`,
+    tenantId: 'demo-tenant-a',
+    institutionId: 'demo-inst-a',
+    workspaceId: 'demo-workspace-a',
+    status,
+    dashboardStatus: dashboardStatusByStatus[status],
+    summary: {
+      title: 'workspace dashboard readonly aggregation API 契约',
+      statusText: statusTextByStatus[status],
+      description: descriptionByStatus[status],
+    },
+    businessLoop: {
+      sectionId: 'business-loop',
+      label: '业务闭环只读聚合',
+      summary: sectionSummary,
+      readonly: true,
+    },
+    managementConfig: {
+      sectionId: 'management-config',
+      label: '管理配置只读聚合',
+      summary: hasContent ? 'ready / items:2 / blocked:1 / missing:0' : 'not_available',
+      readonly: true,
+    },
+    knowledgeGovernance: {
+      sectionId: 'knowledge-governance',
+      label: '知识库治理只读聚合',
+      summary: knowledgeSummary,
+      readonly: true,
+    },
+    readonlyPolicy: {
+      sectionId: 'readonly-policy',
+      label: '只读策略与低敏白名单',
+      summary: readonlyPolicySummary,
+      readonly: true,
+    },
+    taskRecords: [
+      {
+        recordId: `workspace-dashboard-readonly-aggregation-${status}`,
+        status: hasContent ? status : status === 'disabled' ? 'skipped' : status === 'denied' ? 'blocked' : 'empty',
+        title: 'workspace dashboard readonly aggregation',
+        failureReason: hasContent ? 'not_available' : descriptionByStatus[status],
+        readonly: true,
+      },
+    ],
+    aggregation: {
+      status,
+      reasonCode:
+        status === 'ready'
+          ? 'workspace_dashboard_readonly_aggregation_ready'
+          : status === 'partial'
+            ? 'workspace_dashboard_readonly_aggregation_partial'
+            : status === 'stale'
+              ? 'workspace_dashboard_readonly_aggregation_stale'
+              : status === 'empty'
+                ? 'no_workspace_dashboard_readonly_candidates'
+                : status === 'denied'
+                  ? 'permission_denied'
+                  : 'feature_flag_disabled',
+      resultCode:
+        status === 'ready'
+          ? 'readonly'
+          : status === 'partial'
+            ? 'partial'
+            : status === 'stale'
+              ? 'stale'
+              : status === 'denied'
+                ? 'denied'
+                : status === 'empty'
+                  ? 'empty'
+                  : 'skipped',
+      dashboardStatus: dashboardStatusByStatus[status],
+      businessLoopSummary: sectionSummary,
+      managementConfigSummary: hasContent ? 'ready / items:2 / blocked:1 / missing:0' : 'not_available',
+      knowledgeGovernanceSummary: knowledgeSummary,
+      fieldWhitelistSummary: hasContent ? 'ready / unknown:0 / forbidden:0' : 'not_available',
+      readonlyFeaturePolicySummary: readonlyPolicySummary,
+      readonly: true,
+    },
+    riskFlags,
+    recommendedReadonlyActions,
+    readonly: true,
+  };
+}
+
+function buildWorkspaceDashboardReadonlyAggregationUnsafeMockResponse() {
+  const response = buildWorkspaceDashboardReadonlyAggregationMockResponse('ready');
+
+  return {
+    ...response,
+    summary: {
+      ...response.summary,
+      description: 'raw payload token secret credential HIS 真实客户 模型 embedding vector retrieval',
+    },
+    businessLoop: {
+      ...response.businessLoop,
+      summary: '创建任务 预约 触达 营销 成交 支付 合同 发票',
+    },
+    managementConfig: {
+      ...response.managementConfig,
+      summary: 'upload parse chunk runtime worker stack',
+    },
+    knowledgeGovernance: {
+      ...response.knowledgeGovernance,
+      summary: '真实客户姓名 张三 手机号 13800001252',
+    },
+    readonlyPolicy: {
+      ...response.readonlyPolicy,
+      summary: 'credential token secret',
+    },
+    taskRecords: [
+      {
+        recordId: 'workspace-dashboard-readonly-aggregation-ready',
+        status: 'ready',
+        title: '创建任务 预约 触达 营销 成交',
+        failureReason: 'worker stack /tmp/demo dependency error',
+        readonly: true,
+      },
+    ],
+    riskFlags: ['raw_payload_present', 'token_secret_present'],
+    recommendedReadonlyActions: ['createTask', 'autoMarketing', 'payment_contract_invoice'],
+  };
+}
+
 function buildKnowledgeBaseDemoReadonlyUnsafeMockResponse() {
   const response = buildKnowledgeBaseDemoReadonlyMockResponse('ready');
 
@@ -1075,6 +1256,12 @@ type WorkspaceFetchOptions = {
     message: string;
   };
   knowledgeBaseDemoReadonlyPending?: boolean;
+  workspaceDashboardReadonlyAggregationResponse?: unknown;
+  workspaceDashboardReadonlyAggregationError?: {
+    status: number;
+    message: string;
+  };
+  workspaceDashboardReadonlyAggregationPending?: boolean;
   timeline?: unknown;
   treatmentSummaryRecord?: unknown;
   treatmentSummaryMutationError?: {
@@ -1137,6 +1324,10 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     knowledgeBaseDemoReadonlyResponse = buildKnowledgeBaseDemoReadonlyMockResponse('ready'),
     knowledgeBaseDemoReadonlyError,
     knowledgeBaseDemoReadonlyPending = false,
+    workspaceDashboardReadonlyAggregationResponse =
+      buildWorkspaceDashboardReadonlyAggregationMockResponse('ready'),
+    workspaceDashboardReadonlyAggregationError,
+    workspaceDashboardReadonlyAggregationPending = false,
     timeline = customerTimelineResponse,
     treatmentSummaryRecord = phase13CreatedTreatmentSummary,
     treatmentSummaryMutationError,
@@ -1182,6 +1373,21 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
         }
 
         return jsonResponse(knowledgeBaseDemoReadonlyResponse);
+      }
+
+      if (path === '/api/v1/workspace-dashboard/readonly-aggregation') {
+        if (workspaceDashboardReadonlyAggregationPending) {
+          return new Promise<Response>(() => {});
+        }
+
+        if (workspaceDashboardReadonlyAggregationError) {
+          return jsonResponse(
+            { error: workspaceDashboardReadonlyAggregationError.message },
+            { status: workspaceDashboardReadonlyAggregationError.status },
+          );
+        }
+
+        return jsonResponse(workspaceDashboardReadonlyAggregationResponse);
       }
 
       if (institutionError?.path === path) {
@@ -2037,7 +2243,7 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('不接 AI')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '知识库 demo readonly' })).toBeInTheDocument();
     expect(screen.getByText('只读入口')).toBeInTheDocument();
-    expect(screen.getByText('mock / seed / demo')).toBeInTheDocument();
+    expect(screen.getAllByText('mock / seed / demo').length).toBeGreaterThan(0);
     expect(screen.getByText('只调用现有 GET API')).toBeInTheDocument();
     expect(screen.getByText('不新增 API')).toBeInTheDocument();
     expect(screen.getByText('不接 DB')).toBeInTheDocument();
@@ -2046,13 +2252,13 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('不使用真实客户数据')).toBeInTheDocument();
     expect(screen.getByText('不展示模型推理细节')).toBeInTheDocument();
     expect(await screen.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
-    expect(screen.getByText('ready / readonly')).toBeInTheDocument();
+    expect(screen.getAllByText('ready / readonly').length).toBeGreaterThan(0);
     expect(screen.getByText('知识库 demo readonly API 可用于低敏只读演示')).toBeInTheDocument();
     expect(screen.getByText('知识库 demo readonly API 契约')).toBeInTheDocument();
     expect(screen.getByText('categories')).toBeInTheDocument();
     expect(screen.getByText('folders')).toBeInTheDocument();
     expect(screen.getByText('knowledgeItems')).toBeInTheDocument();
-    expect(screen.getByText('taskRecords')).toBeInTheDocument();
+    expect(screen.getAllByText('taskRecords').length).toBeGreaterThan(0);
     expect(screen.getByText('searchPreview')).toBeInTheDocument();
     expect(screen.getByText('平台知识库')).toBeInTheDocument();
     expect(screen.getByText('机构知识库')).toBeInTheDocument();
@@ -2066,6 +2272,14 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('知识库 demo 只读预览')).toBeInTheDocument();
     expect(screen.getByText('平台知识库 demo 预览')).toBeInTheDocument();
     expect(screen.getByText('机构知识库 seed 预览')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'workspace dashboard readonly aggregation' })).toBeInTheDocument();
+    expect(screen.getByText('workspace dashboard readonly aggregation 已就绪')).toBeInTheDocument();
+    expect(screen.getByText('businessLoopSummary')).toBeInTheDocument();
+    expect(screen.getByText('managementConfigSummary')).toBeInTheDocument();
+    expect(screen.getByText('knowledgeGovernanceSummary')).toBeInTheDocument();
+    expect(screen.getByText('fieldWhitelistSummary')).toBeInTheDocument();
+    expect(screen.getByText('readonlyFeaturePolicySummary')).toBeInTheDocument();
+    expect(screen.getByText('review_business_loop_blockers_readonly')).toBeInTheDocument();
     expect(screen.getByText(/部分重复来源任务冲突审计未能通过 resourceId/u)).toBeInTheDocument();
     expect(container.textContent ?? '').not.toContain('Phase21 客户明细不应展示');
     expect(container.textContent ?? '').not.toContain('fu_phase21_sensitive');
@@ -2113,12 +2327,21 @@ describe('工作台入口页面', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/knowledge-base/demo-readonly', {
       cache: 'no-store',
     });
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/workspace-dashboard/readonly-aggregation', {
+      cache: 'no-store',
+    });
     const knowledgeBaseDemoReadonlyCall = fetchMock.mock.calls.find(
       ([input]) => fetchPath(input) === '/api/v1/knowledge-base/demo-readonly',
     );
     expect(knowledgeBaseDemoReadonlyCall).toBeDefined();
     expect(knowledgeBaseDemoReadonlyCall?.[1]?.method).toBeUndefined();
     expect(knowledgeBaseDemoReadonlyCall?.[1]?.body).toBeUndefined();
+    const workspaceDashboardReadonlyAggregationCall = fetchMock.mock.calls.find(
+      ([input]) => fetchPath(input) === '/api/v1/workspace-dashboard/readonly-aggregation',
+    );
+    expect(workspaceDashboardReadonlyAggregationCall).toBeDefined();
+    expect(workspaceDashboardReadonlyAggregationCall?.[1]?.method).toBeUndefined();
+    expect(workspaceDashboardReadonlyAggregationCall?.[1]?.body).toBeUndefined();
     const analysisCall = fetchMock.mock.calls.find(
       ([input]) => fetchPath(input) === '/api/institution/follow-up-path-analysis',
     );
@@ -2264,6 +2487,129 @@ describe('工作台入口页面', () => {
         fetchMock.mock.calls.every(
           ([input, init]) =>
             fetchPath(input) !== '/api/v1/knowledge-base/demo-readonly' ||
+            ((init?.method ?? 'GET') === 'GET' && init?.body === undefined),
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it('机构工作台 workspace dashboard readonly aggregation 展示 loading 状态', async () => {
+    mockWorkspaceFetch({ workspaceDashboardReadonlyAggregationPending: true });
+    render(<HospitalPage />);
+
+    const readonlyAggregationEntry = (await screen.findByRole('heading', {
+      name: 'workspace dashboard readonly aggregation',
+    })).closest('section');
+
+    expect(readonlyAggregationEntry).not.toBeNull();
+    expect(
+      within(readonlyAggregationEntry as HTMLElement).getByText(
+        '正在加载 workspace dashboard readonly aggregation...',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('机构工作台 workspace dashboard readonly aggregation 展示低敏 error 状态', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      workspaceDashboardReadonlyAggregationError: {
+        status: 503,
+        message: 'worker stack /tmp/demo dependency error',
+      },
+    });
+    render(<HospitalPage />);
+
+    const readonlyAggregationEntry = (await screen.findByRole('heading', {
+      name: 'workspace dashboard readonly aggregation',
+    })).closest('section');
+    const readonlyAggregationEntryView = within(readonlyAggregationEntry as HTMLElement);
+
+    expect(
+      await readonlyAggregationEntryView.findByText(
+        'workspace dashboard readonly aggregation 暂时不可用',
+      ),
+    ).toBeInTheDocument();
+    expect(readonlyAggregationEntry?.textContent ?? '').not.toContain('worker');
+    expect(readonlyAggregationEntry?.textContent ?? '').not.toContain('/tmp/demo');
+    expect(readonlyAggregationEntry?.textContent ?? '').not.toContain('dependency error');
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => fetchPath(input) === '/api/v1/workspace-dashboard/readonly-aggregation',
+      ),
+    ).toBe(true);
+  });
+
+  it('机构工作台 workspace dashboard readonly aggregation 不渲染敏感字段或行动按钮', async () => {
+    mockWorkspaceFetch({
+      workspaceDashboardReadonlyAggregationResponse:
+        buildWorkspaceDashboardReadonlyAggregationUnsafeMockResponse(),
+    });
+    render(<HospitalPage />);
+
+    const readonlyAggregationEntry = (await screen.findByRole('heading', {
+      name: 'workspace dashboard readonly aggregation',
+    })).closest('section');
+
+    expect(
+      await within(readonlyAggregationEntry as HTMLElement).findByText(
+        'workspace dashboard readonly aggregation 已就绪',
+      ),
+    ).toBeInTheDocument();
+    const readonlyAggregationText = readonlyAggregationEntry?.textContent ?? '';
+    expect(readonlyAggregationText).toContain('低敏摘要已隐藏');
+    expect(readonlyAggregationText).not.toContain('raw');
+    expect(readonlyAggregationText).not.toContain('payload');
+    expect(readonlyAggregationText).not.toContain('token');
+    expect(readonlyAggregationText).not.toContain('secret');
+    expect(readonlyAggregationText).not.toContain('credential');
+    expect(readonlyAggregationText).not.toContain('HIS');
+    expect(readonlyAggregationText).not.toContain('真实客户');
+    expect(readonlyAggregationText).not.toContain('张三');
+    expect(readonlyAggregationText).not.toContain('13800001252');
+    expect(readonlyAggregationText).not.toContain('模型');
+    expect(readonlyAggregationText).not.toContain('embedding');
+    expect(readonlyAggregationText).not.toContain('vector');
+    expect(readonlyAggregationText).not.toContain('retrieval');
+    expect(readonlyAggregationText).not.toContain('upload');
+    expect(readonlyAggregationText).not.toContain('parse');
+    expect(readonlyAggregationText).not.toContain('chunk');
+    expect(readonlyAggregationText).not.toContain('创建任务');
+    expect(readonlyAggregationText).not.toContain('预约');
+    expect(readonlyAggregationText).not.toContain('触达');
+    expect(readonlyAggregationText).not.toContain('营销');
+    expect(readonlyAggregationText).not.toContain('成交');
+    expect(readonlyAggregationText).not.toContain('支付');
+    expect(readonlyAggregationText).not.toContain('合同');
+    expect(readonlyAggregationText).not.toContain('发票');
+    expect(within(readonlyAggregationEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['disabled', 'workspace dashboard readonly aggregation 暂未开启', 'disabled / skipped'],
+    ['denied', '当前账号没有 workspace dashboard readonly aggregation 访问权限', 'denied / denied'],
+    ['empty', '暂无可展示 workspace dashboard readonly aggregation', 'empty / empty'],
+    ['partial', 'workspace dashboard readonly aggregation 部分可用', 'partial / partial'],
+    ['stale', 'workspace dashboard readonly aggregation 可能已过期', 'stale / stale'],
+    ['ready', 'workspace dashboard readonly aggregation 已就绪', 'ready / readonly'],
+  ] as const)(
+    '机构工作台 workspace dashboard readonly aggregation 展示 %s 状态',
+    async (status, label, statusText) => {
+      const fetchMock = mockWorkspaceFetch({
+        workspaceDashboardReadonlyAggregationResponse:
+          buildWorkspaceDashboardReadonlyAggregationMockResponse(status),
+      });
+      render(<HospitalPage />);
+
+      const readonlyAggregationEntry = (await screen.findByRole('heading', {
+        name: 'workspace dashboard readonly aggregation',
+      })).closest('section');
+      const readonlyAggregationEntryView = within(readonlyAggregationEntry as HTMLElement);
+
+      expect((await readonlyAggregationEntryView.findAllByText(label)).length).toBeGreaterThan(0);
+      expect(readonlyAggregationEntryView.getAllByText(statusText).length).toBeGreaterThan(0);
+      expect(
+        fetchMock.mock.calls.every(
+          ([input, init]) =>
+            fetchPath(input) !== '/api/v1/workspace-dashboard/readonly-aggregation' ||
             ((init?.method ?? 'GET') === 'GET' && init?.body === undefined),
         ),
       ).toBe(true);
