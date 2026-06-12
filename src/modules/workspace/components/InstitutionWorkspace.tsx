@@ -116,6 +116,31 @@ type KnowledgeBaseDemoReadonlyEntryState =
   | { status: 'error' }
   | { status: 'loaded'; response: V1KnowledgeBaseDemoReadonlyApiContractResponse };
 
+type KnowledgeBaseDemoSearchResult = {
+  resultId: string;
+  title: string;
+  snippet: string;
+  scoreBand: 'high' | 'medium' | 'low';
+  sourceKind: 'mock' | 'seed' | 'demo';
+  chunkIndex: number;
+  readonly: true;
+};
+
+type KnowledgeBaseDemoSearchResponse = {
+  status: 'ready' | 'empty' | 'empty_query' | 'denied' | 'validation_failed';
+  readonly: true;
+  query: string;
+  mode?: 'demo_search_mock_embedding';
+  resultCount: number;
+  results: KnowledgeBaseDemoSearchResult[];
+};
+
+type KnowledgeBaseDemoSearchState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'loaded'; response: KnowledgeBaseDemoSearchResponse };
+
 type WorkspaceDashboardReadonlyAggregationEntryState =
   | { status: 'loading' }
   | { status: 'error' }
@@ -291,6 +316,54 @@ function parseFollowUpPathAnalysisPayload(payload: unknown): FollowUpPathAnalysi
     warnings: safeStringList(record.warnings),
     dataSourceNote: safeOptionalString(record.dataSourceNote),
     boundaryNote: safeOptionalString(record.boundaryNote),
+  };
+}
+
+function parseKnowledgeBaseDemoSearchPayload(payload: unknown): KnowledgeBaseDemoSearchResponse {
+  const record = isRecord(payload) ? payload : {};
+  const status = safeOptionalString(record.status);
+  const results = Array.isArray(record.results)
+    ? record.results
+        .filter(isRecord)
+        .map((result, index): KnowledgeBaseDemoSearchResult => {
+          const scoreBand = safeOptionalString(result.scoreBand);
+          const sourceKind = safeOptionalString(result.sourceKind);
+
+          return {
+            resultId: safeOptionalString(result.resultId) ?? `demo-search-result-${index}`,
+            title: safeOptionalString(result.title) ?? '知识库 demo search 结果',
+            snippet: safeOptionalString(result.snippet) ?? '低敏摘要',
+            scoreBand:
+              scoreBand === 'high' || scoreBand === 'medium' || scoreBand === 'low'
+                ? scoreBand
+                : 'low',
+            sourceKind:
+              sourceKind === 'mock' || sourceKind === 'seed' || sourceKind === 'demo'
+                ? sourceKind
+                : 'demo',
+            chunkIndex: safeNumber(result.chunkIndex),
+            readonly: true,
+          };
+        })
+        .slice(0, 5)
+    : [];
+
+  return {
+    status:
+      status === 'ready' ||
+      status === 'empty' ||
+      status === 'empty_query' ||
+      status === 'denied' ||
+      status === 'validation_failed'
+        ? status
+        : results.length > 0
+          ? 'ready'
+          : 'empty',
+    readonly: true,
+    query: safeOptionalString(record.query) ?? '',
+    mode: record.mode === 'demo_search_mock_embedding' ? 'demo_search_mock_embedding' : undefined,
+    resultCount: safeNumber(record.resultCount),
+    results,
   };
 }
 
@@ -830,7 +903,7 @@ function KnowledgeBaseDemoReadonlyEntrySection() {
   });
   const boundaryItems = [
     '只调用现有 GET API',
-    '不新增 API',
+    '只读 search API',
     '低敏字段',
     '不接 DB',
     '不接真实外部院内系统',
@@ -899,7 +972,7 @@ function KnowledgeBaseDemoReadonlyEntrySection() {
       </div>
 
       <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm leading-6 text-emerald-800">
-        当前仅调用 GET /api/v1/knowledge-base/demo-readonly；不会新增 API、写入数据或触发外部动作。
+        当前仅调用 GET /api/v1/knowledge-base/demo-readonly 与 GET /api/v1/knowledge-base/runtime/search；不会写入数据或触发外部动作。
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1351,6 +1424,8 @@ function KnowledgeBaseDemoReadonlyEntryBody({
         </div>
       </div>
 
+      <KnowledgeBaseDemoSearchPanel />
+
       {hasLowSensitiveSummary ? (
         <>
           <div className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
@@ -1487,6 +1562,174 @@ function KnowledgeBaseDemoReadonlyEntryBody({
   );
 }
 
+function KnowledgeBaseDemoSearchPanel() {
+  const [query, setQuery] = useState('');
+  const [searchState, setSearchState] = useState<KnowledgeBaseDemoSearchState>({
+    status: 'idle',
+  });
+  const trimmedQuery = query.trim();
+
+  useEffect(() => {
+    if (trimmedQuery.length === 0) {
+      setSearchState({ status: 'idle' });
+      return;
+    }
+
+    let isMounted = true;
+    const params = new URLSearchParams({ q: trimmedQuery });
+
+    async function runSearch() {
+      setSearchState({ status: 'loading' });
+
+      try {
+        const response = await fetch(
+          `/api/v1/knowledge-base/runtime/search?${params.toString()}`,
+          { cache: 'no-store' },
+        );
+
+        if (!response.ok) {
+          throw new Error('knowledge_base_demo_search_unavailable');
+        }
+
+        const payload = parseKnowledgeBaseDemoSearchPayload(await response.json());
+        if (isMounted) {
+          setSearchState({ status: 'loaded', response: payload });
+        }
+      } catch {
+        if (isMounted) {
+          setSearchState({ status: 'error' });
+        }
+      }
+    }
+
+    void runSearch();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [trimmedQuery]);
+
+  return (
+    <div className="rounded-2xl border border-cyan-200 bg-cyan-50/70 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold tracking-normal text-cyan-950">
+            知识库 demo search
+          </h3>
+          <p className="mt-1 text-sm leading-6 text-cyan-800">
+            仅用于 demo search / mock embedding / readonly，不代表真实生产检索。
+          </p>
+        </div>
+        <span className="rounded-full border border-cyan-200 bg-white px-3 py-1 text-xs font-semibold text-cyan-700">
+          demo search / mock embedding / readonly
+        </span>
+      </div>
+
+      <label className="mt-4 block">
+        <span className="text-xs font-semibold uppercase tracking-normal text-cyan-700">
+          query
+        </span>
+        <input
+          aria-label="知识库 demo search 查询"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          className="mt-2 h-10 w-full rounded-xl border border-cyan-200 bg-white px-3 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:border-cyan-400"
+          placeholder="输入 demo search 查询"
+        />
+      </label>
+
+      <KnowledgeBaseDemoSearchResultState state={searchState} />
+    </div>
+  );
+}
+
+function KnowledgeBaseDemoSearchResultState({
+  state,
+}: {
+  state: KnowledgeBaseDemoSearchState;
+}) {
+  if (state.status === 'idle') {
+    return (
+      <div className="mt-3 rounded-2xl border border-dashed border-cyan-200 bg-white/80 px-4 py-4 text-sm font-semibold text-cyan-700">
+        输入关键词后展示 demo search 低敏结果。
+      </div>
+    );
+  }
+
+  if (state.status === 'loading') {
+    return (
+      <div className="mt-3 rounded-2xl border border-dashed border-cyan-200 bg-white/80 px-4 py-4 text-sm font-semibold text-cyan-700">
+        正在加载知识库 demo search...
+      </div>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div>
+            <h4 className="text-sm font-semibold text-amber-900">
+              知识库 demo search 暂时不可用
+            </h4>
+            <p className="mt-1 text-sm leading-6 text-amber-800">
+              当前不会影响知识库 readonly 摘要展示。
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (state.response.results.length === 0) {
+    return (
+      <div className="mt-3 rounded-2xl border border-dashed border-cyan-200 bg-white/80 px-4 py-4 text-sm font-semibold text-cyan-700">
+        暂无 demo search 结果
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full border border-cyan-200 bg-white px-2.5 py-1 text-xs font-semibold text-cyan-700">
+          {state.response.mode ?? 'demo_search_mock_embedding'}
+        </span>
+        <span className="rounded-full border border-cyan-200 bg-white px-2.5 py-1 text-xs font-semibold text-cyan-700">
+          resultCount: {state.response.resultCount}
+        </span>
+      </div>
+      {state.response.results.map((result) => (
+        <article
+          key={result.resultId}
+          className="rounded-2xl border border-cyan-100 bg-white/86 p-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-sm font-semibold tracking-normal text-slate-950">
+              {toKnowledgeBaseDemoSearchSafeText(result.title)}
+            </h4>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500">
+              {result.sourceKind} / readonly
+            </span>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {toKnowledgeBaseDemoSearchSafeText(result.snippet)}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700">
+              scoreBand: {result.scoreBand}
+            </span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500">
+              chunkIndex: {result.chunkIndex}
+            </span>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 function toKnowledgeBaseDemoReadonlySafeText(value: string) {
   if (isKnowledgeBaseDemoReadonlyUnsafeText(value)) {
     return '低敏摘要已隐藏';
@@ -1496,7 +1739,21 @@ function toKnowledgeBaseDemoReadonlySafeText(value: string) {
 }
 
 function isKnowledgeBaseDemoReadonlyUnsafeText(value: string) {
-  return /真实客户|真实知识|手机号|身份证|病历|诊断|订单|支付|合同|发票|HIS|credential|token|secret|apiKey|raw|payload|worker|stack|dependency|\/tmp|模型|prompt|completion|embedding|vector|retrieval|upload|parse|chunk|上传|编辑|删除|发布|下架|回滚|创建任务|预约|触达|营销|成交/u.test(
+  return /真实客户|真实知识|真实检索|手机号|身份证|病历|诊断|订单|支付|合同|发票|HIS|credential|token|secret|apiKey|raw|payload|worker|stack|dependency|\/tmp|模型|prompt|completion|upload|parse|上传|编辑|删除|发布|下架|回滚|创建任务|预约|触达|营销|成交/u.test(
+    value,
+  );
+}
+
+function toKnowledgeBaseDemoSearchSafeText(value: string) {
+  if (isKnowledgeBaseDemoSearchUnsafeText(value)) {
+    return '低敏摘要已隐藏';
+  }
+
+  return value;
+}
+
+function isKnowledgeBaseDemoSearchUnsafeText(value: string) {
+  return /真实客户|真实知识|真实检索|手机号|身份证|病历|诊断|订单|支付|合同|发票|HIS|credential|token|secret|apiKey|raw|payload|worker|stack|dependency|\/tmp|模型|prompt|completion|上传|编辑|删除|发布|下架|回滚|创建任务|预约|触达|营销|成交/u.test(
     value,
   );
 }
