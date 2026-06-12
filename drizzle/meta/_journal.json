@@ -64,6 +64,13 @@
       "when": 1780759930299,
       "tag": "0008_phase23_his_connection_credential_compensation_job_queue_schema_min",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781283600000,
+      "tag": "0009_v1_knowledge_base_runtime_foundation",
+      "breakpoints": true
     }
   ]
 }
