@@ -2524,6 +2524,55 @@ describe('工作台入口页面', () => {
     ).toBe(true);
   });
 
+  it('机构工作台知识库 demo readonly ready 入口展示演示分层和 demo preview 边界', async () => {
+    mockWorkspaceFetch({
+      knowledgeBaseDemoReadonlyResponse: buildKnowledgeBaseDemoReadonlyMockResponse('ready'),
+    });
+    render(<HospitalPage />);
+
+    const knowledgeBaseEntry = (await screen.findByRole('heading', {
+      name: '知识库 demo readonly',
+    })).closest('section');
+    const knowledgeBaseEntryView = within(knowledgeBaseEntry as HTMLElement);
+
+    expect(await knowledgeBaseEntryView.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getAllByText('mock / seed / demo / readonly').length).toBeGreaterThan(0);
+    expect(knowledgeBaseEntryView.getByText('知识库展示结构')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('分类摘要 categories')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('目录摘要 folders')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('知识条目 knowledgeItems')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('只读任务 taskRecords')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('demo 预览 searchPreview')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('仅展示 demo 预览，不进行真实查找')).toBeInTheDocument();
+    expect(within(knowledgeBaseEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('机构工作台 workspace dashboard readonly aggregation ready 入口展示状态和治理分组', async () => {
+    mockWorkspaceFetch({
+      workspaceDashboardReadonlyAggregationResponse:
+        buildWorkspaceDashboardReadonlyAggregationMockResponse('ready'),
+    });
+    render(<HospitalPage />);
+
+    const readonlyAggregationEntry = (await screen.findByRole('heading', {
+      name: 'workspace dashboard readonly aggregation',
+    })).closest('section');
+    const readonlyAggregationEntryView = within(readonlyAggregationEntry as HTMLElement);
+
+    expect(
+      await readonlyAggregationEntryView.findByText(
+        'workspace dashboard readonly aggregation 已就绪',
+      ),
+    ).toBeInTheDocument();
+    expect(readonlyAggregationEntryView.getByText('状态总览')).toBeInTheDocument();
+    expect(readonlyAggregationEntryView.getByText('status / dashboardStatus')).toBeInTheDocument();
+    expect(readonlyAggregationEntryView.getByText('核心聚合摘要')).toBeInTheDocument();
+    expect(readonlyAggregationEntryView.getByText('治理提示')).toBeInTheDocument();
+    expect(readonlyAggregationEntryView.getByText('只读动作提示')).toBeInTheDocument();
+    expect(readonlyAggregationEntryView.getByText('review_business_loop_blockers_readonly')).toBeInTheDocument();
+    expect(within(readonlyAggregationEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
+  });
+
   it('机构工作台两条 readonly demo 链路不展示敏感或 mutation 片段', async () => {
     mockWorkspaceFetch({
       knowledgeBaseDemoReadonlyResponse: buildKnowledgeBaseDemoReadonlyMockResponse('ready'),
