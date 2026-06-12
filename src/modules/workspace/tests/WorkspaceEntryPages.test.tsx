@@ -1214,6 +1214,34 @@ function buildKnowledgeBaseDemoReadonlyUnsafeMockResponse() {
   };
 }
 
+const readonlyDashboardDemoForbiddenFragments = [
+  '上传',
+  '编辑',
+  '删除',
+  '发布',
+  '下架',
+  '回滚',
+  '创建任务',
+  '预约',
+  '触达',
+  '营销',
+  '成交',
+  '支付',
+  '合同',
+  '发票',
+  'raw',
+  'payload',
+  'token',
+  'secret',
+  'credential',
+  'HIS',
+  '真实客户',
+  '模型',
+  'embedding',
+  'vector',
+  'retrieval',
+] as const;
+
 type WorkspaceTreatmentSummaryPage = {
   records: unknown[];
   pageInfo: unknown;
@@ -2247,10 +2275,10 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('只调用现有 GET API')).toBeInTheDocument();
     expect(screen.getByText('不新增 API')).toBeInTheDocument();
     expect(screen.getByText('不接 DB')).toBeInTheDocument();
-    expect(screen.getByText('不接真实 HIS')).toBeInTheDocument();
-    expect(screen.getByText('不读取 credential')).toBeInTheDocument();
-    expect(screen.getByText('不使用真实客户数据')).toBeInTheDocument();
-    expect(screen.getByText('不展示模型推理细节')).toBeInTheDocument();
+    expect(screen.getByText('不接真实外部院内系统')).toBeInTheDocument();
+    expect(screen.getByText('不读取凭证')).toBeInTheDocument();
+    expect(screen.getByText('不使用真实业务个人数据')).toBeInTheDocument();
+    expect(screen.getByText('不展示智能推断细节')).toBeInTheDocument();
     expect(await screen.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
     expect(screen.getAllByText('ready / readonly').length).toBeGreaterThan(0);
     expect(screen.getByText('知识库 demo readonly API 可用于低敏只读演示')).toBeInTheDocument();
@@ -2264,7 +2292,8 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('机构知识库')).toBeInTheDocument();
     expect(screen.getByText('目录总览')).toBeInTheDocument();
     expect(screen.getByText('可见范围')).toBeInTheDocument();
-    expect(screen.getByText('发布状态总览')).toBeInTheDocument();
+    expect(screen.queryByText('发布状态总览')).not.toBeInTheDocument();
+    expect(screen.getAllByText('低敏摘要已隐藏').length).toBeGreaterThan(0);
     expect(screen.getByText('版本总览')).toBeInTheDocument();
     expect(screen.getByText('审计总览')).toBeInTheDocument();
     expect(screen.getByText('知识库 demo readonly facade')).toBeInTheDocument();
@@ -2462,6 +2491,69 @@ describe('工作台入口页面', () => {
     expect(knowledgeBaseEntryText).not.toContain('合同已完成');
     expect(knowledgeBaseEntryText).not.toContain('发票已完成');
     expect(within(knowledgeBaseEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('机构工作台知识库 demo readonly ready 入口只展示低敏只读验收字段', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      knowledgeBaseDemoReadonlyResponse: buildKnowledgeBaseDemoReadonlyMockResponse('ready'),
+    });
+    render(<HospitalPage />);
+
+    const knowledgeBaseEntry = (await screen.findByRole('heading', {
+      name: '知识库 demo readonly',
+    })).closest('section');
+    const knowledgeBaseEntryView = within(knowledgeBaseEntry as HTMLElement);
+
+    expect(await knowledgeBaseEntryView.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('categories')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('folders')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('knowledgeItems')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('taskRecords')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('searchPreview')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('平台知识库')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('目录总览')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('版本总览')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('知识库 demo 只读预览')).toBeInTheDocument();
+    expect(within(knowledgeBaseEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.every(
+        ([input, init]) =>
+          fetchPath(input) !== '/api/v1/knowledge-base/demo-readonly' ||
+          ((init?.method ?? 'GET') === 'GET' && init?.body === undefined),
+      ),
+    ).toBe(true);
+  });
+
+  it('机构工作台两条 readonly demo 链路不展示敏感或 mutation 片段', async () => {
+    mockWorkspaceFetch({
+      knowledgeBaseDemoReadonlyResponse: buildKnowledgeBaseDemoReadonlyMockResponse('ready'),
+      workspaceDashboardReadonlyAggregationResponse:
+        buildWorkspaceDashboardReadonlyAggregationMockResponse('ready'),
+    });
+    render(<HospitalPage />);
+
+    const knowledgeBaseEntry = (await screen.findByRole('heading', {
+      name: '知识库 demo readonly',
+    })).closest('section');
+    const readonlyAggregationEntry = (await screen.findByRole('heading', {
+      name: 'workspace dashboard readonly aggregation',
+    })).closest('section');
+
+    await within(knowledgeBaseEntry as HTMLElement).findByText('知识库 demo readonly 已就绪');
+    await within(readonlyAggregationEntry as HTMLElement).findByText(
+      'workspace dashboard readonly aggregation 已就绪',
+    );
+
+    const combinedReadonlyDemoText = [
+      knowledgeBaseEntry?.textContent ?? '',
+      readonlyAggregationEntry?.textContent ?? '',
+    ].join(' ');
+
+    for (const fragment of readonlyDashboardDemoForbiddenFragments) {
+      expect(combinedReadonlyDemoText).not.toContain(fragment);
+    }
+    expect(within(knowledgeBaseEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(readonlyAggregationEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
   });
 
   it.each([

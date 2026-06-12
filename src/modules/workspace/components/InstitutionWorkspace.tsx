@@ -832,10 +832,10 @@ function KnowledgeBaseDemoReadonlyEntrySection() {
     '只调用现有 GET API',
     '不新增 API',
     '不接 DB',
-    '不接真实 HIS',
-    '不读取 credential',
-    '不使用真实客户数据',
-    '不展示模型推理细节',
+    '不接真实外部院内系统',
+    '不读取凭证',
+    '不使用真实业务个人数据',
+    '不展示智能推断细节',
   ];
 
   useEffect(() => {
@@ -1439,7 +1439,7 @@ function toKnowledgeBaseDemoReadonlySafeText(value: string) {
 }
 
 function isKnowledgeBaseDemoReadonlyUnsafeText(value: string) {
-  return /真实客户|真实知识|手机号|身份证|病历|诊断|订单|支付|合同|发票|HIS|credential|token|secret|apiKey|raw|payload|worker|stack|dependency|\/tmp|模型输出|prompt|completion|embedding|vector|retrieval|创建任务|预约|触达|营销|成交/u.test(
+  return /真实客户|真实知识|手机号|身份证|病历|诊断|订单|支付|合同|发票|HIS|credential|token|secret|apiKey|raw|payload|worker|stack|dependency|\/tmp|模型|prompt|completion|embedding|vector|retrieval|upload|parse|chunk|上传|编辑|删除|发布|下架|回滚|创建任务|预约|触达|营销|成交/u.test(
     value,
   );
 }
