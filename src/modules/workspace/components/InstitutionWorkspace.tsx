@@ -831,6 +831,7 @@ function KnowledgeBaseDemoReadonlyEntrySection() {
   const boundaryItems = [
     '只调用现有 GET API',
     '不新增 API',
+    '低敏字段',
     '不接 DB',
     '不接真实外部院内系统',
     '不读取凭证',
@@ -1224,7 +1225,7 @@ function toWorkspaceDashboardReadonlyAggregationSafeText(value: string) {
 }
 
 function isWorkspaceDashboardReadonlyAggregationUnsafeText(value: string) {
-  return /真实客户|手机号|身份证|病历|诊断|订单|支付|合同|发票|HIS|credential|token|secret|apiKey|raw|payload|worker|stack|dependency|\/tmp|模型|prompt|completion|embedding|vector|retrieval|upload|parse|chunk|runtime|创建任务|预约|触达|营销|成交|createTask|autoMarketing/u.test(
+  return /真实客户|手机号|身份证|病历|诊断|订单|支付|合同|发票|HIS|credential|token|secret|apiKey|raw|payload|worker|stack|dependency|\/tmp|模型|prompt|completion|embedding|vector|retrieval|upload|parse|chunk|runtime|上传|编辑|删除|发布|下架|回滚|创建任务|预约|触达|营销|成交|createTask|autoMarketing/u.test(
     value,
   );
 }
