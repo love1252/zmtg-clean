@@ -892,7 +892,7 @@ function KnowledgeBaseDemoReadonlyEntrySection() {
             只读入口
           </span>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
-            mock / seed / demo
+            mock / seed / demo / readonly
           </span>
         </div>
       </div>
@@ -1074,8 +1074,13 @@ function WorkspaceDashboardReadonlyAggregationEntryBody({
   return (
     <div className="mt-5 space-y-4">
       <div className="rounded-2xl border border-slate-200/80 bg-white/86 px-4 py-4">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-normal text-slate-400">
-          summary
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-normal text-slate-400">
+            状态总览
+          </span>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500">
+            status / dashboardStatus
+          </span>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -1100,6 +1105,17 @@ function WorkspaceDashboardReadonlyAggregationEntryBody({
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold tracking-normal text-slate-950">
+            核心聚合摘要
+          </h3>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            仅展示当前 demo 聚合结果，方便内部演示时快速扫读。
+          </p>
+        </div>
+      </div>
+
       <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
         {summaryItems.map((item) => (
           <article
@@ -1120,12 +1136,14 @@ function WorkspaceDashboardReadonlyAggregationEntryBody({
         <WorkspaceDashboardReadonlyAggregationList
           emptyText="暂无风险提示"
           items={response.riskFlags}
-          title="riskFlags"
+          label="riskFlags"
+          title="治理提示"
         />
         <WorkspaceDashboardReadonlyAggregationList
           emptyText="暂无只读提示"
           items={response.recommendedReadonlyActions}
-          title="recommendedReadonlyActions"
+          label="recommendedReadonlyActions"
+          title="只读动作提示"
         />
       </div>
 
@@ -1161,16 +1179,21 @@ function WorkspaceDashboardReadonlyAggregationEntryBody({
 function WorkspaceDashboardReadonlyAggregationList({
   emptyText,
   items,
+  label,
   title,
 }: {
   emptyText: string;
   items: readonly string[];
+  label: string;
   title: string;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
-      <div className="text-xs font-semibold uppercase tracking-normal text-slate-400">
-        {title}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold tracking-normal text-slate-950">{title}</span>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500">
+          {label}
+        </span>
       </div>
       {items.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -1269,6 +1292,13 @@ function KnowledgeBaseDemoReadonlyEntryBody({
     response.categories.length > 0 ||
     response.folders.length > 0 ||
     response.knowledgeItems.length > 0;
+  const presentationItems = [
+    '分类摘要 categories',
+    '目录摘要 folders',
+    '知识条目 knowledgeItems',
+    '只读任务 taskRecords',
+    'demo 预览 searchPreview',
+  ];
 
   return (
     <div className="mt-5 space-y-4">
@@ -1291,6 +1321,32 @@ function KnowledgeBaseDemoReadonlyEntryBody({
           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
             {toKnowledgeBaseDemoReadonlySafeText(response.summary.statusText)}
           </span>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold tracking-normal text-emerald-950">
+              知识库展示结构
+            </h3>
+            <p className="mt-1 text-sm leading-6 text-emerald-800">
+              仅展示 demo 预览，不进行真实查找
+            </p>
+          </div>
+          <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
+            mock / seed / demo / readonly
+          </span>
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+          {presentationItems.map((item) => (
+            <div
+              key={item}
+              className="rounded-2xl border border-emerald-100 bg-white/86 px-3 py-2 text-xs font-semibold text-emerald-800"
+            >
+              {item}
+            </div>
+          ))}
         </div>
       </div>
 
