@@ -45,6 +45,14 @@ const unsafeFragments = [
   'password',
   'token',
 ];
+const forbiddenKnowledgeFields = [
+  'content',
+  'rawContent',
+  'parsedContent',
+  'embedding',
+  'embeddingVectorJson',
+  'trainingContent',
+];
 
 const routeRecords: PlatformKnowledgeRepositoryRecord[] = [
   {
@@ -107,10 +115,40 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
         visibleInstitutionIds: ['inst-visible-a'],
       }),
     ]);
-    expect(serialized).not.toContain('"content"');
-    expect(serialized).not.toContain('"embeddingVectorJson"');
-    expect(serialized).not.toContain('"parsedContent"');
-    expect(serialized).not.toContain('"trainingContent"');
+    forbiddenKnowledgeFields.forEach((field) => {
+      expect(serialized).not.toContain(`"${field}"`);
+    });
+  });
+
+  it('items GET 无 tenantId 时只使用 mock fallback，且不初始化真实 repository', async () => {
+    const response = await itemsRoute.GET(
+      new Request(`${apiUrl}?keyword=${encodeURIComponent('恢复期')}`),
+    );
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(payload.dataSource).toBe('mock');
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeItems).not.toHaveBeenCalled();
+  });
+
+  it('items GET 仅在数据库未配置时回退 mock，不暴露 DATABASE_URL 细节', async () => {
+    vi.mocked(getDatabase).mockImplementationOnce(() => {
+      throw new Error('DATABASE_URL is not configured');
+    });
+
+    const response = await itemsRoute.GET(
+      new Request(`${apiUrl}?tenantId=tenant-low-hit&keyword=${encodeURIComponent('恢复期')}`),
+    );
+    const payload = await readJson(response);
+    const serialized = JSON.stringify(payload);
+
+    expect(response.status).toBe(200);
+    expect(payload.dataSource).toBe('mock');
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(serialized).not.toContain('DATABASE_URL');
+    expect(serialized).not.toContain('postgres');
   });
 
   it('items GET 底层异常时返回安全中文文案且不暴露数据库细节', async () => {
@@ -265,6 +303,46 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
       knowledgeId: 'knowledge-route-a',
       institutionId: 'inst-visible-a',
     });
+  });
+
+  it.each([
+    {
+      method: 'POST',
+      handler: visibilityRoute.POST,
+      repositoryMethod: repository.bindInstitutionVisibility,
+      label: 'POST',
+    },
+    {
+      method: 'DELETE',
+      handler: visibilityRoute.DELETE,
+      repositoryMethod: repository.unbindInstitutionVisibility,
+      label: 'DELETE',
+    },
+  ])('$label institutionId 不属于当前 tenant 时返回安全失败且不写入可见范围', async ({
+    method,
+    handler,
+    repositoryMethod,
+  }) => {
+    repository.hasTenantInstitution.mockResolvedValueOnce(false);
+
+    const response = await handler(
+      new Request(visibilityUrl, {
+        method,
+        body: JSON.stringify({
+          tenantId: 'tenant-route-a',
+          institutionId: 'inst-other-tenant',
+        }),
+      }),
+      { params: { knowledgeId: 'knowledge-route-a' } },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await readJson(response)).toEqual({ status: 'validation_failed' });
+    expect(repository.hasTenantInstitution).toHaveBeenCalledWith({
+      tenantId: 'tenant-route-a',
+      institutionId: 'inst-other-tenant',
+    });
+    expect(repositoryMethod).not.toHaveBeenCalled();
   });
 
   it.each([
