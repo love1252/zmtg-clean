@@ -439,7 +439,6 @@ export function HisConnectionReadOnlyPanel() {
 
   useEffect(() => {
     if (!selectedConnectionId) {
-      setDetailState({ status: 'idle' });
       return;
     }
 
@@ -475,7 +474,10 @@ export function HisConnectionReadOnlyPanel() {
     };
   }, [selectedConnectionId]);
 
-  const records = listState.status === 'success' ? listState.records : [];
+  const records = useMemo(
+    () => (listState.status === 'success' ? listState.records : []),
+    [listState],
+  );
   const selectedRecord = useMemo(
     () => records.find((record) => record.connectionId === selectedConnectionId) ?? null,
     [records, selectedConnectionId],

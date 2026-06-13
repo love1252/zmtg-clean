@@ -141,6 +141,8 @@ type KnowledgeBaseDemoSearchState =
   | { status: 'error' }
   | { status: 'loaded'; response: KnowledgeBaseDemoSearchResponse };
 
+const knowledgeBaseDemoIdleSearchState: KnowledgeBaseDemoSearchState = { status: 'idle' };
+
 type WorkspaceDashboardReadonlyAggregationEntryState =
   | { status: 'loading' }
   | { status: 'error' }
@@ -1571,7 +1573,6 @@ function KnowledgeBaseDemoSearchPanel() {
 
   useEffect(() => {
     if (trimmedQuery.length === 0) {
-      setSearchState({ status: 'idle' });
       return;
     }
 
@@ -1638,7 +1639,9 @@ function KnowledgeBaseDemoSearchPanel() {
         />
       </label>
 
-      <KnowledgeBaseDemoSearchResultState state={searchState} />
+      <KnowledgeBaseDemoSearchResultState
+        state={trimmedQuery.length === 0 ? knowledgeBaseDemoIdleSearchState : searchState}
+      />
     </div>
   );
 }

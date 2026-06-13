@@ -387,11 +387,15 @@ function TreatmentSummaryDetailDialog({
   onRecordUpdated: (record: InstitutionTreatmentSummaryListItem) => void;
   record: InstitutionTreatmentSummaryListItem;
 }) {
-  const [detailRecord, setDetailRecord] = useState(record);
+  const [detailRecordState, setDetailRecordState] = useState(() => ({
+    sourceRecord: record,
+    record,
+  }));
   const [isEditFormOpen, setIsEditFormOpen] = useState(false);
-  const [editForm, setEditForm] = useState<TreatmentSummaryEditForm>(() =>
-    recordToEditForm(record),
-  );
+  const [editFormState, setEditFormState] = useState(() => ({
+    record,
+    form: recordToEditForm(record),
+  }));
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [editMessage, setEditMessage] = useState<{
     kind: 'success' | 'error';
@@ -420,10 +424,11 @@ function TreatmentSummaryDetailDialog({
     text: string;
   } | null>(null);
 
-  useEffect(() => {
-    setDetailRecord(record);
-    setEditForm(recordToEditForm(record));
-  }, [record]);
+  const detailRecord =
+    detailRecordState.sourceRecord === record ? detailRecordState.record : record;
+  const defaultEditForm = useMemo(() => recordToEditForm(detailRecord), [detailRecord]);
+  const editForm =
+    editFormState.record === detailRecord ? editFormState.form : defaultEditForm;
 
   const isVoided = isTreatmentSummaryVoided(detailRecord);
 
@@ -477,11 +482,14 @@ function TreatmentSummaryDetailDialog({
     key: keyof TreatmentSummaryEditForm,
     value: string,
   ) {
-    setEditForm((current) => ({ ...current, [key]: value }));
+    setEditFormState({
+      record: detailRecord,
+      form: { ...editForm, [key]: value },
+    });
   }
 
   function handleOpenEditForm() {
-    setEditForm(recordToEditForm(detailRecord));
+    setEditFormState({ record: detailRecord, form: recordToEditForm(detailRecord) });
     setEditMessage(null);
     setIsEditFormOpen(true);
   }
@@ -523,7 +531,7 @@ function TreatmentSummaryDetailDialog({
         ...result.record,
         customerId: detailRecord.customerId,
       };
-      setDetailRecord(nextRecord);
+      setDetailRecordState({ sourceRecord: record, record: nextRecord });
       setIsVoidFormOpen(false);
       setVoidMessage({ kind: 'success', text: '治疗摘要已作废' });
       onRecordUpdated(nextRecord);
@@ -553,8 +561,8 @@ function TreatmentSummaryDetailDialog({
         ...result.record,
         customerId: detailRecord.customerId,
       };
-      setDetailRecord(nextRecord);
-      setEditForm(recordToEditForm(nextRecord));
+      setDetailRecordState({ sourceRecord: record, record: nextRecord });
+      setEditFormState({ record: nextRecord, form: recordToEditForm(nextRecord) });
       setEditMessage({ kind: 'success', text: '治疗摘要已更新' });
       onRecordUpdated(nextRecord);
     } else {
@@ -830,7 +838,10 @@ function TreatmentSummaryDetailDialog({
                     onClick={() => {
                       setIsEditFormOpen(false);
                       setEditMessage(null);
-                      setEditForm(recordToEditForm(detailRecord));
+                      setEditFormState({
+                        record: detailRecord,
+                        form: recordToEditForm(detailRecord),
+                      });
                     }}
                     className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600"
                   >
