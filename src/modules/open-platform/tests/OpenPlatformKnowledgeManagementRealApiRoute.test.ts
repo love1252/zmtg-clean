@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import * as itemsRoute from '@/app/api/v1/open-platform/knowledge-management/items/route';
 import * as visibilityRoute from '@/app/api/v1/open-platform/knowledge-management/items/[knowledgeId]/visibility/route';
+import { getDatabase } from '@/server/db/client';
+import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 
 const database = { database: 'platform-knowledge-test-db' };
 const repository = {
@@ -62,6 +64,12 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
     repository.listKnowledgeItems.mockReset();
     repository.bindInstitutionVisibility.mockReset();
     repository.unbindInstitutionVisibility.mockReset();
+    vi.mocked(getDatabase).mockClear();
+    vi.mocked(createPlatformKnowledgeManagementRepository).mockClear();
+  });
+
+  it('visibility route 只暴露平台端 POST/DELETE 绑定接口', () => {
+    expect(Object.keys(visibilityRoute).sort()).toEqual(['DELETE', 'POST']);
   });
 
   it('items GET 带 tenantId 时接入真实 repository/service 并保持低敏 payload', async () => {
@@ -138,6 +146,84 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
       visibleInstitutionIds: [],
     });
     expect(repository.unbindInstitutionVisibility).toHaveBeenCalledWith({
+      tenantId: 'tenant-route-a',
+      knowledgeId: 'knowledge-route-a',
+      institutionId: 'inst-visible-a',
+    });
+  });
+
+  it.each([
+    {
+      method: 'POST',
+      handler: visibilityRoute.POST,
+      body: { institutionId: 'inst-visible-a' },
+      label: 'POST 缺 tenantId',
+    },
+    {
+      method: 'POST',
+      handler: visibilityRoute.POST,
+      body: { tenantId: 'tenant-route-a' },
+      label: 'POST 缺 institutionId',
+    },
+    {
+      method: 'DELETE',
+      handler: visibilityRoute.DELETE,
+      body: { institutionId: 'inst-visible-a' },
+      label: 'DELETE 缺 tenantId',
+    },
+    {
+      method: 'DELETE',
+      handler: visibilityRoute.DELETE,
+      body: { tenantId: 'tenant-route-a' },
+      label: 'DELETE 缺 institutionId',
+    },
+  ])('$label 返回 400 且不初始化数据库', async ({ method, handler, body }) => {
+    const response = await handler(
+      new Request(visibilityUrl, {
+        method,
+        body: JSON.stringify(body),
+      }),
+      { params: { knowledgeId: 'knowledge-route-a' } },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await readJson(response)).toEqual({ status: 'validation_failed' });
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(repository.bindInstitutionVisibility).not.toHaveBeenCalled();
+    expect(repository.unbindInstitutionVisibility).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      method: 'POST',
+      handler: visibilityRoute.POST,
+      repositoryMethod: repository.bindInstitutionVisibility,
+      label: 'POST 目标知识库不存在或跨 tenant',
+    },
+    {
+      method: 'DELETE',
+      handler: visibilityRoute.DELETE,
+      repositoryMethod: repository.unbindInstitutionVisibility,
+      label: 'DELETE 目标知识库不存在或跨 tenant',
+    },
+  ])('$label 返回 404', async ({ method, handler, repositoryMethod }) => {
+    repositoryMethod.mockResolvedValue({ status: 'not_found' });
+
+    const response = await handler(
+      new Request(visibilityUrl, {
+        method,
+        body: JSON.stringify({
+          tenantId: 'tenant-route-a',
+          institutionId: 'inst-visible-a',
+        }),
+      }),
+      { params: { knowledgeId: 'knowledge-route-a' } },
+    );
+
+    expect(response.status).toBe(404);
+    expect(await readJson(response)).toEqual({ status: 'not_found' });
+    expect(repositoryMethod).toHaveBeenCalledWith({
       tenantId: 'tenant-route-a',
       knowledgeId: 'knowledge-route-a',
       institutionId: 'inst-visible-a',

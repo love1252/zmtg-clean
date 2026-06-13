@@ -26,6 +26,14 @@ async function readVisibilityInput(request: Request, context: VisibilityRouteCon
   };
 }
 
+function hasVisibilityInputScope(input: Awaited<ReturnType<typeof readVisibilityInput>>) {
+  return (
+    input.tenantId.trim().length > 0 &&
+    input.knowledgeId.trim().length > 0 &&
+    input.institutionId.trim().length > 0
+  );
+}
+
 function statusCodeForResult(status: string) {
   if (status === 'validation_failed') return 400;
   if (status === 'not_found') return 404;
@@ -35,9 +43,14 @@ function statusCodeForResult(status: string) {
 
 export async function POST(request: Request, context: VisibilityRouteContext) {
   try {
+    const input = await readVisibilityInput(request, context);
+    if (!hasVisibilityInputScope(input)) {
+      return NextResponse.json({ status: 'validation_failed' }, { status: 400 });
+    }
+
     const result = await bindPlatformKnowledgeInstitutionVisibilityService({
       repository: createPlatformKnowledgeManagementRepository(getDatabase()),
-      input: await readVisibilityInput(request, context),
+      input,
     });
 
     return NextResponse.json(result, { status: statusCodeForResult(result.status) });
@@ -51,9 +64,14 @@ export async function POST(request: Request, context: VisibilityRouteContext) {
 
 export async function DELETE(request: Request, context: VisibilityRouteContext) {
   try {
+    const input = await readVisibilityInput(request, context);
+    if (!hasVisibilityInputScope(input)) {
+      return NextResponse.json({ status: 'validation_failed' }, { status: 400 });
+    }
+
     const result = await unbindPlatformKnowledgeInstitutionVisibilityService({
       repository: createPlatformKnowledgeManagementRepository(getDatabase()),
-      input: await readVisibilityInput(request, context),
+      input,
     });
 
     return NextResponse.json(result, { status: statusCodeForResult(result.status) });

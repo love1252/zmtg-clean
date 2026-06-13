@@ -247,7 +247,7 @@ describe('平台知识库管理 V1 真实数据底座 service', () => {
     expect(unbindMismatch).toEqual({ status: 'not_found' });
   });
 
-  it('支持平台端绑定和解绑机构可见范围', async () => {
+  it('当前无机构归属表时仅校验非空 scope，并支持平台端绑定和解绑机构可见范围', async () => {
     const repository = createRepository();
 
     const bound = await bindPlatformKnowledgeInstitutionVisibilityService({
@@ -257,6 +257,11 @@ describe('平台知识库管理 V1 真实数据底座 service', () => {
         knowledgeId: 'knowledge-ready-a',
         institutionId: 'inst-new-visible',
       },
+    });
+    expect(repository.bindInstitutionVisibility).toHaveBeenCalledWith({
+      tenantId: 'tenant-a',
+      knowledgeId: 'knowledge-ready-a',
+      institutionId: 'inst-new-visible',
     });
     expect(bound).toEqual({
       status: 'bound',

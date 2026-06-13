@@ -191,6 +191,9 @@ export async function listPlatformKnowledgeItemsService(
 }
 
 function hasVisibilityScope(input: PlatformKnowledgeVisibilityRepositoryInput) {
+  // 7-1 only persists the platform knowledge visibility relationship.
+  // The current schema has no reusable institution/organization ownership table,
+  // so tenant + institution existence must be added in 7-2 when institution context lands.
   return (
     normalizeOptionalString(input.tenantId) &&
     normalizeOptionalString(input.knowledgeId) &&
