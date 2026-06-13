@@ -104,6 +104,25 @@ type KnowledgeQaAuditRecord = {
   safeFailureMessage: string | null;
   createdAt: string;
 };
+type KnowledgeBaseCapabilityRecord = {
+  id: string;
+  label: string;
+  enabled: boolean;
+  status: 'enabled' | 'disabled';
+  summary: string;
+  disabledReason: string | null;
+  entryCondition: string | null;
+};
+type KnowledgeBaseCapabilityResponse = {
+  requestId: 'knowledge-base-production-capabilities';
+  readonly: true;
+  capabilities: KnowledgeBaseCapabilityRecord[];
+  qaQuotaPolicy: {
+    tenantDailyLimit: number;
+    institutionDailyLimit: number;
+    usageLimitedMessage: string;
+  };
+};
 
 const fileStatusLabels: Record<KnowledgeFileParseStatus, string> = {
   parsed: '已解析',
@@ -390,6 +409,10 @@ function qaAuditPath(input: { tenantId: string }) {
   return `/api/v1/open-platform/knowledge-management/qa/audits?${params.toString()}`;
 }
 
+function capabilitiesPath() {
+  return '/api/v1/open-platform/knowledge-management/capabilities';
+}
+
 export function OpenPlatformKnowledgeManagementPanel() {
   const [selectedTenantId, setSelectedTenantId] = useState(ALL_TENANTS);
   const [fileSearch, setFileSearch] = useState('');
@@ -424,6 +447,8 @@ export function OpenPlatformKnowledgeManagementPanel() {
   const [qaAuditRecords, setQaAuditRecords] = useState<KnowledgeQaAuditRecord[]>([]);
   const [qaAuditMessage, setQaAuditMessage] = useState('点击刷新查看问答审计');
   const [isQaAuditLoading, setIsQaAuditLoading] = useState(false);
+  const [capabilityResponse, setCapabilityResponse] = useState<KnowledgeBaseCapabilityResponse | null>(null);
+  const [capabilityMessage, setCapabilityMessage] = useState('正在读取生产能力状态...');
   const [isFileActionLoading, setIsFileActionLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -434,6 +459,16 @@ export function OpenPlatformKnowledgeManagementPanel() {
   useEffect(() => {
     let isActive = true;
     const isManualSync = refreshReasonRef.current === 'sync';
+
+    async function loadCapabilities() {
+      const response = await fetch(capabilitiesPath(), { cache: 'no-store' });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.capabilities)) {
+        return null;
+      }
+
+      return payload as KnowledgeBaseCapabilityResponse;
+    }
 
     Promise.all([
       loadOpenPlatformKnowledgeManagementView({ tenantId: selectedTenantParam }),
@@ -448,13 +483,16 @@ export function OpenPlatformKnowledgeManagementPanel() {
         page: 1,
         pageSize: OPEN_PLATFORM_KNOWLEDGE_ITEM_PAGE_SIZE,
       }),
+      loadCapabilities(),
     ])
-      .then(([nextView, nextFiles, nextItems]) => {
+      .then(([nextView, nextFiles, nextItems, nextCapabilities]) => {
         if (!isActive) return;
 
         setView(nextView);
         setFilesResponse(nextFiles);
         setItemsResponse(nextItems);
+        setCapabilityResponse(nextCapabilities);
+        setCapabilityMessage(nextCapabilities ? '生产能力状态已加载' : '生产能力状态暂时无法加载');
         setErrorMessage(null);
         setSelectedFileIds((current) =>
           current.filter((fileId) => nextFiles.records.some((file) => file.fileId === fileId)),
@@ -471,6 +509,8 @@ export function OpenPlatformKnowledgeManagementPanel() {
         if (!isActive) return;
 
         setErrorMessage(getOpenPlatformKnowledgeManagementErrorMessage(error));
+        setCapabilityResponse(null);
+        setCapabilityMessage('生产能力状态暂时无法加载');
       })
       .finally(() => {
         if (!isActive) return;
@@ -1018,6 +1058,47 @@ export function OpenPlatformKnowledgeManagementPanel() {
           </article>
         ))}
       </section>
+
+      {capabilityResponse ? (
+        <article className={cn(sectionShell, 'overflow-hidden')} aria-label="平台端知识库生产能力状态">
+          <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-200" />
+              <div>
+                <h2 className="text-lg font-semibold tracking-normal text-white">生产能力状态</h2>
+                <p className="mt-1 text-sm text-slate-400">展示内部能力与生产级高风险能力开关。</p>
+              </div>
+            </div>
+            <Badge className="border-cyan-300/20 bg-cyan-300/[0.10] text-cyan-100">
+              tenant 每日 {capabilityResponse.qaQuotaPolicy.tenantDailyLimit} 次 · institution 每日 {capabilityResponse.qaQuotaPolicy.institutionDailyLimit} 次
+            </Badge>
+          </div>
+          <div className="p-5">
+            <div className="mb-4 rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-3 text-sm font-semibold text-slate-300">
+              {capabilityMessage}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {capabilityResponse.capabilities.map((capability) => (
+                <article key={capability.id} className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-sm font-semibold tracking-normal text-white">{capability.label}</h3>
+                    <Badge className={capability.enabled ? 'border-emerald-300/20 bg-emerald-300/[0.10] text-emerald-100' : 'border-amber-300/20 bg-amber-300/[0.10] text-amber-100'}>
+                      {capability.enabled ? '已启用' : '未启用'}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-slate-400">{capability.summary}</p>
+                  {!capability.enabled ? (
+                    <div className="mt-3 space-y-2 text-xs leading-5 text-amber-100">
+                      <div>{capability.disabledReason}</div>
+                      <div>{capability.entryCondition}</div>
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        </article>
+      ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
         <aside className="space-y-5">

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as platformQaRoute from '@/app/api/v1/open-platform/knowledge-management/qa/route';
 import * as platformQaAuditsRoute from '@/app/api/v1/open-platform/knowledge-management/qa/audits/route';
+import * as platformCapabilitiesRoute from '@/app/api/v1/open-platform/knowledge-management/capabilities/route';
 import * as institutionQaRoute from '@/app/api/institution/knowledge-management/qa/route';
 import * as institutionQaAuditsRoute from '@/app/api/institution/knowledge-management/qa/audits/route';
 import * as platformEmbeddingRoute from '@/app/api/v1/open-platform/knowledge-management/embeddings/route';
@@ -40,6 +41,7 @@ vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository
 const now = new Date('2026-06-14T08:00:00.000Z');
 const platformQaUrl = 'http://localhost/api/v1/open-platform/knowledge-management/qa';
 const platformQaAuditsUrl = 'http://localhost/api/v1/open-platform/knowledge-management/qa/audits';
+const platformCapabilitiesUrl = 'http://localhost/api/v1/open-platform/knowledge-management/capabilities';
 const institutionQaUrl = 'http://localhost/api/institution/knowledge-management/qa';
 const institutionQaAuditsUrl = 'http://localhost/api/institution/knowledge-management/qa/audits';
 const platformEmbeddingUrl = 'http://localhost/api/v1/open-platform/knowledge-management/embeddings';
@@ -55,6 +57,10 @@ const unsafeFragments = [
   'textContent',
   'fullText',
   'postgres://',
+  'DATABASE_URL',
+  'prompt',
+  'system prompt',
+  '真实 AI 原始响应',
 ];
 
 const visibleKnowledge = {
@@ -265,6 +271,66 @@ describe('知识库 QA API route', () => {
     expect(response.status).toBe(403);
     expect(await readJson(response)).toEqual({ code: 'forbidden', error: '没有访问权限' });
     expect(repository.listKnowledgeQaAuditLogs).not.toHaveBeenCalled();
+  });
+
+  it('平台端可查看知识库 production capability 状态且不泄露敏感信息', async () => {
+    platformContext();
+
+    const response = await platformCapabilitiesRoute.GET(
+      new Request(platformCapabilitiesUrl),
+    );
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual(
+      expect.objectContaining({
+        requestId: 'knowledge-base-production-capabilities',
+        readonly: true,
+      }),
+    );
+    expect(payload.capabilities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'fileManagement', enabled: true, status: 'enabled' }),
+        expect.objectContaining({
+          id: 'realAiProvider',
+          enabled: false,
+          status: 'disabled',
+          disabledReason: expect.stringMatching(/未启用|未接入/),
+          entryCondition: expect.stringMatching(/审批|评审|验收|方案/),
+        }),
+        expect.objectContaining({
+          id: 'ocr',
+          enabled: false,
+          status: 'disabled',
+          disabledReason: expect.stringMatching(/未启用|未接入/),
+          entryCondition: expect.stringMatching(/审批|评审|验收|方案/),
+        }),
+        expect.objectContaining({
+          id: 'runtimeIngestion',
+          enabled: false,
+          status: 'disabled',
+          disabledReason: expect.stringMatching(/未启用|未接入/),
+          entryCondition: expect.stringMatching(/审批|评审|验收|方案/),
+        }),
+      ]),
+    );
+    expect(payload.qaQuotaPolicy).toEqual({
+      tenantDailyLimit: 100,
+      institutionDailyLimit: 30,
+      usageLimitedMessage: '当前知识库问答次数已达上限，请稍后再试',
+    });
+    expectSafePayload(payload);
+  });
+
+  it('非 platform scope 不能查看知识库 production capability 状态', async () => {
+    institutionContext();
+
+    const response = await platformCapabilitiesRoute.GET(
+      new Request(platformCapabilitiesUrl),
+    );
+
+    expect(response.status).toBe(403);
+    expect(await readJson(response)).toEqual({ code: 'forbidden', error: '没有访问权限' });
   });
 
   it('机构端 POST QA 只使用 access context 的 tenant 和 institution', async () => {
