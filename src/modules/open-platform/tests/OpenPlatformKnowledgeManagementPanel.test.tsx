@@ -35,6 +35,37 @@ describe('平台端知识库管理只读看板', () => {
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         const method = init?.method ?? 'GET';
+        if (url.includes('/api/v1/open-platform/knowledge-management/search')) {
+          return Response.json({
+            requestId: 'platform-knowledge-keyword-search',
+            readonly: true,
+            dataSource: 'repository',
+            records: [
+              {
+                knowledgeId: 'knowledge-price-reply',
+                knowledgeTitle: '价格回复知识库',
+                fileId: 'file-ui-a',
+                fileName: '平台文件.pdf',
+                chunkId: 'search-chunk-ui-a',
+                chunkIndex: 0,
+                textPreview: '平台端冷敷引用片段预览',
+                matchReason: '片段包含关键词“冷敷”',
+              },
+            ],
+            pageInfo: {
+              page: 1,
+              pageSize: 10,
+              total: 1,
+              pageCount: 1,
+              hasPreviousPage: false,
+              hasNextPage: false,
+            },
+            emptyState: {
+              title: '暂无匹配片段',
+              description: '当前范围没有命中关键词的已解析知识片段。',
+            },
+          });
+        }
         if (url.includes('/parse/chunks')) {
           return Response.json({
             records: [
@@ -286,6 +317,30 @@ describe('平台端知识库管理只读看板', () => {
         expect.objectContaining({ method: 'DELETE' }),
       ),
     );
+  });
+
+  it('平台端新增检索片段区域，可按关键词查看引用片段', async () => {
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    expect(await screen.findByRole('heading', { name: '检索片段' })).toBeInTheDocument();
+    const searchSection = screen.getByLabelText('平台端知识片段检索');
+    fireEvent.change(within(searchSection).getByLabelText('输入检索关键词'), {
+      target: { value: '冷敷' },
+    });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
+
+    expect(await screen.findByText('平台端冷敷引用片段预览')).toBeInTheDocument();
+    expect(screen.getByText('片段包含关键词“冷敷”')).toBeInTheDocument();
+    expect(screen.getByText('价格回复知识库 · 平台文件.pdf · 片段 1')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/open-platform/knowledge-management/search?'),
+        expect.objectContaining({ cache: 'no-store' }),
+      ),
+    );
+    expect(searchSection.textContent).not.toContain('embedding');
+    expect(searchSection.textContent).not.toContain('训练');
+    expect(searchSection.textContent).not.toContain('问答');
   });
 
   it('默认展示全部机构，切换机构后过滤文件、分类、问题、知识条目和任务', async () => {

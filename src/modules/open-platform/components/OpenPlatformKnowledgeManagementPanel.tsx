@@ -70,6 +70,16 @@ type ManagedKnowledgeChunkRecord = {
   textPreview: string;
   charCount: number;
 };
+type KnowledgeSearchResultRecord = {
+  knowledgeId: string;
+  knowledgeTitle: string;
+  fileId: string;
+  fileName: string;
+  chunkId: string;
+  chunkIndex: number;
+  textPreview: string;
+  matchReason: string;
+};
 
 const fileStatusLabels: Record<KnowledgeFileParseStatus, string> = {
   parsed: '已解析',
@@ -297,6 +307,17 @@ function fileParseChunksPath(input: { knowledgeId: string; tenantId: string; fil
   return `/api/v1/open-platform/knowledge-management/items/${encodeURIComponent(input.knowledgeId)}/files/${encodeURIComponent(input.fileId)}/parse/chunks?tenantId=${encodeURIComponent(input.tenantId)}`;
 }
 
+function keywordSearchPath(input: { tenantId: string; keyword: string }) {
+  const params = new URLSearchParams({
+    tenantId: input.tenantId,
+    keyword: input.keyword,
+    page: '1',
+    pageSize: '10',
+  });
+
+  return `/api/v1/open-platform/knowledge-management/search?${params.toString()}`;
+}
+
 export function OpenPlatformKnowledgeManagementPanel() {
   const [selectedTenantId, setSelectedTenantId] = useState(ALL_TENANTS);
   const [fileSearch, setFileSearch] = useState('');
@@ -313,6 +334,10 @@ export function OpenPlatformKnowledgeManagementPanel() {
   const [expandedParseFileId, setExpandedParseFileId] = useState<string | null>(null);
   const [managedFile, setManagedFile] = useState<File | null>(null);
   const [fileActionMessage, setFileActionMessage] = useState<string | null>(null);
+  const [keywordSearchInput, setKeywordSearchInput] = useState('');
+  const [keywordSearchResults, setKeywordSearchResults] = useState<KnowledgeSearchResultRecord[]>([]);
+  const [keywordSearchMessage, setKeywordSearchMessage] = useState('请输入关键词检索已解析片段');
+  const [isKeywordSearching, setIsKeywordSearching] = useState(false);
   const [isFileActionLoading, setIsFileActionLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -629,6 +654,43 @@ export function OpenPlatformKnowledgeManagementPanel() {
       }));
     } catch {
       setFileActionMessage('解析片段暂时无法加载');
+    }
+  }
+
+  async function handleKeywordSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const keyword = keywordSearchInput.trim();
+    const tenantId = selectedTenantParam ?? scopedKnowledgeItems[0]?.tenantId;
+    if (!keyword) {
+      setKeywordSearchResults([]);
+      setKeywordSearchMessage('请输入关键词后再检索知识片段');
+      return;
+    }
+    if (!tenantId) {
+      setKeywordSearchResults([]);
+      setKeywordSearchMessage('当前范围暂无可检索知识库');
+      return;
+    }
+
+    setIsKeywordSearching(true);
+    setKeywordSearchMessage('正在检索片段...');
+    try {
+      const response = await fetch(keywordSearchPath({ tenantId, keyword }), { cache: 'no-store' });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setKeywordSearchResults([]);
+        setKeywordSearchMessage('知识库片段检索暂时不可用');
+        return;
+      }
+
+      const records = payload.records as KnowledgeSearchResultRecord[];
+      setKeywordSearchResults(records);
+      setKeywordSearchMessage(records.length > 0 ? `已命中 ${records.length} 个引用片段` : '暂无匹配片段');
+    } catch {
+      setKeywordSearchResults([]);
+      setKeywordSearchMessage('知识库片段检索暂时不可用');
+    } finally {
+      setIsKeywordSearching(false);
     }
   }
 
@@ -1011,6 +1073,58 @@ export function OpenPlatformKnowledgeManagementPanel() {
               <span className="text-sm font-semibold text-slate-400">共 {formatNumber(scopedKnowledgeItems.length)} 条</span>
             </div>
             <KnowledgeTable items={scopedKnowledgeItems} />
+          </article>
+
+          <article className={cn(sectionShell, 'overflow-hidden')} aria-label="平台端知识片段检索">
+            <div className="flex flex-col gap-4 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-3">
+                <Search className="h-5 w-5 text-cyan-200" />
+                <div>
+                  <h2 className="text-lg font-semibold tracking-normal text-white">检索片段</h2>
+                  <p className="mt-1 text-sm text-slate-400">按关键词读取已解析文件片段并返回引用位置。</p>
+                </div>
+              </div>
+              <form onSubmit={handleKeywordSearch} className="flex w-full flex-col gap-2 sm:flex-row lg:w-[460px]">
+                <label className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <input
+                    aria-label="输入检索关键词"
+                    value={keywordSearchInput}
+                    onChange={(event) => setKeywordSearchInput(event.target.value)}
+                    placeholder="输入关键词"
+                    className="h-10 w-full rounded-2xl border border-white/10 bg-[#071322]/72 pl-10 pr-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/35"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={isKeywordSearching}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.10] px-4 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/[0.16] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isKeywordSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  检索片段
+                </button>
+              </form>
+            </div>
+            <div className="p-5">
+              <div className="mb-4 rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-3 text-sm font-semibold text-slate-300">
+                {keywordSearchMessage}
+              </div>
+              {keywordSearchResults.length === 0 ? (
+                <EmptyState title="暂无匹配片段" description="输入关键词后可查看已解析文件的引用片段。" />
+              ) : (
+                <div className="grid gap-3 xl:grid-cols-2">
+                  {keywordSearchResults.map((result) => (
+                    <article key={result.chunkId} className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+                      <div className="text-xs font-semibold text-slate-400">
+                        {result.knowledgeTitle} · {result.fileName} · 片段 {result.chunkIndex + 1}
+                      </div>
+                      <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-200">{result.textPreview}</p>
+                      <div className="mt-3 text-xs font-semibold text-cyan-100">{result.matchReason}</div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
           </article>
 
           <article className={cn(sectionShell, 'overflow-hidden')} aria-label="知识库文件管理操作区">

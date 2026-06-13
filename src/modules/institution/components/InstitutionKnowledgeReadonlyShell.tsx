@@ -32,6 +32,16 @@ type InstitutionKnowledgeChunkRecord = {
   textPreview: string;
   charCount: number;
 };
+type InstitutionKnowledgeSearchResultRecord = {
+  knowledgeId: string;
+  knowledgeTitle: string;
+  fileId: string;
+  fileName: string;
+  chunkId: string;
+  chunkIndex: number;
+  textPreview: string;
+  matchReason: string;
+};
 
 const statusLabels: Record<InstitutionKnowledgeItemDto['status'], string> = {
   ready: '可用',
@@ -92,6 +102,10 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [chunksByFileId, setChunksByFileId] = useState<Record<string, InstitutionKnowledgeChunkRecord[]>>({});
   const [expandedChunkFileId, setExpandedChunkFileId] = useState<string | null>(null);
   const [fileMessage, setFileMessage] = useState<string | null>(null);
+  const [chunkSearchInput, setChunkSearchInput] = useState('');
+  const [chunkSearchResults, setChunkSearchResults] = useState<InstitutionKnowledgeSearchResultRecord[]>([]);
+  const [chunkSearchMessage, setChunkSearchMessage] = useState('请输入关键词检索已解析片段');
+  const [isChunkSearching, setIsChunkSearching] = useState(false);
   const [pageInfo, setPageInfo] = useState<InstitutionKnowledgeListResponse['pageInfo']>({
     page: 1,
     pageSize: 10,
@@ -216,6 +230,40 @@ export function InstitutionKnowledgeReadonlyShell() {
     }
   }
 
+  async function searchChunks(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const keyword = chunkSearchInput.trim();
+    if (!keyword) {
+      setChunkSearchResults([]);
+      setChunkSearchMessage('请输入关键词后再检索知识片段');
+      return;
+    }
+
+    setIsChunkSearching(true);
+    setChunkSearchMessage('正在检索片段...');
+    try {
+      const params = new URLSearchParams({ keyword });
+      const response = await fetch(`/api/institution/knowledge-management/search?${params.toString()}`, {
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setChunkSearchResults([]);
+        setChunkSearchMessage('知识库片段检索暂时不可用');
+        return;
+      }
+
+      const records = payload.records as InstitutionKnowledgeSearchResultRecord[];
+      setChunkSearchResults(records);
+      setChunkSearchMessage(records.length > 0 ? `已命中 ${records.length} 个引用片段` : '暂无匹配片段');
+    } catch {
+      setChunkSearchResults([]);
+      setChunkSearchMessage('知识库片段检索暂时不可用');
+    } finally {
+      setIsChunkSearching(false);
+    }
+  }
+
   return (
     <section
       aria-label="机构知识库只读列表"
@@ -279,6 +327,60 @@ export function InstitutionKnowledgeReadonlyShell() {
           title="暂无授权可见知识库"
           description="当前机构暂未获得平台授权的知识库，或搜索条件没有匹配结果。"
         />
+      ) : null}
+
+      {status === 'success' ? (
+        <section
+          aria-label="机构端知识片段检索"
+          className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">检索片段</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">按关键词查看本机构可见知识库的引用片段。</p>
+            </div>
+            <form onSubmit={searchChunks} className="flex w-full flex-col gap-2 sm:flex-row lg:w-[460px]">
+              <label className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  aria-label="输入片段检索关键词"
+                  value={chunkSearchInput}
+                  onChange={(event) => setChunkSearchInput(event.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-cyan-400"
+                  placeholder="输入关键词"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={isChunkSearching}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isChunkSearching ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                检索片段
+              </button>
+            </form>
+          </div>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+            {chunkSearchMessage}
+          </div>
+          <div className="mt-3 grid gap-3 xl:grid-cols-2">
+            {chunkSearchResults.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
+                暂无匹配片段
+              </div>
+            ) : (
+              chunkSearchResults.map((result) => (
+                <article key={result.chunkId} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div className="text-xs font-semibold text-slate-500">
+                    {result.knowledgeTitle} · {result.fileName} · 片段 {result.chunkIndex + 1}
+                  </div>
+                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{result.textPreview}</p>
+                  <div className="mt-2 text-xs font-semibold text-cyan-700">{result.matchReason}</div>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
       ) : null}
 
       {status === 'success' && records.length > 0 ? (
