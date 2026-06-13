@@ -75,6 +75,8 @@ describe('平台知识库管理 V1 只读 API contract', () => {
       topQuestions: expect.any(Array),
       importJobs: expect.any(Array),
     });
+    expect(routePayload).not.toHaveProperty('knowledgeItems');
+    expect(routePayload).not.toHaveProperty('files');
     expect(routePayload).toEqual(directPayload);
     expectReadonlyPayload(routePayload);
   });
@@ -101,6 +103,27 @@ describe('平台知识库管理 V1 只读 API contract', () => {
     expect(await readJson(routeResponse)).toEqual(response);
   });
 
+  it('files route 对异常分页参数使用安全默认值，并保持空结果为中文空状态', async () => {
+    const invalidPageResponse = await filesRoute.GET(new Request(`${filesUrl}?keyword=${encodeURIComponent('没有匹配结果')}&page=-2&pageSize=999`));
+    const payload = await readJson(invalidPageResponse);
+
+    expect(invalidPageResponse.status).toBe(200);
+    expect(payload.records).toEqual([]);
+    expect(payload.pageInfo).toEqual(expect.objectContaining({
+      page: 1,
+      pageSize: 10,
+      total: 0,
+      pageCount: 0,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    }));
+    expect(payload.emptyState).toEqual(expect.objectContaining({
+      title: '暂无匹配的知识库运营数据',
+      description: '请调整机构范围或文件名搜索条件后再查看。',
+    }));
+    expectReadonlyPayload(payload);
+  });
+
   it('items 支持 tenantId、keyword、category、trainingStatus 过滤，且只返回 descriptionPreview', async () => {
     const response = getPlatformKnowledgeItemsResponse({
       tenantId: 'tenant-low-hit',
@@ -125,6 +148,27 @@ describe('平台知识库管理 V1 只读 API contract', () => {
     const routeResponse = await itemsRoute.GET(new Request(`${itemsUrl}?tenantId=tenant-low-hit&keyword=${encodeURIComponent('恢复期')}&category=${encodeURIComponent('话术库')}&trainingStatus=pending&page=1&pageSize=5`));
     expect(routeResponse.status).toBe(200);
     expect(await readJson(routeResponse)).toEqual(response);
+  });
+
+  it('items route 对异常分页参数使用安全默认值，并保持空结果为中文空状态', async () => {
+    const invalidPageResponse = await itemsRoute.GET(new Request(`${itemsUrl}?keyword=${encodeURIComponent('没有匹配结果')}&page=abc&pageSize=0`));
+    const payload = await readJson(invalidPageResponse);
+
+    expect(invalidPageResponse.status).toBe(200);
+    expect(payload.records).toEqual([]);
+    expect(payload.pageInfo).toEqual(expect.objectContaining({
+      page: 1,
+      pageSize: 10,
+      total: 0,
+      pageCount: 0,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    }));
+    expect(payload.emptyState).toEqual(expect.objectContaining({
+      title: '暂无匹配的知识库运营数据',
+      description: '请调整机构范围或文件名搜索条件后再查看。',
+    }));
+    expectReadonlyPayload(payload);
   });
 
   it('空结果返回中文空状态，非法分页返回中文产品化错误', async () => {
