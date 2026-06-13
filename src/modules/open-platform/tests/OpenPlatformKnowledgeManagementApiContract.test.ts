@@ -1,0 +1,148 @@
+import { describe, expect, it } from 'vitest';
+import * as overviewRoute from '@/app/api/v1/open-platform/knowledge-management/route';
+import * as filesRoute from '@/app/api/v1/open-platform/knowledge-management/files/route';
+import * as itemsRoute from '@/app/api/v1/open-platform/knowledge-management/items/route';
+import {
+  buildReadonlyApiError,
+  getPlatformKnowledgeFilesResponse,
+  getPlatformKnowledgeItemsResponse,
+  getPlatformKnowledgeOverviewResponse,
+} from '@/modules/open-platform/server/platformKnowledgeManagementApiContract';
+
+const overviewUrl = 'http://localhost/api/v1/open-platform/knowledge-management';
+const filesUrl = 'http://localhost/api/v1/open-platform/knowledge-management/files';
+const itemsUrl = 'http://localhost/api/v1/open-platform/knowledge-management/items';
+
+const forbiddenFragments = [
+  'Cannot find module',
+  'worker failed',
+  'node_modules',
+  'H:\\',
+  '/Users/',
+  'stack trace',
+  'database error',
+  'embedding provider raw error',
+];
+
+const forbiddenFields = [
+  'content',
+  'body',
+  'rawContent',
+  'fullText',
+  'knowledgeBody',
+  'fileContent',
+  'downloadUrl',
+  'uploadUrl',
+  'exportUrl',
+];
+
+function expectReadonlyPayload(payload: unknown) {
+  const serialized = JSON.stringify(payload);
+
+  forbiddenFragments.forEach((fragment) => {
+    expect(serialized).not.toContain(fragment);
+  });
+  forbiddenFields.forEach((field) => {
+    expect(serialized).not.toContain(`"${field}"`);
+  });
+}
+
+async function readJson(response: Response) {
+  expect(response.headers.get('content-type')).toContain('application/json');
+
+  return response.json() as Promise<Record<string, unknown>>;
+}
+
+describe('平台知识库管理 V1 只读 API contract', () => {
+  it('route 只暴露只读 GET', () => {
+    expect(Object.keys(overviewRoute).sort()).toEqual(['GET']);
+    expect(Object.keys(filesRoute).sort()).toEqual(['GET']);
+    expect(Object.keys(itemsRoute).sort()).toEqual(['GET']);
+  });
+
+  it('overview 返回 totals、tenants、categoryStats、topQuestions 和 importJobs', async () => {
+    const directPayload = getPlatformKnowledgeOverviewResponse();
+    const routeResponse = await overviewRoute.GET(new Request(overviewUrl));
+    const routePayload = await readJson(routeResponse);
+
+    expect(routeResponse.status).toBe(200);
+    expect(routePayload).toMatchObject({
+      readonly: true,
+      dataSource: 'mock',
+      totals: expect.any(Object),
+      tenants: expect.any(Array),
+      categoryStats: expect.any(Array),
+      topQuestions: expect.any(Array),
+      importJobs: expect.any(Array),
+    });
+    expect(routePayload).toEqual(directPayload);
+    expectReadonlyPayload(routePayload);
+  });
+
+  it('files 支持 tenantId、keyword、status 过滤和分页', async () => {
+    const response = getPlatformKnowledgeFilesResponse({
+      tenantId: 'tenant-low-hit',
+      keyword: '修复',
+      status: 'parsed',
+      page: '1',
+      pageSize: '2',
+    });
+
+    expect(response.records.length).toBeGreaterThan(0);
+    expect(response.records.length).toBeLessThanOrEqual(2);
+    expect(response.pageInfo).toEqual(expect.objectContaining({ page: 1, pageSize: 2 }));
+    expect(response.records.every((file) => file.tenantId === 'tenant-low-hit')).toBe(true);
+    expect(response.records.every((file) => file.parseStatus === 'parsed')).toBe(true);
+    expect(response.records.some((file) => file.fileName.includes('修复') || file.category.includes('修复') || file.folder.includes('修复'))).toBe(true);
+    expectReadonlyPayload(response);
+
+    const routeResponse = await filesRoute.GET(new Request(`${filesUrl}?tenantId=tenant-low-hit&keyword=${encodeURIComponent('修复')}&status=parsed&page=1&pageSize=2`));
+    expect(routeResponse.status).toBe(200);
+    expect(await readJson(routeResponse)).toEqual(response);
+  });
+
+  it('items 支持 tenantId、keyword、category、trainingStatus 过滤，且只返回 descriptionPreview', async () => {
+    const response = getPlatformKnowledgeItemsResponse({
+      tenantId: 'tenant-low-hit',
+      keyword: '恢复期',
+      category: '话术库',
+      trainingStatus: 'pending',
+      page: '1',
+      pageSize: '5',
+    });
+
+    expect(response.records).toEqual([
+      expect.objectContaining({
+        tenantId: 'tenant-low-hit',
+        category: '话术库',
+        trainingStatus: 'pending',
+        descriptionPreview: expect.stringContaining('恢复期'),
+      }),
+    ]);
+    expect(response.records[0]).not.toHaveProperty('summaryPreview');
+    expectReadonlyPayload(response);
+
+    const routeResponse = await itemsRoute.GET(new Request(`${itemsUrl}?tenantId=tenant-low-hit&keyword=${encodeURIComponent('恢复期')}&category=${encodeURIComponent('话术库')}&trainingStatus=pending&page=1&pageSize=5`));
+    expect(routeResponse.status).toBe(200);
+    expect(await readJson(routeResponse)).toEqual(response);
+  });
+
+  it('空结果返回中文空状态，非法分页返回中文产品化错误', async () => {
+    const emptyFiles = getPlatformKnowledgeFilesResponse({ keyword: '没有匹配结果', page: '1', pageSize: '10' });
+    expect(emptyFiles.records).toEqual([]);
+    expect(emptyFiles.emptyState).toEqual(expect.objectContaining({
+      title: '暂无匹配的知识库运营数据',
+      description: '请调整机构范围或文件名搜索条件后再查看。',
+    }));
+
+    const error = buildReadonlyApiError('页码参数不正确');
+    expect(error).toEqual({
+      error: {
+        code: 'readonly_contract_error',
+        message: '页码参数不正确',
+      },
+    });
+    expectReadonlyPayload(emptyFiles);
+    expectReadonlyPayload(error);
+  });
+});
