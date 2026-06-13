@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import * as searchRoute from '@/app/api/v1/knowledge-base/runtime/search/route';
+import { handleSearchGET } from '@/modules/knowledge-base/server/v1-knowledge-base-runtime-api-routes';
 import {
   searchV1KnowledgeBaseRuntime,
   v1KnowledgeBaseSearchRuntimeResponseFields,
@@ -117,7 +117,7 @@ function searchRequest(query: string, extra = '') {
 describe('V1 知识库检索 runtime', () => {
   it('search API happy path 返回低敏 readonly results', async () => {
     const repository = createRepository();
-    const response = await searchRoute.GET(searchRequest('水光 护理'), { repository });
+    const response = await handleSearchGET(searchRequest('水光 护理'), { repository });
     const body = await response.json();
 
     expect(response.status).toBe(200);

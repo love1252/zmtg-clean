@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import * as uploadRoute from '@/app/api/v1/knowledge-base/runtime/documents/upload/route';
-import * as documentsRoute from '@/app/api/v1/knowledge-base/runtime/documents/route';
+import {
+  handleDocumentsGET,
+  handleUploadPOST,
+} from '@/modules/knowledge-base/server/v1-knowledge-base-runtime-api-routes';
 import {
   chunkV1KnowledgeBaseRuntimeDocument,
   parseV1KnowledgeBaseRuntimeDocument,
@@ -311,7 +313,7 @@ describe('V1 知识库上传 / 解析 / 分块 runtime', () => {
 
   it('POST upload route 返回 created / unsupported / oversized / empty / parse failed', async () => {
     const repository = createRepository();
-    const created = await uploadRoute.POST(
+    const created = await handleUploadPOST(
       uploadRequest({
         ...scope,
         sourceKind: 'demo',
@@ -327,25 +329,25 @@ describe('V1 知识库上传 / 解析 / 分块 runtime', () => {
     expectResponseFieldsWhitelisted(createdBody);
     expectNoForbiddenRuntimeLeak(createdBody);
 
-    const unsupported = await uploadRoute.POST(
+    const unsupported = await handleUploadPOST(
       uploadRequest({ ...scope, sourceKind: 'demo', fileName: 'x.pdf', mimeType: 'application/pdf', content: 'x' }),
       { repository },
     );
     expect(unsupported.status).toBe(415);
 
-    const oversized = await uploadRoute.POST(
+    const oversized = await handleUploadPOST(
       uploadRequest({ ...scope, sourceKind: 'demo', fileName: 'x.txt', mimeType: 'text/plain', content: 'x'.repeat(32_001) }),
       { repository },
     );
     expect(oversized.status).toBe(413);
 
-    const empty = await uploadRoute.POST(
+    const empty = await handleUploadPOST(
       uploadRequest({ ...scope, sourceKind: 'demo', fileName: 'x.txt', mimeType: 'text/plain', content: '   ' }),
       { repository },
     );
     expect(empty.status).toBe(400);
 
-    const parseFailed = await uploadRoute.POST(
+    const parseFailed = await handleUploadPOST(
       uploadRequest({ ...scope, sourceKind: 'demo', fileName: 'x.json', mimeType: 'application/json', content: '{' }),
       { repository },
     );
@@ -354,7 +356,7 @@ describe('V1 知识库上传 / 解析 / 分块 runtime', () => {
 
   it('GET documents route 返回 readonly summaries 且不暴露敏感 runtime 片段', async () => {
     const repository = createRepository();
-    const response = await documentsRoute.GET(new Request(documentsUrl), { repository });
+    const response = await handleDocumentsGET(new Request(documentsUrl), { repository });
 
     expect(response.status).toBe(200);
     const body = await response.json();

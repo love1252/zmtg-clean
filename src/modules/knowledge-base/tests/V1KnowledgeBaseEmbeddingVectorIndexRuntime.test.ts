@@ -2,8 +2,10 @@ import { readFileSync } from 'node:fs';
 
 import { getTableName } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
-import * as runRoute from '@/app/api/v1/knowledge-base/runtime/index-jobs/run/route';
-import * as jobsRoute from '@/app/api/v1/knowledge-base/runtime/index-jobs/route';
+import {
+  handleIndexJobRunPOST,
+  handleIndexJobsGET,
+} from '@/modules/knowledge-base/server/v1-knowledge-base-runtime-api-routes';
 import { knowledgeChunkEmbeddings } from '@/server/db/schema';
 import {
   createMockDemoKnowledgeBaseEmbedding,
@@ -297,7 +299,7 @@ describe('V1 知识库 embedding / 向量索引 runtime', () => {
 
   it('POST run route 与 GET index jobs route 仅返回低敏 summary', async () => {
     const repository = createRepository();
-    const runResponse = await runRoute.POST(
+    const runResponse = await handleIndexJobRunPOST(
       postRequest({
         ...scope,
         jobId: 'kb-index-job-demo-001',
@@ -310,7 +312,7 @@ describe('V1 知识库 embedding / 向量索引 runtime', () => {
     expectResponseFieldsWhitelisted(runBody);
     expectNoForbiddenLeak(runBody);
 
-    const jobsResponse = await jobsRoute.GET(new Request(jobsUrl), { repository });
+    const jobsResponse = await handleIndexJobsGET(new Request(jobsUrl), { repository });
     expect(jobsResponse.status).toBe(200);
     const jobsBody = await jobsResponse.json();
     expect(jobsBody).toMatchObject({
