@@ -5,6 +5,11 @@ import { normalizePageParams } from '@/modules/open-platform/server/platformKnow
 export const PLATFORM_KNOWLEDGE_FILE_MAX_BYTES = 20 * 1024 * 1024;
 
 export type PlatformKnowledgeFileStatus = 'active' | 'archived';
+export type PlatformKnowledgeFileParseStatus =
+  | 'pending'
+  | 'processing'
+  | 'succeeded'
+  | 'failed';
 
 export type PlatformKnowledgeUploadFileLike = {
   name: string;
@@ -27,11 +32,23 @@ export type PlatformKnowledgeFileRepositoryRecord = {
   createdAt: Date;
   updatedAt: Date;
   archivedAt: Date | null;
+  parseStatus?: PlatformKnowledgeFileParseStatus;
+  failureReasonCode?: string | null;
+  safeFailureMessage?: string | null;
+  textLength?: number;
+  chunkCount?: number;
+  parserVersion?: string | null;
 };
 
 export type PlatformKnowledgeFileDto = Omit<PlatformKnowledgeFileRepositoryRecord, 'storageKey'> & {
   fileType: string;
   sizeLabel: string;
+  parseStatus: PlatformKnowledgeFileParseStatus;
+  failureReasonCode: string | null;
+  safeFailureMessage: string | null;
+  textLength: number;
+  chunkCount: number;
+  parserVersion: string | null;
 };
 
 export type PlatformKnowledgeFileListResponse = {
@@ -210,6 +227,12 @@ function mapFileRecordToDto(record: PlatformKnowledgeFileRepositoryRecord): Plat
     ...safeRecord,
     fileType: extensionOf(record.originalFilename).replace('.', '').toUpperCase(),
     sizeLabel: sizeLabel(record.sizeBytes),
+    parseStatus: record.parseStatus ?? 'pending',
+    failureReasonCode: record.failureReasonCode ?? null,
+    safeFailureMessage: record.safeFailureMessage ?? null,
+    textLength: record.textLength ?? 0,
+    chunkCount: record.chunkCount ?? 0,
+    parserVersion: record.parserVersion ?? null,
   };
 }
 

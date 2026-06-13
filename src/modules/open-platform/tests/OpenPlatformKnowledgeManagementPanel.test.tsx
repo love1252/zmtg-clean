@@ -35,6 +35,42 @@ describe('平台端知识库管理只读看板', () => {
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         const method = init?.method ?? 'GET';
+        if (url.includes('/parse/chunks')) {
+          return Response.json({
+            records: [
+              {
+                chunkId: 'chunk-ui-a',
+                tenantId: 'tenant-xinglan',
+                knowledgeId: 'knowledge-price-reply',
+                fileId: 'file-ui-a',
+                chunkIndex: 0,
+                textPreview: '平台文件解析片段预览',
+                charCount: 10,
+                createdAt: '2026-06-13T08:00:00.000Z',
+                updatedAt: '2026-06-13T08:00:00.000Z',
+              },
+            ],
+          });
+        }
+        if (url.includes('/parse') && method === 'POST') {
+          return Response.json({
+            status: 'succeeded',
+            parse: {
+              parseId: 'parse-ui-a',
+              tenantId: 'tenant-xinglan',
+              knowledgeId: 'knowledge-price-reply',
+              fileId: 'file-ui-a',
+              parseStatus: 'succeeded',
+              failureReasonCode: null,
+              safeFailureMessage: null,
+              textLength: 10,
+              chunkCount: 1,
+              parserVersion: 'local-text-parser-v1',
+              createdAt: '2026-06-13T08:00:00.000Z',
+              updatedAt: '2026-06-13T08:00:00.000Z',
+            },
+          });
+        }
         if (url.includes('/download')) {
           return new Response('file bytes', {
             status: 200,
@@ -62,6 +98,12 @@ describe('平台端知识库管理只读看板', () => {
               archivedAt: null,
               fileType: 'PDF',
               sizeLabel: '10 B',
+              parseStatus: 'pending',
+              failureReasonCode: null,
+              safeFailureMessage: null,
+              textLength: 0,
+              chunkCount: 0,
+              parserVersion: null,
             },
           }, { status: 201 });
         }
@@ -83,6 +125,12 @@ describe('平台端知识库管理只读看板', () => {
               archivedAt: '2026-06-13T09:00:00.000Z',
               fileType: 'PDF',
               sizeLabel: '10 B',
+              parseStatus: 'pending',
+              failureReasonCode: null,
+              safeFailureMessage: null,
+              textLength: 0,
+              chunkCount: 0,
+              parserVersion: null,
             },
           });
         }
@@ -103,6 +151,12 @@ describe('平台端知识库管理只读看板', () => {
               archivedAt: null,
               fileType: 'PDF',
               sizeLabel: '10 B',
+              parseStatus: 'pending',
+              failureReasonCode: null,
+              safeFailureMessage: null,
+              textLength: 0,
+              chunkCount: 0,
+              parserVersion: null,
             },
           ],
           pageInfo: {
@@ -137,7 +191,7 @@ describe('平台端知识库管理只读看板', () => {
     expect(await screen.findByText('平台知识运营中枢')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: '机构概况' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '知识库管理' })).toBeInTheDocument();
-    expect(screen.getByText('查看各机构知识训练、命中表现、导入概况和高频问题。')).toBeInTheDocument();
+    expect(screen.getByText('查看各机构知识解析、命中表现、导入概况和高频问题。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '同步数据' })).toBeInTheDocument();
     expect(viewLoader.loadOpenPlatformKnowledgeManagementView).toHaveBeenCalledWith({ tenantId: null });
     expect(viewLoader.loadOpenPlatformKnowledgeManagementFiles).toHaveBeenCalledWith({
@@ -155,7 +209,7 @@ describe('平台端知识库管理只读看板', () => {
     expect(screen.getByText('接入机构')).toBeInTheDocument();
     expect(screen.getAllByText('知识条目')[0]).toBeInTheDocument();
     expect(screen.getAllByText('累计命中')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('训练覆盖')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('解析覆盖')[0]).toBeInTheDocument();
     expect(screen.getByText('待优化')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '机构概况' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '运营信号' })).toBeInTheDocument();
@@ -163,7 +217,7 @@ describe('平台端知识库管理只读看板', () => {
     expect(screen.getByRole('heading', { name: '分类表现' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '高频问题' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '知识条目' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '导入与训练任务' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '导入与解析任务' })).toBeInTheDocument();
 
     expectNoRawRuntimeError(container);
     expect(screen.getByRole('heading', { name: '文件管理操作' })).toBeInTheDocument();
@@ -178,7 +232,7 @@ describe('平台端知识库管理只读看板', () => {
     expect(container.querySelector('a[download]')).toBeNull();
   });
 
-  it('平台端文件管理操作区支持上传、下载和归档 API 调用', async () => {
+  it('平台端文件管理操作区支持上传、下载、解析、查看片段和归档 API 调用', async () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
     expect(await screen.findByRole('heading', { name: '文件管理操作' })).toBeInTheDocument();
@@ -206,6 +260,24 @@ describe('平台端知识库管理只读看板', () => {
         expect.objectContaining({ method: 'GET' }),
       ),
     );
+
+    fireEvent.click(screen.getByRole('button', { name: '发起解析' }));
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/files/file-ui-a/parse?tenantId=tenant-xinglan'),
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+    expect(await screen.findByText('文件解析已完成')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看片段' }));
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/files/file-ui-a/parse/chunks?tenantId=tenant-xinglan'),
+        expect.objectContaining({ method: 'GET' }),
+      ),
+    );
+    expect(await screen.findByText('平台文件解析片段预览')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '归档文件' }));
     await waitFor(() =>

@@ -1476,4 +1476,71 @@ describe('数据库结构', () => {
       /credential_ref|credentialref|idempotency_key|idempotencykey|scoped_idempotency|synthetic_placeholder|provider_path|secret_path|raw_payload|raw_credential|request_body|response_body|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string|database_url|"sql"|"stack"/i,
     );
   });
+
+  it('定义知识库文件解析结果和解析 chunk 最小表结构', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const parses = schemaModule.knowledgeDocumentFileParses;
+    const parseChunks = schemaModule.knowledgeDocumentFileParseChunks;
+    const migrationSql = readMigrationSql('knowledge_document_file_parsing');
+    const journal = JSON.parse(readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8')) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+
+    expect(parses).toBeDefined();
+    expect(parseChunks).toBeDefined();
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          idx: 13,
+          tag: '0013_v1_knowledge_document_file_parsing',
+        }),
+      ]),
+    );
+
+    const parseColumns = columnNames(getTableConfig(parses as never).columns);
+    const chunkColumns = columnNames(getTableConfig(parseChunks as never).columns);
+
+    expect(parseColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'knowledge_document_id',
+        'file_id',
+        'parse_status',
+        'failure_reason_code',
+        'safe_failure_message',
+        'text_content',
+        'text_length',
+        'chunk_count',
+        'parser_version',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+    expect(chunkColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'knowledge_document_id',
+        'file_id',
+        'chunk_index',
+        'text_preview',
+        'char_count',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+    expect(migrationSql).toContain('create table "knowledge_document_file_parses"');
+    expect(migrationSql).toContain('create table "knowledge_document_file_parse_chunks"');
+    expect(migrationSql).toContain('"parse_status" varchar(32) default \'pending\' not null');
+    expect(migrationSql).toContain('"text_content" text default \'\' not null');
+    expect(migrationSql).toContain('"text_preview" text not null');
+    expect(migrationSql).toContain(
+      'foreign key ("tenant_id","file_id") references "public"."knowledge_document_files"("tenant_id","id")',
+    );
+    expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
+    expect(migrationSql).not.toMatch(
+      /embedding_vector|embedding_provider|ocr|ai_provider|question_answer|training_content|token|secret|password|database_url|"sql"|"stack"/i,
+    );
+  });
 });
