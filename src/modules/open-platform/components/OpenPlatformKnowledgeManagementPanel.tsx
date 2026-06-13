@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  Archive,
   BarChart3,
   BookOpen,
   Building2,
   CheckCircle2,
   Database,
+  Download,
   FileText,
   Layers3,
   Loader2,
@@ -15,6 +17,7 @@ import {
   Search,
   Sparkles,
   TrendingUp,
+  Upload,
 } from 'lucide-react';
 import {
   getOpenPlatformKnowledgeManagementErrorMessage,
@@ -39,6 +42,22 @@ type KnowledgeTrainingStatus = OpenPlatformKnowledgeManagementItems['records'][n
 type ImportJobStatus = OpenPlatformKnowledgeManagementView['importJobs'][number]['status'];
 type KnowledgeFileRecord = OpenPlatformKnowledgeManagementFiles['records'][number];
 type KnowledgeItemRecord = OpenPlatformKnowledgeManagementItems['records'][number];
+type ManagedKnowledgeFileRecord = {
+  fileId: string;
+  tenantId: string;
+  knowledgeId: string;
+  originalFilename: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  status: 'active' | 'archived';
+  uploadedByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+  fileType: string;
+  sizeLabel: string;
+};
 
 const fileStatusLabels: Record<KnowledgeFileParseStatus, string> = {
   parsed: '已解析',
@@ -232,6 +251,18 @@ function KnowledgeTable({ items }: { items: KnowledgeItemRecord[] }) {
   );
 }
 
+function fileManagementPath(input: { knowledgeId: string; tenantId: string }) {
+  return `/api/v1/open-platform/knowledge-management/items/${encodeURIComponent(input.knowledgeId)}/files?tenantId=${encodeURIComponent(input.tenantId)}`;
+}
+
+function fileDownloadPath(input: { knowledgeId: string; tenantId: string; fileId: string }) {
+  return `/api/v1/open-platform/knowledge-management/items/${encodeURIComponent(input.knowledgeId)}/files/${encodeURIComponent(input.fileId)}/download?tenantId=${encodeURIComponent(input.tenantId)}`;
+}
+
+function fileArchivePath(input: { knowledgeId: string; tenantId: string; fileId: string }) {
+  return `/api/v1/open-platform/knowledge-management/items/${encodeURIComponent(input.knowledgeId)}/files/${encodeURIComponent(input.fileId)}?tenantId=${encodeURIComponent(input.tenantId)}`;
+}
+
 export function OpenPlatformKnowledgeManagementPanel() {
   const [selectedTenantId, setSelectedTenantId] = useState(ALL_TENANTS);
   const [fileSearch, setFileSearch] = useState('');
@@ -242,6 +273,11 @@ export function OpenPlatformKnowledgeManagementPanel() {
   const [view, setView] = useState<OpenPlatformKnowledgeManagementView | null>(null);
   const [filesResponse, setFilesResponse] = useState<OpenPlatformKnowledgeManagementFiles | null>(null);
   const [itemsResponse, setItemsResponse] = useState<OpenPlatformKnowledgeManagementItems | null>(null);
+  const [managedKnowledgeId, setManagedKnowledgeId] = useState('');
+  const [managedFiles, setManagedFiles] = useState<ManagedKnowledgeFileRecord[]>([]);
+  const [managedFile, setManagedFile] = useState<File | null>(null);
+  const [fileActionMessage, setFileActionMessage] = useState<string | null>(null);
+  const [isFileActionLoading, setIsFileActionLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -319,6 +355,53 @@ export function OpenPlatformKnowledgeManagementPanel() {
   const parsedFileCount = view?.totals.parsedFileCount ?? 0;
   const failedFileCount = view?.totals.failedFileCount ?? 0;
   const zeroHitCount = view?.totals.zeroHitCount ?? 0;
+  const effectiveManagedKnowledgeId = scopedKnowledgeItems.some(
+    (item) => item.knowledgeId === managedKnowledgeId,
+  )
+    ? managedKnowledgeId
+    : scopedKnowledgeItems[0]?.knowledgeId ?? '';
+  const managedKnowledge = scopedKnowledgeItems.find(
+    (item) => item.knowledgeId === effectiveManagedKnowledgeId,
+  );
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadManagedFiles() {
+      if (!managedKnowledge?.tenantId || !managedKnowledge.knowledgeId) {
+        setManagedFiles([]);
+        return;
+      }
+
+      setFileActionMessage(null);
+      try {
+        const response = await fetch(fileManagementPath({
+          knowledgeId: managedKnowledge.knowledgeId,
+          tenantId: managedKnowledge.tenantId,
+        }), { cache: 'no-store' });
+        const payload = await response.json().catch(() => null);
+        if (!isActive) return;
+
+        if (!response.ok || !payload || !Array.isArray(payload.records)) {
+          setManagedFiles([]);
+          setFileActionMessage('知识库文件暂时无法加载');
+          return;
+        }
+
+        setManagedFiles(payload.records as ManagedKnowledgeFileRecord[]);
+      } catch {
+        if (!isActive) return;
+        setManagedFiles([]);
+        setFileActionMessage('知识库文件暂时无法加载');
+      }
+    }
+
+    void loadManagedFiles();
+
+    return () => {
+      isActive = false;
+    };
+  }, [managedKnowledge?.knowledgeId, managedKnowledge?.tenantId, refreshVersion]);
 
   function handleSelectTenant(tenantId: string) {
     setIsLoading(true);
@@ -364,6 +447,103 @@ export function OpenPlatformKnowledgeManagementPanel() {
     setErrorMessage(null);
     setIsSyncing(true);
     setRefreshVersion((current) => current + 1);
+  }
+
+  async function reloadManagedFiles() {
+    if (!managedKnowledge?.tenantId || !managedKnowledge.knowledgeId) return;
+
+    const response = await fetch(fileManagementPath({
+      knowledgeId: managedKnowledge.knowledgeId,
+      tenantId: managedKnowledge.tenantId,
+    }), { cache: 'no-store' });
+    const payload = await response.json().catch(() => null);
+    if (response.ok && payload && Array.isArray(payload.records)) {
+      setManagedFiles(payload.records as ManagedKnowledgeFileRecord[]);
+    }
+  }
+
+  async function handleUploadManagedFile() {
+    if (!managedKnowledge?.tenantId || !managedKnowledge.knowledgeId || !managedFile) return;
+
+    setIsFileActionLoading(true);
+    setFileActionMessage(null);
+    try {
+      const formData = new FormData();
+      formData.set('tenantId', managedKnowledge.tenantId);
+      formData.set('uploadedByUserId', 'platform-ui');
+      formData.set('file', managedFile);
+      const response = await fetch(fileManagementPath({
+        knowledgeId: managedKnowledge.knowledgeId,
+        tenantId: managedKnowledge.tenantId,
+      }), {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        setFileActionMessage('文件上传失败，请检查类型和大小后重试');
+        return;
+      }
+      setManagedFile(null);
+      setFileActionMessage('文件已上传');
+      await reloadManagedFiles();
+    } catch {
+      setFileActionMessage('文件上传失败，请检查类型和大小后重试');
+    } finally {
+      setIsFileActionLoading(false);
+    }
+  }
+
+  async function handleDownloadManagedFile(file: ManagedKnowledgeFileRecord) {
+    if (!managedKnowledge?.tenantId || !managedKnowledge.knowledgeId) return;
+
+    setFileActionMessage(null);
+    try {
+      const response = await fetch(fileDownloadPath({
+        knowledgeId: managedKnowledge.knowledgeId,
+        tenantId: managedKnowledge.tenantId,
+        fileId: file.fileId,
+      }), { method: 'GET' });
+      if (!response.ok) {
+        setFileActionMessage('文件暂时无法下载');
+        return;
+      }
+      const blob = await response.blob();
+      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = file.originalFilename;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      }
+      setFileActionMessage('文件下载已准备');
+    } catch {
+      setFileActionMessage('文件暂时无法下载');
+    }
+  }
+
+  async function handleArchiveManagedFile(file: ManagedKnowledgeFileRecord) {
+    if (!managedKnowledge?.tenantId || !managedKnowledge.knowledgeId) return;
+
+    setIsFileActionLoading(true);
+    setFileActionMessage(null);
+    try {
+      const response = await fetch(fileArchivePath({
+        knowledgeId: managedKnowledge.knowledgeId,
+        tenantId: managedKnowledge.tenantId,
+        fileId: file.fileId,
+      }), { method: 'DELETE' });
+      if (!response.ok) {
+        setFileActionMessage('文件归档失败，请稍后重试');
+        return;
+      }
+      setFileActionMessage('文件已归档');
+      await reloadManagedFiles();
+    } catch {
+      setFileActionMessage('文件归档失败，请稍后重试');
+    } finally {
+      setIsFileActionLoading(false);
+    }
   }
 
   const metricCards = [
@@ -745,6 +925,109 @@ export function OpenPlatformKnowledgeManagementPanel() {
               <span className="text-sm font-semibold text-slate-400">共 {formatNumber(scopedKnowledgeItems.length)} 条</span>
             </div>
             <KnowledgeTable items={scopedKnowledgeItems} />
+          </article>
+
+          <article className={cn(sectionShell, 'overflow-hidden')} aria-label="知识库文件管理操作区">
+            <div className="flex flex-col gap-4 border-b border-white/10 p-5 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-300/[0.12] text-emerald-200">
+                  <Upload className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold tracking-normal text-white">文件管理操作</h2>
+                  <p className="mt-1 text-sm text-slate-400">平台端上传、下载和归档原始文件，仅展示低敏元数据。</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                <select
+                  aria-label="选择文件所属知识库"
+                  value={effectiveManagedKnowledgeId}
+                  onChange={(event) => setManagedKnowledgeId(event.target.value)}
+                  className="h-10 rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm font-semibold text-slate-100 outline-none"
+                >
+                  {scopedKnowledgeItems.map((item) => (
+                    <option key={item.knowledgeId} value={item.knowledgeId}>
+                      {item.title}
+                    </option>
+                  ))}
+                </select>
+                <label className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-slate-200">
+                  <FileText className="h-4 w-4" />
+                  <span>{managedFile?.name ?? '选择文件'}</span>
+                  <input
+                    aria-label="选择知识库文件"
+                    type="file"
+                    accept=".pdf,.docx,.txt,.md,.csv,.xlsx"
+                    className="sr-only"
+                    onChange={(event) => setManagedFile(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleUploadManagedFile}
+                  disabled={!managedKnowledge || !managedFile || isFileActionLoading}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.10] px-4 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/[0.16] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Upload className="h-4 w-4" />
+                  上传文件
+                </button>
+              </div>
+            </div>
+
+            {fileActionMessage ? (
+              <div className="border-b border-white/10 px-5 py-3 text-sm font-semibold text-cyan-100">
+                {fileActionMessage}
+              </div>
+            ) : null}
+
+            <div className="p-5">
+              {!managedKnowledge ? (
+                <EmptyState title="暂无可管理知识库" description="当前范围没有可绑定文件的知识条目。" />
+              ) : managedFiles.length === 0 ? (
+                <EmptyState title="暂无知识库文件" description="可先上传 PDF、DOCX、TXT、MD、CSV 或 XLSX 文件。" />
+              ) : (
+                <div className="grid gap-3 xl:grid-cols-2">
+                  {managedFiles.map((file) => (
+                    <div
+                      key={file.fileId}
+                      className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-white">{file.originalFilename}</div>
+                          <div className="mt-1 flex flex-wrap gap-2 text-xs font-semibold text-slate-400">
+                            <span>{file.fileType}</span>
+                            <span>{file.sizeLabel}</span>
+                            <span>{file.status === 'active' ? '可下载' : '已归档'}</span>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadManagedFile(file)}
+                            disabled={file.status !== 'active'}
+                            className="inline-flex h-9 items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.10] px-3 text-xs font-semibold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Download className="h-4 w-4" />
+                            下载文件
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleArchiveManagedFile(file)}
+                            disabled={file.status !== 'active' || isFileActionLoading}
+                            className="inline-flex h-9 items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-300/[0.10] px-3 text-xs font-semibold text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Archive className="h-4 w-4" />
+                            归档文件
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </article>
 
           <article className={cn(sectionShell, 'overflow-hidden')}>

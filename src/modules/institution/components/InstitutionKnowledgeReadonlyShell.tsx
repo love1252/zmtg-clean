@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search } from 'lucide-react';
 import type {
   InstitutionKnowledgeItemDto,
   InstitutionKnowledgeListResponse,
@@ -14,6 +14,15 @@ import { InstitutionPageState } from '@/modules/institution/components/Instituti
 import { cn } from '@/shared/utils/cn';
 
 type LoadStatus = 'loading' | 'success' | 'error';
+type InstitutionKnowledgeFileRecord = {
+  fileId: string;
+  originalFilename: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: 'active' | 'archived';
+  fileType: string;
+  sizeLabel: string;
+};
 
 const statusLabels: Record<InstitutionKnowledgeItemDto['status'], string> = {
   ready: '可用',
@@ -62,6 +71,9 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [records, setRecords] = useState<InstitutionKnowledgeItemDto[]>([]);
+  const [expandedKnowledgeId, setExpandedKnowledgeId] = useState<string | null>(null);
+  const [filesByKnowledgeId, setFilesByKnowledgeId] = useState<Record<string, InstitutionKnowledgeFileRecord[]>>({});
+  const [fileMessage, setFileMessage] = useState<string | null>(null);
   const [pageInfo, setPageInfo] = useState<InstitutionKnowledgeListResponse['pageInfo']>({
     page: 1,
     pageSize: 10,
@@ -114,6 +126,54 @@ export function InstitutionKnowledgeReadonlyShell() {
 
   function refresh() {
     setRefreshKey((current) => current + 1);
+  }
+
+  async function loadKnowledgeFiles(knowledgeId: string) {
+    setExpandedKnowledgeId(knowledgeId);
+    setFileMessage(null);
+    try {
+      const response = await fetch(
+        `/api/institution/knowledge-management/items/${encodeURIComponent(knowledgeId)}/files`,
+        { cache: 'no-store' },
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setFileMessage('知识库文件暂时不可用');
+        return;
+      }
+      setFilesByKnowledgeId((current) => ({
+        ...current,
+        [knowledgeId]: payload.records as InstitutionKnowledgeFileRecord[],
+      }));
+    } catch {
+      setFileMessage('知识库文件暂时不可用');
+    }
+  }
+
+  async function downloadKnowledgeFile(knowledgeId: string, file: InstitutionKnowledgeFileRecord) {
+    setFileMessage(null);
+    try {
+      const response = await fetch(
+        `/api/institution/knowledge-management/items/${encodeURIComponent(knowledgeId)}/files/${encodeURIComponent(file.fileId)}/download`,
+        { method: 'GET' },
+      );
+      if (!response.ok) {
+        setFileMessage('文件暂时无法下载');
+        return;
+      }
+      const blob = await response.blob();
+      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = file.originalFilename;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      }
+      setFileMessage('文件下载已准备');
+    } catch {
+      setFileMessage('文件暂时无法下载');
+    }
   }
 
   return (
@@ -226,6 +286,57 @@ export function InstitutionKnowledgeReadonlyShell() {
                   分块 {item.chunkCount}
                 </span>
                 <span>更新于 {formatDate(item.updatedAt)}</span>
+              </div>
+
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => loadKnowledgeFiles(item.knowledgeId)}
+                  className="inline-flex h-9 items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-3 text-xs font-semibold text-cyan-700 transition hover:border-cyan-300 hover:bg-cyan-100"
+                >
+                  <FileText className="h-4 w-4" />
+                  查看文件
+                </button>
+
+                {expandedKnowledgeId === item.knowledgeId ? (
+                  <div className="mt-3 space-y-2">
+                    {fileMessage ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                        {fileMessage}
+                      </div>
+                    ) : null}
+
+                    {(filesByKnowledgeId[item.knowledgeId] ?? []).length === 0 ? (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                        暂无可下载文件
+                      </div>
+                    ) : (
+                      (filesByKnowledgeId[item.knowledgeId] ?? []).map((file) => (
+                        <div
+                          key={file.fileId}
+                          className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-800">
+                              {file.originalFilename}
+                            </div>
+                            <div className="mt-1 text-xs font-semibold text-slate-500">
+                              {file.fileType} · {file.sizeLabel}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => downloadKnowledgeFile(item.knowledgeId, file)}
+                            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-cyan-200 hover:text-cyan-700"
+                          >
+                            <Download className="h-4 w-4" />
+                            下载文件
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ) : null}
               </div>
             </article>
           ))}
