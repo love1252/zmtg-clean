@@ -69,6 +69,11 @@ describe('平台知识库管理 V1 只读 API contract', () => {
     expect(routePayload).toMatchObject({
       readonly: true,
       dataSource: 'mock',
+      scope: {
+        tenantId: null,
+        scopeName: '全部机构',
+      },
+      allTotals: expect.any(Object),
       totals: expect.any(Object),
       tenants: expect.any(Array),
       categoryStats: expect.any(Array),
@@ -79,6 +84,24 @@ describe('平台知识库管理 V1 只读 API contract', () => {
     expect(routePayload).not.toHaveProperty('files');
     expect(routePayload).toEqual(directPayload);
     expectReadonlyPayload(routePayload);
+  });
+
+  it('overview helper 支持按机构返回当前范围统计，不返回知识正文或文件列表', () => {
+    const allScope = getPlatformKnowledgeOverviewResponse();
+    const tenantScope = getPlatformKnowledgeOverviewResponse({ tenantId: 'tenant-low-hit' });
+
+    expect(tenantScope.scope).toEqual({
+      tenantId: 'tenant-low-hit',
+      scopeName: '低命中修复门诊',
+    });
+    expect(tenantScope.allTotals).toEqual(allScope.allTotals);
+    expect(tenantScope.totals.tenantCount).toBe(1);
+    expect(tenantScope.totals.knowledgeCount).toBeLessThan(allScope.totals.knowledgeCount);
+    expect(tenantScope.topQuestions.every((question) => question.tenantId === 'tenant-low-hit')).toBe(true);
+    expect(tenantScope.importJobs.every((job) => job.tenantId === 'tenant-low-hit')).toBe(true);
+    expect(tenantScope).not.toHaveProperty('knowledgeItems');
+    expect(tenantScope).not.toHaveProperty('files');
+    expectReadonlyPayload(tenantScope);
   });
 
   it('files 支持 tenantId、keyword、status 过滤和分页', async () => {

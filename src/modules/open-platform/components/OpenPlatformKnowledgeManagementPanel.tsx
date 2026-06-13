@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -17,24 +17,28 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import {
-  filterKnowledgeFiles,
-  getPlatformKnowledgeMockData,
-  getPlatformKnowledgeScope,
-  normalizeTenantName,
-  type ImportJobStatus,
-  type KnowledgeFileItem,
-  type KnowledgeFileParseStatus,
-  type KnowledgeItem,
-  type KnowledgeTrainingStatus,
-  type TenantKnowledgeStats,
-} from '@/modules/open-platform/mock/platformKnowledge';
+  getOpenPlatformKnowledgeManagementErrorMessage,
+  loadOpenPlatformKnowledgeManagementFiles,
+  loadOpenPlatformKnowledgeManagementItems,
+  loadOpenPlatformKnowledgeManagementView,
+  OPEN_PLATFORM_KNOWLEDGE_FILE_PAGE_SIZE,
+  OPEN_PLATFORM_KNOWLEDGE_ITEM_PAGE_SIZE,
+  type OpenPlatformKnowledgeManagementFiles,
+  type OpenPlatformKnowledgeManagementItems,
+  type OpenPlatformKnowledgeManagementView,
+} from '@/modules/open-platform/lib/platformKnowledgeManagementViewLoader';
 import { cn } from '@/shared/utils/cn';
 
 const ALL_TENANTS = 'all';
-const FILE_PAGE_SIZE = 6;
 
 const sectionShell = 'rounded-[24px] border border-white/10 bg-white/[0.075] shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl';
 const innerCard = 'rounded-2xl border border-white/10 bg-[#071322]/72';
+
+type KnowledgeFileParseStatus = OpenPlatformKnowledgeManagementFiles['records'][number]['parseStatus'];
+type KnowledgeTrainingStatus = OpenPlatformKnowledgeManagementItems['records'][number]['trainingStatus'];
+type ImportJobStatus = OpenPlatformKnowledgeManagementView['importJobs'][number]['status'];
+type KnowledgeFileRecord = OpenPlatformKnowledgeManagementFiles['records'][number];
+type KnowledgeItemRecord = OpenPlatformKnowledgeManagementItems['records'][number];
 
 const fileStatusLabels: Record<KnowledgeFileParseStatus, string> = {
   parsed: '已解析',
@@ -95,15 +99,13 @@ function formatFileSize(kb: number) {
 }
 
 function EmptyState({ title, description }: { title?: string; description?: string }) {
-  const emptyState = getPlatformKnowledgeMockData().emptyState;
-
   return (
     <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-8 text-center">
       <div className="mx-auto grid h-11 w-11 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.10] text-cyan-100">
         <Sparkles className="h-5 w-5" />
       </div>
-      <div className="mt-3 text-sm font-semibold text-white">{title ?? emptyState.title}</div>
-      <p className="mt-1 text-sm text-slate-400">{description ?? emptyState.description}</p>
+      <div className="mt-3 text-sm font-semibold text-white">{title ?? '暂无匹配的知识库运营数据'}</div>
+      <p className="mt-1 text-sm text-slate-400">{description ?? '请调整机构范围或文件名搜索条件后再查看。'}</p>
     </div>
   );
 }
@@ -130,7 +132,7 @@ function KnowledgeFileCard({
   checked,
   onToggle,
 }: {
-  file: KnowledgeFileItem;
+  file: KnowledgeFileRecord;
   checked: boolean;
   onToggle: () => void;
 }) {
@@ -146,7 +148,7 @@ function KnowledgeFileCard({
         />
         <div className="min-w-0 flex-1">
           <h4 className="truncate text-sm font-semibold tracking-normal text-white">{file.fileName}</h4>
-          <p className="mt-1 truncate text-xs text-slate-400">{normalizeTenantName(file.tenantName)}</p>
+          <p className="mt-1 truncate text-xs text-slate-400">{file.tenantName}</p>
         </div>
       </div>
 
@@ -182,7 +184,7 @@ function KnowledgeFileCard({
   );
 }
 
-function KnowledgeTable({ items }: { items: KnowledgeItem[] }) {
+function KnowledgeTable({ items }: { items: KnowledgeItemRecord[] }) {
   if (items.length === 0) {
     return <EmptyState title="暂无知识条目" description="当前范围没有可展示的知识条目摘要。" />;
   }
@@ -206,9 +208,9 @@ function KnowledgeTable({ items }: { items: KnowledgeItem[] }) {
             <tr key={item.knowledgeId} className="align-top">
               <td className="border-b border-white/10 px-4 py-4 font-semibold text-white">{item.title}</td>
               <td className="max-w-[320px] border-b border-white/10 px-4 py-4 text-slate-400">
-                <span className="line-clamp-2">{item.summaryPreview}</span>
+                <span className="line-clamp-2">{item.descriptionPreview}</span>
               </td>
-              <td className="border-b border-white/10 px-4 py-4 text-slate-300">{normalizeTenantName(item.tenantName)}</td>
+              <td className="border-b border-white/10 px-4 py-4 text-slate-300">{item.tenantName}</td>
               <td className="border-b border-white/10 px-4 py-4">
                 <div className="flex flex-wrap gap-2">
                   <Badge className="border-blue-300/20 bg-blue-300/[0.10] text-blue-100">{item.category}</Badge>
@@ -235,73 +237,100 @@ export function OpenPlatformKnowledgeManagementPanel() {
   const [fileSearch, setFileSearch] = useState('');
   const [filePage, setFilePage] = useState(1);
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState('刚刚');
-  const [data, setData] = useState(() => getPlatformKnowledgeMockData());
-
-  const scope = useMemo(
-    () => getPlatformKnowledgeScope(data, selectedTenantId === ALL_TENANTS ? null : selectedTenantId),
-    [data, selectedTenantId],
-  );
-  const allTenantStats = useMemo<TenantKnowledgeStats>(
-    () => ({
-      tenantId: ALL_TENANTS,
-      tenantName: '全部机构',
-      status: 'active',
-      knowledgeCount: data.totals.knowledgeCount,
-      folderCount: data.totals.folderCount,
-      hitCount: data.totals.hitCount,
-      trainedCount: data.totals.trainedCount,
-      failedTrainingCount: data.totals.failedTrainingCount,
-      zeroHitCount: data.totals.zeroHitCount,
-      chunkCount: data.totals.chunkCount,
-      averageHitCount: data.totals.averageHitCount,
-      hitCoverageRate: data.totals.hitCoverageRate,
-      trainingCoverageRate: data.totals.trainingCoverageRate,
-      importSuccessRate: data.totals.importSuccessRate,
-    }),
-    [data],
-  );
-  const scopeName = scope.scopeName;
-  const scopedFiles = scope.files;
-  const scopedKnowledgeItems = scope.knowledgeItems;
-  const scopedJobs = scope.importJobs;
-  const scopedTopQuestions = scope.topQuestions;
-  const scopedCategories = scope.categories;
-  const filteredFiles = useMemo(() => {
-    return filterKnowledgeFiles(scopedFiles, { keyword: fileSearch });
-  }, [fileSearch, scopedFiles]);
-  const pageCount = Math.max(1, Math.ceil(filteredFiles.length / FILE_PAGE_SIZE));
-  const safeFilePage = Math.min(filePage, pageCount);
-  const pagedFiles = filteredFiles.slice((safeFilePage - 1) * FILE_PAGE_SIZE, safeFilePage * FILE_PAGE_SIZE);
-  const maxCategoryHits = Math.max(1, ...scopedCategories.map((category) => category.hitCount));
-  const parsedFileCount = scope.totals.parsedFileCount;
-  const failedFileCount = scope.totals.failedFileCount;
-  const zeroHitCount = scope.totals.zeroHitCount;
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [view, setView] = useState<OpenPlatformKnowledgeManagementView | null>(null);
+  const [filesResponse, setFilesResponse] = useState<OpenPlatformKnowledgeManagementFiles | null>(null);
+  const [itemsResponse, setItemsResponse] = useState<OpenPlatformKnowledgeManagementItems | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const refreshReasonRef = useRef<'auto' | 'sync'>('auto');
+  const selectedTenantParam = selectedTenantId === ALL_TENANTS ? null : selectedTenantId;
 
   useEffect(() => {
-    if (!isSyncing) return undefined;
+    let isActive = true;
+    const isManualSync = refreshReasonRef.current === 'sync';
 
-    const timer = window.setTimeout(() => {
-      setLastSyncedAt(new Intl.DateTimeFormat('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }).format(new Date()));
-      setData(getPlatformKnowledgeMockData());
-      setIsSyncing(false);
-    }, 380);
+    Promise.all([
+      loadOpenPlatformKnowledgeManagementView({ tenantId: selectedTenantParam }),
+      loadOpenPlatformKnowledgeManagementFiles({
+        tenantId: selectedTenantParam,
+        keyword: fileSearch,
+        page: filePage,
+        pageSize: OPEN_PLATFORM_KNOWLEDGE_FILE_PAGE_SIZE,
+      }),
+      loadOpenPlatformKnowledgeManagementItems({
+        tenantId: selectedTenantParam,
+        page: 1,
+        pageSize: OPEN_PLATFORM_KNOWLEDGE_ITEM_PAGE_SIZE,
+      }),
+    ])
+      .then(([nextView, nextFiles, nextItems]) => {
+        if (!isActive) return;
 
-    return () => window.clearTimeout(timer);
-  }, [isSyncing]);
+        setView(nextView);
+        setFilesResponse(nextFiles);
+        setItemsResponse(nextItems);
+        setErrorMessage(null);
+        setSelectedFileIds((current) =>
+          current.filter((fileId) => nextFiles.records.some((file) => file.fileId === fileId)),
+        );
+        if (isManualSync) {
+          setLastSyncedAt(new Intl.DateTimeFormat('zh-CN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }).format(new Date()));
+        }
+      })
+      .catch((error: unknown) => {
+        if (!isActive) return;
+
+        setErrorMessage(getOpenPlatformKnowledgeManagementErrorMessage(error));
+      })
+      .finally(() => {
+        if (!isActive) return;
+
+        setIsLoading(false);
+        setIsSyncing(false);
+        refreshReasonRef.current = 'auto';
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [filePage, fileSearch, refreshVersion, selectedTenantParam]);
+
+  const scopeName = view?.scopeName ?? '全部机构';
+  const scopedFiles = filesResponse?.records ?? [];
+  const scopedKnowledgeItems = itemsResponse?.records ?? [];
+  const scopedJobs = view?.importJobs ?? [];
+  const scopedTopQuestions = view?.topQuestions ?? [];
+  const scopedCategories = view?.categoryStats ?? [];
+  const filePageInfo = filesResponse?.pageInfo;
+  const pageCount = Math.max(1, filePageInfo?.pageCount ?? 1);
+  const safeFilePage = Math.min(filePageInfo?.page ?? filePage, pageCount);
+  const totalFileCount = filePageInfo?.total ?? 0;
+  const filePageSize = filePageInfo?.pageSize ?? OPEN_PLATFORM_KNOWLEDGE_FILE_PAGE_SIZE;
+  const fileRangeStart = totalFileCount === 0 ? 0 : (safeFilePage - 1) * filePageSize + 1;
+  const fileRangeEnd = Math.min(safeFilePage * filePageSize, totalFileCount);
+  const maxCategoryHits = Math.max(1, ...scopedCategories.map((category) => category.hitCount));
+  const parsedFileCount = view?.totals.parsedFileCount ?? 0;
+  const failedFileCount = view?.totals.failedFileCount ?? 0;
+  const zeroHitCount = view?.totals.zeroHitCount ?? 0;
 
   function handleSelectTenant(tenantId: string) {
+    setIsLoading(true);
+    setErrorMessage(null);
     setSelectedTenantId(tenantId);
     setFilePage(1);
     setSelectedFileIds([]);
   }
 
   function handleFileSearchChange(value: string) {
+    setIsLoading(true);
+    setErrorMessage(null);
     setFileSearch(value);
     setFilePage(1);
     setSelectedFileIds([]);
@@ -314,19 +343,35 @@ export function OpenPlatformKnowledgeManagementPanel() {
   }
 
   function handleSelectPage() {
-    setSelectedFileIds(pagedFiles.map((file) => file.fileId));
+    setSelectedFileIds(scopedFiles.map((file) => file.fileId));
+  }
+
+  function handlePreviousPage() {
+    setIsLoading(true);
+    setErrorMessage(null);
+    setFilePage((current) => Math.max(1, current - 1));
+  }
+
+  function handleNextPage() {
+    setIsLoading(true);
+    setErrorMessage(null);
+    setFilePage((current) => Math.min(pageCount, current + 1));
   }
 
   function handleSync() {
+    refreshReasonRef.current = 'sync';
+    setIsLoading(true);
+    setErrorMessage(null);
     setIsSyncing(true);
+    setRefreshVersion((current) => current + 1);
   }
 
   const metricCards = [
-    { label: '接入机构', value: formatNumber(data.totals.tenantCount), helper: `${formatNumber(data.totals.sourceFileCount)} 个源文件`, icon: Building2, tone: 'bg-blue-300/[0.12] text-blue-200' },
-    { label: '知识条目', value: formatNumber(data.totals.knowledgeCount), helper: `${formatNumber(data.totals.chunkCount)} 个训练片段`, icon: Database, tone: 'bg-cyan-300/[0.12] text-cyan-200' },
-    { label: '累计命中', value: formatNumber(data.totals.hitCount), helper: `平均 ${data.totals.averageHitCount} 次/条`, icon: TrendingUp, tone: 'bg-emerald-300/[0.12] text-emerald-200' },
-    { label: '训练覆盖', value: formatPercent(data.totals.trainingCoverageRate), helper: `${data.totals.trainedCount} 条已训练`, icon: CheckCircle2, tone: 'bg-violet-300/[0.12] text-violet-200' },
-    { label: '待优化', value: formatNumber(data.totals.pendingOptimizationCount), helper: `${data.totals.failedImportJobCount} 个异常任务`, icon: AlertTriangle, tone: 'bg-amber-300/[0.12] text-amber-200' },
+    { label: '接入机构', value: formatNumber(view?.allTotals.tenantCount ?? 0), helper: `${formatNumber(view?.allTotals.sourceFileCount ?? 0)} 个源文件`, icon: Building2, tone: 'bg-blue-300/[0.12] text-blue-200' },
+    { label: '知识条目', value: formatNumber(view?.allTotals.knowledgeCount ?? 0), helper: `${formatNumber(view?.allTotals.chunkCount ?? 0)} 个训练片段`, icon: Database, tone: 'bg-cyan-300/[0.12] text-cyan-200' },
+    { label: '累计命中', value: formatNumber(view?.allTotals.hitCount ?? 0), helper: `平均 ${view?.allTotals.averageHitCount ?? 0} 次/条`, icon: TrendingUp, tone: 'bg-emerald-300/[0.12] text-emerald-200' },
+    { label: '训练覆盖', value: formatPercent(view?.allTotals.trainingCoverageRate ?? 0), helper: `${view?.allTotals.trainedCount ?? 0} 条已训练`, icon: CheckCircle2, tone: 'bg-violet-300/[0.12] text-violet-200' },
+    { label: '待优化', value: formatNumber(view?.allTotals.pendingOptimizationCount ?? 0), helper: `${view?.allTotals.failedImportJobCount ?? 0} 个异常任务`, icon: AlertTriangle, tone: 'bg-amber-300/[0.12] text-amber-200' },
   ];
 
   return (
@@ -360,6 +405,37 @@ export function OpenPlatformKnowledgeManagementPanel() {
         </div>
       </div>
 
+      {errorMessage ? (
+        <div className="rounded-2xl border border-rose-300/20 bg-rose-300/[0.10] px-4 py-3 text-sm font-semibold text-rose-100">
+          {errorMessage}。请稍后重试或点击同步数据重新加载。
+        </div>
+      ) : null}
+
+      {isLoading && view ? (
+        <div className="inline-flex items-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.10] px-4 py-3 text-sm font-semibold text-cyan-100" aria-live="polite">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          正在刷新知识库运营数据...
+        </div>
+      ) : null}
+
+      {!view || !filesResponse || !itemsResponse ? (
+        <article className={cn(sectionShell, 'p-8 text-center')} aria-live="polite">
+          {errorMessage ? (
+            <>
+              <AlertTriangle className="mx-auto h-8 w-8 text-rose-200" />
+              <h2 className="mt-3 text-lg font-semibold tracking-normal text-white">知识库运营数据暂时无法加载</h2>
+              <p className="mt-2 text-sm text-slate-400">请稍后重试或点击同步数据重新加载。</p>
+            </>
+          ) : (
+            <>
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-cyan-200" />
+              <h2 className="mt-3 text-lg font-semibold tracking-normal text-white">正在加载知识库运营数据...</h2>
+              <p className="mt-2 text-sm text-slate-400">正在读取只读运营 contract。</p>
+            </>
+          )}
+        </article>
+      ) : (
+        <>
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5" aria-label="平台知识库总指标">
         {metricCards.map((metric) => (
           <article key={metric.label} className={cn(sectionShell, 'p-4')}>
@@ -389,7 +465,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
             </div>
 
             <div className="mt-5 space-y-3">
-              {[allTenantStats, ...data.tenants].map((tenant) => {
+              {[view.allTenantStats, ...view.tenants].map((tenant) => {
                 const isActive = selectedTenantId === tenant.tenantId;
                 return (
                   <button
@@ -403,7 +479,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-white">{normalizeTenantName(tenant.tenantName)}</div>
+                        <div className="truncate text-sm font-semibold text-white">{tenant.tenantName}</div>
                         <div className="mt-1 text-xs text-slate-400">
                           {formatNumber(tenant.knowledgeCount)} 条知识 · {formatNumber(tenant.hitCount)} 次命中
                         </div>
@@ -429,10 +505,10 @@ export function OpenPlatformKnowledgeManagementPanel() {
               </div>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
-              <StatPill label="知识" value={formatNumber(scope.totals.knowledgeCount)} />
-              <StatPill label="片段" value={formatNumber(scope.totals.chunkCount)} />
-              <StatPill label="命中覆盖" value={formatPercent(scope.totals.hitCoverageRate)} />
-              <StatPill label="训练覆盖" value={formatPercent(scope.totals.trainingCoverageRate)} />
+              <StatPill label="知识" value={formatNumber(view.totals.knowledgeCount)} />
+              <StatPill label="片段" value={formatNumber(view.totals.chunkCount)} />
+              <StatPill label="命中覆盖" value={formatPercent(view.totals.hitCoverageRate)} />
+              <StatPill label="训练覆盖" value={formatPercent(view.totals.trainingCoverageRate)} />
             </div>
           </article>
         </aside>
@@ -444,7 +520,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                 <div>
                   <h2 className="text-xl font-semibold tracking-normal text-white">{scopeName}</h2>
                   <p className="mt-2 text-sm text-slate-400">
-                    {formatNumber(scope.totals.knowledgeCount)} 条知识 · {formatNumber(scope.totals.folderCount)} 个文件夹 · 累计命中 {formatNumber(scope.totals.hitCount)} 次
+                    {formatNumber(view.totals.knowledgeCount)} 条知识 · {formatNumber(view.totals.folderCount)} 个文件夹 · 累计命中 {formatNumber(view.totals.hitCount)} 次
                   </p>
                 </div>
                 <label className="relative block w-full max-w-md">
@@ -459,10 +535,10 @@ export function OpenPlatformKnowledgeManagementPanel() {
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <StatPill label="知识" value={formatNumber(scope.totals.knowledgeCount)} />
-                <StatPill label="文件夹" value={formatNumber(scope.totals.folderCount)} />
-                <StatPill label="累计命中" value={formatNumber(scope.totals.hitCount)} />
-                <StatPill label="导入成功率" value={formatPercent(scope.totals.importSuccessRate)} />
+                <StatPill label="知识" value={formatNumber(view.totals.knowledgeCount)} />
+                <StatPill label="文件夹" value={formatNumber(view.totals.folderCount)} />
+                <StatPill label="累计命中" value={formatNumber(view.totals.hitCount)} />
+                <StatPill label="导入成功率" value={formatPercent(view.totals.importSuccessRate)} />
               </div>
             </article>
 
@@ -491,7 +567,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <dt className="text-slate-400">导入成功率</dt>
-                  <dd className="font-semibold text-white">{formatPercent(scope.totals.importSuccessRate)}</dd>
+                  <dd className="font-semibold text-white">{formatPercent(view.totals.importSuccessRate)}</dd>
                 </div>
               </dl>
             </article>
@@ -521,7 +597,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                 <button
                   type="button"
                   onClick={handleSelectPage}
-                  disabled={pagedFiles.length === 0}
+                  disabled={scopedFiles.length === 0}
                   className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.10] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   选择本页
@@ -530,8 +606,8 @@ export function OpenPlatformKnowledgeManagementPanel() {
             </div>
 
             <div className="grid gap-3 border-b border-white/10 p-5 sm:grid-cols-2 xl:grid-cols-4">
-              <StatPill label="源文件" value={formatNumber(scopedFiles.length)} />
-              <StatPill label="总大小" value={formatFileSize(scopedFiles.reduce((total, file) => total + file.fileSizeKb, 0))} />
+              <StatPill label="源文件" value={formatNumber(view.totals.sourceFileCount)} />
+              <StatPill label="总大小" value={formatFileSize(view.totals.totalFileSizeKb)} />
               <StatPill label="解析成功" value={formatNumber(parsedFileCount)} />
               <StatPill label="解析失败" value={formatNumber(failedFileCount)} />
             </div>
@@ -543,11 +619,11 @@ export function OpenPlatformKnowledgeManagementPanel() {
                 </div>
               ) : null}
 
-              {pagedFiles.length === 0 ? (
-                <EmptyState />
+              {scopedFiles.length === 0 ? (
+                <EmptyState title={filesResponse.emptyState.title} description={filesResponse.emptyState.description} />
               ) : (
                 <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                  {pagedFiles.map((file) => (
+                  {scopedFiles.map((file) => (
                     <KnowledgeFileCard
                       key={file.fileId}
                       file={file}
@@ -561,13 +637,13 @@ export function OpenPlatformKnowledgeManagementPanel() {
 
             <div className="flex flex-col gap-3 border-t border-white/10 px-5 py-4 text-sm text-slate-400 sm:flex-row sm:items-center sm:justify-between">
               <span>
-                第 {filteredFiles.length === 0 ? 0 : (safeFilePage - 1) * FILE_PAGE_SIZE + 1}-{Math.min(safeFilePage * FILE_PAGE_SIZE, filteredFiles.length)} 条，共 {filteredFiles.length} 个文件
+                第 {fileRangeStart}-{fileRangeEnd} 条，共 {totalFileCount} 个文件
               </span>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setFilePage((current) => Math.max(1, current - 1))}
-                  disabled={safeFilePage <= 1}
+                  onClick={handlePreviousPage}
+                  disabled={!filePageInfo?.hasPreviousPage}
                   className="h-9 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   上一页
@@ -575,8 +651,8 @@ export function OpenPlatformKnowledgeManagementPanel() {
                 <span className="font-semibold text-slate-200">第 {safeFilePage}/{pageCount} 页</span>
                 <button
                   type="button"
-                  onClick={() => setFilePage((current) => Math.min(pageCount, current + 1))}
-                  disabled={safeFilePage >= pageCount}
+                  onClick={handleNextPage}
+                  disabled={!filePageInfo?.hasNextPage}
                   className="h-9 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   下一页
@@ -646,7 +722,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                         <div className="truncate text-sm font-semibold text-white">{question.questionTitle}</div>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
                           <Badge className="border-white/10 bg-white/[0.06] text-slate-300">{question.category}</Badge>
-                          <span>{normalizeTenantName(question.tenantName)}</span>
+                          <span>{question.tenantName}</span>
                           <span>{formatNumber(question.hitCount)} 次</span>
                         </div>
                       </div>
@@ -691,7 +767,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                       <Badge className={importJobStatusClasses[job.status]}>{importJobStatusLabels[job.status]}</Badge>
                       <div className="min-w-0">
                         <div className="truncate text-base font-semibold text-white">{job.title}</div>
-                        <div className="mt-1 text-sm text-slate-400">{normalizeTenantName(job.tenantName)}</div>
+                        <div className="mt-1 text-sm text-slate-400">{job.tenantName}</div>
                         <div className="mt-1 text-sm text-slate-400">
                           成功 {formatNumber(job.successCount)} / {formatNumber(job.totalCount)}，失败 {formatNumber(job.failedCount)}
                         </div>
@@ -705,6 +781,8 @@ export function OpenPlatformKnowledgeManagementPanel() {
           </article>
         </div>
       </div>
+        </>
+      )}
     </section>
   );
 }

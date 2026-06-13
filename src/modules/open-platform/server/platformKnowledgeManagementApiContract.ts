@@ -2,6 +2,7 @@ import {
   filterKnowledgeFiles,
   filterKnowledgeItems,
   getPlatformKnowledgeMockData,
+  getPlatformKnowledgeScope,
   normalizeTenantName,
   type CategoryStats,
   type ImportJob,
@@ -24,11 +25,20 @@ export type PlatformKnowledgeOverviewResponse = {
   requestId: string;
   readonly: true;
   dataSource: 'mock';
+  scope: {
+    tenantId: string | null;
+    scopeName: string;
+  };
+  allTotals: PlatformKnowledgeTotals;
   totals: PlatformKnowledgeTotals;
   tenants: PlatformKnowledgeTenantDto[];
   categoryStats: CategoryStats[];
   topQuestions: PlatformKnowledgeTopQuestionDto[];
   importJobs: PlatformKnowledgeImportJobDto[];
+};
+
+export type PlatformKnowledgeOverviewParams = {
+  tenantId?: string | null;
 };
 
 export type PlatformKnowledgeTenantDto = Omit<TenantKnowledgeStats, 'tenantName'> & {
@@ -101,18 +111,26 @@ type PageParamsResult =
   | { ok: true; page: number; pageSize: number }
   | { ok: false; error: PlatformKnowledgeReadonlyApiError };
 
-export function getPlatformKnowledgeOverviewResponse(): PlatformKnowledgeOverviewResponse {
+export function getPlatformKnowledgeOverviewResponse(
+  params: PlatformKnowledgeOverviewParams = {},
+): PlatformKnowledgeOverviewResponse {
   const data = getPlatformKnowledgeMockData();
+  const scope = getPlatformKnowledgeScope(data, normalizeOptionalString(params.tenantId));
 
   return {
     requestId: 'open-platform-knowledge-management-overview',
     readonly: true,
     dataSource: 'mock',
-    totals: data.totals,
+    scope: {
+      tenantId: scope.tenantId,
+      scopeName: scope.scopeName,
+    },
+    allTotals: data.totals,
+    totals: scope.totals,
     tenants: data.tenants.map(mapTenant),
-    categoryStats: data.categories,
-    topQuestions: data.topQuestions.map(mapTopQuestion),
-    importJobs: data.importJobs.map(mapImportJob),
+    categoryStats: scope.categories,
+    topQuestions: scope.topQuestions.map(mapTopQuestion),
+    importJobs: scope.importJobs.map(mapImportJob),
   };
 }
 
@@ -199,7 +217,8 @@ function buildListResponse<TRecord>({
 }): PlatformKnowledgeListResponse<TRecord> {
   const total = records.length;
   const pageCount = Math.ceil(total / pageSize);
-  const start = (page - 1) * pageSize;
+  const safePage = pageCount > 0 ? Math.min(page, pageCount) : page;
+  const start = (safePage - 1) * pageSize;
 
   return {
     requestId,
@@ -207,7 +226,7 @@ function buildListResponse<TRecord>({
     dataSource: 'mock',
     records: records.slice(start, start + pageSize),
     pageInfo: {
-      page,
+      page: safePage,
       pageSize,
       total,
       pageCount,
