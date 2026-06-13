@@ -8,11 +8,13 @@ import { createPlatformKnowledgeManagementRepository } from '@/modules/open-plat
 const database = { database: 'platform-knowledge-test-db' };
 const repository = {
   listKnowledgeItems: vi.fn(),
+  hasTenantInstitution: vi.fn(),
   bindInstitutionVisibility: vi.fn(),
   unbindInstitutionVisibility: vi.fn(),
 };
 
 vi.mock('@/server/db/client', () => ({
+  createDatabaseUrlErrorMessage: vi.fn(() => 'DATABASE_URL is not configured'),
   getDatabase: vi.fn(() => database),
 }));
 
@@ -31,6 +33,18 @@ const apiUrl = 'http://localhost/api/v1/open-platform/knowledge-management/items
 const visibilityUrl =
   'http://localhost/api/v1/open-platform/knowledge-management/items/knowledge-route-a/visibility';
 const now = new Date('2026-06-13T08:00:00.000Z');
+const unsafeError = new Error(
+  'SQL failed at /Users/demo/project with database postgres://root:password@localhost token=secret drizzle stack',
+);
+const unsafeFragments = [
+  'SQL',
+  'database',
+  '/Users/',
+  'drizzle',
+  'postgres',
+  'password',
+  'token',
+];
 
 const routeRecords: PlatformKnowledgeRepositoryRecord[] = [
   {
@@ -62,8 +76,10 @@ async function readJson(response: Response) {
 describe('平台知识库管理 V1 真实数据 API route', () => {
   beforeEach(() => {
     repository.listKnowledgeItems.mockReset();
+    repository.hasTenantInstitution.mockReset();
     repository.bindInstitutionVisibility.mockReset();
     repository.unbindInstitutionVisibility.mockReset();
+    repository.hasTenantInstitution.mockResolvedValue(true);
     vi.mocked(getDatabase).mockClear();
     vi.mocked(createPlatformKnowledgeManagementRepository).mockClear();
   });
@@ -95,6 +111,27 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
     expect(serialized).not.toContain('"embeddingVectorJson"');
     expect(serialized).not.toContain('"parsedContent"');
     expect(serialized).not.toContain('"trainingContent"');
+  });
+
+  it('items GET 底层异常时返回安全中文文案且不暴露数据库细节', async () => {
+    repository.listKnowledgeItems.mockRejectedValue(unsafeError);
+
+    const response = await itemsRoute.GET(
+      new Request(`${apiUrl}?tenantId=tenant-route-a`),
+    );
+    const payload = await readJson(response);
+    const serialized = JSON.stringify(payload);
+
+    expect(response.status).toBe(400);
+    expect(payload).toEqual({
+      error: {
+        code: 'readonly_contract_error',
+        message: '知识库条目暂时无法查询',
+      },
+    });
+    unsafeFragments.forEach((fragment) => {
+      expect(serialized).not.toContain(fragment);
+    });
   });
 
   it('visibility POST/DELETE 接入绑定和解绑 service', async () => {
@@ -227,6 +264,51 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
       tenantId: 'tenant-route-a',
       knowledgeId: 'knowledge-route-a',
       institutionId: 'inst-visible-a',
+    });
+  });
+
+  it.each([
+    {
+      method: 'POST',
+      handler: visibilityRoute.POST,
+      repositoryMethod: repository.bindInstitutionVisibility,
+      label: 'POST',
+    },
+    {
+      method: 'DELETE',
+      handler: visibilityRoute.DELETE,
+      repositoryMethod: repository.unbindInstitutionVisibility,
+      label: 'DELETE',
+    },
+  ])('$label 底层异常时返回安全中文文案且不暴露数据库细节', async ({
+    method,
+    handler,
+    repositoryMethod,
+  }) => {
+    repositoryMethod.mockRejectedValue(unsafeError);
+
+    const response = await handler(
+      new Request(visibilityUrl, {
+        method,
+        body: JSON.stringify({
+          tenantId: 'tenant-route-a',
+          institutionId: 'inst-visible-a',
+        }),
+      }),
+      { params: { knowledgeId: 'knowledge-route-a' } },
+    );
+    const payload = await readJson(response);
+    const serialized = JSON.stringify(payload);
+
+    expect(response.status).toBe(400);
+    expect(payload).toEqual({
+      error: {
+        code: 'readonly_contract_error',
+        message: '知识库可见范围暂时无法更新',
+      },
+    });
+    unsafeFragments.forEach((fragment) => {
+      expect(serialized).not.toContain(fragment);
     });
   });
 });

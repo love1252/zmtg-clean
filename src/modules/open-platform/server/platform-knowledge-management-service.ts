@@ -25,7 +25,7 @@ type PlatformKnowledgeItemsServiceInput = {
 type PlatformKnowledgeVisibilityServiceInput = {
   repository: Pick<
     PlatformKnowledgeManagementRepository,
-    'bindInstitutionVisibility' | 'unbindInstitutionVisibility'
+    'bindInstitutionVisibility' | 'hasTenantInstitution' | 'unbindInstitutionVisibility'
   >;
   input: PlatformKnowledgeVisibilityRepositoryInput;
 };
@@ -208,6 +208,14 @@ export async function bindPlatformKnowledgeInstitutionVisibilityService(
     return { status: 'validation_failed' };
   }
 
+  const institutionBelongsToTenant = await input.repository.hasTenantInstitution({
+    tenantId: input.input.tenantId,
+    institutionId: input.input.institutionId,
+  });
+  if (!institutionBelongsToTenant) {
+    return { status: 'validation_failed' };
+  }
+
   return input.repository.bindInstitutionVisibility(input.input);
 }
 
@@ -215,6 +223,14 @@ export async function unbindPlatformKnowledgeInstitutionVisibilityService(
   input: PlatformKnowledgeVisibilityServiceInput,
 ): Promise<PlatformKnowledgeVisibilityRepositoryResult | { status: 'validation_failed' }> {
   if (!hasVisibilityScope(input.input)) {
+    return { status: 'validation_failed' };
+  }
+
+  const institutionBelongsToTenant = await input.repository.hasTenantInstitution({
+    tenantId: input.input.tenantId,
+    institutionId: input.input.institutionId,
+  });
+  if (!institutionBelongsToTenant) {
     return { status: 'validation_failed' };
   }
 

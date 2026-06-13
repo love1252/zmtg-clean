@@ -91,6 +91,10 @@ function createRepository() {
   const visibleByDocument = new Map<string, string[]>(
     records.map((record) => [record.knowledgeId, [...record.visibleInstitutionIds]]),
   );
+  const tenantInstitutions = new Map<string, string[]>([
+    ['tenant-a', ['inst-owner-a', 'inst-visible-a', 'inst-new-visible']],
+    ['tenant-b', ['inst-owner-b', 'inst-visible-b']],
+  ]);
 
   return {
     listKnowledgeItems: vi.fn(async (input: { tenantId: string }) =>
@@ -100,6 +104,9 @@ function createRepository() {
           ...record,
           visibleInstitutionIds: visibleByDocument.get(record.knowledgeId) ?? [],
         })),
+    ),
+    hasTenantInstitution: vi.fn(async (input: { tenantId: string; institutionId: string }) =>
+      (tenantInstitutions.get(input.tenantId) ?? []).includes(input.institutionId),
     ),
     bindInstitutionVisibility: vi.fn(async (input: {
       tenantId: string;
@@ -247,7 +254,7 @@ describe('平台知识库管理 V1 真实数据底座 service', () => {
     expect(unbindMismatch).toEqual({ status: 'not_found' });
   });
 
-  it('当前无机构归属表时仅校验非空 scope，并支持平台端绑定和解绑机构可见范围', async () => {
+  it('institution 属于 tenant 时允许平台端绑定和解绑机构可见范围', async () => {
     const repository = createRepository();
 
     const bound = await bindPlatformKnowledgeInstitutionVisibilityService({
@@ -283,6 +290,44 @@ describe('平台知识库管理 V1 真实数据底座 service', () => {
       knowledgeId: 'knowledge-ready-a',
       tenantId: 'tenant-a',
       visibleInstitutionIds: ['inst-new-visible'],
+    });
+  });
+
+  it('institution 不属于 tenant 时拒绝绑定和解绑，且不写入 visibility repository', async () => {
+    const repository = createRepository();
+
+    const bound = await bindPlatformKnowledgeInstitutionVisibilityService({
+      repository,
+      input: {
+        tenantId: 'tenant-a',
+        knowledgeId: 'knowledge-ready-a',
+        institutionId: 'inst-visible-b',
+      },
+    });
+    const unbound = await unbindPlatformKnowledgeInstitutionVisibilityService({
+      repository,
+      input: {
+        tenantId: 'tenant-a',
+        knowledgeId: 'knowledge-ready-a',
+        institutionId: 'inst-visible-b',
+      },
+    });
+
+    expect(bound).toEqual({ status: 'validation_failed' });
+    expect(unbound).toEqual({ status: 'validation_failed' });
+    expect(repository.hasTenantInstitution).toHaveBeenCalledWith({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-visible-b',
+    });
+    expect(repository.bindInstitutionVisibility).not.toHaveBeenCalledWith({
+      tenantId: 'tenant-a',
+      knowledgeId: 'knowledge-ready-a',
+      institutionId: 'inst-visible-b',
+    });
+    expect(repository.unbindInstitutionVisibility).not.toHaveBeenCalledWith({
+      tenantId: 'tenant-a',
+      knowledgeId: 'knowledge-ready-a',
+      institutionId: 'inst-visible-b',
     });
   });
 });
