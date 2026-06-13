@@ -1,27 +1,15 @@
 import { NextResponse } from 'next/server';
-import { composeInstitutionKnowledgeQaService } from '@/modules/institution/server/institution-knowledge-qa-service';
+import { listInstitutionKnowledgeQaAuditsService } from '@/modules/open-platform/server/platform-knowledge-qa-service';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
 
 function statusCodeForResult(status: string) {
   if (status === 'validation_failed') return 400;
-  if (status === 'usage_limited') return 429;
   return 200;
 }
 
-async function readBody(request: Request) {
-  try {
-    const body = await request.json();
-    return Object.prototype.toString.call(body) === '[object Object]'
-      ? body as Record<string, unknown>
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   const accessContext = getDemoAccessContextFromRequest(request);
   if (!accessContext) {
     return NextResponse.json({ code: 'unauthorized', error: '请先登录' }, { status: 401 });
@@ -31,17 +19,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await readBody(request);
-    const result = await composeInstitutionKnowledgeQaService({
+    const params = new URL(request.url).searchParams;
+    const result = await listInstitutionKnowledgeQaAuditsService({
       repository: createPlatformKnowledgeManagementRepository(getDatabase()),
-      actorUserId: accessContext.userId,
       params: {
         tenantId: accessContext.tenantId,
         institutionId: accessContext.institutionId,
-        question: typeof body.question === 'string' ? body.question : null,
-        knowledgeId: typeof body.knowledgeId === 'string' ? body.knowledgeId : null,
-        fileId: typeof body.fileId === 'string' ? body.fileId : null,
-        retrievalMode: typeof body.retrievalMode === 'string' ? body.retrievalMode : null,
+        page: params.get('page'),
+        pageSize: params.get('pageSize'),
       },
     });
 
@@ -53,7 +38,7 @@ export async function POST(request: Request) {
     });
   } catch {
     return NextResponse.json(
-      { code: 'service_unavailable', error: '知识库问答暂时不可用' },
+      { code: 'service_unavailable', error: '知识库问答审计暂时不可用' },
       { status: 503 },
     );
   }

@@ -28,6 +28,34 @@ describe('机构端知识库只读列表 UI', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/qa/audits')) {
+          return Response.json({
+            requestId: 'institution-knowledge-qa-audits',
+            readonly: true,
+            dataSource: 'repository',
+            records: [
+              {
+                auditId: 'kb-qa-audit-institution-list-ui-a',
+                tenantId: 'tenant-a',
+                institutionId: 'inst-current',
+                actorScope: 'institution',
+                actorUserId: 'tenant-user',
+                question: '复诊前怎么准备？',
+                answerPreview: '基于已召回的知识片段：机构端审计回答预览。',
+                retrievalMode: 'keyword',
+                citationCount: 1,
+                safeStatus: 'answered',
+                safeFailureMessage: null,
+                createdAt: '2026-06-14T08:10:00.000Z',
+              },
+            ],
+            pageInfo: pageInfo,
+            emptyState: {
+              title: '暂无问答审计',
+              description: '当前机构还没有知识库问答审计记录。',
+            },
+          });
+        }
         if (url.includes('/api/institution/knowledge-management/qa')) {
           return Response.json({
             answer: '基于已召回的知识片段：机构端知识库问答回答。',
@@ -294,6 +322,29 @@ describe('机构端知识库只读列表 UI', () => {
     expect(qaSection.textContent).not.toContain('OCR');
     expect(qaSection.textContent).not.toContain('训练');
     expect(qaSection.textContent).not.toContain('runtime');
+  });
+
+  it('机构端新增问答审计只读区域，只展示本机构低敏审计字段', async () => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+    const auditSection = screen.getByLabelText('机构端问答审计');
+    fireEvent.click(within(auditSection).getByRole('button', { name: '刷新审计' }));
+
+    expect(await screen.findByText('复诊前怎么准备？')).toBeInTheDocument();
+    expect(screen.getByText('基于已召回的知识片段：机构端审计回答预览。')).toBeInTheDocument();
+    expect(screen.getByText('关键词 · 引用 1')).toBeInTheDocument();
+    expect(screen.getByText('answered')).toBeInTheDocument();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/institution/knowledge-management/qa/audits',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+    expect(auditSection.textContent).not.toContain('storageKey');
+    expect(auditSection.textContent).not.toContain('embeddingVectorJson');
+    expect(auditSection.textContent).not.toContain('真实 AI');
+    expect(auditSection.textContent).not.toContain('OCR');
+    expect(auditSection.textContent).not.toContain('训练');
+    expect(auditSection.textContent).not.toContain('runtime');
   });
 
   it('展示 empty 和 error 状态，并且不出现上传下载导出解析训练等 CTA', async () => {

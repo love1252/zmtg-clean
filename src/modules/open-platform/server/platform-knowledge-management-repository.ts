@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   knowledgeChunks,
@@ -22,7 +22,10 @@ import type {
   PlatformKnowledgeVectorSearchCandidateRecord,
 } from './platform-knowledge-embedding-vector-search-service';
 import type { KnowledgeChunkSearchRepositoryRecord } from './platform-knowledge-keyword-search-service';
-import type { KnowledgeQaAuditRecord } from './platform-knowledge-qa-service';
+import type {
+  KnowledgeQaAuditLogDto,
+  KnowledgeQaAuditRecord,
+} from './platform-knowledge-qa-service';
 import type {
   PlatformKnowledgeFileParseChunkRecord,
   PlatformKnowledgeFileParseRecord,
@@ -43,6 +46,7 @@ type KnowledgeDocumentFileParseRow = typeof knowledgeDocumentFileParses.$inferSe
 type KnowledgeDocumentFileParseChunkRow = typeof knowledgeDocumentFileParseChunks.$inferSelect;
 type KnowledgeDocumentFileParseChunkEmbeddingRow =
   typeof knowledgeDocumentFileParseChunkEmbeddings.$inferSelect;
+type KnowledgeQaAuditLogRow = typeof knowledgeQaAuditLogs.$inferSelect;
 
 export type PlatformKnowledgeRepositoryRecord = {
   knowledgeId: string;
@@ -265,6 +269,32 @@ function mapVectorSearchCandidate(input: {
     embeddingDimensions: input.embedding.embeddingDimensions,
     embeddingVectorJson: input.embedding.embeddingVectorJson,
     embeddingStatus: input.embedding.status === 'ready' ? 'ready' : 'failed',
+  };
+}
+
+function normalizeQaActorScope(scope: string): KnowledgeQaAuditLogDto['actorScope'] {
+  return scope === 'platform' ? 'platform' : 'institution';
+}
+
+function normalizeQaRetrievalMode(mode: string): KnowledgeQaAuditLogDto['retrievalMode'] {
+  if (mode === 'keyword' || mode === 'vector' || mode === 'hybrid') return mode;
+  return 'hybrid';
+}
+
+function mapQaAuditLogRow(row: KnowledgeQaAuditLogRow): KnowledgeQaAuditLogDto {
+  return {
+    auditId: row.id,
+    tenantId: row.tenantId,
+    institutionId: row.institutionId,
+    actorScope: normalizeQaActorScope(row.actorScope),
+    actorUserId: row.actorUserId,
+    question: row.question,
+    answerPreview: row.answerPreview,
+    retrievalMode: normalizeQaRetrievalMode(row.retrievalMode),
+    citationCount: row.citationCount,
+    safeStatus: row.safeStatus,
+    safeFailureMessage: row.safeFailureMessage,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 
@@ -774,6 +804,66 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
 
         return record ? [record] : [];
       });
+    },
+
+    async countKnowledgeQaAuditLogsForDay(input: {
+      tenantId: string;
+      institutionId: string | null;
+      since: Date;
+    }) {
+      const conditions = [
+        eq(knowledgeQaAuditLogs.tenantId, input.tenantId),
+        gte(knowledgeQaAuditLogs.createdAt, input.since),
+      ];
+      if (input.institutionId) {
+        conditions.push(eq(knowledgeQaAuditLogs.institutionId, input.institutionId));
+      }
+
+      const rows = await database
+        .select({ value: sql<number>`count(*)` })
+        .from(knowledgeQaAuditLogs)
+        .where(and(...conditions));
+
+      return Number(rows[0]?.value ?? 0);
+    },
+
+    async listKnowledgeQaAuditLogs(input: {
+      tenantId: string;
+      institutionId?: string;
+      page: number;
+      pageSize: number;
+    }) {
+      const conditions = [eq(knowledgeQaAuditLogs.tenantId, input.tenantId)];
+      if (input.institutionId) {
+        conditions.push(eq(knowledgeQaAuditLogs.institutionId, input.institutionId));
+      }
+
+      const totalRows = await database
+        .select({ value: sql<number>`count(*)` })
+        .from(knowledgeQaAuditLogs)
+        .where(and(...conditions));
+      const total = Number(totalRows[0]?.value ?? 0);
+      const pageCount = Math.ceil(total / input.pageSize);
+      const page = pageCount > 0 ? Math.min(input.page, pageCount) : input.page;
+      const records = await database
+        .select()
+        .from(knowledgeQaAuditLogs)
+        .where(and(...conditions))
+        .orderBy(desc(knowledgeQaAuditLogs.createdAt), desc(knowledgeQaAuditLogs.id))
+        .limit(input.pageSize)
+        .offset((page - 1) * input.pageSize);
+
+      return {
+        records: records.map(mapQaAuditLogRow),
+        pageInfo: {
+          page,
+          pageSize: input.pageSize,
+          total,
+          pageCount,
+          hasPreviousPage: total > 0 && page > 1,
+          hasNextPage: pageCount > 0 && page < pageCount,
+        },
+      };
     },
 
     async createKnowledgeQaAuditLog(record: KnowledgeQaAuditRecord) {

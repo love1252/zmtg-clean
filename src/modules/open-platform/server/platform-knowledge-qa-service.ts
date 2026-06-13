@@ -11,6 +11,7 @@ import {
 export type KnowledgeQaRetrievalMode = 'keyword' | 'vector' | 'hybrid';
 export type KnowledgeQaActorScope = 'platform' | 'institution';
 export type KnowledgeQaSafeStatus = 'answered' | 'no_citation';
+export const KNOWLEDGE_QA_USAGE_LIMIT_MESSAGE = '当前知识库问答次数已达上限，请稍后再试';
 
 export type KnowledgeQaCitationDto = {
   knowledgeId: string;
@@ -47,8 +48,56 @@ export type KnowledgeQaAuditRecord = {
   createdAt: Date;
 };
 
+export type KnowledgeQaAuditLogDto = {
+  auditId: string;
+  tenantId: string;
+  institutionId: string | null;
+  actorScope: KnowledgeQaActorScope;
+  actorUserId: string;
+  question: string;
+  answerPreview: string;
+  retrievalMode: KnowledgeQaRetrievalMode;
+  citationCount: number;
+  safeStatus: string;
+  safeFailureMessage: string | null;
+  createdAt: string;
+};
+
+export type KnowledgeQaAuditListResponse = {
+  requestId: 'platform-knowledge-qa-audits' | 'institution-knowledge-qa-audits';
+  readonly: true;
+  dataSource: 'repository';
+  records: KnowledgeQaAuditLogDto[];
+  pageInfo: {
+    page: number;
+    pageSize: number;
+    total: number;
+    pageCount: number;
+    hasPreviousPage: boolean;
+    hasNextPage: boolean;
+  };
+  emptyState: {
+    title: string;
+    description: string;
+  };
+};
+
 type KnowledgeQaRepository = {
   listKnowledgeItems(input: { tenantId: string }): Promise<PlatformKnowledgeRepositoryRecord[]>;
+  countKnowledgeQaAuditLogsForDay(input: {
+    tenantId: string;
+    institutionId: string | null;
+    since: Date;
+  }): Promise<number>;
+  listKnowledgeQaAuditLogs(input: {
+    tenantId: string;
+    institutionId?: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{
+    records: KnowledgeQaAuditLogDto[];
+    pageInfo: KnowledgeQaAuditListResponse['pageInfo'];
+  }>;
   searchKnowledgeFileParseChunks(input: {
     tenantId: string;
     keyword: string;
@@ -70,6 +119,8 @@ type KnowledgeQaParams = {
   knowledgeId?: string | number | null;
   fileId?: string | number | null;
   retrievalMode?: string | number | null;
+  page?: string | number | null;
+  pageSize?: string | number | null;
 };
 
 type KnowledgeQaServiceInput = {
@@ -79,7 +130,16 @@ type KnowledgeQaServiceInput = {
 };
 
 const MAX_CITATIONS = 5;
+const TENANT_DAILY_QA_LIMIT = 100;
+const INSTITUTION_DAILY_QA_LIMIT = 30;
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 10;
+const MAX_PAGE_SIZE = 50;
 const NO_CITATION_ANSWER = '当前授权范围内没有召回可引用的知识片段，暂不能给出知识库回答。';
+const auditEmptyState = {
+  title: '暂无问答审计',
+  description: '当前范围还没有知识库问答审计记录。',
+};
 
 function normalizeOptionalString(value: string | number | null | undefined) {
   const trimmed = String(value ?? '').trim();
@@ -119,6 +179,27 @@ function normalizeQuestion(value: string | number | null | undefined) {
 function normalizeRetrievalMode(value: string | number | null | undefined): KnowledgeQaRetrievalMode {
   if (value === 'keyword' || value === 'vector' || value === 'hybrid') return value;
   return 'hybrid';
+}
+
+function parsePositiveInteger(value: string | number | null | undefined, fallback: number) {
+  if (value === null || value === undefined || value === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
+function normalizePageParams(params: KnowledgeQaParams) {
+  const page = parsePositiveInteger(params.page, DEFAULT_PAGE);
+  const parsedPageSize = parsePositiveInteger(params.pageSize, DEFAULT_PAGE_SIZE);
+  const pageSize = parsedPageSize > MAX_PAGE_SIZE ? DEFAULT_PAGE_SIZE : parsedPageSize;
+
+  return { page, pageSize };
+}
+
+function startOfToday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
 }
 
 function deriveKeyword(question: string) {
@@ -346,6 +427,19 @@ async function composeKnowledgeQa(input: KnowledgeQaServiceInput & {
   if (!question.ok) return question.error;
 
   const retrievalMode = normalizeRetrievalMode(input.params.retrievalMode);
+  const usageCount = await input.repository.countKnowledgeQaAuditLogsForDay({
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    since: startOfToday(),
+  });
+  const usageLimit = input.institutionId ? INSTITUTION_DAILY_QA_LIMIT : TENANT_DAILY_QA_LIMIT;
+  if (usageCount >= usageLimit) {
+    return {
+      status: 'usage_limited' as const,
+      message: KNOWLEDGE_QA_USAGE_LIMIT_MESSAGE,
+    };
+  }
+
   const knowledgeId = normalizeOptionalString(input.params.knowledgeId);
   const fileId = normalizeOptionalString(input.params.fileId);
   const visibleKnowledge = await loadVisibleKnowledge({
@@ -413,6 +507,31 @@ export async function composePlatformKnowledgeQaService(input: KnowledgeQaServic
   });
 }
 
+export async function listPlatformKnowledgeQaAuditsService(input: {
+  repository: KnowledgeQaRepository;
+  params: KnowledgeQaParams;
+}) {
+  const tenant = normalizeScope(input.params.tenantId, 'tenantId');
+  if (!tenant.ok) return tenant.error;
+
+  const institutionId = normalizeOptionalString(input.params.institutionId);
+  const pageParams = normalizePageParams(input.params);
+  const result = await input.repository.listKnowledgeQaAuditLogs({
+    tenantId: tenant.value,
+    institutionId,
+    ...pageParams,
+  });
+
+  return {
+    requestId: 'platform-knowledge-qa-audits',
+    readonly: true,
+    dataSource: 'repository',
+    records: result.records,
+    pageInfo: result.pageInfo,
+    emptyState: auditEmptyState,
+  } satisfies KnowledgeQaAuditListResponse;
+}
+
 export async function composeInstitutionKnowledgeQaService(input: KnowledgeQaServiceInput) {
   const tenant = normalizeScope(input.params.tenantId, 'tenantId');
   if (!tenant.ok) return tenant.error;
@@ -426,4 +545,31 @@ export async function composeInstitutionKnowledgeQaService(input: KnowledgeQaSer
     tenantId: tenant.value,
     institutionId: institution.value,
   });
+}
+
+export async function listInstitutionKnowledgeQaAuditsService(input: {
+  repository: KnowledgeQaRepository;
+  params: KnowledgeQaParams;
+}) {
+  const tenant = normalizeScope(input.params.tenantId, 'tenantId');
+  if (!tenant.ok) return tenant.error;
+
+  const institution = normalizeScope(input.params.institutionId, 'institutionId');
+  if (!institution.ok) return institution.error;
+
+  const pageParams = normalizePageParams(input.params);
+  const result = await input.repository.listKnowledgeQaAuditLogs({
+    tenantId: tenant.value,
+    institutionId: institution.value,
+    ...pageParams,
+  });
+
+  return {
+    requestId: 'institution-knowledge-qa-audits',
+    readonly: true,
+    dataSource: 'repository',
+    records: result.records,
+    pageInfo: result.pageInfo,
+    emptyState: auditEmptyState,
+  } satisfies KnowledgeQaAuditListResponse;
 }

@@ -90,6 +90,20 @@ type KnowledgeQaResponseRecord = {
   auditId: string;
   safeStatus: 'answered' | 'no_citation';
 };
+type KnowledgeQaAuditRecord = {
+  auditId: string;
+  tenantId: string;
+  institutionId: string | null;
+  actorScope: 'platform' | 'institution';
+  actorUserId: string;
+  question: string;
+  answerPreview: string;
+  retrievalMode: 'keyword' | 'vector' | 'hybrid';
+  citationCount: number;
+  safeStatus: string;
+  safeFailureMessage: string | null;
+  createdAt: string;
+};
 
 const fileStatusLabels: Record<KnowledgeFileParseStatus, string> = {
   parsed: '已解析',
@@ -147,6 +161,12 @@ const managedParseStatusClasses: Record<ManagedKnowledgeFileRecord['parseStatus'
   failed: 'border-rose-300/20 bg-rose-300/[0.10] text-rose-100',
 };
 
+const qaRetrievalModeLabels: Record<KnowledgeQaAuditRecord['retrievalMode'], string> = {
+  hybrid: '混合检索',
+  keyword: '关键词',
+  vector: '语义',
+};
+
 function formatPercent(value: number) {
   return `${Math.round(value)}%`;
 }
@@ -161,6 +181,19 @@ function formatFileSize(kb: number) {
   }
 
   return `${kb} KB`;
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
 }
 
 function EmptyState({ title, description }: { title?: string; description?: string }) {
@@ -347,6 +380,16 @@ function knowledgeQaPath() {
   return '/api/v1/open-platform/knowledge-management/qa';
 }
 
+function qaAuditPath(input: { tenantId: string }) {
+  const params = new URLSearchParams({
+    tenantId: input.tenantId,
+    page: '1',
+    pageSize: '10',
+  });
+
+  return `/api/v1/open-platform/knowledge-management/qa/audits?${params.toString()}`;
+}
+
 export function OpenPlatformKnowledgeManagementPanel() {
   const [selectedTenantId, setSelectedTenantId] = useState(ALL_TENANTS);
   const [fileSearch, setFileSearch] = useState('');
@@ -378,6 +421,9 @@ export function OpenPlatformKnowledgeManagementPanel() {
   const [qaResponse, setQaResponse] = useState<KnowledgeQaResponseRecord | null>(null);
   const [qaMessage, setQaMessage] = useState('请输入问题发起知识库问答');
   const [isQaLoading, setIsQaLoading] = useState(false);
+  const [qaAuditRecords, setQaAuditRecords] = useState<KnowledgeQaAuditRecord[]>([]);
+  const [qaAuditMessage, setQaAuditMessage] = useState('点击刷新查看问答审计');
+  const [isQaAuditLoading, setIsQaAuditLoading] = useState(false);
   const [isFileActionLoading, setIsFileActionLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -835,7 +881,11 @@ export function OpenPlatformKnowledgeManagementPanel() {
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload || typeof payload.answer !== 'string' || !Array.isArray(payload.citations)) {
         setQaResponse(null);
-        setQaMessage('知识库问答暂时无法处理');
+        setQaMessage(
+          payload && typeof payload.message === 'string'
+            ? payload.message
+            : '知识库问答暂时无法处理',
+        );
         return;
       }
 
@@ -851,6 +901,36 @@ export function OpenPlatformKnowledgeManagementPanel() {
       setQaMessage('知识库问答暂时无法处理');
     } finally {
       setIsQaLoading(false);
+    }
+  }
+
+  async function handleLoadQaAudits() {
+    const tenantId = selectedTenantParam ?? scopedKnowledgeItems[0]?.tenantId;
+    if (!tenantId) {
+      setQaAuditRecords([]);
+      setQaAuditMessage('当前范围暂无可查询审计的知识库');
+      return;
+    }
+
+    setIsQaAuditLoading(true);
+    setQaAuditMessage('正在读取问答审计...');
+    try {
+      const response = await fetch(qaAuditPath({ tenantId }), { cache: 'no-store' });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setQaAuditRecords([]);
+        setQaAuditMessage('问答审计暂时无法加载');
+        return;
+      }
+
+      const records = payload.records as KnowledgeQaAuditRecord[];
+      setQaAuditRecords(records);
+      setQaAuditMessage(records.length > 0 ? `已读取 ${records.length} 条问答审计` : '暂无问答审计记录');
+    } catch {
+      setQaAuditRecords([]);
+      setQaAuditMessage('问答审计暂时无法加载');
+    } finally {
+      setIsQaAuditLoading(false);
     }
   }
 
@@ -1439,6 +1519,58 @@ export function OpenPlatformKnowledgeManagementPanel() {
                       ))
                     )}
                   </div>
+                </div>
+              )}
+            </div>
+          </article>
+
+          <article className={cn(sectionShell, 'overflow-hidden')} aria-label="平台端问答审计">
+            <div className="flex flex-col gap-4 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-3">
+                <Database className="h-5 w-5 text-blue-200" />
+                <div>
+                  <h2 className="text-lg font-semibold tracking-normal text-white">问答审计</h2>
+                  <p className="mt-1 text-sm text-slate-400">查看当前机构范围的低敏问答记录。</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleLoadQaAudits}
+                disabled={isQaAuditLoading}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-300/20 bg-blue-300/[0.10] px-4 text-sm font-semibold text-blue-100 transition hover:bg-blue-300/[0.16] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isQaAuditLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                刷新审计
+              </button>
+            </div>
+            <div className="p-5">
+              <div className="mb-4 rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-3 text-sm font-semibold text-slate-300">
+                {qaAuditMessage}
+              </div>
+              {qaAuditRecords.length === 0 ? (
+                <EmptyState title="暂无问答审计" description="点击刷新后可查看当前范围的问答审计记录。" />
+              ) : (
+                <div className="grid gap-3 xl:grid-cols-2">
+                  {qaAuditRecords.map((record) => (
+                    <article key={record.auditId} className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-400">
+                        <span>{qaRetrievalModeLabels[record.retrievalMode]} · 引用 {record.citationCount}</span>
+                        <span>{formatDate(record.createdAt)}</span>
+                      </div>
+                      <h3 className="mt-3 text-sm font-semibold tracking-normal text-white">{record.question}</h3>
+                      <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-300">{record.answerPreview}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge className="border-emerald-300/20 bg-emerald-300/[0.10] text-emerald-100">
+                          {record.safeStatus}
+                        </Badge>
+                        {record.safeFailureMessage ? (
+                          <Badge className="border-amber-300/20 bg-amber-300/[0.10] text-amber-100">
+                            {record.safeFailureMessage}
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </article>
+                  ))}
                 </div>
               )}
             </div>

@@ -52,6 +52,20 @@ type InstitutionKnowledgeQaResponseRecord = {
   auditId: string;
   safeStatus: 'answered' | 'no_citation';
 };
+type InstitutionKnowledgeQaAuditRecord = {
+  auditId: string;
+  tenantId: string;
+  institutionId: string | null;
+  actorScope: 'platform' | 'institution';
+  actorUserId: string;
+  question: string;
+  answerPreview: string;
+  retrievalMode: 'keyword' | 'vector' | 'hybrid';
+  citationCount: number;
+  safeStatus: string;
+  safeFailureMessage: string | null;
+  createdAt: string;
+};
 
 const statusLabels: Record<InstitutionKnowledgeItemDto['status'], string> = {
   ready: '可用',
@@ -73,6 +87,12 @@ const parseStatusLabels: Record<InstitutionKnowledgeFileRecord['parseStatus'], s
   processing: '解析中',
   succeeded: '解析成功',
   failed: '解析失败',
+};
+
+const qaRetrievalModeLabels: Record<InstitutionKnowledgeQaAuditRecord['retrievalMode'], string> = {
+  hybrid: '混合检索',
+  keyword: '关键词',
+  vector: '语义',
 };
 
 function visibleErrorMessage(error: TenantBusinessClientError | null) {
@@ -125,6 +145,9 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [qaResponse, setQaResponse] = useState<InstitutionKnowledgeQaResponseRecord | null>(null);
   const [qaMessage, setQaMessage] = useState('请输入问题发起知识库问答');
   const [isQaLoading, setIsQaLoading] = useState(false);
+  const [qaAuditRecords, setQaAuditRecords] = useState<InstitutionKnowledgeQaAuditRecord[]>([]);
+  const [qaAuditMessage, setQaAuditMessage] = useState('点击刷新查看问答审计');
+  const [isQaAuditLoading, setIsQaAuditLoading] = useState(false);
   const [pageInfo, setPageInfo] = useState<InstitutionKnowledgeListResponse['pageInfo']>({
     page: 1,
     pageSize: 10,
@@ -340,7 +363,11 @@ export function InstitutionKnowledgeReadonlyShell() {
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload || typeof payload.answer !== 'string' || !Array.isArray(payload.citations)) {
         setQaResponse(null);
-        setQaMessage('知识库问答暂时不可用');
+        setQaMessage(
+          payload && typeof payload.message === 'string'
+            ? payload.message
+            : '知识库问答暂时不可用',
+        );
         return;
       }
 
@@ -356,6 +383,31 @@ export function InstitutionKnowledgeReadonlyShell() {
       setQaMessage('知识库问答暂时不可用');
     } finally {
       setIsQaLoading(false);
+    }
+  }
+
+  async function loadQaAudits() {
+    setIsQaAuditLoading(true);
+    setQaAuditMessage('正在读取问答审计...');
+    try {
+      const response = await fetch('/api/institution/knowledge-management/qa/audits', {
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setQaAuditRecords([]);
+        setQaAuditMessage('问答审计暂时不可用');
+        return;
+      }
+
+      const records = payload.records as InstitutionKnowledgeQaAuditRecord[];
+      setQaAuditRecords(records);
+      setQaAuditMessage(records.length > 0 ? `已读取 ${records.length} 条问答审计` : '暂无问答审计记录');
+    } catch {
+      setQaAuditRecords([]);
+      setQaAuditMessage('问答审计暂时不可用');
+    } finally {
+      setIsQaAuditLoading(false);
     }
   }
 
@@ -612,6 +664,60 @@ export function InstitutionKnowledgeReadonlyShell() {
               </div>
             </div>
           )}
+        </section>
+      ) : null}
+
+      {status === 'success' ? (
+        <section
+          aria-label="机构端问答审计"
+          className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">问答审计</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">只读查看本机构知识库问答记录。</p>
+            </div>
+            <button
+              type="button"
+              onClick={loadQaAudits}
+              disabled={isQaAuditLoading}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 text-sm font-semibold text-cyan-700 transition hover:border-cyan-300 hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isQaAuditLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              刷新审计
+            </button>
+          </div>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+            {qaAuditMessage}
+          </div>
+          <div className="mt-3 grid gap-3 xl:grid-cols-2">
+            {qaAuditRecords.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
+                暂无问答审计
+              </div>
+            ) : (
+              qaAuditRecords.map((record) => (
+                <article key={record.auditId} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
+                    <span>{qaRetrievalModeLabels[record.retrievalMode]} · 引用 {record.citationCount}</span>
+                    <span>{formatDate(record.createdAt)}</span>
+                  </div>
+                  <h3 className="mt-2 text-sm font-semibold tracking-normal text-slate-900">{record.question}</h3>
+                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{record.answerPreview}</p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-700">
+                      {record.safeStatus}
+                    </span>
+                    {record.safeFailureMessage ? (
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700">
+                        {record.safeFailureMessage}
+                      </span>
+                    ) : null}
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
         </section>
       ) : null}
 
