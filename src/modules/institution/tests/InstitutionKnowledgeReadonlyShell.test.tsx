@@ -28,6 +28,30 @@ describe('机构端知识库只读列表 UI', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/search')) {
+          return Response.json({
+            requestId: 'institution-knowledge-keyword-search',
+            readonly: true,
+            dataSource: 'repository',
+            records: [
+              {
+                knowledgeId: 'knowledge-ui-a',
+                knowledgeTitle: '授权可见术后护理',
+                fileId: 'institution-file-a',
+                fileName: '机构文件.pdf',
+                chunkId: 'institution-search-chunk-a',
+                chunkIndex: 0,
+                textPreview: '机构端冷敷引用片段',
+                matchReason: '片段包含关键词“冷敷”',
+              },
+            ],
+            pageInfo: pageInfo,
+            emptyState: {
+              title: '暂无匹配片段',
+              description: '当前范围没有命中关键词的已解析知识片段。',
+            },
+          });
+        }
         if (url.includes('/parse/chunks')) {
           return Response.json({
             readonly: true,
@@ -147,6 +171,28 @@ describe('机构端知识库只读列表 UI', () => {
     expect(listInstitutionKnowledgeItems).toHaveBeenLastCalledWith(
       expect.objectContaining({ keyword: '护理', page: 1 }),
     );
+  });
+
+  it('机构端新增检索片段区域，只读展示授权引用片段', async () => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索关键词'), {
+      target: { value: '冷敷' },
+    });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
+
+    expect(await screen.findByText('机构端冷敷引用片段')).toBeInTheDocument();
+    expect(screen.getByText('片段包含关键词“冷敷”')).toBeInTheDocument();
+    expect(screen.getByText('授权可见术后护理 · 机构文件.pdf · 片段 1')).toBeInTheDocument();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/institution/knowledge-management/search?keyword=%E5%86%B7%E6%95%B7',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+    expect(searchSection.textContent).not.toContain('embedding');
+    expect(searchSection.textContent).not.toContain('训练');
+    expect(searchSection.textContent).not.toContain('问答');
   });
 
   it('展示 empty 和 error 状态，并且不出现上传下载导出解析训练等 CTA', async () => {

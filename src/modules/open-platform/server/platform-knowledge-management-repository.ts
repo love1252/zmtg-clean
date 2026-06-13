@@ -13,6 +13,7 @@ import {
   tenants,
 } from '@/server/db/schema';
 import type { PlatformKnowledgeFileRepositoryRecord } from './platform-knowledge-file-management-service';
+import type { KnowledgeChunkSearchRepositoryRecord } from './platform-knowledge-keyword-search-service';
 import type {
   PlatformKnowledgeFileParseChunkRecord,
   PlatformKnowledgeFileParseRecord,
@@ -188,6 +189,28 @@ function mapFileParseChunkRow(row: KnowledgeDocumentFileParseChunkRow): Platform
     charCount: row.charCount,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+function mapFileParseChunkSearchRecord(input: {
+  chunk: KnowledgeDocumentFileParseChunkRow;
+  parse: KnowledgeDocumentFileParseRow | undefined;
+  file: KnowledgeDocumentFileRow | undefined;
+  document: KnowledgeDocumentRow | undefined;
+}): KnowledgeChunkSearchRepositoryRecord | null {
+  if (!input.file || !input.parse || !input.document) return null;
+
+  return {
+    tenantId: input.chunk.tenantId,
+    knowledgeId: input.chunk.knowledgeDocumentId,
+    knowledgeTitle: input.document.title,
+    fileId: input.chunk.fileId,
+    fileName: input.file.originalFilename,
+    fileStatus: input.file.status === 'archived' ? 'archived' : 'active',
+    parseStatus: normalizeParseStatus(input.parse.parseStatus),
+    chunkId: input.chunk.id,
+    chunkIndex: input.chunk.chunkIndex,
+    textPreview: input.chunk.textPreview,
   };
 }
 
@@ -492,6 +515,69 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
         .orderBy(asc(knowledgeDocumentFileParseChunks.chunkIndex));
 
       return rows.map(mapFileParseChunkRow);
+    },
+
+    async searchKnowledgeFileParseChunks(input: {
+      tenantId: string;
+      keyword: string;
+      knowledgeId?: string;
+      fileId?: string;
+    }): Promise<KnowledgeChunkSearchRepositoryRecord[]> {
+      const normalizedKeyword = input.keyword.trim().toLowerCase();
+      if (!normalizedKeyword) return [];
+
+      const chunkConditions = [
+        eq(knowledgeDocumentFileParseChunks.tenantId, input.tenantId),
+      ];
+      if (input.knowledgeId) {
+        chunkConditions.push(
+          eq(knowledgeDocumentFileParseChunks.knowledgeDocumentId, input.knowledgeId),
+        );
+      }
+      if (input.fileId) {
+        chunkConditions.push(eq(knowledgeDocumentFileParseChunks.fileId, input.fileId));
+      }
+
+      const rows = await database
+        .select()
+        .from(knowledgeDocumentFileParseChunks)
+        .where(and(...chunkConditions))
+        .orderBy(
+          asc(knowledgeDocumentFileParseChunks.knowledgeDocumentId),
+          asc(knowledgeDocumentFileParseChunks.fileId),
+          asc(knowledgeDocumentFileParseChunks.chunkIndex),
+        );
+      const matchedChunks = rows.filter((row) =>
+        row.textPreview.toLowerCase().includes(normalizedKeyword),
+      );
+      if (matchedChunks.length === 0) return [];
+
+      const documents = await database
+        .select()
+        .from(knowledgeDocuments)
+        .where(eq(knowledgeDocuments.tenantId, input.tenantId));
+      const files = await database
+        .select()
+        .from(knowledgeDocumentFiles)
+        .where(eq(knowledgeDocumentFiles.tenantId, input.tenantId));
+      const parses = await database
+        .select()
+        .from(knowledgeDocumentFileParses)
+        .where(eq(knowledgeDocumentFileParses.tenantId, input.tenantId));
+      const documentById = new Map(documents.map((document) => [document.id, document]));
+      const fileById = new Map(files.map((file) => [file.id, file]));
+      const parseByFileId = new Map(parses.map((parse) => [parse.fileId, parse]));
+
+      return matchedChunks.flatMap((chunk) => {
+        const record = mapFileParseChunkSearchRecord({
+          chunk,
+          parse: parseByFileId.get(chunk.fileId),
+          file: fileById.get(chunk.fileId),
+          document: documentById.get(chunk.knowledgeDocumentId),
+        });
+
+        return record ? [record] : [];
+      });
     },
 
     async hasTenantInstitution(
