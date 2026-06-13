@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import {
+  KNOWLEDGE_QA_USAGE_LIMIT_MESSAGE,
   composeInstitutionKnowledgeQaService,
   composePlatformKnowledgeQaService,
   type KnowledgeQaAuditRecord,
   type KnowledgeQaCitationDto,
+  type KnowledgeQaResponse,
 } from '@/modules/open-platform/server/platform-knowledge-qa-service';
 import type { KnowledgeChunkSearchRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-keyword-search-service';
 import type { PlatformKnowledgeVectorSearchCandidateRecord } from '@/modules/open-platform/server/platform-knowledge-embedding-vector-search-service';
@@ -168,6 +170,18 @@ function createRepository() {
   const audits: KnowledgeQaAuditRecord[] = [];
   return {
     audits,
+    countKnowledgeQaAuditLogsForDay: vi.fn(async () => 0),
+    listKnowledgeQaAuditLogs: vi.fn(async () => ({
+      records: [],
+      pageInfo: {
+        page: 1,
+        pageSize: 10,
+        total: 0,
+        pageCount: 0,
+        hasPreviousPage: false,
+        hasNextPage: false,
+      },
+    })),
     listKnowledgeItems: vi.fn(async (input: { tenantId: string }) =>
       knowledgeRecords.filter((record) => record.tenantId === input.tenantId),
     ),
@@ -224,15 +238,14 @@ function expectCitationShape(citation: KnowledgeQaCitationDto) {
   );
 }
 
-function expectQaResponse(
-  result: Awaited<ReturnType<typeof composePlatformKnowledgeQaService>>,
-) {
-  expect('answer' in result).toBe(true);
-  if (!('answer' in result)) {
+function expectQaResponse(result: unknown): KnowledgeQaResponse {
+  const isQaResponse = Boolean(result && typeof result === 'object' && 'answer' in result);
+  expect(isQaResponse).toBe(true);
+  if (!isQaResponse) {
     throw new Error('expected QA response');
   }
 
-  return result;
+  return result as KnowledgeQaResponse;
 }
 
 describe('知识库 mock/local QA service', () => {
@@ -346,5 +359,82 @@ describe('知识库 mock/local QA service', () => {
       }),
     );
     expectSafePayload(result);
+  });
+
+  it('tenant 每日未超限时正常回答并执行召回', async () => {
+    const repository = createRepository();
+    repository.countKnowledgeQaAuditLogsForDay.mockResolvedValueOnce(99);
+
+    const result = expectQaResponse(await composePlatformKnowledgeQaService({
+      repository,
+      actorUserId: 'platform-user',
+      params: {
+        tenantId: 'tenant-a',
+        question: '冷敷后怎么护理？',
+        retrievalMode: 'keyword',
+      },
+    }));
+
+    expect(result.safeStatus).toBe('answered');
+    expect(repository.countKnowledgeQaAuditLogsForDay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        institutionId: null,
+      }),
+    );
+    expect(repository.searchKnowledgeFileParseChunks).toHaveBeenCalled();
+  });
+
+  it('tenant 每日超限时返回中文安全文案且不执行召回', async () => {
+    const repository = createRepository();
+    repository.countKnowledgeQaAuditLogsForDay.mockResolvedValueOnce(100);
+
+    const result = await composePlatformKnowledgeQaService({
+      repository,
+      actorUserId: 'platform-user',
+      params: {
+        tenantId: 'tenant-a',
+        question: '冷敷后怎么护理？',
+        retrievalMode: 'hybrid',
+      },
+    });
+
+    expect(result).toEqual({
+      status: 'usage_limited',
+      message: KNOWLEDGE_QA_USAGE_LIMIT_MESSAGE,
+    });
+    expect(repository.searchKnowledgeFileParseChunks).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeVectorSearchCandidates).not.toHaveBeenCalled();
+    expect(repository.createKnowledgeQaAuditLog).not.toHaveBeenCalled();
+  });
+
+  it('institution 每日超限时返回中文安全文案且不执行召回', async () => {
+    const repository = createRepository();
+    repository.countKnowledgeQaAuditLogsForDay.mockResolvedValueOnce(30);
+
+    const result = await composeInstitutionKnowledgeQaService({
+      repository,
+      actorUserId: 'tenant-user',
+      params: {
+        tenantId: 'tenant-a',
+        institutionId: 'inst-current',
+        question: '复诊前怎么准备？',
+        retrievalMode: 'hybrid',
+      },
+    });
+
+    expect(result).toEqual({
+      status: 'usage_limited',
+      message: KNOWLEDGE_QA_USAGE_LIMIT_MESSAGE,
+    });
+    expect(repository.countKnowledgeQaAuditLogsForDay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-current',
+      }),
+    );
+    expect(repository.searchKnowledgeFileParseChunks).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeVectorSearchCandidates).not.toHaveBeenCalled();
+    expect(repository.createKnowledgeQaAuditLog).not.toHaveBeenCalled();
   });
 });

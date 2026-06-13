@@ -35,6 +35,41 @@ describe('平台端知识库管理只读看板', () => {
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         const method = init?.method ?? 'GET';
+        if (url.includes('/api/v1/open-platform/knowledge-management/qa/audits')) {
+          return Response.json({
+            requestId: 'platform-knowledge-qa-audits',
+            readonly: true,
+            dataSource: 'repository',
+            records: [
+              {
+                auditId: 'kb-qa-audit-platform-ui-a',
+                tenantId: 'tenant-xinglan',
+                institutionId: 'inst-xinglan',
+                actorScope: 'institution',
+                actorUserId: 'tenant-user',
+                question: '冷敷后怎么护理？',
+                answerPreview: '基于已召回的知识片段：平台端审计回答预览。',
+                retrievalMode: 'hybrid',
+                citationCount: 2,
+                safeStatus: 'answered',
+                safeFailureMessage: null,
+                createdAt: '2026-06-14T08:00:00.000Z',
+              },
+            ],
+            pageInfo: {
+              page: 1,
+              pageSize: 10,
+              total: 1,
+              pageCount: 1,
+              hasPreviousPage: false,
+              hasNextPage: false,
+            },
+            emptyState: {
+              title: '暂无问答审计',
+              description: '当前范围还没有知识库问答审计记录。',
+            },
+          });
+        }
         if (url.includes('/api/v1/open-platform/knowledge-management/qa')) {
           return Response.json({
             answer: '基于已召回的知识片段：平台端知识库问答回答。',
@@ -478,6 +513,31 @@ describe('平台端知识库管理只读看板', () => {
     expect(qaSection.textContent).not.toContain('OCR');
     expect(qaSection.textContent).not.toContain('训练');
     expect(qaSection.textContent).not.toContain('runtime');
+  });
+
+  it('平台端新增问答审计区域，展示低敏审计字段', async () => {
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    expect(await screen.findByRole('heading', { name: '问答审计' })).toBeInTheDocument();
+    const auditSection = screen.getByLabelText('平台端问答审计');
+    fireEvent.click(within(auditSection).getByRole('button', { name: '刷新审计' }));
+
+    expect(await screen.findByText('冷敷后怎么护理？')).toBeInTheDocument();
+    expect(screen.getByText('基于已召回的知识片段：平台端审计回答预览。')).toBeInTheDocument();
+    expect(screen.getByText('混合检索 · 引用 2')).toBeInTheDocument();
+    expect(screen.getByText('answered')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/open-platform/knowledge-management/qa/audits?'),
+        expect.objectContaining({ cache: 'no-store' }),
+      ),
+    );
+    expect(auditSection.textContent).not.toContain('storageKey');
+    expect(auditSection.textContent).not.toContain('embeddingVectorJson');
+    expect(auditSection.textContent).not.toContain('真实 AI');
+    expect(auditSection.textContent).not.toContain('OCR');
+    expect(auditSection.textContent).not.toContain('训练');
+    expect(auditSection.textContent).not.toContain('runtime');
   });
 
   it('默认展示全部机构，切换机构后过滤文件、分类、问题、知识条目和任务', async () => {

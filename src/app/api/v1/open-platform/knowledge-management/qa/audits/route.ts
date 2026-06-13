@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { composePlatformKnowledgeQaService } from '@/modules/open-platform/server/platform-knowledge-qa-service';
+import { listPlatformKnowledgeQaAuditsService } from '@/modules/open-platform/server/platform-knowledge-qa-service';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
@@ -19,41 +19,27 @@ function requirePlatformAccess(request: Request) {
     };
   }
 
-  return { ok: true as const, actorUserId: accessContext.userId };
+  return { ok: true as const };
 }
 
 function statusCodeForResult(status: string) {
   if (status === 'validation_failed') return 400;
-  if (status === 'usage_limited') return 429;
   return 200;
 }
 
-async function readBody(request: Request) {
-  try {
-    const body = await request.json();
-    return Object.prototype.toString.call(body) === '[object Object]'
-      ? body as Record<string, unknown>
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   try {
     const access = requirePlatformAccess(request);
     if (!access.ok) return access.response;
 
-    const body = await readBody(request);
-    const result = await composePlatformKnowledgeQaService({
+    const params = new URL(request.url).searchParams;
+    const result = await listPlatformKnowledgeQaAuditsService({
       repository: createPlatformKnowledgeManagementRepository(getDatabase()),
-      actorUserId: access.actorUserId,
       params: {
-        tenantId: typeof body.tenantId === 'string' ? body.tenantId : null,
-        question: typeof body.question === 'string' ? body.question : null,
-        knowledgeId: typeof body.knowledgeId === 'string' ? body.knowledgeId : null,
-        fileId: typeof body.fileId === 'string' ? body.fileId : null,
-        retrievalMode: typeof body.retrievalMode === 'string' ? body.retrievalMode : null,
+        tenantId: params.get('tenantId'),
+        institutionId: params.get('institutionId'),
+        page: params.get('page'),
+        pageSize: params.get('pageSize'),
       },
     });
 
@@ -65,7 +51,7 @@ export async function POST(request: Request) {
     });
   } catch {
     return NextResponse.json(
-      { code: 'service_unavailable', error: '知识库问答暂时无法处理' },
+      { code: 'service_unavailable', error: '知识库问答审计暂时无法查询' },
       { status: 400 },
     );
   }

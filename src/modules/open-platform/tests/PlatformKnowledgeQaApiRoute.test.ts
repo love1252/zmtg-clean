@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as platformQaRoute from '@/app/api/v1/open-platform/knowledge-management/qa/route';
+import * as platformQaAuditsRoute from '@/app/api/v1/open-platform/knowledge-management/qa/audits/route';
 import * as institutionQaRoute from '@/app/api/institution/knowledge-management/qa/route';
+import * as institutionQaAuditsRoute from '@/app/api/institution/knowledge-management/qa/audits/route';
 import * as platformEmbeddingRoute from '@/app/api/v1/open-platform/knowledge-management/embeddings/route';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
@@ -12,6 +14,8 @@ const repository = {
   searchKnowledgeFileParseChunks: vi.fn(),
   listKnowledgeVectorSearchCandidates: vi.fn(),
   createKnowledgeQaAuditLog: vi.fn(),
+  countKnowledgeQaAuditLogsForDay: vi.fn(),
+  listKnowledgeQaAuditLogs: vi.fn(),
 };
 
 vi.mock('@/server/db/client', () => ({
@@ -35,7 +39,9 @@ vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository
 
 const now = new Date('2026-06-14T08:00:00.000Z');
 const platformQaUrl = 'http://localhost/api/v1/open-platform/knowledge-management/qa';
+const platformQaAuditsUrl = 'http://localhost/api/v1/open-platform/knowledge-management/qa/audits';
 const institutionQaUrl = 'http://localhost/api/institution/knowledge-management/qa';
+const institutionQaAuditsUrl = 'http://localhost/api/institution/knowledge-management/qa/audits';
 const platformEmbeddingUrl = 'http://localhost/api/v1/open-platform/knowledge-management/embeddings';
 const unsafeFragments = [
   'storageKey',
@@ -137,6 +143,7 @@ function expectSafePayload(payload: unknown) {
 describe('知识库 QA API route', () => {
   beforeEach(() => {
     Object.values(repository).forEach((mock) => mock.mockReset());
+    repository.countKnowledgeQaAuditLogsForDay.mockResolvedValue(0);
     repository.createKnowledgeQaAuditLog.mockImplementation(async (record) => ({
       auditId: record.auditId,
     }));
@@ -192,6 +199,74 @@ describe('知识库 QA API route', () => {
     expectSafePayload(payload);
   });
 
+  it('平台端可查 QA 审计列表且 payload 只返回低敏字段', async () => {
+    platformContext();
+    repository.listKnowledgeQaAuditLogs.mockResolvedValue({
+      records: [
+        {
+          auditId: 'audit-platform-a',
+          tenantId: 'tenant-route',
+          institutionId: 'inst-current',
+          actorScope: 'institution',
+          actorUserId: 'tenant-user',
+          question: '冷敷后怎么护理？',
+          answerPreview: '基于已召回的知识片段：冷敷护理建议片段。',
+          retrievalMode: 'hybrid',
+          citationCount: 2,
+          safeStatus: 'answered',
+          safeFailureMessage: null,
+          createdAt: '2026-06-14T08:00:00.000Z',
+        },
+      ],
+      pageInfo: {
+        page: 1,
+        pageSize: 10,
+        total: 1,
+        pageCount: 1,
+        hasPreviousPage: false,
+        hasNextPage: false,
+      },
+    });
+
+    const response = await platformQaAuditsRoute.GET(
+      new Request(`${platformQaAuditsUrl}?tenantId=tenant-route&institutionId=inst-current`),
+    );
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(repository.listKnowledgeQaAuditLogs).toHaveBeenCalledWith({
+      tenantId: 'tenant-route',
+      institutionId: 'inst-current',
+      page: 1,
+      pageSize: 10,
+    });
+    expect(payload.records).toEqual([
+      expect.objectContaining({
+        auditId: 'audit-platform-a',
+        tenantId: 'tenant-route',
+        institutionId: 'inst-current',
+        question: '冷敷后怎么护理？',
+        answerPreview: expect.stringContaining('基于已召回的知识片段'),
+        retrievalMode: 'hybrid',
+        citationCount: 2,
+        safeStatus: 'answered',
+      }),
+    ]);
+    expectSafePayload(payload);
+  });
+
+  it('非 platform scope 不能查看平台 QA 审计列表', async () => {
+    institutionContext();
+
+    const response = await platformQaAuditsRoute.GET(
+      new Request(`${platformQaAuditsUrl}?tenantId=tenant-route`),
+    );
+
+    expect(response.status).toBe(403);
+    expect(await readJson(response)).toEqual({ code: 'forbidden', error: '没有访问权限' });
+    expect(repository.listKnowledgeQaAuditLogs).not.toHaveBeenCalled();
+  });
+
   it('机构端 POST QA 只使用 access context 的 tenant 和 institution', async () => {
     institutionContext();
     repository.listKnowledgeItems.mockResolvedValue([visibleKnowledge, hiddenKnowledge]);
@@ -232,6 +307,58 @@ describe('知识库 QA API route', () => {
     expectSafePayload(payload);
   });
 
+  it('机构端只能查看 access context 本机构 QA 审计', async () => {
+    institutionContext();
+    repository.listKnowledgeQaAuditLogs.mockResolvedValue({
+      records: [
+        {
+          auditId: 'audit-institution-a',
+          tenantId: 'tenant-route',
+          institutionId: 'inst-current',
+          actorScope: 'institution',
+          actorUserId: 'tenant-user',
+          question: '复诊前怎么准备？',
+          answerPreview: '基于已召回的知识片段：复诊准备片段。',
+          retrievalMode: 'keyword',
+          citationCount: 1,
+          safeStatus: 'answered',
+          safeFailureMessage: null,
+          createdAt: '2026-06-14T08:10:00.000Z',
+        },
+      ],
+      pageInfo: {
+        page: 1,
+        pageSize: 10,
+        total: 1,
+        pageCount: 1,
+        hasPreviousPage: false,
+        hasNextPage: false,
+      },
+    });
+
+    const response = await institutionQaAuditsRoute.GET(
+      new Request(`${institutionQaAuditsUrl}?tenantId=tenant-other&institutionId=inst-other`),
+    );
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(repository.listKnowledgeQaAuditLogs).toHaveBeenCalledWith({
+      tenantId: 'tenant-route',
+      institutionId: 'inst-current',
+      page: 1,
+      pageSize: 10,
+    });
+    expect(payload.records).toEqual([
+      expect.objectContaining({
+        auditId: 'audit-institution-a',
+        tenantId: 'tenant-route',
+        institutionId: 'inst-current',
+      }),
+    ]);
+    expect(JSON.stringify(payload)).not.toContain('inst-other');
+    expectSafePayload(payload);
+  });
+
   it('空问题返回中文 validation_failed', async () => {
     platformContext();
 
@@ -248,6 +375,61 @@ describe('知识库 QA API route', () => {
       message: '请输入知识库问答问题',
     });
     expect(repository.createKnowledgeQaAuditLog).not.toHaveBeenCalled();
+  });
+
+  it('tenant 每日 QA 超限时返回中文安全文案且不执行召回', async () => {
+    platformContext();
+    repository.countKnowledgeQaAuditLogsForDay.mockResolvedValueOnce(100);
+
+    const response = await platformQaRoute.POST(
+      new Request(platformQaUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          tenantId: 'tenant-route',
+          question: '冷敷后怎么护理？',
+          retrievalMode: 'hybrid',
+        }),
+      }),
+    );
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(429);
+    expect(payload).toEqual({
+      status: 'usage_limited',
+      message: '当前知识库问答次数已达上限，请稍后再试',
+    });
+    expect(repository.searchKnowledgeFileParseChunks).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeVectorSearchCandidates).not.toHaveBeenCalled();
+  });
+
+  it('institution 每日 QA 超限时返回中文安全文案且不执行召回', async () => {
+    institutionContext();
+    repository.countKnowledgeQaAuditLogsForDay.mockResolvedValueOnce(30);
+
+    const response = await institutionQaRoute.POST(
+      new Request(institutionQaUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          question: '复诊前怎么准备？',
+          retrievalMode: 'hybrid',
+        }),
+      }),
+    );
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(429);
+    expect(payload).toEqual({
+      status: 'usage_limited',
+      message: '当前知识库问答次数已达上限，请稍后再试',
+    });
+    expect(repository.countKnowledgeQaAuditLogsForDay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-route',
+        institutionId: 'inst-current',
+      }),
+    );
+    expect(repository.searchKnowledgeFileParseChunks).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeVectorSearchCandidates).not.toHaveBeenCalled();
   });
 
   it('非 platform scope 不能调用平台 QA 且机构端不能发起 embedding 生成', async () => {
