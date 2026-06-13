@@ -168,11 +168,9 @@ export function getPlatformKnowledgeItemsResponse(
 }
 
 export function normalizePageParams(params: Pick<PlatformKnowledgeFilesParams, 'page' | 'pageSize'> = {}): PageParamsResult {
-  const page = parsePositiveInteger(params.page, DEFAULT_PAGE);
-  const pageSize = parsePositiveInteger(params.pageSize, DEFAULT_PAGE_SIZE);
-
-  if (page === null) return { ok: false, error: buildReadonlyApiError('页码参数不正确') };
-  if (pageSize === null || pageSize > MAX_PAGE_SIZE) return { ok: false, error: buildReadonlyApiError('每页数量参数不正确') };
+  const page = parsePositiveInteger(params.page, DEFAULT_PAGE) ?? DEFAULT_PAGE;
+  const parsedPageSize = parsePositiveInteger(params.pageSize, DEFAULT_PAGE_SIZE);
+  const pageSize = parsedPageSize === null || parsedPageSize > MAX_PAGE_SIZE ? DEFAULT_PAGE_SIZE : parsedPageSize;
 
   return { ok: true, page, pageSize };
 }
