@@ -63,8 +63,8 @@ describe('平台端知识库管理只读看板', () => {
                 label: '真实 AI provider',
                 enabled: false,
                 status: 'disabled',
-                summary: '真实 AI provider 未启用',
-                disabledReason: '未接入真实第三方 AI',
+                summary: 'AI provider 适配层已准备，真实 AI 未启用',
+                disabledReason: '真实 AI 未启用，未接入真实第三方 AI',
                 entryCondition: '完成真实 AI 接入方案评审、安全策略和质量验收后再开启。',
               },
               {
@@ -616,7 +616,8 @@ describe('平台端知识库管理只读看板', () => {
     expect(within(capabilitySection).getByText('mock/local QA')).toBeInTheDocument();
     expect(within(capabilitySection).getAllByText('已启用').length).toBeGreaterThan(0);
     expect(within(capabilitySection).getByText('真实 AI provider')).toBeInTheDocument();
-    expect(within(capabilitySection).getByText('未接入真实第三方 AI')).toBeInTheDocument();
+    expect(within(capabilitySection).getByText('AI provider 适配层已准备，真实 AI 未启用')).toBeInTheDocument();
+    expect(within(capabilitySection).getByText('真实 AI 未启用，未接入真实第三方 AI')).toBeInTheDocument();
     expect(within(capabilitySection).getByText('OCR')).toBeInTheDocument();
     expect(within(capabilitySection).getByText('未接入 OCR')).toBeInTheDocument();
     expect(within(capabilitySection).getByText('runtime ingestion')).toBeInTheDocument();
@@ -628,6 +629,7 @@ describe('平台端知识库管理只读看板', () => {
       ),
     );
     expect(capabilitySection.textContent).not.toContain('真实 AI 已可用');
+    expect(capabilitySection.textContent).not.toContain('真实 AI 可用');
     expect(container.textContent).not.toContain('DATABASE_URL');
     expect(container.textContent).not.toContain('embeddingVectorJson');
     expect(container.textContent).not.toContain('storageKey');

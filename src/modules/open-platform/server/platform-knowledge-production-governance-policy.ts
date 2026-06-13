@@ -131,8 +131,8 @@ const disabledCapabilities: KnowledgeBaseCapabilityStatus[] = [
     label: '真实 AI provider',
     enabled: false,
     status: 'disabled',
-    summary: '真实 AI provider 未启用。',
-    disabledReason: '未接入真实第三方 AI，当前仅支持 mock/local QA。',
+    summary: 'AI provider 适配层已准备，真实 AI 未启用。',
+    disabledReason: '真实 AI 未启用，未接入真实第三方 AI，当前仅支持 mock/local QA。',
     entryCondition: '完成真实 AI 接入方案评审、密钥治理、安全策略、成本限额和 QA 质量验收后再开启。',
   },
   {
