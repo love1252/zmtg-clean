@@ -4,6 +4,7 @@ import { createPlatformKnowledgeManagementRepository } from '@/modules/open-plat
 import { downloadPlatformKnowledgeFileService } from '@/modules/open-platform/server/platform-knowledge-file-management-service';
 import { createLocalPlatformKnowledgeFileStorage } from '@/modules/open-platform/server/platform-knowledge-file-storage';
 import { buildReadonlyApiError } from '@/modules/open-platform/server/platformKnowledgeManagementApiContract';
+import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 
 type DownloadRouteContext = {
   params: Promise<{ knowledgeId: string; fileId: string }> | { knowledgeId: string; fileId: string };
@@ -13,8 +14,29 @@ async function readParams(context: DownloadRouteContext) {
   return Promise.resolve(context.params);
 }
 
+function requirePlatformAccess(request: Request) {
+  const accessContext = getDemoAccessContextFromRequest(request);
+  if (!accessContext) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ code: 'unauthorized', error: '请先登录' }, { status: 401 }),
+    };
+  }
+  if (accessContext.scope !== 'platform') {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ code: 'forbidden', error: '没有访问权限' }, { status: 403 }),
+    };
+  }
+
+  return { ok: true as const, accessContext };
+}
+
 export async function GET(request: Request, context: DownloadRouteContext) {
   try {
+    const access = requirePlatformAccess(request);
+    if (!access.ok) return access.response;
+
     const params = await readParams(context);
     const searchParams = new URL(request.url).searchParams;
     const result = await downloadPlatformKnowledgeFileService({

@@ -11,6 +11,7 @@ import * as institutionFilesRoute from '@/app/api/institution/knowledge-manageme
 import * as institutionDownloadRoute from '@/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/download/route';
 import { getDatabase } from '@/server/db/client';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
+import type { AccessContext } from '@/modules/security/domain/access-control';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import { createLocalPlatformKnowledgeFileStorage } from '@/modules/open-platform/server/platform-knowledge-file-storage';
 
@@ -64,6 +65,7 @@ const repository = {
 const storage: PlatformKnowledgeFileStorage = {
   save: vi.fn(),
   read: vi.fn(),
+  delete: vi.fn(),
 };
 
 const unsafeError = new Error(
@@ -79,6 +81,42 @@ const unsafeFragments = [
   'SQL',
   'stack',
   'storageKey',
+];
+
+const tenantAccessContext = {
+  userId: 'demo-user-a',
+  role: 'tenant_admin',
+  scope: 'tenant',
+  tenantId: 'tenant-route-a',
+  institutionId: 'inst-visible-a',
+  source: 'demo_session',
+} as const;
+
+const deniedPlatformContexts: Array<{
+  label: string;
+  context: AccessContext | null;
+  expectedStatus: number;
+  expectedPayload: { code: string; error: string };
+}> = [
+  {
+    label: '未登录',
+    context: null,
+    expectedStatus: 401,
+    expectedPayload: { code: 'unauthorized', error: '请先登录' },
+  },
+  {
+    label: '非 platform scope',
+    context: {
+      userId: 'tenant-user',
+      role: 'tenant_admin',
+      scope: 'tenant',
+      tenantId: 'tenant-route-a',
+      institutionId: 'inst-visible-a',
+      source: 'demo_session',
+    },
+    expectedStatus: 403,
+    expectedPayload: { code: 'forbidden', error: '没有访问权限' },
+  },
 ];
 
 vi.mock('@/server/db/client', () => ({
@@ -126,7 +164,7 @@ function buildMultipartUploadRequest() {
     method: 'POST',
     body: JSON.stringify({
       tenantId: 'tenant-route-a',
-      uploadedByUserId: 'platform-user-a',
+      uploadedByUserId: 'fake-user',
       fileName: '../术后护理.pdf',
       mimeType: 'application/pdf',
       contentBase64: Buffer.from(content).toString('base64'),
@@ -150,6 +188,7 @@ describe('知识库文件管理 API route', () => {
       sizeBytes: fileRecord.sizeBytes,
     }));
     storage.read = vi.fn(async () => content);
+    storage.delete = vi.fn(async () => undefined);
     repository.findKnowledgeItem.mockResolvedValue(knowledgeRecord);
     repository.listKnowledgeFiles.mockResolvedValue([fileRecord]);
     repository.findKnowledgeFile.mockResolvedValue(fileRecord);
@@ -160,11 +199,11 @@ describe('知识库文件管理 API route', () => {
     vi.mocked(createLocalPlatformKnowledgeFileStorage).mockClear();
     vi.mocked(getDemoAccessContextFromRequest).mockReset();
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue({
-      userId: 'demo-user-a',
-      role: 'tenant_admin',
-      scope: 'tenant',
-      tenantId: 'tenant-route-a',
-      institutionId: 'inst-visible-a',
+      userId: 'platform-session-user',
+      role: 'platform_admin',
+      scope: 'platform',
+      tenantId: null,
+      institutionId: null,
       source: 'demo_session',
     });
   });
@@ -180,7 +219,16 @@ describe('知识库文件管理 API route', () => {
     expect(uploadPayload.status).toBe('uploaded');
     expect(JSON.stringify(uploadPayload)).not.toContain('storageKey');
     expect(storage.save).toHaveBeenCalled();
-    expect(repository.createKnowledgeFile).toHaveBeenCalled();
+    expect(repository.createKnowledgeFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uploadedByUserId: 'platform-session-user',
+      }),
+    );
+    expect(repository.createKnowledgeFile).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        uploadedByUserId: 'fake-user',
+      }),
+    );
 
     const listResponse = await platformFilesRoute.GET(
       new Request(platformFilesUrl('?tenantId=tenant-route-a&page=1&pageSize=10')),
@@ -221,6 +269,64 @@ describe('知识库文件管理 API route', () => {
     );
   });
 
+  it.each(deniedPlatformContexts)('平台端 $label 时拒绝文件 route 且不初始化 repository/storage', async ({
+    context,
+    expectedStatus,
+    expectedPayload,
+  }) => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValueOnce(context);
+
+    const response = await platformFilesRoute.POST(
+      buildMultipartUploadRequest(),
+      { params: { knowledgeId: 'knowledge-route-a' } },
+    );
+
+    expect(response.status).toBe(expectedStatus);
+    expect(await readJson(response)).toEqual(expectedPayload);
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(createLocalPlatformKnowledgeFileStorage).not.toHaveBeenCalled();
+    expect(storage.save).not.toHaveBeenCalled();
+    expect(storage.read).not.toHaveBeenCalled();
+    expect(repository.createKnowledgeFile).not.toHaveBeenCalled();
+    expect(repository.archiveKnowledgeFile).not.toHaveBeenCalled();
+  });
+
+  it('平台端非 platform scope 时列表、下载和归档都不初始化 repository/storage', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue({
+      userId: 'tenant-user',
+      role: 'tenant_admin',
+      scope: 'tenant',
+      tenantId: 'tenant-route-a',
+      institutionId: 'inst-visible-a',
+      source: 'demo_session',
+    });
+
+    const listResponse = await platformFilesRoute.GET(
+      new Request(platformFilesUrl('?tenantId=tenant-route-a')),
+      { params: { knowledgeId: 'knowledge-route-a' } },
+    );
+    const downloadResponse = await platformDownloadRoute.GET(
+      new Request(platformDownloadUrl('?tenantId=tenant-route-a')),
+      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+    );
+    const archiveResponse = await platformFileRoute.DELETE(
+      new Request(platformFileUrl('?tenantId=tenant-route-a'), { method: 'DELETE' }),
+      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+    );
+
+    expect(listResponse.status).toBe(403);
+    expect(downloadResponse.status).toBe(403);
+    expect(archiveResponse.status).toBe(403);
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(createLocalPlatformKnowledgeFileStorage).not.toHaveBeenCalled();
+    expect(storage.save).not.toHaveBeenCalled();
+    expect(storage.read).not.toHaveBeenCalled();
+    expect(repository.createKnowledgeFile).not.toHaveBeenCalled();
+    expect(repository.archiveKnowledgeFile).not.toHaveBeenCalled();
+  });
+
   it('平台端底层异常返回固定中文安全错误文案', async () => {
     repository.listKnowledgeFiles.mockRejectedValue(unsafeError);
 
@@ -244,6 +350,8 @@ describe('知识库文件管理 API route', () => {
   });
 
   it('机构端只暴露 GET 列表和 GET 下载，不暴露上传删除归档', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantAccessContext);
+
     expect(Object.keys(institutionFilesRoute).sort()).toEqual(['GET']);
     expect(Object.keys(institutionDownloadRoute).sort()).toEqual(['GET']);
 
@@ -273,6 +381,8 @@ describe('知识库文件管理 API route', () => {
   });
 
   it('机构端未授权、跨 institution 或底层异常时安全返回', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantAccessContext);
+
     repository.findKnowledgeItem.mockResolvedValueOnce({
       ...knowledgeRecord,
       visibleInstitutionIds: [],

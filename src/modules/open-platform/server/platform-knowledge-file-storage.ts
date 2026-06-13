@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { join, normalize, resolve, sep } from 'node:path';
 import { calculateSha256, type PlatformKnowledgeFileStorage } from './platform-knowledge-file-management-service';
 
@@ -62,6 +62,13 @@ export function createLocalPlatformKnowledgeFileStorage(
       const targetPath = assertInsideRoot(rootDir, join(rootDir, relativePath));
 
       return new Uint8Array(await readFile(targetPath));
+    },
+
+    async delete(input) {
+      const relativePath = assertSafeStorageKey(input.storageKey);
+      const targetPath = assertInsideRoot(rootDir, join(rootDir, relativePath));
+
+      await unlink(targetPath);
     },
   };
 }

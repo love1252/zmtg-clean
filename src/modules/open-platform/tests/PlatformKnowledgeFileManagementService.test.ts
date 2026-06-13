@@ -180,6 +180,9 @@ function createFixture() {
       };
     }),
     read: vi.fn(async ({ storageKey }) => stored.get(storageKey) ?? new Uint8Array()),
+    delete: vi.fn(async ({ storageKey }) => {
+      stored.delete(storageKey);
+    }),
   };
 
   return { files, repository, storage };
@@ -255,6 +258,15 @@ describe('知识库文件管理 service', () => {
       }),
       expectedMessage: '文件内容不能为空',
     },
+    {
+      label: '文件名过长',
+      file: createUploadFile({
+        name: `${'长'.repeat(256)}.pdf`,
+        type: 'application/pdf',
+        bytes: new Uint8Array([1]),
+      }),
+      expectedMessage: '文件名过长',
+    },
   ])('平台端上传失败：$label', async ({ file, expectedMessage }) => {
     const { repository, storage } = createFixture();
 
@@ -275,6 +287,35 @@ describe('知识库文件管理 service', () => {
     });
     expect(storage.save).not.toHaveBeenCalled();
     expect(repository.createKnowledgeFile).not.toHaveBeenCalled();
+  });
+
+  it('上传成功写入 storage 后如果元数据写入失败会清理 orphan file', async () => {
+    const { repository, storage } = createFixture();
+    repository.createKnowledgeFile.mockRejectedValueOnce(
+      new Error('DATABASE_URL postgres token secret /Users/demo/path SQL stack'),
+    );
+
+    await expect(uploadPlatformKnowledgeFileService({
+      repository,
+      storage,
+      input: {
+        tenantId: 'tenant-a',
+        knowledgeId: 'knowledge-a',
+        uploadedByUserId: 'platform-user-a',
+        file: createUploadFile({
+          name: '护理.pdf',
+          type: 'application/pdf',
+          bytes: new Uint8Array([1, 2, 3]),
+        }),
+      },
+    })).rejects.toThrow('DATABASE_URL');
+
+    expect(storage.save).toHaveBeenCalledOnce();
+    expect(storage.delete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storageKey: expect.stringContaining('tenant-a/knowledge-a/'),
+      }),
+    );
   });
 
   it('平台端不能上传、下载或归档跨 tenant 知识库文件', async () => {

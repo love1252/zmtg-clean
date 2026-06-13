@@ -3,6 +3,7 @@ import { getDatabase } from '@/server/db/client';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import { archivePlatformKnowledgeFileService } from '@/modules/open-platform/server/platform-knowledge-file-management-service';
 import { buildReadonlyApiError } from '@/modules/open-platform/server/platformKnowledgeManagementApiContract';
+import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 
 type FileRouteContext = {
   params: Promise<{ knowledgeId: string; fileId: string }> | { knowledgeId: string; fileId: string };
@@ -18,6 +19,24 @@ function statusCodeForResult(status: string) {
   return 200;
 }
 
+function requirePlatformAccess(request: Request) {
+  const accessContext = getDemoAccessContextFromRequest(request);
+  if (!accessContext) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ code: 'unauthorized', error: '请先登录' }, { status: 401 }),
+    };
+  }
+  if (accessContext.scope !== 'platform') {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ code: 'forbidden', error: '没有访问权限' }, { status: 403 }),
+    };
+  }
+
+  return { ok: true as const, accessContext };
+}
+
 async function readTenantId(request: Request) {
   const searchTenantId = new URL(request.url).searchParams.get('tenantId');
   if (searchTenantId) return searchTenantId;
@@ -28,6 +47,9 @@ async function readTenantId(request: Request) {
 
 export async function DELETE(request: Request, context: FileRouteContext) {
   try {
+    const access = requirePlatformAccess(request);
+    if (!access.ok) return access.response;
+
     const params = await readParams(context);
     const result = await archivePlatformKnowledgeFileService({
       repository: createPlatformKnowledgeManagementRepository(getDatabase()),

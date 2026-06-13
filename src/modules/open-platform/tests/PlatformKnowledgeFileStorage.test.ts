@@ -40,5 +40,11 @@ describe('平台知识库本地受控文件存储', () => {
     await expect(storage.read({ storageKey: saved.storageKey })).resolves.toSatisfy(
       (value: Uint8Array) => JSON.stringify(Array.from(value)) === JSON.stringify(Array.from(content)),
     );
+    await expect(storage.delete({ storageKey: '../outside.bin' })).rejects.toThrow('invalid storage key');
+    await expect(storage.delete({ storageKey: '/absolute/outside.bin' })).rejects.toThrow(
+      'invalid storage key',
+    );
+    await expect(storage.delete({ storageKey: saved.storageKey })).resolves.toBeUndefined();
+    await expect(storage.read({ storageKey: saved.storageKey })).rejects.toThrow();
   });
 });

@@ -87,6 +87,7 @@ export type PlatformKnowledgeFileStorage = {
     sizeBytes: number;
   }>;
   read(input: { storageKey: string }): Promise<Uint8Array>;
+  delete(input: { storageKey: string }): Promise<void>;
 };
 
 export type PlatformKnowledgeFileServiceParams = {
@@ -163,6 +164,10 @@ function validateFile(file: PlatformKnowledgeUploadFileLike | null) {
   if (!file) return { ok: false as const, message: '请选择要上传的文件' };
 
   const originalFilename = sanitizeDisplayFilename(file.name);
+  if (originalFilename.length > 255) {
+    return { ok: false as const, message: '文件名过长' };
+  }
+
   const extension = extensionOf(originalFilename);
   const allowedMimeTypes = allowedFiles.get(extension);
   if (!allowedMimeTypes) {
@@ -285,21 +290,27 @@ export async function uploadPlatformKnowledgeFileService(input: PlatformKnowledg
     content: buffer,
   });
   const now = new Date();
-  const record = await input.repository.createKnowledgeFile({
-    fileId,
-    tenantId,
-    knowledgeId,
-    originalFilename: validated.originalFilename,
-    storageKey: saved.storageKey,
-    mimeType: validated.mimeType,
-    sizeBytes: saved.sizeBytes,
-    sha256: saved.sha256,
-    status: 'active',
-    uploadedByUserId,
-    createdAt: now,
-    updatedAt: now,
-    archivedAt: null,
-  });
+  let record: PlatformKnowledgeFileRepositoryRecord;
+  try {
+    record = await input.repository.createKnowledgeFile({
+      fileId,
+      tenantId,
+      knowledgeId,
+      originalFilename: validated.originalFilename,
+      storageKey: saved.storageKey,
+      mimeType: validated.mimeType,
+      sizeBytes: saved.sizeBytes,
+      sha256: saved.sha256,
+      status: 'active',
+      uploadedByUserId,
+      createdAt: now,
+      updatedAt: now,
+      archivedAt: null,
+    });
+  } catch (error) {
+    await input.storage.delete({ storageKey: saved.storageKey }).catch(() => undefined);
+    throw error;
+  }
 
   return { status: 'uploaded' as const, file: mapFileRecordToDto(record) };
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDatabase } from '@/server/db/client';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
+import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import {
   listPlatformKnowledgeFilesService,
   uploadPlatformKnowledgeFileService,
@@ -23,8 +24,29 @@ function statusCodeForResult(status: string) {
   return 200;
 }
 
+function requirePlatformAccess(request: Request) {
+  const accessContext = getDemoAccessContextFromRequest(request);
+  if (!accessContext) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ code: 'unauthorized', error: '请先登录' }, { status: 401 }),
+    };
+  }
+  if (accessContext.scope !== 'platform') {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ code: 'forbidden', error: '没有访问权限' }, { status: 403 }),
+    };
+  }
+
+  return { ok: true as const, accessContext };
+}
+
 export async function GET(request: Request, context: FilesRouteContext) {
   try {
+    const access = requirePlatformAccess(request);
+    if (!access.ok) return access.response;
+
     const params = await readParams(context);
     const searchParams = new URL(request.url).searchParams;
     const result = await listPlatformKnowledgeFilesService({
@@ -53,11 +75,14 @@ export async function GET(request: Request, context: FilesRouteContext) {
 
 export async function POST(request: Request, context: FilesRouteContext) {
   try {
+    const access = requirePlatformAccess(request);
+    if (!access.ok) return access.response;
+
     const params = await readParams(context);
     const contentType = request.headers.get('content-type') ?? '';
     const input = contentType.includes('application/json')
-      ? await readJsonUploadInput(request, params.knowledgeId)
-      : await readMultipartUploadInput(request, params.knowledgeId);
+      ? await readJsonUploadInput(request, params.knowledgeId, access.accessContext.userId)
+      : await readMultipartUploadInput(request, params.knowledgeId, access.accessContext.userId);
     const result = await uploadPlatformKnowledgeFileService({
       repository: createPlatformKnowledgeManagementRepository(getDatabase()),
       storage: createLocalPlatformKnowledgeFileStorage(),
@@ -75,17 +100,14 @@ export async function POST(request: Request, context: FilesRouteContext) {
   }
 }
 
-async function readMultipartUploadInput(request: Request, knowledgeId: string) {
+async function readMultipartUploadInput(request: Request, knowledgeId: string, uploadedByUserId: string) {
   const formData = await request.formData();
   const file = formData.get('file');
 
   return {
     tenantId: typeof formData.get('tenantId') === 'string' ? formData.get('tenantId') as string : '',
     knowledgeId,
-    uploadedByUserId:
-      typeof formData.get('uploadedByUserId') === 'string'
-        ? formData.get('uploadedByUserId') as string
-        : 'platform-system',
+    uploadedByUserId,
     file:
       file && typeof file === 'object' && 'arrayBuffer' in file
         ? file as PlatformKnowledgeUploadFileLike
@@ -93,7 +115,7 @@ async function readMultipartUploadInput(request: Request, knowledgeId: string) {
   };
 }
 
-async function readJsonUploadInput(request: Request, knowledgeId: string) {
+async function readJsonUploadInput(request: Request, knowledgeId: string, uploadedByUserId: string) {
   const body = await request.json().catch(() => ({}));
   const content =
     typeof body.contentBase64 === 'string'
@@ -110,8 +132,7 @@ async function readJsonUploadInput(request: Request, knowledgeId: string) {
   return {
     tenantId: typeof body.tenantId === 'string' ? body.tenantId : '',
     knowledgeId,
-    uploadedByUserId:
-      typeof body.uploadedByUserId === 'string' ? body.uploadedByUserId : 'platform-system',
+    uploadedByUserId,
     file,
   };
 }
