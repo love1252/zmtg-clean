@@ -638,6 +638,46 @@ export const platformKnowledgeInstitutionVisibility = pgTable(
   }),
 );
 
+export const knowledgeDocumentFiles = pgTable(
+  'knowledge_document_files',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    knowledgeDocumentId: varchar('knowledge_document_id', { length: 64 }).notNull(),
+    originalFilename: varchar('original_filename', { length: 255 }).notNull(),
+    storageKey: varchar('storage_key', { length: 255 }).notNull(),
+    mimeType: varchar('mime_type', { length: 120 }).notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    sha256: varchar('sha256', { length: 64 }).notNull(),
+    status: varchar('status', { length: 32 }).notNull().default('active'),
+    uploadedByUserId: varchar('uploaded_by_user_id', { length: 96 }).notNull(),
+    ...timestamps,
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('knowledge_document_files_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    documentFk: foreignKey({
+      name: 'knowledge_document_files_tenant_document_fk',
+      columns: [table.tenantId, table.knowledgeDocumentId],
+      foreignColumns: [knowledgeDocuments.tenantId, knowledgeDocuments.id],
+    }),
+    tenantDocumentStatusIdx: index('knowledge_document_files_tenant_document_status_idx').on(
+      table.tenantId,
+      table.knowledgeDocumentId,
+      table.status,
+    ),
+    tenantStorageKeyUnique: uniqueIndex('knowledge_document_files_tenant_storage_key_unique').on(
+      table.tenantId,
+      table.storageKey,
+    ),
+  }),
+);
+
 export const knowledgeChunkEmbeddings = pgTable(
   'knowledge_chunk_embeddings',
   {

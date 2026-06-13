@@ -31,6 +31,91 @@ function expectNoRawRuntimeError(container: HTMLElement) {
 describe('平台端知识库管理只读看板', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET';
+        if (url.includes('/download')) {
+          return new Response('file bytes', {
+            status: 200,
+            headers: {
+              'content-type': 'application/pdf',
+              'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent('平台文件.pdf')}`,
+            },
+          });
+        }
+        if (method === 'POST') {
+          return Response.json({
+            status: 'uploaded',
+            file: {
+              fileId: 'file-ui-uploaded',
+              tenantId: 'tenant-xinglan',
+              knowledgeId: 'knowledge-price-reply',
+              originalFilename: '平台文件.pdf',
+              mimeType: 'application/pdf',
+              sizeBytes: 10,
+              sha256: 'c'.repeat(64),
+              status: 'active',
+              uploadedByUserId: 'platform-ui',
+              createdAt: '2026-06-13T08:00:00.000Z',
+              updatedAt: '2026-06-13T08:00:00.000Z',
+              archivedAt: null,
+              fileType: 'PDF',
+              sizeLabel: '10 B',
+            },
+          }, { status: 201 });
+        }
+        if (method === 'DELETE') {
+          return Response.json({
+            status: 'archived',
+            file: {
+              fileId: 'file-ui-a',
+              tenantId: 'tenant-xinglan',
+              knowledgeId: 'knowledge-price-reply',
+              originalFilename: '平台文件.pdf',
+              mimeType: 'application/pdf',
+              sizeBytes: 10,
+              sha256: 'c'.repeat(64),
+              status: 'archived',
+              uploadedByUserId: 'platform-ui',
+              createdAt: '2026-06-13T08:00:00.000Z',
+              updatedAt: '2026-06-13T08:00:00.000Z',
+              archivedAt: '2026-06-13T09:00:00.000Z',
+              fileType: 'PDF',
+              sizeLabel: '10 B',
+            },
+          });
+        }
+        return Response.json({
+          records: [
+            {
+              fileId: 'file-ui-a',
+              tenantId: 'tenant-xinglan',
+              knowledgeId: 'knowledge-price-reply',
+              originalFilename: '平台文件.pdf',
+              mimeType: 'application/pdf',
+              sizeBytes: 10,
+              sha256: 'c'.repeat(64),
+              status: 'active',
+              uploadedByUserId: 'platform-ui',
+              createdAt: '2026-06-13T08:00:00.000Z',
+              updatedAt: '2026-06-13T08:00:00.000Z',
+              archivedAt: null,
+              fileType: 'PDF',
+              sizeLabel: '10 B',
+            },
+          ],
+          pageInfo: {
+            page: 1,
+            pageSize: 10,
+            total: 1,
+            pageCount: 1,
+            hasPreviousPage: false,
+            hasNextPage: false,
+          },
+        });
+      }),
+    );
   });
 
   it('初始加载时展示中文 loading 状态', () => {
@@ -81,13 +166,54 @@ describe('平台端知识库管理只读看板', () => {
     expect(screen.getByRole('heading', { name: '导入与训练任务' })).toBeInTheDocument();
 
     expectNoRawRuntimeError(container);
-    expect(container.textContent).not.toContain('上传新文件');
+    expect(screen.getByRole('heading', { name: '文件管理操作' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '上传文件' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '下载文件' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '归档文件' })).toBeInTheDocument();
     expect(container.textContent).not.toContain('真实下载');
     expect(container.textContent).not.toContain('开始训练');
     expect(container.textContent).not.toContain('CSV 导出');
-    expect(screen.queryByRole('button', { name: /上传|下载|导出|训练|新增|编辑|删除/ })).not.toBeInTheDocument();
-    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(screen.queryByRole('button', { name: /导出|训练|新增|编辑|删除|问答/ })).not.toBeInTheDocument();
+    expect(container.querySelector('input[type="file"]')).toBeInTheDocument();
     expect(container.querySelector('a[download]')).toBeNull();
+  });
+
+  it('平台端文件管理操作区支持上传、下载和归档 API 调用', async () => {
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    expect(await screen.findByRole('heading', { name: '文件管理操作' })).toBeInTheDocument();
+    expect(await screen.findByText('平台文件.pdf')).toBeInTheDocument();
+
+    const uploadInput = screen.getByLabelText('选择知识库文件');
+    fireEvent.change(uploadInput, {
+      target: {
+        files: [new File(['file bytes'], '平台文件.pdf', { type: 'application/pdf' })],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '上传文件' }));
+
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/open-platform/knowledge-management/items/knowledge-price-reply/files'),
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '下载文件' }));
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/files/file-ui-a/download?tenantId=tenant-xinglan'),
+        expect.objectContaining({ method: 'GET' }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '归档文件' }));
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/files/file-ui-a?tenantId=tenant-xinglan'),
+        expect.objectContaining({ method: 'DELETE' }),
+      ),
+    );
   });
 
   it('默认展示全部机构，切换机构后过滤文件、分类、问题、知识条目和任务', async () => {

@@ -25,6 +25,42 @@ const pageInfo = {
 
 describe('机构端知识库只读列表 UI', () => {
   beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/download')) {
+          return new Response('file bytes', {
+            status: 200,
+            headers: {
+              'content-type': 'application/pdf',
+              'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent('机构文件.pdf')}`,
+            },
+          });
+        }
+
+        return Response.json({
+          records: [
+            {
+              fileId: 'institution-file-a',
+              tenantId: 'tenant-a',
+              knowledgeId: 'knowledge-ui-a',
+              originalFilename: '机构文件.pdf',
+              mimeType: 'application/pdf',
+              sizeBytes: 10,
+              sha256: 'd'.repeat(64),
+              status: 'active',
+              uploadedByUserId: 'platform-user',
+              createdAt: '2026-06-13T08:00:00.000Z',
+              updatedAt: '2026-06-13T08:00:00.000Z',
+              archivedAt: null,
+              fileType: 'PDF',
+              sizeLabel: '10 B',
+            },
+          ],
+          pageInfo: pageInfo,
+        });
+      }),
+    );
     vi.mocked(listInstitutionKnowledgeItems).mockReset();
     vi.mocked(listInstitutionKnowledgeItems).mockResolvedValue({
       ok: true,
@@ -55,6 +91,15 @@ describe('机构端知识库只读列表 UI', () => {
     expect(screen.getByText('低敏摘要，不包含正文。')).toBeInTheDocument();
     expect(screen.getByText('分块 3')).toBeInTheDocument();
     expect(screen.getByText('平台授权')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看文件' }));
+    expect(await screen.findByText('机构文件.pdf')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '下载文件' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '下载文件' }));
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/institution/knowledge-management/items/knowledge-ui-a/files/institution-file-a/download',
+      expect.objectContaining({ method: 'GET' }),
+    );
 
     await act(async () => {
       fireEvent.change(screen.getByLabelText('搜索机构知识库'), {
@@ -104,7 +149,7 @@ describe('机构端知识库只读列表 UI', () => {
     expect(await screen.findByText('知识库只读数据暂时不可用')).toBeInTheDocument();
 
     const shell = screen.getByLabelText('机构知识库只读列表');
-    ['上传', '下载', '导出', '解析', '训练'].forEach((label) => {
+    ['上传', '导出', '解析', '训练', '归档', '删除'].forEach((label) => {
       expect(within(shell).queryByRole('button', { name: label })).not.toBeInTheDocument();
     });
   });

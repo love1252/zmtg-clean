@@ -4,11 +4,13 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   knowledgeChunks,
+  knowledgeDocumentFiles,
   knowledgeDocuments,
   knowledgeSources,
   platformKnowledgeInstitutionVisibility,
   tenants,
 } from '@/server/db/schema';
+import type { PlatformKnowledgeFileRepositoryRecord } from './platform-knowledge-file-management-service';
 import type {
   V1KnowledgeBaseRuntimeFoundationReadonlyStatus,
   V1KnowledgeBaseRuntimeFoundationSourceKind,
@@ -19,6 +21,7 @@ type KnowledgeDocumentRow = typeof knowledgeDocuments.$inferSelect;
 type KnowledgeSourceRow = typeof knowledgeSources.$inferSelect;
 type KnowledgeChunkRow = typeof knowledgeChunks.$inferSelect;
 type KnowledgeVisibilityRow = typeof platformKnowledgeInstitutionVisibility.$inferSelect;
+type KnowledgeDocumentFileRow = typeof knowledgeDocumentFiles.$inferSelect;
 
 export type PlatformKnowledgeRepositoryRecord = {
   knowledgeId: string;
@@ -142,6 +145,24 @@ function mapRecords(input: {
     });
 }
 
+function mapFileRow(row: KnowledgeDocumentFileRow): PlatformKnowledgeFileRepositoryRecord {
+  return {
+    fileId: row.id,
+    tenantId: row.tenantId,
+    knowledgeId: row.knowledgeDocumentId,
+    originalFilename: row.originalFilename,
+    storageKey: row.storageKey,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    sha256: row.sha256,
+    status: row.status === 'archived' ? 'archived' : 'active',
+    uploadedByUserId: row.uploadedByUserId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    archivedAt: row.archivedAt,
+  };
+}
+
 export function createPlatformKnowledgeManagementRepository(database: TenantDatabase) {
   async function listVisibleInstitutionIds(input: { tenantId: string; knowledgeId: string }) {
     const rows = await database
@@ -207,6 +228,85 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
         chunks,
         visibility,
       });
+    },
+
+    async findKnowledgeItem(input: { tenantId: string; knowledgeId: string }) {
+      const records = await this.listKnowledgeItems({ tenantId: input.tenantId });
+      return records.find((record) => record.knowledgeId === input.knowledgeId) ?? null;
+    },
+
+    async listKnowledgeFiles(input: { tenantId: string; knowledgeId: string }) {
+      const rows = await database
+        .select()
+        .from(knowledgeDocumentFiles)
+        .where(
+          and(
+            eq(knowledgeDocumentFiles.tenantId, input.tenantId),
+            eq(knowledgeDocumentFiles.knowledgeDocumentId, input.knowledgeId),
+          ),
+        )
+        .orderBy(desc(knowledgeDocumentFiles.updatedAt), desc(knowledgeDocumentFiles.id));
+
+      return rows.map(mapFileRow);
+    },
+
+    async findKnowledgeFile(input: { tenantId: string; knowledgeId: string; fileId: string }) {
+      const rows = await database
+        .select()
+        .from(knowledgeDocumentFiles)
+        .where(
+          and(
+            eq(knowledgeDocumentFiles.tenantId, input.tenantId),
+            eq(knowledgeDocumentFiles.knowledgeDocumentId, input.knowledgeId),
+            eq(knowledgeDocumentFiles.id, input.fileId),
+          ),
+        )
+        .limit(1);
+
+      return rows[0] ? mapFileRow(rows[0]) : null;
+    },
+
+    async createKnowledgeFile(input: PlatformKnowledgeFileRepositoryRecord) {
+      const row = {
+        id: input.fileId,
+        tenantId: input.tenantId,
+        knowledgeDocumentId: input.knowledgeId,
+        originalFilename: input.originalFilename,
+        storageKey: input.storageKey,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        sha256: input.sha256,
+        status: input.status,
+        uploadedByUserId: input.uploadedByUserId,
+        archivedAt: input.archivedAt,
+      };
+      const inserted = await database
+        .insert(knowledgeDocumentFiles)
+        .values(row)
+        .returning();
+
+      return mapFileRow(inserted[0]);
+    },
+
+    async archiveKnowledgeFile(input: { tenantId: string; knowledgeId: string; fileId: string }) {
+      const archivedAt = new Date();
+      const updated = await database
+        .update(knowledgeDocumentFiles)
+        .set({
+          status: 'archived',
+          archivedAt,
+          updatedAt: archivedAt,
+        })
+        .where(
+          and(
+            eq(knowledgeDocumentFiles.tenantId, input.tenantId),
+            eq(knowledgeDocumentFiles.knowledgeDocumentId, input.knowledgeId),
+            eq(knowledgeDocumentFiles.id, input.fileId),
+          ),
+        )
+        .returning();
+
+      return updated[0] ? mapFileRow(updated[0]) : null;
     },
 
     async hasTenantInstitution(
