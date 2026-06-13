@@ -7,11 +7,12 @@ import {
   createDeterministicMockKnowledgeEmbedding,
   type PlatformKnowledgeVectorSearchCandidateRecord,
 } from '@/modules/open-platform/server/platform-knowledge-embedding-vector-search-service';
+import { KNOWLEDGE_BASE_QA_QUOTA_POLICY } from '@/modules/open-platform/server/platform-knowledge-production-governance-policy';
 
 export type KnowledgeQaRetrievalMode = 'keyword' | 'vector' | 'hybrid';
 export type KnowledgeQaActorScope = 'platform' | 'institution';
 export type KnowledgeQaSafeStatus = 'answered' | 'no_citation';
-export const KNOWLEDGE_QA_USAGE_LIMIT_MESSAGE = '当前知识库问答次数已达上限，请稍后再试';
+export const KNOWLEDGE_QA_USAGE_LIMIT_MESSAGE = KNOWLEDGE_BASE_QA_QUOTA_POLICY.usageLimitedMessage;
 
 export type KnowledgeQaCitationDto = {
   knowledgeId: string;
@@ -130,8 +131,6 @@ type KnowledgeQaServiceInput = {
 };
 
 const MAX_CITATIONS = 5;
-const TENANT_DAILY_QA_LIMIT = 100;
-const INSTITUTION_DAILY_QA_LIMIT = 30;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 50;
@@ -432,7 +431,9 @@ async function composeKnowledgeQa(input: KnowledgeQaServiceInput & {
     institutionId: input.institutionId,
     since: startOfToday(),
   });
-  const usageLimit = input.institutionId ? INSTITUTION_DAILY_QA_LIMIT : TENANT_DAILY_QA_LIMIT;
+  const usageLimit = input.institutionId
+    ? KNOWLEDGE_BASE_QA_QUOTA_POLICY.institutionDailyLimit
+    : KNOWLEDGE_BASE_QA_QUOTA_POLICY.tenantDailyLimit;
   if (usageCount >= usageLimit) {
     return {
       status: 'usage_limited' as const,

@@ -35,6 +35,72 @@ describe('平台端知识库管理只读看板', () => {
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         const method = init?.method ?? 'GET';
+        if (url.includes('/api/v1/open-platform/knowledge-management/capabilities')) {
+          return Response.json({
+            requestId: 'knowledge-base-production-capabilities',
+            readonly: true,
+            capabilities: [
+              {
+                id: 'fileManagement',
+                label: '文件管理',
+                enabled: true,
+                status: 'enabled',
+                summary: '内部受控文件管理已启用',
+                disabledReason: null,
+                entryCondition: null,
+              },
+              {
+                id: 'mockQa',
+                label: 'mock/local QA',
+                enabled: true,
+                status: 'enabled',
+                summary: '内部受控 mock/local QA 已启用',
+                disabledReason: null,
+                entryCondition: null,
+              },
+              {
+                id: 'realAiProvider',
+                label: '真实 AI provider',
+                enabled: false,
+                status: 'disabled',
+                summary: '真实 AI provider 未启用',
+                disabledReason: '未接入真实第三方 AI',
+                entryCondition: '完成真实 AI 接入方案评审、安全策略和质量验收后再开启。',
+              },
+              {
+                id: 'ocr',
+                label: 'OCR',
+                enabled: false,
+                status: 'disabled',
+                summary: 'OCR 未启用',
+                disabledReason: '未接入 OCR',
+                entryCondition: '完成 OCR 解析方案评审和质量验收后再开启。',
+              },
+              {
+                id: 'runtimeIngestion',
+                label: 'runtime ingestion',
+                enabled: false,
+                status: 'disabled',
+                summary: 'runtime ingestion 未启用',
+                disabledReason: '未接入 runtime ingestion',
+                entryCondition: '完成队列、worker、重试、死信和可观测性方案评审后再开启。',
+              },
+            ],
+            qaQuotaPolicy: {
+              tenantDailyLimit: 100,
+              institutionDailyLimit: 30,
+              usageLimitedMessage: '当前知识库问答次数已达上限，请稍后再试',
+            },
+            permissionMatrix: {
+              platform: { actions: [] },
+              institution: { allowedActions: [], forbiddenActions: [] },
+            },
+            sensitiveFieldPolicy: {
+              allowlist: ['knowledgeId', 'fileId', 'chunkId', 'auditId'],
+              denylist: ['storageKey', 'embeddingVectorJson', 'token', 'secret'],
+            },
+          });
+        }
         if (url.includes('/api/v1/open-platform/knowledge-management/qa/audits')) {
           return Response.json({
             requestId: 'platform-knowledge-qa-audits',
@@ -538,6 +604,35 @@ describe('平台端知识库管理只读看板', () => {
     expect(auditSection.textContent).not.toContain('OCR');
     expect(auditSection.textContent).not.toContain('训练');
     expect(auditSection.textContent).not.toContain('runtime');
+  });
+
+  it('平台端新增生产能力状态区域，展示 disabled 原因和 QA 用量策略', async () => {
+    const { container } = render(<OpenPlatformKnowledgeManagementPanel />);
+
+    expect(await screen.findByRole('heading', { name: '生产能力状态' })).toBeInTheDocument();
+    const capabilitySection = screen.getByLabelText('平台端知识库生产能力状态');
+
+    expect(within(capabilitySection).getByText('文件管理')).toBeInTheDocument();
+    expect(within(capabilitySection).getByText('mock/local QA')).toBeInTheDocument();
+    expect(within(capabilitySection).getAllByText('已启用').length).toBeGreaterThan(0);
+    expect(within(capabilitySection).getByText('真实 AI provider')).toBeInTheDocument();
+    expect(within(capabilitySection).getByText('未接入真实第三方 AI')).toBeInTheDocument();
+    expect(within(capabilitySection).getByText('OCR')).toBeInTheDocument();
+    expect(within(capabilitySection).getByText('未接入 OCR')).toBeInTheDocument();
+    expect(within(capabilitySection).getByText('runtime ingestion')).toBeInTheDocument();
+    expect(within(capabilitySection).getByText('tenant 每日 100 次 · institution 每日 30 次')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/v1/open-platform/knowledge-management/capabilities',
+        expect.objectContaining({ cache: 'no-store' }),
+      ),
+    );
+    expect(capabilitySection.textContent).not.toContain('真实 AI 已可用');
+    expect(container.textContent).not.toContain('DATABASE_URL');
+    expect(container.textContent).not.toContain('embeddingVectorJson');
+    expect(container.textContent).not.toContain('storageKey');
+    expect(container.textContent).not.toContain('token');
+    expect(container.textContent).not.toContain('secret');
   });
 
   it('默认展示全部机构，切换机构后过滤文件、分类、问题、知识条目和任务', async () => {

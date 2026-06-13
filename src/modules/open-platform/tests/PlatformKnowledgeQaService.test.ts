@@ -10,6 +10,7 @@ import {
 } from '@/modules/open-platform/server/platform-knowledge-qa-service';
 import type { KnowledgeChunkSearchRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-keyword-search-service';
 import type { PlatformKnowledgeVectorSearchCandidateRecord } from '@/modules/open-platform/server/platform-knowledge-embedding-vector-search-service';
+import { KNOWLEDGE_BASE_QA_QUOTA_POLICY } from '@/modules/open-platform/server/platform-knowledge-production-governance-policy';
 
 const now = new Date('2026-06-14T08:00:00.000Z');
 
@@ -363,7 +364,9 @@ describe('知识库 mock/local QA service', () => {
 
   it('tenant 每日未超限时正常回答并执行召回', async () => {
     const repository = createRepository();
-    repository.countKnowledgeQaAuditLogsForDay.mockResolvedValueOnce(99);
+    repository.countKnowledgeQaAuditLogsForDay.mockResolvedValueOnce(
+      KNOWLEDGE_BASE_QA_QUOTA_POLICY.tenantDailyLimit - 1,
+    );
 
     const result = expectQaResponse(await composePlatformKnowledgeQaService({
       repository,
@@ -387,7 +390,9 @@ describe('知识库 mock/local QA service', () => {
 
   it('tenant 每日超限时返回中文安全文案且不执行召回', async () => {
     const repository = createRepository();
-    repository.countKnowledgeQaAuditLogsForDay.mockResolvedValueOnce(100);
+    repository.countKnowledgeQaAuditLogsForDay.mockResolvedValueOnce(
+      KNOWLEDGE_BASE_QA_QUOTA_POLICY.tenantDailyLimit,
+    );
 
     const result = await composePlatformKnowledgeQaService({
       repository,
@@ -401,8 +406,11 @@ describe('知识库 mock/local QA service', () => {
 
     expect(result).toEqual({
       status: 'usage_limited',
-      message: KNOWLEDGE_QA_USAGE_LIMIT_MESSAGE,
+      message: KNOWLEDGE_BASE_QA_QUOTA_POLICY.usageLimitedMessage,
     });
+    expect(KNOWLEDGE_QA_USAGE_LIMIT_MESSAGE).toBe(
+      KNOWLEDGE_BASE_QA_QUOTA_POLICY.usageLimitedMessage,
+    );
     expect(repository.searchKnowledgeFileParseChunks).not.toHaveBeenCalled();
     expect(repository.listKnowledgeVectorSearchCandidates).not.toHaveBeenCalled();
     expect(repository.createKnowledgeQaAuditLog).not.toHaveBeenCalled();
@@ -410,7 +418,9 @@ describe('知识库 mock/local QA service', () => {
 
   it('institution 每日超限时返回中文安全文案且不执行召回', async () => {
     const repository = createRepository();
-    repository.countKnowledgeQaAuditLogsForDay.mockResolvedValueOnce(30);
+    repository.countKnowledgeQaAuditLogsForDay.mockResolvedValueOnce(
+      KNOWLEDGE_BASE_QA_QUOTA_POLICY.institutionDailyLimit,
+    );
 
     const result = await composeInstitutionKnowledgeQaService({
       repository,
@@ -425,7 +435,7 @@ describe('知识库 mock/local QA service', () => {
 
     expect(result).toEqual({
       status: 'usage_limited',
-      message: KNOWLEDGE_QA_USAGE_LIMIT_MESSAGE,
+      message: KNOWLEDGE_BASE_QA_QUOTA_POLICY.usageLimitedMessage,
     });
     expect(repository.countKnowledgeQaAuditLogsForDay).toHaveBeenCalledWith(
       expect.objectContaining({
