@@ -45,6 +45,9 @@ describe('平台端知识库管理只读看板', () => {
     expect(container.textContent).not.toContain('真实下载');
     expect(container.textContent).not.toContain('开始训练');
     expect(container.textContent).not.toContain('CSV 导出');
+    expect(screen.queryByRole('button', { name: /上传|下载|导出|训练|新增|编辑|删除/ })).not.toBeInTheDocument();
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(container.querySelector('a[download]')).toBeNull();
   });
 
   it('默认展示全部机构，切换机构后过滤文件、分类、问题、知识条目和任务', () => {
@@ -85,5 +88,31 @@ describe('平台端知识库管理只读看板', () => {
     fireEvent.click(syncButton);
     expect(screen.getByRole('button', { name: '同步中...' })).toBeDisabled();
     expect(await screen.findByRole('button', { name: '同步数据' })).toBeInTheDocument();
+  });
+
+  it('展示中文安全错误文案、空状态和异常机构名称兜底', () => {
+    const { container } = render(<OpenPlatformKnowledgeManagementPanel />);
+
+    const fileSection = screen.getByLabelText('机构上传文件列表');
+    const searchInput = within(fileSection).getByPlaceholderText('搜索文件名');
+    fireEvent.change(searchInput, { target: { value: '星澜导入失败记录' } });
+
+    expect(screen.getByText('星澜导入失败记录.xlsx')).toBeInTheDocument();
+    expect(screen.getByText('文件格式暂不支持')).toBeInTheDocument();
+    expectNoRawRuntimeError(container);
+
+    fireEvent.change(searchInput, { target: { value: '没有匹配的文件名' } });
+    expect(screen.getByText('暂无匹配的知识库运营数据')).toBeInTheDocument();
+    expect(screen.getByText('请调整机构范围或文件名搜索条件后再查看。')).toBeInTheDocument();
+
+    fireEvent.change(searchInput, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /机构名称异常/ }));
+
+    const scopeSummary = screen.getByLabelText('当前知识库范围');
+    expect(within(scopeSummary).getByText('机构名称异常')).toBeInTheDocument();
+    expect(screen.getAllByText('机构名称异常').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('未命名机构').length).toBeGreaterThan(0);
+    expect(screen.getByText('PDF 解析服务异常')).toBeInTheDocument();
+    expectNoRawRuntimeError(container);
   });
 });
