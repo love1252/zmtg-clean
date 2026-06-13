@@ -108,6 +108,7 @@ type InstitutionParseReadServiceInput = ParseReadServiceInput & {
 
 const supportedTextExtensions = new Set(['.txt', '.md', '.csv']);
 const unsupportedSafeFailureMessage = '当前文件类型暂未接入解析器';
+const parseFailedSafeFailureMessage = '知识库文件解析失败，请稍后重试';
 
 function normalizeRequired(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -195,6 +196,40 @@ function splitTextIntoChunks(input: {
   return chunks;
 }
 
+async function persistFailedParse(input: {
+  repository: Pick<
+    PlatformKnowledgeDocumentParsingRepository,
+    'saveKnowledgeFileParseResult' | 'replaceKnowledgeFileParseChunks'
+  >;
+  baseRecord: {
+    parseId: string;
+    tenantId: string;
+    knowledgeId: string;
+    fileId: string;
+    parserVersion: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+}) {
+  const parse = await input.repository.saveKnowledgeFileParseResult({
+    ...input.baseRecord,
+    parseStatus: 'failed',
+    failureReasonCode: 'parse_failed',
+    safeFailureMessage: parseFailedSafeFailureMessage,
+    textContent: '',
+    textLength: 0,
+    chunkCount: 0,
+  });
+  await input.repository.replaceKnowledgeFileParseChunks({
+    tenantId: input.baseRecord.tenantId,
+    knowledgeId: input.baseRecord.knowledgeId,
+    fileId: input.baseRecord.fileId,
+    chunks: [],
+  });
+
+  return { status: 'failed' as const, parse: mapParseRecord(parse) };
+}
+
 async function ensureKnowledgeAndFile(input: {
   repository: Pick<
     PlatformKnowledgeDocumentParsingRepository,
@@ -270,25 +305,32 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
     return { status: 'failed' as const, parse: mapParseRecord(parse) };
   }
 
-  const textContent = normalizeExtractedText(await input.storage.read({ storageKey: found.file.storageKey }));
-  const chunks = splitTextIntoChunks({ tenantId, knowledgeId, fileId, text: textContent, now });
-  const parse = await input.repository.saveKnowledgeFileParseResult({
-    ...baseRecord,
-    parseStatus: 'succeeded',
-    failureReasonCode: null,
-    safeFailureMessage: null,
-    textContent,
-    textLength: textContent.length,
-    chunkCount: chunks.length,
-  });
-  await input.repository.replaceKnowledgeFileParseChunks({
-    tenantId,
-    knowledgeId,
-    fileId,
-    chunks,
-  });
+  try {
+    const textContent = normalizeExtractedText(await input.storage.read({ storageKey: found.file.storageKey }));
+    const chunks = splitTextIntoChunks({ tenantId, knowledgeId, fileId, text: textContent, now });
+    const parse = await input.repository.saveKnowledgeFileParseResult({
+      ...baseRecord,
+      parseStatus: 'succeeded',
+      failureReasonCode: null,
+      safeFailureMessage: null,
+      textContent,
+      textLength: textContent.length,
+      chunkCount: chunks.length,
+    });
+    await input.repository.replaceKnowledgeFileParseChunks({
+      tenantId,
+      knowledgeId,
+      fileId,
+      chunks,
+    });
 
-  return { status: 'succeeded' as const, parse: mapParseRecord(parse) };
+    return { status: 'succeeded' as const, parse: mapParseRecord(parse) };
+  } catch {
+    return persistFailedParse({
+      repository: input.repository,
+      baseRecord,
+    });
+  }
 }
 
 export async function getPlatformKnowledgeDocumentFileParseStatusService(input: ParseReadServiceInput) {

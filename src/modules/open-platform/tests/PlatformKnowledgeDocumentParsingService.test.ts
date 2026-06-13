@@ -294,6 +294,125 @@ describe('知识库文档解析与文本抽取 service', () => {
     expectSafePayload(result);
   });
 
+  it('storage.read 抛出底层异常时持久化 failed 状态并清空旧 chunks', async () => {
+    const { repository, storage, chunks, parseRecords } = createFixture();
+    chunks.set('tenant-a:file-a', [
+      {
+        chunkId: 'old-chunk',
+        tenantId: 'tenant-a',
+        knowledgeId: 'knowledge-a',
+        fileId: 'file-a',
+        chunkIndex: 0,
+        textPreview: '旧片段不应残留',
+        charCount: 7,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    storage.read = vi.fn(async () => {
+      throw new Error('SQL storage read failed /Users/demo/path token secret stack');
+    });
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-a' },
+    });
+
+    expect(result.status).toBe('failed');
+    if (!('parse' in result)) throw new Error('expected failed parse result');
+    expect(result.parse).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        failureReasonCode: 'parse_failed',
+        safeFailureMessage: '知识库文件解析失败，请稍后重试',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expect(repository.saveKnowledgeFileParseResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        failureReasonCode: 'parse_failed',
+        safeFailureMessage: '知识库文件解析失败，请稍后重试',
+        textContent: '',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenCalledWith(
+      expect.objectContaining({ chunks: [] }),
+    );
+    expect(chunks.get('tenant-a:file-a')).toEqual([]);
+    expect(parseRecords.get('tenant-a:file-a')).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        textContent: '',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expectSafePayload(result);
+  });
+
+  it('chunk 写入失败时不留下 succeeded 状态并持久化 failed 状态', async () => {
+    const { repository, storage, chunks, parseRecords } = createFixture();
+    chunks.set('tenant-a:file-a', [
+      {
+        chunkId: 'old-chunk',
+        tenantId: 'tenant-a',
+        knowledgeId: 'knowledge-a',
+        fileId: 'file-a',
+        chunkIndex: 0,
+        textPreview: '旧片段不应残留',
+        charCount: 7,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    repository.replaceKnowledgeFileParseChunks.mockRejectedValueOnce(
+      new Error('SQL chunk insert failed /Users/demo/path token secret stack'),
+    );
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-a' },
+    });
+
+    expect(result.status).toBe('failed');
+    if (!('parse' in result)) throw new Error('expected failed parse result');
+    expect(result.parse).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        failureReasonCode: 'parse_failed',
+        safeFailureMessage: '知识库文件解析失败，请稍后重试',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expect(repository.saveKnowledgeFileParseResult).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        textContent: '',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenLastCalledWith(
+      expect.objectContaining({ chunks: [] }),
+    );
+    expect(chunks.get('tenant-a:file-a')).toEqual([]);
+    expect(parseRecords.get('tenant-a:file-a')).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        textContent: '',
+        chunkCount: 0,
+      }),
+    );
+    expectSafePayload(result);
+  });
+
   it('平台端只能解析当前 tenant 的 active 文件，archived 文件不能解析', async () => {
     const { repository, storage } = createFixture();
 

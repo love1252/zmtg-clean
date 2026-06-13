@@ -327,6 +327,46 @@ describe('知识库文档解析 API route', () => {
     expectSafePayload(payload);
   });
 
+  it('平台端解析过程失败时返回安全 failed 状态并持久化失败记录', async () => {
+    storage.read = vi.fn(async () => {
+      throw unsafeError;
+    });
+
+    const response = await platformParseRoute.POST(
+      new Request(platformParseUrl('?tenantId=tenant-route-a'), { method: 'POST' }),
+      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+    );
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        parse: expect.objectContaining({
+          parseStatus: 'failed',
+          failureReasonCode: 'parse_failed',
+          safeFailureMessage: '知识库文件解析失败，请稍后重试',
+          textLength: 0,
+          chunkCount: 0,
+        }),
+      }),
+    );
+    expect(repository.saveKnowledgeFileParseResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        failureReasonCode: 'parse_failed',
+        safeFailureMessage: '知识库文件解析失败，请稍后重试',
+        textContent: '',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenCalledWith(
+      expect.objectContaining({ chunks: [] }),
+    );
+    expectSafePayload(payload);
+  });
+
   it('机构端只读查看解析状态和 chunk，且 tenant/institution 来自 access context', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantAccessContext);
 
