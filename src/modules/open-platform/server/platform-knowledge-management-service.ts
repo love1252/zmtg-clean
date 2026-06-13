@@ -25,7 +25,7 @@ type PlatformKnowledgeItemsServiceInput = {
 type PlatformKnowledgeVisibilityServiceInput = {
   repository: Pick<
     PlatformKnowledgeManagementRepository,
-    'bindInstitutionVisibility' | 'unbindInstitutionVisibility'
+    'bindInstitutionVisibility' | 'hasTenantInstitution' | 'unbindInstitutionVisibility'
   >;
   input: PlatformKnowledgeVisibilityRepositoryInput;
 };
@@ -191,9 +191,9 @@ export async function listPlatformKnowledgeItemsService(
 }
 
 function hasVisibilityScope(input: PlatformKnowledgeVisibilityRepositoryInput) {
-  // 7-1 只持久化平台端知识库可见范围关系。
-  // 当前 schema 没有可复用的机构 / 组织归属表。
-  // tenant + institution 存在性校验应在 7-2 机构端接入现有机构上下文时补齐。
+  // 当前平台知识库 visibility 只接受非空 tenantId、knowledgeId、institutionId；
+  // institution 归属由 hasTenantInstitution 基于 knowledge_sources(tenant_id, institution_id)
+  // 在绑定 / 解绑前校验。
   return (
     normalizeOptionalString(input.tenantId) &&
     normalizeOptionalString(input.knowledgeId) &&
@@ -208,6 +208,14 @@ export async function bindPlatformKnowledgeInstitutionVisibilityService(
     return { status: 'validation_failed' };
   }
 
+  const institutionBelongsToTenant = await input.repository.hasTenantInstitution({
+    tenantId: input.input.tenantId,
+    institutionId: input.input.institutionId,
+  });
+  if (!institutionBelongsToTenant) {
+    return { status: 'validation_failed' };
+  }
+
   return input.repository.bindInstitutionVisibility(input.input);
 }
 
@@ -215,6 +223,14 @@ export async function unbindPlatformKnowledgeInstitutionVisibilityService(
   input: PlatformKnowledgeVisibilityServiceInput,
 ): Promise<PlatformKnowledgeVisibilityRepositoryResult | { status: 'validation_failed' }> {
   if (!hasVisibilityScope(input.input)) {
+    return { status: 'validation_failed' };
+  }
+
+  const institutionBelongsToTenant = await input.repository.hasTenantInstitution({
+    tenantId: input.input.tenantId,
+    institutionId: input.input.institutionId,
+  });
+  if (!institutionBelongsToTenant) {
     return { status: 'validation_failed' };
   }
 

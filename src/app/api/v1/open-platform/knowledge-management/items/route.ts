@@ -42,7 +42,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(
-      buildReadonlyApiError(error instanceof Error ? error.message : '知识库条目查询参数不正确'),
+      buildReadonlyApiError('知识库条目暂时无法查询'),
       { status: 400 },
     );
   }

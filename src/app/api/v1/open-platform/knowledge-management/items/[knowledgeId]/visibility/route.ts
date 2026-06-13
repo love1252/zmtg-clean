@@ -54,9 +54,9 @@ export async function POST(request: Request, context: VisibilityRouteContext) {
     });
 
     return NextResponse.json(result, { status: statusCodeForResult(result.status) });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      buildReadonlyApiError(error instanceof Error ? error.message : '知识库可见范围绑定失败'),
+      buildReadonlyApiError('知识库可见范围暂时无法更新'),
       { status: 400 },
     );
   }
@@ -75,9 +75,9 @@ export async function DELETE(request: Request, context: VisibilityRouteContext) 
     });
 
     return NextResponse.json(result, { status: statusCodeForResult(result.status) });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      buildReadonlyApiError(error instanceof Error ? error.message : '知识库可见范围解绑失败'),
+      buildReadonlyApiError('知识库可见范围暂时无法更新'),
       { status: 400 },
     );
   }

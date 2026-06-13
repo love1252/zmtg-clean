@@ -49,6 +49,11 @@ export type PlatformKnowledgeVisibilityRepositoryInput = {
   institutionId: string;
 };
 
+export type PlatformKnowledgeInstitutionScopeRepositoryInput = {
+  tenantId: string;
+  institutionId: string;
+};
+
 export type PlatformKnowledgeVisibilityRepositoryResult =
   | {
       status: 'bound' | 'unbound';
@@ -202,6 +207,23 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
         chunks,
         visibility,
       });
+    },
+
+    async hasTenantInstitution(
+      input: PlatformKnowledgeInstitutionScopeRepositoryInput,
+    ): Promise<boolean> {
+      const rows = await database
+        .select({ id: knowledgeSources.id })
+        .from(knowledgeSources)
+        .where(
+          and(
+            eq(knowledgeSources.tenantId, input.tenantId),
+            eq(knowledgeSources.institutionId, input.institutionId),
+          ),
+        )
+        .limit(1);
+
+      return rows.length > 0;
     },
 
     async bindInstitutionVisibility(
