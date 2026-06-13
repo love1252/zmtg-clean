@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { createElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InstitutionWorkspace } from '@/modules/workspace/components/InstitutionWorkspace';
-import * as searchRoute from '@/app/api/v1/knowledge-base/runtime/search/route';
+import { handleSearchGET } from '@/modules/knowledge-base/server/v1-knowledge-base-runtime-api-routes';
 import {
   chunkV1KnowledgeBaseRuntimeDocument,
   parseV1KnowledgeBaseRuntimeDocument,
@@ -494,11 +494,11 @@ describe('V1 知识库 MVP 端到端验收收口', () => {
       createMockDemoKnowledgeBaseEmbedding('beta demo recovery', 8).vector,
     ]);
 
-    const firstSearchResponse = await searchRoute.GET(
+    const firstSearchResponse = await handleSearchGET(
       new Request('http://localhost/api/v1/knowledge-base/runtime/search?q=alpha%20care'),
       { repository: createSearchRepository(store) },
     );
-    const secondSearchResponse = await searchRoute.GET(
+    const secondSearchResponse = await handleSearchGET(
       new Request('http://localhost/api/v1/knowledge-base/runtime/search?q=alpha%20care'),
       { repository: createSearchRepository(store) },
     );
