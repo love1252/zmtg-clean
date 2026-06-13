@@ -83,6 +83,13 @@ type KnowledgeSearchResultRecord = {
 type KnowledgeVectorSearchResultRecord = KnowledgeSearchResultRecord & {
   score: number;
 };
+type KnowledgeQaResponseRecord = {
+  answer: string;
+  citations: KnowledgeVectorSearchResultRecord[];
+  retrievalMode: 'keyword' | 'vector' | 'hybrid';
+  auditId: string;
+  safeStatus: 'answered' | 'no_citation';
+};
 
 const fileStatusLabels: Record<KnowledgeFileParseStatus, string> = {
   parsed: '已解析',
@@ -336,6 +343,10 @@ function vectorSearchPath(input: { tenantId: string; query: string }) {
   return `/api/v1/open-platform/knowledge-management/vector-search?${params.toString()}`;
 }
 
+function knowledgeQaPath() {
+  return '/api/v1/open-platform/knowledge-management/qa';
+}
+
 export function OpenPlatformKnowledgeManagementPanel() {
   const [selectedTenantId, setSelectedTenantId] = useState(ALL_TENANTS);
   const [fileSearch, setFileSearch] = useState('');
@@ -362,6 +373,11 @@ export function OpenPlatformKnowledgeManagementPanel() {
   const [vectorSearchResults, setVectorSearchResults] = useState<KnowledgeVectorSearchResultRecord[]>([]);
   const [vectorSearchMessage, setVectorSearchMessage] = useState('请输入内容进行语义检索');
   const [isVectorSearching, setIsVectorSearching] = useState(false);
+  const [qaQuestionInput, setQaQuestionInput] = useState('');
+  const [qaRetrievalMode, setQaRetrievalMode] = useState<'keyword' | 'vector' | 'hybrid'>('hybrid');
+  const [qaResponse, setQaResponse] = useState<KnowledgeQaResponseRecord | null>(null);
+  const [qaMessage, setQaMessage] = useState('请输入问题发起知识库问答');
+  const [isQaLoading, setIsQaLoading] = useState(false);
   const [isFileActionLoading, setIsFileActionLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -786,6 +802,55 @@ export function OpenPlatformKnowledgeManagementPanel() {
       setVectorSearchMessage('知识库向量检索暂时不可用');
     } finally {
       setIsVectorSearching(false);
+    }
+  }
+
+  async function handleKnowledgeQa(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const question = qaQuestionInput.trim();
+    const tenantId = selectedTenantParam ?? scopedKnowledgeItems[0]?.tenantId;
+    if (!question) {
+      setQaResponse(null);
+      setQaMessage('请输入知识库问答问题');
+      return;
+    }
+    if (!tenantId) {
+      setQaResponse(null);
+      setQaMessage('当前范围暂无可问答知识库');
+      return;
+    }
+
+    setIsQaLoading(true);
+    setQaMessage('正在基于引用片段生成回答...');
+    try {
+      const response = await fetch(knowledgeQaPath(), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          tenantId,
+          question,
+          retrievalMode: qaRetrievalMode,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || typeof payload.answer !== 'string' || !Array.isArray(payload.citations)) {
+        setQaResponse(null);
+        setQaMessage('知识库问答暂时无法处理');
+        return;
+      }
+
+      const nextResponse = payload as KnowledgeQaResponseRecord;
+      setQaResponse(nextResponse);
+      setQaMessage(
+        nextResponse.safeStatus === 'no_citation'
+          ? '当前范围暂无可引用片段'
+          : `已生成回答，引用 ${nextResponse.citations.length} 个片段`,
+      );
+    } catch {
+      setQaResponse(null);
+      setQaMessage('知识库问答暂时无法处理');
+    } finally {
+      setIsQaLoading(false);
     }
   }
 
@@ -1300,6 +1365,84 @@ export function OpenPlatformKnowledgeManagementPanel() {
               </div>
             </article>
           </section>
+
+          <article className={cn(sectionShell, 'overflow-hidden')} aria-label="平台端知识库问答">
+            <div className="flex flex-col gap-4 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-3">
+                <BookOpen className="h-5 w-5 text-emerald-200" />
+                <div>
+                  <h2 className="text-lg font-semibold tracking-normal text-white">知识库问答</h2>
+                  <p className="mt-1 text-sm text-slate-400">基于关键词和 mock embedding 召回片段生成低敏回答。</p>
+                </div>
+              </div>
+              <form onSubmit={handleKnowledgeQa} className="flex w-full flex-col gap-2 lg:w-[620px]">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <label className="relative min-w-0 flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                    <input
+                      aria-label="输入知识库问题"
+                      value={qaQuestionInput}
+                      onChange={(event) => setQaQuestionInput(event.target.value)}
+                      placeholder="输入问题"
+                      className="h-10 w-full rounded-2xl border border-white/10 bg-[#071322]/72 pl-10 pr-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/35"
+                    />
+                  </label>
+                  <select
+                    aria-label="选择问答检索模式"
+                    value={qaRetrievalMode}
+                    onChange={(event) => setQaRetrievalMode(event.target.value as 'keyword' | 'vector' | 'hybrid')}
+                    className="h-10 rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm font-semibold text-slate-100 outline-none"
+                  >
+                    <option value="hybrid">混合检索</option>
+                    <option value="keyword">关键词</option>
+                    <option value="vector">语义</option>
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={isQaLoading}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.10] px-4 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/[0.16] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isQaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookOpen className="h-4 w-4" />}
+                    发起问答
+                  </button>
+                </div>
+              </form>
+            </div>
+            <div className="p-5">
+              <div className="mb-4 rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-3 text-sm font-semibold text-slate-300">
+                {qaMessage}
+              </div>
+              {!qaResponse ? (
+                <EmptyState title="暂无问答结果" description="输入问题后可查看回答和引用来源。" />
+              ) : (
+                <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+                  <article className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+                    <div className="text-xs font-semibold text-slate-400">
+                      {qaResponse.retrievalMode === 'hybrid' ? '混合检索' : qaResponse.retrievalMode === 'keyword' ? '关键词' : '语义'}
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-100">{qaResponse.answer}</p>
+                    <div className="mt-3 text-xs font-semibold text-emerald-100">审计编号 {qaResponse.auditId}</div>
+                  </article>
+                  <div className="grid gap-3">
+                    {qaResponse.citations.length === 0 ? (
+                      <EmptyState title="暂无引用来源" description="当前回答没有可展示的引用片段。" />
+                    ) : (
+                      qaResponse.citations.map((citation) => (
+                        <article key={citation.chunkId} className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-400">
+                            <span>{citation.knowledgeTitle} · {citation.fileName} · 片段 {citation.chunkIndex + 1}</span>
+                            <span className="text-cyan-100">分数 {citation.score.toFixed(3)}</span>
+                          </div>
+                          <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-200">{citation.textPreview}</p>
+                          <div className="mt-3 text-xs font-semibold text-cyan-100">{citation.matchReason}</div>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </article>
 
           <article className={cn(sectionShell, 'overflow-hidden')} aria-label="知识库文件管理操作区">
             <div className="flex flex-col gap-4 border-b border-white/10 p-5 xl:flex-row xl:items-center xl:justify-between">

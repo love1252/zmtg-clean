@@ -827,6 +827,44 @@ export const knowledgeDocumentFileParseChunkEmbeddings = pgTable(
   }),
 );
 
+export const knowledgeQaAuditLogs = pgTable(
+  'knowledge_qa_audit_logs',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
+    actorScope: varchar('actor_scope', { length: 24 }).notNull(),
+    actorUserId: varchar('actor_user_id', { length: 96 }).notNull(),
+    question: varchar('question', { length: 512 }).notNull(),
+    answerPreview: varchar('answer_preview', { length: 1024 }).notNull(),
+    retrievalMode: varchar('retrieval_mode', { length: 24 }).notNull(),
+    citationCount: integer('citation_count').notNull(),
+    safeStatus: varchar('safe_status', { length: 32 }).notNull(),
+    safeFailureMessage: varchar('safe_failure_message', { length: 256 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('knowledge_qa_audit_logs_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    tenantCreatedIdx: index('knowledge_qa_audit_logs_tenant_created_idx').on(
+      table.tenantId,
+      table.createdAt,
+    ),
+    tenantInstitutionCreatedIdx: index(
+      'knowledge_qa_audit_logs_tenant_institution_created_idx',
+    ).on(table.tenantId, table.institutionId, table.createdAt),
+    tenantScopeCreatedIdx: index('knowledge_qa_audit_logs_tenant_scope_created_idx').on(
+      table.tenantId,
+      table.actorScope,
+      table.createdAt,
+    ),
+  }),
+);
+
 export const knowledgeChunkEmbeddings = pgTable(
   'knowledge_chunk_embeddings',
   {
