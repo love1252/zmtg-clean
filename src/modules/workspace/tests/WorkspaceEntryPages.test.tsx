@@ -1523,6 +1523,37 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
         return jsonResponse({ records: hisConnections });
       }
 
+      if (path.startsWith('/api/institution/knowledge-management/items')) {
+        return jsonResponse({
+          requestId: 'institution-knowledge-management-items',
+          readonly: true,
+          dataSource: 'repository',
+          records: [
+            {
+              knowledgeId: 'knowledge-workspace-visible',
+              title: '工作台授权知识库',
+              category: '术后护理',
+              status: 'ready',
+              readonlyStatus: 'readonly',
+              sourceKind: 'demo',
+              descriptionPreview: '机构端只读低敏摘要。',
+              chunkCount: 2,
+              visibility: 'platform_authorized',
+              updatedAt: '2026-06-13T08:00:00.000Z',
+              createdAt: '2026-06-13T08:00:00.000Z',
+            },
+          ],
+          pageInfo: {
+            page: 1,
+            pageSize: 10,
+            total: 1,
+            pageCount: 1,
+            hasPreviousPage: false,
+            hasNextPage: false,
+          },
+        });
+      }
+
       if (path.startsWith('/api/institution/his-connections/')) {
         if (hisConnectionDetailError) {
           return jsonResponse(
@@ -3951,18 +3982,19 @@ describe('工作台入口页面', () => {
 
     expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
     expect(screen.getAllByText('演示主线').length).toBeGreaterThanOrEqual(8);
-    expect(screen.getAllByText('后续').length).toBeGreaterThanOrEqual(6);
+    expect(screen.getAllByText('后续').length).toBeGreaterThanOrEqual(4);
 
     fireEvent.click(screen.getByRole('button', { name: '客服工作台' }));
     expect(screen.getByText('客服工作台暂不进入本次演示主线')).toBeInTheDocument();
     expect(
-      screen.getByText('本次主线：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志、HIS 连接配置。'),
+      screen.getByText('本次主线：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志、HIS 连接配置、知识库只读列表。'),
     ).toBeInTheDocument();
-    expect(screen.getByText('后续：客服工作台、知识库、数据分析。')).toBeInTheDocument();
+    expect(screen.getByText('后续：客服工作台、数据分析。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '知识库' }));
-    expect(screen.getByText('知识库暂不进入本次演示主线')).toBeInTheDocument();
-    expect(screen.getByText('本入口不会触发客服、知识库或数据分析真实功能请求。')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '知识库' })).toBeInTheDocument();
+    expect(await screen.findByText('工作台授权知识库')).toBeInTheDocument();
+    expect(screen.getByText('机构端只读低敏摘要。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '数据分析' }));
     expect(screen.getByText('数据分析暂不进入本次演示主线')).toBeInTheDocument();

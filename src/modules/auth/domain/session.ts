@@ -16,6 +16,7 @@ export type AuthSessionUser = {
   name: string;
   role: AuthRole;
   tenantId: string | null;
+  institutionId?: string | null;
 };
 
 export type AuthSession = {

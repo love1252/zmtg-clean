@@ -32,6 +32,7 @@ describe('访问上下文', () => {
       role: 'tenant_admin',
       scope: 'tenant',
       tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-a',
       source: 'demo_session',
     });
   });
@@ -53,6 +54,7 @@ describe('访问上下文', () => {
       role: 'platform_admin',
       scope: 'platform',
       tenantId: null,
+      institutionId: null,
       source: 'demo_session',
     });
   });
@@ -74,6 +76,7 @@ describe('访问上下文', () => {
       role: 'security_auditor',
       scope: 'platform',
       tenantId: null,
+      institutionId: null,
       source: 'demo_session',
     });
   });

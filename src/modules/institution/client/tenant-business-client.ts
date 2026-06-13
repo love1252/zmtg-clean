@@ -2,6 +2,10 @@ import type { AppointmentRecordSummary } from '@/modules/institution/domain/appo
 import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
 import type { CustomerTimelineResponse } from '@/modules/institution/domain/customer-timeline';
 import type {
+  InstitutionKnowledgeItemDto,
+  InstitutionKnowledgeListResponse,
+} from '@/modules/institution/domain/institution-knowledge-management';
+import type {
   FollowUpStatus,
   TenantFollowUpTaskSource,
   TenantFollowUpTask,
@@ -83,6 +87,12 @@ export type FollowUpTaskListClientQuery = {
   sourceTreatmentSummaryId?: string | number | null;
 };
 
+export type InstitutionKnowledgeListClientQuery = {
+  keyword?: string | number | null;
+  page?: string | number | null;
+  pageSize?: string | number | null;
+};
+
 export type TenantBusinessClientErrorKind =
   | 'unauthorized'
   | 'forbidden'
@@ -120,6 +130,14 @@ export type TreatmentSummaryListClientResult =
 
 export type TreatmentFollowUpSuggestionListClientResult =
   | { ok: true; suggestions: TreatmentFollowUpSuggestion[] }
+  | { ok: false; error: TenantBusinessClientError };
+
+export type InstitutionKnowledgeListClientResult =
+  | {
+      ok: true;
+      records: InstitutionKnowledgeItemDto[];
+      pageInfo: InstitutionKnowledgeListResponse['pageInfo'];
+    }
   | { ok: false; error: TenantBusinessClientError };
 
 type TenantBusinessClientOptions = {
@@ -179,6 +197,7 @@ const treatmentSummaryListQueryKeys = [
   'cursor',
 ] as const;
 const followUpTaskListQueryKeys = ['source', 'sourceTreatmentSummaryId'] as const;
+const institutionKnowledgeListQueryKeys = ['keyword', 'page', 'pageSize'] as const;
 
 function getFetcher(options?: TenantBusinessClientOptions) {
   return options?.fetcher ?? globalThis.fetch;
@@ -404,12 +423,44 @@ function buildFollowUpTaskListPath(query: FollowUpTaskListClientQuery = {}) {
     : '/api/institution/followups';
 }
 
+function buildInstitutionKnowledgeListPath(query: InstitutionKnowledgeListClientQuery = {}) {
+  const params = new URLSearchParams();
+
+  for (const key of institutionKnowledgeListQueryKeys) {
+    const value = query[key];
+    if (value === undefined || value === null) continue;
+
+    const normalized = String(value).trim();
+    if (normalized.length === 0) continue;
+    params.set(key, normalized);
+  }
+
+  const queryString = params.toString();
+  return queryString.length > 0
+    ? `/api/institution/knowledge-management/items?${queryString}`
+    : '/api/institution/knowledge-management/items';
+}
+
 function isTreatmentSummaryListPageInfo(input: unknown): input is TreatmentSummaryListPageInfo {
   return (
     isJsonObject(input) &&
     typeof input.hasMore === 'boolean' &&
     typeof input.limit === 'number' &&
     (typeof input.nextCursor === 'string' || input.nextCursor === null)
+  );
+}
+
+function isInstitutionKnowledgePageInfo(
+  input: unknown,
+): input is InstitutionKnowledgeListResponse['pageInfo'] {
+  return (
+    isJsonObject(input) &&
+    typeof input.page === 'number' &&
+    typeof input.pageSize === 'number' &&
+    typeof input.total === 'number' &&
+    typeof input.pageCount === 'number' &&
+    typeof input.hasPreviousPage === 'boolean' &&
+    typeof input.hasNextPage === 'boolean'
   );
 }
 
@@ -451,6 +502,54 @@ export async function listTreatmentSummaries(
     return {
       ok: true,
       records: payload.records as InstitutionTreatmentSummaryListItem[],
+      pageInfo: payload.pageInfo,
+    };
+  } catch {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+}
+
+export async function listInstitutionKnowledgeItems(
+  query?: InstitutionKnowledgeListClientQuery,
+  options?: TenantBusinessClientOptions,
+): Promise<InstitutionKnowledgeListClientResult> {
+  const fetcher = getFetcher(options);
+  if (!fetcher) {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+
+  try {
+    const response = await fetcher(buildInstitutionKnowledgeListPath(query), {
+      cache: 'no-store',
+    });
+    const payload = await readJson(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: createClientError({ status: response.status, payload }),
+      };
+    }
+
+    if (
+      !isJsonObject(payload) ||
+      !Array.isArray(payload.records) ||
+      !isInstitutionKnowledgePageInfo(payload.pageInfo)
+    ) {
+      return {
+        ok: false,
+        error: { kind: 'unknown', message: '请求失败', status: response.status },
+      };
+    }
+
+    return {
+      ok: true,
+      records: payload.records as InstitutionKnowledgeItemDto[],
       pageInfo: payload.pageInfo,
     };
   } catch {
