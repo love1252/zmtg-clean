@@ -768,6 +768,65 @@ export const knowledgeDocumentFileParseChunks = pgTable(
   }),
 );
 
+export const knowledgeDocumentFileParseChunkEmbeddings = pgTable(
+  'knowledge_document_file_parse_chunk_embeddings',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    knowledgeDocumentId: varchar('knowledge_document_id', { length: 64 }).notNull(),
+    fileId: varchar('file_id', { length: 64 }).notNull(),
+    chunkId: varchar('chunk_id', { length: 64 }).notNull(),
+    embeddingProvider: varchar('embedding_provider', { length: 64 })
+      .notNull()
+      .default('mock_local_embedding'),
+    embeddingModel: varchar('embedding_model', { length: 96 })
+      .notNull()
+      .default('mock-local-embedding-v1'),
+    embeddingDimensions: integer('embedding_dimensions').notNull(),
+    embeddingVectorJson: jsonb('embedding_vector_json').$type<number[]>().notNull(),
+    status: varchar('status', { length: 32 }).notNull().default('ready'),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('knowledge_file_parse_chunk_embeddings_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    tenantChunkUnique: unique('knowledge_file_parse_chunk_embeddings_tenant_chunk_unique').on(
+      table.tenantId,
+      table.chunkId,
+    ),
+    documentFk: foreignKey({
+      name: 'knowledge_file_parse_chunk_embeddings_tenant_document_fk',
+      columns: [table.tenantId, table.knowledgeDocumentId],
+      foreignColumns: [knowledgeDocuments.tenantId, knowledgeDocuments.id],
+    }),
+    fileFk: foreignKey({
+      name: 'knowledge_file_parse_chunk_embeddings_tenant_file_fk',
+      columns: [table.tenantId, table.fileId],
+      foreignColumns: [knowledgeDocumentFiles.tenantId, knowledgeDocumentFiles.id],
+    }),
+    chunkFk: foreignKey({
+      name: 'knowledge_file_parse_chunk_embeddings_tenant_chunk_fk',
+      columns: [table.tenantId, table.chunkId],
+      foreignColumns: [knowledgeDocumentFileParseChunks.tenantId, knowledgeDocumentFileParseChunks.id],
+    }),
+    tenantDocumentIdx: index('knowledge_file_parse_chunk_embeddings_tenant_document_idx').on(
+      table.tenantId,
+      table.knowledgeDocumentId,
+    ),
+    tenantFileIdx: index('knowledge_file_parse_chunk_embeddings_tenant_file_idx').on(
+      table.tenantId,
+      table.fileId,
+    ),
+    tenantProviderModelIdx: index(
+      'knowledge_file_parse_chunk_embeddings_tenant_provider_model_idx',
+    ).on(table.tenantId, table.embeddingProvider, table.embeddingModel),
+  }),
+);
+
 export const knowledgeChunkEmbeddings = pgTable(
   'knowledge_chunk_embeddings',
   {

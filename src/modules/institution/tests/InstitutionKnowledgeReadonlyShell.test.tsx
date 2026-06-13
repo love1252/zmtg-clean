@@ -28,6 +28,31 @@ describe('机构端知识库只读列表 UI', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/vector-search')) {
+          return Response.json({
+            requestId: 'institution-knowledge-vector-search',
+            readonly: true,
+            dataSource: 'repository',
+            records: [
+              {
+                knowledgeId: 'knowledge-ui-a',
+                knowledgeTitle: '授权可见术后护理',
+                fileId: 'institution-file-a',
+                fileName: '机构文件.pdf',
+                chunkId: 'institution-vector-chunk-a',
+                chunkIndex: 0,
+                textPreview: '机构端语义相似引用片段',
+                score: 0.765432,
+                matchReason: 'mock embedding 相似度 0.765',
+              },
+            ],
+            pageInfo: pageInfo,
+            emptyState: {
+              title: '暂无相似片段',
+              description: '当前范围没有命中语义相似的已解析知识片段。',
+            },
+          });
+        }
         if (url.includes('/api/institution/knowledge-management/search')) {
           return Response.json({
             requestId: 'institution-knowledge-keyword-search',
@@ -193,6 +218,30 @@ describe('机构端知识库只读列表 UI', () => {
     expect(searchSection.textContent).not.toContain('embedding');
     expect(searchSection.textContent).not.toContain('训练');
     expect(searchSection.textContent).not.toContain('问答');
+  });
+
+  it('机构端新增语义检索只读区域，不提供向量生成入口', async () => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+    const vectorSection = screen.getByLabelText('机构端语义检索');
+    fireEvent.change(within(vectorSection).getByLabelText('输入语义检索内容'), {
+      target: { value: '冷敷护理' },
+    });
+    fireEvent.click(within(vectorSection).getByRole('button', { name: '语义检索' }));
+
+    expect(await screen.findByText('机构端语义相似引用片段')).toBeInTheDocument();
+    expect(screen.getByText('mock embedding 相似度 0.765')).toBeInTheDocument();
+    expect(screen.getByText('相似度 0.765')).toBeInTheDocument();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/institution/knowledge-management/vector-search?query=%E5%86%B7%E6%95%B7%E6%8A%A4%E7%90%86',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+    expect(within(vectorSection).queryByRole('button', { name: '生成向量索引' })).not.toBeInTheDocument();
+    expect(vectorSection.textContent).not.toContain('OCR');
+    expect(vectorSection.textContent).not.toContain('训练');
+    expect(vectorSection.textContent).not.toContain('问答');
+    expect(vectorSection.textContent).not.toContain('第三方 AI');
   });
 
   it('展示 empty 和 error 状态，并且不出现上传下载导出解析训练等 CTA', async () => {

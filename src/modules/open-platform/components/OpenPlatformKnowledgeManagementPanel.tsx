@@ -80,6 +80,9 @@ type KnowledgeSearchResultRecord = {
   textPreview: string;
   matchReason: string;
 };
+type KnowledgeVectorSearchResultRecord = KnowledgeSearchResultRecord & {
+  score: number;
+};
 
 const fileStatusLabels: Record<KnowledgeFileParseStatus, string> = {
   parsed: '已解析',
@@ -318,6 +321,21 @@ function keywordSearchPath(input: { tenantId: string; keyword: string }) {
   return `/api/v1/open-platform/knowledge-management/search?${params.toString()}`;
 }
 
+function vectorEmbeddingPath() {
+  return '/api/v1/open-platform/knowledge-management/embeddings';
+}
+
+function vectorSearchPath(input: { tenantId: string; query: string }) {
+  const params = new URLSearchParams({
+    tenantId: input.tenantId,
+    query: input.query,
+    page: '1',
+    pageSize: '10',
+  });
+
+  return `/api/v1/open-platform/knowledge-management/vector-search?${params.toString()}`;
+}
+
 export function OpenPlatformKnowledgeManagementPanel() {
   const [selectedTenantId, setSelectedTenantId] = useState(ALL_TENANTS);
   const [fileSearch, setFileSearch] = useState('');
@@ -338,6 +356,12 @@ export function OpenPlatformKnowledgeManagementPanel() {
   const [keywordSearchResults, setKeywordSearchResults] = useState<KnowledgeSearchResultRecord[]>([]);
   const [keywordSearchMessage, setKeywordSearchMessage] = useState('请输入关键词检索已解析片段');
   const [isKeywordSearching, setIsKeywordSearching] = useState(false);
+  const [embeddingMessage, setEmbeddingMessage] = useState('选择范围后可生成已解析片段的 mock embedding 索引');
+  const [isEmbeddingLoading, setIsEmbeddingLoading] = useState(false);
+  const [vectorSearchInput, setVectorSearchInput] = useState('');
+  const [vectorSearchResults, setVectorSearchResults] = useState<KnowledgeVectorSearchResultRecord[]>([]);
+  const [vectorSearchMessage, setVectorSearchMessage] = useState('请输入内容进行语义检索');
+  const [isVectorSearching, setIsVectorSearching] = useState(false);
   const [isFileActionLoading, setIsFileActionLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -691,6 +715,77 @@ export function OpenPlatformKnowledgeManagementPanel() {
       setKeywordSearchMessage('知识库片段检索暂时不可用');
     } finally {
       setIsKeywordSearching(false);
+    }
+  }
+
+  async function handleGenerateVectorIndex() {
+    const tenantId = selectedTenantParam ?? scopedKnowledgeItems[0]?.tenantId;
+    if (!tenantId) {
+      setEmbeddingMessage('当前范围暂无可生成向量索引的知识库');
+      return;
+    }
+
+    setIsEmbeddingLoading(true);
+    setEmbeddingMessage('正在生成 mock embedding 索引...');
+    try {
+      const response = await fetch(vectorEmbeddingPath(), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ tenantId }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) {
+        setEmbeddingMessage('知识库向量索引暂时无法生成');
+        return;
+      }
+
+      const embeddingCount = typeof payload.embeddingCount === 'number' ? payload.embeddingCount : 0;
+      setEmbeddingMessage(
+        payload.status === 'empty'
+          ? '当前范围暂无可生成向量索引的已解析片段'
+          : `已生成 ${embeddingCount} 个 mock embedding 索引`,
+      );
+    } catch {
+      setEmbeddingMessage('知识库向量索引暂时无法生成');
+    } finally {
+      setIsEmbeddingLoading(false);
+    }
+  }
+
+  async function handleVectorSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = vectorSearchInput.trim();
+    const tenantId = selectedTenantParam ?? scopedKnowledgeItems[0]?.tenantId;
+    if (!query) {
+      setVectorSearchResults([]);
+      setVectorSearchMessage('请输入语义检索内容');
+      return;
+    }
+    if (!tenantId) {
+      setVectorSearchResults([]);
+      setVectorSearchMessage('当前范围暂无可检索知识库');
+      return;
+    }
+
+    setIsVectorSearching(true);
+    setVectorSearchMessage('正在检索相似片段...');
+    try {
+      const response = await fetch(vectorSearchPath({ tenantId, query }), { cache: 'no-store' });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setVectorSearchResults([]);
+        setVectorSearchMessage('知识库向量检索暂时不可用');
+        return;
+      }
+
+      const records = payload.records as KnowledgeVectorSearchResultRecord[];
+      setVectorSearchResults(records);
+      setVectorSearchMessage(records.length > 0 ? `已命中 ${records.length} 个相似片段` : '暂无相似片段');
+    } catch {
+      setVectorSearchResults([]);
+      setVectorSearchMessage('知识库向量检索暂时不可用');
+    } finally {
+      setIsVectorSearching(false);
     }
   }
 
@@ -1126,6 +1221,85 @@ export function OpenPlatformKnowledgeManagementPanel() {
               )}
             </div>
           </article>
+
+          <section className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+            <article className={cn(sectionShell, 'overflow-hidden')} aria-label="平台端知识向量索引">
+              <div className="flex items-center gap-3 border-b border-white/10 p-5">
+                <Layers3 className="h-5 w-5 text-emerald-200" />
+                <div>
+                  <h2 className="text-lg font-semibold tracking-normal text-white">生成向量索引</h2>
+                  <p className="mt-1 text-sm text-slate-400">为当前范围的已解析片段生成 deterministic mock embedding。</p>
+                </div>
+              </div>
+              <div className="space-y-4 p-5">
+                <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-3 text-sm font-semibold text-slate-300">
+                  {embeddingMessage}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGenerateVectorIndex}
+                  disabled={isEmbeddingLoading}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.10] px-4 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/[0.16] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isEmbeddingLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Layers3 className="h-4 w-4" />}
+                  生成向量索引
+                </button>
+              </div>
+            </article>
+
+            <article className={cn(sectionShell, 'overflow-hidden')} aria-label="平台端语义检索">
+              <div className="flex flex-col gap-4 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-3">
+                  <Search className="h-5 w-5 text-cyan-200" />
+                  <div>
+                    <h2 className="text-lg font-semibold tracking-normal text-white">语义检索</h2>
+                    <p className="mt-1 text-sm text-slate-400">用 mock embedding 相似度返回引用片段。</p>
+                  </div>
+                </div>
+                <form onSubmit={handleVectorSearch} className="flex w-full flex-col gap-2 sm:flex-row lg:w-[460px]">
+                  <label className="relative min-w-0 flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                    <input
+                      aria-label="输入语义检索内容"
+                      value={vectorSearchInput}
+                      onChange={(event) => setVectorSearchInput(event.target.value)}
+                      placeholder="输入检索内容"
+                      className="h-10 w-full rounded-2xl border border-white/10 bg-[#071322]/72 pl-10 pr-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/35"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={isVectorSearching}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.10] px-4 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/[0.16] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isVectorSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    语义检索
+                  </button>
+                </form>
+              </div>
+              <div className="p-5">
+                <div className="mb-4 rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-3 text-sm font-semibold text-slate-300">
+                  {vectorSearchMessage}
+                </div>
+                {vectorSearchResults.length === 0 ? (
+                  <EmptyState title="暂无相似片段" description="生成向量索引后可按语义相似度查看引用片段。" />
+                ) : (
+                  <div className="grid gap-3">
+                    {vectorSearchResults.map((result) => (
+                      <article key={result.chunkId} className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-400">
+                          <span>{result.knowledgeTitle} · {result.fileName} · 片段 {result.chunkIndex + 1}</span>
+                          <span className="text-cyan-100">相似度 {result.score.toFixed(3)}</span>
+                        </div>
+                        <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-200">{result.textPreview}</p>
+                        <div className="mt-3 text-xs font-semibold text-cyan-100">{result.matchReason}</div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </article>
+          </section>
 
           <article className={cn(sectionShell, 'overflow-hidden')} aria-label="知识库文件管理操作区">
             <div className="flex flex-col gap-4 border-b border-white/10 p-5 xl:flex-row xl:items-center xl:justify-between">

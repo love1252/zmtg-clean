@@ -35,6 +35,57 @@ describe('平台端知识库管理只读看板', () => {
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         const method = init?.method ?? 'GET';
+        if (url.includes('/api/v1/open-platform/knowledge-management/embeddings')) {
+          return Response.json({
+            status: 'succeeded',
+            embeddingCount: 1,
+            embeddings: [
+              {
+                embeddingId: 'embedding-ui-a',
+                tenantId: 'tenant-xinglan',
+                knowledgeId: 'knowledge-price-reply',
+                fileId: 'file-ui-a',
+                chunkId: 'chunk-ui-a',
+                embeddingProvider: 'mock_local_embedding',
+                embeddingModel: 'mock-local-embedding-v1',
+                embeddingDimensions: 8,
+                status: 'ready',
+              },
+            ],
+          });
+        }
+        if (url.includes('/api/v1/open-platform/knowledge-management/vector-search')) {
+          return Response.json({
+            requestId: 'platform-knowledge-vector-search',
+            readonly: true,
+            dataSource: 'repository',
+            records: [
+              {
+                knowledgeId: 'knowledge-price-reply',
+                knowledgeTitle: '价格回复知识库',
+                fileId: 'file-ui-a',
+                fileName: '平台文件.pdf',
+                chunkId: 'vector-chunk-ui-a',
+                chunkIndex: 0,
+                textPreview: '平台端语义相似引用片段',
+                score: 0.876543,
+                matchReason: 'mock embedding 相似度 0.877',
+              },
+            ],
+            pageInfo: {
+              page: 1,
+              pageSize: 10,
+              total: 1,
+              pageCount: 1,
+              hasPreviousPage: false,
+              hasNextPage: false,
+            },
+            emptyState: {
+              title: '暂无相似片段',
+              description: '当前范围没有命中语义相似的已解析知识片段。',
+            },
+          });
+        }
         if (url.includes('/api/v1/open-platform/knowledge-management/search')) {
           return Response.json({
             requestId: 'platform-knowledge-keyword-search',
@@ -341,6 +392,39 @@ describe('平台端知识库管理只读看板', () => {
     expect(searchSection.textContent).not.toContain('embedding');
     expect(searchSection.textContent).not.toContain('训练');
     expect(searchSection.textContent).not.toContain('问答');
+  });
+
+  it('平台端新增向量索引和语义检索区域，使用 mock embedding 引用片段', async () => {
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    expect(await screen.findByRole('heading', { name: '生成向量索引' })).toBeInTheDocument();
+    const indexSection = screen.getByLabelText('平台端知识向量索引');
+    fireEvent.click(within(indexSection).getByRole('button', { name: '生成向量索引' }));
+
+    expect(await screen.findByText('已生成 1 个 mock embedding 索引')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/v1/open-platform/knowledge-management/embeddings',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('tenant-xinglan'),
+        }),
+      ),
+    );
+
+    const vectorSection = screen.getByLabelText('平台端语义检索');
+    fireEvent.change(within(vectorSection).getByLabelText('输入语义检索内容'), {
+      target: { value: '冷敷护理' },
+    });
+    fireEvent.click(within(vectorSection).getByRole('button', { name: '语义检索' }));
+
+    expect(await screen.findByText('平台端语义相似引用片段')).toBeInTheDocument();
+    expect(screen.getByText('mock embedding 相似度 0.877')).toBeInTheDocument();
+    expect(screen.getByText('相似度 0.877')).toBeInTheDocument();
+    expect(vectorSection.textContent).not.toContain('OCR');
+    expect(vectorSection.textContent).not.toContain('训练');
+    expect(vectorSection.textContent).not.toContain('问答');
+    expect(vectorSection.textContent).not.toContain('第三方 AI');
   });
 
   it('默认展示全部机构，切换机构后过滤文件、分类、问题、知识条目和任务', async () => {

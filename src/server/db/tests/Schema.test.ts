@@ -1543,4 +1543,57 @@ describe('数据库结构', () => {
       /embedding_vector|embedding_provider|ocr|ai_provider|question_answer|training_content|token|secret|password|database_url|"sql"|"stack"/i,
     );
   });
+
+  it('定义知识库文件解析 chunk embedding 最小持久化表结构', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const embeddings = schemaModule.knowledgeDocumentFileParseChunkEmbeddings;
+    const migrationSql = readMigrationSql('knowledge_document_file_parse_chunk_embeddings');
+    const journal = JSON.parse(readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8')) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+
+    expect(embeddings).toBeDefined();
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          idx: 14,
+          tag: '0014_v1_knowledge_document_file_parse_chunk_embeddings',
+        }),
+      ]),
+    );
+
+    const embeddingColumns = columnNames(getTableConfig(embeddings as never).columns);
+    expect(embeddingColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'knowledge_document_id',
+        'file_id',
+        'chunk_id',
+        'embedding_provider',
+        'embedding_model',
+        'embedding_dimensions',
+        'embedding_vector_json',
+        'status',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+    expect(migrationSql).toContain(
+      'create table "knowledge_document_file_parse_chunk_embeddings"',
+    );
+    expect(migrationSql).toContain('"embedding_provider" varchar(64) default \'mock_local_embedding\' not null');
+    expect(migrationSql).toContain('"embedding_model" varchar(96) default \'mock-local-embedding-v1\' not null');
+    expect(migrationSql).toContain('"embedding_vector_json" jsonb not null');
+    expect(migrationSql).toContain(
+      'foreign key ("tenant_id","chunk_id") references "public"."knowledge_document_file_parse_chunks"("tenant_id","id")',
+    );
+    expect(migrationSql).toContain(
+      'unique("tenant_id","chunk_id")',
+    );
+    expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
+    expect(migrationSql).not.toMatch(
+      /ocr|ai_provider|openai|question_answer|training_content|storage_key|text_content|raw_content|token|secret|password|database_url|"sql"|"stack"/i,
+    );
+  });
 });
