@@ -14,6 +14,11 @@ import {
   type TenantKnowledgeStats,
   type TopQuestion,
 } from '@/modules/open-platform/mock/platformKnowledge';
+import type {
+  V1KnowledgeBaseRuntimeFoundationReadonlyStatus,
+  V1KnowledgeBaseRuntimeFoundationSourceKind,
+  V1KnowledgeBaseRuntimeFoundationStatus,
+} from '@/modules/knowledge-base/domain/v1-knowledge-base-runtime-foundation-api-contract';
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
@@ -24,7 +29,7 @@ const trainingStatuses = new Set<KnowledgeTrainingStatus>(['trained', 'training'
 export type PlatformKnowledgeOverviewResponse = {
   requestId: string;
   readonly: true;
-  dataSource: 'mock';
+  dataSource: 'mock' | 'repository';
   scope: {
     tenantId: string | null;
     scopeName: string;
@@ -52,6 +57,14 @@ export type PlatformKnowledgeFileDto = Omit<KnowledgeFileItem, 'tenantName' | 'i
 export type PlatformKnowledgeItemDto = Omit<KnowledgeItem, 'tenantName' | 'summaryPreview'> & {
   tenantName: string;
   descriptionPreview: string;
+  institutionId?: string;
+  workspaceId?: string;
+  version?: string;
+  sourceKind?: V1KnowledgeBaseRuntimeFoundationSourceKind;
+  status?: V1KnowledgeBaseRuntimeFoundationStatus;
+  readonlyStatus?: V1KnowledgeBaseRuntimeFoundationReadonlyStatus;
+  visibleInstitutionIds?: string[];
+  createdAt?: string;
 };
 
 export type PlatformKnowledgeTopQuestionDto = Omit<TopQuestion, 'tenantName'> & {
@@ -81,8 +94,10 @@ export type PlatformKnowledgeFilesParams = {
 
 export type PlatformKnowledgeItemsParams = {
   tenantId?: string | null;
+  institutionId?: string | null;
   keyword?: string | null;
   category?: string | null;
+  status?: string | null;
   trainingStatus?: string | null;
   page?: string | number | null;
   pageSize?: string | number | null;
@@ -91,7 +106,7 @@ export type PlatformKnowledgeItemsParams = {
 export type PlatformKnowledgeListResponse<TRecord> = {
   requestId: string;
   readonly: true;
-  dataSource: 'mock';
+  dataSource: 'mock' | 'repository';
   records: TRecord[];
   pageInfo: PlatformKnowledgePageInfo;
   emptyState: {

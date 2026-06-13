@@ -607,6 +607,37 @@ export const knowledgeIndexJobs = pgTable(
   }),
 );
 
+export const platformKnowledgeInstitutionVisibility = pgTable(
+  'platform_knowledge_institution_visibility',
+  {
+    id: varchar('id', { length: 96 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    knowledgeDocumentId: varchar('knowledge_document_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantDocumentInstitutionUnique: unique(
+      'platform_kb_visibility_tenant_document_institution_unique',
+    ).on(table.tenantId, table.knowledgeDocumentId, table.institutionId),
+    documentFk: foreignKey({
+      name: 'platform_kb_visibility_tenant_document_fk',
+      columns: [table.tenantId, table.knowledgeDocumentId],
+      foreignColumns: [knowledgeDocuments.tenantId, knowledgeDocuments.id],
+    }),
+    tenantDocumentIdx: index('platform_kb_visibility_tenant_document_idx').on(
+      table.tenantId,
+      table.knowledgeDocumentId,
+    ),
+    tenantInstitutionIdx: index('platform_kb_visibility_tenant_institution_idx').on(
+      table.tenantId,
+      table.institutionId,
+    ),
+  }),
+);
+
 export const knowledgeChunkEmbeddings = pgTable(
   'knowledge_chunk_embeddings',
   {

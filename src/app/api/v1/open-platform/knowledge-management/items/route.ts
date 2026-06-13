@@ -1,28 +1,60 @@
 import { NextResponse } from 'next/server';
+import { createDatabaseUrlErrorMessage, getDatabase } from '@/server/db/client';
+import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
+import { listPlatformKnowledgeItemsService } from '@/modules/open-platform/server/platform-knowledge-management-service';
 import {
   buildReadonlyApiError,
   getPlatformKnowledgeItemsResponse,
 } from '@/modules/open-platform/server/platformKnowledgeManagementApiContract';
 
-export function GET(request: Request) {
+export async function GET(request: Request) {
+  const params = new URL(request.url).searchParams;
+
   try {
-    const params = new URL(request.url).searchParams;
+    const tenantId = params.get('tenantId');
+
+    if (!tenantId?.trim()) {
+      return NextResponse.json(
+        getMockItemsResponse(params),
+        { status: 200 },
+      );
+    }
 
     return NextResponse.json(
-      getPlatformKnowledgeItemsResponse({
-        tenantId: params.get('tenantId'),
-        keyword: params.get('keyword'),
-        category: params.get('category'),
-        trainingStatus: params.get('trainingStatus'),
-        page: params.get('page'),
-        pageSize: params.get('pageSize'),
+      await listPlatformKnowledgeItemsService({
+        repository: createPlatformKnowledgeManagementRepository(getDatabase()),
+        params: {
+          tenantId,
+          institutionId: params.get('institutionId'),
+          status: params.get('status'),
+          category: params.get('category'),
+          trainingStatus: params.get('trainingStatus'),
+          page: params.get('page'),
+          pageSize: params.get('pageSize'),
+          keyword: params.get('keyword'),
+        },
       }),
       { status: 200 },
     );
   } catch (error) {
+    if (error instanceof Error && error.message === createDatabaseUrlErrorMessage()) {
+      return NextResponse.json(getMockItemsResponse(params), { status: 200 });
+    }
+
     return NextResponse.json(
       buildReadonlyApiError(error instanceof Error ? error.message : '知识库条目查询参数不正确'),
       { status: 400 },
     );
   }
+}
+
+function getMockItemsResponse(params: URLSearchParams) {
+  return getPlatformKnowledgeItemsResponse({
+    tenantId: params.get('tenantId'),
+    keyword: params.get('keyword'),
+    category: params.get('category'),
+    trainingStatus: params.get('trainingStatus'),
+    page: params.get('page'),
+    pageSize: params.get('pageSize'),
+  });
 }
