@@ -49,6 +49,7 @@ export type AccessContext = {
   role: AccessRole;
   scope: AccessScope;
   tenantId: string | null;
+  institutionId?: string | null;
   source: 'demo_session' | 'server_session' | 'trusted_gateway';
 };
 

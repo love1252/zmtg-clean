@@ -21,6 +21,7 @@ import { AppointmentCenterShell } from '@/modules/institution/components/Appoint
 import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
 import { HisConnectionReadOnlyPanel } from '@/modules/institution/components/HisConnectionReadOnlyPanel';
 import { InstitutionAuditEventsShell } from '@/modules/institution/components/InstitutionAuditEventsShell';
+import { InstitutionKnowledgeReadonlyShell } from '@/modules/institution/components/InstitutionKnowledgeReadonlyShell';
 import {
   InstitutionPageState,
   getInstitutionPageStateFromClientError,
@@ -249,6 +250,7 @@ const realInstitutionViews = [
   'treatmentSummaries',
   'audit',
   'hisConnections',
+  'knowledge',
 ] as const satisfies readonly InstitutionViewId[];
 
 function isRealInstitutionView(viewId: InstitutionViewId) {
@@ -618,6 +620,8 @@ export function InstitutionWorkspace() {
               <InstitutionAuditEventsShell />
             ) : activeView === 'hisConnections' ? (
               <HisConnectionReadOnlyPanel />
+            ) : activeView === 'knowledge' ? (
+              <InstitutionKnowledgeReadonlyShell />
             ) : (
               <PlaceholderInstitutionView label={activeNavItem.label} />
             )}
@@ -2084,9 +2088,9 @@ function PlaceholderInstitutionView({ label }: { label: string }) {
         <div className="space-y-2 text-sm leading-6 text-slate-500">
           <p>
             本次主线：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志、HIS
-            连接配置。
+            连接配置、知识库只读列表。
           </p>
-          <p>后续：客服工作台、知识库、数据分析。</p>
+          <p>后续：客服工作台、数据分析。</p>
         </div>
       }
       className="items-start text-left"

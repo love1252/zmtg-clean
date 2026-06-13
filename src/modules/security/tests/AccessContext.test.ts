@@ -23,6 +23,7 @@ describe('访问上下文', () => {
         name: '系统管理员',
         role: 'tenant_admin',
         tenantId: 'demo-tenant-001',
+        institutionId: 'demo-inst-a',
       },
       expiresAt: Date.now() + 60_000,
     });
@@ -32,6 +33,29 @@ describe('访问上下文', () => {
       role: 'tenant_admin',
       scope: 'tenant',
       tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-a',
+      source: 'demo_session',
+    });
+  });
+
+  it('租户会话缺少机构编号时不自动补默认机构', () => {
+    const session = encodeDemoSession({
+      user: {
+        id: 'demo-user-admin',
+        username: 'admin',
+        name: '系统管理员',
+        role: 'tenant_admin',
+        tenantId: 'demo-tenant-001',
+      },
+      expiresAt: Date.now() + 60_000,
+    });
+
+    expect(getDemoAccessContextFromRequest(requestWithSession(session))).toEqual({
+      userId: 'demo-user-admin',
+      role: 'tenant_admin',
+      scope: 'tenant',
+      tenantId: 'demo-tenant-001',
+      institutionId: null,
       source: 'demo_session',
     });
   });
@@ -53,6 +77,7 @@ describe('访问上下文', () => {
       role: 'platform_admin',
       scope: 'platform',
       tenantId: null,
+      institutionId: null,
       source: 'demo_session',
     });
   });
@@ -74,6 +99,7 @@ describe('访问上下文', () => {
       role: 'security_auditor',
       scope: 'platform',
       tenantId: null,
+      institutionId: null,
       source: 'demo_session',
     });
   });

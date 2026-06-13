@@ -26,6 +26,7 @@ const demoUsers: Array<DemoSessionUser & { password: string; scope: 'institution
     name: '系统管理员',
     role: 'tenant_admin',
     tenantId: 'demo-tenant-001',
+    institutionId: 'demo-inst-a',
     scope: 'institution',
   },
   {
@@ -60,6 +61,7 @@ export function authenticateDemoUser(input: LoginInput): DemoSessionUser | null 
     name: matched.name,
     role: matched.role,
     tenantId: matched.tenantId,
+    institutionId: matched.institutionId ?? null,
   };
 }
 

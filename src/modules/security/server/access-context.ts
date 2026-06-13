@@ -34,6 +34,7 @@ export function getDemoAccessContextFromRequest(
     role: session.user.role,
     scope,
     tenantId: session.user.tenantId,
+    institutionId: scope === 'tenant' ? session.user.institutionId ?? null : null,
     source: 'demo_session',
   };
 }
