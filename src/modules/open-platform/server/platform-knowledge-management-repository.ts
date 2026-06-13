@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   knowledgeChunks,
+  knowledgeDocumentFileParseChunkEmbeddings,
   knowledgeDocumentFileParseChunks,
   knowledgeDocumentFileParses,
   knowledgeDocumentFiles,
@@ -13,6 +14,12 @@ import {
   tenants,
 } from '@/server/db/schema';
 import type { PlatformKnowledgeFileRepositoryRecord } from './platform-knowledge-file-management-service';
+import type {
+  PlatformKnowledgeChunkEmbeddingSaveRecord,
+  PlatformKnowledgeChunkEmbeddingSummary,
+  PlatformKnowledgeEmbeddingCandidateRecord,
+  PlatformKnowledgeVectorSearchCandidateRecord,
+} from './platform-knowledge-embedding-vector-search-service';
 import type { KnowledgeChunkSearchRepositoryRecord } from './platform-knowledge-keyword-search-service';
 import type {
   PlatformKnowledgeFileParseChunkRecord,
@@ -32,6 +39,8 @@ type KnowledgeVisibilityRow = typeof platformKnowledgeInstitutionVisibility.$inf
 type KnowledgeDocumentFileRow = typeof knowledgeDocumentFiles.$inferSelect;
 type KnowledgeDocumentFileParseRow = typeof knowledgeDocumentFileParses.$inferSelect;
 type KnowledgeDocumentFileParseChunkRow = typeof knowledgeDocumentFileParseChunks.$inferSelect;
+type KnowledgeDocumentFileParseChunkEmbeddingRow =
+  typeof knowledgeDocumentFileParseChunkEmbeddings.$inferSelect;
 
 export type PlatformKnowledgeRepositoryRecord = {
   knowledgeId: string;
@@ -214,6 +223,49 @@ function mapFileParseChunkSearchRecord(input: {
   };
 }
 
+function mapFileParseChunkEmbeddingCandidate(input: {
+  chunk: KnowledgeDocumentFileParseChunkRow;
+  parse: KnowledgeDocumentFileParseRow | undefined;
+  file: KnowledgeDocumentFileRow | undefined;
+  document: KnowledgeDocumentRow | undefined;
+}): PlatformKnowledgeEmbeddingCandidateRecord | null {
+  const searchRecord = mapFileParseChunkSearchRecord(input);
+  return searchRecord;
+}
+
+function mapChunkEmbeddingSummary(
+  row: KnowledgeDocumentFileParseChunkEmbeddingRow,
+): PlatformKnowledgeChunkEmbeddingSummary {
+  return {
+    embeddingId: row.id,
+    tenantId: row.tenantId,
+    knowledgeId: row.knowledgeDocumentId,
+    fileId: row.fileId,
+    chunkId: row.chunkId,
+    embeddingProvider: row.embeddingProvider,
+    embeddingModel: row.embeddingModel,
+    embeddingDimensions: row.embeddingDimensions,
+    status: row.status === 'ready' ? 'ready' : 'ready',
+  };
+}
+
+function mapVectorSearchCandidate(input: {
+  candidate: PlatformKnowledgeEmbeddingCandidateRecord | undefined;
+  embedding: KnowledgeDocumentFileParseChunkEmbeddingRow;
+}): PlatformKnowledgeVectorSearchCandidateRecord | null {
+  if (!input.candidate) return null;
+
+  return {
+    ...input.candidate,
+    embeddingId: input.embedding.id,
+    embeddingProvider: input.embedding.embeddingProvider,
+    embeddingModel: input.embedding.embeddingModel,
+    embeddingDimensions: input.embedding.embeddingDimensions,
+    embeddingVectorJson: input.embedding.embeddingVectorJson,
+    embeddingStatus: input.embedding.status === 'ready' ? 'ready' : 'failed',
+  };
+}
+
 function mapFileRow(
   row: KnowledgeDocumentFileRow,
   parse?: KnowledgeDocumentFileParseRow,
@@ -242,6 +294,62 @@ function mapFileRow(
 }
 
 export function createPlatformKnowledgeManagementRepository(database: TenantDatabase) {
+  async function listEmbeddingCandidates(input: {
+    tenantId: string;
+    knowledgeId?: string;
+    fileId?: string;
+  }) {
+    const chunkConditions = [
+      eq(knowledgeDocumentFileParseChunks.tenantId, input.tenantId),
+    ];
+    if (input.knowledgeId) {
+      chunkConditions.push(
+        eq(knowledgeDocumentFileParseChunks.knowledgeDocumentId, input.knowledgeId),
+      );
+    }
+    if (input.fileId) {
+      chunkConditions.push(eq(knowledgeDocumentFileParseChunks.fileId, input.fileId));
+    }
+
+    const chunks = await database
+      .select()
+      .from(knowledgeDocumentFileParseChunks)
+      .where(and(...chunkConditions))
+      .orderBy(
+        asc(knowledgeDocumentFileParseChunks.knowledgeDocumentId),
+        asc(knowledgeDocumentFileParseChunks.fileId),
+        asc(knowledgeDocumentFileParseChunks.chunkIndex),
+      );
+    if (chunks.length === 0) return [];
+
+    const documents = await database
+      .select()
+      .from(knowledgeDocuments)
+      .where(eq(knowledgeDocuments.tenantId, input.tenantId));
+    const files = await database
+      .select()
+      .from(knowledgeDocumentFiles)
+      .where(eq(knowledgeDocumentFiles.tenantId, input.tenantId));
+    const parses = await database
+      .select()
+      .from(knowledgeDocumentFileParses)
+      .where(eq(knowledgeDocumentFileParses.tenantId, input.tenantId));
+    const documentById = new Map(documents.map((document) => [document.id, document]));
+    const fileById = new Map(files.map((file) => [file.id, file]));
+    const parseByFileId = new Map(parses.map((parse) => [parse.fileId, parse]));
+
+    return chunks.flatMap((chunk) => {
+      const record = mapFileParseChunkEmbeddingCandidate({
+        chunk,
+        parse: parseByFileId.get(chunk.fileId),
+        file: fileById.get(chunk.fileId),
+        document: documentById.get(chunk.knowledgeDocumentId),
+      });
+
+      return record ? [record] : [];
+    });
+  }
+
   async function listVisibleInstitutionIds(input: { tenantId: string; knowledgeId: string }) {
     const rows = await database
       .select()
@@ -574,6 +682,92 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
           parse: parseByFileId.get(chunk.fileId),
           file: fileById.get(chunk.fileId),
           document: documentById.get(chunk.knowledgeDocumentId),
+        });
+
+        return record ? [record] : [];
+      });
+    },
+
+    async listKnowledgeEmbeddingCandidates(input: {
+      tenantId: string;
+      knowledgeId?: string;
+      fileId?: string;
+    }): Promise<PlatformKnowledgeEmbeddingCandidateRecord[]> {
+      return listEmbeddingCandidates(input);
+    },
+
+    async saveKnowledgeChunkEmbeddings(
+      records: PlatformKnowledgeChunkEmbeddingSaveRecord[],
+    ): Promise<PlatformKnowledgeChunkEmbeddingSummary[]> {
+      if (records.length === 0) return [];
+
+      const inserted = await database
+        .insert(knowledgeDocumentFileParseChunkEmbeddings)
+        .values(records.map((record) => ({
+          id: `kb-file-embedding-${createHash('sha256')
+            .update(`${record.tenantId}:${record.chunkId}`)
+            .digest('hex')
+            .slice(0, 40)}`,
+          tenantId: record.tenantId,
+          knowledgeDocumentId: record.knowledgeId,
+          fileId: record.fileId,
+          chunkId: record.chunkId,
+          embeddingProvider: record.embeddingProvider,
+          embeddingModel: record.embeddingModel,
+          embeddingDimensions: record.embeddingDimensions,
+          embeddingVectorJson: record.embeddingVectorJson,
+          status: record.status,
+        })))
+        .onConflictDoUpdate({
+          target: [
+            knowledgeDocumentFileParseChunkEmbeddings.tenantId,
+            knowledgeDocumentFileParseChunkEmbeddings.chunkId,
+          ],
+          set: {
+            embeddingProvider: sql`excluded.embedding_provider`,
+            embeddingModel: sql`excluded.embedding_model`,
+            embeddingDimensions: sql`excluded.embedding_dimensions`,
+            embeddingVectorJson: sql`excluded.embedding_vector_json`,
+            status: sql`excluded.status`,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+
+      return inserted.map(mapChunkEmbeddingSummary);
+    },
+
+    async listKnowledgeVectorSearchCandidates(input: {
+      tenantId: string;
+      knowledgeId?: string;
+      fileId?: string;
+    }): Promise<PlatformKnowledgeVectorSearchCandidateRecord[]> {
+      const candidateRecords = await listEmbeddingCandidates(input);
+      if (candidateRecords.length === 0) return [];
+
+      const embeddingConditions = [
+        eq(knowledgeDocumentFileParseChunkEmbeddings.tenantId, input.tenantId),
+      ];
+      if (input.knowledgeId) {
+        embeddingConditions.push(
+          eq(knowledgeDocumentFileParseChunkEmbeddings.knowledgeDocumentId, input.knowledgeId),
+        );
+      }
+      if (input.fileId) {
+        embeddingConditions.push(eq(knowledgeDocumentFileParseChunkEmbeddings.fileId, input.fileId));
+      }
+      const embeddings = await database
+        .select()
+        .from(knowledgeDocumentFileParseChunkEmbeddings)
+        .where(and(...embeddingConditions));
+      const candidateByChunkId = new Map(
+        candidateRecords.map((candidate) => [candidate.chunkId, candidate]),
+      );
+
+      return embeddings.flatMap((embedding) => {
+        const record = mapVectorSearchCandidate({
+          candidate: candidateByChunkId.get(embedding.chunkId),
+          embedding,
         });
 
         return record ? [record] : [];

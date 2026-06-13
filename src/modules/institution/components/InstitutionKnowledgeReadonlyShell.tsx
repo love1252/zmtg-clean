@@ -42,6 +42,9 @@ type InstitutionKnowledgeSearchResultRecord = {
   textPreview: string;
   matchReason: string;
 };
+type InstitutionKnowledgeVectorSearchResultRecord = InstitutionKnowledgeSearchResultRecord & {
+  score: number;
+};
 
 const statusLabels: Record<InstitutionKnowledgeItemDto['status'], string> = {
   ready: '可用',
@@ -106,6 +109,10 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [chunkSearchResults, setChunkSearchResults] = useState<InstitutionKnowledgeSearchResultRecord[]>([]);
   const [chunkSearchMessage, setChunkSearchMessage] = useState('请输入关键词检索已解析片段');
   const [isChunkSearching, setIsChunkSearching] = useState(false);
+  const [vectorSearchInput, setVectorSearchInput] = useState('');
+  const [vectorSearchResults, setVectorSearchResults] = useState<InstitutionKnowledgeVectorSearchResultRecord[]>([]);
+  const [vectorSearchMessage, setVectorSearchMessage] = useState('请输入内容进行语义检索');
+  const [isVectorSearching, setIsVectorSearching] = useState(false);
   const [pageInfo, setPageInfo] = useState<InstitutionKnowledgeListResponse['pageInfo']>({
     page: 1,
     pageSize: 10,
@@ -264,6 +271,40 @@ export function InstitutionKnowledgeReadonlyShell() {
     }
   }
 
+  async function searchVectorChunks(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = vectorSearchInput.trim();
+    if (!query) {
+      setVectorSearchResults([]);
+      setVectorSearchMessage('请输入语义检索内容');
+      return;
+    }
+
+    setIsVectorSearching(true);
+    setVectorSearchMessage('正在检索相似片段...');
+    try {
+      const params = new URLSearchParams({ query });
+      const response = await fetch(`/api/institution/knowledge-management/vector-search?${params.toString()}`, {
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setVectorSearchResults([]);
+        setVectorSearchMessage('知识库向量检索暂时不可用');
+        return;
+      }
+
+      const records = payload.records as InstitutionKnowledgeVectorSearchResultRecord[];
+      setVectorSearchResults(records);
+      setVectorSearchMessage(records.length > 0 ? `已命中 ${records.length} 个相似片段` : '暂无相似片段');
+    } catch {
+      setVectorSearchResults([]);
+      setVectorSearchMessage('知识库向量检索暂时不可用');
+    } finally {
+      setIsVectorSearching(false);
+    }
+  }
+
   return (
     <section
       aria-label="机构知识库只读列表"
@@ -373,6 +414,61 @@ export function InstitutionKnowledgeReadonlyShell() {
                 <article key={result.chunkId} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
                   <div className="text-xs font-semibold text-slate-500">
                     {result.knowledgeTitle} · {result.fileName} · 片段 {result.chunkIndex + 1}
+                  </div>
+                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{result.textPreview}</p>
+                  <div className="mt-2 text-xs font-semibold text-cyan-700">{result.matchReason}</div>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {status === 'success' ? (
+        <section
+          aria-label="机构端语义检索"
+          className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">语义检索</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">按 mock embedding 相似度查看本机构可见引用片段。</p>
+            </div>
+            <form onSubmit={searchVectorChunks} className="flex w-full flex-col gap-2 sm:flex-row lg:w-[460px]">
+              <label className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  aria-label="输入语义检索内容"
+                  value={vectorSearchInput}
+                  onChange={(event) => setVectorSearchInput(event.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-cyan-400"
+                  placeholder="输入检索内容"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={isVectorSearching}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isVectorSearching ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                语义检索
+              </button>
+            </form>
+          </div>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+            {vectorSearchMessage}
+          </div>
+          <div className="mt-3 grid gap-3 xl:grid-cols-2">
+            {vectorSearchResults.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
+                暂无相似片段
+              </div>
+            ) : (
+              vectorSearchResults.map((result) => (
+                <article key={result.chunkId} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
+                    <span>{result.knowledgeTitle} · {result.fileName} · 片段 {result.chunkIndex + 1}</span>
+                    <span className="text-cyan-700">相似度 {result.score.toFixed(3)}</span>
                   </div>
                   <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{result.textPreview}</p>
                   <div className="mt-2 text-xs font-semibold text-cyan-700">{result.matchReason}</div>

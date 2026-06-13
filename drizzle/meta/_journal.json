@@ -99,6 +99,13 @@
       "when": 1781361000000,
       "tag": "0013_v1_knowledge_document_file_parsing",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1781365200000,
+      "tag": "0014_v1_knowledge_document_file_parse_chunk_embeddings",
+      "breakpoints": true
     }
   ]
 }
