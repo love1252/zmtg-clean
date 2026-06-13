@@ -174,7 +174,7 @@ describe('平台端租户管理面板', () => {
     expect(screen.getByText('平台侧查看机构、套餐和配额边界')).toBeInTheDocument();
     expect(screen.getByText('当前展示为受控 demo 租户，不代表正式计费后台。')).toBeInTheDocument();
     expect(screen.getByText('正在加载租户管理数据...')).toBeInTheDocument();
-    expect(await screen.findByText('智美天工演示机构')).toBeInTheDocument();
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
     expect(screen.getByText('租户状态：active')).toBeInTheDocument();
     expect(screen.getByText('租户 ID：demo-tenant-001')).toBeInTheDocument();
     expect(screen.getByText('套餐名称：成长版')).toBeInTheDocument();
@@ -267,7 +267,7 @@ describe('平台端租户管理面板', () => {
     expect(within(section).getByText('配额风险项')).toBeInTheDocument();
     expect(within(section).getAllByText('配置缺失租户').length).toBeGreaterThan(0);
     expect(within(section).getByText('近期 quota denied')).toBeInTheDocument();
-    expect(within(section).getByText('配额风险机构')).toBeInTheDocument();
+    expect(within(section).getAllByText('配额风险机构').length).toBeGreaterThan(0);
     expect(within(section).getByText(/客户.*88 \/ 100/)).toBeInTheDocument();
     expect(within(section).getByText('配置缺失机构')).toBeInTheDocument();
     expect(within(section).getByText('缺少 active plan')).toBeInTheDocument();
@@ -374,7 +374,7 @@ describe('平台端租户管理面板', () => {
 
     const { container } = render(<OpenPlatformTenantManagementPanel />);
 
-    expect(await screen.findByText('智美天工演示机构')).toBeInTheDocument();
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
     expect(screen.getByText('0 / 0')).toBeInTheDocument();
     expect(screen.getByText('当前未启用 AI 调用配额')).toBeInTheDocument();
     expectNoPlatformDemoMisleadingClaims(container);
