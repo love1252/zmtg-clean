@@ -15,6 +15,7 @@ import {
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { OpenPlatformAuditEventsPanel } from '@/modules/open-platform/components/OpenPlatformAuditEventsPanel';
 import { OpenPlatformGovernancePanel } from '@/modules/open-platform/components/OpenPlatformGovernancePanel';
+import { OpenPlatformKnowledgeManagementPanel } from '@/modules/open-platform/components/OpenPlatformKnowledgeManagementPanel';
 import { OpenPlatformTenantManagementPanel } from '@/modules/open-platform/components/OpenPlatformTenantManagementPanel';
 import {
   platformCapabilityCards,
@@ -141,6 +142,8 @@ export function PlatformConsole() {
           <div className="mx-auto w-full max-w-[1740px] space-y-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
             {activeNavLabel === '租户管理' ? (
               <OpenPlatformTenantManagementPanel />
+            ) : activeNavLabel === '知识库管理' ? (
+              <OpenPlatformKnowledgeManagementPanel />
             ) : activeNavLabel === '权限与审计' ? (
               <>
                 <OpenPlatformAuditEventsPanel />

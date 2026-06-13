@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
+  BookOpen,
   Boxes,
   Building2,
   CalendarClock,
@@ -32,6 +33,7 @@ export const platformNavItems: PlatformNavItem[] = [
   { label: '租户管理', icon: Building2 },
   { label: '产品与套餐', icon: Boxes },
   { label: 'AI 配额边界', icon: Database },
+  { label: '知识库管理', icon: BookOpen },
   { label: '开放连接路线', icon: Plug },
   { label: '权限与审计', icon: Shield },
   { label: '商业化边界', icon: Activity },
