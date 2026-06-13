@@ -57,6 +57,18 @@ type ManagedKnowledgeFileRecord = {
   archivedAt: string | null;
   fileType: string;
   sizeLabel: string;
+  parseStatus: 'pending' | 'processing' | 'succeeded' | 'failed';
+  failureReasonCode: string | null;
+  safeFailureMessage: string | null;
+  textLength: number;
+  chunkCount: number;
+  parserVersion: string | null;
+};
+type ManagedKnowledgeChunkRecord = {
+  chunkId: string;
+  chunkIndex: number;
+  textPreview: string;
+  charCount: number;
 };
 
 const fileStatusLabels: Record<KnowledgeFileParseStatus, string> = {
@@ -74,10 +86,10 @@ const fileStatusClasses: Record<KnowledgeFileParseStatus, string> = {
 };
 
 const trainingStatusLabels: Record<KnowledgeTrainingStatus, string> = {
-  trained: '已训练',
-  training: '训练中',
-  pending: '待训练',
-  failed: '训练异常',
+  trained: '已完成',
+  training: '处理中',
+  pending: '待处理',
+  failed: '处理异常',
 };
 
 const trainingStatusClasses: Record<KnowledgeTrainingStatus, string> = {
@@ -99,6 +111,20 @@ const importJobStatusClasses: Record<ImportJobStatus, string> = {
   running: 'border-cyan-300/20 bg-cyan-300/[0.10] text-cyan-100',
   failed: 'border-rose-300/20 bg-rose-300/[0.10] text-rose-100',
   partial_failed: 'border-amber-300/20 bg-amber-300/[0.10] text-amber-100',
+};
+
+const managedParseStatusLabels: Record<ManagedKnowledgeFileRecord['parseStatus'], string> = {
+  pending: '待解析',
+  processing: '解析中',
+  succeeded: '解析成功',
+  failed: '解析失败',
+};
+
+const managedParseStatusClasses: Record<ManagedKnowledgeFileRecord['parseStatus'], string> = {
+  pending: 'border-amber-300/20 bg-amber-300/[0.10] text-amber-100',
+  processing: 'border-cyan-300/20 bg-cyan-300/[0.10] text-cyan-100',
+  succeeded: 'border-emerald-300/20 bg-emerald-300/[0.10] text-emerald-100',
+  failed: 'border-rose-300/20 bg-rose-300/[0.10] text-rose-100',
 };
 
 function formatPercent(value: number) {
@@ -217,7 +243,7 @@ function KnowledgeTable({ items }: { items: KnowledgeItemRecord[] }) {
             <th className="border-b border-white/10 px-4 py-3">摘要预览</th>
             <th className="border-b border-white/10 px-4 py-3">机构</th>
             <th className="border-b border-white/10 px-4 py-3">分类 / 文件夹</th>
-            <th className="border-b border-white/10 px-4 py-3">训练状态</th>
+            <th className="border-b border-white/10 px-4 py-3">解析状态</th>
             <th className="border-b border-white/10 px-4 py-3">命中</th>
             <th className="border-b border-white/10 px-4 py-3">更新时间</th>
           </tr>
@@ -263,6 +289,14 @@ function fileArchivePath(input: { knowledgeId: string; tenantId: string; fileId:
   return `/api/v1/open-platform/knowledge-management/items/${encodeURIComponent(input.knowledgeId)}/files/${encodeURIComponent(input.fileId)}?tenantId=${encodeURIComponent(input.tenantId)}`;
 }
 
+function fileParsePath(input: { knowledgeId: string; tenantId: string; fileId: string }) {
+  return `/api/v1/open-platform/knowledge-management/items/${encodeURIComponent(input.knowledgeId)}/files/${encodeURIComponent(input.fileId)}/parse?tenantId=${encodeURIComponent(input.tenantId)}`;
+}
+
+function fileParseChunksPath(input: { knowledgeId: string; tenantId: string; fileId: string }) {
+  return `/api/v1/open-platform/knowledge-management/items/${encodeURIComponent(input.knowledgeId)}/files/${encodeURIComponent(input.fileId)}/parse/chunks?tenantId=${encodeURIComponent(input.tenantId)}`;
+}
+
 export function OpenPlatformKnowledgeManagementPanel() {
   const [selectedTenantId, setSelectedTenantId] = useState(ALL_TENANTS);
   const [fileSearch, setFileSearch] = useState('');
@@ -275,6 +309,8 @@ export function OpenPlatformKnowledgeManagementPanel() {
   const [itemsResponse, setItemsResponse] = useState<OpenPlatformKnowledgeManagementItems | null>(null);
   const [managedKnowledgeId, setManagedKnowledgeId] = useState('');
   const [managedFiles, setManagedFiles] = useState<ManagedKnowledgeFileRecord[]>([]);
+  const [managedChunksByFileId, setManagedChunksByFileId] = useState<Record<string, ManagedKnowledgeChunkRecord[]>>({});
+  const [expandedParseFileId, setExpandedParseFileId] = useState<string | null>(null);
   const [managedFile, setManagedFile] = useState<File | null>(null);
   const [fileActionMessage, setFileActionMessage] = useState<string | null>(null);
   const [isFileActionLoading, setIsFileActionLoading] = useState(false);
@@ -546,11 +582,61 @@ export function OpenPlatformKnowledgeManagementPanel() {
     }
   }
 
+  async function handleParseManagedFile(file: ManagedKnowledgeFileRecord) {
+    if (!managedKnowledge?.tenantId || !managedKnowledge.knowledgeId) return;
+
+    setIsFileActionLoading(true);
+    setFileActionMessage(null);
+    try {
+      const response = await fetch(fileParsePath({
+        knowledgeId: managedKnowledge.knowledgeId,
+        tenantId: managedKnowledge.tenantId,
+        fileId: file.fileId,
+      }), { method: 'POST' });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) {
+        setFileActionMessage('文件解析暂时无法处理');
+        return;
+      }
+      setFileActionMessage(payload.status === 'failed' ? '文件解析失败：当前文件类型暂未接入解析器' : '文件解析已完成');
+      await reloadManagedFiles();
+    } catch {
+      setFileActionMessage('文件解析暂时无法处理');
+    } finally {
+      setIsFileActionLoading(false);
+    }
+  }
+
+  async function handleLoadManagedChunks(file: ManagedKnowledgeFileRecord) {
+    if (!managedKnowledge?.tenantId || !managedKnowledge.knowledgeId) return;
+
+    setExpandedParseFileId(file.fileId);
+    setFileActionMessage(null);
+    try {
+      const response = await fetch(fileParseChunksPath({
+        knowledgeId: managedKnowledge.knowledgeId,
+        tenantId: managedKnowledge.tenantId,
+        fileId: file.fileId,
+      }), { method: 'GET' });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setFileActionMessage('解析片段暂时无法加载');
+        return;
+      }
+      setManagedChunksByFileId((current) => ({
+        ...current,
+        [file.fileId]: payload.records as ManagedKnowledgeChunkRecord[],
+      }));
+    } catch {
+      setFileActionMessage('解析片段暂时无法加载');
+    }
+  }
+
   const metricCards = [
     { label: '接入机构', value: formatNumber(view?.allTotals.tenantCount ?? 0), helper: `${formatNumber(view?.allTotals.sourceFileCount ?? 0)} 个源文件`, icon: Building2, tone: 'bg-blue-300/[0.12] text-blue-200' },
-    { label: '知识条目', value: formatNumber(view?.allTotals.knowledgeCount ?? 0), helper: `${formatNumber(view?.allTotals.chunkCount ?? 0)} 个训练片段`, icon: Database, tone: 'bg-cyan-300/[0.12] text-cyan-200' },
+    { label: '知识条目', value: formatNumber(view?.allTotals.knowledgeCount ?? 0), helper: `${formatNumber(view?.allTotals.chunkCount ?? 0)} 个解析片段`, icon: Database, tone: 'bg-cyan-300/[0.12] text-cyan-200' },
     { label: '累计命中', value: formatNumber(view?.allTotals.hitCount ?? 0), helper: `平均 ${view?.allTotals.averageHitCount ?? 0} 次/条`, icon: TrendingUp, tone: 'bg-emerald-300/[0.12] text-emerald-200' },
-    { label: '训练覆盖', value: formatPercent(view?.allTotals.trainingCoverageRate ?? 0), helper: `${view?.allTotals.trainedCount ?? 0} 条已训练`, icon: CheckCircle2, tone: 'bg-violet-300/[0.12] text-violet-200' },
+    { label: '解析覆盖', value: formatPercent(view?.allTotals.trainingCoverageRate ?? 0), helper: `${view?.allTotals.trainedCount ?? 0} 条已完成`, icon: CheckCircle2, tone: 'bg-violet-300/[0.12] text-violet-200' },
     { label: '待优化', value: formatNumber(view?.allTotals.pendingOptimizationCount ?? 0), helper: `${view?.allTotals.failedImportJobCount ?? 0} 个异常任务`, icon: AlertTriangle, tone: 'bg-amber-300/[0.12] text-amber-200' },
   ];
 
@@ -565,7 +651,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
             </div>
             <h1 id="platform-knowledge-heading" className="mt-4 text-3xl font-semibold tracking-normal text-white sm:text-4xl">知识库管理</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400 sm:text-base">
-              查看各机构知识训练、命中表现、导入概况和高频问题。
+              查看各机构知识解析、命中表现、导入概况和高频问题。
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -640,7 +726,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold tracking-normal text-white">机构概况</h2>
-                <p className="mt-1 text-sm text-slate-400">按机构查看知识量、命中和训练覆盖。</p>
+                <p className="mt-1 text-sm text-slate-400">按机构查看知识量、命中和解析覆盖。</p>
               </div>
             </div>
 
@@ -688,7 +774,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
               <StatPill label="知识" value={formatNumber(view.totals.knowledgeCount)} />
               <StatPill label="片段" value={formatNumber(view.totals.chunkCount)} />
               <StatPill label="命中覆盖" value={formatPercent(view.totals.hitCoverageRate)} />
-              <StatPill label="训练覆盖" value={formatPercent(view.totals.trainingCoverageRate)} />
+              <StatPill label="解析覆盖" value={formatPercent(view.totals.trainingCoverageRate)} />
             </div>
           </article>
         </aside>
@@ -862,7 +948,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                             {category.categoryName}
                           </div>
                           <div className="mt-1 text-sm text-slate-400">
-                            {formatNumber(category.knowledgeCount)} 条 · {formatNumber(category.chunkCount)} 个片段 · 训练 {formatPercent(category.trainingCoverageRate)}
+                            {formatNumber(category.knowledgeCount)} 条 · {formatNumber(category.chunkCount)} 个片段 · 解析 {formatPercent(category.trainingCoverageRate)}
                           </div>
                         </div>
                         <Badge className="border-violet-300/20 bg-violet-300/[0.12] text-violet-100">{formatNumber(category.hitCount)} 次命中</Badge>
@@ -1000,9 +1086,17 @@ export function OpenPlatformKnowledgeManagementPanel() {
                             <span>{file.fileType}</span>
                             <span>{file.sizeLabel}</span>
                             <span>{file.status === 'active' ? '可下载' : '已归档'}</span>
+                            <Badge className={managedParseStatusClasses[file.parseStatus]}>
+                              {managedParseStatusLabels[file.parseStatus]} · {file.chunkCount} 片段
+                            </Badge>
                           </div>
+                          {file.safeFailureMessage ? (
+                            <div className="mt-2 rounded-xl border border-rose-300/15 bg-rose-300/[0.08] px-3 py-2 text-xs font-semibold text-rose-100">
+                              {file.safeFailureMessage}
+                            </div>
+                          ) : null}
                         </div>
-                        <div className="flex shrink-0 gap-2">
+                        <div className="flex shrink-0 flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => handleDownloadManagedFile(file)}
@@ -1011,6 +1105,23 @@ export function OpenPlatformKnowledgeManagementPanel() {
                           >
                             <Download className="h-4 w-4" />
                             下载文件
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleParseManagedFile(file)}
+                            disabled={file.status !== 'active' || isFileActionLoading}
+                            className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.10] px-3 text-xs font-semibold text-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <FileText className="h-4 w-4" />
+                            发起解析
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoadManagedChunks(file)}
+                            className="inline-flex h-9 items-center gap-2 rounded-xl border border-blue-300/20 bg-blue-300/[0.10] px-3 text-xs font-semibold text-blue-100"
+                          >
+                            <Layers3 className="h-4 w-4" />
+                            查看片段
                           </button>
                           <button
                             type="button"
@@ -1023,6 +1134,22 @@ export function OpenPlatformKnowledgeManagementPanel() {
                           </button>
                         </div>
                       </div>
+                      {expandedParseFileId === file.fileId ? (
+                        <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                          {(managedChunksByFileId[file.fileId] ?? []).length === 0 ? (
+                            <div className="text-xs font-semibold text-slate-400">暂无解析片段</div>
+                          ) : (
+                            (managedChunksByFileId[file.fileId] ?? []).map((chunk) => (
+                              <div key={chunk.chunkId} className="rounded-lg border border-white/10 bg-[#071322]/72 px-3 py-2">
+                                <div className="text-xs font-semibold text-slate-400">
+                                  片段 {chunk.chunkIndex + 1} · {chunk.charCount} 字
+                                </div>
+                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-300">{chunk.textPreview}</p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -1034,14 +1161,14 @@ export function OpenPlatformKnowledgeManagementPanel() {
             <div className="flex items-center gap-3 border-b border-white/10 p-5">
               <Layers3 className="h-5 w-5 text-violet-200" />
               <div>
-                <h2 className="text-lg font-semibold tracking-normal text-white">导入与训练任务</h2>
-                <p className="mt-1 text-sm text-slate-400">用于平台侧发现批量导入失败、训练异常和任务堆积。</p>
+                <h2 className="text-lg font-semibold tracking-normal text-white">导入与解析任务</h2>
+                <p className="mt-1 text-sm text-slate-400">用于平台侧发现批量导入失败、解析异常和任务堆积。</p>
               </div>
             </div>
             <div className="divide-y divide-white/10">
               {scopedJobs.length === 0 ? (
                 <div className="p-5">
-                  <EmptyState title="暂无任务记录" description="当前机构范围没有导入或训练任务。" />
+                  <EmptyState title="暂无任务记录" description="当前机构范围没有导入或解析任务。" />
                 </div>
               ) : (
                 scopedJobs.map((job) => (

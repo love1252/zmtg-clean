@@ -28,6 +28,24 @@ describe('机构端知识库只读列表 UI', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
+        if (url.includes('/parse/chunks')) {
+          return Response.json({
+            readonly: true,
+            records: [
+              {
+                chunkId: 'institution-chunk-a',
+                tenantId: 'tenant-a',
+                knowledgeId: 'knowledge-ui-a',
+                fileId: 'institution-file-a',
+                chunkIndex: 0,
+                textPreview: '机构端授权可见解析片段',
+                charCount: 12,
+                createdAt: '2026-06-13T08:00:00.000Z',
+                updatedAt: '2026-06-13T08:00:00.000Z',
+              },
+            ],
+          });
+        }
         if (url.includes('/download')) {
           return new Response('file bytes', {
             status: 200,
@@ -55,6 +73,9 @@ describe('机构端知识库只读列表 UI', () => {
               archivedAt: null,
               fileType: 'PDF',
               sizeLabel: '10 B',
+              parseStatus: 'succeeded',
+              safeFailureMessage: null,
+              chunkCount: 1,
             },
           ],
           pageInfo: pageInfo,
@@ -94,6 +115,13 @@ describe('机构端知识库只读列表 UI', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '查看文件' }));
     expect(await screen.findByText('机构文件.pdf')).toBeInTheDocument();
+    expect(screen.getByText('解析成功 · 1 片段')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看解析片段' }));
+    expect(await screen.findByText('机构端授权可见解析片段')).toBeInTheDocument();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/institution/knowledge-management/items/knowledge-ui-a/files/institution-file-a/parse/chunks',
+      expect.objectContaining({ method: 'GET' }),
+    );
     expect(screen.getByRole('button', { name: '下载文件' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '下载文件' }));
     expect(globalThis.fetch).toHaveBeenCalledWith(

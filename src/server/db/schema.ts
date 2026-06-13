@@ -678,6 +678,96 @@ export const knowledgeDocumentFiles = pgTable(
   }),
 );
 
+export const knowledgeDocumentFileParses = pgTable(
+  'knowledge_document_file_parses',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    knowledgeDocumentId: varchar('knowledge_document_id', { length: 64 }).notNull(),
+    fileId: varchar('file_id', { length: 64 }).notNull(),
+    parseStatus: varchar('parse_status', { length: 32 }).notNull().default('pending'),
+    failureReasonCode: varchar('failure_reason_code', { length: 64 }),
+    safeFailureMessage: varchar('safe_failure_message', { length: 240 }),
+    textContent: text('text_content').notNull().default(''),
+    textLength: integer('text_length').notNull().default(0),
+    chunkCount: integer('chunk_count').notNull().default(0),
+    parserVersion: varchar('parser_version', { length: 64 }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('knowledge_file_parses_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    tenantFileUnique: unique('knowledge_file_parses_tenant_file_unique').on(
+      table.tenantId,
+      table.fileId,
+    ),
+    documentFk: foreignKey({
+      name: 'knowledge_file_parses_tenant_document_fk',
+      columns: [table.tenantId, table.knowledgeDocumentId],
+      foreignColumns: [knowledgeDocuments.tenantId, knowledgeDocuments.id],
+    }),
+    fileFk: foreignKey({
+      name: 'knowledge_file_parses_tenant_file_fk',
+      columns: [table.tenantId, table.fileId],
+      foreignColumns: [knowledgeDocumentFiles.tenantId, knowledgeDocumentFiles.id],
+    }),
+    tenantDocumentStatusIdx: index('knowledge_file_parses_tenant_document_status_idx').on(
+      table.tenantId,
+      table.knowledgeDocumentId,
+      table.parseStatus,
+    ),
+    tenantFileIdx: index('knowledge_file_parses_tenant_file_idx').on(
+      table.tenantId,
+      table.fileId,
+    ),
+  }),
+);
+
+export const knowledgeDocumentFileParseChunks = pgTable(
+  'knowledge_document_file_parse_chunks',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    knowledgeDocumentId: varchar('knowledge_document_id', { length: 64 }).notNull(),
+    fileId: varchar('file_id', { length: 64 }).notNull(),
+    chunkIndex: integer('chunk_index').notNull(),
+    textPreview: text('text_preview').notNull(),
+    charCount: integer('char_count').notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('knowledge_file_parse_chunks_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    tenantFileChunkUnique: unique('knowledge_file_parse_chunks_tenant_file_chunk_unique').on(
+      table.tenantId,
+      table.fileId,
+      table.chunkIndex,
+    ),
+    documentFk: foreignKey({
+      name: 'knowledge_file_parse_chunks_tenant_document_fk',
+      columns: [table.tenantId, table.knowledgeDocumentId],
+      foreignColumns: [knowledgeDocuments.tenantId, knowledgeDocuments.id],
+    }),
+    fileFk: foreignKey({
+      name: 'knowledge_file_parse_chunks_tenant_file_fk',
+      columns: [table.tenantId, table.fileId],
+      foreignColumns: [knowledgeDocumentFiles.tenantId, knowledgeDocumentFiles.id],
+    }),
+    tenantFileIdx: index('knowledge_file_parse_chunks_tenant_file_idx').on(
+      table.tenantId,
+      table.fileId,
+    ),
+  }),
+);
+
 export const knowledgeChunkEmbeddings = pgTable(
   'knowledge_chunk_embeddings',
   {

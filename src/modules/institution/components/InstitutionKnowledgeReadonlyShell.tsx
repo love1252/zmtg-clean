@@ -22,6 +22,15 @@ type InstitutionKnowledgeFileRecord = {
   status: 'active' | 'archived';
   fileType: string;
   sizeLabel: string;
+  parseStatus: 'pending' | 'processing' | 'succeeded' | 'failed';
+  safeFailureMessage: string | null;
+  chunkCount: number;
+};
+type InstitutionKnowledgeChunkRecord = {
+  chunkId: string;
+  chunkIndex: number;
+  textPreview: string;
+  charCount: number;
 };
 
 const statusLabels: Record<InstitutionKnowledgeItemDto['status'], string> = {
@@ -37,6 +46,13 @@ const sourceKindLabels: Record<InstitutionKnowledgeItemDto['sourceKind'], string
   demo: '演示',
   mock: '模拟',
   seed: '种子',
+};
+
+const parseStatusLabels: Record<InstitutionKnowledgeFileRecord['parseStatus'], string> = {
+  pending: '待解析',
+  processing: '解析中',
+  succeeded: '解析成功',
+  failed: '解析失败',
 };
 
 function visibleErrorMessage(error: TenantBusinessClientError | null) {
@@ -73,6 +89,8 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [records, setRecords] = useState<InstitutionKnowledgeItemDto[]>([]);
   const [expandedKnowledgeId, setExpandedKnowledgeId] = useState<string | null>(null);
   const [filesByKnowledgeId, setFilesByKnowledgeId] = useState<Record<string, InstitutionKnowledgeFileRecord[]>>({});
+  const [chunksByFileId, setChunksByFileId] = useState<Record<string, InstitutionKnowledgeChunkRecord[]>>({});
+  const [expandedChunkFileId, setExpandedChunkFileId] = useState<string | null>(null);
   const [fileMessage, setFileMessage] = useState<string | null>(null);
   const [pageInfo, setPageInfo] = useState<InstitutionKnowledgeListResponse['pageInfo']>({
     page: 1,
@@ -173,6 +191,28 @@ export function InstitutionKnowledgeReadonlyShell() {
       setFileMessage('文件下载已准备');
     } catch {
       setFileMessage('文件暂时无法下载');
+    }
+  }
+
+  async function loadFileChunks(knowledgeId: string, file: InstitutionKnowledgeFileRecord) {
+    setExpandedChunkFileId(file.fileId);
+    setFileMessage(null);
+    try {
+      const response = await fetch(
+        `/api/institution/knowledge-management/items/${encodeURIComponent(knowledgeId)}/files/${encodeURIComponent(file.fileId)}/parse/chunks`,
+        { method: 'GET' },
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setFileMessage('解析片段暂时不可用');
+        return;
+      }
+      setChunksByFileId((current) => ({
+        ...current,
+        [file.fileId]: payload.records as InstitutionKnowledgeChunkRecord[],
+      }));
+    } catch {
+      setFileMessage('解析片段暂时不可用');
     }
   }
 
@@ -323,15 +363,53 @@ export function InstitutionKnowledgeReadonlyShell() {
                             <div className="mt-1 text-xs font-semibold text-slate-500">
                               {file.fileType} · {file.sizeLabel}
                             </div>
+                            <div className="mt-1 text-xs font-semibold text-slate-500">
+                              {parseStatusLabels[file.parseStatus]} · {file.chunkCount} 片段
+                            </div>
+                            {file.safeFailureMessage ? (
+                              <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700">
+                                {file.safeFailureMessage}
+                              </div>
+                            ) : null}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => downloadKnowledgeFile(item.knowledgeId, file)}
-                            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-cyan-200 hover:text-cyan-700"
-                          >
-                            <Download className="h-4 w-4" />
-                            下载文件
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => loadFileChunks(item.knowledgeId, file)}
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-cyan-200 bg-white px-3 text-xs font-semibold text-cyan-700 transition hover:border-cyan-300"
+                            >
+                              <FileText className="h-4 w-4" />
+                              查看解析片段
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => downloadKnowledgeFile(item.knowledgeId, file)}
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-cyan-200 hover:text-cyan-700"
+                            >
+                              <Download className="h-4 w-4" />
+                              下载文件
+                            </button>
+                          </div>
+                          {expandedChunkFileId === file.fileId ? (
+                            <div className="sm:col-span-2">
+                              {(chunksByFileId[file.fileId] ?? []).length === 0 ? (
+                                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500">
+                                  暂无解析片段
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {(chunksByFileId[file.fileId] ?? []).map((chunk) => (
+                                    <div key={chunk.chunkId} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                                      <div className="text-xs font-semibold text-slate-500">
+                                        片段 {chunk.chunkIndex + 1} · {chunk.charCount} 字
+                                      </div>
+                                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">{chunk.textPreview}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                       ))
                     )}

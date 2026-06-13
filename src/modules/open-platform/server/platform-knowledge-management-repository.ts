@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   knowledgeChunks,
+  knowledgeDocumentFileParseChunks,
+  knowledgeDocumentFileParses,
   knowledgeDocumentFiles,
   knowledgeDocuments,
   knowledgeSources,
@@ -11,6 +13,11 @@ import {
   tenants,
 } from '@/server/db/schema';
 import type { PlatformKnowledgeFileRepositoryRecord } from './platform-knowledge-file-management-service';
+import type {
+  PlatformKnowledgeFileParseChunkRecord,
+  PlatformKnowledgeFileParseRecord,
+  PlatformKnowledgeFileParseStatus,
+} from './platform-knowledge-document-parsing-service';
 import type {
   V1KnowledgeBaseRuntimeFoundationReadonlyStatus,
   V1KnowledgeBaseRuntimeFoundationSourceKind,
@@ -22,6 +29,8 @@ type KnowledgeSourceRow = typeof knowledgeSources.$inferSelect;
 type KnowledgeChunkRow = typeof knowledgeChunks.$inferSelect;
 type KnowledgeVisibilityRow = typeof platformKnowledgeInstitutionVisibility.$inferSelect;
 type KnowledgeDocumentFileRow = typeof knowledgeDocumentFiles.$inferSelect;
+type KnowledgeDocumentFileParseRow = typeof knowledgeDocumentFileParses.$inferSelect;
+type KnowledgeDocumentFileParseChunkRow = typeof knowledgeDocumentFileParseChunks.$inferSelect;
 
 export type PlatformKnowledgeRepositoryRecord = {
   knowledgeId: string;
@@ -145,7 +154,47 @@ function mapRecords(input: {
     });
 }
 
-function mapFileRow(row: KnowledgeDocumentFileRow): PlatformKnowledgeFileRepositoryRecord {
+function normalizeParseStatus(status: string): PlatformKnowledgeFileParseStatus {
+  if (status === 'processing' || status === 'succeeded' || status === 'failed') return status;
+  return 'pending';
+}
+
+function mapFileParseRow(row: KnowledgeDocumentFileParseRow): PlatformKnowledgeFileParseRecord {
+  return {
+    parseId: row.id,
+    tenantId: row.tenantId,
+    knowledgeId: row.knowledgeDocumentId,
+    fileId: row.fileId,
+    parseStatus: normalizeParseStatus(row.parseStatus),
+    failureReasonCode: row.failureReasonCode,
+    safeFailureMessage: row.safeFailureMessage,
+    textContent: row.textContent,
+    textLength: row.textLength,
+    chunkCount: row.chunkCount,
+    parserVersion: row.parserVersion,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapFileParseChunkRow(row: KnowledgeDocumentFileParseChunkRow): PlatformKnowledgeFileParseChunkRecord {
+  return {
+    chunkId: row.id,
+    tenantId: row.tenantId,
+    knowledgeId: row.knowledgeDocumentId,
+    fileId: row.fileId,
+    chunkIndex: row.chunkIndex,
+    textPreview: row.textPreview,
+    charCount: row.charCount,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapFileRow(
+  row: KnowledgeDocumentFileRow,
+  parse?: KnowledgeDocumentFileParseRow,
+): PlatformKnowledgeFileRepositoryRecord {
   return {
     fileId: row.id,
     tenantId: row.tenantId,
@@ -160,6 +209,12 @@ function mapFileRow(row: KnowledgeDocumentFileRow): PlatformKnowledgeFileReposit
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,
+    parseStatus: parse ? normalizeParseStatus(parse.parseStatus) : 'pending',
+    failureReasonCode: parse?.failureReasonCode ?? null,
+    safeFailureMessage: parse?.safeFailureMessage ?? null,
+    textLength: parse?.textLength ?? 0,
+    chunkCount: parse?.chunkCount ?? 0,
+    parserVersion: parse?.parserVersion ?? null,
   };
 }
 
@@ -246,8 +301,18 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
           ),
         )
         .orderBy(desc(knowledgeDocumentFiles.updatedAt), desc(knowledgeDocumentFiles.id));
+      const parses = await database
+        .select()
+        .from(knowledgeDocumentFileParses)
+        .where(
+          and(
+            eq(knowledgeDocumentFileParses.tenantId, input.tenantId),
+            eq(knowledgeDocumentFileParses.knowledgeDocumentId, input.knowledgeId),
+          ),
+        );
+      const parseByFileId = new Map(parses.map((parse) => [parse.fileId, parse]));
 
-      return rows.map(mapFileRow);
+      return rows.map((row) => mapFileRow(row, parseByFileId.get(row.id)));
     },
 
     async findKnowledgeFile(input: { tenantId: string; knowledgeId: string; fileId: string }) {
@@ -262,8 +327,20 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
           ),
         )
         .limit(1);
+      if (!rows[0]) return null;
+      const parses = await database
+        .select()
+        .from(knowledgeDocumentFileParses)
+        .where(
+          and(
+            eq(knowledgeDocumentFileParses.tenantId, input.tenantId),
+            eq(knowledgeDocumentFileParses.knowledgeDocumentId, input.knowledgeId),
+            eq(knowledgeDocumentFileParses.fileId, input.fileId),
+          ),
+        )
+        .limit(1);
 
-      return rows[0] ? mapFileRow(rows[0]) : null;
+      return mapFileRow(rows[0], parses[0]);
     },
 
     async createKnowledgeFile(input: PlatformKnowledgeFileRepositoryRecord) {
@@ -307,6 +384,114 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
         .returning();
 
       return updated[0] ? mapFileRow(updated[0]) : null;
+    },
+
+    async findKnowledgeFileParse(input: { tenantId: string; knowledgeId: string; fileId: string }) {
+      const rows = await database
+        .select()
+        .from(knowledgeDocumentFileParses)
+        .where(
+          and(
+            eq(knowledgeDocumentFileParses.tenantId, input.tenantId),
+            eq(knowledgeDocumentFileParses.knowledgeDocumentId, input.knowledgeId),
+            eq(knowledgeDocumentFileParses.fileId, input.fileId),
+          ),
+        )
+        .limit(1);
+
+      return rows[0] ? mapFileParseRow(rows[0]) : null;
+    },
+
+    async saveKnowledgeFileParseResult(input: PlatformKnowledgeFileParseRecord) {
+      const row = {
+        id: input.parseId,
+        tenantId: input.tenantId,
+        knowledgeDocumentId: input.knowledgeId,
+        fileId: input.fileId,
+        parseStatus: input.parseStatus,
+        failureReasonCode: input.failureReasonCode,
+        safeFailureMessage: input.safeFailureMessage,
+        textContent: input.textContent,
+        textLength: input.textLength,
+        chunkCount: input.chunkCount,
+        parserVersion: input.parserVersion,
+        updatedAt: input.updatedAt,
+      };
+      const updated = await database
+        .insert(knowledgeDocumentFileParses)
+        .values(row)
+        .onConflictDoUpdate({
+          target: [
+            knowledgeDocumentFileParses.tenantId,
+            knowledgeDocumentFileParses.fileId,
+          ],
+          set: {
+            parseStatus: input.parseStatus,
+            failureReasonCode: input.failureReasonCode,
+            safeFailureMessage: input.safeFailureMessage,
+            textContent: input.textContent,
+            textLength: input.textLength,
+            chunkCount: input.chunkCount,
+            parserVersion: input.parserVersion,
+            updatedAt: input.updatedAt,
+          },
+        })
+        .returning();
+
+      return mapFileParseRow(updated[0]);
+    },
+
+    async replaceKnowledgeFileParseChunks(input: {
+      tenantId: string;
+      knowledgeId: string;
+      fileId: string;
+      chunks: PlatformKnowledgeFileParseChunkRecord[];
+    }) {
+      await database
+        .delete(knowledgeDocumentFileParseChunks)
+        .where(
+          and(
+            eq(knowledgeDocumentFileParseChunks.tenantId, input.tenantId),
+            eq(knowledgeDocumentFileParseChunks.knowledgeDocumentId, input.knowledgeId),
+            eq(knowledgeDocumentFileParseChunks.fileId, input.fileId),
+          ),
+        );
+      if (input.chunks.length === 0) return [];
+
+      const inserted = await database
+        .insert(knowledgeDocumentFileParseChunks)
+        .values(input.chunks.map((chunk) => ({
+          id: chunk.chunkId,
+          tenantId: chunk.tenantId,
+          knowledgeDocumentId: chunk.knowledgeId,
+          fileId: chunk.fileId,
+          chunkIndex: chunk.chunkIndex,
+          textPreview: chunk.textPreview,
+          charCount: chunk.charCount,
+        })))
+        .returning();
+
+      return inserted.map(mapFileParseChunkRow);
+    },
+
+    async listKnowledgeFileParseChunks(input: {
+      tenantId: string;
+      knowledgeId: string;
+      fileId: string;
+    }) {
+      const rows = await database
+        .select()
+        .from(knowledgeDocumentFileParseChunks)
+        .where(
+          and(
+            eq(knowledgeDocumentFileParseChunks.tenantId, input.tenantId),
+            eq(knowledgeDocumentFileParseChunks.knowledgeDocumentId, input.knowledgeId),
+            eq(knowledgeDocumentFileParseChunks.fileId, input.fileId),
+          ),
+        )
+        .orderBy(asc(knowledgeDocumentFileParseChunks.chunkIndex));
+
+      return rows.map(mapFileParseChunkRow);
     },
 
     async hasTenantInstitution(

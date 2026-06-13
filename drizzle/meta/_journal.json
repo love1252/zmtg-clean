@@ -92,6 +92,13 @@
       "when": 1781356800000,
       "tag": "0012_v1_knowledge_document_files",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1781361000000,
+      "tag": "0013_v1_knowledge_document_file_parsing",
+      "breakpoints": true
     }
   ]
 }
