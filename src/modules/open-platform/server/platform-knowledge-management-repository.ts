@@ -9,6 +9,7 @@ import {
   knowledgeDocumentFileParses,
   knowledgeDocumentFiles,
   knowledgeDocuments,
+  knowledgeQaAuditLogs,
   knowledgeSources,
   platformKnowledgeInstitutionVisibility,
   tenants,
@@ -21,6 +22,7 @@ import type {
   PlatformKnowledgeVectorSearchCandidateRecord,
 } from './platform-knowledge-embedding-vector-search-service';
 import type { KnowledgeChunkSearchRepositoryRecord } from './platform-knowledge-keyword-search-service';
+import type { KnowledgeQaAuditRecord } from './platform-knowledge-qa-service';
 import type {
   PlatformKnowledgeFileParseChunkRecord,
   PlatformKnowledgeFileParseRecord,
@@ -772,6 +774,28 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
 
         return record ? [record] : [];
       });
+    },
+
+    async createKnowledgeQaAuditLog(record: KnowledgeQaAuditRecord) {
+      const inserted = await database
+        .insert(knowledgeQaAuditLogs)
+        .values({
+          id: record.auditId,
+          tenantId: record.tenantId,
+          institutionId: record.institutionId,
+          actorScope: record.actorScope,
+          actorUserId: record.actorUserId,
+          question: record.question,
+          answerPreview: record.answerPreview,
+          retrievalMode: record.retrievalMode,
+          citationCount: record.citationCount,
+          safeStatus: record.safeStatus,
+          safeFailureMessage: record.safeFailureMessage,
+          createdAt: record.createdAt,
+        })
+        .returning({ auditId: knowledgeQaAuditLogs.id });
+
+      return { auditId: inserted[0]?.auditId ?? record.auditId };
     },
 
     async hasTenantInstitution(

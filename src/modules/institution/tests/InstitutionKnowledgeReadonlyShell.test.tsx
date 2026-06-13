@@ -28,6 +28,27 @@ describe('机构端知识库只读列表 UI', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/qa')) {
+          return Response.json({
+            answer: '基于已召回的知识片段：机构端知识库问答回答。',
+            citations: [
+              {
+                knowledgeId: 'knowledge-ui-a',
+                knowledgeTitle: '授权可见术后护理',
+                fileId: 'institution-file-a',
+                fileName: '机构文件.pdf',
+                chunkId: 'institution-qa-chunk-a',
+                chunkIndex: 0,
+                textPreview: '机构端问答引用片段',
+                score: 1,
+                matchReason: '片段包含关键词“冷敷”',
+              },
+            ],
+            retrievalMode: 'hybrid',
+            auditId: 'kb-qa-audit-institution-ui-a',
+            safeStatus: 'answered',
+          });
+        }
         if (url.includes('/api/institution/knowledge-management/vector-search')) {
           return Response.json({
             requestId: 'institution-knowledge-vector-search',
@@ -242,6 +263,37 @@ describe('机构端知识库只读列表 UI', () => {
     expect(vectorSection.textContent).not.toContain('训练');
     expect(vectorSection.textContent).not.toContain('问答');
     expect(vectorSection.textContent).not.toContain('第三方 AI');
+  });
+
+  it('机构端新增知识库问答只读区域，展示回答、引用来源和审计编号', async () => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+    const qaSection = screen.getByLabelText('机构端知识库问答');
+    fireEvent.change(within(qaSection).getByLabelText('输入知识库问题'), {
+      target: { value: '冷敷后怎么护理？' },
+    });
+    fireEvent.change(within(qaSection).getByLabelText('选择问答检索模式'), {
+      target: { value: 'hybrid' },
+    });
+    fireEvent.click(within(qaSection).getByRole('button', { name: '发起问答' }));
+
+    expect(await screen.findByText('基于已召回的知识片段：机构端知识库问答回答。')).toBeInTheDocument();
+    expect(screen.getByText('机构端问答引用片段')).toBeInTheDocument();
+    expect(screen.getByText('片段包含关键词“冷敷”')).toBeInTheDocument();
+    expect(screen.getByText('审计编号 kb-qa-audit-institution-ui-a')).toBeInTheDocument();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/institution/knowledge-management/qa',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('冷敷后怎么护理？'),
+      }),
+    );
+    expect(within(qaSection).queryByRole('button', { name: '生成向量索引' })).not.toBeInTheDocument();
+    expect(qaSection.textContent).not.toContain('真实 AI');
+    expect(qaSection.textContent).not.toContain('OCR');
+    expect(qaSection.textContent).not.toContain('训练');
+    expect(qaSection.textContent).not.toContain('runtime');
   });
 
   it('展示 empty 和 error 状态，并且不出现上传下载导出解析训练等 CTA', async () => {

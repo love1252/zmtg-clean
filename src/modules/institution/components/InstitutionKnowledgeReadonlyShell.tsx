@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search } from 'lucide-react';
 import type {
   InstitutionKnowledgeItemDto,
   InstitutionKnowledgeListResponse,
@@ -44,6 +44,13 @@ type InstitutionKnowledgeSearchResultRecord = {
 };
 type InstitutionKnowledgeVectorSearchResultRecord = InstitutionKnowledgeSearchResultRecord & {
   score: number;
+};
+type InstitutionKnowledgeQaResponseRecord = {
+  answer: string;
+  citations: InstitutionKnowledgeVectorSearchResultRecord[];
+  retrievalMode: 'keyword' | 'vector' | 'hybrid';
+  auditId: string;
+  safeStatus: 'answered' | 'no_citation';
 };
 
 const statusLabels: Record<InstitutionKnowledgeItemDto['status'], string> = {
@@ -113,6 +120,11 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [vectorSearchResults, setVectorSearchResults] = useState<InstitutionKnowledgeVectorSearchResultRecord[]>([]);
   const [vectorSearchMessage, setVectorSearchMessage] = useState('请输入内容进行语义检索');
   const [isVectorSearching, setIsVectorSearching] = useState(false);
+  const [qaQuestionInput, setQaQuestionInput] = useState('');
+  const [qaRetrievalMode, setQaRetrievalMode] = useState<'keyword' | 'vector' | 'hybrid'>('hybrid');
+  const [qaResponse, setQaResponse] = useState<InstitutionKnowledgeQaResponseRecord | null>(null);
+  const [qaMessage, setQaMessage] = useState('请输入问题发起知识库问答');
+  const [isQaLoading, setIsQaLoading] = useState(false);
   const [pageInfo, setPageInfo] = useState<InstitutionKnowledgeListResponse['pageInfo']>({
     page: 1,
     pageSize: 10,
@@ -305,6 +317,48 @@ export function InstitutionKnowledgeReadonlyShell() {
     }
   }
 
+  async function askKnowledgeBase(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const question = qaQuestionInput.trim();
+    if (!question) {
+      setQaResponse(null);
+      setQaMessage('请输入知识库问答问题');
+      return;
+    }
+
+    setIsQaLoading(true);
+    setQaMessage('正在基于引用片段生成回答...');
+    try {
+      const response = await fetch('/api/institution/knowledge-management/qa', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          retrievalMode: qaRetrievalMode,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || typeof payload.answer !== 'string' || !Array.isArray(payload.citations)) {
+        setQaResponse(null);
+        setQaMessage('知识库问答暂时不可用');
+        return;
+      }
+
+      const nextResponse = payload as InstitutionKnowledgeQaResponseRecord;
+      setQaResponse(nextResponse);
+      setQaMessage(
+        nextResponse.safeStatus === 'no_citation'
+          ? '当前范围暂无可引用片段'
+          : `已生成回答，引用 ${nextResponse.citations.length} 个片段`,
+      );
+    } catch {
+      setQaResponse(null);
+      setQaMessage('知识库问答暂时不可用');
+    } finally {
+      setIsQaLoading(false);
+    }
+  }
+
   return (
     <section
       aria-label="机构知识库只读列表"
@@ -476,6 +530,88 @@ export function InstitutionKnowledgeReadonlyShell() {
               ))
             )}
           </div>
+        </section>
+      ) : null}
+
+      {status === 'success' ? (
+        <section
+          aria-label="机构端知识库问答"
+          className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">知识库问答</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">基于本机构授权可见引用片段生成低敏回答。</p>
+            </div>
+            <form onSubmit={askKnowledgeBase} className="flex w-full flex-col gap-2 lg:w-[620px]">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <label className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    aria-label="输入知识库问题"
+                    value={qaQuestionInput}
+                    onChange={(event) => setQaQuestionInput(event.target.value)}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-cyan-400"
+                    placeholder="输入问题"
+                  />
+                </label>
+                <select
+                  aria-label="选择问答检索模式"
+                  value={qaRetrievalMode}
+                  onChange={(event) => setQaRetrievalMode(event.target.value as 'keyword' | 'vector' | 'hybrid')}
+                  className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none"
+                >
+                  <option value="hybrid">混合检索</option>
+                  <option value="keyword">关键词</option>
+                  <option value="vector">语义</option>
+                </select>
+                <button
+                  type="submit"
+                  disabled={isQaLoading}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isQaLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <BookOpen className="h-4 w-4" />}
+                  发起问答
+                </button>
+              </div>
+            </form>
+          </div>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+            {qaMessage}
+          </div>
+          {!qaResponse ? (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
+              暂无问答结果
+            </div>
+          ) : (
+            <div className="mt-3 grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
+              <article className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                <div className="text-xs font-semibold text-slate-500">
+                  {qaResponse.retrievalMode === 'hybrid' ? '混合检索' : qaResponse.retrievalMode === 'keyword' ? '关键词' : '语义'}
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{qaResponse.answer}</p>
+                <div className="mt-2 text-xs font-semibold text-cyan-700">审计编号 {qaResponse.auditId}</div>
+              </article>
+              <div className="grid gap-3">
+                {qaResponse.citations.length === 0 ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
+                    暂无引用来源
+                  </div>
+                ) : (
+                  qaResponse.citations.map((citation) => (
+                    <article key={citation.chunkId} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
+                        <span>{citation.knowledgeTitle} · {citation.fileName} · 片段 {citation.chunkIndex + 1}</span>
+                        <span className="text-cyan-700">分数 {citation.score.toFixed(3)}</span>
+                      </div>
+                      <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{citation.textPreview}</p>
+                      <div className="mt-2 text-xs font-semibold text-cyan-700">{citation.matchReason}</div>
+                    </article>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </section>
       ) : null}
 

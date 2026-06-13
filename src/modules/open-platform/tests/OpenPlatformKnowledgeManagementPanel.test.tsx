@@ -35,6 +35,27 @@ describe('平台端知识库管理只读看板', () => {
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         const method = init?.method ?? 'GET';
+        if (url.includes('/api/v1/open-platform/knowledge-management/qa')) {
+          return Response.json({
+            answer: '基于已召回的知识片段：平台端知识库问答回答。',
+            citations: [
+              {
+                knowledgeId: 'knowledge-price-reply',
+                knowledgeTitle: '价格回复知识库',
+                fileId: 'file-ui-a',
+                fileName: '平台文件.pdf',
+                chunkId: 'qa-chunk-ui-a',
+                chunkIndex: 0,
+                textPreview: '平台端问答引用片段',
+                score: 1,
+                matchReason: '片段包含关键词“冷敷”',
+              },
+            ],
+            retrievalMode: 'hybrid',
+            auditId: 'kb-qa-audit-ui-a',
+            safeStatus: 'answered',
+          });
+        }
         if (url.includes('/api/v1/open-platform/knowledge-management/embeddings')) {
           return Response.json({
             status: 'succeeded',
@@ -309,7 +330,7 @@ describe('平台端知识库管理只读看板', () => {
     expect(container.textContent).not.toContain('真实下载');
     expect(container.textContent).not.toContain('开始训练');
     expect(container.textContent).not.toContain('CSV 导出');
-    expect(screen.queryByRole('button', { name: /导出|训练|新增|编辑|删除|问答/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /导出|训练|新增|编辑|删除/ })).not.toBeInTheDocument();
     expect(container.querySelector('input[type="file"]')).toBeInTheDocument();
     expect(container.querySelector('a[download]')).toBeNull();
   });
@@ -425,6 +446,38 @@ describe('平台端知识库管理只读看板', () => {
     expect(vectorSection.textContent).not.toContain('训练');
     expect(vectorSection.textContent).not.toContain('问答');
     expect(vectorSection.textContent).not.toContain('第三方 AI');
+  });
+
+  it('平台端新增知识库问答区域，展示回答、引用来源和审计编号', async () => {
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    expect(await screen.findByRole('heading', { name: '知识库问答' })).toBeInTheDocument();
+    const qaSection = screen.getByLabelText('平台端知识库问答');
+    fireEvent.change(within(qaSection).getByLabelText('输入知识库问题'), {
+      target: { value: '冷敷后怎么护理？' },
+    });
+    fireEvent.change(within(qaSection).getByLabelText('选择问答检索模式'), {
+      target: { value: 'hybrid' },
+    });
+    fireEvent.click(within(qaSection).getByRole('button', { name: '发起问答' }));
+
+    expect(await screen.findByText('基于已召回的知识片段：平台端知识库问答回答。')).toBeInTheDocument();
+    expect(screen.getByText('平台端问答引用片段')).toBeInTheDocument();
+    expect(screen.getByText('片段包含关键词“冷敷”')).toBeInTheDocument();
+    expect(screen.getByText('审计编号 kb-qa-audit-ui-a')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/v1/open-platform/knowledge-management/qa',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('tenant-xinglan'),
+        }),
+      ),
+    );
+    expect(qaSection.textContent).not.toContain('真实 AI');
+    expect(qaSection.textContent).not.toContain('OCR');
+    expect(qaSection.textContent).not.toContain('训练');
+    expect(qaSection.textContent).not.toContain('runtime');
   });
 
   it('默认展示全部机构，切换机构后过滤文件、分类、问题、知识条目和任务', async () => {

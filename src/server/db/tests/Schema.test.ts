@@ -1596,4 +1596,51 @@ describe('数据库结构', () => {
       /ocr|ai_provider|openai|question_answer|training_content|storage_key|text_content|raw_content|token|secret|password|database_url|"sql"|"stack"/i,
     );
   });
+
+  it('定义知识库 QA 审计最小持久化表结构', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const qaAuditLogs = schemaModule.knowledgeQaAuditLogs;
+    const migrationSql = readMigrationSql('knowledge_qa_audit_logs');
+    const journal = JSON.parse(readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8')) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+
+    expect(qaAuditLogs).toBeDefined();
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          idx: 15,
+          tag: '0015_v1_knowledge_qa_audit_logs',
+        }),
+      ]),
+    );
+
+    const auditColumns = columnNames(getTableConfig(qaAuditLogs as never).columns);
+    expect(auditColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'institution_id',
+        'actor_scope',
+        'actor_user_id',
+        'question',
+        'answer_preview',
+        'retrieval_mode',
+        'citation_count',
+        'safe_status',
+        'safe_failure_message',
+        'created_at',
+      ]),
+    );
+    expect(migrationSql).toContain('create table "knowledge_qa_audit_logs"');
+    expect(migrationSql).toContain('"question" varchar(512) not null');
+    expect(migrationSql).toContain('"answer_preview" varchar(1024) not null');
+    expect(migrationSql).toContain('"retrieval_mode" varchar(24) not null');
+    expect(migrationSql).toContain('"citation_count" integer not null');
+    expect(migrationSql).toContain('"safe_status" varchar(32) not null');
+    expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
+    expect(migrationSql).not.toMatch(
+      /embedding_vector_json|storage_key|text_content|raw_content|full_text|ocr|openai|ai_provider|training_content|token|secret|password|database_url|"sql"|"stack"/i,
+    );
+  });
 });
