@@ -267,6 +267,26 @@ describe('机构端知识库只读列表 UI', () => {
     ].forEach((label) => {
       expect(within(trialNotice).getByText(label)).toBeInTheDocument();
     });
+    [
+      '确认只读授权范围',
+      '查看授权知识库与授权文件',
+      '查看解析状态与 chunk 预览',
+      '执行关键词检索',
+      '执行 mock 向量检索',
+      '发起 mock/local QA',
+      '核对 citations 与本机构 QA audit',
+      '确认禁止操作不可用',
+    ].forEach((label) => {
+      expect(within(trialNotice).getByText(label)).toBeInTheDocument();
+    });
+    [
+      '只能查看授权知识库内容',
+      '只读链路可完成检索、QA、citations、audit 验收',
+      '上传、归档、解析、训练、embedding、visibility、真实 AI 入口不可见',
+      '跨机构、跨 tenant、未授权内容不可见',
+    ].forEach((label) => {
+      expect(within(trialNotice).getByText(label)).toBeInTheDocument();
+    });
     ['上传', '归档', '发起解析', '训练', '生成 embedding', '管理 visibility', '调用真实 AI'].forEach(
       (label) => {
         expect(within(trialNotice).getByText(label)).toBeInTheDocument();
@@ -287,6 +307,11 @@ describe('机构端知识库只读列表 UI', () => {
       expect(within(trialNotice).queryByRole('button', { name: label })).not.toBeInTheDocument();
     });
     expect(trialNotice.textContent).toContain('仅展示低敏摘要、解析状态、chunk 预览、引用和审计摘要。');
+    expect(trialNotice.textContent).toContain('当前账号没有访问该知识库内容的权限');
+    expect(trialNotice.textContent).toContain('当前知识库问答次数已达上限，请稍后再试');
+    expect(trialNotice.textContent).toContain('当前问题没有命中可引用的知识片段');
+    expect(trialNotice.textContent).toContain('当前范围没有命中关键词或相似片段');
+    expect(trialNotice.textContent).toContain('机构端按步骤完成授权内容只读查看、检索、QA、citations 和本机构 audit 验收。');
     expect(container.textContent).not.toContain('storageKey');
     expect(container.textContent).not.toContain('/Users/');
     expect(container.textContent).not.toContain('SQL');

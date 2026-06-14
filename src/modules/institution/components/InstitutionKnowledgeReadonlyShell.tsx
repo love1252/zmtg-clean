@@ -530,6 +530,57 @@ export function InstitutionKnowledgeReadonlyShell() {
             </div>
           </div>
         </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <div className="rounded-xl border border-cyan-100 bg-white/80 p-3">
+            <h3 className="text-xs font-semibold text-slate-700">只读试用步骤</h3>
+            <ol className="mt-2 space-y-2 text-xs leading-5 text-slate-600">
+              {controlledTrialReadiness.institution.trialSteps.map((step, index) => (
+                <li key={step.id}>
+                  <span aria-hidden="true" className="font-semibold text-cyan-700">
+                    {index + 1}.{' '}
+                  </span>
+                  <span className="font-semibold text-cyan-700">{step.label}</span>
+                  <span className="block text-slate-500">{step.description}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div className="rounded-xl border border-cyan-100 bg-white/80 p-3">
+            <h3 className="text-xs font-semibold text-slate-700">机构端验收清单</h3>
+            <ul className="mt-2 space-y-2 text-xs leading-5 text-slate-600">
+              {controlledTrialReadiness.institution.acceptanceChecklist.map((item) => (
+                <li key={item.id}>
+                  <span className="font-semibold text-emerald-700">{item.label}</span>
+                  <span className="block text-slate-500">{item.description}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <div className="rounded-xl border border-cyan-100 bg-white/80 p-3">
+            <h3 className="text-xs font-semibold text-slate-700">失败态说明</h3>
+            <ul className="mt-2 space-y-2 text-xs leading-5 text-slate-600">
+              {controlledTrialReadiness.commonFailureStates.map((state) => (
+                <li key={state.id}>
+                  <span className="font-semibold text-amber-700">{state.label}</span>
+                  <span className="block text-slate-600">{state.message}</span>
+                  <span className="block text-slate-500">{state.operatorGuidance}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-xl border border-cyan-100 bg-white/80 p-3">
+            <h3 className="text-xs font-semibold text-slate-700">只读通过标准</h3>
+            <ul className="mt-2 space-y-2 text-xs leading-5 text-slate-600">
+              {controlledTrialReadiness.passingCriteria.map((criterion) => (
+                <li key={criterion}>{criterion}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
         <p className="mt-3 text-xs leading-5 text-slate-500">
           {controlledTrialReadiness.lowSensitiveBoundaries[0]}
         </p>

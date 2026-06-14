@@ -219,9 +219,9 @@ describe('知识库生产级治理 policy', () => {
   it('输出内部受控试用 view model，统一平台端和机构端的允许能力、禁止能力与安全限制', () => {
     const readiness = getKnowledgeBaseControlledTrialReadiness();
 
-    expect(readiness.stage).toBe('10-4');
+    expect(readiness.stage).toBe('10-5');
     expect(readiness.status).toBe('内部受控试用');
-    expect(readiness.baselineCommit).toBe('1e41132cbfe23fc755c2426d271f889b40f41d27');
+    expect(readiness.baselineCommit).toBe('be94539792d54ac67275702cd102364f621bd706');
     expect(readiness.supportedFileTypes.map((fileType) => fileType.label)).toEqual([
       'TXT',
       'Markdown',
@@ -288,6 +288,82 @@ describe('知识库生产级治理 policy', () => {
     expect(JSON.stringify(readiness)).not.toContain('API key');
   });
 
+  it('10-5 体验与验收闭环 view model 输出试用步骤、验收清单、失败态说明和通过标准', () => {
+    const readiness = getKnowledgeBaseControlledTrialReadiness();
+
+    expect(readiness.platform.trialSteps.map((step) => step.label)).toEqual([
+      '确认 capability 与 No-Go',
+      '上传白名单文件并发起解析',
+      '查看解析状态与 chunk 预览',
+      '执行关键词检索',
+      '执行 mock 向量检索',
+      '发起 mock/local QA',
+      '核对 citations 与 QA audit',
+      '核对 quota 与失败态说明',
+    ]);
+    expect(readiness.institution.trialSteps.map((step) => step.label)).toEqual([
+      '确认只读授权范围',
+      '查看授权知识库与授权文件',
+      '查看解析状态与 chunk 预览',
+      '执行关键词检索',
+      '执行 mock 向量检索',
+      '发起 mock/local QA',
+      '核对 citations 与本机构 QA audit',
+      '确认禁止操作不可用',
+    ]);
+    expect(readiness.platform.acceptanceChecklist.map((item) => item.label)).toEqual(
+      expect.arrayContaining([
+        '解析状态和失败文案可理解',
+        '检索和 QA 均基于低敏 chunk',
+        'citations、audit、quota、capability 可核对',
+        'No-Go 和禁止外显字段持续可见',
+      ]),
+    );
+    expect(readiness.institution.acceptanceChecklist.map((item) => item.label)).toEqual(
+      expect.arrayContaining([
+        '只能查看授权知识库内容',
+        '只读链路可完成检索、QA、citations、audit 验收',
+        '上传、归档、解析、训练、embedding、visibility、真实 AI 入口不可见',
+        '跨机构、跨 tenant、未授权内容不可见',
+      ]),
+    );
+    expect(readiness.commonFailureStates.map((state) => state.label)).toEqual([
+      '空态',
+      '解析失败',
+      '权限失败',
+      'quota 超限',
+      '无引用',
+      '无检索结果',
+    ]);
+    expect(readiness.commonFailureStates.map((state) => state.message)).toEqual(
+      expect.arrayContaining([
+        '暂无授权可见知识库',
+        '知识库文件解析失败，请稍后重试',
+        '当前账号没有访问该知识库内容的权限',
+        '当前知识库问答次数已达上限，请稍后再试',
+        '当前问题没有命中可引用的知识片段',
+        '当前范围没有命中关键词或相似片段',
+      ]),
+    );
+    expect(readiness.passingCriteria).toEqual(
+      expect.arrayContaining([
+        '平台端按步骤完成上传、解析、chunk、检索、QA、citations、audit、quota、capability 验收。',
+        '机构端按步骤完成授权内容只读查看、检索、QA、citations 和本机构 audit 验收。',
+        '空态、失败态、权限态、quota 超限态、无引用态、无检索结果均展示中文安全文案。',
+      ]),
+    );
+    expect(JSON.stringify(readiness)).not.toContain('storageKey');
+    expect(JSON.stringify(readiness)).not.toContain('/Users/');
+    expect(JSON.stringify(readiness)).not.toContain('SQL');
+    expect(JSON.stringify(readiness)).not.toContain('stack');
+    expect(JSON.stringify(readiness)).not.toContain('token');
+    expect(JSON.stringify(readiness)).not.toContain('secret');
+    expect(JSON.stringify(readiness)).not.toContain('API key');
+    expect(JSON.stringify(readiness)).not.toContain('DATABASE_URL');
+    expect(JSON.stringify(readiness)).not.toContain('原始模型响应');
+    expect(JSON.stringify(readiness)).not.toContain('prompt 原文');
+  });
+
   it('10-4 文档与 helper 使用同一组 No-Go 和 10-3 安全失败文案', () => {
     const readiness = getKnowledgeBaseControlledTrialReadiness();
     const doc = readFileSync(
@@ -313,6 +389,38 @@ describe('知识库生产级治理 policy', () => {
     });
     expect(JSON.stringify(readiness)).not.toContain('API key');
     expect(doc).not.toContain('API key');
+  });
+
+  it('10-5 文档记录验收流程、通过标准、失败态和后续禁止范围', () => {
+    const doc = readFileSync(
+      join(process.cwd(), 'docs/product/2026-06-14-v1-knowledge-base-controlled-trial-acceptance-10-5.md'),
+      'utf8',
+    );
+
+    [
+      '当前主干基线',
+      '10-5 任务目标',
+      '平台端内部试用验收流程',
+      '机构端只读试用验收流程',
+      '通过标准',
+      '失败态处理方式',
+      'No-Go 能力',
+      '低敏字段和禁止字段',
+      '测试范围',
+      '后续不得直接进入的范围',
+    ].forEach((heading) => {
+      expect(doc).toContain(heading);
+    });
+    [...parserSafeFailureMessages, ...qaBoundaryMessages].forEach((message) => {
+      expect(doc).toContain(message);
+    });
+    controlledTrialNoGoLabels.forEach((label) => {
+      expect(doc).toContain(label);
+    });
+    expect(doc).not.toContain('API key');
+    expect(doc).not.toContain('storageKey');
+    expect(doc).not.toContain('/Users/');
+    expect(doc).not.toContain('DATABASE_URL');
   });
 
   it('capability API contract 复用受控试用 view model，且不暴露禁止字段原文', () => {
