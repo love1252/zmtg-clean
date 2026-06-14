@@ -219,9 +219,9 @@ describe('知识库生产级治理 policy', () => {
   it('输出内部受控试用 view model，统一平台端和机构端的允许能力、禁止能力与安全限制', () => {
     const readiness = getKnowledgeBaseControlledTrialReadiness();
 
-    expect(readiness.stage).toBe('10-5');
-    expect(readiness.status).toBe('内部受控试用');
-    expect(readiness.baselineCommit).toBe('be94539792d54ac67275702cd102364f621bd706');
+    expect(readiness.stage).toBe('10-6');
+    expect(readiness.status).toBe('内部受控试用发布包');
+    expect(readiness.baselineCommit).toBe('c7f9b7603b7536fc7a4191213120b4cf6e62585f');
     expect(readiness.supportedFileTypes.map((fileType) => fileType.label)).toEqual([
       'TXT',
       'Markdown',
@@ -364,6 +364,87 @@ describe('知识库生产级治理 policy', () => {
     expect(JSON.stringify(readiness)).not.toContain('prompt 原文');
   });
 
+  it('10-6 发布包 view model 输出交付清单、操作手册、验收模板和后续进入条件', () => {
+    const readiness = getKnowledgeBaseControlledTrialReadiness();
+
+    expect(readiness.releasePackage.deliveryStatus).toBe('可交付内部受控试用');
+    expect(readiness.releasePackage.conclusion).toContain('可以交付内部试用人员');
+    expect(readiness.releasePackage.packageChecklist.map((item) => item.label)).toEqual([
+      '阶段总交付说明',
+      '平台端内部试用操作手册',
+      '机构端只读试用操作手册',
+      '内部验收报告模板',
+      '已完成能力与 No-Go 清单',
+      '后续进入条件说明',
+    ]);
+    expect(readiness.releasePackage.platformManualSummary.map((item) => item.label)).toEqual([
+      '确认发布状态和 No-Go',
+      '按白名单上传并解析文件',
+      '核对 chunk、检索、QA 与引用',
+      '记录 audit、quota 与失败态',
+    ]);
+    expect(readiness.releasePackage.institutionManualSummary.map((item) => item.label)).toEqual([
+      '确认只读交付状态',
+      '查看授权知识库和文件解析状态',
+      '完成只读检索、QA 与 citations',
+      '记录只读边界和失败态',
+    ]);
+    expect(readiness.releasePackage.acceptanceReportFields.map((field) => field.label)).toEqual([
+      '试用人员与日期',
+      '平台端试用记录',
+      '机构端只读试用记录',
+      '文件解析样本与失败态',
+      '检索、QA、citations 与 audit 记录',
+      'quota、capability 与 No-Go 核对',
+      '问题、风险与交接结论',
+    ]);
+    expect(readiness.releasePackage.completedCapabilities.map((capability) => capability.label)).toEqual(
+      expect.arrayContaining([
+        '真实文本文件解析',
+        'chunk 预览',
+        '关键词检索',
+        'mock 向量检索',
+        'mock/local QA',
+        'citations',
+        'QA audit',
+        'quota',
+        'capability',
+        '平台端低敏展示',
+        '机构端只读低敏展示',
+      ]),
+    );
+    expect(readiness.releasePackage.nextStageEntryConditions.map((condition) => condition.label)).toEqual([
+      '真实 AI',
+      'OCR',
+      '真实向量库',
+      'runtime ingestion',
+      '任何真实外部服务',
+    ]);
+    expect(readiness.releasePackage.nextStageEntryConditions.map((condition) => condition.description)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('密钥治理、成本限额、质量评估、安全评估、灰度开关、回滚方案'),
+        expect.stringContaining('文件安全策略、扫描件识别质量评估、失败补偿、人工复核边界'),
+        expect.stringContaining('选型、schema/migration 审批、租户隔离、删除回滚、索引重建策略'),
+        expect.stringContaining('worker/queue/scheduler 方案、幂等、重试、死信、可观测性和回滚'),
+        expect.stringContaining('凭据管理、审计、限流、成本控制和降级策略'),
+      ]),
+    );
+    [
+      'storageKey',
+      '/Users/',
+      'SQL',
+      'stack',
+      'token',
+      'secret',
+      'API key',
+      'DATABASE_URL',
+      '原始模型响应',
+      'prompt 原文',
+    ].forEach((fragment) => {
+      expect(JSON.stringify(readiness.releasePackage)).not.toContain(fragment);
+    });
+  });
+
   it('10-4 文档与 helper 使用同一组 No-Go 和 10-3 安全失败文案', () => {
     const readiness = getKnowledgeBaseControlledTrialReadiness();
     const doc = readFileSync(
@@ -421,6 +502,58 @@ describe('知识库生产级治理 policy', () => {
     expect(doc).not.toContain('storageKey');
     expect(doc).not.toContain('/Users/');
     expect(doc).not.toContain('DATABASE_URL');
+  });
+
+  it('10-6 文档记录发布包、操作手册、验收模板和后续进入条件', () => {
+    const doc = readFileSync(
+      join(process.cwd(), 'docs/product/2026-06-14-v1-knowledge-base-controlled-trial-release-package-10-6.md'),
+      'utf8',
+    );
+
+    [
+      '当前主干基线',
+      '10-6 任务目标',
+      '当前已完成能力总清单',
+      '平台端内部试用操作手册',
+      '机构端只读试用操作手册',
+      '内部验收报告模板',
+      '失败态处理说明',
+      'No-Go 能力清单',
+      '低敏字段和禁止字段',
+      '后续进入真实 AI / OCR / 真实向量库 / runtime 的前置条件',
+      '当前阶段交付结论',
+    ].forEach((heading) => {
+      expect(doc).toContain(heading);
+    });
+    [
+      '阶段总交付说明',
+      '平台端内部试用操作手册',
+      '机构端只读试用操作手册',
+      '内部验收报告模板',
+      '真实 AI：必须先完成密钥治理、成本限额、质量评估、安全评估、灰度开关、回滚方案。',
+      'OCR：必须先完成文件安全策略、扫描件识别质量评估、失败补偿、人工复核边界。',
+      '真实向量库：必须先完成选型、schema/migration 审批、租户隔离、删除回滚、索引重建策略。',
+      'runtime ingestion：必须先完成 worker/queue/scheduler 方案、幂等、重试、死信、可观测性和回滚。',
+      '任何真实外部服务：必须先完成凭据管理、审计、限流、成本控制和降级策略。',
+    ].forEach((content) => {
+      expect(doc).toContain(content);
+    });
+    [...parserSafeFailureMessages, ...qaBoundaryMessages].forEach((message) => {
+      expect(doc).toContain(message);
+    });
+    controlledTrialNoGoLabels.forEach((label) => {
+      expect(doc).toContain(label);
+    });
+    expect(doc).not.toContain('storageKey');
+    expect(doc).not.toContain('/Users/');
+    expect(doc).not.toContain('SQL');
+    expect(doc).not.toContain('stack');
+    expect(doc).not.toContain('token');
+    expect(doc).not.toContain('secret');
+    expect(doc).not.toContain('API key');
+    expect(doc).not.toContain('DATABASE_URL');
+    expect(doc).not.toContain('原始模型响应');
+    expect(doc).not.toContain('prompt 原文');
   });
 
   it('capability API contract 复用受控试用 view model，且不暴露禁止字段原文', () => {

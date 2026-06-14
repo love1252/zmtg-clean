@@ -476,6 +476,57 @@ export function InstitutionKnowledgeReadonlyShell() {
           </span>
         </div>
 
+        <div className="mt-4 rounded-xl border border-cyan-100 bg-white/80 p-3">
+          <div className="text-xs font-semibold text-cyan-700">
+            {controlledTrialReadiness.releasePackage.deliveryStatus}
+          </div>
+          <p className="mt-1 text-xs leading-5 text-slate-600">
+            {controlledTrialReadiness.releasePackage.conclusion}
+          </p>
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <div className="rounded-xl border border-cyan-100 bg-white/80 p-3">
+            <h3 className="text-xs font-semibold text-slate-700">机构端只读试用操作手册</h3>
+            <ol className="mt-2 space-y-2 text-xs leading-5 text-slate-600">
+              {controlledTrialReadiness.releasePackage.institutionManualSummary.map((step, index) => (
+                <li key={step.id}>
+                  <span aria-hidden="true" className="font-semibold text-cyan-700">
+                    {index + 1}.{' '}
+                  </span>
+                  <span className="font-semibold text-cyan-700">{step.label}</span>
+                  <span className="block text-slate-500">{step.description}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div className="rounded-xl border border-cyan-100 bg-white/80 p-3">
+            <h3 className="text-xs font-semibold text-slate-700">机构端验收记录要点</h3>
+            <ul className="mt-2 space-y-2 text-xs leading-5 text-slate-600">
+              {controlledTrialReadiness.releasePackage.acceptanceReportFields
+                .filter((field) => field.id !== 'tester')
+                .map((field) => (
+                  <li key={field.id}>
+                    <span className="font-semibold text-emerald-700">{field.label}</span>
+                    <span className="block text-slate-500">{field.description}</span>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-xl border border-cyan-100 bg-white/80 p-3">
+          <h3 className="text-xs font-semibold text-slate-700">后续进入条件</h3>
+          <ul className="mt-2 grid gap-2 text-xs leading-5 text-slate-600 lg:grid-cols-2">
+            {controlledTrialReadiness.releasePackage.nextStageEntryConditions.map((condition) => (
+              <li key={condition.id}>
+                <span className="font-semibold text-amber-700">{condition.label}</span>
+                <span className="block text-slate-500">{condition.description}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
           <div className="rounded-xl border border-cyan-100 bg-white/80 p-3">
             <h3 className="text-xs font-semibold text-slate-700">可只读试用</h3>
