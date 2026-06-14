@@ -4,6 +4,7 @@ import { OpenPlatformAiReadonlyPanel } from '@/modules/open-platform/components/
 import { PlatformConsole } from '@/modules/workspace/components/PlatformConsole';
 
 const forbiddenText = [
+  '同步模型',
   '测试调用',
   '导出账单',
   '账单金额',
@@ -55,6 +56,7 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.getByText('场景默认模型关系')).toBeInTheDocument();
     expect(screen.getByText('Agent 继承关系')).toBeInTheDocument();
     expect(screen.getByText('模型启用状态说明')).toBeInTheDocument();
+    expect(screen.getByText('Registry 状态：当前为受控只读示例，不代表生产启用。')).toBeInTheDocument();
     expect(screen.getAllByText('真实凭据未接入').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Key 管理未启用').length).toBeGreaterThan(0);
 

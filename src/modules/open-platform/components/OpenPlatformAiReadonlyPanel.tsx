@@ -78,6 +78,7 @@ export function OpenPlatformAiReadonlyPanel() {
           <div>
             <h2 id="ai-model-catalog-heading" className="text-xl font-semibold tracking-normal text-white">AI 模型目录</h2>
             <p className="mt-1 text-sm text-slate-400">厂商列表、模型列表、能力分组、推荐业务场景和继承关系均来自受控示例数据。</p>
+            <p className="mt-2 text-xs font-semibold text-cyan-100">Registry 状态：{view.registryStatusNote}</p>
           </div>
           <span className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.08] px-3 py-1 text-xs font-semibold text-cyan-100">
             模型启用状态说明
