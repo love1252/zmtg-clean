@@ -65,6 +65,7 @@ export async function runPlatformAiRuntimeSmokeTest(): Promise<PlatformAiRuntime
         model: config.model,
         messages: [{ role: 'user', content: SMOKE_PROMPT }],
         temperature: 0,
+        max_tokens: 4,
       }),
       signal: controller.signal,
     });

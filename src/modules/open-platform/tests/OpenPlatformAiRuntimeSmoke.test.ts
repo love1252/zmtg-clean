@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as smokeRoute from '@/app/api/v1/open-platform/ai-runtime/smoke/route';
+import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { runPlatformAiRuntimeSmokeTest } from '@/modules/open-platform/server/platformAiRuntimeSmoke';
+
+vi.mock('@/modules/security/server/access-context', () => ({
+  getDemoAccessContextFromRequest: vi.fn(),
+}));
 
 const runtimeSmokeUrl = 'http://localhost/api/v1/open-platform/ai-runtime/smoke';
 const forbiddenFragments = [
@@ -16,6 +21,15 @@ const forbiddenFragments = [
   'tenant_id',
   'raw metadata',
 ];
+
+const platformAccessContext = {
+  userId: 'platform-admin',
+  role: 'platform_admin',
+  scope: 'platform',
+  tenantId: null,
+  institutionId: null,
+  source: 'demo_session',
+} as const;
 
 function clearRuntimeEnv() {
   vi.unstubAllEnvs();
@@ -51,6 +65,8 @@ async function readJson(response: Response) {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-06-14T12:00:00.000Z'));
+  vi.mocked(getDemoAccessContextFromRequest).mockReset();
+  vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(platformAccessContext);
 });
 
 afterEach(() => {
@@ -60,7 +76,34 @@ afterEach(() => {
 });
 
 describe('平台端 AI runtime smoke route', () => {
-  it('runtime disabled/config missing 时不调用 fetch 并返回低敏错误码', async () => {
+  it('只导出 POST route，不暴露 GET 或其他 mutation 能力', () => {
+    expect(Object.keys(smokeRoute).sort()).toEqual(['POST']);
+  });
+
+  it('未授权 smoke 不调用 fetch 并返回低敏错误码', async () => {
+    stubConfiguredRuntimeEnv();
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(null);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const routeResponse = await smokeRoute.POST(new Request(runtimeSmokeUrl, { method: 'POST' }));
+    const routePayload = await readJson(routeResponse);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(routeResponse.status).toBe(401);
+    expect(routePayload).toMatchObject({
+      ok: false,
+      status: 'failed',
+      latencyMs: 0,
+      provider: null,
+      model: null,
+      checkedAt: '2026-06-14T12:00:00.000Z',
+      errorCode: 'UNAUTHORIZED',
+    });
+    expectLowSensitivePayload(routePayload);
+  });
+
+  it('授权但 runtime disabled/config missing 时不调用 fetch 并返回低敏错误码', async () => {
     clearRuntimeEnv();
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -119,6 +162,7 @@ describe('平台端 AI runtime smoke route', () => {
       model: 'gpt-runtime-smoke',
       messages: [{ role: 'user', content: 'Return OK only.' }],
       temperature: 0,
+      max_tokens: 4,
     });
     expect(JSON.stringify(requestBody)).not.toContain('This must not be forwarded');
     expectLowSensitivePayload(routePayload);

@@ -48,6 +48,10 @@ afterEach(() => {
 });
 
 describe('平台端 AI runtime env-only config/status', () => {
+  it('status route 只导出 GET', () => {
+    expect(Object.keys(statusRoute).sort()).toEqual(['GET']);
+  });
+
   it('env 缺失时返回 disabled/unconfigured 且不泄露 Key', async () => {
     clearRuntimeEnv();
 
