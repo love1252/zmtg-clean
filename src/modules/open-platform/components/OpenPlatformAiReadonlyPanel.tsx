@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   BrainCircuit,
   CheckCircle2,
@@ -34,7 +35,8 @@ function formatLatency(value: number) {
 }
 
 export function OpenPlatformAiReadonlyPanel() {
-  const view = loadOpenPlatformAiReadonlyView();
+  const [selectedMonth, setSelectedMonth] = useState('2026-06');
+  const view = loadOpenPlatformAiReadonlyView({ month: selectedMonth });
   const summaryCards = [
     { label: '月份', value: view.month, icon: Clock3, tone: 'bg-cyan-300/[0.12] text-cyan-100' },
     { label: '总调用数', value: numberFormatter.format(view.usage.summary.totalCalls), icon: Cpu, tone: 'bg-blue-300/[0.12] text-blue-100' },
@@ -190,15 +192,87 @@ export function OpenPlatformAiReadonlyPanel() {
         </div>
       </section>
 
+      <section className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6" aria-labelledby="ai-capability-coverage-heading">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 id="ai-capability-coverage-heading" className="text-xl font-semibold tracking-normal text-white">能力覆盖矩阵</h2>
+            <p className="mt-1 text-sm text-slate-400">能力、场景和示例模型的只读对应关系；视觉与向量能力保持占位，不启用真实处理链路。</p>
+          </div>
+          <span className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.08] px-3 py-1 text-xs font-semibold text-cyan-100">
+            只读覆盖关系
+          </span>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {view.capabilityCoverageRows.map((row) => (
+            <article key={row.capabilityId} className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-100/70">{row.capabilityId}</div>
+              <h3 className="mt-2 text-base font-semibold tracking-normal text-white">覆盖：{row.capabilityName}</h3>
+              <div className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
+                <p>场景：{row.scenarioNames.join('、')}</p>
+                <p>模型：{row.modelNames.join('、')}</p>
+              </div>
+              <div className="mt-4 rounded-xl border border-amber-300/15 bg-amber-300/[0.07] px-3 py-2 text-xs font-semibold text-amber-100">
+                {row.safetyNote}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6" aria-labelledby="ai-security-boundary-heading">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 id="ai-security-boundary-heading" className="text-xl font-semibold tracking-normal text-white">安全边界清单</h2>
+            <p className="mt-1 text-sm text-slate-400">以下能力在 AI-1-02 中仅作为低敏边界文案展示，不提供操作入口。</p>
+          </div>
+          <span className="rounded-full border border-amber-300/20 bg-amber-300/[0.08] px-3 py-1 text-xs font-semibold text-amber-100">
+            全部未启用
+          </span>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {view.disabledCapabilities.map((capability) => (
+            <div key={capability} className="rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-3 text-sm font-semibold text-slate-100">
+              {capability}
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6" aria-labelledby="ai-usage-heading">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 id="ai-usage-heading" className="text-xl font-semibold tracking-normal text-white">AI 用量与费用</h2>
             <p className="mt-1 text-sm text-slate-400">受控示例用量，不读取真实日志，不连接数据库，不展示真实机构标识。</p>
           </div>
-          <span className="rounded-full border border-rose-300/20 bg-rose-300/[0.08] px-3 py-1 text-xs font-semibold text-rose-100">
-            {view.usage.summary.billingStatusLabel}
-          </span>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <div className="flex flex-wrap gap-2">
+              {view.availableMonths.map((month) => {
+                const isActive = month.value === view.selectedMonth;
+                const statusLabel = month.hasUsageData ? '有示例用量' : '空状态示例';
+
+                return (
+                  <button
+                    key={month.value}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => setSelectedMonth(month.value)}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+                      isActive
+                        ? 'border-cyan-200/50 bg-cyan-300/[0.16] text-cyan-50'
+                        : 'border-white/10 bg-white/[0.06] text-slate-300 hover:border-cyan-300/30 hover:text-cyan-100',
+                    )}
+                  >
+                    {month.label} <span className="ml-1 text-[11px] opacity-80">{statusLabel}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <span className="rounded-full border border-rose-300/20 bg-rose-300/[0.08] px-3 py-1 text-xs font-semibold text-rose-100">
+              {view.usage.summary.billingStatusLabel}
+            </span>
+          </div>
         </div>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
@@ -215,7 +289,16 @@ export function OpenPlatformAiReadonlyPanel() {
           ))}
         </div>
 
-        <div className="mt-5 grid gap-4 xl:grid-cols-3">
+        {view.emptyState ? (
+          <div className="mt-5 rounded-2xl border border-amber-300/20 bg-amber-300/[0.08] p-5">
+            <div className="text-base font-semibold text-amber-50">{view.emptyState.title}</div>
+            <p className="mt-2 text-sm leading-6 text-amber-100/90">{view.emptyState.description}</p>
+            <p className="mt-1 text-sm leading-6 text-amber-100/80">真实 AI、真实日志、真实机构排行和正式计费均未接入。</p>
+          </div>
+        ) : null}
+
+        {view.hasUsageData ? (
+          <div className="mt-5 grid gap-4 xl:grid-cols-3">
           <article className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-white">
               <BrainCircuit className="h-4 w-4 text-cyan-100" />
@@ -278,7 +361,8 @@ export function OpenPlatformAiReadonlyPanel() {
               ))}
             </div>
           </article>
-        </div>
+          </div>
+        ) : null}
       </section>
     </section>
   );

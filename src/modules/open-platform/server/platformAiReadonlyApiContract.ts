@@ -1,7 +1,12 @@
 import {
+  PLATFORM_AI_READONLY_AVAILABLE_MONTHS,
   PLATFORM_AI_READONLY_DEFAULT_MONTH,
+  PLATFORM_AI_READONLY_DISABLED_CAPABILITIES,
+  platformAiCapabilityCoverageRows,
   platformAiReadonlySampleData,
   type PlatformAiAgentInheritanceSample,
+  type PlatformAiAvailableMonthSample,
+  type PlatformAiCapabilityCoverageSample,
   type PlatformAiCapabilityGroupSample,
   type PlatformAiProviderSample,
   type PlatformAiProviderModelUsageSample,
@@ -15,6 +20,15 @@ export type PlatformAiReadonlyResponse = {
   readonly: true;
   dataSource: 'controlled_demo';
   month: string;
+  selectedMonth: string;
+  availableMonths: PlatformAiAvailableMonthSample[];
+  hasUsageData: boolean;
+  emptyState: {
+    title: string;
+    description: string;
+  } | null;
+  disabledCapabilities: string[];
+  capabilityCoverageRows: PlatformAiCapabilityCoverageSample[];
   safetyBanner: {
     title: string;
     description: string;
@@ -43,33 +57,46 @@ export type PlatformAiReadonlyResponse = {
   };
 };
 
-const monthPattern = /^\d{4}-(0[1-9]|1[0-2])$/;
+const controlledMonths = new Set(PLATFORM_AI_READONLY_AVAILABLE_MONTHS.map((month) => month.value));
 
 export function normalizeAiReadonlyMonth(value: string | null | undefined) {
   const normalized = String(value ?? '').trim();
-  return monthPattern.test(normalized) ? normalized : PLATFORM_AI_READONLY_DEFAULT_MONTH;
+  return controlledMonths.has(normalized) ? normalized : PLATFORM_AI_READONLY_DEFAULT_MONTH;
 }
 
 export function getPlatformAiReadonlyResponse(params: { month?: string | null } = {}): PlatformAiReadonlyResponse {
   const month = normalizeAiReadonlyMonth(params.month);
+  const monthMeta = PLATFORM_AI_READONLY_AVAILABLE_MONTHS.find((item) => item.value === month);
+  const hasUsageData = Boolean(monthMeta?.hasUsageData);
+  const usageSummary = hasUsageData
+    ? platformAiReadonlySampleData.usage.summary
+    : {
+      month,
+      totalCalls: 0,
+      totalTokens: 0,
+      successRate: 0,
+      averageLatencyMs: 0,
+      estimatedCostCny: 0,
+    };
 
   return {
     requestId: 'open-platform-ai-readonly',
     readonly: true,
     dataSource: 'controlled_demo',
     month,
+    selectedMonth: month,
+    availableMonths: PLATFORM_AI_READONLY_AVAILABLE_MONTHS,
+    hasUsageData,
+    emptyState: hasUsageData ? null : {
+      title: '暂无受控示例用量',
+      description: `${monthMeta?.label ?? month}为受控示例月份，未读取真实 AI 日志；估算费用不是正式账单。`,
+    },
+    disabledCapabilities: [...PLATFORM_AI_READONLY_DISABLED_CAPABILITIES],
+    capabilityCoverageRows: platformAiCapabilityCoverageRows,
     safetyBanner: {
       title: '当前为受控示例数据',
       description: '估算费用不是正式账单；真实 AI 未启用，API Key 管理、模型同步和自动扣费均未启用。',
-      disabledCapabilities: [
-        '真实 AI',
-        'API Key 管理',
-        '厂商模型同步',
-        'OCR',
-        '真实向量库',
-        '正式计费',
-        '自动扣费',
-      ],
+      disabledCapabilities: [...PLATFORM_AI_READONLY_DISABLED_CAPABILITIES],
     },
     modelCatalog: {
       providers: platformAiReadonlySampleData.providers,
@@ -80,13 +107,13 @@ export function getPlatformAiReadonlyResponse(params: { month?: string | null } 
     },
     usage: {
       summary: {
-        ...platformAiReadonlySampleData.usage.summary,
+        ...usageSummary,
         month,
         billingStatusLabel: '估算费用 / 运营参考，不是正式账单',
       },
-      providerModelRows: platformAiReadonlySampleData.usage.providerModelRows,
-      scenarioRows: platformAiReadonlySampleData.usage.scenarioRows,
-      sampleInstitutionRanking: platformAiReadonlySampleData.usage.sampleInstitutionRanking,
+      providerModelRows: hasUsageData ? platformAiReadonlySampleData.usage.providerModelRows : [],
+      scenarioRows: hasUsageData ? platformAiReadonlySampleData.usage.scenarioRows : [],
+      sampleInstitutionRanking: hasUsageData ? platformAiReadonlySampleData.usage.sampleInstitutionRanking : [],
     },
   };
 }
