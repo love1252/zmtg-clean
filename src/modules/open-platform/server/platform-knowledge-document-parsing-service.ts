@@ -1,13 +1,23 @@
 import { createHash } from 'node:crypto';
+import { inflateRawSync, inflateSync } from 'node:zlib';
+import {
+  chunkV1KnowledgeBaseRuntimeDocument,
+  v1KnowledgeBaseUploadParseChunkRuntimeMaxChars,
+} from '@/modules/knowledge-base/server/v1-knowledge-base-upload-parse-chunk-runtime';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import {
   isKnowledgeVisibleToInstitution,
+  PLATFORM_KNOWLEDGE_FILE_MAX_BYTES,
   type PlatformKnowledgeFileRepositoryRecord,
   type PlatformKnowledgeFileStorage,
 } from '@/modules/open-platform/server/platform-knowledge-file-management-service';
 
 export const PLATFORM_KNOWLEDGE_PARSE_CHUNK_MAX_CHARS = 120;
-export const PLATFORM_KNOWLEDGE_PARSER_VERSION = 'local-text-parser-v1';
+export const PLATFORM_KNOWLEDGE_PARSE_TEXT_MAX_CHARS = v1KnowledgeBaseUploadParseChunkRuntimeMaxChars;
+export const PLATFORM_KNOWLEDGE_ZIP_ENTRY_MAX_INFLATED_BYTES = 5 * 1024 * 1024;
+export const PLATFORM_KNOWLEDGE_ZIP_TOTAL_MAX_INFLATED_BYTES = 12 * 1024 * 1024;
+export const PLATFORM_KNOWLEDGE_PDF_FLATE_MAX_INFLATED_BYTES = 8 * 1024 * 1024;
+export const PLATFORM_KNOWLEDGE_PARSER_VERSION = 'local-real-file-parser-v1';
 
 export type PlatformKnowledgeFileParseStatus =
   | 'pending'
@@ -106,9 +116,21 @@ type InstitutionParseReadServiceInput = ParseReadServiceInput & {
   };
 };
 
-const supportedTextExtensions = new Set(['.txt', '.md', '.csv']);
-const unsupportedSafeFailureMessage = '当前文件类型暂未接入解析器';
+const supportedFileTypes = new Map<string, readonly string[]>([
+  ['.txt', ['text/plain']],
+  ['.md', ['text/markdown', 'text/plain']],
+  ['.csv', ['text/csv', 'application/csv', 'application/vnd.ms-excel']],
+  ['.pdf', ['application/pdf']],
+  ['.docx', ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']],
+  ['.xlsx', ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']],
+]);
+const unsupportedSafeFailureMessage = '当前文件类型暂不支持解析';
 const parseFailedSafeFailureMessage = '知识库文件解析失败，请稍后重试';
+const emptyContentSafeFailureMessage = '文件未提取到可解析文本，扫描件或图片内容暂不支持';
+const oversizedFileSafeFailureMessage = '文件大小超过解析限制，请拆分后重新上传';
+const contentTruncatedSafeFailureMessage = '解析文本超过长度限制，已截断为低敏预览';
+
+class ParseSafetyLimitError extends Error {}
 
 function normalizeRequired(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -119,6 +141,19 @@ function extensionOf(filename: string) {
   const dotIndex = filename.lastIndexOf('.');
   if (dotIndex < 0) return '';
   return filename.slice(dotIndex).toLowerCase();
+}
+
+function normalizeMimeType(mimeType: string | null | undefined) {
+  return mimeType?.trim().toLowerCase() ?? '';
+}
+
+function isSupportedFile(input: { filename: string; mimeType: string }) {
+  const extension = extensionOf(input.filename);
+  const allowedMimeTypes = supportedFileTypes.get(extension);
+  if (!allowedMimeTypes) return false;
+
+  const mimeType = normalizeMimeType(input.mimeType);
+  return !mimeType || allowedMimeTypes.includes(mimeType);
 }
 
 function parseId(input: { tenantId: string; knowledgeId: string; fileId: string }) {
@@ -140,8 +175,394 @@ function chunkId(input: {
     .slice(0, 40)}`;
 }
 
-function normalizeExtractedText(content: Uint8Array) {
-  return new TextDecoder('utf-8').decode(content).replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+function normalizeExtractedText(text: string) {
+  return text
+    .replace(/\u0000/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+    .filter((line) => line.length > 0)
+    .join('\n')
+    .trim();
+}
+
+function decodeUtf8(content: Uint8Array) {
+  return new TextDecoder('utf-8', { fatal: false }).decode(content);
+}
+
+function decodeLatin1(content: Uint8Array) {
+  return new TextDecoder('latin1', { fatal: false }).decode(content);
+}
+
+function xmlText(value: string) {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
+function stripXmlTags(value: string) {
+  return xmlText(value.replace(/<[^>]+>/g, ' '));
+}
+
+function parseCsvText(content: Uint8Array) {
+  const text = decodeUtf8(content).replace(/^\uFEFF/, '');
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === '"' && inQuotes && next === '"') {
+      cell += '"';
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === ',' && !inQuotes) {
+      row.push(cell.trim());
+      cell = '';
+      continue;
+    }
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') index += 1;
+      row.push(cell.trim());
+      if (row.some((value) => value.length > 0)) rows.push(row);
+      row = [];
+      cell = '';
+      continue;
+    }
+    cell += char;
+  }
+
+  row.push(cell.trim());
+  if (row.some((value) => value.length > 0)) rows.push(row);
+
+  return rows.map((cells) => cells.join('\t')).join('\n');
+}
+
+function readUint16(content: Uint8Array, offset: number) {
+  return new DataView(content.buffer, content.byteOffset + offset, 2).getUint16(0, true);
+}
+
+function readUint32(content: Uint8Array, offset: number) {
+  return new DataView(content.buffer, content.byteOffset + offset, 4).getUint32(0, true);
+}
+
+function findZipEndOfCentralDirectory(content: Uint8Array) {
+  for (let offset = content.byteLength - 22; offset >= 0; offset -= 1) {
+    if (readUint32(content, offset) === 0x06054b50) return offset;
+  }
+
+  return -1;
+}
+
+function assertInflatedByteLimit(input: {
+  value: number;
+  max: number;
+}) {
+  if (input.value > input.max) {
+    throw new ParseSafetyLimitError('知识库文件解压内容超过安全限制');
+  }
+}
+
+function decodeZipEntry(input: {
+  content: Uint8Array;
+  method: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  currentTotalInflatedBytes: number;
+  dataOffset: number;
+}) {
+  if (input.uncompressedSize > 0) {
+    assertInflatedByteLimit({
+      value: input.uncompressedSize,
+      max: PLATFORM_KNOWLEDGE_ZIP_ENTRY_MAX_INFLATED_BYTES,
+    });
+    assertInflatedByteLimit({
+      value: input.currentTotalInflatedBytes + input.uncompressedSize,
+      max: PLATFORM_KNOWLEDGE_ZIP_TOTAL_MAX_INFLATED_BYTES,
+    });
+  }
+
+  const compressed = input.content.slice(input.dataOffset, input.dataOffset + input.compressedSize);
+  const output =
+    input.method === 0
+      ? compressed
+      : input.method === 8
+        ? new Uint8Array(inflateRawSync(compressed, {
+            maxOutputLength: PLATFORM_KNOWLEDGE_ZIP_ENTRY_MAX_INFLATED_BYTES,
+          }))
+        : null;
+  if (!output) {
+    throw new Error('unsupported zip compression');
+  }
+
+  assertInflatedByteLimit({
+    value: output.byteLength,
+    max: PLATFORM_KNOWLEDGE_ZIP_ENTRY_MAX_INFLATED_BYTES,
+  });
+  assertInflatedByteLimit({
+    value: input.currentTotalInflatedBytes + output.byteLength,
+    max: PLATFORM_KNOWLEDGE_ZIP_TOTAL_MAX_INFLATED_BYTES,
+  });
+
+  return output;
+}
+
+function readZipEntries(content: Uint8Array) {
+  const entries = new Map<string, Uint8Array>();
+  let totalInflatedBytes = 0;
+  const eocdOffset = findZipEndOfCentralDirectory(content);
+  if (eocdOffset >= 0) {
+    const entryCount = readUint16(content, eocdOffset + 10);
+    let centralOffset = readUint32(content, eocdOffset + 16);
+
+    for (let index = 0; index < entryCount; index += 1) {
+      if (readUint32(content, centralOffset) !== 0x02014b50) break;
+
+      const method = readUint16(content, centralOffset + 10);
+      const compressedSize = readUint32(content, centralOffset + 20);
+      const centralUncompressedSize = readUint32(content, centralOffset + 24);
+      const filenameLength = readUint16(content, centralOffset + 28);
+      const extraLength = readUint16(content, centralOffset + 30);
+      const commentLength = readUint16(content, centralOffset + 32);
+      const localOffset = readUint32(content, centralOffset + 42);
+      const filename = decodeUtf8(content.slice(centralOffset + 46, centralOffset + 46 + filenameLength));
+      const localFilenameLength = readUint16(content, localOffset + 26);
+      const localExtraLength = readUint16(content, localOffset + 28);
+      const localUncompressedSize = readUint32(content, localOffset + 22);
+      const uncompressedSize = centralUncompressedSize || localUncompressedSize;
+      const dataOffset = localOffset + 30 + localFilenameLength + localExtraLength;
+
+      const entry = decodeZipEntry({
+        content,
+        method,
+        compressedSize,
+        uncompressedSize,
+        currentTotalInflatedBytes: totalInflatedBytes,
+        dataOffset,
+      });
+      totalInflatedBytes += entry.byteLength;
+      entries.set(filename, entry);
+      centralOffset += 46 + filenameLength + extraLength + commentLength;
+    }
+
+    return entries;
+  }
+
+  let offset = 0;
+  while (offset + 30 < content.byteLength && readUint32(content, offset) === 0x04034b50) {
+    const method = readUint16(content, offset + 8);
+    const compressedSize = readUint32(content, offset + 18);
+    const uncompressedSize = readUint32(content, offset + 22);
+    const filenameLength = readUint16(content, offset + 26);
+    const extraLength = readUint16(content, offset + 28);
+    const filename = decodeUtf8(content.slice(offset + 30, offset + 30 + filenameLength));
+    const dataOffset = offset + 30 + filenameLength + extraLength;
+    const entry = decodeZipEntry({
+      content,
+      method,
+      compressedSize,
+      uncompressedSize,
+      currentTotalInflatedBytes: totalInflatedBytes,
+      dataOffset,
+    });
+    totalInflatedBytes += entry.byteLength;
+    entries.set(filename, entry);
+    offset = dataOffset + compressedSize;
+  }
+
+  return entries;
+}
+
+function extractDocxText(content: Uint8Array) {
+  const entries = readZipEntries(content);
+  const documentEntries = [...entries.entries()]
+    .filter(([name]) =>
+      name === 'word/document.xml' ||
+      /^word\/(header|footer)\d+\.xml$/.test(name),
+    )
+    .sort(([left], [right]) => left.localeCompare(right));
+  const paragraphs: string[] = [];
+
+  documentEntries.forEach(([, bytes]) => {
+    const xml = decodeUtf8(bytes)
+      .replace(/<w:tab\b[^>]*\/>/g, '\t')
+      .replace(/<w:br\b[^>]*\/>/g, '\n')
+      .replace(/<\/w:p>/g, '\n');
+    const texts = [...xml.matchAll(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g)]
+      .map((match) => xmlText(match[1]))
+      .join('');
+    paragraphs.push(texts);
+  });
+
+  return paragraphs.join('\n');
+}
+
+function extractSharedStrings(xml: string) {
+  return [...xml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)].map((match) => {
+    const textNodes = [...match[1].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)]
+      .map((textMatch) => xmlText(textMatch[1]))
+      .join('');
+    return textNodes || stripXmlTags(match[1]).trim();
+  });
+}
+
+function extractXlsxText(content: Uint8Array) {
+  const entries = readZipEntries(content);
+  const sharedStrings = entries.has('xl/sharedStrings.xml')
+    ? extractSharedStrings(decodeUtf8(entries.get('xl/sharedStrings.xml') ?? new Uint8Array()))
+    : [];
+  const rows: string[] = [];
+
+  [...entries.entries()]
+    .filter(([name]) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .forEach(([, bytes]) => {
+      const sheetXml = decodeUtf8(bytes);
+      [...sheetXml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)].forEach((rowMatch) => {
+        const cells = [...rowMatch[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)]
+          .map((cellMatch) => {
+            const attrs = cellMatch[1];
+            const body = cellMatch[2];
+            const type = /\bt="([^"]+)"/.exec(attrs)?.[1];
+            if (type === 's') {
+              const index = Number.parseInt(/<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? '', 10);
+              return Number.isFinite(index) ? sharedStrings[index] ?? '' : '';
+            }
+            if (type === 'inlineStr') {
+              return [...body.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)]
+                .map((match) => xmlText(match[1]))
+                .join('');
+            }
+
+            return xmlText(/<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? '').trim();
+          })
+          .filter((value) => value.length > 0);
+        if (cells.length > 0) rows.push(cells.join('\t'));
+      });
+    });
+
+  return rows.join('\n');
+}
+
+function unescapePdfString(value: string) {
+  return value.replace(/\\([nrtbf()\\])/g, (_match, escaped: string) => {
+    const map: Record<string, string> = {
+      n: '\n',
+      r: '\r',
+      t: '\t',
+      b: '',
+      f: '',
+      '(': '(',
+      ')': ')',
+      '\\': '\\',
+    };
+    return map[escaped] ?? escaped;
+  });
+}
+
+function decodePdfHexString(value: string) {
+  const normalized = value.replace(/\s+/g, '');
+  const bytes: number[] = [];
+  for (let index = 0; index < normalized.length; index += 2) {
+    const byte = Number.parseInt(normalized.slice(index, index + 2).padEnd(2, '0'), 16);
+    if (Number.isFinite(byte)) bytes.push(byte);
+  }
+
+  return decodeUtf8(new Uint8Array(bytes));
+}
+
+function extractPdfTextOperators(content: string) {
+  const texts: string[] = [];
+
+  for (const match of content.matchAll(/\((?:\\.|[^\\)])*\)\s*Tj/g)) {
+    texts.push(unescapePdfString(match[0].replace(/\)\s*Tj$/, '').slice(1)));
+  }
+  for (const match of content.matchAll(/<([0-9a-fA-F\s]+)>\s*Tj/g)) {
+    texts.push(decodePdfHexString(match[1]));
+  }
+  for (const match of content.matchAll(/\[([\s\S]*?)\]\s*TJ/g)) {
+    const arrayBody = match[1];
+    for (const textMatch of arrayBody.matchAll(/\((?:\\.|[^\\)])*\)|<([0-9a-fA-F\s]+)>/g)) {
+      const raw = textMatch[0];
+      if (raw.startsWith('(')) {
+        texts.push(unescapePdfString(raw.slice(1, -1)));
+      } else {
+        texts.push(decodePdfHexString(raw.slice(1, -1)));
+      }
+    }
+  }
+
+  return texts.join('\n');
+}
+
+function inflatePdfFlateStream(content: Uint8Array) {
+  const inflated = new Uint8Array(inflateSync(content, {
+    maxOutputLength: PLATFORM_KNOWLEDGE_PDF_FLATE_MAX_INFLATED_BYTES,
+  }));
+  assertInflatedByteLimit({
+    value: inflated.byteLength,
+    max: PLATFORM_KNOWLEDGE_PDF_FLATE_MAX_INFLATED_BYTES,
+  });
+
+  return inflated;
+}
+
+function extractPdfText(content: Uint8Array) {
+  const raw = decodeLatin1(content);
+  const streams = [...raw.matchAll(/<<(?:[\s\S](?!endobj))*?>>\s*stream\r?\n?([\s\S]*?)\r?\n?endstream/g)];
+  const texts: string[] = [];
+
+  streams.forEach((match) => {
+    const dictionary = match[0].slice(0, match[0].indexOf('stream'));
+    const streamText = match[1];
+    if (/\/Subtype\s*\/Image/.test(dictionary)) return;
+
+    if (/\/FlateDecode/.test(dictionary)) {
+      const streamOffset = raw.indexOf(match[1], match.index);
+      const streamBytes = content.slice(streamOffset, streamOffset + streamText.length);
+      try {
+        texts.push(extractPdfTextOperators(decodeLatin1(inflatePdfFlateStream(streamBytes))));
+      } catch (error) {
+        if (error instanceof ParseSafetyLimitError) throw error;
+        throw new Error('pdf_flate_decode_failed');
+      }
+      return;
+    }
+
+    texts.push(extractPdfTextOperators(streamText));
+  });
+
+  if (texts.length === 0) {
+    texts.push(extractPdfTextOperators(raw));
+  }
+
+  return texts.join('\n');
+}
+
+function extractTextFromFile(input: {
+  filename: string;
+  content: Uint8Array;
+}) {
+  const extension = extensionOf(input.filename);
+  if (extension === '.csv') return normalizeExtractedText(parseCsvText(input.content));
+  if (extension === '.pdf') return normalizeExtractedText(extractPdfText(input.content));
+  if (extension === '.docx') return normalizeExtractedText(extractDocxText(input.content));
+  if (extension === '.xlsx') return normalizeExtractedText(extractXlsxText(input.content));
+
+  return normalizeExtractedText(decodeUtf8(input.content));
 }
 
 function mapParseRecord(record: PlatformKnowledgeFileParseRecord): PlatformKnowledgeFileParseDto {
@@ -176,24 +597,20 @@ function splitTextIntoChunks(input: {
 }) {
   if (!input.text) return [];
 
-  const chunks: PlatformKnowledgeFileParseChunkRecord[] = [];
-  for (let start = 0; start < input.text.length; start += PLATFORM_KNOWLEDGE_PARSE_CHUNK_MAX_CHARS) {
-    const textPreview = input.text.slice(start, start + PLATFORM_KNOWLEDGE_PARSE_CHUNK_MAX_CHARS);
-    const chunkIndex = chunks.length;
-    chunks.push({
-      chunkId: chunkId({ ...input, chunkIndex }),
+  return chunkV1KnowledgeBaseRuntimeDocument({
+    text: input.text,
+    maxChars: PLATFORM_KNOWLEDGE_PARSE_CHUNK_MAX_CHARS,
+  }).map((chunk) => ({
+      chunkId: chunkId({ ...input, chunkIndex: chunk.chunkIndex }),
       tenantId: input.tenantId,
       knowledgeId: input.knowledgeId,
       fileId: input.fileId,
-      chunkIndex,
-      textPreview,
-      charCount: textPreview.length,
+      chunkIndex: chunk.chunkIndex,
+      textPreview: chunk.chunkText,
+      charCount: chunk.charLength,
       createdAt: input.now,
       updatedAt: input.now,
-    });
-  }
-
-  return chunks;
+    }));
 }
 
 async function persistFailedParse(input: {
@@ -210,12 +627,14 @@ async function persistFailedParse(input: {
     createdAt: Date;
     updatedAt: Date;
   };
+  failureReasonCode?: string;
+  safeFailureMessage?: string;
 }) {
   const parse = await input.repository.saveKnowledgeFileParseResult({
     ...input.baseRecord,
     parseStatus: 'failed',
-    failureReasonCode: 'parse_failed',
-    safeFailureMessage: parseFailedSafeFailureMessage,
+    failureReasonCode: input.failureReasonCode ?? 'parse_failed',
+    safeFailureMessage: input.safeFailureMessage ?? parseFailedSafeFailureMessage,
     textContent: '',
     textLength: 0,
     chunkCount: 0,
@@ -285,34 +704,48 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
     updatedAt: now,
   };
 
-  if (!supportedTextExtensions.has(extensionOf(found.file.originalFilename))) {
-    const parse = await input.repository.saveKnowledgeFileParseResult({
-      ...baseRecord,
-      parseStatus: 'failed',
+  if (!isSupportedFile({ filename: found.file.originalFilename, mimeType: found.file.mimeType })) {
+    return persistFailedParse({
+      repository: input.repository,
+      baseRecord,
       failureReasonCode: 'unsupported_file_type',
       safeFailureMessage: unsupportedSafeFailureMessage,
-      textContent: '',
-      textLength: 0,
-      chunkCount: 0,
     });
-    await input.repository.replaceKnowledgeFileParseChunks({
-      tenantId,
-      knowledgeId,
-      fileId,
-      chunks: [],
-    });
+  }
 
-    return { status: 'failed' as const, parse: mapParseRecord(parse) };
+  if (found.file.sizeBytes > PLATFORM_KNOWLEDGE_FILE_MAX_BYTES) {
+    return persistFailedParse({
+      repository: input.repository,
+      baseRecord,
+      failureReasonCode: 'file_too_large',
+      safeFailureMessage: oversizedFileSafeFailureMessage,
+    });
   }
 
   try {
-    const textContent = normalizeExtractedText(await input.storage.read({ storageKey: found.file.storageKey }));
+    const extractedText = extractTextFromFile({
+      filename: found.file.originalFilename,
+      content: await input.storage.read({ storageKey: found.file.storageKey }),
+    });
+    if (!extractedText) {
+      return persistFailedParse({
+        repository: input.repository,
+        baseRecord,
+        failureReasonCode: 'empty_content',
+        safeFailureMessage: emptyContentSafeFailureMessage,
+      });
+    }
+
+    const isTruncated = extractedText.length > PLATFORM_KNOWLEDGE_PARSE_TEXT_MAX_CHARS;
+    const textContent = isTruncated
+      ? extractedText.slice(0, PLATFORM_KNOWLEDGE_PARSE_TEXT_MAX_CHARS)
+      : extractedText;
     const chunks = splitTextIntoChunks({ tenantId, knowledgeId, fileId, text: textContent, now });
     const parse = await input.repository.saveKnowledgeFileParseResult({
       ...baseRecord,
       parseStatus: 'succeeded',
-      failureReasonCode: null,
-      safeFailureMessage: null,
+      failureReasonCode: isTruncated ? 'content_truncated' : null,
+      safeFailureMessage: isTruncated ? contentTruncatedSafeFailureMessage : null,
       textContent,
       textLength: textContent.length,
       chunkCount: chunks.length,
