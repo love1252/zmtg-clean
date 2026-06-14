@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { deflateRawSync } from 'node:zlib';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import {
   parsePlatformKnowledgeDocumentFileService,
@@ -12,12 +13,15 @@ import type {
   PlatformKnowledgeFileRepositoryRecord,
   PlatformKnowledgeFileStorage,
 } from '@/modules/open-platform/server/platform-knowledge-file-management-service';
+import { PLATFORM_KNOWLEDGE_FILE_MAX_BYTES } from '@/modules/open-platform/server/platform-knowledge-file-management-service';
 import {
   listInstitutionKnowledgeDocumentFileChunksService,
   getInstitutionKnowledgeDocumentFileParseStatusService,
 } from '@/modules/institution/server/institution-knowledge-file-parsing-service';
+import { v1KnowledgeBaseUploadParseChunkRuntimeMaxChars } from '@/modules/knowledge-base/server/v1-knowledge-base-upload-parse-chunk-runtime';
 
 const now = new Date('2026-06-13T08:00:00.000Z');
+const encoder = new TextEncoder();
 
 const unsafeFragments = [
   'storageKey',
@@ -93,6 +97,153 @@ function fileRecord(input: Partial<PlatformKnowledgeFileRepositoryRecord> = {}):
   };
 }
 
+function crc32(bytes: Uint8Array) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function uint16(value: number) {
+  const bytes = new Uint8Array(2);
+  new DataView(bytes.buffer).setUint16(0, value, true);
+  return bytes;
+}
+
+function uint32(value: number) {
+  const bytes = new Uint8Array(4);
+  new DataView(bytes.buffer).setUint32(0, value, true);
+  return bytes;
+}
+
+function concatBytes(parts: Uint8Array[]) {
+  const total = parts.reduce((sum, part) => sum + part.byteLength, 0);
+  const output = new Uint8Array(total);
+  let offset = 0;
+  parts.forEach((part) => {
+    output.set(part, offset);
+    offset += part.byteLength;
+  });
+
+  return output;
+}
+
+function createZip(entries: Record<string, string>) {
+  const localParts: Uint8Array[] = [];
+  const centralParts: Uint8Array[] = [];
+  let offset = 0;
+
+  Object.entries(entries).forEach(([name, text]) => {
+    const filename = encoder.encode(name);
+    const raw = encoder.encode(text);
+    const compressed = new Uint8Array(deflateRawSync(raw));
+    const checksum = crc32(raw);
+    const localHeader = concatBytes([
+      uint32(0x04034b50),
+      uint16(20),
+      uint16(0),
+      uint16(8),
+      uint16(0),
+      uint16(0),
+      uint32(checksum),
+      uint32(compressed.byteLength),
+      uint32(raw.byteLength),
+      uint16(filename.byteLength),
+      uint16(0),
+      filename,
+    ]);
+    const centralHeader = concatBytes([
+      uint32(0x02014b50),
+      uint16(20),
+      uint16(20),
+      uint16(0),
+      uint16(8),
+      uint16(0),
+      uint16(0),
+      uint32(checksum),
+      uint32(compressed.byteLength),
+      uint32(raw.byteLength),
+      uint16(filename.byteLength),
+      uint16(0),
+      uint16(0),
+      uint16(0),
+      uint16(0),
+      uint32(0),
+      uint32(offset),
+      filename,
+    ]);
+
+    localParts.push(localHeader, compressed);
+    centralParts.push(centralHeader);
+    offset += localHeader.byteLength + compressed.byteLength;
+  });
+
+  const centralDirectory = concatBytes(centralParts);
+  const endRecord = concatBytes([
+    uint32(0x06054b50),
+    uint16(0),
+    uint16(0),
+    uint16(Object.keys(entries).length),
+    uint16(Object.keys(entries).length),
+    uint32(centralDirectory.byteLength),
+    uint32(offset),
+    uint16(0),
+  ]);
+
+  return concatBytes([...localParts, centralDirectory, endRecord]);
+}
+
+function createDocxBytes(text: string) {
+  return createZip({
+    '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>',
+    'word/document.xml': `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>`,
+  });
+}
+
+function createXlsxBytes(rows: string[][]) {
+  const sharedStrings = rows.flat();
+  const sharedStringXml = sharedStrings
+    .map((value) => `<si><t>${value}</t></si>`)
+    .join('');
+  const sheetXml = rows
+    .map((row, rowIndex) => {
+      const cells = row
+        .map((_, columnIndex) => {
+          const cellRef = `${String.fromCharCode(65 + columnIndex)}${rowIndex + 1}`;
+          const stringIndex = rowIndex * row.length + columnIndex;
+          return `<c r="${cellRef}" t="s"><v>${stringIndex}</v></c>`;
+        })
+        .join('');
+      return `<row r="${rowIndex + 1}">${cells}</row>`;
+    })
+    .join('');
+
+  return createZip({
+    '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>',
+    'xl/sharedStrings.xml': `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${sharedStringXml}</sst>`,
+    'xl/worksheets/sheet1.xml': `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetXml}</sheetData></worksheet>`,
+  });
+}
+
+function createTextPdfBytes(text: string) {
+  return encoder.encode(`%PDF-1.4
+1 0 obj
+<< /Type /Page /Contents 2 0 R >>
+endobj
+2 0 obj
+<< /Length 44 >>
+stream
+BT /F1 12 Tf 72 720 Td (${text}) Tj ET
+endstream
+endobj
+%%EOF`);
+}
+
 function expectSafePayload(payload: unknown) {
   const serialized = JSON.stringify(payload);
 
@@ -103,7 +254,7 @@ function expectSafePayload(payload: unknown) {
 
 function createFixture(input: {
   files?: PlatformKnowledgeFileRepositoryRecord[];
-  storage?: Record<string, string>;
+  storage?: Record<string, string | Uint8Array>;
 } = {}) {
   const files = input.files ?? [
     fileRecord(),
@@ -126,6 +277,18 @@ function createFixture(input: {
       mimeType: 'application/pdf',
     }),
     fileRecord({
+      fileId: 'file-docx',
+      originalFilename: '说明.docx',
+      storageKey: 'tenant-a/knowledge-a/file-docx.bin',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    }),
+    fileRecord({
+      fileId: 'file-xlsx',
+      originalFilename: '回访.xlsx',
+      storageKey: 'tenant-a/knowledge-a/file-xlsx.bin',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }),
+    fileRecord({
       fileId: 'file-archived',
       originalFilename: '归档.txt',
       storageKey: 'tenant-a/knowledge-a/file-archived.bin',
@@ -142,11 +305,16 @@ function createFixture(input: {
   ];
   const parseRecords = new Map<string, PlatformKnowledgeFileParseRecord>();
   const chunks = new Map<string, PlatformKnowledgeFileParseChunkRecord[]>();
-  const storageText = new Map(Object.entries({
+  const storageBytes = new Map<string, string | Uint8Array>(Object.entries({
     'tenant-a/knowledge-a/file-a.bin': '第一段护理说明。'.repeat(20),
     'tenant-a/knowledge-a/file-md.bin': '# 标题\n\n术后护理 Markdown 内容',
     'tenant-a/knowledge-a/file-csv.bin': 'name,value\n注意事项,避免暴晒',
-    'tenant-a/knowledge-a/file-pdf.bin': '%PDF bytes',
+    'tenant-a/knowledge-a/file-pdf.bin': createTextPdfBytes('PDF real text care guide'),
+    'tenant-a/knowledge-a/file-docx.bin': createDocxBytes('DOCX 术后护理文本'),
+    'tenant-a/knowledge-a/file-xlsx.bin': createXlsxBytes([
+      ['项目', '注意事项'],
+      ['水光针', '避免暴晒'],
+    ]),
     'tenant-a/knowledge-a/file-archived.bin': '归档内容',
     'tenant-b/knowledge-b/file-b.bin': '跨租户内容',
     ...input.storage,
@@ -192,7 +360,10 @@ function createFixture(input: {
 
   const storage: PlatformKnowledgeFileStorage = {
     save: vi.fn(),
-    read: vi.fn(async ({ storageKey }) => new TextEncoder().encode(storageText.get(storageKey) ?? '')),
+    read: vi.fn(async ({ storageKey }) => {
+      const value = storageBytes.get(storageKey) ?? '';
+      return typeof value === 'string' ? encoder.encode(value) : value;
+    }),
     delete: vi.fn(),
   };
 
@@ -247,18 +418,48 @@ describe('知识库文档解析与文本抽取 service', () => {
   });
 
   it.each([
-    ['file-pdf', 'pdf'],
-    [fileRecord({ fileId: 'file-docx', originalFilename: '说明.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), 'docx'],
-    [fileRecord({ fileId: 'file-xlsx', originalFilename: '说明.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'xlsx'],
-  ])('不支持的 %s / .%s 文件返回安全失败状态', async (fileOrId, _extension) => {
-    const files = typeof fileOrId === 'string' ? undefined : [fileOrId];
-    const fileId = typeof fileOrId === 'string' ? fileOrId : fileOrId.fileId;
-    const { repository, storage } = createFixture({ files });
+    ['file-pdf', 'PDF real text care guide'],
+    ['file-docx', 'DOCX 术后护理文本'],
+    ['file-xlsx', '水光针'],
+  ])('平台端可以解析真实上传文本类文件 %s', async (fileId, expectedPreview) => {
+    const { repository, storage } = createFixture();
 
     const result = await parsePlatformKnowledgeDocumentFileService({
       repository,
       storage,
       input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId },
+    });
+
+    expect(result.status).toBe('succeeded');
+    if (!('parse' in result)) throw new Error('expected parse result');
+    expect(result.parse).toEqual(
+      expect.objectContaining({
+        parseStatus: 'succeeded',
+        failureReasonCode: null,
+        safeFailureMessage: null,
+        textLength: expect.any(Number),
+        chunkCount: expect.any(Number),
+      }),
+    );
+    const savedChunks = await repository.listKnowledgeFileParseChunks({ tenantId: 'tenant-a', fileId });
+    expect(savedChunks.map((chunk) => chunk.textPreview).join('\n')).toContain(expectedPreview);
+    expect(storage.read).toHaveBeenCalled();
+    expectSafePayload(result);
+  });
+
+  it('不支持的文件类型被白名单拦截且不读取 storage', async () => {
+    const unsupported = fileRecord({
+      fileId: 'file-png',
+      originalFilename: '照片.png',
+      mimeType: 'image/png',
+      storageKey: 'tenant-a/knowledge-a/file-png.bin',
+    });
+    const { repository, storage } = createFixture({ files: [unsupported] });
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-png' },
     });
 
     expect(result.status).toBe('failed');
@@ -267,7 +468,7 @@ describe('知识库文档解析与文本抽取 service', () => {
       expect.objectContaining({
         parseStatus: 'failed',
         failureReasonCode: 'unsupported_file_type',
-        safeFailureMessage: '当前文件类型暂未接入解析器',
+        safeFailureMessage: '当前文件类型暂不支持解析',
         chunkCount: 0,
       }),
     );
@@ -275,7 +476,37 @@ describe('知识库文档解析与文本抽取 service', () => {
     expectSafePayload(result);
   });
 
-  it('空文本解析成功但不生成 chunk', async () => {
+  it('扫描 PDF 或无法抽取文本的 PDF 安全失败且不做 OCR', async () => {
+    const { repository, storage } = createFixture({
+      storage: {
+        'tenant-a/knowledge-a/file-pdf.bin': encoder.encode('%PDF-1.4\n/image-only scan bytes\n%%EOF'),
+      },
+    });
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-pdf' },
+    });
+
+    expect(result.status).toBe('failed');
+    if (!('parse' in result)) throw new Error('expected failed parse result');
+    expect(result.parse).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        failureReasonCode: 'empty_content',
+        safeFailureMessage: '文件未提取到可解析文本，扫描件或图片内容暂不支持',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenCalledWith(
+      expect.objectContaining({ chunks: [] }),
+    );
+    expectSafePayload(result);
+  });
+
+  it('空文本文件安全失败且不生成 chunk', async () => {
     const { repository, storage } = createFixture({
       storage: { 'tenant-a/knowledge-a/file-a.bin': ' \n\t ' },
     });
@@ -286,11 +517,80 @@ describe('知识库文档解析与文本抽取 service', () => {
       input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-a' },
     });
 
-    expect(result.status).toBe('succeeded');
-    expect(result.parse).toEqual(expect.objectContaining({ textLength: 0, chunkCount: 0 }));
+    expect(result.status).toBe('failed');
+    expect(result.parse).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        failureReasonCode: 'empty_content',
+        safeFailureMessage: '文件未提取到可解析文本，扫描件或图片内容暂不支持',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
     expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenCalledWith(
       expect.objectContaining({ chunks: [] }),
     );
+    expectSafePayload(result);
+  });
+
+  it('解析时文件大小超限会安全失败且不读取正文', async () => {
+    const oversized = fileRecord({
+      fileId: 'file-oversized',
+      originalFilename: '超大说明.txt',
+      storageKey: 'tenant-a/knowledge-a/file-oversized.bin',
+      sizeBytes: PLATFORM_KNOWLEDGE_FILE_MAX_BYTES + 1,
+    });
+    const { repository, storage } = createFixture({ files: [oversized] });
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-oversized' },
+    });
+
+    expect(result.status).toBe('failed');
+    if (!('parse' in result)) throw new Error('expected failed parse result');
+    expect(result.parse).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        failureReasonCode: 'file_too_large',
+        safeFailureMessage: '文件大小超过解析限制，请拆分后重新上传',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expect(storage.read).not.toHaveBeenCalled();
+    expectSafePayload(result);
+  });
+
+  it('解析后文本长度超限时截断、低敏标记并复用 chunk 切分机制', async () => {
+    const oversizedText = '护理说明。'.repeat(v1KnowledgeBaseUploadParseChunkRuntimeMaxChars);
+    const { repository, storage, parseRecords } = createFixture({
+      storage: { 'tenant-a/knowledge-a/file-a.bin': oversizedText },
+    });
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-a' },
+    });
+
+    expect(result.status).toBe('succeeded');
+    if (!('parse' in result)) throw new Error('expected parse result');
+    expect(result.parse).toEqual(
+      expect.objectContaining({
+        parseStatus: 'succeeded',
+        failureReasonCode: 'content_truncated',
+        safeFailureMessage: '解析文本超过长度限制，已截断为低敏预览',
+        textLength: v1KnowledgeBaseUploadParseChunkRuntimeMaxChars,
+      }),
+    );
+    expect(parseRecords.get('tenant-a:file-a')?.textContent.length).toBe(
+      v1KnowledgeBaseUploadParseChunkRuntimeMaxChars,
+    );
+    const chunks = await repository.listKnowledgeFileParseChunks({ tenantId: 'tenant-a', fileId: 'file-a' });
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.textPreview.length <= PLATFORM_KNOWLEDGE_PARSE_CHUNK_MAX_CHARS)).toBe(true);
     expectSafePayload(result);
   });
 

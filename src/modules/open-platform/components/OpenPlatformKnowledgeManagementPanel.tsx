@@ -749,7 +749,20 @@ export function OpenPlatformKnowledgeManagementPanel() {
         setFileActionMessage('文件解析暂时无法处理');
         return;
       }
-      setFileActionMessage(payload.status === 'failed' ? '文件解析失败：当前文件类型暂未接入解析器' : '文件解析已完成');
+      const safeMessage =
+        payload && typeof payload === 'object' && 'parse' in payload &&
+        payload.parse && typeof payload.parse === 'object' &&
+        'safeFailureMessage' in payload.parse &&
+        typeof payload.parse.safeFailureMessage === 'string'
+          ? payload.parse.safeFailureMessage
+          : null;
+      setFileActionMessage(
+        payload.status === 'failed'
+          ? `文件解析失败：${safeMessage ?? '知识库文件解析失败，请稍后重试'}`
+          : safeMessage
+            ? `文件解析已完成：${safeMessage}`
+            : '文件解析已完成',
+      );
       await reloadManagedFiles();
     } catch {
       setFileActionMessage('文件解析暂时无法处理');
@@ -1730,6 +1743,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                             <span>{file.fileType}</span>
                             <span>{file.sizeLabel}</span>
                             <span>{file.status === 'active' ? '可下载' : '已归档'}</span>
+                            <span>{formatNumber(file.textLength)} 字符</span>
                             <Badge className={managedParseStatusClasses[file.parseStatus]}>
                               {managedParseStatusLabels[file.parseStatus]} · {file.chunkCount} 片段
                             </Badge>
