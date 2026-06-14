@@ -245,6 +245,7 @@ export function OpenPlatformAiReadonlyPanel() {
           <div>
             <h2 id="ai-usage-heading" className="text-xl font-semibold tracking-normal text-white">AI 用量与费用</h2>
             <p className="mt-1 text-sm text-slate-400">受控示例用量，不读取真实日志，不连接数据库，不展示真实机构标识。</p>
+            <p className="mt-2 text-xs font-semibold text-rose-100">用量口径：当前为受控示例用量，费用为估算，不是正式账单。</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <div className="flex flex-wrap gap-2">

@@ -1,8 +1,5 @@
 import {
-  PLATFORM_AI_READONLY_AVAILABLE_MONTHS,
-  PLATFORM_AI_READONLY_DEFAULT_MONTH,
   PLATFORM_AI_READONLY_DISABLED_CAPABILITIES,
-  platformAiReadonlySampleData,
   type PlatformAiAgentInheritanceSample,
   type PlatformAiAvailableMonthSample,
   type PlatformAiCapabilityCoverageSample,
@@ -14,6 +11,11 @@ import {
   type PlatformAiScenarioUsageSample,
 } from '@/modules/open-platform/mock/platformAiReadonly';
 import { getPlatformAiModelRegistryResponse } from '@/modules/open-platform/server/platformAiModelRegistryContract';
+import {
+  getPlatformAiUsageCostResponse,
+  normalizePlatformAiUsageMonth,
+  type PlatformAiUsageCostResponse,
+} from '@/modules/open-platform/server/platformAiUsageCostContract';
 
 export type PlatformAiReadonlyResponse = {
   requestId: string;
@@ -22,6 +24,9 @@ export type PlatformAiReadonlyResponse = {
   registryVersion: string;
   registryStatus: 'controlled_readonly_demo';
   registryStatusNote: string;
+  usageVersion: PlatformAiUsageCostResponse['usageVersion'];
+  usageStatus: PlatformAiUsageCostResponse['usageStatus'];
+  costDisclaimer: string;
   month: string;
   selectedMonth: string;
   availableMonths: PlatformAiAvailableMonthSample[];
@@ -60,28 +65,14 @@ export type PlatformAiReadonlyResponse = {
   };
 };
 
-const controlledMonths = new Set(PLATFORM_AI_READONLY_AVAILABLE_MONTHS.map((month) => month.value));
-
 export function normalizeAiReadonlyMonth(value: string | null | undefined) {
-  const normalized = String(value ?? '').trim();
-  return controlledMonths.has(normalized) ? normalized : PLATFORM_AI_READONLY_DEFAULT_MONTH;
+  return normalizePlatformAiUsageMonth(value);
 }
 
 export function getPlatformAiReadonlyResponse(params: { month?: string | null } = {}): PlatformAiReadonlyResponse {
-  const month = normalizeAiReadonlyMonth(params.month);
   const registry = getPlatformAiModelRegistryResponse();
-  const monthMeta = PLATFORM_AI_READONLY_AVAILABLE_MONTHS.find((item) => item.value === month);
-  const hasUsageData = Boolean(monthMeta?.hasUsageData);
-  const usageSummary = hasUsageData
-    ? platformAiReadonlySampleData.usage.summary
-    : {
-      month,
-      totalCalls: 0,
-      totalTokens: 0,
-      successRate: 0,
-      averageLatencyMs: 0,
-      estimatedCostCny: 0,
-    };
+  const usageCost = getPlatformAiUsageCostResponse({ month: params.month });
+  const month = usageCost.selectedMonth;
 
   return {
     requestId: 'open-platform-ai-readonly',
@@ -90,14 +81,14 @@ export function getPlatformAiReadonlyResponse(params: { month?: string | null } 
     registryVersion: registry.registryVersion,
     registryStatus: registry.registryStatus,
     registryStatusNote: registry.registryStatusNote,
+    usageVersion: usageCost.usageVersion,
+    usageStatus: usageCost.usageStatus,
+    costDisclaimer: usageCost.costDisclaimer,
     month,
     selectedMonth: month,
-    availableMonths: PLATFORM_AI_READONLY_AVAILABLE_MONTHS,
-    hasUsageData,
-    emptyState: hasUsageData ? null : {
-      title: '暂无受控示例用量',
-      description: `${monthMeta?.label ?? month}为受控示例月份，未读取真实 AI 日志；估算费用不是正式账单。`,
-    },
+    availableMonths: usageCost.availableMonths,
+    hasUsageData: usageCost.hasUsageData,
+    emptyState: usageCost.emptyState,
     disabledCapabilities: [...PLATFORM_AI_READONLY_DISABLED_CAPABILITIES],
     capabilityCoverageRows: registry.capabilityCoverageRows,
     safetyBanner: {
@@ -114,13 +105,13 @@ export function getPlatformAiReadonlyResponse(params: { month?: string | null } 
     },
     usage: {
       summary: {
-        ...usageSummary,
+        ...usageCost.summary,
         month,
         billingStatusLabel: '估算费用 / 运营参考，不是正式账单',
       },
-      providerModelRows: hasUsageData ? platformAiReadonlySampleData.usage.providerModelRows : [],
-      scenarioRows: hasUsageData ? platformAiReadonlySampleData.usage.scenarioRows : [],
-      sampleInstitutionRanking: hasUsageData ? platformAiReadonlySampleData.usage.sampleInstitutionRanking : [],
+      providerModelRows: usageCost.providerModelRows,
+      scenarioRows: usageCost.scenarioRows,
+      sampleInstitutionRanking: usageCost.sampleInstitutionRanking,
     },
   };
 }
