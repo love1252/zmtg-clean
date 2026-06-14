@@ -23,9 +23,20 @@ export type KnowledgeBaseTrialFailureState = {
   operatorGuidance: string;
 };
 
+export type KnowledgeBaseControlledTrialReleasePackage = {
+  deliveryStatus: string;
+  conclusion: string;
+  packageChecklist: KnowledgeBaseTrialCapabilityItem[];
+  platformManualSummary: KnowledgeBaseTrialCapabilityItem[];
+  institutionManualSummary: KnowledgeBaseTrialCapabilityItem[];
+  acceptanceReportFields: KnowledgeBaseTrialCapabilityItem[];
+  completedCapabilities: KnowledgeBaseTrialCapabilityItem[];
+  nextStageEntryConditions: KnowledgeBaseTrialCapabilityItem[];
+};
+
 export type KnowledgeBaseControlledTrialReadiness = {
-  stage: '10-5';
-  status: '内部受控试用';
+  stage: '10-6';
+  status: '内部受控试用发布包';
   baselineCommit: string;
   summary: string;
   supportedFileTypes: KnowledgeBaseTrialFileType[];
@@ -48,14 +59,15 @@ export type KnowledgeBaseControlledTrialReadiness = {
   forbiddenFieldHints: string[];
   commonFailureStates: KnowledgeBaseTrialFailureState[];
   passingCriteria: string[];
+  releasePackage: KnowledgeBaseControlledTrialReleasePackage;
   failureMessages: string[];
 };
 
 const controlledTrialReadiness: KnowledgeBaseControlledTrialReadiness = {
-  stage: '10-5',
-  status: '内部受控试用',
-  baselineCommit: 'be94539792d54ac67275702cd102364f621bd706',
-  summary: '知识库已进入内部受控试用验收闭环，当前仅开放低敏、授权、mock/local 能力。',
+  stage: '10-6',
+  status: '内部受控试用发布包',
+  baselineCommit: 'c7f9b7603b7536fc7a4191213120b4cf6e62585f',
+  summary: '知识库内部受控试用发布包已收口，当前可交付内部试用人员。',
   supportedFileTypes: [
     { id: 'txt', label: 'TXT', behavior: '按纯文本解析，空内容会安全失败。' },
     { id: 'md', label: 'Markdown', behavior: '按 Markdown 文本解析，保留可读正文。' },
@@ -174,6 +186,60 @@ const controlledTrialReadiness: KnowledgeBaseControlledTrialReadiness = {
     '空态、失败态、权限态、quota 超限态、无引用态、无检索结果均展示中文安全文案。',
     'No-Go、低敏字段边界和禁止外显字段在平台端与机构端持续可见。',
   ],
+  releasePackage: {
+    deliveryStatus: '可交付内部受控试用',
+    conclusion: '当前版本可以交付内部试用人员，按发布包手册完成低敏、授权、mock/local 验收。',
+    packageChecklist: [
+      { id: 'overview', label: '阶段总交付说明', description: '说明当前知识库阶段能力、边界和交付结论。' },
+      { id: 'platform-manual', label: '平台端内部试用操作手册', description: '指导平台端完成上传、解析、检索、QA、引用、审计和 quota 验收。' },
+      { id: 'institution-manual', label: '机构端只读试用操作手册', description: '指导机构端完成授权内容只读查看、检索、QA、引用和审计验收。' },
+      { id: 'report-template', label: '内部验收报告模板', description: '统一记录试用人员、样本、结果、失败态、风险和交接结论。' },
+      { id: 'governance-list', label: '已完成能力与 No-Go 清单', description: '明确当前可试用能力与仍禁止能力。' },
+      { id: 'next-entry', label: '后续进入条件说明', description: '明确真实 AI、OCR、真实向量库、runtime 和真实外部服务的前置条件。' },
+    ],
+    platformManualSummary: [
+      { id: 'status', label: '确认发布状态和 No-Go', description: '进入知识库管理界面后先核对发布状态、禁用能力和禁止外显字段。' },
+      { id: 'parse', label: '按白名单上传并解析文件', description: '使用 txt、md、csv、文本型 pdf、docx、xlsx 样本验证解析成功和安全失败。' },
+      { id: 'qa', label: '核对 chunk、检索、QA 与引用', description: '查看低敏 chunk，执行关键词检索、mock 向量检索和 mock/local QA。' },
+      { id: 'audit', label: '记录 audit、quota 与失败态', description: '记录 citations、QA audit、quota、capability 和中文失败态。' },
+    ],
+    institutionManualSummary: [
+      { id: 'readonly-status', label: '确认只读交付状态', description: '先确认机构端只读交付状态和授权范围。' },
+      { id: 'files', label: '查看授权知识库和文件解析状态', description: '只读查看授权知识库、授权文件、解析状态和 chunk 预览。' },
+      { id: 'qa', label: '完成只读检索、QA 与 citations', description: '在授权范围内完成关键词检索、mock 向量检索、mock/local QA 和引用核对。' },
+      { id: 'record', label: '记录只读边界和失败态', description: '记录不可操作入口、权限失败、quota 超限、无引用和无检索结果。' },
+    ],
+    acceptanceReportFields: [
+      { id: 'tester', label: '试用人员与日期', description: '记录试用人员、角色、tenant、机构和日期。' },
+      { id: 'platform', label: '平台端试用记录', description: '记录平台端上传、解析、chunk、检索、QA、audit、quota、capability 结果。' },
+      { id: 'institution', label: '机构端只读试用记录', description: '记录机构端授权内容查看、检索、QA、citations 和本机构 audit 结果。' },
+      { id: 'parse', label: '文件解析样本与失败态', description: '记录文件类型、解析状态、chunk 数、失败态和安全文案。' },
+      { id: 'qa', label: '检索、QA、citations 与 audit 记录', description: '记录召回、回答、引用数量、审计编号和低敏状态。' },
+      { id: 'governance', label: 'quota、capability 与 No-Go 核对', description: '记录 quota 结果、capability 状态和 No-Go 清单核对。' },
+      { id: 'handoff', label: '问题、风险与交接结论', description: '记录问题、风险等级、处理建议和是否可继续试用。' },
+    ],
+    completedCapabilities: [
+      { id: 'upload', label: '文件上传', description: '平台端受控上传白名单文件。' },
+      { id: 'parse', label: '真实文本文件解析', description: '支持常见文本类真实文件解析。' },
+      { id: 'chunks', label: 'chunk 预览', description: '复用现有 chunk 切分并展示低敏预览。' },
+      { id: 'keyword', label: '关键词检索', description: '基于已解析 chunk 的关键词召回。' },
+      { id: 'vector', label: 'mock 向量检索', description: '使用 deterministic mock embedding 验证相似召回。' },
+      { id: 'qa', label: 'mock/local QA', description: '基于召回片段生成本地回答。' },
+      { id: 'citations', label: 'citations', description: '展示回答引用的低敏片段来源。' },
+      { id: 'audit', label: 'QA audit', description: '记录低敏问答审计。' },
+      { id: 'quota', label: 'quota', description: '保留 tenant 与 institution 每日次数限制。' },
+      { id: 'capability', label: 'capability', description: '展示能力启用状态和禁用原因。' },
+      { id: 'platform-low-sensitive', label: '平台端低敏展示', description: '平台端按 tenant 范围展示低敏状态。' },
+      { id: 'institution-readonly', label: '机构端只读低敏展示', description: '机构端按授权范围只读展示低敏内容。' },
+    ],
+    nextStageEntryConditions: [
+      { id: 'real-ai', label: '真实 AI', description: '必须先完成密钥治理、成本限额、质量评估、安全评估、灰度开关、回滚方案。' },
+      { id: 'ocr', label: 'OCR', description: '必须先完成文件安全策略、扫描件识别质量评估、失败补偿、人工复核边界。' },
+      { id: 'vector-store', label: '真实向量库', description: '必须先完成选型、schema/migration 审批、租户隔离、删除回滚、索引重建策略。' },
+      { id: 'runtime-ingestion', label: 'runtime ingestion', description: '必须先完成 worker/queue/scheduler 方案、幂等、重试、死信、可观测性和回滚。' },
+      { id: 'external-service', label: '任何真实外部服务', description: '必须先完成凭据管理、审计、限流、成本控制和降级策略。' },
+    ],
+  },
   failureMessages: [
     '当前文件类型暂不支持解析',
     '文件大小超过解析限制，请拆分后重新上传',

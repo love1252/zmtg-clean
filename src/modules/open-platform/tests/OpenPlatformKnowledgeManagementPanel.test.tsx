@@ -100,10 +100,10 @@ describe('平台端知识库管理只读看板', () => {
               denylist: ['storageKey', 'embeddingVectorJson', 'token', 'secret'],
             },
             controlledTrial: {
-              stage: '10-4',
-              status: '内部受控试用',
-              baselineCommit: '1e41132cbfe23fc755c2426d271f889b40f41d27',
-              summary: '知识库已进入内部受控试用，当前仅开放低敏、授权、mock/local 能力。',
+              stage: '10-6',
+              status: '内部受控试用发布包',
+              baselineCommit: 'c7f9b7603b7536fc7a4191213120b4cf6e62585f',
+              summary: '知识库内部受控试用发布包已收口，当前可交付内部试用人员。',
               supportedFileTypes: [
                 { id: 'txt', label: 'TXT', behavior: '按纯文本解析。' },
                 { id: 'md', label: 'Markdown', behavior: '按 Markdown 文本解析。' },
@@ -184,6 +184,59 @@ describe('平台端知识库管理只读看板', () => {
                 '平台端按步骤完成上传、解析、chunk、检索、QA、citations、audit、quota、capability 验收。',
                 '空态、失败态、权限态、quota 超限态、无引用态、无检索结果均展示中文安全文案。',
               ],
+              releasePackage: {
+                deliveryStatus: '可交付内部受控试用',
+                conclusion: '当前版本可以交付内部试用人员，按手册完成低敏验收。',
+                packageChecklist: [
+                  { id: 'overview', label: '阶段总交付说明', description: '说明当前阶段边界。' },
+                  { id: 'platform-manual', label: '平台端内部试用操作手册', description: '平台端试用步骤。' },
+                  { id: 'institution-manual', label: '机构端只读试用操作手册', description: '机构端只读步骤。' },
+                  { id: 'report-template', label: '内部验收报告模板', description: '统一记录验收项。' },
+                  { id: 'no-go', label: '已完成能力与 No-Go 清单', description: '清楚区分允许与禁止。' },
+                  { id: 'next-entry', label: '后续进入条件说明', description: '下一阶段前置条件。' },
+                ],
+                platformManualSummary: [
+                  { id: 'status', label: '确认发布状态和 No-Go', description: '先看发布状态。' },
+                  { id: 'parse', label: '按白名单上传并解析文件', description: '验证解析。' },
+                  { id: 'qa', label: '核对 chunk、检索、QA 与引用', description: '验证引用。' },
+                  { id: 'audit', label: '记录 audit、quota 与失败态', description: '记录验收。' },
+                ],
+                institutionManualSummary: [
+                  { id: 'readonly-status', label: '确认只读交付状态', description: '确认只读。' },
+                  { id: 'files', label: '查看授权知识库和文件解析状态', description: '查看授权内容。' },
+                  { id: 'qa', label: '完成只读检索、QA 与 citations', description: '完成只读问答。' },
+                  { id: 'record', label: '记录只读边界和失败态', description: '记录边界。' },
+                ],
+                acceptanceReportFields: [
+                  { id: 'tester', label: '试用人员与日期', description: '记录人员和日期。' },
+                  { id: 'platform', label: '平台端试用记录', description: '记录平台端步骤。' },
+                  { id: 'institution', label: '机构端只读试用记录', description: '记录机构端步骤。' },
+                  { id: 'parse', label: '文件解析样本与失败态', description: '记录解析样本。' },
+                  { id: 'qa', label: '检索、QA、citations 与 audit 记录', description: '记录问答链路。' },
+                  { id: 'governance', label: 'quota、capability 与 No-Go 核对', description: '记录治理项。' },
+                  { id: 'handoff', label: '问题、风险与交接结论', description: '记录交接结论。' },
+                ],
+                completedCapabilities: [
+                  { id: 'parse', label: '真实文本文件解析', description: '白名单文本文件解析。' },
+                  { id: 'chunks', label: 'chunk 预览', description: '低敏片段预览。' },
+                  { id: 'keyword', label: '关键词检索', description: '关键词召回。' },
+                  { id: 'vector', label: 'mock 向量检索', description: 'mock 相似召回。' },
+                  { id: 'qa', label: 'mock/local QA', description: '本地问答。' },
+                  { id: 'citations', label: 'citations', description: '引用展示。' },
+                  { id: 'audit', label: 'QA audit', description: '审计记录。' },
+                  { id: 'quota', label: 'quota', description: '用量限制。' },
+                  { id: 'capability', label: 'capability', description: '能力状态。' },
+                  { id: 'platform-low-sensitive', label: '平台端低敏展示', description: '平台端边界。' },
+                  { id: 'institution-readonly', label: '机构端只读低敏展示', description: '机构端边界。' },
+                ],
+                nextStageEntryConditions: [
+                  { id: 'real-ai', label: '真实 AI', description: '必须先完成密钥治理、成本限额、质量评估、安全评估、灰度开关、回滚方案。' },
+                  { id: 'ocr', label: 'OCR', description: '必须先完成文件安全策略、扫描件识别质量评估、失败补偿、人工复核边界。' },
+                  { id: 'vector-store', label: '真实向量库', description: '必须先完成选型、schema/migration 审批、租户隔离、删除回滚、索引重建策略。' },
+                  { id: 'runtime-ingestion', label: 'runtime ingestion', description: '必须先完成 worker/queue/scheduler 方案、幂等、重试、死信、可观测性和回滚。' },
+                  { id: 'external-service', label: '任何真实外部服务', description: '必须先完成凭据管理、审计、限流、成本控制和降级策略。' },
+                ],
+              },
               failureMessages: [
                 '当前文件类型暂不支持解析',
                 '文件大小超过解析限制，请拆分后重新上传',
@@ -738,8 +791,10 @@ describe('平台端知识库管理只读看板', () => {
     expect(await screen.findByRole('heading', { name: '生产能力状态' })).toBeInTheDocument();
     const trialSection = screen.getByLabelText('平台端知识库内部受控试用状态');
 
-    expect(within(trialSection).getByText('内部受控试用')).toBeInTheDocument();
-    expect(within(trialSection).getByText('知识库已进入内部受控试用，当前仅开放低敏、授权、mock/local 能力。')).toBeInTheDocument();
+    expect(within(trialSection).getByText('内部受控试用发布包')).toBeInTheDocument();
+    expect(within(trialSection).getByText('知识库内部受控试用发布包已收口，当前可交付内部试用人员。')).toBeInTheDocument();
+    expect(trialSection.textContent).toContain('可交付内部受控试用');
+    expect(trialSection.textContent).toContain('当前版本可以交付内部试用人员');
     [
       '文件上传',
       '真实文本文件解析',
@@ -752,7 +807,7 @@ describe('平台端知识库管理只读看板', () => {
       'quota',
       'capability',
     ].forEach((label) => {
-      expect(within(trialSection).getByText(label)).toBeInTheDocument();
+      expect(within(trialSection).getAllByText(label).length).toBeGreaterThan(0);
     });
     ['TXT', 'Markdown', 'CSV', '文本型 PDF', 'DOCX', 'XLSX'].forEach((label) => {
       expect(within(trialSection).getByText(label)).toBeInTheDocument();
@@ -774,7 +829,7 @@ describe('平台端知识库管理只读看板', () => {
       'dashboard 聚合',
       '首页编辑',
     ].forEach((label) => {
-      expect(within(trialSection).getByText(label)).toBeInTheDocument();
+      expect(within(trialSection).getAllByText(label).length).toBeGreaterThan(0);
     });
     expect(trialSection.textContent).toContain('仅展示低敏摘要、解析状态、chunk 预览、引用和审计摘要。');
     [
@@ -787,7 +842,7 @@ describe('平台端知识库管理只读看板', () => {
       '核对 citations 与 QA audit',
       '核对 quota 与失败态说明',
     ].forEach((label) => {
-      expect(within(trialSection).getByText(label)).toBeInTheDocument();
+      expect(within(trialSection).getAllByText(label).length).toBeGreaterThan(0);
     });
     [
       '解析状态和失败文案可理解',
@@ -795,7 +850,7 @@ describe('平台端知识库管理只读看板', () => {
       'citations、audit、quota、capability 可核对',
       'No-Go 和禁止外显字段持续可见',
     ].forEach((label) => {
-      expect(within(trialSection).getByText(label)).toBeInTheDocument();
+      expect(within(trialSection).getAllByText(label).length).toBeGreaterThan(0);
     });
     ['空态', '解析失败', 'quota 超限', '无引用', '无检索结果'].forEach((label) => {
       expect(within(trialSection).getByText(label)).toBeInTheDocument();
@@ -803,6 +858,34 @@ describe('平台端知识库管理只读看板', () => {
     expect(trialSection.textContent).toContain('当前问题没有命中可引用的知识片段');
     expect(trialSection.textContent).toContain('当前范围没有命中关键词或相似片段');
     expect(trialSection.textContent).toContain('平台端按步骤完成上传、解析、chunk、检索、QA、citations、audit、quota、capability 验收。');
+    [
+      '阶段总交付说明',
+      '平台端内部试用操作手册',
+      '机构端只读试用操作手册',
+      '内部验收报告模板',
+      '已完成能力与 No-Go 清单',
+      '后续进入条件说明',
+      '确认发布状态和 No-Go',
+      '按白名单上传并解析文件',
+      '核对 chunk、检索、QA 与引用',
+      '记录 audit、quota 与失败态',
+      '试用人员与日期',
+      '平台端试用记录',
+      '机构端只读试用记录',
+      '文件解析样本与失败态',
+      '检索、QA、citations 与 audit 记录',
+      'quota、capability 与 No-Go 核对',
+      '问题、风险与交接结论',
+      '真实 AI',
+      'OCR',
+      '真实向量库',
+      'runtime ingestion',
+      '任何真实外部服务',
+    ].forEach((label) => {
+      expect(within(trialSection).getAllByText(label).length).toBeGreaterThan(0);
+    });
+    expect(trialSection.textContent).toContain('密钥治理、成本限额、质量评估、安全评估、灰度开关、回滚方案');
+    expect(trialSection.textContent).toContain('worker/queue/scheduler 方案、幂等、重试、死信、可观测性和回滚');
     expect(trialSection.textContent).toContain('存储定位键');
     expect(container.textContent).not.toContain('storageKey');
     expect(container.textContent).not.toContain('/Users/');

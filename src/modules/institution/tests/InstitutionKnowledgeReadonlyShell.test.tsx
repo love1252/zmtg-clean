@@ -253,8 +253,10 @@ describe('机构端知识库只读列表 UI', () => {
     expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
     const trialNotice = screen.getByLabelText('机构端知识库只读试用说明');
 
-    expect(within(trialNotice).getByText('内部受控试用')).toBeInTheDocument();
+    expect(within(trialNotice).getByText('内部受控试用发布包')).toBeInTheDocument();
     expect(within(trialNotice).getByText('机构端仅可只读试用授权内容。')).toBeInTheDocument();
+    expect(trialNotice.textContent).toContain('可交付内部受控试用');
+    expect(trialNotice.textContent).toContain('当前版本可以交付内部试用人员');
     [
       '授权知识库查看',
       '授权文件查看',
@@ -303,7 +305,7 @@ describe('机构端知识库只读列表 UI', () => {
       'runtime ingestion',
       'worker / queue / scheduler',
     ].forEach((label) => {
-      expect(within(trialNotice).getByText(label)).toBeInTheDocument();
+      expect(within(trialNotice).getAllByText(label).length).toBeGreaterThan(0);
       expect(within(trialNotice).queryByRole('button', { name: label })).not.toBeInTheDocument();
     });
     expect(trialNotice.textContent).toContain('仅展示低敏摘要、解析状态、chunk 预览、引用和审计摘要。');
@@ -312,6 +314,27 @@ describe('机构端知识库只读列表 UI', () => {
     expect(trialNotice.textContent).toContain('当前问题没有命中可引用的知识片段');
     expect(trialNotice.textContent).toContain('当前范围没有命中关键词或相似片段');
     expect(trialNotice.textContent).toContain('机构端按步骤完成授权内容只读查看、检索、QA、citations 和本机构 audit 验收。');
+    [
+      '机构端只读试用操作手册',
+      '确认只读交付状态',
+      '查看授权知识库和文件解析状态',
+      '完成只读检索、QA 与 citations',
+      '记录只读边界和失败态',
+      '机构端只读试用记录',
+      '文件解析样本与失败态',
+      '检索、QA、citations 与 audit 记录',
+      'quota、capability 与 No-Go 核对',
+      '问题、风险与交接结论',
+      '真实 AI',
+      'OCR',
+      '真实向量库',
+      'runtime ingestion',
+      '任何真实外部服务',
+    ].forEach((label) => {
+      expect(within(trialNotice).getAllByText(label).length).toBeGreaterThan(0);
+    });
+    expect(trialNotice.textContent).toContain('密钥治理、成本限额、质量评估、安全评估、灰度开关、回滚方案');
+    expect(trialNotice.textContent).toContain('文件安全策略、扫描件识别质量评估、失败补偿、人工复核边界');
     expect(container.textContent).not.toContain('storageKey');
     expect(container.textContent).not.toContain('/Users/');
     expect(container.textContent).not.toContain('SQL');

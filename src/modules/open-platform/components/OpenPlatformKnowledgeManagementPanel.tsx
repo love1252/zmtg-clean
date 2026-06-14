@@ -1110,6 +1110,82 @@ export function OpenPlatformKnowledgeManagementPanel() {
                   </Badge>
                 </div>
 
+                <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.08] p-3">
+                  <div className="text-xs font-semibold text-cyan-100">
+                    {capabilityResponse.controlledTrial.releasePackage.deliveryStatus}
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-slate-300">
+                    {capabilityResponse.controlledTrial.releasePackage.conclusion}
+                  </p>
+                </div>
+
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">发布包清单</h4>
+                    <ul className="mt-2 space-y-2 text-xs leading-5 text-slate-300">
+                      {capabilityResponse.controlledTrial.releasePackage.packageChecklist.map((item) => (
+                        <li key={item.id}>
+                          <span className="font-semibold text-cyan-100">{item.label}</span>
+                          <span className="block text-slate-400">{item.description}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">平台端操作手册摘要</h4>
+                    <ol className="mt-2 space-y-2 text-xs leading-5 text-slate-300">
+                      {capabilityResponse.controlledTrial.releasePackage.platformManualSummary.map((step, index) => (
+                        <li key={step.id}>
+                          <span aria-hidden="true" className="font-semibold text-cyan-100">
+                            {index + 1}.{' '}
+                          </span>
+                          <span className="font-semibold text-cyan-100">{step.label}</span>
+                          <span className="block text-slate-400">{step.description}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">内部验收报告模板字段</h4>
+                    <ul className="mt-2 space-y-2 text-xs leading-5 text-slate-300">
+                      {capabilityResponse.controlledTrial.releasePackage.acceptanceReportFields.map((field) => (
+                        <li key={field.id}>
+                          <span className="font-semibold text-emerald-100">{field.label}</span>
+                          <span className="block text-slate-400">{field.description}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">后续进入条件</h4>
+                    <ul className="mt-2 space-y-2 text-xs leading-5 text-slate-300">
+                      {capabilityResponse.controlledTrial.releasePackage.nextStageEntryConditions.map((condition) => (
+                        <li key={condition.id}>
+                          <span className="font-semibold text-amber-100">{condition.label}</span>
+                          <span className="block text-slate-400">{condition.description}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                  <h4 className="text-xs font-semibold text-slate-200">已完成能力总清单</h4>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {capabilityResponse.controlledTrial.releasePackage.completedCapabilities.map((capability) => (
+                      <span
+                        key={capability.id}
+                        className="rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-2.5 py-1 text-xs font-semibold text-emerald-100"
+                      >
+                        {capability.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
                     <h4 className="text-xs font-semibold text-slate-200">可试用能力</h4>
