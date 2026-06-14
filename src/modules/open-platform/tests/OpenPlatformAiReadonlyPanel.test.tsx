@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OpenPlatformAiReadonlyPanel } from '@/modules/open-platform/components/OpenPlatformAiReadonlyPanel';
 import { PlatformConsole } from '@/modules/workspace/components/PlatformConsole';
 
@@ -13,7 +13,7 @@ const forbiddenText = [
   'CSV',
   'PDF',
   'Excel',
-  'sk_test',
+  'runtime-auth-redacted-value',
   'DATABASE_URL',
   'postgres://',
   '/Users/',
@@ -21,7 +21,37 @@ const forbiddenText = [
   'token',
   'secret',
   'credential',
+  '测试调用用户 prompt',
 ];
+
+const runtimeStatusMissing = {
+  readonly: true,
+  dataSource: 'env_only',
+  enabled: false,
+  configured: false,
+  provider: null,
+  model: null,
+  baseUrlConfigured: false,
+  missingKeys: [
+    'ZMTG_AI_RUNTIME_ENABLED',
+    'ZMTG_AI_PROVIDER',
+    'ZMTG_AI_BASE_URL',
+    'ZMTG_AI_API_KEY',
+    'ZMTG_AI_MODEL',
+  ],
+  safety: {
+    title: 'AI Runtime env-only 可用性',
+    keyPolicy: 'API Key 仅从服务端环境变量读取，不在页面输入、不回显、不保存。',
+    smokePolicy: '真实调用仅用于固定 smoke test，不接收用户 prompt。',
+  },
+};
+
+function mockRuntimeStatusFetch(fetchMock = vi.fn()) {
+  fetchMock.mockResolvedValue(new Response(JSON.stringify(runtimeStatusMissing), { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+
+  return fetchMock;
+}
 
 function expectNoForbiddenAiReadonlyContent(container: HTMLElement) {
   const text = container.textContent ?? '';
@@ -40,8 +70,13 @@ function expectNoMutationFetch(fetchMock: ReturnType<typeof vi.fn>) {
   expect(mutatingCall).toBeUndefined();
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('平台端 AI 模型与用量只读面板', () => {
-  it('展示 AI 模型目录、场景关系、Agent 继承和用量费用只读结构', () => {
+  it('展示 AI 模型目录、场景关系、Agent 继承、用量费用和 runtime env-only 状态', async () => {
+    mockRuntimeStatusFetch();
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
     expect(screen.getByRole('heading', { name: 'AI 模型与用量' })).toBeInTheDocument();
@@ -71,6 +106,15 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.getByText('厂商 / 模型维度')).toBeInTheDocument();
     expect(screen.getByText('业务场景维度')).toBeInTheDocument();
     expect(screen.getByText('示例机构排行')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'AI Runtime 状态' })).toBeInTheDocument();
+    expect(screen.getByText('env-only')).toBeInTheDocument();
+    expect(screen.getByText('API Key 仅从服务端环境变量读取，不在页面输入、不回显、不保存。')).toBeInTheDocument();
+    expect(screen.getByText('真实调用仅用于固定 smoke test，不接收用户 prompt。')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('未启用')).toBeInTheDocument();
+      expect(screen.getByText('配置不完整')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '运行 smoke test' })).toBeDisabled();
+    });
     expect(screen.getByRole('heading', { name: '能力覆盖矩阵' })).toBeInTheDocument();
     expect(screen.getByText('文本生成')).toBeInTheDocument();
     expect(screen.getByText('推理判断')).toBeInTheDocument();
@@ -86,7 +130,8 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expectNoForbiddenAiReadonlyContent(container);
   });
 
-  it('支持受控月份切换并展示无用量空状态', () => {
+  it('支持受控月份切换并展示无用量空状态', async () => {
+    mockRuntimeStatusFetch();
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
     expect(screen.getByRole('button', { name: '2026年06月 有示例用量' })).toBeInTheDocument();
@@ -100,12 +145,14 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.getByText('¥0.00')).toBeInTheDocument();
     expect(screen.queryByText('示例机构 A')).not.toBeInTheDocument();
     expect(screen.queryByText('通义千问')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('未启用')).toBeInTheDocument();
+    });
     expectNoForbiddenAiReadonlyContent(container);
   });
 
-  it('平台导航可进入 AI 模型与用量面板，且不触发 mutation 或高风险入口', () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+  it('平台导航可进入 AI 模型与用量面板，且不触发 mutation 或高风险入口', async () => {
+    const fetchMock = mockRuntimeStatusFetch();
     const { container } = render(<PlatformConsole />);
 
     expect(screen.getByRole('button', { name: 'AI 配额边界' })).toBeInTheDocument();
@@ -120,6 +167,10 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.queryByRole('button', { name: /保存 Key/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /显示 Key/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /自动扣费/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /key/i })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('配置不完整')).toBeInTheDocument();
+    });
     expectNoMutationFetch(fetchMock);
     expectNoForbiddenAiReadonlyContent(container);
   });
