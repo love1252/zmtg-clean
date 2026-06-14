@@ -10,6 +10,7 @@ import {
   listInstitutionKnowledgeItems,
   type TenantBusinessClientError,
 } from '@/modules/institution/client/tenant-business-client';
+import { getKnowledgeBaseControlledTrialReadiness } from '@/modules/knowledge-base/domain/v1-knowledge-base-controlled-trial-readiness';
 import { InstitutionPageState } from '@/modules/institution/components/InstitutionPageState';
 import { cn } from '@/shared/utils/cn';
 
@@ -94,6 +95,8 @@ const qaRetrievalModeLabels: Record<InstitutionKnowledgeQaAuditRecord['retrieval
   keyword: '关键词',
   vector: '语义',
 };
+
+const controlledTrialReadiness = getKnowledgeBaseControlledTrialReadiness();
 
 function visibleErrorMessage(error: TenantBusinessClientError | null) {
   if (!error) return '知识库只读数据暂时不可用';
@@ -455,6 +458,75 @@ export function InstitutionKnowledgeReadonlyShell() {
           </button>
         </form>
       </div>
+
+      <section
+        aria-label="机构端知识库只读试用说明"
+        className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4"
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-xs font-semibold text-cyan-700">{controlledTrialReadiness.status}</div>
+            <h2 className="mt-1 text-lg font-semibold tracking-normal text-slate-950">只读试用说明</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              {controlledTrialReadiness.institution.notice}
+            </p>
+          </div>
+          <span className="rounded-full border border-cyan-200 bg-white px-3 py-1.5 text-xs font-semibold text-cyan-700">
+            只读链路
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          <div className="rounded-xl border border-cyan-100 bg-white/80 p-3">
+            <h3 className="text-xs font-semibold text-slate-700">可只读试用</h3>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {controlledTrialReadiness.institution.allowedCapabilities.map((capability) => (
+                <span
+                  key={capability.id}
+                  className="rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"
+                >
+                  {capability.label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl border border-cyan-100 bg-white/80 p-3">
+            <h3 className="text-xs font-semibold text-slate-700">禁止操作</h3>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {controlledTrialReadiness.institution.forbiddenActions.map((action) => (
+                <span
+                  key={action.id}
+                  className="rounded-full border border-amber-100 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"
+                >
+                  {action.label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl border border-cyan-100 bg-white/80 p-3">
+            <h3 className="text-xs font-semibold text-slate-700">仍未开放</h3>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {controlledTrialReadiness.blockedCapabilities
+                .filter((capability) =>
+                  ['ocr', 'scannedPdf', 'realAi', 'vectorStore', 'runtimeIngestion', 'workerQueue'].includes(
+                    capability.id,
+                  ),
+                )
+                .map((capability) => (
+                  <span
+                    key={capability.id}
+                    className="rounded-full border border-rose-100 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700"
+                  >
+                    {capability.label}
+                  </span>
+                ))}
+            </div>
+          </div>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-slate-500">
+          {controlledTrialReadiness.lowSensitiveBoundaries[0]}
+        </p>
+      </section>
 
       {status === 'loading' ? (
         <InstitutionPageState kind="loading" title="正在加载机构知识库..." />

@@ -30,6 +30,7 @@ import {
   type OpenPlatformKnowledgeManagementItems,
   type OpenPlatformKnowledgeManagementView,
 } from '@/modules/open-platform/lib/platformKnowledgeManagementViewLoader';
+import type { KnowledgeBaseControlledTrialReadiness } from '@/modules/knowledge-base/domain/v1-knowledge-base-controlled-trial-readiness';
 import { cn } from '@/shared/utils/cn';
 
 const ALL_TENANTS = 'all';
@@ -122,6 +123,7 @@ type KnowledgeBaseCapabilityResponse = {
     institutionDailyLimit: number;
     usageLimitedMessage: string;
   };
+  controlledTrial?: KnowledgeBaseControlledTrialReadiness;
 };
 
 const fileStatusLabels: Record<KnowledgeFileParseStatus, string> = {
@@ -1090,6 +1092,102 @@ export function OpenPlatformKnowledgeManagementPanel() {
             <div className="mb-4 rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-3 text-sm font-semibold text-slate-300">
               {capabilityMessage}
             </div>
+            {capabilityResponse.controlledTrial ? (
+              <section
+                className="mb-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.06] p-4"
+                aria-label="平台端知识库内部受控试用状态"
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-cyan-100">{capabilityResponse.controlledTrial.status}</div>
+                    <h3 className="mt-1 text-base font-semibold tracking-normal text-white">内部受控试用状态</h3>
+                    <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-300">
+                      {capabilityResponse.controlledTrial.summary}
+                    </p>
+                  </div>
+                  <Badge className="border-white/10 bg-white/[0.08] text-slate-200">
+                    基线 {capabilityResponse.controlledTrial.baselineCommit.slice(0, 8)}
+                  </Badge>
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">可试用能力</h4>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {capabilityResponse.controlledTrial.platform.allowedCapabilities.map((capability) => (
+                        <span
+                          key={capability.id}
+                          className="rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-2.5 py-1 text-xs font-semibold text-emerald-100"
+                        >
+                          {capability.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">支持文件类型</h4>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {capabilityResponse.controlledTrial.supportedFileTypes.map((fileType) => (
+                        <span
+                          key={fileType.id}
+                          className="rounded-full border border-blue-300/20 bg-blue-300/[0.08] px-2.5 py-1 text-xs font-semibold text-blue-100"
+                        >
+                          {fileType.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">解析安全限制</h4>
+                    <dl className="mt-3 grid gap-2">
+                      {capabilityResponse.controlledTrial.safetyLimits.map((limit) => (
+                        <div key={limit.label} className="flex items-center justify-between gap-3 text-xs">
+                          <dt className="text-slate-400">{limit.label}</dt>
+                          <dd className="font-semibold text-white">{limit.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">当前禁止能力</h4>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {capabilityResponse.controlledTrial.blockedCapabilities.map((capability) => (
+                        <span
+                          key={capability.id}
+                          className="rounded-full border border-amber-300/20 bg-amber-300/[0.08] px-2.5 py-1 text-xs font-semibold text-amber-100"
+                        >
+                          {capability.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">低敏展示边界</h4>
+                    <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-300">
+                      {capabilityResponse.controlledTrial.lowSensitiveBoundaries.map((boundary) => (
+                        <li key={boundary}>{boundary}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">禁止外显信息</h4>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {capabilityResponse.controlledTrial.forbiddenFieldHints.map((hint) => (
+                        <span
+                          key={hint}
+                          className="rounded-full border border-rose-300/20 bg-rose-300/[0.08] px-2.5 py-1 text-xs font-semibold text-rose-100"
+                        >
+                          {hint}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            ) : null}
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {capabilityResponse.capabilities.map((capability) => (
                 <article key={capability.id} className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">

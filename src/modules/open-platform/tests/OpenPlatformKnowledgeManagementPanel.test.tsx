@@ -99,6 +99,61 @@ describe('平台端知识库管理只读看板', () => {
               allowlist: ['knowledgeId', 'fileId', 'chunkId', 'auditId'],
               denylist: ['storageKey', 'embeddingVectorJson', 'token', 'secret'],
             },
+            controlledTrial: {
+              stage: '10-4',
+              status: '内部受控试用',
+              baselineCommit: '1e41132cbfe23fc755c2426d271f889b40f41d27',
+              summary: '知识库已进入内部受控试用，当前仅开放低敏、授权、mock/local 能力。',
+              supportedFileTypes: [
+                { id: 'txt', label: 'TXT', behavior: '按纯文本解析。' },
+                { id: 'md', label: 'Markdown', behavior: '按 Markdown 文本解析。' },
+                { id: 'csv', label: 'CSV', behavior: '抽取表格文本。' },
+                { id: 'pdf_text', label: '文本型 PDF', behavior: '仅抽取文本型 PDF；扫描件安全失败。' },
+                { id: 'docx', label: 'DOCX', behavior: '抽取正文文本。' },
+                { id: 'xlsx', label: 'XLSX', behavior: '抽取工作表文本。' },
+              ],
+              safetyLimits: [
+                { label: '文件大小限制', value: '20MB', description: '超过限制会安全拒绝解析。' },
+                { label: '解析文本上限', value: '32000 字符', description: '超过上限会截断并保留低敏状态。' },
+                { label: 'ZIP 单文件解压上限', value: '5MB', description: 'DOCX/XLSX 解压单文件限制。' },
+                { label: 'ZIP 总解压上限', value: '12MB', description: 'DOCX/XLSX 解压总量限制。' },
+                { label: 'PDF 单段解压上限', value: '8MB', description: 'PDF 文本流解压限制。' },
+              ],
+              platform: {
+                notice: '平台端可按 tenant 范围试用知识库管理闭环。',
+                allowedCapabilities: [
+                  { id: 'upload', label: '文件上传', description: '平台端受控上传。' },
+                  { id: 'parse', label: '真实文本文件解析', description: '仅文本型文件解析。' },
+                  { id: 'chunks', label: 'chunk 查看', description: '只展示低敏片段预览。' },
+                  { id: 'keyword', label: '关键词检索', description: '基于已解析片段。' },
+                  { id: 'vector', label: 'mock 向量检索', description: '使用本地 mock embedding。' },
+                  { id: 'qa', label: 'mock/local QA', description: '不调用真实 AI。' },
+                  { id: 'citations', label: 'citations', description: '展示引用片段。' },
+                  { id: 'audit', label: 'QA audit', description: '低敏审计。' },
+                  { id: 'quota', label: 'quota', description: '受每日次数限制。' },
+                  { id: 'capability', label: 'capability', description: '展示能力状态。' },
+                ],
+              },
+              institution: {
+                notice: '机构端仅可只读试用授权内容。',
+                allowedCapabilities: [],
+                forbiddenActions: [],
+              },
+              blockedCapabilities: [
+                { id: 'ocr', label: 'OCR', reason: '未接入图片文字识别。' },
+                { id: 'scannedPdf', label: '扫描 PDF', reason: '扫描件不做识别。' },
+                { id: 'realAi', label: '真实 AI', reason: '真实 AI 未启用。' },
+                { id: 'vectorStore', label: '真实向量库', reason: '仅 mock embedding。' },
+                { id: 'runtimeIngestion', label: 'runtime ingestion', reason: '未启用 runtime ingestion。' },
+                { id: 'workerQueue', label: 'worker/queue', reason: '未启用后台队列。' },
+                { id: 'training', label: '训练', reason: '不训练模型。' },
+                { id: 'billing', label: '计费', reason: '不接入计费。' },
+                { id: 'dashboard', label: 'dashboard', reason: '不做 dashboard 聚合。' },
+              ],
+              lowSensitiveBoundaries: ['仅展示低敏摘要、解析状态、chunk 预览、引用和审计摘要。'],
+              forbiddenFieldHints: ['存储定位键', '本地文件系统路径', '数据库语句', '异常堆栈', '令牌', '密钥', 'API 凭据'],
+              failureMessages: ['该文件没有可解析的文本内容', '当前文件类型暂不支持解析', '文件解析失败，请检查文件内容后重试'],
+            },
           });
         }
         if (url.includes('/api/v1/open-platform/knowledge-management/qa/audits')) {
@@ -613,14 +668,14 @@ describe('平台端知识库管理只读看板', () => {
     const capabilitySection = screen.getByLabelText('平台端知识库生产能力状态');
 
     expect(within(capabilitySection).getByText('文件管理')).toBeInTheDocument();
-    expect(within(capabilitySection).getByText('mock/local QA')).toBeInTheDocument();
+    expect(within(capabilitySection).getAllByText('mock/local QA').length).toBeGreaterThan(0);
     expect(within(capabilitySection).getAllByText('已启用').length).toBeGreaterThan(0);
     expect(within(capabilitySection).getByText('真实 AI provider')).toBeInTheDocument();
     expect(within(capabilitySection).getByText('AI provider 适配层已准备，真实 AI 未启用')).toBeInTheDocument();
     expect(within(capabilitySection).getByText('真实 AI 未启用，未接入真实第三方 AI')).toBeInTheDocument();
-    expect(within(capabilitySection).getByText('OCR')).toBeInTheDocument();
+    expect(within(capabilitySection).getAllByText('OCR').length).toBeGreaterThan(0);
     expect(within(capabilitySection).getByText('未接入 OCR')).toBeInTheDocument();
-    expect(within(capabilitySection).getByText('runtime ingestion')).toBeInTheDocument();
+    expect(within(capabilitySection).getAllByText('runtime ingestion').length).toBeGreaterThan(0);
     expect(within(capabilitySection).getByText('tenant 每日 100 次 · institution 每日 30 次')).toBeInTheDocument();
     await waitFor(() =>
       expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -635,6 +690,58 @@ describe('平台端知识库管理只读看板', () => {
     expect(container.textContent).not.toContain('storageKey');
     expect(container.textContent).not.toContain('token');
     expect(container.textContent).not.toContain('secret');
+  });
+
+  it('平台端展示内部受控试用状态、支持格式、安全限制和禁用能力边界', async () => {
+    const { container } = render(<OpenPlatformKnowledgeManagementPanel />);
+
+    expect(await screen.findByRole('heading', { name: '生产能力状态' })).toBeInTheDocument();
+    const trialSection = screen.getByLabelText('平台端知识库内部受控试用状态');
+
+    expect(within(trialSection).getByText('内部受控试用')).toBeInTheDocument();
+    expect(within(trialSection).getByText('知识库已进入内部受控试用，当前仅开放低敏、授权、mock/local 能力。')).toBeInTheDocument();
+    [
+      '文件上传',
+      '真实文本文件解析',
+      'chunk 查看',
+      '关键词检索',
+      'mock 向量检索',
+      'mock/local QA',
+      'citations',
+      'QA audit',
+      'quota',
+      'capability',
+    ].forEach((label) => {
+      expect(within(trialSection).getByText(label)).toBeInTheDocument();
+    });
+    ['TXT', 'Markdown', 'CSV', '文本型 PDF', 'DOCX', 'XLSX'].forEach((label) => {
+      expect(within(trialSection).getByText(label)).toBeInTheDocument();
+    });
+    ['20MB', '32000 字符', '5MB', '12MB', '8MB'].forEach((label) => {
+      expect(within(trialSection).getByText(label)).toBeInTheDocument();
+    });
+    [
+      'OCR',
+      '扫描 PDF',
+      '真实 AI',
+      '真实向量库',
+      'runtime ingestion',
+      'worker/queue',
+      '训练',
+      '计费',
+      'dashboard',
+    ].forEach((label) => {
+      expect(within(trialSection).getByText(label)).toBeInTheDocument();
+    });
+    expect(trialSection.textContent).toContain('仅展示低敏摘要、解析状态、chunk 预览、引用和审计摘要。');
+    expect(trialSection.textContent).toContain('存储定位键');
+    expect(container.textContent).not.toContain('storageKey');
+    expect(container.textContent).not.toContain('/Users/');
+    expect(container.textContent).not.toContain('SQL');
+    expect(container.textContent).not.toContain('stack');
+    expect(container.textContent).not.toContain('token');
+    expect(container.textContent).not.toContain('secret');
+    expect(container.textContent).not.toContain('API key');
   });
 
   it('默认展示全部机构，切换机构后过滤文件、分类、问题、知识条目和任务', async () => {

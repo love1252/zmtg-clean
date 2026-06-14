@@ -1,3 +1,5 @@
+import { getKnowledgeBaseControlledTrialReadiness } from '@/modules/knowledge-base/domain/v1-knowledge-base-controlled-trial-readiness';
+
 export type KnowledgeBaseProductionCapabilityId =
   | 'fileManagement'
   | 'documentParsing'
@@ -265,5 +267,6 @@ export function getKnowledgeBaseProductionCapabilityStatus() {
     capabilities,
     qaQuotaPolicy: KNOWLEDGE_BASE_QA_QUOTA_POLICY,
     permissionMatrix: getKnowledgeBasePermissionMatrix(),
+    controlledTrial: getKnowledgeBaseControlledTrialReadiness(),
   };
 }
