@@ -247,6 +247,55 @@ describe('机构端知识库只读列表 UI', () => {
     );
   });
 
+  it('机构端展示只读试用说明、授权能力和禁止操作，且不提供受控外入口', async () => {
+    const { container } = render(<InstitutionKnowledgeReadonlyShell />);
+
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+    const trialNotice = screen.getByLabelText('机构端知识库只读试用说明');
+
+    expect(within(trialNotice).getByText('内部受控试用')).toBeInTheDocument();
+    expect(within(trialNotice).getByText('机构端仅可只读试用授权内容。')).toBeInTheDocument();
+    [
+      '授权知识库查看',
+      '授权文件查看',
+      '解析状态查看',
+      'chunk 预览',
+      '关键词检索',
+      'mock/local QA',
+      'citations',
+      'QA audit',
+    ].forEach((label) => {
+      expect(within(trialNotice).getByText(label)).toBeInTheDocument();
+    });
+    ['上传', '归档', '发起解析', '训练', '生成 embedding', '管理 visibility', '调用真实 AI'].forEach(
+      (label) => {
+        expect(within(trialNotice).getByText(label)).toBeInTheDocument();
+        expect(within(trialNotice).queryByRole('button', { name: label })).not.toBeInTheDocument();
+      },
+    );
+    [
+      'OCR',
+      '扫描 PDF / 图片文字识别',
+      '真实 AI',
+      '真实凭据 / API 凭据',
+      '外部网络服务',
+      '真实向量数据库',
+      'runtime ingestion',
+      'worker / queue / scheduler',
+    ].forEach((label) => {
+      expect(within(trialNotice).getByText(label)).toBeInTheDocument();
+      expect(within(trialNotice).queryByRole('button', { name: label })).not.toBeInTheDocument();
+    });
+    expect(trialNotice.textContent).toContain('仅展示低敏摘要、解析状态、chunk 预览、引用和审计摘要。');
+    expect(container.textContent).not.toContain('storageKey');
+    expect(container.textContent).not.toContain('/Users/');
+    expect(container.textContent).not.toContain('SQL');
+    expect(container.textContent).not.toContain('stack');
+    expect(container.textContent).not.toContain('token');
+    expect(container.textContent).not.toContain('secret');
+    expect(container.textContent).not.toContain('API key');
+  });
+
   it('机构端新增检索片段区域，只读展示授权引用片段', async () => {
     render(<InstitutionKnowledgeReadonlyShell />);
 

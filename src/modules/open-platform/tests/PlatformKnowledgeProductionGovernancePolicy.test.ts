@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   KNOWLEDGE_BASE_PRODUCTION_CAPABILITY_IDS,
@@ -7,6 +9,7 @@ import {
   getKnowledgeBaseProductionCapabilityStatus,
   getKnowledgeBaseSensitiveFieldPolicy,
 } from '@/modules/open-platform/server/platform-knowledge-production-governance-policy';
+import { getKnowledgeBaseControlledTrialReadiness } from '@/modules/knowledge-base/domain/v1-knowledge-base-controlled-trial-readiness';
 
 const disabledCapabilityIds: KnowledgeBaseProductionCapabilityId[] = [
   'realAiProvider',
@@ -75,6 +78,34 @@ const deniedFieldFragments = [
   '真实 AI 原始响应',
   'prompt',
   'system prompt',
+];
+
+const controlledTrialNoGoLabels = [
+  'OCR',
+  '扫描 PDF / 图片文字识别',
+  '真实 AI',
+  '真实凭据 / API 凭据',
+  '外部网络服务',
+  '真实向量数据库',
+  'runtime ingestion',
+  'worker / queue / scheduler',
+  '训练系统',
+  '计费系统',
+  'dashboard 聚合',
+  '首页编辑',
+];
+
+const parserSafeFailureMessages = [
+  '当前文件类型暂不支持解析',
+  '文件大小超过解析限制，请拆分后重新上传',
+  '文件未提取到可解析文本，扫描件或图片内容暂不支持',
+  '知识库文件解析失败，请稍后重试',
+  '解析文本超过长度限制，已截断为低敏预览',
+];
+
+const qaBoundaryMessages = [
+  '当前知识库问答次数已达上限，请稍后再试',
+  '当前账号没有访问该知识库内容的权限',
 ];
 
 describe('知识库生产级治理 policy', () => {
@@ -183,5 +214,117 @@ describe('知识库生产级治理 policy', () => {
         'safeStatus',
       ]),
     );
+  });
+
+  it('输出内部受控试用 view model，统一平台端和机构端的允许能力、禁止能力与安全限制', () => {
+    const readiness = getKnowledgeBaseControlledTrialReadiness();
+
+    expect(readiness.stage).toBe('10-4');
+    expect(readiness.status).toBe('内部受控试用');
+    expect(readiness.baselineCommit).toBe('1e41132cbfe23fc755c2426d271f889b40f41d27');
+    expect(readiness.supportedFileTypes.map((fileType) => fileType.label)).toEqual([
+      'TXT',
+      'Markdown',
+      'CSV',
+      '文本型 PDF',
+      'DOCX',
+      'XLSX',
+    ]);
+    expect(readiness.safetyLimits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: '文件大小限制', value: '20MB' }),
+        expect.objectContaining({ label: '解析文本上限', value: '32000 字符' }),
+        expect.objectContaining({ label: 'ZIP 单文件解压上限', value: '5MB' }),
+        expect.objectContaining({ label: 'PDF 单段解压上限', value: '8MB' }),
+      ]),
+    );
+    expect(readiness.platform.allowedCapabilities.map((capability) => capability.label)).toEqual(
+      expect.arrayContaining([
+        '文件上传',
+        '真实文本文件解析',
+        'chunk 查看',
+        '关键词检索',
+        'mock 向量检索',
+        'mock/local QA',
+        'citations',
+        'QA audit',
+        'quota',
+        'capability',
+      ]),
+    );
+    expect(readiness.institution.allowedCapabilities.map((capability) => capability.label)).toEqual(
+      expect.arrayContaining([
+        '授权知识库查看',
+        '授权文件查看',
+        '解析状态查看',
+        'chunk 预览',
+        '关键词检索',
+        'mock/local QA',
+        'citations',
+        'QA audit',
+      ]),
+    );
+    expect(readiness.blockedCapabilities.map((capability) => capability.label)).toEqual(
+      expect.arrayContaining(controlledTrialNoGoLabels),
+    );
+    expect(readiness.failureMessages).toEqual([...parserSafeFailureMessages, ...qaBoundaryMessages]);
+    expect(readiness.institution.forbiddenActions.map((action) => action.label)).toEqual(
+      expect.arrayContaining([
+        '上传',
+        '归档',
+        '发起解析',
+        '训练',
+        '生成 embedding',
+        '管理 visibility',
+        '调用真实 AI',
+      ]),
+    );
+    expect(JSON.stringify(readiness)).not.toContain('storageKey');
+    expect(JSON.stringify(readiness)).not.toContain('/Users/');
+    expect(JSON.stringify(readiness)).not.toContain('SQL');
+    expect(JSON.stringify(readiness)).not.toContain('stack');
+    expect(JSON.stringify(readiness)).not.toContain('token');
+    expect(JSON.stringify(readiness)).not.toContain('secret');
+    expect(JSON.stringify(readiness)).not.toContain('API key');
+  });
+
+  it('10-4 文档与 helper 使用同一组 No-Go 和 10-3 安全失败文案', () => {
+    const readiness = getKnowledgeBaseControlledTrialReadiness();
+    const doc = readFileSync(
+      join(process.cwd(), 'docs/product/2026-06-14-v1-knowledge-base-controlled-trial-readiness-10-4.md'),
+      'utf8',
+    );
+
+    controlledTrialNoGoLabels.forEach((label) => {
+      expect(readiness.blockedCapabilities.map((capability) => capability.label)).toContain(label);
+      expect(doc).toContain(label);
+    });
+    [...parserSafeFailureMessages, ...qaBoundaryMessages].forEach((message) => {
+      expect(readiness.failureMessages).toContain(message);
+      expect(doc).toContain(message);
+    });
+    [
+      '该文件没有可解析的文本内容',
+      '文件超过大小限制，无法解析',
+      '文件解析失败，请检查文件内容后重试',
+    ].forEach((legacyMessage) => {
+      expect(readiness.failureMessages).not.toContain(legacyMessage);
+      expect(doc).not.toContain(legacyMessage);
+    });
+    expect(JSON.stringify(readiness)).not.toContain('API key');
+    expect(doc).not.toContain('API key');
+  });
+
+  it('capability API contract 复用受控试用 view model，且不暴露禁止字段原文', () => {
+    const status = getKnowledgeBaseProductionCapabilityStatus();
+
+    expect(status.controlledTrial).toEqual(getKnowledgeBaseControlledTrialReadiness());
+    expect(JSON.stringify(status.controlledTrial)).not.toContain('storageKey');
+    expect(JSON.stringify(status.controlledTrial)).not.toContain('/Users/');
+    expect(JSON.stringify(status.controlledTrial)).not.toContain('SQL');
+    expect(JSON.stringify(status.controlledTrial)).not.toContain('stack');
+    expect(JSON.stringify(status.controlledTrial)).not.toContain('token');
+    expect(JSON.stringify(status.controlledTrial)).not.toContain('secret');
+    expect(JSON.stringify(status.controlledTrial)).not.toContain('API key');
   });
 });
