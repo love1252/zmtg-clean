@@ -2,7 +2,6 @@ import {
   PLATFORM_AI_READONLY_AVAILABLE_MONTHS,
   PLATFORM_AI_READONLY_DEFAULT_MONTH,
   PLATFORM_AI_READONLY_DISABLED_CAPABILITIES,
-  platformAiCapabilityCoverageRows,
   platformAiReadonlySampleData,
   type PlatformAiAgentInheritanceSample,
   type PlatformAiAvailableMonthSample,
@@ -14,11 +13,15 @@ import {
   type PlatformAiScenarioDefaultSample,
   type PlatformAiScenarioUsageSample,
 } from '@/modules/open-platform/mock/platformAiReadonly';
+import { getPlatformAiModelRegistryResponse } from '@/modules/open-platform/server/platformAiModelRegistryContract';
 
 export type PlatformAiReadonlyResponse = {
   requestId: string;
   readonly: true;
   dataSource: 'controlled_demo';
+  registryVersion: string;
+  registryStatus: 'controlled_readonly_demo';
+  registryStatusNote: string;
   month: string;
   selectedMonth: string;
   availableMonths: PlatformAiAvailableMonthSample[];
@@ -66,6 +69,7 @@ export function normalizeAiReadonlyMonth(value: string | null | undefined) {
 
 export function getPlatformAiReadonlyResponse(params: { month?: string | null } = {}): PlatformAiReadonlyResponse {
   const month = normalizeAiReadonlyMonth(params.month);
+  const registry = getPlatformAiModelRegistryResponse();
   const monthMeta = PLATFORM_AI_READONLY_AVAILABLE_MONTHS.find((item) => item.value === month);
   const hasUsageData = Boolean(monthMeta?.hasUsageData);
   const usageSummary = hasUsageData
@@ -83,6 +87,9 @@ export function getPlatformAiReadonlyResponse(params: { month?: string | null } 
     requestId: 'open-platform-ai-readonly',
     readonly: true,
     dataSource: 'controlled_demo',
+    registryVersion: registry.registryVersion,
+    registryStatus: registry.registryStatus,
+    registryStatusNote: registry.registryStatusNote,
     month,
     selectedMonth: month,
     availableMonths: PLATFORM_AI_READONLY_AVAILABLE_MONTHS,
@@ -92,18 +99,18 @@ export function getPlatformAiReadonlyResponse(params: { month?: string | null } 
       description: `${monthMeta?.label ?? month}为受控示例月份，未读取真实 AI 日志；估算费用不是正式账单。`,
     },
     disabledCapabilities: [...PLATFORM_AI_READONLY_DISABLED_CAPABILITIES],
-    capabilityCoverageRows: platformAiCapabilityCoverageRows,
+    capabilityCoverageRows: registry.capabilityCoverageRows,
     safetyBanner: {
       title: '当前为受控示例数据',
       description: '估算费用不是正式账单；真实 AI 未启用，API Key 管理、模型同步和自动扣费均未启用。',
       disabledCapabilities: [...PLATFORM_AI_READONLY_DISABLED_CAPABILITIES],
     },
     modelCatalog: {
-      providers: platformAiReadonlySampleData.providers,
-      capabilityGroups: platformAiReadonlySampleData.capabilityGroups,
-      scenarioDefaults: platformAiReadonlySampleData.scenarioDefaults,
-      agentInheritance: platformAiReadonlySampleData.agentInheritance,
-      modelStatusNote: '模型启用状态说明：本页仅展示示例状态，不代表生产模型可调用。',
+      providers: registry.providers,
+      capabilityGroups: registry.capabilityGroups,
+      scenarioDefaults: registry.scenarioDefaults,
+      agentInheritance: registry.agentInheritance,
+      modelStatusNote: `模型启用状态说明：${registry.registryStatusNote}`,
     },
     usage: {
       summary: {
