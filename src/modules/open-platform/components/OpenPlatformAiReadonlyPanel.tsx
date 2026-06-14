@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useEffect } from 'react';
 import {
   BrainCircuit,
   CheckCircle2,
@@ -9,6 +10,7 @@ import {
   Cpu,
   Layers3,
   Network,
+  PlayCircle,
   ShieldAlert,
   Sparkles,
 } from 'lucide-react';
@@ -34,9 +36,57 @@ function formatLatency(value: number) {
   return `${numberFormatter.format(value)}ms`;
 }
 
+type PlatformAiRuntimeStatusView = {
+  readonly: true;
+  dataSource: 'env_only';
+  enabled: boolean;
+  configured: boolean;
+  provider: 'openai_compatible' | 'unsupported' | null;
+  model: string | null;
+  baseUrlConfigured: boolean;
+  missingKeys: string[];
+  safety: {
+    title: string;
+    keyPolicy: string;
+    smokePolicy: string;
+  };
+};
+
+type PlatformAiRuntimeSmokeView = {
+  ok: boolean;
+  status: 'skipped' | 'ok' | 'failed';
+  latencyMs: number;
+  provider: 'openai_compatible' | 'unsupported' | null;
+  model: string | null;
+  checkedAt: string;
+  errorCode: string | null;
+};
+
+const runtimeStatusFallback: PlatformAiRuntimeStatusView = {
+  readonly: true,
+  dataSource: 'env_only',
+  enabled: false,
+  configured: false,
+  provider: null,
+  model: null,
+  baseUrlConfigured: false,
+  missingKeys: ['ZMTG_AI_RUNTIME_ENABLED', 'ZMTG_AI_PROVIDER', 'ZMTG_AI_BASE_URL', 'ZMTG_AI_API_KEY', 'ZMTG_AI_MODEL'],
+  safety: {
+    title: 'AI Runtime env-only 可用性',
+    keyPolicy: 'API Key 仅从服务端环境变量读取，不在页面输入、不回显、不保存。',
+    smokePolicy: '真实调用仅用于固定 smoke test，不接收用户 prompt。',
+  },
+};
+
 export function OpenPlatformAiReadonlyPanel() {
   const [selectedMonth, setSelectedMonth] = useState('2026-06');
+  const [runtimeStatus, setRuntimeStatus] = useState<PlatformAiRuntimeStatusView | null>(null);
+  const [runtimeStatusLoadFailed, setRuntimeStatusLoadFailed] = useState(false);
+  const [runtimeSmokeResult, setRuntimeSmokeResult] = useState<PlatformAiRuntimeSmokeView | null>(null);
+  const [isRuntimeSmokeRunning, setIsRuntimeSmokeRunning] = useState(false);
   const view = loadOpenPlatformAiReadonlyView({ month: selectedMonth });
+  const effectiveRuntimeStatus = runtimeStatus ?? runtimeStatusFallback;
+  const canRunRuntimeSmoke = effectiveRuntimeStatus.enabled && effectiveRuntimeStatus.configured;
   const summaryCards = [
     { label: '月份', value: view.month, icon: Clock3, tone: 'bg-cyan-300/[0.12] text-cyan-100' },
     { label: '总调用数', value: numberFormatter.format(view.usage.summary.totalCalls), icon: Cpu, tone: 'bg-blue-300/[0.12] text-blue-100' },
@@ -45,6 +95,57 @@ export function OpenPlatformAiReadonlyPanel() {
     { label: '平均延迟', value: formatLatency(view.usage.summary.averageLatencyMs), icon: Network, tone: 'bg-amber-300/[0.12] text-amber-100' },
     { label: '估算费用 / 运营参考', value: formatCurrency(view.usage.summary.estimatedCostCny), icon: CircleDollarSign, tone: 'bg-rose-300/[0.12] text-rose-100' },
   ];
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetch('/api/v1/open-platform/ai-runtime/status', { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('runtime_status_unavailable');
+        return response.json() as Promise<PlatformAiRuntimeStatusView>;
+      })
+      .then((payload) => {
+        if (!isMounted) return;
+        setRuntimeStatus(payload);
+        setRuntimeStatusLoadFailed(false);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setRuntimeStatus(runtimeStatusFallback);
+        setRuntimeStatusLoadFailed(true);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  async function runRuntimeSmokeTest() {
+    if (!canRunRuntimeSmoke || isRuntimeSmokeRunning) return;
+    setIsRuntimeSmokeRunning(true);
+    setRuntimeSmokeResult(null);
+
+    try {
+      const response = await fetch('/api/v1/open-platform/ai-runtime/smoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const payload = await response.json() as PlatformAiRuntimeSmokeView;
+      setRuntimeSmokeResult(payload);
+    } catch {
+      setRuntimeSmokeResult({
+        ok: false,
+        status: 'failed',
+        latencyMs: 0,
+        provider: effectiveRuntimeStatus.provider,
+        model: effectiveRuntimeStatus.model,
+        checkedAt: new Date().toISOString(),
+        errorCode: 'PROVIDER_REQUEST_FAILED',
+      });
+    } finally {
+      setIsRuntimeSmokeRunning(false);
+    }
+  }
 
   return (
     <section className="space-y-6" aria-labelledby="open-platform-ai-readonly-heading">
@@ -72,6 +173,83 @@ export function OpenPlatformAiReadonlyPanel() {
           </div>
         </div>
       </div>
+
+      <section className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6" aria-labelledby="ai-runtime-status-heading">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-1 text-xs font-semibold text-emerald-100">
+              env-only
+            </div>
+            <h2 id="ai-runtime-status-heading" className="mt-3 text-xl font-semibold tracking-normal text-white">AI Runtime 状态</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              {effectiveRuntimeStatus.safety.keyPolicy}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-slate-400">
+              {effectiveRuntimeStatus.safety.smokePolicy}
+            </p>
+            {runtimeStatusLoadFailed ? (
+              <p className="mt-2 text-xs font-semibold text-amber-100">状态读取失败，当前按未配置展示。</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            disabled={!canRunRuntimeSmoke || isRuntimeSmokeRunning}
+            onClick={() => void runRuntimeSmokeTest()}
+            className={cn(
+              'inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition',
+              canRunRuntimeSmoke
+                ? 'border-cyan-200/50 bg-cyan-300/[0.16] text-cyan-50 hover:bg-cyan-300/[0.22]'
+                : 'cursor-not-allowed border-white/10 bg-white/[0.05] text-slate-500',
+            )}
+          >
+            <PlayCircle className="h-4 w-4" />
+            运行 smoke test
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {[
+            { label: '启用状态', value: effectiveRuntimeStatus.enabled ? '已启用' : '未启用' },
+            { label: '配置状态', value: effectiveRuntimeStatus.configured ? '配置完整' : '配置不完整' },
+            { label: 'Provider', value: effectiveRuntimeStatus.provider ?? '未配置' },
+            { label: '模型名', value: effectiveRuntimeStatus.model ?? '未配置' },
+            { label: 'Base URL', value: effectiveRuntimeStatus.baseUrlConfigured ? '已配置' : '未配置' },
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+              <div className="text-sm text-slate-400">{item.label}</div>
+              <div className="mt-3 text-base font-semibold text-white">{item.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {effectiveRuntimeStatus.missingKeys.length > 0 ? (
+          <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/[0.08] p-4">
+            <div className="text-sm font-semibold text-amber-50">缺失配置项</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {effectiveRuntimeStatus.missingKeys.map((key) => (
+                <span key={key} className="rounded-full border border-amber-300/20 bg-amber-300/[0.08] px-3 py-1 text-xs font-semibold text-amber-100">
+                  {key}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {runtimeSmokeResult ? (
+          <div className={cn(
+            'mt-4 rounded-2xl border p-4 text-sm leading-6',
+            runtimeSmokeResult.ok
+              ? 'border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-50'
+              : 'border-rose-300/20 bg-rose-300/[0.08] text-rose-50',
+          )}>
+            <div className="font-semibold">{runtimeSmokeResult.ok ? 'smoke test 通过' : 'smoke test 未通过'}</div>
+            <p className="mt-1">
+              状态：{runtimeSmokeResult.status} · 延迟：{formatLatency(runtimeSmokeResult.latencyMs)} · 模型：{runtimeSmokeResult.model ?? '未配置'}
+            </p>
+            {runtimeSmokeResult.errorCode ? <p className="mt-1">错误码：{runtimeSmokeResult.errorCode}</p> : null}
+          </div>
+        ) : null}
+      </section>
 
       <section className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6" aria-labelledby="ai-model-catalog-heading">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
