@@ -90,6 +90,7 @@ function isBlockedHostname(hostname: string) {
     || firstOctet === 127
     || (firstOctet === 172 && secondOctet >= 16 && secondOctet <= 31)
     || (firstOctet === 192 && secondOctet === 168)
+    || (firstOctet === 169 && secondOctet === 254)
   );
 }
 
