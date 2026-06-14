@@ -2,6 +2,10 @@ import {
   readPlatformAiRuntimeConfig,
   type PlatformAiRuntimeProvider,
 } from '@/modules/open-platform/server/platformAiRuntimeConfig';
+import {
+  readSavedPlatformAiRuntimeConfig,
+  type PlatformAiProviderConfigRepository,
+} from '@/modules/open-platform/server/platformAiProviderConfig';
 
 export type PlatformAiRuntimeSmokeResult = {
   ok: boolean;
@@ -34,19 +38,39 @@ function buildResult(
   };
 }
 
-export async function runPlatformAiRuntimeSmokeTest(): Promise<PlatformAiRuntimeSmokeResult> {
-  const startedAt = Date.now();
-  const config = readPlatformAiRuntimeConfig();
-  const baseUrl = readEnvValue('ZMTG_AI_BASE_URL');
-  const authValue = readEnvValue('ZMTG_AI_API_KEY');
+async function readSavedRuntimeConfig(input?: {
+  providerConfigRepository?: Pick<PlatformAiProviderConfigRepository, 'findProviderConfig'>;
+}) {
+  if (!input?.providerConfigRepository) return null;
 
-  if (!config.enabled || !config.configured || !baseUrl || !authValue || !config.model) {
+  try {
+    return await readSavedPlatformAiRuntimeConfig({ repository: input.providerConfigRepository });
+  } catch {
+    return null;
+  }
+}
+
+export async function runPlatformAiRuntimeSmokeTest(input?: {
+  providerConfigRepository?: Pick<PlatformAiProviderConfigRepository, 'findProviderConfig'>;
+}): Promise<PlatformAiRuntimeSmokeResult> {
+  const startedAt = Date.now();
+  const savedConfig = await readSavedRuntimeConfig(input);
+  const config = readPlatformAiRuntimeConfig();
+  const baseUrl = savedConfig?.baseUrl ?? readEnvValue('ZMTG_AI_BASE_URL');
+  const authValue = savedConfig?.apiKey ?? readEnvValue('ZMTG_AI_API_KEY');
+  const provider = savedConfig?.provider ?? config.provider;
+  const model = savedConfig?.model ?? config.model;
+  const configured = savedConfig
+    ? true
+    : config.enabled && config.configured && Boolean(baseUrl && authValue && model);
+
+  if (!configured || !baseUrl || !authValue || !model) {
     return buildResult({
       ok: false,
       status: 'skipped',
       latencyMs: 0,
-      provider: config.provider,
-      model: config.model,
+      provider,
+      model,
       errorCode: 'RUNTIME_NOT_CONFIGURED',
     });
   }
@@ -62,7 +86,7 @@ export async function runPlatformAiRuntimeSmokeTest(): Promise<PlatformAiRuntime
         'Content-Type': 'application/json',
       }),
       body: JSON.stringify({
-        model: config.model,
+        model,
         messages: [{ role: 'user', content: SMOKE_PROMPT }],
         temperature: 0,
         max_tokens: 4,
@@ -77,8 +101,8 @@ export async function runPlatformAiRuntimeSmokeTest(): Promise<PlatformAiRuntime
         ok: false,
         status: 'failed',
         latencyMs: Math.max(0, Date.now() - startedAt),
-        provider: config.provider,
-        model: config.model,
+        provider,
+        model,
         errorCode: 'PROVIDER_REQUEST_FAILED',
       });
     }
@@ -87,8 +111,8 @@ export async function runPlatformAiRuntimeSmokeTest(): Promise<PlatformAiRuntime
       ok: true,
       status: 'ok',
       latencyMs: Math.max(0, Date.now() - startedAt),
-      provider: config.provider,
-      model: config.model,
+      provider,
+      model,
       errorCode: null,
     });
   } catch (error) {
@@ -98,8 +122,8 @@ export async function runPlatformAiRuntimeSmokeTest(): Promise<PlatformAiRuntime
       ok: false,
       status: 'failed',
       latencyMs: Math.max(0, Date.now() - startedAt),
-      provider: config.provider,
-      model: config.model,
+      provider,
+      model,
       errorCode: error instanceof DOMException && error.name === 'AbortError'
         ? 'PROVIDER_TIMEOUT'
         : 'PROVIDER_REQUEST_FAILED',

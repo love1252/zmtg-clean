@@ -62,6 +62,16 @@ type PlatformAiRuntimeSmokeView = {
   errorCode: string | null;
 };
 
+type PlatformAiProviderConfigView = {
+  configured: boolean;
+  provider: 'openai_compatible' | null;
+  model: string | null;
+  baseUrlConfigured: boolean;
+  lastCheckStatus: 'not_checked' | 'ok' | 'failed' | 'skipped';
+  lastCheckedAt: string | null;
+  updatedAt: string | null;
+};
+
 const runtimeStatusFallback: PlatformAiRuntimeStatusView = {
   readonly: true,
   dataSource: 'env_only',
@@ -78,15 +88,37 @@ const runtimeStatusFallback: PlatformAiRuntimeStatusView = {
   },
 };
 
+const providerConfigFallback: PlatformAiProviderConfigView = {
+  configured: false,
+  provider: null,
+  model: null,
+  baseUrlConfigured: false,
+  lastCheckStatus: 'not_checked',
+  lastCheckedAt: null,
+  updatedAt: null,
+};
+
 export function OpenPlatformAiReadonlyPanel() {
   const [selectedMonth, setSelectedMonth] = useState('2026-06');
   const [runtimeStatus, setRuntimeStatus] = useState<PlatformAiRuntimeStatusView | null>(null);
   const [runtimeStatusLoadFailed, setRuntimeStatusLoadFailed] = useState(false);
   const [runtimeSmokeResult, setRuntimeSmokeResult] = useState<PlatformAiRuntimeSmokeView | null>(null);
   const [isRuntimeSmokeRunning, setIsRuntimeSmokeRunning] = useState(false);
+  const [providerConfig, setProviderConfig] = useState<PlatformAiProviderConfigView | null>(null);
+  const [providerConfigLoadFailed, setProviderConfigLoadFailed] = useState(false);
+  const [providerConfigSaveState, setProviderConfigSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [providerConfigForm, setProviderConfigForm] = useState({
+    provider: 'openai_compatible',
+    baseUrl: '',
+    model: '',
+    apiKey: '',
+  });
   const view = loadOpenPlatformAiReadonlyView({ month: selectedMonth });
   const effectiveRuntimeStatus = runtimeStatus ?? runtimeStatusFallback;
-  const canRunRuntimeSmoke = effectiveRuntimeStatus.enabled && effectiveRuntimeStatus.configured;
+  const effectiveProviderConfig = providerConfig ?? providerConfigFallback;
+  const canRunRuntimeSmoke = (
+    effectiveRuntimeStatus.enabled && effectiveRuntimeStatus.configured
+  ) || effectiveProviderConfig.configured;
   const summaryCards = [
     { label: '月份', value: view.month, icon: Clock3, tone: 'bg-cyan-300/[0.12] text-cyan-100' },
     { label: '总调用数', value: numberFormatter.format(view.usage.summary.totalCalls), icon: Cpu, tone: 'bg-blue-300/[0.12] text-blue-100' },
@@ -115,10 +147,60 @@ export function OpenPlatformAiReadonlyPanel() {
         setRuntimeStatusLoadFailed(true);
       });
 
+    fetch('/api/v1/open-platform/ai-runtime/provider-config', { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('provider_config_unavailable');
+        return response.json() as Promise<PlatformAiProviderConfigView>;
+      })
+      .then((payload) => {
+        if (!isMounted) return;
+        setProviderConfig(payload);
+        setProviderConfigLoadFailed(false);
+        setProviderConfigForm((current) => ({
+          ...current,
+          provider: payload.provider ?? current.provider,
+          model: payload.model ?? current.model,
+        }));
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setProviderConfig(providerConfigFallback);
+        setProviderConfigLoadFailed(true);
+      });
+
     return () => {
       isMounted = false;
     };
   }, []);
+
+  async function saveProviderConfig() {
+    if (providerConfigSaveState === 'saving') return;
+    setProviderConfigSaveState('saving');
+
+    try {
+      const response = await fetch('/api/v1/open-platform/ai-runtime/provider-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(providerConfigForm),
+      });
+      const payload = await response.json() as PlatformAiProviderConfigView | { ok: false; errorCode: string };
+
+      if (!response.ok || 'ok' in payload) {
+        throw new Error('provider_config_save_failed');
+      }
+
+      setProviderConfig(payload);
+      setProviderConfigForm((current) => ({
+        ...current,
+        provider: payload.provider ?? current.provider,
+        model: payload.model ?? current.model,
+        apiKey: '',
+      }));
+      setProviderConfigSaveState('saved');
+    } catch {
+      setProviderConfigSaveState('failed');
+    }
+  }
 
   async function runRuntimeSmokeTest() {
     if (!canRunRuntimeSmoke || isRuntimeSmokeRunning) return;
@@ -137,8 +219,8 @@ export function OpenPlatformAiReadonlyPanel() {
         ok: false,
         status: 'failed',
         latencyMs: 0,
-        provider: effectiveRuntimeStatus.provider,
-        model: effectiveRuntimeStatus.model,
+        provider: effectiveProviderConfig.provider ?? effectiveRuntimeStatus.provider,
+        model: effectiveProviderConfig.model ?? effectiveRuntimeStatus.model,
         checkedAt: new Date().toISOString(),
         errorCode: 'PROVIDER_REQUEST_FAILED',
       });
@@ -248,6 +330,104 @@ export function OpenPlatformAiReadonlyPanel() {
             </p>
             {runtimeSmokeResult.errorCode ? <p className="mt-1">错误码：{runtimeSmokeResult.errorCode}</p> : null}
           </div>
+        ) : null}
+      </section>
+
+      <section className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6" aria-labelledby="ai-provider-config-heading">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 id="ai-provider-config-heading" className="text-xl font-semibold tracking-normal text-white">厂商 Key 配置</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              仅保存到服务端加密存储，页面只展示低敏配置状态；保存后不会回显 Key。
+            </p>
+            {providerConfigLoadFailed ? (
+              <p className="mt-2 text-xs font-semibold text-amber-100">配置状态读取失败，当前按未配置展示。</p>
+            ) : null}
+          </div>
+          <div className={cn(
+            'inline-flex w-fit rounded-full border px-3 py-1 text-xs font-semibold',
+            effectiveProviderConfig.configured
+              ? 'border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-100'
+              : 'border-amber-300/20 bg-amber-300/[0.08] text-amber-100',
+          )}>
+            {effectiveProviderConfig.configured ? '已配置' : '未配置'}
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'Provider', value: effectiveProviderConfig.provider ?? '未配置' },
+            { label: '模型名', value: effectiveProviderConfig.model ?? '未配置' },
+            { label: 'Base URL', value: effectiveProviderConfig.baseUrlConfigured ? '已配置' : '未配置' },
+            { label: '检查状态', value: effectiveProviderConfig.lastCheckStatus },
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
+              <div className="text-sm text-slate-400">{item.label}</div>
+              <div className="mt-3 text-base font-semibold text-white">{item.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <form
+          className="mt-5 grid gap-4 xl:grid-cols-[1fr_1.3fr_1fr_1.3fr_auto]"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveProviderConfig();
+          }}
+        >
+          <label className="space-y-2 text-sm font-semibold text-slate-200">
+            <span>Provider</span>
+            <input
+              aria-label="Provider"
+              value={providerConfigForm.provider}
+              onChange={(event) => setProviderConfigForm((current) => ({ ...current, provider: event.target.value }))}
+              className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50"
+            />
+          </label>
+          <label className="space-y-2 text-sm font-semibold text-slate-200">
+            <span>Base URL</span>
+            <input
+              aria-label="Base URL"
+              value={providerConfigForm.baseUrl}
+              onChange={(event) => setProviderConfigForm((current) => ({ ...current, baseUrl: event.target.value }))}
+              className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50"
+            />
+          </label>
+          <label className="space-y-2 text-sm font-semibold text-slate-200">
+            <span>Model</span>
+            <input
+              aria-label="Model"
+              value={providerConfigForm.model}
+              onChange={(event) => setProviderConfigForm((current) => ({ ...current, model: event.target.value }))}
+              className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50"
+            />
+          </label>
+          <label className="space-y-2 text-sm font-semibold text-slate-200">
+            <span>API Key</span>
+            <input
+              aria-label="API Key"
+              type="password"
+              value={providerConfigForm.apiKey}
+              onChange={(event) => setProviderConfigForm((current) => ({ ...current, apiKey: event.target.value }))}
+              className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50"
+            />
+          </label>
+          <div className="flex items-end">
+            <button
+              type="submit"
+              disabled={providerConfigSaveState === 'saving'}
+              className="inline-flex h-11 w-full items-center justify-center rounded-full border border-cyan-200/50 bg-cyan-300/[0.16] px-4 text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/[0.22] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-slate-500 xl:w-auto"
+            >
+              保存配置
+            </button>
+          </div>
+        </form>
+
+        {providerConfigSaveState === 'saved' ? (
+          <p className="mt-3 text-sm font-semibold text-emerald-100">配置已保存，Key 输入已清空。</p>
+        ) : null}
+        {providerConfigSaveState === 'failed' ? (
+          <p className="mt-3 text-sm font-semibold text-rose-100">配置保存失败，请检查必填项或服务端加密设置。</p>
         ) : null}
       </section>
 

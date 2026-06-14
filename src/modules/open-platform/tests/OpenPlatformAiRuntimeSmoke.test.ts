@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as smokeRoute from '@/app/api/v1/open-platform/ai-runtime/smoke/route';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { runPlatformAiRuntimeSmokeTest } from '@/modules/open-platform/server/platformAiRuntimeSmoke';
+import {
+  savePlatformAiProviderConfig,
+  type PlatformAiProviderConfigRepository,
+} from '@/modules/open-platform/server/platformAiProviderConfig';
 
 vi.mock('@/modules/security/server/access-context', () => ({
   getDemoAccessContextFromRequest: vi.fn(),
@@ -30,6 +34,35 @@ const platformAccessContext = {
   institutionId: null,
   source: 'demo_session',
 } as const;
+
+function configureEncryptionKey() {
+  vi.stubEnv('ZMTG_SECRET_ENCRYPTION_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=');
+}
+
+function createProviderConfigRepository(): PlatformAiProviderConfigRepository {
+  let record: Awaited<ReturnType<PlatformAiProviderConfigRepository['findProviderConfig']>> = null;
+
+  return {
+    async findProviderConfig() {
+      return record;
+    },
+    async upsertProviderConfig(input) {
+      record = {
+        id: 'platform-ai-provider-config-default',
+        provider: input.provider,
+        baseUrl: input.baseUrl,
+        model: input.model,
+        encryptedApiKey: input.encryptedApiKey,
+        configured: input.configured,
+        lastCheckStatus: 'not_checked',
+        lastCheckedAt: null,
+        createdAt: new Date('2026-06-14T12:00:00.000Z'),
+        updatedAt: input.updatedAt,
+      };
+      return record;
+    },
+  };
+}
 
 function clearRuntimeEnv() {
   vi.unstubAllEnvs();
@@ -166,6 +199,47 @@ describe('平台端 AI runtime smoke route', () => {
     });
     expect(JSON.stringify(requestBody)).not.toContain('This must not be forwarded');
     expectLowSensitivePayload(routePayload);
+  });
+
+  it('优先使用已保存 provider config 调用固定 prompt，不依赖 env-only Key', async () => {
+    clearRuntimeEnv();
+    configureEncryptionKey();
+    const providerConfigRepository = createProviderConfigRepository();
+    await savePlatformAiProviderConfig({
+      repository: providerConfigRepository,
+      input: {
+        provider: 'openai_compatible',
+        baseUrl: 'https://saved-provider.example.test/v1/',
+        model: 'gpt-saved-provider',
+        apiKey: 'saved-provider-auth-redacted-value',
+      },
+      now: new Date('2026-06-14T12:00:00.000Z'),
+    });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: 'OK' } }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const serviceResult = await runPlatformAiRuntimeSmokeTest({ providerConfigRepository });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const requestBody = JSON.parse(String(init.body));
+
+    expect(serviceResult).toMatchObject({
+      ok: true,
+      status: 'ok',
+      provider: 'openai_compatible',
+      model: 'gpt-saved-provider',
+      errorCode: null,
+    });
+    expect(url).toBe('https://saved-provider.example.test/v1/chat/completions');
+    expect(requestBody).toMatchObject({
+      model: 'gpt-saved-provider',
+      messages: [{ role: 'user', content: 'Return OK only.' }],
+      temperature: 0,
+      max_tokens: 4,
+    });
+    expect(JSON.stringify(requestBody)).not.toContain('saved-provider-auth-redacted-value');
+    expectLowSensitivePayload(serviceResult);
   });
 
   it('provider 失败时返回安全错误码且不暴露 provider error 原文', async () => {
