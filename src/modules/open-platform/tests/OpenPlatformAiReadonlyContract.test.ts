@@ -58,6 +58,9 @@ describe('平台端 AI 模型与用量只读 contract', () => {
       registryVersion: 'ai-registry-v1-controlled-demo',
       registryStatus: 'controlled_readonly_demo',
       registryStatusNote: '当前为受控只读示例，不代表生产启用。',
+      usageVersion: 'ai-usage-cost-v1-controlled-demo',
+      usageStatus: 'controlled_readonly_demo',
+      costDisclaimer: expect.stringContaining('估算费用不是正式账单'),
       selectedMonth: '2026-06',
       month: '2026-06',
       availableMonths: [

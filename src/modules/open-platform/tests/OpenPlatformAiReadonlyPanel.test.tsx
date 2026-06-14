@@ -61,6 +61,7 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.getAllByText('Key 管理未启用').length).toBeGreaterThan(0);
 
     expect(screen.getByRole('heading', { name: 'AI 用量与费用' })).toBeInTheDocument();
+    expect(screen.getByText('用量口径：当前为受控示例用量，费用为估算，不是正式账单。')).toBeInTheDocument();
     expect(screen.getByText('2026-06')).toBeInTheDocument();
     expect(screen.getByText('总调用数')).toBeInTheDocument();
     expect(screen.getByText('Token')).toBeInTheDocument();
