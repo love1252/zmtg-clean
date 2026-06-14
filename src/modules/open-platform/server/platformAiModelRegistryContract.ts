@@ -29,6 +29,13 @@ export type PlatformAiModelRegistryValidationResult = {
 
 const controlledCapabilityIds = new Set<PlatformAiCapabilityId>(['reasoning', 'text', 'vision', 'embedding']);
 
+function haveSameItems(left: string[], right: string[]) {
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+
+  return leftSet.size === rightSet.size && Array.from(leftSet).every((item) => rightSet.has(item));
+}
+
 export function getPlatformAiModelRegistryResponse(): PlatformAiModelRegistryResponse {
   return {
     readonly: true,
@@ -57,6 +64,8 @@ export function validatePlatformAiModelRegistryContract(
   const capabilityGroupsById = new Map(payload.capabilityGroups.map((group) => [group.capabilityId, group]));
   const scenarioIds = payload.scenarioDefaults.map((scenario) => scenario.scenarioId);
   const scenarioNames = new Set(payload.scenarioDefaults.map((scenario) => scenario.scenarioName));
+  const scenarioById = new Map(payload.scenarioDefaults.map((scenario) => [scenario.scenarioId, scenario]));
+  const scenarioByName = new Map(payload.scenarioDefaults.map((scenario) => [scenario.scenarioName, scenario]));
 
   if (new Set(providerIds).size !== providerIds.length) {
     errors.add('providerId 必须唯一');
@@ -119,12 +128,31 @@ export function validatePlatformAiModelRegistryContract(
   });
 
   payload.agentInheritance.forEach((agent) => {
+    const inheritedScenario = scenarioById.get(agent.inheritsScenarioId);
+    const inheritedModel = modelById.get(agent.inheritedModelId);
+
+    if (!inheritedScenario) {
+      errors.add('agent.inheritsScenarioId 必须存在于 scenarioDefaults.scenarioId');
+    }
+
     if (!scenarioNames.has(agent.inheritsScenarioName)) {
       errors.add('agent 继承场景必须存在');
     }
 
+    if (inheritedScenario && inheritedScenario.scenarioName !== agent.inheritsScenarioName) {
+      errors.add('agent.inheritsScenarioId 与 inheritsScenarioName 必须指向同一场景');
+    }
+
+    if (!inheritedModel) {
+      errors.add('agent.inheritedModelId 必须存在于 registry modelId');
+    }
+
     if (!modelNames.has(agent.inheritedModelName)) {
       errors.add('agent 继承模型必须存在');
+    }
+
+    if (inheritedModel && inheritedModel.displayName !== agent.inheritedModelName) {
+      errors.add('agent.inheritedModelId 与 inheritedModelName 必须指向同一模型');
     }
   });
 
@@ -139,7 +167,21 @@ export function validatePlatformAiModelRegistryContract(
       }
     });
 
+    if (!haveSameItems(row.scenarioNames, row.scenarioRefs.map((scenario) => scenario.scenarioName))) {
+      errors.add('coverage.scenarioRefs 的 scenarioName 集合必须与 coverage.scenarioNames 集合一致');
+    }
+
     row.scenarioRefs.forEach((scenario) => {
+      const registeredScenario = scenarioByName.get(scenario.scenarioName);
+
+      if (scenario.scenarioStatus === 'active' && !registeredScenario) {
+        errors.add('coverage active 场景必须存在于 scenarioDefaults.scenarioName');
+      }
+
+      if (!registeredScenario && !['placeholder', 'future_placeholder'].includes(scenario.scenarioStatus)) {
+        errors.add('不存在于 scenarioDefaults 的 coverage 场景必须标记 placeholder 或 future_placeholder');
+      }
+
       if (scenario.scenarioName.includes('占位') && !['placeholder', 'future_placeholder'].includes(scenario.scenarioStatus)) {
         errors.add('未来占位场景必须显式标记 placeholder / future_placeholder');
       }

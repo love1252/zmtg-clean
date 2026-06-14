@@ -151,10 +151,14 @@ describe('平台端 AI 模型 Registry 只读 contract', () => {
     });
 
     const knownScenarioNames = new Set(payload.scenarioDefaults.map((scenario) => scenario.scenarioName));
+    const knownScenarioById = new Map(payload.scenarioDefaults.map((scenario) => [scenario.scenarioId, scenario]));
     const knownModelNames = new Set(payload.providers.flatMap((provider) => provider.models.map((model) => model.displayName)));
+    const knownModelById = new Map(payload.providers.flatMap((provider) => provider.models.map((model) => [model.modelId, model])));
     payload.agentInheritance.forEach((agent) => {
       expect(knownScenarioNames.has(agent.inheritsScenarioName)).toBe(true);
+      expect(knownScenarioById.get(agent.inheritsScenarioId)?.scenarioName).toBe(agent.inheritsScenarioName);
       expect(knownModelNames.has(agent.inheritedModelName)).toBe(true);
+      expect(knownModelById.get(agent.inheritedModelId)?.displayName).toBe(agent.inheritedModelName);
     });
 
     const knownCapabilityIds = new Set(payload.capabilityGroups.map((group) => group.capabilityId));
@@ -163,9 +167,12 @@ describe('平台端 AI 模型 Registry 只读 contract', () => {
       row.modelNames.forEach((modelName) => {
         expect(knownModelNames.has(modelName)).toBe(true);
       });
+      expect(new Set(row.scenarioRefs.map((scenario) => scenario.scenarioName))).toEqual(new Set(row.scenarioNames));
       row.scenarioRefs.forEach((scenario) => {
-        if (scenario.scenarioName.includes('占位')) {
-          expect(scenario.scenarioStatus).toBe('future_placeholder');
+        if (knownScenarioNames.has(scenario.scenarioName)) {
+          expect(scenario.scenarioStatus).toBe('active');
+        } else {
+          expect(['placeholder', 'future_placeholder']).toContain(scenario.scenarioStatus);
         }
       });
     });
@@ -217,12 +224,50 @@ describe('平台端 AI 模型 Registry 只读 contract', () => {
     }, 'agent 继承模型必须存在');
 
     expectInvalidRegistry((payload) => {
+      payload.agentInheritance[0].inheritsScenarioId = 'missing-scenario';
+    }, 'agent.inheritsScenarioId 必须存在于 scenarioDefaults.scenarioId');
+
+    expectInvalidRegistry((payload) => {
+      payload.agentInheritance[0].inheritedModelId = 'missing-model';
+    }, 'agent.inheritedModelId 必须存在于 registry modelId');
+
+    expectInvalidRegistry((payload) => {
+      payload.agentInheritance[0].inheritsScenarioId = payload.scenarioDefaults[1].scenarioId;
+    }, 'agent.inheritsScenarioId 与 inheritsScenarioName 必须指向同一场景');
+
+    expectInvalidRegistry((payload) => {
+      payload.agentInheritance[0].inheritedModelId = payload.providers[1].models[0].modelId;
+    }, 'agent.inheritedModelId 与 inheritedModelName 必须指向同一模型');
+
+    expectInvalidRegistry((payload) => {
       payload.capabilityCoverageRows[0].capabilityId = 'unknown-capability' as never;
     }, 'coverage.capabilityId 必须存在');
 
     expectInvalidRegistry((payload) => {
       payload.capabilityCoverageRows[0].modelNames = ['不存在的示例模型'];
     }, 'coverage.modelNames 必须存在');
+
+    expectInvalidRegistry((payload) => {
+      payload.capabilityCoverageRows[0].scenarioRefs = [
+        { scenarioName: 'AI 客服默认模型', scenarioStatus: 'active' },
+      ];
+    }, 'coverage.scenarioRefs 的 scenarioName 集合必须与 coverage.scenarioNames 集合一致');
+
+    expectInvalidRegistry((payload) => {
+      payload.capabilityCoverageRows[0].scenarioRefs = [
+        { scenarioName: 'AI 客服默认模型', scenarioStatus: 'active' },
+        { scenarioName: '未登记 active 场景', scenarioStatus: 'active' },
+      ];
+      payload.capabilityCoverageRows[0].scenarioNames = ['AI 客服默认模型', '未登记 active 场景'];
+    }, 'coverage active 场景必须存在于 scenarioDefaults.scenarioName');
+
+    expectInvalidRegistry((payload) => {
+      payload.capabilityCoverageRows[0].scenarioRefs = [
+        { scenarioName: 'AI 客服默认模型', scenarioStatus: 'active' },
+        { scenarioName: '未登记待定场景', scenarioStatus: 'active' },
+      ];
+      payload.capabilityCoverageRows[0].scenarioNames = ['AI 客服默认模型', '未登记待定场景'];
+    }, '不存在于 scenarioDefaults 的 coverage 场景必须标记 placeholder 或 future_placeholder');
 
     expectInvalidRegistry((payload) => {
       payload.capabilityCoverageRows[2].scenarioRefs = [
