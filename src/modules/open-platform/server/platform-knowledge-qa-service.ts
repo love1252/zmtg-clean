@@ -14,6 +14,10 @@ import {
   getDefaultKnowledgeAiProvider,
   type KnowledgeAiProvider,
 } from '@/modules/open-platform/server/platform-knowledge-ai-provider-adapter';
+import {
+  KNOWLEDGE_QA_SAFETY_BLOCK_MESSAGE,
+  evaluateKnowledgeQaSafety,
+} from '@/modules/open-platform/server/platform-knowledge-ai-readiness-evaluation';
 import { KNOWLEDGE_BASE_QA_QUOTA_POLICY } from '@/modules/open-platform/server/platform-knowledge-production-governance-policy';
 
 export type KnowledgeQaRetrievalMode = 'keyword' | 'vector' | 'hybrid';
@@ -421,6 +425,14 @@ async function composeKnowledgeQa(input: KnowledgeQaServiceInput & {
 }) {
   const question = normalizeQuestion(input.params.question);
   if (!question.ok) return question.error;
+
+  const safety = evaluateKnowledgeQaSafety({ question: question.question, citations: [] });
+  if (!safety.allowed) {
+    return {
+      status: 'safety_blocked' as const,
+      message: KNOWLEDGE_QA_SAFETY_BLOCK_MESSAGE,
+    };
+  }
 
   const retrievalMode = normalizeRetrievalMode(input.params.retrievalMode);
   const usageCount = await input.repository.countKnowledgeQaAuditLogsForDay({
