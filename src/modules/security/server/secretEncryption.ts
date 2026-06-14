@@ -1,3 +1,4 @@
+// Server runtime secret encryption module. It depends on node:crypto and must not be imported by client components.
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 export type SecretEncryptionAlgorithm = 'AES-256-GCM';
@@ -27,9 +28,15 @@ const ivBytes = 12;
 const authTagBytes = 16;
 
 class SecretEncryptionError extends Error {
-  constructor(code: 'not_configured' | 'invalid_envelope' | 'decrypt_failed') {
+  constructor(code: 'server_only' | 'not_configured' | 'invalid_envelope' | 'decrypt_failed') {
     super(`encryption_${code}`);
     this.name = 'SecretEncryptionError';
+  }
+}
+
+function assertServerRuntime() {
+  if (typeof process === 'undefined' || !process.versions?.node) {
+    throw new SecretEncryptionError('server_only');
   }
 }
 
@@ -75,6 +82,8 @@ function assertSupportedEnvelope(envelope: EncryptedSecretEnvelope) {
 }
 
 export function getSecretEncryptionStatus(): SecretEncryptionStatus {
+  assertServerRuntime();
+
   try {
     readMasterKey();
     return {
@@ -94,6 +103,8 @@ export function getSecretEncryptionStatus(): SecretEncryptionStatus {
 }
 
 export function encryptSecret(plaintext: string): EncryptedSecretEnvelope {
+  assertServerRuntime();
+
   if (typeof plaintext !== 'string' || plaintext.length === 0) {
     throw new SecretEncryptionError('invalid_envelope');
   }
@@ -114,6 +125,8 @@ export function encryptSecret(plaintext: string): EncryptedSecretEnvelope {
 }
 
 export function decryptSecret(envelope: EncryptedSecretEnvelope): string {
+  assertServerRuntime();
+
   try {
     assertSupportedEnvelope(envelope);
     const key = readMasterKey();

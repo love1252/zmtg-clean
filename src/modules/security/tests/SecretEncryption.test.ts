@@ -23,7 +23,7 @@ function configureValidMasterKey() {
 function expectLowSensitiveError(action: () => unknown, sensitiveValues: string[]) {
   const plaintext = 'plain-runtime-key-for-test';
 
-    expect(action).toThrow(/encryption_/);
+  expect(action).toThrow(/encryption_/);
 
   try {
     action();
@@ -32,6 +32,23 @@ function expectLowSensitiveError(action: () => unknown, sensitiveValues: string[
     expect(message).not.toContain(plaintext);
     sensitiveValues.forEach((value) => expect(message).not.toContain(value));
     expect(message).not.toMatch(/stack|\/Users|DATABASE_URL|apiKey|secret/i);
+  }
+}
+
+function withProcessUndefined(action: () => unknown) {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'process');
+
+  Object.defineProperty(globalThis, 'process', {
+    configurable: true,
+    value: undefined,
+  });
+
+  try {
+    return action();
+  } finally {
+    if (originalDescriptor) {
+      Object.defineProperty(globalThis, 'process', originalDescriptor);
+    }
   }
 }
 
@@ -122,5 +139,25 @@ describe('server secret encryption foundation', () => {
     expectLowSensitiveError(() => decryptSecret(tamperedCiphertext), [masterKey]);
     expectLowSensitiveError(() => decryptSecret(tamperedIv), [masterKey]);
     expectLowSensitiveError(() => decryptSecret(tamperedAuthTag), [masterKey]);
+  });
+
+  it('非 Node runtime 下抛出低敏 server-only 错误，不吞成未配置状态', () => {
+    expect(() => withProcessUndefined(() => getSecretEncryptionStatus())).toThrow(
+      'encryption_server_only',
+    );
+    expect(() => withProcessUndefined(() => encryptSecret('plain-runtime-key-for-test'))).toThrow(
+      'encryption_server_only',
+    );
+    expect(() =>
+      withProcessUndefined(() =>
+        decryptSecret({
+          algorithm: 'AES-256-GCM',
+          keyVersion: 'v1',
+          iv: 'invalid',
+          authTag: 'invalid',
+          ciphertext: 'invalid',
+        }),
+      ),
+    ).toThrow('encryption_server_only');
   });
 });
