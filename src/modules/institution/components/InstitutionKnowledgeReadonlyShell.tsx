@@ -508,9 +508,16 @@ export function InstitutionKnowledgeReadonlyShell() {
             <div className="mt-3 flex flex-wrap gap-2">
               {controlledTrialReadiness.blockedCapabilities
                 .filter((capability) =>
-                  ['ocr', 'scannedPdf', 'realAi', 'vectorStore', 'runtimeIngestion', 'workerQueue'].includes(
-                    capability.id,
-                  ),
+                  [
+                    'ocr',
+                    'scannedPdf',
+                    'realAi',
+                    'credentials',
+                    'externalNetwork',
+                    'vectorStore',
+                    'runtimeIngestion',
+                    'workerQueue',
+                  ].includes(capability.id),
                 )
                 .map((capability) => (
                   <span

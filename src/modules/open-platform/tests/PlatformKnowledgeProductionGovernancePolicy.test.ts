@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   KNOWLEDGE_BASE_PRODUCTION_CAPABILITY_IDS,
@@ -76,6 +78,34 @@ const deniedFieldFragments = [
   '真实 AI 原始响应',
   'prompt',
   'system prompt',
+];
+
+const controlledTrialNoGoLabels = [
+  'OCR',
+  '扫描 PDF / 图片文字识别',
+  '真实 AI',
+  '真实凭据 / API 凭据',
+  '外部网络服务',
+  '真实向量数据库',
+  'runtime ingestion',
+  'worker / queue / scheduler',
+  '训练系统',
+  '计费系统',
+  'dashboard 聚合',
+  '首页编辑',
+];
+
+const parserSafeFailureMessages = [
+  '当前文件类型暂不支持解析',
+  '文件大小超过解析限制，请拆分后重新上传',
+  '文件未提取到可解析文本，扫描件或图片内容暂不支持',
+  '知识库文件解析失败，请稍后重试',
+  '解析文本超过长度限制，已截断为低敏预览',
+];
+
+const qaBoundaryMessages = [
+  '当前知识库问答次数已达上限，请稍后再试',
+  '当前账号没有访问该知识库内容的权限',
 ];
 
 describe('知识库生产级治理 policy', () => {
@@ -235,18 +265,9 @@ describe('知识库生产级治理 policy', () => {
       ]),
     );
     expect(readiness.blockedCapabilities.map((capability) => capability.label)).toEqual(
-      expect.arrayContaining([
-        'OCR',
-        '扫描 PDF',
-        '真实 AI',
-        '真实向量库',
-        'runtime ingestion',
-        'worker/queue',
-        '训练',
-        '计费',
-        'dashboard',
-      ]),
+      expect.arrayContaining(controlledTrialNoGoLabels),
     );
+    expect(readiness.failureMessages).toEqual([...parserSafeFailureMessages, ...qaBoundaryMessages]);
     expect(readiness.institution.forbiddenActions.map((action) => action.label)).toEqual(
       expect.arrayContaining([
         '上传',
@@ -265,6 +286,33 @@ describe('知识库生产级治理 policy', () => {
     expect(JSON.stringify(readiness)).not.toContain('token');
     expect(JSON.stringify(readiness)).not.toContain('secret');
     expect(JSON.stringify(readiness)).not.toContain('API key');
+  });
+
+  it('10-4 文档与 helper 使用同一组 No-Go 和 10-3 安全失败文案', () => {
+    const readiness = getKnowledgeBaseControlledTrialReadiness();
+    const doc = readFileSync(
+      join(process.cwd(), 'docs/product/2026-06-14-v1-knowledge-base-controlled-trial-readiness-10-4.md'),
+      'utf8',
+    );
+
+    controlledTrialNoGoLabels.forEach((label) => {
+      expect(readiness.blockedCapabilities.map((capability) => capability.label)).toContain(label);
+      expect(doc).toContain(label);
+    });
+    [...parserSafeFailureMessages, ...qaBoundaryMessages].forEach((message) => {
+      expect(readiness.failureMessages).toContain(message);
+      expect(doc).toContain(message);
+    });
+    [
+      '该文件没有可解析的文本内容',
+      '文件超过大小限制，无法解析',
+      '文件解析失败，请检查文件内容后重试',
+    ].forEach((legacyMessage) => {
+      expect(readiness.failureMessages).not.toContain(legacyMessage);
+      expect(doc).not.toContain(legacyMessage);
+    });
+    expect(JSON.stringify(readiness)).not.toContain('API key');
+    expect(doc).not.toContain('API key');
   });
 
   it('capability API contract 复用受控试用 view model，且不暴露禁止字段原文', () => {

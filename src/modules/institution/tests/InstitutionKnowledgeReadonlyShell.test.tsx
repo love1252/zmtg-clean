@@ -273,8 +273,18 @@ describe('机构端知识库只读列表 UI', () => {
         expect(within(trialNotice).queryByRole('button', { name: label })).not.toBeInTheDocument();
       },
     );
-    ['OCR', '扫描 PDF', '真实 AI', '真实向量库', 'runtime ingestion', 'worker/queue'].forEach((label) => {
+    [
+      'OCR',
+      '扫描 PDF / 图片文字识别',
+      '真实 AI',
+      '真实凭据 / API 凭据',
+      '外部网络服务',
+      '真实向量数据库',
+      'runtime ingestion',
+      'worker / queue / scheduler',
+    ].forEach((label) => {
       expect(within(trialNotice).getByText(label)).toBeInTheDocument();
+      expect(within(trialNotice).queryByRole('button', { name: label })).not.toBeInTheDocument();
     });
     expect(trialNotice.textContent).toContain('仅展示低敏摘要、解析状态、chunk 预览、引用和审计摘要。');
     expect(container.textContent).not.toContain('storageKey');
