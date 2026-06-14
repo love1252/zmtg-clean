@@ -33,6 +33,17 @@ function cloneRegistry(payload: PlatformAiModelRegistryResponse): PlatformAiMode
   return structuredClone(payload) as PlatformAiModelRegistryResponse;
 }
 
+function expectInvalidRegistry(
+  mutate: (payload: PlatformAiModelRegistryResponse) => void,
+  expectedError: string,
+) {
+  const payload = cloneRegistry(getPlatformAiModelRegistryResponse());
+
+  mutate(payload);
+
+  expect(validatePlatformAiModelRegistryContract(payload).errors).toContain(expectedError);
+}
+
 describe('平台端 AI 模型 Registry 只读 contract', () => {
   it('返回受控只读 registry 状态和低敏结构', () => {
     const payload = getPlatformAiModelRegistryResponse();
@@ -73,20 +84,62 @@ describe('平台端 AI 模型 Registry 只读 contract', () => {
     });
     expect(payload.agentInheritance[0]).toMatchObject({
       agentName: expect.any(String),
+      inheritsScenarioId: expect.any(String),
       inheritsScenarioName: expect.any(String),
+      inheritedModelId: expect.any(String),
       inheritedModelName: expect.any(String),
     });
+    expect(payload.capabilityCoverageRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        capabilityId: 'vision',
+        scenarioRefs: expect.arrayContaining([
+          expect.objectContaining({
+            scenarioName: '图片资料理解占位',
+            scenarioStatus: 'future_placeholder',
+          }),
+        ]),
+      }),
+      expect.objectContaining({
+        capabilityId: 'embedding',
+        scenarioRefs: expect.arrayContaining([
+          expect.objectContaining({
+            scenarioName: '知识库召回占位',
+            scenarioStatus: 'future_placeholder',
+          }),
+        ]),
+      }),
+    ]));
     expectLowSensitivePayload(payload);
   });
 
-  it('校验 modelId 唯一、默认模型存在、能力匹配和 coverage 引用完整', () => {
+  it('校验 registry 引用关系完整且占位场景显式标记', () => {
     const payload = getPlatformAiModelRegistryResponse();
     const validation = validatePlatformAiModelRegistryContract(payload);
 
     expect(validation).toEqual({ ok: true, errors: [] });
 
+    const providerIds = payload.providers.map((provider) => provider.providerId);
+    expect(new Set(providerIds).size).toBe(providerIds.length);
+
     const modelIds = payload.providers.flatMap((provider) => provider.models.map((model) => model.modelId));
     expect(new Set(modelIds).size).toBe(modelIds.length);
+
+    const capabilityIds = payload.capabilityGroups.map((group) => group.capabilityId);
+    expect(new Set(capabilityIds).size).toBe(capabilityIds.length);
+
+    payload.capabilityGroups.forEach((group) => {
+      group.modelIds.forEach((modelId) => {
+        const model = payload.providers
+          .flatMap((provider) => provider.models)
+          .find((item) => item.modelId === modelId);
+
+        expect(model).toBeDefined();
+        expect(model?.capabilityIds).toContain(group.capabilityId);
+      });
+    });
+
+    const scenarioIds = payload.scenarioDefaults.map((scenario) => scenario.scenarioId);
+    expect(new Set(scenarioIds).size).toBe(scenarioIds.length);
 
     payload.scenarioDefaults.forEach((scenario) => {
       const defaultModel = payload.providers
@@ -97,29 +150,87 @@ describe('平台端 AI 模型 Registry 只读 contract', () => {
       expect(defaultModel?.capabilityIds).toContain(scenario.requiredCapability);
     });
 
+    const knownScenarioNames = new Set(payload.scenarioDefaults.map((scenario) => scenario.scenarioName));
     const knownModelNames = new Set(payload.providers.flatMap((provider) => provider.models.map((model) => model.displayName)));
+    payload.agentInheritance.forEach((agent) => {
+      expect(knownScenarioNames.has(agent.inheritsScenarioName)).toBe(true);
+      expect(knownModelNames.has(agent.inheritedModelName)).toBe(true);
+    });
+
+    const knownCapabilityIds = new Set(payload.capabilityGroups.map((group) => group.capabilityId));
     payload.capabilityCoverageRows.forEach((row) => {
+      expect(knownCapabilityIds.has(row.capabilityId)).toBe(true);
       row.modelNames.forEach((modelName) => {
         expect(knownModelNames.has(modelName)).toBe(true);
+      });
+      row.scenarioRefs.forEach((scenario) => {
+        if (scenario.scenarioName.includes('占位')) {
+          expect(scenario.scenarioStatus).toBe('future_placeholder');
+        }
       });
     });
   });
 
   it('能发现 registry contract 破坏性数据问题', () => {
-    const duplicateModelPayload = cloneRegistry(getPlatformAiModelRegistryResponse());
-    duplicateModelPayload.providers[1].models[0].modelId = duplicateModelPayload.providers[0].models[0].modelId;
-    expect(validatePlatformAiModelRegistryContract(duplicateModelPayload).errors).toContain('modelId 必须唯一');
+    expectInvalidRegistry((payload) => {
+      payload.providers[1].providerId = payload.providers[0].providerId;
+    }, 'providerId 必须唯一');
 
-    const missingDefaultPayload = cloneRegistry(getPlatformAiModelRegistryResponse());
-    missingDefaultPayload.scenarioDefaults[0].defaultModelId = 'missing-model';
-    expect(validatePlatformAiModelRegistryContract(missingDefaultPayload).errors).toContain('defaultModelId 必须存在');
+    expectInvalidRegistry((payload) => {
+      payload.providers[1].models[0].modelId = payload.providers[0].models[0].modelId;
+    }, 'modelId 必须唯一');
 
-    const capabilityMismatchPayload = cloneRegistry(getPlatformAiModelRegistryResponse());
-    capabilityMismatchPayload.scenarioDefaults[0].requiredCapability = 'embedding';
-    expect(validatePlatformAiModelRegistryContract(capabilityMismatchPayload).errors).toContain('requiredCapability 必须被 default model 覆盖');
+    expectInvalidRegistry((payload) => {
+      payload.providers[0].models[0].capabilityIds = ['unknown-capability' as never];
+    }, 'capabilityId 必须属于受控能力集合');
 
-    const missingCoveragePayload = cloneRegistry(getPlatformAiModelRegistryResponse());
-    missingCoveragePayload.capabilityCoverageRows[0].modelNames = ['不存在的示例模型'];
-    expect(validatePlatformAiModelRegistryContract(missingCoveragePayload).errors).toContain('capability coverage 不得引用不存在模型');
+    expectInvalidRegistry((payload) => {
+      payload.capabilityGroups[1].capabilityId = payload.capabilityGroups[0].capabilityId;
+    }, 'capabilityGroups.capabilityId 必须唯一');
+
+    expectInvalidRegistry((payload) => {
+      payload.capabilityGroups[0].modelIds = ['missing-model'];
+    }, 'capabilityGroups.modelIds 必须存在');
+
+    expectInvalidRegistry((payload) => {
+      payload.capabilityGroups[3].modelIds = ['qwen-plus-sample'];
+    }, 'capabilityGroups.modelIds 对应模型必须声明该 capability');
+
+    expectInvalidRegistry((payload) => {
+      payload.scenarioDefaults[1].scenarioId = payload.scenarioDefaults[0].scenarioId;
+    }, 'scenarioId 必须唯一');
+
+    expectInvalidRegistry((payload) => {
+      payload.scenarioDefaults[0].defaultModelId = 'missing-model';
+    }, 'defaultModelId 必须存在');
+
+    expectInvalidRegistry((payload) => {
+      payload.scenarioDefaults[0].requiredCapability = 'embedding';
+    }, 'requiredCapability 必须被 default model 覆盖');
+
+    expectInvalidRegistry((payload) => {
+      payload.agentInheritance[0].inheritsScenarioName = '不存在的场景';
+    }, 'agent 继承场景必须存在');
+
+    expectInvalidRegistry((payload) => {
+      payload.agentInheritance[0].inheritedModelName = '不存在的模型';
+    }, 'agent 继承模型必须存在');
+
+    expectInvalidRegistry((payload) => {
+      payload.capabilityCoverageRows[0].capabilityId = 'unknown-capability' as never;
+    }, 'coverage.capabilityId 必须存在');
+
+    expectInvalidRegistry((payload) => {
+      payload.capabilityCoverageRows[0].modelNames = ['不存在的示例模型'];
+    }, 'coverage.modelNames 必须存在');
+
+    expectInvalidRegistry((payload) => {
+      payload.capabilityCoverageRows[2].scenarioRefs = [
+        {
+          scenarioName: '图片资料理解占位',
+          scenarioStatus: 'active',
+        } as never,
+      ];
+    }, '未来占位场景必须显式标记 placeholder / future_placeholder');
   });
 });
