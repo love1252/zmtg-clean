@@ -25,6 +25,7 @@ import type {
   ProtectedAction,
   ProtectedResource,
 } from '@/modules/security/domain/access-control';
+import type { EncryptedSecretEnvelope } from '@/modules/security/server/secretEncryption';
 
 export const tenantStatusEnum = pgEnum('tenant_status', ['active', 'suspended']);
 export const authRoleEnum = pgEnum('auth_role', [
@@ -241,6 +242,25 @@ export const tenantQuotaSnapshots = pgTable(
     planAssignmentSnapshotIdx: index(
       'tenant_quota_snapshots_plan_assignment_snapshot_idx',
     ).on(table.planAssignmentId, table.snapshotAt),
+  }),
+);
+
+export const platformAiProviderConfigs = pgTable(
+  'platform_ai_provider_configs',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    provider: varchar('provider', { length: 64 }).notNull(),
+    baseUrl: varchar('base_url', { length: 256 }).notNull(),
+    model: varchar('model', { length: 128 }).notNull(),
+    encryptedApiKey: jsonb('encrypted_api_key').$type<EncryptedSecretEnvelope>().notNull(),
+    configured: boolean('configured').notNull().default(false),
+    lastCheckStatus: varchar('last_check_status', { length: 32 }).notNull().default('not_checked'),
+    lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => ({
+    providerIdx: index('platform_ai_provider_configs_provider_idx').on(table.provider),
+    updatedAtIdx: index('platform_ai_provider_configs_updated_at_idx').on(table.updatedAt),
   }),
 );
 

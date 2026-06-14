@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { runPlatformAiRuntimeSmokeTest } from '@/modules/open-platform/server/platformAiRuntimeSmoke';
+import { createPlatformAiProviderConfigRepository } from '@/modules/open-platform/server/platformAiProviderConfigRepository';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
+import { getDatabase } from '@/server/db/client';
 
 function unauthorizedSmokeResponse(status: 401 | 403) {
   return NextResponse.json({
@@ -22,12 +24,26 @@ function requirePlatformAccess(request: Request) {
   return { ok: true as const };
 }
 
+function getOptionalProviderConfigRepository() {
+  try {
+    return createPlatformAiProviderConfigRepository(getDatabase());
+  } catch {
+    return undefined;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const access = requirePlatformAccess(request);
     if (!access.ok) return access.response;
 
-    return NextResponse.json(await runPlatformAiRuntimeSmokeTest(), { status: 200 });
+    const providerConfigRepository = getOptionalProviderConfigRepository();
+    return NextResponse.json(
+      await runPlatformAiRuntimeSmokeTest(
+        providerConfigRepository ? { providerConfigRepository } : undefined,
+      ),
+      { status: 200 },
+    );
   } catch {
     return NextResponse.json({
       ok: false,

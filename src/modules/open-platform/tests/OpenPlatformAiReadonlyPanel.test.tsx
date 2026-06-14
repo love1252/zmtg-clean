@@ -46,8 +46,54 @@ const runtimeStatusMissing = {
   },
 };
 
+const providerConfigMissing = {
+  configured: false,
+  provider: null,
+  model: null,
+  baseUrlConfigured: false,
+  lastCheckStatus: 'not_checked',
+  lastCheckedAt: null,
+  updatedAt: null,
+};
+
+const providerConfigSaved = {
+  configured: true,
+  provider: 'openai_compatible',
+  model: 'gpt-provider-config',
+  baseUrlConfigured: true,
+  lastCheckStatus: 'not_checked',
+  lastCheckedAt: null,
+  updatedAt: '2026-06-15T00:00:00.000Z',
+};
+
 function mockRuntimeStatusFetch(fetchMock = vi.fn()) {
-  fetchMock.mockResolvedValue(new Response(JSON.stringify(runtimeStatusMissing), { status: 200 }));
+  fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = String(init?.method ?? 'GET').toUpperCase();
+
+    if (url === '/api/v1/open-platform/ai-runtime/status') {
+      return Promise.resolve(new Response(JSON.stringify(runtimeStatusMissing), { status: 200 }));
+    }
+    if (url === '/api/v1/open-platform/ai-runtime/provider-config' && method === 'GET') {
+      return Promise.resolve(new Response(JSON.stringify(providerConfigMissing), { status: 200 }));
+    }
+    if (url === '/api/v1/open-platform/ai-runtime/provider-config' && method === 'POST') {
+      return Promise.resolve(new Response(JSON.stringify(providerConfigSaved), { status: 200 }));
+    }
+    if (url === '/api/v1/open-platform/ai-runtime/smoke' && method === 'POST') {
+      return Promise.resolve(new Response(JSON.stringify({
+        ok: false,
+        status: 'skipped',
+        latencyMs: 0,
+        provider: null,
+        model: null,
+        checkedAt: '2026-06-15T00:00:00.000Z',
+        errorCode: 'RUNTIME_NOT_CONFIGURED',
+      }), { status: 200 }));
+    }
+
+    return Promise.resolve(new Response(JSON.stringify({ ok: false }), { status: 404 }));
+  });
   vi.stubGlobal('fetch', fetchMock);
 
   return fetchMock;
@@ -107,6 +153,8 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.getByText('业务场景维度')).toBeInTheDocument();
     expect(screen.getByText('示例机构排行')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'AI Runtime 状态' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '厂商 Key 配置' })).toBeInTheDocument();
+    expect(screen.getAllByText('未配置').length).toBeGreaterThan(0);
     expect(screen.getByText('env-only')).toBeInTheDocument();
     expect(screen.getByText('API Key 仅从服务端环境变量读取，不在页面输入、不回显、不保存。')).toBeInTheDocument();
     expect(screen.getByText('真实调用仅用于固定 smoke test，不接收用户 prompt。')).toBeInTheDocument();
@@ -127,6 +175,38 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.getByText('厂商模型同步')).toBeInTheDocument();
     expect(screen.getByText('正式账单')).toBeInTheDocument();
 
+    expectNoForbiddenAiReadonlyContent(container);
+  });
+
+  it('支持保存厂商 Key 配置，成功后清空 Key 输入且不回显敏感内容', async () => {
+    const fetchMock = mockRuntimeStatusFetch();
+    const { container } = render(<OpenPlatformAiReadonlyPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '厂商 Key 配置' })).toBeInTheDocument();
+    });
+
+    const providerInput = screen.getByLabelText('Provider') as HTMLInputElement;
+    const baseUrlInput = screen.getByLabelText('Base URL') as HTMLInputElement;
+    const modelInput = screen.getByLabelText('Model') as HTMLInputElement;
+    const keyInput = screen.getByLabelText('API Key') as HTMLInputElement;
+
+    expect(keyInput.type).toBe('password');
+    fireEvent.change(providerInput, { target: { value: 'openai_compatible' } });
+    fireEvent.change(baseUrlInput, { target: { value: 'https://provider.example.test/v1' } });
+    fireEvent.change(modelInput, { target: { value: 'gpt-provider-config' } });
+    fireEvent.change(keyInput, { target: { value: 'provider-test-key-never-return' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存配置' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/open-platform/ai-runtime/provider-config', expect.objectContaining({
+        method: 'POST',
+      }));
+      expect(keyInput.value).toBe('');
+      expect(screen.getAllByText('已配置').length).toBeGreaterThan(0);
+    });
+    expect(container.textContent).not.toContain('provider-test-key-never-return');
+    expect(screen.queryByRole('button', { name: /显示|隐藏/ })).not.toBeInTheDocument();
     expectNoForbiddenAiReadonlyContent(container);
   });
 
@@ -164,10 +244,8 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.queryByRole('button', { name: /同步模型/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /测试调用/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /导出账单/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /保存 Key/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /显示 Key/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /自动扣费/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('textbox', { name: /key/i })).not.toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('配置不完整')).toBeInTheDocument();
     });
