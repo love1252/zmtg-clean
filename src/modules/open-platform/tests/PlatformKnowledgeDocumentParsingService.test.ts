@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { deflateRawSync } from 'node:zlib';
+import { deflateRawSync, deflateSync } from 'node:zlib';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import {
   parsePlatformKnowledgeDocumentFileService,
@@ -22,6 +22,9 @@ import { v1KnowledgeBaseUploadParseChunkRuntimeMaxChars } from '@/modules/knowle
 
 const now = new Date('2026-06-13T08:00:00.000Z');
 const encoder = new TextEncoder();
+const zipEntryDeclaredOverLimitBytes = 6 * 1024 * 1024;
+const zipTotalInflatedOverLimitBytes = 13 * 1024 * 1024;
+const pdfFlateInflatedOverLimitBytes = 9 * 1024 * 1024;
 
 const unsafeFragments = [
   'storageKey',
@@ -34,6 +37,9 @@ const unsafeFragments = [
   'stack',
   'token',
   'secret',
+  'word/document.xml',
+  'xl/sharedStrings.xml',
+  'xl/worksheets/sheet1.xml',
   'embedding',
   'trainingContent',
   'answer',
@@ -133,7 +139,12 @@ function concatBytes(parts: Uint8Array[]) {
   return output;
 }
 
-function createZip(entries: Record<string, string>) {
+function createZip(
+  entries: Record<string, string>,
+  options: {
+    declaredUncompressedSizes?: Record<string, number>;
+  } = {},
+) {
   const localParts: Uint8Array[] = [];
   const centralParts: Uint8Array[] = [];
   let offset = 0;
@@ -143,6 +154,7 @@ function createZip(entries: Record<string, string>) {
     const raw = encoder.encode(text);
     const compressed = new Uint8Array(deflateRawSync(raw));
     const checksum = crc32(raw);
+    const declaredUncompressedSize = options.declaredUncompressedSizes?.[name] ?? raw.byteLength;
     const localHeader = concatBytes([
       uint32(0x04034b50),
       uint16(20),
@@ -152,7 +164,7 @@ function createZip(entries: Record<string, string>) {
       uint16(0),
       uint32(checksum),
       uint32(compressed.byteLength),
-      uint32(raw.byteLength),
+      uint32(declaredUncompressedSize),
       uint16(filename.byteLength),
       uint16(0),
       filename,
@@ -167,7 +179,7 @@ function createZip(entries: Record<string, string>) {
       uint16(0),
       uint32(checksum),
       uint32(compressed.byteLength),
-      uint32(raw.byteLength),
+      uint32(declaredUncompressedSize),
       uint16(filename.byteLength),
       uint16(0),
       uint16(0),
@@ -198,14 +210,29 @@ function createZip(entries: Record<string, string>) {
   return concatBytes([...localParts, centralDirectory, endRecord]);
 }
 
-function createDocxBytes(text: string) {
-  return createZip({
-    '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>',
-    'word/document.xml': `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>`,
-  });
+function createDocxBytes(
+  text: string,
+  options: {
+    extraEntries?: Record<string, string>;
+    declaredUncompressedSizes?: Record<string, number>;
+  } = {},
+) {
+  return createZip(
+    {
+      '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>',
+      'word/document.xml': `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>`,
+      ...options.extraEntries,
+    },
+    { declaredUncompressedSizes: options.declaredUncompressedSizes },
+  );
 }
 
-function createXlsxBytes(rows: string[][]) {
+function createXlsxBytes(
+  rows: string[][],
+  options: {
+    declaredUncompressedSizes?: Record<string, number>;
+  } = {},
+) {
   const sharedStrings = rows.flat();
   const sharedStringXml = sharedStrings
     .map((value) => `<si><t>${value}</t></si>`)
@@ -223,11 +250,14 @@ function createXlsxBytes(rows: string[][]) {
     })
     .join('');
 
-  return createZip({
-    '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>',
-    'xl/sharedStrings.xml': `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${sharedStringXml}</sst>`,
-    'xl/worksheets/sheet1.xml': `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetXml}</sheetData></worksheet>`,
-  });
+  return createZip(
+    {
+      '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>',
+      'xl/sharedStrings.xml': `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${sharedStringXml}</sst>`,
+      'xl/worksheets/sheet1.xml': `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetXml}</sheetData></worksheet>`,
+    },
+    { declaredUncompressedSizes: options.declaredUncompressedSizes },
+  );
 }
 
 function createTextPdfBytes(text: string) {
@@ -242,6 +272,25 @@ BT /F1 12 Tf 72 720 Td (${text}) Tj ET
 endstream
 endobj
 %%EOF`);
+}
+
+function createFlatePdfBytes(text: string) {
+  const compressed = new Uint8Array(deflateSync(encoder.encode(`BT (${text}) Tj ET`)));
+  return concatBytes([
+    encoder.encode(`%PDF-1.4
+1 0 obj
+<< /Type /Page /Contents 2 0 R >>
+endobj
+2 0 obj
+<< /Length ${compressed.byteLength} /Filter /FlateDecode >>
+stream
+`),
+    compressed,
+    encoder.encode(`
+endstream
+endobj
+%%EOF`),
+  ]);
 }
 
 function expectSafePayload(payload: unknown) {
@@ -591,6 +640,173 @@ describe('知识库文档解析与文本抽取 service', () => {
     const chunks = await repository.listKnowledgeFileParseChunks({ tenantId: 'tenant-a', fileId: 'file-a' });
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks.every((chunk) => chunk.textPreview.length <= PLATFORM_KNOWLEDGE_PARSE_CHUNK_MAX_CHARS)).toBe(true);
+    expectSafePayload(result);
+  });
+
+  it.each([
+    [
+      'file-docx',
+      createDocxBytes('DOCX safe text', {
+        declaredUncompressedSizes: {
+          'word/document.xml': zipEntryDeclaredOverLimitBytes,
+        },
+      }),
+    ],
+    [
+      'file-xlsx',
+      createXlsxBytes([['项目', '注意事项']], {
+        declaredUncompressedSizes: {
+          'xl/sharedStrings.xml': zipEntryDeclaredOverLimitBytes,
+        },
+      }),
+    ],
+  ])('ZIP entry 声明 uncompressed size 超限时安全失败并清空旧 chunk：%s', async (fileId, bytes) => {
+    const storageKey = `tenant-a/knowledge-a/${fileId}.bin`;
+    const { repository, storage, chunks, parseRecords } = createFixture({
+      storage: { [storageKey]: bytes },
+    });
+    chunks.set(`tenant-a:${fileId}`, [
+      {
+        chunkId: 'old-chunk',
+        tenantId: 'tenant-a',
+        knowledgeId: 'knowledge-a',
+        fileId,
+        chunkIndex: 0,
+        textPreview: '旧片段不应残留',
+        charCount: 7,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId },
+    });
+
+    expect(result.status).toBe('failed');
+    if (!('parse' in result)) throw new Error('expected failed parse result');
+    expect(result.parse).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        failureReasonCode: 'parse_failed',
+        safeFailureMessage: '知识库文件解析失败，请稍后重试',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expect(chunks.get(`tenant-a:${fileId}`)).toEqual([]);
+    expect(parseRecords.get(`tenant-a:${fileId}`)).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        textContent: '',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expectSafePayload(result);
+  });
+
+  it('ZIP total extracted bytes 超限时安全失败并清空旧 chunk', async () => {
+    const { repository, storage, chunks, parseRecords } = createFixture({
+      storage: {
+        'tenant-a/knowledge-a/file-docx.bin': createDocxBytes('DOCX safe text', {
+          extraEntries: {
+            'word/large-unused.xml': 'A'.repeat(zipTotalInflatedOverLimitBytes),
+          },
+        }),
+      },
+    });
+    chunks.set('tenant-a:file-docx', [
+      {
+        chunkId: 'old-chunk',
+        tenantId: 'tenant-a',
+        knowledgeId: 'knowledge-a',
+        fileId: 'file-docx',
+        chunkIndex: 0,
+        textPreview: '旧片段不应残留',
+        charCount: 7,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-docx' },
+    });
+
+    expect(result.status).toBe('failed');
+    if (!('parse' in result)) throw new Error('expected failed parse result');
+    expect(result.parse).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        failureReasonCode: 'parse_failed',
+        safeFailureMessage: '知识库文件解析失败，请稍后重试',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expect(chunks.get('tenant-a:file-docx')).toEqual([]);
+    expect(parseRecords.get('tenant-a:file-docx')).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        textContent: '',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expectSafePayload(result);
+  });
+
+  it('PDF FlateDecode 解压内容超限时安全失败并清空旧 chunk', async () => {
+    const { repository, storage, chunks, parseRecords } = createFixture({
+      storage: {
+        'tenant-a/knowledge-a/file-pdf.bin': createFlatePdfBytes('A'.repeat(pdfFlateInflatedOverLimitBytes)),
+      },
+    });
+    chunks.set('tenant-a:file-pdf', [
+      {
+        chunkId: 'old-chunk',
+        tenantId: 'tenant-a',
+        knowledgeId: 'knowledge-a',
+        fileId: 'file-pdf',
+        chunkIndex: 0,
+        textPreview: '旧片段不应残留',
+        charCount: 7,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-pdf' },
+    });
+
+    expect(result.status).toBe('failed');
+    if (!('parse' in result)) throw new Error('expected failed parse result');
+    expect(result.parse).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        failureReasonCode: 'parse_failed',
+        safeFailureMessage: '知识库文件解析失败，请稍后重试',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
+    expect(chunks.get('tenant-a:file-pdf')).toEqual([]);
+    expect(parseRecords.get('tenant-a:file-pdf')).toEqual(
+      expect.objectContaining({
+        parseStatus: 'failed',
+        textContent: '',
+        textLength: 0,
+        chunkCount: 0,
+      }),
+    );
     expectSafePayload(result);
   });
 

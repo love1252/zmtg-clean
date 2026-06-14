@@ -14,6 +14,9 @@ import {
 
 export const PLATFORM_KNOWLEDGE_PARSE_CHUNK_MAX_CHARS = 120;
 export const PLATFORM_KNOWLEDGE_PARSE_TEXT_MAX_CHARS = v1KnowledgeBaseUploadParseChunkRuntimeMaxChars;
+export const PLATFORM_KNOWLEDGE_ZIP_ENTRY_MAX_INFLATED_BYTES = 5 * 1024 * 1024;
+export const PLATFORM_KNOWLEDGE_ZIP_TOTAL_MAX_INFLATED_BYTES = 12 * 1024 * 1024;
+export const PLATFORM_KNOWLEDGE_PDF_FLATE_MAX_INFLATED_BYTES = 8 * 1024 * 1024;
 export const PLATFORM_KNOWLEDGE_PARSER_VERSION = 'local-real-file-parser-v1';
 
 export type PlatformKnowledgeFileParseStatus =
@@ -126,6 +129,8 @@ const parseFailedSafeFailureMessage = '知识库文件解析失败，请稍后�
 const emptyContentSafeFailureMessage = '文件未提取到可解析文本，扫描件或图片内容暂不支持';
 const oversizedFileSafeFailureMessage = '文件大小超过解析限制，请拆分后重新上传';
 const contentTruncatedSafeFailureMessage = '解析文本超过长度限制，已截断为低敏预览';
+
+class ParseSafetyLimitError extends Error {}
 
 function normalizeRequired(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -262,20 +267,62 @@ function findZipEndOfCentralDirectory(content: Uint8Array) {
   return -1;
 }
 
+function assertInflatedByteLimit(input: {
+  value: number;
+  max: number;
+}) {
+  if (input.value > input.max) {
+    throw new ParseSafetyLimitError('知识库文件解压内容超过安全限制');
+  }
+}
+
 function decodeZipEntry(input: {
   content: Uint8Array;
   method: number;
   compressedSize: number;
+  uncompressedSize: number;
+  currentTotalInflatedBytes: number;
   dataOffset: number;
 }) {
+  if (input.uncompressedSize > 0) {
+    assertInflatedByteLimit({
+      value: input.uncompressedSize,
+      max: PLATFORM_KNOWLEDGE_ZIP_ENTRY_MAX_INFLATED_BYTES,
+    });
+    assertInflatedByteLimit({
+      value: input.currentTotalInflatedBytes + input.uncompressedSize,
+      max: PLATFORM_KNOWLEDGE_ZIP_TOTAL_MAX_INFLATED_BYTES,
+    });
+  }
+
   const compressed = input.content.slice(input.dataOffset, input.dataOffset + input.compressedSize);
-  if (input.method === 0) return compressed;
-  if (input.method === 8) return new Uint8Array(inflateRawSync(compressed));
-  throw new Error('unsupported zip compression');
+  const output =
+    input.method === 0
+      ? compressed
+      : input.method === 8
+        ? new Uint8Array(inflateRawSync(compressed, {
+            maxOutputLength: PLATFORM_KNOWLEDGE_ZIP_ENTRY_MAX_INFLATED_BYTES,
+          }))
+        : null;
+  if (!output) {
+    throw new Error('unsupported zip compression');
+  }
+
+  assertInflatedByteLimit({
+    value: output.byteLength,
+    max: PLATFORM_KNOWLEDGE_ZIP_ENTRY_MAX_INFLATED_BYTES,
+  });
+  assertInflatedByteLimit({
+    value: input.currentTotalInflatedBytes + output.byteLength,
+    max: PLATFORM_KNOWLEDGE_ZIP_TOTAL_MAX_INFLATED_BYTES,
+  });
+
+  return output;
 }
 
 function readZipEntries(content: Uint8Array) {
   const entries = new Map<string, Uint8Array>();
+  let totalInflatedBytes = 0;
   const eocdOffset = findZipEndOfCentralDirectory(content);
   if (eocdOffset >= 0) {
     const entryCount = readUint16(content, eocdOffset + 10);
@@ -286,6 +333,7 @@ function readZipEntries(content: Uint8Array) {
 
       const method = readUint16(content, centralOffset + 10);
       const compressedSize = readUint32(content, centralOffset + 20);
+      const centralUncompressedSize = readUint32(content, centralOffset + 24);
       const filenameLength = readUint16(content, centralOffset + 28);
       const extraLength = readUint16(content, centralOffset + 30);
       const commentLength = readUint16(content, centralOffset + 32);
@@ -293,9 +341,20 @@ function readZipEntries(content: Uint8Array) {
       const filename = decodeUtf8(content.slice(centralOffset + 46, centralOffset + 46 + filenameLength));
       const localFilenameLength = readUint16(content, localOffset + 26);
       const localExtraLength = readUint16(content, localOffset + 28);
+      const localUncompressedSize = readUint32(content, localOffset + 22);
+      const uncompressedSize = centralUncompressedSize || localUncompressedSize;
       const dataOffset = localOffset + 30 + localFilenameLength + localExtraLength;
 
-      entries.set(filename, decodeZipEntry({ content, method, compressedSize, dataOffset }));
+      const entry = decodeZipEntry({
+        content,
+        method,
+        compressedSize,
+        uncompressedSize,
+        currentTotalInflatedBytes: totalInflatedBytes,
+        dataOffset,
+      });
+      totalInflatedBytes += entry.byteLength;
+      entries.set(filename, entry);
       centralOffset += 46 + filenameLength + extraLength + commentLength;
     }
 
@@ -306,11 +365,21 @@ function readZipEntries(content: Uint8Array) {
   while (offset + 30 < content.byteLength && readUint32(content, offset) === 0x04034b50) {
     const method = readUint16(content, offset + 8);
     const compressedSize = readUint32(content, offset + 18);
+    const uncompressedSize = readUint32(content, offset + 22);
     const filenameLength = readUint16(content, offset + 26);
     const extraLength = readUint16(content, offset + 28);
     const filename = decodeUtf8(content.slice(offset + 30, offset + 30 + filenameLength));
     const dataOffset = offset + 30 + filenameLength + extraLength;
-    entries.set(filename, decodeZipEntry({ content, method, compressedSize, dataOffset }));
+    const entry = decodeZipEntry({
+      content,
+      method,
+      compressedSize,
+      uncompressedSize,
+      currentTotalInflatedBytes: totalInflatedBytes,
+      dataOffset,
+    });
+    totalInflatedBytes += entry.byteLength;
+    entries.set(filename, entry);
     offset = dataOffset + compressedSize;
   }
 
@@ -439,14 +508,25 @@ function extractPdfTextOperators(content: string) {
   return texts.join('\n');
 }
 
+function inflatePdfFlateStream(content: Uint8Array) {
+  const inflated = new Uint8Array(inflateSync(content, {
+    maxOutputLength: PLATFORM_KNOWLEDGE_PDF_FLATE_MAX_INFLATED_BYTES,
+  }));
+  assertInflatedByteLimit({
+    value: inflated.byteLength,
+    max: PLATFORM_KNOWLEDGE_PDF_FLATE_MAX_INFLATED_BYTES,
+  });
+
+  return inflated;
+}
+
 function extractPdfText(content: Uint8Array) {
   const raw = decodeLatin1(content);
   const streams = [...raw.matchAll(/<<(?:[\s\S](?!endobj))*?>>\s*stream\r?\n?([\s\S]*?)\r?\n?endstream/g)];
   const texts: string[] = [];
 
   streams.forEach((match) => {
-    const objectStart = Math.max(0, raw.lastIndexOf('obj', match.index ?? 0));
-    const dictionary = raw.slice(objectStart, match.index);
+    const dictionary = match[0].slice(0, match[0].indexOf('stream'));
     const streamText = match[1];
     if (/\/Subtype\s*\/Image/.test(dictionary)) return;
 
@@ -454,9 +534,10 @@ function extractPdfText(content: Uint8Array) {
       const streamOffset = raw.indexOf(match[1], match.index);
       const streamBytes = content.slice(streamOffset, streamOffset + streamText.length);
       try {
-        texts.push(extractPdfTextOperators(decodeLatin1(new Uint8Array(inflateSync(streamBytes)))));
-      } catch {
-        texts.push(extractPdfTextOperators(streamText));
+        texts.push(extractPdfTextOperators(decodeLatin1(inflatePdfFlateStream(streamBytes))));
+      } catch (error) {
+        if (error instanceof ParseSafetyLimitError) throw error;
+        throw new Error('pdf_flate_decode_failed');
       }
       return;
     }

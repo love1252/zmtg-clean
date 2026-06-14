@@ -33,6 +33,22 @@
   - `failureReasonCode`: `content_truncated`
   - `safeFailureMessage`: `解析文本超过长度限制，已截断为低敏预览`
 
+## 解析安全限制
+
+为避免 DOCX、XLSX 或 PDF 中异常压缩内容造成内存风险，解析器设置以下本地解压上限：
+
+- ZIP 单个 entry 最大解压内容：`5MB`。
+- ZIP 累计解压内容：`12MB`。
+- PDF `/FlateDecode` 单个 stream 最大解压内容：`8MB`。
+
+DOCX / XLSX 解析会先读取 central directory 或 local header 中声明的 uncompressed size，单个 entry 或累计大小超过限制时会停止解析。实际解压后仍会再次检查输出长度，防止声明大小不可信。
+
+PDF `/FlateDecode` 使用 Node.js zlib 的 `maxOutputLength` 限制输出；同时在解压后立即再次检查输出长度，兼容不支持该参数或声明不可信的场景。
+
+上述超限属于内部解析失败，只返回安全文案：
+
+`知识库文件解析失败，请稍后重试`
+
 ## 解析失败行为
 
 解析失败只返回中文安全文案，不返回第三方库错误、stack trace、SQL、storageKey、本地路径、token、secret 或 API key。
