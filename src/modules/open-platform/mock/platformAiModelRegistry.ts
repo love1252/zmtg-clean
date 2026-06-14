@@ -38,14 +38,22 @@ export type PlatformAiRegistryScenarioDefault = {
 export type PlatformAiRegistryAgentInheritance = {
   agentName: string;
   agentDescription: string;
+  inheritsScenarioId: string;
   inheritsScenarioName: string;
+  inheritedModelId: string;
   inheritedModelName: string;
+};
+
+export type PlatformAiRegistryCoverageScenarioRef = {
+  scenarioName: string;
+  scenarioStatus: 'active' | 'placeholder' | 'future_placeholder';
 };
 
 export type PlatformAiRegistryCapabilityCoverage = {
   capabilityId: PlatformAiCapabilityId;
   capabilityName: string;
   scenarioNames: string[];
+  scenarioRefs: PlatformAiRegistryCoverageScenarioRef[];
   modelNames: string[];
   safetyNote: string;
 };
@@ -193,19 +201,25 @@ export const platformAiModelRegistryData: PlatformAiModelRegistryData = {
     {
       agentName: '客服 Agent',
       agentDescription: '初步咨询和项目推荐。',
+      inheritsScenarioId: 'sample-customer-service',
       inheritsScenarioName: 'AI 客服默认模型',
+      inheritedModelId: 'qwen-plus-sample',
       inheritedModelName: 'Qwen Plus 示例',
     },
     {
       agentName: '护理 Agent',
       agentDescription: '术后提醒和恢复指导。',
+      inheritsScenarioId: 'sample-knowledge-qa',
       inheritsScenarioName: '知识库问答模型',
+      inheritedModelId: 'qwen-plus-sample',
       inheritedModelName: 'Qwen Plus 示例',
     },
     {
       agentName: '运营分析 Agent',
       agentDescription: '趋势总结和异常解释。',
+      inheritsScenarioId: 'sample-workflow-decision',
       inheritsScenarioName: '工作流判断模型',
+      inheritedModelId: 'deepseek-reasoner-sample',
       inheritedModelName: 'DeepSeek Reasoner 示例',
     },
   ],
@@ -214,6 +228,10 @@ export const platformAiModelRegistryData: PlatformAiModelRegistryData = {
       capabilityId: 'text',
       capabilityName: '文本生成',
       scenarioNames: ['AI 客服默认模型', '知识库问答模型'],
+      scenarioRefs: [
+        { scenarioName: 'AI 客服默认模型', scenarioStatus: 'active' },
+        { scenarioName: '知识库问答模型', scenarioStatus: 'active' },
+      ],
       modelNames: ['Qwen Plus 示例', 'DeepSeek Reasoner 示例', '豆包视觉理解示例'],
       safetyNote: '只读示例，不触发真实 AI。',
     },
@@ -221,6 +239,9 @@ export const platformAiModelRegistryData: PlatformAiModelRegistryData = {
       capabilityId: 'reasoning',
       capabilityName: '推理判断',
       scenarioNames: ['工作流判断模型'],
+      scenarioRefs: [
+        { scenarioName: '工作流判断模型', scenarioStatus: 'active' },
+      ],
       modelNames: ['Qwen Plus 示例', 'DeepSeek Reasoner 示例'],
       safetyNote: '仅展示场景关系，不运行工作流判断。',
     },
@@ -228,6 +249,9 @@ export const platformAiModelRegistryData: PlatformAiModelRegistryData = {
       capabilityId: 'vision',
       capabilityName: '视觉理解',
       scenarioNames: ['图片资料理解占位'],
+      scenarioRefs: [
+        { scenarioName: '图片资料理解占位', scenarioStatus: 'future_placeholder' },
+      ],
       modelNames: ['豆包视觉理解示例'],
       safetyNote: 'OCR 未启用',
     },
@@ -235,6 +259,9 @@ export const platformAiModelRegistryData: PlatformAiModelRegistryData = {
       capabilityId: 'embedding',
       capabilityName: '向量模型',
       scenarioNames: ['知识库召回占位'],
+      scenarioRefs: [
+        { scenarioName: '知识库召回占位', scenarioStatus: 'future_placeholder' },
+      ],
       modelNames: ['Text Embedding 示例'],
       safetyNote: '真实向量库未启用',
     },
