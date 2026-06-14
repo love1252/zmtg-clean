@@ -9,6 +9,7 @@ import {
   FileText,
   KeyRound,
   LayoutDashboard,
+  BrainCircuit,
   Plug,
   Shield,
 } from 'lucide-react';
@@ -33,6 +34,7 @@ export const platformNavItems: PlatformNavItem[] = [
   { label: '租户管理', icon: Building2 },
   { label: '产品与套餐', icon: Boxes },
   { label: 'AI 配额边界', icon: Database },
+  { label: 'AI 模型与用量', icon: BrainCircuit },
   { label: '知识库管理', icon: BookOpen },
   { label: '开放连接路线', icon: Plug },
   { label: '权限与审计', icon: Shield },
