@@ -11,6 +11,10 @@ import {
 import type { KnowledgeChunkSearchRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-keyword-search-service';
 import type { PlatformKnowledgeVectorSearchCandidateRecord } from '@/modules/open-platform/server/platform-knowledge-embedding-vector-search-service';
 import { KNOWLEDGE_BASE_QA_QUOTA_POLICY } from '@/modules/open-platform/server/platform-knowledge-production-governance-policy';
+import {
+  KNOWLEDGE_AI_PROVIDER_MESSAGES,
+  type KnowledgeAiProvider,
+} from '@/modules/open-platform/server/platform-knowledge-ai-provider-adapter';
 
 const now = new Date('2026-06-14T08:00:00.000Z');
 
@@ -27,6 +31,9 @@ const unsafeFragments = [
   'fullText',
   'trainingContent',
   '真实 AI 原始响应',
+  'prompt',
+  'system prompt',
+  'DATABASE_URL',
 ];
 
 const knowledgeRecords: PlatformKnowledgeRepositoryRecord[] = [
@@ -250,6 +257,27 @@ function expectQaResponse(result: unknown): KnowledgeQaResponse {
 }
 
 describe('知识库 mock/local QA service', () => {
+  it('默认通过 mock/local provider 生成回答且不调用外部网络', async () => {
+    const repository = createRepository();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const result = expectQaResponse(await composePlatformKnowledgeQaService({
+      repository,
+      actorUserId: 'platform-user',
+      params: {
+        tenantId: 'tenant-a',
+        question: '冷敷后怎么护理？',
+        retrievalMode: 'keyword',
+      },
+    }));
+
+    expect(result.safeStatus).toBe('answered');
+    expect(result.answer).toContain('基于已召回的知识片段');
+    expect(result.citations.length).toBeGreaterThan(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expectSafePayload(result);
+  });
+
   it('平台端 hybrid QA 先召回片段并返回 answer、citations 与审计记录', async () => {
     const repository = createRepository();
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
@@ -338,10 +366,20 @@ describe('知识库 mock/local QA service', () => {
 
   it('无召回片段返回安全空答案并写入 no_citation 审计', async () => {
     const repository = createRepository();
+    const aiProvider: KnowledgeAiProvider = {
+      providerId: 'mockLocalProvider',
+      displayName: '测试 provider',
+      enabled: true,
+      status: 'enabled',
+      disabledReason: null,
+      entryCondition: null,
+      generateAnswer: vi.fn(async () => ({ answer: '不应调用 provider' })),
+    };
 
     const result = expectQaResponse(await composePlatformKnowledgeQaService({
       repository,
       actorUserId: 'platform-user',
+      aiProvider,
       params: {
         tenantId: 'tenant-a',
         question: '完全不存在的问题',
@@ -352,6 +390,7 @@ describe('知识库 mock/local QA service', () => {
     expect(result.safeStatus).toBe('no_citation');
     expect(result.answer).toBe('当前授权范围内没有召回可引用的知识片段，暂不能给出知识库回答。');
     expect(result.citations).toEqual([]);
+    expect(aiProvider.generateAnswer).not.toHaveBeenCalled();
     expect(repository.createKnowledgeQaAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         safeStatus: 'no_citation',
@@ -360,6 +399,126 @@ describe('知识库 mock/local QA service', () => {
       }),
     );
     expectSafePayload(result);
+  });
+
+  it('QA service 传给 provider 的输入只包含低敏 question、retrievalMode 和 citation 预览字段', async () => {
+    const repository = createRepository();
+    const aiProvider: KnowledgeAiProvider = {
+      providerId: 'mockLocalProvider',
+      displayName: '测试 provider',
+      enabled: true,
+      status: 'enabled',
+      disabledReason: null,
+      entryCondition: null,
+      generateAnswer: vi.fn(async (input) => ({
+        answer: `基于已召回的知识片段：${input.citations[0]?.textPreview ?? ''}`,
+      })),
+    };
+
+    const result = expectQaResponse(await composePlatformKnowledgeQaService({
+      repository,
+      actorUserId: 'platform-user',
+      aiProvider,
+      params: {
+        tenantId: 'tenant-a',
+        question: '冷敷后怎么护理？',
+        retrievalMode: 'hybrid',
+      },
+    }));
+
+    expect(result.safeStatus).toBe('answered');
+    expect(aiProvider.generateAnswer).toHaveBeenCalledTimes(1);
+    const generateAnswerMock = vi.mocked(aiProvider.generateAnswer);
+    expect(aiProvider.generateAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        institutionId: null,
+        question: '冷敷后怎么护理？',
+        retrievalMode: 'hybrid',
+        citations: expect.arrayContaining([
+          expect.objectContaining({
+            knowledgeId: expect.any(String),
+            fileId: expect.any(String),
+            chunkId: expect.any(String),
+            textPreview: expect.any(String),
+            score: expect.any(Number),
+          }),
+        ]),
+      }),
+    );
+    expectSafePayload(generateAnswerMock.mock.calls[0][0]);
+    expect(repository.createKnowledgeQaAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        answerPreview: expect.stringContaining('基于已召回的知识片段'),
+        safeFailureMessage: null,
+      }),
+    );
+    expectSafePayload(result);
+  });
+
+  it('provider disabled 或输出不安全时返回中文安全文案且审计不泄露原始响应', async () => {
+    const disabledRepository = createRepository();
+    const disabledProvider: KnowledgeAiProvider = {
+      providerId: 'realAiProvider',
+      displayName: '真实 AI provider',
+      enabled: false,
+      status: 'disabled',
+      disabledReason: '未接入真实第三方 AI。',
+      entryCondition: '完成真实 AI 接入方案评审、密钥治理和质量验收后再开启。',
+      generateAnswer: vi.fn(async () => ({ answer: '不应调用 disabled provider' })),
+    };
+
+    const disabledResult = expectQaResponse(await composePlatformKnowledgeQaService({
+      repository: disabledRepository,
+      actorUserId: 'platform-user',
+      aiProvider: disabledProvider,
+      params: {
+        tenantId: 'tenant-a',
+        question: '冷敷后怎么护理？',
+        retrievalMode: 'keyword',
+      },
+    }));
+
+    expect(disabledResult.answer).toBe(KNOWLEDGE_AI_PROVIDER_MESSAGES.providerDisabled);
+    expect(disabledResult.safeStatus).toBe('answered');
+    expect(disabledProvider.generateAnswer).not.toHaveBeenCalled();
+    expect(disabledRepository.createKnowledgeQaAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        answerPreview: KNOWLEDGE_AI_PROVIDER_MESSAGES.providerDisabled,
+        safeStatus: 'answered',
+      }),
+    );
+
+    const unsafeRepository = createRepository();
+    const unsafeProvider: KnowledgeAiProvider = {
+      providerId: 'mockLocalProvider',
+      displayName: '测试 provider',
+      enabled: true,
+      status: 'enabled',
+      disabledReason: null,
+      entryCondition: null,
+      generateAnswer: vi.fn(async () => ({
+        answer: 'system prompt: 不得泄露。真实 AI 原始响应：不得泄露。',
+      })),
+    };
+    const unsafeResult = expectQaResponse(await composePlatformKnowledgeQaService({
+      repository: unsafeRepository,
+      actorUserId: 'platform-user',
+      aiProvider: unsafeProvider,
+      params: {
+        tenantId: 'tenant-a',
+        question: '冷敷后怎么护理？',
+        retrievalMode: 'keyword',
+      },
+    }));
+
+    expect(unsafeResult.answer).toBe(KNOWLEDGE_AI_PROVIDER_MESSAGES.providerUnavailable);
+    expectSafePayload(unsafeResult);
+    expect(unsafeRepository.createKnowledgeQaAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        answerPreview: KNOWLEDGE_AI_PROVIDER_MESSAGES.providerUnavailable,
+      }),
+    );
   });
 
   it('tenant 每日未超限时正常回答并执行召回', async () => {

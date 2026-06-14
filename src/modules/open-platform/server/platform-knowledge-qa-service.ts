@@ -7,6 +7,13 @@ import {
   createDeterministicMockKnowledgeEmbedding,
   type PlatformKnowledgeVectorSearchCandidateRecord,
 } from '@/modules/open-platform/server/platform-knowledge-embedding-vector-search-service';
+import {
+  KNOWLEDGE_AI_PROVIDER_MESSAGES,
+  buildSafeKnowledgeAiProviderInput,
+  generateKnowledgeAiProviderAnswer,
+  getDefaultKnowledgeAiProvider,
+  type KnowledgeAiProvider,
+} from '@/modules/open-platform/server/platform-knowledge-ai-provider-adapter';
 import { KNOWLEDGE_BASE_QA_QUOTA_POLICY } from '@/modules/open-platform/server/platform-knowledge-production-governance-policy';
 
 export type KnowledgeQaRetrievalMode = 'keyword' | 'vector' | 'hybrid';
@@ -128,13 +135,14 @@ type KnowledgeQaServiceInput = {
   repository: KnowledgeQaRepository;
   actorUserId: string;
   params: KnowledgeQaParams;
+  aiProvider?: KnowledgeAiProvider;
 };
 
 const MAX_CITATIONS = 5;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 50;
-const NO_CITATION_ANSWER = '当前授权范围内没有召回可引用的知识片段，暂不能给出知识库回答。';
+const NO_CITATION_ANSWER = KNOWLEDGE_AI_PROVIDER_MESSAGES.noCitation;
 const auditEmptyState = {
   title: '暂无问答审计',
   description: '当前范围还没有知识库问答审计记录。',
@@ -287,17 +295,6 @@ function mergeCitations(citations: KnowledgeQaCitationDto[]) {
   });
 
   return Array.from(byChunkId.values()).sort(sortCitations).slice(0, MAX_CITATIONS);
-}
-
-function composeAnswer(citations: KnowledgeQaCitationDto[]) {
-  if (citations.length === 0) return NO_CITATION_ANSWER;
-
-  const summary = citations
-    .slice(0, 3)
-    .map((citation, index) => `${index + 1}. ${citation.textPreview}`)
-    .join(' ');
-
-  return `基于已召回的知识片段：${summary}`;
 }
 
 function auditId(input: {
@@ -472,8 +469,20 @@ async function composeKnowledgeQa(input: KnowledgeQaServiceInput & {
   }
 
   const citations = mergeCitations(citationBatches.flat());
-  const answer = composeAnswer(citations);
   const safeStatus: KnowledgeQaSafeStatus = citations.length > 0 ? 'answered' : 'no_citation';
+  const providerResult = citations.length > 0
+    ? await generateKnowledgeAiProviderAnswer(
+      input.aiProvider ?? getDefaultKnowledgeAiProvider(),
+      buildSafeKnowledgeAiProviderInput({
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        question: question.question,
+        retrievalMode,
+        citations,
+      }),
+    )
+    : null;
+  const answer = providerResult?.answer ?? NO_CITATION_ANSWER;
   const audit = buildAudit({
     tenantId: input.tenantId,
     institutionId: input.institutionId,

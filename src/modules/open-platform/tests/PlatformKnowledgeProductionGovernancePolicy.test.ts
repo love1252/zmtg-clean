@@ -111,6 +111,14 @@ describe('知识库生产级治理 policy', () => {
       expect(capability?.entryCondition).toMatch(/审批|评审|验收|方案/);
     });
 
+    expect(capabilitiesById.get('realAiProvider')).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        status: 'disabled',
+        summary: expect.stringContaining('AI provider 适配层已准备'),
+        disabledReason: expect.stringContaining('真实 AI 未启用'),
+      }),
+    );
     expect(JSON.stringify(status)).not.toContain('真实 AI 已可用');
   });
 
