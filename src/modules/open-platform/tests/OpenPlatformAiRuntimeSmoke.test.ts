@@ -6,6 +6,7 @@ import {
   savePlatformAiProviderConfig,
   type PlatformAiProviderConfigRepository,
 } from '@/modules/open-platform/server/platformAiProviderConfig';
+import { encryptSecret } from '@/modules/security/server/secretEncryption';
 
 vi.mock('@/modules/security/server/access-context', () => ({
   getDemoAccessContextFromRequest: vi.fn(),
@@ -239,6 +240,41 @@ describe('平台端 AI runtime smoke route', () => {
       max_tokens: 4,
     });
     expect(JSON.stringify(requestBody)).not.toContain('saved-provider-auth-redacted-value');
+    expectLowSensitivePayload(serviceResult);
+  });
+
+  it('不使用未知 provider 的已保存配置', async () => {
+    clearRuntimeEnv();
+    configureEncryptionKey();
+    const providerConfigRepository: Pick<PlatformAiProviderConfigRepository, 'findProviderConfig'> = {
+      async findProviderConfig() {
+        return {
+          id: 'platform-ai-provider-config-default',
+          provider: 'unknown_provider' as never,
+          baseUrl: 'https://unknown-provider.example.test/v1',
+          model: 'gpt-unknown-provider',
+          encryptedApiKey: encryptSecret('unknown-provider-auth-redacted-value'),
+          configured: true,
+          lastCheckStatus: 'not_checked',
+          lastCheckedAt: null,
+          createdAt: new Date('2026-06-14T12:00:00.000Z'),
+          updatedAt: new Date('2026-06-14T12:00:00.000Z'),
+        };
+      },
+    };
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const serviceResult = await runPlatformAiRuntimeSmokeTest({ providerConfigRepository });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(serviceResult).toMatchObject({
+      ok: false,
+      status: 'skipped',
+      provider: null,
+      model: null,
+      errorCode: 'RUNTIME_NOT_CONFIGURED',
+    });
     expectLowSensitivePayload(serviceResult);
   });
 

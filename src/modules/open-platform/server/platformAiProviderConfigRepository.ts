@@ -16,14 +16,17 @@ function normalizeLastCheckStatus(value: string): PlatformAiProviderConfigRecord
   return 'not_checked';
 }
 
-function normalizeProvider(value: string): PlatformAiProviderConfigRecord['provider'] {
-  return value === 'openai_compatible' ? 'openai_compatible' : 'openai_compatible';
+function normalizeProvider(value: string): PlatformAiProviderConfigRecord['provider'] | null {
+  return value === 'openai_compatible' ? 'openai_compatible' : null;
 }
 
-function mapProviderConfigRow(row: ProviderConfigRow): PlatformAiProviderConfigRecord {
+function mapProviderConfigRow(row: ProviderConfigRow): PlatformAiProviderConfigRecord | null {
+  const provider = normalizeProvider(row.provider);
+  if (!provider) return null;
+
   return {
     id: row.id,
-    provider: normalizeProvider(row.provider),
+    provider,
     baseUrl: row.baseUrl,
     model: row.model,
     encryptedApiKey: row.encryptedApiKey,
@@ -79,7 +82,11 @@ export function createPlatformAiProviderConfigRepository(
         })
         .returning();
 
-      return mapProviderConfigRow(rows[0]);
+      const row = rows[0];
+      const mappedRecord = row ? mapProviderConfigRow(row) : null;
+      if (!mappedRecord) throw new Error('provider_config_save_failed');
+
+      return mappedRecord;
     },
   };
 }

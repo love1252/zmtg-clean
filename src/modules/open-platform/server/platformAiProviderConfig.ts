@@ -70,6 +70,48 @@ function normalizeProvider(value: unknown): PlatformAiRuntimeProvider | null {
   return value === 'openai_compatible' ? 'openai_compatible' : null;
 }
 
+function isBlockedHostname(hostname: string) {
+  const normalized = hostname.toLowerCase().replace(/\.$/, '');
+  const ipv4Parts = normalized.split('.');
+  const isIpv4Literal = ipv4Parts.length === 4 && ipv4Parts.every((part) => /^\d+$/.test(part));
+
+  if (normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '0.0.0.0') {
+    return true;
+  }
+  if (normalized === '::1' || normalized === '[::1]') return true;
+  if (!isIpv4Literal) return false;
+
+  const [first = '', second = ''] = ipv4Parts;
+  const firstOctet = Number(first);
+  const secondOctet = Number(second);
+
+  return (
+    firstOctet === 10
+    || firstOctet === 127
+    || (firstOctet === 172 && secondOctet >= 16 && secondOctet <= 31)
+    || (firstOctet === 192 && secondOctet === 168)
+  );
+}
+
+function normalizeBaseUrl(value: unknown) {
+  const rawValue = normalizeText(value, 256);
+  if (!rawValue) return null;
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(rawValue);
+  } catch {
+    return null;
+  }
+
+  if (parsedUrl.protocol !== 'https:') return null;
+  if (parsedUrl.username || parsedUrl.password) return null;
+  if (parsedUrl.search || parsedUrl.hash) return null;
+  if (isBlockedHostname(parsedUrl.hostname)) return null;
+
+  return parsedUrl.toString().replace(/\/+$/, '');
+}
+
 function mapRecordToSafeStatus(
   record: PlatformAiProviderConfigRecord | null,
 ): PlatformAiProviderConfigSafeStatus {
@@ -108,7 +150,7 @@ export async function savePlatformAiProviderConfig(input: {
   now?: Date;
 }): Promise<PlatformAiProviderConfigSaveResult> {
   const provider = normalizeProvider(input.input.provider);
-  const baseUrl = normalizeText(input.input.baseUrl, 256);
+  const baseUrl = normalizeBaseUrl(input.input.baseUrl);
   const model = normalizeText(input.input.model, 128);
   const apiKey = normalizeText(input.input.apiKey, 4096);
 
@@ -142,11 +184,12 @@ export async function readSavedPlatformAiRuntimeConfig(input: {
   repository: Pick<PlatformAiProviderConfigRepository, 'findProviderConfig'>;
 }): Promise<PlatformAiSavedRuntimeConfig | null> {
   const record = await input.repository.findProviderConfig();
-  if (!record || !record.configured) return null;
+  const provider = normalizeProvider(record?.provider);
+  if (!record || !record.configured || !provider) return null;
 
   try {
     return {
-      provider: record.provider,
+      provider,
       baseUrl: record.baseUrl,
       model: record.model,
       apiKey: decryptSecret(record.encryptedApiKey),
