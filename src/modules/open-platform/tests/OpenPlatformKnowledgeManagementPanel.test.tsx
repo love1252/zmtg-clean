@@ -121,6 +121,22 @@ describe('平台端知识库管理只读看板', () => {
               ],
               platform: {
                 notice: '平台端可按 tenant 范围试用知识库管理闭环。',
+                trialSteps: [
+                  { id: 'capability', label: '确认 capability 与 No-Go', description: '先确认能力边界。' },
+                  { id: 'parse', label: '上传白名单文件并发起解析', description: '验证解析链路。' },
+                  { id: 'chunks', label: '查看解析状态与 chunk 预览', description: '确认低敏片段。' },
+                  { id: 'keyword', label: '执行关键词检索', description: '验证关键词召回。' },
+                  { id: 'vector', label: '执行 mock 向量检索', description: '验证 mock 语义召回。' },
+                  { id: 'qa', label: '发起 mock/local QA', description: '验证本地问答。' },
+                  { id: 'audit', label: '核对 citations 与 QA audit', description: '核对引用和审计。' },
+                  { id: 'quota', label: '核对 quota 与失败态说明', description: '核对用量和失败态。' },
+                ],
+                acceptanceChecklist: [
+                  { id: 'parse-copy', label: '解析状态和失败文案可理解', description: '中文安全文案。' },
+                  { id: 'chunk-safe', label: '检索和 QA 均基于低敏 chunk', description: '不展示全文。' },
+                  { id: 'audit-quota', label: 'citations、audit、quota、capability 可核对', description: '闭环可验收。' },
+                  { id: 'no-go', label: 'No-Go 和禁止外显字段持续可见', description: '边界可见。' },
+                ],
                 allowedCapabilities: [
                   { id: 'upload', label: '文件上传', description: '平台端受控上传。' },
                   { id: 'parse', label: '真实文本文件解析', description: '仅文本型文件解析。' },
@@ -138,6 +154,8 @@ describe('平台端知识库管理只读看板', () => {
                 notice: '机构端仅可只读试用授权内容。',
                 allowedCapabilities: [],
                 forbiddenActions: [],
+                trialSteps: [],
+                acceptanceChecklist: [],
               },
               blockedCapabilities: [
                 { id: 'ocr', label: 'OCR', reason: '未接入图片文字识别。' },
@@ -155,6 +173,17 @@ describe('平台端知识库管理只读看板', () => {
               ],
               lowSensitiveBoundaries: ['仅展示低敏摘要、解析状态、chunk 预览、引用和审计摘要。'],
               forbiddenFieldHints: ['存储定位键', '本地文件系统路径', '数据库语句', '异常堆栈', '令牌', '密钥', 'API 凭据'],
+              commonFailureStates: [
+                { id: 'empty', label: '空态', message: '暂无授权可见知识库', operatorGuidance: '确认授权范围。' },
+                { id: 'parseFailed', label: '解析失败', message: '知识库文件解析失败，请稍后重试', operatorGuidance: '检查文件类型。' },
+                { id: 'quota', label: 'quota 超限', message: '当前知识库问答次数已达上限，请稍后再试', operatorGuidance: '稍后重试。' },
+                { id: 'noCitation', label: '无引用', message: '当前问题没有命中可引用的知识片段', operatorGuidance: '调整问题。' },
+                { id: 'noResult', label: '无检索结果', message: '当前范围没有命中关键词或相似片段', operatorGuidance: '调整关键词。' },
+              ],
+              passingCriteria: [
+                '平台端按步骤完成上传、解析、chunk、检索、QA、citations、audit、quota、capability 验收。',
+                '空态、失败态、权限态、quota 超限态、无引用态、无检索结果均展示中文安全文案。',
+              ],
               failureMessages: [
                 '当前文件类型暂不支持解析',
                 '文件大小超过解析限制，请拆分后重新上传',
@@ -748,6 +777,32 @@ describe('平台端知识库管理只读看板', () => {
       expect(within(trialSection).getByText(label)).toBeInTheDocument();
     });
     expect(trialSection.textContent).toContain('仅展示低敏摘要、解析状态、chunk 预览、引用和审计摘要。');
+    [
+      '确认 capability 与 No-Go',
+      '上传白名单文件并发起解析',
+      '查看解析状态与 chunk 预览',
+      '执行关键词检索',
+      '执行 mock 向量检索',
+      '发起 mock/local QA',
+      '核对 citations 与 QA audit',
+      '核对 quota 与失败态说明',
+    ].forEach((label) => {
+      expect(within(trialSection).getByText(label)).toBeInTheDocument();
+    });
+    [
+      '解析状态和失败文案可理解',
+      '检索和 QA 均基于低敏 chunk',
+      'citations、audit、quota、capability 可核对',
+      'No-Go 和禁止外显字段持续可见',
+    ].forEach((label) => {
+      expect(within(trialSection).getByText(label)).toBeInTheDocument();
+    });
+    ['空态', '解析失败', 'quota 超限', '无引用', '无检索结果'].forEach((label) => {
+      expect(within(trialSection).getByText(label)).toBeInTheDocument();
+    });
+    expect(trialSection.textContent).toContain('当前问题没有命中可引用的知识片段');
+    expect(trialSection.textContent).toContain('当前范围没有命中关键词或相似片段');
+    expect(trialSection.textContent).toContain('平台端按步骤完成上传、解析、chunk、检索、QA、citations、audit、quota、capability 验收。');
     expect(trialSection.textContent).toContain('存储定位键');
     expect(container.textContent).not.toContain('storageKey');
     expect(container.textContent).not.toContain('/Users/');

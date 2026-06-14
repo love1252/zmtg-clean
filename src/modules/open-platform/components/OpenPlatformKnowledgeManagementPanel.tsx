@@ -1165,6 +1165,57 @@ export function OpenPlatformKnowledgeManagementPanel() {
 
                 <div className="mt-3 grid gap-3 lg:grid-cols-2">
                   <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">平台端试用步骤</h4>
+                    <ol className="mt-2 space-y-2 text-xs leading-5 text-slate-300">
+                      {capabilityResponse.controlledTrial.platform.trialSteps.map((step, index) => (
+                        <li key={step.id}>
+                          <span aria-hidden="true" className="font-semibold text-cyan-100">
+                            {index + 1}.{' '}
+                          </span>
+                          <span className="font-semibold text-cyan-100">{step.label}</span>
+                          <span className="block text-slate-400">{step.description}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">平台端验收清单</h4>
+                    <ul className="mt-2 space-y-2 text-xs leading-5 text-slate-300">
+                      {capabilityResponse.controlledTrial.platform.acceptanceChecklist.map((item) => (
+                        <li key={item.id}>
+                          <span className="font-semibold text-emerald-100">{item.label}</span>
+                          <span className="block text-slate-400">{item.description}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">失败态说明</h4>
+                    <ul className="mt-2 space-y-2 text-xs leading-5 text-slate-300">
+                      {capabilityResponse.controlledTrial.commonFailureStates.map((state) => (
+                        <li key={state.id}>
+                          <span className="font-semibold text-amber-100">{state.label}</span>
+                          <span className="block text-slate-300">{state.message}</span>
+                          <span className="block text-slate-500">{state.operatorGuidance}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
+                    <h4 className="text-xs font-semibold text-slate-200">受控试用通过标准</h4>
+                    <ul className="mt-2 space-y-2 text-xs leading-5 text-slate-300">
+                      {capabilityResponse.controlledTrial.passingCriteria.map((criterion) => (
+                        <li key={criterion}>{criterion}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-[#071322]/72 p-3">
                     <h4 className="text-xs font-semibold text-slate-200">低敏展示边界</h4>
                     <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-300">
                       {capabilityResponse.controlledTrial.lowSensitiveBoundaries.map((boundary) => (
