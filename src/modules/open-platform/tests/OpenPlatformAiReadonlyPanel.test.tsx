@@ -9,6 +9,9 @@ const forbiddenText = [
   '账单金额',
   '应收',
   '发票',
+  'CSV',
+  'PDF',
+  'Excel',
   'sk_test',
   'DATABASE_URL',
   'postgres://',
@@ -65,7 +68,35 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.getByText('厂商 / 模型维度')).toBeInTheDocument();
     expect(screen.getByText('业务场景维度')).toBeInTheDocument();
     expect(screen.getByText('示例机构排行')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '能力覆盖矩阵' })).toBeInTheDocument();
+    expect(screen.getByText('文本生成')).toBeInTheDocument();
+    expect(screen.getByText('推理判断')).toBeInTheDocument();
+    expect(screen.getByText('视觉理解')).toBeInTheDocument();
+    expect(screen.getAllByText('OCR 未启用').length).toBeGreaterThan(0);
+    expect(screen.getByText('向量模型')).toBeInTheDocument();
+    expect(screen.getAllByText('真实向量库未启用').length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: '安全边界清单' })).toBeInTheDocument();
+    expect(screen.getByText('真实 AI')).toBeInTheDocument();
+    expect(screen.getByText('厂商模型同步')).toBeInTheDocument();
+    expect(screen.getByText('正式账单')).toBeInTheDocument();
 
+    expectNoForbiddenAiReadonlyContent(container);
+  });
+
+  it('支持受控月份切换并展示无用量空状态', () => {
+    const { container } = render(<OpenPlatformAiReadonlyPanel />);
+
+    expect(screen.getByRole('button', { name: '2026年06月 有示例用量' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2026年05月 空状态示例' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '2026年05月 空状态示例' }));
+
+    expect(screen.getByText('暂无受控示例用量')).toBeInTheDocument();
+    expect(screen.getByText('2026年05月为受控示例月份，未读取真实 AI 日志；估算费用不是正式账单。')).toBeInTheDocument();
+    expect(screen.getAllByText('0').length).toBeGreaterThan(0);
+    expect(screen.getByText('¥0.00')).toBeInTheDocument();
+    expect(screen.queryByText('示例机构 A')).not.toBeInTheDocument();
+    expect(screen.queryByText('通义千问')).toBeInTheDocument();
     expectNoForbiddenAiReadonlyContent(container);
   });
 
@@ -83,6 +114,9 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.queryByRole('button', { name: /同步模型/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /测试调用/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /导出账单/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /保存 Key/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /显示 Key/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /自动扣费/ })).not.toBeInTheDocument();
     expectNoMutationFetch(fetchMock);
     expectNoForbiddenAiReadonlyContent(container);
   });

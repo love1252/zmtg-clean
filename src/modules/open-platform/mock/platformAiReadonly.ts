@@ -76,6 +76,20 @@ export type PlatformAiSampleInstitutionUsage = {
   estimatedCostCny: number;
 };
 
+export type PlatformAiAvailableMonthSample = {
+  value: string;
+  label: string;
+  hasUsageData: boolean;
+};
+
+export type PlatformAiCapabilityCoverageSample = {
+  capabilityId: PlatformAiCapabilityId;
+  capabilityName: string;
+  scenarioNames: string[];
+  modelNames: string[];
+  safetyNote: string;
+};
+
 export type PlatformAiReadonlySampleData = {
   providers: PlatformAiProviderSample[];
   capabilityGroups: PlatformAiCapabilityGroupSample[];
@@ -90,6 +104,52 @@ export type PlatformAiReadonlySampleData = {
 };
 
 export const PLATFORM_AI_READONLY_DEFAULT_MONTH = '2026-06';
+
+export const PLATFORM_AI_READONLY_AVAILABLE_MONTHS: PlatformAiAvailableMonthSample[] = [
+  { value: '2026-06', label: '2026年06月', hasUsageData: true },
+  { value: '2026-05', label: '2026年05月', hasUsageData: false },
+];
+
+export const PLATFORM_AI_READONLY_DISABLED_CAPABILITIES = [
+  '真实 AI',
+  'API Key 管理',
+  '厂商模型同步',
+  'OCR',
+  '真实向量库',
+  '自动扣费',
+  '正式账单',
+] as const;
+
+export const platformAiCapabilityCoverageRows: PlatformAiCapabilityCoverageSample[] = [
+  {
+    capabilityId: 'text',
+    capabilityName: '文本生成',
+    scenarioNames: ['AI 客服默认模型', '知识库问答模型'],
+    modelNames: ['Qwen Plus 示例', 'DeepSeek Reasoner 示例', '豆包视觉理解示例'],
+    safetyNote: '只读示例，不触发真实 AI。',
+  },
+  {
+    capabilityId: 'reasoning',
+    capabilityName: '推理判断',
+    scenarioNames: ['工作流判断模型'],
+    modelNames: ['Qwen Plus 示例', 'DeepSeek Reasoner 示例'],
+    safetyNote: '仅展示场景关系，不运行工作流判断。',
+  },
+  {
+    capabilityId: 'vision',
+    capabilityName: '视觉理解',
+    scenarioNames: ['图片资料理解占位'],
+    modelNames: ['豆包视觉理解示例'],
+    safetyNote: 'OCR 未启用',
+  },
+  {
+    capabilityId: 'embedding',
+    capabilityName: '向量模型',
+    scenarioNames: ['知识库召回占位'],
+    modelNames: ['Text Embedding 示例'],
+    safetyNote: '真实向量库未启用',
+  },
+];
 
 export const platformAiReadonlySampleData: PlatformAiReadonlySampleData = {
   providers: [
