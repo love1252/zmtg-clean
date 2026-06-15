@@ -4,6 +4,7 @@ import { getDemoAccessContextFromRequest } from '@/modules/security/server/acces
 import {
   getPlatformAiProviderConfigStatus,
   savePlatformAiProviderConfig,
+  type PlatformAiProviderConfigSaveInput,
 } from '@/modules/open-platform/server/platformAiProviderConfig';
 import { createPlatformAiProviderConfigRepository } from '@/modules/open-platform/server/platformAiProviderConfigRepository';
 
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
   try {
     const result = await savePlatformAiProviderConfig({
       repository: getRepository(),
-      input: payload as Record<string, unknown>,
+      input: payload as PlatformAiProviderConfigSaveInput,
     });
 
     if (result.status === 'validation_failed') {

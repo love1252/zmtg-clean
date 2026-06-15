@@ -5,7 +5,6 @@ import {
   readPlatformAiRuntimeConfig,
 } from '@/modules/open-platform/server/platformAiRuntimeConfig';
 
-const runtimeStatusUrl = 'http://localhost/api/v1/open-platform/ai-runtime/status';
 const forbiddenFragments = [
   'runtime-auth-redacted-value-1234',
   'sk_test',
@@ -57,7 +56,7 @@ describe('平台端 AI runtime env-only config/status', () => {
 
     const config = readPlatformAiRuntimeConfig();
     const status = getPlatformAiRuntimeStatus();
-    const routeResponse = await statusRoute.GET(new Request(runtimeStatusUrl));
+    const routeResponse = await statusRoute.GET();
     const routePayload = await readJson(routeResponse);
 
     expect(config).toMatchObject({
@@ -100,7 +99,7 @@ describe('平台端 AI runtime env-only config/status', () => {
     vi.stubEnv('ZMTG_AI_MODEL', 'gpt-runtime-smoke');
 
     const config = readPlatformAiRuntimeConfig();
-    const routeResponse = await statusRoute.GET(new Request(runtimeStatusUrl));
+    const routeResponse = await statusRoute.GET();
     const routePayload = await readJson(routeResponse);
 
     expect(config).toMatchObject({
