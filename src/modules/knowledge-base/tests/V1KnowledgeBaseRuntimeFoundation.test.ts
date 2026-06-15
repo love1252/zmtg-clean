@@ -301,6 +301,8 @@ describe('V1 知识库 runtime foundation', () => {
       '"readonly_status" "knowledge_base_runtime_readonly_status" DEFAULT \'readonly\' NOT NULL',
       '"created_at" timestamp with time zone DEFAULT now() NOT NULL',
       '"updated_at" timestamp with time zone DEFAULT now() NOT NULL',
+      'CONSTRAINT "knowledge_sources_tenant_id_id_unique" UNIQUE("tenant_id","id")',
+      'CONSTRAINT "knowledge_documents_tenant_id_id_unique" UNIQUE("tenant_id","id")',
     ].forEach((fragment) => {
       expect(migration).toContain(fragment);
     });
