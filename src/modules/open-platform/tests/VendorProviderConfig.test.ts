@@ -63,11 +63,12 @@ function makeRecord(overrides: Partial<VendorProviderConfigRecord> = {}): Vendor
 }
 
 function createInMemoryRepo() {
-  let savedRecords: VendorProviderConfigRecord[] = [];
+  const savedRecords: VendorProviderConfigRecord[] = [];
 
   return {
-    _records: savedRecords,
-    findAll: vi.fn(async () => savedRecords),
+    _getRecords() { return savedRecords; },
+    _reset() { savedRecords.length = 0; },
+    findAll: vi.fn(async () => [...savedRecords]),
     findByVendor: vi.fn(async (vendor: SupportedVendor) =>
       savedRecords.find((r) => r.vendor === vendor) ?? null,
     ),
@@ -93,7 +94,8 @@ function createInMemoryRepo() {
       return record;
     }),
     deleteByVendor: vi.fn(async (vendor: SupportedVendor) => {
-      savedRecords = savedRecords.filter((r) => r.vendor !== vendor);
+      const idx = savedRecords.findIndex((r) => r.vendor === vendor);
+      if (idx >= 0) savedRecords.splice(idx, 1);
     }),
   };
 }
@@ -304,7 +306,7 @@ vi.mock('@/modules/open-platform/server/vendorProviderConfigRepository', async (
 const routeModule = await import('@/app/api/v1/open-platform/provider-configs/route');
 
 beforeEach(() => {
-  routeInMemoryRepo._records.length = 0;
+  routeInMemoryRepo._reset();
   vi.mocked(getDemoAccessContextFromRequest).mockReset();
   vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(platformAccessContext);
 });
@@ -336,6 +338,23 @@ describe('vendor provider configs route', () => {
     const body = await response.json();
     expect(body).toHaveProperty('configs');
     expect(Array.isArray(body.configs)).toBe(true);
+    expectLowSensitivePayload(body);
+  });
+
+  it('returns 403 when scope is not platform', async () => {
+    const tenantContext = {
+      userId: 'tenant-user',
+      role: 'tenant_admin' as const,
+      scope: 'tenant' as const,
+      tenantId: 'tenant-1',
+      institutionId: null,
+      source: 'demo_session' as const,
+    };
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    const response = await routeModule.GET(new Request(providerConfigsUrl));
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body.errorCode).toBe('FORBIDDEN');
     expectLowSensitivePayload(body);
   });
 

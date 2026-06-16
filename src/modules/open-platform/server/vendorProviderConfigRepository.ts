@@ -23,6 +23,7 @@ function normalizeLastCheckStatus(value: string | null): VendorProviderConfigLas
 
 function mapVendorConfigRow(row: ProviderConfigRow): VendorProviderConfigRecord | null {
   if (!isSupportedVendor(row.provider)) return null;
+  if (row.id !== vendorProviderConfigId(row.provider)) return null;
 
   return {
     id: row.id,
@@ -47,7 +48,7 @@ export function createVendorProviderConfigRepository(database: TenantDatabase) {
         .orderBy(platformAiProviderConfigs.id);
 
       return rows
-        .filter((row) => row.id !== SINGLETON_ID)
+        .filter((row) => isSupportedVendor(row.provider) && row.id === vendorProviderConfigId(row.provider))
         .map(mapVendorConfigRow)
         .filter((r): r is VendorProviderConfigRecord => r !== null);
     },
