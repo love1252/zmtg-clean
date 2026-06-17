@@ -11,8 +11,10 @@ import {
   Layers3,
   Network,
   PlayCircle,
+  PlusCircle,
   ShieldAlert,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { loadOpenPlatformAiReadonlyView } from '@/modules/open-platform/lib/platformAiReadonlyViewLoader';
 import { cn } from '@/shared/utils/cn';
@@ -72,8 +74,65 @@ type PlatformAiProviderConfigView = {
   updatedAt: string | null;
 };
 
+type VendorProviderConfigView = {
+  id: string;
+  vendor: string;
+  displayName: string;
+  provider: string;
+  baseUrl: string;
+  model: string;
+  configured: boolean;
+  lastCheckStatus: string;
+  lastCheckedAt: string | null;
+  updatedAt: string | null;
+};
+
+const SUPPORTED_VENDOR_KEYS = ['doubao', 'deepseek', 'qwen', 'chatglm', 'kimi'] as const;
+
+const VENDOR_DISPLAY_NAMES: Record<string, string> = {
+  doubao: '豆包 (Volcengine)',
+  deepseek: 'DeepSeek',
+  qwen: '通义千问',
+  chatglm: '智谱 GLM',
+  kimi: 'Kimi',
+};
+
+const VENDOR_DEFAULT_BASE_URLS: Record<string, string> = {
+  doubao: 'https://ark.cn-beijing.volces.com/api/v3',
+  deepseek: 'https://api.deepseek.com/v1',
+  qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  chatglm: 'https://open.bigmodel.cn/api/paas/v4',
+  kimi: 'https://api.moonshot.cn/v1',
+};
+
+const VENDOR_DEFAULT_MODELS: Record<string, string> = {
+  doubao: 'doubao-seed-1-8-251228',
+  deepseek: 'deepseek-v4-flash',
+  qwen: 'qwen-plus-latest',
+  chatglm: 'glm-4.7-flash',
+  kimi: 'kimi-k2-5-260127',
+};
+
+function formatLastChecked(value: string | null) {
+  if (!value) return '未检查';
+  try {
+    return new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+  } catch {
+    return value;
+  }
+}
+
+function formatUpdatedAt(value: string | null) {
+  if (!value) return '—';
+  try {
+    return new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+  } catch {
+    return value;
+  }
+}
+
 const runtimeStatusFallback: PlatformAiRuntimeStatusView = {
-  readonly: true,
+  readonly: true as const,
   dataSource: 'env_only',
   enabled: false,
   configured: false,
@@ -88,15 +147,8 @@ const runtimeStatusFallback: PlatformAiRuntimeStatusView = {
   },
 };
 
-const providerConfigFallback: PlatformAiProviderConfigView = {
-  configured: false,
-  provider: null,
-  model: null,
-  baseUrlConfigured: false,
-  lastCheckStatus: 'not_checked',
-  lastCheckedAt: null,
-  updatedAt: null,
-};
+
+
 
 export function OpenPlatformAiReadonlyPanel() {
   const [selectedMonth, setSelectedMonth] = useState('2026-06');
@@ -104,21 +156,20 @@ export function OpenPlatformAiReadonlyPanel() {
   const [runtimeStatusLoadFailed, setRuntimeStatusLoadFailed] = useState(false);
   const [runtimeSmokeResult, setRuntimeSmokeResult] = useState<PlatformAiRuntimeSmokeView | null>(null);
   const [isRuntimeSmokeRunning, setIsRuntimeSmokeRunning] = useState(false);
-  const [providerConfig, setProviderConfig] = useState<PlatformAiProviderConfigView | null>(null);
-  const [providerConfigLoadFailed, setProviderConfigLoadFailed] = useState(false);
-  const [providerConfigSaveState, setProviderConfigSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
-  const [providerConfigForm, setProviderConfigForm] = useState({
-    provider: 'openai_compatible',
-    baseUrl: '',
-    model: '',
+  const [vendorConfigs, setVendorConfigs] = useState<VendorProviderConfigView[]>([]);
+  const [vendorConfigsLoadFailed, setVendorConfigsLoadFailed] = useState(false);
+  const [selectedVendor, setSelectedVendor] = useState<string>('doubao');
+  const [vendorForm, setVendorForm] = useState({
+    baseUrl: VENDOR_DEFAULT_BASE_URLS.doubao,
+    model: VENDOR_DEFAULT_MODELS.doubao,
     apiKey: '',
   });
+  const [vendorSaveState, setVendorSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [vendorDeleteState, setVendorDeleteState] = useState<'idle' | 'deleting' | 'deleted' | 'failed'>('idle');
+  const currentConfig = vendorConfigs.find((c) => c.vendor === selectedVendor);
   const view = loadOpenPlatformAiReadonlyView({ month: selectedMonth });
   const effectiveRuntimeStatus = runtimeStatus ?? runtimeStatusFallback;
-  const effectiveProviderConfig = providerConfig ?? providerConfigFallback;
-  const canRunRuntimeSmoke = (
-    effectiveRuntimeStatus.enabled && effectiveRuntimeStatus.configured
-  ) || effectiveProviderConfig.configured;
+  const canRunRuntimeSmoke = effectiveRuntimeStatus.enabled && effectiveRuntimeStatus.configured;
   const summaryCards = [
     { label: '月份', value: view.month, icon: Clock3, tone: 'bg-cyan-300/[0.12] text-cyan-100' },
     { label: '总调用数', value: numberFormatter.format(view.usage.summary.totalCalls), icon: Cpu, tone: 'bg-blue-300/[0.12] text-blue-100' },
@@ -147,25 +198,20 @@ export function OpenPlatformAiReadonlyPanel() {
         setRuntimeStatusLoadFailed(true);
       });
 
-    fetch('/api/v1/open-platform/ai-runtime/provider-config', { cache: 'no-store' })
+    fetch('/api/v1/open-platform/provider-configs', { cache: 'no-store' })
       .then(async (response) => {
-        if (!response.ok) throw new Error('provider_config_unavailable');
-        return response.json() as Promise<PlatformAiProviderConfigView>;
+        if (!response.ok) throw new Error('vendor_configs_unavailable');
+        return response.json() as Promise<{ configs: VendorProviderConfigView[] }>;
       })
       .then((payload) => {
         if (!isMounted) return;
-        setProviderConfig(payload);
-        setProviderConfigLoadFailed(false);
-        setProviderConfigForm((current) => ({
-          ...current,
-          provider: payload.provider ?? current.provider,
-          model: payload.model ?? current.model,
-        }));
+        setVendorConfigs(payload.configs ?? []);
+        setVendorConfigsLoadFailed(false);
       })
       .catch(() => {
         if (!isMounted) return;
-        setProviderConfig(providerConfigFallback);
-        setProviderConfigLoadFailed(true);
+        setVendorConfigs([]);
+        setVendorConfigsLoadFailed(true);
       });
 
     return () => {
@@ -173,32 +219,67 @@ export function OpenPlatformAiReadonlyPanel() {
     };
   }, []);
 
-  async function saveProviderConfig() {
-    if (providerConfigSaveState === 'saving') return;
-    setProviderConfigSaveState('saving');
+  async function saveVendorConfig() {
+    if (vendorSaveState === 'saving') return;
+    setVendorSaveState('saving');
 
     try {
-      const response = await fetch('/api/v1/open-platform/ai-runtime/provider-config', {
+      const response = await fetch('/api/v1/open-platform/provider-configs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(providerConfigForm),
+        body: JSON.stringify({
+          vendor: selectedVendor,
+          baseUrl: vendorForm.baseUrl,
+          model: vendorForm.model,
+          apiKey: vendorForm.apiKey,
+        }),
       });
-      const payload = await response.json() as PlatformAiProviderConfigView | { ok: false; errorCode: string };
+      const payload = await response.json() as VendorProviderConfigView | { ok: false; errorCode: string };
 
       if (!response.ok || 'ok' in payload) {
-        throw new Error('provider_config_save_failed');
+        throw new Error('vendor_config_save_failed');
       }
 
-      setProviderConfig(payload);
-      setProviderConfigForm((current) => ({
-        ...current,
-        provider: payload.provider ?? current.provider,
-        model: payload.model ?? current.model,
-        apiKey: '',
-      }));
-      setProviderConfigSaveState('saved');
+      setVendorConfigs((prev) => {
+        const idx = prev.findIndex((c) => c.vendor === selectedVendor);
+        const config = payload as VendorProviderConfigView;
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = config;
+          return next;
+        }
+        return [...prev, config];
+      });
+      setVendorForm((current) => ({ ...current, apiKey: '' }));
+      setVendorSaveState('saved');
     } catch {
-      setProviderConfigSaveState('failed');
+      setVendorSaveState('failed');
+    }
+  }
+
+  async function deleteVendorConfig() {
+    if (vendorDeleteState === 'deleting') return;
+    setVendorDeleteState('deleting');
+
+    try {
+      const response = await fetch(
+        `/api/v1/open-platform/provider-configs?vendor=${encodeURIComponent(selectedVendor)}`,
+        { method: 'DELETE' },
+      );
+      const payload = await response.json() as Record<string, unknown>;
+
+      if (!response.ok) {
+        throw new Error('vendor_config_delete_failed');
+      }
+
+      if (payload.ok) {
+        setVendorConfigs((prev) => prev.filter((c) => c.vendor !== selectedVendor));
+        setVendorDeleteState('deleted');
+      } else {
+        throw new Error('vendor_config_delete_failed');
+      }
+    } catch {
+      setVendorDeleteState('failed');
     }
   }
 
@@ -219,8 +300,8 @@ export function OpenPlatformAiReadonlyPanel() {
         ok: false,
         status: 'failed',
         latencyMs: 0,
-        provider: effectiveProviderConfig.provider ?? effectiveRuntimeStatus.provider,
-        model: effectiveProviderConfig.model ?? effectiveRuntimeStatus.model,
+        provider: effectiveRuntimeStatus.provider,
+        model: effectiveRuntimeStatus.model,
         checkedAt: new Date().toISOString(),
         errorCode: 'PROVIDER_REQUEST_FAILED',
       });
@@ -333,63 +414,91 @@ export function OpenPlatformAiReadonlyPanel() {
         ) : null}
       </section>
 
-      <section className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6" aria-labelledby="ai-provider-config-heading">
+      <section className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6" aria-labelledby="ai-vendor-config-heading">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h2 id="ai-provider-config-heading" className="text-xl font-semibold tracking-normal text-white">厂商 Key 配置</h2>
+            <h2 id="ai-vendor-config-heading" className="text-xl font-semibold tracking-normal text-white">厂商 Key 配置</h2>
             <p className="mt-2 text-sm leading-6 text-slate-400">
-              仅保存到服务端加密存储，页面只展示低敏配置状态；保存后不会回显 Key。
+              支持 {SUPPORTED_VENDOR_KEYS.length} 家厂商独立配置，仅保存到服务端加密存储，页面只展示低敏状态；保存后不返回 Key。
             </p>
-            {providerConfigLoadFailed ? (
-              <p className="mt-2 text-xs font-semibold text-amber-100">配置状态读取失败，当前按未配置展示。</p>
+            {vendorConfigsLoadFailed ? (
+              <p className="mt-2 text-xs font-semibold text-amber-100">厂商配置读取失败，当前展示为空。</p>
             ) : null}
           </div>
           <div className={cn(
             'inline-flex w-fit rounded-full border px-3 py-1 text-xs font-semibold',
-            effectiveProviderConfig.configured
+            currentConfig?.configured
               ? 'border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-100'
               : 'border-amber-300/20 bg-amber-300/[0.08] text-amber-100',
           )}>
-            {effectiveProviderConfig.configured ? '已配置' : '未配置'}
+            {currentConfig?.configured ? '已配置' : '未配置'}
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 flex flex-wrap gap-2">
+          {SUPPORTED_VENDOR_KEYS.map((vendor) => {
+            const config = vendorConfigs.find((c) => c.vendor === vendor);
+            const isActive = vendor === selectedVendor;
+            return (
+              <button
+                key={vendor}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => {
+                  const cfg = vendorConfigs.find((c) => c.vendor === vendor);
+                  setSelectedVendor(vendor);
+                  setVendorForm({
+                    baseUrl: cfg?.baseUrl ?? VENDOR_DEFAULT_BASE_URLS[vendor],
+                    model: cfg?.model ?? VENDOR_DEFAULT_MODELS[vendor],
+                    apiKey: '',
+                  });
+                  setVendorSaveState('idle');
+                  setVendorDeleteState('idle');
+                }}
+                className={cn(
+                  'rounded-full border px-3.5 py-1.5 text-xs font-semibold transition',
+                  isActive
+                    ? 'border-cyan-200/50 bg-cyan-300/[0.16] text-cyan-50'
+                    : 'border-white/10 bg-white/[0.06] text-slate-300 hover:border-cyan-300/30 hover:text-cyan-100',
+                )}
+              >
+                {VENDOR_DISPLAY_NAMES[vendor] ?? vendor}
+                {config?.configured ? (
+                  <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           {[
-            { label: 'Provider', value: effectiveProviderConfig.provider ?? '未配置' },
-            { label: '模型名', value: effectiveProviderConfig.model ?? '未配置' },
-            { label: 'Base URL', value: effectiveProviderConfig.baseUrlConfigured ? '已配置' : '未配置' },
-            { label: '检查状态', value: effectiveProviderConfig.lastCheckStatus },
+            { label: '厂商', value: VENDOR_DISPLAY_NAMES[selectedVendor] ?? selectedVendor },
+            { label: '模型', value: currentConfig?.model ?? VENDOR_DEFAULT_MODELS[selectedVendor] },
+            { label: 'Base URL', value: currentConfig?.baseUrl ?? VENDOR_DEFAULT_BASE_URLS[selectedVendor] },
+            { label: '检查状态', value: currentConfig?.lastCheckStatus ?? 'not_checked' },
+            { label: '最后检查时间', value: formatLastChecked(currentConfig?.lastCheckedAt ?? null) },
           ].map((item) => (
             <div key={item.label} className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
               <div className="text-sm text-slate-400">{item.label}</div>
-              <div className="mt-3 text-base font-semibold text-white">{item.value}</div>
+              <div className="mt-2 text-sm font-semibold text-white break-all">{item.value}</div>
             </div>
           ))}
         </div>
 
         <form
-          className="mt-5 grid gap-4 xl:grid-cols-[1fr_1.3fr_1fr_1.3fr_auto]"
+          className="mt-5 grid gap-4 xl:grid-cols-[1.3fr_1fr_1.3fr_auto]"
           onSubmit={(event) => {
             event.preventDefault();
-            void saveProviderConfig();
+            void saveVendorConfig();
           }}
         >
-          <label className="space-y-2 text-sm font-semibold text-slate-200">
-            <span>Provider</span>
-            <input
-              aria-label="Provider"
-              value={providerConfigForm.provider}
-              onChange={(event) => setProviderConfigForm((current) => ({ ...current, provider: event.target.value }))}
-              className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50"
-            />
-          </label>
           <label className="space-y-2 text-sm font-semibold text-slate-200">
             <span>Base URL</span>
             <input
               aria-label="Base URL"
-              value={providerConfigForm.baseUrl}
-              onChange={(event) => setProviderConfigForm((current) => ({ ...current, baseUrl: event.target.value }))}
+              value={vendorForm.baseUrl}
+              onChange={(event) => setVendorForm((current) => ({ ...current, baseUrl: event.target.value }))}
               className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50"
             />
           </label>
@@ -397,37 +506,58 @@ export function OpenPlatformAiReadonlyPanel() {
             <span>Model</span>
             <input
               aria-label="Model"
-              value={providerConfigForm.model}
-              onChange={(event) => setProviderConfigForm((current) => ({ ...current, model: event.target.value }))}
+              value={vendorForm.model}
+              onChange={(event) => setVendorForm((current) => ({ ...current, model: event.target.value }))}
               className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50"
             />
           </label>
           <label className="space-y-2 text-sm font-semibold text-slate-200">
-            <span>API Key</span>
+            <span>API Key（仅输入新 key，不回显旧值）</span>
             <input
               aria-label="API Key"
               type="password"
-              value={providerConfigForm.apiKey}
-              onChange={(event) => setProviderConfigForm((current) => ({ ...current, apiKey: event.target.value }))}
+              value={vendorForm.apiKey}
+              onChange={(event) => setVendorForm((current) => ({ ...current, apiKey: event.target.value }))}
               className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50"
             />
           </label>
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
             <button
               type="submit"
-              disabled={providerConfigSaveState === 'saving'}
-              className="inline-flex h-11 w-full items-center justify-center rounded-full border border-cyan-200/50 bg-cyan-300/[0.16] px-4 text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/[0.22] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-slate-500 xl:w-auto"
+              disabled={vendorSaveState === 'saving'}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-cyan-200/50 bg-cyan-300/[0.16] px-5 text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/[0.22] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-slate-500"
             >
-              保存配置
+              <PlusCircle className="h-4 w-4" />
+              保存
+            </button>
+            <button
+              type="button"
+              disabled={!currentConfig || vendorDeleteState === 'deleting'}
+              onClick={() => void deleteVendorConfig()}
+              className={cn(
+                'inline-flex h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm font-semibold transition',
+                currentConfig
+                  ? 'border-rose-300/30 bg-rose-300/[0.10] text-rose-100 hover:bg-rose-300/[0.18]'
+                  : 'cursor-not-allowed border-white/10 bg-white/[0.05] text-slate-500',
+              )}
+            >
+              <Trash2 className="h-4 w-4" />
+              删除
             </button>
           </div>
         </form>
 
-        {providerConfigSaveState === 'saved' ? (
+        {vendorSaveState === 'saved' ? (
           <p className="mt-3 text-sm font-semibold text-emerald-100">配置已保存，Key 输入已清空。</p>
         ) : null}
-        {providerConfigSaveState === 'failed' ? (
+        {vendorSaveState === 'failed' ? (
           <p className="mt-3 text-sm font-semibold text-rose-100">配置保存失败，请检查必填项或服务端加密设置。</p>
+        ) : null}
+        {vendorDeleteState === 'deleted' ? (
+          <p className="mt-3 text-sm font-semibold text-emerald-100">配置已删除。</p>
+        ) : null}
+        {vendorDeleteState === 'failed' ? (
+          <p className="mt-3 text-sm font-semibold text-rose-100">删除失败，请重试。</p>
         ) : null}
       </section>
 
