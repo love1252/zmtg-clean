@@ -22,6 +22,12 @@ const forbiddenText = [
   'secret',
   'credential',
   '测试调用用户 prompt',
+  'encryptedApiKey',
+  'ciphertext',
+  'authTag',
+  'provider-test-key-never-return',
+  'vendor-test-key-never-return',
+  'test-api-key-for-ui-save',
 ];
 
 const runtimeStatusMissing = {
@@ -66,6 +72,14 @@ const providerConfigSaved = {
   updatedAt: '2026-06-15T00:00:00.000Z',
 };
 
+const VENDOR_DISPLAY_NAMES: Record<string, string> = {
+  doubao: '豆包 (Volcengine)',
+  deepseek: 'DeepSeek',
+  qwen: '通义千问',
+  chatglm: '智谱 GLM',
+  kimi: 'Kimi',
+};
+
 function mockRuntimeStatusFetch(fetchMock = vi.fn()) {
   fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -73,12 +87,6 @@ function mockRuntimeStatusFetch(fetchMock = vi.fn()) {
 
     if (url === '/api/v1/open-platform/ai-runtime/status') {
       return Promise.resolve(new Response(JSON.stringify(runtimeStatusMissing), { status: 200 }));
-    }
-    if (url === '/api/v1/open-platform/ai-runtime/provider-config' && method === 'GET') {
-      return Promise.resolve(new Response(JSON.stringify(providerConfigMissing), { status: 200 }));
-    }
-    if (url === '/api/v1/open-platform/ai-runtime/provider-config' && method === 'POST') {
-      return Promise.resolve(new Response(JSON.stringify(providerConfigSaved), { status: 200 }));
     }
     if (url === '/api/v1/open-platform/ai-runtime/smoke' && method === 'POST') {
       return Promise.resolve(new Response(JSON.stringify({
@@ -90,6 +98,55 @@ function mockRuntimeStatusFetch(fetchMock = vi.fn()) {
         checkedAt: '2026-06-15T00:00:00.000Z',
         errorCode: 'RUNTIME_NOT_CONFIGURED',
       }), { status: 200 }));
+    }
+    if (url === '/api/v1/open-platform/provider-configs' && method === 'GET') {
+      return Promise.resolve(new Response(JSON.stringify({
+        configs: [
+          {
+            id: 'provider-config-doubao',
+            vendor: 'doubao',
+            displayName: '豆包 (Volcengine)',
+            provider: 'openai_compatible',
+            baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+            model: 'doubao-seed-1-8-251228',
+            configured: true,
+            lastCheckStatus: 'ok',
+            lastCheckedAt: '2026-06-17T00:00:00.000Z',
+            updatedAt: '2026-06-17T00:00:00.000Z',
+          },
+          {
+            id: 'provider-config-kimi',
+            vendor: 'kimi',
+            displayName: 'Kimi',
+            provider: 'openai_compatible',
+            baseUrl: 'https://api.moonshot.cn/v1',
+            model: 'kimi-k2-5-260127',
+            configured: true,
+            lastCheckStatus: 'ok',
+            lastCheckedAt: null,
+            updatedAt: null,
+          },
+        ],
+      }), { status: 200 }));
+    }
+    if (url === '/api/v1/open-platform/provider-configs' && method === 'POST') {
+      const body = JSON.parse(String(init?.body ?? '{}'));
+      const vendor = String(body.vendor ?? 'doubao');
+      return Promise.resolve(new Response(JSON.stringify({
+        id: `provider-config-${vendor}`,
+        vendor,
+        displayName: VENDOR_DISPLAY_NAMES[vendor] ?? vendor,
+        provider: 'openai_compatible',
+        baseUrl: String(body.baseUrl ?? ''),
+        model: String(body.model ?? ''),
+        configured: true,
+        lastCheckStatus: 'not_checked',
+        lastCheckedAt: null,
+        updatedAt: new Date().toISOString(),
+      }), { status: 200 }));
+    }
+    if (url.startsWith('/api/v1/open-platform/provider-configs?vendor=') && method === 'DELETE') {
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     }
 
     return Promise.resolve(new Response(JSON.stringify({ ok: false }), { status: 404 }));
@@ -178,36 +235,109 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expectNoForbiddenAiReadonlyContent(container);
   });
 
-  it('支持保存厂商 Key 配置，成功后清空 Key 输入且不回显敏感内容', async () => {
-    const fetchMock = mockRuntimeStatusFetch();
-    const { container } = render(<OpenPlatformAiReadonlyPanel />);
+  it('多厂商配置：初始加载已有 doubao 配置后表单显示已有 baseUrl/model', async () => {
+    mockRuntimeStatusFetch();
+    render(<OpenPlatformAiReadonlyPanel />);
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: '厂商 Key 配置' })).toBeInTheDocument();
     });
 
-    const providerInput = screen.getByLabelText('Provider') as HTMLInputElement;
     const baseUrlInput = screen.getByLabelText('Base URL') as HTMLInputElement;
     const modelInput = screen.getByLabelText('Model') as HTMLInputElement;
     const keyInput = screen.getByLabelText('API Key') as HTMLInputElement;
 
-    expect(keyInput.type).toBe('password');
-    fireEvent.change(providerInput, { target: { value: 'openai_compatible' } });
-    fireEvent.change(baseUrlInput, { target: { value: 'https://provider.example.test/v1' } });
-    fireEvent.change(modelInput, { target: { value: 'gpt-provider-config' } });
-    fireEvent.change(keyInput, { target: { value: 'provider-test-key-never-return' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存配置' }));
+    expect(baseUrlInput.value).toBe('https://ark.cn-beijing.volces.com/api/v3');
+    expect(modelInput.value).toBe('doubao-seed-1-8-251228');
+    expect(keyInput.value).toBe('');
+  });
+
+  it('切换厂商时表单切换到已有配置或默认值', async () => {
+    mockRuntimeStatusFetch();
+    render(<OpenPlatformAiReadonlyPanel />);
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/v1/open-platform/ai-runtime/provider-config', expect.objectContaining({
-        method: 'POST',
-      }));
-      expect(keyInput.value).toBe('');
-      expect(screen.getAllByText('已配置').length).toBeGreaterThan(0);
+      expect(screen.getByRole('heading', { name: '厂商 Key 配置' })).toBeInTheDocument();
     });
-    expect(container.textContent).not.toContain('provider-test-key-never-return');
-    expect(screen.queryByRole('button', { name: /显示|隐藏/ })).not.toBeInTheDocument();
-    expectNoForbiddenAiReadonlyContent(container);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Kimi' }));
+
+    const baseUrlInput = screen.getByLabelText('Base URL') as HTMLInputElement;
+    const modelInput = screen.getByLabelText('Model') as HTMLInputElement;
+    const keyInput = screen.getByLabelText('API Key') as HTMLInputElement;
+
+    expect(baseUrlInput.value).toBe('https://api.moonshot.cn/v1');
+    expect(modelInput.value).toBe('kimi-k2-5-260127');
+    expect(keyInput.value).toBe('');
+  });
+
+  it('保存成功后 API Key 输入被清空', async () => {
+    mockRuntimeStatusFetch();
+    render(<OpenPlatformAiReadonlyPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '厂商 Key 配置' })).toBeInTheDocument();
+    });
+
+    const keyInput = screen.getByLabelText('API Key') as HTMLInputElement;
+    fireEvent.change(keyInput, { target: { value: 'test-api-key-for-ui-save' } });
+    fireEvent.click(screen.getByRole('button', { name: /保存/ }));
+
+    await waitFor(() => {
+      expect(keyInput.value).toBe('');
+    });
+  });
+
+  it('页面不展示 encryptedApiKey/ciphertext/authTag/iv', async () => {
+    mockRuntimeStatusFetch();
+    const { container } = render(<OpenPlatformAiReadonlyPanel />);
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '厂商 Key 配置' })).toBeInTheDocument();
+    });
+    expect(container.textContent).not.toContain('encryptedApiKey');
+    expect(container.textContent).not.toContain('ciphertext');
+    expect(container.textContent).not.toContain('authTag');
+    expect(container.textContent).not.toContain('iv');
+  });
+
+  it.each([
+    { status: 401, errorCode: 'UNAUTHORIZED' },
+    { status: 403, errorCode: 'FORBIDDEN' },
+  ])('加载失败 $status 时所有输入和按钮 disabled 且无 mutation 请求', async ({ status, errorCode }) => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/v1/open-platform/ai-runtime/status') {
+        return Promise.resolve(new Response(JSON.stringify(runtimeStatusMissing), { status: 200 }));
+      }
+      if (url === '/api/v1/open-platform/provider-configs' && String(init?.method ?? 'GET').toUpperCase() === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({ ok: false, errorCode }), { status }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ ok: false }), { status: 404 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OpenPlatformAiReadonlyPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText('厂商配置读取失败，当前展示为空。')).toBeInTheDocument();
+    });
+
+    const baseUrlInput = screen.getByLabelText('Base URL') as HTMLInputElement;
+    const modelInput = screen.getByLabelText('Model') as HTMLInputElement;
+    const keyInput = screen.getByLabelText('API Key') as HTMLInputElement;
+    const saveButton = screen.getByRole('button', { name: /保存/ });
+    const deleteButton = screen.getByRole('button', { name: /删除/ });
+
+    expect(baseUrlInput).toBeDisabled();
+    expect(modelInput).toBeDisabled();
+    expect(keyInput).toBeDisabled();
+    expect(saveButton).toBeDisabled();
+    expect(deleteButton).toBeDisabled();
+
+    const mutationCalls = fetchMock.mock.calls.filter(([, init]) => {
+      const method = String((init as RequestInit | undefined)?.method ?? 'GET').toUpperCase();
+      return ['POST', 'PUT', 'DELETE'].includes(method);
+    });
+    expect(mutationCalls).toHaveLength(0);
   });
 
   it('支持受控月份切换并展示无用量空状态', async () => {
@@ -224,7 +354,6 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.getAllByText('0').length).toBeGreaterThan(0);
     expect(screen.getByText('¥0.00')).toBeInTheDocument();
     expect(screen.queryByText('示例机构 A')).not.toBeInTheDocument();
-    expect(screen.queryByText('通义千问')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('未启用')).toBeInTheDocument();
     });
