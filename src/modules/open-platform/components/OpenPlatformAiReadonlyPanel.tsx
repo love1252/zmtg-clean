@@ -558,7 +558,7 @@ export function OpenPlatformAiReadonlyPanel() {
             </button>
             <button
               type="button"
-              disabled={!currentConfig || vendorDeleteState === 'deleting'}
+              disabled={vendorConfigsLoadFailed || vendorDeleteState === 'deleting' || !currentConfig}
               onClick={() => void deleteVendorConfig()}
               className={cn(
                 'inline-flex h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm font-semibold transition',
