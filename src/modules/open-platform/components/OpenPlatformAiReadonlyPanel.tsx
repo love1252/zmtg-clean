@@ -521,8 +521,9 @@ export function OpenPlatformAiReadonlyPanel() {
             <input
               aria-label="Base URL"
               value={vendorForm.baseUrl}
+              disabled={vendorConfigsLoadFailed}
               onChange={(event) => setVendorForm((current) => ({ ...current, baseUrl: event.target.value }))}
-              className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50"
+              className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50 disabled:opacity-40 disabled:cursor-not-allowed"
             />
           </label>
           <label className="space-y-2 text-sm font-semibold text-slate-200">
@@ -530,8 +531,9 @@ export function OpenPlatformAiReadonlyPanel() {
             <input
               aria-label="Model"
               value={vendorForm.model}
+              disabled={vendorConfigsLoadFailed}
               onChange={(event) => setVendorForm((current) => ({ ...current, model: event.target.value }))}
-              className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50"
+              className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50 disabled:opacity-40 disabled:cursor-not-allowed"
             />
           </label>
           <label className="space-y-2 text-sm font-semibold text-slate-200">
@@ -540,14 +542,15 @@ export function OpenPlatformAiReadonlyPanel() {
               aria-label="API Key"
               type="password"
               value={vendorForm.apiKey}
+              disabled={vendorConfigsLoadFailed}
               onChange={(event) => setVendorForm((current) => ({ ...current, apiKey: event.target.value }))}
-              className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50"
+              className="h-11 w-full rounded-xl border border-white/10 bg-[#071322]/72 px-3 text-sm text-white outline-none transition focus:border-cyan-200/50 disabled:opacity-40 disabled:cursor-not-allowed"
             />
           </label>
           <div className="flex items-end gap-2">
             <button
               type="submit"
-              disabled={vendorSaveState === 'saving'}
+              disabled={vendorSaveState === 'saving' || vendorConfigsLoadFailed}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-cyan-200/50 bg-cyan-300/[0.16] px-5 text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/[0.22] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-slate-500"
             >
               <PlusCircle className="h-4 w-4" />
