@@ -205,8 +205,17 @@ export function OpenPlatformAiReadonlyPanel() {
       })
       .then((payload) => {
         if (!isMounted) return;
-        setVendorConfigs(payload.configs ?? []);
+        const configs = payload.configs ?? [];
+        setVendorConfigs(configs);
         setVendorConfigsLoadFailed(false);
+        const currentCfg = configs.find((c) => c.vendor === 'doubao');
+        if (currentCfg) {
+          setVendorForm({
+            baseUrl: currentCfg.baseUrl,
+            model: currentCfg.model,
+            apiKey: '',
+          });
+        }
       })
       .catch(() => {
         if (!isMounted) return;
@@ -221,6 +230,10 @@ export function OpenPlatformAiReadonlyPanel() {
 
   async function saveVendorConfig() {
     if (vendorSaveState === 'saving') return;
+    if (vendorConfigsLoadFailed) {
+      setVendorSaveState('failed');
+      return;
+    }
     setVendorSaveState('saving');
 
     try {
@@ -259,6 +272,10 @@ export function OpenPlatformAiReadonlyPanel() {
 
   async function deleteVendorConfig() {
     if (vendorDeleteState === 'deleting') return;
+    if (vendorConfigsLoadFailed) {
+      setVendorDeleteState('failed');
+      return;
+    }
     setVendorDeleteState('deleting');
 
     try {
@@ -274,6 +291,11 @@ export function OpenPlatformAiReadonlyPanel() {
 
       if (payload.ok) {
         setVendorConfigs((prev) => prev.filter((c) => c.vendor !== selectedVendor));
+        setVendorForm({
+          baseUrl: VENDOR_DEFAULT_BASE_URLS[selectedVendor],
+          model: VENDOR_DEFAULT_MODELS[selectedVendor],
+          apiKey: '',
+        });
         setVendorDeleteState('deleted');
       } else {
         throw new Error('vendor_config_delete_failed');
@@ -490,6 +512,7 @@ export function OpenPlatformAiReadonlyPanel() {
           className="mt-5 grid gap-4 xl:grid-cols-[1.3fr_1fr_1.3fr_auto]"
           onSubmit={(event) => {
             event.preventDefault();
+            if (vendorConfigsLoadFailed) return;
             void saveVendorConfig();
           }}
         >
