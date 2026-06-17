@@ -300,14 +300,17 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(container.textContent).not.toContain('iv');
   });
 
-  it('加载失败时不可执行保存或删除', async () => {
+  it.each([
+    { status: 401, errorCode: 'UNAUTHORIZED' },
+    { status: 403, errorCode: 'FORBIDDEN' },
+  ])('加载失败 $status 时所有输入和按钮 disabled 且无 mutation 请求', async ({ status, errorCode }) => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === '/api/v1/open-platform/ai-runtime/status') {
         return Promise.resolve(new Response(JSON.stringify(runtimeStatusMissing), { status: 200 }));
       }
       if (url === '/api/v1/open-platform/provider-configs' && String(init?.method ?? 'GET').toUpperCase() === 'GET') {
-        return Promise.resolve(new Response(JSON.stringify({ ok: false, errorCode: 'UNAUTHORIZED' }), { status: 401 }));
+        return Promise.resolve(new Response(JSON.stringify({ ok: false, errorCode }), { status }));
       }
       return Promise.resolve(new Response(JSON.stringify({ ok: false }), { status: 404 }));
     });
@@ -318,30 +321,23 @@ describe('平台端 AI 模型与用量只读面板', () => {
       expect(screen.getByText('厂商配置读取失败，当前展示为空。')).toBeInTheDocument();
     });
 
+    const baseUrlInput = screen.getByLabelText('Base URL') as HTMLInputElement;
+    const modelInput = screen.getByLabelText('Model') as HTMLInputElement;
+    const keyInput = screen.getByLabelText('API Key') as HTMLInputElement;
     const saveButton = screen.getByRole('button', { name: /保存/ });
     const deleteButton = screen.getByRole('button', { name: /删除/ });
+
+    expect(baseUrlInput).toBeDisabled();
+    expect(modelInput).toBeDisabled();
+    expect(keyInput).toBeDisabled();
+    expect(saveButton).toBeDisabled();
     expect(deleteButton).toBeDisabled();
 
-    fireEvent.click(saveButton);
-    // vendorConfigsLoadFailed=true causes saveVendorConfig to set failed immediately.
-    // The UI shows the "配置已保存，Key 输入已清空。" text but since the flow never reaches setVendorSaveState('saved'),
-    // the message stays "配置已经保存" (saved: false). After save returns early, vendorSaveState is 'failed'.
-    // Check that the delete button is disabled and no POST/DELETE was sent.
-
-    // After the early return in saveVendorConfig, vendorSaveState should be 'failed'
-    await waitFor(() => {
-      // vendorConfigsLoadFailed=true means delete returns early too
-      // so we just validate that all mutation fetches are absent
-    }, { timeout: 1000 });
-
-    const postOrDeleteCalls = fetchMock.mock.calls.filter(([, init]) => {
+    const mutationCalls = fetchMock.mock.calls.filter(([, init]) => {
       const method = String((init as RequestInit | undefined)?.method ?? 'GET').toUpperCase();
-      return method === 'POST' || method === 'PUT' || method === 'DELETE';
+      return ['POST', 'PUT', 'DELETE'].includes(method);
     });
-    expect(postOrDeleteCalls).toHaveLength(0);
-
-    // The save button is still present (not replaced by error message in this flow)
-    expect(screen.getByRole('button', { name: /保存/ })).toBeInTheDocument();
+    expect(mutationCalls).toHaveLength(0);
   });
 
   it('支持受控月份切换并展示无用量空状态', async () => {
