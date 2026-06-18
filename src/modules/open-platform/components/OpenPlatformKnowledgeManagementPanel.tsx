@@ -32,6 +32,7 @@ import {
 } from '@/modules/open-platform/lib/platformKnowledgeManagementViewLoader';
 import type { KnowledgeBaseControlledTrialReadiness } from '@/modules/knowledge-base/domain/v1-knowledge-base-controlled-trial-readiness';
 import { cn } from '@/shared/utils/cn';
+import { packTarGz } from '@/shared/utils/tar';
 
 const ALL_TENANTS = 'all';
 
@@ -708,6 +709,52 @@ export function OpenPlatformKnowledgeManagementPanel() {
       setFileActionMessage('文件下载已准备');
     } catch {
       setFileActionMessage('文件暂时无法下载');
+    }
+  }
+
+  async function handleBulkDownloadSelectedFiles() {
+    if (selectedFileIds.length === 0 || !managedKnowledge?.tenantId || !managedKnowledge.knowledgeId) return;
+
+    setFileActionMessage(null);
+    try {
+      // Obtain file names via metadata API, then download each file & pack as .tar.gz
+      const fileElements: Array<{ name: string; blob: Blob }> = [];
+      for (const fileId of selectedFileIds) {
+        const response = await fetch(fileDownloadPath({
+          knowledgeId: managedKnowledge.knowledgeId,
+          tenantId: managedKnowledge.tenantId,
+          fileId,
+        }), { method: 'GET' });
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        // find file name from managedFiles state
+        const fileMeta = managedFiles.find((f: ManagedKnowledgeFileRecord) => f.fileId === fileId);
+        const fileName = fileMeta?.originalFilename ?? `${fileId}.bin`;
+        fileElements.push({ name: fileName, blob });
+      }
+
+      if (fileElements.length === 0) {
+        setFileActionMessage('没有可下载的文件');
+        return;
+      }
+
+      // pack as tar.gz using existing platform library
+      import('@/shared/utils/tar').then(async ({ packTarGz }) => {
+        const tarGzBlob = await packTarGz(fileElements);
+        if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+          const url = URL.createObjectURL(tarGzBlob);
+          const anchor = document.createElement('a');
+          anchor.href = url;
+          anchor.download = `knowledge-files-${Date.now()}.tar.gz`;
+          anchor.click();
+          URL.revokeObjectURL(url);
+        }
+        setFileActionMessage(`${fileElements.length} 个文件打包下载已准备`);
+      }).catch(() => {
+        setFileActionMessage('打包下载失败，请稍后重试');
+      });
+    } catch {
+      setFileActionMessage('打包下载失败，请稍后重试');
     }
   }
 
@@ -1501,8 +1548,18 @@ export function OpenPlatformKnowledgeManagementPanel() {
 
             <div className="p-5">
               {selectedFileIds.length > 0 ? (
-                <div className="mb-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.08] px-4 py-3 text-sm font-semibold text-cyan-100">
-                  已选择 {selectedFileIds.length} 个文件
+                <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.08] px-4 py-3">
+                  <span className="text-sm font-semibold text-cyan-100">
+                    已选择 {selectedFileIds.length} 个文件
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkDownloadSelectedFiles()}
+                    className="inline-flex items-center gap-2 rounded-full border border-cyan-200/50 bg-cyan-300/[0.16] px-4 py-2 text-xs font-semibold text-cyan-50 transition hover:bg-cyan-300/[0.22]"
+                  >
+                    <Download className="h-4 w-4" />
+                    打包下载已选
+                  </button>
                 </div>
               ) : null}
 
