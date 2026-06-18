@@ -213,12 +213,12 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.getByRole('heading', { name: '厂商 Key 配置' })).toBeInTheDocument();
     expect(screen.getAllByText('未配置').length).toBeGreaterThan(0);
     expect(screen.getByText('env-only')).toBeInTheDocument();
-    expect(screen.getByText('API Key 仅从服务端环境变量读取，不在页面输入、不回显、不保存。')).toBeInTheDocument();
+    expect(screen.getByText('真实调用已禁用。dry-run readiness 检查厂商配置完整性，不解密 Key、不外呼厂商 API。')).toBeInTheDocument();
     expect(screen.getByText('真实调用仅用于固定 smoke test，不接收用户 prompt。')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('未启用')).toBeInTheDocument();
       expect(screen.getByText('配置不完整')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: '运行 smoke test' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'dry-run readiness' })).toBeDisabled();
     });
     expect(screen.getByRole('heading', { name: '能力覆盖矩阵' })).toBeInTheDocument();
     expect(screen.getByText('文本生成')).toBeInTheDocument();
