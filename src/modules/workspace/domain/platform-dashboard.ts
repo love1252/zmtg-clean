@@ -125,4 +125,7 @@ export const platformTrendSummary = {
   callTrendLabel: 'AI 调用趋势（未启用）',
   revenueLabel: '商业化收入（不涉及）',
   note: '所有趋势数据均为占位 SVG，不代表真实运营数据',
+  tenantGrowthChange: '+12.5%',
+  callTrendChange: '+18.5%',
+  revenueChange: '+6.8%',
 };

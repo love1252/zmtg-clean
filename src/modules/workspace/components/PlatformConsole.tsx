@@ -5,6 +5,7 @@ import Image from 'next/image';
 import {
   Activity,
   AlertTriangle,
+  ArrowUpRight,
   Bell,
   CheckCircle2,
   Clock,
@@ -13,7 +14,6 @@ import {
   LockKeyhole,
   PlugZap,
   RadioTower,
-  ShieldCheck,
   TrendingUp,
 } from 'lucide-react';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
@@ -218,7 +218,7 @@ export function PlatformConsole() {
                     <div className="grid gap-3 sm:grid-cols-3 xl:w-[560px]">
                       {[
                         { icon: PlugZap, label: '开放连接', value: '长期路线' },
-                        { icon: ShieldCheck, label: '权限审计', value: '可追踪' },
+                        { icon: TrendingUp, label: '租户增长', value: platformTrendSummary.tenantGrowthChange },
                         { icon: LockKeyhole, label: 'AI 配额', value: '0 / 0' },
                       ].map((item) => (
                         <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.07] p-4">
@@ -250,41 +250,76 @@ export function PlatformConsole() {
                   <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <h2 className="text-lg font-semibold tracking-normal text-white">平台收尾健康概览</h2>
-                        <p className="mt-1 text-sm text-slate-400">围绕租户、套餐、配额和审计做演示收尾。</p>
+                        <h2 className="text-lg font-semibold tracking-normal text-white">平台收尾趋势参考</h2>
+                        <p className="mt-1 text-sm text-slate-400">演示租户增长与 AI 调用占位趋势，均为静态 SVG 不代表真实数据。</p>
                       </div>
                       <span className="rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-1 text-xs font-semibold text-emerald-200">受控 demo</span>
                     </div>
 
-                    <div className="mt-6 grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
-                      <div className="h-[300px] rounded-2xl border border-white/10 bg-[#071322]/75 p-4">
-                        <svg viewBox="0 0 720 280" className="h-full w-full" role="img" aria-label={platformTrendSummary.tenantGrowthLabel}>
-                          <defs>
-                            <linearGradient id="platformTrendFill" x1="0" x2="0" y1="0" y2="1">
-                              <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.32" />
-                              <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
-                            </linearGradient>
-                          </defs>
-                          {[60, 120, 180, 240].map((y) => (
-                            <line key={y} x1="24" x2="696" y1={y} y2={y} stroke="rgba(148,163,184,0.18)" strokeWidth="1" />
-                          ))}
-                          <polygon points="26,206 118,188 210,166 302,146 394,130 486,96 578,78 694,44 694,252 26,252" fill="url(#platformTrendFill)" />
-                          <polyline points="26,206 118,188 210,166 302,146 394,130 486,96 578,78 694,44" fill="none" stroke="#38bdf8" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-                          <polyline points="26,212 118,198 210,176 302,154 394,138 486,112 578,90 694,62" fill="none" stroke="#8b5cf6" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
+                    <div className="mt-6 grid gap-5 lg:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-[#071322]/75 p-4">
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <span className="text-sm font-semibold text-white">租户增长趋势</span>
+                          <span className="rounded-full border border-emerald-300/20 bg-emerald-300/[0.10] px-2 py-0.5 text-xs font-semibold text-emerald-200 flex items-center gap-1">
+                            <ArrowUpRight className="h-3 w-3" />
+                            {platformTrendSummary.tenantGrowthChange}
+                          </span>
+                        </div>
+                        <div className="h-[180px]">
+                          <svg viewBox="0 0 720 160" className="h-full w-full" role="img" aria-label={platformTrendSummary.tenantGrowthLabel}>
+                            <defs>
+                              <linearGradient id="tenantGrowthFill" x1="0" x2="0" y1="0" y2="1">
+                                <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.28" />
+                                <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
+                              </linearGradient>
+                            </defs>
+                            {[40, 80, 120].map((y) => (
+                              <line key={y} x1="24" x2="696" y1={y} y2={y} stroke="rgba(148,163,184,0.15)" strokeWidth="1" />
+                            ))}
+                            <polygon points="26,116 118,106 210,92 302,78 394,64 486,50 578,40 694,22 694,148 26,148" fill="url(#tenantGrowthFill)" />
+                            <polyline points="26,116 118,106 210,92 302,78 394,64 486,50 578,40 694,22" fill="none" stroke="#38bdf8" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
                       </div>
 
                       <div className="rounded-2xl border border-white/10 bg-[#071322]/75 p-4">
-                        <div className="text-sm font-semibold text-white">配额使用参考</div>
-                        <div className="mt-5 flex h-[236px] items-end gap-2">
-                          {trendBars.map((height, index) => (
-                            <div key={height} className="flex flex-1 flex-col items-center gap-2">
-                              <div className="w-full rounded-t-md bg-gradient-to-t from-blue-600 to-cyan-300" style={{ height: `${height * 1.65}px` }} />
-                              <span className="text-[11px] text-slate-500">{index + 1}</span>
-                            </div>
-                          ))}
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <span className="text-sm font-semibold text-white">AI 调用趋势</span>
+                          <span className="rounded-full border border-violet-300/20 bg-violet-300/[0.10] px-2 py-0.5 text-xs font-semibold text-violet-200 flex items-center gap-1">
+                            <ArrowUpRight className="h-3 w-3" />
+                            {platformTrendSummary.callTrendChange}
+                          </span>
+                        </div>
+                        <div className="h-[180px]">
+                          <svg viewBox="0 0 720 160" className="h-full w-full" role="img" aria-label={platformTrendSummary.callTrendLabel}>
+                            <defs>
+                              <linearGradient id="callTrendFill" x1="0" x2="0" y1="0" y2="1">
+                                <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.22" />
+                                <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+                              </linearGradient>
+                            </defs>
+                            {[40, 80, 120].map((y) => (
+                              <line key={y} x1="24" x2="696" y1={y} y2={y} stroke="rgba(148,163,184,0.15)" strokeWidth="1" />
+                            ))}
+                            <polygon points="26,120 118,104 210,94 302,82 394,70 486,56 578,46 694,28 694,148 26,148" fill="url(#callTrendFill)" />
+                            <polyline points="26,120 118,104 210,94 302,82 394,70 486,56 578,46 694,28" fill="none" stroke="#8b5cf6" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                            <polyline points="26,126 118,114 210,104 302,90 394,78 486,68 578,56 694,42" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
                         </div>
                       </div>
+                    </div>
+
+                    <div className="mt-4 rounded-xl border border-slate-400/15 bg-slate-400/[0.05] px-3 py-2 text-xs leading-5 text-slate-500 flex items-center gap-2">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" /> 租户
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-violet-400" /> 调用
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" /> 成功
+                      </span>
+                      <span className="ml-auto">{platformTrendSummary.note}</span>
                     </div>
                   </article>
 
