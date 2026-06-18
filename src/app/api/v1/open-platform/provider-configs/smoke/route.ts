@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createVendorProviderConfigRepository } from '@/modules/open-platform/server/vendorProviderConfigRepository';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
-import { isSupportedVendor, type SupportedVendor } from '@/modules/open-platform/domain/vendor-catalog';
+import { isSupportedVendor } from '@/modules/open-platform/domain/vendor-catalog';
 import {
   runMultiVendorSmokeTest,
   type PlatformAiRuntimeSmokeResult,
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       provider: null,
       model: null,
       checkedAt: new Date().toISOString(),
-      errorCode: 'PROVIDER_REQUEST_FAILED',
-    }, { status: 200 });
+      errorCode: null,
+    } satisfies PlatformAiRuntimeSmokeResult, { status: 200 });
   }
 }

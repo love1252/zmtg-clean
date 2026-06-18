@@ -1,26 +1,22 @@
-import { decryptSecret } from '@/modules/security/server/secretEncryption';
 import { type SupportedVendor } from '@/modules/open-platform/domain/vendor-catalog';
 import { type VendorProviderConfigRepository } from './vendorProviderConfigRepository';
 
 export type PlatformAiRuntimeSmokeResult = {
   ok: boolean;
-  status: 'skipped' | 'ok' | 'failed';
+  status: 'ready' | 'skipped' | 'failed';
   latencyMs: number;
   provider: 'openai_compatible' | null;
   model: string | null;
   checkedAt: string;
-  errorCode: 'NOT_CONFIGURED' | 'PROVIDER_REQUEST_FAILED' | 'PROVIDER_TIMEOUT' | null;
+  errorCode: 'NOT_CONFIGURED' | 'INCOMPLETE_CONFIG' | null;
 };
 
 export type MultiVendorSmokeResult =
   | { status: 'vendor_not_configured'; payload: PlatformAiRuntimeSmokeResult }
   | { status: 'completed'; payload: PlatformAiRuntimeSmokeResult };
 
-const SMOKE_PROMPT = 'Return OK only.';
-const SMOKE_TIMEOUT_MS = 8000;
-
-function normalizeBaseUrl(baseUrl: string) {
-  return baseUrl.replace(/\/+$/, '');
+function hasNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 function buildResult(
@@ -32,11 +28,14 @@ function buildResult(
   };
 }
 
+/**
+ * Dry-run smoke readiness check.
+ * No decryption, no outbound fetch, no Bearer token, no real smoke.
+ */
 export async function runMultiVendorSmokeTest(input: {
   repository: Pick<VendorProviderConfigRepository, 'findByVendor'>;
   vendor: SupportedVendor;
 }): Promise<MultiVendorSmokeResult> {
-  const startedAt = Date.now();
   const record = await input.repository.findByVendor(input.vendor);
 
   if (!record || !record.configured) {
@@ -53,88 +52,36 @@ export async function runMultiVendorSmokeTest(input: {
     };
   }
 
-  let apiKey: string;
-  try {
-    apiKey = decryptSecret(record.encryptedApiKey);
-  } catch {
-    return {
-      status: 'vendor_not_configured',
-      payload: buildResult({
-        ok: false,
-        status: 'skipped',
-        latencyMs: 0,
-        provider: null,
-        model: null,
-        errorCode: 'NOT_CONFIGURED',
-      }),
-    };
-  }
+  const isComplete =
+    hasNonEmptyString(record.baseUrl) &&
+    hasNonEmptyString(record.model) &&
+    record.encryptedApiKey !== null &&
+    typeof record.encryptedApiKey === 'object' &&
+    hasNonEmptyString((record.encryptedApiKey as Record<string, unknown>).ciphertext);
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), SMOKE_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(
-      `${normalizeBaseUrl(record.baseUrl)}/chat/completions`,
-      {
-        method: 'POST',
-        headers: new Headers({
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        }),
-        body: JSON.stringify({
-          model: record.model,
-          messages: [{ role: 'user', content: SMOKE_PROMPT }],
-          temperature: 0,
-          max_tokens: 4,
-        }),
-        signal: controller.signal,
-      },
-    );
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      return {
-        status: 'completed',
-        payload: buildResult({
-          ok: false,
-          status: 'failed',
-          latencyMs: Math.max(0, Date.now() - startedAt),
-          provider: 'openai_compatible',
-          model: record.model,
-          errorCode: 'PROVIDER_REQUEST_FAILED',
-        }),
-      };
-    }
-
-    return {
-      status: 'completed',
-      payload: buildResult({
-        ok: true,
-        status: 'ok',
-        latencyMs: Math.max(0, Date.now() - startedAt),
-        provider: 'openai_compatible',
-        model: record.model,
-        errorCode: null,
-      }),
-    };
-  } catch (error) {
-    clearTimeout(timeoutId);
-
+  if (!isComplete) {
     return {
       status: 'completed',
       payload: buildResult({
         ok: false,
         status: 'failed',
-        latencyMs: Math.max(0, Date.now() - startedAt),
+        latencyMs: 0,
         provider: 'openai_compatible',
-        model: record.model,
-        errorCode:
-          error instanceof DOMException && error.name === 'AbortError'
-            ? 'PROVIDER_TIMEOUT'
-            : 'PROVIDER_REQUEST_FAILED',
+        model: record.model ?? null,
+        errorCode: 'INCOMPLETE_CONFIG',
       }),
     };
   }
+
+  return {
+    status: 'completed',
+    payload: buildResult({
+      ok: true,
+      status: 'ready',
+      latencyMs: 0,
+      provider: 'openai_compatible',
+      model: record.model,
+      errorCode: null,
+    }),
+  };
 }
