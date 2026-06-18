@@ -174,10 +174,10 @@ describe('平台端租户管理面板', () => {
     expect(screen.getByText('平台侧查看机构、套餐和配额边界')).toBeInTheDocument();
     expect(screen.getByText('当前展示为受控 demo 租户，不代表正式计费后台。')).toBeInTheDocument();
     expect(screen.getByText('正在加载租户管理数据...')).toBeInTheDocument();
-    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
-    expect(screen.getByText('租户状态：active')).toBeInTheDocument();
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('运行中')).toBeInTheDocument();
     expect(screen.getByText('租户 ID：demo-tenant-001')).toBeInTheDocument();
-    expect(screen.getByText('套餐名称：成长版')).toBeInTheDocument();
+    expect(screen.getByText('成长版')).toBeInTheDocument();
     expect(screen.getByText('套餐编号：growth-care')).toBeInTheDocument();
     expect(screen.getByText('套餐状态：active')).toBeInTheDocument();
     expect(screen.getByText('分配状态：active')).toBeInTheDocument();
@@ -354,7 +354,6 @@ describe('平台端租户管理面板', () => {
     render(<OpenPlatformTenantManagementPanel />);
 
     expect((await screen.findAllByText('未分配套餐机构')).length).toBeGreaterThan(0);
-    expect(screen.getByText('套餐名称：未分配')).toBeInTheDocument();
     expect(screen.getAllByText('- / -')).toHaveLength(4);
     expect(screen.getByText('快照时间：-')).toBeInTheDocument();
   });

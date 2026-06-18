@@ -25,6 +25,7 @@ import type {
   PlatformCommercialMissingConfigurationReason,
   PlatformCommercialQuotaRiskTenant,
 } from '@/modules/open-platform/domain/platform-commercial-health';
+import { cn } from '@/shared/utils/cn';
 
 type TenantManagementStateProps = {
   title: string;
@@ -510,16 +511,34 @@ export function OpenPlatformTenantManagementPanel() {
                     <div className="flex flex-wrap items-center gap-2">
                       <Users className="h-5 w-5 text-cyan-100" />
                       <span className="text-base font-semibold text-white">{tenant.tenantName}</span>
-                      <span className="rounded-full border border-emerald-300/20 bg-emerald-300/[0.10] px-2.5 py-1 text-xs font-semibold text-emerald-100">
-                        租户状态：{tenant.tenantStatus}
+                      {/* 参考旧版 status badge 颜色映射 */}
+                      <span className={cn(
+                        'rounded-full border px-2.5 py-1 text-xs font-semibold',
+                        tenant.tenantStatus === 'active'
+                          ? 'border-emerald-300/20 bg-emerald-300/[0.10] text-emerald-100'
+                          : tenant.tenantStatus === 'suspended'
+                            ? 'border-amber-300/20 bg-amber-300/[0.10] text-amber-100'
+                            : tenant.tenantStatus === 'cancelled'
+                              ? 'border-rose-300/20 bg-rose-300/[0.10] text-rose-100'
+                              : 'border-slate-300/20 bg-slate-300/[0.08] text-slate-300',
+                      )}>
+                        {tenant.tenantStatus === 'active' ? '运行中' : tenant.tenantStatus === 'suspended' ? '已冻结' : tenant.tenantStatus === 'cancelled' ? '已注销' : tenant.tenantStatus}
                       </span>
+                      {tenant.planName ? (
+                        <span className="rounded-full border border-blue-300/20 bg-blue-300/[0.08] px-2.5 py-1 text-xs font-semibold text-blue-100">
+                          {tenant.planName}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {tenantField('租户 ID', tenant.tenantId)}
-                      {tenantField('套餐名称', tenant.planName ?? '未分配')}
                       {tenantField('套餐编号', tenant.planCode)}
                       {tenantField('套餐状态', tenant.planStatus)}
                       {tenantField('分配状态', tenant.assignmentStatus)}
+                    </div>
+                    <div className="mt-3 text-xs text-slate-500">
+                      创建时间：{formatDateTime(tenant.createdAt)} · 更新时间：{formatDateTime(tenant.updatedAt)}
+                      {tenant.expiresAt ? ` · 到期：${formatDateTime(tenant.expiresAt)}` : null}
                     </div>
                   </div>
                   <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-semibold text-slate-300">
