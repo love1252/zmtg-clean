@@ -3042,10 +3042,10 @@ describe('工作台入口页面', () => {
     expect(screen.getAllByText('远山医美连锁').length).toBeGreaterThan(0);
     expect(screen.getByText('平台侧查看机构、套餐和配额边界')).toBeInTheDocument();
     expect(screen.getByText('当前展示为受控 demo 租户，不代表正式计费后台。')).toBeInTheDocument();
-    expect(screen.getByText('套餐名称：Growth Plan')).toBeInTheDocument();
-    expect(screen.getByText('套餐名称：Starter Plan')).toBeInTheDocument();
-    expect(screen.getByText('套餐名称：Trial Plan')).toBeInTheDocument();
-    expect(screen.getByText('套餐名称：Enterprise Plan')).toBeInTheDocument();
+    expect(screen.getByText('Growth Plan')).toBeInTheDocument();
+    expect(screen.getByText('Starter Plan')).toBeInTheDocument();
+    expect(screen.getByText('Trial Plan')).toBeInTheDocument();
+    expect(screen.getByText('Enterprise Plan')).toBeInTheDocument();
     expect(screen.getAllByText('0 / 0').length).toBeGreaterThanOrEqual(4);
     expect(screen.getAllByText('当前未启用 AI 调用配额').length).toBeGreaterThanOrEqual(4);
     expectNoPlatformDemoMisleadingClaims(container);
@@ -4239,7 +4239,7 @@ describe('工作台入口页面', () => {
     expect(screen.getByRole('navigation', { name: '平台端移动导航' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：开放连接路线' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出平台' })).toBeInTheDocument();
-    expect(screen.getByText('平台收尾健康概览')).toBeInTheDocument();
+    expect(screen.getByText('平台收尾治理视图')).toBeInTheDocument();
     expect(screen.getByText('开放连接治理边界')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '开放平台基础治理' })).toBeInTheDocument();
     expect(screen.getByText('服务端租户上下文')).toBeInTheDocument();
@@ -4260,8 +4260,8 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('套餐覆盖率')).toBeInTheDocument();
     expect(screen.getAllByText('暂无需要收尾关注的商业化健康信号').length).toBeGreaterThan(0);
     expect(screen.getAllByText('智美天工演示机构').length).toBeGreaterThan(0);
-    expect(screen.getByText('租户状态：active')).toBeInTheDocument();
-    expect(screen.getByText('套餐名称：成长版')).toBeInTheDocument();
+    expect(screen.getByText('运行中')).toBeInTheDocument();
+    expect(screen.getByText('成长版')).toBeInTheDocument();
     expect(screen.getByText('套餐编号：growth-care')).toBeInTheDocument();
     expect(screen.getByText('24 / 5000')).toBeInTheDocument();
     expect(screen.getByText('12 / 2000')).toBeInTheDocument();
