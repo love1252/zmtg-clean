@@ -1,9 +1,25 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as statusRoute from '@/app/api/v1/open-platform/ai-runtime/status/route';
+import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import {
   getPlatformAiRuntimeStatus,
   readPlatformAiRuntimeConfig,
 } from '@/modules/open-platform/server/platformAiRuntimeConfig';
+
+const statusUrl = 'http://localhost/api/v1/open-platform/ai-runtime/status';
+
+const platformAccessContext = {
+  userId: 'platform-admin',
+  role: 'platform_admin' as const,
+  scope: 'platform' as const,
+  tenantId: null,
+  institutionId: null,
+  source: 'demo_session' as const,
+};
+
+vi.mock('@/modules/security/server/access-context', () => ({
+  getDemoAccessContextFromRequest: vi.fn(),
+}));
 
 const forbiddenFragments = [
   'runtime-auth-redacted-value-1234',
@@ -44,6 +60,11 @@ async function readJson(response: Response) {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.mocked(getDemoAccessContextFromRequest).mockReset();
+});
+
+beforeEach(() => {
+  vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(platformAccessContext);
 });
 
 describe('平台端 AI runtime env-only config/status', () => {
@@ -56,7 +77,7 @@ describe('平台端 AI runtime env-only config/status', () => {
 
     const config = readPlatformAiRuntimeConfig();
     const status = getPlatformAiRuntimeStatus();
-    const routeResponse = await statusRoute.GET();
+    const routeResponse = await statusRoute.GET(new Request('http://localhost/api/v1/open-platform/ai-runtime/status'));
     const routePayload = await readJson(routeResponse);
 
     expect(config).toMatchObject({
@@ -99,7 +120,7 @@ describe('平台端 AI runtime env-only config/status', () => {
     vi.stubEnv('ZMTG_AI_MODEL', 'gpt-runtime-smoke');
 
     const config = readPlatformAiRuntimeConfig();
-    const routeResponse = await statusRoute.GET();
+    const routeResponse = await statusRoute.GET(new Request('http://localhost/api/v1/open-platform/ai-runtime/status'));
     const routePayload = await readJson(routeResponse);
 
     expect(config).toMatchObject({

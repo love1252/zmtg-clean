@@ -156,6 +156,8 @@ export function OpenPlatformAiReadonlyPanel() {
   const [runtimeStatusLoadFailed, setRuntimeStatusLoadFailed] = useState(false);
   const [runtimeSmokeResult, setRuntimeSmokeResult] = useState<PlatformAiRuntimeSmokeView | null>(null);
   const [isRuntimeSmokeRunning, setIsRuntimeSmokeRunning] = useState(false);
+  const [dryRunSmokeResult, setDryRunSmokeResult] = useState<PlatformAiRuntimeSmokeView | null>(null);
+  const [isDryRunSmokeRunning, setIsDryRunSmokeRunning] = useState(false);
   const [vendorConfigs, setVendorConfigs] = useState<VendorProviderConfigView[]>([]);
   const [vendorConfigsLoadFailed, setVendorConfigsLoadFailed] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<string>('doubao');
@@ -170,6 +172,7 @@ export function OpenPlatformAiReadonlyPanel() {
   const view = loadOpenPlatformAiReadonlyView({ month: selectedMonth });
   const effectiveRuntimeStatus = runtimeStatus ?? runtimeStatusFallback;
   const canRunRuntimeSmoke = effectiveRuntimeStatus.enabled && effectiveRuntimeStatus.configured;
+  const canRunDryRunSmoke = currentConfig?.configured ?? false;
   const summaryCards = [
     { label: '月份', value: view.month, icon: Clock3, tone: 'bg-cyan-300/[0.12] text-cyan-100' },
     { label: '总调用数', value: numberFormatter.format(view.usage.summary.totalCalls), icon: Cpu, tone: 'bg-blue-300/[0.12] text-blue-100' },
@@ -305,30 +308,44 @@ export function OpenPlatformAiReadonlyPanel() {
     }
   }
 
-  async function runRuntimeSmokeTest() {
-    if (!canRunRuntimeSmoke || isRuntimeSmokeRunning) return;
-    setIsRuntimeSmokeRunning(true);
-    setRuntimeSmokeResult(null);
+  async function runDryRunSmokeTest() {
+    if (isDryRunSmokeRunning) return;
+    setIsDryRunSmokeRunning(true);
+    setDryRunSmokeResult(null);
 
     try {
-      const response = await fetch('/api/v1/open-platform/ai-runtime/smoke', {
+      const response = await fetch('/api/v1/open-platform/provider-configs/smoke', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendor: selectedVendor }),
       });
       const payload = await response.json() as PlatformAiRuntimeSmokeView;
-      setRuntimeSmokeResult(payload);
+
+      if (!response.ok && 'ok' in payload && !payload.ok) {
+        setDryRunSmokeResult({
+          ok: false,
+          status: 'failed',
+          latencyMs: 0,
+          provider: null,
+          model: null,
+          checkedAt: new Date().toISOString(),
+          errorCode: 'PROVIDER_REQUEST_FAILED',
+        });
+      } else {
+        setDryRunSmokeResult(payload);
+      }
     } catch {
-      setRuntimeSmokeResult({
+      setDryRunSmokeResult({
         ok: false,
         status: 'failed',
         latencyMs: 0,
-        provider: effectiveRuntimeStatus.provider,
-        model: effectiveRuntimeStatus.model,
+        provider: null,
+        model: null,
         checkedAt: new Date().toISOString(),
         errorCode: 'PROVIDER_REQUEST_FAILED',
       });
     } finally {
-      setIsRuntimeSmokeRunning(false);
+      setIsDryRunSmokeRunning(false);
     }
   }
 
@@ -367,7 +384,7 @@ export function OpenPlatformAiReadonlyPanel() {
             </div>
             <h2 id="ai-runtime-status-heading" className="mt-3 text-xl font-semibold tracking-normal text-white">AI Runtime 状态</h2>
             <p className="mt-2 text-sm leading-6 text-slate-400">
-              {effectiveRuntimeStatus.safety.keyPolicy}
+              真实调用已禁用。dry-run readiness 检查厂商配置完整性，不解密 Key、不外呼厂商 API。
             </p>
             <p className="mt-1 text-sm leading-6 text-slate-400">
               {effectiveRuntimeStatus.safety.smokePolicy}
@@ -378,17 +395,17 @@ export function OpenPlatformAiReadonlyPanel() {
           </div>
           <button
             type="button"
-            disabled={!canRunRuntimeSmoke || isRuntimeSmokeRunning}
-            onClick={() => void runRuntimeSmokeTest()}
+            disabled={!canRunDryRunSmoke || isDryRunSmokeRunning}
+            onClick={() => void runDryRunSmokeTest()}
             className={cn(
               'inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition',
-              canRunRuntimeSmoke
+              canRunDryRunSmoke
                 ? 'border-cyan-200/50 bg-cyan-300/[0.16] text-cyan-50 hover:bg-cyan-300/[0.22]'
                 : 'cursor-not-allowed border-white/10 bg-white/[0.05] text-slate-500',
             )}
           >
             <PlayCircle className="h-4 w-4" />
-            运行 smoke test
+            dry-run readiness
           </button>
         </div>
 
