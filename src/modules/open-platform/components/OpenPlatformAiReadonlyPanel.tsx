@@ -154,8 +154,6 @@ export function OpenPlatformAiReadonlyPanel() {
   const [selectedMonth, setSelectedMonth] = useState('2026-06');
   const [runtimeStatus, setRuntimeStatus] = useState<PlatformAiRuntimeStatusView | null>(null);
   const [runtimeStatusLoadFailed, setRuntimeStatusLoadFailed] = useState(false);
-  const [runtimeSmokeResult, setRuntimeSmokeResult] = useState<PlatformAiRuntimeSmokeView | null>(null);
-  const [isRuntimeSmokeRunning, setIsRuntimeSmokeRunning] = useState(false);
   const [dryRunSmokeResult, setDryRunSmokeResult] = useState<PlatformAiRuntimeSmokeView | null>(null);
   const [isDryRunSmokeRunning, setIsDryRunSmokeRunning] = useState(false);
   const [vendorConfigs, setVendorConfigs] = useState<VendorProviderConfigView[]>([]);
@@ -171,7 +169,6 @@ export function OpenPlatformAiReadonlyPanel() {
   const currentConfig = vendorConfigs.find((c) => c.vendor === selectedVendor);
   const view = loadOpenPlatformAiReadonlyView({ month: selectedMonth });
   const effectiveRuntimeStatus = runtimeStatus ?? runtimeStatusFallback;
-  const canRunRuntimeSmoke = effectiveRuntimeStatus.enabled && effectiveRuntimeStatus.configured;
   const canRunDryRunSmoke = currentConfig?.configured ?? false;
   const summaryCards = [
     { label: '月份', value: view.month, icon: Clock3, tone: 'bg-cyan-300/[0.12] text-cyan-100' },
@@ -437,18 +434,18 @@ export function OpenPlatformAiReadonlyPanel() {
           </div>
         ) : null}
 
-        {runtimeSmokeResult ? (
+        {dryRunSmokeResult ? (
           <div className={cn(
             'mt-4 rounded-2xl border p-4 text-sm leading-6',
-            runtimeSmokeResult.ok
+            dryRunSmokeResult.ok
               ? 'border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-50'
               : 'border-rose-300/20 bg-rose-300/[0.08] text-rose-50',
           )}>
-            <div className="font-semibold">{runtimeSmokeResult.ok ? 'smoke test 通过' : 'smoke test 未通过'}</div>
+            <div className="font-semibold">{dryRunSmokeResult.ok ? 'dry-run readiness 通过' : 'dry-run readiness 未通过'}</div>
             <p className="mt-1">
-              状态：{runtimeSmokeResult.status} · 延迟：{formatLatency(runtimeSmokeResult.latencyMs)} · 模型：{runtimeSmokeResult.model ?? '未配置'}
+              状态：{dryRunSmokeResult.status} · 延迟：{formatLatency(dryRunSmokeResult.latencyMs)} · 模型：{dryRunSmokeResult.model ?? '未配置'}
             </p>
-            {runtimeSmokeResult.errorCode ? <p className="mt-1">错误码：{runtimeSmokeResult.errorCode}</p> : null}
+            {dryRunSmokeResult.errorCode ? <p className="mt-1">错误码：{dryRunSmokeResult.errorCode}</p> : null}
           </div>
         ) : null}
       </section>

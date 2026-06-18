@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import * as statusRoute from '@/app/api/v1/open-platform/ai-runtime/status/route';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import {
