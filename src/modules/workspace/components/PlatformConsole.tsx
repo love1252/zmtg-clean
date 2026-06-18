@@ -4,29 +4,62 @@ import { useState } from 'react';
 import Image from 'next/image';
 import {
   Activity,
+  AlertTriangle,
   Bell,
   CheckCircle2,
+  Clock,
   Command,
+  ExternalLink,
   LockKeyhole,
   PlugZap,
   RadioTower,
   ShieldCheck,
+  TrendingUp,
 } from 'lucide-react';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
+import { AiQuotaBoundaryPanel } from '@/modules/open-platform/components/AiQuotaBoundaryPanel';
+import { CommercialBoundaryPanel } from '@/modules/open-platform/components/CommercialBoundaryPanel';
+import { HomepageBrandPanel } from '@/modules/open-platform/components/HomepageBrandPanel';
+import { OpenConnectionRoadmapPanel } from '@/modules/open-platform/components/OpenConnectionRoadmapPanel';
 import { OpenPlatformAiReadonlyPanel } from '@/modules/open-platform/components/OpenPlatformAiReadonlyPanel';
 import { OpenPlatformAuditEventsPanel } from '@/modules/open-platform/components/OpenPlatformAuditEventsPanel';
 import { OpenPlatformGovernancePanel } from '@/modules/open-platform/components/OpenPlatformGovernancePanel';
 import { OpenPlatformKnowledgeManagementPanel } from '@/modules/open-platform/components/OpenPlatformKnowledgeManagementPanel';
 import { OpenPlatformTenantManagementPanel } from '@/modules/open-platform/components/OpenPlatformTenantManagementPanel';
+import { ProductPlanPanel } from '@/modules/open-platform/components/ProductPlanPanel';
 import {
+  platformAlertItems,
   platformCapabilityCards,
   platformHealthItems,
   platformMetrics,
   platformNavItems,
+  platformQuickActions,
+  platformSystemHealthItems,
+  platformTrendSummary,
+  type PlatformAlertItem,
+  type PlatformSystemHealthItem,
 } from '@/modules/workspace/domain/platform-dashboard';
 import { cn } from '@/shared/utils/cn';
 
 const trendBars = [48, 56, 63, 68, 74, 82, 88, 93, 98, 108];
+
+const alertIconMap: Record<PlatformAlertItem['level'], typeof AlertTriangle> = {
+  error: AlertTriangle,
+  warning: Clock,
+  info: Bell,
+};
+
+const alertToneMap: Record<PlatformAlertItem['level'], string> = {
+  error: 'border-rose-300/20 bg-rose-300/[0.10] text-rose-100',
+  warning: 'border-amber-300/20 bg-amber-300/[0.10] text-amber-100',
+  info: 'border-cyan-300/20 bg-cyan-300/[0.10] text-cyan-100',
+};
+
+const systemHealthTone = {
+  healthy: { badge: 'border-emerald-300/20 bg-emerald-300/[0.10] text-emerald-100', dot: 'bg-emerald-400', label: '正常' },
+  warning: { badge: 'border-amber-300/20 bg-amber-300/[0.10] text-amber-100', dot: 'bg-amber-400', label: '警告' },
+  offline: { badge: 'border-slate-300/20 bg-slate-300/[0.06] text-slate-400', dot: 'bg-slate-500', label: '未启用' },
+} as const;
 
 export function PlatformConsole() {
   const [activeNavLabel, setActiveNavLabel] = useState('平台总览');
@@ -141,12 +174,22 @@ export function PlatformConsole() {
           </nav>
 
           <div className="mx-auto w-full max-w-[1740px] space-y-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
-            {activeNavLabel === '租户管理' ? (
+            {activeNavLabel === '首页与品牌' ? (
+              <HomepageBrandPanel />
+            ) : activeNavLabel === '租户管理' ? (
               <OpenPlatformTenantManagementPanel />
+            ) : activeNavLabel === '产品与套餐' ? (
+              <ProductPlanPanel />
+            ) : activeNavLabel === 'AI 配额边界' ? (
+              <AiQuotaBoundaryPanel />
             ) : activeNavLabel === 'AI 模型与用量' ? (
               <OpenPlatformAiReadonlyPanel />
             ) : activeNavLabel === '知识库管理' ? (
               <OpenPlatformKnowledgeManagementPanel />
+            ) : activeNavLabel === '开放连接路线' ? (
+              <OpenConnectionRoadmapPanel />
+            ) : activeNavLabel === '商业化边界' ? (
+              <CommercialBoundaryPanel />
             ) : activeNavLabel === '权限与审计' ? (
               <>
                 <OpenPlatformAuditEventsPanel />
@@ -188,7 +231,7 @@ export function PlatformConsole() {
                   </div>
                 </section>
 
-                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {platformMetrics.map((metric) => (
                     <article key={metric.label} className="rounded-[22px] border border-white/10 bg-white/[0.075] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl">
                       <div className="flex items-start justify-between gap-3">
@@ -203,7 +246,7 @@ export function PlatformConsole() {
                   ))}
                 </section>
 
-                <section className="grid gap-5 xl:grid-cols-[1.3fr_0.7fr]">
+                <section className="grid gap-5 xl:grid-cols-[1.3fr_1.05fr_0.75fr]">
                   <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -215,7 +258,7 @@ export function PlatformConsole() {
 
                     <div className="mt-6 grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
                       <div className="h-[300px] rounded-2xl border border-white/10 bg-[#071322]/75 p-4">
-                        <svg viewBox="0 0 720 280" className="h-full w-full" role="img" aria-label="平台增长与调用趋势折线图">
+                        <svg viewBox="0 0 720 280" className="h-full w-full" role="img" aria-label={platformTrendSummary.tenantGrowthLabel}>
                           <defs>
                             <linearGradient id="platformTrendFill" x1="0" x2="0" y1="0" y2="1">
                               <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.32" />
@@ -271,6 +314,100 @@ export function PlatformConsole() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  </article>
+
+                  <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-lg font-semibold tracking-normal text-white">快捷操作</h2>
+                        <p className="mt-1 text-sm text-slate-400">常用平台治理入口。</p>
+                      </div>
+                    </div>
+                    <div className="mt-5 space-y-2">
+                      {platformQuickActions.map((action) => (
+                        <button
+                          key={action.label}
+                          type="button"
+                          onClick={() => setActiveNavLabel(action.hint)}
+                          className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#071322]/75 px-4 py-3 text-left transition hover:bg-white/[0.06]"
+                        >
+                          <div className="flex items-center gap-3">
+                            <action.icon className="h-4 w-4 text-cyan-200" />
+                            <span className="text-sm font-semibold text-white">{action.label}</span>
+                          </div>
+                          <ExternalLink className="h-4 w-4 text-slate-500" />
+                        </button>
+                      ))}
+                    </div>
+                  </article>
+                </section>
+
+                <section className="grid gap-5 xl:grid-cols-[1fr_0.85fr]">
+                  <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-lg font-semibold tracking-normal text-white">系统健康状态</h2>
+                        <p className="mt-1 text-sm text-slate-400">演示环境核心服务状态，仅供参考。</p>
+                      </div>
+                      <span className="rounded-full border border-blue-300/20 bg-blue-300/[0.08] px-3 py-1 text-xs font-semibold text-blue-200">只读监控</span>
+                    </div>
+
+                    <div className="mt-5 space-y-3">
+                      {platformSystemHealthItems.map((item) => {
+                        const tone = systemHealthTone[item.status];
+                        return (
+                          <div key={item.key} className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[#071322]/75 px-4 py-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className={cn('h-2.5 w-2.5 rounded-full', tone.dot)} />
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-white">{item.name}</div>
+                                <div className="text-xs text-slate-400">
+                                  {item.status === 'offline'
+                                    ? item.capacityHint
+                                    : `延迟 ${item.latencyMs}ms · 可用率 ${item.uptimePercent}%`}
+                                </div>
+                              </div>
+                            </div>
+                            <span className={cn('shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold', tone.badge)}>
+                              {tone.label}
+                              {item.status === 'warning' && item.capacityHint ? ` · ${item.capacityHint}` : ''}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </article>
+
+                  <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-lg font-semibold tracking-normal text-white">预警与待办</h2>
+                        <p className="mt-1 text-sm text-slate-400">平台治理信号摘要，均为占位模拟数据。</p>
+                      </div>
+                      <span className="rounded-full border border-slate-400/20 bg-slate-400/[0.08] px-3 py-1 text-xs font-semibold text-slate-300">
+                        {platformAlertItems.length} 项
+                      </span>
+                    </div>
+
+                    <div className="mt-5 space-y-2">
+                      {platformAlertItems.map((alert) => {
+                        const Icon = alertIconMap[alert.level];
+                        return (
+                          <div key={alert.id} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-[#071322]/75 px-4 py-3">
+                            <div className={cn('mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl', alertToneMap[alert.level])}>
+                              <Icon className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-3">
+                                <h4 className="truncate text-sm font-semibold text-white">{alert.label}</h4>
+                                <span className="shrink-0 text-xs text-slate-500">{alert.timeAgo}</span>
+                              </div>
+                              <p className="mt-1 text-sm leading-5 text-slate-400">{alert.detail}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </article>
                 </section>
