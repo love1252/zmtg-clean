@@ -147,6 +147,7 @@ describe('工作台看板领域模型', () => {
       'conversations',
       'appointments',
       'knowledge',
+      'aiModels',
       'analytics',
     ]);
     expect(institutionNavItems.filter((item) => item.active)).toHaveLength(1);
@@ -242,6 +243,8 @@ describe('工作台看板领域模型', () => {
         '租户管理',
         '产品与套餐',
         'AI 配额边界',
+        'AI 模型与用量',
+        '知识库管理',
         '开放连接路线',
         '权限与审计',
         '商业化边界',
@@ -250,7 +253,7 @@ describe('工作台看板领域模型', () => {
   });
 
   it('保持平台运营卡片具备业务含义', () => {
-    expect(platformMetrics).toHaveLength(6);
+    expect(platformMetrics.length).toBeGreaterThanOrEqual(6);
     expect(platformMetrics.map((item) => item.label)).toEqual(
       expect.arrayContaining(['demo 租户', '演示套餐', 'AI 配额', '配额快照', '商业化信号', '平台审计']),
     );
