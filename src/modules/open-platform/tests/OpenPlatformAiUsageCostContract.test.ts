@@ -32,20 +32,20 @@ function expectLowSensitivePayload(payload: unknown) {
 
 describe('平台端 AI 用量费用只读 contract', () => {
   it('返回受控只读 usage/cost 状态、月份白名单和未来日志字段说明', () => {
-    const payload = getPlatformAiUsageCostResponse({ month: '2026-06' });
+    const payload = getPlatformAiUsageCostResponse({ month: '2026-05' });
 
     expect(payload).toMatchObject({
       readonly: true,
       dataSource: 'controlled_demo',
       usageVersion: 'ai-usage-cost-v1-controlled-demo',
       usageStatus: 'controlled_readonly_demo',
-      selectedMonth: '2026-06',
+      selectedMonth: '2026-05',
       hasUsageData: true,
       emptyState: null,
       costDisclaimer: expect.stringContaining('估算费用不是正式账单'),
       availableMonths: [
-        { value: '2026-06', label: '2026年06月', hasUsageData: true },
-        { value: '2026-05', label: '2026年05月', hasUsageData: false },
+        { value: '2026-05', label: '2026年05月', hasUsageData: true },
+        { value: '2026-06', label: '2026年06月', hasUsageData: false },
       ],
       futureLogFieldSpec: expect.arrayContaining([
         expect.objectContaining({ field: 'tenantScope' }),
@@ -72,16 +72,16 @@ describe('平台端 AI 用量费用只读 contract', () => {
   it('月份参数只允许受控白名单，异常月份安全回落默认月份', () => {
     expect(normalizePlatformAiUsageMonth('2026-06')).toBe('2026-06');
     expect(normalizePlatformAiUsageMonth('2026-05')).toBe('2026-05');
-    expect(normalizePlatformAiUsageMonth('bad-month')).toBe('2026-06');
-    expect(normalizePlatformAiUsageMonth('2026-13')).toBe('2026-06');
-    expect(normalizePlatformAiUsageMonth('../../secret')).toBe('2026-06');
-    expect(normalizePlatformAiUsageMonth('2026-04')).toBe('2026-06');
+    expect(normalizePlatformAiUsageMonth('bad-month')).toBe('2026-05');
+    expect(normalizePlatformAiUsageMonth('2026-13')).toBe('2026-05');
+    expect(normalizePlatformAiUsageMonth('../../secret')).toBe('2026-05');
+    expect(normalizePlatformAiUsageMonth('2026-04')).toBe('2026-05');
 
-    expect(getPlatformAiUsageCostResponse({ month: '../../secret' }).selectedMonth).toBe('2026-06');
+    expect(getPlatformAiUsageCostResponse({ month: '../../secret' }).selectedMonth).toBe('2026-05');
   });
 
   it('有数据月份汇总与厂商模型明细一致且数值合法', () => {
-    const payload = getPlatformAiUsageCostResponse({ month: '2026-06' });
+    const payload = getPlatformAiUsageCostResponse({ month: '2026-05' });
     const providerTotals = payload.providerModelRows.reduce((totals, row) => ({
       calls: totals.calls + row.calls,
       tokens: totals.tokens + row.totalTokens,
@@ -92,9 +92,43 @@ describe('平台端 AI 用量费用只读 contract', () => {
     expect(payload.summary.totalCalls).toBe(providerTotals.calls);
     expect(payload.summary.totalTokens).toBe(providerTotals.tokens);
     expect(payload.summary.estimatedCostCny).toBeCloseTo(providerTotals.cost, 2);
+    expect(payload.summary.inputTokens + payload.summary.outputTokens).toBe(payload.summary.totalTokens);
     expect(payload.summary.successRate).toBeGreaterThanOrEqual(0);
     expect(payload.summary.successRate).toBeLessThanOrEqual(1);
     expect(payload.summary.averageLatencyMs).toBeGreaterThanOrEqual(0);
+    expect(payload.dailyRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        date: '2026-05-19',
+        label: '19',
+        modelCosts: expect.arrayContaining([
+          expect.objectContaining({
+            providerName: '通义千问',
+            modelName: 'Qwen Plus',
+          }),
+        ]),
+      }),
+    ]));
+    expect(payload.providerUsageGroups).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        providerName: '通义千问',
+        models: expect.arrayContaining([
+          expect.objectContaining({
+            modelName: 'Qwen Plus',
+            inputTokens: expect.any(Number),
+            outputTokens: expect.any(Number),
+          }),
+        ]),
+      }),
+    ]));
+    expect(payload.scenarioRows[0]).toEqual(expect.objectContaining({
+      description: expect.any(String),
+      sourceScenarios: expect.any(Array),
+    }));
+    expect(payload.sampleInstitutionRanking[0]).toEqual(expect.objectContaining({
+      scenarios: expect.arrayContaining([
+        expect.objectContaining({ scenarioName: expect.any(String) }),
+      ]),
+    }));
     payload.providerModelRows.forEach((row) => {
       expect(row.successRate).toBeGreaterThanOrEqual(0);
       expect(row.successRate).toBeLessThanOrEqual(1);
@@ -103,18 +137,18 @@ describe('平台端 AI 用量费用只读 contract', () => {
   });
 
   it('空状态月份 summary 归零且明细为空', () => {
-    const payload = getPlatformAiUsageCostResponse({ month: '2026-05' });
+    const payload = getPlatformAiUsageCostResponse({ month: '2026-06' });
 
     expect(validatePlatformAiUsageCostContract(payload)).toEqual({ ok: true, errors: [] });
     expect(payload).toMatchObject({
-      selectedMonth: '2026-05',
+      selectedMonth: '2026-06',
       hasUsageData: false,
       emptyState: {
         title: '暂无受控示例用量',
-        description: '2026年05月为受控示例月份，未读取真实 AI 日志；估算费用不是正式账单。',
+        description: '2026年06月为受控示例月份，未读取真实 AI 日志；估算费用不是正式账单。',
       },
       summary: {
-        month: '2026-05',
+        month: '2026-06',
         totalCalls: 0,
         totalTokens: 0,
         successRate: 0,
@@ -122,6 +156,8 @@ describe('平台端 AI 用量费用只读 contract', () => {
         estimatedCostCny: 0,
       },
       providerModelRows: [],
+      dailyRows: [],
+      providerUsageGroups: [],
       scenarioRows: [],
       sampleInstitutionRanking: [],
     });
@@ -129,31 +165,39 @@ describe('平台端 AI 用量费用只读 contract', () => {
   });
 
   it('能发现 usage/cost contract 破坏性数据问题', () => {
-    const invalidMonth = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-06' }));
+    const invalidMonth = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-05' }));
     invalidMonth.selectedMonth = '2026-04';
     expect(validatePlatformAiUsageCostContract(invalidMonth).errors).toContain('selectedMonth 必须来自 availableMonths');
 
-    const invalidEmpty = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-05' }));
+    const invalidEmpty = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-06' }));
     invalidEmpty.summary.totalCalls = 1;
     expect(validatePlatformAiUsageCostContract(invalidEmpty).errors).toContain('无数据月份 summary 必须归零且明细为空');
 
-    const invalidAggregation = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-06' }));
+    const invalidAggregation = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-05' }));
     invalidAggregation.summary.totalCalls += 1;
     expect(validatePlatformAiUsageCostContract(invalidAggregation).errors).toContain('有数据月份 summary 必须与 providerModelRows 汇总一致');
 
-    const invalidRate = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-06' }));
+    const invalidDailyRows = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-05' }));
+    invalidDailyRows.dailyRows = [];
+    expect(validatePlatformAiUsageCostContract(invalidDailyRows).errors).toContain('有数据月份必须提供每日消耗明细');
+
+    const invalidProviderGroups = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-05' }));
+    invalidProviderGroups.providerUsageGroups = [];
+    expect(validatePlatformAiUsageCostContract(invalidProviderGroups).errors).toContain('有数据月份必须提供厂商分组与模型明细');
+
+    const invalidRate = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-05' }));
     invalidRate.summary.successRate = 1.2;
     expect(validatePlatformAiUsageCostContract(invalidRate).errors).toContain('successRate 必须在 0 到 1');
 
-    const invalidLatency = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-06' }));
+    const invalidLatency = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-05' }));
     invalidLatency.summary.averageLatencyMs = -1;
     expect(validatePlatformAiUsageCostContract(invalidLatency).errors).toContain('averageLatencyMs 不得为负数');
 
-    const invalidDisclaimer = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-06' }));
+    const invalidDisclaimer = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-05' }));
     invalidDisclaimer.costDisclaimer = '运营参考';
     expect(validatePlatformAiUsageCostContract(invalidDisclaimer).errors).toContain('costDisclaimer 必须包含“估算费用不是正式账单”');
 
-    const invalidFutureSpec = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-06' }));
+    const invalidFutureSpec = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-05' }));
     invalidFutureSpec.futureLogFieldSpec = invalidFutureSpec.futureLogFieldSpec.filter((field) => field.field !== 'sensitiveFieldPolicy');
     expect(validatePlatformAiUsageCostContract(invalidFutureSpec).errors).toContain('futureLogFieldSpec 必须说明敏感字段不展示原文');
   });

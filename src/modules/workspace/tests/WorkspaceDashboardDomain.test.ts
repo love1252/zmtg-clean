@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Brain, TrendingUp } from 'lucide-react';
 import type { AppointmentRecordSummary } from '@/modules/institution/domain/appointment-records';
 import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
 import type { TenantFollowUpTask } from '@/modules/institution/domain/followup-workflow';
@@ -242,13 +243,17 @@ describe('工作台看板领域模型', () => {
         '首页与品牌',
         '租户管理',
         '产品与套餐',
-        'AI 配额边界',
-        'AI 模型与用量',
+        'AI模型配置',
+        'AI用量与费用',
         '知识库管理',
         '开放连接路线',
         '权限与审计',
         '商业化边界',
       ]),
+    );
+    expect(platformNavItems.find((item) => item.label === 'AI模型配置')?.icon).toBe(Brain);
+    expect(platformNavItems.find((item) => item.label === 'AI用量与费用')?.icon).toBe(
+      TrendingUp,
     );
   });
 
