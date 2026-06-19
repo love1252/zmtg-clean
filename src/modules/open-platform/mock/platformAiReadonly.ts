@@ -6,7 +6,9 @@ import {
   PLATFORM_AI_USAGE_AVAILABLE_MONTHS,
   PLATFORM_AI_USAGE_DEFAULT_MONTH,
   platformAiUsageCostSampleData,
+  type PlatformAiDailyUsage,
   type PlatformAiProviderModelUsage,
+  type PlatformAiProviderUsageGroup,
   type PlatformAiSampleInstitutionUsage as PlatformAiUsageSampleInstitutionUsage,
   type PlatformAiScenarioUsage,
   type PlatformAiUsageAvailableMonth,
@@ -59,6 +61,8 @@ export type PlatformAiAgentInheritanceSample = {
 
 export type PlatformAiUsageSummarySample = PlatformAiUsageSummary;
 export type PlatformAiProviderModelUsageSample = PlatformAiProviderModelUsage;
+export type PlatformAiDailyUsageSample = PlatformAiDailyUsage;
+export type PlatformAiProviderUsageGroupSample = PlatformAiProviderUsageGroup;
 export type PlatformAiScenarioUsageSample = PlatformAiScenarioUsage;
 export type PlatformAiSampleInstitutionUsage = PlatformAiUsageSampleInstitutionUsage;
 export type PlatformAiAvailableMonthSample = PlatformAiUsageAvailableMonth;
@@ -79,6 +83,8 @@ export type PlatformAiReadonlySampleData = {
   usage: {
     summary: PlatformAiUsageSummarySample;
     providerModelRows: PlatformAiProviderModelUsageSample[];
+    dailyRows: PlatformAiDailyUsageSample[];
+    providerUsageGroups: PlatformAiProviderUsageGroupSample[];
     scenarioRows: PlatformAiScenarioUsageSample[];
     sampleInstitutionRanking: PlatformAiSampleInstitutionUsage[];
   };

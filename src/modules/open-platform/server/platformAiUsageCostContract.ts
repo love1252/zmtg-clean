@@ -5,7 +5,9 @@ import {
   platformAiFutureLogFieldSpec,
   platformAiUsageCostSampleData,
   type PlatformAiFutureLogFieldSpec,
+  type PlatformAiDailyUsage,
   type PlatformAiProviderModelUsage,
+  type PlatformAiProviderUsageGroup,
   type PlatformAiSampleInstitutionUsage,
   type PlatformAiScenarioUsage,
   type PlatformAiUsageAvailableMonth,
@@ -26,6 +28,8 @@ export type PlatformAiUsageCostResponse = {
   } | null;
   summary: PlatformAiUsageSummary;
   providerModelRows: PlatformAiProviderModelUsage[];
+  dailyRows: PlatformAiDailyUsage[];
+  providerUsageGroups: PlatformAiProviderUsageGroup[];
   scenarioRows: PlatformAiScenarioUsage[];
   sampleInstitutionRanking: PlatformAiSampleInstitutionUsage[];
   costDisclaimer: string;
@@ -43,10 +47,15 @@ function emptySummary(month: string): PlatformAiUsageSummary {
   return {
     month,
     totalCalls: 0,
+    successCalls: 0,
+    failedCalls: 0,
+    inputTokens: 0,
+    outputTokens: 0,
     totalTokens: 0,
     successRate: 0,
     averageLatencyMs: 0,
     estimatedCostCny: 0,
+    peakDayCostCny: 0,
   };
 }
 
@@ -56,16 +65,25 @@ function isRate(value: number) {
 
 function isZeroSummary(summary: PlatformAiUsageSummary) {
   return summary.totalCalls === 0
+    && summary.successCalls === 0
+    && summary.failedCalls === 0
+    && summary.inputTokens === 0
+    && summary.outputTokens === 0
     && summary.totalTokens === 0
     && summary.successRate === 0
     && summary.averageLatencyMs === 0
-    && summary.estimatedCostCny === 0;
+    && summary.estimatedCostCny === 0
+    && summary.peakDayCostCny === 0;
 }
 
 function hasValidRatesAndLatency(payload: PlatformAiUsageCostResponse) {
   const rows = [
     { successRate: payload.summary.successRate, averageLatencyMs: payload.summary.averageLatencyMs },
     ...payload.providerModelRows.map((row) => ({
+      successRate: row.successRate,
+      averageLatencyMs: row.averageLatencyMs,
+    })),
+    ...payload.providerUsageGroups.map((row) => ({
       successRate: row.successRate,
       averageLatencyMs: row.averageLatencyMs,
     })),
@@ -87,7 +105,18 @@ function hasProviderAggregationMatch(payload: PlatformAiUsageCostResponse) {
 
   return payload.summary.totalCalls === totals.calls
     && payload.summary.totalTokens === totals.tokens
+    && payload.summary.inputTokens + payload.summary.outputTokens === totals.tokens
     && Math.abs(payload.summary.estimatedCostCny - totals.cost) <= 0.005;
+}
+
+function hasDailyRows(payload: PlatformAiUsageCostResponse) {
+  return payload.dailyRows.length > 0
+    && payload.dailyRows.every((row) => row.modelCosts.length > 0);
+}
+
+function hasProviderGroups(payload: PlatformAiUsageCostResponse) {
+  return payload.providerUsageGroups.length > 0
+    && payload.providerUsageGroups.every((group) => group.models.length > 0);
 }
 
 export function normalizePlatformAiUsageMonth(value: string | null | undefined) {
@@ -116,6 +145,8 @@ export function getPlatformAiUsageCostResponse(params: { month?: string | null }
       ? { ...platformAiUsageCostSampleData.summary, month: selectedMonth }
       : emptySummary(selectedMonth),
     providerModelRows: hasUsageData ? platformAiUsageCostSampleData.providerModelRows : [],
+    dailyRows: hasUsageData ? platformAiUsageCostSampleData.dailyRows : [],
+    providerUsageGroups: hasUsageData ? platformAiUsageCostSampleData.providerUsageGroups : [],
     scenarioRows: hasUsageData ? platformAiUsageCostSampleData.scenarioRows : [],
     sampleInstitutionRanking: hasUsageData ? platformAiUsageCostSampleData.sampleInstitutionRanking : [],
     costDisclaimer: PLATFORM_AI_USAGE_COST_DISCLAIMER,
@@ -150,9 +181,17 @@ export function validatePlatformAiUsageCostContract(
     if (!hasProviderAggregationMatch(payload)) {
       errors.push('有数据月份 summary 必须与 providerModelRows 汇总一致');
     }
+    if (!hasDailyRows(payload)) {
+      errors.push('有数据月份必须提供每日消耗明细');
+    }
+    if (!hasProviderGroups(payload)) {
+      errors.push('有数据月份必须提供厂商分组与模型明细');
+    }
   } else if (
     !isZeroSummary(payload.summary)
     || payload.providerModelRows.length > 0
+    || payload.dailyRows.length > 0
+    || payload.providerUsageGroups.length > 0
     || payload.scenarioRows.length > 0
     || payload.sampleInstitutionRanking.length > 0
   ) {

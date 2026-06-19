@@ -4,8 +4,10 @@ import {
   type PlatformAiAvailableMonthSample,
   type PlatformAiCapabilityCoverageSample,
   type PlatformAiCapabilityGroupSample,
+  type PlatformAiDailyUsageSample,
   type PlatformAiProviderSample,
   type PlatformAiProviderModelUsageSample,
+  type PlatformAiProviderUsageGroupSample,
   type PlatformAiSampleInstitutionUsage,
   type PlatformAiScenarioDefaultSample,
   type PlatformAiScenarioUsageSample,
@@ -53,13 +55,20 @@ export type PlatformAiReadonlyResponse = {
     summary: {
       month: string;
       totalCalls: number;
+      successCalls: number;
+      failedCalls: number;
+      inputTokens: number;
+      outputTokens: number;
       totalTokens: number;
       successRate: number;
       averageLatencyMs: number;
       estimatedCostCny: number;
+      peakDayCostCny: number;
       billingStatusLabel: '估算费用 / 运营参考，不是正式账单';
     };
     providerModelRows: PlatformAiProviderModelUsageSample[];
+    dailyRows: PlatformAiDailyUsageSample[];
+    providerUsageGroups: PlatformAiProviderUsageGroupSample[];
     scenarioRows: PlatformAiScenarioUsageSample[];
     sampleInstitutionRanking: PlatformAiSampleInstitutionUsage[];
   };
@@ -110,6 +119,8 @@ export function getPlatformAiReadonlyResponse(params: { month?: string | null } 
         billingStatusLabel: '估算费用 / 运营参考，不是正式账单',
       },
       providerModelRows: usageCost.providerModelRows,
+      dailyRows: usageCost.dailyRows,
+      providerUsageGroups: usageCost.providerUsageGroups,
       scenarioRows: usageCost.scenarioRows,
       sampleInstitutionRanking: usageCost.sampleInstitutionRanking,
     },

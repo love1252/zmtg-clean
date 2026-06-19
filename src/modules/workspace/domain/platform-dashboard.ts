@@ -5,6 +5,7 @@ import {
   Bell,
   BookOpen,
   Boxes,
+  Brain,
   Building2,
   CalendarClock,
   Clock,
@@ -14,7 +15,6 @@ import {
   Globe,
   KeyRound,
   LayoutDashboard,
-  BrainCircuit,
   Plug,
   TrendingUp,
   Shield,
@@ -40,8 +40,8 @@ export const platformNavItems: PlatformNavItem[] = [
   { label: '首页与品牌', icon: FileText },
   { label: '租户管理', icon: Building2 },
   { label: '产品与套餐', icon: Boxes },
-  { label: 'AI 配额边界', icon: Database },
-  { label: 'AI 模型与用量', icon: BrainCircuit },
+  { label: 'AI模型配置', icon: Brain },
+  { label: 'AI用量与费用', icon: TrendingUp },
   { label: '知识库管理', icon: BookOpen },
   { label: '开放连接路线', icon: Plug },
   { label: '权限与审计', icon: Shield },
@@ -115,8 +115,8 @@ export const platformSystemHealthItems: PlatformSystemHealthItem[] = [
 export const platformQuickActions: PlatformQuickAction[] = [
   { label: '查看租户列表', icon: Building2, hint: '租户管理' },
   { label: '审查商业化健康', icon: Activity, hint: '商业化边界' },
-  { label: '浏览 AI 模型', icon: BrainCircuit, hint: 'AI 模型与用量' },
-  { label: '检查配额快照', icon: Database, hint: 'AI 配额边界' },
+  { label: '浏览 AI 用量', icon: TrendingUp, hint: 'AI用量与费用' },
+  { label: '检查模型配置', icon: Brain, hint: 'AI模型配置' },
   { label: '查看知识库', icon: BookOpen, hint: '知识库管理' },
 ];
 
