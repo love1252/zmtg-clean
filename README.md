@@ -98,6 +98,12 @@
 - Phase 23 HIS 连接配置凭证补偿 operation failed manual review 状态转换边界 Plan Mode 已完成：只读盘点确认现有 `markCredentialCompensationOperationManualReviewRequired` 只允许 `compensation_running -> manual_review_required`，因此当前明确拒绝 `compensation_failed -> manual_review_required`；本阶段建议后续新增窄语义 `markFailedCredentialCompensationOperationManualReviewRequired`，只允许 `compensation_failed -> manual_review_required`，保留现有 running manual review 方法服务 unsafe unknown、timeout 和 stale running recovery。本阶段仅新增中文 Plan 文档并同步 README、roadmap 和 devlog，不修改 `src/**` 或 `drizzle/**`，不新增 schema / migration，不修改 operation repository、worker 或 job queue repository，不新增 manual review reason，不接 audit / service / route / runner / scheduler，不接真实 provider，不处理真实凭证，不做测试连接，不接真实 HIS adapter
 - Phase 23 HIS 连接配置凭证补偿 operation failed manual review 状态转换 runtime 最小边界已完成：operation repository 新增 `markFailedCredentialCompensationOperationManualReviewRequired`，只允许 `compensation_failed -> manual_review_required`，写回绑定 `tenantId + connectionId + operationId`，成功时仅更新 state、manualReviewRequired、updatedAt 和 completedAt，不修改 retryCount、lastAttemptAt 或 claim；现有 `markCredentialCompensationOperationManualReviewRequired` 保持 `compensation_running -> manual_review_required`，继续服务 unsafe unknown、timeout 和 stale running recovery。本阶段不新增 schema / migration，不修改 `drizzle/**`，不修改 worker 或 job queue repository，不接 audit / service / route / runner / scheduler，不接真实 provider，不处理真实凭证，不做测试连接，不接真实 HIS adapter
 - Phase 23 HIS 连接配置凭证补偿 retry exhausted manual review worker runtime 最小边界已完成：worker 在 `retryable_failure` / `provider_unavailable` 达到上限并成功写回 job dead letter 后，调用 `markFailedCredentialCompensationOperationManualReviewRequired` 推进 operation `compensation_failed -> manual_review_required`；调用只携带 `tenantId + connectionId + operationId`，dead letter 失败时不调用 operation manual review，operation manual review 失败时不回滚 job dead letter、不 requeue、不递增 operation retry count，并映射为现有稳定 worker result。本阶段不新增 schema / migration，不修改 `drizzle/**`，不修改 operation repository 或 job queue repository，不接 audit / service / route / runner / scheduler，不接真实 provider，不处理真实凭证，不做测试连接，不接真实 HIS adapter
+- 知识库 V1 完整闭环（2026-06-09 至 2026-06-14）：从文件上传、文档解析、关键词检索、embedding 向量检索到问答编排与引用审计、用量治理、AI provider 安全适配层、内部受控试用验收闭环和生产上线验收，均已合并
+- AI 多厂商模型管理（2026-06-14 至 2026-06-19）：平台端/机构端 AI 模型只读面板、只读 AI 模型注册表、只读 AI 用量成本契约、多厂商 Provider 配置 CRUD 与 UI、Vendor Catalog 基础、多厂商 dry-run smoke、平台端概述仪表盘和 Shell 面板
+- Secret 加密基础与 AI Provider Key 安全配置（A0）：服务端 secret 加密底座、安全 Provider Key 配置、base URL 验证与 link-local 阻断
+- Agent Guardrails v1 规则和 Skills 已落地
+- 知识库文件打包下载功能
+- 测试规模：137 个测试文件、约 1432 个测试（各 PR 合并记录中的测试计数）
 - 开放平台基础治理基线
 
 Phase 6 已完成：
@@ -290,7 +296,8 @@ Phase 22 HIS 标准治疗事件 mapper v1 当前状态：
 - Phase 20 / Phase 21 后续扩展评估：路径模板 schema / API、租户自定义 SOP、平台端模板管理、路径效果分析、图表、导出、经营归因、外部系统输入或触达能力必须单独规划
 - HIS 标准治疗事件 mapper 后续扩展、真实 HIS adapter、create / update API 实现、pause / resume / revoke / delete 状态 API、凭证引用集成、凭证加密、健康检查 / 测试连接、Webhook / 同步任务和后续拆分、业务事件埋点体系 spec、经营智能中心 v1、客服会话、版本历史 / diff 展示和完整治疗记录能力仍需单独规划
 - 平台租户状态管理、更多资源配额 enforcement、完整套餐商业化后台与计费能力
-- AI 与知识库
+- AI 多厂商模型管理后续增强：真实厂商 API 调用、厂商密钥轮换、Provider 健康检查、用量计费接入、AI 模型版本管理等仍需单独规划
+- 知识库后续增强：真实 AI 模型调用（当前为只读/干跑 smoke）、知识库公开访问、更多文件格式支持等仍需单独规划
 - 企业微信、开放平台凭证和计费
 
 路线图参考：

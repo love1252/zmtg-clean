@@ -1,6 +1,6 @@
 # 智美天工产品事实源
 
-> 文档状态：已完成 PRODUCT-REBASE-01 产品事实源收口，并经过 V1-SCOPE-LOCK-01 初步锁定 1.0 范围；仍需人工确认的内容已单独标记。
+> 文档状态：已完成 PRODUCT-REBASE-01 产品事实源收口、V1-SCOPE-LOCK-01 初步锁定 1.0 范围、2026-06-19 AI 多厂商模型管理与知识库能力更新；仍需人工确认的内容已单独标记。
 
 ## 资料来源
 
@@ -14,6 +14,7 @@
 - `docs/superpowers/plans/2026-06-08-phase23-backlog-priority-freeze.md`
 - `docs/superpowers/plans/2026-06-08-phase24-production-readiness-plan.md`
 - `docs/devlog/2026-06-08.md`
+- `docs/devlog/2026-06-19.md`
 - `docs/product/zhimeitiangong-v1-scope.md`
 
 ## 一句话定位
@@ -82,6 +83,27 @@ V1-SCOPE-LOCK-01 锁定：AI 是建议、草稿、标签、提醒、运营洞察
 
 1.0 不做 AI 自动客服、AI 自动医疗建议、AI Agent 自动执行或 RAG / Agent 生产能力。
 
+### AI 多厂商模型管理（2026-06-19 更新）
+
+截至 2026-06-19，项目已完成 AI 多厂商模型管理的只读基础设施和干跑 smoke 验证：
+
+- **只读 AI 模型注册表**：平台端和机构端可查看已注册 AI 模型及 vendor catalog。
+- **只读 AI 用量成本契约**：提供用量和成本的只读视图。
+- **多厂商 Provider 配置**：支持多个 AI 厂商的 provider 配置 CRUD，包括安全 API Key 配置（A0 加密底座）、base URL 校验和 link-local 阻断。
+- **多厂商 Smoke**：dry-run readiness check，验证配置完整性，不真实调用外部厂商 API。
+- **知识库**：文件上传、文档解析、关键词/向量/混合检索、问答编排与引用审计、AI provider 安全适配层。内部受控试用，不做真实 AI 模型调用。
+
+### AI 多厂商安全边界
+
+当前 AI 多厂商相关能力遵守以下安全边界：
+
+- 低敏字段：只展示模型名称、厂商、配置状态、用量摘要等低敏信息。
+- 只读/干跑 smoke：所有 smoke 测试为 dry-run readiness check，不真实调用外部厂商 API。
+- 不泄露 secret：AI Provider Key 经服务端加密底座保护，前端不展示凭证明文、`credentialRef`、API Key 原文。
+- 不真实外呼厂商 API：当前所有 AI 能力停留在只读面板和 smoke 检查，不存在向 OpenAI / Anthropic / 其他厂商的真实 HTTP 请求。
+- 不修改 schema 或 migration 而未授权：AI 多厂商相关 schema 和 migration 的变更必须单独审批。
+- 遵守当前架构和权限边界：平台端使用 `platform_admin`，机构端使用既有租户隔离和 RBAC，不新增权限角色或放宽访问控制。
+
 ## SCRM / 客户运营的位置
 
 SCRM、客户运营、随访、复诊、复购和沉睡客户唤醒属于产品主线。
@@ -122,8 +144,8 @@ PRODUCT-REBASE-01 只做产品事实源收口；V1-SCOPE-LOCK-01 只做 1.0 范�
 
 ## 待人工确认
 
-- 待人工确认：1.0 是否需要“客服工作台 / 客服记录”作为必须项。
-- 待人工确认：AI 在 1.0 中是否真实调用模型，还是只做占位 / 人工辅助。
+- 待人工确认：1.0 是否需要”客服工作台 / 客服记录”作为必须项。
+- 待人工确认：AI 在 1.0 中是否真实调用模型，还是只做占位 / 人工辅助。（2026-06-19 更新：当前 AI 多厂商模型管理仅做只读面板和 dry-run smoke，不真实调用外部厂商 API。）
 - 待人工确认：企业微信 / 微信在 1.0 中是否只记录触达建议，还是需要真实接入试点。
 - 待人工确认：OneID / SceneID / Event 是否进入 1.0 基础模型，还是全部后置。
 - 待人工确认：标签 / 分层采用轻量规则时，具体字段与规则由后续任务确认。
