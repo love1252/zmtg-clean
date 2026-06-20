@@ -4257,6 +4257,45 @@ describe('工作台入口页面', () => {
     expect(screen.queryByText('审计事件词汇')).not.toBeInTheDocument();
   });
 
+  it('平台端桌面侧边栏默认展开，可收起为固定图标栏并保持栏目切换', async () => {
+    const fetchMock = mockWorkspaceFetch({ role: 'platform_admin' });
+    render(<OpenPlatformPage />);
+
+    expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
+
+    const sidebar = screen.getByLabelText('平台端侧边栏');
+    const mainContent = screen.getByLabelText('平台端主内容');
+    const desktopNav = screen.getByRole('navigation', { name: '平台端桌面导航' });
+    const collapseButton = screen.getByRole('button', { name: '收起侧边栏' });
+
+    expect(sidebar).toHaveAttribute('data-sidebar-state', 'expanded');
+    expect(sidebar).toHaveClass('fixed', 'md:w-[228px]');
+    expect(mainContent).toHaveClass('md:pl-[228px]');
+    expect(collapseButton).toHaveAttribute('aria-expanded', 'true');
+    expect(within(desktopNav).getByText('租户管理')).toBeInTheDocument();
+
+    fireEvent.click(collapseButton);
+
+    expect(sidebar).toHaveAttribute('data-sidebar-state', 'collapsed');
+    expect(sidebar).toHaveClass('fixed', 'md:w-16');
+    expect(mainContent).toHaveClass('md:pl-16');
+    expect(screen.getByRole('button', { name: '展开侧边栏' })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(desktopNav).queryByText('租户管理')).not.toBeInTheDocument();
+
+    fireEvent.click(within(desktopNav).getByRole('button', { name: '租户管理' }));
+
+    expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/tenants', { cache: 'no-store' });
+
+    fireEvent.click(screen.getByRole('button', { name: '展开侧边栏' }));
+
+    expect(sidebar).toHaveAttribute('data-sidebar-state', 'expanded');
+    expect(sidebar).toHaveClass('md:w-[228px]');
+    expect(mainContent).toHaveClass('md:pl-[228px]');
+    expect(screen.getByRole('button', { name: '收起侧边栏' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(desktopNav).getByText('租户管理')).toBeInTheDocument();
+  });
+
   it('平台端租户管理入口接入租户 API 并展示套餐配额摘要', async () => {
     const fetchMock = mockWorkspaceFetch({ role: 'platform_admin' });
     const { container } = render(<OpenPlatformPage />);
