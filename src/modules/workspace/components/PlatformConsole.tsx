@@ -4,17 +4,11 @@ import { useState } from 'react';
 import Image from 'next/image';
 import {
   Activity,
-  AlertTriangle,
-  ArrowUpRight,
   Bell,
   CheckCircle2,
-  Clock,
   Command,
   ExternalLink,
-  LockKeyhole,
-  PlugZap,
-  RadioTower,
-  TrendingUp,
+  Info,
 } from 'lucide-react';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { CommercialBoundaryPanel } from '@/modules/open-platform/components/CommercialBoundaryPanel';
@@ -28,38 +22,17 @@ import { OpenPlatformKnowledgeManagementPanel } from '@/modules/open-platform/co
 import { OpenPlatformTenantManagementPanel } from '@/modules/open-platform/components/OpenPlatformTenantManagementPanel';
 import { ProductPlanPanel } from '@/modules/open-platform/components/ProductPlanPanel';
 import {
-  platformAlertItems,
+  platformAiReferenceItems,
   platformCapabilityCards,
   platformHealthItems,
+  platformKnowledgeQualityItems,
   platformMetrics,
   platformNavItems,
+  platformPlanStatusItems,
   platformQuickActions,
-  platformSystemHealthItems,
-  platformTrendSummary,
-  type PlatformAlertItem,
-  type PlatformSystemHealthItem,
+  platformTenantStatusItems,
 } from '@/modules/workspace/domain/platform-dashboard';
 import { cn } from '@/shared/utils/cn';
-
-const trendBars = [48, 56, 63, 68, 74, 82, 88, 93, 98, 108];
-
-const alertIconMap: Record<PlatformAlertItem['level'], typeof AlertTriangle> = {
-  error: AlertTriangle,
-  warning: Clock,
-  info: Bell,
-};
-
-const alertToneMap: Record<PlatformAlertItem['level'], string> = {
-  error: 'border-rose-300/20 bg-rose-300/[0.10] text-rose-100',
-  warning: 'border-amber-100 bg-amber-50 text-amber-700',
-  info: 'border-blue-100 bg-blue-50 text-blue-700',
-};
-
-const systemHealthTone = {
-  healthy: { badge: 'border-emerald-100 bg-emerald-50 text-emerald-700', dot: 'bg-emerald-400', label: '正常' },
-  warning: { badge: 'border-amber-100 bg-amber-50 text-amber-700', dot: 'bg-amber-400', label: '警告' },
-  offline: { badge: 'border-slate-300/20 bg-slate-300/[0.06] text-[#64748b]', dot: 'bg-slate-500', label: '未启用' },
-} as const;
 
 export function PlatformConsole() {
   const [activeNavLabel, setActiveNavLabel] = useState('平台总览');
@@ -81,7 +54,7 @@ export function PlatformConsole() {
             <Image src="/brand/logo-mark.png" alt="" width={50} height={50} className={cn('rounded-xl bg-white object-contain', isLightPlatformView ? 'h-10 w-10 p-1' : 'h-[50px] w-[50px] p-1.5')} />
             <div>
               <div className={cn('text-base font-semibold tracking-normal', isLightPlatformView ? 'text-[#1f2937]' : 'text-[#1f2937]')}>智美天工管理后台</div>
-              <div className={cn('mt-0.5 text-xs', isLightPlatformView ? 'text-[#64748b]' : 'text-blue-600/70')}>Platform Console</div>
+              <div className={cn('mt-0.5 text-xs', isLightPlatformView ? 'text-[#64748b]' : 'text-blue-600/70')}>平台控制台</div>
             </div>
           </div>
 
@@ -234,9 +207,9 @@ export function PlatformConsole() {
               <OpenPlatformTenantManagementPanel />
             ) : activeNavLabel === '产品与套餐' ? (
               <ProductPlanPanel />
-            ) : activeNavLabel === 'AI模型配置' ? (
+            ) : activeNavLabel === '人工智能模型配置' ? (
               <OpenPlatformAiModelConfigPanel />
-            ) : activeNavLabel === 'AI用量与费用' ? (
+            ) : activeNavLabel === '人工智能示例用量' ? (
               <OpenPlatformAiReadonlyPanel />
             ) : activeNavLabel === '知识库管理' ? (
               <OpenPlatformKnowledgeManagementPanel />
@@ -249,279 +222,222 @@ export function PlatformConsole() {
                 <OpenPlatformAuditEventsPanel />
                 <OpenPlatformGovernancePanel />
               </>
-            ) : (
-              <>
-                <section className="overflow-hidden rounded-[28px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-7">
-                  <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-                    <div className="max-w-4xl">
-                      <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-blue-700">
-                        <RadioTower className="h-4 w-4" />
-                        平台收尾治理视图
-                      </div>
-                      <h1 className="mt-5 text-[2.15rem] font-semibold leading-[1.12] tracking-normal text-[#1f2937] sm:text-5xl lg:text-[62px]">
-                        <span className="block">掌控租户、套餐与配额</span>
-                        <span className="block bg-gradient-to-r from-cyan-300 via-blue-400 to-violet-400 bg-clip-text text-transparent">
-                          让平台治理可复盘
-                        </span>
-                      </h1>
-                      <p className="mt-5 max-w-2xl text-base leading-7 text-[#64748b] sm:text-lg">
-                        当前收尾页只展示受控 demo 租户、套餐、配额快照、商业化健康和平台审计；开放连接、AI、计费属于后续路线，当前未启用。
-                      </p>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-3 xl:w-[560px]">
-                      {[
-                        { icon: PlugZap, label: '开放连接', value: '长期路线' },
-                        { icon: TrendingUp, label: '租户增长', value: platformTrendSummary.tenantGrowthChange },
-                        { icon: LockKeyhole, label: 'AI 配额', value: '0 / 0' },
-                      ].map((item) => (
-                        <div key={item.label} className="rounded-2xl border border-[#e6edf5] bg-white p-4">
-                          <item.icon className="h-5 w-5 text-blue-600" />
-                          <div className="mt-3 text-sm font-semibold tracking-normal text-[#1f2937]">{item.value}</div>
-                          <div className="mt-1 text-xs text-[#64748b]">{item.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  {platformMetrics.map((metric) => (
-                    <article key={metric.label} className="rounded-[22px] border border-[#e6edf5] bg-white p-4 shadow-sm">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="text-sm font-medium text-[#64748b]">{metric.label}</div>
-                        <div className={cn('grid h-10 w-10 place-items-center rounded-2xl', metric.tone)}>
-                          <metric.icon className="h-5 w-5" />
-                        </div>
-                      </div>
-                      <div className="mt-4 text-3xl font-semibold tracking-normal text-[#1f2937]">{metric.value}</div>
-                      <div className="mt-3 text-sm font-semibold text-emerald-300">{metric.change}</div>
-                    </article>
-                  ))}
-                </section>
-
-                <section className="grid gap-5 xl:grid-cols-[1.3fr_1.05fr_0.75fr]">
-                  <article className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <h2 className="text-lg font-semibold tracking-normal text-[#1f2937]">平台收尾趋势参考</h2>
-                        <p className="mt-1 text-sm text-[#64748b]">演示租户增长与 AI 调用占位趋势，均为静态 SVG 不代表真实数据。</p>
-                      </div>
-                      <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">受控 demo</span>
-                    </div>
-
-                    <div className="mt-6 grid gap-5 lg:grid-cols-2">
-                      <div className="rounded-2xl border border-[#e6edf5] bg-white p-4">
-                        <div className="flex items-center justify-between gap-3 mb-3">
-                          <span className="text-sm font-semibold text-[#1f2937]">租户增长趋势</span>
-                          <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 flex items-center gap-1">
-                            <ArrowUpRight className="h-3 w-3" />
-                            {platformTrendSummary.tenantGrowthChange}
-                          </span>
-                        </div>
-                        <div className="h-[180px]">
-                          <svg viewBox="0 0 720 160" className="h-full w-full" role="img" aria-label={platformTrendSummary.tenantGrowthLabel}>
-                            <defs>
-                              <linearGradient id="tenantGrowthFill" x1="0" x2="0" y1="0" y2="1">
-                                <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.28" />
-                                <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
-                              </linearGradient>
-                            </defs>
-                            {[40, 80, 120].map((y) => (
-                              <line key={y} x1="24" x2="696" y1={y} y2={y} stroke="rgba(148,163,184,0.15)" strokeWidth="1" />
-                            ))}
-                            <polygon points="26,116 118,106 210,92 302,78 394,64 486,50 578,40 694,22 694,148 26,148" fill="url(#tenantGrowthFill)" />
-                            <polyline points="26,116 118,106 210,92 302,78 394,64 486,50 578,40 694,22" fill="none" stroke="#38bdf8" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-[#e6edf5] bg-white p-4">
-                        <div className="flex items-center justify-between gap-3 mb-3">
-                          <span className="text-sm font-semibold text-[#1f2937]">AI 调用趋势</span>
-                          <span className="rounded-full border border-violet-100 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700 flex items-center gap-1">
-                            <ArrowUpRight className="h-3 w-3" />
-                            {platformTrendSummary.callTrendChange}
-                          </span>
-                        </div>
-                        <div className="h-[180px]">
-                          <svg viewBox="0 0 720 160" className="h-full w-full" role="img" aria-label={platformTrendSummary.callTrendLabel}>
-                            <defs>
-                              <linearGradient id="callTrendFill" x1="0" x2="0" y1="0" y2="1">
-                                <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.22" />
-                                <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
-                              </linearGradient>
-                            </defs>
-                            {[40, 80, 120].map((y) => (
-                              <line key={y} x1="24" x2="696" y1={y} y2={y} stroke="rgba(148,163,184,0.15)" strokeWidth="1" />
-                            ))}
-                            <polygon points="26,120 118,104 210,94 302,82 394,70 486,56 578,46 694,28 694,148 26,148" fill="url(#callTrendFill)" />
-                            <polyline points="26,120 118,104 210,94 302,82 394,70 486,56 578,46 694,28" fill="none" stroke="#8b5cf6" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-                            <polyline points="26,126 118,114 210,104 302,90 394,78 486,68 578,56 694,42" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500 flex items-center gap-2">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" /> 租户
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-violet-400" /> 调用
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" /> 成功
-                      </span>
-                      <span className="ml-auto">{platformTrendSummary.note}</span>
-                    </div>
-                  </article>
-
-                  <article className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h2 className="text-lg font-semibold tracking-normal text-[#1f2937]">演示视图状态</h2>
-                        <p className="mt-1 text-sm text-[#64748b]">标注当前可演示能力和后续路线边界。</p>
-                      </div>
-                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">全部正常</span>
-                    </div>
-                    <div className="mt-5 space-y-3">
-                      {platformHealthItems.map((item) => (
-                        <div key={item.label} className="flex items-center justify-between gap-4 rounded-2xl border border-[#e6edf5] bg-white px-4 py-3">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-2xl', item.warning ? 'bg-amber-300/[0.12] text-amber-200' : 'bg-emerald-50 text-emerald-700')}>
-                              <CheckCircle2 className="h-5 w-5" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-semibold text-[#1f2937]">{item.label}</div>
-                              <div className="text-xs text-[#64748b]">{item.detail}</div>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm font-semibold text-[#1f2937]">{item.value}</div>
-                            <div className="text-xs text-slate-500">{item.status}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </article>
-
-                  <article className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h2 className="text-lg font-semibold tracking-normal text-[#1f2937]">快捷操作</h2>
-                        <p className="mt-1 text-sm text-[#64748b]">常用平台治理入口。</p>
-                      </div>
-                    </div>
-                    <div className="mt-5 space-y-2">
-                      {platformQuickActions.map((action) => (
-                        <button
-                          key={action.label}
-                          type="button"
-                          onClick={() => setActiveNavLabel(action.hint)}
-                          className="flex w-full items-center justify-between gap-3 rounded-xl border border-[#e6edf5] bg-white px-4 py-3 text-left transition hover:bg-white"
-                        >
-                          <div className="flex items-center gap-3">
-                            <action.icon className="h-4 w-4 text-blue-600" />
-                            <span className="text-sm font-semibold text-[#1f2937]">{action.label}</span>
-                          </div>
-                          <ExternalLink className="h-4 w-4 text-slate-500" />
-                        </button>
-                      ))}
-                    </div>
-                  </article>
-                </section>
-
-                <section className="grid gap-5 xl:grid-cols-[1fr_0.85fr]">
-                  <article className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h2 className="text-lg font-semibold tracking-normal text-[#1f2937]">系统健康状态</h2>
-                        <p className="mt-1 text-sm text-[#64748b]">演示环境核心服务状态，仅供参考。</p>
-                      </div>
-                      <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">只读监控</span>
-                    </div>
-
-                    <div className="mt-5 space-y-3">
-                      {platformSystemHealthItems.map((item) => {
-                        const tone = systemHealthTone[item.status];
-                        return (
-                          <div key={item.key} className="flex items-center justify-between gap-4 rounded-2xl border border-[#e6edf5] bg-white px-4 py-3">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <div className={cn('h-2.5 w-2.5 rounded-full', tone.dot)} />
-                              <div className="min-w-0">
-                                <div className="text-sm font-semibold text-[#1f2937]">{item.name}</div>
-                                <div className="text-xs text-[#64748b]">
-                                  {item.status === 'offline'
-                                    ? item.capacityHint
-                                    : `延迟 ${item.latencyMs}ms · 可用率 ${item.uptimePercent}%`}
-                                </div>
-                              </div>
-                            </div>
-                            <span className={cn('shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold', tone.badge)}>
-                              {tone.label}
-                              {item.status === 'warning' && item.capacityHint ? ` · ${item.capacityHint}` : ''}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </article>
-
-                  <article className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h2 className="text-lg font-semibold tracking-normal text-[#1f2937]">预警与待办</h2>
-                        <p className="mt-1 text-sm text-[#64748b]">平台治理信号摘要，均为占位模拟数据。</p>
-                      </div>
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-[#64748b]">
-                        {platformAlertItems.length} 项
-                      </span>
-                    </div>
-
-                    <div className="mt-5 space-y-2">
-                      {platformAlertItems.map((alert) => {
-                        const Icon = alertIconMap[alert.level];
-                        return (
-                          <div key={alert.id} className="flex items-start gap-3 rounded-2xl border border-[#e6edf5] bg-white px-4 py-3">
-                            <div className={cn('mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl', alertToneMap[alert.level])}>
-                              <Icon className="h-4 w-4" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-3">
-                                <h4 className="truncate text-sm font-semibold text-[#1f2937]">{alert.label}</h4>
-                                <span className="shrink-0 text-xs text-slate-500">{alert.timeAgo}</span>
-                              </div>
-                              <p className="mt-1 text-sm leading-5 text-[#64748b]">{alert.detail}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </article>
-                </section>
-
-                <section className="grid gap-4 md:grid-cols-3">
-                  {platformCapabilityCards.map((item) => (
-                    <article key={item.title} className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm">
-                      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-blue-600">
-                        <item.icon className="h-6 w-6" />
-                      </div>
-                      <h2 className="mt-4 text-base font-semibold tracking-normal text-[#1f2937]">{item.title}</h2>
-                      <p className="mt-2 text-sm leading-6 text-[#64748b]">{item.detail}</p>
-                      <button type="button" className="mt-5 inline-flex h-9 items-center rounded-full border border-[#e6edf5] px-3 text-sm font-semibold text-blue-700 transition hover:bg-[#f8fafc]">
-                        查看治理清单
-                      </button>
-                    </article>
-                  ))}
-                </section>
-
-                <OpenPlatformGovernancePanel />
-              </>
-            )}
+            ) : activeNavLabel === '平台总览' ? (
+              <PlatformOverview onNavigate={setActiveNavLabel} />
+            ) : null}
           </div>
         </section>
       </div>
     </main>
+  );
+}
+
+type PlatformOverviewProps = {
+  onNavigate: (label: string) => void;
+};
+
+function PlatformOverview({ onNavigate }: PlatformOverviewProps) {
+  return (
+    <>
+      <section aria-labelledby="platform-overview-heading" className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
+        <div>
+          <div className="max-w-4xl">
+            <div className="flex flex-wrap gap-2">
+              {['真实库数据', '受控示例', '长期路线'].map((label) => (
+                <span key={label} className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                  {label}
+                </span>
+              ))}
+            </div>
+            <h1 id="platform-overview-heading" className="mt-4 text-3xl font-semibold tracking-normal text-[#1f2937] sm:text-4xl">
+              平台总览
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#64748b] sm:text-base">
+              只保留能支撑运营判断的核心信号：租户是否可运营、套餐和配额是否完整、快照是否可信、拒绝审计是否需要复核。知识库与人工智能只作为低权重能力参考，不替代商业化健康判断。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section aria-label="核心运营指标" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {platformMetrics.map((metric) => (
+          <article key={metric.label} className="rounded-[20px] border border-[#e6edf5] bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-[#64748b]">{metric.label}</h2>
+                <div className="mt-3 text-3xl font-semibold tracking-normal text-[#1f2937]">{metric.value}</div>
+              </div>
+              <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-2xl', metric.tone)}>
+                <metric.icon className="h-5 w-5" />
+              </div>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-[#64748b]">{metric.change}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        <DistributionPanel title="租户状态分布" items={platformTenantStatusItems} note="判断活跃租户基数，避免把暂停或注销租户计入运营盘面。" />
+        <DistributionPanel title="套餐分布摘要" items={platformPlanStatusItems} note="判断活跃租户是否具备可解释的商业化配置。" />
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.1fr_0.95fr_0.95fr]">
+        <article className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-[#1f2937]">商业化健康</h2>
+              <p className="mt-1 text-sm text-[#64748b]">优先处理会影响租户运营判断的配置缺口。</p>
+            </div>
+            <span className="rounded-full border border-amber-100 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">需要复核</span>
+          </div>
+          <div className="mt-5 space-y-3">
+            {platformHealthItems.map((item) => (
+              <div key={item.label} className="flex items-start justify-between gap-4 rounded-2xl border border-[#e6edf5] bg-white px-4 py-3">
+                <div className="flex min-w-0 gap-3">
+                  <div className={cn('mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl', item.warning ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700')}>
+                    {item.warning ? <Info className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#1f2937]">{item.label}</h3>
+                    <p className="mt-1 text-xs leading-5 text-[#64748b]">{item.detail}</p>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-base font-semibold text-[#1f2937]">{item.value}</div>
+                  <div className="mt-1 text-xs text-[#64748b]">{item.status}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <ReferencePanel title="知识库能力质量参考" items={platformKnowledgeQualityItems} />
+        <ReferencePanel title="人工智能示例用量与模型配置参考" items={platformAiReferenceItems} />
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        <article className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-[#1f2937]">治理工作队列</h2>
+              <p className="mt-1 text-sm text-[#64748b]">从高风险到配置补齐，直接进入对应平台栏目处理。</p>
+            </div>
+            <Activity className="h-5 w-5 text-blue-600" />
+          </div>
+          <div className="mt-5 space-y-2">
+            {platformQuickActions.map((action, index) => (
+              <button
+                key={action.label}
+                type="button"
+                onClick={() => onNavigate(action.hint)}
+                className="flex w-full items-center justify-between gap-3 rounded-xl border border-[#e6edf5] bg-white px-4 py-3 text-left transition hover:bg-[#f8fafc] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#bfdbfe]"
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-blue-50 text-xs font-semibold text-blue-700">{index + 1}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <action.icon className="h-4 w-4 shrink-0 text-blue-600" />
+                    <span className="text-sm font-semibold text-[#1f2937]">{action.label}</span>
+                  </span>
+                </span>
+                <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <article className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-[#1f2937]">能力边界</h2>
+              <p className="mt-1 text-sm text-[#64748b]">防止把未上线能力误读为当前运营能力。</p>
+            </div>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-[#64748b]">只读</span>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {platformCapabilityCards.map((item) => (
+              <div key={item.title} className="rounded-2xl border border-[#e6edf5] bg-white p-4">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600">
+                    <item.icon className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-[#1f2937]">{item.title}</h3>
+                </div>
+                <p className="mt-3 text-xs leading-5 text-[#64748b]">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+    </>
+  );
+}
+
+type DistributionItem = {
+  label: string;
+  value: string;
+  tone: string;
+};
+
+function DistributionPanel({ title, items, note }: { title: string; items: readonly DistributionItem[]; note: string }) {
+  const total = items.reduce((sum, item) => sum + Number(item.value), 0);
+
+  return (
+    <article className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold tracking-normal text-[#1f2937]">{title}</h2>
+          <p className="mt-1 text-sm text-[#64748b]">{note}</p>
+        </div>
+        <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">分布数据</span>
+      </div>
+      <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-slate-100">
+        {items.map((item) => (
+          <span key={item.label} className={item.tone} style={{ width: `${(Number(item.value) / total) * 100}%` }} />
+        ))}
+      </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        {items.map((item) => (
+          <div key={item.label} className="rounded-2xl border border-[#e6edf5] bg-white px-4 py-3">
+            <div className="flex items-center gap-2 text-xs text-[#64748b]">
+              <span className={cn('h-2.5 w-2.5 rounded-full', item.tone)} />
+              {item.label}
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-[#1f2937]">{item.value}</div>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+type ReferenceItem = {
+  label: string;
+  value: string;
+  detail: string;
+};
+
+function ReferencePanel({ title, items }: { title: string; items: readonly ReferenceItem[] }) {
+  return (
+    <article className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold tracking-normal text-[#1f2937]">{title}</h2>
+          <p className="mt-1 text-sm text-[#64748b]">低权重参考，不参与核心商业化排序。</p>
+        </div>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-[#64748b]">受控示例</span>
+      </div>
+      <div className="mt-5 space-y-3">
+        {items.map((item) => (
+          <div key={item.label} className="rounded-2xl border border-[#e6edf5] bg-white px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-[#1f2937]">{item.label}</h3>
+              <span className="shrink-0 text-base font-semibold text-[#1f2937]">{item.value}</span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-[#64748b]">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+    </article>
   );
 }

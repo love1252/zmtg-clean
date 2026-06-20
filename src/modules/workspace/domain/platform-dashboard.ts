@@ -2,23 +2,17 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
   AlertTriangle,
-  Bell,
   BookOpen,
   Boxes,
   Brain,
   Building2,
   CalendarClock,
-  Clock,
-  CreditCard,
-  Database,
   FileText,
-  Globe,
   KeyRound,
   LayoutDashboard,
   Plug,
   TrendingUp,
   Shield,
-  Server,
 } from 'lucide-react';
 
 export type PlatformNavItem = {
@@ -40,8 +34,8 @@ export const platformNavItems: PlatformNavItem[] = [
   { label: '首页与品牌', icon: FileText },
   { label: '租户管理', icon: Building2 },
   { label: '产品与套餐', icon: Boxes },
-  { label: 'AI模型配置', icon: Brain },
-  { label: 'AI用量与费用', icon: TrendingUp },
+  { label: '人工智能模型配置', icon: Brain },
+  { label: '人工智能示例用量', icon: TrendingUp },
   { label: '知识库管理', icon: BookOpen },
   { label: '开放连接路线', icon: Plug },
   { label: '权限与审计', icon: Shield },
@@ -49,46 +43,27 @@ export const platformNavItems: PlatformNavItem[] = [
 ];
 
 export const platformMetrics: PlatformMetric[] = [
-  { label: 'demo 租户', value: '4', change: '受控演示', icon: Building2, tone: 'bg-blue-50 text-blue-600' },
-  { label: '演示套餐', value: '4', change: 'Starter / Growth / Trial / Enterprise', icon: Boxes, tone: 'bg-emerald-50 text-emerald-600' },
-  { label: 'AI 配额', value: '0 / 0', change: '当前未启用', icon: Database, tone: 'bg-violet-50 text-violet-600' },
-  { label: '配额快照', value: '4', change: '运营参考', icon: CalendarClock, tone: 'bg-cyan-50 text-cyan-600' },
-  { label: '商业化信号', value: '3 类', change: '风险 / 缺失 / denied', icon: Activity, tone: 'bg-amber-50 text-amber-600' },
-  { label: '平台审计', value: '可追踪', change: '关键操作留痕', icon: Shield, tone: 'bg-emerald-50 text-emerald-600' },
-  { label: '知识库文件', value: '—', change: '接入中，尚未统计', icon: BookOpen, tone: 'bg-rose-50 text-rose-600' },
-  { label: '平台运行', value: '—', change: '受控 demo 环境', icon: Server, tone: 'bg-slate-50 text-slate-600' },
+  { label: '活跃租户数', value: '18', change: '总记录 24，暂停 4，注销 2', icon: Building2, tone: 'bg-blue-50 text-blue-600' },
+  { label: '有效套餐覆盖率', value: '83%', change: '15 / 18 个活跃租户', icon: Boxes, tone: 'bg-emerald-50 text-emerald-600' },
+  { label: '基础配置缺失租户', value: '3', change: '缺有效套餐或配额上限', icon: AlertTriangle, tone: 'bg-amber-50 text-amber-600' },
+  { label: '快照异常租户', value: '4', change: '缺失 1，过期 3，阈值 7 天', icon: CalendarClock, tone: 'bg-cyan-50 text-cyan-600' },
+  { label: '配额风险影响租户', value: '5', change: '高风险 2，中风险 3，风险项 8', icon: Activity, tone: 'bg-rose-50 text-rose-600' },
+  { label: '拒绝审计信号', value: '7', change: '配额拒绝 5，其他拒绝 2，最近 100 条', icon: Shield, tone: 'bg-violet-50 text-violet-600' },
 ];
 
 export const platformHealthItems = [
-  { label: '租户管理视图', detail: '机构、套餐、配额只读展示', value: '已就绪', status: '受控 demo', warning: false },
-  { label: '商业化健康', detail: '运营辅助，不做正式计费', value: '已就绪', status: '受控 demo', warning: false },
-  { label: 'AI 调用配额', detail: '当前未启用 AI 调用配额', value: '0 / 0', status: '未启用', warning: false },
-  { label: '开放连接路线', detail: '长期路线，当前不接外部系统', value: '未启用', status: '路线边界', warning: true },
+  { label: '缺少有效套餐', detail: '活跃租户没有有效套餐时，商业化口径无法判断', value: '2', status: '需要补齐', warning: true },
+  { label: '缺少配额上限', detail: '套餐存在但配额上限缺失，容易误判租户风险', value: '1', status: '需要补齐', warning: true },
+  { label: '快照异常租户', detail: '配额快照缺失或超过 7 天，当前用量判断不可信', value: '4', status: '需要复核', warning: true },
+  { label: '配额拒绝样本', detail: '最近审计事件中出现拒绝结果，需要区分正常拦截和配置问题', value: '5', status: '需要审查', warning: false },
 ] as const;
 
 export const platformCapabilityCards = [
-  { icon: KeyRound, title: '开放连接治理边界', detail: 'API Key、OAuth、Webhook 保留为长期路线治理词汇，当前不生成密钥、不授权、不投递。' },
-  { icon: Activity, title: '商业化健康收尾', detail: '展示套餐覆盖、配额快照、配置缺失和 quota denied 信号，不做支付、合同或发票。' },
-  { icon: Shield, title: '平台操作可审计', detail: '平台操作留痕，避免越权查看机构敏感数据。' },
+  { icon: KeyRound, title: '真实计费未启用', detail: '只呈现套餐、配额和风险判断，不展示收入、合同、发票或支付数据。' },
+  { icon: Plug, title: '外部连接未启用', detail: '开放连接属于长期路线，本页不生成密钥、不授权，也不投递外部系统。' },
+  { icon: Shield, title: '真实人工智能密钥未启用', detail: '示例用量只用于治理参考，不读取真实密钥，也不触发真实模型调用。' },
+  { icon: Brain, title: '示例模型配置受控配置', detail: '模型配置只展示受控样例，避免把未上线能力误判为可运营能力。' },
 ] as const;
-
-export type PlatformAlertItem = {
-  id: number;
-  level: 'error' | 'warning' | 'info';
-  label: string;
-  detail: string;
-  timeAgo: string;
-  icon: LucideIcon;
-};
-
-export type PlatformSystemHealthItem = {
-  key: string;
-  name: string;
-  status: 'healthy' | 'warning' | 'offline';
-  uptimePercent: number;
-  latencyMs: number;
-  capacityHint: string | null;
-};
 
 export type PlatformQuickAction = {
   label: string;
@@ -96,36 +71,33 @@ export type PlatformQuickAction = {
   hint: string;
 };
 
-export const platformAlertItems: PlatformAlertItem[] = [
-  { id: 1, level: 'warning', label: '演示租户：北京美莱', detail: '套餐配额快照超过 7 天未更新', timeAgo: '模拟数据', icon: Clock },
-  { id: 2, level: 'info', label: '演示租户：上海艺星', detail: '试用套餐即将到期（演示时间线）', timeAgo: '模拟数据', icon: Bell },
-  { id: 3, level: 'warning', label: 'AI 调用配额', detail: '当前未启用 AI 调用配额，租户调用不受限', timeAgo: '模拟数据', icon: Activity },
-  { id: 4, level: 'info', label: '商业化边界', detail: 'quota denied 事件记录为空（演示环境无真实请求）', timeAgo: '模拟数据', icon: TrendingUp },
-  { id: 5, level: 'error', label: '开放连接路线', detail: '所有外部连接器均处于禁用状态（长期路线）', timeAgo: '模拟数据', icon: AlertTriangle },
-];
-
-export const platformSystemHealthItems: PlatformSystemHealthItem[] = [
-  { key: 'api-gateway', name: 'API Gateway', status: 'healthy', uptimePercent: 99.9, latencyMs: 42, capacityHint: null },
-  { key: 'database', name: '数据库 (PostgreSQL)', status: 'healthy', uptimePercent: 99.9, latencyMs: 12, capacityHint: null },
-  { key: 'ai-runtime', name: 'AI 运行时', status: 'offline', uptimePercent: 0, latencyMs: 0, capacityHint: '未启用' },
-  { key: 'storage', name: '文件存储', status: 'warning', uptimePercent: 99.9, latencyMs: 68, capacityHint: '演示环境无真实存储' },
-  { key: 'agent-service', name: 'Agent 服务', status: 'offline', uptimePercent: 0, latencyMs: 0, capacityHint: '未部署' },
-];
-
 export const platformQuickActions: PlatformQuickAction[] = [
-  { label: '查看租户列表', icon: Building2, hint: '租户管理' },
-  { label: '审查商业化健康', icon: Activity, hint: '商业化边界' },
-  { label: '浏览 AI 用量', icon: TrendingUp, hint: 'AI用量与费用' },
-  { label: '检查模型配置', icon: Brain, hint: 'AI模型配置' },
-  { label: '查看知识库', icon: BookOpen, hint: '知识库管理' },
+  { label: '查看配额风险影响租户', icon: Activity, hint: '商业化边界' },
+  { label: '补齐有效套餐和配额上限', icon: Boxes, hint: '产品与套餐' },
+  { label: '处理快照异常租户', icon: CalendarClock, hint: '租户管理' },
+  { label: '审查最近配额拒绝或其他拒绝信号', icon: Shield, hint: '权限与审计' },
 ];
 
-export const platformTrendSummary = {
-  tenantGrowthLabel: '演示租户增长趋势（占位）',
-  callTrendLabel: 'AI 调用趋势（未启用）',
-  revenueLabel: '商业化收入（不涉及）',
-  note: '所有趋势数据均为占位 SVG，不代表真实运营数据',
-  tenantGrowthChange: '+12.5%',
-  callTrendChange: '+18.5%',
-  revenueChange: '+6.8%',
-};
+export const platformTenantStatusItems = [
+  { label: '活跃', value: '18', tone: 'bg-blue-500' },
+  { label: '暂停', value: '4', tone: 'bg-amber-400' },
+  { label: '注销', value: '2', tone: 'bg-slate-400' },
+] as const;
+
+export const platformPlanStatusItems = [
+  { label: '有有效套餐', value: '15', tone: 'bg-emerald-500' },
+  { label: '无有效套餐', value: '2', tone: 'bg-rose-500' },
+  { label: '套餐待确认', value: '1', tone: 'bg-amber-400' },
+] as const;
+
+export const platformKnowledgeQualityItems = [
+  { label: '已接入知识库租户', value: '9', detail: '仅作为能力成熟度参考' },
+  { label: '低质量文件样本', value: '6', detail: '用于提醒治理，不作为核心经营指标' },
+  { label: '待处理知识库任务', value: '3', detail: '低权重辅助信息' },
+] as const;
+
+export const platformAiReferenceItems = [
+  { label: '示例用量租户', value: '7', detail: '受控示例，不代表真实调用' },
+  { label: '模型配置待确认', value: '2', detail: '只提示配置完整性' },
+  { label: '真实调用成本', value: '未启用', detail: '本轮不统计成本或排行' },
+] as const;

@@ -3032,7 +3032,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<OpenPlatformPage />);
 
-    expect(await screen.findByRole('heading', { name: /掌控租户、套餐与配额/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
 
     expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
@@ -4231,27 +4231,37 @@ describe('工作台入口页面', () => {
     mockWorkspaceFetch({ role: 'platform_admin' });
     render(<OpenPlatformPage />);
 
-    expect(await screen.findByRole('heading', { name: /掌控租户、套餐与配额/ })).toBeInTheDocument();
-    expect(screen.getByText('让平台治理可复盘')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
+    expect(screen.getByText('有效套餐覆盖率')).toBeInTheDocument();
+    expect(screen.getByText('拒绝审计信号')).toBeInTheDocument();
+    expect(screen.getByText('治理工作队列')).toBeInTheDocument();
+    expect(screen.getByText('能力边界')).toBeInTheDocument();
+    expect(screen.queryByText('平台收尾趋势参考')).not.toBeInTheDocument();
+    expect(screen.queryByText('系统健康状态')).not.toBeInTheDocument();
+    expect(screen.queryByText('AI 调用趋势')).not.toBeInTheDocument();
+    expect(screen.queryByText('本轮范围')).not.toBeInTheDocument();
+    expect(screen.queryByText('历史参考视图')).not.toBeInTheDocument();
+    expect(screen.queryByText('服务状态参考')).not.toBeInTheDocument();
+    expect(screen.queryByText('预警与待办')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '平台总览' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '首页与品牌' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '权限与审计' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '平台端移动导航' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：开放连接路线' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出平台' })).toBeInTheDocument();
-    expect(screen.getByText('平台收尾治理视图')).toBeInTheDocument();
-    expect(screen.getByText('开放连接治理边界')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '开放平台基础治理' })).toBeInTheDocument();
-    expect(screen.getByText('服务端租户上下文')).toBeInTheDocument();
-    expect(screen.getByText('权限样例矩阵')).toBeInTheDocument();
-    expect(screen.getByText('审计事件词汇')).toBeInTheDocument();
+    expect(screen.getByText('真实库数据')).toBeInTheDocument();
+    expect(screen.getAllByText('受控示例').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { name: '开放平台基础治理' })).not.toBeInTheDocument();
+    expect(screen.queryByText('服务端租户上下文')).not.toBeInTheDocument();
+    expect(screen.queryByText('权限样例矩阵')).not.toBeInTheDocument();
+    expect(screen.queryByText('审计事件词汇')).not.toBeInTheDocument();
   });
 
   it('平台端租户管理入口接入租户 API 并展示套餐配额摘要', async () => {
     const fetchMock = mockWorkspaceFetch({ role: 'platform_admin' });
     const { container } = render(<OpenPlatformPage />);
 
-    expect(await screen.findByRole('heading', { name: /掌控租户、套餐与配额/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
 
     expect(screen.getByText('正在加载租户管理数据...')).toBeInTheDocument();
@@ -4293,7 +4303,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<OpenPlatformPage />);
 
-    expect(await screen.findByRole('heading', { name: /掌控租户、套餐与配额/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
 
     expect(await screen.findByRole('heading', { name: '商业化健康' })).toBeInTheDocument();
@@ -4338,7 +4348,7 @@ describe('工作台入口页面', () => {
     const fetchMock = mockWorkspaceFetch({ role: 'platform_admin', platformTenants: [] });
     const { container } = render(<OpenPlatformPage />);
 
-    expect(await screen.findByRole('heading', { name: /掌控租户、套餐与配额/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
 
     expect(await screen.findByText('暂无受控 demo 租户')).toBeInTheDocument();
@@ -4357,7 +4367,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<OpenPlatformPage />);
 
-    expect(await screen.findByRole('heading', { name: /掌控租户、套餐与配额/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
 
     expect(await screen.findByText(visibleMessage)).toBeInTheDocument();
@@ -4369,7 +4379,7 @@ describe('工作台入口页面', () => {
     const fetchMock = mockWorkspaceFetch({ role: 'platform_admin' });
     const { container } = render(<OpenPlatformPage />);
 
-    expect(await screen.findByRole('heading', { name: /掌控租户、套餐与配额/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '权限与审计' }));
 
     expect(await screen.findByRole('heading', { name: '平台审计日志' })).toBeInTheDocument();
