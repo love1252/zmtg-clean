@@ -9,6 +9,8 @@ import {
   Command,
   ExternalLink,
   Info,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { CommercialBoundaryPanel } from '@/modules/open-platform/components/CommercialBoundaryPanel';
@@ -36,32 +38,61 @@ import { cn } from '@/shared/utils/cn';
 
 export function PlatformConsole() {
   const [activeNavLabel, setActiveNavLabel] = useState('平台总览');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const isLightPlatformView = true;
+  const SidebarToggleIcon = isSidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
 
   return (
     <main className={cn('min-h-screen overflow-x-hidden', isLightPlatformView ? 'bg-[#f7f9fc] text-slate-950' : 'bg-[#f7f9fc] text-slate-950')}>
       {!isLightPlatformView ? (
         <div className="fixed inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(37,99,235,0.28),transparent_34%),radial-gradient(circle_at_82%_20%,rgba(20,184,166,0.18),transparent_30%),linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[length:auto,auto,44px_44px,44px_44px]" />
       ) : null}
-      <div className="relative flex min-h-screen">
-        <aside className={cn(
-          'hidden shrink-0 border-r md:flex md:flex-col',
-          isLightPlatformView
-            ? 'w-[228px] border-[#e6edf5] bg-white text-[#1f2937]'
-            : 'w-[286px] border-[#e6edf5] bg-white text-[#64748b] shadow-sm',
-        )}>
-          <div className={cn('flex items-center gap-3 border-b px-5', isLightPlatformView ? 'h-[70px] border-[#e6edf5]' : 'h-[86px] border-[#e6edf5]')}>
+      <div className="relative min-h-screen">
+        <aside
+          aria-label="平台端侧边栏"
+          data-sidebar-state={isSidebarCollapsed ? 'collapsed' : 'expanded'}
+          className={cn(
+            'fixed left-0 top-0 z-30 hidden h-screen shrink-0 border-r transition-[width] duration-200 md:flex md:flex-col',
+            isSidebarCollapsed ? 'md:w-16' : isLightPlatformView ? 'md:w-[228px]' : 'md:w-[286px]',
+            isLightPlatformView
+              ? 'border-[#e6edf5] bg-white text-[#1f2937]'
+              : 'border-[#e6edf5] bg-white text-[#64748b] shadow-sm',
+          )}
+        >
+          <div
+            className={cn(
+              'flex items-center border-b',
+              isSidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-5',
+              isLightPlatformView ? 'h-[70px] border-[#e6edf5]' : 'h-[86px] border-[#e6edf5]',
+            )}
+          >
             <Image src="/brand/logo-mark.png" alt="" width={50} height={50} className={cn('rounded-xl bg-white object-contain', isLightPlatformView ? 'h-10 w-10 p-1' : 'h-[50px] w-[50px] p-1.5')} />
-            <div>
-              <div className={cn('text-base font-semibold tracking-normal', isLightPlatformView ? 'text-[#1f2937]' : 'text-[#1f2937]')}>智美天工管理后台</div>
-              <div className={cn('mt-0.5 text-xs', isLightPlatformView ? 'text-[#64748b]' : 'text-blue-600/70')}>平台控制台</div>
-            </div>
+            {!isSidebarCollapsed ? (
+              <div className="min-w-0">
+                <div className={cn('truncate text-base font-semibold tracking-normal', isLightPlatformView ? 'text-[#1f2937]' : 'text-[#1f2937]')}>智美天工管理后台</div>
+                <div className={cn('mt-0.5 truncate text-xs', isLightPlatformView ? 'text-[#64748b]' : 'text-blue-600/70')}>平台控制台</div>
+              </div>
+            ) : null}
           </div>
 
           {isLightPlatformView ? (
-            <div className="flex h-[58px] items-center justify-between border-b border-[#e6edf5] px-6 text-sm text-[#64748b]">
-              <span>平台菜单</span>
-              <Command className="h-4 w-4" />
+            <div
+              className={cn(
+                'flex h-[58px] items-center border-b border-[#e6edf5] text-sm text-[#64748b]',
+                isSidebarCollapsed ? 'justify-center px-2' : 'justify-between px-6',
+              )}
+            >
+              {!isSidebarCollapsed ? <span>平台菜单</span> : null}
+              <button
+                type="button"
+                aria-label={isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+                aria-expanded={!isSidebarCollapsed}
+                title={isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+                onClick={() => setIsSidebarCollapsed((collapsed) => !collapsed)}
+                className="grid h-8 w-8 place-items-center rounded-lg text-[#64748b] transition hover:bg-[#f1f5f9] hover:text-[#2563eb] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#bfdbfe]"
+              >
+                <SidebarToggleIcon className="h-4 w-4" />
+              </button>
             </div>
           ) : (
             <div className="px-5 py-5">
@@ -75,14 +106,23 @@ export function PlatformConsole() {
             </div>
           )}
 
-          <nav className={cn('flex-1 space-y-1 overflow-y-auto', isLightPlatformView ? 'px-4 py-4' : 'px-4')}>
+          <nav
+            aria-label="平台端桌面导航"
+            className={cn(
+              'flex-1 space-y-1 overflow-y-auto',
+              isSidebarCollapsed ? 'px-2 py-4' : isLightPlatformView ? 'px-4 py-4' : 'px-4',
+            )}
+          >
             {platformNavItems.map((item) => (
               <button
                 key={item.label}
                 type="button"
+                aria-label={item.label}
+                title={isSidebarCollapsed ? item.label : undefined}
                 onClick={() => setActiveNavLabel(item.label)}
                 className={cn(
-                  'flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium tracking-normal transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#bfdbfe]',
+                  'flex h-11 w-full items-center rounded-xl text-sm font-medium tracking-normal transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#bfdbfe]',
+                  isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3 text-left',
                   isLightPlatformView
                     ? activeNavLabel === item.label
                       ? 'bg-[#eaf3ff] text-[#2563eb]'
@@ -93,12 +133,12 @@ export function PlatformConsole() {
                 )}
               >
                 <item.icon className="h-5 w-5 shrink-0" />
-                {item.label}
+                {!isSidebarCollapsed ? item.label : null}
               </button>
             ))}
           </nav>
 
-          <div className={cn('space-y-3 border-t p-5', isLightPlatformView ? 'border-[#e6edf5]' : 'border-[#e6edf5]')}>
+          <div className={cn('space-y-3 border-t', isSidebarCollapsed ? 'p-3' : 'p-5', isLightPlatformView ? 'border-[#e6edf5]' : 'border-[#e6edf5]')}>
             {!isLightPlatformView ? (
             <div className="rounded-2xl border border-emerald-300/14 bg-emerald-300/[0.07] p-4">
               <div className="flex items-center justify-between gap-3">
@@ -112,17 +152,25 @@ export function PlatformConsole() {
             ) : null}
             <LogoutButton
               redirectTo="/platform-login"
+              ariaLabel={isSidebarCollapsed ? '退出平台' : undefined}
               className={cn(
-                'flex h-10 w-full rounded-xl text-sm font-semibold',
+                'flex h-10 rounded-xl text-sm font-semibold',
+                isSidebarCollapsed ? 'w-10 px-0' : 'w-full',
                 isLightPlatformView ? 'text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#1f2937]' : 'text-[#64748b] hover:bg-[#f8fafc] hover:text-[#1f2937]',
               )}
             >
-              退出
+              {isSidebarCollapsed ? '' : '退出'}
             </LogoutButton>
           </div>
         </aside>
 
-        <section className="min-w-0 flex-1">
+        <section
+          aria-label="平台端主内容"
+          className={cn(
+            'min-w-0 flex-1 transition-[padding] duration-200',
+            isSidebarCollapsed ? 'md:pl-16' : isLightPlatformView ? 'md:pl-[228px]' : 'md:pl-[286px]',
+          )}
+        >
           <header className={cn(
             'flex items-center justify-between border-b px-4 sm:px-6 lg:px-8',
             isLightPlatformView
