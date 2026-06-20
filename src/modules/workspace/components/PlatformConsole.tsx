@@ -17,10 +17,10 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
-import { AiQuotaBoundaryPanel } from '@/modules/open-platform/components/AiQuotaBoundaryPanel';
 import { CommercialBoundaryPanel } from '@/modules/open-platform/components/CommercialBoundaryPanel';
 import { HomepageBrandPanel } from '@/modules/open-platform/components/HomepageBrandPanel';
 import { OpenConnectionRoadmapPanel } from '@/modules/open-platform/components/OpenConnectionRoadmapPanel';
+import { OpenPlatformAiModelConfigPanel } from '@/modules/open-platform/components/OpenPlatformAiModelConfigPanel';
 import { OpenPlatformAiReadonlyPanel } from '@/modules/open-platform/components/OpenPlatformAiReadonlyPanel';
 import { OpenPlatformAuditEventsPanel } from '@/modules/open-platform/components/OpenPlatformAuditEventsPanel';
 import { OpenPlatformGovernancePanel } from '@/modules/open-platform/components/OpenPlatformGovernancePanel';
@@ -64,28 +64,29 @@ const systemHealthTone = {
 export function PlatformConsole() {
   const [activeNavLabel, setActiveNavLabel] = useState('平台总览');
   const isAiUsageView = activeNavLabel === 'AI用量与费用';
+  const isLightPlatformView = isAiUsageView || activeNavLabel === 'AI模型配置';
 
   return (
-    <main className={cn('min-h-screen overflow-x-hidden', isAiUsageView ? 'bg-[#f7f9fc] text-slate-950' : 'bg-[#06111f] text-white')}>
-      {!isAiUsageView ? (
+    <main className={cn('min-h-screen overflow-x-hidden', isLightPlatformView ? 'bg-[#f7f9fc] text-slate-950' : 'bg-[#06111f] text-white')}>
+      {!isLightPlatformView ? (
         <div className="fixed inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(37,99,235,0.28),transparent_34%),radial-gradient(circle_at_82%_20%,rgba(20,184,166,0.18),transparent_30%),linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[length:auto,auto,44px_44px,44px_44px]" />
       ) : null}
       <div className="relative flex min-h-screen">
         <aside className={cn(
           'hidden shrink-0 border-r md:flex md:flex-col',
-          isAiUsageView
+          isLightPlatformView
             ? 'w-[228px] border-[#e6edf5] bg-white text-[#1f2937]'
             : 'w-[286px] border-white/10 bg-[#071322]/88 text-slate-200 shadow-2xl shadow-black/30 backdrop-blur-xl',
         )}>
-          <div className={cn('flex items-center gap-3 border-b px-5', isAiUsageView ? 'h-[70px] border-[#e6edf5]' : 'h-[86px] border-white/10')}>
-            <Image src="/brand/logo-mark.png" alt="" width={50} height={50} className={cn('rounded-xl bg-white object-contain', isAiUsageView ? 'h-10 w-10 p-1' : 'h-[50px] w-[50px] p-1.5')} />
+          <div className={cn('flex items-center gap-3 border-b px-5', isLightPlatformView ? 'h-[70px] border-[#e6edf5]' : 'h-[86px] border-white/10')}>
+            <Image src="/brand/logo-mark.png" alt="" width={50} height={50} className={cn('rounded-xl bg-white object-contain', isLightPlatformView ? 'h-10 w-10 p-1' : 'h-[50px] w-[50px] p-1.5')} />
             <div>
-              <div className={cn('text-base font-semibold tracking-normal', isAiUsageView ? 'text-[#1f2937]' : 'text-white')}>智美天工管理后台</div>
-              <div className={cn('mt-0.5 text-xs', isAiUsageView ? 'text-[#64748b]' : 'text-cyan-200/70')}>Platform Console</div>
+              <div className={cn('text-base font-semibold tracking-normal', isLightPlatformView ? 'text-[#1f2937]' : 'text-white')}>智美天工管理后台</div>
+              <div className={cn('mt-0.5 text-xs', isLightPlatformView ? 'text-[#64748b]' : 'text-cyan-200/70')}>Platform Console</div>
             </div>
           </div>
 
-          {isAiUsageView ? (
+          {isLightPlatformView ? (
             <div className="flex h-[58px] items-center justify-between border-b border-[#e6edf5] px-6 text-sm text-[#64748b]">
               <span>平台菜单</span>
               <Command className="h-4 w-4" />
@@ -102,7 +103,7 @@ export function PlatformConsole() {
             </div>
           )}
 
-          <nav className={cn('flex-1 space-y-1 overflow-y-auto', isAiUsageView ? 'px-4 py-4' : 'px-4')}>
+          <nav className={cn('flex-1 space-y-1 overflow-y-auto', isLightPlatformView ? 'px-4 py-4' : 'px-4')}>
             {platformNavItems.map((item) => (
               <button
                 key={item.label}
@@ -110,7 +111,7 @@ export function PlatformConsole() {
                 onClick={() => setActiveNavLabel(item.label)}
                 className={cn(
                   'flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium tracking-normal transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#bfdbfe]',
-                  isAiUsageView
+                  isLightPlatformView
                     ? activeNavLabel === item.label
                       ? 'bg-[#eaf3ff] text-[#2563eb]'
                       : 'text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#1f2937]'
@@ -125,8 +126,8 @@ export function PlatformConsole() {
             ))}
           </nav>
 
-          <div className={cn('space-y-3 border-t p-5', isAiUsageView ? 'border-[#e6edf5]' : 'border-white/10')}>
-            {!isAiUsageView ? (
+          <div className={cn('space-y-3 border-t p-5', isLightPlatformView ? 'border-[#e6edf5]' : 'border-white/10')}>
+            {!isLightPlatformView ? (
             <div className="rounded-2xl border border-emerald-300/14 bg-emerald-300/[0.07] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -141,7 +142,7 @@ export function PlatformConsole() {
               redirectTo="/platform-login"
               className={cn(
                 'flex h-10 w-full rounded-xl text-sm font-semibold',
-                isAiUsageView ? 'text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#1f2937]' : 'text-slate-300 hover:bg-white/[0.08] hover:text-white',
+                isLightPlatformView ? 'text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#1f2937]' : 'text-slate-300 hover:bg-white/[0.08] hover:text-white',
               )}
             >
               退出
@@ -152,52 +153,52 @@ export function PlatformConsole() {
         <section className="min-w-0 flex-1">
           <header className={cn(
             'flex items-center justify-between border-b px-4 sm:px-6 lg:px-8',
-            isAiUsageView
+            isLightPlatformView
               ? 'min-h-[70px] border-[#e6edf5] bg-white'
               : 'min-h-[78px] border-white/10 bg-[#071322]/72 backdrop-blur-xl',
           )}>
             <div className="flex min-w-0 items-center gap-3">
-              <Image src="/brand/logo-mark.png" alt="" width={42} height={42} className={cn('h-10 w-10 rounded-xl bg-white object-contain p-1 md:hidden', isAiUsageView ? 'border border-[#e6edf5]' : '')} />
+              <Image src="/brand/logo-mark.png" alt="" width={42} height={42} className={cn('h-10 w-10 rounded-xl bg-white object-contain p-1 md:hidden', isLightPlatformView ? 'border border-[#e6edf5]' : '')} />
               <div className="min-w-0">
-                <div className={cn('truncate text-sm font-semibold md:text-base', isAiUsageView ? 'text-transparent md:hidden' : 'text-white')}>智美天工平台运营中枢</div>
-                <div className={cn('mt-0.5 text-xs', isAiUsageView ? 'text-transparent md:hidden' : 'text-slate-400')}>租户、套餐、配额与安全审计</div>
+                <div className={cn('truncate text-sm font-semibold md:text-base', isLightPlatformView ? 'text-transparent md:hidden' : 'text-white')}>智美天工平台运营中枢</div>
+                <div className={cn('mt-0.5 text-xs', isLightPlatformView ? 'text-transparent md:hidden' : 'text-slate-400')}>租户、套餐、配额与安全审计</div>
               </div>
             </div>
-            <div className={cn('flex items-center gap-3 text-sm', isAiUsageView ? 'text-[#64748b]' : 'text-slate-300')}>
+            <div className={cn('flex items-center gap-3 text-sm', isLightPlatformView ? 'text-[#64748b]' : 'text-slate-300')}>
               <button
                 type="button"
                 aria-label="通知"
                 className={cn(
                   'relative grid h-10 w-10 place-items-center rounded-xl border',
-                  isAiUsageView ? 'border-transparent bg-white text-[#64748b]' : 'border-white/10 bg-white/[0.06] text-slate-300',
+                  isLightPlatformView ? 'border-transparent bg-white text-[#64748b]' : 'border-white/10 bg-white/[0.06] text-slate-300',
                 )}
               >
                 <Bell className="h-5 w-5" />
-                {isAiUsageView ? <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" /> : null}
+                {isLightPlatformView ? <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" /> : null}
               </button>
               <LogoutButton
                 redirectTo="/platform-login"
                 className={cn(
                   'h-10 shrink-0 rounded-xl border px-3 text-xs font-semibold md:hidden',
-                  isAiUsageView ? 'border-[#e6edf5] bg-white text-[#64748b]' : 'border-white/10 bg-white/[0.06] text-slate-300',
+                  isLightPlatformView ? 'border-[#e6edf5] bg-white text-[#64748b]' : 'border-white/10 bg-white/[0.06] text-slate-300',
                 )}
               >
                 退出平台
               </LogoutButton>
               <span className={cn(
                 'hidden items-center gap-2 rounded-full border px-3 py-1.5 font-semibold sm:inline-flex',
-                isAiUsageView ? 'border-transparent bg-white text-[#1f2937]' : 'border-blue-300/20 bg-blue-300/[0.08] text-cyan-100',
+                isLightPlatformView ? 'border-transparent bg-white text-[#1f2937]' : 'border-blue-300/20 bg-blue-300/[0.08] text-cyan-100',
               )}>
-                <span className={cn('grid h-6 w-6 place-items-center rounded-full text-xs', isAiUsageView ? 'bg-[#eaf3ff] text-[#2563eb]' : 'bg-cyan-300/20 text-cyan-100')}>超</span>
+                <span className={cn('grid h-6 w-6 place-items-center rounded-full text-xs', isLightPlatformView ? 'bg-[#eaf3ff] text-[#2563eb]' : 'bg-cyan-300/20 text-cyan-100')}>超</span>
                 超级管理员
               </span>
             </div>
           </header>
 
-          <nav aria-label="平台端移动导航" className={cn('border-b px-4 py-3 md:hidden', isAiUsageView ? 'border-[#e6edf5] bg-white' : 'border-white/10 bg-[#071322]/82 backdrop-blur-xl')}>
+          <nav aria-label="平台端移动导航" className={cn('border-b px-4 py-3 md:hidden', isLightPlatformView ? 'border-[#e6edf5] bg-white' : 'border-white/10 bg-[#071322]/82 backdrop-blur-xl')}>
             <div className="mb-2 flex items-center justify-between gap-3">
-              <span className={cn('text-xs font-semibold', isAiUsageView ? 'text-[#64748b]' : 'text-slate-400')}>平台导航</span>
-              <span className={cn('rounded-full border px-2.5 py-1 text-xs font-semibold', isAiUsageView ? 'border-[#e6edf5] bg-[#f8fafc] text-[#64748b]' : 'border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-200')}>服务正常</span>
+              <span className={cn('text-xs font-semibold', isLightPlatformView ? 'text-[#64748b]' : 'text-slate-400')}>平台导航</span>
+              <span className={cn('rounded-full border px-2.5 py-1 text-xs font-semibold', isLightPlatformView ? 'border-[#e6edf5] bg-[#f8fafc] text-[#64748b]' : 'border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-200')}>服务正常</span>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {platformNavItems.map((item) => (
@@ -208,7 +209,7 @@ export function PlatformConsole() {
                   onClick={() => setActiveNavLabel(item.label)}
                   className={cn(
                     'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold tracking-normal',
-                    isAiUsageView
+                    isLightPlatformView
                       ? activeNavLabel === item.label
                         ? 'border-[#bfdbfe] bg-[#eaf3ff] text-[#2563eb]'
                         : 'border-[#e6edf5] bg-white text-[#64748b]'
@@ -226,7 +227,7 @@ export function PlatformConsole() {
 
           <div className={cn(
             'mx-auto w-full space-y-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-7',
-            isAiUsageView ? 'max-w-none bg-[#f7f9fc]' : 'max-w-[1740px]',
+            isLightPlatformView ? 'max-w-none bg-[#f7f9fc]' : 'max-w-[1740px]',
           )}>
             {activeNavLabel === '首页与品牌' ? (
               <HomepageBrandPanel />
@@ -235,7 +236,7 @@ export function PlatformConsole() {
             ) : activeNavLabel === '产品与套餐' ? (
               <ProductPlanPanel />
             ) : activeNavLabel === 'AI模型配置' ? (
-              <AiQuotaBoundaryPanel />
+              <OpenPlatformAiModelConfigPanel />
             ) : activeNavLabel === 'AI用量与费用' ? (
               <OpenPlatformAiReadonlyPanel />
             ) : activeNavLabel === '知识库管理' ? (

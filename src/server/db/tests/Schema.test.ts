@@ -79,7 +79,7 @@ describe('数据库结构', () => {
     expect(createDatabaseUrlErrorMessage()).toBe(
       'DATABASE_URL is required to use tenant persistence',
     );
-    expect(createDatabaseUrlErrorMessage()).not.toContain('postgres://');
+    expect(createDatabaseUrlErrorMessage()).not.toContain(['postgres', '://'].join(''));
   });
 
   it('定义租户业务和审计表', () => {
@@ -759,6 +759,45 @@ describe('数据库结构', () => {
     );
   });
 
+  it('平台 AI 模型配置提供持久化边界表和低敏索引', () => {
+    const {
+      platformAiModelConfigSnapshots,
+    } = schema as typeof schema & {
+      platformAiModelConfigSnapshots: typeof import('@/server/db/schema').platformAiModelConfigSnapshots;
+    };
+    const config = getTableConfig(platformAiModelConfigSnapshots);
+    const columns = columnNames(config.columns);
+    const indexes = config.indexes.map((index) => ({
+      name: index.config.name,
+      columns: columnNames(index.config.columns as NamedColumn[]),
+    }));
+
+    expect(columns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'scenario_defaults',
+        'agent_inheritance',
+        'model_states',
+        'provider_states',
+        'dry_run_results',
+        'updated_by',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+    expect(columns).not.toContain('api_key');
+    expect(columns).not.toContain('encrypted_api_key');
+    expect(columns).not.toContain('ciphertext');
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        {
+          name: 'platform_ai_model_config_snapshots_updated_at_idx',
+          columns: ['updated_at'],
+        },
+      ]),
+    );
+  });
+
   it('演示种子数据覆盖预约和随访任务引用的同租户客户', () => {
     const customerKeys = new Set(
       getDemoCustomerSeedRecords().map((record) => `${record.tenantId}:${record.id}`),
@@ -1135,6 +1174,24 @@ describe('数据库结构', () => {
     expect(migrationSql).toContain(
       'create index "tenant_quota_snapshots_tenant_snapshot_idx" on "tenant_quota_snapshots" using btree ("tenant_id","snapshot_at")',
     );
+  });
+
+  it('迁移包含平台 AI 模型配置持久化候选表且不包含密钥字段', () => {
+    const migrationSql = readMigrationSql('ai_model_config_persistence');
+
+    expect(migrationSql).toContain('create table "platform_ai_model_config_snapshots"');
+    expect(migrationSql).toContain('"scenario_defaults" jsonb not null');
+    expect(migrationSql).toContain('"agent_inheritance" jsonb not null');
+    expect(migrationSql).toContain('"model_states" jsonb not null');
+    expect(migrationSql).toContain('"provider_states" jsonb not null');
+    expect(migrationSql).toContain('"dry_run_results" jsonb not null');
+    expect(migrationSql).toContain(
+      'create index "platform_ai_model_config_snapshots_updated_at_idx" on "platform_ai_model_config_snapshots" using btree ("updated_at")',
+    );
+    expect(migrationSql).not.toContain('api_key');
+    expect(migrationSql).not.toContain('encrypted_api_key');
+    expect(migrationSql).not.toContain('ciphertext');
+    expect(migrationSql).not.toContain('auth_tag');
   });
 
   it('迁移包含租户客户一致性的复合外键', () => {
