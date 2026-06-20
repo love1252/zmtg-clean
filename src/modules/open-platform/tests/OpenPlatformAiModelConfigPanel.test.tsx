@@ -367,6 +367,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
       expect(screen.getByText('同步已完成：豆包')).toBeInTheDocument();
       expect(screen.getByText('测试已完成：Seed Pro 2.0')).toBeInTheDocument();
     });
+    expect(screen.getByText('测试已完成：Seed Pro 2.0').closest('div')).toHaveClass('md:flex-wrap');
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('provider-key-value');
     expectNoForbiddenContent(container);
   });

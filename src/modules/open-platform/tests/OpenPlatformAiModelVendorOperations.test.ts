@@ -9,7 +9,7 @@ import {
   runAiModelVendorSync,
   runAiModelVendorTest,
 } from '@/modules/open-platform/server/platformAiModelVendorOperations';
-import { getSupportedVendorConfig, type SupportedVendor } from '@/modules/open-platform/domain/vendor-catalog';
+import { getSupportedVendorConfig, listSupportedVendors, type SupportedVendor } from '@/modules/open-platform/domain/vendor-catalog';
 import type { VendorProviderConfigRecord } from '@/modules/open-platform/server/vendorProviderConfigTypes';
 
 type MockVendorFetcher = (input: string, init?: RequestInit) => Promise<Response>;
@@ -652,5 +652,31 @@ describe('AI 模型厂商同步与测试 route', () => {
     expect(JSON.stringify(routeFetch.mock.calls)).not.toContain('dashscope');
     expect(JSON.stringify(routeFetch.mock.calls)).not.toContain('moonshot');
     expectLowSensitivePayload(payload);
+  });
+
+  it('测试 route 默认 dry-run 时五家厂商不依赖已保存 Key 记录', async () => {
+    const cases = listSupportedVendors().map((vendor) => ({
+      vendor,
+      modelId: getSupportedVendorConfig(vendor).defaultModel,
+    }));
+
+    for (const testCase of cases) {
+      const response = await testRoute.POST(new Request('http://localhost/api/v1/open-platform/ai-model-config/test', {
+        method: 'POST',
+        body: JSON.stringify(testCase),
+      }));
+      const payload = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(payload).toMatchObject({
+        vendor: testCase.vendor,
+        modelId: testCase.modelId,
+        status: 'success',
+      });
+      expectLowSensitivePayload(payload);
+    }
+
+    expect(routeRepository.findByVendor).not.toHaveBeenCalled();
+    expect(routeFetch).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as viewLoader from '@/modules/open-platform/lib/platformKnowledgeManagementViewLoader';
 import { OpenPlatformKnowledgeManagementPanel } from '@/modules/open-platform/components/OpenPlatformKnowledgeManagementPanel';
 import { PlatformConsole } from '@/modules/workspace/components/PlatformConsole';
+import {
+  getPlatformKnowledgeFilesResponse,
+  getPlatformKnowledgeItemsResponse,
+  getPlatformKnowledgeOverviewResponse,
+} from '@/modules/open-platform/server/platformKnowledgeManagementApiContract';
 
 vi.mock('@/modules/open-platform/lib/platformKnowledgeManagementViewLoader', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/modules/open-platform/lib/platformKnowledgeManagementViewLoader')>();
@@ -33,9 +38,159 @@ describe('平台端知识库管理只读看板', () => {
     vi.clearAllMocks();
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string, init?: RequestInit) => {
+      vi.fn(async (url: string | Request | URL, init?: RequestInit) => {
+        const requestUrl = typeof url === 'string' ? url : url instanceof Request ? url.url : url.toString();
+        const parsedUrl = new URL(requestUrl, 'http://localhost');
         const method = init?.method ?? 'GET';
-        if (url.includes('/api/v1/open-platform/knowledge-management/capabilities')) {
+        if (parsedUrl.pathname === '/api/v1/open-platform/knowledge-management/directories/reorder' && method === 'PATCH') {
+          return Response.json({
+            requestId: 'open-platform-knowledge-directory-management',
+            readonly: false,
+            status: 'reordered',
+            message: '目录排序已保存',
+            affected: {
+              sources: 2,
+              documents: 0,
+              chunks: 0,
+              jobs: 0,
+            },
+          });
+        }
+        if (parsedUrl.pathname === '/api/v1/open-platform/knowledge-management/directories' && method === 'POST') {
+          const body = typeof init?.body === 'string'
+            ? JSON.parse(init.body) as { name?: string; parentId?: string | null }
+            : {};
+          const name = body.name ?? '新目录';
+          const parentId = body.parentId ?? null;
+          const isChild = Boolean(parentId);
+          return Response.json({
+            requestId: 'open-platform-knowledge-directory-management',
+            readonly: false,
+            status: 'created',
+            message: '目录已创建',
+            directory: {
+              directoryId: isChild
+                ? `${parentId}:child:${encodeURIComponent(name)}`
+                : `directory:library:${encodeURIComponent(name)}`,
+              parentId,
+              kind: isChild ? 'folder' : 'knowledge_library',
+              name,
+              depth: isChild ? 1 : 0,
+              sortOrder: isChild ? 101 : 100,
+              knowledgeCount: 0,
+              fileCount: 0,
+              canRename: true,
+              canCreateChild: !isChild,
+              canArchive: true,
+              archiveBlockedReason: null,
+              status: 'active',
+            },
+            affected: {
+              sources: 1,
+              documents: 0,
+              chunks: 0,
+              jobs: 0,
+            },
+          }, { status: 201 });
+        }
+        if (parsedUrl.pathname.includes('/api/v1/open-platform/knowledge-management/directories/') && method === 'PATCH') {
+          const body = typeof init?.body === 'string' ? JSON.parse(init.body) as { name?: string } : {};
+          const name = body.name ?? '自定义目录';
+          return Response.json({
+            requestId: 'open-platform-knowledge-directory-management',
+            readonly: false,
+            status: 'renamed',
+            message: '目录名称已保存',
+            directory: {
+              directoryId: `directory:library:${encodeURIComponent(name)}`,
+              parentId: null,
+              kind: 'knowledge_library',
+              name,
+              depth: 0,
+              sortOrder: 100,
+              knowledgeCount: 1,
+              fileCount: 1,
+              canRename: true,
+              canCreateChild: true,
+              canArchive: false,
+              archiveBlockedReason: '目录下仍有知识条目或文件',
+              status: 'active',
+            },
+            affected: {
+              sources: 1,
+              documents: 0,
+              chunks: 0,
+              jobs: 0,
+            },
+          });
+        }
+        if (parsedUrl.pathname.includes('/api/v1/open-platform/knowledge-management/directories/') && method === 'DELETE') {
+          const encodedDirectoryId = parsedUrl.pathname.split('/').at(-1) ?? '';
+          const directoryId = decodeURIComponent(decodeURIComponent(encodedDirectoryId));
+          if (directoryId.includes('新目录') || directoryId.includes('新子目录')) {
+            return Response.json({
+              requestId: 'open-platform-knowledge-directory-management',
+              readonly: false,
+              status: 'archived',
+              message: '目录已归档',
+              directory: {
+                directoryId,
+                parentId: null,
+                kind: 'knowledge_library',
+                name: directoryId.includes('新子目录') ? '新子目录' : '新目录',
+                depth: 0,
+                sortOrder: 100,
+                knowledgeCount: 0,
+                fileCount: 0,
+                canRename: true,
+                canCreateChild: true,
+                canArchive: false,
+                archiveBlockedReason: '目录已归档',
+                status: 'archived',
+              },
+            });
+          }
+          return Response.json({
+            requestId: 'open-platform-knowledge-directory-management',
+            readonly: false,
+            status: 'blocked',
+            message: '目录下仍有知识条目或文件，请先迁移后再归档',
+          }, { status: 409 });
+        }
+        if (parsedUrl.pathname === '/api/v1/open-platform/knowledge-management') {
+          return Response.json({
+            ...getPlatformKnowledgeOverviewResponse({
+            tenantId: parsedUrl.searchParams.get('tenantId'),
+            }),
+            dataSource: 'repository',
+          });
+        }
+        if (parsedUrl.pathname === '/api/v1/open-platform/knowledge-management/files') {
+          return Response.json({
+            ...getPlatformKnowledgeFilesResponse({
+            tenantId: parsedUrl.searchParams.get('tenantId'),
+            keyword: parsedUrl.searchParams.get('keyword'),
+            status: parsedUrl.searchParams.get('status'),
+            page: parsedUrl.searchParams.get('page'),
+            pageSize: parsedUrl.searchParams.get('pageSize'),
+            }),
+            dataSource: 'repository',
+          });
+        }
+        if (parsedUrl.pathname === '/api/v1/open-platform/knowledge-management/items') {
+          return Response.json({
+            ...getPlatformKnowledgeItemsResponse({
+            tenantId: parsedUrl.searchParams.get('tenantId'),
+            keyword: parsedUrl.searchParams.get('keyword'),
+            category: parsedUrl.searchParams.get('category'),
+            trainingStatus: parsedUrl.searchParams.get('trainingStatus'),
+            page: parsedUrl.searchParams.get('page'),
+            pageSize: parsedUrl.searchParams.get('pageSize'),
+            }),
+            dataSource: 'repository',
+          });
+        }
+        if (requestUrl.includes('/api/v1/open-platform/knowledge-management/capabilities')) {
           return Response.json({
             requestId: 'knowledge-base-production-capabilities',
             readonly: true,
@@ -249,7 +404,7 @@ describe('平台端知识库管理只读看板', () => {
             },
           });
         }
-        if (url.includes('/api/v1/open-platform/knowledge-management/qa/audits')) {
+        if (requestUrl.includes('/api/v1/open-platform/knowledge-management/qa/audits')) {
           return Response.json({
             requestId: 'platform-knowledge-qa-audits',
             readonly: true,
@@ -284,7 +439,7 @@ describe('平台端知识库管理只读看板', () => {
             },
           });
         }
-        if (url.includes('/api/v1/open-platform/knowledge-management/qa')) {
+        if (requestUrl.includes('/api/v1/open-platform/knowledge-management/qa')) {
           return Response.json({
             answer: '基于已召回的知识片段：平台端知识库问答回答。',
             citations: [
@@ -305,7 +460,7 @@ describe('平台端知识库管理只读看板', () => {
             safeStatus: 'answered',
           });
         }
-        if (url.includes('/api/v1/open-platform/knowledge-management/embeddings')) {
+        if (requestUrl.includes('/api/v1/open-platform/knowledge-management/embeddings')) {
           return Response.json({
             status: 'succeeded',
             embeddingCount: 1,
@@ -324,7 +479,7 @@ describe('平台端知识库管理只读看板', () => {
             ],
           });
         }
-        if (url.includes('/api/v1/open-platform/knowledge-management/vector-search')) {
+        if (requestUrl.includes('/api/v1/open-platform/knowledge-management/vector-search')) {
           return Response.json({
             requestId: 'platform-knowledge-vector-search',
             readonly: true,
@@ -356,7 +511,7 @@ describe('平台端知识库管理只读看板', () => {
             },
           });
         }
-        if (url.includes('/api/v1/open-platform/knowledge-management/search')) {
+        if (requestUrl.includes('/api/v1/open-platform/knowledge-management/search')) {
           return Response.json({
             requestId: 'platform-knowledge-keyword-search',
             readonly: true,
@@ -387,7 +542,7 @@ describe('平台端知识库管理只读看板', () => {
             },
           });
         }
-        if (url.includes('/parse/chunks')) {
+        if (requestUrl.includes('/parse/chunks')) {
           return Response.json({
             records: [
               {
@@ -404,7 +559,7 @@ describe('平台端知识库管理只读看板', () => {
             ],
           });
         }
-        if (url.includes('/parse') && method === 'POST') {
+        if (requestUrl.includes('/parse') && method === 'POST') {
           return Response.json({
             status: 'succeeded',
             parse: {
@@ -423,7 +578,7 @@ describe('平台端知识库管理只读看板', () => {
             },
           });
         }
-        if (url.includes('/download')) {
+        if (requestUrl.includes('/download')) {
           return new Response('file bytes', {
             status: 200,
             headers: {
@@ -535,15 +690,16 @@ describe('平台端知识库管理只读看板', () => {
     expect(screen.getByText('正在读取只读运营 contract。')).toBeInTheDocument();
   });
 
-  it('可以从平台侧菜单进入知识库管理页面并展示只读运营模块', async () => {
+  it('可以从平台侧菜单进入白色主题知识库工作台并默认展示文件管理', async () => {
     const { container } = render(<PlatformConsole />);
 
     fireEvent.click(screen.getByRole('button', { name: '知识库管理' }));
 
-    expect(await screen.findByText('平台知识运营中枢')).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: '机构概况' })).toBeInTheDocument();
+    expect(container.querySelector('main')).toHaveClass('bg-[#f7f9fc]');
     expect(screen.getByRole('heading', { name: '知识库管理' })).toBeInTheDocument();
-    expect(screen.getByText('查看各机构知识解析、命中表现、导入概况和高频问题。')).toBeInTheDocument();
+    expect(screen.getByText('按机构、目录、文件和问答链路管理知识库。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '上传文档' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '新建知识' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '同步数据' })).toBeInTheDocument();
     expect(viewLoader.loadOpenPlatformKnowledgeManagementView).toHaveBeenCalledWith({ tenantId: null });
     expect(viewLoader.loadOpenPlatformKnowledgeManagementFiles).toHaveBeenCalledWith({
@@ -558,28 +714,55 @@ describe('平台端知识库管理只读看板', () => {
       pageSize: 50,
     });
 
-    expect(screen.getByText('接入机构')).toBeInTheDocument();
+    expect(await screen.findByText('接入机构')).toBeInTheDocument();
     expect(screen.getAllByText('知识条目')[0]).toBeInTheDocument();
     expect(screen.getAllByText('累计命中')[0]).toBeInTheDocument();
     expect(screen.getAllByText('解析覆盖')[0]).toBeInTheDocument();
     expect(screen.getByText('待优化')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '机构概况' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '知识目录' })).toBeInTheDocument();
+    const workbench = screen.getByLabelText('知识库管理工作台');
+    expect(within(workbench).getByLabelText('知识目录')).toBeInTheDocument();
+    expect(within(workbench).getByLabelText('文件管理工作区')).toBeInTheDocument();
+    expect(within(workbench).getByLabelText('运营信号')).toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: '知识库工作区' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '文件管理' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: '知识条目' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '检索测试' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '问答审计' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '导入任务' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '文件管理' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '运营信号' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '机构上传文件' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '分类表现' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '高频问题' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '知识条目' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '导入与解析任务' })).toBeInTheDocument();
+    expect(screen.getByText('高频提问 TOP 5')).toBeInTheDocument();
+    expect(screen.getByText('热门知识分类 TOP 5')).toBeInTheDocument();
+    expect(screen.getByText('命中次数（近7天）')).toBeInTheDocument();
+    expect(screen.getByText('导入成功率（近7天）')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '更多筛选' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '解析已选' })).toBeDisabled();
+    expect(
+      Array.from(container.querySelectorAll('[class]')).some((element) =>
+        element.getAttribute('class')?.includes('xl:grid-cols-[1fr_300px_300px]'),
+      ),
+    ).toBe(false);
+    expect(
+      Array.from(container.querySelectorAll('[class]')).some((element) =>
+        element.getAttribute('class')?.includes('xl:grid-cols-[240px_minmax(0,1fr)_260px]') &&
+        element.getAttribute('class')?.includes('items-start'),
+      ),
+    ).toBe(true);
+    expect(screen.queryByLabelText('当前知识库范围')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('知识库功能真实性状态')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '功能真实性' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '机构上传文件' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '文件管理操作' })).not.toBeInTheDocument();
 
     expectNoRawRuntimeError(container);
-    expect(screen.getByRole('heading', { name: '文件管理操作' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '上传文件' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: '下载文件' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: '归档文件' })).toBeInTheDocument();
     expect(container.textContent).not.toContain('真实下载');
     expect(container.textContent).not.toContain('开始训练');
     expect(container.textContent).not.toContain('CSV 导出');
-    expect(screen.queryByRole('button', { name: /导出|训练|新增|编辑|删除/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /导出|训练|编辑|删除/ })).not.toBeInTheDocument();
     expect(container.querySelector('input[type="file"]')).toBeInTheDocument();
     expect(container.querySelector('a[download]')).toBeNull();
   });
@@ -587,7 +770,7 @@ describe('平台端知识库管理只读看板', () => {
   it('平台端文件管理操作区支持上传、下载、解析、查看片段和归档 API 调用', async () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
-    expect(await screen.findByRole('heading', { name: '文件管理操作' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '上传与解析' })).toBeInTheDocument();
     expect(await screen.findByText('平台文件.pdf')).toBeInTheDocument();
 
     const uploadInput = screen.getByLabelText('选择知识库文件');
@@ -640,9 +823,210 @@ describe('平台端知识库管理只读看板', () => {
     );
   });
 
+  it('顶部上传文档入口会跳转到真实上传区并打开文件选择', async () => {
+    const inputClickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => undefined);
+    const scrollIntoViewSpy = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoViewSpy,
+    });
+
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    expect(await screen.findByRole('heading', { name: '上传与解析' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '上传文档' }));
+
+    await waitFor(() => expect(scrollIntoViewSpy).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' }));
+    expect(inputClickSpy).toHaveBeenCalled();
+
+    inputClickSpy.mockRestore();
+  });
+
+  it('上传区选择文件和上传文件控件保持单行文案', async () => {
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    expect(await screen.findByRole('heading', { name: '上传与解析' })).toBeInTheDocument();
+    const uploadInput = screen.getByLabelText('选择知识库文件');
+    const chooseFileControl = uploadInput.closest('label');
+    const uploadButton = screen.getByRole('button', { name: '上传文件' });
+
+    expect(chooseFileControl).toHaveClass('whitespace-nowrap');
+    expect(chooseFileControl).toHaveClass('min-w-[96px]');
+    expect(uploadButton).toHaveClass('whitespace-nowrap');
+    expect(uploadButton).toHaveClass('min-w-[96px]');
+  });
+
+  it('顶部上传文档入口在没有可绑定知识条目时展示阻断原因', async () => {
+    const inputClickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => undefined);
+    vi.mocked(viewLoader.loadOpenPlatformKnowledgeManagementItems).mockResolvedValueOnce({
+      requestId: 'open-platform-knowledge-management-items',
+      readonly: true,
+      dataSource: 'repository',
+      records: [],
+      pageInfo: {
+        page: 1,
+        pageSize: 50,
+        total: 0,
+        pageCount: 0,
+        hasPreviousPage: false,
+        hasNextPage: false,
+      },
+      emptyState: {
+        title: '暂无匹配的知识库运营数据',
+        description: '请调整机构范围或文件名搜索条件后再查看。',
+      },
+    });
+
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    expect(await screen.findByRole('heading', { name: '上传与解析' })).toBeInTheDocument();
+    const ownerSelect = screen.getByLabelText('选择文件所属知识库');
+    expect(ownerSelect).toBeDisabled();
+    expect(within(ownerSelect).getByRole('option', { name: '暂无可选知识库' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '上传文档' }));
+
+    expect(await screen.findByText('暂无可上传的知识库条目，请先新建知识后再上传文档。')).toBeInTheDocument();
+    expect(inputClickSpy).not.toHaveBeenCalled();
+
+    inputClickSpy.mockRestore();
+  });
+
+  it('左侧知识目录使用服务端目录 contract 而不是硬编码目录', async () => {
+    vi.mocked(viewLoader.loadOpenPlatformKnowledgeManagementView).mockResolvedValueOnce({
+      ...getPlatformKnowledgeOverviewResponse(),
+      dataSource: 'repository',
+      scopeName: '全部机构',
+      allTenantStats: {
+        tenantId: 'all',
+        tenantName: '全部机构',
+        status: 'active',
+        knowledgeCount: 3,
+        folderCount: 2,
+        hitCount: 0,
+        trainedCount: 0,
+        failedTrainingCount: 0,
+        zeroHitCount: 0,
+        chunkCount: 0,
+        averageHitCount: 0,
+        hitCoverageRate: 0,
+        trainingCoverageRate: 0,
+        importSuccessRate: 0,
+      },
+      directories: [
+        {
+          directoryId: 'library-custom-root',
+          parentId: null,
+          name: '自定义知识库',
+          depth: 0,
+          sortOrder: 10,
+          knowledgeCount: 2,
+          fileCount: 1,
+          canRename: true,
+          canCreateChild: true,
+          canArchive: false,
+          archiveBlockedReason: '目录下仍有知识条目',
+          status: 'active',
+        },
+        {
+          directoryId: 'folder-custom-child',
+          parentId: 'library-custom-root',
+          name: '自定义子目录',
+          depth: 1,
+          sortOrder: 20,
+          knowledgeCount: 1,
+          fileCount: 1,
+          canRename: true,
+          canCreateChild: false,
+          canArchive: true,
+          archiveBlockedReason: null,
+          status: 'active',
+        },
+      ],
+    } as unknown as viewLoader.OpenPlatformKnowledgeManagementView);
+
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    const directory = await screen.findByLabelText('知识目录');
+    expect(within(directory).getByText('自定义知识库')).toBeInTheDocument();
+    expect(within(directory).getByText('自定义子目录')).toBeInTheDocument();
+    expect(within(directory).queryByText('医学美容知识库')).not.toBeInTheDocument();
+  });
+
+  it('选定具体机构后可 inline 重命名目录并展示保存状态', async () => {
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    const directory = await screen.findByLabelText('知识目录');
+    fireEvent.click(within(directory).getByRole('button', { name: /星澜医美中心/ }));
+    const renameButton = await within(directory).findByRole('button', { name: '重命名 话术库' });
+
+    fireEvent.click(renameButton);
+    const nameInput = within(directory).getByLabelText('目录名称');
+    fireEvent.change(nameInput, { target: { value: '自定义话术库' } });
+    fireEvent.click(within(directory).getByRole('button', { name: '保存目录名称' }));
+
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/open-platform/knowledge-management/directories/'),
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({ tenantId: 'tenant-xinglan', name: '自定义话术库' }),
+        }),
+      ),
+    );
+    expect(await within(directory).findByText('目录名称已保存')).toBeInTheDocument();
+    expect(within(directory).getByText('自定义话术库')).toBeInTheDocument();
+  });
+
+  it('目录新增、空目录归档和排序入口使用真实状态反馈', async () => {
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    const directory = await screen.findByLabelText('知识目录');
+    fireEvent.click(within(directory).getByRole('button', { name: /星澜医美中心/ }));
+
+    fireEvent.click(await within(directory).findByRole('button', { name: '新增目录' }));
+    expect(await within(directory).findByText('目录已创建')).toBeInTheDocument();
+    expect(within(directory).getByRole('button', { name: '筛选目录 新目录' })).toBeInTheDocument();
+
+    fireEvent.click(within(directory).getByRole('button', { name: '归档 话术库' }));
+    expect(await within(directory).findByText('目录下仍有知识条目或文件，请先迁移后再归档')).toBeInTheDocument();
+
+    fireEvent.click(within(directory).getByRole('button', { name: '归档 新目录' }));
+    expect(await within(directory).findByText('目录已归档')).toBeInTheDocument();
+    expect(within(directory).queryByRole('button', { name: '筛选目录 新目录' })).not.toBeInTheDocument();
+
+    fireEvent.click(within(directory).getByRole('button', { name: '新增子目录 话术库' }));
+    expect(await within(directory).findByText('目录已创建')).toBeInTheDocument();
+    expect(within(directory).getByRole('button', { name: '筛选目录 新子目录' })).toBeInTheDocument();
+
+    fireEvent.click(within(directory).getByRole('button', { name: '上移 项目知识' }));
+    expect(await within(directory).findByText('目录排序已保存')).toBeInTheDocument();
+  });
+
+  it('点击左侧目录后联动知识条目范围和上传归属下拉', async () => {
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    const directory = await screen.findByLabelText('知识目录');
+    fireEvent.click(within(directory).getByRole('button', { name: /星澜医美中心/ }));
+    fireEvent.click(await within(directory).findByRole('button', { name: '筛选目录 话术库' }));
+
+    expect(within(directory).getByRole('button', { name: '筛选目录 话术库' })).toHaveAttribute('aria-current', 'true');
+    const ownerSelect = screen.getByLabelText('选择文件所属知识库');
+    expect(ownerSelect).toBeEnabled();
+    expect(within(ownerSelect).getByRole('option', { name: '客户询问价格时怎么回复？' })).toBeInTheDocument();
+    expect(within(ownerSelect).queryByRole('option', { name: 'AOPT 的应用' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '知识条目' }));
+    const knowledgeItemsSection = screen.getByRole('heading', { name: '知识条目' }).closest('article');
+    expect(knowledgeItemsSection).not.toBeNull();
+    expect(within(knowledgeItemsSection as HTMLElement).getByText('客户询问价格时怎么回复？')).toBeInTheDocument();
+    expect(within(knowledgeItemsSection as HTMLElement).queryByText('AOPT 的应用')).not.toBeInTheDocument();
+  });
+
   it('平台端新增检索片段区域，可按关键词查看引用片段', async () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
+    fireEvent.click(await screen.findByRole('tab', { name: '检索测试' }));
     expect(await screen.findByRole('heading', { name: '检索片段' })).toBeInTheDocument();
     const searchSection = screen.getByLabelText('平台端知识片段检索');
     fireEvent.change(within(searchSection).getByLabelText('输入检索关键词'), {
@@ -667,6 +1051,7 @@ describe('平台端知识库管理只读看板', () => {
   it('平台端新增向量索引和语义检索区域，使用 mock embedding 引用片段', async () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
+    fireEvent.click(await screen.findByRole('tab', { name: '检索测试' }));
     expect(await screen.findByRole('heading', { name: '生成向量索引' })).toBeInTheDocument();
     const indexSection = screen.getByLabelText('平台端知识向量索引');
     fireEvent.click(within(indexSection).getByRole('button', { name: '生成向量索引' }));
@@ -700,6 +1085,7 @@ describe('平台端知识库管理只读看板', () => {
   it('平台端新增知识库问答区域，展示回答、引用来源和审计编号', async () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
+    fireEvent.click(await screen.findByRole('tab', { name: '检索测试' }));
     expect(await screen.findByRole('heading', { name: '知识库问答' })).toBeInTheDocument();
     const qaSection = screen.getByLabelText('平台端知识库问答');
     fireEvent.change(within(qaSection).getByLabelText('输入知识库问题'), {
@@ -732,6 +1118,7 @@ describe('平台端知识库管理只读看板', () => {
   it('平台端新增问答审计区域，展示低敏审计字段', async () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
+    fireEvent.click(await screen.findByRole('tab', { name: '问答审计' }));
     expect(await screen.findByRole('heading', { name: '问答审计' })).toBeInTheDocument();
     const auditSection = screen.getByLabelText('平台端问答审计');
     fireEvent.click(within(auditSection).getByRole('button', { name: '刷新审计' }));
@@ -754,139 +1141,19 @@ describe('平台端知识库管理只读看板', () => {
     expect(auditSection.textContent).not.toContain('runtime');
   });
 
-  it('平台端新增生产能力状态区域，展示 disabled 原因和 QA 用量策略', async () => {
+  it('平台端知识库管理下线生产能力状态卡片，避免覆盖旧系统模板主流程', async () => {
     const { container } = render(<OpenPlatformKnowledgeManagementPanel />);
 
-    expect(await screen.findByRole('heading', { name: '生产能力状态' })).toBeInTheDocument();
-    const capabilitySection = screen.getByLabelText('平台端知识库生产能力状态');
-
-    expect(within(capabilitySection).getByText('文件管理')).toBeInTheDocument();
-    expect(within(capabilitySection).getAllByText('mock/local QA').length).toBeGreaterThan(0);
-    expect(within(capabilitySection).getAllByText('已启用').length).toBeGreaterThan(0);
-    expect(within(capabilitySection).getByText('真实 AI provider')).toBeInTheDocument();
-    expect(within(capabilitySection).getByText('AI provider 适配层已准备，真实 AI 未启用')).toBeInTheDocument();
-    expect(within(capabilitySection).getByText('真实 AI 未启用，未接入真实第三方 AI')).toBeInTheDocument();
-    expect(within(capabilitySection).getAllByText('OCR').length).toBeGreaterThan(0);
-    expect(within(capabilitySection).getByText('未接入 OCR')).toBeInTheDocument();
-    expect(within(capabilitySection).getAllByText('runtime ingestion').length).toBeGreaterThan(0);
-    expect(within(capabilitySection).getByText('tenant 每日 100 次 · institution 每日 30 次')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(globalThis.fetch).toHaveBeenCalledWith(
-        '/api/v1/open-platform/knowledge-management/capabilities',
-        expect.objectContaining({ cache: 'no-store' }),
-      ),
+    expect(await screen.findByText('星澜医美中心术后护理指南.pdf')).toBeInTheDocument();
+    expect(screen.queryByLabelText('当前知识库范围')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('知识库管理工作台')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '生产能力状态' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('平台端知识库生产能力状态')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('平台端知识库内部受控试用状态')).not.toBeInTheDocument();
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(
+      '/api/v1/open-platform/knowledge-management/capabilities',
+      expect.anything(),
     );
-    expect(capabilitySection.textContent).not.toContain('真实 AI 已可用');
-    expect(capabilitySection.textContent).not.toContain('真实 AI 可用');
-    expect(container.textContent).not.toContain('DATABASE_URL');
-    expect(container.textContent).not.toContain('embeddingVectorJson');
-    expect(container.textContent).not.toContain('storageKey');
-    expect(container.textContent).not.toContain('token');
-    expect(container.textContent).not.toContain('secret');
-  });
-
-  it('平台端展示内部受控试用状态、支持格式、安全限制和禁用能力边界', async () => {
-    const { container } = render(<OpenPlatformKnowledgeManagementPanel />);
-
-    expect(await screen.findByRole('heading', { name: '生产能力状态' })).toBeInTheDocument();
-    const trialSection = screen.getByLabelText('平台端知识库内部受控试用状态');
-
-    expect(within(trialSection).getByText('内部受控试用发布包')).toBeInTheDocument();
-    expect(within(trialSection).getByText('知识库内部受控试用发布包已收口，当前可交付内部试用人员。')).toBeInTheDocument();
-    expect(trialSection.textContent).toContain('可交付内部受控试用');
-    expect(trialSection.textContent).toContain('当前版本可以交付内部试用人员');
-    [
-      '文件上传',
-      '真实文本文件解析',
-      'chunk 查看',
-      '关键词检索',
-      'mock 向量检索',
-      'mock/local QA',
-      'citations',
-      'QA audit',
-      'quota',
-      'capability',
-    ].forEach((label) => {
-      expect(within(trialSection).getAllByText(label).length).toBeGreaterThan(0);
-    });
-    ['TXT', 'Markdown', 'CSV', '文本型 PDF', 'DOCX', 'XLSX'].forEach((label) => {
-      expect(within(trialSection).getByText(label)).toBeInTheDocument();
-    });
-    ['20MB', '32000 字符', '5MB', '12MB', '8MB'].forEach((label) => {
-      expect(within(trialSection).getByText(label)).toBeInTheDocument();
-    });
-    [
-      'OCR',
-      '扫描 PDF / 图片文字识别',
-      '真实 AI',
-      '真实凭据 / API 凭据',
-      '外部网络服务',
-      '真实向量数据库',
-      'runtime ingestion',
-      'worker / queue / scheduler',
-      '训练系统',
-      '计费系统',
-      'dashboard 聚合',
-      '首页编辑',
-    ].forEach((label) => {
-      expect(within(trialSection).getAllByText(label).length).toBeGreaterThan(0);
-    });
-    expect(trialSection.textContent).toContain('仅展示低敏摘要、解析状态、chunk 预览、引用和审计摘要。');
-    [
-      '确认 capability 与 No-Go',
-      '上传白名单文件并发起解析',
-      '查看解析状态与 chunk 预览',
-      '执行关键词检索',
-      '执行 mock 向量检索',
-      '发起 mock/local QA',
-      '核对 citations 与 QA audit',
-      '核对 quota 与失败态说明',
-    ].forEach((label) => {
-      expect(within(trialSection).getAllByText(label).length).toBeGreaterThan(0);
-    });
-    [
-      '解析状态和失败文案可理解',
-      '检索和 QA 均基于低敏 chunk',
-      'citations、audit、quota、capability 可核对',
-      'No-Go 和禁止外显字段持续可见',
-    ].forEach((label) => {
-      expect(within(trialSection).getAllByText(label).length).toBeGreaterThan(0);
-    });
-    ['空态', '解析失败', 'quota 超限', '无引用', '无检索结果'].forEach((label) => {
-      expect(within(trialSection).getByText(label)).toBeInTheDocument();
-    });
-    expect(trialSection.textContent).toContain('当前问题没有命中可引用的知识片段');
-    expect(trialSection.textContent).toContain('当前范围没有命中关键词或相似片段');
-    expect(trialSection.textContent).toContain('平台端按步骤完成上传、解析、chunk、检索、QA、citations、audit、quota、capability 验收。');
-    [
-      '阶段总交付说明',
-      '平台端内部试用操作手册',
-      '机构端只读试用操作手册',
-      '内部验收报告模板',
-      '已完成能力与 No-Go 清单',
-      '后续进入条件说明',
-      '确认发布状态和 No-Go',
-      '按白名单上传并解析文件',
-      '核对 chunk、检索、QA 与引用',
-      '记录 audit、quota 与失败态',
-      '试用人员与日期',
-      '平台端试用记录',
-      '机构端只读试用记录',
-      '文件解析样本与失败态',
-      '检索、QA、citations 与 audit 记录',
-      'quota、capability 与 No-Go 核对',
-      '问题、风险与交接结论',
-      '真实 AI',
-      'OCR',
-      '真实向量库',
-      'runtime ingestion',
-      '任何真实外部服务',
-    ].forEach((label) => {
-      expect(within(trialSection).getAllByText(label).length).toBeGreaterThan(0);
-    });
-    expect(trialSection.textContent).toContain('密钥治理、成本限额、质量评估、安全评估、灰度开关、回滚方案');
-    expect(trialSection.textContent).toContain('worker/queue/scheduler 方案、幂等、重试、死信、可观测性和回滚');
-    expect(trialSection.textContent).toContain('存储定位键');
     expect(container.textContent).not.toContain('storageKey');
     expect(container.textContent).not.toContain('/Users/');
     expect(container.textContent).not.toContain('SQL');
@@ -899,17 +1166,19 @@ describe('平台端知识库管理只读看板', () => {
   it('默认展示全部机构，切换机构后过滤文件、分类、问题、知识条目和任务', async () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
-    const scopeSummary = await screen.findByLabelText('当前知识库范围');
-    expect(await within(scopeSummary).findByText('全部机构')).toBeInTheDocument();
+    const directory = await screen.findByLabelText('知识目录');
+    expect(await within(directory).findByRole('button', { name: /全部机构/ })).toHaveAttribute('aria-current', 'true');
     expect(await screen.findByText('星澜医美中心术后护理指南.pdf')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /低命中修复门诊/ }));
+    fireEvent.click(within(directory).getByRole('button', { name: /低命中修复门诊/ }));
 
-    expect(await within(scopeSummary).findByText('低命中修复门诊')).toBeInTheDocument();
+    expect(await within(directory).findByRole('button', { name: /低命中修复门诊/ })).toHaveAttribute('aria-current', 'true');
     expect(await screen.findByText('低命中修复术后答疑.docx')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText('星澜医美中心术后护理指南.pdf')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('tab', { name: '知识条目' }));
     expect(screen.getAllByText('修复术后饮食要注意什么？')[0]).toBeInTheDocument();
     expect(screen.queryByText('水光针术后需要注意什么？')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '导入任务' }));
     expect(screen.getByText('低命中机构修复资料导入')).toBeInTheDocument();
     expect(viewLoader.loadOpenPlatformKnowledgeManagementView).toHaveBeenLastCalledWith({ tenantId: 'tenant-low-hit' });
   });
@@ -946,6 +1215,48 @@ describe('平台端知识库管理只读看板', () => {
     expect(await screen.findByRole('button', { name: '同步数据' })).toBeInTheDocument();
   });
 
+  it('批量下载已选文件按每个文件自己的 tenant 和 knowledgeId 调用真实下载接口', async () => {
+    const filesResponse = getPlatformKnowledgeFilesResponse({ page: 1, pageSize: 2 });
+    vi.mocked(viewLoader.loadOpenPlatformKnowledgeManagementFiles).mockResolvedValueOnce({
+      ...filesResponse,
+      dataSource: 'repository',
+      records: filesResponse.records.slice(0, 2).map((file, index) => ({
+        ...file,
+        fileId: index === 0 ? 'file-bulk-a' : 'file-bulk-b',
+        tenantId: index === 0 ? 'tenant-xinglan' : 'tenant-low-hit',
+        knowledgeId: index === 0 ? 'knowledge-price-reply' : 'knowledge-repair-diet',
+        fileName: index === 0 ? '批量下载 A.pdf' : '批量下载 B.pdf',
+      })),
+      pageInfo: {
+        page: 1,
+        pageSize: 2,
+        total: 2,
+        pageCount: 1,
+        hasPreviousPage: false,
+        hasNextPage: false,
+      },
+    });
+
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    const fileSection = await screen.findByLabelText('机构上传文件列表');
+    fireEvent.click(within(fileSection).getByRole('button', { name: '选择本页' }));
+    fireEvent.click(screen.getByRole('button', { name: '打包下载' }));
+
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/open-platform/knowledge-management/items/knowledge-price-reply/files/file-bulk-a/download?tenantId=tenant-xinglan'),
+        expect.objectContaining({ method: 'GET' }),
+      ),
+    );
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/open-platform/knowledge-management/items/knowledge-repair-diet/files/file-bulk-b/download?tenantId=tenant-low-hit'),
+        expect.objectContaining({ method: 'GET' }),
+      ),
+    );
+  });
+
   it('展示中文安全错误文案、空状态和异常机构名称兜底', async () => {
     const { container } = render(<OpenPlatformKnowledgeManagementPanel />);
 
@@ -963,10 +1274,10 @@ describe('平台端知识库管理只读看板', () => {
     expect(screen.getByText('请调整机构范围或文件名搜索条件后再查看。')).toBeInTheDocument();
 
     fireEvent.change(searchInput, { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: /机构名称异常/ }));
+    const directory = screen.getByLabelText('知识目录');
+    fireEvent.click(within(directory).getByRole('button', { name: /机构名称异常/ }));
 
-    const scopeSummary = screen.getByLabelText('当前知识库范围');
-    expect(await within(scopeSummary).findByText('机构名称异常')).toBeInTheDocument();
+    expect(await within(directory).findByRole('button', { name: /机构名称异常/ })).toHaveAttribute('aria-current', 'true');
     expect(screen.getAllByText('机构名称异常').length).toBeGreaterThan(0);
     expect(screen.getAllByText('未命名机构').length).toBeGreaterThan(0);
     expect(screen.getByText('PDF 解析服务异常')).toBeInTheDocument();
@@ -1007,6 +1318,7 @@ describe('平台端知识库管理只读看板', () => {
 
     const { container } = render(<OpenPlatformKnowledgeManagementPanel />);
 
+    fireEvent.click(await screen.findByRole('tab', { name: '知识条目' }));
     expect(await screen.findByText('暂无知识条目')).toBeInTheDocument();
     expect(container.textContent).not.toContain('fileContent');
     expect(container.textContent).not.toContain('downloadUrl');

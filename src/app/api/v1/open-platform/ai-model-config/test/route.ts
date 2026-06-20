@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAuditEvent, type AuditReason } from '@/modules/audit/domain/audit-events';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
-import { isSupportedVendor, type SupportedVendor } from '@/modules/open-platform/domain/vendor-catalog';
+import { getSupportedVendorConfig, isSupportedVendor, type SupportedVendor } from '@/modules/open-platform/domain/vendor-catalog';
 import {
   createDefaultAiModelVendorAdapter,
   createDryRunAiModelVendorAdapter,
@@ -36,6 +36,43 @@ function createRouteVendorAdapter() {
   return process.env.AI_MODEL_VENDOR_EXTERNAL_CALL_ENABLED === 'true'
     ? createDefaultAiModelVendorAdapter()
     : createDryRunAiModelVendorAdapter();
+}
+
+function isExternalVendorCallEnabled() {
+  return process.env.AI_MODEL_VENDOR_EXTERNAL_CALL_ENABLED === 'true';
+}
+
+async function runRouteDryRunVendorTest(input: {
+  vendor: SupportedVendor;
+  modelId: string;
+}) {
+  const rate = defaultAiModelVendorRateLimiter.check({ vendor: input.vendor, operation: 'test' });
+  if (!rate.allowed) {
+    return {
+      status: 'completed' as const,
+      payload: {
+        ok: false,
+        status: 'rate_limited' as const,
+        vendor: input.vendor,
+        modelId: input.modelId,
+        latencyMs: 0,
+        checkedAt: new Date().toISOString(),
+        errorCode: 'RATE_LIMITED' as const,
+        retryAfterMs: rate.retryAfterMs,
+      },
+    };
+  }
+
+  const adapter = createDryRunAiModelVendorAdapter();
+  const vendorConfig = getSupportedVendorConfig(input.vendor);
+  const payload = await adapter.testModel({
+    vendor: input.vendor,
+    baseUrl: vendorConfig.defaultBaseUrl,
+    apiKey: 'dry-run-placeholder',
+    modelId: input.modelId,
+  });
+
+  return { status: 'completed' as const, payload };
 }
 
 async function recordAudit(input: {
@@ -138,15 +175,18 @@ export async function POST(request: Request) {
   if (!payload) return lowSensitiveError(400, 'VALIDATION_FAILED');
 
   try {
-    const repository = createVendorProviderConfigRepository(getDatabase());
-    const adapter = createRouteVendorAdapter();
-    const result = await runAiModelVendorTest({
-      repository,
-      adapter,
-      rateLimiter: defaultAiModelVendorRateLimiter,
-      vendor: payload.vendor,
-      modelId: payload.modelId,
-    });
+    const result = isExternalVendorCallEnabled()
+      ? await runAiModelVendorTest({
+        repository: createVendorProviderConfigRepository(getDatabase()),
+        adapter: createRouteVendorAdapter(),
+        rateLimiter: defaultAiModelVendorRateLimiter,
+        vendor: payload.vendor,
+        modelId: payload.modelId,
+      })
+      : await runRouteDryRunVendorTest({
+        vendor: payload.vendor,
+        modelId: payload.modelId,
+      });
 
     await recordAudit({
       context: access.context,

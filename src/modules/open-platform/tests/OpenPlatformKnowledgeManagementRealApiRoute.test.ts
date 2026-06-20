@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
+import * as overviewRoute from '@/app/api/v1/open-platform/knowledge-management/route';
+import * as filesRoute from '@/app/api/v1/open-platform/knowledge-management/files/route';
 import * as itemsRoute from '@/app/api/v1/open-platform/knowledge-management/items/route';
 import * as visibilityRoute from '@/app/api/v1/open-platform/knowledge-management/items/[knowledgeId]/visibility/route';
 import { getDatabase } from '@/server/db/client';
@@ -7,6 +9,10 @@ import { createPlatformKnowledgeManagementRepository } from '@/modules/open-plat
 
 const database = { database: 'platform-knowledge-test-db' };
 const repository = {
+  listKnowledgeOverviewItems: vi.fn(),
+  listKnowledgeOverviewFiles: vi.fn(),
+  listKnowledgeOverviewQaAudits: vi.fn(),
+  listKnowledgeDirectorySources: vi.fn(),
   listKnowledgeItems: vi.fn(),
   hasTenantInstitution: vi.fn(),
   bindInstitutionVisibility: vi.fn(),
@@ -75,6 +81,45 @@ const routeRecords: PlatformKnowledgeRepositoryRecord[] = [
   },
 ];
 
+const routeFiles = [
+  {
+    fileId: 'file-route-a',
+    taskId: 'file-route-a',
+    tenantId: 'tenant-route-a',
+    tenantName: '路由租户 A',
+    knowledgeId: 'knowledge-route-a',
+    fileName: '平台真实文件.pdf',
+    mimeType: 'application/pdf',
+    fileType: 'PDF',
+    fileSizeKb: 24,
+    category: '演示知识',
+    folder: 'workspace-a',
+    parseStatus: 'parsed' as const,
+    taskStatus: 'completed' as const,
+    parsedChars: 1200,
+    safeErrorMessage: null,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  },
+];
+
+const routeAudits = [
+  {
+    auditId: 'audit-route-a',
+    tenantId: 'tenant-route-a',
+    institutionId: 'inst-visible-a',
+    actorScope: 'platform' as const,
+    actorUserId: 'platform-user-a',
+    question: '术后怎么护理？',
+    answerPreview: '低敏回答预览。',
+    retrievalMode: 'hybrid' as const,
+    citationCount: 2,
+    safeStatus: 'answered',
+    safeFailureMessage: null,
+    createdAt: now.toISOString(),
+  },
+];
+
 async function readJson(response: Response) {
   expect(response.headers.get('content-type')).toContain('application/json');
 
@@ -83,13 +128,108 @@ async function readJson(response: Response) {
 
 describe('平台知识库管理 V1 真实数据 API route', () => {
   beforeEach(() => {
+    repository.listKnowledgeOverviewItems.mockReset();
+    repository.listKnowledgeOverviewFiles.mockReset();
+    repository.listKnowledgeOverviewQaAudits.mockReset();
+    repository.listKnowledgeDirectorySources.mockReset();
     repository.listKnowledgeItems.mockReset();
     repository.hasTenantInstitution.mockReset();
     repository.bindInstitutionVisibility.mockReset();
     repository.unbindInstitutionVisibility.mockReset();
+    repository.listKnowledgeOverviewItems.mockResolvedValue(routeRecords);
+    repository.listKnowledgeOverviewFiles.mockResolvedValue(routeFiles);
+    repository.listKnowledgeOverviewQaAudits.mockResolvedValue(routeAudits);
+    repository.listKnowledgeDirectorySources.mockResolvedValue([]);
     repository.hasTenantInstitution.mockResolvedValue(true);
     vi.mocked(getDatabase).mockClear();
     vi.mocked(createPlatformKnowledgeManagementRepository).mockClear();
+  });
+
+  it('overview GET 默认接入 repository 汇总核心概览，不再返回 mock 数据源', async () => {
+    const response = await overviewRoute.GET(
+      new Request('http://localhost/api/v1/open-platform/knowledge-management'),
+    );
+    const payload = await readJson(response);
+    const serialized = JSON.stringify(payload);
+
+    expect(response.status).toBe(200);
+    expect(repository.listKnowledgeOverviewItems).toHaveBeenCalledWith({ tenantId: null });
+    expect(repository.listKnowledgeOverviewFiles).toHaveBeenCalledWith({ tenantId: null });
+    expect(repository.listKnowledgeOverviewQaAudits).toHaveBeenCalledWith({ tenantId: null });
+    expect(payload.dataSource).toBe('repository');
+    expect(payload.totals).toEqual(expect.objectContaining({
+      knowledgeCount: 1,
+      sourceFileCount: 1,
+      parsedFileCount: 1,
+    }));
+    expect(payload.categoryStats).toEqual([
+      expect.objectContaining({ categoryName: '演示知识', knowledgeCount: 1 }),
+    ]);
+    expect(payload.directories).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'virtual_root',
+          name: '全部知识库',
+          knowledgeCount: 1,
+          fileCount: 1,
+        }),
+        expect.objectContaining({
+          kind: 'knowledge_library',
+          name: '演示知识',
+          knowledgeCount: 1,
+          fileCount: 1,
+        }),
+        expect.objectContaining({
+          kind: 'folder',
+          name: 'workspace-a',
+          knowledgeCount: 1,
+          fileCount: 1,
+        }),
+      ]),
+    );
+    expect(payload.topQuestions).toEqual([
+      expect.objectContaining({ questionTitle: '术后怎么护理？', hitCount: 1 }),
+    ]);
+    expect(serialized).not.toContain('storageKey');
+    expect(serialized).not.toContain('embeddingVectorJson');
+  });
+
+  it('files GET 默认接入 repository 文件低敏列表，不再返回 mock 数据源', async () => {
+    const response = await filesRoute.GET(
+      new Request('http://localhost/api/v1/open-platform/knowledge-management/files?keyword=平台真实文件'),
+    );
+    const payload = await readJson(response);
+    const serialized = JSON.stringify(payload);
+
+    expect(response.status).toBe(200);
+    expect(repository.listKnowledgeOverviewFiles).toHaveBeenCalledWith({ tenantId: null });
+    expect(payload.dataSource).toBe('repository');
+    expect(payload.records).toEqual([
+      expect.objectContaining({
+        fileId: 'file-route-a',
+        fileName: '平台真实文件.pdf',
+        tenantName: '路由租户 A',
+      }),
+    ]);
+    expect(serialized).not.toContain('storageKey');
+    expect(serialized).not.toContain('DATABASE_URL');
+  });
+
+  it('items GET 默认接入 repository 知识条目低敏列表，不再 fallback mock', async () => {
+    const response = await itemsRoute.GET(
+      new Request(`${apiUrl}?keyword=${encodeURIComponent('平台端真实列表')}`),
+    );
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(repository.listKnowledgeOverviewItems).toHaveBeenCalledWith({ tenantId: null });
+    expect(payload.dataSource).toBe('repository');
+    expect(payload.records).toEqual([
+      expect.objectContaining({
+        knowledgeId: 'knowledge-route-a',
+        title: '平台端真实列表记录',
+      }),
+    ]);
   });
 
   it('visibility route 只暴露平台端 POST/DELETE 绑定接口', () => {
@@ -120,17 +260,22 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
     });
   });
 
-  it('items GET 无 tenantId 时只使用 mock fallback，且不初始化真实 repository', async () => {
+  it('items GET 数据库未配置且无 tenantId 时回退 mock，且不暴露配置细节', async () => {
+    vi.mocked(getDatabase).mockImplementationOnce(() => {
+      throw new Error('DATABASE_URL is not configured');
+    });
+
     const response = await itemsRoute.GET(
       new Request(`${apiUrl}?keyword=${encodeURIComponent('恢复期')}`),
     );
     const payload = await readJson(response);
+    const serialized = JSON.stringify(payload);
 
     expect(response.status).toBe(200);
     expect(payload.dataSource).toBe('mock');
-    expect(getDatabase).not.toHaveBeenCalled();
     expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
     expect(repository.listKnowledgeItems).not.toHaveBeenCalled();
+    expect(serialized).not.toContain('DATABASE_URL');
   });
 
   it('items GET 仅在数据库未配置时回退 mock，不暴露 DATABASE_URL 细节', async () => {

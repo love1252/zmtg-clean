@@ -1,7 +1,4 @@
 import {
-  getPlatformKnowledgeFilesResponse,
-  getPlatformKnowledgeItemsResponse,
-  getPlatformKnowledgeOverviewResponse,
   type PlatformKnowledgeFilesParams,
   type PlatformKnowledgeItemsParams,
   type PlatformKnowledgeItemDto,
@@ -26,10 +23,37 @@ export type OpenPlatformKnowledgeManagementViewParams = {
   tenantId?: string | null;
 };
 
+async function fetchKnowledgeJson<TPayload>(path: string): Promise<TPayload> {
+  const response = await fetch(path, { cache: 'no-store' });
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok || !payload || typeof payload !== 'object') {
+    throw new Error('知识库运营数据暂时无法加载');
+  }
+
+  return payload as TPayload;
+}
+
+function buildKnowledgeQuery(params: Record<string, string | number | null | undefined>) {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    searchParams.set(key, String(value));
+  });
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
+}
+
 export async function loadOpenPlatformKnowledgeManagementView(
   params: OpenPlatformKnowledgeManagementViewParams = {},
 ): Promise<OpenPlatformKnowledgeManagementView> {
-  const overview = getPlatformKnowledgeOverviewResponse({ tenantId: params.tenantId });
+  const overview = await fetchKnowledgeJson<PlatformKnowledgeOverviewResponse>(
+    `/api/v1/open-platform/knowledge-management${buildKnowledgeQuery({
+      tenantId: params.tenantId,
+    })}`,
+  );
 
   return {
     ...overview,
@@ -56,19 +80,23 @@ export async function loadOpenPlatformKnowledgeManagementView(
 export async function loadOpenPlatformKnowledgeManagementFiles(
   params: PlatformKnowledgeFilesParams = {},
 ): Promise<OpenPlatformKnowledgeManagementFiles> {
-  return getPlatformKnowledgeFilesResponse({
-    ...params,
-    pageSize: params.pageSize ?? OPEN_PLATFORM_KNOWLEDGE_FILE_PAGE_SIZE,
-  });
+  return fetchKnowledgeJson<OpenPlatformKnowledgeManagementFiles>(
+    `/api/v1/open-platform/knowledge-management/files${buildKnowledgeQuery({
+      ...params,
+      pageSize: params.pageSize ?? OPEN_PLATFORM_KNOWLEDGE_FILE_PAGE_SIZE,
+    })}`,
+  );
 }
 
 export async function loadOpenPlatformKnowledgeManagementItems(
   params: PlatformKnowledgeItemsParams = {},
 ): Promise<OpenPlatformKnowledgeManagementItems> {
-  return getPlatformKnowledgeItemsResponse({
-    ...params,
-    pageSize: params.pageSize ?? OPEN_PLATFORM_KNOWLEDGE_ITEM_PAGE_SIZE,
-  });
+  return fetchKnowledgeJson<OpenPlatformKnowledgeManagementItems>(
+    `/api/v1/open-platform/knowledge-management/items${buildKnowledgeQuery({
+      ...params,
+      pageSize: params.pageSize ?? OPEN_PLATFORM_KNOWLEDGE_ITEM_PAGE_SIZE,
+    })}`,
+  );
 }
 
 export function getOpenPlatformKnowledgeManagementErrorMessage(_error: unknown) {

@@ -939,7 +939,7 @@ export function OpenPlatformAiModelConfigPanel() {
                             {capabilityExpanded ? (
                               <div id={modelsRegionId} className="divide-y divide-gray-100 p-2">
                                 {models.map((model) => (
-                                  <div key={model.modelId} className={cn('flex flex-col gap-2 px-3 py-2.5 md:flex-row md:items-center md:justify-between', isModelEnabled(model.modelId) ? 'bg-green-50' : 'bg-white')}>
+                                  <div key={model.modelId} className={cn('flex flex-col gap-2 px-3 py-2.5 md:flex-row md:flex-wrap md:items-center md:justify-between', isModelEnabled(model.modelId) ? 'bg-green-50' : 'bg-white')}>
                                     <div className="min-w-0 flex-1">
                                       <div className="flex flex-wrap items-center gap-2">
                                         <h4 className="text-sm font-semibold tracking-normal text-gray-900">{model.displayName}</h4>

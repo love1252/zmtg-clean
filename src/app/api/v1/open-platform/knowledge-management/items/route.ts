@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createDatabaseUrlErrorMessage, getDatabase } from '@/server/db/client';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
-import { listPlatformKnowledgeItemsService } from '@/modules/open-platform/server/platform-knowledge-management-service';
+import {
+  listPlatformKnowledgeItemsService,
+  listPlatformKnowledgeOverviewItemsService,
+} from '@/modules/open-platform/server/platform-knowledge-management-service';
 import {
   buildReadonlyApiError,
   getPlatformKnowledgeItemsResponse,
@@ -12,17 +15,30 @@ export async function GET(request: Request) {
 
   try {
     const tenantId = params.get('tenantId');
+    const repository = createPlatformKnowledgeManagementRepository(getDatabase());
 
     if (!tenantId?.trim()) {
       return NextResponse.json(
-        getMockItemsResponse(params),
+        await listPlatformKnowledgeOverviewItemsService({
+          repository,
+          params: {
+            tenantId,
+            institutionId: params.get('institutionId'),
+            status: params.get('status'),
+            category: params.get('category'),
+            trainingStatus: params.get('trainingStatus'),
+            page: params.get('page'),
+            pageSize: params.get('pageSize'),
+            keyword: params.get('keyword'),
+          },
+        }),
         { status: 200 },
       );
     }
 
     return NextResponse.json(
       await listPlatformKnowledgeItemsService({
-        repository: createPlatformKnowledgeManagementRepository(getDatabase()),
+        repository,
         params: {
           tenantId,
           institutionId: params.get('institutionId'),

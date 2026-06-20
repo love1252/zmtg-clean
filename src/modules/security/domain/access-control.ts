@@ -24,6 +24,7 @@ export const ACCESS_RESOURCES = [
   'audit_log',
   'platform_health',
   'ai_model_config',
+  'knowledge_management',
 ] as const;
 
 export type ProtectedResource = (typeof ACCESS_RESOURCES)[number];

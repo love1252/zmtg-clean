@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   knowledgeChunks,
@@ -9,12 +9,19 @@ import {
   knowledgeDocumentFileParses,
   knowledgeDocumentFiles,
   knowledgeDocuments,
+  knowledgeIndexJobs,
   knowledgeQaAuditLogs,
   knowledgeSources,
   platformKnowledgeInstitutionVisibility,
   tenants,
 } from '@/server/db/schema';
 import type { PlatformKnowledgeFileRepositoryRecord } from './platform-knowledge-file-management-service';
+import {
+  PLATFORM_KNOWLEDGE_LIBRARY_WORKSPACE_ID,
+  parsePlatformKnowledgeDirectoryId,
+  type PlatformKnowledgeDirectorySourceDto,
+  type PlatformKnowledgeFileDto,
+} from './platformKnowledgeManagementApiContract';
 import type {
   PlatformKnowledgeChunkEmbeddingSaveRecord,
   PlatformKnowledgeChunkEmbeddingSummary,
@@ -47,6 +54,7 @@ type KnowledgeDocumentFileParseChunkRow = typeof knowledgeDocumentFileParseChunk
 type KnowledgeDocumentFileParseChunkEmbeddingRow =
   typeof knowledgeDocumentFileParseChunkEmbeddings.$inferSelect;
 type KnowledgeQaAuditLogRow = typeof knowledgeQaAuditLogs.$inferSelect;
+type TenantRow = typeof tenants.$inferSelect;
 
 export type PlatformKnowledgeRepositoryRecord = {
   knowledgeId: string;
@@ -71,6 +79,10 @@ export type PlatformKnowledgeListRepositoryInput = {
   tenantId: string;
 };
 
+export type PlatformKnowledgeOverviewRepositoryInput = {
+  tenantId?: string | null;
+};
+
 export type PlatformKnowledgeVisibilityRepositoryInput = {
   tenantId: string;
   knowledgeId: string;
@@ -91,9 +103,61 @@ export type PlatformKnowledgeVisibilityRepositoryResult =
     }
   | { status: 'not_found' };
 
+export type PlatformKnowledgeDirectoryRenameRepositoryInput = {
+  tenantId: string;
+  directoryId: string;
+  nextName: string;
+};
+
+export type PlatformKnowledgeDirectoryRenameRepositoryResult =
+  | {
+      status: 'renamed';
+      affectedSources: number;
+      affectedDocuments: number;
+      affectedChunks: number;
+      affectedJobs: number;
+    }
+  | { status: 'not_found' };
+
+export type PlatformKnowledgeDirectoryCreateRepositoryInput = {
+  tenantId: string;
+  name: string;
+  parentId: string | null;
+  libraryName: string;
+  folderName: string | null;
+};
+
+export type PlatformKnowledgeDirectoryCreateRepositoryResult =
+  | { status: 'created'; sourceId: string }
+  | { status: 'not_found' };
+
+export type PlatformKnowledgeDirectoryArchiveRepositoryResult =
+  | { status: 'archived'; affectedSources: number }
+  | { status: 'not_found' };
+
+export type PlatformKnowledgeDirectoryReorderRepositoryInput = {
+  tenantId: string;
+  directoryIds: string[];
+};
+
+export type PlatformKnowledgeDirectoryReorderRepositoryResult =
+  | { status: 'reordered'; affectedSources: number }
+  | { status: 'not_found' };
+
 function visibilityId(input: PlatformKnowledgeVisibilityRepositoryInput) {
   return `pkb-vis-${createHash('sha256')
     .update(`${input.tenantId}:${input.knowledgeId}:${input.institutionId}`)
+    .digest('hex')
+    .slice(0, 40)}`;
+}
+
+function directorySourceId(input: {
+  tenantId: string;
+  libraryName: string;
+  folderName: string | null;
+}) {
+  return `pkb-dir-src-${createHash('sha256')
+    .update(`${input.tenantId}:${input.libraryName}:${input.folderName ?? PLATFORM_KNOWLEDGE_LIBRARY_WORKSPACE_ID}`)
     .digest('hex')
     .slice(0, 40)}`;
 }
@@ -106,6 +170,12 @@ function sourceCategory(sourceKind: V1KnowledgeBaseRuntimeFoundationSourceKind) 
   };
 
   return labels[sourceKind];
+}
+
+function sourceDirectoryLabel(source: KnowledgeSourceRow | undefined, sourceKind: V1KnowledgeBaseRuntimeFoundationSourceKind) {
+  const sourceLabel = source?.sourceLabel?.trim();
+
+  return sourceLabel || sourceCategory(sourceKind);
 }
 
 function sourceDescription(row: {
@@ -160,7 +230,7 @@ function mapRecords(input: {
         sourceKind: document.sourceKind,
         status: document.status,
         readonlyStatus: document.readonlyStatus,
-        category: sourceCategory(document.sourceKind),
+        category: sourceDirectoryLabel(source, document.sourceKind),
         descriptionPreview: sourceDescription({ document, source }),
         chunkCount: chunkCountByDocumentId.get(document.id) ?? 0,
         visibleInstitutionIds: visibleByDocumentId.get(document.id) ?? [],
@@ -173,6 +243,68 @@ function mapRecords(input: {
 function normalizeParseStatus(status: string): PlatformKnowledgeFileParseStatus {
   if (status === 'processing' || status === 'succeeded' || status === 'failed') return status;
   return 'pending';
+}
+
+function normalizeOverviewParseStatus(status: string | undefined): PlatformKnowledgeFileDto['parseStatus'] {
+  if (status === 'succeeded') return 'parsed';
+  if (status === 'processing') return 'parsing';
+  if (status === 'failed') return 'failed';
+  return 'pending';
+}
+
+function overviewTaskStatus(
+  status: PlatformKnowledgeFileDto['parseStatus'],
+): PlatformKnowledgeFileDto['taskStatus'] {
+  if (status === 'parsed') return 'completed';
+  if (status === 'parsing') return 'running';
+  if (status === 'failed') return 'failed';
+  return 'pending';
+}
+
+function fileTypeLabel(input: { filename: string; mimeType: string }) {
+  const lowerName = input.filename.toLowerCase();
+  if (input.mimeType.includes('pdf') || lowerName.endsWith('.pdf')) return 'PDF';
+  if (input.mimeType.includes('word') || lowerName.endsWith('.docx')) return 'Word';
+  if (input.mimeType.includes('spreadsheet') || lowerName.endsWith('.xlsx')) return 'Excel';
+  if (input.mimeType.includes('csv') || lowerName.endsWith('.csv')) return 'CSV';
+  if (lowerName.endsWith('.md')) return 'Markdown';
+  if (input.mimeType.includes('text') || lowerName.endsWith('.txt')) return 'TXT';
+  if (input.mimeType.includes('image')) return '图片';
+  return '文件';
+}
+
+function mapOverviewFileRow(input: {
+  file: KnowledgeDocumentFileRow;
+  parse: KnowledgeDocumentFileParseRow | undefined;
+  document: KnowledgeDocumentRow | undefined;
+  source: KnowledgeSourceRow | undefined;
+  tenant: TenantRow | undefined;
+}): PlatformKnowledgeFileDto {
+  const parseStatus = normalizeOverviewParseStatus(input.parse?.parseStatus);
+  const updatedAt = (input.parse?.updatedAt ?? input.file.updatedAt).toISOString();
+
+  return {
+    fileId: input.file.id,
+    taskId: input.parse?.id ?? input.file.id,
+    tenantId: input.file.tenantId,
+    tenantName: input.tenant?.name ?? '未命名机构',
+    knowledgeId: input.file.knowledgeDocumentId,
+    fileName: input.file.originalFilename,
+    mimeType: input.file.mimeType,
+    fileType: fileTypeLabel({
+      filename: input.file.originalFilename,
+      mimeType: input.file.mimeType,
+    }),
+    fileSizeKb: Math.ceil(input.file.sizeBytes / 1024),
+    category: input.document ? sourceDirectoryLabel(input.source, input.document.sourceKind) : '未分类',
+    folder: input.source?.workspaceId ?? input.document?.workspaceId ?? '未归档',
+    parseStatus,
+    taskStatus: overviewTaskStatus(parseStatus),
+    parsedChars: input.parse?.textLength ?? 0,
+    safeErrorMessage: input.parse?.safeFailureMessage ?? null,
+    createdAt: input.file.createdAt.toISOString(),
+    updatedAt,
+  };
 }
 
 function mapFileParseRow(row: KnowledgeDocumentFileParseRow): PlatformKnowledgeFileParseRecord {
@@ -412,6 +544,269 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
   }
 
   return {
+    async listKnowledgeOverviewItems(
+      input: PlatformKnowledgeOverviewRepositoryInput = {},
+    ): Promise<PlatformKnowledgeRepositoryRecord[]> {
+      const tenantId = input.tenantId?.trim() || null;
+      const tenantRows = tenantId
+        ? await database.select().from(tenants).where(eq(tenants.id, tenantId))
+        : await database.select().from(tenants);
+      const documents = tenantId
+        ? await database
+          .select()
+          .from(knowledgeDocuments)
+          .where(eq(knowledgeDocuments.tenantId, tenantId))
+          .orderBy(desc(knowledgeDocuments.updatedAt), desc(knowledgeDocuments.id))
+        : await database
+          .select()
+          .from(knowledgeDocuments)
+          .orderBy(desc(knowledgeDocuments.updatedAt), desc(knowledgeDocuments.id));
+      const sources = tenantId
+        ? await database.select().from(knowledgeSources).where(eq(knowledgeSources.tenantId, tenantId))
+        : await database.select().from(knowledgeSources);
+      const chunks = tenantId
+        ? await database.select().from(knowledgeChunks).where(eq(knowledgeChunks.tenantId, tenantId))
+        : await database.select().from(knowledgeChunks);
+      const visibility = tenantId
+        ? await database
+          .select()
+          .from(platformKnowledgeInstitutionVisibility)
+          .where(eq(platformKnowledgeInstitutionVisibility.tenantId, tenantId))
+        : await database.select().from(platformKnowledgeInstitutionVisibility);
+
+      return tenantRows.flatMap((tenant) =>
+        mapRecords({
+          tenantId: tenant.id,
+          tenantName: tenant.name,
+          documents,
+          sources,
+          chunks,
+          visibility,
+        }),
+      );
+    },
+
+    async listKnowledgeOverviewFiles(
+      input: PlatformKnowledgeOverviewRepositoryInput = {},
+    ): Promise<PlatformKnowledgeFileDto[]> {
+      const tenantId = input.tenantId?.trim() || null;
+      const tenantRows = tenantId
+        ? await database.select().from(tenants).where(eq(tenants.id, tenantId))
+        : await database.select().from(tenants);
+      const documents = tenantId
+        ? await database.select().from(knowledgeDocuments).where(eq(knowledgeDocuments.tenantId, tenantId))
+        : await database.select().from(knowledgeDocuments);
+      const sources = tenantId
+        ? await database.select().from(knowledgeSources).where(eq(knowledgeSources.tenantId, tenantId))
+        : await database.select().from(knowledgeSources);
+      const files = tenantId
+        ? await database
+          .select()
+          .from(knowledgeDocumentFiles)
+          .where(eq(knowledgeDocumentFiles.tenantId, tenantId))
+          .orderBy(desc(knowledgeDocumentFiles.updatedAt), desc(knowledgeDocumentFiles.id))
+        : await database
+          .select()
+          .from(knowledgeDocumentFiles)
+          .orderBy(desc(knowledgeDocumentFiles.updatedAt), desc(knowledgeDocumentFiles.id));
+      const parses = tenantId
+        ? await database
+          .select()
+          .from(knowledgeDocumentFileParses)
+          .where(eq(knowledgeDocumentFileParses.tenantId, tenantId))
+        : await database.select().from(knowledgeDocumentFileParses);
+      const tenantById = new Map(tenantRows.map((tenant) => [tenant.id, tenant]));
+      const documentById = new Map(documents.map((document) => [document.id, document]));
+      const sourceById = new Map(sources.map((source) => [source.id, source]));
+      const parseByFileId = new Map(parses.map((parse) => [parse.fileId, parse]));
+
+      return files.map((file) => {
+        const document = documentById.get(file.knowledgeDocumentId);
+        return mapOverviewFileRow({
+          file,
+          parse: parseByFileId.get(file.id),
+          document,
+          source: document ? sourceById.get(document.sourceId) : undefined,
+          tenant: tenantById.get(file.tenantId),
+        });
+      });
+    },
+
+    async listKnowledgeOverviewQaAudits(
+      input: PlatformKnowledgeOverviewRepositoryInput = {},
+    ): Promise<KnowledgeQaAuditLogDto[]> {
+      const tenantId = input.tenantId?.trim() || null;
+      const rows = tenantId
+        ? await database
+          .select()
+          .from(knowledgeQaAuditLogs)
+          .where(eq(knowledgeQaAuditLogs.tenantId, tenantId))
+          .orderBy(desc(knowledgeQaAuditLogs.createdAt), desc(knowledgeQaAuditLogs.id))
+          .limit(100)
+        : await database
+          .select()
+          .from(knowledgeQaAuditLogs)
+          .orderBy(desc(knowledgeQaAuditLogs.createdAt), desc(knowledgeQaAuditLogs.id))
+          .limit(100);
+
+      return rows.map(mapQaAuditLogRow);
+    },
+
+    async listKnowledgeDirectorySources(
+      input: PlatformKnowledgeOverviewRepositoryInput = {},
+    ): Promise<PlatformKnowledgeDirectorySourceDto[]> {
+      const tenantId = input.tenantId?.trim() || null;
+      const rows = tenantId
+        ? await database
+          .select()
+          .from(knowledgeSources)
+          .where(eq(knowledgeSources.tenantId, tenantId))
+        : await database.select().from(knowledgeSources);
+
+      return rows.map((source) => ({
+        tenantId: source.tenantId,
+        sourceLabel: source.sourceLabel,
+        workspaceId: source.workspaceId,
+        status: source.status,
+        updatedAt: source.updatedAt,
+      }));
+    },
+
+    async createKnowledgeDirectory(
+      input: PlatformKnowledgeDirectoryCreateRepositoryInput,
+    ): Promise<PlatformKnowledgeDirectoryCreateRepositoryResult> {
+      const workspaceId = input.folderName ?? PLATFORM_KNOWLEDGE_LIBRARY_WORKSPACE_ID;
+      const sourceId = directorySourceId({
+        tenantId: input.tenantId,
+        libraryName: input.libraryName,
+        folderName: input.folderName,
+      });
+      const updatedAt = new Date();
+      const existing = await database
+        .select()
+        .from(knowledgeSources)
+        .where(
+          and(
+            eq(knowledgeSources.tenantId, input.tenantId),
+            eq(knowledgeSources.id, sourceId),
+          ),
+        )
+        .limit(1);
+
+      if (existing[0]) {
+        const restored = await database
+          .update(knowledgeSources)
+          .set({
+            sourceLabel: input.libraryName,
+            workspaceId,
+            status: 'empty',
+            readonlyStatus: 'readonly',
+            updatedAt,
+          })
+          .where(
+            and(
+              eq(knowledgeSources.tenantId, input.tenantId),
+              eq(knowledgeSources.id, sourceId),
+            ),
+          )
+          .returning({ id: knowledgeSources.id });
+
+        return restored[0] ? { status: 'created', sourceId: restored[0].id } : { status: 'not_found' };
+      }
+
+      const inserted = await database
+        .insert(knowledgeSources)
+        .values({
+          id: sourceId,
+          tenantId: input.tenantId,
+          institutionId: 'platform-directory',
+          workspaceId,
+          sourceKind: 'mock',
+          status: 'empty',
+          readonlyStatus: 'readonly',
+          sourceLabel: input.libraryName,
+        })
+        .returning({ id: knowledgeSources.id });
+
+      return inserted[0] ? { status: 'created', sourceId: inserted[0].id } : { status: 'not_found' };
+    },
+
+    async archiveKnowledgeDirectory(input: {
+      tenantId: string;
+      directoryId: string;
+    }): Promise<PlatformKnowledgeDirectoryArchiveRepositoryResult> {
+      const parsed = parsePlatformKnowledgeDirectoryId(input.directoryId);
+      if (!parsed.ok) return { status: 'not_found' };
+      const archivedAt = new Date();
+      const conditions = [
+        eq(knowledgeSources.tenantId, input.tenantId),
+      ];
+
+      if (parsed.kind === 'knowledge_library') {
+        conditions.push(
+          eq(knowledgeSources.sourceLabel, parsed.libraryName),
+          eq(knowledgeSources.workspaceId, PLATFORM_KNOWLEDGE_LIBRARY_WORKSPACE_ID),
+        );
+      } else {
+        conditions.push(
+          eq(knowledgeSources.sourceLabel, parsed.libraryName),
+          eq(knowledgeSources.workspaceId, parsed.folderName),
+        );
+      }
+
+      const updated = await database
+        .update(knowledgeSources)
+        .set({
+          status: 'disabled',
+          readonlyStatus: 'blocked',
+          updatedAt: archivedAt,
+        })
+        .where(and(...conditions))
+        .returning({ id: knowledgeSources.id });
+
+      return updated.length > 0
+        ? { status: 'archived', affectedSources: updated.length }
+        : { status: 'not_found' };
+    },
+
+    async reorderKnowledgeDirectories(
+      input: PlatformKnowledgeDirectoryReorderRepositoryInput,
+    ): Promise<PlatformKnowledgeDirectoryReorderRepositoryResult> {
+      let affectedSources = 0;
+      const baseTime = Date.now();
+
+      for (const [index, directoryId] of input.directoryIds.entries()) {
+        const parsed = parsePlatformKnowledgeDirectoryId(directoryId);
+        if (!parsed.ok) continue;
+
+        const conditions = [
+          eq(knowledgeSources.tenantId, input.tenantId),
+        ];
+        if (parsed.kind === 'knowledge_library') {
+          conditions.push(eq(knowledgeSources.sourceLabel, parsed.libraryName));
+        } else {
+          conditions.push(
+            eq(knowledgeSources.sourceLabel, parsed.libraryName),
+            eq(knowledgeSources.workspaceId, parsed.folderName),
+          );
+        }
+
+        const updated = await database
+          .update(knowledgeSources)
+          .set({
+            updatedAt: new Date(baseTime + index),
+          })
+          .where(and(...conditions))
+          .returning({ id: knowledgeSources.id });
+
+        affectedSources += updated.length;
+      }
+
+      return affectedSources > 0
+        ? { status: 'reordered', affectedSources }
+        : { status: 'not_found' };
+    },
+
     async listKnowledgeItems(
       input: PlatformKnowledgeListRepositoryInput,
     ): Promise<PlatformKnowledgeRepositoryRecord[]> {
@@ -451,6 +846,122 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
     async findKnowledgeItem(input: { tenantId: string; knowledgeId: string }) {
       const records = await this.listKnowledgeItems({ tenantId: input.tenantId });
       return records.find((record) => record.knowledgeId === input.knowledgeId) ?? null;
+    },
+
+    async renameKnowledgeDirectory(
+      input: PlatformKnowledgeDirectoryRenameRepositoryInput,
+    ): Promise<PlatformKnowledgeDirectoryRenameRepositoryResult> {
+      const parsed = parsePlatformKnowledgeDirectoryId(input.directoryId);
+      if (!parsed.ok) return { status: 'not_found' };
+      const updatedAt = new Date();
+
+      if (parsed.kind === 'knowledge_library') {
+        const updatedSources = await database
+          .update(knowledgeSources)
+          .set({
+            sourceLabel: input.nextName,
+            updatedAt,
+          })
+          .where(
+            and(
+              eq(knowledgeSources.tenantId, input.tenantId),
+              eq(knowledgeSources.sourceLabel, parsed.libraryName),
+            ),
+          )
+          .returning({ id: knowledgeSources.id });
+
+        if (updatedSources.length === 0) return { status: 'not_found' };
+
+        return {
+          status: 'renamed',
+          affectedSources: updatedSources.length,
+          affectedDocuments: 0,
+          affectedChunks: 0,
+          affectedJobs: 0,
+        };
+      }
+
+      const matchingSources = await database
+        .select({ id: knowledgeSources.id })
+        .from(knowledgeSources)
+        .where(
+          and(
+            eq(knowledgeSources.tenantId, input.tenantId),
+            eq(knowledgeSources.sourceLabel, parsed.libraryName),
+            eq(knowledgeSources.workspaceId, parsed.folderName),
+          ),
+        );
+      const sourceIds = matchingSources.map((source) => source.id);
+      if (sourceIds.length === 0) return { status: 'not_found' };
+
+      const updatedSources = await database
+        .update(knowledgeSources)
+        .set({
+          workspaceId: input.nextName,
+          updatedAt,
+        })
+        .where(
+          and(
+            eq(knowledgeSources.tenantId, input.tenantId),
+            inArray(knowledgeSources.id, sourceIds),
+          ),
+        )
+        .returning({ id: knowledgeSources.id });
+      const updatedDocuments = await database
+        .update(knowledgeDocuments)
+        .set({
+          workspaceId: input.nextName,
+          updatedAt,
+        })
+        .where(
+          and(
+            eq(knowledgeDocuments.tenantId, input.tenantId),
+            inArray(knowledgeDocuments.sourceId, sourceIds),
+            eq(knowledgeDocuments.workspaceId, parsed.folderName),
+          ),
+        )
+        .returning({ id: knowledgeDocuments.id });
+      const documentIds = updatedDocuments.map((document) => document.id);
+      const updatedChunks = documentIds.length > 0
+        ? await database
+          .update(knowledgeChunks)
+          .set({
+            workspaceId: input.nextName,
+            updatedAt,
+          })
+          .where(
+            and(
+              eq(knowledgeChunks.tenantId, input.tenantId),
+              inArray(knowledgeChunks.documentId, documentIds),
+              eq(knowledgeChunks.workspaceId, parsed.folderName),
+            ),
+          )
+          .returning({ id: knowledgeChunks.id })
+        : [];
+      const updatedJobs = documentIds.length > 0
+        ? await database
+          .update(knowledgeIndexJobs)
+          .set({
+            workspaceId: input.nextName,
+            updatedAt,
+          })
+          .where(
+            and(
+              eq(knowledgeIndexJobs.tenantId, input.tenantId),
+              inArray(knowledgeIndexJobs.documentId, documentIds),
+              eq(knowledgeIndexJobs.workspaceId, parsed.folderName),
+            ),
+          )
+          .returning({ id: knowledgeIndexJobs.id })
+        : [];
+
+      return {
+        status: 'renamed',
+        affectedSources: updatedSources.length,
+        affectedDocuments: updatedDocuments.length,
+        affectedChunks: updatedChunks.length,
+        affectedJobs: updatedJobs.length,
+      };
     },
 
     async listKnowledgeFiles(input: { tenantId: string; knowledgeId: string }) {

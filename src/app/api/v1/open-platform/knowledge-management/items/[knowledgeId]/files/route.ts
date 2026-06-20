@@ -11,10 +11,10 @@ import { createLocalPlatformKnowledgeFileStorage } from '@/modules/open-platform
 import { buildReadonlyApiError } from '@/modules/open-platform/server/platformKnowledgeManagementApiContract';
 
 type FilesRouteContext = {
-  params: Promise<{ knowledgeId: string }> | { knowledgeId: string };
+  params: Promise<{ knowledgeId: string }>;
 };
 
-async function readParams(context: FilesRouteContext) {
+async function readParams(context: FilesRouteContext | { params: { knowledgeId: string } }) {
   return Promise.resolve(context.params);
 }
 
