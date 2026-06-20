@@ -113,6 +113,20 @@
       "when": 1781452800000,
       "tag": "0015_v1_knowledge_qa_audit_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1781884800000,
+      "tag": "0016_ai_provider_config_secure",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1781888400000,
+      "tag": "0017_ai_model_config_persistence",
+      "breakpoints": true
     }
   ]
 }

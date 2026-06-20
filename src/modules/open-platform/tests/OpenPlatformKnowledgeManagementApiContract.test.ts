@@ -3,10 +3,12 @@ import * as overviewRoute from '@/app/api/v1/open-platform/knowledge-management/
 import * as filesRoute from '@/app/api/v1/open-platform/knowledge-management/files/route';
 import * as itemsRoute from '@/app/api/v1/open-platform/knowledge-management/items/route';
 import {
+  buildPlatformKnowledgeDirectories,
   buildReadonlyApiError,
   getPlatformKnowledgeFilesResponse,
   getPlatformKnowledgeItemsResponse,
   getPlatformKnowledgeOverviewResponse,
+  PLATFORM_KNOWLEDGE_LIBRARY_WORKSPACE_ID,
 } from '@/modules/open-platform/server/platformKnowledgeManagementApiContract';
 
 const overviewUrl = 'http://localhost/api/v1/open-platform/knowledge-management';
@@ -19,6 +21,9 @@ const forbiddenFragments = [
   'node_modules',
   'H:\\',
   '/Users/',
+  'DATABASE_URL',
+  'secret',
+  'token',
   'stack trace',
   'database error',
   'embedding provider raw error',
@@ -34,6 +39,9 @@ const forbiddenFields = [
   'downloadUrl',
   'uploadUrl',
   'exportUrl',
+  'storageKey',
+  'secret',
+  'token',
 ];
 
 function expectReadonlyPayload(payload: unknown) {
@@ -77,9 +85,36 @@ describe('平台知识库管理 V1 只读 API contract', () => {
       totals: expect.any(Object),
       tenants: expect.any(Array),
       categoryStats: expect.any(Array),
+      directories: expect.any(Array),
       topQuestions: expect.any(Array),
       importJobs: expect.any(Array),
     });
+    expect(routePayload.directories).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          directoryId: 'directory:all-knowledge',
+          kind: 'virtual_root',
+          name: '全部知识库',
+          canRename: false,
+          canCreateChild: true,
+          canArchive: false,
+          status: 'active',
+        }),
+        expect.objectContaining({
+          kind: 'knowledge_library',
+          canRename: true,
+          canCreateChild: true,
+          status: 'active',
+        }),
+        expect.objectContaining({
+          kind: 'folder',
+          parentId: expect.any(String),
+          canRename: true,
+          canCreateChild: false,
+          status: 'active',
+        }),
+      ]),
+    );
     expect(routePayload).not.toHaveProperty('knowledgeItems');
     expect(routePayload).not.toHaveProperty('files');
     expect(routePayload).toEqual(directPayload);
@@ -97,11 +132,59 @@ describe('平台知识库管理 V1 只读 API contract', () => {
     expect(tenantScope.allTotals).toEqual(allScope.allTotals);
     expect(tenantScope.totals.tenantCount).toBe(1);
     expect(tenantScope.totals.knowledgeCount).toBeLessThan(allScope.totals.knowledgeCount);
+    expect(tenantScope.directories.every((directory) => directory.status === 'active')).toBe(true);
+    expect(tenantScope.directories.some((directory) => directory.name === '全部知识库')).toBe(true);
     expect(tenantScope.topQuestions.every((question) => question.tenantId === 'tenant-low-hit')).toBe(true);
     expect(tenantScope.importJobs.every((job) => job.tenantId === 'tenant-low-hit')).toBe(true);
     expect(tenantScope).not.toHaveProperty('knowledgeItems');
     expect(tenantScope).not.toHaveProperty('files');
     expectReadonlyPayload(tenantScope);
+  });
+
+  it('目录 contract 会按目录源更新时间保持服务端排序', () => {
+    const directories = buildPlatformKnowledgeDirectories({
+      items: [],
+      files: [],
+      sources: [
+        {
+          tenantId: 'tenant-a',
+          sourceLabel: '第二知识库',
+          workspaceId: PLATFORM_KNOWLEDGE_LIBRARY_WORKSPACE_ID,
+          status: 'empty',
+          updatedAt: '2026-06-20T00:00:02.000Z',
+        },
+        {
+          tenantId: 'tenant-a',
+          sourceLabel: '第一知识库',
+          workspaceId: PLATFORM_KNOWLEDGE_LIBRARY_WORKSPACE_ID,
+          status: 'empty',
+          updatedAt: '2026-06-20T00:00:01.000Z',
+        },
+        {
+          tenantId: 'tenant-a',
+          sourceLabel: '第一知识库',
+          workspaceId: '子目录 B',
+          status: 'empty',
+          updatedAt: '2026-06-20T00:00:04.000Z',
+        },
+        {
+          tenantId: 'tenant-a',
+          sourceLabel: '第一知识库',
+          workspaceId: '子目录 A',
+          status: 'empty',
+          updatedAt: '2026-06-20T00:00:03.000Z',
+        },
+      ],
+    });
+
+    expect(directories.map((directory) => directory.name)).toEqual([
+      '全部知识库',
+      '第一知识库',
+      '子目录 A',
+      '子目录 B',
+      '第二知识库',
+    ]);
+    expectReadonlyPayload(directories);
   });
 
   it('files 支持 tenantId、keyword、status 过滤和分页', async () => {

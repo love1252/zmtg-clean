@@ -1,13 +1,10 @@
-export type SupportedVendor = 'doubao' | 'deepseek' | 'qwen' | 'chatglm' | 'kimi';
-
-export type SupportedVendorConfig = {
-  vendor: SupportedVendor;
+type SupportedVendorConfigFields = {
   displayName: string;
   defaultBaseUrl: string;
   defaultModel: string;
 };
 
-const SUPPORTED_VENDOR_CONFIGS: Record<SupportedVendor, Omit<SupportedVendorConfig, 'vendor'>> = {
+const SUPPORTED_VENDOR_CONFIGS = {
   doubao: {
     displayName: '豆包 (Volcengine)',
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
@@ -30,10 +27,16 @@ const SUPPORTED_VENDOR_CONFIGS: Record<SupportedVendor, Omit<SupportedVendorConf
   },
   kimi: {
     displayName: 'Kimi',
-    defaultBaseUrl: 'https://api.moonshot.cn/v1',
+    defaultBaseUrl: 'https://api.moonshot.ai/v1',
     defaultModel: 'kimi-k2-5-260127',
   },
-} as const;
+} as const satisfies Record<string, SupportedVendorConfigFields>;
+
+export type SupportedVendor = keyof typeof SUPPORTED_VENDOR_CONFIGS;
+
+export type SupportedVendorConfig = SupportedVendorConfigFields & {
+  vendor: SupportedVendor;
+};
 
 const SUPPORTED_VENDOR_KEYS = Object.keys(SUPPORTED_VENDOR_CONFIGS) as SupportedVendor[];
 

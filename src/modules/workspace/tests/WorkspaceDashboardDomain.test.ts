@@ -243,33 +243,43 @@ describe('工作台看板领域模型', () => {
         '首页与品牌',
         '租户管理',
         '产品与套餐',
-        'AI模型配置',
-        'AI用量与费用',
+        '人工智能模型配置',
+        '人工智能示例用量',
         '知识库管理',
         '开放连接路线',
         '权限与审计',
         '商业化边界',
       ]),
     );
-    expect(platformNavItems.find((item) => item.label === 'AI模型配置')?.icon).toBe(Brain);
-    expect(platformNavItems.find((item) => item.label === 'AI用量与费用')?.icon).toBe(
+    expect(platformNavItems.find((item) => item.label === '人工智能模型配置')?.icon).toBe(Brain);
+    expect(platformNavItems.find((item) => item.label === '人工智能示例用量')?.icon).toBe(
       TrendingUp,
     );
   });
 
-  it('保持平台运营卡片具备业务含义', () => {
-    expect(platformMetrics.length).toBeGreaterThanOrEqual(6);
+  it('保持平台总览核心指标为真实运营判断口径', () => {
+    expect(platformMetrics).toHaveLength(6);
     expect(platformMetrics.map((item) => item.label)).toEqual(
-      expect.arrayContaining(['demo 租户', '演示套餐', 'AI 配额', '配额快照', '商业化信号', '平台审计']),
+      [
+        '活跃租户数',
+        '有效套餐覆盖率',
+        '基础配置缺失租户',
+        '快照异常租户',
+        '配额风险影响租户',
+        '拒绝审计信号',
+      ],
     );
-    expect(platformHealthItems).toHaveLength(4);
-    expect(platformHealthItems.map((item) => item.detail)).toEqual(
-      expect.arrayContaining(['当前未启用 AI 调用配额', '运营辅助，不做正式计费']),
-    );
+    expect(platformHealthItems.map((item) => item.label)).toEqual([
+      '缺少有效套餐',
+      '缺少配额上限',
+      '快照异常租户',
+      '配额拒绝样本',
+    ]);
     expect(platformCapabilityCards.map((item) => item.title)).toEqual([
-      '开放连接治理边界',
-      '商业化健康收尾',
-      '平台操作可审计',
+      '真实计费未启用',
+      '外部连接未启用',
+      '真实人工智能密钥未启用',
+      '示例模型配置受控配置',
     ]);
   });
 });

@@ -159,6 +159,10 @@ function platformDownloadUrl(search = '') {
   return `http://localhost/api/v1/open-platform/knowledge-management/items/knowledge-route-a/files/file-route-a/download${search}`;
 }
 
+function platformFilesContext() {
+  return { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) };
+}
+
 function buildMultipartUploadRequest() {
   return new Request(platformFilesUrl(), {
     method: 'POST',
@@ -211,7 +215,7 @@ describe('知识库文件管理 API route', () => {
   it('平台端 POST 上传、GET 列表、GET 下载和 DELETE 归档文件', async () => {
     const uploadResponse = await platformFilesRoute.POST(
       buildMultipartUploadRequest(),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      platformFilesContext(),
     );
     const uploadPayload = await readJson(uploadResponse);
 
@@ -232,7 +236,7 @@ describe('知识库文件管理 API route', () => {
 
     const listResponse = await platformFilesRoute.GET(
       new Request(platformFilesUrl('?tenantId=tenant-route-a&page=1&pageSize=10')),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      platformFilesContext(),
     );
     const listPayload = await readJson(listResponse);
     expect(listResponse.status).toBe(200);
@@ -278,7 +282,7 @@ describe('知识库文件管理 API route', () => {
 
     const response = await platformFilesRoute.POST(
       buildMultipartUploadRequest(),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      platformFilesContext(),
     );
 
     expect(response.status).toBe(expectedStatus);
@@ -304,7 +308,7 @@ describe('知识库文件管理 API route', () => {
 
     const listResponse = await platformFilesRoute.GET(
       new Request(platformFilesUrl('?tenantId=tenant-route-a')),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      platformFilesContext(),
     );
     const downloadResponse = await platformDownloadRoute.GET(
       new Request(platformDownloadUrl('?tenantId=tenant-route-a')),
@@ -332,7 +336,7 @@ describe('知识库文件管理 API route', () => {
 
     const response = await platformFilesRoute.GET(
       new Request(platformFilesUrl('?tenantId=tenant-route-a')),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      platformFilesContext(),
     );
     const payload = await readJson(response);
     const serialized = JSON.stringify(payload);

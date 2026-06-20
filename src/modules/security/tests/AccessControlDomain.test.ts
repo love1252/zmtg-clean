@@ -84,6 +84,7 @@ describe('访问控制领域', () => {
       'permission_policy',
       'audit_log',
       'platform_health',
+      'ai_model_config',
     ]);
     expect(ACCESS_ACTIONS).toContain('read_own_tenant');
     expect(ACCESS_ACTIONS).toContain('read_aggregate');
@@ -568,6 +569,71 @@ describe('访问控制领域', () => {
         action: 'export_report',
       }),
     ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+  });
+
+  it('AI 模型配置只允许平台管理员写入和触发测试，平台运营与审计员保持只读边界', () => {
+    for (const action of ['read_detail', 'update', 'manage_credentials', 'test_connection'] as const) {
+      expect(
+        canAccessResource({
+          context: platformAdminContext,
+          resource: 'ai_model_config',
+          action,
+        }),
+      ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+    }
+
+    expect(
+      canAccessResource({
+        context: platformOperatorContext,
+        resource: 'ai_model_config',
+        action: 'read_detail',
+      }),
+    ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+    expect(
+      canAccessResource({
+        context: platformOperatorContext,
+        resource: 'ai_model_config',
+        action: 'update',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
+    expect(
+      canAccessResource({
+        context: platformOperatorContext,
+        resource: 'ai_model_config',
+        action: 'test_connection',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
+    expect(
+      canAccessResource({
+        context: securityAuditorContext,
+        resource: 'ai_model_config',
+        action: 'review',
+      }),
+    ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+    expect(
+      canAccessResource({
+        context: securityAuditorContext,
+        resource: 'ai_model_config',
+        action: 'update',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
+  });
+
+  it('AI 模型配置拒绝租户端角色访问平台配置边界', () => {
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'ai_model_config',
+        action: 'read_detail',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'ai_model_config',
+        action: 'update',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
   });
 
   it('默认拒绝未知策略组合', () => {

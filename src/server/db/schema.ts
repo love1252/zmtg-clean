@@ -264,6 +264,23 @@ export const platformAiProviderConfigs = pgTable(
   }),
 );
 
+export const platformAiModelConfigSnapshots = pgTable(
+  'platform_ai_model_config_snapshots',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    scenarioDefaults: jsonb('scenario_defaults').$type<Array<Record<string, unknown>>>().notNull(),
+    agentInheritance: jsonb('agent_inheritance').$type<Array<Record<string, unknown>>>().notNull(),
+    modelStates: jsonb('model_states').$type<Array<Record<string, unknown>>>().notNull(),
+    providerStates: jsonb('provider_states').$type<Array<Record<string, unknown>>>().notNull(),
+    dryRunResults: jsonb('dry_run_results').$type<Array<Record<string, unknown>>>().notNull(),
+    updatedBy: varchar('updated_by', { length: 96 }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    updatedAtIdx: index('platform_ai_model_config_snapshots_updated_at_idx').on(table.updatedAt),
+  }),
+);
+
 export const tenantMembers = pgTable(
   'tenant_members',
   {

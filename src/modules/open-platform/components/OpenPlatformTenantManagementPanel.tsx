@@ -115,7 +115,7 @@ function missingReasonLabel(reason: PlatformCommercialMissingConfigurationReason
 
 function tenantField(label: string, value: string | null) {
   return (
-    <span className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs font-semibold text-slate-300">
+    <span className="rounded-full border border-[#e6edf5] bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
       {label}：{value ?? '-'}
     </span>
   );
@@ -125,12 +125,12 @@ function TenantManagementState({ title, description, kind }: TenantManagementSta
   const isLoading = kind === 'loading';
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-8 text-center">
-      <div className="mx-auto grid h-11 w-11 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.10] text-cyan-100">
+    <div className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] px-4 py-8 text-center">
+      <div className="mx-auto grid h-11 w-11 place-items-center rounded-2xl border border-blue-100 bg-blue-50 text-blue-700">
         {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ShieldCheck className="h-5 w-5" />}
       </div>
-      <div className="mt-3 text-sm font-semibold text-white">{title}</div>
-      {description ? <p className="mt-1 text-sm text-slate-400">{description}</p> : null}
+      <div className="mt-3 text-sm font-semibold text-slate-950">{title}</div>
+      {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
     </div>
   );
 }
@@ -144,9 +144,9 @@ function TenantQuotaGrid({ tenant }: { tenant: OpenPlatformTenantRecord }) {
         const isAiQuotaDisabled = item.key === 'aiCalls' && current === 0 && max === 0;
 
         return (
-          <div key={item.key} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-            <div className="text-xs font-semibold text-slate-400">{item.label}</div>
-            <div className="mt-2 text-xl font-semibold tracking-normal text-white">
+          <div key={item.key} className="rounded-2xl border border-[#e6edf5] bg-white p-4">
+            <div className="text-xs font-semibold text-slate-500">{item.label}</div>
+            <div className="mt-2 text-xl font-semibold tracking-normal text-slate-950">
               {quotaValue(current)} / {quotaValue(max)}
             </div>
             {isAiQuotaDisabled ? (
@@ -171,9 +171,9 @@ function CommercialHealthMetricCard({
   helper: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
-      <div className="text-xs font-semibold text-slate-400">{label}</div>
-      <div className="mt-2 text-2xl font-semibold tracking-normal text-white">{value}</div>
+    <div className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4">
+      <div className="text-xs font-semibold text-slate-500">{label}</div>
+      <div className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">{value}</div>
       <div className="mt-1 text-xs leading-5 text-slate-500">{helper}</div>
     </div>
   );
@@ -181,7 +181,7 @@ function CommercialHealthMetricCard({
 
 function EmptyCommercialHealthSignal() {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-5 text-sm text-slate-400">
+    <div className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] px-4 py-5 text-sm text-slate-500">
       暂无需要收尾关注的商业化健康信号
     </div>
   );
@@ -190,7 +190,7 @@ function EmptyCommercialHealthSignal() {
 function CommercialHealthPanel({ health }: { health: PlatformCommercialHealthViewModel | null }) {
   if (!health) {
     return (
-      <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
+      <article className="rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
         <TenantManagementState kind="loading" title="正在加载平台商业化健康摘要..." />
       </article>
     );
@@ -202,25 +202,25 @@ function CommercialHealthPanel({ health }: { health: PlatformCommercialHealthVie
     health.quotaDeniedSignals.totalCount > 0;
 
   return (
-    <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
+    <article className="rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/[0.10] px-3 py-1 text-xs font-semibold text-emerald-100">
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
             <Activity className="h-4 w-4" />
             只读运营辅助
           </div>
-          <h3 className="mt-3 text-lg font-semibold tracking-normal text-white">商业化健康</h3>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+          <h3 className="mt-3 text-lg font-semibold tracking-normal text-slate-950">商业化健康</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
             商业化健康是运营辅助，不是完整计费系统。
           </p>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
             配额快照仅作运营参考，用于识别套餐覆盖、配置缺失和 Trial 租户转化跟进机会。
           </p>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
             quota denied 是演示审计信号，不会自行变更套餐或发起触达动作。
           </p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-3 py-2 text-xs font-semibold leading-5 text-slate-300">
+        <div className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] px-3 py-2 text-xs font-semibold leading-5 text-slate-600">
           最近更新：{formatDateTime(health.lastUpdatedAt)}
         </div>
       </div>
@@ -259,9 +259,9 @@ function CommercialHealthPanel({ health }: { health: PlatformCommercialHealthVie
         </div>
       ) : (
         <div className="mt-5 grid gap-4 xl:grid-cols-3">
-          <section className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <AlertTriangle className="h-4 w-4 text-amber-200" />
+          <section className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+              <AlertTriangle className="h-4 w-4 text-amber-700" />
               配额风险租户
             </div>
             <div className="mt-3 space-y-2">
@@ -269,10 +269,10 @@ function CommercialHealthPanel({ health }: { health: PlatformCommercialHealthVie
                 health.riskTenants.slice(0, 5).map((risk) => (
                   <div
                     key={`${risk.tenantId}-${risk.quotaKey}`}
-                    className="rounded-xl border border-white/10 bg-white/[0.05] p-3"
+                    className="rounded-xl border border-[#e6edf5] bg-white p-3"
                   >
-                    <div className="text-sm font-semibold text-white">{risk.tenantName}</div>
-                    <div className="mt-1 text-xs leading-5 text-slate-400">
+                    <div className="text-sm font-semibold text-slate-950">{risk.tenantName}</div>
+                    <div className="mt-1 text-xs leading-5 text-slate-500">
                       {risk.quotaLabel}：{risk.currentSnapshotUsage} / {risk.quotaLimit}，
                       {formatUsagePercent(risk.usageRatio)}，{quotaRiskStatusLabel(risk.status)}
                     </div>
@@ -287,21 +287,21 @@ function CommercialHealthPanel({ health }: { health: PlatformCommercialHealthVie
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <Database className="h-4 w-4 text-cyan-100" />
+          <section className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+              <Database className="h-4 w-4 text-blue-700" />
               配置缺失租户
             </div>
             <div className="mt-3 space-y-2">
               {health.missingConfigurationTenants.length > 0 ? (
                 health.missingConfigurationTenants.slice(0, 5).map((tenant) => (
-                  <div key={tenant.tenantId} className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
-                    <div className="text-sm font-semibold text-white">{tenant.tenantName}</div>
+                  <div key={tenant.tenantId} className="rounded-xl border border-[#e6edf5] bg-white p-3">
+                    <div className="text-sm font-semibold text-slate-950">{tenant.tenantName}</div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {tenant.reasons.map((reason) => (
                         <span
                           key={`${tenant.tenantId}-${reason.key}`}
-                          className="rounded-full border border-amber-300/20 bg-amber-300/[0.10] px-2.5 py-1 text-xs font-semibold text-amber-100"
+                          className="rounded-full border border-amber-100 bg-amber-300/[0.10] px-2.5 py-1 text-xs font-semibold text-amber-700"
                         >
                           {missingReasonLabel(reason)}
                         </span>
@@ -315,33 +315,33 @@ function CommercialHealthPanel({ health }: { health: PlatformCommercialHealthVie
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <BarChart3 className="h-4 w-4 text-emerald-100" />
+          <section className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+              <BarChart3 className="h-4 w-4 text-emerald-700" />
               quota denied 信号
             </div>
             {health.quotaDeniedSignals.totalCount > 0 ? (
               <div className="mt-3 space-y-3">
-                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
-                  <div className="text-xs font-semibold text-slate-400">reason 聚合</div>
+                <div className="rounded-xl border border-[#e6edf5] bg-white p-3">
+                  <div className="text-xs font-semibold text-slate-500">reason 聚合</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {health.quotaDeniedSignals.byReason.map((item) => (
                       <span
                         key={item.reason}
-                        className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs font-semibold text-slate-200"
+                        className="rounded-full border border-[#e6edf5] bg-white px-2.5 py-1 text-xs font-semibold text-slate-600"
                       >
                         {item.reason} · {item.count}
                       </span>
                     ))}
                   </div>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
-                  <div className="text-xs font-semibold text-slate-400">resource 聚合</div>
+                <div className="rounded-xl border border-[#e6edf5] bg-white p-3">
+                  <div className="text-xs font-semibold text-slate-500">resource 聚合</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {health.quotaDeniedSignals.byResource.map((item) => (
                       <span
                         key={item.resource}
-                        className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs font-semibold text-slate-200"
+                        className="rounded-full border border-[#e6edf5] bg-white px-2.5 py-1 text-xs font-semibold text-slate-600"
                       >
                         {item.resource} · {item.count}
                       </span>
@@ -421,25 +421,25 @@ export function OpenPlatformTenantManagementPanel() {
 
   return (
     <section className="space-y-5">
-      <section className="rounded-[24px] border border-cyan-300/16 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
+      <section className="rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/[0.08] px-3 py-1 text-xs font-semibold text-cyan-100">
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
               <Building2 className="h-4 w-4" />
               平台只读治理视图
             </div>
-            <h2 className="mt-4 text-2xl font-semibold tracking-normal text-white">租户管理</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+            <h2 className="mt-4 text-2xl font-semibold tracking-normal text-slate-950">租户管理</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
               平台侧查看机构、套餐和配额边界
             </p>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
               当前展示为受控 demo 租户，不代表正式计费后台。
             </p>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
               仅展示运营元数据、套餐分配和配额快照，不提供租户创建、冻结、恢复或删除流程。
             </p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-[#071322]/72 px-4 py-3 text-sm font-semibold text-cyan-100">
+          <div className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-blue-700">
             受控 demo 租户
           </div>
         </div>
@@ -452,27 +452,27 @@ export function OpenPlatformTenantManagementPanel() {
           { label: '已分配套餐', value: totals.assignedPlans, icon: Database },
           { label: '配额快照', value: totals.snapshots, icon: CalendarClock },
         ].map((item) => (
-          <article key={item.label} className="rounded-[22px] border border-white/10 bg-white/[0.075] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.14)] backdrop-blur-xl">
+          <article key={item.label} className="rounded-xl border border-[#e6edf5] bg-white p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
-              <div className="text-sm font-medium text-slate-400">{item.label}</div>
-              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-cyan-300/[0.12] text-cyan-100">
+              <div className="text-sm font-medium text-slate-500">{item.label}</div>
+              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-50 text-blue-700">
                 <item.icon className="h-5 w-5" />
               </div>
             </div>
-            <div className="mt-4 text-3xl font-semibold tracking-normal text-white">{isLoading ? '--' : item.value}</div>
+            <div className="mt-4 text-3xl font-semibold tracking-normal text-slate-950">{isLoading ? '--' : item.value}</div>
           </article>
         ))}
       </section>
 
       {!errorState ? <CommercialHealthPanel health={commercialHealth} /> : null}
 
-      <article className="rounded-[24px] border border-white/10 bg-white/[0.075] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:p-6">
+      <article className="rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold tracking-normal text-white">租户列表</h3>
-            <p className="mt-1 text-sm text-slate-400">展示受控 demo 租户的基础状态、套餐信息和配额快照。</p>
+            <h3 className="text-lg font-semibold tracking-normal text-slate-950">租户列表</h3>
+            <p className="mt-1 text-sm text-slate-500">展示受控 demo 租户的基础状态、套餐信息和配额快照。</p>
           </div>
-          <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-semibold text-slate-300">
+          <span className="rounded-full border border-[#e6edf5] bg-white px-3 py-1 text-xs font-semibold text-slate-600">
             只读
           </span>
         </div>
@@ -504,28 +504,28 @@ export function OpenPlatformTenantManagementPanel() {
             {records.map((tenant) => (
               <section
                 key={tenant.tenantId}
-                className="rounded-2xl border border-white/10 bg-[#071322]/72 p-4"
+                className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4"
               >
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Users className="h-5 w-5 text-cyan-100" />
-                      <span className="text-base font-semibold text-white">{tenant.tenantName}</span>
+                      <Users className="h-5 w-5 text-blue-700" />
+                      <span className="text-base font-semibold text-slate-950">{tenant.tenantName}</span>
                       {/* 参考旧版 status badge 颜色映射 */}
                       <span className={cn(
                         'rounded-full border px-2.5 py-1 text-xs font-semibold',
                         tenant.tenantStatus === 'active'
-                          ? 'border-emerald-300/20 bg-emerald-300/[0.10] text-emerald-100'
+                          ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
                           : tenant.tenantStatus === 'suspended'
-                            ? 'border-amber-300/20 bg-amber-300/[0.10] text-amber-100'
+                            ? 'border-amber-100 bg-amber-300/[0.10] text-amber-700'
                             : tenant.tenantStatus === 'cancelled'
-                              ? 'border-rose-300/20 bg-rose-300/[0.10] text-rose-100'
-                              : 'border-slate-300/20 bg-slate-300/[0.08] text-slate-300',
+                              ? 'border-rose-100 bg-rose-50 text-rose-100'
+                              : 'border-slate-300/20 bg-slate-300/[0.08] text-slate-600',
                       )}>
                         {tenant.tenantStatus === 'active' ? '运行中' : tenant.tenantStatus === 'suspended' ? '已冻结' : tenant.tenantStatus === 'cancelled' ? '已注销' : tenant.tenantStatus}
                       </span>
                       {tenant.planName ? (
-                        <span className="rounded-full border border-blue-300/20 bg-blue-300/[0.08] px-2.5 py-1 text-xs font-semibold text-blue-100">
+                        <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
                           {tenant.planName}
                         </span>
                       ) : null}
@@ -541,7 +541,7 @@ export function OpenPlatformTenantManagementPanel() {
                       {tenant.expiresAt ? ` · 到期：${formatDateTime(tenant.expiresAt)}` : null}
                     </div>
                   </div>
-                  <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-semibold text-slate-300">
+                  <div className="shrink-0 rounded-2xl border border-[#e6edf5] bg-white px-3 py-2 text-sm font-semibold text-slate-600">
                     快照时间：{formatDateTime(tenant.snapshotAt)}
                   </div>
                 </div>

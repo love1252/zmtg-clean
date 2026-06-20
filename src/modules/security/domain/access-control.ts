@@ -23,6 +23,8 @@ export const ACCESS_RESOURCES = [
   'permission_policy',
   'audit_log',
   'platform_health',
+  'ai_model_config',
+  'knowledge_management',
 ] as const;
 
 export type ProtectedResource = (typeof ACCESS_RESOURCES)[number];
@@ -78,9 +80,24 @@ const accessPolicies: AccessPolicy[] = [
     actions: ['read_detail', 'manage_policy', 'review'],
   },
   {
+    role: 'platform_admin',
+    resource: 'ai_model_config',
+    actions: ['read_detail', 'update', 'manage_credentials', 'test_connection'],
+  },
+  {
     role: 'platform_operator',
     resource: 'platform_health',
     actions: ['read_aggregate', 'read_detail'],
+  },
+  {
+    role: 'platform_operator',
+    resource: 'ai_model_config',
+    actions: ['read_detail'],
+  },
+  {
+    role: 'security_auditor',
+    resource: 'ai_model_config',
+    actions: ['read_detail', 'review'],
   },
   {
     role: 'platform_operator',
