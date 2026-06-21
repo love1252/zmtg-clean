@@ -164,6 +164,37 @@ describe('平台端 AI 用量费用只读 contract', () => {
     expectLowSensitivePayload(payload);
   });
 
+  it('可将受控示例用量映射到指定当天，支撑 AI 用量账单默认展示今日消耗', () => {
+    const payload = getPlatformAiUsageCostResponse({ month: '2026-06', usageDate: '2026-06-22' });
+
+    expect(validatePlatformAiUsageCostContract(payload)).toEqual({ ok: true, errors: [] });
+    expect(payload).toMatchObject({
+      selectedMonth: '2026-06',
+      usageDate: '2026-06-22',
+      hasUsageData: true,
+      emptyState: null,
+      summary: {
+        month: '2026-06',
+        totalCalls: 49,
+        totalTokens: 14959,
+        estimatedCostCny: 0.0499,
+      },
+      dailyRows: [
+        expect.objectContaining({
+          date: '2026-06-22',
+          label: '22',
+          calls: 49,
+          totalTokens: 14959,
+          estimatedCostCny: 0.0405,
+        }),
+      ],
+    });
+    expect(payload.availableMonths).toEqual(expect.arrayContaining([
+      { value: '2026-06', label: '2026年06月', hasUsageData: true },
+    ]));
+    expectLowSensitivePayload(payload);
+  });
+
   it('能发现 usage/cost contract 破坏性数据问题', () => {
     const invalidMonth = structuredClone(getPlatformAiUsageCostResponse({ month: '2026-05' }));
     invalidMonth.selectedMonth = '2026-04';

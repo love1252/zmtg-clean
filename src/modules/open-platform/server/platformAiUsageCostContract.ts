@@ -21,6 +21,7 @@ export type PlatformAiUsageCostResponse = {
   usageStatus: 'controlled_readonly_demo';
   availableMonths: PlatformAiUsageAvailableMonth[];
   selectedMonth: string;
+  usageDate: string | null;
   hasUsageData: boolean;
   emptyState: {
     title: string;
@@ -42,6 +43,7 @@ export type PlatformAiUsageCostValidationResult = {
 };
 
 const controlledMonths = new Set(PLATFORM_AI_USAGE_AVAILABLE_MONTHS.map((month) => month.value));
+const usageDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function emptySummary(month: string): PlatformAiUsageSummary {
   return {
@@ -124,18 +126,72 @@ export function normalizePlatformAiUsageMonth(value: string | null | undefined) 
   return controlledMonths.has(normalized) ? normalized : PLATFORM_AI_USAGE_DEFAULT_MONTH;
 }
 
-export function getPlatformAiUsageCostResponse(params: { month?: string | null } = {}): PlatformAiUsageCostResponse {
-  const selectedMonth = normalizePlatformAiUsageMonth(params.month);
-  const monthMeta = PLATFORM_AI_USAGE_AVAILABLE_MONTHS.find((month) => month.value === selectedMonth);
-  const hasUsageData = Boolean(monthMeta?.hasUsageData);
+export function normalizePlatformAiUsageDate(value: string | null | undefined) {
+  const normalized = String(value ?? '').trim();
+  const match = usageDatePattern.exec(normalized);
+  if (!match) return null;
+
+  const [, year, month, day] = match;
+  const date = new Date(`${year}-${month}-${day}T00:00:00.000Z`);
+  if (
+    date.getUTCFullYear() !== Number(year)
+    || date.getUTCMonth() + 1 !== Number(month)
+    || date.getUTCDate() !== Number(day)
+  ) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function formatUsageMonthLabel(month: string) {
+  const [year, monthNumber] = month.split('-');
+  return `${year}年${monthNumber}月`;
+}
+
+function getAvailableMonthsForUsageDate(usageDate: string | null) {
+  if (!usageDate) return PLATFORM_AI_USAGE_AVAILABLE_MONTHS;
+
+  const usageMonth = usageDate.slice(0, 7);
+  const hasExistingMonth = PLATFORM_AI_USAGE_AVAILABLE_MONTHS.some((month) => month.value === usageMonth);
+  const months = hasExistingMonth
+    ? PLATFORM_AI_USAGE_AVAILABLE_MONTHS
+    : [...PLATFORM_AI_USAGE_AVAILABLE_MONTHS, { value: usageMonth, label: formatUsageMonthLabel(usageMonth), hasUsageData: false }];
+
+  return months.map((month) => (
+    month.value === usageMonth ? { ...month, hasUsageData: true } : month
+  ));
+}
+
+function mapControlledDailyRowsToUsageDate(usageDate: string) {
+  const sourceRow = platformAiUsageCostSampleData.dailyRows.reduce<PlatformAiDailyUsage | null>((result, row) => (
+    !result || row.estimatedCostCny > result.estimatedCostCny ? row : result
+  ), null);
+  if (!sourceRow) return [];
+
+  return [{
+    ...sourceRow,
+    date: usageDate,
+    label: String(Number(usageDate.slice(8, 10))),
+    modelCosts: sourceRow.modelCosts.map((model) => ({ ...model })),
+  }];
+}
+
+export function getPlatformAiUsageCostResponse(params: { month?: string | null; usageDate?: string | null } = {}): PlatformAiUsageCostResponse {
+  const usageDate = normalizePlatformAiUsageDate(params.usageDate);
+  const selectedMonth = usageDate ? usageDate.slice(0, 7) : normalizePlatformAiUsageMonth(params.month);
+  const availableMonths = getAvailableMonthsForUsageDate(usageDate);
+  const monthMeta = availableMonths.find((month) => month.value === selectedMonth);
+  const hasUsageData = usageDate ? true : Boolean(monthMeta?.hasUsageData);
 
   return {
     readonly: true,
     dataSource: 'controlled_demo',
     usageVersion: 'ai-usage-cost-v1-controlled-demo',
     usageStatus: 'controlled_readonly_demo',
-    availableMonths: PLATFORM_AI_USAGE_AVAILABLE_MONTHS,
+    availableMonths,
     selectedMonth,
+    usageDate,
     hasUsageData,
     emptyState: hasUsageData ? null : {
       title: '暂无受控示例用量',
@@ -145,7 +201,9 @@ export function getPlatformAiUsageCostResponse(params: { month?: string | null }
       ? { ...platformAiUsageCostSampleData.summary, month: selectedMonth }
       : emptySummary(selectedMonth),
     providerModelRows: hasUsageData ? platformAiUsageCostSampleData.providerModelRows : [],
-    dailyRows: hasUsageData ? platformAiUsageCostSampleData.dailyRows : [],
+    dailyRows: usageDate
+      ? mapControlledDailyRowsToUsageDate(usageDate)
+      : hasUsageData ? platformAiUsageCostSampleData.dailyRows : [],
     providerUsageGroups: hasUsageData ? platformAiUsageCostSampleData.providerUsageGroups : [],
     scenarioRows: hasUsageData ? platformAiUsageCostSampleData.scenarioRows : [],
     sampleInstitutionRanking: hasUsageData ? platformAiUsageCostSampleData.sampleInstitutionRanking : [],

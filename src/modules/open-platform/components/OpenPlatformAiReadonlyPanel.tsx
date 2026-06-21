@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { loadOpenPlatformAiReadonlyView } from '@/modules/open-platform/lib/platformAiReadonlyViewLoader';
 import {
-  PLATFORM_AI_READONLY_DEFAULT_MONTH,
   type PlatformAiDailyUsageSample,
 } from '@/modules/open-platform/mock/platformAiReadonly';
 import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
@@ -35,18 +34,49 @@ function formatLatency(value: number) {
 }
 
 type UsageMonthPickerAnchor = 'summary' | 'provider';
+type UsageSelection = {
+  month: string;
+  usageDate: string | null;
+};
 
+function padDatePart(value: number) {
+  return String(value).padStart(2, '0');
+}
 
+function getTodayUsageDate() {
+  const now = new Date();
+  return `${now.getFullYear()}-${padDatePart(now.getMonth() + 1)}-${padDatePart(now.getDate())}`;
+}
+
+function getUsageMonthFromDate(date: string) {
+  return date.slice(0, 7);
+}
+
+function formatUsageDateLabel(date: string) {
+  const [year, month, day] = date.split('-');
+  return `${year}年${month}月${day}日`;
+}
+
+function createTodayUsageSelection(): UsageSelection {
+  const usageDate = getTodayUsageDate();
+  return {
+    month: getUsageMonthFromDate(usageDate),
+    usageDate,
+  };
+}
 
 
 export function OpenPlatformAiReadonlyPanel() {
-  const [selectedMonth, setSelectedMonth] = useState('2026-05');
+  const [usageSelection, setUsageSelection] = useState<UsageSelection>(createTodayUsageSelection);
   const [isUsageMonthPickerOpen, setIsUsageMonthPickerOpen] = useState(false);
   const [usageMonthPickerAnchor, setUsageMonthPickerAnchor] = useState<UsageMonthPickerAnchor | null>(null);
   const [selectedUsageDay, setSelectedUsageDay] = useState<string | null>(null);
   const [selectedUsageProvider, setSelectedUsageProvider] = useState<string | null>(null);
   const [selectedUsageInstitution, setSelectedUsageInstitution] = useState<string | null>(null);
-  const view = loadOpenPlatformAiReadonlyView({ month: selectedMonth });
+  const view = loadOpenPlatformAiReadonlyView({
+    month: usageSelection.month,
+    usageDate: usageSelection.usageDate,
+  });
   const dailyRows = view.usage.dailyRows;
   const peakDailyRow = dailyRows.reduce<PlatformAiDailyUsageSample | null>((result, row) => (
     !result || row.estimatedCostCny > result.estimatedCostCny ? row : result
@@ -58,7 +88,9 @@ export function OpenPlatformAiReadonlyPanel() {
     ?? view.usage.sampleInstitutionRanking[0]
     ?? null;
   const maxDayCost = Math.max(0.01, ...dailyRows.map((row) => row.estimatedCostCny));
-  const usageMonthLabel = `${view.availableMonths.find((month) => month.value === view.selectedMonth)?.label ?? view.selectedMonth}用量`;
+  const usagePeriodLabel = view.usageDate
+    ? `${formatUsageDateLabel(view.usageDate)}用量`
+    : `${view.availableMonths.find((month) => month.value === view.selectedMonth)?.label ?? view.selectedMonth}用量`;
   const modelCostColors: Record<string, string> = {
     qwen: 'bg-[#facc15]',
     deepseek: 'bg-[#38bdf8]',
@@ -84,7 +116,16 @@ export function OpenPlatformAiReadonlyPanel() {
   const selectedMonthNumber = Number(view.selectedMonth.slice(5, 7));
 
   function changeUsageMonth(value: string) {
-    setSelectedMonth(value);
+    setUsageSelection({ month: value, usageDate: null });
+    setSelectedUsageDay(null);
+    setSelectedUsageProvider(null);
+    setSelectedUsageInstitution(null);
+    setIsUsageMonthPickerOpen(false);
+    setUsageMonthPickerAnchor(null);
+  }
+
+  function resetUsageToToday() {
+    setUsageSelection(createTodayUsageSelection());
     setSelectedUsageDay(null);
     setSelectedUsageProvider(null);
     setSelectedUsageInstitution(null);
@@ -128,8 +169,8 @@ export function OpenPlatformAiReadonlyPanel() {
           })}
         </div>
         <div className="mt-5 flex items-center justify-between text-base text-[#0879f2]">
-          <button type="button" onClick={() => changeUsageMonth(PLATFORM_AI_READONLY_DEFAULT_MONTH)}>清除</button>
-          <button type="button" onClick={() => changeUsageMonth(PLATFORM_AI_READONLY_DEFAULT_MONTH)}>本月</button>
+          <button type="button" onClick={resetUsageToToday}>清除</button>
+          <button type="button" onClick={resetUsageToToday}>本月</button>
         </div>
       </div>
     );
@@ -137,7 +178,9 @@ export function OpenPlatformAiReadonlyPanel() {
 
   function renderUsageMonthButton(anchor: UsageMonthPickerAnchor, ariaLabelPrefix: string) {
     const isOpen = isUsageMonthPickerOpen && usageMonthPickerAnchor === anchor;
-    const label = view.availableMonths.find((month) => month.value === view.selectedMonth)?.label ?? view.selectedMonth;
+    const label = view.usageDate
+      ? formatUsageDateLabel(view.usageDate)
+      : view.availableMonths.find((month) => month.value === view.selectedMonth)?.label ?? view.selectedMonth;
 
     return (
       <div className="relative">
@@ -199,10 +242,10 @@ export function OpenPlatformAiReadonlyPanel() {
           <div className="flex flex-col gap-4 border-b border-[#e6edf5] pb-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="text-xs font-bold text-[#2f7cf6]">AI 用量账单</div>
-              <div className="mt-1 text-[22px] font-bold tracking-normal text-[#1f2937]">{usageMonthLabel}</div>
+              <div className="mt-1 text-[22px] font-bold tracking-normal text-[#1f2937]">{usagePeriodLabel}</div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {renderUsageMonthButton('summary', '选择 AI 用量月份')}
+              {renderUsageMonthButton('summary', view.usageDate ? '选择 AI 用量日期' : '选择 AI 用量月份')}
               <button
                 type="button"
                 onClick={exportUsageDetail}

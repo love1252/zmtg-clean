@@ -7,7 +7,7 @@ export type OpenPlatformAiReadonlyView = PlatformAiReadonlyResponse & {
   scopeLabel: string;
 };
 
-export function loadOpenPlatformAiReadonlyView(params: { month?: string | null } = {}): OpenPlatformAiReadonlyView {
+export function loadOpenPlatformAiReadonlyView(params: { month?: string | null; usageDate?: string | null } = {}): OpenPlatformAiReadonlyView {
   const response = getPlatformAiReadonlyResponse(params);
 
   return {

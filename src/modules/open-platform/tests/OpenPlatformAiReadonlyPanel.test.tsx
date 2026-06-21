@@ -62,12 +62,32 @@ function expectNoProviderConfigFetch(fetchMock: ReturnType<typeof vi.fn>) {
   expect(providerConfigCall).toBeUndefined();
 }
 
+function freezeUsageDate() {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-06-22T09:30:00+08:00'));
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('平台端 AI 模型与用量只读面板', () => {
+  it('默认按当前日期展示 AI 用量账单当天消耗', () => {
+    freezeUsageDate();
+
+    render(<OpenPlatformAiReadonlyPanel />);
+
+    expect(screen.getByText('2026年06月22日用量')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '选择 AI 用量日期 2026年06月22日' })).toBeInTheDocument();
+    expect(screen.getByText('2026-06-22')).toBeInTheDocument();
+    expect(screen.getAllByText('¥0.0499').length).toBeGreaterThan(0);
+    expect(screen.getByText('调用 16 次 · Token 10,597')).toBeInTheDocument();
+    expect(screen.queryByText('2026年05月用量')).not.toBeInTheDocument();
+  });
+
   it('展示旧系统用量费用、模型目录与低敏边界，且不展示 Runtime 与 Key 配置卡', () => {
+    freezeUsageDate();
     const fetchMock = stubFetch();
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
@@ -84,7 +104,7 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.getByRole('heading', { name: 'AI 用量与费用' })).toBeInTheDocument();
     expect(screen.getByText('用量口径：当前为受控示例用量，费用为估算，不是正式账单。')).toBeInTheDocument();
     expect(screen.getAllByText('AI 用量账单').length).toBeGreaterThan(0);
-    expect(screen.getByText('2026年05月用量')).toBeInTheDocument();
+    expect(screen.getByText('2026年06月22日用量')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '导出' })).toBeInTheDocument();
     expect(screen.getByText('消耗金额')).toBeInTheDocument();
     expect(screen.getAllByText('¥0.0499').length).toBeGreaterThan(0);
@@ -98,7 +118,7 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.getByText('¥0.040')).toBeInTheDocument();
     expect(screen.getByText('每日消耗')).toBeInTheDocument();
     expect(screen.getByText('按模型费用占比堆叠，点击查看单日构成')).toBeInTheDocument();
-    expect(screen.getByText('2026-05-19')).toBeInTheDocument();
+    expect(screen.getByText('2026-06-22')).toBeInTheDocument();
     expect(screen.getByText('单日模型费用构成')).toBeInTheDocument();
     expect(screen.getByText('Qwen Plus')).toBeInTheDocument();
     expect(screen.getByText('调用 16 次 · Token 10,597')).toBeInTheDocument();
@@ -143,19 +163,23 @@ describe('平台端 AI 模型与用量只读面板', () => {
   });
 
   it('厂商与模型明细区月份入口也打开旧系统月份弹层', () => {
+    freezeUsageDate();
+
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(screen.getByRole('button', { name: '选择厂商模型消耗月份 2026年05月' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '选择厂商模型消耗月份 2026年06月22日' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '选择厂商模型消耗月份 2026年05月' }));
+    fireEvent.click(screen.getByRole('button', { name: '选择厂商模型消耗月份 2026年06月22日' }));
 
     expect(screen.getByRole('dialog', { name: '选择 AI 用量月份' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '5月' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '6月' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '清除' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '本月' })).toBeInTheDocument();
   });
 
   it('页面不展示 encryptedApiKey/ciphertext/authTag/iv，也不展示 Key 配置入口', () => {
+    freezeUsageDate();
+
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
     expect(container.textContent).not.toContain('encryptedApiKey');
     expect(container.textContent).not.toContain('ciphertext');
@@ -166,15 +190,17 @@ describe('平台端 AI 模型与用量只读面板', () => {
   });
 
   it('月份选择弹层按旧系统样式展示并支持受控月份切换到空状态', () => {
+    freezeUsageDate();
+
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(screen.getByRole('button', { name: '选择 AI 用量月份 2026年05月' })).toBeInTheDocument();
-    expect(screen.getByText('2026年05月用量')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '选择 AI 用量日期 2026年06月22日' })).toBeInTheDocument();
+    expect(screen.getByText('2026年06月22日用量')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '选择 AI 用量月份 2026年05月' }));
+    fireEvent.click(screen.getByRole('button', { name: '选择 AI 用量日期 2026年06月22日' }));
     expect(screen.getByRole('dialog', { name: '选择 AI 用量月份' })).toBeInTheDocument();
     expect(screen.getByText('2026')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '5月' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '6月' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '清除' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '本月' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '6月' }));
