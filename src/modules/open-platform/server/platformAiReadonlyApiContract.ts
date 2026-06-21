@@ -31,6 +31,7 @@ export type PlatformAiReadonlyResponse = {
   costDisclaimer: string;
   month: string;
   selectedMonth: string;
+  usageDate: string | null;
   availableMonths: PlatformAiAvailableMonthSample[];
   hasUsageData: boolean;
   emptyState: {
@@ -78,9 +79,9 @@ export function normalizeAiReadonlyMonth(value: string | null | undefined) {
   return normalizePlatformAiUsageMonth(value);
 }
 
-export function getPlatformAiReadonlyResponse(params: { month?: string | null } = {}): PlatformAiReadonlyResponse {
+export function getPlatformAiReadonlyResponse(params: { month?: string | null; usageDate?: string | null } = {}): PlatformAiReadonlyResponse {
   const registry = getPlatformAiModelRegistryResponse();
-  const usageCost = getPlatformAiUsageCostResponse({ month: params.month });
+  const usageCost = getPlatformAiUsageCostResponse({ month: params.month, usageDate: params.usageDate });
   const month = usageCost.selectedMonth;
 
   return {
@@ -95,6 +96,7 @@ export function getPlatformAiReadonlyResponse(params: { month?: string | null } 
     costDisclaimer: usageCost.costDisclaimer,
     month,
     selectedMonth: month,
+    usageDate: usageCost.usageDate,
     availableMonths: usageCost.availableMonths,
     hasUsageData: usageCost.hasUsageData,
     emptyState: usageCost.emptyState,
