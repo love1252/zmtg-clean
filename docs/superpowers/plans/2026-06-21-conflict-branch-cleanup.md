@@ -182,6 +182,17 @@ PR 标题：随访：重建路径分析与审计关联最小边界
 
 验证至少包含对应 Vitest route/domain 测试。
 
+### 任务 3 执行记录
+
+- `2026-06-21`：两条 Phase21 支线经 `git cherry -v origin/main <branch>` 确认等价 patch 已进入 `origin/main`。
+- `2026-06-21`：已运行 `pnpm test src/modules/institution/tests/FollowUpPathAnalysis.test.ts src/modules/institution/tests/FollowUpPathAnalysisApiRoutes.test.ts`，2 个测试文件、16 个用例通过。
+- `2026-06-21`：经用户确认后，已删除以下本地旧支线；未删除远端分支。
+
+```text
+codex/phase21-duplicate-followup-audit-link
+codex/phase21-followup-path-analysis-api
+```
+
 ## 任务 4：处理平台 demo UI 支线
 
 **文件：**
@@ -189,21 +200,35 @@ PR 标题：随访：重建路径分析与审计关联最小边界
 - 候选读取：`src/modules/workspace/components/PlatformConsole.tsx`
 - 候选读取：`src/modules/open-platform/tests/**`
 
-- [ ] **步骤 1：审计 `codex/platform-demo-ui-polish-v1`**
+- [x] **步骤 1：审计 `codex/platform-demo-ui-polish-v1`**
 
 只摘取仍适用于当前平台端白色主题、首页与品牌、AI 模型配置、知识库管理的 UI 经验。
 
-- [ ] **步骤 2：避免直接合并旧 UI**
+- [x] **步骤 2：避免直接合并旧 UI**
 
 该支线与近期平台端页面冲突，禁止整支线合并。
 
-- [ ] **步骤 3：如有必要，重建小 PR**
+- [x] **步骤 3：如有必要，重建小 PR**
 
 ```text
 PR 标题：平台端：补齐 demo UI 遗留细节
 ```
 
 必须附截图或浏览器验收说明。
+
+执行结论：本次审计无需重建小 PR。`git cherry -v origin/main codex/platform-demo-ui-polish-v1` 标记为 `-`，说明等价 patch 已在 `origin/main`；当前平台相关回归测试也已通过。该本地支线建议经用户确认后删除，远端分支另行确认。
+
+### 任务 4 执行记录
+
+- `2026-06-21`：审计 `codex/platform-demo-ui-polish-v1`，确认不适合整支线合并。
+- `2026-06-21`：`git cherry -v origin/main codex/platform-demo-ui-polish-v1` 显示该支线等价 patch 已进入 `origin/main`。
+- `2026-06-21`：已运行以下平台端相关回归测试，5 个测试文件、87 个用例通过。
+
+```bash
+pnpm test src/modules/open-platform/tests/OpenPlatformAuditEventsPanel.test.tsx src/modules/open-platform/tests/OpenPlatformGovernancePanel.test.tsx src/modules/open-platform/tests/OpenPlatformTenantManagementPanel.test.tsx src/modules/workspace/tests/WorkspaceDashboardDomain.test.ts src/modules/workspace/tests/WorkspaceEntryPages.test.tsx
+```
+
+- 本次未删除 `codex/platform-demo-ui-polish-v1` 本地分支，等待用户明确确认。
 
 ## 任务 5：隔离租户持久化 Phase3
 

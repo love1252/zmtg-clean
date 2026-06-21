@@ -3,7 +3,7 @@
 > 日期：`2026-06-21 CST +0800`  
 > 执行分支：`codex/conflict-branch-cleanup-plan-20260621`  
 > 基线：`origin/main` = `3e789b04c9c11224fee3583d578177dc2f168e22`  
-> 范围：执行《冲突支线清理任务计划》的任务 1、任务 2、任务 7。  
+> 范围：执行《冲突支线清理任务计划》的任务 1、任务 2、任务 3、任务 4、任务 7。
 > 边界：不删除分支、不合并冲突支线、不运行 migration、不读取 `.env` / `.env.local`、不外呼第三方、不修改 runtime。
 
 ---
@@ -14,7 +14,7 @@
 | --- | --- |
 | 日期 | `2026-06-21 CST +0800` |
 | 当前分支 | `codex/conflict-branch-cleanup-plan-20260621` |
-| 当前 HEAD | `4ecac6243a8081bef3bdac372cfbb1387a9cd3cc` |
+| 当前 HEAD | `abc99f1421c978d802cba26428d6f17d7583f31d` |
 | `origin/main` | `3e789b04c9c11224fee3583d578177dc2f168e22` |
 | 工作区 | 执行前干净 |
 | 计划 PR | `#351 文档：制定冲突支线清理任务计划` |
@@ -72,13 +72,11 @@ plan/phase23-his-credential-compensation-worker-test-provider-noop-execution
 
 ---
 
-## 四、剩余 14 条支线状态
+## 四、剩余 12 条本地未合并支线状态
 
 | 支线 | 当前结论 | 原因 | 后续要求 |
 | --- | --- | --- | --- |
-| `codex/phase21-duplicate-followup-audit-link` | 建议废弃 | `git cherry -v origin/main codex/phase21-duplicate-followup-audit-link` 显示等价 patch 已在 `origin/main`；当前主线已包含 `duplicateSourceTaskConflictCount` 审计关联口径。 | 不需要重建；等待用户确认后删除本地旧支线。 |
-| `codex/phase21-followup-path-analysis-api` | 建议废弃 | `git cherry -v origin/main codex/phase21-followup-path-analysis-api` 显示等价 patch 已在 `origin/main`；当前主线已有只读 API、service、repository 方法和 API route 测试。 | 不需要重建；等待用户确认后删除本地旧支线。 |
-| `codex/platform-demo-ui-polish-v1` | 等待 UI 摘取 | 与当前平台端 UI 大改冲突。 | 只摘取仍有效 UI 点，不整支线合并。 |
+| `codex/platform-demo-ui-polish-v1` | 建议废弃 / 无需重建 | `git cherry -v origin/main codex/platform-demo-ui-polish-v1` 显示等价 patch 已在 `origin/main`；当前平台端相关回归测试通过。 | 本地分支尚未删除；建议用户确认后删除本地旧支线。 |
 | `codex/tenant-persistence-phase3-plan` | 等待单独审批 | 涉及 DB、schema、依赖、API、真实落库。 | 必须独立目标任务批准。 |
 | `feat/phase23-his-connection-compensation-operation-repository-min` | 等待审批/重建 | HIS runtime repository。 | 独立 HIS 补偿任务处理。 |
 | `feat/phase23-his-credential-compensation-job-queue-repository-min` | 等待单独审批 | 涉及 job queue repository。 | 必须明确批准 queue 范围。 |
@@ -111,24 +109,29 @@ origin/codex/visual-foundation
 git push origin --delete <branch>
 ```
 
-### 5.2 Phase21 本地旧支线确认
+### 5.2 Phase21 本地旧支线清理结果
 
-Phase21 两条支线已确认无需重建。建议下一步请用户确认是否删除以下本地旧支线：
+Phase21 两条支线已确认无需重建，并已在用户确认后删除本地旧支线：
 
 ```text
 codex/phase21-duplicate-followup-audit-link
 codex/phase21-followup-path-analysis-api
 ```
 
-如果确认删除，只删除本地分支，不删除远端分支：
+远端仍保留，未执行远端删除：
 
-```bash
-git branch -D codex/phase21-duplicate-followup-audit-link codex/phase21-followup-path-analysis-api
+```text
+origin/codex/phase21-duplicate-followup-audit-link
+origin/codex/phase21-followup-path-analysis-api
 ```
 
-### 5.3 后续批次
+### 5.3 平台 demo UI 本地旧支线确认
 
-1. 进入 `codex/platform-demo-ui-polish-v1` 审计，只摘取仍适用 UI 点。
+`codex/platform-demo-ui-polish-v1` 已审计完成，等价 patch 已进入 `origin/main`，当前无需重建小 PR。建议下一步请用户确认是否删除该本地旧支线；本报告不删除远端分支。
+
+### 5.4 后续批次
+
+1. 如用户确认，删除 `codex/platform-demo-ui-polish-v1` 本地旧支线。
 2. HIS 与租户持久化必须另开目标任务，不进入普通清理。
 
 ---
@@ -153,12 +156,30 @@ pnpm test src/modules/institution/tests/FollowUpPathAnalysis.test.ts src/modules
 
 ---
 
-## 七、验证计划
+## 七、平台 demo UI 审计验证补充
 
-本批是 docs-only 执行报告，验证命令：
+本次补充审计执行：
+
+```bash
+git cherry -v origin/main codex/platform-demo-ui-polish-v1
+pnpm test src/modules/open-platform/tests/OpenPlatformAuditEventsPanel.test.tsx src/modules/open-platform/tests/OpenPlatformGovernancePanel.test.tsx src/modules/open-platform/tests/OpenPlatformTenantManagementPanel.test.tsx src/modules/workspace/tests/WorkspaceDashboardDomain.test.ts src/modules/workspace/tests/WorkspaceEntryPages.test.tsx
+```
+
+结果：
+
+- `codex/platform-demo-ui-polish-v1`：`git cherry` 标记为 `-`，等价 patch 已进入 `origin/main`。
+- 平台端审计、治理、租户管理、工作台入口相关测试通过。
+- 总计：5 个测试文件、87 个用例通过。
+- 结论：不需要从该旧支线重建小 PR；该本地支线建议用户确认后删除。
+
+---
+
+## 八、验证计划
+
+本批文档改动的格式验证命令：
 
 ```bash
 git diff --check
 ```
 
-未运行测试、未运行 lint，原因是本批没有 runtime 改动。
+本批未运行 lint，原因是本次提交只修改文档。功能测试已在 Phase21 与平台 demo UI 审计环节按对应支线范围运行，结果见第六、七节。
