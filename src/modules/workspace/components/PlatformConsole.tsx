@@ -167,16 +167,20 @@ export function PlatformConsole() {
         <section
           aria-label="平台端主内容"
           className={cn(
-            'min-w-0 flex-1 transition-[padding] duration-200',
+            'min-w-0 flex-1 pt-[70px] transition-[padding] duration-200',
             isSidebarCollapsed ? 'md:pl-16' : isLightPlatformView ? 'md:pl-[228px]' : 'md:pl-[286px]',
           )}
         >
-          <header className={cn(
-            'flex items-center justify-between border-b px-4 sm:px-6 lg:px-8',
-            isLightPlatformView
-              ? 'min-h-[70px] border-[#e6edf5] bg-white'
-              : 'min-h-[78px] border-[#e6edf5] bg-white ',
-          )}>
+          <header
+            aria-label="平台端顶栏"
+            className={cn(
+              'fixed left-0 right-0 top-0 z-20 flex items-center justify-between border-b px-4 transition-[left] duration-200 sm:px-6 lg:px-8',
+              isSidebarCollapsed ? 'md:left-16' : isLightPlatformView ? 'md:left-[228px]' : 'md:left-[286px]',
+              isLightPlatformView
+                ? 'min-h-[70px] border-[#e6edf5] bg-white'
+                : 'min-h-[78px] border-[#e6edf5] bg-white ',
+            )}
+          >
             <div className="flex min-w-0 items-center gap-3">
               <Image src="/brand/logo-mark.png" alt="" width={42} height={42} className={cn('h-10 w-10 rounded-xl bg-white object-contain p-1 md:hidden', isLightPlatformView ? 'border border-[#e6edf5]' : '')} />
               <div className="min-w-0">
@@ -249,7 +253,6 @@ export function PlatformConsole() {
             'mx-auto w-full space-y-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-7',
             isLightPlatformView ? 'max-w-none bg-[#f7f9fc]' : 'max-w-[1740px]',
           )}>
-            <PlatformScopeNotice activeLabel={activeNavLabel} />
             {activeNavLabel === '首页与品牌' ? (
               <HomepageBrandPanel />
             ) : activeNavLabel === '租户管理' ? (
@@ -278,41 +281,6 @@ export function PlatformConsole() {
         </section>
       </div>
     </main>
-  );
-}
-
-function PlatformScopeNotice({ activeLabel }: { activeLabel: string }) {
-  const badges = ['只读预览', '演示数据', 'V1 范围', '暂未开放编辑能力'];
-
-  return (
-    <aside
-      aria-label="平台端能力状态"
-      className="rounded-xl border border-[#dbe5f0] bg-white px-4 py-3 shadow-sm sm:px-5"
-    >
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 gap-3">
-          <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
-            <Info className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-slate-950">当前栏目：{activeLabel}</div>
-            <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-500">
-              本页用于平台运营人员查看租户、套餐、配额、知识库和审计边界；所有数据均为演示数据或受控只读视图，不会创建租户、修改套餐、发起触达或调用外部系统。
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2 lg:justify-end">
-          {badges.map((badge) => (
-            <span
-              key={badge}
-              className="inline-flex h-8 items-center rounded-full border border-slate-200 bg-[#f8fafc] px-3 text-xs font-semibold text-slate-600"
-            >
-              {badge}
-            </span>
-          ))}
-        </div>
-      </div>
-    </aside>
   );
 }
 
