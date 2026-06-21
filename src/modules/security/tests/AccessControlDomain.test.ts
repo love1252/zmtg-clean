@@ -85,6 +85,7 @@ describe('访问控制领域', () => {
       'audit_log',
       'platform_health',
       'ai_model_config',
+      'knowledge_management',
     ]);
     expect(ACCESS_ACTIONS).toContain('read_own_tenant');
     expect(ACCESS_ACTIONS).toContain('read_aggregate');
