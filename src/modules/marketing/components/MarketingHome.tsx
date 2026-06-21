@@ -301,6 +301,86 @@ const homepageFooterCss = `
       }
     `;
 
+const homepagePreviewBridgeScript = `
+      (() => {
+        const targets = [
+          ['hero', '.hero-copy, .metrics, .growth-card'],
+          ['navigation', '.nav'],
+          ['brand', '.brand-logo-stack'],
+          ['heroPrimaryAction', '[data-edit-target="heroPrimaryAction"]'],
+          ['heroImage', '.hero-bg, .hero-veil'],
+          ['metricConversionRate', '[data-edit-target="metricConversionRate"]'],
+          ['diagnosisSection', '[data-edit-target="diagnosisSection"]'],
+          ['journeySection', '[data-edit-target="journeySection"]'],
+          ['agentSection', '[data-edit-target="agentSection"]'],
+          ['caseSection', '[data-edit-target="caseSection"]'],
+          ['pricingSection', '[data-edit-target="pricingSection"]'],
+          ['finalCta', '[data-edit-target="finalCta"]'],
+          ['footer', '.site-footer'],
+          ['wechatQr', '.footer-qr:first-child'],
+          ['miniProgramQr', '.footer-qr:nth-child(2)'],
+        ];
+        const clickTargets = [
+          ['heroPrimaryAction', '[data-edit-target="heroPrimaryAction"]'],
+          ['brand', '.brand-logo-stack'],
+          ['wechatQr', '.footer-qr:first-child'],
+          ['miniProgramQr', '.footer-qr:nth-child(2)'],
+          ['metricConversionRate', '[data-edit-target="metricConversionRate"]'],
+          ['diagnosisSection', '[data-edit-target="diagnosisSection"]'],
+          ['journeySection', '[data-edit-target="journeySection"]'],
+          ['agentSection', '[data-edit-target="agentSection"]'],
+          ['caseSection', '[data-edit-target="caseSection"]'],
+          ['pricingSection', '[data-edit-target="pricingSection"]'],
+          ['finalCta', '[data-edit-target="finalCta"]'],
+          ['hero', '.hero-copy, .metrics, .growth-card'],
+          ['navigation', '.nav'],
+          ['footer', '.site-footer'],
+          ['heroImage', '.hero-bg, .hero-veil, .hero'],
+        ];
+
+        const findTarget = (targetName) => {
+          const target = targets.find(([name]) => name === targetName);
+          return target ? document.querySelector(target[1]) : null;
+        };
+
+        targets.forEach(([, selector]) => {
+          document.querySelectorAll(selector).forEach((element) => {
+            element.classList.add('homepage-preview-editable');
+          });
+        });
+
+        window.addEventListener('message', (event) => {
+          const data = event.data;
+          if (!data || typeof data !== 'object') return;
+          if (data.type !== 'homepage-preview-scroll') return;
+
+          const element = findTarget(data.target);
+          if (!element) return;
+
+          document.querySelectorAll('.homepage-preview-selected').forEach((selected) => {
+            selected.classList.remove('homepage-preview-selected');
+          });
+          element.classList.add('homepage-preview-selected');
+          element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        });
+
+        document.addEventListener('click', (event) => {
+          const element = event.target instanceof Element ? event.target : null;
+          if (!element) return;
+          const explicitTarget = element.closest('[data-edit-target]')?.getAttribute('data-edit-target');
+          const target = explicitTarget
+            ? clickTargets.find(([name]) => name === explicitTarget)
+            : clickTargets.find(([, selector]) => element.closest(selector));
+          if (!target) {
+            window.parent.postMessage({ type: 'homepage-preview-target-unavailable' }, '*');
+            return;
+          }
+          event.preventDefault();
+          window.parent.postMessage({ type: 'homepage-preview-target', target: target[0] }, '*');
+        });
+      })();
+    `;
+
 const luxuryMarkup = `<div class=\"page\">\n      <section class=\"hero\">\n        <img class=\"hero-bg\" src=\"/homepage/zmtg-luxury-clinic-bg.png\" alt=\"\" />\n        <div class=\"hero-veil\"></div>\n\n        <nav class=\"nav\">\n          <div class=\"brand\">\n            <span class=\"brand-logo-stack\" aria-label=\"智美天工 ZHIMEI TIANGONG\">\n              <img class=\"brand-logo-img brand-logo-day\" src=\"/brand/zmtg-logo-horizontal-luxury-clean.png\" alt=\"\" />\n              <img class=\"brand-logo-img brand-logo-night\" src=\"/brand/zmtg-logo-horizontal-night-clean.png\" alt=\"\" />\n            </span>\n          </div>\n          <div class=\"links\">\n            <a href=\"#diagnosis\">增长诊断</a>\n            <a href=\"#agents\">智能体方案</a>\n            <a href=\"#journey\">客户旅程</a>\n            <a href=\"#cases\">案例数据</a>\n          </div>\n          <div class=\"nav-actions\">
             <button class=\"theme-toggle\" type=\"button\" aria-label=\"切换夜间模式\" title=\"切换夜间模式\"><span class=\"moon-icon\" aria-hidden=\"true\">☾</span><span class=\"sun-icon\" aria-hidden=\"true\">☀</span><span class=\"theme-toggle-label\">夜间模式</span></button>
             <a class=\"nav-button\" href=\"/login\">预约演示</a>
@@ -346,6 +426,117 @@ function growthRowsMarkup(config: HomepageBrandConfig) {
     .join('\n            ');
 }
 
+function sectionHeadMarkup(section: { kicker: string; title: string; description: string }) {
+  return `<div class=\"section-head\">
+          <div>
+            <div class=\"kicker\">${escapeHtml(section.kicker)}</div>
+            <h2>${escapeHtml(section.title)}</h2>
+          </div>
+          <p>${escapeHtml(section.description)}</p>
+        </div>`;
+}
+
+function diagnosisSectionMarkup(config: HomepageBrandConfig) {
+  const section = config.sections.diagnosis;
+  const cards = section.cards
+    .map((card) => `<div class=\"diag\"><div class=\"num\">${escapeHtml(card.marker ?? '')}</div><h3>${escapeHtml(card.title)}</h3><p>${escapeHtml(card.description)}</p></div>`)
+    .join('\n          ');
+
+  return `<section id=\"diagnosis\" class=\"band diagnosis\">
+        ${sectionHeadMarkup(section)}
+        <div class=\"diagnosis-grid\">
+          ${cards}
+        </div>
+      </section>`;
+}
+
+function journeySectionMarkup(config: HomepageBrandConfig) {
+  const section = config.sections.journey;
+  const steps = section.cards
+    .map((card) => `<div class=\"timeline-item\"><div class=\"dot\">${escapeHtml(card.marker ?? '')}</div><div><h3>${escapeHtml(card.title)}</h3><p>${escapeHtml(card.description)}</p></div></div>`)
+    .join('\n              ');
+  const lanes = section.lanes
+    .map((lane) => `<div class=\"lane\"><b>${escapeHtml(lane.title)}</b>${lane.cards.map((card) => `<div class=\"mini-card${card.hot ? ' hot' : ''}\">${escapeHtml(card.title)}${card.description ? `<br />${escapeHtml(card.description)}` : ''}</div>`).join('')}</div>`)
+    .join('\n              ');
+
+  return `<section id=\"journey\" class=\"band journey\">
+        ${sectionHeadMarkup(section)}
+        <div class=\"journey-layout\">
+          <div class=\"journey-panel\">
+            <div class=\"timeline\">
+              ${steps}
+            </div>
+          </div>
+          <div class=\"journey-screen\">
+            <div class=\"screen-head\"><span>${escapeHtml(section.boardTitle)}</span><span>${escapeHtml(section.boardSummary)}</span></div>
+            <div class=\"pipeline\">
+              ${lanes}
+            </div>
+          </div>
+        </div>
+      </section>`;
+}
+
+function agentSectionMarkup(config: HomepageBrandConfig) {
+  const section = config.sections.agents;
+  const cards = section.cards
+    .map((card) => `<div class=\"agent-card\"><div class=\"agent-icon\">${escapeHtml(card.icon ?? '')}</div><h3>${escapeHtml(card.title)}</h3><p>${escapeHtml(card.description)}</p><ul>${(card.items ?? []).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>`)
+    .join('\n          ');
+
+  return `<section id=\"agents\" class=\"band agents\">
+        ${sectionHeadMarkup(section)}
+        <div class=\"agent-grid\">
+          ${cards}
+        </div>
+      </section>`;
+}
+
+function caseSectionMarkup(config: HomepageBrandConfig) {
+  const section = config.sections.cases;
+  const stats = section.stats
+    .map((stat) => `<div class=\"case-stat\"><strong>${escapeHtml(stat.value)}</strong><span>${escapeHtml(stat.label)}</span></div>`)
+    .join('\n            ');
+
+  return `<section id=\"cases\" class=\"band case-band\">
+        ${sectionHeadMarkup(section)}
+        <div class=\"case-grid\">
+          <div class=\"case-quote\">
+            <p>${escapeHtml(section.quote)}</p>
+            <b>${escapeHtml(section.author)}</b>
+          </div>
+          <div class=\"case-stats\">
+            ${stats}
+          </div>
+        </div>
+      </section>`;
+}
+
+function pricingSectionMarkup(config: HomepageBrandConfig) {
+  const section = config.sections.pricing;
+  const plans = section.plans
+    .map((plan) => `<div class=\"price-card${plan.featured ? ' featured' : ''}\"><h3>${escapeHtml(plan.title)}</h3><p>${escapeHtml(plan.description)}</p><div class=\"price\">${escapeHtml(plan.price)} <small>${escapeHtml(plan.period)}</small></div><ul>${plan.features.map((feature) => `<li>${escapeHtml(feature)}</li>`).join('')}</ul></div>`)
+    .join('\n          ');
+
+  return `<section id=\"pricing\" class=\"band pricing\">
+        ${sectionHeadMarkup(section)}
+        <div class=\"pricing-grid\">
+          ${plans}
+        </div>
+      </section>`;
+}
+
+function finalCtaSectionMarkup(config: HomepageBrandConfig) {
+  const section = config.sections.finalCta;
+
+  return `<section class=\"final-cta\">
+        <div class=\"cta-box\">
+          <h2>${escapeHtml(section.title)}</h2>
+          <p>${escapeHtml(section.description)}</p>
+          <a class=\"button primary\" href=\"${escapeHtml(section.action.href)}\">${escapeHtml(section.action.label)}</a>
+        </div>
+      </section>`;
+}
+
 function homepageFooterMarkup(config: HomepageBrandConfig) {
   const footer = config.footer;
 
@@ -369,6 +560,33 @@ function homepageFooterMarkup(config: HomepageBrandConfig) {
           </div>
         </div>
       </footer>`;
+}
+
+function withPreviewEditTargets(markup: string) {
+  return markup
+    .replace('<section class="hero">', '<section class="hero" data-edit-target="heroImage">')
+    .replace('<img class="hero-bg"', '<img class="hero-bg" data-edit-target="heroImage"')
+    .replace('<div class="hero-veil">', '<div class="hero-veil" data-edit-target="heroImage">')
+    .replace('<nav class="nav">', '<nav class="nav" data-edit-target="navigation">')
+    .replace('<span class="brand-logo-stack"', '<span class="brand-logo-stack" data-edit-target="brand"')
+    .replace('<a class="nav-button"', '<a class="nav-button" data-edit-target="navigation"')
+    .replace('<div class="hero-copy">', '<div class="hero-copy" data-edit-target="hero">')
+    .replace('<div class="pill">', '<div class="pill" data-edit-target="hero">')
+    .replace('<h1>', '<h1 data-edit-target="hero">')
+    .replace('<p class="lead">', '<p class="lead" data-edit-target="hero">')
+    .replace('<div class="actions">', '<div class="actions" data-edit-target="heroPrimaryAction">')
+    .replace('<div class="editor-note">', '<div class="editor-note" data-edit-target="hero">')
+    .replace('<div class="metrics">', '<div class="metrics" data-edit-target="metricConversionRate">')
+    .replace('<aside class="growth-card">', '<aside class="growth-card" data-edit-target="metricConversionRate">')
+    .replace('<section id="diagnosis" class="band diagnosis">', '<section id="diagnosis" class="band diagnosis" data-edit-target="diagnosisSection">')
+    .replace('<section id="journey" class="band journey">', '<section id="journey" class="band journey" data-edit-target="journeySection">')
+    .replace('<section id="agents" class="band agents">', '<section id="agents" class="band agents" data-edit-target="agentSection">')
+    .replace('<section id="cases" class="band case-band">', '<section id="cases" class="band case-band" data-edit-target="caseSection">')
+    .replace('<section id="pricing" class="band pricing">', '<section id="pricing" class="band pricing" data-edit-target="pricingSection">')
+    .replace('<section class="final-cta">', '<section class="final-cta" data-edit-target="finalCta">')
+    .replace('<footer class="site-footer"', '<footer class="site-footer" data-edit-target="footer"')
+    .replace('<div class="footer-qr"><img', '<div class="footer-qr" data-edit-target="wechatQr"><img')
+    .replace('<div class="footer-qr"><img', '<div class="footer-qr" data-edit-target="miniProgramQr"><img');
 }
 
 export function buildMarketingHomeMarkup(config: HomepageBrandConfig = defaultHomepageBrandConfig) {
@@ -420,7 +638,65 @@ export function buildMarketingHomeMarkup(config: HomepageBrandConfig = defaultHo
     .replace('她们处于术后第 21-30 天，近期咨询补水与修复项目，建议由资深咨询师人工跟进。', escapeHtml(config.growthCard.insight.description))
     .replace('<div class=\"chips\"><span>高意向</span><span>复购窗口</span><span>需人工承接</span></div>', `<div class=\"chips\">${config.growthCard.insight.chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join('')}</div>`);
 
+  markup = replaceFirst(
+    markup,
+    /<section id=\"diagnosis\" class=\"band diagnosis\">[\s\S]*?<\/section>/,
+    diagnosisSectionMarkup(config),
+  );
+  markup = replaceFirst(
+    markup,
+    /<section id=\"journey\" class=\"band journey\">[\s\S]*?<\/section>/,
+    journeySectionMarkup(config),
+  );
+  markup = replaceFirst(
+    markup,
+    /<section id=\"agents\" class=\"band agents\">[\s\S]*?<\/section>/,
+    agentSectionMarkup(config),
+  );
+  markup = replaceFirst(
+    markup,
+    /<section id=\"cases\" class=\"band case-band\">[\s\S]*?<\/section>/,
+    caseSectionMarkup(config),
+  );
+  markup = replaceFirst(
+    markup,
+    /<section id=\"pricing\" class=\"band pricing\">[\s\S]*?<\/section>/,
+    pricingSectionMarkup(config),
+  );
+  markup = replaceFirst(
+    markup,
+    /<section class=\"final-cta\">[\s\S]*?<\/section>/,
+    finalCtaSectionMarkup(config),
+  );
+
   return markup.replace(/\n    <\/div>$/, `\n      ${homepageFooterMarkup(config)}\n    </div>`);
+}
+
+export function buildMarketingHomePreviewDocument(config: HomepageBrandConfig = defaultHomepageBrandConfig) {
+  const previewMarkup = withPreviewEditTargets(buildMarketingHomeMarkup(config));
+
+  return `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>真实首页草稿预览</title>
+    <style>
+      html, body { margin: 0; min-height: 100%; background: #ffffff; }
+      ${luxuryCss}
+      ${homepageFooterCss}
+      .homepage-preview-editable { cursor: pointer; }
+      .homepage-preview-editable:hover { outline: 3px solid rgba(37, 99, 235, 0.75); outline-offset: -3px; }
+      .homepage-preview-selected { outline: 3px solid rgba(37, 99, 235, 0.95); outline-offset: -3px; }
+    </style>
+  </head>
+  <body>
+    <div class="luxuryRoot">
+      ${previewMarkup}
+    </div>
+    <script>${homepagePreviewBridgeScript}<\/script>
+  </body>
+</html>`;
 }
 
 export function MarketingHome({ config = defaultHomepageBrandConfig }: { config?: HomepageBrandConfig }) {

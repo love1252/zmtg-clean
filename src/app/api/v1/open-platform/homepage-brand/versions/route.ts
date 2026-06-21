@@ -24,6 +24,6 @@ export async function GET(request: Request) {
       { status: 200 },
     );
   } catch {
-    return lowSensitiveError(200, 'HOMEPAGE_BRAND_UNAVAILABLE');
+    return lowSensitiveError(503, 'HOMEPAGE_BRAND_UNAVAILABLE');
   }
 }
