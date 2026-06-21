@@ -4270,6 +4270,7 @@ describe('工作台入口页面', () => {
 
     const sidebar = screen.getByLabelText('平台端侧边栏');
     const mainContent = screen.getByLabelText('平台端主内容');
+    const topbar = screen.getByLabelText('平台端顶栏');
     const desktopNav = screen.getByRole('navigation', { name: '平台端桌面导航' });
     const collapseButton = screen.getByRole('button', { name: '收起侧边栏' });
     const brandArea = screen.getByLabelText('平台端品牌区');
@@ -4278,6 +4279,7 @@ describe('工作台入口页面', () => {
     expect(sidebar).toHaveAttribute('data-sidebar-state', 'expanded');
     expect(sidebar).toHaveClass('fixed', 'md:w-[228px]');
     expect(mainContent).toHaveClass('md:pl-[228px]');
+    expect(topbar).toHaveClass('fixed', 'top-0', 'right-0', 'md:left-[228px]');
     expect(brandArea).toHaveClass('w-[228px]');
     expect(brandLogo).toHaveClass('h-12', 'w-12');
     expect(collapseButton).toHaveAttribute('aria-expanded', 'true');
@@ -4288,6 +4290,7 @@ describe('工作台入口页面', () => {
     expect(sidebar).toHaveAttribute('data-sidebar-state', 'collapsed');
     expect(sidebar).toHaveClass('fixed', 'md:w-16');
     expect(mainContent).toHaveClass('md:pl-16');
+    expect(topbar).toHaveClass('fixed', 'top-0', 'right-0', 'md:left-16');
     expect(screen.getByRole('button', { name: '展开侧边栏' })).toHaveAttribute('aria-expanded', 'false');
     expect(brandArea).toHaveClass('w-[228px]');
     expect(within(brandArea).getByText('智美天工管理后台')).toBeInTheDocument();
@@ -4304,6 +4307,7 @@ describe('工作台入口页面', () => {
     expect(sidebar).toHaveAttribute('data-sidebar-state', 'expanded');
     expect(sidebar).toHaveClass('md:w-[228px]');
     expect(mainContent).toHaveClass('md:pl-[228px]');
+    expect(topbar).toHaveClass('fixed', 'top-0', 'right-0', 'md:left-[228px]');
     expect(screen.getByRole('button', { name: '收起侧边栏' })).toHaveAttribute('aria-expanded', 'true');
     expect(within(desktopNav).getByText('租户管理')).toBeInTheDocument();
   });

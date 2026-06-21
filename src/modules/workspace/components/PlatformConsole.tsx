@@ -167,16 +167,20 @@ export function PlatformConsole() {
         <section
           aria-label="平台端主内容"
           className={cn(
-            'min-w-0 flex-1 transition-[padding] duration-200',
+            'min-w-0 flex-1 pt-[70px] transition-[padding] duration-200',
             isSidebarCollapsed ? 'md:pl-16' : isLightPlatformView ? 'md:pl-[228px]' : 'md:pl-[286px]',
           )}
         >
-          <header className={cn(
-            'flex items-center justify-between border-b px-4 sm:px-6 lg:px-8',
-            isLightPlatformView
-              ? 'min-h-[70px] border-[#e6edf5] bg-white'
-              : 'min-h-[78px] border-[#e6edf5] bg-white ',
-          )}>
+          <header
+            aria-label="平台端顶栏"
+            className={cn(
+              'fixed left-0 right-0 top-0 z-20 flex items-center justify-between border-b px-4 transition-[left] duration-200 sm:px-6 lg:px-8',
+              isSidebarCollapsed ? 'md:left-16' : isLightPlatformView ? 'md:left-[228px]' : 'md:left-[286px]',
+              isLightPlatformView
+                ? 'min-h-[70px] border-[#e6edf5] bg-white'
+                : 'min-h-[78px] border-[#e6edf5] bg-white ',
+            )}
+          >
             <div className="flex min-w-0 items-center gap-3">
               <Image src="/brand/logo-mark.png" alt="" width={42} height={42} className={cn('h-10 w-10 rounded-xl bg-white object-contain p-1 md:hidden', isLightPlatformView ? 'border border-[#e6edf5]' : '')} />
               <div className="min-w-0">
