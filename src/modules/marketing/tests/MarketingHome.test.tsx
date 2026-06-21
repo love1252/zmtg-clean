@@ -70,11 +70,20 @@ describe('官网首页', () => {
 
     render(<MarketingHome config={config} />);
 
+    const footerGrid = document.querySelector('.footer-grid');
+    const footerLegal = document.querySelector('.footer-legal');
+    const icpLink = screen.getByRole('link', { name: '粤ICP备12345678号' });
+    const policeLink = screen.getByRole('link', { name: '粤公网安备12345678901234号' });
+
     expect(screen.getByText('智美天工科技有限公司')).toBeInTheDocument();
     expect(screen.getByText('0755-12345678')).toBeInTheDocument();
     expect(screen.getByText('hello@zmtg.ai')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '粤ICP备12345678号' })).toHaveAttribute('href', 'https://beian.miit.gov.cn/');
-    expect(screen.getByRole('link', { name: '粤公网安备12345678901234号' })).toHaveAttribute('href', 'https://www.beian.gov.cn/');
+    expect(icpLink).toHaveAttribute('href', 'https://beian.miit.gov.cn/');
+    expect(policeLink).toHaveAttribute('href', 'https://www.beian.gov.cn/');
+    expect(footerLegal).toContainElement(icpLink);
+    expect(footerLegal).toContainElement(policeLink);
+    expect(footerLegal?.previousElementSibling).toBe(footerGrid);
+    expect(footerGrid).not.toContainElement(icpLink);
     expect(screen.getByRole('img', { name: '公众号二维码' })).toHaveAttribute('src', '/homepage/wechat-qr.png');
     expect(screen.getByRole('img', { name: '小程序二维码' })).toHaveAttribute('src', '/homepage/mini-program-qr.png');
   });

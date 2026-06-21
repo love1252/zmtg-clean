@@ -216,8 +216,7 @@ const homepageFooterCss = `
         line-height: 1.72;
       }
 
-      .footer-contact,
-      .footer-records {
+      .footer-contact {
         display: flex;
         flex-wrap: wrap;
         gap: 10px 18px;
@@ -225,10 +224,28 @@ const homepageFooterCss = `
         font-size: 13px;
       }
 
-      .footer-records a {
-        color: #1f5fe5;
-        font-weight: 800;
+      .footer-legal {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px 16px;
+        margin-top: 38px;
+        padding-top: 22px;
+        border-top: 1px solid rgba(11,22,36,0.08);
+        color: #98a4b5;
+        font-size: 12px;
+        line-height: 1.6;
+        text-align: center;
+      }
+
+      .footer-legal a {
+        color: inherit;
+        font-weight: 500;
         text-decoration: none;
+      }
+
+      .footer-legal a:hover {
+        color: #6f7b8d;
       }
 
       .footer-qrs {
@@ -289,6 +306,15 @@ const homepageFooterCss = `
         box-shadow: 0 24px 70px rgba(0,0,0,0.18);
       }
 
+      .theme-dark .footer-legal {
+        border-top-color: rgba(185,214,255,0.1);
+        color: #78889c;
+      }
+
+      .theme-dark .footer-legal a:hover {
+        color: #9badc2;
+      }
+
       @media (max-width: 980px) {
         .site-footer {
           padding: 54px 22px 48px;
@@ -297,6 +323,10 @@ const homepageFooterCss = `
         .footer-grid,
         .footer-qrs {
           grid-template-columns: 1fr;
+        }
+
+        .footer-legal {
+          margin-top: 30px;
         }
       }
     `;
@@ -549,15 +579,15 @@ function homepageFooterMarkup(config: HomepageBrandConfig) {
               <span>联系电话：<b>${escapeHtml(footer.phone)}</b></span>
               <span>邮箱：<b>${escapeHtml(footer.email)}</b></span>
             </div>
-            <div class=\"footer-records\">
-              <a href=\"${escapeHtml(footer.icpUrl)}\" target=\"_blank\" rel=\"noreferrer\">${escapeHtml(footer.icpNumber)}</a>
-              <a href=\"${escapeHtml(footer.policeUrl)}\" target=\"_blank\" rel=\"noreferrer\">${escapeHtml(footer.policeNumber)}</a>
-            </div>
           </div>
           <div class=\"footer-qrs\">
             <div class=\"footer-qr\"><img src=\"${escapeHtml(footer.wechatQrUrl)}\" alt=\"公众号二维码\" /><div><span>公众号二维码</span><small>关注品牌动态与运营案例</small></div></div>
             <div class=\"footer-qr\"><img src=\"${escapeHtml(footer.miniProgramQrUrl)}\" alt=\"小程序二维码\" /><div><span>小程序二维码</span><small>移动端查看服务入口</small></div></div>
           </div>
+        </div>
+        <div class=\"footer-legal\" aria-label=\"网站备案信息\">
+          <a href=\"${escapeHtml(footer.icpUrl)}\" target=\"_blank\" rel=\"noreferrer\">${escapeHtml(footer.icpNumber)}</a>
+          <a href=\"${escapeHtml(footer.policeUrl)}\" target=\"_blank\" rel=\"noreferrer\">${escapeHtml(footer.policeNumber)}</a>
         </div>
       </footer>`;
 }
