@@ -238,7 +238,7 @@ pnpm test src/modules/open-platform/tests/OpenPlatformAuditEventsPanel.test.tsx 
 - 候选读取：`src/app/api/**`
 - 候选读取：`package.json`
 
-- [ ] **步骤 1：只做风险结论**
+- [x] **步骤 1：只做风险结论**
 
 支线：
 
@@ -248,13 +248,18 @@ codex/tenant-persistence-phase3-plan
 
 该支线涉及 DB、schema、依赖、API、真实落库，不得在普通清理任务中合并。
 
-- [ ] **步骤 2：输出审批需求**
+- [x] **步骤 2：输出审批需求**
 
 如需继续，必须单独让用户批准：
 
 ```text
 批准进入租户持久化 Phase3 重建任务：允许修改 schema/migration/API/repository/测试；不读取 env，不运行 migration，除非再次单独批准。
 ```
+
+### 任务 5 执行记录
+
+- `2026-06-21`：复查 `codex/tenant-persistence-phase3-plan`，确认仍有非等价提交，但该支线涉及 schema/migration、数据库连接、租户 API、依赖和鉴权相关 runtime。
+- `2026-06-21`：确认该支线不能直接合并；如仍需能力，必须基于当前 `origin/main` 另开单独目标任务重建。
 
 ## 任务 6：隔离 HIS Phase23 支线
 
@@ -264,7 +269,7 @@ codex/tenant-persistence-phase3-plan
 - 候选读取：`drizzle/**`
 - 候选读取：`docs/superpowers/plans/2026-06-0*-phase23-*.md`
 
-- [ ] **步骤 1：把 HIS 支线分成三组**
+- [x] **步骤 1：把 HIS 支线分成三组**
 
 ```text
 计划文档组：
@@ -299,6 +304,12 @@ PR 标题：HIS：重建凭证补偿 repository 与 retry policy 最小边界
 - [ ] **步骤 4：schema/queue/worker 组必须等待批准**
 
 禁止在本清理任务中合并。需要用户明确批准后另开任务。
+
+### 任务 6 执行记录
+
+- `2026-06-21`：复查剩余 HIS Phase23 支线，确认 5 条等价 patch 已进入 `origin/main`，建议经用户确认后删除本地旧支线。
+- `2026-06-21`：确认 operation repository、job queue repository、schema、retry policy helper、worker stale recovery 仍有非等价提交，但均不能直接合并，只能按 runtime/schema/worker 边界另开审批任务重建。
+- `2026-06-21`：当前主线 HIS 凭证补偿 4 个 runtime 测试文件共 112 个用例通过；`Schema.test.ts` 有 1 个既有失败，原因是迁移 SQL 中存在 `"metadata" jsonb`，与安全字段断言冲突。
 
 ## 任务 7：最终收口报告
 

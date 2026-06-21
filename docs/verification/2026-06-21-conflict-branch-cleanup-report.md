@@ -183,3 +183,93 @@ git diff --check
 ```
 
 本批未运行 lint，原因是本次提交只修改文档。功能测试已在 Phase21 与平台 demo UI 审计环节按对应支线范围运行，结果见第六、七节。
+
+---
+
+## 九、剩余 12 条未合并支线复查
+
+复查时间：`2026-06-21 CST +0800`
+
+复查命令：
+
+```bash
+git branch --no-merged origin/main --format='%(refname:short)' | grep -v '^codex/conflict-branch-cleanup-plan-20260621$'
+git cherry -v origin/main <branch>
+git diff --name-status origin/main...<branch>
+git merge-tree --write-tree origin/main <branch>
+```
+
+复查结论：
+
+| 支线 | 覆盖状态 | 冲突状态 | 处理建议 |
+| --- | --- | --- | --- |
+| `codex/platform-demo-ui-polish-v1` | `git cherry` 标记为 `-`，等价 patch 已进入 `origin/main`。 | 与当前平台端 UI 文件冲突，且直接对比会回退大量当前主线文件。 | 建议确认后删除本地旧支线，不重建。 |
+| `codex/tenant-persistence-phase3-plan` | 仍有非等价提交，但主线已存在租户持久化相关计划、schema 和数据库文件。 | 涉及 `drizzle/**`、`src/server/db/**`、auth route、租户 API、package/lockfile，直接合并会冲突并回退大量后续迁移。 | 不合并旧支线；如仍需要租户持久化能力，必须另开单独目标任务重建。 |
+| `feat/phase23-his-connection-compensation-operation-repository-min` | 主线已存在 operation repository 文件和测试，但旧支线仍有非等价 patch。 | 与 README、devlog、roadmap、operation repository、Schema 等冲突。 | 不直接合并；如需补差异，单独比较当前主线实现后重建最小补丁。 |
+| `feat/phase23-his-credential-compensation-job-queue-repository-min` | 主线已存在 job queue repository 文件和测试，但旧支线仍有非等价 patch。 | 与 README、devlog、roadmap、job queue repository 相关内容冲突。 | 不直接合并；如需补差异，单独重建小 PR。 |
+| `feat/phase23-his-credential-compensation-job-queue-schema-min` | 主线已存在 `0008_phase23_his_connection_credential_compensation_job_queue_schema_min.sql`、schema 和 Schema 测试。 | 涉及 Drizzle migration、`_journal.json`、`src/server/db/schema.ts`，直接合并高风险。 | 不直接合并；schema/migration 只能在单独审批后处理。 |
+| `feat/phase23-his-credential-compensation-retry-policy-helper-min` | 主线已存在 retry policy helper 和测试，但旧支线仍有非等价 patch。 | 与 README、devlog、roadmap、worker/operation repository 相关文件冲突。 | 不直接合并；若需要，只重建 helper 差异补丁。 |
+| `feat/phase23-his-credential-compensation-worker-claim-lock-stale-recovery-min` | 主线已存在 worker runtime 和测试，但旧支线仍有非等价 patch。 | 涉及 worker runtime，直接合并会和当前 worker 实现冲突。 | 不直接合并；worker/stale recovery 必须另开 runtime 审批任务。 |
+| `feat/phase23-his-credential-compensation-worker-test-provider-noop-execution-min` | `git cherry` 标记为 `-`，等价 patch 已进入 `origin/main`。 | 仍会与 README、devlog、roadmap、worker 文件冲突。 | 建议确认后删除本地旧支线，不重建。 |
+| `plan/phase23-his-credential-compensation-outbox-job-queue` | `git cherry` 标记为 `-`，等价文档已进入 `origin/main`。 | README、devlog、roadmap 仍冲突。 | 建议确认后删除本地旧支线，不重建。 |
+| `plan/phase23-his-credential-compensation-retry-requeue-backoff-runtime` | `git cherry` 标记为 `-`，等价文档已进入 `origin/main`。 | README、devlog、roadmap 仍冲突。 | 建议确认后删除本地旧支线，不重建。 |
+| `plan/phase23-his-credential-compensation-worker-claim-lock-stale-recovery` | `git cherry` 标记为 `-`，等价文档已进入 `origin/main`。 | README、devlog、roadmap 仍冲突。 | 建议确认后删除本地旧支线，不重建。 |
+| `plan/phase23-his-credential-compensation-worker-test-provider-noop-execution` | `git cherry` 标记为 `-`，等价文档已进入 `origin/main`。 | README、devlog、roadmap 仍冲突。 | 建议确认后删除本地旧支线，不重建。 |
+
+### 9.1 可确认删除的本地旧支线
+
+以下 6 条支线已由 `git cherry` 确认为等价 patch 已进入 `origin/main`，建议用户确认后删除本地旧支线；本报告不删除远端：
+
+```text
+codex/platform-demo-ui-polish-v1
+feat/phase23-his-credential-compensation-worker-test-provider-noop-execution-min
+plan/phase23-his-credential-compensation-outbox-job-queue
+plan/phase23-his-credential-compensation-retry-requeue-backoff-runtime
+plan/phase23-his-credential-compensation-worker-claim-lock-stale-recovery
+plan/phase23-his-credential-compensation-worker-test-provider-noop-execution
+```
+
+### 9.2 不能直接合并的高风险支线
+
+以下 6 条支线仍有非等价提交，但都不能直接合并：
+
+```text
+codex/tenant-persistence-phase3-plan
+feat/phase23-his-connection-compensation-operation-repository-min
+feat/phase23-his-credential-compensation-job-queue-repository-min
+feat/phase23-his-credential-compensation-job-queue-schema-min
+feat/phase23-his-credential-compensation-retry-policy-helper-min
+feat/phase23-his-credential-compensation-worker-claim-lock-stale-recovery-min
+```
+
+原因：
+
+- 它们的 merge-base 均早于当前平台端、知识库、AI 模型、首页品牌等大量主线工作。
+- 直接合并会删除或回退大量当前主线文件，尤其是 `drizzle/0009` 到 `0018`、知识库 runtime、AI 模型配置、首页品牌 runtime 等。
+- `tenant-persistence` 涉及 schema/migration/API/依赖。
+- HIS schema、queue、worker 涉及本项目必须单独审批的高风险边界。
+
+### 9.3 复查测试结果
+
+本次针对当前主线已有 HIS 凭证补偿能力运行：
+
+```bash
+pnpm test src/modules/institution/tests/HisConnectionCredentialCompensationOperationRepository.test.ts src/modules/institution/tests/HisConnectionCredentialCompensationJobQueueRepository.test.ts src/modules/institution/tests/HisConnectionCredentialCompensationRetryPolicy.test.ts src/modules/institution/tests/HisConnectionCredentialCompensationWorker.test.ts src/server/db/tests/Schema.test.ts
+```
+
+结果：
+
+- `HisConnectionCredentialCompensationOperationRepository.test.ts`：20 个用例通过。
+- `HisConnectionCredentialCompensationJobQueueRepository.test.ts`：17 个用例通过。
+- `HisConnectionCredentialCompensationRetryPolicy.test.ts`：16 个用例通过。
+- `HisConnectionCredentialCompensationWorker.test.ts`：59 个用例通过。
+- `Schema.test.ts`：36 个用例通过，1 个用例失败。
+
+失败项：
+
+```text
+数据库结构 > 迁移不包含真实个人信息字段名
+expected migration SQL not to contain '"metadata" jsonb'
+```
+
+判断：该失败来自当前主线迁移内容与 schema 安全测试之间的既有不一致，本次复查未修改 runtime，未引入该失败。后续如果要收口 HIS/schema 类支线，应先单独处理这个 schema 测试问题，避免把旧支线清理和 schema 修复混在一个 PR。
