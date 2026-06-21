@@ -74,6 +74,7 @@ function isDisplayableLogoRef(value: string | null | undefined) {
 export function OpenPlatformAiModelConfigPanel() {
   const [configView, setConfigView] = useState(aiModelConfigView);
   const allConfigModels = configView.providers.flatMap((provider) => provider.models);
+  const [isConfigLoading, setIsConfigLoading] = useState(true);
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
   const [expandedCapabilities, setExpandedCapabilities] = useState<Record<string, boolean>>({});
   const [scenarioModelById, setScenarioModelById] = useState<Record<string, string>>(() => Object.fromEntries(
@@ -153,6 +154,8 @@ export function OpenPlatformAiModelConfigPanel() {
         }
       } catch {
         // The panel keeps the controlled baseline when persistence is unavailable.
+      } finally {
+        if (!cancelled) setIsConfigLoading(false);
       }
     }
 
@@ -623,6 +626,33 @@ export function OpenPlatformAiModelConfigPanel() {
         <p className="mt-1 text-sm text-[#6b7280]">{configView.subtitle}</p>
       </div>
 
+      {isConfigLoading ? (
+        <section
+          aria-busy="true"
+          aria-live="polite"
+          className="rounded-xl border border-blue-100 bg-white p-6 shadow-sm"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-gray-900">模型配置加载中</h2>
+              <p className="mt-1 text-sm text-gray-500">正在读取已保存的模型启用状态、厂商 Key 状态和 Logo 配置。</p>
+            </div>
+            <div className="h-2 w-32 overflow-hidden rounded-full bg-blue-50">
+              <div className="h-full w-1/2 rounded-full bg-blue-500" />
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+            {['模型启用状态', '厂商配置状态', '默认场景配置'].map((label) => (
+              <div key={label} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <div className="h-3 w-24 rounded-full bg-gray-200" />
+                <div className="mt-4 h-7 w-14 rounded-full bg-gray-200" />
+                <span className="sr-only">{label}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : (
+      <>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {[
           { label: '已启用模型', value: String(enabledModelCount), icon: Cpu, className: 'bg-blue-100 text-blue-600' },
@@ -1010,6 +1040,8 @@ export function OpenPlatformAiModelConfigPanel() {
           <span>Logo、模型启用和场景默认关系均来自受控示例数据。</span>
         </div>
       </section>
+      </>
+      )}
     </section>
   );
 }

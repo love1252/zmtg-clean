@@ -211,6 +211,55 @@ function stubPersistedKeyAndModelStateFetch() {
   return fetchMock;
 }
 
+function stubDelayedPersistedAiModelConfigFetch() {
+  let resolveConfig: (response: Response) => void = () => {};
+  const configResponse = new Promise<Response>((resolve) => {
+    resolveConfig = resolve;
+  });
+  const persistedView = getPlatformAiModelConfigResponse();
+  persistedView.providers = persistedView.providers.map((provider) => (
+    provider.providerId === 'doubao'
+      ? {
+          ...provider,
+          logoRef: 'data:image/png;base64,iVBORw0KGgo=',
+          models: provider.models.map((model) => (
+            model.modelId === 'doubao-seed-2-0-pro-260215'
+              ? { ...model, enabled: false }
+              : model
+          )),
+        }
+      : provider
+  ));
+
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = String(init?.method ?? 'GET').toUpperCase();
+
+    if (url.includes('/api/v1/open-platform/ai-model-config') && method === 'GET') {
+      return configResponse;
+    }
+
+    return new Response(JSON.stringify({ ok: false }), { status: 404 });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  return {
+    fetchMock,
+    resolveConfig: () => resolveConfig(new Response(JSON.stringify({
+      ...persistedView,
+      summary: {
+        enabledModelCount: 9,
+        configuredProviderCount: 5,
+        defaultScenarioCount: 8,
+      },
+      dataSource: 'persisted_boundary',
+      operationMode: 'persisted_dry_run',
+      persistenceMode: 'database',
+      dryRunResults: [],
+    }), { status: 200 })),
+  };
+}
+
 function expectNoMutationFetch(fetchMock: ReturnType<typeof vi.fn>) {
   const mutatingCall = fetchMock.mock.calls.find(([input, init]) => {
     if (String(input).includes('/api/v1/open-platform/ai-model-config')) return false;
@@ -235,12 +284,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+async function openAiModelConfigPanel() {
+  fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
+  await waitFor(() => expect(screen.queryByText('模型配置加载中')).not.toBeInTheDocument());
+}
+
 describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
-  it('导航进入 AI模型配置后展示旧系统信息结构，不再展示 quota 占位', () => {
+  it('导航进入 AI模型配置后展示旧系统信息结构，不再展示 quota 占位', async () => {
     const fetchMock = stubFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
+    await openAiModelConfigPanel();
 
     const bannerHeading = screen.getByRole('heading', { name: 'AI模型配置' });
     const banner = bannerHeading.closest('[data-platform-banner="true"]');
@@ -284,11 +338,11 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     expectNoForbiddenContent(container);
   });
 
-  it('厂商展开后展示低敏 Key 状态、能力分组和模型行，同步测试按钮为受控执行', () => {
+  it('厂商展开后展示低敏 Key 状态、能力分组和模型行，同步测试按钮为受控执行', async () => {
     const fetchMock = stubFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
+    await openAiModelConfigPanel();
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
 
     expect(screen.getByText('上传 Logo')).toBeInTheDocument();
@@ -323,11 +377,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/open-platform/ai-model-config',
-      expect.objectContaining({ method: 'GET' }),
-    ));
+    await openAiModelConfigPanel();
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
     await waitFor(() => expect(screen.getAllByText('Key 已配置 ****9821').length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: '能力分组 豆包 深度思考' }));
@@ -363,7 +413,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubPersistenceFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
+    await openAiModelConfigPanel();
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
     fireEvent.click(screen.getByRole('button', { name: '能力分组 豆包 深度思考' }));
 
@@ -383,11 +433,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubSyncedModelPersistenceFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/open-platform/ai-model-config',
-      expect.objectContaining({ method: 'GET' }),
-    ));
+    await openAiModelConfigPanel();
 
     fireEvent.click(screen.getByRole('button', { name: '厂商 通义千问' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '厂商 通义千问' })).toHaveTextContent('8 个模型'));
@@ -400,11 +446,32 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     expectNoForbiddenContent(container);
   });
 
-  it('能力分组可独立展开和收起，并保持厂商展开状态', () => {
-    const fetchMock = stubFetch();
+  it('进入 AI模型配置时等待持久化配置返回后再展示计数和厂商 Logo', async () => {
+    const { fetchMock, resolveConfig } = stubDelayedPersistedAiModelConfigFetch();
     const { container } = render(<PlatformConsole />);
 
     fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
+
+    expect(screen.getByText('模型配置加载中')).toBeInTheDocument();
+    expect(screen.queryByText('已启用模型')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '厂商 豆包' })).not.toBeInTheDocument();
+    expect(screen.queryByAltText('豆包 Logo')).not.toBeInTheDocument();
+
+    resolveConfig();
+
+    await waitFor(() => expect(screen.getByText('已启用模型')).toBeInTheDocument());
+    expect(screen.getByText('9')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '厂商 豆包' })).toBeInTheDocument();
+    expect(screen.getByAltText('豆包 Logo')).toBeInTheDocument();
+    expectNoMutationFetch(fetchMock);
+    expectNoForbiddenContent(container);
+  });
+
+  it('能力分组可独立展开和收起，并保持厂商展开状态', async () => {
+    const fetchMock = stubFetch();
+    const { container } = render(<PlatformConsole />);
+
+    await openAiModelConfigPanel();
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
 
     const reasoningGroup = screen.getByRole('button', { name: '能力分组 豆包 深度思考' });
@@ -440,7 +507,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     stubFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
+    await openAiModelConfigPanel();
 
     const customerServiceSelect = screen.getByLabelText('AI 客服 默认模型');
     expect(customerServiceSelect).toBeEnabled();
@@ -470,7 +537,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubPersistenceFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
+    await openAiModelConfigPanel();
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
 
     const keyInput = screen.getByLabelText('豆包 API Key') as HTMLInputElement;
@@ -511,11 +578,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubProviderConfigUnavailableFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/open-platform/ai-model-config',
-      expect.objectContaining({ method: 'GET' }),
-    ));
+    await openAiModelConfigPanel();
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
 
     fireEvent.change(screen.getByLabelText('豆包 API Key'), { target: { value: 'provider-key-value-123456' } });
@@ -534,11 +597,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubPersistedKeyAndModelStateFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/open-platform/ai-model-config',
-      expect.objectContaining({ method: 'GET' }),
-    ));
+    await openAiModelConfigPanel();
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
 
     const keyInput = screen.getByLabelText('豆包 API Key') as HTMLInputElement;
@@ -562,11 +621,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubPersistenceFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/open-platform/ai-model-config',
-      expect.objectContaining({ method: 'GET' }),
-    ));
+    await openAiModelConfigPanel();
 
     fireEvent.change(screen.getByLabelText('AI 客服 默认模型'), { target: { value: 'deepseek-v4-flash' } });
     fireEvent.click(screen.getByRole('button', { name: '保存应用配置' }));
@@ -605,11 +660,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubPersistenceFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/open-platform/ai-model-config',
-      expect.objectContaining({ method: 'GET' }),
-    ));
+    await openAiModelConfigPanel();
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
 
     const logoFile = new File(['logo'], 'doubao-logo.png', { type: 'image/png' });
@@ -637,11 +688,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubPersistenceFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/open-platform/ai-model-config',
-      expect.objectContaining({ method: 'GET' }),
-    ));
+    await openAiModelConfigPanel();
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
 
     const logoFile = new File(['logo'], 'doubao-logo.png', { type: 'image/png' });
@@ -665,11 +712,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubPersistenceFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/open-platform/ai-model-config',
-      expect.objectContaining({ method: 'GET' }),
-    ));
+    await openAiModelConfigPanel();
 
     fireEvent.click(screen.getByRole('button', { name: '场景预设' }));
     expect(screen.getAllByText('场景预设').length).toBeGreaterThan(0);
@@ -691,11 +734,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubLogoPersistenceFailureFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/open-platform/ai-model-config',
-      expect.objectContaining({ method: 'GET' }),
-    ));
+    await openAiModelConfigPanel();
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
 
     const logoFile = new File(['logo'], 'doubao-logo.png', { type: 'image/png' });
@@ -713,7 +752,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
+    await openAiModelConfigPanel();
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
 
     const logoFile = new File(['logo'], 'doubao-logo.png', { type: 'image/png' });
@@ -751,11 +790,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     const fetchMock = stubPersistenceFetch();
     const { container } = render(<PlatformConsole />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI模型配置' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/open-platform/ai-model-config',
-      expect.objectContaining({ method: 'GET' }),
-    ));
+    await openAiModelConfigPanel();
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
     fireEvent.click(screen.getByRole('button', { name: '能力分组 豆包 深度思考' }));
 
