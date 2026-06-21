@@ -76,8 +76,8 @@ plan/phase23-his-credential-compensation-worker-test-provider-noop-execution
 
 | 支线 | 当前结论 | 原因 | 后续要求 |
 | --- | --- | --- | --- |
-| `codex/phase21-duplicate-followup-audit-link` | 等待审批/重建 | 涉及随访路径分析 domain 与测试。 | 单独做 Phase21 随访审计重建评估。 |
-| `codex/phase21-followup-path-analysis-api` | 等待审批/重建 | 涉及 API route、server service、repository。 | 用户批准 runtime 后再重建。 |
+| `codex/phase21-duplicate-followup-audit-link` | 建议废弃 | `git cherry -v origin/main codex/phase21-duplicate-followup-audit-link` 显示等价 patch 已在 `origin/main`；当前主线已包含 `duplicateSourceTaskConflictCount` 审计关联口径。 | 不需要重建；等待用户确认后删除本地旧支线。 |
+| `codex/phase21-followup-path-analysis-api` | 建议废弃 | `git cherry -v origin/main codex/phase21-followup-path-analysis-api` 显示等价 patch 已在 `origin/main`；当前主线已有只读 API、service、repository 方法和 API route 测试。 | 不需要重建；等待用户确认后删除本地旧支线。 |
 | `codex/platform-demo-ui-polish-v1` | 等待 UI 摘取 | 与当前平台端 UI 大改冲突。 | 只摘取仍有效 UI 点，不整支线合并。 |
 | `codex/tenant-persistence-phase3-plan` | 等待单独审批 | 涉及 DB、schema、依赖、API、真实落库。 | 必须独立目标任务批准。 |
 | `feat/phase23-his-connection-compensation-operation-repository-min` | 等待审批/重建 | HIS runtime repository。 | 独立 HIS 补偿任务处理。 |
@@ -95,7 +95,9 @@ plan/phase23-his-credential-compensation-worker-test-provider-noop-execution
 
 ## 五、建议的下一批动作
 
-1. 如需彻底清理远端，请用户单独确认是否删除以下远端旧支线：
+### 5.1 远端旧支线确认
+
+如需彻底清理远端，请用户单独确认是否删除以下远端旧支线：
 
 ```text
 origin/codex/app-foundation
@@ -103,19 +105,55 @@ origin/codex/auth-demo-session
 origin/codex/visual-foundation
 ```
 
-2. 如果确认删除远端，建议单独执行并记录：
+如果确认删除远端，建议单独执行并记录：
 
 ```bash
 git push origin --delete <branch>
 ```
 
-3. 再进入 Phase21 随访两条支线审计，判断是否重建。
+### 5.2 Phase21 本地旧支线确认
 
-4. HIS 与租户持久化必须另开目标任务，不进入普通清理。
+Phase21 两条支线已确认无需重建。建议下一步请用户确认是否删除以下本地旧支线：
+
+```text
+codex/phase21-duplicate-followup-audit-link
+codex/phase21-followup-path-analysis-api
+```
+
+如果确认删除，只删除本地分支，不删除远端分支：
+
+```bash
+git branch -D codex/phase21-duplicate-followup-audit-link codex/phase21-followup-path-analysis-api
+```
+
+### 5.3 后续批次
+
+1. 进入 `codex/platform-demo-ui-polish-v1` 审计，只摘取仍适用 UI 点。
+2. HIS 与租户持久化必须另开目标任务，不进入普通清理。
 
 ---
 
-## 六、验证计划
+## 六、Phase21 审计验证补充
+
+本次补充审计执行：
+
+```bash
+git cherry -v origin/main codex/phase21-duplicate-followup-audit-link
+git cherry -v origin/main codex/phase21-followup-path-analysis-api
+pnpm test src/modules/institution/tests/FollowUpPathAnalysis.test.ts src/modules/institution/tests/FollowUpPathAnalysisApiRoutes.test.ts
+```
+
+结果：
+
+- `codex/phase21-duplicate-followup-audit-link`：`git cherry` 标记为 `-`，等价 patch 已进入 `origin/main`。
+- `codex/phase21-followup-path-analysis-api`：`git cherry` 标记为 `-`，等价 patch 已进入 `origin/main`。
+- `FollowUpPathAnalysis.test.ts`：11 个用例通过。
+- `FollowUpPathAnalysisApiRoutes.test.ts`：5 个用例通过。
+- 总计：2 个测试文件、16 个用例通过。
+
+---
+
+## 七、验证计划
 
 本批是 docs-only 执行报告，验证命令：
 

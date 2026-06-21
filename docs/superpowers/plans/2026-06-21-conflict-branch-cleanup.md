@@ -161,18 +161,18 @@ codex/visual-foundation
 - 候选读取：`src/app/api/institution/follow-up-path-analysis/route.ts`
 - 候选读取：`src/modules/institution/tests/**`
 
-- [ ] **步骤 1：审计两条支线**
+- [x] **步骤 1：审计两条支线**
 
 ```text
 codex/phase21-duplicate-followup-audit-link
 codex/phase21-followup-path-analysis-api
 ```
 
-- [ ] **步骤 2：判断是否仍符合当前架构**
+- [x] **步骤 2：判断是否仍符合当前架构**
 
 只允许给出设计判断，不直接合并。若需要 API route 或 server repository 改动，先请求用户批准 runtime 范围。
 
-- [ ] **步骤 3：规划新 PR**
+- [x] **步骤 3：规划新 PR**
 
 如果仍有价值，拆为一个中文 PR：
 
@@ -318,3 +318,4 @@ pnpm exec eslint <相关文件>
 - `2026-06-21 CST +0800`：已完成任务 1、任务 2 和任务 7，输出 `docs/verification/2026-06-21-conflict-branch-cleanup-report.md`。
 - `2026-06-21 CST +0800`：经用户确认，已删除 5 条本地旧支线：`codex/app-foundation`、`codex/auth-demo-session`、`codex/auth-demo-session-local-squash-20260529`、`codex/classify-workbench-sections-by-sidebar`、`codex/visual-foundation`。
 - 远端旧支线未删除；如需删除 `origin/codex/app-foundation`、`origin/codex/auth-demo-session`、`origin/codex/visual-foundation`，必须再次取得用户明确批准。
+- `2026-06-21 CST +0800`：已完成任务 3 Phase21 随访支线审计；`codex/phase21-duplicate-followup-audit-link` 与 `codex/phase21-followup-path-analysis-api` 的等价 patch 已在 `origin/main`，当前主线相关测试通过，结论为无需重建、建议确认后删除本地旧支线。
