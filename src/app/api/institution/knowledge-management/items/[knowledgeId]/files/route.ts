@@ -5,11 +5,11 @@ import { createPlatformKnowledgeManagementRepository } from '@/modules/open-plat
 import { listInstitutionKnowledgeFilesService } from '@/modules/institution/server/institution-knowledge-file-management-service';
 
 type FilesRouteContext = {
-  params: Promise<{ knowledgeId: string }> | { knowledgeId: string };
+  params: Promise<{ knowledgeId: string }>;
 };
 
 async function readParams(context: FilesRouteContext) {
-  return Promise.resolve(context.params);
+  return context.params;
 }
 
 export async function GET(request: Request, context: FilesRouteContext) {

@@ -8,11 +8,11 @@ import {
 import { buildReadonlyApiError } from '@/modules/open-platform/server/platformKnowledgeManagementApiContract';
 
 type VisibilityRouteContext = {
-  params: Promise<{ knowledgeId: string }> | { knowledgeId: string };
+  params: Promise<{ knowledgeId: string }>;
 };
 
 async function readRouteParams(context: VisibilityRouteContext) {
-  return Promise.resolve(context.params);
+  return context.params;
 }
 
 async function readVisibilityInput(request: Request, context: VisibilityRouteContext) {

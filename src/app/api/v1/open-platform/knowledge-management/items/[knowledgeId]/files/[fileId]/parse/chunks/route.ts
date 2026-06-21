@@ -6,11 +6,11 @@ import { buildReadonlyApiError } from '@/modules/open-platform/server/platformKn
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 
 type ChunksRouteContext = {
-  params: Promise<{ knowledgeId: string; fileId: string }> | { knowledgeId: string; fileId: string };
+  params: Promise<{ knowledgeId: string; fileId: string }>;
 };
 
 async function readParams(context: ChunksRouteContext) {
-  return Promise.resolve(context.params);
+  return context.params;
 }
 
 function requirePlatformAccess(request: Request) {

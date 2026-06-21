@@ -14,8 +14,8 @@ type FilesRouteContext = {
   params: Promise<{ knowledgeId: string }>;
 };
 
-async function readParams(context: FilesRouteContext | { params: { knowledgeId: string } }) {
-  return Promise.resolve(context.params);
+async function readParams(context: FilesRouteContext) {
+  return context.params;
 }
 
 function statusCodeForResult(status: string) {
