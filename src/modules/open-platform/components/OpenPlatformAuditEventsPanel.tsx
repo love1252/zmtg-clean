@@ -17,6 +17,7 @@ import {
   ACCESS_ACTIONS,
   ACCESS_RESOURCES,
 } from '@/modules/security/domain/access-control';
+import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 
 type AuditFilterForm = {
   from: string;
@@ -252,26 +253,11 @@ export function OpenPlatformAuditEventsPanel() {
 
   return (
     <section className="space-y-5">
-      <section className="rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-              <ShieldCheck className="h-4 w-4" />
-              平台操作可审计
-            </div>
-            <h2 className="mt-4 text-2xl font-semibold tracking-normal text-slate-950">平台审计日志</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-              展示平台管理员查看租户、查看商业化健康和配额拒绝等关键操作，只展示白名单字段。
-            </p>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              不展示请求体、服务端错误细节、凭证、连接信息或机构业务敏感内容。
-            </p>
-          </div>
-          <div className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-blue-700">
-            关键操作可追踪
-          </div>
-        </div>
-      </section>
+      <PlatformSectionBanner
+        headingId="platform-audit-events-heading"
+        title="平台审计日志"
+        description="展示平台管理员查看租户、查看商业化健康和配额拒绝等关键操作，只展示白名单字段。不展示请求体、服务端错误细节、凭证、连接信息或机构业务敏感内容。"
+      />
 
       <form
         className="rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm"

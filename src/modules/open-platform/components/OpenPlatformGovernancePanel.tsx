@@ -6,6 +6,7 @@ import {
   platformRoleCatalog,
   tenantIsolationPrinciples,
 } from '@/modules/open-platform/domain/governance';
+import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { cn } from '@/shared/utils/cn';
 
 const sectionShell = 'rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6';
@@ -50,36 +51,11 @@ const auditFieldLabels: Record<string, string> = {
 export function OpenPlatformGovernancePanel() {
   return (
     <section className="space-y-5" aria-labelledby="open-platform-governance-heading">
-      <div className={cn(sectionShell, 'overflow-hidden')}>
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-blue-700">
-              <ShieldCheck className="h-4 w-4" />
-              长期路线治理词汇
-            </div>
-            <h2 id="open-platform-governance-heading" className="mt-4 text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
-              开放平台基础治理
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-              先把租户隔离、权限边界、连接生命周期和审计词汇固定为可视化基准，不代表真实生产能力已完成。第一阶段不生成真实密钥、不执行授权回调、不投递外部事件。
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3 lg:w-[620px]">
-            {[
-              { icon: Layers3, label: '租户边界', value: `${tenantIsolationPrinciples.length} 条原则` },
-              { icon: Fingerprint, label: '角色权限', value: `${platformRoleCatalog.length} 类角色` },
-              { icon: FileCheck2, label: '审计词汇', value: `${auditEventCatalog.length} 类事件` },
-            ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4">
-                <item.icon className="h-5 w-5 text-blue-600" />
-                <div className="mt-3 text-lg font-semibold tracking-normal text-slate-950">{item.value}</div>
-                <div className="mt-1 text-xs text-slate-500">{item.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <PlatformSectionBanner
+        headingId="open-platform-governance-heading"
+        title="开放平台基础治理"
+        description="先把租户隔离、权限边界、连接生命周期和审计词汇固定为可视化基准，不代表真实生产能力已完成。第一阶段不生成真实密钥、不执行授权回调、不投递外部事件。"
+      />
 
       <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
         <article className={sectionShell}>

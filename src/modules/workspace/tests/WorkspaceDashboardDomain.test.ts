@@ -243,16 +243,16 @@ describe('工作台看板领域模型', () => {
         '首页与品牌',
         '租户管理',
         '产品与套餐',
-        '人工智能模型配置',
-        '人工智能示例用量',
+        'AI模型配置',
+        'AI用量与费用',
         '知识库管理',
         '开放连接路线',
         '权限与审计',
         '商业化边界',
       ]),
     );
-    expect(platformNavItems.find((item) => item.label === '人工智能模型配置')?.icon).toBe(Brain);
-    expect(platformNavItems.find((item) => item.label === '人工智能示例用量')?.icon).toBe(
+    expect(platformNavItems.find((item) => item.label === 'AI模型配置')?.icon).toBe(Brain);
+    expect(platformNavItems.find((item) => item.label === 'AI用量与费用')?.icon).toBe(
       TrendingUp,
     );
   });

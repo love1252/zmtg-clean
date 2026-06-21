@@ -1,4 +1,5 @@
-import { CheckCircle2, Clock, GitBranch, Globe, KeyRound, Plug, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, GitBranch, Plug, XCircle } from 'lucide-react';
+import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { cn } from '@/shared/utils/cn';
 
 const sectionShell = 'rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6';
@@ -75,36 +76,11 @@ const capabilityTiers = [
 export function OpenConnectionRoadmapPanel() {
   return (
     <section className="space-y-5" aria-labelledby="open-connection-roadmap-heading">
-      <div className={cn(sectionShell, 'overflow-hidden')}>
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-blue-700">
-              <Plug className="h-4 w-4" />
-              开放连接路线
-            </div>
-            <h2 id="open-connection-roadmap-heading" className="mt-4 text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
-              开放连接路线
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-              开放连接是平台长期路线核心能力模块，覆盖 API Key 管理、OAuth 应用、Webhook 和第三方集成。当前为治理词汇只读展示，不生成真实密钥、不执行回调、不投递事件。
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3 lg:w-[560px]">
-            {[
-              { icon: KeyRound, label: 'API Key', value: 'Not issued' },
-              { icon: Globe, label: 'OAuth 应用', value: '0 个' },
-              { icon: Plug, label: 'Webhook', value: '未配置' },
-            ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4">
-                <item.icon className="h-5 w-5 text-blue-600" />
-                <div className="mt-3 text-sm font-semibold tracking-normal text-slate-950">{item.value}</div>
-                <div className="mt-1 text-xs text-slate-500">{item.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <PlatformSectionBanner
+        headingId="open-connection-roadmap-heading"
+        title="开放连接路线"
+        description="开放连接是平台长期路线核心能力模块，覆盖 API Key 管理、OAuth 应用、Webhook 和第三方集成。当前为治理词汇只读展示，不生成真实密钥、不执行回调、不投递事件。"
+      />
 
       <div className="grid gap-5 xl:grid-cols-3">
         {capabilityTiers.map((tier) => (

@@ -7,6 +7,7 @@ import {
   PLATFORM_AI_READONLY_DEFAULT_MONTH,
   type PlatformAiDailyUsageSample,
 } from '@/modules/open-platform/mock/platformAiReadonly';
+import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { cn } from '@/shared/utils/cn';
 
 const percentFormatter = new Intl.NumberFormat('zh-CN', {
@@ -184,6 +185,13 @@ export function OpenPlatformAiReadonlyPanel() {
 
   return (
     <section className="flex flex-col gap-6" aria-labelledby="ai-usage-heading">
+      <PlatformSectionBanner
+        headingId="ai-usage-banner-heading"
+        headingLevel="h1"
+        title="AI用量与费用"
+        description="查看受控 AI 用量、费用估算、厂商模型消耗和机构排行。当前费用仅用于运营参考，不作为正式账单或自动扣费依据。"
+      />
+
       <section className="order-1 rounded-[18px] border border-[#e6edf5] bg-[#f7f9fc] p-3 text-slate-950 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.04)] lg:p-4" aria-labelledby="ai-usage-heading">
         <h2 id="ai-usage-heading" className="sr-only">AI 用量与费用</h2>
         <p className="sr-only">用量口径：当前为受控示例用量，费用为估算，不是正式账单。</p>
