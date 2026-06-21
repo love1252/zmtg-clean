@@ -7,11 +7,11 @@ import { buildReadonlyApiError } from '@/modules/open-platform/server/platformKn
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 
 type DownloadRouteContext = {
-  params: Promise<{ knowledgeId: string; fileId: string }> | { knowledgeId: string; fileId: string };
+  params: Promise<{ knowledgeId: string; fileId: string }>;
 };
 
 async function readParams(context: DownloadRouteContext) {
-  return Promise.resolve(context.params);
+  return context.params;
 }
 
 function requirePlatformAccess(request: Request) {

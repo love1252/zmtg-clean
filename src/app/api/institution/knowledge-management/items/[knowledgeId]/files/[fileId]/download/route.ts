@@ -6,11 +6,11 @@ import { createLocalPlatformKnowledgeFileStorage } from '@/modules/open-platform
 import { downloadInstitutionKnowledgeFileService } from '@/modules/institution/server/institution-knowledge-file-management-service';
 
 type DownloadRouteContext = {
-  params: Promise<{ knowledgeId: string; fileId: string }> | { knowledgeId: string; fileId: string };
+  params: Promise<{ knowledgeId: string; fileId: string }>;
 };
 
 async function readParams(context: DownloadRouteContext) {
-  return Promise.resolve(context.params);
+  return context.params;
 }
 
 export async function GET(request: Request, context: DownloadRouteContext) {

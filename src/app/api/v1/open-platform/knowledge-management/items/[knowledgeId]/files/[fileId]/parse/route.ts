@@ -10,11 +10,11 @@ import { buildReadonlyApiError } from '@/modules/open-platform/server/platformKn
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 
 type ParseRouteContext = {
-  params: Promise<{ knowledgeId: string; fileId: string }> | { knowledgeId: string; fileId: string };
+  params: Promise<{ knowledgeId: string; fileId: string }>;
 };
 
 async function readParams(context: ParseRouteContext) {
-  return Promise.resolve(context.params);
+  return context.params;
 }
 
 function requirePlatformAccess(request: Request) {

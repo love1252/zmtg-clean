@@ -5,11 +5,11 @@ import { createPlatformKnowledgeManagementRepository } from '@/modules/open-plat
 import { getInstitutionKnowledgeDocumentFileParseStatusService } from '@/modules/institution/server/institution-knowledge-file-parsing-service';
 
 type ParseRouteContext = {
-  params: Promise<{ knowledgeId: string; fileId: string }> | { knowledgeId: string; fileId: string };
+  params: Promise<{ knowledgeId: string; fileId: string }>;
 };
 
 async function readParams(context: ParseRouteContext) {
-  return Promise.resolve(context.params);
+  return context.params;
 }
 
 function statusCodeForResult(status: string) {

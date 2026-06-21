@@ -40,8 +40,8 @@ function statusCodeForDirectoryResult(status: string) {
   return 409;
 }
 
-async function readParams(context: DirectoryRouteContext | { params: { directoryId: string } }) {
-  return Promise.resolve(context.params);
+async function readParams(context: DirectoryRouteContext) {
+  return context.params;
 }
 
 export async function PATCH(request: Request, context: DirectoryRouteContext) {

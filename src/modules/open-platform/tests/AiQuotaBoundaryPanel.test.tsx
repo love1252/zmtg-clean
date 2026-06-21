@@ -7,7 +7,7 @@ describe('AI 配额边界面板', () => {
     render(<AiQuotaBoundaryPanel />);
 
     expect(screen.getByRole('heading', { name: 'AI 配额边界' })).toBeInTheDocument();
-    expect(screen.getByText('配额治理视图')).toBeInTheDocument();
+    expect(screen.getByText(/当前未启用真实配额管控/)).toBeInTheDocument();
     expect(screen.getByText('配额维度概览')).toBeInTheDocument();
     expect(screen.getByText('Quota Denied 占位')).toBeInTheDocument();
 
