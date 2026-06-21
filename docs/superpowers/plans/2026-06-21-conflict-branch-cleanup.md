@@ -93,7 +93,7 @@ PR 内容：
 - 读取：Git 分支与 diff 元数据。
 - 修改：无。
 
-- [ ] **步骤 1：确认启动状态**
+- [x] **步骤 1：确认启动状态**
 
 ```bash
 date '+%Y-%m-%d %Z %z'
@@ -105,7 +105,7 @@ git status --short
 
 期望：日期为当天，分支为清理任务分支或 `main`，`HEAD` 与 `origin/main` 基线明确，工作区干净。
 
-- [ ] **步骤 2：重新列出未合并分支**
+- [x] **步骤 2：重新列出未合并分支**
 
 ```bash
 git branch --no-merged origin/main --format='%(refname:short)'
@@ -113,7 +113,7 @@ git branch --no-merged origin/main --format='%(refname:short)'
 
 期望：只剩本计划列出的 19 条支线；如果数量变化，先更新本计划再继续。
 
-- [ ] **步骤 3：记录每条支线风险**
+- [x] **步骤 3：记录每条支线风险**
 
 ```bash
 git branch --no-merged origin/main --format='%(refname:short)' | while IFS= read -r branch; do
@@ -130,7 +130,7 @@ done
 - 读取：`README.md`、`docs/devlog/*.md`、相关 `src/modules/auth/**`、`src/modules/workspace/**` diff。
 - 修改：先不修改；如需重建，另开 PR。
 
-- [ ] **步骤 1：审计以下支线是否已被主线覆盖**
+- [x] **步骤 1：审计以下支线是否已被主线覆盖**
 
 ```text
 codex/app-foundation
@@ -140,7 +140,7 @@ codex/classify-workbench-sections-by-sidebar
 codex/visual-foundation
 ```
 
-- [ ] **步骤 2：输出中文结论**
+- [x] **步骤 2：输出中文结论**
 
 每条支线给出一种结论：
 
@@ -150,7 +150,7 @@ codex/visual-foundation
 人工复核：无法判断，需用户指定业务取舍。
 ```
 
-- [ ] **步骤 3：如需删除，先请求确认**
+- [x] **步骤 3：如需删除，先请求确认**
 
 不得直接执行 `git branch -D` 或删除远端分支。必须让用户输入明确确认。
 
@@ -280,7 +280,7 @@ PR 标题：HIS：重建凭证补偿 repository 与 retry policy 最小边界
 **文件：**
 - 新增或修改：`docs/verification/<当天日期>-conflict-branch-cleanup-report.md`
 
-- [ ] **步骤 1：输出最终表格**
+- [x] **步骤 1：输出最终表格**
 
 每条支线必须有结论：
 
@@ -288,11 +288,11 @@ PR 标题：HIS：重建凭证补偿 repository 与 retry policy 最小边界
 已合并 / 已重建 / 等待审批 / 建议废弃 / 已确认删除
 ```
 
-- [ ] **步骤 2：输出剩余风险**
+- [x] **步骤 2：输出剩余风险**
 
 必须列出未处理分支原因，以及是否需要用户批准。
 
-- [ ] **步骤 3：验证**
+- [x] **步骤 3：验证**
 
 如果只改文档：
 
