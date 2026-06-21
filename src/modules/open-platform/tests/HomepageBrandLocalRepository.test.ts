@@ -54,11 +54,23 @@ describe('首页与品牌本地持久化仓库', () => {
   });
 
   it('共享仓库入口在缺少 DATABASE_URL 时自动使用本地仓库', async () => {
+    const storePath = await tempStorePath();
     vi.doMock('@/server/db/client', () => ({
       getDatabase: vi.fn(() => {
         throw new Error('DATABASE_URL is required to use tenant persistence');
       }),
     }));
+    vi.doMock('@/modules/open-platform/server/homepage-brand-local-repository', async () => {
+      const actual = await vi.importActual<
+        typeof import('@/modules/open-platform/server/homepage-brand-local-repository')
+      >('@/modules/open-platform/server/homepage-brand-local-repository');
+      return {
+        ...actual,
+        createLocalHomepageBrandRepository: vi.fn(() =>
+          actual.createLocalHomepageBrandRepository({ storePath }),
+        ),
+      };
+    });
 
     const { getHomepageBrandRepository } = await import('@/app/api/v1/open-platform/homepage-brand/_shared');
     const repository = getHomepageBrandRepository();

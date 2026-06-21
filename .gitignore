@@ -16,3 +16,5 @@ coverage/
 .vercel/
 .turbo/
 var/knowledge-files/
+var/homepage-brand-local-store.json
+var/homepage-brand-assets/

@@ -1,14 +1,13 @@
 import type { Metadata } from 'next';
 import { MarketingHome } from '@/modules/marketing/components/MarketingHome';
 import { defaultHomepageBrandConfig } from '@/modules/marketing/domain/homepageBrandConfig';
-import { createHomepageBrandRepository } from '@/modules/open-platform/server/homepage-brand-repository';
+import { getHomepageBrandRepository } from '@/app/api/v1/open-platform/homepage-brand/_shared';
 import { getPublishedHomepageBrandConfigService } from '@/modules/open-platform/server/homepage-brand-service';
-import { getDatabase } from '@/server/db/client';
 
 async function loadPublishedHomepageBrandConfig() {
   try {
     return await getPublishedHomepageBrandConfigService({
-      repository: createHomepageBrandRepository(getDatabase()),
+      repository: getHomepageBrandRepository(),
     });
   } catch {
     return defaultHomepageBrandConfig;
