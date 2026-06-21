@@ -71,6 +71,76 @@ export type HomepageBrandLoginPageConfig = {
   insights: HomepageBrandLoginInsight[];
 };
 
+export type HomepageBrandContentCard = {
+  id: string;
+  marker?: string;
+  icon?: string;
+  title: string;
+  description: string;
+  items?: string[];
+  hot?: boolean;
+};
+
+export type HomepageBrandContentSection = {
+  kicker: string;
+  title: string;
+  description: string;
+  cards: HomepageBrandContentCard[];
+};
+
+export type HomepageBrandJourneyLane = {
+  id: string;
+  title: string;
+  cards: HomepageBrandContentCard[];
+};
+
+export type HomepageBrandJourneySection = HomepageBrandContentSection & {
+  boardTitle: string;
+  boardSummary: string;
+  lanes: HomepageBrandJourneyLane[];
+};
+
+export type HomepageBrandCaseSection = {
+  kicker: string;
+  title: string;
+  description: string;
+  quote: string;
+  author: string;
+  stats: Array<{ id: string; value: string; label: string }>;
+};
+
+export type HomepageBrandPricingPlan = {
+  id: string;
+  title: string;
+  description: string;
+  price: string;
+  period: string;
+  featured: boolean;
+  features: string[];
+};
+
+export type HomepageBrandPricingSection = {
+  kicker: string;
+  title: string;
+  description: string;
+  plans: HomepageBrandPricingPlan[];
+};
+
+export type HomepageBrandFinalCtaSection = {
+  title: string;
+  description: string;
+  action: HomepageBrandAction;
+};
+
+export type HomepageBrandContentSections = {
+  diagnosis: HomepageBrandContentSection;
+  journey: HomepageBrandJourneySection;
+  agents: HomepageBrandContentSection;
+  cases: HomepageBrandCaseSection;
+  pricing: HomepageBrandPricingSection;
+  finalCta: HomepageBrandFinalCtaSection;
+};
+
 export type HomepageBrandConfig = {
   brand: {
     platformName: string;
@@ -115,6 +185,7 @@ export type HomepageBrandConfig = {
       chips: string[];
     };
   };
+  sections: HomepageBrandContentSections;
   login: {
     institution: HomepageBrandLoginPageConfig;
     platform: HomepageBrandLoginPageConfig;
@@ -195,6 +266,75 @@ export const defaultHomepageBrandConfig: HomepageBrandConfig = {
       confidence: '92%匹配',
       description: '她们处于术后第 21-30 天，近期咨询补水与修复项目，建议由资深咨询师人工跟进。',
       chips: ['高意向', '复购窗口', '需人工承接'],
+    },
+  },
+  sections: {
+    diagnosis: {
+      kicker: 'GROWTH DIAGNOSIS',
+      title: '先诊断增长断点，再配置智能体',
+      description: '页面不再堆功能，而是把机构最关心的经营问题拆成四个可被 AI 协同解决的环节。',
+      cards: [
+        { id: 'customer-assets', marker: '01', title: '客户资产分散', description: '客户记录、项目偏好和跟进状态散落在不同账号和表格，团队无法统一复盘。' },
+        { id: 'consulting', marker: '02', title: '咨询承接不稳定', description: '新客咨询高峰期容易漏回，资深咨询师时间被低意向客户消耗。' },
+        { id: 'aftercare', marker: '03', title: '术后关怀难坚持', description: '术后提醒、恢复反馈和复诊邀约靠人工记忆，服务标准难复制。' },
+        { id: 'repurchase', marker: '04', title: '复购机会不可见', description: '客户进入补水、修复、抗衰等复购窗口时，系统没有及时提醒团队承接。' },
+      ],
+    },
+    journey: {
+      kicker: 'CUSTOMER JOURNEY',
+      title: '把医美客户旅程做成可运营资产',
+      description: '从咨询、到院、术后到复购，每个节点都可以由智能体提示、触达、转人工和复盘。',
+      cards: [
+        { id: 'new-consult', marker: '1', title: '新客咨询', description: 'AI 接待基础问题，识别高意向、禁忌风险和价格异议。' },
+        { id: 'appointment', marker: '2', title: '预约到院', description: '提醒到院时间、术前注意事项，并把关键诉求同步给咨询师。' },
+        { id: 'aftercare', marker: '3', title: '术后关怀', description: '按项目自动发送护理提醒，异常反馈及时转人工。' },
+        { id: 'repurchase', marker: '4', title: '复购召回', description: '根据恢复周期和历史偏好，提示适合承接的复购窗口。' },
+      ],
+      boardTitle: '智美天工 · 旅程运营看板',
+      boardSummary: '本周 216 个高意向机会',
+      lanes: [
+        { id: 'new-consult', title: '新客咨询', cards: [{ id: 'price', title: '玻尿酸价格咨询', description: 'AI 建议：转人工', hot: true }, { id: 'thermage', title: '热玛吉恢复期问题', description: '' }, { id: 'waterlight', title: '水光针禁忌咨询', description: '' }] },
+        { id: 'appointment', title: '到院邀约', cards: [{ id: 'tomorrow', title: '明日到院提醒', description: '' }, { id: 'schedule', title: '高预算客户确认档期', description: '', hot: true }, { id: 'prep', title: '术前注意事项', description: '' }] },
+        { id: 'aftercare', title: '术后关怀', cards: [{ id: 'swelling', title: '第 3 天红肿反馈', description: '' }, { id: 'followup', title: '第 7 天复诊提醒', description: '' }, { id: 'risk', title: '异常症状转人工', description: '', hot: true }] },
+        { id: 'repurchase', title: '复购召回', cards: [{ id: 'repair', title: '补水修复窗口', description: '', hot: true }, { id: 'anti-aging', title: '抗衰项目推荐', description: '' }, { id: 'birthday', title: '会员生日关怀', description: '' }] },
+      ],
+    },
+    agents: {
+      kicker: 'AI AGENTS',
+      title: '不是一个客服机器人，而是一组医美增长智能体',
+      description: '每个智能体负责一个经营场景，并遵守医美合规话术边界。',
+      cards: [
+        { id: 'consulting', icon: '咨', title: '咨询转化智能体', description: '辅助接待新客，提炼需求，识别高意向并提示人工承接。', items: ['项目知识问答', '价格异议处理', '风险话术提醒'] },
+        { id: 'aftercare', icon: '护', title: '术后关怀智能体', description: '根据项目周期自动发送护理提醒，收集恢复反馈并识别异常。', items: ['护理 SOP 触达', '复诊提醒', '异常转人工'] },
+        { id: 'growth', icon: '营', title: '复购增长智能体', description: '结合客户偏好、恢复阶段和历史项目，发现适合跟进的增长机会。', items: ['复购窗口识别', '人群分层', '召回话术建议'] },
+      ],
+    },
+    cases: {
+      kicker: 'RESULTS',
+      title: '让经营结果看得见',
+      description: '比“用了 AI”更重要的是：客户有没有被及时承接，服务有没有持续发生，复购有没有被唤醒。',
+      quote: '“上线后，咨询师每天打开系统先看高意向客户和复购窗口，不再靠人工翻聊天记录。术后关怀稳定了，客户体验也更一致。”',
+      author: '某连锁医美机构 · 运营总监',
+      stats: [
+        { id: 'repurchase', value: '35%', label: '复购率提升' },
+        { id: 'response', value: '2.4x', label: '咨询响应效率' },
+        { id: 'risk', value: '40%', label: '客诉风险下降' },
+      ],
+    },
+    pricing: {
+      kicker: 'PLANS',
+      title: '按机构阶段选择增长方案',
+      description: '试用版先验证一条核心客户旅程，专业版跑通单店增长，企业版复制到多门店。',
+      plans: [
+        { id: 'trial', title: '试用版', description: '验证核心旅程', price: '¥0', period: '/14天', featured: false, features: ['客户管理基础功能', 'AI 咨询助手', '3 条随访旅程', '基础数据分析'] },
+        { id: 'professional', title: '专业版', description: '适合单店和成长期机构', price: '¥2,999', period: '/月', featured: true, features: ['无限随访旅程', '企业微信客户同步', 'AI 优先响应', '营销自动化与数据导出'] },
+        { id: 'enterprise', title: '企业版', description: '适合连锁机构', price: '¥7,999', period: '/月', featured: false, features: ['多门店统一管理', '专属成功经理', '高级数据分析', '私有化与定制方案'] },
+      ],
+    },
+    finalCta: {
+      title: '先从一条客户旅程开始，看到 AI 带来的真实增长',
+      description: '我们会帮机构梳理咨询、到院、术后和复购四个关键节点，先配置一条可运行的增长旅程，再逐步扩展到完整智能运营中台。',
+      action: { label: '预约增长诊断 →', href: '/login' },
     },
   },
   login: {
@@ -281,6 +421,39 @@ export function cloneHomepageBrandConfig(config: HomepageBrandConfig): HomepageB
         ...defaultHomepageBrandConfig.growthCard.insight,
         ...cloned.growthCard?.insight,
         chips: cloned.growthCard?.insight?.chips ?? defaultHomepageBrandConfig.growthCard.insight.chips,
+      },
+    },
+    sections: {
+      diagnosis: {
+        ...defaultHomepageBrandConfig.sections.diagnosis,
+        ...cloned.sections?.diagnosis,
+        cards: cloned.sections?.diagnosis?.cards ?? defaultHomepageBrandConfig.sections.diagnosis.cards,
+      },
+      journey: {
+        ...defaultHomepageBrandConfig.sections.journey,
+        ...cloned.sections?.journey,
+        cards: cloned.sections?.journey?.cards ?? defaultHomepageBrandConfig.sections.journey.cards,
+        lanes: cloned.sections?.journey?.lanes ?? defaultHomepageBrandConfig.sections.journey.lanes,
+      },
+      agents: {
+        ...defaultHomepageBrandConfig.sections.agents,
+        ...cloned.sections?.agents,
+        cards: cloned.sections?.agents?.cards ?? defaultHomepageBrandConfig.sections.agents.cards,
+      },
+      cases: {
+        ...defaultHomepageBrandConfig.sections.cases,
+        ...cloned.sections?.cases,
+        stats: cloned.sections?.cases?.stats ?? defaultHomepageBrandConfig.sections.cases.stats,
+      },
+      pricing: {
+        ...defaultHomepageBrandConfig.sections.pricing,
+        ...cloned.sections?.pricing,
+        plans: cloned.sections?.pricing?.plans ?? defaultHomepageBrandConfig.sections.pricing.plans,
+      },
+      finalCta: {
+        ...defaultHomepageBrandConfig.sections.finalCta,
+        ...cloned.sections?.finalCta,
+        action: { ...defaultHomepageBrandConfig.sections.finalCta.action, ...cloned.sections?.finalCta?.action },
       },
     },
     login: {
@@ -371,6 +544,10 @@ export function validateHomepageBrandConfig(config: HomepageBrandConfig) {
 
   if (!allowedHrefs.has(config.hero.secondaryAction.href)) {
     errors.push(`辅助按钮地址不在白名单：${config.hero.secondaryAction.href}`);
+  }
+
+  if (!allowedHrefs.has(config.sections.finalCta.action.href)) {
+    errors.push(`底部转化按钮地址不在白名单：${config.sections.finalCta.action.href}`);
   }
 
   return errors;

@@ -85,6 +85,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ...result, asset: assetDto(result.asset) }, { status: 200 });
   } catch {
-    return lowSensitiveError(200, 'HOMEPAGE_BRAND_UNAVAILABLE');
+    return lowSensitiveError(503, 'HOMEPAGE_BRAND_UNAVAILABLE');
   }
 }

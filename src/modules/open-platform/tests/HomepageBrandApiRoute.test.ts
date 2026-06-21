@@ -140,6 +140,7 @@ describe('首页与品牌 API route', () => {
     vi.mocked(getDatabase).mockClear();
     vi.mocked(createHomepageBrandRepository).mockClear();
     vi.mocked(createLocalHomepageBrandAssetStorage).mockClear();
+    vi.unstubAllEnvs();
   });
 
   it('未登录访问返回 401', async () => {
@@ -184,6 +185,17 @@ describe('首页与品牌 API route', () => {
     expect((payload.assets as unknown[])).toHaveLength(5);
   });
 
+  it('GET 配置服务不可用时返回 503 低敏错误', async () => {
+    platformContext();
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.mocked(repository.findConfig).mockRejectedValueOnce(new Error('database_unavailable'));
+
+    const response = await homepageRoute.GET(new Request('http://localhost/api/v1/open-platform/homepage-brand'));
+
+    expect(response.status).toBe(503);
+    expect(await readJson(response)).toEqual({ ok: false, errorCode: 'HOMEPAGE_BRAND_UNAVAILABLE' });
+  });
+
   it('PUT draft 保存首页配置草稿', async () => {
     platformContext();
     const config = cloneHomepageBrandConfig(defaultHomepageBrandConfig);
@@ -199,6 +211,22 @@ describe('首页与品牌 API route', () => {
     expect(response.status).toBe(200);
     expect(payload.status).toBe('saved');
     expect(repository.upsertConfigDraft).toHaveBeenCalled();
+  });
+
+  it('PUT draft 持久化失败时返回 503 低敏错误', async () => {
+    platformContext();
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.mocked(repository.upsertConfigDraft).mockRejectedValueOnce(new Error('database_unavailable'));
+
+    const response = await draftRoute.PUT(
+      new Request('http://localhost/api/v1/open-platform/homepage-brand/draft', {
+        method: 'PUT',
+        body: JSON.stringify({ config: defaultHomepageBrandConfig }),
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    expect(await readJson(response)).toEqual({ ok: false, errorCode: 'HOMEPAGE_BRAND_UNAVAILABLE' });
   });
 
   it('POST publish 发布当前草稿', async () => {
