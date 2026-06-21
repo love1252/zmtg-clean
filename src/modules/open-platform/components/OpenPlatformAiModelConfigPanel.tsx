@@ -36,9 +36,9 @@ import { cn } from '@/shared/utils/cn';
 type CapabilityId = PlatformAiModelConfigCapabilityId;
 
 const operationStatusLabel: Record<PlatformAiModelConfigDryRunStatus, string> = {
-  dry_run: '可执行',
-  disabled: 'disabled',
-  not_available: 'not_available',
+  dry_run: '受控执行',
+  disabled: '暂未开放',
+  not_available: '暂不可用',
 };
 
 const capabilityMeta: Record<CapabilityId, { label: string; icon: typeof Brain; className: string }> = {
@@ -152,7 +152,7 @@ export function OpenPlatformAiModelConfigPanel() {
           }));
         }
       } catch {
-        // The panel keeps the controlled mock baseline when persistence is unavailable.
+        // The panel keeps the controlled baseline when persistence is unavailable.
       }
     }
 
@@ -467,7 +467,7 @@ export function OpenPlatformAiModelConfigPanel() {
   function updateKeyDraft(providerId: string, value: string) {
     setKeyDraftByProvider((current) => ({ ...current, [providerId]: value }));
     setKeyDraftSavedByProvider((current) => ({ ...current, [providerId]: false }));
-    if (value) addProviderStatus(providerId, '新 Key 已输入，保存后会写入服务端凭证配置。');
+    if (value) addProviderStatus(providerId, '新 Key 已输入，保存后仅写入受控凭证边界。');
   }
 
   function toggleKeyVisibility(provider: PlatformAiModelConfigProvider) {
@@ -659,7 +659,7 @@ export function OpenPlatformAiModelConfigPanel() {
             </button>
             <button
               type="button"
-              onClick={() => { void saveAppConfig('应用配置 dry-run 已保存'); }}
+              onClick={() => { void saveAppConfig('应用配置受控保存已完成'); }}
               className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white"
             >
               <Check className="h-4 w-4" />
@@ -782,7 +782,7 @@ export function OpenPlatformAiModelConfigPanel() {
           </div>
           <button
             type="button"
-            onClick={() => { void saveAllConfig('全部配置已保存'); }}
+            onClick={() => { void saveAllConfig('全部配置受控保存已完成'); }}
             className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white"
           >
             <Check className="h-4 w-4" />

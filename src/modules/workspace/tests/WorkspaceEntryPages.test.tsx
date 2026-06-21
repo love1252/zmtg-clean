@@ -3041,7 +3041,7 @@ describe('工作台入口页面', () => {
     expect(screen.getAllByText('澄镜医疗美容').length).toBeGreaterThan(0);
     expect(screen.getAllByText('远山医美连锁').length).toBeGreaterThan(0);
     expect(screen.getByText(/平台侧查看机构、套餐和配额边界/)).toBeInTheDocument();
-    expect(screen.getByText(/当前展示为受控 demo 租户/)).toBeInTheDocument();
+    expect(screen.getByText(/当前展示为受控演示租户/)).toBeInTheDocument();
     expect(screen.getByText('Growth Plan')).toBeInTheDocument();
     expect(screen.getByText('Starter Plan')).toBeInTheDocument();
     expect(screen.getByText('Trial Plan')).toBeInTheDocument();
@@ -4402,8 +4402,8 @@ describe('工作台入口页面', () => {
     expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
 
-    expect(await screen.findByText('暂无受控 demo 租户')).toBeInTheDocument();
-    expect(screen.getByText('当前没有可展示的 demo 租户、套餐或配额快照。')).toBeInTheDocument();
+    expect(await screen.findByText('暂无受控演示租户')).toBeInTheDocument();
+    expect(screen.getByText('当前没有可展示的演示租户、套餐或配额快照。')).toBeInTheDocument();
     expectNoPlatformTenantMutation(fetchMock);
     expectNoSensitivePlatformTenantContent(container);
   });

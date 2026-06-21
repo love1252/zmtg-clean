@@ -299,7 +299,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     expect(screen.getByLabelText('上传 Logo 豆包')).toBeEnabled();
     expect(screen.getByRole('button', { name: '显示' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '保存 Key' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: '同步模型 可执行' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '同步模型 受控执行' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '能力分组 豆包 深度思考' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByRole('button', { name: '能力分组 豆包 文本生成' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByRole('button', { name: '能力分组 豆包 视觉理解' })).toHaveAttribute('aria-expanded', 'false');
@@ -332,12 +332,12 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     await waitFor(() => expect(screen.getAllByText('Key 已配置 ****9821').length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: '能力分组 豆包 深度思考' }));
 
-    expect(screen.getByRole('button', { name: '同步模型 可执行' })).toBeEnabled();
-    expect(screen.getAllByRole('button', { name: /^测试 .* 可执行$/ })[0]).toBeEnabled();
-    expect(screen.getAllByRole('button', { name: '测试 Seed Pro 2.0 可执行' })[0]).toHaveTextContent('测试 可执行');
+    expect(screen.getByRole('button', { name: '同步模型 受控执行' })).toBeEnabled();
+    expect(screen.getAllByRole('button', { name: /^测试 .* 受控执行$/ })[0]).toBeEnabled();
+    expect(screen.getAllByRole('button', { name: '测试 Seed Pro 2.0 受控执行' })[0]).toHaveTextContent('测试 受控执行');
 
-    fireEvent.click(screen.getByRole('button', { name: '同步模型 可执行' }));
-    fireEvent.click(screen.getAllByRole('button', { name: '测试 Seed Pro 2.0 可执行' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: '同步模型 受控执行' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '测试 Seed Pro 2.0 受控执行' })[0]);
 
     expect(screen.getByText('同步请求已提交：豆包')).toBeInTheDocument();
     expect(screen.getByText('测试请求已提交：Seed Pro 2.0')).toBeInTheDocument();
@@ -367,8 +367,8 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     fireEvent.click(screen.getByRole('button', { name: '厂商 豆包' }));
     fireEvent.click(screen.getByRole('button', { name: '能力分组 豆包 深度思考' }));
 
-    fireEvent.click(screen.getByRole('button', { name: '同步模型 可执行' }));
-    fireEvent.click(screen.getAllByRole('button', { name: '测试 Seed Pro 2.0 可执行' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: '同步模型 受控执行' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '测试 Seed Pro 2.0 受控执行' })[0]);
 
     await waitFor(() => {
       expect(screen.getByText('同步已完成：豆包')).toBeInTheDocument();
@@ -461,7 +461,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存应用配置' }));
     expect(screen.getByText('应用配置保存中...')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('应用配置保存失败：持久化服务不可用')).toBeInTheDocument());
-    expect(screen.queryByText('应用配置 dry-run 已保存')).not.toBeInTheDocument();
+    expect(screen.queryByText('应用配置受控保存已完成')).not.toBeInTheDocument();
 
     expectNoForbiddenContent(container);
   });
@@ -571,7 +571,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     fireEvent.change(screen.getByLabelText('AI 客服 默认模型'), { target: { value: 'deepseek-v4-flash' } });
     fireEvent.click(screen.getByRole('button', { name: '保存应用配置' }));
 
-    await waitFor(() => expect(screen.getByText('应用配置 dry-run 已保存')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('应用配置受控保存已完成')).toBeInTheDocument());
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([url, init]) => (
         String(url).includes('/api/v1/open-platform/ai-model-config')
@@ -709,7 +709,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     expectNoForbiddenContent(container);
   });
 
-  it('厂商配置支持 Logo 本地预览、Key dry-run、模型启用和保存全部配置 dry-run', async () => {
+  it('厂商配置支持 Logo 本地预览、Key 受控保存、模型启用和保存全部配置', async () => {
     const fetchMock = stubFetch();
     const { container } = render(<PlatformConsole />);
 
@@ -721,12 +721,12 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     await waitFor(() => expect(screen.getByText('本地预览：doubao-logo.png')).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText('豆包 API Key'), { target: { value: 'new-provider-key-value' } });
-    expect(screen.getByText('新 Key 已输入，保存后会写入服务端凭证配置。')).toBeInTheDocument();
+    expect(screen.getByText('新 Key 已输入，保存后仅写入受控凭证边界。')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '显示' }));
     expect(screen.getByRole('button', { name: '关闭显示' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: '保存 Key' }));
     await waitFor(() => expect(screen.getByText('Key 保存失败：豆包 服务不可用，未保存。')).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: '同步模型 可执行' }));
+    fireEvent.click(screen.getByRole('button', { name: '同步模型 受控执行' }));
     expect(screen.getByText('Key 保存失败：豆包 服务不可用，未保存。')).toBeInTheDocument();
     expect(screen.getByText('同步请求已提交：豆包')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('同步失败：豆包 服务不可用')).toBeInTheDocument());
@@ -741,7 +741,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存全部配置' }));
     expect(screen.getByText('全部配置保存中...')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('全部配置保存失败：持久化服务不可用')).toBeInTheDocument());
-    expect(screen.queryByText('全部配置 dry-run 已保存')).not.toBeInTheDocument();
+    expect(screen.queryByText('全部配置受控保存已完成')).not.toBeInTheDocument();
 
     expectNoMutationFetch(fetchMock);
     expectNoForbiddenContent(container);
@@ -766,7 +766,7 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存全部配置' }));
 
     expect(screen.getByText('全部配置保存中...')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText('全部配置已保存')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('全部配置受控保存已完成')).toBeInTheDocument());
     expect(fetchMock.mock.calls.some(([url, init]) => (
       String(url).includes('/api/v1/open-platform/ai-model-config')
       && String((init as RequestInit | undefined)?.method).toUpperCase() === 'PUT'

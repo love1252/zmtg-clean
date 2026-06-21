@@ -361,7 +361,7 @@ function CommercialHealthPanel({ health }: { health: PlatformCommercialHealthVie
 
       <div className="mt-4 flex items-center gap-2 text-xs leading-5 text-slate-500">
         <CalendarClock className="h-4 w-4" />
-        配额使用率来自受控 demo 快照，仅作运营参考，不作为正式计费或自行变更套餐依据。
+        配额使用率来自受控演示快照，仅作运营参考，不作为正式计费或自行变更套餐依据。
       </div>
     </article>
   );
@@ -425,12 +425,12 @@ export function OpenPlatformTenantManagementPanel() {
       <PlatformSectionBanner
         headingId="tenant-management-heading"
         title="租户管理"
-        description="平台侧查看机构、套餐和配额边界。当前展示为受控 demo 租户，不代表正式计费后台。仅展示运营元数据、套餐分配和配额快照，不提供租户创建、冻结、恢复或删除流程。"
+        description="平台侧查看机构、套餐和配额边界。当前展示为受控演示租户，不代表正式计费后台。仅展示运营元数据、套餐分配和配额快照，不提供租户创建、冻结、恢复或删除流程。"
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: 'demo 租户', value: totals.tenants, icon: Building2 },
+          { label: '演示租户', value: totals.tenants, icon: Building2 },
           { label: '运行中租户', value: totals.activeTenants, icon: ShieldCheck },
           { label: '已分配套餐', value: totals.assignedPlans, icon: Database },
           { label: '配额快照', value: totals.snapshots, icon: CalendarClock },
@@ -453,7 +453,7 @@ export function OpenPlatformTenantManagementPanel() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold tracking-normal text-slate-950">租户列表</h3>
-            <p className="mt-1 text-sm text-slate-500">展示受控 demo 租户的基础状态、套餐信息和配额快照。</p>
+            <p className="mt-1 text-sm text-slate-500">展示受控演示租户的基础状态、套餐信息和配额快照。</p>
           </div>
           <span className="rounded-full border border-[#e6edf5] bg-white px-3 py-1 text-xs font-semibold text-slate-600">
             只读
@@ -476,8 +476,8 @@ export function OpenPlatformTenantManagementPanel() {
           <div className="mt-4">
             <TenantManagementState
               kind="empty"
-              title="暂无受控 demo 租户"
-              description="当前没有可展示的 demo 租户、套餐或配额快照。"
+              title="暂无受控演示租户"
+              description="当前没有可展示的演示租户、套餐或配额快照。"
             />
           </div>
         ) : null}

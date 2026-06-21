@@ -180,8 +180,8 @@ export function PlatformConsole() {
             <div className="flex min-w-0 items-center gap-3">
               <Image src="/brand/logo-mark.png" alt="" width={42} height={42} className={cn('h-10 w-10 rounded-xl bg-white object-contain p-1 md:hidden', isLightPlatformView ? 'border border-[#e6edf5]' : '')} />
               <div className="min-w-0">
-                <div className={cn('truncate text-sm font-semibold md:text-base', isLightPlatformView ? 'text-transparent md:hidden' : 'text-[#1f2937]')}>智美天工平台运营中枢</div>
-                <div className={cn('mt-0.5 text-xs', isLightPlatformView ? 'text-transparent md:hidden' : 'text-[#64748b]')}>租户、套餐、配额与安全审计</div>
+                <div className={cn('truncate text-sm font-semibold md:text-base', isLightPlatformView ? 'text-[#1f2937] md:hidden' : 'text-[#1f2937]')}>平台运营中枢</div>
+                <div className={cn('mt-0.5 truncate text-xs', isLightPlatformView ? 'text-[#64748b] md:hidden' : 'text-[#64748b]')}>只读预览 · V1 范围</div>
               </div>
             </div>
             <div className={cn('flex items-center gap-3 text-sm', isLightPlatformView ? 'text-[#64748b]' : 'text-[#64748b]')}>
@@ -249,6 +249,7 @@ export function PlatformConsole() {
             'mx-auto w-full space-y-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-7',
             isLightPlatformView ? 'max-w-none bg-[#f7f9fc]' : 'max-w-[1740px]',
           )}>
+            <PlatformScopeNotice activeLabel={activeNavLabel} />
             {activeNavLabel === '首页与品牌' ? (
               <HomepageBrandPanel />
             ) : activeNavLabel === '租户管理' ? (
@@ -277,6 +278,41 @@ export function PlatformConsole() {
         </section>
       </div>
     </main>
+  );
+}
+
+function PlatformScopeNotice({ activeLabel }: { activeLabel: string }) {
+  const badges = ['只读预览', '演示数据', 'V1 范围', '暂未开放编辑能力'];
+
+  return (
+    <aside
+      aria-label="平台端能力状态"
+      className="rounded-xl border border-[#dbe5f0] bg-white px-4 py-3 shadow-sm sm:px-5"
+    >
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 gap-3">
+          <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
+            <Info className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-slate-950">当前栏目：{activeLabel}</div>
+            <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-500">
+              本页用于平台运营人员查看租户、套餐、配额、知识库和审计边界；所有数据均为演示数据或受控只读视图，不会创建租户、修改套餐、发起触达或调用外部系统。
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 lg:justify-end">
+          {badges.map((badge) => (
+            <span
+              key={badge}
+              className="inline-flex h-8 items-center rounded-full border border-slate-200 bg-[#f8fafc] px-3 text-xs font-semibold text-slate-600"
+            >
+              {badge}
+            </span>
+          ))}
+        </div>
+      </div>
+    </aside>
   );
 }
 
