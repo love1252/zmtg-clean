@@ -62,13 +62,13 @@ plan/phase23-his-credential-compensation-worker-test-provider-noop-execution
 
 | 支线 | 结论 | 判断依据 | 建议动作 |
 | --- | --- | --- | --- |
-| `codex/app-foundation` | 建议废弃 | 当前主线已存在 `AuthRole` / `AuthSession`、`DemoSessionGate`、`demo-session`、`institution-dashboard`、`platform-dashboard` 等能力；该支线相对当前主线会尝试回退大量文件。 | 不直接合并。等待用户确认后删除本地/远端旧支线；如仍需底座整理，基于当前 `main` 重建小 PR。 |
-| `codex/auth-demo-session` | 建议废弃 | 当前主线已经有 `/api/auth/login`、`/api/auth/logout`、`/api/auth/session`、`DemoSessionGate`、`LogoutButton`，且当前实现包含签名 cookie 和生产 secret 缺失保护；旧支线会覆盖较新的登录与品牌配置链路。 | 不直接合并。保留当前主线实现；等待用户确认后删除旧支线。 |
-| `codex/auth-demo-session-local-squash-20260529` | 建议废弃 | 该支线是 `codex/auth-demo-session` 的压缩重复支线，文件范围与能力高度重复；继续保留会增加误合并风险。 | 优先确认删除。不得与 `codex/auth-demo-session` 同时保留。 |
-| `codex/classify-workbench-sections-by-sidebar` | 建议废弃，必要时重建 | 当前主线的机构工作台已有 `institutionNavItems` 和稳定 `InstitutionViewId`；旧支线只改 `InstitutionWorkspace.tsx` 与入口测试，直接合并会冲突当前更完整页面。 | 不直接合并。若仍需要“按侧栏分类工作区区块”，基于当前主线另开设计任务。 |
-| `codex/visual-foundation` | 建议废弃，素材已被主线吸收 | 当前主线已存在 `LuxuryLoginShell`、品牌图片、首页背景图、`MarketingHome` 和首页品牌配置；旧支线相对当前主线会回退登录页和首页品牌管理能力。 | 不直接合并。若需提取未使用素材或视觉细节，进入“首页与品牌视觉精修”小 PR。 |
+| `codex/app-foundation` | 已确认删除本地 | 当前主线已存在 `AuthRole` / `AuthSession`、`DemoSessionGate`、`demo-session`、`institution-dashboard`、`platform-dashboard` 等能力；该支线相对当前主线会尝试回退大量文件。 | 已删除本地分支；远端 `origin/codex/app-foundation` 未删除，需单独批准。 |
+| `codex/auth-demo-session` | 已确认删除本地 | 当前主线已经有 `/api/auth/login`、`/api/auth/logout`、`/api/auth/session`、`DemoSessionGate`、`LogoutButton`，且当前实现包含签名 cookie 和生产 secret 缺失保护；旧支线会覆盖较新的登录与品牌配置链路。 | 已删除本地分支；远端 `origin/codex/auth-demo-session` 未删除，需单独批准。 |
+| `codex/auth-demo-session-local-squash-20260529` | 已确认删除本地 | 该支线是 `codex/auth-demo-session` 的压缩重复支线，文件范围与能力高度重复；继续保留会增加误合并风险。 | 已删除本地分支；未发现对应远端分支。 |
+| `codex/classify-workbench-sections-by-sidebar` | 已确认删除本地 | 当前主线的机构工作台已有 `institutionNavItems` 和稳定 `InstitutionViewId`；旧支线只改 `InstitutionWorkspace.tsx` 与入口测试，直接合并会冲突当前更完整页面。 | 已删除本地分支；未发现对应远端分支。若仍需要该能力，基于当前主线重建。 |
+| `codex/visual-foundation` | 已确认删除本地 | 当前主线已存在 `LuxuryLoginShell`、品牌图片、首页背景图、`MarketingHome` 和首页品牌配置；旧支线相对当前主线会回退登录页和首页品牌管理能力。 | 已删除本地分支；远端 `origin/codex/visual-foundation` 未删除，需单独批准。 |
 
-本批没有删除任何分支。上述“建议废弃”只代表审计结论，删除本地或远端分支前仍需用户明确确认。
+本批已在用户确认后删除上述 5 条本地分支。未删除任何远端分支。
 
 ---
 
@@ -95,20 +95,18 @@ plan/phase23-his-credential-compensation-worker-test-provider-noop-execution
 
 ## 五、建议的下一批动作
 
-1. 先请用户确认是否删除 5 条早期/重复底座支线：
+1. 如需彻底清理远端，请用户单独确认是否删除以下远端旧支线：
 
 ```text
-codex/app-foundation
-codex/auth-demo-session
-codex/auth-demo-session-local-squash-20260529
-codex/classify-workbench-sections-by-sidebar
-codex/visual-foundation
+origin/codex/app-foundation
+origin/codex/auth-demo-session
+origin/codex/visual-foundation
 ```
 
-2. 如果确认删除，建议只删除本地分支，远端分支再单独确认：
+2. 如果确认删除远端，建议单独执行并记录：
 
 ```bash
-git branch -D <branch>
+git push origin --delete <branch>
 ```
 
 3. 再进入 Phase21 随访两条支线审计，判断是否重建。

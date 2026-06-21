@@ -312,3 +312,9 @@ pnpm exec eslint <相关文件>
 ## 执行建议
 
 建议先执行任务 1、任务 2 和任务 7，形成“废弃/保留/重建”的第一版清理报告。不要一口气处理 HIS 和租户持久化，它们属于高风险长期支线，应该拆成独立目标任务。
+
+## 执行记录
+
+- `2026-06-21 CST +0800`：已完成任务 1、任务 2 和任务 7，输出 `docs/verification/2026-06-21-conflict-branch-cleanup-report.md`。
+- `2026-06-21 CST +0800`：经用户确认，已删除 5 条本地旧支线：`codex/app-foundation`、`codex/auth-demo-session`、`codex/auth-demo-session-local-squash-20260529`、`codex/classify-workbench-sections-by-sidebar`、`codex/visual-foundation`。
+- 远端旧支线未删除；如需删除 `origin/codex/app-foundation`、`origin/codex/auth-demo-session`、`origin/codex/visual-foundation`，必须再次取得用户明确批准。
