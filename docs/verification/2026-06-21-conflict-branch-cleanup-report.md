@@ -1,8 +1,8 @@
 # 冲突支线清理第一批执行报告
 
-> 日期：`2026-06-21 CST +0800`  
-> 执行分支：`codex/conflict-branch-cleanup-plan-20260621`  
-> 基线：`origin/main` = `3e789b04c9c11224fee3583d578177dc2f168e22`  
+> 日期：`2026-06-21 CST +0800`
+> 执行分支：`codex/conflict-branch-cleanup-plan-20260621`
+> 基线：`origin/main` = `3e789b04c9c11224fee3583d578177dc2f168e22`
 > 范围：执行《冲突支线清理任务计划》的任务 1、任务 2、任务 3、任务 4、任务 7。
 > 边界：不删除分支、不合并冲突支线、不运行 migration、不读取 `.env` / `.env.local`、不外呼第三方、不修改 runtime。
 
