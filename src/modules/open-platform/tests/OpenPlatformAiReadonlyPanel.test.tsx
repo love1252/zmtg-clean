@@ -188,16 +188,23 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expectNoForbiddenAiReadonlyContent(container);
   });
 
-  it('平台导航可进入 人工智能示例用量面板，且不触发 mutation 或高风险入口', async () => {
+  it('平台导航可进入 AI用量与费用面板，且不触发 mutation 或高风险入口', async () => {
     const fetchMock = stubFetch();
     const { container } = render(<PlatformConsole />);
 
-    expect(screen.getByRole('button', { name: '人工智能模型配置' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '人工智能示例用量' }));
+    expect(screen.getByRole('button', { name: 'AI模型配置' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'AI用量与费用' }));
+
+    const bannerHeading = screen.getByRole('heading', { name: 'AI用量与费用' });
+    const banner = bannerHeading.closest('[data-platform-banner="true"]');
+    expect(banner).not.toBeNull();
+    expect(banner).toHaveClass('rounded-xl', 'py-4', 'lg:py-5');
+    expect(bannerHeading).toHaveClass('text-2xl', 'sm:text-[28px]');
+    expect(screen.getByText(/查看受控 AI 用量、费用估算、厂商模型消耗和机构排行/)).toBeInTheDocument();
 
     expect(screen.getByRole('heading', { name: 'AI 用量与费用' })).toBeInTheDocument();
     expect(screen.queryByText('平台端 AI 模型与用量低敏只读基础')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '移动导航：人工智能示例用量' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '移动导航：AI用量与费用' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /同步模型/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /测试调用/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /导出账单/ })).not.toBeInTheDocument();

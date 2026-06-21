@@ -26,6 +26,9 @@ type LuxuryLoginShellProps = {
   insights: LoginInsight[];
   alternateHref: string;
   alternateLabel: string;
+  logoUrl?: string;
+  logoAlt?: string;
+  backgroundImageUrl?: string;
   children: ReactNode;
 };
 
@@ -39,6 +42,9 @@ export function LuxuryLoginShell({
   insights,
   alternateHref,
   alternateLabel,
+  logoUrl = '/brand/zmtg-logo-horizontal-luxury-clean.png',
+  logoAlt = '智美天工',
+  backgroundImageUrl = '/homepage/zmtg-luxury-clinic-bg.png',
   children,
 }: LuxuryLoginShellProps) {
   const isPlatform = variant === 'platform';
@@ -52,7 +58,7 @@ export function LuxuryLoginShell({
     >
       <div
         className="absolute inset-0 bg-cover bg-center opacity-70"
-        style={{ backgroundImage: "url('/homepage/zmtg-luxury-clinic-bg.png')" }}
+        style={{ backgroundImage: `url("${backgroundImageUrl}")` }}
       />
       <div className="absolute inset-0 bg-[linear-gradient(115deg,rgba(248,246,240,0.96)_0%,rgba(248,246,240,0.9)_42%,rgba(237,246,248,0.78)_100%)]" />
       <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-white/70 to-transparent" />
@@ -61,8 +67,8 @@ export function LuxuryLoginShell({
         <header className="flex items-center justify-between gap-4">
           <Link href="/" className="inline-flex items-center" aria-label="返回智美天工首页">
             <img
-              src="/brand/zmtg-logo-horizontal-luxury-clean.png"
-              alt="智美天工"
+              src={logoUrl}
+              alt={logoAlt}
               className="h-12 w-auto object-contain sm:h-14"
             />
           </Link>

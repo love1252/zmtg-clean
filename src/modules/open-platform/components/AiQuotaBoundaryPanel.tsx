@@ -1,4 +1,5 @@
-import { AlertTriangle, BarChart3, Building2, Database, TrendingUp } from 'lucide-react';
+import { AlertTriangle, BarChart3 } from 'lucide-react';
+import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { cn } from '@/shared/utils/cn';
 
 const sectionShell = 'rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6';
@@ -18,36 +19,11 @@ const deniedEvents = [
 export function AiQuotaBoundaryPanel() {
   return (
     <section className="space-y-5" aria-labelledby="ai-quota-boundary-heading">
-      <div className={cn(sectionShell, 'overflow-hidden')}>
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-blue-700">
-              <Database className="h-4 w-4" />
-              配额治理视图
-            </div>
-            <h2 id="ai-quota-boundary-heading" className="mt-4 text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
-              AI 配额边界
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-              AI 调用配额是平台收尾治理的关键边界。当前未启用真实配额管控，仅展示配额维度和 denied 事件词汇占位。
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3 lg:w-[560px]">
-            {[
-              { icon: Building2, label: '覆盖租户', value: '4' },
-              { icon: TrendingUp, label: '配额利用率', value: '不适用' },
-              { icon: AlertTriangle, label: 'Denied 事件', value: '0（演示）' },
-            ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4">
-                <item.icon className="h-5 w-5 text-blue-600" />
-                <div className="mt-3 text-sm font-semibold tracking-normal text-slate-950">{item.value}</div>
-                <div className="mt-1 text-xs text-slate-500">{item.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <PlatformSectionBanner
+        headingId="ai-quota-boundary-heading"
+        title="AI 配额边界"
+        description="AI 调用配额是平台收尾治理的关键边界。当前未启用真实配额管控，仅展示配额维度和 denied 事件词汇占位。"
+      />
 
       <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
         <article className={sectionShell}>

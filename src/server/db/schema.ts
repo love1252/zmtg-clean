@@ -15,6 +15,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import type { AuditReason } from '@/modules/audit/domain/audit-events';
+import type { HomepageBrandConfig } from '@/modules/marketing/domain/homepageBrandConfig';
 import type {
   HisConnectionCredentialCompensationState,
   HisConnectionCredentialProviderFailureCategory,
@@ -157,6 +158,24 @@ export const knowledgeBaseRuntimeReadonlyStatusEnum = pgEnum(
   'knowledge_base_runtime_readonly_status',
   ['readonly', 'blocked'],
 );
+export const homepageBrandConfigStatusEnum = pgEnum('homepage_brand_config_status', [
+  'draft',
+  'published',
+  'archived',
+]);
+export const homepageBrandAssetKindEnum = pgEnum('homepage_brand_asset_kind', [
+  'logo',
+  'night_logo',
+  'mark_logo',
+  'hero_background',
+  'share_image',
+]);
+export const homepageBrandAuditActionEnum = pgEnum('homepage_brand_audit_action', [
+  'save_draft',
+  'upload_asset',
+  'publish',
+  'rollback',
+]);
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -1129,6 +1148,105 @@ export const auditEvents = pgTable(
       table.resource,
       table.resourceId,
       table.occurredAt,
+    ),
+  }),
+);
+
+export const homepageBrandConfigs = pgTable(
+  'homepage_brand_configs',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    status: homepageBrandConfigStatusEnum('status').notNull().default('draft'),
+    draftConfigJson: jsonb('draft_config_json').$type<HomepageBrandConfig>().notNull(),
+    publishedVersionId: varchar('published_version_id', { length: 64 }),
+    draftUpdatedBy: varchar('draft_updated_by', { length: 96 }).notNull(),
+    publishedBy: varchar('published_by', { length: 96 }),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => ({
+    statusUpdatedIdx: index('homepage_brand_configs_status_updated_idx').on(
+      table.status,
+      table.updatedAt,
+    ),
+  }),
+);
+
+export const homepageBrandConfigVersions = pgTable(
+  'homepage_brand_config_versions',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    configId: varchar('config_id', { length: 64 })
+      .notNull()
+      .references(() => homepageBrandConfigs.id),
+    versionNumber: integer('version_number').notNull(),
+    configJson: jsonb('config_json').$type<HomepageBrandConfig>().notNull(),
+    summary: varchar('summary', { length: 240 }).notNull(),
+    publishedBy: varchar('published_by', { length: 96 }).notNull(),
+    publishedAt: timestamp('published_at', { withTimezone: true }).notNull().defaultNow(),
+    ...timestamps,
+  },
+  (table) => ({
+    configVersionUnique: unique('homepage_brand_config_versions_config_version_unique').on(
+      table.configId,
+      table.versionNumber,
+    ),
+    configPublishedIdx: index('homepage_brand_config_versions_config_published_idx').on(
+      table.configId,
+      table.publishedAt,
+    ),
+  }),
+);
+
+export const homepageBrandAssets = pgTable(
+  'homepage_brand_assets',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    kind: homepageBrandAssetKindEnum('kind').notNull(),
+    originalFilename: varchar('original_filename', { length: 180 }).notNull(),
+    mimeType: varchar('mime_type', { length: 96 }).notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    storageKey: varchar('storage_key', { length: 240 }).notNull(),
+    publicUrl: varchar('public_url', { length: 240 }).notNull(),
+    checksumSha256: varchar('checksum_sha256', { length: 64 }).notNull(),
+    uploadedBy: varchar('uploaded_by', { length: 96 }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    kindCreatedIdx: index('homepage_brand_assets_kind_created_idx').on(table.kind, table.createdAt),
+    storageKeyUnique: unique('homepage_brand_assets_storage_key_unique').on(table.storageKey),
+    checksumIdx: index('homepage_brand_assets_checksum_idx').on(table.checksumSha256),
+  }),
+);
+
+export const homepageBrandAuditLogs = pgTable(
+  'homepage_brand_audit_logs',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    action: homepageBrandAuditActionEnum('action').notNull(),
+    configId: varchar('config_id', { length: 64 }).references(() => homepageBrandConfigs.id),
+    versionId: varchar('version_id', { length: 64 }).references(() => homepageBrandConfigVersions.id),
+    assetId: varchar('asset_id', { length: 64 }).references(() => homepageBrandAssets.id),
+    actorId: varchar('actor_id', { length: 96 }).notNull(),
+    summary: varchar('summary', { length: 240 }).notNull(),
+    metadata: jsonb('metadata')
+      .$type<Record<string, string | number | boolean | null>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    actionCreatedIdx: index('homepage_brand_audit_logs_action_created_idx').on(
+      table.action,
+      table.createdAt,
+    ),
+    configCreatedIdx: index('homepage_brand_audit_logs_config_created_idx').on(
+      table.configId,
+      table.createdAt,
+    ),
+    actorCreatedIdx: index('homepage_brand_audit_logs_actor_created_idx').on(
+      table.actorId,
+      table.createdAt,
     ),
   }),
 );

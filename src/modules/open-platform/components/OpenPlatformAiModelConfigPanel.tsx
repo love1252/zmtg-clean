@@ -29,6 +29,7 @@ import {
   type PlatformAiModelConfigKeyStatus,
   type PlatformAiModelConfigProvider,
 } from '@/modules/open-platform/mock/platformAiModelConfig';
+import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import type { PlatformAiModelConfigPersistedInput, PlatformAiModelConfigPersistedResponse } from '@/modules/open-platform/server/platformAiModelConfigPersistenceTypes';
 import { cn } from '@/shared/utils/cn';
 
@@ -610,8 +611,15 @@ export function OpenPlatformAiModelConfigPanel() {
 
   return (
     <section className="space-y-6 text-slate-950" aria-labelledby="ai-model-config-heading">
+      <PlatformSectionBanner
+        headingId="ai-model-config-heading"
+        headingLevel="h1"
+        title="AI模型配置"
+        description="管理平台 AI 模型厂商、模型启用状态、场景默认关系和低敏配置边界。模型密钥、测试调用和同步操作均限定在受控接口内。"
+      />
+
       <div>
-        <h1 id="ai-model-config-heading" className="text-2xl font-bold tracking-normal text-[#111827]">{configView.title}</h1>
+        <h2 id="ai-model-heading" className="text-2xl font-bold tracking-normal text-[#111827]">{configView.title}</h2>
         <p className="mt-1 text-sm text-[#6b7280]">{configView.subtitle}</p>
       </div>
 

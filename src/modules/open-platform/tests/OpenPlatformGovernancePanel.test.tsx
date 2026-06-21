@@ -7,7 +7,7 @@ describe('开放平台治理面板', () => {
     render(<OpenPlatformGovernancePanel />);
 
     expect(screen.getByRole('heading', { name: '开放平台基础治理' })).toBeInTheDocument();
-    expect(screen.getByText('长期路线治理词汇')).toBeInTheDocument();
+    expect(screen.getByText(/先把租户隔离、权限边界、连接生命周期和审计词汇固定为可视化基准/)).toBeInTheDocument();
     expect(screen.getByText('租户隔离原则')).toBeInTheDocument();
     expect(screen.getByText('权限样例矩阵')).toBeInTheDocument();
     expect(screen.getByText('连接生命周期')).toBeInTheDocument();

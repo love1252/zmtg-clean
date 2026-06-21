@@ -22,6 +22,7 @@ import { OpenPlatformAuditEventsPanel } from '@/modules/open-platform/components
 import { OpenPlatformGovernancePanel } from '@/modules/open-platform/components/OpenPlatformGovernancePanel';
 import { OpenPlatformKnowledgeManagementPanel } from '@/modules/open-platform/components/OpenPlatformKnowledgeManagementPanel';
 import { OpenPlatformTenantManagementPanel } from '@/modules/open-platform/components/OpenPlatformTenantManagementPanel';
+import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { ProductPlanPanel } from '@/modules/open-platform/components/ProductPlanPanel';
 import {
   platformAiReferenceItems,
@@ -60,19 +61,18 @@ export function PlatformConsole() {
           )}
         >
           <div
+            aria-label="平台端品牌区"
             className={cn(
-              'flex items-center border-b',
-              isSidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-5',
+              'flex items-center gap-3 border-b bg-white px-5',
+              isLightPlatformView ? 'w-[228px]' : 'w-[286px]',
               isLightPlatformView ? 'h-[70px] border-[#e6edf5]' : 'h-[86px] border-[#e6edf5]',
             )}
           >
-            <Image src="/brand/logo-mark.png" alt="" width={50} height={50} className={cn('rounded-xl bg-white object-contain', isLightPlatformView ? 'h-10 w-10 p-1' : 'h-[50px] w-[50px] p-1.5')} />
-            {!isSidebarCollapsed ? (
-              <div className="min-w-0">
-                <div className={cn('truncate text-base font-semibold tracking-normal', isLightPlatformView ? 'text-[#1f2937]' : 'text-[#1f2937]')}>智美天工管理后台</div>
-                <div className={cn('mt-0.5 truncate text-xs', isLightPlatformView ? 'text-[#64748b]' : 'text-blue-600/70')}>平台控制台</div>
-              </div>
-            ) : null}
+            <Image src="/brand/logo-mark.png" alt="" width={56} height={56} className={cn('rounded-xl bg-white object-contain', isLightPlatformView ? 'h-12 w-12 p-1' : 'h-14 w-14 p-1.5')} />
+            <div className="min-w-0">
+              <div className={cn('truncate text-base font-semibold tracking-normal', isLightPlatformView ? 'text-[#1f2937]' : 'text-[#1f2937]')}>智美天工管理后台</div>
+              <div className={cn('mt-0.5 truncate text-xs', isLightPlatformView ? 'text-[#64748b]' : 'text-blue-600/70')}>平台控制台</div>
+            </div>
           </div>
 
           {isLightPlatformView ? (
@@ -255,9 +255,9 @@ export function PlatformConsole() {
               <OpenPlatformTenantManagementPanel />
             ) : activeNavLabel === '产品与套餐' ? (
               <ProductPlanPanel />
-            ) : activeNavLabel === '人工智能模型配置' ? (
+            ) : activeNavLabel === 'AI模型配置' ? (
               <OpenPlatformAiModelConfigPanel />
-            ) : activeNavLabel === '人工智能示例用量' ? (
+            ) : activeNavLabel === 'AI用量与费用' ? (
               <OpenPlatformAiReadonlyPanel />
             ) : activeNavLabel === '知识库管理' ? (
               <OpenPlatformKnowledgeManagementPanel />
@@ -287,25 +287,12 @@ type PlatformOverviewProps = {
 function PlatformOverview({ onNavigate }: PlatformOverviewProps) {
   return (
     <>
-      <section aria-labelledby="platform-overview-heading" className="rounded-[24px] border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
-        <div>
-          <div className="max-w-4xl">
-            <div className="flex flex-wrap gap-2">
-              {['真实库数据', '受控示例', '长期路线'].map((label) => (
-                <span key={label} className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                  {label}
-                </span>
-              ))}
-            </div>
-            <h1 id="platform-overview-heading" className="mt-4 text-3xl font-semibold tracking-normal text-[#1f2937] sm:text-4xl">
-              平台总览
-            </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#64748b] sm:text-base">
-              只保留能支撑运营判断的核心信号：租户是否可运营、套餐和配额是否完整、快照是否可信、拒绝审计是否需要复核。知识库与人工智能只作为低权重能力参考，不替代商业化健康判断。
-            </p>
-          </div>
-        </div>
-      </section>
+      <PlatformSectionBanner
+        headingId="platform-overview-heading"
+        headingLevel="h1"
+        title="平台总览"
+        description="只保留能支撑运营判断的核心信号：租户是否可运营、套餐和配额是否完整、快照是否可信、拒绝审计是否需要复核。知识库与人工智能只作为低权重能力参考，不替代商业化健康判断。"
+      />
 
       <section aria-label="核心运营指标" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {platformMetrics.map((metric) => (
@@ -360,7 +347,7 @@ function PlatformOverview({ onNavigate }: PlatformOverviewProps) {
         </article>
 
         <ReferencePanel title="知识库能力质量参考" items={platformKnowledgeQualityItems} />
-        <ReferencePanel title="人工智能示例用量与模型配置参考" items={platformAiReferenceItems} />
+        <ReferencePanel title="AI用量与费用与模型配置参考" items={platformAiReferenceItems} />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">

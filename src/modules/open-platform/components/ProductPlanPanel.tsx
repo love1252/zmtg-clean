@@ -1,4 +1,5 @@
-import { Boxes, Check, CreditCard, Layers3, Users, Zap } from 'lucide-react';
+import { Check, Zap } from 'lucide-react';
+import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { cn } from '@/shared/utils/cn';
 
 const sectionShell = 'rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6';
@@ -48,36 +49,11 @@ const plans = [
 export function ProductPlanPanel() {
   return (
     <section className="space-y-5" aria-labelledby="product-plan-heading">
-      <div className={cn(sectionShell, 'overflow-hidden')}>
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-blue-700">
-              <Boxes className="h-4 w-4" />
-              产品路线视图
-            </div>
-            <h2 id="product-plan-heading" className="mt-4 text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
-              产品与套餐
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-              套餐权益对照表作为长期路线词汇预留。当前示范平台端如何观测套餐覆盖度和权益对比，不涉及真实定价、订阅、支付或合同。
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3 lg:w-[560px]">
-            {[
-              { icon: Layers3, label: '套餐层级', value: '3 档' },
-              { icon: Users, label: '租户覆盖', value: '受控 demo' },
-              { icon: CreditCard, label: '定价', value: '未上线' },
-            ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4">
-                <item.icon className="h-5 w-5 text-blue-600" />
-                <div className="mt-3 text-sm font-semibold tracking-normal text-slate-950">{item.value}</div>
-                <div className="mt-1 text-xs text-slate-500">{item.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <PlatformSectionBanner
+        headingId="product-plan-heading"
+        title="产品与套餐"
+        description="套餐权益对照表作为长期路线词汇预留。当前示范平台端如何观测套餐覆盖度和权益对比，不涉及真实定价、订阅、支付或合同。"
+      />
 
       <div className="grid gap-5 xl:grid-cols-3">
         {plans.map((plan) => (

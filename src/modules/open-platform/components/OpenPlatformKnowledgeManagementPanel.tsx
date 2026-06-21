@@ -36,6 +36,7 @@ import {
   type OpenPlatformKnowledgeManagementItems,
   type OpenPlatformKnowledgeManagementView,
 } from '@/modules/open-platform/lib/platformKnowledgeManagementViewLoader';
+import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { cn } from '@/shared/utils/cn';
 import { packTarGz } from '@/shared/utils/tar';
 
@@ -1333,42 +1334,41 @@ export function OpenPlatformKnowledgeManagementPanel() {
 
   return (
     <section className="space-y-4 text-slate-950" aria-labelledby="platform-knowledge-heading">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 id="platform-knowledge-heading" className="text-2xl font-semibold tracking-normal text-slate-950">知识库管理</h1>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
-            按机构、目录、文件和问答链路管理知识库。
-          </p>
-	        </div>
-		        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-		          <button
-		            type="button"
-		            onClick={handleOpenUploadDocument}
-		            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
-		          >
-	            <Upload className="h-4 w-4" />
-	            上传文档
-	          </button>
-	          <button
-	            type="button"
-	            disabled
-	            title="新建知识需要后续接入知识条目写入接口"
-	            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#dbe5f0] bg-white px-4 text-sm font-semibold text-blue-700 transition disabled:cursor-not-allowed disabled:opacity-60"
-	          >
-	            <BookOpen className="h-4 w-4" />
-	            新建知识
-	          </button>
-	          <button
-	            type="button"
-	            onClick={handleSync}
-	            disabled={isSyncing}
-	            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
+      <PlatformSectionBanner
+        headingId="platform-knowledge-heading"
+        headingLevel="h1"
+        title="知识库管理"
+        description="按机构、目录、文件和问答链路管理知识库。"
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            onClick={handleOpenUploadDocument}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
           >
-	            {isSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-	            {isSyncing ? '同步中...' : '同步数据'}
-	          </button>
-	        </div>
-      </div>
+            <Upload className="h-4 w-4" />
+            上传文档
+          </button>
+          <button
+            type="button"
+            disabled
+            title="新建知识需要后续接入知识条目写入接口"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#dbe5f0] bg-white px-4 text-sm font-semibold text-blue-700 transition disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <BookOpen className="h-4 w-4" />
+            新建知识
+          </button>
+          <button
+            type="button"
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {isSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {isSyncing ? '同步中...' : '同步数据'}
+          </button>
+        </div>
+      </PlatformSectionBanner>
 
       {errorMessage ? (
         <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">

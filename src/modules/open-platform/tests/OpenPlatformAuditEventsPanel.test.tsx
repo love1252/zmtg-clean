@@ -108,7 +108,7 @@ describe('平台端审计日志面板', () => {
     const { container } = render(<OpenPlatformAuditEventsPanel />);
 
     expect(screen.getByRole('heading', { name: '平台审计日志' })).toBeInTheDocument();
-    expect(screen.getByText('平台操作可审计')).toBeInTheDocument();
+    expect(screen.getByText(/只展示白名单字段/)).toBeInTheDocument();
     expect(screen.getByText('正在加载平台审计事件...')).toBeInTheDocument();
     pending.resolve(auditEventsResponse([auditEventRecord]));
 

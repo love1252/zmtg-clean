@@ -696,7 +696,11 @@ describe('平台端知识库管理只读看板', () => {
     fireEvent.click(screen.getByRole('button', { name: '知识库管理' }));
 
     expect(container.querySelector('main')).toHaveClass('bg-[#f7f9fc]');
-    expect(screen.getByRole('heading', { name: '知识库管理' })).toBeInTheDocument();
+    const bannerHeading = screen.getByRole('heading', { name: '知识库管理' });
+    const banner = bannerHeading.closest('[data-platform-banner="true"]');
+    expect(banner).not.toBeNull();
+    expect(banner).toHaveClass('rounded-xl', 'py-4', 'lg:py-5');
+    expect(bannerHeading).toHaveClass('text-2xl', 'sm:text-[28px]');
     expect(screen.getByText('按机构、目录、文件和问答链路管理知识库。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '上传文档' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '新建知识' })).toBeDisabled();

@@ -1,4 +1,5 @@
-import { Activity, ArrowUpRight, CreditCard, FileSignature, ReceiptText, ShieldCheck, WalletCards } from 'lucide-react';
+import { CreditCard, FileSignature, ReceiptText, ShieldCheck, WalletCards } from 'lucide-react';
+import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { cn } from '@/shared/utils/cn';
 
 const sectionShell = 'rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6';
@@ -63,36 +64,11 @@ const auditSignals = [
 export function CommercialBoundaryPanel() {
   return (
     <section className="space-y-5" aria-labelledby="commercial-boundary-heading">
-      <div className={cn(sectionShell, 'overflow-hidden')}>
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-blue-700">
-              <Activity className="h-4 w-4" />
-              商业化边界视图
-            </div>
-            <h2 id="commercial-boundary-heading" className="mt-4 text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
-              商业化边界
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-              商业化是平台长期路线中最后收尾的关键环节。当前展示计费、订单、合同、发票的词汇预留，不接真实支付、不含定价、不处理税务合规。
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3 lg:w-[560px]">
-            {[
-              { icon: WalletCards, label: '计费模式', value: '词汇预留' },
-              { icon: ReceiptText, label: '订单', value: '0 条' },
-              { icon: ArrowUpRight, label: 'MRR', value: '不适用' },
-            ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4">
-                <item.icon className="h-5 w-5 text-blue-600" />
-                <div className="mt-3 text-sm font-semibold tracking-normal text-slate-950">{item.value}</div>
-                <div className="mt-1 text-xs text-slate-500">{item.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <PlatformSectionBanner
+        headingId="commercial-boundary-heading"
+        title="商业化边界"
+        description="商业化是平台长期路线中最后收尾的关键环节。当前展示计费、订单、合同、发票的词汇预留，不接真实支付、不含定价、不处理税务合规。"
+      />
 
       <div className="grid gap-5 xl:grid-cols-2">
         {commercialLifecycle.map((phase) => {

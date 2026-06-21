@@ -25,6 +25,7 @@ import type {
   PlatformCommercialMissingConfigurationReason,
   PlatformCommercialQuotaRiskTenant,
 } from '@/modules/open-platform/domain/platform-commercial-health';
+import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { cn } from '@/shared/utils/cn';
 
 type TenantManagementStateProps = {
@@ -421,29 +422,11 @@ export function OpenPlatformTenantManagementPanel() {
 
   return (
     <section className="space-y-5">
-      <section className="rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm lg:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-              <Building2 className="h-4 w-4" />
-              平台只读治理视图
-            </div>
-            <h2 className="mt-4 text-2xl font-semibold tracking-normal text-slate-950">租户管理</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-              平台侧查看机构、套餐和配额边界
-            </p>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              当前展示为受控 demo 租户，不代表正式计费后台。
-            </p>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              仅展示运营元数据、套餐分配和配额快照，不提供租户创建、冻结、恢复或删除流程。
-            </p>
-          </div>
-          <div className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-blue-700">
-            受控 demo 租户
-          </div>
-        </div>
-      </section>
+      <PlatformSectionBanner
+        headingId="tenant-management-heading"
+        title="租户管理"
+        description="平台侧查看机构、套餐和配额边界。当前展示为受控 demo 租户，不代表正式计费后台。仅展示运营元数据、套餐分配和配额快照，不提供租户创建、冻结、恢复或删除流程。"
+      />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
