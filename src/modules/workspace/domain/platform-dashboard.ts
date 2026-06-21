@@ -62,7 +62,7 @@ export const platformCapabilityCards = [
   { icon: KeyRound, title: '真实计费未启用', detail: '只呈现套餐、配额和风险判断，不展示收入、合同、发票或支付数据。' },
   { icon: Plug, title: '外部连接未启用', detail: '开放连接属于长期路线，本页不生成密钥、不授权，也不投递外部系统。' },
   { icon: Shield, title: '真实人工智能密钥未启用', detail: '示例用量只用于治理参考，不读取真实密钥，也不触发真实模型调用。' },
-  { icon: Brain, title: '示例模型配置受控配置', detail: '模型配置只展示受控样例，避免把未上线能力误判为可运营能力。' },
+  { icon: Brain, title: '模型配置为受控示例', detail: '模型配置只展示受控样例，避免把未上线能力误判为可运营能力。' },
 ] as const;
 
 export type PlatformQuickAction = {

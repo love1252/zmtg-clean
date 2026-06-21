@@ -216,6 +216,16 @@ function formatDate(value: string) {
   }).format(date);
 }
 
+function productizeKnowledgeRuntimeCopy(value: string) {
+  return value
+    .replaceAll('deterministic mock embedding', '受控向量索引')
+    .replaceAll('mock embedding', '受控向量')
+    .replaceAll('受控向量 相似度', '受控向量相似度')
+    .replaceAll('mock/local QA', '受控本地问答')
+    .replaceAll('mock_local_embedding', '受控本地向量')
+    .replaceAll('mock-local-embedding-v1', '受控本地向量 V1');
+}
+
 function EmptyState({ title, description }: { title?: string; description?: string }) {
   return (
     <div className="rounded-lg border border-dashed border-[#dbe5f0] bg-[#f8fafc] px-4 py-8 text-center">
@@ -485,7 +495,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
   const [keywordSearchResults, setKeywordSearchResults] = useState<KnowledgeSearchResultRecord[]>([]);
   const [keywordSearchMessage, setKeywordSearchMessage] = useState('请输入关键词检索已解析片段');
   const [isKeywordSearching, setIsKeywordSearching] = useState(false);
-  const [embeddingMessage, setEmbeddingMessage] = useState('选择范围后可生成已解析片段的 mock embedding 索引');
+  const [embeddingMessage, setEmbeddingMessage] = useState('选择范围后可生成已解析片段的受控向量索引');
   const [isEmbeddingLoading, setIsEmbeddingLoading] = useState(false);
   const [vectorSearchInput, setVectorSearchInput] = useState('');
   const [vectorSearchResults, setVectorSearchResults] = useState<KnowledgeVectorSearchResultRecord[]>([]);
@@ -1178,7 +1188,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
     }
 
     setIsEmbeddingLoading(true);
-    setEmbeddingMessage('正在生成 mock embedding 索引...');
+    setEmbeddingMessage('正在生成受控向量索引...');
     try {
       const response = await fetch(vectorEmbeddingPath(), {
         method: 'POST',
@@ -1195,7 +1205,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
       setEmbeddingMessage(
         payload.status === 'empty'
           ? '当前范围暂无可生成向量索引的已解析片段'
-          : `已生成 ${embeddingCount} 个 mock embedding 索引`,
+          : `已生成 ${embeddingCount} 个受控向量索引`,
       );
     } catch {
       setEmbeddingMessage('知识库向量索引暂时无法生成');
@@ -1889,7 +1899,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                         {result.knowledgeTitle} · {result.fileName} · 片段 {result.chunkIndex + 1}
                       </div>
                       <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{result.textPreview}</p>
-                      <div className="mt-3 text-xs font-semibold text-blue-700">{result.matchReason}</div>
+                      <div className="mt-3 text-xs font-semibold text-blue-700">{productizeKnowledgeRuntimeCopy(result.matchReason)}</div>
                     </article>
                   ))}
                 </div>
@@ -1903,7 +1913,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                 <Layers3 className="h-5 w-5 text-emerald-600" />
                 <div>
                   <h2 className="text-lg font-semibold tracking-normal text-slate-950">生成向量索引</h2>
-                  <p className="mt-1 text-sm text-slate-500">为当前范围的已解析片段生成 deterministic mock embedding。</p>
+                  <p className="mt-1 text-sm text-slate-500">为当前范围的已解析片段生成受控向量索引，仅用于只读检索预览。</p>
                 </div>
               </div>
               <div className="space-y-4 p-5">
@@ -1928,7 +1938,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                   <Search className="h-5 w-5 text-blue-600" />
                   <div>
                     <h2 className="text-lg font-semibold tracking-normal text-slate-950">语义检索</h2>
-                    <p className="mt-1 text-sm text-slate-500">用 mock embedding 相似度返回引用片段。</p>
+                    <p className="mt-1 text-sm text-slate-500">用受控向量相似度返回引用片段，不调用外部模型。</p>
                   </div>
                 </div>
                 <form onSubmit={handleVectorSearch} className="flex w-full flex-col gap-2 sm:flex-row lg:w-[460px]">
@@ -1967,7 +1977,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                           <span className="text-blue-700">相似度 {result.score.toFixed(3)}</span>
                         </div>
                         <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{result.textPreview}</p>
-                        <div className="mt-3 text-xs font-semibold text-blue-700">{result.matchReason}</div>
+                        <div className="mt-3 text-xs font-semibold text-blue-700">{productizeKnowledgeRuntimeCopy(result.matchReason)}</div>
                       </article>
                     ))}
                   </div>
@@ -1982,7 +1992,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                 <BookOpen className="h-5 w-5 text-emerald-600" />
                 <div>
                   <h2 className="text-lg font-semibold tracking-normal text-slate-950">知识库问答</h2>
-                  <p className="mt-1 text-sm text-slate-500">基于关键词和 mock embedding 召回片段生成低敏回答。</p>
+                  <p className="mt-1 text-sm text-slate-500">基于关键词和受控向量召回片段生成低敏回答。</p>
                 </div>
               </div>
               <form onSubmit={handleKnowledgeQa} className="flex w-full flex-col gap-2 lg:w-[620px]">
@@ -2044,7 +2054,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                             <span className="text-blue-700">分数 {citation.score.toFixed(3)}</span>
                           </div>
                           <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{citation.textPreview}</p>
-                          <div className="mt-3 text-xs font-semibold text-blue-700">{citation.matchReason}</div>
+                          <div className="mt-3 text-xs font-semibold text-blue-700">{productizeKnowledgeRuntimeCopy(citation.matchReason)}</div>
                         </article>
                       ))
                     )}

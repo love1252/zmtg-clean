@@ -1052,7 +1052,7 @@ describe('平台端知识库管理只读看板', () => {
     expect(searchSection.textContent).not.toContain('问答');
   });
 
-  it('平台端新增向量索引和语义检索区域，使用 mock embedding 引用片段', async () => {
+  it('平台端新增向量索引和语义检索区域，使用受控向量索引引用片段', async () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
     fireEvent.click(await screen.findByRole('tab', { name: '检索测试' }));
@@ -1060,7 +1060,7 @@ describe('平台端知识库管理只读看板', () => {
     const indexSection = screen.getByLabelText('平台端知识向量索引');
     fireEvent.click(within(indexSection).getByRole('button', { name: '生成向量索引' }));
 
-    expect(await screen.findByText('已生成 1 个 mock embedding 索引')).toBeInTheDocument();
+    expect(await screen.findByText('已生成 1 个受控向量索引')).toBeInTheDocument();
     await waitFor(() =>
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/open-platform/knowledge-management/embeddings',
@@ -1078,8 +1078,10 @@ describe('平台端知识库管理只读看板', () => {
     fireEvent.click(within(vectorSection).getByRole('button', { name: '语义检索' }));
 
     expect(await screen.findByText('平台端语义相似引用片段')).toBeInTheDocument();
-    expect(screen.getByText('mock embedding 相似度 0.877')).toBeInTheDocument();
+    expect(screen.getByText('受控向量相似度 0.877')).toBeInTheDocument();
     expect(screen.getByText('相似度 0.877')).toBeInTheDocument();
+    expect(indexSection.textContent).not.toContain('mock embedding');
+    expect(vectorSection.textContent).not.toContain('mock embedding');
     expect(vectorSection.textContent).not.toContain('OCR');
     expect(vectorSection.textContent).not.toContain('训练');
     expect(vectorSection.textContent).not.toContain('问答');

@@ -7,7 +7,7 @@ describe('产品与套餐面板', () => {
     render(<ProductPlanPanel />);
 
     expect(screen.getByRole('heading', { name: '产品与套餐' })).toBeInTheDocument();
-    expect(screen.getByText('产品路线视图')).toBeInTheDocument();
+    expect(screen.getByText(/套餐权益对照表作为长期路线词汇预留/)).toBeInTheDocument();
 
     expect(screen.getByText('Starter 基础版')).toBeInTheDocument();
     expect(screen.getByText('Professional 专业版')).toBeInTheDocument();
@@ -18,7 +18,7 @@ describe('产品与套餐面板', () => {
     expect(screen.getAllByText('连接器').length).toBeGreaterThanOrEqual(3);
 
     expect(screen.getAllByText('参考价（未定价）').length).toBe(3);
-    expect(screen.getByText('未上线')).toBeInTheDocument();
+    expect(screen.getByText(/套餐权益对比为长期路线只读词汇/)).toBeInTheDocument();
 
     const serialized = document.body.textContent?.toLowerCase() ?? '';
     expect(serialized).toContain('定价、下单、续费');

@@ -110,9 +110,13 @@ describe('平台端审计日志面板', () => {
     expect(screen.getByRole('heading', { name: '平台审计日志' })).toBeInTheDocument();
     expect(screen.getByText(/只展示白名单字段/)).toBeInTheDocument();
     expect(screen.getByText('正在加载平台审计事件...')).toBeInTheDocument();
+    expect(screen.getByText('加载期间筛选暂不可用')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '应用筛选' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '重置筛选' })).toBeDisabled();
     pending.resolve(auditEventsResponse([auditEventRecord]));
 
     expect(await screen.findByText('audit_evt_platform_001')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '应用筛选' })).toBeEnabled();
     expect(screen.getByText('租户 ID：demo-tenant-001')).toBeInTheDocument();
     expect(screen.getByText('资源类型：customer')).toBeInTheDocument();
     expect(screen.getByText('资源 ID：cust_001')).toBeInTheDocument();

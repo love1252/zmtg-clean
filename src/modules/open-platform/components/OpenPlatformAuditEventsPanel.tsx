@@ -251,6 +251,8 @@ export function OpenPlatformAuditEventsPanel() {
     });
   }
 
+  const isFilterDisabled = isLoading || isLoadingMore;
+
   return (
     <section className="space-y-5">
       <PlatformSectionBanner
@@ -271,19 +273,24 @@ export function OpenPlatformAuditEventsPanel() {
             <div>
               <h3 className="text-base font-semibold text-slate-950">筛选</h3>
               <p className="mt-0.5 text-xs text-slate-500">仅支持平台审计白名单字段，租户 ID 只用于平台侧筛选。</p>
+              {isFilterDisabled ? (
+                <p className="mt-1 text-xs font-semibold text-blue-700">加载期间筛选暂不可用</p>
+              ) : null}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={handleResetFilters}
-              className="inline-flex h-9 items-center justify-center rounded-full border border-[#e6edf5] bg-white px-3 text-sm font-semibold text-slate-600"
+              disabled={isFilterDisabled}
+              className="inline-flex h-9 items-center justify-center rounded-full border border-[#e6edf5] bg-white px-3 text-sm font-semibold text-slate-600 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
             >
               重置筛选
             </button>
             <button
               type="submit"
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-cyan-300 px-3 text-sm font-semibold text-[#06111f]"
+              disabled={isFilterDisabled}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-cyan-300 px-3 text-sm font-semibold text-[#06111f] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
             >
               <Search className="h-4 w-4" />
               应用筛选

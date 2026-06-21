@@ -172,7 +172,7 @@ describe('平台端租户管理面板', () => {
 
     expect(screen.getByRole('heading', { name: '租户管理' })).toBeInTheDocument();
     expect(screen.getByText(/平台侧查看机构、套餐和配额边界/)).toBeInTheDocument();
-    expect(screen.getByText(/当前展示为受控 demo 租户/)).toBeInTheDocument();
+    expect(screen.getByText(/当前展示为受控演示租户/)).toBeInTheDocument();
     expect(screen.getByText('正在加载租户管理数据...')).toBeInTheDocument();
     expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('运行中')).toBeInTheDocument();
@@ -306,8 +306,8 @@ describe('平台端租户管理面板', () => {
 
     render(<OpenPlatformTenantManagementPanel />);
 
-    expect(await screen.findByText('暂无受控 demo 租户')).toBeInTheDocument();
-    expect(screen.getByText('当前没有可展示的 demo 租户、套餐或配额快照。')).toBeInTheDocument();
+    expect(await screen.findByText('暂无受控演示租户')).toBeInTheDocument();
+    expect(screen.getByText('当前没有可展示的演示租户、套餐或配额快照。')).toBeInTheDocument();
     expect(screen.getByText('暂无需要收尾关注的商业化健康信号')).toBeInTheDocument();
   });
 

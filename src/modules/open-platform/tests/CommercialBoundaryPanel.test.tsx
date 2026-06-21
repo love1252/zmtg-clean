@@ -7,7 +7,7 @@ describe('商业化边界面板', () => {
     render(<CommercialBoundaryPanel />);
 
     expect(screen.getByRole('heading', { name: '商业化边界' })).toBeInTheDocument();
-    expect(screen.getByText('商业化边界视图')).toBeInTheDocument();
+    expect(screen.getByText(/当前展示计费、订单、合同、发票的词汇预留/)).toBeInTheDocument();
 
     expect(screen.getAllByText('计费模式').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('订单管理').length).toBeGreaterThanOrEqual(1);
