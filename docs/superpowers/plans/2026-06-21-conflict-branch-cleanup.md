@@ -355,3 +355,5 @@ pnpm exec eslint <相关文件>
 - `2026-06-21 CST +0800`：经用户确认，已删除 5 条本地旧支线：`codex/app-foundation`、`codex/auth-demo-session`、`codex/auth-demo-session-local-squash-20260529`、`codex/classify-workbench-sections-by-sidebar`、`codex/visual-foundation`。
 - 远端旧支线未删除；如需删除 `origin/codex/app-foundation`、`origin/codex/auth-demo-session`、`origin/codex/visual-foundation`，必须再次取得用户明确批准。
 - `2026-06-21 CST +0800`：已完成任务 3 Phase21 随访支线审计；`codex/phase21-duplicate-followup-audit-link` 与 `codex/phase21-followup-path-analysis-api` 的等价 patch 已在 `origin/main`，当前主线相关测试通过，结论为无需重建、建议确认后删除本地旧支线。
+- `2026-06-21 CST +0800`：经用户确认，已删除剩余 12 条本地未合并旧支线；本地未合并列表只剩当前清理 PR 分支 `codex/conflict-branch-cleanup-plan-20260621`。
+- `2026-06-21 CST +0800`：已在执行报告中整理后续中文重建任务建议，包括租户持久化重建、HIS repository 差异复核、HIS schema 安全修复、retry policy 复核和 worker stale recovery 重建。

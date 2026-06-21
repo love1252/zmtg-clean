@@ -273,3 +273,65 @@ expected migration SQL not to contain '"metadata" jsonb'
 ```
 
 判断：该失败来自当前主线迁移内容与 schema 安全测试之间的既有不一致，本次复查未修改 runtime，未引入该失败。后续如果要收口 HIS/schema 类支线，应先单独处理这个 schema 测试问题，避免把旧支线清理和 schema 修复混在一个 PR。
+
+---
+
+## 十、剩余 12 条本地旧支线清理结果
+
+清理时间：`2026-06-21 CST +0800`
+
+用户授权范围：
+
+- 该删除的本地旧支线可以删除。
+- 不能合并或会与当前已确定内容冲突的旧支线可以直接删除。
+- 如仍需要能力，可以后续基于当前主线重建目标任务。
+
+已删除本地旧支线：
+
+```text
+codex/platform-demo-ui-polish-v1
+codex/tenant-persistence-phase3-plan
+feat/phase23-his-connection-compensation-operation-repository-min
+feat/phase23-his-credential-compensation-job-queue-repository-min
+feat/phase23-his-credential-compensation-job-queue-schema-min
+feat/phase23-his-credential-compensation-retry-policy-helper-min
+feat/phase23-his-credential-compensation-worker-claim-lock-stale-recovery-min
+feat/phase23-his-credential-compensation-worker-test-provider-noop-execution-min
+plan/phase23-his-credential-compensation-outbox-job-queue
+plan/phase23-his-credential-compensation-retry-requeue-backoff-runtime
+plan/phase23-his-credential-compensation-worker-claim-lock-stale-recovery
+plan/phase23-his-credential-compensation-worker-test-provider-noop-execution
+```
+
+清理后本地未合并分支：
+
+```text
+codex/conflict-branch-cleanup-plan-20260621
+```
+
+说明：以上操作只删除本地旧支线，未删除任何远端分支。
+
+### 10.1 后续建议重建的中文目标任务
+
+以下能力不从旧支线合并，后续如要继续，只能基于当前 `origin/main` 新建目标任务：
+
+| 目标任务 | 建议中文标题 | 范围 | 必须注意的边界 |
+| --- | --- | --- | --- |
+| 租户持久化重建 | `租户持久化：基于当前主线重建 Phase3 数据库与只读 API 最小边界` | 重新评估租户 schema、repository、只读 API、审计和测试是否仍缺口。 | 涉及 schema/migration/API/依赖，必须单独审批；不得复用旧支线直接合并。 |
+| HIS 凭证补偿 repository 差异复核 | `HIS：复核凭证补偿 operation 与 job queue repository 差异` | 对比当前主线 repository 与旧支线差异，只补当前仍缺失的测试或边界。 | 只做最小补丁；不得回退当前 HIS、知识库、AI 模型或首页品牌内容。 |
+| HIS 凭证补偿 schema 安全修复 | `HIS：修复 Schema.test 中 metadata 字段安全断言冲突` | 先处理当前主线 `Schema.test.ts` 中 `"metadata" jsonb` 断言失败。 | 属于 schema/test 边界，必须单独审批；不运行 migration，除非再次明确批准。 |
+| HIS 凭证补偿 retry policy 复核 | `HIS：复核凭证补偿 retry policy helper 边界` | 确认当前 retry policy 是否已覆盖上限、下一次执行时间和异常输入。 | 优先纯函数与测试，不引入 worker/queue 联动。 |
+| HIS 凭证补偿 worker stale recovery 重建 | `HIS：重建凭证补偿 worker stale recovery 最小边界` | 如业务仍需要，基于当前 worker 实现补 claim lock 过期恢复。 | 涉及 worker runtime，必须单独审批；不外呼真实 HIS。 |
+
+### 10.2 不建议重建的旧支线
+
+以下旧支线等价 patch 已进入 `origin/main`，无需重建：
+
+```text
+codex/platform-demo-ui-polish-v1
+feat/phase23-his-credential-compensation-worker-test-provider-noop-execution-min
+plan/phase23-his-credential-compensation-outbox-job-queue
+plan/phase23-his-credential-compensation-retry-requeue-backoff-runtime
+plan/phase23-his-credential-compensation-worker-claim-lock-stale-recovery
+plan/phase23-his-credential-compensation-worker-test-provider-noop-execution
+```
