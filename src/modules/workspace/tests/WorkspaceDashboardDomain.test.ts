@@ -7,9 +7,8 @@ import { institutionNavItems } from '@/modules/workspace/domain/institution-dash
 import { buildInstitutionDashboardSummary } from '@/modules/workspace/domain/institution-dashboard-view-models';
 import { buildV1OpportunityReadonlySummary } from '@/modules/workspace/domain/v1-opportunity-readonly-view-models';
 import {
+  buildPlatformOverviewViewModel,
   platformCapabilityCards,
-  platformHealthItems,
-  platformMetrics,
   platformNavItems,
 } from '@/modules/workspace/domain/platform-dashboard';
 
@@ -257,9 +256,14 @@ describe('工作台看板领域模型', () => {
     );
   });
 
-  it('保持平台总览核心指标为真实运营判断口径', () => {
-    expect(platformMetrics).toHaveLength(6);
-    expect(platformMetrics.map((item) => item.label)).toEqual(
+  it('平台总览空租户时从真实租户列表派生零值运营口径', () => {
+    const overview = buildPlatformOverviewViewModel({
+      tenants: [],
+      now: new Date('2026-06-22T00:00:00+08:00'),
+    });
+
+    expect(overview.metrics).toHaveLength(6);
+    expect(overview.metrics.map((item) => item.label)).toEqual(
       [
         '活跃租户数',
         '有效套餐覆盖率',
@@ -269,12 +273,18 @@ describe('工作台看板领域模型', () => {
         '拒绝审计信号',
       ],
     );
-    expect(platformHealthItems.map((item) => item.label)).toEqual([
+    expect(overview.metrics.map((item) => item.value)).toEqual(['0', '0%', '0', '0', '0', '0']);
+    expect(overview.metrics.map((item) => item.change).join(' ')).not.toContain('18');
+    expect(overview.metrics.map((item) => item.change).join(' ')).not.toContain('配额拒绝 5');
+    expect(overview.healthItems.map((item) => item.label)).toEqual([
       '缺少有效套餐',
       '缺少配额上限',
       '快照异常租户',
       '配额拒绝样本',
     ]);
+    expect(overview.healthItems.map((item) => item.value)).toEqual(['0', '0', '0', '0']);
+    expect(overview.tenantStatusItems.map((item) => item.value)).toEqual(['0', '0', '0']);
+    expect(overview.planStatusItems.map((item) => item.value)).toEqual(['0', '0', '0']);
     expect(platformCapabilityCards.map((item) => item.title)).toEqual([
       '真实计费未启用',
       '外部连接未启用',

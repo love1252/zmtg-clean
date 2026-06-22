@@ -4262,6 +4262,32 @@ describe('工作台入口页面', () => {
     expect(screen.queryByText('审计事件词汇')).not.toBeInTheDocument();
   });
 
+  it('平台总览在无租户时展示真实零值而不是静态演示指标', async () => {
+    const fetchMock = mockWorkspaceFetch({ role: 'platform_admin', platformTenants: [] });
+    const { container } = render(<OpenPlatformPage />);
+
+    expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
+
+    const metricSection = screen.getByLabelText('核心运营指标');
+    expect(within(metricSection).getByText('活跃租户数')).toBeInTheDocument();
+    expect(within(metricSection).getByText('有效套餐覆盖率')).toBeInTheDocument();
+    expect(within(metricSection).getByText('0%')).toBeInTheDocument();
+    expect(within(metricSection).getByText('0 / 0 个活跃租户')).toBeInTheDocument();
+    expect(within(metricSection).getAllByText('0')).toHaveLength(5);
+    expect(metricSection.textContent).not.toContain('18');
+    expect(metricSection.textContent).not.toContain('83%');
+    expect(metricSection.textContent).not.toContain('配额拒绝 5');
+    expect(screen.getByText('暂无配置缺失租户')).toBeInTheDocument();
+    expect(screen.getByText('暂无配额风险')).toBeInTheDocument();
+    expect(screen.getByText('平台审计日志已清空或未接入本页聚合')).toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/tenants', { cache: 'no-store' }),
+    );
+    expectNoPlatformTenantMutation(fetchMock);
+    expectNoSensitivePlatformTenantContent(container);
+  });
+
   it('平台端桌面侧边栏默认展开，可收起为固定图标栏并保持栏目切换', async () => {
     const fetchMock = mockWorkspaceFetch({ role: 'platform_admin' });
     render(<OpenPlatformPage />);

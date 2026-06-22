@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import {
   Activity,
@@ -21,18 +21,14 @@ import { OpenPlatformAiReadonlyPanel } from '@/modules/open-platform/components/
 import { OpenPlatformAuditEventsPanel } from '@/modules/open-platform/components/OpenPlatformAuditEventsPanel';
 import { OpenPlatformKnowledgeManagementPanel } from '@/modules/open-platform/components/OpenPlatformKnowledgeManagementPanel';
 import { OpenPlatformTenantManagementPanel } from '@/modules/open-platform/components/OpenPlatformTenantManagementPanel';
+import { listOpenPlatformTenants } from '@/modules/open-platform/client/platform-tenant-management-client';
 import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { ProductPlanPanel } from '@/modules/open-platform/components/ProductPlanPanel';
 import {
-  platformAiReferenceItems,
+  buildPlatformOverviewViewModel,
   platformCapabilityCards,
-  platformHealthItems,
-  platformKnowledgeQualityItems,
-  platformMetrics,
   platformNavItems,
-  platformPlanStatusItems,
   platformQuickActions,
-  platformTenantStatusItems,
 } from '@/modules/workspace/domain/platform-dashboard';
 import { cn } from '@/shared/utils/cn';
 
@@ -285,6 +281,40 @@ type PlatformOverviewProps = {
 };
 
 function PlatformOverview({ onNavigate }: PlatformOverviewProps) {
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [overview, setOverview] = useState(() =>
+    buildPlatformOverviewViewModel({
+      tenants: [],
+      now: new Date(),
+    }),
+  );
+  const hasHealthWarnings = overview.healthItems.some((item) => item.warning);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadOverview() {
+      setLoadState('loading');
+      const result = await listOpenPlatformTenants();
+      if (!isMounted) return;
+
+      if (!result.ok) {
+        setOverview(buildPlatformOverviewViewModel({ tenants: [], now: new Date() }));
+        setLoadState('error');
+        return;
+      }
+
+      setOverview(buildPlatformOverviewViewModel({ tenants: result.records, now: new Date() }));
+      setLoadState('ready');
+    }
+
+    void loadOverview();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <>
       <PlatformSectionBanner
@@ -293,9 +323,14 @@ function PlatformOverview({ onNavigate }: PlatformOverviewProps) {
         title="平台总览"
         description="只保留能支撑运营判断的核心信号：租户是否可运营、套餐和配额是否完整、快照是否可信、拒绝审计是否需要复核。知识库与人工智能只作为低权重能力参考，不替代商业化健康判断。"
       />
+      {loadState === 'error' ? (
+        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+          租户聚合暂不可用，当前展示零值安全空态。请稍后刷新或进入租户管理查看接口状态。
+        </div>
+      ) : null}
 
       <section aria-label="核心运营指标" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {platformMetrics.map((metric) => (
+        {overview.metrics.map((metric) => (
           <article key={metric.label} className="rounded-[20px] border border-[#e6edf5] bg-white p-5 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -312,8 +347,8 @@ function PlatformOverview({ onNavigate }: PlatformOverviewProps) {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
-        <DistributionPanel title="租户状态分布" items={platformTenantStatusItems} note="判断活跃租户基数，避免把暂停或注销租户计入运营盘面。" />
-        <DistributionPanel title="套餐分布摘要" items={platformPlanStatusItems} note="判断活跃租户是否具备可解释的商业化配置。" />
+        <DistributionPanel title="租户状态分布" items={overview.tenantStatusItems} note="判断活跃租户基数，避免把暂停或注销租户计入运营盘面。" />
+        <DistributionPanel title="套餐分布摘要" items={overview.planStatusItems} note="判断活跃租户是否具备可解释的商业化配置。" />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.1fr_0.95fr_0.95fr]">
@@ -323,10 +358,12 @@ function PlatformOverview({ onNavigate }: PlatformOverviewProps) {
               <h2 className="text-lg font-semibold tracking-normal text-[#1f2937]">商业化健康</h2>
               <p className="mt-1 text-sm text-[#64748b]">优先处理会影响租户运营判断的配置缺口。</p>
             </div>
-            <span className="rounded-full border border-amber-100 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">需要复核</span>
+            <span className={cn('rounded-full border px-3 py-1 text-xs font-semibold', hasHealthWarnings ? 'border-amber-100 bg-amber-50 text-amber-700' : 'border-emerald-100 bg-emerald-50 text-emerald-700')}>
+              {hasHealthWarnings ? '需要复核' : '暂无风险'}
+            </span>
           </div>
           <div className="mt-5 space-y-3">
-            {platformHealthItems.map((item) => (
+            {overview.healthItems.map((item) => (
               <div key={item.label} className="flex items-start justify-between gap-4 rounded-2xl border border-[#e6edf5] bg-white px-4 py-3">
                 <div className="flex min-w-0 gap-3">
                   <div className={cn('mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl', item.warning ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700')}>
@@ -346,8 +383,8 @@ function PlatformOverview({ onNavigate }: PlatformOverviewProps) {
           </div>
         </article>
 
-        <ReferencePanel title="知识库能力质量参考" items={platformKnowledgeQualityItems} />
-        <ReferencePanel title="AI用量与费用与模型配置参考" items={platformAiReferenceItems} />
+        <ReferencePanel title="知识库能力质量参考" items={overview.knowledgeQualityItems} />
+        <ReferencePanel title="AI用量与费用与模型配置参考" items={overview.aiReferenceItems} />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
@@ -428,7 +465,11 @@ function DistributionPanel({ title, items, note }: { title: string; items: reado
       </div>
       <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-slate-100">
         {items.map((item) => (
-          <span key={item.label} className={item.tone} style={{ width: `${(Number(item.value) / total) * 100}%` }} />
+          <span
+            key={item.label}
+            className={item.tone}
+            style={{ width: total > 0 ? `${(Number(item.value) / total) * 100}%` : '0%' }}
+          />
         ))}
       </div>
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -460,7 +501,7 @@ function ReferencePanel({ title, items }: { title: string; items: readonly Refer
           <h2 className="text-lg font-semibold tracking-normal text-[#1f2937]">{title}</h2>
           <p className="mt-1 text-sm text-[#64748b]">低权重参考，不参与核心商业化排序。</p>
         </div>
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-[#64748b]">受控示例</span>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-[#64748b]">只读参考</span>
       </div>
       <div className="mt-5 space-y-3">
         {items.map((item) => (
