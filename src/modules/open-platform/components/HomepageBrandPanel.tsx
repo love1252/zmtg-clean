@@ -210,8 +210,12 @@ export function HomepageBrandPanel() {
   const [assets, setAssets] = useState<HomepageBrandAssetDto[]>([]);
   const [auditLogs, setAuditLogs] = useState<HomepageBrandAuditLogDto[]>([]);
   const [message, setMessage] = useState('');
+  const [isConfigLoaded, setIsConfigLoaded] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [configStatus, setConfigStatus] = useState('draft');
+  const [publishedVersionId, setPublishedVersionId] = useState<string | null>(null);
+  const [publishedAt, setPublishedAt] = useState<string | null>(null);
   const [publishSummary, setPublishSummary] = useState('');
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
   const [selectedVisualTarget, setSelectedVisualTarget] = useState<VisualEditTargetId | null>(null);
@@ -227,9 +231,14 @@ export function HomepageBrandPanel() {
         setVersions(view.versions);
         setAssets(view.assets);
         setAuditLogs(view.auditLogs);
+        setConfigStatus(view.status);
+        setPublishedVersionId(view.publishedVersionId);
+        setPublishedAt(view.publishedAt);
         setIsDirty(false);
       } catch (error) {
         if (!ignore) setMessage(error instanceof Error ? error.message : '');
+      } finally {
+        if (!ignore) setIsConfigLoaded(true);
       }
     }
 
@@ -266,6 +275,7 @@ export function HomepageBrandPanel() {
     }));
     setConfig(cloneHomepageBrandConfig(result.config));
     setIsDirty(false);
+    setConfigStatus('draft');
     return true;
   }
 
@@ -299,6 +309,9 @@ export function HomepageBrandPanel() {
         body: JSON.stringify({ summary: publishSummary || '发布首页与品牌配置' }),
       }));
       setVersions((current) => [result.version, ...current.filter((item) => item.id !== result.version.id)]);
+      setConfigStatus('published');
+      setPublishedVersionId(result.version.id);
+      setPublishedAt(result.version.publishedAt);
       setMessage(`已保存草稿并发布版本 ${result.version.versionNumber}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '发布失败');
@@ -332,6 +345,9 @@ export function HomepageBrandPanel() {
       }));
       setConfig(cloneHomepageBrandConfig(result.config));
       setVersions((current) => [result.version, ...current.filter((item) => item.id !== result.version.id)]);
+      setConfigStatus('published');
+      setPublishedVersionId(result.version.id);
+      setPublishedAt(result.version.publishedAt);
       setIsDirty(false);
       setMessage(`已回滚并生成版本 ${result.version.versionNumber}`);
     } catch (error) {
@@ -392,6 +408,10 @@ export function HomepageBrandPanel() {
     }
   }
 
+  const hasPublishedHomepage = Boolean(publishedVersionId);
+  const hasDraftOverPublishedHomepage = isConfigLoaded && configStatus === 'draft' && hasPublishedHomepage;
+  const publishedAtLabel = publishedAt ? formatDateTime(publishedAt) : '暂无发布时间';
+
   return (
     <section className="space-y-5" aria-labelledby="homepage-brand-heading">
       <PlatformSectionBanner
@@ -407,7 +427,7 @@ export function HomepageBrandPanel() {
           ) : null}
           <button
             type="button"
-            disabled={isBusy}
+            disabled={isBusy || !isConfigLoaded}
             onClick={() => void saveDraft()}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 disabled:opacity-60"
           >
@@ -416,7 +436,7 @@ export function HomepageBrandPanel() {
           </button>
           <button
             type="button"
-            disabled={isBusy}
+            disabled={isBusy || !isConfigLoaded}
             onClick={() => setPendingConfirmation({ kind: 'publish' })}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#2563eb] px-3 text-sm font-semibold text-white transition hover:bg-[#1d4ed8] disabled:opacity-60"
           >
@@ -425,8 +445,9 @@ export function HomepageBrandPanel() {
           </button>
           <button
             type="button"
+            disabled={!isConfigLoaded}
             onClick={() => setActiveTab('草稿预览')}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#d8e2ee] bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-blue-200 hover:text-blue-700"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#d8e2ee] bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-blue-200 hover:text-blue-700 disabled:opacity-60"
           >
             <Eye className="h-4 w-4" />
             草稿预览
@@ -439,65 +460,88 @@ export function HomepageBrandPanel() {
         ) : null}
       </PlatformSectionBanner>
 
-      <div className={cn(sectionShell, 'p-2')}>
-        <div role="tablist" aria-label="首页与品牌页签" className="flex flex-wrap gap-2">
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab}
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                'h-10 rounded-lg px-4 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#bfdbfe]',
-                activeTab === tab ? 'bg-[#eaf3ff] text-[#2563eb]' : 'text-slate-500 hover:bg-[#f1f5f9] hover:text-slate-900',
-              )}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-      </div>
+      {!isConfigLoaded ? (
+        <article className={sectionShell} aria-busy="true" aria-live="polite">
+          <div className="flex flex-col gap-2">
+            <h3 className="text-lg font-semibold tracking-normal text-slate-950">正在加载首页与品牌配置</h3>
+            <p className="text-sm leading-6 text-slate-500">
+              正在读取已保存的联系方式、备案号和二维码配置，加载完成前不会展示默认占位内容。
+            </p>
+          </div>
+        </article>
+      ) : null}
 
-      {activeTab === '品牌概览' ? (
-        <BrandOverview
-          config={config}
-          updateConfig={updateConfig}
-          saveDraft={saveDraft}
-          uploadFooterQr={uploadFooterQr}
-          isBusy={isBusy}
-        />
+      {hasDraftOverPublishedHomepage ? (
+        <aside className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+          <p className="font-semibold">当前为草稿，官网首页仍读取已发布版本</p>
+          <p>如需让官网首页同步这些联系信息、备案号和二维码，请使用“保存并发布”。</p>
+          <p className="mt-1 text-xs font-semibold text-amber-700">当前已发布版本：{publishedVersionId} · {publishedAtLabel}</p>
+        </aside>
       ) : null}
-      {activeTab === '登录页管理' ? <LoginPageEditor config={config} updateConfig={updateConfig} saveDraft={saveDraft} isBusy={isBusy} /> : null}
-      {activeTab === '素材上传' ? <AssetUploader config={config} assets={assets} uploadAsset={uploadAsset} /> : null}
-      {activeTab === '发布记录' ? (
-        <PublishRecords
-          versions={versions}
-          auditLogs={auditLogs}
-          publishSummary={publishSummary}
-          setPublishSummary={setPublishSummary}
-          requestPublish={() => setPendingConfirmation({ kind: 'publish' })}
-          requestRollbackToVersion={(version) => setPendingConfirmation({
-            kind: 'rollback',
-            versionId: version.id,
-            versionNumber: version.versionNumber,
-          })}
-          isBusy={isBusy}
-        />
-      ) : null}
-      {activeTab === '草稿预览' ? (
-        <HomepagePreview
-          previewDocument={previewDocument}
-          config={config}
-          updateConfig={updateConfig}
-          uploadAsset={uploadAsset}
-          uploadFooterQr={uploadFooterQr}
-          selectedTarget={selectedVisualTarget}
-          setSelectedTarget={setSelectedVisualTarget}
-          onUnavailableTarget={() => setMessage('该区域暂不可编辑，请点击蓝色高亮区域或上方可编辑区块。')}
-          goToTab={setActiveTab}
-          isBusy={isBusy}
-        />
+
+      {isConfigLoaded ? (
+        <>
+          <div className={cn(sectionShell, 'p-2')}>
+            <div role="tablist" aria-label="首页与品牌页签" className="flex flex-wrap gap-2">
+              {tabs.map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    'h-10 rounded-lg px-4 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#bfdbfe]',
+                    activeTab === tab ? 'bg-[#eaf3ff] text-[#2563eb]' : 'text-slate-500 hover:bg-[#f1f5f9] hover:text-slate-900',
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {activeTab === '品牌概览' ? (
+            <BrandOverview
+              config={config}
+              updateConfig={updateConfig}
+              saveDraft={saveDraft}
+              uploadFooterQr={uploadFooterQr}
+              isBusy={isBusy}
+            />
+          ) : null}
+          {activeTab === '登录页管理' ? <LoginPageEditor config={config} updateConfig={updateConfig} saveDraft={saveDraft} isBusy={isBusy} /> : null}
+          {activeTab === '素材上传' ? <AssetUploader config={config} assets={assets} uploadAsset={uploadAsset} /> : null}
+          {activeTab === '发布记录' ? (
+            <PublishRecords
+              versions={versions}
+              auditLogs={auditLogs}
+              publishSummary={publishSummary}
+              setPublishSummary={setPublishSummary}
+              requestPublish={() => setPendingConfirmation({ kind: 'publish' })}
+              requestRollbackToVersion={(version) => setPendingConfirmation({
+                kind: 'rollback',
+                versionId: version.id,
+                versionNumber: version.versionNumber,
+              })}
+              isBusy={isBusy}
+            />
+          ) : null}
+          {activeTab === '草稿预览' ? (
+            <HomepagePreview
+              previewDocument={previewDocument}
+              config={config}
+              updateConfig={updateConfig}
+              uploadAsset={uploadAsset}
+              uploadFooterQr={uploadFooterQr}
+              selectedTarget={selectedVisualTarget}
+              setSelectedTarget={setSelectedVisualTarget}
+              onUnavailableTarget={() => setMessage('该区域暂不可编辑，请点击蓝色高亮区域或上方可编辑区块。')}
+              goToTab={setActiveTab}
+              isBusy={isBusy}
+            />
+          ) : null}
+        </>
       ) : null}
 
       {pendingConfirmation ? (
