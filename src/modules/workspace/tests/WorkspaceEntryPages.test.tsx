@@ -4245,7 +4245,7 @@ describe('工作台入口页面', () => {
     expect(screen.queryByText('预警与待办')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '平台总览' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '首页与品牌' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '权限与审计' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '平台审计日志' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '平台端移动导航' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：开放连接路线' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出平台' })).toBeInTheDocument();
@@ -4430,23 +4430,28 @@ describe('工作台入口页面', () => {
     expectNoSensitivePlatformTenantContent(container);
   });
 
-  it('平台端权限与审计入口展示审计日志并保持敏感字段边界', async () => {
+  it('平台端平台审计日志入口只展示审计日志并保持敏感字段边界', async () => {
     const fetchMock = mockWorkspaceFetch({ role: 'platform_admin' });
     const { container } = render(<OpenPlatformPage />);
 
     expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '权限与审计' }));
+    fireEvent.click(screen.getByRole('button', { name: '平台审计日志' }));
 
     expect(await screen.findByRole('heading', { name: '平台审计日志' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '开放平台基础治理' })).not.toBeInTheDocument();
+    expect(screen.queryByText('租户隔离原则')).not.toBeInTheDocument();
+    expect(screen.queryByText('权限样例矩阵')).not.toBeInTheDocument();
+    expect(screen.queryByText('连接生命周期')).not.toBeInTheDocument();
+    expect(screen.queryByText('审计事件词汇')).not.toBeInTheDocument();
     expect(screen.getByText(/只展示白名单字段/)).toBeInTheDocument();
     expect(screen.getByText('audit_phase8_platform')).toBeInTheDocument();
     expect(screen.getByText('租户 ID：demo-tenant-001')).toBeInTheDocument();
-    expect(screen.getByText('资源类型：customer')).toBeInTheDocument();
-    expect(screen.getByText('结果：allowed')).toBeInTheDocument();
+    expect(screen.getByText('资源类型：客户')).toBeInTheDocument();
+    expect(screen.getByText('结果：通过')).toBeInTheDocument();
     expect(screen.getByLabelText('租户 ID')).toBeInTheDocument();
 
     const auditCall = fetchMock.mock.calls.find(
-      ([input]) => fetchPath(input) === '/api/open-platform/audit-events',
+      ([input]) => fetchPath(input) === '/api/open-platform/audit-events?limit=10',
     );
     expect(auditCall).toBeDefined();
     expect(auditCall?.[1]).toEqual({ cache: 'no-store' });

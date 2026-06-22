@@ -38,7 +38,7 @@ export const platformNavItems: PlatformNavItem[] = [
   { label: 'AI用量与费用', icon: TrendingUp },
   { label: '知识库管理', icon: BookOpen },
   { label: '开放连接路线', icon: Plug },
-  { label: '权限与审计', icon: Shield },
+  { label: '平台审计日志', icon: Shield },
   { label: '商业化边界', icon: Activity },
 ];
 
@@ -75,7 +75,7 @@ export const platformQuickActions: PlatformQuickAction[] = [
   { label: '查看配额风险影响租户', icon: Activity, hint: '商业化边界' },
   { label: '补齐有效套餐和配额上限', icon: Boxes, hint: '产品与套餐' },
   { label: '处理快照异常租户', icon: CalendarClock, hint: '租户管理' },
-  { label: '审查最近配额拒绝或其他拒绝信号', icon: Shield, hint: '权限与审计' },
+  { label: '审查最近配额拒绝或其他拒绝信号', icon: Shield, hint: '平台审计日志' },
 ];
 
 export const platformTenantStatusItems = [
