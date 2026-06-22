@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OpenPlatformTenantManagementPanel } from '@/modules/open-platform/components/OpenPlatformTenantManagementPanel';
 
@@ -177,7 +177,7 @@ describe('平台端租户管理面板', () => {
     expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('运行中')).toBeInTheDocument();
     expect(screen.getByText('租户 ID：demo-tenant-001')).toBeInTheDocument();
-    expect(screen.getByText('成长版')).toBeInTheDocument();
+    expect(screen.getAllByText('成长版').length).toBeGreaterThan(0);
     expect(screen.getByText('套餐编号：growth-care')).toBeInTheDocument();
     expect(screen.getByText('套餐状态：active')).toBeInTheDocument();
     expect(screen.getByText('分配状态：active')).toBeInTheDocument();
@@ -308,7 +308,7 @@ describe('平台端租户管理面板', () => {
 
     expect(await screen.findByText('暂无受控演示租户')).toBeInTheDocument();
     expect(screen.getByText('当前没有可展示的演示租户、套餐或配额快照。')).toBeInTheDocument();
-    expect(screen.getByText('暂无需要收尾关注的商业化健康信号')).toBeInTheDocument();
+    expect(screen.getAllByText('暂无需要收尾关注的商业化健康信号').length).toBeGreaterThan(0);
   });
 
   it.each([
@@ -377,5 +377,113 @@ describe('平台端租户管理面板', () => {
     expect(screen.getByText('0 / 0')).toBeInTheDocument();
     expect(screen.getByText('当前未启用 AI 调用配额')).toBeInTheDocument();
     expectNoPlatformDemoMisleadingClaims(container);
+  });
+
+  it('支持搜索和前端筛选授权异常租户', async () => {
+    const riskyTenant = {
+      ...tenantRecord,
+      tenantId: 'tenant-risk',
+      tenantName: '授权异常机构',
+      planName: null,
+      planCode: null,
+      planStatus: null,
+      assignmentStatus: null,
+      snapshotAt: null,
+    };
+    mockTenantFetch([
+      jsonResponse({
+        records: [
+          tenantRecord,
+          {
+            ...tenantRecord,
+            tenantId: 'tenant-expiring',
+            tenantName: '即将到期机构',
+            expiresAt: '2026-06-29T00:00:00.000Z',
+            currentCustomers: 4500,
+          },
+          riskyTenant,
+        ],
+      }),
+    ]);
+
+    render(<OpenPlatformTenantManagementPanel />);
+
+    expect(await screen.findByText('租户管理工作台')).toBeInTheDocument();
+    expect(screen.getAllByText('授权异常').length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText('搜索租户'), { target: { value: '授权异常' } });
+    fireEvent.change(screen.getByLabelText('授权状态'), { target: { value: 'issue' } });
+
+    const table = screen.getByRole('table');
+    expect(within(table).getAllByText('授权异常机构').length).toBeGreaterThan(0);
+    expect(within(table).queryByText('智美天工演示机构')).not.toBeInTheDocument();
+    expect(screen.getByText('筛选结果 1 个租户')).toBeInTheDocument();
+  });
+
+  it('点击查看打开租户详情抽屉并展示授权快照、用量摘要和审计入口', async () => {
+    mockTenantFetch([jsonResponse({ records: [tenantRecord] })]);
+
+    render(<OpenPlatformTenantManagementPanel />);
+
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '查看 智美天工演示机构' }));
+
+    const drawer = screen.getByRole('dialog', { name: '租户详情' });
+    expect(within(drawer).getByText('授权快照')).toBeInTheDocument();
+    expect(within(drawer).getByText('用量摘要（本月）')).toBeInTheDocument();
+    expect(within(drawer).getByText('审计入口')).toBeInTheDocument();
+    expect(within(drawer).getByRole('button', { name: '查看审计日志' })).toBeInTheDocument();
+  });
+
+  it('新建租户三步流程只展示前端状态且成功态说明 UI 写入项', async () => {
+    const fetchMock = mockTenantFetch([jsonResponse({ records: [tenantRecord] })]);
+    const { container } = render(<OpenPlatformTenantManagementPanel />);
+
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '打开新建租户' }));
+
+    expect(screen.getByRole('dialog', { name: '新建租户' })).toBeInTheDocument();
+    expect(screen.getByText('机构与管理员')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('机构名称'), { target: { value: '星澜医美中心' } });
+    fireEvent.change(screen.getByLabelText('联系人姓名'), { target: { value: '张明' } });
+    fireEvent.change(screen.getByLabelText('联系人手机号'), { target: { value: '13800000000' } });
+    fireEvent.change(screen.getByLabelText('管理员姓名'), { target: { value: '李静' } });
+    fireEvent.change(screen.getByLabelText('管理员手机号或邮箱'), { target: { value: 'admin@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }));
+
+    expect(screen.getByText('套餐与权益')).toBeInTheDocument();
+    expect(screen.getByText('专业版 v3 授权预览')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }));
+
+    expect(screen.getAllByText('提交确认').length).toBeGreaterThan(0);
+    expect(screen.getByText('审计摘要')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认开设租户' }));
+
+    expect(screen.getByText('租户 UI 状态已生成')).toBeInTheDocument();
+    expect(screen.getByText('租户主体')).toBeInTheDocument();
+    expect(screen.getByText('初始管理员')).toBeInTheDocument();
+    expect(screen.getByText('套餐分配')).toBeInTheDocument();
+    expect(screen.getAllByText('授权快照').length).toBeGreaterThan(0);
+    expect(screen.getByText('审计记录')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual(
+      expect.arrayContaining(['/api/open-platform/tenants']),
+    );
+    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).not.toContain(
+      '/api/open-platform/tenants/create',
+    );
+    expect(container.textContent ?? '').not.toContain('13800000000');
+    expect(container.textContent ?? '').not.toContain('admin@example.com');
+    expectNoPlatformDemoMisleadingClaims(container);
+  });
+
+  it('暂无租户时展示空状态和低风险入口', async () => {
+    mockTenantFetch([jsonResponse({ records: [] })]);
+
+    render(<OpenPlatformTenantManagementPanel />);
+
+    expect(await screen.findByText('暂无租户')).toBeInTheDocument();
+    expect(screen.getByText('请通过平台管理端开设第一个测试租户。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '新建租户' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '查看产品与套餐' })).toBeInTheDocument();
   });
 });
