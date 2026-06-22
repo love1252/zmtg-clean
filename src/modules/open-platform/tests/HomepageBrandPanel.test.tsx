@@ -161,6 +161,51 @@ describe('首页与品牌面板', () => {
     vi.stubGlobal('fetch', createFetchMock());
   });
 
+  it('首次加载配置前不渲染默认页脚字段，避免刷新时闪现初始内容', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)));
+
+    render(<HomepageBrandPanel />);
+
+    expect(screen.getByText('正在加载首页与品牌配置')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue(defaultHomepageBrandConfig.footer.phone)).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue(defaultHomepageBrandConfig.footer.email)).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue(defaultHomepageBrandConfig.footer.icpNumber)).not.toBeInTheDocument();
+  });
+
+  it('草稿与已发布版本不一致时提示官网首页仍读取已发布版本', async () => {
+    const draftView = {
+      ...baseView,
+      status: 'draft',
+      publishedVersionId: 'version-a',
+      publishedAt: '2026-06-20T08:00:00.000Z',
+      config: {
+        ...defaultHomepageBrandConfig,
+        footer: {
+          ...defaultHomepageBrandConfig.footer,
+          phone: '15221995259',
+          email: '125238695@qq.com',
+          icpNumber: '沪ICP备2023031593号',
+          policeNumber: '沪公网安备31011502400713号',
+          wechatQrUrl: '/uploads/homepage-brand/share_image/homepage-brand-asset-qr.png',
+        },
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url.endsWith('/api/v1/open-platform/homepage-brand') && method === 'GET') {
+        return Response.json(draftView);
+      }
+      return createFetchMock()(input, init);
+    }));
+
+    render(<HomepageBrandPanel />);
+
+    expect(await screen.findByDisplayValue('15221995259')).toBeInTheDocument();
+    expect(screen.getByText('当前为草稿，官网首页仍读取已发布版本')).toBeInTheDocument();
+    expect(screen.getByText('如需让官网首页同步这些联系信息、备案号和二维码，请使用“保存并发布”。')).toBeInTheDocument();
+  });
+
   it('渲染真实闭环栏目，不显示阶段和技术状态提示', async () => {
     render(<HomepageBrandPanel />);
 
