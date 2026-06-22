@@ -22,6 +22,7 @@ describe('产品与套餐面板', () => {
 
     const serialized = document.body.textContent?.toLowerCase() ?? '';
     expect(serialized).toContain('定价、下单、续费');
+    expect(serialized).not.toContain('演示环境权益词汇');
     expect(serialized).not.toContain('stripe');
     expect(serialized).not.toContain('payment');
     expect(serialized).not.toContain(['client', '_secret'].join(''));

@@ -7,6 +7,9 @@ import { ArrowRight, Eye, EyeOff, KeyRound, LockKeyhole, ShieldCheck, UserCog, U
 import { LuxuryLoginShell } from '@/modules/auth/components/LuxuryLoginShell';
 import type { HomepageBrandConfig } from '@/modules/marketing/domain/homepageBrandConfig';
 
+const isDevelopmentLoginEntryEnabled =
+  process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_ZMTG_ENABLE_DEMO_AUTH === 'true';
+
 export function InstitutionLoginClient({ config }: { config: HomepageBrandConfig }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -85,11 +88,13 @@ export function InstitutionLoginClient({ config }: { config: HomepageBrandConfig
           </div>
         </div>
 
-        <div className="mb-6 rounded-[22px] border border-[#dce8e8] bg-[#f5fbfa]/85 p-4 text-sm leading-6 text-slate-600">
-          <span className="font-semibold text-slate-900">演示账号：</span>admin
-          <span className="mx-2 text-slate-300">/</span>
-          <span className="font-semibold text-slate-900">密码：</span>admin123
-        </div>
+        {isDevelopmentLoginEntryEnabled ? (
+          <div className="mb-6 rounded-[22px] border border-[#dce8e8] bg-[#f5fbfa]/85 p-4 text-sm leading-6 text-slate-600">
+            <span className="font-semibold text-slate-900">开发环境入口</span>
+            <span className="mx-2 text-slate-300">/</span>
+            仅用于本地和测试服务器调试，不创建真实用户，也不代表真实租户。
+          </div>
+        ) : null}
 
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
@@ -155,13 +160,15 @@ export function InstitutionLoginClient({ config }: { config: HomepageBrandConfig
           </button>
         </form>
 
-        <button
-          type="button"
-          onClick={fillDemoAccount}
-          className="mt-4 h-12 w-full rounded-2xl border border-[#d6e1e1] bg-white/65 text-sm font-semibold text-slate-700 transition hover:border-[#9fb8bb] hover:bg-white"
-        >
-          填入演示账号
-        </button>
+        {isDevelopmentLoginEntryEnabled ? (
+          <button
+            type="button"
+            onClick={fillDemoAccount}
+            className="mt-4 h-12 w-full rounded-2xl border border-[#d6e1e1] bg-white/65 text-sm font-semibold text-slate-700 transition hover:border-[#9fb8bb] hover:bg-white"
+          >
+            填入开发账号
+          </button>
+        ) : null}
 
         <p className="mt-6 text-center text-sm leading-6 text-slate-500">
           还没有机构账号？
@@ -245,11 +252,13 @@ export function PlatformLoginClient({ config }: { config: HomepageBrandConfig })
           </div>
         </div>
 
-        <div className="mb-6 rounded-[22px] border border-[#dce8e8] bg-[#f5fbfa]/85 p-4 text-sm leading-6 text-slate-600">
-          <span className="font-semibold text-slate-900">演示账号：</span>platform
-          <span className="mx-2 text-slate-300">/</span>
-          <span className="font-semibold text-slate-900">密码：</span>admin123
-        </div>
+        {isDevelopmentLoginEntryEnabled ? (
+          <div className="mb-6 rounded-[22px] border border-[#dce8e8] bg-[#f5fbfa]/85 p-4 text-sm leading-6 text-slate-600">
+            <span className="font-semibold text-slate-900">开发环境入口</span>
+            <span className="mx-2 text-slate-300">/</span>
+            仅用于本地和测试服务器调试，不创建真实平台管理员，也不代表生产认证。
+          </div>
+        ) : null}
 
         <form onSubmit={handleLogin} className="space-y-5">
           <div>

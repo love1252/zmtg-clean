@@ -131,51 +131,53 @@ describe('V1 workspace dashboard readonly aggregation API route', () => {
 
     expect(payload).toMatchObject({
       requestId: 'workspace-dashboard-readonly-aggregation-route-request',
-      tenantId: 'demo-tenant-a',
-      institutionId: 'demo-inst-a',
-      workspaceId: 'demo-workspace-a',
-      status: 'ready',
-      dashboardStatus: 'ready',
+      tenantId: 'not_available',
+      institutionId: 'not_available',
+      workspaceId: 'not_available',
+      status: 'empty',
+      dashboardStatus: 'empty',
       readonly: true,
       summary: {
         title: 'workspace dashboard readonly aggregation API 契约',
-        statusText: 'ready / readonly',
+        statusText: 'empty / empty',
       },
       businessLoop: expect.objectContaining({ readonly: true }),
       managementConfig: expect.objectContaining({ readonly: true }),
       knowledgeGovernance: expect.objectContaining({ readonly: true }),
       readonlyPolicy: expect.objectContaining({ readonly: true }),
       aggregation: expect.objectContaining({
-        status: 'ready',
-        dashboardStatus: 'ready',
+        status: 'empty',
+        dashboardStatus: 'empty',
         readonly: true,
       }),
     });
     expect(payload.taskRecords).toEqual([
       expect.objectContaining({
-        recordId: 'workspace-dashboard-readonly-aggregation-ready',
-        status: 'ready',
-        failureReason: 'not_available',
+        recordId: 'workspace-dashboard-readonly-aggregation-empty',
+        status: 'empty',
+        failureReason: '暂无可展示 workspace dashboard 只读聚合',
         readonly: true,
       }),
     ]);
+    expect(JSON.stringify(payload)).not.toContain('demo-tenant-a');
+    expect(JSON.stringify(payload)).not.toContain('demo-inst-a');
     expectContractWhitelist(payload);
   });
 
-  it('只返回 mock / seed / demo 只读聚合内容，不返回敏感或 runtime 片段', async () => {
+  it('默认返回空聚合，不返回 mock / seed / demo 内容或 runtime 片段', async () => {
     const payload = await callRoute();
 
-    expect(payload.businessLoop.summary).toContain('ready / items:');
-    expect(payload.managementConfig.summary).toContain('ready / items:');
-    expect(payload.knowledgeGovernance.summary).toContain('ready /');
-    expect(payload.readonlyPolicy.summary).toBe('ready / readonly');
+    expect(payload.businessLoop.summary).toBe('not_available');
+    expect(payload.managementConfig.summary).toBe('not_available');
+    expect(payload.knowledgeGovernance.summary).toBe('not_available');
+    expect(payload.readonlyPolicy.summary).toBe('not_available');
     expectNoSensitiveOrRuntimeFragments(payload);
   });
 
   it('recommendedReadonlyActions 仅为 readonly hint，不包含 mutation 行为', async () => {
     const payload = await callRoute();
 
-    expect(payload.recommendedReadonlyActions.length).toBeGreaterThan(0);
+    expect(payload.recommendedReadonlyActions).toEqual([]);
     expectReadonlyActionsOnly(payload.recommendedReadonlyActions);
     expectNoSensitiveOrRuntimeFragments(payload);
   });

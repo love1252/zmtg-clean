@@ -111,7 +111,14 @@ function createRepository(
 }
 
 function searchRequest(query: string, extra = '') {
-  return new Request(`${searchUrl}?q=${encodeURIComponent(query)}${extra}`);
+  const params = new URLSearchParams({
+    q: query,
+    tenantId: scope.tenantId,
+    institutionId: scope.institutionId,
+    workspaceId: scope.workspaceId,
+  });
+
+  return new Request(`${searchUrl}?${params.toString()}${extra}`);
 }
 
 describe('V1 知识库检索 runtime', () => {

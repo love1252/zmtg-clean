@@ -200,9 +200,9 @@ export function buildInstitutionDashboardSummary(
     metrics: [
       {
         key: 'customer_total',
-        label: '当前演示客户',
+        label: '客户总数',
         value: formatCount(input.customers.length),
-        helper: '受控 demo 数据',
+        helper: 'API 数据',
         tone: 'blue',
       },
       {

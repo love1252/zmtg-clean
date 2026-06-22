@@ -4,7 +4,10 @@ import { getPlatformAiReadonlyResponse } from '@/modules/open-platform/server/pl
 export function GET(request: Request) {
   const params = new URL(request.url).searchParams;
 
-  return NextResponse.json(getPlatformAiReadonlyResponse({ month: params.get('month') }), {
+  return NextResponse.json(getPlatformAiReadonlyResponse({
+    month: params.get('month'),
+    usageDate: params.get('usageDate'),
+  }), {
     status: 200,
   });
 }

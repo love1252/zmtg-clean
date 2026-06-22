@@ -54,7 +54,7 @@ export async function GET(request: Request) {
     );
   } catch (error) {
     if (error instanceof Error && error.message === createDatabaseUrlErrorMessage()) {
-      return NextResponse.json(getMockItemsResponse(params), { status: 200 });
+      return NextResponse.json(getUnconnectedItemsResponse(params), { status: 200 });
     }
 
     return NextResponse.json(
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
   }
 }
 
-function getMockItemsResponse(params: URLSearchParams) {
+function getUnconnectedItemsResponse(params: URLSearchParams) {
   return getPlatformKnowledgeItemsResponse({
     tenantId: params.get('tenantId'),
     keyword: params.get('keyword'),

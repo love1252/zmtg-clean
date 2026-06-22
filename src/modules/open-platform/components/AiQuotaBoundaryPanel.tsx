@@ -11,11 +11,6 @@ const quotaMockBars = [
   { label: 'AI 调用', used: '0', limit: '0', pct: 0 },
 ];
 
-const deniedEvents = [
-  { tenant: '演示租户示例', quota: '客户数', reason: 'missing_active_plan', time: '—' },
-  { tenant: '演示租户示例', quota: 'AI 调用', reason: 'quota_exceeded_appointments', time: '—' },
-];
-
 export function AiQuotaBoundaryPanel() {
   return (
     <section className="space-y-5" aria-labelledby="ai-quota-boundary-heading">
@@ -67,32 +62,12 @@ export function AiQuotaBoundaryPanel() {
             </div>
           </div>
 
-          <div className="mt-5 space-y-3">
-            {deniedEvents.map((event, idx) => (
-              <div key={idx} className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h4 className="text-sm font-semibold tracking-normal text-slate-950">{event.tenant}</h4>
-                    <p className="mt-1 text-sm text-slate-500">配额维度：{event.quota}</p>
-                  </div>
-                  <span className="shrink-0 rounded-full border border-rose-100 bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-100">
-                    denied
-                  </span>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full border border-[#e6edf5] bg-white px-2.5 py-1 text-slate-600">
-                    reason: {event.reason}
-                  </span>
-                  <span className="rounded-full border border-[#e6edf5] bg-white px-2.5 py-1 text-slate-500">
-                    {event.time}
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div className="mt-5 rounded-2xl border border-dashed border-[#dbe6f3] bg-[#f8fafc] p-5 text-sm leading-6 text-slate-500">
+            暂无真实 quota denied 记录。后续接入真实配额检查后，仅展示 API 返回的低敏事件摘要。
           </div>
 
           <div className="mt-4 rounded-xl border border-slate-400/15 bg-slate-400/[0.05] px-4 py-3 text-xs leading-5 text-slate-500">
-            演示环境中无真实 AI 调用流量，denied 事件记录为空。配额阈值（80% 预警、100% 拒绝）为词汇预留。
+            当前无真实 AI 调用流量，denied 事件记录为空。配额阈值（80% 预警、100% 拒绝）为词汇预留。
           </div>
         </article>
       </div>

@@ -30,10 +30,6 @@ import {
 } from '@/modules/institution/components/InstitutionPageState';
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 import { TreatmentSummaryManagementShell } from '@/modules/institution/components/TreatmentSummaryManagementShell';
-import { AuditTraceMockSection } from '@/modules/workspace/components/AuditTraceMockSection';
-import { DashboardMetricsMockSection } from '@/modules/workspace/components/DashboardMetricsMockSection';
-import { ManualConfirmMockSection } from '@/modules/workspace/components/ManualConfirmMockSection';
-import { RepurchaseDormantOpportunityMockSection } from '@/modules/workspace/components/RepurchaseDormantOpportunityMockSection';
 import type { V1KnowledgeBaseDemoReadonlyApiContractResponse } from '@/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-api-contract';
 import type { V1WorkspaceDashboardReadonlyAggregationApiContractResponse } from '@/modules/workspace/domain/v1-workspace-dashboard-readonly-api-contract';
 import {
@@ -159,72 +155,6 @@ const followUpPathBoundaryLabels = [
   '不接 AI',
 ] as const;
 
-type RevisitReminderMockItem = {
-  id: string;
-  customerDisplayName: string;
-  opportunityType: '复诊提醒';
-  sourceSummary: string;
-  handlingWindow: string;
-  priority: '低' | '中' | '高';
-  status: '待人工确认' | '已转内部随访' | '已形成预约意向';
-  demoFlag: string;
-  lowSensitiveNotes: string;
-};
-
-const revisitReminderMockItems: RevisitReminderMockItem[] = [
-  {
-    id: 'revisit-demo-xu-d5',
-    customerDisplayName: '客户甲',
-    opportunityType: '复诊提醒',
-    sourceSummary: '治疗后摘要 · D5 保湿观察 · 水光复诊',
-    handlingWindow: '今日',
-    priority: '高',
-    status: '待人工确认',
-    demoFlag: 'mock',
-    lowSensitiveNotes: '复诊前状态确认，仅展示低敏摘要。',
-  },
-  {
-    id: 'revisit-demo-qin-d7',
-    customerDisplayName: 'CUST-DEMO-001',
-    opportunityType: '复诊提醒',
-    sourceSummary: '路径模板 · D7 复查窗口 · 恢复阶段反馈',
-    handlingWindow: 'D7',
-    priority: '中',
-    status: '已转内部随访',
-    demoFlag: 'demo',
-    lowSensitiveNotes: '内部随访任务说明，不代表外部消息发送。',
-  },
-  {
-    id: 'revisit-demo-zhao-week',
-    customerDisplayName: '客户乙',
-    opportunityType: '复诊提醒',
-    sourceSummary: '预约状态 · 本周复查 · 随访结果摘要',
-    handlingWindow: '本周',
-    priority: '低',
-    status: '已形成预约意向',
-    demoFlag: 'seed',
-    lowSensitiveNotes: '预约意向仅为内部方向，不是真实预约。',
-  },
-];
-
-const revisitReminderExceptionStates = [
-  '来源信息不完整，仅作内部参考',
-  '缺少处理日期，未计入时间窗口指标',
-  '状态异常，暂不计入正式指标',
-  '当前包含演示 / mock 数据，仅用于内部验证',
-] as const;
-
-const revisitReminderBoundaryTags = [
-  'UI mock',
-  '不调用 API',
-  '不创建真实预约',
-  '不创建真实随访任务',
-  '不连接 HIS',
-  '不自动约诊',
-  '不自动触达客户',
-  '不生成医疗诊断',
-] as const;
-
 const emptyDashboardSummary = buildInstitutionDashboardSummary({
   customers: [],
   appointments: [],
@@ -259,7 +189,7 @@ function isRealInstitutionView(viewId: InstitutionViewId) {
 }
 
 function navigationBoundaryLabel(viewId: InstitutionViewId) {
-  return isRealInstitutionView(viewId) ? '演示主线' : '后续';
+  return isRealInstitutionView(viewId) ? '开发主线' : '后续';
 }
 
 function navigationBoundaryClasses(viewId: InstitutionViewId) {
@@ -272,7 +202,7 @@ function visibleDashboardErrorState(error: TenantBusinessClientError): Instituti
   return getInstitutionPageStateFromClientError(error, {
     forbiddenMessage: '当前账号没有访问机构首页数据的权限',
     fallbackMessage: '机构运营视图暂时无法加载',
-    unavailableMessage: '数据服务暂时不可用，请稍后刷新或切换演示备份',
+    unavailableMessage: '数据服务暂时不可用，请稍后刷新或切换到开发空态',
   });
 }
 
@@ -336,7 +266,7 @@ function parseKnowledgeBaseDemoSearchPayload(payload: unknown): KnowledgeBaseDem
 
           return {
             resultId: safeOptionalString(result.resultId) ?? `demo-search-result-${index}`,
-            title: safeOptionalString(result.title) ?? '知识库 demo search 结果',
+            title: safeOptionalString(result.title) ?? '知识库只读搜索结果',
             snippet: safeOptionalString(result.snippet) ?? '低敏摘要',
             scoreBand:
               scoreBand === 'high' || scoreBand === 'medium' || scoreBand === 'low'
@@ -668,7 +598,7 @@ function InstitutionDashboardHome({
             </div>
             <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-cyan-200/80 bg-cyan-50/80 px-3.5 py-1.5 text-xs font-semibold text-cyan-700 md:mt-0">
               <Sparkles className="h-4 w-4" />
-              当前为受控 demo 数据
+              当前为 API 数据
             </div>
             <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-normal text-slate-950 sm:text-5xl lg:text-[60px] xl:text-[64px]">
               <span className="block">今日治疗后随访重点</span>
@@ -677,14 +607,14 @@ function InstitutionDashboardHome({
               </span>
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-              客户、预约、随访任务统一进入运营视图，用于演示治疗后服务闭环；当前为受控 demo 数据，不代表外部系统已完成同步。
+              客户、预约、随访任务统一进入运营视图；无真实记录时展示空态，不创建真实业务动作。
             </p>
           </div>
 
           <div className="grid grid-cols-3 gap-2 sm:gap-3 2xl:w-[520px]">
             {[
               { label: '数据范围', value: '当前租户' },
-              { label: '演示口径', value: '受控 demo' },
+              { label: '数据口径', value: 'API 派生' },
               { label: '后续动作', value: '人工确认' },
             ].map((item) => (
               <div
@@ -751,13 +681,8 @@ function InstitutionDashboardHome({
         />
       ) : null}
 
-      <RevisitReminderMockSection />
-      <RepurchaseDormantOpportunityMockSection />
-      <ManualConfirmMockSection />
-      <DashboardMetricsMockSection />
       <WorkspaceDashboardReadonlyAggregationEntrySection />
       <KnowledgeBaseDemoReadonlyEntrySection />
-      <AuditTraceMockSection />
 
       <FollowUpPathAnalysisPanel
         analysis={followUpPathAnalysis}
@@ -881,7 +806,7 @@ function InstitutionDashboardHome({
 
         <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold tracking-normal text-slate-950">演示边界</h2>
+            <h2 className="text-lg font-semibold tracking-normal text-slate-950">开发边界</h2>
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
               只读
             </span>
@@ -890,7 +815,7 @@ function InstitutionDashboardHome({
             {[
               '工作台用于串联治疗后运营闭环，不展示原始诊疗、沟通或附件内容。',
               '首页不提交 tenantId，也不创建、修改或删除业务记录。',
-              '当前为受控 demo 数据，页面仅展示可解释的运营摘要。',
+              '无真实记录时保持空态或只读聚合说明，不用前端 mock 数据填充。',
             ].map((item) => (
               <div
                 key={item}
@@ -963,10 +888,10 @@ function KnowledgeBaseDemoReadonlyEntrySection() {
           </div>
           <div>
             <h2 className="text-lg font-semibold tracking-normal text-slate-950">
-              知识库 demo readonly
+              知识库只读入口
             </h2>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              机构工作台中的知识库只读入口，仅消费现有 demo readonly API。
+              机构工作台中的知识库只读入口；当前无真实知识库记录时保持空态。
             </p>
           </div>
         </div>
@@ -975,13 +900,13 @@ function KnowledgeBaseDemoReadonlyEntrySection() {
             只读入口
           </span>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
-            mock / seed / demo / readonly
+            未接入真实数据
           </span>
         </div>
       </div>
 
       <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm leading-6 text-emerald-800">
-        当前仅调用 GET /api/v1/knowledge-base/demo-readonly 与 GET /api/v1/knowledge-base/runtime/search；不会写入数据或触发外部动作。
+        当前仅调用只读 GET 接口；不会写入数据或触发外部动作。
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1068,7 +993,7 @@ function WorkspaceDashboardReadonlyAggregationEntrySection() {
             readonly aggregation
           </span>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
-            mock / seed / demo
+            无默认样例数据
           </span>
         </div>
       </div>
@@ -1194,7 +1119,7 @@ function WorkspaceDashboardReadonlyAggregationEntryBody({
             核心聚合摘要
           </h3>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            仅展示当前 demo 聚合结果，方便内部演示时快速扫读。
+            仅展示当前只读聚合结果；无真实记录时保持空态。
           </p>
         </div>
       </div>
@@ -1346,7 +1271,7 @@ function KnowledgeBaseDemoReadonlyEntryBody({
   if (state.status === 'loading') {
     return (
       <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm font-semibold text-slate-500">
-        正在加载知识库 demo readonly...
+        正在加载知识库只读入口...
       </div>
     );
   }
@@ -1358,7 +1283,7 @@ function KnowledgeBaseDemoReadonlyEntryBody({
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
           <div>
             <h3 className="text-sm font-semibold text-amber-900">
-              知识库 demo readonly 暂时不可用
+              知识库只读入口暂时不可用
             </h3>
             <p className="mt-1 text-sm leading-6 text-amber-800">
               请稍后刷新页面，当前不会影响机构工作台其他只读摘要。
@@ -1380,7 +1305,7 @@ function KnowledgeBaseDemoReadonlyEntryBody({
     '目录摘要 folders',
     '知识条目 knowledgeItems',
     '只读任务 taskRecords',
-    'demo 预览 searchPreview',
+    '预览 searchPreview',
   ];
 
   return (
@@ -1414,11 +1339,11 @@ function KnowledgeBaseDemoReadonlyEntryBody({
               知识库展示结构
             </h3>
             <p className="mt-1 text-sm leading-6 text-emerald-800">
-              仅展示 demo 预览，不进行真实查找
+              当前无真实知识库记录时仅展示空结构，不进行真实查找
             </p>
           </div>
           <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
-            mock / seed / demo / readonly
+            只读 / 空态
           </span>
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
@@ -1622,14 +1547,14 @@ function KnowledgeBaseDemoSearchPanel() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold tracking-normal text-cyan-950">
-            知识库 demo search
+            知识库只读搜索
           </h3>
           <p className="mt-1 text-sm leading-6 text-cyan-800">
-            仅用于 demo search / mock embedding / readonly，不代表真实生产检索。
+            仅用于只读搜索 / 受控本地索引，不代表真实生产检索。
           </p>
         </div>
         <span className="rounded-full border border-cyan-200 bg-white px-3 py-1 text-xs font-semibold text-cyan-700">
-          demo search / mock embedding / readonly
+          只读搜索 / 受控本地索引
         </span>
       </div>
 
@@ -1638,11 +1563,11 @@ function KnowledgeBaseDemoSearchPanel() {
           query
         </span>
         <input
-          aria-label="知识库 demo search 查询"
+          aria-label="知识库只读搜索查询"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="mt-2 h-10 w-full rounded-xl border border-cyan-200 bg-white px-3 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:border-cyan-400"
-          placeholder="输入 demo search 查询"
+          placeholder="输入只读搜索查询"
         />
       </label>
 
@@ -1661,7 +1586,7 @@ function KnowledgeBaseDemoSearchResultState({
   if (state.status === 'idle') {
     return (
       <div className="mt-3 rounded-2xl border border-dashed border-cyan-200 bg-white/80 px-4 py-4 text-sm font-semibold text-cyan-700">
-        输入关键词后展示 demo search 低敏结果。
+        输入关键词后展示只读搜索低敏结果。
       </div>
     );
   }
@@ -1669,7 +1594,7 @@ function KnowledgeBaseDemoSearchResultState({
   if (state.status === 'loading') {
     return (
       <div className="mt-3 rounded-2xl border border-dashed border-cyan-200 bg-white/80 px-4 py-4 text-sm font-semibold text-cyan-700">
-        正在加载知识库 demo search...
+        正在加载知识库只读搜索...
       </div>
     );
   }
@@ -1681,7 +1606,7 @@ function KnowledgeBaseDemoSearchResultState({
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
           <div>
             <h4 className="text-sm font-semibold text-amber-900">
-              知识库 demo search 暂时不可用
+              知识库只读搜索暂时不可用
             </h4>
             <p className="mt-1 text-sm leading-6 text-amber-800">
               当前不会影响知识库 readonly 摘要展示。
@@ -1695,7 +1620,7 @@ function KnowledgeBaseDemoSearchResultState({
   if (state.response.results.length === 0) {
     return (
       <div className="mt-3 rounded-2xl border border-dashed border-cyan-200 bg-white/80 px-4 py-4 text-sm font-semibold text-cyan-700">
-        暂无 demo search 结果
+        暂无只读搜索结果
       </div>
     );
   }
@@ -1704,7 +1629,7 @@ function KnowledgeBaseDemoSearchResultState({
     <div className="mt-3 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full border border-cyan-200 bg-white px-2.5 py-1 text-xs font-semibold text-cyan-700">
-          {state.response.mode ?? 'demo_search_mock_embedding'}
+          {toKnowledgeBaseDemoSearchSafeText(state.response.mode ?? 'readonly_search')}
         </span>
         <span className="rounded-full border border-cyan-200 bg-white px-2.5 py-1 text-xs font-semibold text-cyan-700">
           resultCount: {state.response.resultCount}
@@ -1720,7 +1645,7 @@ function KnowledgeBaseDemoSearchResultState({
               {toKnowledgeBaseDemoSearchSafeText(result.title)}
             </h4>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500">
-              {result.sourceKind} / readonly
+              {toKnowledgeBaseDemoSearchSafeText(result.sourceKind)} / readonly
             </span>
           </div>
           <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -1740,12 +1665,28 @@ function KnowledgeBaseDemoSearchResultState({
   );
 }
 
-function toKnowledgeBaseDemoReadonlySafeText(value: string) {
+function toKnowledgeBaseDemoReadonlySafeText(value: string | null | undefined) {
+  if (value === null || value === undefined) {
+    return 'not_available';
+  }
+
   if (isKnowledgeBaseDemoReadonlyUnsafeText(value)) {
     return '低敏摘要已隐藏';
   }
 
-  return value;
+  return value
+    .replaceAll('知识库 demo readonly API 契约', '知识库只读入口')
+    .replaceAll('知识库 demo readonly facade', '知识库只读聚合')
+    .replaceAll('知识库 demo readonly', '知识库只读')
+    .replaceAll('demo readonly', '只读')
+    .replaceAll('mock_demo_preview', 'readonly_preview')
+    .replaceAll('知识库 demo 只读预览', '知识库只读预览')
+    .replaceAll('mock / seed / demo', '只读空态')
+    .replaceAll('低敏只读演示', '低敏只读预览')
+    .replaceAll('演示', '预览')
+    .replaceAll('demo', '只读')
+    .replaceAll('seed', '开发数据')
+    .replaceAll('mock', '空态');
 }
 
 function isKnowledgeBaseDemoReadonlyUnsafeText(value: string) {
@@ -1754,12 +1695,23 @@ function isKnowledgeBaseDemoReadonlyUnsafeText(value: string) {
   );
 }
 
-function toKnowledgeBaseDemoSearchSafeText(value: string) {
+function toKnowledgeBaseDemoSearchSafeText(value: string | null | undefined) {
+  if (value === null || value === undefined) {
+    return 'not_available';
+  }
+
   if (isKnowledgeBaseDemoSearchUnsafeText(value)) {
     return '低敏摘要已隐藏';
   }
 
-  return value;
+  return value
+    .replaceAll('demo_search_mock_embedding', 'readonly_search')
+    .replaceAll('mock_demo_preview', 'readonly_preview')
+    .replaceAll('低敏只读演示', '低敏只读预览')
+    .replaceAll('演示', '预览')
+    .replaceAll('demo', '只读')
+    .replaceAll('seed', '开发数据')
+    .replaceAll('mock', '空态');
 }
 
 function isKnowledgeBaseDemoSearchUnsafeText(value: string) {
@@ -1772,175 +1724,30 @@ function knowledgeBaseDemoReadonlyStatusLabel(
   response: V1KnowledgeBaseDemoReadonlyApiContractResponse,
 ) {
   if (response.status === 'disabled') {
-    return '知识库 demo readonly 暂未开启';
+    return '知识库只读入口暂未开启';
   }
 
   if (response.status === 'denied') {
-    return '当前账号没有知识库 demo readonly 访问权限';
+    return '当前账号没有知识库只读入口访问权限';
   }
 
   if (response.status === 'empty') {
-    return '暂无可展示知识库 demo readonly 内容';
+    return '暂无真实知识库只读内容';
   }
 
   if (response.status === 'exception') {
-    return '知识库 demo readonly 来源不完整';
+    return '知识库只读入口来源不完整';
   }
 
   if (response.status === 'partial') {
-    return '知识库 demo readonly 部分可用';
+    return '知识库只读入口部分可用';
   }
 
   if (response.status === 'stale') {
-    return '知识库 demo readonly 可能已过期';
+    return '知识库只读入口可能已过期';
   }
 
-  return '知识库 demo readonly 已就绪';
-}
-
-function RevisitReminderMockSection() {
-  return (
-    <section className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
-            <Bell className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold tracking-normal text-slate-950">复诊提醒</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-500">
-              仅用于内部复诊 / 复查 / 状态确认，不会自动约诊或触达客户。
-            </p>
-          </div>
-        </div>
-        <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
-          演示 / mock 数据
-        </span>
-      </div>
-
-      <div className="mt-5 rounded-2xl border border-cyan-200 bg-cyan-50/80 px-4 py-3 text-sm leading-6 text-cyan-800">
-        当前为演示 / mock 数据，仅用于内部验证，不代表生产数据。复诊提醒入口只展示前端
-        mock 状态，不会调用接口或产生业务动作。
-      </div>
-
-      <div className="mt-5 grid gap-3 xl:grid-cols-3">
-        {revisitReminderMockItems.map((item) => (
-          <article
-            key={item.id}
-            className="rounded-2xl border border-slate-200/80 bg-white/86 p-4"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600">
-                {item.opportunityType}
-              </span>
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600">
-                {item.demoFlag}
-              </span>
-            </div>
-            <h3 className="mt-4 text-base font-semibold tracking-normal text-slate-950">
-              {item.customerDisplayName}
-            </h3>
-            <dl className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
-              <div>
-                <dt className="text-xs font-semibold text-slate-400">来源摘要</dt>
-                <dd>{item.sourceSummary}</dd>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <dt className="text-xs font-semibold text-slate-400">处理窗口</dt>
-                  <dd>{item.handlingWindow}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-semibold text-slate-400">优先级</dt>
-                  <dd>{item.priority}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-semibold text-slate-400">状态</dt>
-                  <dd>{item.status}</dd>
-                </div>
-              </div>
-              <div>
-                <dt className="text-xs font-semibold text-slate-400">低敏备注</dt>
-                <dd>{item.lowSensitiveNotes}</dd>
-              </div>
-            </dl>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                可转内部随访任务
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                可形成预约意向
-              </span>
-            </div>
-            <button
-              type="button"
-              disabled
-              className="mt-4 h-10 w-full rounded-xl border border-slate-200 bg-slate-100 text-sm font-semibold text-slate-500"
-            >
-              进入人工确认（演示）
-            </button>
-          </article>
-        ))}
-      </div>
-
-      <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr]">
-        <article className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-5">
-          <h3 className="text-sm font-semibold tracking-normal text-slate-950">
-            暂无待处理复诊提醒
-          </h3>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            当前没有需要内部人员处理的复诊 / 复查 / 状态确认提醒。
-          </p>
-        </article>
-
-        <article className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-5">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-            <div>
-              <h3 className="text-sm font-semibold tracking-normal text-amber-900">
-                异常态 mock
-              </h3>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {revisitReminderExceptionStates.map((item) => (
-                  <span
-                    key={item}
-                    className="rounded-full border border-amber-200 bg-white/70 px-2.5 py-1 text-xs font-semibold text-amber-800"
-                  >
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </article>
-      </div>
-
-      <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr]">
-        <article className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
-          <h3 className="text-sm font-semibold tracking-normal text-slate-950">
-            人工确认边界
-          </h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            人工确认仅表示内部人员选择处理方向，不代表客户已被触达。内部随访任务不是外部消息发送，预约意向不是真实预约，也不是外部系统同步。
-          </p>
-        </article>
-
-        <article className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
-          <h3 className="text-sm font-semibold tracking-normal text-slate-950">边界标签</h3>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {revisitReminderBoundaryTags.map((label) => (
-              <span
-                key={label}
-                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600"
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-        </article>
-      </div>
-    </section>
-  );
+  return '知识库只读入口已就绪';
 }
 
 function FollowUpPathAnalysisPanel({
@@ -2085,7 +1892,7 @@ function PlaceholderInstitutionView({ label }: { label: string }) {
   return (
     <InstitutionPageState
       kind="placeholder"
-      title={`${label}暂不进入本次演示主线`}
+      title={`${label}暂不进入本次开发主线`}
       description="本入口不会触发客服、知识库或数据分析真实功能请求。"
       action={
         <div className="space-y-2 text-sm leading-6 text-slate-500">

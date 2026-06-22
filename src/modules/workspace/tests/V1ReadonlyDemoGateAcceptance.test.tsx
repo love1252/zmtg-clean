@@ -68,10 +68,10 @@ function buildKnowledgeBaseDemoReadonlyMockResponse(status: KnowledgeBaseDemoRea
     ready: 'ready / readonly',
   } satisfies Record<KnowledgeBaseDemoReadonlyMockStatus, string>;
   const descriptionByStatus = {
-    disabled: '该知识库 demo readonly API 暂未开启',
-    denied: '当前账号没有访问知识库 demo readonly API 的权限',
-    empty: '暂无可展示知识库 demo readonly 内容',
-    ready: '知识库 demo readonly API 可用于低敏只读演示',
+    disabled: '该知识库只读入口API 暂未开启',
+    denied: '当前账号没有访问知识库只读入口API 的权限',
+    empty: '暂无可展示知识库只读入口内容',
+    ready: '知识库只读入口API 可用于低敏只读预览',
   } satisfies Record<KnowledgeBaseDemoReadonlyMockStatus, string>;
 
   return {
@@ -81,7 +81,7 @@ function buildKnowledgeBaseDemoReadonlyMockResponse(status: KnowledgeBaseDemoRea
     workspaceId: 'demo-workspace-a',
     status,
     summary: {
-      title: '知识库 demo readonly API 契约',
+      title: '知识库只读入口API 契约',
       statusText: statusTextByStatus[status],
       description: descriptionByStatus[status],
     },
@@ -126,20 +126,20 @@ function buildKnowledgeBaseDemoReadonlyMockResponse(status: KnowledgeBaseDemoRea
       {
         recordId: `demo-readonly-facade-${status}`,
         status: hasContent ? 'ready' : status,
-        title: '知识库 demo readonly facade',
+        title: '知识库只读入口facade',
         failureReason: hasContent ? 'not_available' : descriptionByStatus[status],
         readonly: true,
       },
     ],
     searchPreview: {
-      mode: 'mock_demo_preview',
-      query: '知识库 demo 只读预览',
+      mode: 'readonly_preview',
+      query: '知识库只读预览',
       resultCount: hasContent ? 1 : 0,
       results: hasContent
         ? [
             {
               previewId: 'platform-knowledge-base-preview',
-              title: '平台知识库 demo 预览',
+              title: '平台知识库 只读 预览',
               snippet: 'platform:1 / ready:1',
               sourceKind: 'demo',
               readonly: true,
@@ -432,7 +432,7 @@ function mockReadonlyDemoGateFetch(options: ReadonlyDemoGateFetchOptions = {}) {
 
 async function readonlyDemoSections() {
   const knowledgeBaseEntry = (await screen.findByRole('heading', {
-    name: '知识库 demo readonly',
+    name: '知识库只读入口',
   })).closest('section');
   const workspaceAggregationEntry = (await screen.findByRole('heading', {
     name: 'workspace dashboard readonly aggregation',
@@ -460,7 +460,7 @@ describe('V1 readonly demo 总验收门禁', () => {
     const knowledgeBaseView = within(knowledgeBaseEntry);
     const workspaceAggregationView = within(workspaceAggregationEntry);
 
-    expect(await knowledgeBaseView.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
+    expect(await knowledgeBaseView.findByText('知识库只读入口已就绪')).toBeInTheDocument();
     expect(
       await workspaceAggregationView.findByText(
         'workspace dashboard readonly aggregation 已就绪',
@@ -468,7 +468,7 @@ describe('V1 readonly demo 总验收门禁', () => {
     ).toBeInTheDocument();
 
     expect(knowledgeBaseView.getByText('只调用现有 GET API')).toBeInTheDocument();
-    expect(knowledgeBaseView.getByText('demo search / mock embedding / readonly')).toBeInTheDocument();
+    expect(knowledgeBaseView.getByText('只读 search API')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('只读入口')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('低敏字段')).toBeInTheDocument();
     expect(workspaceAggregationView.getByText('只调用既有 GET route')).toBeInTheDocument();
@@ -506,10 +506,10 @@ describe('V1 readonly demo 总验收门禁', () => {
   });
 
   it.each([
-    ['disabled', '知识库 demo readonly 暂未开启', 'disabled / skipped'],
-    ['denied', '当前账号没有知识库 demo readonly 访问权限', 'denied / denied'],
-    ['empty', '暂无可展示知识库 demo readonly 内容', 'empty / empty'],
-    ['ready', '知识库 demo readonly 已就绪', 'ready / readonly'],
+    ['disabled', '知识库只读入口暂未开启', 'disabled / skipped'],
+    ['denied', '当前账号没有知识库只读入口访问权限', 'denied / denied'],
+    ['empty', '暂无可展示知识库只读入口内容', 'empty / empty'],
+    ['ready', '知识库只读入口已就绪', 'ready / readonly'],
   ] as const)('覆盖 knowledge base demo readonly 的 %s 状态', async (status, label, statusText) => {
     mockReadonlyDemoGateFetch({
       knowledgeBaseDemoReadonlyResponse: buildKnowledgeBaseDemoReadonlyMockResponse(status),
@@ -558,7 +558,7 @@ describe('V1 readonly demo 总验收门禁', () => {
     const pendingSections = await readonlyDemoSections();
 
     expect(
-      within(pendingSections.knowledgeBaseEntry).getByText('正在加载知识库 demo readonly...'),
+      within(pendingSections.knowledgeBaseEntry).getByText('正在加载知识库只读入口...'),
     ).toBeInTheDocument();
     expect(
       within(pendingSections.workspaceAggregationEntry).getByText(
@@ -583,7 +583,7 @@ describe('V1 readonly demo 总验收门禁', () => {
 
     const { knowledgeBaseEntry, workspaceAggregationEntry } = await readonlyDemoSections();
     expect(
-      await within(knowledgeBaseEntry).findByText('知识库 demo readonly 暂时不可用'),
+      await within(knowledgeBaseEntry).findByText('知识库只读入口暂时不可用'),
     ).toBeInTheDocument();
     expect(
       await within(workspaceAggregationEntry).findByText(
@@ -636,22 +636,22 @@ describe('V1 readonly demo 总验收门禁', () => {
     const { knowledgeBaseEntry } = await readonlyDemoSections();
     const knowledgeBaseView = within(knowledgeBaseEntry);
 
-    expect(await knowledgeBaseView.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
-    expect(knowledgeBaseView.getAllByText('mock / seed / demo / readonly').length).toBeGreaterThan(0);
+    expect(await knowledgeBaseView.findByText('知识库只读入口已就绪')).toBeInTheDocument();
+    expect(knowledgeBaseView.getAllByText('只读 / 空态').length).toBeGreaterThan(0);
     expect(knowledgeBaseView.getByText('知识库展示结构')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('分类摘要 categories')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('目录摘要 folders')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('知识条目 knowledgeItems')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('只读任务 taskRecords')).toBeInTheDocument();
-    expect(knowledgeBaseView.getByText('demo 预览 searchPreview')).toBeInTheDocument();
+    expect(knowledgeBaseView.getByText('预览 searchPreview')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('categories')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('folders')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('knowledgeItems')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('taskRecords')).toBeInTheDocument();
     expect(knowledgeBaseView.getByText('searchPreview')).toBeInTheDocument();
-    expect(knowledgeBaseView.getByText('mock_demo_preview')).toBeInTheDocument();
-    expect(knowledgeBaseView.getByText('知识库 demo 只读预览')).toBeInTheDocument();
-    expect(knowledgeBaseView.getByText('仅展示 demo 预览，不进行真实查找')).toBeInTheDocument();
+    expect(knowledgeBaseView.getByText('readonly_preview')).toBeInTheDocument();
+    expect(knowledgeBaseView.getByText('知识库只读预览')).toBeInTheDocument();
+    expect(knowledgeBaseView.getByText('当前无真实知识库记录时仅展示空结构，不进行真实查找')).toBeInTheDocument();
   });
 
   it('两条 readonly demo 链路不渲染敏感字段、真实检索字段或 mutation 文案', async () => {
@@ -663,7 +663,7 @@ describe('V1 readonly demo 总验收门禁', () => {
     render(<HospitalPage />);
 
     const { knowledgeBaseEntry, workspaceAggregationEntry } = await readonlyDemoSections();
-    await within(knowledgeBaseEntry).findByText('知识库 demo readonly 已就绪');
+    await within(knowledgeBaseEntry).findByText('知识库只读入口已就绪');
     await within(workspaceAggregationEntry).findByText(
       'workspace dashboard readonly aggregation 已就绪',
     );

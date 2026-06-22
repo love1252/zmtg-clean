@@ -76,7 +76,7 @@ export function ProductPlanPanel() {
 
             <div className="mt-5 flex items-center gap-2 rounded-xl border border-[#e6edf5] bg-[#f8fafc] px-4 py-3 text-sm text-slate-500">
               <Check className="h-4 w-4 text-emerald-300" />
-              演示环境权益词汇，非真实套餐
+              长期路线权益词汇，非真实套餐
             </div>
           </article>
         ))}

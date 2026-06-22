@@ -248,7 +248,7 @@ export async function searchV1KnowledgeBaseRuntime(input: {
       resultId: resultIdFor(candidate),
       chunkId: candidate.chunkId,
       documentId: candidate.documentId,
-      title: safeString(candidate.title, '知识库 demo 搜索结果'),
+      title: safeString(candidate.title, '知识库只读搜索结果'),
       snippet: safeString(candidate.snippet, `chunk:${candidate.chunkIndex}`),
       scoreBand: scoreBandFor(score),
       sourceKind: candidate.sourceKind,

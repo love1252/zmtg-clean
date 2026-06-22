@@ -494,12 +494,18 @@ describe('V1 知识库 MVP 端到端验收收口', () => {
       createMockDemoKnowledgeBaseEmbedding('beta demo recovery', 8).vector,
     ]);
 
+    const searchParams = new URLSearchParams({
+      q: 'alpha care',
+      tenantId: scope.tenantId,
+      institutionId: scope.institutionId,
+      workspaceId: scope.workspaceId,
+    });
     const firstSearchResponse = await handleSearchGET(
-      new Request('http://localhost/api/v1/knowledge-base/runtime/search?q=alpha%20care'),
+      new Request(`http://localhost/api/v1/knowledge-base/runtime/search?${searchParams.toString()}`),
       { repository: createSearchRepository(store) },
     );
     const secondSearchResponse = await handleSearchGET(
-      new Request('http://localhost/api/v1/knowledge-base/runtime/search?q=alpha%20care'),
+      new Request(`http://localhost/api/v1/knowledge-base/runtime/search?${searchParams.toString()}`),
       { repository: createSearchRepository(store) },
     );
     const firstSearchBody = await firstSearchResponse.json();
@@ -530,21 +536,27 @@ describe('V1 知识库 MVP 端到端验收收口', () => {
     const fetchMock = createWorkspaceFetch(firstSearchBody);
     const { container } = render(createElement(InstitutionWorkspace));
     const knowledgeBaseSection = (await screen.findByRole('heading', {
-      name: '知识库 demo readonly',
+      name: '知识库只读入口',
     })).closest('section');
     expect(knowledgeBaseSection).not.toBeNull();
     const knowledgeBaseView = within(knowledgeBaseSection as HTMLElement);
 
-    expect(await knowledgeBaseView.findByText('demo search / mock embedding / readonly')).toBeInTheDocument();
-    expect(knowledgeBaseView.getByLabelText('知识库 demo search 查询')).toBeInTheDocument();
-    fireEvent.change(knowledgeBaseView.getByLabelText('知识库 demo search 查询'), {
+    expect(await knowledgeBaseView.findByText('只读 search API')).toBeInTheDocument();
+    expect(knowledgeBaseView.getByLabelText('知识库只读搜索查询')).toBeInTheDocument();
+    fireEvent.change(knowledgeBaseView.getByLabelText('知识库只读搜索查询'), {
       target: { value: 'alpha care' },
     });
 
-    expect((await knowledgeBaseView.findAllByText('mvp-demo.md')).length).toBeGreaterThan(0);
-    expect(knowledgeBaseView.getByText('demo_search_mock_embedding')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => {
+        const path = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        return path.startsWith('/api/v1/knowledge-base/runtime/search?q=');
+      })).toBe(true);
+    });
+    expect(knowledgeBaseView.queryByText('mvp-demo.md')).not.toBeInTheDocument();
+    expect(knowledgeBaseView.getAllByText('readonly_search').length).toBeGreaterThan(0);
     expect(within(knowledgeBaseSection as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
-    const searchPanel = screen.getByRole('heading', { name: '知识库 demo search' }).closest('div');
+    const searchPanel = screen.getByRole('heading', { name: '知识库只读搜索' }).closest('div');
     expect(searchPanel).not.toBeNull();
     const searchCall = fetchMock.mock.calls.find(([input]) => {
       const path = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;

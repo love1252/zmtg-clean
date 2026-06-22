@@ -168,7 +168,7 @@ describe('工作台看板领域模型', () => {
     );
   });
 
-  it('基于演示数据派生机构首页指标', () => {
+  it('基于 API 记录派生机构首页指标，不带演示口径', () => {
     const summary = buildInstitutionDashboardSummary({
       customers: [...customerRecords],
       appointments: [...appointmentRecords],
@@ -176,7 +176,7 @@ describe('工作台看板领域模型', () => {
     });
 
     expect(summary.metrics).toEqual([
-      expect.objectContaining({ key: 'customer_total', label: '当前演示客户', value: '2' }),
+      expect.objectContaining({ key: 'customer_total', label: '客户总数', value: '2', helper: 'API 数据' }),
       expect.objectContaining({ key: 'high_priority_customers', label: '高优先级客户', value: '1' }),
       expect.objectContaining({ key: 'pending_appointments', label: '待确认预约', value: '1' }),
       expect.objectContaining({ key: 'due_followups', label: '待处理随访', value: '1' }),
@@ -189,6 +189,8 @@ describe('工作台看板领域模型', () => {
     ]);
     expect(summary.isEmpty).toBe(false);
     expect(JSON.stringify(summary)).not.toContain('tenantId');
+    expect(JSON.stringify(summary)).not.toContain('演示');
+    expect(JSON.stringify(summary)).not.toContain('demo');
     expect(JSON.stringify(summary)).not.toContain('AI 已排序');
     expect(JSON.stringify(summary)).not.toContain('实时同步');
   });
@@ -289,7 +291,7 @@ describe('工作台看板领域模型', () => {
       '真实计费未启用',
       '外部连接未启用',
       '真实人工智能密钥未启用',
-      '模型配置为受控示例',
+      '模型配置未接入真实服务',
     ]);
   });
 });

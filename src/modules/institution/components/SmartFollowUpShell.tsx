@@ -345,8 +345,9 @@ export function SmartFollowUpShell() {
                 <p className="mt-1 text-sm text-slate-500">仅用于说明运营路径，不代表外部客服接入能力。</p>
               </div>
             </div>
-            <div className="mt-4 space-y-3">
-              {followUpJourneys.map((journey) => (
+            {followUpJourneys.length > 0 ? (
+              <div className="mt-4 space-y-3">
+                {followUpJourneys.map((journey) => (
                 <div key={journey.id} className="rounded-2xl border border-slate-200 bg-white p-3">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm font-semibold text-slate-950">{journey.name}</span>
@@ -358,21 +359,27 @@ export function SmartFollowUpShell() {
                     {journey.activeCustomers} 位客户 · {journey.conversionHint}
                   </p>
                 </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white/70 px-4 py-6 text-sm leading-6 text-slate-500">
+                暂无真实随访旅程配置。
+              </div>
+            )}
           </article>
 
           <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-sm backdrop-blur-xl">
             <div className="flex items-center gap-3">
               <MessageSquareText className="h-5 w-5 text-emerald-600" />
               <div>
-                <h3 className="text-lg font-semibold text-slate-950">演示话术建议</h3>
-                <p className="mt-1 text-sm text-slate-500">仅展示静态安全说明。</p>
+                <h3 className="text-lg font-semibold text-slate-950">话术建议</h3>
+                <p className="mt-1 text-sm text-slate-500">暂无真实话术配置时保持空态。</p>
               </div>
             </div>
 
-            <div className="mt-4 space-y-3">
-              {followUpMessageSuggestions.map((suggestion) => (
+            {followUpMessageSuggestions.length > 0 ? (
+              <div className="mt-4 space-y-3">
+                {followUpMessageSuggestions.map((suggestion) => (
                 <div
                   key={suggestion.title}
                   className="rounded-2xl border border-slate-200 bg-white p-3"
@@ -385,8 +392,13 @@ export function SmartFollowUpShell() {
                     {suggestion.content}
                   </p>
                 </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white/70 px-4 py-6 text-sm leading-6 text-slate-500">
+                暂无真实话术建议。
+              </div>
+            )}
 
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-800">
               任务需人工处理，不会主动向客户发送消息。

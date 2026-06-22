@@ -1,9 +1,5 @@
 import {
-  PLATFORM_AI_USAGE_AVAILABLE_MONTHS,
-  PLATFORM_AI_USAGE_COST_DISCLAIMER,
-  PLATFORM_AI_USAGE_DEFAULT_MONTH,
   platformAiFutureLogFieldSpec,
-  platformAiUsageCostSampleData,
   type PlatformAiFutureLogFieldSpec,
   type PlatformAiDailyUsage,
   type PlatformAiProviderModelUsage,
@@ -16,9 +12,9 @@ import {
 
 export type PlatformAiUsageCostResponse = {
   readonly: true;
-  dataSource: 'controlled_demo';
-  usageVersion: 'ai-usage-cost-v1-controlled-demo';
-  usageStatus: 'controlled_readonly_demo';
+  dataSource: 'unconnected';
+  usageVersion: 'ai-usage-cost-v1-unconnected';
+  usageStatus: 'not_connected';
   availableMonths: PlatformAiUsageAvailableMonth[];
   selectedMonth: string;
   usageDate: string | null;
@@ -26,7 +22,7 @@ export type PlatformAiUsageCostResponse = {
   emptyState: {
     title: string;
     description: string;
-  } | null;
+  };
   summary: PlatformAiUsageSummary;
   providerModelRows: PlatformAiProviderModelUsage[];
   dailyRows: PlatformAiDailyUsage[];
@@ -42,8 +38,14 @@ export type PlatformAiUsageCostValidationResult = {
   errors: string[];
 };
 
-const controlledMonths = new Set(PLATFORM_AI_USAGE_AVAILABLE_MONTHS.map((month) => month.value));
+const defaultUsageMonth = '2026-06';
+const safeMonthPattern = /^(\d{4})-(\d{2})$/;
 const usageDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+const emptyState = {
+  title: '暂无真实 AI 用量记录',
+  description: '当前未接入真实 AI 调用日志；不会展示预置用量、机构排行或估算账单。',
+};
+const costDisclaimer = '当前未接入真实 AI 调用日志；估算费用不是正式账单，仅供后续运营口径占位。';
 
 function emptySummary(month: string): PlatformAiUsageSummary {
   return {
@@ -59,6 +61,14 @@ function emptySummary(month: string): PlatformAiUsageSummary {
     estimatedCostCny: 0,
     peakDayCostCny: 0,
   };
+}
+
+function isSafeMonth(value: string) {
+  const match = safeMonthPattern.exec(value);
+  if (!match) return false;
+
+  const month = Number(match[2]);
+  return month >= 1 && month <= 12;
 }
 
 function isRate(value: number) {
@@ -78,52 +88,17 @@ function isZeroSummary(summary: PlatformAiUsageSummary) {
     && summary.peakDayCostCny === 0;
 }
 
-function hasValidRatesAndLatency(payload: PlatformAiUsageCostResponse) {
-  const rows = [
-    { successRate: payload.summary.successRate, averageLatencyMs: payload.summary.averageLatencyMs },
-    ...payload.providerModelRows.map((row) => ({
-      successRate: row.successRate,
-      averageLatencyMs: row.averageLatencyMs,
-    })),
-    ...payload.providerUsageGroups.map((row) => ({
-      successRate: row.successRate,
-      averageLatencyMs: row.averageLatencyMs,
-    })),
-    ...payload.scenarioRows.map((row) => ({
-      successRate: row.successRate,
-      averageLatencyMs: 0,
-    })),
-  ];
-
-  return rows.every((row) => isRate(row.successRate) && row.averageLatencyMs >= 0);
-}
-
-function hasProviderAggregationMatch(payload: PlatformAiUsageCostResponse) {
-  const totals = payload.providerModelRows.reduce((result, row) => ({
-    calls: result.calls + row.calls,
-    tokens: result.tokens + row.totalTokens,
-    cost: result.cost + row.estimatedCostCny,
-  }), { calls: 0, tokens: 0, cost: 0 });
-
-  return payload.summary.totalCalls === totals.calls
-    && payload.summary.totalTokens === totals.tokens
-    && payload.summary.inputTokens + payload.summary.outputTokens === totals.tokens
-    && Math.abs(payload.summary.estimatedCostCny - totals.cost) <= 0.005;
-}
-
-function hasDailyRows(payload: PlatformAiUsageCostResponse) {
-  return payload.dailyRows.length > 0
-    && payload.dailyRows.every((row) => row.modelCosts.length > 0);
-}
-
-function hasProviderGroups(payload: PlatformAiUsageCostResponse) {
-  return payload.providerUsageGroups.length > 0
-    && payload.providerUsageGroups.every((group) => group.models.length > 0);
+function hasNoUsageRows(payload: PlatformAiUsageCostResponse) {
+  return payload.providerModelRows.length === 0
+    && payload.dailyRows.length === 0
+    && payload.providerUsageGroups.length === 0
+    && payload.scenarioRows.length === 0
+    && payload.sampleInstitutionRanking.length === 0;
 }
 
 export function normalizePlatformAiUsageMonth(value: string | null | undefined) {
   const normalized = String(value ?? '').trim();
-  return controlledMonths.has(normalized) ? normalized : PLATFORM_AI_USAGE_DEFAULT_MONTH;
+  return isSafeMonth(normalized) ? normalized : defaultUsageMonth;
 }
 
 export function normalizePlatformAiUsageDate(value: string | null | undefined) {
@@ -149,65 +124,29 @@ function formatUsageMonthLabel(month: string) {
   return `${year}年${monthNumber}月`;
 }
 
-function getAvailableMonthsForUsageDate(usageDate: string | null) {
-  if (!usageDate) return PLATFORM_AI_USAGE_AVAILABLE_MONTHS;
-
-  const usageMonth = usageDate.slice(0, 7);
-  const hasExistingMonth = PLATFORM_AI_USAGE_AVAILABLE_MONTHS.some((month) => month.value === usageMonth);
-  const months = hasExistingMonth
-    ? PLATFORM_AI_USAGE_AVAILABLE_MONTHS
-    : [...PLATFORM_AI_USAGE_AVAILABLE_MONTHS, { value: usageMonth, label: formatUsageMonthLabel(usageMonth), hasUsageData: false }];
-
-  return months.map((month) => (
-    month.value === usageMonth ? { ...month, hasUsageData: true } : month
-  ));
-}
-
-function mapControlledDailyRowsToUsageDate(usageDate: string) {
-  const sourceRow = platformAiUsageCostSampleData.dailyRows.reduce<PlatformAiDailyUsage | null>((result, row) => (
-    !result || row.estimatedCostCny > result.estimatedCostCny ? row : result
-  ), null);
-  if (!sourceRow) return [];
-
-  return [{
-    ...sourceRow,
-    date: usageDate,
-    label: String(Number(usageDate.slice(8, 10))),
-    modelCosts: sourceRow.modelCosts.map((model) => ({ ...model })),
-  }];
-}
-
 export function getPlatformAiUsageCostResponse(params: { month?: string | null; usageDate?: string | null } = {}): PlatformAiUsageCostResponse {
   const usageDate = normalizePlatformAiUsageDate(params.usageDate);
   const selectedMonth = usageDate ? usageDate.slice(0, 7) : normalizePlatformAiUsageMonth(params.month);
-  const availableMonths = getAvailableMonthsForUsageDate(usageDate);
-  const monthMeta = availableMonths.find((month) => month.value === selectedMonth);
-  const hasUsageData = usageDate ? true : Boolean(monthMeta?.hasUsageData);
 
   return {
     readonly: true,
-    dataSource: 'controlled_demo',
-    usageVersion: 'ai-usage-cost-v1-controlled-demo',
-    usageStatus: 'controlled_readonly_demo',
-    availableMonths,
+    dataSource: 'unconnected',
+    usageVersion: 'ai-usage-cost-v1-unconnected',
+    usageStatus: 'not_connected',
+    availableMonths: [
+      { value: selectedMonth, label: formatUsageMonthLabel(selectedMonth), hasUsageData: false },
+    ],
     selectedMonth,
     usageDate,
-    hasUsageData,
-    emptyState: hasUsageData ? null : {
-      title: '暂无受控示例用量',
-      description: `${monthMeta?.label ?? selectedMonth}为受控示例月份，未读取真实 AI 日志；估算费用不是正式账单。`,
-    },
-    summary: hasUsageData
-      ? { ...platformAiUsageCostSampleData.summary, month: selectedMonth }
-      : emptySummary(selectedMonth),
-    providerModelRows: hasUsageData ? platformAiUsageCostSampleData.providerModelRows : [],
-    dailyRows: usageDate
-      ? mapControlledDailyRowsToUsageDate(usageDate)
-      : hasUsageData ? platformAiUsageCostSampleData.dailyRows : [],
-    providerUsageGroups: hasUsageData ? platformAiUsageCostSampleData.providerUsageGroups : [],
-    scenarioRows: hasUsageData ? platformAiUsageCostSampleData.scenarioRows : [],
-    sampleInstitutionRanking: hasUsageData ? platformAiUsageCostSampleData.sampleInstitutionRanking : [],
-    costDisclaimer: PLATFORM_AI_USAGE_COST_DISCLAIMER,
+    hasUsageData: false,
+    emptyState,
+    summary: emptySummary(selectedMonth),
+    providerModelRows: [],
+    dailyRows: [],
+    providerUsageGroups: [],
+    scenarioRows: [],
+    sampleInstitutionRanking: [],
+    costDisclaimer,
     futureLogFieldSpec: platformAiFutureLogFieldSpec,
   };
 }
@@ -216,44 +155,21 @@ export function validatePlatformAiUsageCostContract(
   payload: PlatformAiUsageCostResponse,
 ): PlatformAiUsageCostValidationResult {
   const errors: string[] = [];
-  const selectedMonthMeta = payload.availableMonths.find((month) => month.value === payload.selectedMonth);
 
-  if (!selectedMonthMeta) {
-    errors.push('selectedMonth 必须来自 availableMonths');
+  if (!isSafeMonth(payload.selectedMonth)) {
+    errors.push('selectedMonth 必须是 YYYY-MM 安全月份');
   }
 
-  if (!hasValidRatesAndLatency(payload)) {
-    if (!isRate(payload.summary.successRate)
-      || payload.providerModelRows.some((row) => !isRate(row.successRate))
-      || payload.scenarioRows.some((row) => !isRate(row.successRate))) {
-      errors.push('successRate 必须在 0 到 1');
-    }
-
-    if (payload.summary.averageLatencyMs < 0
-      || payload.providerModelRows.some((row) => row.averageLatencyMs < 0)) {
-      errors.push('averageLatencyMs 不得为负数');
-    }
+  if (payload.dataSource !== 'unconnected' || payload.usageStatus !== 'not_connected') {
+    errors.push('未接入状态必须标记为 not_connected');
   }
 
-  if (payload.hasUsageData) {
-    if (!hasProviderAggregationMatch(payload)) {
-      errors.push('有数据月份 summary 必须与 providerModelRows 汇总一致');
-    }
-    if (!hasDailyRows(payload)) {
-      errors.push('有数据月份必须提供每日消耗明细');
-    }
-    if (!hasProviderGroups(payload)) {
-      errors.push('有数据月份必须提供厂商分组与模型明细');
-    }
-  } else if (
-    !isZeroSummary(payload.summary)
-    || payload.providerModelRows.length > 0
-    || payload.dailyRows.length > 0
-    || payload.providerUsageGroups.length > 0
-    || payload.scenarioRows.length > 0
-    || payload.sampleInstitutionRanking.length > 0
-  ) {
-    errors.push('无数据月份 summary 必须归零且明细为空');
+  if (!isRate(payload.summary.successRate) || payload.summary.averageLatencyMs < 0) {
+    errors.push('successRate 必须在 0 到 1');
+  }
+
+  if (!isZeroSummary(payload.summary) || !hasNoUsageRows(payload) || payload.hasUsageData) {
+    errors.push('未接入状态 summary 必须归零且明细为空');
   }
 
   if (!payload.costDisclaimer.includes('估算费用不是正式账单')) {

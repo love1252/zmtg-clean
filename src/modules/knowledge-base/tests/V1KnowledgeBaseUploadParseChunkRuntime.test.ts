@@ -21,6 +21,8 @@ const scope = {
   workspaceId: 'demo-workspace-a',
 };
 
+const scopeQuery = new URLSearchParams(scope).toString();
+
 function collectFields(payload: unknown): string[] {
   if (Array.isArray(payload)) {
     return payload.flatMap((item) => collectFields(item));
@@ -356,7 +358,7 @@ describe('V1 知识库上传 / 解析 / 分块 runtime', () => {
 
   it('GET documents route 返回 readonly summaries 且不暴露敏感 runtime 片段', async () => {
     const repository = createRepository();
-    const response = await handleDocumentsGET(new Request(documentsUrl), { repository });
+    const response = await handleDocumentsGET(new Request(`${documentsUrl}?${scopeQuery}`), { repository });
 
     expect(response.status).toBe(200);
     const body = await response.json();

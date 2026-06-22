@@ -75,7 +75,7 @@ const segmentToneClasses: Record<CustomerSegmentKey, string> = {
 };
 
 const segmentTrendLabels: Record<CustomerSegmentKey, string> = {
-  high_priority: '演示客户',
+  high_priority: 'API 客户',
   post_care: '脱敏摘要',
   repurchase_window: '运营分层',
   silent_reactivation: '待人工确认',
@@ -83,8 +83,8 @@ const segmentTrendLabels: Record<CustomerSegmentKey, string> = {
 
 const customerBoundaryItems = [
   {
-    title: '客户用于讲述服务故事',
-    description: '沈知夏、叶舒颜、顾安然、唐以沫等客户用于演示治疗后运营闭环。',
+    title: '客户来自 API records',
+    description: '无真实客户记录时保持空态，不使用前端虚拟客户填充业务列表。',
   },
   {
     title: '表单只提交白名单字段',
@@ -443,7 +443,7 @@ export function CustomerCenterShell() {
       <InstitutionSectionHeader
         eyebrow="客户运营"
         title="客户中心"
-        description="客户、预约、随访任务统一进入运营视图。这里展示虚构 demo 客户的状态、负责人、优先级和下一步动作。"
+        description="客户、预约、随访任务统一进入运营视图。这里仅展示 API 返回的脱敏客户摘要、负责人、优先级和下一步动作。"
         action={
           <label className="relative block w-full lg:w-[320px]" aria-label="客户搜索">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -484,7 +484,7 @@ export function CustomerCenterShell() {
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-slate-950">客户优先级队列</h3>
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
-              受控 demo
+              API 数据
             </span>
           </div>
 
@@ -503,7 +503,7 @@ export function CustomerCenterShell() {
           {!isLoading && !listErrorState && filteredCustomers.length === 0 ? (
             <InstitutionPageState
               kind="empty"
-              title="暂无可讲述的演示客户"
+              title="暂无客户记录"
               description="当前没有可展示的客户旅程记录，可先创建只包含脱敏展示字段的客户摘要。"
               className="mt-4"
             />
@@ -773,7 +773,7 @@ export function CustomerCenterShell() {
                 <ShieldCheck className="h-5 w-5" />
               </div>
               <div>
-                  <h3 className="text-lg font-semibold">客户演示边界</h3>
+                  <h3 className="text-lg font-semibold">客户数据边界</h3>
                 <p className="mt-1 text-sm text-slate-400">只展示脱敏客户摘要和下一步人工动作。</p>
               </div>
             </div>
@@ -789,7 +789,7 @@ export function CustomerCenterShell() {
               ))}
             </div>
             <div className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950">
-              演示客户均为虚构脱敏数据
+              当前只展示脱敏 API 数据
               <ArrowRight className="h-4 w-4" />
             </div>
           </div>

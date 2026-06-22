@@ -1,18 +1,11 @@
-import {
-  filterKnowledgeFiles,
-  filterKnowledgeItems,
-  getPlatformKnowledgeMockData,
-  getPlatformKnowledgeScope,
-  normalizeTenantName,
-  type CategoryStats,
-  type ImportJob,
-  type KnowledgeFileItem,
-  type KnowledgeFileParseStatus,
-  type KnowledgeItem,
-  type KnowledgeTrainingStatus,
-  type PlatformKnowledgeTotals,
-  type TenantKnowledgeStats,
-  type TopQuestion,
+import type {
+  CategoryStats,
+  ImportJob,
+  KnowledgeFileItem,
+  KnowledgeItem,
+  PlatformKnowledgeTotals,
+  TenantKnowledgeStats,
+  TopQuestion,
 } from '@/modules/open-platform/mock/platformKnowledge';
 import type {
   V1KnowledgeBaseRuntimeFoundationReadonlyStatus,
@@ -24,13 +17,39 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 50;
 export const PLATFORM_KNOWLEDGE_LIBRARY_WORKSPACE_ID = '__library__';
-const fileParseStatuses = new Set<KnowledgeFileParseStatus>(['parsed', 'failed', 'parsing', 'pending']);
-const trainingStatuses = new Set<KnowledgeTrainingStatus>(['trained', 'training', 'pending', 'failed']);
+
+const zeroTotals: PlatformKnowledgeTotals = {
+  tenantCount: 0,
+  knowledgeCount: 0,
+  categoryCount: 0,
+  folderCount: 0,
+  hitCount: 0,
+  chunkCount: 0,
+  averageHitCount: 0,
+  trainedCount: 0,
+  failedTrainingCount: 0,
+  zeroHitCount: 0,
+  importJobCount: 0,
+  failedImportJobCount: 0,
+  hitCoverageRate: 0,
+  trainingCoverageRate: 0,
+  importSuccessRate: 0,
+  pendingOptimizationCount: 0,
+  sourceFileCount: 0,
+  totalFileSizeKb: 0,
+  parsedFileCount: 0,
+  failedFileCount: 0,
+};
+
+const unconnectedEmptyState = {
+  title: '暂无真实知识库运营数据',
+  description: '当前未接入知识库数据库或暂无知识库记录，请在真实数据写入后查看。',
+};
 
 export type PlatformKnowledgeOverviewResponse = {
   requestId: string;
   readonly: true;
-  dataSource: 'mock' | 'repository';
+  dataSource: 'unconnected' | 'repository';
   scope: {
     tenantId: string | null;
     scopeName: string;
@@ -162,7 +181,7 @@ export type PlatformKnowledgeItemsParams = {
 export type PlatformKnowledgeListResponse<TRecord> = {
   requestId: string;
   readonly: true;
-  dataSource: 'mock' | 'repository';
+  dataSource: 'unconnected' | 'repository';
   records: TRecord[];
   pageInfo: PlatformKnowledgePageInfo;
   emptyState: {
@@ -185,78 +204,60 @@ type PageParamsResult =
 export function getPlatformKnowledgeOverviewResponse(
   params: PlatformKnowledgeOverviewParams = {},
 ): PlatformKnowledgeOverviewResponse {
-  const data = getPlatformKnowledgeMockData();
-  const scope = getPlatformKnowledgeScope(data, normalizeOptionalString(params.tenantId));
+  const tenantId = normalizeOptionalString(params.tenantId) ?? null;
 
   return {
     requestId: 'open-platform-knowledge-management-overview',
     readonly: true,
-    dataSource: 'mock',
+    dataSource: 'unconnected',
     scope: {
-      tenantId: scope.tenantId,
-      scopeName: scope.scopeName,
+      tenantId,
+      scopeName: tenantId ? '已选择机构' : '全部机构',
     },
-    allTotals: data.totals,
-    totals: scope.totals,
-    tenants: data.tenants.map(mapTenant),
-    categoryStats: scope.categories,
+    allTotals: { ...zeroTotals },
+    totals: { ...zeroTotals },
+    tenants: [],
+    categoryStats: [],
     directories: buildPlatformKnowledgeDirectories({
-      items: scope.knowledgeItems,
-      files: scope.files,
+      items: [],
+      files: [],
     }),
-    topQuestions: scope.topQuestions.map(mapTopQuestion),
-    importJobs: scope.importJobs.map(mapImportJob),
+    topQuestions: [],
+    importJobs: [],
   };
 }
 
 export function getPlatformKnowledgeFilesResponse(
   params: PlatformKnowledgeFilesParams = {},
 ): PlatformKnowledgeListResponse<PlatformKnowledgeFileDto> {
-  const data = getPlatformKnowledgeMockData();
   const pageParams = normalizePageParams(params);
   if (!pageParams.ok) {
     throw new Error(pageParams.error.error.message);
   }
 
-  const status = normalizeFileParseStatus(params.status);
-  const records = filterKnowledgeFiles(data.files, {
-    tenantId: normalizeOptionalString(params.tenantId),
-    keyword: normalizeOptionalString(params.keyword),
-    status,
-  }).map(mapFile);
-
   return buildListResponse({
     requestId: 'open-platform-knowledge-management-files',
-    records,
+    records: [],
     page: pageParams.page,
     pageSize: pageParams.pageSize,
-    emptyState: data.emptyState,
+    emptyState: unconnectedEmptyState,
   });
 }
 
 export function getPlatformKnowledgeItemsResponse(
   params: PlatformKnowledgeItemsParams = {},
 ): PlatformKnowledgeListResponse<PlatformKnowledgeItemDto> {
-  const data = getPlatformKnowledgeMockData();
   const pageParams = normalizePageParams(params);
   if (!pageParams.ok) {
     throw new Error(pageParams.error.error.message);
   }
 
-  const trainingStatus = normalizeTrainingStatus(params.trainingStatus);
-  const records = filterKnowledgeItems(data.knowledgeItems, {
-    tenantId: normalizeOptionalString(params.tenantId),
-    keyword: normalizeOptionalString(params.keyword),
-    category: normalizeOptionalString(params.category),
-    trainingStatus,
-  }).map(mapItem);
-
   return buildListResponse({
     requestId: 'open-platform-knowledge-management-items',
-    records,
+    records: [],
     page: pageParams.page,
     pageSize: pageParams.pageSize,
-    emptyState: data.emptyState,
+    emptyState: unconnectedEmptyState,
   });
 }
 
@@ -522,7 +523,7 @@ function buildListResponse<TRecord>({
   return {
     requestId,
     readonly: true,
-    dataSource: 'mock',
+    dataSource: 'unconnected',
     records: records.slice(start, start + pageSize),
     pageInfo: {
       page: safePage,
@@ -536,68 +537,10 @@ function buildListResponse<TRecord>({
   };
 }
 
-function mapTenant(tenant: TenantKnowledgeStats): PlatformKnowledgeTenantDto {
-  return {
-    ...tenant,
-    tenantName: normalizeTenantName(tenant.tenantName),
-  };
-}
-
-function mapFile(file: KnowledgeFileItem): PlatformKnowledgeFileDto {
-  const { tenantName, isDownloadable: _isDownloadable, ...rest } = file;
-
-  return {
-    ...rest,
-    tenantName: normalizeTenantName(tenantName),
-  };
-}
-
-function mapItem(item: KnowledgeItem): PlatformKnowledgeItemDto {
-  const { tenantName, summaryPreview, ...rest } = item;
-
-  return {
-    ...rest,
-    tenantName: normalizeTenantName(tenantName),
-    descriptionPreview: summaryPreview,
-  };
-}
-
-function mapTopQuestion(question: TopQuestion): PlatformKnowledgeTopQuestionDto {
-  return {
-    ...question,
-    tenantName: normalizeTenantName(question.tenantName),
-  };
-}
-
-function mapImportJob(job: ImportJob): PlatformKnowledgeImportJobDto {
-  return {
-    ...job,
-    tenantName: normalizeTenantName(job.tenantName),
-  };
-}
-
 function normalizeOptionalString(value: string | null | undefined) {
   const trimmed = value?.trim();
 
   return trimmed ? trimmed : undefined;
-}
-
-function normalizeFileParseStatus(value: string | null | undefined) {
-  const normalized = normalizeOptionalString(value);
-  if (!normalized) return undefined;
-
-  return fileParseStatuses.has(normalized as KnowledgeFileParseStatus)
-    ? normalized as KnowledgeFileParseStatus
-    : undefined;
-}
-
-function normalizeTrainingStatus(value: string | null | undefined) {
-  const normalized = normalizeOptionalString(value);
-  if (!normalized) return undefined;
-
-  return trainingStatuses.has(normalized as KnowledgeTrainingStatus)
-    ? normalized as KnowledgeTrainingStatus
-    : undefined;
 }
 
 function parsePositiveInteger(value: string | number | null | undefined, fallback: number) {

@@ -28,6 +28,10 @@ const forbiddenText = [
   'provider-test-key-never-return',
   'vendor-test-key-never-return',
   'test-api-key-for-ui-save',
+  '受控示例用量',
+  '示例用量',
+  '智美天工医美智能运营系统',
+  'Qwen Plus',
 ];
 
 function stubFetch(fetchMock = vi.fn()) {
@@ -73,144 +77,58 @@ afterEach(() => {
 });
 
 describe('平台端 AI 模型与用量只读面板', () => {
-  it('默认按当前日期展示 AI 用量账单当天消耗', () => {
+  it('默认按当前日期展示未接入 AI 用量空态', () => {
     freezeUsageDate();
 
-    render(<OpenPlatformAiReadonlyPanel />);
-
-    expect(screen.getByText('2026年06月22日用量')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '选择 AI 用量日期 2026年06月22日' })).toBeInTheDocument();
-    expect(screen.getByText('2026-06-22')).toBeInTheDocument();
-    expect(screen.getAllByText('¥0.0499').length).toBeGreaterThan(0);
-    expect(screen.getByText('调用 16 次 · Token 10,597')).toBeInTheDocument();
-    expect(screen.queryByText('2026年05月用量')).not.toBeInTheDocument();
-  });
-
-  it('展示旧系统用量费用、模型目录与低敏边界，且不展示 Runtime 与 Key 配置卡', () => {
-    freezeUsageDate();
-    const fetchMock = stubFetch();
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(screen.queryByText('平台端 AI 模型与用量低敏只读基础')).not.toBeInTheDocument();
-    expect(screen.queryByText('平台端只读展示 AI 模型目录、能力分组、场景关系和用量费用信息架构；当前不接入真实模型服务，不读取真实机构日志。')).not.toBeInTheDocument();
-
-    expect(screen.queryByRole('heading', { name: 'AI 模型目录' })).not.toBeInTheDocument();
-    expect(screen.queryByText('厂商列表')).not.toBeInTheDocument();
-    expect(screen.queryByText('场景默认模型关系')).not.toBeInTheDocument();
-    expect(screen.queryByText('Agent 继承关系')).not.toBeInTheDocument();
-    expect(screen.queryByText('模型启用状态说明')).not.toBeInTheDocument();
-    expect(screen.queryByText('Registry 状态：当前为受控只读示例，不代表生产启用。')).not.toBeInTheDocument();
-
     expect(screen.getByRole('heading', { name: 'AI 用量与费用' })).toBeInTheDocument();
-    expect(screen.getByText('用量口径：当前为受控示例用量，费用为估算，不是正式账单。')).toBeInTheDocument();
-    expect(screen.getAllByText('AI 用量账单').length).toBeGreaterThan(0);
+    expect(screen.getByText('用量口径：当前未接入真实 AI 调用日志，费用为 0，不是正式账单。')).toBeInTheDocument();
     expect(screen.getByText('2026年06月22日用量')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '导出' })).toBeInTheDocument();
-    expect(screen.getByText('消耗金额')).toBeInTheDocument();
-    expect(screen.getAllByText('¥0.0499').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('调用次数').length).toBeGreaterThan(0);
-    expect(screen.getByText('49')).toBeInTheDocument();
-    expect(screen.getAllByText('Token').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('14,959').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('成功率').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('79.6%').length).toBeGreaterThan(0);
-    expect(screen.getByText('峰值日')).toBeInTheDocument();
-    expect(screen.getByText('¥0.040')).toBeInTheDocument();
-    expect(screen.getByText('每日消耗')).toBeInTheDocument();
-    expect(screen.getByText('按模型费用占比堆叠，点击查看单日构成')).toBeInTheDocument();
-    expect(screen.getByText('2026-06-22')).toBeInTheDocument();
-    expect(screen.getByText('单日模型费用构成')).toBeInTheDocument();
-    expect(screen.getByText('Qwen Plus')).toBeInTheDocument();
-    expect(screen.getByText('调用 16 次 · Token 10,597')).toBeInTheDocument();
-    expect(screen.getByText('Qwen3.6 Plus')).toBeInTheDocument();
-    expect(screen.getByText('DeepSeek V4 Flash')).toBeInTheDocument();
-    expect(screen.getByText('厂商与模型消耗明细')).toBeInTheDocument();
-    expect(screen.getByText('选择上方厂商后查看模型消耗明细')).toBeInTheDocument();
-    expect(screen.getByText('总金额 ¥0.0499')).toBeInTheDocument();
-    expect(screen.getByText('业务场景消耗')).toBeInTheDocument();
-    expect(screen.getByText('统一业务口径，技术来源保留在标签中。')).toBeInTheDocument();
-    expect(screen.getByText('机构用量排行')).toBeInTheDocument();
-    expect(screen.getByText('点击机构查看场景明细')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '厂商 通义千问' }));
-    expect(screen.getByText('通义千问 模型明细')).toBeInTheDocument();
-    expect(screen.getByText('输入 Token')).toBeInTheDocument();
-    expect(screen.getByText('输出 Token')).toBeInTheDocument();
-    expect(screen.getByText('总 Token')).toBeInTheDocument();
-    expect(screen.getByText('厂商占比')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /机构 智美天工医美智能运营系统/ }));
-    expect(screen.getByText('智美天工医美智能运营系统 场景明细')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'AI Runtime 状态' })).not.toBeInTheDocument();
-    expect(screen.queryByText('env-only')).not.toBeInTheDocument();
-    expect(screen.queryByText('真实调用已禁用。dry-run readiness 检查厂商配置完整性，不解密 Key、不外呼厂商 API。')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'dry-run readiness' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '选择 AI 用量日期 2026年06月22日' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '导出' })).toBeDisabled();
+    expect(screen.getByText('暂无真实 AI 用量记录')).toBeInTheDocument();
+    expect(screen.getByText('当前未接入真实 AI 调用日志；不会展示预置用量、机构排行或估算账单。')).toBeInTheDocument();
+    expect(screen.getAllByText('0').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('¥0.0000').length).toBeGreaterThan(0);
+    expect(screen.queryByText('单日模型费用构成')).not.toBeInTheDocument();
+    expect(screen.queryByText('厂商与模型消耗明细')).not.toBeInTheDocument();
+    expect(screen.queryByText('机构用量排行')).not.toBeInTheDocument();
+    expectNoForbiddenAiReadonlyContent(container);
+  });
+
+  it('月份选择弹层保留，但切换月份后仍保持未接入空态', () => {
+    freezeUsageDate();
+
+    const { container } = render(<OpenPlatformAiReadonlyPanel />);
+
+    fireEvent.click(screen.getByRole('button', { name: '选择 AI 用量日期 2026年06月22日' }));
+
+    expect(screen.getByRole('dialog', { name: '选择 AI 用量月份' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '6月' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '清除' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '本月' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '5月' }));
+
+    expect(screen.getByText('2026年05月用量')).toBeInTheDocument();
+    expect(screen.getByText('暂无真实 AI 用量记录')).toBeInTheDocument();
+    expect(screen.queryByText('Qwen Plus')).not.toBeInTheDocument();
+    expect(screen.queryByText('智美天工医美智能运营系统')).not.toBeInTheDocument();
+    expectNoForbiddenAiReadonlyContent(container);
+  });
+
+  it('页面不展示 Key 配置入口，也不触发 provider 配置读取', () => {
+    freezeUsageDate();
+    const fetchMock = stubFetch();
+
+    const { container } = render(<OpenPlatformAiReadonlyPanel />);
+
     expect(screen.queryByRole('heading', { name: '厂商 Key 配置' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('API Key')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /保存/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /删除/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '能力覆盖矩阵' })).not.toBeInTheDocument();
-    expect(screen.queryByText('只读覆盖关系')).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /覆盖：文本生成/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /覆盖：推理判断/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /覆盖：视觉理解/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /覆盖：向量模型/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '安全边界清单' })).not.toBeInTheDocument();
-    expect(screen.queryByText('全部未启用')).not.toBeInTheDocument();
-    expect(screen.queryByText('API Key 管理')).not.toBeInTheDocument();
-    expect(screen.queryByText('厂商模型同步')).not.toBeInTheDocument();
-
     expectNoProviderConfigFetch(fetchMock);
-    expectNoForbiddenAiReadonlyContent(container);
-  });
-
-  it('厂商与模型明细区月份入口也打开旧系统月份弹层', () => {
-    freezeUsageDate();
-
-    render(<OpenPlatformAiReadonlyPanel />);
-
-    expect(screen.getByRole('button', { name: '选择厂商模型消耗月份 2026年06月22日' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '选择厂商模型消耗月份 2026年06月22日' }));
-
-    expect(screen.getByRole('dialog', { name: '选择 AI 用量月份' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '6月' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: '清除' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '本月' })).toBeInTheDocument();
-  });
-
-  it('页面不展示 encryptedApiKey/ciphertext/authTag/iv，也不展示 Key 配置入口', () => {
-    freezeUsageDate();
-
-    const { container } = render(<OpenPlatformAiReadonlyPanel />);
-    expect(container.textContent).not.toContain('encryptedApiKey');
-    expect(container.textContent).not.toContain('ciphertext');
-    expect(container.textContent).not.toContain('authTag');
-    expect(container.textContent).not.toContain('iv');
-    expect(screen.queryByRole('heading', { name: '厂商 Key 配置' })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('API Key')).not.toBeInTheDocument();
-  });
-
-  it('月份选择弹层按旧系统样式展示并支持受控月份切换到空状态', () => {
-    freezeUsageDate();
-
-    const { container } = render(<OpenPlatformAiReadonlyPanel />);
-
-    expect(screen.getByRole('button', { name: '选择 AI 用量日期 2026年06月22日' })).toBeInTheDocument();
-    expect(screen.getByText('2026年06月22日用量')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '选择 AI 用量日期 2026年06月22日' }));
-    expect(screen.getByRole('dialog', { name: '选择 AI 用量月份' })).toBeInTheDocument();
-    expect(screen.getByText('2026')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '6月' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: '清除' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '本月' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '6月' }));
-
-    expect(screen.getByText('暂无受控示例用量')).toBeInTheDocument();
-    expect(screen.getByText('2026年06月为受控示例月份，未读取真实 AI 日志；估算费用不是正式账单。')).toBeInTheDocument();
-    expect(screen.getAllByText('0').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('¥0.0000').length).toBeGreaterThan(0);
-    expect(screen.queryByText('智美天工医美智能运营系统')).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'AI Runtime 状态' })).not.toBeInTheDocument();
     expectNoForbiddenAiReadonlyContent(container);
   });
 
@@ -224,12 +142,8 @@ describe('平台端 AI 模型与用量只读面板', () => {
     const bannerHeading = screen.getByRole('heading', { name: 'AI用量与费用' });
     const banner = bannerHeading.closest('[data-platform-banner="true"]');
     expect(banner).not.toBeNull();
-    expect(banner).toHaveClass('rounded-xl', 'py-4', 'lg:py-5');
-    expect(bannerHeading).toHaveClass('text-2xl', 'sm:text-[28px]');
-    expect(screen.getByText(/查看受控 AI 用量、费用估算、厂商模型消耗和机构排行/)).toBeInTheDocument();
-
+    expect(screen.getAllByText(/当前未接入真实 AI 调用日志/).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: 'AI 用量与费用' })).toBeInTheDocument();
-    expect(screen.queryByText('平台端 AI 模型与用量低敏只读基础')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：AI用量与费用' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /同步模型/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /测试调用/ })).not.toBeInTheDocument();
@@ -238,8 +152,6 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.queryByRole('button', { name: /自动扣费/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'AI Runtime 状态' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'dry-run readiness' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '厂商 Key 配置' })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('API Key')).not.toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('AI 用量账单')).toBeInTheDocument();
     });

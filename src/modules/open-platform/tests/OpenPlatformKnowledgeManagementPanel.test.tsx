@@ -4,6 +4,7 @@ import * as viewLoader from '@/modules/open-platform/lib/platformKnowledgeManage
 import { OpenPlatformKnowledgeManagementPanel } from '@/modules/open-platform/components/OpenPlatformKnowledgeManagementPanel';
 import { PlatformConsole } from '@/modules/workspace/components/PlatformConsole';
 import {
+  buildPlatformKnowledgeDirectories,
   getPlatformKnowledgeFilesResponse,
   getPlatformKnowledgeItemsResponse,
   getPlatformKnowledgeOverviewResponse,
@@ -31,6 +32,210 @@ function expectNoRawRuntimeError(container: HTMLElement) {
   expect(text).not.toContain('postgres://');
   expect(text).not.toContain('stack');
   expect(text).not.toContain('sk_test');
+}
+
+const panelKnowledgeItems = [
+  {
+    knowledgeId: 'knowledge-price-reply',
+    tenantId: 'tenant-xinglan',
+    tenantName: '星澜医美中心',
+    title: '客户询问价格时怎么回复？',
+    descriptionPreview: '平台端测试用低敏知识摘要。',
+    category: '星澜医美中心',
+    folder: '话术库',
+    hitCount: 42,
+    trainingStatus: 'ready',
+    updatedAt: '2026-06-14 10:00',
+    institutionId: 'inst-xinglan',
+    workspaceId: 'workspace-xinglan',
+    version: 'v1',
+    sourceKind: 'demo',
+    status: 'ready',
+    readonlyStatus: 'ready',
+    visibleInstitutionIds: ['inst-xinglan'],
+    createdAt: '2026-06-13T08:00:00.000Z',
+  },
+  {
+    knowledgeId: 'knowledge-repair-diet',
+    tenantId: 'tenant-low-hit',
+    tenantName: '低命中修复门诊',
+    title: '修复术后饮食要注意什么？',
+    descriptionPreview: '测试低命中机构筛选用低敏摘要。',
+    category: '低命中修复门诊',
+    folder: '项目知识',
+    hitCount: 1,
+    trainingStatus: 'ready',
+    updatedAt: '2026-06-15 10:00',
+    institutionId: 'inst-low-hit',
+    workspaceId: 'workspace-low-hit',
+    version: 'v1',
+    sourceKind: 'fixture',
+    status: 'ready',
+    readonlyStatus: 'ready',
+    visibleInstitutionIds: ['inst-low-hit'],
+    createdAt: '2026-06-15T08:00:00.000Z',
+  },
+];
+
+const panelKnowledgeFiles = [
+  {
+    fileId: 'file-ui-a',
+    tenantId: 'tenant-xinglan',
+    tenantName: '星澜医美中心',
+    knowledgeId: 'knowledge-price-reply',
+    knowledgeTitle: '价格回复知识库',
+    fileName: '星澜医美中心术后护理指南.pdf',
+    originalFilename: '平台文件.pdf',
+    mimeType: 'application/pdf',
+    fileType: 'PDF',
+    fileSizeKb: 10,
+    sizeBytes: 10,
+    sizeLabel: '10 B',
+    sha256: 'c'.repeat(64),
+    status: 'active',
+    parseStatus: 'pending',
+    safeErrorMessage: null,
+    safeFailureMessage: null,
+    uploadedByUserId: 'platform-ui',
+    textLength: 0,
+    chunkCount: 0,
+    parserVersion: null,
+    category: '星澜医美中心',
+    folder: '话术库',
+    updatedAt: '2026-06-14 10:00',
+    createdAt: '2026-06-13T08:00:00.000Z',
+    archivedAt: null,
+  },
+  {
+    fileId: 'file-ui-failed',
+    tenantId: 'tenant-xinglan',
+    tenantName: '星澜医美中心',
+    knowledgeId: 'knowledge-price-reply',
+    knowledgeTitle: '价格回复知识库',
+    fileName: '星澜导入失败记录.xlsx',
+    originalFilename: '星澜导入失败记录.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    fileType: 'XLSX',
+    fileSizeKb: 12,
+    sizeBytes: 12,
+    sizeLabel: '12 B',
+    sha256: 'd'.repeat(64),
+    status: 'active',
+    parseStatus: 'failed',
+    safeErrorMessage: '文件格式暂不支持',
+    safeFailureMessage: '文件格式暂不支持',
+    uploadedByUserId: 'platform-ui',
+    textLength: 0,
+    chunkCount: 0,
+    parserVersion: null,
+    category: '星澜医美中心',
+    folder: '导入记录',
+    updatedAt: '2026-06-14 11:00',
+    createdAt: '2026-06-13T09:00:00.000Z',
+    archivedAt: null,
+  },
+  {
+    fileId: 'file-low-hit-a',
+    tenantId: 'tenant-low-hit',
+    tenantName: '低命中修复门诊',
+    knowledgeId: 'knowledge-repair-diet',
+    knowledgeTitle: '修复术后饮食要注意什么？',
+    fileName: '低命中修复术后答疑.docx',
+    originalFilename: '低命中修复术后答疑.docx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    fileType: 'DOCX',
+    fileSizeKb: 16,
+    sizeBytes: 16,
+    sizeLabel: '16 B',
+    sha256: 'e'.repeat(64),
+    status: 'active',
+    parseStatus: 'parsed',
+    safeErrorMessage: null,
+    safeFailureMessage: null,
+    uploadedByUserId: 'platform-ui',
+    textLength: 120,
+    chunkCount: 2,
+    parserVersion: 'fixture-parser',
+    category: '低命中修复门诊',
+    folder: '项目知识',
+    updatedAt: '2026-06-15 10:00',
+    createdAt: '2026-06-15T08:00:00.000Z',
+    archivedAt: null,
+  },
+  {
+    fileId: 'file-unknown-failed',
+    tenantId: 'tenant-unknown',
+    tenantName: '机构名称异常',
+    knowledgeId: 'knowledge-unknown',
+    knowledgeTitle: '未命名机构',
+    fileName: '机构名称异常资料.pdf',
+    originalFilename: '机构名称异常资料.pdf',
+    mimeType: 'application/pdf',
+    fileType: 'PDF',
+    fileSizeKb: 18,
+    sizeBytes: 18,
+    sizeLabel: '18 B',
+    sha256: 'f'.repeat(64),
+    status: 'active',
+    parseStatus: 'failed',
+    safeErrorMessage: 'PDF 解析服务异常',
+    safeFailureMessage: 'PDF 解析服务异常',
+    uploadedByUserId: 'platform-ui',
+    textLength: 0,
+    chunkCount: 0,
+    parserVersion: null,
+    category: '机构名称异常',
+    folder: '未命名机构',
+    updatedAt: '2026-06-16 10:00',
+    createdAt: '2026-06-16T08:00:00.000Z',
+    archivedAt: null,
+  },
+  ...Array.from({ length: 4 }, (_, index) => ({
+    fileId: `file-page-extra-${index + 1}`,
+    tenantId: 'tenant-xinglan',
+    tenantName: '星澜医美中心',
+    knowledgeId: 'knowledge-price-reply',
+    knowledgeTitle: '客户询问价格时怎么回复？',
+    fileName: `星澜分页资料 ${index + 1}.txt`,
+    originalFilename: `星澜分页资料 ${index + 1}.txt`,
+    mimeType: 'text/plain',
+    fileType: 'TXT',
+    fileSizeKb: 8,
+    sizeBytes: 8,
+    sizeLabel: '8 B',
+    sha256: String(index + 1).repeat(64).slice(0, 64),
+    status: 'active',
+    parseStatus: 'parsed',
+    safeErrorMessage: null,
+    safeFailureMessage: null,
+    uploadedByUserId: 'platform-ui',
+    textLength: 80,
+    chunkCount: 1,
+    parserVersion: 'fixture-parser',
+    category: '星澜医美中心',
+    folder: '话术库',
+    updatedAt: '2026-06-14 12:00',
+    createdAt: '2026-06-14T08:00:00.000Z',
+    archivedAt: null,
+  })),
+];
+
+function pageInfoFor(total: number, page = 1, pageSize = 10) {
+  return {
+    page,
+    pageSize,
+    total,
+    pageCount: Math.max(1, Math.ceil(total / pageSize)),
+    hasPreviousPage: page > 1,
+    hasNextPage: page * pageSize < total,
+  };
+}
+
+function selectTenantCard(directory: HTMLElement, tenantName: string) {
+  const [tenantCard] = within(directory).getAllByRole('button', { name: new RegExp(tenantName) });
+  expect(tenantCard).toBeInTheDocument();
+  fireEvent.click(tenantCard);
+  return tenantCard;
 }
 
 describe('平台端知识库管理只读看板', () => {
@@ -158,14 +363,253 @@ describe('平台端知识库管理只读看板', () => {
           }, { status: 409 });
         }
         if (parsedUrl.pathname === '/api/v1/open-platform/knowledge-management') {
+          const selectedTenantId = parsedUrl.searchParams.get('tenantId');
+          const itemsForView = selectedTenantId
+            ? panelKnowledgeItems.filter((item) => item.tenantId === selectedTenantId)
+            : panelKnowledgeItems;
+          const filesForView = selectedTenantId
+            ? panelKnowledgeFiles.filter((file) => file.tenantId === selectedTenantId)
+            : panelKnowledgeFiles;
+          const directories = buildPlatformKnowledgeDirectories({
+            items: itemsForView,
+            files: filesForView,
+            sources: [
+              {
+                tenantId: 'tenant-xinglan',
+                sourceLabel: '星澜医美中心',
+                workspaceId: 'workspace-xinglan',
+                status: 'active',
+                updatedAt: '2026-06-14T10:00:00.000Z',
+              },
+              {
+                tenantId: 'tenant-low-hit',
+                sourceLabel: '低命中修复门诊',
+                workspaceId: 'workspace-low-hit',
+                status: 'active',
+                updatedAt: '2026-06-15T10:00:00.000Z',
+              },
+              {
+                tenantId: 'tenant-unknown',
+                sourceLabel: '机构名称异常',
+                workspaceId: 'workspace-unknown',
+                status: 'active',
+                updatedAt: '2026-06-16T10:00:00.000Z',
+              },
+            ],
+          });
           return Response.json({
             ...getPlatformKnowledgeOverviewResponse({
             tenantId: parsedUrl.searchParams.get('tenantId'),
             }),
             dataSource: 'repository',
+            allTotals: {
+              ...getPlatformKnowledgeOverviewResponse().allTotals,
+              tenantCount: 1,
+              knowledgeCount: itemsForView.length,
+              categoryCount: new Set(itemsForView.map((item) => item.category)).size,
+              folderCount: new Set(filesForView.map((file) => file.folder)).size,
+              hitCount: itemsForView.reduce((sum, item) => sum + item.hitCount, 0),
+              chunkCount: filesForView.reduce((sum, file) => sum + file.chunkCount, 0),
+              averageHitCount: itemsForView.length === 0 ? 0 : Math.round(itemsForView.reduce((sum, item) => sum + item.hitCount, 0) / itemsForView.length),
+              trainedCount: itemsForView.filter((item) => item.trainingStatus === 'ready').length,
+              failedTrainingCount: 0,
+              zeroHitCount: itemsForView.filter((item) => item.hitCount === 0).length,
+              hitCoverageRate: itemsForView.length === 0 ? 0 : 100,
+              trainingCoverageRate: itemsForView.length === 0 ? 0 : 100,
+              importSuccessRate: filesForView.length === 0 ? 0 : Math.round((filesForView.filter((file) => file.parseStatus !== 'failed').length / filesForView.length) * 100),
+              sourceFileCount: panelKnowledgeFiles.length,
+              importJobCount: 1,
+              failedImportJobCount: 1,
+              pendingOptimizationCount: 1,
+            },
+            totals: {
+              ...getPlatformKnowledgeOverviewResponse().totals,
+              tenantCount: 1,
+              knowledgeCount: itemsForView.length,
+              categoryCount: new Set(itemsForView.map((item) => item.category)).size,
+              folderCount: new Set(filesForView.map((file) => file.folder)).size,
+              hitCount: itemsForView.reduce((sum, item) => sum + item.hitCount, 0),
+              chunkCount: filesForView.reduce((sum, file) => sum + file.chunkCount, 0),
+              averageHitCount: itemsForView.length === 0 ? 0 : Math.round(itemsForView.reduce((sum, item) => sum + item.hitCount, 0) / itemsForView.length),
+              trainedCount: itemsForView.filter((item) => item.trainingStatus === 'ready').length,
+              failedTrainingCount: 0,
+              zeroHitCount: itemsForView.filter((item) => item.hitCount === 0).length,
+              hitCoverageRate: itemsForView.length === 0 ? 0 : 100,
+              trainingCoverageRate: itemsForView.length === 0 ? 0 : 100,
+              importSuccessRate: filesForView.length === 0 ? 0 : Math.round((filesForView.filter((file) => file.parseStatus !== 'failed').length / filesForView.length) * 100),
+              sourceFileCount: filesForView.length,
+              importJobCount: 1,
+              failedImportJobCount: 1,
+              pendingOptimizationCount: 1,
+            },
+            tenants: [
+              {
+                tenantId: 'tenant-xinglan',
+                tenantName: '星澜医美中心',
+                knowledgeCount: 1,
+                categoryCount: 1,
+                folderCount: 2,
+                hitCount: 42,
+                chunkCount: 1,
+                averageHitCount: 42,
+                trainedCount: 1,
+                failedTrainingCount: 0,
+                zeroHitCount: 0,
+                hitCoverageRate: 100,
+                trainingCoverageRate: 100,
+                importSuccessRate: 83,
+                sourceFileCount: panelKnowledgeFiles.length,
+                totalFileSizeKb: 22,
+                parsedFileCount: 1,
+                failedFileCount: 1,
+                importJobCount: 1,
+                failedImportJobCount: 1,
+                pendingOptimizationCount: 1,
+              },
+              {
+                tenantId: 'tenant-low-hit',
+                tenantName: '低命中修复门诊',
+                knowledgeCount: 1,
+                categoryCount: 1,
+                folderCount: 1,
+                hitCount: 1,
+                chunkCount: 2,
+                averageHitCount: 1,
+                trainedCount: 1,
+                failedTrainingCount: 0,
+                zeroHitCount: 0,
+                hitCoverageRate: 100,
+                trainingCoverageRate: 100,
+                importSuccessRate: 100,
+                sourceFileCount: 1,
+                totalFileSizeKb: 16,
+                parsedFileCount: 1,
+                failedFileCount: 0,
+                importJobCount: 1,
+                failedImportJobCount: 0,
+                pendingOptimizationCount: 1,
+              },
+              {
+                tenantId: 'tenant-unknown',
+                tenantName: '机构名称异常',
+                knowledgeCount: 0,
+                categoryCount: 1,
+                folderCount: 1,
+                hitCount: 0,
+                chunkCount: 0,
+                averageHitCount: 0,
+                trainedCount: 0,
+                failedTrainingCount: 0,
+                zeroHitCount: 0,
+                hitCoverageRate: 0,
+                trainingCoverageRate: 0,
+                importSuccessRate: 0,
+                sourceFileCount: 1,
+                totalFileSizeKb: 18,
+                parsedFileCount: 0,
+                failedFileCount: 1,
+                importJobCount: 1,
+                failedImportJobCount: 1,
+                pendingOptimizationCount: 1,
+              },
+            ],
+            categoryStats: [
+              {
+                categoryCode: 'xinglan',
+                categoryName: '星澜医美中心',
+                category: '星澜医美中心',
+                knowledgeCount: 1,
+                hitCount: 42,
+                averageHitCount: 42,
+                trainedCount: 1,
+                failedTrainingCount: 0,
+                zeroHitCount: 0,
+                chunkCount: 1,
+                hitCoverageRate: 100,
+                trainingCoverageRate: 100,
+              },
+              {
+                categoryCode: 'low-hit',
+                categoryName: '低命中修复门诊',
+                category: '低命中修复门诊',
+                knowledgeCount: 1,
+                hitCount: 1,
+                averageHitCount: 1,
+                trainedCount: 1,
+                failedTrainingCount: 0,
+                zeroHitCount: 0,
+                chunkCount: 2,
+                hitCoverageRate: 100,
+                trainingCoverageRate: 100,
+              },
+            ],
+            directories,
+            topQuestions: [
+              {
+                knowledgeId: 'knowledge-price-reply',
+                question: '冷敷后怎么护理？',
+                questionTitle: '冷敷后怎么护理？',
+                tenantId: 'tenant-xinglan',
+                tenantName: '星澜医美中心',
+                category: '星澜医美中心',
+                folder: '话术库',
+                hitCount: 12,
+                lastAskedAt: '2026-06-14 10:00',
+                updatedAt: '2026-06-14 10:00',
+              },
+            ],
+            importJobs: (selectedTenantId === 'tenant-low-hit' ? [
+              {
+                taskId: 'import-job-low-hit',
+                jobId: 'import-job-low-hit',
+                tenantId: 'tenant-low-hit',
+                tenantName: '低命中修复门诊',
+                title: '低命中机构修复资料导入',
+                fileName: '低命中机构修复资料导入',
+                status: 'completed',
+                totalCount: 8,
+                successCount: 8,
+                failedCount: 0,
+                totalRows: 8,
+                successRows: 8,
+                failedRows: 0,
+                createdAt: '2026-06-15 11:00',
+                updatedAt: '2026-06-15 11:10',
+              },
+            ] : [
+              {
+                taskId: 'import-job-xinglan-failed',
+                jobId: 'import-job-xinglan-failed',
+                tenantId: 'tenant-xinglan',
+                tenantName: '星澜医美中心',
+                title: '星澜导入失败记录.xlsx',
+                fileName: '星澜导入失败记录.xlsx',
+                status: 'failed',
+                totalCount: 10,
+                successCount: 0,
+                failedCount: 10,
+                totalRows: 10,
+                successRows: 0,
+                failedRows: 10,
+                createdAt: '2026-06-14 11:00',
+                updatedAt: '2026-06-14 11:10',
+              },
+            ]),
           });
         }
         if (parsedUrl.pathname === '/api/v1/open-platform/knowledge-management/files') {
+          const keyword = parsedUrl.searchParams.get('keyword')?.trim() ?? '';
+          const status = parsedUrl.searchParams.get('status')?.trim() ?? '';
+          const tenantId = parsedUrl.searchParams.get('tenantId')?.trim() ?? '';
+          const page = Number(parsedUrl.searchParams.get('page') ?? 1);
+          const pageSize = Number(parsedUrl.searchParams.get('pageSize') ?? 10);
+          const records = panelKnowledgeFiles.filter((file) => {
+            const tenantMatched = tenantId.length === 0 || file.tenantId === tenantId;
+            const keywordMatched = keyword.length === 0 || file.fileName.includes(keyword) || file.originalFilename.includes(keyword);
+            const statusMatched = status.length === 0 || status === 'all' || file.parseStatus === status || file.status === status;
+            return tenantMatched && keywordMatched && statusMatched;
+          });
+          const pageRecords = records.slice((page - 1) * pageSize, page * pageSize);
           return Response.json({
             ...getPlatformKnowledgeFilesResponse({
             tenantId: parsedUrl.searchParams.get('tenantId'),
@@ -175,9 +619,23 @@ describe('平台端知识库管理只读看板', () => {
             pageSize: parsedUrl.searchParams.get('pageSize'),
             }),
             dataSource: 'repository',
+            records: pageRecords,
+            pageInfo: pageInfoFor(records.length, page, pageSize),
           });
         }
         if (parsedUrl.pathname === '/api/v1/open-platform/knowledge-management/items') {
+          const keyword = parsedUrl.searchParams.get('keyword')?.trim() ?? '';
+          const category = parsedUrl.searchParams.get('category')?.trim() ?? '';
+          const tenantId = parsedUrl.searchParams.get('tenantId')?.trim() ?? '';
+          const page = Number(parsedUrl.searchParams.get('page') ?? 1);
+          const pageSize = Number(parsedUrl.searchParams.get('pageSize') ?? 10);
+          const records = panelKnowledgeItems.filter((item) => {
+            const tenantMatched = tenantId.length === 0 || item.tenantId === tenantId;
+            const keywordMatched = keyword.length === 0 || item.title.includes(keyword) || item.descriptionPreview.includes(keyword);
+            const categoryMatched = category.length === 0 || category === 'all' || item.category === category;
+            return tenantMatched && keywordMatched && categoryMatched;
+          });
+          const pageRecords = records.slice((page - 1) * pageSize, page * pageSize);
           return Response.json({
             ...getPlatformKnowledgeItemsResponse({
             tenantId: parsedUrl.searchParams.get('tenantId'),
@@ -188,6 +646,8 @@ describe('平台端知识库管理只读看板', () => {
             pageSize: parsedUrl.searchParams.get('pageSize'),
             }),
             dataSource: 'repository',
+            records: pageRecords,
+            pageInfo: pageInfoFor(records.length, page, pageSize),
           });
         }
         if (requestUrl.includes('/api/v1/open-platform/knowledge-management/capabilities')) {
@@ -970,7 +1430,7 @@ describe('平台端知识库管理只读看板', () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
     const directory = await screen.findByLabelText('知识目录');
-    fireEvent.click(within(directory).getByRole('button', { name: /星澜医美中心/ }));
+    selectTenantCard(directory, '星澜医美中心');
     const renameButton = await within(directory).findByRole('button', { name: '重命名 话术库' });
 
     fireEvent.click(renameButton);
@@ -995,7 +1455,7 @@ describe('平台端知识库管理只读看板', () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
     const directory = await screen.findByLabelText('知识目录');
-    fireEvent.click(within(directory).getByRole('button', { name: /星澜医美中心/ }));
+    selectTenantCard(directory, '星澜医美中心');
 
     fireEvent.click(await within(directory).findByRole('button', { name: '新增目录' }));
     expect(await within(directory).findByText('目录已创建')).toBeInTheDocument();
@@ -1008,11 +1468,11 @@ describe('平台端知识库管理只读看板', () => {
     expect(await within(directory).findByText('目录已归档')).toBeInTheDocument();
     expect(within(directory).queryByRole('button', { name: '筛选目录 新目录' })).not.toBeInTheDocument();
 
-    fireEvent.click(within(directory).getByRole('button', { name: '新增子目录 话术库' }));
+    fireEvent.click(within(directory).getByRole('button', { name: '新增子目录 星澜医美中心' }));
     expect(await within(directory).findByText('目录已创建')).toBeInTheDocument();
     expect(within(directory).getByRole('button', { name: '筛选目录 新子目录' })).toBeInTheDocument();
 
-    fireEvent.click(within(directory).getByRole('button', { name: '上移 项目知识' }));
+    fireEvent.click(within(directory).getByRole('button', { name: '上移 低命中修复门诊' }));
     expect(await within(directory).findByText('目录排序已保存')).toBeInTheDocument();
   });
 
@@ -1020,7 +1480,7 @@ describe('平台端知识库管理只读看板', () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
     const directory = await screen.findByLabelText('知识目录');
-    fireEvent.click(within(directory).getByRole('button', { name: /星澜医美中心/ }));
+    selectTenantCard(directory, '星澜医美中心');
     fireEvent.click(await within(directory).findByRole('button', { name: '筛选目录 话术库' }));
 
     expect(within(directory).getByRole('button', { name: '筛选目录 话术库' })).toHaveAttribute('aria-current', 'true');
@@ -1185,9 +1645,11 @@ describe('平台端知识库管理只读看板', () => {
     expect(await within(directory).findByRole('button', { name: /全部机构/ })).toHaveAttribute('aria-current', 'true');
     expect(await screen.findByText('星澜医美中心术后护理指南.pdf')).toBeInTheDocument();
 
-    fireEvent.click(within(directory).getByRole('button', { name: /低命中修复门诊/ }));
+    selectTenantCard(directory, '低命中修复门诊');
 
-    expect(await within(directory).findByRole('button', { name: /低命中修复门诊/ })).toHaveAttribute('aria-current', 'true');
+    await waitFor(() =>
+      expect(within(directory).getAllByRole('button', { name: /低命中修复门诊/ })[0]).toHaveAttribute('aria-current', 'true'),
+    );
     expect(await screen.findByText('低命中修复术后答疑.docx')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText('星澜医美中心术后护理指南.pdf')).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole('tab', { name: '知识条目' }));
@@ -1235,7 +1697,7 @@ describe('平台端知识库管理只读看板', () => {
     vi.mocked(viewLoader.loadOpenPlatformKnowledgeManagementFiles).mockResolvedValueOnce({
       ...filesResponse,
       dataSource: 'repository',
-      records: filesResponse.records.slice(0, 2).map((file, index) => ({
+      records: panelKnowledgeFiles.slice(0, 2).map((file, index) => ({
         ...file,
         fileId: index === 0 ? 'file-bulk-a' : 'file-bulk-b',
         tenantId: index === 0 ? 'tenant-xinglan' : 'tenant-low-hit',
@@ -1285,14 +1747,16 @@ describe('平台端知识库管理只读看板', () => {
     expectNoRawRuntimeError(container);
 
     fireEvent.change(searchInput, { target: { value: '没有匹配的文件名' } });
-    expect(await screen.findByText('暂无匹配的知识库运营数据')).toBeInTheDocument();
-    expect(screen.getByText('请调整机构范围或文件名搜索条件后再查看。')).toBeInTheDocument();
+    expect(await screen.findByText('暂无真实知识库运营数据')).toBeInTheDocument();
+    expect(screen.getByText('当前未接入知识库数据库或暂无知识库记录，请在真实数据写入后查看。')).toBeInTheDocument();
 
     fireEvent.change(searchInput, { target: { value: '' } });
     const directory = screen.getByLabelText('知识目录');
-    fireEvent.click(within(directory).getByRole('button', { name: /机构名称异常/ }));
+    selectTenantCard(directory, '机构名称异常');
 
-    expect(await within(directory).findByRole('button', { name: /机构名称异常/ })).toHaveAttribute('aria-current', 'true');
+    await waitFor(() =>
+      expect(within(directory).getAllByRole('button', { name: /机构名称异常/ })[0]).toHaveAttribute('aria-current', 'true'),
+    );
     expect(screen.getAllByText('机构名称异常').length).toBeGreaterThan(0);
     expect(screen.getAllByText('未命名机构').length).toBeGreaterThan(0);
     expect(screen.getByText('PDF 解析服务异常')).toBeInTheDocument();

@@ -127,43 +127,35 @@ describe('V1 知识库 demo readonly API route', () => {
 
     expect(payload).toMatchObject({
       requestId: 'demo-readonly-api-route-request',
-      tenantId: 'demo-tenant-a',
-      institutionId: 'demo-inst-a',
-      workspaceId: 'demo-workspace-a',
-      status: 'ready',
+      tenantId: 'not_available',
+      institutionId: 'not_available',
+      workspaceId: 'not_available',
+      status: 'empty',
       readonly: true,
       summary: {
         title: '知识库 demo readonly API 契约',
       },
       facade: {
-        facadeStatus: 'ready',
+        facadeStatus: 'empty',
         readonly: true,
       },
     });
+    expect(JSON.stringify(payload)).not.toContain('demo-tenant-a');
+    expect(JSON.stringify(payload)).not.toContain('demo-inst-a');
     expectContractWhitelist(payload);
   });
 
-  it('包含 categories / folders / knowledgeItems / taskRecords / searchPreview', async () => {
+  it('默认不返回内置 categories / folders / knowledgeItems / searchPreview 数据', async () => {
     const payload = await callRoute();
 
-    expect(payload.categories).toEqual([
-      expect.objectContaining({ categoryId: 'platform-knowledge-base', readonly: true }),
-      expect.objectContaining({ categoryId: 'institution-knowledge-base', readonly: true }),
-    ]);
-    expect(payload.folders).toEqual([
-      expect.objectContaining({ folderId: 'catalog-summary', readonly: true }),
-      expect.objectContaining({ folderId: 'visibility-summary', readonly: true }),
-    ]);
-    expect(payload.knowledgeItems).toEqual([
-      expect.objectContaining({ itemId: 'publish-status-summary', readonly: true }),
-      expect.objectContaining({ itemId: 'version-summary', readonly: true }),
-      expect.objectContaining({ itemId: 'audit-summary', readonly: true }),
-    ]);
+    expect(payload.categories).toEqual([]);
+    expect(payload.folders).toEqual([]);
+    expect(payload.knowledgeItems).toEqual([]);
     expect(payload.taskRecords).toEqual([
       expect.objectContaining({
-        recordId: 'demo-readonly-facade-ready',
-        status: 'ready',
-        failureReason: 'not_available',
+        recordId: 'demo-readonly-facade-empty',
+        status: 'empty',
+        failureReason: '暂无可展示知识库 demo readonly facade',
         readonly: true,
       }),
     ]);
@@ -171,19 +163,16 @@ describe('V1 知识库 demo readonly API route', () => {
       expect.objectContaining({
         mode: 'mock_demo_preview',
         query: '知识库 demo 只读预览',
-        resultCount: 2,
+        resultCount: 0,
         readonly: true,
       }),
     );
   });
 
-  it('searchPreview 仅为 mock / demo 预览，不触发真实检索', async () => {
+  it('searchPreview 默认为空，不触发真实检索', async () => {
     const payload = await callRoute();
 
-    expect(payload.searchPreview.results.map((item) => item.sourceKind)).toEqual([
-      'demo',
-      'seed',
-    ]);
+    expect(payload.searchPreview.results).toEqual([]);
     expect(JSON.stringify(payload.searchPreview)).not.toContain('embedding');
     expect(JSON.stringify(payload.searchPreview)).not.toContain('vector');
     expect(JSON.stringify(payload.searchPreview)).not.toContain('retrieval');

@@ -26,12 +26,6 @@ export type RunRouteDependencies = {
   repository?: V1KnowledgeBaseEmbeddingVectorIndexRuntimeRepository;
 };
 
-const defaultScope = {
-  tenantId: 'demo-tenant-a',
-  institutionId: 'demo-inst-a',
-  workspaceId: 'demo-workspace-a',
-};
-
 function defaultFoundationRepository(): V1KnowledgeBaseUploadParseChunkRuntimeRepository {
   return createV1KnowledgeBaseRuntimeFoundationRepository(getDatabase());
 }
@@ -48,9 +42,9 @@ function scopeFromRequest(request: Request) {
   const url = new URL(request.url);
 
   return {
-    tenantId: url.searchParams.get('tenantId') ?? defaultScope.tenantId,
-    institutionId: url.searchParams.get('institutionId') ?? defaultScope.institutionId,
-    workspaceId: url.searchParams.get('workspaceId') ?? defaultScope.workspaceId,
+    tenantId: url.searchParams.get('tenantId') ?? '',
+    institutionId: url.searchParams.get('institutionId') ?? '',
+    workspaceId: url.searchParams.get('workspaceId') ?? '',
   };
 }
 

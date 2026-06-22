@@ -139,7 +139,7 @@ function visibleTenantErrorState(error: OpenPlatformTenantClientError): TenantMa
   if (error.kind === 'service_unavailable') {
     return {
       kind: 'unavailable',
-      title: '租户治理视图暂时不可用，请稍后刷新或切换演示备份',
+      title: '租户治理视图暂时不可用，请稍后刷新或切换到开发空态',
     };
   }
 
@@ -305,8 +305,8 @@ function EmptyTenantState({ onCreate }: { onCreate: () => void }) {
         </button>
       </div>
       <div className="mt-5 text-xs text-slate-500">当前页面不支持公开注册、真实计费或外部通知。</div>
-      <div className="sr-only">暂无受控演示租户</div>
-      <div className="sr-only">当前没有可展示的演示租户、套餐或配额快照。</div>
+      <div className="sr-only">暂无租户记录</div>
+      <div className="sr-only">当前没有可展示的租户、套餐或配额快照。</div>
     </div>
   );
 }
@@ -808,7 +808,7 @@ export function OpenPlatformTenantManagementPanel() {
         <PlatformSectionBanner
           headingId="tenant-management-heading"
           title="租户管理"
-          description="平台侧查看机构、套餐和配额边界。当前展示为受控演示租户，不代表正式计费后台。仅展示运营元数据、套餐分配和配额快照，不提供租户创建、冻结、恢复或删除流程。"
+          description="平台侧查看机构、套餐和配额边界。当前仅展示 API 返回的租户记录，不代表正式计费后台。仅展示运营元数据、套餐分配和配额快照，不提供真实租户创建、冻结、恢复或删除流程。"
         />
         <button
           type="button"
@@ -835,7 +835,7 @@ export function OpenPlatformTenantManagementPanel() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h3 className="text-lg font-semibold tracking-normal text-slate-950">租户列表</h3>
-            <p className="mt-1 text-sm text-slate-500">展示受控演示租户的基础状态、套餐信息、授权快照和配额风险。</p>
+            <p className="mt-1 text-sm text-slate-500">展示 API 返回租户的基础状态、套餐信息、授权快照和配额风险。</p>
           </div>
           <div className="rounded-full border border-[#dbe6f3] bg-[#f8fafc] px-3 py-1 text-xs font-semibold text-slate-600">
             筛选结果 {filteredRecords.length} 个租户

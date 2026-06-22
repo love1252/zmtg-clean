@@ -334,7 +334,7 @@ export function AppointmentCenterShell() {
             <InstitutionPageState
               kind="empty"
               title="暂无可串联的预约记录"
-              description="当前没有预约可放入客户旅程，可从右侧选择演示客户创建预约摘要。"
+              description="当前没有预约可放入客户旅程，可从右侧选择 API 返回客户创建预约摘要。"
             />
           ) : null}
 

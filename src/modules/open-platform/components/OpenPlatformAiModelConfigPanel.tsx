@@ -1037,7 +1037,7 @@ export function OpenPlatformAiModelConfigPanel() {
           <Sparkles className="h-4 w-4 text-blue-500" />
           <span>{configView.readonlyNote}</span>
           <ImageIcon className="h-4 w-4 text-gray-400" />
-          <span>Logo、模型启用和场景默认关系均来自受控示例数据。</span>
+          <span>Logo、模型启用和场景默认关系均为未接入真实模型服务的配置预览。</span>
         </div>
       </section>
       </>

@@ -76,7 +76,7 @@ describe('平台知识库管理 V1 只读 API contract', () => {
     expect(routeResponse.status).toBe(200);
     expect(routePayload).toMatchObject({
       readonly: true,
-      dataSource: 'mock',
+      dataSource: 'unconnected',
       scope: {
         tenantId: null,
         scopeName: '全部机构',
@@ -95,30 +95,24 @@ describe('平台知识库管理 V1 只读 API contract', () => {
           directoryId: 'directory:all-knowledge',
           kind: 'virtual_root',
           name: '全部知识库',
+          knowledgeCount: 0,
+          fileCount: 0,
           canRename: false,
           canCreateChild: true,
           canArchive: false,
           status: 'active',
         }),
-        expect.objectContaining({
-          kind: 'knowledge_library',
-          canRename: true,
-          canCreateChild: true,
-          status: 'active',
-        }),
-        expect.objectContaining({
-          kind: 'folder',
-          parentId: expect.any(String),
-          canRename: true,
-          canCreateChild: false,
-          status: 'active',
-        }),
       ]),
     );
+    expect(routePayload.tenants).toEqual([]);
+    expect(routePayload.categoryStats).toEqual([]);
+    expect(routePayload.topQuestions).toEqual([]);
+    expect(routePayload.importJobs).toEqual([]);
     expect(routePayload).not.toHaveProperty('knowledgeItems');
     expect(routePayload).not.toHaveProperty('files');
     expect(routePayload).toEqual(directPayload);
     expectReadonlyPayload(routePayload);
+    expect(JSON.stringify(routePayload)).not.toContain('星澜医美中心');
   });
 
   it('overview helper 支持按机构返回当前范围统计，不返回知识正文或文件列表', () => {
@@ -127,15 +121,15 @@ describe('平台知识库管理 V1 只读 API contract', () => {
 
     expect(tenantScope.scope).toEqual({
       tenantId: 'tenant-low-hit',
-      scopeName: '低命中修复门诊',
+      scopeName: '已选择机构',
     });
     expect(tenantScope.allTotals).toEqual(allScope.allTotals);
-    expect(tenantScope.totals.tenantCount).toBe(1);
-    expect(tenantScope.totals.knowledgeCount).toBeLessThan(allScope.totals.knowledgeCount);
+    expect(tenantScope.totals.tenantCount).toBe(0);
+    expect(tenantScope.totals.knowledgeCount).toBe(0);
     expect(tenantScope.directories.every((directory) => directory.status === 'active')).toBe(true);
     expect(tenantScope.directories.some((directory) => directory.name === '全部知识库')).toBe(true);
-    expect(tenantScope.topQuestions.every((question) => question.tenantId === 'tenant-low-hit')).toBe(true);
-    expect(tenantScope.importJobs.every((job) => job.tenantId === 'tenant-low-hit')).toBe(true);
+    expect(tenantScope.topQuestions).toEqual([]);
+    expect(tenantScope.importJobs).toEqual([]);
     expect(tenantScope).not.toHaveProperty('knowledgeItems');
     expect(tenantScope).not.toHaveProperty('files');
     expectReadonlyPayload(tenantScope);
@@ -196,12 +190,14 @@ describe('平台知识库管理 V1 只读 API contract', () => {
       pageSize: '2',
     });
 
-    expect(response.records.length).toBeGreaterThan(0);
-    expect(response.records.length).toBeLessThanOrEqual(2);
-    expect(response.pageInfo).toEqual(expect.objectContaining({ page: 1, pageSize: 2 }));
-    expect(response.records.every((file) => file.tenantId === 'tenant-low-hit')).toBe(true);
-    expect(response.records.every((file) => file.parseStatus === 'parsed')).toBe(true);
-    expect(response.records.some((file) => file.fileName.includes('修复') || file.category.includes('修复') || file.folder.includes('修复'))).toBe(true);
+    expect(response.dataSource).toBe('unconnected');
+    expect(response.records).toEqual([]);
+    expect(response.pageInfo).toEqual(expect.objectContaining({
+      page: 1,
+      pageSize: 2,
+      total: 0,
+      pageCount: 0,
+    }));
     expectReadonlyPayload(response);
 
     const routeResponse = await filesRoute.GET(new Request(`${filesUrl}?tenantId=tenant-low-hit&keyword=${encodeURIComponent('修复')}&status=parsed&page=1&pageSize=2`));
@@ -224,8 +220,8 @@ describe('平台知识库管理 V1 只读 API contract', () => {
       hasNextPage: false,
     }));
     expect(payload.emptyState).toEqual(expect.objectContaining({
-      title: '暂无匹配的知识库运营数据',
-      description: '请调整机构范围或文件名搜索条件后再查看。',
+      title: '暂无真实知识库运营数据',
+      description: '当前未接入知识库数据库或暂无知识库记录，请在真实数据写入后查看。',
     }));
     expectReadonlyPayload(payload);
   });
@@ -240,15 +236,8 @@ describe('平台知识库管理 V1 只读 API contract', () => {
       pageSize: '5',
     });
 
-    expect(response.records).toEqual([
-      expect.objectContaining({
-        tenantId: 'tenant-low-hit',
-        category: '话术库',
-        trainingStatus: 'pending',
-        descriptionPreview: expect.stringContaining('恢复期'),
-      }),
-    ]);
-    expect(response.records[0]).not.toHaveProperty('summaryPreview');
+    expect(response.dataSource).toBe('unconnected');
+    expect(response.records).toEqual([]);
     expectReadonlyPayload(response);
 
     const routeResponse = await itemsRoute.GET(new Request(`${itemsUrl}?tenantId=tenant-low-hit&keyword=${encodeURIComponent('恢复期')}&category=${encodeURIComponent('话术库')}&trainingStatus=pending&page=1&pageSize=5`));
@@ -271,8 +260,8 @@ describe('平台知识库管理 V1 只读 API contract', () => {
       hasNextPage: false,
     }));
     expect(payload.emptyState).toEqual(expect.objectContaining({
-      title: '暂无匹配的知识库运营数据',
-      description: '请调整机构范围或文件名搜索条件后再查看。',
+      title: '暂无真实知识库运营数据',
+      description: '当前未接入知识库数据库或暂无知识库记录，请在真实数据写入后查看。',
     }));
     expectReadonlyPayload(payload);
   });
@@ -281,8 +270,8 @@ describe('平台知识库管理 V1 只读 API contract', () => {
     const emptyFiles = getPlatformKnowledgeFilesResponse({ keyword: '没有匹配结果', page: '1', pageSize: '10' });
     expect(emptyFiles.records).toEqual([]);
     expect(emptyFiles.emptyState).toEqual(expect.objectContaining({
-      title: '暂无匹配的知识库运营数据',
-      description: '请调整机构范围或文件名搜索条件后再查看。',
+      title: '暂无真实知识库运营数据',
+      description: '当前未接入知识库数据库或暂无知识库记录，请在真实数据写入后查看。',
     }));
 
     const error = buildReadonlyApiError('页码参数不正确');

@@ -537,6 +537,8 @@ describe('机构业务页面壳', () => {
 
     expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
     expect(screen.getByText(/客户、预约、随访任务统一进入运营视图/u)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('虚构 demo 客户');
+    expect(document.body.textContent).not.toContain('受控 demo');
     expect(screen.getByText('正在加载客户数据...')).toBeInTheDocument();
     expect(await screen.findByText('王女士')).toBeInTheDocument();
     expect(screen.getAllByText('赵女士').length).toBeGreaterThan(0);
@@ -554,7 +556,8 @@ describe('机构业务页面壳', () => {
 
     render(<CustomerCenterShell />);
 
-    expect(await screen.findByText('暂无可讲述的演示客户')).toBeInTheDocument();
+    expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
+    expect(screen.getByText('当前没有可展示的客户旅程记录，可先创建只包含脱敏展示字段的客户摘要。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '创建客户' })).toBeInTheDocument();
     expect(screen.getByLabelText('脱敏手机号展示值')).toBeInTheDocument();
     expect(screen.getByLabelText('脱敏病历号展示值')).toBeInTheDocument();
@@ -580,7 +583,7 @@ describe('机构业务页面壳', () => {
 
     render(<CustomerCenterShell />);
 
-    expect(await screen.findByText('暂无可讲述的演示客户')).toBeInTheDocument();
+    expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
     fireEvent.change(screen.getByLabelText('生命周期'), { target: { value: 'consulting' } });
     fireEvent.change(screen.getByLabelText('优先级'), { target: { value: 'high' } });
@@ -659,7 +662,7 @@ describe('机构业务页面壳', () => {
 
     render(<CustomerCenterShell />);
 
-    expect(await screen.findByText('暂无可讲述的演示客户')).toBeInTheDocument();
+    expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
     fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-lin' } });
     fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: '皮肤管理' } });
@@ -681,7 +684,7 @@ describe('机构业务页面壳', () => {
 
     render(<CustomerCenterShell />);
 
-    expect(await screen.findByText('暂无可讲述的演示客户')).toBeInTheDocument();
+    expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
     fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-lin' } });
     fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: '皮肤管理' } });
@@ -711,7 +714,7 @@ describe('机构业务页面壳', () => {
 
     const { container } = render(<CustomerCenterShell />);
 
-    expect(await screen.findByText('暂无可讲述的演示客户')).toBeInTheDocument();
+    expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
     fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-lin' } });
     fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: '皮肤管理' } });
@@ -1367,7 +1370,7 @@ describe('机构业务页面壳', () => {
     expect(text).not.toContain('自动触达');
   });
 
-  it('智能随访展示空状态和静态话术安全说明', async () => {
+  it('智能随访展示空状态和真实配置空态说明', async () => {
     const fetchMock = mockInstitutionFetch({
       '/api/institution/followups': [jsonResponse({ records: [] })],
     });
@@ -1375,7 +1378,8 @@ describe('机构业务页面壳', () => {
     render(<SmartFollowUpShell />);
 
     expect(await screen.findByText('暂无随访任务')).toBeInTheDocument();
-    expect(screen.getByText('这是演示话术：请根据客户真实恢复情况由专业人员确认后再发送。')).toBeInTheDocument();
+    expect(screen.getByText('暂无真实随访旅程配置。')).toBeInTheDocument();
+    expect(screen.getByText('暂无真实话术建议。')).toBeInTheDocument();
     expect(screen.getByText('任务需人工处理，不会主动向客户发送消息。')).toBeInTheDocument();
     expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual([
       '/api/institution/followups',

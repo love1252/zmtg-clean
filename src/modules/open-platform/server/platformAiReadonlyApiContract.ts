@@ -22,7 +22,7 @@ import {
 export type PlatformAiReadonlyResponse = {
   requestId: string;
   readonly: true;
-  dataSource: 'controlled_demo';
+  dataSource: PlatformAiUsageCostResponse['dataSource'];
   registryVersion: string;
   registryStatus: 'controlled_readonly_demo';
   registryStatusNote: string;
@@ -87,7 +87,7 @@ export function getPlatformAiReadonlyResponse(params: { month?: string | null; u
   return {
     requestId: 'open-platform-ai-readonly',
     readonly: true,
-    dataSource: 'controlled_demo',
+    dataSource: usageCost.dataSource,
     registryVersion: registry.registryVersion,
     registryStatus: registry.registryStatus,
     registryStatusNote: registry.registryStatusNote,
@@ -103,8 +103,8 @@ export function getPlatformAiReadonlyResponse(params: { month?: string | null; u
     disabledCapabilities: [...PLATFORM_AI_READONLY_DISABLED_CAPABILITIES],
     capabilityCoverageRows: registry.capabilityCoverageRows,
     safetyBanner: {
-      title: '当前为受控示例数据',
-      description: '估算费用不是正式账单；真实 AI 未启用，API Key 管理、模型同步和自动扣费均未启用。',
+      title: 'AI 用量未接入',
+      description: '当前未接入真实 AI 调用日志；不会展示预置用量、机构排行或估算账单。',
       disabledCapabilities: [...PLATFORM_AI_READONLY_DISABLED_CAPABILITIES],
     },
     modelCatalog: {

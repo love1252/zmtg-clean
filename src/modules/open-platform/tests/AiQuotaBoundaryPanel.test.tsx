@@ -21,6 +21,8 @@ describe('AI 配额边界面板', () => {
     const serialized = document.body.textContent?.toLowerCase() ?? '';
     expect(serialized).toContain('不反映');
     expect(serialized).toContain('不执行真实');
+    expect(serialized).not.toContain('演示租户示例');
+    expect(serialized).not.toContain('演示环境');
     expect(serialized).not.toContain('api_key');
     expect(serialized).not.toContain(['client', '_secret'].join(''));
     expect(serialized).not.toContain('access_token');

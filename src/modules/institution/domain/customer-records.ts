@@ -46,65 +46,6 @@ export type CustomerRecordSummary = {
   tags: string[];
 };
 
-export const demoTenantCustomerRecords: TenantCustomerRecord[] = [
-  {
-    id: 'cust_wang_repurchase',
-    tenantId: 'demo-tenant-001',
-    displayName: '王女士',
-    lifecycle: 'repurchase_window',
-    priority: 'high',
-    ownerUserId: 'consultant-lin',
-    projectInterest: '热玛吉修复组合',
-    maskedPhone: '138****1208',
-    maskedMedicalRecordNo: 'MR****001',
-    lastTouchSummary: '术后第 28 天',
-    nextAction: '安排资深咨询师人工回访',
-    tags: ['高价值', '近期咨询补水', '适合人工承接'],
-  },
-  {
-    id: 'cust_chen_conversion',
-    tenantId: 'demo-tenant-001',
-    displayName: '陈女士',
-    lifecycle: 'consulting',
-    priority: 'high',
-    ownerUserId: 'consultant-zhou',
-    projectInterest: '玻尿酸联合方案',
-    maskedPhone: '139****2609',
-    maskedMedicalRecordNo: 'MR****002',
-    lastTouchSummary: '浏览案例页 3 次',
-    nextAction: '发送案例对比与价格解释',
-    tags: ['预算明确', '价格异议', '需跟进'],
-  },
-  {
-    id: 'cust_zhao_care',
-    tenantId: 'demo-tenant-001',
-    displayName: '赵女士',
-    lifecycle: 'post_care',
-    priority: 'high',
-    ownerUserId: 'service-group-a',
-    projectInterest: '光电修复',
-    maskedPhone: '137****8842',
-    maskedMedicalRecordNo: 'MR****003',
-    lastTouchSummary: 'D3 红肿反馈',
-    nextAction: '转人工回访并记录恢复情况',
-    tags: ['敏感反馈', '需安抚', '术后 D3'],
-  },
-  {
-    id: 'cust_other_tenant',
-    tenantId: 'demo-tenant-002',
-    displayName: '周女士',
-    lifecycle: 'scheduled',
-    priority: 'medium',
-    ownerUserId: 'consultant-other',
-    projectInterest: '皮肤检测',
-    maskedPhone: '136****7711',
-    maskedMedicalRecordNo: 'MR****101',
-    lastTouchSummary: '明日到院',
-    nextAction: '同步到院提醒',
-    tags: ['跨租户演示记录'],
-  },
-];
-
 function toCustomerSummary(record: TenantCustomerRecord): CustomerRecordSummary {
   return {
     id: record.id,
@@ -127,7 +68,7 @@ export function listCustomerRecordsForAccess(input: {
   targetTenantId: string;
   records?: TenantCustomerRecord[];
 }): TenantBusinessResult<CustomerRecordSummary> {
-  const { context, targetTenantId, records = demoTenantCustomerRecords } = input;
+  const { context, targetTenantId, records = [] } = input;
   const decision = canAccessResource({
     context,
     resource: 'customer',

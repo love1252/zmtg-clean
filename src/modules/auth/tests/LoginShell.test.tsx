@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   InstitutionLoginClient,
   PlatformLoginClient,
@@ -10,12 +10,20 @@ import {
 } from '@/modules/marketing/domain/homepageBrandConfig';
 
 describe('登录页外壳', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('渲染机构登录文案', () => {
     render(<InstitutionLoginClient config={defaultHomepageBrandConfig} />);
 
     expect(screen.getByRole('heading', { name: '机构工作台登录' })).toBeInTheDocument();
     expect(screen.getByLabelText('用户名 / 手机号')).toBeInTheDocument();
     expect(screen.getByLabelText('密码')).toBeInTheDocument();
+    expect(screen.getByText('开发环境入口')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '填入开发账号' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('admin123');
+    expect(document.body.textContent).not.toContain('演示账号');
     screen.getAllByRole('link', { name: '平台管理员入口' }).forEach((link) => {
       expect(link).toHaveAttribute('href', '/platform-login');
     });
@@ -27,10 +35,29 @@ describe('登录页外壳', () => {
     expect(screen.getByRole('heading', { name: '平台管理员登录' })).toBeInTheDocument();
     expect(screen.getByLabelText('管理员账号')).toBeInTheDocument();
     expect(screen.getByLabelText('密码')).toBeInTheDocument();
+    expect(screen.getByText('开发环境入口')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('admin123');
+    expect(document.body.textContent).not.toContain('演示账号');
     screen.getAllByRole('link', { name: '机构工作台入口' }).forEach((link) => {
       expect(link).toHaveAttribute('href', '/login');
     });
   });
+
+  it('生产环境默认隐藏受控开发入口', async () => {
+    vi.resetModules();
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('NEXT_PUBLIC_ZMTG_ENABLE_DEMO_AUTH', '');
+    const { InstitutionLoginClient: ProductionInstitutionLoginClient } = await import(
+      '@/modules/auth/components/ConfiguredLoginPages'
+    );
+
+    render(<ProductionInstitutionLoginClient config={defaultHomepageBrandConfig} />);
+
+    expect(screen.queryByText('开发环境入口')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '填入开发账号' })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('admin123');
+  });
+
 
   it('登录页使用首页与品牌中的登录页配置', () => {
     const config = cloneHomepageBrandConfig(defaultHomepageBrandConfig);

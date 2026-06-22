@@ -260,7 +260,7 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
     });
   });
 
-  it('items GET 数据库未配置且无 tenantId 时回退 mock，且不暴露配置细节', async () => {
+  it('items GET 数据库未配置且无 tenantId 时返回未接入空态，且不暴露配置细节', async () => {
     vi.mocked(getDatabase).mockImplementationOnce(() => {
       throw new Error('DATABASE_URL is not configured');
     });
@@ -272,13 +272,15 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
     const serialized = JSON.stringify(payload);
 
     expect(response.status).toBe(200);
-    expect(payload.dataSource).toBe('mock');
+    expect(payload.dataSource).toBe('unconnected');
+    expect(payload.records).toEqual([]);
     expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
     expect(repository.listKnowledgeItems).not.toHaveBeenCalled();
     expect(serialized).not.toContain('DATABASE_URL');
+    expect(serialized).not.toContain('星澜医美中心');
   });
 
-  it('items GET 仅在数据库未配置时回退 mock，不暴露 DATABASE_URL 细节', async () => {
+  it('items GET 仅在数据库未配置时返回未接入空态，不暴露 DATABASE_URL 细节', async () => {
     vi.mocked(getDatabase).mockImplementationOnce(() => {
       throw new Error('DATABASE_URL is not configured');
     });
@@ -290,10 +292,12 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
     const serialized = JSON.stringify(payload);
 
     expect(response.status).toBe(200);
-    expect(payload.dataSource).toBe('mock');
+    expect(payload.dataSource).toBe('unconnected');
+    expect(payload.records).toEqual([]);
     expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
     expect(serialized).not.toContain('DATABASE_URL');
     expect(serialized).not.toContain('postgres');
+    expect(serialized).not.toContain('星澜医美中心');
   });
 
   it('items GET 底层异常时返回安全中文文案且不暴露数据库细节', async () => {

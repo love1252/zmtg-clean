@@ -23,6 +23,8 @@ const scope = {
   workspaceId: 'demo-workspace-a',
 };
 
+const scopeQuery = new URLSearchParams(scope).toString();
+
 const chunks = [
   {
     chunkId: 'kb-chunk-demo-001',
@@ -312,7 +314,7 @@ describe('V1 知识库 embedding / 向量索引 runtime', () => {
     expectResponseFieldsWhitelisted(runBody);
     expectNoForbiddenLeak(runBody);
 
-    const jobsResponse = await handleIndexJobsGET(new Request(jobsUrl), { repository });
+    const jobsResponse = await handleIndexJobsGET(new Request(`${jobsUrl}?${scopeQuery}`), { repository });
     expect(jobsResponse.status).toBe(200);
     const jobsBody = await jobsResponse.json();
     expect(jobsBody).toMatchObject({

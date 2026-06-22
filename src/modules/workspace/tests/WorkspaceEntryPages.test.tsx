@@ -853,10 +853,10 @@ function buildKnowledgeBaseDemoReadonlyMockResponse(status: KnowledgeBaseDemoRea
     ready: 'ready / readonly',
   } satisfies Record<KnowledgeBaseDemoReadonlyMockStatus, string>;
   const descriptionByStatus = {
-    disabled: '该知识库 demo readonly API 暂未开启',
-    denied: '当前账号没有访问知识库 demo readonly API 的权限',
-    empty: '暂无可展示知识库 demo readonly 内容',
-    ready: '知识库 demo readonly API 可用于低敏只读演示',
+    disabled: '该知识库只读入口API 暂未开启',
+    denied: '当前账号没有访问知识库只读入口API 的权限',
+    empty: '暂无可展示知识库只读入口内容',
+    ready: '知识库只读入口API 可用于低敏只读预览',
   } satisfies Record<KnowledgeBaseDemoReadonlyMockStatus, string>;
 
   return {
@@ -866,7 +866,7 @@ function buildKnowledgeBaseDemoReadonlyMockResponse(status: KnowledgeBaseDemoRea
     workspaceId: 'demo-workspace-a',
     status,
     summary: {
-      title: '知识库 demo readonly API 契约',
+      title: '知识库只读入口API 契约',
       statusText: statusTextByStatus[status],
       description: descriptionByStatus[status],
     },
@@ -931,27 +931,27 @@ function buildKnowledgeBaseDemoReadonlyMockResponse(status: KnowledgeBaseDemoRea
       {
         recordId: `demo-readonly-facade-${status}`,
         status: hasContent ? 'ready' : status,
-        title: '知识库 demo readonly facade',
+        title: '知识库只读入口facade',
         failureReason: hasContent ? 'not_available' : descriptionByStatus[status],
         readonly: true,
       },
     ],
     searchPreview: {
-      mode: 'mock_demo_preview',
-      query: '知识库 demo 只读预览',
+      mode: 'readonly_preview',
+      query: '知识库只读预览',
       resultCount: hasContent ? 2 : 0,
       results: hasContent
         ? [
             {
               previewId: 'platform-knowledge-base-preview',
-              title: '平台知识库 demo 预览',
+              title: '平台知识库 只读 预览',
               snippet: 'platform:1 / published:1 / draft:0 / archived:0 / disabled:0',
               sourceKind: 'demo',
               readonly: true,
             },
             {
               previewId: 'institution-knowledge-base-preview',
-              title: '机构知识库 seed 预览',
+              title: '机构知识库 开发数据 预览',
               snippet: 'institution:1 / published:0 / draft:1 / archived:0 / disabled:0',
               sourceKind: 'seed',
               readonly: true,
@@ -1253,7 +1253,7 @@ const knowledgeBaseSearchReadyResponse = {
       resultId: 'kb-search-result-hydro-care',
       chunkId: 'kb-chunk-hydro-care',
       documentId: 'kb-document-hydro-care',
-      title: '水光术后护理 demo 知识',
+      title: '水光术后护理 只读 知识',
       snippet: 'chunk:0 / chars:128',
       scoreBand: 'high',
       sourceKind: 'demo',
@@ -1264,7 +1264,7 @@ const knowledgeBaseSearchReadyResponse = {
       resultId: 'kb-search-result-photoelectric-care',
       chunkId: 'kb-chunk-photoelectric-care',
       documentId: 'kb-document-photoelectric-care',
-      title: '光电治疗恢复 seed 知识',
+      title: '光电治疗恢复 开发数据 知识',
       snippet: 'chunk:1 / chars:96',
       scoreBand: 'medium',
       sourceKind: 'seed',
@@ -2226,7 +2226,7 @@ function expectNoSensitiveTreatmentSummaryManagementContent(container: HTMLEleme
 function expectNoInstitutionDemoMisleadingClaims(container: HTMLElement) {
   const text = container.textContent ?? '';
 
-  expect(text).not.toContain('AI 演示主线');
+  expect(text).not.toContain('AI 开发主线');
   expect(text).not.toContain('系统自动触达客户');
   expect(text).not.toContain('已启用自动触达');
   expect(text).not.toContain('真实 HIS 同步');
@@ -2333,10 +2333,12 @@ describe('工作台入口页面', () => {
     expect(await screen.findByRole('heading', { name: /今日治疗后随访重点/ })).toBeInTheDocument();
     expect(screen.getByText('待人工确认的后续动作')).toBeInTheDocument();
     expect(screen.getByText('正在加载机构运营摘要...')).toBeInTheDocument();
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
+    expect(screen.queryByText('当前为受控 demo 数据')).not.toBeInTheDocument();
+    expect(screen.queryByText('UI mock-only')).not.toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: '随访路径运营分析' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/session', { cache: 'no-store' });
-    await expectMetric('当前演示客户', '2');
+    await expectMetric('客户总数', '2');
     await expectMetric('高优先级客户', '1');
     await expectMetric('待确认预约', '1');
     await expectMetric('待处理随访', '1');
@@ -2356,21 +2358,21 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('不展示治疗正文、病历正文、咨询全文')).toBeInTheDocument();
     expect(screen.getAllByText('不自动触达客户').length).toBeGreaterThan(0);
     expect(screen.getByText('不接 AI')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '知识库 demo readonly' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '知识库只读入口' })).toBeInTheDocument();
     expect(screen.getByText('只读入口')).toBeInTheDocument();
-    expect(screen.getAllByText('mock / seed / demo').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('未接入真实数据').length).toBeGreaterThan(0);
     expect(screen.getByText('只调用现有 GET API')).toBeInTheDocument();
     expect(screen.getByText('只读 search API')).toBeInTheDocument();
-    expect(screen.getByText('demo search / mock embedding / readonly')).toBeInTheDocument();
+    expect(screen.getByText('只读搜索 / 受控本地索引')).toBeInTheDocument();
     expect(screen.getByText('不接 DB')).toBeInTheDocument();
     expect(screen.getByText('不接真实外部院内系统')).toBeInTheDocument();
     expect(screen.getByText('不读取凭证')).toBeInTheDocument();
     expect(screen.getByText('不使用真实业务个人数据')).toBeInTheDocument();
     expect(screen.getByText('不展示智能推断细节')).toBeInTheDocument();
-    expect(await screen.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
+    expect(await screen.findByText('知识库只读入口已就绪')).toBeInTheDocument();
     expect(screen.getAllByText('ready / readonly').length).toBeGreaterThan(0);
-    expect(screen.getByText('知识库 demo readonly API 可用于低敏只读演示')).toBeInTheDocument();
-    expect(screen.getByText('知识库 demo readonly API 契约')).toBeInTheDocument();
+    expect(screen.getByText('知识库只读入口API 可用于低敏只读预览')).toBeInTheDocument();
+    expect(screen.getByText('知识库只读入口API 契约')).toBeInTheDocument();
     expect(screen.getByText('categories')).toBeInTheDocument();
     expect(screen.getByText('folders')).toBeInTheDocument();
     expect(screen.getByText('knowledgeItems')).toBeInTheDocument();
@@ -2384,11 +2386,11 @@ describe('工作台入口页面', () => {
     expect(screen.getAllByText('低敏摘要已隐藏').length).toBeGreaterThan(0);
     expect(screen.getByText('版本总览')).toBeInTheDocument();
     expect(screen.getByText('审计总览')).toBeInTheDocument();
-    expect(screen.getByText('知识库 demo readonly facade')).toBeInTheDocument();
-    expect(screen.getByText('mock_demo_preview')).toBeInTheDocument();
-    expect(screen.getByText('知识库 demo 只读预览')).toBeInTheDocument();
-    expect(screen.getByText('平台知识库 demo 预览')).toBeInTheDocument();
-    expect(screen.getByText('机构知识库 seed 预览')).toBeInTheDocument();
+    expect(screen.getByText('知识库只读入口facade')).toBeInTheDocument();
+    expect(screen.getByText('readonly_preview')).toBeInTheDocument();
+    expect(screen.getByText('知识库只读预览')).toBeInTheDocument();
+    expect(screen.getByText('平台知识库 只读 预览')).toBeInTheDocument();
+    expect(screen.getByText('机构知识库 开发数据 预览')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'workspace dashboard readonly aggregation' })).toBeInTheDocument();
     expect(screen.getByText('workspace dashboard readonly aggregation 已就绪')).toBeInTheDocument();
     expect(screen.getByText('businessLoopSummary')).toBeInTheDocument();
@@ -2506,21 +2508,21 @@ describe('工作台入口页面', () => {
     expectOnlyInstitutionReadCalls(fetchMock);
   });
 
-  it('机构工作台知识库 demo readonly 入口展示 loading 状态', async () => {
+  it('机构工作台知识库只读入口入口展示 loading 状态', async () => {
     mockWorkspaceFetch({ knowledgeBaseDemoReadonlyPending: true });
     render(<HospitalPage />);
 
     const knowledgeBaseEntry = (await screen.findByRole('heading', {
-      name: '知识库 demo readonly',
+      name: '知识库只读入口',
     })).closest('section');
 
     expect(knowledgeBaseEntry).not.toBeNull();
     expect(
-      within(knowledgeBaseEntry as HTMLElement).getByText('正在加载知识库 demo readonly...'),
+      within(knowledgeBaseEntry as HTMLElement).getByText('正在加载知识库只读入口...'),
     ).toBeInTheDocument();
   });
 
-  it('机构工作台知识库 demo readonly 入口展示低敏 error 状态', async () => {
+  it('机构工作台知识库只读入口入口展示低敏 error 状态', async () => {
     const fetchMock = mockWorkspaceFetch({
       knowledgeBaseDemoReadonlyError: {
         status: 503,
@@ -2530,11 +2532,11 @@ describe('工作台入口页面', () => {
     render(<HospitalPage />);
 
     const knowledgeBaseEntry = (await screen.findByRole('heading', {
-      name: '知识库 demo readonly',
+      name: '知识库只读入口',
     })).closest('section');
     const knowledgeBaseEntryView = within(knowledgeBaseEntry as HTMLElement);
 
-    expect(await knowledgeBaseEntryView.findByText('知识库 demo readonly 暂时不可用')).toBeInTheDocument();
+    expect(await knowledgeBaseEntryView.findByText('知识库只读入口暂时不可用')).toBeInTheDocument();
     expect(knowledgeBaseEntry?.textContent ?? '').not.toContain('worker');
     expect(knowledgeBaseEntry?.textContent ?? '').not.toContain('/tmp/demo');
     expect(knowledgeBaseEntry?.textContent ?? '').not.toContain('dependency error');
@@ -2545,17 +2547,17 @@ describe('工作台入口页面', () => {
     ).toBe(true);
   });
 
-  it('机构工作台知识库 demo readonly 入口不渲染敏感字段或行动按钮', async () => {
+  it('机构工作台知识库只读入口入口不渲染敏感字段或行动按钮', async () => {
     mockWorkspaceFetch({
       knowledgeBaseDemoReadonlyResponse: buildKnowledgeBaseDemoReadonlyUnsafeMockResponse(),
     });
     render(<HospitalPage />);
 
     const knowledgeBaseEntry = (await screen.findByRole('heading', {
-      name: '知识库 demo readonly',
+      name: '知识库只读入口',
     })).closest('section');
 
-    expect(await within(knowledgeBaseEntry as HTMLElement).findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
+    expect(await within(knowledgeBaseEntry as HTMLElement).findByText('知识库只读入口已就绪')).toBeInTheDocument();
     const knowledgeBaseEntryText = knowledgeBaseEntry?.textContent ?? '';
     expect(knowledgeBaseEntryText).toContain('低敏摘要已隐藏');
     expect(knowledgeBaseEntryText).not.toContain('真实客户姓名');
@@ -2579,18 +2581,18 @@ describe('工作台入口页面', () => {
     expect(within(knowledgeBaseEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('机构工作台知识库 demo readonly ready 入口只展示低敏只读验收字段', async () => {
+  it('机构工作台知识库只读入口ready 入口只展示低敏只读验收字段', async () => {
     const fetchMock = mockWorkspaceFetch({
       knowledgeBaseDemoReadonlyResponse: buildKnowledgeBaseDemoReadonlyMockResponse('ready'),
     });
     render(<HospitalPage />);
 
     const knowledgeBaseEntry = (await screen.findByRole('heading', {
-      name: '知识库 demo readonly',
+      name: '知识库只读入口',
     })).closest('section');
     const knowledgeBaseEntryView = within(knowledgeBaseEntry as HTMLElement);
 
-    expect(await knowledgeBaseEntryView.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
+    expect(await knowledgeBaseEntryView.findByText('知识库只读入口已就绪')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getByText('categories')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getByText('folders')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getByText('knowledgeItems')).toBeInTheDocument();
@@ -2599,7 +2601,7 @@ describe('工作台入口页面', () => {
     expect(knowledgeBaseEntryView.getByText('平台知识库')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getByText('目录总览')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getByText('版本总览')).toBeInTheDocument();
-    expect(knowledgeBaseEntryView.getByText('知识库 demo 只读预览')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('知识库只读预览')).toBeInTheDocument();
     expect(within(knowledgeBaseEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.every(
@@ -2610,49 +2612,49 @@ describe('工作台入口页面', () => {
     ).toBe(true);
   });
 
-  it('机构工作台知识库 demo readonly ready 入口展示演示分层和 demo preview 边界', async () => {
+  it('机构工作台知识库只读入口ready 入口展示演示分层和 demo preview 边界', async () => {
     mockWorkspaceFetch({
       knowledgeBaseDemoReadonlyResponse: buildKnowledgeBaseDemoReadonlyMockResponse('ready'),
     });
     render(<HospitalPage />);
 
     const knowledgeBaseEntry = (await screen.findByRole('heading', {
-      name: '知识库 demo readonly',
+      name: '知识库只读入口',
     })).closest('section');
     const knowledgeBaseEntryView = within(knowledgeBaseEntry as HTMLElement);
 
-    expect(await knowledgeBaseEntryView.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
-    expect(knowledgeBaseEntryView.getAllByText('mock / seed / demo / readonly').length).toBeGreaterThan(0);
+    expect(await knowledgeBaseEntryView.findByText('知识库只读入口已就绪')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getAllByText('只读 / 空态').length).toBeGreaterThan(0);
     expect(knowledgeBaseEntryView.getByText('知识库展示结构')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getByText('分类摘要 categories')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getByText('目录摘要 folders')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getByText('知识条目 knowledgeItems')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getByText('只读任务 taskRecords')).toBeInTheDocument();
-    expect(knowledgeBaseEntryView.getByText('demo 预览 searchPreview')).toBeInTheDocument();
-    expect(knowledgeBaseEntryView.getByText('仅展示 demo 预览，不进行真实查找')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('预览 searchPreview')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('当前无真实知识库记录时仅展示空结构，不进行真实查找')).toBeInTheDocument();
     expect(within(knowledgeBaseEntry as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('机构工作台知识库 demo readonly 搜索展示 ready / empty / error / loading 且只调用 GET', async () => {
+  it('机构工作台知识库只读入口搜索展示 ready / empty / error / loading 且只调用 GET', async () => {
     const fetchMock = mockWorkspaceFetch();
     render(<HospitalPage />);
 
     const knowledgeBaseEntry = (await screen.findByRole('heading', {
-      name: '知识库 demo readonly',
+      name: '知识库只读入口',
     })).closest('section');
     const knowledgeBaseEntryView = within(knowledgeBaseEntry as HTMLElement);
 
-    expect(await knowledgeBaseEntryView.findByText('知识库 demo readonly 已就绪')).toBeInTheDocument();
-    expect(knowledgeBaseEntryView.getByText('demo search / mock embedding / readonly')).toBeInTheDocument();
-    expect(knowledgeBaseEntryView.getByLabelText('知识库 demo search 查询')).toBeInTheDocument();
+    expect(await knowledgeBaseEntryView.findByText('知识库只读入口已就绪')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('只读搜索 / 受控本地索引')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByLabelText('知识库只读搜索查询')).toBeInTheDocument();
 
-    fireEvent.change(knowledgeBaseEntryView.getByLabelText('知识库 demo search 查询'), {
+    fireEvent.change(knowledgeBaseEntryView.getByLabelText('知识库只读搜索查询'), {
       target: { value: '水光 护理' },
     });
 
-    expect(await knowledgeBaseEntryView.findByText('正在加载知识库 demo search...')).toBeInTheDocument();
-    expect(await knowledgeBaseEntryView.findByText('水光术后护理 demo 知识')).toBeInTheDocument();
-    expect(knowledgeBaseEntryView.getByText('光电治疗恢复 seed 知识')).toBeInTheDocument();
+    expect(await knowledgeBaseEntryView.findByText('正在加载知识库只读搜索...')).toBeInTheDocument();
+    expect(await knowledgeBaseEntryView.findByText('水光术后护理 只读 知识')).toBeInTheDocument();
+    expect(knowledgeBaseEntryView.getByText('光电治疗恢复 开发数据 知识')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getByText('scoreBand: high')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getAllByText(/readonly/u).length).toBeGreaterThan(0);
 
@@ -2684,13 +2686,13 @@ describe('工作台入口页面', () => {
     });
     render(<HospitalPage />);
     const emptyEntry = (await screen.findAllByRole('heading', {
-      name: '知识库 demo readonly',
+      name: '知识库只读入口',
     })).at(-1)?.closest('section');
     const emptyEntryView = within(emptyEntry as HTMLElement);
-    fireEvent.change(emptyEntryView.getByLabelText('知识库 demo search 查询'), {
+    fireEvent.change(emptyEntryView.getByLabelText('知识库只读搜索查询'), {
       target: { value: '无结果' },
     });
-    expect(await emptyEntryView.findByText('暂无 demo search 结果')).toBeInTheDocument();
+    expect(await emptyEntryView.findByText('暂无只读搜索结果')).toBeInTheDocument();
 
     vi.unstubAllGlobals();
     mockWorkspaceFetch({
@@ -2701,13 +2703,13 @@ describe('工作台入口页面', () => {
     });
     render(<HospitalPage />);
     const errorEntry = (await screen.findAllByRole('heading', {
-      name: '知识库 demo readonly',
+      name: '知识库只读入口',
     })).at(-1)?.closest('section');
     const errorEntryView = within(errorEntry as HTMLElement);
-    fireEvent.change(errorEntryView.getByLabelText('知识库 demo search 查询'), {
+    fireEvent.change(errorEntryView.getByLabelText('知识库只读搜索查询'), {
       target: { value: '错误' },
     });
-    expect(await errorEntryView.findByText('知识库 demo search 暂时不可用')).toBeInTheDocument();
+    expect(await errorEntryView.findByText('知识库只读搜索暂时不可用')).toBeInTheDocument();
     expect(errorEntry?.textContent ?? '').not.toContain('worker');
     expect(errorEntry?.textContent ?? '').not.toContain('/tmp/demo');
     expect(errorEntry?.textContent ?? '').not.toContain('dependency error');
@@ -2716,13 +2718,13 @@ describe('工作台入口页面', () => {
     const pendingFetchMock = mockWorkspaceFetch({ knowledgeBaseSearchPending: true });
     const { unmount } = render(<HospitalPage />);
     const pendingEntry = (await screen.findAllByRole('heading', {
-      name: '知识库 demo readonly',
+      name: '知识库只读入口',
     })).at(-1)?.closest('section');
     const pendingEntryView = within(pendingEntry as HTMLElement);
-    fireEvent.change(pendingEntryView.getByLabelText('知识库 demo search 查询'), {
+    fireEvent.change(pendingEntryView.getByLabelText('知识库只读搜索查询'), {
       target: { value: '等待' },
     });
-    expect(await pendingEntryView.findByText('正在加载知识库 demo search...')).toBeInTheDocument();
+    expect(await pendingEntryView.findByText('正在加载知识库只读搜索...')).toBeInTheDocument();
     expect(pendingFetchMock).toHaveBeenCalled();
     unmount();
   });
@@ -2762,13 +2764,13 @@ describe('工作台入口页面', () => {
     render(<HospitalPage />);
 
     const knowledgeBaseEntry = (await screen.findByRole('heading', {
-      name: '知识库 demo readonly',
+      name: '知识库只读入口',
     })).closest('section');
     const readonlyAggregationEntry = (await screen.findByRole('heading', {
       name: 'workspace dashboard readonly aggregation',
     })).closest('section');
 
-    await within(knowledgeBaseEntry as HTMLElement).findByText('知识库 demo readonly 已就绪');
+    await within(knowledgeBaseEntry as HTMLElement).findByText('知识库只读入口已就绪');
     await within(readonlyAggregationEntry as HTMLElement).findByText(
       'workspace dashboard readonly aggregation 已就绪',
     );
@@ -2786,11 +2788,11 @@ describe('工作台入口页面', () => {
   });
 
   it.each([
-    ['disabled', '知识库 demo readonly 暂未开启', 'disabled / skipped'],
-    ['denied', '当前账号没有知识库 demo readonly 访问权限', 'denied / denied'],
-    ['empty', '暂无可展示知识库 demo readonly 内容', 'empty / empty'],
+    ['disabled', '知识库只读入口暂未开启', 'disabled / skipped'],
+    ['denied', '当前账号没有知识库只读入口访问权限', 'denied / denied'],
+    ['empty', '暂无可展示知识库只读入口内容', 'empty / empty'],
   ] as const)(
-    '机构工作台知识库 demo readonly 入口展示 %s 状态',
+    '机构工作台知识库只读入口入口展示 %s 状态',
     async (status, label, statusText) => {
       const fetchMock = mockWorkspaceFetch({
         knowledgeBaseDemoReadonlyResponse: buildKnowledgeBaseDemoReadonlyMockResponse(status),
@@ -2798,7 +2800,7 @@ describe('工作台入口页面', () => {
       render(<HospitalPage />);
 
       const knowledgeBaseEntry = (await screen.findByRole('heading', {
-        name: '知识库 demo readonly',
+        name: '知识库只读入口',
       })).closest('section');
       const knowledgeBaseEntryView = within(knowledgeBaseEntry as HTMLElement);
 
@@ -2937,7 +2939,7 @@ describe('工作台入口页面', () => {
     },
   );
 
-  it('demo seed smoke 支撑机构端演示主线入口、客户、预约、时间线、摘要、随访和审计', async () => {
+  it('demo seed smoke 支撑机构端开发主线入口、客户、预约、时间线、摘要、随访和审计', async () => {
     const demoSeed = buildDemoSeedWorkspaceSmokeFixtures();
     const fetchMock = mockWorkspaceFetch({
       customers: demoSeed.customers,
@@ -2953,7 +2955,7 @@ describe('工作台入口页面', () => {
 
     expect(await screen.findByRole('heading', { name: /今日治疗后随访重点/ })).toBeInTheDocument();
     expect(screen.getByText('待人工确认的后续动作')).toBeInTheDocument();
-    await expectMetric('当前演示客户', '8');
+    await expectMetric('客户总数', '8');
     await expectMetric('待确认预约', '1');
     await expectMetric('待处理随访', '2');
     expect(await screen.findByText('顾安然：D2 术后重点关怀')).toBeInTheDocument();
@@ -3041,7 +3043,7 @@ describe('工作台入口页面', () => {
     expect(screen.getAllByText('澄镜医疗美容').length).toBeGreaterThan(0);
     expect(screen.getAllByText('远山医美连锁').length).toBeGreaterThan(0);
     expect(screen.getByText(/平台侧查看机构、套餐和配额边界/)).toBeInTheDocument();
-    expect(screen.getByText(/当前展示为受控演示租户/)).toBeInTheDocument();
+    expect(screen.getByText(/当前仅展示 API 返回的租户记录/)).toBeInTheDocument();
     expect(screen.getByText('Growth Plan')).toBeInTheDocument();
     expect(screen.getByText('Starter Plan')).toBeInTheDocument();
     expect(screen.getByText('Trial Plan')).toBeInTheDocument();
@@ -3091,7 +3093,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
 
     expect(screen.getByRole('heading', { name: '治疗摘要管理' })).toBeInTheDocument();
@@ -3195,7 +3197,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
     expect(screen.getByRole('heading', { name: '治疗摘要管理' })).toBeInTheDocument();
     expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
@@ -3313,7 +3315,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
     expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
 
@@ -3383,7 +3385,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
     expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
@@ -3420,7 +3422,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
     expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
 
@@ -3451,7 +3453,7 @@ describe('工作台入口页面', () => {
     const fetchMock = mockWorkspaceFetch();
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
 
     expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
@@ -3506,7 +3508,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
 
     expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
@@ -3577,7 +3579,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
 
     expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
@@ -3620,7 +3622,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '治疗摘要管理' }));
 
     expect(await screen.findByText('Phase14 治疗摘要管理项目')).toBeInTheDocument();
@@ -3666,7 +3668,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '智能随访' }));
 
     expect(screen.getByRole('heading', { name: '智能随访' })).toBeInTheDocument();
@@ -3725,7 +3727,7 @@ describe('工作台入口页面', () => {
     const fetchMock = mockWorkspaceFetch();
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
     expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
@@ -3786,7 +3788,7 @@ describe('工作台入口页面', () => {
     });
     render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
     expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
@@ -3802,7 +3804,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
     expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
@@ -3861,7 +3863,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
     expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
@@ -3907,10 +3909,10 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
 
-    expect(await screen.findByText('暂无可讲述的演示客户')).toBeInTheDocument();
+    expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: 'Phase10 客户' } });
     fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-phase10' } });
     fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: 'Phase10 修复项目' } });
@@ -3948,7 +3950,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '预约中心' }));
 
     expect(await screen.findByText('暂无可串联的预约记录')).toBeInTheDocument();
@@ -3976,16 +3978,16 @@ describe('工作台入口页面', () => {
     expect(text).not.toContain('secret');
   });
 
-  it('机构导航清晰标注演示主线和后续入口', async () => {
+  it('机构导航清晰标注开发主线和后续入口', async () => {
     const fetchMock = mockWorkspaceFetch();
     render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
-    expect(screen.getAllByText('演示主线').length).toBeGreaterThanOrEqual(8);
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
+    expect(screen.getAllByText('开发主线').length).toBeGreaterThanOrEqual(8);
     expect(screen.getAllByText('后续').length).toBeGreaterThanOrEqual(4);
 
     fireEvent.click(screen.getByRole('button', { name: '客服工作台' }));
-    expect(screen.getByText('客服工作台暂不进入本次演示主线')).toBeInTheDocument();
+    expect(screen.getByText('客服工作台暂不进入本次开发主线')).toBeInTheDocument();
     expect(
       screen.getByText('本次主线：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志、HIS 连接配置、知识库只读列表。'),
     ).toBeInTheDocument();
@@ -3997,15 +3999,15 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('机构端只读低敏摘要。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '数据分析' }));
-    expect(screen.getByText('数据分析暂不进入本次演示主线')).toBeInTheDocument();
+    expect(screen.getByText('数据分析暂不进入本次开发主线')).toBeInTheDocument();
     expectNoInstitutionMutation(fetchMock);
   });
 
-  it('机构端移动导航可切换演示主线业务页', async () => {
+  it('机构端移动导航可切换开发主线业务页', async () => {
     const fetchMock = mockWorkspaceFetch();
     render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '移动导航：客户中心' }));
     expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
@@ -4033,7 +4035,7 @@ describe('工作台入口页面', () => {
     const fetchMock = mockWorkspaceFetch();
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'HIS 连接配置' }));
 
@@ -4086,7 +4088,7 @@ describe('工作台入口页面', () => {
     const fetchMock = mockWorkspaceFetch({ hisConnections: [] });
     render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'HIS 连接配置' }));
     expect(await screen.findByText('暂无 HIS 连接配置')).toBeInTheDocument();
     expect(
@@ -4104,7 +4106,7 @@ describe('工作台入口页面', () => {
     });
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'HIS 连接配置' }));
     expect(await screen.findByText('HIS 连接配置暂时不可用')).toBeInTheDocument();
     expectNoSensitiveHisConnectionContent(container);
@@ -4115,7 +4117,7 @@ describe('工作台入口页面', () => {
     const fetchMock = mockWorkspaceFetch();
     const { container } = render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '审计日志' }));
 
     expect(await screen.findByText('audit_phase8_institution')).toBeInTheDocument();
@@ -4174,9 +4176,9 @@ describe('工作台入口页面', () => {
     });
     render(<HospitalPage />);
 
-    expect(await screen.findByText('当前为受控 demo 数据')).toBeInTheDocument();
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     expect(await screen.findByText('暂无可计算运营摘要')).toBeInTheDocument();
-    await expectMetric('当前演示客户', '0');
+    await expectMetric('客户总数', '0');
     await expectMetric('高优先级客户', '0');
     await expectMetric('待确认预约', '0');
     await expectMetric('待处理随访', '0');
@@ -4209,7 +4211,7 @@ describe('工作台入口页面', () => {
   it.each([
     [401, '请先登录', '登录状态已失效，请重新登录'],
     [403, '没有访问权限', '当前账号没有访问机构首页数据的权限'],
-    [503, '数据服务暂时不可用', '数据服务暂时不可用，请稍后刷新或切换演示备份'],
+    [503, '数据服务暂时不可用', '数据服务暂时不可用，请稍后刷新或切换到开发空态'],
   ])('机构工作台首页处理 %s 错误态', async (status, apiMessage, visibleMessage) => {
     const fetchMock = mockWorkspaceFetch({
       institutionError: {
@@ -4410,15 +4412,15 @@ describe('工作台入口页面', () => {
     expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
 
-    expect(await screen.findByText('暂无受控演示租户')).toBeInTheDocument();
-    expect(screen.getByText('当前没有可展示的演示租户、套餐或配额快照。')).toBeInTheDocument();
+    expect(await screen.findByText('暂无租户记录')).toBeInTheDocument();
+    expect(screen.getByText('当前没有可展示的租户、套餐或配额快照。')).toBeInTheDocument();
     expectNoPlatformTenantMutation(fetchMock);
     expectNoSensitivePlatformTenantContent(container);
   });
 
   it.each([
     [403, '没有访问权限', '当前账号没有查看租户管理的权限'],
-    [503, '数据服务暂时不可用', '租户治理视图暂时不可用，请稍后刷新或切换演示备份'],
+    [503, '数据服务暂时不可用', '租户治理视图暂时不可用，请稍后刷新或切换到开发空态'],
   ])('平台端租户管理入口处理 %s 错误态', async (status, apiMessage, visibleMessage) => {
     const fetchMock = mockWorkspaceFetch({
       role: 'platform_admin',

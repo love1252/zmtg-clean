@@ -20,6 +20,9 @@ const forbiddenFragments = [
   '账单金额',
   '应收',
   '发票',
+  '受控示例',
+  '示例用量',
+  '智美天工医美智能运营系统',
 ];
 
 function expectLowSensitivePayload(payload: unknown) {
@@ -41,9 +44,9 @@ describe('平台端 AI 模型与用量只读 contract', () => {
     expect(Object.keys(aiReadonlyRoute).sort()).toEqual(['GET']);
   });
 
-  it('返回受控示例数据和低敏模型、用量结构', async () => {
-    const directPayload = getPlatformAiReadonlyResponse({ month: '2026-05' });
-    const routeResponse = await aiReadonlyRoute.GET(new Request(`${aiReadonlyUrl}?month=2026-05`, {
+  it('返回 AI 配置只读结构和未接入用量空态', async () => {
+    const directPayload = getPlatformAiReadonlyResponse({ month: '2026-06' });
+    const routeResponse = await aiReadonlyRoute.GET(new Request(`${aiReadonlyUrl}?month=2026-06`, {
       headers: {
         'X-Tenant-ID': 'forged-tenant-should-not-be-trusted',
       },
@@ -54,33 +57,18 @@ describe('平台端 AI 模型与用量只读 contract', () => {
     expect(routePayload).toEqual(directPayload);
     expect(routePayload).toMatchObject({
       readonly: true,
-      dataSource: 'controlled_demo',
-      registryVersion: 'ai-registry-v1-controlled-demo',
-      registryStatus: 'controlled_readonly_demo',
-      registryStatusNote: '当前为受控只读示例，不代表生产启用。',
-      usageVersion: 'ai-usage-cost-v1-controlled-demo',
-      usageStatus: 'controlled_readonly_demo',
+      dataSource: 'unconnected',
+      registryVersion: expect.any(String),
+      usageVersion: 'ai-usage-cost-v1-unconnected',
+      usageStatus: 'not_connected',
       costDisclaimer: expect.stringContaining('估算费用不是正式账单'),
-      selectedMonth: '2026-05',
-      month: '2026-05',
-      availableMonths: [
-        { value: '2026-05', label: '2026年05月', hasUsageData: true },
-        { value: '2026-06', label: '2026年06月', hasUsageData: false },
-      ],
-      hasUsageData: true,
-      emptyState: null,
-      capabilityCoverageRows: expect.arrayContaining([
-        expect.objectContaining({
-          capabilityId: 'vision',
-          capabilityName: '视觉理解',
-          safetyNote: 'OCR 未启用',
-        }),
-        expect.objectContaining({
-          capabilityId: 'embedding',
-          capabilityName: '向量模型',
-          safetyNote: '真实向量库未启用',
-        }),
-      ]),
+      selectedMonth: '2026-06',
+      month: '2026-06',
+      hasUsageData: false,
+      emptyState: {
+        title: '暂无真实 AI 用量记录',
+        description: '当前未接入真实 AI 调用日志；不会展示预置用量、机构排行或估算账单。',
+      },
       disabledCapabilities: expect.arrayContaining([
         '真实 AI',
         'API Key 管理',
@@ -98,38 +86,41 @@ describe('平台端 AI 模型与用量只读 contract', () => {
       },
       usage: {
         summary: expect.objectContaining({
-          estimatedCostCny: expect.any(Number),
+          totalCalls: 0,
+          totalTokens: 0,
+          estimatedCostCny: 0,
           billingStatusLabel: '估算费用 / 运营参考，不是正式账单',
         }),
-        providerModelRows: expect.any(Array),
-        scenarioRows: expect.any(Array),
-        sampleInstitutionRanking: expect.any(Array),
+        providerModelRows: [],
+        dailyRows: [],
+        providerUsageGroups: [],
+        scenarioRows: [],
+        sampleInstitutionRanking: [],
       },
       safetyBanner: expect.objectContaining({
-        title: '当前为受控示例数据',
+        title: 'AI 用量未接入',
       }),
     });
     expectLowSensitivePayload(routePayload);
   });
 
   it('异常月份参数使用安全默认月份', async () => {
-    expect(normalizeAiReadonlyMonth('bad-month')).toBe('2026-05');
-    expect(normalizeAiReadonlyMonth('2026-13')).toBe('2026-05');
-    expect(normalizeAiReadonlyMonth('../../secret')).toBe('2026-05');
-    expect(normalizeAiReadonlyMonth('2026-04')).toBe('2026-05');
+    expect(normalizeAiReadonlyMonth('bad-month')).toBe('2026-06');
+    expect(normalizeAiReadonlyMonth('2026-13')).toBe('2026-06');
+    expect(normalizeAiReadonlyMonth('../../secret')).toBe('2026-06');
     expect(normalizeAiReadonlyMonth('2026-05')).toBe('2026-05');
 
     const routeResponse = await aiReadonlyRoute.GET(new Request(`${aiReadonlyUrl}?month=../../secret`));
     const payload = await readJson(routeResponse);
 
     expect(routeResponse.status).toBe(200);
-    expect(payload.month).toBe('2026-05');
+    expect(payload.month).toBe('2026-06');
     expectLowSensitivePayload(payload);
   });
 
-  it('空状态月份返回低敏 emptyState 且 X-Tenant-ID 不影响响应', async () => {
-    const directPayload = getPlatformAiReadonlyResponse({ month: '2026-06' });
-    const routeResponse = await aiReadonlyRoute.GET(new Request(`${aiReadonlyUrl}?month=2026-06`, {
+  it('按日期查询仍返回未接入空态且 X-Tenant-ID 不影响响应', async () => {
+    const directPayload = getPlatformAiReadonlyResponse({ usageDate: '2026-06-22' });
+    const routeResponse = await aiReadonlyRoute.GET(new Request(`${aiReadonlyUrl}?usageDate=2026-06-22`, {
       headers: {
         'X-Tenant-ID': 'forged-real-tenant',
       },
@@ -140,12 +131,12 @@ describe('平台端 AI 模型与用量只读 contract', () => {
     expect(payload).toEqual(directPayload);
     expect(payload).toMatchObject({
       readonly: true,
-      dataSource: 'controlled_demo',
+      dataSource: 'unconnected',
       selectedMonth: '2026-06',
+      usageDate: '2026-06-22',
       hasUsageData: false,
       emptyState: {
-        title: '暂无受控示例用量',
-        description: '2026年06月为受控示例月份，未读取真实 AI 日志；估算费用不是正式账单。',
+        title: '暂无真实 AI 用量记录',
       },
       usage: {
         summary: expect.objectContaining({
