@@ -1,0 +1,39 @@
+<svg width="1280" height="760" viewBox="0 0 1280 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="760" fill="#EEF2F7"/>
+  <rect x="40" y="42" width="760" height="676" rx="18" fill="#FFFFFF" stroke="#D8E3F0"/>
+  <text x="76" y="92" font-family="Arial, 'PingFang SC', sans-serif" font-size="24" font-weight="800" fill="#0F172A">租户列表</text>
+  <rect x="76" y="126" width="688" height="76" rx="14" fill="#F8FAFC" stroke="#E6EDF5"/>
+  <text x="104" y="158" font-family="Arial, 'PingFang SC', sans-serif" font-size="16" font-weight="800" fill="#0F172A">上海星悦医美</text>
+  <text x="104" y="182" font-family="Arial, 'PingFang SC', sans-serif" font-size="13" fill="#64748B">专业版 v3 · 运行中 · 快照已生成</text>
+  <text x="680" y="172" font-family="Arial, 'PingFang SC', sans-serif" font-size="14" font-weight="800" fill="#1769E0">查看</text>
+  <rect x="828" y="0" width="452" height="760" fill="#FFFFFF"/>
+  <rect x="828" y="0" width="452" height="760" stroke="#D8E3F0"/>
+  <text x="860" y="52" font-family="Arial, 'PingFang SC', sans-serif" font-size="24" font-weight="800" fill="#0F172A">租户详情</text>
+  <text x="860" y="80" font-family="Arial, 'PingFang SC', sans-serif" font-size="13" fill="#64748B">授权快照、套餐、用量和审计入口集中展示。</text>
+  <rect x="860" y="112" width="372" height="108" rx="14" fill="#F8FAFC" stroke="#E6EDF5"/>
+  <text x="884" y="148" font-family="Arial, 'PingFang SC', sans-serif" font-size="18" font-weight="800" fill="#0F172A">上海星悦医美</text>
+  <rect x="884" y="166" width="58" height="24" rx="12" fill="#DCFCE7"/>
+  <text x="900" y="183" font-family="Arial, 'PingFang SC', sans-serif" font-size="12" font-weight="800" fill="#047857">运行</text>
+  <text x="958" y="183" font-family="Arial, 'PingFang SC', sans-serif" font-size="12" fill="#64748B">tenant_1024</text>
+  <text x="884" y="206" font-family="Arial, 'PingFang SC', sans-serif" font-size="12" fill="#64748B">联系人：李运营 152****5259</text>
+  <rect x="860" y="244" width="372" height="174" rx="14" fill="#FFFFFF" stroke="#D8E3F0"/>
+  <text x="884" y="280" font-family="Arial, 'PingFang SC', sans-serif" font-size="17" font-weight="800" fill="#0F172A">套餐授权快照</text>
+  <g font-family="Arial, 'PingFang SC', sans-serif" font-size="13">
+    <text x="884" y="318" fill="#64748B">套餐版本</text><text x="1004" y="318" font-weight="800" fill="#0F172A">专业版 v3</text>
+    <text x="884" y="350" fill="#64748B">生效时间</text><text x="1004" y="350" font-weight="800" fill="#0F172A">2026-06-22</text>
+    <text x="884" y="382" fill="#64748B">失效时间</text><text x="1004" y="382" font-weight="800" fill="#0F172A">2027-06-21</text>
+    <rect x="884" y="394" width="92" height="22" rx="11" fill="#EAF3FF"/>
+    <text x="904" y="410" font-weight="800" fill="#1769E0">快照有效</text>
+  </g>
+  <rect x="860" y="440" width="372" height="142" rx="14" fill="#FFFFFF" stroke="#D8E3F0"/>
+  <text x="884" y="476" font-family="Arial, 'PingFang SC', sans-serif" font-size="17" font-weight="800" fill="#0F172A">功能门禁</text>
+  <g font-family="Arial, 'PingFang SC', sans-serif" font-size="12" font-weight="800">
+    <rect x="884" y="496" width="88" height="28" rx="14" fill="#EAF3FF"/><text x="904" y="515" fill="#1769E0">客户管理</text>
+    <rect x="984" y="496" width="88" height="28" rx="14" fill="#EAF3FF"/><text x="1004" y="515" fill="#1769E0">治疗摘要</text>
+    <rect x="1084" y="496" width="76" height="28" rx="14" fill="#EAF3FF"/><text x="1104" y="515" fill="#1769E0">知识库</text>
+    <rect x="884" y="536" width="88" height="28" rx="14" fill="#EAF3FF"/><text x="908" y="555" fill="#1769E0">AI 对话</text>
+  </g>
+  <rect x="860" y="604" width="372" height="96" rx="14" fill="#FFFFFF" stroke="#D8E3F0"/>
+  <text x="884" y="638" font-family="Arial, 'PingFang SC', sans-serif" font-size="17" font-weight="800" fill="#0F172A">配额快照</text>
+  <text x="884" y="670" font-family="Arial, 'PingFang SC', sans-serif" font-size="13" fill="#64748B">客户 168 / 5000 · AI 420 / 10000 · 文件 36 / 1000</text>
+</svg>

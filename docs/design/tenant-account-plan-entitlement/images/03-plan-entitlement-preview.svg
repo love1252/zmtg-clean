@@ -1,0 +1,52 @@
+<svg width="1280" height="760" viewBox="0 0 1280 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="760" fill="#F7F9FC"/>
+  <rect x="40" y="34" width="1200" height="692" rx="20" fill="#FFFFFF" stroke="#D8E3F0"/>
+  <text x="76" y="82" font-family="Arial, 'PingFang SC', sans-serif" font-size="25" font-weight="800" fill="#0F172A">选择套餐与权益预览</text>
+  <text x="76" y="110" font-family="Arial, 'PingFang SC', sans-serif" font-size="14" fill="#64748B">套餐负责能力和容量，角色权限仍由 RBAC 控制。选择后生成租户授权快照。</text>
+  <g font-family="Arial, 'PingFang SC', sans-serif">
+    <rect x="76" y="146" width="258" height="154" rx="16" fill="#FFFFFF" stroke="#D8E3F0"/>
+    <text x="100" y="180" font-size="18" font-weight="800" fill="#0F172A">试用版</text>
+    <text x="100" y="206" font-size="13" fill="#64748B">适合新机构 30 天试用</text>
+    <text x="100" y="238" font-size="13" fill="#475569">客户 200 / AI 300 次</text>
+    <text x="100" y="264" font-size="13" fill="#475569">知识库 20 个文件</text>
+    <rect x="236" y="168" width="70" height="28" rx="14" fill="#FEF3C7"/>
+    <text x="254" y="187" font-size="12" font-weight="800" fill="#B45309">试用</text>
+    <rect x="354" y="146" width="258" height="154" rx="16" fill="#EAF3FF" stroke="#1769E0" stroke-width="2"/>
+    <text x="378" y="180" font-size="18" font-weight="800" fill="#0F172A">专业版</text>
+    <text x="378" y="206" font-size="13" fill="#64748B">适合成长期机构运营</text>
+    <text x="378" y="238" font-size="13" fill="#475569">客户 5000 / AI 10000 次</text>
+    <text x="378" y="264" font-size="13" fill="#475569">知识库 1000 个文件</text>
+    <rect x="516" y="168" width="70" height="28" rx="14" fill="#1769E0"/>
+    <text x="535" y="187" font-size="12" font-weight="800" fill="#FFFFFF">已选</text>
+    <rect x="632" y="146" width="258" height="154" rx="16" fill="#FFFFFF" stroke="#D8E3F0"/>
+    <text x="656" y="180" font-size="18" font-weight="800" fill="#0F172A">旗舰版</text>
+    <text x="656" y="206" font-size="13" fill="#64748B">适合多团队机构</text>
+    <text x="656" y="238" font-size="13" fill="#475569">高容量 / 多模型 / 审计增强</text>
+    <text x="656" y="264" font-size="13" fill="#475569">可启用更多管理员</text>
+    <rect x="910" y="146" width="258" height="154" rx="16" fill="#FFFFFF" stroke="#D8E3F0"/>
+    <text x="934" y="180" font-size="18" font-weight="800" fill="#0F172A">定制版</text>
+    <text x="934" y="206" font-size="13" fill="#64748B">大客户人工配置</text>
+    <text x="934" y="238" font-size="13" fill="#475569">需要平台审批和审计</text>
+    <text x="934" y="264" font-size="13" fill="#475569">按合同配置权益</text>
+  </g>
+  <rect x="76" y="328" width="1092" height="340" rx="16" fill="#FFFFFF" stroke="#D8E3F0"/>
+  <text x="104" y="366" font-family="Arial, 'PingFang SC', sans-serif" font-size="18" font-weight="800" fill="#0F172A">专业版 v3 权益预览</text>
+  <text x="104" y="391" font-family="Arial, 'PingFang SC', sans-serif" font-size="13" fill="#64748B">以下内容会写入租户授权快照。功能门禁只表示租户拥有能力入口，不替代用户角色权限。</text>
+  <line x1="104" y1="420" x2="1140" y2="420" stroke="#E6EDF5"/>
+  <g font-family="Arial, 'PingFang SC', sans-serif" font-size="13">
+    <text x="104" y="452" font-weight="800" fill="#0F172A">模块可见性</text>
+    <rect x="104" y="468" width="128" height="30" rx="15" fill="#EAF3FF"/><text x="128" y="488" font-weight="700" fill="#1769E0">客户管理</text>
+    <rect x="244" y="468" width="128" height="30" rx="15" fill="#EAF3FF"/><text x="268" y="488" font-weight="700" fill="#1769E0">治疗摘要</text>
+    <rect x="384" y="468" width="128" height="30" rx="15" fill="#EAF3FF"/><text x="412" y="488" font-weight="700" fill="#1769E0">知识库</text>
+    <rect x="524" y="468" width="128" height="30" rx="15" fill="#EAF3FF"/><text x="548" y="488" font-weight="700" fill="#1769E0">AI 助手</text>
+    <text x="104" y="540" font-weight="800" fill="#0F172A">容量配额</text>
+    <rect x="104" y="556" width="230" height="74" rx="12" fill="#F8FAFC" stroke="#E6EDF5"/>
+    <text x="124" y="586" fill="#64748B">客户数上限</text><text x="124" y="616" font-size="24" font-weight="800" fill="#0F172A">5,000</text>
+    <rect x="350" y="556" width="230" height="74" rx="12" fill="#F8FAFC" stroke="#E6EDF5"/>
+    <text x="370" y="586" fill="#64748B">知识库文件</text><text x="370" y="616" font-size="24" font-weight="800" fill="#0F172A">1,000</text>
+    <rect x="596" y="556" width="230" height="74" rx="12" fill="#F8FAFC" stroke="#E6EDF5"/>
+    <text x="616" y="586" fill="#64748B">月度 AI 调用</text><text x="616" y="616" font-size="24" font-weight="800" fill="#0F172A">10,000</text>
+    <rect x="842" y="556" width="230" height="74" rx="12" fill="#F8FAFC" stroke="#E6EDF5"/>
+    <text x="862" y="586" fill="#64748B">成员数量</text><text x="862" y="616" font-size="24" font-weight="800" fill="#0F172A">50</text>
+  </g>
+</svg>
