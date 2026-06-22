@@ -1,0 +1,40 @@
+<svg width="1280" height="760" viewBox="0 0 1280 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="760" fill="#F7F9FC"/>
+  <rect x="86" y="42" width="1108" height="676" rx="20" fill="#FFFFFF" stroke="#D8E3F0"/>
+  <text x="124" y="92" font-family="Arial, 'PingFang SC', sans-serif" font-size="26" font-weight="800" fill="#0F172A">提交前确认</text>
+  <text x="124" y="122" font-family="Arial, 'PingFang SC', sans-serif" font-size="14" fill="#64748B">请确认租户、初始管理员、套餐版本和授权快照。提交后会写入平台审计日志。</text>
+  <rect x="124" y="158" width="500" height="214" rx="16" fill="#F8FAFC" stroke="#E1EAF4"/>
+  <text x="152" y="196" font-family="Arial, 'PingFang SC', sans-serif" font-size="18" font-weight="800" fill="#0F172A">租户与账号</text>
+  <g font-family="Arial, 'PingFang SC', sans-serif" font-size="14">
+    <text x="152" y="234" fill="#64748B">机构名称</text><text x="284" y="234" font-weight="800" fill="#0F172A">上海星悦医美</text>
+    <text x="152" y="268" fill="#64748B">联系人</text><text x="284" y="268" font-weight="800" fill="#0F172A">李运营  152****5259</text>
+    <text x="152" y="302" fill="#64748B">初始管理员</text><text x="284" y="302" font-weight="800" fill="#0F172A">王院长  租户管理员</text>
+    <text x="152" y="336" fill="#64748B">创建原因</text><text x="284" y="336" font-weight="800" fill="#0F172A">测试服务器验收开设</text>
+  </g>
+  <rect x="656" y="158" width="500" height="214" rx="16" fill="#F8FAFC" stroke="#E1EAF4"/>
+  <text x="684" y="196" font-family="Arial, 'PingFang SC', sans-serif" font-size="18" font-weight="800" fill="#0F172A">套餐授权快照</text>
+  <g font-family="Arial, 'PingFang SC', sans-serif" font-size="14">
+    <text x="684" y="234" fill="#64748B">套餐</text><text x="816" y="234" font-weight="800" fill="#0F172A">专业版 v3</text>
+    <text x="684" y="268" fill="#64748B">有效期</text><text x="816" y="268" font-weight="800" fill="#0F172A">2026-06-22 至 2027-06-21</text>
+    <text x="684" y="302" fill="#64748B">快照状态</text><text x="816" y="302" font-weight="800" fill="#0F172A">提交成功后生成</text>
+    <text x="684" y="336" fill="#64748B">覆盖项</text><text x="816" y="336" font-weight="800" fill="#0F172A">无</text>
+  </g>
+  <rect x="124" y="404" width="1032" height="170" rx="16" fill="#FFFFFF" stroke="#D8E3F0"/>
+  <text x="152" y="442" font-family="Arial, 'PingFang SC', sans-serif" font-size="18" font-weight="800" fill="#0F172A">即将写入的审计摘要</text>
+  <g font-family="Arial, 'PingFang SC', sans-serif" font-size="13">
+    <rect x="152" y="470" width="206" height="42" rx="21" fill="#EAF3FF"/>
+    <text x="178" y="497" font-weight="800" fill="#1769E0">操作：创建租户</text>
+    <rect x="374" y="470" width="238" height="42" rx="21" fill="#EAF3FF"/>
+    <text x="400" y="497" font-weight="800" fill="#1769E0">资源：tenant_待生成</text>
+    <rect x="628" y="470" width="238" height="42" rx="21" fill="#EAF3FF"/>
+    <text x="654" y="497" font-weight="800" fill="#1769E0">套餐：专业版 v3</text>
+    <rect x="882" y="470" width="206" height="42" rx="21" fill="#EAF3FF"/>
+    <text x="908" y="497" font-weight="800" fill="#1769E0">操作者：平台管理员</text>
+    <rect x="152" y="528" width="936" height="30" rx="15" fill="#FFF7ED"/>
+    <text x="176" y="548" fill="#92400E">审计只记录低敏摘要，不记录完整手机号、邮箱、密码、请求体、SQL 或服务端错误细节。</text>
+  </g>
+  <rect x="814" y="620" width="126" height="44" rx="12" fill="#F8FAFC" stroke="#D8E3F0"/>
+  <text x="855" y="648" font-family="Arial, 'PingFang SC', sans-serif" font-size="14" font-weight="800" fill="#475569">上一步</text>
+  <rect x="956" y="620" width="156" height="44" rx="12" fill="#1769E0"/>
+  <text x="995" y="648" font-family="Arial, 'PingFang SC', sans-serif" font-size="14" font-weight="800" fill="#FFFFFF">确认开设租户</text>
+</svg>

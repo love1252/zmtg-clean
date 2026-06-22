@@ -1,0 +1,67 @@
+<svg width="1280" height="760" viewBox="0 0 1280 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="760" fill="#F7F9FC"/>
+  <rect x="0" y="0" width="220" height="760" fill="#FFFFFF" stroke="#E6EDF5"/>
+  <text x="28" y="42" font-family="Arial, 'PingFang SC', sans-serif" font-size="16" font-weight="800" fill="#0F172A">智美天工管理后台</text>
+  <rect x="16" y="247" width="188" height="42" rx="11" fill="#EAF3FF"/>
+  <text x="52" y="274" font-family="Arial, 'PingFang SC', sans-serif" font-size="14" font-weight="700" fill="#1769E0">租户管理</text>
+  <rect x="220" y="0" width="1060" height="760" fill="#F7F9FC"/>
+  <rect x="246" y="84" width="1008" height="620" rx="18" fill="#FFFFFF" stroke="#D8E3F0"/>
+  <rect x="246" y="84" width="1008" height="78" rx="18" fill="#FFFFFF"/>
+  <text x="278" y="126" font-family="Arial, 'PingFang SC', sans-serif" font-size="24" font-weight="800" fill="#0F172A">新建租户</text>
+  <text x="278" y="150" font-family="Arial, 'PingFang SC', sans-serif" font-size="13" fill="#64748B">平台管理员开设租户账号，提交后生成租户、初始管理员、套餐授权快照和审计记录。</text>
+  <rect x="1060" y="110" width="76" height="34" rx="10" fill="#F8FAFC" stroke="#D8E3F0"/>
+  <text x="1084" y="132" font-family="Arial, 'PingFang SC', sans-serif" font-size="13" font-weight="700" fill="#475569">取消</text>
+  <rect x="1148" y="110" width="80" height="34" rx="10" fill="#1769E0"/>
+  <text x="1174" y="132" font-family="Arial, 'PingFang SC', sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">下一步</text>
+  <line x1="246" y1="162" x2="1254" y2="162" stroke="#E6EDF5"/>
+  <g font-family="Arial, 'PingFang SC', sans-serif">
+    <circle cx="310" cy="204" r="16" fill="#1769E0"/>
+    <text x="306" y="209" font-size="13" font-weight="800" fill="#FFFFFF">1</text>
+    <text x="334" y="209" font-size="14" font-weight="800" fill="#0F172A">机构信息</text>
+    <line x1="430" y1="204" x2="520" y2="204" stroke="#CBD5E1"/>
+    <circle cx="544" cy="204" r="16" fill="#EAF3FF"/>
+    <text x="540" y="209" font-size="13" font-weight="800" fill="#1769E0">2</text>
+    <text x="568" y="209" font-size="14" font-weight="700" fill="#64748B">套餐与权益</text>
+    <line x1="670" y1="204" x2="760" y2="204" stroke="#CBD5E1"/>
+    <circle cx="784" cy="204" r="16" fill="#EAF3FF"/>
+    <text x="780" y="209" font-size="13" font-weight="800" fill="#1769E0">3</text>
+    <text x="808" y="209" font-size="14" font-weight="700" fill="#64748B">提交确认</text>
+  </g>
+  <rect x="278" y="244" width="460" height="390" rx="14" fill="#FFFFFF" stroke="#E1EAF4"/>
+  <text x="302" y="280" font-family="Arial, 'PingFang SC', sans-serif" font-size="18" font-weight="800" fill="#0F172A">机构基础信息</text>
+  <text x="302" y="304" font-family="Arial, 'PingFang SC', sans-serif" font-size="13" fill="#64748B">这些字段用于建立租户主体，手机号和邮箱需在后续 runtime 中单独审批存储与脱敏策略。</text>
+  <g font-family="Arial, 'PingFang SC', sans-serif" font-size="13">
+    <text x="302" y="344" font-weight="700" fill="#334155">机构名称</text>
+    <rect x="302" y="354" width="396" height="42" rx="10" fill="#F8FAFC" stroke="#D8E3F0"/>
+    <text x="320" y="381" fill="#94A3B8">例如：上海星悦医美</text>
+    <text x="302" y="424" font-weight="700" fill="#334155">机构简称</text>
+    <rect x="302" y="434" width="396" height="42" rx="10" fill="#F8FAFC" stroke="#D8E3F0"/>
+    <text x="320" y="461" fill="#94A3B8">用于列表展示，可选</text>
+    <text x="302" y="504" font-weight="700" fill="#334155">联系人姓名</text>
+    <rect x="302" y="514" width="184" height="42" rx="10" fill="#F8FAFC" stroke="#D8E3F0"/>
+    <text x="320" y="541" fill="#94A3B8">运营联系人</text>
+    <text x="514" y="504" font-weight="700" fill="#334155">联系人手机号</text>
+    <rect x="514" y="514" width="184" height="42" rx="10" fill="#F8FAFC" stroke="#D8E3F0"/>
+    <text x="532" y="541" fill="#94A3B8">脱敏展示</text>
+    <text x="302" y="584" font-weight="700" fill="#334155">联系人邮箱</text>
+    <rect x="302" y="594" width="396" height="42" rx="10" fill="#F8FAFC" stroke="#D8E3F0"/>
+    <text x="320" y="621" fill="#94A3B8">可选，用于内部联络</text>
+  </g>
+  <rect x="762" y="244" width="460" height="390" rx="14" fill="#FFFFFF" stroke="#E1EAF4"/>
+  <text x="786" y="280" font-family="Arial, 'PingFang SC', sans-serif" font-size="18" font-weight="800" fill="#0F172A">初始管理员</text>
+  <text x="786" y="304" font-family="Arial, 'PingFang SC', sans-serif" font-size="13" fill="#64748B">默认创建租户管理员，不在页面展示明文密码，不触发短信或邮件通知。</text>
+  <g font-family="Arial, 'PingFang SC', sans-serif" font-size="13">
+    <text x="786" y="344" font-weight="700" fill="#334155">管理员姓名</text>
+    <rect x="786" y="354" width="396" height="42" rx="10" fill="#F8FAFC" stroke="#D8E3F0"/>
+    <text x="804" y="381" fill="#94A3B8">例如：王院长</text>
+    <text x="786" y="424" font-weight="700" fill="#334155">手机号或邮箱</text>
+    <rect x="786" y="434" width="396" height="42" rx="10" fill="#F8FAFC" stroke="#D8E3F0"/>
+    <text x="804" y="461" fill="#94A3B8">至少填写一项</text>
+    <text x="786" y="504" font-weight="700" fill="#334155">初始角色</text>
+    <rect x="786" y="514" width="396" height="42" rx="10" fill="#F8FAFC" stroke="#D8E3F0"/>
+    <text x="804" y="541" fill="#0F172A">租户管理员</text>
+    <rect x="786" y="584" width="396" height="52" rx="12" fill="#FFF7ED" stroke="#FED7AA"/>
+    <text x="806" y="608" font-weight="800" fill="#B45309">安全提示</text>
+    <text x="806" y="627" fill="#92400E">账号初始化和通知能力需单独任务审批，本流程只定义开设边界。</text>
+  </g>
+</svg>
