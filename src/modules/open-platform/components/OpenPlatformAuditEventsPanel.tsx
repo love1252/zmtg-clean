@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Filter, Loader2, Search, ShieldCheck } from 'lucide-react';
 import {
   AUDIT_REASON_VALUES,
@@ -38,6 +38,9 @@ type PlatformAuditStateProps = {
   kind: 'loading' | 'empty' | 'error' | 'forbidden' | 'unavailable';
 };
 
+const defaultAuditPageLimit = '10';
+const defaultAuditEventsQuery = { limit: defaultAuditPageLimit } as const;
+
 const emptyAuditFilterForm: AuditFilterForm = {
   from: '',
   to: '',
@@ -48,7 +51,7 @@ const emptyAuditFilterForm: AuditFilterForm = {
   result: '',
   reason: '',
   actorId: '',
-  limit: '',
+  limit: defaultAuditPageLimit,
 };
 
 const resultToneClasses = {
@@ -56,6 +59,107 @@ const resultToneClasses = {
   denied: 'border-rose-100 bg-rose-50 text-rose-100',
   transitioned: 'border-blue-100 bg-blue-50 text-blue-700',
 } as const;
+
+const resourceLabels: Record<string, string> = {
+  tenant: '租户',
+  tenant_member: '租户成员',
+  customer: '客户',
+  appointment: '预约',
+  follow_up: '随访',
+  treatment_summary: '治疗摘要',
+  open_connection: '开放连接',
+  permission_policy: '权限策略',
+  audit_log: '审计日志',
+  platform_health: '平台健康',
+  ai_model_config: 'AI 模型配置',
+  knowledge_management: '知识库管理',
+};
+
+const actionLabels: Record<string, string> = {
+  read_aggregate: '查看汇总',
+  read_own_tenant: '查看本机构',
+  read_detail: '查看详情',
+  create: '创建',
+  update: '更新',
+  delete: '删除',
+  manage_status: '管理状态',
+  manage_credentials: '管理凭证',
+  test_connection: '连通测试',
+  manage_policy: '管理策略',
+  review: '审查',
+  export_report: '导出报告',
+};
+
+const resultLabels: Record<string, string> = {
+  allowed: '通过',
+  denied: '拒绝',
+  transitioned: '状态已变更',
+};
+
+const reasonLabels: Record<string, string> = {
+  allowed_by_policy: '符合平台策略',
+  missing_tenant: '缺少租户上下文',
+  cross_tenant_denied: '跨租户访问已拒绝',
+  role_denied: '角色权限不足',
+  sensitive_detail_denied: '敏感详情已拦截',
+  invalid_transition: '状态流转无效',
+  stale_transition: '状态已过期',
+  not_found_or_not_owned: '资源不存在或不属于当前范围',
+  invalid_his_connection_payload: 'HIS 连接内容不完整',
+  his_connection_name_conflict: 'HIS 连接名称重复',
+  invalid_treatment_summary_reference: '治疗摘要引用无效',
+  invalid_treatment_summary_payload: '治疗摘要内容不完整',
+  treatment_summary_voided: '治疗摘要已作废',
+  treatment_summary_already_voided: '治疗摘要已作废',
+  invalid_treatment_summary_void_payload: '作废说明不完整',
+  voided_treatment_summary_follow_up_blocked: '已作废摘要不可生成随访',
+  invalid_follow_up_suggestion: '随访建议无效',
+  active_source_follow_up_exists: '来源任务已存在有效随访',
+  quota_exceeded_customers: '客户配额已达上限',
+  quota_exceeded_appointments: '预约配额已达上限',
+  missing_active_plan: '缺少有效套餐',
+  missing_quota_limit: '缺少配额上限',
+  provider_unavailable: '服务商暂不可用',
+  provider_timeout: '服务商响应超时',
+  provider_retry_exhausted: '服务商重试已用尽',
+  provider_circuit_open: '服务商保护开关已打开',
+  provider_validation_failed: '服务商校验失败',
+  provider_write_failed: '服务商写入失败',
+  provider_revoke_failed: '服务商撤销失败',
+  provider_describe_failed: '服务商详情读取失败',
+  provider_health_failed: '服务商健康检查失败',
+  repository_after_provider_failed: '本地记录同步失败',
+  audit_after_provider_failed: '审计记录写入失败',
+  test_connection_requested: '已发起连通测试',
+  test_connection_provider_healthy: '服务商连通正常',
+  test_connection_missing_credential: '缺少测试凭证',
+  test_connection_unsupported_vendor: '暂不支持该服务商测试',
+  test_connection_limited_health_probe: '仅完成受限健康检查',
+  test_connection_external_unreachable: '外部服务不可达',
+  test_connection_provider_timeout: '服务商测试超时',
+  test_connection_connection_not_active: '连接未启用',
+  test_connection_completed: '连通测试完成',
+  compensation_pending: '补偿任务待处理',
+  compensation_running: '补偿任务处理中',
+  compensation_succeeded: '补偿任务已完成',
+  compensation_failed: '补偿任务失败',
+  manual_review_required: '需要人工复核',
+};
+
+const roleLabels: Record<string, string> = {
+  tenant_admin: '机构管理员',
+  tenant_operator: '机构运营',
+  consultant: '咨询师',
+  customer_service: '客服',
+  platform_admin: '平台管理员',
+  platform_operator: '平台运营',
+  security_auditor: '安全审计员',
+};
+
+function displayLabel(labels: Record<string, string>, value: string | null, fallback = '未归类') {
+  if (!value) return null;
+  return labels[value] ?? fallback;
+}
 
 function trimOrUndefined(value: string) {
   const trimmed = value.trim();
@@ -149,43 +253,35 @@ export function OpenPlatformAuditEventsPanel() {
   const [records, setRecords] = useState<OpenPlatformAuditEventRecord[]>([]);
   const [pageInfo, setPageInfo] = useState<OpenPlatformAuditEventsPageInfo | null>(null);
   const [form, setForm] = useState<AuditFilterForm>(emptyAuditFilterForm);
-  const [activeQuery, setActiveQuery] = useState<OpenPlatformAuditEventsQuery>({});
+  const [activeQuery, setActiveQuery] = useState<OpenPlatformAuditEventsQuery>(defaultAuditEventsQuery);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageCursors, setPageCursors] = useState<Array<string | undefined>>([undefined]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [errorState, setErrorState] = useState<PlatformAuditStateProps | null>(null);
 
   async function loadAuditEvents(input: {
     query: OpenPlatformAuditEventsQuery;
-    mode: 'replace' | 'append';
+    pageIndex: number;
+    pageCursors: Array<string | undefined>;
   }) {
-    const { mode, query } = input;
-    if (mode === 'append') {
-      setIsLoadingMore(true);
-    } else {
-      setIsLoading(true);
-    }
+    const { query } = input;
+    setIsLoading(true);
     setErrorState(null);
 
     const result = await listOpenPlatformAuditEvents(query);
 
     if (result.ok) {
-      setRecords((current) =>
-        mode === 'append' ? [...current, ...result.records] : result.records,
-      );
+      setRecords(result.records);
       setPageInfo(result.pageInfo);
+      setPageIndex(input.pageIndex);
+      setPageCursors(input.pageCursors);
     } else {
-      if (mode === 'replace') {
-        setRecords([]);
-        setPageInfo(null);
-      }
+      setRecords([]);
+      setPageInfo(null);
       setErrorState(visibleAuditErrorState(result.error));
     }
 
-    if (mode === 'append') {
-      setIsLoadingMore(false);
-    } else {
-      setIsLoading(false);
-    }
+    setIsLoading(false);
   }
 
   useEffect(() => {
@@ -194,13 +290,15 @@ export function OpenPlatformAuditEventsPanel() {
     async function loadInitialAuditEvents() {
       setIsLoading(true);
       setErrorState(null);
-      const result = await listOpenPlatformAuditEvents();
+      const result = await listOpenPlatformAuditEvents(defaultAuditEventsQuery);
 
       if (!isActive) return;
 
       if (result.ok) {
         setRecords(result.records);
         setPageInfo(result.pageInfo);
+        setPageIndex(0);
+        setPageCursors([undefined]);
       } else {
         setRecords([]);
         setPageInfo(null);
@@ -217,15 +315,6 @@ export function OpenPlatformAuditEventsPanel() {
     };
   }, []);
 
-  const resultCounts = useMemo(
-    () =>
-      AUDIT_RESULT_VALUES.map((result) => ({
-        result,
-        count: records.filter((record) => record.result === result).length,
-      })),
-    [records],
-  );
-
   function handleFieldChange(key: keyof AuditFilterForm, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
   }
@@ -234,24 +323,46 @@ export function OpenPlatformAuditEventsPanel() {
     event.preventDefault();
     const nextQuery = formToAuditQuery(form);
     setActiveQuery(nextQuery);
-    void loadAuditEvents({ query: nextQuery, mode: 'replace' });
+    void loadAuditEvents({ query: nextQuery, pageIndex: 0, pageCursors: [undefined] });
   }
 
   function handleResetFilters() {
     setForm(emptyAuditFilterForm);
-    setActiveQuery({});
-    void loadAuditEvents({ query: {}, mode: 'replace' });
-  }
-
-  function handleLoadMore() {
-    if (!pageInfo?.nextCursor) return;
+    setActiveQuery(defaultAuditEventsQuery);
     void loadAuditEvents({
-      query: { ...activeQuery, cursor: pageInfo.nextCursor },
-      mode: 'append',
+      query: defaultAuditEventsQuery,
+      pageIndex: 0,
+      pageCursors: [undefined],
     });
   }
 
-  const isFilterDisabled = isLoading || isLoadingMore;
+  function handleNextPage() {
+    if (!pageInfo?.nextCursor) return;
+    const nextPageIndex = pageIndex + 1;
+    const nextPageCursors = pageCursors.slice(0, nextPageIndex + 1);
+    nextPageCursors[nextPageIndex] = pageInfo.nextCursor;
+    void loadAuditEvents({
+      query: { ...activeQuery, cursor: pageInfo.nextCursor },
+      pageIndex: nextPageIndex,
+      pageCursors: nextPageCursors,
+    });
+  }
+
+  function handlePreviousPage() {
+    if (pageIndex <= 0) return;
+    const previousPageIndex = pageIndex - 1;
+    const previousCursor = pageCursors[previousPageIndex];
+    const previousQuery = previousCursor
+      ? { ...activeQuery, cursor: previousCursor }
+      : activeQuery;
+    void loadAuditEvents({
+      query: previousQuery,
+      pageIndex: previousPageIndex,
+      pageCursors,
+    });
+  }
+
+  const isFilterDisabled = isLoading;
 
   return (
     <section className="space-y-5">
@@ -335,7 +446,7 @@ export function OpenPlatformAuditEventsPanel() {
               <option value="">全部</option>
               {ACCESS_RESOURCES.map((resource) => (
                 <option key={resource} value={resource}>
-                  {resource}
+                  {displayLabel(resourceLabels, resource)}
                 </option>
               ))}
             </select>
@@ -358,7 +469,7 @@ export function OpenPlatformAuditEventsPanel() {
               <option value="">全部</option>
               {ACCESS_ACTIONS.map((action) => (
                 <option key={action} value={action}>
-                  {action}
+                  {displayLabel(actionLabels, action)}
                 </option>
               ))}
             </select>
@@ -373,7 +484,7 @@ export function OpenPlatformAuditEventsPanel() {
               <option value="">全部</option>
               {AUDIT_RESULT_VALUES.map((result) => (
                 <option key={result} value={result}>
-                  {result}
+                  {displayLabel(resultLabels, result)}
                 </option>
               ))}
             </select>
@@ -388,7 +499,7 @@ export function OpenPlatformAuditEventsPanel() {
               <option value="">全部</option>
               {AUDIT_REASON_VALUES.map((reason) => (
                 <option key={reason} value={reason}>
-                  {reason}
+                  {displayLabel(reasonLabels, reason)}
                 </option>
               ))}
             </select>
@@ -408,7 +519,7 @@ export function OpenPlatformAuditEventsPanel() {
               onChange={(event) => handleFieldChange('limit', event.target.value)}
               className="mt-2 h-10 w-full rounded-xl border border-[#e6edf5] bg-[#f8fafc] px-3 text-sm text-slate-700 outline-none focus:border-blue-300"
             >
-              <option value="">默认</option>
+              <option value="10">10</option>
               <option value="25">25</option>
               <option value="50">50</option>
               <option value="100">100</option>
@@ -417,18 +528,6 @@ export function OpenPlatformAuditEventsPanel() {
         </div>
       </form>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        {resultCounts.map((item) => (
-          <article
-            key={item.result}
-            className={`rounded-xl border p-4 shadow-sm ${resultToneClasses[item.result]}`}
-          >
-            <div className="text-xs font-semibold opacity-80">{item.result}</div>
-            <div className="mt-2 text-2xl font-semibold">{isLoading ? '--' : item.count}</div>
-          </article>
-        ))}
-      </section>
-
       <article className="rounded-xl border border-[#e6edf5] bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -436,7 +535,7 @@ export function OpenPlatformAuditEventsPanel() {
             <p className="mt-1 text-sm text-slate-500">租户、套餐、商业化健康和拒绝事件按时间倒序排列。</p>
           </div>
           <span className="rounded-full border border-[#e6edf5] bg-white px-3 py-1 text-xs font-semibold text-slate-600">
-            {pageInfo ? `limit ${pageInfo.limit}` : 'limit 默认'}
+            {pageInfo ? `第 ${pageIndex + 1} 页 · 每页 ${pageInfo.limit} 条` : '每页 10 条'}
           </span>
         </div>
 
@@ -473,17 +572,17 @@ export function OpenPlatformAuditEventsPanel() {
                         {record.id}
                       </span>
                       <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${resultToneClasses[record.result]}`}>
-                        结果：{record.result}
+                        结果：{displayLabel(resultLabels, record.result)}
                       </span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {auditField('租户 ID', record.tenantId)}
-                      {auditField('资源类型', record.resource)}
+                      {auditField('资源类型', displayLabel(resourceLabels, record.resource))}
                       {auditField('资源 ID', record.resourceId)}
-                      {auditField('操作', record.action)}
-                      {auditField('原因', record.reason)}
+                      {auditField('操作', displayLabel(actionLabels, record.action))}
+                      {auditField('原因', displayLabel(reasonLabels, record.reason))}
                       {auditField('操作者', record.actorId)}
-                      {auditField('角色', record.actorRole)}
+                      {auditField('角色', displayLabel(roleLabels, record.actorRole))}
                     </div>
                   </div>
                   <div className="shrink-0 rounded-2xl border border-[#e6edf5] bg-white px-3 py-2 text-sm font-semibold text-slate-600">
@@ -493,16 +592,24 @@ export function OpenPlatformAuditEventsPanel() {
               </section>
             ))}
 
-            {pageInfo?.hasMore && pageInfo.nextCursor ? (
-              <div className="flex justify-center pt-2">
+            {pageIndex > 0 || (pageInfo?.hasMore && pageInfo.nextCursor) ? (
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={handleLoadMore}
-                  disabled={isLoadingMore}
+                  onClick={handlePreviousPage}
+                  disabled={isLoading || pageIndex <= 0}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#e6edf5] bg-white px-4 text-sm font-semibold text-slate-600 disabled:cursor-not-allowed disabled:text-slate-500"
                 >
-                  {isLoadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  加载更多平台审计事件
+                  上一页
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNextPage}
+                  disabled={isLoading || !pageInfo?.hasMore || !pageInfo.nextCursor}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#e6edf5] bg-white px-4 text-sm font-semibold text-slate-600 disabled:cursor-not-allowed disabled:text-slate-500"
+                >
+                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  下一页
                 </button>
               </div>
             ) : null}

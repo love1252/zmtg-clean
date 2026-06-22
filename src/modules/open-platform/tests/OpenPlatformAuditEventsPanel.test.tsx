@@ -37,7 +37,7 @@ function fetchPath(input: Parameters<typeof fetch>[0]) {
   return input.url;
 }
 
-function auditEventsResponse(records: unknown[], pageInfo = { hasMore: false, limit: 50, nextCursor: null }) {
+function auditEventsResponse(records: unknown[], pageInfo = { hasMore: false, limit: 10, nextCursor: null }) {
   return jsonResponse({ records, pageInfo });
 }
 
@@ -117,15 +117,19 @@ describe('平台端审计日志面板', () => {
 
     expect(await screen.findByText('audit_evt_platform_001')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '应用筛选' })).toBeEnabled();
+    expect(screen.queryByText('allowed', { selector: 'article > div' })).not.toBeInTheDocument();
+    expect(screen.queryByText('denied', { selector: 'article > div' })).not.toBeInTheDocument();
+    expect(screen.queryByText('transitioned', { selector: 'article > div' })).not.toBeInTheDocument();
     expect(screen.getByText('租户 ID：demo-tenant-001')).toBeInTheDocument();
-    expect(screen.getByText('资源类型：customer')).toBeInTheDocument();
+    expect(screen.getByText('资源类型：客户')).toBeInTheDocument();
     expect(screen.getByText('资源 ID：cust_001')).toBeInTheDocument();
-    expect(screen.getByText('操作：update')).toBeInTheDocument();
-    expect(screen.getByText('结果：allowed')).toBeInTheDocument();
-    expect(screen.getByText('原因：allowed_by_policy')).toBeInTheDocument();
+    expect(screen.getByText('操作：更新')).toBeInTheDocument();
+    expect(screen.getByText('结果：通过')).toBeInTheDocument();
+    expect(screen.getByText('原因：符合平台策略')).toBeInTheDocument();
     expect(screen.getByText('操作者：demo-user-admin')).toBeInTheDocument();
-    expect(screen.getByText('角色：tenant_admin')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/audit-events', { cache: 'no-store' });
+    expect(screen.getByText('角色：机构管理员')).toBeInTheDocument();
+    expect(screen.getByText('第 1 页 · 每页 10 条')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/audit-events?limit=10', { cache: 'no-store' });
     expectNoSensitiveAuditContent(container);
     expectNoPlatformDemoMisleadingClaims(container);
   });
@@ -159,6 +163,46 @@ describe('平台端审计日志面板', () => {
     expect(secondPath).toContain('reason=allowed_by_policy');
     expect(secondPath).toContain('actorId=demo-user-admin');
     expect(fetchMock.mock.calls[1]?.[1]).toEqual({ cache: 'no-store' });
+  });
+
+  it('按页替换展示平台关键操作记录，避免列表无限加长', async () => {
+    const fetchMock = mockAuditEventsFetch([
+      auditEventsResponse(
+        [{ ...auditEventRecord, id: 'audit_evt_page_1' }],
+        { hasMore: true, limit: 10, nextCursor: 'cursor-page-2' },
+      ),
+      auditEventsResponse(
+        [{ ...auditEventRecord, id: 'audit_evt_page_2', resource: 'ai_model_config', action: 'read_detail' }],
+        { hasMore: false, limit: 10, nextCursor: null },
+      ),
+      auditEventsResponse(
+        [{ ...auditEventRecord, id: 'audit_evt_page_1' }],
+        { hasMore: true, limit: 10, nextCursor: 'cursor-page-2' },
+      ),
+    ]);
+
+    render(<OpenPlatformAuditEventsPanel />);
+
+    expect(await screen.findByText('audit_evt_page_1')).toBeInTheDocument();
+    expect(screen.getByText('第 1 页 · 每页 10 条')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+
+    expect(await screen.findByText('audit_evt_page_2')).toBeInTheDocument();
+    expect(screen.queryByText('audit_evt_page_1')).not.toBeInTheDocument();
+    expect(screen.getByText('资源类型：AI 模型配置')).toBeInTheDocument();
+    expect(screen.getByText('操作：查看详情')).toBeInTheDocument();
+    expect(screen.getByText('第 2 页 · 每页 10 条')).toBeInTheDocument();
+
+    const nextPath = fetchPath(fetchMock.mock.calls[1]?.[0] ?? '');
+    expect(nextPath).toContain('limit=10');
+    expect(nextPath).toContain('cursor=cursor-page-2');
+
+    fireEvent.click(screen.getByRole('button', { name: '上一页' }));
+
+    expect(await screen.findByText('audit_evt_page_1')).toBeInTheDocument();
+    expect(screen.queryByText('audit_evt_page_2')).not.toBeInTheDocument();
+    const previousPath = fetchPath(fetchMock.mock.calls[2]?.[0] ?? '');
+    expect(previousPath).toBe('/api/open-platform/audit-events?limit=10');
   });
 
   it('展示空状态', async () => {

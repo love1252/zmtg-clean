@@ -19,7 +19,6 @@ import { OpenConnectionRoadmapPanel } from '@/modules/open-platform/components/O
 import { OpenPlatformAiModelConfigPanel } from '@/modules/open-platform/components/OpenPlatformAiModelConfigPanel';
 import { OpenPlatformAiReadonlyPanel } from '@/modules/open-platform/components/OpenPlatformAiReadonlyPanel';
 import { OpenPlatformAuditEventsPanel } from '@/modules/open-platform/components/OpenPlatformAuditEventsPanel';
-import { OpenPlatformGovernancePanel } from '@/modules/open-platform/components/OpenPlatformGovernancePanel';
 import { OpenPlatformKnowledgeManagementPanel } from '@/modules/open-platform/components/OpenPlatformKnowledgeManagementPanel';
 import { OpenPlatformTenantManagementPanel } from '@/modules/open-platform/components/OpenPlatformTenantManagementPanel';
 import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
@@ -269,11 +268,8 @@ export function PlatformConsole() {
               <OpenConnectionRoadmapPanel />
             ) : activeNavLabel === '商业化边界' ? (
               <CommercialBoundaryPanel />
-            ) : activeNavLabel === '权限与审计' ? (
-              <>
-                <OpenPlatformAuditEventsPanel />
-                <OpenPlatformGovernancePanel />
-              </>
+            ) : activeNavLabel === '平台审计日志' ? (
+              <OpenPlatformAuditEventsPanel />
             ) : activeNavLabel === '平台总览' ? (
               <PlatformOverview onNavigate={setActiveNavLabel} />
             ) : null}
