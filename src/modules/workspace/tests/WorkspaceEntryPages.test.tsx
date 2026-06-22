@@ -3023,7 +3023,7 @@ describe('工作台入口页面', () => {
     expectNoInstitutionDemoMisleadingClaims(container);
   });
 
-  it('demo seed smoke 支撑平台端 4 个租户、4 个套餐、商业化健康和 AI 配额边界', async () => {
+  it('demo seed smoke 支撑平台端 4 个租户、4 个套餐和 AI 配额边界', async () => {
     const demoSeed = buildDemoSeedWorkspaceSmokeFixtures();
     const fetchMock = mockWorkspaceFetch({
       role: 'platform_admin',
@@ -3050,12 +3050,12 @@ describe('工作台入口页面', () => {
     expect(screen.getAllByText('当前未启用 AI 调用配额').length).toBeGreaterThanOrEqual(4);
     expectNoPlatformDemoMisleadingClaims(container);
 
-    expect(await screen.findByRole('heading', { name: '商业化健康' })).toBeInTheDocument();
-    expect(screen.getAllByText(/quota_exceeded_appointments/).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { name: '商业化健康' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/quota_exceeded_appointments/)).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/tenants', { cache: 'no-store' });
-    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/audit-events?result=denied&limit=100', {
-      cache: 'no-store',
-    });
+    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).not.toContain(
+      '/api/open-platform/audit-events?result=denied&limit=100',
+    );
     expectNoPlatformTenantMutation(fetchMock);
     expectNoSensitivePlatformTenantContent(container);
   });
@@ -4321,9 +4321,9 @@ describe('工作台入口页面', () => {
 
     expect(screen.getByText('正在加载租户管理数据...')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '商业化健康' })).toBeInTheDocument();
-    expect(screen.getByText('套餐覆盖率')).toBeInTheDocument();
-    expect(screen.getAllByText('暂无需要收尾关注的商业化健康信号').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { name: '商业化健康' })).not.toBeInTheDocument();
+    expect(screen.queryByText('套餐覆盖率')).not.toBeInTheDocument();
+    expect(screen.queryByText('暂无需要收尾关注的商业化健康信号')).not.toBeInTheDocument();
     expect(screen.getAllByText('智美天工演示机构').length).toBeGreaterThan(0);
     expect(screen.getByText('运行中')).toBeInTheDocument();
     expect(screen.getByText('成长版')).toBeInTheDocument();
@@ -4344,13 +4344,12 @@ describe('工作台入口页面', () => {
     const commercialHealthAuditCall = fetchMock.mock.calls.find(
       ([input]) => fetchPath(input) === '/api/open-platform/audit-events?result=denied&limit=100',
     );
-    expect(commercialHealthAuditCall).toBeDefined();
-    expect(commercialHealthAuditCall?.[1]).toEqual({ cache: 'no-store' });
+    expect(commercialHealthAuditCall).toBeUndefined();
     expectNoPlatformTenantMutation(fetchMock);
     expectNoSensitivePlatformTenantContent(container);
   });
 
-  it('平台端租户管理入口 smoke 覆盖商业化健康信号和安全边界', async () => {
+  it('平台端租户管理入口不再展示旧商业化健康卡片或审计信号', async () => {
     const fetchMock = mockWorkspaceFetch({
       role: 'platform_admin',
       platformTenants: [platformCommercialRiskTenant, platformCommercialMissingTenant],
@@ -4361,39 +4360,18 @@ describe('工作台入口页面', () => {
     expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
 
-    expect(await screen.findByRole('heading', { name: '商业化健康' })).toBeInTheDocument();
-    const commercialHealthSection = screen.getByRole('heading', { name: '商业化健康' }).closest('article');
-    expect(commercialHealthSection).not.toBeNull();
-    const commercialHealth = commercialHealthSection as HTMLElement;
-
-    expect(within(commercialHealth).getByText('套餐覆盖率')).toBeInTheDocument();
-    expect(
-      within(commercialHealth).getByText('商业化健康是运营辅助，不是完整计费系统。'),
-    ).toBeInTheDocument();
-    expect(
-      within(commercialHealth).getByText('quota denied 是演示审计信号，不会自行变更套餐或发起触达动作。'),
-    ).toBeInTheDocument();
-    expect(within(commercialHealth).getByText('50%')).toBeInTheDocument();
-    expect(within(commercialHealth).getByText('配额风险项')).toBeInTheDocument();
-    expect(within(commercialHealth).getAllByText('配置缺失租户').length).toBeGreaterThan(0);
-    expect(within(commercialHealth).getByText('近期 quota denied')).toBeInTheDocument();
-    expect(within(commercialHealth).getAllByText('Phase11 配额风险机构').length).toBeGreaterThan(0);
-    expect(within(commercialHealth).getByText(/客户.*88 \/ 100/)).toBeInTheDocument();
-    expect(within(commercialHealth).getByText('Phase11 配置缺失机构')).toBeInTheDocument();
-    expect(within(commercialHealth).getByText('缺少 active plan')).toBeInTheDocument();
-    expect(within(commercialHealth).getByText(/缺少 quota limit/)).toBeInTheDocument();
-    expect(within(commercialHealth).getByText('缺少 quota snapshot')).toBeInTheDocument();
-    expect(within(commercialHealth).getByText(/quota_exceeded_customers/)).toBeInTheDocument();
-    expect(within(commercialHealth).getAllByText(/customer/).length).toBeGreaterThan(0);
-    expect(within(commercialHealth).getAllByText(/运营参考/).length).toBeGreaterThan(0);
-    expect(within(commercialHealth).getAllByText(/配额快照/).length).toBeGreaterThan(0);
-    expect(commercialHealth.textContent ?? '').not.toContain('强一致');
-    expect(commercialHealth.textContent ?? '').not.toContain('enforcement');
+    expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '商业化健康' })).not.toBeInTheDocument();
+    expect(screen.queryByText('只读运营辅助')).not.toBeInTheDocument();
+    expect(screen.queryByText('套餐覆盖率')).not.toBeInTheDocument();
+    expect(screen.queryByText(/quota denied/)).not.toBeInTheDocument();
+    expect(screen.getAllByText('Phase11 配额风险机构').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Phase11 配置缺失机构').length).toBeGreaterThan(0);
 
     expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/tenants', { cache: 'no-store' });
-    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/audit-events?result=denied&limit=100', {
-      cache: 'no-store',
-    });
+    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).not.toContain(
+      '/api/open-platform/audit-events?result=denied&limit=100',
+    );
     expectNoPlatformTenantMutation(fetchMock);
     expectNoSensitivePlatformTenantContent(container);
     expectNoPlatformDemoMisleadingClaims(container);

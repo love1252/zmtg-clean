@@ -154,13 +154,6 @@ function expectNoPlatformDemoMisleadingClaims(container: HTMLElement) {
   expect(text).not.toContain('自动触达');
 }
 
-function commercialHealthSection() {
-  const heading = screen.getByRole('heading', { name: '商业化健康' });
-  const section = heading.closest('article');
-  expect(section).not.toBeNull();
-  return section as HTMLElement;
-}
-
 describe('平台端租户管理面板', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -196,100 +189,22 @@ describe('平台端租户管理面板', () => {
     expectNoPlatformDemoMisleadingClaims(container);
   });
 
-  it('展示商业化健康摘要、配额风险、配置缺失和 quota denied 信号', async () => {
-    const riskyTenant = {
-      ...tenantRecord,
-      tenantId: 'tenant-risk',
-      tenantName: '配额风险机构',
-      maxCustomers: 100,
-      currentCustomers: 88,
-    };
-    const missingConfigTenant = {
-      ...tenantRecord,
-      tenantId: 'tenant-missing-config',
-      tenantName: '配置缺失机构',
-      planName: null,
-      planCode: null,
-      planStatus: null,
-      assignmentStatus: null,
-      maxCustomers: null,
-      maxAppointments: null,
-      maxFollowUps: null,
-      maxAiCalls: null,
-      currentCustomers: null,
-      currentAppointments: null,
-      currentFollowUps: null,
-      currentAiCalls: null,
-      snapshotAt: null,
-    };
+  it('不再展示旧商业化健康卡片或请求 quota denied 审计信号', async () => {
     const fetchMock = mockTenantFetch({
-      tenantResponses: [jsonResponse({ records: [riskyTenant, missingConfigTenant] })],
-      auditEventsResponse: jsonResponse({
-        records: [
-          {
-            id: 'audit_quota_denied_001',
-            tenantId: 'tenant-risk',
-            resource: 'customer',
-            resourceId: 'cust_raw_should_not_render',
-            action: 'create',
-            result: 'denied',
-            reason: 'quota_exceeded_customers',
-            actorId: 'demo-user-admin',
-            actorRole: 'tenant_admin',
-            occurredAt: '2026-05-31T10:00:00.000Z',
-            requestBody: { phoneNumber: '13800000000' },
-            metadata: { sql: 'select * from audit_events' },
-            stack: 'Error: DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
-            token: 'sk_test_should_not_render',
-            secret: 'raw-secret',
-          },
-        ],
-        pageInfo: {
-          hasMore: false,
-          limit: 100,
-          nextCursor: null,
-        },
-      }),
+      tenantResponses: [jsonResponse({ records: [tenantRecord] })],
     });
     const { container } = render(<OpenPlatformTenantManagementPanel />);
 
-    expect(await screen.findByRole('heading', { name: '商业化健康' })).toBeInTheDocument();
-    const section = commercialHealthSection();
-
-    expect(within(section).getByText('套餐覆盖率')).toBeInTheDocument();
-    expect(
-      within(section).getByText('商业化健康是运营辅助，不是完整计费系统。'),
-    ).toBeInTheDocument();
-    expect(
-      within(section).getByText('quota denied 是演示审计信号，不会自行变更套餐或发起触达动作。'),
-    ).toBeInTheDocument();
-    expect(within(section).getByText('50%')).toBeInTheDocument();
-    expect(within(section).getByText('配额风险项')).toBeInTheDocument();
-    expect(within(section).getAllByText('配置缺失租户').length).toBeGreaterThan(0);
-    expect(within(section).getByText('近期 quota denied')).toBeInTheDocument();
-    expect(within(section).getAllByText('配额风险机构').length).toBeGreaterThan(0);
-    expect(within(section).getByText(/客户.*88 \/ 100/)).toBeInTheDocument();
-    expect(within(section).getByText('配置缺失机构')).toBeInTheDocument();
-    expect(within(section).getByText('缺少 active plan')).toBeInTheDocument();
-    expect(within(section).getByText(/缺少 quota limit/)).toBeInTheDocument();
-    expect(within(section).getByText('缺少 quota snapshot')).toBeInTheDocument();
-    expect(within(section).getByText(/quota_exceeded_customers/)).toBeInTheDocument();
-    expect(within(section).getAllByText(/customer/).length).toBeGreaterThan(0);
-    expect(within(section).getAllByText(/运营参考/).length).toBeGreaterThan(0);
-    expect(within(section).getAllByText(/配额快照/).length).toBeGreaterThan(0);
-    expect(section.textContent ?? '').not.toContain('强一致');
-    expect(section.textContent ?? '').not.toContain('enforcement');
-    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual(
-      expect.arrayContaining([
-        '/api/open-platform/tenants',
-        '/api/open-platform/audit-events?result=denied&limit=100',
-      ]),
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { name: '商业化健康' })).not.toBeInTheDocument();
+    expect(screen.queryByText('只读运营辅助')).not.toBeInTheDocument();
+    expect(screen.queryByText('套餐覆盖率')).not.toBeInTheDocument();
+    expect(screen.queryByText(/quota denied/)).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).not.toContain(
+      '/api/open-platform/audit-events?result=denied&limit=100',
     );
     expectNoSensitiveTenantContent(container);
     expectNoPlatformDemoMisleadingClaims(container);
-    expect(container.textContent ?? '').not.toContain('requestBody');
-    expect(container.textContent ?? '').not.toContain('metadata');
-    expect(container.textContent ?? '').not.toContain('cust_raw_should_not_render');
   });
 
   it('展示 loading 状态', () => {
@@ -308,7 +223,7 @@ describe('平台端租户管理面板', () => {
 
     expect(await screen.findByText('暂无受控演示租户')).toBeInTheDocument();
     expect(screen.getByText('当前没有可展示的演示租户、套餐或配额快照。')).toBeInTheDocument();
-    expect(screen.getAllByText('暂无需要收尾关注的商业化健康信号').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { name: '商业化健康' })).not.toBeInTheDocument();
   });
 
   it.each([
