@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PlatformConsole } from '@/modules/workspace/components/PlatformConsole';
 import { getPlatformAiModelConfigResponse } from '@/modules/open-platform/server/platformAiModelConfigContract';
@@ -21,6 +21,14 @@ const forbiddenFragments = [
   'PR3',
   'PR4',
   'PR5',
+];
+
+const expectedDefaultVendorLogos = [
+  { providerName: '豆包', logoSrc: '/ai-vendor-logos/doubao.svg' },
+  { providerName: 'DeepSeek', logoSrc: '/ai-vendor-logos/deepseek.svg' },
+  { providerName: '通义千问', logoSrc: '/ai-vendor-logos/qwen.svg' },
+  { providerName: '智谱GLM', logoSrc: '/ai-vendor-logos/chatglm.svg' },
+  { providerName: 'Kimi', logoSrc: '/ai-vendor-logos/kimi.svg' },
 ];
 
 function stubFetch() {
@@ -333,6 +341,27 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
     expect(screen.getByRole('button', { name: '厂商 通义千问' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '厂商 智谱GLM' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '厂商 Kimi' })).toBeInTheDocument();
+
+    expectNoMutationFetch(fetchMock);
+    expectNoForbiddenContent(container);
+  });
+
+  it('数据库没有 logoRef 时展示仓库内默认厂商 Logo，默认资产不可用时回退字母方块', async () => {
+    const fetchMock = stubPersistenceFetch();
+    const { container } = render(<PlatformConsole />);
+
+    await openAiModelConfigPanel();
+
+    expectedDefaultVendorLogos.forEach(({ providerName, logoSrc }) => {
+      expect(screen.getByRole('img', { name: `${providerName} Logo` })).toHaveAttribute('src', logoSrc);
+    });
+
+    const deepSeekDefaultLogo = screen.getByRole('img', { name: 'DeepSeek Logo' });
+    fireEvent.error(deepSeekDefaultLogo);
+
+    const deepSeekButton = screen.getByRole('button', { name: '厂商 DeepSeek' });
+    expect(within(deepSeekButton).queryByRole('img', { name: 'DeepSeek Logo' })).not.toBeInTheDocument();
+    expect(deepSeekButton).toHaveTextContent('D');
 
     expectNoMutationFetch(fetchMock);
     expectNoForbiddenContent(container);

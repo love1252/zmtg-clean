@@ -53,6 +53,13 @@ const aiModelConfigPersistenceEndpoint = '/api/v1/open-platform/ai-model-config'
 const aiModelConfigSyncEndpoint = `${aiModelConfigPersistenceEndpoint}/sync`;
 const aiModelConfigTestEndpoint = `${aiModelConfigPersistenceEndpoint}/test`;
 const providerConfigsEndpoint = '/api/v1/open-platform/provider-configs';
+const defaultProviderLogoRefs: Record<string, string> = {
+  doubao: '/ai-vendor-logos/doubao.svg',
+  deepseek: '/ai-vendor-logos/deepseek.svg',
+  qwen: '/ai-vendor-logos/qwen.svg',
+  chatglm: '/ai-vendor-logos/chatglm.svg',
+  kimi: '/ai-vendor-logos/kimi.svg',
+};
 
 type VendorOperationPayload = {
   ok?: boolean;
@@ -63,7 +70,7 @@ type VendorOperationPayload = {
 const allowedLogoImageTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const maxLogoImageBytes = 150 * 1024;
 
-function isDisplayableLogoRef(value: string | null | undefined) {
+function isDisplayableLogoRef(value: string | null | undefined): value is string {
   if (!value) return false;
   return value.startsWith('data:image/png;base64,')
     || value.startsWith('data:image/jpeg;base64,')
@@ -85,6 +92,7 @@ export function OpenPlatformAiModelConfigPanel() {
   ));
   const [logoPreviewByProvider, setLogoPreviewByProvider] = useState<Record<string, string>>({});
   const [logoFileNameByProvider, setLogoFileNameByProvider] = useState<Record<string, string>>({});
+  const [failedDefaultLogoByProvider, setFailedDefaultLogoByProvider] = useState<Record<string, boolean>>({});
   const [keyDraftByProvider, setKeyDraftByProvider] = useState<Record<string, string>>({});
   const [keyDraftSavedByProvider, setKeyDraftSavedByProvider] = useState<Record<string, boolean>>({});
   const [keyStatusByProvider, setKeyStatusByProvider] = useState<Record<string, PlatformAiModelConfigKeyStatus>>({});
@@ -218,12 +226,22 @@ export function OpenPlatformAiModelConfigPanel() {
     return '输入新 Key';
   }
 
-  function getProviderLogoRef(providerId: string) {
+  function getUploadedProviderLogoRef(providerId: string) {
     return logoPreviewByProvider[providerId] ?? null;
+  }
+
+  function getProviderLogoRef(providerId: string) {
+    const uploadedLogoRef = getUploadedProviderLogoRef(providerId);
+    if (uploadedLogoRef) return uploadedLogoRef;
+
+    if (failedDefaultLogoByProvider[providerId]) return null;
+    return defaultProviderLogoRefs[providerId] ?? null;
   }
 
   function renderProviderLogo(provider: PlatformAiModelConfigProvider, className: string) {
     const logoRef = getProviderLogoRef(provider.providerId);
+    const isDefaultLogo = logoRef === defaultProviderLogoRefs[provider.providerId] && !getUploadedProviderLogoRef(provider.providerId);
+
     if (isDisplayableLogoRef(logoRef)) {
       return (
         // eslint-disable-next-line @next/next/no-img-element -- User-uploaded data URL previews cannot go through next/image optimization.
@@ -231,6 +249,9 @@ export function OpenPlatformAiModelConfigPanel() {
           src={logoRef}
           alt={`${provider.providerName} Logo`}
           className={cn('object-contain bg-white', className)}
+          onError={isDefaultLogo
+            ? () => setFailedDefaultLogoByProvider((current) => ({ ...current, [provider.providerId]: true }))
+            : undefined}
         />
       );
     }
@@ -875,11 +896,11 @@ export function OpenPlatformAiModelConfigPanel() {
                             <div className="mt-1 text-[11px] text-gray-400">
                               {logoFileNameByProvider[provider.providerId]
                                 ? `本地预览：${logoFileNameByProvider[provider.providerId]}`
-                                : getProviderLogoRef(provider.providerId)
+                                : getUploadedProviderLogoRef(provider.providerId)
                                   ? '已保存 Logo'
                                   : '默认 Logo'}
                             </div>
-                            {getProviderLogoRef(provider.providerId) ? (
+                            {getUploadedProviderLogoRef(provider.providerId) ? (
                               <button
                                 type="button"
                                 aria-label={`恢复默认 Logo ${provider.providerName}`}
