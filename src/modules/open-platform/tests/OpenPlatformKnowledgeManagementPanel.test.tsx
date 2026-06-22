@@ -827,6 +827,15 @@ describe('平台端知识库管理只读看板', () => {
     );
   });
 
+  it('文件管理页签优先展示上传与解析卡片', async () => {
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    const uploadPanel = await screen.findByLabelText('知识库文件管理操作区');
+    const fileListPanel = await screen.findByLabelText('机构上传文件列表');
+
+    expect(uploadPanel.compareDocumentPosition(fileListPanel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('顶部上传文档入口会跳转到真实上传区并打开文件选择', async () => {
     const inputClickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => undefined);
     const scrollIntoViewSpy = vi.fn();
