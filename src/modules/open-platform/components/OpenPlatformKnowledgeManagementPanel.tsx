@@ -1624,6 +1624,157 @@ export function OpenPlatformKnowledgeManagementPanel() {
           </div>
 
           {activeWorkspaceTab === 'files' ? (
+	          <article ref={uploadPanelRef} className={cn(sectionShell, 'overflow-hidden')} aria-label="知识库文件管理操作区">
+            <div className="flex flex-col gap-4 border-b border-[#e6edf5] p-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-50 text-emerald-600">
+                  <Upload className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold tracking-normal text-slate-950">上传与解析</h2>
+                  <p className="mt-1 text-sm text-slate-500">平台端上传、下载和归档原始文件，仅展示低敏元数据。</p>
+                </div>
+              </div>
+
+	              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                <select
+                  aria-label="选择文件所属知识库"
+                  disabled={!hasManagedKnowledgeOptions}
+                  value={hasManagedKnowledgeOptions ? effectiveManagedKnowledgeId : '__empty__'}
+                  onChange={(event) => setManagedKnowledgeId(event.target.value)}
+                  className="h-10 rounded-lg border border-[#dbe5f0] bg-white px-3 text-sm font-semibold text-slate-700 outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                >
+                  {hasManagedKnowledgeOptions ? visibleKnowledgeItems.map((item) => (
+                    <option key={item.knowledgeId} value={item.knowledgeId}>
+                      {item.title}
+                    </option>
+                  )) : (
+                    <option value="__empty__">暂无可选知识库</option>
+                  )}
+                </select>
+	                <label className="inline-flex h-10 min-w-[96px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[#dbe5f0] bg-white px-3 text-sm font-semibold text-slate-700">
+	                  <FileText className="h-4 w-4 shrink-0" />
+	                  <span className="max-w-[160px] truncate whitespace-nowrap">{managedFile?.name ?? '选择文件'}</span>
+	                  <input
+	                    ref={managedFileInputRef}
+	                    aria-label="选择知识库文件"
+                    type="file"
+                    accept=".pdf,.docx,.txt,.md,.csv,.xlsx"
+                    className="sr-only"
+                    onChange={(event) => setManagedFile(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                <button
+                  type="button"
+	                  onClick={handleUploadManagedFile}
+	                  disabled={!managedKnowledge || !managedFile || isFileActionLoading}
+	                  className="inline-flex h-10 min-w-[96px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+	                >
+	                  <Upload className="h-4 w-4 shrink-0" />
+	                  上传文件
+                </button>
+              </div>
+            </div>
+
+            {fileActionMessage ? (
+              <div className="border-b border-[#e6edf5] px-4 py-3 text-sm font-semibold text-blue-700">
+                {fileActionMessage}
+              </div>
+            ) : null}
+
+            <div className="p-4">
+              {!managedKnowledge ? (
+                <EmptyState title="暂无可管理知识库" description="当前范围没有可绑定文件的知识条目。" />
+              ) : managedFiles.length === 0 ? (
+                <EmptyState title="暂无知识库文件" description="可先上传 PDF、DOCX、TXT、MD、CSV 或 XLSX 文件。" />
+              ) : (
+                <div className="grid gap-3 xl:grid-cols-2">
+                  {managedFiles.map((file) => (
+                    <div
+                      key={file.fileId}
+                      className="rounded-lg border border-[#e6edf5] bg-[#f8fafc] p-4"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-slate-950">{file.originalFilename}</div>
+                          <div className="mt-1 flex flex-wrap gap-2 text-xs font-semibold text-slate-500">
+                            <span>{file.fileType}</span>
+                            <span>{file.sizeLabel}</span>
+                            <span>{file.status === 'active' ? '可下载' : '已归档'}</span>
+                            <span>{formatNumber(file.textLength)} 字符</span>
+                            <Badge className={managedParseStatusClasses[file.parseStatus]}>
+                              {managedParseStatusLabels[file.parseStatus]} · {file.chunkCount} 片段
+                            </Badge>
+                          </div>
+                          {file.safeFailureMessage ? (
+                            <div className="mt-2 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                              {file.safeFailureMessage}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadManagedFile(file)}
+                            disabled={file.status !== 'active'}
+                            className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Download className="h-4 w-4" />
+                            下载文件
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleParseManagedFile(file)}
+                            disabled={file.status !== 'active' || isFileActionLoading}
+                            className="inline-flex h-9 items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <FileText className="h-4 w-4" />
+                            发起解析
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoadManagedChunks(file)}
+                            className="inline-flex h-9 items-center gap-2 rounded-lg border border-sky-100 bg-sky-50 px-3 text-xs font-semibold text-sky-700"
+                          >
+                            <Layers3 className="h-4 w-4" />
+                            查看片段
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleArchiveManagedFile(file)}
+                            disabled={file.status !== 'active' || isFileActionLoading}
+                            className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-100 bg-amber-50 px-3 text-xs font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Archive className="h-4 w-4" />
+                            归档文件
+                          </button>
+                        </div>
+                      </div>
+                      {expandedParseFileId === file.fileId ? (
+                        <div className="mt-3 space-y-2 rounded-lg border border-[#e6edf5] bg-white p-3">
+                          {(managedChunksByFileId[file.fileId] ?? []).length === 0 ? (
+                            <div className="text-xs font-semibold text-slate-500">暂无解析片段</div>
+                          ) : (
+                            (managedChunksByFileId[file.fileId] ?? []).map((chunk) => (
+                              <div key={chunk.chunkId} className="rounded-lg border border-[#e6edf5] bg-[#f8fafc] px-3 py-2">
+                                <div className="text-xs font-semibold text-slate-500">
+                                  片段 {chunk.chunkIndex + 1} · {chunk.charCount} 字
+                                </div>
+                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-700">{chunk.textPreview}</p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </article>
+          ) : null}
+
+          {activeWorkspaceTab === 'files' ? (
 	          <article className={cn(sectionShell, 'overflow-hidden')} aria-label="机构上传文件列表">
 	            <div className="space-y-3 border-b border-[#e6edf5] p-4">
 	              <div className="flex items-center justify-between gap-3">
@@ -2113,157 +2264,6 @@ export function OpenPlatformKnowledgeManagementPanel() {
                         ) : null}
                       </div>
                     </article>
-                  ))}
-                </div>
-              )}
-            </div>
-          </article>
-          ) : null}
-
-          {activeWorkspaceTab === 'files' ? (
-	          <article ref={uploadPanelRef} className={cn(sectionShell, 'overflow-hidden')} aria-label="知识库文件管理操作区">
-            <div className="flex flex-col gap-4 border-b border-[#e6edf5] p-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-50 text-emerald-600">
-                  <Upload className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold tracking-normal text-slate-950">上传与解析</h2>
-                  <p className="mt-1 text-sm text-slate-500">平台端上传、下载和归档原始文件，仅展示低敏元数据。</p>
-                </div>
-              </div>
-
-	              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-                <select
-                  aria-label="选择文件所属知识库"
-                  disabled={!hasManagedKnowledgeOptions}
-                  value={hasManagedKnowledgeOptions ? effectiveManagedKnowledgeId : '__empty__'}
-                  onChange={(event) => setManagedKnowledgeId(event.target.value)}
-                  className="h-10 rounded-lg border border-[#dbe5f0] bg-white px-3 text-sm font-semibold text-slate-700 outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                >
-                  {hasManagedKnowledgeOptions ? visibleKnowledgeItems.map((item) => (
-                    <option key={item.knowledgeId} value={item.knowledgeId}>
-                      {item.title}
-                    </option>
-                  )) : (
-                    <option value="__empty__">暂无可选知识库</option>
-                  )}
-                </select>
-	                <label className="inline-flex h-10 min-w-[96px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[#dbe5f0] bg-white px-3 text-sm font-semibold text-slate-700">
-	                  <FileText className="h-4 w-4 shrink-0" />
-	                  <span className="max-w-[160px] truncate whitespace-nowrap">{managedFile?.name ?? '选择文件'}</span>
-	                  <input
-	                    ref={managedFileInputRef}
-	                    aria-label="选择知识库文件"
-                    type="file"
-                    accept=".pdf,.docx,.txt,.md,.csv,.xlsx"
-                    className="sr-only"
-                    onChange={(event) => setManagedFile(event.target.files?.[0] ?? null)}
-                  />
-                </label>
-                <button
-                  type="button"
-	                  onClick={handleUploadManagedFile}
-	                  disabled={!managedKnowledge || !managedFile || isFileActionLoading}
-	                  className="inline-flex h-10 min-w-[96px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-	                >
-	                  <Upload className="h-4 w-4 shrink-0" />
-	                  上传文件
-                </button>
-              </div>
-            </div>
-
-            {fileActionMessage ? (
-              <div className="border-b border-[#e6edf5] px-4 py-3 text-sm font-semibold text-blue-700">
-                {fileActionMessage}
-              </div>
-            ) : null}
-
-            <div className="p-4">
-              {!managedKnowledge ? (
-                <EmptyState title="暂无可管理知识库" description="当前范围没有可绑定文件的知识条目。" />
-              ) : managedFiles.length === 0 ? (
-                <EmptyState title="暂无知识库文件" description="可先上传 PDF、DOCX、TXT、MD、CSV 或 XLSX 文件。" />
-              ) : (
-                <div className="grid gap-3 xl:grid-cols-2">
-                  {managedFiles.map((file) => (
-                    <div
-                      key={file.fileId}
-                      className="rounded-lg border border-[#e6edf5] bg-[#f8fafc] p-4"
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-slate-950">{file.originalFilename}</div>
-                          <div className="mt-1 flex flex-wrap gap-2 text-xs font-semibold text-slate-500">
-                            <span>{file.fileType}</span>
-                            <span>{file.sizeLabel}</span>
-                            <span>{file.status === 'active' ? '可下载' : '已归档'}</span>
-                            <span>{formatNumber(file.textLength)} 字符</span>
-                            <Badge className={managedParseStatusClasses[file.parseStatus]}>
-                              {managedParseStatusLabels[file.parseStatus]} · {file.chunkCount} 片段
-                            </Badge>
-                          </div>
-                          {file.safeFailureMessage ? (
-                            <div className="mt-2 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
-                              {file.safeFailureMessage}
-                            </div>
-                          ) : null}
-                        </div>
-                        <div className="flex shrink-0 flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadManagedFile(file)}
-                            disabled={file.status !== 'active'}
-                            className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            <Download className="h-4 w-4" />
-                            下载文件
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleParseManagedFile(file)}
-                            disabled={file.status !== 'active' || isFileActionLoading}
-                            className="inline-flex h-9 items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            <FileText className="h-4 w-4" />
-                            发起解析
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLoadManagedChunks(file)}
-                            className="inline-flex h-9 items-center gap-2 rounded-lg border border-sky-100 bg-sky-50 px-3 text-xs font-semibold text-sky-700"
-                          >
-                            <Layers3 className="h-4 w-4" />
-                            查看片段
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleArchiveManagedFile(file)}
-                            disabled={file.status !== 'active' || isFileActionLoading}
-                            className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-100 bg-amber-50 px-3 text-xs font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            <Archive className="h-4 w-4" />
-                            归档文件
-                          </button>
-                        </div>
-                      </div>
-                      {expandedParseFileId === file.fileId ? (
-                        <div className="mt-3 space-y-2 rounded-lg border border-[#e6edf5] bg-white p-3">
-                          {(managedChunksByFileId[file.fileId] ?? []).length === 0 ? (
-                            <div className="text-xs font-semibold text-slate-500">暂无解析片段</div>
-                          ) : (
-                            (managedChunksByFileId[file.fileId] ?? []).map((chunk) => (
-                              <div key={chunk.chunkId} className="rounded-lg border border-[#e6edf5] bg-[#f8fafc] px-3 py-2">
-                                <div className="text-xs font-semibold text-slate-500">
-                                  片段 {chunk.chunkIndex + 1} · {chunk.charCount} 字
-                                </div>
-                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-700">{chunk.textPreview}</p>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
                   ))}
                 </div>
               )}
