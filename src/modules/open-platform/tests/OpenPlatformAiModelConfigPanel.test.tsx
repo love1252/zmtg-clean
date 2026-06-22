@@ -1,4 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PlatformConsole } from '@/modules/workspace/components/PlatformConsole';
 import { getPlatformAiModelConfigResponse } from '@/modules/open-platform/server/platformAiModelConfigContract';
@@ -30,6 +32,8 @@ const expectedDefaultVendorLogos = [
   { providerName: '智谱GLM', logoSrc: '/ai-vendor-logos/chatglm.svg' },
   { providerName: 'Kimi', logoSrc: '/ai-vendor-logos/kimi.svg' },
 ];
+
+const defaultLogoAssetPaths = expectedDefaultVendorLogos.map(({ logoSrc }) => logoSrc.replace(/^\//, 'public/'));
 
 function stubFetch() {
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: false }), { status: 404 }));
@@ -365,6 +369,15 @@ describe('平台端 AI 模型配置旧系统视觉只读还原', () => {
 
     expectNoMutationFetch(fetchMock);
     expectNoForbiddenContent(container);
+  });
+
+  it('仓库默认厂商 Logo 使用稳定图片资产而不是占位矢量图', () => {
+    defaultLogoAssetPaths.forEach((assetPath) => {
+      const assetContent = readFileSync(join(process.cwd(), assetPath), 'utf8');
+
+      expect(assetContent.length).toBeGreaterThan(4000);
+      expect(assetContent).toContain('data:image/png;base64,');
+    });
   });
 
   it('厂商展开后展示低敏 Key 状态、能力分组和模型行，同步测试按钮为受控执行', async () => {
