@@ -336,7 +336,7 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
         method: 'POST',
         body: JSON.stringify({ tenantId: 'tenant-route-a', institutionId: 'inst-visible-a' }),
       }),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) },
     );
     expect(postResponse.status).toBe(200);
     expect(await readJson(postResponse)).toEqual({
@@ -356,7 +356,7 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
         method: 'DELETE',
         body: JSON.stringify({ tenantId: 'tenant-route-a', institutionId: 'inst-visible-a' }),
       }),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) },
     );
     expect(deleteResponse.status).toBe(200);
     expect(await readJson(deleteResponse)).toEqual({
@@ -403,7 +403,7 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
         method,
         body: JSON.stringify(body),
       }),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) },
     );
 
     expect(response.status).toBe(400);
@@ -438,7 +438,7 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
           institutionId: 'inst-visible-a',
         }),
       }),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) },
     );
 
     expect(response.status).toBe(404);
@@ -478,7 +478,7 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
           institutionId: 'inst-other-tenant',
         }),
       }),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) },
     );
 
     expect(response.status).toBe(400);
@@ -518,7 +518,7 @@ describe('平台知识库管理 V1 真实数据 API route', () => {
           institutionId: 'inst-visible-a',
         }),
       }),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) },
     );
     const payload = await readJson(response);
     const serialized = JSON.stringify(payload);

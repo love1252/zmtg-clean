@@ -216,7 +216,7 @@ describe('知识库文档解析 API route', () => {
   it('平台端 POST 发起解析、GET 查看状态和 GET 查看 chunk 列表', async () => {
     const parseResponse = await platformParseRoute.POST(
       new Request(platformParseUrl('?tenantId=tenant-route-a'), { method: 'POST' }),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     const parsePayload = await readJson(parseResponse);
 
@@ -235,7 +235,7 @@ describe('知识库文档解析 API route', () => {
 
     const statusResponse = await platformParseRoute.GET(
       new Request(platformParseUrl('?tenantId=tenant-route-a')),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     const statusPayload = await readJson(statusResponse);
     expect(statusResponse.status).toBe(200);
@@ -250,7 +250,7 @@ describe('知识库文档解析 API route', () => {
 
     const chunksResponse = await platformChunksRoute.GET(
       new Request(platformChunksUrl('?tenantId=tenant-route-a')),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     const chunksPayload = await readJson(chunksResponse);
     expect(chunksResponse.status).toBe(200);
@@ -286,7 +286,7 @@ describe('知识库文档解析 API route', () => {
 
     const response = await platformParseRoute.POST(
       new Request(platformParseUrl('?tenantId=tenant-route-a'), { method: 'POST' }),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
 
     expect(response.status).toBe(expectedStatus);
@@ -303,7 +303,7 @@ describe('知识库文档解析 API route', () => {
 
     const archived = await platformParseRoute.POST(
       new Request(platformParseUrl('?tenantId=tenant-route-a'), { method: 'POST' }),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     expect(archived.status).toBe(400);
     expect(await readJson(archived)).toEqual({
@@ -314,7 +314,7 @@ describe('知识库文档解析 API route', () => {
     repository.findKnowledgeFile.mockRejectedValueOnce(unsafeError);
     const failed = await platformParseRoute.GET(
       new Request(platformParseUrl('?tenantId=tenant-route-a')),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     const payload = await readJson(failed);
     expect(failed.status).toBe(400);
@@ -334,7 +334,7 @@ describe('知识库文档解析 API route', () => {
 
     const response = await platformParseRoute.POST(
       new Request(platformParseUrl('?tenantId=tenant-route-a'), { method: 'POST' }),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     const payload = await readJson(response);
 
@@ -375,7 +375,7 @@ describe('知识库文档解析 API route', () => {
 
     const statusResponse = await institutionParseRoute.GET(
       new Request(institutionParseUrl('?tenantId=tenant-b&institutionId=inst-b')),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     expect(statusResponse.status).toBe(200);
     expect(await readJson(statusResponse)).toEqual(
@@ -391,7 +391,7 @@ describe('知识库文档解析 API route', () => {
 
     const chunksResponse = await institutionChunksRoute.GET(
       new Request(institutionChunksUrl('?tenantId=tenant-b&institutionId=inst-b')),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     expect(chunksResponse.status).toBe(200);
     expect(await readJson(chunksResponse)).toEqual(
@@ -412,7 +412,7 @@ describe('知识库文档解析 API route', () => {
 
     const forbidden = await institutionParseRoute.GET(
       new Request(institutionParseUrl()),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     expect(forbidden.status).toBe(403);
     expect(await readJson(forbidden)).toEqual({ code: 'forbidden', error: '没有访问权限' });
@@ -420,7 +420,7 @@ describe('知识库文档解析 API route', () => {
     repository.findKnowledgeItem.mockRejectedValueOnce(unsafeError);
     const failed = await institutionChunksRoute.GET(
       new Request(institutionChunksUrl()),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     const payload = await readJson(failed);
     expect(failed.status).toBe(503);

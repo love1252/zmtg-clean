@@ -251,7 +251,7 @@ describe('知识库文件管理 API route', () => {
 
     const downloadResponse = await platformDownloadRoute.GET(
       new Request(platformDownloadUrl('?tenantId=tenant-route-a')),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     expect(downloadResponse.status).toBe(200);
     expect(downloadResponse.headers.get('content-disposition')).toContain(
@@ -262,7 +262,7 @@ describe('知识库文件管理 API route', () => {
 
     const deleteResponse = await platformFileRoute.DELETE(
       new Request(platformFileUrl('?tenantId=tenant-route-a'), { method: 'DELETE' }),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     expect(deleteResponse.status).toBe(200);
     expect(await readJson(deleteResponse)).toEqual(
@@ -312,11 +312,11 @@ describe('知识库文件管理 API route', () => {
     );
     const downloadResponse = await platformDownloadRoute.GET(
       new Request(platformDownloadUrl('?tenantId=tenant-route-a')),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     const archiveResponse = await platformFileRoute.DELETE(
       new Request(platformFileUrl('?tenantId=tenant-route-a'), { method: 'DELETE' }),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
 
     expect(listResponse.status).toBe(403);
@@ -361,7 +361,7 @@ describe('知识库文件管理 API route', () => {
 
     const listResponse = await institutionFilesRoute.GET(
       new Request('http://localhost/api/institution/knowledge-management/items/knowledge-route-a/files'),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) },
     );
     const listPayload = await readJson(listResponse);
     expect(listResponse.status).toBe(200);
@@ -378,7 +378,7 @@ describe('知识库文件管理 API route', () => {
       new Request(
         'http://localhost/api/institution/knowledge-management/items/knowledge-route-a/files/file-route-a/download',
       ),
-      { params: { knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     expect(downloadResponse.status).toBe(200);
     expect(await downloadResponse.text()).toBe('file bytes');
@@ -395,7 +395,7 @@ describe('知识库文件管理 API route', () => {
 
     const forbidden = await institutionFilesRoute.GET(
       new Request('http://localhost/api/institution/knowledge-management/items/knowledge-route-a/files'),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) },
     );
     expect(forbidden.status).toBe(403);
     expect(await readJson(forbidden)).toEqual({ code: 'forbidden', error: '没有访问权限' });
@@ -403,7 +403,7 @@ describe('知识库文件管理 API route', () => {
     repository.findKnowledgeItem.mockRejectedValueOnce(unsafeError);
     const failed = await institutionFilesRoute.GET(
       new Request('http://localhost/api/institution/knowledge-management/items/knowledge-route-a/files'),
-      { params: { knowledgeId: 'knowledge-route-a' } },
+      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) },
     );
     const payload = await readJson(failed);
     const serialized = JSON.stringify(payload);

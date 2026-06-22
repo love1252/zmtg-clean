@@ -37,7 +37,14 @@ function fetchPath(input: Parameters<typeof fetch>[0]) {
   return input.url;
 }
 
-function auditEventsResponse(records: unknown[], pageInfo = { hasMore: false, limit: 10, nextCursor: null }) {
+function auditEventsResponse(
+  records: unknown[],
+  pageInfo: { hasMore: boolean; limit: number; nextCursor: string | null } = {
+    hasMore: false,
+    limit: 10,
+    nextCursor: null,
+  },
+) {
   return jsonResponse({ records, pageInfo });
 }
 
