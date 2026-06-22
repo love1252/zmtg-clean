@@ -77,7 +77,7 @@ command -v curl >/dev/null || fail "curl 未安装"
 command -v tar >/dev/null || fail "tar 未安装"
 
 mkdir -p "$APP_ROOT/releases" "$APP_ROOT/backups" "$APP_ROOT/logs"
-RELEASE_DIR="$APP_ROOT/releases/$(date '+%Y%m%d%H%M%S')-\${COMMIT:0:7}"
+RELEASE_DIR="$APP_ROOT/releases/$(date '+%Y%m%d%H%M%S')-${'${'}COMMIT:0:7}"
 
 log "创建 release: $RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
