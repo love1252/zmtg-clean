@@ -294,6 +294,10 @@ describe('产品与套餐面板', () => {
     fireEvent.click(within(editor).getByRole('button', { name: '发布草稿' }));
 
     await waitFor(() => expect(screen.getByText('草稿已发布')).toBeInTheDocument());
+    await waitFor(() => {
+      expect(within(screen.getByText('已发布版本').parentElement as HTMLElement).getByText('2')).toBeInTheDocument();
+      expect(within(screen.getByText('停用版本').parentElement as HTMLElement).getByText('2')).toBeInTheDocument();
+    });
     expect(fetchMock.mock.calls.some(([input, init]) => (
       fetchPath(input) ===
         '/api/v1/open-platform/plan-catalog/versions/plan-version-professional-draft/publish' &&

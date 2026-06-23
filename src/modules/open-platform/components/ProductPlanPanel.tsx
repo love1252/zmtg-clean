@@ -138,22 +138,33 @@ function draftFormToPayload(form: DraftForm): PlanVersionDraftPayload {
 function upsertVersion(catalog: PlanCatalogDto, nextVersion: PlanCatalogVersionDto): PlanCatalogDto {
   const plans = catalog.plans.map((plan) => {
     if (plan.planId !== nextVersion.planId) return plan;
-    const versions = plan.versions.some((version) => version.versionId === nextVersion.versionId)
-      ? plan.versions.map((version) =>
-          version.versionId === nextVersion.versionId ? nextVersion : version,
-        )
-      : [nextVersion, ...plan.versions];
+    const versions = (
+      plan.versions.some((version) => version.versionId === nextVersion.versionId)
+        ? plan.versions.map((version) =>
+            version.versionId === nextVersion.versionId ? nextVersion : version,
+          )
+        : [nextVersion, ...plan.versions]
+    ).map((version) => {
+      if (
+        nextVersion.status !== 'published' ||
+        version.versionId === nextVersion.versionId ||
+        version.status !== 'published'
+      ) {
+        return version;
+      }
+
+      return {
+        ...version,
+        status: 'retired' as const,
+        retiredAt: nextVersion.publishedAt ?? nextVersion.updatedAt,
+        updatedAt: nextVersion.updatedAt,
+      };
+    });
 
     return {
       ...plan,
-      draftVersionId:
-        nextVersion.status === 'draft'
-          ? nextVersion.versionId
-          : versions.find((version) => version.status === 'draft')?.versionId ?? null,
-      publishedVersionId:
-        nextVersion.status === 'published'
-          ? nextVersion.versionId
-          : plan.publishedVersionId,
+      draftVersionId: versions.find((version) => version.status === 'draft')?.versionId ?? null,
+      publishedVersionId: versions.find((version) => version.status === 'published')?.versionId ?? null,
       versions,
     };
   });
@@ -316,6 +327,7 @@ export function ProductPlanPanel() {
       return;
     }
     setCatalog((current) => (current ? upsertVersion(current, result.version) : current));
+    setDraftForm(null);
     setErrorMessage(null);
     setMessage('草稿已发布');
   }
