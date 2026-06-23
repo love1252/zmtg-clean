@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { createDatabase, createPostgresClient, type TenantDatabase } from '@/server/db/client';
 import {
   appointments,
@@ -88,28 +88,28 @@ const demoTenantRecords: Array<typeof tenants.$inferInsert> = [
 const demoTenantPlanRecords: Array<typeof tenantPlans.$inferInsert> = [
   {
     id: 'plan-starter-care',
-    name: 'Starter Plan',
+    name: '基础版',
     code: 'starter-care',
     description: '适合起步机构的基础运营演示套餐。',
     status: 'active',
   },
   {
     id: 'plan-growth-care',
-    name: 'Growth Plan',
+    name: '专业版',
     code: 'growth-care',
     description: '适合增长期机构演示治疗后运营闭环、配额管控和多角色协作。',
     status: 'active',
   },
   {
     id: 'plan-trial-care',
-    name: 'Trial Plan',
+    name: '试用版',
     code: 'trial-care',
     description: '适合受控外部演示和试用评估的轻量套餐。',
     status: 'active',
   },
   {
     id: 'plan-enterprise-care',
-    name: 'Enterprise Plan',
+    name: '集团版',
     code: 'enterprise-care',
     description: '适合连锁机构演示多租户治理和更高配额。',
     status: 'active',
@@ -122,7 +122,7 @@ const demoTenantPlanVersionRecords: Array<typeof tenantPlanVersions.$inferInsert
     planId: 'plan-starter-care',
     versionCode: '2026-v1',
     status: 'published',
-    displayName: 'Starter 基础版',
+    displayName: '基础版',
     displayPrice: '基础版参考价（未定价）',
     priceNote: '仅用于商业化配置演示，可由平台管理员手动调整。',
     agentLimit: 1,
@@ -158,7 +158,7 @@ const demoTenantPlanVersionRecords: Array<typeof tenantPlanVersions.$inferInsert
     planId: 'plan-growth-care',
     versionCode: '2026-v1',
     status: 'published',
-    displayName: 'Professional 专业版',
+    displayName: '专业版',
     displayPrice: '专业版参考价（未定价）',
     priceNote: '仅用于商业化配置演示，可由平台管理员手动调整。',
     agentLimit: 3,
@@ -194,7 +194,7 @@ const demoTenantPlanVersionRecords: Array<typeof tenantPlanVersions.$inferInsert
     planId: 'plan-trial-care',
     versionCode: '2026-v1',
     status: 'published',
-    displayName: 'Trial 试用版',
+    displayName: '试用版',
     displayPrice: '试用版参考价（未定价）',
     priceNote: '仅用于受控演示和试用评估，可由平台管理员手动调整。',
     agentLimit: 1,
@@ -230,7 +230,7 @@ const demoTenantPlanVersionRecords: Array<typeof tenantPlanVersions.$inferInsert
     planId: 'plan-enterprise-care',
     versionCode: '2026-v1',
     status: 'published',
-    displayName: 'Enterprise 集团版',
+    displayName: '集团版',
     displayPrice: '集团版参考价（未定价）',
     priceNote: '仅用于商业化配置演示，可由平台管理员手动调整。',
     agentLimit: 20,
@@ -1356,6 +1356,13 @@ export async function seedDemoData(db: TenantDatabase) {
         updatedAt: sql`excluded.updated_at`,
       },
     });
+
+  for (const plan of getDemoTenantPlanSeedRecords()) {
+    await db
+      .update(tenantPlanVersions)
+      .set({ displayName: plan.name })
+      .where(eq(tenantPlanVersions.planId, plan.id));
+  }
 
   await db
     .insert(tenantPlanAssignments)

@@ -26,7 +26,7 @@ const planCatalogPayload = {
   plans: [
     {
       planId: 'plan-starter',
-      planName: 'Starter 基础版',
+      planName: '基础版',
       planCode: 'starter',
       planDescription: '适合单机构试运行',
       planStatus: 'active',
@@ -38,7 +38,7 @@ const planCatalogPayload = {
           planId: 'plan-starter',
           versionCode: '2026-06-v1',
           status: 'published',
-          displayName: 'Starter 基础版',
+          displayName: '基础版',
           displayPrice: '¥999/月',
           priceNote: '展示价，线下确认',
           agentLimit: 1,
@@ -62,7 +62,7 @@ const planCatalogPayload = {
     },
     {
       planId: 'plan-professional',
-      planName: 'Professional 专业版',
+      planName: '专业版',
       planCode: 'professional',
       planDescription: '适合增长期机构',
       planStatus: 'active',
@@ -74,7 +74,7 @@ const planCatalogPayload = {
           planId: 'plan-professional',
           versionCode: '2026-06-v2',
           status: 'draft',
-          displayName: 'Professional 专业版',
+          displayName: '专业版',
           displayPrice: '¥3999/月',
           priceNote: '展示价，线下确认',
           agentLimit: 5,
@@ -102,7 +102,7 @@ const planCatalogPayload = {
           planId: 'plan-professional',
           versionCode: '2026-06-v1',
           status: 'published',
-          displayName: 'Professional 专业版',
+          displayName: '专业版',
           displayPrice: '¥2999/月',
           priceNote: '展示价，线下确认',
           agentLimit: 3,
@@ -127,7 +127,7 @@ const planCatalogPayload = {
           planId: 'plan-professional',
           versionCode: '2026-05-v1',
           status: 'retired',
-          displayName: 'Professional 专业版',
+          displayName: '专业版',
           displayPrice: '¥2599/月',
           priceNote: '历史展示价',
           agentLimit: 2,
@@ -246,18 +246,21 @@ describe('产品与套餐面板', () => {
     expect(screen.getByText('已发布版本')).toBeInTheDocument();
     expect(screen.getByText('草稿版本')).toBeInTheDocument();
     expect(screen.getByText('停用版本')).toBeInTheDocument();
-    expect(screen.getByText('Professional 专业版')).toBeInTheDocument();
-    expect(screen.getAllByText('当前 published 版本').length).toBeGreaterThan(0);
+    expect(screen.getByText('专业版')).toBeInTheDocument();
+    expect(screen.getAllByText('当前已发布版本').length).toBeGreaterThan(0);
     expect(screen.getAllByText('2026-06-v1').length).toBeGreaterThan(0);
-    expect(screen.getByText('可编辑 draft 版本')).toBeInTheDocument();
+    expect(screen.getByText('可编辑草稿版本')).toBeInTheDocument();
     expect(screen.getByText('2026-06-v2')).toBeInTheDocument();
     expect(screen.getAllByText('¥2999/月').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Agent 数量').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: '编辑 Professional 专业版 草稿' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '复制 Starter 基础版 为草稿' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '编辑 专业版 草稿' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '复制 基础版 为草稿' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '套餐目录' })).toHaveAttribute('aria-pressed', 'true');
     expect(fetchPath(fetchMock.mock.calls[0]?.[0] ?? '')).toBe('/api/v1/open-platform/plan-catalog');
     expect(fetchMock.mock.calls[0]?.[1]).toEqual({ cache: 'no-store' });
+    expect(container.textContent ?? '').not.toMatch(
+      /\b(Starter|Professional|Growth|Trial|Enterprise|Plan|draft|published|retired)\b/,
+    );
     expectNoSensitivePlanContent(container);
   });
 
@@ -266,7 +269,7 @@ describe('产品与套餐面板', () => {
     const { container } = render(<ProductPlanPanel />);
 
     await screen.findByText('套餐目录配置台');
-    fireEvent.click(screen.getByRole('button', { name: '编辑 Professional 专业版 草稿' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑 专业版 草稿' }));
 
     const editor = screen.getByRole('region', { name: '套餐草稿编辑器' });
     expect(within(editor).getByLabelText('展示价格')).toHaveValue('¥3999/月');
@@ -319,7 +322,7 @@ describe('产品与套餐面板', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '版本记录' }));
     expect(screen.getByText(/2026-05-v1/)).toBeInTheDocument();
-    expect(screen.getByText('retired')).toBeInTheDocument();
+    expect(screen.getByText('已停用')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '商业化预留' }));
     expect(screen.getByText('订单')).toBeInTheDocument();

@@ -187,10 +187,15 @@ function StatusPill({ status }: { status: PlanCatalogVersionDto['status'] }) {
     published: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     retired: 'border-slate-200 bg-slate-100 text-slate-500',
   }[status];
+  const label = {
+    draft: '草稿',
+    published: '已发布',
+    retired: '已停用',
+  }[status];
 
   return (
     <span className={cn('rounded-full border px-2.5 py-1 text-xs font-semibold', tone)}>
-      {status}
+      {label}
     </span>
   );
 }
@@ -349,7 +354,7 @@ export function ProductPlanPanel() {
             套餐目录配置台
           </div>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            draft 可编辑，published 只作为当前发布版本展示，停用版本保留历史解释。
+            草稿可编辑，已发布版本只作为当前发布版本展示，停用版本保留历史解释。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -423,7 +428,7 @@ export function ProductPlanPanel() {
                     <div className="mt-4 rounded-xl border border-[#e6edf5] bg-[#f8fafc] p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <div className="text-xs font-semibold text-slate-500">当前 published 版本</div>
+                          <div className="text-xs font-semibold text-slate-500">当前已发布版本</div>
                           <div className="mt-1 text-sm font-semibold text-slate-950">
                             {publishedVersion.versionCode}
                           </div>
@@ -442,7 +447,7 @@ export function ProductPlanPanel() {
                     <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <div className="text-xs font-semibold text-blue-700">可编辑 draft 版本</div>
+                          <div className="text-xs font-semibold text-blue-700">可编辑草稿版本</div>
                           <div className="mt-1 text-sm font-semibold text-slate-950">
                             {draftVersion.versionCode}
                           </div>
@@ -479,7 +484,7 @@ export function ProductPlanPanel() {
                 <div>
                   <div className="text-lg font-semibold text-slate-950">草稿编辑</div>
                   <p className="mt-1 text-sm leading-6 text-slate-500">
-                    published 版本不能原地编辑；保存后仍为 draft，发布后才进入可选版本池。
+                    已发布版本不能原地编辑；保存后仍为草稿，发布后才进入可选版本池。
                   </p>
                 </div>
 
@@ -592,7 +597,7 @@ export function ProductPlanPanel() {
             ) : (
               <div className="py-8 text-center">
                 <RefreshCw className="mx-auto h-8 w-8 text-slate-300" />
-                <div className="mt-3 text-sm font-semibold text-slate-700">选择一个 draft 版本开始编辑</div>
+                <div className="mt-3 text-sm font-semibold text-slate-700">选择一个草稿版本开始编辑</div>
                 <p className="mt-1 text-sm leading-6 text-slate-500">
                   没有草稿时，可以先从当前发布版本复制为草稿。
                 </p>

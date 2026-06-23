@@ -3057,10 +3057,13 @@ describe('工作台入口页面', () => {
     expect(screen.getAllByText('远山医美连锁').length).toBeGreaterThan(0);
     expect(screen.getByText(/平台侧查看机构、套餐和配额边界/)).toBeInTheDocument();
     expect(screen.getByText(/支持受控开通测试租户并生成授权快照/)).toBeInTheDocument();
-    expect(screen.getByText('Growth Plan')).toBeInTheDocument();
-    expect(screen.getByText('Starter Plan')).toBeInTheDocument();
-    expect(screen.getByText('Trial Plan')).toBeInTheDocument();
-    expect(screen.getByText('Enterprise Plan')).toBeInTheDocument();
+    expect(screen.getByText('专业版')).toBeInTheDocument();
+    expect(screen.getByText('基础版')).toBeInTheDocument();
+    expect(screen.getByText('试用版')).toBeInTheDocument();
+    expect(screen.getByText('集团版')).toBeInTheDocument();
+    expect(container.textContent ?? '').not.toMatch(
+      /\b(Starter|Growth|Trial|Enterprise|Plan)\b/,
+    );
     expect(screen.getAllByText('0 / 0').length).toBeGreaterThanOrEqual(4);
     expect(screen.getAllByText('当前未启用 AI 调用配额').length).toBeGreaterThanOrEqual(4);
     expectNoPlatformDemoMisleadingClaims(container);

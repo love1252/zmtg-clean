@@ -1035,11 +1035,16 @@ describe('数据库结构', () => {
     }>('getDemoTenantAuthorizationSnapshotSeedRecords');
     const planIds = new Set(plans.map((plan) => plan.id));
     const versionIds = new Set(versions.map((version) => version.id));
+    const versionDisplayNames = versions.map((version) => version.displayName);
     const activeAssignments = assignments.filter((assignment) => assignment.status === 'active');
     const activeSnapshots = authorizationSnapshots.filter((snapshot) => snapshot.status === 'active');
     const snapshotByTenantId = new Map(activeSnapshots.map((snapshot) => [snapshot.tenantId, snapshot]));
 
     expect(new Set(versions.map((version) => version.planId))).toEqual(planIds);
+    expect(versionDisplayNames).toEqual(expect.arrayContaining(['基础版', '专业版', '试用版', '集团版']));
+    expect(versionDisplayNames.join(' ')).not.toMatch(
+      /\b(Starter|Professional|Growth|Trial|Enterprise|Plan)\b/,
+    );
     expect(versions.every((version) => version.status === 'published')).toBe(true);
     expect(
       versions.every(
@@ -1112,7 +1117,7 @@ describe('数据库结构', () => {
     );
   });
 
-  it('演示种子数据包含星澜医美中心、演示角色和 Growth Plan 配额', () => {
+  it('演示种子数据包含星澜医美中心、演示角色和中文套餐配额', () => {
     const tenants = getSeedRecords<{ id: string; name: string }>('getDemoTenantSeedRecords');
     const tenantMembers = getSeedRecords<{
       userId: string;
@@ -1148,15 +1153,15 @@ describe('数据库结构', () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: 'growth-care',
-          name: 'Growth Plan',
+          name: '专业版',
         }),
         expect.objectContaining({
           code: 'trial-care',
-          name: 'Trial Plan',
+          name: '试用版',
         }),
         expect.objectContaining({
           code: 'enterprise-care',
-          name: 'Enterprise Plan',
+          name: '集团版',
         }),
       ]),
     );
@@ -1337,6 +1342,8 @@ describe('数据库结构', () => {
     expect(seedSource).toContain('.insert(tenantPlanVersions)');
     expect(seedSource).toContain('.insert(tenantAuthorizationSnapshots)');
     expect(seedSource).toContain('.insert(tenantCommercialRecords)');
+    expect(seedSource).toContain('.update(tenantPlanVersions)');
+    expect(seedSource).toContain('displayName: plan.name');
   });
 
   it('演示 seed 不写入 HIS 连接配置或凭证引用数据', () => {
