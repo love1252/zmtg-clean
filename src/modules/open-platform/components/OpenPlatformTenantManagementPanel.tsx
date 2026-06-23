@@ -19,12 +19,17 @@ import {
 import {
   applyOpenPlatformTenantPlanChange,
   createOpenPlatformTenantWithPlan,
+  listOpenPlatformTenantCommercialRecords,
   listOpenPlatformTenants,
   listOpenPlatformTenantPlanOptions,
   previewOpenPlatformTenantPlanChange,
   type OpenPlatformTenantClientError,
   type OpenPlatformTenantRecord,
 } from '@/modules/open-platform/client/platform-tenant-management-client';
+import {
+  buildTenantCommercialRecordOverview,
+  type TenantCommercialRecordDto,
+} from '@/modules/open-platform/domain/tenant-commercial-records';
 import type { TenantPlanChangePreview } from '@/modules/open-platform/domain/tenant-plan-change';
 import type { TenantPlanOptionDto } from '@/modules/open-platform/domain/tenant-plan-binding';
 import {
@@ -303,6 +308,14 @@ function TenantDetailDrawer({
     changeRecordId: string;
     auditEventId: string;
   } | null>(null);
+  const [commercialRecordsState, setCommercialRecordsState] = useState<{
+    status: 'loading' | 'ready' | 'error';
+    records: TenantCommercialRecordDto[];
+    message?: string;
+  }>({
+    status: 'loading',
+    records: [],
+  });
 
   const effectiveTargetPlanVersionId = changePlanOptions.some(
     (plan) => plan.planVersionId === targetPlanVersionId,
@@ -313,6 +326,40 @@ function TenantDetailDrawer({
     changePlanOptions.find((plan) => plan.planVersionId === effectiveTargetPlanVersionId) ??
     changePlanOptions[0] ??
     null;
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadCommercialRecords() {
+      const result = await listOpenPlatformTenantCommercialRecords(tenant.tenantId);
+      if (!isActive) return;
+
+      if (result.ok) {
+        setCommercialRecordsState({
+          status: 'ready',
+          records: result.records,
+        });
+        return;
+      }
+
+      setCommercialRecordsState({
+        status: 'error',
+        records: [],
+        message: result.error.message,
+      });
+    }
+
+    void loadCommercialRecords();
+
+    return () => {
+      isActive = false;
+    };
+  }, [tenant.tenantId]);
+
+  const commercialOverview = useMemo(
+    () => buildTenantCommercialRecordOverview(commercialRecordsState.records),
+    [commercialRecordsState.records],
+  );
 
   function resetPlanChangeResult() {
     setChangePreview(null);
@@ -622,6 +669,91 @@ function TenantDetailDrawer({
               <StatusBadge label={expiry.label} tone={expiry.tone} />
               <p className="mt-2 text-sm text-slate-500">到期提醒只展示状态，不触发外部通知。</p>
             </div>
+          </div>
+        </section>
+
+        <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 className="text-base font-semibold text-slate-950">商业化预留</h4>
+              <p className="mt-1 text-sm text-slate-500">
+                只读人工记录，用于观察订单、合同、发票、支付的预留状态。
+              </p>
+            </div>
+            <div className="rounded-full border border-[#dbe6f3] bg-[#f8fafc] px-3 py-1 text-xs font-semibold text-slate-600">
+              {commercialRecordsState.status === 'loading'
+                ? '加载中'
+                : `${commercialOverview.total} 条记录`}
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-4">
+            {[
+              { key: 'order', label: '订单' },
+              { key: 'contract', label: '合同' },
+              { key: 'invoice', label: '发票' },
+              { key: 'payment', label: '支付' },
+            ].map((item) => (
+              <div key={item.key} className="rounded-xl border border-[#dbe6f3] bg-[#f8fafc] p-3">
+                <div className="text-sm font-semibold text-slate-950">{item.label}</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {commercialRecordsState.status === 'ready'
+                    ? `${commercialOverview.byType[item.key as keyof typeof commercialOverview.byType]} 条人工记录`
+                    : '等待读取'}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {commercialRecordsState.status === 'error' ? (
+            <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+              商业化预留记录暂时不可用：{commercialRecordsState.message || '请求失败'}
+            </div>
+          ) : null}
+
+          {commercialRecordsState.status === 'ready' && commercialRecordsState.records.length === 0 ? (
+            <div className="mt-3 rounded-xl border border-dashed border-[#dbe6f3] bg-[#f8fafc] px-4 py-6 text-center text-sm text-slate-500">
+              暂无人工商业化预留记录。
+            </div>
+          ) : null}
+
+          {commercialRecordsState.records.length > 0 ? (
+            <div className="mt-4 overflow-x-auto rounded-xl border border-[#dbe6f3]">
+              <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+                <thead className="bg-[#f8fafc] text-xs font-semibold text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">类型</th>
+                    <th className="px-3 py-2">展示编号</th>
+                    <th className="px-3 py-2">人工状态</th>
+                    <th className="px-3 py-2">展示金额</th>
+                    <th className="px-3 py-2">周期</th>
+                    <th className="px-3 py-2">关联变更</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#dbe6f3] bg-white">
+                  {commercialRecordsState.records.map((record) => (
+                    <tr key={record.recordId}>
+                      <td className="px-3 py-2 font-semibold text-slate-950">
+                        {record.recordTypeLabel}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">{record.displayCode}</td>
+                      <td className="px-3 py-2">
+                        <StatusBadge label={record.statusLabel} tone="blue" />
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">{record.displayAmount ?? '-'}</td>
+                      <td className="px-3 py-2 text-slate-600">{record.periodLabel ?? '-'}</td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {record.relatedPlanChangeId ?? '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-700">
+            当前区域不提供线上交易处理、资金处理、外部交易系统调用或税务处理能力。
           </div>
         </section>
 
@@ -1365,6 +1497,7 @@ export function OpenPlatformTenantManagementPanel() {
 
       {selectedTenant ? (
         <TenantDetailDrawer
+          key={selectedTenant.tenantId}
           tenant={selectedTenant}
           planOptions={tenantPlanOptions}
           onTenantChanged={handleTenantChanged}

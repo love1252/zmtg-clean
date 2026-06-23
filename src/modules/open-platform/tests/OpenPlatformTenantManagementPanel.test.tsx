@@ -175,6 +175,69 @@ const tenantAfterPlanChange = {
   authorizationGeneratedAt: '2026-06-23T04:00:00.000Z',
 };
 
+const tenantCommercialRecords = [
+  {
+    recordId: 'commercial-record-order-001',
+    tenantId: 'demo-tenant-001',
+    recordType: 'order',
+    recordTypeLabel: '订单',
+    status: 'pending',
+    statusLabel: '待人工确认',
+    displayCode: 'ORD-2026-0001',
+    displayAmount: '¥2999/月',
+    periodLabel: '2026-06',
+    relatedPlanChangeId: 'tenant-plan-change-demo-001',
+    occurredAt: '2026-06-23T06:00:00.000Z',
+    createdAt: '2026-06-23T06:00:00.000Z',
+    updatedAt: '2026-06-23T06:10:00.000Z',
+  },
+  {
+    recordId: 'commercial-record-contract-001',
+    tenantId: 'demo-tenant-001',
+    recordType: 'contract',
+    recordTypeLabel: '合同',
+    status: 'manual_review',
+    statusLabel: '人工复核',
+    displayCode: 'CON-2026-0001',
+    displayAmount: null,
+    periodLabel: '2026-06',
+    relatedPlanChangeId: null,
+    occurredAt: null,
+    createdAt: '2026-06-23T06:00:00.000Z',
+    updatedAt: '2026-06-23T06:10:00.000Z',
+  },
+  {
+    recordId: 'commercial-record-invoice-001',
+    tenantId: 'demo-tenant-001',
+    recordType: 'invoice',
+    recordTypeLabel: '发票',
+    status: 'draft',
+    statusLabel: '预留草稿',
+    displayCode: 'INV-2026-0001',
+    displayAmount: null,
+    periodLabel: null,
+    relatedPlanChangeId: null,
+    occurredAt: null,
+    createdAt: '2026-06-23T06:00:00.000Z',
+    updatedAt: '2026-06-23T06:10:00.000Z',
+  },
+  {
+    recordId: 'commercial-record-payment-001',
+    tenantId: 'demo-tenant-001',
+    recordType: 'payment',
+    recordTypeLabel: '支付',
+    status: 'completed',
+    statusLabel: '已人工确认',
+    displayCode: 'PAY-2026-0001',
+    displayAmount: '¥2999/月',
+    periodLabel: '2026-06',
+    relatedPlanChangeId: null,
+    occurredAt: '2026-06-23T06:00:00.000Z',
+    createdAt: '2026-06-23T06:00:00.000Z',
+    updatedAt: '2026-06-23T06:10:00.000Z',
+  },
+];
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
@@ -196,6 +259,7 @@ type MockTenantFetchOptions =
       createTenantResponse?: Response;
       planChangePreviewResponse?: Response;
       planChangeResponse?: Response;
+      commercialRecordsResponse?: Response;
       auditEventsResponse?: Response;
     };
 
@@ -256,6 +320,10 @@ function mockTenantFetch(options: MockTenantFetchOptions) {
         auditEventId: 'audit-event-demo-001',
         tenant: tenantAfterPlanChange,
       });
+  const commercialRecordsResponse = Array.isArray(options)
+    ? jsonResponse({ ok: true, records: tenantCommercialRecords })
+    : options.commercialRecordsResponse ??
+      jsonResponse({ ok: true, records: tenantCommercialRecords });
   const auditEventsResponse = Array.isArray(options)
     ? defaultAuditEventsResponse()
     : options.auditEventsResponse ?? defaultAuditEventsResponse();
@@ -289,6 +357,13 @@ function mockTenantFetch(options: MockTenantFetchOptions) {
 
     if (path === '/api/v1/open-platform/tenants/demo-tenant-001/plan-change' && method === 'POST') {
       return planChangeResponse.clone();
+    }
+
+    if (
+      path === '/api/v1/open-platform/tenants/demo-tenant-001/commercial-records' &&
+      method === 'GET'
+    ) {
+      return commercialRecordsResponse.clone();
     }
 
     if (path.startsWith('/api/open-platform/audit-events')) {
@@ -554,8 +629,65 @@ describe('平台端租户管理面板', () => {
     const drawer = screen.getByRole('dialog', { name: '租户详情' });
     expect(within(drawer).getByText('授权快照')).toBeInTheDocument();
     expect(within(drawer).getByText('用量摘要（本月）')).toBeInTheDocument();
+    expect(await within(drawer).findByText('商业化预留')).toBeInTheDocument();
     expect(within(drawer).getByText('审计入口')).toBeInTheDocument();
     expect(within(drawer).getByRole('button', { name: '查看审计日志' })).toBeInTheDocument();
+  });
+
+  it('租户详情展示订单、合同、发票、支付的只读商业化预留状态', async () => {
+    const fetchMock = mockTenantFetch({
+      tenantResponses: [jsonResponse({ records: [tenantRecord] })],
+      commercialRecordsResponse: jsonResponse({
+        ok: true,
+        records: [
+          ...tenantCommercialRecords,
+          {
+            recordId: 'commercial-record-sensitive',
+            tenantId: 'demo-tenant-001',
+            recordType: 'order',
+            recordTypeLabel: '订单',
+            status: 'cancelled',
+            statusLabel: '已取消',
+            displayCode: 'ORD-SAFE',
+            displayAmount: null,
+            periodLabel: null,
+            relatedPlanChangeId: null,
+            occurredAt: null,
+            createdAt: '2026-06-23T06:00:00.000Z',
+            updatedAt: '2026-06-23T06:10:00.000Z',
+            note: 'payment_token=payment_token_should_not_render',
+            webhook_secret: 'webhook_secret_should_not_render',
+            contract_body: '完整合同正文',
+          },
+        ],
+      }),
+    });
+    const { container } = render(<OpenPlatformTenantManagementPanel />);
+
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '查看 智美天工演示机构' }));
+
+    const drawer = screen.getByRole('dialog', { name: '租户详情' });
+    expect(await within(drawer).findByText('商业化预留')).toBeInTheDocument();
+    expect(within(drawer).getByText('ORD-2026-0001')).toBeInTheDocument();
+    expect(within(drawer).getByText('待人工确认')).toBeInTheDocument();
+    expect(within(drawer).getByText('CON-2026-0001')).toBeInTheDocument();
+    expect(within(drawer).getByText('人工复核')).toBeInTheDocument();
+    expect(within(drawer).getByText('INV-2026-0001')).toBeInTheDocument();
+    expect(within(drawer).getByText('预留草稿')).toBeInTheDocument();
+    expect(within(drawer).getByText('PAY-2026-0001')).toBeInTheDocument();
+    expect(within(drawer).getByText('已人工确认')).toBeInTheDocument();
+    expect(within(drawer).getByText(/只读人工记录/)).toBeInTheDocument();
+
+    expect(fetchMock.mock.calls.some(([input, init]) => (
+      fetchPath(input) === '/api/v1/open-platform/tenants/demo-tenant-001/commercial-records' &&
+      String(init?.method ?? 'GET').toUpperCase() === 'GET'
+    ))).toBe(true);
+    expect(container.textContent ?? '').not.toMatch(
+      /payment_token|webhook_secret|contract_body|完整合同正文|立即支付|自动扣费|在线开票|第三方商业化 API/i,
+    );
+    expectNoSensitiveTenantContent(container);
+    expectNoPlatformDemoMisleadingClaims(container);
   });
 
   it('在租户详情中预览套餐变更差异并应用生成新授权快照', async () => {
@@ -580,7 +712,7 @@ describe('平台端租户管理面板', () => {
 
     expect(await within(drawer).findByText('套餐变更差异对照')).toBeInTheDocument();
     expect(within(drawer).getByText('展示价格')).toBeInTheDocument();
-    expect(within(drawer).getByText('¥2999/月')).toBeInTheDocument();
+    expect(within(drawer).getAllByText('¥2999/月').length).toBeGreaterThan(0);
     expect(within(drawer).getByText('¥9999/月')).toBeInTheDocument();
     expect(within(drawer).getByText('Agent 数量')).toBeInTheDocument();
     expect(within(drawer).getByText('20')).toBeInTheDocument();

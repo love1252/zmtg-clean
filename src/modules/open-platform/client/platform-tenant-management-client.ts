@@ -11,6 +11,7 @@ import type {
   TenantPlanChangePayload,
   TenantPlanChangePreview,
 } from '@/modules/open-platform/domain/tenant-plan-change';
+import type { TenantCommercialRecordDto } from '@/modules/open-platform/domain/tenant-commercial-records';
 import type { TenantPlanOptionDto } from '@/modules/open-platform/domain/tenant-plan-binding';
 
 export type OpenPlatformTenantRecord = TenantManagementListItem;
@@ -53,6 +54,10 @@ export type OpenPlatformTenantPlanChangeApplyResult =
       auditEventId: string;
       tenant: OpenPlatformTenantRecord;
     }
+  | { ok: false; error: OpenPlatformTenantClientError };
+
+export type OpenPlatformTenantCommercialRecordsResult =
+  | { ok: true; records: TenantCommercialRecordDto[] }
   | { ok: false; error: OpenPlatformTenantClientError };
 
 export type CreateOpenPlatformTenantInput = {
@@ -315,6 +320,47 @@ export async function applyOpenPlatformTenantPlanChange(
       auditEventId: payload.auditEventId,
       tenant: payload.tenant as OpenPlatformTenantRecord,
     };
+  } catch {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+}
+
+export async function listOpenPlatformTenantCommercialRecords(
+  tenantId: string,
+  options?: OpenPlatformTenantClientOptions,
+): Promise<OpenPlatformTenantCommercialRecordsResult> {
+  const fetcher = getFetcher(options);
+  if (!fetcher) {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+
+  try {
+    const response = await fetcher(
+      `/api/v1/open-platform/tenants/${encodeURIComponent(tenantId)}/commercial-records`,
+      { cache: 'no-store' },
+    );
+    const payload = await readJson(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: createClientError({ status: response.status, payload }),
+      };
+    }
+
+    if (!isJsonObject(payload) || !Array.isArray(payload.records)) {
+      return {
+        ok: false,
+        error: { kind: 'unknown', message: '请求失败', status: response.status },
+      };
+    }
+
+    return { ok: true, records: payload.records as TenantCommercialRecordDto[] };
   } catch {
     return {
       ok: false,
