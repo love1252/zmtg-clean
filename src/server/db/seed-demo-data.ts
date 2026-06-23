@@ -112,7 +112,7 @@ const demoTenantPlanRecords: Array<typeof tenantPlans.$inferInsert> = [
     name: '集团版',
     code: 'enterprise-care',
     description: '适合连锁机构演示多租户治理和更高配额。',
-    status: 'active',
+    status: 'retired',
   },
 ];
 
@@ -229,7 +229,7 @@ const demoTenantPlanVersionRecords: Array<typeof tenantPlanVersions.$inferInsert
     id: 'plan-version-enterprise-care-2026-v1',
     planId: 'plan-enterprise-care',
     versionCode: '2026-v1',
-    status: 'published',
+    status: 'retired',
     displayName: '集团版',
     displayPrice: '集团版参考价（未定价）',
     priceNote: '仅用于商业化配置演示，可由平台管理员手动调整。',
@@ -257,7 +257,7 @@ const demoTenantPlanVersionRecords: Array<typeof tenantPlanVersions.$inferInsert
     updatedBy: 'demo-user-platform',
     publishedBy: 'demo-user-platform',
     publishedAt: demoSeedStartedAt,
-    retiredAt: null,
+    retiredAt: demoSeedSnapshotAt,
     createdAt: demoSeedStartedAt,
     updatedAt: demoSeedStartedAt,
   },
@@ -294,8 +294,8 @@ const demoTenantPlanAssignmentRecords: Array<typeof tenantPlanAssignments.$infer
   {
     id: 'assign-demo-tenant-004-enterprise',
     tenantId: suspendedTenantId,
-    planId: 'plan-enterprise-care',
-    planVersionId: 'plan-version-enterprise-care-2026-v1',
+    planId: 'plan-growth-care',
+    planVersionId: 'plan-version-growth-care-2026-v1',
     status: 'expired',
     startedAt: new Date('2026-01-01T09:00:00+08:00'),
     expiresAt: new Date('2026-05-31T23:59:59+08:00'),
@@ -389,7 +389,7 @@ const demoTenantAuthorizationSnapshotRecords: Array<
     id: 'auth-snapshot-demo-tenant-004-enterprise-expired',
     tenantId: suspendedTenantId,
     planAssignmentId: 'assign-demo-tenant-004-enterprise',
-    planVersionId: 'plan-version-enterprise-care-2026-v1',
+    planVersionId: 'plan-version-growth-care-2026-v1',
     status: 'superseded',
     generatedAt: new Date('2026-01-01T09:10:00+08:00'),
     supersededAt: new Date('2026-05-31T23:59:59+08:00'),
@@ -1361,6 +1361,17 @@ export async function seedDemoData(db: TenantDatabase) {
     await db
       .update(tenantPlanVersions)
       .set({ displayName: plan.name })
+      .where(eq(tenantPlanVersions.planId, plan.id));
+  }
+
+  for (const plan of getDemoTenantPlanSeedRecords().filter((record) => record.status === 'retired')) {
+    await db
+      .update(tenantPlanVersions)
+      .set({
+        status: 'retired',
+        retiredAt: demoSeedSnapshotAt,
+        updatedAt: demoSeedSnapshotAt,
+      })
       .where(eq(tenantPlanVersions.planId, plan.id));
   }
 

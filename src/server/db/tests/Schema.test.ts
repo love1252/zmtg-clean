@@ -973,6 +973,7 @@ describe('数据库结构', () => {
     const plans = getDemoTenantPlanSeedRecords();
     const assignments = getDemoTenantPlanAssignmentSeedRecords();
     const snapshots = getDemoTenantQuotaSnapshotSeedRecords();
+    const activePlans = plans.filter((plan) => plan.status === 'active');
     const demoTenantIds = [
       'demo-tenant-001',
       'demo-tenant-002',
@@ -980,12 +981,20 @@ describe('数据库结构', () => {
       'demo-tenant-004',
     ];
 
-    expect(plans.map((plan) => plan.code)).toEqual(
+    expect(activePlans.map((plan) => plan.code)).toEqual(
       expect.arrayContaining([
         'starter-care',
         'growth-care',
         'trial-care',
-        'enterprise-care',
+      ]),
+    );
+    expect(activePlans).toHaveLength(3);
+    expect(plans).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'enterprise-care',
+          status: 'retired',
+        }),
       ]),
     );
     expect(assignments.map((assignment) => assignment.tenantId)).toEqual(
@@ -1036,16 +1045,29 @@ describe('数据库结构', () => {
     const planIds = new Set(plans.map((plan) => plan.id));
     const versionIds = new Set(versions.map((version) => version.id));
     const versionDisplayNames = versions.map((version) => version.displayName);
+    const publishedVersions = versions.filter((version) => version.status === 'published');
     const activeAssignments = assignments.filter((assignment) => assignment.status === 'active');
     const activeSnapshots = authorizationSnapshots.filter((snapshot) => snapshot.status === 'active');
     const snapshotByTenantId = new Map(activeSnapshots.map((snapshot) => [snapshot.tenantId, snapshot]));
 
     expect(new Set(versions.map((version) => version.planId))).toEqual(planIds);
-    expect(versionDisplayNames).toEqual(expect.arrayContaining(['基础版', '专业版', '试用版', '集团版']));
+    expect(publishedVersions.map((version) => version.displayName)).toEqual(
+      expect.arrayContaining(['基础版', '专业版', '试用版']),
+    );
+    expect(publishedVersions.map((version) => version.displayName)).not.toContain('集团版');
+    expect(publishedVersions).toHaveLength(3);
+    expect(versions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          planId: 'plan-enterprise-care',
+          status: 'retired',
+          displayName: '集团版',
+        }),
+      ]),
+    );
     expect(versionDisplayNames.join(' ')).not.toMatch(
       /\b(Starter|Professional|Growth|Trial|Enterprise|Plan)\b/,
     );
-    expect(versions.every((version) => version.status === 'published')).toBe(true);
     expect(
       versions.every(
         (version) =>
@@ -1128,6 +1150,7 @@ describe('数据库结构', () => {
     const plans = getDemoTenantPlanSeedRecords();
     const assignments = getDemoTenantPlanAssignmentSeedRecords();
     const quotaSnapshots = getDemoTenantQuotaSnapshotSeedRecords();
+    const activePlans = plans.filter((plan) => plan.status === 'active');
 
     expect(tenants).toEqual(
       expect.arrayContaining([
@@ -1149,8 +1172,12 @@ describe('数据库结构', () => {
         }),
       ]),
     );
-    expect(plans).toEqual(
+    expect(activePlans).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          code: 'starter-care',
+          name: '基础版',
+        }),
         expect.objectContaining({
           code: 'growth-care',
           name: '专业版',
@@ -1159,12 +1186,9 @@ describe('数据库结构', () => {
           code: 'trial-care',
           name: '试用版',
         }),
-        expect.objectContaining({
-          code: 'enterprise-care',
-          name: '集团版',
-        }),
       ]),
     );
+    expect(activePlans.map((plan) => plan.name)).not.toContain('集团版');
     expect(assignments).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -1181,7 +1205,7 @@ describe('数据库结构', () => {
         }),
         expect.objectContaining({
           tenantId: 'demo-tenant-004',
-          planId: 'plan-enterprise-care',
+          planId: 'plan-growth-care',
         }),
       ]),
     );

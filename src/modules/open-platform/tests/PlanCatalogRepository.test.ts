@@ -36,7 +36,8 @@ vi.mock('drizzle-orm', async (importOriginal) => {
 
 function createPlanCatalogDatabase(rows: unknown[] = []) {
   const orderBy = vi.fn(async (..._orders: unknown[]) => rows);
-  const leftJoinVersions = vi.fn(() => ({ orderBy }));
+  const where = vi.fn(() => ({ orderBy }));
+  const leftJoinVersions = vi.fn(() => ({ where }));
   const from = vi.fn(() => ({ leftJoin: leftJoinVersions }));
   const select = vi.fn(() => ({ from }));
 
@@ -46,6 +47,7 @@ function createPlanCatalogDatabase(rows: unknown[] = []) {
     leftJoinVersions,
     orderBy,
     select,
+    where,
   };
 }
 
@@ -109,7 +111,7 @@ describe('平台套餐目录 repository', () => {
     );
   });
 
-  it('查询套餐模板并左关联套餐版本，按套餐编码和版本更新时间稳定排序', async () => {
+  it('只查询 active 套餐模板并左关联套餐版本，按套餐编码和版本更新时间稳定排序', async () => {
     const query = createPlanCatalogDatabase([
       {
         plan: planRow,
@@ -128,6 +130,11 @@ describe('平台套餐目录 repository', () => {
       tenantPlanVersions,
       { column: tenantPlanVersions.planId, operator: 'eq', value: tenantPlans.id },
     );
+    expect(query.where).toHaveBeenCalledWith({
+      column: tenantPlans.status,
+      operator: 'eq',
+      value: 'active',
+    });
     expect(query.orderBy).toHaveBeenCalledWith(
       { column: tenantPlans.code, direction: 'asc' },
       { column: tenantPlanVersions.updatedAt, direction: 'desc' },

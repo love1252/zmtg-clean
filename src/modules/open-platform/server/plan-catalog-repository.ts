@@ -132,6 +132,7 @@ export function createPlanCatalogRepository(database: TenantDatabase) {
         })
         .from(tenantPlans)
         .leftJoin(tenantPlanVersions, eq(tenantPlanVersions.planId, tenantPlans.id))
+        .where(eq(tenantPlans.status, 'active'))
         .orderBy(asc(tenantPlans.code), desc(tenantPlanVersions.updatedAt));
 
       return groupPlanCatalogRows(rows as PlanCatalogQueryRow[]);
