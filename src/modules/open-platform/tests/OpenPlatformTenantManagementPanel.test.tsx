@@ -66,6 +66,115 @@ const professionalPlanOption = {
   serviceEntitlements: ['上线培训'],
 };
 
+const enterprisePlanOption = {
+  planId: 'plan-enterprise',
+  planCode: 'enterprise',
+  planName: 'Enterprise 集团版',
+  planVersionId: 'plan-version-enterprise-published',
+  versionCode: '2026-06-v1',
+  displayName: 'Enterprise 集团版 2026-06',
+  displayPrice: '¥9999/月',
+  priceNote: '展示价格，人工确认口径',
+  agentLimit: 20,
+  seatLimit: 200,
+  monthlyAiCallLimit: 2000000,
+  knowledgeStorageGb: 1024,
+  connectorEntitlements: ['企微', 'HIS', 'CRM', '新氧', '美团', '抖音'],
+  serviceEntitlements: ['专属实施', '年度复盘'],
+};
+
+const tenantPlanChangePreview = {
+  tenantId: 'demo-tenant-001',
+  fromPlanVersionId: 'plan-version-growth-202606',
+  toPlanVersionId: 'plan-version-enterprise-published',
+  changedItemCount: 9,
+  unchangedItemCount: 0,
+  items: [
+    {
+      key: 'displayName',
+      label: '套餐版本',
+      before: 'Growth Care 2026-06',
+      after: 'Enterprise 集团版 2026-06',
+      changed: true,
+    },
+    {
+      key: 'displayPrice',
+      label: '展示价格',
+      before: '¥2999/月',
+      after: '¥9999/月',
+      changed: true,
+    },
+    {
+      key: 'agentLimit',
+      label: 'Agent 数量',
+      before: '3',
+      after: '20',
+      changed: true,
+    },
+    {
+      key: 'seatLimit',
+      label: '员工席位',
+      before: '40',
+      after: '200',
+      changed: true,
+    },
+    {
+      key: 'monthlyAiCallLimit',
+      label: 'AI 调用 / 月',
+      before: '300,000',
+      after: '2,000,000',
+      changed: true,
+    },
+    {
+      key: 'knowledgeStorageGb',
+      label: '知识库存储',
+      before: '100 GB',
+      after: '1,024 GB',
+      changed: true,
+    },
+    {
+      key: 'connectorEntitlements',
+      label: '连接器权益',
+      before: '企微 / HIS',
+      after: '企微 / HIS / CRM / 新氧 / 美团 / 抖音',
+      changed: true,
+    },
+    {
+      key: 'serviceEntitlements',
+      label: '服务权益',
+      before: '上线培训 / 季度复盘',
+      after: '专属实施 / 年度复盘',
+      changed: true,
+    },
+    {
+      key: 'versionCode',
+      label: '版本号',
+      before: '2026-06-v1',
+      after: '2026-06-v1',
+      changed: false,
+    },
+  ],
+};
+
+const tenantAfterPlanChange = {
+  ...tenantRecord,
+  updatedAt: '2026-06-23T04:00:00.000Z',
+  planName: 'Enterprise 集团版',
+  planCode: 'enterprise',
+  planVersionId: 'plan-version-enterprise-published',
+  planVersionCode: '2026-06-v1',
+  planDisplayName: 'Enterprise 集团版 2026-06',
+  planDisplayPrice: '¥9999/月',
+  agentLimit: 20,
+  seatLimit: 200,
+  monthlyAiCallLimit: 2000000,
+  knowledgeStorageGb: 1024,
+  connectorEntitlements: ['企微', 'HIS', 'CRM', '新氧', '美团', '抖音'],
+  serviceEntitlements: ['专属实施', '年度复盘'],
+  authorizationSnapshotId: 'auth-snapshot-enterprise-active',
+  authorizationGeneratedAt: '2026-06-23T04:00:00.000Z',
+};
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
@@ -85,6 +194,8 @@ type MockTenantFetchOptions =
       tenantResponses?: Response[];
       planOptionsResponse?: Response;
       createTenantResponse?: Response;
+      planChangePreviewResponse?: Response;
+      planChangeResponse?: Response;
       auditEventsResponse?: Response;
     };
 
@@ -125,6 +236,26 @@ function mockTenantFetch(options: MockTenantFetchOptions) {
           authorizationGeneratedAt: '2026-06-23T03:00:00.000Z',
         },
       });
+  const planChangePreviewResponse = Array.isArray(options)
+    ? jsonResponse({ ok: true, status: 'preview_ready', preview: tenantPlanChangePreview })
+    : options.planChangePreviewResponse ??
+      jsonResponse({ ok: true, status: 'preview_ready', preview: tenantPlanChangePreview });
+  const planChangeResponse = Array.isArray(options)
+    ? jsonResponse({
+        ok: true,
+        status: 'plan_changed',
+        changeRecordId: 'tenant-plan-change-demo-001',
+        auditEventId: 'audit-event-demo-001',
+        tenant: tenantAfterPlanChange,
+      })
+    : options.planChangeResponse ??
+      jsonResponse({
+        ok: true,
+        status: 'plan_changed',
+        changeRecordId: 'tenant-plan-change-demo-001',
+        auditEventId: 'audit-event-demo-001',
+        tenant: tenantAfterPlanChange,
+      });
   const auditEventsResponse = Array.isArray(options)
     ? defaultAuditEventsResponse()
     : options.auditEventsResponse ?? defaultAuditEventsResponse();
@@ -147,6 +278,17 @@ function mockTenantFetch(options: MockTenantFetchOptions) {
 
     if (path === '/api/v1/open-platform/tenants' && method === 'POST') {
       return createTenantResponse.clone();
+    }
+
+    if (
+      path === '/api/v1/open-platform/tenants/demo-tenant-001/plan-change-preview' &&
+      method === 'POST'
+    ) {
+      return planChangePreviewResponse.clone();
+    }
+
+    if (path === '/api/v1/open-platform/tenants/demo-tenant-001/plan-change' && method === 'POST') {
+      return planChangeResponse.clone();
     }
 
     if (path.startsWith('/api/open-platform/audit-events')) {
@@ -414,6 +556,68 @@ describe('平台端租户管理面板', () => {
     expect(within(drawer).getByText('用量摘要（本月）')).toBeInTheDocument();
     expect(within(drawer).getByText('审计入口')).toBeInTheDocument();
     expect(within(drawer).getByRole('button', { name: '查看审计日志' })).toBeInTheDocument();
+  });
+
+  it('在租户详情中预览套餐变更差异并应用生成新授权快照', async () => {
+    const fetchMock = mockTenantFetch({
+      tenantResponses: [jsonResponse({ records: [tenantRecord] })],
+      planOptionsResponse: jsonResponse({ options: [professionalPlanOption, enterprisePlanOption] }),
+    });
+    const { container } = render(<OpenPlatformTenantManagementPanel />);
+
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '查看 智美天工演示机构' }));
+
+    const drawer = screen.getByRole('dialog', { name: '租户详情' });
+    fireEvent.click(within(drawer).getByRole('button', { name: '变更套餐' }));
+    fireEvent.change(within(drawer).getByLabelText('目标套餐版本'), {
+      target: { value: 'plan-version-enterprise-published' },
+    });
+    fireEvent.change(within(drawer).getByLabelText('变更原因'), {
+      target: { value: '机构升级到集团版并刷新授权快照' },
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: '预览变更' }));
+
+    expect(await within(drawer).findByText('套餐变更差异对照')).toBeInTheDocument();
+    expect(within(drawer).getByText('展示价格')).toBeInTheDocument();
+    expect(within(drawer).getByText('¥2999/月')).toBeInTheDocument();
+    expect(within(drawer).getByText('¥9999/月')).toBeInTheDocument();
+    expect(within(drawer).getByText('Agent 数量')).toBeInTheDocument();
+    expect(within(drawer).getByText('20')).toBeInTheDocument();
+    expect(within(drawer).getByText('连接器权益')).toBeInTheDocument();
+    expect(within(drawer).getByText('企微 / HIS / CRM / 新氧 / 美团 / 抖音')).toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByRole('button', { name: '确认应用变更' }));
+
+    expect(await within(drawer).findByText('套餐变更已应用并生成新授权快照')).toBeInTheDocument();
+    expect(within(drawer).getByText('变更记录：tenant-plan-change-demo-001')).toBeInTheDocument();
+    expect(within(drawer).getByText('审计事件：audit-event-demo-001')).toBeInTheDocument();
+    expect(screen.getAllByText('Enterprise 集团版').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('套餐编号：enterprise').length).toBeGreaterThan(0);
+
+    const previewCall = fetchMock.mock.calls.find(([input, init]) => (
+      fetchPath(input) === '/api/v1/open-platform/tenants/demo-tenant-001/plan-change-preview' &&
+      String(init?.method).toUpperCase() === 'POST'
+    ));
+    const applyCall = fetchMock.mock.calls.find(([input, init]) => (
+      fetchPath(input) === '/api/v1/open-platform/tenants/demo-tenant-001/plan-change' &&
+      String(init?.method).toUpperCase() === 'POST'
+    ));
+    expect(previewCall).toBeDefined();
+    expect(applyCall).toBeDefined();
+    expect(JSON.parse(String(previewCall?.[1]?.body))).toEqual({
+      toPlanVersionId: 'plan-version-enterprise-published',
+      reason: '机构升级到集团版并刷新授权快照',
+    });
+    expect(JSON.parse(String(applyCall?.[1]?.body))).toEqual({
+      toPlanVersionId: 'plan-version-enterprise-published',
+      reason: '机构升级到集团版并刷新授权快照',
+    });
+    expect(`${previewCall?.[1]?.body ?? ''}${applyCall?.[1]?.body ?? ''}`).not.toMatch(
+      /13800000000|admin@example.com|payment_token|webhook_secret|client_secret|api_key/i,
+    );
+    expectNoSensitiveTenantContent(container);
+    expectNoPlatformDemoMisleadingClaims(container);
   });
 
   it('新建租户三步流程选择 published 套餐版本，提交后生成授权快照并刷新列表', async () => {

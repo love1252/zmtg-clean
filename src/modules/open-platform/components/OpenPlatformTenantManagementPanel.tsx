@@ -17,12 +17,15 @@ import {
   X,
 } from 'lucide-react';
 import {
+  applyOpenPlatformTenantPlanChange,
   createOpenPlatformTenantWithPlan,
   listOpenPlatformTenants,
   listOpenPlatformTenantPlanOptions,
+  previewOpenPlatformTenantPlanChange,
   type OpenPlatformTenantClientError,
   type OpenPlatformTenantRecord,
 } from '@/modules/open-platform/client/platform-tenant-management-client';
+import type { TenantPlanChangePreview } from '@/modules/open-platform/domain/tenant-plan-change';
 import type { TenantPlanOptionDto } from '@/modules/open-platform/domain/tenant-plan-binding';
 import {
   buildTenantManagementOverview,
@@ -271,14 +274,101 @@ function EmptyTenantState({ onCreate }: { onCreate: () => void }) {
 
 function TenantDetailDrawer({
   tenant,
+  planOptions,
+  onTenantChanged,
   onClose,
 }: {
   tenant: OpenPlatformTenantRecord;
+  planOptions: TenantPlanOptionDto[];
+  onTenantChanged: (tenant: OpenPlatformTenantRecord) => void;
   onClose: () => void;
 }) {
   const authorization = getTenantAuthorizationState(tenant);
   const quotaRisk = getTenantQuotaRiskState(tenant);
   const expiry = getTenantExpiryState(tenant, { now: defaultNow });
+  const changePlanOptions = useMemo(
+    () => planOptions.filter((plan) => plan.planVersionId !== tenant.planVersionId),
+    [planOptions, tenant.planVersionId],
+  );
+  const [isChangeOpen, setIsChangeOpen] = useState(false);
+  const [targetPlanVersionId, setTargetPlanVersionId] = useState(
+    changePlanOptions[0]?.planVersionId ?? '',
+  );
+  const [changeReason, setChangeReason] = useState('平台套餐变更，刷新授权快照。');
+  const [changePreview, setChangePreview] = useState<TenantPlanChangePreview | null>(null);
+  const [changeError, setChangeError] = useState<string | null>(null);
+  const [isPreviewingChange, setIsPreviewingChange] = useState(false);
+  const [isApplyingChange, setIsApplyingChange] = useState(false);
+  const [changeSuccess, setChangeSuccess] = useState<{
+    changeRecordId: string;
+    auditEventId: string;
+  } | null>(null);
+
+  const effectiveTargetPlanVersionId = changePlanOptions.some(
+    (plan) => plan.planVersionId === targetPlanVersionId,
+  )
+    ? targetPlanVersionId
+    : changePlanOptions[0]?.planVersionId ?? '';
+  const selectedChangePlan =
+    changePlanOptions.find((plan) => plan.planVersionId === effectiveTargetPlanVersionId) ??
+    changePlanOptions[0] ??
+    null;
+
+  function resetPlanChangeResult() {
+    setChangePreview(null);
+    setChangeSuccess(null);
+    setChangeError(null);
+  }
+
+  async function handlePreviewPlanChange() {
+    if (!effectiveTargetPlanVersionId || !changeReason.trim()) {
+      setChangeError('请选择目标套餐版本并填写变更原因');
+      return;
+    }
+
+    setIsPreviewingChange(true);
+    setChangeError(null);
+    setChangeSuccess(null);
+    const result = await previewOpenPlatformTenantPlanChange(tenant.tenantId, {
+      toPlanVersionId: effectiveTargetPlanVersionId,
+      reason: changeReason,
+    });
+    setIsPreviewingChange(false);
+
+    if (!result.ok) {
+      setChangePreview(null);
+      setChangeError(`套餐变更预览失败：${result.error.message}`);
+      return;
+    }
+
+    setChangePreview(result.preview);
+  }
+
+  async function handleApplyPlanChange() {
+    if (!effectiveTargetPlanVersionId || !changeReason.trim()) {
+      setChangeError('请选择目标套餐版本并填写变更原因');
+      return;
+    }
+
+    setIsApplyingChange(true);
+    setChangeError(null);
+    const result = await applyOpenPlatformTenantPlanChange(tenant.tenantId, {
+      toPlanVersionId: effectiveTargetPlanVersionId,
+      reason: changeReason,
+    });
+    setIsApplyingChange(false);
+
+    if (!result.ok) {
+      setChangeError(`套餐变更应用失败：${result.error.message}`);
+      return;
+    }
+
+    setChangeSuccess({
+      changeRecordId: result.changeRecordId,
+      auditEventId: result.auditEventId,
+    });
+    onTenantChanged(result.tenant);
+  }
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/25 backdrop-blur-[1px]">
@@ -330,7 +420,17 @@ function TenantDetailDrawer({
         </section>
 
         <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
-          <h4 className="text-base font-semibold text-slate-950">当前套餐</h4>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h4 className="text-base font-semibold text-slate-950">当前套餐</h4>
+            <button
+              type="button"
+              onClick={() => setIsChangeOpen((current) => !current)}
+              className="inline-flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700"
+            >
+              <ClipboardList className="h-4 w-4" />
+              变更套餐
+            </button>
+          </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl bg-blue-50 p-4">
               <div className="text-lg font-semibold text-slate-950">{tenant.planName ?? '未配置套餐'}</div>
@@ -343,6 +443,144 @@ function TenantDetailDrawer({
             </div>
           </div>
         </section>
+
+        {isChangeOpen ? (
+          <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="text-base font-semibold text-slate-950">套餐变更</h4>
+                <p className="mt-1 text-sm text-slate-500">
+                  先预览权益差异，再应用变更并生成新的授权快照。
+                </p>
+              </div>
+              {selectedChangePlan ? (
+                <StatusBadge label={selectedChangePlan.versionCode} tone="blue" />
+              ) : null}
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1.2fr]">
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                目标套餐版本
+                <select
+                  aria-label="目标套餐版本"
+                  value={effectiveTargetPlanVersionId}
+                  onChange={(event) => {
+                    setTargetPlanVersionId(event.target.value);
+                    resetPlanChangeResult();
+                  }}
+                  className="rounded-lg border border-[#dbe6f3] bg-white px-3 py-2 text-sm font-normal text-slate-900"
+                >
+                  {changePlanOptions.length === 0 ? <option value="">暂无可变更套餐</option> : null}
+                  {changePlanOptions.map((plan) => (
+                    <option key={plan.planVersionId} value={plan.planVersionId}>
+                      {plan.displayName} - {plan.displayPrice}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                变更原因
+                <textarea
+                  aria-label="变更原因"
+                  value={changeReason}
+                  onChange={(event) => {
+                    setChangeReason(event.target.value);
+                    resetPlanChangeResult();
+                  }}
+                  className="min-h-20 rounded-lg border border-[#dbe6f3] px-3 py-2 text-sm font-normal text-slate-900"
+                  placeholder="请输入本次套餐变更的业务原因"
+                />
+              </label>
+            </div>
+
+            {selectedChangePlan ? (
+              <div className="mt-3 rounded-xl border border-[#dbe6f3] bg-[#f8fafc] p-3">
+                <div className="text-sm font-semibold text-slate-950">
+                  目标：{selectedChangePlan.displayName}
+                </div>
+                <div className="mt-2 grid gap-2 text-sm text-slate-600 sm:grid-cols-4">
+                  <span>Agent {formatLimit(selectedChangePlan.agentLimit)}</span>
+                  <span>员工席位 {formatLimit(selectedChangePlan.seatLimit)}</span>
+                  <span>AI 调用/月 {formatLimit(selectedChangePlan.monthlyAiCallLimit)}</span>
+                  <span>知识库 {formatLimit(selectedChangePlan.knowledgeStorageGb)} GB</span>
+                </div>
+              </div>
+            ) : null}
+
+            {changeError ? (
+              <div className="mt-3 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                {changeError}
+              </div>
+            ) : null}
+
+            {changeSuccess ? (
+              <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                <div className="font-semibold">套餐变更已应用并生成新授权快照</div>
+                <div className="mt-1">变更记录：{changeSuccess.changeRecordId}</div>
+                <div>审计事件：{changeSuccess.auditEventId}</div>
+              </div>
+            ) : null}
+
+            {changePreview ? (
+              <div className="mt-4 overflow-x-auto rounded-xl border border-[#dbe6f3]">
+                <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+                  <caption className="sr-only">套餐变更差异对照</caption>
+                  <thead className="bg-[#f8fafc] text-xs font-semibold text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2">权益项</th>
+                      <th className="px-3 py-2">变更前</th>
+                      <th className="px-3 py-2">变更后</th>
+                      <th className="px-3 py-2">状态</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#dbe6f3] bg-white">
+                    {changePreview.items.map((item) => (
+                      <tr key={item.key}>
+                        <td className="px-3 py-2 font-semibold text-slate-900">{item.label}</td>
+                        <td className="px-3 py-2 text-slate-600">{item.before}</td>
+                        <td className="px-3 py-2 text-slate-900">{item.after}</td>
+                        <td className="px-3 py-2">
+                          <StatusBadge
+                            label={item.changed ? '已变化' : '未变化'}
+                            tone={item.changed ? 'amber' : 'slate'}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="border-t border-[#dbe6f3] bg-[#f8fafc] px-3 py-2 text-xs text-slate-500">
+                  套餐变更差异对照：{changePreview.changedItemCount} 项变化，{changePreview.unchangedItemCount} 项不变。
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="inline-flex items-center gap-2 text-xs text-slate-500">
+                <Lock className="h-4 w-4" />
+                仅提交套餐版本和变更原因，不提交联系人、计费、支付或密钥字段。
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={isPreviewingChange || isApplyingChange || !effectiveTargetPlanVersionId}
+                  onClick={() => void handlePreviewPlanChange()}
+                  className="rounded-lg border border-[#dbe6f3] bg-white px-4 py-2 text-sm font-semibold text-blue-700 disabled:text-slate-400"
+                >
+                  {isPreviewingChange ? '预览中...' : '预览变更'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isApplyingChange || !changePreview}
+                  onClick={() => void handleApplyPlanChange()}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-slate-300"
+                >
+                  {isApplyingChange ? '应用中...' : '确认应用变更'}
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
           <h4 className="text-base font-semibold text-slate-950">授权快照</h4>
@@ -839,6 +1077,13 @@ export function OpenPlatformTenantManagementPanel() {
     setCreateStep(4);
   }
 
+  function handleTenantChanged(tenant: OpenPlatformTenantRecord) {
+    setRecords((current) =>
+      current.map((item) => (item.tenantId === tenant.tenantId ? tenant : item)),
+    );
+    setSelectedTenant(tenant);
+  }
+
   return (
     <section className="space-y-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -1118,7 +1363,14 @@ export function OpenPlatformTenantManagementPanel() {
         </article>
       ) : null}
 
-      {selectedTenant ? <TenantDetailDrawer tenant={selectedTenant} onClose={() => setSelectedTenant(null)} /> : null}
+      {selectedTenant ? (
+        <TenantDetailDrawer
+          tenant={selectedTenant}
+          planOptions={tenantPlanOptions}
+          onTenantChanged={handleTenantChanged}
+          onClose={() => setSelectedTenant(null)}
+        />
+      ) : null}
       {isCreateOpen ? (
         <CreateTenantModal
           form={createForm}

@@ -184,7 +184,13 @@ describe('平台租户管理 repository', () => {
     expect(query.from).toHaveBeenCalledWith(tenants);
     expect(query.leftJoinPlanAssignments).toHaveBeenCalledWith(
       tenantPlanAssignments,
-      { column: tenantPlanAssignments.tenantId, operator: 'eq', value: tenants.id },
+      {
+        conditions: [
+          { column: tenantPlanAssignments.tenantId, operator: 'eq', value: tenants.id },
+          { column: tenantPlanAssignments.status, operator: 'eq', value: 'active' },
+        ],
+        operator: 'and',
+      },
     );
     expect(query.leftJoinPlans).toHaveBeenCalledWith(
       tenantPlans,

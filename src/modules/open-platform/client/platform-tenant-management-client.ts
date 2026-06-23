@@ -7,6 +7,10 @@ import {
   type PlatformCommercialHealthViewModel,
 } from '@/modules/open-platform/domain/platform-commercial-health';
 import type { TenantManagementListItem } from '@/modules/open-platform/domain/tenant-management';
+import type {
+  TenantPlanChangePayload,
+  TenantPlanChangePreview,
+} from '@/modules/open-platform/domain/tenant-plan-change';
 import type { TenantPlanOptionDto } from '@/modules/open-platform/domain/tenant-plan-binding';
 
 export type OpenPlatformTenantRecord = TenantManagementListItem;
@@ -35,6 +39,20 @@ export type OpenPlatformTenantPlanOptionsResult =
 
 export type OpenPlatformTenantCreateResult =
   | { ok: true; status: 'tenant_created'; tenant: OpenPlatformTenantRecord }
+  | { ok: false; error: OpenPlatformTenantClientError };
+
+export type OpenPlatformTenantPlanChangePreviewResult =
+  | { ok: true; status: 'preview_ready'; preview: TenantPlanChangePreview }
+  | { ok: false; error: OpenPlatformTenantClientError };
+
+export type OpenPlatformTenantPlanChangeApplyResult =
+  | {
+      ok: true;
+      status: 'plan_changed';
+      changeRecordId: string;
+      auditEventId: string;
+      tenant: OpenPlatformTenantRecord;
+    }
   | { ok: false; error: OpenPlatformTenantClientError };
 
 export type CreateOpenPlatformTenantInput = {
@@ -185,6 +203,116 @@ export async function createOpenPlatformTenantWithPlan(
     return {
       ok: true,
       status: 'tenant_created',
+      tenant: payload.tenant as OpenPlatformTenantRecord,
+    };
+  } catch {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+}
+
+export async function previewOpenPlatformTenantPlanChange(
+  tenantId: string,
+  input: TenantPlanChangePayload,
+  options?: OpenPlatformTenantClientOptions,
+): Promise<OpenPlatformTenantPlanChangePreviewResult> {
+  const fetcher = getFetcher(options);
+  if (!fetcher) {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+
+  try {
+    const response = await fetcher(
+      `/api/v1/open-platform/tenants/${encodeURIComponent(tenantId)}/plan-change-preview`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+    );
+    const payload = await readJson(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: createClientError({ status: response.status, payload }),
+      };
+    }
+    if (
+      !isJsonObject(payload) ||
+      payload.status !== 'preview_ready' ||
+      !isJsonObject(payload.preview)
+    ) {
+      return {
+        ok: false,
+        error: { kind: 'unknown', message: '请求失败', status: response.status },
+      };
+    }
+
+    return {
+      ok: true,
+      status: 'preview_ready',
+      preview: payload.preview as TenantPlanChangePreview,
+    };
+  } catch {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+}
+
+export async function applyOpenPlatformTenantPlanChange(
+  tenantId: string,
+  input: TenantPlanChangePayload,
+  options?: OpenPlatformTenantClientOptions,
+): Promise<OpenPlatformTenantPlanChangeApplyResult> {
+  const fetcher = getFetcher(options);
+  if (!fetcher) {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+
+  try {
+    const response = await fetcher(
+      `/api/v1/open-platform/tenants/${encodeURIComponent(tenantId)}/plan-change`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+    );
+    const payload = await readJson(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: createClientError({ status: response.status, payload }),
+      };
+    }
+    if (
+      !isJsonObject(payload) ||
+      payload.status !== 'plan_changed' ||
+      typeof payload.changeRecordId !== 'string' ||
+      typeof payload.auditEventId !== 'string' ||
+      !isJsonObject(payload.tenant)
+    ) {
+      return {
+        ok: false,
+        error: { kind: 'unknown', message: '请求失败', status: response.status },
+      };
+    }
+
+    return {
+      ok: true,
+      status: 'plan_changed',
+      changeRecordId: payload.changeRecordId,
+      auditEventId: payload.auditEventId,
       tenant: payload.tenant as OpenPlatformTenantRecord,
     };
   } catch {

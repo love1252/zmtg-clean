@@ -105,7 +105,13 @@ export function createTenantManagementRepository(database: TenantDatabase) {
           quotaSnapshot: tenantQuotaSnapshots,
         })
         .from(tenants)
-        .leftJoin(tenantPlanAssignments, eq(tenantPlanAssignments.tenantId, tenants.id))
+        .leftJoin(
+          tenantPlanAssignments,
+          and(
+            eq(tenantPlanAssignments.tenantId, tenants.id),
+            eq(tenantPlanAssignments.status, 'active'),
+          ),
+        )
         .leftJoin(tenantPlans, eq(tenantPlans.id, tenantPlanAssignments.planId))
         .leftJoin(tenantPlanVersions, eq(tenantPlanVersions.id, tenantPlanAssignments.planVersionId))
         .leftJoin(
