@@ -11,9 +11,22 @@ const tenantRecord = {
   planName: '成长版',
   planCode: 'growth-care',
   planStatus: 'active',
+  planVersionId: 'plan-version-growth-202606',
+  planVersionCode: '2026-06-v1',
+  planDisplayName: 'Growth Care 2026-06',
+  planDisplayPrice: '¥2999/月',
   assignmentStatus: 'active',
   startedAt: '2026-05-31T00:00:00.000Z',
   expiresAt: null,
+  agentLimit: 3,
+  seatLimit: 40,
+  monthlyAiCallLimit: 300000,
+  knowledgeStorageGb: 100,
+  connectorEntitlements: ['企微', 'HIS'],
+  serviceEntitlements: ['上线培训', '季度复盘'],
+  authorizationSnapshotId: 'auth-snapshot-demo-tenant-001-active',
+  authorizationSnapshotStatus: 'active',
+  authorizationGeneratedAt: '2026-06-23T02:00:00.000Z',
   maxCustomers: 5000,
   maxAppointments: 2000,
   maxFollowUps: 10000,
@@ -36,6 +49,23 @@ const tenantRecord = {
   secret: 'raw-secret',
 };
 
+const professionalPlanOption = {
+  planId: 'plan-professional',
+  planCode: 'professional',
+  planName: 'Professional 专业版',
+  planVersionId: 'plan-version-professional-published',
+  versionCode: '2026-06-v1',
+  displayName: 'Professional 专业版 2026-06',
+  displayPrice: '¥2999/月',
+  priceNote: '展示价格，人工确认口径',
+  agentLimit: 3,
+  seatLimit: 40,
+  monthlyAiCallLimit: 300000,
+  knowledgeStorageGb: 100,
+  connectorEntitlements: ['企微', 'HIS'],
+  serviceEntitlements: ['上线培训'],
+};
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
@@ -53,6 +83,8 @@ type MockTenantFetchOptions =
   | Response[]
   | {
       tenantResponses?: Response[];
+      planOptionsResponse?: Response;
+      createTenantResponse?: Response;
       auditEventsResponse?: Response;
     };
 
@@ -69,12 +101,37 @@ function defaultAuditEventsResponse() {
 
 function mockTenantFetch(options: MockTenantFetchOptions) {
   const tenantResponses = Array.isArray(options) ? [...options] : [...(options.tenantResponses ?? [])];
+  const planOptionsResponse = Array.isArray(options)
+    ? jsonResponse({ options: [professionalPlanOption] })
+    : options.planOptionsResponse ?? jsonResponse({ options: [professionalPlanOption] });
+  const createTenantResponse = Array.isArray(options)
+    ? jsonResponse({ ok: true, status: 'tenant_created', tenant: tenantRecord })
+    : options.createTenantResponse ??
+      jsonResponse({
+        ok: true,
+        status: 'tenant_created',
+        tenant: {
+          ...tenantRecord,
+          tenantId: 'tenant-created',
+          tenantName: '星澜医美中心',
+          planName: 'Professional 专业版',
+          planCode: 'professional',
+          planVersionId: 'plan-version-professional-published',
+          planVersionCode: '2026-06-v1',
+          planDisplayName: 'Professional 专业版 2026-06',
+          planDisplayPrice: '¥2999/月',
+          authorizationSnapshotId: 'tenant-authorization-snapshot-created',
+          authorizationSnapshotStatus: 'active',
+          authorizationGeneratedAt: '2026-06-23T03:00:00.000Z',
+        },
+      });
   const auditEventsResponse = Array.isArray(options)
     ? defaultAuditEventsResponse()
     : options.auditEventsResponse ?? defaultAuditEventsResponse();
 
   const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
     const path = fetchPath(input);
+    const method = String(_init?.method ?? 'GET').toUpperCase();
     if (path === '/api/open-platform/tenants') {
       const response = tenantResponses.length > 1 ? tenantResponses.shift() : tenantResponses[0];
       if (!response) {
@@ -82,6 +139,14 @@ function mockTenantFetch(options: MockTenantFetchOptions) {
       }
 
       return response.clone();
+    }
+
+    if (path === '/api/v1/open-platform/tenant-plan-options' && method === 'GET') {
+      return planOptionsResponse.clone();
+    }
+
+    if (path === '/api/v1/open-platform/tenants' && method === 'POST') {
+      return createTenantResponse.clone();
     }
 
     if (path.startsWith('/api/open-platform/audit-events')) {
@@ -165,7 +230,7 @@ describe('平台端租户管理面板', () => {
 
     expect(screen.getByRole('heading', { name: '租户管理' })).toBeInTheDocument();
     expect(screen.getByText(/平台侧查看机构、套餐和配额边界/)).toBeInTheDocument();
-    expect(screen.getByText(/当前仅展示 API 返回的租户记录/)).toBeInTheDocument();
+    expect(screen.getByText(/支持受控开通测试租户并生成授权快照/)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('受控演示租户');
     expect(screen.getByText('正在加载租户管理数据...')).toBeInTheDocument();
     expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThanOrEqual(1);
@@ -351,7 +416,7 @@ describe('平台端租户管理面板', () => {
     expect(within(drawer).getByRole('button', { name: '查看审计日志' })).toBeInTheDocument();
   });
 
-  it('新建租户三步流程只展示前端状态且成功态说明 UI 写入项', async () => {
+  it('新建租户三步流程选择 published 套餐版本，提交后生成授权快照并刷新列表', async () => {
     const fetchMock = mockTenantFetch([jsonResponse({ records: [tenantRecord] })]);
     const { container } = render(<OpenPlatformTenantManagementPanel />);
 
@@ -368,24 +433,39 @@ describe('平台端租户管理面板', () => {
     fireEvent.click(screen.getByRole('button', { name: '下一步' }));
 
     expect(screen.getByText('套餐与权益')).toBeInTheDocument();
-    expect(screen.getByText('专业版 v3 授权预览')).toBeInTheDocument();
+    expect(screen.getByText('Professional 专业版 2026-06 授权预览')).toBeInTheDocument();
+    expect(screen.getAllByText('展示价格 ¥2999/月').length).toBeGreaterThan(0);
+    expect(screen.getByText('套餐版本 2026-06-v1')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '下一步' }));
 
     expect(screen.getAllByText('提交确认').length).toBeGreaterThan(0);
     expect(screen.getByText('审计摘要')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认开设租户' }));
 
-    expect(screen.getByText('租户 UI 状态已生成')).toBeInTheDocument();
+    expect(await screen.findByText('租户已开通并生成授权快照')).toBeInTheDocument();
     expect(screen.getByText('租户主体')).toBeInTheDocument();
-    expect(screen.getByText('初始管理员')).toBeInTheDocument();
     expect(screen.getByText('套餐分配')).toBeInTheDocument();
     expect(screen.getAllByText('授权快照').length).toBeGreaterThan(0);
-    expect(screen.getByText('审计记录')).toBeInTheDocument();
-    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual(
-      expect.arrayContaining(['/api/open-platform/tenants']),
+    expect(screen.getByText(/星澜医美中心/)).toBeInTheDocument();
+    const createCall = fetchMock.mock.calls.find(([input, init]) => (
+      fetchPath(input) === '/api/v1/open-platform/tenants' &&
+      String(init?.method).toUpperCase() === 'POST'
+    ));
+    expect(createCall).toBeDefined();
+    expect(JSON.parse(String(createCall?.[1]?.body))).toEqual({
+      organizationName: '星澜医美中心',
+      planVersionId: 'plan-version-professional-published',
+      reason: '平台测试租户开设，用于授权快照验证。',
+    });
+    expect(String(createCall?.[1]?.body)).not.toMatch(
+      /13800000000|admin@example.com|payment_token|webhook_secret|client_secret|api_key/i,
     );
-    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).not.toContain(
-      '/api/open-platform/tenants/create',
+    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual(
+      expect.arrayContaining([
+        '/api/open-platform/tenants',
+        '/api/v1/open-platform/tenant-plan-options',
+        '/api/v1/open-platform/tenants',
+      ]),
     );
     expect(container.textContent ?? '').not.toContain('13800000000');
     expect(container.textContent ?? '').not.toContain('admin@example.com');

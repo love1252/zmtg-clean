@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  tenantAuthorizationSnapshots,
   tenantPlanAssignments,
+  tenantPlanVersions,
   tenantPlans,
   tenantQuotaSnapshots,
   tenants,
@@ -27,11 +29,18 @@ const eqMock = vi.hoisted(() =>
     value,
   })),
 );
+const andMock = vi.hoisted(() =>
+  vi.fn((...conditions: unknown[]) => ({
+    conditions,
+    operator: 'and',
+  })),
+);
 
 vi.mock('drizzle-orm', async (importOriginal) => {
   const actual = await importOriginal<typeof import('drizzle-orm')>();
   return {
     ...actual,
+    and: andMock,
     asc: ascMock,
     desc: descMock,
     eq: eqMock,
@@ -41,15 +50,19 @@ vi.mock('drizzle-orm', async (importOriginal) => {
 function createTenantManagementDatabase(rows: unknown[] = []) {
   const orderBy = vi.fn(async (..._orders: unknown[]) => rows);
   const leftJoinQuotaSnapshots = vi.fn(() => ({ orderBy }));
-  const leftJoinPlanAssignments = vi.fn(() => ({ leftJoin: leftJoinQuotaSnapshots }));
-  const leftJoinPlans = vi.fn(() => ({ leftJoin: leftJoinPlanAssignments }));
-  const from = vi.fn(() => ({ leftJoin: leftJoinPlans }));
+  const leftJoinAuthorizationSnapshots = vi.fn(() => ({ leftJoin: leftJoinQuotaSnapshots }));
+  const leftJoinPlanVersions = vi.fn(() => ({ leftJoin: leftJoinAuthorizationSnapshots }));
+  const leftJoinPlans = vi.fn(() => ({ leftJoin: leftJoinPlanVersions }));
+  const leftJoinPlanAssignments = vi.fn(() => ({ leftJoin: leftJoinPlans }));
+  const from = vi.fn(() => ({ leftJoin: leftJoinPlanAssignments }));
   const select = vi.fn(() => ({ from }));
 
   return {
     database: { select } as unknown as TenantDatabase,
     from,
+    leftJoinAuthorizationSnapshots,
     leftJoinPlanAssignments,
+    leftJoinPlanVersions,
     leftJoinPlans,
     leftJoinQuotaSnapshots,
     orderBy,
@@ -79,11 +92,55 @@ const assignmentRow = {
   id: 'assign-demo-tenant-001-growth',
   tenantId: 'demo-tenant-001',
   planId: 'plan-growth-care',
+  planVersionId: 'plan-version-growth-202606',
   status: 'active',
   startedAt: new Date('2026-05-31T00:00:00.000Z'),
   expiresAt: null,
   createdAt: new Date('2026-05-31T00:00:00.000Z'),
   updatedAt: new Date('2026-05-31T00:00:00.000Z'),
+};
+
+const planVersionRow = {
+  id: 'plan-version-growth-202606',
+  planId: 'plan-growth-care',
+  versionCode: '2026-06-v1',
+  status: 'published',
+  displayName: 'Growth Care 2026-06',
+  displayPrice: '¥2999/月',
+  priceNote: '人工展示价格',
+  agentLimit: 3,
+  seatLimit: 40,
+  monthlyAiCallLimit: 300000,
+  knowledgeStorageGb: 100,
+  connectorEntitlementsJson: { connectors: ['企微', 'HIS'] },
+  serviceEntitlementsJson: { services: ['上线培训', '季度复盘'] },
+  featureEntitlementsJson: { modules: ['客户管理', '知识库'] },
+  quotaEntitlementsJson: { aiCallsPerMonth: 300000, knowledgeStorageGb: 100 },
+  changeSummary: '首个正式版本',
+  createdBy: 'demo-user-platform',
+  updatedBy: 'demo-user-platform',
+  publishedBy: 'demo-user-platform',
+  publishedAt: new Date('2026-06-23T01:00:00.000Z'),
+  retiredAt: null,
+  createdAt: new Date('2026-06-23T00:00:00.000Z'),
+  updatedAt: new Date('2026-06-23T01:00:00.000Z'),
+};
+
+const authorizationSnapshotRow = {
+  id: 'auth-snapshot-demo-tenant-001-active',
+  tenantId: 'demo-tenant-001',
+  planAssignmentId: 'assign-demo-tenant-001-growth',
+  planVersionId: 'plan-version-growth-202606',
+  status: 'active',
+  snapshotJson: {},
+  quotaJson: {},
+  connectorJson: { connectors: ['企微', 'HIS'] },
+  serviceJson: { services: ['上线培训', '季度复盘'] },
+  sourceChangeRecordId: null,
+  generatedBy: 'demo-user-platform',
+  generatedAt: new Date('2026-06-23T02:00:00.000Z'),
+  supersededAt: null,
+  createdAt: new Date('2026-06-23T02:00:00.000Z'),
 };
 
 const snapshotRow = {
@@ -103,6 +160,7 @@ const snapshotRow = {
 };
 
 beforeEach(() => {
+  andMock.mockClear();
   ascMock.mockClear();
   descMock.mockClear();
   eqMock.mockClear();
@@ -115,6 +173,8 @@ describe('平台租户管理 repository', () => {
         tenant: tenantRow,
         plan: planRow,
         assignment: assignmentRow,
+        planVersion: planVersionRow,
+        authorizationSnapshot: authorizationSnapshotRow,
         quotaSnapshot: snapshotRow,
       },
     ]);
@@ -122,13 +182,27 @@ describe('平台租户管理 repository', () => {
     const result = await createTenantManagementRepository(query.database).listTenantManagementRecords();
 
     expect(query.from).toHaveBeenCalledWith(tenants);
-    expect(query.leftJoinPlans).toHaveBeenCalledWith(
+    expect(query.leftJoinPlanAssignments).toHaveBeenCalledWith(
       tenantPlanAssignments,
       { column: tenantPlanAssignments.tenantId, operator: 'eq', value: tenants.id },
     );
-    expect(query.leftJoinPlanAssignments).toHaveBeenCalledWith(
+    expect(query.leftJoinPlans).toHaveBeenCalledWith(
       tenantPlans,
       { column: tenantPlans.id, operator: 'eq', value: tenantPlanAssignments.planId },
+    );
+    expect(query.leftJoinPlanVersions).toHaveBeenCalledWith(
+      tenantPlanVersions,
+      { column: tenantPlanVersions.id, operator: 'eq', value: tenantPlanAssignments.planVersionId },
+    );
+    expect(query.leftJoinAuthorizationSnapshots).toHaveBeenCalledWith(
+      tenantAuthorizationSnapshots,
+      {
+        conditions: [
+          { column: tenantAuthorizationSnapshots.tenantId, operator: 'eq', value: tenants.id },
+          { column: tenantAuthorizationSnapshots.status, operator: 'eq', value: 'active' },
+        ],
+        operator: 'and',
+      },
     );
     expect(query.leftJoinQuotaSnapshots).toHaveBeenCalledWith(
       tenantQuotaSnapshots,
@@ -148,9 +222,22 @@ describe('平台租户管理 repository', () => {
         planName: '成长版',
         planCode: 'growth-care',
         planStatus: 'active',
+        planVersionId: 'plan-version-growth-202606',
+        planVersionCode: '2026-06-v1',
+        planDisplayName: 'Growth Care 2026-06',
+        planDisplayPrice: '¥2999/月',
         assignmentStatus: 'active',
         startedAt: '2026-05-31T00:00:00.000Z',
         expiresAt: null,
+        agentLimit: 3,
+        seatLimit: 40,
+        monthlyAiCallLimit: 300000,
+        knowledgeStorageGb: 100,
+        connectorEntitlements: ['企微', 'HIS'],
+        serviceEntitlements: ['上线培训', '季度复盘'],
+        authorizationSnapshotId: 'auth-snapshot-demo-tenant-001-active',
+        authorizationSnapshotStatus: 'active',
+        authorizationGeneratedAt: '2026-06-23T02:00:00.000Z',
         maxCustomers: 5000,
         maxAppointments: 2000,
         maxFollowUps: 10000,
@@ -170,6 +257,8 @@ describe('平台租户管理 repository', () => {
         tenant: { ...tenantRow, id: 'demo-tenant-003', name: '未分配套餐机构', status: 'suspended' },
         plan: null,
         assignment: null,
+        planVersion: null,
+        authorizationSnapshot: null,
         quotaSnapshot: null,
       },
     ]);
@@ -186,9 +275,22 @@ describe('平台租户管理 repository', () => {
         planName: null,
         planCode: null,
         planStatus: null,
+        planVersionId: null,
+        planVersionCode: null,
+        planDisplayName: null,
+        planDisplayPrice: null,
         assignmentStatus: null,
         startedAt: null,
         expiresAt: null,
+        agentLimit: null,
+        seatLimit: null,
+        monthlyAiCallLimit: null,
+        knowledgeStorageGb: null,
+        connectorEntitlements: [],
+        serviceEntitlements: [],
+        authorizationSnapshotId: null,
+        authorizationSnapshotStatus: null,
+        authorizationGeneratedAt: null,
         maxCustomers: null,
         maxAppointments: null,
         maxFollowUps: null,
@@ -212,6 +314,15 @@ describe('平台租户管理 repository', () => {
         },
         plan: { ...planRow, token: 'sk_test_should_not_return' },
         assignment: { ...assignmentRow, secret: 'raw-secret' },
+        planVersion: {
+          ...planVersionRow,
+          payment_token: 'payment_token_should_not_return',
+          webhook_secret: 'webhook_secret_should_not_return',
+        },
+        authorizationSnapshot: {
+          ...authorizationSnapshotRow,
+          contract_body: '完整合同正文',
+        },
         quotaSnapshot: {
           ...snapshotRow,
           treatmentRecord: '完整治疗记录正文',
@@ -236,5 +347,8 @@ describe('平台租户管理 repository', () => {
     expect(serialized).not.toContain('stack');
     expect(serialized).not.toContain('token');
     expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('payment_token');
+    expect(serialized).not.toContain('webhook_secret');
+    expect(serialized).not.toContain('contract_body');
   });
 });

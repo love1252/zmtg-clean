@@ -2057,9 +2057,22 @@ function buildDemoPlatformTenants(): OpenPlatformTenantRecord[] {
       planName: plan?.name ?? null,
       planCode: plan?.code ?? null,
       planStatus: plan?.status ?? null,
+      planVersionId: null,
+      planVersionCode: null,
+      planDisplayName: null,
+      planDisplayPrice: null,
       assignmentStatus: assignment?.status ?? null,
       startedAt: toIsoStringForDemoSmoke(assignment?.startedAt),
       expiresAt: toIsoStringForDemoSmoke(assignment?.expiresAt),
+      agentLimit: null,
+      seatLimit: null,
+      monthlyAiCallLimit: null,
+      knowledgeStorageGb: null,
+      connectorEntitlements: [],
+      serviceEntitlements: [],
+      authorizationSnapshotId: null,
+      authorizationSnapshotStatus: null,
+      authorizationGeneratedAt: null,
       maxCustomers: quota?.maxCustomers ?? null,
       maxAppointments: quota?.maxAppointments ?? null,
       maxFollowUps: quota?.maxFollowUps ?? null,
@@ -3043,7 +3056,7 @@ describe('工作台入口页面', () => {
     expect(screen.getAllByText('澄镜医疗美容').length).toBeGreaterThan(0);
     expect(screen.getAllByText('远山医美连锁').length).toBeGreaterThan(0);
     expect(screen.getByText(/平台侧查看机构、套餐和配额边界/)).toBeInTheDocument();
-    expect(screen.getByText(/当前仅展示 API 返回的租户记录/)).toBeInTheDocument();
+    expect(screen.getByText(/支持受控开通测试租户并生成授权快照/)).toBeInTheDocument();
     expect(screen.getByText('Growth Plan')).toBeInTheDocument();
     expect(screen.getByText('Starter Plan')).toBeInTheDocument();
     expect(screen.getByText('Trial Plan')).toBeInTheDocument();

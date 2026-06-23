@@ -7,9 +7,22 @@ export const tenantManagementDtoFields = [
   'planName',
   'planCode',
   'planStatus',
+  'planVersionId',
+  'planVersionCode',
+  'planDisplayName',
+  'planDisplayPrice',
   'assignmentStatus',
   'startedAt',
   'expiresAt',
+  'agentLimit',
+  'seatLimit',
+  'monthlyAiCallLimit',
+  'knowledgeStorageGb',
+  'connectorEntitlements',
+  'serviceEntitlements',
+  'authorizationSnapshotId',
+  'authorizationSnapshotStatus',
+  'authorizationGeneratedAt',
   'maxCustomers',
   'maxAppointments',
   'maxFollowUps',
@@ -32,9 +45,22 @@ export type TenantManagementRecord = {
   planName: string | null;
   planCode: string | null;
   planStatus: string | null;
+  planVersionId: string | null;
+  planVersionCode: string | null;
+  planDisplayName: string | null;
+  planDisplayPrice: string | null;
   assignmentStatus: string | null;
   startedAt: Date | string | null;
   expiresAt: Date | string | null;
+  agentLimit: number | null;
+  seatLimit: number | null;
+  monthlyAiCallLimit: number | null;
+  knowledgeStorageGb: number | null;
+  connectorEntitlements: string[];
+  serviceEntitlements: string[];
+  authorizationSnapshotId: string | null;
+  authorizationSnapshotStatus: string | null;
+  authorizationGeneratedAt: Date | string | null;
   maxCustomers: number | null;
   maxAppointments: number | null;
   maxFollowUps: number | null;
@@ -56,7 +82,13 @@ export type TenantManagementListItem = {
     | 'currentAppointments'
     | 'currentFollowUps'
     | 'currentAiCalls'
+    | 'agentLimit'
+    | 'seatLimit'
+    | 'monthlyAiCallLimit'
+    | 'knowledgeStorageGb'
     ? number | null
+    : field extends 'connectorEntitlements' | 'serviceEntitlements'
+      ? string[]
     : string | null;
 } & {
   tenantId: string;
@@ -71,6 +103,10 @@ function toIsoString(value: Date | string | null) {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
+function normalizeStringList(value: string[]) {
+  return value.filter((item) => item.trim().length > 0);
+}
+
 export function mapTenantManagementRecordToDto(
   record: TenantManagementRecord,
 ): TenantManagementListItem {
@@ -83,9 +119,22 @@ export function mapTenantManagementRecordToDto(
     planName: record.planName,
     planCode: record.planCode,
     planStatus: record.planStatus,
+    planVersionId: record.planVersionId,
+    planVersionCode: record.planVersionCode,
+    planDisplayName: record.planDisplayName,
+    planDisplayPrice: record.planDisplayPrice,
     assignmentStatus: record.assignmentStatus,
     startedAt: toIsoString(record.startedAt),
     expiresAt: toIsoString(record.expiresAt),
+    agentLimit: record.agentLimit,
+    seatLimit: record.seatLimit,
+    monthlyAiCallLimit: record.monthlyAiCallLimit,
+    knowledgeStorageGb: record.knowledgeStorageGb,
+    connectorEntitlements: normalizeStringList(record.connectorEntitlements),
+    serviceEntitlements: normalizeStringList(record.serviceEntitlements),
+    authorizationSnapshotId: record.authorizationSnapshotId,
+    authorizationSnapshotStatus: record.authorizationSnapshotStatus,
+    authorizationGeneratedAt: toIsoString(record.authorizationGeneratedAt),
     maxCustomers: record.maxCustomers,
     maxAppointments: record.maxAppointments,
     maxFollowUps: record.maxFollowUps,
