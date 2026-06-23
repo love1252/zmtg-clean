@@ -27,15 +27,41 @@ export function createDatabase(client = createPostgresClient()) {
 
 export type TenantDatabase = ReturnType<typeof createDatabase>;
 
-let cachedClient: ReturnType<typeof createPostgresClient> | null = null;
-let cachedDatabase: TenantDatabase | null = null;
+type DatabaseGlobalCache = {
+  database: TenantDatabase | null;
+  databaseUrl: string | null;
+  postgresClient: ReturnType<typeof createPostgresClient> | null;
+};
+
+const databaseGlobalCacheKey = '__zmtgDatabaseCache';
+
+function getDatabaseGlobalCache() {
+  const globalWithDatabaseCache = globalThis as typeof globalThis & {
+    __zmtgDatabaseCache?: DatabaseGlobalCache;
+  };
+
+  globalWithDatabaseCache[databaseGlobalCacheKey] ??= {
+    database: null,
+    databaseUrl: null,
+    postgresClient: null,
+  };
+
+  return globalWithDatabaseCache[databaseGlobalCacheKey];
+}
 
 export function getDatabase() {
-  if (!cachedClient) {
-    cachedClient = createPostgresClient();
+  const databaseUrl = getDatabaseUrl();
+  const cache = getDatabaseGlobalCache();
+
+  if (!cache.postgresClient || cache.databaseUrl !== databaseUrl) {
+    cache.postgresClient = createPostgresClient(databaseUrl);
+    cache.database = null;
+    cache.databaseUrl = databaseUrl;
   }
-  if (!cachedDatabase) {
-    cachedDatabase = createDatabase(cachedClient);
+
+  if (!cache.database) {
+    cache.database = createDatabase(cache.postgresClient);
   }
-  return cachedDatabase;
+
+  return cache.database;
 }
