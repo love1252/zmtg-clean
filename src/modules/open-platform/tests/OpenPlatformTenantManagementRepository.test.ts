@@ -181,6 +181,14 @@ describe('平台租户管理 repository', () => {
 
     const result = await createTenantManagementRepository(query.database).listTenantManagementRecords();
 
+    expect(query.select).toHaveBeenCalledWith({
+      tenant: tenants,
+      plan: tenantPlans,
+      assignment: tenantPlanAssignments,
+      planVersion: tenantPlanVersions,
+      authorizationSnapshot: tenantAuthorizationSnapshots,
+      quotaSnapshot: tenantQuotaSnapshots,
+    });
     expect(query.from).toHaveBeenCalledWith(tenants);
     expect(query.leftJoinPlanAssignments).toHaveBeenCalledWith(
       tenantPlanAssignments,

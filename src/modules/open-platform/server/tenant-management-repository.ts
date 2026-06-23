@@ -102,6 +102,8 @@ export function createTenantManagementRepository(database: TenantDatabase) {
           tenant: tenants,
           plan: tenantPlans,
           assignment: tenantPlanAssignments,
+          planVersion: tenantPlanVersions,
+          authorizationSnapshot: tenantAuthorizationSnapshots,
           quotaSnapshot: tenantQuotaSnapshots,
         })
         .from(tenants)

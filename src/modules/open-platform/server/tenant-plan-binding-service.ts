@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
 import type { TenantManagementListItem } from '@/modules/open-platform/domain/tenant-management';
 import {
   buildAuthorizationSnapshotPayload,
@@ -47,6 +48,7 @@ export type TenantPlanBindingRepository = {
       supersededAt: null;
       createdAt: Date;
     };
+    auditEvent: TenantAuditEvent;
   }): Promise<TenantManagementListItem>;
 };
 
@@ -72,6 +74,8 @@ export async function listTenantPlanOptionsService(input: {
 export async function createTenantWithPlanService(input: {
   repository: TenantPlanBindingRepository;
   actorId: string;
+  actorRole: TenantAuditEvent['actorRole'];
+  auditSource: TenantAuditEvent['source'];
   payload: unknown;
   now?: () => Date;
   idFactory?: IdFactory;
@@ -91,6 +95,7 @@ export async function createTenantWithPlanService(input: {
   const tenantId = idFactory('tenant');
   const assignmentId = idFactory('tenant-plan-assignment');
   const snapshotId = idFactory('tenant-authorization-snapshot');
+  const auditEventId = idFactory('audit-event');
   const snapshotPayload = buildAuthorizationSnapshotPayload(planVersion);
   const tenant = await input.repository.createTenantWithPlanAuthorization({
     planVersion,
@@ -127,6 +132,20 @@ export async function createTenantWithPlanService(input: {
       generatedAt: current,
       supersededAt: null,
       createdAt: current,
+    },
+    auditEvent: {
+      eventId: auditEventId,
+      actorId: input.actorId,
+      actorRole: input.actorRole,
+      tenantId,
+      scope: 'platform',
+      resource: 'tenant',
+      resourceId: tenantId,
+      action: 'create',
+      result: 'allowed',
+      reason: 'tenant_plan_assignment_created',
+      occurredAt: current.toISOString(),
+      source: input.auditSource,
     },
   });
 

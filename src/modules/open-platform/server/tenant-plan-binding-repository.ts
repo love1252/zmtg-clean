@@ -1,10 +1,12 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 
+import { mapAuditEventToInsert } from '@/modules/audit/server/audit-event-repository';
 import { mapTenantManagementRecordToDto } from '@/modules/open-platform/domain/tenant-management';
 import type { TenantPlanPublishedVersionRecord } from '@/modules/open-platform/domain/tenant-plan-binding';
 import type { TenantPlanBindingRepository } from '@/modules/open-platform/server/tenant-plan-binding-service';
 import type { TenantDatabase } from '@/server/db/client';
 import {
+  auditEvents,
   tenantAuthorizationSnapshots,
   tenantPlanAssignments,
   tenantPlanVersions,
@@ -93,6 +95,7 @@ export function createTenantPlanBindingRepository(database: TenantDatabase): Ten
         await tx.insert(tenants).values(input.tenant);
         await tx.insert(tenantPlanAssignments).values(input.assignment);
         await tx.insert(tenantAuthorizationSnapshots).values(input.authorizationSnapshot);
+        await tx.insert(auditEvents).values(mapAuditEventToInsert(input.auditEvent));
       });
 
       return mapTenantManagementRecordToDto({

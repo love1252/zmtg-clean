@@ -38,6 +38,8 @@ export async function POST(request: Request) {
     const result = await createTenantWithPlanService({
       repository,
       actorId: context.userId,
+      actorRole: context.role,
+      auditSource: context.source,
       payload,
     });
 

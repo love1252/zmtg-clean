@@ -26,6 +26,7 @@ export type AuditReason =
   | 'quota_exceeded_appointments'
   | 'missing_active_plan'
   | 'missing_quota_limit'
+  | 'tenant_plan_assignment_created'
   | 'tenant_plan_changed'
   | 'provider_unavailable'
   | 'provider_timeout'

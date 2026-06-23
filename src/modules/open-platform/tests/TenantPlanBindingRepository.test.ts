@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTenantPlanBindingRepository } from '@/modules/open-platform/server/tenant-plan-binding-repository';
 import type { TenantDatabase } from '@/server/db/client';
 import {
+  auditEvents,
   tenantAuthorizationSnapshots,
   tenantPlanAssignments,
   tenantPlanVersions,
@@ -203,7 +204,7 @@ describe('租户套餐绑定 repository', () => {
     expect(result?.versionId).toBe('plan-version-professional-published');
   });
 
-  it('事务内写入租户、套餐分配和 active 授权快照，并返回低敏租户 DTO', async () => {
+  it('事务内写入租户、套餐分配、active 授权快照和开通审计，并返回低敏租户 DTO', async () => {
     const query = createDatabase();
     const now = new Date('2026-06-23T03:00:00.000Z');
 
@@ -262,6 +263,20 @@ describe('租户套餐绑定 repository', () => {
         supersededAt: null,
         createdAt: now,
       },
+      auditEvent: {
+        eventId: 'audit-event-fixed',
+        actorId: 'demo-user-platform',
+        actorRole: 'platform_admin',
+        tenantId: 'tenant-fixed',
+        scope: 'platform',
+        resource: 'tenant',
+        resourceId: 'tenant-fixed',
+        action: 'create',
+        result: 'allowed',
+        reason: 'tenant_plan_assignment_created',
+        occurredAt: now.toISOString(),
+        source: 'demo_session',
+      },
     });
 
     expect(query.transaction).toHaveBeenCalledTimes(1);
@@ -269,6 +284,7 @@ describe('租户套餐绑定 repository', () => {
       tenants,
       tenantPlanAssignments,
       tenantAuthorizationSnapshots,
+      auditEvents,
     ]);
     expect(query.inserted[1].values).toEqual(
       expect.objectContaining({
@@ -279,6 +295,17 @@ describe('租户套餐绑定 repository', () => {
       expect.objectContaining({
         status: 'active',
         planVersionId: 'plan-version-professional-published',
+      }),
+    );
+    expect(query.inserted[3].values).toEqual(
+      expect.objectContaining({
+        eventId: 'audit-event-fixed',
+        tenantId: 'tenant-fixed',
+        resource: 'tenant',
+        resourceId: 'tenant-fixed',
+        action: 'create',
+        result: 'allowed',
+        reason: 'tenant_plan_assignment_created',
       }),
     );
     expect(result).toEqual(

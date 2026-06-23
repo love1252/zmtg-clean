@@ -1004,6 +1004,114 @@ describe('数据库结构', () => {
     );
   });
 
+  it('演示种子数据包含商业化套餐版本和授权快照', () => {
+    const plans = getDemoTenantPlanSeedRecords();
+    const assignments = getDemoTenantPlanAssignmentSeedRecords();
+    const versions = getSeedRecords<{
+      id: string;
+      planId: string;
+      status: string;
+      displayName: string;
+      displayPrice: string;
+      agentLimit: number | null;
+      seatLimit: number | null;
+      monthlyAiCallLimit: number | null;
+      knowledgeStorageGb: number | null;
+      connectorEntitlementsJson: Record<string, unknown>;
+      serviceEntitlementsJson: Record<string, unknown>;
+      quotaEntitlementsJson: Record<string, unknown>;
+    }>('getDemoTenantPlanVersionSeedRecords');
+    const authorizationSnapshots = getSeedRecords<{
+      id: string;
+      tenantId: string;
+      planAssignmentId: string;
+      planVersionId: string;
+      status: string;
+      snapshotJson: Record<string, unknown>;
+      quotaJson: Record<string, unknown>;
+      connectorJson: Record<string, unknown>;
+      serviceJson: Record<string, unknown>;
+      generatedBy: string;
+    }>('getDemoTenantAuthorizationSnapshotSeedRecords');
+    const planIds = new Set(plans.map((plan) => plan.id));
+    const versionIds = new Set(versions.map((version) => version.id));
+    const activeAssignments = assignments.filter((assignment) => assignment.status === 'active');
+    const activeSnapshots = authorizationSnapshots.filter((snapshot) => snapshot.status === 'active');
+    const snapshotByTenantId = new Map(activeSnapshots.map((snapshot) => [snapshot.tenantId, snapshot]));
+
+    expect(new Set(versions.map((version) => version.planId))).toEqual(planIds);
+    expect(versions.every((version) => version.status === 'published')).toBe(true);
+    expect(
+      versions.every(
+        (version) =>
+          Boolean(version.displayName) &&
+          Boolean(version.displayPrice) &&
+          (version.agentLimit ?? 0) > 0 &&
+          (version.seatLimit ?? 0) > 0 &&
+          (version.monthlyAiCallLimit ?? 0) > 0 &&
+          (version.knowledgeStorageGb ?? 0) > 0 &&
+          Array.isArray(version.connectorEntitlementsJson.connectors) &&
+          Array.isArray(version.serviceEntitlementsJson.services) &&
+          typeof version.quotaEntitlementsJson === 'object',
+      ),
+    ).toBe(true);
+    expect(
+      activeAssignments.every(
+        (assignment) =>
+          typeof assignment.planVersionId === 'string' && versionIds.has(assignment.planVersionId),
+      ),
+    ).toBe(true);
+    expect(activeSnapshots).toHaveLength(activeAssignments.length);
+    expect(
+      activeAssignments.every((assignment) => {
+        const snapshot = snapshotByTenantId.get(assignment.tenantId);
+        return (
+          snapshot?.planAssignmentId === assignment.id &&
+          snapshot.planVersionId === assignment.planVersionId &&
+          snapshot.generatedBy === 'demo-user-platform' &&
+          snapshot.snapshotJson.planVersionId === assignment.planVersionId &&
+          typeof snapshot.quotaJson === 'object' &&
+          typeof snapshot.connectorJson === 'object' &&
+          typeof snapshot.serviceJson === 'object'
+        );
+      }),
+    ).toBe(true);
+    expect(serializeSeedRecords([...versions, ...authorizationSnapshots])).not.toMatch(
+      sensitiveDemoSeedPattern,
+    );
+  });
+
+  it('演示种子数据包含只读商业化预留记录', () => {
+    const tenants = new Set(getSeedRecords<{ id: string }>('getDemoTenantSeedRecords').map((tenant) => tenant.id));
+    const commercialRecords = getSeedRecords<{
+      tenantId: string;
+      recordType: string;
+      status: string;
+      displayCode: string;
+      displayAmount: string | null;
+      periodLabel: string | null;
+      note: string | null;
+    }>('getDemoTenantCommercialRecordSeedRecords');
+    const recordTypes = new Set(commercialRecords.map((record) => record.recordType));
+    const allowedStatuses = new Set(['draft', 'pending', 'manual_review', 'completed', 'cancelled']);
+
+    expect(recordTypes).toEqual(new Set(['order', 'contract', 'invoice', 'payment']));
+    expect(commercialRecords.length).toBeGreaterThanOrEqual(4);
+    expect(
+      commercialRecords.every(
+        (record) =>
+          tenants.has(record.tenantId) &&
+          allowedStatuses.has(record.status) &&
+          Boolean(record.displayCode) &&
+          Boolean(record.periodLabel),
+      ),
+    ).toBe(true);
+    expect(serializeSeedRecords(commercialRecords)).not.toMatch(sensitiveDemoSeedPattern);
+    expect(serializeSeedRecords(commercialRecords)).not.toMatch(
+      /真实支付|真实扣费|立即支付|自动扣费|自动续费|银行卡|第三方支付|stripe|支付宝|微信支付|payment_token|webhook_secret|api_key|DATABASE_URL/i,
+    );
+  });
+
   it('演示种子数据包含星澜医美中心、演示角色和 Growth Plan 配额', () => {
     const tenants = getSeedRecords<{ id: string; name: string }>('getDemoTenantSeedRecords');
     const tenantMembers = getSeedRecords<{
@@ -1226,6 +1334,9 @@ describe('数据库结构', () => {
 
     expect(seedSource).toContain('onConflictDoUpdate');
     expect(seedSource).not.toContain('onConflictDoNothing');
+    expect(seedSource).toContain('.insert(tenantPlanVersions)');
+    expect(seedSource).toContain('.insert(tenantAuthorizationSnapshots)');
+    expect(seedSource).toContain('.insert(tenantCommercialRecords)');
   });
 
   it('演示 seed 不写入 HIS 连接配置或凭证引用数据', () => {

@@ -102,6 +102,8 @@ describe('租户套餐绑定 service', () => {
     const result = await createTenantWithPlanService({
       repository,
       actorId: 'demo-user-platform',
+      actorRole: 'platform_admin',
+      auditSource: 'demo_session',
       now: () => new Date('2026-06-23T03:00:00.000Z'),
       idFactory: (prefix) => `${prefix}-fixed`,
       payload: {
@@ -167,6 +169,20 @@ describe('租户套餐绑定 service', () => {
         supersededAt: null,
         createdAt: new Date('2026-06-23T03:00:00.000Z'),
       },
+      auditEvent: {
+        eventId: 'audit-event-fixed',
+        actorId: 'demo-user-platform',
+        actorRole: 'platform_admin',
+        tenantId: 'tenant-fixed',
+        scope: 'platform',
+        resource: 'tenant',
+        resourceId: 'tenant-fixed',
+        action: 'create',
+        result: 'allowed',
+        reason: 'tenant_plan_assignment_created',
+        occurredAt: '2026-06-23T03:00:00.000Z',
+        source: 'demo_session',
+      },
     });
     const createAuthorizationMock = vi.mocked(repository.createTenantWithPlanAuthorization);
     expect(JSON.stringify(createAuthorizationMock.mock.calls)).not.toMatch(
@@ -183,6 +199,8 @@ describe('租户套餐绑定 service', () => {
       createTenantWithPlanService({
         repository,
         actorId: 'demo-user-platform',
+        actorRole: 'platform_admin',
+        auditSource: 'demo_session',
         payload: {
           organizationName: '星澜医美中心',
           planVersionId: 'plan-version-draft',
