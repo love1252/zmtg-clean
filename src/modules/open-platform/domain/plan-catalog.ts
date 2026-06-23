@@ -254,7 +254,7 @@ function mapVersionRecordToDto(version: PlanCatalogVersionRecord) {
 function latestVersionId(
   versions: PlanCatalogVersionRecord[],
   status: PlanCatalogVersionStatus,
-) {
+): string | null {
   const [latest] = versions
     .filter((version) => version.status === status)
     .sort((left, right) => {
