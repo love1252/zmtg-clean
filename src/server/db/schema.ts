@@ -28,6 +28,8 @@ import type {
 } from '@/modules/security/domain/access-control';
 import type { EncryptedSecretEnvelope } from '@/modules/security/server/secretEncryption';
 
+type JsonRecord = Record<string, unknown>;
+
 export const tenantStatusEnum = pgEnum('tenant_status', ['active', 'suspended']);
 export const authRoleEnum = pgEnum('auth_role', [
   'tenant_admin',
@@ -69,6 +71,34 @@ export const tenantPlanAssignmentStatusEnum = pgEnum('tenant_plan_assignment_sta
   'active',
   'scheduled',
   'expired',
+]);
+export const tenantPlanVersionStatusEnum = pgEnum('tenant_plan_version_status', [
+  'draft',
+  'published',
+  'retired',
+]);
+export const tenantAuthorizationSnapshotStatusEnum = pgEnum(
+  'tenant_authorization_snapshot_status',
+  ['active', 'superseded', 'revoked'],
+);
+export const tenantPlanChangeStatusEnum = pgEnum('tenant_plan_change_status', [
+  'previewed',
+  'applied',
+  'cancelled',
+  'failed',
+]);
+export const tenantCommercialRecordTypeEnum = pgEnum('tenant_commercial_record_type', [
+  'order',
+  'contract',
+  'invoice',
+  'payment',
+]);
+export const tenantCommercialRecordStatusEnum = pgEnum('tenant_commercial_record_status', [
+  'draft',
+  'pending',
+  'manual_review',
+  'completed',
+  'cancelled',
 ]);
 export const hisConnectionStatusEnum = pgEnum('his_connection_status', [
   'draft',
@@ -205,6 +235,59 @@ export const tenantPlans = pgTable(
   }),
 );
 
+export const tenantPlanVersions = pgTable(
+  'tenant_plan_versions',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    planId: varchar('plan_id', { length: 64 })
+      .notNull()
+      .references(() => tenantPlans.id),
+    versionCode: varchar('version_code', { length: 64 }).notNull(),
+    status: tenantPlanVersionStatusEnum('status').notNull().default('draft'),
+    displayName: varchar('display_name', { length: 120 }).notNull(),
+    displayPrice: varchar('display_price', { length: 80 }).notNull(),
+    priceNote: text('price_note').notNull().default(''),
+    agentLimit: integer('agent_limit'),
+    seatLimit: integer('seat_limit'),
+    monthlyAiCallLimit: integer('monthly_ai_call_limit'),
+    knowledgeStorageGb: integer('knowledge_storage_gb'),
+    connectorEntitlementsJson: jsonb('connector_entitlements_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    serviceEntitlementsJson: jsonb('service_entitlements_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    featureEntitlementsJson: jsonb('feature_entitlements_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    quotaEntitlementsJson: jsonb('quota_entitlements_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    changeSummary: text('change_summary').notNull().default(''),
+    createdBy: varchar('created_by', { length: 96 }).notNull(),
+    updatedBy: varchar('updated_by', { length: 96 }).notNull(),
+    publishedBy: varchar('published_by', { length: 96 }),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    retiredAt: timestamp('retired_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => ({
+    planVersionCodeUniqueIdx: uniqueIndex('tenant_plan_versions_plan_version_code_unique_idx').on(
+      table.planId,
+      table.versionCode,
+    ),
+    planStatusIdx: index('tenant_plan_versions_plan_status_idx').on(table.planId, table.status),
+    statusUpdatedIdx: index('tenant_plan_versions_status_updated_idx').on(
+      table.status,
+      table.updatedAt,
+    ),
+  }),
+);
+
 export const tenantPlanAssignments = pgTable(
   'tenant_plan_assignments',
   {
@@ -215,6 +298,9 @@ export const tenantPlanAssignments = pgTable(
     planId: varchar('plan_id', { length: 64 })
       .notNull()
       .references(() => tenantPlans.id),
+    planVersionId: varchar('plan_version_id', { length: 64 }).references(
+      () => tenantPlanVersions.id,
+    ),
     status: tenantPlanAssignmentStatusEnum('status').notNull().default('active'),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
@@ -228,6 +314,143 @@ export const tenantPlanAssignments = pgTable(
     planStatusIdx: index('tenant_plan_assignments_plan_status_idx').on(
       table.planId,
       table.status,
+    ),
+    planVersionIdx: index('tenant_plan_assignments_plan_version_idx').on(table.planVersionId),
+  }),
+);
+
+export const tenantAuthorizationSnapshots = pgTable(
+  'tenant_authorization_snapshots',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    planAssignmentId: varchar('plan_assignment_id', { length: 64 })
+      .notNull()
+      .references(() => tenantPlanAssignments.id),
+    planVersionId: varchar('plan_version_id', { length: 64 })
+      .notNull()
+      .references(() => tenantPlanVersions.id),
+    status: tenantAuthorizationSnapshotStatusEnum('status').notNull().default('active'),
+    snapshotJson: jsonb('snapshot_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    quotaJson: jsonb('quota_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    connectorJson: jsonb('connector_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    serviceJson: jsonb('service_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    sourceChangeRecordId: varchar('source_change_record_id', { length: 64 }),
+    generatedBy: varchar('generated_by', { length: 96 }).notNull(),
+    generatedAt: timestamp('generated_at', { withTimezone: true }).notNull(),
+    supersededAt: timestamp('superseded_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantStatusIdx: index('tenant_authorization_snapshots_tenant_status_idx').on(
+      table.tenantId,
+      table.status,
+    ),
+    activeTenantUniqueIdx: uniqueIndex('tenant_authorization_snapshots_active_tenant_unique_idx')
+      .on(table.tenantId)
+      .where(sql`${table.status} = 'active'`),
+    planAssignmentGeneratedIdx: index('tenant_authorization_snapshots_assignment_generated_idx').on(
+      table.planAssignmentId,
+      table.generatedAt,
+    ),
+    planVersionIdx: index('tenant_authorization_snapshots_plan_version_idx').on(
+      table.planVersionId,
+    ),
+  }),
+);
+
+export const tenantPlanChangeRecords = pgTable(
+  'tenant_plan_change_records',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    fromPlanVersionId: varchar('from_plan_version_id', { length: 64 }).references(
+      () => tenantPlanVersions.id,
+    ),
+    toPlanVersionId: varchar('to_plan_version_id', { length: 64 })
+      .notNull()
+      .references(() => tenantPlanVersions.id),
+    fromSnapshotId: varchar('from_snapshot_id', { length: 64 }).references(
+      () => tenantAuthorizationSnapshots.id,
+    ),
+    toSnapshotId: varchar('to_snapshot_id', { length: 64 }).references(
+      () => tenantAuthorizationSnapshots.id,
+    ),
+    status: tenantPlanChangeStatusEnum('status').notNull().default('previewed'),
+    diffJson: jsonb('diff_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    reason: text('reason').notNull(),
+    requestedBy: varchar('requested_by', { length: 96 }).notNull(),
+    appliedBy: varchar('applied_by', { length: 96 }),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantCreatedIdx: index('tenant_plan_change_records_tenant_created_idx').on(
+      table.tenantId,
+      table.createdAt,
+    ),
+    tenantStatusIdx: index('tenant_plan_change_records_tenant_status_idx').on(
+      table.tenantId,
+      table.status,
+    ),
+    toPlanVersionIdx: index('tenant_plan_change_records_to_plan_version_idx').on(
+      table.toPlanVersionId,
+    ),
+  }),
+);
+
+export const tenantCommercialRecords = pgTable(
+  'tenant_commercial_records',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    recordType: tenantCommercialRecordTypeEnum('record_type').notNull(),
+    status: tenantCommercialRecordStatusEnum('status').notNull().default('draft'),
+    displayCode: varchar('display_code', { length: 96 }).notNull(),
+    displayAmount: varchar('display_amount', { length: 80 }),
+    periodLabel: varchar('period_label', { length: 80 }),
+    relatedPlanChangeId: varchar('related_plan_change_id', { length: 64 }).references(
+      () => tenantPlanChangeRecords.id,
+    ),
+    note: text('note'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }),
+    createdBy: varchar('created_by', { length: 96 }).notNull(),
+    updatedBy: varchar('updated_by', { length: 96 }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantTypeStatusIdx: index('tenant_commercial_records_tenant_type_status_idx').on(
+      table.tenantId,
+      table.recordType,
+      table.status,
+    ),
+    tenantCreatedIdx: index('tenant_commercial_records_tenant_created_idx').on(
+      table.tenantId,
+      table.createdAt,
+    ),
+    relatedPlanChangeIdx: index('tenant_commercial_records_related_plan_change_idx').on(
+      table.relatedPlanChangeId,
     ),
   }),
 );

@@ -142,6 +142,159 @@ describe('数据库结构', () => {
     );
   });
 
+  it('定义平台套餐商业化闭环基础表、版本状态枚举和安全字段边界', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const tenantPlanVersions = schemaModule.tenantPlanVersions;
+    const tenantAuthorizationSnapshots = schemaModule.tenantAuthorizationSnapshots;
+    const tenantPlanChangeRecords = schemaModule.tenantPlanChangeRecords;
+    const tenantCommercialRecords = schemaModule.tenantCommercialRecords;
+    const tenantPlanVersionStatusEnum = schemaModule.tenantPlanVersionStatusEnum as
+      | { enumValues?: string[] }
+      | undefined;
+    const tenantAuthorizationSnapshotStatusEnum =
+      schemaModule.tenantAuthorizationSnapshotStatusEnum as { enumValues?: string[] } | undefined;
+    const tenantPlanChangeStatusEnum = schemaModule.tenantPlanChangeStatusEnum as
+      | { enumValues?: string[] }
+      | undefined;
+    const tenantCommercialRecordTypeEnum = schemaModule.tenantCommercialRecordTypeEnum as
+      | { enumValues?: string[] }
+      | undefined;
+    const tenantCommercialRecordStatusEnum = schemaModule.tenantCommercialRecordStatusEnum as
+      | { enumValues?: string[] }
+      | undefined;
+
+    expect(tenantPlanVersions).toBeDefined();
+    expect(tenantAuthorizationSnapshots).toBeDefined();
+    expect(tenantPlanChangeRecords).toBeDefined();
+    expect(tenantCommercialRecords).toBeDefined();
+    expect(tenantPlanVersionStatusEnum?.enumValues).toEqual(['draft', 'published', 'retired']);
+    expect(tenantAuthorizationSnapshotStatusEnum?.enumValues).toEqual([
+      'active',
+      'superseded',
+      'revoked',
+    ]);
+    expect(tenantPlanChangeStatusEnum?.enumValues).toEqual([
+      'previewed',
+      'applied',
+      'cancelled',
+      'failed',
+    ]);
+    expect(tenantCommercialRecordTypeEnum?.enumValues).toEqual([
+      'order',
+      'contract',
+      'invoice',
+      'payment',
+    ]);
+    expect(tenantCommercialRecordStatusEnum?.enumValues).toEqual([
+      'draft',
+      'pending',
+      'manual_review',
+      'completed',
+      'cancelled',
+    ]);
+
+    const versionColumns = columnNames(getTableConfig(tenantPlanVersions as never).columns);
+    const snapshotColumns = columnNames(
+      getTableConfig(tenantAuthorizationSnapshots as never).columns,
+    );
+    const changeColumns = columnNames(getTableConfig(tenantPlanChangeRecords as never).columns);
+    const commercialColumns = columnNames(getTableConfig(tenantCommercialRecords as never).columns);
+    const assignmentColumns = columnNames(getTableConfig(schema.tenantPlanAssignments).columns);
+
+    expect(assignmentColumns).toContain('plan_version_id');
+    expect(versionColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'plan_id',
+        'version_code',
+        'status',
+        'display_name',
+        'display_price',
+        'price_note',
+        'agent_limit',
+        'seat_limit',
+        'monthly_ai_call_limit',
+        'knowledge_storage_gb',
+        'connector_entitlements_json',
+        'service_entitlements_json',
+        'feature_entitlements_json',
+        'quota_entitlements_json',
+        'change_summary',
+        'created_by',
+        'updated_by',
+        'published_by',
+        'published_at',
+        'retired_at',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+    expect(snapshotColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'plan_assignment_id',
+        'plan_version_id',
+        'status',
+        'snapshot_json',
+        'quota_json',
+        'connector_json',
+        'service_json',
+        'source_change_record_id',
+        'generated_by',
+        'generated_at',
+        'superseded_at',
+        'created_at',
+      ]),
+    );
+    expect(changeColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'from_plan_version_id',
+        'to_plan_version_id',
+        'from_snapshot_id',
+        'to_snapshot_id',
+        'status',
+        'diff_json',
+        'reason',
+        'requested_by',
+        'applied_by',
+        'applied_at',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+    expect(commercialColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'record_type',
+        'status',
+        'display_code',
+        'display_amount',
+        'period_label',
+        'related_plan_change_id',
+        'note',
+        'occurred_at',
+        'created_by',
+        'updated_by',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+    expect(
+      JSON.stringify({
+        versionColumns,
+        snapshotColumns,
+        changeColumns,
+        commercialColumns,
+      }),
+    ).not.toMatch(
+      /card_number|payment_token|webhook_secret|contract_body|invoice_tax_no|client_secret|api_key|encrypted_api_key/i,
+    );
+  });
+
   it('定义 HIS 连接配置安全元数据表、状态枚举和租户内索引约束', () => {
     const schemaModule = schema as typeof schema & Record<string, unknown>;
     const hisConnections = schemaModule.hisConnections;
@@ -1175,6 +1328,51 @@ describe('数据库结构', () => {
     );
     expect(migrationSql).toContain(
       'create index "tenant_quota_snapshots_tenant_snapshot_idx" on "tenant_quota_snapshots" using btree ("tenant_id","snapshot_at")',
+    );
+  });
+
+  it('迁移包含平台套餐商业化闭环基础表且不包含真实支付敏感字段', () => {
+    const migrationSql = readMigrationSql('platform_plan_commercialization_v1_schema');
+    const journal = JSON.parse(
+      readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8'),
+    ) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+
+    expect(migrationSql).toContain('create type "public"."tenant_plan_version_status"');
+    expect(migrationSql).toContain('create type "public"."tenant_authorization_snapshot_status"');
+    expect(migrationSql).toContain('create type "public"."tenant_plan_change_status"');
+    expect(migrationSql).toContain('create type "public"."tenant_commercial_record_type"');
+    expect(migrationSql).toContain('create type "public"."tenant_commercial_record_status"');
+    expect(migrationSql).toContain('create table "tenant_plan_versions"');
+    expect(migrationSql).toContain('create table "tenant_authorization_snapshots"');
+    expect(migrationSql).toContain('create table "tenant_plan_change_records"');
+    expect(migrationSql).toContain('create table "tenant_commercial_records"');
+    expect(migrationSql).toContain(
+      'alter table "tenant_plan_assignments" add column "plan_version_id" varchar(64)',
+    );
+    expect(migrationSql).toContain(
+      'alter table "tenant_plan_assignments" add constraint "tenant_plan_assignments_plan_version_id_tenant_plan_versions_id_fk" foreign key ("plan_version_id") references "public"."tenant_plan_versions"("id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "tenant_authorization_snapshots" add constraint "tenant_authorization_snapshots_plan_version_id_tenant_plan_versions_id_fk" foreign key ("plan_version_id") references "public"."tenant_plan_versions"("id")',
+    );
+    expect(migrationSql).toContain(
+      'create unique index "tenant_plan_versions_plan_version_code_unique_idx" on "tenant_plan_versions" using btree ("plan_id","version_code")',
+    );
+    expect(migrationSql).toContain(
+      'create unique index "tenant_authorization_snapshots_active_tenant_unique_idx" on "tenant_authorization_snapshots" using btree ("tenant_id") where "tenant_authorization_snapshots"."status" = \'active\'',
+    );
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          idx: 19,
+          tag: '0019_platform_plan_commercialization_v1_schema',
+        }),
+      ]),
+    );
+    expect(migrationSql).not.toMatch(
+      /stripe|payment_token|webhook_secret|card_number|contract_body|invoice_tax_no|client_secret|api_key|encrypted_api_key|ciphertext|auth_tag/i,
     );
   });
 
