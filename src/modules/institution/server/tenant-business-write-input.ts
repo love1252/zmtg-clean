@@ -20,6 +20,10 @@ export type CreateCustomerPayload = {
   lastTouchSummary: string;
   nextAction: string;
   tags: string[];
+  gender: string;
+  birthDate: string;
+  referralSource: string;
+  notes: string;
 };
 
 export type UpdateCustomerPayload = Partial<CreateCustomerPayload> & {
@@ -97,6 +101,10 @@ const customerFieldKeys = [
   'lastTouchSummary',
   'nextAction',
   'tags',
+  'gender',
+  'birthDate',
+  'referralSource',
+  'notes',
 ] as const;
 
 const customerStringKeys = [
@@ -107,6 +115,10 @@ const customerStringKeys = [
   'maskedMedicalRecordNo',
   'lastTouchSummary',
   'nextAction',
+  'gender',
+  'birthDate',
+  'referralSource',
+  'notes',
 ] as const;
 
 const maskedCustomerStringKeys = new Set<string>(['maskedPhone', 'maskedMedicalRecordNo']);
@@ -116,6 +128,10 @@ const rawPiiProtectedCustomerStringKeys = new Set<string>([
   'projectInterest',
   'lastTouchSummary',
   'nextAction',
+  'gender',
+  'birthDate',
+  'referralSource',
+  'notes',
 ]);
 const rawPiiProtectedAppointmentStringKeys = new Set<string>([
   'customerDisplayName',

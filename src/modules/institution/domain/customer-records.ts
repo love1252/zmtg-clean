@@ -29,6 +29,10 @@ export type TenantCustomerRecord = {
   lastTouchSummary: string;
   nextAction: string;
   tags: string[];
+  gender: string;
+  birthDate: string;
+  referralSource: string;
+  notes: string;
 };
 
 export type CustomerRecordSummary = {
@@ -44,6 +48,10 @@ export type CustomerRecordSummary = {
   lastTouchSummary: string;
   nextAction: string;
   tags: string[];
+  gender: string;
+  birthDate: string;
+  referralSource: string;
+  notes: string;
 };
 
 function toCustomerSummary(record: TenantCustomerRecord): CustomerRecordSummary {
@@ -60,6 +68,10 @@ function toCustomerSummary(record: TenantCustomerRecord): CustomerRecordSummary 
     lastTouchSummary: record.lastTouchSummary,
     nextAction: record.nextAction,
     tags: record.tags,
+    gender: record.gender,
+    birthDate: record.birthDate,
+    referralSource: record.referralSource,
+    notes: record.notes,
   };
 }
 

@@ -199,6 +199,10 @@ const validCreateCustomerPayload = {
   lastTouchSummary: '初次咨询',
   nextAction: '预约到店',
   tags: ['新客'],
+  gender: '未指定',
+  birthDate: '未指定',
+  referralSource: '未指定',
+  notes: '未指定',
 };
 
 const validUpdateCustomerPayload = {
