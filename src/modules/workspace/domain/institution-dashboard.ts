@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   MessageCircle,
   Server,
+  Target,
   Users,
   Workflow,
 } from 'lucide-react';
@@ -31,13 +32,15 @@ export type InstitutionViewId =
   | 'appointments'
   | 'knowledge'
   | 'aiModels'
-  | 'analytics';
+  | 'analytics'
+  | 'opportunities';
 
 export const institutionNavItems: InstitutionNavItem[] = [
   { id: 'dashboard', label: '工作台', icon: LayoutDashboard, active: true },
   { id: 'customers', label: '客户中心', icon: Users },
   { id: 'followups', label: '智能随访', icon: Workflow },
   { id: 'treatmentSummaries', label: '治疗摘要管理', icon: ClipboardList },
+  { id: 'opportunities', label: '机会池', icon: Target },
   { id: 'audit', label: '审计日志', icon: FileSearch },
   { id: 'hisConnections', label: 'HIS 连接配置', icon: Server },
   { id: 'conversations', label: '客服工作台', icon: MessageCircle },

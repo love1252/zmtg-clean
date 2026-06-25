@@ -14,6 +14,8 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Target,
+  TrendingUp,
   Users,
 } from 'lucide-react';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
@@ -23,6 +25,7 @@ import { HisConnectionReadOnlyPanel } from '@/modules/institution/components/His
 import { InstitutionAuditEventsShell } from '@/modules/institution/components/InstitutionAuditEventsShell';
 import { InstitutionAiModelsShell } from '@/modules/institution/components/InstitutionAiModelsShell';
 import { InstitutionKnowledgeReadonlyShell } from '@/modules/institution/components/InstitutionKnowledgeReadonlyShell';
+import { OpportunityPoolShell } from '@/modules/institution/components/OpportunityPoolShell';
 import {
   InstitutionPageState,
   getInstitutionPageStateFromClientError,
@@ -59,6 +62,8 @@ const metricIcons = {
   high_priority_customers: BriefcaseBusiness,
   pending_appointments: CalendarCheck,
   due_followups: Clock3,
+  completed_followups: CheckCircle2,
+  opportunity_pool: Target,
 } satisfies Record<InstitutionDashboardMetricKey, typeof Users>;
 
 const followUpPathAnalysisMetricItems = [
@@ -547,6 +552,8 @@ export function InstitutionWorkspace() {
               <SmartFollowUpShell />
             ) : activeView === 'treatmentSummaries' ? (
               <TreatmentSummaryManagementShell />
+            ) : activeView === 'opportunities' ? (
+              <OpportunityPoolShell />
             ) : activeView === 'audit' ? (
               <InstitutionAuditEventsShell />
             ) : activeView === 'hisConnections' ? (
