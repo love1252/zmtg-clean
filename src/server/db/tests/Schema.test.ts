@@ -718,6 +718,129 @@ describe('数据库结构', () => {
     );
   });
 
+  it('定义正式租户账号、联系人表和账号状态枚举', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const authUsers = schemaModule.authUsers;
+    const tenantContacts = schemaModule.tenantContacts;
+    const authAccountStatusEnum = schemaModule.authAccountStatusEnum as
+      | { enumValues?: string[] }
+      | undefined;
+    const tenantStatusEnum = schemaModule.tenantStatusEnum as
+      | { enumValues?: string[] }
+      | undefined;
+
+    expect(authUsers).toBeDefined();
+    expect(tenantContacts).toBeDefined();
+    expect(authAccountStatusEnum?.enumValues).toEqual([
+      'active',
+      'password_reset_required',
+      'disabled',
+      'locked',
+    ]);
+    expect(tenantStatusEnum?.enumValues).toEqual([
+      'active',
+      'suspended',
+      'trialing',
+      'expired',
+    ]);
+
+    const authConfig = getTableConfig(authUsers as never);
+    const contactConfig = getTableConfig(tenantContacts as never);
+    const authColumns = columnNames(authConfig.columns);
+    const contactColumns = columnNames(contactConfig.columns);
+    const authIndexes = authConfig.indexes.map((index) => ({
+      name: index.config.name,
+      unique: index.config.unique,
+      columns: columnNames(index.config.columns as NamedColumn[]),
+    }));
+    const contactIndexes = contactConfig.indexes.map((index) => ({
+      name: index.config.name,
+      unique: index.config.unique,
+      columns: columnNames(index.config.columns as NamedColumn[]),
+    }));
+    const memberUserFk = getTableConfig(tenantMembers).foreignKeys.find(
+      (foreignKey) => foreignKey.getName() === 'tenant_members_user_id_auth_users_id_fk',
+    );
+    const contactTenantFk = contactConfig.foreignKeys.find(
+      (foreignKey) => foreignKey.getName() === 'tenant_contacts_tenant_id_tenants_id_fk',
+    );
+    const contactAdminFk = contactConfig.foreignKeys.find(
+      (foreignKey) => foreignKey.getName() === 'tenant_contacts_initial_admin_user_id_auth_users_id_fk',
+    );
+
+    expect(authConfig.name).toBe('auth_users');
+    expect(contactConfig.name).toBe('tenant_contacts');
+    expect(authColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'username',
+        'display_name',
+        'phone',
+        'email',
+        'password_hash',
+        'password_updated_at',
+        'password_reset_required',
+        'status',
+        'last_login_at',
+        'failed_login_count',
+        'locked_until',
+        'created_by',
+        'updated_by',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+    expect(contactColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'tenant_id',
+        'contact_name',
+        'contact_phone',
+        'contact_email',
+        'initial_admin_user_id',
+        'created_by',
+        'updated_by',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+    expect(authIndexes).toEqual(
+      expect.arrayContaining([
+        { name: 'auth_users_username_unique_idx', unique: true, columns: ['username'] },
+        { name: 'auth_users_phone_idx', unique: false, columns: ['phone'] },
+        { name: 'auth_users_email_idx', unique: false, columns: ['email'] },
+        { name: 'auth_users_status_idx', unique: false, columns: ['status'] },
+      ]),
+    );
+    expect(contactIndexes).toEqual(
+      expect.arrayContaining([
+        { name: 'tenant_contacts_tenant_unique_idx', unique: true, columns: ['tenant_id'] },
+        {
+          name: 'tenant_contacts_admin_user_idx',
+          unique: false,
+          columns: ['initial_admin_user_id'],
+        },
+      ]),
+    );
+    expect(foreignKeyColumns(memberUserFk)).toEqual({
+      columns: ['user_id'],
+      foreignColumns: ['id'],
+    });
+    expect(foreignKeyColumns(contactTenantFk)).toEqual({
+      columns: ['tenant_id'],
+      foreignColumns: ['id'],
+    });
+    expect(foreignKeyColumns(contactAdminFk)).toEqual({
+      columns: ['initial_admin_user_id'],
+      foreignColumns: ['id'],
+    });
+    expect(
+      JSON.stringify({ authColumns, contactColumns, authIndexes, contactIndexes }),
+    ).not.toMatch(
+      /plain_password|password_plaintext|temporary_password|request_body|response_body|raw_payload|sql\b|stack|database_url|secret|token|api_key|oauth|private_key/i,
+    );
+  });
+
   it('预约和随访任务通过租户加客户复合外键关联客户', () => {
     const appointmentCustomerFk = getTableConfig(appointments).foreignKeys.find(
       (foreignKey) => foreignKey.getName() === 'appointments_tenant_customer_fk',
@@ -1587,6 +1710,52 @@ describe('数据库结构', () => {
     expect(migrationSql).not.toMatch(/\bdelete\s+from\b|\binsert\s+into\b|(^|;)\s*update\s+/i);
     expect(migrationSql).not.toMatch(
       /phone_number|id_number|medical_record_no|raw_payload|request_body|response_body|treatment_record|medical_record_body|diagnosis_text|clinical_note|consultation_transcript|image_original|file_original|credential_secret|credential_value|credential_plaintext|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string|database_url|"sql"|"stack"/i,
+    );
+  });
+
+  it('迁移包含正式租户账号和联系人表且不保存明文密码或请求细节', () => {
+    const migrationSql = readMigrationSql('tenant_formal_accounts');
+    const journal = JSON.parse(
+      readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8'),
+    ) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          idx: 20,
+          tag: '0020_tenant_formal_accounts',
+        }),
+      ]),
+    );
+    expect(migrationSql).toContain('alter type "public"."tenant_status" add value \'trialing\'');
+    expect(migrationSql).toContain('alter type "public"."tenant_status" add value \'expired\'');
+    expect(migrationSql).toContain('create type "public"."auth_account_status"');
+    expect(migrationSql).toContain('create table "auth_users"');
+    expect(migrationSql).toContain('"password_hash" text not null');
+    expect(migrationSql).toContain('"password_reset_required" boolean default true not null');
+    expect(migrationSql).toContain('"failed_login_count" integer default 0 not null');
+    expect(migrationSql).toContain('create table "tenant_contacts"');
+    expect(migrationSql).toContain(
+      'alter table "tenant_members" add constraint "tenant_members_user_id_auth_users_id_fk" foreign key ("user_id") references "public"."auth_users"("id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "tenant_contacts" add constraint "tenant_contacts_tenant_id_tenants_id_fk" foreign key ("tenant_id") references "public"."tenants"("id")',
+    );
+    expect(migrationSql).toContain(
+      'alter table "tenant_contacts" add constraint "tenant_contacts_initial_admin_user_id_auth_users_id_fk" foreign key ("initial_admin_user_id") references "public"."auth_users"("id")',
+    );
+    expect(migrationSql).toContain(
+      'create unique index "auth_users_username_unique_idx" on "auth_users" using btree ("username")',
+    );
+    expect(migrationSql).toContain(
+      'create unique index "tenant_contacts_tenant_unique_idx" on "tenant_contacts" using btree ("tenant_id")',
+    );
+    expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
+    expect(migrationSql).not.toMatch(/\bdelete\s+from\b|\binsert\s+into\b|(^|;)\s*update\s+/i);
+    expect(migrationSql).not.toMatch(
+      /plain_password|password_plaintext|temporary_password|request_body|response_body|raw_payload|credential_secret|credential_plaintext|token|secret|api_key|oauth|basic_auth|signing_key|private_key|connection_string|database_url|"sql"|"stack"/i,
     );
   });
 

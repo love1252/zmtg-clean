@@ -30,7 +30,18 @@ import type { EncryptedSecretEnvelope } from '@/modules/security/server/secretEn
 
 type JsonRecord = Record<string, unknown>;
 
-export const tenantStatusEnum = pgEnum('tenant_status', ['active', 'suspended']);
+export const tenantStatusEnum = pgEnum('tenant_status', [
+  'active',
+  'suspended',
+  'trialing',
+  'expired',
+]);
+export const authAccountStatusEnum = pgEnum('auth_account_status', [
+  'active',
+  'password_reset_required',
+  'disabled',
+  'locked',
+]);
 export const authRoleEnum = pgEnum('auth_role', [
   'tenant_admin',
   'tenant_operator',
@@ -218,6 +229,56 @@ export const tenants = pgTable('tenants', {
   status: tenantStatusEnum('status').notNull().default('active'),
   ...timestamps,
 });
+
+export const authUsers = pgTable(
+  'auth_users',
+  {
+    id: varchar('id', { length: 96 }).primaryKey(),
+    username: varchar('username', { length: 96 }).notNull(),
+    displayName: varchar('display_name', { length: 120 }).notNull(),
+    phone: varchar('phone', { length: 32 }),
+    email: varchar('email', { length: 160 }),
+    passwordHash: text('password_hash').notNull(),
+    passwordUpdatedAt: timestamp('password_updated_at', { withTimezone: true }).notNull(),
+    passwordResetRequired: boolean('password_reset_required').notNull().default(true),
+    status: authAccountStatusEnum('status').notNull().default('password_reset_required'),
+    lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    failedLoginCount: integer('failed_login_count').notNull().default(0),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
+    createdBy: varchar('created_by', { length: 96 }).notNull(),
+    updatedBy: varchar('updated_by', { length: 96 }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    usernameUniqueIdx: uniqueIndex('auth_users_username_unique_idx').on(table.username),
+    phoneIdx: index('auth_users_phone_idx').on(table.phone),
+    emailIdx: index('auth_users_email_idx').on(table.email),
+    statusIdx: index('auth_users_status_idx').on(table.status),
+  }),
+);
+
+export const tenantContacts = pgTable(
+  'tenant_contacts',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    contactName: varchar('contact_name', { length: 120 }).notNull(),
+    contactPhone: varchar('contact_phone', { length: 32 }).notNull(),
+    contactEmail: varchar('contact_email', { length: 160 }),
+    initialAdminUserId: varchar('initial_admin_user_id', { length: 96 })
+      .notNull()
+      .references(() => authUsers.id),
+    createdBy: varchar('created_by', { length: 96 }).notNull(),
+    updatedBy: varchar('updated_by', { length: 96 }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantUniqueIdx: uniqueIndex('tenant_contacts_tenant_unique_idx').on(table.tenantId),
+    adminUserIdx: index('tenant_contacts_admin_user_idx').on(table.initialAdminUserId),
+  }),
+);
 
 export const tenantPlans = pgTable(
   'tenant_plans',
@@ -530,7 +591,9 @@ export const tenantMembers = pgTable(
     tenantId: varchar('tenant_id', { length: 64 })
       .notNull()
       .references(() => tenants.id),
-    userId: varchar('user_id', { length: 96 }).notNull(),
+    userId: varchar('user_id', { length: 96 })
+      .notNull()
+      .references(() => authUsers.id),
     role: authRoleEnum('role').notNull(),
     displayName: varchar('display_name', { length: 120 }).notNull(),
     ...timestamps,
