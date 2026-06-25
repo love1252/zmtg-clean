@@ -31,6 +31,10 @@ type MutableCustomerUpdateValues = Pick<
   | 'lastTouchSummary'
   | 'nextAction'
   | 'tags'
+  | 'gender'
+  | 'birthDate'
+  | 'referralSource'
+  | 'notes'
 >;
 type UpdateCustomerInput = Partial<MutableCustomerUpdateValues> & {
   tenantId: string;
@@ -123,6 +127,10 @@ function pickCustomerUpdateValues(input: UpdateCustomerInput): Partial<MutableCu
     lastTouchSummary: input.lastTouchSummary,
     nextAction: input.nextAction,
     tags: input.tags,
+    gender: input.gender,
+    birthDate: input.birthDate,
+    referralSource: input.referralSource,
+    notes: input.notes,
   });
 }
 
@@ -140,6 +148,10 @@ export function mapCustomerRowToRecord(row: CustomerRow): CustomerRecordSummary 
     lastTouchSummary: row.lastTouchSummary,
     nextAction: row.nextAction,
     tags: row.tags,
+    gender: row.gender,
+    birthDate: row.birthDate,
+    referralSource: row.referralSource,
+    notes: row.notes,
   };
 }
 

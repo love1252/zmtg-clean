@@ -21,6 +21,10 @@ describe('租户业务写入请求载荷校验', () => {
         lastTouchSummary: '术后第 28 天',
         nextAction: '人工回访',
         tags: ['高价值'],
+        gender: '未指定',
+        birthDate: '未指定',
+        referralSource: '未指定',
+        notes: '未指定',
       }),
     ).toEqual({
       ok: true,
@@ -35,6 +39,10 @@ describe('租户业务写入请求载荷校验', () => {
         lastTouchSummary: '术后第 28 天',
         nextAction: '人工回访',
         tags: ['高价值'],
+        gender: '未指定',
+        birthDate: '未指定',
+        referralSource: '未指定',
+        notes: '未指定',
       },
     });
 
@@ -70,6 +78,10 @@ describe('租户业务写入请求载荷校验', () => {
         lastTouchSummary: '术后第 28 天',
         nextAction: '人工回访',
         tags: ['高价值'],
+        gender: '未指定',
+        birthDate: '未指定',
+        referralSource: '未指定',
+        notes: '未指定',
       }),
     ).toEqual({
       ok: false,
@@ -102,6 +114,10 @@ describe('租户业务写入请求载荷校验', () => {
           lastTouchSummary: '术后第 28 天',
           nextAction: '人工回访',
           tags: ['高价值'],
+          gender: '未指定',
+          birthDate: '未指定',
+          referralSource: '未指定',
+          notes: '未指定',
         }),
       ).toEqual({
         ok: false,
@@ -154,6 +170,10 @@ describe('租户业务写入请求载荷校验', () => {
         lastTouchSummary: '术后第 28 天',
         nextAction: '人工回访',
         tags: [' '],
+        gender: '未指定',
+        birthDate: '未指定',
+        referralSource: '未指定',
+        notes: '未指定',
       }),
     ).toEqual({
       ok: false,
@@ -179,6 +199,10 @@ describe('租户业务写入请求载荷校验', () => {
         lastTouchSummary: '客户电话 13800000000',
         nextAction: '人工回访',
         tags: ['高价值'],
+        gender: '未指定',
+        birthDate: '未指定',
+        referralSource: '未指定',
+        notes: '未指定',
       }),
     ).toEqual({
       ok: false,
@@ -212,6 +236,10 @@ describe('租户业务写入请求载荷校验', () => {
         lastTouchSummary: '术后第 28 天',
         nextAction: '人工回访',
         tags: ['高价值'],
+        gender: '未指定',
+        birthDate: '未指定',
+        referralSource: '未指定',
+        notes: '未指定',
       }),
     ).toEqual({
       ok: false,

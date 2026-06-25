@@ -155,6 +155,10 @@ const customerPayloadKeys = [
   'lastTouchSummary',
   'nextAction',
   'tags',
+  'gender',
+  'birthDate',
+  'referralSource',
+  'notes',
 ] as const;
 
 const updateCustomerPayloadKeys = ['id', ...customerPayloadKeys] as const;

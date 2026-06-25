@@ -40,6 +40,10 @@ const customerRecord = {
   lastTouchSummary: 'Phase5 验收触达',
   nextAction: 'Phase5 收尾回访',
   tags: ['Phase5', '验收'],
+  gender: '',
+  birthDate: '',
+  referralSource: '',
+  notes: '',
 };
 
 const appointmentRecord = {
@@ -81,6 +85,10 @@ const postCareCustomerRecord = {
   lastTouchSummary: 'Phase6 术后反馈',
   nextAction: 'Phase6 客服回访',
   tags: ['Phase6', '术后'],
+  gender: '',
+  birthDate: '',
+  referralSource: '',
+  notes: '',
 };
 
 const rescheduleAppointmentRecord = {

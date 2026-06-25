@@ -22,6 +22,10 @@ type CustomerSeed = {
   lastTouchSummary: string;
   nextAction: string;
   tags: string[];
+  gender: string;
+  birthDate: string;
+  referralSource: string;
+  notes: string;
 };
 
 type FollowUpSeed = {
@@ -96,6 +100,10 @@ function buildCustomerSeeds(tenantId: string, userId: string): CustomerSeed[] {
       lastTouchSummary: '三天前完成光子嫩肤治疗，术后恢复良好，建议一周后复诊评估',
       nextAction: '安排术后一周复诊，评估皮肤恢复状态并推荐维养方案',
       tags: ['光子嫩肤', '术后关怀', '高价值'],
+      gender: '女',
+      birthDate: '1990',
+      referralSource: '老客介绍',
+      notes: '对服务要求较高，注意术后回访时机。',
     },
     {
       id: c2,
@@ -109,6 +117,10 @@ function buildCustomerSeeds(tenantId: string, userId: string): CustomerSeed[] {
       lastTouchSummary: '两周前咨询热玛吉项目，对价格敏感，处于决策阶段',
       nextAction: '跟进热玛吉意向，提供限时体验价促进转化',
       tags: ['热玛吉', '意向客户', '价格敏感'],
+      gender: '女',
+      birthDate: '1988',
+      referralSource: '线上广告',
+      notes: '价格敏感型，需多次跟进。已发送方案邮件。',
     },
     {
       id: c3,
@@ -122,6 +134,10 @@ function buildCustomerSeeds(tenantId: string, userId: string): CustomerSeed[] {
       lastTouchSummary: '两个月前完成水光针疗程后未再到院，属于沉睡客户',
       nextAction: '通过关怀消息唤醒，推荐季节维养优惠套餐',
       tags: ['水光针', '沉睡客户', '需唤醒'],
+      gender: '女',
+      birthDate: '1995',
+      referralSource: '平台搜索',
+      notes: '曾经活跃，最近两个月无记录。适合季节活动唤醒。',
     },
     {
       id: c4,
@@ -135,6 +151,10 @@ function buildCustomerSeeds(tenantId: string, userId: string): CustomerSeed[] {
       lastTouchSummary: '初次到院咨询眼部年轻化方案，对眼周射频和填充均有兴趣',
       nextAction: '发送眼部年轻化方案对比资料，预约二次面诊',
       tags: ['眼部年轻化', '新客', '方案对比'],
+      gender: '女',
+      birthDate: '1985',
+      referralSource: '朋友推荐',
+      notes: '对眼部综合方案很感兴趣，需要顾问耐心解答。',
     },
     {
       id: c5,
@@ -148,6 +168,10 @@ function buildCustomerSeeds(tenantId: string, userId: string): CustomerSeed[] {
       lastTouchSummary: '上周完成玻尿酸鼻唇沟填充，术后轻微肿胀已消退，效果满意',
       nextAction: '安排填充两周后回访，评估吸收情况和是否需要补打',
       tags: ['玻尿酸', '术后关怀', '填充'],
+      gender: '女',
+      birthDate: '1993',
+      referralSource: '线上广告',
+      notes: '对填充效果满意，可能对其它注射项目也有兴趣。',
     },
   ];
 }
@@ -333,6 +357,10 @@ export async function provisionDemoDataForTenant(
         lastTouchSummary: seed.lastTouchSummary,
         nextAction: seed.nextAction,
         tags: seed.tags,
+        gender: seed.gender,
+        birthDate: seed.birthDate,
+        referralSource: seed.referralSource,
+        notes: seed.notes,
       });
     }
 

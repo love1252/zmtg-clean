@@ -1268,6 +1268,10 @@ export const customers = pgTable(
     lastTouchSummary: text('last_touch_summary').notNull(),
     nextAction: text('next_action').notNull(),
     tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    gender: varchar('gender', { length: 20 }).notNull().default(''),
+    birthDate: varchar('birth_date', { length: 20 }).notNull().default(''),
+    referralSource: varchar('referral_source', { length: 80 }).notNull().default(''),
+    notes: text('notes').notNull().default(''),
     ...timestamps,
   },
   (table) => ({

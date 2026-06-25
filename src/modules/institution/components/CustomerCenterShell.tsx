@@ -42,6 +42,10 @@ type CustomerFormState = {
   lastTouchSummary: string;
   nextAction: string;
   tagsText: string;
+  gender: string;
+  birthDate: string;
+  referralSource: string;
+  notes: string;
 };
 
 const emptyCustomerForm: CustomerFormState = {
@@ -55,6 +59,10 @@ const emptyCustomerForm: CustomerFormState = {
   lastTouchSummary: '',
   nextAction: '',
   tagsText: '',
+  gender: '',
+  birthDate: '',
+  referralSource: '',
+  notes: '',
 };
 
 const lifecycleOptions = Object.entries(customerLifecycleLabels) as [
@@ -149,6 +157,10 @@ function toFormState(record: CustomerRecordSummary): CustomerFormState {
     lastTouchSummary: record.lastTouchSummary,
     nextAction: record.nextAction,
     tagsText: record.tags.join(', '),
+    gender: record.gender,
+    birthDate: record.birthDate,
+    referralSource: record.referralSource,
+    notes: record.notes,
   };
 }
 
@@ -171,6 +183,10 @@ function toCustomerPayload(form: CustomerFormState): CreateCustomerClientPayload
     lastTouchSummary: form.lastTouchSummary.trim(),
     nextAction: form.nextAction.trim(),
     tags: splitTags(form.tagsText),
+    gender: form.gender.trim(),
+    birthDate: form.birthDate.trim(),
+    referralSource: form.referralSource.trim(),
+    notes: form.notes.trim(),
   };
 }
 
