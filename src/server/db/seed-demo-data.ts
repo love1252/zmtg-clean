@@ -1,27 +1,49 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { createDatabase, createPostgresClient, type TenantDatabase } from '@/server/db/client';
 import {
   appointments,
   auditEvents,
   customers,
   followUpTasks,
+  tenantAuthorizationSnapshots,
+  tenantCommercialRecords,
   tenantMembers,
   tenantPlanAssignments,
+  tenantPlanChangeRecords,
   tenantPlans,
+  tenantPlanVersions,
   tenantQuotaSnapshots,
   tenants,
   treatmentSummaries,
 } from '@/server/db/schema';
 
-const demoTenantId = 'demo-tenant-001';
-const secondaryTenantId = 'demo-tenant-002';
-const trialTenantId = 'demo-tenant-003';
-const suspendedTenantId = 'demo-tenant-004';
+const trialYunlanTenantId = 'trial-tenant-yunlan';
+const trialBaiyueTenantId = 'trial-tenant-baiyue';
+const starterXingheTenantId = 'starter-tenant-xinghe';
+const starterYubaiTenantId = 'starter-tenant-yubai';
+const growthChengxingTenantId = 'growth-tenant-chengxing';
+const growthQingmangTenantId = 'growth-tenant-qingmang';
+const primaryDemoTenantId = growthChengxingTenantId;
+const demoTenantId = primaryDemoTenantId;
+const secondaryTenantId = starterXingheTenantId;
 const demoSeedStartedAt = new Date('2026-06-01T09:00:00+08:00');
 const demoSeedSnapshotAt = new Date('2026-06-02T09:00:00+08:00');
+const legacyDemoTenantIds = [
+  'demo-tenant-001',
+  'demo-tenant-002',
+  'demo-tenant-003',
+  'demo-tenant-004',
+];
+const legacyDemoPlanIds = ['plan-enterprise-care'];
+const legacyDemoPlanVersionIds = [
+  'plan-version-starter-care-2026-v1',
+  'plan-version-growth-care-2026-v1',
+  'plan-version-trial-care-2026-v1',
+  'plan-version-enterprise-care-2026-v1',
+];
 
 export const demoSeedProductionGuardMessage =
   'demo seed 仅用于 local/demo 环境；生产环境如需运行必须显式设置 ZMTG_ENABLE_DEMO_SEED=true';
@@ -47,149 +69,434 @@ type DemoFollowUpSourceReference = {
   sourceTreatmentSummaryId: string;
 };
 
+function cloneJsonRecord(value: unknown) {
+  return JSON.parse(JSON.stringify(value ?? {})) as Record<string, unknown>;
+}
+
+function readStringList(json: unknown, key: string) {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return [];
+  const value = (json as Record<string, unknown>)[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+}
+
 const demoTenantRecords: Array<typeof tenants.$inferInsert> = [
   {
-    id: demoTenantId,
-    name: '星澜医美中心',
+    id: trialYunlanTenantId,
+    name: '云澜轻美诊所',
     status: 'active',
   },
   {
-    id: secondaryTenantId,
-    name: '青禾皮肤管理',
+    id: trialBaiyueTenantId,
+    name: '柏悦皮肤管理中心',
     status: 'active',
   },
   {
-    id: trialTenantId,
-    name: '澄镜医疗美容',
+    id: starterXingheTenantId,
+    name: '星禾医美门诊',
     status: 'active',
   },
   {
-    id: suspendedTenantId,
-    name: '远山医美连锁',
-    status: 'suspended',
+    id: starterYubaiTenantId,
+    name: '予白皮肤管理',
+    status: 'active',
+  },
+  {
+    id: growthChengxingTenantId,
+    name: '澄星医疗美容',
+    status: 'active',
+  },
+  {
+    id: growthQingmangTenantId,
+    name: '青芒美学连锁',
+    status: 'active',
   },
 ];
 
 const demoTenantPlanRecords: Array<typeof tenantPlans.$inferInsert> = [
   {
     id: 'plan-starter-care',
-    name: 'Starter Plan',
+    name: '基础版',
     code: 'starter-care',
-    description: '适合起步机构的基础运营演示套餐。',
+    description: '适合单店或小机构正式试用客户档案、知识库和基础连接器。',
     status: 'active',
   },
   {
     id: 'plan-growth-care',
-    name: 'Growth Plan',
+    name: '专业版',
     code: 'growth-care',
-    description: '适合增长期机构演示治疗后运营闭环、配额管控和多角色协作。',
+    description: '适合成熟机构或多角色团队试用客户分层、AI 运营和连接器能力。',
     status: 'active',
   },
   {
     id: 'plan-trial-care',
-    name: 'Trial Plan',
+    name: '试用版',
     code: 'trial-care',
-    description: '适合受控外部演示和试用评估的轻量套餐。',
+    description: '适合意向客户和演示客户体验核心流程。',
     status: 'active',
   },
+];
+
+const demoTenantPlanVersionRecords: Array<typeof tenantPlanVersions.$inferInsert> = [
   {
-    id: 'plan-enterprise-care',
-    name: 'Enterprise Plan',
-    code: 'enterprise-care',
-    description: '适合连锁机构演示多租户治理和更高配额。',
-    status: 'active',
+    id: 'plan-version-trial-care-2026-commercial-trial',
+    planId: 'plan-trial-care',
+    versionCode: '2026-commercial-trial',
+    status: 'published',
+    displayName: '试用版',
+    displayPrice: '试用版展示价（未定价）',
+    priceNote: '仅用于商业试用演示，不代表正式报价。',
+    agentLimit: 1,
+    seatLimit: 1,
+    monthlyAiCallLimit: 5000,
+    knowledgeStorageGb: 1,
+    connectorEntitlementsJson: {
+      connectors: ['企微演示'],
+    },
+    serviceEntitlementsJson: {
+      services: ['新手引导', '图文/视频教程', '平台演示配置'],
+    },
+    featureEntitlementsJson: {
+      features: ['客户管理体验', '智能随访示例', '知识库示例', 'AI 助手体验'],
+    },
+    quotaEntitlementsJson: {
+      agentLimit: 1,
+      seatLimit: 1,
+      monthlyAiCallLimit: 5000,
+      knowledgeStorageMb: 100,
+    },
+    changeSummary: '初始化商业试用版权益',
+    createdBy: 'demo-user-platform',
+    updatedBy: 'demo-user-platform',
+    publishedBy: 'demo-user-platform',
+    publishedAt: demoSeedStartedAt,
+    retiredAt: null,
+    createdAt: demoSeedStartedAt,
+    updatedAt: demoSeedStartedAt,
+  },
+  {
+    id: 'plan-version-starter-care-2026-commercial-trial',
+    planId: 'plan-starter-care',
+    versionCode: '2026-commercial-trial',
+    status: 'published',
+    displayName: '基础版',
+    displayPrice: '基础版展示价（未定价）',
+    priceNote: '仅用于商业试用演示，不代表正式报价。',
+    agentLimit: 1,
+    seatLimit: 5,
+    monthlyAiCallLimit: 50000,
+    knowledgeStorageGb: 1,
+    connectorEntitlementsJson: {
+      connectors: ['企微'],
+    },
+    serviceEntitlementsJson: {
+      services: ['新手引导', '图文/视频教程', '1 次基础配置', '1 次线上培训'],
+    },
+    featureEntitlementsJson: {
+      features: ['客户管理', '智能随访', '知识库管理', 'AI 智能助手', 'AI 客服辅助'],
+    },
+    quotaEntitlementsJson: {
+      agentLimit: 1,
+      seatLimit: 5,
+      monthlyAiCallLimit: 50000,
+      knowledgeStorageMb: 500,
+    },
+    changeSummary: '初始化商业基础版权益',
+    createdBy: 'demo-user-platform',
+    updatedBy: 'demo-user-platform',
+    publishedBy: 'demo-user-platform',
+    publishedAt: demoSeedStartedAt,
+    retiredAt: null,
+    createdAt: demoSeedStartedAt,
+    updatedAt: demoSeedStartedAt,
+  },
+  {
+    id: 'plan-version-growth-care-2026-commercial-trial',
+    planId: 'plan-growth-care',
+    versionCode: '2026-commercial-trial',
+    status: 'published',
+    displayName: '专业版',
+    displayPrice: '专业版展示价（未定价）',
+    priceNote: '仅用于商业试用演示，不代表正式报价。',
+    agentLimit: 3,
+    seatLimit: 20,
+    monthlyAiCallLimit: 300000,
+    knowledgeStorageGb: 2,
+    connectorEntitlementsJson: {
+      connectors: ['企微', 'HIS', 'CRM'],
+    },
+    serviceEntitlementsJson: {
+      services: ['专属配置支持', '多角色培训', '进阶模板', '专属上线检查'],
+    },
+    featureEntitlementsJson: {
+      features: ['客户 360 档案', '多场景随访 SOP', '知识库管理', '多 Agent 分工', '完整数据报表'],
+    },
+    quotaEntitlementsJson: {
+      agentLimit: 3,
+      seatLimit: 20,
+      monthlyAiCallLimit: 300000,
+      knowledgeStorageMb: 2048,
+    },
+    changeSummary: '初始化商业专业版权益',
+    createdBy: 'demo-user-platform',
+    updatedBy: 'demo-user-platform',
+    publishedBy: 'demo-user-platform',
+    publishedAt: demoSeedStartedAt,
+    retiredAt: null,
+    createdAt: demoSeedStartedAt,
+    updatedAt: demoSeedStartedAt,
   },
 ];
 
 const demoTenantPlanAssignmentRecords: Array<typeof tenantPlanAssignments.$inferInsert> = [
   {
-    id: 'assign-demo-tenant-001-growth',
-    tenantId: demoTenantId,
-    planId: 'plan-growth-care',
-    status: 'active',
-    startedAt: demoSeedStartedAt,
-    expiresAt: null,
-  },
-  {
-    id: 'assign-demo-tenant-002-starter',
-    tenantId: secondaryTenantId,
-    planId: 'plan-starter-care',
-    status: 'active',
-    startedAt: demoSeedStartedAt,
-    expiresAt: null,
-  },
-  {
-    id: 'assign-demo-tenant-003-trial',
-    tenantId: trialTenantId,
+    id: 'assign-trial-tenant-yunlan-trial',
+    tenantId: trialYunlanTenantId,
     planId: 'plan-trial-care',
+    planVersionId: 'plan-version-trial-care-2026-commercial-trial',
     status: 'active',
     startedAt: demoSeedStartedAt,
     expiresAt: null,
   },
   {
-    id: 'assign-demo-tenant-004-enterprise',
-    tenantId: suspendedTenantId,
-    planId: 'plan-enterprise-care',
-    status: 'expired',
-    startedAt: new Date('2026-01-01T09:00:00+08:00'),
-    expiresAt: new Date('2026-05-31T23:59:59+08:00'),
+    id: 'assign-trial-tenant-baiyue-trial',
+    tenantId: trialBaiyueTenantId,
+    planId: 'plan-trial-care',
+    planVersionId: 'plan-version-trial-care-2026-commercial-trial',
+    status: 'active',
+    startedAt: demoSeedStartedAt,
+    expiresAt: null,
   },
+  {
+    id: 'assign-starter-tenant-xinghe-starter',
+    tenantId: starterXingheTenantId,
+    planId: 'plan-starter-care',
+    planVersionId: 'plan-version-starter-care-2026-commercial-trial',
+    status: 'active',
+    startedAt: demoSeedStartedAt,
+    expiresAt: null,
+  },
+  {
+    id: 'assign-starter-tenant-yubai-starter',
+    tenantId: starterYubaiTenantId,
+    planId: 'plan-starter-care',
+    planVersionId: 'plan-version-starter-care-2026-commercial-trial',
+    status: 'active',
+    startedAt: demoSeedStartedAt,
+    expiresAt: null,
+  },
+  {
+    id: 'assign-growth-tenant-chengxing-growth',
+    tenantId: growthChengxingTenantId,
+    planId: 'plan-growth-care',
+    planVersionId: 'plan-version-growth-care-2026-commercial-trial',
+    status: 'active',
+    startedAt: demoSeedStartedAt,
+    expiresAt: null,
+  },
+  {
+    id: 'assign-growth-tenant-qingmang-growth',
+    tenantId: growthQingmangTenantId,
+    planId: 'plan-growth-care',
+    planVersionId: 'plan-version-growth-care-2026-commercial-trial',
+    status: 'active',
+    startedAt: demoSeedStartedAt,
+    expiresAt: null,
+  },
+];
+
+function buildTenantGrantSnapshotRecord(input: {
+  id: string;
+  tenantId: string;
+  planAssignmentId: string;
+  planVersionId: string;
+  status: 'active' | 'superseded' | 'revoked';
+  generatedAt: Date;
+  supersededAt: Date | null;
+}) {
+  const version = demoTenantPlanVersionRecords.find((record) => record.id === input.planVersionId);
+  const plan = version
+    ? demoTenantPlanRecords.find((record) => record.id === version.planId)
+    : undefined;
+
+  if (!version || !plan) {
+    throw new Error(`Demo authorization snapshot references missing plan version: ${input.id}`);
+  }
+
+  const quotaJson = cloneJsonRecord(version.quotaEntitlementsJson);
+
+  return {
+    id: input.id,
+    tenantId: input.tenantId,
+    planAssignmentId: input.planAssignmentId,
+    planVersionId: input.planVersionId,
+    status: input.status,
+    snapshotJson: {
+      planId: version.planId,
+      planCode: plan.code,
+      planName: plan.name,
+      planVersionId: version.id,
+      versionCode: version.versionCode,
+      displayName: version.displayName,
+      displayPrice: version.displayPrice,
+    },
+    quotaJson,
+    connectorJson: {
+      connectors: readStringList(version.connectorEntitlementsJson, 'connectors'),
+    },
+    serviceJson: {
+      services: readStringList(version.serviceEntitlementsJson, 'services'),
+    },
+    sourceChangeRecordId: null,
+    generatedBy: 'demo-user-platform',
+    generatedAt: input.generatedAt,
+    supersededAt: input.supersededAt,
+    createdAt: input.generatedAt,
+  } satisfies typeof tenantAuthorizationSnapshots.$inferInsert;
+}
+
+const demoTenantAuthorizationSnapshotRecords: Array<
+  typeof tenantAuthorizationSnapshots.$inferInsert
+> = [
+  buildTenantGrantSnapshotRecord({
+    id: 'auth-trial-tenant-yunlan-current',
+    tenantId: trialYunlanTenantId,
+    planAssignmentId: 'assign-trial-tenant-yunlan-trial',
+    planVersionId: 'plan-version-trial-care-2026-commercial-trial',
+    status: 'active',
+    generatedAt: demoSeedSnapshotAt,
+    supersededAt: null,
+  }),
+  buildTenantGrantSnapshotRecord({
+    id: 'auth-trial-tenant-baiyue-current',
+    tenantId: trialBaiyueTenantId,
+    planAssignmentId: 'assign-trial-tenant-baiyue-trial',
+    planVersionId: 'plan-version-trial-care-2026-commercial-trial',
+    status: 'active',
+    generatedAt: demoSeedSnapshotAt,
+    supersededAt: null,
+  }),
+  buildTenantGrantSnapshotRecord({
+    id: 'auth-starter-tenant-xinghe-current',
+    tenantId: starterXingheTenantId,
+    planAssignmentId: 'assign-starter-tenant-xinghe-starter',
+    planVersionId: 'plan-version-starter-care-2026-commercial-trial',
+    status: 'active',
+    generatedAt: demoSeedSnapshotAt,
+    supersededAt: null,
+  }),
+  buildTenantGrantSnapshotRecord({
+    id: 'auth-starter-tenant-yubai-current',
+    tenantId: starterYubaiTenantId,
+    planAssignmentId: 'assign-starter-tenant-yubai-starter',
+    planVersionId: 'plan-version-starter-care-2026-commercial-trial',
+    status: 'active',
+    generatedAt: demoSeedSnapshotAt,
+    supersededAt: null,
+  }),
+  buildTenantGrantSnapshotRecord({
+    id: 'auth-growth-tenant-chengxing-current',
+    tenantId: growthChengxingTenantId,
+    planAssignmentId: 'assign-growth-tenant-chengxing-growth',
+    planVersionId: 'plan-version-growth-care-2026-commercial-trial',
+    status: 'active',
+    generatedAt: demoSeedSnapshotAt,
+    supersededAt: null,
+  }),
+  buildTenantGrantSnapshotRecord({
+    id: 'auth-growth-tenant-qingmang-current',
+    tenantId: growthQingmangTenantId,
+    planAssignmentId: 'assign-growth-tenant-qingmang-growth',
+    planVersionId: 'plan-version-growth-care-2026-commercial-trial',
+    status: 'active',
+    generatedAt: demoSeedSnapshotAt,
+    supersededAt: null,
+  }),
 ];
 
 const demoTenantQuotaSnapshotRecords: Array<typeof tenantQuotaSnapshots.$inferInsert> = [
   {
-    id: 'quota-demo-tenant-001-current',
-    tenantId: demoTenantId,
-    planAssignmentId: 'assign-demo-tenant-001-growth',
+    id: 'quota-trial-tenant-yunlan-current',
+    tenantId: trialYunlanTenantId,
+    planAssignmentId: 'assign-trial-tenant-yunlan-trial',
+    maxCustomers: 80,
+    maxAppointments: 120,
+    maxFollowUps: 200,
+    maxAiCalls: 5000,
+    currentCustomers: 18,
+    currentAppointments: 26,
+    currentFollowUps: 35,
+    currentAiCalls: 0,
+    snapshotAt: demoSeedSnapshotAt,
+  },
+  {
+    id: 'quota-trial-tenant-baiyue-current',
+    tenantId: trialBaiyueTenantId,
+    planAssignmentId: 'assign-trial-tenant-baiyue-trial',
+    maxCustomers: 80,
+    maxAppointments: 120,
+    maxFollowUps: 200,
+    maxAiCalls: 5000,
+    currentCustomers: 24,
+    currentAppointments: 32,
+    currentFollowUps: 48,
+    currentAiCalls: 0,
+    snapshotAt: demoSeedSnapshotAt,
+  },
+  {
+    id: 'quota-starter-tenant-xinghe-current',
+    tenantId: starterXingheTenantId,
+    planAssignmentId: 'assign-starter-tenant-xinghe-starter',
     maxCustomers: 500,
     maxAppointments: 800,
     maxFollowUps: 1200,
-    maxAiCalls: 0,
-    currentCustomers: 386,
-    currentAppointments: 612,
-    currentFollowUps: 930,
+    maxAiCalls: 50000,
+    currentCustomers: 128,
+    currentAppointments: 186,
+    currentFollowUps: 260,
     currentAiCalls: 0,
     snapshotAt: demoSeedSnapshotAt,
   },
   {
-    id: 'quota-demo-tenant-002-current',
-    tenantId: secondaryTenantId,
-    planAssignmentId: 'assign-demo-tenant-002-starter',
-    maxCustomers: 120,
-    maxAppointments: 160,
-    maxFollowUps: 300,
-    maxAiCalls: 0,
-    currentCustomers: 92,
-    currentAppointments: 121,
-    currentFollowUps: 188,
+    id: 'quota-starter-tenant-yubai-current',
+    tenantId: starterYubaiTenantId,
+    planAssignmentId: 'assign-starter-tenant-yubai-starter',
+    maxCustomers: 500,
+    maxAppointments: 800,
+    maxFollowUps: 1200,
+    maxAiCalls: 50000,
+    currentCustomers: 166,
+    currentAppointments: 248,
+    currentFollowUps: 388,
     currentAiCalls: 0,
     snapshotAt: demoSeedSnapshotAt,
   },
   {
-    id: 'quota-demo-tenant-003-current',
-    tenantId: trialTenantId,
-    planAssignmentId: 'assign-demo-tenant-003-trial',
-    maxCustomers: 50,
-    maxAppointments: 80,
-    maxFollowUps: 120,
-    maxAiCalls: 0,
-    currentCustomers: 38,
-    currentAppointments: 51,
-    currentFollowUps: 44,
+    id: 'quota-growth-tenant-chengxing-current',
+    tenantId: growthChengxingTenantId,
+    planAssignmentId: 'assign-growth-tenant-chengxing-growth',
+    maxCustomers: 2000,
+    maxAppointments: 3000,
+    maxFollowUps: 5000,
+    maxAiCalls: 300000,
+    currentCustomers: 680,
+    currentAppointments: 980,
+    currentFollowUps: 1520,
     currentAiCalls: 0,
     snapshotAt: demoSeedSnapshotAt,
   },
   {
-    id: 'quota-demo-tenant-004-current',
-    tenantId: suspendedTenantId,
-    planAssignmentId: 'assign-demo-tenant-004-enterprise',
-    maxCustomers: 5000,
-    maxAppointments: 6000,
-    maxFollowUps: 10000,
-    maxAiCalls: 0,
-    currentCustomers: 1800,
-    currentAppointments: 3200,
-    currentFollowUps: 4100,
+    id: 'quota-growth-tenant-qingmang-current',
+    tenantId: growthQingmangTenantId,
+    planAssignmentId: 'assign-growth-tenant-qingmang-growth',
+    maxCustomers: 2000,
+    maxAppointments: 3000,
+    maxFollowUps: 5000,
+    maxAiCalls: 300000,
+    currentCustomers: 920,
+    currentAppointments: 1360,
+    currentFollowUps: 2180,
     currentAiCalls: 0,
     snapshotAt: demoSeedSnapshotAt,
   },
@@ -197,39 +504,149 @@ const demoTenantQuotaSnapshotRecords: Array<typeof tenantQuotaSnapshots.$inferIn
 
 const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> = [
   {
+    id: 'member-trial-yunlan-admin',
+    tenantId: trialYunlanTenantId,
+    userId: 'trial-user-yunlan-admin',
+    role: 'tenant_admin',
+    displayName: '云澜管理员',
+  },
+  {
+    id: 'member-trial-baiyue-admin',
+    tenantId: trialBaiyueTenantId,
+    userId: 'trial-user-baiyue-admin',
+    role: 'tenant_admin',
+    displayName: '柏悦管理员',
+  },
+  {
+    id: 'member-starter-xinghe-admin',
+    tenantId: starterXingheTenantId,
+    userId: 'starter-user-xinghe-admin',
+    role: 'tenant_admin',
+    displayName: '星禾管理员',
+  },
+  {
+    id: 'member-starter-yubai-admin',
+    tenantId: starterYubaiTenantId,
+    userId: 'starter-user-yubai-admin',
+    role: 'tenant_admin',
+    displayName: '予白管理员',
+  },
+  {
+    id: 'member-growth-chengxing-admin',
+    tenantId: growthChengxingTenantId,
+    userId: 'growth-user-chengxing-admin',
+    role: 'tenant_admin',
+    displayName: '澄星管理员',
+  },
+  {
+    id: 'member-growth-qingmang-admin',
+    tenantId: growthQingmangTenantId,
+    userId: 'growth-user-qingmang-admin',
+    role: 'tenant_admin',
+    displayName: '青芒管理员',
+  },
+  {
     id: 'member-demo-admin',
-    tenantId: demoTenantId,
+    tenantId: growthChengxingTenantId,
     userId: 'demo-user-admin',
     role: 'tenant_admin',
-    displayName: '林院长',
+    displayName: '演示管理员',
   },
   {
     id: 'member-demo-ops',
-    tenantId: demoTenantId,
+    tenantId: growthChengxingTenantId,
     userId: 'demo-user-ops',
     role: 'tenant_operator',
     displayName: '周运营',
   },
   {
     id: 'member-demo-consultant',
-    tenantId: demoTenantId,
+    tenantId: growthChengxingTenantId,
     userId: 'demo-user-consultant',
     role: 'consultant',
     displayName: '许咨询',
   },
   {
     id: 'member-demo-service',
-    tenantId: demoTenantId,
+    tenantId: growthChengxingTenantId,
     userId: 'demo-user-service',
     role: 'customer_service',
     displayName: '赵客服',
   },
   {
     id: 'member-demo-assistant',
-    tenantId: demoTenantId,
+    tenantId: growthChengxingTenantId,
     userId: 'demo-user-assistant',
     role: 'tenant_operator',
     displayName: '陈医助',
+  },
+];
+
+
+const demoTenantCommercialRecordRecords: Array<typeof tenantCommercialRecords.$inferInsert> = [
+  {
+    id: 'commercial-demo-order-001',
+    tenantId: demoTenantId,
+    recordType: 'order',
+    status: 'pending',
+    displayCode: 'ORDER-DEMO-001',
+    displayAmount: '参考金额（未结算）',
+    periodLabel: '2026-06 演示周期',
+    relatedPlanChangeId: null,
+    note: '仅用于人工流程占位，不触发交易。',
+    occurredAt: new Date('2026-06-02T10:00:00+08:00'),
+    createdBy: 'demo-user-platform',
+    updatedBy: 'demo-user-platform',
+    createdAt: demoSeedSnapshotAt,
+    updatedAt: demoSeedSnapshotAt,
+  },
+  {
+    id: 'commercial-demo-contract-001',
+    tenantId: demoTenantId,
+    recordType: 'contract',
+    status: 'manual_review',
+    displayCode: 'CONTRACT-DEMO-001',
+    displayAmount: null,
+    periodLabel: '2026-06 演示周期',
+    relatedPlanChangeId: null,
+    note: '仅用于人工商务资料占位，不承载正文或签章。',
+    occurredAt: new Date('2026-06-02T10:10:00+08:00'),
+    createdBy: 'demo-user-platform',
+    updatedBy: 'demo-user-platform',
+    createdAt: demoSeedSnapshotAt,
+    updatedAt: demoSeedSnapshotAt,
+  },
+  {
+    id: 'commercial-demo-invoice-001',
+    tenantId: demoTenantId,
+    recordType: 'invoice',
+    status: 'draft',
+    displayCode: 'INVOICE-DEMO-001',
+    displayAmount: '参考金额（未开具）',
+    periodLabel: '2026-06 演示周期',
+    relatedPlanChangeId: null,
+    note: '仅用于人工开票流程占位，不包含税号或票据原文。',
+    occurredAt: new Date('2026-06-02T10:20:00+08:00'),
+    createdBy: 'demo-user-platform',
+    updatedBy: 'demo-user-platform',
+    createdAt: demoSeedSnapshotAt,
+    updatedAt: demoSeedSnapshotAt,
+  },
+  {
+    id: 'commercial-demo-payment-001',
+    tenantId: demoTenantId,
+    recordType: 'payment',
+    status: 'manual_review',
+    displayCode: 'PAY-DEMO-001',
+    displayAmount: '参考金额（待人工确认）',
+    periodLabel: '2026-06 演示周期',
+    relatedPlanChangeId: null,
+    note: '仅用于人工回款状态占位，不触发交易。',
+    occurredAt: new Date('2026-06-02T10:30:00+08:00'),
+    createdBy: 'demo-user-platform',
+    updatedBy: 'demo-user-platform',
+    createdAt: demoSeedSnapshotAt,
+    updatedAt: demoSeedSnapshotAt,
   },
 ];
 
@@ -785,12 +1202,36 @@ export function getDemoTenantPlanSeedRecords() {
   return [...demoTenantPlanRecords];
 }
 
+export function getDemoTenantPlanVersionSeedRecords() {
+  return demoTenantPlanVersionRecords.map((record) => ({
+    ...record,
+    connectorEntitlementsJson: cloneJsonRecord(record.connectorEntitlementsJson),
+    serviceEntitlementsJson: cloneJsonRecord(record.serviceEntitlementsJson),
+    featureEntitlementsJson: cloneJsonRecord(record.featureEntitlementsJson),
+    quotaEntitlementsJson: cloneJsonRecord(record.quotaEntitlementsJson),
+  }));
+}
+
 export function getDemoTenantPlanAssignmentSeedRecords() {
   return [...demoTenantPlanAssignmentRecords];
 }
 
+export function getDemoTenantAuthorizationSnapshotSeedRecords() {
+  return demoTenantAuthorizationSnapshotRecords.map((record) => ({
+    ...record,
+    snapshotJson: cloneJsonRecord(record.snapshotJson),
+    quotaJson: cloneJsonRecord(record.quotaJson),
+    connectorJson: cloneJsonRecord(record.connectorJson),
+    serviceJson: cloneJsonRecord(record.serviceJson),
+  }));
+}
+
 export function getDemoTenantQuotaSnapshotSeedRecords() {
   return [...demoTenantQuotaSnapshotRecords];
+}
+
+export function getDemoTenantCommercialRecordSeedRecords() {
+  return [...demoTenantCommercialRecordRecords];
 }
 
 export function getDemoTenantMemberSeedRecords() {
@@ -945,10 +1386,31 @@ export function assertDemoSeedExecutionAllowed(env: NodeJS.ProcessEnv = process.
   }
 }
 
+async function cleanupLegacyDemoSeedRecords(db: TenantDatabase) {
+  await db.delete(auditEvents).where(inArray(auditEvents.tenantId, legacyDemoTenantIds));
+  await db.delete(followUpTasks).where(inArray(followUpTasks.tenantId, legacyDemoTenantIds));
+  await db.delete(treatmentSummaries).where(inArray(treatmentSummaries.tenantId, legacyDemoTenantIds));
+  await db.delete(appointments).where(inArray(appointments.tenantId, legacyDemoTenantIds));
+  await db.delete(customers).where(inArray(customers.tenantId, legacyDemoTenantIds));
+  await db.delete(tenantCommercialRecords).where(inArray(tenantCommercialRecords.tenantId, legacyDemoTenantIds));
+  await db.delete(tenantPlanChangeRecords).where(inArray(tenantPlanChangeRecords.tenantId, legacyDemoTenantIds));
+  await db.delete(tenantAuthorizationSnapshots).where(
+    inArray(tenantAuthorizationSnapshots.tenantId, legacyDemoTenantIds),
+  );
+  await db.delete(tenantQuotaSnapshots).where(inArray(tenantQuotaSnapshots.tenantId, legacyDemoTenantIds));
+  await db.delete(tenantMembers).where(inArray(tenantMembers.tenantId, legacyDemoTenantIds));
+  await db.delete(tenantPlanAssignments).where(inArray(tenantPlanAssignments.tenantId, legacyDemoTenantIds));
+  await db.delete(tenants).where(inArray(tenants.id, legacyDemoTenantIds));
+  await db.delete(tenantPlanVersions).where(inArray(tenantPlanVersions.id, legacyDemoPlanVersionIds));
+  await db.delete(tenantPlanVersions).where(inArray(tenantPlanVersions.planId, legacyDemoPlanIds));
+  await db.delete(tenantPlans).where(inArray(tenantPlans.id, legacyDemoPlanIds));
+}
+
 export async function seedDemoData(db: TenantDatabase) {
   assertDemoCustomerReferenceCoverage();
   assertDemoTreatmentAppointmentReferenceCoverage();
   assertDemoFollowUpSourceReferenceCoverage();
+  await cleanupLegacyDemoSeedRecords(db);
 
   await db
     .insert(tenants)
@@ -977,6 +1439,54 @@ export async function seedDemoData(db: TenantDatabase) {
     });
 
   await db
+    .insert(tenantPlanVersions)
+    .values(getDemoTenantPlanVersionSeedRecords())
+    .onConflictDoUpdate({
+      target: tenantPlanVersions.id,
+      set: {
+        planId: sql`excluded.plan_id`,
+        versionCode: sql`excluded.version_code`,
+        status: sql`excluded.status`,
+        displayName: sql`excluded.display_name`,
+        displayPrice: sql`excluded.display_price`,
+        priceNote: sql`excluded.price_note`,
+        agentLimit: sql`excluded.agent_limit`,
+        seatLimit: sql`excluded.seat_limit`,
+        monthlyAiCallLimit: sql`excluded.monthly_ai_call_limit`,
+        knowledgeStorageGb: sql`excluded.knowledge_storage_gb`,
+        connectorEntitlementsJson: sql`excluded.connector_entitlements_json`,
+        serviceEntitlementsJson: sql`excluded.service_entitlements_json`,
+        featureEntitlementsJson: sql`excluded.feature_entitlements_json`,
+        quotaEntitlementsJson: sql`excluded.quota_entitlements_json`,
+        changeSummary: sql`excluded.change_summary`,
+        createdBy: sql`excluded.created_by`,
+        updatedBy: sql`excluded.updated_by`,
+        publishedBy: sql`excluded.published_by`,
+        publishedAt: sql`excluded.published_at`,
+        retiredAt: sql`excluded.retired_at`,
+        updatedAt: sql`excluded.updated_at`,
+      },
+    });
+
+  for (const plan of getDemoTenantPlanSeedRecords()) {
+    await db
+      .update(tenantPlanVersions)
+      .set({ displayName: plan.name })
+      .where(eq(tenantPlanVersions.planId, plan.id));
+  }
+
+  for (const plan of getDemoTenantPlanSeedRecords().filter((record) => record.status === 'retired')) {
+    await db
+      .update(tenantPlanVersions)
+      .set({
+        status: 'retired',
+        retiredAt: demoSeedSnapshotAt,
+        updatedAt: demoSeedSnapshotAt,
+      })
+      .where(eq(tenantPlanVersions.planId, plan.id));
+  }
+
+  await db
     .insert(tenantPlanAssignments)
     .values(getDemoTenantPlanAssignmentSeedRecords())
     .onConflictDoUpdate({
@@ -984,10 +1494,33 @@ export async function seedDemoData(db: TenantDatabase) {
       set: {
         tenantId: sql`excluded.tenant_id`,
         planId: sql`excluded.plan_id`,
+        planVersionId: sql`excluded.plan_version_id`,
         status: sql`excluded.status`,
         startedAt: sql`excluded.started_at`,
         expiresAt: sql`excluded.expires_at`,
         updatedAt: sql`now()`,
+      },
+    });
+
+  await db
+    .insert(tenantAuthorizationSnapshots)
+    .values(getDemoTenantAuthorizationSnapshotSeedRecords())
+    .onConflictDoUpdate({
+      target: tenantAuthorizationSnapshots.id,
+      set: {
+        tenantId: sql`excluded.tenant_id`,
+        planAssignmentId: sql`excluded.plan_assignment_id`,
+        planVersionId: sql`excluded.plan_version_id`,
+        status: sql`excluded.status`,
+        snapshotJson: sql`excluded.snapshot_json`,
+        quotaJson: sql`excluded.quota_json`,
+        connectorJson: sql`excluded.connector_json`,
+        serviceJson: sql`excluded.service_json`,
+        sourceChangeRecordId: sql`excluded.source_change_record_id`,
+        generatedBy: sql`excluded.generated_by`,
+        generatedAt: sql`excluded.generated_at`,
+        supersededAt: sql`excluded.superseded_at`,
+        createdAt: sql`excluded.created_at`,
       },
     });
 
@@ -1008,6 +1541,27 @@ export async function seedDemoData(db: TenantDatabase) {
         currentFollowUps: sql`excluded.current_follow_ups`,
         currentAiCalls: sql`excluded.current_ai_calls`,
         snapshotAt: sql`excluded.snapshot_at`,
+      },
+    });
+
+  await db
+    .insert(tenantCommercialRecords)
+    .values(getDemoTenantCommercialRecordSeedRecords())
+    .onConflictDoUpdate({
+      target: tenantCommercialRecords.id,
+      set: {
+        tenantId: sql`excluded.tenant_id`,
+        recordType: sql`excluded.record_type`,
+        status: sql`excluded.status`,
+        displayCode: sql`excluded.display_code`,
+        displayAmount: sql`excluded.display_amount`,
+        periodLabel: sql`excluded.period_label`,
+        relatedPlanChangeId: sql`excluded.related_plan_change_id`,
+        note: sql`excluded.note`,
+        occurredAt: sql`excluded.occurred_at`,
+        createdBy: sql`excluded.created_by`,
+        updatedBy: sql`excluded.updated_by`,
+        updatedAt: sql`excluded.updated_at`,
       },
     });
 

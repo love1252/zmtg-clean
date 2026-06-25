@@ -161,6 +161,108 @@ describe('审计事件领域模型', () => {
     });
   });
 
+  it('支持租户正式录入和初始管理员账号创建审计 reason，且不携带密码或请求体', () => {
+    expect(AUDIT_REASON_VALUES).toEqual(
+      expect.arrayContaining([
+        'tenant_plan_assignment_created',
+        'tenant_account_created',
+        'tenant_account_password_reset',
+        'tenant_account_disabled',
+        'tenant_account_enabled',
+        'tenant_login_succeeded',
+        'tenant_login_failed',
+      ]),
+    );
+
+    const event = createAuditEvent({
+      eventId: 'audit_evt_tenant_account_created_001',
+      context: {
+        userId: 'demo-user-platform',
+        role: 'platform_admin',
+        scope: 'platform',
+        tenantId: null,
+        source: 'demo_session',
+      },
+      resource: 'tenant_member',
+      resourceId: 'tenant-member-chenlei',
+      action: 'create',
+      result: 'allowed',
+      reason: 'tenant_account_created',
+      occurredAt: '2026-06-25T09:00:00.000Z',
+    });
+
+    expect(event).toMatchObject({
+      resource: 'tenant_member',
+      resourceId: 'tenant-member-chenlei',
+      action: 'create',
+      result: 'allowed',
+      reason: 'tenant_account_created',
+    });
+    expect(JSON.stringify(event)).not.toMatch(
+      /PlaintextPasswordShouldNotPass|passwordHash|scrypt\$|requestBody|SQL|select \*|DATABASE_URL|stack/i,
+    );
+
+    for (const reason of [
+      'tenant_account_password_reset',
+      'tenant_account_disabled',
+      'tenant_account_enabled',
+    ] as const) {
+      expect(
+        createAuditEvent({
+          eventId: `audit_evt_${reason}`,
+          context: {
+            userId: 'demo-user-platform',
+            role: 'platform_admin',
+            scope: 'platform',
+            tenantId: null,
+            source: 'demo_session',
+          },
+          resource: 'tenant_member',
+          resourceId: 'tenant-member-chenlei',
+          action: reason === 'tenant_account_password_reset' ? 'manage_credentials' : 'manage_status',
+          result: 'transitioned',
+          reason,
+          occurredAt: '2026-06-25T09:00:00.000Z',
+        }),
+      ).toMatchObject({
+        resource: 'tenant_member',
+        resourceId: 'tenant-member-chenlei',
+        result: 'transitioned',
+        reason,
+      });
+    }
+
+    for (const [reason, result] of [
+      ['tenant_login_succeeded', 'allowed'],
+      ['tenant_login_failed', 'denied'],
+    ] as const) {
+      expect(
+        createAuditEvent({
+          eventId: `audit_evt_${reason}`,
+          context: {
+            userId: 'auth-user-chenlei',
+            role: 'tenant_admin',
+            scope: 'tenant',
+            tenantId: 'tenant-zhengpu',
+            source: 'server_session',
+          },
+          resource: 'tenant_member',
+          resourceId: 'tenant-member-chenlei',
+          action: 'read_own_tenant',
+          result,
+          reason,
+          occurredAt: '2026-06-25T09:05:00.000Z',
+        }),
+      ).toMatchObject({
+        resource: 'tenant_member',
+        resourceId: 'tenant-member-chenlei',
+        action: 'read_own_tenant',
+        result,
+        reason,
+      });
+    }
+  });
+
   it('支持治疗摘要创建审计决策，且不携带请求体、正文、PII 或内部敏感信息', () => {
     expect(AUDIT_REASON_VALUES).toContain('invalid_treatment_summary_reference');
     expect(AUDIT_REASON_VALUES).toContain('invalid_treatment_summary_payload');

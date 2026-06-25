@@ -11,9 +11,30 @@ const tenantRecord = {
   planName: '成长版',
   planCode: 'growth-care',
   planStatus: 'active',
+  planVersionId: 'plan-version-growth-202606',
+  planVersionCode: '2026-06-v1',
+  planDisplayName: 'Growth Care 2026-06',
+  planDisplayPrice: '¥2999/月',
   assignmentStatus: 'active',
   startedAt: '2026-05-31T00:00:00.000Z',
   expiresAt: null,
+  agentLimit: 3,
+  seatLimit: 40,
+  monthlyAiCallLimit: 300000,
+  knowledgeStorageGb: 100,
+  connectorEntitlements: ['企微', 'HIS'],
+  serviceEntitlements: ['上线培训', '季度复盘'],
+  authorizationSnapshotId: 'auth-snapshot-demo-tenant-001-active',
+  authorizationSnapshotStatus: 'active',
+  authorizationGeneratedAt: '2026-06-23T02:00:00.000Z',
+  openingContact: {
+    contactName: '陈磊',
+    contactPhone: '13985162773',
+    contactEmail: 'contact@example.com',
+    adminName: '陈磊',
+    adminAccount: 'zhengpu',
+    adminContact: '13985162273',
+  },
   maxCustomers: 5000,
   maxAppointments: 2000,
   maxFollowUps: 10000,
@@ -36,6 +57,226 @@ const tenantRecord = {
   secret: 'raw-secret',
 };
 
+const professionalPlanOption = {
+  planId: 'plan-professional',
+  planCode: 'professional',
+  planName: 'Professional 专业版',
+  planVersionId: 'plan-version-professional-published',
+  versionCode: '2026-06-v1',
+  displayName: 'Professional 专业版 2026-06',
+  displayPrice: '¥2999/月',
+  priceNote: '展示价格，人工确认口径',
+  agentLimit: 3,
+  seatLimit: 40,
+  monthlyAiCallLimit: 300000,
+  knowledgeStorageGb: 100,
+  connectorEntitlements: ['企微', 'HIS'],
+  serviceEntitlements: ['上线培训'],
+};
+
+const trialPlanOption = {
+  planId: 'plan-trial',
+  planCode: 'trial-care',
+  planName: '试用版',
+  planVersionId: 'plan-version-trial-published',
+  versionCode: '2026-06-v1',
+  displayName: '试用版',
+  displayPrice: '试用版展示价（未定价）',
+  priceNote: '10 天商业试用体验周期',
+  agentLimit: 1,
+  seatLimit: 1,
+  monthlyAiCallLimit: 5000,
+  knowledgeStorageGb: 1,
+  connectorEntitlements: ['企微'],
+  serviceEntitlements: ['新手引导'],
+};
+
+const enterprisePlanOption = {
+  planId: 'plan-enterprise',
+  planCode: 'enterprise',
+  planName: 'Enterprise 集团版',
+  planVersionId: 'plan-version-enterprise-published',
+  versionCode: '2026-06-v1',
+  displayName: 'Enterprise 集团版 2026-06',
+  displayPrice: '¥9999/月',
+  priceNote: '展示价格，人工确认口径',
+  agentLimit: 20,
+  seatLimit: 200,
+  monthlyAiCallLimit: 2000000,
+  knowledgeStorageGb: 1024,
+  connectorEntitlements: ['企微', 'HIS', 'CRM', '新氧', '美团', '抖音'],
+  serviceEntitlements: ['专属实施', '年度复盘'],
+};
+
+const tenantPlanChangePreview = {
+  tenantId: 'demo-tenant-001',
+  fromPlanVersionId: 'plan-version-growth-202606',
+  toPlanVersionId: 'plan-version-enterprise-published',
+  changedItemCount: 9,
+  unchangedItemCount: 0,
+  items: [
+    {
+      key: 'displayName',
+      label: '套餐版本',
+      before: 'Growth Care 2026-06',
+      after: 'Enterprise 集团版 2026-06',
+      changed: true,
+    },
+    {
+      key: 'displayPrice',
+      label: '展示价格',
+      before: '¥2999/月',
+      after: '¥9999/月',
+      changed: true,
+    },
+    {
+      key: 'agentLimit',
+      label: 'Agent 数量',
+      before: '3',
+      after: '20',
+      changed: true,
+    },
+    {
+      key: 'seatLimit',
+      label: '员工席位',
+      before: '40',
+      after: '200',
+      changed: true,
+    },
+    {
+      key: 'monthlyAiCallLimit',
+      label: 'AI 调用 / 月',
+      before: '300,000',
+      after: '2,000,000',
+      changed: true,
+    },
+    {
+      key: 'knowledgeStorageGb',
+      label: '知识库存储',
+      before: '100 GB',
+      after: '1,024 GB',
+      changed: true,
+    },
+    {
+      key: 'connectorEntitlements',
+      label: '连接器权益',
+      before: '企微 / HIS',
+      after: '企微 / HIS / CRM / 新氧 / 美团 / 抖音',
+      changed: true,
+    },
+    {
+      key: 'serviceEntitlements',
+      label: '服务权益',
+      before: '上线培训 / 季度复盘',
+      after: '专属实施 / 年度复盘',
+      changed: true,
+    },
+    {
+      key: 'versionCode',
+      label: '版本号',
+      before: '2026-06-v1',
+      after: '2026-06-v1',
+      changed: false,
+    },
+  ],
+};
+
+const tenantAfterPlanChange = {
+  ...tenantRecord,
+  updatedAt: '2026-06-23T04:00:00.000Z',
+  planName: 'Enterprise 集团版',
+  planCode: 'enterprise',
+  planVersionId: 'plan-version-enterprise-published',
+  planVersionCode: '2026-06-v1',
+  planDisplayName: 'Enterprise 集团版 2026-06',
+  planDisplayPrice: '¥9999/月',
+  agentLimit: 20,
+  seatLimit: 200,
+  monthlyAiCallLimit: 2000000,
+  knowledgeStorageGb: 1024,
+  connectorEntitlements: ['企微', 'HIS', 'CRM', '新氧', '美团', '抖音'],
+  serviceEntitlements: ['专属实施', '年度复盘'],
+  authorizationSnapshotId: 'auth-snapshot-enterprise-active',
+  authorizationGeneratedAt: '2026-06-23T04:00:00.000Z',
+};
+
+const trialTenantRecord = {
+  ...tenantRecord,
+  tenantId: 'tenant-11317ff5-ae9',
+  tenantName: '上海正璞医疗美容门诊部有限公司',
+  planName: '试用版',
+  planCode: 'trial-care',
+  planVersionId: 'plan-version-trial-published',
+  planVersionCode: '2026-06-v1',
+  planDisplayName: '试用版',
+  planDisplayPrice: '试用版展示价（未定价）',
+  startedAt: '2026-06-25T08:35:39.190Z',
+  expiresAt: '2026-07-05T08:35:39.190Z',
+};
+
+const tenantCommercialRecords = [
+  {
+    recordId: 'commercial-record-order-001',
+    tenantId: 'demo-tenant-001',
+    recordType: 'order',
+    recordTypeLabel: '订单',
+    status: 'pending',
+    statusLabel: '待人工确认',
+    displayCode: 'ORD-2026-0001',
+    displayAmount: '¥2999/月',
+    periodLabel: '2026-06',
+    relatedPlanChangeId: 'tenant-plan-change-demo-001',
+    occurredAt: '2026-06-23T06:00:00.000Z',
+    createdAt: '2026-06-23T06:00:00.000Z',
+    updatedAt: '2026-06-23T06:10:00.000Z',
+  },
+  {
+    recordId: 'commercial-record-contract-001',
+    tenantId: 'demo-tenant-001',
+    recordType: 'contract',
+    recordTypeLabel: '合同',
+    status: 'manual_review',
+    statusLabel: '人工复核',
+    displayCode: 'CON-2026-0001',
+    displayAmount: null,
+    periodLabel: '2026-06',
+    relatedPlanChangeId: null,
+    occurredAt: null,
+    createdAt: '2026-06-23T06:00:00.000Z',
+    updatedAt: '2026-06-23T06:10:00.000Z',
+  },
+  {
+    recordId: 'commercial-record-invoice-001',
+    tenantId: 'demo-tenant-001',
+    recordType: 'invoice',
+    recordTypeLabel: '发票',
+    status: 'draft',
+    statusLabel: '预留草稿',
+    displayCode: 'INV-2026-0001',
+    displayAmount: null,
+    periodLabel: null,
+    relatedPlanChangeId: null,
+    occurredAt: null,
+    createdAt: '2026-06-23T06:00:00.000Z',
+    updatedAt: '2026-06-23T06:10:00.000Z',
+  },
+  {
+    recordId: 'commercial-record-payment-001',
+    tenantId: 'demo-tenant-001',
+    recordType: 'payment',
+    recordTypeLabel: '支付',
+    status: 'completed',
+    statusLabel: '已人工确认',
+    displayCode: 'PAY-2026-0001',
+    displayAmount: '¥2999/月',
+    periodLabel: '2026-06',
+    relatedPlanChangeId: null,
+    occurredAt: '2026-06-23T06:00:00.000Z',
+    createdAt: '2026-06-23T06:00:00.000Z',
+    updatedAt: '2026-06-23T06:10:00.000Z',
+  },
+];
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
@@ -53,6 +294,11 @@ type MockTenantFetchOptions =
   | Response[]
   | {
       tenantResponses?: Response[];
+      planOptionsResponse?: Response;
+      createTenantResponse?: Response;
+      planChangePreviewResponse?: Response;
+      planChangeResponse?: Response;
+      commercialRecordsResponse?: Response;
       auditEventsResponse?: Response;
     };
 
@@ -69,12 +315,61 @@ function defaultAuditEventsResponse() {
 
 function mockTenantFetch(options: MockTenantFetchOptions) {
   const tenantResponses = Array.isArray(options) ? [...options] : [...(options.tenantResponses ?? [])];
+  const planOptionsResponse = Array.isArray(options)
+    ? jsonResponse({ options: [professionalPlanOption] })
+    : options.planOptionsResponse ?? jsonResponse({ options: [professionalPlanOption] });
+  const createTenantResponse = Array.isArray(options)
+    ? jsonResponse({ ok: true, status: 'tenant_created', tenant: tenantRecord })
+    : options.createTenantResponse ??
+      jsonResponse({
+        ok: true,
+        status: 'tenant_created',
+        tenant: {
+          ...tenantRecord,
+          tenantId: 'tenant-created',
+          tenantName: '星澜医美中心',
+          planName: 'Professional 专业版',
+          planCode: 'professional',
+          planVersionId: 'plan-version-professional-published',
+          planVersionCode: '2026-06-v1',
+          planDisplayName: 'Professional 专业版 2026-06',
+          planDisplayPrice: '¥2999/月',
+          authorizationSnapshotId: 'tenant-authorization-snapshot-created',
+          authorizationSnapshotStatus: 'active',
+          authorizationGeneratedAt: '2026-06-23T03:00:00.000Z',
+        },
+      });
+  const planChangePreviewResponse = Array.isArray(options)
+    ? jsonResponse({ ok: true, status: 'preview_ready', preview: tenantPlanChangePreview })
+    : options.planChangePreviewResponse ??
+      jsonResponse({ ok: true, status: 'preview_ready', preview: tenantPlanChangePreview });
+  const planChangeResponse = Array.isArray(options)
+    ? jsonResponse({
+        ok: true,
+        status: 'plan_changed',
+        changeRecordId: 'tenant-plan-change-demo-001',
+        auditEventId: 'audit-event-demo-001',
+        tenant: tenantAfterPlanChange,
+      })
+    : options.planChangeResponse ??
+      jsonResponse({
+        ok: true,
+        status: 'plan_changed',
+        changeRecordId: 'tenant-plan-change-demo-001',
+        auditEventId: 'audit-event-demo-001',
+        tenant: tenantAfterPlanChange,
+      });
+  const commercialRecordsResponse = Array.isArray(options)
+    ? jsonResponse({ ok: true, records: tenantCommercialRecords })
+    : options.commercialRecordsResponse ??
+      jsonResponse({ ok: true, records: tenantCommercialRecords });
   const auditEventsResponse = Array.isArray(options)
     ? defaultAuditEventsResponse()
     : options.auditEventsResponse ?? defaultAuditEventsResponse();
 
   const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
     const path = fetchPath(input);
+    const method = String(_init?.method ?? 'GET').toUpperCase();
     if (path === '/api/open-platform/tenants') {
       const response = tenantResponses.length > 1 ? tenantResponses.shift() : tenantResponses[0];
       if (!response) {
@@ -82,6 +377,32 @@ function mockTenantFetch(options: MockTenantFetchOptions) {
       }
 
       return response.clone();
+    }
+
+    if (path === '/api/v1/open-platform/tenant-plan-options' && method === 'GET') {
+      return planOptionsResponse.clone();
+    }
+
+    if (path === '/api/v1/open-platform/tenants' && method === 'POST') {
+      return createTenantResponse.clone();
+    }
+
+    if (
+      path === '/api/v1/open-platform/tenants/demo-tenant-001/plan-change-preview' &&
+      method === 'POST'
+    ) {
+      return planChangePreviewResponse.clone();
+    }
+
+    if (path === '/api/v1/open-platform/tenants/demo-tenant-001/plan-change' && method === 'POST') {
+      return planChangeResponse.clone();
+    }
+
+    if (
+      path === '/api/v1/open-platform/tenants/demo-tenant-001/commercial-records' &&
+      method === 'GET'
+    ) {
+      return commercialRecordsResponse.clone();
     }
 
     if (path.startsWith('/api/open-platform/audit-events')) {
@@ -165,7 +486,7 @@ describe('平台端租户管理面板', () => {
 
     expect(screen.getByRole('heading', { name: '租户管理' })).toBeInTheDocument();
     expect(screen.getByText(/平台侧查看机构、套餐和配额边界/)).toBeInTheDocument();
-    expect(screen.getByText(/当前仅展示 API 返回的租户记录/)).toBeInTheDocument();
+    expect(screen.getByText(/支持受控开通测试租户并生成授权快照/)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('受控演示租户');
     expect(screen.getByText('正在加载租户管理数据...')).toBeInTheDocument();
     expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThanOrEqual(1);
@@ -337,22 +658,153 @@ describe('平台端租户管理面板', () => {
   });
 
   it('点击查看打开租户详情抽屉并展示授权快照、用量摘要和审计入口', async () => {
-    mockTenantFetch([jsonResponse({ records: [tenantRecord] })]);
+    mockTenantFetch([jsonResponse({ records: [trialTenantRecord] })]);
 
     render(<OpenPlatformTenantManagementPanel />);
+
+    expect((await screen.findAllByText('上海正璞医疗美容门诊部有限公司')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '查看 上海正璞医疗美容门诊部有限公司' }));
+
+    const drawer = screen.getByRole('dialog', { name: '租户详情' });
+    expect(within(drawer).getByText('联系人：陈磊')).toBeInTheDocument();
+    expect(within(drawer).getByText('联系人手机：13985162773')).toBeInTheDocument();
+    expect(within(drawer).getByText('联系人邮箱：contact@example.com')).toBeInTheDocument();
+    expect(within(drawer).getByText('管理员账号：zhengpu')).toBeInTheDocument();
+    expect(within(drawer).getByText('管理员联系方式：13985162273')).toBeInTheDocument();
+    expect(within(drawer).queryByText(/张\*\*/)).not.toBeInTheDocument();
+    expect(within(drawer).getByText('试用开始：2026年6月25日 16:35')).toBeInTheDocument();
+    expect(within(drawer).getByText('试用截止：2026年7月5日 16:35')).toBeInTheDocument();
+    expect(within(drawer).getAllByText('14 天后到期').length).toBeGreaterThan(0);
+    expect(within(drawer).getByText('授权快照')).toBeInTheDocument();
+    expect(within(drawer).getByText('用量摘要（本月）')).toBeInTheDocument();
+    expect(await within(drawer).findByText('商业化预留')).toBeInTheDocument();
+    expect(within(drawer).getByText('审计入口')).toBeInTheDocument();
+    expect(within(drawer).getByRole('button', { name: '查看审计日志' })).toBeInTheDocument();
+  });
+
+  it('租户详情展示订单、合同、发票、支付的只读商业化预留状态', async () => {
+    const fetchMock = mockTenantFetch({
+      tenantResponses: [jsonResponse({ records: [tenantRecord] })],
+      commercialRecordsResponse: jsonResponse({
+        ok: true,
+        records: [
+          ...tenantCommercialRecords,
+          {
+            recordId: 'commercial-record-sensitive',
+            tenantId: 'demo-tenant-001',
+            recordType: 'order',
+            recordTypeLabel: '订单',
+            status: 'cancelled',
+            statusLabel: '已取消',
+            displayCode: 'ORD-SAFE',
+            displayAmount: null,
+            periodLabel: null,
+            relatedPlanChangeId: null,
+            occurredAt: null,
+            createdAt: '2026-06-23T06:00:00.000Z',
+            updatedAt: '2026-06-23T06:10:00.000Z',
+            note: 'payment_token=payment_token_should_not_render',
+            webhook_secret: 'webhook_secret_should_not_render',
+            contract_body: '完整合同正文',
+          },
+        ],
+      }),
+    });
+    const { container } = render(<OpenPlatformTenantManagementPanel />);
 
     expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: '查看 智美天工演示机构' }));
 
     const drawer = screen.getByRole('dialog', { name: '租户详情' });
-    expect(within(drawer).getByText('授权快照')).toBeInTheDocument();
-    expect(within(drawer).getByText('用量摘要（本月）')).toBeInTheDocument();
-    expect(within(drawer).getByText('审计入口')).toBeInTheDocument();
-    expect(within(drawer).getByRole('button', { name: '查看审计日志' })).toBeInTheDocument();
+    expect(await within(drawer).findByText('商业化预留')).toBeInTheDocument();
+    expect(within(drawer).getByText('ORD-2026-0001')).toBeInTheDocument();
+    expect(within(drawer).getByText('待人工确认')).toBeInTheDocument();
+    expect(within(drawer).getByText('CON-2026-0001')).toBeInTheDocument();
+    expect(within(drawer).getByText('人工复核')).toBeInTheDocument();
+    expect(within(drawer).getByText('INV-2026-0001')).toBeInTheDocument();
+    expect(within(drawer).getByText('预留草稿')).toBeInTheDocument();
+    expect(within(drawer).getByText('PAY-2026-0001')).toBeInTheDocument();
+    expect(within(drawer).getByText('已人工确认')).toBeInTheDocument();
+    expect(within(drawer).getByText(/只读人工记录/)).toBeInTheDocument();
+
+    expect(fetchMock.mock.calls.some(([input, init]) => (
+      fetchPath(input) === '/api/v1/open-platform/tenants/demo-tenant-001/commercial-records' &&
+      String(init?.method ?? 'GET').toUpperCase() === 'GET'
+    ))).toBe(true);
+    expect(container.textContent ?? '').not.toMatch(
+      /payment_token|webhook_secret|contract_body|完整合同正文|立即支付|自动扣费|在线开票|第三方商业化 API/i,
+    );
+    expectNoSensitiveTenantContent(container);
+    expectNoPlatformDemoMisleadingClaims(container);
   });
 
-  it('新建租户三步流程只展示前端状态且成功态说明 UI 写入项', async () => {
-    const fetchMock = mockTenantFetch([jsonResponse({ records: [tenantRecord] })]);
+  it('在租户详情中预览套餐变更差异并应用生成新授权快照', async () => {
+    const fetchMock = mockTenantFetch({
+      tenantResponses: [jsonResponse({ records: [tenantRecord] })],
+      planOptionsResponse: jsonResponse({ options: [professionalPlanOption, enterprisePlanOption] }),
+    });
+    const { container } = render(<OpenPlatformTenantManagementPanel />);
+
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '查看 智美天工演示机构' }));
+
+    const drawer = screen.getByRole('dialog', { name: '租户详情' });
+    fireEvent.click(within(drawer).getByRole('button', { name: '变更套餐' }));
+    fireEvent.change(within(drawer).getByLabelText('目标套餐版本'), {
+      target: { value: 'plan-version-enterprise-published' },
+    });
+    fireEvent.change(within(drawer).getByLabelText('变更原因'), {
+      target: { value: '机构升级到集团版并刷新授权快照' },
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: '预览变更' }));
+
+    expect(await within(drawer).findByText('套餐变更差异对照')).toBeInTheDocument();
+    expect(within(drawer).getByText('展示价格')).toBeInTheDocument();
+    expect(within(drawer).getAllByText('¥2999/月').length).toBeGreaterThan(0);
+    expect(within(drawer).getByText('¥9999/月')).toBeInTheDocument();
+    expect(within(drawer).getByText('Agent 数量')).toBeInTheDocument();
+    expect(within(drawer).getByText('20')).toBeInTheDocument();
+    expect(within(drawer).getByText('连接器权益')).toBeInTheDocument();
+    expect(within(drawer).getByText('企微 / HIS / CRM / 新氧 / 美团 / 抖音')).toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByRole('button', { name: '确认应用变更' }));
+
+    expect(await within(drawer).findByText('套餐变更已应用并生成新授权快照')).toBeInTheDocument();
+    expect(within(drawer).getByText('变更记录：tenant-plan-change-demo-001')).toBeInTheDocument();
+    expect(within(drawer).getByText('审计事件：audit-event-demo-001')).toBeInTheDocument();
+    expect(screen.getAllByText('Enterprise 集团版').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('套餐编号：enterprise').length).toBeGreaterThan(0);
+
+    const previewCall = fetchMock.mock.calls.find(([input, init]) => (
+      fetchPath(input) === '/api/v1/open-platform/tenants/demo-tenant-001/plan-change-preview' &&
+      String(init?.method).toUpperCase() === 'POST'
+    ));
+    const applyCall = fetchMock.mock.calls.find(([input, init]) => (
+      fetchPath(input) === '/api/v1/open-platform/tenants/demo-tenant-001/plan-change' &&
+      String(init?.method).toUpperCase() === 'POST'
+    ));
+    expect(previewCall).toBeDefined();
+    expect(applyCall).toBeDefined();
+    expect(JSON.parse(String(previewCall?.[1]?.body))).toEqual({
+      toPlanVersionId: 'plan-version-enterprise-published',
+      reason: '机构升级到集团版并刷新授权快照',
+    });
+    expect(JSON.parse(String(applyCall?.[1]?.body))).toEqual({
+      toPlanVersionId: 'plan-version-enterprise-published',
+      reason: '机构升级到集团版并刷新授权快照',
+    });
+    expect(`${previewCall?.[1]?.body ?? ''}${applyCall?.[1]?.body ?? ''}`).not.toMatch(
+      /13800000000|admin@example.com|payment_token|webhook_secret|client_secret|api_key/i,
+    );
+    expectNoSensitiveTenantContent(container);
+    expectNoPlatformDemoMisleadingClaims(container);
+  });
+
+  it('新建试用租户时展示 10 天游标并提交真实业务联系人字段', async () => {
+    const fetchMock = mockTenantFetch({
+      tenantResponses: [jsonResponse({ records: [tenantRecord] })],
+      planOptionsResponse: jsonResponse({ options: [trialPlanOption, professionalPlanOption] }),
+    });
     const { container } = render(<OpenPlatformTenantManagementPanel />);
 
     expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
@@ -363,32 +815,56 @@ describe('平台端租户管理面板', () => {
     fireEvent.change(screen.getByLabelText('机构名称'), { target: { value: '星澜医美中心' } });
     fireEvent.change(screen.getByLabelText('联系人姓名'), { target: { value: '张明' } });
     fireEvent.change(screen.getByLabelText('联系人手机号'), { target: { value: '13800000000' } });
+    fireEvent.change(screen.getByLabelText('联系人邮箱'), { target: { value: 'contact@example.com' } });
     fireEvent.change(screen.getByLabelText('管理员姓名'), { target: { value: '李静' } });
+    fireEvent.change(screen.getByLabelText('管理员登录账号'), { target: { value: 'xinglan_admin' } });
     fireEvent.change(screen.getByLabelText('管理员手机号或邮箱'), { target: { value: 'admin@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: '下一步' }));
 
     expect(screen.getByText('套餐与权益')).toBeInTheDocument();
-    expect(screen.getByText('专业版 v3 授权预览')).toBeInTheDocument();
+    expect(screen.getByText('试用版 授权预览')).toBeInTheDocument();
+    expect(screen.getAllByText('展示价格 试用版展示价（未定价）').length).toBeGreaterThan(0);
+    expect(screen.getByText('套餐版本 2026-06-v1')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '下一步' }));
 
     expect(screen.getAllByText('提交确认').length).toBeGreaterThan(0);
+    expect(screen.getByText('试用周期：10 天')).toBeInTheDocument();
+    expect(screen.getByText('开始时间：2026年6月22日 00:00')).toBeInTheDocument();
+    expect(screen.getByText('截止时间：2026年7月2日 00:00')).toBeInTheDocument();
     expect(screen.getByText('审计摘要')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认开设租户' }));
 
-    expect(screen.getByText('租户 UI 状态已生成')).toBeInTheDocument();
+    expect(await screen.findByText('租户已开通并生成授权快照')).toBeInTheDocument();
     expect(screen.getByText('租户主体')).toBeInTheDocument();
-    expect(screen.getByText('初始管理员')).toBeInTheDocument();
     expect(screen.getByText('套餐分配')).toBeInTheDocument();
     expect(screen.getAllByText('授权快照').length).toBeGreaterThan(0);
-    expect(screen.getByText('审计记录')).toBeInTheDocument();
+    expect(screen.getAllByText(/星澜医美中心/).length).toBeGreaterThan(0);
+    const createCall = fetchMock.mock.calls.find(([input, init]) => (
+      fetchPath(input) === '/api/v1/open-platform/tenants' &&
+      String(init?.method).toUpperCase() === 'POST'
+    ));
+    expect(createCall).toBeDefined();
+    expect(JSON.parse(String(createCall?.[1]?.body))).toEqual({
+      organizationName: '星澜医美中心',
+      contactName: '张明',
+      contactPhone: '13800000000',
+      contactEmail: 'contact@example.com',
+      adminName: '李静',
+      adminAccount: 'xinglan_admin',
+      adminContact: 'admin@example.com',
+      planVersionId: 'plan-version-trial-published',
+      reason: '平台测试租户开设，用于授权快照验证。',
+    });
+    expect(String(createCall?.[1]?.body)).not.toMatch(
+      /PlaintextPasswordShouldNotPass|requestBody|select \*|payment_token|webhook_secret|client_secret|api_key/i,
+    );
     expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual(
-      expect.arrayContaining(['/api/open-platform/tenants']),
+      expect.arrayContaining([
+        '/api/open-platform/tenants',
+        '/api/v1/open-platform/tenant-plan-options',
+        '/api/v1/open-platform/tenants',
+      ]),
     );
-    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).not.toContain(
-      '/api/open-platform/tenants/create',
-    );
-    expect(container.textContent ?? '').not.toContain('13800000000');
-    expect(container.textContent ?? '').not.toContain('admin@example.com');
     expectNoPlatformDemoMisleadingClaims(container);
   });
 

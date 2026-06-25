@@ -17,10 +17,21 @@ import {
   X,
 } from 'lucide-react';
 import {
+  applyOpenPlatformTenantPlanChange,
+  createOpenPlatformTenantWithPlan,
+  listOpenPlatformTenantCommercialRecords,
   listOpenPlatformTenants,
+  listOpenPlatformTenantPlanOptions,
+  previewOpenPlatformTenantPlanChange,
   type OpenPlatformTenantClientError,
   type OpenPlatformTenantRecord,
 } from '@/modules/open-platform/client/platform-tenant-management-client';
+import {
+  buildTenantCommercialRecordOverview,
+  type TenantCommercialRecordDto,
+} from '@/modules/open-platform/domain/tenant-commercial-records';
+import type { TenantPlanChangePreview } from '@/modules/open-platform/domain/tenant-plan-change';
+import type { TenantPlanOptionDto } from '@/modules/open-platform/domain/tenant-plan-binding';
 import {
   buildTenantManagementOverview,
   filterTenantManagementRecords,
@@ -47,72 +58,28 @@ type CreateTenantForm = {
   organizationName: string;
   contactName: string;
   contactPhone: string;
+  contactEmail: string;
   adminName: string;
+  adminAccount: string;
   adminContact: string;
-  planCode: string;
+  planVersionId: string;
   reason: string;
 };
 
 const defaultNow = '2026-06-22T00:00:00.000+08:00';
+const trialDurationDays = 10;
 
 const defaultCreateTenantForm: CreateTenantForm = {
   organizationName: '',
   contactName: '',
   contactPhone: '',
+  contactEmail: '',
   adminName: '',
+  adminAccount: '',
   adminContact: '',
-  planCode: 'professional',
-  reason: '平台测试租户开设，用于 UI-only 验证授权快照路径。',
+  planVersionId: '',
+  reason: '平台测试租户开设，用于授权快照验证。',
 };
-
-const planOptions = [
-  {
-    code: 'trial',
-    name: '试用版',
-    helper: '适合短期体验与功能验证',
-    members: '5',
-    customers: '100',
-    aiCalls: '200',
-    knowledgeFiles: '100',
-  },
-  {
-    code: 'basic',
-    name: '基础版',
-    helper: '满足小型团队基础运营需求',
-    members: '10',
-    customers: '500',
-    aiCalls: '1,000',
-    knowledgeFiles: '500',
-  },
-  {
-    code: 'professional',
-    name: '专业版',
-    helper: '适合成长型机构，功能与容量均衡',
-    members: '50',
-    customers: '2,000',
-    aiCalls: '10,000',
-    knowledgeFiles: '2,000',
-    recommended: true,
-  },
-  {
-    code: 'enterprise',
-    name: '旗舰版',
-    helper: '支持规模化运营与更高并发',
-    members: '200',
-    customers: '10,000',
-    aiCalls: '50,000',
-    knowledgeFiles: '10,000',
-  },
-  {
-    code: 'custom',
-    name: '定制版',
-    helper: '按需定制功能与容量，需人工复核',
-    members: '按需',
-    customers: '按需',
-    aiCalls: '按需',
-    knowledgeFiles: '按需',
-  },
-] as const;
 
 const quotaItems = [
   { key: 'customers', label: '客户数', currentKey: 'currentCustomers', maxKey: 'maxCustomers' },
@@ -165,6 +132,25 @@ function quotaValue(value: number | null) {
   return typeof value === 'number' ? String(value) : '-';
 }
 
+function formatLimit(value: number | null, fallback = '不限') {
+  return typeof value === 'number' ? new Intl.NumberFormat('zh-CN').format(value) : fallback;
+}
+
+function addDaysIso(value: string, days: number) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+  return new Date(timestamp + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function isTrialPlanOption(plan: TenantPlanOptionDto | null) {
+  if (!plan) return false;
+  return (
+    plan.planCode.toLowerCase().includes('trial') ||
+    plan.planName.includes('试用') ||
+    plan.displayName.includes('试用')
+  );
+}
+
 function statusBadgeClass(tone: 'slate' | 'emerald' | 'blue' | 'amber' | 'rose') {
   if (tone === 'emerald') return 'border-emerald-100 bg-emerald-50 text-emerald-700';
   if (tone === 'blue') return 'border-blue-100 bg-blue-50 text-blue-700';
@@ -195,6 +181,18 @@ function maskEmail(value: string) {
 
 function maskContact(value: string) {
   return value.includes('@') ? maskEmail(value) : maskPhone(value);
+}
+
+function displayField(value: string | null | undefined) {
+  return value && value.trim().length > 0 ? value : '未录入';
+}
+
+function isTrialTenant(tenant: OpenPlatformTenantRecord) {
+  return (
+    tenant.planCode?.toLowerCase().includes('trial') ||
+    tenant.planName?.includes('试用') ||
+    tenant.planDisplayName?.includes('试用')
+  );
 }
 
 function TenantManagementState({ title, description, kind }: TenantManagementStateProps) {
@@ -313,14 +311,145 @@ function EmptyTenantState({ onCreate }: { onCreate: () => void }) {
 
 function TenantDetailDrawer({
   tenant,
+  planOptions,
+  onTenantChanged,
   onClose,
 }: {
   tenant: OpenPlatformTenantRecord;
+  planOptions: TenantPlanOptionDto[];
+  onTenantChanged: (tenant: OpenPlatformTenantRecord) => void;
   onClose: () => void;
 }) {
   const authorization = getTenantAuthorizationState(tenant);
   const quotaRisk = getTenantQuotaRiskState(tenant);
   const expiry = getTenantExpiryState(tenant, { now: defaultNow });
+  const changePlanOptions = useMemo(
+    () => planOptions.filter((plan) => plan.planVersionId !== tenant.planVersionId),
+    [planOptions, tenant.planVersionId],
+  );
+  const [isChangeOpen, setIsChangeOpen] = useState(false);
+  const [targetPlanVersionId, setTargetPlanVersionId] = useState(
+    changePlanOptions[0]?.planVersionId ?? '',
+  );
+  const [changeReason, setChangeReason] = useState('平台套餐变更，刷新授权快照。');
+  const [changePreview, setChangePreview] = useState<TenantPlanChangePreview | null>(null);
+  const [changeError, setChangeError] = useState<string | null>(null);
+  const [isPreviewingChange, setIsPreviewingChange] = useState(false);
+  const [isApplyingChange, setIsApplyingChange] = useState(false);
+  const [changeSuccess, setChangeSuccess] = useState<{
+    changeRecordId: string;
+    auditEventId: string;
+  } | null>(null);
+  const [commercialRecordsState, setCommercialRecordsState] = useState<{
+    status: 'loading' | 'ready' | 'error';
+    records: TenantCommercialRecordDto[];
+    message?: string;
+  }>({
+    status: 'loading',
+    records: [],
+  });
+
+  const effectiveTargetPlanVersionId = changePlanOptions.some(
+    (plan) => plan.planVersionId === targetPlanVersionId,
+  )
+    ? targetPlanVersionId
+    : changePlanOptions[0]?.planVersionId ?? '';
+  const selectedChangePlan =
+    changePlanOptions.find((plan) => plan.planVersionId === effectiveTargetPlanVersionId) ??
+    changePlanOptions[0] ??
+    null;
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadCommercialRecords() {
+      const result = await listOpenPlatformTenantCommercialRecords(tenant.tenantId);
+      if (!isActive) return;
+
+      if (result.ok) {
+        setCommercialRecordsState({
+          status: 'ready',
+          records: result.records,
+        });
+        return;
+      }
+
+      setCommercialRecordsState({
+        status: 'error',
+        records: [],
+        message: result.error.message,
+      });
+    }
+
+    void loadCommercialRecords();
+
+    return () => {
+      isActive = false;
+    };
+  }, [tenant.tenantId]);
+
+  const commercialOverview = useMemo(
+    () => buildTenantCommercialRecordOverview(commercialRecordsState.records),
+    [commercialRecordsState.records],
+  );
+  const openingContact = tenant.openingContact;
+  const showTrialPeriod = isTrialTenant(tenant) && Boolean(tenant.startedAt || tenant.expiresAt);
+
+  function resetPlanChangeResult() {
+    setChangePreview(null);
+    setChangeSuccess(null);
+    setChangeError(null);
+  }
+
+  async function handlePreviewPlanChange() {
+    if (!effectiveTargetPlanVersionId || !changeReason.trim()) {
+      setChangeError('请选择目标套餐版本并填写变更原因');
+      return;
+    }
+
+    setIsPreviewingChange(true);
+    setChangeError(null);
+    setChangeSuccess(null);
+    const result = await previewOpenPlatformTenantPlanChange(tenant.tenantId, {
+      toPlanVersionId: effectiveTargetPlanVersionId,
+      reason: changeReason,
+    });
+    setIsPreviewingChange(false);
+
+    if (!result.ok) {
+      setChangePreview(null);
+      setChangeError(`套餐变更预览失败：${result.error.message}`);
+      return;
+    }
+
+    setChangePreview(result.preview);
+  }
+
+  async function handleApplyPlanChange() {
+    if (!effectiveTargetPlanVersionId || !changeReason.trim()) {
+      setChangeError('请选择目标套餐版本并填写变更原因');
+      return;
+    }
+
+    setIsApplyingChange(true);
+    setChangeError(null);
+    const result = await applyOpenPlatformTenantPlanChange(tenant.tenantId, {
+      toPlanVersionId: effectiveTargetPlanVersionId,
+      reason: changeReason,
+    });
+    setIsApplyingChange(false);
+
+    if (!result.ok) {
+      setChangeError(`套餐变更应用失败：${result.error.message}`);
+      return;
+    }
+
+    setChangeSuccess({
+      changeRecordId: result.changeRecordId,
+      auditEventId: result.auditEventId,
+    });
+    onTenantChanged(result.tenant);
+  }
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/25 backdrop-blur-[1px]">
@@ -367,12 +496,27 @@ function TenantDetailDrawer({
             <div>租户 ID：{tenant.tenantId}</div>
             <div>最近更新：{formatDateTime(tenant.updatedAt)}</div>
             <div>创建时间：{formatDateTime(tenant.createdAt)}</div>
-            <div>联系方式：张**（{maskPhone('13800000000')}）</div>
+            <div>联系人：{displayField(openingContact?.contactName)}</div>
+            <div>联系人手机：{displayField(openingContact?.contactPhone)}</div>
+            <div>联系人邮箱：{displayField(openingContact?.contactEmail)}</div>
+            <div>管理员姓名：{displayField(openingContact?.adminName)}</div>
+            <div>管理员账号：{displayField(openingContact?.adminAccount)}</div>
+            <div>管理员联系方式：{displayField(openingContact?.adminContact)}</div>
           </div>
         </section>
 
         <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
-          <h4 className="text-base font-semibold text-slate-950">当前套餐</h4>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h4 className="text-base font-semibold text-slate-950">当前套餐</h4>
+            <button
+              type="button"
+              onClick={() => setIsChangeOpen((current) => !current)}
+              className="inline-flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700"
+            >
+              <ClipboardList className="h-4 w-4" />
+              变更套餐
+            </button>
+          </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl bg-blue-50 p-4">
               <div className="text-lg font-semibold text-slate-950">{tenant.planName ?? '未配置套餐'}</div>
@@ -380,11 +524,155 @@ function TenantDetailDrawer({
             </div>
             <div className="space-y-2 text-sm text-slate-600">
               <div>有效期：{tenant.expiresAt ? formatDateTime(tenant.expiresAt) : '未设置'}</div>
+              {showTrialPeriod ? (
+                <>
+                  <div>试用开始：{formatDateTime(tenant.startedAt)}</div>
+                  <div>试用截止：{formatDateTime(tenant.expiresAt)}</div>
+                </>
+              ) : null}
               <div>分配状态：{tenant.assignmentStatus ?? '-'}</div>
               <StatusBadge label={expiry.label} tone={expiry.tone} />
             </div>
           </div>
         </section>
+
+        {isChangeOpen ? (
+          <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="text-base font-semibold text-slate-950">套餐变更</h4>
+                <p className="mt-1 text-sm text-slate-500">
+                  先预览权益差异，再应用变更并生成新的授权快照。
+                </p>
+              </div>
+              {selectedChangePlan ? (
+                <StatusBadge label={selectedChangePlan.versionCode} tone="blue" />
+              ) : null}
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1.2fr]">
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                目标套餐版本
+                <select
+                  aria-label="目标套餐版本"
+                  value={effectiveTargetPlanVersionId}
+                  onChange={(event) => {
+                    setTargetPlanVersionId(event.target.value);
+                    resetPlanChangeResult();
+                  }}
+                  className="rounded-lg border border-[#dbe6f3] bg-white px-3 py-2 text-sm font-normal text-slate-900"
+                >
+                  {changePlanOptions.length === 0 ? <option value="">暂无可变更套餐</option> : null}
+                  {changePlanOptions.map((plan) => (
+                    <option key={plan.planVersionId} value={plan.planVersionId}>
+                      {plan.displayName} - {plan.displayPrice}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                变更原因
+                <textarea
+                  aria-label="变更原因"
+                  value={changeReason}
+                  onChange={(event) => {
+                    setChangeReason(event.target.value);
+                    resetPlanChangeResult();
+                  }}
+                  className="min-h-20 rounded-lg border border-[#dbe6f3] px-3 py-2 text-sm font-normal text-slate-900"
+                  placeholder="请输入本次套餐变更的业务原因"
+                />
+              </label>
+            </div>
+
+            {selectedChangePlan ? (
+              <div className="mt-3 rounded-xl border border-[#dbe6f3] bg-[#f8fafc] p-3">
+                <div className="text-sm font-semibold text-slate-950">
+                  目标：{selectedChangePlan.displayName}
+                </div>
+                <div className="mt-2 grid gap-2 text-sm text-slate-600 sm:grid-cols-4">
+                  <span>Agent {formatLimit(selectedChangePlan.agentLimit)}</span>
+                  <span>员工席位 {formatLimit(selectedChangePlan.seatLimit)}</span>
+                  <span>AI 调用/月 {formatLimit(selectedChangePlan.monthlyAiCallLimit)}</span>
+                  <span>知识库 {formatLimit(selectedChangePlan.knowledgeStorageGb)} GB</span>
+                </div>
+              </div>
+            ) : null}
+
+            {changeError ? (
+              <div className="mt-3 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                {changeError}
+              </div>
+            ) : null}
+
+            {changeSuccess ? (
+              <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                <div className="font-semibold">套餐变更已应用并生成新授权快照</div>
+                <div className="mt-1">变更记录：{changeSuccess.changeRecordId}</div>
+                <div>审计事件：{changeSuccess.auditEventId}</div>
+              </div>
+            ) : null}
+
+            {changePreview ? (
+              <div className="mt-4 overflow-x-auto rounded-xl border border-[#dbe6f3]">
+                <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+                  <caption className="sr-only">套餐变更差异对照</caption>
+                  <thead className="bg-[#f8fafc] text-xs font-semibold text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2">权益项</th>
+                      <th className="px-3 py-2">变更前</th>
+                      <th className="px-3 py-2">变更后</th>
+                      <th className="px-3 py-2">状态</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#dbe6f3] bg-white">
+                    {changePreview.items.map((item) => (
+                      <tr key={item.key}>
+                        <td className="px-3 py-2 font-semibold text-slate-900">{item.label}</td>
+                        <td className="px-3 py-2 text-slate-600">{item.before}</td>
+                        <td className="px-3 py-2 text-slate-900">{item.after}</td>
+                        <td className="px-3 py-2">
+                          <StatusBadge
+                            label={item.changed ? '已变化' : '未变化'}
+                            tone={item.changed ? 'amber' : 'slate'}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="border-t border-[#dbe6f3] bg-[#f8fafc] px-3 py-2 text-xs text-slate-500">
+                  套餐变更差异对照：{changePreview.changedItemCount} 项变化，{changePreview.unchangedItemCount} 项不变。
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="inline-flex items-center gap-2 text-xs text-slate-500">
+                <Lock className="h-4 w-4" />
+                仅提交套餐版本和变更原因，不提交联系人、计费、支付或密钥字段。
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={isPreviewingChange || isApplyingChange || !effectiveTargetPlanVersionId}
+                  onClick={() => void handlePreviewPlanChange()}
+                  className="rounded-lg border border-[#dbe6f3] bg-white px-4 py-2 text-sm font-semibold text-blue-700 disabled:text-slate-400"
+                >
+                  {isPreviewingChange ? '预览中...' : '预览变更'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isApplyingChange || !changePreview}
+                  onClick={() => void handleApplyPlanChange()}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-slate-300"
+                >
+                  {isApplyingChange ? '应用中...' : '确认应用变更'}
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
           <h4 className="text-base font-semibold text-slate-950">授权快照</h4>
@@ -430,6 +718,91 @@ function TenantDetailDrawer({
         </section>
 
         <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 className="text-base font-semibold text-slate-950">商业化预留</h4>
+              <p className="mt-1 text-sm text-slate-500">
+                只读人工记录，用于观察订单、合同、发票、支付的预留状态。
+              </p>
+            </div>
+            <div className="rounded-full border border-[#dbe6f3] bg-[#f8fafc] px-3 py-1 text-xs font-semibold text-slate-600">
+              {commercialRecordsState.status === 'loading'
+                ? '加载中'
+                : `${commercialOverview.total} 条记录`}
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-4">
+            {[
+              { key: 'order', label: '订单' },
+              { key: 'contract', label: '合同' },
+              { key: 'invoice', label: '发票' },
+              { key: 'payment', label: '支付' },
+            ].map((item) => (
+              <div key={item.key} className="rounded-xl border border-[#dbe6f3] bg-[#f8fafc] p-3">
+                <div className="text-sm font-semibold text-slate-950">{item.label}</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {commercialRecordsState.status === 'ready'
+                    ? `${commercialOverview.byType[item.key as keyof typeof commercialOverview.byType]} 条人工记录`
+                    : '等待读取'}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {commercialRecordsState.status === 'error' ? (
+            <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+              商业化预留记录暂时不可用：{commercialRecordsState.message || '请求失败'}
+            </div>
+          ) : null}
+
+          {commercialRecordsState.status === 'ready' && commercialRecordsState.records.length === 0 ? (
+            <div className="mt-3 rounded-xl border border-dashed border-[#dbe6f3] bg-[#f8fafc] px-4 py-6 text-center text-sm text-slate-500">
+              暂无人工商业化预留记录。
+            </div>
+          ) : null}
+
+          {commercialRecordsState.records.length > 0 ? (
+            <div className="mt-4 overflow-x-auto rounded-xl border border-[#dbe6f3]">
+              <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+                <thead className="bg-[#f8fafc] text-xs font-semibold text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">类型</th>
+                    <th className="px-3 py-2">展示编号</th>
+                    <th className="px-3 py-2">人工状态</th>
+                    <th className="px-3 py-2">展示金额</th>
+                    <th className="px-3 py-2">周期</th>
+                    <th className="px-3 py-2">关联变更</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#dbe6f3] bg-white">
+                  {commercialRecordsState.records.map((record) => (
+                    <tr key={record.recordId}>
+                      <td className="px-3 py-2 font-semibold text-slate-950">
+                        {record.recordTypeLabel}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">{record.displayCode}</td>
+                      <td className="px-3 py-2">
+                        <StatusBadge label={record.statusLabel} tone="blue" />
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">{record.displayAmount ?? '-'}</td>
+                      <td className="px-3 py-2 text-slate-600">{record.periodLabel ?? '-'}</td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {record.relatedPlanChangeId ?? '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-700">
+            当前区域不提供线上交易处理、资金处理、外部交易系统调用或税务处理能力。
+          </div>
+        </section>
+
+        <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
           <h4 className="text-base font-semibold text-slate-950">审计入口</h4>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {['操作日志', '登录日志', '敏感操作', '导出报表'].map((item) => (
@@ -451,18 +824,30 @@ function TenantDetailDrawer({
 
 function CreateTenantModal({
   form,
+  planOptions,
+  isSubmitting,
+  errorMessage,
   step,
   onChange,
   onStepChange,
+  onSubmit,
   onClose,
 }: {
   form: CreateTenantForm;
+  planOptions: TenantPlanOptionDto[];
+  isSubmitting: boolean;
+  errorMessage: string | null;
   step: CreateTenantStep;
   onChange: (form: CreateTenantForm) => void;
   onStepChange: (step: CreateTenantStep) => void;
+  onSubmit: () => void;
   onClose: () => void;
 }) {
-  const selectedPlan = planOptions.find((plan) => plan.code === form.planCode) ?? planOptions[2];
+  const selectedPlan =
+    planOptions.find((plan) => plan.planVersionId === form.planVersionId) ?? planOptions[0] ?? null;
+  const trialExpiresAt = isTrialPlanOption(selectedPlan)
+    ? addDaysIso(defaultNow, trialDurationDays)
+    : null;
   const update = (key: keyof CreateTenantForm, value: string) => onChange({ ...form, [key]: value });
 
   return (
@@ -475,7 +860,7 @@ function CreateTenantModal({
         <div className="flex items-start justify-between gap-4 border-b border-[#dbe6f3] px-5 py-4">
           <div>
             <h3 className="text-xl font-semibold text-slate-950">新建租户</h3>
-            <p className="mt-1 text-sm text-slate-500">三步式 UI-only 流程，不提交真实创建请求。</p>
+            <p className="mt-1 text-sm text-slate-500">三步式受控流程，只写入租户、套餐分配和授权快照。</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg border border-[#dbe6f3] p-2 text-slate-500">
             <X className="h-4 w-4" />
@@ -535,7 +920,16 @@ function CreateTenantModal({
                       value={form.contactPhone}
                       onChange={(event) => update('contactPhone', event.target.value)}
                       className="rounded-lg border border-[#dbe6f3] px-3 py-2 text-sm font-normal"
-                      placeholder="仅 UI 状态，确认页脱敏展示"
+                      placeholder="用于商业试用开通台账"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                    联系人邮箱
+                    <input
+                      value={form.contactEmail}
+                      onChange={(event) => update('contactEmail', event.target.value)}
+                      className="rounded-lg border border-[#dbe6f3] px-3 py-2 text-sm font-normal"
+                      placeholder="用于商业试用开通台账"
                     />
                   </label>
                 </div>
@@ -553,12 +947,21 @@ function CreateTenantModal({
                     />
                   </label>
                   <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                    管理员登录账号
+                    <input
+                      value={form.adminAccount}
+                      onChange={(event) => update('adminAccount', event.target.value)}
+                      className="rounded-lg border border-[#dbe6f3] px-3 py-2 text-sm font-normal"
+                      placeholder="例如 xinglan_admin"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm font-semibold text-slate-700">
                     管理员手机号或邮箱
                     <input
                       value={form.adminContact}
                       onChange={(event) => update('adminContact', event.target.value)}
                       className="rounded-lg border border-[#dbe6f3] px-3 py-2 text-sm font-normal"
-                      placeholder="确认页只展示脱敏结果"
+                      placeholder="用于账号开通联系与授权台账"
                     />
                   </label>
                   <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
@@ -574,27 +977,33 @@ function CreateTenantModal({
               <section className="rounded-xl border border-[#dbe6f3] p-4">
                 <h4 className="text-base font-semibold text-slate-950">选择套餐</h4>
                 <div className="mt-4 grid gap-3">
+                  {planOptions.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-[#dbe6f3] bg-[#f8fafc] px-4 py-8 text-center text-sm text-slate-500">
+                      暂无可选择的 published 套餐版本
+                    </div>
+                  ) : null}
                   {planOptions.map((plan) => (
                     <button
-                      key={plan.code}
+                      key={plan.planVersionId}
                       type="button"
-                      onClick={() => update('planCode', plan.code)}
+                      onClick={() => update('planVersionId', plan.planVersionId)}
                       className={cn(
                         'rounded-xl border p-4 text-left',
-                        form.planCode === plan.code ? 'border-blue-500 bg-blue-50' : 'border-[#dbe6f3] bg-white',
+                        form.planVersionId === plan.planVersionId
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-[#dbe6f3] bg-white',
                       )}
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-base font-semibold text-slate-950">{plan.name}</span>
-                        {'recommended' in plan && plan.recommended ? <StatusBadge label="推荐" tone="blue" /> : null}
-                        {plan.code === 'custom' ? <StatusBadge label="需人工复核" tone="amber" /> : null}
+                        <span className="text-base font-semibold text-slate-950">{plan.displayName}</span>
+                        <StatusBadge label={plan.versionCode} tone="blue" />
                       </div>
-                      <p className="mt-1 text-sm text-slate-500">{plan.helper}</p>
+                      <p className="mt-1 text-sm text-slate-500">展示价格 {plan.displayPrice}</p>
                       <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-4">
-                        <span>成员数 {plan.members}</span>
-                        <span>客户数 {plan.customers}</span>
-                        <span>AI调用/日 {plan.aiCalls}</span>
-                        <span>知识库文件 {plan.knowledgeFiles}</span>
+                        <span>Agent {formatLimit(plan.agentLimit)}</span>
+                        <span>员工席位 {formatLimit(plan.seatLimit)}</span>
+                        <span>AI调用/月 {formatLimit(plan.monthlyAiCallLimit)}</span>
+                        <span>知识库 {formatLimit(plan.knowledgeStorageGb)} GB</span>
                       </div>
                     </button>
                   ))}
@@ -602,37 +1011,52 @@ function CreateTenantModal({
               </section>
 
               <section className="rounded-xl border border-[#dbe6f3] p-4">
-                <h4 className="text-base font-semibold text-slate-950">专业版 v3 授权预览</h4>
-                <p className="mt-1 text-sm text-slate-500">以下为该套餐默认开通的能力与容量。</p>
-                <div className="mt-4 space-y-3">
+                <h4 className="text-base font-semibold text-slate-950">
+                  {selectedPlan ? `${selectedPlan.displayName} 授权预览` : '授权预览'}
+                </h4>
+                <p className="mt-1 text-sm text-slate-500">
+                  {selectedPlan ? `套餐版本 ${selectedPlan.versionCode}` : '请先选择 published 套餐版本'}
+                </p>
+                {selectedPlan ? (
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-xl border border-[#dbe6f3] p-3">
+                      <div className="text-sm font-semibold text-slate-950">展示价格 {selectedPlan.displayPrice}</div>
+                      <div className="mt-1 text-sm text-slate-500">{selectedPlan.priceNote || '人工确认口径'}</div>
+                    </div>
                   <div className="rounded-xl border border-[#dbe6f3] p-3">
-                    <div className="text-sm font-semibold text-slate-950">开通模块</div>
+                    <div className="text-sm font-semibold text-slate-950">连接器</div>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {['客户管理', '预约管理', '知识库', 'AI助手', '报表'].map((item) => (
+                      {(selectedPlan.connectorEntitlements.length > 0
+                        ? selectedPlan.connectorEntitlements
+                        : ['未配置']).map((item) => (
                         <StatusBadge key={item} label={item} tone="blue" />
                       ))}
                     </div>
                   </div>
                   <div className="rounded-xl border border-[#dbe6f3] p-3">
-                    <div className="text-sm font-semibold text-slate-950">功能门禁</div>
-                    <div className="mt-2 grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
-                      <span>知识库导入</span>
-                      <span>AI问答</span>
-                      <span>报表导出</span>
+                    <div className="text-sm font-semibold text-slate-950">服务权益</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(selectedPlan.serviceEntitlements.length > 0
+                        ? selectedPlan.serviceEntitlements
+                        : ['未配置']).map((item) => (
+                        <StatusBadge key={item} label={item} tone="blue" />
+                      ))}
                     </div>
                   </div>
                   <div className="rounded-xl border border-[#dbe6f3] p-3">
                     <div className="text-sm font-semibold text-slate-950">容量配额</div>
                     <div className="mt-2 grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
-                      <span>成员上限 {selectedPlan.members}</span>
-                      <span>客户上限 {selectedPlan.customers}</span>
-                      <span>知识库文件 {selectedPlan.knowledgeFiles}</span>
+                      <span>Agent {formatLimit(selectedPlan.agentLimit)}</span>
+                      <span>员工席位 {formatLimit(selectedPlan.seatLimit)}</span>
+                      <span>AI 调用/月 {formatLimit(selectedPlan.monthlyAiCallLimit)}</span>
+                      <span>知识库存储 {formatLimit(selectedPlan.knowledgeStorageGb)} GB</span>
                     </div>
                   </div>
                   <div className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm text-amber-700">
                     套餐控制租户能力，角色控制人员动作。
                   </div>
                 </div>
+                ) : null}
               </section>
             </div>
           ) : null}
@@ -643,20 +1067,33 @@ function CreateTenantModal({
                 <h4 className="text-base font-semibold text-slate-950">提交确认</h4>
                 <div className="mt-4 space-y-3 text-sm text-slate-600">
                   <div>租户：{form.organizationName || '未填写机构'}</div>
-                  <div>联系人：{form.contactName || '-'}（{form.contactPhone ? maskPhone(form.contactPhone) : '-'}）</div>
-                  <div>初始管理员：{form.adminName || '-'}（{form.adminContact ? maskContact(form.adminContact) : '-'}）</div>
-                  <div>套餐：{selectedPlan.name} v3</div>
-                  <div>有效期：UI 预览有效期，不写入真实授权快照</div>
+                  <div>
+                    联系人：{form.contactName || '-'}（{form.contactPhone || '-'} / {form.contactEmail || '-'}）
+                  </div>
+                  <div>
+                    初始管理员：{form.adminName || '-'}（账号 {form.adminAccount || '-'} / 联系方式 {form.adminContact || '-'}）
+                  </div>
+                  <div>套餐：{selectedPlan?.displayName ?? '-'}</div>
+                  <div>套餐版本：{selectedPlan?.versionCode ?? '-'}</div>
+                  {trialExpiresAt ? (
+                    <>
+                      <div>试用周期：{trialDurationDays} 天</div>
+                      <div>开始时间：{formatDateTime(defaultNow)}</div>
+                      <div>截止时间：{formatDateTime(trialExpiresAt)}</div>
+                    </>
+                  ) : (
+                    <div>有效期：正式套餐暂未设置到期时间</div>
+                  )}
                 </div>
               </section>
               <section className="rounded-xl border border-[#dbe6f3] p-4">
                 <h4 className="text-base font-semibold text-slate-950">审计摘要</h4>
                 <div className="mt-4 space-y-3 text-sm text-slate-600">
                   <div>记录租户开设原因：{form.reason}</div>
-                  <div>记录套餐版本：{selectedPlan.name} v3</div>
-                  <div>记录授权快照摘要：模块、功能门禁、容量配额</div>
-                  <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-rose-700">
-                    不记录完整手机号、邮箱、密码、请求体、SQL 或服务端错误细节。
+                  <div>记录套餐版本：{selectedPlan?.versionCode ?? '-'}</div>
+                  <div>记录授权快照摘要：模块、功能门禁、容量配额、试用周期和开通联系人</div>
+                  <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-amber-700">
+                    业务联系人字段按授权快照保存；密码不明文保存；请求体、SQL 和服务端细节仅进入受控诊断边界。
                   </div>
                 </div>
               </section>
@@ -668,12 +1105,15 @@ function CreateTenantModal({
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-600 text-white">
                 <Check className="h-7 w-7" />
               </div>
-              <h4 className="mt-4 text-xl font-semibold text-slate-950">租户 UI 状态已生成</h4>
+              <h4 className="mt-4 text-xl font-semibold text-slate-950">租户已开通并生成授权快照</h4>
               <p className="mt-2 text-sm text-slate-600">
-                以下结果仅为 UI 状态展示，不代表已提交真实创建请求或写入真实授权数据。
+                已通过平台受控 API 写入租户主体、套餐分配和授权快照。
               </p>
-              <div className="mt-5 grid gap-3 sm:grid-cols-5">
-                {['租户主体', '初始管理员', '套餐分配', '授权快照', '审计记录'].map((item) => (
+              <div className="mt-3 text-sm font-semibold text-slate-950">
+                租户：{form.organizationName || '新建租户'}
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-4">
+                {['租户主体', '套餐分配', '授权快照', '返回列表'].map((item) => (
                   <div key={item} className="rounded-xl border border-emerald-100 bg-white px-3 py-3 text-sm font-semibold text-emerald-700">
                     {item}
                   </div>
@@ -699,8 +1139,9 @@ function CreateTenantModal({
           <div className="flex items-center justify-between border-t border-[#dbe6f3] px-5 py-4">
             <div className="inline-flex items-center gap-2 text-xs text-slate-500">
               <Lock className="h-4 w-4" />
-              新建流程仅展示前端状态，不调用真实创建 API。
+              提交真实业务联系人字段；密码、请求体、SQL 和服务端细节不进入普通审计。
             </div>
+            {errorMessage ? <div className="text-sm font-semibold text-rose-700">{errorMessage}</div> : null}
             <div className="flex gap-2">
               {step > 1 ? (
                 <button
@@ -713,10 +1154,17 @@ function CreateTenantModal({
               ) : null}
               <button
                 type="button"
-                onClick={() => onStepChange(step === 3 ? 4 : ((step + 1) as CreateTenantStep))}
+                disabled={isSubmitting || (step === 2 && !selectedPlan)}
+                onClick={() => {
+                  if (step === 3) {
+                    onSubmit();
+                    return;
+                  }
+                  onStepChange((step + 1) as CreateTenantStep);
+                }}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
               >
-                {step === 3 ? '确认开设租户' : '下一步'}
+                {step === 3 ? (isSubmitting ? '提交中...' : '确认开设租户') : '下一步'}
               </button>
             </div>
           </div>
@@ -728,6 +1176,7 @@ function CreateTenantModal({
 
 export function OpenPlatformTenantManagementPanel() {
   const [records, setRecords] = useState<OpenPlatformTenantRecord[]>([]);
+  const [tenantPlanOptions, setTenantPlanOptions] = useState<TenantPlanOptionDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorState, setErrorState] = useState<TenantManagementStateProps | null>(null);
   const [keyword, setKeyword] = useState('');
@@ -738,6 +1187,8 @@ export function OpenPlatformTenantManagementPanel() {
   const [quotaRisk, setQuotaRisk] = useState<'all' | TenantQuotaRiskStatus>('all');
   const [selectedTenant, setSelectedTenant] = useState<OpenPlatformTenantRecord | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isCreatingTenant, setIsCreatingTenant] = useState(false);
+  const [createTenantError, setCreateTenantError] = useState<string | null>(null);
   const [createStep, setCreateStep] = useState<CreateTenantStep>(1);
   const [createForm, setCreateForm] = useState<CreateTenantForm>(defaultCreateTenantForm);
 
@@ -748,6 +1199,7 @@ export function OpenPlatformTenantManagementPanel() {
       setIsLoading(true);
       setErrorState(null);
       const tenantResult = await listOpenPlatformTenants();
+      const planOptionsResult = await listOpenPlatformTenantPlanOptions();
 
       if (!isActive) return;
 
@@ -756,6 +1208,16 @@ export function OpenPlatformTenantManagementPanel() {
       } else if (!tenantResult.ok) {
         setRecords([]);
         setErrorState(visibleTenantErrorState(tenantResult.error));
+      }
+      if (planOptionsResult.ok) {
+        setTenantPlanOptions(planOptionsResult.options);
+        setCreateForm((current) =>
+          current.planVersionId || !planOptionsResult.options[0]
+            ? current
+            : { ...current, planVersionId: planOptionsResult.options[0].planVersionId },
+        );
+      } else {
+        setTenantPlanOptions([]);
       }
 
       setIsLoading(false);
@@ -798,8 +1260,44 @@ export function OpenPlatformTenantManagementPanel() {
 
   function openCreateTenant() {
     setCreateStep(1);
-    setCreateForm(defaultCreateTenantForm);
+    setCreateTenantError(null);
+    setCreateForm({
+      ...defaultCreateTenantForm,
+      planVersionId: tenantPlanOptions[0]?.planVersionId ?? '',
+    });
     setIsCreateOpen(true);
+  }
+
+  async function handleCreateTenant() {
+    setIsCreatingTenant(true);
+    setCreateTenantError(null);
+    const result = await createOpenPlatformTenantWithPlan({
+      organizationName: createForm.organizationName,
+      contactName: createForm.contactName,
+      contactPhone: createForm.contactPhone,
+      contactEmail: createForm.contactEmail,
+      adminName: createForm.adminName,
+      adminAccount: createForm.adminAccount,
+      adminContact: createForm.adminContact,
+      planVersionId: createForm.planVersionId,
+      reason: createForm.reason,
+    });
+    setIsCreatingTenant(false);
+
+    if (!result.ok) {
+      setCreateTenantError(`租户开通失败：${result.error.message}`);
+      return;
+    }
+
+    setRecords((current) => [result.tenant, ...current.filter((item) => item.tenantId !== result.tenant.tenantId)]);
+    setCreateStep(4);
+  }
+
+  function handleTenantChanged(tenant: OpenPlatformTenantRecord) {
+    setRecords((current) =>
+      current.map((item) => (item.tenantId === tenant.tenantId ? tenant : item)),
+    );
+    setSelectedTenant(tenant);
   }
 
   return (
@@ -808,7 +1306,7 @@ export function OpenPlatformTenantManagementPanel() {
         <PlatformSectionBanner
           headingId="tenant-management-heading"
           title="租户管理"
-          description="平台侧查看机构、套餐和配额边界。当前仅展示 API 返回的租户记录，不代表正式计费后台。仅展示运营元数据、套餐分配和配额快照，不提供真实租户创建、冻结、恢复或删除流程。"
+          description="平台侧查看机构、套餐和配额边界。支持受控开通测试租户并生成授权快照，不代表正式计费后台；不提供冻结、恢复、删除或真实商业化流程。"
         />
         <button
           type="button"
@@ -969,6 +1467,7 @@ export function OpenPlatformTenantManagementPanel() {
                   const expiryState = getTenantExpiryState(tenant, { now: defaultNow });
                   const authorizationState = getTenantAuthorizationState(tenant);
                   const quotaRiskState = getTenantQuotaRiskState(tenant);
+                  const openingContact = tenant.openingContact;
 
                   return (
                     <tr key={tenant.tenantId} className="align-top">
@@ -980,6 +1479,10 @@ export function OpenPlatformTenantManagementPanel() {
                           <div>
                             <div className="font-semibold text-slate-950">{tenant.tenantName}</div>
                             <div className="mt-1 text-xs text-slate-500">租户 ID：{tenant.tenantId}</div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              联系人：{displayField(openingContact?.contactName)}
+                              {openingContact?.contactPhone ? ` / ${openingContact.contactPhone}` : ''}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -1081,13 +1584,25 @@ export function OpenPlatformTenantManagementPanel() {
         </article>
       ) : null}
 
-      {selectedTenant ? <TenantDetailDrawer tenant={selectedTenant} onClose={() => setSelectedTenant(null)} /> : null}
+      {selectedTenant ? (
+        <TenantDetailDrawer
+          key={selectedTenant.tenantId}
+          tenant={selectedTenant}
+          planOptions={tenantPlanOptions}
+          onTenantChanged={handleTenantChanged}
+          onClose={() => setSelectedTenant(null)}
+        />
+      ) : null}
       {isCreateOpen ? (
         <CreateTenantModal
           form={createForm}
+          planOptions={tenantPlanOptions}
+          isSubmitting={isCreatingTenant}
+          errorMessage={createTenantError}
           step={createStep}
           onChange={setCreateForm}
           onStepChange={setCreateStep}
+          onSubmit={() => void handleCreateTenant()}
           onClose={() => setIsCreateOpen(false)}
         />
       ) : null}

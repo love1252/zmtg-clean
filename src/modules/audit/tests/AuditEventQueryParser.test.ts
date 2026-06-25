@@ -148,6 +148,63 @@ describe('审计查询参数 parser', () => {
     });
   });
 
+  it('接受平台新租户套餐开通审计 reason 查询', () => {
+    expect(
+      parseAuditEventQueryParams(
+        params({
+          resource: 'tenant',
+          action: 'create',
+          result: 'allowed',
+          reason: 'tenant_plan_assignment_created',
+        }),
+      ),
+    ).toEqual({
+      ok: true,
+      query: {
+        filters: {
+          resource: 'tenant',
+          action: 'create',
+          result: 'allowed',
+          reason: 'tenant_plan_assignment_created',
+        },
+        limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
+      },
+    });
+  });
+
+  it('接受平台租户初始管理员账号创建审计 reason 查询', () => {
+    for (const [action, result, reason] of [
+      ['create', 'allowed', 'tenant_account_created'],
+      ['manage_credentials', 'transitioned', 'tenant_account_password_reset'],
+      ['manage_status', 'transitioned', 'tenant_account_disabled'],
+      ['manage_status', 'transitioned', 'tenant_account_enabled'],
+      ['read_own_tenant', 'allowed', 'tenant_login_succeeded'],
+      ['read_own_tenant', 'denied', 'tenant_login_failed'],
+    ] as const) {
+      expect(
+        parseAuditEventQueryParams(
+          params({
+            resource: 'tenant_member',
+            action,
+            result,
+            reason,
+          }),
+        ),
+      ).toEqual({
+        ok: true,
+        query: {
+          filters: {
+            resource: 'tenant_member',
+            action,
+            result,
+            reason,
+          },
+          limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
+        },
+      });
+    }
+  });
+
   it('接受治疗摘要作废的稳定 reason 查询', () => {
     for (const reason of [
       'treatment_summary_voided',
