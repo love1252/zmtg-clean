@@ -142,6 +142,7 @@ describe('工作台看板领域模型', () => {
       'customers',
       'followups',
       'treatmentSummaries',
+      'opportunities',
       'audit',
       'hisConnections',
       'conversations',
@@ -180,6 +181,8 @@ describe('工作台看板领域模型', () => {
       expect.objectContaining({ key: 'high_priority_customers', label: '高优先级客户', value: '1' }),
       expect.objectContaining({ key: 'pending_appointments', label: '待确认预约', value: '1' }),
       expect.objectContaining({ key: 'due_followups', label: '待处理随访', value: '1' }),
+      expect.objectContaining({ key: 'completed_followups', label: '已完成随访' }),
+      expect.objectContaining({ key: 'opportunity_pool', label: '机会池客户' }),
     ]);
     expect(summary.supportingStats).toEqual([
       expect.objectContaining({ key: 'repurchase_window', label: '复购窗口期', value: '1' }),
@@ -227,7 +230,7 @@ describe('工作台看板领域模型', () => {
       followUpTasks: [],
     });
 
-    expect(summary.metrics.map((metric) => metric.value)).toEqual(['0', '0', '0', '0']);
+    expect(summary.metrics.map((metric) => metric.value)).toEqual(['0', '0', '0', '0', '0', '0']);
     expect(summary.supportingStats.map((metric) => metric.value)).toEqual(['0', '0', '0', '0']);
     expect(summary.actionItems).toEqual([]);
     expect(summary.isEmpty).toBe(true);

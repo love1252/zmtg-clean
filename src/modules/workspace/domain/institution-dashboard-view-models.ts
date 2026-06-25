@@ -11,7 +11,9 @@ export type InstitutionDashboardMetricKey =
   | 'customer_total'
   | 'high_priority_customers'
   | 'pending_appointments'
-  | 'due_followups';
+  | 'due_followups'
+  | 'completed_followups'
+  | 'opportunity_pool';
 
 export type InstitutionDashboardSupportingStatKey =
   | 'repurchase_window'
@@ -195,6 +197,16 @@ export function buildInstitutionDashboardSummary(
     input.followUpTasks,
     (task) => task.status === 'due',
   );
+  const completedFollowUps = countFollowUps(
+    input.followUpTasks,
+    (task) => task.status === 'completed',
+  );
+  const opportunityCustomers = countCustomers(
+    input.customers,
+    (customer) => customer.lifecycle === 'post_care' ||
+      customer.lifecycle === 'repurchase_window' ||
+      customer.lifecycle === 'silent_reactivation',
+  );
 
   return {
     metrics: [
@@ -225,6 +237,20 @@ export function buildInstitutionDashboardSummary(
         value: formatCount(dueFollowUps),
         helper: '今日运营重点',
         tone: 'amber',
+      },
+      {
+        key: 'completed_followups',
+        label: '已完成随访',
+        value: formatCount(completedFollowUps),
+        helper: '运营成果',
+        tone: 'emerald',
+      },
+      {
+        key: 'opportunity_pool',
+        label: '机会池客户',
+        value: formatCount(opportunityCustomers),
+        helper: '待运营转化',
+        tone: 'violet',
       },
     ],
     supportingStats: [

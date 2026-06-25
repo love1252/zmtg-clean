@@ -20,6 +20,7 @@ import {
   sessionMaxAgeSeconds,
 } from '@/modules/auth/server/demo-session';
 import { getDatabase, type TenantDatabase } from '@/server/db/client';
+import { provisionDemoDataForTenant } from '@/modules/institution/server/trial-provisioning-service';
 
 type LoginPayload = {
   username?: unknown;
@@ -175,10 +176,23 @@ export async function POST(request: Request) {
 
   const formalLoginResult = await authenticateFormalAccount({ username, password, scope });
   if (formalLoginResult.status === 'authenticated') {
-    return createLoginResponse({
+    const response = createLoginResponse({
       user: formalLoginResult.user,
       passwordResetRequired: formalLoginResult.passwordResetRequired,
     });
+    if (formalLoginResult.user.tenantId) {
+      try {
+        const db = getDatabase();
+        await provisionDemoDataForTenant({
+          db,
+          tenantId: formalLoginResult.user.tenantId,
+          userId: formalLoginResult.user.id,
+        });
+      } catch {
+        // provisioning failure must not block login
+      }
+    }
+    return response;
   }
   if (formalLoginResult.status === 'rejected') {
     return NextResponse.json({ code: 401, message: '用户名或密码错误' }, { status: 401 });
