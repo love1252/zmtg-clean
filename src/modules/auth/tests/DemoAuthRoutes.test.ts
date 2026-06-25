@@ -130,7 +130,7 @@ describe('演示认证路由', () => {
         user: {
           username: 'admin',
           role: 'tenant_admin',
-          tenantId: 'demo-tenant-001',
+          tenantId: 'growth-tenant-chengxing',
         },
       },
     });
@@ -144,7 +144,46 @@ describe('演示认证路由', () => {
       user: {
         username: 'admin',
         role: 'tenant_admin',
-        tenantId: 'demo-tenant-001',
+        tenantId: 'growth-tenant-chengxing',
+      },
+    });
+  });
+
+  it.each([
+    ['yunlan_admin', 'trial-tenant-yunlan', '云澜轻美诊所管理员'],
+    ['baiyue_admin', 'trial-tenant-baiyue', '柏悦皮肤管理中心管理员'],
+    ['xinghe_admin', 'starter-tenant-xinghe', '星禾医美门诊管理员'],
+    ['yubai_admin', 'starter-tenant-yubai', '予白皮肤管理管理员'],
+    ['chengxing_admin', 'growth-tenant-chengxing', '澄星医疗美容管理员'],
+    ['qingmang_admin', 'growth-tenant-qingmang', '青芒美学连锁管理员'],
+  ])('%s 可登录机构端并绑定正确租户', async (username, tenantId, name) => {
+    const loginResponse = await loginPost(jsonRequest({ username, password: 'admin123' }));
+    const loginPayload = await loginResponse.json();
+    const cookie = readCookie(loginResponse.headers.get('set-cookie'));
+
+    expect(loginResponse.status).toBe(200);
+    expect(loginPayload).toMatchObject({
+      code: 0,
+      data: {
+        user: {
+          username,
+          name,
+          role: 'tenant_admin',
+          tenantId,
+        },
+      },
+    });
+
+    const sessionResponse = await sessionGet(requestWithCookie(cookie));
+    const sessionPayload = await sessionResponse.json();
+
+    expect(sessionResponse.status).toBe(200);
+    expect(sessionPayload).toMatchObject({
+      authenticated: true,
+      user: {
+        username,
+        role: 'tenant_admin',
+        tenantId,
       },
     });
   });
