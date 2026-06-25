@@ -1,16 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
-  Copy,
   History,
   LoaderCircle,
-  RefreshCw,
   Save,
   Send,
   Table2,
+  X,
   Zap,
 } from 'lucide-react';
 
@@ -56,6 +55,22 @@ const tabItems: Array<{ id: PlanCatalogTab; label: string }> = [
   { id: 'history', label: '版本记录' },
   { id: 'commercial', label: '商业化预留' },
 ];
+const customerFeatureOptions = ['客户运营', '客户档案', '客户基础资料导入', 'AI 用户画像', '客户分层'];
+const moduleFeatureOptions = ['知识库', '智能随访', 'AI 智能助手', 'AI 客服辅助', '内容素材库', '数据统计', '审计日志'];
+const connectorOptions = ['企微', '个人微信', 'HIS', 'CRM', '电商/订单', '短信/外呼'];
+const serviceOptions = ['新手引导', '图文/视频教程', '实施支持', '季度复盘', '线上培训', '模板支持', '上线检查'];
+const planSortRank: Record<string, number> = {
+  trial: 0,
+  'trial-care': 0,
+  试用版: 0,
+  starter: 1,
+  'starter-care': 1,
+  基础版: 1,
+  growth: 2,
+  'growth-care': 2,
+  professional: 2,
+  专业版: 2,
+};
 
 function formatNumber(value: number | null) {
   return typeof value === 'number' ? new Intl.NumberFormat('zh-CN').format(value) : '不限';
@@ -73,6 +88,10 @@ function listText(items: string[]) {
   return items.length > 0 ? items.join(' / ') : '未配置';
 }
 
+function formatStorageMb(value: number | null) {
+  return typeof value === 'number' ? `${formatNumber(value * 1024)} MB` : '不限';
+}
+
 function numberText(value: string) {
   if (!value.trim()) return null;
   const parsed = Number(value);
@@ -84,6 +103,21 @@ function splitText(value: string) {
     .split(/[、,，/]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function joinText(items: string[]) {
+  return Array.from(new Set(items)).join('、');
+}
+
+function toggleTextItem(value: string, item: string) {
+  const items = splitText(value);
+  return items.includes(item)
+    ? joinText(items.filter((current) => current !== item))
+    : joinText([...items, item]);
+}
+
+function getPlanSortRank(plan: PlanCatalogPlan) {
+  return planSortRank[plan.planCode] ?? planSortRank[plan.planName] ?? 99;
 }
 
 function getLatestVersion(plan: PlanCatalogPlan, status: PlanCatalogVersionDto['status']) {
@@ -200,44 +234,252 @@ function StatusPill({ status }: { status: PlanCatalogVersionDto['status'] }) {
   );
 }
 
-function VersionMetrics({ version }: { version: PlanCatalogVersionDto }) {
-  const connectors = readStringList(version.connectorEntitlementsJson, 'connectors');
-  const services = readStringList(version.serviceEntitlementsJson, 'services');
-
+function CompactInfo({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-      <Metric label="Agent 数量" value={`${formatNumber(version.agentLimit)} 个`} />
-      <Metric label="员工席位" value={`${formatNumber(version.seatLimit)} 席`} />
-      <Metric label="AI 调用 / 月" value={`${formatNumber(version.monthlyAiCallLimit)} 次`} />
-      <Metric label="知识库存储" value={`${formatNumber(version.knowledgeStorageGb)} GB`} />
-      <Metric label="连接器" value={listText(connectors)} />
-      <Metric label="服务权益" value={listText(services)} />
+    <div className="min-w-0 rounded-md border border-[#e6edf5] bg-[#f8fafc] px-2 py-1.5">
+      <div className="truncate text-[11px] font-semibold leading-4 text-slate-500">{label}</div>
+      <div className="truncate text-xs font-semibold leading-5 text-slate-950">{value}</div>
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function EditorGroup({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-[#e6edf5] bg-[#f8fafc] px-3 py-2">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-right font-semibold text-slate-950">{value}</span>
+    <fieldset className="rounded-lg border border-[#e6edf5] bg-[#f8fafc] p-3">
+      <legend className="px-1 text-sm font-semibold text-slate-950">{title}</legend>
+      {description ? <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p> : null}
+      <div className="mt-3">{children}</div>
+    </fieldset>
+  );
+}
+
+function CheckboxList({
+  options,
+  value,
+  onChange,
+}: {
+  options: string[];
+  value: string;
+  onChange: (nextValue: string) => void;
+}) {
+  const selected = splitText(value);
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      {options.map((option) => (
+        <label
+          key={option}
+          className="flex min-h-9 items-center gap-2 rounded-lg border border-[#dbe6f3] bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+        >
+          <input
+            type="checkbox"
+            checked={selected.includes(option)}
+            onChange={() => onChange(toggleTextItem(value, option))}
+            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200"
+          />
+          {option}
+        </label>
+      ))}
     </div>
   );
 }
 
-function SummaryCard({ label, value }: { label: string; value: number }) {
+function DraftEditor({
+  planName,
+  draftForm,
+  isMutating,
+  onUpdateDraft,
+  onCancelDraft,
+  onPublishDraft,
+}: {
+  planName: string;
+  draftForm: DraftForm;
+  isMutating: boolean;
+  onUpdateDraft: (field: keyof DraftForm, value: string) => void;
+  onCancelDraft: () => void;
+  onPublishDraft: () => void;
+}) {
   return (
-    <div className="rounded-xl border border-[#e6edf5] bg-white px-4 py-3 shadow-sm">
-      <div className="text-sm text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">{value}</div>
-    </div>
-  );
-}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4 py-6">
+      <section
+        aria-label={`编辑${planName}草稿`}
+        aria-modal="true"
+        role="dialog"
+        className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-blue-100 bg-white shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[#e6edf5] px-5 py-4">
+          <div>
+            <div className="text-base font-semibold text-slate-950">编辑{planName}草稿</div>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              已发布版本不能原地编辑；保存后仍为草稿，发布后才进入可选版本池。
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="关闭编辑弹窗"
+            disabled={isMutating}
+            onClick={onCancelDraft}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#dbe6f3] bg-white text-slate-500 hover:border-blue-200 hover:text-slate-800 disabled:opacity-60"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
 
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-[#dbe6f3] bg-white px-4 py-8 text-center text-sm text-slate-500">
-      {text}
+        <div className="flex-1 space-y-4 overflow-y-auto p-5">
+        <div className="grid gap-3 xl:grid-cols-2">
+          <EditorGroup title="基础信息" description="只表达展示口径，不代表真实计费或合同价格。">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block text-sm font-semibold text-slate-700">
+                版本编码
+                <input
+                  className={fieldShell}
+                  value={draftForm.versionCode}
+                  onChange={(event) => onUpdateDraft('versionCode', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                展示名称
+                <input
+                  className={fieldShell}
+                  value={draftForm.displayName}
+                  onChange={(event) => onUpdateDraft('displayName', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                展示价格
+                <input
+                  className={fieldShell}
+                  value={draftForm.displayPrice}
+                  onChange={(event) => onUpdateDraft('displayPrice', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                价格备注
+                <input
+                  className={fieldShell}
+                  value={draftForm.priceNote}
+                  onChange={(event) => onUpdateDraft('priceNote', event.target.value)}
+                />
+              </label>
+            </div>
+          </EditorGroup>
+
+          <EditorGroup title="容量配额" description="机构端只看到业务额度，不展示 Token、模型厂商或平台成本。">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block text-sm font-semibold text-slate-700">
+                员工席位
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.seatLimit}
+                  onChange={(event) => onUpdateDraft('seatLimit', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                Agent 数量
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.agentLimit}
+                  onChange={(event) => onUpdateDraft('agentLimit', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                AI 调用 / 月
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.monthlyAiCallLimit}
+                  onChange={(event) => onUpdateDraft('monthlyAiCallLimit', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                文件存储 GB
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.knowledgeStorageGb}
+                  onChange={(event) => onUpdateDraft('knowledgeStorageGb', event.target.value)}
+                />
+              </label>
+            </div>
+          </EditorGroup>
+        </div>
+
+        <div className="grid gap-3 xl:grid-cols-2">
+          <EditorGroup title="客户与画像">
+            <CheckboxList
+              options={customerFeatureOptions}
+              value={draftForm.featureText}
+              onChange={(nextValue) => onUpdateDraft('featureText', nextValue)}
+            />
+          </EditorGroup>
+
+          <EditorGroup title="功能模块">
+            <CheckboxList
+              options={moduleFeatureOptions}
+              value={draftForm.featureText}
+              onChange={(nextValue) => onUpdateDraft('featureText', nextValue)}
+            />
+          </EditorGroup>
+        </div>
+
+        <div className="grid gap-3 xl:grid-cols-2">
+          <EditorGroup title="连接器" description="连接器按系统能力勾选，个人微信默认需要合规评估。">
+            <CheckboxList
+              options={connectorOptions}
+              value={draftForm.connectorText}
+              onChange={(nextValue) => onUpdateDraft('connectorText', nextValue)}
+            />
+          </EditorGroup>
+
+          <EditorGroup title="上线支持">
+            <CheckboxList
+              options={serviceOptions}
+              value={draftForm.serviceText}
+              onChange={(nextValue) => onUpdateDraft('serviceText', nextValue)}
+            />
+          </EditorGroup>
+        </div>
+
+        <label className="block text-sm font-semibold text-slate-700">
+          变更说明
+          <textarea
+            className="mt-1 min-h-16 w-full rounded-lg border border-[#dbe6f3] bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            value={draftForm.changeSummary}
+            onChange={(event) => onUpdateDraft('changeSummary', event.target.value)}
+          />
+        </label>
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2 border-t border-[#e6edf5] bg-[#f8fafc] px-5 py-4">
+          <button
+            type="button"
+            disabled={isMutating}
+            onClick={onCancelDraft}
+            className="inline-flex items-center gap-2 rounded-lg border border-[#dbe6f3] bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            disabled={isMutating}
+            onClick={onPublishDraft}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            <Send className="h-4 w-4" />
+            发布
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -250,6 +492,7 @@ export function ProductPlanPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [draftForm, setDraftForm] = useState<DraftForm | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -280,12 +523,25 @@ export function ProductPlanPanel() {
       .find((version) => version.versionId === draftForm.versionId) ?? null;
   }, [catalog, draftForm]);
 
+  const plans = useMemo(
+    () => [...(catalog?.plans ?? [])].sort((left, right) => {
+      const rankDiff = getPlanSortRank(left) - getPlanSortRank(right);
+      return rankDiff || left.planName.localeCompare(right.planName, 'zh-CN');
+    }),
+    [catalog],
+  );
+  const selectedDraftPlan = useMemo(() => {
+    if (!catalog || !selectedDraftVersion) return null;
+    return catalog.plans.find((plan) => plan.planId === selectedDraftVersion.planId) ?? null;
+  }, [catalog, selectedDraftVersion]);
+
   function updateDraft(field: keyof DraftForm, value: string) {
     setDraftForm((current) => (current ? { ...current, [field]: value } : current));
   }
 
   async function handleCreateDraft(plan: PlanCatalogPlan) {
     const source = getLatestVersion(plan, 'published') ?? plan.versions[0];
+    setSelectedPlanId(plan.planId);
     setIsMutating(true);
     setMessage(null);
     const result = await createOpenPlatformPlanVersionDraft(plan.planId, {
@@ -302,30 +558,26 @@ export function ProductPlanPanel() {
     setActiveTab('catalog');
   }
 
-  async function handleSaveDraft() {
-    if (!draftForm) return;
-    setIsMutating(true);
-    setMessage(null);
-    const result = await saveOpenPlatformPlanVersionDraft(
-      draftForm.versionId,
-      draftFormToPayload(draftForm),
-    );
-    setIsMutating(false);
-    if (!result.ok) {
-      setErrorMessage(`草稿保存失败：${result.error.message}`);
-      return;
-    }
-    setCatalog((current) => (current ? upsertVersion(current, result.version) : current));
-    setDraftForm(versionToDraftForm(result.version));
-    setErrorMessage(null);
-    setMessage('草稿已保存');
+  function handleCancelDraft() {
+    setDraftForm(null);
   }
 
   async function handlePublishDraft() {
     if (!draftForm) return;
     setIsMutating(true);
     setMessage(null);
-    const result = await publishOpenPlatformPlanVersion(draftForm.versionId);
+    const saveResult = await saveOpenPlatformPlanVersionDraft(
+      draftForm.versionId,
+      draftFormToPayload(draftForm),
+    );
+    if (!saveResult.ok) {
+      setIsMutating(false);
+      setErrorMessage(`草稿保存失败：${saveResult.error.message}`);
+      return;
+    }
+    setCatalog((current) => (current ? upsertVersion(current, saveResult.version) : current));
+
+    const result = await publishOpenPlatformPlanVersion(saveResult.version.versionId);
     setIsMutating(false);
     if (!result.ok) {
       setErrorMessage(`草稿发布失败：${result.error.message}`);
@@ -336,8 +588,6 @@ export function ProductPlanPanel() {
     setErrorMessage(null);
     setMessage('草稿已发布');
   }
-
-  const plans = catalog?.plans ?? [];
 
   return (
     <section className="space-y-5" aria-labelledby="product-plan-heading">
@@ -397,214 +647,97 @@ export function ProductPlanPanel() {
         </div>
       ) : null}
 
-      {catalog ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <SummaryCard label="套餐模板" value={catalog.summary.planCount} />
-          <SummaryCard label="已发布版本" value={catalog.summary.publishedVersionCount} />
-          <SummaryCard label="草稿版本" value={catalog.summary.draftVersionCount} />
-          <SummaryCard label="停用版本" value={catalog.summary.retiredVersionCount} />
-        </div>
-      ) : null}
-
       {!isLoading && catalog && activeTab === 'catalog' ? (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid gap-4">
+          <section aria-label="紧凑套餐目录" role="region" className="overflow-hidden rounded-xl border border-[#e6edf5] bg-white shadow-sm">
+            <div className="flex items-center justify-between gap-3 border-b border-[#e6edf5] bg-[#f8fafc] px-4 py-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-950">套餐列表</div>
+                <div className="mt-0.5 text-xs text-slate-500">一行管理版本、配额和编辑入口。</div>
+              </div>
+              <div className="text-xs font-semibold text-slate-500">{plans.length} 个套餐</div>
+            </div>
+            <div className="divide-y divide-[#eef3f8] overflow-x-auto">
             {plans.map((plan) => {
               const publishedVersion = getLatestVersion(plan, 'published');
               const draftVersion = getLatestVersion(plan, 'draft');
+              const displayVersion = publishedVersion ?? draftVersion;
+              const connectors = displayVersion
+                ? readStringList(displayVersion.connectorEntitlementsJson, 'connectors')
+                : [];
+              const isSelected = selectedPlanId === plan.planId;
 
               return (
-                <article key={plan.planId} className={sectionShell}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="text-lg font-semibold text-slate-950">{plan.planName}</div>
-                      <div className="mt-1 text-sm text-slate-500">套餐编号：{plan.planCode}</div>
+                <div
+                  key={plan.planId}
+                  className={cn(
+                    'px-3 py-2 text-sm transition',
+                    isSelected ? 'bg-blue-50/60' : 'bg-white',
+                  )}
+                >
+                  <div className="grid min-w-[1000px] grid-cols-[minmax(180px,1.05fr)_minmax(128px,.95fr)_64px_52px_58px_96px_82px_minmax(178px,1.45fr)_auto] items-center gap-1.5">
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="truncate text-sm font-semibold text-slate-950">{plan.planName}</div>
+                        <StatusPill status={publishedVersion?.status ?? draftVersion?.status ?? 'retired'} />
+                      </div>
+                      <div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs">
+                        <span className="truncate text-slate-500">编号：{plan.planCode}</span>
+                        <span className="truncate font-semibold text-blue-700">
+                          {draftVersion ? `草稿 ${draftVersion.versionCode}` : '点击编辑创建草稿'}
+                        </span>
+                      </div>
                     </div>
-                    <StatusPill status={publishedVersion?.status ?? 'retired'} />
+                    <CompactInfo label="当前版本" value={displayVersion?.versionCode ?? '暂无'} />
+                    <CompactInfo label="展示价格" value={displayVersion?.displayPrice ?? '未定价'} />
+                    <CompactInfo label="Agent" value={`${formatNumber(displayVersion?.agentLimit ?? null)} 个`} />
+                    <CompactInfo label="员工席位" value={`${formatNumber(displayVersion?.seatLimit ?? null)} 席`} />
+                    <CompactInfo label="AI调用额度/月" value={`${formatNumber(displayVersion?.monthlyAiCallLimit ?? null)} 次`} />
+                    <CompactInfo label="知识库容量" value={formatStorageMb(displayVersion?.knowledgeStorageGb ?? null)} />
+                    <CompactInfo label="连接器" value={listText(connectors)} />
+                    {draftVersion ? (
+                      <button
+                        type="button"
+                        aria-label={`编辑 ${plan.planName} 草稿`}
+                        onClick={() => {
+                          setSelectedPlanId(plan.planId);
+                          setDraftForm(versionToDraftForm(draftVersion));
+                        }}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 text-xs font-semibold text-blue-700"
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        编辑
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`编辑 ${plan.planName}`}
+                        disabled={isMutating}
+                        onClick={() => void handleCreateDraft(plan)}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 text-xs font-semibold text-blue-700 hover:border-blue-300 disabled:opacity-60"
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        编辑
+                      </button>
+                    )}
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-slate-500">{plan.planDescription}</p>
-
-                  {publishedVersion ? (
-                    <div className="mt-4 rounded-xl border border-[#e6edf5] bg-[#f8fafc] p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-xs font-semibold text-slate-500">当前已发布版本</div>
-                          <div className="mt-1 text-sm font-semibold text-slate-950">
-                            {publishedVersion.versionCode}
-                          </div>
-                        </div>
-                        <div className="text-right text-lg font-semibold text-slate-950">
-                          {publishedVersion.displayPrice}
-                        </div>
-                      </div>
-                      <VersionMetrics version={publishedVersion} />
-                    </div>
-                  ) : (
-                    <EmptyState text="暂无已发布版本" />
-                  )}
-
-                  {draftVersion ? (
-                    <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-xs font-semibold text-blue-700">可编辑草稿版本</div>
-                          <div className="mt-1 text-sm font-semibold text-slate-950">
-                            {draftVersion.versionCode}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setDraftForm(versionToDraftForm(draftVersion))}
-                          className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700"
-                        >
-                          <Save className="h-4 w-4" />
-                          编辑 {plan.planName} 草稿
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={isMutating}
-                      onClick={() => void handleCreateDraft(plan)}
-                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#dbe6f3] bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 disabled:opacity-60"
-                    >
-                      <Copy className="h-4 w-4" />
-                      复制 {plan.planName} 为草稿
-                    </button>
-                  )}
-                </article>
+                </div>
               );
             })}
-          </div>
-
-          <aside aria-label="套餐草稿编辑器" role="region" className={sectionShell}>
-            {draftForm && selectedDraftVersion ? (
-              <div className="space-y-4">
-                <div>
-                  <div className="text-lg font-semibold text-slate-950">草稿编辑</div>
-                  <p className="mt-1 text-sm leading-6 text-slate-500">
-                    已发布版本不能原地编辑；保存后仍为草稿，发布后才进入可选版本池。
-                  </p>
-                </div>
-
-                <label className="block text-sm font-semibold text-slate-700">
-                  版本编码
-                  <input
-                    className={fieldShell}
-                    value={draftForm.versionCode}
-                    onChange={(event) => updateDraft('versionCode', event.target.value)}
-                  />
-                </label>
-                <label className="block text-sm font-semibold text-slate-700">
-                  展示名称
-                  <input
-                    className={fieldShell}
-                    value={draftForm.displayName}
-                    onChange={(event) => updateDraft('displayName', event.target.value)}
-                  />
-                </label>
-                <label className="block text-sm font-semibold text-slate-700">
-                  展示价格
-                  <input
-                    className={fieldShell}
-                    value={draftForm.displayPrice}
-                    onChange={(event) => updateDraft('displayPrice', event.target.value)}
-                  />
-                </label>
-                <label className="block text-sm font-semibold text-slate-700">
-                  Agent 数量
-                  <input
-                    className={fieldShell}
-                    inputMode="numeric"
-                    value={draftForm.agentLimit}
-                    onChange={(event) => updateDraft('agentLimit', event.target.value)}
-                  />
-                </label>
-                <label className="block text-sm font-semibold text-slate-700">
-                  员工席位
-                  <input
-                    className={fieldShell}
-                    inputMode="numeric"
-                    value={draftForm.seatLimit}
-                    onChange={(event) => updateDraft('seatLimit', event.target.value)}
-                  />
-                </label>
-                <label className="block text-sm font-semibold text-slate-700">
-                  AI 调用 / 月
-                  <input
-                    className={fieldShell}
-                    inputMode="numeric"
-                    value={draftForm.monthlyAiCallLimit}
-                    onChange={(event) => updateDraft('monthlyAiCallLimit', event.target.value)}
-                  />
-                </label>
-                <label className="block text-sm font-semibold text-slate-700">
-                  知识库存储 GB
-                  <input
-                    className={fieldShell}
-                    inputMode="numeric"
-                    value={draftForm.knowledgeStorageGb}
-                    onChange={(event) => updateDraft('knowledgeStorageGb', event.target.value)}
-                  />
-                </label>
-                <label className="block text-sm font-semibold text-slate-700">
-                  连接器
-                  <input
-                    className={fieldShell}
-                    value={draftForm.connectorText}
-                    onChange={(event) => updateDraft('connectorText', event.target.value)}
-                  />
-                </label>
-                <label className="block text-sm font-semibold text-slate-700">
-                  服务权益
-                  <input
-                    className={fieldShell}
-                    value={draftForm.serviceText}
-                    onChange={(event) => updateDraft('serviceText', event.target.value)}
-                  />
-                </label>
-                <label className="block text-sm font-semibold text-slate-700">
-                  变更说明
-                  <textarea
-                    className="mt-1 min-h-20 w-full rounded-lg border border-[#dbe6f3] bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    value={draftForm.changeSummary}
-                    onChange={(event) => updateDraft('changeSummary', event.target.value)}
-                  />
-                </label>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={isMutating}
-                    onClick={() => void handleSaveDraft()}
-                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                  >
-                    <Save className="h-4 w-4" />
-                    保存草稿
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isMutating}
-                    onClick={() => void handlePublishDraft()}
-                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-60"
-                  >
-                    <Send className="h-4 w-4" />
-                    发布草稿
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="py-8 text-center">
-                <RefreshCw className="mx-auto h-8 w-8 text-slate-300" />
-                <div className="mt-3 text-sm font-semibold text-slate-700">选择一个草稿版本开始编辑</div>
-                <p className="mt-1 text-sm leading-6 text-slate-500">
-                  没有草稿时，可以先从当前发布版本复制为草稿。
-                </p>
-              </div>
-            )}
-          </aside>
+            </div>
+          </section>
         </div>
+      ) : null}
+
+      {draftForm && selectedDraftPlan ? (
+        <DraftEditor
+          planName={selectedDraftPlan.planName}
+          draftForm={draftForm}
+          isMutating={isMutating}
+          onUpdateDraft={updateDraft}
+          onCancelDraft={handleCancelDraft}
+          onPublishDraft={() => void handlePublishDraft()}
+        />
       ) : null}
 
       {!isLoading && catalog && activeTab === 'comparison' ? (

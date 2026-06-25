@@ -18,9 +18,9 @@ function fetchPath(input: Parameters<typeof fetch>[0]) {
 
 const planCatalogPayload = {
   summary: {
-    planCount: 2,
+    planCount: 3,
     draftVersionCount: 1,
-    publishedVersionCount: 2,
+    publishedVersionCount: 3,
     retiredVersionCount: 1,
   },
   plans: [
@@ -149,6 +149,42 @@ const planCatalogPayload = {
         },
       ],
     },
+    {
+      planId: 'plan-trial',
+      planName: '试用版',
+      planCode: 'trial',
+      planDescription: '适合演示体验',
+      planStatus: 'active',
+      publishedVersionId: 'plan-version-trial-published',
+      draftVersionId: null,
+      versions: [
+        {
+          versionId: 'plan-version-trial-published',
+          planId: 'plan-trial',
+          versionCode: '2026-06-v1',
+          status: 'published',
+          displayName: '试用版',
+          displayPrice: '¥0/月',
+          priceNote: '展示价，线下确认',
+          agentLimit: 1,
+          seatLimit: 1,
+          monthlyAiCallLimit: 5000,
+          knowledgeStorageGb: 1,
+          connectorEntitlementsJson: { connectors: ['企微'] },
+          serviceEntitlementsJson: { services: ['新手引导'] },
+          featureEntitlementsJson: { modules: ['客户运营'] },
+          quotaEntitlementsJson: { aiCallsPerMonth: 5000 },
+          changeSummary: '试用版本',
+          createdBy: 'platform-user',
+          updatedBy: 'platform-user',
+          publishedBy: 'platform-user',
+          publishedAt: '2026-06-21T08:00:00.000Z',
+          retiredAt: null,
+          createdAt: '2026-06-20T08:00:00.000Z',
+          updatedAt: '2026-06-21T08:00:00.000Z',
+        },
+      ],
+    },
   ],
 };
 
@@ -242,19 +278,29 @@ describe('产品与套餐面板', () => {
     expect(screen.getByText('正在加载套餐目录...')).toBeInTheDocument();
 
     expect(await screen.findByText('套餐目录配置台')).toBeInTheDocument();
-    expect(screen.getByText('套餐模板')).toBeInTheDocument();
-    expect(screen.getByText('已发布版本')).toBeInTheDocument();
-    expect(screen.getByText('草稿版本')).toBeInTheDocument();
-    expect(screen.getByText('停用版本')).toBeInTheDocument();
+    expect(screen.queryByText('套餐模板')).not.toBeInTheDocument();
+    expect(screen.queryByText('已发布版本')).not.toBeInTheDocument();
+    expect(screen.queryByText('草稿版本')).not.toBeInTheDocument();
+    expect(screen.queryByText('停用版本')).not.toBeInTheDocument();
     expect(screen.getByText('专业版')).toBeInTheDocument();
-    expect(screen.getAllByText('当前已发布版本').length).toBeGreaterThan(0);
+    expect(screen.getByRole('region', { name: '紧凑套餐目录' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '套餐详情预览' })).not.toBeInTheDocument();
+    expect(screen.getAllByText('当前版本').length).toBeGreaterThan(0);
     expect(screen.getAllByText('2026-06-v1').length).toBeGreaterThan(0);
-    expect(screen.getByText('可编辑草稿版本')).toBeInTheDocument();
-    expect(screen.getByText('2026-06-v2')).toBeInTheDocument();
+    expect(screen.getByText(/草稿 2026-06-v2/)).toBeInTheDocument();
     expect(screen.getAllByText('¥2999/月').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Agent 数量').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: '编辑 专业版 草稿' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '复制 基础版 为草稿' })).toBeInTheDocument();
+    expect(screen.getAllByText('Agent').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('AI调用额度/月').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('知识库容量').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: '编辑 专业版 草稿' })).toHaveTextContent('编辑');
+    expect(screen.queryByRole('button', { name: '查看' })).not.toBeInTheDocument();
+    expect(screen.queryByText('复制为草稿')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '编辑 基础版' })).toHaveTextContent('编辑');
+    expect(
+      within(screen.getByRole('region', { name: '紧凑套餐目录' }))
+        .getAllByText(/^(试用版|基础版|专业版)$/)
+        .map((node) => node.textContent),
+    ).toEqual(['试用版', '基础版', '专业版']);
     expect(screen.getByRole('button', { name: '套餐目录' })).toHaveAttribute('aria-pressed', 'true');
     expect(fetchPath(fetchMock.mock.calls[0]?.[0] ?? '')).toBe('/api/v1/open-platform/plan-catalog');
     expect(fetchMock.mock.calls[0]?.[1]).toEqual({ cache: 'no-store' });
@@ -271,13 +317,27 @@ describe('产品与套餐面板', () => {
     await screen.findByText('套餐目录配置台');
     fireEvent.click(screen.getByRole('button', { name: '编辑 专业版 草稿' }));
 
-    const editor = screen.getByRole('region', { name: '套餐草稿编辑器' });
+    const editor = screen.getByRole('dialog', { name: '编辑专业版草稿' });
+    expect(within(editor).getByRole('group', { name: '基础信息' })).toBeInTheDocument();
+    expect(within(editor).getByRole('group', { name: '容量配额' })).toBeInTheDocument();
+    expect(within(editor).getByRole('group', { name: '客户与画像' })).toBeInTheDocument();
+    expect(within(editor).getByRole('group', { name: '功能模块' })).toBeInTheDocument();
+    expect(within(editor).getByRole('group', { name: '连接器' })).toBeInTheDocument();
+    expect(within(editor).getByRole('group', { name: '上线支持' })).toBeInTheDocument();
+    expect(within(editor).getByRole('button', { name: '关闭编辑弹窗' })).toBeInTheDocument();
+    expect(within(editor).getByRole('button', { name: '取消' })).toBeInTheDocument();
+    expect(within(editor).queryByRole('button', { name: '保存草稿' })).not.toBeInTheDocument();
+    expect(within(editor).queryByRole('button', { name: '发布草稿' })).not.toBeInTheDocument();
+    expect(within(editor).getByRole('button', { name: '发布' })).toBeInTheDocument();
     expect(within(editor).getByLabelText('展示价格')).toHaveValue('¥3999/月');
     fireEvent.change(within(editor).getByLabelText('展示价格'), { target: { value: '¥4599/月' } });
     fireEvent.change(within(editor).getByLabelText('Agent 数量'), { target: { value: '6' } });
-    fireEvent.click(within(editor).getByRole('button', { name: '保存草稿' }));
+    fireEvent.click(within(editor).getByRole('checkbox', { name: 'CRM' }));
+    fireEvent.click(within(editor).getByRole('checkbox', { name: 'AI 客服辅助' }));
+    fireEvent.click(within(editor).getByRole('checkbox', { name: '上线检查' }));
+    fireEvent.click(within(editor).getByRole('button', { name: '发布' }));
 
-    await waitFor(() => expect(screen.getByText('草稿已保存')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('草稿已发布')).toBeInTheDocument());
     const saveCall = fetchMock.mock.calls.find(([input, init]) => (
       fetchPath(input) === '/api/v1/open-platform/plan-catalog/versions/plan-version-professional-draft' &&
       String(init?.method).toUpperCase() === 'PUT'
@@ -290,17 +350,12 @@ describe('产品与套餐面板', () => {
         seatLimit: 60,
         monthlyAiCallLimit: 500000,
         knowledgeStorageGb: 200,
+        connectorEntitlementsJson: { connectors: ['企微', 'HIS', 'CRM'] },
+        featureEntitlementsJson: { modules: ['客户运营', '知识库', 'AI 客服辅助'] },
+        serviceEntitlementsJson: { services: ['实施支持', '季度复盘', '上线检查'] },
       }),
     );
     expect(String(saveCall?.[1]?.body)).not.toMatch(/status|payment_token|api_key|webhook_secret/i);
-
-    fireEvent.click(within(editor).getByRole('button', { name: '发布草稿' }));
-
-    await waitFor(() => expect(screen.getByText('草稿已发布')).toBeInTheDocument());
-    await waitFor(() => {
-      expect(within(screen.getByText('已发布版本').parentElement as HTMLElement).getByText('2')).toBeInTheDocument();
-      expect(within(screen.getByText('停用版本').parentElement as HTMLElement).getByText('2')).toBeInTheDocument();
-    });
     expect(fetchMock.mock.calls.some(([input, init]) => (
       fetchPath(input) ===
         '/api/v1/open-platform/plan-catalog/versions/plan-version-professional-draft/publish' &&
