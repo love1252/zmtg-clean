@@ -13,6 +13,7 @@ import {
   Plug,
   TrendingUp,
   Shield,
+  Presentation,
 } from 'lucide-react';
 import type { TenantManagementListItem } from '@/modules/open-platform/domain/tenant-management';
 import { getTenantQuotaRiskState } from '@/modules/open-platform/domain/tenant-management-view';
@@ -69,6 +70,7 @@ export const platformNavItems: PlatformNavItem[] = [
   { label: 'AI用量与费用', icon: TrendingUp },
   { label: '知识库管理', icon: BookOpen },
   { label: '开放连接路线', icon: Plug },
+  { label: '体验版操作说明', icon: Presentation },
   { label: '平台审计日志', icon: Shield },
   { label: '商业化边界', icon: Activity },
 ];
