@@ -31,6 +31,8 @@ export type AuditReason =
   | 'tenant_account_password_reset'
   | 'tenant_account_disabled'
   | 'tenant_account_enabled'
+  | 'tenant_login_succeeded'
+  | 'tenant_login_failed'
   | 'tenant_plan_changed'
   | 'provider_unavailable'
   | 'provider_timeout'

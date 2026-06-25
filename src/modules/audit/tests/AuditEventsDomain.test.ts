@@ -169,6 +169,8 @@ describe('审计事件领域模型', () => {
         'tenant_account_password_reset',
         'tenant_account_disabled',
         'tenant_account_enabled',
+        'tenant_login_succeeded',
+        'tenant_login_failed',
       ]),
     );
 
@@ -226,6 +228,36 @@ describe('审计事件领域模型', () => {
         resource: 'tenant_member',
         resourceId: 'tenant-member-chenlei',
         result: 'transitioned',
+        reason,
+      });
+    }
+
+    for (const [reason, result] of [
+      ['tenant_login_succeeded', 'allowed'],
+      ['tenant_login_failed', 'denied'],
+    ] as const) {
+      expect(
+        createAuditEvent({
+          eventId: `audit_evt_${reason}`,
+          context: {
+            userId: 'auth-user-chenlei',
+            role: 'tenant_admin',
+            scope: 'tenant',
+            tenantId: 'tenant-zhengpu',
+            source: 'server_session',
+          },
+          resource: 'tenant_member',
+          resourceId: 'tenant-member-chenlei',
+          action: 'read_own_tenant',
+          result,
+          reason,
+          occurredAt: '2026-06-25T09:05:00.000Z',
+        }),
+      ).toMatchObject({
+        resource: 'tenant_member',
+        resourceId: 'tenant-member-chenlei',
+        action: 'read_own_tenant',
+        result,
         reason,
       });
     }

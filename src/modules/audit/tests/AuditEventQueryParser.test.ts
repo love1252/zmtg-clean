@@ -178,6 +178,8 @@ describe('审计查询参数 parser', () => {
       ['manage_credentials', 'transitioned', 'tenant_account_password_reset'],
       ['manage_status', 'transitioned', 'tenant_account_disabled'],
       ['manage_status', 'transitioned', 'tenant_account_enabled'],
+      ['read_own_tenant', 'allowed', 'tenant_login_succeeded'],
+      ['read_own_tenant', 'denied', 'tenant_login_failed'],
     ] as const) {
       expect(
         parseAuditEventQueryParams(

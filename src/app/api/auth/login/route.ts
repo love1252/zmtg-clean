@@ -1,4 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { createAuditEvent } from '@/modules/audit/domain/audit-events';
+import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
+import type {
+  AuthAccountRecord,
+  AuthTenantMembershipRecord,
+} from '@/modules/auth/domain/auth-account';
 import type { AuthSessionUser } from '@/modules/auth/domain/session';
 import { normalizeAuthUsername } from '@/modules/auth/domain/auth-account';
 import { createAuthAccountRepository } from '@/modules/auth/server/auth-account-repository';
@@ -12,7 +19,7 @@ import {
   isDemoAuthEnabled,
   sessionMaxAgeSeconds,
 } from '@/modules/auth/server/demo-session';
-import { getDatabase } from '@/server/db/client';
+import { getDatabase, type TenantDatabase } from '@/server/db/client';
 
 type LoginPayload = {
   username?: unknown;
@@ -24,6 +31,41 @@ type FormalLoginResult =
   | { status: 'authenticated'; user: AuthSessionUser; passwordResetRequired: boolean }
   | { status: 'rejected' }
   | { status: 'not_found_or_unavailable' };
+
+type FormalLoginAuditReason = 'tenant_login_succeeded' | 'tenant_login_failed';
+
+async function recordFormalLoginAudit(input: {
+  database: TenantDatabase;
+  account: AuthAccountRecord;
+  membership: AuthTenantMembershipRecord | null;
+  result: 'allowed' | 'denied';
+  reason: FormalLoginAuditReason;
+}) {
+  if (!input.membership) return;
+
+  try {
+    await createAuditEventRepository(input.database).record(
+      createAuditEvent({
+        eventId: `audit_evt_login_${randomUUID()}`,
+        context: {
+          userId: input.account.id,
+          role: input.membership.role,
+          scope: 'tenant',
+          tenantId: input.membership.tenantId,
+          source: 'server_session',
+        },
+        resource: 'tenant_member',
+        resourceId: input.membership.id,
+        action: 'read_own_tenant',
+        result: input.result,
+        reason: input.reason,
+        occurredAt: new Date().toISOString(),
+      }),
+    );
+  } catch {
+    // 登录审计是安全观察信号；审计写入失败不应改变认证结果。
+  }
+}
 
 function createLoginResponse(input: {
   user: AuthSessionUser;
@@ -71,11 +113,13 @@ async function authenticateFormalAccount(input: {
   }
 
   try {
-    const repository = createAuthAccountRepository(getDatabase());
+    const database = getDatabase();
+    const repository = createAuthAccountRepository(database);
     const account = await repository.findAccountByUsername(normalizeAuthUsername(input.username));
     if (!account) {
       return { status: 'not_found_or_unavailable' };
     }
+    const membership = await repository.findPrimaryTenantMembershipByUserId(account.id);
 
     const service = createAuthAccountService({ repository });
     const result = await service.authenticatePasswordAccount({
@@ -85,8 +129,23 @@ async function authenticateFormalAccount(input: {
     });
 
     if (result.status !== 'authenticated') {
+      await recordFormalLoginAudit({
+        database,
+        account,
+        membership,
+        result: 'denied',
+        reason: 'tenant_login_failed',
+      });
       return { status: 'rejected' };
     }
+
+    await recordFormalLoginAudit({
+      database,
+      account,
+      membership,
+      result: 'allowed',
+      reason: 'tenant_login_succeeded',
+    });
 
     return {
       status: 'authenticated',

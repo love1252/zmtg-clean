@@ -33,11 +33,29 @@ const routeMocks = vi.hoisted(() => {
   const service = {
     authenticatePasswordAccount: vi.fn(),
   };
+  const membership = {
+    id: 'tenant-member-zhengpu-admin',
+    tenantId: 'tenant-zhengpu',
+    userId: 'auth-user-zhengpu-admin',
+    role: 'tenant_admin',
+    displayName: '陈磊',
+    createdAt: new Date('2026-06-25T07:00:00.000Z'),
+    updatedAt: new Date('2026-06-25T07:00:00.000Z'),
+  };
+  const auditRepository = {
+    record: vi.fn(),
+    listCustomerAuditEventsByResourceId: vi.fn(),
+    listAuditEvents: vi.fn(),
+    listFollowUpPathAnalysisAuditEventsByTenant: vi.fn(),
+  };
 
   return {
+    auditRepository,
     account,
+    membership,
     createAuthAccountRepository: vi.fn(() => repository),
     createAuthAccountService: vi.fn(() => service),
+    createAuditEventRepository: vi.fn(() => auditRepository),
     database: { database: 'formal-auth-db' },
     getDatabase: vi.fn(),
     repository,
@@ -71,6 +89,15 @@ vi.mock('@/modules/auth/server/auth-account-service', async (importOriginal) => 
   };
 });
 
+vi.mock('@/modules/audit/server/audit-event-repository', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/modules/audit/server/audit-event-repository')>();
+  return {
+    ...actual,
+    createAuditEventRepository: routeMocks.createAuditEventRepository,
+  };
+});
+
 function jsonRequest(body: unknown) {
   return new Request('http://localhost/api/auth/login', {
     method: 'POST',
@@ -89,9 +116,12 @@ beforeEach(() => {
   routeMocks.getDatabase.mockReturnValue(routeMocks.database);
   routeMocks.createAuthAccountRepository.mockClear();
   routeMocks.createAuthAccountService.mockClear();
+  routeMocks.createAuditEventRepository.mockClear();
   Object.values(routeMocks.repository).forEach((mock) => mock.mockReset());
+  Object.values(routeMocks.auditRepository).forEach((mock) => mock.mockReset());
   routeMocks.service.authenticatePasswordAccount.mockReset();
   routeMocks.repository.findAccountByUsername.mockResolvedValue(routeMocks.account);
+  routeMocks.repository.findPrimaryTenantMembershipByUserId.mockResolvedValue(routeMocks.membership);
   routeMocks.service.authenticatePasswordAccount.mockResolvedValue({
     status: 'authenticated',
     passwordResetRequired: true,
@@ -137,6 +167,9 @@ describe('正式账号登录路由', () => {
     expect(routeMocks.getDatabase).toHaveBeenCalledWith();
     expect(routeMocks.createAuthAccountRepository).toHaveBeenCalledWith(routeMocks.database);
     expect(routeMocks.repository.findAccountByUsername).toHaveBeenCalledWith('zhengpu_admin');
+    expect(routeMocks.repository.findPrimaryTenantMembershipByUserId).toHaveBeenCalledWith(
+      'auth-user-zhengpu-admin',
+    );
     expect(routeMocks.createAuthAccountService).toHaveBeenCalledWith({
       repository: routeMocks.repository as AuthAccountRepository,
     });
@@ -152,7 +185,24 @@ describe('正式账号登录路由', () => {
       role: 'tenant_admin',
       tenantId: 'tenant-zhengpu',
     });
+    expect(routeMocks.createAuditEventRepository).toHaveBeenCalledWith(routeMocks.database);
+    expect(routeMocks.auditRepository.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'auth-user-zhengpu-admin',
+        actorRole: 'tenant_admin',
+        tenantId: 'tenant-zhengpu',
+        scope: 'tenant',
+        resource: 'tenant_member',
+        resourceId: 'tenant-member-zhengpu-admin',
+        action: 'read_own_tenant',
+        result: 'allowed',
+        reason: 'tenant_login_succeeded',
+      }),
+    );
     expect(JSON.stringify(payload)).not.toMatch(/Init#2026-Strong|passwordHash|scrypt\$/i);
+    expect(JSON.stringify(routeMocks.auditRepository.record.mock.calls)).not.toMatch(
+      /Init#2026-Strong|passwordHash|scrypt\$|requestBody|select \*/i,
+    );
   });
 
   it('正式账号存在但密码错误时不回退到同名演示账号', async () => {
@@ -179,6 +229,22 @@ describe('正式账号登录路由', () => {
       code: 401,
       message: '用户名或密码错误',
     });
+    expect(routeMocks.auditRepository.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'auth-user-zhengpu-admin',
+        actorRole: 'tenant_admin',
+        tenantId: 'tenant-zhengpu',
+        scope: 'tenant',
+        resource: 'tenant_member',
+        resourceId: 'tenant-member-zhengpu-admin',
+        action: 'read_own_tenant',
+        result: 'denied',
+        reason: 'tenant_login_failed',
+      }),
+    );
+    expect(JSON.stringify(routeMocks.auditRepository.record.mock.calls)).not.toMatch(
+      /admin123|passwordHash|scrypt\$|requestBody|select \*/i,
+    );
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 });
