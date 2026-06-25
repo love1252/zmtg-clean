@@ -18,6 +18,10 @@ const customerRecord = {
   lastTouchSummary: '术后第 28 天',
   nextAction: '安排资深咨询师人工回访',
   tags: ['高价值', '近期咨询补水'],
+  gender: '',
+  birthDate: '',
+  referralSource: '',
+  notes: '',
 };
 
 const appointmentRecord = {
@@ -614,6 +618,10 @@ describe('机构业务页面壳', () => {
       lastTouchSummary: '初次咨询',
       nextAction: '预约到店',
       tags: ['新客', '高意向'],
+      gender: '',
+      birthDate: '',
+      referralSource: '',
+      notes: '',
     });
     expect(serializedBody).not.toContain('tenantId');
     expect(serializedBody).not.toContain('phoneNumber');
