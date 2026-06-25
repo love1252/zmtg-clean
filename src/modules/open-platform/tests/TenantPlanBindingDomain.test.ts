@@ -58,10 +58,11 @@ describe('租户套餐绑定 domain', () => {
         adminName: '李静',
         adminAccount: 'xinglan_admin',
         adminContact: 'admin@example.com',
+        initialPassword: 'PlaintextPasswordShouldNotPass',
       },
     });
     expect(JSON.stringify(parsed)).not.toMatch(
-      /PlaintextPasswordShouldNotPass|requestBody|select \* from tenants|stack trace|payment_token|webhook_secret/i,
+      /requestBody|select \* from tenants|stack trace|payment_token|webhook_secret/i,
     );
   });
 

@@ -9,8 +9,11 @@ import type { TenantPlanPublishedVersionRecord } from '@/modules/open-platform/d
 import type { TenantPlanBindingRepository } from '@/modules/open-platform/server/tenant-plan-binding-service';
 import type { TenantDatabase } from '@/server/db/client';
 import {
+  authUsers,
   auditEvents,
+  tenantContacts,
   tenantAuthorizationSnapshots,
+  tenantMembers,
   tenantPlanAssignments,
   tenantPlanVersions,
   tenantPlans,
@@ -101,9 +104,13 @@ export function createTenantPlanBindingRepository(database: TenantDatabase): Ten
       await database.transaction(async (transactionDatabase) => {
         const tx = transactionDatabase as unknown as TenantDatabase;
         await tx.insert(tenants).values(input.tenant);
+        await tx.insert(authUsers).values(input.authAccount);
+        await tx.insert(tenantMembers).values(input.tenantMember);
+        await tx.insert(tenantContacts).values(input.tenantContact);
         await tx.insert(tenantPlanAssignments).values(input.assignment);
         await tx.insert(tenantAuthorizationSnapshots).values(input.authorizationSnapshot);
         await tx.insert(auditEvents).values(mapAuditEventToInsert(input.auditEvent));
+        await tx.insert(auditEvents).values(mapAuditEventToInsert(input.accountAuditEvent));
       });
 
       return mapTenantManagementRecordToDto({

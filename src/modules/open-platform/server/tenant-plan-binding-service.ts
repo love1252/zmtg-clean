@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
+import {
+  normalizeAuthUsername,
+  type AuthAccountRecord,
+  type AuthTenantMembershipRecord,
+} from '@/modules/auth/domain/auth-account';
+import { hashPasswordScrypt } from '@/modules/auth/server/password-hash';
+import type { AuthAccountPasswordHasher } from '@/modules/auth/server/auth-account-service';
 import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
 import type { TenantManagementListItem } from '@/modules/open-platform/domain/tenant-management';
 import {
@@ -13,6 +20,19 @@ import {
   type TenantPlanPublishedVersionRecord,
 } from '@/modules/open-platform/domain/tenant-plan-binding';
 
+type TenantContactRecord = {
+  id: string;
+  tenantId: string;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string | null;
+  initialAdminUserId: string;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export type TenantPlanBindingRepository = {
   listPublishedPlanVersions(): Promise<TenantPlanPublishedVersionRecord[]>;
   findPublishedPlanVersionById(versionId: string): Promise<TenantPlanPublishedVersionRecord | null>;
@@ -21,10 +41,13 @@ export type TenantPlanBindingRepository = {
     tenant: {
       id: string;
       name: string;
-      status: 'active';
+      status: 'active' | 'trialing';
       createdAt: Date;
       updatedAt: Date;
     };
+    authAccount: AuthAccountRecord;
+    tenantMember: AuthTenantMembershipRecord;
+    tenantContact: TenantContactRecord;
     assignment: {
       id: string;
       tenantId: string;
@@ -53,17 +76,48 @@ export type TenantPlanBindingRepository = {
       createdAt: Date;
     };
     auditEvent: TenantAuditEvent;
+    accountAuditEvent: TenantAuditEvent;
   }): Promise<TenantManagementListItem>;
 };
 
 type IdFactory = (prefix: string) => string;
+type PasswordHasher = Pick<AuthAccountPasswordHasher, 'hash'>;
 
 function defaultIdFactory(prefix: string) {
   return `${prefix}-${randomUUID().slice(0, 12)}`;
 }
 
+function defaultTemporaryPasswordFactory() {
+  return randomUUID();
+}
+
 function nowDate(input?: () => Date) {
   return input ? input() : new Date();
+}
+
+function optionalText(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized && normalized.length > 0 ? normalized : null;
+}
+
+function parseAdminContact(input: {
+  adminContact?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+}) {
+  const adminContact = optionalText(input.adminContact);
+
+  if (!adminContact) {
+    const contactPhone = optionalText(input.contactPhone);
+    const contactEmail = optionalText(input.contactEmail);
+    return { phone: contactPhone, email: contactEmail };
+  }
+
+  if (adminContact.includes('@')) {
+    return { phone: null, email: adminContact };
+  }
+
+  return { phone: adminContact, email: null };
 }
 
 export async function listTenantPlanOptionsService(input: {
@@ -83,6 +137,8 @@ export async function createTenantWithPlanService(input: {
   payload: unknown;
   now?: () => Date;
   idFactory?: IdFactory;
+  passwordHasher?: PasswordHasher;
+  temporaryPasswordFactory?: () => string;
 }) {
   const parsed = parseCreateTenantWithPlanPayload(input.payload);
   if (!parsed.ok) {
@@ -97,12 +153,25 @@ export async function createTenantWithPlanService(input: {
   const current = nowDate(input.now);
   const idFactory = input.idFactory ?? defaultIdFactory;
   const tenantId = idFactory('tenant');
+  const authUserId = idFactory('auth-user');
+  const tenantMemberId = idFactory('tenant-member');
+  const tenantContactId = idFactory('tenant-contact');
   const assignmentId = idFactory('tenant-plan-assignment');
   const snapshotId = idFactory('tenant-authorization-snapshot');
   const auditEventId = idFactory('audit-event');
+  const accountAuditEventId = idFactory('audit-event-account');
   const snapshotPayload = buildAuthorizationSnapshotPayload(planVersion);
-  const expiresAt = isTrialPlanVersion(planVersion) ? calculateTrialExpiresAt(current) : null;
+  const isTrial = isTrialPlanVersion(planVersion);
+  const expiresAt = isTrial ? calculateTrialExpiresAt(current) : null;
   const openingContact = buildOpeningContactSnapshot(parsed.value);
+  const adminDisplayName = parsed.value.adminName ?? parsed.value.contactName ?? parsed.value.tenantName;
+  const adminUsername = normalizeAuthUsername(parsed.value.adminAccount ?? `${tenantId}-admin`);
+  const adminContact = parseAdminContact(parsed.value);
+  const contactName = parsed.value.contactName ?? adminDisplayName;
+  const contactPhone = parsed.value.contactPhone ?? adminContact.phone ?? '';
+  const passwordHasher = input.passwordHasher ?? { hash: hashPasswordScrypt };
+  const passwordToHash = parsed.value.initialPassword ?? (input.temporaryPasswordFactory ?? defaultTemporaryPasswordFactory)();
+  const passwordHash = await passwordHasher.hash(passwordToHash);
   const snapshotJson: Record<string, unknown> = {
     ...snapshotPayload.snapshotJson,
     ...(expiresAt
@@ -122,7 +191,46 @@ export async function createTenantWithPlanService(input: {
     tenant: {
       id: tenantId,
       name: parsed.value.tenantName,
-      status: 'active',
+      status: isTrial ? 'trialing' : 'active',
+      createdAt: current,
+      updatedAt: current,
+    },
+    authAccount: {
+      id: authUserId,
+      username: adminUsername,
+      displayName: adminDisplayName,
+      phone: adminContact.phone,
+      email: adminContact.email,
+      passwordHash,
+      passwordUpdatedAt: current,
+      passwordResetRequired: true,
+      status: 'password_reset_required',
+      lastLoginAt: null,
+      failedLoginCount: 0,
+      lockedUntil: null,
+      createdBy: input.actorId,
+      updatedBy: input.actorId,
+      createdAt: current,
+      updatedAt: current,
+    },
+    tenantMember: {
+      id: tenantMemberId,
+      tenantId,
+      userId: authUserId,
+      role: 'tenant_admin',
+      displayName: adminDisplayName,
+      createdAt: current,
+      updatedAt: current,
+    },
+    tenantContact: {
+      id: tenantContactId,
+      tenantId,
+      contactName,
+      contactPhone,
+      contactEmail: optionalText(parsed.value.contactEmail),
+      initialAdminUserId: authUserId,
+      createdBy: input.actorId,
+      updatedBy: input.actorId,
       createdAt: current,
       updatedAt: current,
     },
@@ -164,6 +272,20 @@ export async function createTenantWithPlanService(input: {
       action: 'create',
       result: 'allowed',
       reason: 'tenant_plan_assignment_created',
+      occurredAt: current.toISOString(),
+      source: input.auditSource,
+    },
+    accountAuditEvent: {
+      eventId: accountAuditEventId,
+      actorId: input.actorId,
+      actorRole: input.actorRole,
+      tenantId,
+      scope: 'platform',
+      resource: 'tenant_member',
+      resourceId: tenantMemberId,
+      action: 'create',
+      result: 'allowed',
+      reason: 'tenant_account_created',
       occurredAt: current.toISOString(),
       source: input.auditSource,
     },

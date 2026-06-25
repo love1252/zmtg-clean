@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTenantPlanBindingRepository } from '@/modules/open-platform/server/tenant-plan-binding-repository';
 import type { TenantDatabase } from '@/server/db/client';
 import {
+  authUsers,
   auditEvents,
+  tenantContacts,
   tenantAuthorizationSnapshots,
+  tenantMembers,
   tenantPlanAssignments,
   tenantPlanVersions,
   tenantPlans,
@@ -236,6 +239,45 @@ describe('租户套餐绑定 repository', () => {
         createdAt: now,
         updatedAt: now,
       },
+      authAccount: {
+        id: 'auth-user-fixed',
+        username: 'xinglan_admin',
+        displayName: '李静',
+        phone: null,
+        email: 'admin@example.com',
+        passwordHash: 'scrypt$16384$8$1$salt$hash',
+        passwordUpdatedAt: now,
+        passwordResetRequired: true,
+        status: 'password_reset_required',
+        lastLoginAt: null,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        createdBy: 'demo-user-platform',
+        updatedBy: 'demo-user-platform',
+        createdAt: now,
+        updatedAt: now,
+      },
+      tenantMember: {
+        id: 'tenant-member-fixed',
+        tenantId: 'tenant-fixed',
+        userId: 'auth-user-fixed',
+        role: 'tenant_admin',
+        displayName: '李静',
+        createdAt: now,
+        updatedAt: now,
+      },
+      tenantContact: {
+        id: 'tenant-contact-fixed',
+        tenantId: 'tenant-fixed',
+        contactName: '陈磊',
+        contactPhone: '13800000000',
+        contactEmail: 'contact@example.com',
+        initialAdminUserId: 'auth-user-fixed',
+        createdBy: 'demo-user-platform',
+        updatedBy: 'demo-user-platform',
+        createdAt: now,
+        updatedAt: now,
+      },
       assignment: {
         id: 'tenant-plan-assignment-fixed',
         tenantId: 'tenant-fixed',
@@ -287,27 +329,70 @@ describe('租户套餐绑定 repository', () => {
         occurredAt: now.toISOString(),
         source: 'demo_session',
       },
+      accountAuditEvent: {
+        eventId: 'audit-event-account-fixed',
+        actorId: 'demo-user-platform',
+        actorRole: 'platform_admin',
+        tenantId: 'tenant-fixed',
+        scope: 'platform',
+        resource: 'tenant_member',
+        resourceId: 'tenant-member-fixed',
+        action: 'create',
+        result: 'allowed',
+        reason: 'tenant_account_created',
+        occurredAt: now.toISOString(),
+        source: 'demo_session',
+      },
     });
 
     expect(query.transaction).toHaveBeenCalledTimes(1);
     expect(query.inserted.map((item) => item.table)).toEqual([
       tenants,
+      authUsers,
+      tenantMembers,
+      tenantContacts,
       tenantPlanAssignments,
       tenantAuthorizationSnapshots,
+      auditEvents,
       auditEvents,
     ]);
     expect(query.inserted[1].values).toEqual(
       expect.objectContaining({
+        id: 'auth-user-fixed',
+        username: 'xinglan_admin',
+        passwordHash: 'scrypt$16384$8$1$salt$hash',
+        status: 'password_reset_required',
+      }),
+    );
+    expect(query.inserted[2].values).toEqual({
+      id: 'tenant-member-fixed',
+      tenantId: 'tenant-fixed',
+      userId: 'auth-user-fixed',
+      role: 'tenant_admin',
+      displayName: '李静',
+      createdAt: now,
+      updatedAt: now,
+    });
+    expect(query.inserted[3].values).toEqual(
+      expect.objectContaining({
+        tenantId: 'tenant-fixed',
+        contactName: '陈磊',
+        contactPhone: '13800000000',
+        initialAdminUserId: 'auth-user-fixed',
+      }),
+    );
+    expect(query.inserted[4].values).toEqual(
+      expect.objectContaining({
         planVersionId: 'plan-version-professional-published',
       }),
     );
-    expect(query.inserted[2].values).toEqual(
+    expect(query.inserted[5].values).toEqual(
       expect.objectContaining({
         status: 'active',
         planVersionId: 'plan-version-professional-published',
       }),
     );
-    expect(query.inserted[3].values).toEqual(
+    expect(query.inserted[6].values).toEqual(
       expect.objectContaining({
         eventId: 'audit-event-fixed',
         tenantId: 'tenant-fixed',
@@ -316,6 +401,17 @@ describe('租户套餐绑定 repository', () => {
         action: 'create',
         result: 'allowed',
         reason: 'tenant_plan_assignment_created',
+      }),
+    );
+    expect(query.inserted[7].values).toEqual(
+      expect.objectContaining({
+        eventId: 'audit-event-account-fixed',
+        tenantId: 'tenant-fixed',
+        resource: 'tenant_member',
+        resourceId: 'tenant-member-fixed',
+        action: 'create',
+        result: 'allowed',
+        reason: 'tenant_account_created',
       }),
     );
     expect(result).toEqual(

@@ -138,7 +138,7 @@ describe('租户套餐绑定 service', () => {
     expect(repository.findPublishedPlanVersionById).toHaveBeenCalledWith(
       'plan-version-professional-published',
     );
-    expect(repository.createTenantWithPlanAuthorization).toHaveBeenCalledWith({
+    expect(repository.createTenantWithPlanAuthorization).toHaveBeenCalledWith(expect.objectContaining({
       planVersion: publishedPlanVersion,
       tenant: {
         id: 'tenant-fixed',
@@ -210,10 +210,100 @@ describe('租户套餐绑定 service', () => {
         occurredAt: '2026-06-23T03:00:00.000Z',
         source: 'demo_session',
       },
-    });
+    }));
     const createAuthorizationMock = vi.mocked(repository.createTenantWithPlanAuthorization);
     expect(JSON.stringify(createAuthorizationMock.mock.calls)).not.toMatch(
       /payment_token|webhook_secret|client_secret|api_key|DATABASE_URL|requestBody|select \*|stack trace/i,
+    );
+  });
+
+  it('新建租户时生成正式管理员账号、租户成员、联系人和账号创建审计', async () => {
+    const repository = createRepository();
+    const passwordHasher = {
+      hash: vi.fn(async () => 'scrypt$16384$8$1$salt$hash'),
+      verify: vi.fn(async () => false),
+    };
+
+    await createTenantWithPlanService({
+      repository,
+      actorId: 'demo-user-platform',
+      actorRole: 'platform_admin',
+      auditSource: 'demo_session',
+      now: () => new Date('2026-06-25T08:00:00.000Z'),
+      idFactory: (prefix) => `${prefix}-fixed`,
+      passwordHasher,
+      payload: {
+        organizationName: '上海正璞医疗美容门诊部有限公司',
+        planVersionId: 'plan-version-professional-published',
+        reason: '商业试用开通',
+        contactName: '陈磊',
+        contactPhone: '13985162773',
+        contactEmail: 'contact@example.com',
+        adminName: '陈磊',
+        adminAccount: 'zhengpu_admin',
+        adminContact: '13985162273',
+        initialPassword: 'Init#2026-Strong',
+        requestBody: { password: 'Init#2026-Strong' },
+        sql: 'select * from tenants',
+      },
+    });
+
+    expect(passwordHasher.hash).toHaveBeenCalledWith('Init#2026-Strong');
+    expect(repository.createTenantWithPlanAuthorization).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authAccount: expect.objectContaining({
+          id: 'auth-user-fixed',
+          username: 'zhengpu_admin',
+          displayName: '陈磊',
+          phone: '13985162273',
+          email: null,
+          passwordHash: 'scrypt$16384$8$1$salt$hash',
+          passwordResetRequired: true,
+          status: 'password_reset_required',
+          createdBy: 'demo-user-platform',
+          updatedBy: 'demo-user-platform',
+        }),
+        tenantMember: {
+          id: 'tenant-member-fixed',
+          tenantId: 'tenant-fixed',
+          userId: 'auth-user-fixed',
+          role: 'tenant_admin',
+          displayName: '陈磊',
+          createdAt: new Date('2026-06-25T08:00:00.000Z'),
+          updatedAt: new Date('2026-06-25T08:00:00.000Z'),
+        },
+        tenantContact: {
+          id: 'tenant-contact-fixed',
+          tenantId: 'tenant-fixed',
+          contactName: '陈磊',
+          contactPhone: '13985162773',
+          contactEmail: 'contact@example.com',
+          initialAdminUserId: 'auth-user-fixed',
+          createdBy: 'demo-user-platform',
+          updatedBy: 'demo-user-platform',
+          createdAt: new Date('2026-06-25T08:00:00.000Z'),
+          updatedAt: new Date('2026-06-25T08:00:00.000Z'),
+        },
+        accountAuditEvent: {
+          eventId: 'audit-event-account-fixed',
+          actorId: 'demo-user-platform',
+          actorRole: 'platform_admin',
+          tenantId: 'tenant-fixed',
+          scope: 'platform',
+          resource: 'tenant_member',
+          resourceId: 'tenant-member-fixed',
+          action: 'create',
+          result: 'allowed',
+          reason: 'tenant_account_created',
+          occurredAt: '2026-06-25T08:00:00.000Z',
+          source: 'demo_session',
+        },
+      }),
+    );
+
+    const call = vi.mocked(repository.createTenantWithPlanAuthorization).mock.calls[0][0];
+    expect(JSON.stringify([call.authorizationSnapshot, call.auditEvent, call.accountAuditEvent])).not.toMatch(
+      /Init#2026-Strong|scrypt\$|passwordHash|requestBody|select \* from tenants/i,
     );
   });
 

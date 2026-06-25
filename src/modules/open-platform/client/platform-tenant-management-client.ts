@@ -68,6 +68,7 @@ export type CreateOpenPlatformTenantInput = {
   adminName?: string;
   adminAccount?: string;
   adminContact?: string;
+  initialPassword?: string;
   planVersionId: string;
   reason: string;
 };

@@ -172,6 +172,30 @@ describe('审计查询参数 parser', () => {
     });
   });
 
+  it('接受平台租户初始管理员账号创建审计 reason 查询', () => {
+    expect(
+      parseAuditEventQueryParams(
+        params({
+          resource: 'tenant_member',
+          action: 'create',
+          result: 'allowed',
+          reason: 'tenant_account_created',
+        }),
+      ),
+    ).toEqual({
+      ok: true,
+      query: {
+        filters: {
+          resource: 'tenant_member',
+          action: 'create',
+          result: 'allowed',
+          reason: 'tenant_account_created',
+        },
+        limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
+      },
+    });
+  });
+
   it('接受治疗摘要作废的稳定 reason 查询', () => {
     for (const reason of [
       'treatment_summary_voided',

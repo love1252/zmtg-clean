@@ -46,6 +46,7 @@ export type CreateTenantWithPlanPayload = {
   adminName?: string;
   adminAccount?: string;
   adminContact?: string;
+  initialPassword?: string;
 };
 
 export type CreateTenantWithPlanParseResult =
@@ -119,6 +120,7 @@ export function parseCreateTenantWithPlanPayload(input: unknown): CreateTenantWi
       adminName: readOptionalText(payload, 'adminName'),
       adminAccount: readOptionalText(payload, 'adminAccount'),
       adminContact: readOptionalText(payload, 'adminContact'),
+      initialPassword: readOptionalText(payload, 'initialPassword'),
     },
   };
 }
