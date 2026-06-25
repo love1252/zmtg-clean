@@ -173,27 +173,34 @@ describe('审计查询参数 parser', () => {
   });
 
   it('接受平台租户初始管理员账号创建审计 reason 查询', () => {
-    expect(
-      parseAuditEventQueryParams(
-        params({
-          resource: 'tenant_member',
-          action: 'create',
-          result: 'allowed',
-          reason: 'tenant_account_created',
-        }),
-      ),
-    ).toEqual({
-      ok: true,
-      query: {
-        filters: {
-          resource: 'tenant_member',
-          action: 'create',
-          result: 'allowed',
-          reason: 'tenant_account_created',
+    for (const [action, result, reason] of [
+      ['create', 'allowed', 'tenant_account_created'],
+      ['manage_credentials', 'transitioned', 'tenant_account_password_reset'],
+      ['manage_status', 'transitioned', 'tenant_account_disabled'],
+      ['manage_status', 'transitioned', 'tenant_account_enabled'],
+    ] as const) {
+      expect(
+        parseAuditEventQueryParams(
+          params({
+            resource: 'tenant_member',
+            action,
+            result,
+            reason,
+          }),
+        ),
+      ).toEqual({
+        ok: true,
+        query: {
+          filters: {
+            resource: 'tenant_member',
+            action,
+            result,
+            reason,
+          },
+          limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
         },
-        limit: DEFAULT_AUDIT_EVENT_QUERY_LIMIT,
-      },
-    });
+      });
+    }
   });
 
   it('接受治疗摘要作废的稳定 reason 查询', () => {

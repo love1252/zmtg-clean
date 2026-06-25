@@ -163,7 +163,13 @@ describe('审计事件领域模型', () => {
 
   it('支持租户正式录入和初始管理员账号创建审计 reason，且不携带密码或请求体', () => {
     expect(AUDIT_REASON_VALUES).toEqual(
-      expect.arrayContaining(['tenant_plan_assignment_created', 'tenant_account_created']),
+      expect.arrayContaining([
+        'tenant_plan_assignment_created',
+        'tenant_account_created',
+        'tenant_account_password_reset',
+        'tenant_account_disabled',
+        'tenant_account_enabled',
+      ]),
     );
 
     const event = createAuditEvent({
@@ -193,6 +199,36 @@ describe('审计事件领域模型', () => {
     expect(JSON.stringify(event)).not.toMatch(
       /PlaintextPasswordShouldNotPass|passwordHash|scrypt\$|requestBody|SQL|select \*|DATABASE_URL|stack/i,
     );
+
+    for (const reason of [
+      'tenant_account_password_reset',
+      'tenant_account_disabled',
+      'tenant_account_enabled',
+    ] as const) {
+      expect(
+        createAuditEvent({
+          eventId: `audit_evt_${reason}`,
+          context: {
+            userId: 'demo-user-platform',
+            role: 'platform_admin',
+            scope: 'platform',
+            tenantId: null,
+            source: 'demo_session',
+          },
+          resource: 'tenant_member',
+          resourceId: 'tenant-member-chenlei',
+          action: reason === 'tenant_account_password_reset' ? 'manage_credentials' : 'manage_status',
+          result: 'transitioned',
+          reason,
+          occurredAt: '2026-06-25T09:00:00.000Z',
+        }),
+      ).toMatchObject({
+        resource: 'tenant_member',
+        resourceId: 'tenant-member-chenlei',
+        result: 'transitioned',
+        reason,
+      });
+    }
   });
 
   it('支持治疗摘要创建审计决策，且不携带请求体、正文、PII 或内部敏感信息', () => {
