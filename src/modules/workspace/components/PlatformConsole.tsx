@@ -23,6 +23,7 @@ import { OpenPlatformKnowledgeManagementPanel } from '@/modules/open-platform/co
 import { OpenPlatformTenantManagementPanel } from '@/modules/open-platform/components/OpenPlatformTenantManagementPanel';
 import { listOpenPlatformTenants } from '@/modules/open-platform/client/platform-tenant-management-client';
 import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
+import { TrialV01ExperienceHandoffPanel } from '@/modules/open-platform/components/TrialV01ExperienceHandoffPanel';
 import { ProductPlanPanel } from '@/modules/open-platform/components/ProductPlanPanel';
 import {
   buildPlatformOverviewViewModel,
@@ -266,6 +267,8 @@ export function PlatformConsole() {
               <CommercialBoundaryPanel />
             ) : activeNavLabel === '平台审计日志' ? (
               <OpenPlatformAuditEventsPanel />
+            ) : activeNavLabel === '体验版操作说明' ? (
+              <TrialV01ExperienceHandoffPanel />
             ) : activeNavLabel === '平台总览' ? (
               <PlatformOverview onNavigate={setActiveNavLabel} />
             ) : null}
