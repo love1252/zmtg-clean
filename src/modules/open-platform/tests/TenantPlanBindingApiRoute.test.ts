@@ -126,7 +126,7 @@ beforeEach(() => {
     planDisplayPrice: '¥2999/月',
     assignmentStatus: 'active',
     startedAt: input.assignment.startedAt.toISOString(),
-    expiresAt: null,
+    expiresAt: input.assignment.expiresAt?.toISOString() ?? null,
     agentLimit: 3,
     seatLimit: 40,
     monthlyAiCallLimit: 300000,
@@ -136,6 +136,7 @@ beforeEach(() => {
     authorizationSnapshotId: input.authorizationSnapshot.id,
     authorizationSnapshotStatus: 'active',
     authorizationGeneratedAt: input.authorizationSnapshot.generatedAt.toISOString(),
+    openingContact: input.authorizationSnapshot.snapshotJson.openingContact ?? null,
     maxCustomers: null,
     maxAppointments: null,
     maxFollowUps: null,
@@ -198,6 +199,14 @@ describe('租户套餐绑定 API', () => {
         tenantName: '星澜医美中心',
         planVersionId: 'plan-version-professional-published',
         authorizationSnapshotStatus: 'active',
+        openingContact: {
+          contactName: '陈磊',
+          contactPhone: '13800000000',
+          contactEmail: 'contact@example.com',
+          adminName: '李静',
+          adminAccount: 'xinglan_admin',
+          adminContact: 'admin@example.com',
+        },
       }),
     );
     expect(routeMocks.repository.createTenantWithPlanAuthorization).toHaveBeenCalledTimes(1);

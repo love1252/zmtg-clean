@@ -253,7 +253,17 @@ describe('租户套餐绑定 repository', () => {
         planAssignmentId: 'tenant-plan-assignment-fixed',
         planVersionId: 'plan-version-professional-published',
         status: 'active',
-        snapshotJson: { planCode: 'professional' },
+        snapshotJson: {
+          planCode: 'professional',
+          openingContact: {
+            contactName: '陈磊',
+            contactPhone: '13800000000',
+            contactEmail: 'contact@example.com',
+            adminName: '李静',
+            adminAccount: 'xinglan_admin',
+            adminContact: 'admin@example.com',
+          },
+        },
         quotaJson: { monthlyAiCallLimit: 300000 },
         connectorJson: { connectors: ['企微', 'HIS'] },
         serviceJson: { services: ['上线培训'] },
@@ -316,10 +326,18 @@ describe('租户套餐绑定 repository', () => {
         authorizationSnapshotId: 'tenant-authorization-snapshot-fixed',
         authorizationSnapshotStatus: 'active',
         authorizationGeneratedAt: '2026-06-23T03:00:00.000Z',
+        openingContact: {
+          contactName: '陈磊',
+          contactPhone: '13800000000',
+          contactEmail: 'contact@example.com',
+          adminName: '李静',
+          adminAccount: 'xinglan_admin',
+          adminContact: 'admin@example.com',
+        },
       }),
     );
     expect(JSON.stringify(query.inserted.map((item) => item.values))).not.toMatch(
-      /13800000000|admin@example.com|payment_token|webhook_secret|client_secret|api_key/i,
+      /PlaintextPasswordShouldNotPass|select \* from tenants|payment_token|webhook_secret|client_secret|api_key/i,
     );
   });
 });

@@ -43,6 +43,15 @@ const targetPlanVersion: TenantPlanPublishedVersionRecord = {
   serviceEntitlementsJson: { services: ['上线培训', '季度复盘'] },
 };
 
+const openingContactSnapshot = {
+  contactName: '陈磊',
+  contactPhone: '13985162773',
+  contactEmail: 'contact@example.com',
+  adminName: '陈磊',
+  adminAccount: 'zhengpu',
+  adminContact: '13985162273',
+};
+
 const currentTenantState = {
   tenant: {
     id: 'tenant-001',
@@ -69,6 +78,16 @@ const currentTenantState = {
     planAssignmentId: 'assignment-growth-active',
     planVersionId: 'plan-version-growth-202606',
     status: 'active',
+    snapshotJson: {
+      openingContact: {
+        ...openingContactSnapshot,
+        requestBody: { password: 'PlaintextPasswordShouldNotPass' },
+        sql: 'select * from tenants',
+      },
+      securityBoundary: {
+        passwordStorage: 'hash_or_reset_only',
+      },
+    },
     generatedAt: new Date('2026-06-01T00:00:00.000Z'),
   },
 };
@@ -165,7 +184,12 @@ describe('租户套餐变更 service', () => {
     expect(repository.applyTenantPlanChange).toHaveBeenCalledWith({
       tenant: currentTenantState.tenant,
       currentAssignment: currentTenantState.assignment,
-      currentAuthorizationSnapshot: currentTenantState.authorizationSnapshot,
+      currentAuthorizationSnapshot: {
+        ...currentTenantState.authorizationSnapshot,
+        snapshotJson: {
+          openingContact: openingContactSnapshot,
+        },
+      },
       toPlanVersion: targetPlanVersion,
       newAssignment: {
         id: 'tenant-plan-assignment-fixed',
@@ -184,6 +208,14 @@ describe('租户套餐变更 service', () => {
         planAssignmentId: 'tenant-plan-assignment-fixed',
         planVersionId: 'plan-version-professional-202606',
         status: 'active',
+        snapshotJson: expect.objectContaining({
+          openingContact: openingContactSnapshot,
+          securityBoundary: {
+            contactFields: 'business_contact_fields_only',
+            passwordStorage: 'no_plaintext_password',
+            diagnosticMode: 'controlled_short_lived_redacted',
+          },
+        }),
         generatedBy: 'demo-user-platform',
         generatedAt: new Date('2026-06-23T04:00:00.000Z'),
       }),
@@ -216,7 +248,7 @@ describe('租户套餐变更 service', () => {
       appliedAt: new Date('2026-06-23T04:00:00.000Z'),
     });
     expect(JSON.stringify(vi.mocked(repository.applyTenantPlanChange).mock.calls)).not.toMatch(
-      /13800000000|payment_token|webhook_secret|client_secret|api_key/i,
+      /13800000000|payment_token|PlaintextPasswordShouldNotPass|select \* from tenants|webhook_secret|client_secret|api_key/i,
     );
   });
 

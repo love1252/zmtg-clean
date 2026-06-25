@@ -183,6 +183,18 @@ function maskContact(value: string) {
   return value.includes('@') ? maskEmail(value) : maskPhone(value);
 }
 
+function displayField(value: string | null | undefined) {
+  return value && value.trim().length > 0 ? value : '未录入';
+}
+
+function isTrialTenant(tenant: OpenPlatformTenantRecord) {
+  return (
+    tenant.planCode?.toLowerCase().includes('trial') ||
+    tenant.planName?.includes('试用') ||
+    tenant.planDisplayName?.includes('试用')
+  );
+}
+
 function TenantManagementState({ title, description, kind }: TenantManagementStateProps) {
   const isLoading = kind === 'loading';
 
@@ -380,6 +392,8 @@ function TenantDetailDrawer({
     () => buildTenantCommercialRecordOverview(commercialRecordsState.records),
     [commercialRecordsState.records],
   );
+  const openingContact = tenant.openingContact;
+  const showTrialPeriod = isTrialTenant(tenant) && Boolean(tenant.startedAt || tenant.expiresAt);
 
   function resetPlanChangeResult() {
     setChangePreview(null);
@@ -482,7 +496,12 @@ function TenantDetailDrawer({
             <div>租户 ID：{tenant.tenantId}</div>
             <div>最近更新：{formatDateTime(tenant.updatedAt)}</div>
             <div>创建时间：{formatDateTime(tenant.createdAt)}</div>
-            <div>联系方式：张**（{maskPhone('13800000000')}）</div>
+            <div>联系人：{displayField(openingContact?.contactName)}</div>
+            <div>联系人手机：{displayField(openingContact?.contactPhone)}</div>
+            <div>联系人邮箱：{displayField(openingContact?.contactEmail)}</div>
+            <div>管理员姓名：{displayField(openingContact?.adminName)}</div>
+            <div>管理员账号：{displayField(openingContact?.adminAccount)}</div>
+            <div>管理员联系方式：{displayField(openingContact?.adminContact)}</div>
           </div>
         </section>
 
@@ -505,6 +524,12 @@ function TenantDetailDrawer({
             </div>
             <div className="space-y-2 text-sm text-slate-600">
               <div>有效期：{tenant.expiresAt ? formatDateTime(tenant.expiresAt) : '未设置'}</div>
+              {showTrialPeriod ? (
+                <>
+                  <div>试用开始：{formatDateTime(tenant.startedAt)}</div>
+                  <div>试用截止：{formatDateTime(tenant.expiresAt)}</div>
+                </>
+              ) : null}
               <div>分配状态：{tenant.assignmentStatus ?? '-'}</div>
               <StatusBadge label={expiry.label} tone={expiry.tone} />
             </div>
@@ -1442,6 +1467,7 @@ export function OpenPlatformTenantManagementPanel() {
                   const expiryState = getTenantExpiryState(tenant, { now: defaultNow });
                   const authorizationState = getTenantAuthorizationState(tenant);
                   const quotaRiskState = getTenantQuotaRiskState(tenant);
+                  const openingContact = tenant.openingContact;
 
                   return (
                     <tr key={tenant.tenantId} className="align-top">
@@ -1453,6 +1479,10 @@ export function OpenPlatformTenantManagementPanel() {
                           <div>
                             <div className="font-semibold text-slate-950">{tenant.tenantName}</div>
                             <div className="mt-1 text-xs text-slate-500">租户 ID：{tenant.tenantId}</div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              联系人：{displayField(openingContact?.contactName)}
+                              {openingContact?.contactPhone ? ` / ${openingContact.contactPhone}` : ''}
+                            </div>
                           </div>
                         </div>
                       </td>

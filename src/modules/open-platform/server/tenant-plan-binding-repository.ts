@@ -1,7 +1,10 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 
 import { mapAuditEventToInsert } from '@/modules/audit/server/audit-event-repository';
-import { mapTenantManagementRecordToDto } from '@/modules/open-platform/domain/tenant-management';
+import {
+  mapTenantManagementRecordToDto,
+  normalizeTenantOpeningContact,
+} from '@/modules/open-platform/domain/tenant-management';
 import type { TenantPlanPublishedVersionRecord } from '@/modules/open-platform/domain/tenant-plan-binding';
 import type { TenantPlanBindingRepository } from '@/modules/open-platform/server/tenant-plan-binding-service';
 import type { TenantDatabase } from '@/server/db/client';
@@ -28,6 +31,11 @@ function readStringList(json: unknown, key: string) {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : [];
+}
+
+function readOpeningContact(json: unknown) {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  return normalizeTenantOpeningContact((json as Record<string, unknown>).openingContact);
 }
 
 function mapPublishedPlanVersionRow(row: PlanVersionQueryRow): TenantPlanPublishedVersionRecord {
@@ -123,6 +131,7 @@ export function createTenantPlanBindingRepository(database: TenantDatabase): Ten
         authorizationSnapshotId: input.authorizationSnapshot.id,
         authorizationSnapshotStatus: input.authorizationSnapshot.status,
         authorizationGeneratedAt: input.authorizationSnapshot.generatedAt,
+        openingContact: readOpeningContact(input.authorizationSnapshot.snapshotJson),
         maxCustomers: null,
         maxAppointments: null,
         maxFollowUps: null,

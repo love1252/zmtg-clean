@@ -124,6 +124,16 @@ const currentTenantState = {
     planAssignmentId: 'assignment-growth-active',
     planVersionId: 'plan-version-growth-202606',
     status: 'active',
+    snapshotJson: {
+      openingContact: {
+        contactName: '陈磊',
+        contactPhone: '13985162773',
+        contactEmail: 'contact@example.com',
+        adminName: '陈磊',
+        adminAccount: 'zhengpu',
+        adminContact: '13985162273',
+      },
+    },
     generatedAt: new Date('2026-06-01T00:00:00.000Z'),
   },
 };
@@ -186,6 +196,7 @@ beforeEach(() => {
       authorizationSnapshotId: input.newAuthorizationSnapshot.id,
       authorizationSnapshotStatus: input.newAuthorizationSnapshot.status,
       authorizationGeneratedAt: input.newAuthorizationSnapshot.generatedAt.toISOString(),
+      openingContact: input.newAuthorizationSnapshot.snapshotJson.openingContact,
       maxCustomers: null,
       maxAppointments: null,
       maxFollowUps: null,

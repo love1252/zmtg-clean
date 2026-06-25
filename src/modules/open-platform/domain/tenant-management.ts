@@ -23,6 +23,7 @@ export const tenantManagementDtoFields = [
   'authorizationSnapshotId',
   'authorizationSnapshotStatus',
   'authorizationGeneratedAt',
+  'openingContact',
   'maxCustomers',
   'maxAppointments',
   'maxFollowUps',
@@ -35,6 +36,15 @@ export const tenantManagementDtoFields = [
 ] as const;
 
 export type TenantManagementDtoField = (typeof tenantManagementDtoFields)[number];
+
+export type TenantOpeningContact = {
+  contactName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  adminName: string | null;
+  adminAccount: string | null;
+  adminContact: string | null;
+};
 
 export type TenantManagementRecord = {
   tenantId: string;
@@ -61,6 +71,7 @@ export type TenantManagementRecord = {
   authorizationSnapshotId: string | null;
   authorizationSnapshotStatus: string | null;
   authorizationGeneratedAt: Date | string | null;
+  openingContact?: TenantOpeningContact | null;
   maxCustomers: number | null;
   maxAppointments: number | null;
   maxFollowUps: number | null;
@@ -72,8 +83,10 @@ export type TenantManagementRecord = {
   snapshotAt: Date | string | null;
 };
 
+type TenantManagementScalarDtoField = Exclude<TenantManagementDtoField, 'openingContact'>;
+
 export type TenantManagementListItem = {
-  [field in TenantManagementDtoField]: field extends
+  [field in TenantManagementScalarDtoField]: field extends
     | 'maxCustomers'
     | 'maxAppointments'
     | 'maxFollowUps'
@@ -96,6 +109,7 @@ export type TenantManagementListItem = {
   tenantStatus: string;
   createdAt: string;
   updatedAt: string;
+  openingContact: TenantOpeningContact | null;
 };
 
 function toIsoString(value: Date | string | null) {
@@ -105,6 +119,25 @@ function toIsoString(value: Date | string | null) {
 
 function normalizeStringList(value: string[]) {
   return value.filter((item) => item.trim().length > 0);
+}
+
+function readOpeningContactText(input: Record<string, unknown>, key: keyof TenantOpeningContact) {
+  const value = input[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+export function normalizeTenantOpeningContact(input: unknown): TenantOpeningContact | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const payload = input as Record<string, unknown>;
+  const openingContact: TenantOpeningContact = {
+    contactName: readOpeningContactText(payload, 'contactName'),
+    contactPhone: readOpeningContactText(payload, 'contactPhone'),
+    contactEmail: readOpeningContactText(payload, 'contactEmail'),
+    adminName: readOpeningContactText(payload, 'adminName'),
+    adminAccount: readOpeningContactText(payload, 'adminAccount'),
+    adminContact: readOpeningContactText(payload, 'adminContact'),
+  };
+  return Object.values(openingContact).some(Boolean) ? openingContact : null;
 }
 
 export function mapTenantManagementRecordToDto(
@@ -135,6 +168,7 @@ export function mapTenantManagementRecordToDto(
     authorizationSnapshotId: record.authorizationSnapshotId,
     authorizationSnapshotStatus: record.authorizationSnapshotStatus,
     authorizationGeneratedAt: toIsoString(record.authorizationGeneratedAt),
+    openingContact: normalizeTenantOpeningContact(record.openingContact),
     maxCustomers: record.maxCustomers,
     maxAppointments: record.maxAppointments,
     maxFollowUps: record.maxFollowUps,

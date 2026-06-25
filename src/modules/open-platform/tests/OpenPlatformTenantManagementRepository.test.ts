@@ -132,7 +132,18 @@ const authorizationSnapshotRow = {
   planAssignmentId: 'assign-demo-tenant-001-growth',
   planVersionId: 'plan-version-growth-202606',
   status: 'active',
-  snapshotJson: {},
+  snapshotJson: {
+    openingContact: {
+      contactName: '陈磊',
+      contactPhone: '13985162773',
+      contactEmail: 'contact@example.com',
+      adminName: '陈磊',
+      adminAccount: 'zhengpu',
+      adminContact: '13985162273',
+      requestBody: { password: 'PlaintextPasswordShouldNotPass' },
+      sql: 'select * from tenants',
+    },
+  },
   quotaJson: {},
   connectorJson: { connectors: ['企微', 'HIS'] },
   serviceJson: { services: ['上线培训', '季度复盘'] },
@@ -252,6 +263,14 @@ describe('平台租户管理 repository', () => {
         authorizationSnapshotId: 'auth-snapshot-demo-tenant-001-active',
         authorizationSnapshotStatus: 'active',
         authorizationGeneratedAt: '2026-06-23T02:00:00.000Z',
+        openingContact: {
+          contactName: '陈磊',
+          contactPhone: '13985162773',
+          contactEmail: 'contact@example.com',
+          adminName: '陈磊',
+          adminAccount: 'zhengpu',
+          adminContact: '13985162273',
+        },
         maxCustomers: 5000,
         maxAppointments: 2000,
         maxFollowUps: 10000,
@@ -305,6 +324,7 @@ describe('平台租户管理 repository', () => {
         authorizationSnapshotId: null,
         authorizationSnapshotStatus: null,
         authorizationGeneratedAt: null,
+        openingContact: null,
         maxCustomers: null,
         maxAppointments: null,
         maxFollowUps: null,
@@ -364,5 +384,7 @@ describe('平台租户管理 repository', () => {
     expect(serialized).not.toContain('payment_token');
     expect(serialized).not.toContain('webhook_secret');
     expect(serialized).not.toContain('contract_body');
+    expect(serialized).not.toContain('PlaintextPasswordShouldNotPass');
+    expect(serialized).not.toContain('select * from tenants');
   });
 });

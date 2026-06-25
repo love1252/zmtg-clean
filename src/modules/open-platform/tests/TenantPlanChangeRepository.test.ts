@@ -96,7 +96,18 @@ const authorizationSnapshotRow = {
   planAssignmentId: 'assignment-growth-active',
   planVersionId: 'plan-version-growth-202606',
   status: 'active',
-  snapshotJson: {},
+  snapshotJson: {
+    openingContact: {
+      contactName: '陈磊',
+      contactPhone: '13985162773',
+      contactEmail: 'contact@example.com',
+      adminName: '陈磊',
+      adminAccount: 'zhengpu',
+      adminContact: '13985162273',
+      requestBody: { password: 'PlaintextPasswordShouldNotPass' },
+      sql: 'select * from tenants',
+    },
+  },
   quotaJson: {},
   connectorJson: { connectors: ['企微'] },
   serviceJson: { services: ['基础培训'] },
@@ -281,7 +292,17 @@ describe('租户套餐变更 repository', () => {
         planAssignmentId: 'assignment-professional-active',
         planVersionId: 'plan-version-professional-202606',
         status: 'active',
-        snapshotJson: { planCode: 'professional' },
+        snapshotJson: {
+          planCode: 'professional',
+          openingContact: {
+            contactName: '陈磊',
+            contactPhone: '13985162773',
+            contactEmail: 'contact@example.com',
+            adminName: '陈磊',
+            adminAccount: 'zhengpu',
+            adminContact: '13985162273',
+          },
+        },
         quotaJson: { monthlyAiCallLimit: 300000 },
         connectorJson: { connectors: ['企微', 'HIS'] },
         serviceJson: { services: ['上线培训'] },
@@ -351,11 +372,19 @@ describe('租户套餐变更 repository', () => {
           planVersionId: 'plan-version-professional-202606',
           authorizationSnapshotId: 'auth-snapshot-professional-active',
           authorizationSnapshotStatus: 'active',
+          openingContact: {
+            contactName: '陈磊',
+            contactPhone: '13985162773',
+            contactEmail: 'contact@example.com',
+            adminName: '陈磊',
+            adminAccount: 'zhengpu',
+            adminContact: '13985162273',
+          },
         }),
       }),
     );
     expect(JSON.stringify(query.transactionMutations.inserted.map((item) => item.values))).not.toMatch(
-      /13800000000|payment_token|webhook_secret|client_secret|api_key/i,
+      /13800000000|payment_token|PlaintextPasswordShouldNotPass|select \* from tenants|webhook_secret|client_secret|api_key/i,
     );
   });
 });

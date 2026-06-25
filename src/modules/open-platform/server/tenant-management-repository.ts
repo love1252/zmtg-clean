@@ -1,6 +1,7 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 import {
   mapTenantManagementRecordToDto,
+  normalizeTenantOpeningContact,
   type TenantManagementListItem,
   type TenantManagementRecord,
 } from '@/modules/open-platform/domain/tenant-management';
@@ -38,6 +39,11 @@ function readStringList(json: unknown, key: string) {
     : [];
 }
 
+function readOpeningContact(json: unknown) {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  return normalizeTenantOpeningContact((json as Record<string, unknown>).openingContact);
+}
+
 function mapTenantManagementQueryRowToRecord(
   row: TenantManagementQueryRow,
 ): TenantManagementRecord {
@@ -73,6 +79,7 @@ function mapTenantManagementQueryRowToRecord(
     authorizationSnapshotId: row.authorizationSnapshot?.id ?? null,
     authorizationSnapshotStatus: row.authorizationSnapshot?.status ?? null,
     authorizationGeneratedAt: row.authorizationSnapshot?.generatedAt ?? null,
+    openingContact: readOpeningContact(row.authorizationSnapshot?.snapshotJson),
     maxCustomers: row.quotaSnapshot?.maxCustomers ?? null,
     maxAppointments: row.quotaSnapshot?.maxAppointments ?? null,
     maxFollowUps: row.quotaSnapshot?.maxFollowUps ?? null,

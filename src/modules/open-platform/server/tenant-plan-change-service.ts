@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
 import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
-import type { TenantManagementListItem } from '@/modules/open-platform/domain/tenant-management';
+import {
+  normalizeTenantOpeningContact,
+  type TenantManagementListItem,
+} from '@/modules/open-platform/domain/tenant-management';
 import {
   buildTenantPlanChangePreview,
   parseTenantPlanChangePayload,
@@ -9,6 +12,7 @@ import {
 } from '@/modules/open-platform/domain/tenant-plan-change';
 import {
   buildAuthorizationSnapshotPayload,
+  buildSecurityBoundarySnapshot,
   type TenantPlanPublishedVersionRecord,
 } from '@/modules/open-platform/domain/tenant-plan-binding';
 import type { AccessRole } from '@/modules/security/domain/access-control';
@@ -39,6 +43,7 @@ export type TenantCurrentPlanStateRecord = {
     planAssignmentId: string;
     planVersionId: string;
     status: string;
+    snapshotJson: Record<string, unknown>;
     generatedAt: Date;
   };
 };
@@ -196,11 +201,22 @@ export async function applyTenantPlanChangeService(input: {
   const changeRecordId = idFactory('tenant-plan-change');
   const auditEventId = idFactory('audit-event');
   const snapshotPayload = buildAuthorizationSnapshotPayload(preview.toPlanVersion);
+  const currentSnapshotJson = preview.currentState.authorizationSnapshot.snapshotJson;
+  const preservedOpeningContact = normalizeTenantOpeningContact(currentSnapshotJson.openingContact);
+  const preservedSnapshotJson = {
+    ...snapshotPayload.snapshotJson,
+    ...(preservedOpeningContact ? { openingContact: preservedOpeningContact } : {}),
+    securityBoundary: buildSecurityBoundarySnapshot(),
+  };
+  const currentAuthorizationSnapshotForWrite = {
+    ...preview.currentState.authorizationSnapshot,
+    snapshotJson: preservedOpeningContact ? { openingContact: preservedOpeningContact } : {},
+  };
 
   return input.repository.applyTenantPlanChange({
     tenant: preview.currentState.tenant,
     currentAssignment: preview.currentState.assignment,
-    currentAuthorizationSnapshot: preview.currentState.authorizationSnapshot,
+    currentAuthorizationSnapshot: currentAuthorizationSnapshotForWrite,
     toPlanVersion: preview.toPlanVersion,
     newAssignment: {
       id: assignmentId,
@@ -219,7 +235,7 @@ export async function applyTenantPlanChangeService(input: {
       planAssignmentId: assignmentId,
       planVersionId: preview.toPlanVersion.versionId,
       status: 'active',
-      snapshotJson: snapshotPayload.snapshotJson,
+      snapshotJson: preservedSnapshotJson,
       quotaJson: snapshotPayload.quotaJson,
       connectorJson: snapshotPayload.connectorJson,
       serviceJson: snapshotPayload.serviceJson,

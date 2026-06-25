@@ -27,6 +27,14 @@ const tenantRecord = {
   authorizationSnapshotId: 'auth-snapshot-demo-tenant-001-active',
   authorizationSnapshotStatus: 'active',
   authorizationGeneratedAt: '2026-06-23T02:00:00.000Z',
+  openingContact: {
+    contactName: '陈磊',
+    contactPhone: '13985162773',
+    contactEmail: 'contact@example.com',
+    adminName: '陈磊',
+    adminAccount: 'zhengpu',
+    adminContact: '13985162273',
+  },
   maxCustomers: 5000,
   maxAppointments: 2000,
   maxFollowUps: 10000,
@@ -190,6 +198,20 @@ const tenantAfterPlanChange = {
   serviceEntitlements: ['专属实施', '年度复盘'],
   authorizationSnapshotId: 'auth-snapshot-enterprise-active',
   authorizationGeneratedAt: '2026-06-23T04:00:00.000Z',
+};
+
+const trialTenantRecord = {
+  ...tenantRecord,
+  tenantId: 'tenant-11317ff5-ae9',
+  tenantName: '上海正璞医疗美容门诊部有限公司',
+  planName: '试用版',
+  planCode: 'trial-care',
+  planVersionId: 'plan-version-trial-published',
+  planVersionCode: '2026-06-v1',
+  planDisplayName: '试用版',
+  planDisplayPrice: '试用版展示价（未定价）',
+  startedAt: '2026-06-25T08:35:39.190Z',
+  expiresAt: '2026-07-05T08:35:39.190Z',
 };
 
 const tenantCommercialRecords = [
@@ -636,14 +658,23 @@ describe('平台端租户管理面板', () => {
   });
 
   it('点击查看打开租户详情抽屉并展示授权快照、用量摘要和审计入口', async () => {
-    mockTenantFetch([jsonResponse({ records: [tenantRecord] })]);
+    mockTenantFetch([jsonResponse({ records: [trialTenantRecord] })]);
 
     render(<OpenPlatformTenantManagementPanel />);
 
-    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: '查看 智美天工演示机构' }));
+    expect((await screen.findAllByText('上海正璞医疗美容门诊部有限公司')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '查看 上海正璞医疗美容门诊部有限公司' }));
 
     const drawer = screen.getByRole('dialog', { name: '租户详情' });
+    expect(within(drawer).getByText('联系人：陈磊')).toBeInTheDocument();
+    expect(within(drawer).getByText('联系人手机：13985162773')).toBeInTheDocument();
+    expect(within(drawer).getByText('联系人邮箱：contact@example.com')).toBeInTheDocument();
+    expect(within(drawer).getByText('管理员账号：zhengpu')).toBeInTheDocument();
+    expect(within(drawer).getByText('管理员联系方式：13985162273')).toBeInTheDocument();
+    expect(within(drawer).queryByText(/张\*\*/)).not.toBeInTheDocument();
+    expect(within(drawer).getByText('试用开始：2026年6月25日 16:35')).toBeInTheDocument();
+    expect(within(drawer).getByText('试用截止：2026年7月5日 16:35')).toBeInTheDocument();
+    expect(within(drawer).getAllByText('14 天后到期').length).toBeGreaterThan(0);
     expect(within(drawer).getByText('授权快照')).toBeInTheDocument();
     expect(within(drawer).getByText('用量摘要（本月）')).toBeInTheDocument();
     expect(await within(drawer).findByText('商业化预留')).toBeInTheDocument();

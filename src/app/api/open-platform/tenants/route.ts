@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import {
+  normalizeTenantOpeningContact,
   tenantManagementDtoFields,
   type TenantManagementListItem,
 } from '@/modules/open-platform/domain/tenant-management';
@@ -52,6 +53,7 @@ function mapOpenPlatformTenant(record: TenantManagementListItem): TenantManageme
     authorizationSnapshotId: record.authorizationSnapshotId,
     authorizationSnapshotStatus: record.authorizationSnapshotStatus,
     authorizationGeneratedAt: record.authorizationGeneratedAt,
+    openingContact: normalizeTenantOpeningContact(record.openingContact),
     maxCustomers: record.maxCustomers,
     maxAppointments: record.maxAppointments,
     maxFollowUps: record.maxFollowUps,
