@@ -148,6 +148,13 @@
       "when": 1782380009950,
       "tag": "0020_tenant_formal_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1782406542146,
+      "tag": "0021_customer_basic_crud_fields",
+      "breakpoints": true
     }
   ]
 }
