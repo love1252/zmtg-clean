@@ -3,7 +3,11 @@ import { randomUUID } from 'node:crypto';
 import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
 import type { TenantManagementListItem } from '@/modules/open-platform/domain/tenant-management';
 import {
+  buildOpeningContactSnapshot,
   buildAuthorizationSnapshotPayload,
+  buildSecurityBoundarySnapshot,
+  calculateTrialExpiresAt,
+  isTrialPlanVersion,
   mapPublishedPlanVersionToOption,
   parseCreateTenantWithPlanPayload,
   type TenantPlanPublishedVersionRecord,
@@ -28,7 +32,7 @@ export type TenantPlanBindingRepository = {
       planVersionId: string;
       status: 'active';
       startedAt: Date;
-      expiresAt: null;
+      expiresAt: Date | null;
       createdAt: Date;
       updatedAt: Date;
     };
@@ -97,6 +101,22 @@ export async function createTenantWithPlanService(input: {
   const snapshotId = idFactory('tenant-authorization-snapshot');
   const auditEventId = idFactory('audit-event');
   const snapshotPayload = buildAuthorizationSnapshotPayload(planVersion);
+  const expiresAt = isTrialPlanVersion(planVersion) ? calculateTrialExpiresAt(current) : null;
+  const openingContact = buildOpeningContactSnapshot(parsed.value);
+  const snapshotJson: Record<string, unknown> = {
+    ...snapshotPayload.snapshotJson,
+    ...(expiresAt
+      ? {
+          trialPeriod: {
+            startedAt: current.toISOString(),
+            expiresAt: expiresAt.toISOString(),
+            durationDays: 10,
+          },
+        }
+      : {}),
+    ...(openingContact ? { openingContact } : {}),
+    securityBoundary: buildSecurityBoundarySnapshot(),
+  };
   const tenant = await input.repository.createTenantWithPlanAuthorization({
     planVersion,
     tenant: {
@@ -113,7 +133,7 @@ export async function createTenantWithPlanService(input: {
       planVersionId: planVersion.versionId,
       status: 'active',
       startedAt: current,
-      expiresAt: null,
+      expiresAt,
       createdAt: current,
       updatedAt: current,
     },
@@ -123,7 +143,7 @@ export async function createTenantWithPlanService(input: {
       planAssignmentId: assignmentId,
       planVersionId: planVersion.versionId,
       status: 'active',
-      snapshotJson: snapshotPayload.snapshotJson,
+      snapshotJson,
       quotaJson: snapshotPayload.quotaJson,
       connectorJson: snapshotPayload.connectorJson,
       serviceJson: snapshotPayload.serviceJson,

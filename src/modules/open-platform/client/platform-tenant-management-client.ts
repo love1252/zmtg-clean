@@ -62,6 +62,12 @@ export type OpenPlatformTenantCommercialRecordsResult =
 
 export type CreateOpenPlatformTenantInput = {
   organizationName: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  adminName?: string;
+  adminAccount?: string;
+  adminContact?: string;
   planVersionId: string;
   reason: string;
 };

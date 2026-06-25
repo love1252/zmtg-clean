@@ -66,6 +66,23 @@ const professionalPlanOption = {
   serviceEntitlements: ['上线培训'],
 };
 
+const trialPlanOption = {
+  planId: 'plan-trial',
+  planCode: 'trial-care',
+  planName: '试用版',
+  planVersionId: 'plan-version-trial-published',
+  versionCode: '2026-06-v1',
+  displayName: '试用版',
+  displayPrice: '试用版展示价（未定价）',
+  priceNote: '10 天商业试用体验周期',
+  agentLimit: 1,
+  seatLimit: 1,
+  monthlyAiCallLimit: 5000,
+  knowledgeStorageGb: 1,
+  connectorEntitlements: ['企微'],
+  serviceEntitlements: ['新手引导'],
+};
+
 const enterprisePlanOption = {
   planId: 'plan-enterprise',
   planCode: 'enterprise',
@@ -752,8 +769,11 @@ describe('平台端租户管理面板', () => {
     expectNoPlatformDemoMisleadingClaims(container);
   });
 
-  it('新建租户三步流程选择 published 套餐版本，提交后生成授权快照并刷新列表', async () => {
-    const fetchMock = mockTenantFetch([jsonResponse({ records: [tenantRecord] })]);
+  it('新建试用租户时展示 10 天游标并提交真实业务联系人字段', async () => {
+    const fetchMock = mockTenantFetch({
+      tenantResponses: [jsonResponse({ records: [tenantRecord] })],
+      planOptionsResponse: jsonResponse({ options: [trialPlanOption, professionalPlanOption] }),
+    });
     const { container } = render(<OpenPlatformTenantManagementPanel />);
 
     expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
@@ -764,17 +784,22 @@ describe('平台端租户管理面板', () => {
     fireEvent.change(screen.getByLabelText('机构名称'), { target: { value: '星澜医美中心' } });
     fireEvent.change(screen.getByLabelText('联系人姓名'), { target: { value: '张明' } });
     fireEvent.change(screen.getByLabelText('联系人手机号'), { target: { value: '13800000000' } });
+    fireEvent.change(screen.getByLabelText('联系人邮箱'), { target: { value: 'contact@example.com' } });
     fireEvent.change(screen.getByLabelText('管理员姓名'), { target: { value: '李静' } });
+    fireEvent.change(screen.getByLabelText('管理员登录账号'), { target: { value: 'xinglan_admin' } });
     fireEvent.change(screen.getByLabelText('管理员手机号或邮箱'), { target: { value: 'admin@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: '下一步' }));
 
     expect(screen.getByText('套餐与权益')).toBeInTheDocument();
-    expect(screen.getByText('Professional 专业版 2026-06 授权预览')).toBeInTheDocument();
-    expect(screen.getAllByText('展示价格 ¥2999/月').length).toBeGreaterThan(0);
+    expect(screen.getByText('试用版 授权预览')).toBeInTheDocument();
+    expect(screen.getAllByText('展示价格 试用版展示价（未定价）').length).toBeGreaterThan(0);
     expect(screen.getByText('套餐版本 2026-06-v1')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '下一步' }));
 
     expect(screen.getAllByText('提交确认').length).toBeGreaterThan(0);
+    expect(screen.getByText('试用周期：10 天')).toBeInTheDocument();
+    expect(screen.getByText('开始时间：2026年6月22日 00:00')).toBeInTheDocument();
+    expect(screen.getByText('截止时间：2026年7月2日 00:00')).toBeInTheDocument();
     expect(screen.getByText('审计摘要')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认开设租户' }));
 
@@ -782,7 +807,7 @@ describe('平台端租户管理面板', () => {
     expect(screen.getByText('租户主体')).toBeInTheDocument();
     expect(screen.getByText('套餐分配')).toBeInTheDocument();
     expect(screen.getAllByText('授权快照').length).toBeGreaterThan(0);
-    expect(screen.getByText(/星澜医美中心/)).toBeInTheDocument();
+    expect(screen.getAllByText(/星澜医美中心/).length).toBeGreaterThan(0);
     const createCall = fetchMock.mock.calls.find(([input, init]) => (
       fetchPath(input) === '/api/v1/open-platform/tenants' &&
       String(init?.method).toUpperCase() === 'POST'
@@ -790,11 +815,17 @@ describe('平台端租户管理面板', () => {
     expect(createCall).toBeDefined();
     expect(JSON.parse(String(createCall?.[1]?.body))).toEqual({
       organizationName: '星澜医美中心',
-      planVersionId: 'plan-version-professional-published',
+      contactName: '张明',
+      contactPhone: '13800000000',
+      contactEmail: 'contact@example.com',
+      adminName: '李静',
+      adminAccount: 'xinglan_admin',
+      adminContact: 'admin@example.com',
+      planVersionId: 'plan-version-trial-published',
       reason: '平台测试租户开设，用于授权快照验证。',
     });
     expect(String(createCall?.[1]?.body)).not.toMatch(
-      /13800000000|admin@example.com|payment_token|webhook_secret|client_secret|api_key/i,
+      /PlaintextPasswordShouldNotPass|requestBody|select \*|payment_token|webhook_secret|client_secret|api_key/i,
     );
     expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual(
       expect.arrayContaining([
@@ -803,8 +834,6 @@ describe('平台端租户管理面板', () => {
         '/api/v1/open-platform/tenants',
       ]),
     );
-    expect(container.textContent ?? '').not.toContain('13800000000');
-    expect(container.textContent ?? '').not.toContain('admin@example.com');
     expectNoPlatformDemoMisleadingClaims(container);
   });
 

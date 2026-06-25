@@ -40,6 +40,12 @@ export type CreateTenantWithPlanPayload = {
   tenantName: string;
   planVersionId: string;
   reason: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  adminName?: string;
+  adminAccount?: string;
+  adminContact?: string;
 };
 
 export type CreateTenantWithPlanParseResult =
@@ -75,6 +81,11 @@ function readText(input: Record<string, unknown>, key: string) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function readOptionalText(input: Record<string, unknown>, key: string) {
+  const value = readText(input, key);
+  return value.length > 0 ? value : undefined;
+}
+
 function readStringList(json: unknown, key: string) {
   if (!isJsonObject(json)) return [];
   const value = json[key];
@@ -102,6 +113,12 @@ export function parseCreateTenantWithPlanPayload(input: unknown): CreateTenantWi
       tenantName,
       planVersionId,
       reason,
+      contactName: readOptionalText(payload, 'contactName'),
+      contactPhone: readOptionalText(payload, 'contactPhone'),
+      contactEmail: readOptionalText(payload, 'contactEmail'),
+      adminName: readOptionalText(payload, 'adminName'),
+      adminAccount: readOptionalText(payload, 'adminAccount'),
+      adminContact: readOptionalText(payload, 'adminContact'),
     },
   };
 }
@@ -152,5 +169,38 @@ export function buildAuthorizationSnapshotPayload(
     serviceJson: {
       services: readStringList(record.serviceEntitlementsJson, 'services'),
     },
+  };
+}
+
+export function isTrialPlanVersion(record: TenantPlanPublishedVersionRecord) {
+  return (
+    record.planCode.toLowerCase().includes('trial') ||
+    record.planName.includes('试用') ||
+    record.displayName.includes('试用')
+  );
+}
+
+export function calculateTrialExpiresAt(startedAt: Date, durationDays = 10) {
+  return new Date(startedAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
+}
+
+export function buildOpeningContactSnapshot(payload: CreateTenantWithPlanPayload) {
+  const contact = {
+    contactName: payload.contactName,
+    contactPhone: payload.contactPhone,
+    contactEmail: payload.contactEmail,
+    adminName: payload.adminName,
+    adminAccount: payload.adminAccount,
+    adminContact: payload.adminContact,
+  };
+  const entries = Object.entries(contact).filter(([, value]) => Boolean(value));
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
+export function buildSecurityBoundarySnapshot() {
+  return {
+    contactFields: 'business_contact_fields_only',
+    passwordStorage: 'no_plaintext_password',
+    diagnosticMode: 'controlled_short_lived_redacted',
   };
 }

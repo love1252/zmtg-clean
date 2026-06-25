@@ -58,19 +58,24 @@ type CreateTenantForm = {
   organizationName: string;
   contactName: string;
   contactPhone: string;
+  contactEmail: string;
   adminName: string;
+  adminAccount: string;
   adminContact: string;
   planVersionId: string;
   reason: string;
 };
 
 const defaultNow = '2026-06-22T00:00:00.000+08:00';
+const trialDurationDays = 10;
 
 const defaultCreateTenantForm: CreateTenantForm = {
   organizationName: '',
   contactName: '',
   contactPhone: '',
+  contactEmail: '',
   adminName: '',
+  adminAccount: '',
   adminContact: '',
   planVersionId: '',
   reason: '平台测试租户开设，用于授权快照验证。',
@@ -129,6 +134,21 @@ function quotaValue(value: number | null) {
 
 function formatLimit(value: number | null, fallback = '不限') {
   return typeof value === 'number' ? new Intl.NumberFormat('zh-CN').format(value) : fallback;
+}
+
+function addDaysIso(value: string, days: number) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+  return new Date(timestamp + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function isTrialPlanOption(plan: TenantPlanOptionDto | null) {
+  if (!plan) return false;
+  return (
+    plan.planCode.toLowerCase().includes('trial') ||
+    plan.planName.includes('试用') ||
+    plan.displayName.includes('试用')
+  );
 }
 
 function statusBadgeClass(tone: 'slate' | 'emerald' | 'blue' | 'amber' | 'rose') {
@@ -800,6 +820,9 @@ function CreateTenantModal({
 }) {
   const selectedPlan =
     planOptions.find((plan) => plan.planVersionId === form.planVersionId) ?? planOptions[0] ?? null;
+  const trialExpiresAt = isTrialPlanOption(selectedPlan)
+    ? addDaysIso(defaultNow, trialDurationDays)
+    : null;
   const update = (key: keyof CreateTenantForm, value: string) => onChange({ ...form, [key]: value });
 
   return (
@@ -872,7 +895,16 @@ function CreateTenantModal({
                       value={form.contactPhone}
                       onChange={(event) => update('contactPhone', event.target.value)}
                       className="rounded-lg border border-[#dbe6f3] px-3 py-2 text-sm font-normal"
-                      placeholder="仅 UI 状态，确认页脱敏展示"
+                      placeholder="用于商业试用开通台账"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                    联系人邮箱
+                    <input
+                      value={form.contactEmail}
+                      onChange={(event) => update('contactEmail', event.target.value)}
+                      className="rounded-lg border border-[#dbe6f3] px-3 py-2 text-sm font-normal"
+                      placeholder="用于商业试用开通台账"
                     />
                   </label>
                 </div>
@@ -890,12 +922,21 @@ function CreateTenantModal({
                     />
                   </label>
                   <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                    管理员登录账号
+                    <input
+                      value={form.adminAccount}
+                      onChange={(event) => update('adminAccount', event.target.value)}
+                      className="rounded-lg border border-[#dbe6f3] px-3 py-2 text-sm font-normal"
+                      placeholder="例如 xinglan_admin"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm font-semibold text-slate-700">
                     管理员手机号或邮箱
                     <input
                       value={form.adminContact}
                       onChange={(event) => update('adminContact', event.target.value)}
                       className="rounded-lg border border-[#dbe6f3] px-3 py-2 text-sm font-normal"
-                      placeholder="确认页只展示脱敏结果"
+                      placeholder="用于账号开通联系与授权台账"
                     />
                   </label>
                   <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
@@ -1001,11 +1042,23 @@ function CreateTenantModal({
                 <h4 className="text-base font-semibold text-slate-950">提交确认</h4>
                 <div className="mt-4 space-y-3 text-sm text-slate-600">
                   <div>租户：{form.organizationName || '未填写机构'}</div>
-                  <div>联系人：{form.contactName || '-'}（{form.contactPhone ? maskPhone(form.contactPhone) : '-'}）</div>
-                  <div>初始管理员：{form.adminName || '-'}（{form.adminContact ? maskContact(form.adminContact) : '-'}）</div>
+                  <div>
+                    联系人：{form.contactName || '-'}（{form.contactPhone || '-'} / {form.contactEmail || '-'}）
+                  </div>
+                  <div>
+                    初始管理员：{form.adminName || '-'}（账号 {form.adminAccount || '-'} / 联系方式 {form.adminContact || '-'}）
+                  </div>
                   <div>套餐：{selectedPlan?.displayName ?? '-'}</div>
                   <div>套餐版本：{selectedPlan?.versionCode ?? '-'}</div>
-                  <div>有效期：当前版本未设置到期时间</div>
+                  {trialExpiresAt ? (
+                    <>
+                      <div>试用周期：{trialDurationDays} 天</div>
+                      <div>开始时间：{formatDateTime(defaultNow)}</div>
+                      <div>截止时间：{formatDateTime(trialExpiresAt)}</div>
+                    </>
+                  ) : (
+                    <div>有效期：正式套餐暂未设置到期时间</div>
+                  )}
                 </div>
               </section>
               <section className="rounded-xl border border-[#dbe6f3] p-4">
@@ -1013,9 +1066,9 @@ function CreateTenantModal({
                 <div className="mt-4 space-y-3 text-sm text-slate-600">
                   <div>记录租户开设原因：{form.reason}</div>
                   <div>记录套餐版本：{selectedPlan?.versionCode ?? '-'}</div>
-                  <div>记录授权快照摘要：模块、功能门禁、容量配额</div>
-                  <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-rose-700">
-                    不记录完整手机号、邮箱、密码、请求体、SQL 或服务端错误细节。
+                  <div>记录授权快照摘要：模块、功能门禁、容量配额、试用周期和开通联系人</div>
+                  <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-amber-700">
+                    业务联系人字段按授权快照保存；密码不明文保存；请求体、SQL 和服务端细节仅进入受控诊断边界。
                   </div>
                 </div>
               </section>
@@ -1061,7 +1114,7 @@ function CreateTenantModal({
           <div className="flex items-center justify-between border-t border-[#dbe6f3] px-5 py-4">
             <div className="inline-flex items-center gap-2 text-xs text-slate-500">
               <Lock className="h-4 w-4" />
-              仅提交低敏开通字段，不发送联系人手机号或管理员邮箱。
+              提交真实业务联系人字段；密码、请求体、SQL 和服务端细节不进入普通审计。
             </div>
             {errorMessage ? <div className="text-sm font-semibold text-rose-700">{errorMessage}</div> : null}
             <div className="flex gap-2">
@@ -1195,6 +1248,12 @@ export function OpenPlatformTenantManagementPanel() {
     setCreateTenantError(null);
     const result = await createOpenPlatformTenantWithPlan({
       organizationName: createForm.organizationName,
+      contactName: createForm.contactName,
+      contactPhone: createForm.contactPhone,
+      contactEmail: createForm.contactEmail,
+      adminName: createForm.adminName,
+      adminAccount: createForm.adminAccount,
+      adminContact: createForm.adminContact,
       planVersionId: createForm.planVersionId,
       reason: createForm.reason,
     });

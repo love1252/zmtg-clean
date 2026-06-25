@@ -96,7 +96,7 @@ function createTenantRequest(body: unknown) {
 
 function expectNoSensitivePayload(payload: unknown) {
   expect(JSON.stringify(payload)).not.toMatch(
-    /13800000000|admin@example.com|payment_token|webhook_secret|client_secret|api_key|DATABASE_URL|postgres:\/\//i,
+    /payment_token|webhook_secret|client_secret|api_key|DATABASE_URL|postgres:\/\/|PlaintextPasswordShouldNotPass|requestBody|select \*|stack trace/i,
   );
 }
 
@@ -177,8 +177,15 @@ describe('租户套餐绑定 API', () => {
         organizationName: '星澜医美中心',
         planVersionId: 'plan-version-professional-published',
         reason: '测试服开通',
+        contactName: '陈磊',
         contactPhone: '13800000000',
+        contactEmail: 'contact@example.com',
+        adminName: '李静',
+        adminAccount: 'xinglan_admin',
         adminContact: 'admin@example.com',
+        initialPassword: 'PlaintextPasswordShouldNotPass',
+        requestBody: { password: 'PlaintextPasswordShouldNotPass' },
+        sql: 'select * from tenants',
         payment_token: 'payment_token_should_not_pass',
       }),
     );
@@ -196,6 +203,12 @@ describe('租户套餐绑定 API', () => {
     expect(routeMocks.repository.createTenantWithPlanAuthorization).toHaveBeenCalledTimes(1);
     expectNoSensitivePayload(payload);
     expectNoSensitivePayload(routeMocks.repository.createTenantWithPlanAuthorization.mock.calls);
+    expect(JSON.stringify(routeMocks.repository.createTenantWithPlanAuthorization.mock.calls)).toContain(
+      '13800000000',
+    );
+    expect(JSON.stringify(routeMocks.repository.createTenantWithPlanAuthorization.mock.calls)).toContain(
+      'contact@example.com',
+    );
   });
 
   it('无登录态返回 401 且不初始化数据库', async () => {

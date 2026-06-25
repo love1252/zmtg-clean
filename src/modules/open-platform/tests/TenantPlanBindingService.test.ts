@@ -26,6 +26,23 @@ const publishedPlanVersion = {
   quotaEntitlementsJson: { aiCallsPerMonth: 300000 },
 };
 
+const trialPlanVersion = {
+  ...publishedPlanVersion,
+  planId: 'plan-trial-care',
+  planCode: 'trial-care',
+  planName: '试用版',
+  versionId: 'plan-version-trial-published',
+  displayName: '试用版',
+  displayPrice: '试用版展示价（未定价）',
+  agentLimit: 1,
+  seatLimit: 1,
+  monthlyAiCallLimit: 5000,
+  knowledgeStorageGb: 1,
+  connectorEntitlementsJson: { connectors: ['企微演示'] },
+  serviceEntitlementsJson: { services: ['新手引导'] },
+  quotaEntitlementsJson: { aiCallsPerMonth: 5000, knowledgeStorageMb: 100 },
+};
+
 function createRepository(overrides: Partial<TenantPlanBindingRepository> = {}) {
   return {
     listPublishedPlanVersions: vi.fn(async () => [publishedPlanVersion]),
@@ -154,6 +171,15 @@ describe('租户套餐绑定 service', () => {
           versionCode: '2026-06-v1',
           displayName: 'Professional 专业版 2026-06',
           displayPrice: '¥2999/月',
+          openingContact: {
+            contactPhone: '13800000000',
+            adminContact: 'admin@example.com',
+          },
+          securityBoundary: {
+            contactFields: 'business_contact_fields_only',
+            passwordStorage: 'no_plaintext_password',
+            diagnosticMode: 'controlled_short_lived_redacted',
+          },
         },
         quotaJson: {
           agentLimit: 3,
@@ -186,7 +212,72 @@ describe('租户套餐绑定 service', () => {
     });
     const createAuthorizationMock = vi.mocked(repository.createTenantWithPlanAuthorization);
     expect(JSON.stringify(createAuthorizationMock.mock.calls)).not.toMatch(
-      /13800000000|admin@example.com|payment_token|webhook_secret|client_secret|api_key/i,
+      /payment_token|webhook_secret|client_secret|api_key|DATABASE_URL|requestBody|select \*|stack trace/i,
+    );
+  });
+
+  it('新建试用版租户时按当前时间生成 10 天体验有效期并固化受控开通资料', async () => {
+    const repository = createRepository({
+      findPublishedPlanVersionById: vi.fn(async () => trialPlanVersion),
+    });
+
+    await createTenantWithPlanService({
+      repository,
+      actorId: 'demo-user-platform',
+      actorRole: 'platform_admin',
+      auditSource: 'demo_session',
+      now: () => new Date('2026-06-25T07:30:00.000Z'),
+      idFactory: (prefix) => `${prefix}-fixed`,
+      payload: {
+        organizationName: '云澜试用机构',
+        planVersionId: 'plan-version-trial-published',
+        reason: '商业试用开通',
+        contactName: '陈磊',
+        contactPhone: '13800000000',
+        contactEmail: 'contact@example.com',
+        adminName: '李静',
+        adminAccount: 'yunlan_trial_admin',
+        adminContact: 'admin@example.com',
+        initialPassword: 'PlaintextPasswordShouldNotPass',
+        requestBody: { password: 'PlaintextPasswordShouldNotPass' },
+        sql: 'select * from tenants',
+      },
+    });
+
+    expect(repository.createTenantWithPlanAuthorization).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assignment: expect.objectContaining({
+          startedAt: new Date('2026-06-25T07:30:00.000Z'),
+          expiresAt: new Date('2026-07-05T07:30:00.000Z'),
+        }),
+        authorizationSnapshot: expect.objectContaining({
+          snapshotJson: expect.objectContaining({
+            trialPeriod: {
+              startedAt: '2026-06-25T07:30:00.000Z',
+              expiresAt: '2026-07-05T07:30:00.000Z',
+              durationDays: 10,
+            },
+            openingContact: {
+              contactName: '陈磊',
+              contactPhone: '13800000000',
+              contactEmail: 'contact@example.com',
+              adminName: '李静',
+              adminAccount: 'yunlan_trial_admin',
+              adminContact: 'admin@example.com',
+            },
+            securityBoundary: expect.objectContaining({
+              passwordStorage: 'no_plaintext_password',
+              diagnosticMode: 'controlled_short_lived_redacted',
+            }),
+          }),
+        }),
+        auditEvent: expect.objectContaining({
+          reason: 'tenant_plan_assignment_created',
+        }),
+      }),
+    );
+    expect(JSON.stringify(vi.mocked(repository.createTenantWithPlanAuthorization).mock.calls)).not.toMatch(
+      /PlaintextPasswordShouldNotPass|requestBody|select \* from tenants|passwordStorage\\":\\"plaintext/i,
     );
   });
 

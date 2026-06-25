@@ -27,13 +27,21 @@ const publishedPlanVersion = {
 };
 
 describe('租户套餐绑定 domain', () => {
-  it('只接受租户名称、published 版本 ID 和开通原因，不把联系人敏感字段纳入写入值', () => {
+  it('接受真实商业试用联系人字段，但拒绝把密码、请求体和诊断细节纳入普通开通值', () => {
     const parsed = parseCreateTenantWithPlanPayload({
       organizationName: ' 星澜医美中心 ',
       planVersionId: ' plan-version-professional-published ',
       reason: ' 测试服开通租户 ',
+      contactName: ' 陈磊 ',
       contactPhone: '13800000000',
+      contactEmail: 'contact@example.com',
+      adminName: ' 李静 ',
+      adminAccount: 'xinglan_admin',
       adminContact: 'admin@example.com',
+      initialPassword: 'PlaintextPasswordShouldNotPass',
+      requestBody: { password: 'PlaintextPasswordShouldNotPass' },
+      sql: 'select * from tenants',
+      stack: 'Error: stack trace',
       payment_token: 'payment_token_should_not_pass',
       webhook_secret: 'webhook_secret_should_not_pass',
     });
@@ -44,12 +52,17 @@ describe('租户套餐绑定 domain', () => {
         tenantName: '星澜医美中心',
         planVersionId: 'plan-version-professional-published',
         reason: '测试服开通租户',
+        contactName: '陈磊',
+        contactPhone: '13800000000',
+        contactEmail: 'contact@example.com',
+        adminName: '李静',
+        adminAccount: 'xinglan_admin',
+        adminContact: 'admin@example.com',
       },
     });
-    expect(JSON.stringify(parsed)).not.toContain('13800000000');
-    expect(JSON.stringify(parsed)).not.toContain('admin@example.com');
-    expect(JSON.stringify(parsed)).not.toContain('payment_token');
-    expect(JSON.stringify(parsed)).not.toContain('webhook_secret');
+    expect(JSON.stringify(parsed)).not.toMatch(
+      /PlaintextPasswordShouldNotPass|requestBody|select \* from tenants|stack trace|payment_token|webhook_secret/i,
+    );
   });
 
   it('拒绝空名称、空版本和空原因', () => {
