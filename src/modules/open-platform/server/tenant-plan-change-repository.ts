@@ -6,6 +6,7 @@ import {
   normalizeTenantOpeningContact,
 } from '@/modules/open-platform/domain/tenant-management';
 import type { TenantPlanPublishedVersionRecord } from '@/modules/open-platform/domain/tenant-plan-binding';
+import { insertOneCommercialRecord } from '@/modules/open-platform/server/tenant-commercial-records-repository';
 import type {
   TenantCurrentPlanStateRecord,
   TenantPlanChangeApplyInput,
@@ -231,6 +232,18 @@ export function createTenantPlanChangeRepository(database: TenantDatabase): Tena
         await tx.insert(tenantAuthorizationSnapshots).values(input.newAuthorizationSnapshot);
         await tx.insert(tenantPlanChangeRecords).values(input.changeRecord);
         await tx.insert(auditEvents).values(mapAuditEventToInsert(input.auditEvent));
+        // 套餐变更商业记录
+        await insertOneCommercialRecord(tx, {
+          id: `${input.tenant.id}-commercial-plan-change-${input.changeRecord.id.slice(0, 12)}`,
+          tenantId: input.tenant.id,
+          recordType: 'plan_change',
+          displayCode: `套餐变更-${input.toPlanVersion.displayName}`,
+          note: input.changeRecord.reason,
+          relatedPlanChangeId: input.changeRecord.id,
+          occurredAt: input.appliedAt,
+          createdBy: input.changeRecord.requestedBy,
+          updatedBy: input.changeRecord.appliedBy,
+        });
       });
 
       return {

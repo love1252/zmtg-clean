@@ -6,6 +6,7 @@ import {
   auditEvents,
   tenantContacts,
   tenantMembers,
+  tenantCommercialRecords,
 } from '@/server/db/schema';
 
 const andMock = vi.hoisted(() =>
@@ -245,6 +246,13 @@ describe('租户初始管理员账号管理 repository', () => {
           resource: 'tenant_member',
           resourceId: 'tenant-member-zhengpu-admin',
           reason: 'tenant_account_password_reset',
+        }),
+      },
+      {
+        table: tenantCommercialRecords,
+        values: expect.objectContaining({
+          recordType: 'account_status_change',
+          displayCode: '账号重置密码-zhengpu_admin',
         }),
       },
     ]);

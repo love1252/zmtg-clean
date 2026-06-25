@@ -188,6 +188,11 @@ describe('数据库结构', () => {
       'contract',
       'invoice',
       'payment',
+      'tenant_opening',
+      'account_opening',
+      'plan_binding',
+      'plan_change',
+      'account_status_change',
     ]);
     expect(tenantCommercialRecordStatusEnum?.enumValues).toEqual([
       'draft',
