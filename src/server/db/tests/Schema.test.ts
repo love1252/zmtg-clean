@@ -6,9 +6,13 @@ import { describe, expect, it } from 'vitest';
 import { createDatabaseUrlErrorMessage } from '@/server/db/client';
 import {
   getDemoCustomerSeedRecords,
+  getDemoTenantAuthorizationSnapshotSeedRecords,
+  getDemoTenantMemberSeedRecords,
   getDemoTenantPlanAssignmentSeedRecords,
   getDemoTenantPlanSeedRecords,
+  getDemoTenantPlanVersionSeedRecords,
   getDemoTenantQuotaSnapshotSeedRecords,
+  getDemoTenantSeedRecords,
 } from '@/server/db/seed-demo-data';
 import * as seedDemoData from '@/server/db/seed-demo-data';
 import * as schema from '@/server/db/schema';
@@ -969,143 +973,74 @@ describe('数据库结构', () => {
     expect(referencedCustomerKeys.filter((key) => !customerKeys.has(key))).toEqual([]);
   });
 
-  it('演示种子数据包含租户套餐、套餐分配和配额快照', () => {
+  it('商业试用初始化数据只包含三档套餐和六个虚拟机构', () => {
+    const tenants = getDemoTenantSeedRecords();
     const plans = getDemoTenantPlanSeedRecords();
+    const versions = getDemoTenantPlanVersionSeedRecords();
     const assignments = getDemoTenantPlanAssignmentSeedRecords();
-    const snapshots = getDemoTenantQuotaSnapshotSeedRecords();
-    const activePlans = plans.filter((plan) => plan.status === 'active');
-    const demoTenantIds = [
-      'demo-tenant-001',
-      'demo-tenant-002',
-      'demo-tenant-003',
-      'demo-tenant-004',
-    ];
+    const quotaSnapshots = getDemoTenantQuotaSnapshotSeedRecords();
+    const authorizationSnapshots = getDemoTenantAuthorizationSnapshotSeedRecords();
+    const members = getDemoTenantMemberSeedRecords();
+    const serialized = JSON.stringify({
+      tenants,
+      plans,
+      versions,
+      assignments,
+      quotaSnapshots,
+      authorizationSnapshots,
+      members,
+    });
 
-    expect(activePlans.map((plan) => plan.code)).toEqual(
-      expect.arrayContaining([
-        'starter-care',
-        'growth-care',
-        'trial-care',
-      ]),
-    );
-    expect(activePlans).toHaveLength(3);
-    expect(plans).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: 'enterprise-care',
-          status: 'retired',
-        }),
-      ]),
-    );
-    expect(assignments.map((assignment) => assignment.tenantId)).toEqual(
-      expect.arrayContaining(demoTenantIds),
-    );
-    expect(snapshots.map((snapshot) => snapshot.tenantId)).toEqual(
-      expect.arrayContaining(demoTenantIds),
-    );
-    expect(snapshots.every((snapshot) => snapshot.currentCustomers <= snapshot.maxCustomers)).toBe(
+    expect(plans.map((plan) => plan.code).sort()).toEqual([
+      'growth-care',
+      'starter-care',
+      'trial-care',
+    ]);
+    expect(plans.map((plan) => plan.name).sort()).toEqual(['专业版', '基础版', '试用版']);
+    expect(tenants.map((tenant) => tenant.id).sort()).toEqual([
+      'growth-tenant-chengxing',
+      'growth-tenant-qingmang',
+      'starter-tenant-xinghe',
+      'starter-tenant-yubai',
+      'trial-tenant-baiyue',
+      'trial-tenant-yunlan',
+    ]);
+    expect(tenants.every((tenant) => tenant.status === 'active')).toBe(true);
+    expect(assignments).toHaveLength(6);
+    expect(assignments.every((assignment) => typeof assignment.planVersionId === 'string')).toBe(
       true,
     );
-    expect(snapshots.every((snapshot) => snapshot.maxAiCalls === 0)).toBe(true);
-    expect(snapshots.every((snapshot) => snapshot.currentAiCalls === 0)).toBe(true);
-    expect(JSON.stringify({ plans, assignments, snapshots })).not.toMatch(
-      /phoneNumber|idNumber|medicalRecordNo|treatmentRecord|consultationTranscript|DATABASE_URL|secret|token/i,
+    expect(quotaSnapshots).toHaveLength(6);
+    expect(quotaSnapshots.every((snapshot) => snapshot.currentCustomers <= snapshot.maxCustomers)).toBe(
+      true,
     );
-  });
-
-  it('演示种子数据包含商业化套餐版本和授权快照', () => {
-    const plans = getDemoTenantPlanSeedRecords();
-    const assignments = getDemoTenantPlanAssignmentSeedRecords();
-    const versions = getSeedRecords<{
-      id: string;
-      planId: string;
-      status: string;
-      displayName: string;
-      displayPrice: string;
-      agentLimit: number | null;
-      seatLimit: number | null;
-      monthlyAiCallLimit: number | null;
-      knowledgeStorageGb: number | null;
-      connectorEntitlementsJson: Record<string, unknown>;
-      serviceEntitlementsJson: Record<string, unknown>;
-      quotaEntitlementsJson: Record<string, unknown>;
-    }>('getDemoTenantPlanVersionSeedRecords');
-    const authorizationSnapshots = getSeedRecords<{
-      id: string;
-      tenantId: string;
-      planAssignmentId: string;
-      planVersionId: string;
-      status: string;
-      snapshotJson: Record<string, unknown>;
-      quotaJson: Record<string, unknown>;
-      connectorJson: Record<string, unknown>;
-      serviceJson: Record<string, unknown>;
-      generatedBy: string;
-    }>('getDemoTenantAuthorizationSnapshotSeedRecords');
-    const planIds = new Set(plans.map((plan) => plan.id));
-    const versionIds = new Set(versions.map((version) => version.id));
-    const versionDisplayNames = versions.map((version) => version.displayName);
-    const publishedVersions = versions.filter((version) => version.status === 'published');
-    const activeAssignments = assignments.filter((assignment) => assignment.status === 'active');
-    const activeSnapshots = authorizationSnapshots.filter((snapshot) => snapshot.status === 'active');
-    const snapshotByTenantId = new Map(activeSnapshots.map((snapshot) => [snapshot.tenantId, snapshot]));
-
-    expect(new Set(versions.map((version) => version.planId))).toEqual(planIds);
-    expect(publishedVersions.map((version) => version.displayName)).toEqual(
-      expect.arrayContaining(['基础版', '专业版', '试用版']),
-    );
-    expect(publishedVersions.map((version) => version.displayName)).not.toContain('集团版');
-    expect(publishedVersions).toHaveLength(3);
-    expect(versions).toEqual(
+    expect(quotaSnapshots.every((snapshot) => snapshot.currentAiCalls === 0)).toBe(true);
+    expect(authorizationSnapshots).toHaveLength(6);
+    expect(authorizationSnapshots.every((snapshot) => snapshot.status === 'active')).toBe(true);
+    expect(versions.map((version) => version.displayName).sort()).toEqual([
+      '专业版',
+      '基础版',
+      '试用版',
+    ]);
+    expect(members).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          planId: 'plan-enterprise-care',
-          status: 'retired',
-          displayName: '集团版',
+          tenantId: 'trial-tenant-yunlan',
+          userId: 'trial-user-yunlan-admin',
+          role: 'tenant_admin',
+        }),
+        expect.objectContaining({
+          tenantId: 'growth-tenant-qingmang',
+          userId: 'growth-user-qingmang-admin',
+          role: 'tenant_admin',
         }),
       ]),
     );
-    expect(versionDisplayNames.join(' ')).not.toMatch(
-      /\b(Starter|Professional|Growth|Trial|Enterprise|Plan)\b/,
-    );
-    expect(
-      versions.every(
-        (version) =>
-          Boolean(version.displayName) &&
-          Boolean(version.displayPrice) &&
-          (version.agentLimit ?? 0) > 0 &&
-          (version.seatLimit ?? 0) > 0 &&
-          (version.monthlyAiCallLimit ?? 0) > 0 &&
-          (version.knowledgeStorageGb ?? 0) > 0 &&
-          Array.isArray(version.connectorEntitlementsJson.connectors) &&
-          Array.isArray(version.serviceEntitlementsJson.services) &&
-          typeof version.quotaEntitlementsJson === 'object',
-      ),
-    ).toBe(true);
-    expect(
-      activeAssignments.every(
-        (assignment) =>
-          typeof assignment.planVersionId === 'string' && versionIds.has(assignment.planVersionId),
-      ),
-    ).toBe(true);
-    expect(activeSnapshots).toHaveLength(activeAssignments.length);
-    expect(
-      activeAssignments.every((assignment) => {
-        const snapshot = snapshotByTenantId.get(assignment.tenantId);
-        return (
-          snapshot?.planAssignmentId === assignment.id &&
-          snapshot.planVersionId === assignment.planVersionId &&
-          snapshot.generatedBy === 'demo-user-platform' &&
-          snapshot.snapshotJson.planVersionId === assignment.planVersionId &&
-          typeof snapshot.quotaJson === 'object' &&
-          typeof snapshot.connectorJson === 'object' &&
-          typeof snapshot.serviceJson === 'object'
-        );
-      }),
-    ).toBe(true);
-    expect(serializeSeedRecords([...versions, ...authorizationSnapshots])).not.toMatch(
-      sensitiveDemoSeedPattern,
-    );
+    expect(serialized).not.toContain('Enterprise');
+    expect(serialized).not.toContain('集团版');
+    expect(serialized).not.toContain('demo-tenant-004');
+    expect(serialized).not.toContain('Growth Plan');
+    expect(serialized).not.toMatch(sensitiveDemoSeedPattern);
   });
 
   it('演示种子数据包含只读商业化预留记录', () => {
@@ -1136,100 +1071,6 @@ describe('数据库结构', () => {
     expect(serializeSeedRecords(commercialRecords)).not.toMatch(sensitiveDemoSeedPattern);
     expect(serializeSeedRecords(commercialRecords)).not.toMatch(
       /真实支付|真实扣费|立即支付|自动扣费|自动续费|银行卡|第三方支付|stripe|支付宝|微信支付|payment_token|webhook_secret|api_key|DATABASE_URL/i,
-    );
-  });
-
-  it('演示种子数据包含星澜医美中心、演示角色和中文套餐配额', () => {
-    const tenants = getSeedRecords<{ id: string; name: string }>('getDemoTenantSeedRecords');
-    const tenantMembers = getSeedRecords<{
-      userId: string;
-      displayName: string;
-      role: string;
-      tenantId: string;
-    }>('getDemoTenantMemberSeedRecords');
-    const plans = getDemoTenantPlanSeedRecords();
-    const assignments = getDemoTenantPlanAssignmentSeedRecords();
-    const quotaSnapshots = getDemoTenantQuotaSnapshotSeedRecords();
-    const activePlans = plans.filter((plan) => plan.status === 'active');
-
-    expect(tenants).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'demo-tenant-001',
-          name: '星澜医美中心',
-        }),
-        expect.objectContaining({
-          id: 'demo-tenant-002',
-          name: '青禾皮肤管理',
-        }),
-        expect.objectContaining({
-          id: 'demo-tenant-003',
-          name: '澄镜医疗美容',
-        }),
-        expect.objectContaining({
-          id: 'demo-tenant-004',
-          name: '远山医美连锁',
-        }),
-      ]),
-    );
-    expect(activePlans).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: 'starter-care',
-          name: '基础版',
-        }),
-        expect.objectContaining({
-          code: 'growth-care',
-          name: '专业版',
-        }),
-        expect.objectContaining({
-          code: 'trial-care',
-          name: '试用版',
-        }),
-      ]),
-    );
-    expect(activePlans.map((plan) => plan.name)).not.toContain('集团版');
-    expect(assignments).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          tenantId: 'demo-tenant-001',
-          planId: 'plan-growth-care',
-        }),
-        expect.objectContaining({
-          tenantId: 'demo-tenant-002',
-          planId: 'plan-starter-care',
-        }),
-        expect.objectContaining({
-          tenantId: 'demo-tenant-003',
-          planId: 'plan-trial-care',
-        }),
-        expect.objectContaining({
-          tenantId: 'demo-tenant-004',
-          planId: 'plan-growth-care',
-        }),
-      ]),
-    );
-    expect(quotaSnapshots).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          tenantId: 'demo-tenant-001',
-          maxCustomers: expect.any(Number),
-          maxAppointments: expect.any(Number),
-          maxFollowUps: expect.any(Number),
-        }),
-        expect.objectContaining({ tenantId: 'demo-tenant-002' }),
-        expect.objectContaining({ tenantId: 'demo-tenant-003' }),
-        expect.objectContaining({ tenantId: 'demo-tenant-004' }),
-      ]),
-    );
-    expect(tenantMembers).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ displayName: '林院长', role: 'tenant_admin' }),
-        expect.objectContaining({ displayName: '周运营', role: 'tenant_operator' }),
-        expect.objectContaining({ displayName: '许咨询', role: 'consultant' }),
-        expect.objectContaining({ displayName: '赵客服', role: 'customer_service' }),
-        expect.objectContaining({ displayName: '陈医助', tenantId: 'demo-tenant-001' }),
-      ]),
     );
   });
 
@@ -1368,6 +1209,22 @@ describe('数据库结构', () => {
     expect(seedSource).toContain('.insert(tenantCommercialRecords)');
     expect(seedSource).toContain('.update(tenantPlanVersions)');
     expect(seedSource).toContain('displayName: plan.name');
+  });
+
+  it('商业试用 seed 会清理旧 demo 租户和旧集团版套餐残留', () => {
+    const seedSource = readFileSync(join(process.cwd(), 'src/server/db/seed-demo-data.ts'), 'utf8');
+
+    expect(seedSource).toContain('cleanupLegacyDemoSeedRecords');
+    expect(seedSource).toContain('legacyDemoTenantIds');
+    expect(seedSource).toContain('demo-tenant-004');
+    expect(seedSource).toContain('plan-enterprise-care');
+    expect(seedSource).toContain('.delete(tenantPlanAssignments)');
+    expect(seedSource).toContain('.delete(tenantAuthorizationSnapshots)');
+    expect(seedSource).toContain('.delete(tenantQuotaSnapshots)');
+    expect(seedSource).toContain('.delete(tenantPlanVersions)');
+    expect(seedSource).toContain('inArray(tenantPlanVersions.planId, legacyDemoPlanIds)');
+    expect(seedSource).toContain('.delete(tenantPlans)');
+    expect(seedSource).toContain('await cleanupLegacyDemoSeedRecords(db)');
   });
 
   it('演示 seed 不写入 HIS 连接配置或凭证引用数据', () => {

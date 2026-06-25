@@ -2098,21 +2098,22 @@ function buildDemoFollowUpSourceResponses(followups: TenantFollowUpTask[]) {
 }
 
 function buildDemoSeedWorkspaceSmokeFixtures() {
+  const primarySmokeTenantId = 'growth-tenant-chengxing';
   const customers = getDemoCustomerSeedRecords()
-    .filter((record) => record.tenantId === 'demo-tenant-001')
+    .filter((record) => record.tenantId === primarySmokeTenantId)
     .map(mapDemoCustomerSeed);
   const appointments = getDemoAppointmentSeedRecords()
-    .filter((record) => record.tenantId === 'demo-tenant-001')
+    .filter((record) => record.tenantId === primarySmokeTenantId)
     .map(mapDemoAppointmentSeed);
   const followups = getDemoFollowUpTaskSeedRecords()
-    .filter((record) => record.tenantId === 'demo-tenant-001')
+    .filter((record) => record.tenantId === primarySmokeTenantId)
     .map(mapDemoFollowUpTaskSeed);
   const treatmentSummaryRecords = getDemoTreatmentSummarySeedRecords()
-    .filter((record) => record.tenantId === 'demo-tenant-001')
+    .filter((record) => record.tenantId === primarySmokeTenantId)
     .map(mapDemoTreatmentSummarySeed);
   const treatmentSummaries = treatmentSummaryRecords.map(mapTreatmentSummaryRecordToListItem);
   const auditEvents = getDemoAuditEventSeedRecords()
-    .filter((record) => record.scope === 'tenant' && record.tenantId === 'demo-tenant-001')
+    .filter((record) => record.scope === 'tenant' && record.tenantId === primarySmokeTenantId)
     .map(mapDemoAuditEventSeed);
   const platformAuditEvents = getDemoAuditEventSeedRecords()
     .filter((record) => record.scope === 'platform' || record.result === 'denied')
@@ -3038,7 +3039,7 @@ describe('工作台入口页面', () => {
     expectNoInstitutionDemoMisleadingClaims(container);
   });
 
-  it('demo seed smoke 支撑平台端 4 个租户、3 个当前套餐和 AI 配额边界', async () => {
+  it('demo seed smoke 支撑平台端 6 个商业试用机构、3 个当前套餐和 AI 配额边界', async () => {
     const demoSeed = buildDemoSeedWorkspaceSmokeFixtures();
     const fetchMock = mockWorkspaceFetch({
       role: 'platform_admin',
@@ -3051,21 +3052,25 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
 
     expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
-    expect(screen.getAllByText('星澜医美中心').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('青禾皮肤管理').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('澄镜医疗美容').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('远山医美连锁').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('云澜轻美诊所').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('柏悦皮肤管理中心').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('星禾医美门诊').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('予白皮肤管理').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('澄星医疗美容').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('青芒美学连锁').length).toBeGreaterThan(0);
     expect(screen.getByText(/平台侧查看机构、套餐和配额边界/)).toBeInTheDocument();
     expect(screen.getByText(/支持受控开通测试租户并生成授权快照/)).toBeInTheDocument();
-    expect(screen.getAllByText('专业版').length).toBeGreaterThan(0);
-    expect(screen.getByText('基础版')).toBeInTheDocument();
-    expect(screen.getByText('试用版')).toBeInTheDocument();
+    expect(screen.getAllByText('专业版').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('基础版').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('试用版').length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText('集团版')).not.toBeInTheDocument();
     expect(container.textContent ?? '').not.toMatch(
       /\b(Starter|Growth|Trial|Enterprise|Plan)\b/,
     );
-    expect(screen.getAllByText('0 / 0').length).toBeGreaterThanOrEqual(4);
-    expect(screen.getAllByText('当前未启用 AI 调用配额').length).toBeGreaterThanOrEqual(4);
+    expect(screen.getAllByText('0 / 300000').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('0 / 50000').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('0 / 5000').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('当前未启用 AI 调用配额')).not.toBeInTheDocument();
     expectNoPlatformDemoMisleadingClaims(container);
 
     expect(screen.queryByRole('heading', { name: '商业化健康' })).not.toBeInTheDocument();
