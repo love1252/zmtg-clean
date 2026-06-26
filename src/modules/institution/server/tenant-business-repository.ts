@@ -102,6 +102,22 @@ type CreateFollowUpTaskFromTreatmentSummarySuggestionResult =
   | { kind: 'conflict'; resourceId: string; reason: 'active_source_follow_up_exists' }
   | { kind: 'invalid_source'; reason: 'source_treatment_summary_not_found_or_cross_tenant' };
 
+type CreateManualFollowUpTaskInput = {
+  id: string;
+  tenantId: string;
+  customerId: string;
+  customerDisplayName: string;
+  stage: string;
+  status: FollowUpStatus;
+  dueAt: string;
+  suggestedAction: string;
+  riskLevel: FollowUpRiskLevel;
+};
+
+type CreateManualFollowUpTaskResult =
+  | { kind: 'created'; task: TenantFollowUpTask }
+  | { kind: 'customer_not_found' };
+
 const activeSourceFollowUpStatuses = new Set<FollowUpStatus>([
   'scheduled',
   'due',
@@ -335,6 +351,40 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         .returning();
 
       return { kind: 'created', task: mapFollowUpTaskSourceRowToRecord(row) };
+    },
+    async createManualFollowUpTask(
+      input: CreateManualFollowUpTaskInput,
+    ): Promise<CreateManualFollowUpTaskResult> {
+      const customerExists = await database
+        .select({ id: customers.id })
+        .from(customers)
+        .where(and(eq(customers.tenantId, input.tenantId), eq(customers.id, input.customerId)))
+        .limit(1);
+
+      if (customerExists.length === 0) {
+        return { kind: 'customer_not_found' };
+      }
+
+      // 手动创建随访：不关联治疗摘要来源，source 字段为 null
+      const [row] = await database
+        .insert(followUpTasks)
+        .values({
+          id: input.id,
+          tenantId: input.tenantId,
+          customerId: input.customerId,
+          customerDisplayName: input.customerDisplayName,
+          journeyId: `manual-${Date.now()}`,
+          stage: input.stage,
+          status: input.status,
+          dueAt: new Date(input.dueAt),
+          suggestedAction: input.suggestedAction,
+          riskLevel: input.riskLevel,
+          sourceTreatmentSummaryId: null,
+          sourceSuggestionKey: null,
+        })
+        .returning();
+
+      return { kind: 'created', task: mapFollowUpTaskRowToRecord(row) };
     },
     async customerExistsByTenant(input: CustomerLookupInput): Promise<boolean> {
       const [row] = await database

@@ -29,6 +29,10 @@ export type TenantQuotaLimits = {
 };
 
 const SERVER_TRUSTED_PLAN_QUOTA_LIMITS_BY_CODE = {
+  'trial-care': {
+    maxAppointments: 120,
+    maxCustomers: 80,
+  },
   'starter-care': {
     maxAppointments: 400,
     maxCustomers: 1000,

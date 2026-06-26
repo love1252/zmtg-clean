@@ -7,7 +7,6 @@ import {
 import { parseFollowUpTaskListQuery } from '@/modules/institution/server/follow-up-task-query-parser';
 import { runTenantBusinessAuditTransaction } from '@/modules/institution/server/tenant-business-audit-transaction';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
-import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 import {
   parseFollowUpTransitionPayload,
 } from '@/modules/institution/server/tenant-business-write-input';
@@ -136,20 +135,23 @@ export async function POST(request: Request) {
     return await handleTenantBusinessMutationRequest({
       context, resource: 'follow_up', action: 'create',
       mutate: async ({ tenantId, successAuditEvent }) => {
-        const quotaDecision = await checkTenantQuotaForCreate({ database: db, tenantId, resource: 'appointments' });
-        if (!quotaDecision.allowed) return { kind: 'quota_denied', decision: quotaDecision };
         try {
           return await runTenantBusinessAuditTransaction(db, async ({ repository, auditRepository }) => {
-            const customerExists = await repository.customerExistsByTenant({ tenantId, id: customerId });
-            if (!customerExists) return { kind: 'not_found' };
-            const record = await repository.createFollowUpTaskFromTreatmentSummarySuggestion({
-              id: globalThis.crypto.randomUUID(), tenantId, customerId,
+            // 使用手动创建路径，不关联治疗摘要来源
+            const record = await repository.createManualFollowUpTask({
+              id: globalThis.crypto.randomUUID(),
+              tenantId,
+              customerId,
               customerDisplayName: customerDisplayName || '客户',
-              journeyId: `manual-${Date.now()}`, stage, status: st, dueAt,
-              suggestedAction, riskLevel: rl,
-              sourceTreatmentSummaryId: '', sourceSuggestionKey: `manual-${Date.now()}`,
+              stage,
+              status: st,
+              dueAt,
+              suggestedAction,
+              riskLevel: rl,
             });
-            if (record.kind !== 'created') return { kind: 'conflict' as const, reason: 'stale_transition' as const };
+            if (record.kind !== 'created') {
+              return { kind: 'not_found' as const };
+            }
             await auditRepository.record({ ...successAuditEvent, resourceId: record.task.id });
             return { kind: 'success' as const, record: record.task };
           });

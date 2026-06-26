@@ -135,7 +135,7 @@ const accessPolicies: AccessPolicy[] = [
   {
     role: 'tenant_admin',
     resource: 'follow_up',
-    actions: ['read_own_tenant', 'update'],
+    actions: ['read_own_tenant', 'create', 'update'],
   },
   {
     role: 'tenant_admin',
