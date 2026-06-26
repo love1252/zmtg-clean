@@ -30,7 +30,7 @@ export async function POST(request: Request) {
           name: f.name,
           type: f.type,
           size: f.size,
-          arrayBuffer: f.arrayBuffer,
+          arrayBuffer: () => f.arrayBuffer(),
         };
       }
     }
