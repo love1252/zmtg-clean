@@ -273,8 +273,8 @@ describe('机构知识库上传解析 service', () => {
       input: { tenantId: 't', institutionId: 'i', uploadedByUserId: 'u', file: jsonFile },
     });
 
-    // JSON is on the allowlist, so upload should proceed, then parse
+    // JSON is on the allowlist, so upload should proceed, then parse with real chunks
     expect(result.status).toBe('created');
-    expect(result.chunkCount).toBeGreaterThanOrEqual(0);
+    expect(result.chunkCount).toBeGreaterThan(0);
   });
 });

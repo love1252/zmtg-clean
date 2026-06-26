@@ -83,8 +83,7 @@ export async function POST(request: Request) {
       parse: result.parse,
       chunkCount: result.chunkCount,
     }, { status: 201 });
-  } catch (err) {
-    console.error('[knowledge-upload] unexpected error', err instanceof Error ? err.message : err);
+  } catch {
     return NextResponse.json(
       { code: 'service_unavailable', error: '知识库文件上传暂时不可用' },
       { status: 503 },
