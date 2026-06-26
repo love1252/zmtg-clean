@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BookOpen, ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search, Upload } from 'lucide-react';
+import { BookOpen, Brain, ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search, Upload } from 'lucide-react';
 import type {
   InstitutionKnowledgeItemDto,
   InstitutionKnowledgeListResponse,
@@ -65,6 +65,21 @@ type InstitutionKnowledgeQaAuditRecord = {
   citationCount: number;
   safeStatus: string;
   safeFailureMessage: string | null;
+  createdAt: string;
+};
+type InstitutionAiCallUsageRecord = {
+  id: string;
+  tenantId: string;
+  institutionId: string | null;
+  actorUserId: string;
+  provider: string;
+  model: string;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  latencyMs: number | null;
+  status: string;
+  errorCode: string | null;
   createdAt: string;
 };
 
@@ -151,6 +166,14 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [qaAuditRecords, setQaAuditRecords] = useState<InstitutionKnowledgeQaAuditRecord[]>([]);
   const [qaAuditMessage, setQaAuditMessage] = useState('点击刷新查看问答审计');
   const [isQaAuditLoading, setIsQaAuditLoading] = useState(false);
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiAnswer, setAiAnswer] = useState<string | null>(null);
+  const [aiMessage, setAiMessage] = useState('输入问题，选择模型，发起真实 AI 调用');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiVendor, setAiVendor] = useState('deepseek');
+  const [aiUsageRecords, setAiUsageRecords] = useState<InstitutionAiCallUsageRecord[]>([]);
+  const [aiUsageMessage, setAiUsageMessage] = useState('点击刷新查看 AI 调用记录');
+  const [isAiUsageLoading, setIsAiUsageLoading] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadMessage, setUploadMessage] = useState('选择文件后上传，支持 .txt、.md、.csv、.json 格式，最大 2MB');
@@ -467,6 +490,76 @@ export function InstitutionKnowledgeReadonlyShell() {
       setQaAuditMessage('问答审计暂时不可用');
     } finally {
       setIsQaAuditLoading(false);
+    }
+  }
+
+  async function requestAiCall(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const question = aiQuestion.trim();
+    if (!question) {
+      setAiAnswer(null);
+      setAiMessage('请输入问题后再发起 AI 调用');
+      return;
+    }
+
+    setIsAiLoading(true);
+    setAiMessage('正在调用真实 AI 模型...');
+    try {
+      const response = await fetch('/api/institution/knowledge-management/ai-call', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ question, vendor: aiVendor }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const errorMsg = typeof payload?.error === 'string'
+          ? payload.error
+          : 'AI 调用失败，请稍后重试';
+        setAiAnswer(null);
+        setAiMessage(errorMsg);
+        return;
+      }
+
+      const answer = typeof payload?.answer === 'string' ? payload.answer : '';
+      setAiAnswer(answer || '（模型未返回内容）');
+      const record = payload?.record;
+      const tokenInfo = record && typeof record.totalTokens === 'number'
+        ? `，token 用量 ${record.totalTokens}`
+        : '';
+      const latencyInfo = record && typeof record.latencyMs === 'number'
+        ? `，耗时 ${record.latencyMs}ms`
+        : '';
+      setAiMessage(`AI 回答已生成${tokenInfo}${latencyInfo}`);
+    } catch {
+      setAiAnswer(null);
+      setAiMessage('AI 调用失败，请稍后重试');
+    } finally {
+      setIsAiLoading(false);
+    }
+  }
+
+  async function loadAiUsage() {
+    setIsAiUsageLoading(true);
+    setAiUsageMessage('正在读取 AI 调用记录...');
+    try {
+      const response = await fetch('/api/institution/knowledge-management/ai-call/usage', {
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setAiUsageRecords([]);
+        setAiUsageMessage('AI 调用记录暂时不可用');
+        return;
+      }
+
+      const records = payload.records as InstitutionAiCallUsageRecord[];
+      setAiUsageRecords(records);
+      setAiUsageMessage(records.length > 0 ? `已读取 ${records.length} 条 AI 调用记录` : '暂无 AI 调用记录');
+    } catch {
+      setAiUsageRecords([]);
+      setAiUsageMessage('AI 调用记录暂时不可用');
+    } finally {
+      setIsAiUsageLoading(false);
     }
   }
 
@@ -995,6 +1088,139 @@ export function InstitutionKnowledgeReadonlyShell() {
                     {record.safeFailureMessage ? (
                       <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700">
                         {record.safeFailureMessage}
+                      </span>
+                    ) : null}
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {status === 'success' ? (
+        <section
+          aria-label="机构端 AI 真实调用"
+          className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">知识库 AI 试问</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">基于本机构授权可见知识片段，调用真实大模型生成回答。</p>
+            </div>
+            <form onSubmit={requestAiCall} className="flex w-full flex-col gap-2 lg:w-[660px]">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <label className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    aria-label="输入 AI 问题"
+                    value={aiQuestion}
+                    onChange={(event) => setAiQuestion(event.target.value)}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-violet-400"
+                    placeholder="输入问题，例如：冷敷后怎么护理？"
+                  />
+                </label>
+                <select
+                  aria-label="选择 AI 模型"
+                  value={aiVendor}
+                  onChange={(event) => setAiVendor(event.target.value)}
+                  className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none"
+                >
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="doubao">豆包</option>
+                  <option value="qwen">通义千问</option>
+                </select>
+                <button
+                  type="submit"
+                  disabled={isAiLoading}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isAiLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+                  AI 试问
+                </button>
+              </div>
+            </form>
+          </div>
+          <div
+            className={cn(
+              'mt-4 rounded-xl border px-3 py-2 text-xs font-semibold',
+              aiAnswer ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-slate-200 bg-slate-50 text-slate-500',
+            )}
+          >
+            {aiMessage}
+          </div>
+          {aiAnswer ? (
+            <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50/70 p-4">
+              <p className="text-sm leading-6 text-slate-700 whitespace-pre-wrap">{aiAnswer}</p>
+              <p className="mt-2 text-xs font-semibold text-slate-500">AI 生成内容仅供参考，不构成专业建议。</p>
+            </div>
+          ) : !isAiLoading ? (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
+              暂无 AI 回答
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {status === 'success' ? (
+        <section
+          aria-label="机构端 AI 调用记录"
+          className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">AI 调用记录</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">查看本机构最近 AI 调用的用量、模型和状态。</p>
+            </div>
+            <button
+              type="button"
+              onClick={loadAiUsage}
+              disabled={isAiUsageLoading}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 text-sm font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isAiUsageLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              刷新记录
+            </button>
+          </div>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+            {aiUsageMessage}
+          </div>
+          <div className="mt-3 grid gap-3 xl:grid-cols-2">
+            {aiUsageRecords.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
+                暂无 AI 调用记录
+              </div>
+            ) : (
+              aiUsageRecords.map((record) => (
+                <article key={record.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
+                    <span>{record.provider} · {record.model}</span>
+                    <span>{formatDate(record.createdAt)}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+                    <span
+                      className={cn(
+                        'rounded-full border px-2.5 py-1',
+                        record.status === 'succeeded'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : 'border-amber-200 bg-amber-50 text-amber-700',
+                      )}
+                    >
+                      {record.status === 'succeeded' ? '成功' : record.status === 'rate_limited' ? '限流' : '失败'}
+                    </span>
+                    {record.totalTokens ? (
+                      <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-violet-700">
+                        {record.totalTokens} tokens
+                      </span>
+                    ) : null}
+                    {record.latencyMs ? (
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-600">
+                        {record.latencyMs}ms
+                      </span>
+                    ) : null}
+                    {record.errorCode ? (
+                      <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-rose-700">
+                        {record.errorCode}
                       </span>
                     ) : null}
                   </div>

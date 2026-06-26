@@ -10,9 +10,11 @@ import {
   Loader2,
   Lock,
   Plus,
+  RefreshCw,
   Search,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   Users,
   X,
 } from 'lucide-react';
@@ -1191,6 +1193,15 @@ export function OpenPlatformTenantManagementPanel() {
   const [createTenantError, setCreateTenantError] = useState<string | null>(null);
   const [createStep, setCreateStep] = useState<CreateTenantStep>(1);
   const [createForm, setCreateForm] = useState<CreateTenantForm>(defaultCreateTenantForm);
+  const [aiUsageSummary, setAiUsageSummary] = useState<Array<{
+    tenantId: string;
+    callCount: number;
+    totalTokens: number | null;
+    succeededCount: number;
+    failedCount: number;
+  }>>([]);
+  const [isAiUsageLoading, setIsAiUsageLoading] = useState(false);
+  const [showAiUsage, setShowAiUsage] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -1606,6 +1617,81 @@ export function OpenPlatformTenantManagementPanel() {
           onClose={() => setIsCreateOpen(false)}
         />
       ) : null}
+
+      {showAiUsage ? (
+        <section
+          aria-label="平台端 AI 用量聚合"
+          className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">AI 用量聚合</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">只读查看各租户 AI 调用次数和 token 用量。</p>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                setIsAiUsageLoading(true);
+                try {
+                  const r = await fetch('/api/v1/open-platform/ai-usage', { cache: 'no-store' });
+                  const p = await r.json().catch(() => ({ records: [] }));
+                  setAiUsageSummary(Array.isArray(p.records) ? p.records : []);
+                } catch { setAiUsageSummary([]); }
+                finally { setIsAiUsageLoading(false); }
+              }}
+              disabled={isAiUsageLoading}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 text-xs font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-100"
+            >
+              {isAiUsageLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              刷新用量
+            </button>
+          </div>
+
+          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr className="text-xs font-semibold text-slate-500">
+                  <th className="px-4 py-2.5 text-left">租户 ID</th>
+                  <th className="px-4 py-2.5 text-right">调用次数</th>
+                  <th className="px-4 py-2.5 text-right">成功</th>
+                  <th className="px-4 py-2.5 text-right">失败</th>
+                  <th className="px-4 py-2.5 text-right">Token 总量</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {aiUsageSummary.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-xs font-semibold text-slate-400">
+                      暂无 AI 调用数据
+                    </td>
+                  </tr>
+                ) : (
+                  aiUsageSummary.map((row) => (
+                    <tr key={row.tenantId} className="text-xs text-slate-700">
+                      <td className="px-4 py-2.5 font-mono text-slate-600">{row.tenantId}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold">{row.callCount}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-emerald-600">{row.succeededCount}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-rose-600">{row.failedCount}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold">{row.totalTokens ?? '-'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+        <button
+          type="button"
+          onClick={() => setShowAiUsage((v) => !v)}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 text-xs font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-100"
+        >
+          <Sparkles className="h-4 w-4" />
+          {showAiUsage ? '隐藏 AI 用量' : 'AI 用量'}
+        </button>
+      </div>
     </section>
   );
 }

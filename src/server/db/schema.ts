@@ -1212,6 +1212,40 @@ export const knowledgeQaAuditLogs = pgTable(
   }),
 );
 
+export const aiCallUsageRecords = pgTable(
+  'ai_call_usage_records',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
+    actorUserId: varchar('actor_user_id', { length: 96 }).notNull(),
+    provider: varchar('provider', { length: 64 }).notNull(),
+    model: varchar('model', { length: 128 }).notNull(),
+    promptTokens: integer('prompt_tokens'),
+    completionTokens: integer('completion_tokens'),
+    totalTokens: integer('total_tokens'),
+    latencyMs: integer('latency_ms'),
+    status: varchar('status', { length: 32 }).notNull(),
+    errorCode: varchar('error_code', { length: 64 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('ai_call_usage_records_tenant_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    tenantCreatedIdx: index('ai_call_usage_records_tenant_created_idx').on(
+      table.tenantId,
+      table.createdAt,
+    ),
+    tenantInstitutionCreatedIdx: index(
+      'ai_call_usage_records_tenant_institution_created_idx',
+    ).on(table.tenantId, table.institutionId, table.createdAt),
+  }),
+);
+
 export const knowledgeChunkEmbeddings = pgTable(
   'knowledge_chunk_embeddings',
   {
