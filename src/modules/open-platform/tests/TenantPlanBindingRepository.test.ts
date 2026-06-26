@@ -11,6 +11,7 @@ import {
   tenantPlanVersions,
   tenantPlans,
   tenants,
+  tenantCommercialRecords,
 } from '@/server/db/schema';
 
 const andMock = vi.hoisted(() =>
@@ -355,6 +356,9 @@ describe('租户套餐绑定 repository', () => {
       tenantAuthorizationSnapshots,
       auditEvents,
       auditEvents,
+      tenantCommercialRecords,
+      tenantCommercialRecords,
+      tenantCommercialRecords,
     ]);
     expect(query.inserted[1].values).toEqual(
       expect.objectContaining({

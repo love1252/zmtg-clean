@@ -103,6 +103,11 @@ export const tenantCommercialRecordTypeEnum = pgEnum('tenant_commercial_record_t
   'contract',
   'invoice',
   'payment',
+  'tenant_opening',
+  'account_opening',
+  'plan_binding',
+  'plan_change',
+  'account_status_change',
 ]);
 export const tenantCommercialRecordStatusEnum = pgEnum('tenant_commercial_record_status', [
   'draft',

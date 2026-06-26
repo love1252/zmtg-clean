@@ -9,6 +9,7 @@ import {
   tenantPlanVersions,
   tenantPlans,
   tenants,
+  tenantCommercialRecords,
 } from '@/server/db/schema';
 
 const andMock = vi.hoisted(() =>
@@ -361,6 +362,7 @@ describe('租户套餐变更 repository', () => {
       tenantAuthorizationSnapshots,
       tenantPlanChangeRecords,
       auditEvents,
+      tenantCommercialRecords,
     ]);
     expect(result).toEqual(
       expect.objectContaining({

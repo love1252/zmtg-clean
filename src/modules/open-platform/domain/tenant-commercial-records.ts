@@ -1,4 +1,14 @@
-export const tenantCommercialRecordTypes = ['order', 'contract', 'invoice', 'payment'] as const;
+export const tenantCommercialRecordTypes = [
+  'order',
+  'contract',
+  'invoice',
+  'payment',
+  'tenant_opening',
+  'account_opening',
+  'plan_binding',
+  'plan_change',
+  'account_status_change',
+] as const;
 export const tenantCommercialRecordStatuses = [
   'draft',
   'pending',
@@ -51,6 +61,11 @@ const recordTypeLabels: Record<TenantCommercialRecordType, string> = {
   contract: '合同',
   invoice: '发票',
   payment: '支付',
+  tenant_opening: '机构开通',
+  account_opening: '账号开通',
+  plan_binding: '套餐绑定',
+  plan_change: '套餐变更',
+  account_status_change: '账号状态变更',
 };
 
 const statusLabels: Record<TenantCommercialRecordStatus, string> = {
@@ -84,6 +99,11 @@ function createTypeCounts(): Record<TenantCommercialRecordType, number> {
     contract: 0,
     invoice: 0,
     payment: 0,
+    tenant_opening: 0,
+    account_opening: 0,
+    plan_binding: 0,
+    plan_change: 0,
+    account_status_change: 0,
   };
 }
 
