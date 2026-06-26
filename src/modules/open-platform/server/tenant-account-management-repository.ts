@@ -99,7 +99,7 @@ export function createTenantAccountManagementRepository(
         const actionLabel =
           input.action === 'disable' ? '停用' : input.action === 'enable' ? '启用' : '重置密码';
         await insertOneCommercialRecord(tx, {
-          id: `${input.account.tenantId}-commercial-account-status-${input.auditEvent.eventId.slice(0, 8)}`,
+          id: `${input.account.tenantId}-commercial-account-status-${input.auditEvent.eventId.slice(-12)}`,
           tenantId: input.account.tenantId,
           recordType: 'account_status_change',
           displayCode: `账号${actionLabel}-${input.account.username}`,

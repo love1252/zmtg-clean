@@ -326,4 +326,148 @@ describe('租户初始管理员账号管理 repository', () => {
       }),
     );
   });
+
+  it('同一租户连续 disable -> enable -> reset_password 生成三条 account_status_change 且 ID 唯一', async () => {
+    const query = createDatabase();
+
+    const repo = createTenantAccountManagementRepository(query.database);
+
+    const baseAccount = {
+      tenantId: 'tenant-zhengpu',
+      accountId: 'auth-user-zhengpu-admin',
+      tenantMemberId: 'tenant-member-zhengpu-admin',
+      username: 'zhengpu_admin',
+      displayName: '陈磊',
+      role: 'tenant_admin' as const,
+      status: 'active' as const,
+      passwordResetRequired: false,
+    };
+
+    // Step 1: disable
+    await repo.applyTenantAccountOperation({
+      action: 'disable',
+      account: { ...baseAccount, status: 'active', passwordResetRequired: false },
+      nextStatus: 'disabled',
+      passwordResetRequired: false,
+      lockedUntil: null,
+      updatedAt: now,
+      updatedBy: 'demo-user-platform',
+      auditEvent: {
+        eventId: 'audit-event-3f1a7b2c9d4e',
+        actorId: 'demo-user-platform',
+        actorRole: 'platform_admin',
+        tenantId: 'tenant-zhengpu',
+        scope: 'platform',
+        resource: 'tenant_member',
+        resourceId: 'tenant-member-zhengpu-admin',
+        action: 'manage_status',
+        result: 'transitioned',
+        reason: 'tenant_account_disabled',
+        occurredAt: now.toISOString(),
+        source: 'server_session',
+      },
+    });
+
+    // Step 2: enable
+    await repo.applyTenantAccountOperation({
+      action: 'enable',
+      account: { ...baseAccount, status: 'disabled', passwordResetRequired: false },
+      nextStatus: 'active',
+      passwordResetRequired: false,
+      lockedUntil: null,
+      updatedAt: new Date('2026-06-25T10:05:00.000Z'),
+      updatedBy: 'demo-user-platform',
+      auditEvent: {
+        eventId: 'audit-event-8a2c1f5e7b3d',
+        actorId: 'demo-user-platform',
+        actorRole: 'platform_admin',
+        tenantId: 'tenant-zhengpu',
+        scope: 'platform',
+        resource: 'tenant_member',
+        resourceId: 'tenant-member-zhengpu-admin',
+        action: 'manage_status',
+        result: 'transitioned',
+        reason: 'tenant_account_enabled',
+        occurredAt: '2026-06-25T10:05:00.000Z',
+        source: 'server_session',
+      },
+    });
+
+    // Step 3: reset_password
+    await repo.applyTenantAccountOperation({
+      action: 'reset_password',
+      account: { ...baseAccount, status: 'active', passwordResetRequired: false },
+      nextStatus: 'password_reset_required',
+      passwordResetRequired: true,
+      passwordHash: 'scrypt$16384$8$1$newSalt$newHash',
+      passwordUpdatedAt: new Date('2026-06-25T10:10:00.000Z'),
+      lockedUntil: null,
+      updatedAt: new Date('2026-06-25T10:10:00.000Z'),
+      updatedBy: 'demo-user-platform',
+      auditEvent: {
+        eventId: 'audit-event-6d9e4a1f2c7b',
+        actorId: 'demo-user-platform',
+        actorRole: 'platform_admin',
+        tenantId: 'tenant-zhengpu',
+        scope: 'platform',
+        resource: 'tenant_member',
+        resourceId: 'tenant-member-zhengpu-admin',
+        action: 'manage_credentials',
+        result: 'transitioned',
+        reason: 'tenant_account_password_reset',
+        occurredAt: '2026-06-25T10:10:00.000Z',
+        source: 'server_session',
+      },
+    });
+
+    expect(query.transaction).toHaveBeenCalledTimes(3);
+    expect(query.inserted).toHaveLength(6); // 每次操作: 1 auditEvent + 1 tenantCommercialRecord = 2, 3次 = 6
+
+    const commercialRecords = query.inserted.filter(
+      (item) => item.table === tenantCommercialRecords,
+    );
+    expect(commercialRecords).toHaveLength(3);
+
+    const commercialIds = commercialRecords.map(
+      (item) => (item.values as Record<string, unknown>).id as string,
+    );
+    const uniqueIds = new Set(commercialIds);
+    expect(uniqueIds.size).toBe(3);
+
+    // 验证三条 ID 末尾唯一片段取自 eventId 尾部
+    expect(commercialIds[0]).toBe('tenant-zhengpu-commercial-account-status-3f1a7b2c9d4e');
+    expect(commercialIds[1]).toBe('tenant-zhengpu-commercial-account-status-8a2c1f5e7b3d');
+    expect(commercialIds[2]).toBe('tenant-zhengpu-commercial-account-status-6d9e4a1f2c7b');
+
+    // 验证记录类型和 displayCode
+    expect(commercialRecords[0].values).toEqual(
+      expect.objectContaining({
+        recordType: 'account_status_change',
+        displayCode: '账号停用-zhengpu_admin',
+      }),
+    );
+    expect(commercialRecords[1].values).toEqual(
+      expect.objectContaining({
+        recordType: 'account_status_change',
+        displayCode: '账号启用-zhengpu_admin',
+      }),
+    );
+    expect(commercialRecords[2].values).toEqual(
+      expect.objectContaining({
+        recordType: 'account_status_change',
+        displayCode: '账号重置密码-zhengpu_admin',
+      }),
+    );
+
+    // 三条记录均属于当前 tenantId
+    commercialRecords.forEach((item) => {
+      expect((item.values as Record<string, unknown>).tenantId).toBe('tenant-zhengpu');
+    });
+
+    // reset_password 商业记录不包含敏感信息
+    const resetPwdRecord = commercialRecords[2].values as Record<string, unknown>;
+    expect(JSON.stringify(resetPwdRecord)).not.toMatch(
+      /passwordHash|scrypt\$|New#2026|requestBody/i,
+    );
+  });
 });
