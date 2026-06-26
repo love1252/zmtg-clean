@@ -120,6 +120,7 @@ const supportedFileTypes = new Map<string, readonly string[]>([
   ['.txt', ['text/plain']],
   ['.md', ['text/markdown', 'text/plain']],
   ['.csv', ['text/csv', 'application/csv', 'application/vnd.ms-excel']],
+  ['.json', ['application/json']],
   ['.pdf', ['application/pdf']],
   ['.docx', ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']],
   ['.xlsx', ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']],
@@ -249,6 +250,19 @@ function parseCsvText(content: Uint8Array) {
   if (row.some((value) => value.length > 0)) rows.push(row);
 
   return rows.map((cells) => cells.join('\t')).join('\n');
+}
+
+function parseJsonText(content: Uint8Array) {
+  const text = decodeUtf8(content);
+  try {
+    const parsed = JSON.parse(text);
+    // \u5C06 JSON \u683C\u5F0F\u5316\u4E3A\u591A\u884C\u6587\u672C\uFF0C\u4FBF\u4E8E\u89E3\u6790\u5206\u5757
+    const formatted = JSON.stringify(parsed, null, 2);
+    return formatted;
+  } catch {
+    // JSON \u89E3\u6790\u5931\u8D25\uFF0C\u8FD4\u56DE\u539F\u59CB\u6587\u672C
+    return text;
+  }
 }
 
 function readUint16(content: Uint8Array, offset: number) {
@@ -558,6 +572,7 @@ function extractTextFromFile(input: {
 }) {
   const extension = extensionOf(input.filename);
   if (extension === '.csv') return normalizeExtractedText(parseCsvText(input.content));
+  if (extension === '.json') return normalizeExtractedText(parseJsonText(input.content));
   if (extension === '.pdf') return normalizeExtractedText(extractPdfText(input.content));
   if (extension === '.docx') return normalizeExtractedText(extractDocxText(input.content));
   if (extension === '.xlsx') return normalizeExtractedText(extractXlsxText(input.content));
