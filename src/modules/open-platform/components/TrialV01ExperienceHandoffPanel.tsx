@@ -44,13 +44,15 @@ type DemoStep = {
 
 const platformDemoSteps: DemoStep[] = [
   { title: '登录平台端', detail: '在平台端登录页面输入平台管理员账号和密码。', action: '打开 /platform-login' },
-  { title: '进入租户管理', detail: '左侧导航栏点击「租户管理」，查看所有已创建租户的列表。', action: '租户管理' },
-  { title: '新建试用机构', detail: '点击「新建租户」按钮，填写租户名称、选择试用套餐、设置配额。', action: '新建租户' },
-  { title: '创建机构账号', detail: '在租户详情中点击「管理账号」，为新建的租户创建管理员账号。', action: '管理账号' },
-  { title: '绑定套餐', detail: '进入「产品与套餐」页面，查看套餐版本、发布套餐、为租户绑定套餐。', action: '产品与套餐' },
-  { title: '查看商业记录', detail: '在租户详情中查看商业记录（订单、合同、发票、支付记录）。', action: '商业记录' },
-  { title: '套餐变更', detail: '对已绑定套餐的租户执行套餐变更预览和提交。', action: '套餐变更' },
-  { title: '查看审计', detail: '进入「平台审计日志」页面查看平台端操作审计记录。', action: '平台审计日志' },
+  { title: '查看体验版操作说明', detail: '左侧导航栏点击「体验版操作说明」，了解 V0.2 完整功能清单和演示路径。', action: '体验版操作说明' },
+  { title: '新建正式机构', detail: '进入「租户管理」，点击「新建租户」按钮，填写机构名称、选择套餐、设置配额并创建。', action: '租户管理 → 新建租户' },
+  { title: '创建机构管理员账号', detail: '在租户详情中点击「管理账号」，设置用户名和密码，为机构创建初始管理员账号。', action: '管理账号' },
+  { title: '绑定套餐', detail: '新建机构后系统自动绑定所选套餐，可在租户详情中查看当前套餐和授权快照。', action: '租户详情' },
+  { title: '查看商业记录', detail: '在租户详情「商业记录」区域查看自动生成的 tenant_opening、account_opening、plan_binding 三条记录。', action: '商业记录' },
+  { title: '执行套餐变更', detail: '在租户详情中点击「套餐变更」，预览变更差异后提交应用，自动生成 plan_change 商业记录。', action: '套餐变更' },
+  { title: '管理机构账号', detail: '在租户详情「管理账号」区域可执行停用、启用、重置密码操作，每次操作自动生成 account_status_change 商业记录。', action: '停用 / 启用 / 重置密码' },
+  { title: '查看审计日志', detail: '进入「平台审计日志」页面查看平台端所有操作审计记录，支持按资源、操作、结果筛选。', action: '平台审计日志' },
+  { title: '体验数据重置', detail: '进入「体验数据重置」页面查看当前数据概览，二次确认后执行数据清理重置，恢复测试服到可演示状态。', action: '体验数据重置' },
 ];
 
 const institutionDemoSteps: DemoStep[] = [
@@ -58,6 +60,8 @@ const institutionDemoSteps: DemoStep[] = [
   { title: '进入机构工作台', detail: '登录成功后自动跳转至 /hospital，进入机构运营工作台。', action: '/hospital' },
   { title: '查看工作台看板', detail: '首页看板展示客户总数、高优先级客户、待确认预约、待处理随访、已完成随访、机会池客户等指标。', action: '工作台' },
   { title: '查看客户列表', detail: '点击「客户中心」查看当前机构的所有客户，支持搜索、筛选、新建和编辑。', action: '客户中心' },
+  { title: '新建客户', detail: '点击「新建客户」按钮，填写客户基本信息（姓名、手机号、项目兴趣等）并提交。', action: '新建客户' },
+  { title: '编辑客户', detail: '点击客户卡片进入详情，支持修改客户基本信息和标签。', action: '编辑客户' },
   { title: '查看客户详情', detail: '点击客户卡片的「查看详情」按钮，侧边栏展示客户基础资料、标签、预约记录、治疗摘要、随访任务和时间线。', action: '查看详情' },
   { title: '完成一条随访任务', detail: '进入「智能随访」，找到状态为「待处理」的随访任务，依次点击流转按钮将其推进至「已完成」。刷新页面后状态保持。', action: '智能随访' },
   { title: '查看机会池', detail: '点击「机会池」查看基于客户旅程自动分类的复诊机会、复购机会和沉睡客户机会。', action: '机会池' },
@@ -66,43 +70,47 @@ const institutionDemoSteps: DemoStep[] = [
 
 const availableFeatures = {
   platform: [
-    '平台端登录',
-    '平台总览看板（租户数、套餐覆盖率、配额风险）',
-    '租户管理（新建/查看/编辑租户）',
-    '套餐与产品管理（创建套餐、发布版本、绑定租户）',
-    '租户账号管理（创建/重置机构管理员账号）',
-    '商业记录查看（订单、合同、发票、支付）',
-    '套餐变更（预览变更、提交变更）',
+    '平台端正式机构开通',
+    '初始管理员账号创建',
+    '套餐绑定（自动生成 plan_binding 商业记录）',
+    '套餐变更预览与执行（自动生成 plan_change 商业记录）',
+    '商业记录自动生成 — tenant_opening、account_opening、plan_binding、plan_change、account_status_change',
+    '机构账号停用、启用、重置密码',
     '平台审计日志查看',
+    '体验数据重置 / 清理机制（二次确认 + 审计写入）',
+    '平台总览看板（租户数、套餐覆盖率、配额风险）',
     '首页品牌配置',
-    'AI 模型配置入口',
-    '知识库管理入口',
-    '体验版 V0.1 操作说明（本页面）',
+    'AI 模型配置入口（只读）',
+    '知识库管理入口（只读）',
+    '体验版 V0.2 操作说明（本页面）',
   ],
   institution: [
     '机构端正式账号登录',
     '工作台看板（客户数、待随访数、已完成随访数、机会数）',
-    '客户中心（客户列表、搜索、过滤、新建、编辑）',
+    '客户列表（搜索、过滤、新建、编辑）',
     '客户详情时间线（基础资料、标签、预约、治疗摘要、随访、审计）',
+    '客户新增与编辑',
     '智能随访（随访任务列表、状态流转、来源筛选）',
     '随访任务完成（流转持久化，刷新后不丢）',
-    '机会池（复诊机会、复购机会、沉睡客户机会）',
+    '复诊、复购、沉睡客户机会池',
+    '租户数据隔离',
     '预约中心（预约列表、新建预约）',
     '治疗摘要管理（列表、新增、编辑、作废）',
     '审计日志查看',
-    '体验版数据自动供给（首次正式登录取 provision 5 客户 + 随访 + 治疗摘要）',
+    '体验版数据自动供给（首次正式登录 provision 5 客户 + 随访 + 治疗摘要）',
   ],
 };
 
 const notAvailableFeatures = [
-  { icon: XCircle, title: '未接入真实 HIS', description: '当前不连接任何医院信息系统，不拉取真实诊疗数据。' },
-  { icon: XCircle, title: '未接入短信 / 企微 / 电话触达', description: '随访任务仅支持在系统内状态流转，不会自动向客户发送手机短信、企微消息或拨打电话。' },
-  { icon: XCircle, title: '未接入真实 AI 大模型', description: 'AI 模型配置为只读入口，不触发真实模型调用、不消耗 Token、不产生费用。' },
-  { icon: XCircle, title: '未启用知识库真实上传解析', description: '知识库管理入口为只读预览，不支持文件上传、解析或向量化。' },
-  { icon: XCircle, title: '未开放完整客户 CRUD', description: '客户中心支持基本的新增与编辑操作，但不支持批量导入、数据导出、客户合并等高级功能。' },
-  { icon: XCircle, title: '未启用正式计费扣费', description: '套餐价格仅用于展示，不接入真实支付、不产生实际扣费。' },
-  { icon: XCircle, title: '未启用正式生产监控', description: '当前版本不含正式告警、性能监控或 SLA 保障。' },
-  { icon: XCircle, title: '未启用合同 / 发票 / 支付闭环', description: '商业记录为演示数据，不代表真实合同签署、发票开具或资金流转。' },
+  { icon: XCircle, title: '不宣称真实 HIS 接入', description: '当前不连接任何医院信息系统，不拉取真实诊疗数据。' },
+  { icon: XCircle, title: '不宣称短信 / 企微 / 电话自动触达', description: '随访任务仅支持在系统内状态流转，不会自动向客户发送手机短信、企微消息或拨打电话。' },
+  { icon: XCircle, title: '不宣称真实 AI 大模型调用', description: 'AI 模型配置为只读入口，不触发真实模型调用、不消耗 Token、不产生费用。' },
+  { icon: XCircle, title: '不宣称知识库真实上传解析', description: '知识库管理入口为只读预览，不支持文件上传、解析或向量化。' },
+  { icon: XCircle, title: '不宣称正式支付、合同、发票、收款、退款', description: '商业记录为演示数据，不代表真实合同签署、发票开具或资金流转。套餐价格仅展示，不接入真实支付。' },
+  { icon: XCircle, title: '不宣称自动计费扣费', description: '当前版本不处理自动计费、不消耗额度、不生成账单。' },
+  { icon: XCircle, title: '不宣称正式生产监控', description: '当前版本不含正式告警、性能监控或 SLA 保障。' },
+  { icon: XCircle, title: '不宣称正式商用交付已完成', description: '体验版用于功能演示和内部验收，不代表产品已具备正式商用条件。' },
+  { icon: XCircle, title: '不宣称数据重置功能可用于生产环境', description: '数据重置为测试服/体验版专用能力，全量不可逆，严禁用于正式生产环境。' },
 ];
 
 const faqItems = [
@@ -138,6 +146,14 @@ const faqItems = [
     question: '体验版有数据量上限吗？',
     answer: '体验版受套餐配额限制。演示租户使用试用版套餐，有各自的配额上限。正式环境由平台管理员在套餐中配置。',
   },
+  {
+    question: '数据重置会删除什么？',
+    answer: '数据重置会清空所有机构及关联数据（客户、随访、商业记录等），但 platform 平台账号、套餐目录和版本不受影响。重置后可以重新新建机构继续体验。',
+  },
+  {
+    question: '如何恢复预置的演示机构？',
+    answer: '数据重置不会自动恢复预置的演示机构（如澄星医疗美容等）。如需恢复 seed 演示机构，请联系管理员运行 pnpm seed。',
+  },
 ];
 
 export function TrialV01ExperienceHandoffPanel() {
@@ -171,7 +187,7 @@ export function TrialV01ExperienceHandoffPanel() {
           <div className="max-w-3xl">
             <p className="text-sm font-semibold text-blue-600">只读 · 平台端受控可见</p>
             <h1 className="mt-2 text-4xl font-semibold tracking-normal text-slate-950 lg:text-5xl">
-              智美天工 Clean 体验版 V0.1
+              智美天工 Clean 体验版 V0.2
             </h1>
             <p className="mt-3 text-lg leading-7 text-slate-600">
               本页面为平台端受控入口，仅平台管理员登录后可查看。页面不暴露账号密码，不对外公开。
@@ -454,6 +470,7 @@ export function TrialV01ExperienceHandoffPanel() {
             <p className="mt-1 text-sm leading-6 text-rose-800">
               本页面为平台端受控入口，仅限平台管理员登录后查看。页面内容（包括账号用户名）不得在未登录公开页面暴露。
               演示账号密码需通过安全渠道单独传递，禁止在任何页面、文档或公开渠道中直接展示。
+              体验数据重置为全量不可逆操作，仅限测试服/体验版环境，严禁用于正式生产。
             </p>
           </div>
         </div>
