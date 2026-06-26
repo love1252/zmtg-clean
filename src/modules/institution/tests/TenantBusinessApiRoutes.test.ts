@@ -12,6 +12,7 @@ import {
 import {
   GET as followupsGet,
   PATCH as followupsPatch,
+  POST as followupsPost,
 } from '@/app/api/institution/followups/route';
 import { DEMO_SESSION_COOKIE } from '@/modules/auth/server/demo-session';
 import type { AccessContext } from '@/modules/security/domain/access-control';
@@ -31,6 +32,7 @@ const routeMocks = vi.hoisted(() => {
     createAppointment: vi.fn(),
     updateAppointment: vi.fn(),
     transitionFollowUpTask: vi.fn(),
+    createManualFollowUpTask: vi.fn(),
   };
   const auditRecord = vi.fn();
   const checkTenantQuotaForCreate = vi.fn();
@@ -186,6 +188,11 @@ beforeEach(() => {
     kind: 'updated',
     task: { id: 'fu_001', tenantId: 'demo-tenant-001', status: 'in_progress' },
   });
+  routeMocks.repository.createManualFollowUpTask.mockReset();
+  routeMocks.repository.createManualFollowUpTask.mockResolvedValue({
+    kind: 'created',
+    task: { id: 'fu_created', tenantId: 'demo-tenant-001', status: 'scheduled' },
+  });
 });
 
 const validCreateCustomerPayload = {
@@ -229,6 +236,16 @@ const validUpdateAppointmentPayload = {
 const validFollowUpTransitionPayload = {
   id: 'fu_001',
   nextStatus: 'in_progress',
+};
+
+const validCreateFollowUpPayload = {
+  customerId: 'cust_001',
+  customerDisplayName: '王女士',
+  stage: '术后回访',
+  dueAt: '2026-06-15T10:00:00+08:00',
+  suggestedAction: '联系客户确认恢复情况',
+  riskLevel: 'normal',
+  status: 'scheduled',
 };
 
 function expectAuditEventDoesNotContainPrivateBody(event: unknown) {
@@ -1500,6 +1517,136 @@ describe('租户业务写入 API 路由', () => {
       reason: 'stale_transition',
     }));
     expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
+  });
+
+  it('机构账号手动创建随访成功 201', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await followupsPost(
+      new Request('http://localhost/api/institution/followups', {
+        method: 'POST',
+        body: JSON.stringify(validCreateFollowUpPayload),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      record: { id: 'fu_created', tenantId: 'demo-tenant-001' },
+    });
+    expect(routeMocks.repository.createManualFollowUpTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'demo-tenant-001',
+        customerId: 'cust_001',
+        stage: '术后回访',
+        status: 'scheduled',
+        riskLevel: 'normal',
+      }),
+    );
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'create',
+      resource: 'follow_up',
+      resourceId: 'fu_created',
+      result: 'allowed',
+    }));
+    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
+  });
+
+  it('未登录创建随访返回 401', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
+
+    const response = await followupsPost(
+      new Request('http://localhost/api/institution/followups', {
+        method: 'POST',
+        body: JSON.stringify(validCreateFollowUpPayload),
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: '请先登录' });
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+  });
+
+  it('平台上下文创建随访返回 403 且不调用写入', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
+
+    const response = await followupsPost(
+      new Request('http://localhost/api/institution/followups', {
+        method: 'POST',
+        body: JSON.stringify(validCreateFollowUpPayload),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
+    expect(routeMocks.repository.createManualFollowUpTask).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      result: 'denied',
+      reason: 'role_denied',
+    }));
+  });
+
+  it('跨租户客户写入随访被隔离拒绝', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
+      ...tenantContext,
+      tenantId: 'other-tenant-002',
+    });
+    routeMocks.repository.createManualFollowUpTask.mockResolvedValueOnce({
+      kind: 'customer_not_found',
+    });
+
+    const response = await followupsPost(
+      new Request('http://localhost/api/institution/followups', {
+        method: 'POST',
+        body: JSON.stringify(validCreateFollowUpPayload),
+      }),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
+  });
+
+  it('无效 customerId 创建随访返回 404', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    routeMocks.repository.createManualFollowUpTask.mockResolvedValueOnce({
+      kind: 'customer_not_found',
+    });
+
+    const response = await followupsPost(
+      new Request('http://localhost/api/institution/followups', {
+        method: 'POST',
+        body: JSON.stringify(validCreateFollowUpPayload),
+      }),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
+  });
+
+  it('体验版套餐机构创建预约成功（trial-care quota 已配置）', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
+      ...tenantContext,
+      tenantId: 'trial-tenant-test',
+    });
+    routeMocks.checkTenantQuotaForCreate.mockResolvedValueOnce({
+      allowed: true,
+      current: 5,
+      limit: 120,
+      resource: 'appointments',
+    });
+
+    const response = await appointmentsPost(
+      new Request('http://localhost/api/institution/appointments', {
+        method: 'POST',
+        body: JSON.stringify(validCreateAppointmentPayload),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ resource: 'appointments' }),
+    );
+    expect(routeMocks.repository.createAppointment).toHaveBeenCalled();
   });
 
   it('写入链路异常返回 503 且不泄露数据库或密钥信息', async () => {

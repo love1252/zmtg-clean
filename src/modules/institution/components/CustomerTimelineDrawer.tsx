@@ -12,7 +12,9 @@ import {
   X,
 } from 'lucide-react';
 import {
+  createAppointment,
   createTreatmentSummary,
+  type CreateAppointmentClientPayload,
   type CreateTreatmentSummaryClientPayload,
   type TenantBusinessClientError,
 } from '@/modules/institution/client/tenant-business-client';
@@ -27,8 +29,9 @@ import type {
   CustomerTimelineFollowUpSummary,
   CustomerTimelineResponse,
 } from '@/modules/institution/domain/customer-timeline';
-import type { FollowUpRiskLevel } from '@/modules/institution/domain/followup-workflow';
+import type { FollowUpRiskLevel, FollowUpStatus } from '@/modules/institution/domain/followup-workflow';
 import type { CustomerTimelineTreatmentSummary } from '@/modules/institution/domain/treatment-summaries';
+import type { AppointmentStatus } from '@/modules/institution/domain/appointment-records';
 import {
   appointmentStatusLabels,
   customerLifecycleLabels,
@@ -394,6 +397,140 @@ export function CustomerTimelineDrawer({
     useState<string | null>(null);
   const [isTreatmentSummarySubmitting, setIsTreatmentSummarySubmitting] = useState(false);
 
+  // 预约新增表单
+  type AppointmentFormState = {
+    project: string;
+    scheduledAt: string;
+    consultantUserId: string;
+    status: AppointmentStatus;
+    note: string;
+  };
+  const emptyAppointmentForm: AppointmentFormState = {
+    project: '',
+    scheduledAt: '',
+    consultantUserId: '',
+    status: 'pending_confirmation',
+    note: '',
+  };
+  const appointmentStatusOptions = Object.entries(appointmentStatusLabels) as [
+    AppointmentStatus,
+    string,
+  ][];
+  const [isAppointmentFormOpen, setIsAppointmentFormOpen] = useState(false);
+  const [appointmentForm, setAppointmentForm] = useState<AppointmentFormState>(emptyAppointmentForm);
+  const [appointmentSubmitError, setAppointmentSubmitError] = useState<string | null>(null);
+  const [appointmentSubmitSuccess, setAppointmentSubmitSuccess] = useState<string | null>(null);
+  const [isAppointmentSubmitting, setIsAppointmentSubmitting] = useState(false);
+
+  function updateAppointmentFormField<Key extends keyof AppointmentFormState>(
+    key: Key,
+    value: AppointmentFormState[Key],
+  ) {
+    setAppointmentForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function handleAppointmentSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!appointmentForm.project.trim() || !appointmentForm.scheduledAt.trim()) {
+      setAppointmentSubmitError('请填写预约项目和预约时间');
+      return;
+    }
+    setIsAppointmentSubmitting(true);
+    setAppointmentSubmitError(null);
+    try {
+      const payload: CreateAppointmentClientPayload = {
+        customerId,
+        customerDisplayName: customer?.displayName ?? customerName,
+        project: appointmentForm.project.trim(),
+        scheduledAt: appointmentForm.scheduledAt.trim(),
+        consultantUserId: appointmentForm.consultantUserId.trim(),
+        status: appointmentForm.status,
+        note: appointmentForm.note.trim(),
+      };
+      const result = await createAppointment(payload);
+      if (result.ok) {
+        setAppointmentForm(emptyAppointmentForm);
+        setIsAppointmentFormOpen(false);
+        setAppointmentSubmitSuccess('预约已创建');
+        await onTimelineRefresh();
+      } else {
+        setAppointmentSubmitError(result.error.message);
+      }
+    } finally {
+      setIsAppointmentSubmitting(false);
+    }
+  }
+
+  // 随访任务创建表单
+  type FollowUpFormState = {
+    stage: string;
+    suggestedAction: string;
+    riskLevel: FollowUpRiskLevel;
+    dueAt: string;
+    status: FollowUpStatus;
+  };
+  const emptyFollowUpForm: FollowUpFormState = {
+    stage: '',
+    suggestedAction: '',
+    riskLevel: 'normal',
+    dueAt: '',
+    status: 'scheduled',
+  };
+  const followUpStatusOptions = Object.entries(followUpStatusLabels) as [
+    FollowUpStatus,
+    string,
+  ][];
+  const [isFollowUpFormOpen, setIsFollowUpFormOpen] = useState(false);
+  const [followUpForm, setFollowUpForm] = useState<FollowUpFormState>(emptyFollowUpForm);
+  const [followUpSubmitError, setFollowUpSubmitError] = useState<string | null>(null);
+  const [followUpSubmitSuccess, setFollowUpSubmitSuccess] = useState<string | null>(null);
+  const [isFollowUpSubmitting, setIsFollowUpSubmitting] = useState(false);
+
+  function updateFollowUpFormField<Key extends keyof FollowUpFormState>(
+    key: Key,
+    value: FollowUpFormState[Key],
+  ) {
+    setFollowUpForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function handleFollowUpSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!followUpForm.stage.trim() || !followUpForm.dueAt.trim()) {
+      setFollowUpSubmitError('请填写随访阶段和到期时间');
+      return;
+    }
+    setIsFollowUpSubmitting(true);
+    setFollowUpSubmitError(null);
+    try {
+      const response = await fetch('/api/institution/followups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId,
+          customerDisplayName: customer?.displayName ?? customerName,
+          stage: followUpForm.stage.trim(),
+          suggestedAction: followUpForm.suggestedAction.trim(),
+          riskLevel: followUpForm.riskLevel,
+          dueAt: followUpForm.dueAt.trim(),
+          status: followUpForm.status,
+        }),
+      });
+      const data = await response.json();
+      if (response.ok && data.record) {
+        setFollowUpForm(emptyFollowUpForm);
+        setIsFollowUpFormOpen(false);
+        setFollowUpSubmitSuccess('随访任务已创建');
+        await onTimelineRefresh();
+      } else {
+        setFollowUpSubmitError(typeof data.error === 'string' ? data.error : '随访创建失败');
+      }
+    } catch {
+      setFollowUpSubmitError('请求失败，请稍后重试');
+    } finally {
+      setIsFollowUpSubmitting(false);
+    }
+  }
+
   function updateTreatmentSummaryFormField<Key extends keyof TreatmentSummaryFormState>(
     key: Key,
     value: TreatmentSummaryFormState[Key],
@@ -527,29 +664,283 @@ export function CustomerTimelineDrawer({
               </section>
 
               <section className="space-y-3">
-                <SectionHeader icon={CalendarClock} title="预约记录" />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <SectionHeader icon={CalendarClock} title="预约记录" />
+                  <button
+                    type="button"
+                    className="inline-flex h-9 items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700"
+                    onClick={() => {
+                      setAppointmentSubmitError(null);
+                      setAppointmentSubmitSuccess(null);
+                      setIsAppointmentFormOpen((prev) => !prev);
+                    }}
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    新增预约
+                  </button>
+                </div>
+
+                {appointmentSubmitSuccess ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                    {appointmentSubmitSuccess}
+                  </div>
+                ) : null}
+
+                {isAppointmentFormOpen ? (
+                  <form
+                    className="rounded-2xl border border-blue-100 bg-white p-4"
+                    onSubmit={handleAppointmentSubmit}
+                  >
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="appointment-project" className="text-xs font-semibold text-slate-500">
+                          预约项目 *
+                        </label>
+                        <input
+                          id="appointment-project"
+                          className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                          maxLength={160}
+                          placeholder="如：光子嫩肤"
+                          value={appointmentForm.project}
+                          onChange={(e) => updateAppointmentFormField('project', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="appointment-scheduled-at" className="text-xs font-semibold text-slate-500">
+                          预约时间 *
+                        </label>
+                        <input
+                          id="appointment-scheduled-at"
+                          className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                          placeholder="2026-07-01T10:00:00Z"
+                          maxLength={64}
+                          value={appointmentForm.scheduledAt}
+                          onChange={(e) => updateAppointmentFormField('scheduledAt', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="appointment-consultant" className="text-xs font-semibold text-slate-500">
+                          顾问
+                        </label>
+                        <input
+                          id="appointment-consultant"
+                          className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                          maxLength={96}
+                          placeholder="如：李医生"
+                          value={appointmentForm.consultantUserId}
+                          onChange={(e) => updateAppointmentFormField('consultantUserId', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="appointment-status" className="text-xs font-semibold text-slate-500">
+                          状态
+                        </label>
+                        <select
+                          id="appointment-status"
+                          className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                          value={appointmentForm.status}
+                          onChange={(e) => updateAppointmentFormField('status', e.target.value as AppointmentStatus)}
+                        >
+                          {appointmentStatusOptions.map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label htmlFor="appointment-note" className="text-xs font-semibold text-slate-500">
+                          备注
+                        </label>
+                        <textarea
+                          id="appointment-note"
+                          className="mt-1 h-20 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300"
+                          placeholder="预约备注（可选）"
+                          value={appointmentForm.note}
+                          onChange={(e) => updateAppointmentFormField('note', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    {appointmentSubmitError ? (
+                      <p className="mt-3 text-sm text-rose-600">{appointmentSubmitError}</p>
+                    ) : null}
+                    <div className="mt-4 flex gap-3">
+                      <button
+                        type="submit"
+                        disabled={isAppointmentSubmitting}
+                        className="inline-flex h-9 items-center gap-2 rounded-full bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+                      >
+                        {isAppointmentSubmitting ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            创建中...
+                          </>
+                        ) : (
+                          '创建预约'
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                        onClick={() => {
+                          setIsAppointmentFormOpen(false);
+                          setAppointmentSubmitError(null);
+                        }}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+
                 {timeline.appointments.length > 0 ? (
                   <ul className="space-y-3">
                     {timeline.appointments.map((appointment) => (
                       <AppointmentSummary key={appointment.id} appointment={appointment} />
                     ))}
                   </ul>
-                ) : (
+                ) : !isAppointmentFormOpen ? (
                   <InstitutionPageState kind="empty" title="暂无预约记录" />
-                )}
+                ) : null}
               </section>
 
               <section className="space-y-3">
-                <SectionHeader icon={ClipboardList} title="随访任务" />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <SectionHeader icon={ClipboardList} title="随访任务" />
+                  <button
+                    type="button"
+                    className="inline-flex h-9 items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-700"
+                    onClick={() => {
+                      setFollowUpSubmitError(null);
+                      setFollowUpSubmitSuccess(null);
+                      setIsFollowUpFormOpen((prev) => !prev);
+                    }}
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    新增随访
+                  </button>
+                </div>
+
+                {followUpSubmitSuccess ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                    {followUpSubmitSuccess}
+                  </div>
+                ) : null}
+
+                {isFollowUpFormOpen ? (
+                  <form
+                    className="rounded-2xl border border-amber-100 bg-white p-4"
+                    onSubmit={handleFollowUpSubmit}
+                  >
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="followup-stage" className="text-xs font-semibold text-slate-500">
+                          随访阶段 *
+                        </label>
+                        <input
+                          id="followup-stage"
+                          className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-amber-300"
+                          maxLength={120}
+                          placeholder="如：术后1周随访"
+                          value={followUpForm.stage}
+                          onChange={(e) => updateFollowUpFormField('stage', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="followup-due-at" className="text-xs font-semibold text-slate-500">
+                          到期时间 *
+                        </label>
+                        <input
+                          id="followup-due-at"
+                          className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-amber-300"
+                          placeholder="2026-07-01T10:00:00Z"
+                          maxLength={64}
+                          value={followUpForm.dueAt}
+                          onChange={(e) => updateFollowUpFormField('dueAt', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="followup-risk" className="text-xs font-semibold text-slate-500">
+                          风险等级
+                        </label>
+                        <select
+                          id="followup-risk"
+                          className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-amber-300"
+                          value={followUpForm.riskLevel}
+                          onChange={(e) => updateFollowUpFormField('riskLevel', e.target.value as FollowUpRiskLevel)}
+                        >
+                          {riskLevelOptions.map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="followup-status" className="text-xs font-semibold text-slate-500">
+                          状态
+                        </label>
+                        <select
+                          id="followup-status"
+                          className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-amber-300"
+                          value={followUpForm.status}
+                          onChange={(e) => updateFollowUpFormField('status', e.target.value as FollowUpStatus)}
+                        >
+                          {followUpStatusOptions.map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label htmlFor="followup-action" className="text-xs font-semibold text-slate-500">
+                          建议动作
+                        </label>
+                        <textarea
+                          id="followup-action"
+                          className="mt-1 h-20 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-amber-300"
+                          placeholder="随访动作说明（可选）"
+                          value={followUpForm.suggestedAction}
+                          onChange={(e) => updateFollowUpFormField('suggestedAction', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    {followUpSubmitError ? (
+                      <p className="mt-3 text-sm text-rose-600">{followUpSubmitError}</p>
+                    ) : null}
+                    <div className="mt-4 flex gap-3">
+                      <button
+                        type="submit"
+                        disabled={isFollowUpSubmitting}
+                        className="inline-flex h-9 items-center gap-2 rounded-full bg-amber-600 px-4 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:opacity-60"
+                      >
+                        {isFollowUpSubmitting ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            创建中...
+                          </>
+                        ) : (
+                          '创建随访'
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                        onClick={() => {
+                          setIsFollowUpFormOpen(false);
+                          setFollowUpSubmitError(null);
+                        }}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+
                 {timeline.followups.length > 0 ? (
                   <ul className="space-y-3">
                     {timeline.followups.map((followUp) => (
                       <FollowUpSummary key={followUp.id} followUp={followUp} />
                     ))}
                   </ul>
-                ) : (
+                ) : !isFollowUpFormOpen ? (
                   <InstitutionPageState kind="empty" title="暂无随访任务" />
-                )}
+                ) : null}
               </section>
 
               <section className="space-y-3">

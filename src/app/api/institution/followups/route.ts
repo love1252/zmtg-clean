@@ -7,7 +7,9 @@ import {
 import { parseFollowUpTaskListQuery } from '@/modules/institution/server/follow-up-task-query-parser';
 import { runTenantBusinessAuditTransaction } from '@/modules/institution/server/tenant-business-audit-transaction';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
-import { parseFollowUpTransitionPayload } from '@/modules/institution/server/tenant-business-write-input';
+import {
+  parseFollowUpTransitionPayload,
+} from '@/modules/institution/server/tenant-business-write-input';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
 
@@ -97,4 +99,65 @@ export async function PATCH(request: Request) {
   } catch {
     return NextResponse.json({ error: '数据服务暂时不可用' }, { status: 503 });
   }
+}
+
+function isFollowUpCustomerReferenceError(error: unknown) {
+  const databaseError = error as { code?: unknown; constraint?: unknown; constraint_name?: unknown; message?: unknown };
+  const constraintName = databaseError.constraint_name ?? databaseError.constraint;
+  return (
+    databaseError.code === '23503' &&
+    (constraintName === 'follow_up_tasks_tenant_customer_fk' ||
+      (typeof databaseError.message === 'string' && databaseError.message.includes('follow_up_tasks_tenant_customer_fk')))
+  );
+}
+
+export async function POST(request: Request) {
+  const context = getDemoAccessContextFromRequest(request);
+  if (!context) return NextResponse.json({ error: '请先登录' }, { status: 401 });
+
+  const body = await readJsonBody(request);
+  if (!body.ok) return NextResponse.json({ error: '请求格式不正确' }, { status: 400 });
+
+  const payload = body.value as Record<string, unknown>;
+  const customerId = typeof payload.customerId === 'string' ? payload.customerId.trim() : '';
+  const customerDisplayName = typeof payload.customerDisplayName === 'string' ? payload.customerDisplayName.trim() : '';
+  const stage = typeof payload.stage === 'string' ? payload.stage.trim() : '';
+  const dueAt = typeof payload.dueAt === 'string' ? payload.dueAt.trim() : '';
+  const suggestedAction = typeof payload.suggestedAction === 'string' ? payload.suggestedAction.trim() : '';
+  const rl = typeof payload.riskLevel === 'string' && ['normal','watch','urgent'].includes(payload.riskLevel) ? payload.riskLevel as 'normal'|'watch'|'urgent' : 'normal';
+  const st = typeof payload.status === 'string' && ['scheduled','due'].includes(payload.status) ? payload.status as 'scheduled'|'due' : 'scheduled';
+
+  if (!customerId || !stage || !dueAt) return NextResponse.json({ error: 'customerId、stage、dueAt 不可为空' }, { status: 400 });
+
+  try {
+    const db = getDatabase();
+    const auditRepository = createAuditEventRepository(db);
+    return await handleTenantBusinessMutationRequest({
+      context, resource: 'follow_up', action: 'create',
+      mutate: async ({ tenantId, successAuditEvent }) => {
+        try {
+          return await runTenantBusinessAuditTransaction(db, async ({ repository, auditRepository }) => {
+            // 使用手动创建路径，不关联治疗摘要来源
+            const record = await repository.createManualFollowUpTask({
+              id: globalThis.crypto.randomUUID(),
+              tenantId,
+              customerId,
+              customerDisplayName: customerDisplayName || '客户',
+              stage,
+              status: st,
+              dueAt,
+              suggestedAction,
+              riskLevel: rl,
+            });
+            if (record.kind !== 'created') {
+              return { kind: 'not_found' as const };
+            }
+            await auditRepository.record({ ...successAuditEvent, resourceId: record.task.id });
+            return { kind: 'success' as const, record: record.task };
+          });
+        } catch (error) { if (isFollowUpCustomerReferenceError(error)) return { kind: 'not_found' }; throw error; }
+      },
+      auditRepository, successStatus: 201,
+    });
+  } catch { return NextResponse.json({ error: '数据服务暂时不可用' }, { status: 503 }); }
 }
