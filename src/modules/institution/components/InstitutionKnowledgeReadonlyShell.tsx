@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BookOpen, ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search, Upload } from 'lucide-react';
 import type {
   InstitutionKnowledgeItemDto,
   InstitutionKnowledgeListResponse,
@@ -151,6 +151,10 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [qaAuditRecords, setQaAuditRecords] = useState<InstitutionKnowledgeQaAuditRecord[]>([]);
   const [qaAuditMessage, setQaAuditMessage] = useState('点击刷新查看问答审计');
   const [isQaAuditLoading, setIsQaAuditLoading] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [uploadMessage, setUploadMessage] = useState('选择文件后上传，支持 .txt、.md、.csv、.json 格式，最大 2MB');
+  const [uploadedKnowledgeId, setUploadedKnowledgeId] = useState<string | null>(null);
   const [pageInfo, setPageInfo] = useState<InstitutionKnowledgeListResponse['pageInfo']>({
     page: 1,
     pageSize: 10,
@@ -203,6 +207,58 @@ export function InstitutionKnowledgeReadonlyShell() {
 
   function refresh() {
     setRefreshKey((current) => current + 1);
+  }
+
+  async function handleUpload(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!uploadFile) {
+      setUploadMessage('请选择要上传的文件');
+      setUploadStatus('error');
+      return;
+    }
+
+    const allowedExtensions = ['.txt', '.md', '.csv', '.json'];
+    const filename = uploadFile.name.toLowerCase();
+    const hasValidExtension = allowedExtensions.some((ext) => filename.endsWith(ext));
+    if (!hasValidExtension) {
+      setUploadMessage('文件类型暂不支持，当前支持 .txt、.md、.csv、.json 格式');
+      setUploadStatus('error');
+      return;
+    }
+
+    const maxBytes = 2 * 1024 * 1024;
+    if (uploadFile.size > maxBytes) {
+      setUploadMessage('文件大小不能超过 2MB');
+      setUploadStatus('error');
+      return;
+    }
+
+    setUploadStatus('uploading');
+    setUploadMessage('正在上传并解析文件...');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      const response = await fetch('/api/institution/knowledge-management/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const payload = await response.json().catch(() => null);
+      if (response.ok && payload?.status === 'created') {
+        setUploadStatus('success');
+        const chunkInfo = payload.chunkCount > 0 ? `，共 ${payload.chunkCount} 个片段` : '';
+        setUploadMessage(`文件已上传并解析成功${chunkInfo}`);
+        setUploadedKnowledgeId(payload.knowledgeId ?? null);
+        setUploadFile(null);
+        refresh();
+      } else {
+        setUploadStatus('error');
+        setUploadMessage(typeof payload?.error === 'string' ? payload.error : '文件上传失败，请稍后重试');
+      }
+    } catch {
+      setUploadStatus('error');
+      setUploadMessage('文件上传失败，请稍后重试');
+    }
   }
 
   async function loadKnowledgeFiles(knowledgeId: string) {
@@ -458,6 +514,53 @@ export function InstitutionKnowledgeReadonlyShell() {
           </button>
         </form>
       </div>
+
+      <section
+        aria-label="机构端知识库文件上传"
+        className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4"
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold tracking-normal text-slate-950">上传机构文件</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">上传低敏文件并自动解析，支持 .txt、.md、.csv、.json 格式，最大 2MB。</p>
+          </div>
+          <form onSubmit={handleUpload} className="flex w-full flex-col gap-2 sm:flex-row lg:w-[540px]">
+            <label className="relative min-w-0 flex-1">
+              <input
+                type="file"
+                accept=".txt,.md,.csv,.json"
+                onChange={(event) => {
+                  const files = event.target.files;
+                  setUploadFile(files?.length ? files[0] : null);
+                  setUploadStatus('idle');
+                  setUploadMessage('选择文件后上传，支持 .txt、.md、.csv、.json 格式，最大 2MB');
+                }}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-cyan-700 hover:file:bg-cyan-200 focus:border-cyan-400"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={!uploadFile || uploadStatus === 'uploading'}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {uploadStatus === 'uploading' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              上传解析
+            </button>
+          </form>
+        </div>
+        <div
+          className={cn(
+            'mt-4 rounded-xl border px-3 py-2 text-xs font-semibold',
+            uploadStatus === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              : uploadStatus === 'error'
+                ? 'border-rose-200 bg-rose-50 text-rose-700'
+                : 'border-slate-200 bg-slate-50 text-slate-500',
+          )}
+        >
+          {uploadMessage}
+        </div>
+      </section>
 
       <section
         aria-label="机构端知识库只读试用说明"
