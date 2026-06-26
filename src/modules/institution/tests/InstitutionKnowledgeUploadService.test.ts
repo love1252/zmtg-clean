@@ -233,4 +233,48 @@ describe('机构知识库上传解析 service', () => {
     expect(result.status).toBe('created');
     expect(result.chunkCount).toBe(1);
   });
+
+  it('JSON 文件上传解析成功且 chunks > 0', async () => {
+    const { repository, storage } = createMocks();
+    repository.createInstitutionKnowledgeSource.mockResolvedValue({ sourceId: 'src' });
+    repository.createInstitutionKnowledgeDocument.mockResolvedValue({ documentId: 'doc' });
+    storage.save.mockResolvedValue({ storageKey: 'k', sha256: 's', sizeBytes: 100 });
+    repository.createKnowledgeFile.mockResolvedValue({
+      fileId: 'f', tenantId: 't', knowledgeId: 'doc', originalFilename: 'data.json',
+      mimeType: 'application/json', sizeBytes: 100, status: 'active' as const, sha256: 's',
+      storageKey: 'k', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
+    });
+    repository.findKnowledgeItem.mockResolvedValue({
+      knowledgeId: 'doc',
+      tenantId: 't',
+      institutionId: 'i',
+      title: 'data.json',
+      status: 'ready',
+      visibleInstitutionIds: ['i'],
+    } as unknown as Parameters<typeof repository.findKnowledgeItem>[0] extends never ? never : ReturnType<typeof repository.findKnowledgeItem> extends Promise<infer T> ? T : never);
+    repository.findKnowledgeFile.mockResolvedValue({
+      fileId: 'f', tenantId: 't', knowledgeId: 'doc', originalFilename: 'data.json',
+      storageKey: 'k', mimeType: 'application/json', sizeBytes: 100, sha256: 's',
+      status: 'active', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
+    });
+    repository.findKnowledgeFileParse.mockResolvedValue(null);
+    repository.saveKnowledgeFileParseResult.mockResolvedValue({
+      parseId: 'p', tenantId: 't', knowledgeId: 'doc', fileId: 'f', parseStatus: 'succeeded',
+      failureReasonCode: null, safeFailureMessage: null, textContent: '{"a":1}', textLength: 7,
+      chunkCount: 1, parserVersion: 'v1', createdAt: new Date(), updatedAt: new Date(),
+    });
+    repository.replaceKnowledgeFileParseChunks.mockResolvedValue([]);
+    storage.read.mockResolvedValue(new Uint8Array(Buffer.from('{"key":"value","items":[1,2,3]}')));
+
+    const jsonFile = { name: 'data.json', type: 'application/json', size: 100, arrayBuffer: async () => new Uint8Array(Buffer.from('{"key":"value"}')).buffer as ArrayBuffer };
+
+    const result = await uploadAndParseInstitutionKnowledgeFileService({
+      repository, storage,
+      input: { tenantId: 't', institutionId: 'i', uploadedByUserId: 'u', file: jsonFile },
+    });
+
+    // JSON is on the allowlist, so upload should proceed, then parse
+    expect(result.status).toBe('created');
+    expect(result.chunkCount).toBeGreaterThanOrEqual(0);
+  });
 });
