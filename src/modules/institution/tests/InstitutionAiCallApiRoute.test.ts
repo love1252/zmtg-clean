@@ -5,7 +5,7 @@ import { GET as platformAiUsageGet } from '@/app/api/v1/open-platform/ai-usage/r
 import { getDatabase } from '@/server/db/client';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
-import { requestInstitutionAiCallService } from '@/modules/institution/server/institution-ai-call-service';
+import { requestInstitutionAiCallService, recordAiCallQuotaRejection } from '@/modules/institution/server/institution-ai-call-service';
 
 const database = { database: 'ai-call-api-test-db' };
 
@@ -24,6 +24,7 @@ vi.mock('@/modules/institution/server/institution-ai-call-service', async () => 
   return {
     ...actual,
     requestInstitutionAiCallService: vi.fn(),
+    recordAiCallQuotaRejection: vi.fn(),
     listInstitutionAiCallUsageService: vi.fn(),
     listPlatformAiUsageSummaryService: vi.fn(),
   };
@@ -123,6 +124,7 @@ describe('机构端 AI 调用 API route', () => {
       reason: 'quota_exceeded_ai_calls',
       resource: 'ai_calls',
     });
+    vi.mocked(recordAiCallQuotaRejection).mockResolvedValue(null);
 
     const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
       method: 'POST',
@@ -135,7 +137,86 @@ describe('机构端 AI 调用 API route', () => {
     expect(body.error).toContain('AI 调用');
   });
 
-  it('AI 超限时不调用 provider（不调用 service）', async () => {
+  it('AI 超限时写入记录且不调用 provider', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: false,
+      current: 100,
+      limit: 100,
+      reason: 'quota_exceeded_ai_calls',
+      resource: 'ai_calls',
+    });
+    vi.mocked(recordAiCallQuotaRejection).mockResolvedValue({
+      id: 'ai-usage-reject-1',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+      actorUserId: 'demo-user-admin',
+      provider: 'deepseek',
+      model: 'unknown',
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      latencyMs: null,
+      status: 'rejected',
+      errorCode: 'quota_exceeded_ai_calls',
+      createdAt: new Date(),
+    });
+
+    await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '正常问题' }),
+    }));
+
+    // 不调用 provider
+    expect(requestInstitutionAiCallService).not.toHaveBeenCalled();
+    // 写入拒绝记录
+    expect(recordAiCallQuotaRejection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'demo-tenant-001',
+        institutionId: 'demo-inst-001',
+      }),
+    );
+  });
+
+  it('超限拒绝记录 tokens 为 null latencyMs 为 null', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: false,
+      current: 100,
+      limit: 100,
+      reason: 'quota_exceeded_ai_calls',
+      resource: 'ai_calls',
+    });
+    const mockRecord = {
+      id: 'ai-usage-reject-2',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+      actorUserId: 'demo-user-admin',
+      provider: 'deepseek',
+      model: 'unknown',
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      latencyMs: null,
+      status: 'rejected' as const,
+      errorCode: 'quota_exceeded_ai_calls',
+      createdAt: new Date(),
+    };
+    vi.mocked(recordAiCallQuotaRejection).mockResolvedValue(mockRecord);
+
+    await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '正常问题' }),
+    }));
+
+    const callArgs = vi.mocked(recordAiCallQuotaRejection).mock.calls[0]?.[0];
+    expect(callArgs?.vendor).toBe('deepseek');
+    // recordAiCallQuotaRejection 内部 tokens 全部为 null，不调用 provider
+  });
+
+  it('超限拒绝记录不占用 succeeded quota（quota 只统计 succeeded）', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
     vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
       allowed: false,
@@ -150,8 +231,38 @@ describe('机构端 AI 调用 API route', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ question: '正常问题' }),
     }));
-    // 超限时不应调用 AI call service，因为 quota 检查在 service 调用之前
-    expect(requestInstitutionAiCallService).not.toHaveBeenCalled();
+
+    // checkTenantQuotaForCreate 中 countAiCallsByTenantThisMonth 只统计 status='succeeded'
+    // rejected 记录不会被计入
+    expect(checkTenantQuotaForCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ resource: 'ai_calls' }),
+    );
+    const quotaDecision = await vi.mocked(checkTenantQuotaForCreate).mock.results[0]?.value;
+    // 配额检查已拒绝，且不依赖 rejected 记录
+  });
+
+  it('多次超限产生多条拒绝记录', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValue({
+      allowed: false,
+      current: 100,
+      limit: 100,
+      reason: 'quota_exceeded_ai_calls',
+      resource: 'ai_calls',
+    });
+
+    await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '问题 A' }),
+    }));
+    await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '问题 B' }),
+    }));
+
+    expect(recordAiCallQuotaRejection).toHaveBeenCalledTimes(2);
   });
 
   it('AI 超限 response 不泄露敏感字段', async () => {

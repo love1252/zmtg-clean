@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { decryptSecret } from '@/modules/security/server/secretEncryption';
 import type { EncryptedSecretEnvelope } from '@/modules/security/server/secretEncryption';
 
-export type AiCallUsageStatus = 'succeeded' | 'failed' | 'sensitive_input_rejected' | 'rate_limited' | 'provider_unavailable';
+export type AiCallUsageStatus = 'succeeded' | 'failed' | 'sensitive_input_rejected' | 'rate_limited' | 'provider_unavailable' | 'rejected';
 
 export type AiCallUsageRecord = {
   id: string;
@@ -37,6 +37,8 @@ export type PlatformAiUsageSummary = {
   totalTokens: number | null;
   succeededCount: number;
   failedCount: number;
+  rejectedCount: number;
+  quotaExceededCount: number;
 };
 
 export type PlatformAiUsageListResponse = {
@@ -384,6 +386,35 @@ export async function requestInstitutionAiCallService(input: {
     };
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+export async function recordAiCallQuotaRejection(input: {
+  repository: AiCallUsageRepository;
+  tenantId: string;
+  institutionId: string | null;
+  actorUserId: string;
+  vendor: string;
+  model?: string | null;
+}): Promise<AiCallUsageRecord | null> {
+  try {
+    const record = await input.repository.createUsageRecord({
+      id: generateRecordId(),
+      tenantId: input.tenantId,
+      institutionId: input.institutionId,
+      actorUserId: input.actorUserId,
+      provider: input.vendor,
+      model: input.model ?? 'unknown',
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      latencyMs: null,
+      status: 'rejected',
+      errorCode: 'quota_exceeded_ai_calls',
+    });
+    return record;
+  } catch {
+    return null;
   }
 }
 

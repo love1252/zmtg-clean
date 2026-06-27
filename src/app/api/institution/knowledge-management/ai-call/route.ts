@@ -5,6 +5,7 @@ import { createAiCallUsageRepository } from '@/modules/institution/server/instit
 import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 import {
   requestInstitutionAiCallService,
+  recordAiCallQuotaRejection,
   getDefaultAiVendor,
   isAllowedAiVendor,
 } from '@/modules/institution/server/institution-ai-call-service';
@@ -44,6 +45,15 @@ export async function POST(request: Request) {
       resource: 'ai_calls',
     });
     if (!quotaDecision.allowed) {
+      // 写入超限拒绝审计记录，不调用 provider
+      recordAiCallQuotaRejection({
+        repository: createAiCallUsageRepository(db),
+        tenantId: accessContext.tenantId,
+        institutionId: accessContext.institutionId,
+        actorUserId: accessContext.userId,
+        vendor,
+      }).catch(() => {});
+
       return NextResponse.json(
         { code: 'quota_exceeded_ai_calls', error: 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐' },
         { status: 409 },
