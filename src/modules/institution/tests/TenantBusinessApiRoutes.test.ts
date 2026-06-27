@@ -568,7 +568,7 @@ describe('租户业务写入 API 处理器', () => {
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
-      error: '客户数量已达到当前套餐上限，请联系平台管理员调整套餐',
+      code: 'quota_exceeded_customers', error: '客户数量已达到当前套餐上限，请联系平台管理员调整套餐',
     });
     expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
       action: 'create',
@@ -1064,7 +1064,7 @@ describe('租户业务写入 API 路由', () => {
     const serializedPayload = JSON.stringify(payload);
 
     expect(response.status).toBe(409);
-    expect(payload).toEqual({ error: '客户数量已达到当前套餐上限，请联系平台管理员调整套餐' });
+    expect(payload).toEqual({ code: 'quota_exceeded_customers', error: '客户数量已达到当前套餐上限，请联系平台管理员调整套餐' });
     expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledWith({
       database: routeMocks.database,
       resource: 'customers',
@@ -1108,7 +1108,7 @@ describe('租户业务写入 API 路由', () => {
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
-      error: '当前租户未配置有效套餐，暂时无法新增记录',
+      code: 'missing_active_plan', error: '当前租户未配置有效套餐，暂时无法新增记录',
     });
     expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
@@ -1136,7 +1136,7 @@ describe('租户业务写入 API 路由', () => {
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
-      error: '当前租户套餐配额未配置，暂时无法新增记录',
+      code: 'missing_quota_limit', error: '当前租户套餐配额未配置，暂时无法新增记录',
     });
     expect(routeMocks.repository.createAppointment).not.toHaveBeenCalled();
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
@@ -1327,7 +1327,7 @@ describe('租户业务写入 API 路由', () => {
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
-      error: '预约配额已达上限，请联系平台管理员调整套餐',
+      code: 'quota_exceeded_appointments', error: '预约配额已达上限，请联系平台管理员调整套餐',
     });
     expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledWith({
       database: routeMocks.database,

@@ -257,7 +257,7 @@ export async function handleTenantBusinessMutationRequest<Item>({
     );
 
     return NextResponse.json(
-      { error: getTenantQuotaDenialMessage(result.decision.reason) },
+      { code: result.decision.reason, error: getTenantQuotaDenialMessage(result.decision.reason) },
       { status: 409 },
     );
   }

@@ -45,6 +45,16 @@ vi.mock('@/modules/open-platform/server/tenant-plan-binding-repository', async (
   };
 });
 
+vi.mock('@/modules/institution/domain/quota-enforcement', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/modules/institution/domain/quota-enforcement')>();
+  return {
+    ...actual,
+    getTenantPlanQuotaLimitsByCode: vi.fn(() => ({
+      maxAppointments: 120, maxCustomers: 80, maxKnowledgeFiles: 20, maxStaffSeats: 5, maxAiCalls: 100,
+    })),
+  };
+});
+
 const platformAdminContext: AccessContext = {
   userId: 'demo-user-platform',
   role: 'platform_admin',
