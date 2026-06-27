@@ -70,6 +70,9 @@ type SearchServiceInput = {
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 50;
+const KEYWORD_MIN_LENGTH = 1;
+const KEYWORD_MAX_LENGTH = 80;
+const SNIPPET_MAX_CHARS = 300;
 const emptyState = {
   title: '暂无匹配片段',
   description: '当前范围没有命中关键词的已解析知识片段。',
@@ -88,6 +91,26 @@ function normalizeKeyword(value: string | number | null | undefined) {
       error: {
         status: 'validation_failed' as const,
         message: '请输入关键词后再检索知识片段',
+      },
+    };
+  }
+
+  if (keyword.length < KEYWORD_MIN_LENGTH) {
+    return {
+      ok: false as const,
+      error: {
+        status: 'validation_failed' as const,
+        message: '关键词不能为空，请输入 1~80 个字符后再检索',
+      },
+    };
+  }
+
+  if (keyword.length > KEYWORD_MAX_LENGTH) {
+    return {
+      ok: false as const,
+      error: {
+        status: 'validation_failed' as const,
+        message: `关键词过长，最多支持 ${KEYWORD_MAX_LENGTH} 个字符`,
       },
     };
   }
@@ -133,6 +156,26 @@ function buildMatchReason(keyword: string) {
   return `片段包含关键词“${keyword}”`;
 }
 
+function truncateSnippet(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  // Try to break at a sentence-ending punctuation or space
+  const truncated = text.slice(0, maxChars);
+  const lastPeriod = Math.max(
+    truncated.lastIndexOf('。'),
+    truncated.lastIndexOf('！'),
+    truncated.lastIndexOf('？'),
+    truncated.lastIndexOf('\n'),
+  );
+  if (lastPeriod > maxChars * 0.6) {
+    return truncated.slice(0, lastPeriod + 1);
+  }
+  const lastSpace = truncated.lastIndexOf(' ');
+  if (lastSpace > maxChars * 0.8) {
+    return `${truncated.slice(0, lastSpace)}…`;
+  }
+  return `${truncated}…`;
+}
+
 function mapChunkToDto(
   record: KnowledgeChunkSearchRepositoryRecord,
   keyword: string,
@@ -144,7 +187,7 @@ function mapChunkToDto(
     fileName: record.fileName,
     chunkId: record.chunkId,
     chunkIndex: record.chunkIndex,
-    textPreview: record.textPreview,
+    textPreview: truncateSnippet(record.textPreview, SNIPPET_MAX_CHARS),
     matchReason: buildMatchReason(keyword),
   };
 }
