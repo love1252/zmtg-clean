@@ -211,7 +211,7 @@ describe('租户初始管理员账号管理 API', () => {
     const body = await enabled.json();
 
     expect(enabled.status).toBe(409);
-    expect(body.errorCode).toBe('quota_exceeded_staff_seats');
+    expect(body.code).toBe('quota_exceeded_staff_seats');
     expect(body.error).toContain('员工席位');
     // 超限时不应调用 service
     expect(routeMocks.repository.applyTenantAccountOperation).not.toHaveBeenCalled();

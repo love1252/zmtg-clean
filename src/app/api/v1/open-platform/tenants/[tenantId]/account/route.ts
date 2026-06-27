@@ -76,7 +76,7 @@ export async function PATCH(request: Request, context: TenantAccountRouteContext
       });
       if (!quotaDecision.allowed) {
         return NextResponse.json(
-          { ok: false, errorCode: 'quota_exceeded_staff_seats', error: '员工席位已达到当前套餐上限，请联系平台管理员调整套餐' },
+          { code: 'quota_exceeded_staff_seats', error: '员工席位已达到当前套餐上限，请联系平台管理员调整套餐' },
           { status: 409 },
         );
       }

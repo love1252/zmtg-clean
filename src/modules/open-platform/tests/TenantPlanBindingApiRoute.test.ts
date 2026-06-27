@@ -351,7 +351,7 @@ describe('租户套餐绑定 API', () => {
     const body = await response.json();
 
     expect(response.status).toBe(409);
-    expect(body.errorCode).toBe('quota_exceeded_staff_seats');
+    expect(body.code).toBe('quota_exceeded_staff_seats');
     expect(body.error).toContain('员工席位');
     // 不调用创建 service
     expect(routeMocks.repository.createTenantWithPlanAuthorization).not.toHaveBeenCalled();
@@ -371,7 +371,7 @@ describe('租户套餐绑定 API', () => {
     const body = await response.json();
 
     expect(response.status).toBe(409);
-    expect(body.errorCode).toBe('quota_exceeded_staff_seats');
+    expect(body.code).toBe('quota_exceeded_staff_seats');
     // 不调用创建 service
     expect(routeMocks.repository.createTenantWithPlanAuthorization).not.toHaveBeenCalled();
   });
