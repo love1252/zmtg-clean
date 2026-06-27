@@ -1,0 +1,83 @@
+import { NextResponse } from 'next/server';
+import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
+import { getDatabase } from '@/server/db/client';
+import { createAiCallUsageRepository } from '@/modules/institution/server/institution-ai-call-usage-repository';
+import {
+  requestInstitutionAiCallService,
+  getDefaultAiVendor,
+  isAllowedAiVendor,
+} from '@/modules/institution/server/institution-ai-call-service';
+
+async function readBody(request: Request) {
+  try {
+    const body = await request.json();
+    return Object.prototype.toString.call(body) === '[object Object]'
+      ? body as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function POST(request: Request) {
+  const accessContext = getDemoAccessContextFromRequest(request);
+  if (!accessContext) {
+    return NextResponse.json({ code: 'unauthorized', error: '请先登录' }, { status: 401 });
+  }
+  if (accessContext.scope !== 'tenant' || !accessContext.tenantId || !accessContext.institutionId) {
+    return NextResponse.json({ code: 'forbidden', error: '没有访问权限' }, { status: 403 });
+  }
+
+  try {
+    const body = await readBody(request);
+    const vendor = typeof body.vendor === 'string' && isAllowedAiVendor(body.vendor)
+      ? body.vendor
+      : getDefaultAiVendor();
+
+    const result = await requestInstitutionAiCallService({
+      repository: createAiCallUsageRepository(getDatabase()),
+      vendor,
+      input: {
+        tenantId: accessContext.tenantId,
+        institutionId: accessContext.institutionId,
+        userId: accessContext.userId,
+        question: typeof body.question === 'string' ? body.question : null,
+      },
+    });
+
+    if (result.status === 'validation_failed' || result.status === 'sensitive_input_rejected') {
+      return NextResponse.json(
+        { code: result.status === 'sensitive_input_rejected' ? 'sensitive_input_rejected' : 'validation_error', error: result.message },
+        { status: result.status === 'sensitive_input_rejected' ? 422 : 400 },
+      );
+    }
+    if (result.status === 'service_unavailable') {
+      return NextResponse.json(
+        { code: 'service_unavailable', error: result.message },
+        { status: 503 },
+      );
+    }
+    if (result.status === 'rate_limited') {
+      return NextResponse.json(
+        { code: 'rate_limited', error: result.message },
+        { status: 429 },
+      );
+    }
+    if (result.status === 'provider_unavailable') {
+      return NextResponse.json(
+        { code: 'provider_error', error: result.message, answer: result.answer || '' },
+        { status: 502 },
+      );
+    }
+
+    return NextResponse.json({
+      answer: result.answer,
+      record: result.record,
+    }, { status: 201 });
+  } catch {
+    return NextResponse.json(
+      { code: 'service_unavailable', error: 'AI 调用暂时不可用' },
+      { status: 503 },
+    );
+  }
+}
