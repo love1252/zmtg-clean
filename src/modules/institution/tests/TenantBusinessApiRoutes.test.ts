@@ -568,7 +568,7 @@ describe('租户业务写入 API 处理器', () => {
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
-      error: '客户配额已达上限，请联系平台管理员调整套餐',
+      error: '客户数量已达到当前套餐上限，请联系平台管理员调整套餐',
     });
     expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
       action: 'create',
@@ -1064,7 +1064,7 @@ describe('租户业务写入 API 路由', () => {
     const serializedPayload = JSON.stringify(payload);
 
     expect(response.status).toBe(409);
-    expect(payload).toEqual({ error: '客户配额已达上限，请联系平台管理员调整套餐' });
+    expect(payload).toEqual({ error: '客户数量已达到当前套餐上限，请联系平台管理员调整套餐' });
     expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledWith({
       database: routeMocks.database,
       resource: 'customers',

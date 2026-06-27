@@ -55,7 +55,10 @@ const tenantQuotaDenialMessages: Record<TenantQuotaDenialReason, string> = {
   missing_active_plan: '当前租户未配置有效套餐，暂时无法新增记录',
   missing_quota_limit: '当前租户套餐配额未配置，暂时无法新增记录',
   quota_exceeded_appointments: '预约配额已达上限，请联系平台管理员调整套餐',
-  quota_exceeded_customers: '客户配额已达上限，请联系平台管理员调整套餐',
+  quota_exceeded_customers: '客户数量已达到当前套餐上限，请联系平台管理员调整套餐',
+  quota_exceeded_knowledge_files: '知识库文件数量已达到当前套餐上限，请联系平台管理员调整套餐',
+  quota_exceeded_staff_seats: '员工席位已达到当前套餐上限，请联系平台管理员调整套餐',
+  quota_exceeded_ai_calls: 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐',
 };
 
 function getTenantQuotaDenialMessage(reason: TenantQuotaDenialReason) {

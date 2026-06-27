@@ -31,6 +31,10 @@ vi.mock('@/modules/institution/server/institution-ai-call-usage-repository', () 
   createAiCallUsageRepository: vi.fn(() => ({})),
 }));
 
+vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => ({
+  checkTenantQuotaForCreate: vi.fn(() => Promise.resolve({ allowed: true, current: 0, limit: 100, resource: 'ai_calls' })),
+}));
+
 const tenantContext = {
   userId: 'demo-user-admin',
   role: 'tenant_admin' as const,

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
 import { createAiCallUsageRepository } from '@/modules/institution/server/institution-ai-call-usage-repository';
+import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 import {
   requestInstitutionAiCallService,
   getDefaultAiVendor,
@@ -34,8 +35,23 @@ export async function POST(request: Request) {
       ? body.vendor
       : getDefaultAiVendor();
 
+    const db = getDatabase();
+
+    // 检查 AI 调用配额
+    const quotaDecision = await checkTenantQuotaForCreate({
+      database: db,
+      tenantId: accessContext.tenantId,
+      resource: 'ai_calls',
+    });
+    if (!quotaDecision.allowed) {
+      return NextResponse.json(
+        { code: 'quota_exceeded', error: 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐' },
+        { status: 409 },
+      );
+    }
+
     const result = await requestInstitutionAiCallService({
-      repository: createAiCallUsageRepository(getDatabase()),
+      repository: createAiCallUsageRepository(db),
       vendor,
       input: {
         tenantId: accessContext.tenantId,

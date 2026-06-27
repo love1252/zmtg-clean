@@ -5,6 +5,7 @@ import { createTenantAccountManagementRepository } from '@/modules/open-platform
 import { canAccessResource, type AccessContext } from '@/modules/security/domain/access-control';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
+import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 
 type TenantAccountRouteContext = {
   params: Promise<{ tenantId: string }>;
@@ -62,6 +63,25 @@ export async function PATCH(request: Request, context: TenantAccountRouteContext
   const [params, payload] = await Promise.all([context.params, readJsonBody(request)]);
 
   try {
+    // 对 enable 操作检查员工席位配额
+    const rawAction = typeof payload === 'object' && payload !== null && 'action' in payload
+      ? String((payload as Record<string, unknown>).action).trim()
+      : '';
+    if (rawAction === 'enable') {
+      const db = getDatabase();
+      const quotaDecision = await checkTenantQuotaForCreate({
+        database: db,
+        tenantId: params.tenantId,
+        resource: 'staff_seats',
+      });
+      if (!quotaDecision.allowed) {
+        return NextResponse.json(
+          { ok: false, errorCode: 'QUOTA_EXCEEDED', error: '员工席位已达到当前套餐上限，请联系平台管理员调整套餐' },
+          { status: 409 },
+        );
+      }
+    }
+
     const repository = createTenantAccountManagementRepository(getDatabase());
     const result = await manageTenantAccountService({
       repository,

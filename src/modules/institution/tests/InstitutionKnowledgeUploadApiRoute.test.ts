@@ -37,6 +37,10 @@ vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository
   };
 });
 
+vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => ({
+  checkTenantQuotaForCreate: vi.fn(() => Promise.resolve({ allowed: true, current: 0, limit: 20, resource: 'knowledge_files' })),
+}));
+
 const tenantContext = {
   userId: 'demo-user-admin',
   role: 'tenant_admin' as const,

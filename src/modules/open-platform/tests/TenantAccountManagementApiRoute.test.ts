@@ -43,6 +43,10 @@ vi.mock('@/modules/open-platform/server/tenant-account-management-repository', a
   };
 });
 
+vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => ({
+  checkTenantQuotaForCreate: vi.fn(() => Promise.resolve({ allowed: true, current: 0, limit: 5, resource: 'staff_seats' })),
+}));
+
 const platformAdminContext: AccessContext = {
   userId: 'demo-user-platform',
   role: 'platform_admin',

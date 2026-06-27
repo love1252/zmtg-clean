@@ -3,6 +3,7 @@ import { getDemoAccessContextFromRequest } from '@/modules/security/server/acces
 import { getDatabase } from '@/server/db/client';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import { createLocalPlatformKnowledgeFileStorage } from '@/modules/open-platform/server/platform-knowledge-file-storage';
+import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 import {
   uploadAndParseInstitutionKnowledgeFileService,
   type InstitutionKnowledgeUploadFileLike,
@@ -50,6 +51,20 @@ export async function POST(request: Request) {
 
   try {
     const db = getDatabase();
+
+    // 检查知识库文件数量配额
+    const quotaDecision = await checkTenantQuotaForCreate({
+      database: db,
+      tenantId: accessContext.tenantId,
+      resource: 'knowledge_files',
+    });
+    if (!quotaDecision.allowed) {
+      return NextResponse.json(
+        { code: 'quota_exceeded', error: '知识库文件数量已达到当前套餐上限，请联系平台管理员调整套餐' },
+        { status: 409 },
+      );
+    }
+
     const repository = createPlatformKnowledgeManagementRepository(db);
     const storage = createLocalPlatformKnowledgeFileStorage();
 
