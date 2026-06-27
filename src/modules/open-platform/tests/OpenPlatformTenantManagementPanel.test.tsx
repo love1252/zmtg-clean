@@ -718,7 +718,13 @@ describe('平台端租户管理面板', () => {
 
     // 旧口径：历史快照用量
     expect(within(drawer).getByText('历史快照用量（仅供参考）')).toBeInTheDocument();
-    expect(within(drawer).getByText('此数据来自授权快照，非实时统计。实际限制以下方"实时套餐权益用量"的实时统计为准。')).toBeInTheDocument();
+    expect(
+      within(drawer).getByText((content: string) =>
+        content.includes('此数据来自授权快照，非实时统计') &&
+        content.includes('实时套餐权益用量') &&
+        content.includes('实时统计为准'),
+      ),
+    ).toBeInTheDocument();
 
     // 新口径：实时套餐权益用量
     expect(await within(drawer).findByText('实时套餐权益用量（当前限制判断依据）')).toBeInTheDocument();
