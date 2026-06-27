@@ -713,7 +713,10 @@ function TenantDetailDrawer({
         </section>
 
         <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
-          <h4 className="text-base font-semibold text-slate-950">用量摘要（本月）</h4>
+          <h4 className="text-base font-semibold text-slate-950">历史快照用量（仅供参考）</h4>
+          <p className="mt-1 text-xs text-slate-400">
+            此数据来自授权快照，非实时统计。实际限制以下方&ldquo;实时套餐权益用量&rdquo;的实时统计为准。
+          </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {quotaItems.map((item) => (
               <div key={item.key} className="rounded-xl bg-[#f8fafc] p-3">
@@ -732,9 +735,9 @@ function TenantDetailDrawer({
           </section>
         ) : entitlementView ? (
           <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
-            <h4 className="text-base font-semibold text-slate-950">套餐权益用量</h4>
+            <h4 className="text-base font-semibold text-slate-950">实时套餐权益用量（当前限制判断依据）</h4>
             <p className="mt-1 text-xs text-slate-500">
-              当前套餐：{entitlementView.planCode ?? '-'}
+              当前套餐：{entitlementView.planName ?? entitlementView.planCode ?? '-'}
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {entitlementView.items.map((item) => {

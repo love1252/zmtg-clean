@@ -51,7 +51,7 @@ export async function getTenantEntitlementUsageService(input: {
     tenantId: input.tenantId,
     institutionId: input.institutionId ?? null,
     planCode,
-    planName: null, // plan name can be added from activeQuota if needed
+    planName: activeQuota.planName ?? planCode,
     usages: {
       customers,
       staffSeats,

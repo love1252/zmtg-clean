@@ -347,6 +347,7 @@ export function InstitutionWorkspace() {
     items: Array<{ resource: string; label: string; used: number | null; limit: number | null;
       remaining: number | null; status: string }>;
     planCode: string | null;
+    planName: string | null;
   } | null>(null);
   const activeNavItem = institutionNavItems.find((item) => item.id === activeView) ?? institutionNavItems[0];
   const highPriorityMetric = dashboardSummary.metrics.find(
@@ -599,6 +600,7 @@ function InstitutionDashboardHome({
     items: Array<{ resource: string; label: string; used: number | null; limit: number | null;
       remaining: number | null; status: string }>;
     planCode: string | null;
+    planName: string | null;
   } | null;
   errorState: InstitutionPageStateProps | null;
   followUpPathAnalysis: FollowUpPathAnalysisApiResponse | null;
@@ -709,7 +711,7 @@ function InstitutionDashboardHome({
             </div>
             <div>
               <h2 className="text-base font-semibold tracking-normal text-slate-950">
-                当前套餐：{entitlementView.planCode ?? '-'}
+                当前套餐：{entitlementView.planName ?? entitlementView.planCode ?? '-'}
               </h2>
               <p className="mt-1 text-xs text-slate-500">套餐权益用量，接近上限时会提前提示</p>
             </div>

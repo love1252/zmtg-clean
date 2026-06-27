@@ -277,6 +277,21 @@ const tenantCommercialRecords = [
   },
 ];
 
+const mockEntitlementUsageView = {
+  tenantId: 'demo-tenant-001',
+  institutionId: 'inst-001',
+  planCode: 'growth-care',
+  planName: '成长版',
+  items: [
+    { resource: 'customers', label: '客户数', used: 80, limit: 100, remaining: 20, status: 'normal' },
+    { resource: 'staff_seats', label: '员工席位', used: 15, limit: 20, remaining: 5, status: 'normal' },
+    { resource: 'knowledge_files', label: '知识库文件', used: 90, limit: 100, remaining: 10, status: 'near_limit' },
+    { resource: 'ai_calls', label: 'AI 调用（本月）', used: 200, limit: 500, remaining: 300, status: 'normal' },
+  ],
+  readable: true,
+  source: 'mixed',
+};
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
@@ -300,6 +315,7 @@ type MockTenantFetchOptions =
       planChangeResponse?: Response;
       commercialRecordsResponse?: Response;
       auditEventsResponse?: Response;
+      entitlementUsageResponse?: Response;
     };
 
 function defaultAuditEventsResponse() {
@@ -367,6 +383,10 @@ function mockTenantFetch(options: MockTenantFetchOptions) {
     ? defaultAuditEventsResponse()
     : options.auditEventsResponse ?? defaultAuditEventsResponse();
 
+  const entitlementUsageResponse = Array.isArray(options)
+    ? jsonResponse(mockEntitlementUsageView)
+    : options.entitlementUsageResponse ?? jsonResponse(mockEntitlementUsageView);
+
   const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
     const path = fetchPath(input);
     const method = String(_init?.method ?? 'GET').toUpperCase();
@@ -407,6 +427,10 @@ function mockTenantFetch(options: MockTenantFetchOptions) {
 
     if (path.startsWith('/api/open-platform/audit-events')) {
       return auditEventsResponse.clone();
+    }
+
+    if (path.match(/\/api\/v1\/open-platform\/tenants\/[\w-]+\/entitlement-usage/)) {
+      return entitlementUsageResponse.clone();
     }
 
     throw new Error(`没有为 ${path} 配置 fetch mock`);
@@ -657,7 +681,7 @@ describe('平台端租户管理面板', () => {
     expect(screen.getByText('筛选结果 1 个租户')).toBeInTheDocument();
   });
 
-  it('点击查看打开租户详情抽屉并展示授权快照、用量摘要和审计入口', async () => {
+  it('点击查看打开租户详情抽屉并展示授权快照、历史快照用量和审计入口', async () => {
     mockTenantFetch([jsonResponse({ records: [trialTenantRecord] })]);
 
     render(<OpenPlatformTenantManagementPanel />);
@@ -676,10 +700,96 @@ describe('平台端租户管理面板', () => {
     expect(within(drawer).getByText('试用截止：2026年7月5日 16:35')).toBeInTheDocument();
     expect(within(drawer).getAllByText('14 天后到期').length).toBeGreaterThan(0);
     expect(within(drawer).getByText('授权快照')).toBeInTheDocument();
-    expect(within(drawer).getByText('用量摘要（本月）')).toBeInTheDocument();
+    expect(within(drawer).getByText('历史快照用量（仅供参考）')).toBeInTheDocument();
     expect(await within(drawer).findByText('商业化预留')).toBeInTheDocument();
     expect(within(drawer).getByText('审计入口')).toBeInTheDocument();
     expect(within(drawer).getByRole('button', { name: '查看审计日志' })).toBeInTheDocument();
+  });
+
+  it('租户详情展示新旧用量口径明确区分', async () => {
+    mockTenantFetch([jsonResponse({ records: [tenantRecord] })]);
+
+    render(<OpenPlatformTenantManagementPanel />);
+
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '查看 智美天工演示机构' }));
+
+    const drawer = screen.getByRole('dialog', { name: '租户详情' });
+
+    // 旧口径：历史快照用量
+    expect(within(drawer).getByText('历史快照用量（仅供参考）')).toBeInTheDocument();
+    expect(within(drawer).getByText('此数据来自授权快照，非实时统计。实际限制以下方"实时套餐权益用量"的实时统计为准。')).toBeInTheDocument();
+
+    // 新口径：实时套餐权益用量
+    expect(await within(drawer).findByText('实时套餐权益用量（当前限制判断依据）')).toBeInTheDocument();
+    expect(within(drawer).getByText('当前套餐：成长版')).toBeInTheDocument();
+
+    // 四个资源项（两个区域都有，新区域在每个 item 内用 label 展示）
+    expect(within(drawer).getAllByText('客户数').length).toBeGreaterThanOrEqual(1);
+    expect(within(drawer).getAllByText('员工席位').length).toBeGreaterThanOrEqual(1);
+    expect(within(drawer).getAllByText('知识库文件').length).toBeGreaterThanOrEqual(1);
+    expect(within(drawer).getAllByText('AI 调用（本月）').length).toBeGreaterThanOrEqual(1);
+
+    // 状态显示
+    // near_limit 状态
+    expect(within(drawer).getByText('接近上限')).toBeInTheDocument();
+    expect(within(drawer).getByText('即将达到当前套餐上限，请联系平台管理员')).toBeInTheDocument();
+    // normal 状态
+    expect(within(drawer).getAllByText('正常').length).toBeGreaterThanOrEqual(1);
+
+    // planName 展示（成长版出现在新区域标题和旧区域租户信息中）
+    expect(within(drawer).getAllByText(/成长版/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('套餐权益用量展示 exceeded 状态警告', async () => {
+    mockTenantFetch({
+      tenantResponses: [jsonResponse({ records: [tenantRecord] })],
+      entitlementUsageResponse: jsonResponse({
+        ...mockEntitlementUsageView,
+        items: mockEntitlementUsageView.items.map((item) =>
+          item.resource === 'ai_calls'
+            ? { ...item, used: 500, remaining: 0, status: 'exceeded' }
+            : item,
+        ),
+      }),
+    });
+
+    render(<OpenPlatformTenantManagementPanel />);
+
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '查看 智美天工演示机构' }));
+
+    const drawer = screen.getByRole('dialog', { name: '租户详情' });
+    expect(await within(drawer).findByText('已超限')).toBeInTheDocument();
+    expect(within(drawer).getByText('已达到上限，后续操作将受限')).toBeInTheDocument();
+  });
+
+  it('套餐权益用量无套餐时不展示', async () => {
+    mockTenantFetch({
+      tenantResponses: [jsonResponse({ records: [tenantRecord] })],
+      entitlementUsageResponse: jsonResponse({
+        ...mockEntitlementUsageView,
+        planCode: null,
+        planName: null,
+        items: mockEntitlementUsageView.items.map((item) => ({
+          ...item,
+          status: 'no_active_plan',
+          used: null,
+          limit: null,
+          remaining: null,
+        })),
+      }),
+    });
+
+    render(<OpenPlatformTenantManagementPanel />);
+
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '查看 智美天工演示机构' }));
+
+    const drawer = screen.getByRole('dialog', { name: '租户详情' });
+    expect(await within(drawer).findByText('实时套餐权益用量（当前限制判断依据）')).toBeInTheDocument();
+    expect(within(drawer).getByText('当前套餐：-')).toBeInTheDocument();
+    expect(within(drawer).getAllByText('无套餐').length).toBeGreaterThanOrEqual(1);
   });
 
   it('租户详情展示订单、合同、发票、支付的只读商业化预留状态', async () => {
