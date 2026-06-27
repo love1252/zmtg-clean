@@ -316,6 +316,7 @@ type MockTenantFetchOptions =
       commercialRecordsResponse?: Response;
       auditEventsResponse?: Response;
       entitlementUsageResponse?: Response;
+      aiUsageResponse?: Response;
     };
 
 function defaultAuditEventsResponse() {
@@ -387,6 +388,10 @@ function mockTenantFetch(options: MockTenantFetchOptions) {
     ? jsonResponse(mockEntitlementUsageView)
     : options.entitlementUsageResponse ?? jsonResponse(mockEntitlementUsageView);
 
+  const aiUsageResponse = Array.isArray(options)
+    ? jsonResponse({ records: [] })
+    : options.aiUsageResponse ?? jsonResponse({ records: [] });
+
   const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
     const path = fetchPath(input);
     const method = String(_init?.method ?? 'GET').toUpperCase();
@@ -431,6 +436,10 @@ function mockTenantFetch(options: MockTenantFetchOptions) {
 
     if (path.match(/\/api\/v1\/open-platform\/tenants\/[\w-]+\/entitlement-usage/)) {
       return entitlementUsageResponse.clone();
+    }
+
+    if (path.startsWith('/api/v1/open-platform/ai-usage')) {
+      return aiUsageResponse.clone();
     }
 
     throw new Error(`没有为 ${path} 配置 fetch mock`);
@@ -993,5 +1002,65 @@ describe('平台端租户管理面板', () => {
     expect(screen.getByText('请通过平台管理端开设第一个测试租户。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '新建租户' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '查看产品与套餐' })).toBeInTheDocument();
+  });
+
+  it('AI 用量聚合表格展示超限拒绝列且与失败不重叠', async () => {
+    const fetchMock = mockTenantFetch({
+      tenantResponses: [jsonResponse({ records: [tenantRecord] })],
+      aiUsageResponse: jsonResponse({
+        records: [{
+          tenantId: 'demo-tenant-001',
+          callCount: 8,
+          totalTokens: 500,
+          succeededCount: 3,
+          failedCount: 2,
+          rejectedCount: 3,
+          quotaExceededCount: 3,
+        }],
+      }),
+    });
+
+    render(<OpenPlatformTenantManagementPanel />);
+
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
+
+    // 打开 AI 用量聚合区并加载数据
+    fireEvent.click(screen.getByText('AI 用量'));
+    fireEvent.click(await screen.findByText('刷新用量'));
+
+    // 表头显示超限拒绝列
+    expect(await screen.findByText('超限拒绝')).toBeInTheDocument();
+    expect(screen.getByText('成功')).toBeInTheDocument();
+    expect(screen.getByText('失败')).toBeInTheDocument();
+
+    // AI 用量表格中有 quotaboundcount = 3 显示在超限拒绝列
+    const tables = screen.getAllByRole('table');
+    const aiTable = tables.find((t) => within(t).queryByText('超限拒绝'));
+    expect(aiTable).toBeDefined();
+    // 3（succeededCount）会出现在多个单元格，用 getAllByText 检查至少有一个
+    const threeCells = within(aiTable!).getAllByText('3');
+    expect(threeCells.length).toBeGreaterThanOrEqual(1);
+
+    // 验证 fetch 被调用
+    expect(fetchMock.mock.calls.some(([input, init]) => (
+      fetchPath(input) === '/api/v1/open-platform/ai-usage' &&
+      String(init?.method ?? 'GET').toUpperCase() === 'GET'
+    ))).toBe(true);
+  });
+
+  it('AI 用量聚合空数据 colSpan 正确', async () => {
+    mockTenantFetch({
+      tenantResponses: [jsonResponse({ records: [tenantRecord] })],
+      aiUsageResponse: jsonResponse({ records: [] }),
+    });
+
+    render(<OpenPlatformTenantManagementPanel />);
+
+    expect((await screen.findAllByText('智美天工演示机构')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByText('AI 用量'));
+    fireEvent.click(await screen.findByText('刷新用量'));
+
+    // 空数据表格 colSpan 应为 6
+    expect(await screen.findByText('暂无 AI 调用数据')).toBeInTheDocument();
   });
 });

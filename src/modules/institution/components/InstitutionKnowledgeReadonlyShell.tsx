@@ -1203,10 +1203,12 @@ export function InstitutionKnowledgeReadonlyShell() {
                         'rounded-full border px-2.5 py-1',
                         record.status === 'succeeded'
                           ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                          : 'border-amber-200 bg-amber-50 text-amber-700',
+                          : record.status === 'rejected'
+                            ? 'border-amber-200 bg-amber-50 text-amber-700'
+                            : 'border-amber-200 bg-amber-50 text-amber-700',
                       )}
                     >
-                      {record.status === 'succeeded' ? '成功' : record.status === 'rate_limited' ? '限流' : '失败'}
+                      {record.status === 'succeeded' ? '成功' : record.status === 'rejected' ? '超限拒绝' : record.status === 'rate_limited' ? '限流' : '失败'}
                     </span>
                     {record.totalTokens ? (
                       <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-violet-700">

@@ -1277,6 +1277,8 @@ export function OpenPlatformTenantManagementPanel() {
     totalTokens: number | null;
     succeededCount: number;
     failedCount: number;
+    rejectedCount: number;
+    quotaExceededCount: number;
   }>>([]);
   const [isAiUsageLoading, setIsAiUsageLoading] = useState(false);
   const [showAiUsage, setShowAiUsage] = useState(false);
@@ -1733,13 +1735,14 @@ export function OpenPlatformTenantManagementPanel() {
                   <th className="px-4 py-2.5 text-right">调用次数</th>
                   <th className="px-4 py-2.5 text-right">成功</th>
                   <th className="px-4 py-2.5 text-right">失败</th>
+                  <th className="px-4 py-2.5 text-right">超限拒绝</th>
                   <th className="px-4 py-2.5 text-right">Token 总量</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {aiUsageSummary.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-xs font-semibold text-slate-400">
+                    <td colSpan={6} className="px-4 py-8 text-center text-xs font-semibold text-slate-400">
                       暂无 AI 调用数据
                     </td>
                   </tr>
@@ -1750,6 +1753,7 @@ export function OpenPlatformTenantManagementPanel() {
                       <td className="px-4 py-2.5 text-right font-semibold">{row.callCount}</td>
                       <td className="px-4 py-2.5 text-right font-semibold text-emerald-600">{row.succeededCount}</td>
                       <td className="px-4 py-2.5 text-right font-semibold text-rose-600">{row.failedCount}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-amber-600">{row.quotaExceededCount ?? '-'}</td>
                       <td className="px-4 py-2.5 text-right font-semibold">{row.totalTokens ?? '-'}</td>
                     </tr>
                   ))
