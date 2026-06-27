@@ -129,9 +129,9 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
           callCount: sql<number>`count(*)::int`,
           totalTokens: sql<number | null>`sum(${aiCallUsageRecords.totalTokens})::int`,
           succeededCount: sql<number>`count(case when ${aiCallUsageRecords.status} = 'succeeded' then 1 end)::int`,
-          failedCount: sql<number>`count(case when ${aiCallUsageRecords.status} != 'succeeded' then 1 end)::int`,
           rejectedCount: sql<number>`count(case when ${aiCallUsageRecords.status} = 'rejected' then 1 end)::int`,
           quotaExceededCount: sql<number>`count(case when ${aiCallUsageRecords.status} = 'rejected' and ${aiCallUsageRecords.errorCode} = 'quota_exceeded_ai_calls' then 1 end)::int`,
+          failedCount: sql<number>`count(case when ${aiCallUsageRecords.status} != 'succeeded' and not (${aiCallUsageRecords.status} = 'rejected' and ${aiCallUsageRecords.errorCode} = 'quota_exceeded_ai_calls') then 1 end)::int`,
         })
         .from(aiCallUsageRecords)
         .groupBy(aiCallUsageRecords.tenantId)

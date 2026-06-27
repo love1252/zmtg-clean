@@ -45,14 +45,21 @@ export async function POST(request: Request) {
       resource: 'ai_calls',
     });
     if (!quotaDecision.allowed) {
-      // 写入超限拒绝审计记录，不调用 provider
-      recordAiCallQuotaRejection({
-        repository: createAiCallUsageRepository(db),
-        tenantId: accessContext.tenantId,
-        institutionId: accessContext.institutionId,
-        actorUserId: accessContext.userId,
-        vendor,
-      }).catch(() => {});
+      try {
+        // 写入超限拒绝审计记录，不调用 provider
+        await recordAiCallQuotaRejection({
+          repository: createAiCallUsageRepository(db),
+          tenantId: accessContext.tenantId,
+          institutionId: accessContext.institutionId,
+          actorUserId: accessContext.userId,
+          vendor,
+        });
+      } catch {
+        return NextResponse.json(
+          { code: 'ai_quota_rejection_audit_failed', error: 'AI 超限审计记录写入失败，请稍后重试' },
+          { status: 500 },
+        );
+      }
 
       return NextResponse.json(
         { code: 'quota_exceeded_ai_calls', error: 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐' },

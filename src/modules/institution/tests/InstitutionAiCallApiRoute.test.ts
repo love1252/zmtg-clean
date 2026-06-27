@@ -124,7 +124,21 @@ describe('机构端 AI 调用 API route', () => {
       reason: 'quota_exceeded_ai_calls',
       resource: 'ai_calls',
     });
-    vi.mocked(recordAiCallQuotaRejection).mockResolvedValue(null);
+    vi.mocked(recordAiCallQuotaRejection).mockResolvedValue({
+      id: 'ai-usage-reject-1',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+      actorUserId: 'demo-user-admin',
+      provider: 'deepseek',
+      model: 'unknown',
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      latencyMs: null,
+      status: 'rejected',
+      errorCode: 'quota_exceeded_ai_calls',
+      createdAt: new Date(),
+    });
 
     const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
       method: 'POST',
@@ -265,6 +279,60 @@ describe('机构端 AI 调用 API route', () => {
     expect(recordAiCallQuotaRejection).toHaveBeenCalledTimes(2);
   });
 
+  it('审计写入失败时返回受控 500 且不调用 provider', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: false,
+      current: 100,
+      limit: 100,
+      reason: 'quota_exceeded_ai_calls',
+      resource: 'ai_calls',
+    });
+    vi.mocked(recordAiCallQuotaRejection).mockRejectedValueOnce(new Error('db write error'));
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '正常问题' }),
+    }));
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.code).toBe('ai_quota_rejection_audit_failed');
+    expect(body.error).toContain('审计记录写入失败');
+
+    // 不调用 provider
+    expect(requestInstitutionAiCallService).not.toHaveBeenCalled();
+  });
+
+  it('审计写入失败 response 不泄露敏感字段', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: false,
+      current: 100,
+      limit: 100,
+      reason: 'quota_exceeded_ai_calls',
+      resource: 'ai_calls',
+    });
+    vi.mocked(recordAiCallQuotaRejection).mockRejectedValueOnce(new Error('db write error'));
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '正常问题' }),
+    }));
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('api_key');
+    expect(serialized).not.toContain('Bearer');
+    expect(serialized).not.toContain('DATABASE_URL');
+    expect(serialized).not.toContain('postgres://');
+    expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('password');
+    expect(serialized).not.toContain('stack');
+    expect(serialized).not.toContain('SQL');
+    expect(serialized).toContain('ai_quota_rejection_audit_failed');
+  });
+
   it('AI 超限 response 不泄露敏感字段', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
     vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
@@ -273,6 +341,17 @@ describe('机构端 AI 调用 API route', () => {
       limit: 100,
       reason: 'quota_exceeded_ai_calls',
       resource: 'ai_calls',
+    });
+    vi.mocked(recordAiCallQuotaRejection).mockResolvedValue({
+      id: 'ai-usage-reject-1',
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-inst-001',
+      actorUserId: 'demo-user-admin',
+      provider: 'deepseek',
+      model: 'unknown',
+      promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null,
+      status: 'rejected', errorCode: 'quota_exceeded_ai_calls',
+      createdAt: new Date(),
     });
 
     const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {

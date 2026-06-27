@@ -396,26 +396,22 @@ export async function recordAiCallQuotaRejection(input: {
   actorUserId: string;
   vendor: string;
   model?: string | null;
-}): Promise<AiCallUsageRecord | null> {
-  try {
-    const record = await input.repository.createUsageRecord({
-      id: generateRecordId(),
-      tenantId: input.tenantId,
-      institutionId: input.institutionId,
-      actorUserId: input.actorUserId,
-      provider: input.vendor,
-      model: input.model ?? 'unknown',
-      promptTokens: null,
-      completionTokens: null,
-      totalTokens: null,
-      latencyMs: null,
-      status: 'rejected',
-      errorCode: 'quota_exceeded_ai_calls',
-    });
-    return record;
-  } catch {
-    return null;
-  }
+}): Promise<AiCallUsageRecord> {
+  const record = await input.repository.createUsageRecord({
+    id: generateRecordId(),
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    actorUserId: input.actorUserId,
+    provider: input.vendor,
+    model: input.model ?? 'unknown',
+    promptTokens: null,
+    completionTokens: null,
+    totalTokens: null,
+    latencyMs: null,
+    status: 'rejected',
+    errorCode: 'quota_exceeded_ai_calls',
+  });
+  return record;
 }
 
 const ALLOWED_VENDORS = ['deepseek', 'doubao', 'qwen'];
