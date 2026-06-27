@@ -34,6 +34,7 @@ export type ActiveTenantQuotaLimitRecord = {
   limits: TenantQuotaLimits;
   planAssignmentId: string;
   planCode: string;
+  planName: string;
   quotaSnapshotId: string | null;
   tenantId: string;
 };
@@ -54,6 +55,7 @@ function mapQuotaLimitQueryRowToRecord(
     limits,
     planAssignmentId: row.assignment.id,
     planCode: row.plan.code,
+    planName: row.plan.name,
     quotaSnapshotId: row.quotaSnapshot?.id ?? null,
     tenantId: row.assignment.tenantId,
   };

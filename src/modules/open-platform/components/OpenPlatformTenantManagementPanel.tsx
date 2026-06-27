@@ -350,6 +350,12 @@ function TenantDetailDrawer({
     status: 'loading',
     records: [],
   });
+  const [entitlementView, setEntitlementView] = useState<{
+    items: Array<{ resource: string; label: string; used: number | null; limit: number | null;
+      remaining: number | null; status: string }>;
+    planCode: string | null; planName: string | null;
+  } | null>(null);
+  const [isEntitlementLoading, setIsEntitlementLoading] = useState(false);
 
   const effectiveTargetPlanVersionId = changePlanOptions.some(
     (plan) => plan.planVersionId === targetPlanVersionId,
@@ -384,6 +390,21 @@ function TenantDetailDrawer({
     }
 
     void loadCommercialRecords();
+
+    async function loadEntitlementView() {
+      setIsEntitlementLoading(true);
+      try {
+        const r = await fetch(`/api/v1/open-platform/tenants/${encodeURIComponent(tenant.tenantId)}/entitlement-usage`);
+        const p = await r.json().catch(() => null);
+        if (r.ok && p && Array.isArray(p.items)) {
+          setEntitlementView(p);
+        } else {
+          setEntitlementView(null);
+        }
+      } catch { setEntitlementView(null); }
+      finally { setIsEntitlementLoading(false); }
+    }
+    void loadEntitlementView();
 
     return () => {
       isActive = false;
@@ -692,7 +713,10 @@ function TenantDetailDrawer({
         </section>
 
         <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
-          <h4 className="text-base font-semibold text-slate-950">用量摘要（本月）</h4>
+          <h4 className="text-base font-semibold text-slate-950">历史快照用量（仅供参考）</h4>
+          <p className="mt-1 text-xs text-slate-400">
+            此数据来自授权快照，非实时统计。实际限制以下方&ldquo;实时套餐权益用量&rdquo;的实时统计为准。
+          </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {quotaItems.map((item) => (
               <div key={item.key} className="rounded-xl bg-[#f8fafc] p-3">
@@ -704,6 +728,60 @@ function TenantDetailDrawer({
             ))}
           </div>
         </section>
+
+        {isEntitlementLoading ? (
+          <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
+            <div className="text-sm text-slate-500">正在加载套餐权益用量...</div>
+          </section>
+        ) : entitlementView ? (
+          <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
+            <h4 className="text-base font-semibold text-slate-950">实时套餐权益用量（当前限制判断依据）</h4>
+            <p className="mt-1 text-xs text-slate-500">
+              当前套餐：{entitlementView.planName ?? entitlementView.planCode ?? '-'}
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {entitlementView.items.map((item) => {
+                const statusTone =
+                  item.status === 'exceeded' ? 'rose' :
+                  item.status === 'near_limit' ? 'amber' :
+                  item.status === 'no_active_plan' || item.status === 'not_configured' ? 'slate' :
+                  'emerald';
+                const statusLabel =
+                  item.status === 'exceeded' ? '已超限' :
+                  item.status === 'near_limit' ? '接近上限' :
+                  item.status === 'no_active_plan' ? '无套餐' :
+                  item.status === 'not_configured' ? '未配置' : '正常';
+                return (
+                  <div key={item.resource} className="rounded-xl bg-[#f8fafc] p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-500">{item.label}</span>
+                      <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                        statusTone === 'emerald' && 'bg-emerald-100 text-emerald-700',
+                        statusTone === 'amber' && 'bg-amber-100 text-amber-700',
+                        statusTone === 'rose' && 'bg-rose-100 text-rose-700',
+                        statusTone === 'slate' && 'bg-slate-100 text-slate-500',
+                      )}>{statusLabel}</span>
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-slate-950">
+                      {item.used ?? '-'} / {item.limit ?? '-'}
+                    </div>
+                    {item.remaining !== null && (
+                      <div className="mt-0.5 text-xs text-slate-400">
+                        剩余 {item.remaining}
+                      </div>
+                    )}
+                    {item.status === 'near_limit' && (
+                      <p className="mt-1 text-xs text-amber-600">即将达到当前套餐上限，请联系平台管理员</p>
+                    )}
+                    {item.status === 'exceeded' && (
+                      <p className="mt-1 text-xs text-rose-600">已达到上限，后续操作将受限</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
         <section className="mt-4 rounded-xl border border-[#dbe6f3] p-4">
           <h4 className="text-base font-semibold text-slate-950">风险提示</h4>
