@@ -293,8 +293,8 @@ describe('工作台看板领域模型', () => {
     expect(platformCapabilityCards.map((item) => item.title)).toEqual([
       '真实计费未启用',
       '外部连接未启用',
-      '真实人工智能密钥未启用',
-      '模型配置未接入真实服务',
+      'AI 模型处于受控试运行',
+      '模型配置已接入多个厂商',
     ]);
   });
 });
