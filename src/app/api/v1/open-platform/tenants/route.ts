@@ -5,6 +5,7 @@ import { getDemoAccessContextFromRequest } from '@/modules/security/server/acces
 import { createTenantPlanBindingRepository } from '@/modules/open-platform/server/tenant-plan-binding-repository';
 import { createTenantWithPlanService } from '@/modules/open-platform/server/tenant-plan-binding-service';
 import { getDatabase } from '@/server/db/client';
+import { getTenantPlanQuotaLimitsByCode } from '@/modules/institution/domain/quota-enforcement';
 
 function lowSensitiveError(status: number, errorCode: string) {
   return NextResponse.json({ ok: false, errorCode }, { status });
@@ -34,7 +35,27 @@ export async function POST(request: Request) {
 
   try {
     const payload = await readJsonBody(request);
-    const repository = createTenantPlanBindingRepository(getDatabase());
+    const db = getDatabase();
+    const repository = createTenantPlanBindingRepository(db);
+
+    // 创建租户前检查目标套餐的 maxStaffSeats（受信常量来源，与 checkTenantQuotaForCreate 一致）
+    const rawPlanVersionId = typeof payload === 'object' && payload !== null && 'planVersionId' in payload
+      ? String((payload as Record<string, unknown>).planVersionId).trim()
+      : '';
+    if (rawPlanVersionId) {
+      const planVersion = await repository.findPublishedPlanVersionById(rawPlanVersionId);
+      if (planVersion) {
+        const limits = getTenantPlanQuotaLimitsByCode(planVersion.planCode);
+        const maxStaffSeats = limits?.maxStaffSeats ?? null;
+        if (!(typeof maxStaffSeats === 'number' && maxStaffSeats >= 1)) {
+          return NextResponse.json(
+            { code: 'quota_exceeded_staff_seats', error: '员工席位已达到当前套餐上限，请联系平台管理员调整套餐' },
+            { status: 409 },
+          );
+        }
+      }
+    }
+
     const result = await createTenantWithPlanService({
       repository,
       actorId: context.userId,

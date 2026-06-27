@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as tenantAccountRoute from '@/app/api/v1/open-platform/tenants/[tenantId]/account/route';
+import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
 const routeMocks = vi.hoisted(() => {
@@ -40,6 +41,14 @@ vi.mock('@/modules/open-platform/server/tenant-account-management-repository', a
   return {
     ...actual,
     createTenantAccountManagementRepository: routeMocks.createTenantAccountManagementRepository,
+  };
+});
+
+vi.mock('@/modules/institution/server/tenant-quota-enforcement', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/modules/institution/server/tenant-quota-enforcement')>();
+  return {
+    ...actual,
+    checkTenantQuotaForCreate: vi.fn(),
   };
 });
 
@@ -89,13 +98,9 @@ function expectNoSensitivePayload(payload: unknown) {
 }
 
 beforeEach(() => {
-  routeMocks.getDatabase.mockReset();
+  vi.clearAllMocks();
   routeMocks.getDatabase.mockReturnValue(routeMocks.database);
-  routeMocks.getDemoAccessContextFromRequest.mockReset();
   routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
-  routeMocks.createTenantAccountManagementRepository.mockClear();
-  routeMocks.repository.findInitialAdminAccountByTenantId.mockReset();
-  routeMocks.repository.applyTenantAccountOperation.mockReset();
   routeMocks.repository.findInitialAdminAccountByTenantId.mockResolvedValue(tenantAdminAccount);
   routeMocks.repository.applyTenantAccountOperation.mockImplementation(async (input) => ({
     status: 'account_updated',
@@ -150,30 +155,112 @@ describe('租户初始管理员账号管理 API', () => {
     expectNoSensitivePayload(routeMocks.repository.applyTenantAccountOperation.mock.calls[0][0].auditEvent);
   });
 
-  it('platform_admin 可停用和启用初始管理员账号', async () => {
+  it('platform_admin 可停用初始管理员账号', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
 
     const disabled = await tenantAccountRoute.PATCH(
       request('/api/v1/open-platform/tenants/tenant-zhengpu/account', { action: 'disable' }),
       routeContext(),
     );
-    const enabled = await tenantAccountRoute.PATCH(
-      request('/api/v1/open-platform/tenants/tenant-zhengpu/account', { action: 'enable' }),
-      routeContext(),
-    );
-
     expect(disabled.status).toBe(200);
     await expect(disabled.json()).resolves.toMatchObject({
       ok: true,
       action: 'disable',
       account: { status: 'disabled' },
     });
+  });
+
+  it('enable 未超限时成功', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true,
+      current: 1,
+      limit: 5,
+      resource: 'staff_seats',
+    });
+
+    const enabled = await tenantAccountRoute.PATCH(
+      request('/api/v1/open-platform/tenants/tenant-zhengpu/account', { action: 'enable' }),
+      routeContext(),
+    );
     expect(enabled.status).toBe(200);
     await expect(enabled.json()).resolves.toMatchObject({
       ok: true,
       action: 'enable',
       account: { status: 'active' },
     });
+    expect(routeMocks.repository.applyTenantAccountOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'enable' }),
+    );
+  });
+
+  it('enable 员工席位超限时返回 409', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: false,
+      current: 5,
+      limit: 5,
+      reason: 'quota_exceeded_staff_seats',
+      resource: 'staff_seats',
+    });
+
+    const enabled = await tenantAccountRoute.PATCH(
+      request('/api/v1/open-platform/tenants/tenant-zhengpu/account', { action: 'enable' }),
+      routeContext(),
+    );
+    const body = await enabled.json();
+
+    expect(enabled.status).toBe(409);
+    expect(body.code).toBe('quota_exceeded_staff_seats');
+    expect(body.error).toContain('员工席位');
+    // 超限时不应调用 service
+    expect(routeMocks.repository.applyTenantAccountOperation).not.toHaveBeenCalled();
+  });
+
+  it('enable 超限 response 不泄露敏感字段', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: false,
+      current: 5,
+      limit: 5,
+      reason: 'quota_exceeded_staff_seats',
+      resource: 'staff_seats',
+    });
+
+    const enabled = await tenantAccountRoute.PATCH(
+      request('/api/v1/open-platform/tenants/tenant-zhengpu/account', { action: 'enable' }),
+      routeContext(),
+    );
+    const body = await enabled.json();
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('DATABASE_URL');
+    expect(serialized).not.toContain('postgres://');
+    expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('stack');
+    expect(serialized).not.toContain('token');
+  });
+
+  it('跨租户 active 账号计数隔离（按当前 tenantId）', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true,
+      current: 1,
+      limit: 5,
+      resource: 'staff_seats',
+    });
+
+    const enabled = await tenantAccountRoute.PATCH(
+      request('/api/v1/open-platform/tenants/tenant-zhengpu/account', { action: 'enable' }),
+      routeContext(),
+    );
+    expect(enabled.status).toBe(200);
+    // checkTenantQuotaForCreate must be called with the target tenantId
+    expect(checkTenantQuotaForCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resource: 'staff_seats',
+        tenantId: 'tenant-zhengpu',
+      }),
+    );
   });
 
   it('无登录态或非 platform_admin 返回低敏错误且不初始化数据库', async () => {

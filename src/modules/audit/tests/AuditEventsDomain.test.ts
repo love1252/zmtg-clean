@@ -139,6 +139,9 @@ describe('审计事件领域模型', () => {
       expect.arrayContaining([
         'quota_exceeded_customers',
         'quota_exceeded_appointments',
+        'quota_exceeded_knowledge_files',
+        'quota_exceeded_staff_seats',
+        'quota_exceeded_ai_calls',
         'missing_active_plan',
         'missing_quota_limit',
       ]),

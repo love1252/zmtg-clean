@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, sql } from 'drizzle-orm';
 import {
   evaluateTenantQuotaForCreate,
   getTenantPlanQuotaLimitsByCode,
@@ -9,8 +9,12 @@ import {
 } from '@/modules/institution/domain/quota-enforcement';
 import type { TenantDatabase } from '@/server/db/client';
 import {
+  aiCallUsageRecords,
   appointments,
+  authUsers,
   customers,
+  knowledgeDocumentFiles,
+  tenantMembers,
   tenantPlanAssignments,
   tenantPlans,
   tenantQuotaSnapshots,
@@ -41,6 +45,9 @@ function mapQuotaLimitQueryRowToRecord(
   const limits = {
     maxAppointments: row.quotaSnapshot?.maxAppointments ?? fallbackLimits?.maxAppointments ?? null,
     maxCustomers: row.quotaSnapshot?.maxCustomers ?? fallbackLimits?.maxCustomers ?? null,
+    maxKnowledgeFiles: fallbackLimits?.maxKnowledgeFiles ?? null,
+    maxStaffSeats: fallbackLimits?.maxStaffSeats ?? null,
+    maxAiCalls: row.quotaSnapshot?.maxAiCalls ?? fallbackLimits?.maxAiCalls ?? null,
   };
 
   return {
@@ -81,6 +88,53 @@ export function createTenantQuotaEnforcementRepository(database: TenantDatabase)
         .select({ value: count() })
         .from(customers)
         .where(eq(customers.tenantId, tenantId));
+
+      return normalizeCount(row?.value);
+    },
+
+    async countActiveStaffSeatsByTenant(tenantId: string): Promise<number> {
+      const [row] = await database
+        .select({ value: count() })
+        .from(tenantMembers)
+        .innerJoin(authUsers, eq(authUsers.id, tenantMembers.userId))
+        .where(
+          and(
+            eq(tenantMembers.tenantId, tenantId),
+            eq(tenantMembers.role, 'tenant_admin'),
+            eq(authUsers.status, 'active'),
+          ),
+        );
+
+      return normalizeCount(row?.value);
+    },
+
+    async countKnowledgeFilesByTenant(tenantId: string): Promise<number> {
+      const [row] = await database
+        .select({ value: count() })
+        .from(knowledgeDocumentFiles)
+        .where(
+          and(
+            eq(knowledgeDocumentFiles.tenantId, tenantId),
+            eq(knowledgeDocumentFiles.status, 'active'),
+          ),
+        );
+
+      return normalizeCount(row?.value);
+    },
+
+    async countAiCallsByTenantThisMonth(tenantId: string): Promise<number> {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const [row] = await database
+        .select({ value: count() })
+        .from(aiCallUsageRecords)
+        .where(
+          and(
+            eq(aiCallUsageRecords.tenantId, tenantId),
+            sql`${aiCallUsageRecords.createdAt} >= ${monthStart}`,
+            sql`${aiCallUsageRecords.status} = 'succeeded'`,
+          ),
+        );
 
       return normalizeCount(row?.value);
     },
@@ -152,10 +206,27 @@ export async function checkTenantQuotaForCreate(input: {
     });
   }
 
-  const current =
-    input.resource === 'customers'
-      ? await repository.countCustomersByTenant(input.tenantId)
-      : await repository.countAppointmentsByTenant(input.tenantId);
+  let current: number;
+
+  switch (input.resource) {
+    case 'customers':
+      current = await repository.countCustomersByTenant(input.tenantId);
+      break;
+    case 'appointments':
+      current = await repository.countAppointmentsByTenant(input.tenantId);
+      break;
+    case 'knowledge_files':
+      current = await repository.countKnowledgeFilesByTenant(input.tenantId);
+      break;
+    case 'staff_seats':
+      current = await repository.countActiveStaffSeatsByTenant(input.tenantId);
+      break;
+    case 'ai_calls':
+      current = await repository.countAiCallsByTenantThisMonth(input.tenantId);
+      break;
+    default:
+      current = 0;
+  }
 
   return evaluateTenantQuotaForCreate({
     current,
