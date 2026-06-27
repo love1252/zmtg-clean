@@ -187,7 +187,7 @@ const searchChunks: KnowledgeChunkSearchRepositoryRecord[] = [
   },
 ];
 
-const veryLongSnippet = '术后护理指南详细说明。'.repeat(25);
+const veryLongSnippet = '术后护理指南详细说明无断句无标点无空格连续文本'.repeat(15);
 
 function createRepository(overrides?: {
   listKnowledgeItems?: typeof vi.fn;
@@ -418,7 +418,7 @@ describe('机构端知识库关键词检索 service', () => {
     }
   });
 
-  it('snippet 不超过 300 字', async () => {
+  it('snippet 不超过 300 字，省略号计入上限', async () => {
     const repository = createRepository({
       searchKnowledgeFileParseChunks: vi.fn(async () => [
         {
@@ -465,11 +465,14 @@ describe('机构端知识库关键词检索 service', () => {
       expect(longResult).toBeDefined();
       expect(shortResult).toBeDefined();
       if (longResult) {
-        expect(longResult.textPreview.length).toBeLessThanOrEqual(310); // 300 + ellipsis
+        expect(longResult.textPreview.length).toBeLessThanOrEqual(300);
+        expect(longResult.textPreview.endsWith('…')).toBe(true);
       }
       if (shortResult) {
-        // 短文本不截断
+        // 短文本不截断，不加省略号
         expect(shortResult.textPreview).toBe('简要护理说明。');
+        expect(shortResult.textPreview.length).toBeLessThanOrEqual(300);
+        expect(shortResult.textPreview.endsWith('…')).toBe(false);
       }
     }
   });

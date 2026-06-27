@@ -158,19 +158,23 @@ function buildMatchReason(keyword: string) {
 
 function truncateSnippet(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
-  // Try to break at a sentence-ending punctuation or space
-  const truncated = text.slice(0, maxChars);
+
+  // Reserve 1 char for the ellipsis — body must be at most maxChars - 1
+  const bodyLimit = maxChars - 1;
+
+  // Try to break at a sentence-ending punctuation or newline within bodyLimit
+  const truncated = text.slice(0, bodyLimit);
   const lastPeriod = Math.max(
     truncated.lastIndexOf('。'),
     truncated.lastIndexOf('！'),
     truncated.lastIndexOf('？'),
     truncated.lastIndexOf('\n'),
   );
-  if (lastPeriod > maxChars * 0.6) {
-    return truncated.slice(0, lastPeriod + 1);
+  if (lastPeriod > bodyLimit * 0.6) {
+    return `${truncated.slice(0, lastPeriod + 1)}…`;
   }
   const lastSpace = truncated.lastIndexOf(' ');
-  if (lastSpace > maxChars * 0.8) {
+  if (lastSpace > bodyLimit * 0.8) {
     return `${truncated.slice(0, lastSpace)}…`;
   }
   return `${truncated}…`;
