@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { decryptSecret } from '@/modules/security/server/secretEncryption';
 import type { EncryptedSecretEnvelope } from '@/modules/security/server/secretEncryption';
 
-export type AiCallUsageStatus = 'succeeded' | 'failed' | 'rate_limited' | 'provider_unavailable';
+export type AiCallUsageStatus = 'succeeded' | 'failed' | 'sensitive_input_rejected' | 'rate_limited' | 'provider_unavailable';
 
 export type AiCallUsageRecord = {
   id: string;
@@ -25,7 +25,7 @@ export type AiCallUsageDto = Omit<AiCallUsageRecord, 'createdAt'> & {
 };
 
 export type InstitutionAiCallResult = {
-  status: 'created' | 'validation_failed' | 'not_found' | 'service_unavailable' | 'rate_limited' | 'provider_unavailable';
+  status: 'created' | 'validation_failed' | 'not_found' | 'sensitive_input_rejected' | 'service_unavailable' | 'rate_limited' | 'provider_unavailable';
   message?: string;
   answer?: string;
   record?: AiCallUsageDto;
@@ -141,6 +141,28 @@ const deniedResponseFragments = [
   'env.local',
 ];
 
+const sensitiveInputPatterns = [
+  { pattern: /\d{15}(\d{2}[0-9Xx])?/, label: '公民身份号码' },
+  { pattern: /\d{6}\s*\d{8}[0-9A-Za-z]/, label: '公民身份号码' },
+  { pattern: /\d{16,19}/, label: '银行卡号' },
+  { pattern: /[\d\s-]{15,19}/, label: '银行卡号' },
+  { pattern: /支付|付款|收款|转账|汇款|结算/, label: '支付信息' },
+  { pattern: /发票号|发票|invoice|receipt/i, label: '票据信息' },
+  { pattern: /合同号|合同编号|contract/i, label: '合同信息' },
+  { pattern: /病历|诊断证明|检查报告|化验报告|影像报告|病理报告|处方笺/, label: '高敏医疗文书' },
+  { pattern: /password|密码|secret|token|api.?key|api_key|apikey|authorization|bearer/i, label: '凭证类信息' },
+];
+
+function hasSensitiveInput(text: string) {
+  const normalized = text.replace(/\s/g, '');
+  for (const entry of sensitiveInputPatterns) {
+    if (entry.pattern.test(text)) return true;
+    if (entry.pattern.test(normalized)) return true;
+  }
+  if (hasDeniedFragment(text)) return true;
+  return false;
+}
+
 function hasDeniedFragment(text: string) {
   const normalized = text.toLowerCase();
   return deniedResponseFragments.some((fragment) => normalized.includes(fragment.toLowerCase()));
@@ -163,7 +185,6 @@ export async function requestInstitutionAiCallService(input: {
     institutionId?: string | null;
     userId?: string | null;
     question?: string | null;
-    contextChunks?: string[] | null;
   };
 }): Promise<InstitutionAiCallResult> {
   const tenantId = normalizeRequired(input.input.tenantId);
@@ -179,6 +200,29 @@ export async function requestInstitutionAiCallService(input: {
   }
   if (question.length > 512) {
     return { status: 'validation_failed', message: '问题过长，请控制在512字以内' };
+  }
+
+  if (hasSensitiveInput(question)) {
+    const record = await input.repository.createUsageRecord({
+      id: generateRecordId(),
+      tenantId,
+      institutionId,
+      actorUserId: userId,
+      provider: input.vendor,
+      model: 'pre_call_safety_check',
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      latencyMs: null,
+      status: 'sensitive_input_rejected',
+      errorCode: 'SENSITIVE_INPUT_REJECTED',
+    }).catch(() => null);
+
+    return {
+      status: 'sensitive_input_rejected',
+      message: '输入内容包含敏感信息，请移除身份证、银行卡、病历、合同、凭证等敏感内容后重试',
+      record: record ? mapRecordToDto(record) : undefined,
+    };
   }
 
   const vendorConfig = await input.repository.findVendorConfig(input.vendor);
@@ -199,23 +243,12 @@ export async function requestInstitutionAiCallService(input: {
     };
   }
 
-  const contextText = (input.input.contextChunks ?? [])
-    .filter(Boolean)
-    .slice(0, 5)
-    .map((chunk, index) => `[${index + 1}] ${chunk}`)
-    .join('\n\n');
-
-  const systemPrompt = '你是一个医疗美容机构知识库助手。请基于以下知识片段回答用户问题。如果知识片段中没有相关信息，请如实说明。请使用中文回答，保持专业、简洁。';
+  const systemPrompt = '你是一个医疗美容机构助手。请基于专业知识回答用户问题，保持中文、专业、简洁。注意保护用户隐私，不编造诊断建议。';
 
   const messages: OpenAiChatMessage[] = [
     { role: 'system', content: systemPrompt },
+    { role: 'user', content: question },
   ];
-
-  if (contextText) {
-    messages.push({ role: 'user', content: `参考知识片段：\n${contextText}\n\n用户问题：${question}` });
-  } else {
-    messages.push({ role: 'user', content: question });
-  }
 
   const providerName = input.vendor;
   const modelName = vendorConfig.model;
@@ -301,7 +334,7 @@ export async function requestInstitutionAiCallService(input: {
     }
 
     const usage = body.usage ?? {};
-    const promptTokens = usage.prompt_tokens ?? estimateTokens(question + contextText + systemPrompt);
+    const promptTokens = usage.prompt_tokens ?? estimateTokens(question + systemPrompt);
     const completionTokens = usage.completion_tokens ?? estimateTokens(answer);
     const totalTokens = usage.total_tokens ?? (promptTokens + completionTokens);
 

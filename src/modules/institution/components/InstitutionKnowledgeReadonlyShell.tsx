@@ -168,7 +168,7 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [isQaAuditLoading, setIsQaAuditLoading] = useState(false);
   const [aiQuestion, setAiQuestion] = useState('');
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
-  const [aiMessage, setAiMessage] = useState('输入问题，选择模型，发起真实 AI 调用');
+  const [aiMessage, setAiMessage] = useState('不含 RAG/检索的真实模型试问，仅发送低敏问题至大模型。');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiVendor, setAiVendor] = useState('deepseek');
   const [aiUsageRecords, setAiUsageRecords] = useState<InstitutionAiCallUsageRecord[]>([]);
@@ -1106,7 +1106,7 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">知识库 AI 试问</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">基于本机构授权可见知识片段，调用真实大模型生成回答。</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">不含 RAG/检索的真实模型试问，仅发送低敏问题至大模型。</p>
             </div>
             <form onSubmit={requestAiCall} className="flex w-full flex-col gap-2 lg:w-[660px]">
               <div className="flex flex-col gap-2 sm:flex-row">

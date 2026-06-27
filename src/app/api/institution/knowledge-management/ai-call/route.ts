@@ -42,16 +42,13 @@ export async function POST(request: Request) {
         institutionId: accessContext.institutionId,
         userId: accessContext.userId,
         question: typeof body.question === 'string' ? body.question : null,
-        contextChunks: Array.isArray(body.contextChunks)
-          ? body.contextChunks.filter((c) => typeof c === 'string')
-          : null,
       },
     });
 
-    if (result.status === 'validation_failed') {
+    if (result.status === 'validation_failed' || result.status === 'sensitive_input_rejected') {
       return NextResponse.json(
-        { code: 'validation_error', error: result.message },
-        { status: 400 },
+        { code: result.status === 'sensitive_input_rejected' ? 'sensitive_input_rejected' : 'validation_error', error: result.message },
+        { status: result.status === 'sensitive_input_rejected' ? 422 : 400 },
       );
     }
     if (result.status === 'service_unavailable') {

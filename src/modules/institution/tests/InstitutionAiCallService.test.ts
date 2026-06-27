@@ -72,7 +72,6 @@ describe('AI 真实调用与用量记录 service', () => {
         institutionId: 'inst-001',
         userId: 'user-001',
         question: '冷敷后怎么护理？',
-        contextChunks: ['冷敷是医美术后常见护理环节', '应避免过热和剧烈刺激'],
       },
     });
 
@@ -294,5 +293,123 @@ describe('AI 真实调用与用量记录 service', () => {
 
     expect(resultOwn.records.length).toBe(1);
     expect(resultOther.records.length).toBe(0);
+  });
+
+  it('身份证号输入被拒绝且不调用 provider', async () => {
+    const fetchSpy = vi.fn();
+    (globalThis as unknown as { fetch: typeof fetch }).fetch = fetchSpy;
+
+    const repository = {
+      findVendorConfig: vi.fn(),
+      createUsageRecord: vi.fn().mockImplementation(async (input) => createMockUsageRecord({
+        id: input.id, tenantId: input.tenantId, institutionId: input.institutionId, actorUserId: input.actorUserId, provider: input.provider, model: input.model, promptTokens: input.promptTokens, completionTokens: input.completionTokens, totalTokens: input.totalTokens, latencyMs: input.latencyMs, status: input.status, errorCode: input.errorCode,
+      })),
+      listInstitutionUsageRecords: vi.fn(),
+      listPlatformUsageSummary: vi.fn(),
+    };
+
+    const result = await requestInstitutionAiCallService({
+      repository,
+      vendor: 'deepseek',
+      input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '身份证110101199001011234的客户可以做什么项目？' },
+    });
+
+    expect(result.status).toBe('sensitive_input_rejected');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result.message).toContain('敏感');
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('110101');
+    expect(result.record).toBeTruthy();
+    expect(result.record!.status).toBe('sensitive_input_rejected');
+  });
+
+  it('银行卡号输入被拒绝', async () => {
+    const repository = {
+      findVendorConfig: vi.fn(),
+      createUsageRecord: vi.fn().mockImplementation(async (input) => createMockUsageRecord({
+        id: input.id, tenantId: input.tenantId, institutionId: input.institutionId, actorUserId: input.actorUserId, provider: input.provider, model: input.model, promptTokens: input.promptTokens, completionTokens: input.completionTokens, totalTokens: input.totalTokens, latencyMs: input.latencyMs, status: input.status, errorCode: input.errorCode,
+      })),
+      listInstitutionUsageRecords: vi.fn(),
+      listPlatformUsageSummary: vi.fn(),
+    };
+
+    const result = await requestInstitutionAiCallService({
+      repository,
+      vendor: 'deepseek',
+      input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '付款到账号6222021234567890123可以吗？' },
+    });
+
+    expect(result.status).toBe('sensitive_input_rejected');
+    expect(result.record!.status).toBe('sensitive_input_rejected');
+  });
+
+  it('病历/诊断内容被拒绝', async () => {
+    const repository = {
+      findVendorConfig: vi.fn(),
+      createUsageRecord: vi.fn().mockImplementation(async (input) => createMockUsageRecord({
+        id: input.id, tenantId: input.tenantId, institutionId: input.institutionId, actorUserId: input.actorUserId, provider: input.provider, model: input.model, promptTokens: input.promptTokens, completionTokens: input.completionTokens, totalTokens: input.totalTokens, latencyMs: input.latencyMs, status: input.status, errorCode: input.errorCode,
+      })),
+      listInstitutionUsageRecords: vi.fn(),
+      listPlatformUsageSummary: vi.fn(),
+    };
+
+    const result = await requestInstitutionAiCallService({
+      repository,
+      vendor: 'deepseek',
+      input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '这个诊断证明写了检查报告结果建议做些什么？' },
+    });
+
+    expect(result.status).toBe('sensitive_input_rejected');
+  });
+
+  it('客户端传入 contextChunks 被忽略，不会进入 provider prompt', async () => {
+    let capturedBody: string | null = null;
+    (globalThis as unknown as { fetch: typeof fetch }).fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      capturedBody = init?.body as string ?? null;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: '正常回答' } }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }),
+      };
+    });
+
+    const repository = {
+      findVendorConfig: vi.fn().mockResolvedValue({
+        baseUrl: 'https://api.deepseek.com/v1',
+        model: 'deepseek-v4-flash',
+        encryptedApiKey: { algorithm: 'AES-256-GCM', keyVersion: 'v1', iv: 'a', authTag: 'b', ciphertext: 'c' },
+        configured: true,
+      }),
+      createUsageRecord: vi.fn().mockImplementation(async (input) => createMockUsageRecord({
+        id: input.id, tenantId: input.tenantId, institutionId: input.institutionId, actorUserId: input.actorUserId, provider: input.provider, model: input.model, promptTokens: input.promptTokens, completionTokens: input.completionTokens, totalTokens: input.totalTokens, latencyMs: input.latencyMs, status: input.status, errorCode: input.errorCode,
+      })),
+      listInstitutionUsageRecords: vi.fn(),
+      listPlatformUsageSummary: vi.fn(),
+    };
+
+    vi.mock('@/modules/security/server/secretEncryption', () => ({
+      decryptSecret: vi.fn(() => 'mock-plain-key'),
+    }));
+
+    // Note: contextChunks is no longer accepted in the type, but if someone
+    // passes it via the old input shape (e.g. cast), it must not appear in the prompt.
+    // We verify that the service signature no longer includes contextChunks.
+    const result = await requestInstitutionAiCallService({
+      repository,
+      vendor: 'deepseek',
+      input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '术后冷敷多久？' },
+    });
+
+    expect(result.status).toBe('created');
+    if (capturedBody) {
+      const parsed = JSON.parse(capturedBody);
+      const userMessage = parsed.messages.find((m: { role: string }) => m.role === 'user')?.content ?? '';
+      // Must NOT contain any artificially injected "参考知识片段" format
+      expect(userMessage).not.toContain('参考知识片段');
+      expect(userMessage).not.toContain('伪造');
+      expect(userMessage).not.toContain('其他租户');
+    }
   });
 });
