@@ -13,6 +13,7 @@ import {
   Route,
   Search,
   ShieldCheck,
+  ShieldQuestion,
   Sparkles,
   Target,
   TrendingUp,
@@ -342,6 +343,11 @@ export function InstitutionWorkspace() {
     useState<FollowUpPathAnalysisApiResponse | null>(null);
   const [followUpPathAnalysisStatus, setFollowUpPathAnalysisStatus] =
     useState<DashboardLoadStatus>('loading');
+  const [entitlementView, setEntitlementView] = useState<{
+    items: Array<{ resource: string; label: string; used: number | null; limit: number | null;
+      remaining: number | null; status: string }>;
+    planCode: string | null;
+  } | null>(null);
   const activeNavItem = institutionNavItems.find((item) => item.id === activeView) ?? institutionNavItems[0];
   const highPriorityMetric = dashboardSummary.metrics.find(
     (metric) => metric.key === 'high_priority_customers',
@@ -366,6 +372,14 @@ export function InstitutionWorkspace() {
       ]);
 
       if (!isActive) return;
+
+      // 加载套餐权益用量（只读，不需要阻塞主运营视图）
+      fetch('/api/institution/entitlement-usage')
+        .then((r) => r.json().catch(() => null))
+        .then((p) => {
+          if (p && Array.isArray(p.items)) setEntitlementView(p);
+        })
+        .catch(() => {});
 
       if (pathAnalysisResult.ok) {
         setFollowUpPathAnalysis(pathAnalysisResult.analysis);
@@ -538,6 +552,7 @@ export function InstitutionWorkspace() {
           <div className="mx-auto w-full max-w-[1740px] space-y-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-7">
             {activeView === 'dashboard' ? (
               <InstitutionDashboardHome
+                entitlementView={entitlementView}
                 errorState={dashboardErrorState}
                 followUpPathAnalysis={followUpPathAnalysis}
                 followUpPathAnalysisStatus={followUpPathAnalysisStatus}
@@ -573,12 +588,18 @@ export function InstitutionWorkspace() {
 }
 
 function InstitutionDashboardHome({
+  entitlementView,
   errorState,
   followUpPathAnalysis,
   followUpPathAnalysisStatus,
   status,
   summary,
 }: {
+  entitlementView: {
+    items: Array<{ resource: string; label: string; used: number | null; limit: number | null;
+      remaining: number | null; status: string }>;
+    planCode: string | null;
+  } | null;
   errorState: InstitutionPageStateProps | null;
   followUpPathAnalysis: FollowUpPathAnalysisApiResponse | null;
   followUpPathAnalysisStatus: DashboardLoadStatus;
@@ -679,6 +700,49 @@ function InstitutionDashboardHome({
           );
         })}
       </section>
+
+      {entitlementView ? (
+        <section className="rounded-[22px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-700">
+              <ShieldQuestion className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold tracking-normal text-slate-950">
+                当前套餐：{entitlementView.planCode ?? '-'}
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">套餐权益用量，接近上限时会提前提示</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {entitlementView.items.map((item) => {
+              let statusBadge = '';
+              if (item.status === 'exceeded') statusBadge = 'text-rose-600';
+              else if (item.status === 'near_limit') statusBadge = 'text-amber-600';
+              else if (item.status === 'no_active_plan' || item.status === 'not_configured') statusBadge = 'text-slate-400';
+              else statusBadge = 'text-emerald-600';
+              return (
+                <div key={item.resource} className="rounded-xl border border-slate-200/80 bg-white p-3">
+                  <div className="text-xs font-semibold text-slate-500">{item.label}</div>
+                  <div className="mt-1 flex items-baseline gap-1">
+                    <span className="text-xl font-semibold text-slate-950">{item.used ?? '-'}</span>
+                    <span className="text-sm text-slate-400">/ {item.limit ?? '-'}</span>
+                    {item.remaining !== null && (
+                      <span className="ml-auto text-xs text-slate-400">剩余 {item.remaining}</span>
+                    )}
+                  </div>
+                  {item.status === 'near_limit' && (
+                    <p className="mt-1 text-xs text-amber-600 font-medium">即将达到上限，请联系平台管理员</p>
+                  )}
+                  {item.status === 'exceeded' && (
+                    <p className="mt-1 text-xs text-rose-600 font-medium">已达到上限</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {status === 'success' && summary.isEmpty ? (
         <InstitutionPageState
