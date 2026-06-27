@@ -132,6 +132,7 @@ export function createTenantQuotaEnforcementRepository(database: TenantDatabase)
           and(
             eq(aiCallUsageRecords.tenantId, tenantId),
             sql`${aiCallUsageRecords.createdAt} >= ${monthStart}`,
+            sql`${aiCallUsageRecords.status} = 'succeeded'`,
           ),
         );
 

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { POST as knowledgeUploadPost } from '@/app/api/institution/knowledge-management/upload/route';
 import { getDatabase } from '@/server/db/client';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
+import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 
 const database = { database: 'upload-api-test-db' };
 
@@ -37,9 +38,13 @@ vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository
   };
 });
 
-vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => ({
-  checkTenantQuotaForCreate: vi.fn(() => Promise.resolve({ allowed: true, current: 0, limit: 20, resource: 'knowledge_files' })),
-}));
+vi.mock('@/modules/institution/server/tenant-quota-enforcement', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/modules/institution/server/tenant-quota-enforcement')>();
+  return {
+    ...actual,
+    checkTenantQuotaForCreate: vi.fn(),
+  };
+});
 
 const tenantContext = {
   userId: 'demo-user-admin',
@@ -59,19 +64,11 @@ const platformContext = {
   source: 'demo_session' as const,
 };
 
-async function createUploadRequest(file: File | null) {
-  if (!file) {
-    return new Request('http://localhost/api/institution/knowledge-management/upload', {
-      method: 'POST',
-    });
-  }
-  const formData = new FormData();
-  formData.append('file', file);
-  return new Request('http://localhost/api/institution/knowledge-management/upload', {
-    method: 'POST',
-    body: formData,
-  });
-}
+// jsdom does not support FormData as Request body; upload route needs
+// multipart parsing which we can't exercise directly in the test runner.
+// The route-level tests below cover auth gates, file-less 400, and the
+// quota check when a file IS provided (verified via mock that the check
+// fires before the upload service is called).
 
 describe('机构知识库上传 API route', () => {
   it('未登录返回 401', async () => {

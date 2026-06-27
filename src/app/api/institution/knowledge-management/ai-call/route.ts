@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     });
     if (!quotaDecision.allowed) {
       return NextResponse.json(
-        { code: 'quota_exceeded', error: 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐' },
+        { code: 'quota_exceeded_ai_calls', error: 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐' },
         { status: 409 },
       );
     }

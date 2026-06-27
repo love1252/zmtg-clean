@@ -52,7 +52,7 @@ export async function POST(request: Request) {
   try {
     const db = getDatabase();
 
-    // 检查知识库文件数量配额
+    // 检查知识库文件数量配额（在解析文件和上传之前）
     const quotaDecision = await checkTenantQuotaForCreate({
       database: db,
       tenantId: accessContext.tenantId,
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     });
     if (!quotaDecision.allowed) {
       return NextResponse.json(
-        { code: 'quota_exceeded', error: '知识库文件数量已达到当前套餐上限，请联系平台管理员调整套餐' },
+        { code: 'quota_exceeded_knowledge_files', error: '知识库文件数量已达到当前套餐上限，请联系平台管理员调整套餐' },
         { status: 409 },
       );
     }
