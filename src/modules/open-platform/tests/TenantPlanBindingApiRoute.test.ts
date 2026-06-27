@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as tenantPlanOptionsRoute from '@/app/api/v1/open-platform/tenant-plan-options/route';
 import * as tenantCreateRoute from '@/app/api/v1/open-platform/tenants/route';
+import { getTenantPlanQuotaLimitsByCode } from '@/modules/institution/domain/quota-enforcement';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
 const routeMocks = vi.hoisted(() => {
@@ -49,9 +50,7 @@ vi.mock('@/modules/institution/domain/quota-enforcement', async (importOriginal)
   const actual = await importOriginal<typeof import('@/modules/institution/domain/quota-enforcement')>();
   return {
     ...actual,
-    getTenantPlanQuotaLimitsByCode: vi.fn(() => ({
-      maxAppointments: 120, maxCustomers: 80, maxKnowledgeFiles: 20, maxStaffSeats: 5, maxAiCalls: 100,
-    })),
+    getTenantPlanQuotaLimitsByCode: vi.fn(),
   };
 });
 
@@ -157,6 +156,10 @@ beforeEach(() => {
     currentAiCalls: null,
     snapshotAt: null,
   }));
+  // Default: maxStaffSeats=5 (valid, allows creation)
+  vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue({
+    maxAppointments: 120, maxCustomers: 80, maxKnowledgeFiles: 20, maxStaffSeats: 5, maxAiCalls: 100,
+  });
 });
 
 describe('租户套餐绑定 API', () => {
@@ -313,5 +316,85 @@ describe('租户套餐绑定 API', () => {
     expect(response.status).toBe(503);
     expect(payload).toEqual({ ok: false, errorCode: 'TENANT_PLAN_BINDING_UNAVAILABLE' });
     expectNoSensitivePayload(payload);
+  });
+
+  it('maxStaffSeats 有效时创建租户成功', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
+    vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue({
+      maxAppointments: 120, maxCustomers: 80, maxKnowledgeFiles: 20, maxStaffSeats: 5, maxAiCalls: 100,
+    });
+
+    const response = await tenantCreateRoute.POST(
+      createTenantRequest({
+        organizationName: '席位验证机构',
+        planVersionId: 'plan-version-professional-published',
+        reason: '验证 maxStaffSeats>=1',
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(routeMocks.repository.createTenantWithPlanAuthorization).toHaveBeenCalledTimes(1);
+  });
+
+  it('maxStaffSeats 无效（返回 0）时拒绝创建租户', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
+    vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue({
+      maxAppointments: 120, maxCustomers: 80, maxKnowledgeFiles: 20, maxStaffSeats: 0, maxAiCalls: 100,
+    });
+
+    const response = await tenantCreateRoute.POST(
+      createTenantRequest({
+        organizationName: '席位超限机构',
+        planVersionId: 'plan-version-professional-published',
+        reason: '验证 maxStaffSeats=0',
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.errorCode).toBe('quota_exceeded_staff_seats');
+    expect(body.error).toContain('员工席位');
+    // 不调用创建 service
+    expect(routeMocks.repository.createTenantWithPlanAuthorization).not.toHaveBeenCalled();
+  });
+
+  it('maxStaffSeats 不存在（null）时拒绝创建租户', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
+    vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue(null);
+
+    const response = await tenantCreateRoute.POST(
+      createTenantRequest({
+        organizationName: '无受信常量机构',
+        planVersionId: 'plan-version-professional-published',
+        reason: '验证 maxStaffSeats=null',
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.errorCode).toBe('quota_exceeded_staff_seats');
+    // 不调用创建 service
+    expect(routeMocks.repository.createTenantWithPlanAuthorization).not.toHaveBeenCalled();
+  });
+
+  it('staff 超限 response 不泄露敏感字段', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
+    vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue({
+      maxAppointments: 120, maxCustomers: 80, maxKnowledgeFiles: 20, maxStaffSeats: 0, maxAiCalls: 100,
+    });
+
+    const response = await tenantCreateRoute.POST(
+      createTenantRequest({
+        organizationName: '泄露测试',
+        planVersionId: 'plan-version-professional-published',
+        reason: '测试敏感字段',
+      }),
+    );
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('DATABASE_URL');
+    expect(serialized).not.toContain('postgres://');
+    expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('stack');
+    expect(serialized).not.toContain('token');
   });
 });

@@ -3,6 +3,7 @@ import { POST as knowledgeUploadPost } from '@/app/api/institution/knowledge-man
 import { getDatabase } from '@/server/db/client';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
+import { uploadAndParseInstitutionKnowledgeFileService } from '@/modules/institution/server/institution-knowledge-upload-service';
 
 const database = { database: 'upload-api-test-db' };
 
@@ -64,11 +65,38 @@ const platformContext = {
   source: 'demo_session' as const,
 };
 
-// jsdom does not support FormData as Request body; upload route needs
-// multipart parsing which we can't exercise directly in the test runner.
-// The route-level tests below cover auth gates, file-less 400, and the
-// quota check when a file IS provided (verified via mock that the check
-// fires before the upload service is called).
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+/**
+ * Create a Request whose formData() returns a valid file object.
+ * We override formData on the instance so the route can read a file
+ * without depending on jsdom multipart parsing.
+ */
+function createRequestWithMockFile(): Request {
+  const req = new Request('http://localhost/api/institution/knowledge-management/upload', {
+    method: 'POST',
+    headers: { 'content-type': 'multipart/form-data; boundary=test' },
+  });
+  const mockFile = {
+    name: 'test.txt',
+    type: 'text/plain',
+    size: 6,
+    arrayBuffer: async () => new ArrayBuffer(6),
+  };
+  const mockFormData = {
+    get: (key: string) => (key === 'file' ? mockFile : null),
+    has: (key: string) => key === 'file',
+  };
+  // Override instance formData to return our mock
+  Object.defineProperty(req, 'formData', {
+    value: async () => mockFormData,
+    writable: true,
+    configurable: true,
+  });
+  return req;
+}
 
 describe('机构知识库上传 API route', () => {
   it('未登录返回 401', async () => {
@@ -100,5 +128,77 @@ describe('机构知识库上传 API route', () => {
     expect(serialized).not.toContain('postgres://');
     expect(serialized).not.toContain('secret');
     expect(serialized).not.toContain('token');
+  });
+
+  it('知识库文件达到上限时返回 409 且不调用 upload service', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: false,
+      current: 20,
+      limit: 20,
+      reason: 'quota_exceeded_knowledge_files',
+      resource: 'knowledge_files',
+    });
+
+    const response = await knowledgeUploadPost(createRequestWithMockFile());
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.code).toBe('quota_exceeded_knowledge_files');
+    expect(body.error).toContain('知识库文件');
+    expect(uploadAndParseInstitutionKnowledgeFileService).not.toHaveBeenCalled();
+  });
+
+  it('知识库超限 response 不泄露敏感字段', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: false,
+      current: 20,
+      limit: 20,
+      reason: 'quota_exceeded_knowledge_files',
+      resource: 'knowledge_files',
+    });
+
+    const response = await knowledgeUploadPost(createRequestWithMockFile());
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('DATABASE_URL');
+    expect(serialized).not.toContain('postgres://');
+    expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('stack');
+    expect(serialized).not.toContain('token');
+  });
+
+  it('知识库未超限时上传 .txt 成功（mock quota 放行）', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true,
+      current: 5,
+      limit: 20,
+      resource: 'knowledge_files',
+    });
+    vi.mocked(uploadAndParseInstitutionKnowledgeFileService).mockResolvedValueOnce({
+      status: 'created',
+      knowledgeId: 'k1',
+      sourceId: 's1',
+      file: {
+        fileId: 'f1', tenantId: 'demo-tenant-001', knowledgeId: 'k1',
+        originalFilename: 'test.txt', mimeType: 'text/plain', sizeBytes: 100,
+        status: 'active', fileType: 'TXT', sizeLabel: '1 KB',
+        parseStatus: 'succeeded', failureReasonCode: null, safeFailureMessage: null,
+        textLength: 12, chunkCount: 1, parserVersion: 'v1',
+        uploadedByUserId: 'demo-user-admin', createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(), archivedAt: null,
+      },
+      parse: { textLength: 12, chunkCount: 1, parserVersion: 'v1' },
+      chunkCount: 1,
+    });
+
+    const response = await knowledgeUploadPost(createRequestWithMockFile());
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body.status).toBe('created');
+    expect(body.chunkCount).toBe(1);
   });
 });
