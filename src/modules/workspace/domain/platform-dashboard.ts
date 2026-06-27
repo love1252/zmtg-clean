@@ -80,8 +80,8 @@ export const platformNavItems: PlatformNavItem[] = [
 export const platformCapabilityCards = [
   { icon: KeyRound, title: '真实计费未启用', detail: '只呈现套餐、配额和风险判断，不展示收入、合同、发票或支付数据。' },
   { icon: Plug, title: '外部连接未启用', detail: '开放连接属于长期路线，本页不生成密钥、不授权，也不投递外部系统。' },
-  { icon: Shield, title: '真实人工智能密钥未启用', detail: '当前无真实 AI 调用日志，不读取真实密钥，也不触发真实模型调用。' },
-  { icon: Brain, title: '模型配置未接入真实服务', detail: '模型配置仅保留配置入口，不代表已经启用真实模型服务。' },
+  { icon: Shield, title: 'AI 模型处于受控试运行', detail: '已接入真实厂商 Key（加密存储），机构端可通过知识库 AI 试问发起真实模型调用。非生产环境。' },
+  { icon: Brain, title: '模型配置已接入多个厂商', detail: '支持 DeepSeek、豆包、通义千问等厂商 Key 管理和连接测试，机构端低敏试问可用。' },
 ] as const;
 
 export type PlatformQuickAction = {
