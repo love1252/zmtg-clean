@@ -6,6 +6,8 @@ import { getDatabase } from '@/server/db/client';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 import { requestInstitutionAiCallService, recordAiCallQuotaRejection } from '@/modules/institution/server/institution-ai-call-service';
+import { searchInstitutionKnowledgeChunksService } from '@/modules/institution/server/institution-knowledge-keyword-search-service';
+import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 
 const database = { database: 'ai-call-api-test-db' };
 
@@ -41,6 +43,14 @@ vi.mock('@/modules/institution/server/tenant-quota-enforcement', async (importOr
     checkTenantQuotaForCreate: vi.fn(),
   };
 });
+
+vi.mock('@/modules/institution/server/institution-knowledge-keyword-search-service', () => ({
+  searchInstitutionKnowledgeChunksService: vi.fn(),
+}));
+
+vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository', () => ({
+  createPlatformKnowledgeManagementRepository: vi.fn(() => ({})),
+}));
 
 const tenantContext = {
   userId: 'demo-user-admin',
@@ -375,6 +385,14 @@ describe('机构端 AI 调用 API route', () => {
       limit: 100,
       resource: 'ai_calls',
     });
+    vi.mocked(searchInstitutionKnowledgeChunksService).mockResolvedValueOnce({
+      requestId: 'institution-knowledge-keyword-search' as const,
+      readonly: true as const,
+      dataSource: 'repository' as const,
+      records: [],
+      pageInfo: { page: 1, pageSize: 5, total: 0, pageCount: 0, hasPreviousPage: false, hasNextPage: false },
+      emptyState: { title: '暂无匹配片段', description: '当前范围没有命中关键词的已解析知识片段。' },
+    });
     vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
       status: 'created',
       answer: '冷敷建议保持清洁干燥',
@@ -430,5 +448,133 @@ describe('平台端 AI 用量聚合 API route', () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(null);
     const response = await platformAiUsageGet(new Request('http://localhost/api/v1/open-platform/ai-usage'));
     expect(response.status).toBe(401);
+  });
+});
+
+describe('AI 试问 RAG 知识库检索闭环', () => {
+  it('KB 检索成功，service 收到 knowledgeChunks', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true, current: 5, limit: 100, resource: 'ai_calls',
+    });
+    vi.mocked(searchInstitutionKnowledgeChunksService).mockResolvedValueOnce({
+      requestId: 'institution-knowledge-keyword-search' as const,
+      readonly: true as const,
+      dataSource: 'repository' as const,
+      records: [
+        { knowledgeId: 'kb-1', knowledgeTitle: '术后护理指南', fileId: 'f-1', fileName: '术后护理.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷后保持清洁。', matchReason: '包含关键词"冷敷"' },
+      ],
+      pageInfo: { page: 1, pageSize: 5, total: 1, pageCount: 1, hasPreviousPage: false, hasNextPage: false },
+      emptyState: { title: '', description: '' },
+    });
+    vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
+      status: 'created',
+      answer: '根据参考资料，冷敷后保持清洁干燥。',
+      record: { id: 'r1', tenantId: 't', institutionId: 'i', actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
+      knowledgeContext: { used: true, query: '冷敷后怎么护理？', sources: [{ knowledgeId: 'kb-1', knowledgeTitle: '术后护理指南', fileId: 'f-1', fileName: '术后护理.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷后保持清洁。', matchReason: '包含关键词"冷敷"' }] },
+    });
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '冷敷后怎么护理？' }),
+    }));
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.knowledgeContext).toBeDefined();
+    expect(body.knowledgeContext.used).toBe(true);
+    expect(body.knowledgeContext.sources).toHaveLength(1);
+  });
+
+  it('KB 检索异常返回受控 503，不调用 provider', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true, current: 5, limit: 100, resource: 'ai_calls',
+    });
+    vi.mocked(searchInstitutionKnowledgeChunksService).mockRejectedValueOnce(new Error('DB down'));
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '冷敷后怎么护理？' }),
+    }));
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body.code).toBe('knowledge_retrieval_failed');
+    expect(JSON.stringify(body)).not.toContain('DB');
+    expect(JSON.stringify(body)).not.toContain('api_key');
+    // 不调用 provider
+    expect(requestInstitutionAiCallService).not.toHaveBeenCalled();
+  });
+
+  it('KB 检索返回空时正常调用 provider', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true, current: 5, limit: 100, resource: 'ai_calls',
+    });
+    vi.mocked(searchInstitutionKnowledgeChunksService).mockResolvedValueOnce({
+      requestId: 'institution-knowledge-keyword-search' as const,
+      readonly: true as const,
+      dataSource: 'repository' as const,
+      records: [],
+      pageInfo: { page: 1, pageSize: 5, total: 0, pageCount: 0, hasPreviousPage: false, hasNextPage: false },
+      emptyState: { title: '暂无匹配片段', description: '描述' },
+    });
+    vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
+      status: 'created', answer: '普通回答',
+      record: { id: 'r1', tenantId: 't', institutionId: 'i', actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
+      knowledgeContext: { used: false, query: '冷敷后怎么护理？', sources: [] },
+    });
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '冷敷后怎么护理？' }),
+    }));
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.knowledgeContext.used).toBe(false);
+    expect(body.knowledgeContext.sources).toHaveLength(0);
+  });
+
+  it('quota 超限时不执行 KB 检索（安全顺序）', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: false, current: 100, limit: 100, reason: 'quota_exceeded_ai_calls', resource: 'ai_calls',
+    });
+    vi.mocked(recordAiCallQuotaRejection).mockResolvedValue({
+      id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', provider: 'deepseek', model: 'unknown',
+      promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null,
+      status: 'rejected', errorCode: 'quota_exceeded_ai_calls', createdAt: new Date(),
+    });
+
+    await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '正常问题' }),
+    }));
+
+    // quota 拒绝后，不应执行 KB 检索
+    expect(searchInstitutionKnowledgeChunksService).not.toHaveBeenCalled();
+    expect(requestInstitutionAiCallService).not.toHaveBeenCalled();
+  });
+
+  it('检索失败 response 不泄露敏感字段', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true, current: 5, limit: 100, resource: 'ai_calls',
+    });
+    vi.mocked(searchInstitutionKnowledgeChunksService).mockRejectedValueOnce(new Error('internal db error'));
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '正常问题' }),
+    }));
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('api_key');
+    expect(serialized).not.toContain('Bearer');
+    expect(serialized).not.toContain('DATABASE_URL');
+    expect(serialized).not.toContain('postgres://');
+    expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('password');
+    expect(serialized).not.toContain('internal');
+    expect(serialized).not.toContain('db error');
   });
 });
