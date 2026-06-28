@@ -763,7 +763,6 @@ describe('机构端知识库只读列表 UI', () => {
                   metadata: {
                     knowledgeContext: {
                       used: true,
-                      searchKeyword: '冷敷',
                       sources: [{ knowledgeId: 'kb-1', knowledgeTitle: '术后护理', fileId: 'f-1', fileName: '术后护理规范.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷后保持清洁干燥。', matchReason: '包含"冷敷"' }],
                     },
                   },
@@ -774,7 +773,7 @@ describe('机构端知识库只读列表 UI', () => {
                   actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
                   promptTokens: 20, completionTokens: 10, totalTokens: 30, latencyMs: 200,
                   status: 'succeeded', errorCode: null,
-                  metadata: { knowledgeContext: { used: false, searchKeyword: '', sources: [] } },
+                  metadata: { knowledgeContext: { used: false, sources: [] } },
                   createdAt: '2026-06-28T07:00:00.000Z',
                 },
                 {

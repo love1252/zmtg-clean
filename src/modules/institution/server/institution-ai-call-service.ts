@@ -11,13 +11,13 @@ export type AiCallUsageStatus = 'succeeded' | 'failed' | 'sensitive_input_reject
  * 持久化到 ai_call_usage_records.metadata 的 RAG 摘要。
  * 仅在 succeeded 调用时写入；rejected / failed / sensitive_input_rejected 不写入。
  * sources 仅保存白名单字段，禁止 storageKey / bucket / signedUrl / embedding /
- * provider raw response / prompt 原文 / API key / baseUrl / Authorization。
- * 不保存原始用户问题 / prompt；searchKeyword 仅保存服务端派生后的 KB 检索关键词。
+ * provider raw response / prompt 原文 / 原始 question / 派生检索关键词 / API key /
+ * baseUrl / Authorization。
+ * 不保存原始用户问题 / prompt / 派生检索关键词；检索关键词仅运行时使用，不持久化。
  */
 export type AiCallUsageMetadata = {
   knowledgeContext?: {
     used: boolean;
-    searchKeyword: string;
     sources: Array<{
       knowledgeId: string;
       knowledgeTitle: string;
@@ -74,8 +74,7 @@ const METADATA_TEXT_PREVIEW_MAX = 300;
 /**
  * 从 KB 检索结果构造受控 RAG metadata。
  * 仅提取白名单字段，并对 textPreview 做防御性截断（<=300）。
- * searchKeyword 必须是服务端派生后的 KB 检索关键词（deriveKnowledgeSearchKeyword），
- * 不得传入原始用户问题 / prompt。
+ * 不接收 / 不写入原始 question / prompt / 派生检索关键词；检索关键词仅运行时使用。
  * kbChunks 为 undefined 时返回 null（不写入 RAG metadata）。
  */
 export function buildAiCallUsageMetadata(
@@ -91,14 +90,12 @@ export function buildAiCallUsageMetadata(
       matchReason: string;
     }>
     | undefined,
-  searchKeyword: string,
 ): AiCallUsageMetadata {
   if (!kbChunks) return null;
 
   return {
     knowledgeContext: {
       used: kbChunks.length > 0,
-      searchKeyword,
       sources: kbChunks.map((chunk) => ({
         knowledgeId: chunk.knowledgeId,
         knowledgeTitle: chunk.knowledgeTitle,
@@ -517,9 +514,9 @@ export async function requestInstitutionAiCallService(input: {
     const completionTokens = usage.completion_tokens ?? estimateTokens(answer);
     const totalTokens = usage.total_tokens ?? (promptTokens + completionTokens);
 
-    // 成功调用写入 RAG metadata（仅白名单字段 + 服务端派生检索关键词，用于后续追溯）
-    // 不保存原始 question / prompt
-    const metadata = buildAiCallUsageMetadata(kbChunks, searchKeyword);
+    // 成功调用写入 RAG metadata（仅 used + sources 白名单字段，用于后续追溯）
+    // 不保存原始 question / prompt / 派生检索关键词
+    const metadata = buildAiCallUsageMetadata(kbChunks);
 
     const record = await input.repository.createUsageRecord({
       id: generateRecordId(),
