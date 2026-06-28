@@ -83,6 +83,23 @@ type InstitutionAiCallUsageRecord = {
   createdAt: string;
 };
 
+type InstitutionAiCallKnowledgeContextSource = {
+  knowledgeId: string;
+  knowledgeTitle: string;
+  fileId: string;
+  fileName: string;
+  chunkId: string;
+  chunkIndex: number;
+  textPreview: string;
+  matchReason: string;
+};
+
+type InstitutionAiCallKnowledgeContext = {
+  used: boolean;
+  query: string;
+  sources: InstitutionAiCallKnowledgeContextSource[];
+};
+
 const statusLabels: Record<InstitutionKnowledgeItemDto['status'], string> = {
   ready: '可用',
   pending: '处理中',
@@ -168,7 +185,8 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [isQaAuditLoading, setIsQaAuditLoading] = useState(false);
   const [aiQuestion, setAiQuestion] = useState('');
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
-  const [aiMessage, setAiMessage] = useState('不含 RAG/检索的真实模型试问，仅发送低敏问题至大模型。');
+  const [aiMessage, setAiMessage] = useState('AI 试问将自动参考本机构知识库中的匹配片段，辅助生成更可靠的回答。');
+  const [aiKnowledgeContext, setAiKnowledgeContext] = useState<InstitutionAiCallKnowledgeContext | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiVendor, setAiVendor] = useState('deepseek');
   const [aiUsageRecords, setAiUsageRecords] = useState<InstitutionAiCallUsageRecord[]>([]);
@@ -522,6 +540,8 @@ export function InstitutionKnowledgeReadonlyShell() {
 
       const answer = typeof payload?.answer === 'string' ? payload.answer : '';
       setAiAnswer(answer || '（模型未返回内容）');
+      const knowledgeContext = payload?.knowledgeContext as InstitutionAiCallKnowledgeContext | undefined;
+      setAiKnowledgeContext(knowledgeContext ?? null);
       const record = payload?.record;
       const tokenInfo = record && typeof record.totalTokens === 'number'
         ? `，token 用量 ${record.totalTokens}`
@@ -1106,7 +1126,7 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">知识库 AI 试问</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">不含 RAG/检索的真实模型试问，仅发送低敏问题至大模型。</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">AI 试问将自动参考本机构知识库中的匹配片段，辅助生成更可靠的回答。</p>
             </div>
             <form onSubmit={requestAiCall} className="flex w-full flex-col gap-2 lg:w-[660px]">
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -1153,6 +1173,29 @@ export function InstitutionKnowledgeReadonlyShell() {
             <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50/70 p-4">
               <p className="text-sm leading-6 text-slate-700 whitespace-pre-wrap">{aiAnswer}</p>
               <p className="mt-2 text-xs font-semibold text-slate-500">AI 生成内容仅供参考，不构成专业建议。</p>
+              {aiKnowledgeContext && aiKnowledgeContext.sources.length > 0 ? (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+                  <p className="text-xs font-semibold text-amber-800">
+                    AI 回答参考本机构知识库片段，仍需人工确认（共 {aiKnowledgeContext.sources.length} 条引用）
+                  </p>
+                  <div className="mt-2 space-y-2">
+                    {aiKnowledgeContext.sources.map((source) => (
+                      <div key={source.chunkId} className="rounded-lg border border-amber-100 bg-white/70 px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
+                          <span>{source.knowledgeTitle} · {source.fileName} · 片段 {source.chunkIndex + 1}</span>
+                        </div>
+                        <p className="mt-1 text-sm leading-6 text-slate-700 line-clamp-3">{source.textPreview}</p>
+                        <p className="mt-1 text-xs font-semibold text-amber-600">{source.matchReason}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs font-semibold text-amber-600">以上引用的知识库片段仅供参考，可能包含过时或不完整信息，不构成权威依据。</p>
+                </div>
+              ) : aiKnowledgeContext && !aiKnowledgeContext.used ? (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs font-semibold text-amber-700">
+                  未匹配到知识库引用
+                </div>
+              ) : null}
             </div>
           ) : !isAiLoading ? (
             <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">

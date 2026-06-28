@@ -67,6 +67,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const questionText = typeof body.question === 'string' ? body.question.trim() : '';
+
     const result = await requestInstitutionAiCallService({
       repository: createAiCallUsageRepository(db),
       vendor,
@@ -74,8 +76,9 @@ export async function POST(request: Request) {
         tenantId: accessContext.tenantId,
         institutionId: accessContext.institutionId,
         userId: accessContext.userId,
-        question: typeof body.question === 'string' ? body.question : null,
+        question: questionText || null,
       },
+      db,
     });
 
     if (result.status === 'validation_failed' || result.status === 'sensitive_input_rejected') {
@@ -106,6 +109,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       answer: result.answer,
       record: result.record,
+      knowledgeContext: result.knowledgeContext ?? null,
     }, { status: 201 });
   } catch {
     return NextResponse.json(

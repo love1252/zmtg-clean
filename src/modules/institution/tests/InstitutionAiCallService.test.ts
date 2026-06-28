@@ -4,7 +4,7 @@ import {
   listInstitutionAiCallUsageService,
   listPlatformAiUsageSummaryService,
 } from '@/modules/institution/server/institution-ai-call-service';
-import type { AiCallUsageRecord } from '@/modules/institution/server/institution-ai-call-service';
+import type { AiCallUsageRecord, AiCallUsageStatus } from '@/modules/institution/server/institution-ai-call-service';
 
 function createMockUsageRecord(overrides: Partial<AiCallUsageRecord> = {}): AiCallUsageRecord {
   return {
@@ -411,5 +411,215 @@ describe('AI 真实调用与用量记录 service', () => {
       expect(userMessage).not.toContain('伪造');
       expect(userMessage).not.toContain('其他租户');
     }
+  });
+
+  it('有 knowledgeChunks 时 prompt 包含"参考资料"和"不可信"关键词', async () => {
+    let capturedBody: string | null = null;
+    (globalThis as unknown as { fetch: typeof fetch }).fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      capturedBody = init?.body as string ?? null;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: '根据参考资料，冷敷后应保持清洁干燥。' } }],
+          usage: { prompt_tokens: 100, completion_tokens: 30, total_tokens: 130 },
+        }),
+      };
+    });
+
+    const repository = {
+      findVendorConfig: vi.fn().mockResolvedValue({
+        baseUrl: 'https://api.deepseek.com/v1',
+        model: 'deepseek-v4-flash',
+        encryptedApiKey: { algorithm: 'AES-256-GCM', keyVersion: 'v1', iv: 'a', authTag: 'b', ciphertext: 'c' },
+        configured: true,
+      }),
+      createUsageRecord: vi.fn().mockImplementation(async (input: Record<string, unknown>) => createMockUsageRecord({
+        id: input.id as string, tenantId: input.tenantId as string, institutionId: input.institutionId as string, actorUserId: input.actorUserId as string, provider: input.provider as string, model: input.model as string, promptTokens: input.promptTokens as number | null, completionTokens: input.completionTokens as number | null, totalTokens: input.totalTokens as number | null, latencyMs: input.latencyMs as number | null, status: input.status as AiCallUsageStatus, errorCode: input.errorCode as string | null,
+      })),
+      listInstitutionUsageRecords: vi.fn(),
+      listPlatformUsageSummary: vi.fn(),
+    };
+
+    vi.mock('@/modules/security/server/secretEncryption', () => ({
+      decryptSecret: vi.fn(() => 'mock-plain-key'),
+    }));
+
+    const knowledgeChunks = [{
+      knowledgeId: 'kb-1', knowledgeTitle: '术后护理指南',
+      fileId: 'file-1', fileName: '术后护理.pdf',
+      chunkId: 'chunk-1', chunkIndex: 0,
+      textPreview: '冷敷后建议保持创面清洁，避免剧烈热刺激。',
+      matchReason: '片段包含关键词"冷敷"',
+    }];
+
+    const result = await requestInstitutionAiCallService({
+      repository, vendor: 'deepseek',
+      input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '冷敷后怎么护理？' },
+      knowledgeChunks,
+    });
+
+    expect(result.status).toBe('created');
+    if (capturedBody) {
+      const parsed = JSON.parse(capturedBody);
+      const systemContent = parsed.messages.find((m: { role: string }) => m.role === 'system')?.content ?? '';
+      expect(systemContent).toContain('参考资料');
+      expect(systemContent).toContain('不可信');
+      expect(systemContent).toContain('术后护理指南');
+      expect(systemContent).toContain('冷敷后建议保持创面清洁');
+      expect(systemContent).toContain('prompt injection');
+    }
+  });
+
+  it('knowledgeContext 返回结构和内容正确', async () => {
+    (globalThis as unknown as { fetch: typeof fetch }).fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '回答内容' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      }),
+    });
+
+    const repository = {
+      findVendorConfig: vi.fn().mockResolvedValue({
+        baseUrl: 'https://api.deepseek.com/v1',
+        model: 'deepseek-v4-flash',
+        encryptedApiKey: { algorithm: 'AES-256-GCM', keyVersion: 'v1', iv: 'a', authTag: 'b', ciphertext: 'c' },
+        configured: true,
+      }),
+      createUsageRecord: vi.fn().mockImplementation(async (input: Record<string, unknown>) => createMockUsageRecord({
+        id: input.id as string, tenantId: input.tenantId as string, institutionId: input.institutionId as string, actorUserId: input.actorUserId as string, provider: input.provider as string, model: input.model as string, promptTokens: input.promptTokens as number | null, completionTokens: input.completionTokens as number | null, totalTokens: input.totalTokens as number | null, latencyMs: input.latencyMs as number | null, status: input.status as AiCallUsageStatus, errorCode: input.errorCode as string | null,
+      })),
+      listInstitutionUsageRecords: vi.fn(),
+      listPlatformUsageSummary: vi.fn(),
+    };
+
+    vi.mock('@/modules/security/server/secretEncryption', () => ({
+      decryptSecret: vi.fn(() => 'mock-plain-key'),
+    }));
+
+    const knowledgeChunks = [
+      { knowledgeId: 'kb-1', knowledgeTitle: '指南A', fileId: 'f-1', fileName: '指南A.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '片段内容A', matchReason: '匹配原因A' },
+      { knowledgeId: 'kb-2', knowledgeTitle: '指南B', fileId: 'f-2', fileName: '指南B.pdf', chunkId: 'c-2', chunkIndex: 1, textPreview: '片段内容B', matchReason: '匹配原因B' },
+    ];
+
+    const result = await requestInstitutionAiCallService({
+      repository, vendor: 'deepseek',
+      input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '术后护理方法？' },
+      knowledgeChunks,
+    });
+
+    expect(result.status).toBe('created');
+    expect(result.knowledgeContext).toBeDefined();
+    expect(result.knowledgeContext!.used).toBe(true);
+    expect(result.knowledgeContext!.query).toBe('术后护理方法？');
+    expect(result.knowledgeContext!.sources).toHaveLength(2);
+    expect(result.knowledgeContext!.sources[0].knowledgeTitle).toBe('指南A');
+    expect(result.knowledgeContext!.sources[0].textPreview).toBe('片段内容A');
+    expect(result.knowledgeContext!.sources[1].fileId).toBe('f-2');
+  });
+
+  it('knowledgeChunks 超过 5 条时只注入前 5 条', async () => {
+    let capturedBody: string | null = null;
+    (globalThis as unknown as { fetch: typeof fetch }).fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      capturedBody = init?.body as string ?? null;
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'ok' } }], usage: {} }),
+      };
+    });
+
+    const repository = {
+      findVendorConfig: vi.fn().mockResolvedValue({
+        baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash',
+        encryptedApiKey: { algorithm: 'AES-256-GCM', keyVersion: 'v1', iv: 'a', authTag: 'b', ciphertext: 'c' },
+        configured: true,
+      }),
+      createUsageRecord: vi.fn().mockImplementation(async (input: Record<string, unknown>) => createMockUsageRecord({})),
+      listInstitutionUsageRecords: vi.fn(), listPlatformUsageSummary: vi.fn(),
+    };
+
+    vi.mock('@/modules/security/server/secretEncryption', () => ({ decryptSecret: vi.fn(() => 'mock-plain-key') }));
+
+    const knowledgeChunks = Array.from({ length: 7 }, (_, i) => ({
+      knowledgeId: `kb-${i}`, knowledgeTitle: `指南${i}`, fileId: `f-${i}`, fileName: `指南${i}.pdf`,
+      chunkId: `c-${i}`, chunkIndex: i, textPreview: `片段${i}`, matchReason: `原因${i}`,
+    }));
+
+    await requestInstitutionAiCallService({
+      repository, vendor: 'deepseek',
+      input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: 'test?' },
+      knowledgeChunks,
+    });
+
+    if (capturedBody) {
+      const parsed = JSON.parse(capturedBody);
+      const systemContent: string = parsed.messages.find((m: { role: string }) => m.role === 'system')?.content ?? '';
+      expect(systemContent).toContain('参考资料1');
+      expect(systemContent).toContain('参考资料5');
+      expect(systemContent).not.toContain('参考资料6');
+      expect(systemContent).not.toContain('参考资料7');
+    }
+  });
+
+  it('敏感输入拒绝时不注入 KB 片段且不调用 provider', async () => {
+    const fetchSpy = vi.fn();
+    (globalThis as unknown as { fetch: typeof fetch }).fetch = fetchSpy;
+
+    const repository = {
+      findVendorConfig: vi.fn(),
+      createUsageRecord: vi.fn().mockImplementation(async (input: Record<string, unknown>) => createMockUsageRecord({
+        id: input.id as string, tenantId: input.tenantId as string, institutionId: input.institutionId as string, actorUserId: input.actorUserId as string, provider: input.provider as string, model: input.model as string, promptTokens: input.promptTokens as number | null, completionTokens: input.completionTokens as number | null, totalTokens: input.totalTokens as number | null, latencyMs: input.latencyMs as number | null, status: input.status as AiCallUsageStatus, errorCode: input.errorCode as string | null,
+      })),
+      listInstitutionUsageRecords: vi.fn(),
+      listPlatformUsageSummary: vi.fn(),
+    };
+
+    const knowledgeChunks = [{
+      knowledgeId: 'kb-1', knowledgeTitle: '术后护理', fileId: 'f-1', fileName: '术后.pdf',
+      chunkId: 'c-1', chunkIndex: 0, textPreview: '正常片段', matchReason: '匹配',
+    }];
+
+    const result = await requestInstitutionAiCallService({
+      repository, vendor: 'deepseek',
+      input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '身份证110101199001011234的客户做什么项目？' },
+      knowledgeChunks,
+    });
+
+    expect(result.status).toBe('sensitive_input_rejected');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // 敏感拒绝不泄露身份证号
+    expect(JSON.stringify(result)).not.toContain('110101');
+  });
+
+  it('无 knowledgeChunks 时向后兼容，原行为不变', async () => {
+    (globalThis as unknown as { fetch: typeof fetch }).fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '正常回答' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      }),
+    });
+
+    const repository = {
+      findVendorConfig: vi.fn().mockResolvedValue({
+        baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash',
+        encryptedApiKey: { algorithm: 'AES-256-GCM', keyVersion: 'v1', iv: 'a', authTag: 'b', ciphertext: 'c' },
+        configured: true,
+      }),
+      createUsageRecord: vi.fn().mockImplementation(async (input: Record<string, unknown>) => createMockUsageRecord({})),
+      listInstitutionUsageRecords: vi.fn(), listPlatformUsageSummary: vi.fn(),
+    };
+
+    vi.mock('@/modules/security/server/secretEncryption', () => ({ decryptSecret: vi.fn(() => 'mock-plain-key') }));
+
+    const result = await requestInstitutionAiCallService({
+      repository, vendor: 'deepseek',
+      input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '冷敷后怎么护理？' },
+    });
+
+    expect(result.status).toBe('created');
+    expect(result.knowledgeContext).toBeUndefined();
+    // system prompt 应保持基线的内容（无"参考资料"注入）
+    // 因为 knowledgeChunks 未传，prompt 保持原始 system prompt
   });
 });

@@ -6,6 +6,8 @@ import { getDatabase } from '@/server/db/client';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 import { requestInstitutionAiCallService, recordAiCallQuotaRejection } from '@/modules/institution/server/institution-ai-call-service';
+import { searchInstitutionKnowledgeChunksService } from '@/modules/institution/server/institution-knowledge-keyword-search-service';
+import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 
 const database = { database: 'ai-call-api-test-db' };
 
@@ -41,6 +43,14 @@ vi.mock('@/modules/institution/server/tenant-quota-enforcement', async (importOr
     checkTenantQuotaForCreate: vi.fn(),
   };
 });
+
+vi.mock('@/modules/institution/server/institution-knowledge-keyword-search-service', () => ({
+  searchInstitutionKnowledgeChunksService: vi.fn(),
+}));
+
+vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository', () => ({
+  createPlatformKnowledgeManagementRepository: vi.fn(() => ({})),
+}));
 
 const tenantContext = {
   userId: 'demo-user-admin',
@@ -384,6 +394,7 @@ describe('机构端 AI 调用 API route', () => {
         promptTokens: 50, completionTokens: 30, totalTokens: 80, latencyMs: 500,
         status: 'succeeded', errorCode: null, createdAt: new Date().toISOString(),
       },
+      knowledgeContext: { used: false, query: '', sources: [] },
     });
 
     const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
@@ -430,5 +441,142 @@ describe('平台端 AI 用量聚合 API route', () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(null);
     const response = await platformAiUsageGet(new Request('http://localhost/api/v1/open-platform/ai-usage'));
     expect(response.status).toBe(401);
+  });
+});
+
+describe('AI 试问 RAG 知识库检索闭环（安全顺序）', () => {
+  it('正常输入时 service 收到 db 参数（KB 检索由 service 内部执行）', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true, current: 5, limit: 100, resource: 'ai_calls',
+    });
+    vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
+      status: 'created',
+      answer: '根据参考资料回答。',
+      record: { id: 'r1', tenantId: 't', institutionId: 'i', actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
+      knowledgeContext: { used: true, query: '冷敷后怎么护理？', sources: [{ knowledgeId: 'kb-1', knowledgeTitle: '术后护理', fileId: 'f-1', fileName: '术后护理.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷后保持清洁。', matchReason: '包含"冷敷"' }] },
+    });
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '冷敷后怎么护理？' }),
+    }));
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.knowledgeContext).toBeDefined();
+    expect(body.knowledgeContext.used).toBe(true);
+
+    // service 被调用时传入了 db 参数（由 service 内部执行 KB 检索）
+    expect(requestInstitutionAiCallService).toHaveBeenCalledWith(
+      expect.objectContaining({ db: expect.anything() as unknown }),
+    );
+  });
+
+  it('高敏输入时 service 返回 sensitive_input_rejected，route 返回 422且不调用 provider', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true, current: 5, limit: 100, resource: 'ai_calls',
+    });
+    vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
+      status: 'sensitive_input_rejected',
+      message: '输入内容包含敏感信息，请移除身份证、银行卡、病历、合同、凭证等敏感内容后重试',
+    });
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '身份证110101199001011234' }),
+    }));
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body.code).toBe('sensitive_input_rejected');
+
+    // 高敏拒绝后 route 不执行 KB 检索（KB 检索在 service 内部，已由 mock 短路）
+    // searchInstitutionKnowledgeChunksService 不应被 route 层直接调用
+    expect(searchInstitutionKnowledgeChunksService).not.toHaveBeenCalled();
+  });
+
+  it('输入无效（空问题）时 service 返回 validation_failed，route 返回400且不执行 KB 检索', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true, current: 0, limit: 100, resource: 'ai_calls',
+    });
+    vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
+      status: 'validation_failed',
+      message: '请输入问题',
+    });
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '' }),
+    }));
+    expect(response.status).toBe(400);
+
+    // KB 检索不应被 route 层直接调用
+    expect(searchInstitutionKnowledgeChunksService).not.toHaveBeenCalled();
+  });
+
+  it('输入过长时 service 返回 validation_failed 且不执行 KB 检索', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true, current: 0, limit: 100, resource: 'ai_calls',
+    });
+    vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
+      status: 'validation_failed',
+      message: '问题过长，请控制在512字以内',
+    });
+
+    const longQuestion = 'A'.repeat(600);
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: longQuestion }),
+    }));
+    expect(response.status).toBe(400);
+    expect(searchInstitutionKnowledgeChunksService).not.toHaveBeenCalled();
+  });
+
+  it('quota 超限时不执行 KB 检索（安全顺序：quota 在 service 调用之前）', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: false, current: 100, limit: 100, reason: 'quota_exceeded_ai_calls', resource: 'ai_calls',
+    });
+    vi.mocked(recordAiCallQuotaRejection).mockResolvedValue({
+      id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', provider: 'deepseek', model: 'unknown',
+      promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null,
+      status: 'rejected', errorCode: 'quota_exceeded_ai_calls', createdAt: new Date(),
+    });
+
+    await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '正常问题' }),
+    }));
+
+    // quota 拒绝后 route 不应调用 service 也不应执行 KB 检索
+    expect(requestInstitutionAiCallService).not.toHaveBeenCalled();
+    expect(searchInstitutionKnowledgeChunksService).not.toHaveBeenCalled();
+  });
+
+  it('检索失败 response 不泄露敏感字段', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true, current: 5, limit: 100, resource: 'ai_calls',
+    });
+    vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
+      status: 'service_unavailable',
+      message: '知识库检索暂时不可用，请稍后重试',
+    });
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '正常问题' }),
+    }));
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('api_key');
+    expect(serialized).not.toContain('Bearer');
+    expect(serialized).not.toContain('DATABASE_URL');
+    expect(serialized).not.toContain('postgres://');
+    expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('password');
+    expect(serialized).toContain('知识库检索');
   });
 });

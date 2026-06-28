@@ -572,4 +572,156 @@ describe('机构端知识库只读列表 UI', () => {
       },
     );
   });
+
+  describe('AI 试问 RAG 知识库引用展示', () => {
+    beforeEach(() => {
+      vi.mocked(listInstitutionKnowledgeItems).mockResolvedValue({
+        ok: true,
+        records: [
+          {
+            knowledgeId: 'knowledge-ui-a',
+            title: '授权可见术后护理',
+            category: '术后护理',
+            status: 'ready',
+            readonlyStatus: 'readonly',
+            sourceKind: 'demo',
+            descriptionPreview: '低敏摘要，不包含正文。',
+            chunkCount: 3,
+            visibility: 'platform_authorized',
+            updatedAt: '2026-06-13T08:00:00.000Z',
+            createdAt: '2026-06-13T08:00:00.000Z',
+          },
+        ],
+        pageInfo,
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, init?: RequestInit) => {
+          if (url.includes('/api/institution/knowledge-management/ai-call') && init?.method === 'POST') {
+            return Response.json({
+              answer: '根据知识库参考资料，冷敷后应保持创面清洁干燥，避免剧烈热刺激。',
+              record: {
+                id: 'rec-rag', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
+                actorUserId: 'demo-user-admin', provider: 'deepseek', model: 'deepseek-v4-flash',
+                promptTokens: 150, completionTokens: 60, totalTokens: 210, latencyMs: 800,
+                status: 'succeeded', errorCode: null, createdAt: new Date().toISOString(),
+              },
+              knowledgeContext: {
+                used: true,
+                query: '冷敷后怎么护理？',
+                sources: [
+                  {
+                    knowledgeId: 'kb-rag-1', knowledgeTitle: '术后护理指南',
+                    fileId: 'file-rag-1', fileName: '术后护理规范.pdf',
+                    chunkId: 'chunk-rag-1', chunkIndex: 0,
+                    textPreview: '冷敷后建议保持创面清洁，避免剧烈热刺激，可使用医用冷敷贴。',
+                    matchReason: '片段包含关键词"冷敷"',
+                  },
+                  {
+                    knowledgeId: 'kb-rag-2', knowledgeTitle: '皮肤护理基础知识',
+                    fileId: 'file-rag-2', fileName: '术后康复指南.pdf',
+                    chunkId: 'chunk-rag-2', chunkIndex: 2,
+                    textPreview: '术后72小时内建议冷敷，每次15-20分钟，间隔1小时。',
+                    matchReason: '片段包含关键词"冷敷"',
+                  },
+                ],
+              },
+            });
+          }
+          if (url.includes('/api/institution/knowledge-management/ai-call/usage')) {
+            return Response.json({ requestId: 'institution-ai-call-usage', readonly: true, dataSource: 'repository', records: [], emptyState: { title: '暂无', description: '暂无' } });
+          }
+          return Response.json({ records: [{
+            knowledgeId: 'knowledge-ui-a', knowledgeTitle: '授权可见术后护理',
+            knowledgeDescription: '低敏摘要：术后护理常识', status: 'ready', sourceKind: 'demo',
+            knowledgeDocuments: [],
+          }], pageInfo });
+        }),
+      );
+    });
+
+    it('有 knowledgeContext 时渲染引用来源卡片', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const aiSection = screen.getByLabelText('机构端 AI 真实调用');
+      const input = within(aiSection).getByLabelText('输入 AI 问题');
+      const button = within(aiSection).getByRole('button', { name: 'AI 试问' });
+
+      fireEvent.change(input, { target: { value: '冷敷后怎么护理？' } });
+      fireEvent.click(button);
+
+      // 引用来源卡片应出现
+      expect(await screen.findByText(/术后护理规范\.pdf/)).toBeInTheDocument();
+      expect(screen.getByText(/术后康复指南\.pdf/)).toBeInTheDocument();
+      expect(screen.getByText(/冷敷后建议保持创面清洁/)).toBeInTheDocument();
+      // matchReason 有两条，用 getAllByText
+      expect(screen.getAllByText(/片段包含关键词"冷敷"/).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('显示免责声明', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const aiSection = screen.getByLabelText('机构端 AI 真实调用');
+      const input = within(aiSection).getByLabelText('输入 AI 问题');
+      const button = within(aiSection).getByRole('button', { name: 'AI 试问' });
+
+      fireEvent.change(input, { target: { value: '冷敷后怎么护理？' } });
+      fireEvent.click(button);
+
+      // AI 生成内容免责声明始终可见
+      expect(await screen.findByText('AI 生成内容仅供参考，不构成专业建议。')).toBeInTheDocument();
+      expect(screen.getByText(/AI 回答参考本机构知识库片段，仍需人工确认/)).toBeInTheDocument();
+      expect(screen.getByText('以上引用的知识库片段仅供参考，可能包含过时或不完整信息，不构成权威依据。')).toBeInTheDocument();
+    });
+
+    it('AI 试问描述文案已更新为含知识库片段参考的说明', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      // 等待页面加载完成，描述出现在 AI 试问区域的 <p> 标签中 + aiMessage div 中
+      // 使用 findAllByText 处理多个匹配
+      const matches = await screen.findAllByText(/AI 试问将自动参考本机构知识库中的匹配片段/);
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('不展示敏感字段', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const aiSection = screen.getByLabelText('机构端 AI 真实调用');
+      const input = within(aiSection).getByLabelText('输入 AI 问题');
+      const button = within(aiSection).getByRole('button', { name: 'AI 试问' });
+
+      fireEvent.change(input, { target: { value: '冷敷后怎么护理？' } });
+      fireEvent.click(button);
+
+      expect(await screen.findByText(/术后护理规范/)).toBeInTheDocument();
+
+      ['api_key', 'DATABASE_URL', 'storageKey', 'bucket', 'signedUrl', 'Bearer', 'Authorization', 'postgres://', 'secret', 'password', 'Agent', '自动运营', '自动触达'].forEach(
+        (fragment) => {
+          expect(aiSection.textContent).not.toContain(fragment);
+        },
+      );
+    });
+
+    it('不出现超范围自动化/Agent 文案', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const aiSection = screen.getByLabelText('机构端 AI 真实调用');
+      const input = within(aiSection).getByLabelText('输入 AI 问题');
+      const button = within(aiSection).getByRole('button', { name: 'AI 试问' });
+
+      fireEvent.change(input, { target: { value: '冷敷后怎么护理？' } });
+      fireEvent.click(button);
+
+      expect(await screen.findByText(/术后护理规范/)).toBeInTheDocument();
+
+      ['自动运营', '自动触达', 'Agent', 'embedding', '向量库', '模型切换'].forEach(
+        (text) => {
+          expect(aiSection.textContent).not.toContain(text);
+        },
+      );
+    });
+  });
 });
