@@ -169,6 +169,13 @@
       "when": 1782492348578,
       "tag": "0023_living_captain_cross",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1782643322808,
+      "tag": "0024_greedy_rachel_grey",
+      "breakpoints": true
     }
   ]
 }

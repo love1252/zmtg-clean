@@ -1415,7 +1415,7 @@ describe('数据库结构', () => {
     expect(migrationSql).not.toContain('"medical_record_no"');
     expect(migrationSql).not.toContain('"treatment_record"');
     expect(migrationSql).not.toContain('"consultation_transcript"');
-    expect(Array.from(migrationSql.matchAll(/"metadata" jsonb/g))).toHaveLength(1);
+    expect(Array.from(migrationSql.matchAll(/"metadata" jsonb/g))).toHaveLength(2);
     expect(migrationSql).toContain('create table "homepage_brand_audit_logs"');
     expect(migrationSql).toContain('"metadata" jsonb default \'{}\'::jsonb not null');
     expect(migrationSql).not.toContain('"request_body"');
