@@ -435,7 +435,7 @@ describe('机构端 AI 调用记录 API route', () => {
         metadata: {
           knowledgeContext: {
             used: true,
-            query: '冷敷后怎么护理？',
+            searchKeyword: '冷敷',
             sources: [{ knowledgeId: 'kb-1', knowledgeTitle: '指南', fileId: 'f-1', fileName: '指南.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷需间隔观察。', matchReason: '包含"冷敷"' }],
           },
         },
@@ -448,10 +448,13 @@ describe('机构端 AI 调用记录 API route', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.records[0].metadata.knowledgeContext.used).toBe(true);
+    expect(body.records[0].metadata.knowledgeContext.searchKeyword).toBe('冷敷');
     expect(body.records[0].metadata.knowledgeContext.sources).toHaveLength(1);
     expect(body.records[0].metadata.knowledgeContext.sources[0].fileName).toBe('指南.pdf');
     const serialized = JSON.stringify(body);
     expect(serialized).not.toMatch(/storageKey|bucket|signedUrl|embedding|api_key|baseUrl|Authorization/i);
+    // usage API 不返回原始 question / query 字段
+    expect(serialized).not.toMatch(/"query"/i);
   });
 
   it('usage API 旧记录 metadata=null 时不崩且不伪造 RAG', async () => {

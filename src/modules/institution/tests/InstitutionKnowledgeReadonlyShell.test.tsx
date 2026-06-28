@@ -763,7 +763,7 @@ describe('机构端知识库只读列表 UI', () => {
                   metadata: {
                     knowledgeContext: {
                       used: true,
-                      query: '冷敷后怎么护理？',
+                      searchKeyword: '冷敷',
                       sources: [{ knowledgeId: 'kb-1', knowledgeTitle: '术后护理', fileId: 'f-1', fileName: '术后护理规范.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷后保持清洁干燥。', matchReason: '包含"冷敷"' }],
                     },
                   },
@@ -774,7 +774,7 @@ describe('机构端知识库只读列表 UI', () => {
                   actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
                   promptTokens: 20, completionTokens: 10, totalTokens: 30, latencyMs: 200,
                   status: 'succeeded', errorCode: null,
-                  metadata: { knowledgeContext: { used: false, query: '随机问题', sources: [] } },
+                  metadata: { knowledgeContext: { used: false, searchKeyword: '', sources: [] } },
                   createdAt: '2026-06-28T07:00:00.000Z',
                 },
                 {
@@ -811,6 +811,8 @@ describe('机构端知识库只读列表 UI', () => {
       expect(await screen.findByText('已使用知识库')).toBeInTheDocument();
       expect(screen.getByText(/术后护理规范\.pdf/)).toBeInTheDocument();
       expect(screen.getByText(/冷敷后保持清洁干燥/)).toBeInTheDocument();
+      // usage 记录区不展示原始用户问题 / query
+      expect(usageSection.textContent).not.toContain('query');
     });
 
     it('展示"未使用知识库参考"徽标', async () => {

@@ -819,7 +819,9 @@ describe('AI 真实调用与用量记录 service', () => {
   });
 
   describe('RAG metadata 持久化', () => {
-    it('succeeded + used=true 时写入 knowledgeContext metadata', async () => {
+    const longQuestion = '请根据机构知识库回答：术后24小时内是否可以冷敷？回答时请列出依据来源。';
+
+    it('succeeded + used=true 时写入 knowledgeContext metadata，searchKeyword 为派生关键词', async () => {
       let capturedMetadata: unknown = undefined;
       (globalThis as unknown as { fetch: typeof fetch }).fetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -851,7 +853,7 @@ describe('AI 真实调用与用量记录 service', () => {
 
       const result = await requestInstitutionAiCallService({
         repository, vendor: 'deepseek',
-        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '冷敷后怎么护理？' },
+        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: longQuestion },
         knowledgeChunks,
       });
 
@@ -859,13 +861,16 @@ describe('AI 真实调用与用量记录 service', () => {
       expect(capturedMetadata).toEqual({
         knowledgeContext: {
           used: true,
-          query: '冷敷后怎么护理？',
+          searchKeyword: '冷敷',
           sources: [{
             knowledgeId: 'kb-1', knowledgeTitle: '术后护理', fileId: 'f-1', fileName: '护理.pdf',
             chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷需间隔观察。', matchReason: '包含"冷敷"',
           }],
         },
       });
+      // 不保存原始 question / prompt
+      expect(JSON.stringify(capturedMetadata)).not.toContain(longQuestion);
+      expect(JSON.stringify(capturedMetadata)).not.toContain('请根据机构知识库');
     });
 
     it('succeeded + used=false 时 metadata.knowledgeContext.used=false 且 sources=[]', async () => {
@@ -890,16 +895,18 @@ describe('AI 真实调用与用量记录 service', () => {
 
       vi.mock('@/modules/security/server/secretEncryption', () => ({ decryptSecret: vi.fn(() => 'mock-plain-key') }));
 
-      // 空数组 -> used=false
+      // 空数组 -> used=false；searchKeyword 仍为派生关键词，不含原始 question
       await requestInstitutionAiCallService({
         repository, vendor: 'deepseek',
-        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '随机问题' },
+        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: longQuestion },
         knowledgeChunks: [],
       });
 
-      expect(capturedMetadata).toEqual({
-        knowledgeContext: { used: false, query: '随机问题', sources: [] },
-      });
+      const metadata = capturedMetadata as { knowledgeContext: { used: boolean; searchKeyword: string; sources: unknown[] } };
+      expect(metadata.knowledgeContext.used).toBe(false);
+      expect(metadata.knowledgeContext.sources).toEqual([]);
+      expect(metadata.knowledgeContext.searchKeyword).toBe('冷敷');
+      expect(JSON.stringify(capturedMetadata)).not.toContain(longQuestion);
     });
 
     it('metadata sources 只包含白名单字段，不含 storageKey/embedding 等敏感字段', async () => {
@@ -930,14 +937,17 @@ describe('AI 真实调用与用量记录 service', () => {
 
       await requestInstitutionAiCallService({
         repository, vendor: 'deepseek',
-        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '冷敷' },
+        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: longQuestion },
         knowledgeChunks: knowledgeChunks as never,
       });
 
       const metadata = JSON.stringify(repository.createUsageRecord.mock.calls[0]?.[0].metadata);
       expect(metadata).not.toMatch(/storageKey|bucket|signedUrl|embedding|api_key|baseUrl|Authorization/i);
+      // 不含原始 question
+      expect(metadata).not.toContain(longQuestion);
       // 白名单字段存在
       const parsed = JSON.parse(metadata);
+      expect(parsed.knowledgeContext.searchKeyword).toBe('冷敷');
       expect(parsed.knowledgeContext.sources[0]).toEqual({
         knowledgeId: 'kb-1', knowledgeTitle: '指南', fileId: 'f-1', fileName: '指南.pdf',
         chunkId: 'c-1', chunkIndex: 0, textPreview: '内容', matchReason: '匹配',

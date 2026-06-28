@@ -83,7 +83,7 @@ type InstitutionAiCallUsageRecord = {
   metadata: {
     knowledgeContext?: {
       used: boolean;
-      query: string;
+      searchKeyword: string;
       sources: InstitutionAiCallKnowledgeContextSource[];
     };
   } | null;

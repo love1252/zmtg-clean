@@ -12,11 +12,12 @@ export type AiCallUsageStatus = 'succeeded' | 'failed' | 'sensitive_input_reject
  * 仅在 succeeded 调用时写入；rejected / failed / sensitive_input_rejected 不写入。
  * sources 仅保存白名单字段，禁止 storageKey / bucket / signedUrl / embedding /
  * provider raw response / prompt 原文 / API key / baseUrl / Authorization。
+ * 不保存原始用户问题 / prompt；searchKeyword 仅保存服务端派生后的 KB 检索关键词。
  */
 export type AiCallUsageMetadata = {
   knowledgeContext?: {
     used: boolean;
-    query: string;
+    searchKeyword: string;
     sources: Array<{
       knowledgeId: string;
       knowledgeTitle: string;
@@ -73,6 +74,8 @@ const METADATA_TEXT_PREVIEW_MAX = 300;
 /**
  * 从 KB 检索结果构造受控 RAG metadata。
  * 仅提取白名单字段，并对 textPreview 做防御性截断（<=300）。
+ * searchKeyword 必须是服务端派生后的 KB 检索关键词（deriveKnowledgeSearchKeyword），
+ * 不得传入原始用户问题 / prompt。
  * kbChunks 为 undefined 时返回 null（不写入 RAG metadata）。
  */
 export function buildAiCallUsageMetadata(
@@ -88,14 +91,14 @@ export function buildAiCallUsageMetadata(
       matchReason: string;
     }>
     | undefined,
-  question: string,
+  searchKeyword: string,
 ): AiCallUsageMetadata {
   if (!kbChunks) return null;
 
   return {
     knowledgeContext: {
       used: kbChunks.length > 0,
-      query: question,
+      searchKeyword,
       sources: kbChunks.map((chunk) => ({
         knowledgeId: chunk.knowledgeId,
         knowledgeTitle: chunk.knowledgeTitle,
@@ -333,9 +336,11 @@ export async function requestInstitutionAiCallService(input: {
   // 使用 deriveKnowledgeSearchKeyword 从长问题中提取可命中短词，避免
   // 整句提问无法匹配知识库片段
   // 不可由客户端覆盖 tenantId/institutionId
+  // searchKeyword 始终派生一次，同时作为持久化 metadata 的受控检索关键词
+  // （不保存原始 question / prompt）
   let kbChunks = input.knowledgeChunks;
+  const searchKeyword = deriveKnowledgeSearchKeyword(question);
   if (input.db && (!kbChunks || kbChunks.length === 0)) {
-    const searchKeyword = deriveKnowledgeSearchKeyword(question);
     if (searchKeyword) {
       try {
         const searchResult = await searchInstitutionKnowledgeChunksService({
@@ -512,8 +517,9 @@ export async function requestInstitutionAiCallService(input: {
     const completionTokens = usage.completion_tokens ?? estimateTokens(answer);
     const totalTokens = usage.total_tokens ?? (promptTokens + completionTokens);
 
-    // 成功调用写入 RAG metadata（仅白名单字段，用于后续追溯）
-    const metadata = buildAiCallUsageMetadata(kbChunks, question);
+    // 成功调用写入 RAG metadata（仅白名单字段 + 服务端派生检索关键词，用于后续追溯）
+    // 不保存原始 question / prompt
+    const metadata = buildAiCallUsageMetadata(kbChunks, searchKeyword);
 
     const record = await input.repository.createUsageRecord({
       id: generateRecordId(),
