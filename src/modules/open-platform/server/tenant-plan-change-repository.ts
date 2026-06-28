@@ -11,6 +11,7 @@ import type {
   TenantCurrentPlanStateRecord,
   TenantPlanChangeApplyInput,
   TenantPlanChangeRepository,
+  InitialPlanAssignmentInput,
 } from '@/modules/open-platform/server/tenant-plan-change-service';
 import type { TenantDatabase } from '@/server/db/client';
 import {
@@ -210,6 +211,25 @@ export function createTenantPlanChangeRepository(database: TenantDatabase): Tena
       return rows[0] ? mapPublishedPlanVersionRow(rows[0] as PlanVersionQueryRow) : null;
     },
 
+    async findTenantById(tenantId: string) {
+      const rows = await database
+        .select()
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+
+      const row = rows[0];
+      if (!row) return null;
+
+      return {
+        id: row.id,
+        name: row.name,
+        status: row.status,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    },
+
     async applyTenantPlanChange(input: TenantPlanChangeApplyInput) {
       await database.transaction(async (transactionDatabase) => {
         const tx = transactionDatabase as unknown as TenantDatabase;
@@ -250,7 +270,36 @@ export function createTenantPlanChangeRepository(database: TenantDatabase): Tena
         status: 'plan_changed' as const,
         changeRecordId: input.changeRecord.id,
         auditEventId: input.auditEvent.eventId,
-        tenant: mapChangedTenantToDto(input),
+        tenant: mapChangedTenantToDto(input as TenantPlanChangeApplyInput),
+      };
+    },
+
+    async applyInitialTenantPlanAssignment(input: InitialPlanAssignmentInput) {
+      await database.transaction(async (transactionDatabase) => {
+        const tx = transactionDatabase as unknown as TenantDatabase;
+        await tx.insert(tenantPlanAssignments).values(input.newAssignment);
+        await tx.insert(tenantAuthorizationSnapshots).values(input.newAuthorizationSnapshot);
+        await tx.insert(tenantPlanChangeRecords).values(input.changeRecord);
+        await tx.insert(auditEvents).values(mapAuditEventToInsert(input.auditEvent));
+        // 套餐首次分配商业记录
+        await insertOneCommercialRecord(tx, {
+          id: `${input.tenant.id}-commercial-plan-assign-${input.changeRecord.id.slice(0, 12)}`,
+          tenantId: input.tenant.id,
+          recordType: 'plan_change',
+          displayCode: `套餐首次分配-${input.toPlanVersion.displayName}`,
+          note: input.changeRecord.reason,
+          relatedPlanChangeId: input.changeRecord.id,
+          occurredAt: input.appliedAt,
+          createdBy: input.changeRecord.requestedBy,
+          updatedBy: input.changeRecord.appliedBy,
+        });
+      });
+
+      return {
+        status: 'plan_changed' as const,
+        changeRecordId: input.changeRecord.id,
+        auditEventId: input.auditEvent.eventId,
+        tenant: mapChangedTenantToDto(input as unknown as TenantPlanChangeApplyInput),
       };
     },
   };

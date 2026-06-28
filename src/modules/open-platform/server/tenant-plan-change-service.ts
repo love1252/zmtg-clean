@@ -7,6 +7,7 @@ import {
 } from '@/modules/open-platform/domain/tenant-management';
 import {
   buildTenantPlanChangePreview,
+  buildInitialPlanAssignmentPreview,
   parseTenantPlanChangePayload,
   type TenantPlanChangePreview,
 } from '@/modules/open-platform/domain/tenant-plan-change';
@@ -103,7 +104,14 @@ export type TenantPlanChangeApplyInput = {
 export type TenantPlanChangeRepository = {
   findCurrentTenantPlanState(tenantId: string): Promise<TenantCurrentPlanStateRecord | null>;
   findPublishedPlanVersionById(versionId: string): Promise<TenantPlanPublishedVersionRecord | null>;
+  findTenantById(tenantId: string): Promise<{ id: string; name: string; status: string; createdAt: Date; updatedAt: Date } | null>;
   applyTenantPlanChange(input: TenantPlanChangeApplyInput): Promise<{
+    status: 'plan_changed';
+    changeRecordId: string;
+    auditEventId: string;
+    tenant: TenantManagementListItem;
+  }>;
+  applyInitialTenantPlanAssignment(input: InitialPlanAssignmentInput): Promise<{
     status: 'plan_changed';
     changeRecordId: string;
     auditEventId: string;
@@ -111,11 +119,67 @@ export type TenantPlanChangeRepository = {
   }>;
 };
 
+export type InitialPlanAssignmentInput = {
+  tenant: {
+    id: string;
+    name: string;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  toPlanVersion: TenantPlanPublishedVersionRecord;
+  newAssignment: {
+    id: string;
+    tenantId: string;
+    planId: string;
+    planVersionId: string;
+    status: 'active';
+    startedAt: Date;
+    expiresAt: null;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  newAuthorizationSnapshot: {
+    id: string;
+    tenantId: string;
+    planAssignmentId: string;
+    planVersionId: string;
+    status: 'active';
+    snapshotJson: Record<string, unknown>;
+    quotaJson: Record<string, unknown>;
+    connectorJson: Record<string, unknown>;
+    serviceJson: Record<string, unknown>;
+    sourceChangeRecordId: string;
+    generatedBy: string;
+    generatedAt: Date;
+    supersededAt: null;
+    createdAt: Date;
+  };
+  changeRecord: {
+    id: string;
+    tenantId: string;
+    fromPlanVersionId: null;
+    toPlanVersionId: string;
+    fromSnapshotId: null;
+    toSnapshotId: string;
+    status: 'applied';
+    diffJson: Record<string, unknown>;
+    reason: string;
+    requestedBy: string;
+    appliedBy: string;
+    appliedAt: Date;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  auditEvent: TenantAuditEvent;
+  appliedAt: Date;
+};
+
 type IdFactory = (prefix: string) => string;
 
 type TenantPlanChangeServiceResult =
   | { status: 'validation_error'; errors: string[] }
-  | { status: 'not_found'; errorCode: 'CURRENT_PLAN_NOT_FOUND' | 'PUBLISHED_PLAN_VERSION_NOT_FOUND' }
+  | { status: 'not_found'; errorCode: 'CURRENT_PLAN_NOT_FOUND' | 'PUBLISHED_PLAN_VERSION_NOT_FOUND' | 'TENANT_NOT_FOUND' | 'PLAN_NOT_FOUND' }
   | { status: 'invalid_transition'; errorCode: 'SAME_PLAN_VERSION' }
   | { status: 'preview_ready'; preview: TenantPlanChangePreview }
   | {
@@ -138,19 +202,33 @@ async function buildPreview(input: {
   tenantId: string;
   payload: unknown;
 }): Promise<
-  | { ok: true; currentState: TenantCurrentPlanStateRecord; toPlanVersion: TenantPlanPublishedVersionRecord; preview: TenantPlanChangePreview; reason: string }
+  | { ok: true; currentState: TenantCurrentPlanStateRecord | null; toPlanVersion: TenantPlanPublishedVersionRecord; preview: TenantPlanChangePreview; reason: string }
   | Exclude<TenantPlanChangeServiceResult, { status: 'preview_ready' | 'plan_changed' }>
 > {
   const parsed = parseTenantPlanChangePayload(input.payload);
   if (!parsed.ok) return { status: 'validation_error', errors: parsed.errors };
 
-  const currentState = await input.repository.findCurrentTenantPlanState(input.tenantId);
-  if (!currentState) return { status: 'not_found', errorCode: 'CURRENT_PLAN_NOT_FOUND' };
-
   const toPlanVersion = await input.repository.findPublishedPlanVersionById(
     parsed.value.toPlanVersionId,
   );
   if (!toPlanVersion) return { status: 'not_found', errorCode: 'PUBLISHED_PLAN_VERSION_NOT_FOUND' };
+
+  const currentState = await input.repository.findCurrentTenantPlanState(input.tenantId);
+
+  // 首次分配套餐：租户无 active plan 时允许预览
+  if (!currentState) {
+    return {
+      ok: true,
+      currentState: null,
+      toPlanVersion,
+      reason: parsed.value.reason,
+      preview: buildInitialPlanAssignmentPreview({
+        tenantId: input.tenantId,
+        toPlanVersion,
+      }),
+    };
+  }
+
   if (currentState.planVersion.versionId === toPlanVersion.versionId) {
     return { status: 'invalid_transition', errorCode: 'SAME_PLAN_VERSION' };
   }
@@ -201,7 +279,83 @@ export async function applyTenantPlanChangeService(input: {
   const changeRecordId = idFactory('tenant-plan-change');
   const auditEventId = idFactory('audit-event');
   const snapshotPayload = buildAuthorizationSnapshotPayload(preview.toPlanVersion);
-  const currentSnapshotJson = preview.currentState.authorizationSnapshot.snapshotJson;
+
+  // 首次分配套餐：无 currentState，直接创建 assignment/snapshot/changeRecord/audit
+  if (!preview.currentState) {
+    const tenant = await input.repository.findTenantById(input.tenantId);
+    if (!tenant) return { status: 'not_found', errorCode: 'TENANT_NOT_FOUND' };
+
+    const snapshotJson: Record<string, unknown> = {
+      ...snapshotPayload.snapshotJson,
+      securityBoundary: buildSecurityBoundarySnapshot(),
+    };
+
+    return input.repository.applyInitialTenantPlanAssignment({
+      tenant,
+      toPlanVersion: preview.toPlanVersion,
+      newAssignment: {
+        id: assignmentId,
+        tenantId: input.tenantId,
+        planId: preview.toPlanVersion.planId,
+        planVersionId: preview.toPlanVersion.versionId,
+        status: 'active',
+        startedAt: current,
+        expiresAt: null,
+        createdAt: current,
+        updatedAt: current,
+      },
+      newAuthorizationSnapshot: {
+        id: snapshotId,
+        tenantId: input.tenantId,
+        planAssignmentId: assignmentId,
+        planVersionId: preview.toPlanVersion.versionId,
+        status: 'active',
+        snapshotJson,
+        quotaJson: snapshotPayload.quotaJson,
+        connectorJson: snapshotPayload.connectorJson,
+        serviceJson: snapshotPayload.serviceJson,
+        sourceChangeRecordId: changeRecordId,
+        generatedBy: input.actorId,
+        generatedAt: current,
+        supersededAt: null,
+        createdAt: current,
+      },
+      changeRecord: {
+        id: changeRecordId,
+        tenantId: input.tenantId,
+        fromPlanVersionId: null,
+        toPlanVersionId: preview.toPlanVersion.versionId,
+        fromSnapshotId: null,
+        toSnapshotId: snapshotId,
+        status: 'applied',
+        diffJson: preview.preview as unknown as Record<string, unknown>,
+        reason: preview.reason,
+        requestedBy: input.actorId,
+        appliedBy: input.actorId,
+        appliedAt: current,
+        createdAt: current,
+        updatedAt: current,
+      },
+      auditEvent: {
+        eventId: auditEventId,
+        actorId: input.actorId,
+        actorRole: input.actorRole,
+        tenantId: input.tenantId,
+        scope: 'platform',
+        resource: 'tenant',
+        resourceId: input.tenantId,
+        action: 'manage_status',
+        result: 'transitioned',
+        reason: 'tenant_plan_changed',
+        occurredAt: current.toISOString(),
+        source: 'server_session',
+      },
+      appliedAt: current,
+    });
+  }
+
+  const currentState = preview.currentState;
+  const currentSnapshotJson = currentState.authorizationSnapshot.snapshotJson;
   const preservedOpeningContact = normalizeTenantOpeningContact(currentSnapshotJson.openingContact);
   const preservedSnapshotJson = {
     ...snapshotPayload.snapshotJson,
@@ -209,13 +363,13 @@ export async function applyTenantPlanChangeService(input: {
     securityBoundary: buildSecurityBoundarySnapshot(),
   };
   const currentAuthorizationSnapshotForWrite = {
-    ...preview.currentState.authorizationSnapshot,
+    ...currentState.authorizationSnapshot,
     snapshotJson: preservedOpeningContact ? { openingContact: preservedOpeningContact } : {},
   };
 
   return input.repository.applyTenantPlanChange({
-    tenant: preview.currentState.tenant,
-    currentAssignment: preview.currentState.assignment,
+    tenant: currentState.tenant,
+    currentAssignment: currentState.assignment,
     currentAuthorizationSnapshot: currentAuthorizationSnapshotForWrite,
     toPlanVersion: preview.toPlanVersion,
     newAssignment: {
@@ -248,12 +402,12 @@ export async function applyTenantPlanChangeService(input: {
     changeRecord: {
       id: changeRecordId,
       tenantId: input.tenantId,
-      fromPlanVersionId: preview.currentState.planVersion.versionId,
+      fromPlanVersionId: currentState.planVersion.versionId,
       toPlanVersionId: preview.toPlanVersion.versionId,
-      fromSnapshotId: preview.currentState.authorizationSnapshot.id,
+      fromSnapshotId: currentState.authorizationSnapshot.id,
       toSnapshotId: snapshotId,
       status: 'applied',
-      diffJson: preview.preview,
+      diffJson: preview.preview as unknown as Record<string, unknown>,
       reason: preview.reason,
       requestedBy: input.actorId,
       appliedBy: input.actorId,

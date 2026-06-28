@@ -8,6 +8,8 @@ const routeMocks = vi.hoisted(() => {
     findCurrentTenantPlanState: vi.fn(),
     findPublishedPlanVersionById: vi.fn(),
     applyTenantPlanChange: vi.fn(),
+    findTenantById: vi.fn(),
+    applyInitialTenantPlanAssignment: vi.fn(),
   };
   const database = { database: 'tenant-plan-change-db' };
 
@@ -165,9 +167,18 @@ beforeEach(() => {
   routeMocks.repository.findCurrentTenantPlanState.mockReset();
   routeMocks.repository.findPublishedPlanVersionById.mockReset();
   routeMocks.repository.applyTenantPlanChange.mockReset();
+  routeMocks.repository.findTenantById.mockReset();
+  routeMocks.repository.applyInitialTenantPlanAssignment.mockReset();
   routeMocks.repository.findCurrentTenantPlanState.mockResolvedValue(currentTenantState);
   routeMocks.repository.findPublishedPlanVersionById.mockResolvedValue(targetPlanVersion);
-  routeMocks.repository.applyTenantPlanChange.mockImplementation(async (input) => ({
+  routeMocks.repository.findTenantById.mockResolvedValue({
+    id: 'tenant-001',
+    name: '星澜医美中心',
+    status: 'active',
+    createdAt: new Date('2026-06-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-06-20T00:00:00.000Z'),
+  });
+  routeMocks.repository.applyTenantPlanChange.mockImplementation(async (input: Record<string,unknown>) => ({
     status: 'plan_changed',
     changeRecordId: input.changeRecord.id,
     auditEventId: input.auditEvent.eventId,
@@ -286,7 +297,7 @@ describe('租户套餐变更 API', () => {
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
   });
 
-  it('缺少原因返回 400，同版本返回 409，未找到当前套餐返回 404', async () => {
+  it('缺少原因返回 400，同版本返回 409，无当前套餐按首次分配处理', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
 
     const validation = await planChangeRoute.POST(
@@ -316,19 +327,76 @@ describe('租户套餐变更 API', () => {
       errorCode: 'SAME_PLAN_VERSION',
     });
 
+    // 无 currentState 的租户不再返回 CURRENT_PLAN_NOT_FOUND，
+    // 而是进入首次分配逻辑（preview 返回 200）
     routeMocks.repository.findCurrentTenantPlanState.mockResolvedValueOnce(null);
-    const missing = await planChangePreviewRoute.POST(
-      request('/api/v1/open-platform/tenants/tenant-missing/plan-change-preview', {
+    routeMocks.repository.findTenantById.mockResolvedValueOnce({
+      id: 'tenant-missing',
+      name: '未配置租户',
+      status: 'active',
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-20T00:00:00.000Z'),
+    });
+    routeMocks.repository.applyInitialTenantPlanAssignment.mockImplementationOnce(async (input: Record<string, unknown>) => ({
+      status: 'plan_changed',
+      changeRecordId: (input as Record<string, unknown>).changeRecord
+        ? ((input as Record<string, unknown>).changeRecord as Record<string, string>).id
+        : 'change-new',
+      auditEventId: (input as Record<string, unknown>).auditEvent
+        ? ((input as Record<string, unknown>).auditEvent as Record<string, string>).eventId
+        : 'audit-new',
+      tenant: {
+        tenantId: 'tenant-missing',
+        tenantName: (input as Record<string, unknown>).tenant
+          ? ((input as Record<string, unknown>).tenant as Record<string, string>).name ?? '未配置租户'
+          : '未配置租户',
+        tenantStatus: 'active',
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: (input as Record<string, unknown>).appliedAt
+          ? String((input as Record<string, unknown>).appliedAt)
+          : new Date().toISOString(),
+        planName: targetPlanVersion.planName,
+        planCode: targetPlanVersion.planCode,
+        planStatus: targetPlanVersion.planStatus,
+        planVersionId: targetPlanVersion.versionId,
+        planVersionCode: targetPlanVersion.versionCode,
+        planDisplayName: targetPlanVersion.displayName,
+        planDisplayPrice: targetPlanVersion.displayPrice,
+        assignmentStatus: 'active',
+        startedAt: new Date().toISOString(),
+        expiresAt: null,
+        agentLimit: targetPlanVersion.agentLimit,
+        seatLimit: targetPlanVersion.seatLimit,
+        monthlyAiCallLimit: targetPlanVersion.monthlyAiCallLimit,
+        knowledgeStorageGb: targetPlanVersion.knowledgeStorageGb,
+        connectorEntitlements: ['企微', 'HIS'],
+        serviceEntitlements: ['上线培训'],
+        authorizationSnapshotId: 'snap-new',
+        authorizationSnapshotStatus: 'active',
+        authorizationGeneratedAt: new Date().toISOString(),
+        maxCustomers: null,
+        maxAppointments: null,
+        maxFollowUps: null,
+        maxAiCalls: null,
+        currentCustomers: null,
+        currentAppointments: null,
+        currentFollowUps: null,
+        currentAiCalls: null,
+        snapshotAt: null,
+      },
+    }));
+    const initialAssign = await planChangeRoute.POST(
+      request('/api/v1/open-platform/tenants/tenant-missing/plan-change', {
         toPlanVersionId: 'plan-version-professional-202606',
-        reason: '升级',
+        reason: '首次分配',
       }),
       routeContext('tenant-missing'),
     );
-    expect(missing.status).toBe(404);
-    await expect(missing.json()).resolves.toEqual({
-      ok: false,
-      errorCode: 'CURRENT_PLAN_NOT_FOUND',
-    });
+    expect(initialAssign.status).toBe(200);
+    const initialPayload = await initialAssign.json() as Record<string, unknown>;
+    expect(initialPayload.ok).toBe(true);
+    expect(initialPayload.status).toBe('plan_changed');
+    expectNoSensitivePayload(initialPayload);
   });
 
   it('数据服务异常返回稳定低敏 503', async () => {
