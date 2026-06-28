@@ -96,7 +96,54 @@ function createRepository(overrides: Partial<TenantPlanChangeRepository> = {}) {
   return {
     findCurrentTenantPlanState: vi.fn(async () => currentTenantState),
     findPublishedPlanVersionById: vi.fn(async () => targetPlanVersion),
+    findTenantById: vi.fn(async (id) => ({
+      id,
+      name: '星澜医美中心',
+      status: 'active',
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-20T00:00:00.000Z'),
+    })),
     applyTenantPlanChange: vi.fn(async (input) => ({
+      status: 'plan_changed' as const,
+      changeRecordId: input.changeRecord.id,
+      auditEventId: input.auditEvent.eventId,
+      tenant: {
+        tenantId: input.tenant.id,
+        tenantName: input.tenant.name,
+        tenantStatus: input.tenant.status,
+        createdAt: input.tenant.createdAt.toISOString(),
+        updatedAt: input.tenant.updatedAt.toISOString(),
+        planName: targetPlanVersion.planName,
+        planCode: targetPlanVersion.planCode,
+        planStatus: targetPlanVersion.planStatus,
+        planVersionId: targetPlanVersion.versionId,
+        planVersionCode: targetPlanVersion.versionCode,
+        planDisplayName: targetPlanVersion.displayName,
+        planDisplayPrice: targetPlanVersion.displayPrice,
+        assignmentStatus: input.newAssignment.status,
+        startedAt: input.newAssignment.startedAt.toISOString(),
+        expiresAt: null,
+        agentLimit: targetPlanVersion.agentLimit,
+        seatLimit: targetPlanVersion.seatLimit,
+        monthlyAiCallLimit: targetPlanVersion.monthlyAiCallLimit,
+        knowledgeStorageGb: targetPlanVersion.knowledgeStorageGb,
+        connectorEntitlements: ['企微', 'HIS'],
+        serviceEntitlements: ['上线培训', '季度复盘'],
+        authorizationSnapshotId: input.newAuthorizationSnapshot.id,
+        authorizationSnapshotStatus: input.newAuthorizationSnapshot.status,
+        authorizationGeneratedAt: input.newAuthorizationSnapshot.generatedAt.toISOString(),
+        maxCustomers: null,
+        maxAppointments: null,
+        maxFollowUps: null,
+        maxAiCalls: null,
+        currentCustomers: null,
+        currentAppointments: null,
+        currentFollowUps: null,
+        currentAiCalls: null,
+        snapshotAt: null,
+      },
+    })),
+    applyInitialTenantPlanAssignment: vi.fn(async (input) => ({
       status: 'plan_changed' as const,
       changeRecordId: input.changeRecord.id,
       auditEventId: input.auditEvent.eventId,
@@ -253,14 +300,8 @@ describe('租户套餐变更 service', () => {
   });
 
   it('拒绝未配置当前套餐、目标版本不存在、同版本和缺少原因的变更', async () => {
-    await expect(
-      previewTenantPlanChangeService({
-        repository: createRepository({ findCurrentTenantPlanState: vi.fn(async () => null) }),
-        tenantId: 'tenant-missing',
-        payload: { toPlanVersionId: 'plan-version-professional-202606', reason: '升级' },
-      }),
-    ).resolves.toEqual({ status: 'not_found', errorCode: 'CURRENT_PLAN_NOT_FOUND' });
-
+    // CURRENT_PLAN_NOT_FOUND 现在由首次分配处理，不再返回错误
+    // 目标版本不存在仍返回错误
     await expect(
       previewTenantPlanChangeService({
         repository: createRepository({ findPublishedPlanVersionById: vi.fn(async () => null) }),
@@ -286,5 +327,115 @@ describe('租户套餐变更 service', () => {
         payload: { toPlanVersionId: 'plan-version-professional-202606' },
       }),
     ).resolves.toEqual({ status: 'validation_error', errors: ['REASON_REQUIRED'] });
+  });
+
+  describe('首次分配套餐（无 currentState）', () => {
+    it('无 active plan 租户可以 preview 首次分配（不再 CURRENT_PLAN_NOT_FOUND）', async () => {
+      const repository = createRepository({
+        findCurrentTenantPlanState: vi.fn(async () => null),
+      });
+
+      const result = await previewTenantPlanChangeService({
+        repository,
+        tenantId: 'tenant-new',
+        payload: { toPlanVersionId: 'plan-version-professional-202606', reason: '首次分配' },
+      });
+
+      expect(result.status).toBe('preview_ready');
+      expect(result.preview?.fromPlanVersionId).toBeNull();
+      expect(result.preview?.changedItemCount).toBeGreaterThan(0);
+      // 所有项都 changed（从未配置到有套餐）
+      expect(result.preview?.unchangedItemCount).toBe(0);
+    });
+
+    it('无 active plan 租户可以 apply 首次分配', async () => {
+      const repository = createRepository({
+        findCurrentTenantPlanState: vi.fn(async () => null),
+      });
+
+      const result = await applyTenantPlanChangeService({
+        repository,
+        actorId: 'demo-user-platform',
+        actorRole: 'platform_admin',
+        tenantId: 'tenant-new',
+        payload: { toPlanVersionId: 'plan-version-professional-202606', reason: '首次分配' },
+        now: () => new Date('2026-06-23T04:00:00.000Z'),
+        idFactory: (prefix) => `${prefix}-fixed`,
+      });
+
+      expect(result.status).toBe('plan_changed');
+      expect(repository.findTenantById).toHaveBeenCalledWith('tenant-new');
+      expect(repository.applyInitialTenantPlanAssignment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenant: expect.objectContaining({ id: 'tenant-new' }),
+          newAssignment: expect.objectContaining({
+            tenantId: 'tenant-new',
+            status: 'active',
+          }),
+          changeRecord: expect.objectContaining({
+            fromPlanVersionId: null,
+            fromSnapshotId: null,
+          }),
+          auditEvent: expect.objectContaining({
+            reason: 'tenant_plan_changed',
+          }),
+        }),
+      );
+      // 首次分配不调用 old applyTenantPlanChange（不 deactivate 旧 assignment）
+      expect(repository.applyTenantPlanChange).not.toHaveBeenCalled();
+    });
+
+    it('首次分配 apply 要求 tenant 存在（repo findTenantById null 返回 TENANT_NOT_FOUND）', async () => {
+      const repository = createRepository({
+        findCurrentTenantPlanState: vi.fn(async () => null),
+        findTenantById: vi.fn(async () => null),
+      });
+
+      const result = await applyTenantPlanChangeService({
+        repository,
+        actorId: 'demo-user-platform',
+        actorRole: 'platform_admin',
+        tenantId: 'tenant-missing',
+        payload: { toPlanVersionId: 'plan-version-professional-202606', reason: '首次分配' },
+      });
+
+      expect(result).toEqual({ status: 'not_found', errorCode: 'TENANT_NOT_FOUND' });
+    });
+
+    it('首次分配时目标 plan 不存在仍返回 PUBLISHED_PLAN_VERSION_NOT_FOUND', async () => {
+      const repository = createRepository({
+        findCurrentTenantPlanState: vi.fn(async () => null),
+        findPublishedPlanVersionById: vi.fn(async () => null),
+      });
+
+      const result = await previewTenantPlanChangeService({
+        repository,
+        tenantId: 'tenant-new',
+        payload: { toPlanVersionId: 'plan-version-missing', reason: '首次分配' },
+      });
+
+      expect(result).toEqual({ status: 'not_found', errorCode: 'PUBLISHED_PLAN_VERSION_NOT_FOUND' });
+    });
+
+    it('已有 active plan 的租户仍走原变更流程（首次分配不触发）', async () => {
+      const repository = createRepository(); // 默认有 currentState
+
+      const result = await applyTenantPlanChangeService({
+        repository,
+        actorId: 'demo-user-platform',
+        actorRole: 'platform_admin',
+        tenantId: 'tenant-001',
+        payload: { toPlanVersionId: 'plan-version-professional-202606', reason: '升级' },
+        now: () => new Date('2026-06-23T04:00:00.000Z'),
+        idFactory: (prefix) => `${prefix}-fixed`,
+      });
+
+      expect(result.status).toBe('plan_changed');
+      // 原流程调用 applyTenantPlanChange
+      expect(repository.applyTenantPlanChange).toHaveBeenCalledTimes(1);
+      // 首次分配不触发
+      expect(repository.applyInitialTenantPlanAssignment).not.toHaveBeenCalled();
+      expect(repository.findTenantById).not.toHaveBeenCalled();
+    });
   });
 });

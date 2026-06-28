@@ -28,7 +28,7 @@ export type TenantPlanChangeDiffItem = {
 
 export type TenantPlanChangePreview = {
   tenantId: string;
-  fromPlanVersionId: string;
+  fromPlanVersionId: string | null;
   toPlanVersionId: string;
   changedItemCount: number;
   unchangedItemCount: number;
@@ -166,6 +166,79 @@ export function buildTenantPlanChangePreview(input: {
     toPlanVersionId: toPlanVersion.versionId,
     changedItemCount,
     unchangedItemCount: items.length - changedItemCount,
+    items,
+  };
+}
+
+export function buildInitialPlanAssignmentPreview(input: {
+  tenantId: string;
+  toPlanVersion: TenantPlanPublishedVersionRecord;
+}): TenantPlanChangePreview {
+  const { toPlanVersion } = input;
+  const initialLabel = '未配置套餐';
+  const items: TenantPlanChangeDiffItem[] = [
+    diffItem({
+      key: 'displayName',
+      label: '套餐版本',
+      before: initialLabel,
+      after: toPlanVersion.displayName,
+    }),
+    diffItem({
+      key: 'displayPrice',
+      label: '展示价格',
+      before: initialLabel,
+      after: toPlanVersion.displayPrice,
+    }),
+    diffItem({
+      key: 'agentLimit',
+      label: 'Agent 数量',
+      before: initialLabel,
+      after: formatNumber(toPlanVersion.agentLimit),
+    }),
+    diffItem({
+      key: 'seatLimit',
+      label: '员工席位',
+      before: initialLabel,
+      after: formatNumber(toPlanVersion.seatLimit),
+    }),
+    diffItem({
+      key: 'monthlyAiCallLimit',
+      label: 'AI 调用 / 月',
+      before: initialLabel,
+      after: formatNumber(toPlanVersion.monthlyAiCallLimit),
+    }),
+    diffItem({
+      key: 'knowledgeStorageGb',
+      label: '知识库存储',
+      before: initialLabel,
+      after: formatStorage(toPlanVersion.knowledgeStorageGb),
+    }),
+    diffItem({
+      key: 'connectorEntitlements',
+      label: '连接器权益',
+      before: initialLabel,
+      after: formatList(readStringList(toPlanVersion.connectorEntitlementsJson, 'connectors')),
+    }),
+    diffItem({
+      key: 'serviceEntitlements',
+      label: '服务权益',
+      before: initialLabel,
+      after: formatList(readStringList(toPlanVersion.serviceEntitlementsJson, 'services')),
+    }),
+    diffItem({
+      key: 'versionCode',
+      label: '版本号',
+      before: initialLabel,
+      after: toPlanVersion.versionCode,
+    }),
+  ];
+
+  return {
+    tenantId: input.tenantId,
+    fromPlanVersionId: null,
+    toPlanVersionId: toPlanVersion.versionId,
+    changedItemCount: items.length,
+    unchangedItemCount: 0,
     items,
   };
 }
