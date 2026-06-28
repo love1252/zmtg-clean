@@ -333,8 +333,8 @@ export async function requestInstitutionAiCallService(input: {
   // 使用 deriveKnowledgeSearchKeyword 从长问题中提取可命中短词，避免
   // 整句提问无法匹配知识库片段
   // 不可由客户端覆盖 tenantId/institutionId
-  // searchKeyword 始终派生一次，同时作为持久化 metadata 的受控检索关键词
-  // （不保存原始 question / prompt）
+  // searchKeyword 始终在运行时派生一次，仅用于本次知识库检索。
+  // 不保存原始 question / prompt / 派生检索关键词。
   let kbChunks = input.knowledgeChunks;
   const searchKeyword = deriveKnowledgeSearchKeyword(question);
   if (input.db && (!kbChunks || kbChunks.length === 0)) {

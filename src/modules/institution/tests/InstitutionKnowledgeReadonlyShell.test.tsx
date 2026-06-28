@@ -28,6 +28,19 @@ describe('机构端知识库只读列表 UI', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/entitlement-usage')) {
+          return Response.json({
+            tenantId: 'demo-tenant-001',
+            institutionId: 'demo-inst-001',
+            planCode: 'starter-care',
+            planName: '成长版',
+            readable: true,
+            source: 'mixed',
+            items: [
+              { resource: 'ai_calls', label: 'AI 调用（本月）', used: 12, limit: 100, remaining: 88, status: 'normal' },
+            ],
+          });
+        }
         if (url.includes('/api/institution/knowledge-management/qa/audits')) {
           return Response.json({
             requestId: 'institution-knowledge-qa-audits',
@@ -749,6 +762,19 @@ describe('机构端知识库只读列表 UI', () => {
       vi.stubGlobal(
         'fetch',
         vi.fn(async (url: string) => {
+          if (url.includes('/api/institution/entitlement-usage')) {
+            return Response.json({
+              tenantId: 'demo-tenant-001',
+              institutionId: 'demo-inst-001',
+              planCode: 'starter-care',
+              planName: '成长版',
+              readable: true,
+              source: 'mixed',
+              items: [
+                { resource: 'ai_calls', label: 'AI 调用（本月）', used: 12, limit: 100, remaining: 88, status: 'normal' },
+              ],
+            });
+          }
           if (url.includes('/api/institution/knowledge-management/ai-call/usage')) {
             return Response.json({
               requestId: 'institution-ai-call-usage',
@@ -790,6 +816,34 @@ describe('机构端知识库只读列表 UI', () => {
                   status: 'rejected', errorCode: 'quota_exceeded_ai_calls', metadata: null,
                   createdAt: '2026-06-27T06:00:00.000Z',
                 },
+                {
+                  id: 'rec-sensitive', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
+                  actorUserId: 'u', provider: 'deepseek', model: 'pre_call_safety_check',
+                  promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null,
+                  status: 'sensitive_input_rejected', errorCode: 'SENSITIVE_INPUT_REJECTED', metadata: null,
+                  createdAt: '2026-06-27T05:00:00.000Z',
+                },
+                {
+                  id: 'rec-rate-limited', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
+                  actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
+                  promptTokens: 10, completionTokens: null, totalTokens: null, latencyMs: 100,
+                  status: 'rate_limited', errorCode: 'RATE_LIMITED', metadata: null,
+                  createdAt: '2026-06-27T04:00:00.000Z',
+                },
+                {
+                  id: 'rec-provider-unavailable', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
+                  actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
+                  promptTokens: 10, completionTokens: null, totalTokens: null, latencyMs: 100,
+                  status: 'provider_unavailable', errorCode: 'HTTP_503', metadata: null,
+                  createdAt: '2026-06-27T03:00:00.000Z',
+                },
+                {
+                  id: 'rec-failed', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
+                  actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
+                  promptTokens: 10, completionTokens: null, totalTokens: null, latencyMs: 100,
+                  status: 'failed', errorCode: 'NETWORK_ERROR', metadata: null,
+                  createdAt: '2026-06-27T02:00:00.000Z',
+                },
               ],
               emptyState: { title: '暂无', description: '暂无' },
             });
@@ -797,6 +851,93 @@ describe('机构端知识库只读列表 UI', () => {
           return Response.json({ records: [], pageInfo });
         }),
       );
+    });
+
+    it('展示 AI 调用额度 used / limit / remaining', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const aiSection = screen.getByLabelText('机构端 AI 真实调用');
+      expect(await within(aiSection).findByText('本月 AI 调用额度')).toBeInTheDocument();
+      expect(within(aiSection).getByText('已用 12')).toBeInTheDocument();
+      expect(within(aiSection).getByText('上限 100')).toBeInTheDocument();
+      expect(within(aiSection).getByText('剩余 88')).toBeInTheDocument();
+    });
+
+    it('remaining=0 时展示额度用尽提示', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => {
+          if (url.includes('/api/institution/entitlement-usage')) {
+            return Response.json({
+              items: [
+                { resource: 'ai_calls', label: 'AI 调用（本月）', used: 100, limit: 100, remaining: 0, status: 'exceeded' },
+              ],
+            });
+          }
+          return Response.json({ records: [], pageInfo });
+        }),
+      );
+
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const aiSection = screen.getByLabelText('机构端 AI 真实调用');
+      expect(await within(aiSection).findByText('剩余 0')).toBeInTheDocument();
+      expect(within(aiSection).getByText('本月 AI 调用额度已用尽，请联系平台管理员调整套餐。')).toBeInTheDocument();
+    });
+
+    it('AI 调用记录细分状态文案', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const usageSection = screen.getByLabelText('机构端 AI 调用记录');
+      fireEvent.click(within(usageSection).getByRole('button', { name: '刷新记录' }));
+
+      expect(await screen.findByText('AI 调用额度已用尽')).toBeInTheDocument();
+      expect(screen.getByText('敏感输入已拒绝')).toBeInTheDocument();
+      expect(screen.getByText('供应商限流')).toBeInTheDocument();
+      expect(screen.getByText('供应商暂不可用')).toBeInTheDocument();
+      expect(screen.getByText('调用失败')).toBeInTheDocument();
+    });
+
+    it('metadata=null 旧成功记录显示受控说明', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const usageSection = screen.getByLabelText('机构端 AI 调用记录');
+      fireEvent.click(within(usageSection).getByRole('button', { name: '刷新记录' }));
+
+      expect(await screen.findByText('旧记录未记录知识库上下文')).toBeInTheDocument();
+      expect(usageSection.textContent).not.toContain('searchKeyword');
+      expect(usageSection.textContent).not.toContain('query');
+      expect(usageSection.textContent).not.toContain('原始 question');
+      expect(usageSection.textContent).not.toContain('provider raw response');
+    });
+
+    it('调用结果和记录区提示 AI 需人工确认', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const aiSection = screen.getByLabelText('机构端 AI 真实调用');
+      expect(within(aiSection).getByText(/结果需人工确认/)).toBeInTheDocument();
+      const usageSection = screen.getByLabelText('机构端 AI 调用记录');
+      expect(within(usageSection).getByText(/AI 结果需人工确认/)).toBeInTheDocument();
+      fireEvent.click(within(usageSection).getByRole('button', { name: '刷新记录' }));
+      expect(await within(usageSection).findByText('AI 参考片段仍需人工确认，不可直接作为诊疗结论。')).toBeInTheDocument();
+    });
+
+    it('不展示 prompt / answer / provider raw response 敏感字段', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const usageSection = screen.getByLabelText('机构端 AI 调用记录');
+      fireEvent.click(within(usageSection).getByRole('button', { name: '刷新记录' }));
+      await screen.findByText('已使用知识库');
+
+      expect(usageSection.textContent).not.toContain('prompt');
+      expect(usageSection.textContent).not.toContain('answer');
+      expect(usageSection.textContent).not.toContain('provider raw response');
     });
 
     it('展示"已使用知识库"徽标和 sources 摘要', async () => {
@@ -832,7 +973,7 @@ describe('机构端知识库只读列表 UI', () => {
       fireEvent.click(within(usageSection).getByRole('button', { name: '刷新记录' }));
 
       await screen.findByText('已使用知识库');
-      // 旧成功记录（metadata=null）和 rejected 记录都不展示 RAG 徽标
+      // 旧成功记录（metadata=null）和 rejected / failed 类记录都不展示 RAG 徽标
       // 只应有 1 个"已使用知识库"和 1 个"未使用知识库参考"
       expect(screen.getAllByText('已使用知识库')).toHaveLength(1);
       expect(screen.getAllByText('未使用知识库参考')).toHaveLength(1);
