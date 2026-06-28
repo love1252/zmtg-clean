@@ -476,4 +476,100 @@ describe('机构端知识库只读列表 UI', () => {
       expect(within(shell).queryByRole('button', { name: label })).not.toBeInTheDocument();
     });
   });
+
+  it('检索片段区域明确展示"不会调用 AI / 不进入 AI prompt"文案', async () => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    expect(searchSection.textContent).toContain('仅搜索已解析的机构知识库片段');
+    expect(searchSection.textContent).toContain('不会调用 AI');
+    expect(searchSection.textContent).toContain('不会进入 AI prompt');
+  });
+
+  it('检索为空时不展示敏感字段', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/search')) {
+          return Response.json({
+            requestId: 'institution-knowledge-keyword-search',
+            readonly: true,
+            dataSource: 'repository',
+            records: [],
+            pageInfo: { ...pageInfo, total: 0, pageCount: 0 },
+            emptyState: {
+              title: '暂无匹配片段',
+              description: '当前范围没有命中关键词的已解析知识片段。',
+            },
+          });
+        }
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+
+    render(<InstitutionKnowledgeReadonlyShell />);
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索关键词'), {
+      target: { value: '不存在的关键词' },
+    });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
+
+    expect(await screen.findByText('暂无匹配片段')).toBeInTheDocument();
+    ['api_key', 'DATABASE_URL', 'storageKey', 'bucket', 'signedUrl', 'embeddingVectorJson', 'Bearer', 'Authorization'].forEach(
+      (fragment) => {
+        expect(searchSection.textContent).not.toContain(fragment);
+      },
+    );
+  });
+
+  it('检索 API 错误展示受控文案，不泄露内部信息', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/search')) {
+          return new Response(
+            JSON.stringify({ code: 'service_unavailable', error: '知识库片段检索暂时不可用' }),
+            { status: 503 },
+          );
+        }
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+
+    render(<InstitutionKnowledgeReadonlyShell />);
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索关键词'), {
+      target: { value: '冷敷' },
+    });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
+
+    expect(await screen.findByText('知识库片段检索暂时不可用')).toBeInTheDocument();
+    ['DATABASE_URL', 'postgres://', 'secret', 'stack', 'SQL', 'Bearer', '/Users/'].forEach((fragment) => {
+      expect(searchSection.textContent).not.toContain(fragment);
+    });
+  });
+
+  it('检索结果中不展示敏感字段', async () => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    // The default mock already returns a result with "机构端冷敷引用片段"
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索关键词'), {
+      target: { value: '冷敷' },
+    });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
+
+    expect(await screen.findByText('机构端冷敷引用片段')).toBeInTheDocument();
+    ['api_key', 'DATABASE_URL', 'storageKey', 'bucket', 'signedUrl', 'embeddingVectorJson', 'Bearer', 'Authorization', '/Users/', 'stack', 'SQL'].forEach(
+      (fragment) => {
+        expect(searchSection.textContent).not.toContain(fragment);
+      },
+    );
+  });
 });

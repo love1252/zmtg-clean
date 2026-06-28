@@ -152,7 +152,7 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [fileMessage, setFileMessage] = useState<string | null>(null);
   const [chunkSearchInput, setChunkSearchInput] = useState('');
   const [chunkSearchResults, setChunkSearchResults] = useState<InstitutionKnowledgeSearchResultRecord[]>([]);
-  const [chunkSearchMessage, setChunkSearchMessage] = useState('请输入关键词检索已解析片段');
+  const [chunkSearchMessage, setChunkSearchMessage] = useState('仅搜索已解析的机构知识库片段，不会调用 AI，也不会进入 AI prompt');
   const [isChunkSearching, setIsChunkSearching] = useState(false);
   const [vectorSearchInput, setVectorSearchInput] = useState('');
   const [vectorSearchResults, setVectorSearchResults] = useState<InstitutionKnowledgeVectorSearchResultRecord[]>([]);
@@ -861,7 +861,7 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">检索片段</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">按关键词查看本机构可见知识库的引用片段。</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">按关键词查看本机构可见知识库的引用片段。仅搜索已解析的机构知识库片段，不会调用 AI，也不会进入 AI prompt。</p>
             </div>
             <form onSubmit={searchChunks} className="flex w-full flex-col gap-2 sm:flex-row lg:w-[460px]">
               <label className="relative min-w-0 flex-1">
