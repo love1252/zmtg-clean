@@ -724,4 +724,117 @@ describe('机构端知识库只读列表 UI', () => {
       );
     });
   });
+
+  describe('AI 调用记录 RAG metadata 展示', () => {
+    beforeEach(() => {
+      vi.mocked(listInstitutionKnowledgeItems).mockResolvedValue({
+        ok: true,
+        records: [
+          {
+            knowledgeId: 'knowledge-ui-a',
+            title: '授权可见术后护理',
+            category: '术后护理',
+            status: 'ready',
+            readonlyStatus: 'readonly',
+            sourceKind: 'demo',
+            descriptionPreview: '低敏摘要。',
+            chunkCount: 1,
+            visibility: 'platform_authorized',
+            updatedAt: '2026-06-13T08:00:00.000Z',
+            createdAt: '2026-06-13T08:00:00.000Z',
+          },
+        ],
+        pageInfo,
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => {
+          if (url.includes('/api/institution/knowledge-management/ai-call/usage')) {
+            return Response.json({
+              requestId: 'institution-ai-call-usage',
+              readonly: true,
+              dataSource: 'repository',
+              records: [
+                {
+                  id: 'rec-rag-used', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
+                  actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
+                  promptTokens: 150, completionTokens: 60, totalTokens: 210, latencyMs: 800,
+                  status: 'succeeded', errorCode: null,
+                  metadata: {
+                    knowledgeContext: {
+                      used: true,
+                      query: '冷敷后怎么护理？',
+                      sources: [{ knowledgeId: 'kb-1', knowledgeTitle: '术后护理', fileId: 'f-1', fileName: '术后护理规范.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷后保持清洁干燥。', matchReason: '包含"冷敷"' }],
+                    },
+                  },
+                  createdAt: '2026-06-28T08:00:00.000Z',
+                },
+                {
+                  id: 'rec-rag-unused', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
+                  actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
+                  promptTokens: 20, completionTokens: 10, totalTokens: 30, latencyMs: 200,
+                  status: 'succeeded', errorCode: null,
+                  metadata: { knowledgeContext: { used: false, query: '随机问题', sources: [] } },
+                  createdAt: '2026-06-28T07:00:00.000Z',
+                },
+                {
+                  id: 'rec-old-null', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
+                  actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
+                  promptTokens: 10, completionTokens: 5, totalTokens: 15, latencyMs: 100,
+                  status: 'succeeded', errorCode: null, metadata: null,
+                  createdAt: '2026-06-27T07:00:00.000Z',
+                },
+                {
+                  id: 'rec-rejected', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
+                  actorUserId: 'u', provider: 'deepseek', model: 'unknown',
+                  promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null,
+                  status: 'rejected', errorCode: 'quota_exceeded_ai_calls', metadata: null,
+                  createdAt: '2026-06-27T06:00:00.000Z',
+                },
+              ],
+              emptyState: { title: '暂无', description: '暂无' },
+            });
+          }
+          return Response.json({ records: [], pageInfo });
+        }),
+      );
+    });
+
+    it('展示"已使用知识库"徽标和 sources 摘要', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const usageSection = screen.getByLabelText('机构端 AI 调用记录');
+      const refreshButton = within(usageSection).getByRole('button', { name: '刷新记录' });
+      fireEvent.click(refreshButton);
+
+      expect(await screen.findByText('已使用知识库')).toBeInTheDocument();
+      expect(screen.getByText(/术后护理规范\.pdf/)).toBeInTheDocument();
+      expect(screen.getByText(/冷敷后保持清洁干燥/)).toBeInTheDocument();
+    });
+
+    it('展示"未使用知识库参考"徽标', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const usageSection = screen.getByLabelText('机构端 AI 调用记录');
+      fireEvent.click(within(usageSection).getByRole('button', { name: '刷新记录' }));
+
+      expect(await screen.findByText('未使用知识库参考')).toBeInTheDocument();
+    });
+
+    it('metadata=null 旧记录和 rejected 记录不误显示 RAG 徽标', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const usageSection = screen.getByLabelText('机构端 AI 调用记录');
+      fireEvent.click(within(usageSection).getByRole('button', { name: '刷新记录' }));
+
+      await screen.findByText('已使用知识库');
+      // 旧成功记录（metadata=null）和 rejected 记录都不展示 RAG 徽标
+      // 只应有 1 个"已使用知识库"和 1 个"未使用知识库参考"
+      expect(screen.getAllByText('已使用知识库')).toHaveLength(1);
+      expect(screen.getAllByText('未使用知识库参考')).toHaveLength(1);
+    });
+  });
 });

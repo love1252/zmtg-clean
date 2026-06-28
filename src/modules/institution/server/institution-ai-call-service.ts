@@ -7,6 +7,29 @@ import { deriveKnowledgeSearchKeyword } from '@/modules/institution/domain/insti
 
 export type AiCallUsageStatus = 'succeeded' | 'failed' | 'sensitive_input_rejected' | 'rate_limited' | 'provider_unavailable' | 'rejected';
 
+/**
+ * 持久化到 ai_call_usage_records.metadata 的 RAG 摘要。
+ * 仅在 succeeded 调用时写入；rejected / failed / sensitive_input_rejected 不写入。
+ * sources 仅保存白名单字段，禁止 storageKey / bucket / signedUrl / embedding /
+ * provider raw response / prompt 原文 / API key / baseUrl / Authorization。
+ */
+export type AiCallUsageMetadata = {
+  knowledgeContext?: {
+    used: boolean;
+    query: string;
+    sources: Array<{
+      knowledgeId: string;
+      knowledgeTitle: string;
+      fileId: string;
+      fileName: string;
+      chunkId: string;
+      chunkIndex: number;
+      textPreview: string;
+      matchReason: string;
+    }>;
+  };
+} | null;
+
 export type AiCallUsageRecord = {
   id: string;
   tenantId: string;
@@ -20,6 +43,7 @@ export type AiCallUsageRecord = {
   latencyMs: number | null;
   status: AiCallUsageStatus;
   errorCode: string | null;
+  metadata: AiCallUsageMetadata;
   createdAt: Date;
 };
 
@@ -43,6 +67,51 @@ export type KnowledgeContext = {
   query: string;
   sources: KnowledgeContextSource[];
 };
+
+const METADATA_TEXT_PREVIEW_MAX = 300;
+
+/**
+ * 从 KB 检索结果构造受控 RAG metadata。
+ * 仅提取白名单字段，并对 textPreview 做防御性截断（<=300）。
+ * kbChunks 为 undefined 时返回 null（不写入 RAG metadata）。
+ */
+export function buildAiCallUsageMetadata(
+  kbChunks:
+    | Array<{
+      knowledgeId: string;
+      knowledgeTitle: string;
+      fileId: string;
+      fileName: string;
+      chunkId: string;
+      chunkIndex: number;
+      textPreview: string;
+      matchReason: string;
+    }>
+    | undefined,
+  question: string,
+): AiCallUsageMetadata {
+  if (!kbChunks) return null;
+
+  return {
+    knowledgeContext: {
+      used: kbChunks.length > 0,
+      query: question,
+      sources: kbChunks.map((chunk) => ({
+        knowledgeId: chunk.knowledgeId,
+        knowledgeTitle: chunk.knowledgeTitle,
+        fileId: chunk.fileId,
+        fileName: chunk.fileName,
+        chunkId: chunk.chunkId,
+        chunkIndex: chunk.chunkIndex,
+        textPreview:
+          chunk.textPreview.length > METADATA_TEXT_PREVIEW_MAX
+            ? `${chunk.textPreview.slice(0, METADATA_TEXT_PREVIEW_MAX - 1)}…`
+            : chunk.textPreview,
+        matchReason: chunk.matchReason,
+      })),
+    },
+  };
+}
 
 export type InstitutionAiCallResult = {
   status: 'created' | 'validation_failed' | 'not_found' | 'sensitive_input_rejected' | 'service_unavailable' | 'rate_limited' | 'provider_unavailable';
@@ -104,6 +173,7 @@ export type AiCallUsageRepository = {
     latencyMs: number | null;
     status: AiCallUsageStatus;
     errorCode: string | null;
+    metadata?: AiCallUsageMetadata;
   }): Promise<AiCallUsageRecord>;
   listInstitutionUsageRecords(input: {
     tenantId: string;
@@ -442,6 +512,9 @@ export async function requestInstitutionAiCallService(input: {
     const completionTokens = usage.completion_tokens ?? estimateTokens(answer);
     const totalTokens = usage.total_tokens ?? (promptTokens + completionTokens);
 
+    // 成功调用写入 RAG metadata（仅白名单字段，用于后续追溯）
+    const metadata = buildAiCallUsageMetadata(kbChunks, question);
+
     const record = await input.repository.createUsageRecord({
       id: generateRecordId(),
       tenantId,
@@ -455,6 +528,7 @@ export async function requestInstitutionAiCallService(input: {
       latencyMs,
       status: 'succeeded',
       errorCode: null,
+      metadata,
     });
 
     const knowledgeContext: KnowledgeContext | undefined = kbChunks
