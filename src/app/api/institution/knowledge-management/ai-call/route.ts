@@ -9,9 +9,6 @@ import {
   getDefaultAiVendor,
   isAllowedAiVendor,
 } from '@/modules/institution/server/institution-ai-call-service';
-import { searchInstitutionKnowledgeChunksService } from '@/modules/institution/server/institution-knowledge-keyword-search-service';
-import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
-import type { KnowledgeChunkSearchResultDto } from '@/modules/open-platform/server/platform-knowledge-keyword-search-service';
 
 async function readBody(request: Request) {
   try {
@@ -71,35 +68,6 @@ export async function POST(request: Request) {
     }
 
     const questionText = typeof body.question === 'string' ? body.question.trim() : '';
-    const searchKeyword = questionText.slice(0, 80);
-
-    // 服务端知识库关键词检索（不可由客户端覆盖 tenantId/institutionId）
-    let knowledgeChunks: KnowledgeChunkSearchResultDto[] = [];
-    if (searchKeyword) {
-      try {
-        const searchResult = await searchInstitutionKnowledgeChunksService({
-          repository: createPlatformKnowledgeManagementRepository(db),
-          params: {
-            tenantId: accessContext.tenantId,
-            institutionId: accessContext.institutionId,
-            keyword: searchKeyword,
-            page: 1,
-            pageSize: 5,
-          },
-        });
-
-        if ('records' in searchResult) {
-          knowledgeChunks = searchResult.records;
-        }
-        // validation_failed 表示 keyword 无效 -> 无片段，正常继续
-      } catch {
-        // 检索失败 -> 安全起见返回受控 503，不调用 provider
-        return NextResponse.json(
-          { code: 'knowledge_retrieval_failed', error: '知识库检索暂时不可用，请稍后重试' },
-          { status: 503 },
-        );
-      }
-    }
 
     const result = await requestInstitutionAiCallService({
       repository: createAiCallUsageRepository(db),
@@ -110,7 +78,7 @@ export async function POST(request: Request) {
         userId: accessContext.userId,
         question: questionText || null,
       },
-      knowledgeChunks,
+      db,
     });
 
     if (result.status === 'validation_failed' || result.status === 'sensitive_input_rejected') {

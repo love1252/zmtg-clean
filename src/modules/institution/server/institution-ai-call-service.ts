@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { decryptSecret } from '@/modules/security/server/secretEncryption';
 import type { EncryptedSecretEnvelope } from '@/modules/security/server/secretEncryption';
+import { searchInstitutionKnowledgeChunksService } from '@/modules/institution/server/institution-knowledge-keyword-search-service';
+import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 
 export type AiCallUsageStatus = 'succeeded' | 'failed' | 'sensitive_input_rejected' | 'rate_limited' | 'provider_unavailable' | 'rejected';
 
@@ -216,6 +218,7 @@ export async function requestInstitutionAiCallService(input: {
     textPreview: string;
     matchReason: string;
   }>;
+  db?: unknown;
 }): Promise<InstitutionAiCallResult> {
   const tenantId = normalizeRequired(input.input.tenantId);
   const institutionId = normalizeRequired(input.input.institutionId);
@@ -255,6 +258,42 @@ export async function requestInstitutionAiCallService(input: {
     };
   }
 
+  // 服务端知识库关键词检索（仅在输入校验和高敏检查通过后执行）
+  // 不可由客户端覆盖 tenantId/institutionId
+  let kbChunks = input.knowledgeChunks;
+  if (input.db && (!kbChunks || kbChunks.length === 0)) {
+    const searchKeyword = question.slice(0, 80);
+    if (searchKeyword) {
+      try {
+        const searchResult = await searchInstitutionKnowledgeChunksService({
+          repository: createPlatformKnowledgeManagementRepository(input.db as Parameters<typeof createPlatformKnowledgeManagementRepository>[0]),
+          params: {
+            tenantId,
+            institutionId,
+            keyword: searchKeyword,
+            page: 1,
+            pageSize: 5,
+          },
+        });
+
+        if ('records' in searchResult) {
+          kbChunks = searchResult.records;
+        }
+        // validation_failed 表示 keyword 无效 -> 无片段，正常继续
+      } catch {
+        // 检索失败 -> 安全起见返回受控 503，不调用 provider
+        return {
+          status: 'service_unavailable',
+          message: '知识库检索暂时不可用，请稍后重试',
+        };
+      }
+    } else {
+      kbChunks = [];
+    }
+  }
+  // 如 route 已传入 knowledgeChunks（如从 route 层提前检索），也使用它
+  // 否则 service 自己检索
+
   const vendorConfig = await input.repository.findVendorConfig(input.vendor);
   if (!vendorConfig || !vendorConfig.configured) {
     return {
@@ -276,10 +315,9 @@ export async function requestInstitutionAiCallService(input: {
   const BASE_SYSTEM_PROMPT = '你是一个医疗美容机构助手。请基于专业知识回答用户问题，保持中文、专业、简洁。注意保护用户隐私，不编造诊断建议。';
 
   let systemPrompt = BASE_SYSTEM_PROMPT;
-  const kbChunks = input.knowledgeChunks;
   const hasKbChunks = kbChunks && kbChunks.length > 0;
 
-  if (hasKbChunks) {
+  if (hasKbChunks && kbChunks) {
     const MAX_SNIPPETS = 5;
     const selectedChunks = kbChunks.slice(0, MAX_SNIPPETS);
     const kbSections = selectedChunks.map((chunk, i) =>
