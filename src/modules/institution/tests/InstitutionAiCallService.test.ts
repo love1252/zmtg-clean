@@ -3,6 +3,7 @@ import {
   requestInstitutionAiCallService,
   listInstitutionAiCallUsageService,
   listPlatformAiUsageSummaryService,
+  buildAiCallUsageMetadata,
 } from '@/modules/institution/server/institution-ai-call-service';
 import type { AiCallUsageRecord, AiCallUsageStatus } from '@/modules/institution/server/institution-ai-call-service';
 
@@ -20,6 +21,7 @@ function createMockUsageRecord(overrides: Partial<AiCallUsageRecord> = {}): AiCa
     latencyMs: 500,
     status: 'succeeded',
     errorCode: null,
+    metadata: null,
     createdAt: new Date(),
     ...overrides,
   };
@@ -813,6 +815,293 @@ describe('AI 真实调用与用量记录 service', () => {
       expect(serialized).not.toMatch(/api_key|apikey|Bearer|baseUrl|Authorization/i);
       // token/password/secret must not appear as values; field names like promptTokens are expected
       expect(serialized).not.toMatch(/"token"|"password"|"secret"/i);
+    });
+  });
+
+  describe('RAG metadata 持久化', () => {
+    const longQuestion = '请根据机构知识库回答：术后24小时内是否可以冷敷？回答时请列出依据来源。';
+
+    function assertNoQuestionOrKeyword(metadata: unknown, question: string) {
+      const serialized = JSON.stringify(metadata);
+      expect(serialized).not.toContain(question);
+      expect(serialized).not.toMatch(/"query"|"searchKeyword"/i);
+    }
+
+    it('succeeded + used=true 时写入 knowledgeContext metadata（仅 used + sources）', async () => {
+      let capturedMetadata: unknown = undefined;
+      (globalThis as unknown as { fetch: typeof fetch }).fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: '回答' } }], usage: {} }),
+      });
+
+      const repository = {
+        findVendorConfig: vi.fn().mockResolvedValue({
+          baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash',
+          encryptedApiKey: { algorithm: 'AES-256-GCM', keyVersion: 'v1', iv: 'a', authTag: 'b', ciphertext: 'c' },
+          configured: true,
+        }),
+        createUsageRecord: vi.fn().mockImplementation(async (input: Record<string, unknown>) => {
+          capturedMetadata = input.metadata;
+          return createMockUsageRecord({
+            id: input.id as string, status: input.status as AiCallUsageStatus,
+            metadata: input.metadata as AiCallUsageRecord['metadata'],
+          });
+        }),
+        listInstitutionUsageRecords: vi.fn(), listPlatformUsageSummary: vi.fn(),
+      };
+
+      vi.mock('@/modules/security/server/secretEncryption', () => ({ decryptSecret: vi.fn(() => 'mock-plain-key') }));
+
+      const knowledgeChunks = [{
+        knowledgeId: 'kb-1', knowledgeTitle: '术后护理', fileId: 'f-1', fileName: '护理.pdf',
+        chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷需间隔观察。', matchReason: '包含"冷敷"',
+      }];
+
+      const result = await requestInstitutionAiCallService({
+        repository, vendor: 'deepseek',
+        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: longQuestion },
+        knowledgeChunks,
+      });
+
+      expect(result.status).toBe('created');
+      expect(capturedMetadata).toEqual({
+        knowledgeContext: {
+          used: true,
+          sources: [{
+            knowledgeId: 'kb-1', knowledgeTitle: '术后护理', fileId: 'f-1', fileName: '护理.pdf',
+            chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷需间隔观察。', matchReason: '包含"冷敷"',
+          }],
+        },
+      });
+      // 不保存原始 question / prompt / 派生检索关键词
+      assertNoQuestionOrKeyword(capturedMetadata, longQuestion);
+    });
+
+    it('succeeded + used=false 时 metadata.knowledgeContext.used=false 且 sources=[]', async () => {
+      let capturedMetadata: unknown = undefined;
+      (globalThis as unknown as { fetch: typeof fetch }).fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: '回答' } }], usage: {} }),
+      });
+
+      const repository = {
+        findVendorConfig: vi.fn().mockResolvedValue({
+          baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash',
+          encryptedApiKey: { algorithm: 'AES-256-GCM', keyVersion: 'v1', iv: 'a', authTag: 'b', ciphertext: 'c' },
+          configured: true,
+        }),
+        createUsageRecord: vi.fn().mockImplementation(async (input: Record<string, unknown>) => {
+          capturedMetadata = input.metadata;
+          return createMockUsageRecord({ metadata: input.metadata as AiCallUsageRecord['metadata'] });
+        }),
+        listInstitutionUsageRecords: vi.fn(), listPlatformUsageSummary: vi.fn(),
+      };
+
+      vi.mock('@/modules/security/server/secretEncryption', () => ({ decryptSecret: vi.fn(() => 'mock-plain-key') }));
+
+      // 空数组 -> used=false
+      await requestInstitutionAiCallService({
+        repository, vendor: 'deepseek',
+        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: longQuestion },
+        knowledgeChunks: [],
+      });
+
+      const metadata = capturedMetadata as { knowledgeContext: { used: boolean; sources: unknown[] } };
+      expect(metadata.knowledgeContext.used).toBe(false);
+      expect(metadata.knowledgeContext.sources).toEqual([]);
+      assertNoQuestionOrKeyword(capturedMetadata, longQuestion);
+    });
+
+    it('metadata sources 只包含白名单字段，不含 storageKey/embedding 等敏感字段', async () => {
+      (globalThis as unknown as { fetch: typeof fetch }).fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: '回答' } }], usage: {} }),
+      });
+
+      const repository = {
+        findVendorConfig: vi.fn().mockResolvedValue({
+          baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash',
+          encryptedApiKey: { algorithm: 'AES-256-GCM', keyVersion: 'v1', iv: 'a', authTag: 'b', ciphertext: 'c' },
+          configured: true,
+        }),
+        createUsageRecord: vi.fn().mockImplementation(async (input: Record<string, unknown>) =>
+          createMockUsageRecord({ metadata: input.metadata as AiCallUsageRecord['metadata'] }),
+        ),
+        listInstitutionUsageRecords: vi.fn(), listPlatformUsageSummary: vi.fn(),
+      };
+
+      vi.mock('@/modules/security/server/secretEncryption', () => ({ decryptSecret: vi.fn(() => 'mock-plain-key') }));
+
+      // 模拟带敏感字段的 chunk（实际搜索不会返回，但验证白名单过滤）
+      const knowledgeChunks = [{
+        knowledgeId: 'kb-1', knowledgeTitle: '指南', fileId: 'f-1', fileName: '指南.pdf',
+        chunkId: 'c-1', chunkIndex: 0, textPreview: '内容', matchReason: '匹配',
+      }] as Array<Record<string, unknown>>;
+
+      await requestInstitutionAiCallService({
+        repository, vendor: 'deepseek',
+        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: longQuestion },
+        knowledgeChunks: knowledgeChunks as never,
+      });
+
+      const metadata = JSON.stringify(repository.createUsageRecord.mock.calls[0]?.[0].metadata);
+      expect(metadata).not.toMatch(/storageKey|bucket|signedUrl|embedding|api_key|baseUrl|Authorization/i);
+      // 不含原始 question / 派生检索关键词
+      expect(metadata).not.toContain(longQuestion);
+      expect(metadata).not.toMatch(/"query"|"searchKeyword"/i);
+      // 白名单字段存在
+      const parsed = JSON.parse(metadata);
+      expect(parsed.knowledgeContext.sources[0]).toEqual({
+        knowledgeId: 'kb-1', knowledgeTitle: '指南', fileId: 'f-1', fileName: '指南.pdf',
+        chunkId: 'c-1', chunkIndex: 0, textPreview: '内容', matchReason: '匹配',
+      });
+    });
+
+    it('极短问题（如"随机问题"）不会进入 metadata', async () => {
+      let capturedMetadata: unknown = undefined;
+      (globalThis as unknown as { fetch: typeof fetch }).fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: '回答' } }], usage: {} }),
+      });
+
+      const repository = {
+        findVendorConfig: vi.fn().mockResolvedValue({
+          baseUrl: 'https://api.deepseek.com/v1', model: 'm',
+          encryptedApiKey: { algorithm: 'AES-256-GCM', keyVersion: 'v1', iv: 'a', authTag: 'b', ciphertext: 'c' },
+          configured: true,
+        }),
+        createUsageRecord: vi.fn().mockImplementation(async (input: Record<string, unknown>) => {
+          capturedMetadata = input.metadata;
+          return createMockUsageRecord({ metadata: input.metadata as AiCallUsageRecord['metadata'] });
+        }),
+        listInstitutionUsageRecords: vi.fn(), listPlatformUsageSummary: vi.fn(),
+      };
+
+      vi.mock('@/modules/security/server/secretEncryption', () => ({ decryptSecret: vi.fn(() => 'mock-plain-key') }));
+
+      await requestInstitutionAiCallService({
+        repository, vendor: 'deepseek',
+        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '随机问题' },
+        knowledgeChunks: [],
+      });
+
+      // 极短问题文本不应出现在 metadata 中
+      assertNoQuestionOrKeyword(capturedMetadata, '随机问题');
+    });
+
+    it('含客户姓名问题（如"张三术后疼痛怎么办"）不会进入 metadata', async () => {
+      let capturedMetadata: unknown = undefined;
+      (globalThis as unknown as { fetch: typeof fetch }).fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: '回答' } }], usage: {} }),
+      });
+
+      const repository = {
+        findVendorConfig: vi.fn().mockResolvedValue({
+          baseUrl: 'https://api.deepseek.com/v1', model: 'm',
+          encryptedApiKey: { algorithm: 'AES-256-GCM', keyVersion: 'v1', iv: 'a', authTag: 'b', ciphertext: 'c' },
+          configured: true,
+        }),
+        createUsageRecord: vi.fn().mockImplementation(async (input: Record<string, unknown>) => {
+          capturedMetadata = input.metadata;
+          return createMockUsageRecord({ metadata: input.metadata as AiCallUsageRecord['metadata'] });
+        }),
+        listInstitutionUsageRecords: vi.fn(), listPlatformUsageSummary: vi.fn(),
+      };
+
+      vi.mock('@/modules/security/server/secretEncryption', () => ({ decryptSecret: vi.fn(() => 'mock-plain-key') }));
+
+      const knowledgeChunks = [{
+        knowledgeId: 'kb-1', knowledgeTitle: '术后护理', fileId: 'f-1', fileName: '护理.pdf',
+        chunkId: 'c-1', chunkIndex: 0, textPreview: '术后疼痛可冷敷缓解。', matchReason: '匹配',
+      }];
+
+      await requestInstitutionAiCallService({
+        repository, vendor: 'deepseek',
+        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '张三术后疼痛怎么办' },
+        knowledgeChunks,
+      });
+
+      // 客户姓名 / 原始问题不应出现在 metadata 中
+      assertNoQuestionOrKeyword(capturedMetadata, '张三术后疼痛怎么办');
+      expect(JSON.stringify(capturedMetadata)).not.toContain('张三');
+    });
+
+    it('长指令问题不会进入 metadata', async () => {
+      let capturedMetadata: unknown = undefined;
+      (globalThis as unknown as { fetch: typeof fetch }).fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: '回答' } }], usage: {} }),
+      });
+
+      const repository = {
+        findVendorConfig: vi.fn().mockResolvedValue({
+          baseUrl: 'https://api.deepseek.com/v1', model: 'm',
+          encryptedApiKey: { algorithm: 'AES-256-GCM', keyVersion: 'v1', iv: 'a', authTag: 'b', ciphertext: 'c' },
+          configured: true,
+        }),
+        createUsageRecord: vi.fn().mockImplementation(async (input: Record<string, unknown>) => {
+          capturedMetadata = input.metadata;
+          return createMockUsageRecord({ metadata: input.metadata as AiCallUsageRecord['metadata'] });
+        }),
+        listInstitutionUsageRecords: vi.fn(), listPlatformUsageSummary: vi.fn(),
+      };
+
+      vi.mock('@/modules/security/server/secretEncryption', () => ({ decryptSecret: vi.fn(() => 'mock-plain-key') }));
+
+      await requestInstitutionAiCallService({
+        repository, vendor: 'deepseek',
+        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: longQuestion },
+        knowledgeChunks: [],
+      });
+
+      assertNoQuestionOrKeyword(capturedMetadata, longQuestion);
+    });
+
+    it('sensitive_input_rejected 不写 RAG metadata（metadata=null）', async () => {
+      let capturedMetadata: unknown = 'UNSET';
+      const fetchSpy = vi.fn();
+      (globalThis as unknown as { fetch: typeof fetch }).fetch = fetchSpy;
+
+      const repository = {
+        findVendorConfig: vi.fn(),
+        createUsageRecord: vi.fn().mockImplementation(async (input: Record<string, unknown>) => {
+          capturedMetadata = input.metadata;
+          return createMockUsageRecord({ status: 'sensitive_input_rejected' });
+        }),
+        listInstitutionUsageRecords: vi.fn(), listPlatformUsageSummary: vi.fn(),
+      };
+
+      const result = await requestInstitutionAiCallService({
+        repository, vendor: 'deepseek',
+        input: { tenantId: 't', institutionId: 'inst', userId: 'u', question: '身份证110101199001011234的客户' },
+      });
+
+      expect(result.status).toBe('sensitive_input_rejected');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      // 敏感拒绝不传 metadata -> undefined
+      expect(capturedMetadata).toBeUndefined();
+    });
+
+    it('buildAiCallUsageMetadata: textPreview 超过 300 字会防御性截断', () => {
+      const longText = '冷敷'.repeat(200); // 400 字
+      const metadata = buildAiCallUsageMetadata(
+        [{ knowledgeId: 'kb-1', knowledgeTitle: 't', fileId: 'f-1', fileName: 'f.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: longText, matchReason: 'm' }],
+      );
+      expect(metadata?.knowledgeContext?.sources[0].textPreview.length).toBeLessThanOrEqual(300);
+    });
+
+    it('buildAiCallUsageMetadata: kbChunks 为 undefined 时返回 null', () => {
+      expect(buildAiCallUsageMetadata(undefined)).toBeNull();
+    });
+
+    it('buildAiCallUsageMetadata: 不写入 query / searchKeyword 字段', () => {
+      const metadata = buildAiCallUsageMetadata(
+        [{ knowledgeId: 'kb-1', knowledgeTitle: 't', fileId: 'f-1', fileName: 'f.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '内容', matchReason: 'm' }],
+      );
+      const serialized = JSON.stringify(metadata);
+      expect(serialized).not.toMatch(/"query"|"searchKeyword"/i);
+      expect(metadata?.knowledgeContext?.used).toBe(true);
     });
   });
 });

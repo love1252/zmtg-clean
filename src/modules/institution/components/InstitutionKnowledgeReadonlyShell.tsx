@@ -80,6 +80,12 @@ type InstitutionAiCallUsageRecord = {
   latencyMs: number | null;
   status: string;
   errorCode: string | null;
+  metadata: {
+    knowledgeContext?: {
+      used: boolean;
+      sources: InstitutionAiCallKnowledgeContextSource[];
+    };
+  } | null;
   createdAt: string;
 };
 
@@ -1234,7 +1240,11 @@ export function InstitutionKnowledgeReadonlyShell() {
                 暂无 AI 调用记录
               </div>
             ) : (
-              aiUsageRecords.map((record) => (
+              aiUsageRecords.map((record) => {
+                const ragUsed = record.metadata?.knowledgeContext?.used === true;
+                const ragSources = record.metadata?.knowledgeContext?.sources ?? [];
+                const hasRagMetadata = Boolean(record.metadata?.knowledgeContext);
+                return (
                 <article key={record.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
                     <span>{record.provider} · {record.model}</span>
@@ -1268,9 +1278,34 @@ export function InstitutionKnowledgeReadonlyShell() {
                         {record.errorCode}
                       </span>
                     ) : null}
+                    {record.status === 'succeeded' && hasRagMetadata ? (
+                      <span
+                        className={cn(
+                          'rounded-full border px-2.5 py-1',
+                          ragUsed
+                            ? 'border-amber-200 bg-amber-50 text-amber-700'
+                            : 'border-slate-200 bg-slate-50 text-slate-500',
+                        )}
+                      >
+                        {ragUsed ? '已使用知识库' : '未使用知识库参考'}
+                      </span>
+                    ) : null}
                   </div>
+                  {record.status === 'succeeded' && ragUsed && ragSources.length > 0 ? (
+                    <div className="mt-2 space-y-1.5">
+                      {ragSources.map((source) => (
+                        <div key={source.chunkId} className="rounded-lg border border-amber-100 bg-white/70 px-2.5 py-1.5">
+                          <div className="text-xs font-semibold text-slate-500">
+                            {source.fileName} · 片段 {source.chunkIndex + 1}
+                          </div>
+                          <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-slate-600">{source.textPreview}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </article>
-              ))
+                );
+              })
             )}
           </div>
         </section>

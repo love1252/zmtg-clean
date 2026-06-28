@@ -7,6 +7,7 @@ import {
 } from '@/server/db/schema';
 import type { EncryptedSecretEnvelope } from '@/modules/security/server/secretEncryption';
 import type {
+  AiCallUsageMetadata,
   AiCallUsageRecord,
   AiCallUsageStatus,
   PlatformAiUsageSummary,
@@ -50,6 +51,7 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
       latencyMs: number | null;
       status: AiCallUsageStatus;
       errorCode: string | null;
+      metadata?: AiCallUsageMetadata;
     }): Promise<AiCallUsageRecord> {
       const rows = await database
         .insert(aiCallUsageRecords)
@@ -66,6 +68,7 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
           latencyMs: input.latencyMs,
           status: input.status,
           errorCode: input.errorCode,
+          metadata: input.metadata ?? null,
         })
         .returning();
 
@@ -85,6 +88,7 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
         latencyMs: row.latencyMs,
         status: row.status as AiCallUsageStatus,
         errorCode: row.errorCode,
+        metadata: (row.metadata as AiCallUsageMetadata | null) ?? null,
         createdAt: row.createdAt,
       };
     },
@@ -118,6 +122,7 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
           latencyMs: row.latencyMs,
           status: row.status as AiCallUsageStatus,
           errorCode: row.errorCode,
+          metadata: (row.metadata as AiCallUsageMetadata | null) ?? null,
           createdAt: row.createdAt,
         }));
     },

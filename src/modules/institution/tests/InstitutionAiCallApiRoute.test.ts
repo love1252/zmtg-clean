@@ -420,6 +420,62 @@ describe('机构端 AI 调用记录 API route', () => {
     const response = await aiCallUsageGet(new Request('http://localhost/api/institution/knowledge-management/ai-call/usage'));
     expect(response.status).toBe(403);
   });
+
+  it('usage API 返回 RAG metadata 摘要（used=true + sources）', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    const { listInstitutionAiCallUsageService } = await import('@/modules/institution/server/institution-ai-call-service');
+    vi.mocked(listInstitutionAiCallUsageService).mockResolvedValue({
+      requestId: 'institution-ai-call-usage',
+      readonly: true,
+      dataSource: 'repository',
+      records: [{
+        id: 'rec-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
+        actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: 10, completionTokens: 5,
+        totalTokens: 15, latencyMs: 100, status: 'succeeded', errorCode: null,
+        metadata: {
+          knowledgeContext: {
+            used: true,
+            sources: [{ knowledgeId: 'kb-1', knowledgeTitle: '指南', fileId: 'f-1', fileName: '指南.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷需间隔观察。', matchReason: '包含"冷敷"' }],
+          },
+        },
+        createdAt: new Date().toISOString(),
+      }],
+      emptyState: { title: '暂无 AI 调用记录', description: '当前机构还没有发起过 AI 调用。' },
+    });
+
+    const response = await aiCallUsageGet(new Request('http://localhost/api/institution/knowledge-management/ai-call/usage'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.records[0].metadata.knowledgeContext.used).toBe(true);
+    expect(body.records[0].metadata.knowledgeContext.sources).toHaveLength(1);
+    expect(body.records[0].metadata.knowledgeContext.sources[0].fileName).toBe('指南.pdf');
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toMatch(/storageKey|bucket|signedUrl|embedding|api_key|baseUrl|Authorization/i);
+    // usage API 不返回 query / searchKeyword / 原始 question
+    expect(serialized).not.toMatch(/"query"|"searchKeyword"/i);
+  });
+
+  it('usage API 旧记录 metadata=null 时不崩且不伪造 RAG', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    const { listInstitutionAiCallUsageService } = await import('@/modules/institution/server/institution-ai-call-service');
+    vi.mocked(listInstitutionAiCallUsageService).mockResolvedValue({
+      requestId: 'institution-ai-call-usage',
+      readonly: true,
+      dataSource: 'repository',
+      records: [
+        { id: 'old-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: 10, completionTokens: 5, totalTokens: 15, latencyMs: 100, status: 'succeeded', errorCode: null, metadata: null, createdAt: new Date().toISOString() },
+        { id: 'rej-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null, status: 'rejected', errorCode: 'quota_exceeded_ai_calls', metadata: null, createdAt: new Date().toISOString() },
+      ],
+      emptyState: { title: '暂无 AI 调用记录', description: '当前机构还没有发起过 AI 调用。' },
+    });
+
+    const response = await aiCallUsageGet(new Request('http://localhost/api/institution/knowledge-management/ai-call/usage'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.records[0].metadata).toBeNull();
+    // rejected 记录 metadata=null，不伪造 RAG
+    expect(body.records[1].metadata).toBeNull();
+  });
 });
 
 describe('平台端 AI 用量聚合 API route', () => {

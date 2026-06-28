@@ -7,6 +7,30 @@ import { deriveKnowledgeSearchKeyword } from '@/modules/institution/domain/insti
 
 export type AiCallUsageStatus = 'succeeded' | 'failed' | 'sensitive_input_rejected' | 'rate_limited' | 'provider_unavailable' | 'rejected';
 
+/**
+ * 持久化到 ai_call_usage_records.metadata 的 RAG 摘要。
+ * 仅在 succeeded 调用时写入；rejected / failed / sensitive_input_rejected 不写入。
+ * sources 仅保存白名单字段，禁止 storageKey / bucket / signedUrl / embedding /
+ * provider raw response / prompt 原文 / 原始 question / 派生检索关键词 / API key /
+ * baseUrl / Authorization。
+ * 不保存原始用户问题 / prompt / 派生检索关键词；检索关键词仅运行时使用，不持久化。
+ */
+export type AiCallUsageMetadata = {
+  knowledgeContext?: {
+    used: boolean;
+    sources: Array<{
+      knowledgeId: string;
+      knowledgeTitle: string;
+      fileId: string;
+      fileName: string;
+      chunkId: string;
+      chunkIndex: number;
+      textPreview: string;
+      matchReason: string;
+    }>;
+  };
+} | null;
+
 export type AiCallUsageRecord = {
   id: string;
   tenantId: string;
@@ -20,6 +44,7 @@ export type AiCallUsageRecord = {
   latencyMs: number | null;
   status: AiCallUsageStatus;
   errorCode: string | null;
+  metadata: AiCallUsageMetadata;
   createdAt: Date;
 };
 
@@ -43,6 +68,50 @@ export type KnowledgeContext = {
   query: string;
   sources: KnowledgeContextSource[];
 };
+
+const METADATA_TEXT_PREVIEW_MAX = 300;
+
+/**
+ * 从 KB 检索结果构造受控 RAG metadata。
+ * 仅提取白名单字段，并对 textPreview 做防御性截断（<=300）。
+ * 不接收 / 不写入原始 question / prompt / 派生检索关键词；检索关键词仅运行时使用。
+ * kbChunks 为 undefined 时返回 null（不写入 RAG metadata）。
+ */
+export function buildAiCallUsageMetadata(
+  kbChunks:
+    | Array<{
+      knowledgeId: string;
+      knowledgeTitle: string;
+      fileId: string;
+      fileName: string;
+      chunkId: string;
+      chunkIndex: number;
+      textPreview: string;
+      matchReason: string;
+    }>
+    | undefined,
+): AiCallUsageMetadata {
+  if (!kbChunks) return null;
+
+  return {
+    knowledgeContext: {
+      used: kbChunks.length > 0,
+      sources: kbChunks.map((chunk) => ({
+        knowledgeId: chunk.knowledgeId,
+        knowledgeTitle: chunk.knowledgeTitle,
+        fileId: chunk.fileId,
+        fileName: chunk.fileName,
+        chunkId: chunk.chunkId,
+        chunkIndex: chunk.chunkIndex,
+        textPreview:
+          chunk.textPreview.length > METADATA_TEXT_PREVIEW_MAX
+            ? `${chunk.textPreview.slice(0, METADATA_TEXT_PREVIEW_MAX - 1)}…`
+            : chunk.textPreview,
+        matchReason: chunk.matchReason,
+      })),
+    },
+  };
+}
 
 export type InstitutionAiCallResult = {
   status: 'created' | 'validation_failed' | 'not_found' | 'sensitive_input_rejected' | 'service_unavailable' | 'rate_limited' | 'provider_unavailable';
@@ -104,6 +173,7 @@ export type AiCallUsageRepository = {
     latencyMs: number | null;
     status: AiCallUsageStatus;
     errorCode: string | null;
+    metadata?: AiCallUsageMetadata;
   }): Promise<AiCallUsageRecord>;
   listInstitutionUsageRecords(input: {
     tenantId: string;
@@ -263,9 +333,11 @@ export async function requestInstitutionAiCallService(input: {
   // 使用 deriveKnowledgeSearchKeyword 从长问题中提取可命中短词，避免
   // 整句提问无法匹配知识库片段
   // 不可由客户端覆盖 tenantId/institutionId
+  // searchKeyword 始终派生一次，同时作为持久化 metadata 的受控检索关键词
+  // （不保存原始 question / prompt）
   let kbChunks = input.knowledgeChunks;
+  const searchKeyword = deriveKnowledgeSearchKeyword(question);
   if (input.db && (!kbChunks || kbChunks.length === 0)) {
-    const searchKeyword = deriveKnowledgeSearchKeyword(question);
     if (searchKeyword) {
       try {
         const searchResult = await searchInstitutionKnowledgeChunksService({
@@ -442,6 +514,10 @@ export async function requestInstitutionAiCallService(input: {
     const completionTokens = usage.completion_tokens ?? estimateTokens(answer);
     const totalTokens = usage.total_tokens ?? (promptTokens + completionTokens);
 
+    // 成功调用写入 RAG metadata（仅 used + sources 白名单字段，用于后续追溯）
+    // 不保存原始 question / prompt / 派生检索关键词
+    const metadata = buildAiCallUsageMetadata(kbChunks);
+
     const record = await input.repository.createUsageRecord({
       id: generateRecordId(),
       tenantId,
@@ -455,6 +531,7 @@ export async function requestInstitutionAiCallService(input: {
       latencyMs,
       status: 'succeeded',
       errorCode: null,
+      metadata,
     });
 
     const knowledgeContext: KnowledgeContext | undefined = kbChunks
