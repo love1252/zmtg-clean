@@ -1229,6 +1229,7 @@ export const aiCallUsageRecords = pgTable(
     latencyMs: integer('latency_ms'),
     status: varchar('status', { length: 32 }).notNull(),
     errorCode: varchar('error_code', { length: 64 }),
+    metadata: jsonb('metadata'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({

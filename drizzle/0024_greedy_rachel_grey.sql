@@ -1,0 +1,1 @@
+ALTER TABLE "ai_call_usage_records" ADD COLUMN "metadata" jsonb;
