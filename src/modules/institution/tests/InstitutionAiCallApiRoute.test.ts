@@ -579,4 +579,57 @@ describe('AI 试问 RAG 知识库检索闭环（安全顺序）', () => {
     expect(serialized).not.toContain('password');
     expect(serialized).toContain('知识库检索');
   });
+
+  it('响应中 knowledgeContext.used=true 且 sources 字段受控', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true, current: 5, limit: 100, resource: 'ai_calls',
+    });
+    vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
+      status: 'created',
+      answer: '根据参考资料回答。',
+      record: { id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
+      knowledgeContext: {
+        used: true,
+        query: '冷敷后怎么护理？',
+        sources: [{ knowledgeId: 'kb-1', knowledgeTitle: '指南', fileId: 'f-1', fileName: '指南.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷后保持清洁。', matchReason: '包含"冷敷"' }],
+      },
+    });
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '冷敷后怎么护理？' }),
+    }));
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.knowledgeContext.used).toBe(true);
+    expect(body.knowledgeContext.sources).toHaveLength(1);
+    expect(body.knowledgeContext.sources[0].fileName).toBe('指南.pdf');
+    expect(body.knowledgeContext.sources[0].textPreview).toBe('冷敷后保持清洁。');
+    // 不泄露敏感字段
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toMatch(/storageKey|bucket|signedUrl|embedding|api_key|baseUrl|Authorization/i);
+  });
+
+  it('knowledgeContext.used=false 时 sources 为空数组', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true, current: 5, limit: 100, resource: 'ai_calls',
+    });
+    vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
+      status: 'created',
+      answer: '知识库暂无相关依据，建议人工确认。',
+      record: { id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
+      knowledgeContext: { used: false, query: '随机问题', sources: [] },
+    });
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '随机问题' }),
+    }));
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.knowledgeContext.used).toBe(false);
+    expect(body.knowledgeContext.sources).toEqual([]);
+  });
 });
