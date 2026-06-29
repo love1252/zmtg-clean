@@ -106,6 +106,15 @@ type InstitutionAiCallKnowledgeContext = {
   sources: InstitutionAiCallKnowledgeContextSource[];
 };
 
+type InstitutionAiQuotaItem = {
+  resource: string;
+  label: string;
+  used: number | null;
+  limit: number | null;
+  remaining: number | null;
+  status: string;
+};
+
 const statusLabels: Record<InstitutionKnowledgeItemDto['status'], string> = {
   ready: '可用',
   pending: '处理中',
@@ -161,6 +170,28 @@ function formatDate(value: string) {
   }).format(date);
 }
 
+function getAiUsageStatusLabel(record: InstitutionAiCallUsageRecord) {
+  if (record.errorCode === 'quota_exceeded_ai_calls') return 'AI 调用额度已用尽';
+  if (record.status === 'sensitive_input_rejected') return '敏感输入已拒绝';
+  if (record.status === 'rate_limited') return '供应商限流';
+  if (record.status === 'provider_unavailable') return '供应商暂不可用';
+  if (record.status === 'succeeded') return '成功';
+  if (record.status === 'failed') return '调用失败';
+  return '调用失败';
+}
+
+function getAiUsageStatusTone(record: InstitutionAiCallUsageRecord) {
+  if (record.status === 'succeeded') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (record.errorCode === 'quota_exceeded_ai_calls' || record.status === 'sensitive_input_rejected') {
+    return 'border-amber-200 bg-amber-50 text-amber-700';
+  }
+  return 'border-rose-200 bg-rose-50 text-rose-700';
+}
+
+function formatQuotaNumber(value: number | null) {
+  return value === null ? '-' : String(value);
+}
+
 export function InstitutionKnowledgeReadonlyShell() {
   const [keywordInput, setKeywordInput] = useState('');
   const [keyword, setKeyword] = useState('');
@@ -195,6 +226,8 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [aiKnowledgeContext, setAiKnowledgeContext] = useState<InstitutionAiCallKnowledgeContext | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiVendor, setAiVendor] = useState('deepseek');
+  const [aiQuotaItem, setAiQuotaItem] = useState<InstitutionAiQuotaItem | null>(null);
+  const [aiQuotaMessage, setAiQuotaMessage] = useState('正在读取 AI 调用额度...');
   const [aiUsageRecords, setAiUsageRecords] = useState<InstitutionAiCallUsageRecord[]>([]);
   const [aiUsageMessage, setAiUsageMessage] = useState('点击刷新查看 AI 调用记录');
   const [isAiUsageLoading, setIsAiUsageLoading] = useState(false);
@@ -246,6 +279,10 @@ export function InstitutionKnowledgeReadonlyShell() {
     };
   }, [keyword, page, refreshKey]);
 
+  useEffect(() => {
+    void loadAiQuota();
+  }, []);
+
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPage(1);
@@ -254,6 +291,34 @@ export function InstitutionKnowledgeReadonlyShell() {
 
   function refresh() {
     setRefreshKey((current) => current + 1);
+  }
+
+  async function loadAiQuota() {
+    try {
+      const response = await fetch('/api/institution/entitlement-usage', {
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => null);
+      const items = Array.isArray(payload?.items) ? payload.items as InstitutionAiQuotaItem[] : [];
+      const aiItem = items.find((item) => item.resource === 'ai_calls') ?? null;
+      setAiQuotaItem(aiItem);
+      if (!response.ok || !aiItem) {
+        setAiQuotaMessage('AI 调用额度暂时不可用，请联系平台管理员确认套餐。');
+        return;
+      }
+      if (aiItem.limit === null) {
+        setAiQuotaMessage('当前套餐未配置 AI 调用额度，请联系平台管理员。');
+        return;
+      }
+      if (aiItem.remaining === 0 || aiItem.status === 'exceeded') {
+        setAiQuotaMessage('本月 AI 调用额度已用尽，请联系平台管理员调整套餐。');
+        return;
+      }
+      setAiQuotaMessage('本月 AI 调用额度可用，接近上限时请先人工确认是否继续调用。');
+    } catch {
+      setAiQuotaItem(null);
+      setAiQuotaMessage('AI 调用额度暂时不可用，请稍后刷新或联系平台管理员。');
+    }
   }
 
   async function handleUpload(event: React.FormEvent<HTMLFormElement>) {
@@ -555,7 +620,8 @@ export function InstitutionKnowledgeReadonlyShell() {
       const latencyInfo = record && typeof record.latencyMs === 'number'
         ? `，耗时 ${record.latencyMs}ms`
         : '';
-      setAiMessage(`AI 回答已生成${tokenInfo}${latencyInfo}`);
+      setAiMessage(`AI 回答已生成${tokenInfo}${latencyInfo}，请人工确认后再用于服务沟通`);
+      void loadAiQuota();
     } catch {
       setAiAnswer(null);
       setAiMessage('AI 调用失败，请稍后重试');
@@ -1132,7 +1198,7 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">知识库 AI 试问</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">AI 试问将自动参考本机构知识库中的匹配片段，辅助生成更可靠的回答。</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">AI 试问将自动参考本机构知识库中的匹配片段，辅助生成更可靠的回答；结果需人工确认。</p>
             </div>
             <form onSubmit={requestAiCall} className="flex w-full flex-col gap-2 lg:w-[660px]">
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -1170,6 +1236,24 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div
             className={cn(
               'mt-4 rounded-xl border px-3 py-2 text-xs font-semibold',
+              aiQuotaItem?.remaining === 0 || aiQuotaItem?.status === 'exceeded'
+                ? 'border-rose-200 bg-rose-50 text-rose-700'
+                : aiQuotaItem
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border-slate-200 bg-slate-50 text-slate-500',
+            )}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span>本月 AI 调用额度</span>
+              <span>已用 {formatQuotaNumber(aiQuotaItem?.used ?? null)}</span>
+              <span>上限 {formatQuotaNumber(aiQuotaItem?.limit ?? null)}</span>
+              <span>剩余 {formatQuotaNumber(aiQuotaItem?.remaining ?? null)}</span>
+            </div>
+            <p className="mt-1 text-xs font-medium">{aiQuotaMessage}</p>
+          </div>
+          <div
+            className={cn(
+              'mt-3 rounded-xl border px-3 py-2 text-xs font-semibold',
               aiAnswer ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-slate-200 bg-slate-50 text-slate-500',
             )}
           >
@@ -1219,7 +1303,7 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">AI 调用记录</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">查看本机构最近 AI 调用的用量、模型和状态。</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">查看本机构最近 AI 调用的用量、模型和状态；AI 结果需人工确认。</p>
             </div>
             <button
               type="button"
@@ -1254,14 +1338,10 @@ export function InstitutionKnowledgeReadonlyShell() {
                     <span
                       className={cn(
                         'rounded-full border px-2.5 py-1',
-                        record.status === 'succeeded'
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                          : record.status === 'rejected'
-                            ? 'border-amber-200 bg-amber-50 text-amber-700'
-                            : 'border-amber-200 bg-amber-50 text-amber-700',
+                        getAiUsageStatusTone(record),
                       )}
                     >
-                      {record.status === 'succeeded' ? '成功' : record.status === 'rejected' ? '超限拒绝' : record.status === 'rate_limited' ? '限流' : '失败'}
+                      {getAiUsageStatusLabel(record)}
                     </span>
                     {record.totalTokens ? (
                       <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-violet-700">
@@ -1301,6 +1381,12 @@ export function InstitutionKnowledgeReadonlyShell() {
                           <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-slate-600">{source.textPreview}</p>
                         </div>
                       ))}
+                      <p className="text-xs font-semibold text-amber-600">AI 参考片段仍需人工确认，不可直接作为诊疗结论。</p>
+                    </div>
+                  ) : null}
+                  {record.status === 'succeeded' && !hasRagMetadata ? (
+                    <div className="mt-2 rounded-lg border border-slate-200 bg-white/70 px-2.5 py-1.5 text-xs font-semibold text-slate-500">
+                      旧记录未记录知识库上下文
                     </div>
                   ) : null}
                 </article>
