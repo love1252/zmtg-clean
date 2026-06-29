@@ -76,7 +76,7 @@ afterEach(() => {
 });
 
 describe('平台端 AI 模型与用量只读面板', () => {
-  it('默认展示 AI 用量与 Credits 明细空态', async () => {
+  it('默认展示 AI 用量与积分明细空态', async () => {
     const fetchMock = stubFetch(vi.fn(async () => new Response(JSON.stringify({
       requestId: 'platform-ai-usage-credits',
       readonly: true,
@@ -99,8 +99,8 @@ describe('平台端 AI 模型与用量只读面板', () => {
 
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(screen.getByRole('heading', { name: 'AI 用量与 Credits 明细' })).toBeInTheDocument();
-    expect(screen.getByText('汇总和明细均来自 AI 调用记录，只读展示计量状态，不执行扣减、导出或 provider 调用。')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    expect(screen.getByText('汇总和明细均来自 AI 调用记录，只读展示计量状态，不执行扣减、导出或模型厂商调用。')).toBeInTheDocument();
     expect(await screen.findByText('暂无 AI 用量明细')).toBeInTheDocument();
     expect(screen.getByText('当前过滤条件下没有 AI 调用记录。')).toBeInTheDocument();
     expect(screen.getAllByText('0').length).toBeGreaterThan(0);
@@ -166,7 +166,7 @@ describe('平台端 AI 模型与用量只读面板', () => {
     const banner = bannerHeading.closest('[data-platform-banner="true"]');
     expect(banner).not.toBeNull();
     expect(screen.queryByText(/当前未接入真实 AI 调用日志/)).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'AI 用量与 Credits 明细' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：AI用量与费用' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /同步模型/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /测试调用/ })).not.toBeInTheDocument();

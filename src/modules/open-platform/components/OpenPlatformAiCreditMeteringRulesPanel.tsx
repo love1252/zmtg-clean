@@ -89,9 +89,9 @@ function positiveInteger(value: string) {
 
 function errorMessage(error: OpenPlatformAiCreditMeteringRulesClientError) {
   if (error.kind === 'unauthorized') return '登录状态已失效，请重新登录平台端。';
-  if (error.kind === 'forbidden') return '当前账号没有管理 AI Credits 计量规则的权限。';
+  if (error.kind === 'forbidden') return '当前账号没有管理 AI 积分计量规则的权限。';
   if (error.kind === 'validation_error') return `规则校验失败：${error.errors?.join('、') ?? error.message}`;
-  if (error.kind === 'conflict') return '规则版本已存在，请调整 meteringVersion。';
+  if (error.kind === 'conflict') return '规则版本已存在，请调整计量版本。';
   if (error.kind === 'not_found') return '计量规则不存在或已被移除。';
   if (error.kind === 'service_unavailable') return '计量规则服务暂不可用，请稍后重试。';
   return error.message;
@@ -109,13 +109,13 @@ function validateCreateForm(form: RuleFormState): { ok: true; payload: CreateOpe
   const effectiveFrom = datetimeLocalToIso(form.effectiveFrom);
   const effectiveTo = form.effectiveTo.trim() ? datetimeLocalToIso(form.effectiveTo) : null;
 
-  if (!provider || !model || !meteringVersion) return { ok: false, message: 'provider、model 和 meteringVersion 必填。' };
-  if (inputTokenWeight === null || outputTokenWeight === null || modelMultiplier === null) return { ok: false, message: 'token 权重和模型倍率必须为正数。' };
-  if (ragCreditSurcharge === null) return { ok: false, message: 'RAG surcharge 必须为非负整数。' };
-  if (creditsPerStandardTokenUnit === null) return { ok: false, message: 'creditsPerStandardTokenUnit 必须为正整数。' };
-  if (!effectiveFrom) return { ok: false, message: 'effectiveFrom 必须为有效时间。' };
-  if (form.effectiveTo.trim() && !effectiveTo) return { ok: false, message: 'effectiveTo 必须为有效时间。' };
-  if (effectiveTo && new Date(effectiveTo).getTime() <= new Date(effectiveFrom).getTime()) return { ok: false, message: 'effectiveTo 必须晚于 effectiveFrom。' };
+  if (!provider || !model || !meteringVersion) return { ok: false, message: '模型厂商、模型名称和计量版本必填。' };
+  if (inputTokenWeight === null || outputTokenWeight === null || modelMultiplier === null) return { ok: false, message: 'Token 权重和模型倍率必须为正数。' };
+  if (ragCreditSurcharge === null) return { ok: false, message: '知识库附加积分必须为非负整数。' };
+  if (creditsPerStandardTokenUnit === null) return { ok: false, message: '每标准 Token 单位积分必须为正整数。' };
+  if (!effectiveFrom) return { ok: false, message: '生效开始必须为有效时间。' };
+  if (form.effectiveTo.trim() && !effectiveTo) return { ok: false, message: '生效结束必须为有效时间。' };
+  if (effectiveTo && new Date(effectiveTo).getTime() <= new Date(effectiveFrom).getTime()) return { ok: false, message: '生效结束必须晚于生效开始。' };
 
   return {
     ok: true,
@@ -281,15 +281,15 @@ export function OpenPlatformAiCreditMeteringRulesPanel() {
     const effectiveFrom = datetimeLocalToIso(draft.effectiveFrom);
     const effectiveTo = draft.effectiveTo.trim() ? datetimeLocalToIso(draft.effectiveTo) : null;
     if (!effectiveFrom) {
-      setError('effectiveFrom 必须为有效时间。');
+      setError('生效开始必须为有效时间。');
       return;
     }
     if (draft.effectiveTo.trim() && !effectiveTo) {
-      setError('effectiveTo 必须为有效时间。');
+      setError('生效结束必须为有效时间。');
       return;
     }
     if (effectiveTo && new Date(effectiveTo).getTime() <= new Date(effectiveFrom).getTime()) {
-      setError('effectiveTo 必须晚于 effectiveFrom。');
+      setError('生效结束必须晚于生效开始。');
       return;
     }
     await patchRule(record.id, { effectiveFrom, effectiveTo }, '计量规则生效期已更新');
@@ -300,8 +300,8 @@ export function OpenPlatformAiCreditMeteringRulesPanel() {
       <PlatformSectionBanner
         headingId="ai-credit-metering-rules-heading"
         headingLevel="h1"
-        title="AI Credits 计量规则"
-        description="平台端仅维护 AI Credits 低敏计量规则，不展示 provider 凭证、不触发真实模型调用，也不会把规则明细暴露到机构端。"
+        title="AI 积分计量规则"
+        description="平台端仅维护 AI 积分低敏计量规则，不展示模型厂商凭证、不触发真实模型调用，也不会把规则明细暴露到机构端。"
       />
 
       {message ? (
@@ -317,19 +317,19 @@ export function OpenPlatformAiCreditMeteringRulesPanel() {
         </div>
       ) : null}
 
-      <section className={sectionShell} aria-label="AI Credits 计量规则筛选">
+      <section className={sectionShell} aria-label="AI 积分计量规则筛选">
         <div className="flex items-center gap-2 text-lg font-semibold text-slate-950">
           <SlidersHorizontal className="h-5 w-5 text-blue-600" />
           规则筛选
         </div>
         <form onSubmit={handleFilterSubmit} className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_160px_auto_auto]">
-          <Field label="provider">
+          <Field label="模型厂商">
             <input className={fieldShell} value={providerFilter} onChange={(event) => setProviderFilter(event.target.value)} placeholder="deepseek" />
           </Field>
-          <Field label="model">
+          <Field label="模型名称">
             <input className={fieldShell} value={modelFilter} onChange={(event) => setModelFilter(event.target.value)} placeholder="deepseek-v4-flash" />
           </Field>
-          <Field label="enabled">
+          <Field label="启用状态">
             <select className={fieldShell} value={enabledFilter} onChange={(event) => setEnabledFilter(event.target.value as EnabledFilter)}>
               <option value="all">全部</option>
               <option value="enabled">已启用</option>
@@ -341,28 +341,28 @@ export function OpenPlatformAiCreditMeteringRulesPanel() {
         </form>
       </section>
 
-      <section className={sectionShell} aria-label="创建 AI Credits 计量规则">
+      <section className={sectionShell} aria-label="创建 AI 积分计量规则">
         <div>
           <h2 className="text-lg font-semibold text-slate-950">创建规则</h2>
-          <p className="mt-1 text-sm leading-6 text-slate-500">权重变更请创建新的 meteringVersion；本表单不会写入 provider 凭证或触发 AI 调用。</p>
+          <p className="mt-1 text-sm leading-6 text-slate-500">权重变更请创建新的计量版本；本表单不会写入模型厂商凭证或触发 AI 调用。</p>
         </div>
         <form onSubmit={handleCreate} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Field label="provider"><input aria-label="创建 provider" className={fieldShell} value={form.provider} onChange={(event) => setForm((current) => ({ ...current, provider: event.target.value }))} /></Field>
-          <Field label="model"><input aria-label="创建 model" className={fieldShell} value={form.model} onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))} /></Field>
-          <Field label="meteringVersion"><input aria-label="创建 meteringVersion" className={fieldShell} value={form.meteringVersion} onChange={(event) => setForm((current) => ({ ...current, meteringVersion: event.target.value }))} /></Field>
-          <Field label="enabled">
-            <select aria-label="创建 enabled" className={fieldShell} value={String(form.enabled)} onChange={(event) => setForm((current) => ({ ...current, enabled: event.target.value === 'true' }))}>
+          <Field label="模型厂商"><input aria-label="创建模型厂商" className={fieldShell} value={form.provider} onChange={(event) => setForm((current) => ({ ...current, provider: event.target.value }))} /></Field>
+          <Field label="模型名称"><input aria-label="创建模型名称" className={fieldShell} value={form.model} onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))} /></Field>
+          <Field label="计量版本"><input aria-label="创建计量版本" className={fieldShell} value={form.meteringVersion} onChange={(event) => setForm((current) => ({ ...current, meteringVersion: event.target.value }))} /></Field>
+          <Field label="启用状态">
+            <select aria-label="创建启用状态" className={fieldShell} value={String(form.enabled)} onChange={(event) => setForm((current) => ({ ...current, enabled: event.target.value === 'true' }))}>
               <option value="true">已启用</option>
               <option value="false">已停用</option>
             </select>
           </Field>
-          <Field label="inputTokenWeight"><input aria-label="创建 inputTokenWeight" type="number" step="0.000001" className={fieldShell} value={form.inputTokenWeight} onChange={(event) => setForm((current) => ({ ...current, inputTokenWeight: event.target.value }))} /></Field>
-          <Field label="outputTokenWeight"><input aria-label="创建 outputTokenWeight" type="number" step="0.000001" className={fieldShell} value={form.outputTokenWeight} onChange={(event) => setForm((current) => ({ ...current, outputTokenWeight: event.target.value }))} /></Field>
-          <Field label="modelMultiplier"><input aria-label="创建 modelMultiplier" type="number" step="0.000001" className={fieldShell} value={form.modelMultiplier} onChange={(event) => setForm((current) => ({ ...current, modelMultiplier: event.target.value }))} /></Field>
-          <Field label="ragCreditSurcharge"><input aria-label="创建 ragCreditSurcharge" type="number" step="1" className={fieldShell} value={form.ragCreditSurcharge} onChange={(event) => setForm((current) => ({ ...current, ragCreditSurcharge: event.target.value }))} /></Field>
-          <Field label="creditsPerStandardTokenUnit"><input aria-label="创建 creditsPerStandardTokenUnit" type="number" step="1" className={fieldShell} value={form.creditsPerStandardTokenUnit} onChange={(event) => setForm((current) => ({ ...current, creditsPerStandardTokenUnit: event.target.value }))} /></Field>
-          <Field label="effectiveFrom"><input aria-label="创建 effectiveFrom" type="datetime-local" className={fieldShell} value={form.effectiveFrom} onChange={(event) => setForm((current) => ({ ...current, effectiveFrom: event.target.value }))} /></Field>
-          <Field label="effectiveTo"><input aria-label="创建 effectiveTo" type="datetime-local" className={fieldShell} value={form.effectiveTo} onChange={(event) => setForm((current) => ({ ...current, effectiveTo: event.target.value }))} /></Field>
+          <Field label="输入 Token 权重"><input aria-label="创建输入 Token 权重" type="number" step="0.000001" className={fieldShell} value={form.inputTokenWeight} onChange={(event) => setForm((current) => ({ ...current, inputTokenWeight: event.target.value }))} /></Field>
+          <Field label="输出 Token 权重"><input aria-label="创建输出 Token 权重" type="number" step="0.000001" className={fieldShell} value={form.outputTokenWeight} onChange={(event) => setForm((current) => ({ ...current, outputTokenWeight: event.target.value }))} /></Field>
+          <Field label="模型倍率"><input aria-label="创建模型倍率" type="number" step="0.000001" className={fieldShell} value={form.modelMultiplier} onChange={(event) => setForm((current) => ({ ...current, modelMultiplier: event.target.value }))} /></Field>
+          <Field label="知识库附加积分"><input aria-label="创建知识库附加积分" type="number" step="1" className={fieldShell} value={form.ragCreditSurcharge} onChange={(event) => setForm((current) => ({ ...current, ragCreditSurcharge: event.target.value }))} /></Field>
+          <Field label="每标准 Token 单位积分"><input aria-label="创建每标准 Token 单位积分" type="number" step="1" className={fieldShell} value={form.creditsPerStandardTokenUnit} onChange={(event) => setForm((current) => ({ ...current, creditsPerStandardTokenUnit: event.target.value }))} /></Field>
+          <Field label="生效开始"><input aria-label="创建生效开始" type="datetime-local" className={fieldShell} value={form.effectiveFrom} onChange={(event) => setForm((current) => ({ ...current, effectiveFrom: event.target.value }))} /></Field>
+          <Field label="生效结束"><input aria-label="创建生效结束" type="datetime-local" className={fieldShell} value={form.effectiveTo} onChange={(event) => setForm((current) => ({ ...current, effectiveTo: event.target.value }))} /></Field>
           <button type="submit" disabled={isMutating} className={cn(buttonShell, 'self-end bg-blue-600 text-white hover:bg-blue-700')}>
             {isMutating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             创建规则
@@ -370,7 +370,7 @@ export function OpenPlatformAiCreditMeteringRulesPanel() {
         </form>
       </section>
 
-      <section className={sectionShell} aria-label="AI Credits 计量规则列表">
+      <section className={sectionShell} aria-label="AI 积分计量规则列表">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">规则列表</h2>
@@ -385,7 +385,7 @@ export function OpenPlatformAiCreditMeteringRulesPanel() {
         {loadState === 'loading' ? (
           <div className="mt-5 flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
             <LoaderCircle className="h-4 w-4 animate-spin" />
-            正在加载 AI Credits 计量规则...
+            正在加载 AI 积分计量规则...
           </div>
         ) : null}
 
@@ -395,7 +395,7 @@ export function OpenPlatformAiCreditMeteringRulesPanel() {
 
         {loadState === 'ready' && records.length === 0 ? (
           <div className="mt-5 rounded-xl border border-dashed border-[#dbe6f3] bg-[#f8fafc] px-4 py-8 text-center text-sm text-slate-500">
-            暂无 AI Credits 计量规则，请创建第一条规则。
+            暂无 AI 积分计量规则，请创建第一条规则。
           </div>
         ) : null}
 
@@ -404,15 +404,15 @@ export function OpenPlatformAiCreditMeteringRulesPanel() {
             <table className="min-w-[1200px] w-full divide-y divide-[#e6edf5] text-left text-sm">
               <thead className="bg-[#f8fafc] text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-3">provider / model</th>
-                  <th className="px-3 py-3">meteringVersion</th>
-                  <th className="px-3 py-3">enabled</th>
-                  <th className="px-3 py-3">input / output</th>
-                  <th className="px-3 py-3">multiplier</th>
-                  <th className="px-3 py-3">surcharge / unit</th>
-                  <th className="px-3 py-3">effectiveFrom</th>
-                  <th className="px-3 py-3">effectiveTo</th>
-                  <th className="px-3 py-3">updatedAt</th>
+                  <th className="px-3 py-3">模型厂商 / 模型名称</th>
+                  <th className="px-3 py-3">计量版本</th>
+                  <th className="px-3 py-3">启用状态</th>
+                  <th className="px-3 py-3">输入 / 输出权重</th>
+                  <th className="px-3 py-3">模型倍率</th>
+                  <th className="px-3 py-3">知识库附加 / 单位积分</th>
+                  <th className="px-3 py-3">生效开始</th>
+                  <th className="px-3 py-3">生效结束</th>
+                  <th className="px-3 py-3">更新时间</th>
                   <th className="px-3 py-3">操作</th>
                 </tr>
               </thead>
@@ -432,7 +432,7 @@ export function OpenPlatformAiCreditMeteringRulesPanel() {
                       <td className="px-3 py-3 align-top text-slate-700">{record.ragCreditSurcharge} / {record.creditsPerStandardTokenUnit}</td>
                       <td className="px-3 py-3 align-top">
                         <input
-                          aria-label={`effectiveFrom ${record.meteringVersion}`}
+                          aria-label={`生效开始 ${record.meteringVersion}`}
                           type="datetime-local"
                           className="h-9 rounded-lg border border-[#dbe6f3] px-2 text-xs text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                           value={draft.effectiveFrom}
@@ -442,7 +442,7 @@ export function OpenPlatformAiCreditMeteringRulesPanel() {
                       </td>
                       <td className="px-3 py-3 align-top">
                         <input
-                          aria-label={`effectiveTo ${record.meteringVersion}`}
+                          aria-label={`生效结束 ${record.meteringVersion}`}
                           type="datetime-local"
                           className="h-9 rounded-lg border border-[#dbe6f3] px-2 text-xs text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                           value={draft.effectiveTo}

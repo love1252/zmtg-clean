@@ -93,28 +93,80 @@ afterEach(() => {
 });
 
 describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
+  it('AI 用量与费用筛选区使用中文字段 label 且保留真实模型值', async () => {
+    mockUsageFetch({
+      records: [
+        usageRecord,
+        {
+          ...usageRecord,
+          id: 'usage-002',
+          tenantName: '澜星医美',
+          status: 'failed',
+          errorCode: 'PROVIDER_TIMEOUT',
+          aiCreditsConsumed: 0,
+          meteringStatus: 'pending',
+          meteringVersion: null,
+          knowledgeContextUsed: false,
+          sourceCount: 0,
+        },
+        {
+          ...usageRecord,
+          id: 'usage-003',
+          tenantName: '青岚医美',
+          status: 'provider_unavailable',
+          errorCode: 'PROVIDER_UNAVAILABLE',
+          aiCreditsConsumed: 0,
+          meteringStatus: 'not_billable',
+          meteringVersion: null,
+          knowledgeContextUsed: false,
+          sourceCount: 0,
+        },
+      ],
+    });
+    render(<OpenPlatformAiReadonlyPanel />);
+
+    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    ['租户ID', '调用状态', '计量状态', '模型厂商', '模型名称', '开始时间', '结束时间', '返回条数'].forEach((label) => {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    });
+    ['tenantId', 'status', 'meteringStatus', 'provider', 'model', 'dateFrom', 'dateTo', 'limit'].forEach((label) => {
+      expect(screen.queryByText(label, { exact: true })).not.toBeInTheDocument();
+    });
+    expect(screen.getAllByText('deepseek').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('deepseek-v4-flash').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已计量').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('待计量').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('不计费').length).toBeGreaterThan(0);
+    expect(screen.getByText('已按当前规则计算 AI 积分。')).toBeInTheDocument();
+    expect(screen.getByText('缺少有效规则或 Token 数据，暂待后续处理。')).toBeInTheDocument();
+    expect(screen.getByText('调用未成功或不满足计费条件，AI 积分记为 0。')).toBeInTheDocument();
+    expect(screen.queryByText('metered', { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText('pending', { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText('not_billable', { exact: true })).not.toBeInTheDocument();
+  });
+
   it('展示 loading 状态', () => {
     mockUsageFetch({ pending: true });
 
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(screen.getByText('正在加载 AI 用量与 Credits 明细...')).toBeInTheDocument();
+    expect(screen.getByText('正在加载 AI 用量与积分明细...')).toBeInTheDocument();
   });
 
   it('展示汇总卡片和明细表格低敏字段', async () => {
     const fetchMock = mockUsageFetch();
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: 'AI 用量与 Credits 明细' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
     expect(screen.getByText('总调用')).toBeInTheDocument();
-    expect(screen.getByText('Credits 消耗')).toBeInTheDocument();
+    expect(screen.getByText('AI 积分消耗')).toBeInTheDocument();
     expect(screen.getByText('星澜医美')).toBeInTheDocument();
     expect(screen.getByText('deepseek')).toBeInTheDocument();
     expect(screen.getByText('deepseek-v4-flash')).toBeInTheDocument();
     expect(screen.getByText('v06-ui-verify-test')).toBeInTheDocument();
     expect(screen.getByText('使用知识库 · 1 个来源')).toBeInTheDocument();
     expect(screen.getAllByText('已计量').length).toBeGreaterThan(0);
-    expect(screen.getByText('已按当前规则计算 AI Credits。')).toBeInTheDocument();
+    expect(screen.getByText('已按当前规则计算 AI 积分。')).toBeInTheDocument();
     expectNoSensitiveContent(container);
     expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/ai-usage-credits?limit=50', { cache: 'no-store' });
   });
@@ -132,7 +184,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     render(<OpenPlatformAiReadonlyPanel />);
 
     expect(await screen.findByText('明细列表暂不可用。')).toBeInTheDocument();
-    expect(screen.getByText('AI 用量与 Credits 明细服务暂不可用，请稍后重试。')).toBeInTheDocument();
+    expect(screen.getByText('AI 用量与积分明细服务暂不可用，请稍后重试。')).toBeInTheDocument();
   });
 
   it('支持筛选和刷新且不触发 mutation', async () => {
@@ -140,14 +192,14 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     render(<OpenPlatformAiReadonlyPanel />);
 
     expect(await screen.findByText('星澜医美')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('tenantId'), { target: { value: 'tenant-001' } });
-    fireEvent.change(screen.getByLabelText('status'), { target: { value: 'succeeded' } });
-    fireEvent.change(screen.getByLabelText('meteringStatus'), { target: { value: 'metered' } });
-    fireEvent.change(screen.getByLabelText('provider'), { target: { value: 'deepseek' } });
-    fireEvent.change(screen.getByLabelText('model'), { target: { value: 'deepseek-v4-flash' } });
-    fireEvent.change(screen.getByLabelText('dateFrom'), { target: { value: '2026-06-30T00:00' } });
-    fireEvent.change(screen.getByLabelText('dateTo'), { target: { value: '2026-06-30T23:59' } });
-    fireEvent.change(screen.getByLabelText('limit'), { target: { value: '25' } });
+    fireEvent.change(screen.getByLabelText('租户ID'), { target: { value: 'tenant-001' } });
+    fireEvent.change(screen.getByLabelText('调用状态'), { target: { value: 'succeeded' } });
+    fireEvent.change(screen.getByLabelText('计量状态'), { target: { value: 'metered' } });
+    fireEvent.change(screen.getByLabelText('模型厂商'), { target: { value: 'deepseek' } });
+    fireEvent.change(screen.getByLabelText('模型名称'), { target: { value: 'deepseek-v4-flash' } });
+    fireEvent.change(screen.getByLabelText('开始时间'), { target: { value: '2026-06-30T00:00' } });
+    fireEvent.change(screen.getByLabelText('结束时间'), { target: { value: '2026-06-30T23:59' } });
+    fireEvent.change(screen.getByLabelText('返回条数'), { target: { value: '25' } });
     fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
 
     await waitFor(() => {

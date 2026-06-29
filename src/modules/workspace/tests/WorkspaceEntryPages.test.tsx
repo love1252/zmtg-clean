@@ -2477,8 +2477,8 @@ describe('工作台入口页面', () => {
     expect(screen.queryByText('AI 经营副驾驶建议')).not.toBeInTheDocument();
     expect(screen.getAllByText('智美天工').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '工作台' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'AI Credits规则' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '移动导航：AI Credits规则' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'AI 积分规则' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '移动导航：AI 积分规则' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'AI用量与费用' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '移动导航：AI用量与费用' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '客户中心' })).toBeInTheDocument();
@@ -4308,7 +4308,7 @@ describe('工作台入口页面', () => {
     expect(screen.queryByText('预警与待办')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '平台总览' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '首页与品牌' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'AI Credits规则' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'AI 积分规则' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '平台审计日志' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '平台端移动导航' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：开放连接路线' })).toBeInTheDocument();
@@ -4326,14 +4326,14 @@ describe('工作台入口页面', () => {
     expect(screen.queryByText('审计事件词汇')).not.toBeInTheDocument();
   });
 
-  it('平台端 AI Credits 规则入口接入既有规则 API 且保持低敏边界', async () => {
+  it('平台端 AI 积分规则入口接入既有规则 API 且保持低敏边界', async () => {
     const fetchMock = mockWorkspaceFetch({ role: 'platform_admin' });
     const { container } = render(<OpenPlatformPage />);
 
     expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'AI Credits规则' }));
+    fireEvent.click(screen.getByRole('button', { name: 'AI 积分规则' }));
 
-    expect(await screen.findByRole('heading', { name: 'AI Credits 计量规则' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'AI 积分计量规则' })).toBeInTheDocument();
     expect(screen.getByText('v06-stage-verify-workspace')).toBeInTheDocument();
     expect(screen.getByText('deepseek-v4-flash')).toBeInTheDocument();
     expect(container.textContent ?? '').not.toMatch(/sk_test_ai_credits_rule_should_not_render|apiKey|baseUrl|Authorization|rawResponse|signedUrl|storageKey/i);

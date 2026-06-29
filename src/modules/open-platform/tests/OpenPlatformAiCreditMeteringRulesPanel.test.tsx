@@ -83,19 +83,54 @@ afterEach(() => {
 });
 
 describe('OpenPlatformAiCreditMeteringRulesPanel', () => {
+  it('平台 AI 积分规则页面使用中文字段 label 且保留真实模型值', async () => {
+    mockRulesFetch();
+    render(<OpenPlatformAiCreditMeteringRulesPanel />);
+
+    expect(await screen.findByRole('heading', { name: 'AI 积分计量规则' })).toBeInTheDocument();
+    [
+      '模型厂商',
+      '模型名称',
+      '启用状态',
+      '计量版本',
+      '输入 Token 权重',
+      '输出 Token 权重',
+      '模型倍率',
+      '知识库附加积分',
+      '每标准 Token 单位积分',
+      '生效开始',
+      '生效结束',
+    ].forEach((label) => expect(screen.getAllByText(label).length).toBeGreaterThan(0));
+    [
+      'provider',
+      'model',
+      'meteringVersion',
+      'enabled',
+      'effectiveFrom',
+      'effectiveTo',
+      'inputTokenWeight',
+      'outputTokenWeight',
+      'modelMultiplier',
+      'ragCreditSurcharge',
+      'creditsPerStandardTokenUnit',
+    ].forEach((label) => expect(screen.queryByText(label, { exact: true })).not.toBeInTheDocument());
+    expect(screen.getByText('deepseek')).toBeInTheDocument();
+    expect(screen.getByText('deepseek-v4-flash')).toBeInTheDocument();
+  });
+
   it('展示 loading 状态', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
 
     render(<OpenPlatformAiCreditMeteringRulesPanel />);
 
-    expect(screen.getByText('正在加载 AI Credits 计量规则...')).toBeInTheDocument();
+    expect(screen.getByText('正在加载 AI 积分计量规则...')).toBeInTheDocument();
   });
 
   it('渲染规则列表低敏字段', async () => {
     const fetchMock = mockRulesFetch();
     const { container } = render(<OpenPlatformAiCreditMeteringRulesPanel />);
 
-    expect(await screen.findByRole('heading', { name: 'AI Credits 计量规则' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'AI 积分计量规则' })).toBeInTheDocument();
     expect(await screen.findByText('deepseek')).toBeInTheDocument();
     expect(screen.getByText('deepseek-v4-flash')).toBeInTheDocument();
     expect(screen.getByText('v06-stage-verify-ui')).toBeInTheDocument();
@@ -111,7 +146,7 @@ describe('OpenPlatformAiCreditMeteringRulesPanel', () => {
     mockRulesFetch({ records: [] });
     render(<OpenPlatformAiCreditMeteringRulesPanel />);
 
-    expect(await screen.findByText('暂无 AI Credits 计量规则，请创建第一条规则。')).toBeInTheDocument();
+    expect(await screen.findByText('暂无 AI 积分计量规则，请创建第一条规则。')).toBeInTheDocument();
   });
 
   it('展示错误状态', async () => {
@@ -127,11 +162,11 @@ describe('OpenPlatformAiCreditMeteringRulesPanel', () => {
     render(<OpenPlatformAiCreditMeteringRulesPanel />);
 
     expect(await screen.findByText('v06-stage-verify-ui')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('创建 provider'), { target: { value: 'deepseek' } });
-    fireEvent.change(screen.getByLabelText('创建 model'), { target: { value: 'deepseek-v4-flash' } });
-    fireEvent.change(screen.getByLabelText('创建 meteringVersion'), { target: { value: 'v06-stage-verify-ui-new' } });
-    fireEvent.change(screen.getByLabelText('创建 effectiveFrom'), { target: { value: '2026-06-29T00:00' } });
-    fireEvent.change(screen.getByLabelText('创建 effectiveTo'), { target: { value: '2026-06-30T00:00' } });
+    fireEvent.change(screen.getByLabelText('创建模型厂商'), { target: { value: 'deepseek' } });
+    fireEvent.change(screen.getByLabelText('创建模型名称'), { target: { value: 'deepseek-v4-flash' } });
+    fireEvent.change(screen.getByLabelText('创建计量版本'), { target: { value: 'v06-stage-verify-ui-new' } });
+    fireEvent.change(screen.getByLabelText('创建生效开始'), { target: { value: '2026-06-29T00:00' } });
+    fireEvent.change(screen.getByLabelText('创建生效结束'), { target: { value: '2026-06-30T00:00' } });
     fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
 
     expect(await screen.findByText('计量规则已创建')).toBeInTheDocument();
@@ -160,7 +195,7 @@ describe('OpenPlatformAiCreditMeteringRulesPanel', () => {
     expect(await screen.findByText('v06-stage-verify-ui')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
 
-    expect(screen.getByText('provider、model 和 meteringVersion 必填。')).toBeInTheDocument();
+    expect(screen.getByText('模型厂商、模型名称和计量版本必填。')).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
   });
 

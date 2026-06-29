@@ -259,7 +259,7 @@ export function PlatformConsole() {
               <ProductPlanPanel />
             ) : activeNavLabel === 'AI模型配置' ? (
               <OpenPlatformAiModelConfigPanel />
-            ) : activeNavLabel === 'AI Credits规则' ? (
+            ) : activeNavLabel === 'AI 积分规则' ? (
               <OpenPlatformAiCreditMeteringRulesPanel />
             ) : activeNavLabel === 'AI用量与费用' ? (
               <OpenPlatformAiReadonlyPanel />

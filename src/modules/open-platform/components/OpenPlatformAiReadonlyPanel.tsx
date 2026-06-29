@@ -111,9 +111,9 @@ function meteringStatusLabel(status: string | null) {
 }
 
 function meteringStatusDescription(status: string | null) {
-  if (status === 'metered') return '已按当前规则计算 AI Credits。';
-  if (status === 'pending') return '缺少有效规则或 token 数据，暂待后续处理。';
-  if (status === 'not_billable') return '调用未成功或不满足计费条件，Credits 记为 0。';
+  if (status === 'metered') return '已按当前规则计算 AI 积分。';
+  if (status === 'pending') return '缺少有效规则或 Token 数据，暂待后续处理。';
+  if (status === 'not_billable') return '调用未成功或不满足计费条件，AI 积分记为 0。';
   if (status === 'legacy') return '历史数据未进入新计量链路。';
   return '暂无计量状态。';
 }
@@ -122,8 +122,8 @@ function errorMessage(kind: string) {
   if (kind === 'unauthorized') return '请先登录平台端。';
   if (kind === 'forbidden') return '当前账号没有查看平台 AI 用量的权限。';
   if (kind === 'validation_error') return '筛选条件不正确，请检查后重试。';
-  if (kind === 'service_unavailable') return 'AI 用量与 Credits 明细服务暂不可用，请稍后重试。';
-  return 'AI 用量与 Credits 明细请求失败，请稍后重试。';
+  if (kind === 'service_unavailable') return 'AI 用量与积分明细服务暂不可用，请稍后重试。';
+  return 'AI 用量与积分明细请求失败，请稍后重试。';
 }
 
 function SummaryCard(props: { label: string; value: string; tone?: string }) {
@@ -248,14 +248,14 @@ export function OpenPlatformAiReadonlyPanel() {
         headingId="ai-usage-banner-heading"
         headingLevel="h1"
         title="AI用量与费用"
-        description="平台端只读查看 AI 调用、计量状态和 Credits 消耗明细；仅展示运营低敏字段，不返回原始问题、回答、provider 凭证或客户高敏信息。"
+        description="平台端只读查看 AI 调用、计量状态和积分消耗明细；仅展示运营低敏字段，不返回原始问题、回答、模型厂商凭证或客户高敏信息。"
       />
 
       <section className="rounded-[20px] border border-[#e6edf5] bg-white p-5 shadow-sm" aria-labelledby="ai-usage-heading">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 id="ai-usage-heading" className="text-lg font-semibold tracking-normal text-[#1f2937]">AI 用量与 Credits 明细</h2>
-            <p className="mt-1 text-sm leading-6 text-[#64748b]">汇总和明细均来自 AI 调用记录，只读展示计量状态，不执行扣减、导出或 provider 调用。</p>
+            <h2 id="ai-usage-heading" className="text-lg font-semibold tracking-normal text-[#1f2937]">AI 用量与积分明细</h2>
+            <p className="mt-1 text-sm leading-6 text-[#64748b]">汇总和明细均来自 AI 调用记录，只读展示计量状态，不执行扣减、导出或模型厂商调用。</p>
           </div>
           <button
             type="button"
@@ -274,7 +274,7 @@ export function OpenPlatformAiReadonlyPanel() {
           <SummaryCard label="已计量" value={formatNumber(summary.meteredCalls)} tone="bg-blue-50" />
           <SummaryCard label="待计量" value={formatNumber(summary.pendingCalls)} tone="bg-amber-50" />
           <SummaryCard label="不计费" value={formatNumber(summary.notBillableCalls)} tone="bg-slate-50" />
-          <SummaryCard label="Credits 消耗" value={formatNumber(summary.totalAiCreditsConsumed)} tone="bg-indigo-50" />
+          <SummaryCard label="AI 积分消耗" value={formatNumber(summary.totalAiCreditsConsumed)} tone="bg-indigo-50" />
         </div>
 
         <form
@@ -285,11 +285,11 @@ export function OpenPlatformAiReadonlyPanel() {
           }}
         >
           <label className="text-sm font-semibold text-[#1f2937]">
-            tenantId
+            租户ID
             <input value={filters.tenantId} onChange={(event) => updateFilter('tenantId', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" placeholder="全部租户" />
           </label>
           <label className="text-sm font-semibold text-[#1f2937]">
-            status
+            调用状态
             <select value={filters.status} onChange={(event) => updateFilter('status', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal">
               <option value="">全部状态</option>
               <option value="succeeded">成功</option>
@@ -301,7 +301,7 @@ export function OpenPlatformAiReadonlyPanel() {
             </select>
           </label>
           <label className="text-sm font-semibold text-[#1f2937]">
-            meteringStatus
+            计量状态
             <select value={filters.meteringStatus} onChange={(event) => updateFilter('meteringStatus', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal">
               <option value="">全部计量状态</option>
               <option value="metered">已计量</option>
@@ -311,23 +311,23 @@ export function OpenPlatformAiReadonlyPanel() {
             </select>
           </label>
           <label className="text-sm font-semibold text-[#1f2937]">
-            provider
-            <input value={filters.provider} onChange={(event) => updateFilter('provider', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" placeholder="全部 provider" />
+            模型厂商
+            <input value={filters.provider} onChange={(event) => updateFilter('provider', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" placeholder="全部模型厂商" />
           </label>
           <label className="text-sm font-semibold text-[#1f2937]">
-            model
-            <input value={filters.model} onChange={(event) => updateFilter('model', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" placeholder="全部 model" />
+            模型名称
+            <input value={filters.model} onChange={(event) => updateFilter('model', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" placeholder="全部模型名称" />
           </label>
           <label className="text-sm font-semibold text-[#1f2937]">
-            dateFrom
+            开始时间
             <input type="datetime-local" value={filters.dateFrom} onChange={(event) => updateFilter('dateFrom', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" />
           </label>
           <label className="text-sm font-semibold text-[#1f2937]">
-            dateTo
+            结束时间
             <input type="datetime-local" value={filters.dateTo} onChange={(event) => updateFilter('dateTo', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" />
           </label>
           <label className="text-sm font-semibold text-[#1f2937]">
-            limit
+            返回条数
             <input type="number" min="1" max="100" value={filters.limit} onChange={(event) => updateFilter('limit', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" />
           </label>
           <div className="flex items-end gap-2 md:col-span-2 xl:col-span-4">
@@ -337,7 +337,7 @@ export function OpenPlatformAiReadonlyPanel() {
         </form>
 
         {loadState === 'loading' ? (
-          <div className="mt-5 rounded-2xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-4 py-8 text-center text-sm text-[#64748b]">正在加载 AI 用量与 Credits 明细...</div>
+          <div className="mt-5 rounded-2xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-4 py-8 text-center text-sm text-[#64748b]">正在加载 AI 用量与积分明细...</div>
         ) : null}
 
         {loadState === 'error' ? (
@@ -363,9 +363,9 @@ export function OpenPlatformAiReadonlyPanel() {
                   <tr>
                     <th className="px-4 py-3">租户</th>
                     <th className="px-4 py-3">调用状态</th>
-                    <th className="px-4 py-3">provider / model</th>
+                    <th className="px-4 py-3">模型厂商 / 模型名称</th>
                     <th className="px-4 py-3">Token</th>
-                    <th className="px-4 py-3">Credits / 计量</th>
+                    <th className="px-4 py-3">AI 积分 / 计量</th>
                     <th className="px-4 py-3">计量版本 / RAG</th>
                     <th className="px-4 py-3">创建时间</th>
                   </tr>

@@ -109,7 +109,7 @@ function createClientError(input: {
     errors?.[0] ??
     (isJsonObject(input.payload) && typeof input.payload.errorCode === 'string'
       ? input.payload.errorCode
-      : input.fallbackMessage ?? 'AI 用量与 Credits 明细请求失败');
+      : input.fallbackMessage ?? 'AI 用量与积分明细请求失败');
 
   return {
     kind: errorKindFromStatus(input.status),
@@ -143,7 +143,7 @@ export async function listOpenPlatformAiUsageCredits(
   if (!fetcher) {
     return {
       ok: false,
-      error: { kind: 'unknown', message: 'AI 用量与 Credits 明细请求失败', status: 0 },
+      error: { kind: 'unknown', message: 'AI 用量与积分明细请求失败', status: 0 },
     };
   }
 
@@ -161,7 +161,7 @@ export async function listOpenPlatformAiUsageCredits(
     ) {
       return {
         ok: false,
-        error: { kind: 'unknown', message: 'AI 用量与 Credits 明细响应异常', status: response.status },
+        error: { kind: 'unknown', message: 'AI 用量与积分明细响应异常', status: response.status },
       };
     }
 
@@ -169,7 +169,7 @@ export async function listOpenPlatformAiUsageCredits(
   } catch {
     return {
       ok: false,
-      error: { kind: 'unknown', message: 'AI 用量与 Credits 明细请求失败', status: 0 },
+      error: { kind: 'unknown', message: 'AI 用量与积分明细请求失败', status: 0 },
     };
   }
 }

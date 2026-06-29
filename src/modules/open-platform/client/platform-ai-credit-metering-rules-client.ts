@@ -108,7 +108,7 @@ function createClientError(input: {
     errors?.[0] ??
     (isJsonObject(input.payload) && typeof input.payload.errorCode === 'string'
       ? input.payload.errorCode
-      : input.fallbackMessage ?? 'AI Credits 计量规则请求失败');
+      : input.fallbackMessage ?? 'AI 积分计量规则请求失败');
 
   return {
     kind: errorKindFromStatus(input.status),
@@ -135,7 +135,7 @@ export async function listOpenPlatformAiCreditMeteringRules(
   if (!fetcher) {
     return {
       ok: false,
-      error: { kind: 'unknown', message: 'AI Credits 计量规则请求失败', status: 0 },
+      error: { kind: 'unknown', message: 'AI 积分计量规则请求失败', status: 0 },
     };
   }
 
@@ -148,7 +148,7 @@ export async function listOpenPlatformAiCreditMeteringRules(
     if (!isJsonObject(payload) || !Array.isArray(payload.records)) {
       return {
         ok: false,
-        error: { kind: 'unknown', message: 'AI Credits 计量规则响应异常', status: response.status },
+        error: { kind: 'unknown', message: 'AI 积分计量规则响应异常', status: response.status },
       };
     }
 
@@ -156,7 +156,7 @@ export async function listOpenPlatformAiCreditMeteringRules(
   } catch {
     return {
       ok: false,
-      error: { kind: 'unknown', message: 'AI Credits 计量规则请求失败', status: 0 },
+      error: { kind: 'unknown', message: 'AI 积分计量规则请求失败', status: 0 },
     };
   }
 }
@@ -170,7 +170,7 @@ async function mutationRequest(
   if (!fetcher) {
     return {
       ok: false,
-      error: { kind: 'unknown', message: 'AI Credits 计量规则请求失败', status: 0 },
+      error: { kind: 'unknown', message: 'AI 积分计量规则请求失败', status: 0 },
     };
   }
 
@@ -183,7 +183,7 @@ async function mutationRequest(
     if (!isJsonObject(payload) || !payload.record) {
       return {
         ok: false,
-        error: { kind: 'unknown', message: 'AI Credits 计量规则响应异常', status: response.status },
+        error: { kind: 'unknown', message: 'AI 积分计量规则响应异常', status: response.status },
       };
     }
 
@@ -191,7 +191,7 @@ async function mutationRequest(
   } catch {
     return {
       ok: false,
-      error: { kind: 'unknown', message: 'AI Credits 计量规则请求失败', status: 0 },
+      error: { kind: 'unknown', message: 'AI 积分计量规则请求失败', status: 0 },
     };
   }
 }
