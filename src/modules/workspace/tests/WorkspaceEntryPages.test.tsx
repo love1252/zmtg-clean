@@ -2479,6 +2479,8 @@ describe('工作台入口页面', () => {
     expect(screen.getByRole('button', { name: '工作台' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'AI Credits规则' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '移动导航：AI Credits规则' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'AI用量与费用' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '移动导航：AI用量与费用' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '客户中心' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '机构端移动导航' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：客户中心' })).toBeInTheDocument();
