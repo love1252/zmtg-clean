@@ -125,6 +125,23 @@ describe('机构端 AI 调用 API route', () => {
     expect(response.status).toBe(400);
   });
 
+  it('机构端传入 provider / model 选择时返回受控错误且不调用 provider', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+
+    const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '冷敷后怎么护理？', provider: 'deepseek', model: 'deepseek-v4-flash' }),
+    }));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.code).toBe('INSTITUTION_AI_MODEL_SELECTION_FORBIDDEN');
+    expect(body.error).toContain('平台统一配置');
+    expect(checkTenantQuotaForCreate).not.toHaveBeenCalled();
+    expect(requestInstitutionAiCallService).not.toHaveBeenCalled();
+  });
+
   it('AI 调用达到上限时返回 409', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
     vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
@@ -390,7 +407,7 @@ describe('机构端 AI 调用 API route', () => {
       answer: '冷敷建议保持清洁干燥',
       record: {
         id: 'rec-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-        actorUserId: 'demo-user-admin', provider: 'deepseek', model: 'deepseek-v4-flash',
+        actorUserId: 'demo-user-admin', serviceName: '平台 AI 服务',
         promptTokens: 50, completionTokens: 30, totalTokens: 80, latencyMs: 500,
         status: 'succeeded', errorCode: null, createdAt: new Date().toISOString(),
       },
@@ -405,6 +422,8 @@ describe('机构端 AI 调用 API route', () => {
     expect(response.status).toBe(201);
     const body = await response.json();
     expect(body.answer).toBeTruthy();
+    expect(body.record.serviceName).toBe('平台 AI 服务');
+    expect(JSON.stringify(body.record)).not.toMatch(/"provider"|"model"|deepseek|deepseek-v4-flash/i);
   });
 });
 
@@ -430,7 +449,7 @@ describe('机构端 AI 调用记录 API route', () => {
       dataSource: 'repository',
       records: [{
         id: 'rec-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-        actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: 10, completionTokens: 5,
+        actorUserId: 'u', serviceName: '平台 AI 服务', promptTokens: 10, completionTokens: 5,
         totalTokens: 15, latencyMs: 100, status: 'succeeded', errorCode: null,
         metadata: {
           knowledgeContext: {
@@ -449,8 +468,10 @@ describe('机构端 AI 调用记录 API route', () => {
     expect(body.records[0].metadata.knowledgeContext.used).toBe(true);
     expect(body.records[0].metadata.knowledgeContext.sources).toHaveLength(1);
     expect(body.records[0].metadata.knowledgeContext.sources[0].fileName).toBe('指南.pdf');
+    expect(body.records[0].serviceName).toBe('平台 AI 服务');
     const serialized = JSON.stringify(body);
     expect(serialized).not.toMatch(/storageKey|bucket|signedUrl|embedding|api_key|baseUrl|Authorization/i);
+    expect(serialized).not.toMatch(/"provider"|"model"|deepseek|deepseek-v4-flash/i);
     // usage API 不返回 query / searchKeyword / 原始 question
     expect(serialized).not.toMatch(/"query"|"searchKeyword"/i);
   });
@@ -463,8 +484,8 @@ describe('机构端 AI 调用记录 API route', () => {
       readonly: true,
       dataSource: 'repository',
       records: [
-        { id: 'old-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: 10, completionTokens: 5, totalTokens: 15, latencyMs: 100, status: 'succeeded', errorCode: null, metadata: null, createdAt: new Date().toISOString() },
-        { id: 'rej-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null, status: 'rejected', errorCode: 'quota_exceeded_ai_calls', metadata: null, createdAt: new Date().toISOString() },
+        { id: 'old-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', serviceName: '平台 AI 服务', promptTokens: 10, completionTokens: 5, totalTokens: 15, latencyMs: 100, status: 'succeeded', errorCode: null, metadata: null, createdAt: new Date().toISOString() },
+        { id: 'rej-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', serviceName: '平台 AI 服务', promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null, status: 'rejected', errorCode: 'quota_exceeded_ai_calls', metadata: null, createdAt: new Date().toISOString() },
       ],
       emptyState: { title: '暂无 AI 调用记录', description: '当前机构还没有发起过 AI 调用。' },
     });
@@ -509,7 +530,7 @@ describe('AI 试问 RAG 知识库检索闭环（安全顺序）', () => {
     vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
       status: 'created',
       answer: '根据参考资料回答。',
-      record: { id: 'r1', tenantId: 't', institutionId: 'i', actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
+      record: { id: 'r1', tenantId: 't', institutionId: 'i', actorUserId: 'u', serviceName: '平台 AI 服务', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
       knowledgeContext: { used: true, query: '冷敷后怎么护理？', sources: [{ knowledgeId: 'kb-1', knowledgeTitle: '术后护理', fileId: 'f-1', fileName: '术后护理.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷后保持清洁。', matchReason: '包含"冷敷"' }] },
     });
 
@@ -596,7 +617,7 @@ describe('AI 试问 RAG 知识库检索闭环（安全顺序）', () => {
       allowed: false, current: 100, limit: 100, reason: 'quota_exceeded_ai_calls', resource: 'ai_calls',
     });
     vi.mocked(recordAiCallQuotaRejection).mockResolvedValue({
-      id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', provider: 'deepseek', model: 'unknown',
+      id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', serviceName: '平台 AI 服务',
       promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null,
       status: 'rejected', errorCode: 'quota_exceeded_ai_calls', createdAt: new Date(),
     });
@@ -644,7 +665,7 @@ describe('AI 试问 RAG 知识库检索闭环（安全顺序）', () => {
     vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
       status: 'created',
       answer: '根据参考资料回答。',
-      record: { id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
+      record: { id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', serviceName: '平台 AI 服务', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
       knowledgeContext: {
         used: true,
         query: '冷敷后怎么护理？',
@@ -675,7 +696,7 @@ describe('AI 试问 RAG 知识库检索闭环（安全顺序）', () => {
     vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
       status: 'created',
       answer: '知识库暂无相关依据，建议人工确认。',
-      record: { id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', provider: 'deepseek', model: 'm', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
+      record: { id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', serviceName: '平台 AI 服务', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
       knowledgeContext: { used: false, query: '随机问题', sources: [] },
     });
 

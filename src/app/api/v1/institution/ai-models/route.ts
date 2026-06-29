@@ -1,8 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDatabase } from '@/server/db/client';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
-import { createVendorProviderConfigRepository } from '@/modules/open-platform/server/vendorProviderConfigRepository';
-import { listVendorProviderConfigs } from '@/modules/open-platform/server/vendorProviderConfig';
 
 function unauthorizedResponse() {
   return NextResponse.json({ code: 'unauthorized', error: '请先登录' }, { status: 401 });
@@ -12,10 +9,13 @@ function forbiddenResponse() {
   return NextResponse.json({ code: 'forbidden', error: '没有访问权限' }, { status: 403 });
 }
 
-function serviceUnavailableResponse() {
+function institutionAiModelGovernanceForbiddenResponse() {
   return NextResponse.json(
-    { code: 'service_unavailable', error: 'AI 模型数据暂时不可用' },
-    { status: 503 },
+    {
+      code: 'INSTITUTION_AI_MODEL_GOVERNANCE_FORBIDDEN',
+      error: '机构端不能查看或配置 AI 模型，AI 服务由平台统一管理',
+    },
+    { status: 403 },
   );
 }
 
@@ -29,15 +29,5 @@ export async function GET(request: Request) {
     return forbiddenResponse();
   }
 
-  try {
-    const repository = createVendorProviderConfigRepository(getDatabase());
-    const result = await listVendorProviderConfigs({ repository });
-
-    return NextResponse.json(
-      { models: result.configs },
-      { status: 200 },
-    );
-  } catch {
-    return serviceUnavailableResponse();
-  }
+  return institutionAiModelGovernanceForbiddenResponse();
 }

@@ -7,7 +7,6 @@ import {
   requestInstitutionAiCallService,
   recordAiCallQuotaRejection,
   getDefaultAiVendor,
-  isAllowedAiVendor,
 } from '@/modules/institution/server/institution-ai-call-service';
 
 async function readBody(request: Request) {
@@ -21,6 +20,12 @@ async function readBody(request: Request) {
   }
 }
 
+const forbiddenInstitutionAiModelSelectionFields = ['vendor', 'provider', 'model', 'modelId', 'providerId'] as const;
+
+function hasInstitutionAiModelSelection(input: Record<string, unknown>) {
+  return forbiddenInstitutionAiModelSelectionFields.some((field) => Object.prototype.hasOwnProperty.call(input, field));
+}
+
 export async function POST(request: Request) {
   const accessContext = getDemoAccessContextFromRequest(request);
   if (!accessContext) {
@@ -32,9 +37,16 @@ export async function POST(request: Request) {
 
   try {
     const body = await readBody(request);
-    const vendor = typeof body.vendor === 'string' && isAllowedAiVendor(body.vendor)
-      ? body.vendor
-      : getDefaultAiVendor();
+    if (hasInstitutionAiModelSelection(body)) {
+      return NextResponse.json(
+        {
+          code: 'INSTITUTION_AI_MODEL_SELECTION_FORBIDDEN',
+          error: '机构端不能选择 AI 模型或供应商，AI 服务由平台统一配置',
+        },
+        { status: 400 },
+      );
+    }
+    const vendor = getDefaultAiVendor();
 
     const db = getDatabase();
 

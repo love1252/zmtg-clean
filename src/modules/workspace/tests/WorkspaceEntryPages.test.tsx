@@ -4015,6 +4015,7 @@ describe('工作台入口页面', () => {
     expect(screen.getAllByText('开发主线').length).toBeGreaterThanOrEqual(8);
     expect(screen.getAllByText('后续').length).toBeGreaterThanOrEqual(4);
 
+    expect(screen.queryByRole('button', { name: 'AI 模型' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客服工作台' }));
     expect(screen.getByText('客服工作台暂不进入本次开发主线')).toBeInTheDocument();
     expect(
