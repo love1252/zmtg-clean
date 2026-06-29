@@ -83,8 +83,7 @@ describe('AI 真实调用与用量记录 service', () => {
     expect(result.record!.tenantId).toBe('t-001');
     expect(result.record!.institutionId).toBe('inst-001');
     expect(result.record!.serviceName).toBe('平台 AI 服务');
-    expect(JSON.stringify(result.record)).not.toMatch(/"provider"|"model"/);
-    expect(result.record!.totalTokens).toBe(120);
+    expect(JSON.stringify(result.record)).not.toMatch(/"provider"|"model"|"promptTokens"|"completionTokens"|"totalTokens"/);
     expect(result.record!.status).toBe('succeeded');
   });
 
@@ -296,6 +295,25 @@ describe('AI 真实调用与用量记录 service', () => {
 
     expect(resultOwn.records.length).toBe(1);
     expect(resultOther.records.length).toBe(0);
+  });
+
+  it('机构端用量列表 DTO 不返回 provider/model/token 计量字段', async () => {
+    const records: AiCallUsageRecord[] = [createMockUsageRecord()];
+    const repository = {
+      findVendorConfig: vi.fn(),
+      createUsageRecord: vi.fn(),
+      listInstitutionUsageRecords: vi.fn().mockResolvedValue(records),
+      listPlatformUsageSummary: vi.fn(),
+    };
+
+    const result = await listInstitutionAiCallUsageService({
+      repository,
+      params: { tenantId: 't-001', institutionId: 'inst-001' },
+    });
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].serviceName).toBe('平台 AI 服务');
+    expect(JSON.stringify(result.records[0])).not.toMatch(/"provider"|"model"|"promptTokens"|"completionTokens"|"totalTokens"/);
   });
 
   it('身份证号输入被拒绝且不调用 provider', async () => {
@@ -814,8 +832,8 @@ describe('AI 真实调用与用量记录 service', () => {
       const serialized = JSON.stringify(result);
       expect(serialized).not.toMatch(/storageKey|bucket|signedUrl|embedding|DATABASE_URL|postgres:\/\//i);
       expect(serialized).not.toMatch(/api_key|apikey|Bearer|baseUrl|Authorization/i);
-      // token/password/secret must not appear as values; field names like promptTokens are expected
-      expect(serialized).not.toMatch(/"token"|"password"|"secret"/i);
+      // token/password/secret must not appear as values or institution-facing DTO field names
+      expect(serialized).not.toMatch(/"token"|"password"|"secret"|"promptTokens"|"completionTokens"|"totalTokens"/i);
     });
   });
 
