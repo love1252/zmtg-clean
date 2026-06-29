@@ -34,8 +34,7 @@ const forbiddenText = [
   'Qwen Plus',
 ];
 
-function stubFetch(fetchMock = vi.fn()) {
-  fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: false }), { status: 404 }));
+function stubFetch(fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: false }), { status: 404 }))) {
   vi.stubGlobal('fetch', fetchMock);
 
   return fetchMock;
@@ -77,53 +76,77 @@ afterEach(() => {
 });
 
 describe('平台端 AI 模型与用量只读面板', () => {
-  it('默认按当前日期展示未接入 AI 用量空态', () => {
-    freezeUsageDate();
+  it('默认展示 AI 用量与 Credits 明细空态', async () => {
+    const fetchMock = stubFetch(vi.fn(async () => new Response(JSON.stringify({
+      requestId: 'platform-ai-usage-credits',
+      readonly: true,
+      dataSource: 'repository',
+      summary: {
+        totalCalls: 0,
+        succeededCalls: 0,
+        failedCalls: 0,
+        meteredCalls: 0,
+        pendingCalls: 0,
+        notBillableCalls: 0,
+        totalAiCreditsConsumed: 0,
+      },
+      records: [],
+      emptyState: {
+        title: '暂无 AI 用量明细',
+        description: '当前过滤条件下没有 AI 调用记录。',
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } })));
 
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(screen.getByRole('heading', { name: 'AI 用量与费用' })).toBeInTheDocument();
-    expect(screen.getByText('用量口径：当前未接入真实 AI 调用日志，费用为 0，不是正式账单。')).toBeInTheDocument();
-    expect(screen.getByText('2026年06月22日用量')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '选择 AI 用量日期 2026年06月22日' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '导出' })).toBeDisabled();
-    expect(screen.getByText('暂无真实 AI 用量记录')).toBeInTheDocument();
-    expect(screen.getByText('当前未接入真实 AI 调用日志；不会展示预置用量、机构排行或估算账单。')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'AI 用量与 Credits 明细' })).toBeInTheDocument();
+    expect(screen.getByText('汇总和明细均来自 AI 调用记录，只读展示计量状态，不执行扣减、导出或 provider 调用。')).toBeInTheDocument();
+    expect(await screen.findByText('暂无 AI 用量明细')).toBeInTheDocument();
+    expect(screen.getByText('当前过滤条件下没有 AI 调用记录。')).toBeInTheDocument();
     expect(screen.getAllByText('0').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('¥0.0000').length).toBeGreaterThan(0);
-    expect(screen.queryByText('单日模型费用构成')).not.toBeInTheDocument();
-    expect(screen.queryByText('厂商与模型消耗明细')).not.toBeInTheDocument();
-    expect(screen.queryByText('机构用量排行')).not.toBeInTheDocument();
+    expect(screen.queryByText('厂商 Key 配置')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /导出账单/ })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/ai-usage-credits?limit=50', { cache: 'no-store' });
     expectNoForbiddenAiReadonlyContent(container);
   });
 
-  it('月份选择弹层保留，但切换月份后仍保持未接入空态', () => {
-    freezeUsageDate();
-
+  it('刷新仍保持只读且不触发 mutation', async () => {
+    const fetchMock = stubFetch(vi.fn(async () => new Response(JSON.stringify({
+      requestId: 'platform-ai-usage-credits',
+      readonly: true,
+      dataSource: 'repository',
+      summary: {
+        totalCalls: 0,
+        succeededCalls: 0,
+        failedCalls: 0,
+        meteredCalls: 0,
+        pendingCalls: 0,
+        notBillableCalls: 0,
+        totalAiCreditsConsumed: 0,
+      },
+      records: [],
+      emptyState: {
+        title: '暂无 AI 用量明细',
+        description: '当前过滤条件下没有 AI 调用记录。',
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } })));
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    fireEvent.click(screen.getByRole('button', { name: '选择 AI 用量日期 2026年06月22日' }));
+    expect(await screen.findByText('暂无 AI 用量明细')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '刷新' }));
 
-    expect(screen.getByRole('dialog', { name: '选择 AI 用量月份' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '6月' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: '清除' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '本月' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '5月' }));
-
-    expect(screen.getByText('2026年05月用量')).toBeInTheDocument();
-    expect(screen.getByText('暂无真实 AI 用量记录')).toBeInTheDocument();
-    expect(screen.queryByText('Qwen Plus')).not.toBeInTheDocument();
-    expect(screen.queryByText('智美天工医美智能运营系统')).not.toBeInTheDocument();
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2));
+    expectNoMutationFetch(fetchMock);
+    expectNoProviderConfigFetch(fetchMock);
     expectNoForbiddenAiReadonlyContent(container);
   });
 
-  it('页面不展示 Key 配置入口，也不触发 provider 配置读取', () => {
-    freezeUsageDate();
+  it('页面不展示 Key 配置入口，也不触发 provider 配置读取', async () => {
     const fetchMock = stubFetch();
 
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
+    expect(await screen.findByText('明细列表暂不可用。')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '厂商 Key 配置' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('API Key')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /保存/ })).not.toBeInTheDocument();
@@ -142,8 +165,8 @@ describe('平台端 AI 模型与用量只读面板', () => {
     const bannerHeading = screen.getByRole('heading', { name: 'AI用量与费用' });
     const banner = bannerHeading.closest('[data-platform-banner="true"]');
     expect(banner).not.toBeNull();
-    expect(screen.getAllByText(/当前未接入真实 AI 调用日志/).length).toBeGreaterThan(0);
-    expect(screen.getByRole('heading', { name: 'AI 用量与费用' })).toBeInTheDocument();
+    expect(screen.queryByText(/当前未接入真实 AI 调用日志/)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'AI 用量与 Credits 明细' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：AI用量与费用' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /同步模型/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /测试调用/ })).not.toBeInTheDocument();
@@ -153,7 +176,7 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.queryByRole('heading', { name: 'AI Runtime 状态' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'dry-run readiness' })).not.toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText('AI 用量账单')).toBeInTheDocument();
+      expect(screen.getByText('明细列表暂不可用。')).toBeInTheDocument();
     });
     expectNoProviderConfigFetch(fetchMock);
     expectNoMutationFetch(fetchMock);
