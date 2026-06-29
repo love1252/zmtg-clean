@@ -16,6 +16,7 @@ import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { CommercialBoundaryPanel } from '@/modules/open-platform/components/CommercialBoundaryPanel';
 import { HomepageBrandPanel } from '@/modules/open-platform/components/HomepageBrandPanel';
 import { OpenConnectionRoadmapPanel } from '@/modules/open-platform/components/OpenConnectionRoadmapPanel';
+import { OpenPlatformAiCreditMeteringRulesPanel } from '@/modules/open-platform/components/OpenPlatformAiCreditMeteringRulesPanel';
 import { OpenPlatformAiModelConfigPanel } from '@/modules/open-platform/components/OpenPlatformAiModelConfigPanel';
 import { OpenPlatformAiReadonlyPanel } from '@/modules/open-platform/components/OpenPlatformAiReadonlyPanel';
 import { OpenPlatformAuditEventsPanel } from '@/modules/open-platform/components/OpenPlatformAuditEventsPanel';
@@ -258,6 +259,8 @@ export function PlatformConsole() {
               <ProductPlanPanel />
             ) : activeNavLabel === 'AI模型配置' ? (
               <OpenPlatformAiModelConfigPanel />
+            ) : activeNavLabel === 'AI Credits规则' ? (
+              <OpenPlatformAiCreditMeteringRulesPanel />
             ) : activeNavLabel === 'AI用量与费用' ? (
               <OpenPlatformAiReadonlyPanel />
             ) : activeNavLabel === '知识库管理' ? (
