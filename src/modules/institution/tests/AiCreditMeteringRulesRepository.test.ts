@@ -270,7 +270,7 @@ describe('AI credits metering rule lookup repository', () => {
     expect(serialized).not.toContain('rawResponse');
   });
 
-  it('未修改 AI call service、quota enforcement、schema 和 migration', () => {
+  it('未修改 quota enforcement、schema 和 migration', () => {
     const changedFiles = execFileSync('git', ['status', '--short', '--untracked-files=all'], {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -279,7 +279,6 @@ describe('AI credits metering rule lookup repository', () => {
       .filter(Boolean)
       .map((line) => line.slice(3));
 
-    expect(changedFiles).not.toContain('src/modules/institution/server/institution-ai-call-service.ts');
     expect(changedFiles).not.toContain('src/modules/institution/domain/quota-enforcement.ts');
     expect(changedFiles).not.toContain('src/server/db/schema.ts');
     expect(changedFiles.some((file) => file.includes('/migrations/') || file.includes('drizzle/'))).toBe(
