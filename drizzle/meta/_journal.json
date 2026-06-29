@@ -176,6 +176,13 @@
       "when": 1782643322808,
       "tag": "0024_greedy_rachel_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1782710961939,
+      "tag": "0025_v06_ai_credits_metering_schema",
+      "breakpoints": true
     }
   ]
 }

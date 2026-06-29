@@ -5,6 +5,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -316,6 +317,7 @@ export const tenantPlanVersions = pgTable(
     agentLimit: integer('agent_limit'),
     seatLimit: integer('seat_limit'),
     monthlyAiCallLimit: integer('monthly_ai_call_limit'),
+    monthlyAiCreditLimit: integer('monthly_ai_credit_limit'),
     knowledgeStorageGb: integer('knowledge_storage_gb'),
     connectorEntitlementsJson: jsonb('connector_entitlements_json')
       .$type<JsonRecord>()
@@ -535,10 +537,12 @@ export const tenantQuotaSnapshots = pgTable(
     maxAppointments: integer('max_appointments').notNull(),
     maxFollowUps: integer('max_follow_ups').notNull(),
     maxAiCalls: integer('max_ai_calls').notNull(),
+    maxAiCredits: integer('max_ai_credits'),
     currentCustomers: integer('current_customers').notNull(),
     currentAppointments: integer('current_appointments').notNull(),
     currentFollowUps: integer('current_follow_ups').notNull(),
     currentAiCalls: integer('current_ai_calls').notNull(),
+    currentAiCredits: integer('current_ai_credits'),
     snapshotAt: timestamp('snapshot_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -586,6 +590,36 @@ export const platformAiModelConfigSnapshots = pgTable(
   },
   (table) => ({
     updatedAtIdx: index('platform_ai_model_config_snapshots_updated_at_idx').on(table.updatedAt),
+  }),
+);
+
+export const platformAiCreditMeteringRules = pgTable(
+  'platform_ai_credit_metering_rules',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    provider: varchar('provider', { length: 64 }).notNull(),
+    model: varchar('model', { length: 128 }).notNull(),
+    meteringVersion: varchar('metering_version', { length: 64 }).notNull(),
+    inputTokenWeight: numeric('input_token_weight', { precision: 12, scale: 6 }).notNull(),
+    outputTokenWeight: numeric('output_token_weight', { precision: 12, scale: 6 }).notNull(),
+    modelMultiplier: numeric('model_multiplier', { precision: 12, scale: 6 }).notNull(),
+    ragCreditSurcharge: integer('rag_credit_surcharge').notNull(),
+    creditsPerStandardTokenUnit: integer('credits_per_standard_token_unit').notNull(),
+    enabled: boolean('enabled').notNull(),
+    effectiveFrom: timestamp('effective_from', { withTimezone: true }).notNull(),
+    effectiveTo: timestamp('effective_to', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => ({
+    providerModelVersionUniqueIdx: uniqueIndex(
+      'platform_ai_credit_metering_rules_provider_model_version_unique_idx',
+    ).on(table.provider, table.model, table.meteringVersion),
+    providerModelEnabledIdx: index(
+      'platform_ai_credit_metering_rules_provider_model_enabled_idx',
+    ).on(table.provider, table.model, table.enabled),
+    effectiveFromIdx: index('platform_ai_credit_metering_rules_effective_from_idx').on(
+      table.effectiveFrom,
+    ),
   }),
 );
 
@@ -1230,6 +1264,10 @@ export const aiCallUsageRecords = pgTable(
     status: varchar('status', { length: 32 }).notNull(),
     errorCode: varchar('error_code', { length: 64 }),
     metadata: jsonb('metadata'),
+    aiCreditsConsumed: integer('ai_credits_consumed'),
+    meteringStatus: varchar('metering_status', { length: 32 }),
+    meteringVersion: varchar('metering_version', { length: 64 }),
+    meteringDetails: jsonb('metering_details').$type<JsonRecord>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({

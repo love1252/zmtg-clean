@@ -1083,6 +1083,89 @@ describe('数据库结构', () => {
     );
   });
 
+  it('V0.6 AI credits schema 只新增内部计量字段并保留现有 calls/token 字段', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const aiCallUsageRecords = schemaModule.aiCallUsageRecords;
+    const tenantPlanVersions = schemaModule.tenantPlanVersions;
+    const tenantQuotaSnapshots = schemaModule.tenantQuotaSnapshots;
+    const platformAiCreditMeteringRules = schemaModule.platformAiCreditMeteringRules;
+
+    expect(aiCallUsageRecords).toBeDefined();
+    expect(tenantPlanVersions).toBeDefined();
+    expect(tenantQuotaSnapshots).toBeDefined();
+    expect(platformAiCreditMeteringRules).toBeDefined();
+
+    const usageColumns = columnNames(getTableConfig(aiCallUsageRecords as never).columns);
+    const planVersionColumns = columnNames(getTableConfig(tenantPlanVersions as never).columns);
+    const quotaColumns = columnNames(getTableConfig(tenantQuotaSnapshots as never).columns);
+    const meteringRuleColumns = columnNames(getTableConfig(platformAiCreditMeteringRules as never).columns);
+    const meteringRuleIndexes = getTableConfig(platformAiCreditMeteringRules as never).indexes.map((index) => ({
+      name: index.config.name,
+      columns: columnNames(index.config.columns as NamedColumn[]),
+    }));
+
+    expect(usageColumns).toEqual(
+      expect.arrayContaining([
+        'prompt_tokens',
+        'completion_tokens',
+        'total_tokens',
+        'ai_credits_consumed',
+        'metering_status',
+        'metering_version',
+        'metering_details',
+      ]),
+    );
+    expect(planVersionColumns).toEqual(
+      expect.arrayContaining(['monthly_ai_call_limit', 'monthly_ai_credit_limit']),
+    );
+    expect(quotaColumns).toEqual(
+      expect.arrayContaining([
+        'max_ai_calls',
+        'current_ai_calls',
+        'max_ai_credits',
+        'current_ai_credits',
+      ]),
+    );
+    expect(meteringRuleColumns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'provider',
+        'model',
+        'metering_version',
+        'input_token_weight',
+        'output_token_weight',
+        'model_multiplier',
+        'rag_credit_surcharge',
+        'credits_per_standard_token_unit',
+        'enabled',
+        'effective_from',
+        'effective_to',
+        'created_at',
+        'updated_at',
+      ]),
+    );
+    expect(meteringRuleIndexes).toEqual(
+      expect.arrayContaining([
+        {
+          name: 'platform_ai_credit_metering_rules_provider_model_version_unique_idx',
+          columns: ['provider', 'model', 'metering_version'],
+        },
+      ]),
+    );
+    expect(meteringRuleColumns).not.toEqual(
+      expect.arrayContaining([
+        'api_key',
+        'encrypted_api_key',
+        'base_url',
+        'authorization',
+        'prompt',
+        'answer',
+        'raw_response',
+        'provider_raw_response',
+      ]),
+    );
+  });
+
   it('演示种子数据覆盖预约和随访任务引用的同租户客户', () => {
     const customerKeys = new Set(
       getDemoCustomerSeedRecords().map((record) => `${record.tenantId}:${record.id}`),
@@ -1519,6 +1602,60 @@ describe('数据库结构', () => {
     expect(migrationSql).not.toContain('encrypted_api_key');
     expect(migrationSql).not.toContain('ciphertext');
     expect(migrationSql).not.toContain('auth_tag');
+  });
+
+  it('V0.6 AI credits 迁移只新增 additive 计量结构且不包含敏感字段或 backfill', () => {
+    const migrationSql = readMigrationSql('v06_ai_credits_metering_schema');
+    const journal = JSON.parse(readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8')) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+
+    expect(migrationSql).toContain('create table "platform_ai_credit_metering_rules"');
+    expect(migrationSql).toContain('"provider" varchar(64) not null');
+    expect(migrationSql).toContain('"model" varchar(128) not null');
+    expect(migrationSql).toContain('"metering_version" varchar(64) not null');
+    expect(migrationSql).toContain('"input_token_weight" numeric(12, 6) not null');
+    expect(migrationSql).toContain('"output_token_weight" numeric(12, 6) not null');
+    expect(migrationSql).toContain('"model_multiplier" numeric(12, 6) not null');
+    expect(migrationSql).toContain('"rag_credit_surcharge" integer not null');
+    expect(migrationSql).toContain('"credits_per_standard_token_unit" integer not null');
+    expect(migrationSql).toContain('"enabled" boolean not null');
+    expect(migrationSql).toContain('"effective_from" timestamp with time zone not null');
+    expect(migrationSql).toContain('"effective_to" timestamp with time zone');
+    expect(migrationSql).toContain(
+      'alter table "ai_call_usage_records" add column "ai_credits_consumed" integer',
+    );
+    expect(migrationSql).toContain(
+      'alter table "ai_call_usage_records" add column "metering_status" varchar(32)',
+    );
+    expect(migrationSql).toContain(
+      'alter table "ai_call_usage_records" add column "metering_version" varchar(64)',
+    );
+    expect(migrationSql).toContain(
+      'alter table "ai_call_usage_records" add column "metering_details" jsonb',
+    );
+    expect(migrationSql).toContain(
+      'alter table "tenant_plan_versions" add column "monthly_ai_credit_limit" integer',
+    );
+    expect(migrationSql).toContain(
+      'alter table "tenant_quota_snapshots" add column "max_ai_credits" integer',
+    );
+    expect(migrationSql).toContain(
+      'alter table "tenant_quota_snapshots" add column "current_ai_credits" integer',
+    );
+    expect(migrationSql).toContain(
+      'create unique index "platform_ai_credit_metering_rules_provider_model_version_unique_idx" on "platform_ai_credit_metering_rules" using btree ("provider","model","metering_version")',
+    );
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ idx: 25, tag: '0025_v06_ai_credits_metering_schema' }),
+      ]),
+    );
+    expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b|\brename\b/i);
+    expect(migrationSql).not.toMatch(/\bdelete\s+from\b|\binsert\s+into\b|(^|;)\s*update\s+/i);
+    expect(migrationSql).not.toMatch(
+      /api_key|apikey|encrypted_api_key|base_url|authorization|bearer|prompt\b|answer\b|raw_response|provider_raw_response|ciphertext|auth_tag|secret|database_url/i,
+    );
   });
 
   it('迁移包含租户客户一致性的复合外键', () => {
