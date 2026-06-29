@@ -73,9 +73,6 @@ type InstitutionAiCallUsageRecord = {
   institutionId: string | null;
   actorUserId: string;
   serviceName: string;
-  promptTokens: number | null;
-  completionTokens: number | null;
-  totalTokens: number | null;
   latencyMs: number | null;
   status: string;
   errorCode: string | null;
@@ -590,7 +587,7 @@ export function InstitutionKnowledgeReadonlyShell() {
     }
 
     setIsAiLoading(true);
-    setAiMessage('正在调用真实 AI 模型...');
+    setAiMessage('正在调用平台 AI 服务...');
     try {
       const response = await fetch('/api/institution/knowledge-management/ai-call', {
         method: 'POST',
@@ -608,17 +605,14 @@ export function InstitutionKnowledgeReadonlyShell() {
       }
 
       const answer = typeof payload?.answer === 'string' ? payload.answer : '';
-      setAiAnswer(answer || '（模型未返回内容）');
+      setAiAnswer(answer || '（AI 暂未返回内容）');
       const knowledgeContext = payload?.knowledgeContext as InstitutionAiCallKnowledgeContext | undefined;
       setAiKnowledgeContext(knowledgeContext ?? null);
       const record = payload?.record;
-      const tokenInfo = record && typeof record.totalTokens === 'number'
-        ? `，token 用量 ${record.totalTokens}`
-        : '';
       const latencyInfo = record && typeof record.latencyMs === 'number'
         ? `，耗时 ${record.latencyMs}ms`
         : '';
-      setAiMessage(`AI 回答已生成${tokenInfo}${latencyInfo}，请人工确认后再用于服务沟通`);
+      setAiMessage(`AI 回答已生成，已计入本月 AI 调用额度${latencyInfo}，请人工确认后再用于服务沟通`);
       void loadAiQuota();
     } catch {
       setAiAnswer(null);
@@ -1294,7 +1288,7 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">AI 调用记录</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">查看本机构最近 AI 调用的用量、模型和状态；AI 结果需人工确认。</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">查看本机构最近 AI 调用的额度、状态和知识库引用情况；AI 结果需人工确认。</p>
             </div>
             <button
               type="button"
@@ -1334,11 +1328,9 @@ export function InstitutionKnowledgeReadonlyShell() {
                     >
                       {getAiUsageStatusLabel(record)}
                     </span>
-                    {record.totalTokens ? (
-                      <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-violet-700">
-                        {record.totalTokens} tokens
-                      </span>
-                    ) : null}
+                    <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-violet-700">
+                      {record.status === 'succeeded' ? '已计入本月 AI 调用额度' : '已记录，未计入成功调用额度'}
+                    </span>
                     {record.latencyMs ? (
                       <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-600">
                         {record.latencyMs}ms

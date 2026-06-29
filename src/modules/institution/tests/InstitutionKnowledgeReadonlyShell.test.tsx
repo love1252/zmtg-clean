@@ -874,6 +874,44 @@ describe('机构端知识库只读列表 UI', () => {
       expect(usageSection.textContent).not.toMatch(/deepseek|deepseek-v4-flash|DeepSeek|智谱|Kimi|Claude|豆包|通义千问|qwen|doubao/i);
     });
 
+    it('AI 调用记录按成功/非成功状态展示额度文案且隐藏 token 计量字段', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const usageSection = screen.getByLabelText('机构端 AI 调用记录');
+      fireEvent.click(within(usageSection).getByRole('button', { name: '刷新记录' }));
+
+      expect(await within(usageSection).findAllByText('已计入本月 AI 调用额度')).toHaveLength(3);
+      expect(within(usageSection).getAllByText('已记录，未计入成功调用额度')).toHaveLength(5);
+      expect(usageSection.textContent).not.toMatch(/\btoken\b|\btokens\b|promptTokens|completionTokens|totalTokens/i);
+      expect(usageSection.textContent).not.toContain('210 tokens');
+      expect(usageSection.textContent).not.toContain('30 tokens');
+      expect(usageSection.textContent).not.toContain('15 tokens');
+
+      const sensitiveRecord = screen.getByText('敏感输入已拒绝').closest('article') as HTMLElement;
+      expect(within(sensitiveRecord).queryByText('已计入本月 AI 调用额度')).not.toBeInTheDocument();
+      expect(within(sensitiveRecord).getByText('已记录，未计入成功调用额度')).toBeInTheDocument();
+
+      const quotaRecord = screen.getByText('AI 调用额度已用尽').closest('article') as HTMLElement;
+      expect(within(quotaRecord).queryByText('已计入本月 AI 调用额度')).not.toBeInTheDocument();
+      expect(within(quotaRecord).getByText('已记录，未计入成功调用额度')).toBeInTheDocument();
+
+      ['调用失败', '供应商限流', '供应商暂不可用'].forEach((statusLabel) => {
+        const record = screen.getByText(statusLabel).closest('article') as HTMLElement;
+        expect(within(record).queryByText('已计入本月 AI 调用额度')).not.toBeInTheDocument();
+        expect(within(record).getByText('已记录，未计入成功调用额度')).toBeInTheDocument();
+      });
+    });
+
+    it('AI 调用记录说明文案移除“模型”字样', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const usageSection = screen.getByLabelText('机构端 AI 调用记录');
+      expect(usageSection.textContent).toContain('查看本机构最近 AI 调用的额度、状态和知识库引用情况');
+      expect(usageSection.textContent).not.toContain('模型');
+    });
+
     it('展示 AI 调用额度 used / limit / remaining', async () => {
       render(<InstitutionKnowledgeReadonlyShell />);
       expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
@@ -948,7 +986,7 @@ describe('机构端知识库只读列表 UI', () => {
       expect(await within(usageSection).findByText('AI 参考片段仍需人工确认，不可直接作为诊疗结论。')).toBeInTheDocument();
     });
 
-    it('不展示 prompt / answer / provider raw response 敏感字段', async () => {
+    it('不展示 prompt / question / answer / provider raw response 敏感字段', async () => {
       render(<InstitutionKnowledgeReadonlyShell />);
       expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
 
@@ -957,6 +995,7 @@ describe('机构端知识库只读列表 UI', () => {
       await screen.findByText('已使用知识库');
 
       expect(usageSection.textContent).not.toContain('prompt');
+      expect(usageSection.textContent).not.toContain('question');
       expect(usageSection.textContent).not.toContain('answer');
       expect(usageSection.textContent).not.toContain('provider raw response');
     });
