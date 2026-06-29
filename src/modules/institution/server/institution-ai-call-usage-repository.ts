@@ -5,6 +5,10 @@ import {
   platformAiProviderConfigs,
   tenants,
 } from '@/server/db/schema';
+import type {
+  AiCreditMeteringDetails,
+  AiCreditMeteringStatus,
+} from '@/modules/institution/domain/ai-credits-metering';
 import type { EncryptedSecretEnvelope } from '@/modules/security/server/secretEncryption';
 import type {
   AiCallUsageMetadata,
@@ -51,6 +55,10 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
       latencyMs: number | null;
       status: AiCallUsageStatus;
       errorCode: string | null;
+      aiCreditsConsumed: number | null;
+      meteringStatus: AiCreditMeteringStatus | null;
+      meteringVersion: string | null;
+      meteringDetails: AiCreditMeteringDetails | null;
       metadata?: AiCallUsageMetadata;
     }): Promise<AiCallUsageRecord> {
       const rows = await database
@@ -68,6 +76,10 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
           latencyMs: input.latencyMs,
           status: input.status,
           errorCode: input.errorCode,
+          aiCreditsConsumed: input.aiCreditsConsumed,
+          meteringStatus: input.meteringStatus,
+          meteringVersion: input.meteringVersion,
+          meteringDetails: input.meteringDetails,
           metadata: input.metadata ?? null,
         })
         .returning();
@@ -89,6 +101,10 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
         status: row.status as AiCallUsageStatus,
         errorCode: row.errorCode,
         metadata: (row.metadata as AiCallUsageMetadata | null) ?? null,
+        aiCreditsConsumed: row.aiCreditsConsumed,
+        meteringStatus: row.meteringStatus as AiCreditMeteringStatus | null,
+        meteringVersion: row.meteringVersion,
+        meteringDetails: (row.meteringDetails as AiCreditMeteringDetails | null) ?? null,
         createdAt: row.createdAt,
       };
     },
@@ -123,6 +139,10 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
           status: row.status as AiCallUsageStatus,
           errorCode: row.errorCode,
           metadata: (row.metadata as AiCallUsageMetadata | null) ?? null,
+          aiCreditsConsumed: row.aiCreditsConsumed,
+          meteringStatus: row.meteringStatus as AiCreditMeteringStatus | null,
+          meteringVersion: row.meteringVersion,
+          meteringDetails: (row.meteringDetails as AiCreditMeteringDetails | null) ?? null,
           createdAt: row.createdAt,
         }));
     },

@@ -1,4 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import {
+  calculateAiCreditMetering,
+  type AiCreditMeteringDetails,
+  type AiCreditMeteringStatus,
+} from '@/modules/institution/domain/ai-credits-metering';
+import {
+  createAiCreditMeteringRulesRepository,
+  type AiCreditMeteringRulesRepository,
+} from '@/modules/institution/server/ai-credit-metering-rules-repository';
 import { decryptSecret } from '@/modules/security/server/secretEncryption';
 import type { EncryptedSecretEnvelope } from '@/modules/security/server/secretEncryption';
 import { searchInstitutionKnowledgeChunksService } from '@/modules/institution/server/institution-knowledge-keyword-search-service';
@@ -44,11 +53,27 @@ export type AiCallUsageRecord = {
   latencyMs: number | null;
   status: AiCallUsageStatus;
   errorCode: string | null;
+  aiCreditsConsumed: number | null;
+  meteringStatus: AiCreditMeteringStatus | null;
+  meteringVersion: string | null;
+  meteringDetails: AiCreditMeteringDetails | null;
   metadata: AiCallUsageMetadata;
   createdAt: Date;
 };
 
-export type AiCallUsageDto = Omit<AiCallUsageRecord, 'createdAt' | 'provider' | 'model' | 'promptTokens' | 'completionTokens' | 'totalTokens'> & {
+export type AiCallUsageDto = Omit<
+  AiCallUsageRecord,
+  | 'createdAt'
+  | 'provider'
+  | 'model'
+  | 'promptTokens'
+  | 'completionTokens'
+  | 'totalTokens'
+  | 'aiCreditsConsumed'
+  | 'meteringStatus'
+  | 'meteringVersion'
+  | 'meteringDetails'
+> & {
   serviceName: '平台 AI 服务';
   createdAt: string;
 };
@@ -174,6 +199,10 @@ export type AiCallUsageRepository = {
     latencyMs: number | null;
     status: AiCallUsageStatus;
     errorCode: string | null;
+    aiCreditsConsumed: number | null;
+    meteringStatus: AiCreditMeteringStatus | null;
+    meteringVersion: string | null;
+    meteringDetails: AiCreditMeteringDetails | null;
     metadata?: AiCallUsageMetadata;
   }): Promise<AiCallUsageRecord>;
   listInstitutionUsageRecords(input: {
@@ -187,6 +216,13 @@ export type AiCallUsageRepository = {
 const USAGE_RECORD_LIMIT = 50;
 const AI_CALL_TIMEOUT_MS = 30000;
 
+type AiCallUsageMeteringWriteFields = {
+  aiCreditsConsumed: number | null;
+  meteringStatus: AiCreditMeteringStatus | null;
+  meteringVersion: string | null;
+  meteringDetails: AiCreditMeteringDetails | null;
+};
+
 function normalizeRequired(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -198,6 +234,114 @@ function nowIso() {
 
 function generateRecordId() {
   return `ai-usage-${randomUUID()}`;
+}
+
+function toAiCreditMeteringUsageStatus(status: AiCallUsageStatus) {
+  return status;
+}
+
+function calculateAiCallUsageMetering(input: {
+  status: AiCallUsageStatus;
+  errorCode: string | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  rule?: Awaited<ReturnType<AiCreditMeteringRulesRepository['findCurrentRuleForProviderModel']>> | null;
+}): AiCallUsageMeteringWriteFields {
+  const metering = calculateAiCreditMetering({
+    rule: input.rule?.status === 'found' ? input.rule.rule : null,
+    usage: {
+      status: toAiCreditMeteringUsageStatus(input.status),
+      errorCode: input.errorCode,
+      inputTokens: input.promptTokens,
+      outputTokens: input.completionTokens,
+      totalTokens: input.totalTokens,
+    },
+  });
+
+  return {
+    aiCreditsConsumed: metering.aiCreditsConsumed,
+    meteringStatus: metering.meteringStatus,
+    meteringVersion: metering.meteringVersion,
+    meteringDetails: metering.meteringDetails,
+  };
+}
+
+async function resolveAiCallUsageMetering(input: {
+  rulesRepository?: AiCreditMeteringRulesRepository;
+  provider: string;
+  model: string;
+  status: AiCallUsageStatus;
+  errorCode: string | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+}): Promise<AiCallUsageMeteringWriteFields> {
+  const ruleLookup = input.status === 'succeeded'
+    ? await input.rulesRepository?.findCurrentRuleForProviderModel({
+        provider: input.provider,
+        model: input.model,
+      }).catch(() => ({
+        status: 'no_rule' as const,
+        reason: 'missing_metering_rule' as const,
+        rule: null,
+      }))
+    : null;
+
+  return calculateAiCallUsageMetering({
+    status: input.status,
+    errorCode: input.errorCode,
+    promptTokens: input.promptTokens,
+    completionTokens: input.completionTokens,
+    totalTokens: input.totalTokens,
+    rule: ruleLookup,
+  });
+}
+
+async function createMeteredUsageRecord(input: {
+  repository: AiCallUsageRepository;
+  rulesRepository?: AiCreditMeteringRulesRepository;
+  id: string;
+  tenantId: string;
+  institutionId: string | null;
+  actorUserId: string;
+  provider: string;
+  model: string;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  latencyMs: number | null;
+  status: AiCallUsageStatus;
+  errorCode: string | null;
+  metadata?: AiCallUsageMetadata;
+}) {
+  const metering = await resolveAiCallUsageMetering({
+    rulesRepository: input.rulesRepository,
+    provider: input.provider,
+    model: input.model,
+    status: input.status,
+    errorCode: input.errorCode,
+    promptTokens: input.promptTokens,
+    completionTokens: input.completionTokens,
+    totalTokens: input.totalTokens,
+  });
+
+  return input.repository.createUsageRecord({
+    id: input.id,
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    actorUserId: input.actorUserId,
+    provider: input.provider,
+    model: input.model,
+    promptTokens: input.promptTokens,
+    completionTokens: input.completionTokens,
+    totalTokens: input.totalTokens,
+    latencyMs: input.latencyMs,
+    status: input.status,
+    errorCode: input.errorCode,
+    ...metering,
+    metadata: input.metadata,
+  });
 }
 
 type OpenAiChatMessage = {
@@ -269,6 +413,10 @@ function mapRecordToDto(record: AiCallUsageRecord): AiCallUsageDto {
     promptTokens: _promptTokens,
     completionTokens: _completionTokens,
     totalTokens: _totalTokens,
+    aiCreditsConsumed: _aiCreditsConsumed,
+    meteringStatus: _meteringStatus,
+    meteringVersion: _meteringVersion,
+    meteringDetails: _meteringDetails,
     ...safeRecord
   } = record;
   void _provider;
@@ -276,6 +424,10 @@ function mapRecordToDto(record: AiCallUsageRecord): AiCallUsageDto {
   void _promptTokens;
   void _completionTokens;
   void _totalTokens;
+  void _aiCreditsConsumed;
+  void _meteringStatus;
+  void _meteringVersion;
+  void _meteringDetails;
   return {
     ...safeRecord,
     serviceName: '平台 AI 服务',
@@ -304,12 +456,15 @@ export async function requestInstitutionAiCallService(input: {
     textPreview: string;
     matchReason: string;
   }>;
+  rulesRepository?: AiCreditMeteringRulesRepository;
   db?: unknown;
 }): Promise<InstitutionAiCallResult> {
   const tenantId = normalizeRequired(input.input.tenantId);
   const institutionId = normalizeRequired(input.input.institutionId);
   const userId = normalizeRequired(input.input.userId) ?? 'anonymous';
   const question = normalizeRequired(input.input.question);
+  const rulesRepository = input.rulesRepository
+    ?? (input.db ? createAiCreditMeteringRulesRepository(input.db as Parameters<typeof createAiCreditMeteringRulesRepository>[0]) : undefined);
 
   if (!tenantId || !institutionId) {
     return { status: 'validation_failed', message: '缺少机构身份信息' };
@@ -322,7 +477,9 @@ export async function requestInstitutionAiCallService(input: {
   }
 
   if (hasSensitiveInput(question)) {
-    const record = await input.repository.createUsageRecord({
+    const record = await createMeteredUsageRecord({
+      repository: input.repository,
+      rulesRepository,
       id: generateRecordId(),
       tenantId,
       institutionId,
@@ -473,7 +630,9 @@ export async function requestInstitutionAiCallService(input: {
       const errorCode = rateLimited ? 'RATE_LIMITED' : `HTTP_${response.status}`;
       const status: AiCallUsageStatus = rateLimited ? 'rate_limited' : 'provider_unavailable';
 
-      const record = await input.repository.createUsageRecord({
+      const record = await createMeteredUsageRecord({
+        repository: input.repository,
+        rulesRepository,
         id: generateRecordId(),
         tenantId,
         institutionId,
@@ -501,7 +660,9 @@ export async function requestInstitutionAiCallService(input: {
     const answer = body.choices?.[0]?.message?.content ?? '';
 
     if (!answer || hasDeniedFragment(answer)) {
-      const record = await input.repository.createUsageRecord({
+      const record = await createMeteredUsageRecord({
+        repository: input.repository,
+        rulesRepository,
         id: generateRecordId(),
         tenantId,
         institutionId,
@@ -533,7 +694,9 @@ export async function requestInstitutionAiCallService(input: {
     // 不保存原始 question / prompt / 派生检索关键词
     const metadata = buildAiCallUsageMetadata(kbChunks);
 
-    const record = await input.repository.createUsageRecord({
+    const record = await createMeteredUsageRecord({
+      repository: input.repository,
+      rulesRepository,
       id: generateRecordId(),
       tenantId,
       institutionId,
@@ -576,7 +739,9 @@ export async function requestInstitutionAiCallService(input: {
     const latencyMs = Date.now() - startedAt;
     const timedOut = error instanceof DOMException && error.name === 'AbortError';
 
-    const record = await input.repository.createUsageRecord({
+    const record = await createMeteredUsageRecord({
+      repository: input.repository,
+      rulesRepository,
       id: generateRecordId(),
       tenantId,
       institutionId,
@@ -609,7 +774,8 @@ export async function recordAiCallQuotaRejection(input: {
   vendor: string;
   model?: string | null;
 }): Promise<AiCallUsageRecord> {
-  const record = await input.repository.createUsageRecord({
+  const record = await createMeteredUsageRecord({
+    repository: input.repository,
     id: generateRecordId(),
     tenantId: input.tenantId,
     institutionId: input.institutionId,
