@@ -874,18 +874,33 @@ describe('机构端知识库只读列表 UI', () => {
       expect(usageSection.textContent).not.toMatch(/deepseek|deepseek-v4-flash|DeepSeek|智谱|Kimi|Claude|豆包|通义千问|qwen|doubao/i);
     });
 
-    it('AI 调用记录隐藏 token 计量字段并展示额度中性文案', async () => {
+    it('AI 调用记录按成功/非成功状态展示额度文案且隐藏 token 计量字段', async () => {
       render(<InstitutionKnowledgeReadonlyShell />);
       expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
 
       const usageSection = screen.getByLabelText('机构端 AI 调用记录');
       fireEvent.click(within(usageSection).getByRole('button', { name: '刷新记录' }));
 
-      expect(await within(usageSection).findAllByText('已计入本月 AI 调用额度')).not.toHaveLength(0);
+      expect(await within(usageSection).findAllByText('已计入本月 AI 调用额度')).toHaveLength(3);
+      expect(within(usageSection).getAllByText('已记录，未计入成功调用额度')).toHaveLength(5);
       expect(usageSection.textContent).not.toMatch(/\btoken\b|\btokens\b|promptTokens|completionTokens|totalTokens/i);
       expect(usageSection.textContent).not.toContain('210 tokens');
       expect(usageSection.textContent).not.toContain('30 tokens');
       expect(usageSection.textContent).not.toContain('15 tokens');
+
+      const sensitiveRecord = screen.getByText('敏感输入已拒绝').closest('article') as HTMLElement;
+      expect(within(sensitiveRecord).queryByText('已计入本月 AI 调用额度')).not.toBeInTheDocument();
+      expect(within(sensitiveRecord).getByText('已记录，未计入成功调用额度')).toBeInTheDocument();
+
+      const quotaRecord = screen.getByText('AI 调用额度已用尽').closest('article') as HTMLElement;
+      expect(within(quotaRecord).queryByText('已计入本月 AI 调用额度')).not.toBeInTheDocument();
+      expect(within(quotaRecord).getByText('已记录，未计入成功调用额度')).toBeInTheDocument();
+
+      ['调用失败', '供应商限流', '供应商暂不可用'].forEach((statusLabel) => {
+        const record = screen.getByText(statusLabel).closest('article') as HTMLElement;
+        expect(within(record).queryByText('已计入本月 AI 调用额度')).not.toBeInTheDocument();
+        expect(within(record).getByText('已记录，未计入成功调用额度')).toBeInTheDocument();
+      });
     });
 
     it('AI 调用记录说明文案移除“模型”字样', async () => {

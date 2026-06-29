@@ -1329,7 +1329,7 @@ export function InstitutionKnowledgeReadonlyShell() {
                       {getAiUsageStatusLabel(record)}
                     </span>
                     <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-violet-700">
-                      已计入本月 AI 调用额度
+                      {record.status === 'succeeded' ? '已计入本月 AI 调用额度' : '已记录，未计入成功调用额度'}
                     </span>
                     {record.latencyMs ? (
                       <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-600">
