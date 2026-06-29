@@ -148,11 +148,11 @@ describe('工作台看板领域模型', () => {
       'conversations',
       'appointments',
       'knowledge',
-      'aiModels',
       'analytics',
     ]);
     expect(institutionNavItems.filter((item) => item.active)).toHaveLength(1);
     expect(institutionNavItems.find((item) => item.active)?.id).toBe('dashboard');
+    expect(labels).not.toContain('AI 模型');
     expect(labels).toEqual(
       expect.arrayContaining([
         '工作台',

@@ -24,7 +24,6 @@ import { AppointmentCenterShell } from '@/modules/institution/components/Appoint
 import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
 import { HisConnectionReadOnlyPanel } from '@/modules/institution/components/HisConnectionReadOnlyPanel';
 import { InstitutionAuditEventsShell } from '@/modules/institution/components/InstitutionAuditEventsShell';
-import { InstitutionAiModelsShell } from '@/modules/institution/components/InstitutionAiModelsShell';
 import { InstitutionKnowledgeReadonlyShell } from '@/modules/institution/components/InstitutionKnowledgeReadonlyShell';
 import { OpportunityPoolShell } from '@/modules/institution/components/OpportunityPoolShell';
 import {
@@ -576,8 +575,6 @@ export function InstitutionWorkspace() {
               <HisConnectionReadOnlyPanel />
             ) : activeView === 'knowledge' ? (
               <InstitutionKnowledgeReadonlyShell />
-            ) : activeView === 'aiModels' ? (
-              <InstitutionAiModelsShell />
             ) : (
               <PlaceholderInstitutionView label={activeNavItem.label} />
             )}

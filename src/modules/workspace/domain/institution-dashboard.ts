@@ -2,7 +2,6 @@ import type { LucideIcon } from 'lucide-react';
 import {
   BarChart3,
   BookOpen,
-  Brain,
   CalendarCheck,
   ClipboardList,
   FileSearch,
@@ -31,7 +30,6 @@ export type InstitutionViewId =
   | 'conversations'
   | 'appointments'
   | 'knowledge'
-  | 'aiModels'
   | 'analytics'
   | 'opportunities';
 
@@ -46,7 +44,6 @@ export const institutionNavItems: InstitutionNavItem[] = [
   { id: 'conversations', label: '客服工作台', icon: MessageCircle },
   { id: 'appointments', label: '预约中心', icon: CalendarCheck },
   { id: 'knowledge', label: '知识库', icon: BookOpen },
-  { id: 'aiModels', label: 'AI 模型', icon: Brain },
   { id: 'analytics', label: '数据分析', icon: BarChart3 },
 ];
 

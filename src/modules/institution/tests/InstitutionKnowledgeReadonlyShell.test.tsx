@@ -615,7 +615,7 @@ describe('机构端知识库只读列表 UI', () => {
               answer: '根据知识库参考资料，冷敷后应保持创面清洁干燥，避免剧烈热刺激。',
               record: {
                 id: 'rec-rag', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-                actorUserId: 'demo-user-admin', provider: 'deepseek', model: 'deepseek-v4-flash',
+                actorUserId: 'demo-user-admin', serviceName: '平台 AI 服务',
                 promptTokens: 150, completionTokens: 60, totalTokens: 210, latencyMs: 800,
                 status: 'succeeded', errorCode: null, createdAt: new Date().toISOString(),
               },
@@ -695,6 +695,16 @@ describe('机构端知识库只读列表 UI', () => {
       // 使用 findAllByText 处理多个匹配
       const matches = await screen.findAllByText(/AI 试问将自动参考本机构知识库中的匹配片段/);
       expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('AI 试问区域不显示模型选择和具体厂商模型名', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const aiSection = screen.getByLabelText('机构端 AI 真实调用');
+      expect(within(aiSection).queryByLabelText('选择 AI 模型')).not.toBeInTheDocument();
+      expect(within(aiSection).getByText('平台 AI 服务')).toBeInTheDocument();
+      expect(aiSection.textContent).not.toMatch(/DeepSeek|deepseek|智谱|Kimi|Claude|豆包|通义千问|qwen|doubao/i);
     });
 
     it('不展示敏感字段', async () => {
@@ -783,7 +793,7 @@ describe('机构端知识库只读列表 UI', () => {
               records: [
                 {
                   id: 'rec-rag-used', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-                  actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
+                  actorUserId: 'u', serviceName: '平台 AI 服务',
                   promptTokens: 150, completionTokens: 60, totalTokens: 210, latencyMs: 800,
                   status: 'succeeded', errorCode: null,
                   metadata: {
@@ -796,7 +806,7 @@ describe('机构端知识库只读列表 UI', () => {
                 },
                 {
                   id: 'rec-rag-unused', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-                  actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
+                  actorUserId: 'u', serviceName: '平台 AI 服务',
                   promptTokens: 20, completionTokens: 10, totalTokens: 30, latencyMs: 200,
                   status: 'succeeded', errorCode: null,
                   metadata: { knowledgeContext: { used: false, sources: [] } },
@@ -804,42 +814,42 @@ describe('机构端知识库只读列表 UI', () => {
                 },
                 {
                   id: 'rec-old-null', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-                  actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
+                  actorUserId: 'u', serviceName: '平台 AI 服务',
                   promptTokens: 10, completionTokens: 5, totalTokens: 15, latencyMs: 100,
                   status: 'succeeded', errorCode: null, metadata: null,
                   createdAt: '2026-06-27T07:00:00.000Z',
                 },
                 {
                   id: 'rec-rejected', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-                  actorUserId: 'u', provider: 'deepseek', model: 'unknown',
+                  actorUserId: 'u', serviceName: '平台 AI 服务',
                   promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null,
                   status: 'rejected', errorCode: 'quota_exceeded_ai_calls', metadata: null,
                   createdAt: '2026-06-27T06:00:00.000Z',
                 },
                 {
                   id: 'rec-sensitive', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-                  actorUserId: 'u', provider: 'deepseek', model: 'pre_call_safety_check',
+                  actorUserId: 'u', serviceName: '平台 AI 服务',
                   promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null,
                   status: 'sensitive_input_rejected', errorCode: 'SENSITIVE_INPUT_REJECTED', metadata: null,
                   createdAt: '2026-06-27T05:00:00.000Z',
                 },
                 {
                   id: 'rec-rate-limited', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-                  actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
+                  actorUserId: 'u', serviceName: '平台 AI 服务',
                   promptTokens: 10, completionTokens: null, totalTokens: null, latencyMs: 100,
                   status: 'rate_limited', errorCode: 'RATE_LIMITED', metadata: null,
                   createdAt: '2026-06-27T04:00:00.000Z',
                 },
                 {
                   id: 'rec-provider-unavailable', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-                  actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
+                  actorUserId: 'u', serviceName: '平台 AI 服务',
                   promptTokens: 10, completionTokens: null, totalTokens: null, latencyMs: 100,
                   status: 'provider_unavailable', errorCode: 'HTTP_503', metadata: null,
                   createdAt: '2026-06-27T03:00:00.000Z',
                 },
                 {
                   id: 'rec-failed', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-                  actorUserId: 'u', provider: 'deepseek', model: 'deepseek-v4-flash',
+                  actorUserId: 'u', serviceName: '平台 AI 服务',
                   promptTokens: 10, completionTokens: null, totalTokens: null, latencyMs: 100,
                   status: 'failed', errorCode: 'NETWORK_ERROR', metadata: null,
                   createdAt: '2026-06-27T02:00:00.000Z',
@@ -851,6 +861,17 @@ describe('机构端知识库只读列表 UI', () => {
           return Response.json({ records: [], pageInfo });
         }),
       );
+    });
+
+    it('AI 调用记录显示平台 AI 服务且不展示 raw provider/model', async () => {
+      render(<InstitutionKnowledgeReadonlyShell />);
+      expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+      const usageSection = screen.getByLabelText('机构端 AI 调用记录');
+      fireEvent.click(within(usageSection).getByRole('button', { name: '刷新记录' }));
+
+      expect(await within(usageSection).findAllByText('平台 AI 服务')).not.toHaveLength(0);
+      expect(usageSection.textContent).not.toMatch(/deepseek|deepseek-v4-flash|DeepSeek|智谱|Kimi|Claude|豆包|通义千问|qwen|doubao/i);
     });
 
     it('展示 AI 调用额度 used / limit / remaining', async () => {

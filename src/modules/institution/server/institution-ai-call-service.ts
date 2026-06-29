@@ -48,7 +48,8 @@ export type AiCallUsageRecord = {
   createdAt: Date;
 };
 
-export type AiCallUsageDto = Omit<AiCallUsageRecord, 'createdAt'> & {
+export type AiCallUsageDto = Omit<AiCallUsageRecord, 'createdAt' | 'provider' | 'model'> & {
+  serviceName: '平台 AI 服务';
   createdAt: string;
 };
 
@@ -262,8 +263,12 @@ function hasDeniedFragment(text: string) {
 }
 
 function mapRecordToDto(record: AiCallUsageRecord): AiCallUsageDto {
+  const { provider: _provider, model: _model, ...safeRecord } = record;
+  void _provider;
+  void _model;
   return {
-    ...record,
+    ...safeRecord,
+    serviceName: '平台 AI 服务',
     createdAt: record.createdAt instanceof Date
       ? record.createdAt.toISOString()
       : record.createdAt,

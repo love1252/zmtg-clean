@@ -90,21 +90,23 @@ describe('机构端 AI 模型列表 API', () => {
     expect(body.code).toBe('forbidden');
   });
 
-  it('returns models list for valid tenant', async () => {
+  it('returns governance forbidden for valid tenant and does not expose models', async () => {
     const { GET } = await import('@/app/api/v1/institution/ai-models/route');
     const response = await GET(new Request(aiModelsUrl));
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(403);
     const body = await response.json();
-    expect(body).toHaveProperty('models');
-    expect(Array.isArray(body.models)).toBe(true);
+    expect(body.code).toBe('INSTITUTION_AI_MODEL_GOVERNANCE_FORBIDDEN');
+    expect(JSON.stringify(body)).not.toContain('models');
     expectLowSensitivePayload(body);
   });
 
-  it('response does not include secret fields', async () => {
+  it('response does not include raw provider/model or secret fields', async () => {
     const { GET } = await import('@/app/api/v1/institution/ai-models/route');
     const response = await GET(new Request(aiModelsUrl));
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(403);
     const body = await response.json();
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toMatch(/deepseek|doubao|qwen|provider|DeepSeek|Kimi|Claude/i);
     expectLowSensitivePayload(body);
   });
 });

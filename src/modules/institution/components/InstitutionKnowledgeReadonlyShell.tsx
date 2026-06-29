@@ -72,8 +72,7 @@ type InstitutionAiCallUsageRecord = {
   tenantId: string;
   institutionId: string | null;
   actorUserId: string;
-  provider: string;
-  model: string;
+  serviceName: string;
   promptTokens: number | null;
   completionTokens: number | null;
   totalTokens: number | null;
@@ -225,7 +224,6 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [aiMessage, setAiMessage] = useState('AI 试问将自动参考本机构知识库中的匹配片段，辅助生成更可靠的回答。');
   const [aiKnowledgeContext, setAiKnowledgeContext] = useState<InstitutionAiCallKnowledgeContext | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiVendor, setAiVendor] = useState('deepseek');
   const [aiQuotaItem, setAiQuotaItem] = useState<InstitutionAiQuotaItem | null>(null);
   const [aiQuotaMessage, setAiQuotaMessage] = useState('正在读取 AI 调用额度...');
   const [aiUsageRecords, setAiUsageRecords] = useState<InstitutionAiCallUsageRecord[]>([]);
@@ -597,7 +595,7 @@ export function InstitutionKnowledgeReadonlyShell() {
       const response = await fetch('/api/institution/knowledge-management/ai-call', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ question, vendor: aiVendor }),
+        body: JSON.stringify({ question }),
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
@@ -1212,16 +1210,9 @@ export function InstitutionKnowledgeReadonlyShell() {
                     placeholder="输入问题，例如：冷敷后怎么护理？"
                   />
                 </label>
-                <select
-                  aria-label="选择 AI 模型"
-                  value={aiVendor}
-                  onChange={(event) => setAiVendor(event.target.value)}
-                  className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none"
-                >
-                  <option value="deepseek">DeepSeek</option>
-                  <option value="doubao">豆包</option>
-                  <option value="qwen">通义千问</option>
-                </select>
+                <div className="inline-flex h-11 items-center justify-center rounded-xl border border-violet-200 bg-violet-50 px-3 text-sm font-semibold text-violet-700">
+                  平台 AI 服务
+                </div>
                 <button
                   type="submit"
                   disabled={isAiLoading}
@@ -1331,7 +1322,7 @@ export function InstitutionKnowledgeReadonlyShell() {
                 return (
                 <article key={record.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
-                    <span>{record.provider} · {record.model}</span>
+                    <span>{record.serviceName || '平台 AI 服务'}</span>
                     <span>{formatDate(record.createdAt)}</span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">

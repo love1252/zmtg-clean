@@ -82,7 +82,8 @@ describe('AI 真实调用与用量记录 service', () => {
     expect(result.record).toBeTruthy();
     expect(result.record!.tenantId).toBe('t-001');
     expect(result.record!.institutionId).toBe('inst-001');
-    expect(result.record!.provider).toBe('deepseek');
+    expect(result.record!.serviceName).toBe('平台 AI 服务');
+    expect(JSON.stringify(result.record)).not.toMatch(/"provider"|"model"/);
     expect(result.record!.totalTokens).toBe(120);
     expect(result.record!.status).toBe('succeeded');
   });
