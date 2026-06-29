@@ -549,6 +549,27 @@ const platformCommercialMissingTenant = {
   snapshotAt: null,
 };
 
+const platformAiCreditMeteringRuleRecord = {
+  id: 'rule-workspace-ai-credits',
+  provider: 'deepseek',
+  model: 'deepseek-v4-flash',
+  meteringVersion: 'v06-stage-verify-workspace',
+  inputTokenWeight: 1,
+  outputTokenWeight: 1,
+  modelMultiplier: 1,
+  ragCreditSurcharge: 0,
+  creditsPerStandardTokenUnit: 1000,
+  enabled: true,
+  effectiveFrom: '2026-06-29T00:00:00.000Z',
+  effectiveTo: '2026-06-30T00:00:00.000Z',
+  createdAt: '2026-06-29T00:00:00.000Z',
+  updatedAt: '2026-06-29T01:00:00.000Z',
+  apiKey: 'sk_test_ai_credits_rule_should_not_render',
+  baseUrl: 'https://provider.example.test',
+  Authorization: 'Bearer should-not-render',
+  rawResponse: { unsafe: true },
+};
+
 const platformQuotaDeniedAuditEventRecord = {
   ...platformAuditEventRecord,
   id: 'audit_phase11_quota_denied',
@@ -1318,6 +1339,7 @@ type WorkspaceFetchOptions = {
     status: number;
     message: string;
   };
+  platformAiCreditMeteringRules?: unknown[];
   knowledgeBaseDemoReadonlyResponse?: unknown;
   knowledgeBaseDemoReadonlyError?: {
     status: number;
@@ -1395,6 +1417,7 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     platformAuditEvents = [platformAuditEventRecord],
     platformTenants = [platformTenantRecord],
     platformTenantError,
+    platformAiCreditMeteringRules = [platformAiCreditMeteringRuleRecord],
     knowledgeBaseDemoReadonlyResponse = buildKnowledgeBaseDemoReadonlyMockResponse('ready'),
     knowledgeBaseDemoReadonlyError,
     knowledgeBaseDemoReadonlyPending = false,
@@ -1663,6 +1686,10 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
         }
 
         return jsonResponse({ records: platformTenants });
+      }
+
+      if (path.startsWith('/api/open-platform/ai-credit-metering-rules')) {
+        return jsonResponse({ records: platformAiCreditMeteringRules });
       }
 
       if (
@@ -2450,6 +2477,8 @@ describe('工作台入口页面', () => {
     expect(screen.queryByText('AI 经营副驾驶建议')).not.toBeInTheDocument();
     expect(screen.getAllByText('智美天工').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '工作台' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'AI Credits规则' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '移动导航：AI Credits规则' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '客户中心' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '机构端移动导航' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：客户中心' })).toBeInTheDocument();
@@ -4277,6 +4306,7 @@ describe('工作台入口页面', () => {
     expect(screen.queryByText('预警与待办')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '平台总览' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '首页与品牌' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'AI Credits规则' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '平台审计日志' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '平台端移动导航' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：开放连接路线' })).toBeInTheDocument();
@@ -4292,6 +4322,24 @@ describe('工作台入口页面', () => {
     expect(screen.queryByText('服务端租户上下文')).not.toBeInTheDocument();
     expect(screen.queryByText('权限样例矩阵')).not.toBeInTheDocument();
     expect(screen.queryByText('审计事件词汇')).not.toBeInTheDocument();
+  });
+
+  it('平台端 AI Credits 规则入口接入既有规则 API 且保持低敏边界', async () => {
+    const fetchMock = mockWorkspaceFetch({ role: 'platform_admin' });
+    const { container } = render(<OpenPlatformPage />);
+
+    expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'AI Credits规则' }));
+
+    expect(await screen.findByRole('heading', { name: 'AI Credits 计量规则' })).toBeInTheDocument();
+    expect(screen.getByText('v06-stage-verify-workspace')).toBeInTheDocument();
+    expect(screen.getByText('deepseek-v4-flash')).toBeInTheDocument();
+    expect(container.textContent ?? '').not.toMatch(/sk_test_ai_credits_rule_should_not_render|apiKey|baseUrl|Authorization|rawResponse|signedUrl|storageKey/i);
+
+    const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
+    expect(requestPaths).toContain('/api/open-platform/ai-credit-metering-rules');
+    expect(requestPaths.some((path) => /provider-config|ai-model-config|smoke|ai-runtime/u.test(path))).toBe(false);
+    expect(requestPaths.some((path) => path.startsWith('/api/institution/knowledge-management/ai-call'))).toBe(false);
   });
 
   it('平台总览在无租户时展示真实零值而不是静态演示指标', async () => {
