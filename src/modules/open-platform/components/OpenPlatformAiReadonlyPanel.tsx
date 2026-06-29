@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { RefreshCw } from 'lucide-react';
 
 import {
   listOpenPlatformAiUsageCredits,
   type OpenPlatformAiUsageCreditsFilters,
   type OpenPlatformAiUsageCreditsResponse,
+  type PlatformAiUsageCreditsByDateDto,
+  type PlatformAiUsageCreditsByMeteringStatusDto,
+  type PlatformAiUsageCreditsByModelDto,
+  type PlatformAiUsageCreditsByTenantDto,
   type PlatformAiUsageCreditDetailDto,
 } from '@/modules/open-platform/client/platform-ai-usage-credits-client';
 import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
@@ -50,6 +54,12 @@ const emptyData: OpenPlatformAiUsageCreditsResponse = {
     pendingCalls: 0,
     notBillableCalls: 0,
     totalAiCreditsConsumed: 0,
+  },
+  aggregations: {
+    byModel: [],
+    byTenant: [],
+    byMeteringStatus: [],
+    byDate: [],
   },
   records: [],
   emptyState: {
@@ -106,6 +116,7 @@ function meteringStatusLabel(status: string | null) {
     pending: '待计量',
     not_billable: '不计费',
     legacy: '历史记录',
+    empty: '未计量',
   };
   return labels[status] ?? status;
 }
@@ -132,6 +143,155 @@ function SummaryCard(props: { label: string; value: string; tone?: string }) {
       <div className="text-xs font-semibold text-[#64748b]">{props.label}</div>
       <div className="mt-2 text-2xl font-semibold tracking-normal text-[#1f2937]">{props.value}</div>
     </article>
+  );
+}
+
+function EmptyAggregation({ label }: { label: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-4 py-6 text-center text-sm text-[#64748b]">
+      暂无{label}数据
+    </div>
+  );
+}
+
+function ModelAggregationTable({ rows }: { rows: PlatformAiUsageCreditsByModelDto[] }) {
+  if (rows.length === 0) return <EmptyAggregation label="模型用量统计" />;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[760px] text-left text-sm">
+        <thead className="bg-[#f8fafc] text-xs font-semibold text-[#64748b]">
+          <tr>
+            <th className="px-4 py-3">模型厂商 / 模型名称</th>
+            <th className="px-4 py-3">总调用</th>
+            <th className="px-4 py-3">成功 / 失败</th>
+            <th className="px-4 py-3">已计量</th>
+            <th className="px-4 py-3">Token 总量</th>
+            <th className="px-4 py-3">AI 积分消耗</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#e6edf5]">
+          {rows.map((row) => (
+            <tr key={`${row.provider}:${row.model}`}>
+              <td className="px-4 py-3">
+                <div className="font-semibold text-[#1f2937]">{row.provider}</div>
+                <div className="mt-1 text-xs text-[#94a3b8]">{row.model}</div>
+              </td>
+              <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.totalCalls)}</td>
+              <td className="px-4 py-3 text-[#64748b]">{formatNumber(row.succeededCalls)} / {formatNumber(row.failedCalls)}</td>
+              <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.meteredCalls)}</td>
+              <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.totalTokens)}</td>
+              <td className="px-4 py-3 font-semibold text-[#2563eb]">{formatNumber(row.totalAiCreditsConsumed)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TenantAggregationTable({ rows }: { rows: PlatformAiUsageCreditsByTenantDto[] }) {
+  if (rows.length === 0) return <EmptyAggregation label="租户用量统计" />;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[820px] text-left text-sm">
+        <thead className="bg-[#f8fafc] text-xs font-semibold text-[#64748b]">
+          <tr>
+            <th className="px-4 py-3">租户</th>
+            <th className="px-4 py-3">总调用</th>
+            <th className="px-4 py-3">成功 / 失败</th>
+            <th className="px-4 py-3">已计量</th>
+            <th className="px-4 py-3">待计量</th>
+            <th className="px-4 py-3">不计费</th>
+            <th className="px-4 py-3">AI 积分消耗</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#e6edf5]">
+          {rows.map((row) => (
+            <tr key={row.tenantId}>
+              <td className="px-4 py-3">
+                <div className="font-semibold text-[#1f2937]">{row.tenantName ?? '未命名租户'}</div>
+                <div className="mt-1 text-xs text-[#94a3b8]">{row.tenantId}</div>
+              </td>
+              <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.totalCalls)}</td>
+              <td className="px-4 py-3 text-[#64748b]">{formatNumber(row.succeededCalls)} / {formatNumber(row.failedCalls)}</td>
+              <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.meteredCalls)}</td>
+              <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.pendingCalls)}</td>
+              <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.notBillableCalls)}</td>
+              <td className="px-4 py-3 font-semibold text-[#2563eb]">{formatNumber(row.totalAiCreditsConsumed)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MeteringStatusAggregation({ rows }: { rows: PlatformAiUsageCreditsByMeteringStatusDto[] }) {
+  if (rows.length === 0) return <EmptyAggregation label="计量状态统计" />;
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {rows.map((row) => (
+        <article key={row.meteringStatus} className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4">
+          <div className="text-sm font-semibold text-[#1f2937]">{meteringStatusLabel(row.meteringStatus)}</div>
+          <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div className="text-xs font-semibold text-[#64748b]">调用次数</div>
+              <div className="mt-1 text-lg font-semibold text-[#1f2937]">{formatNumber(row.calls)}</div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-[#64748b]">AI 积分消耗</div>
+              <div className="mt-1 text-lg font-semibold text-[#2563eb]">{formatNumber(row.totalAiCreditsConsumed)}</div>
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function DateAggregationTable({ rows }: { rows: PlatformAiUsageCreditsByDateDto[] }) {
+  if (rows.length === 0) return <EmptyAggregation label="日期用量趋势" />;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[620px] text-left text-sm">
+        <thead className="bg-[#f8fafc] text-xs font-semibold text-[#64748b]">
+          <tr>
+            <th className="px-4 py-3">日期</th>
+            <th className="px-4 py-3">总调用</th>
+            <th className="px-4 py-3">成功调用</th>
+            <th className="px-4 py-3">失败调用</th>
+            <th className="px-4 py-3">AI 积分消耗</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#e6edf5]">
+          {rows.map((row) => (
+            <tr key={row.date}>
+              <td className="px-4 py-3 font-semibold text-[#1f2937]">{row.date}</td>
+              <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.totalCalls)}</td>
+              <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.succeededCalls)}</td>
+              <td className="px-4 py-3 text-[#64748b]">{formatNumber(row.failedCalls)}</td>
+              <td className="px-4 py-3 font-semibold text-[#2563eb]">{formatNumber(row.totalAiCreditsConsumed)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AggregationCard(props: { title: string; description: string; children: ReactNode }) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[#e6edf5] bg-white" aria-labelledby={`${props.title}-heading`}>
+      <div className="border-b border-[#e6edf5] px-4 py-3">
+        <h3 id={`${props.title}-heading`} className="text-sm font-semibold text-[#1f2937]">{props.title}</h3>
+        <p className="mt-1 text-xs leading-5 text-[#64748b]">{props.description}</p>
+      </div>
+      {props.children}
+    </section>
   );
 }
 
@@ -338,6 +498,37 @@ export function OpenPlatformAiReadonlyPanel() {
 
         {loadState === 'loading' ? (
           <div className="mt-5 rounded-2xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-4 py-8 text-center text-sm text-[#64748b]">正在加载 AI 用量与积分明细...</div>
+        ) : null}
+
+        {loadState === 'ready' ? (
+          <div className="mt-5 grid gap-4">
+            <div>
+              <h3 className="text-base font-semibold text-[#1f2937]">AI 积分消耗统计</h3>
+              <p className="mt-1 text-sm leading-6 text-[#64748b]">按筛选条件汇总模型、租户、计量状态和日期维度的只读用量，不包含账单导出、费用结算或功能场景统计。</p>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <AggregationCard title="模型用量统计" description="按模型厂商和模型名称统计调用、Token 与 AI 积分消耗。">
+                <ModelAggregationTable rows={data.aggregations.byModel} />
+              </AggregationCard>
+
+              <AggregationCard title="租户用量统计" description="按租户低敏标识统计调用成功、失败、计量状态和 AI 积分消耗。">
+                <TenantAggregationTable rows={data.aggregations.byTenant} />
+              </AggregationCard>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <AggregationCard title="计量状态统计" description="按已计量、待计量、不计费、未计量和历史记录归类。">
+                <div className="p-4">
+                  <MeteringStatusAggregation rows={data.aggregations.byMeteringStatus} />
+                </div>
+              </AggregationCard>
+
+              <AggregationCard title="日期用量趋势" description="按日期展示调用量和 AI 积分消耗，便于对齐旧版每日消耗口径。">
+                <DateAggregationTable rows={data.aggregations.byDate} />
+              </AggregationCard>
+            </div>
+          </div>
         ) : null}
 
         {loadState === 'error' ? (

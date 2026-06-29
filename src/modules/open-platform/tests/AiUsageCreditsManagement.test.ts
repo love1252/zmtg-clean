@@ -46,6 +46,19 @@ function expectLowSensitivePayload(input: unknown) {
   );
 }
 
+
+function zeroSummaryForTest() {
+  return {
+    totalCalls: 0,
+    succeededCalls: 0,
+    failedCalls: 0,
+    meteredCalls: 0,
+    pendingCalls: 0,
+    notBillableCalls: 0,
+    totalAiCreditsConsumed: 0,
+  };
+}
+
 describe('platform AI usage credits server', () => {
   it('规范化过滤条件并限制 limit 上限', () => {
     const result = normalizePlatformAiUsageCreditsFilters({
@@ -114,6 +127,41 @@ describe('platform AI usage credits server', () => {
         totalAiCreditsConsumed: 2,
         filters,
       } as never),
+      aggregateUsageCredits: async (filters) => ({
+        byModel: [{
+          provider: 'deepseek',
+          model: 'deepseek-v4-flash',
+          totalCalls: 2,
+          succeededCalls: 1,
+          failedCalls: 1,
+          meteredCalls: 1,
+          totalTokens: 200,
+          totalAiCreditsConsumed: 2,
+        }],
+        byTenant: [{
+          tenantId: 'tenant-001',
+          tenantName: '星澜医美',
+          totalCalls: 2,
+          succeededCalls: 1,
+          failedCalls: 1,
+          meteredCalls: 1,
+          pendingCalls: 1,
+          notBillableCalls: 0,
+          totalAiCreditsConsumed: 2,
+        }],
+        byMeteringStatus: [
+          { meteringStatus: 'metered', calls: 1, totalAiCreditsConsumed: 2 },
+          { meteringStatus: 'empty', calls: 1, totalAiCreditsConsumed: 0 },
+        ],
+        byDate: [{
+          date: '2026-06-30',
+          totalCalls: 2,
+          succeededCalls: 1,
+          failedCalls: 1,
+          totalAiCreditsConsumed: 2,
+        }],
+        filters,
+      } as never),
       listUsageCredits: async () => [mapPlatformAiUsageCreditRowToDto(usageRow)],
     };
 
@@ -132,8 +180,73 @@ describe('platform AI usage credits server', () => {
         pendingCalls: 1,
         totalAiCreditsConsumed: 2,
       });
+      expect(result.response.aggregations.byModel).toEqual([expect.objectContaining({
+        provider: 'deepseek',
+        model: 'deepseek-v4-flash',
+        totalCalls: 2,
+        totalTokens: 200,
+        totalAiCreditsConsumed: 2,
+      })]);
+      expect(result.response.aggregations.byTenant).toEqual([expect.objectContaining({
+        tenantId: 'tenant-001',
+        tenantName: '星澜医美',
+        pendingCalls: 1,
+        totalAiCreditsConsumed: 2,
+      })]);
+      expect(result.response.aggregations.byMeteringStatus).toEqual([
+        expect.objectContaining({ meteringStatus: 'metered', calls: 1, totalAiCreditsConsumed: 2 }),
+        expect.objectContaining({ meteringStatus: 'empty', calls: 1, totalAiCreditsConsumed: 0 }),
+      ]);
+      expect(result.response.aggregations.byDate).toEqual([expect.objectContaining({
+        date: '2026-06-30',
+        totalCalls: 2,
+        totalAiCreditsConsumed: 2,
+      })]);
       expect(result.response.records).toHaveLength(1);
       expectLowSensitivePayload(result.response);
     }
+  });
+
+
+  it('把过滤条件传递给聚合查询', async () => {
+    const seenFilters: unknown[] = [];
+    const repository: PlatformAiUsageCreditsRepository = {
+      summarizeUsageCredits: async () => zeroSummaryForTest(),
+      aggregateUsageCredits: async (filters) => {
+        seenFilters.push(filters);
+        return {
+          byModel: [],
+          byTenant: [],
+          byMeteringStatus: [],
+          byDate: [],
+        };
+      },
+      listUsageCredits: async () => [],
+    };
+
+    const result = await listPlatformAiUsageCredits({
+      repository,
+      filters: {
+        tenantId: 'tenant-001',
+        status: 'succeeded',
+        meteringStatus: 'metered',
+        provider: 'deepseek',
+        model: 'deepseek-v4-flash',
+        dateFrom: '2026-06-30T00:00:00.000Z',
+        dateTo: '2026-06-30T23:59:59.000Z',
+        limit: '25',
+      },
+    });
+
+    expect(result.status).toBe('ok');
+    expect(seenFilters).toHaveLength(1);
+    expect(seenFilters[0]).toMatchObject({
+      tenantId: 'tenant-001',
+      status: 'succeeded',
+      meteringStatus: 'metered',
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      limit: 25,
+    });
   });
 });

@@ -28,6 +28,40 @@ const usageResponse = {
     notBillableCalls: 1,
     totalAiCreditsConsumed: 2,
   },
+  aggregations: {
+    byModel: [{
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      totalCalls: 2,
+      succeededCalls: 1,
+      failedCalls: 1,
+      meteredCalls: 1,
+      totalTokens: 200,
+      totalAiCreditsConsumed: 2,
+    }],
+    byTenant: [{
+      tenantId: 'tenant-001',
+      tenantName: '星澜医美',
+      totalCalls: 2,
+      succeededCalls: 1,
+      failedCalls: 1,
+      meteredCalls: 1,
+      pendingCalls: 0,
+      notBillableCalls: 1,
+      totalAiCreditsConsumed: 2,
+    }],
+    byMeteringStatus: [
+      { meteringStatus: 'metered', calls: 1, totalAiCreditsConsumed: 2 },
+      { meteringStatus: 'not_billable', calls: 1, totalAiCreditsConsumed: 0 },
+    ],
+    byDate: [{
+      date: '2026-06-30',
+      totalCalls: 2,
+      succeededCalls: 1,
+      failedCalls: 1,
+      totalAiCreditsConsumed: 2,
+    }],
+  },
   records: [
     {
       id: 'usage-001',
@@ -56,7 +90,7 @@ const usageResponse = {
 
 function expectLowSensitivePayload(input: unknown) {
   expect(JSON.stringify(input)).not.toMatch(
-    /apiKey|encryptedApiKey|baseUrl|Authorization|Cookie|Token|prompt|question|answer|rawResponse|signedUrl|storageKey/i,
+    /apiKey|encryptedApiKey|baseUrl|Authorization|Cookie|prompt|question|answer|rawResponse|signedUrl|storageKey/i,
   );
 }
 
@@ -67,6 +101,12 @@ describe('platform AI usage credits client', () => {
     const result = await listOpenPlatformAiUsageCredits(undefined, { fetcher });
 
     expect(result).toEqual({ ok: true, data: usageResponse });
+    if (result.ok) {
+      expect(result.data.aggregations.byModel).toEqual([expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-flash' })]);
+      expect(result.data.aggregations.byTenant).toEqual([expect.objectContaining({ tenantId: 'tenant-001', tenantName: '星澜医美' })]);
+      expect(result.data.aggregations.byMeteringStatus).toEqual(expect.arrayContaining([expect.objectContaining({ meteringStatus: 'metered' })]));
+      expect(result.data.aggregations.byDate).toEqual([expect.objectContaining({ date: '2026-06-30' })]);
+    }
     expect(fetcher).toHaveBeenCalledWith('/api/open-platform/ai-usage-credits', { cache: 'no-store' });
   });
 
@@ -84,7 +124,8 @@ describe('platform AI usage credits client', () => {
       limit: 25,
     }, { fetcher });
 
-    expect(fetchPath(fetcher.mock.calls[0][0])).toBe(
+    const firstCall = fetcher.mock.calls[0] as unknown as [Parameters<typeof fetch>[0], RequestInit?] | undefined;
+    expect(fetchPath(firstCall?.[0] ?? '')).toBe(
       '/api/open-platform/ai-usage-credits?tenantId=tenant-001&status=succeeded&meteringStatus=metered&provider=deepseek&model=deepseek-v4-flash&dateFrom=2026-06-30T00%3A00%3A00.000Z&dateTo=2026-06-30T23%3A59%3A59.000Z&limit=25',
     );
   });

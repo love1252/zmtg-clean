@@ -8,6 +8,50 @@ export type PlatformAiUsageCreditsSummaryDto = {
   totalAiCreditsConsumed: number;
 };
 
+export type PlatformAiUsageCreditsByModelDto = {
+  provider: string;
+  model: string;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
+  meteredCalls: number;
+  totalTokens: number;
+  totalAiCreditsConsumed: number;
+};
+
+export type PlatformAiUsageCreditsByTenantDto = {
+  tenantId: string;
+  tenantName: string | null;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
+  meteredCalls: number;
+  pendingCalls: number;
+  notBillableCalls: number;
+  totalAiCreditsConsumed: number;
+};
+
+export type PlatformAiUsageCreditsByMeteringStatusDto = {
+  meteringStatus: string;
+  calls: number;
+  totalAiCreditsConsumed: number;
+};
+
+export type PlatformAiUsageCreditsByDateDto = {
+  date: string;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
+  totalAiCreditsConsumed: number;
+};
+
+export type PlatformAiUsageCreditsAggregationsDto = {
+  byModel: PlatformAiUsageCreditsByModelDto[];
+  byTenant: PlatformAiUsageCreditsByTenantDto[];
+  byMeteringStatus: PlatformAiUsageCreditsByMeteringStatusDto[];
+  byDate: PlatformAiUsageCreditsByDateDto[];
+};
+
 export type PlatformAiUsageCreditDetailDto = {
   id: string;
   tenantId: string;
@@ -43,6 +87,7 @@ export type OpenPlatformAiUsageCreditsResponse = {
   readonly: true;
   dataSource: 'repository';
   summary: PlatformAiUsageCreditsSummaryDto;
+  aggregations: PlatformAiUsageCreditsAggregationsDto;
   records: PlatformAiUsageCreditDetailDto[];
   emptyState: {
     title: string;
@@ -157,6 +202,7 @@ export async function listOpenPlatformAiUsageCredits(
       !isJsonObject(payload) ||
       payload.requestId !== 'platform-ai-usage-credits' ||
       !isJsonObject(payload.summary) ||
+      !isJsonObject(payload.aggregations) ||
       !Array.isArray(payload.records)
     ) {
       return {

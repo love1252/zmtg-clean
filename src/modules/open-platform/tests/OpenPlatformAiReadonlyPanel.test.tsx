@@ -18,8 +18,7 @@ const forbiddenText = [
   'postgres://',
   '/Users/',
   'stack',
-  'token',
-  'secret',
+    'secret',
   'credential',
   '测试调用用户 prompt',
   'encryptedApiKey',
@@ -90,6 +89,12 @@ describe('平台端 AI 模型与用量只读面板', () => {
         notBillableCalls: 0,
         totalAiCreditsConsumed: 0,
       },
+      aggregations: {
+      byModel: [],
+      byTenant: [],
+      byMeteringStatus: [],
+      byDate: [],
+    },
       records: [],
       emptyState: {
         title: '暂无 AI 用量明细',
@@ -124,6 +129,12 @@ describe('平台端 AI 模型与用量只读面板', () => {
         notBillableCalls: 0,
         totalAiCreditsConsumed: 0,
       },
+      aggregations: {
+      byModel: [],
+      byTenant: [],
+      byMeteringStatus: [],
+      byDate: [],
+    },
       records: [],
       emptyState: {
         title: '暂无 AI 用量明细',

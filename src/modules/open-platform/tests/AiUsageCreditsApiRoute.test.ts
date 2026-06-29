@@ -4,6 +4,7 @@ import { GET } from '@/app/api/open-platform/ai-usage-credits/route';
 import {
   createPlatformAiUsageCreditsRepository,
   listPlatformAiUsageCredits,
+  type PlatformAiUsageCreditsResponse,
 } from '@/modules/open-platform/server/ai-usage-credits';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 
@@ -55,6 +56,40 @@ const responsePayload = {
     notBillableCalls: 1,
     totalAiCreditsConsumed: 2,
   },
+  aggregations: {
+    byModel: [{
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      totalCalls: 2,
+      succeededCalls: 1,
+      failedCalls: 1,
+      meteredCalls: 1,
+      totalTokens: 200,
+      totalAiCreditsConsumed: 2,
+    }],
+    byTenant: [{
+      tenantId: 'tenant-001',
+      tenantName: '星澜医美',
+      totalCalls: 2,
+      succeededCalls: 1,
+      failedCalls: 1,
+      meteredCalls: 1,
+      pendingCalls: 0,
+      notBillableCalls: 1,
+      totalAiCreditsConsumed: 2,
+    }],
+    byMeteringStatus: [
+      { meteringStatus: 'metered', calls: 1, totalAiCreditsConsumed: 2 },
+      { meteringStatus: 'not_billable', calls: 1, totalAiCreditsConsumed: 0 },
+    ],
+    byDate: [{
+      date: '2026-06-30',
+      totalCalls: 2,
+      succeededCalls: 1,
+      failedCalls: 1,
+      totalAiCreditsConsumed: 2,
+    }],
+  },
   records: [
     {
       id: 'usage-001',
@@ -81,10 +116,27 @@ const responsePayload = {
       Authorization: 'Bearer should-not-return',
     },
   ],
+  filters: {
+    tenantId: 'tenant-001',
+    status: 'succeeded',
+    meteringStatus: 'metered',
+    provider: 'deepseek',
+    model: 'deepseek-v4-flash',
+    limit: 50,
+  },
   emptyState: {
     title: '暂无 AI 用量明细',
     description: '当前过滤条件下没有 AI 调用记录。',
   },
+} satisfies PlatformAiUsageCreditsResponse & {
+  records: Array<PlatformAiUsageCreditsResponse['records'][number] & {
+    prompt: string;
+    answer: string;
+    rawResponse: { unsafe: boolean };
+    apiKey: string;
+    baseUrl: string;
+    Authorization: string;
+  }>;
 };
 
 async function readJson(response: Response) {
@@ -133,6 +185,24 @@ describe('平台端 AI usage credits API', () => {
       },
     });
     expect(body.summary).toMatchObject({ totalCalls: 2, meteredCalls: 1, totalAiCreditsConsumed: 2 });
+    expect((body.aggregations as Record<string, unknown[]>).byModel[0]).toMatchObject({
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      totalCalls: 2,
+    });
+    expect((body.aggregations as Record<string, unknown[]>).byTenant[0]).toMatchObject({
+      tenantId: 'tenant-001',
+      tenantName: '星澜医美',
+      totalAiCreditsConsumed: 2,
+    });
+    expect((body.aggregations as Record<string, unknown[]>).byMeteringStatus[0]).toMatchObject({
+      meteringStatus: 'metered',
+      calls: 1,
+    });
+    expect((body.aggregations as Record<string, unknown[]>).byDate[0]).toMatchObject({
+      date: '2026-06-30',
+      totalCalls: 2,
+    });
     expect(body.records).toEqual([
       expect.objectContaining({
         id: 'usage-001',
