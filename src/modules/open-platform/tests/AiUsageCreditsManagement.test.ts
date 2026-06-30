@@ -188,6 +188,14 @@ describe('platform AI usage credits server', () => {
           failedCalls: 1,
           totalAiCreditsConsumed: 2,
         }],
+        byDateProvider: [{
+          date: '2026-06-30',
+          provider: 'deepseek',
+          providerDisplayName: 'DeepSeek',
+          totalCalls: 2,
+          totalTokens: 200,
+          totalAiCreditsConsumed: 2,
+        }],
         filters,
       } as never),
       listFilterOptions: async () => filterOptionsForTest(),
@@ -230,6 +238,14 @@ describe('platform AI usage credits server', () => {
       expect(result.response.aggregations.byDate).toEqual([expect.objectContaining({
         date: '2026-06-30',
         totalCalls: 2,
+        totalAiCreditsConsumed: 2,
+      })]);
+      expect(result.response.aggregations.byDateProvider).toEqual([expect.objectContaining({
+        date: '2026-06-30',
+        provider: 'deepseek',
+        providerDisplayName: 'DeepSeek',
+        totalCalls: 2,
+        totalTokens: 200,
         totalAiCreditsConsumed: 2,
       })]);
       expect(result.response.filterOptions).toMatchObject({
@@ -290,6 +306,7 @@ describe('platform AI usage credits server', () => {
           byTenant: [],
           byMeteringStatus: [],
           byDate: [],
+          byDateProvider: [],
         };
       },
       listFilterOptions: async () => filterOptionsForTest(),

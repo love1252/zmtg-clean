@@ -7,7 +7,7 @@ import {
   listOpenPlatformAiUsageCredits,
   type OpenPlatformAiUsageCreditsFilters,
   type OpenPlatformAiUsageCreditsResponse,
-  type PlatformAiUsageCreditsByDateDto,
+  type PlatformAiUsageCreditsByDateProviderDto,
   type PlatformAiUsageCreditsByMeteringStatusDto,
   type PlatformAiUsageCreditsByModelDto,
   type PlatformAiUsageCreditsByTenantDto,
@@ -116,6 +116,7 @@ const emptyData: OpenPlatformAiUsageCreditsResponse = {
     byTenant: [],
     byMeteringStatus: [],
     byDate: [],
+    byDateProvider: [],
   },
   filterOptions: {
     providers: [],
@@ -781,24 +782,152 @@ function AggregationCard(props: { title: string; description?: string; children:
   );
 }
 
-function CompactDateBars({ rows }: { rows: PlatformAiUsageCreditsByDateDto[] }) {
-  if (rows.length === 0) return <EmptyAggregation label="日期用量趋势" />;
-  const maxCredits = Math.max(1, ...rows.map((row) => row.totalAiCreditsConsumed));
+function DateTrendChart(props: {
+  rows: PlatformAiUsageCreditsByDateProviderDto[];
+  metric: UsageStatsMetric;
+  onMetricChange: (metric: UsageStatsMetric) => void;
+  onSelectProvider: (provider: string) => void;
+}) {
+  const metricOption = usageStatsMetrics.find((metric) => metric.key === props.metric) ?? usageStatsMetrics[0];
+  const days = useMemo(() => {
+    const grouped = new Map<string, {
+      date: string;
+      total: number;
+      segments: Array<{
+        provider: string;
+        providerLabel: string;
+        value: number;
+        totalCalls: number;
+        totalTokens: number;
+        totalAiCreditsConsumed: number;
+      }>;
+    }>();
+
+    props.rows.forEach((row) => {
+      const value = usageMetricValue(row, props.metric);
+      const day = grouped.get(row.date) ?? { date: row.date, total: 0, segments: [] };
+      day.total += value;
+      day.segments.push({
+        provider: row.provider,
+        providerLabel: row.providerDisplayName ?? row.provider,
+        value,
+        totalCalls: row.totalCalls,
+        totalTokens: row.totalTokens,
+        totalAiCreditsConsumed: row.totalAiCreditsConsumed,
+      });
+      grouped.set(row.date, day);
+    });
+
+    return Array.from(grouped.values())
+      .map((day) => ({
+        ...day,
+        segments: day.segments.sort((left, right) => right.value - left.value || left.provider.localeCompare(right.provider)),
+      }))
+      .sort((left, right) => left.date.localeCompare(right.date));
+  }, [props.metric, props.rows]);
+  const providers = useMemo(() => {
+    const providerMap = new Map<string, string>();
+    props.rows.forEach((row) => providerMap.set(row.provider, row.providerDisplayName ?? row.provider));
+    return Array.from(providerMap.entries()).sort((left, right) => left[1].localeCompare(right[1]));
+  }, [props.rows]);
+  const maxTotal = Math.max(1, ...days.map((day) => day.total));
 
   return (
-    <div className="grid gap-2 p-3">
-      {rows.slice(-7).map((row) => (
-        <div key={row.date} className="grid gap-2 rounded-xl bg-[#f8fafc] px-3 py-2 text-sm sm:grid-cols-[112px_1fr_120px] sm:items-center">
-          <div className="font-semibold text-[#1f2937]">{row.date}</div>
-          <div className="h-2 overflow-hidden rounded-full bg-[#e2e8f0]">
-            <div className="h-full rounded-full bg-[#2563eb]" style={{ width: `${Math.max(4, (row.totalAiCreditsConsumed / maxCredits) * 100)}%` }} />
-          </div>
-          <div className="text-xs font-semibold text-[#64748b] sm:text-right">
-            调用 {formatNumber(row.totalCalls)} · 积分 {formatNumber(row.totalAiCreditsConsumed)}
-          </div>
+    <section className="grid gap-4 p-4" aria-labelledby="date-trend-chart-heading">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h4 id="date-trend-chart-heading" className="text-sm font-semibold text-[#1f2937]">按日期查看 AI 用量趋势</h4>
+          <p className="mt-1 text-xs leading-5 text-[#64748b]">X 轴为日期，Y 轴为当前指标；柱体按厂商稳定分色堆叠，点击厂商分段可联动筛选。</p>
         </div>
-      ))}
-    </div>
+        <div className="flex flex-wrap gap-2" aria-label="趋势图指标切换">
+          {usageStatsMetrics.map((metric) => (
+            <button
+              key={metric.key}
+              type="button"
+              onClick={() => props.onMetricChange(metric.key)}
+              className={cn(
+                'h-8 rounded-full border px-3 text-xs font-semibold transition',
+                props.metric === metric.key
+                  ? 'border-[#2563eb] bg-[#2563eb] text-white'
+                  : 'border-[#dbe3ee] bg-white text-[#64748b] hover:bg-[#f1f5f9]',
+              )}
+              aria-pressed={props.metric === metric.key}
+            >
+              {metric.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {days.length === 0 ? (
+        <EmptyAggregation label="日期用量趋势" />
+      ) : (
+        <>
+          <div className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-4">
+            <div className="mb-3 flex items-center justify-between text-xs font-semibold text-[#64748b]">
+              <span>Y 轴：{metricOption.label}</span>
+              <span>峰值 {formatNumber(maxTotal)}</span>
+            </div>
+            <div className="grid grid-cols-[36px_minmax(0,1fr)] gap-3">
+              <div className="flex h-52 flex-col justify-between text-right text-[11px] font-semibold text-[#94a3b8]" aria-hidden="true">
+                <span>{formatNumber(maxTotal)}</span>
+                <span>{formatNumber(Math.round(maxTotal / 2))}</span>
+                <span>0</span>
+              </div>
+              <div className="relative border-b border-l border-[#cbd5e1] pl-3 pt-2">
+                <div className="pointer-events-none absolute inset-x-3 top-2 h-px bg-[#e2e8f0]" />
+                <div className="pointer-events-none absolute inset-x-3 top-1/2 h-px bg-[#e2e8f0]" />
+                <div className="flex h-52 items-end gap-2 overflow-x-auto pb-2" aria-label="按日期和厂商堆叠的 AI 用量趋势图">
+                  {days.map((day) => (
+                    <div key={day.date} className="flex min-w-[56px] flex-1 flex-col items-center gap-2">
+                      <div className="flex h-44 w-full items-end justify-center">
+                        <div
+                          className="flex w-full max-w-[44px] flex-col-reverse overflow-hidden rounded-t-xl border border-white bg-[#e2e8f0] shadow-sm"
+                          style={{ height: `${Math.max(8, (day.total / maxTotal) * 100)}%` }}
+                          aria-label={`${day.date} ${metricOption.label}合计 ${formatNumber(day.total)}`}
+                        >
+                          {day.segments.map((segment) => {
+                            if (segment.value <= 0) return null;
+                            const title = `${day.date} · ${segment.providerLabel} · ${metricOption.label} ${formatNumber(segment.value)}；点击筛选厂商 ${segment.providerLabel}`;
+                            return (
+                              <button
+                                key={`${day.date}:${segment.provider}`}
+                                type="button"
+                                onClick={() => props.onSelectProvider(segment.provider)}
+                                title={title}
+                                aria-label={title}
+                                className="min-h-[6px] w-full border-t border-white/60 transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[#1d4ed8] focus:ring-offset-1"
+                                style={{ height: `${(segment.value / Math.max(1, day.total)) * 100}%`, backgroundColor: providerColor(segment.provider) }}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <span className="w-full truncate text-center text-[11px] font-semibold text-[#64748b]" title={day.date}>{day.date.slice(5)}</span>
+                      <span className="text-[11px] font-semibold text-[#1f2937]">{formatNumber(day.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2" aria-label="趋势图厂商图例">
+            {providers.map(([provider, label]) => (
+              <button
+                key={provider}
+                type="button"
+                onClick={() => props.onSelectProvider(provider)}
+                className="inline-flex items-center gap-2 rounded-full border border-[#dbe3ee] bg-white px-3 py-1.5 text-xs font-semibold text-[#64748b] transition hover:bg-[#eef6ff] focus:outline-none focus:ring-2 focus:ring-[#bfdbfe]"
+                aria-label={`筛选趋势图厂商 ${label}`}
+              >
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: providerColor(provider) }} aria-hidden="true" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -846,6 +975,7 @@ export function OpenPlatformAiReadonlyPanel() {
   const [data, setData] = useState<OpenPlatformAiUsageCreditsResponse>(emptyData);
   const [error, setError] = useState('');
   const [usageStatsMetric, setUsageStatsMetric] = useState<UsageStatsMetric>('calls');
+  const [dateTrendMetric, setDateTrendMetric] = useState<UsageStatsMetric>('calls');
   const [activeTab, setActiveTab] = useState<AiUsageTab>('overview');
 
   async function loadUsage(nextFilters: FilterFormState) {
@@ -1194,7 +1324,12 @@ export function OpenPlatformAiReadonlyPanel() {
                 </div>
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
                   <AggregationCard title="日期用量趋势">
-                    <CompactDateBars rows={data.aggregations.byDate} />
+                    <DateTrendChart
+                      rows={data.aggregations.byDateProvider}
+                      metric={dateTrendMetric}
+                      onMetricChange={setDateTrendMetric}
+                      onSelectProvider={selectProviderFilter}
+                    />
                   </AggregationCard>
                   <AggregationCard title="计量状态摘要">
                     <div className="p-3">
