@@ -115,6 +115,32 @@ function usagePayload(records: unknown[] = [usageRecord]) {
         failedCalls: 1,
         totalAiCreditsConsumed: 6,
       }] : [],
+      byDateProvider: hasRecords ? [
+        {
+          date: '2026-06-29',
+          provider: 'deepseek',
+          providerDisplayName: 'DeepSeek',
+          totalCalls: 1,
+          totalTokens: 200,
+          totalAiCreditsConsumed: 2,
+        },
+        {
+          date: '2026-06-30',
+          provider: 'deepseek',
+          providerDisplayName: 'DeepSeek',
+          totalCalls: 3,
+          totalTokens: 600,
+          totalAiCreditsConsumed: 6,
+        },
+        {
+          date: '2026-06-30',
+          provider: 'moonshot',
+          providerDisplayName: 'Kimi',
+          totalCalls: 2,
+          totalTokens: 300,
+          totalAiCreditsConsumed: 4,
+        },
+      ] : [],
     },
     filterOptions: {
       providers: [
@@ -317,9 +343,10 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(screen.getByRole('tab', { name: '总览' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('AI 积分消耗统计')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '日期用量趋势' })).toBeInTheDocument();
+    expect(screen.getByText('按日期查看 AI 用量趋势')).toBeInTheDocument();
+    expect(screen.getByText('06-30')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '计量状态摘要' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '厂商 / 模型用量统计' })).toBeInTheDocument();
-    expect(screen.getByText('2026-06-30')).toBeInTheDocument();
 
     selectAiUsageTab('模型与厂商');
     expect(screen.getByRole('tab', { name: '模型与厂商' })).toHaveAttribute('aria-selected', 'true');
@@ -461,16 +488,89 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(screen.getByRole('option', { name: /DeepSeek V4 Flash/ })).toBeInTheDocument();
   });
 
+  it('日期趋势图支持指标切换、厂商分色图例、中文提示和厂商联动筛选', async () => {
+    const fetchMock = mockUsageFetch();
+    const { container } = render(<OpenPlatformAiReadonlyPanel />);
+
+    expect(await screen.findByRole('heading', { name: '日期用量趋势' })).toBeInTheDocument();
+    expect(screen.getByText('按日期查看 AI 用量趋势')).toBeInTheDocument();
+    expect(screen.getByText('X 轴为日期，Y 轴为当前指标；柱体按厂商稳定分色堆叠，点击厂商分段可联动筛选。')).toBeInTheDocument();
+    expect(screen.getByText('Y 轴：调用次数')).toBeInTheDocument();
+    expect(screen.getByText('06-29')).toBeInTheDocument();
+    expect(screen.getByText('06-30')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '筛选趋势图厂商 DeepSeek' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '筛选趋势图厂商 Kimi' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /2026-06-30 · DeepSeek · 调用次数 3/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Token 总量' })[0]);
+    expect(screen.getByText('Y 轴：Token 总量')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /2026-06-30 · Kimi · Token 总量 300/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'AI 积分消耗' })[0]);
+    expect(screen.getByText('Y 轴：AI 积分消耗')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /2026-06-30 · DeepSeek · AI 积分消耗 6/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /2026-06-30 · Kimi · AI 积分消耗 4/ }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('provider=moonshot'))).toBe(true);
+    });
+    selectAiUsageTab('明细记录');
+    expect(screen.getByLabelText('模型厂商')).toHaveValue('Kimi');
+    expect(screen.queryByText(/人民币|费用金额|真实成本/)).not.toBeInTheDocument();
+    expectNoSensitiveContent(container);
+  });
+
+  it('全局时间范围变化后日期趋势图同步使用最新聚合数据', async () => {
+    const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+      const path = fetchPath(input);
+      const payload = usagePayload([usageRecord]);
+      if (path.includes('dateFrom=2026-06-21T16%3A00%3A00.000Z')) {
+        return jsonResponse({
+          ...payload,
+          aggregations: {
+            ...payload.aggregations,
+            byDateProvider: [{
+              date: '2026-06-22',
+              provider: 'moonshot',
+              providerDisplayName: 'Kimi',
+              totalCalls: 5,
+              totalTokens: 900,
+              totalAiCreditsConsumed: 8,
+            }],
+          },
+        });
+      }
+      return jsonResponse(payload);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OpenPlatformAiReadonlyPanel />);
+
+    expect(await screen.findByText('06-30')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '今日' }));
+
+    expect(await screen.findByText('06-22')).toBeInTheDocument();
+    expect(screen.queryByText('06-30')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /2026-06-22 · Kimi · 调用次数 5/ })).toBeInTheDocument();
+  });
+
+  it('日期趋势图无数据时显示中文空状态', async () => {
+    mockUsageFetch({ records: [] });
+    render(<OpenPlatformAiReadonlyPanel />);
+
+    expect(await screen.findByRole('heading', { name: '日期用量趋势' })).toBeInTheDocument();
+    expect(screen.getByText('暂无日期用量趋势数据')).toBeInTheDocument();
+  });
+
   it('条形统计支持指标切换、点击联动和空状态', async () => {
     const fetchMock = mockUsageFetch();
     render(<OpenPlatformAiReadonlyPanel />);
 
     expect(await screen.findByRole('heading', { name: '厂商 / 模型用量统计' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '调用次数' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'Token 总量' }));
-    expect(screen.getByRole('button', { name: 'Token 总量' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'AI 积分消耗' }));
-    expect(screen.getByRole('button', { name: 'AI 积分消耗' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByRole('button', { name: '调用次数' })[1]).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Token 总量' })[1]);
+    expect(screen.getAllByRole('button', { name: 'Token 总量' })[1]).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getAllByRole('button', { name: 'AI 积分消耗' })[1]);
+    expect(screen.getAllByRole('button', { name: 'AI 积分消耗' })[1]).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getAllByText(/调用 3/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Token 600/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/积分 6/).length).toBeGreaterThan(0);

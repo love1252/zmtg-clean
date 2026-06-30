@@ -52,11 +52,21 @@ export type PlatformAiUsageCreditsByDateDto = {
   totalAiCreditsConsumed: number;
 };
 
+export type PlatformAiUsageCreditsByDateProviderDto = {
+  date: string;
+  provider: string;
+  providerDisplayName: string | null;
+  totalCalls: number;
+  totalTokens: number;
+  totalAiCreditsConsumed: number;
+};
+
 export type PlatformAiUsageCreditsAggregationsDto = {
   byModel: PlatformAiUsageCreditsByModelDto[];
   byTenant: PlatformAiUsageCreditsByTenantDto[];
   byMeteringStatus: PlatformAiUsageCreditsByMeteringStatusDto[];
   byDate: PlatformAiUsageCreditsByDateDto[];
+  byDateProvider: PlatformAiUsageCreditsByDateProviderDto[];
 };
 
 export type PlatformAiUsageCreditDetailDto = {
@@ -211,6 +221,14 @@ type AiUsageCreditByDateRow = {
   totalCalls: number;
   succeededCalls: number;
   failedCalls: number;
+  totalAiCreditsConsumed: number | null;
+};
+
+type AiUsageCreditByDateProviderRow = {
+  date: string;
+  provider: string;
+  totalCalls: number;
+  totalTokens: number | null;
   totalAiCreditsConsumed: number | null;
 };
 
@@ -454,6 +472,18 @@ function mapDateAggregationRow(row: AiUsageCreditByDateRow): PlatformAiUsageCred
     totalCalls: row.totalCalls ?? 0,
     succeededCalls: row.succeededCalls ?? 0,
     failedCalls: row.failedCalls ?? 0,
+    totalAiCreditsConsumed: row.totalAiCreditsConsumed ?? 0,
+  };
+}
+
+function mapDateProviderAggregationRow(row: AiUsageCreditByDateProviderRow): PlatformAiUsageCreditsByDateProviderDto {
+  const presentation = getProviderPresentation(row.provider, 'history');
+  return {
+    date: row.date,
+    provider: row.provider,
+    providerDisplayName: presentation.displayName,
+    totalCalls: row.totalCalls ?? 0,
+    totalTokens: row.totalTokens ?? 0,
     totalAiCreditsConsumed: row.totalAiCreditsConsumed ?? 0,
   };
 }
@@ -781,7 +811,18 @@ export function createPlatformAiUsageCreditsRepository(database: TenantDatabase)
         .from(aiCallUsageRecords)
         .$dynamic();
 
-      const [byModelRows, byTenantRows, byMeteringStatusRows, byDateRows] = await Promise.all([
+      const byDateProviderQuery = database
+        .select({
+          date: dateExpression,
+          provider: aiCallUsageRecords.provider,
+          totalCalls: sql<number>`count(*)::int`,
+          totalTokens: sql<number | null>`coalesce(sum(${aiCallUsageRecords.totalTokens}), 0)::int`,
+          totalAiCreditsConsumed: sql<number | null>`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)::int`,
+        })
+        .from(aiCallUsageRecords)
+        .$dynamic();
+
+      const [byModelRows, byTenantRows, byMeteringStatusRows, byDateRows, byDateProviderRows] = await Promise.all([
         withConditions(byModelQuery, conditions)
           .groupBy(aiCallUsageRecords.provider, aiCallUsageRecords.model)
           .orderBy(desc(sql`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)`), desc(sql`count(*)`))
@@ -797,6 +838,9 @@ export function createPlatformAiUsageCreditsRepository(database: TenantDatabase)
           .groupBy(dateExpression)
           .orderBy(asc(dateExpression))
           .limit(31),
+        withConditions(byDateProviderQuery, conditions)
+          .groupBy(dateExpression, aiCallUsageRecords.provider)
+          .orderBy(asc(dateExpression), desc(sql`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)`)),
       ]);
 
       const byMeteringStatus = new Map<string, PlatformAiUsageCreditsByMeteringStatusDto>();
@@ -816,6 +860,7 @@ export function createPlatformAiUsageCreditsRepository(database: TenantDatabase)
         byTenant: (byTenantRows as AiUsageCreditByTenantRow[]).map(mapTenantAggregationRow),
         byMeteringStatus: Array.from(byMeteringStatus.values()),
         byDate: (byDateRows as AiUsageCreditByDateRow[]).map(mapDateAggregationRow),
+        byDateProvider: (byDateProviderRows as AiUsageCreditByDateProviderRow[]).map(mapDateProviderAggregationRow),
       };
     },
   };

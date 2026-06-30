@@ -90,6 +90,14 @@ const responsePayload = {
       failedCalls: 1,
       totalAiCreditsConsumed: 2,
     }],
+    byDateProvider: [{
+      date: '2026-06-30',
+      provider: 'deepseek',
+      providerDisplayName: 'DeepSeek',
+      totalCalls: 2,
+      totalTokens: 200,
+      totalAiCreditsConsumed: 2,
+    }],
   },
   filterOptions: {
     providers: [{
@@ -227,6 +235,14 @@ describe('平台端 AI usage credits API', () => {
     expect((body.aggregations as Record<string, unknown[]>).byDate[0]).toMatchObject({
       date: '2026-06-30',
       totalCalls: 2,
+    });
+    expect((body.aggregations as Record<string, unknown[]>).byDateProvider[0]).toMatchObject({
+      date: '2026-06-30',
+      provider: 'deepseek',
+      providerDisplayName: 'DeepSeek',
+      totalCalls: 2,
+      totalTokens: 200,
+      totalAiCreditsConsumed: 2,
     });
     expect(body.filterOptions).toMatchObject({
       providers: [{ provider: 'deepseek', displayName: 'DeepSeek', logoText: 'D', source: 'system' }],

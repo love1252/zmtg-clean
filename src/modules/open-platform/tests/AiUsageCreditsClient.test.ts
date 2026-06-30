@@ -62,6 +62,14 @@ const usageResponse = {
       failedCalls: 1,
       totalAiCreditsConsumed: 2,
     }],
+    byDateProvider: [{
+      date: '2026-06-30',
+      provider: 'deepseek',
+      providerDisplayName: 'DeepSeek',
+      totalCalls: 2,
+      totalTokens: 200,
+      totalAiCreditsConsumed: 2,
+    }],
   },
   filterOptions: {
     providers: [{
@@ -130,6 +138,16 @@ describe('platform AI usage credits client', () => {
       expect(result.data.aggregations.byTenant).toEqual([expect.objectContaining({ tenantId: 'tenant-001', tenantName: '星澜医美', totalTokens: 200 })]);
       expect(result.data.aggregations.byMeteringStatus).toEqual(expect.arrayContaining([expect.objectContaining({ meteringStatus: 'metered' })]));
       expect(result.data.aggregations.byDate).toEqual([expect.objectContaining({ date: '2026-06-30' })]);
+      expect(result.data.aggregations.byDateProvider).toEqual([
+        expect.objectContaining({
+          date: '2026-06-30',
+          provider: 'deepseek',
+          providerDisplayName: 'DeepSeek',
+          totalCalls: 2,
+          totalTokens: 200,
+          totalAiCreditsConsumed: 2,
+        }),
+      ]);
       expect(result.data.filterOptions).toMatchObject({
         providers: [{ provider: 'deepseek', displayName: 'DeepSeek', logoText: 'D', source: 'system' }],
         models: [{ provider: 'deepseek', model: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', providerDisplayName: 'DeepSeek', source: 'system' }],

@@ -46,11 +46,21 @@ export type PlatformAiUsageCreditsByDateDto = {
   totalAiCreditsConsumed: number;
 };
 
+export type PlatformAiUsageCreditsByDateProviderDto = {
+  date: string;
+  provider: string;
+  providerDisplayName: string | null;
+  totalCalls: number;
+  totalTokens: number;
+  totalAiCreditsConsumed: number;
+};
+
 export type PlatformAiUsageCreditsAggregationsDto = {
   byModel: PlatformAiUsageCreditsByModelDto[];
   byTenant: PlatformAiUsageCreditsByTenantDto[];
   byMeteringStatus: PlatformAiUsageCreditsByMeteringStatusDto[];
   byDate: PlatformAiUsageCreditsByDateDto[];
+  byDateProvider: PlatformAiUsageCreditsByDateProviderDto[];
 };
 
 export type PlatformAiUsageCreditDetailDto = {
