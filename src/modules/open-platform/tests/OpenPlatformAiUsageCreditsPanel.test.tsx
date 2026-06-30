@@ -94,11 +94,63 @@ function usagePayload(records: unknown[] = [usageRecord]) {
       }] : [],
     },
     filterOptions: {
-      providers: [{ provider: 'deepseek' }, { provider: 'moonshot' }, { provider: 'unknown' }],
+      providers: [
+        {
+          provider: 'deepseek',
+          displayName: 'DeepSeek',
+          logoUrl: '/ai-vendor-logos/deepseek.svg',
+          logoText: 'D',
+          logoClassName: 'bg-emerald-600',
+          source: 'system',
+        },
+        {
+          provider: 'moonshot',
+          displayName: 'Kimi',
+          logoUrl: '/ai-vendor-logos/kimi.svg',
+          logoText: 'K',
+          logoClassName: 'bg-slate-900',
+          source: 'history',
+        },
+        {
+          provider: 'unknown',
+          displayName: null,
+          logoUrl: null,
+          logoText: 'U',
+          logoClassName: 'bg-slate-500',
+          source: 'history',
+        },
+      ],
       models: [
-        { provider: 'deepseek', model: 'deepseek-v4-flash' },
-        { provider: 'moonshot', model: 'moonshot-v1-8k' },
-        { provider: 'unknown', model: 'pre_call_safety_check' },
+        {
+          provider: 'deepseek',
+          model: 'deepseek-v4-flash',
+          displayName: 'DeepSeek V4 Flash',
+          providerDisplayName: 'DeepSeek',
+          logoUrl: '/ai-vendor-logos/deepseek.svg',
+          logoText: 'D',
+          logoClassName: 'bg-emerald-600',
+          source: 'system',
+        },
+        {
+          provider: 'moonshot',
+          model: 'moonshot-v1-8k',
+          displayName: 'Kimi 8K',
+          providerDisplayName: 'Kimi',
+          logoUrl: '/ai-vendor-logos/kimi.svg',
+          logoText: 'K',
+          logoClassName: 'bg-slate-900',
+          source: 'history',
+        },
+        {
+          provider: 'unknown',
+          model: 'pre_call_safety_check',
+          displayName: null,
+          providerDisplayName: null,
+          logoUrl: null,
+          logoText: 'U',
+          logoClassName: 'bg-slate-500',
+          source: 'history',
+        },
       ],
       tenants: [
         { tenantId: 'tenant-001', tenantName: '星澜医美' },
@@ -258,30 +310,48 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(screen.getByText('AI 用量与积分明细服务暂不可用，请稍后重试。')).toBeInTheDocument();
   });
 
-  it('筛选区提供可搜索候选、模型级联和手动输入能力', async () => {
+  it('筛选区使用自定义候选浮层、模型级联和手动输入能力', async () => {
     const fetchMock = mockUsageFetch();
-    render(<OpenPlatformAiReadonlyPanel />);
+    const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
     expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
     const tenantInput = screen.getByLabelText('租户');
     const providerInput = screen.getByLabelText('模型厂商');
     const modelInput = screen.getByLabelText('模型名称');
 
-    expect(tenantInput).toHaveAttribute('list', 'ai-usage-tenant-filter-options');
-    expect(providerInput).toHaveAttribute('list', 'ai-usage-provider-filter-options');
-    expect(modelInput).toHaveAttribute('list', 'ai-usage-model-filter-options');
+    expect(tenantInput).not.toHaveAttribute('list');
+    expect(providerInput).not.toHaveAttribute('list');
+    expect(modelInput).not.toHaveAttribute('list');
+    expect(container.querySelector('datalist')).toBeNull();
     expect(screen.getByText('可从候选租户中选择，也可手动输入历史租户ID。')).toBeInTheDocument();
     expect(screen.getByText('已选择模型厂商时，仅展示该厂商下的候选模型；仍可手动输入。')).toBeInTheDocument();
 
-    const providerOptions = document.querySelectorAll('#ai-usage-provider-filter-options option');
-    expect(Array.from(providerOptions).map((option) => option.getAttribute('value'))).toEqual(expect.arrayContaining(['deepseek', 'moonshot', 'unknown']));
+    fireEvent.focus(providerInput);
+    expect(await screen.findByRole('listbox', { name: '模型厂商候选项' })).toBeInTheDocument();
+    expect(screen.getByText('DeepSeek')).toBeInTheDocument();
+    expect(screen.getAllByText('deepseek').length).toBeGreaterThan(0);
+    expect(screen.getByText('系统值')).toBeInTheDocument();
 
-    fireEvent.change(providerInput, { target: { value: 'moonshot' } });
-    await waitFor(() => {
-      const cascadedModelOptions = Array.from(document.querySelectorAll('#ai-usage-model-filter-options option')).map((option) => option.getAttribute('value'));
-      expect(cascadedModelOptions).toContain('moonshot-v1-8k');
-      expect(cascadedModelOptions).not.toContain('deepseek-v4-flash');
-    });
+    fireEvent.change(providerInput, { target: { value: 'moon' } });
+    expect(screen.getByText('Kimi')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: /Kimi/ }));
+    expect(providerInput).toHaveValue('moonshot');
+
+    fireEvent.focus(modelInput);
+    expect(await screen.findByRole('listbox', { name: '模型名称候选项' })).toBeInTheDocument();
+    expect(screen.getByText('Kimi 8K')).toBeInTheDocument();
+    expect(screen.getByText(/moonshot-v1-8k/)).toBeInTheDocument();
+    expect(screen.queryByText('DeepSeek V4 Flash')).not.toBeInTheDocument();
+
+    fireEvent.keyDown(modelInput, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('listbox', { name: '模型名称候选项' })).not.toBeInTheDocument());
+
+    fireEvent.focus(tenantInput);
+    expect(await screen.findByRole('listbox', { name: '租户候选项' })).toBeInTheDocument();
+    expect(screen.getAllByText('星澜医美').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('tenant-001').length).toBeGreaterThan(0);
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => expect(screen.queryByRole('listbox', { name: '租户候选项' })).not.toBeInTheDocument());
 
     fireEvent.change(modelInput, { target: { value: 'legacy-manual-model' } });
     fireEvent.change(tenantInput, { target: { value: 'tenant-history' } });

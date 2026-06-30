@@ -84,11 +84,22 @@ export type OpenPlatformAiUsageCreditsFilters = {
 
 export type PlatformAiUsageCreditsFilterProviderOptionDto = {
   provider: string;
+  displayName: string | null;
+  logoUrl: string | null;
+  logoText: string | null;
+  logoClassName: string | null;
+  source: 'configured' | 'system' | 'history';
 };
 
 export type PlatformAiUsageCreditsFilterModelOptionDto = {
   provider: string;
   model: string;
+  displayName: string | null;
+  providerDisplayName: string | null;
+  logoUrl: string | null;
+  logoText: string | null;
+  logoClassName: string | null;
+  source: 'configured' | 'system' | 'history';
 };
 
 export type PlatformAiUsageCreditsFilterTenantOptionDto = {

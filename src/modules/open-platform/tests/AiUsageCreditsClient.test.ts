@@ -63,8 +63,24 @@ const usageResponse = {
     }],
   },
   filterOptions: {
-    providers: [{ provider: 'deepseek' }],
-    models: [{ provider: 'deepseek', model: 'deepseek-v4-flash' }],
+    providers: [{
+      provider: 'deepseek',
+      displayName: 'DeepSeek',
+      logoUrl: '/ai-vendor-logos/deepseek.svg',
+      logoText: 'D',
+      logoClassName: 'bg-emerald-600',
+      source: 'system',
+    }],
+    models: [{
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      displayName: 'DeepSeek V4 Flash',
+      providerDisplayName: 'DeepSeek',
+      logoUrl: '/ai-vendor-logos/deepseek.svg',
+      logoText: 'D',
+      logoClassName: 'bg-emerald-600',
+      source: 'system',
+    }],
     tenants: [{ tenantId: 'tenant-001', tenantName: '星澜医美' }],
     statuses: ['succeeded', 'failed'],
     meteringStatuses: ['metered', 'not_billable', 'empty'],
@@ -114,8 +130,8 @@ describe('platform AI usage credits client', () => {
       expect(result.data.aggregations.byMeteringStatus).toEqual(expect.arrayContaining([expect.objectContaining({ meteringStatus: 'metered' })]));
       expect(result.data.aggregations.byDate).toEqual([expect.objectContaining({ date: '2026-06-30' })]);
       expect(result.data.filterOptions).toMatchObject({
-        providers: [{ provider: 'deepseek' }],
-        models: [{ provider: 'deepseek', model: 'deepseek-v4-flash' }],
+        providers: [{ provider: 'deepseek', displayName: 'DeepSeek', logoText: 'D', source: 'system' }],
+        models: [{ provider: 'deepseek', model: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', providerDisplayName: 'DeepSeek', source: 'system' }],
         tenants: [{ tenantId: 'tenant-001', tenantName: '星澜医美' }],
       });
     }
