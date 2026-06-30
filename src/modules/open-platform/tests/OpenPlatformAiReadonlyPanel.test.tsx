@@ -79,7 +79,7 @@ afterEach(() => {
 });
 
 describe('平台端 AI 模型与用量只读面板', () => {
-  it('默认展示 AI 用量与积分明细空态', async () => {
+  it('默认展示 AI 用量账单空态', async () => {
     const fetchMock = stubFetch(vi.fn(async () => new Response(JSON.stringify({
       requestId: 'platform-ai-usage-credits',
       readonly: true,
@@ -116,10 +116,11 @@ describe('平台端 AI 模型与用量只读面板', () => {
 
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(screen.getByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
-    expect(screen.getByText('按栏目查看统计和明细，不执行扣减、导出或模型厂商调用。')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
+    expect(screen.getByText('AI 用量账单')).toBeInTheDocument();
+    expect(screen.getByText(/当前以 AI 积分消耗替代费用主指标/)).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '总览' })).toHaveAttribute('aria-selected', 'true');
-    expect(await screen.findByText('暂无厂商 / 模型用量统计数据')).toBeInTheDocument();
+    expect(await screen.findByText('暂无厂商 / 模型消耗卡片数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: '明细记录' }));
     expect(screen.getByText('暂无 AI 用量明细')).toBeInTheDocument();
     expect(screen.getByText('当前过滤条件下没有 AI 调用记录。')).toBeInTheDocument();
@@ -166,7 +167,7 @@ describe('平台端 AI 模型与用量只读面板', () => {
     }), { status: 200, headers: { 'content-type': 'application/json' } })));
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByText('暂无厂商 / 模型用量统计数据')).toBeInTheDocument();
+    expect(await screen.findByText('暂无厂商 / 模型消耗卡片数据')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: '明细记录' }));
     expect(screen.getByText('暂无 AI 用量明细')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '刷新' }));
@@ -202,7 +203,7 @@ describe('平台端 AI 模型与用量只读面板', () => {
     const banner = bannerHeading.closest('[data-platform-banner="true"]');
     expect(banner).not.toBeNull();
     expect(screen.queryByText(/当前未接入真实 AI 调用日志/)).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '移动导航：AI用量与费用' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /同步模型/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /测试调用/ })).not.toBeInTheDocument();
