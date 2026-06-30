@@ -44,6 +44,8 @@ const usageRecord = {
 };
 
 function usagePayload(records: unknown[] = [usageRecord]) {
+  const hasRecords = records.length > 0;
+
   return {
     requestId: 'platform-ai-usage-credits',
     readonly: true,
@@ -56,6 +58,40 @@ function usagePayload(records: unknown[] = [usageRecord]) {
       pendingCalls: 0,
       notBillableCalls: 0,
       totalAiCreditsConsumed: records.length * 2,
+    },
+    aggregations: {
+      byModel: hasRecords ? [{
+        provider: 'deepseek',
+        model: 'deepseek-v4-flash',
+        totalCalls: 3,
+        succeededCalls: 2,
+        failedCalls: 1,
+        meteredCalls: 2,
+        totalTokens: 600,
+        totalAiCreditsConsumed: 6,
+      }] : [],
+      byTenant: hasRecords ? [{
+        tenantId: 'tenant-001',
+        tenantName: '星澜医美',
+        totalCalls: 3,
+        succeededCalls: 2,
+        failedCalls: 1,
+        meteredCalls: 2,
+        pendingCalls: 1,
+        notBillableCalls: 0,
+        totalAiCreditsConsumed: 6,
+      }] : [],
+      byMeteringStatus: hasRecords ? [
+        { meteringStatus: 'metered', calls: 2, totalAiCreditsConsumed: 6 },
+        { meteringStatus: 'empty', calls: 1, totalAiCreditsConsumed: 0 },
+      ] : [],
+      byDate: hasRecords ? [{
+        date: '2026-06-30',
+        totalCalls: 3,
+        succeededCalls: 2,
+        failedCalls: 1,
+        totalAiCreditsConsumed: 6,
+      }] : [],
     },
     records,
     emptyState: {
@@ -158,17 +194,38 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
     expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
-    expect(screen.getByText('总调用')).toBeInTheDocument();
-    expect(screen.getByText('AI 积分消耗')).toBeInTheDocument();
-    expect(screen.getByText('星澜医美')).toBeInTheDocument();
-    expect(screen.getByText('deepseek')).toBeInTheDocument();
-    expect(screen.getByText('deepseek-v4-flash')).toBeInTheDocument();
+    expect(screen.getAllByText('总调用').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('AI 积分消耗').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('星澜医美').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('deepseek').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('deepseek-v4-flash').length).toBeGreaterThan(0);
     expect(screen.getByText('v06-ui-verify-test')).toBeInTheDocument();
     expect(screen.getByText('使用知识库 · 1 个来源')).toBeInTheDocument();
     expect(screen.getAllByText('已计量').length).toBeGreaterThan(0);
     expect(screen.getByText('已按当前规则计算 AI 积分。')).toBeInTheDocument();
     expectNoSensitiveContent(container);
     expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/ai-usage-credits?limit=50', { cache: 'no-store' });
+  });
+
+  it('展示模型、租户、计量状态和日期聚合统计', async () => {
+    mockUsageFetch();
+    const { container } = render(<OpenPlatformAiReadonlyPanel />);
+
+    expect(await screen.findByRole('heading', { name: '模型用量统计' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '租户用量统计' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '计量状态统计' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '日期用量趋势' })).toBeInTheDocument();
+    expect(screen.getByText('AI 积分消耗统计')).toBeInTheDocument();
+    expect(screen.getByText('按模型厂商和模型名称统计调用、Token 与 AI 积分消耗。')).toBeInTheDocument();
+    expect(screen.getAllByText('deepseek').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('deepseek-v4-flash').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('星澜医美').length).toBeGreaterThan(0);
+    expect(screen.getByText('2026-06-30')).toBeInTheDocument();
+    expect(screen.getByText('未计量')).toBeInTheDocument();
+    expect(screen.queryByText('byModel')).not.toBeInTheDocument();
+    expect(screen.queryByText('totalAiCreditsConsumed')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /导出/ })).not.toBeInTheDocument();
+    expectNoSensitiveContent(container);
   });
 
   it('展示 empty 状态', async () => {
@@ -191,7 +248,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     const fetchMock = mockUsageFetch();
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByText('星澜医美')).toBeInTheDocument();
+    expect((await screen.findAllByText('星澜医美')).length).toBeGreaterThan(0);
     fireEvent.change(screen.getByLabelText('租户ID'), { target: { value: 'tenant-001' } });
     fireEvent.change(screen.getByLabelText('调用状态'), { target: { value: 'succeeded' } });
     fireEvent.change(screen.getByLabelText('计量状态'), { target: { value: 'metered' } });
@@ -208,7 +265,10 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('meteringStatus=metered'))).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: '刷新' }));
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(3));
-    expect(fetchMock.mock.calls.some(([, init]) => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(init?.method ?? 'GET').toUpperCase()))).toBe(false);
+    expect(fetchMock.mock.calls.some((call) => {
+      const init = (call as [Parameters<typeof fetch>[0], RequestInit?])[1];
+      return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(init?.method ?? 'GET').toUpperCase());
+    })).toBe(false);
     expect(fetchMock.mock.calls.some(([input]) => /provider-config|smoke|ai-runtime/u.test(fetchPath(input)))).toBe(false);
   });
 });

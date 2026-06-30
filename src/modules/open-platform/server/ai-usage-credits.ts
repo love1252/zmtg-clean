@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, lte, sql, type SQL } from 'drizzle-orm';
 
 import type { TenantDatabase } from '@/server/db/client';
 import { aiCallUsageRecords, tenants } from '@/server/db/schema';
@@ -11,6 +11,50 @@ export type PlatformAiUsageCreditsSummaryDto = {
   pendingCalls: number;
   notBillableCalls: number;
   totalAiCreditsConsumed: number;
+};
+
+export type PlatformAiUsageCreditsByModelDto = {
+  provider: string;
+  model: string;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
+  meteredCalls: number;
+  totalTokens: number;
+  totalAiCreditsConsumed: number;
+};
+
+export type PlatformAiUsageCreditsByTenantDto = {
+  tenantId: string;
+  tenantName: string | null;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
+  meteredCalls: number;
+  pendingCalls: number;
+  notBillableCalls: number;
+  totalAiCreditsConsumed: number;
+};
+
+export type PlatformAiUsageCreditsByMeteringStatusDto = {
+  meteringStatus: string;
+  calls: number;
+  totalAiCreditsConsumed: number;
+};
+
+export type PlatformAiUsageCreditsByDateDto = {
+  date: string;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
+  totalAiCreditsConsumed: number;
+};
+
+export type PlatformAiUsageCreditsAggregationsDto = {
+  byModel: PlatformAiUsageCreditsByModelDto[];
+  byTenant: PlatformAiUsageCreditsByTenantDto[];
+  byMeteringStatus: PlatformAiUsageCreditsByMeteringStatusDto[];
+  byDate: PlatformAiUsageCreditsByDateDto[];
 };
 
 export type PlatformAiUsageCreditDetailDto = {
@@ -59,6 +103,7 @@ export type PlatformAiUsageCreditsResponse = {
   readonly: true;
   dataSource: 'repository';
   summary: PlatformAiUsageCreditsSummaryDto;
+  aggregations: PlatformAiUsageCreditsAggregationsDto;
   records: PlatformAiUsageCreditDetailDto[];
   filters: NormalizedPlatformAiUsageCreditsFilters;
   emptyState: {
@@ -92,6 +137,43 @@ type AiUsageCreditSummaryRow = {
   meteredCalls: number;
   pendingCalls: number;
   notBillableCalls: number;
+  totalAiCreditsConsumed: number | null;
+};
+
+type AiUsageCreditByModelRow = {
+  provider: string;
+  model: string;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
+  meteredCalls: number;
+  totalTokens: number | null;
+  totalAiCreditsConsumed: number | null;
+};
+
+type AiUsageCreditByTenantRow = {
+  tenantId: string;
+  tenantName: string | null;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
+  meteredCalls: number;
+  pendingCalls: number;
+  notBillableCalls: number;
+  totalAiCreditsConsumed: number | null;
+};
+
+type AiUsageCreditByMeteringStatusRow = {
+  meteringStatus: string | null;
+  calls: number;
+  totalAiCreditsConsumed: number | null;
+};
+
+type AiUsageCreditByDateRow = {
+  date: string;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
   totalAiCreditsConsumed: number | null;
 };
 
@@ -230,6 +312,57 @@ function mapSummaryRow(row: AiUsageCreditSummaryRow | undefined): PlatformAiUsag
   };
 }
 
+function normalizeMeteringStatus(value: string | null) {
+  if (!value) return 'empty';
+  if (value === 'metered' || value === 'pending' || value === 'not_billable' || value === 'legacy') return value;
+  return 'legacy';
+}
+
+function mapModelAggregationRow(row: AiUsageCreditByModelRow): PlatformAiUsageCreditsByModelDto {
+  return {
+    provider: row.provider,
+    model: row.model,
+    totalCalls: row.totalCalls ?? 0,
+    succeededCalls: row.succeededCalls ?? 0,
+    failedCalls: row.failedCalls ?? 0,
+    meteredCalls: row.meteredCalls ?? 0,
+    totalTokens: row.totalTokens ?? 0,
+    totalAiCreditsConsumed: row.totalAiCreditsConsumed ?? 0,
+  };
+}
+
+function mapTenantAggregationRow(row: AiUsageCreditByTenantRow): PlatformAiUsageCreditsByTenantDto {
+  return {
+    tenantId: row.tenantId,
+    tenantName: row.tenantName,
+    totalCalls: row.totalCalls ?? 0,
+    succeededCalls: row.succeededCalls ?? 0,
+    failedCalls: row.failedCalls ?? 0,
+    meteredCalls: row.meteredCalls ?? 0,
+    pendingCalls: row.pendingCalls ?? 0,
+    notBillableCalls: row.notBillableCalls ?? 0,
+    totalAiCreditsConsumed: row.totalAiCreditsConsumed ?? 0,
+  };
+}
+
+function mapMeteringStatusAggregationRow(row: AiUsageCreditByMeteringStatusRow): PlatformAiUsageCreditsByMeteringStatusDto {
+  return {
+    meteringStatus: normalizeMeteringStatus(row.meteringStatus),
+    calls: row.calls ?? 0,
+    totalAiCreditsConsumed: row.totalAiCreditsConsumed ?? 0,
+  };
+}
+
+function mapDateAggregationRow(row: AiUsageCreditByDateRow): PlatformAiUsageCreditsByDateDto {
+  return {
+    date: row.date,
+    totalCalls: row.totalCalls ?? 0,
+    succeededCalls: row.succeededCalls ?? 0,
+    failedCalls: row.failedCalls ?? 0,
+    totalAiCreditsConsumed: row.totalAiCreditsConsumed ?? 0,
+  };
+}
+
 function buildConditions(filters: NormalizedPlatformAiUsageCreditsFilters): SQL[] {
   const conditions: SQL[] = [];
   if (filters.tenantId) conditions.push(eq(aiCallUsageRecords.tenantId, filters.tenantId));
@@ -300,6 +433,98 @@ export function createPlatformAiUsageCreditsRepository(database: TenantDatabase)
       const rows = await withConditions(baseSummaryQuery, conditions);
       return mapSummaryRow(rows[0] as AiUsageCreditSummaryRow | undefined);
     },
+
+    async aggregateUsageCredits(filters: NormalizedPlatformAiUsageCreditsFilters): Promise<PlatformAiUsageCreditsAggregationsDto> {
+      const conditions = buildConditions(filters);
+      const dateExpression = sql<string>`to_char(${aiCallUsageRecords.createdAt}, 'YYYY-MM-DD')`;
+
+      const byModelQuery = database
+        .select({
+          provider: aiCallUsageRecords.provider,
+          model: aiCallUsageRecords.model,
+          totalCalls: sql<number>`count(*)::int`,
+          succeededCalls: sql<number>`count(case when ${aiCallUsageRecords.status} = 'succeeded' then 1 end)::int`,
+          failedCalls: sql<number>`count(case when ${aiCallUsageRecords.status} != 'succeeded' then 1 end)::int`,
+          meteredCalls: sql<number>`count(case when ${aiCallUsageRecords.meteringStatus} = 'metered' then 1 end)::int`,
+          totalTokens: sql<number | null>`coalesce(sum(${aiCallUsageRecords.totalTokens}), 0)::int`,
+          totalAiCreditsConsumed: sql<number | null>`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)::int`,
+        })
+        .from(aiCallUsageRecords)
+        .$dynamic();
+
+      const byTenantQuery = database
+        .select({
+          tenantId: aiCallUsageRecords.tenantId,
+          tenantName: tenants.name,
+          totalCalls: sql<number>`count(*)::int`,
+          succeededCalls: sql<number>`count(case when ${aiCallUsageRecords.status} = 'succeeded' then 1 end)::int`,
+          failedCalls: sql<number>`count(case when ${aiCallUsageRecords.status} != 'succeeded' then 1 end)::int`,
+          meteredCalls: sql<number>`count(case when ${aiCallUsageRecords.meteringStatus} = 'metered' then 1 end)::int`,
+          pendingCalls: sql<number>`count(case when ${aiCallUsageRecords.meteringStatus} = 'pending' then 1 end)::int`,
+          notBillableCalls: sql<number>`count(case when ${aiCallUsageRecords.meteringStatus} = 'not_billable' then 1 end)::int`,
+          totalAiCreditsConsumed: sql<number | null>`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)::int`,
+        })
+        .from(aiCallUsageRecords)
+        .leftJoin(tenants, eq(aiCallUsageRecords.tenantId, tenants.id))
+        .$dynamic();
+
+      const byMeteringStatusQuery = database
+        .select({
+          meteringStatus: aiCallUsageRecords.meteringStatus,
+          calls: sql<number>`count(*)::int`,
+          totalAiCreditsConsumed: sql<number | null>`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)::int`,
+        })
+        .from(aiCallUsageRecords)
+        .$dynamic();
+
+      const byDateQuery = database
+        .select({
+          date: dateExpression,
+          totalCalls: sql<number>`count(*)::int`,
+          succeededCalls: sql<number>`count(case when ${aiCallUsageRecords.status} = 'succeeded' then 1 end)::int`,
+          failedCalls: sql<number>`count(case when ${aiCallUsageRecords.status} != 'succeeded' then 1 end)::int`,
+          totalAiCreditsConsumed: sql<number | null>`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)::int`,
+        })
+        .from(aiCallUsageRecords)
+        .$dynamic();
+
+      const [byModelRows, byTenantRows, byMeteringStatusRows, byDateRows] = await Promise.all([
+        withConditions(byModelQuery, conditions)
+          .groupBy(aiCallUsageRecords.provider, aiCallUsageRecords.model)
+          .orderBy(desc(sql`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)`), desc(sql`count(*)`))
+          .limit(20),
+        withConditions(byTenantQuery, conditions)
+          .groupBy(aiCallUsageRecords.tenantId, tenants.name)
+          .orderBy(desc(sql`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)`), desc(sql`count(*)`))
+          .limit(20),
+        withConditions(byMeteringStatusQuery, conditions)
+          .groupBy(aiCallUsageRecords.meteringStatus)
+          .orderBy(desc(sql`count(*)`)),
+        withConditions(byDateQuery, conditions)
+          .groupBy(dateExpression)
+          .orderBy(asc(dateExpression))
+          .limit(31),
+      ]);
+
+      const byMeteringStatus = new Map<string, PlatformAiUsageCreditsByMeteringStatusDto>();
+      (byMeteringStatusRows as AiUsageCreditByMeteringStatusRow[])
+        .map(mapMeteringStatusAggregationRow)
+        .forEach((row) => {
+          const current = byMeteringStatus.get(row.meteringStatus);
+          byMeteringStatus.set(row.meteringStatus, {
+            meteringStatus: row.meteringStatus,
+            calls: (current?.calls ?? 0) + row.calls,
+            totalAiCreditsConsumed: (current?.totalAiCreditsConsumed ?? 0) + row.totalAiCreditsConsumed,
+          });
+        });
+
+      return {
+        byModel: (byModelRows as AiUsageCreditByModelRow[]).map(mapModelAggregationRow),
+        byTenant: (byTenantRows as AiUsageCreditByTenantRow[]).map(mapTenantAggregationRow),
+        byMeteringStatus: Array.from(byMeteringStatus.values()),
+        byDate: (byDateRows as AiUsageCreditByDateRow[]).map(mapDateAggregationRow),
+      };
+    },
   };
 }
 
@@ -315,8 +540,9 @@ export async function listPlatformAiUsageCredits(input: {
   const normalized = normalizePlatformAiUsageCreditsFilters(input.filters ?? {});
   if (!normalized.ok) return { status: 'validation_failed', errors: normalized.errors };
 
-  const [summary, records] = await Promise.all([
+  const [summary, aggregations, records] = await Promise.all([
     input.repository.summarizeUsageCredits(normalized.filters),
+    input.repository.aggregateUsageCredits(normalized.filters),
     input.repository.listUsageCredits(normalized.filters),
   ]);
 
@@ -327,6 +553,7 @@ export async function listPlatformAiUsageCredits(input: {
       readonly: true,
       dataSource: 'repository',
       summary,
+      aggregations,
       records,
       filters: normalized.filters,
       emptyState: {
