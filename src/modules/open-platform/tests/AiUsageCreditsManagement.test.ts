@@ -50,8 +50,24 @@ function expectLowSensitivePayload(input: unknown) {
 
 function filterOptionsForTest() {
   return {
-    providers: [{ provider: 'deepseek' }],
-    models: [{ provider: 'deepseek', model: 'deepseek-v4-flash' }],
+    providers: [{
+      provider: 'deepseek',
+      displayName: 'DeepSeek',
+      logoUrl: '/ai-vendor-logos/deepseek.svg',
+      logoText: 'D',
+      logoClassName: 'bg-emerald-600',
+      source: 'system' as const,
+    }],
+    models: [{
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      displayName: 'DeepSeek V4 Flash',
+      providerDisplayName: 'DeepSeek',
+      logoUrl: '/ai-vendor-logos/deepseek.svg',
+      logoText: 'D',
+      logoClassName: 'bg-emerald-600',
+      source: 'system' as const,
+    }],
     tenants: [{ tenantId: 'tenant-001', tenantName: '星澜医美' }],
     statuses: ['succeeded', 'failed'],
     meteringStatuses: ['metered', 'pending', 'not_billable', 'legacy', 'empty'],
@@ -215,8 +231,8 @@ describe('platform AI usage credits server', () => {
         totalAiCreditsConsumed: 2,
       })]);
       expect(result.response.filterOptions).toMatchObject({
-        providers: [{ provider: 'deepseek' }],
-        models: [{ provider: 'deepseek', model: 'deepseek-v4-flash' }],
+        providers: [{ provider: 'deepseek', displayName: 'DeepSeek', logoText: 'D', source: 'system' }],
+        models: [{ provider: 'deepseek', model: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', providerDisplayName: 'DeepSeek', source: 'system' }],
         tenants: [{ tenantId: 'tenant-001', tenantName: '星澜医美' }],
       });
       expect(result.response.records).toHaveLength(1);
@@ -243,13 +259,13 @@ describe('platform AI usage credits server', () => {
     });
 
     expect(filterOptions.providers).toEqual(expect.arrayContaining([
-      { provider: 'deepseek' },
-      { provider: 'unknown' },
+      expect.objectContaining({ provider: 'deepseek', displayName: 'DeepSeek', logoText: 'D', source: 'system' }),
+      expect.objectContaining({ provider: 'unknown', displayName: null, source: 'history' }),
     ]));
     expect(filterOptions.models).toEqual(expect.arrayContaining([
-      { provider: 'deepseek', model: 'deepseek-v4-flash' },
-      { provider: 'unknown', model: 'pre_call_safety_check' },
-      { provider: 'unknown', model: 'unknown' },
+      expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', providerDisplayName: 'DeepSeek', source: 'system' }),
+      expect.objectContaining({ provider: 'unknown', model: 'pre_call_safety_check', displayName: null, source: 'history' }),
+      expect.objectContaining({ provider: 'unknown', model: 'unknown', displayName: null, source: 'history' }),
     ]));
     expect(filterOptions.tenants).toEqual(expect.arrayContaining([
       { tenantId: 'tenant-001', tenantName: '星澜医美' },

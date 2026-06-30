@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, lte, sql, type SQL } from 'drizzle-orm';
 
 import type { TenantDatabase } from '@/server/db/client';
 import { aiCallUsageRecords, platformAiCreditMeteringRules, platformAiProviderConfigs, tenants } from '@/server/db/schema';
+import { platformAiModelConfigData } from '@/modules/open-platform/mock/platformAiModelConfig';
 
 export type PlatformAiUsageCreditsSummaryDto = {
   totalCalls: number;
@@ -100,11 +101,22 @@ export type NormalizedPlatformAiUsageCreditsFilters = {
 
 export type PlatformAiUsageCreditsFilterProviderOptionDto = {
   provider: string;
+  displayName: string | null;
+  logoUrl: string | null;
+  logoText: string | null;
+  logoClassName: string | null;
+  source: 'configured' | 'system' | 'history';
 };
 
 export type PlatformAiUsageCreditsFilterModelOptionDto = {
   provider: string;
   model: string;
+  displayName: string | null;
+  providerDisplayName: string | null;
+  logoUrl: string | null;
+  logoText: string | null;
+  logoClassName: string | null;
+  source: 'configured' | 'system' | 'history';
 };
 
 export type PlatformAiUsageCreditsFilterTenantOptionDto = {
@@ -203,6 +215,7 @@ type AiUsageCreditByDateRow = {
 type AiUsageCreditFilterModelSourceRow = {
   provider: string | null;
   model: string | null;
+  source?: FilterOptionSourceKind;
 };
 
 type AiUsageCreditFilterTenantRow = {
@@ -229,6 +242,42 @@ const textLimits = {
 } as const;
 const DEFAULT_FILTER_STATUSES = ['succeeded', 'failed', 'rejected', 'sensitive_input_rejected', 'rate_limited', 'provider_unavailable'];
 const DEFAULT_FILTER_METERING_STATUSES = ['metered', 'pending', 'not_billable', 'legacy', 'empty'];
+type FilterOptionSourceKind = 'configured' | 'system' | 'history';
+
+type ProviderPresentation = {
+  displayName: string | null;
+  logoUrl: string | null;
+  logoText: string | null;
+  logoClassName: string | null;
+  source: FilterOptionSourceKind;
+};
+
+const DEFAULT_PROVIDER_LOGO_URLS: Record<string, string> = {
+  doubao: '/ai-vendor-logos/doubao.svg',
+  deepseek: '/ai-vendor-logos/deepseek.svg',
+  qwen: '/ai-vendor-logos/qwen.svg',
+  chatglm: '/ai-vendor-logos/chatglm.svg',
+  kimi: '/ai-vendor-logos/kimi.svg',
+};
+
+const SYSTEM_PROVIDER_PRESENTATION = new Map<string, ProviderPresentation>(
+  platformAiModelConfigData.providers.map((provider) => [provider.providerId, {
+    displayName: provider.providerName,
+    logoUrl: DEFAULT_PROVIDER_LOGO_URLS[provider.providerId] ?? null,
+    logoText: provider.logoText,
+    logoClassName: provider.logoClassName,
+    source: 'system' as const,
+  }]),
+);
+
+const SYSTEM_MODEL_PRESENTATION = new Map<string, { displayName: string; provider: string }>(
+  platformAiModelConfigData.providers.flatMap((provider) => (
+    provider.models.map((model) => [`${provider.providerId}::${model.modelId}`, {
+      displayName: model.displayName,
+      provider: provider.providerId,
+    }] as const)
+  )),
+);
 
 function zeroSummary(): PlatformAiUsageCreditsSummaryDto {
   return {
@@ -415,13 +464,70 @@ function addUniqueValue(target: Set<string>, value: string | null | undefined) {
   target.add(normalizeFilterOptionValue(value));
 }
 
+function sourceRank(source: FilterOptionSourceKind) {
+  if (source === 'configured') return 3;
+  if (source === 'system') return 2;
+  return 1;
+}
+
+function getProviderPresentation(provider: string, source: FilterOptionSourceKind): ProviderPresentation {
+  const system = SYSTEM_PROVIDER_PRESENTATION.get(provider);
+  return {
+    displayName: system?.displayName ?? null,
+    logoUrl: system?.logoUrl ?? null,
+    logoText: system?.logoText ?? provider.slice(0, 1).toUpperCase(),
+    logoClassName: system?.logoClassName ?? 'bg-slate-500',
+    source: sourceRank(source) >= sourceRank(system?.source ?? 'history') ? source : system?.source ?? source,
+  };
+}
+
+function chooseFilterOptionSource(provider: string, model: string, rowSource: FilterOptionSourceKind): FilterOptionSourceKind {
+  if (rowSource === 'configured') return 'configured';
+  if (SYSTEM_MODEL_PRESENTATION.has(`${provider}::${model}`) || SYSTEM_PROVIDER_PRESENTATION.has(provider)) return 'system';
+  return rowSource;
+}
+
+function addUniqueProviderOption(
+  target: Map<string, PlatformAiUsageCreditsFilterProviderOptionDto>,
+  value: string | null | undefined,
+  source: FilterOptionSourceKind,
+) {
+  const provider = normalizeFilterOptionValue(value);
+  const current = target.get(provider);
+  if (current && sourceRank(current.source) > sourceRank(source)) return;
+  const presentation = getProviderPresentation(provider, source);
+  target.set(provider, {
+    provider,
+    displayName: presentation.displayName,
+    logoUrl: presentation.logoUrl,
+    logoText: presentation.logoText,
+    logoClassName: presentation.logoClassName,
+    source: presentation.source,
+  });
+}
+
 function addUniqueModelOption(
   target: Map<string, PlatformAiUsageCreditsFilterModelOptionDto>,
   row: AiUsageCreditFilterModelSourceRow,
 ) {
   const provider = normalizeFilterOptionValue(row.provider);
   const model = normalizeFilterOptionValue(row.model);
-  target.set(`${provider}::${model}`, { provider, model });
+  const current = target.get(`${provider}::${model}`);
+  const source = chooseFilterOptionSource(provider, model, row.source ?? 'history');
+  if (current && sourceRank(current.source) > sourceRank(source)) return;
+
+  const providerPresentation = getProviderPresentation(provider, source);
+  const modelPresentation = SYSTEM_MODEL_PRESENTATION.get(`${provider}::${model}`);
+  target.set(`${provider}::${model}`, {
+    provider,
+    model,
+    displayName: modelPresentation?.displayName ?? null,
+    providerDisplayName: providerPresentation.displayName,
+    logoUrl: providerPresentation.logoUrl,
+    logoText: providerPresentation.logoText,
+    logoClassName: providerPresentation.logoClassName,
+    source,
+  });
 }
 
 export function buildPlatformAiUsageCreditsFilterOptions(input: {
@@ -430,15 +536,18 @@ export function buildPlatformAiUsageCreditsFilterOptions(input: {
   statusRows: AiUsageCreditFilterStatusRow[];
   meteringStatusRows: AiUsageCreditFilterMeteringStatusRow[];
 }): PlatformAiUsageCreditsFilterOptionsDto {
-  const providers = new Set<string>();
+  const providers = new Map<string, PlatformAiUsageCreditsFilterProviderOptionDto>();
   const models = new Map<string, PlatformAiUsageCreditsFilterModelOptionDto>();
   const tenantsById = new Map<string, PlatformAiUsageCreditsFilterTenantOptionDto>();
   const statuses = new Set(DEFAULT_FILTER_STATUSES);
   const meteringStatuses = new Set(DEFAULT_FILTER_METERING_STATUSES);
 
   input.modelRows.forEach((row) => {
-    addUniqueValue(providers, row.provider);
-    addUniqueModelOption(models, row);
+    const provider = normalizeFilterOptionValue(row.provider);
+    const model = normalizeFilterOptionValue(row.model);
+    const source = chooseFilterOptionSource(provider, model, row.source ?? 'history');
+    addUniqueProviderOption(providers, provider, source);
+    addUniqueModelOption(models, { provider, model, source });
   });
   input.tenantRows.forEach((row) => {
     const tenantId = row.tenantId?.trim();
@@ -449,7 +558,11 @@ export function buildPlatformAiUsageCreditsFilterOptions(input: {
   input.meteringStatusRows.forEach((row) => meteringStatuses.add(normalizeMeteringStatus(row.meteringStatus)));
 
   return {
-    providers: Array.from(providers).sort((left, right) => left.localeCompare(right, 'zh-CN')).map((provider) => ({ provider })),
+    providers: Array.from(providers.values()).sort((left, right) => {
+      const leftLabel = left.displayName ?? left.provider;
+      const rightLabel = right.displayName ?? right.provider;
+      return leftLabel.localeCompare(rightLabel, 'zh-CN');
+    }),
     models: Array.from(models.values()).sort((left, right) => {
       const byProvider = left.provider.localeCompare(right.provider, 'zh-CN');
       return byProvider || left.model.localeCompare(right.model, 'zh-CN');
@@ -581,9 +694,9 @@ export function createPlatformAiUsageCreditsRepository(database: TenantDatabase)
 
       return buildPlatformAiUsageCreditsFilterOptions({
         modelRows: [
-          ...(usageModelRows as AiUsageCreditFilterModelSourceRow[]),
-          ...(providerConfigModelRows as AiUsageCreditFilterModelSourceRow[]),
-          ...(meteringRuleModelRows as AiUsageCreditFilterModelSourceRow[]),
+          ...(usageModelRows as AiUsageCreditFilterModelSourceRow[]).map((row) => ({ ...row, source: 'history' as const })),
+          ...(providerConfigModelRows as AiUsageCreditFilterModelSourceRow[]).map((row) => ({ ...row, source: 'configured' as const })),
+          ...(meteringRuleModelRows as AiUsageCreditFilterModelSourceRow[]).map((row) => ({ ...row, source: 'system' as const })),
         ],
         tenantRows: tenantRows as AiUsageCreditFilterTenantRow[],
         statusRows: statusRows as AiUsageCreditFilterStatusRow[],

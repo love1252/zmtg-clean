@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RefreshCw } from 'lucide-react';
 
 import {
@@ -12,6 +12,9 @@ import {
   type PlatformAiUsageCreditsByModelDto,
   type PlatformAiUsageCreditsByTenantDto,
   type PlatformAiUsageCreditDetailDto,
+  type PlatformAiUsageCreditsFilterModelOptionDto,
+  type PlatformAiUsageCreditsFilterProviderOptionDto,
+  type PlatformAiUsageCreditsFilterTenantOptionDto,
 } from '@/modules/open-platform/client/platform-ai-usage-credits-client';
 import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { cn } from '@/shared/utils/cn';
@@ -148,32 +151,160 @@ function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter((value) => value.trim())));
 }
 
+function providerFilterOption(option: PlatformAiUsageCreditsFilterProviderOptionDto): SearchableFilterOption {
+  const title = option.displayName ?? option.provider;
+  return {
+    value: option.provider,
+    title,
+    subtitle: option.displayName ? option.provider : filterOptionSourceLabel(option.source),
+    badge: filterOptionSourceLabel(option.source),
+    logoUrl: option.logoUrl,
+    logoText: option.logoText,
+    logoClassName: option.logoClassName,
+    keywords: [option.provider, option.displayName ?? '', filterOptionSourceLabel(option.source)],
+  };
+}
+
+function modelFilterOption(option: PlatformAiUsageCreditsFilterModelOptionDto): SearchableFilterOption {
+  const title = option.displayName ?? option.model;
+  const providerLabel = option.providerDisplayName ?? option.provider;
+  return {
+    value: option.model,
+    title,
+    subtitle: option.displayName ? `${option.model} · ${providerLabel}` : `${providerLabel} · ${filterOptionSourceLabel(option.source)}`,
+    badge: filterOptionSourceLabel(option.source),
+    logoUrl: option.logoUrl,
+    logoText: option.logoText,
+    logoClassName: option.logoClassName,
+    keywords: [option.model, option.displayName ?? '', option.provider, option.providerDisplayName ?? '', filterOptionSourceLabel(option.source)],
+  };
+}
+
+function tenantFilterOption(option: PlatformAiUsageCreditsFilterTenantOptionDto): SearchableFilterOption {
+  const title = option.tenantName ?? option.tenantId;
+  return {
+    value: option.tenantId,
+    title,
+    subtitle: option.tenantName ? option.tenantId : '未命名租户',
+    logoText: title.slice(0, 1).toUpperCase(),
+    logoClassName: 'bg-sky-600',
+    keywords: [option.tenantId, option.tenantName ?? ''],
+  };
+}
+
+type SearchableFilterOption = {
+  value: string;
+  title: string;
+  subtitle?: string;
+  badge?: string;
+  logoUrl?: string | null;
+  logoText?: string | null;
+  logoClassName?: string | null;
+  keywords: string[];
+};
+
+function filterOptionSourceLabel(source: 'configured' | 'system' | 'history') {
+  if (source === 'configured') return '已配置';
+  if (source === 'system') return '系统值';
+  return '历史值';
+}
+
+function optionLogo(option: SearchableFilterOption) {
+  const logoClassName = option.logoClassName ?? 'bg-slate-500';
+  if (option.logoUrl) {
+    return (
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-white">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={option.logoUrl} alt="" className="h-5 w-5 object-contain" />
+      </span>
+    );
+  }
+  return (
+    <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white', logoClassName)}>
+      {option.logoText ?? option.title.slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
 function SearchableFilterInput(props: {
   id: string;
   label: string;
   value: string;
-  options: Array<{ value: string; label?: string }>;
+  options: SearchableFilterOption[];
   placeholder: string;
   helper: string;
   onChange: (value: string) => void;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLLabelElement | null>(null);
+  const normalizedQuery = props.value.trim().toLowerCase();
+  const filteredOptions = useMemo(() => {
+    if (!normalizedQuery) return props.options;
+    return props.options.filter((option) => option.keywords.some((keyword) => keyword.toLowerCase().includes(normalizedQuery)));
+  }, [normalizedQuery, props.options]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
+    }
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, []);
+
   return (
-    <label className="text-sm font-semibold text-[#1f2937]" htmlFor={props.id}>
+    <label ref={rootRef} className="relative text-sm font-semibold text-[#1f2937]" htmlFor={props.id}>
       {props.label}
       <input
         id={props.id}
+        role="combobox"
         aria-label={props.label}
-        list={`${props.id}-options`}
+        aria-expanded={isOpen}
+        aria-controls={`${props.id}-listbox`}
+        aria-haspopup="listbox"
         value={props.value}
-        onChange={(event) => props.onChange(event.target.value)}
-        className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal"
+        onFocus={() => setIsOpen(true)}
+        onClick={() => setIsOpen(true)}
+        onChange={(event) => {
+          props.onChange(event.target.value);
+          setIsOpen(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') setIsOpen(false);
+        }}
+        className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal outline-none transition focus:border-[#93c5fd] focus:ring-2 focus:ring-[#dbeafe]"
         placeholder={props.placeholder}
       />
-      <datalist id={`${props.id}-options`}>
-        {props.options.map((option) => (
-          <option key={`${props.id}:${option.value}`} value={option.value} label={option.label} />
-        ))}
-      </datalist>
+      {isOpen ? (
+        <div
+          id={`${props.id}-listbox`}
+          role="listbox"
+          aria-label={`${props.label}候选项`}
+          className="absolute left-0 right-0 z-30 mt-1 max-h-60 overflow-y-auto rounded-xl border border-[#dbe3ee] bg-white p-1 shadow-lg shadow-slate-200/70"
+        >
+          {filteredOptions.length > 0 ? filteredOptions.map((option) => (
+            <button
+              key={`${props.id}:${option.value}`}
+              type="button"
+              role="option"
+              aria-selected={props.value === option.value}
+              onClick={() => {
+                props.onChange(option.value);
+                setIsOpen(false);
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-[#f1f5f9] focus:bg-[#eef6ff] focus:outline-none"
+            >
+              {optionLogo(option)}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-[#1f2937]">{option.title}</span>
+                {option.subtitle ? <span className="mt-0.5 block truncate text-xs font-normal text-[#64748b]">{option.subtitle}</span> : null}
+              </span>
+              {option.badge ? <span className="shrink-0 rounded-full bg-[#eef2ff] px-2 py-0.5 text-[11px] font-semibold text-[#4f46e5]">{option.badge}</span> : null}
+            </button>
+          )) : (
+            <div className="rounded-lg px-3 py-3 text-sm font-normal text-[#64748b]">暂无候选，可手动输入</div>
+          )}
+        </div>
+      ) : null}
       <span className="mt-1 block text-xs font-normal leading-5 text-[#64748b]">{props.helper}</span>
     </label>
   );
@@ -443,14 +574,11 @@ export function OpenPlatformAiReadonlyPanel() {
   }
 
   const summary = data.summary;
-  const providerOptions = data.filterOptions.providers.map((option) => ({ value: option.provider }));
+  const providerOptions = data.filterOptions.providers.map(providerFilterOption);
   const modelOptions = data.filterOptions.models
     .filter((option) => !filters.provider.trim() || option.provider === filters.provider.trim())
-    .map((option) => ({ value: option.model, label: option.provider }));
-  const tenantOptions = data.filterOptions.tenants.map((option) => ({
-    value: option.tenantId,
-    label: option.tenantName ?? '未命名租户',
-  }));
+    .map(modelFilterOption);
+  const tenantOptions = data.filterOptions.tenants.map(tenantFilterOption);
   const statusOptions = uniqueStrings(data.filterOptions.statuses);
   const meteringStatusOptions = uniqueStrings(data.filterOptions.meteringStatuses);
 

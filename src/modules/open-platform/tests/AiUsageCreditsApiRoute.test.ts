@@ -91,8 +91,24 @@ const responsePayload = {
     }],
   },
   filterOptions: {
-    providers: [{ provider: 'deepseek' }],
-    models: [{ provider: 'deepseek', model: 'deepseek-v4-flash' }],
+    providers: [{
+      provider: 'deepseek',
+      displayName: 'DeepSeek',
+      logoUrl: '/ai-vendor-logos/deepseek.svg',
+      logoText: 'D',
+      logoClassName: 'bg-emerald-600',
+      source: 'system',
+    }],
+    models: [{
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      displayName: 'DeepSeek V4 Flash',
+      providerDisplayName: 'DeepSeek',
+      logoUrl: '/ai-vendor-logos/deepseek.svg',
+      logoText: 'D',
+      logoClassName: 'bg-emerald-600',
+      source: 'system',
+    }],
     tenants: [{ tenantId: 'tenant-001', tenantName: '星澜医美' }],
     statuses: ['succeeded', 'failed'],
     meteringStatuses: ['metered', 'not_billable', 'empty'],
@@ -211,8 +227,8 @@ describe('平台端 AI usage credits API', () => {
       totalCalls: 2,
     });
     expect(body.filterOptions).toMatchObject({
-      providers: [{ provider: 'deepseek' }],
-      models: [{ provider: 'deepseek', model: 'deepseek-v4-flash' }],
+      providers: [{ provider: 'deepseek', displayName: 'DeepSeek', logoText: 'D', source: 'system' }],
+      models: [{ provider: 'deepseek', model: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', providerDisplayName: 'DeepSeek', source: 'system' }],
       tenants: [{ tenantId: 'tenant-001', tenantName: '星澜医美' }],
     });
     expect(body.records).toEqual([
