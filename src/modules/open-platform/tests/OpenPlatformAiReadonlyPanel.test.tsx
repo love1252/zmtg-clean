@@ -112,10 +112,13 @@ describe('平台端 AI 模型与用量只读面板', () => {
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
     expect(screen.getByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
-    expect(screen.getByText('汇总和明细均来自 AI 调用记录，只读展示计量状态，不执行扣减、导出或模型厂商调用。')).toBeInTheDocument();
-    expect(await screen.findByText('暂无 AI 用量明细')).toBeInTheDocument();
+    expect(screen.getByText('按栏目查看统计和明细，不执行扣减、导出或模型厂商调用。')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '总览' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByText('暂无厂商 / 模型用量统计数据')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '明细记录' }));
+    expect(screen.getByText('暂无 AI 用量明细')).toBeInTheDocument();
     expect(screen.getByText('当前过滤条件下没有 AI 调用记录。')).toBeInTheDocument();
-    expect(screen.getAllByText('0').length).toBeGreaterThan(0);
+    expect(screen.getByRole('tab', { name: '明细记录' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByText('厂商 Key 配置')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /导出账单/ })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/ai-usage-credits?limit=50', { cache: 'no-store' });
@@ -157,7 +160,9 @@ describe('平台端 AI 模型与用量只读面板', () => {
     }), { status: 200, headers: { 'content-type': 'application/json' } })));
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByText('暂无 AI 用量明细')).toBeInTheDocument();
+    expect(await screen.findByText('暂无厂商 / 模型用量统计数据')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '明细记录' }));
+    expect(screen.getByText('暂无 AI 用量明细')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '刷新' }));
 
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2));
