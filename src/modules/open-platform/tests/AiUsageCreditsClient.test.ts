@@ -62,6 +62,13 @@ const usageResponse = {
       totalAiCreditsConsumed: 2,
     }],
   },
+  filterOptions: {
+    providers: [{ provider: 'deepseek' }],
+    models: [{ provider: 'deepseek', model: 'deepseek-v4-flash' }],
+    tenants: [{ tenantId: 'tenant-001', tenantName: '星澜医美' }],
+    statuses: ['succeeded', 'failed'],
+    meteringStatuses: ['metered', 'not_billable', 'empty'],
+  },
   records: [
     {
       id: 'usage-001',
@@ -106,6 +113,11 @@ describe('platform AI usage credits client', () => {
       expect(result.data.aggregations.byTenant).toEqual([expect.objectContaining({ tenantId: 'tenant-001', tenantName: '星澜医美' })]);
       expect(result.data.aggregations.byMeteringStatus).toEqual(expect.arrayContaining([expect.objectContaining({ meteringStatus: 'metered' })]));
       expect(result.data.aggregations.byDate).toEqual([expect.objectContaining({ date: '2026-06-30' })]);
+      expect(result.data.filterOptions).toMatchObject({
+        providers: [{ provider: 'deepseek' }],
+        models: [{ provider: 'deepseek', model: 'deepseek-v4-flash' }],
+        tenants: [{ tenantId: 'tenant-001', tenantName: '星澜医美' }],
+      });
     }
     expect(fetcher).toHaveBeenCalledWith('/api/open-platform/ai-usage-credits', { cache: 'no-store' });
   });

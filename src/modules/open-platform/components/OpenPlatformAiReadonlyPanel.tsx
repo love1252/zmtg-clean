@@ -61,6 +61,13 @@ const emptyData: OpenPlatformAiUsageCreditsResponse = {
     byMeteringStatus: [],
     byDate: [],
   },
+  filterOptions: {
+    providers: [],
+    models: [],
+    tenants: [],
+    statuses: ['succeeded', 'failed', 'rejected', 'sensitive_input_rejected', 'rate_limited', 'provider_unavailable'],
+    meteringStatuses: ['metered', 'pending', 'not_billable', 'legacy', 'empty'],
+  },
   records: [],
   emptyState: {
     title: '暂无 AI 用量明细',
@@ -135,6 +142,41 @@ function errorMessage(kind: string) {
   if (kind === 'validation_error') return '筛选条件不正确，请检查后重试。';
   if (kind === 'service_unavailable') return 'AI 用量与积分明细服务暂不可用，请稍后重试。';
   return 'AI 用量与积分明细请求失败，请稍后重试。';
+}
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.filter((value) => value.trim())));
+}
+
+function SearchableFilterInput(props: {
+  id: string;
+  label: string;
+  value: string;
+  options: Array<{ value: string; label?: string }>;
+  placeholder: string;
+  helper: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="text-sm font-semibold text-[#1f2937]" htmlFor={props.id}>
+      {props.label}
+      <input
+        id={props.id}
+        aria-label={props.label}
+        list={`${props.id}-options`}
+        value={props.value}
+        onChange={(event) => props.onChange(event.target.value)}
+        className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal"
+        placeholder={props.placeholder}
+      />
+      <datalist id={`${props.id}-options`}>
+        {props.options.map((option) => (
+          <option key={`${props.id}:${option.value}`} value={option.value} label={option.label} />
+        ))}
+      </datalist>
+      <span className="mt-1 block text-xs font-normal leading-5 text-[#64748b]">{props.helper}</span>
+    </label>
+  );
 }
 
 function SummaryCard(props: { label: string; value: string; tone?: string }) {
@@ -401,6 +443,16 @@ export function OpenPlatformAiReadonlyPanel() {
   }
 
   const summary = data.summary;
+  const providerOptions = data.filterOptions.providers.map((option) => ({ value: option.provider }));
+  const modelOptions = data.filterOptions.models
+    .filter((option) => !filters.provider.trim() || option.provider === filters.provider.trim())
+    .map((option) => ({ value: option.model, label: option.provider }));
+  const tenantOptions = data.filterOptions.tenants.map((option) => ({
+    value: option.tenantId,
+    label: option.tenantName ?? '未命名租户',
+  }));
+  const statusOptions = uniqueStrings(data.filterOptions.statuses);
+  const meteringStatusOptions = uniqueStrings(data.filterOptions.meteringStatuses);
 
   return (
     <section className="flex flex-col gap-6" aria-labelledby="ai-usage-heading">
@@ -444,40 +496,51 @@ export function OpenPlatformAiReadonlyPanel() {
             applyFilters();
           }}
         >
-          <label className="text-sm font-semibold text-[#1f2937]">
-            租户ID
-            <input value={filters.tenantId} onChange={(event) => updateFilter('tenantId', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" placeholder="全部租户" />
-          </label>
+          <SearchableFilterInput
+            id="ai-usage-tenant-filter"
+            label="租户"
+            value={filters.tenantId}
+            options={tenantOptions}
+            placeholder="输入或选择租户ID"
+            helper="可从候选租户中选择，也可手动输入历史租户ID。"
+            onChange={(value) => updateFilter('tenantId', value)}
+          />
           <label className="text-sm font-semibold text-[#1f2937]">
             调用状态
             <select value={filters.status} onChange={(event) => updateFilter('status', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal">
               <option value="">全部状态</option>
-              <option value="succeeded">成功</option>
-              <option value="failed">失败</option>
-              <option value="rejected">已拒绝</option>
-              <option value="sensitive_input_rejected">敏感输入拒绝</option>
-              <option value="rate_limited">限流</option>
-              <option value="provider_unavailable">供应商不可用</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>{statusLabel(status)}</option>
+              ))}
             </select>
           </label>
           <label className="text-sm font-semibold text-[#1f2937]">
             计量状态
             <select value={filters.meteringStatus} onChange={(event) => updateFilter('meteringStatus', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal">
               <option value="">全部计量状态</option>
-              <option value="metered">已计量</option>
-              <option value="pending">待计量</option>
-              <option value="not_billable">不计费</option>
-              <option value="legacy">历史记录</option>
+              {meteringStatusOptions.map((status) => (
+                <option key={status} value={status}>{meteringStatusLabel(status)}</option>
+              ))}
             </select>
           </label>
-          <label className="text-sm font-semibold text-[#1f2937]">
-            模型厂商
-            <input value={filters.provider} onChange={(event) => updateFilter('provider', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" placeholder="全部模型厂商" />
-          </label>
-          <label className="text-sm font-semibold text-[#1f2937]">
-            模型名称
-            <input value={filters.model} onChange={(event) => updateFilter('model', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" placeholder="全部模型名称" />
-          </label>
+          <SearchableFilterInput
+            id="ai-usage-provider-filter"
+            label="模型厂商"
+            value={filters.provider}
+            options={providerOptions}
+            placeholder="输入或选择模型厂商"
+            helper="可搜索候选厂商，也可手动输入历史值或异常值。"
+            onChange={(value) => updateFilter('provider', value)}
+          />
+          <SearchableFilterInput
+            id="ai-usage-model-filter"
+            label="模型名称"
+            value={filters.model}
+            options={modelOptions}
+            placeholder="输入或选择模型名称"
+            helper="已选择模型厂商时，仅展示该厂商下的候选模型；仍可手动输入。"
+            onChange={(value) => updateFilter('model', value)}
+          />
           <label className="text-sm font-semibold text-[#1f2937]">
             开始时间
             <input type="datetime-local" value={filters.dateFrom} onChange={(event) => updateFilter('dateFrom', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" />

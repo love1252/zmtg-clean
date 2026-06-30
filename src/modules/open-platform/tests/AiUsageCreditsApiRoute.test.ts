@@ -90,6 +90,13 @@ const responsePayload = {
       totalAiCreditsConsumed: 2,
     }],
   },
+  filterOptions: {
+    providers: [{ provider: 'deepseek' }],
+    models: [{ provider: 'deepseek', model: 'deepseek-v4-flash' }],
+    tenants: [{ tenantId: 'tenant-001', tenantName: '星澜医美' }],
+    statuses: ['succeeded', 'failed'],
+    meteringStatuses: ['metered', 'not_billable', 'empty'],
+  },
   records: [
     {
       id: 'usage-001',
@@ -202,6 +209,11 @@ describe('平台端 AI usage credits API', () => {
     expect((body.aggregations as Record<string, unknown[]>).byDate[0]).toMatchObject({
       date: '2026-06-30',
       totalCalls: 2,
+    });
+    expect(body.filterOptions).toMatchObject({
+      providers: [{ provider: 'deepseek' }],
+      models: [{ provider: 'deepseek', model: 'deepseek-v4-flash' }],
+      tenants: [{ tenantId: 'tenant-001', tenantName: '星澜医美' }],
     });
     expect(body.records).toEqual([
       expect.objectContaining({
