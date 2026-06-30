@@ -209,7 +209,11 @@ function mockUsageFetch(options: { records?: unknown[]; status?: number; pending
 
 function expectNoSensitiveContent(container: HTMLElement) {
   const text = container.textContent ?? '';
-  expect(text).not.toMatch(/sk_test_should_not_render|apiKey|baseUrl|Authorization|Cookie|用户 prompt|answer 不应展示|rawResponse|signedUrl|storageKey/i);
+  expect(text).not.toMatch(/sk_test_should_not_render|apiKey|encryptedApiKey|ciphertext|authTag|baseUrl|Authorization|Cookie|用户 prompt|answer 不应展示|rawResponse|signedUrl|storageKey/i);
+}
+
+function selectAiUsageTab(label: string) {
+  fireEvent.click(screen.getByRole('tab', { name: label }));
 }
 
 afterEach(() => {
@@ -250,6 +254,8 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     render(<OpenPlatformAiReadonlyPanel />);
 
     expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '总览' })).toHaveAttribute('aria-selected', 'true');
+    selectAiUsageTab('明细记录');
     ['租户', '调用状态', '计量状态', '模型厂商', '模型名称', '开始时间', '结束时间', '返回条数'].forEach((label) => {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     });
@@ -284,9 +290,10 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
     expect(screen.getAllByText('总调用').length).toBeGreaterThan(0);
     expect(screen.getAllByText('AI 积分消耗').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('星澜医美').length).toBeGreaterThan(0);
     expect(screen.getAllByText('deepseek').length).toBeGreaterThan(0);
     expect(screen.getAllByText('deepseek-v4-flash').length).toBeGreaterThan(0);
+    selectAiUsageTab('明细记录');
+    expect(screen.getAllByText('星澜医美').length).toBeGreaterThan(0);
     expect(screen.getByText('v06-ui-verify-test')).toBeInTheDocument();
     expect(screen.getByText('使用知识库 · 1 个来源')).toBeInTheDocument();
     expect(screen.getAllByText('已计量').length).toBeGreaterThan(0);
@@ -295,21 +302,38 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/ai-usage-credits?limit=50', { cache: 'no-store' });
   });
 
-  it('展示模型、租户、计量状态和日期聚合统计', async () => {
+  it('默认展示总览并可切换模型、租户、计量状态和明细记录标签页', async () => {
     mockUsageFetch();
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: '模型用量统计' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '租户用量统计' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '计量状态统计' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '日期用量趋势' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '总览' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('AI 积分消耗统计')).toBeInTheDocument();
-    expect(screen.getByText('按模型厂商和模型名称统计调用、Token 与 AI 积分消耗。')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '日期用量趋势' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '计量状态摘要' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '厂商 / 模型用量统计' })).toBeInTheDocument();
+    expect(screen.getByText('2026-06-30')).toBeInTheDocument();
+
+    selectAiUsageTab('模型与厂商');
+    expect(screen.getByRole('tab', { name: '模型与厂商' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { name: '模型用量统计' })).toBeInTheDocument();
     expect(screen.getAllByText('deepseek').length).toBeGreaterThan(0);
     expect(screen.getAllByText('deepseek-v4-flash').length).toBeGreaterThan(0);
+
+    selectAiUsageTab('租户用量');
+    expect(screen.getByRole('tab', { name: '租户用量' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { name: '租户用量统计' })).toBeInTheDocument();
     expect(screen.getAllByText('星澜医美').length).toBeGreaterThan(0);
-    expect(screen.getByText('2026-06-30')).toBeInTheDocument();
+
+    selectAiUsageTab('计量状态');
+    expect(screen.getByRole('tab', { name: '计量状态' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { name: '计量状态统计' })).toBeInTheDocument();
     expect(screen.getAllByText('未计量').length).toBeGreaterThan(0);
+
+    selectAiUsageTab('明细记录');
+    expect(screen.getByRole('tab', { name: '明细记录' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('明细列表')).toBeInTheDocument();
+    expect(screen.getByLabelText('模型厂商')).toBeInTheDocument();
     expect(screen.queryByText('byModel')).not.toBeInTheDocument();
     expect(screen.queryByText('totalAiCreditsConsumed')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /导出/ })).not.toBeInTheDocument();
@@ -320,9 +344,12 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     mockUsageFetch({ records: [] });
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByText('暂无 AI 用量明细')).toBeInTheDocument();
-    expect(screen.getByText('当前过滤条件下没有 AI 调用记录。')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
     expect(screen.getByText('暂无厂商 / 模型用量统计数据')).toBeInTheDocument();
+    expect(screen.getByText('暂无日期用量趋势数据')).toBeInTheDocument();
+    selectAiUsageTab('明细记录');
+    expect(screen.getByText('暂无 AI 用量明细')).toBeInTheDocument();
+    expect(screen.getByText('当前过滤条件下没有 AI 调用记录。')).toBeInTheDocument();
   });
 
   it('展示错误状态', async () => {
@@ -338,6 +365,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
     expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    selectAiUsageTab('明细记录');
     const tenantInput = screen.getByLabelText('租户');
     const providerInput = screen.getByLabelText('模型厂商');
     const modelInput = screen.getByLabelText('模型名称');
@@ -346,8 +374,8 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(providerInput).not.toHaveAttribute('list');
     expect(modelInput).not.toHaveAttribute('list');
     expect(container.querySelector('datalist')).toBeNull();
-    expect(screen.getByText('可从候选租户中选择，也可手动输入历史租户ID。')).toBeInTheDocument();
-    expect(screen.getByText('已选择模型厂商时，仅展示该厂商下的候选模型；仍可手动输入。')).toBeInTheDocument();
+    expect(screen.getByText('可选择候选，也可手动输入历史租户ID。')).toBeInTheDocument();
+    expect(screen.getByText('选择厂商后仅展示该厂商模型；仍可手动输入。')).toBeInTheDocument();
 
     fireEvent.focus(providerInput);
     expect(await screen.findByRole('listbox', { name: '模型厂商候选项' })).toBeInTheDocument();
@@ -393,6 +421,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     render(<OpenPlatformAiReadonlyPanel />);
 
     expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    selectAiUsageTab('明细记录');
     const providerInput = screen.getByLabelText('模型厂商');
     const modelInput = screen.getByLabelText('模型名称');
 
@@ -441,13 +470,16 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('provider=moonshot'))).toBe(true);
     });
+    selectAiUsageTab('明细记录');
     expect(screen.getByLabelText('模型厂商')).toHaveValue('Kimi');
+    selectAiUsageTab('总览');
 
     fireEvent.click(screen.getByRole('button', { name: '筛选模型 DeepSeek V4 Flash' }));
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('provider=deepseek'))).toBe(true);
     });
     expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('model=deepseek-v4-flash'))).toBe(true);
+    selectAiUsageTab('明细记录');
     expect(screen.getByLabelText('模型名称')).toHaveValue('DeepSeek V4 Flash');
   });
 
@@ -455,7 +487,8 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     const fetchMock = mockUsageFetch();
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect((await screen.findAllByText('星澜医美')).length).toBeGreaterThan(0);
+    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    selectAiUsageTab('明细记录');
     fireEvent.change(screen.getByLabelText('租户'), { target: { value: 'tenant-001' } });
     fireEvent.change(screen.getByLabelText('调用状态'), { target: { value: 'succeeded' } });
     fireEvent.change(screen.getByLabelText('计量状态'), { target: { value: 'metered' } });
