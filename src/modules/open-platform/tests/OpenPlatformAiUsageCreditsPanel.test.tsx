@@ -93,6 +93,20 @@ function usagePayload(records: unknown[] = [usageRecord]) {
         totalAiCreditsConsumed: 6,
       }] : [],
     },
+    filterOptions: {
+      providers: [{ provider: 'deepseek' }, { provider: 'moonshot' }, { provider: 'unknown' }],
+      models: [
+        { provider: 'deepseek', model: 'deepseek-v4-flash' },
+        { provider: 'moonshot', model: 'moonshot-v1-8k' },
+        { provider: 'unknown', model: 'pre_call_safety_check' },
+      ],
+      tenants: [
+        { tenantId: 'tenant-001', tenantName: '星澜医美' },
+        { tenantId: 'tenant-history', tenantName: null },
+      ],
+      statuses: ['succeeded', 'failed', 'provider_unavailable'],
+      meteringStatuses: ['metered', 'pending', 'not_billable', 'legacy', 'empty'],
+    },
     records,
     emptyState: {
       title: '暂无 AI 用量明细',
@@ -162,7 +176,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     render(<OpenPlatformAiReadonlyPanel />);
 
     expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
-    ['租户ID', '调用状态', '计量状态', '模型厂商', '模型名称', '开始时间', '结束时间', '返回条数'].forEach((label) => {
+    ['租户', '调用状态', '计量状态', '模型厂商', '模型名称', '开始时间', '结束时间', '返回条数'].forEach((label) => {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     });
     ['tenantId', 'status', 'meteringStatus', 'provider', 'model', 'dateFrom', 'dateTo', 'limit'].forEach((label) => {
@@ -221,7 +235,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(screen.getAllByText('deepseek-v4-flash').length).toBeGreaterThan(0);
     expect(screen.getAllByText('星澜医美').length).toBeGreaterThan(0);
     expect(screen.getByText('2026-06-30')).toBeInTheDocument();
-    expect(screen.getByText('未计量')).toBeInTheDocument();
+    expect(screen.getAllByText('未计量').length).toBeGreaterThan(0);
     expect(screen.queryByText('byModel')).not.toBeInTheDocument();
     expect(screen.queryByText('totalAiCreditsConsumed')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /导出/ })).not.toBeInTheDocument();
@@ -244,12 +258,48 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(screen.getByText('AI 用量与积分明细服务暂不可用，请稍后重试。')).toBeInTheDocument();
   });
 
+  it('筛选区提供可搜索候选、模型级联和手动输入能力', async () => {
+    const fetchMock = mockUsageFetch();
+    render(<OpenPlatformAiReadonlyPanel />);
+
+    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    const tenantInput = screen.getByLabelText('租户');
+    const providerInput = screen.getByLabelText('模型厂商');
+    const modelInput = screen.getByLabelText('模型名称');
+
+    expect(tenantInput).toHaveAttribute('list', 'ai-usage-tenant-filter-options');
+    expect(providerInput).toHaveAttribute('list', 'ai-usage-provider-filter-options');
+    expect(modelInput).toHaveAttribute('list', 'ai-usage-model-filter-options');
+    expect(screen.getByText('可从候选租户中选择，也可手动输入历史租户ID。')).toBeInTheDocument();
+    expect(screen.getByText('已选择模型厂商时，仅展示该厂商下的候选模型；仍可手动输入。')).toBeInTheDocument();
+
+    const providerOptions = document.querySelectorAll('#ai-usage-provider-filter-options option');
+    expect(Array.from(providerOptions).map((option) => option.getAttribute('value'))).toEqual(expect.arrayContaining(['deepseek', 'moonshot', 'unknown']));
+
+    fireEvent.change(providerInput, { target: { value: 'moonshot' } });
+    await waitFor(() => {
+      const cascadedModelOptions = Array.from(document.querySelectorAll('#ai-usage-model-filter-options option')).map((option) => option.getAttribute('value'));
+      expect(cascadedModelOptions).toContain('moonshot-v1-8k');
+      expect(cascadedModelOptions).not.toContain('deepseek-v4-flash');
+    });
+
+    fireEvent.change(modelInput, { target: { value: 'legacy-manual-model' } });
+    fireEvent.change(tenantInput, { target: { value: 'tenant-history' } });
+    fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('provider=moonshot'))).toBe(true);
+    });
+    expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('model=legacy-manual-model'))).toBe(true);
+    expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('tenantId=tenant-history'))).toBe(true);
+  });
+
   it('支持筛选和刷新且不触发 mutation', async () => {
     const fetchMock = mockUsageFetch();
     render(<OpenPlatformAiReadonlyPanel />);
 
     expect((await screen.findAllByText('星澜医美')).length).toBeGreaterThan(0);
-    fireEvent.change(screen.getByLabelText('租户ID'), { target: { value: 'tenant-001' } });
+    fireEvent.change(screen.getByLabelText('租户'), { target: { value: 'tenant-001' } });
     fireEvent.change(screen.getByLabelText('调用状态'), { target: { value: 'succeeded' } });
     fireEvent.change(screen.getByLabelText('计量状态'), { target: { value: 'metered' } });
     fireEvent.change(screen.getByLabelText('模型厂商'), { target: { value: 'deepseek' } });

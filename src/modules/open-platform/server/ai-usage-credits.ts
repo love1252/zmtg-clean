@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gte, lte, sql, type SQL } from 'drizzle-orm';
 
 import type { TenantDatabase } from '@/server/db/client';
-import { aiCallUsageRecords, tenants } from '@/server/db/schema';
+import { aiCallUsageRecords, platformAiCreditMeteringRules, platformAiProviderConfigs, tenants } from '@/server/db/schema';
 
 export type PlatformAiUsageCreditsSummaryDto = {
   totalCalls: number;
@@ -98,12 +98,35 @@ export type NormalizedPlatformAiUsageCreditsFilters = {
   limit: number;
 };
 
+export type PlatformAiUsageCreditsFilterProviderOptionDto = {
+  provider: string;
+};
+
+export type PlatformAiUsageCreditsFilterModelOptionDto = {
+  provider: string;
+  model: string;
+};
+
+export type PlatformAiUsageCreditsFilterTenantOptionDto = {
+  tenantId: string;
+  tenantName: string | null;
+};
+
+export type PlatformAiUsageCreditsFilterOptionsDto = {
+  providers: PlatformAiUsageCreditsFilterProviderOptionDto[];
+  models: PlatformAiUsageCreditsFilterModelOptionDto[];
+  tenants: PlatformAiUsageCreditsFilterTenantOptionDto[];
+  statuses: string[];
+  meteringStatuses: string[];
+};
+
 export type PlatformAiUsageCreditsResponse = {
   requestId: 'platform-ai-usage-credits';
   readonly: true;
   dataSource: 'repository';
   summary: PlatformAiUsageCreditsSummaryDto;
   aggregations: PlatformAiUsageCreditsAggregationsDto;
+  filterOptions: PlatformAiUsageCreditsFilterOptionsDto;
   records: PlatformAiUsageCreditDetailDto[];
   filters: NormalizedPlatformAiUsageCreditsFilters;
   emptyState: {
@@ -177,6 +200,24 @@ type AiUsageCreditByDateRow = {
   totalAiCreditsConsumed: number | null;
 };
 
+type AiUsageCreditFilterModelSourceRow = {
+  provider: string | null;
+  model: string | null;
+};
+
+type AiUsageCreditFilterTenantRow = {
+  tenantId: string | null;
+  tenantName: string | null;
+};
+
+type AiUsageCreditFilterStatusRow = {
+  status: string | null;
+};
+
+type AiUsageCreditFilterMeteringStatusRow = {
+  meteringStatus: string | null;
+};
+
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const textLimits = {
@@ -186,6 +227,8 @@ const textLimits = {
   provider: 64,
   model: 128,
 } as const;
+const DEFAULT_FILTER_STATUSES = ['succeeded', 'failed', 'rejected', 'sensitive_input_rejected', 'rate_limited', 'provider_unavailable'];
+const DEFAULT_FILTER_METERING_STATUSES = ['metered', 'pending', 'not_billable', 'legacy', 'empty'];
 
 function zeroSummary(): PlatformAiUsageCreditsSummaryDto {
   return {
@@ -363,6 +406,64 @@ function mapDateAggregationRow(row: AiUsageCreditByDateRow): PlatformAiUsageCred
   };
 }
 
+function normalizeFilterOptionValue(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized || 'unknown';
+}
+
+function addUniqueValue(target: Set<string>, value: string | null | undefined) {
+  target.add(normalizeFilterOptionValue(value));
+}
+
+function addUniqueModelOption(
+  target: Map<string, PlatformAiUsageCreditsFilterModelOptionDto>,
+  row: AiUsageCreditFilterModelSourceRow,
+) {
+  const provider = normalizeFilterOptionValue(row.provider);
+  const model = normalizeFilterOptionValue(row.model);
+  target.set(`${provider}::${model}`, { provider, model });
+}
+
+export function buildPlatformAiUsageCreditsFilterOptions(input: {
+  modelRows: AiUsageCreditFilterModelSourceRow[];
+  tenantRows: AiUsageCreditFilterTenantRow[];
+  statusRows: AiUsageCreditFilterStatusRow[];
+  meteringStatusRows: AiUsageCreditFilterMeteringStatusRow[];
+}): PlatformAiUsageCreditsFilterOptionsDto {
+  const providers = new Set<string>();
+  const models = new Map<string, PlatformAiUsageCreditsFilterModelOptionDto>();
+  const tenantsById = new Map<string, PlatformAiUsageCreditsFilterTenantOptionDto>();
+  const statuses = new Set(DEFAULT_FILTER_STATUSES);
+  const meteringStatuses = new Set(DEFAULT_FILTER_METERING_STATUSES);
+
+  input.modelRows.forEach((row) => {
+    addUniqueValue(providers, row.provider);
+    addUniqueModelOption(models, row);
+  });
+  input.tenantRows.forEach((row) => {
+    const tenantId = row.tenantId?.trim();
+    if (!tenantId || tenantsById.has(tenantId)) return;
+    tenantsById.set(tenantId, { tenantId, tenantName: row.tenantName });
+  });
+  input.statusRows.forEach((row) => addUniqueValue(statuses, row.status));
+  input.meteringStatusRows.forEach((row) => meteringStatuses.add(normalizeMeteringStatus(row.meteringStatus)));
+
+  return {
+    providers: Array.from(providers).sort((left, right) => left.localeCompare(right, 'zh-CN')).map((provider) => ({ provider })),
+    models: Array.from(models.values()).sort((left, right) => {
+      const byProvider = left.provider.localeCompare(right.provider, 'zh-CN');
+      return byProvider || left.model.localeCompare(right.model, 'zh-CN');
+    }),
+    tenants: Array.from(tenantsById.values()).sort((left, right) => {
+      const leftLabel = left.tenantName ?? left.tenantId;
+      const rightLabel = right.tenantName ?? right.tenantId;
+      return leftLabel.localeCompare(rightLabel, 'zh-CN');
+    }),
+    statuses: Array.from(statuses),
+    meteringStatuses: Array.from(meteringStatuses),
+  };
+}
+
 function buildConditions(filters: NormalizedPlatformAiUsageCreditsFilters): SQL[] {
   const conditions: SQL[] = [];
   if (filters.tenantId) conditions.push(eq(aiCallUsageRecords.tenantId, filters.tenantId));
@@ -413,6 +514,81 @@ export function createPlatformAiUsageCreditsRepository(database: TenantDatabase)
         .limit(filters.limit);
 
       return (rows as AiUsageCreditRow[]).map(mapPlatformAiUsageCreditRowToDto);
+    },
+
+    async listFilterOptions(): Promise<PlatformAiUsageCreditsFilterOptionsDto> {
+      const usageModelRowsQuery = database
+        .select({
+          provider: aiCallUsageRecords.provider,
+          model: aiCallUsageRecords.model,
+        })
+        .from(aiCallUsageRecords)
+        .groupBy(aiCallUsageRecords.provider, aiCallUsageRecords.model)
+        .orderBy(asc(aiCallUsageRecords.provider), asc(aiCallUsageRecords.model))
+        .limit(200);
+
+      const providerConfigModelRowsQuery = database
+        .select({
+          provider: platformAiProviderConfigs.provider,
+          model: platformAiProviderConfigs.model,
+        })
+        .from(platformAiProviderConfigs)
+        .groupBy(platformAiProviderConfigs.provider, platformAiProviderConfigs.model)
+        .orderBy(asc(platformAiProviderConfigs.provider), asc(platformAiProviderConfigs.model))
+        .limit(200);
+
+      const meteringRuleModelRowsQuery = database
+        .select({
+          provider: platformAiCreditMeteringRules.provider,
+          model: platformAiCreditMeteringRules.model,
+        })
+        .from(platformAiCreditMeteringRules)
+        .groupBy(platformAiCreditMeteringRules.provider, platformAiCreditMeteringRules.model)
+        .orderBy(asc(platformAiCreditMeteringRules.provider), asc(platformAiCreditMeteringRules.model))
+        .limit(200);
+
+      const tenantRowsQuery = database
+        .select({
+          tenantId: aiCallUsageRecords.tenantId,
+          tenantName: tenants.name,
+        })
+        .from(aiCallUsageRecords)
+        .leftJoin(tenants, eq(aiCallUsageRecords.tenantId, tenants.id))
+        .groupBy(aiCallUsageRecords.tenantId, tenants.name)
+        .orderBy(asc(tenants.name), asc(aiCallUsageRecords.tenantId))
+        .limit(200);
+
+      const statusRowsQuery = database
+        .select({ status: aiCallUsageRecords.status })
+        .from(aiCallUsageRecords)
+        .groupBy(aiCallUsageRecords.status)
+        .orderBy(asc(aiCallUsageRecords.status));
+
+      const meteringStatusRowsQuery = database
+        .select({ meteringStatus: aiCallUsageRecords.meteringStatus })
+        .from(aiCallUsageRecords)
+        .groupBy(aiCallUsageRecords.meteringStatus)
+        .orderBy(asc(aiCallUsageRecords.meteringStatus));
+
+      const [usageModelRows, providerConfigModelRows, meteringRuleModelRows, tenantRows, statusRows, meteringStatusRows] = await Promise.all([
+        usageModelRowsQuery,
+        providerConfigModelRowsQuery,
+        meteringRuleModelRowsQuery,
+        tenantRowsQuery,
+        statusRowsQuery,
+        meteringStatusRowsQuery,
+      ]);
+
+      return buildPlatformAiUsageCreditsFilterOptions({
+        modelRows: [
+          ...(usageModelRows as AiUsageCreditFilterModelSourceRow[]),
+          ...(providerConfigModelRows as AiUsageCreditFilterModelSourceRow[]),
+          ...(meteringRuleModelRows as AiUsageCreditFilterModelSourceRow[]),
+        ],
+        tenantRows: tenantRows as AiUsageCreditFilterTenantRow[],
+        statusRows: statusRows as AiUsageCreditFilterStatusRow[],
+        meteringStatusRows: meteringStatusRows as AiUsageCreditFilterMeteringStatusRow[],
+      });
     },
 
     async summarizeUsageCredits(filters: NormalizedPlatformAiUsageCreditsFilters) {
@@ -540,9 +716,10 @@ export async function listPlatformAiUsageCredits(input: {
   const normalized = normalizePlatformAiUsageCreditsFilters(input.filters ?? {});
   if (!normalized.ok) return { status: 'validation_failed', errors: normalized.errors };
 
-  const [summary, aggregations, records] = await Promise.all([
+  const [summary, aggregations, filterOptions, records] = await Promise.all([
     input.repository.summarizeUsageCredits(normalized.filters),
     input.repository.aggregateUsageCredits(normalized.filters),
+    input.repository.listFilterOptions(),
     input.repository.listUsageCredits(normalized.filters),
   ]);
 
@@ -554,6 +731,7 @@ export async function listPlatformAiUsageCredits(input: {
       dataSource: 'repository',
       summary,
       aggregations,
+      filterOptions,
       records,
       filters: normalized.filters,
       emptyState: {

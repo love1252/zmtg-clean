@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildPlatformAiUsageCreditsFilterOptions,
   listPlatformAiUsageCredits,
   mapPlatformAiUsageCreditRowToDto,
   normalizePlatformAiUsageCreditsFilters,
@@ -46,6 +47,16 @@ function expectLowSensitivePayload(input: unknown) {
   );
 }
 
+
+function filterOptionsForTest() {
+  return {
+    providers: [{ provider: 'deepseek' }],
+    models: [{ provider: 'deepseek', model: 'deepseek-v4-flash' }],
+    tenants: [{ tenantId: 'tenant-001', tenantName: '星澜医美' }],
+    statuses: ['succeeded', 'failed'],
+    meteringStatuses: ['metered', 'pending', 'not_billable', 'legacy', 'empty'],
+  };
+}
 
 function zeroSummaryForTest() {
   return {
@@ -162,6 +173,7 @@ describe('platform AI usage credits server', () => {
         }],
         filters,
       } as never),
+      listFilterOptions: async () => filterOptionsForTest(),
       listUsageCredits: async () => [mapPlatformAiUsageCreditRowToDto(usageRow)],
     };
 
@@ -202,11 +214,52 @@ describe('platform AI usage credits server', () => {
         totalCalls: 2,
         totalAiCreditsConsumed: 2,
       })]);
+      expect(result.response.filterOptions).toMatchObject({
+        providers: [{ provider: 'deepseek' }],
+        models: [{ provider: 'deepseek', model: 'deepseek-v4-flash' }],
+        tenants: [{ tenantId: 'tenant-001', tenantName: '星澜医美' }],
+      });
       expect(result.response.records).toHaveLength(1);
       expectLowSensitivePayload(result.response);
     }
   });
 
+
+  it('构建低敏筛选候选项并合并去重历史值', () => {
+    const filterOptions = buildPlatformAiUsageCreditsFilterOptions({
+      modelRows: [
+        { provider: 'deepseek', model: 'deepseek-v4-flash' },
+        { provider: 'deepseek', model: 'deepseek-v4-flash' },
+        { provider: 'unknown', model: 'pre_call_safety_check' },
+        { provider: '', model: null },
+      ],
+      tenantRows: [
+        { tenantId: 'tenant-001', tenantName: '星澜医美' },
+        { tenantId: 'tenant-001', tenantName: '重复租户不应重复展示' },
+        { tenantId: 'tenant-history', tenantName: null },
+      ],
+      statusRows: [{ status: 'succeeded' }, { status: 'legacy_status' }],
+      meteringStatusRows: [{ meteringStatus: 'metered' }, { meteringStatus: null }, { meteringStatus: 'unexpected_metering' }],
+    });
+
+    expect(filterOptions.providers).toEqual(expect.arrayContaining([
+      { provider: 'deepseek' },
+      { provider: 'unknown' },
+    ]));
+    expect(filterOptions.models).toEqual(expect.arrayContaining([
+      { provider: 'deepseek', model: 'deepseek-v4-flash' },
+      { provider: 'unknown', model: 'pre_call_safety_check' },
+      { provider: 'unknown', model: 'unknown' },
+    ]));
+    expect(filterOptions.tenants).toEqual(expect.arrayContaining([
+      { tenantId: 'tenant-001', tenantName: '星澜医美' },
+      { tenantId: 'tenant-history', tenantName: null },
+    ]));
+    expect(filterOptions.tenants.filter((tenant) => tenant.tenantId === 'tenant-001')).toHaveLength(1);
+    expect(filterOptions.statuses).toEqual(expect.arrayContaining(['succeeded', 'failed', 'legacy_status']));
+    expect(filterOptions.meteringStatuses).toEqual(expect.arrayContaining(['metered', 'empty', 'legacy']));
+    expectLowSensitivePayload(filterOptions);
+  });
 
   it('把过滤条件传递给聚合查询', async () => {
     const seenFilters: unknown[] = [];
@@ -221,6 +274,7 @@ describe('platform AI usage credits server', () => {
           byDate: [],
         };
       },
+      listFilterOptions: async () => filterOptionsForTest(),
       listUsageCredits: async () => [],
     };
 

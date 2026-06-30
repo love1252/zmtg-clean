@@ -82,12 +82,35 @@ export type OpenPlatformAiUsageCreditsFilters = {
   limit?: number | string | null;
 };
 
+export type PlatformAiUsageCreditsFilterProviderOptionDto = {
+  provider: string;
+};
+
+export type PlatformAiUsageCreditsFilterModelOptionDto = {
+  provider: string;
+  model: string;
+};
+
+export type PlatformAiUsageCreditsFilterTenantOptionDto = {
+  tenantId: string;
+  tenantName: string | null;
+};
+
+export type PlatformAiUsageCreditsFilterOptionsDto = {
+  providers: PlatformAiUsageCreditsFilterProviderOptionDto[];
+  models: PlatformAiUsageCreditsFilterModelOptionDto[];
+  tenants: PlatformAiUsageCreditsFilterTenantOptionDto[];
+  statuses: string[];
+  meteringStatuses: string[];
+};
+
 export type OpenPlatformAiUsageCreditsResponse = {
   requestId: 'platform-ai-usage-credits';
   readonly: true;
   dataSource: 'repository';
   summary: PlatformAiUsageCreditsSummaryDto;
   aggregations: PlatformAiUsageCreditsAggregationsDto;
+  filterOptions: PlatformAiUsageCreditsFilterOptionsDto;
   records: PlatformAiUsageCreditDetailDto[];
   emptyState: {
     title: string;
@@ -203,6 +226,12 @@ export async function listOpenPlatformAiUsageCredits(
       payload.requestId !== 'platform-ai-usage-credits' ||
       !isJsonObject(payload.summary) ||
       !isJsonObject(payload.aggregations) ||
+      !isJsonObject(payload.filterOptions) ||
+      !Array.isArray(payload.filterOptions.providers) ||
+      !Array.isArray(payload.filterOptions.models) ||
+      !Array.isArray(payload.filterOptions.tenants) ||
+      !Array.isArray(payload.filterOptions.statuses) ||
+      !Array.isArray(payload.filterOptions.meteringStatuses) ||
       !Array.isArray(payload.records)
     ) {
       return {

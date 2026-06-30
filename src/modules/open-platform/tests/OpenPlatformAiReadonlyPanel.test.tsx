@@ -95,6 +95,13 @@ describe('平台端 AI 模型与用量只读面板', () => {
       byMeteringStatus: [],
       byDate: [],
     },
+      filterOptions: {
+        providers: [],
+        models: [],
+        tenants: [],
+        statuses: ['succeeded', 'failed'],
+        meteringStatuses: ['metered', 'pending', 'not_billable', 'legacy', 'empty'],
+      },
       records: [],
       emptyState: {
         title: '暂无 AI 用量明细',
@@ -135,6 +142,13 @@ describe('平台端 AI 模型与用量只读面板', () => {
       byMeteringStatus: [],
       byDate: [],
     },
+      filterOptions: {
+        providers: [],
+        models: [],
+        tenants: [],
+        statuses: ['succeeded', 'failed'],
+        meteringStatuses: ['metered', 'pending', 'not_billable', 'legacy', 'empty'],
+      },
       records: [],
       emptyState: {
         title: '暂无 AI 用量明细',
