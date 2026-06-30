@@ -34,6 +34,7 @@ export type PlatformAiUsageCreditsByTenantDto = {
   meteredCalls: number;
   pendingCalls: number;
   notBillableCalls: number;
+  totalTokens: number;
   totalAiCreditsConsumed: number;
 };
 
@@ -195,6 +196,7 @@ type AiUsageCreditByTenantRow = {
   meteredCalls: number;
   pendingCalls: number;
   notBillableCalls: number;
+  totalTokens: number | null;
   totalAiCreditsConsumed: number | null;
 };
 
@@ -433,6 +435,7 @@ function mapTenantAggregationRow(row: AiUsageCreditByTenantRow): PlatformAiUsage
     meteredCalls: row.meteredCalls ?? 0,
     pendingCalls: row.pendingCalls ?? 0,
     notBillableCalls: row.notBillableCalls ?? 0,
+    totalTokens: row.totalTokens ?? 0,
     totalAiCreditsConsumed: row.totalAiCreditsConsumed ?? 0,
   };
 }
@@ -751,6 +754,7 @@ export function createPlatformAiUsageCreditsRepository(database: TenantDatabase)
           meteredCalls: sql<number>`count(case when ${aiCallUsageRecords.meteringStatus} = 'metered' then 1 end)::int`,
           pendingCalls: sql<number>`count(case when ${aiCallUsageRecords.meteringStatus} = 'pending' then 1 end)::int`,
           notBillableCalls: sql<number>`count(case when ${aiCallUsageRecords.meteringStatus} = 'not_billable' then 1 end)::int`,
+          totalTokens: sql<number | null>`coalesce(sum(${aiCallUsageRecords.totalTokens}), 0)::int`,
           totalAiCreditsConsumed: sql<number | null>`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)::int`,
         })
         .from(aiCallUsageRecords)

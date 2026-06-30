@@ -48,6 +48,7 @@ const usageResponse = {
       meteredCalls: 1,
       pendingCalls: 0,
       notBillableCalls: 1,
+      totalTokens: 200,
       totalAiCreditsConsumed: 2,
     }],
     byMeteringStatus: [
@@ -126,7 +127,7 @@ describe('platform AI usage credits client', () => {
     expect(result).toEqual({ ok: true, data: usageResponse });
     if (result.ok) {
       expect(result.data.aggregations.byModel).toEqual([expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-flash' })]);
-      expect(result.data.aggregations.byTenant).toEqual([expect.objectContaining({ tenantId: 'tenant-001', tenantName: '星澜医美' })]);
+      expect(result.data.aggregations.byTenant).toEqual([expect.objectContaining({ tenantId: 'tenant-001', tenantName: '星澜医美', totalTokens: 200 })]);
       expect(result.data.aggregations.byMeteringStatus).toEqual(expect.arrayContaining([expect.objectContaining({ meteringStatus: 'metered' })]));
       expect(result.data.aggregations.byDate).toEqual([expect.objectContaining({ date: '2026-06-30' })]);
       expect(result.data.filterOptions).toMatchObject({

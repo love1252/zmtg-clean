@@ -174,6 +174,7 @@ describe('platform AI usage credits server', () => {
           meteredCalls: 1,
           pendingCalls: 1,
           notBillableCalls: 0,
+          totalTokens: 200,
           totalAiCreditsConsumed: 2,
         }],
         byMeteringStatus: [
@@ -219,6 +220,7 @@ describe('platform AI usage credits server', () => {
         tenantId: 'tenant-001',
         tenantName: '星澜医美',
         pendingCalls: 1,
+        totalTokens: 200,
         totalAiCreditsConsumed: 2,
       })]);
       expect(result.response.aggregations.byMeteringStatus).toEqual([

@@ -23,6 +23,8 @@ const numberFormatter = new Intl.NumberFormat('zh-CN');
 
 type LoadState = 'loading' | 'ready' | 'error';
 
+type TimeRangePreset = 'today' | 'last7Days' | 'thisMonth' | 'lastMonth' | 'custom';
+
 type FilterFormState = {
   tenantId: string;
   status: string;
@@ -32,18 +34,69 @@ type FilterFormState = {
   dateFrom: string;
   dateTo: string;
   limit: string;
+  timeRange: TimeRangePreset;
 };
 
-const defaultFilters: FilterFormState = {
-  tenantId: '',
-  status: '',
-  meteringStatus: '',
-  provider: '',
-  model: '',
-  dateFrom: '',
-  dateTo: '',
-  limit: '50',
-};
+const timeRangePresets: Array<{ key: TimeRangePreset; label: string }> = [
+  { key: 'today', label: '今日' },
+  { key: 'last7Days', label: '近7天' },
+  { key: 'thisMonth', label: '本月' },
+  { key: 'lastMonth', label: '上月' },
+  { key: 'custom', label: '自定义时间范围' },
+];
+
+function padDatePart(value: number) {
+  return String(value).padStart(2, '0');
+}
+
+function formatDateTimeLocal(date: Date) {
+  return [
+    date.getFullYear(),
+    padDatePart(date.getMonth() + 1),
+    padDatePart(date.getDate()),
+  ].join('-') + `T${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}`;
+}
+
+function timeRangeDates(preset: Exclude<TimeRangePreset, 'custom'>, now = new Date()) {
+  if (preset === 'today') {
+    return {
+      dateFrom: formatDateTimeLocal(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0)),
+      dateTo: formatDateTimeLocal(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59)),
+    };
+  }
+
+  if (preset === 'last7Days') {
+    return {
+      dateFrom: formatDateTimeLocal(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0)),
+      dateTo: formatDateTimeLocal(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59)),
+    };
+  }
+
+  if (preset === 'lastMonth') {
+    return {
+      dateFrom: formatDateTimeLocal(new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0)),
+      dateTo: formatDateTimeLocal(new Date(now.getFullYear(), now.getMonth(), 0, 23, 59)),
+    };
+  }
+
+  return {
+    dateFrom: formatDateTimeLocal(new Date(now.getFullYear(), now.getMonth(), 1, 0, 0)),
+    dateTo: formatDateTimeLocal(new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59)),
+  };
+}
+
+function createDefaultFilters(): FilterFormState {
+  return {
+    tenantId: '',
+    status: '',
+    meteringStatus: '',
+    provider: '',
+    model: '',
+    ...timeRangeDates('thisMonth'),
+    limit: '50',
+    timeRange: 'thisMonth',
+  };
+}
 
 const emptyData: OpenPlatformAiUsageCreditsResponse = {
   requestId: 'platform-ai-usage-credits',
@@ -552,7 +605,7 @@ function ProviderModelUsageStats(props: {
       <div className="flex flex-col gap-3 border-b border-[#dbeafe] px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 id="provider-model-usage-stats-heading" className="text-sm font-semibold text-[#1f2937]">厂商 / 模型用量统计</h3>
-          <p className="mt-1 text-xs leading-5 text-[#64748b]">复用当前 AI usage credits 聚合数据，按厂商分组展示模型调用、Token 与 AI 积分消耗；点击厂商或模型可联动筛选。</p>
+          <p className="mt-1 text-xs leading-5 text-[#64748b]">复用当前 AI 用量与积分聚合数据，按厂商分组展示模型调用、Token 与 AI 积分消耗；点击厂商或模型可联动筛选。</p>
         </div>
         <div className="flex flex-wrap gap-2" aria-label="统计指标切换">
           {usageStatsMetrics.map((metric) => (
@@ -581,24 +634,37 @@ function ProviderModelUsageStats(props: {
           {stats.map((provider) => {
             const color = providerColor(provider.provider);
             const providerValue = usageMetricValue(provider, props.metric);
+            const hideProviderSummary = stats.length === 1 && provider.models.length === 1;
             return (
               <article key={provider.provider} className="rounded-2xl border border-[#e6edf5] bg-white p-4 shadow-sm">
-                <button
-                  type="button"
-                  onClick={() => props.onSelectProvider(provider.provider)}
-                  className="flex w-full items-center gap-3 rounded-xl text-left transition hover:bg-[#f8fafc] focus:bg-[#eef6ff] focus:outline-none"
-                  aria-label={`筛选厂商 ${provider.providerOption.title}`}
-                >
-                  {optionLogo(provider.providerOption)}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-[#1f2937]">{provider.providerOption.title}</span>
-                    <span className="mt-0.5 block truncate text-xs text-[#94a3b8]">{provider.provider}</span>
-                  </span>
-                  <span className="shrink-0 text-sm font-semibold text-[#1f2937]">{formatNumber(providerValue)}</span>
-                </button>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e2e8f0]" aria-label={`${provider.providerOption.title}${metricLabel}占比`}>
-                  <div className="h-full rounded-full" style={{ width: `${Math.max(4, (providerValue / maxValue) * 100)}%`, backgroundColor: color }} />
-                </div>
+                {hideProviderSummary ? (
+                  <div className="flex w-full items-center gap-3 rounded-xl">
+                    {optionLogo(provider.providerOption)}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-[#1f2937]">{provider.providerOption.title}</span>
+                      <span className="mt-0.5 block truncate text-xs text-[#94a3b8]">{provider.provider}</span>
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => props.onSelectProvider(provider.provider)}
+                      className="flex w-full items-center gap-3 rounded-xl text-left transition hover:bg-[#f8fafc] focus:bg-[#eef6ff] focus:outline-none"
+                      aria-label={`筛选厂商 ${provider.providerOption.title}`}
+                    >
+                      {optionLogo(provider.providerOption)}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-[#1f2937]">{provider.providerOption.title}</span>
+                        <span className="mt-0.5 block truncate text-xs text-[#94a3b8]">{provider.provider}</span>
+                      </span>
+                      <span className="shrink-0 text-sm font-semibold text-[#1f2937]">{formatNumber(providerValue)}</span>
+                    </button>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e2e8f0]" aria-label={`${provider.providerOption.title}${metricLabel}占比`}>
+                      <div className="h-full rounded-full" style={{ width: `${Math.max(4, (providerValue / maxValue) * 100)}%`, backgroundColor: color }} />
+                    </div>
+                  </>
+                )}
                 <div className="mt-3 grid gap-2">
                   {provider.models.map((model) => {
                     const modelValue = usageMetricValue(model, props.metric);
@@ -644,16 +710,17 @@ function TenantAggregationTable({ rows }: { rows: PlatformAiUsageCreditsByTenant
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[820px] text-left text-sm">
+      <table className="w-full min-w-[920px] text-left text-sm">
         <thead className="bg-[#f8fafc] text-xs font-semibold text-[#64748b]">
           <tr>
             <th className="px-3 py-2">租户</th>
             <th className="px-3 py-2">总调用</th>
             <th className="px-3 py-2">成功 / 失败</th>
+            <th className="px-3 py-2">Token 总量</th>
+            <th className="px-3 py-2">AI 积分消耗</th>
             <th className="px-3 py-2">已计量</th>
             <th className="px-3 py-2">待计量</th>
             <th className="px-3 py-2">不计费</th>
-            <th className="px-3 py-2">AI 积分消耗</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[#e6edf5]">
@@ -665,10 +732,11 @@ function TenantAggregationTable({ rows }: { rows: PlatformAiUsageCreditsByTenant
               </td>
               <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.totalCalls)}</td>
               <td className="px-3 py-2 text-[#64748b]">{formatNumber(row.succeededCalls)} / {formatNumber(row.failedCalls)}</td>
+              <td className="px-3 py-2 font-semibold text-[#1f2937]">{formatNumber(row.totalTokens)}</td>
+              <td className="px-3 py-2 font-semibold text-[#2563eb]">{formatNumber(row.totalAiCreditsConsumed)}</td>
               <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.meteredCalls)}</td>
               <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.pendingCalls)}</td>
               <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.notBillableCalls)}</td>
-              <td className="px-3 py-2 font-semibold text-[#2563eb]">{formatNumber(row.totalAiCreditsConsumed)}</td>
             </tr>
           ))}
         </tbody>
@@ -771,8 +839,9 @@ function DetailRow({ record }: { record: PlatformAiUsageCreditDetailDto }) {
 }
 
 export function OpenPlatformAiReadonlyPanel() {
-  const [filters, setFilters] = useState<FilterFormState>(defaultFilters);
-  const [appliedFilters, setAppliedFilters] = useState<FilterFormState>(defaultFilters);
+  const [initialFilters] = useState(createDefaultFilters);
+  const [filters, setFilters] = useState<FilterFormState>(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useState<FilterFormState>(initialFilters);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [data, setData] = useState<OpenPlatformAiUsageCreditsResponse>(emptyData);
   const [error, setError] = useState('');
@@ -797,7 +866,7 @@ export function OpenPlatformAiReadonlyPanel() {
     let isMounted = true;
 
     async function loadInitialUsage() {
-      const result = await listOpenPlatformAiUsageCredits(toApiFilters(defaultFilters));
+      const result = await listOpenPlatformAiUsageCredits(toApiFilters(initialFilters));
       if (!isMounted) return;
 
       if (!result.ok) {
@@ -817,10 +886,28 @@ export function OpenPlatformAiReadonlyPanel() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialFilters]);
 
   function updateFilter(key: keyof FilterFormState, value: string) {
-    setFilters((current) => ({ ...current, [key]: value }));
+    setFilters((current) => ({
+      ...current,
+      [key]: value,
+      ...(key === 'dateFrom' || key === 'dateTo' ? { timeRange: 'custom' as const } : {}),
+    }));
+  }
+
+  function updateTimeRange(preset: TimeRangePreset) {
+    const dateFilters = preset === 'custom' ? {} : timeRangeDates(preset);
+    setFilters((current) => ({ ...current, ...dateFilters, timeRange: preset }));
+  }
+
+  function applyTimeRange(preset: TimeRangePreset) {
+    const dateFilters = preset === 'custom' ? {} : timeRangeDates(preset);
+    const nextFilters = { ...filters, ...dateFilters, timeRange: preset };
+    setFilters(nextFilters);
+    setAppliedFilters(nextFilters);
+    setLoadState('loading');
+    void loadUsage(nextFilters);
   }
 
   function updateProviderFilter(value: string) {
@@ -854,10 +941,11 @@ export function OpenPlatformAiReadonlyPanel() {
   }
 
   function resetFilters() {
-    setFilters(defaultFilters);
-    setAppliedFilters(defaultFilters);
+    const nextFilters = createDefaultFilters();
+    setFilters(nextFilters);
+    setAppliedFilters(nextFilters);
     setLoadState('loading');
-    void loadUsage(defaultFilters);
+    void loadUsage(nextFilters);
   }
 
   function refreshUsage() {
@@ -896,6 +984,47 @@ export function OpenPlatformAiReadonlyPanel() {
       onSelectProvider={selectProviderFilter}
       onSelectModel={selectModelFilter}
     />
+  );
+  const timeRangeFilter = (
+    <section className="mt-4 rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-3" aria-labelledby="ai-usage-time-range-heading">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h3 id="ai-usage-time-range-heading" className="text-sm font-semibold text-[#1f2937]">全局时间范围</h3>
+          <p className="mt-1 text-xs leading-5 text-[#64748b]">时间范围作用于总览、模型与厂商、租户用量、计量状态和明细记录；返回条数仅影响明细记录。</p>
+        </div>
+        <div className="flex flex-wrap gap-2" aria-label="全局时间范围筛选">
+          {timeRangePresets.map((preset) => (
+            <button
+              key={preset.key}
+              type="button"
+              onClick={() => (preset.key === 'custom' ? updateTimeRange('custom') : applyTimeRange(preset.key))}
+              className={cn(
+                'h-8 rounded-full border px-3 text-xs font-semibold transition',
+                filters.timeRange === preset.key
+                  ? 'border-[#2563eb] bg-[#2563eb] text-white'
+                  : 'border-[#dbe3ee] bg-white text-[#64748b] hover:bg-[#f1f5f9]',
+              )}
+              aria-pressed={filters.timeRange === preset.key}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {filters.timeRange === 'custom' ? (
+        <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+          <label className="text-sm font-semibold text-[#1f2937]">
+            开始时间
+            <input type="datetime-local" value={filters.dateFrom} onChange={(event) => updateFilter('dateFrom', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" />
+          </label>
+          <label className="text-sm font-semibold text-[#1f2937]">
+            结束时间
+            <input type="datetime-local" value={filters.dateTo} onChange={(event) => updateFilter('dateTo', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" />
+          </label>
+          <button type="button" onClick={applyFilters} className="h-10 rounded-xl bg-[#2563eb] px-4 text-sm font-semibold text-white transition hover:bg-[#1d4ed8]">应用时间范围</button>
+        </div>
+      ) : null}
+    </section>
   );
   const filterForm = (
     <form
@@ -950,14 +1079,6 @@ export function OpenPlatformAiReadonlyPanel() {
         helper="选择厂商后仅展示该厂商模型；仍可手动输入。"
         onChange={(value) => updateFilter('model', value)}
       />
-      <label className="text-sm font-semibold text-[#1f2937]">
-        开始时间
-        <input type="datetime-local" value={filters.dateFrom} onChange={(event) => updateFilter('dateFrom', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" />
-      </label>
-      <label className="text-sm font-semibold text-[#1f2937]">
-        结束时间
-        <input type="datetime-local" value={filters.dateTo} onChange={(event) => updateFilter('dateTo', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" />
-      </label>
       <label className="text-sm font-semibold text-[#1f2937]">
         返回条数
         <input type="number" min="1" max="100" value={filters.limit} onChange={(event) => updateFilter('limit', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal" />
@@ -1021,6 +1142,8 @@ export function OpenPlatformAiReadonlyPanel() {
             刷新
           </button>
         </div>
+
+        {timeRangeFilter}
 
         <div className="mt-4 flex gap-2 overflow-x-auto rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-1" role="tablist" aria-label="AI用量栏目">
           {aiUsageTabs.map((tab) => (
