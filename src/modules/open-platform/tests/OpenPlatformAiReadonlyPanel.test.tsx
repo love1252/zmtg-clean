@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenPlatformAiReadonlyPanel } from '@/modules/open-platform/components/OpenPlatformAiReadonlyPanel';
 import { PlatformConsole } from '@/modules/workspace/components/PlatformConsole';
 
@@ -65,9 +65,13 @@ function expectNoProviderConfigFetch(fetchMock: ReturnType<typeof vi.fn>) {
 }
 
 function freezeUsageDate() {
-  vi.useFakeTimers();
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(new Date('2026-06-22T09:30:00+08:00'));
 }
+
+beforeEach(() => {
+  freezeUsageDate();
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -121,7 +125,7 @@ describe('平台端 AI 模型与用量只读面板', () => {
     expect(screen.getByRole('tab', { name: '明细记录' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByText('厂商 Key 配置')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /导出账单/ })).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/ai-usage-credits?limit=50', { cache: 'no-store' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/ai-usage-credits?dateFrom=2026-05-31T16%3A00%3A00.000Z&dateTo=2026-06-30T15%3A59%3A00.000Z&limit=50', { cache: 'no-store' });
     expectNoForbiddenAiReadonlyContent(container);
   });
 

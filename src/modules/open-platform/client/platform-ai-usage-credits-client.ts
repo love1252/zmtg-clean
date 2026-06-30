@@ -28,6 +28,7 @@ export type PlatformAiUsageCreditsByTenantDto = {
   meteredCalls: number;
   pendingCalls: number;
   notBillableCalls: number;
+  totalTokens: number;
   totalAiCreditsConsumed: number;
 };
 

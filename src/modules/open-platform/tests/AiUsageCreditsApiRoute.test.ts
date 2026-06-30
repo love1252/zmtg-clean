@@ -76,6 +76,7 @@ const responsePayload = {
       meteredCalls: 1,
       pendingCalls: 0,
       notBillableCalls: 1,
+      totalTokens: 200,
       totalAiCreditsConsumed: 2,
     }],
     byMeteringStatus: [
@@ -216,6 +217,7 @@ describe('平台端 AI usage credits API', () => {
     expect((body.aggregations as Record<string, unknown[]>).byTenant[0]).toMatchObject({
       tenantId: 'tenant-001',
       tenantName: '星澜医美',
+      totalTokens: 200,
       totalAiCreditsConsumed: 2,
     });
     expect((body.aggregations as Record<string, unknown[]>).byMeteringStatus[0]).toMatchObject({
