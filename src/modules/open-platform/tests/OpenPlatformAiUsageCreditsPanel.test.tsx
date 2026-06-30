@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { OpenPlatformAiReadonlyPanel } from '@/modules/open-platform/components/OpenPlatformAiReadonlyPanel';
@@ -60,16 +60,38 @@ function usagePayload(records: unknown[] = [usageRecord]) {
       totalAiCreditsConsumed: records.length * 2,
     },
     aggregations: {
-      byModel: hasRecords ? [{
-        provider: 'deepseek',
-        model: 'deepseek-v4-flash',
-        totalCalls: 3,
-        succeededCalls: 2,
-        failedCalls: 1,
-        meteredCalls: 2,
-        totalTokens: 600,
-        totalAiCreditsConsumed: 6,
-      }] : [],
+      byModel: hasRecords ? [
+        {
+          provider: 'deepseek',
+          model: 'deepseek-v4-flash',
+          totalCalls: 3,
+          succeededCalls: 2,
+          failedCalls: 1,
+          meteredCalls: 2,
+          totalTokens: 600,
+          totalAiCreditsConsumed: 6,
+        },
+        {
+          provider: 'moonshot',
+          model: 'moonshot-v1-8k',
+          totalCalls: 2,
+          succeededCalls: 2,
+          failedCalls: 0,
+          meteredCalls: 2,
+          totalTokens: 300,
+          totalAiCreditsConsumed: 4,
+        },
+        {
+          provider: 'unknown',
+          model: 'pre_call_safety_check',
+          totalCalls: 1,
+          succeededCalls: 1,
+          failedCalls: 0,
+          meteredCalls: 0,
+          totalTokens: 0,
+          totalAiCreditsConsumed: 0,
+        },
+      ] : [],
       byTenant: hasRecords ? [{
         tenantId: 'tenant-001',
         tenantName: '星澜医美',
@@ -300,6 +322,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
 
     expect(await screen.findByText('暂无 AI 用量明细')).toBeInTheDocument();
     expect(screen.getByText('当前过滤条件下没有 AI 调用记录。')).toBeInTheDocument();
+    expect(screen.getByText('暂无厂商 / 模型用量统计数据')).toBeInTheDocument();
   });
 
   it('展示错误状态', async () => {
@@ -328,20 +351,21 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
 
     fireEvent.focus(providerInput);
     expect(await screen.findByRole('listbox', { name: '模型厂商候选项' })).toBeInTheDocument();
-    expect(screen.getByText('DeepSeek')).toBeInTheDocument();
+    expect(screen.getAllByText('DeepSeek').length).toBeGreaterThan(0);
     expect(screen.getAllByText('deepseek').length).toBeGreaterThan(0);
     expect(screen.getByText('系统值')).toBeInTheDocument();
 
     fireEvent.change(providerInput, { target: { value: 'moon' } });
-    expect(screen.getByText('Kimi')).toBeInTheDocument();
+    expect(screen.getAllByText('Kimi').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('option', { name: /Kimi/ }));
-    expect(providerInput).toHaveValue('moonshot');
+    expect(providerInput).toHaveValue('Kimi');
 
     fireEvent.focus(modelInput);
-    expect(await screen.findByRole('listbox', { name: '模型名称候选项' })).toBeInTheDocument();
-    expect(screen.getByText('Kimi 8K')).toBeInTheDocument();
-    expect(screen.getByText(/moonshot-v1-8k/)).toBeInTheDocument();
-    expect(screen.queryByText('DeepSeek V4 Flash')).not.toBeInTheDocument();
+    const modelListbox = await screen.findByRole('listbox', { name: '模型名称候选项' });
+    expect(modelListbox).toBeInTheDocument();
+    expect(within(modelListbox).getAllByText('Kimi 8K').length).toBeGreaterThan(0);
+    expect(within(modelListbox).getAllByText(/moonshot-v1-8k/).length).toBeGreaterThan(0);
+    expect(within(modelListbox).queryByText('DeepSeek V4 Flash')).not.toBeInTheDocument();
 
     fireEvent.keyDown(modelInput, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('listbox', { name: '模型名称候选项' })).not.toBeInTheDocument());
@@ -362,6 +386,69 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     });
     expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('model=legacy-manual-model'))).toBe(true);
     expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('tenantId=tenant-history'))).toBe(true);
+  });
+
+  it('优化模型厂商和模型名称已选态并支持重新选择候选', async () => {
+    mockUsageFetch();
+    render(<OpenPlatformAiReadonlyPanel />);
+
+    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    const providerInput = screen.getByLabelText('模型厂商');
+    const modelInput = screen.getByLabelText('模型名称');
+
+    fireEvent.focus(providerInput);
+    fireEvent.click(screen.getByRole('option', { name: /DeepSeek/ }));
+    expect(providerInput).toHaveValue('DeepSeek');
+    expect(screen.getAllByText('deepseek').length).toBeGreaterThan(0);
+    expect(screen.getByText('系统值')).toBeInTheDocument();
+
+    fireEvent.focus(providerInput);
+    expect(await screen.findByRole('listbox', { name: '模型厂商候选项' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Kimi/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: /Kimi/ }));
+    expect(providerInput).toHaveValue('Kimi');
+    expect(screen.getAllByText('moonshot').length).toBeGreaterThan(0);
+
+    fireEvent.focus(modelInput);
+    expect(await screen.findByRole('listbox', { name: '模型名称候选项' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: /Kimi 8K/ }));
+    expect(modelInput).toHaveValue('Kimi 8K');
+    expect(screen.getAllByText(/moonshot-v1-8k/).length).toBeGreaterThan(0);
+
+    fireEvent.focus(modelInput);
+    expect(await screen.findByRole('listbox', { name: '模型名称候选项' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Kimi 8K/ })).toBeInTheDocument();
+    fireEvent.change(providerInput, { target: { value: '' } });
+    fireEvent.focus(modelInput);
+    expect(screen.getByRole('option', { name: /DeepSeek V4 Flash/ })).toBeInTheDocument();
+  });
+
+  it('条形统计支持指标切换、点击联动和空状态', async () => {
+    const fetchMock = mockUsageFetch();
+    render(<OpenPlatformAiReadonlyPanel />);
+
+    expect(await screen.findByRole('heading', { name: '厂商 / 模型用量统计' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '调用次数' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Token 总量' }));
+    expect(screen.getByRole('button', { name: 'Token 总量' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'AI 积分消耗' }));
+    expect(screen.getByRole('button', { name: 'AI 积分消耗' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByText(/调用 3/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Token 600/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/积分 6/).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: '筛选厂商 Kimi' }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('provider=moonshot'))).toBe(true);
+    });
+    expect(screen.getByLabelText('模型厂商')).toHaveValue('Kimi');
+
+    fireEvent.click(screen.getByRole('button', { name: '筛选模型 DeepSeek V4 Flash' }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('provider=deepseek'))).toBe(true);
+    });
+    expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('model=deepseek-v4-flash'))).toBe(true);
+    expect(screen.getByLabelText('模型名称')).toHaveValue('DeepSeek V4 Flash');
   });
 
   it('支持筛选和刷新且不触发 mutation', async () => {

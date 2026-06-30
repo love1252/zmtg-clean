@@ -203,27 +203,92 @@ type SearchableFilterOption = {
   keywords: string[];
 };
 
+type UsageStatsMetric = 'calls' | 'tokens' | 'credits';
+
+type ProviderModelUsageStat = {
+  provider: string;
+  providerOption: SearchableFilterOption;
+  totalCalls: number;
+  totalTokens: number;
+  totalAiCreditsConsumed: number;
+  models: Array<{
+    provider: string;
+    model: string;
+    modelOption: SearchableFilterOption;
+    totalCalls: number;
+    totalTokens: number;
+    totalAiCreditsConsumed: number;
+  }>;
+};
+
+const usageStatsMetrics: Array<{ key: UsageStatsMetric; label: string; shortLabel: string }> = [
+  { key: 'calls', label: '调用次数', shortLabel: '调用' },
+  { key: 'tokens', label: 'Token 总量', shortLabel: 'Token' },
+  { key: 'credits', label: 'AI 积分消耗', shortLabel: '积分' },
+];
+
+const providerBarColors = ['#2563eb', '#059669', '#7c3aed', '#ea580c', '#0891b2', '#db2777', '#4f46e5', '#16a34a'];
+
 function filterOptionSourceLabel(source: 'configured' | 'system' | 'history') {
   if (source === 'configured') return '已配置';
   if (source === 'system') return '系统值';
   return '历史值';
 }
 
-function optionLogo(option: SearchableFilterOption) {
+function optionLogo(option: SearchableFilterOption, className?: string) {
   const logoClassName = option.logoClassName ?? 'bg-slate-500';
   if (option.logoUrl) {
     return (
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-white">
+      <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-white', className)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={option.logoUrl} alt="" className="h-5 w-5 object-contain" />
       </span>
     );
   }
   return (
-    <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white', logoClassName)}>
+    <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white', logoClassName, className)}>
       {option.logoText ?? option.title.slice(0, 1).toUpperCase()}
     </span>
   );
+}
+
+function optionMatchesQuery(option: SearchableFilterOption, query: string) {
+  return option.keywords.some((keyword) => keyword.toLowerCase().includes(query));
+}
+
+function usageMetricValue(row: Pick<PlatformAiUsageCreditsByModelDto, 'totalCalls' | 'totalTokens' | 'totalAiCreditsConsumed'>, metric: UsageStatsMetric) {
+  if (metric === 'calls') return row.totalCalls;
+  if (metric === 'tokens') return row.totalTokens;
+  return row.totalAiCreditsConsumed;
+}
+
+function providerColor(provider: string) {
+  const hash = provider.split('').reduce((total, char) => total + char.charCodeAt(0), 0);
+  return providerBarColors[hash % providerBarColors.length];
+}
+
+function fallbackProviderOption(provider: string): SearchableFilterOption {
+  return {
+    value: provider,
+    title: provider,
+    subtitle: '历史值',
+    badge: '历史值',
+    logoText: provider.slice(0, 1).toUpperCase(),
+    logoClassName: 'bg-slate-500',
+    keywords: [provider, '历史值'],
+  };
+}
+
+function fallbackModelOption(row: Pick<PlatformAiUsageCreditsByModelDto, 'provider' | 'model'>): SearchableFilterOption {
+  return {
+    value: row.model,
+    title: row.model,
+    subtitle: `${row.provider} · 历史值`,
+    badge: '历史值',
+    logoText: row.provider.slice(0, 1).toUpperCase(),
+    logoClassName: 'bg-slate-500',
+    keywords: [row.model, row.provider, '历史值'],
+  };
 }
 
 function SearchableFilterInput(props: {
@@ -236,12 +301,20 @@ function SearchableFilterInput(props: {
   onChange: (value: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLLabelElement | null>(null);
-  const normalizedQuery = props.value.trim().toLowerCase();
+  const selectedOption = useMemo(() => props.options.find((option) => option.value === props.value), [props.options, props.value]);
+  const normalizedQuery = query.trim().toLowerCase();
   const filteredOptions = useMemo(() => {
     if (!normalizedQuery) return props.options;
-    return props.options.filter((option) => option.keywords.some((keyword) => keyword.toLowerCase().includes(normalizedQuery)));
+    return props.options.filter((option) => optionMatchesQuery(option, normalizedQuery));
   }, [normalizedQuery, props.options]);
+  const displayValue = isOpen ? query : (selectedOption?.title ?? props.value);
+
+  function openOptions(nextQuery = '') {
+    setQuery(nextQuery);
+    setIsOpen(true);
+  }
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -254,26 +327,45 @@ function SearchableFilterInput(props: {
   return (
     <label ref={rootRef} className="relative text-sm font-semibold text-[#1f2937]" htmlFor={props.id}>
       {props.label}
-      <input
-        id={props.id}
-        role="combobox"
-        aria-label={props.label}
-        aria-expanded={isOpen}
-        aria-controls={`${props.id}-listbox`}
-        aria-haspopup="listbox"
-        value={props.value}
-        onFocus={() => setIsOpen(true)}
-        onClick={() => setIsOpen(true)}
-        onChange={(event) => {
-          props.onChange(event.target.value);
-          setIsOpen(true);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') setIsOpen(false);
-        }}
-        className="mt-1 h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal outline-none transition focus:border-[#93c5fd] focus:ring-2 focus:ring-[#dbeafe]"
-        placeholder={props.placeholder}
-      />
+      <div className="relative mt-1">
+        {selectedOption && !isOpen ? (
+          <span className="pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2">
+            {optionLogo(selectedOption, 'h-6 w-6 text-[11px]')}
+          </span>
+        ) : null}
+        <input
+          id={props.id}
+          role="combobox"
+          aria-label={props.label}
+          aria-expanded={isOpen}
+          aria-controls={`${props.id}-listbox`}
+          aria-haspopup="listbox"
+          value={displayValue}
+          onFocus={() => openOptions('')}
+          onClick={() => openOptions('')}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            setQuery(nextValue);
+            props.onChange(nextValue);
+            setIsOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setIsOpen(false);
+          }}
+          className={cn(
+            'h-10 w-full rounded-xl border border-[#dbe3ee] bg-white px-3 text-sm font-normal outline-none transition focus:border-[#93c5fd] focus:ring-2 focus:ring-[#dbeafe]',
+            selectedOption && !isOpen ? 'pl-10' : '',
+          )}
+          placeholder={props.placeholder}
+        />
+      </div>
+      {selectedOption && !isOpen ? (
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal leading-5 text-[#64748b]">
+          <span className="truncate font-semibold text-[#1f2937]">{selectedOption.title}</span>
+          {selectedOption.subtitle ? <span className="truncate">{selectedOption.subtitle}</span> : null}
+          {selectedOption.badge ? <span className="rounded-full bg-[#eef2ff] px-2 py-0.5 text-[11px] font-semibold text-[#4f46e5]">{selectedOption.badge}</span> : null}
+        </div>
+      ) : null}
       {isOpen ? (
         <div
           id={`${props.id}-listbox`}
@@ -289,6 +381,7 @@ function SearchableFilterInput(props: {
               aria-selected={props.value === option.value}
               onClick={() => {
                 props.onChange(option.value);
+                setQuery('');
                 setIsOpen(false);
               }}
               className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-[#f1f5f9] focus:bg-[#eef6ff] focus:outline-none"
@@ -327,8 +420,21 @@ function EmptyAggregation({ label }: { label: string }) {
   );
 }
 
-function ModelAggregationTable({ rows }: { rows: PlatformAiUsageCreditsByModelDto[] }) {
+function ModelAggregationTable({
+  rows,
+  providerOptions,
+  modelOptions,
+}: {
+  rows: PlatformAiUsageCreditsByModelDto[];
+  providerOptions: SearchableFilterOption[];
+  modelOptions: SearchableFilterOption[];
+}) {
   if (rows.length === 0) return <EmptyAggregation label="模型用量统计" />;
+  const providersByCode = new Map(providerOptions.map((option) => [option.value, option]));
+  const modelsByKey = new Map(rows.map((row) => {
+    const option = modelOptions.find((candidate) => candidate.value === row.model && candidate.keywords.includes(row.provider)) ?? fallbackModelOption(row);
+    return [`${row.provider}:${row.model}`, option] as const;
+  }));
 
   return (
     <div className="overflow-x-auto">
@@ -344,22 +450,183 @@ function ModelAggregationTable({ rows }: { rows: PlatformAiUsageCreditsByModelDt
           </tr>
         </thead>
         <tbody className="divide-y divide-[#e6edf5]">
-          {rows.map((row) => (
-            <tr key={`${row.provider}:${row.model}`}>
-              <td className="px-4 py-3">
-                <div className="font-semibold text-[#1f2937]">{row.provider}</div>
-                <div className="mt-1 text-xs text-[#94a3b8]">{row.model}</div>
-              </td>
-              <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.totalCalls)}</td>
-              <td className="px-4 py-3 text-[#64748b]">{formatNumber(row.succeededCalls)} / {formatNumber(row.failedCalls)}</td>
-              <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.meteredCalls)}</td>
-              <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.totalTokens)}</td>
-              <td className="px-4 py-3 font-semibold text-[#2563eb]">{formatNumber(row.totalAiCreditsConsumed)}</td>
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const providerOption = providersByCode.get(row.provider) ?? fallbackProviderOption(row.provider);
+            const modelOption = modelsByKey.get(`${row.provider}:${row.model}`) ?? fallbackModelOption(row);
+            return (
+              <tr key={`${row.provider}:${row.model}`}>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    {optionLogo(providerOption)}
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-[#1f2937]">{providerOption.title}</div>
+                      <div className="mt-1 truncate text-xs text-[#94a3b8]">{row.provider}</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs text-[#64748b]">
+                    <span className="font-semibold text-[#1f2937]">{modelOption.title}</span>
+                    <span className="ml-2 text-[#94a3b8]">{row.model}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.totalCalls)}</td>
+                <td className="px-4 py-3 text-[#64748b]">{formatNumber(row.succeededCalls)} / {formatNumber(row.failedCalls)}</td>
+                <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.meteredCalls)}</td>
+                <td className="px-4 py-3 text-[#1f2937]">{formatNumber(row.totalTokens)}</td>
+                <td className="px-4 py-3 font-semibold text-[#2563eb]">{formatNumber(row.totalAiCreditsConsumed)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function buildProviderModelUsageStats(input: {
+  rows: PlatformAiUsageCreditsByModelDto[];
+  providerOptions: SearchableFilterOption[];
+  modelOptions: SearchableFilterOption[];
+}): ProviderModelUsageStat[] {
+  const providersByCode = new Map(input.providerOptions.map((option) => [option.value, option]));
+  const groups = new Map<string, ProviderModelUsageStat>();
+
+  input.rows.forEach((row) => {
+    const providerOption = providersByCode.get(row.provider) ?? fallbackProviderOption(row.provider);
+    const group = groups.get(row.provider) ?? {
+      provider: row.provider,
+      providerOption,
+      totalCalls: 0,
+      totalTokens: 0,
+      totalAiCreditsConsumed: 0,
+      models: [],
+    };
+    const modelOption = input.modelOptions.find((option) => option.value === row.model && option.keywords.includes(row.provider)) ?? fallbackModelOption(row);
+    group.totalCalls += row.totalCalls;
+    group.totalTokens += row.totalTokens;
+    group.totalAiCreditsConsumed += row.totalAiCreditsConsumed;
+    group.models.push({
+      provider: row.provider,
+      model: row.model,
+      modelOption,
+      totalCalls: row.totalCalls,
+      totalTokens: row.totalTokens,
+      totalAiCreditsConsumed: row.totalAiCreditsConsumed,
+    });
+    groups.set(row.provider, group);
+  });
+
+  return Array.from(groups.values()).sort((left, right) => right.totalAiCreditsConsumed - left.totalAiCreditsConsumed || right.totalCalls - left.totalCalls);
+}
+
+function ProviderModelUsageStats(props: {
+  rows: PlatformAiUsageCreditsByModelDto[];
+  providerOptions: SearchableFilterOption[];
+  modelOptions: SearchableFilterOption[];
+  metric: UsageStatsMetric;
+  onMetricChange: (metric: UsageStatsMetric) => void;
+  onSelectProvider: (provider: string) => void;
+  onSelectModel: (provider: string, model: string) => void;
+}) {
+  const stats = useMemo(() => buildProviderModelUsageStats({
+    rows: props.rows,
+    providerOptions: props.providerOptions,
+    modelOptions: props.modelOptions,
+  }), [props.modelOptions, props.providerOptions, props.rows]);
+  const maxValue = Math.max(1, ...stats.flatMap((provider) => [
+    usageMetricValue(provider, props.metric),
+    ...provider.models.map((model) => usageMetricValue(model, props.metric)),
+  ]));
+  const metricLabel = usageStatsMetrics.find((metric) => metric.key === props.metric)?.label ?? '调用次数';
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[#dbeafe] bg-[#f8fbff]" aria-labelledby="provider-model-usage-stats-heading">
+      <div className="flex flex-col gap-3 border-b border-[#dbeafe] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h3 id="provider-model-usage-stats-heading" className="text-sm font-semibold text-[#1f2937]">厂商 / 模型用量统计</h3>
+          <p className="mt-1 text-xs leading-5 text-[#64748b]">复用当前 AI usage credits 聚合数据，按厂商分组展示模型调用、Token 与 AI 积分消耗；点击厂商或模型可联动筛选。</p>
+        </div>
+        <div className="flex flex-wrap gap-2" aria-label="统计指标切换">
+          {usageStatsMetrics.map((metric) => (
+            <button
+              key={metric.key}
+              type="button"
+              onClick={() => props.onMetricChange(metric.key)}
+              className={cn(
+                'h-8 rounded-full border px-3 text-xs font-semibold transition',
+                props.metric === metric.key
+                  ? 'border-[#2563eb] bg-[#2563eb] text-white'
+                  : 'border-[#dbe3ee] bg-white text-[#64748b] hover:bg-[#f1f5f9]',
+              )}
+              aria-pressed={props.metric === metric.key}
+            >
+              {metric.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {stats.length === 0 ? (
+        <div className="px-4 py-8 text-center text-sm text-[#64748b]">暂无厂商 / 模型用量统计数据</div>
+      ) : (
+        <div className="grid gap-4 p-4">
+          {stats.map((provider) => {
+            const color = providerColor(provider.provider);
+            const providerValue = usageMetricValue(provider, props.metric);
+            return (
+              <article key={provider.provider} className="rounded-2xl border border-[#e6edf5] bg-white p-4 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => props.onSelectProvider(provider.provider)}
+                  className="flex w-full items-center gap-3 rounded-xl text-left transition hover:bg-[#f8fafc] focus:bg-[#eef6ff] focus:outline-none"
+                  aria-label={`筛选厂商 ${provider.providerOption.title}`}
+                >
+                  {optionLogo(provider.providerOption)}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-[#1f2937]">{provider.providerOption.title}</span>
+                    <span className="mt-0.5 block truncate text-xs text-[#94a3b8]">{provider.provider}</span>
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold text-[#1f2937]">{formatNumber(providerValue)}</span>
+                </button>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e2e8f0]" aria-label={`${provider.providerOption.title}${metricLabel}占比`}>
+                  <div className="h-full rounded-full" style={{ width: `${Math.max(4, (providerValue / maxValue) * 100)}%`, backgroundColor: color }} />
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {provider.models.map((model) => {
+                    const modelValue = usageMetricValue(model, props.metric);
+                    return (
+                      <button
+                        key={`${model.provider}:${model.model}`}
+                        type="button"
+                        onClick={() => props.onSelectModel(model.provider, model.model)}
+                        className="grid gap-2 rounded-xl border border-[#edf2f7] bg-[#f8fafc] p-3 text-left transition hover:border-[#bfdbfe] hover:bg-[#eef6ff] focus:border-[#93c5fd] focus:outline-none"
+                        aria-label={`筛选模型 ${model.modelOption.title}`}
+                      >
+                        <span className="flex items-center gap-2">
+                          {optionLogo(model.modelOption, 'h-6 w-6 text-[11px]')}
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-[#1f2937]">{model.modelOption.title}</span>
+                            <span className="mt-0.5 block truncate text-xs text-[#94a3b8]">{model.model}</span>
+                          </span>
+                          <span className="shrink-0 text-xs font-semibold text-[#1f2937]">{formatNumber(modelValue)}</span>
+                        </span>
+                        <span className="h-2 overflow-hidden rounded-full bg-[#e2e8f0]">
+                          <span className="block h-full rounded-full" style={{ width: `${Math.max(4, (modelValue / maxValue) * 100)}%`, backgroundColor: color }} />
+                        </span>
+                        <span className="grid gap-1 text-[11px] font-semibold text-[#64748b] sm:grid-cols-3">
+                          <span>调用 {formatNumber(model.totalCalls)}</span>
+                          <span>Token {formatNumber(model.totalTokens)}</span>
+                          <span>积分 {formatNumber(model.totalAiCreditsConsumed)}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -510,6 +777,7 @@ export function OpenPlatformAiReadonlyPanel() {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [data, setData] = useState<OpenPlatformAiUsageCreditsResponse>(emptyData);
   const [error, setError] = useState('');
+  const [usageStatsMetric, setUsageStatsMetric] = useState<UsageStatsMetric>('calls');
 
   async function loadUsage(nextFilters: FilterFormState) {
     const result = await listOpenPlatformAiUsageCredits(toApiFilters(nextFilters));
@@ -553,6 +821,30 @@ export function OpenPlatformAiReadonlyPanel() {
 
   function updateFilter(key: keyof FilterFormState, value: string) {
     setFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateProviderFilter(value: string) {
+    setFilters((current) => ({
+      ...current,
+      provider: value,
+      model: current.provider === value ? current.model : '',
+    }));
+  }
+
+  function selectProviderFilter(provider: string) {
+    const nextFilters = { ...filters, provider, model: '' };
+    setFilters(nextFilters);
+    setAppliedFilters(nextFilters);
+    setLoadState('loading');
+    void loadUsage(nextFilters);
+  }
+
+  function selectModelFilter(provider: string, model: string) {
+    const nextFilters = { ...filters, provider, model };
+    setFilters(nextFilters);
+    setAppliedFilters(nextFilters);
+    setLoadState('loading');
+    void loadUsage(nextFilters);
   }
 
   function applyFilters() {
@@ -658,7 +950,7 @@ export function OpenPlatformAiReadonlyPanel() {
             options={providerOptions}
             placeholder="输入或选择模型厂商"
             helper="可搜索候选厂商，也可手动输入历史值或异常值。"
-            onChange={(value) => updateFilter('provider', value)}
+            onChange={updateProviderFilter}
           />
           <SearchableFilterInput
             id="ai-usage-model-filter"
@@ -698,9 +990,19 @@ export function OpenPlatformAiReadonlyPanel() {
               <p className="mt-1 text-sm leading-6 text-[#64748b]">按筛选条件汇总模型、租户、计量状态和日期维度的只读用量，不包含账单导出、费用结算或功能场景统计。</p>
             </div>
 
+            <ProviderModelUsageStats
+              rows={data.aggregations.byModel}
+              providerOptions={providerOptions}
+              modelOptions={data.filterOptions.models.map(modelFilterOption)}
+              metric={usageStatsMetric}
+              onMetricChange={setUsageStatsMetric}
+              onSelectProvider={selectProviderFilter}
+              onSelectModel={selectModelFilter}
+            />
+
             <div className="grid gap-4 xl:grid-cols-2">
               <AggregationCard title="模型用量统计" description="按模型厂商和模型名称统计调用、Token 与 AI 积分消耗。">
-                <ModelAggregationTable rows={data.aggregations.byModel} />
+                <ModelAggregationTable rows={data.aggregations.byModel} providerOptions={providerOptions} modelOptions={data.filterOptions.models.map(modelFilterOption)} />
               </AggregationCard>
 
               <AggregationCard title="租户用量统计" description="按租户低敏标识统计调用成功、失败、计量状态和 AI 积分消耗。">
