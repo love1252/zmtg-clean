@@ -70,7 +70,7 @@ export type PlatformAiUsageCreditsByDateProviderModelDto = {
 
 export type PlatformAiUsageCreditsByServiceProjectDto = {
   serviceCategory: string;
-  serviceName: string | null;
+  serviceName: string;
   serviceSource: string | null;
   serviceAction: string | null;
   serviceVersion: string | null;

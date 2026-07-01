@@ -229,7 +229,7 @@ describe('platform AI usage credits server', () => {
           totalAiCreditsConsumed: 2,
         }, {
           serviceCategory: 'unknown',
-          serviceName: null,
+          serviceName: '未归因服务',
           serviceSource: null,
           serviceAction: null,
           serviceVersion: null,
@@ -324,7 +324,7 @@ describe('platform AI usage credits server', () => {
         }),
         expect.objectContaining({
           serviceCategory: 'unknown',
-          serviceName: null,
+          serviceName: '未归因服务',
           serviceSource: null,
           serviceAction: null,
           serviceVersion: null,

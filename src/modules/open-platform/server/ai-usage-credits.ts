@@ -76,7 +76,7 @@ export type PlatformAiUsageCreditsByDateProviderModelDto = {
 
 export type PlatformAiUsageCreditsByServiceProjectDto = {
   serviceCategory: string;
-  serviceName: string | null;
+  serviceName: string;
   serviceSource: string | null;
   serviceAction: string | null;
   serviceVersion: string | null;
@@ -573,10 +573,15 @@ function normalizeServiceProjectText(value: string | null) {
   return normalized || null;
 }
 
+function normalizeServiceProjectName(value: string | null) {
+  const normalized = value?.trim();
+  return normalized || '未归因服务';
+}
+
 function mapServiceProjectAggregationRow(row: AiUsageCreditByServiceProjectRow): PlatformAiUsageCreditsByServiceProjectDto {
   return {
     serviceCategory: normalizeServiceProjectCategory(row.serviceCategory),
-    serviceName: normalizeServiceProjectText(row.serviceName),
+    serviceName: normalizeServiceProjectName(row.serviceName),
     serviceSource: normalizeServiceProjectText(row.serviceSource),
     serviceAction: normalizeServiceProjectText(row.serviceAction),
     serviceVersion: normalizeServiceProjectText(row.serviceVersion),
