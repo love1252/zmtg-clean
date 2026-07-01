@@ -592,6 +592,30 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(screen.getByLabelText('模型名称')).toHaveValue('DeepSeek V4 Flash');
   });
 
+  it('选中厂商后展示该厂商模型明细表且不出现费用字段', async () => {
+    mockUsageFetch();
+    const { container } = render(<OpenPlatformAiReadonlyPanel />);
+
+    expect(await screen.findByRole('heading', { name: '厂商 / 模型消耗' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '筛选厂商 DeepSeek' }));
+
+    const detailsTable = await screen.findByRole('table', { name: '选中厂商模型明细表' });
+    expect(screen.getByRole('heading', { name: 'DeepSeek 模型明细' })).toBeInTheDocument();
+    expect(within(detailsTable).getByText('厂商名称')).toBeInTheDocument();
+    expect(within(detailsTable).getByText('模型名称')).toBeInTheDocument();
+    expect(within(detailsTable).getByText('model code')).toBeInTheDocument();
+    expect(within(detailsTable).getByText('调用次数')).toBeInTheDocument();
+    expect(within(detailsTable).getByText('Token 总量')).toBeInTheDocument();
+    expect(within(detailsTable).getByText('AI 积分消耗')).toBeInTheDocument();
+    expect(within(detailsTable).getByText('成功率')).toBeInTheDocument();
+    expect(within(detailsTable).getByText('AI 积分占比')).toBeInTheDocument();
+    expect(within(detailsTable).getByText('DeepSeek V4 Flash')).toBeInTheDocument();
+    expect(within(detailsTable).getByText('deepseek-v4-flash')).toBeInTheDocument();
+    expect(screen.getByText('当前展示选中厂商下模型的低敏用量字段，不包含费用金额或原始内容。')).toBeInTheDocument();
+    expect(container.textContent ?? '').not.toMatch(/¥|RMB|人民币金额|真实成本/u);
+    expectNoSensitiveContent(container);
+  });
+
   it('默认本月并支持全局时间范围切换影响全部栏目', async () => {
     const fetchMock = mockUsageFetch();
     render(<OpenPlatformAiReadonlyPanel />);
@@ -672,7 +696,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     mockUsageFetch();
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByText('卡片复用当前 AI 用量聚合数据，展示厂商标识、模型数量、AI 积分占比、调用、Token 与成功率；模型明细表留待 10E-2。')).toBeInTheDocument();
+    expect(await screen.findByText('卡片复用当前 AI 用量聚合数据，展示厂商标识、模型数量、AI 积分占比、调用、Token 与成功率；选择厂商后在下方查看模型明细表。')).toBeInTheDocument();
     expect(screen.queryByText(/AI usage credits 聚合数据/i)).not.toBeInTheDocument();
     expect(screen.getAllByText('deepseek').length).toBeGreaterThan(0);
     expect(screen.getAllByText('deepseek-v4-flash').length).toBeGreaterThan(0);

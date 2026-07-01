@@ -672,6 +672,66 @@ function buildProviderModelUsageStats(input: {
   return Array.from(groups.values()).sort((left, right) => right.totalAiCreditsConsumed - left.totalAiCreditsConsumed || right.totalCalls - left.totalCalls);
 }
 
+function ProviderModelDetailTable({ provider }: { provider: ProviderModelUsageStat }) {
+  const providerCredits = Math.max(1, provider.totalAiCreditsConsumed);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[#dbeafe] bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-[#e6edf5] bg-[#f8fbff] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h4 className="text-base font-semibold text-[#1f2937]">{provider.providerOption.title} 模型明细</h4>
+          <p className="mt-1 text-xs leading-5 text-[#64748b]">当前展示选中厂商下模型的低敏用量字段，不包含费用金额或原始内容。</p>
+        </div>
+        <div className="grid gap-2 text-xs font-semibold text-[#64748b] sm:grid-cols-3">
+          <span className="rounded-xl bg-white px-3 py-2">调用 {formatNumber(provider.totalCalls)}</span>
+          <span className="rounded-xl bg-white px-3 py-2">Token {formatNumber(provider.totalTokens)}</span>
+          <span className="rounded-xl bg-white px-3 py-2">积分 {formatNumber(provider.totalAiCreditsConsumed)}</span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table aria-label="选中厂商模型明细表" className="w-full min-w-[920px] text-left text-sm">
+          <thead className="bg-[#f8fafc] text-xs font-semibold text-[#64748b]">
+            <tr>
+              <th className="px-3 py-2">厂商名称</th>
+              <th className="px-3 py-2">模型名称</th>
+              <th className="px-3 py-2">model code</th>
+              <th className="px-3 py-2">调用次数</th>
+              <th className="px-3 py-2">Token 总量</th>
+              <th className="px-3 py-2">AI 积分消耗</th>
+              <th className="px-3 py-2">成功率</th>
+              <th className="px-3 py-2">AI 积分占比</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#e6edf5]">
+            {provider.models.map((model) => (
+              <tr key={`${model.provider}:${model.model}`}>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    {optionLogo(provider.providerOption, 'h-7 w-7 text-[11px]')}
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-[#1f2937]">{provider.providerOption.title}</div>
+                      <div className="mt-1 truncate text-xs text-[#94a3b8]">{provider.provider}</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-3 py-2">
+                  <div className="font-semibold text-[#1f2937]">{model.modelOption.title}</div>
+                </td>
+                <td className="px-3 py-2 text-[#64748b]">{model.model}</td>
+                <td className="px-3 py-2 text-[#1f2937]">{formatNumber(model.totalCalls)}</td>
+                <td className="px-3 py-2 text-[#1f2937]">{formatNumber(model.totalTokens)}</td>
+                <td className="px-3 py-2 font-semibold text-[#2563eb]">{formatNumber(model.totalAiCreditsConsumed)}</td>
+                <td className="px-3 py-2 text-[#64748b]">{successRateFromCalls(model.succeededCalls, model.failedCalls)}</td>
+                <td className="px-3 py-2 text-[#64748b]">{formatPercent(model.totalAiCreditsConsumed, providerCredits)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function ProviderModelUsageStats(props: {
   rows: PlatformAiUsageCreditsByModelDto[];
   providerOptions: SearchableFilterOption[];
@@ -696,6 +756,9 @@ function ProviderModelUsageStats(props: {
   ]));
   const metricLabel = usageStatsMetrics.find((metric) => metric.key === props.metric)?.label ?? '调用次数';
   const totalCredits = Math.max(1, props.totalAiCreditsConsumed);
+  const selectedProviderDetails = props.selectedProvider
+    ? stats.find((provider) => provider.provider === props.selectedProvider) ?? null
+    : null;
 
   return (
     <section className="overflow-hidden rounded-[20px] border border-[#dbeafe] bg-white shadow-sm" aria-labelledby="provider-model-usage-stats-heading">
@@ -703,7 +766,7 @@ function ProviderModelUsageStats(props: {
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2563eb]">厂商与模型消耗明细</div>
           <h3 id="provider-model-usage-stats-heading" className="mt-1 text-base font-semibold text-[#1f2937]">厂商 / 模型消耗</h3>
-          <p className="mt-1 text-xs leading-5 text-[#64748b]">卡片复用当前 AI 用量聚合数据，展示厂商标识、模型数量、AI 积分占比、调用、Token 与成功率；模型明细表留待 10E-2。</p>
+          <p className="mt-1 text-xs leading-5 text-[#64748b]">卡片复用当前 AI 用量聚合数据，展示厂商标识、模型数量、AI 积分占比、调用、Token 与成功率；选择厂商后在下方查看模型明细表。</p>
         </div>
         <div className="flex flex-col gap-2 sm:items-end">
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#64748b]">
@@ -739,7 +802,7 @@ function ProviderModelUsageStats(props: {
             const color = providerColor(provider.provider);
             const providerValue = usageMetricValue(provider, props.metric);
             const creditPercent = formatPercent(provider.totalAiCreditsConsumed, totalCredits);
-            const isSelectedProvider = props.selectedProvider === provider.provider && !props.selectedModel;
+            const isSelectedProvider = props.selectedProvider === provider.provider;
             return (
               <article
                 key={provider.provider}
@@ -753,6 +816,7 @@ function ProviderModelUsageStats(props: {
                   onClick={() => props.onSelectProvider(provider.provider)}
                   className="flex w-full items-start gap-3 rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-[#bfdbfe]"
                   aria-label={`筛选厂商 ${provider.providerOption.title}`}
+                  aria-pressed={isSelectedProvider}
                 >
                   {optionLogo(provider.providerOption, 'h-10 w-10 text-sm')}
                   <span className="min-w-0 flex-1">
@@ -820,6 +884,15 @@ function ProviderModelUsageStats(props: {
           })}
         </div>
       )}
+      <div className="border-t border-[#dbeafe] bg-[#f8fbff] p-4">
+        {!props.selectedProvider ? (
+          <div className="rounded-2xl border border-dashed border-[#cbd5e1] bg-white px-4 py-5 text-center text-sm text-[#64748b]">选择上方厂商后查看模型消耗明细。</div>
+        ) : selectedProviderDetails ? (
+          <ProviderModelDetailTable provider={selectedProviderDetails} />
+        ) : (
+          <div className="rounded-2xl border border-dashed border-[#cbd5e1] bg-white px-4 py-5 text-center text-sm text-[#64748b]">当前选中厂商暂无模型明细数据。</div>
+        )}
+      </div>
     </section>
   );
 }
@@ -1478,7 +1551,7 @@ export function OpenPlatformAiReadonlyPanel() {
 
                 <section className="rounded-2xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] p-4" aria-labelledby="single-day-model-composition-heading">
                   <h3 id="single-day-model-composition-heading" className="text-sm font-semibold text-[#1f2937]">单日模型消耗构成</h3>
-                  <p className="mt-1 text-xs leading-5 text-[#64748b]">当前 API 仅提供日期 × 厂商聚合，暂不补造单日模型构成或费用数据；后续 10E-2 在口径确认后补充模型明细。</p>
+                  <p className="mt-1 text-xs leading-5 text-[#64748b]">当前 API 仅提供日期 × 厂商聚合，暂不补造单日模型构成或费用数据；单日模型构成需后续单独任务确认口径。</p>
                 </section>
 
                 {providerModelStats}
