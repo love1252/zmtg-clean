@@ -171,6 +171,12 @@ function formatDateOnly(value: string) {
   }).format(date);
 }
 
+function formatShortMonthDay(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+}
+
 function formatMonthUsageTitle(filters: FilterFormState) {
   const date = filters.dateFrom ? new Date(filters.dateFrom) : new Date();
   if (Number.isNaN(date.getTime())) return '当前时间范围用量';
@@ -546,10 +552,10 @@ function LegacyOverviewMetricCard(props: { label: string; value: string; helper?
   }[props.tone ?? 'default'];
 
   return (
-    <article className={cn('rounded-xl border px-3 py-2 shadow-sm', toneClassName)}>
+    <article className={cn('min-w-0 rounded-xl border px-3 py-2 shadow-sm', toneClassName)}>
       <div className="text-[11px] font-semibold text-[#64748b]">{props.label}</div>
-      <div className="mt-1 text-lg font-bold tracking-tight">{props.value}</div>
-      {props.helper ? <div className="mt-1 text-[11px] leading-4 text-[#64748b]">{props.helper}</div> : null}
+      <div className="mt-1 break-words text-lg font-bold leading-tight tracking-tight">{props.value}</div>
+      {props.helper ? <div className="mt-1 break-words text-[11px] leading-4 text-[#64748b]">{props.helper}</div> : null}
     </article>
   );
 }
@@ -1210,12 +1216,12 @@ export function OpenPlatformAiReadonlyPanel() {
   const totalTokens = totalTokensFromAggregations(data);
   const successRate = successRateFromCalls(summary.succeededCalls, summary.failedCalls);
   const peakDay = peakDayFromDateProviders(data.aggregations.byDateProvider);
-  const peakDayLabel = peakDay ? formatDateOnly(peakDay.date) : '暂无峰值日';
+  const peakDayLabel = peakDay ? formatShortMonthDay(peakDay.date) : '暂无峰值日';
   const peakDayHelper = peakDay
-    ? `AI 积分 ${formatNumber(peakDay.totalAiCreditsConsumed)} · 调用 ${formatNumber(peakDay.totalCalls)}`
+    ? `${formatDateOnly(peakDay.date)} · AI 积分 ${formatNumber(peakDay.totalAiCreditsConsumed)} · 调用 ${formatNumber(peakDay.totalCalls)}`
     : '当前范围内暂无日期聚合数据';
   const summaryCards = (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
       <LegacyOverviewMetricCard label="调用次数" value={formatNumber(summary.totalCalls)} helper={`成功 ${formatNumber(summary.succeededCalls)} · 失败 ${formatNumber(summary.failedCalls)}`} tone="blue" />
       <LegacyOverviewMetricCard label="Token 总量" value={formatNumber(totalTokens)} helper="由模型聚合优先回退到日期聚合" />
       <LegacyOverviewMetricCard label="成功率" value={successRate} helper="成功调用 / 成功与失败调用" tone="success" />
@@ -1451,11 +1457,11 @@ export function OpenPlatformAiReadonlyPanel() {
           >
             {activeTab === 'overview' ? (
               <div className="grid gap-4">
-                <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-                  <section className="rounded-[20px] border border-[#dbeafe] bg-[#f8fbff] p-4 shadow-sm" aria-labelledby="legacy-billing-summary-heading">
+                <div className="grid min-w-0 gap-4 2xl:grid-cols-[400px_minmax(0,1fr)]">
+                  <section className="min-w-0 rounded-[20px] border border-[#dbeafe] bg-[#f8fbff] p-4 shadow-sm" aria-labelledby="legacy-billing-summary-heading">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2563eb]">账单摘要</div>
                     <h3 id="legacy-billing-summary-heading" className="mt-1 text-base font-semibold text-[#1f2937]">AI 积分消耗</h3>
-                    <div className="mt-3 text-4xl font-bold tracking-tight text-[#2563eb]">{formatNumber(summary.totalAiCreditsConsumed)}</div>
+                    <div className="mt-3 break-words text-4xl font-bold leading-tight tracking-tight text-[#2563eb]">{formatNumber(summary.totalAiCreditsConsumed)}</div>
                     <p className="mt-2 text-xs leading-5 text-[#64748b]">当前展示 AI 积分消耗，不展示法币金额或结算成本；费用结算与导出能力后置。</p>
                     <div className="mt-4">{summaryCards}</div>
                   </section>

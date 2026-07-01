@@ -345,7 +345,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(screen.getByText('单日模型消耗构成')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '每日消耗' })).toBeInTheDocument();
     expect(screen.getByText('按日期查看 AI 用量趋势')).toBeInTheDocument();
-    expect(screen.getByText('06-30')).toBeInTheDocument();
+    expect(screen.getAllByText('06-30').length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: '厂商 / 模型消耗' })).toBeInTheDocument();
 
     selectAiUsageTab('模型与厂商');
@@ -497,7 +497,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(screen.getByText('X 轴为日期，Y 轴为当前指标；柱体按厂商稳定分色堆叠，点击厂商分段可联动筛选。')).toBeInTheDocument();
     expect(screen.getByText('Y 轴：调用次数')).toBeInTheDocument();
     expect(screen.getByText('06-29')).toBeInTheDocument();
-    expect(screen.getByText('06-30')).toBeInTheDocument();
+    expect(screen.getAllByText('06-30').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '筛选趋势图厂商 DeepSeek' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '筛选趋势图厂商 Kimi' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /2026-06-30 · DeepSeek · 调用次数 3/ })).toBeInTheDocument();
@@ -545,11 +545,11 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByText('06-30')).toBeInTheDocument();
+    expect((await screen.findAllByText('06-30')).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: '今日' }));
 
-    expect(await screen.findByText('06-22')).toBeInTheDocument();
-    expect(screen.queryByText('06-30')).not.toBeInTheDocument();
+    expect((await screen.findAllByText('06-22')).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.queryAllByText('06-30')).toHaveLength(0));
     expect(screen.getByRole('button', { name: /2026-06-22 · Kimi · 调用次数 5/ })).toBeInTheDocument();
   });
 
