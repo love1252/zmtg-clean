@@ -297,6 +297,11 @@ describe('AI call usage metering 写入', () => {
     expect(recordInput.aiCreditsConsumed).toBe(0);
     expect(recordInput.meteringStatus).toBe('not_billable');
     expect(recordInput.meteringDetails?.reason).toBe('quota_exceeded_ai_calls_not_billable');
+    expect(recordInput.serviceCategory).toBe('ai_qa');
+    expect(recordInput.serviceName).toBe('AI 问答');
+    expect(recordInput.serviceSource).toBe('institution_ai_call');
+    expect(recordInput.serviceAction).toBe('quota_rejected');
+    expect(recordInput.serviceVersion).toBe('v06-service-metering-1');
   });
 
   it('meteringDetails 不包含 prompt / question / answer / rawResponse / apiKey / baseUrl / Authorization', async () => {
