@@ -1551,7 +1551,7 @@ export function OpenPlatformAiReadonlyPanel() {
 
                 <section className="rounded-2xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] p-4" aria-labelledby="single-day-model-composition-heading">
                   <h3 id="single-day-model-composition-heading" className="text-sm font-semibold text-[#1f2937]">单日模型消耗构成</h3>
-                  <p className="mt-1 text-xs leading-5 text-[#64748b]">当前 API 仅提供日期 × 厂商聚合，暂不补造单日模型构成或费用数据；后续 10E-2 在口径确认后补充模型明细。</p>
+                  <p className="mt-1 text-xs leading-5 text-[#64748b]">当前 API 仅提供日期 × 厂商聚合，暂不补造单日模型构成或费用数据；单日模型构成需后续单独任务确认口径。</p>
                 </section>
 
                 {providerModelStats}
