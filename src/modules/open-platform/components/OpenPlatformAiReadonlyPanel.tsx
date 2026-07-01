@@ -161,6 +161,79 @@ function formatDateTime(value: string) {
   }).format(date);
 }
 
+function formatDateOnly(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function formatShortMonthDay(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+}
+
+function formatMonthUsageTitle(filters: FilterFormState) {
+  const date = filters.dateFrom ? new Date(filters.dateFrom) : new Date();
+  if (Number.isNaN(date.getTime())) return '当前时间范围用量';
+  return `${date.getFullYear()}年${padDatePart(date.getMonth() + 1)}月用量`;
+}
+
+function formatDateRangeSummary(filters: FilterFormState) {
+  if (!filters.dateFrom || !filters.dateTo) return '未限定时间范围';
+  return `${formatDateOnly(filters.dateFrom)} - ${formatDateOnly(filters.dateTo)}`;
+}
+
+function formatPercent(numerator: number, denominator: number) {
+  if (denominator <= 0) return '0%';
+  return `${((numerator / denominator) * 100).toFixed(1)}%`;
+}
+
+function totalTokensFromAggregations(data: OpenPlatformAiUsageCreditsResponse) {
+  const modelTokens = data.aggregations.byModel.reduce((total, row) => total + row.totalTokens, 0);
+  if (modelTokens > 0) return modelTokens;
+  return data.aggregations.byDateProvider.reduce((total, row) => total + row.totalTokens, 0);
+}
+
+type PeakDaySummary = {
+  date: string;
+  totalCalls: number;
+  totalTokens: number;
+  totalAiCreditsConsumed: number;
+} | null;
+
+function peakDayFromDateProviders(rows: PlatformAiUsageCreditsByDateProviderDto[]): PeakDaySummary {
+  const grouped = new Map<string, Exclude<PeakDaySummary, null>>();
+
+  rows.forEach((row) => {
+    const current = grouped.get(row.date) ?? {
+      date: row.date,
+      totalCalls: 0,
+      totalTokens: 0,
+      totalAiCreditsConsumed: 0,
+    };
+    current.totalCalls += row.totalCalls;
+    current.totalTokens += row.totalTokens;
+    current.totalAiCreditsConsumed += row.totalAiCreditsConsumed;
+    grouped.set(row.date, current);
+  });
+
+  return Array.from(grouped.values()).sort((left, right) => (
+    right.totalAiCreditsConsumed - left.totalAiCreditsConsumed ||
+    right.totalCalls - left.totalCalls ||
+    left.date.localeCompare(right.date)
+  ))[0] ?? null;
+}
+
+function successRateFromCalls(succeededCalls: number, failedCalls: number) {
+  const total = succeededCalls + failedCalls;
+  return formatPercent(succeededCalls, total);
+}
+
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
     succeeded: '成功',
@@ -264,6 +337,8 @@ type ProviderModelUsageStat = {
   provider: string;
   providerOption: SearchableFilterOption;
   totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
   totalTokens: number;
   totalAiCreditsConsumed: number;
   models: Array<{
@@ -271,6 +346,8 @@ type ProviderModelUsageStat = {
     model: string;
     modelOption: SearchableFilterOption;
     totalCalls: number;
+    succeededCalls: number;
+    failedCalls: number;
     totalTokens: number;
     totalAiCreditsConsumed: number;
   }>;
@@ -466,11 +543,19 @@ function SearchableFilterInput(props: {
   );
 }
 
-function SummaryCard(props: { label: string; value: string; tone?: string }) {
+function LegacyOverviewMetricCard(props: { label: string; value: string; helper?: string; tone?: 'default' | 'success' | 'warning' | 'blue' }) {
+  const toneClassName = {
+    default: 'border-[#e6edf5] bg-white text-[#1f2937]',
+    success: 'border-emerald-100 bg-[#e8f9ef] text-[#047857]',
+    warning: 'border-amber-100 bg-[#fff7e6] text-[#d97706]',
+    blue: 'border-blue-100 bg-[#eef6ff] text-[#2563eb]',
+  }[props.tone ?? 'default'];
+
   return (
-    <article className={cn('rounded-2xl border border-[#e6edf5] bg-white px-3 py-2.5 shadow-sm', props.tone)}>
+    <article className={cn('min-w-0 rounded-xl border px-3 py-2 shadow-sm', toneClassName)}>
       <div className="text-[11px] font-semibold text-[#64748b]">{props.label}</div>
-      <div className="mt-1 text-xl font-semibold tracking-normal text-[#1f2937]">{props.value}</div>
+      <div className="mt-1 break-words text-lg font-bold leading-tight tracking-tight">{props.value}</div>
+      {props.helper ? <div className="mt-1 break-words text-[11px] leading-4 text-[#64748b]">{props.helper}</div> : null}
     </article>
   );
 }
@@ -559,12 +644,16 @@ function buildProviderModelUsageStats(input: {
       provider: row.provider,
       providerOption,
       totalCalls: 0,
+      succeededCalls: 0,
+      failedCalls: 0,
       totalTokens: 0,
       totalAiCreditsConsumed: 0,
       models: [],
     };
     const modelOption = input.modelOptions.find((option) => option.value === row.model && option.keywords.includes(row.provider)) ?? fallbackModelOption(row);
     group.totalCalls += row.totalCalls;
+    group.succeededCalls += row.succeededCalls;
+    group.failedCalls += row.failedCalls;
     group.totalTokens += row.totalTokens;
     group.totalAiCreditsConsumed += row.totalAiCreditsConsumed;
     group.models.push({
@@ -572,6 +661,8 @@ function buildProviderModelUsageStats(input: {
       model: row.model,
       modelOption,
       totalCalls: row.totalCalls,
+      succeededCalls: row.succeededCalls,
+      failedCalls: row.failedCalls,
       totalTokens: row.totalTokens,
       totalAiCreditsConsumed: row.totalAiCreditsConsumed,
     });
@@ -589,6 +680,10 @@ function ProviderModelUsageStats(props: {
   onMetricChange: (metric: UsageStatsMetric) => void;
   onSelectProvider: (provider: string) => void;
   onSelectModel: (provider: string, model: string) => void;
+  periodLabel: string;
+  selectedProvider: string;
+  selectedModel: string;
+  totalAiCreditsConsumed: number;
 }) {
   const stats = useMemo(() => buildProviderModelUsageStats({
     rows: props.rows,
@@ -600,81 +695,103 @@ function ProviderModelUsageStats(props: {
     ...provider.models.map((model) => usageMetricValue(model, props.metric)),
   ]));
   const metricLabel = usageStatsMetrics.find((metric) => metric.key === props.metric)?.label ?? '调用次数';
+  const totalCredits = Math.max(1, props.totalAiCreditsConsumed);
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#dbeafe] bg-[#f8fbff]" aria-labelledby="provider-model-usage-stats-heading">
-      <div className="flex flex-col gap-3 border-b border-[#dbeafe] px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
+    <section className="overflow-hidden rounded-[20px] border border-[#dbeafe] bg-white shadow-sm" aria-labelledby="provider-model-usage-stats-heading">
+      <div className="flex flex-col gap-3 border-b border-[#dbeafe] bg-[#f8fbff] px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h3 id="provider-model-usage-stats-heading" className="text-sm font-semibold text-[#1f2937]">厂商 / 模型用量统计</h3>
-          <p className="mt-1 text-xs leading-5 text-[#64748b]">复用当前 AI 用量与积分聚合数据，按厂商分组展示模型调用、Token 与 AI 积分消耗；点击厂商或模型可联动筛选。</p>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2563eb]">厂商与模型消耗明细</div>
+          <h3 id="provider-model-usage-stats-heading" className="mt-1 text-base font-semibold text-[#1f2937]">厂商 / 模型消耗</h3>
+          <p className="mt-1 text-xs leading-5 text-[#64748b]">卡片复用当前 AI 用量聚合数据，展示厂商标识、模型数量、AI 积分占比、调用、Token 与成功率；模型明细表留待 10E-2。</p>
         </div>
-        <div className="flex flex-wrap gap-2" aria-label="统计指标切换">
-          {usageStatsMetrics.map((metric) => (
-            <button
-              key={metric.key}
-              type="button"
-              onClick={() => props.onMetricChange(metric.key)}
-              className={cn(
-                'h-8 rounded-full border px-3 text-xs font-semibold transition',
-                props.metric === metric.key
-                  ? 'border-[#2563eb] bg-[#2563eb] text-white'
-                  : 'border-[#dbe3ee] bg-white text-[#64748b] hover:bg-[#f1f5f9]',
-              )}
-              aria-pressed={props.metric === metric.key}
-            >
-              {metric.label}
-            </button>
-          ))}
+        <div className="flex flex-col gap-2 sm:items-end">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#64748b]">
+            <span className="rounded-full border border-[#dbeafe] bg-white px-3 py-1">{props.periodLabel}</span>
+            <span className="rounded-full bg-[#2563eb] px-3 py-1 text-white">总 AI 积分 {formatNumber(props.totalAiCreditsConsumed)}</span>
+          </div>
+          <div className="flex flex-wrap gap-2" aria-label="厂商模型卡片指标切换">
+            {usageStatsMetrics.map((metric) => (
+              <button
+                key={metric.key}
+                type="button"
+                onClick={() => props.onMetricChange(metric.key)}
+                className={cn(
+                  'h-8 rounded-full border px-3 text-xs font-semibold transition',
+                  props.metric === metric.key
+                    ? 'border-[#2563eb] bg-[#2563eb] text-white'
+                    : 'border-[#dbe3ee] bg-white text-[#64748b] hover:bg-[#f1f5f9]',
+                )}
+                aria-pressed={props.metric === metric.key}
+              >
+                {metric.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {stats.length === 0 ? (
-        <div className="px-4 py-8 text-center text-sm text-[#64748b]">暂无厂商 / 模型用量统计数据</div>
+        <div className="px-4 py-8 text-center text-sm text-[#64748b]">暂无厂商 / 模型消耗卡片数据</div>
       ) : (
-        <div className="grid gap-4 p-4">
+        <div className="grid gap-3 bg-[#f8fbff] p-4 lg:grid-cols-2">
           {stats.map((provider) => {
             const color = providerColor(provider.provider);
             const providerValue = usageMetricValue(provider, props.metric);
-            const hideProviderSummary = stats.length === 1 && provider.models.length === 1;
+            const creditPercent = formatPercent(provider.totalAiCreditsConsumed, totalCredits);
+            const isSelectedProvider = props.selectedProvider === provider.provider && !props.selectedModel;
             return (
-              <article key={provider.provider} className="rounded-2xl border border-[#e6edf5] bg-white p-4 shadow-sm">
-                {hideProviderSummary ? (
-                  <div className="flex w-full items-center gap-3 rounded-xl">
-                    {optionLogo(provider.providerOption)}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-[#1f2937]">{provider.providerOption.title}</span>
-                      <span className="mt-0.5 block truncate text-xs text-[#94a3b8]">{provider.provider}</span>
-                    </span>
-                  </div>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => props.onSelectProvider(provider.provider)}
-                      className="flex w-full items-center gap-3 rounded-xl text-left transition hover:bg-[#f8fafc] focus:bg-[#eef6ff] focus:outline-none"
-                      aria-label={`筛选厂商 ${provider.providerOption.title}`}
-                    >
-                      {optionLogo(provider.providerOption)}
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-[#1f2937]">{provider.providerOption.title}</span>
-                        <span className="mt-0.5 block truncate text-xs text-[#94a3b8]">{provider.provider}</span>
-                      </span>
-                      <span className="shrink-0 text-sm font-semibold text-[#1f2937]">{formatNumber(providerValue)}</span>
-                    </button>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e2e8f0]" aria-label={`${provider.providerOption.title}${metricLabel}占比`}>
-                      <div className="h-full rounded-full" style={{ width: `${Math.max(4, (providerValue / maxValue) * 100)}%`, backgroundColor: color }} />
-                    </div>
-                  </>
+              <article
+                key={provider.provider}
+                className={cn(
+                  'rounded-2xl border p-4 shadow-sm transition',
+                  isSelectedProvider ? 'border-[#93c5fd] bg-[#eef6ff]' : 'border-[#e6edf5] bg-white',
                 )}
+              >
+                <button
+                  type="button"
+                  onClick={() => props.onSelectProvider(provider.provider)}
+                  className="flex w-full items-start gap-3 rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-[#bfdbfe]"
+                  aria-label={`筛选厂商 ${provider.providerOption.title}`}
+                >
+                  {optionLogo(provider.providerOption, 'h-10 w-10 text-sm')}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-base font-semibold text-[#1f2937]">{provider.providerOption.title}</span>
+                      <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-[#2563eb]">{provider.models.length} 个模型</span>
+                    </span>
+                    <span className="mt-1 block truncate text-xs text-[#94a3b8]">{provider.provider}</span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="block text-lg font-bold text-[#2563eb]">{creditPercent}</span>
+                    <span className="text-[11px] font-semibold text-[#64748b]">AI 积分占比</span>
+                  </span>
+                </button>
+
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e2e8f0]" aria-label={`${provider.providerOption.title}${metricLabel}占比`}>
+                  <div className="h-full rounded-full" style={{ width: `${Math.max(4, (providerValue / maxValue) * 100)}%`, backgroundColor: color }} />
+                </div>
+
+                <div className="mt-3 grid gap-2 text-xs font-semibold text-[#64748b] sm:grid-cols-4">
+                  <span className="rounded-xl bg-[#f8fafc] px-3 py-2">调用 {formatNumber(provider.totalCalls)}</span>
+                  <span className="rounded-xl bg-[#f8fafc] px-3 py-2">Token {formatNumber(provider.totalTokens)}</span>
+                  <span className="rounded-xl bg-[#f8fafc] px-3 py-2">成功率 {successRateFromCalls(provider.succeededCalls, provider.failedCalls)}</span>
+                  <span className="rounded-xl bg-[#f8fafc] px-3 py-2">积分 {formatNumber(provider.totalAiCreditsConsumed)}</span>
+                </div>
+
                 <div className="mt-3 grid gap-2">
                   {provider.models.map((model) => {
                     const modelValue = usageMetricValue(model, props.metric);
+                    const isSelectedModel = props.selectedProvider === model.provider && props.selectedModel === model.model;
                     return (
                       <button
                         key={`${model.provider}:${model.model}`}
                         type="button"
                         onClick={() => props.onSelectModel(model.provider, model.model)}
-                        className="grid gap-2 rounded-xl border border-[#edf2f7] bg-[#f8fafc] p-3 text-left transition hover:border-[#bfdbfe] hover:bg-[#eef6ff] focus:border-[#93c5fd] focus:outline-none"
+                        className={cn(
+                          'grid gap-2 rounded-xl border p-3 text-left transition hover:border-[#bfdbfe] hover:bg-[#eef6ff] focus:border-[#93c5fd] focus:outline-none',
+                          isSelectedModel ? 'border-[#93c5fd] bg-[#eef6ff]' : 'border-[#edf2f7] bg-[#f8fafc]',
+                        )}
                         aria-label={`筛选模型 ${model.modelOption.title}`}
                       >
                         <span className="flex items-center gap-2">
@@ -688,9 +805,10 @@ function ProviderModelUsageStats(props: {
                         <span className="h-2 overflow-hidden rounded-full bg-[#e2e8f0]">
                           <span className="block h-full rounded-full" style={{ width: `${Math.max(4, (modelValue / maxValue) * 100)}%`, backgroundColor: color }} />
                         </span>
-                        <span className="grid gap-1 text-[11px] font-semibold text-[#64748b] sm:grid-cols-3">
+                        <span className="grid gap-1 text-[11px] font-semibold text-[#64748b] sm:grid-cols-4">
                           <span>调用 {formatNumber(model.totalCalls)}</span>
                           <span>Token {formatNumber(model.totalTokens)}</span>
+                          <span>成功率 {successRateFromCalls(model.succeededCalls, model.failedCalls)}</span>
                           <span>积分 {formatNumber(model.totalAiCreditsConsumed)}</span>
                         </span>
                       </button>
@@ -1093,15 +1211,21 @@ export function OpenPlatformAiReadonlyPanel() {
   const meteringStatusOptions = uniqueStrings(data.filterOptions.meteringStatuses);
 
   const allModelOptions = data.filterOptions.models.map(modelFilterOption);
+  const periodTitle = formatMonthUsageTitle(appliedFilters);
+  const periodRange = formatDateRangeSummary(appliedFilters);
+  const totalTokens = totalTokensFromAggregations(data);
+  const successRate = successRateFromCalls(summary.succeededCalls, summary.failedCalls);
+  const peakDay = peakDayFromDateProviders(data.aggregations.byDateProvider);
+  const peakDayLabel = peakDay ? formatShortMonthDay(peakDay.date) : '暂无峰值日';
+  const peakDayHelper = peakDay
+    ? `${formatDateOnly(peakDay.date)} · AI 积分 ${formatNumber(peakDay.totalAiCreditsConsumed)} · 调用 ${formatNumber(peakDay.totalCalls)}`
+    : '当前范围内暂无日期聚合数据';
   const summaryCards = (
-    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-7">
-      <SummaryCard label="总调用" value={formatNumber(summary.totalCalls)} />
-      <SummaryCard label="成功调用" value={formatNumber(summary.succeededCalls)} tone="bg-emerald-50" />
-      <SummaryCard label="失败调用" value={formatNumber(summary.failedCalls)} tone="bg-rose-50" />
-      <SummaryCard label="已计量" value={formatNumber(summary.meteredCalls)} tone="bg-blue-50" />
-      <SummaryCard label="待计量" value={formatNumber(summary.pendingCalls)} tone="bg-amber-50" />
-      <SummaryCard label="不计费" value={formatNumber(summary.notBillableCalls)} tone="bg-slate-50" />
-      <SummaryCard label="AI 积分消耗" value={formatNumber(summary.totalAiCreditsConsumed)} tone="bg-indigo-50" />
+    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+      <LegacyOverviewMetricCard label="调用次数" value={formatNumber(summary.totalCalls)} helper={`成功 ${formatNumber(summary.succeededCalls)} · 失败 ${formatNumber(summary.failedCalls)}`} tone="blue" />
+      <LegacyOverviewMetricCard label="Token 总量" value={formatNumber(totalTokens)} helper="由模型聚合优先回退到日期聚合" />
+      <LegacyOverviewMetricCard label="成功率" value={successRate} helper="成功调用 / 成功与失败调用" tone="success" />
+      <LegacyOverviewMetricCard label="峰值日" value={peakDayLabel} helper={peakDayHelper} tone="warning" />
     </div>
   );
   const providerModelStats = (
@@ -1113,6 +1237,10 @@ export function OpenPlatformAiReadonlyPanel() {
       onMetricChange={setUsageStatsMetric}
       onSelectProvider={selectProviderFilter}
       onSelectModel={selectModelFilter}
+      periodLabel={periodTitle}
+      selectedProvider={appliedFilters.provider}
+      selectedModel={appliedFilters.model}
+      totalAiCreditsConsumed={summary.totalAiCreditsConsumed}
     />
   );
   const timeRangeFilter = (
@@ -1260,17 +1388,29 @@ export function OpenPlatformAiReadonlyPanel() {
       <section className="rounded-[20px] border border-[#e6edf5] bg-white p-4 shadow-sm" aria-labelledby="ai-usage-heading">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 id="ai-usage-heading" className="text-lg font-semibold tracking-normal text-[#1f2937]">AI 用量与积分明细</h2>
-            <p className="mt-1 text-sm leading-6 text-[#64748b]">按栏目查看统计和明细，不执行扣减、导出或模型厂商调用。</p>
+            <div className="text-xs font-semibold text-[#2563eb]">AI 用量账单</div>
+            <h2 id="ai-usage-heading" className="mt-1 text-xl font-semibold tracking-normal text-[#1f2937]">{periodTitle}</h2>
+            <p className="mt-1 text-sm leading-6 text-[#64748b]">{periodRange}；当前以 AI 积分消耗替代费用主指标，真实费用结算后置。</p>
           </div>
-          <button
-            type="button"
-            onClick={refreshUsage}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-[#dbeafe] bg-[#eaf3ff] px-3 text-sm font-semibold text-[#2563eb] transition hover:bg-[#dbeafe]"
-          >
-            <RefreshCw className="h-4 w-4" />
-            刷新
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex h-9 items-center justify-center rounded-xl border border-[#dbeafe] bg-[#f8fbff] px-3 text-sm font-semibold text-[#2563eb]">{periodTitle}</span>
+            <button
+              type="button"
+              disabled
+              className="inline-flex h-9 cursor-not-allowed items-center justify-center rounded-xl border border-[#dbe3ee] bg-[#f1f5f9] px-3 text-sm font-semibold text-[#94a3b8]"
+              title="账单导出能力后置，本 PR 不实现真实导出"
+            >
+              导出（后置）
+            </button>
+            <button
+              type="button"
+              onClick={refreshUsage}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-[#dbeafe] bg-[#eaf3ff] px-3 text-sm font-semibold text-[#2563eb] transition hover:bg-[#dbeafe]"
+            >
+              <RefreshCw className="h-4 w-4" />
+              刷新
+            </button>
+          </div>
         </div>
 
         {timeRangeFilter}
@@ -1317,13 +1457,16 @@ export function OpenPlatformAiReadonlyPanel() {
           >
             {activeTab === 'overview' ? (
               <div className="grid gap-4">
-                {summaryCards}
-                <div>
-                  <h3 className="text-base font-semibold text-[#1f2937]">AI 积分消耗统计</h3>
-                  <p className="mt-1 text-sm leading-6 text-[#64748b]">核心趋势和厂商模型摘要。</p>
-                </div>
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
-                  <AggregationCard title="日期用量趋势">
+                <div className="grid min-w-0 gap-4 2xl:grid-cols-[400px_minmax(0,1fr)]">
+                  <section className="min-w-0 rounded-[20px] border border-[#dbeafe] bg-[#f8fbff] p-4 shadow-sm" aria-labelledby="legacy-billing-summary-heading">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2563eb]">账单摘要</div>
+                    <h3 id="legacy-billing-summary-heading" className="mt-1 text-base font-semibold text-[#1f2937]">AI 积分消耗</h3>
+                    <div className="mt-3 break-words text-4xl font-bold leading-tight tracking-tight text-[#2563eb]">{formatNumber(summary.totalAiCreditsConsumed)}</div>
+                    <p className="mt-2 text-xs leading-5 text-[#64748b]">当前展示 AI 积分消耗，不展示法币金额或结算成本；费用结算与导出能力后置。</p>
+                    <div className="mt-4">{summaryCards}</div>
+                  </section>
+
+                  <AggregationCard title="每日消耗" description="旧版账单式主图区域；保留调用次数、Token 总量、AI 积分消耗切换，以及厂商分色图例和点击筛选联动。">
                     <DateTrendChart
                       rows={data.aggregations.byDateProvider}
                       metric={dateTrendMetric}
@@ -1331,12 +1474,13 @@ export function OpenPlatformAiReadonlyPanel() {
                       onSelectProvider={selectProviderFilter}
                     />
                   </AggregationCard>
-                  <AggregationCard title="计量状态摘要">
-                    <div className="p-3">
-                      <MeteringStatusAggregation rows={data.aggregations.byMeteringStatus} />
-                    </div>
-                  </AggregationCard>
                 </div>
+
+                <section className="rounded-2xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] p-4" aria-labelledby="single-day-model-composition-heading">
+                  <h3 id="single-day-model-composition-heading" className="text-sm font-semibold text-[#1f2937]">单日模型消耗构成</h3>
+                  <p className="mt-1 text-xs leading-5 text-[#64748b]">当前 API 仅提供日期 × 厂商聚合，暂不补造单日模型构成或费用数据；后续 10E-2 在口径确认后补充模型明细。</p>
+                </section>
+
                 {providerModelStats}
               </div>
             ) : null}

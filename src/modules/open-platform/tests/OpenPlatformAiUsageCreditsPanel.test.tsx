@@ -286,7 +286,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     });
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '总览' })).toHaveAttribute('aria-selected', 'true');
     selectAiUsageTab('明细记录');
     ['租户', '调用状态', '计量状态', '模型厂商', '模型名称', '返回条数'].forEach((label) => {
@@ -320,8 +320,8 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     const fetchMock = mockUsageFetch();
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
-    expect(screen.getAllByText('总调用').length).toBeGreaterThan(0);
+    expect(await screen.findByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
+    expect(screen.getAllByText('调用次数').length).toBeGreaterThan(0);
     expect(screen.getAllByText('AI 积分消耗').length).toBeGreaterThan(0);
     expect(screen.getAllByText('deepseek').length).toBeGreaterThan(0);
     expect(screen.getAllByText('deepseek-v4-flash').length).toBeGreaterThan(0);
@@ -339,14 +339,14 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     mockUsageFetch();
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '总览' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText('AI 积分消耗统计')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '日期用量趋势' })).toBeInTheDocument();
+    expect(screen.getByText('账单摘要')).toBeInTheDocument();
+    expect(screen.getByText('单日模型消耗构成')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '每日消耗' })).toBeInTheDocument();
     expect(screen.getByText('按日期查看 AI 用量趋势')).toBeInTheDocument();
-    expect(screen.getByText('06-30')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '计量状态摘要' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '厂商 / 模型用量统计' })).toBeInTheDocument();
+    expect(screen.getAllByText('06-30').length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: '厂商 / 模型消耗' })).toBeInTheDocument();
 
     selectAiUsageTab('模型与厂商');
     expect(screen.getByRole('tab', { name: '模型与厂商' })).toHaveAttribute('aria-selected', 'true');
@@ -372,7 +372,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(screen.getByLabelText('模型厂商')).toBeInTheDocument();
     expect(screen.queryByText('byModel')).not.toBeInTheDocument();
     expect(screen.queryByText('totalAiCreditsConsumed')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /导出/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '导出（后置）' })).toBeDisabled();
     expectNoSensitiveContent(container);
   });
 
@@ -380,8 +380,8 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     mockUsageFetch({ records: [] });
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
-    expect(screen.getByText('暂无厂商 / 模型用量统计数据')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
+    expect(screen.getByText('暂无厂商 / 模型消耗卡片数据')).toBeInTheDocument();
     expect(screen.getByText('暂无日期用量趋势数据')).toBeInTheDocument();
     selectAiUsageTab('明细记录');
     expect(screen.getByText('暂无 AI 用量明细')).toBeInTheDocument();
@@ -400,7 +400,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     const fetchMock = mockUsageFetch();
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
     selectAiUsageTab('明细记录');
     const tenantInput = screen.getByLabelText('租户');
     const providerInput = screen.getByLabelText('模型厂商');
@@ -456,7 +456,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     mockUsageFetch();
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
     selectAiUsageTab('明细记录');
     const providerInput = screen.getByLabelText('模型厂商');
     const modelInput = screen.getByLabelText('模型名称');
@@ -492,12 +492,12 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     const fetchMock = mockUsageFetch();
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: '日期用量趋势' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '每日消耗' })).toBeInTheDocument();
     expect(screen.getByText('按日期查看 AI 用量趋势')).toBeInTheDocument();
     expect(screen.getByText('X 轴为日期，Y 轴为当前指标；柱体按厂商稳定分色堆叠，点击厂商分段可联动筛选。')).toBeInTheDocument();
     expect(screen.getByText('Y 轴：调用次数')).toBeInTheDocument();
     expect(screen.getByText('06-29')).toBeInTheDocument();
-    expect(screen.getByText('06-30')).toBeInTheDocument();
+    expect(screen.getAllByText('06-30').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '筛选趋势图厂商 DeepSeek' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '筛选趋势图厂商 Kimi' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /2026-06-30 · DeepSeek · 调用次数 3/ })).toBeInTheDocument();
@@ -545,11 +545,11 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByText('06-30')).toBeInTheDocument();
+    expect((await screen.findAllByText('06-30')).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: '今日' }));
 
-    expect(await screen.findByText('06-22')).toBeInTheDocument();
-    expect(screen.queryByText('06-30')).not.toBeInTheDocument();
+    expect((await screen.findAllByText('06-22')).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.queryAllByText('06-30')).toHaveLength(0));
     expect(screen.getByRole('button', { name: /2026-06-22 · Kimi · 调用次数 5/ })).toBeInTheDocument();
   });
 
@@ -557,15 +557,15 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     mockUsageFetch({ records: [] });
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: '日期用量趋势' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '每日消耗' })).toBeInTheDocument();
     expect(screen.getByText('暂无日期用量趋势数据')).toBeInTheDocument();
   });
 
-  it('条形统计支持指标切换、点击联动和空状态', async () => {
+  it('厂商与模型卡片支持指标切换、点击联动和空状态', async () => {
     const fetchMock = mockUsageFetch();
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: '厂商 / 模型用量统计' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '厂商 / 模型消耗' })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '调用次数' })[1]).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getAllByRole('button', { name: 'Token 总量' })[1]);
     expect(screen.getAllByRole('button', { name: 'Token 总量' })[1]).toHaveAttribute('aria-pressed', 'true');
@@ -596,7 +596,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     const fetchMock = mockUsageFetch();
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '本月' })).toHaveAttribute('aria-pressed', 'true');
     expect(fetchPath(fetchMock.mock.calls[0]?.[0] ?? '')).toContain('dateFrom=2026-05-31T16%3A00%3A00.000Z');
     expect(fetchPath(fetchMock.mock.calls[0]?.[0] ?? '')).toContain('dateTo=2026-06-30T15%3A59%3A00.000Z');
@@ -622,7 +622,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     const fetchMock = mockUsageFetch();
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '自定义时间范围' }));
     fireEvent.change(screen.getByLabelText('开始时间'), { target: { value: '2026-06-10T00:00' } });
     fireEvent.change(screen.getByLabelText('结束时间'), { target: { value: '2026-06-20T23:59' } });
@@ -641,7 +641,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(screen.getByText(/返回条数仅影响明细记录/)).toBeInTheDocument();
   });
 
-  it('单厂商单模型时隐藏重复厂商汇总条但保留模型联动', async () => {
+  it('单厂商单模型时保留厂商卡片和模型联动', async () => {
     const fetchMock = mockUsageFetch({ records: [usageRecord] });
     vi.mocked(fetch).mockResolvedValue(jsonResponse({
       ...usagePayload([usageRecord]),
@@ -661,8 +661,8 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     }));
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: '厂商 / 模型用量统计' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '筛选厂商 DeepSeek' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '厂商 / 模型消耗' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '筛选厂商 DeepSeek' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '筛选模型 DeepSeek V4 Flash' }));
 
     await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('model=deepseek-v4-flash'))).toBe(true));
@@ -672,7 +672,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     mockUsageFetch();
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByText('复用当前 AI 用量与积分聚合数据，按厂商分组展示模型调用、Token 与 AI 积分消耗；点击厂商或模型可联动筛选。')).toBeInTheDocument();
+    expect(await screen.findByText('卡片复用当前 AI 用量聚合数据，展示厂商标识、模型数量、AI 积分占比、调用、Token 与成功率；模型明细表留待 10E-2。')).toBeInTheDocument();
     expect(screen.queryByText(/AI usage credits 聚合数据/i)).not.toBeInTheDocument();
     expect(screen.getAllByText('deepseek').length).toBeGreaterThan(0);
     expect(screen.getAllByText('deepseek-v4-flash').length).toBeGreaterThan(0);
@@ -682,7 +682,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     const fetchMock = mockUsageFetch();
     render(<OpenPlatformAiReadonlyPanel />);
 
-    expect(await screen.findByRole('heading', { name: 'AI 用量与积分明细' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
     selectAiUsageTab('明细记录');
     fireEvent.change(screen.getByLabelText('租户'), { target: { value: 'tenant-001' } });
     fireEvent.change(screen.getByLabelText('调用状态'), { target: { value: 'succeeded' } });
