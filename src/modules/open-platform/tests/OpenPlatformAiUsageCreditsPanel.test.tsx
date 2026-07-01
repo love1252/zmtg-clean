@@ -374,7 +374,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
   });
 
   it('默认展示总览并可切换模型、租户、计量状态和明细记录标签页', async () => {
-    mockUsageFetch();
+    const fetchMock = mockUsageFetch();
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
     expect(await screen.findByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
@@ -394,10 +394,17 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
 
     selectAiUsageTab('租户用量');
     expect(screen.getByRole('tab', { name: '租户用量' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('heading', { name: '租户用量统计' })).toBeInTheDocument();
-    expect(screen.getByText('Token 总量')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '机构 / 租户用量排行' })).toBeInTheDocument();
+    expect(screen.getAllByText('Token 总量').length).toBeGreaterThan(0);
     expect(screen.getAllByText('600').length).toBeGreaterThan(0);
     expect(screen.getAllByText('星澜医美').length).toBeGreaterThan(0);
+    expect(screen.getByText('#1')).toBeInTheDocument();
+    expect(screen.getAllByText('成功率').length).toBeGreaterThan(0);
+    expect(screen.getByText('待计量 1')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '筛选租户 星澜医美' }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('tenantId=tenant-001'))).toBe(true);
+    });
 
     selectAiUsageTab('计量状态');
     expect(screen.getByRole('tab', { name: '计量状态' })).toHaveAttribute('aria-selected', 'true');

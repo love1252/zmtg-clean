@@ -922,42 +922,139 @@ function ProviderModelUsageStats(props: {
   );
 }
 
-function TenantAggregationTable({ rows }: { rows: PlatformAiUsageCreditsByTenantDto[] }) {
-  if (rows.length === 0) return <EmptyAggregation label="租户用量统计" />;
+function TenantAggregationTable(props: {
+  rows: PlatformAiUsageCreditsByTenantDto[];
+  selectedTenantId: string;
+  onSelectTenant: (tenantId: string) => void;
+}) {
+  if (props.rows.length === 0) return <EmptyAggregation label="机构 / 租户用量排行" />;
+
+  const rankedRows = [...props.rows].sort((left, right) => {
+    const creditsDelta = right.totalAiCreditsConsumed - left.totalAiCreditsConsumed;
+    if (creditsDelta !== 0) return creditsDelta;
+
+    const tokenDelta = right.totalTokens - left.totalTokens;
+    if (tokenDelta !== 0) return tokenDelta;
+
+    const callsDelta = right.totalCalls - left.totalCalls;
+    if (callsDelta !== 0) return callsDelta;
+
+    return left.tenantId.localeCompare(right.tenantId);
+  });
+  const maxCredits = Math.max(...rankedRows.map((row) => row.totalAiCreditsConsumed), 0);
+  const maxTokens = Math.max(...rankedRows.map((row) => row.totalTokens), 0);
+  const maxCalls = Math.max(...rankedRows.map((row) => row.totalCalls), 0);
+  const scoreBaseline = Math.max(maxCredits || maxTokens || maxCalls, 1);
+
+  function scoreFor(row: PlatformAiUsageCreditsByTenantDto) {
+    if (maxCredits > 0) return row.totalAiCreditsConsumed;
+    if (maxTokens > 0) return row.totalTokens;
+    return row.totalCalls;
+  }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[920px] text-left text-sm">
-        <thead className="bg-[#f8fafc] text-xs font-semibold text-[#64748b]">
-          <tr>
-            <th className="px-3 py-2">租户</th>
-            <th className="px-3 py-2">总调用</th>
-            <th className="px-3 py-2">成功 / 失败</th>
-            <th className="px-3 py-2">Token 总量</th>
-            <th className="px-3 py-2">AI 积分消耗</th>
-            <th className="px-3 py-2">已计量</th>
-            <th className="px-3 py-2">待计量</th>
-            <th className="px-3 py-2">不计费</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[#e6edf5]">
-          {rows.map((row) => (
-            <tr key={row.tenantId}>
-              <td className="px-3 py-2">
-                <div className="font-semibold text-[#1f2937]">{row.tenantName ?? '未命名租户'}</div>
-                <div className="mt-1 text-xs text-[#94a3b8]">{row.tenantId}</div>
-              </td>
-              <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.totalCalls)}</td>
-              <td className="px-3 py-2 text-[#64748b]">{formatNumber(row.succeededCalls)} / {formatNumber(row.failedCalls)}</td>
-              <td className="px-3 py-2 font-semibold text-[#1f2937]">{formatNumber(row.totalTokens)}</td>
-              <td className="px-3 py-2 font-semibold text-[#2563eb]">{formatNumber(row.totalAiCreditsConsumed)}</td>
-              <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.meteredCalls)}</td>
-              <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.pendingCalls)}</td>
-              <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.notBillableCalls)}</td>
+    <div className="grid gap-4">
+      <div className="grid gap-3 xl:grid-cols-2">
+        {rankedRows.map((row, index) => {
+          const tenantLabel = row.tenantName ?? '未命名租户';
+          const isSelected = props.selectedTenantId === row.tenantId;
+          const progress = scoreFor(row) <= 0 ? 0 : Math.max(4, (scoreFor(row) / scoreBaseline) * 100);
+
+          return (
+            <button
+              key={row.tenantId}
+              type="button"
+              onClick={() => props.onSelectTenant(row.tenantId)}
+              className={cn(
+                'rounded-2xl border p-4 text-left shadow-sm transition hover:border-[#93c5fd] hover:bg-[#f8fbff] focus:border-[#2563eb] focus:outline-none',
+                isSelected ? 'border-[#93c5fd] bg-[#eef6ff]' : 'border-[#e6edf5] bg-white',
+              )}
+              aria-label={`筛选租户 ${tenantLabel}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#2563eb] text-sm font-bold text-white">{index + 1}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-base font-semibold text-[#1f2937]">{tenantLabel}</span>
+                      <span className="mt-0.5 block truncate text-xs text-[#94a3b8]">{row.tenantId}</span>
+                    </span>
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-full bg-[#eff6ff] px-2.5 py-1 text-xs font-semibold text-[#2563eb]">AI 积分 {formatNumber(row.totalAiCreditsConsumed)}</span>
+              </div>
+
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#e2e8f0]" aria-label={`${tenantLabel}排行占比`}>
+                <span className="block h-full rounded-full bg-[#2563eb]" style={{ width: `${progress}%` }} />
+              </div>
+
+              <div className="mt-4 grid gap-2 text-xs font-semibold text-[#64748b] sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
+                <span className="rounded-xl bg-[#f8fafc] px-3 py-2">
+                  <span className="block text-[#94a3b8]">调用次数</span>
+                  <span className="mt-1 block text-sm text-[#1f2937]">{formatNumber(row.totalCalls)}</span>
+                </span>
+                <span className="rounded-xl bg-[#f8fafc] px-3 py-2">
+                  <span className="block text-[#94a3b8]">Token 总量</span>
+                  <span className="mt-1 block text-sm text-[#1f2937]">{formatNumber(row.totalTokens)}</span>
+                </span>
+                <span className="rounded-xl bg-[#f8fafc] px-3 py-2">
+                  <span className="block text-[#94a3b8]">成功率</span>
+                  <span className="mt-1 block text-sm text-[#1f2937]">{successRateFromCalls(row.succeededCalls, row.failedCalls)}</span>
+                </span>
+                <span className="rounded-xl bg-[#f8fafc] px-3 py-2">
+                  <span className="block text-[#94a3b8]">计量状态</span>
+                  <span className="mt-1 block text-sm text-[#1f2937]">已计量 {formatNumber(row.meteredCalls)}</span>
+                </span>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                <span className="rounded-full bg-[#eef6ff] px-2.5 py-1 text-[#2563eb]">成功 {formatNumber(row.succeededCalls)}</span>
+                <span className="rounded-full bg-[#fef2f2] px-2.5 py-1 text-[#dc2626]">失败 {formatNumber(row.failedCalls)}</span>
+                <span className="rounded-full bg-[#fff7ed] px-2.5 py-1 text-[#c2410c]">待计量 {formatNumber(row.pendingCalls)}</span>
+                <span className="rounded-full bg-[#f8fafc] px-2.5 py-1 text-[#64748b]">不计费 {formatNumber(row.notBillableCalls)}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-[#e6edf5]">
+        <table className="w-full min-w-[980px] text-left text-sm">
+          <thead className="bg-[#f8fafc] text-xs font-semibold text-[#64748b]">
+            <tr>
+              <th className="px-3 py-2">排名</th>
+              <th className="px-3 py-2">租户</th>
+              <th className="px-3 py-2">总调用</th>
+              <th className="px-3 py-2">成功 / 失败</th>
+              <th className="px-3 py-2">成功率</th>
+              <th className="px-3 py-2">Token 总量</th>
+              <th className="px-3 py-2">AI 积分消耗</th>
+              <th className="px-3 py-2">已计量</th>
+              <th className="px-3 py-2">待计量</th>
+              <th className="px-3 py-2">不计费</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-[#e6edf5]">
+            {rankedRows.map((row, index) => (
+              <tr key={row.tenantId}>
+                <td className="px-3 py-2 font-semibold text-[#2563eb]">#{index + 1}</td>
+                <td className="px-3 py-2">
+                  <div className="font-semibold text-[#1f2937]">{row.tenantName ?? '未命名租户'}</div>
+                  <div className="mt-1 text-xs text-[#94a3b8]">{row.tenantId}</div>
+                </td>
+                <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.totalCalls)}</td>
+                <td className="px-3 py-2 text-[#64748b]">{formatNumber(row.succeededCalls)} / {formatNumber(row.failedCalls)}</td>
+                <td className="px-3 py-2 text-[#1f2937]">{successRateFromCalls(row.succeededCalls, row.failedCalls)}</td>
+                <td className="px-3 py-2 font-semibold text-[#1f2937]">{formatNumber(row.totalTokens)}</td>
+                <td className="px-3 py-2 font-semibold text-[#2563eb]">{formatNumber(row.totalAiCreditsConsumed)}</td>
+                <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.meteredCalls)}</td>
+                <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.pendingCalls)}</td>
+                <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.notBillableCalls)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1432,6 +1529,14 @@ export function OpenPlatformAiReadonlyPanel() {
     void loadUsage(nextFilters);
   }
 
+  function selectTenantFilter(tenantId: string) {
+    const nextFilters = { ...filters, tenantId };
+    setFilters(nextFilters);
+    setAppliedFilters(nextFilters);
+    setLoadState('loading');
+    void loadUsage(nextFilters);
+  }
+
   function applyFilters() {
     setLoadState('loading');
     setAppliedFilters(filters);
@@ -1757,8 +1862,12 @@ export function OpenPlatformAiReadonlyPanel() {
             ) : null}
 
             {activeTab === 'tenants' ? (
-              <AggregationCard title="租户用量统计">
-                <TenantAggregationTable rows={data.aggregations.byTenant} />
+              <AggregationCard title="机构 / 租户用量排行" description="按低敏租户维度汇总调用、Token、AI 积分和计量状态；点击排行项可联动现有租户筛选。">
+                <TenantAggregationTable
+                  rows={data.aggregations.byTenant}
+                  selectedTenantId={appliedFilters.tenantId}
+                  onSelectTenant={selectTenantFilter}
+                />
               </AggregationCard>
             ) : null}
 
