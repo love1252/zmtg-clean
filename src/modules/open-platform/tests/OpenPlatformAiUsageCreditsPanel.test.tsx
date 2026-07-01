@@ -179,6 +179,53 @@ function usagePayload(records: unknown[] = [usageRecord]) {
           totalAiCreditsConsumed: 4,
         },
       ] : [],
+      byServiceProject: hasRecords ? [
+        {
+          serviceCategory: 'ai_conversation',
+          serviceName: 'AI 问答',
+          serviceSource: 'platform_console',
+          serviceAction: 'chat_completion',
+          serviceVersion: 'v1',
+          totalCalls: 8,
+          succeededCalls: 6,
+          failedCalls: 2,
+          meteredCalls: 5,
+          pendingCalls: 2,
+          notBillableCalls: 1,
+          totalTokens: 1200,
+          totalAiCreditsConsumed: 18,
+        },
+        {
+          serviceCategory: 'knowledge_base',
+          serviceName: '知识库问答',
+          serviceSource: 'rag_console',
+          serviceAction: 'answer_with_context',
+          serviceVersion: 'v2',
+          totalCalls: 4,
+          succeededCalls: 4,
+          failedCalls: 0,
+          meteredCalls: 4,
+          pendingCalls: 0,
+          notBillableCalls: 0,
+          totalTokens: 900,
+          totalAiCreditsConsumed: 10,
+        },
+        {
+          serviceCategory: 'unknown',
+          serviceName: '未归因服务',
+          serviceSource: null,
+          serviceAction: null,
+          serviceVersion: null,
+          totalCalls: 2,
+          succeededCalls: 1,
+          failedCalls: 1,
+          meteredCalls: 0,
+          pendingCalls: 1,
+          notBillableCalls: 1,
+          totalTokens: 100,
+          totalAiCreditsConsumed: 0,
+        },
+      ] : [],
     },
     filterOptions: {
       providers: [
@@ -373,7 +420,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/ai-usage-credits?dateFrom=2026-05-31T16%3A00%3A00.000Z&dateTo=2026-06-30T15%3A59%3A00.000Z&limit=50', { cache: 'no-store' });
   });
 
-  it('默认展示总览并可切换模型、租户、计量状态和明细记录标签页', async () => {
+  it('默认展示总览并可切换模型、租户、服务项目、计量状态和明细记录标签页', async () => {
     const fetchMock = mockUsageFetch();
     const { container } = render(<OpenPlatformAiReadonlyPanel />);
 
@@ -406,6 +453,28 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
       expect(fetchMock.mock.calls.some(([input]) => fetchPath(input).includes('tenantId=tenant-001'))).toBe(true);
     });
 
+    selectAiUsageTab('服务项目');
+    expect(screen.getByRole('tab', { name: '服务项目' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { name: '服务项目消耗排行' })).toBeInTheDocument();
+    expect(screen.getAllByText('AI 问答').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('知识库问答').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('未归因服务').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('ai_conversation').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('knowledge_base').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('unknown').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('platform_console').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('chat_completion').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('v1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    expect(screen.getByText('调用 8')).toBeInTheDocument();
+    expect(screen.getByText('Token 1,200')).toBeInTheDocument();
+    expect(screen.getAllByText('AI 积分 18').length).toBeGreaterThan(0);
+    expect(screen.getByText('成功率 75.0%')).toBeInTheDocument();
+    expect(screen.getAllByText('已计量 5').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('待计量 2').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('不计费 1').length).toBeGreaterThan(0);
+    expect(container.textContent ?? '').not.toMatch(/¥|RMB|人民币金额|真实成本|用户 prompt|answer 不应展示|rawResponse|metadata|meteringDetails/u);
+
     selectAiUsageTab('计量状态');
     expect(screen.getByRole('tab', { name: '计量状态' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('heading', { name: '计量状态统计' })).toBeInTheDocument();
@@ -428,6 +497,8 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(await screen.findByRole('heading', { name: '2026年06月用量' })).toBeInTheDocument();
     expect(screen.getByText('暂无厂商 / 模型消耗卡片数据')).toBeInTheDocument();
     expect(screen.getByText('暂无日期用量趋势数据')).toBeInTheDocument();
+    selectAiUsageTab('服务项目');
+    expect(screen.getByText('暂无服务项目消耗数据')).toBeInTheDocument();
     selectAiUsageTab('明细记录');
     expect(screen.getByText('暂无 AI 用量明细')).toBeInTheDocument();
     expect(screen.getByText('当前过滤条件下没有 AI 调用记录。')).toBeInTheDocument();
@@ -718,7 +789,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '本月' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '本月' })).toHaveAttribute('aria-pressed', 'true'));
-    ['总览', '模型与厂商', '租户用量', '计量状态', '明细记录'].forEach((tab) => {
+    ['总览', '模型与厂商', '租户用量', '服务项目', '计量状态', '明细记录'].forEach((tab) => {
       selectAiUsageTab(tab);
       expect(screen.getByRole('tab', { name: tab })).toHaveAttribute('aria-selected', 'true');
     });
