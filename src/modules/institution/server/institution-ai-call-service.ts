@@ -40,6 +40,16 @@ export type AiCallUsageMetadata = {
   };
 } | null;
 
+export type AiCallUsageServiceProject = {
+  serviceCategory?: string | null;
+  serviceName?: string | null;
+  serviceSource?: string | null;
+  serviceAction?: string | null;
+  serviceVersion?: string | null;
+};
+
+export type AiCallUsageServiceProjectRecordFields = Required<AiCallUsageServiceProject>;
+
 export type AiCallUsageRecord = {
   id: string;
   tenantId: string;
@@ -57,6 +67,11 @@ export type AiCallUsageRecord = {
   meteringStatus: AiCreditMeteringStatus | null;
   meteringVersion: string | null;
   meteringDetails: AiCreditMeteringDetails | null;
+  serviceCategory?: string | null;
+  serviceName?: string | null;
+  serviceSource?: string | null;
+  serviceAction?: string | null;
+  serviceVersion?: string | null;
   metadata: AiCallUsageMetadata;
   createdAt: Date;
 };
@@ -73,6 +88,11 @@ export type AiCallUsageDto = Omit<
   | 'meteringStatus'
   | 'meteringVersion'
   | 'meteringDetails'
+  | 'serviceCategory'
+  | 'serviceName'
+  | 'serviceSource'
+  | 'serviceAction'
+  | 'serviceVersion'
 > & {
   serviceName: '平台 AI 服务';
   createdAt: string;
@@ -204,7 +224,7 @@ export type AiCallUsageRepository = {
     meteringVersion: string | null;
     meteringDetails: AiCreditMeteringDetails | null;
     metadata?: AiCallUsageMetadata;
-  }): Promise<AiCallUsageRecord>;
+  } & AiCallUsageServiceProject): Promise<AiCallUsageRecord>;
   listInstitutionUsageRecords(input: {
     tenantId: string;
     institutionId: string;
@@ -215,6 +235,31 @@ export type AiCallUsageRepository = {
 
 const USAGE_RECORD_LIMIT = 50;
 const AI_CALL_TIMEOUT_MS = 30000;
+const AI_CALL_SERVICE_PROJECT_VERSION = 'v06-service-metering-1';
+
+const AI_QA_SERVICE_PROJECT = {
+  serviceCategory: 'ai_qa',
+  serviceName: 'AI 问答',
+  serviceSource: 'institution_ai_call',
+  serviceAction: 'direct_answer',
+  serviceVersion: AI_CALL_SERVICE_PROJECT_VERSION,
+} as const satisfies AiCallUsageServiceProjectRecordFields;
+
+const KNOWLEDGE_BASE_QA_SERVICE_PROJECT = {
+  serviceCategory: 'knowledge_base_qa',
+  serviceName: '知识库问答',
+  serviceSource: 'institution_knowledge_qa',
+  serviceAction: 'rag_answer',
+  serviceVersion: AI_CALL_SERVICE_PROJECT_VERSION,
+} as const satisfies AiCallUsageServiceProjectRecordFields;
+
+function resolveAiCallServiceProject(input: {
+  knowledgeContextUsed: boolean;
+}): AiCallUsageServiceProjectRecordFields {
+  return input.knowledgeContextUsed
+    ? KNOWLEDGE_BASE_QA_SERVICE_PROJECT
+    : AI_QA_SERVICE_PROJECT;
+}
 
 type AiCallUsageMeteringWriteFields = {
   aiCreditsConsumed: number | null;
@@ -314,6 +359,7 @@ async function createMeteredUsageRecord(input: {
   status: AiCallUsageStatus;
   errorCode: string | null;
   metadata?: AiCallUsageMetadata;
+  serviceProject?: AiCallUsageServiceProject;
 }) {
   const metering = await resolveAiCallUsageMetering({
     rulesRepository: input.rulesRepository,
@@ -340,6 +386,11 @@ async function createMeteredUsageRecord(input: {
     status: input.status,
     errorCode: input.errorCode,
     ...metering,
+    serviceCategory: input.serviceProject?.serviceCategory ?? null,
+    serviceName: input.serviceProject?.serviceName ?? null,
+    serviceSource: input.serviceProject?.serviceSource ?? null,
+    serviceAction: input.serviceProject?.serviceAction ?? null,
+    serviceVersion: input.serviceProject?.serviceVersion ?? null,
     metadata: input.metadata,
   });
 }
@@ -417,6 +468,11 @@ function mapRecordToDto(record: AiCallUsageRecord): AiCallUsageDto {
     meteringStatus: _meteringStatus,
     meteringVersion: _meteringVersion,
     meteringDetails: _meteringDetails,
+    serviceCategory: _serviceCategory,
+    serviceName: _internalServiceName,
+    serviceSource: _serviceSource,
+    serviceAction: _serviceAction,
+    serviceVersion: _serviceVersion,
     ...safeRecord
   } = record;
   void _provider;
@@ -428,6 +484,11 @@ function mapRecordToDto(record: AiCallUsageRecord): AiCallUsageDto {
   void _meteringStatus;
   void _meteringVersion;
   void _meteringDetails;
+  void _serviceCategory;
+  void _internalServiceName;
+  void _serviceSource;
+  void _serviceAction;
+  void _serviceVersion;
   return {
     ...safeRecord,
     serviceName: '平台 AI 服务',
@@ -492,6 +553,7 @@ export async function requestInstitutionAiCallService(input: {
       latencyMs: null,
       status: 'sensitive_input_rejected',
       errorCode: 'SENSITIVE_INPUT_REJECTED',
+      serviceProject: AI_QA_SERVICE_PROJECT,
     }).catch(() => null);
 
     return {
@@ -563,6 +625,9 @@ export async function requestInstitutionAiCallService(input: {
 
   let systemPrompt = BASE_SYSTEM_PROMPT;
   const hasKbChunks = kbChunks && kbChunks.length > 0;
+  const serviceProject = resolveAiCallServiceProject({
+    knowledgeContextUsed: Boolean(hasKbChunks),
+  });
 
   if (hasKbChunks && kbChunks) {
     const MAX_SNIPPETS = 5;
@@ -645,6 +710,7 @@ export async function requestInstitutionAiCallService(input: {
         latencyMs,
         status,
         errorCode,
+        serviceProject,
       });
 
       return {
@@ -675,6 +741,7 @@ export async function requestInstitutionAiCallService(input: {
         latencyMs,
         status: 'provider_unavailable',
         errorCode: 'UNSAFE_RESPONSE',
+        serviceProject,
       });
 
       return {
@@ -710,6 +777,7 @@ export async function requestInstitutionAiCallService(input: {
       status: 'succeeded',
       errorCode: null,
       metadata,
+      serviceProject,
     });
 
     const knowledgeContext: KnowledgeContext | undefined = kbChunks
@@ -754,6 +822,7 @@ export async function requestInstitutionAiCallService(input: {
       latencyMs,
       status: timedOut ? 'provider_unavailable' : 'failed',
       errorCode: timedOut ? 'TIMEOUT' : 'NETWORK_ERROR',
+      serviceProject,
     }).catch(() => null);
 
     return {

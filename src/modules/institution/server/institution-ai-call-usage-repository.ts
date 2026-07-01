@@ -13,6 +13,7 @@ import type { EncryptedSecretEnvelope } from '@/modules/security/server/secretEn
 import type {
   AiCallUsageMetadata,
   AiCallUsageRecord,
+  AiCallUsageServiceProject,
   AiCallUsageStatus,
   PlatformAiUsageSummary,
 } from '@/modules/institution/server/institution-ai-call-service';
@@ -60,7 +61,7 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
       meteringVersion: string | null;
       meteringDetails: AiCreditMeteringDetails | null;
       metadata?: AiCallUsageMetadata;
-    }): Promise<AiCallUsageRecord> {
+    } & AiCallUsageServiceProject): Promise<AiCallUsageRecord> {
       const rows = await database
         .insert(aiCallUsageRecords)
         .values({
@@ -80,6 +81,11 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
           meteringStatus: input.meteringStatus,
           meteringVersion: input.meteringVersion,
           meteringDetails: input.meteringDetails,
+          serviceCategory: input.serviceCategory ?? null,
+          serviceName: input.serviceName ?? null,
+          serviceSource: input.serviceSource ?? null,
+          serviceAction: input.serviceAction ?? null,
+          serviceVersion: input.serviceVersion ?? null,
           metadata: input.metadata ?? null,
         })
         .returning();
@@ -105,6 +111,11 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
         meteringStatus: row.meteringStatus as AiCreditMeteringStatus | null,
         meteringVersion: row.meteringVersion,
         meteringDetails: (row.meteringDetails as AiCreditMeteringDetails | null) ?? null,
+        serviceCategory: row.serviceCategory ?? null,
+        serviceName: row.serviceName ?? null,
+        serviceSource: row.serviceSource ?? null,
+        serviceAction: row.serviceAction ?? null,
+        serviceVersion: row.serviceVersion ?? null,
         createdAt: row.createdAt,
       };
     },
@@ -143,6 +154,11 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
           meteringStatus: row.meteringStatus as AiCreditMeteringStatus | null,
           meteringVersion: row.meteringVersion,
           meteringDetails: (row.meteringDetails as AiCreditMeteringDetails | null) ?? null,
+          serviceCategory: row.serviceCategory,
+          serviceName: row.serviceName,
+          serviceSource: row.serviceSource,
+          serviceAction: row.serviceAction,
+          serviceVersion: row.serviceVersion,
           createdAt: row.createdAt,
         }));
     },

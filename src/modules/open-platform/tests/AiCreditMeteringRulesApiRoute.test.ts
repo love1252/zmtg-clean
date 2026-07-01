@@ -222,7 +222,7 @@ describe('平台端 AI credits metering rules API', () => {
     );
   });
 
-  it('不修改机构端 DTO、schema、migration，也不触发 provider', () => {
+  it('不修改 schema、migration，也不触发 provider', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const changedFiles = execFileSync('git', ['status', '--short', '--untracked-files=all'], {
       cwd: process.cwd(),
@@ -232,7 +232,6 @@ describe('平台端 AI credits metering rules API', () => {
       .filter(Boolean)
       .map((line) => line.slice(3));
 
-    expect(changedFiles).not.toContain('src/modules/institution/server/institution-ai-call-service.ts');
     expect(changedFiles).not.toContain('src/server/db/schema.ts');
     expect(changedFiles.some((file) => file.includes('/migrations/') || file.includes('drizzle/'))).toBe(false);
     expect(fetchSpy).not.toHaveBeenCalled();

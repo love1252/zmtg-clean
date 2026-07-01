@@ -22,6 +22,11 @@ const usageRow = {
   aiCreditsConsumed: 2,
   meteringStatus: 'metered',
   meteringVersion: 'v06-ui-verify-test',
+  serviceCategory: 'knowledge_base_qa',
+  serviceName: '知识库问答',
+  serviceSource: 'institution_knowledge_qa',
+  serviceAction: 'rag_answer',
+  serviceVersion: 'v06-service-metering-1',
   metadata: {
     knowledgeContext: {
       used: true,
@@ -43,7 +48,7 @@ const usageRow = {
 
 function expectLowSensitivePayload(input: unknown) {
   expect(JSON.stringify(input)).not.toMatch(
-    /apiKey|encryptedApiKey|baseUrl|Authorization|Cookie|rawPrompt|rawQuestion|rawAnswer|rawResponse|signedUrl|storageKey|完整 source 原文|用户 prompt|客户姓名|手机号|身份证|病历详情/i,
+    /apiKey|encryptedApiKey|baseUrl|Authorization|Cookie|rawPrompt|rawQuestion|rawAnswer|rawResponse|signedUrl|storageKey|serviceCategory|serviceName|serviceSource|serviceAction|serviceVersion|knowledge_base_qa|知识库问答|完整 source 原文|用户 prompt|客户姓名|手机号|身份证|病历详情/i,
   );
 }
 

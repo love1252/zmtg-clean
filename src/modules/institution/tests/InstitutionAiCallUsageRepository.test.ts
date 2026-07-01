@@ -55,6 +55,11 @@ describe('AI call usage repository metering 写入', () => {
       meteringStatus: 'metered',
       meteringVersion: 'ai-credits-v0.6-test',
       meteringDetails,
+      serviceCategory: 'knowledge_base_qa',
+      serviceName: '知识库问答',
+      serviceSource: 'institution_knowledge_qa',
+      serviceAction: 'rag_answer',
+      serviceVersion: 'v06-service-metering-1',
       metadata: {
         knowledgeContext: {
           used: true,
@@ -90,6 +95,11 @@ describe('AI call usage repository metering 写入', () => {
       meteringStatus: 'metered',
       meteringVersion: 'ai-credits-v0.6-test',
       meteringDetails,
+      serviceCategory: 'knowledge_base_qa',
+      serviceName: '知识库问答',
+      serviceSource: 'institution_knowledge_qa',
+      serviceAction: 'rag_answer',
+      serviceVersion: 'v06-service-metering-1',
       metadata: {
         knowledgeContext: {
           used: true,
@@ -118,6 +128,11 @@ describe('AI call usage repository metering 写入', () => {
       meteringStatus: 'metered',
       meteringVersion: 'ai-credits-v0.6-test',
       meteringDetails,
+      serviceCategory: 'knowledge_base_qa',
+      serviceName: '知识库问答',
+      serviceSource: 'institution_knowledge_qa',
+      serviceAction: 'rag_answer',
+      serviceVersion: 'v06-service-metering-1',
       metadata: expect.objectContaining({
         knowledgeContext: expect.objectContaining({ used: true }),
       }),
@@ -132,6 +147,75 @@ describe('AI call usage repository metering 写入', () => {
       meteringStatus: 'metered',
       meteringVersion: 'ai-credits-v0.6-test',
       meteringDetails,
+      serviceCategory: 'knowledge_base_qa',
+      serviceName: '知识库问答',
+      serviceSource: 'institution_knowledge_qa',
+      serviceAction: 'rag_answer',
+      serviceVersion: 'v06-service-metering-1',
+    });
+  });
+
+  it('createUsageRecord 未传入 service project 字段时写入 null 并保持兼容', async () => {
+    const createdAt = new Date('2026-06-29T10:00:00.000Z');
+    const query = createInsertDatabase({
+      id: 'ai-usage-002',
+      tenantId: 'tenant-001',
+      institutionId: 'inst-001',
+      actorUserId: 'user-001',
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      latencyMs: null,
+      status: 'failed',
+      errorCode: 'NETWORK_ERROR',
+      aiCreditsConsumed: 0,
+      meteringStatus: 'not_billable',
+      meteringVersion: null,
+      meteringDetails: null,
+      serviceCategory: null,
+      serviceName: null,
+      serviceSource: null,
+      serviceAction: null,
+      serviceVersion: null,
+      metadata: null,
+      createdAt,
+    });
+
+    const result = await createAiCallUsageRepository(query.database).createUsageRecord({
+      id: 'ai-usage-002',
+      tenantId: 'tenant-001',
+      institutionId: 'inst-001',
+      actorUserId: 'user-001',
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      latencyMs: null,
+      status: 'failed',
+      errorCode: 'NETWORK_ERROR',
+      aiCreditsConsumed: 0,
+      meteringStatus: 'not_billable',
+      meteringVersion: null,
+      meteringDetails: null,
+      metadata: null,
+    });
+
+    expect(query.values).toHaveBeenCalledWith(expect.objectContaining({
+      serviceCategory: null,
+      serviceName: null,
+      serviceSource: null,
+      serviceAction: null,
+      serviceVersion: null,
+    }));
+    expect(result).toMatchObject({
+      serviceCategory: null,
+      serviceName: null,
+      serviceSource: null,
+      serviceAction: null,
+      serviceVersion: null,
     });
   });
 });
