@@ -48,7 +48,7 @@ const usageRow = {
 
 function expectLowSensitivePayload(input: unknown) {
   expect(JSON.stringify(input)).not.toMatch(
-    /apiKey|encryptedApiKey|baseUrl|Authorization|Cookie|rawPrompt|rawQuestion|rawAnswer|rawResponse|signedUrl|storageKey|serviceCategory|serviceName|serviceSource|serviceAction|serviceVersion|knowledge_base_qa|知识库问答|完整 source 原文|用户 prompt|客户姓名|手机号|身份证|病历详情/i,
+    /apiKey|encryptedApiKey|baseUrl|Authorization|Cookie|rawPrompt|rawQuestion|rawAnswer|rawResponse|signedUrl|storageKey|完整 source 原文|用户 prompt|客户姓名|手机号|身份证|病历详情/i,
   );
 }
 
@@ -213,6 +213,35 @@ describe('platform AI usage credits server', () => {
           totalTokens: 200,
           totalAiCreditsConsumed: 2,
         }],
+        byServiceProject: [{
+          serviceCategory: 'knowledge_base_qa',
+          serviceName: '知识库问答',
+          serviceSource: 'institution_ai_call',
+          serviceAction: 'rag_answer',
+          serviceVersion: 'v06-service-metering-1',
+          totalCalls: 2,
+          succeededCalls: 1,
+          failedCalls: 1,
+          meteredCalls: 1,
+          pendingCalls: 1,
+          notBillableCalls: 0,
+          totalTokens: 200,
+          totalAiCreditsConsumed: 2,
+        }, {
+          serviceCategory: 'unknown',
+          serviceName: '未归因服务',
+          serviceSource: null,
+          serviceAction: null,
+          serviceVersion: null,
+          totalCalls: 1,
+          succeededCalls: 0,
+          failedCalls: 1,
+          meteredCalls: 0,
+          pendingCalls: 0,
+          notBillableCalls: 1,
+          totalTokens: 0,
+          totalAiCreditsConsumed: 0,
+        }],
         filters,
       } as never),
       listFilterOptions: async () => filterOptionsForTest(),
@@ -277,6 +306,34 @@ describe('platform AI usage credits server', () => {
         totalTokens: 200,
         totalAiCreditsConsumed: 2,
       })]);
+      expect(result.response.aggregations.byServiceProject).toEqual([
+        expect.objectContaining({
+          serviceCategory: 'knowledge_base_qa',
+          serviceName: '知识库问答',
+          serviceSource: 'institution_ai_call',
+          serviceAction: 'rag_answer',
+          serviceVersion: 'v06-service-metering-1',
+          totalCalls: 2,
+          succeededCalls: 1,
+          failedCalls: 1,
+          meteredCalls: 1,
+          pendingCalls: 1,
+          notBillableCalls: 0,
+          totalTokens: 200,
+          totalAiCreditsConsumed: 2,
+        }),
+        expect.objectContaining({
+          serviceCategory: 'unknown',
+          serviceName: '未归因服务',
+          serviceSource: null,
+          serviceAction: null,
+          serviceVersion: null,
+          totalCalls: 1,
+          notBillableCalls: 1,
+          totalTokens: 0,
+          totalAiCreditsConsumed: 0,
+        }),
+      ]);
       expect(result.response.filterOptions).toMatchObject({
         providers: [{ provider: 'deepseek', displayName: 'DeepSeek', logoText: 'D', source: 'system' }],
         models: [{ provider: 'deepseek', model: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', providerDisplayName: 'DeepSeek', source: 'system' }],
@@ -337,6 +394,7 @@ describe('platform AI usage credits server', () => {
           byDate: [],
           byDateProvider: [],
           byDateProviderModel: [],
+          byServiceProject: [],
         };
       },
       listFilterOptions: async () => filterOptionsForTest(),
