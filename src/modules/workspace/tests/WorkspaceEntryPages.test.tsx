@@ -161,6 +161,68 @@ const followUpPathAnalysisRecord = {
   secret: 'phase21-secret',
 };
 
+const aiServiceUsageResponse = {
+  requestId: 'institution-ai-service-usage',
+  readonly: true,
+  period: {
+    from: '2026-06-01',
+    to: '2026-06-30',
+    preset: 'currentMonth',
+  },
+  summary: {
+    totalUsageCount: 8,
+    succeededCount: 6,
+    failedCount: 1,
+    rejectedCount: 1,
+    successRate: 75,
+    aiServiceUnitsUsed: 12,
+    provider: 'provider_should_not_render',
+    model: 'model_should_not_render',
+    totalTokens: 99999,
+    prompt: 'prompt_should_not_render',
+    rawResponse: 'raw_response_should_not_render',
+    metadata: { secret: 'metadata_should_not_render' },
+    meteringDetails: { cost: 'metering_should_not_render' },
+  },
+  trend: [
+    { date: '2026-06-28', usageCount: 3, aiServiceUnitsUsed: 4 },
+    { date: '2026-06-29', usageCount: 5, aiServiceUnitsUsed: 8 },
+  ],
+  serviceProjects: [
+    {
+      serviceCategory: 'ai_qa',
+      serviceName: 'AI 问答',
+      usageCount: 5,
+      succeededCount: 4,
+      failedCount: 1,
+      rejectedCount: 0,
+      successRate: 80,
+      aiServiceUnitsUsed: 8,
+      sharePercent: 66.7,
+      provider: 'deepseek_should_not_render',
+      model: 'deepseek-v4-should-not-render',
+      totalTokens: 8888,
+      answer: 'answer_should_not_render',
+    },
+    {
+      serviceCategory: 'unknown',
+      serviceName: '未归因服务',
+      usageCount: 3,
+      succeededCount: 2,
+      failedCount: 0,
+      rejectedCount: 1,
+      successRate: 66.7,
+      aiServiceUnitsUsed: 4,
+      sharePercent: 33.3,
+    },
+  ],
+  quota: {
+    isLinked: false,
+    remaining: 999,
+  },
+  notes: ['只展示机构端低敏服务使用统计，不展示内部模型或成本信息。'],
+};
+
 const hisConnectionRecord = {
   connectionId: 'his_conn_active',
   connectionName: '星澜 HIS 只读连接',
@@ -1323,6 +1385,11 @@ type WorkspaceFetchOptions = {
     status: number;
     message: string;
   };
+  aiServiceUsage?: unknown;
+  aiServiceUsageError?: {
+    status: number;
+    message: string;
+  };
   hisConnections?: unknown[];
   hisConnectionDetails?: Record<string, unknown>;
   hisConnectionListError?: {
@@ -1410,6 +1477,8 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
     auditEvents = [auditEventRecord],
     followUpPathAnalysis = followUpPathAnalysisRecord,
     followUpPathAnalysisError,
+    aiServiceUsage = aiServiceUsageResponse,
+    aiServiceUsageError,
     hisConnections = [hisConnectionRecord, draftHisConnectionRecord],
     hisConnectionDetails,
     hisConnectionListError,
@@ -1541,6 +1610,17 @@ function mockWorkspaceFetch(options: WorkspaceFetchOptions = {}) {
         }
 
         return jsonResponse(followUpPathAnalysis);
+      }
+
+      if (path.startsWith('/api/institution/ai-service-usage')) {
+        if (aiServiceUsageError) {
+          return jsonResponse(
+            { error: aiServiceUsageError.message },
+            { status: aiServiceUsageError.status },
+          );
+        }
+
+        return jsonResponse(aiServiceUsage);
       }
 
       if (path === '/api/institution/his-connections') {
@@ -4050,7 +4130,10 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByRole('button', { name: '客服工作台' }));
     expect(screen.getByText('客服工作台暂不进入本次开发主线')).toBeInTheDocument();
     expect(
-      screen.getByText('本次主线：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志、HIS 连接配置、知识库只读列表。'),
+      screen.getByText((content) =>
+        content.includes('本次主线：工作台、客户中心、预约中心、智能随访、AI 服务使用、治疗摘要管理')
+        && content.includes('HIS 连接配置、知识库只读列表。'),
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText('后续：客服工作台、数据分析。')).toBeInTheDocument();
 
@@ -4090,6 +4173,96 @@ describe('工作台入口页面', () => {
     expect(screen.getByRole('heading', { name: '审计日志' })).toBeInTheDocument();
     expect(await screen.findByText('audit_phase8_institution')).toBeInTheDocument();
     expectOnlyInstitutionReadCalls(fetchMock);
+  });
+
+  it('机构端导航进入 AI 服务使用后展示低敏只读指标、趋势和服务项目排行', async () => {
+    const fetchMock = mockWorkspaceFetch();
+    const { container } = render(<HospitalPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 服务使用' }));
+
+    expect(await screen.findByRole('heading', { name: 'AI 服务使用' })).toBeInTheDocument();
+    expect(screen.getByText('AI 服务使用次数')).toBeInTheDocument();
+    expect(screen.getByText('AI 服务额度使用量')).toBeInTheDocument();
+    expect(screen.getAllByText('成功率').length).toBeGreaterThan(0);
+    expect(screen.getByText('未完成调用')).toBeInTheDocument();
+    expect(screen.getByText('套餐额度暂未接入')).toBeInTheDocument();
+    expect(screen.getByText('服务项目排行')).toBeInTheDocument();
+    expect(screen.getByText('AI 问答')).toBeInTheDocument();
+    expect(screen.getByText('未归因服务')).toBeInTheDocument();
+    expect(screen.getByText('06-29')).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes('5 次') && content.includes('额度 8')),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('12').length).toBeGreaterThan(0);
+
+    const aiUsageCalls = fetchMock.mock.calls.filter(([input]) =>
+      fetchPath(input).startsWith('/api/institution/ai-service-usage'),
+    );
+    expect(aiUsageCalls.length).toBeGreaterThan(0);
+    for (const [input, init] of aiUsageCalls) {
+      expect(fetchPath(input)).not.toContain('tenantId');
+      expect(init?.method ?? 'GET').toBe('GET');
+      expect(init?.body).toBeUndefined();
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: '近 7 天' }));
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          fetchPath(input) === '/api/institution/ai-service-usage?preset=last7days',
+        ),
+      ).toBe(true);
+    });
+
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/provider_should_not_render|model_should_not_render|deepseek_should_not_render|deepseek-v4-should-not-render|Token|totalTokens|prompt_should_not_render|answer_should_not_render|raw_response_should_not_render|metadata_should_not_render|metering_should_not_render|RMB|¥|真实成本|客户姓名|手机号|身份证|病历详情|治疗摘要原文|随访建议原文/i);
+  });
+
+  it('机构端 AI 服务使用展示空状态和额度未接入提示', async () => {
+    mockWorkspaceFetch({
+      aiServiceUsage: {
+        ...aiServiceUsageResponse,
+        summary: {
+          totalUsageCount: 0,
+          succeededCount: 0,
+          failedCount: 0,
+          rejectedCount: 0,
+          successRate: 0,
+          aiServiceUnitsUsed: 0,
+        },
+        trend: [],
+        serviceProjects: [],
+        quota: { isLinked: false },
+      },
+    });
+    render(<HospitalPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 服务使用' }));
+
+    expect(await screen.findByText('暂无 AI 服务使用记录')).toBeInTheDocument();
+    expect(screen.getByText('本月暂无使用记录')).toBeInTheDocument();
+    expect(screen.getByText('套餐额度暂未接入')).toBeInTheDocument();
+  });
+
+  it('机构端 AI 服务使用 API 失败时展示低敏错误态', async () => {
+    const fetchMock = mockWorkspaceFetch({
+      aiServiceUsageError: {
+        status: 503,
+        message: 'DATABASE_URL postgres://secret stack token provider rawResponse',
+      },
+    });
+    const { container } = render(<HospitalPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 服务使用' }));
+
+    expect(await screen.findByText('AI 服务使用数据暂时不可用')).toBeInTheDocument();
+    expect(container.textContent ?? '').not.toMatch(/DATABASE_URL|postgres:\/\/|stack|token|provider|rawResponse/i);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        fetchPath(input).startsWith('/api/institution/ai-service-usage'),
+      ),
+    ).toBe(true);
   });
 
   it('机构入口 smoke 覆盖 HIS 连接配置只读入口、安全摘要和敏感字段边界', async () => {

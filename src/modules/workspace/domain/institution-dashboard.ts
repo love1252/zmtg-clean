@@ -4,6 +4,7 @@ import {
   BookOpen,
   CalendarCheck,
   ClipboardList,
+  Gauge,
   FileSearch,
   LayoutDashboard,
   MessageCircle,
@@ -24,6 +25,7 @@ export type InstitutionViewId =
   | 'dashboard'
   | 'customers'
   | 'followups'
+  | 'aiServiceUsage'
   | 'treatmentSummaries'
   | 'audit'
   | 'hisConnections'
@@ -37,6 +39,7 @@ export const institutionNavItems: InstitutionNavItem[] = [
   { id: 'dashboard', label: '工作台', icon: LayoutDashboard, active: true },
   { id: 'customers', label: '客户中心', icon: Users },
   { id: 'followups', label: '智能随访', icon: Workflow },
+  { id: 'aiServiceUsage', label: 'AI 服务使用', icon: Gauge },
   { id: 'treatmentSummaries', label: '治疗摘要管理', icon: ClipboardList },
   { id: 'opportunities', label: '机会池', icon: Target },
   { id: 'audit', label: '审计日志', icon: FileSearch },
