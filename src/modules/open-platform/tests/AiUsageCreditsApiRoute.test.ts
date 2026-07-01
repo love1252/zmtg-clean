@@ -110,6 +110,21 @@ const responsePayload = {
       totalTokens: 200,
       totalAiCreditsConsumed: 2,
     }],
+    byServiceProject: [{
+      serviceCategory: 'knowledge_base_qa',
+      serviceName: '知识库问答',
+      serviceSource: 'institution_ai_call',
+      serviceAction: 'rag_answer',
+      serviceVersion: 'v06-service-metering-1',
+      totalCalls: 2,
+      succeededCalls: 1,
+      failedCalls: 1,
+      meteredCalls: 1,
+      pendingCalls: 0,
+      notBillableCalls: 1,
+      totalTokens: 200,
+      totalAiCreditsConsumed: 2,
+    }],
   },
   filterOptions: {
     providers: [{
@@ -263,6 +278,20 @@ describe('平台端 AI usage credits API', () => {
       model: 'deepseek-v4-flash',
       modelDisplayName: 'DeepSeek V4 Flash',
       totalCalls: 2,
+      totalTokens: 200,
+      totalAiCreditsConsumed: 2,
+    });
+    expect((body.aggregations as Record<string, unknown[]>).byServiceProject[0]).toMatchObject({
+      serviceCategory: 'knowledge_base_qa',
+      serviceName: '知识库问答',
+      serviceSource: 'institution_ai_call',
+      serviceAction: 'rag_answer',
+      serviceVersion: 'v06-service-metering-1',
+      totalCalls: 2,
+      succeededCalls: 1,
+      failedCalls: 1,
+      meteredCalls: 1,
+      notBillableCalls: 1,
       totalTokens: 200,
       totalAiCreditsConsumed: 2,
     });

@@ -68,6 +68,22 @@ export type PlatformAiUsageCreditsByDateProviderModelDto = {
   totalAiCreditsConsumed: number;
 };
 
+export type PlatformAiUsageCreditsByServiceProjectDto = {
+  serviceCategory: string;
+  serviceName: string | null;
+  serviceSource: string | null;
+  serviceAction: string | null;
+  serviceVersion: string | null;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
+  meteredCalls: number;
+  pendingCalls: number;
+  notBillableCalls: number;
+  totalTokens: number;
+  totalAiCreditsConsumed: number;
+};
+
 export type PlatformAiUsageCreditsAggregationsDto = {
   byModel: PlatformAiUsageCreditsByModelDto[];
   byTenant: PlatformAiUsageCreditsByTenantDto[];
@@ -75,6 +91,7 @@ export type PlatformAiUsageCreditsAggregationsDto = {
   byDate: PlatformAiUsageCreditsByDateDto[];
   byDateProvider: PlatformAiUsageCreditsByDateProviderDto[];
   byDateProviderModel: PlatformAiUsageCreditsByDateProviderModelDto[];
+  byServiceProject?: PlatformAiUsageCreditsByServiceProjectDto[];
 };
 
 export type PlatformAiUsageCreditDetailDto = {

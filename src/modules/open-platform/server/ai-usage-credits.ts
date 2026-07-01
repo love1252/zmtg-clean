@@ -74,6 +74,22 @@ export type PlatformAiUsageCreditsByDateProviderModelDto = {
   totalAiCreditsConsumed: number;
 };
 
+export type PlatformAiUsageCreditsByServiceProjectDto = {
+  serviceCategory: string;
+  serviceName: string | null;
+  serviceSource: string | null;
+  serviceAction: string | null;
+  serviceVersion: string | null;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
+  meteredCalls: number;
+  pendingCalls: number;
+  notBillableCalls: number;
+  totalTokens: number;
+  totalAiCreditsConsumed: number;
+};
+
 export type PlatformAiUsageCreditsAggregationsDto = {
   byModel: PlatformAiUsageCreditsByModelDto[];
   byTenant: PlatformAiUsageCreditsByTenantDto[];
@@ -81,6 +97,7 @@ export type PlatformAiUsageCreditsAggregationsDto = {
   byDate: PlatformAiUsageCreditsByDateDto[];
   byDateProvider: PlatformAiUsageCreditsByDateProviderDto[];
   byDateProviderModel: PlatformAiUsageCreditsByDateProviderModelDto[];
+  byServiceProject: PlatformAiUsageCreditsByServiceProjectDto[];
 };
 
 export type PlatformAiUsageCreditDetailDto = {
@@ -253,6 +270,22 @@ type AiUsageCreditByDateProviderModelRow = {
   totalCalls: number;
   succeededCalls: number;
   failedCalls: number;
+  totalTokens: number | null;
+  totalAiCreditsConsumed: number | null;
+};
+
+type AiUsageCreditByServiceProjectRow = {
+  serviceCategory: string | null;
+  serviceName: string | null;
+  serviceSource: string | null;
+  serviceAction: string | null;
+  serviceVersion: string | null;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
+  meteredCalls: number;
+  pendingCalls: number;
+  notBillableCalls: number;
   totalTokens: number | null;
   totalAiCreditsConsumed: number | null;
 };
@@ -530,6 +563,34 @@ function mapDateProviderModelAggregationRow(row: AiUsageCreditByDateProviderMode
   };
 }
 
+function normalizeServiceProjectCategory(value: string | null) {
+  const normalized = value?.trim();
+  return normalized || 'unknown';
+}
+
+function normalizeServiceProjectText(value: string | null) {
+  const normalized = value?.trim();
+  return normalized || null;
+}
+
+function mapServiceProjectAggregationRow(row: AiUsageCreditByServiceProjectRow): PlatformAiUsageCreditsByServiceProjectDto {
+  return {
+    serviceCategory: normalizeServiceProjectCategory(row.serviceCategory),
+    serviceName: normalizeServiceProjectText(row.serviceName),
+    serviceSource: normalizeServiceProjectText(row.serviceSource),
+    serviceAction: normalizeServiceProjectText(row.serviceAction),
+    serviceVersion: normalizeServiceProjectText(row.serviceVersion),
+    totalCalls: row.totalCalls ?? 0,
+    succeededCalls: row.succeededCalls ?? 0,
+    failedCalls: row.failedCalls ?? 0,
+    meteredCalls: row.meteredCalls ?? 0,
+    pendingCalls: row.pendingCalls ?? 0,
+    notBillableCalls: row.notBillableCalls ?? 0,
+    totalTokens: row.totalTokens ?? 0,
+    totalAiCreditsConsumed: row.totalAiCreditsConsumed ?? 0,
+  };
+}
+
 function normalizeFilterOptionValue(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized || 'unknown';
@@ -801,6 +862,11 @@ export function createPlatformAiUsageCreditsRepository(database: TenantDatabase)
     async aggregateUsageCredits(filters: NormalizedPlatformAiUsageCreditsFilters): Promise<PlatformAiUsageCreditsAggregationsDto> {
       const conditions = buildConditions(filters);
       const dateExpression = sql<string>`to_char(${aiCallUsageRecords.createdAt}, 'YYYY-MM-DD')`;
+      const serviceCategoryExpression = sql<string>`coalesce(nullif(${aiCallUsageRecords.serviceCategory}, ''), 'unknown')`;
+      const serviceNameExpression = sql<string | null>`nullif(${aiCallUsageRecords.serviceName}, '')`;
+      const serviceSourceExpression = sql<string | null>`nullif(${aiCallUsageRecords.serviceSource}, '')`;
+      const serviceActionExpression = sql<string | null>`nullif(${aiCallUsageRecords.serviceAction}, '')`;
+      const serviceVersionExpression = sql<string | null>`nullif(${aiCallUsageRecords.serviceVersion}, '')`;
 
       const byModelQuery = database
         .select({
@@ -878,7 +944,34 @@ export function createPlatformAiUsageCreditsRepository(database: TenantDatabase)
         .from(aiCallUsageRecords)
         .$dynamic();
 
-      const [byModelRows, byTenantRows, byMeteringStatusRows, byDateRows, byDateProviderRows, byDateProviderModelRows] = await Promise.all([
+      const byServiceProjectQuery = database
+        .select({
+          serviceCategory: serviceCategoryExpression,
+          serviceName: serviceNameExpression,
+          serviceSource: serviceSourceExpression,
+          serviceAction: serviceActionExpression,
+          serviceVersion: serviceVersionExpression,
+          totalCalls: sql<number>`count(*)::int`,
+          succeededCalls: sql<number>`count(case when ${aiCallUsageRecords.status} = 'succeeded' then 1 end)::int`,
+          failedCalls: sql<number>`count(case when ${aiCallUsageRecords.status} != 'succeeded' then 1 end)::int`,
+          meteredCalls: sql<number>`count(case when ${aiCallUsageRecords.meteringStatus} = 'metered' then 1 end)::int`,
+          pendingCalls: sql<number>`count(case when ${aiCallUsageRecords.meteringStatus} = 'pending' then 1 end)::int`,
+          notBillableCalls: sql<number>`count(case when ${aiCallUsageRecords.meteringStatus} = 'not_billable' then 1 end)::int`,
+          totalTokens: sql<number | null>`coalesce(sum(${aiCallUsageRecords.totalTokens}), 0)::int`,
+          totalAiCreditsConsumed: sql<number | null>`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)::int`,
+        })
+        .from(aiCallUsageRecords)
+        .$dynamic();
+
+      const [
+        byModelRows,
+        byTenantRows,
+        byMeteringStatusRows,
+        byDateRows,
+        byDateProviderRows,
+        byDateProviderModelRows,
+        byServiceProjectRows,
+      ] = await Promise.all([
         withConditions(byModelQuery, conditions)
           .groupBy(aiCallUsageRecords.provider, aiCallUsageRecords.model)
           .orderBy(desc(sql`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)`), desc(sql`count(*)`))
@@ -900,6 +993,10 @@ export function createPlatformAiUsageCreditsRepository(database: TenantDatabase)
         withConditions(byDateProviderModelQuery, conditions)
           .groupBy(dateExpression, aiCallUsageRecords.provider, aiCallUsageRecords.model)
           .orderBy(asc(dateExpression), desc(sql`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)`), desc(sql`count(*)`)),
+        withConditions(byServiceProjectQuery, conditions)
+          .groupBy(serviceCategoryExpression, serviceNameExpression, serviceSourceExpression, serviceActionExpression, serviceVersionExpression)
+          .orderBy(desc(sql`coalesce(sum(${aiCallUsageRecords.aiCreditsConsumed}), 0)`), desc(sql`count(*)`))
+          .limit(20),
       ]);
 
       const byMeteringStatus = new Map<string, PlatformAiUsageCreditsByMeteringStatusDto>();
@@ -921,6 +1018,7 @@ export function createPlatformAiUsageCreditsRepository(database: TenantDatabase)
         byDate: (byDateRows as AiUsageCreditByDateRow[]).map(mapDateAggregationRow),
         byDateProvider: (byDateProviderRows as AiUsageCreditByDateProviderRow[]).map(mapDateProviderAggregationRow),
         byDateProviderModel: (byDateProviderModelRows as AiUsageCreditByDateProviderModelRow[]).map(mapDateProviderModelAggregationRow),
+        byServiceProject: (byServiceProjectRows as AiUsageCreditByServiceProjectRow[]).map(mapServiceProjectAggregationRow),
       };
     },
   };
