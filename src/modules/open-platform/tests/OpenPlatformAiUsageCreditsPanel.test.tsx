@@ -141,6 +141,44 @@ function usagePayload(records: unknown[] = [usageRecord]) {
           totalAiCreditsConsumed: 4,
         },
       ] : [],
+      byDateProviderModel: hasRecords ? [
+        {
+          date: '2026-06-29',
+          provider: 'deepseek',
+          providerDisplayName: 'DeepSeek',
+          model: 'deepseek-v4-flash',
+          modelDisplayName: 'DeepSeek V4 Flash',
+          totalCalls: 1,
+          succeededCalls: 1,
+          failedCalls: 0,
+          totalTokens: 200,
+          totalAiCreditsConsumed: 2,
+        },
+        {
+          date: '2026-06-30',
+          provider: 'deepseek',
+          providerDisplayName: 'DeepSeek',
+          model: 'deepseek-v4-flash',
+          modelDisplayName: 'DeepSeek V4 Flash',
+          totalCalls: 3,
+          succeededCalls: 2,
+          failedCalls: 1,
+          totalTokens: 600,
+          totalAiCreditsConsumed: 6,
+        },
+        {
+          date: '2026-06-30',
+          provider: 'moonshot',
+          providerDisplayName: 'Kimi',
+          model: 'moonshot-v1-8k',
+          modelDisplayName: 'Kimi 8K',
+          totalCalls: 2,
+          succeededCalls: 2,
+          failedCalls: 0,
+          totalTokens: 300,
+          totalAiCreditsConsumed: 4,
+        },
+      ] : [],
     },
     filterOptions: {
       providers: [
@@ -496,7 +534,7 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expect(screen.getByText('按日期查看 AI 用量趋势')).toBeInTheDocument();
     expect(screen.getByText('X 轴为日期，Y 轴为当前指标；柱体按厂商稳定分色堆叠，点击厂商分段可联动筛选。')).toBeInTheDocument();
     expect(screen.getByText('Y 轴：调用次数')).toBeInTheDocument();
-    expect(screen.getByText('06-29')).toBeInTheDocument();
+    expect(screen.getAllByText('06-29').length).toBeGreaterThan(0);
     expect(screen.getAllByText('06-30').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '筛选趋势图厂商 DeepSeek' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '筛选趋势图厂商 Kimi' })).toBeInTheDocument();
@@ -520,6 +558,31 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
     expectNoSensitiveContent(container);
   });
 
+  it('单日模型消耗构成默认选中高积分日期并支持点击趋势日期切换', async () => {
+    mockUsageFetch();
+    const { container } = render(<OpenPlatformAiReadonlyPanel />);
+
+    expect(await screen.findByRole('heading', { name: '单日模型消耗构成' })).toBeInTheDocument();
+    const composition = screen.getByRole('heading', { name: '单日模型消耗构成' }).closest('section');
+    expect(composition).not.toBeNull();
+    const compositionScope = within(composition as HTMLElement);
+
+    expect(compositionScope.getByText('当前日期：')).toBeInTheDocument();
+    expect(compositionScope.getByText('2026/06/30')).toBeInTheDocument();
+    expect(compositionScope.getByText('DeepSeek V4 Flash')).toBeInTheDocument();
+    expect(compositionScope.getByText('Kimi 8K')).toBeInTheDocument();
+    expect(compositionScope.getAllByText(/AI 积分|积分/).length).toBeGreaterThan(0);
+    expect(compositionScope.getByText('占比 60.0%')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '选择日期 2026-06-29' }));
+
+    expect(compositionScope.getByText('2026/06/29')).toBeInTheDocument();
+    expect(compositionScope.getByText('DeepSeek V4 Flash')).toBeInTheDocument();
+    expect(compositionScope.queryByText('Kimi 8K')).not.toBeInTheDocument();
+    expect(container.textContent ?? '').not.toMatch(/¥|RMB|人民币金额|真实成本/u);
+    expectNoSensitiveContent(container);
+  });
+
   it('全局时间范围变化后日期趋势图同步使用最新聚合数据', async () => {
     const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
       const path = fetchPath(input);
@@ -534,6 +597,18 @@ describe('OpenPlatformAiReadonlyPanel AI usage credits details', () => {
               provider: 'moonshot',
               providerDisplayName: 'Kimi',
               totalCalls: 5,
+              totalTokens: 900,
+              totalAiCreditsConsumed: 8,
+            }],
+            byDateProviderModel: [{
+              date: '2026-06-22',
+              provider: 'moonshot',
+              providerDisplayName: 'Kimi',
+              model: 'moonshot-v1-8k',
+              modelDisplayName: 'Kimi 8K',
+              totalCalls: 5,
+              succeededCalls: 5,
+              failedCalls: 0,
               totalTokens: 900,
               totalAiCreditsConsumed: 8,
             }],

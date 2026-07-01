@@ -8,6 +8,7 @@ import {
   type OpenPlatformAiUsageCreditsFilters,
   type OpenPlatformAiUsageCreditsResponse,
   type PlatformAiUsageCreditsByDateProviderDto,
+  type PlatformAiUsageCreditsByDateProviderModelDto,
   type PlatformAiUsageCreditsByMeteringStatusDto,
   type PlatformAiUsageCreditsByModelDto,
   type PlatformAiUsageCreditsByTenantDto,
@@ -117,6 +118,7 @@ const emptyData: OpenPlatformAiUsageCreditsResponse = {
     byMeteringStatus: [],
     byDate: [],
     byDateProvider: [],
+    byDateProviderModel: [],
   },
   filterOptions: {
     providers: [],
@@ -353,6 +355,19 @@ type ProviderModelUsageStat = {
   }>;
 };
 
+type DailyProviderModelStat = {
+  date: string;
+  provider: string;
+  providerOption: SearchableFilterOption;
+  model: string;
+  modelOption: SearchableFilterOption;
+  totalCalls: number;
+  succeededCalls: number;
+  failedCalls: number;
+  totalTokens: number;
+  totalAiCreditsConsumed: number;
+};
+
 const usageStatsMetrics: Array<{ key: UsageStatsMetric; label: string; shortLabel: string }> = [
   { key: 'calls', label: '调用次数', shortLabel: '调用' },
   { key: 'tokens', label: 'Token 总量', shortLabel: 'Token' },
@@ -428,6 +443,16 @@ function fallbackModelOption(row: Pick<PlatformAiUsageCreditsByModelDto, 'provid
     logoText: row.provider.slice(0, 1).toUpperCase(),
     logoClassName: 'bg-slate-500',
     keywords: [row.model, row.provider, '历史值'],
+  };
+}
+
+function modelOptionForRow(
+  row: Pick<PlatformAiUsageCreditsByDateProviderModelDto, 'provider' | 'model' | 'modelDisplayName'>,
+  modelOptions: SearchableFilterOption[],
+) {
+  return modelOptions.find((option) => option.value === row.model && option.keywords.includes(row.provider)) ?? {
+    ...fallbackModelOption(row),
+    title: row.modelDisplayName ?? row.model,
   };
 }
 
@@ -973,11 +998,151 @@ function AggregationCard(props: { title: string; description?: string; children:
   );
 }
 
+function defaultDailyCompositionDate(rows: PlatformAiUsageCreditsByDateProviderModelDto[]) {
+  const grouped = new Map<string, { date: string; totalCalls: number; totalAiCreditsConsumed: number }>();
+  rows.forEach((row) => {
+    const current = grouped.get(row.date) ?? { date: row.date, totalCalls: 0, totalAiCreditsConsumed: 0 };
+    current.totalCalls += row.totalCalls;
+    current.totalAiCreditsConsumed += row.totalAiCreditsConsumed;
+    grouped.set(row.date, current);
+  });
+
+  return Array.from(grouped.values()).sort((left, right) => (
+    right.totalAiCreditsConsumed - left.totalAiCreditsConsumed ||
+    right.totalCalls - left.totalCalls ||
+    right.date.localeCompare(left.date)
+  ))[0]?.date ?? '';
+}
+
+function DailyModelComposition(props: {
+  rows: PlatformAiUsageCreditsByDateProviderModelDto[];
+  selectedDate: string;
+  onSelectDate: (date: string) => void;
+  providerOptions: SearchableFilterOption[];
+  modelOptions: SearchableFilterOption[];
+}) {
+  const providersByCode = useMemo(() => (
+    new Map(props.providerOptions.map((option) => [option.value, option]))
+  ), [props.providerOptions]);
+  const dateOptions = useMemo(() => {
+    const grouped = new Map<string, { date: string; totalCalls: number; totalAiCreditsConsumed: number }>();
+    props.rows.forEach((row) => {
+      const current = grouped.get(row.date) ?? { date: row.date, totalCalls: 0, totalAiCreditsConsumed: 0 };
+      current.totalCalls += row.totalCalls;
+      current.totalAiCreditsConsumed += row.totalAiCreditsConsumed;
+      grouped.set(row.date, current);
+    });
+    return Array.from(grouped.values()).sort((left, right) => right.date.localeCompare(left.date));
+  }, [props.rows]);
+  const selectedDate = props.selectedDate || dateOptions[0]?.date || '';
+  const selectedRows = useMemo<DailyProviderModelStat[]>(() => (
+    props.rows
+      .filter((row) => row.date === selectedDate)
+      .map((row) => {
+        const providerOption = providersByCode.get(row.provider) ?? {
+          ...fallbackProviderOption(row.provider),
+          title: row.providerDisplayName ?? row.provider,
+        };
+        const modelOption = modelOptionForRow(row, props.modelOptions);
+        return {
+          date: row.date,
+          provider: row.provider,
+          providerOption,
+          model: row.model,
+          modelOption,
+          totalCalls: row.totalCalls,
+          succeededCalls: row.succeededCalls,
+          failedCalls: row.failedCalls,
+          totalTokens: row.totalTokens,
+          totalAiCreditsConsumed: row.totalAiCreditsConsumed,
+        };
+      })
+      .sort((left, right) => (
+        right.totalAiCreditsConsumed - left.totalAiCreditsConsumed ||
+        right.totalCalls - left.totalCalls ||
+        left.model.localeCompare(right.model)
+      ))
+  ), [props.modelOptions, props.rows, providersByCode, selectedDate]);
+  const totalCredits = Math.max(1, selectedRows.reduce((total, row) => total + row.totalAiCreditsConsumed, 0));
+  const maxCredits = Math.max(1, ...selectedRows.map((row) => row.totalAiCreditsConsumed));
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[#e6edf5] bg-white" aria-labelledby="single-day-model-composition-heading">
+      <div className="flex flex-col gap-3 border-b border-[#e6edf5] bg-[#f8fbff] px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h3 id="single-day-model-composition-heading" className="text-sm font-semibold text-[#1f2937]">单日模型消耗构成</h3>
+          <p className="mt-1 text-xs leading-5 text-[#64748b]">按选中日期展示模型消耗排行；当前以 AI 积分替代费用指标，真实账单结算后置。</p>
+        </div>
+        {dateOptions.length > 0 ? (
+          <div className="flex flex-wrap gap-2" aria-label="单日模型消耗日期选择">
+            {dateOptions.map((day) => (
+              <button
+                key={day.date}
+                type="button"
+                onClick={() => props.onSelectDate(day.date)}
+                className={cn(
+                  'h-8 rounded-full border px-3 text-xs font-semibold transition',
+                  selectedDate === day.date
+                    ? 'border-[#2563eb] bg-[#2563eb] text-white'
+                    : 'border-[#dbe3ee] bg-white text-[#64748b] hover:bg-[#f1f5f9]',
+                )}
+                aria-pressed={selectedDate === day.date}
+              >
+                {formatShortMonthDay(day.date)}
+                <span className="ml-1 opacity-80">积分 {formatNumber(day.totalAiCreditsConsumed)}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      {selectedRows.length === 0 ? (
+        <div className="px-4 py-8 text-center text-sm text-[#64748b]">暂无单日模型消耗构成数据</div>
+      ) : (
+        <div className="grid gap-3 p-4">
+          <div className="text-xs font-semibold text-[#64748b]">
+            当前日期：<span className="text-[#1f2937]">{formatDateOnly(selectedDate)}</span>
+          </div>
+          <div className="grid gap-2">
+            {selectedRows.map((row) => (
+              <article key={`${row.date}:${row.provider}:${row.model}`} className="rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex min-w-0 items-start gap-3">
+                    {optionLogo(row.providerOption, 'h-9 w-9 text-sm')}
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-[#1f2937]">{row.modelOption.title}</span>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-[#64748b]">{row.providerOption.title}</span>
+                      </div>
+                      <div className="mt-1 break-all text-xs text-[#94a3b8]">{row.provider} · {row.model}</div>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 text-xs font-semibold text-[#64748b] sm:grid-cols-5">
+                    <span className="rounded-xl bg-white px-3 py-2">调用 {formatNumber(row.totalCalls)}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">Token {formatNumber(row.totalTokens)}</span>
+                    <span className="rounded-xl bg-white px-3 py-2 text-[#2563eb]">积分 {formatNumber(row.totalAiCreditsConsumed)}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">成功率 {successRateFromCalls(row.succeededCalls, row.failedCalls)}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">占比 {formatPercent(row.totalAiCreditsConsumed, totalCredits)}</span>
+                  </div>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e2e8f0]" aria-label={`${row.modelOption.title} AI 积分占比`}>
+                  <div className="h-full rounded-full" style={{ width: `${Math.max(4, (row.totalAiCreditsConsumed / maxCredits) * 100)}%`, backgroundColor: providerColor(row.provider) }} />
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function DateTrendChart(props: {
   rows: PlatformAiUsageCreditsByDateProviderDto[];
   metric: UsageStatsMetric;
   onMetricChange: (metric: UsageStatsMetric) => void;
   onSelectProvider: (provider: string) => void;
+  onSelectDate: (date: string) => void;
 }) {
   const metricOption = usageStatsMetrics.find((metric) => metric.key === props.metric) ?? usageStatsMetrics[0];
   const days = useMemo(() => {
@@ -1084,7 +1249,10 @@ function DateTrendChart(props: {
                               <button
                                 key={`${day.date}:${segment.provider}`}
                                 type="button"
-                                onClick={() => props.onSelectProvider(segment.provider)}
+                                onClick={() => {
+                                  props.onSelectDate(day.date);
+                                  props.onSelectProvider(segment.provider);
+                                }}
                                 title={title}
                                 aria-label={title}
                                 className="min-h-[6px] w-full border-t border-white/60 transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[#1d4ed8] focus:ring-offset-1"
@@ -1094,7 +1262,15 @@ function DateTrendChart(props: {
                           })}
                         </div>
                       </div>
-                      <span className="w-full truncate text-center text-[11px] font-semibold text-[#64748b]" title={day.date}>{day.date.slice(5)}</span>
+                      <button
+                        type="button"
+                        onClick={() => props.onSelectDate(day.date)}
+                        className="w-full truncate rounded-md text-center text-[11px] font-semibold text-[#64748b] transition hover:bg-white hover:text-[#2563eb] focus:outline-none focus:ring-2 focus:ring-[#bfdbfe]"
+                        title={day.date}
+                        aria-label={`选择日期 ${day.date}`}
+                      >
+                        {day.date.slice(5)}
+                      </button>
                       <span className="text-[11px] font-semibold text-[#1f2937]">{formatNumber(day.total)}</span>
                     </div>
                   ))}
@@ -1168,6 +1344,7 @@ export function OpenPlatformAiReadonlyPanel() {
   const [usageStatsMetric, setUsageStatsMetric] = useState<UsageStatsMetric>('calls');
   const [dateTrendMetric, setDateTrendMetric] = useState<UsageStatsMetric>('calls');
   const [activeTab, setActiveTab] = useState<AiUsageTab>('overview');
+  const [selectedDailyDate, setSelectedDailyDate] = useState('');
 
   async function loadUsage(nextFilters: FilterFormState) {
     const result = await listOpenPlatformAiUsageCredits(toApiFilters(nextFilters));
@@ -1289,6 +1466,13 @@ export function OpenPlatformAiReadonlyPanel() {
   const totalTokens = totalTokensFromAggregations(data);
   const successRate = successRateFromCalls(summary.succeededCalls, summary.failedCalls);
   const peakDay = peakDayFromDateProviders(data.aggregations.byDateProvider);
+  const defaultDailyDate = useMemo(
+    () => defaultDailyCompositionDate(data.aggregations.byDateProviderModel),
+    [data.aggregations.byDateProviderModel],
+  );
+  const activeDailyDate = selectedDailyDate && data.aggregations.byDateProviderModel.some((row) => row.date === selectedDailyDate)
+    ? selectedDailyDate
+    : defaultDailyDate;
   const peakDayLabel = peakDay ? formatShortMonthDay(peakDay.date) : '暂无峰值日';
   const peakDayHelper = peakDay
     ? `${formatDateOnly(peakDay.date)} · AI 积分 ${formatNumber(peakDay.totalAiCreditsConsumed)} · 调用 ${formatNumber(peakDay.totalCalls)}`
@@ -1316,6 +1500,7 @@ export function OpenPlatformAiReadonlyPanel() {
       totalAiCreditsConsumed={summary.totalAiCreditsConsumed}
     />
   );
+
   const timeRangeFilter = (
     <section className="mt-4 rounded-2xl border border-[#e6edf5] bg-[#f8fafc] p-3" aria-labelledby="ai-usage-time-range-heading">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -1545,14 +1730,18 @@ export function OpenPlatformAiReadonlyPanel() {
                       metric={dateTrendMetric}
                       onMetricChange={setDateTrendMetric}
                       onSelectProvider={selectProviderFilter}
+                      onSelectDate={setSelectedDailyDate}
                     />
                   </AggregationCard>
                 </div>
 
-                <section className="rounded-2xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] p-4" aria-labelledby="single-day-model-composition-heading">
-                  <h3 id="single-day-model-composition-heading" className="text-sm font-semibold text-[#1f2937]">单日模型消耗构成</h3>
-                  <p className="mt-1 text-xs leading-5 text-[#64748b]">当前 API 仅提供日期 × 厂商聚合，暂不补造单日模型构成或费用数据；单日模型构成需后续单独任务确认口径。</p>
-                </section>
+                <DailyModelComposition
+                  rows={data.aggregations.byDateProviderModel}
+                  selectedDate={activeDailyDate}
+                  onSelectDate={setSelectedDailyDate}
+                  providerOptions={providerOptions}
+                  modelOptions={allModelOptions}
+                />
 
                 {providerModelStats}
               </div>

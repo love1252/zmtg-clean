@@ -99,6 +99,7 @@ describe('平台端 AI 模型与用量只读面板', () => {
         byMeteringStatus: [],
         byDate: [],
         byDateProvider: [],
+        byDateProviderModel: [],
       },
       filterOptions: {
         providers: [],
@@ -151,6 +152,7 @@ describe('平台端 AI 模型与用量只读面板', () => {
         byMeteringStatus: [],
         byDate: [],
         byDateProvider: [],
+        byDateProviderModel: [],
       },
       filterOptions: {
         providers: [],
