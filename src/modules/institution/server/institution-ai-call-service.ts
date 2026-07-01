@@ -245,6 +245,14 @@ const AI_QA_SERVICE_PROJECT = {
   serviceVersion: AI_CALL_SERVICE_PROJECT_VERSION,
 } as const satisfies AiCallUsageServiceProjectRecordFields;
 
+const AI_QA_QUOTA_REJECTED_SERVICE_PROJECT = {
+  serviceCategory: 'ai_qa',
+  serviceName: 'AI 问答',
+  serviceSource: 'institution_ai_call',
+  serviceAction: 'quota_rejected',
+  serviceVersion: AI_CALL_SERVICE_PROJECT_VERSION,
+} as const satisfies AiCallUsageServiceProjectRecordFields;
+
 const KNOWLEDGE_BASE_QA_SERVICE_PROJECT = {
   serviceCategory: 'knowledge_base_qa',
   serviceName: '知识库问答',
@@ -857,6 +865,7 @@ export async function recordAiCallQuotaRejection(input: {
     latencyMs: null,
     status: 'rejected',
     errorCode: 'quota_exceeded_ai_calls',
+    serviceProject: AI_QA_QUOTA_REJECTED_SERVICE_PROJECT,
   });
   return record;
 }
