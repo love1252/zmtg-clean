@@ -1658,6 +1658,55 @@ describe('数据库结构', () => {
     );
   });
 
+  it('V0.6 AI usage 服务项目 schema 只新增低敏 nullable 字段', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const aiCallUsageRecords = schemaModule.aiCallUsageRecords;
+    const migrationSql = readMigrationSql('v06_ai_usage_service_project_fields');
+    const journal = JSON.parse(readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8')) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+
+    expect(aiCallUsageRecords).toBeDefined();
+
+    const usageColumns = columnNames(getTableConfig(aiCallUsageRecords as never).columns);
+
+    expect(usageColumns).toEqual(
+      expect.arrayContaining([
+        'service_category',
+        'service_name',
+        'service_source',
+        'service_action',
+        'service_version',
+      ]),
+    );
+    expect(migrationSql).toContain(
+      'alter table "ai_call_usage_records" add column "service_category" varchar(64)',
+    );
+    expect(migrationSql).toContain(
+      'alter table "ai_call_usage_records" add column "service_name" varchar(128)',
+    );
+    expect(migrationSql).toContain(
+      'alter table "ai_call_usage_records" add column "service_source" varchar(96)',
+    );
+    expect(migrationSql).toContain(
+      'alter table "ai_call_usage_records" add column "service_action" varchar(96)',
+    );
+    expect(migrationSql).toContain(
+      'alter table "ai_call_usage_records" add column "service_version" varchar(64)',
+    );
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ idx: 26, tag: '0026_v06_ai_usage_service_project_fields' }),
+      ]),
+    );
+    expect(migrationSql).not.toMatch(/\bnot\s+null\b|\bdefault\b/i);
+    expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b|\brename\b/i);
+    expect(migrationSql).not.toMatch(/\bdelete\s+from\b|\binsert\s+into\b|(^|;)\s*update\s+/i);
+    expect(migrationSql).not.toMatch(
+      /api_key|apikey|encrypted_api_key|base_url|authorization|cookie|bearer|token\b|prompt\b|question\b|answer\b|raw_response|provider_raw_response|metadata|metering_details|signed_url|storage_key|secret|database_url/i,
+    );
+  });
+
   it('迁移包含租户客户一致性的复合外键', () => {
     const migrationSql = readMigrationSql();
 
