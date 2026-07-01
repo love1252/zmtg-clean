@@ -11,6 +11,7 @@ import {
   type PlatformAiUsageCreditsByDateProviderModelDto,
   type PlatformAiUsageCreditsByMeteringStatusDto,
   type PlatformAiUsageCreditsByModelDto,
+  type PlatformAiUsageCreditsByServiceProjectDto,
   type PlatformAiUsageCreditsByTenantDto,
   type PlatformAiUsageCreditDetailDto,
   type PlatformAiUsageCreditsFilterModelOptionDto,
@@ -333,7 +334,7 @@ type SearchableFilterOption = {
 };
 
 type UsageStatsMetric = 'calls' | 'tokens' | 'credits';
-type AiUsageTab = 'overview' | 'models' | 'tenants' | 'metering' | 'details';
+type AiUsageTab = 'overview' | 'models' | 'tenants' | 'serviceProjects' | 'metering' | 'details';
 
 type ProviderModelUsageStat = {
   provider: string;
@@ -380,6 +381,7 @@ const aiUsageTabs: Array<{ key: AiUsageTab; label: string }> = [
   { key: 'overview', label: '总览' },
   { key: 'models', label: '模型与厂商' },
   { key: 'tenants', label: '租户用量' },
+  { key: 'serviceProjects', label: '服务项目' },
   { key: 'metering', label: '计量状态' },
   { key: 'details', label: '明细记录' },
 ];
@@ -1059,6 +1061,136 @@ function TenantAggregationTable(props: {
   );
 }
 
+function nullableServiceText(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized || '—';
+}
+
+function ServiceProjectAggregation({ rows }: { rows: PlatformAiUsageCreditsByServiceProjectDto[] }) {
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-4 py-5 text-center text-sm text-[#64748b]">
+        暂无服务项目消耗数据
+      </div>
+    );
+  }
+
+  const rankedRows = [...rows].sort((left, right) => {
+    const creditsDelta = right.totalAiCreditsConsumed - left.totalAiCreditsConsumed;
+    if (creditsDelta !== 0) return creditsDelta;
+
+    const callsDelta = right.totalCalls - left.totalCalls;
+    if (callsDelta !== 0) return callsDelta;
+
+    const tokenDelta = right.totalTokens - left.totalTokens;
+    if (tokenDelta !== 0) return tokenDelta;
+
+    return left.serviceName.localeCompare(right.serviceName, 'zh-CN');
+  });
+
+  return (
+    <div className="grid gap-4 p-3">
+      <div className="grid gap-3 xl:grid-cols-2">
+        {rankedRows.map((row, index) => (
+          <article key={`${row.serviceCategory}:${row.serviceName}:${nullableServiceText(row.serviceSource)}:${nullableServiceText(row.serviceAction)}:${nullableServiceText(row.serviceVersion)}`} className="rounded-2xl border border-[#e6edf5] bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#2563eb] text-sm font-bold text-white">{index + 1}</span>
+                  <div className="min-w-0">
+                    <h4 className="truncate text-base font-semibold text-[#1f2937]">{row.serviceName}</h4>
+                    <p className="mt-0.5 truncate text-xs text-[#94a3b8]">{row.serviceCategory}</p>
+                  </div>
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full bg-[#eff6ff] px-2.5 py-1 text-xs font-semibold text-[#2563eb]">AI 积分 {formatNumber(row.totalAiCreditsConsumed)}</span>
+            </div>
+
+            <div className="mt-4 grid gap-2 text-xs font-semibold text-[#64748b] sm:grid-cols-2 xl:grid-cols-4">
+              <span className="rounded-xl bg-[#f8fafc] px-3 py-2">
+                <span className="block text-[#94a3b8]">调用次数</span>
+                <span className="mt-1 block text-sm text-[#1f2937]">调用 {formatNumber(row.totalCalls)}</span>
+              </span>
+              <span className="rounded-xl bg-[#f8fafc] px-3 py-2">
+                <span className="block text-[#94a3b8]">Token 总量</span>
+                <span className="mt-1 block text-sm text-[#1f2937]">Token {formatNumber(row.totalTokens)}</span>
+              </span>
+              <span className="rounded-xl bg-[#f8fafc] px-3 py-2">
+                <span className="block text-[#94a3b8]">AI 积分消耗</span>
+                <span className="mt-1 block text-sm text-[#2563eb]">AI 积分 {formatNumber(row.totalAiCreditsConsumed)}</span>
+              </span>
+              <span className="rounded-xl bg-[#f8fafc] px-3 py-2">
+                <span className="block text-[#94a3b8]">成功率</span>
+                <span className="mt-1 block text-sm text-[#1f2937]">成功率 {successRateFromCalls(row.succeededCalls, row.failedCalls)}</span>
+              </span>
+            </div>
+
+            <div className="mt-3 grid gap-2 text-xs text-[#64748b] sm:grid-cols-3">
+              <div className="rounded-xl bg-[#f8fafc] px-3 py-2">
+                <span className="block font-semibold text-[#94a3b8]">调用来源</span>
+                <span className="mt-1 block break-words text-[#1f2937]">{nullableServiceText(row.serviceSource)}</span>
+              </div>
+              <div className="rounded-xl bg-[#f8fafc] px-3 py-2">
+                <span className="block font-semibold text-[#94a3b8]">动作</span>
+                <span className="mt-1 block break-words text-[#1f2937]">{nullableServiceText(row.serviceAction)}</span>
+              </div>
+              <div className="rounded-xl bg-[#f8fafc] px-3 py-2">
+                <span className="block font-semibold text-[#94a3b8]">版本</span>
+                <span className="mt-1 block break-words text-[#1f2937]">{nullableServiceText(row.serviceVersion)}</span>
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+              <span className="rounded-full bg-[#eef6ff] px-2.5 py-1 text-[#2563eb]">已计量 {formatNumber(row.meteredCalls)}</span>
+              <span className="rounded-full bg-[#fff7ed] px-2.5 py-1 text-[#c2410c]">待计量 {formatNumber(row.pendingCalls)}</span>
+              <span className="rounded-full bg-[#f8fafc] px-2.5 py-1 text-[#64748b]">不计费 {formatNumber(row.notBillableCalls)}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-[#e6edf5]">
+        <table className="w-full min-w-[1120px] text-left text-sm" aria-label="服务项目消耗明细表">
+          <thead className="bg-[#f8fafc] text-xs font-semibold text-[#64748b]">
+            <tr>
+              <th className="px-3 py-2">服务项目</th>
+              <th className="px-3 py-2">服务分类</th>
+              <th className="px-3 py-2">调用来源</th>
+              <th className="px-3 py-2">动作</th>
+              <th className="px-3 py-2">版本</th>
+              <th className="px-3 py-2">调用次数</th>
+              <th className="px-3 py-2">成功率</th>
+              <th className="px-3 py-2">Token 总量</th>
+              <th className="px-3 py-2">AI 积分消耗</th>
+              <th className="px-3 py-2">已计量</th>
+              <th className="px-3 py-2">待计量</th>
+              <th className="px-3 py-2">不计费</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#e6edf5]">
+            {rankedRows.map((row) => (
+              <tr key={`${row.serviceCategory}:${row.serviceName}:${nullableServiceText(row.serviceSource)}:${nullableServiceText(row.serviceAction)}:${nullableServiceText(row.serviceVersion)}`}>
+                <td className="px-3 py-2 font-semibold text-[#1f2937]">{row.serviceName}</td>
+                <td className="px-3 py-2 text-[#64748b]">{row.serviceCategory}</td>
+                <td className="px-3 py-2 text-[#64748b]">{nullableServiceText(row.serviceSource)}</td>
+                <td className="px-3 py-2 text-[#64748b]">{nullableServiceText(row.serviceAction)}</td>
+                <td className="px-3 py-2 text-[#64748b]">{nullableServiceText(row.serviceVersion)}</td>
+                <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.totalCalls)}</td>
+                <td className="px-3 py-2 text-[#1f2937]">{successRateFromCalls(row.succeededCalls, row.failedCalls)}</td>
+                <td className="px-3 py-2 font-semibold text-[#1f2937]">{formatNumber(row.totalTokens)}</td>
+                <td className="px-3 py-2 font-semibold text-[#2563eb]">{formatNumber(row.totalAiCreditsConsumed)}</td>
+                <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.meteredCalls)}</td>
+                <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.pendingCalls)}</td>
+                <td className="px-3 py-2 text-[#1f2937]">{formatNumber(row.notBillableCalls)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function MeteringStatusAggregation({ rows }: { rows: PlatformAiUsageCreditsByMeteringStatusDto[] }) {
   if (rows.length === 0) return <EmptyAggregation label="计量状态统计" />;
 
@@ -1611,7 +1743,7 @@ export function OpenPlatformAiReadonlyPanel() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h3 id="ai-usage-time-range-heading" className="text-sm font-semibold text-[#1f2937]">全局时间范围</h3>
-          <p className="mt-1 text-xs leading-5 text-[#64748b]">时间范围作用于总览、模型与厂商、租户用量、计量状态和明细记录；返回条数仅影响明细记录。</p>
+          <p className="mt-1 text-xs leading-5 text-[#64748b]">时间范围作用于总览、模型与厂商、租户用量、服务项目、计量状态和明细记录；返回条数仅影响明细记录。</p>
         </div>
         <div className="flex flex-wrap gap-2" aria-label="全局时间范围筛选">
           {timeRangePresets.map((preset) => (
@@ -1868,6 +2000,12 @@ export function OpenPlatformAiReadonlyPanel() {
                   selectedTenantId={appliedFilters.tenantId}
                   onSelectTenant={selectTenantFilter}
                 />
+              </AggregationCard>
+            ) : null}
+
+            {activeTab === 'serviceProjects' ? (
+              <AggregationCard title="服务项目消耗排行" description="按服务项目低敏归因汇总调用、Token、AI 积分和计量状态；不展示原始问题、回答、费用金额或客户高敏信息。">
+                <ServiceProjectAggregation rows={data.aggregations.byServiceProject ?? []} />
               </AggregationCard>
             ) : null}
 
