@@ -25,6 +25,11 @@ function createMockUsageRecord(overrides: Partial<AiCallUsageRecord> = {}): AiCa
     meteringStatus: null,
     meteringVersion: null,
     meteringDetails: null,
+    serviceCategory: null,
+    serviceName: null,
+    serviceSource: null,
+    serviceAction: null,
+    serviceVersion: null,
     metadata: null,
     createdAt: new Date(),
     ...overrides,
@@ -87,8 +92,15 @@ describe('AI 真实调用与用量记录 service', () => {
     expect(result.record!.tenantId).toBe('t-001');
     expect(result.record!.institutionId).toBe('inst-001');
     expect(result.record!.serviceName).toBe('平台 AI 服务');
-    expect(JSON.stringify(result.record)).not.toMatch(/"provider"|"model"|"promptTokens"|"completionTokens"|"totalTokens"/);
+    expect(JSON.stringify(result.record)).not.toMatch(/"provider"|"model"|"promptTokens"|"completionTokens"|"totalTokens"|"serviceCategory"|"serviceSource"|"serviceAction"|"serviceVersion"/);
     expect(result.record!.status).toBe('succeeded');
+    expect(repository.createUsageRecord).toHaveBeenCalledWith(expect.objectContaining({
+      serviceCategory: 'ai_qa',
+      serviceName: 'AI 问答',
+      serviceSource: 'institution_ai_call',
+      serviceAction: 'direct_answer',
+      serviceVersion: 'v06-service-metering-1',
+    }));
   });
 
   it('未登录/无 tenantId 返回 validation_failed', async () => {
@@ -301,8 +313,14 @@ describe('AI 真实调用与用量记录 service', () => {
     expect(resultOther.records.length).toBe(0);
   });
 
-  it('机构端用量列表 DTO 不返回 provider/model/token 计量字段', async () => {
-    const records: AiCallUsageRecord[] = [createMockUsageRecord()];
+  it('机构端用量列表 DTO 不返回 provider/model/token/服务项目归因字段', async () => {
+    const records: AiCallUsageRecord[] = [createMockUsageRecord({
+      serviceCategory: 'ai_qa',
+      serviceName: 'AI 问答',
+      serviceSource: 'institution_ai_call',
+      serviceAction: 'direct_answer',
+      serviceVersion: 'v06-service-metering-1',
+    })];
     const repository = {
       findVendorConfig: vi.fn(),
       createUsageRecord: vi.fn(),
@@ -317,7 +335,7 @@ describe('AI 真实调用与用量记录 service', () => {
 
     expect(result.records).toHaveLength(1);
     expect(result.records[0].serviceName).toBe('平台 AI 服务');
-    expect(JSON.stringify(result.records[0])).not.toMatch(/"provider"|"model"|"promptTokens"|"completionTokens"|"totalTokens"/);
+    expect(JSON.stringify(result.records[0])).not.toMatch(/"provider"|"model"|"promptTokens"|"completionTokens"|"totalTokens"|"serviceCategory"|"serviceSource"|"serviceAction"|"serviceVersion"|AI 问答|institution_ai_call|direct_answer/);
   });
 
   it('身份证号输入被拒绝且不调用 provider', async () => {
@@ -484,6 +502,13 @@ describe('AI 真实调用与用量记录 service', () => {
     });
 
     expect(result.status).toBe('created');
+    expect(repository.createUsageRecord).toHaveBeenCalledWith(expect.objectContaining({
+      serviceCategory: 'knowledge_base_qa',
+      serviceName: '知识库问答',
+      serviceSource: 'institution_knowledge_qa',
+      serviceAction: 'rag_answer',
+      serviceVersion: 'v06-service-metering-1',
+    }));
     if (capturedBody) {
       const parsed = JSON.parse(capturedBody);
       const systemContent = parsed.messages.find((m: { role: string }) => m.role === 'system')?.content ?? '';
