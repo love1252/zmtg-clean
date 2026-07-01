@@ -1268,6 +1268,11 @@ export const aiCallUsageRecords = pgTable(
     meteringStatus: varchar('metering_status', { length: 32 }),
     meteringVersion: varchar('metering_version', { length: 64 }),
     meteringDetails: jsonb('metering_details').$type<JsonRecord>(),
+    serviceCategory: varchar('service_category', { length: 64 }),
+    serviceName: varchar('service_name', { length: 128 }),
+    serviceSource: varchar('service_source', { length: 96 }),
+    serviceAction: varchar('service_action', { length: 96 }),
+    serviceVersion: varchar('service_version', { length: 64 }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({

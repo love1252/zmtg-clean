@@ -183,6 +183,13 @@
       "when": 1782710961939,
       "tag": "0025_v06_ai_credits_metering_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1782720000000,
+      "tag": "0026_v06_ai_usage_service_project_fields",
+      "breakpoints": true
     }
   ]
 }
