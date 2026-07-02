@@ -738,3 +738,18 @@ quota: InstitutionAiServiceQuotaDto
 14. 不做额度告警。
 15. 不做导出。
 16. 不做接口开发。
+
+## 12. CONTRACT-02 实现说明
+
+`V0.6-PACKAGE-AI-QUOTA-CONTRACT-02` 仅落地 server-domain contract：
+
+1. 新增套餐权益 / AI 服务额度 domain type、低敏 DTO、mock fixture、纯 helper 和 mapper。
+2. 覆盖 `trial` / `basic` / `professional` 套餐示例。
+3. 覆盖 `unlinked` / `active` / `warning` / `overLimit` / `expired` quota 状态。
+4. 覆盖 AI 问答、知识库问答、智能随访和未归因服务的 service project quota attribution 示例。
+5. 机构端 mapper 仅输出 `AI 服务额度` 低敏视图，`unlinked` 稳定映射为 `套餐额度暂未接入`。
+6. 本阶段不新增真实 API route。
+7. 本阶段不改 DB / schema / migration。
+8. 本阶段不做真实额度扣减、额度告警或导出。
+9. 本阶段不执行 migration、db:seed 或任何数据写入。
+10. 后续 API route、机构端 UI 联动和测试服验收必须拆分为独立任务并单独授权。
