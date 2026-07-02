@@ -5,8 +5,10 @@ import { describe, expect, it } from 'vitest';
 import {
   calculatePackageAiQuotaRemaining,
   calculatePackageAiQuotaUsageRate,
+  INSTITUTION_AI_QUOTA_READONLY_FIELD_WHITELIST,
   PACKAGE_AI_QUOTA_FIXTURES,
   mapPlatformAiQuotaContractToInstitutionView,
+  mapRealPackageAiQuotaSourceToInstitutionReadonlyDto,
   resolvePackageAiQuotaWarningLevel,
 } from '@/modules/institution/domain/package-ai-quota-contract';
 
@@ -19,6 +21,7 @@ const sensitiveInstitutionPatterns = [
   /RMB/i,
   /¥/,
   /real.*cost/i,
+  /真实成本/,
   /prompt/i,
   /answer/i,
   /rawResponse/i,
@@ -27,6 +30,9 @@ const sensitiveInstitutionPatterns = [
   /apiKey/i,
   /baseUrl/i,
   /credential/i,
+  /客户手机号/,
+  /客户身份证/,
+  /病历详情/,
 ];
 
 const sensitivePlatformCredentialPatterns = [
@@ -136,6 +142,145 @@ describe('套餐权益 / AI 服务额度 server-domain contract', () => {
         }),
       ]),
     );
+  });
+
+  it('真实 quota linkage fixtures 覆盖 active / warning / overLimit / expired / fallback 场景', () => {
+    expect(Object.keys(PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources)).toEqual([
+      'active',
+      'warning',
+      'overLimit',
+      'expired',
+      'missingBinding',
+      'invalidFallback',
+      'unlinkedCompatibility',
+    ]);
+    expect(PACKAGE_AI_QUOTA_FIXTURES.realLinkageInstitutionReadonlyDtos.active).toMatchObject({
+      isLinked: true,
+      status: 'active',
+      totalAllowance: 1000,
+      used: 420,
+      remaining: 580,
+      usageRate: 42,
+      warningLevel: 'low',
+      displayUnit: 'AI 服务额度',
+    });
+  });
+
+  it('真实 quota linkage mapper 重新计算 remaining / usageRate，不信任 source 派生值', () => {
+    const dto = mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(
+      PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources.active,
+    );
+
+    expect(dto).toEqual({
+      isLinked: true,
+      status: 'active',
+      periodStart: '2026-07-01',
+      periodEnd: '2026-07-31',
+      totalAllowance: 1000,
+      used: 420,
+      remaining: 580,
+      usageRate: 42,
+      warningLevel: 'low',
+      displayUnit: 'AI 服务额度',
+      notes: [],
+    });
+  });
+
+  it('真实 quota linkage mapper 正确映射 warning / overLimit / expired', () => {
+    expect(mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(
+      PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources.warning,
+    )).toMatchObject({
+      isLinked: true,
+      status: 'warning',
+      totalAllowance: 1000,
+      used: 880,
+      remaining: 120,
+      usageRate: 88,
+      warningLevel: 'medium',
+    });
+    expect(mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(
+      PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources.overLimit,
+    )).toMatchObject({
+      isLinked: true,
+      status: 'overLimit',
+      totalAllowance: 100,
+      used: 126,
+      remaining: 0,
+      usageRate: 126,
+      warningLevel: 'exceeded',
+    });
+    expect(mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(
+      PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources.expired,
+    )).toMatchObject({
+      isLinked: true,
+      status: 'expired',
+      periodStart: '2026-06-01',
+      periodEnd: '2026-06-30',
+      totalAllowance: 5000,
+      used: 900,
+      remaining: 4100,
+      usageRate: 18,
+      warningLevel: 'high',
+    });
+  });
+
+  it('missing binding 与 invalid source 回退为安全未接入状态，不伪装真实额度', () => {
+    const missingBinding = mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(
+      PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources.missingBinding,
+    );
+    const invalidFallback = mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(
+      PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources.invalidFallback,
+    );
+    const nullFallback = mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(null);
+
+    for (const dto of [missingBinding, invalidFallback, nullFallback]) {
+      expect(dto).toMatchObject({
+        isLinked: false,
+        status: 'unlinked',
+        periodStart: null,
+        periodEnd: null,
+        totalAllowance: null,
+        used: 0,
+        remaining: null,
+        usageRate: null,
+        warningLevel: 'none',
+        displayUnit: 'AI 服务额度',
+      });
+      expect(dto.notes.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('保留真实 linkage 的 unlinked compatibility 路径', () => {
+    const dto = mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(
+      PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources.unlinkedCompatibility,
+    );
+
+    expect(dto).toMatchObject({
+      isLinked: false,
+      status: 'unlinked',
+      totalAllowance: null,
+      used: 0,
+      remaining: null,
+      usageRate: null,
+      warningLevel: 'none',
+    });
+    expect(dto.notes).toEqual(['套餐额度暂未接入']);
+  });
+
+  it('机构端真实 quota readonly DTO 只包含白名单字段', () => {
+    const allowedFields = [...INSTITUTION_AI_QUOTA_READONLY_FIELD_WHITELIST].sort();
+
+    for (const dto of Object.values(PACKAGE_AI_QUOTA_FIXTURES.realLinkageInstitutionReadonlyDtos)) {
+      expect(Object.keys(dto).sort()).toEqual(allowedFields);
+    }
+  });
+
+  it('机构端真实 quota readonly DTO 不泄露敏感字段或客户隐私内容', () => {
+    const serialized = JSON.stringify(PACKAGE_AI_QUOTA_FIXTURES.realLinkageInstitutionReadonlyDtos);
+
+    for (const pattern of sensitiveInstitutionPatterns) {
+      expect(serialized).not.toMatch(pattern);
+    }
   });
 
   it('平台 contract 不包含凭据、真实成本或原始问答内容', () => {
