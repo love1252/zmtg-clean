@@ -753,3 +753,18 @@ quota: InstitutionAiServiceQuotaDto
 8. 本阶段不做真实额度扣减、额度告警或导出。
 9. 本阶段不执行 migration、db:seed 或任何数据写入。
 10. 后续 API route、机构端 UI 联动和测试服验收必须拆分为独立任务并单独授权。
+
+## 13. READONLY-03 实现说明
+
+`V0.6-PACKAGE-AI-QUOTA-PLATFORM-READONLY-03` 新增平台端 mock/fixture-based readonly API：
+
+1. 新增 `GET /api/v1/open-platform/package-ai-quota`。
+2. API 复用 CONTRACT-02 的套餐、租户绑定、quota 状态和 service project attribution fixtures。
+3. API 返回 `packages`、`entitlements`、`tenantBindings`、`tenantQuotaSummaries`、`serviceProjectQuotaAttributions`、`quotaStatuses` 和 `notes`。
+4. 当前未接真实 DB。
+5. 当前未改 DB / schema / migration。
+6. 当前未做真实额度扣减。
+7. 当前未做额度告警。
+8. 当前未做导出。
+9. 当前未做 UI。
+10. 后续机构端 `quota.isLinked=true` readonly、机构端 UI 联动和本地 / 测试服验收仍需拆分为独立任务并单独授权。
