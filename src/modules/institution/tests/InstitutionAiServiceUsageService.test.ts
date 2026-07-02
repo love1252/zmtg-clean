@@ -13,6 +13,20 @@ const period = {
   preset: 'currentMonth' as const,
 };
 
+const quotaReadonlyAllowedFields = [
+  'isLinked',
+  'status',
+  'periodStart',
+  'periodEnd',
+  'totalAllowance',
+  'used',
+  'remaining',
+  'usageRate',
+  'warningLevel',
+  'displayUnit',
+  'notes',
+].sort();
+
 function createRow(overrides: Partial<InstitutionAiServiceUsageRow> = {}): InstitutionAiServiceUsageRow {
   return {
     createdAt: new Date('2026-06-29T10:00:00.000Z'),
@@ -117,6 +131,16 @@ describe('机构端 AI 服务使用只读 facade', () => {
     });
   });
 
+  it('不影响 /api/institution/ai-service-usage quota contract 白名单字段', () => {
+    const response = buildInstitutionAiServiceUsageResponse({
+      period,
+      rows: [],
+    });
+
+    expect(Object.keys(response.quota).sort()).toEqual(quotaReadonlyAllowedFields);
+    expect(response.quota).toEqual(createInstitutionAiServiceUsageQuotaFromFixture('active'));
+  });
+
   it('按日期和服务项目聚合，并隐藏模型、Token、内部积分字段', () => {
     const response = buildInstitutionAiServiceUsageResponse({
       period,
@@ -205,7 +229,7 @@ describe('机构端 AI 服务使用只读 facade', () => {
     ]);
 
     const serialized = JSON.stringify(response);
-    expect(serialized).not.toMatch(/provider|model|modelCode|totalTokens|Token|aiCreditsConsumed|prompt|question|answer|rawResponse|metadata|meteringDetails|apiKey|encryptedApiKey|baseUrl|Authorization|Cookie|RMB|¥/i);
+    expect(serialized).not.toMatch(/provider|model|modelCode|totalTokens|Token|aiCreditsConsumed|prompt|question|answer|rawResponse|metadata|meteringDetails|apiKey|encryptedApiKey|baseUrl|Authorization|Cookie|RMB|¥|真实成本|客户手机号|客户身份证|病历详情/i);
   });
 
   it('支持预设和自定义时间范围，非法日期返回受控错误', () => {

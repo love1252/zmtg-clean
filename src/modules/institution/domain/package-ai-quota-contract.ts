@@ -24,6 +24,23 @@ export const PACKAGE_AI_QUOTA_WARNING_LEVELS = [
   'high',
   'exceeded',
 ] as const;
+export const INSTITUTION_AI_QUOTA_READONLY_FIELD_WHITELIST = [
+  'isLinked',
+  'status',
+  'periodStart',
+  'periodEnd',
+  'totalAllowance',
+  'used',
+  'remaining',
+  'usageRate',
+  'warningLevel',
+  'displayUnit',
+  'notes',
+] as const;
+
+export type InstitutionAiQuotaReadonlyField =
+  (typeof INSTITUTION_AI_QUOTA_READONLY_FIELD_WHITELIST)[number];
+
 export const TENANT_PACKAGE_STATUSES = ['unlinked', 'active', 'expired', 'suspended'] as const;
 export const PACKAGE_AI_SERVICE_PROJECT_CATEGORIES = [
   'ai_qa',
@@ -142,6 +159,41 @@ export type PlatformPackageAiQuotaContract = {
   } | null;
 };
 
+export type RealPackageAiQuotaAllowanceSource = {
+  totalAllowance: number | null;
+  displayUnit: 'AI 服务额度' | null;
+};
+
+export type RealPackageAiQuotaUsageSource = {
+  used: number | null;
+  remaining: number | null;
+  usageRate: number | null;
+};
+
+export type RealPackageAiQuotaLinkageSource = {
+  tenantPackage: TenantPackageBindingContract | null;
+  period: PackageAiQuotaPeriod | null;
+  allowance: RealPackageAiQuotaAllowanceSource | null;
+  usage: RealPackageAiQuotaUsageSource | null;
+  status: PackageAiQuotaStatus | null;
+  warningLevel: PackageAiQuotaWarningLevel | null;
+  notes: string[];
+};
+
+export type InstitutionAiQuotaReadonlyDto = {
+  isLinked: boolean;
+  status: PackageAiQuotaStatus;
+  periodStart: string | null;
+  periodEnd: string | null;
+  totalAllowance: number | null;
+  used: number;
+  remaining: number | null;
+  usageRate: number | null;
+  warningLevel: PackageAiQuotaWarningLevel;
+  displayUnit: 'AI 服务额度';
+  notes: string[];
+};
+
 export type InstitutionAiQuotaServiceProjectView = {
   serviceProjectCategory: PackageAiServiceProjectCategory;
   serviceProjectName: string;
@@ -154,19 +206,7 @@ export type InstitutionAiQuotaServiceProjectView = {
 export type InstitutionAiQuotaView = {
   packageName: string | null;
   packageVersion: string | null;
-  quota: {
-    isLinked: boolean;
-    status: PackageAiQuotaStatus;
-    periodStart: string | null;
-    periodEnd: string | null;
-    totalAllowance: number | null;
-    used: number;
-    remaining: number | null;
-    usageRate: number | null;
-    warningLevel: PackageAiQuotaWarningLevel;
-    displayUnit: 'AI 服务额度';
-    notes: string[];
-  };
+  quota: InstitutionAiQuotaReadonlyDto;
   serviceProjects: InstitutionAiQuotaServiceProjectView[];
 };
 
@@ -200,6 +240,75 @@ export function resolvePackageAiQuotaWarningLevel(input: {
   if (input.usageRate >= 80) return 'medium';
   if (input.usageRate > 0) return 'low';
   return 'none';
+}
+
+function isFiniteNonNegativeNumber(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function createInstitutionAiQuotaFallback(reason: 'missing_binding' | 'invalid_source' | 'unlinked'): InstitutionAiQuotaReadonlyDto {
+  const notesByReason: Record<typeof reason, string> = {
+    missing_binding: '套餐绑定缺失，额度视图已回退为未接入。',
+    invalid_source: '套餐额度数据暂不可用，额度视图已回退为未接入。',
+    unlinked: '套餐额度暂未接入',
+  };
+
+  return {
+    isLinked: false,
+    status: 'unlinked',
+    periodStart: null,
+    periodEnd: null,
+    totalAllowance: null,
+    used: 0,
+    remaining: null,
+    usageRate: null,
+    warningLevel: 'none',
+    displayUnit: 'AI 服务额度',
+    notes: [notesByReason[reason]],
+  };
+}
+
+export function mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(
+  source: RealPackageAiQuotaLinkageSource | null | undefined,
+): InstitutionAiQuotaReadonlyDto {
+  if (!source) return createInstitutionAiQuotaFallback('invalid_source');
+  if (source.status === 'unlinked') return createInstitutionAiQuotaFallback('unlinked');
+
+  if (
+    !source.tenantPackage
+    || source.tenantPackage.tenantPackageStatus === 'unlinked'
+    || !source.tenantPackage.packageCode
+  ) {
+    return createInstitutionAiQuotaFallback('missing_binding');
+  }
+
+  const totalAllowance = source.allowance?.totalAllowance;
+  const used = source.usage?.used;
+  if (!source.period || !isFiniteNonNegativeNumber(totalAllowance) || !isFiniteNonNegativeNumber(used)) {
+    return createInstitutionAiQuotaFallback('invalid_source');
+  }
+
+  const calculatedRemaining = calculatePackageAiQuotaRemaining({ quotaLimit: totalAllowance, used });
+  const calculatedUsageRate = calculatePackageAiQuotaUsageRate({ quotaLimit: totalAllowance, used });
+  const status = source.status ?? 'unlinked';
+  if (status === 'unlinked') return createInstitutionAiQuotaFallback('unlinked');
+
+  return {
+    isLinked: true,
+    status,
+    periodStart: source.period.periodStart,
+    periodEnd: source.period.periodEnd,
+    totalAllowance,
+    used: Math.max(0, used),
+    remaining: calculatedRemaining,
+    usageRate: calculatedUsageRate,
+    warningLevel: source.warningLevel ?? resolvePackageAiQuotaWarningLevel({
+      status,
+      usageRate: calculatedUsageRate,
+    }),
+    displayUnit: 'AI 服务额度',
+    notes: source.notes,
+  };
 }
 
 function createQuotaSnapshot(input: {
@@ -435,6 +544,116 @@ const platformContractsByStatus = {
   }),
 } as const satisfies Record<PackageAiQuotaStatus, PlatformPackageAiQuotaContract>;
 
+const realTenantPackageBinding: TenantPackageBindingContract = {
+  tenantId: 'tenant-demo-low-sensitive',
+  institutionId: 'institution-demo-low-sensitive',
+  packageCode: 'basic',
+  tenantPackageStatus: 'active',
+  packageVersion: 'v06',
+  effectiveFrom: '2026-07-01',
+  effectiveTo: '2026-07-31',
+};
+
+function createRealLinkageSource(input: {
+  tenantPackage?: TenantPackageBindingContract | null;
+  totalAllowance: number | null;
+  used: number | null;
+  remaining?: number | null;
+  usageRate?: number | null;
+  status: PackageAiQuotaStatus | null;
+  warningLevel?: PackageAiQuotaWarningLevel | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  notes?: string[];
+}): RealPackageAiQuotaLinkageSource {
+  return {
+    tenantPackage: input.tenantPackage === undefined ? realTenantPackageBinding : input.tenantPackage,
+    period: input.periodStart === undefined && input.periodEnd === undefined
+      ? {
+          periodStart: '2026-07-01',
+          periodEnd: '2026-07-31',
+          quotaCycle: 'monthly',
+        }
+      : {
+          periodStart: input.periodStart ?? null,
+          periodEnd: input.periodEnd ?? null,
+          quotaCycle: 'monthly',
+        },
+    allowance: {
+      totalAllowance: input.totalAllowance,
+      displayUnit: 'AI 服务额度',
+    },
+    usage: {
+      used: input.used,
+      remaining: input.remaining ?? null,
+      usageRate: input.usageRate ?? null,
+    },
+    status: input.status,
+    warningLevel: input.warningLevel ?? null,
+    notes: input.notes ?? [],
+  };
+}
+
+const realLinkageSources = {
+  active: createRealLinkageSource({
+    totalAllowance: 1000,
+    used: 420,
+    remaining: 999,
+    usageRate: 9,
+    status: 'active',
+  }),
+  warning: createRealLinkageSource({
+    totalAllowance: 1000,
+    used: 880,
+    status: 'warning',
+  }),
+  overLimit: createRealLinkageSource({
+    totalAllowance: 100,
+    used: 126,
+    status: 'overLimit',
+  }),
+  expired: createRealLinkageSource({
+    tenantPackage: {
+      ...realTenantPackageBinding,
+      tenantPackageStatus: 'expired',
+      effectiveFrom: '2026-06-01',
+      effectiveTo: '2026-06-30',
+    },
+    totalAllowance: 5000,
+    used: 900,
+    status: 'expired',
+    periodStart: '2026-06-01',
+    periodEnd: '2026-06-30',
+  }),
+  missingBinding: createRealLinkageSource({
+    tenantPackage: null,
+    totalAllowance: 1000,
+    used: 420,
+    status: 'active',
+  }),
+  invalidFallback: createRealLinkageSource({
+    totalAllowance: null,
+    used: 420,
+    status: 'active',
+  }),
+  unlinkedCompatibility: createRealLinkageSource({
+    tenantPackage: {
+      ...realTenantPackageBinding,
+      packageCode: null,
+      tenantPackageStatus: 'unlinked',
+      packageVersion: null,
+      effectiveFrom: null,
+      effectiveTo: null,
+    },
+    totalAllowance: null,
+    used: 0,
+    status: 'unlinked',
+    periodStart: null,
+    periodEnd: null,
+    notes: ['套餐额度暂未接入'],
+  }),
+} as const satisfies Record<string, RealPackageAiQuotaLinkageSource>;
+
 export const PACKAGE_AI_QUOTA_FIXTURES = {
   packages: packageDefinitions,
   serviceProjects: serviceProjectAttributions,
@@ -446,6 +665,18 @@ export const PACKAGE_AI_QUOTA_FIXTURES = {
     platformContractsByStatus.overLimit,
     platformContractsByStatus.expired,
   ],
+  realLinkageSources,
+  realLinkageInstitutionReadonlyDtos: {
+    active: mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(realLinkageSources.active),
+    warning: mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(realLinkageSources.warning),
+    overLimit: mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(realLinkageSources.overLimit),
+    expired: mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(realLinkageSources.expired),
+    missingBinding: mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(realLinkageSources.missingBinding),
+    invalidFallback: mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(realLinkageSources.invalidFallback),
+    unlinkedCompatibility: mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(
+      realLinkageSources.unlinkedCompatibility,
+    ),
+  },
 } as const;
 
 export function mapPlatformAiQuotaContractToInstitutionView(
