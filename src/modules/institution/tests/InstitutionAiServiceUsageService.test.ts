@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildInstitutionAiServiceUsageResponse,
+  createInstitutionAiServiceUsageQuotaFromFixture,
   resolveInstitutionAiServiceUsagePeriod,
   type InstitutionAiServiceUsageRow,
 } from '@/modules/institution/server/institution-ai-service-usage';
@@ -45,11 +46,74 @@ describe('机构端 AI 服务使用只读 facade', () => {
       trend: [],
       serviceProjects: [],
       quota: {
-        isLinked: false,
+        isLinked: true,
+        status: 'active',
+        periodStart: '2026-07-01',
+        periodEnd: '2026-07-31',
+        totalAllowance: 1000,
+        used: 420,
+        remaining: 580,
+        usageRate: 42,
+        warningLevel: 'low',
+        displayUnit: 'AI 服务额度',
+        notes: [],
       },
       notes: expect.arrayContaining([
         expect.stringContaining('只展示机构端低敏服务使用统计'),
+        expect.stringContaining('当前为只读额度视图'),
       ]),
+    });
+  });
+
+  it('保留 quota.isLinked=false 兼容输出', () => {
+    const response = buildInstitutionAiServiceUsageResponse({
+      period,
+      rows: [],
+      quotaLinked: false,
+    });
+
+    expect(response.quota).toEqual({ isLinked: false });
+  });
+
+  it('从 mock fixture 返回 active / warning / overLimit / expired linked readonly quota', () => {
+    expect(createInstitutionAiServiceUsageQuotaFromFixture('active')).toMatchObject({
+      isLinked: true,
+      status: 'active',
+      totalAllowance: 1000,
+      used: 420,
+      remaining: 580,
+      usageRate: 42,
+      warningLevel: 'low',
+    });
+    expect(createInstitutionAiServiceUsageQuotaFromFixture('warning')).toMatchObject({
+      isLinked: true,
+      status: 'warning',
+      totalAllowance: 1000,
+      used: 880,
+      remaining: 120,
+      usageRate: 88,
+      warningLevel: 'medium',
+    });
+    expect(createInstitutionAiServiceUsageQuotaFromFixture('overLimit')).toMatchObject({
+      isLinked: true,
+      status: 'overLimit',
+      totalAllowance: 100,
+      used: 126,
+      remaining: 0,
+      usageRate: 126,
+      warningLevel: 'exceeded',
+    });
+    expect(JSON.stringify(createInstitutionAiServiceUsageQuotaFromFixture('overLimit'))).not.toMatch(
+      /shouldBlock|isBlocked|hardBlock|deduct|charge|alert/i,
+    );
+    expect(createInstitutionAiServiceUsageQuotaFromFixture('expired')).toMatchObject({
+      isLinked: true,
+      status: 'expired',
+      totalAllowance: 5000,
+      used: 900,
+      remaining: 4100,
+      usageRate: 18,
+      warningLevel: 'high',
     });
   });
 
@@ -106,6 +170,9 @@ describe('机构端 AI 服务使用只读 facade', () => {
         successRate: 50,
         aiServiceUnitsUsed: 2,
         sharePercent: 100,
+        used: 180,
+        remaining: 270,
+        usageRate: 40,
       },
       {
         serviceCategory: 'knowledge_base_qa',
@@ -117,6 +184,9 @@ describe('机构端 AI 服务使用只读 facade', () => {
         successRate: 0,
         aiServiceUnitsUsed: 0,
         sharePercent: 0,
+        used: 160,
+        remaining: 190,
+        usageRate: 45.7,
       },
       {
         serviceCategory: 'unknown',
@@ -128,6 +198,9 @@ describe('机构端 AI 服务使用只读 facade', () => {
         successRate: 0,
         aiServiceUnitsUsed: 0,
         sharePercent: 0,
+        used: 20,
+        remaining: 30,
+        usageRate: 40,
       },
     ]);
 

@@ -768,3 +768,18 @@ quota: InstitutionAiServiceQuotaDto
 8. 当前未做导出。
 9. 当前未做 UI。
 10. 后续机构端 `quota.isLinked=true` readonly、机构端 UI 联动和本地 / 测试服验收仍需拆分为独立任务并单独授权。
+
+## 14. LINKED-04 实现说明
+
+`V0.6-PACKAGE-AI-QUOTA-INSTITUTION-LINKED-04` 将机构端现有 `GET /api/institution/ai-service-usage` 演进为 mock/fixture-based linked readonly 展示链路：
+
+1. 保持现有机构端 API route，不新增 route，前端仍只传 `preset`，不传 `tenantId`。
+2. API 复用 CONTRACT-02 的 `PACKAGE_AI_QUOTA_FIXTURES` 和 `mapPlatformAiQuotaContractToInstitutionView`，默认返回 `quota.isLinked=true` 的低敏只读额度字段。
+3. `quota` 仅展示 `status`、`periodStart`、`periodEnd`、`totalAllowance`、`used`、`remaining`、`usageRate`、`warningLevel`、`displayUnit` 和 `notes`。
+4. `serviceProjects[]` 补充 `used`、`remaining` 和 `usageRate`，仅用于机构端只读展示。
+5. 当前仍使用 mock / fixture 数据，未接真实 DB，未做真实数据联动。
+6. 当前未改 DB / schema / migration / drizzle / `src/server/db`。
+7. 当前未做真实额度扣减、quota enforcement、额度告警或导出。
+8. `overLimit` 仅显示状态，不阻断服务、不扣减、不触发告警。
+9. UI 已展示总额度、已用、剩余、使用率、周期、状态和 `warningLevel`，并明确说明当前为只读额度视图，不代表真实扣减，不代表财务账单。
+10. 后续仍需测试服验收、真实租户套餐绑定与真实用量聚合联动设计，并单独授权真实数据接入。
