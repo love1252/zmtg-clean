@@ -1,6 +1,7 @@
 import {
   PACKAGE_AI_QUOTA_FIXTURES,
   PACKAGE_AI_QUOTA_STATUSES,
+  mapPlatformAiQuotaContractToInstitutionView,
   type PackageAiQuotaPackageCode,
   type PackageAiQuotaStatus,
   type PlatformPackageAiQuotaContract,
@@ -187,6 +188,8 @@ function mapTenantBinding(
 function mapTenantQuotaSummary(
   contract: PlatformPackageAiQuotaContract,
 ): PlatformPackageAiQuotaReadonlyTenantQuotaSummaryDto {
+  const institutionLowSensitiveView = mapPlatformAiQuotaContractToInstitutionView(contract);
+
   return {
     tenantId: contract.tenantPackage.tenantId,
     institutionId: contract.tenantPackage.institutionId,
@@ -203,8 +206,8 @@ function mapTenantQuotaSummary(
       remaining: contract.quota.remaining,
       usageRate: contract.quota.usageRate,
       warningLevel: contract.quota.warningLevel,
-      displayUnit: contract.quota.displayUnit,
-      notes: contract.quota.notes,
+      displayUnit: institutionLowSensitiveView.quota.displayUnit,
+      notes: institutionLowSensitiveView.quota.notes,
     },
   };
 }
