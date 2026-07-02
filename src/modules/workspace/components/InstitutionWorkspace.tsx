@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { AppointmentCenterShell } from '@/modules/institution/components/AppointmentCenterShell';
+import { InstitutionAiServiceUsageShell } from '@/modules/institution/components/InstitutionAiServiceUsageShell';
 import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
 import { HisConnectionReadOnlyPanel } from '@/modules/institution/components/HisConnectionReadOnlyPanel';
 import { InstitutionAuditEventsShell } from '@/modules/institution/components/InstitutionAuditEventsShell';
@@ -183,6 +184,7 @@ const realInstitutionViews = [
   'customers',
   'appointments',
   'followups',
+  'aiServiceUsage',
   'treatmentSummaries',
   'audit',
   'hisConnections',
@@ -565,6 +567,8 @@ export function InstitutionWorkspace() {
               <AppointmentCenterShell />
             ) : activeView === 'followups' ? (
               <SmartFollowUpShell />
+            ) : activeView === 'aiServiceUsage' ? (
+              <InstitutionAiServiceUsageShell />
             ) : activeView === 'treatmentSummaries' ? (
               <TreatmentSummaryManagementShell />
             ) : activeView === 'opportunities' ? (
@@ -1967,8 +1971,8 @@ function PlaceholderInstitutionView({ label }: { label: string }) {
       action={
         <div className="space-y-2 text-sm leading-6 text-slate-500">
           <p>
-            本次主线：工作台、客户中心、预约中心、智能随访、治疗摘要管理、审计日志、HIS
-            连接配置、知识库只读列表。
+            本次主线：工作台、客户中心、预约中心、智能随访、AI 服务使用、治疗摘要管理、审计日志、
+            HIS 连接配置、知识库只读列表。
           </p>
           <p>后续：客服工作台、数据分析。</p>
         </div>

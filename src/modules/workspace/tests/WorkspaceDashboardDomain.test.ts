@@ -141,6 +141,7 @@ describe('工作台看板领域模型', () => {
       'dashboard',
       'customers',
       'followups',
+      'aiServiceUsage',
       'treatmentSummaries',
       'opportunities',
       'audit',
