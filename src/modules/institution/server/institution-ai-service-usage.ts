@@ -3,6 +3,13 @@ import { and, asc, eq, gte, lte } from 'drizzle-orm';
 import type { TenantDatabase } from '@/server/db/client';
 import { aiCallUsageRecords } from '@/server/db/schema';
 import type { AiCallUsageStatus } from '@/modules/institution/server/institution-ai-call-service';
+import {
+  PACKAGE_AI_QUOTA_FIXTURES,
+  mapPlatformAiQuotaContractToInstitutionView,
+  type InstitutionAiQuotaView,
+  type PackageAiQuotaStatus,
+  type PackageAiQuotaWarningLevel,
+} from '@/modules/institution/domain/package-ai-quota-contract';
 
 export type InstitutionAiServiceUsagePreset =
   | 'today'
@@ -42,7 +49,26 @@ export type InstitutionAiServiceUsageServiceProjectDto = {
   successRate: number;
   aiServiceUnitsUsed: number;
   sharePercent: number;
+  used: number;
+  remaining: number | null;
+  usageRate: number | null;
 };
+
+export type InstitutionAiServiceUsageQuotaDto =
+  | { isLinked: false }
+  | {
+      isLinked: true;
+      status: PackageAiQuotaStatus;
+      periodStart: string | null;
+      periodEnd: string | null;
+      totalAllowance: number | null;
+      used: number;
+      remaining: number | null;
+      usageRate: number | null;
+      warningLevel: PackageAiQuotaWarningLevel;
+      displayUnit: 'AI 服务额度';
+      notes: string[];
+    };
 
 export type InstitutionAiServiceUsageResponse = {
   requestId: 'institution-ai-service-usage';
@@ -51,9 +77,7 @@ export type InstitutionAiServiceUsageResponse = {
   summary: InstitutionAiServiceUsageSummaryDto;
   trend: InstitutionAiServiceUsageTrendDto[];
   serviceProjects: InstitutionAiServiceUsageServiceProjectDto[];
-  quota: {
-    isLinked: false;
-  };
+  quota: InstitutionAiServiceUsageQuotaDto;
   notes: string[];
 };
 
@@ -70,9 +94,11 @@ type ResolvePeriodResult =
   | { ok: false; code: 'invalid_date_range'; error: '时间范围无效' };
 
 const INSTITUTION_AI_SERVICE_USAGE_NOTES = [
-  '只展示机构端低敏服务使用统计，不展示内部模型、供应商、成本或原始内容。',
-  '服务额度仅作只读运营分析；套餐扣减、费用结算和导出能力不在本接口中提供。',
+  '只展示机构端低敏服务使用统计，不展示高敏技术细节或原始内容。',
+  '当前为只读额度视图，不代表真实扣减，不代表财务账单。',
 ];
+
+const DEFAULT_LINKED_PACKAGE_AI_QUOTA_STATUS: PackageAiQuotaStatus = 'active';
 
 function pad2(value: number) {
   return String(value).padStart(2, '0');
@@ -230,10 +256,59 @@ function incrementCounters(
   target.failedCount += 1;
 }
 
+function toServiceProjectQuotaMap(quotaView: InstitutionAiQuotaView) {
+  return new Map(
+    quotaView.serviceProjects.map((item) => [
+      item.serviceProjectName,
+      {
+        used: item.used,
+        remaining: item.remaining,
+        usageRate: item.usageRate,
+      },
+    ]),
+  );
+}
+
+function selectInstitutionAiQuotaView(status: PackageAiQuotaStatus = DEFAULT_LINKED_PACKAGE_AI_QUOTA_STATUS) {
+  return mapPlatformAiQuotaContractToInstitutionView(
+    PACKAGE_AI_QUOTA_FIXTURES.platformContractsByStatus[status],
+  );
+}
+
+function createLegacyUnlinkedQuota(): InstitutionAiServiceUsageQuotaDto {
+  return { isLinked: false };
+}
+
+function createLinkedQuota(quotaView: InstitutionAiQuotaView): InstitutionAiServiceUsageQuotaDto {
+  return {
+    isLinked: true,
+    status: quotaView.quota.status,
+    periodStart: quotaView.quota.periodStart,
+    periodEnd: quotaView.quota.periodEnd,
+    totalAllowance: quotaView.quota.totalAllowance,
+    used: quotaView.quota.used,
+    remaining: quotaView.quota.remaining,
+    usageRate: quotaView.quota.usageRate,
+    warningLevel: quotaView.quota.warningLevel,
+    displayUnit: quotaView.quota.displayUnit,
+    notes: quotaView.quota.notes,
+  };
+}
+
+export function createInstitutionAiServiceUsageQuotaFromFixture(
+  status: PackageAiQuotaStatus = DEFAULT_LINKED_PACKAGE_AI_QUOTA_STATUS,
+): InstitutionAiServiceUsageQuotaDto {
+  return createLinkedQuota(selectInstitutionAiQuotaView(status));
+}
+
 export function buildInstitutionAiServiceUsageResponse(input: {
   period: InstitutionAiServiceUsagePeriod;
   rows: InstitutionAiServiceUsageRow[];
+  quotaStatus?: PackageAiQuotaStatus;
+  quotaLinked?: boolean;
 }): InstitutionAiServiceUsageResponse {
+  const quotaView = selectInstitutionAiQuotaView(input.quotaStatus);
+  const serviceProjectQuotaMap = toServiceProjectQuotaMap(quotaView);
   const summary = createEmptySummary();
   const trendMap = new Map<string, InstitutionAiServiceUsageTrendDto>();
   const serviceProjectMap = new Map<string, InstitutionAiServiceUsageServiceProjectDto>();
@@ -267,6 +342,9 @@ export function buildInstitutionAiServiceUsageResponse(input: {
       successRate: 0,
       aiServiceUnitsUsed: 0,
       sharePercent: 0,
+      used: serviceProjectQuotaMap.get(serviceName)?.used ?? 0,
+      remaining: serviceProjectQuotaMap.get(serviceName)?.remaining ?? null,
+      usageRate: serviceProjectQuotaMap.get(serviceName)?.usageRate ?? null,
     };
     serviceProject.usageCount += 1;
     serviceProject.aiServiceUnitsUsed += aiServiceUnitsUsed;
@@ -308,9 +386,7 @@ export function buildInstitutionAiServiceUsageResponse(input: {
     summary,
     trend: Array.from(trendMap.values()).sort((left, right) => left.date.localeCompare(right.date)),
     serviceProjects,
-    quota: {
-      isLinked: false,
-    },
+    quota: input.quotaLinked === false ? createLegacyUnlinkedQuota() : createLinkedQuota(quotaView),
     notes: INSTITUTION_AI_SERVICE_USAGE_NOTES,
   };
 }

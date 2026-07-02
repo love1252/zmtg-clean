@@ -25,7 +25,26 @@ export type InstitutionAiServiceUsageServiceProject = {
   successRate: number;
   aiServiceUnitsUsed: number;
   sharePercent: number;
+  used: number;
+  remaining: number | null;
+  usageRate: number | null;
 };
+
+export type InstitutionAiServiceUsageQuota =
+  | { isLinked: false }
+  | {
+      isLinked: true;
+      status: string;
+      periodStart: string | null;
+      periodEnd: string | null;
+      totalAllowance: number | null;
+      used: number;
+      remaining: number | null;
+      usageRate: number | null;
+      warningLevel: string;
+      displayUnit: 'AI 服务额度';
+      notes: string[];
+    };
 
 export type InstitutionAiServiceUsageResponse = {
   requestId: 'institution-ai-service-usage';
@@ -38,9 +57,7 @@ export type InstitutionAiServiceUsageResponse = {
   summary: InstitutionAiServiceUsageSummary;
   trend: InstitutionAiServiceUsageTrendPoint[];
   serviceProjects: InstitutionAiServiceUsageServiceProject[];
-  quota: {
-    isLinked: boolean;
-  };
+  quota: InstitutionAiServiceUsageQuota;
 };
 
 export type InstitutionAiServiceUsageClientError = {
@@ -73,6 +90,18 @@ function safeNumber(value: unknown) {
 
 function safeString(value: unknown, fallback: string) {
   return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
+}
+
+function safeNullableNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function safeNullableString(value: unknown) {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function safeStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
 function parseSummary(value: unknown): InstitutionAiServiceUsageSummary {
@@ -114,13 +143,33 @@ function parseServiceProjects(value: unknown): InstitutionAiServiceUsageServiceP
     successRate: safeNumber(item.successRate),
     aiServiceUnitsUsed: safeNumber(item.aiServiceUnitsUsed),
     sharePercent: safeNumber(item.sharePercent),
+    used: safeNumber(item.used),
+    remaining: safeNullableNumber(item.remaining),
+    usageRate: safeNullableNumber(item.usageRate),
   }));
+}
+
+function parseQuota(value: unknown): InstitutionAiServiceUsageQuota {
+  if (!isRecord(value) || value.isLinked !== true) return { isLinked: false };
+
+  return {
+    isLinked: true,
+    status: safeString(value.status, 'active'),
+    periodStart: safeNullableString(value.periodStart),
+    periodEnd: safeNullableString(value.periodEnd),
+    totalAllowance: safeNullableNumber(value.totalAllowance),
+    used: safeNumber(value.used),
+    remaining: safeNullableNumber(value.remaining),
+    usageRate: safeNullableNumber(value.usageRate),
+    warningLevel: safeString(value.warningLevel, 'none'),
+    displayUnit: 'AI 服务额度',
+    notes: safeStringArray(value.notes),
+  };
 }
 
 function parseResponse(payload: unknown): InstitutionAiServiceUsageResponse {
   const record = isRecord(payload) ? payload : {};
   const period = isRecord(record.period) ? record.period : {};
-  const quota = isRecord(record.quota) ? record.quota : {};
 
   return {
     requestId: 'institution-ai-service-usage',
@@ -133,9 +182,7 @@ function parseResponse(payload: unknown): InstitutionAiServiceUsageResponse {
     summary: parseSummary(record.summary),
     trend: parseTrend(record.trend),
     serviceProjects: parseServiceProjects(record.serviceProjects),
-    quota: {
-      isLinked: quota.isLinked === true,
-    },
+    quota: parseQuota(record.quota),
   };
 }
 

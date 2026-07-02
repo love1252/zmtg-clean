@@ -41,12 +41,37 @@ const metricToneClasses = {
   amber: 'border-amber-200 bg-amber-50 text-amber-700',
 } as const;
 
+const quotaStatusLabels: Record<string, string> = {
+  active: '正常',
+  warning: '接近额度',
+  overLimit: '已超出',
+  expired: '已过期',
+  unlinked: '未接入',
+};
+
+const quotaWarningLevelLabels: Record<string, string> = {
+  none: '无',
+  low: '低',
+  medium: '中',
+  high: '高',
+  exceeded: '已超出',
+};
+
 function formatNumber(value: number) {
   return new Intl.NumberFormat('zh-CN').format(value);
 }
 
-function formatPercent(value: number) {
-  return `${Number.isFinite(value) ? value : 0}%`;
+function formatPercent(value: number | null | undefined) {
+  return `${typeof value === 'number' && Number.isFinite(value) ? value : 0}%`;
+}
+
+function formatQuotaNumber(value: number | null | undefined) {
+  return value === null || value === undefined ? '未设置' : formatNumber(value);
+}
+
+function formatQuotaDateRange(periodStart: string | null, periodEnd: string | null) {
+  if (!periodStart || !periodEnd) return '未设置周期';
+  return `${periodStart} 至 ${periodEnd}`;
 }
 
 function formatDateLabel(value: string) {
@@ -231,7 +256,64 @@ export function InstitutionAiServiceUsageShell() {
                 </div>
               </div>
             </div>
-          ) : null}
+          ) : (
+            <section className="rounded-[24px] border border-blue-100 bg-blue-50/80 p-5 text-sm leading-6 text-blue-900 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-blue-700">套餐 AI 服务额度</p>
+                  <h3 className="mt-1 text-xl font-semibold text-slate-950">只读额度视图</h3>
+                  <p className="mt-2 text-slate-600">
+                    当前为只读额度视图，不代表真实扣减，不代表财务账单；超出额度仅显示状态，不阻断服务、不触发扣减或告警。
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full border border-blue-200 bg-white/80 px-3 py-1 text-xs font-semibold text-blue-700">
+                    状态：{quotaStatusLabels[data.quota.status] ?? data.quota.status}
+                  </span>
+                  <span className="rounded-full border border-amber-200 bg-white/80 px-3 py-1 text-xs font-semibold text-amber-700">
+                    warningLevel：{quotaWarningLevelLabels[data.quota.warningLevel] ?? data.quota.warningLevel}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="rounded-2xl border border-white/80 bg-white/78 p-4">
+                  <div className="text-xs text-slate-400">总额度</div>
+                  <div className="mt-1 text-2xl font-semibold text-slate-950">
+                    {formatQuotaNumber(data.quota.totalAllowance)}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">{data.quota.displayUnit}</div>
+                </div>
+                <div className="rounded-2xl border border-white/80 bg-white/78 p-4">
+                  <div className="text-xs text-slate-400">已用</div>
+                  <div className="mt-1 text-2xl font-semibold text-slate-950">
+                    {formatQuotaNumber(data.quota.used)}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">只读统计</div>
+                </div>
+                <div className="rounded-2xl border border-white/80 bg-white/78 p-4">
+                  <div className="text-xs text-slate-400">剩余</div>
+                  <div className="mt-1 text-2xl font-semibold text-slate-950">
+                    {formatQuotaNumber(data.quota.remaining)}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">不代表可用扣减余额</div>
+                </div>
+                <div className="rounded-2xl border border-white/80 bg-white/78 p-4">
+                  <div className="text-xs text-slate-400">使用率</div>
+                  <div className="mt-1 text-2xl font-semibold text-slate-950">
+                    {formatPercent(data.quota.usageRate)}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">mock 口径展示</div>
+                </div>
+                <div className="rounded-2xl border border-white/80 bg-white/78 p-4">
+                  <div className="text-xs text-slate-400">周期</div>
+                  <div className="mt-1 text-base font-semibold text-slate-950">
+                    {formatQuotaDateRange(data.quota.periodStart, data.quota.periodEnd)}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">仅用于展示</div>
+                </div>
+              </div>
+            </section>
+          )}
 
           {isEmptyUsage(data) ? (
             <InstitutionPageState
