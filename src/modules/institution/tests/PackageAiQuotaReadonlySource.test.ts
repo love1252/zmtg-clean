@@ -11,6 +11,8 @@ import {
   createControlledFallbackPackageAiQuotaReadonlySource,
   createPackageAiQuotaControlledFallbackReadonlySourceRepository,
   createPackageAiQuotaDependencyInjectedReadonlySourceRepository,
+  createPackageAiQuotaFixtureBackedReadonlySource,
+  createPackageAiQuotaFixtureBackedReadonlySourceRepository,
   createPackageAiQuotaReadonlySourceFacade,
 } from '@/modules/institution/server/package-ai-quota-readonly-source';
 
@@ -137,6 +139,32 @@ describe('套餐权益 / AI 服务额度 readonly source foundation', () => {
       displayUnit: 'AI 服务额度',
     });
     expect(dto).toEqual(mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(source));
+  });
+
+  it('fixture-backed readonly source repository 维持默认 linked 演示口径，但仍输出 source contract', async () => {
+    const active = createPackageAiQuotaFixtureBackedReadonlySource();
+    const repository = createPackageAiQuotaFixtureBackedReadonlySourceRepository();
+    const source = await repository.findReadonlySource(baseLookup);
+    const dto = mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(source);
+
+    expect(source).toEqual(active);
+    expect(dto).toMatchObject({
+      isLinked: true,
+      status: 'active',
+      totalAllowance: 1000,
+      used: 420,
+      remaining: 580,
+      usageRate: 42,
+      warningLevel: 'low',
+    });
+    expect(mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(
+      createPackageAiQuotaFixtureBackedReadonlySource({ status: 'overLimit' }),
+    )).toMatchObject({
+      isLinked: true,
+      status: 'overLimit',
+      remaining: 0,
+      warningLevel: 'exceeded',
+    });
   });
 
   it('dependency-injected adapter 使用 mock dependency 输出 active source，不连接真实 DB', async () => {

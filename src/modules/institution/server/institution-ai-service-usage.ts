@@ -5,11 +5,19 @@ import { aiCallUsageRecords } from '@/server/db/schema';
 import type { AiCallUsageStatus } from '@/modules/institution/server/institution-ai-call-service';
 import {
   PACKAGE_AI_QUOTA_FIXTURES,
+  mapRealPackageAiQuotaSourceToInstitutionReadonlyDto,
   mapPlatformAiQuotaContractToInstitutionView,
+  type InstitutionAiQuotaReadonlyDto,
   type InstitutionAiQuotaView,
   type PackageAiQuotaStatus,
-  type PackageAiQuotaWarningLevel,
+  type RealPackageAiQuotaLinkageSource,
 } from '@/modules/institution/domain/package-ai-quota-contract';
+import {
+  createPackageAiQuotaFixtureBackedReadonlySource,
+  createPackageAiQuotaFixtureBackedReadonlySourceRepository,
+  createPackageAiQuotaReadonlySourceFacade,
+  type PackageAiQuotaReadonlySourceRepository,
+} from '@/modules/institution/server/package-ai-quota-readonly-source';
 
 export type InstitutionAiServiceUsagePreset =
   | 'today'
@@ -56,19 +64,7 @@ export type InstitutionAiServiceUsageServiceProjectDto = {
 
 export type InstitutionAiServiceUsageQuotaDto =
   | { isLinked: false }
-  | {
-      isLinked: true;
-      status: PackageAiQuotaStatus;
-      periodStart: string | null;
-      periodEnd: string | null;
-      totalAllowance: number | null;
-      used: number;
-      remaining: number | null;
-      usageRate: number | null;
-      warningLevel: PackageAiQuotaWarningLevel;
-      displayUnit: 'AI 服务额度';
-      notes: string[];
-    };
+  | InstitutionAiQuotaReadonlyDto;
 
 export type InstitutionAiServiceUsageResponse = {
   requestId: 'institution-ai-service-usage';
@@ -275,30 +271,37 @@ function selectInstitutionAiQuotaView(status: PackageAiQuotaStatus = DEFAULT_LIN
   );
 }
 
-function createLegacyUnlinkedQuota(): InstitutionAiServiceUsageQuotaDto {
-  return { isLinked: false };
+function selectInstitutionAiQuotaReadonlySource(
+  status: PackageAiQuotaStatus = DEFAULT_LINKED_PACKAGE_AI_QUOTA_STATUS,
+) {
+  return createPackageAiQuotaFixtureBackedReadonlySource({ status });
 }
 
-function createLinkedQuota(quotaView: InstitutionAiQuotaView): InstitutionAiServiceUsageQuotaDto {
-  return {
-    isLinked: true,
-    status: quotaView.quota.status,
-    periodStart: quotaView.quota.periodStart,
-    periodEnd: quotaView.quota.periodEnd,
-    totalAllowance: quotaView.quota.totalAllowance,
-    used: quotaView.quota.used,
-    remaining: quotaView.quota.remaining,
-    usageRate: quotaView.quota.usageRate,
-    warningLevel: quotaView.quota.warningLevel,
-    displayUnit: quotaView.quota.displayUnit,
-    notes: quotaView.quota.notes,
-  };
+function createInstitutionAiServiceUsageQuotaFromReadonlyDto(
+  dto: InstitutionAiQuotaReadonlyDto,
+): InstitutionAiServiceUsageQuotaDto {
+  if (!dto.isLinked) return dto;
+  return dto;
+}
+
+export function createInstitutionAiServiceUsageQuotaFromReadonlySource(
+  source: RealPackageAiQuotaLinkageSource | null | undefined,
+): InstitutionAiServiceUsageQuotaDto {
+  return createInstitutionAiServiceUsageQuotaFromReadonlyDto(
+    mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(source),
+  );
+}
+
+function createLegacyUnlinkedQuota(): InstitutionAiServiceUsageQuotaDto {
+  return { isLinked: false };
 }
 
 export function createInstitutionAiServiceUsageQuotaFromFixture(
   status: PackageAiQuotaStatus = DEFAULT_LINKED_PACKAGE_AI_QUOTA_STATUS,
 ): InstitutionAiServiceUsageQuotaDto {
-  return createLinkedQuota(selectInstitutionAiQuotaView(status));
+  return createInstitutionAiServiceUsageQuotaFromReadonlySource(
+    selectInstitutionAiQuotaReadonlySource(status),
+  );
 }
 
 export function buildInstitutionAiServiceUsageResponse(input: {
@@ -306,6 +309,7 @@ export function buildInstitutionAiServiceUsageResponse(input: {
   rows: InstitutionAiServiceUsageRow[];
   quotaStatus?: PackageAiQuotaStatus;
   quotaLinked?: boolean;
+  quotaSource?: RealPackageAiQuotaLinkageSource | null;
 }): InstitutionAiServiceUsageResponse {
   const quotaView = selectInstitutionAiQuotaView(input.quotaStatus);
   const serviceProjectQuotaMap = toServiceProjectQuotaMap(quotaView);
@@ -386,7 +390,11 @@ export function buildInstitutionAiServiceUsageResponse(input: {
     summary,
     trend: Array.from(trendMap.values()).sort((left, right) => left.date.localeCompare(right.date)),
     serviceProjects,
-    quota: input.quotaLinked === false ? createLegacyUnlinkedQuota() : createLinkedQuota(quotaView),
+    quota: input.quotaLinked === false
+      ? createLegacyUnlinkedQuota()
+      : createInstitutionAiServiceUsageQuotaFromReadonlySource(
+          input.quotaSource ?? selectInstitutionAiQuotaReadonlySource(input.quotaStatus),
+        ),
     notes: INSTITUTION_AI_SERVICE_USAGE_NOTES,
   };
 }
@@ -431,6 +439,7 @@ export async function getInstitutionAiServiceUsage(input: {
   period: InstitutionAiServiceUsagePeriod;
   dateFrom: Date;
   dateTo: Date;
+  packageAiQuotaReadonlySourceRepository?: PackageAiQuotaReadonlySourceRepository;
 }): Promise<InstitutionAiServiceUsageResponse> {
   const rows = await listInstitutionAiServiceUsageRows({
     database: input.database,
@@ -439,9 +448,18 @@ export async function getInstitutionAiServiceUsage(input: {
     dateFrom: input.dateFrom,
     dateTo: input.dateTo,
   });
+  const quotaSourceFacade = createPackageAiQuotaReadonlySourceFacade(
+    input.packageAiQuotaReadonlySourceRepository
+      ?? createPackageAiQuotaFixtureBackedReadonlySourceRepository(),
+  );
+  const quotaSource = await quotaSourceFacade.getRealPackageAiQuotaLinkageSource({
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+  });
 
   return buildInstitutionAiServiceUsageResponse({
     period: input.period,
     rows,
+    quotaSource,
   });
 }
