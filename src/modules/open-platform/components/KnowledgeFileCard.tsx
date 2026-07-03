@@ -12,7 +12,7 @@ export type KnowledgeFileCardProps = {
   fileSizeLabel: string;
   categoryLabel: string;
   folderLabel: string;
-  textLengthLabel: string;
+  parsedCharsLabel: string;
   chunkCountLabel: string;
   updatedAtLabel: string;
   errorMessageLabel: string;
@@ -33,7 +33,7 @@ export function KnowledgeFileCard({
   fileSizeLabel,
   categoryLabel,
   folderLabel,
-  textLengthLabel,
+  parsedCharsLabel,
   chunkCountLabel,
   updatedAtLabel,
   errorMessageLabel,
@@ -70,7 +70,7 @@ export function KnowledgeFileCard({
         </div>
         <div>
           <dt className="font-semibold text-slate-500">解析字符数</dt>
-          <dd className="mt-1 font-semibold text-slate-800">{textLengthLabel}</dd>
+          <dd className="mt-1 font-semibold text-slate-800">{parsedCharsLabel}</dd>
         </div>
         <div>
           <dt className="font-semibold text-slate-500">解析片段</dt>

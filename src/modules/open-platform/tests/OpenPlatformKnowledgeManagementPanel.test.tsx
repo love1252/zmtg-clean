@@ -98,7 +98,7 @@ const panelKnowledgeFiles = [
     safeErrorMessage: null,
     safeFailureMessage: null,
     uploadedByUserId: 'platform-ui',
-    textLength: 0,
+    parsedChars: 0,
     chunkCount: 0,
     parserVersion: null,
     category: '星澜医美中心',
@@ -126,7 +126,7 @@ const panelKnowledgeFiles = [
     safeErrorMessage: '文件格式暂不支持',
     safeFailureMessage: '文件格式暂不支持',
     uploadedByUserId: 'platform-ui',
-    textLength: 0,
+    parsedChars: 0,
     chunkCount: 0,
     parserVersion: null,
     category: '星澜医美中心',
@@ -154,7 +154,7 @@ const panelKnowledgeFiles = [
     safeErrorMessage: null,
     safeFailureMessage: null,
     uploadedByUserId: 'platform-ui',
-    textLength: 120,
+    parsedChars: 120,
     chunkCount: 2,
     parserVersion: 'fixture-parser',
     category: '低命中修复门诊',
@@ -182,7 +182,7 @@ const panelKnowledgeFiles = [
     safeErrorMessage: 'PDF 解析服务异常',
     safeFailureMessage: 'PDF 解析服务异常',
     uploadedByUserId: 'platform-ui',
-    textLength: 0,
+    parsedChars: 0,
     chunkCount: 0,
     parserVersion: null,
     category: '机构名称异常',
@@ -210,7 +210,7 @@ const panelKnowledgeFiles = [
     safeErrorMessage: null,
     safeFailureMessage: null,
     uploadedByUserId: 'platform-ui',
-    textLength: 80,
+    parsedChars: 80,
     chunkCount: 1,
     parserVersion: 'fixture-parser',
     category: '星澜医美中心',
@@ -1069,7 +1069,7 @@ describe('平台端知识库管理只读看板', () => {
               parseStatus: 'pending',
               failureReasonCode: null,
               safeFailureMessage: null,
-              textLength: 0,
+              parsedChars: 0,
               chunkCount: 0,
               parserVersion: null,
             },
@@ -1096,7 +1096,7 @@ describe('平台端知识库管理只读看板', () => {
               parseStatus: 'pending',
               failureReasonCode: null,
               safeFailureMessage: null,
-              textLength: 0,
+              parsedChars: 0,
               chunkCount: 0,
               parserVersion: null,
             },
@@ -1122,7 +1122,7 @@ describe('平台端知识库管理只读看板', () => {
               parseStatus: 'pending',
               failureReasonCode: null,
               safeFailureMessage: null,
-              textLength: 0,
+              parsedChars: 0,
               chunkCount: 0,
               parserVersion: null,
             },
@@ -1313,7 +1313,8 @@ describe('平台端知识库管理只读看板', () => {
     expect(within(fileCardGrid).getByText('待解析')).toBeInTheDocument();
     expect(within(fileCardGrid).getByText('PDF · 10 KB')).toBeInTheDocument();
     expect(within(fileCardGrid).getAllByText('话术库').length).toBeGreaterThan(0);
-    expect(within(fileCardGrid).getAllByText('0 字符').length).toBeGreaterThan(0);
+    expect(within(fileCardGrid).getByText('120 字符')).toBeInTheDocument();
+    expect(within(fileCardGrid).getAllByText('当前数据契约未提供解析片段数').length).toBeGreaterThan(0);
     expect(within(fileCardGrid).getByText('2026-06-14 10:00')).toBeInTheDocument();
     expect(within(fileCardGrid).getAllByText('错误信息：暂无解析错误').length).toBeGreaterThan(0);
     expect(within(fileCardGrid).getByText('星澜导入失败记录.xlsx')).toBeInTheDocument();
@@ -1322,6 +1323,43 @@ describe('平台端知识库管理只读看板', () => {
     expect(within(fileCardGrid).getByText('错误信息：文件格式暂不支持')).toBeInTheDocument();
     expect(within(fileCardGrid).getAllByRole('button', { name: '下载' }).length).toBeGreaterThan(0);
     expect(within(fileCardGrid).getAllByRole('button', { name: '操作受控' }).length).toBeGreaterThan(0);
+  });
+
+  it('文件卡片网格展示 parsedChars 真实字段和解析片段受控 fallback，不依赖旧版字段', async () => {
+    const filesResponse = getPlatformKnowledgeFilesResponse({ page: 1, pageSize: 1 });
+    vi.mocked(viewLoader.loadOpenPlatformKnowledgeManagementFiles).mockResolvedValueOnce({
+      ...filesResponse,
+      dataSource: 'repository',
+      records: [
+        {
+          fileId: 'file-no-parsed-chars',
+          taskId: 'task-no-parsed-chars',
+          tenantId: 'tenant-xinglan',
+          tenantName: '星澜医美中心',
+          knowledgeId: 'knowledge-price-reply',
+          fileName: '契约缺失解析字符数.pdf',
+          mimeType: 'application/pdf',
+          fileType: 'PDF',
+          fileSizeKb: 10,
+          category: '星澜医美中心',
+          folder: '话术库',
+          parseStatus: 'pending',
+          taskStatus: 'running',
+          safeErrorMessage: null,
+          createdAt: '2026-06-14 09:00',
+          updatedAt: '2026-06-14 10:00',
+        } as unknown as PlatformKnowledgeFileDto,
+      ],
+      pageInfo: pageInfoFor(1, 1, 1),
+    });
+
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    const fileCardGrid = await screen.findByLabelText('文件卡片网格');
+    expect(within(fileCardGrid).getByText('契约缺失解析字符数.pdf')).toBeInTheDocument();
+    expect(within(fileCardGrid).getByText('当前数据契约未提供解析字符数')).toBeInTheDocument();
+    expect(within(fileCardGrid).getByText('当前数据契约未提供解析片段数')).toBeInTheDocument();
+    expect(fileCardGrid.textContent).not.toContain('textLength');
   });
 
   it('UPGRADE-02 展示当前范围摘要、机构运营卡细分标签和文件受控操作状态', async () => {
@@ -1342,6 +1380,7 @@ describe('平台端知识库管理只读看板', () => {
     const fileCardGrid = screen.getByLabelText('文件卡片网格');
     expect(within(fileCardGrid).getAllByText('保留原始文件').length).toBeGreaterThan(0);
     expect(within(fileCardGrid).getAllByText('解析片段').length).toBeGreaterThan(0);
+    expect(within(fileCardGrid).getAllByText('当前数据契约未提供解析片段数').length).toBeGreaterThan(0);
     expect(within(fileCardGrid).getAllByText('下载能力').length).toBeGreaterThan(0);
     expect(within(fileCardGrid).getAllByText('批量解析请使用已选文件操作，本卡片不新增接口').length).toBeGreaterThan(0);
 
@@ -1763,7 +1802,7 @@ describe('平台端知识库管理只读看板', () => {
         folder: file.folder,
         parseStatus: file.parseStatus as PlatformKnowledgeFileDto['parseStatus'],
         taskStatus: (file.parseStatus === 'failed' ? 'failed' : 'completed') as PlatformKnowledgeFileDto['taskStatus'],
-        parsedChars: file.textLength,
+        parsedChars: file.parsedChars,
         safeErrorMessage: file.safeErrorMessage,
         createdAt: file.createdAt,
         updatedAt: file.updatedAt,

@@ -211,6 +211,18 @@ function formatControlledPercent(value: number | null | undefined, hasData: bool
   return formatPercent(value);
 }
 
+function formatParsedCharsLabel(parsedChars: number | null | undefined) {
+  if (typeof parsedChars !== 'number' || !Number.isFinite(parsedChars)) {
+    return '当前数据契约未提供解析字符数';
+  }
+
+  return `${formatNumber(parsedChars)} 字符`;
+}
+
+function formatFileChunkCountLabel() {
+  return '当前数据契约未提供解析片段数';
+}
+
 function resolveTenantOperationalStatus(input: {
   knowledgeCount: number;
   sourceFileCount?: number;
@@ -1990,8 +2002,8 @@ export function OpenPlatformKnowledgeManagementPanel() {
                         fileSizeLabel={formatFileSize(file.fileSizeKb)}
                         categoryLabel={file.category || '未分类'}
                         folderLabel={file.folder || '未分组'}
-                        textLengthLabel={`${formatNumber(file.parsedChars ?? 0)} 字符`}
-                        chunkCountLabel="文件列表暂未提供"
+                        parsedCharsLabel={formatParsedCharsLabel(file.parsedChars)}
+                        chunkCountLabel={formatFileChunkCountLabel()}
                         updatedAtLabel={file.updatedAt || '暂无更新时间'}
                         errorMessageLabel={file.safeErrorMessage || '暂无解析错误'}
                         hasError={Boolean(file.safeErrorMessage)}
