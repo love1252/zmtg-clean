@@ -1,11 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   buildInstitutionAiServiceUsageResponse,
   createInstitutionAiServiceUsageQuotaFromFixture,
+  createInstitutionAiServiceUsageQuotaFromReadonlySource,
+  getInstitutionAiServiceUsage,
   resolveInstitutionAiServiceUsagePeriod,
   type InstitutionAiServiceUsageRow,
 } from '@/modules/institution/server/institution-ai-service-usage';
+import {
+  PACKAGE_AI_QUOTA_FIXTURES,
+  mapRealPackageAiQuotaSourceToInstitutionReadonlyDto,
+} from '@/modules/institution/domain/package-ai-quota-contract';
+import type { TenantDatabase } from '@/server/db/client';
 
 const period = {
   from: '2026-06-01',
@@ -35,6 +42,21 @@ function createRow(overrides: Partial<InstitutionAiServiceUsageRow> = {}): Insti
     serviceCategory: 'ai_qa',
     serviceName: 'AI 问答',
     ...overrides,
+  };
+}
+
+function createReadonlyUsageDatabase(rows: InstitutionAiServiceUsageRow[] = []) {
+  const orderBy = vi.fn(async () => rows);
+  const where = vi.fn(() => ({ orderBy }));
+  const from = vi.fn(() => ({ where }));
+  const select = vi.fn(() => ({ from }));
+
+  return {
+    database: { select } as unknown as TenantDatabase,
+    select,
+    from,
+    where,
+    orderBy,
   };
 }
 
@@ -89,7 +111,7 @@ describe('机构端 AI 服务使用只读 facade', () => {
     expect(response.quota).toEqual({ isLinked: false });
   });
 
-  it('从 mock fixture 返回 active / warning / overLimit / expired linked readonly quota', () => {
+  it('从 readonly source facade 兼容 active / warning / overLimit / expired linked readonly quota', () => {
     expect(createInstitutionAiServiceUsageQuotaFromFixture('active')).toMatchObject({
       isLinked: true,
       status: 'active',
@@ -129,6 +151,134 @@ describe('机构端 AI 服务使用只读 facade', () => {
       usageRate: 18,
       warningLevel: 'high',
     });
+  });
+
+  it('quota source 明确经过 RealPackageAiQuotaLinkageSource -> mapper，source 不可用时安全 fallback', () => {
+    const activeSource = PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources.active;
+    const fromUsageFacade = createInstitutionAiServiceUsageQuotaFromReadonlySource(activeSource);
+    const fromMapper = mapRealPackageAiQuotaSourceToInstitutionReadonlyDto(activeSource);
+
+    expect(fromUsageFacade).toEqual(fromMapper);
+    expect(fromUsageFacade).toMatchObject({
+      isLinked: true,
+      status: 'active',
+      totalAllowance: 1000,
+      used: 420,
+      remaining: 580,
+      usageRate: 42,
+      warningLevel: 'low',
+    });
+    expect(createInstitutionAiServiceUsageQuotaFromReadonlySource(null)).toMatchObject({
+      isLinked: false,
+      status: 'unlinked',
+      totalAllowance: null,
+      used: 0,
+      remaining: null,
+      usageRate: null,
+      warningLevel: 'none',
+    });
+    expect(createInstitutionAiServiceUsageQuotaFromReadonlySource(
+      PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources.invalidFallback,
+    )).toMatchObject({
+      isLinked: false,
+      status: 'unlinked',
+      totalAllowance: null,
+      used: 0,
+      remaining: null,
+      usageRate: null,
+      warningLevel: 'none',
+    });
+  });
+
+  it('runtime 默认通过 readonly source facade 返回 linked quota，且 source null 时 controlled fallback 为 isLinked=false', async () => {
+    const query = createReadonlyUsageDatabase([]);
+    const defaultResponse = await getInstitutionAiServiceUsage({
+      database: query.database,
+      tenantId: 'tenant-current',
+      institutionId: 'institution-current',
+      period,
+      dateFrom: new Date('2026-06-01T00:00:00.000Z'),
+      dateTo: new Date('2026-06-30T23:59:59.999Z'),
+    });
+
+    expect(defaultResponse.quota).toMatchObject({
+      isLinked: true,
+      status: 'active',
+      totalAllowance: 1000,
+      used: 420,
+      remaining: 580,
+      usageRate: 42,
+      warningLevel: 'low',
+    });
+    expect(query.select).toHaveBeenCalledTimes(1);
+
+    const repository = {
+      findReadonlySource: vi.fn(async () => null),
+    };
+    const fallbackResponse = await getInstitutionAiServiceUsage({
+      database: query.database,
+      tenantId: 'tenant-current',
+      institutionId: 'institution-current',
+      period,
+      dateFrom: new Date('2026-06-01T00:00:00.000Z'),
+      dateTo: new Date('2026-06-30T23:59:59.999Z'),
+      packageAiQuotaReadonlySourceRepository: repository,
+    });
+
+    expect(repository.findReadonlySource).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-current',
+      institutionId: 'institution-current',
+    }));
+    expect(fallbackResponse.quota).toMatchObject({
+      isLinked: false,
+      status: 'unlinked',
+      totalAllowance: null,
+      used: 0,
+      remaining: null,
+      usageRate: null,
+      warningLevel: 'none',
+    });
+    expect(fallbackResponse.period).toEqual(period);
+    expect(fallbackResponse.summary).toMatchObject({ totalUsageCount: 0, aiServiceUnitsUsed: 0 });
+    expect(fallbackResponse.serviceProjects).toEqual([]);
+  });
+
+  it('runtime readonly source 不写数据库、不调用 provider、不触发扣减告警导出', async () => {
+    const query = createReadonlyUsageDatabase([createRow()]);
+    const sideEffects = {
+      writeDatabase: vi.fn(),
+      callProvider: vi.fn(),
+      deductQuota: vi.fn(),
+      sendAlert: vi.fn(),
+      exportQuota: vi.fn(),
+    };
+    const repository = {
+      findReadonlySource: vi.fn(async () => PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources.overLimit),
+      ...sideEffects,
+    };
+
+    const response = await getInstitutionAiServiceUsage({
+      database: query.database,
+      tenantId: 'tenant-current',
+      institutionId: 'institution-current',
+      period,
+      dateFrom: new Date('2026-06-01T00:00:00.000Z'),
+      dateTo: new Date('2026-06-30T23:59:59.999Z'),
+      packageAiQuotaReadonlySourceRepository: repository,
+    });
+
+    expect(response.quota).toMatchObject({
+      isLinked: true,
+      status: 'overLimit',
+      remaining: 0,
+      warningLevel: 'exceeded',
+    });
+    expect(JSON.stringify(response)).not.toMatch(/shouldBlock|isBlocked|hardBlock|deduct|charge|alert|warningSent|export/i);
+    expect(sideEffects.writeDatabase).not.toHaveBeenCalled();
+    expect(sideEffects.callProvider).not.toHaveBeenCalled();
+    expect(sideEffects.deductQuota).not.toHaveBeenCalled();
+    expect(sideEffects.sendAlert).not.toHaveBeenCalled();
+    expect(sideEffects.exportQuota).not.toHaveBeenCalled();
   });
 
   it('不影响 /api/institution/ai-service-usage quota contract 白名单字段', () => {

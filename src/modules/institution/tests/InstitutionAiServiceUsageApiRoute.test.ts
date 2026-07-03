@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+
 import { createElement } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -231,6 +233,11 @@ describe('机构端 GET /api/institution/ai-service-usage', () => {
       warningLevel: 'exceeded',
     });
     expect(serialized).not.toMatch(/shouldBlock|isBlocked|hardBlock|deduct|charge|alert|warningSent/i);
+  });
+
+  it('本轮仍不新增 package-ai-quota API route', () => {
+    expect(existsSync('src/app/api/institution/package-ai-quota')).toBe(false);
+    expect(existsSync('src/app/api/open-platform/package-ai-quota')).toBe(false);
   });
 
   it('service 异常返回 503 且不暴露错误细节', async () => {

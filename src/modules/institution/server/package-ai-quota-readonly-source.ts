@@ -1,4 +1,5 @@
 import {
+  PACKAGE_AI_QUOTA_FIXTURES,
   calculatePackageAiQuotaUsageRate,
   mapRealPackageAiQuotaSourceToInstitutionReadonlyDto,
   resolvePackageAiQuotaWarningLevel,
@@ -157,6 +158,24 @@ export function createPackageAiQuotaControlledFallbackReadonlySourceRepository()
         institutionId: input.institutionId,
         reason: 'unavailable_source',
       });
+    },
+  };
+}
+
+export function createPackageAiQuotaFixtureBackedReadonlySource(input: {
+  status?: PackageAiQuotaStatus;
+} = {}): RealPackageAiQuotaLinkageSource {
+  const status = input.status ?? 'active';
+  if (status === 'unlinked') return PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources.unlinkedCompatibility;
+  return PACKAGE_AI_QUOTA_FIXTURES.realLinkageSources[status];
+}
+
+export function createPackageAiQuotaFixtureBackedReadonlySourceRepository(input: {
+  status?: PackageAiQuotaStatus;
+} = {}): PackageAiQuotaReadonlySourceRepository {
+  return {
+    async findReadonlySource() {
+      return createPackageAiQuotaFixtureBackedReadonlySource(input);
     },
   };
 }
