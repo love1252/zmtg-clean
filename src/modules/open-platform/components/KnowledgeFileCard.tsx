@@ -13,6 +13,7 @@ export type KnowledgeFileCardProps = {
   categoryLabel: string;
   folderLabel: string;
   textLengthLabel: string;
+  chunkCountLabel: string;
   updatedAtLabel: string;
   errorMessageLabel: string;
   hasError: boolean;
@@ -33,6 +34,7 @@ export function KnowledgeFileCard({
   categoryLabel,
   folderLabel,
   textLengthLabel,
+  chunkCountLabel,
   updatedAtLabel,
   errorMessageLabel,
   hasError,
@@ -71,6 +73,14 @@ export function KnowledgeFileCard({
           <dd className="mt-1 font-semibold text-slate-800">{textLengthLabel}</dd>
         </div>
         <div>
+          <dt className="font-semibold text-slate-500">解析片段</dt>
+          <dd className="mt-1 font-semibold text-slate-800">{chunkCountLabel}</dd>
+        </div>
+        <div>
+          <dt className="font-semibold text-slate-500">保留原始文件</dt>
+          <dd className="mt-1 font-semibold text-slate-800">是</dd>
+        </div>
+        <div>
           <dt className="font-semibold text-slate-500">分类</dt>
           <dd className="mt-1 font-semibold text-slate-800">{categoryLabel}</dd>
         </div>
@@ -88,6 +98,16 @@ export function KnowledgeFileCard({
         hasError ? 'border-rose-100 bg-rose-50 text-rose-700' : 'border-emerald-100 bg-emerald-50 text-emerald-700',
       )}>
         错误信息：{errorMessageLabel}
+      </div>
+      <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+        <div className="rounded-lg border border-[#e6edf5] bg-white px-3 py-2">
+          <div className="font-semibold text-slate-500">下载能力</div>
+          <div className="mt-1 font-semibold text-slate-800">{canDownload ? '可下载' : '缺少归属，受控禁用'}</div>
+        </div>
+        <div className="rounded-lg border border-[#e6edf5] bg-white px-3 py-2">
+          <div className="font-semibold text-slate-500">操作状态</div>
+          <div className="mt-1 font-semibold text-slate-800">批量解析请使用已选文件操作，本卡片不新增接口</div>
+        </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         <button

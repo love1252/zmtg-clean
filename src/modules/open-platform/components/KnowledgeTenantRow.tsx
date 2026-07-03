@@ -21,9 +21,17 @@ export function KnowledgeTenantRow({
   isActive,
   onSelect,
 }: KnowledgeTenantRowProps) {
+  const statusTone =
+    statusLabel === '待优化'
+      ? 'border-amber-100 bg-amber-50 text-amber-700'
+      : statusLabel === '待接入'
+        ? 'border-slate-200 bg-slate-50 text-slate-600'
+        : 'border-emerald-100 bg-emerald-50 text-emerald-700';
+
   return (
     <button
       type="button"
+      aria-label={`机构运营卡 ${tenantName}`}
       aria-current={isActive ? 'true' : undefined}
       onClick={() => onSelect(tenantId)}
       className={cn(
@@ -31,24 +39,35 @@ export function KnowledgeTenantRow({
         isActive ? 'border-blue-200 bg-blue-50 shadow-sm' : 'border-[#e6edf5] bg-white hover:bg-[#f8fafc]',
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className={cn('truncate text-sm font-semibold', isActive ? 'text-blue-700' : 'text-slate-950')}>
-            {tenantName}
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className={cn('truncate text-sm font-semibold', isActive ? 'text-blue-700' : 'text-slate-950')}>
+              {tenantName}
+            </div>
+            <div className="mt-1 text-xs font-semibold text-slate-500">运营状态</div>
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-2 text-xs font-semibold text-slate-500">
-            <span>知识 {knowledgeLabel}</span>
-            <span>命中 {hitLabel}</span>
-            <span>覆盖 {coverageLabel}</span>
-            <span>状态 {statusLabel}</span>
+          <span className={cn('inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-xs font-semibold', statusTone)}>
+            {statusLabel}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div className="rounded-lg border border-[#edf2f7] bg-white px-2 py-2">
+            <div className="font-semibold text-slate-500">知识数</div>
+            <div className="mt-1 font-semibold text-slate-900">{knowledgeLabel}</div>
+          </div>
+          <div className="rounded-lg border border-[#edf2f7] bg-white px-2 py-2">
+            <div className="font-semibold text-slate-500">命中数</div>
+            <div className="mt-1 font-semibold text-slate-900">{hitLabel}</div>
+          </div>
+          <div className="rounded-lg border border-[#edf2f7] bg-white px-2 py-2">
+            <div className="font-semibold text-slate-500">覆盖率</div>
+            <div className="mt-1 font-semibold text-slate-900">{coverageLabel}</div>
           </div>
         </div>
-        <span className={cn(
-          'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold',
-          isActive ? 'border-blue-100 bg-white text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-600',
-        )}>
-          {coverageLabel}
-        </span>
+        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
+          <div className="h-full rounded-full bg-blue-500" style={{ width: coverageLabel === '暂无可用数据' ? '0%' : coverageLabel }} />
+        </div>
       </div>
     </button>
   );
