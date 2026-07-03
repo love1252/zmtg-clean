@@ -1675,6 +1675,37 @@ export function OpenPlatformKnowledgeManagementPanel() {
             ))}
           </div>
 
+          <section className={cn(sectionShell, 'p-4')} aria-label="当前范围运营摘要">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-xs font-semibold text-slate-500">当前范围</div>
+                <h2 className="mt-1 text-lg font-semibold tracking-normal text-slate-950">{scopeName}</h2>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                  数据来自新版知识库 contract，未新增统计 API
+                  {selectedDirectory ? ` · 当前目录：${selectedDirectory.name}` : ''}
+                </p>
+              </div>
+              <div className="grid gap-2 text-xs sm:grid-cols-4 lg:min-w-[520px]">
+                <div className="rounded-lg border border-[#e6edf5] bg-[#f8fafc] px-3 py-2">
+                  <div className="font-semibold text-slate-500">文件</div>
+                  <div className="mt-1 font-semibold text-slate-900">{formatNumber(visibleFiles.length)}</div>
+                </div>
+                <div className="rounded-lg border border-[#e6edf5] bg-[#f8fafc] px-3 py-2">
+                  <div className="font-semibold text-slate-500">知识</div>
+                  <div className="mt-1 font-semibold text-slate-900">{formatNumber(visibleKnowledgeItems.length)}</div>
+                </div>
+                <div className="rounded-lg border border-[#e6edf5] bg-[#f8fafc] px-3 py-2">
+                  <div className="font-semibold text-slate-500">已选文件</div>
+                  <div className="mt-1 font-semibold text-slate-900">{formatNumber(visibleSelectedFileIds.length)}</div>
+                </div>
+                <div className="rounded-lg border border-[#e6edf5] bg-[#f8fafc] px-3 py-2">
+                  <div className="font-semibold text-slate-500">目录</div>
+                  <div className="mt-1 font-semibold text-slate-900">{selectedDirectory?.name ?? '全部目录'}</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section className="grid gap-3 sm:grid-cols-3" aria-label="当前范围健康卡">
             {currentHealthCards.map((card) => (
               <article key={card.label} className={cn(sectionShell, 'p-4')}>
@@ -1960,6 +1991,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
                         categoryLabel={file.category || '未分类'}
                         folderLabel={file.folder || '未分组'}
                         textLengthLabel={`${formatNumber(file.parsedChars ?? 0)} 字符`}
+                        chunkCountLabel="文件列表暂未提供"
                         updatedAtLabel={file.updatedAt || '暂无更新时间'}
                         errorMessageLabel={file.safeErrorMessage || '暂无解析错误'}
                         hasError={Boolean(file.safeErrorMessage)}
@@ -2414,7 +2446,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
             </div>
           </article>
 
-          <KnowledgeSignalCard title="高频问题" helper="按当前机构范围展示 TOP 5">
+          <KnowledgeSignalCard title="高频问题" helper="按当前机构范围展示 TOP 5" riskLabel={topQuestionSignals.length > 0 ? '观察' : '低'}>
             <div className="space-y-3">
               {topQuestionSignals.length === 0 ? (
                 <div className="text-sm text-slate-500">暂无高频问题</div>
@@ -2430,7 +2462,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
             </div>
           </KnowledgeSignalCard>
 
-          <KnowledgeSignalCard title="热门分类" helper="保留新版分类统计 contract">
+          <KnowledgeSignalCard title="热门分类" helper="保留新版分类统计 contract" riskLabel={topCategorySignals.length > 0 ? '低' : '观察'}>
             <div className="space-y-3">
               {topCategorySignals.length === 0 ? (
                 <div className="text-sm text-slate-500">暂无分类</div>
@@ -2445,7 +2477,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
             </div>
           </KnowledgeSignalCard>
 
-          <KnowledgeSignalCard title="零命中知识" helper="用于识别待优化内容">
+          <KnowledgeSignalCard title="零命中知识" helper="用于识别待优化内容" riskLabel={zeroHitKnowledgeItems.length > 0 ? '中' : '低'}>
             <div className="space-y-3">
               {zeroHitKnowledgeItems.length === 0 ? (
                 <div className="text-sm text-slate-500">当前范围暂无零命中知识</div>
@@ -2460,7 +2492,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
             </div>
           </KnowledgeSignalCard>
 
-          <KnowledgeSignalCard title="导入成功率" helper="当前范围前端受控展示">
+          <KnowledgeSignalCard title="导入成功率" helper="当前范围前端受控展示" riskLabel={failedFileCount > 0 ? '中' : '低'}>
             <div className="text-2xl font-semibold tracking-normal text-slate-950">
               {formatControlledPercent(view.totals.importSuccessRate, currentScopeHasFiles || scopedJobs.length > 0)}
             </div>

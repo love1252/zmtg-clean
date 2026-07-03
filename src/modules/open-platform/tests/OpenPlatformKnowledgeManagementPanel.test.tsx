@@ -1183,7 +1183,7 @@ describe('平台端知识库管理只读看板', () => {
     expect(screen.getAllByText('知识条目')[0]).toBeInTheDocument();
     expect(screen.getAllByText('累计命中')[0]).toBeInTheDocument();
     expect(screen.getAllByText('训练 / 解析覆盖')[0]).toBeInTheDocument();
-    expect(screen.getByText('待优化')).toBeInTheDocument();
+    expect(screen.getAllByText('待优化').length).toBeGreaterThan(0);
     expect(screen.getByLabelText('当前范围健康卡')).toBeInTheDocument();
     expect(screen.getAllByText('导入成功率').length).toBeGreaterThan(0);
     expect(screen.getByText('命中覆盖率')).toBeInTheDocument();
@@ -1322,6 +1322,31 @@ describe('平台端知识库管理只读看板', () => {
     expect(within(fileCardGrid).getByText('错误信息：文件格式暂不支持')).toBeInTheDocument();
     expect(within(fileCardGrid).getAllByRole('button', { name: '下载' }).length).toBeGreaterThan(0);
     expect(within(fileCardGrid).getAllByRole('button', { name: '操作受控' }).length).toBeGreaterThan(0);
+  });
+
+  it('UPGRADE-02 展示当前范围摘要、机构运营卡细分标签和文件受控操作状态', async () => {
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    const workbench = await screen.findByLabelText('知识库管理工作台');
+    const scopeSummary = within(workbench).getByLabelText('当前范围运营摘要');
+    expect(within(scopeSummary).getByText('当前范围')).toBeInTheDocument();
+    expect(within(scopeSummary).getByText('全部机构')).toBeInTheDocument();
+    expect(within(scopeSummary).getByText('数据来自新版知识库 contract，未新增统计 API')).toBeInTheDocument();
+
+    const directoryPanel = within(workbench).getByLabelText('知识目录');
+    expect(within(directoryPanel).getAllByText('知识数').length).toBeGreaterThan(0);
+    expect(within(directoryPanel).getAllByText('命中数').length).toBeGreaterThan(0);
+    expect(within(directoryPanel).getAllByText('覆盖率').length).toBeGreaterThan(0);
+    expect(within(directoryPanel).getAllByText('运营状态').length).toBeGreaterThan(0);
+
+    const fileCardGrid = screen.getByLabelText('文件卡片网格');
+    expect(within(fileCardGrid).getAllByText('保留原始文件').length).toBeGreaterThan(0);
+    expect(within(fileCardGrid).getAllByText('解析片段').length).toBeGreaterThan(0);
+    expect(within(fileCardGrid).getAllByText('下载能力').length).toBeGreaterThan(0);
+    expect(within(fileCardGrid).getAllByText('批量解析请使用已选文件操作，本卡片不新增接口').length).toBeGreaterThan(0);
+
+    const signals = within(workbench).getByLabelText('运营信号');
+    expect(within(signals).getAllByText(/风险等级/).length).toBeGreaterThan(0);
   });
   it('顶部上传文档入口会跳转到真实上传区并打开文件选择', async () => {
     const inputClickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => undefined);
