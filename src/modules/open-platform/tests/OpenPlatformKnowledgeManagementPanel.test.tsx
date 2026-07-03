@@ -8,6 +8,7 @@ import {
   getPlatformKnowledgeFilesResponse,
   getPlatformKnowledgeItemsResponse,
   getPlatformKnowledgeOverviewResponse,
+  type PlatformKnowledgeFileDto,
 } from '@/modules/open-platform/server/platformKnowledgeManagementApiContract';
 
 vi.mock('@/modules/open-platform/lib/platformKnowledgeManagementViewLoader', async (importOriginal) => {
@@ -1181,8 +1182,12 @@ describe('平台端知识库管理只读看板', () => {
     expect(await screen.findByText('接入机构')).toBeInTheDocument();
     expect(screen.getAllByText('知识条目')[0]).toBeInTheDocument();
     expect(screen.getAllByText('累计命中')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('解析覆盖')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('训练 / 解析覆盖')[0]).toBeInTheDocument();
     expect(screen.getByText('待优化')).toBeInTheDocument();
+    expect(screen.getByLabelText('当前范围健康卡')).toBeInTheDocument();
+    expect(screen.getAllByText('导入成功率').length).toBeGreaterThan(0);
+    expect(screen.getByText('命中覆盖率')).toBeInTheDocument();
+    expect(screen.getByText('训练 / 解析覆盖率')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '知识目录' })).toBeInTheDocument();
     const workbench = screen.getByLabelText('知识库管理工作台');
     expect(within(workbench).getByLabelText('知识目录')).toBeInTheDocument();
@@ -1196,10 +1201,10 @@ describe('平台端知识库管理只读看板', () => {
     expect(screen.getByRole('tab', { name: '导入任务' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '文件管理' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '运营信号' })).toBeInTheDocument();
-    expect(screen.getByText('高频提问 TOP 5')).toBeInTheDocument();
-    expect(screen.getByText('热门知识分类 TOP 5')).toBeInTheDocument();
-    expect(screen.getByText('命中次数（近7天）')).toBeInTheDocument();
-    expect(screen.getByText('导入成功率（近7天）')).toBeInTheDocument();
+    expect(screen.getByText('高频问题')).toBeInTheDocument();
+    expect(screen.getByText('热门分类')).toBeInTheDocument();
+    expect(screen.getByText('零命中知识')).toBeInTheDocument();
+    expect(screen.getAllByText('导入成功率').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '更多筛选' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '解析已选' })).toBeDisabled();
     expect(
@@ -1287,15 +1292,37 @@ describe('平台端知识库管理只读看板', () => {
     );
   });
 
-  it('文件管理页签优先展示上传与解析卡片', async () => {
+  it('文件管理页签优先展示上传与解析卡片，并保留文件卡片网格', async () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
     const uploadPanel = await screen.findByLabelText('知识库文件管理操作区');
     const fileListPanel = await screen.findByLabelText('机构上传文件列表');
+    const fileCardGrid = await screen.findByLabelText('文件卡片网格');
 
     expect(uploadPanel.compareDocumentPosition(fileListPanel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(fileCardGrid).toBeInTheDocument();
   });
 
+  it('文件卡片网格展示文件名、机构、状态、类型大小、分类文件夹、解析字符数、更新时间和错误信息', async () => {
+    render(<OpenPlatformKnowledgeManagementPanel />);
+
+    const fileCardGrid = await screen.findByLabelText('文件卡片网格');
+
+    expect(within(fileCardGrid).getByText('星澜医美中心术后护理指南.pdf')).toBeInTheDocument();
+    expect(within(fileCardGrid).getAllByText('星澜医美中心').length).toBeGreaterThan(0);
+    expect(within(fileCardGrid).getByText('待解析')).toBeInTheDocument();
+    expect(within(fileCardGrid).getByText('PDF · 10 KB')).toBeInTheDocument();
+    expect(within(fileCardGrid).getAllByText('话术库').length).toBeGreaterThan(0);
+    expect(within(fileCardGrid).getAllByText('0 字符').length).toBeGreaterThan(0);
+    expect(within(fileCardGrid).getByText('2026-06-14 10:00')).toBeInTheDocument();
+    expect(within(fileCardGrid).getAllByText('错误信息：暂无解析错误').length).toBeGreaterThan(0);
+    expect(within(fileCardGrid).getByText('星澜导入失败记录.xlsx')).toBeInTheDocument();
+    expect(within(fileCardGrid).getByText('XLSX · 12 KB')).toBeInTheDocument();
+    expect(within(fileCardGrid).getByText('导入记录')).toBeInTheDocument();
+    expect(within(fileCardGrid).getByText('错误信息：文件格式暂不支持')).toBeInTheDocument();
+    expect(within(fileCardGrid).getAllByRole('button', { name: '下载' }).length).toBeGreaterThan(0);
+    expect(within(fileCardGrid).getAllByRole('button', { name: '操作受控' }).length).toBeGreaterThan(0);
+  });
   it('顶部上传文档入口会跳转到真实上传区并打开文件选择', async () => {
     const inputClickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => undefined);
     const scrollIntoViewSpy = vi.fn();
@@ -1619,7 +1646,7 @@ describe('平台端知识库管理只读看板', () => {
   it('平台端知识库管理下线生产能力状态卡片，避免覆盖旧系统模板主流程', async () => {
     const { container } = render(<OpenPlatformKnowledgeManagementPanel />);
 
-    expect(await screen.findByText('星澜医美中心术后护理指南.pdf')).toBeInTheDocument();
+    expect((await screen.findAllByText('星澜医美中心术后护理指南.pdf')).length).toBeGreaterThan(0);
     expect(screen.queryByLabelText('当前知识库范围')).not.toBeInTheDocument();
     expect(screen.getByLabelText('知识库管理工作台')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '生产能力状态' })).not.toBeInTheDocument();
@@ -1643,15 +1670,15 @@ describe('平台端知识库管理只读看板', () => {
 
     const directory = await screen.findByLabelText('知识目录');
     expect(await within(directory).findByRole('button', { name: /全部机构/ })).toHaveAttribute('aria-current', 'true');
-    expect(await screen.findByText('星澜医美中心术后护理指南.pdf')).toBeInTheDocument();
+    expect((await screen.findAllByText('星澜医美中心术后护理指南.pdf')).length).toBeGreaterThan(0);
 
     selectTenantCard(directory, '低命中修复门诊');
 
     await waitFor(() =>
       expect(within(directory).getAllByRole('button', { name: /低命中修复门诊/ })[0]).toHaveAttribute('aria-current', 'true'),
     );
-    expect(await screen.findByText('低命中修复术后答疑.docx')).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText('星澜医美中心术后护理指南.pdf')).not.toBeInTheDocument());
+    expect((await screen.findAllByText('低命中修复术后答疑.docx')).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.queryAllByText('星澜医美中心术后护理指南.pdf')).toHaveLength(0));
     fireEvent.click(screen.getByRole('tab', { name: '知识条目' }));
     expect(screen.getAllByText('修复术后饮食要注意什么？')[0]).toBeInTheDocument();
     expect(screen.queryByText('水光针术后需要注意什么？')).not.toBeInTheDocument();
@@ -1663,13 +1690,13 @@ describe('平台端知识库管理只读看板', () => {
   it('支持按文件名搜索、选择本页、分页和同步 loading', async () => {
     render(<OpenPlatformKnowledgeManagementPanel />);
 
-    expect(await screen.findByText('星澜医美中心术后护理指南.pdf')).toBeInTheDocument();
+    expect((await screen.findAllByText('星澜医美中心术后护理指南.pdf')).length).toBeGreaterThan(0);
     const fileSection = await screen.findByLabelText('机构上传文件列表');
     const searchInput = within(fileSection).getByPlaceholderText('搜索文件名');
     fireEvent.change(searchInput, { target: { value: '星澜导入失败记录' } });
 
-    expect(await screen.findByText('星澜导入失败记录.xlsx')).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText('星澜医美中心术后护理指南.pdf')).not.toBeInTheDocument());
+    expect((await screen.findAllByText('星澜导入失败记录.xlsx')).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.queryAllByText('星澜医美中心术后护理指南.pdf')).toHaveLength(0));
     expect(viewLoader.loadOpenPlatformKnowledgeManagementFiles).toHaveBeenLastCalledWith({
       tenantId: null,
       keyword: '星澜导入失败记录',
@@ -1681,7 +1708,7 @@ describe('平台端知识库管理只读看板', () => {
     expect(screen.getByText('已选择 1 个文件')).toBeInTheDocument();
 
     fireEvent.change(searchInput, { target: { value: '' } });
-    expect(await screen.findByText('星澜医美中心术后护理指南.pdf')).toBeInTheDocument();
+    expect((await screen.findAllByText('星澜医美中心术后护理指南.pdf')).length).toBeGreaterThan(0);
     await waitFor(() => expect(within(fileSection).getByRole('button', { name: '下一页' })).toBeEnabled());
     fireEvent.click(within(fileSection).getByRole('button', { name: '下一页' }));
     expect(await screen.findByText(/第 2\/2 页/)).toBeInTheDocument();
@@ -1698,11 +1725,23 @@ describe('平台端知识库管理只读看板', () => {
       ...filesResponse,
       dataSource: 'repository',
       records: panelKnowledgeFiles.slice(0, 2).map((file, index) => ({
-        ...file,
         fileId: index === 0 ? 'file-bulk-a' : 'file-bulk-b',
+        taskId: `task-bulk-${index + 1}`,
         tenantId: index === 0 ? 'tenant-xinglan' : 'tenant-low-hit',
+        tenantName: file.tenantName,
         knowledgeId: index === 0 ? 'knowledge-price-reply' : 'knowledge-repair-diet',
         fileName: index === 0 ? '批量下载 A.pdf' : '批量下载 B.pdf',
+        mimeType: file.mimeType,
+        fileType: file.fileType,
+        fileSizeKb: file.fileSizeKb,
+        category: file.category,
+        folder: file.folder,
+        parseStatus: file.parseStatus as PlatformKnowledgeFileDto['parseStatus'],
+        taskStatus: (file.parseStatus === 'failed' ? 'failed' : 'completed') as PlatformKnowledgeFileDto['taskStatus'],
+        parsedChars: file.textLength,
+        safeErrorMessage: file.safeErrorMessage,
+        createdAt: file.createdAt,
+        updatedAt: file.updatedAt,
       })),
       pageInfo: {
         page: 1,
@@ -1737,13 +1776,13 @@ describe('平台端知识库管理只读看板', () => {
   it('展示中文安全错误文案、空状态和异常机构名称兜底', async () => {
     const { container } = render(<OpenPlatformKnowledgeManagementPanel />);
 
-    expect(await screen.findByText('星澜医美中心术后护理指南.pdf')).toBeInTheDocument();
+    expect((await screen.findAllByText('星澜医美中心术后护理指南.pdf')).length).toBeGreaterThan(0);
     const fileSection = await screen.findByLabelText('机构上传文件列表');
     const searchInput = within(fileSection).getByPlaceholderText('搜索文件名');
     fireEvent.change(searchInput, { target: { value: '星澜导入失败记录' } });
 
-    expect(await screen.findByText('星澜导入失败记录.xlsx')).toBeInTheDocument();
-    expect(screen.getByText('文件格式暂不支持')).toBeInTheDocument();
+    expect((await screen.findAllByText('星澜导入失败记录.xlsx')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('文件格式暂不支持').length).toBeGreaterThan(0);
     expectNoRawRuntimeError(container);
 
     fireEvent.change(searchInput, { target: { value: '没有匹配的文件名' } });
@@ -1779,7 +1818,7 @@ describe('平台端知识库管理只读看板', () => {
     vi.mocked(viewLoader.loadOpenPlatformKnowledgeManagementItems).mockResolvedValueOnce({
       requestId: 'open-platform-knowledge-management-items',
       readonly: true,
-      dataSource: 'mock',
+      dataSource: 'unconnected',
       records: [],
       pageInfo: {
         page: 1,
