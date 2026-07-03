@@ -276,10 +276,11 @@ describe('机构端知识库只读列表 UI', () => {
     expect(within(cardPanel).getByRole('heading', { name: '解析 / 训练任务记录' })).toBeInTheDocument();
     expect(within(cardPanel).getByRole('heading', { name: '运营建议 / 风险提示' })).toBeInTheDocument();
 
-    ['上传文档', '新建知识', '新建文件夹', '重新训练'].forEach((label) => {
-      expect(within(cardPanel).getByRole('button', { name: `${label}（待接入真实功能）` })).toBeDisabled();
+    expect(within(cardPanel).getByRole('button', { name: '上传文档' })).toBeEnabled();
+    ['新建知识', '新建文件夹', '重新训练'].forEach((label) => {
+      expect(within(cardPanel).getByRole('button', { name: new RegExp(`^${label}（`) })).toBeDisabled();
     });
-    expect(within(cardPanel).getByRole('button', { name: '开始检索测试' })).toBeDisabled();
+    expect(within(cardPanel).getByRole('button', { name: '开始检索测试' })).toBeEnabled();
 
     [
       '真实训练已完成',
