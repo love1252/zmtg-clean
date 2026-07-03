@@ -12,6 +12,7 @@ import {
 } from '@/modules/institution/client/tenant-business-client';
 import { getKnowledgeBaseControlledTrialReadiness } from '@/modules/knowledge-base/domain/v1-knowledge-base-controlled-trial-readiness';
 import { InstitutionPageState } from '@/modules/institution/components/InstitutionPageState';
+import { InstitutionKnowledgeBaseCardPanel } from '@/modules/institution/components/InstitutionKnowledgeBaseCardPanel';
 import { cn } from '@/shared/utils/cn';
 
 type LoadStatus = 'loading' | 'success' | 'error';
@@ -691,6 +692,8 @@ export function InstitutionKnowledgeReadonlyShell() {
           </button>
         </form>
       </div>
+
+      <InstitutionKnowledgeBaseCardPanel />
 
       <section
         aria-label="机构端知识库文件上传"

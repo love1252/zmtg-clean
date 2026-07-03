@@ -260,6 +260,37 @@ describe('机构端知识库只读列表 UI', () => {
     );
   });
 
+  it('机构端知识库入口展示卡片功能壳且操作仍受控', async () => {
+    const { container } = render(<InstitutionKnowledgeReadonlyShell />);
+
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+    const cardPanel = screen.getByLabelText('机构知识库卡片功能壳');
+
+    expect(within(cardPanel).getByRole('heading', { name: '机构知识库' })).toBeInTheDocument();
+    ['知识条目', '文件数', '已解析 / 待解析', '待优化 / 低命中'].forEach((label) => {
+      expect(within(cardPanel).getAllByText(label).length).toBeGreaterThan(0);
+    });
+    expect(within(cardPanel).getByRole('heading', { name: '知识目录' })).toBeInTheDocument();
+    expect(within(cardPanel).getByRole('heading', { name: '文件 / 文档' })).toBeInTheDocument();
+    expect(within(cardPanel).getByRole('heading', { name: '检索测试' })).toBeInTheDocument();
+    expect(within(cardPanel).getByRole('heading', { name: '解析 / 训练任务记录' })).toBeInTheDocument();
+    expect(within(cardPanel).getByRole('heading', { name: '运营建议 / 风险提示' })).toBeInTheDocument();
+
+    ['上传文档', '新建知识', '新建文件夹', '重新训练'].forEach((label) => {
+      expect(within(cardPanel).getByRole('button', { name: `${label}（待接入真实功能）` })).toBeDisabled();
+    });
+    expect(within(cardPanel).getByRole('button', { name: '开始检索测试' })).toBeDisabled();
+
+    [
+      '真实训练已完成',
+      '真实解析已完成',
+      '真实统计 API 已接入',
+      '已接入真实知识库数据库',
+    ].forEach((text) => {
+      expect(container.textContent).not.toContain(text);
+    });
+  });
+
   it('机构端展示只读试用说明、授权能力和禁止操作，且不提供受控外入口', async () => {
     const { container } = render(<InstitutionKnowledgeReadonlyShell />);
 
