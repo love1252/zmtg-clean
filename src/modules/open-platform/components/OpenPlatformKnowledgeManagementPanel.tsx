@@ -36,9 +36,12 @@ import {
   type OpenPlatformKnowledgeManagementItems,
   type OpenPlatformKnowledgeManagementView,
 } from '@/modules/open-platform/lib/platformKnowledgeManagementViewLoader';
+import { KnowledgeFileCard } from '@/modules/open-platform/components/KnowledgeFileCard';
+import { KnowledgeMetricCard } from '@/modules/open-platform/components/KnowledgeMetricCard';
+import { KnowledgeSignalCard } from '@/modules/open-platform/components/KnowledgeSignalCard';
+import { KnowledgeTenantRow } from '@/modules/open-platform/components/KnowledgeTenantRow';
 import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { cn } from '@/shared/utils/cn';
-import { packTarGz } from '@/shared/utils/tar';
 
 const ALL_TENANTS = 'all';
 const workspaceTabs = [
@@ -201,6 +204,22 @@ function formatFileSize(kb: number) {
   }
 
   return `${kb} KB`;
+}
+
+function formatControlledPercent(value: number | null | undefined, hasData: boolean) {
+  if (!hasData || typeof value !== 'number' || !Number.isFinite(value)) return '暂无可用数据';
+  return formatPercent(value);
+}
+
+function resolveTenantOperationalStatus(input: {
+  knowledgeCount: number;
+  sourceFileCount?: number;
+  failedImportJobCount?: number;
+  pendingOptimizationCount?: number;
+}) {
+  if (input.failedImportJobCount || input.pendingOptimizationCount) return '待优化';
+  if (input.knowledgeCount === 0 && !input.sourceFileCount) return '待接入';
+  return '运行中';
 }
 
 function formatDate(value: string) {
@@ -1003,6 +1022,39 @@ export function OpenPlatformKnowledgeManagementPanel() {
     }
   }
 
+  async function handleDownloadVisibleFile(fileId: string) {
+    const file = visibleFiles.find((item) => item.fileId === fileId);
+    if (!hasKnowledgeFileDownloadScope(file)) {
+      setFileActionMessage('该文件缺少知识库归属，暂无法下载');
+      return;
+    }
+
+    setFileActionMessage(null);
+    try {
+      const response = await fetch(fileDownloadPath({
+        knowledgeId: file.knowledgeId,
+        tenantId: file.tenantId,
+        fileId: file.fileId,
+      }), { method: 'GET' });
+      if (!response.ok) {
+        setFileActionMessage('文件暂时无法下载');
+        return;
+      }
+      const blob = await response.blob();
+      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = file.fileName || `${file.fileId}.bin`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      }
+      setFileActionMessage('文件下载已准备');
+    } catch {
+      setFileActionMessage('文件暂时无法下载');
+    }
+  }
+
   async function handleBulkDownloadSelectedFiles() {
     if (visibleSelectedFileIds.length === 0) return;
 
@@ -1338,9 +1390,31 @@ export function OpenPlatformKnowledgeManagementPanel() {
     { label: '接入机构', value: formatNumber(view?.allTotals.tenantCount ?? 0), helper: `${formatNumber(view?.allTotals.sourceFileCount ?? 0)} 个源文件`, icon: Building2, tone: 'bg-blue-50 text-blue-600' },
     { label: '知识条目', value: formatNumber(view?.allTotals.knowledgeCount ?? 0), helper: `${formatNumber(view?.allTotals.chunkCount ?? 0)} 个解析片段`, icon: Database, tone: 'bg-cyan-50 text-cyan-600' },
     { label: '累计命中', value: formatNumber(view?.allTotals.hitCount ?? 0), helper: `平均 ${view?.allTotals.averageHitCount ?? 0} 次/条`, icon: TrendingUp, tone: 'bg-emerald-50 text-emerald-600' },
-    { label: '解析覆盖', value: formatPercent(view?.allTotals.trainingCoverageRate ?? 0), helper: `${view?.allTotals.trainedCount ?? 0} 条已完成`, icon: CheckCircle2, tone: 'bg-violet-50 text-violet-600' },
-    { label: '待优化', value: formatNumber(view?.allTotals.pendingOptimizationCount ?? 0), helper: `${view?.allTotals.failedImportJobCount ?? 0} 个异常任务`, icon: AlertTriangle, tone: 'bg-amber-50 text-amber-600' },
+    { label: '训练 / 解析覆盖', value: formatControlledPercent(view?.allTotals.trainingCoverageRate, Boolean(view?.allTotals.knowledgeCount)), helper: `${formatNumber(view?.allTotals.trainedCount ?? 0)} 条已完成训练或解析`, icon: CheckCircle2, tone: 'bg-violet-50 text-violet-600' },
+    { label: '待优化', value: formatNumber(view?.allTotals.pendingOptimizationCount ?? 0), helper: `${formatNumber(view?.allTotals.failedImportJobCount ?? 0)} 个异常任务`, icon: AlertTriangle, tone: 'bg-amber-50 text-amber-600' },
   ];
+  const currentScopeHasKnowledge = visibleKnowledgeItems.length > 0;
+  const currentScopeHasFiles = visibleFiles.length > 0;
+  const currentHealthCards = [
+    {
+      label: '导入成功率',
+      value: formatControlledPercent(view?.totals.importSuccessRate, currentScopeHasFiles || scopedJobs.length > 0),
+      helper: currentScopeHasFiles || scopedJobs.length > 0 ? '基于当前范围文件与导入任务派生' : '当前范围暂无文件或导入任务',
+    },
+    {
+      label: '命中覆盖率',
+      value: formatControlledPercent(view?.totals.hitCoverageRate, currentScopeHasKnowledge),
+      helper: currentScopeHasKnowledge ? `${formatNumber(view?.totals.zeroHitCount ?? 0)} 条零命中知识` : '当前范围暂无知识条目',
+    },
+    {
+      label: '训练 / 解析覆盖率',
+      value: formatControlledPercent(view?.totals.trainingCoverageRate, currentScopeHasKnowledge || currentScopeHasFiles),
+      helper: currentScopeHasKnowledge || currentScopeHasFiles ? `${formatNumber(view?.totals.trainedCount ?? 0)} 条完成，${formatNumber(failedFileCount)} 个解析失败文件` : '当前范围暂无可计算覆盖率的数据',
+    },
+  ];
+  const zeroHitKnowledgeItems = visibleKnowledgeItems.filter((item) => item.hitCount === 0).slice(0, 5);
+  const topCategorySignals = scopedCategories.slice(0, 5);
+  const topQuestionSignals = scopedTopQuestions.slice(0, 5);
 
   return (
     <section className="space-y-4 text-slate-950" aria-labelledby="platform-knowledge-heading">
@@ -1413,15 +1487,7 @@ export function OpenPlatformKnowledgeManagementPanel() {
         <>
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5" aria-label="平台知识库总指标">
         {metricCards.map((metric) => (
-          <article key={metric.label} className={cn(sectionShell, 'flex min-h-[56px] items-center justify-between gap-3 px-4 py-3')}>
-            <div>
-              <div className="text-xs font-semibold text-slate-500">{metric.label}</div>
-              <div className="mt-0.5 text-xl font-semibold tracking-normal text-slate-950">{metric.value}</div>
-            </div>
-            <div className={cn('grid h-9 w-9 place-items-center rounded-lg', metric.tone)}>
-              <metric.icon className="h-4 w-4" />
-            </div>
-          </article>
+          <KnowledgeMetricCard key={metric.label} {...metric} />
         ))}
       </section>
 
@@ -1438,34 +1504,20 @@ export function OpenPlatformKnowledgeManagementPanel() {
 	          </div>
 
 	          <div className="mt-4 space-y-2">
-	            {[view.allTenantStats, ...view.tenants].map((tenant) => {
-	              const isActive = selectedTenantId === tenant.tenantId;
-	              return (
-	                <button
-	                  key={tenant.tenantId}
-	                  type="button"
-	                  aria-current={isActive ? 'true' : undefined}
-	                  onClick={() => handleSelectTenant(tenant.tenantId)}
-	                  className={cn(
-	                    'w-full rounded-lg border px-3 py-2 text-left transition',
-	                    isActive ? 'border-blue-200 bg-blue-50' : 'border-[#e6edf5] bg-white hover:bg-[#f8fafc]',
-	                  )}
-	                >
-	                  <div className="flex items-start justify-between gap-3">
-	                    <div className="min-w-0">
-	                      <div className={cn('truncate text-sm font-semibold', isActive ? 'text-blue-700' : 'text-slate-950')}>{tenant.tenantName}</div>
-	                      <div className="mt-1 text-xs text-slate-500">
-	                        {formatNumber(tenant.knowledgeCount)} 条知识 · {formatNumber(tenant.hitCount)} 次命中
-	                      </div>
-	                    </div>
-	                    <Badge className={isActive ? 'border-blue-100 bg-white text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-600'}>
-	                      {formatPercent(tenant.trainingCoverageRate)}
-	                    </Badge>
-	                  </div>
-	                </button>
-	              );
-	            })}
-	          </div>
+            {[view.allTenantStats, ...view.tenants].map((tenant) => (
+              <KnowledgeTenantRow
+                key={tenant.tenantId}
+                tenantId={tenant.tenantId}
+                tenantName={tenant.tenantName}
+                knowledgeLabel={formatNumber(tenant.knowledgeCount)}
+                hitLabel={formatNumber(tenant.hitCount)}
+                coverageLabel={formatControlledPercent(tenant.trainingCoverageRate, tenant.knowledgeCount > 0)}
+                statusLabel={resolveTenantOperationalStatus(tenant)}
+                isActive={selectedTenantId === tenant.tenantId}
+                onSelect={handleSelectTenant}
+              />
+            ))}
+          </div>
 
 	          <div className="mt-4 border-t border-[#e6edf5] pt-4">
 	            <div className="mb-2 flex items-center justify-between gap-2">
@@ -1622,6 +1674,16 @@ export function OpenPlatformKnowledgeManagementPanel() {
               </button>
             ))}
           </div>
+
+          <section className="grid gap-3 sm:grid-cols-3" aria-label="当前范围健康卡">
+            {currentHealthCards.map((card) => (
+              <article key={card.label} className={cn(sectionShell, 'p-4')}>
+                <div className="text-xs font-semibold text-slate-500">{card.label}</div>
+                <div className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">{card.value}</div>
+                <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{card.helper}</p>
+              </article>
+            ))}
+          </section>
 
           {activeWorkspaceTab === 'files' ? (
 	          <article ref={uploadPanelRef} className={cn(sectionShell, 'overflow-hidden')} aria-label="知识库文件管理操作区">
@@ -1883,7 +1945,33 @@ export function OpenPlatformKnowledgeManagementPanel() {
               {visibleFiles.length === 0 ? (
                 <EmptyState title={filesResponse.emptyState.title} description={filesResponse.emptyState.description} />
               ) : (
-                <KnowledgeFileTable files={visibleFiles} selectedFileIds={visibleSelectedFileIds} onToggle={handleToggleFile} />
+                <div className="space-y-4">
+                  <div className="grid gap-3 xl:grid-cols-2" aria-label="文件卡片网格">
+                    {visibleFiles.map((file) => (
+                      <KnowledgeFileCard
+                        key={file.fileId}
+                        fileId={file.fileId}
+                        fileName={file.fileName}
+                        tenantName={file.tenantName}
+                        statusLabel={fileStatusLabels[file.parseStatus]}
+                        statusClassName={fileStatusClasses[file.parseStatus]}
+                        fileType={file.fileType}
+                        fileSizeLabel={formatFileSize(file.fileSizeKb)}
+                        categoryLabel={file.category || '未分类'}
+                        folderLabel={file.folder || '未分组'}
+                        textLengthLabel={`${formatNumber(file.parsedChars ?? 0)} 字符`}
+                        updatedAtLabel={file.updatedAt || '暂无更新时间'}
+                        errorMessageLabel={file.safeErrorMessage || '暂无解析错误'}
+                        hasError={Boolean(file.safeErrorMessage)}
+                        selected={visibleSelectedFileIds.includes(file.fileId)}
+                        canDownload={hasKnowledgeFileDownloadScope(file)}
+                        onToggle={handleToggleFile}
+                        onDownload={(fileId) => void handleDownloadVisibleFile(fileId)}
+                      />
+                    ))}
+                  </div>
+                  <KnowledgeFileTable files={visibleFiles} selectedFileIds={visibleSelectedFileIds} onToggle={handleToggleFile} />
+                </div>
               )}
             </div>
 
@@ -2308,69 +2396,79 @@ export function OpenPlatformKnowledgeManagementPanel() {
 	        </div>
 
 	        <aside className="space-y-3" aria-label="运营信号">
-	          <article className={cn(sectionShell, 'p-4')}>
-	            <div className="flex items-center justify-between gap-3">
-	              <div>
-	                <h2 className="text-base font-semibold tracking-normal text-slate-950">运营信号</h2>
-	                <p className="mt-1 text-xs text-slate-500">最近同步：{lastSyncedAt}</p>
-	              </div>
-	              <button
-	                type="button"
-	                onClick={handleSync}
-	                disabled={isSyncing}
-	                className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#dbe5f0] bg-white px-2 text-xs font-semibold text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-	              >
-	                {isSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-	                刷新
-	              </button>
-	            </div>
-	          </article>
+          <article className={cn(sectionShell, 'p-4')}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold tracking-normal text-slate-950">运营信号</h2>
+                <p className="mt-1 text-xs text-slate-500">最近同步：{lastSyncedAt}</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSync}
+                disabled={isSyncing}
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#dbe5f0] bg-white px-2 text-xs font-semibold text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                刷新
+              </button>
+            </div>
+          </article>
 
-	          <article className={cn(sectionShell, 'p-4')}>
-	            <h3 className="text-sm font-semibold tracking-normal text-slate-950">高频提问 TOP 5</h3>
-	            <div className="mt-3 space-y-3">
-	              {scopedTopQuestions.slice(0, 5).length === 0 ? (
-	                <div className="text-sm text-slate-500">暂无高频问题</div>
-	              ) : (
-	                scopedTopQuestions.slice(0, 5).map((question, index) => (
-	                  <div key={question.knowledgeId} className="flex items-center gap-3 text-sm">
-	                    <span className="w-4 shrink-0 text-xs font-semibold text-slate-500">{index + 1}</span>
-	                    <span className="min-w-0 flex-1 truncate text-slate-700">{question.questionTitle}</span>
-	                    <span className="shrink-0 font-semibold text-slate-500">{formatNumber(question.hitCount)}</span>
-	                  </div>
-	                ))
-	              )}
-	            </div>
-	          </article>
+          <KnowledgeSignalCard title="高频问题" helper="按当前机构范围展示 TOP 5">
+            <div className="space-y-3">
+              {topQuestionSignals.length === 0 ? (
+                <div className="text-sm text-slate-500">暂无高频问题</div>
+              ) : (
+                topQuestionSignals.map((question, index) => (
+                  <div key={question.knowledgeId} className="flex items-center gap-3 text-sm">
+                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700">{index + 1}</span>
+                    <span className="min-w-0 flex-1 truncate text-slate-700">{question.questionTitle}</span>
+                    <span className="shrink-0 font-semibold text-slate-500">{formatNumber(question.hitCount)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </KnowledgeSignalCard>
 
-	          <article className={cn(sectionShell, 'p-4')}>
-	            <h3 className="text-sm font-semibold tracking-normal text-slate-950">热门知识分类 TOP 5</h3>
-	            <div className="mt-3 space-y-3">
-	              {scopedCategories.slice(0, 5).length === 0 ? (
-	                <div className="text-sm text-slate-500">暂无分类</div>
-	              ) : (
-	                scopedCategories.slice(0, 5).map((category) => (
-	                  <div key={category.categoryCode} className="flex items-center justify-between gap-3 text-sm">
-	                    <span className="min-w-0 truncate text-slate-700">{category.categoryName}</span>
-	                    <span className="shrink-0 font-semibold text-slate-500">{formatNumber(category.hitCount)}</span>
-	                  </div>
-	                ))
-	              )}
-	            </div>
-	          </article>
+          <KnowledgeSignalCard title="热门分类" helper="保留新版分类统计 contract">
+            <div className="space-y-3">
+              {topCategorySignals.length === 0 ? (
+                <div className="text-sm text-slate-500">暂无分类</div>
+              ) : (
+                topCategorySignals.map((category) => (
+                  <div key={category.categoryCode} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate text-slate-700">{category.categoryName}</span>
+                    <span className="shrink-0 font-semibold text-slate-500">{formatNumber(category.hitCount)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </KnowledgeSignalCard>
 
-	          <article className={cn(sectionShell, 'p-4')}>
-	            <div className="text-sm text-slate-500">命中次数（近7天）</div>
-	            <div className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">{formatNumber(view.totals.hitCount)}</div>
-	            <div className="mt-1 text-xs font-semibold text-emerald-600">较上周保持可观测</div>
-	          </article>
+          <KnowledgeSignalCard title="零命中知识" helper="用于识别待优化内容">
+            <div className="space-y-3">
+              {zeroHitKnowledgeItems.length === 0 ? (
+                <div className="text-sm text-slate-500">当前范围暂无零命中知识</div>
+              ) : (
+                zeroHitKnowledgeItems.map((item) => (
+                  <div key={item.knowledgeId} className="text-sm">
+                    <div className="truncate font-semibold text-slate-800">{item.title}</div>
+                    <div className="mt-1 text-xs font-semibold text-slate-500">{item.tenantName} · {item.category || '未分类'}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </KnowledgeSignalCard>
 
-	          <article className={cn(sectionShell, 'p-4')}>
-	            <div className="text-sm text-slate-500">导入成功率（近7天）</div>
-	            <div className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">{formatPercent(view.totals.importSuccessRate)}</div>
-	            <div className="mt-1 text-xs font-semibold text-emerald-600">基于当前范围统计</div>
-	          </article>
-	        </aside>
+          <KnowledgeSignalCard title="导入成功率" helper="当前范围前端受控展示">
+            <div className="text-2xl font-semibold tracking-normal text-slate-950">
+              {formatControlledPercent(view.totals.importSuccessRate, currentScopeHasFiles || scopedJobs.length > 0)}
+            </div>
+            <div className="mt-1 text-xs font-semibold text-slate-500">
+              {currentScopeHasFiles || scopedJobs.length > 0 ? '基于现有文件与任务统计' : '暂无文件或导入任务，未伪装真实数据'}
+            </div>
+          </KnowledgeSignalCard>
+        </aside>
 	      </div>
         </>
       )}
