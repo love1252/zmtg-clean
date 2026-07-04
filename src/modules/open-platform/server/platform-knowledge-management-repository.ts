@@ -1470,61 +1470,6 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
       };
     },
 
-    async createInstitutionKnowledgeSource(input: {
-      tenantId: string;
-      institutionId: string;
-      sourceLabel: string;
-    }) {
-      const sourceId = `inst-src-${createHash('sha256')
-        .update(`${input.tenantId}:${input.institutionId}:${input.sourceLabel}:${Date.now()}`)
-        .digest('hex')
-        .slice(0, 40)}`;
-      await database.insert(knowledgeSources).values({
-        id: sourceId,
-        tenantId: input.tenantId,
-        institutionId: input.institutionId,
-        workspaceId: input.institutionId,
-        sourceKind: 'seed',
-        status: 'ready',
-        readonlyStatus: 'readonly',
-        sourceLabel: input.sourceLabel,
-      });
-      return { sourceId };
-    },
-
-    async createInstitutionKnowledgeDocument(input: {
-      tenantId: string;
-      institutionId: string;
-      sourceId: string;
-      title: string;
-    }) {
-      const documentId = `inst-doc-${createHash('sha256')
-        .update(`${input.tenantId}:${input.institutionId}:${input.title}:${Date.now()}`)
-        .digest('hex')
-        .slice(0, 40)}`;
-      await database.insert(knowledgeDocuments).values({
-        id: documentId,
-        tenantId: input.tenantId,
-        institutionId: input.institutionId,
-        workspaceId: input.institutionId,
-        sourceId: input.sourceId,
-        sourceKind: 'seed',
-        status: 'ready',
-        readonlyStatus: 'readonly',
-        title: input.title,
-        version: 'v1',
-      });
-      await database.insert(platformKnowledgeInstitutionVisibility).values({
-        id: `inst-vis-${createHash('sha256')
-          .update(`${input.tenantId}:${documentId}:${input.institutionId}`)
-          .digest('hex')
-          .slice(0, 40)}`,
-        tenantId: input.tenantId,
-        knowledgeDocumentId: documentId,
-        institutionId: input.institutionId,
-      }).onConflictDoNothing();
-      return { documentId };
-    },
   };
 }
 

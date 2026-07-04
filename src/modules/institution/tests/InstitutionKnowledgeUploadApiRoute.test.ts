@@ -39,6 +39,10 @@ vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository
   };
 });
 
+vi.mock('@/modules/institution/server/institution-knowledge-write-repository', () => ({
+  createInstitutionKnowledgeWriteRepository: vi.fn(() => ({})),
+}));
+
 vi.mock('@/modules/institution/server/tenant-quota-enforcement', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/modules/institution/server/tenant-quota-enforcement')>();
   return {

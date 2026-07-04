@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstitutionKnowledgeBaseCardPanel } from '@/modules/institution/components/InstitutionKnowledgeBaseCardPanel';
 import { listInstitutionKnowledgeItems } from '@/modules/institution/client/tenant-business-client';
@@ -114,11 +114,29 @@ function mockDefaultFetch() {
               chunkIndex: 0,
               textPreview: '冷敷后保持创面清洁，避免剧烈热刺激。',
               matchReason: '片段包含关键词“冷敷”',
+              parseStatus: 'succeeded',
             },
           ],
           pageInfo,
           emptyState: { title: '暂无匹配片段', description: '当前范围没有命中关键词的已解析知识片段。' },
         });
+      }
+      if (url.includes('/parse/chunks')) {
+        return Response.json({
+          requestId: 'institution-knowledge-document-file-parse-chunks',
+          readonly: true,
+          records: [
+            {
+              chunkId: 'chunk-aftercare-1',
+              chunkIndex: 0,
+              textPreview: '冷敷后保持创面清洁，避免剧烈热刺激。',
+              charCount: 21,
+            },
+          ],
+        });
+      }
+      if (url.includes('/parse') && init?.method === 'POST') {
+        return Response.json({ status: 'succeeded', parse: { parseStatus: 'succeeded', textLength: 64, chunkCount: 2 } });
       }
       if (url.includes('/files')) {
         return Response.json({ records: url.includes('knowledge-owned-aftercare') ? files : [], pageInfo });
@@ -251,10 +269,13 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     fireEvent.change(within(searchSection).getByLabelText('输入知识库检索关键词'), { target: { value: '冷敷' } });
     fireEvent.click(within(searchSection).getByRole('button', { name: '开始检索测试' }));
 
-    expect(await within(searchSection).findByText('已命中 1 个真实解析片段。')).toBeInTheDocument();
-    expect(within(searchSection).getByText('冷敷后保持创面清洁，避免剧烈热刺激。')).toBeInTheDocument();
+    expect(await within(searchSection).findByText('已命中 1 个真实解析片段，topK=5。')).toBeInTheDocument();
+    expect(within(searchSection).getByText(/后保持创面清洁/)).toBeInTheDocument();
+    expect(within(searchSection).getByText('知识条目标题：本机构术后护理知识')).toBeInTheDocument();
+    expect(within(searchSection).getByText('文件名：术后护理.md')).toBeInTheDocument();
+    expect(within(searchSection).getByText('已解析')).toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/api/institution/knowledge-management/search?keyword=%E5%86%B7%E6%95%B7',
+      '/api/institution/knowledge-management/search?keyword=%E5%86%B7%E6%95%B7&pageSize=5',
       expect.objectContaining({ cache: 'no-store' }),
     );
     expect(searchSection.textContent).toContain('不调用 AI provider');
@@ -303,6 +324,178 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     fireEvent.click(within(searchSection).getByRole('button', { name: '开始检索测试' }));
 
     expect(await within(searchSection).findByText('关键词检索暂时不可用')).toBeInTheDocument();
+  });
+
+
+
+  it('topK 参数生效且新一轮检索会清空旧结果', async () => {
+    await renderLoaded();
+
+    const searchSection = screen.getByLabelText('机构知识库检索测试卡片');
+    fireEvent.change(within(searchSection).getByLabelText('输入知识库检索关键词'), { target: { value: '冷敷' } });
+    fireEvent.change(within(searchSection).getByLabelText('选择 topK'), { target: { value: '10' } });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '开始检索测试' }));
+
+    expect(await within(searchSection).findByText('已命中 1 个真实解析片段，topK=10。')).toBeInTheDocument();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/institution/knowledge-management/search?keyword=%E5%86%B7%E6%95%B7&pageSize=10',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+
+    vi.mocked(globalThis.fetch).mockImplementation(async (url: string) => {
+      if (url.includes('/api/institution/knowledge-management/search')) {
+        return Response.json({ records: [], pageInfo, emptyState: { title: '暂无匹配片段', description: '无命中' } });
+      }
+      if (url.includes('/files')) return Response.json({ records: [], pageInfo });
+      return Response.json({ records: [], pageInfo });
+    });
+    fireEvent.change(within(searchSection).getByLabelText('输入知识库检索关键词'), { target: { value: '不存在' } });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '开始检索测试' }));
+
+    await within(searchSection).findByText('正在使用机构端关键词检索 API 查询已解析片段；已清空上一轮旧结果...');
+    expect(within(searchSection).queryByText('知识条目标题：本机构术后护理知识')).not.toBeInTheDocument();
+    expect(await within(searchSection).findByText('暂无匹配片段。')).toBeInTheDocument();
+  });
+
+  it('检索 validation_failed 使用低敏错误态展示', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/search')) {
+          return Response.json({ status: 'validation_failed', message: '关键词过长，最多支持 80 个字符' }, { status: 400 });
+        }
+        if (url.includes('/files')) return Response.json({ records: [], pageInfo });
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+    mockKnowledgeList();
+    render(<InstitutionKnowledgeBaseCardPanel />);
+    await screen.findByText('知识条目：本机构术后护理知识');
+
+    const searchSection = screen.getByLabelText('机构知识库检索测试卡片');
+    fireEvent.change(within(searchSection).getByLabelText('输入知识库检索关键词'), { target: { value: 'x'.repeat(81) } });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '开始检索测试' }));
+
+    expect(await within(searchSection).findByText('关键词过长，最多支持 80 个字符')).toBeInTheDocument();
+  });
+
+  it('chunk 列表加载成功、空状态和错误态均可展示', async () => {
+    await renderLoaded();
+
+    const chunkSection = screen.getByLabelText('机构知识库片段可视化管理');
+    fireEvent.click(screen.getByRole('button', { name: '查看片段' }));
+
+    expect(await within(chunkSection).findByText('已读取 1 个解析片段。')).toBeInTheDocument();
+    expect(within(chunkSection).getByText('chunkIndex 0')).toBeInTheDocument();
+    expect(within(chunkSection).getByText('charCount 21')).toBeInTheDocument();
+    expect(within(chunkSection).getByText('所属知识条目：本机构术后护理知识')).toBeInTheDocument();
+
+    vi.mocked(globalThis.fetch).mockImplementation(async (url: string) => {
+      if (url.includes('/parse/chunks')) return Response.json({ records: [] });
+      if (url.includes('/files')) return Response.json({ records: files, pageInfo });
+      return Response.json({ records: [], pageInfo });
+    });
+    fireEvent.click(screen.getByRole('button', { name: '查看片段' }));
+    expect(await within(chunkSection).findByText('当前文件暂无解析片段。')).toBeInTheDocument();
+
+    vi.mocked(globalThis.fetch).mockImplementation(async (url: string) => {
+      if (url.includes('/parse/chunks')) return Response.json({ error: '解析片段暂时不可用' }, { status: 503 });
+      if (url.includes('/files')) return Response.json({ records: files, pageInfo });
+      return Response.json({ records: [], pageInfo });
+    });
+    fireEvent.click(screen.getByRole('button', { name: '查看片段' }));
+    expect((await within(chunkSection).findAllByText('解析片段暂时不可用')).length).toBeGreaterThan(0);
+  });
+
+  it('.txt / .md 重新解析成功，PDF / Word / Excel 不误启用深度解析', async () => {
+    await renderLoaded();
+
+    fireEvent.click(screen.getByRole('button', { name: '重新解析' }));
+    expect(await screen.findByText('文件已重新解析，状态和片段已刷新。')).toBeInTheDocument();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/institution/knowledge-management/items/knowledge-owned-aftercare/files/file-aftercare-md/parse',
+      expect.objectContaining({ method: 'POST' }),
+    );
+
+    vi.mocked(globalThis.fetch).mockImplementation(async (url: string) => {
+      if (url.includes('/files')) {
+        return Response.json({
+          records: url.includes('knowledge-owned-aftercare')
+            ? [{ ...files[0], fileId: 'file-pdf', originalFilename: '机构文件.pdf', fileType: 'PDF' }]
+            : [],
+          pageInfo,
+        });
+      }
+      return Response.json({ records: [], pageInfo });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+    });
+    expect((await screen.findAllByText('机构文件.pdf')).length).toBeGreaterThan(0);
+    screen.getAllByRole('button', { name: '重新解析' }).forEach((button) => {
+      expect(button).toBeDisabled();
+    });
+  });
+
+  it('重新解析失败低敏展示', async () => {
+    await renderLoaded();
+    vi.mocked(globalThis.fetch).mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.includes('/parse') && init?.method === 'POST') {
+        return Response.json({ error: '文件重新解析失败' }, { status: 503 });
+      }
+      if (url.includes('/files')) return Response.json({ records: files, pageInfo });
+      return Response.json({ records: [], pageInfo });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '重新解析' }));
+    expect(await screen.findByText('文件重新解析失败')).toBeInTheDocument();
+  });
+
+  it('新建、编辑和归档知识在前端完成确认态和刷新', async () => {
+    await renderLoaded();
+
+    fireEvent.change(screen.getByLabelText('知识标题'), { target: { value: '新建护理知识' } });
+    fireEvent.change(screen.getByLabelText('分类 / 目录口径'), { target: { value: '护理分类' } });
+    fireEvent.change(screen.getByLabelText('摘要 / 描述'), { target: { value: '低敏摘要' } });
+    fireEvent.click(screen.getByRole('button', { name: '新建知识' }));
+    expect(await screen.findByText('知识条目已新建。')).toBeInTheDocument();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/institution/knowledge-management/items',
+      expect.objectContaining({ method: 'POST' }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    expect(screen.getByLabelText('知识标题')).toHaveValue('本机构术后护理知识');
+    fireEvent.change(screen.getByLabelText('知识标题'), { target: { value: '更新护理知识' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存编辑' }));
+    expect(await screen.findByText('知识条目已更新。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '归档' }));
+    expect(screen.getByText('确认软归档“本机构术后护理知识”？归档后不会物理删除数据。')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认归档' }));
+    expect(await screen.findByText('知识条目已软归档，文件列表和检索结果已刷新。')).toBeInTheDocument();
+  });
+
+  it('新建和编辑知识失败时低敏展示错误', async () => {
+    await renderLoaded();
+    vi.mocked(globalThis.fetch).mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/institution/knowledge-management/items') && init?.method === 'POST') {
+        return Response.json({ error: '知识条目新建失败' }, { status: 503 });
+      }
+      if (url.includes('/api/institution/knowledge-management/items') && init?.method === 'PATCH') {
+        return Response.json({ error: '知识条目编辑失败' }, { status: 503 });
+      }
+      if (url.includes('/files')) return Response.json({ records: files, pageInfo });
+      return Response.json({ records: [], pageInfo });
+    });
+
+    fireEvent.change(screen.getByLabelText('知识标题'), { target: { value: '新建护理知识' } });
+    fireEvent.click(screen.getByRole('button', { name: '新建知识' }));
+    expect(await screen.findByText('知识条目新建失败')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存编辑' }));
+    expect(await screen.findByText('知识条目编辑失败')).toBeInTheDocument();
   });
 
   it('不展示其他机构数据，并保留重新训练 / AI / 向量能力受控文案', async () => {

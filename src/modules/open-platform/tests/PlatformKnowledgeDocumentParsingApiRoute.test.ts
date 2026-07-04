@@ -370,7 +370,7 @@ describe('知识库文档解析 API route', () => {
   it('机构端只读查看解析状态和 chunk，且 tenant/institution 来自 access context', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantAccessContext);
 
-    expect(Object.keys(institutionParseRoute).sort()).toEqual(['GET']);
+    expect(Object.keys(institutionParseRoute).sort()).toEqual(['GET', 'POST']);
     expect(Object.keys(institutionChunksRoute).sort()).toEqual(['GET']);
 
     const statusResponse = await institutionParseRoute.GET(
