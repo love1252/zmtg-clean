@@ -8,11 +8,25 @@ import type {
   PlatformKnowledgeManagementRepository,
   PlatformKnowledgeRepositoryRecord,
 } from '@/modules/open-platform/server/platform-knowledge-management-repository';
+import type { InstitutionKnowledgeWriteRepository } from './institution-knowledge-write-repository';
 
 type InstitutionKnowledgeItemsServiceInput = {
   repository: Pick<PlatformKnowledgeManagementRepository, 'listKnowledgeItems'>;
   params: InstitutionKnowledgeItemsParams;
 };
+
+type InstitutionKnowledgeWriteInput = {
+  tenantId?: string | null;
+  institutionId?: string | null;
+  knowledgeId?: string | null;
+  title?: string | null;
+  category?: string | null;
+  description?: string | null;
+};
+
+export type InstitutionKnowledgeWriteResult =
+  | { status: 'created' | 'updated' | 'archived'; record: InstitutionKnowledgeItemDto }
+  | { status: 'validation_failed' | 'forbidden' | 'not_found'; message: string };
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
@@ -35,6 +49,44 @@ function assertScope(value: string | null | undefined, label: string) {
   }
 
   return normalized;
+}
+
+function validateScope(value: string | null | undefined, label: string) {
+  const normalized = normalizeOptionalString(value);
+  if (!normalized) {
+    return {
+      ok: false as const,
+      error: { status: 'validation_failed' as const, message: `${label} 是机构知识管理的必填范围` },
+    };
+  }
+
+  return { ok: true as const, value: normalized };
+}
+
+function validateTextField(input: {
+  value: string | null | undefined;
+  label: string;
+  maxLength: number;
+  required?: boolean;
+}) {
+  const normalized = normalizeOptionalString(input.value);
+  if (!normalized) {
+    if (input.required) {
+      return {
+        ok: false as const,
+        error: { status: 'validation_failed' as const, message: `${input.label}不能为空` },
+      };
+    }
+    return { ok: true as const, value: '' };
+  }
+  if (normalized.length > input.maxLength) {
+    return {
+      ok: false as const,
+      error: { status: 'validation_failed' as const, message: `${input.label}最多 ${input.maxLength} 个字符` },
+    };
+  }
+
+  return { ok: true as const, value: normalized };
 }
 
 function parsePositiveInteger(value: string | number | null | undefined, fallback: number) {
@@ -93,6 +145,18 @@ function mapRecordToDto(
   };
 }
 
+function mapVisibleRecordOrForbidden(input: {
+  record: PlatformKnowledgeRepositoryRecord;
+  institutionId: string;
+}): InstitutionKnowledgeItemDto | null {
+  const visibility = visibleToInstitution(input.record, input.institutionId);
+  return visibility ? mapRecordToDto(input.record, visibility) : null;
+}
+
+function blockedResult(status: 'validation_failed' | 'forbidden' | 'not_found', message: string) {
+  return { status, message };
+}
+
 function buildListResponse(
   records: InstitutionKnowledgeItemDto[],
   page: number,
@@ -142,4 +206,109 @@ export async function listInstitutionKnowledgeItemsService(
     .map(({ record, visibility }) => mapRecordToDto(record, visibility));
 
   return buildListResponse(filtered, pageParams.page, pageParams.pageSize);
+}
+
+export async function createInstitutionKnowledgeItemService(input: {
+  repository: InstitutionKnowledgeWriteRepository;
+  input: InstitutionKnowledgeWriteInput;
+}): Promise<InstitutionKnowledgeWriteResult> {
+  const tenant = validateScope(input.input.tenantId, 'tenantId');
+  if (!tenant.ok) return tenant.error;
+  const institution = validateScope(input.input.institutionId, 'institutionId');
+  if (!institution.ok) return institution.error;
+  const title = validateTextField({ value: input.input.title, label: '标题', maxLength: 200, required: true });
+  if (!title.ok) return title.error;
+  const category = validateTextField({ value: input.input.category, label: '分类 / 目录口径', maxLength: 160 });
+  if (!category.ok) return category.error;
+  const description = validateTextField({ value: input.input.description, label: '摘要 / 描述', maxLength: 64 });
+  if (!description.ok) return description.error;
+
+  const source = await input.repository.createInstitutionKnowledgeSource({
+    tenantId: tenant.value,
+    institutionId: institution.value,
+    sourceLabel: category.value || '未分类',
+  });
+  const created = await input.repository.createInstitutionKnowledgeDocument({
+    tenantId: tenant.value,
+    institutionId: institution.value,
+    sourceId: source.sourceId,
+    title: title.value,
+    description: description.value || 'v1',
+  });
+  const record = await input.repository.findKnowledgeItem({
+    tenantId: tenant.value,
+    knowledgeId: created.documentId,
+  });
+  if (!record) return blockedResult('not_found', '知识条目创建后暂时不可读取');
+  const dto = mapVisibleRecordOrForbidden({ record, institutionId: institution.value });
+  if (!dto) return blockedResult('forbidden', '没有访问权限');
+
+  return { status: 'created', record: dto };
+}
+
+export async function updateInstitutionKnowledgeItemService(input: {
+  repository: InstitutionKnowledgeWriteRepository;
+  input: InstitutionKnowledgeWriteInput;
+}): Promise<InstitutionKnowledgeWriteResult> {
+  const tenant = validateScope(input.input.tenantId, 'tenantId');
+  if (!tenant.ok) return tenant.error;
+  const institution = validateScope(input.input.institutionId, 'institutionId');
+  if (!institution.ok) return institution.error;
+  const knowledge = validateScope(input.input.knowledgeId, 'knowledgeId');
+  if (!knowledge.ok) return knowledge.error;
+  const title = validateTextField({ value: input.input.title, label: '标题', maxLength: 200, required: true });
+  if (!title.ok) return title.error;
+  const category = validateTextField({ value: input.input.category, label: '分类 / 目录口径', maxLength: 160 });
+  if (!category.ok) return category.error;
+  const description = validateTextField({ value: input.input.description, label: '摘要 / 描述', maxLength: 64 });
+  if (!description.ok) return description.error;
+
+  const current = await input.repository.findKnowledgeItem({ tenantId: tenant.value, knowledgeId: knowledge.value });
+  if (!current) return blockedResult('not_found', '知识条目不存在');
+  if (current.tenantId !== tenant.value || current.institutionId !== institution.value) {
+    return blockedResult('forbidden', '没有访问权限');
+  }
+
+  const result = await input.repository.updateInstitutionKnowledgeDocument({
+    tenantId: tenant.value,
+    institutionId: institution.value,
+    knowledgeId: knowledge.value,
+    title: title.value,
+    category: category.value || '未分类',
+    description: description.value || 'v1',
+  });
+  if (result.status === 'not_found') return blockedResult('not_found', '知识条目不存在');
+  const dto = mapVisibleRecordOrForbidden({ record: result.record, institutionId: institution.value });
+  if (!dto) return blockedResult('forbidden', '没有访问权限');
+
+  return { status: 'updated', record: dto };
+}
+
+export async function archiveInstitutionKnowledgeItemService(input: {
+  repository: InstitutionKnowledgeWriteRepository;
+  input: InstitutionKnowledgeWriteInput;
+}): Promise<InstitutionKnowledgeWriteResult> {
+  const tenant = validateScope(input.input.tenantId, 'tenantId');
+  if (!tenant.ok) return tenant.error;
+  const institution = validateScope(input.input.institutionId, 'institutionId');
+  if (!institution.ok) return institution.error;
+  const knowledge = validateScope(input.input.knowledgeId, 'knowledgeId');
+  if (!knowledge.ok) return knowledge.error;
+
+  const current = await input.repository.findKnowledgeItem({ tenantId: tenant.value, knowledgeId: knowledge.value });
+  if (!current) return blockedResult('not_found', '知识条目不存在');
+  if (current.tenantId !== tenant.value || current.institutionId !== institution.value) {
+    return blockedResult('forbidden', '没有访问权限');
+  }
+
+  const result = await input.repository.archiveInstitutionKnowledgeDocument({
+    tenantId: tenant.value,
+    institutionId: institution.value,
+    knowledgeId: knowledge.value,
+  });
+  if (result.status === 'not_found') return blockedResult('not_found', '知识条目不存在');
+  const dto = mapVisibleRecordOrForbidden({ record: result.record, institutionId: institution.value });
+  if (!dto) return blockedResult('forbidden', '没有访问权限');
+
+  return { status: 'archived', record: dto };
 }

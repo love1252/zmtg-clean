@@ -269,6 +269,7 @@ describe('知识库关键词检索 service', () => {
         chunkIndex: 0,
         textPreview: '术后护理需要冷敷，避免暴晒。',
         matchReason: '片段包含关键词“冷敷”',
+        parseStatus: 'succeeded',
       },
     ]);
     expect(response.pageInfo).toEqual(

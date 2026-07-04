@@ -26,6 +26,7 @@ export type KnowledgeChunkSearchResultDto = {
   chunkIndex: number;
   textPreview: string;
   matchReason: string;
+  parseStatus: 'pending' | 'processing' | 'succeeded' | 'failed';
 };
 
 export type KnowledgeChunkSearchResponse = {
@@ -193,6 +194,7 @@ function mapChunkToDto(
     chunkIndex: record.chunkIndex,
     textPreview: truncateSnippet(record.textPreview, SNIPPET_MAX_CHARS),
     matchReason: buildMatchReason(keyword),
+    parseStatus: record.parseStatus,
   };
 }
 

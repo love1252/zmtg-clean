@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
+import { createInstitutionKnowledgeWriteRepository } from '@/modules/institution/server/institution-knowledge-write-repository';
 import { createLocalPlatformKnowledgeFileStorage } from '@/modules/open-platform/server/platform-knowledge-file-storage';
 import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 import {
@@ -65,7 +66,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const repository = createPlatformKnowledgeManagementRepository(db);
+    const repository = {
+      ...createPlatformKnowledgeManagementRepository(db),
+      ...createInstitutionKnowledgeWriteRepository(db),
+    };
     const storage = createLocalPlatformKnowledgeFileStorage();
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({

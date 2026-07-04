@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
-import { listInstitutionKnowledgeItemsService } from '@/modules/institution/server/institution-knowledge-management-service';
+import type { InstitutionKnowledgeWriteRepository } from '@/modules/institution/server/institution-knowledge-write-repository';
+import {
+  archiveInstitutionKnowledgeItemService,
+  createInstitutionKnowledgeItemService,
+  listInstitutionKnowledgeItemsService,
+  updateInstitutionKnowledgeItemService,
+} from '@/modules/institution/server/institution-knowledge-management-service';
 
 const now = new Date('2026-06-13T08:00:00.000Z');
 
@@ -103,6 +109,79 @@ function createRepository() {
   };
 }
 
+function createWriteRepository(): InstitutionKnowledgeWriteRepository {
+  const state = new Map(records.map((record) => [record.knowledgeId, { ...record }]));
+  return {
+    findKnowledgeItem: vi.fn(async (input: { tenantId: string; knowledgeId: string }) => {
+      const record = state.get(input.knowledgeId);
+      return record && record.tenantId === input.tenantId ? record : null;
+    }),
+    createInstitutionKnowledgeSource: vi.fn(async () => ({ sourceId: 'new-source' })),
+    createInstitutionKnowledgeDocument: vi.fn(async (input: {
+      tenantId: string;
+      institutionId: string;
+      sourceId: string;
+      title: string;
+      description?: string | null;
+    }) => {
+      state.set('new-knowledge', {
+        knowledgeId: 'new-knowledge',
+        tenantId: input.tenantId,
+        tenantName: '租户 A',
+        institutionId: input.institutionId,
+        workspaceId: input.institutionId,
+        title: input.title,
+        version: input.description || 'v1',
+        sourceKind: 'seed',
+        status: 'ready',
+        readonlyStatus: 'readonly',
+        category: '分类 / 目录口径',
+        descriptionPreview: input.description || 'v1',
+        chunkCount: 0,
+        visibleInstitutionIds: [input.institutionId],
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { documentId: 'new-knowledge' };
+    }),
+    updateInstitutionKnowledgeDocument: vi.fn(async (input: {
+      tenantId: string;
+      institutionId: string;
+      knowledgeId: string;
+      title: string;
+      category: string;
+      description: string;
+    }) => {
+      const current = state.get(input.knowledgeId);
+      if (!current || current.tenantId !== input.tenantId || current.institutionId !== input.institutionId) {
+        return { status: 'not_found' as const };
+      }
+      const record = {
+        ...current,
+        title: input.title,
+        category: input.category,
+        descriptionPreview: input.description,
+        updatedAt: now,
+      };
+      state.set(input.knowledgeId, record);
+      return { status: 'updated' as const, record };
+    }),
+    archiveInstitutionKnowledgeDocument: vi.fn(async (input: {
+      tenantId: string;
+      institutionId: string;
+      knowledgeId: string;
+    }) => {
+      const current = state.get(input.knowledgeId);
+      if (!current || current.tenantId !== input.tenantId || current.institutionId !== input.institutionId) {
+        return { status: 'not_found' as const };
+      }
+      const record = { ...current, status: 'disabled' as const, readonlyStatus: 'blocked' as const };
+      state.set(input.knowledgeId, record);
+      return { status: 'archived' as const, record };
+    }),
+  };
+}
+
 describe('机构端知识库管理 V1 只读 service', () => {
   it('只返回当前 tenant 且授权给当前 institution 或明确归属本机构的低敏记录', async () => {
     const repository = createRepository();
@@ -173,4 +252,132 @@ describe('机构端知识库管理 V1 只读 service', () => {
     expect(unauthorizedInstitution.records).toEqual([]);
     expectNoForbiddenKnowledgePayload(unauthorizedInstitution);
   });
+
+  it('新建知识由服务端机构范围决定并写入分类 / 目录口径和摘要', async () => {
+    const repository = createWriteRepository();
+
+    const result = await createInstitutionKnowledgeItemService({
+      repository,
+      input: {
+        tenantId: 'tenant-a',
+        institutionId: 'inst-current',
+        title: '新建护理知识',
+        category: '护理分类',
+        description: '低敏摘要',
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'created', record: { title: '新建护理知识', visibility: 'owned' } });
+    expect(repository.createInstitutionKnowledgeSource).toHaveBeenCalledWith({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-current',
+      sourceLabel: '护理分类',
+    });
+    expect(repository.createInstitutionKnowledgeDocument).toHaveBeenCalledWith({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-current',
+      sourceId: 'new-source',
+      title: '新建护理知识',
+      description: '低敏摘要',
+    });
+  });
+
+  it('新建知识失败时返回 validation_failed', async () => {
+    const repository = createWriteRepository();
+
+    const result = await createInstitutionKnowledgeItemService({
+      repository,
+      input: { tenantId: 'tenant-a', institutionId: 'inst-current', title: '   ' },
+    });
+
+    expect(result).toEqual({ status: 'validation_failed', message: '标题不能为空' });
+    expect(repository.createInstitutionKnowledgeDocument).not.toHaveBeenCalled();
+  });
+
+  it('编辑知识成功且不允许修改租户或机构归属', async () => {
+    const repository = createWriteRepository();
+
+    const result = await updateInstitutionKnowledgeItemService({
+      repository,
+      input: {
+        tenantId: 'tenant-a',
+        institutionId: 'inst-current',
+        knowledgeId: 'knowledge-owned-a',
+        title: '更新后的知识',
+        category: '更新分类',
+        description: '更新摘要',
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'updated', record: { title: '更新后的知识', category: '更新分类' } });
+    expect(repository.updateInstitutionKnowledgeDocument).toHaveBeenCalledWith({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-current',
+      knowledgeId: 'knowledge-owned-a',
+      title: '更新后的知识',
+      category: '更新分类',
+      description: '更新摘要',
+    });
+  });
+
+  it('编辑知识失败时返回 validation_failed', async () => {
+    const repository = createWriteRepository();
+
+    const result = await updateInstitutionKnowledgeItemService({
+      repository,
+      input: {
+        tenantId: 'tenant-a',
+        institutionId: 'inst-current',
+        knowledgeId: 'knowledge-owned-a',
+        title: '',
+      },
+    });
+
+    expect(result).toEqual({ status: 'validation_failed', message: '标题不能为空' });
+    expect(repository.updateInstitutionKnowledgeDocument).not.toHaveBeenCalled();
+  });
+
+  it('跨机构不能编辑或归档知识', async () => {
+    const repository = createWriteRepository();
+
+    await expect(updateInstitutionKnowledgeItemService({
+      repository,
+      input: {
+        tenantId: 'tenant-a',
+        institutionId: 'inst-current',
+        knowledgeId: 'knowledge-authorized-a',
+        title: '不应修改',
+        category: '不应修改',
+        description: '不应修改',
+      },
+    })).resolves.toEqual({ status: 'forbidden', message: '没有访问权限' });
+
+    await expect(archiveInstitutionKnowledgeItemService({
+      repository,
+      input: {
+        tenantId: 'tenant-a',
+        institutionId: 'inst-current',
+        knowledgeId: 'knowledge-authorized-a',
+      },
+    })).resolves.toEqual({ status: 'forbidden', message: '没有访问权限' });
+    expect(repository.updateInstitutionKnowledgeDocument).not.toHaveBeenCalled();
+    expect(repository.archiveInstitutionKnowledgeDocument).not.toHaveBeenCalled();
+  });
+
+  it('归档知识做软归档并返回 disabled 状态', async () => {
+    const repository = createWriteRepository();
+
+    const result = await archiveInstitutionKnowledgeItemService({
+      repository,
+      input: { tenantId: 'tenant-a', institutionId: 'inst-current', knowledgeId: 'knowledge-owned-a' },
+    });
+
+    expect(result).toMatchObject({ status: 'archived', record: { status: 'disabled', readonlyStatus: 'blocked' } });
+    expect(repository.archiveInstitutionKnowledgeDocument).toHaveBeenCalledWith({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-current',
+      knowledgeId: 'knowledge-owned-a',
+    });
+  });
+
 });

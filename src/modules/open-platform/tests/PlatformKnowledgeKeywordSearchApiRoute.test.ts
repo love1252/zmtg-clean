@@ -145,6 +145,7 @@ describe('知识库关键词检索 API route', () => {
         chunkIndex: 0,
         textPreview: '冷敷片段。',
         matchReason: '片段包含关键词“冷敷”',
+        parseStatus: 'succeeded',
       },
     ]);
     expectSafePayload(payload);

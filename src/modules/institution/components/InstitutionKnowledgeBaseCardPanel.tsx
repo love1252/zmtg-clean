@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import {
   AlertTriangle,
+  Archive,
   BookOpen,
   FileText,
   FolderPlus,
+  Pencil,
   RefreshCw,
   Search,
   Trash2,
@@ -20,6 +22,9 @@ type DirectoryId = 'all' | 'consultation' | 'project' | 'aftercare' | 'campaign'
 type LoadStatus = 'idle' | 'loading' | 'success' | 'error';
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 type SearchStatus = 'idle' | 'searching' | 'success' | 'empty' | 'error';
+type ChunkLoadStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error';
+type KnowledgeFormMode = 'create' | 'edit';
+type MutationStatus = 'idle' | 'loading' | 'success' | 'error';
 
 type InstitutionKnowledgeFileRecord = {
   fileId: string;
@@ -51,6 +56,14 @@ type InstitutionKnowledgeSearchResultRecord = {
   chunkIndex: number;
   textPreview: string;
   matchReason: string;
+  parseStatus: 'pending' | 'processing' | 'succeeded' | 'failed';
+};
+
+type InstitutionKnowledgeChunkRecord = {
+  chunkId: string;
+  chunkIndex: number;
+  textPreview: string;
+  charCount: number;
 };
 
 type ControlledAction = {
@@ -80,11 +93,9 @@ const unsupportedDocumentExamples = [
 ];
 
 const controlledActions: ControlledAction[] = [
-  { label: '新建知识', icon: BookOpen, reason: '待接入可靠新建知识 API' },
-  { label: '新建文件夹', icon: FolderPlus, reason: '待接入目录写入 API' },
-  { label: '重新解析', icon: RefreshCw, reason: '待接入机构端重新解析触发入口' },
+  { label: '新建文件夹', icon: FolderPlus, reason: '本轮只支持分类 / 目录口径，不伪装完整文件夹树' },
   { label: '重新训练', icon: RefreshCw, reason: '未接训练 runtime' },
-  { label: '删除', icon: Trash2, reason: '待接入删除审计和恢复策略' },
+  { label: '删除', icon: Trash2, reason: '本轮只做软归档，不做硬删除' },
 ];
 
 const statusLabels: Record<InstitutionKnowledgeItemDto['status'], string> = {
@@ -148,6 +159,37 @@ function isAllowedUploadFile(file: File | null) {
   return name.endsWith('.txt') || name.endsWith('.md');
 }
 
+function isReparseEnabled(file: InstitutionKnowledgeFileRecord) {
+  const name = (file.originalFilename ?? '').toLowerCase();
+  return file.status === 'active' && (name.endsWith('.txt') || name.endsWith('.md'));
+}
+
+function highlightKeyword(text: string, keyword: string) {
+  const trimmedKeyword = keyword.trim();
+  if (!trimmedKeyword) return text;
+  const lowerText = text.toLowerCase();
+  const lowerKeyword = trimmedKeyword.toLowerCase();
+  const segments: ReactNode[] = [];
+  let cursor = 0;
+  let index = lowerText.indexOf(lowerKeyword);
+  while (index >= 0) {
+    if (index > cursor) segments.push(text.slice(cursor, index));
+    segments.push(
+      <mark key={`${index}-${trimmedKeyword}`} className="rounded bg-amber-200 px-1 text-amber-950">
+        {text.slice(index, index + trimmedKeyword.length)}
+      </mark>,
+    );
+    cursor = index + trimmedKeyword.length;
+    index = lowerText.indexOf(lowerKeyword, cursor);
+  }
+  if (cursor < text.length) segments.push(text.slice(cursor));
+  return segments.length > 0 ? segments : text;
+}
+
+function selectedKnowledgeForFile(items: InstitutionKnowledgeItemDto[], file: InstitutionKnowledgeFileRecord) {
+  return items.find((item) => item.knowledgeId === file.knowledgeId) ?? null;
+}
+
 function ControlledButton({ action }: { action: ControlledAction }) {
   const Icon = action.icon;
   return (
@@ -171,19 +213,37 @@ export function InstitutionKnowledgeBaseCardPanel() {
   const [knowledgeItems, setKnowledgeItems] = useState<InstitutionKnowledgeItemDto[]>([]);
   const [filesByKnowledgeId, setFilesByKnowledgeId] = useState<Record<string, InstitutionKnowledgeFileRecord[]>>({});
   const [fileMessage, setFileMessage] = useState('文件列表将随真实知识条目加载。');
+  const [chunkPanelFile, setChunkPanelFile] = useState<InstitutionKnowledgeFileRecord | null>(null);
+  const [chunkRecords, setChunkRecords] = useState<InstitutionKnowledgeChunkRecord[]>([]);
+  const [chunkStatus, setChunkStatus] = useState<ChunkLoadStatus>('idle');
+  const [chunkMessage, setChunkMessage] = useState('选择文件后查看解析片段。');
+  const [knowledgeFormMode, setKnowledgeFormMode] = useState<KnowledgeFormMode>('create');
+  const [editingKnowledgeId, setEditingKnowledgeId] = useState<string | null>(null);
+  const [knowledgeTitleInput, setKnowledgeTitleInput] = useState('');
+  const [knowledgeCategoryInput, setKnowledgeCategoryInput] = useState('');
+  const [knowledgeDescriptionInput, setKnowledgeDescriptionInput] = useState('');
+  const [knowledgeMutationStatus, setKnowledgeMutationStatus] = useState<MutationStatus>('idle');
+  const [knowledgeMutationMessage, setKnowledgeMutationMessage] = useState('可新建或编辑知识条目；分类 / 目录口径使用现有字段承载，不创建完整文件夹树。');
+  const [archiveConfirmKnowledgeId, setArchiveConfirmKnowledgeId] = useState<string | null>(null);
+  const [archiveStatus, setArchiveStatus] = useState<MutationStatus>('idle');
+  const [archiveMessage, setArchiveMessage] = useState('归档为软归档，不做物理删除。');
+  const [reparseStatusByFileId, setReparseStatusByFileId] = useState<Record<string, MutationStatus>>({});
+  const [reparseMessageByFileId, setReparseMessageByFileId] = useState<Record<string, string>>({});
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
   const [uploadMessage, setUploadMessage] = useState('支持上传 .txt / .md，上传后使用现有机构端 API 自动保存并简单解析。');
   const [searchInput, setSearchInput] = useState('');
+  const [searchTopK, setSearchTopK] = useState(5);
+  const [activeSearchKeyword, setActiveSearchKeyword] = useState('');
   const [searchStatus, setSearchStatus] = useState<SearchStatus>('idle');
-  const [searchMessage, setSearchMessage] = useState('请输入关键词测试已解析片段检索；不会调用 AI provider 或向量数据库。');
+  const [searchMessage, setSearchMessage] = useState('请输入关键词测试已解析片段检索；当前为关键词检索，不是 AI 问答，不调用 AI provider，不使用向量数据库。');
   const [searchResults, setSearchResults] = useState<InstitutionKnowledgeSearchResultRecord[]>([]);
 
   const loadKnowledgeFiles = useCallback(async (items: InstitutionKnowledgeItemDto[]) => {
     if (items.length === 0) {
       setFilesByKnowledgeId({});
       setFileMessage('当前没有真实文件记录。');
-      return;
+      return {};
     }
 
     try {
@@ -200,9 +260,11 @@ export function InstitutionKnowledgeBaseCardPanel() {
       setFilesByKnowledgeId(Object.fromEntries(entries));
       const total = entries.reduce((sum, [, files]) => sum + files.length, 0);
       setFileMessage(total > 0 ? `已读取 ${total} 个真实文件记录。` : '当前知识条目暂无真实文件记录。');
+      return Object.fromEntries(entries) as Record<string, InstitutionKnowledgeFileRecord[]>;
     } catch {
       setFilesByKnowledgeId({});
       setFileMessage('文件列表暂时不可用，知识条目仍可查看。');
+      return {};
     }
   }, []);
 
@@ -354,20 +416,178 @@ export function InstitutionKnowledgeBaseCardPanel() {
     }
   }
 
+  function resetKnowledgeForm() {
+    setKnowledgeFormMode('create');
+    setEditingKnowledgeId(null);
+    setKnowledgeTitleInput('');
+    setKnowledgeCategoryInput('');
+    setKnowledgeDescriptionInput('');
+    setKnowledgeMutationStatus('idle');
+    setKnowledgeMutationMessage('可新建或编辑知识条目；分类 / 目录口径使用现有字段承载，不创建完整文件夹树。');
+  }
+
+  function startEditKnowledge(item: InstitutionKnowledgeItemDto) {
+    setKnowledgeFormMode('edit');
+    setEditingKnowledgeId(item.knowledgeId);
+    setKnowledgeTitleInput(item.title);
+    setKnowledgeCategoryInput(item.category);
+    setKnowledgeDescriptionInput(item.descriptionPreview);
+    setKnowledgeMutationStatus('idle');
+    setKnowledgeMutationMessage('正在编辑现有知识条目，不允许修改租户或机构归属。');
+  }
+
+  async function submitKnowledgeForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = knowledgeTitleInput.trim();
+    if (!title) {
+      setKnowledgeMutationStatus('error');
+      setKnowledgeMutationMessage('标题不能为空。');
+      return;
+    }
+
+    setKnowledgeMutationStatus('loading');
+    setKnowledgeMutationMessage(knowledgeFormMode === 'create' ? '正在新建知识条目...' : '正在更新知识条目...');
+    try {
+      const payload = {
+        knowledgeId: editingKnowledgeId,
+        title,
+        category: knowledgeCategoryInput.trim(),
+        description: knowledgeDescriptionInput.trim(),
+      };
+      const response = await fetch('/api/institution/knowledge-management/items', {
+        method: knowledgeFormMode === 'create' ? 'POST' : 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const responsePayload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setKnowledgeMutationStatus('error');
+        setKnowledgeMutationMessage(getVisibleError(responsePayload, knowledgeFormMode === 'create' ? '知识条目新建失败。' : '知识条目编辑失败。'));
+        return;
+      }
+
+      setKnowledgeMutationStatus('success');
+      setKnowledgeMutationMessage(knowledgeFormMode === 'create' ? '知识条目已新建。' : '知识条目已更新。');
+      setKnowledgeFormMode('create');
+      setEditingKnowledgeId(null);
+      setKnowledgeTitleInput('');
+      setKnowledgeCategoryInput('');
+      setKnowledgeDescriptionInput('');
+      await loadKnowledgeItems();
+    } catch {
+      setKnowledgeMutationStatus('error');
+      setKnowledgeMutationMessage(knowledgeFormMode === 'create' ? '知识条目新建失败。' : '知识条目编辑失败。');
+    }
+  }
+
+  async function archiveKnowledge(item: InstitutionKnowledgeItemDto) {
+    setArchiveStatus('loading');
+    setArchiveMessage(`正在归档“${item.title}”...`);
+    try {
+      const response = await fetch('/api/institution/knowledge-management/items', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'archive', knowledgeId: item.knowledgeId }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setArchiveStatus('error');
+        setArchiveMessage(getVisibleError(payload, '知识条目归档失败。'));
+        return;
+      }
+
+      setArchiveStatus('success');
+      setArchiveConfirmKnowledgeId(null);
+      setArchiveMessage('知识条目已软归档，文件列表和检索结果已刷新。');
+      setSearchResults([]);
+      setSearchStatus('idle');
+      setSearchMessage('归档后已清空旧检索结果，请重新输入关键词复验。');
+      await loadKnowledgeItems();
+    } catch {
+      setArchiveStatus('error');
+      setArchiveMessage('知识条目归档失败。');
+    }
+  }
+
+  async function loadFileChunks(file: InstitutionKnowledgeFileRecord) {
+    setChunkPanelFile(file);
+    setChunkStatus('loading');
+    setChunkRecords([]);
+    setChunkMessage('正在读取解析片段...');
+    try {
+      const response = await fetch(
+        `/api/institution/knowledge-management/items/${encodeURIComponent(file.knowledgeId)}/files/${encodeURIComponent(file.fileId)}/parse/chunks`,
+        { cache: 'no-store' },
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setChunkStatus('error');
+        setChunkMessage(getVisibleError(payload, '解析片段暂时不可用。'));
+        return;
+      }
+      const records = payload.records as InstitutionKnowledgeChunkRecord[];
+      setChunkRecords(records);
+      setChunkStatus(records.length > 0 ? 'success' : 'empty');
+      setChunkMessage(records.length > 0 ? `已读取 ${records.length} 个解析片段。` : '当前文件暂无解析片段。');
+    } catch {
+      setChunkStatus('error');
+      setChunkMessage('解析片段暂时不可用。');
+    }
+  }
+
+  async function reparseFile(file: InstitutionKnowledgeFileRecord) {
+    if (!isReparseEnabled(file)) {
+      setReparseStatusByFileId((current) => ({ ...current, [file.fileId]: 'error' }));
+      setReparseMessageByFileId((current) => ({
+        ...current,
+        [file.fileId]: '当前仅支持 .txt / .md 文件重新解析；PDF / Word / Excel 继续受控说明，不做深度解析。',
+      }));
+      return;
+    }
+
+    setReparseStatusByFileId((current) => ({ ...current, [file.fileId]: 'loading' }));
+    setReparseMessageByFileId((current) => ({ ...current, [file.fileId]: '正在重新解析文件...' }));
+    try {
+      const response = await fetch(
+        `/api/institution/knowledge-management/items/${encodeURIComponent(file.knowledgeId)}/files/${encodeURIComponent(file.fileId)}/parse`,
+        { method: 'POST' },
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setReparseStatusByFileId((current) => ({ ...current, [file.fileId]: 'error' }));
+        setReparseMessageByFileId((current) => ({ ...current, [file.fileId]: getVisibleError(payload, '文件重新解析失败。') }));
+        return;
+      }
+
+      setReparseStatusByFileId((current) => ({ ...current, [file.fileId]: 'success' }));
+      setReparseMessageByFileId((current) => ({ ...current, [file.fileId]: '文件已重新解析，状态和片段已刷新。' }));
+      setSearchResults([]);
+      setSearchStatus('idle');
+      setSearchMessage('重新解析后已清空旧检索结果，请重新输入关键词复验。');
+      const nextFiles = await loadKnowledgeFiles(knowledgeItems);
+      const refreshedFile = nextFiles[file.knowledgeId]?.find((candidate) => candidate.fileId === file.fileId) ?? file;
+      await loadFileChunks(refreshedFile);
+    } catch {
+      setReparseStatusByFileId((current) => ({ ...current, [file.fileId]: 'error' }));
+      setReparseMessageByFileId((current) => ({ ...current, [file.fileId]: '文件重新解析失败。' }));
+    }
+  }
+
   async function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const keyword = searchInput.trim();
+    setSearchResults([]);
+    setActiveSearchKeyword(keyword);
     if (!keyword) {
       setSearchStatus('error');
-      setSearchResults([]);
       setSearchMessage('请输入关键词后再检索。');
       return;
     }
 
     setSearchStatus('searching');
-    setSearchMessage('正在使用机构端关键词检索 API 查询已解析片段...');
+    setSearchMessage('正在使用机构端关键词检索 API 查询已解析片段；已清空上一轮旧结果...');
     try {
-      const params = new URLSearchParams({ keyword });
+      const params = new URLSearchParams({ keyword, pageSize: String(searchTopK) });
       const response = await fetch(`/api/institution/knowledge-management/search?${params.toString()}`, {
         cache: 'no-store',
       });
@@ -375,14 +595,14 @@ export function InstitutionKnowledgeBaseCardPanel() {
       if (!response.ok || !payload || !Array.isArray(payload.records)) {
         setSearchStatus('error');
         setSearchResults([]);
-        setSearchMessage(getVisibleError(payload, '关键词检索暂时不可用。'));
+        setSearchMessage(getVisibleError(payload, response.status === 400 ? '关键词不符合检索要求。' : '关键词检索暂时不可用。'));
         return;
       }
 
       const records = payload.records as InstitutionKnowledgeSearchResultRecord[];
       setSearchResults(records);
       setSearchStatus(records.length > 0 ? 'success' : 'empty');
-      setSearchMessage(records.length > 0 ? `已命中 ${records.length} 个真实解析片段。` : '暂无匹配片段。');
+      setSearchMessage(records.length > 0 ? `已命中 ${records.length} 个真实解析片段，topK=${searchTopK}。` : '暂无匹配片段。');
     } catch {
       setSearchStatus('error');
       setSearchResults([]);
@@ -472,6 +692,82 @@ export function InstitutionKnowledgeBaseCardPanel() {
             <ControlledButton key={action.label} action={action} />
           ))}
         </div>
+        <form onSubmit={submitKnowledgeForm} className="mt-4 rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h3 className="text-base font-semibold tracking-normal text-slate-950">
+                {knowledgeFormMode === 'create' ? '新建知识' : '编辑知识'}
+              </h3>
+              <p className="mt-1 text-xs leading-5 text-slate-600">
+                支持标题、分类 / 目录口径、摘要 / 描述；租户与机构归属由服务端 accessContext 决定。
+              </p>
+            </div>
+            {knowledgeFormMode === 'edit' ? (
+              <button
+                type="button"
+                onClick={resetKnowledgeForm}
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600"
+              >
+                取消编辑
+              </button>
+            ) : null}
+          </div>
+          <div className="mt-3 grid gap-2 lg:grid-cols-[1fr_0.8fr_1fr_auto]">
+            <input
+              aria-label="知识标题"
+              value={knowledgeTitleInput}
+              onChange={(event) => setKnowledgeTitleInput(event.target.value)}
+              placeholder="标题"
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-cyan-400"
+            />
+            <input
+              aria-label="分类 / 目录口径"
+              value={knowledgeCategoryInput}
+              onChange={(event) => setKnowledgeCategoryInput(event.target.value)}
+              placeholder="分类 / 目录口径"
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-cyan-400"
+            />
+            <input
+              aria-label="摘要 / 描述"
+              value={knowledgeDescriptionInput}
+              onChange={(event) => setKnowledgeDescriptionInput(event.target.value)}
+              placeholder="摘要 / 描述"
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-cyan-400"
+            />
+            <button
+              type="submit"
+              disabled={knowledgeMutationStatus === 'loading'}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-cyan-700 px-4 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {knowledgeMutationStatus === 'loading' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <BookOpen className="h-4 w-4" />}
+              {knowledgeFormMode === 'create' ? '新建知识' : '保存编辑'}
+            </button>
+          </div>
+          <div
+            className={cn(
+              'mt-3 rounded-xl border px-3 py-2 text-xs font-semibold',
+              knowledgeMutationStatus === 'success'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : knowledgeMutationStatus === 'error'
+                  ? 'border-rose-200 bg-rose-50 text-rose-700'
+                  : 'border-slate-200 bg-white/80 text-slate-500',
+            )}
+          >
+            {knowledgeMutationMessage}
+          </div>
+          <div
+            className={cn(
+              'mt-2 rounded-xl border px-3 py-2 text-xs font-semibold',
+              archiveStatus === 'success'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : archiveStatus === 'error'
+                  ? 'border-rose-200 bg-rose-50 text-rose-700'
+                  : 'border-amber-200 bg-amber-50 text-amber-700',
+            )}
+          >
+            {archiveMessage}
+          </div>
+        </form>
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
@@ -562,9 +858,57 @@ export function InstitutionKnowledgeBaseCardPanel() {
                           </span>
                         </div>
                       </div>
-                      <span className="shrink-0 text-xs font-semibold text-slate-500">更新于 {formatDate(entry.updatedAt)}</span>
+                      <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
+                        <span className="text-xs font-semibold text-slate-500">更新于 {formatDate(entry.updatedAt)}</span>
+                        {entry.visibility === 'owned' ? (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => startEditKnowledge(entry)}
+                              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-cyan-200 bg-white px-2.5 text-xs font-semibold text-cyan-700"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                              编辑
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setArchiveConfirmKnowledgeId(entry.knowledgeId)}
+                              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 text-xs font-semibold text-amber-700"
+                            >
+                              <Archive className="h-3.5 w-3.5" />
+                              归档
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                            平台授权条目不可编辑 / 归档
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <p className="mt-3 text-sm leading-6 text-slate-600">摘要：{entry.descriptionPreview || '暂无摘要。'}</p>
+                    {archiveConfirmKnowledgeId === entry.knowledgeId ? (
+                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                        <div className="font-semibold">确认软归档“{entry.title}”？归档后不会物理删除数据。</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void archiveKnowledge(entry)}
+                            disabled={archiveStatus === 'loading'}
+                            className="inline-flex h-8 items-center justify-center rounded-lg bg-amber-600 px-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            确认归档
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setArchiveConfirmKnowledgeId(null)}
+                            className="inline-flex h-8 items-center justify-center rounded-lg border border-amber-200 bg-white px-3 font-semibold text-amber-700"
+                          >
+                            取消
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="mt-3 rounded-xl border border-white bg-white px-3 py-2 text-xs font-semibold text-slate-500">
                       片段数 {entry.chunkCount}
                     </div>
@@ -608,6 +952,10 @@ export function InstitutionKnowledgeBaseCardPanel() {
                         <dd>{typeof document.textLength === 'number' ? document.textLength : '待解析结果返回'}</dd>
                       </div>
                       <div>
+                        <dt className="font-semibold text-slate-500">片段数</dt>
+                        <dd>{document.chunkCount}</dd>
+                      </div>
+                      <div>
                         <dt className="font-semibold text-slate-500">更新时间</dt>
                         <dd>{formatDate(document.updatedAt)}</dd>
                       </div>
@@ -616,6 +964,40 @@ export function InstitutionKnowledgeBaseCardPanel() {
                         <dd>{document.safeFailureMessage || '暂无错误'}</dd>
                       </div>
                     </dl>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void loadFileChunks(document)}
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-cyan-200 bg-white px-2.5 text-xs font-semibold text-cyan-700"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        查看片段
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void reparseFile(document)}
+                        disabled={reparseStatusByFileId[document.fileId] === 'loading' || !isReparseEnabled(document)}
+                        title={isReparseEnabled(document) ? '重新解析 txt / md 文件' : '当前仅支持 .txt / .md 文件重新解析'}
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <RefreshCw className={cn('h-3.5 w-3.5', reparseStatusByFileId[document.fileId] === 'loading' ? 'animate-spin' : '')} />
+                        重新解析
+                      </button>
+                    </div>
+                    {reparseMessageByFileId[document.fileId] ? (
+                      <div
+                        className={cn(
+                          'mt-2 rounded-xl border px-3 py-2 text-xs font-semibold',
+                          reparseStatusByFileId[document.fileId] === 'success'
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : reparseStatusByFileId[document.fileId] === 'error'
+                              ? 'border-rose-200 bg-rose-50 text-rose-700'
+                              : 'border-slate-200 bg-white text-slate-500',
+                        )}
+                      >
+                        {reparseMessageByFileId[document.fileId]}
+                      </div>
+                    ) : null}
                   </article>
                 ))
               )}
@@ -629,13 +1011,76 @@ export function InstitutionKnowledgeBaseCardPanel() {
             </div>
           </section>
 
+          <section aria-label="机构知识库片段可视化管理" className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">chunk / 片段可视化管理</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                只读展示文件解析后的 chunk 列表；不做 chunk 编辑、删除或启停。
+              </p>
+            </div>
+            <div
+              className={cn(
+                'mt-4 rounded-xl border px-3 py-2 text-xs font-semibold',
+                chunkStatus === 'success'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : chunkStatus === 'error'
+                    ? 'border-rose-200 bg-rose-50 text-rose-700'
+                    : chunkStatus === 'empty'
+                      ? 'border-amber-200 bg-amber-50 text-amber-700'
+                      : 'border-slate-200 bg-slate-50 text-slate-500',
+              )}
+            >
+              {chunkMessage}
+            </div>
+            {!chunkPanelFile ? (
+              <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+                请在文件 / 文档卡片中点击“查看片段”。
+              </div>
+            ) : chunkStatus === 'loading' ? (
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+                正在加载 chunk 列表...
+              </div>
+            ) : chunkStatus === 'error' ? (
+              <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
+                {chunkMessage}
+              </div>
+            ) : chunkRecords.length === 0 ? (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                当前文件暂无解析片段。解析失败、待解析或空内容文件会出现该状态。
+              </div>
+            ) : (
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                {chunkRecords.map((chunk) => {
+                  const owner = selectedKnowledgeForFile(knowledgeItems, chunkPanelFile);
+                  return (
+                    <article key={chunk.chunkId} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
+                        <span>{chunkPanelFile.originalFilename}</span>
+                        <span>chunkIndex {chunk.chunkIndex}</span>
+                      </div>
+                      <p className="mt-2 line-clamp-4 text-sm leading-6 text-slate-700">{chunk.textPreview}</p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                        <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-cyan-700">
+                          charCount {chunk.charCount}
+                        </span>
+                        <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-600">
+                          所属知识条目：{owner?.title ?? chunkPanelFile.knowledgeId}
+                        </span>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
           <section aria-label="机构知识库检索测试卡片" className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <h2 className="text-lg font-semibold tracking-normal text-slate-950">检索测试</h2>
                 <p className="mt-1 text-sm leading-6 text-slate-600">使用现有关键词检索 API 查询已解析片段；不调用 AI provider，不使用向量数据库。</p>
               </div>
-              <form onSubmit={submitSearch} className="flex w-full flex-col gap-2 lg:w-[460px] sm:flex-row">
+              <form onSubmit={submitSearch} className="flex w-full flex-col gap-2 lg:w-[560px] sm:flex-row">
                 <input
                   aria-label="输入知识库检索关键词"
                   value={searchInput}
@@ -643,6 +1088,16 @@ export function InstitutionKnowledgeBaseCardPanel() {
                   placeholder="输入关键词，例如 冷敷"
                   className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-cyan-400"
                 />
+                <select
+                  aria-label="选择 topK"
+                  value={searchTopK}
+                  onChange={(event) => setSearchTopK(Number(event.target.value))}
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-cyan-400"
+                >
+                  <option value={3}>topK 3</option>
+                  <option value={5}>topK 5</option>
+                  <option value={10}>topK 10</option>
+                </select>
                 <button
                   type="submit"
                   disabled={searchStatus === 'searching'}
@@ -670,17 +1125,21 @@ export function InstitutionKnowledgeBaseCardPanel() {
             <div className="mt-4 grid gap-3">
               {searchResults.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-                  暂无检索结果。命中后会展示知识标题、文件名、片段序号和低敏片段预览。
+                  暂无检索结果。命中后会展示知识条目标题、文件名、chunkIndex、textPreview、matchReason 和 parseStatus。
                 </div>
               ) : (
                 searchResults.map((result) => (
                   <article key={result.chunkId} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
-                      <span>{result.knowledgeTitle} · {result.fileName} · 片段 {result.chunkIndex + 1}</span>
-                      <span className="text-cyan-700">关键词命中</span>
+                      <span>{result.knowledgeTitle} · {result.fileName} · chunkIndex {result.chunkIndex}</span>
+                      <span className="text-cyan-700">{parseStatusLabels[result.parseStatus] ?? result.parseStatus}</span>
                     </div>
-                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{result.textPreview}</p>
-                    <div className="mt-2 text-xs font-semibold text-cyan-700">{result.matchReason}</div>
+                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{highlightKeyword(result.textPreview, activeSearchKeyword)}</p>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+                      <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-cyan-700">{result.matchReason}</span>
+                      <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-600">知识条目标题：{result.knowledgeTitle}</span>
+                      <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-600">文件名：{result.fileName}</span>
+                    </div>
                   </article>
                 ))
               )}
