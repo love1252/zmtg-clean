@@ -127,6 +127,9 @@ export type PlatformKnowledgeTenantDto = Omit<TenantKnowledgeStats, 'tenantName'
 export type PlatformKnowledgeFileDto = Omit<KnowledgeFileItem, 'tenantName' | 'isDownloadable'> & {
   tenantName: string;
   knowledgeId?: string;
+  ocrStatus?: 'pending' | 'succeeded' | 'failed' | 'unsupported' | 'ocr_required';
+  failureReasonCode?: string | null;
+  chunkCount?: number;
 };
 
 export type PlatformKnowledgeItemDto = Omit<KnowledgeItem, 'tenantName' | 'summaryPreview'> & {

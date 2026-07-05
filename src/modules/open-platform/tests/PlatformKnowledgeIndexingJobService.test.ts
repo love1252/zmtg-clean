@@ -4,11 +4,17 @@ import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/
 import {
   cancelKnowledgeIndexingJob,
   createAndRunGenerateEmbeddingsJob,
+  createAndRunOcrFileJob,
   createAndRunRebuildKnowledgeIndexJob,
   createKnowledgeIndexingJob,
   listInstitutionKnowledgeIndexingJobs,
   type KnowledgeIndexingJobRecord,
 } from '@/modules/open-platform/server/platform-knowledge-indexing-job-service';
+
+import {
+  createMockKnowledgeDocumentOcrProvider,
+  disabledKnowledgeDocumentOcrProvider,
+} from '@/modules/open-platform/server/platform-knowledge-ocr-provider';
 
 const now = new Date('2026-07-05T08:00:00.000Z');
 const encoder = new TextEncoder();
@@ -93,6 +99,30 @@ function createEmbeddingRepository(options: { knowledge?: PlatformKnowledgeRepos
       safeFailureMessage: null,
       textLength: 16,
       chunkCount: 1,
+      parserVersion: 'test-parser',
+    },
+    {
+      fileId: 'file-image',
+      tenantId: 'tenant-a',
+      knowledgeId: 'knowledge-visible',
+      originalFilename: '术后照片.png',
+      storageKey: 'safe-image-key',
+      mimeType: 'image/png',
+      sizeBytes: 16,
+      sha256: 'hash-image',
+      status: 'active' as const,
+      uploadedByUserId: 'user-a',
+      createdAt: now,
+      updatedAt: now,
+      archivedAt: null,
+      fileType: 'PNG',
+      sizeLabel: '1 KB',
+      parseStatus: 'failed' as const,
+      ocrStatus: 'ocr_required' as const,
+      failureReasonCode: 'ocr_required',
+      safeFailureMessage: '需要 OCR',
+      textLength: 0,
+      chunkCount: 0,
       parserVersion: 'test-parser',
     },
   ];
@@ -263,6 +293,7 @@ describe('platform knowledge indexing job service', () => {
     const result = await createAndRunRebuildKnowledgeIndexJob({
       repository,
       storage,
+      ocrProvider: createMockKnowledgeDocumentOcrProvider({ text: '重建 OCR 图片文本进入 chunk。' }),
       input: {
         tenantId: 'tenant-a',
         institutionId: 'inst-current',
@@ -279,16 +310,113 @@ describe('platform knowledge indexing job service', () => {
     }));
     expect(repository.listKnowledgeFiles).toHaveBeenCalledWith({ tenantId: 'tenant-a', knowledgeId: 'knowledge-visible' });
     expect(storage.read).toHaveBeenCalledWith({ storageKey: 'safe-storage-key' });
+    expect(storage.read).toHaveBeenCalledWith({ storageKey: 'safe-image-key' });
     expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a',
       fileId: 'file-visible',
       chunks: expect.arrayContaining([expect.objectContaining({ textPreview: expect.stringContaining('重建解析文本') })]),
+    }));
+    expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a',
+      fileId: 'file-image',
+      chunks: expect.arrayContaining([expect.objectContaining({ textPreview: expect.stringContaining('重建 OCR 图片文本') })]),
     }));
     expect(repository.listKnowledgeEmbeddingCandidates).toHaveBeenCalledWith({
       tenantId: 'tenant-a',
       knowledgeId: 'knowledge-visible',
       fileId: undefined,
     });
+  });
+
+  it('ocr_file job 成功后生成 chunk 且返回低敏任务 DTO', async () => {
+    const repository = createEmbeddingRepository();
+    const storage = createStorage('not-used-image-bytes');
+
+    const result = await createAndRunOcrFileJob({
+      repository,
+      storage,
+      ocrProvider: createMockKnowledgeDocumentOcrProvider({ text: 'OCR job 文本进入 chunk' }),
+      input: {
+        tenantId: 'tenant-a',
+        institutionId: 'inst-current',
+        actorUserId: 'user-a',
+        knowledgeId: 'knowledge-visible',
+        fileId: 'file-image',
+      },
+    });
+    const serialized = JSON.stringify(result);
+
+    expect(result.status).toBe('succeeded');
+    expect('job' in result ? result.job : null).toEqual(expect.objectContaining({
+      jobType: 'ocr_file',
+      status: 'succeeded',
+      knowledgeId: 'knowledge-visible',
+      fileId: 'file-image',
+      totalCount: 1,
+      processedCount: 1,
+      failedCount: 0,
+    }));
+    expect(repository.createKnowledgeIndexingJob).toHaveBeenCalledWith(expect.objectContaining({
+      jobType: 'ocr_file',
+      metadataJson: expect.objectContaining({ mode: 'ocr' }),
+    }));
+    expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenCalledWith(expect.objectContaining({
+      fileId: 'file-image',
+      chunks: expect.arrayContaining([expect.objectContaining({ textPreview: expect.stringContaining('OCR job 文本') })]),
+    }));
+    expect(serialized).not.toMatch(/storageKey|signedUrl|embeddingVectorJson|ocrProviderType|provider|model|token|cost|vendor|secret/i);
+  });
+
+  it('ocr_file job 失败时记录低敏失败原因', async () => {
+    const repository = createEmbeddingRepository();
+
+    const result = await createAndRunOcrFileJob({
+      repository,
+      storage: createStorage('image'),
+      ocrProvider: disabledKnowledgeDocumentOcrProvider,
+      input: {
+        tenantId: 'tenant-a',
+        institutionId: 'inst-current',
+        actorUserId: 'user-a',
+        knowledgeId: 'knowledge-visible',
+        fileId: 'file-image',
+      },
+    });
+    const serialized = JSON.stringify(result);
+
+    expect(result.status).toBe('failed');
+    expect('job' in result ? result.job : null).toEqual(expect.objectContaining({
+      jobType: 'ocr_file',
+      status: 'failed',
+      failureReasonCode: 'ocr_provider_disabled',
+      safeMessage: 'OCR 当前未启用，无法识别扫描件或图片文字',
+    }));
+    expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenCalledWith(expect.objectContaining({
+      fileId: 'file-image',
+      chunks: [],
+    }));
+    expect(serialized).not.toMatch(/storageKey|signedUrl|ocrProviderType|model|token|cost|vendor|secret/i);
+  });
+
+  it('跨机构不可触发 OCR 任务', async () => {
+    const repository = createEmbeddingRepository({ knowledge: hiddenKnowledge });
+
+    const result = await createAndRunOcrFileJob({
+      repository,
+      storage: createStorage('image'),
+      ocrProvider: createMockKnowledgeDocumentOcrProvider({ text: '不可触达' }),
+      input: {
+        tenantId: 'tenant-a',
+        institutionId: 'inst-current',
+        actorUserId: 'user-a',
+        knowledgeId: 'knowledge-hidden',
+        fileId: 'file-image',
+      },
+    });
+
+    expect(result).toEqual({ status: 'forbidden' });
+    expect(repository.createKnowledgeIndexingJob).not.toHaveBeenCalled();
+    expect(repository.replaceKnowledgeFileParseChunks).not.toHaveBeenCalled();
   });
 
   it('只允许 pending 任务取消，running 不强杀', async () => {

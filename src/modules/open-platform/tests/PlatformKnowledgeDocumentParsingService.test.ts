@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { deflateRawSync, deflateSync } from 'node:zlib';
+import {
+  createMockKnowledgeDocumentOcrProvider,
+  disabledKnowledgeDocumentOcrProvider,
+} from '@/modules/open-platform/server/platform-knowledge-ocr-provider';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import {
   parsePlatformKnowledgeDocumentFileService,
@@ -41,8 +45,12 @@ const unsafeFragments = [
   'word/document.xml',
   'xl/sharedStrings.xml',
   'xl/worksheets/sheet1.xml',
-  'trainingContent',
-  'answer',
+  'ocrProviderType',
+  'model',
+  'vendor',
+  'cost',
+  'signedUrl',
+  'bucket',
 ];
 
 const knowledgeRecords: PlatformKnowledgeRepositoryRecord[] = [
@@ -338,6 +346,24 @@ function createFixture(input: {
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     }),
     fileRecord({
+      fileId: 'file-jpg',
+      originalFilename: '照片.jpg',
+      storageKey: 'tenant-a/knowledge-a/file-jpg.bin',
+      mimeType: 'image/jpeg',
+    }),
+    fileRecord({
+      fileId: 'file-png',
+      originalFilename: '照片.png',
+      storageKey: 'tenant-a/knowledge-a/file-png.bin',
+      mimeType: 'image/png',
+    }),
+    fileRecord({
+      fileId: 'file-webp',
+      originalFilename: '照片.webp',
+      storageKey: 'tenant-a/knowledge-a/file-webp.bin',
+      mimeType: 'image/webp',
+    }),
+    fileRecord({
       fileId: 'file-archived',
       originalFilename: '归档.txt',
       storageKey: 'tenant-a/knowledge-a/file-archived.bin',
@@ -364,6 +390,9 @@ function createFixture(input: {
       ['项目', '注意事项'],
       ['水光针', '避免暴晒'],
     ]),
+    'tenant-a/knowledge-a/file-jpg.bin': new Uint8Array([0xff, 0xd8, 0xff, 0xdb]),
+    'tenant-a/knowledge-a/file-png.bin': new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    'tenant-a/knowledge-a/file-webp.bin': encoder.encode('RIFF-webp'),
     'tenant-a/knowledge-a/file-archived.bin': '归档内容',
     'tenant-b/knowledge-b/file-b.bin': '跨租户内容',
     ...input.storage,
@@ -567,17 +596,17 @@ describe('知识库文档解析与文本抽取 service', () => {
 
   it('不支持的文件类型被白名单拦截且不读取 storage', async () => {
     const unsupported = fileRecord({
-      fileId: 'file-png',
-      originalFilename: '照片.png',
-      mimeType: 'image/png',
-      storageKey: 'tenant-a/knowledge-a/file-png.bin',
+      fileId: 'file-gif',
+      originalFilename: '动图.gif',
+      mimeType: 'image/gif',
+      storageKey: 'tenant-a/knowledge-a/file-gif.bin',
     });
     const { repository, storage } = createFixture({ files: [unsupported] });
 
     const result = await parsePlatformKnowledgeDocumentFileService({
       repository,
       storage,
-      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-png' },
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-gif' },
     });
 
     expect(result.status).toBe('failed');
@@ -594,7 +623,122 @@ describe('知识库文档解析与文本抽取 service', () => {
     expectSafePayload(result);
   });
 
-  it('扫描 PDF 或无法抽取文本的 PDF 安全失败且不做 OCR', async () => {
+  it.each([
+    ['file-png', 'image/png'],
+    ['file-jpg', 'image/jpeg'],
+  ])('图片文件 %s 默认进入 OCR-ready dry-run 状态且不生成脏 chunk', async (fileId) => {
+    const { repository, storage } = createFixture();
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId },
+    });
+
+    expect(result.status).toBe('failed');
+    if (!('parse' in result)) throw new Error('expected failed parse result');
+    expect(result.parse).toEqual(expect.objectContaining({
+      parseStatus: 'failed',
+      failureReasonCode: 'ocr_required',
+      chunkCount: 0,
+      textLength: 0,
+    }));
+    expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenCalledWith(expect.objectContaining({ chunks: [] }));
+    expect(storage.read).toHaveBeenCalled();
+    expectSafePayload(result);
+  });
+
+  it('mock OCR success 后生成 chunk 并只返回低敏状态', async () => {
+    const { repository, storage } = createFixture();
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      ocrProvider: createMockKnowledgeDocumentOcrProvider({ text: '图片 OCR 识别文本\n术后避免暴晒' }),
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-png' },
+    });
+
+    expect(result.status).toBe('succeeded');
+    if (!('parse' in result)) throw new Error('expected parse result');
+    expect(result.parse).toEqual(expect.objectContaining({
+      parseStatus: 'succeeded',
+      failureReasonCode: null,
+      safeFailureMessage: null,
+      chunkCount: expect.any(Number),
+      parserVersion: 'local-real-file-parser-v2+ocr-ready',
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      ocrStatus: 'succeeded',
+    }));
+    const savedChunks = await repository.listKnowledgeFileParseChunks({ tenantId: 'tenant-a', fileId: 'file-png' });
+    expect(savedChunks.map((chunk) => chunk.textPreview).join('\n')).toContain('图片 OCR 识别文本');
+    expectSafePayload(result);
+  });
+
+  it('OCR provider disabled 时低敏失败且不生成脏 chunk', async () => {
+    const { repository, storage } = createFixture();
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      ocrProvider: disabledKnowledgeDocumentOcrProvider,
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-jpg' },
+    });
+
+    expect(result.status).toBe('failed');
+    if (!('parse' in result)) throw new Error('expected failed parse result');
+    expect(result.parse).toEqual(expect.objectContaining({
+      parseStatus: 'failed',
+      failureReasonCode: 'ocr_provider_disabled',
+      safeFailureMessage: 'OCR 当前未启用，无法识别扫描件或图片文字',
+      chunkCount: 0,
+    }));
+    expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenCalledWith(expect.objectContaining({ chunks: [] }));
+    expectSafePayload(result);
+  });
+
+  it('mock OCR 失败时低敏失败且不生成脏 chunk', async () => {
+    const { repository, storage } = createFixture();
+
+    const result = await parsePlatformKnowledgeDocumentFileService({
+      repository,
+      storage,
+      ocrProvider: createMockKnowledgeDocumentOcrProvider({ failureReasonCode: 'ocr_low_confidence', safeMessage: 'OCR 置信度不足，请更换更清晰的文件' }),
+      input: { tenantId: 'tenant-a', knowledgeId: 'knowledge-a', fileId: 'file-png' },
+    });
+
+    expect(result.status).toBe('failed');
+    if (!('parse' in result)) throw new Error('expected failed parse result');
+    expect(result.parse).toEqual(expect.objectContaining({
+      parseStatus: 'failed',
+      failureReasonCode: 'ocr_low_confidence',
+      safeFailureMessage: 'OCR 置信度不足，请更换更清晰的文件',
+      chunkCount: 0,
+    }));
+    expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenCalledWith(expect.objectContaining({ chunks: [] }));
+    expectSafePayload(result);
+  });
+
+  it('WEBP 可识别为 OCR-ready 文件类型', () => {
+    const result = parseKnowledgeDocumentFile({
+      fileName: '海报.webp',
+      mimeType: 'image/webp',
+      buffer: encoder.encode('RIFF-webp'),
+      tenantId: 'tenant-a',
+      institutionId: 'inst-visible-a',
+      knowledgeId: 'knowledge-a',
+      fileId: 'file-webp',
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'ocr_required',
+      parserType: 'image',
+      failureReasonCode: 'ocr_required',
+      ocrStatus: 'ocr_required',
+    }));
+  });
+
+  it('扫描 PDF 或无法抽取文本的 PDF 进入 OCR-ready 状态且默认不生成 chunk', async () => {
     const { repository, storage } = createFixture({
       storage: {
         'tenant-a/knowledge-a/file-pdf.bin': encoder.encode('%PDF-1.4\n/image-only scan bytes\n%%EOF'),
@@ -612,8 +756,8 @@ describe('知识库文档解析与文本抽取 service', () => {
     expect(result.parse).toEqual(
       expect.objectContaining({
         parseStatus: 'failed',
-        failureReasonCode: 'parse_scanned_pdf_unsupported',
-        safeFailureMessage: 'PDF 未提取到可复制文本，扫描件或图片文字暂不支持 OCR',
+        failureReasonCode: 'ocr_required',
+        safeFailureMessage: '该文件需要 OCR 识别；当前为 OCR-ready 最小闭环，尚未接入生产 OCR 服务',
         textLength: 0,
         chunkCount: 0,
       }),
@@ -640,7 +784,7 @@ describe('知识库文档解析与文本抽取 service', () => {
       expect.objectContaining({
         parseStatus: 'failed',
         failureReasonCode: 'parse_empty_text',
-        safeFailureMessage: '文件未提取到可解析文本，扫描件或图片内容暂不支持',
+        safeFailureMessage: '文件未提取到可解析文本，扫描件或图片内容需要 OCR',
         textLength: 0,
         chunkCount: 0,
       }),

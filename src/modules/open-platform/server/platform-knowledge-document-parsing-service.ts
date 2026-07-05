@@ -4,6 +4,14 @@ import {
   chunkV1KnowledgeBaseRuntimeDocument,
   v1KnowledgeBaseUploadParseChunkRuntimeMaxChars,
 } from '@/modules/knowledge-base/server/v1-knowledge-base-upload-parse-chunk-runtime';
+import {
+  dryRunKnowledgeDocumentOcrProvider,
+  performKnowledgeDocumentOcr,
+  type PlatformKnowledgeOcrFailureReasonCode,
+  type PlatformKnowledgeOcrProvider,
+  type PlatformKnowledgeOcrProviderType,
+  type PlatformKnowledgeOcrWarningCode,
+} from '@/modules/open-platform/server/platform-knowledge-ocr-provider';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import {
   isKnowledgeVisibleToInstitution,
@@ -94,6 +102,7 @@ export type PlatformKnowledgeDocumentParsingRepository = {
 type ParseServiceInput = {
   repository: PlatformKnowledgeDocumentParsingRepository;
   storage: Pick<PlatformKnowledgeFileStorage, 'read'>;
+  ocrProvider?: PlatformKnowledgeOcrProvider;
   input: {
     tenantId?: string | null;
     knowledgeId?: string | null;
@@ -126,9 +135,13 @@ const supportedFileTypes = new Map<string, readonly string[]>([
   ['.pdf', ['application/pdf']],
   ['.docx', ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']],
   ['.xlsx', ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']],
+  ['.png', ['image/png']],
+  ['.jpg', ['image/jpeg']],
+  ['.jpeg', ['image/jpeg']],
+  ['.webp', ['image/webp']],
 ]);
 
-export type PlatformKnowledgeDocumentParserType = 'text' | 'markdown' | 'csv' | 'pdf' | 'docx' | 'xlsx';
+export type PlatformKnowledgeDocumentParserType = 'text' | 'markdown' | 'csv' | 'pdf' | 'docx' | 'xlsx' | 'image';
 export type PlatformKnowledgeDocumentParseFailureReasonCode =
   | 'unsupported_file_type'
   | 'parse_empty_text'
@@ -137,10 +150,12 @@ export type PlatformKnowledgeDocumentParseFailureReasonCode =
   | 'parse_sheet_limit_exceeded'
   | 'parse_malformed_document'
   | 'parse_scanned_pdf_unsupported'
-  | 'parse_service_failed';
+  | 'parse_service_failed'
+  | PlatformKnowledgeOcrFailureReasonCode;
 export type PlatformKnowledgeDocumentParseWarningCode =
   | 'parse_text_truncated'
-  | 'parse_row_limit_exceeded';
+  | 'parse_row_limit_exceeded'
+  | PlatformKnowledgeOcrWarningCode;
 
 export type PlatformKnowledgeDocumentParseResult = {
   status: 'succeeded';
@@ -149,14 +164,20 @@ export type PlatformKnowledgeDocumentParseResult = {
   pageCount?: number;
   sheetCount?: number;
   rowCount?: number;
+  ocrStatus?: 'succeeded';
+  ocrProviderType?: PlatformKnowledgeOcrProviderType;
+  imageCount?: number;
   warningCodes: PlatformKnowledgeDocumentParseWarningCode[];
 } | {
-  status: 'failed' | 'unsupported';
+  status: 'failed' | 'unsupported' | 'ocr_required';
   text: '';
   parserType: PlatformKnowledgeDocumentParserType | null;
   pageCount?: number;
   sheetCount?: number;
   rowCount?: number;
+  ocrStatus?: 'failed' | 'unsupported' | 'ocr_required';
+  ocrProviderType?: PlatformKnowledgeOcrProviderType;
+  imageCount?: number;
   warningCodes: PlatformKnowledgeDocumentParseWarningCode[];
   failureReasonCode: PlatformKnowledgeDocumentParseFailureReasonCode;
   safeMessage: string;
@@ -179,8 +200,8 @@ export type PlatformKnowledgeDocumentParseInput = {
 const unsupportedSafeFailureMessage = '当前文件类型暂不支持解析';
 const parseFailedSafeFailureMessage = '知识库文件解析失败，请稍后重试';
 const malformedSafeFailureMessage = '文件结构无法解析，请确认文件未损坏后重试';
-const emptyContentSafeFailureMessage = '文件未提取到可解析文本，扫描件或图片内容暂不支持';
-const scannedPdfSafeFailureMessage = 'PDF 未提取到可复制文本，扫描件或图片文字暂不支持 OCR';
+const emptyContentSafeFailureMessage = '文件未提取到可解析文本，扫描件或图片内容需要 OCR';
+const scannedPdfSafeFailureMessage = 'PDF 未提取到可复制文本，需要 OCR 识别；当前为 OCR-ready 最小闭环';
 const oversizedFileSafeFailureMessage = '文件大小超过解析限制，请拆分后重新上传';
 const pageLimitSafeFailureMessage = 'PDF 页数超过解析限制，请拆分后重新上传';
 const sheetLimitSafeFailureMessage = 'Excel 工作表数量超过解析限制，请拆分后重新上传';
@@ -667,6 +688,10 @@ function extractPdfText(content: Uint8Array, maxPages = PLATFORM_KNOWLEDGE_PARSE
   return { text: texts.join('\n'), pageCount };
 }
 
+function isImageExtension(extension: string) {
+  return extension === '.png' || extension === '.jpg' || extension === '.jpeg' || extension === '.webp';
+}
+
 function parserTypeForExtension(extension: string): PlatformKnowledgeDocumentParserType | null {
   if (extension === '.txt') return 'text';
   if (extension === '.md') return 'markdown';
@@ -674,17 +699,22 @@ function parserTypeForExtension(extension: string): PlatformKnowledgeDocumentPar
   if (extension === '.pdf') return 'pdf';
   if (extension === '.docx') return 'docx';
   if (extension === '.xlsx') return 'xlsx';
+  if (isImageExtension(extension)) return 'image';
   return null;
 }
 
 function failureResult(input: {
-  status?: 'failed' | 'unsupported';
+  status?: 'failed' | 'unsupported' | 'ocr_required';
   parserType: PlatformKnowledgeDocumentParserType | null;
   failureReasonCode: PlatformKnowledgeDocumentParseFailureReasonCode;
   safeMessage: string;
   pageCount?: number;
   sheetCount?: number;
   rowCount?: number;
+  ocrStatus?: 'failed' | 'unsupported' | 'ocr_required';
+  ocrProviderType?: PlatformKnowledgeOcrProviderType;
+  imageCount?: number;
+  warningCodes?: PlatformKnowledgeDocumentParseWarningCode[];
 }): PlatformKnowledgeDocumentParseResult {
   return {
     status: input.status ?? 'failed',
@@ -695,7 +725,10 @@ function failureResult(input: {
     pageCount: input.pageCount,
     sheetCount: input.sheetCount,
     rowCount: input.rowCount,
-    warningCodes: [],
+    ocrStatus: input.ocrStatus,
+    ocrProviderType: input.ocrProviderType,
+    imageCount: input.imageCount,
+    warningCodes: input.warningCodes ?? [],
   };
 }
 
@@ -716,6 +749,19 @@ export function parseKnowledgeDocumentFile(input: PlatformKnowledgeDocumentParse
   const maxSheets = input.maxSheets ?? PLATFORM_KNOWLEDGE_PARSE_MAX_SHEETS;
   const maxPages = input.maxPages ?? PLATFORM_KNOWLEDGE_PARSE_MAX_PAGES;
   const warningCodes: PlatformKnowledgeDocumentParseWarningCode[] = [];
+
+  if (isImageExtension(extension)) {
+    return failureResult({
+      status: 'ocr_required',
+      parserType,
+      failureReasonCode: 'ocr_required',
+      safeMessage: scannedPdfSafeFailureMessage,
+      ocrStatus: 'ocr_required',
+      ocrProviderType: 'dry_run',
+      imageCount: 1,
+      warningCodes: ['ocr_dry_run_result'],
+    });
+  }
 
   try {
     let extractedText = '';
@@ -747,12 +793,16 @@ export function parseKnowledgeDocumentFile(input: PlatformKnowledgeDocumentParse
     let text = normalizeExtractedText(extractedText);
     if (!text) {
       return failureResult({
+        status: parserType === 'pdf' ? 'ocr_required' : 'failed',
         parserType,
-        failureReasonCode: parserType === 'pdf' ? 'parse_scanned_pdf_unsupported' : 'parse_empty_text',
+        failureReasonCode: parserType === 'pdf' ? 'ocr_required' : 'parse_empty_text',
         safeMessage: parserType === 'pdf' ? scannedPdfSafeFailureMessage : emptyContentSafeFailureMessage,
         pageCount,
         sheetCount,
         rowCount,
+        ocrStatus: parserType === 'pdf' ? 'ocr_required' : undefined,
+        ocrProviderType: parserType === 'pdf' ? 'dry_run' : undefined,
+        warningCodes: parserType === 'pdf' ? ['ocr_dry_run_result'] : [],
       });
     }
     if (text.length > maxChars) {
@@ -933,14 +983,76 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
   }
 
   try {
+    const fileBuffer = await input.storage.read({ storageKey: found.file.storageKey });
     const documentParse = parseKnowledgeDocumentFile({
       fileName: found.file.originalFilename,
       mimeType: found.file.mimeType,
-      buffer: await input.storage.read({ storageKey: found.file.storageKey }),
+      buffer: fileBuffer,
       tenantId,
+      institutionId: found.knowledge.institutionId,
       knowledgeId,
       fileId,
     });
+    if (documentParse.status === 'ocr_required') {
+      const ocrResult = await performKnowledgeDocumentOcr({
+        fileName: found.file.originalFilename,
+        mimeType: found.file.mimeType,
+        buffer: fileBuffer,
+        tenantId,
+        institutionId: found.knowledge.institutionId,
+        knowledgeId,
+        fileId,
+      }, input.ocrProvider ?? dryRunKnowledgeDocumentOcrProvider);
+      if (ocrResult.status !== 'succeeded') {
+        return persistFailedParse({
+          repository: input.repository,
+          baseRecord,
+          failureReasonCode: ocrResult.failureReasonCode,
+          safeFailureMessage: ocrResult.safeMessage,
+        });
+      }
+
+      let ocrText = normalizeExtractedText(ocrResult.text);
+      const warningCodes: PlatformKnowledgeDocumentParseWarningCode[] = [...ocrResult.warningCodes];
+      if (!ocrText) {
+        return persistFailedParse({
+          repository: input.repository,
+          baseRecord,
+          failureReasonCode: 'ocr_empty_text',
+          safeFailureMessage: 'OCR 未识别到可索引文本',
+        });
+      }
+      if (ocrText.length > PLATFORM_KNOWLEDGE_PARSE_TEXT_MAX_CHARS) {
+        ocrText = ocrText.slice(0, PLATFORM_KNOWLEDGE_PARSE_TEXT_MAX_CHARS);
+        warningCodes.push('ocr_text_truncated');
+      }
+
+      const chunks = splitTextIntoChunks({ tenantId, knowledgeId, fileId, text: ocrText, now });
+      const parse = await input.repository.saveKnowledgeFileParseResult({
+        ...baseRecord,
+        parserVersion: `${PLATFORM_KNOWLEDGE_PARSER_VERSION}+ocr-ready`,
+        parseStatus: 'succeeded',
+        failureReasonCode: null,
+        safeFailureMessage: null,
+        textContent: ocrText,
+        textLength: ocrText.length,
+        chunkCount: chunks.length,
+      });
+      await input.repository.replaceKnowledgeFileParseChunks({
+        tenantId,
+        knowledgeId,
+        fileId,
+        chunks,
+      });
+
+      return {
+        status: 'succeeded' as const,
+        parse: mapParseRecord(parse),
+        parserType: documentParse.parserType ?? 'image',
+        ocrStatus: 'succeeded' as const,
+        warningCodes,
+      };
+    }
     if (documentParse.status !== 'succeeded') {
       return persistFailedParse({
         repository: input.repository,
@@ -972,6 +1084,7 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
       parse: mapParseRecord(parse),
       parserType: documentParse.parserType,
       warningCodes: documentParse.warningCodes,
+      ocrStatus: documentParse.ocrStatus,
     };
   } catch {
     return persistFailedParse({

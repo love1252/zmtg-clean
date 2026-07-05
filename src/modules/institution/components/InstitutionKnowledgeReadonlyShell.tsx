@@ -25,6 +25,7 @@ type InstitutionKnowledgeFileRecord = {
   fileType: string;
   sizeLabel: string;
   parseStatus: 'pending' | 'processing' | 'succeeded' | 'failed';
+  ocrStatus?: 'pending' | 'succeeded' | 'failed' | 'unsupported' | 'ocr_required';
   safeFailureMessage: string | null;
   failureReasonCode?: string | null;
   parserVersion?: string | null;
@@ -32,7 +33,7 @@ type InstitutionKnowledgeFileRecord = {
 };
 type InstitutionKnowledgeIndexingJobRecord = {
   jobId: string;
-  jobType: 'parse_file' | 'generate_embeddings' | 'rebuild_embeddings' | 'rebuild_knowledge_index';
+  jobType: 'parse_file' | 'ocr_file' | 'generate_embeddings' | 'rebuild_embeddings' | 'rebuild_knowledge_index';
   status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
   knowledgeId: string | null;
   fileId: string | null;
@@ -158,6 +159,14 @@ const parseStatusLabels: Record<InstitutionKnowledgeFileRecord['parseStatus'], s
   failed: '解析失败',
 };
 
+const ocrStatusLabels: Record<NonNullable<InstitutionKnowledgeFileRecord['ocrStatus']>, string> = {
+  pending: 'OCR 待触发',
+  succeeded: 'OCR 已完成',
+  failed: 'OCR 失败',
+  unsupported: 'OCR 不支持',
+  ocr_required: '需要 OCR',
+};
+
 const embeddingStatusLabels: Record<NonNullable<InstitutionKnowledgeChunkRecord['embeddingStatus']>, string> = {
   pending: '向量待生成',
   ready: '向量已生成',
@@ -178,6 +187,7 @@ const qaRetrievalModeLabels: Record<InstitutionKnowledgeQaAuditRecord['retrieval
 
 const indexingJobTypeLabels: Record<InstitutionKnowledgeIndexingJobRecord['jobType'], string> = {
   parse_file: '解析文件',
+  ocr_file: '执行 OCR',
   generate_embeddings: '生成向量索引',
   rebuild_embeddings: '重建文件向量索引',
   rebuild_knowledge_index: '重建知识索引',
@@ -282,7 +292,7 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [isAiUsageLoading, setIsAiUsageLoading] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
-  const [uploadMessage, setUploadMessage] = useState('选择文件后上传，支持 TXT / MD / PDF / DOCX / XLSX / CSV，最大 2MB');
+  const [uploadMessage, setUploadMessage] = useState('选择文件后上传，支持 TXT / MD / PDF / DOCX / XLSX / CSV / PNG / JPG，最大 2MB；扫描 PDF / 图片文字进入 OCR-ready 流程');
   const [uploadedKnowledgeId, setUploadedKnowledgeId] = useState<string | null>(null);
   const [indexingJobs, setIndexingJobs] = useState<InstitutionKnowledgeIndexingJobRecord[]>([]);
   const [indexingJobMessage, setIndexingJobMessage] = useState('点击刷新查看最近索引任务');
@@ -382,11 +392,11 @@ export function InstitutionKnowledgeReadonlyShell() {
       return;
     }
 
-    const allowedExtensions = ['.txt', '.md', '.pdf', '.docx', '.xlsx', '.csv'];
+    const allowedExtensions = ['.txt', '.md', '.pdf', '.docx', '.xlsx', '.csv', '.png', '.jpg', '.jpeg'];
     const filename = uploadFile.name.toLowerCase();
     const hasValidExtension = allowedExtensions.some((ext) => filename.endsWith(ext));
     if (!hasValidExtension) {
-      setUploadMessage('文件类型暂不支持，当前支持 TXT、MD、PDF、DOCX、XLSX、CSV 格式');
+      setUploadMessage('文件类型暂不支持，当前支持 TXT、MD、PDF、DOCX、XLSX、CSV、PNG、JPG 格式');
       setUploadStatus('error');
       return;
     }
@@ -634,6 +644,27 @@ export function InstitutionKnowledgeReadonlyShell() {
     }
   }
 
+  async function createOcrFileJob(knowledgeId: string, file: InstitutionKnowledgeFileRecord) {
+    setFileMessage('正在创建 OCR 任务...');
+    try {
+      const response = await fetch('/api/institution/knowledge-management/indexing-jobs', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jobType: 'ocr_file', knowledgeId, fileId: file.fileId }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || typeof payload.status !== 'string') {
+        setFileMessage(typeof payload?.error === 'string' ? payload.error : 'OCR 任务暂时无法创建');
+        return;
+      }
+      const statusLabel = indexingJobStatusLabels[payload.status as InstitutionKnowledgeIndexingJobRecord['status']] ?? payload.status;
+      setFileMessage(`OCR 任务已执行：${statusLabel}${payload.safeMessage ? `，${payload.safeMessage}` : ''}`);
+      await Promise.all([loadKnowledgeFiles(knowledgeId), loadIndexingJobs()]);
+    } catch {
+      setFileMessage('OCR 任务暂时无法创建');
+    }
+  }
+
   async function rebuildFileEmbeddings(knowledgeId: string, file: InstitutionKnowledgeFileRecord) {
     setFileMessage('正在创建向量索引任务...');
     try {
@@ -856,18 +887,18 @@ export function InstitutionKnowledgeReadonlyShell() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-semibold tracking-normal text-slate-950">上传机构文件</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">上传低敏文件并自动解析，支持 TXT / MD / PDF / DOCX / XLSX / CSV，最大 2MB；PDF 仅支持可复制文本，扫描件需后续 OCR，本轮不支持；Excel 仅抽取表格文本，不执行公式。</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">上传低敏文件并自动解析，支持 TXT / MD / PDF / DOCX / XLSX / CSV / PNG / JPG，最大 2MB；普通 PDF 支持文本抽取，扫描 PDF / 图片文字需要 OCR；当前为 OCR-ready 最小闭环，不接外部云 OCR，不做生产级批量 OCR 或 worker / queue / cron；Excel 仅抽取表格文本，不执行公式。</p>
           </div>
           <form onSubmit={handleUpload} className="flex w-full flex-col gap-2 sm:flex-row lg:w-[540px]">
             <label className="relative min-w-0 flex-1">
               <input
                 type="file"
-                accept=".txt,.md,.pdf,.docx,.xlsx,.csv"
+                accept=".txt,.md,.pdf,.docx,.xlsx,.csv,.png,.jpg,.jpeg"
                 onChange={(event) => {
                   const files = event.target.files;
                   setUploadFile(files?.length ? files[0] : null);
                   setUploadStatus('idle');
-                  setUploadMessage('选择文件后上传，支持 TXT / MD / PDF / DOCX / XLSX / CSV，最大 2MB');
+                  setUploadMessage('选择文件后上传，支持 TXT / MD / PDF / DOCX / XLSX / CSV / PNG / JPG，最大 2MB；扫描 PDF / 图片文字进入 OCR-ready 流程');
                 }}
                 className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-cyan-700 hover:file:bg-cyan-200 focus:border-cyan-400"
               />
@@ -904,7 +935,7 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div>
             <h2 className="text-lg font-semibold tracking-normal text-slate-950">索引任务</h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-              当前是 DB-backed minimal job flow：请求内创建并执行任务记录，用于解析文件、生成向量索引和重建索引；重建知识索引会重新解析当前知识文件后再生成向量；不是生产级队列，不做 OCR，不识别扫描件，也不是训练系统。
+              当前是 DB-backed minimal job flow：请求内创建并执行任务记录，用于解析文件、执行 OCR-ready 文件、生成向量索引和重建索引；重建知识索引会重新解析当前知识文件，扫描 PDF / 图片文字按 OCR 状态处理后再生成向量；不接外部云 OCR，不做生产级队列、worker 或 cron，也不是训练系统。
             </p>
           </div>
           <button
@@ -969,6 +1000,24 @@ export function InstitutionKnowledgeReadonlyShell() {
               );
             })
           )}
+        </div>
+      </section>
+
+      <section
+        aria-label="机构端 OCR-ready 边界说明"
+        className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4"
+      >
+        <div>
+          <h2 className="text-lg font-semibold tracking-normal text-slate-950">OCR-ready 边界</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            图片与扫描 PDF 会进入 OCR contract；当前为 OCR-ready 最小闭环，默认 dry-run 仅返回低敏 OCR 状态，mock 模式用于测试闭环。机构端不展示原图路径、存储定位、临时下载链接、完整 OCR 文本、OCR 实现类型、模型、计费或供应商。
+          </p>
+        </div>
+        <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
+          <span className="rounded-xl border border-cyan-100 bg-white/80 px-3 py-2">图片白名单：PNG / JPG</span>
+          <span className="rounded-xl border border-cyan-100 bg-white/80 px-3 py-2">普通 PDF：文本抽取</span>
+          <span className="rounded-xl border border-cyan-100 bg-white/80 px-3 py-2">扫描 PDF：需要 OCR</span>
+          <span className="rounded-xl border border-cyan-100 bg-white/80 px-3 py-2">不接外部云 OCR / 不做生产级批量 OCR</span>
         </div>
       </section>
 
@@ -1178,7 +1227,7 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">检索测试台</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">支持 keyword / vector / hybrid，默认 hybrid；结果按 deterministic rerank 排序。仅使用已解析片段，不做 OCR、扫描件识别或生产级训练队列。</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">支持 keyword / vector / hybrid，默认 hybrid；结果按 deterministic rerank 排序。仅使用已解析片段；OCR 成功文本可进入 chunk / embedding / retrieval，扫描 PDF 或图片 OCR 未完成时不生成脏片段。</p>
             </div>
             <form onSubmit={searchChunks} className="flex w-full flex-col gap-2 lg:w-[720px]">
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -1734,7 +1783,7 @@ export function InstitutionKnowledgeReadonlyShell() {
                               {file.fileType} · {file.sizeLabel}
                             </div>
                             <div className="mt-1 text-xs font-semibold text-slate-500">
-                              {parseStatusLabels[file.parseStatus]} · {file.chunkCount} 片段
+                              {parseStatusLabels[file.parseStatus]} · {ocrStatusLabels[file.ocrStatus ?? 'pending']} · {file.chunkCount} 片段
                               {file.parserVersion ? ` · ${file.parserVersion}` : ''}
                             </div>
                             {file.failureReasonCode ? (
@@ -1756,6 +1805,14 @@ export function InstitutionKnowledgeReadonlyShell() {
                             >
                               <FileText className="h-4 w-4" />
                               查看解析片段
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => createOcrFileJob(item.knowledgeId, file)}
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-700 transition hover:border-amber-300"
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                              执行 OCR / 重建 OCR 索引
                             </button>
                             <button
                               type="button"

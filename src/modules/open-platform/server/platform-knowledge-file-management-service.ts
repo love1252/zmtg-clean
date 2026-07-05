@@ -44,6 +44,7 @@ export type PlatformKnowledgeFileDto = Omit<PlatformKnowledgeFileRepositoryRecor
   fileType: string;
   sizeLabel: string;
   parseStatus: PlatformKnowledgeFileParseStatus;
+  ocrStatus: 'pending' | 'succeeded' | 'failed' | 'unsupported' | 'ocr_required';
   failureReasonCode: string | null;
   safeFailureMessage: string | null;
   textLength: number;
@@ -152,6 +153,10 @@ const allowedFiles = new Map<string, readonly string[]>([
   ['.md', ['text/markdown', 'text/plain']],
   ['.csv', ['text/csv', 'application/csv', 'application/vnd.ms-excel']],
   ['.xlsx', ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']],
+  ['.png', ['image/png']],
+  ['.jpg', ['image/jpeg']],
+  ['.jpeg', ['image/jpeg']],
+  ['.webp', ['image/webp']],
 ]);
 
 const emptyState = {
@@ -221,14 +226,23 @@ function sizeLabel(sizeBytes: number) {
   return `${sizeBytes} B`;
 }
 
+function ocrStatusFromFailureReason(value: string | null | undefined): PlatformKnowledgeFileDto['ocrStatus'] {
+  if (!value?.startsWith('ocr_')) return 'pending';
+  if (value === 'ocr_required') return 'ocr_required';
+  if (value === 'ocr_unsupported_file_type') return 'unsupported';
+  return 'failed';
+}
+
 function mapFileRecordToDto(record: PlatformKnowledgeFileRepositoryRecord): PlatformKnowledgeFileDto {
   const { storageKey: _storageKey, ...safeRecord } = record;
+  const failureReasonCode = record.failureReasonCode ?? null;
   return {
     ...safeRecord,
     fileType: extensionOf(record.originalFilename).replace('.', '').toUpperCase(),
     sizeLabel: sizeLabel(record.sizeBytes),
     parseStatus: record.parseStatus ?? 'pending',
-    failureReasonCode: record.failureReasonCode ?? null,
+    ocrStatus: failureReasonCode ? ocrStatusFromFailureReason(failureReasonCode) : 'pending',
+    failureReasonCode,
     safeFailureMessage: record.safeFailureMessage ?? null,
     textLength: record.textLength ?? 0,
     chunkCount: record.chunkCount ?? 0,

@@ -3,6 +3,7 @@ import { createPlatformKnowledgeManagementRepository } from '@/modules/open-plat
 import { createLocalPlatformKnowledgeFileStorage } from '@/modules/open-platform/server/platform-knowledge-file-storage';
 import {
   createAndRunGenerateEmbeddingsJob,
+  createAndRunOcrFileJob,
   createAndRunParseFileJob,
   createAndRunRebuildEmbeddingsJob,
   createAndRunRebuildKnowledgeIndexJob,
@@ -14,6 +15,7 @@ import { getDatabase } from '@/server/db/client';
 
 const allowedJobTypes = new Set<KnowledgeIndexingJobType>([
   'parse_file',
+  'ocr_file',
   'generate_embeddings',
   'rebuild_embeddings',
   'rebuild_knowledge_index',
@@ -126,7 +128,13 @@ export async function POST(request: Request) {
         storage: createLocalPlatformKnowledgeFileStorage(),
         input: taskInput,
       })
-      : jobType === 'generate_embeddings'
+      : jobType === 'ocr_file'
+        ? await createAndRunOcrFileJob({
+          repository,
+          storage: createLocalPlatformKnowledgeFileStorage(),
+          input: taskInput,
+        })
+        : jobType === 'generate_embeddings'
         ? await createAndRunGenerateEmbeddingsJob({ repository, input: taskInput })
         : jobType === 'rebuild_embeddings'
           ? await createAndRunRebuildEmbeddingsJob({ repository, input: taskInput })

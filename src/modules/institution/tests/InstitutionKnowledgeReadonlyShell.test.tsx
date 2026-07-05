@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstitutionKnowledgeReadonlyShell } from '@/modules/institution/components/InstitutionKnowledgeReadonlyShell';
 import { listInstitutionKnowledgeItems } from '@/modules/institution/client/tenant-business-client';
@@ -27,8 +27,30 @@ describe('机构端知识库只读列表 UI', () => {
   beforeEach(() => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
+      vi.fn(async (url: string, init?: RequestInit) => {
         if (url.includes('/api/institution/knowledge-management/indexing-jobs')) {
+          if (init?.method === 'POST') {
+            return Response.json({
+              status: 'failed',
+              job: {
+                jobId: 'kb-index-job-ocr-ui',
+                jobType: 'ocr_file',
+                status: 'failed',
+                knowledgeId: 'knowledge-ui-a',
+                fileId: 'institution-file-image',
+                totalCount: 1,
+                processedCount: 0,
+                failedCount: 1,
+                failureReasonCode: 'ocr_required',
+                safeMessage: '该文件需要 OCR 识别；当前为 OCR-ready 最小闭环，尚未接入生产 OCR 服务',
+                createdAt: '2026-06-13T08:00:00.000Z',
+                startedAt: '2026-06-13T08:00:01.000Z',
+                finishedAt: '2026-06-13T08:00:02.000Z',
+                updatedAt: '2026-06-13T08:00:02.000Z',
+              },
+              safeMessage: '该文件需要 OCR 识别；当前为 OCR-ready 最小闭环，尚未接入生产 OCR 服务',
+            });
+          }
           return Response.json({
             records: [
               {
@@ -236,8 +258,30 @@ describe('机构端知识库只读列表 UI', () => {
               fileType: 'PDF',
               sizeLabel: '10 B',
               parseStatus: 'succeeded',
+              ocrStatus: 'pending',
               safeFailureMessage: null,
               chunkCount: 1,
+            },
+            {
+              fileId: 'institution-file-image',
+              tenantId: 'tenant-a',
+              knowledgeId: 'knowledge-ui-a',
+              originalFilename: '术后照片.png',
+              mimeType: 'image/png',
+              sizeBytes: 10,
+              sha256: 'e'.repeat(64),
+              status: 'active',
+              uploadedByUserId: 'platform-user',
+              createdAt: '2026-06-13T08:00:00.000Z',
+              updatedAt: '2026-06-13T08:00:00.000Z',
+              archivedAt: null,
+              fileType: 'PNG',
+              sizeLabel: '10 B',
+              parseStatus: 'failed',
+              ocrStatus: 'ocr_required',
+              failureReasonCode: 'ocr_required',
+              safeFailureMessage: '该文件需要 OCR 识别；当前为 OCR-ready 最小闭环，尚未接入生产 OCR 服务',
+              chunkCount: 0,
             },
           ],
           pageInfo: pageInfo,
@@ -279,22 +323,41 @@ describe('机构端知识库只读列表 UI', () => {
     expect(within(indexingSection).getByText(/DB-backed minimal job flow/)).toBeInTheDocument();
     expect(within(indexingSection).getByText('重建文件向量索引')).toBeInTheDocument();
     expect(within(indexingSection).getByText('向量索引任务已完成')).toBeInTheDocument();
+    expect(screen.getByLabelText('机构端 OCR-ready 边界说明').textContent).toContain('OCR-ready 最小闭环');
+    expect(screen.getByLabelText('机构端 OCR-ready 边界说明').textContent).toContain('不接外部云 OCR');
+    expect(screen.getByLabelText('机构端 OCR-ready 边界说明').textContent).toContain('不做生产级批量 OCR');
 
     fireEvent.click(screen.getByRole('button', { name: '查看文件' }));
     expect(await screen.findByText('机构文件.pdf')).toBeInTheDocument();
-    expect(screen.getByText('解析成功 · 1 片段')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '查看解析片段' }));
+    expect(screen.getByText('解析成功 · OCR 待触发 · 1 片段')).toBeInTheDocument();
+    expect(screen.getAllByText('术后照片.png').length).toBeGreaterThan(0);
+    expect(screen.getByText('解析失败 · 需要 OCR · 0 片段')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: '查看解析片段' })[0]);
     expect(await screen.findByText('机构端授权可见解析片段')).toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/api/institution/knowledge-management/items/knowledge-ui-a/files/institution-file-a/parse/chunks',
       expect.objectContaining({ method: 'GET' }),
     );
-    expect(screen.getByRole('button', { name: '下载文件' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '下载文件' }));
+    expect(screen.getAllByRole('button', { name: '下载文件' })[0]).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: '下载文件' })[0]);
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/api/institution/knowledge-management/items/knowledge-ui-a/files/institution-file-a/download',
       expect.objectContaining({ method: 'GET' }),
     );
+
+    expect(screen.getAllByRole('button', { name: '执行 OCR / 重建 OCR 索引' })[1]).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: '执行 OCR / 重建 OCR 索引' })[1]);
+    });
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/institution/knowledge-management/indexing-jobs',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ jobType: 'ocr_file', knowledgeId: 'knowledge-ui-a', fileId: 'institution-file-image' }),
+        }),
+      );
+    });
 
     await act(async () => {
       fireEvent.change(screen.getByLabelText('搜索机构知识库'), {
@@ -590,7 +653,7 @@ describe('机构端知识库只读列表 UI', () => {
     const searchSection = screen.getByLabelText('机构端知识片段检索');
     expect(searchSection.textContent).toContain('支持 keyword / vector / hybrid');
     expect(searchSection.textContent).toContain('deterministic rerank');
-    expect(searchSection.textContent).toContain('不做 OCR、扫描件识别或生产级训练队列');
+    expect(searchSection.textContent).toContain('OCR 成功文本可进入 chunk / embedding / retrieval');
   });
 
   it('检索为空时不展示敏感字段', async () => {
