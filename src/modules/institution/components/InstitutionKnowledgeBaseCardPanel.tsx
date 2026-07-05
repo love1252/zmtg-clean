@@ -7,6 +7,7 @@ import {
   BookOpen,
   FileText,
   FolderPlus,
+  MessageCircle,
   Pencil,
   RefreshCw,
   Search,
@@ -22,6 +23,7 @@ type DirectoryId = 'all' | 'consultation' | 'project' | 'aftercare' | 'campaign'
 type LoadStatus = 'idle' | 'loading' | 'success' | 'error';
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 type SearchStatus = 'idle' | 'searching' | 'success' | 'empty' | 'error';
+type AnswerStatus = 'idle' | 'loading' | 'answered' | 'no_answer' | 'error';
 type ChunkLoadStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error';
 type KnowledgeFormMode = 'create' | 'edit';
 type MutationStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -57,6 +59,23 @@ type InstitutionKnowledgeSearchResultRecord = {
   textPreview: string;
   matchReason: string;
   parseStatus: 'pending' | 'processing' | 'succeeded' | 'failed';
+};
+
+type InstitutionKnowledgeAnswerSource = {
+  knowledgeId: string;
+  knowledgeTitle: string;
+  fileId: string;
+  fileName: string;
+  chunkIndex: number;
+  textPreview: string;
+};
+
+type InstitutionKnowledgeAnswerPayload = {
+  status: 'answered' | 'no_answer' | 'validation_failed' | 'provider_unavailable' | 'service_unavailable';
+  answer: string;
+  sources: InstitutionKnowledgeAnswerSource[];
+  noAnswerReason?: string;
+  message?: string;
 };
 
 type InstitutionKnowledgeChunkRecord = {
@@ -238,6 +257,12 @@ export function InstitutionKnowledgeBaseCardPanel() {
   const [searchStatus, setSearchStatus] = useState<SearchStatus>('idle');
   const [searchMessage, setSearchMessage] = useState('请输入关键词测试已解析片段检索；当前为关键词检索，不是 AI 问答，不调用 AI provider，不使用向量数据库。');
   const [searchResults, setSearchResults] = useState<InstitutionKnowledgeSearchResultRecord[]>([]);
+  const [answerQuestion, setAnswerQuestion] = useState('');
+  const [answerTopK, setAnswerTopK] = useState(5);
+  const [answerStatus, setAnswerStatus] = useState<AnswerStatus>('idle');
+  const [answerMessage, setAnswerMessage] = useState('当前基于机构知识库内容回答，先使用关键词 / chunk 召回；仅供内部运营参考，需人工确认。');
+  const [answerText, setAnswerText] = useState('');
+  const [answerSources, setAnswerSources] = useState<InstitutionKnowledgeAnswerSource[]>([]);
 
   const loadKnowledgeFiles = useCallback(async (items: InstitutionKnowledgeItemDto[]) => {
     if (items.length === 0) {
@@ -610,6 +635,52 @@ export function InstitutionKnowledgeBaseCardPanel() {
     }
   }
 
+  async function submitAnswer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const question = answerQuestion.trim();
+    setAnswerText('');
+    setAnswerSources([]);
+    if (!question) {
+      setAnswerStatus('error');
+      setAnswerMessage('请输入问题后再提问。');
+      return;
+    }
+
+    setAnswerStatus('loading');
+    setAnswerMessage('正在基于关键词 / chunk 召回组装上下文；已清空上一轮旧答案...');
+    try {
+      const response = await fetch('/api/institution/knowledge-management/answer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ question, topK: answerTopK }),
+      });
+      const payload = await response.json().catch(() => null) as InstitutionKnowledgeAnswerPayload | null;
+      if (!response.ok || !payload || !Array.isArray(payload.sources)) {
+        setAnswerStatus('error');
+        setAnswerMessage(getVisibleError(payload, response.status === 400 ? '问题不符合问答要求。' : '知识库问答服务暂时不可用，请稍后重试。'));
+        return;
+      }
+
+      setAnswerText(payload.answer || '');
+      setAnswerSources(payload.sources);
+      if (payload.status === 'answered') {
+        setAnswerStatus('answered');
+        setAnswerMessage(`已基于 ${payload.sources.length} 个引用来源生成受控问答草稿。`);
+        return;
+      }
+      if (payload.status === 'no_answer') {
+        setAnswerStatus('no_answer');
+        setAnswerMessage('未在当前知识库中找到足够依据');
+        return;
+      }
+      setAnswerStatus('error');
+      setAnswerMessage(payload.message || '知识库问答服务暂时不可用，请稍后重试。');
+    } catch {
+      setAnswerStatus('error');
+      setAnswerMessage('知识库问答服务暂时不可用，请稍后重试。');
+    }
+  }
+
   return (
     <section
       aria-label="机构知识库卡片功能壳"
@@ -623,7 +694,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
             用于维护机构内部话术、项目说明、服务流程和培训知识。当前接入现有机构端知识库列表、txt / md 上传和关键词检索测试。
           </p>
           <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-500">
-            本轮不接 AI provider、不接向量数据库、不做复杂 PDF / Word / Excel 深度解析，也不宣称生产可用。
+            本轮仅接入 mock / dry-run provider 的受控问答闭环；不接真实外部 AI、不接向量数据库、不做复杂 PDF / Word / Excel 深度解析，也不宣称生产可用。
           </p>
         </div>
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
@@ -632,7 +703,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
             最小闭环说明
           </div>
           <p className="mt-1 text-xs leading-5">
-            上传和检索使用现有机构端 API；新建、重新训练、向量和复杂删除仍受控禁用。
+            上传、检索和 mock / dry-run 问答使用现有机构端 API；新建、重新训练、向量和复杂删除仍受控禁用。
           </p>
         </div>
       </div>
@@ -1074,6 +1145,100 @@ export function InstitutionKnowledgeBaseCardPanel() {
             )}
           </section>
 
+          <section aria-label="机构知识库问答台" className="rounded-2xl border border-cyan-200/80 bg-cyan-50/50 p-4 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold text-cyan-700">受控问答闭环</p>
+                <h2 className="mt-1 text-lg font-semibold tracking-normal text-slate-950">知识库问答</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  当前基于机构知识库内容回答；当前为受控问答闭环；先使用关键词 / chunk 召回，不宣称已接向量数据库、训练或真实外部 AI；不展示模型名、Token、成本、厂商。
+                </p>
+                <p className="mt-1 text-xs font-semibold leading-5 text-amber-700">
+                  仅供内部运营参考，需人工确认。医美术后、复诊和风险类内容需由专业人员复核。
+                </p>
+              </div>
+              <form onSubmit={submitAnswer} className="flex w-full flex-col gap-2 lg:w-[620px]">
+                <textarea
+                  aria-label="输入知识库问答问题"
+                  value={answerQuestion}
+                  onChange={(event) => setAnswerQuestion(event.target.value)}
+                  placeholder="输入问题，例如 术后24小时内冷敷有哪些注意事项？"
+                  rows={3}
+                  className="min-h-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-cyan-400"
+                />
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <select
+                    aria-label="选择问答 topK"
+                    value={answerTopK}
+                    onChange={(event) => setAnswerTopK(Number(event.target.value))}
+                    className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-cyan-400"
+                  >
+                    <option value={3}>topK 3</option>
+                    <option value={5}>topK 5</option>
+                    <option value={10}>topK 10</option>
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={answerStatus === 'loading'}
+                    className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-cyan-700 px-4 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {answerStatus === 'loading' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+                    提问
+                  </button>
+                </div>
+              </form>
+            </div>
+            <div
+              className={cn(
+                'mt-4 rounded-xl border px-3 py-2 text-xs font-semibold',
+                answerStatus === 'answered'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : answerStatus === 'error'
+                    ? 'border-rose-200 bg-rose-50 text-rose-700'
+                    : answerStatus === 'no_answer'
+                      ? 'border-amber-200 bg-amber-50 text-amber-700'
+                      : 'border-slate-200 bg-white/80 text-slate-500',
+              )}
+            >
+              {answerMessage}
+            </div>
+            <div className="mt-4 grid gap-3">
+              {answerStatus === 'loading' ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-500">
+                  正在提问并等待 mock / dry-run provider 返回...
+                </div>
+              ) : answerText ? (
+                <article className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <h3 className="text-sm font-semibold text-slate-950">答案</h3>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{answerText}</p>
+                </article>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-4 text-sm leading-6 text-slate-600">
+                  暂无问答结果。命中后会展示答案和引用来源；无命中时不会调用 provider。
+                </div>
+              )}
+              <section aria-label="知识库问答引用来源" className="rounded-2xl border border-slate-200 bg-white p-4">
+                <h3 className="text-sm font-semibold text-slate-950">引用来源</h3>
+                {answerSources.length === 0 ? (
+                  <p className="mt-2 text-sm leading-6 text-slate-600">暂无引用来源；不会编造来源或输出无来源的确定性医疗建议。</p>
+                ) : (
+                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                    {answerSources.map((source) => (
+                      <article key={`${source.knowledgeId}-${source.fileId}-${source.chunkIndex}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
+                          <span>{source.knowledgeTitle}</span>
+                          <span>chunkIndex {source.chunkIndex}</span>
+                        </div>
+                        <p className="mt-2 text-xs font-semibold text-slate-600">文件名：{source.fileName}</p>
+                        <p className="mt-2 line-clamp-4 text-sm leading-6 text-slate-700">{source.textPreview}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          </section>
+
           <section aria-label="机构知识库检索测试卡片" className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
@@ -1206,7 +1371,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
             </article>
             <article className="rounded-2xl border border-violet-200 bg-violet-50 p-3">
               <h3 className="text-sm font-semibold text-violet-800">待训练内容</h3>
-              <p className="mt-1 text-xs leading-5 text-violet-700">训练、AI 问答和向量能力仍为后续专项，不在本轮触发。</p>
+              <p className="mt-1 text-xs leading-5 text-violet-700">真实外部 AI、向量数据库和训练能力仍为后续专项；当前仅提供 mock / dry-run 受控问答闭环。</p>
             </article>
             <article className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <h3 className="text-sm font-semibold text-slate-800">建议动作</h3>

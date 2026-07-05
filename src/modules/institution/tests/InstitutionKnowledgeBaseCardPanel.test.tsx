@@ -99,6 +99,22 @@ function mockDefaultFetch() {
           { status: 201 },
         );
       }
+      if (url.includes('/api/institution/knowledge-management/answer')) {
+        return Response.json({
+          status: 'answered',
+          answer: '基于召回片段，术后冷敷应控制时长并观察异常。仅供内部运营参考，需人工确认',
+          sources: [
+            {
+              knowledgeId: 'knowledge-owned-aftercare',
+              knowledgeTitle: '本机构术后护理知识',
+              fileId: 'file-aftercare-md',
+              fileName: '术后护理.md',
+              chunkIndex: 0,
+              textPreview: '冷敷后保持创面清洁，避免剧烈热刺激。',
+            },
+          ],
+        });
+      }
       if (url.includes('/api/institution/knowledge-management/search')) {
         return Response.json({
           requestId: 'institution-knowledge-keyword-search',
@@ -379,6 +395,132 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     expect(await within(searchSection).findByText('关键词过长，最多支持 80 个字符')).toBeInTheDocument();
   });
 
+  it('问答台渲染并展示受控能力边界', async () => {
+    await renderLoaded();
+
+    const answerSection = screen.getByLabelText('机构知识库问答台');
+    expect(within(answerSection).getByRole('heading', { name: '知识库问答' })).toBeInTheDocument();
+    expect(within(answerSection).getByLabelText('输入知识库问答问题')).toBeInTheDocument();
+    expect(within(answerSection).getByLabelText('选择问答 topK')).toHaveValue('5');
+    expect(answerSection.textContent).toContain('当前基于机构知识库内容回答');
+    expect(answerSection.textContent).toContain('当前为受控问答闭环');
+    expect(answerSection.textContent).toContain('仅供内部运营参考，需人工确认');
+    expect(answerSection.textContent).toContain('不展示模型名、Token、成本、厂商');
+  });
+
+  it('问答台提问成功后展示答案和 sources', async () => {
+    await renderLoaded();
+
+    const answerSection = screen.getByLabelText('机构知识库问答台');
+    fireEvent.change(within(answerSection).getByLabelText('输入知识库问答问题'), { target: { value: '术后冷敷注意事项？' } });
+    fireEvent.change(within(answerSection).getByLabelText('选择问答 topK'), { target: { value: '10' } });
+    fireEvent.click(within(answerSection).getByRole('button', { name: '提问' }));
+
+    expect(await within(answerSection).findByText('已基于 1 个引用来源生成受控问答草稿。')).toBeInTheDocument();
+    expect(within(answerSection).getByText(/术后冷敷应控制时长/)).toBeInTheDocument();
+    expect(within(answerSection).getByText('本机构术后护理知识')).toBeInTheDocument();
+    expect(within(answerSection).getByText('文件名：术后护理.md')).toBeInTheDocument();
+    expect(within(answerSection).getByText('chunkIndex 0')).toBeInTheDocument();
+    expect(within(answerSection).getByText(/冷敷后保持创面清洁/)).toBeInTheDocument();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/institution/knowledge-management/answer',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ question: '术后冷敷注意事项？', topK: 10 }),
+      }),
+    );
+    const answerCalls = vi.mocked(globalThis.fetch).mock.calls.filter(([url]) => String(url).includes('/answer'));
+    expect(answerCalls).toHaveLength(1);
+    expect(answerCalls.some(([url]) => /embedding|vector|rerank|ocr|training/i.test(String(url)))).toBe(false);
+  });
+
+  it('问答台 no_answer 状态不会展示旧答案或编造来源', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/answer')) {
+          return Response.json({
+            status: 'no_answer',
+            answer: '未在当前知识库中找到足够依据。仅供内部运营参考，需人工确认',
+            sources: [],
+            noAnswerReason: 'no_retrieval_hit',
+          });
+        }
+        if (url.includes('/files')) return Response.json({ records: [], pageInfo });
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+    mockKnowledgeList();
+    render(<InstitutionKnowledgeBaseCardPanel />);
+    await screen.findByText('知识条目：本机构术后护理知识');
+
+    const answerSection = screen.getByLabelText('机构知识库问答台');
+    fireEvent.change(within(answerSection).getByLabelText('输入知识库问答问题'), { target: { value: '未知问题' } });
+    fireEvent.click(within(answerSection).getByRole('button', { name: '提问' }));
+
+    expect(await within(answerSection).findByText('未在当前知识库中找到足够依据')).toBeInTheDocument();
+    expect(within(answerSection).getByText(/不会编造来源/)).toBeInTheDocument();
+    expect(within(answerSection).queryByText('文件名：术后护理.md')).not.toBeInTheDocument();
+  });
+
+  it('问答台 provider error 使用低敏错误态展示', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/answer')) {
+          return Response.json({
+            status: 'provider_unavailable',
+            answer: '知识库问答服务暂时不可用，请稍后重试。仅供内部运营参考，需人工确认',
+            sources: [],
+            message: '知识库问答服务暂时不可用，请稍后重试',
+          });
+        }
+        if (url.includes('/files')) return Response.json({ records: [], pageInfo });
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+    mockKnowledgeList();
+    render(<InstitutionKnowledgeBaseCardPanel />);
+    await screen.findByText('知识条目：本机构术后护理知识');
+
+    const answerSection = screen.getByLabelText('机构知识库问答台');
+    fireEvent.change(within(answerSection).getByLabelText('输入知识库问答问题'), { target: { value: '冷敷？' } });
+    fireEvent.click(within(answerSection).getByRole('button', { name: '提问' }));
+
+    expect(await within(answerSection).findByText('知识库问答服务暂时不可用，请稍后重试')).toBeInTheDocument();
+    expect(answerSection.textContent).not.toContain('DATABASE_URL');
+    expect(answerSection.textContent).not.toContain('provider config');
+    expect(answerSection.textContent).not.toContain('厂商：');
+  });
+
+  it('新一轮提问会清空旧答案', async () => {
+    await renderLoaded();
+
+    const answerSection = screen.getByLabelText('机构知识库问答台');
+    fireEvent.change(within(answerSection).getByLabelText('输入知识库问答问题'), { target: { value: '术后冷敷注意事项？' } });
+    fireEvent.click(within(answerSection).getByRole('button', { name: '提问' }));
+    expect(await within(answerSection).findByText(/术后冷敷应控制时长/)).toBeInTheDocument();
+
+    vi.mocked(globalThis.fetch).mockImplementation(async (url: string) => {
+      if (url.includes('/api/institution/knowledge-management/answer')) {
+        return Response.json({
+          status: 'no_answer',
+          answer: '未在当前知识库中找到足够依据。仅供内部运营参考，需人工确认',
+          sources: [],
+          noAnswerReason: 'no_retrieval_hit',
+        });
+      }
+      if (url.includes('/files')) return Response.json({ records: files, pageInfo });
+      return Response.json({ records: [], pageInfo });
+    });
+    fireEvent.change(within(answerSection).getByLabelText('输入知识库问答问题'), { target: { value: '未知问题' } });
+    fireEvent.click(within(answerSection).getByRole('button', { name: '提问' }));
+
+    await within(answerSection).findByText('正在基于关键词 / chunk 召回组装上下文；已清空上一轮旧答案...');
+    expect(within(answerSection).queryByText(/术后冷敷应控制时长/)).not.toBeInTheDocument();
+    expect(await within(answerSection).findByText('未在当前知识库中找到足够依据')).toBeInTheDocument();
+  });
   it('chunk 列表加载成功、空状态和错误态均可展示', async () => {
     await renderLoaded();
 
@@ -511,7 +653,7 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
 
     expect(screen.queryByText('其他机构不可见知识')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '重新训练（未接训练 runtime）' })).toBeDisabled();
-    expect(screen.getByText('训练、AI 问答和向量能力仍为后续专项，不在本轮触发。')).toBeInTheDocument();
+    expect(screen.getByText('真实外部 AI、向量数据库和训练能力仍为后续专项；当前仅提供 mock / dry-run 受控问答闭环。')).toBeInTheDocument();
   });
 
   it('不出现误导真实能力已完成或已接入的文案', async () => {
