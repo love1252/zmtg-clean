@@ -3,6 +3,7 @@ import { deflateRawSync, deflateSync } from 'node:zlib';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import {
   parsePlatformKnowledgeDocumentFileService,
+  parseKnowledgeDocumentFile,
   getPlatformKnowledgeDocumentFileParseStatusService,
   listPlatformKnowledgeDocumentFileChunksService,
   PLATFORM_KNOWLEDGE_PARSE_CHUNK_MAX_CHARS,
@@ -495,6 +496,75 @@ describe('知识库文档解析与文本抽取 service', () => {
     expectSafePayload(result);
   });
 
+
+
+  it('统一 parser contract 暴露 parserType、warningCodes 与低敏限制结果', () => {
+    const csv = parseKnowledgeDocumentFile({
+      fileName: '回访.csv',
+      mimeType: 'text/csv',
+      buffer: encoder.encode('姓名,注意事项\n王阿姨,避免暴晒\n李阿姨,按时复诊'),
+      tenantId: 'tenant-a',
+      institutionId: 'inst-visible-a',
+      knowledgeId: 'knowledge-a',
+      fileId: 'file-csv',
+      maxRows: 2,
+    });
+    expect(csv).toEqual(expect.objectContaining({
+      status: 'succeeded',
+      parserType: 'csv',
+      rowCount: 2,
+      warningCodes: ['parse_row_limit_exceeded'],
+    }));
+    expect(csv.text).toContain('王阿姨');
+
+    const oversizedPdf = parseKnowledgeDocumentFile({
+      fileName: '说明.pdf',
+      mimeType: 'application/pdf',
+      buffer: createTextPdfBytes('PDF text'),
+      tenantId: 'tenant-a',
+      knowledgeId: 'knowledge-a',
+      fileId: 'file-pdf',
+      maxPages: 0,
+    });
+    expect(oversizedPdf).toEqual(expect.objectContaining({
+      status: 'failed',
+      parserType: 'pdf',
+      failureReasonCode: 'parse_page_limit_exceeded',
+      safeMessage: 'PDF 页数超过解析限制，请拆分后重新上传',
+    }));
+
+    const tooManySheets = parseKnowledgeDocumentFile({
+      fileName: '回访.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer: createXlsxBytes([['项目', '注意事项']]),
+      tenantId: 'tenant-a',
+      knowledgeId: 'knowledge-a',
+      fileId: 'file-xlsx',
+      maxSheets: 0,
+    });
+    expect(tooManySheets).toEqual(expect.objectContaining({
+      status: 'failed',
+      parserType: 'xlsx',
+      failureReasonCode: 'parse_sheet_limit_exceeded',
+      safeMessage: 'Excel 工作表数量超过解析限制，请拆分后重新上传',
+    }));
+
+    const malformedDocx = parseKnowledgeDocumentFile({
+      fileName: '损坏.docx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer: encoder.encode('not-a-zip'),
+      tenantId: 'tenant-a',
+      knowledgeId: 'knowledge-a',
+      fileId: 'file-docx',
+    });
+    expect(malformedDocx).toEqual(expect.objectContaining({
+      status: 'failed',
+      parserType: 'docx',
+      failureReasonCode: 'parse_malformed_document',
+      safeMessage: '文件结构无法解析，请确认文件未损坏后重试',
+    }));
+  });
+
   it('不支持的文件类型被白名单拦截且不读取 storage', async () => {
     const unsupported = fileRecord({
       fileId: 'file-png',
@@ -542,8 +612,8 @@ describe('知识库文档解析与文本抽取 service', () => {
     expect(result.parse).toEqual(
       expect.objectContaining({
         parseStatus: 'failed',
-        failureReasonCode: 'empty_content',
-        safeFailureMessage: '文件未提取到可解析文本，扫描件或图片内容暂不支持',
+        failureReasonCode: 'parse_scanned_pdf_unsupported',
+        safeFailureMessage: 'PDF 未提取到可复制文本，扫描件或图片文字暂不支持 OCR',
         textLength: 0,
         chunkCount: 0,
       }),
@@ -569,7 +639,7 @@ describe('知识库文档解析与文本抽取 service', () => {
     expect(result.parse).toEqual(
       expect.objectContaining({
         parseStatus: 'failed',
-        failureReasonCode: 'empty_content',
+        failureReasonCode: 'parse_empty_text',
         safeFailureMessage: '文件未提取到可解析文本，扫描件或图片内容暂不支持',
         textLength: 0,
         chunkCount: 0,
@@ -601,7 +671,7 @@ describe('知识库文档解析与文本抽取 service', () => {
     expect(result.parse).toEqual(
       expect.objectContaining({
         parseStatus: 'failed',
-        failureReasonCode: 'file_too_large',
+        failureReasonCode: 'parse_file_too_large',
         safeFailureMessage: '文件大小超过解析限制，请拆分后重新上传',
         textLength: 0,
         chunkCount: 0,
@@ -628,8 +698,8 @@ describe('知识库文档解析与文本抽取 service', () => {
     expect(result.parse).toEqual(
       expect.objectContaining({
         parseStatus: 'succeeded',
-        failureReasonCode: 'content_truncated',
-        safeFailureMessage: '解析文本超过长度限制，已截断为低敏预览',
+        failureReasonCode: null,
+        safeFailureMessage: null,
         textLength: v1KnowledgeBaseUploadParseChunkRuntimeMaxChars,
       }),
     );
@@ -689,7 +759,7 @@ describe('知识库文档解析与文本抽取 service', () => {
     expect(result.parse).toEqual(
       expect.objectContaining({
         parseStatus: 'failed',
-        failureReasonCode: 'parse_failed',
+        failureReasonCode: 'parse_service_failed',
         safeFailureMessage: '知识库文件解析失败，请稍后重试',
         textLength: 0,
         chunkCount: 0,
@@ -742,7 +812,7 @@ describe('知识库文档解析与文本抽取 service', () => {
     expect(result.parse).toEqual(
       expect.objectContaining({
         parseStatus: 'failed',
-        failureReasonCode: 'parse_failed',
+        failureReasonCode: 'parse_service_failed',
         safeFailureMessage: '知识库文件解析失败，请稍后重试',
         textLength: 0,
         chunkCount: 0,
@@ -791,7 +861,7 @@ describe('知识库文档解析与文本抽取 service', () => {
     expect(result.parse).toEqual(
       expect.objectContaining({
         parseStatus: 'failed',
-        failureReasonCode: 'parse_failed',
+        failureReasonCode: 'parse_service_failed',
         safeFailureMessage: '知识库文件解析失败，请稍后重试',
         textLength: 0,
         chunkCount: 0,
@@ -839,7 +909,7 @@ describe('知识库文档解析与文本抽取 service', () => {
     expect(result.parse).toEqual(
       expect.objectContaining({
         parseStatus: 'failed',
-        failureReasonCode: 'parse_failed',
+        failureReasonCode: 'parse_service_failed',
         safeFailureMessage: '知识库文件解析失败，请稍后重试',
         textLength: 0,
         chunkCount: 0,
@@ -848,7 +918,7 @@ describe('知识库文档解析与文本抽取 service', () => {
     expect(repository.saveKnowledgeFileParseResult).toHaveBeenCalledWith(
       expect.objectContaining({
         parseStatus: 'failed',
-        failureReasonCode: 'parse_failed',
+        failureReasonCode: 'parse_service_failed',
         safeFailureMessage: '知识库文件解析失败，请稍后重试',
         textContent: '',
         textLength: 0,
@@ -900,7 +970,7 @@ describe('知识库文档解析与文本抽取 service', () => {
     expect(result.parse).toEqual(
       expect.objectContaining({
         parseStatus: 'failed',
-        failureReasonCode: 'parse_failed',
+        failureReasonCode: 'parse_service_failed',
         safeFailureMessage: '知识库文件解析失败，请稍后重试',
         textLength: 0,
         chunkCount: 0,

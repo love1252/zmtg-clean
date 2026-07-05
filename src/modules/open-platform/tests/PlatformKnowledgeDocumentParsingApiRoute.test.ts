@@ -344,7 +344,7 @@ describe('知识库文档解析 API route', () => {
         status: 'failed',
         parse: expect.objectContaining({
           parseStatus: 'failed',
-          failureReasonCode: 'parse_failed',
+          failureReasonCode: 'parse_service_failed',
           safeFailureMessage: '知识库文件解析失败，请稍后重试',
           textLength: 0,
           chunkCount: 0,
@@ -354,7 +354,7 @@ describe('知识库文档解析 API route', () => {
     expect(repository.saveKnowledgeFileParseResult).toHaveBeenCalledWith(
       expect.objectContaining({
         parseStatus: 'failed',
-        failureReasonCode: 'parse_failed',
+        failureReasonCode: 'parse_service_failed',
         safeFailureMessage: '知识库文件解析失败，请稍后重试',
         textContent: '',
         textLength: 0,

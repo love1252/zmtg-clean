@@ -132,6 +132,7 @@ export async function POST(request: Request) {
           ? await createAndRunRebuildEmbeddingsJob({ repository, input: taskInput })
           : await createAndRunRebuildKnowledgeIndexJob({
             repository,
+            storage: createLocalPlatformKnowledgeFileStorage(),
             input: {
               tenantId: taskInput.tenantId,
               institutionId: taskInput.institutionId,

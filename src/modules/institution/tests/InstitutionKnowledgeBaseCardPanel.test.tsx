@@ -217,7 +217,7 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     expect(screen.queryByText(/本机构术后护理知识/)).not.toBeInTheDocument();
   });
 
-  it('展示真实文件 / 文档卡片和 txt/md 简单解析状态', async () => {
+  it('展示真实文件 / 文档卡片和支持格式解析状态', async () => {
     await renderLoaded();
 
     const documentSection = screen.getByLabelText('机构知识库文件文档卡片');
@@ -226,17 +226,17 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     expect(within(documentSection).getByText('已解析')).toBeInTheDocument();
     expect(within(documentSection).getByText('64')).toBeInTheDocument();
     expect(within(documentSection).getByText('暂无错误')).toBeInTheDocument();
-    expect(within(documentSection).getByText('复杂 PDF / Word / Excel 深度解析仍为后续接入')).toBeInTheDocument();
+    expect(within(documentSection).getByText('支持 TXT / MD / PDF / DOCX / XLSX / CSV 解析，PDF 仅支持可复制文本')).toBeInTheDocument();
   });
 
-  it('上传 txt / md 成功后调用现有上传 API 并刷新真实列表', async () => {
+  it('上传支持格式成功后调用现有上传 API 并刷新真实列表', async () => {
     await renderLoaded();
 
     const file = new File(['# 护理\n冷敷后保持清洁'], '新护理.md', { type: 'text/markdown' });
     fireEvent.change(screen.getByLabelText('选择知识库上传文件'), { target: { files: [file] } });
     fireEvent.click(screen.getByRole('button', { name: '上传文档' }));
 
-    expect(await screen.findByText('上传成功，已触发现有简单解析，生成 2 个片段。')).toBeInTheDocument();
+    expect(await screen.findByText('上传成功，已触发文档解析，生成 2 个片段。')).toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/api/institution/knowledge-management/upload',
       expect.objectContaining({ method: 'POST', body: expect.any(FormData) }),
@@ -266,16 +266,15 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     expect(await screen.findByText('文件上传失败，请稍后重试')).toBeInTheDocument();
   });
 
-  it('复杂 PDF / Word / Excel 不会被伪装为已完成深度解析', async () => {
+  it('PDF 可上传并保留 OCR 边界说明', async () => {
     await renderLoaded();
 
     const file = new File(['fake pdf'], '护理.pdf', { type: 'application/pdf' });
     fireEvent.change(screen.getByLabelText('选择知识库上传文件'), { target: { files: [file] } });
 
-    expect(screen.getByText('当前最小闭环仅开放 txt / md；复杂 PDF / Word / Excel 深度解析仍为后续接入。')).toBeInTheDocument();
+    expect(screen.getByText('已选择 护理.pdf，可上传并触发文档解析。')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '上传文档' }));
-    expect(screen.getByText('当前最小闭环仅开放 txt / md；复杂 PDF / Word / Excel 深度解析仍为后续接入。')).toBeInTheDocument();
-    expect(globalThis.fetch).not.toHaveBeenCalledWith('/api/institution/knowledge-management/upload', expect.anything());
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/institution/knowledge-management/upload', expect.objectContaining({ method: 'POST', body: expect.any(FormData) }));
   });
 
   it('关键词检索成功路径展示命中结果且不调用 AI / provider', async () => {
@@ -636,7 +635,7 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     expect((await within(chunkSection).findAllByText('解析片段暂时不可用')).length).toBeGreaterThan(0);
   });
 
-  it('.txt / .md 重新解析成功，PDF / Word / Excel 不误启用深度解析', async () => {
+  it('.txt / .md 重新解析成功，PDF / Word / Excel 也可重新解析', async () => {
     await renderLoaded();
 
     fireEvent.click(screen.getByRole('button', { name: '重新解析' }));
@@ -662,7 +661,7 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     });
     expect((await screen.findAllByText('机构文件.pdf')).length).toBeGreaterThan(0);
     screen.getAllByRole('button', { name: '重新解析' }).forEach((button) => {
-      expect(button).toBeDisabled();
+      expect(button).not.toBeDisabled();
     });
   });
 
@@ -740,7 +739,7 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
 
     expect(screen.queryByText('其他机构不可见知识')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '重新训练（未接训练 runtime）' })).toBeDisabled();
-    expect(screen.getByText('机构端知识库问答接入受控 real provider 治理闭环；当前仍不是向量检索，训练、embedding、rerank、OCR 和 queue 仍未接入。')).toBeInTheDocument();
+    expect(screen.getByText('机构端知识库问答接入受控 real provider 治理闭环；当前已接入 embedding 与 hybrid retrieval，不展示向量数组或内部配置；OCR、training 和 queue 仍未接入。')).toBeInTheDocument();
   });
 
   it('不出现误导真实能力已完成或已接入的文案', async () => {
