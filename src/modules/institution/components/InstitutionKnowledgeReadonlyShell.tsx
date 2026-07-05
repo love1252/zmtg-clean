@@ -33,6 +33,7 @@ type InstitutionKnowledgeChunkRecord = {
   chunkIndex: number;
   textPreview: string;
   charCount: number;
+  embeddingStatus?: 'pending' | 'ready' | 'failed';
 };
 type InstitutionKnowledgeSearchResultRecord = {
   knowledgeId: string;
@@ -42,10 +43,14 @@ type InstitutionKnowledgeSearchResultRecord = {
   chunkId: string;
   chunkIndex: number;
   textPreview: string;
+  retrievalMode?: 'keyword' | 'vector' | 'hybrid';
+  keywordScore?: number;
+  vectorScore?: number;
+  rerankScore?: number;
   matchReason: string;
 };
 type InstitutionKnowledgeVectorSearchResultRecord = InstitutionKnowledgeSearchResultRecord & {
-  score: number;
+  score?: number;
 };
 type InstitutionKnowledgeQaResponseRecord = {
   answer: string;
@@ -134,6 +139,18 @@ const parseStatusLabels: Record<InstitutionKnowledgeFileRecord['parseStatus'], s
   failed: '解析失败',
 };
 
+const embeddingStatusLabels: Record<NonNullable<InstitutionKnowledgeChunkRecord['embeddingStatus']>, string> = {
+  pending: '向量待生成',
+  ready: '向量已生成',
+  failed: '向量生成失败',
+};
+
+const retrievalModeLabels: Record<'keyword' | 'vector' | 'hybrid', string> = {
+  keyword: 'keyword',
+  vector: 'vector',
+  hybrid: 'hybrid',
+};
+
 const qaRetrievalModeLabels: Record<InstitutionKnowledgeQaAuditRecord['retrievalMode'], string> = {
   hybrid: '混合检索',
   keyword: '关键词',
@@ -171,7 +188,7 @@ function getAiUsageStatusLabel(record: InstitutionAiCallUsageRecord) {
   if (record.errorCode === 'quota_exceeded_ai_calls') return 'AI 调用额度已用尽';
   if (record.status === 'sensitive_input_rejected') return '敏感输入已拒绝';
   if (record.status === 'rate_limited') return '供应商限流';
-  if (record.status === 'provider_unavailable') return '供应商暂不可用';
+  if (record.status === 'provider_unavailable') return '服务暂不可用';
   if (record.status === 'succeeded') return '成功';
   if (record.status === 'failed') return '调用失败';
   return '调用失败';
@@ -202,8 +219,10 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [expandedChunkFileId, setExpandedChunkFileId] = useState<string | null>(null);
   const [fileMessage, setFileMessage] = useState<string | null>(null);
   const [chunkSearchInput, setChunkSearchInput] = useState('');
+  const [chunkSearchMode, setChunkSearchMode] = useState<'keyword' | 'vector' | 'hybrid'>('hybrid');
+  const [chunkSearchTopK, setChunkSearchTopK] = useState<'3' | '5' | '10'>('5');
   const [chunkSearchResults, setChunkSearchResults] = useState<InstitutionKnowledgeSearchResultRecord[]>([]);
-  const [chunkSearchMessage, setChunkSearchMessage] = useState('仅搜索已解析的机构知识库片段，不会调用 AI，也不会进入 AI prompt');
+  const [chunkSearchMessage, setChunkSearchMessage] = useState('默认使用 hybrid 检索：keyword + vector 召回后按 deterministic rerank 排序，不会展示向量数组或内部配置');
   const [isChunkSearching, setIsChunkSearching] = useState(false);
   const [vectorSearchInput, setVectorSearchInput] = useState('');
   const [vectorSearchResults, setVectorSearchResults] = useState<InstitutionKnowledgeVectorSearchResultRecord[]>([]);
@@ -441,33 +460,39 @@ export function InstitutionKnowledgeReadonlyShell() {
 
   async function searchChunks(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const keyword = chunkSearchInput.trim();
-    if (!keyword) {
+    const query = chunkSearchInput.trim();
+    if (!query) {
       setChunkSearchResults([]);
-      setChunkSearchMessage('请输入关键词后再检索知识片段');
+      setChunkSearchMessage('请输入检索内容后再检索知识片段');
       return;
     }
 
     setIsChunkSearching(true);
-    setChunkSearchMessage('正在检索片段...');
+    setChunkSearchMessage('正在执行 hybrid/vector/keyword 检索并重排片段...');
     try {
-      const params = new URLSearchParams({ keyword });
-      const response = await fetch(`/api/institution/knowledge-management/search?${params.toString()}`, {
+      const params = new URLSearchParams({
+        query,
+        keyword: query,
+        mode: chunkSearchMode,
+        topK: chunkSearchTopK,
+        pageSize: chunkSearchTopK,
+      });
+      const response = await fetch(`/api/institution/knowledge-management/retrieval?${params.toString()}`, {
         cache: 'no-store',
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload || !Array.isArray(payload.records)) {
         setChunkSearchResults([]);
-        setChunkSearchMessage('知识库片段检索暂时不可用');
+        setChunkSearchMessage('知识库检索暂时不可用');
         return;
       }
 
       const records = payload.records as InstitutionKnowledgeSearchResultRecord[];
       setChunkSearchResults(records);
-      setChunkSearchMessage(records.length > 0 ? `已命中 ${records.length} 个引用片段` : '暂无匹配片段');
+      setChunkSearchMessage(records.length > 0 ? `已按 rerank 排序命中 ${records.length} 个引用片段` : '暂无匹配片段');
     } catch {
       setChunkSearchResults([]);
-      setChunkSearchMessage('知识库片段检索暂时不可用');
+      setChunkSearchMessage('知识库检索暂时不可用');
     } finally {
       setIsChunkSearching(false);
     }
@@ -504,6 +529,31 @@ export function InstitutionKnowledgeReadonlyShell() {
       setVectorSearchMessage('知识库向量检索暂时不可用');
     } finally {
       setIsVectorSearching(false);
+    }
+  }
+
+  async function rebuildFileEmbeddings(knowledgeId: string, file: InstitutionKnowledgeFileRecord) {
+    setFileMessage('正在生成 / 重建向量索引...');
+    try {
+      const response = await fetch(
+        `/api/institution/knowledge-management/items/${encodeURIComponent(knowledgeId)}/files/${encodeURIComponent(file.fileId)}/embeddings`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ rebuild: true }),
+        },
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || typeof payload.status !== 'string') {
+        setFileMessage('向量索引暂时无法生成');
+        return;
+      }
+      const count = typeof payload.embeddingCount === 'number' ? payload.embeddingCount : 0;
+      const skipped = typeof payload.skippedCount === 'number' ? payload.skippedCount : 0;
+      setFileMessage(`向量索引处理完成：生成 ${count} 个，跳过 ${skipped} 个`);
+      await loadFileChunks(knowledgeId, file);
+    } catch {
+      setFileMessage('向量索引暂时无法生成');
     }
   }
 
@@ -947,28 +997,50 @@ export function InstitutionKnowledgeReadonlyShell() {
         >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold tracking-normal text-slate-950">检索片段</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">按关键词查看本机构可见知识库的引用片段。仅搜索已解析的机构知识库片段，不会调用 AI，也不会进入 AI prompt。</p>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">检索测试台</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">支持 keyword / vector / hybrid，默认 hybrid；结果按 deterministic rerank 排序。仅使用已解析片段，不做 OCR、复杂文档解析或生产级训练队列。</p>
             </div>
-            <form onSubmit={searchChunks} className="flex w-full flex-col gap-2 sm:flex-row lg:w-[460px]">
-              <label className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  aria-label="输入片段检索关键词"
-                  value={chunkSearchInput}
-                  onChange={(event) => setChunkSearchInput(event.target.value)}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-cyan-400"
-                  placeholder="输入关键词"
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={isChunkSearching}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isChunkSearching ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                检索片段
-              </button>
+            <form onSubmit={searchChunks} className="flex w-full flex-col gap-2 lg:w-[720px]">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <label className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    aria-label="输入片段检索内容"
+                    value={chunkSearchInput}
+                    onChange={(event) => setChunkSearchInput(event.target.value)}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-cyan-400"
+                    placeholder="输入检索内容"
+                  />
+                </label>
+                <select
+                  aria-label="选择检索模式"
+                  value={chunkSearchMode}
+                  onChange={(event) => setChunkSearchMode(event.target.value as 'keyword' | 'vector' | 'hybrid')}
+                  className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none"
+                >
+                  <option value="hybrid">hybrid</option>
+                  <option value="keyword">keyword</option>
+                  <option value="vector">vector</option>
+                </select>
+                <select
+                  aria-label="选择检索条数"
+                  value={chunkSearchTopK}
+                  onChange={(event) => setChunkSearchTopK(event.target.value as '3' | '5' | '10')}
+                  className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none"
+                >
+                  <option value="3">Top 3</option>
+                  <option value="5">Top 5</option>
+                  <option value="10">Top 10</option>
+                </select>
+                <button
+                  type="submit"
+                  disabled={isChunkSearching}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isChunkSearching ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  检索片段
+                </button>
+              </div>
             </form>
           </div>
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
@@ -982,11 +1054,17 @@ export function InstitutionKnowledgeReadonlyShell() {
             ) : (
               chunkSearchResults.map((result) => (
                 <article key={result.chunkId} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                  <div className="text-xs font-semibold text-slate-500">
-                    {result.knowledgeTitle} · {result.fileName} · 片段 {result.chunkIndex + 1}
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
+                    <span>{result.knowledgeTitle} · {result.fileName} · 片段 {result.chunkIndex + 1}</span>
+                    <span className="text-cyan-700">{retrievalModeLabels[result.retrievalMode ?? 'keyword']}</span>
                   </div>
                   <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{result.textPreview}</p>
-                  <div className="mt-2 text-xs font-semibold text-cyan-700">{result.matchReason}</div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-cyan-700">
+                    <span>{result.matchReason}</span>
+                    {typeof result.keywordScore === 'number' ? <span>keyword {result.keywordScore.toFixed(3)}</span> : null}
+                    {typeof result.vectorScore === 'number' ? <span>vector {result.vectorScore.toFixed(3)}</span> : null}
+                    {typeof result.rerankScore === 'number' ? <span>rerank {result.rerankScore.toFixed(3)}</span> : null}
+                  </div>
                 </article>
               ))
             )}
@@ -1002,7 +1080,7 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">语义检索</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">按 mock embedding 相似度查看本机构可见引用片段。</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">按向量相似度查看本机构可见引用片段，不展示向量数组或内部配置。</p>
             </div>
             <form onSubmit={searchVectorChunks} className="flex w-full flex-col gap-2 sm:flex-row lg:w-[460px]">
               <label className="relative min-w-0 flex-1">
@@ -1038,7 +1116,7 @@ export function InstitutionKnowledgeReadonlyShell() {
                 <article key={result.chunkId} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
                     <span>{result.knowledgeTitle} · {result.fileName} · 片段 {result.chunkIndex + 1}</span>
-                    <span className="text-cyan-700">相似度 {result.score.toFixed(3)}</span>
+                    <span className="text-cyan-700">相似度 {(result.score ?? result.vectorScore ?? 0).toFixed(3)}</span>
                   </div>
                   <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{result.textPreview}</p>
                   <div className="mt-2 text-xs font-semibold text-cyan-700">{result.matchReason}</div>
@@ -1057,7 +1135,7 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">知识库问答</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">基于本机构授权可见引用片段生成低敏回答。</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">基于本机构授权可见引用片段生成低敏回答；Answer API 当前使用 hybrid retrieval sources，保留 no_answer、quota 与服务失败低敏治理。</p>
             </div>
             <form onSubmit={askKnowledgeBase} className="flex w-full flex-col gap-2 lg:w-[620px]">
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -1118,7 +1196,7 @@ export function InstitutionKnowledgeReadonlyShell() {
                     <article key={citation.chunkId} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
                         <span>{citation.knowledgeTitle} · {citation.fileName} · 片段 {citation.chunkIndex + 1}</span>
-                        <span className="text-cyan-700">分数 {citation.score.toFixed(3)}</span>
+                        <span className="text-cyan-700">{citation.retrievalMode ? retrievalModeLabels[citation.retrievalMode] : 'hybrid'} · 分数 {typeof citation.score === 'number' ? citation.score.toFixed(3) : (citation.rerankScore ?? citation.vectorScore ?? citation.keywordScore ?? 0).toFixed(3)}</span>
                       </div>
                       <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{citation.textPreview}</p>
                       <div className="mt-2 text-xs font-semibold text-cyan-700">{citation.matchReason}</div>
@@ -1485,6 +1563,14 @@ export function InstitutionKnowledgeReadonlyShell() {
                             </button>
                             <button
                               type="button"
+                              onClick={() => rebuildFileEmbeddings(item.knowledgeId, file)}
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                              生成 / 重建向量索引
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => downloadKnowledgeFile(item.knowledgeId, file)}
                               className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-cyan-200 hover:text-cyan-700"
                             >
@@ -1502,8 +1588,11 @@ export function InstitutionKnowledgeReadonlyShell() {
                                 <div className="space-y-2">
                                   {(chunksByFileId[file.fileId] ?? []).map((chunk) => (
                                     <div key={chunk.chunkId} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                                      <div className="text-xs font-semibold text-slate-500">
-                                        片段 {chunk.chunkIndex + 1} · {chunk.charCount} 字
+                                      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
+                                        <span>片段 {chunk.chunkIndex + 1} · {chunk.charCount} 字</span>
+                                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700">
+                                          {embeddingStatusLabels[chunk.embeddingStatus ?? 'pending']}
+                                        </span>
                                       </div>
                                       <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">{chunk.textPreview}</p>
                                     </div>

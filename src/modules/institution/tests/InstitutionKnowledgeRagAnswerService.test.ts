@@ -6,6 +6,7 @@ import {
 import type { AiChatProvider } from '@/modules/institution/server/institution-rag-answer-provider';
 import type { KnowledgeChunkSearchRepositoryRecord } from '@/modules/institution/server/institution-knowledge-keyword-search-service';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
+import { createDeterministicMockKnowledgeEmbedding } from '@/modules/open-platform/server/platform-knowledge-embedding-vector-search-service';
 
 const now = new Date('2026-07-05T08:00:00.000Z');
 const humanConfirmationText = '仅供内部运营参考，需人工确认';
@@ -164,6 +165,23 @@ function createRepository(chunks: KnowledgeChunkSearchRepositoryRecord[] = baseC
       expect(input.keyword.length).toBeGreaterThan(0);
       return chunks;
     }),
+    listKnowledgeVectorSearchCandidates: vi.fn(async (input: { tenantId: string }) =>
+      chunks
+        .filter((chunk) => chunk.tenantId === input.tenantId)
+        .filter((chunk) => chunk.fileStatus === 'active' && chunk.parseStatus === 'succeeded')
+        .map((chunk) => {
+          const embedding = createDeterministicMockKnowledgeEmbedding(chunk.textPreview);
+          return {
+            ...chunk,
+            embeddingId: `embedding-${chunk.chunkId}`,
+            embeddingProvider: embedding.provider,
+            embeddingModel: embedding.model,
+            embeddingDimensions: embedding.dimensions,
+            embeddingVectorJson: embedding.vector,
+            embeddingStatus: 'ready' as const,
+          };
+        }),
+    ),
   };
 }
 
@@ -475,6 +493,8 @@ describe('机构端知识库 RAG answer service', () => {
         fileName: expect.any(String),
         chunkIndex: expect.any(Number),
         textPreview: expect.any(String),
+        retrievalMode: expect.stringMatching(/keyword|vector|hybrid/),
+        matchReason: expect.stringContaining('rerank'),
       }));
     });
     expectNoSensitiveFields(result);
@@ -501,6 +521,24 @@ describe('机构端知识库 RAG answer service', () => {
     expect(result.answer).toBe(`知识库问答服务暂时不可用，请稍后重试。${humanConfirmationText}`);
     expect('message' in result ? result.message : '').toBe('知识库问答服务暂时不可用，请稍后重试');
     expect(result.sources.length).toBeGreaterThan(0);
+    expectNoSensitiveFields(result);
+  });
+
+  it('answer 使用 hybrid sources，no_answer 不调用 provider，且不返回 embedding array', async () => {
+    const provider = createProvider();
+    const result = await answerInstitutionKnowledgeRagQuestion({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-current',
+      question: '术后冷敷怎么护理？',
+      repository: createRepository(),
+      provider,
+    });
+
+    expect(result.status).toBe('answered');
+    expect(result.sources.length).toBeGreaterThan(0);
+    expect(result.sources.some((source) => source.retrievalMode === 'hybrid' || source.retrievalMode === 'vector')).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('embeddingVectorJson');
+    expect(JSON.stringify(result)).not.toContain('embeddingProvider');
     expectNoSensitiveFields(result);
   });
 

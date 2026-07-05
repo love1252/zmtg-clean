@@ -1168,6 +1168,7 @@ export const knowledgeDocumentFileParseChunkEmbeddings = pgTable(
     embeddingDimensions: integer('embedding_dimensions').notNull(),
     embeddingVectorJson: jsonb('embedding_vector_json').$type<number[]>().notNull(),
     status: varchar('status', { length: 32 }).notNull().default('ready'),
+    failureReasonCode: varchar('failure_reason_code', { length: 64 }),
     ...timestamps,
   },
   (table) => ({

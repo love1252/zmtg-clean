@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { deriveKnowledgeSearchKeyword } from '@/modules/institution/domain/institution-knowledge-management';
 import type { KnowledgeChunkSearchRepositoryRecord } from '@/modules/institution/server/institution-knowledge-keyword-search-service';
 import type {
   AiChatProvider,
@@ -7,6 +6,12 @@ import type {
   InstitutionRagAnswerProviderResolver,
 } from '@/modules/institution/server/institution-rag-answer-provider';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
+import {
+  searchInstitutionKnowledgeRetrievalChunksService,
+  type PlatformKnowledgeRetrievalMode,
+  type PlatformKnowledgeRetrievalResultDto,
+  type PlatformKnowledgeVectorSearchCandidateRecord,
+} from '@/modules/open-platform/server/platform-knowledge-embedding-vector-search-service';
 
 export type InstitutionKnowledgeRagAnswerSource = {
   knowledgeId: string;
@@ -16,6 +21,8 @@ export type InstitutionKnowledgeRagAnswerSource = {
   chunkId: string;
   chunkIndex: number;
   textPreview: string;
+  retrievalMode: PlatformKnowledgeRetrievalMode;
+  matchReason: string;
 };
 
 export type InstitutionKnowledgeRagAnswerStatus =
@@ -72,6 +79,11 @@ export type InstitutionKnowledgeRagAnswerRepository = {
     knowledgeId?: string;
     fileId?: string;
   }): Promise<KnowledgeChunkSearchRepositoryRecord[]>;
+  listKnowledgeVectorSearchCandidates?(input: {
+    tenantId: string;
+    knowledgeId?: string;
+    fileId?: string;
+  }): Promise<PlatformKnowledgeVectorSearchCandidateRecord[]>;
   createKnowledgeQaAuditLog?(record: {
     auditId: string;
     tenantId: string;
@@ -80,7 +92,7 @@ export type InstitutionKnowledgeRagAnswerRepository = {
     actorUserId: string;
     question: string;
     answerPreview: string;
-    retrievalMode: 'keyword';
+    retrievalMode: 'hybrid';
     citationCount: number;
     safeStatus: 'answered' | 'no_citation';
     safeFailureMessage: string | null;
@@ -177,21 +189,13 @@ function normalizeTopK(value: string | number | null | undefined) {
   };
 }
 
-function isKnowledgeVisibleToInstitution(knowledge: PlatformKnowledgeRepositoryRecord, institutionId: string) {
-  return knowledge.institutionId === institutionId || knowledge.visibleInstitutionIds.includes(institutionId);
-}
-
-function isSearchableChunk(record: KnowledgeChunkSearchRepositoryRecord) {
-  return record.fileStatus === 'active' && record.parseStatus === 'succeeded';
-}
-
 function truncateText(text: string, maxChars: number) {
   const normalized = text.trim();
   if (normalized.length <= maxChars) return normalized;
   return `${normalized.slice(0, maxChars - 1)}…`;
 }
 
-function mapSource(record: KnowledgeChunkSearchRepositoryRecord): InstitutionKnowledgeRagAnswerSource {
+function mapSource(record: PlatformKnowledgeRetrievalResultDto): InstitutionKnowledgeRagAnswerSource {
   return {
     knowledgeId: record.knowledgeId,
     knowledgeTitle: record.knowledgeTitle,
@@ -200,6 +204,8 @@ function mapSource(record: KnowledgeChunkSearchRepositoryRecord): InstitutionKno
     chunkId: record.chunkId,
     chunkIndex: record.chunkIndex,
     textPreview: truncateText(record.textPreview, 300),
+    retrievalMode: record.retrievalMode,
+    matchReason: record.matchReason,
   };
 }
 
@@ -250,36 +256,21 @@ async function retrieveSources(input: {
   question: string;
   topK: number;
 }) {
-  const keyword = deriveKnowledgeSearchKeyword(input.question);
-  const [knowledgeItems, chunks] = await Promise.all([
-    input.repository.listKnowledgeItems({ tenantId: input.tenantId }),
-    input.repository.searchKnowledgeFileParseChunks({ tenantId: input.tenantId, keyword }),
-  ]);
-  const visibleKnowledge = new Map(
-    knowledgeItems
-      .filter((knowledge) => knowledge.tenantId === input.tenantId)
-      .filter((knowledge) => isKnowledgeVisibleToInstitution(knowledge, input.institutionId))
-      .map((knowledge) => [knowledge.knowledgeId, knowledge]),
-  );
-  const deduped = new Map<string, KnowledgeChunkSearchRepositoryRecord>();
+  const result = await searchInstitutionKnowledgeRetrievalChunksService({
+    repository: input.repository,
+    params: {
+      tenantId: input.tenantId,
+      institutionId: input.institutionId,
+      query: input.question,
+      mode: 'hybrid',
+      topK: input.topK,
+      page: 1,
+      pageSize: input.topK,
+    },
+  });
+  if ('status' in result) return [];
 
-  chunks
-    .filter((chunk) => chunk.tenantId === input.tenantId)
-    .filter(isSearchableChunk)
-    .filter((chunk) => visibleKnowledge.has(chunk.knowledgeId))
-    .sort((left, right) =>
-      left.knowledgeId.localeCompare(right.knowledgeId) ||
-      left.fileId.localeCompare(right.fileId) ||
-      left.chunkIndex - right.chunkIndex ||
-      left.chunkId.localeCompare(right.chunkId),
-    )
-    .forEach((chunk) => {
-      if (!deduped.has(chunk.chunkId)) deduped.set(chunk.chunkId, chunk);
-    });
-
-  return Array.from(deduped.values())
-    .slice(0, input.topK)
-    .map((record) => ({ ...mapSource(record), matchReason: 'keyword' }));
+  return result.records.map((record: PlatformKnowledgeRetrievalResultDto) => mapSource(record));
 }
 
 function questionHash(question: string) {
@@ -361,7 +352,7 @@ async function recordLowSensitivityAudit(input: {
     actorUserId: input.actorUserId,
     question: buildAuditQuestion(audit).slice(0, 512),
     answerPreview: `answerLength=${audit.answerLength};status=${audit.status}`,
-    retrievalMode: 'keyword',
+    retrievalMode: 'hybrid',
     citationCount: input.sourceCount,
     safeStatus: input.status === 'answered' ? 'answered' : 'no_citation',
     safeFailureMessage: input.status === 'answered'
@@ -372,9 +363,9 @@ async function recordLowSensitivityAudit(input: {
 }
 
 function toPublicSources(
-  sources: Array<InstitutionKnowledgeRagAnswerSource & { matchReason: string }>,
+  sources: InstitutionKnowledgeRagAnswerSource[],
 ): InstitutionKnowledgeRagAnswerSource[] {
-  return sources.map(({ matchReason: _matchReason, ...source }) => source);
+  return sources;
 }
 
 export async function answerInstitutionKnowledgeRagQuestion(

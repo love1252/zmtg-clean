@@ -69,6 +69,34 @@ describe('机构端知识库只读列表 UI', () => {
             },
           });
         }
+        if (url.includes('/api/institution/knowledge-management/retrieval')) {
+          return Response.json({
+            requestId: 'institution-knowledge-hybrid-search',
+            readonly: true,
+            dataSource: 'repository',
+            records: [
+              {
+                knowledgeId: 'knowledge-ui-a',
+                knowledgeTitle: '授权可见术后护理',
+                fileId: 'institution-file-a',
+                fileName: '机构文件.pdf',
+                chunkId: 'institution-hybrid-chunk-a',
+                chunkIndex: 0,
+                textPreview: '机构端 hybrid rerank 引用片段',
+                retrievalMode: 'hybrid',
+                keywordScore: 1,
+                vectorScore: 0.765432,
+                rerankScore: 0.91,
+                matchReason: '关键词匹配 1.000；向量相似度 0.765；deterministic rerank',
+              },
+            ],
+            pageInfo: pageInfo,
+            emptyState: {
+              title: '暂无检索命中',
+              description: '当前范围没有命中已解析知识片段。',
+            },
+          });
+        }
         if (url.includes('/api/institution/knowledge-management/qa')) {
           return Response.json({
             answer: '基于已召回的知识片段：机构端知识库问答回答。',
@@ -105,7 +133,7 @@ describe('机构端知识库只读列表 UI', () => {
                 chunkIndex: 0,
                 textPreview: '机构端语义相似引用片段',
                 score: 0.765432,
-                matchReason: 'mock embedding 相似度 0.765',
+                matchReason: '向量相似度 0.765',
               },
             ],
             pageInfo: pageInfo,
@@ -153,6 +181,7 @@ describe('机构端知识库只读列表 UI', () => {
                 charCount: 12,
                 createdAt: '2026-06-13T08:00:00.000Z',
                 updatedAt: '2026-06-13T08:00:00.000Z',
+                embeddingStatus: 'ready',
               },
             ],
           });
@@ -390,26 +419,30 @@ describe('机构端知识库只读列表 UI', () => {
     expect(container.textContent).not.toContain('API key');
   });
 
-  it('机构端新增检索片段区域，只读展示授权引用片段', async () => {
+  it('机构端新增检索测试台，展示 hybrid / vector / rerank 命中', async () => {
     render(<InstitutionKnowledgeReadonlyShell />);
 
     expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
     const searchSection = screen.getByLabelText('机构端知识片段检索');
-    fireEvent.change(within(searchSection).getByLabelText('输入片段检索关键词'), {
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索内容'), {
       target: { value: '冷敷' },
+    });
+    fireEvent.change(within(searchSection).getByLabelText('选择检索模式'), {
+      target: { value: 'hybrid' },
     });
     fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
 
-    expect(await screen.findByText('机构端冷敷引用片段')).toBeInTheDocument();
-    expect(screen.getByText('片段包含关键词“冷敷”')).toBeInTheDocument();
-    expect(screen.getByText('授权可见术后护理 · 机构文件.pdf · 片段 1')).toBeInTheDocument();
+    expect(await screen.findByText('机构端 hybrid rerank 引用片段')).toBeInTheDocument();
+    expect(screen.getByText('关键词匹配 1.000；向量相似度 0.765；deterministic rerank')).toBeInTheDocument();
+    expect(within(searchSection).getAllByText('hybrid').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('rerank 0.910')).toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/api/institution/knowledge-management/search?keyword=%E5%86%B7%E6%95%B7',
+      '/api/institution/knowledge-management/retrieval?query=%E5%86%B7%E6%95%B7&keyword=%E5%86%B7%E6%95%B7&mode=hybrid&topK=5&pageSize=5',
       expect.objectContaining({ cache: 'no-store' }),
     );
-    expect(searchSection.textContent).not.toContain('embedding');
-    expect(searchSection.textContent).not.toContain('训练');
-    expect(searchSection.textContent).not.toContain('问答');
+    expect(searchSection.textContent).not.toContain('embeddingVectorJson');
+    expect(searchSection.textContent).not.toContain('provider');
+    expect(searchSection.textContent).not.toContain('训练队列完成');
   });
 
   it('机构端新增语义检索只读区域，不提供向量生成入口', async () => {
@@ -423,7 +456,7 @@ describe('机构端知识库只读列表 UI', () => {
     fireEvent.click(within(vectorSection).getByRole('button', { name: '语义检索' }));
 
     expect(await screen.findByText('机构端语义相似引用片段')).toBeInTheDocument();
-    expect(screen.getByText('mock embedding 相似度 0.765')).toBeInTheDocument();
+    expect(screen.getByText('向量相似度 0.765')).toBeInTheDocument();
     expect(screen.getByText('相似度 0.765')).toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/api/institution/knowledge-management/vector-search?query=%E5%86%B7%E6%95%B7%E6%8A%A4%E7%90%86',
@@ -431,7 +464,7 @@ describe('机构端知识库只读列表 UI', () => {
     );
     expect(within(vectorSection).queryByRole('button', { name: '生成向量索引' })).not.toBeInTheDocument();
     expect(vectorSection.textContent).not.toContain('OCR');
-    expect(vectorSection.textContent).not.toContain('训练');
+    expect(vectorSection.textContent).not.toContain('真实出网');
     expect(vectorSection.textContent).not.toContain('问答');
     expect(vectorSection.textContent).not.toContain('第三方 AI');
   });
@@ -523,30 +556,30 @@ describe('机构端知识库只读列表 UI', () => {
     });
   });
 
-  it('检索片段区域明确展示"不会调用 AI / 不进入 AI prompt"文案', async () => {
+  it('检索片段区域明确展示 hybrid / rerank / 不做训练队列文案', async () => {
     render(<InstitutionKnowledgeReadonlyShell />);
     expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
 
     const searchSection = screen.getByLabelText('机构端知识片段检索');
-    expect(searchSection.textContent).toContain('仅搜索已解析的机构知识库片段');
-    expect(searchSection.textContent).toContain('不会调用 AI');
-    expect(searchSection.textContent).toContain('不会进入 AI prompt');
+    expect(searchSection.textContent).toContain('支持 keyword / vector / hybrid');
+    expect(searchSection.textContent).toContain('deterministic rerank');
+    expect(searchSection.textContent).toContain('不做 OCR、复杂文档解析或生产级训练队列');
   });
 
   it('检索为空时不展示敏感字段', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
-        if (url.includes('/api/institution/knowledge-management/search')) {
+        if (url.includes('/api/institution/knowledge-management/retrieval')) {
           return Response.json({
-            requestId: 'institution-knowledge-keyword-search',
+            requestId: 'institution-knowledge-hybrid-search',
             readonly: true,
             dataSource: 'repository',
             records: [],
             pageInfo: { ...pageInfo, total: 0, pageCount: 0 },
             emptyState: {
-              title: '暂无匹配片段',
-              description: '当前范围没有命中关键词的已解析知识片段。',
+              title: '暂无检索命中',
+              description: '当前范围没有命中已解析知识片段。',
             },
           });
         }
@@ -558,7 +591,7 @@ describe('机构端知识库只读列表 UI', () => {
     expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
 
     const searchSection = screen.getByLabelText('机构端知识片段检索');
-    fireEvent.change(within(searchSection).getByLabelText('输入片段检索关键词'), {
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索内容'), {
       target: { value: '不存在的关键词' },
     });
     fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
@@ -575,9 +608,9 @@ describe('机构端知识库只读列表 UI', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
-        if (url.includes('/api/institution/knowledge-management/search')) {
+        if (url.includes('/api/institution/knowledge-management/retrieval')) {
           return new Response(
-            JSON.stringify({ code: 'service_unavailable', error: '知识库片段检索暂时不可用' }),
+            JSON.stringify({ code: 'service_unavailable', error: '知识库检索暂时不可用' }),
             { status: 503 },
           );
         }
@@ -589,12 +622,12 @@ describe('机构端知识库只读列表 UI', () => {
     expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
 
     const searchSection = screen.getByLabelText('机构端知识片段检索');
-    fireEvent.change(within(searchSection).getByLabelText('输入片段检索关键词'), {
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索内容'), {
       target: { value: '冷敷' },
     });
     fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
 
-    expect(await screen.findByText('知识库片段检索暂时不可用')).toBeInTheDocument();
+    expect(await screen.findByText('知识库检索暂时不可用')).toBeInTheDocument();
     ['DATABASE_URL', 'postgres://', 'secret', 'stack', 'SQL', 'Bearer', '/Users/'].forEach((fragment) => {
       expect(searchSection.textContent).not.toContain(fragment);
     });
@@ -605,13 +638,13 @@ describe('机构端知识库只读列表 UI', () => {
     expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
 
     const searchSection = screen.getByLabelText('机构端知识片段检索');
-    // The default mock already returns a result with "机构端冷敷引用片段"
-    fireEvent.change(within(searchSection).getByLabelText('输入片段检索关键词'), {
+    // The default mock already returns a result with "机构端 hybrid rerank 引用片段"
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索内容'), {
       target: { value: '冷敷' },
     });
     fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
 
-    expect(await screen.findByText('机构端冷敷引用片段')).toBeInTheDocument();
+    expect(await screen.findByText('机构端 hybrid rerank 引用片段')).toBeInTheDocument();
     ['api_key', 'DATABASE_URL', 'storageKey', 'bucket', 'signedUrl', 'embeddingVectorJson', 'Bearer', 'Authorization', '/Users/', 'stack', 'SQL'].forEach(
       (fragment) => {
         expect(searchSection.textContent).not.toContain(fragment);
@@ -929,7 +962,7 @@ describe('机构端知识库只读列表 UI', () => {
       expect(within(quotaRecord).queryByText('已计入本月 AI 调用额度')).not.toBeInTheDocument();
       expect(within(quotaRecord).getByText('已记录，未计入成功调用额度')).toBeInTheDocument();
 
-      ['调用失败', '供应商限流', '供应商暂不可用'].forEach((statusLabel) => {
+      ['调用失败', '供应商限流', '服务暂不可用'].forEach((statusLabel) => {
         const record = screen.getByText(statusLabel).closest('article') as HTMLElement;
         expect(within(record).queryByText('已计入本月 AI 调用额度')).not.toBeInTheDocument();
         expect(within(record).getByText('已记录，未计入成功调用额度')).toBeInTheDocument();
@@ -989,7 +1022,7 @@ describe('机构端知识库只读列表 UI', () => {
       expect(await screen.findByText('AI 调用额度已用尽')).toBeInTheDocument();
       expect(screen.getByText('敏感输入已拒绝')).toBeInTheDocument();
       expect(screen.getByText('供应商限流')).toBeInTheDocument();
-      expect(screen.getByText('供应商暂不可用')).toBeInTheDocument();
+      expect(screen.getByText('服务暂不可用')).toBeInTheDocument();
       expect(screen.getByText('调用失败')).toBeInTheDocument();
     });
 

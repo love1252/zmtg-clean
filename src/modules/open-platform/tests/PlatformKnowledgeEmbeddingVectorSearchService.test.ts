@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import {
   createDeterministicMockKnowledgeEmbedding,
+  createMockKnowledgeEmbeddingProvider,
+  createOpenAiCompatibleKnowledgeEmbeddingProvider,
   generatePlatformKnowledgeChunkEmbeddingsService,
+  searchInstitutionKnowledgeRetrievalChunksService,
   searchInstitutionKnowledgeVectorChunksService,
   searchPlatformKnowledgeVectorChunksService,
   type PlatformKnowledgeEmbeddingCandidateRecord,
@@ -164,6 +167,30 @@ const embeddingCandidates: PlatformKnowledgeEmbeddingCandidateRecord[] = [
     textPreview: 'archived 不应生成 embedding。',
   },
   {
+    tenantId: 'tenant-a',
+    knowledgeId: 'knowledge-owned',
+    knowledgeTitle: '本机构知识库',
+    fileId: 'file-owned',
+    fileName: '本机构.txt',
+    fileStatus: 'active',
+    parseStatus: 'succeeded',
+    chunkId: 'chunk-owned-0',
+    chunkIndex: 0,
+    textPreview: '本机构可见的片段可以生成 embedding。',
+  },
+  {
+    tenantId: 'tenant-a',
+    knowledgeId: 'knowledge-hidden',
+    knowledgeTitle: '未授权知识库',
+    fileId: 'file-hidden',
+    fileName: '隐藏知识.txt',
+    fileStatus: 'active',
+    parseStatus: 'succeeded',
+    chunkId: 'chunk-hidden-0',
+    chunkIndex: 0,
+    textPreview: '其他机构不可见的片段不应生成 embedding。',
+  },
+  {
     tenantId: 'tenant-b',
     knowledgeId: 'knowledge-b',
     knowledgeTitle: '跨租户知识库',
@@ -182,6 +209,18 @@ function createRepository() {
   return {
     listKnowledgeItems: vi.fn(async (input: { tenantId: string }) =>
       knowledgeRecords.filter((record) => record.tenantId === input.tenantId),
+    ),
+    searchKnowledgeFileParseChunks: vi.fn(async (input: {
+      tenantId: string;
+      keyword: string;
+      knowledgeId?: string;
+      fileId?: string;
+    }) =>
+      embeddingCandidates
+        .filter((candidate) => candidate.tenantId === input.tenantId)
+        .filter((candidate) => !input.knowledgeId || candidate.knowledgeId === input.knowledgeId)
+        .filter((candidate) => !input.fileId || candidate.fileId === input.fileId)
+        .filter((candidate) => candidate.textPreview.includes(input.keyword)),
     ),
     listKnowledgeEmbeddingCandidates: vi.fn(async (input: {
       tenantId: string;
@@ -202,7 +241,8 @@ function createRepository() {
       embeddingModel: string;
       embeddingDimensions: number;
       embeddingVectorJson: number[];
-      status: 'ready';
+      status: 'ready' | 'failed';
+      failureReasonCode?: string | null;
     }>) => {
       records.forEach((record) => {
         const candidate = embeddingCandidates.find((item) =>
@@ -229,6 +269,7 @@ function createRepository() {
         embeddingModel: record.embeddingModel,
         embeddingDimensions: record.embeddingDimensions,
         status: record.status,
+        failureReasonCode: record.failureReasonCode ?? null,
       }));
     }),
     listKnowledgeVectorSearchCandidates: vi.fn(async (input: {
@@ -307,6 +348,106 @@ describe('知识库 embedding 与向量检索 service', () => {
     expectSafePayload(response);
   });
 
+  it('机构端只能对当前机构可见 knowledge/file 生成 embedding，响应不泄露敏感字段', async () => {
+    const repository = createRepository();
+
+    const response = await generatePlatformKnowledgeChunkEmbeddingsService({
+      repository,
+      params: {
+        tenantId: 'tenant-a',
+        institutionId: 'inst-visible-a',
+        knowledgeId: 'knowledge-a',
+        fileId: 'file-a',
+      },
+    });
+
+    expect(response).toEqual(expect.objectContaining({
+      status: 'succeeded',
+      embeddingCount: 2,
+      skippedCount: 0,
+    }));
+    expect(repository.listKnowledgeItems).toHaveBeenCalledWith({ tenantId: 'tenant-a' });
+    expect(repository.saveKnowledgeChunkEmbeddings).toHaveBeenCalledWith([
+      expect.objectContaining({ knowledgeId: 'knowledge-a', fileId: 'file-a', chunkId: 'chunk-a-0' }),
+      expect.objectContaining({ knowledgeId: 'knowledge-a', fileId: 'file-a', chunkId: 'chunk-a-1' }),
+    ]);
+    expectSafePayload(response);
+    ['provider', 'model', 'token', 'cost', 'vendor'].forEach((field) => {
+      expect(JSON.stringify(response).toLowerCase()).not.toContain(field);
+    });
+  });
+
+  it('机构端不可对同 tenant 其他机构不可见 knowledge/file 生成 embedding', async () => {
+    const repository = createRepository();
+
+    const response = await generatePlatformKnowledgeChunkEmbeddingsService({
+      repository,
+      params: {
+        tenantId: 'tenant-a',
+        institutionId: 'inst-current',
+        knowledgeId: 'knowledge-hidden',
+        fileId: 'file-hidden',
+      },
+    });
+
+    expect(response).toEqual({
+      status: 'forbidden',
+      embeddingCount: 0,
+      skippedCount: 0,
+      message: '当前知识项不存在或不可访问',
+    });
+    expect(repository.listKnowledgeItems).toHaveBeenCalledWith({ tenantId: 'tenant-a' });
+    expect(repository.listKnowledgeEmbeddingCandidates).not.toHaveBeenCalled();
+    expect(repository.saveKnowledgeChunkEmbeddings).not.toHaveBeenCalled();
+    expectSafePayload(response);
+  });
+
+  it('机构端未指定 knowledgeId 时只生成当前机构可见范围的 embedding', async () => {
+    const repository = createRepository();
+
+    const response = await generatePlatformKnowledgeChunkEmbeddingsService({
+      repository,
+      params: {
+        tenantId: 'tenant-a',
+        institutionId: 'inst-current',
+      },
+    });
+
+    expect(response).toEqual(expect.objectContaining({
+      status: 'succeeded',
+      embeddingCount: 1,
+    }));
+    const savedPayload = JSON.stringify(repository.saveKnowledgeChunkEmbeddings.mock.calls[0][0]);
+    expect(savedPayload).toContain('knowledge-owned');
+    expect(savedPayload).not.toContain('knowledge-hidden');
+    expect(savedPayload).not.toContain('knowledge-a');
+    expectSafePayload(response);
+  });
+
+  it('平台端不传 institutionId 时保留原生成逻辑并仍可 rebuild', async () => {
+    const repository = createRepository();
+
+    const generated = await generatePlatformKnowledgeChunkEmbeddingsService({
+      repository,
+      params: { tenantId: 'tenant-a', knowledgeId: 'knowledge-hidden', fileId: 'file-hidden' },
+    });
+    expect(generated).toMatchObject({ status: 'succeeded', embeddingCount: 1, skippedCount: 0 });
+
+    const skipped = await generatePlatformKnowledgeChunkEmbeddingsService({
+      repository,
+      params: { tenantId: 'tenant-a', knowledgeId: 'knowledge-hidden', fileId: 'file-hidden' },
+    });
+    expect(skipped).toMatchObject({ status: 'succeeded', embeddingCount: 0, skippedCount: 1 });
+
+    const rebuilt = await generatePlatformKnowledgeChunkEmbeddingsService({
+      repository,
+      params: { tenantId: 'tenant-a', knowledgeId: 'knowledge-hidden', fileId: 'file-hidden', rebuild: true },
+    });
+    expect(rebuilt).toMatchObject({ status: 'succeeded', embeddingCount: 1, skippedCount: 0 });
+    expectSafePayload(generated);
+    expectSafePayload(rebuilt);
+  });
+
   it('平台端向量检索返回相似引用片段且不泄露 embeddingVectorJson', async () => {
     const repository = createRepository();
     await generatePlatformKnowledgeChunkEmbeddingsService({
@@ -332,8 +473,10 @@ describe('知识库 embedding 与向量检索 service', () => {
       chunkId: expect.any(String),
       chunkIndex: expect.any(Number),
       textPreview: expect.any(String),
+      retrievalMode: 'vector',
       score: expect.any(Number),
-      matchReason: expect.stringContaining('mock embedding 相似度'),
+      vectorScore: expect.any(Number),
+      matchReason: expect.stringContaining('向量相似度'),
     }));
     expect(response.records[0].score).toBeGreaterThanOrEqual(response.records.at(-1)?.score ?? 0);
     expectSafePayload(response);
@@ -379,5 +522,113 @@ describe('知识库 embedding 与向量检索 service', () => {
       message: '请输入语义检索内容',
     });
     expect(repository.listKnowledgeVectorSearchCandidates).not.toHaveBeenCalled();
+  });
+
+  it('embedding provider mock success 且 OpenAI-compatible adapter 处理 failure / malformed / timeout / missing / disabled', async () => {
+    const mockProvider = createMockKnowledgeEmbeddingProvider();
+    await expect(mockProvider.embed({ texts: ['冷敷', '复诊'] })).resolves.toMatchObject({
+      status: 'success',
+      dimensions: 8,
+      vectors: [expect.any(Array), expect.any(Array)],
+    });
+
+    const disabled = createOpenAiCompatibleKnowledgeEmbeddingProvider({
+      enabled: false,
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+    });
+    await expect(disabled.embed({ texts: ['冷敷'] })).resolves.toMatchObject({
+      status: 'failed',
+      errorCode: 'provider_disabled',
+    });
+
+    const missing = createOpenAiCompatibleKnowledgeEmbeddingProvider({
+      enabled: true,
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+    });
+    await expect(missing.embed({ texts: ['冷敷'] })).resolves.toMatchObject({
+      status: 'failed',
+      errorCode: 'missing_config',
+    });
+
+    const httpFailure = createOpenAiCompatibleKnowledgeEmbeddingProvider({
+      enabled: true,
+      apiKey: 'test-key',
+      baseUrl: 'https://example.test/v1',
+      model: 'text-embedding-test',
+      fetchImpl: vi.fn(async () => ({ ok: false })) as unknown as typeof fetch,
+    });
+    await expect(httpFailure.embed({ texts: ['冷敷'] })).resolves.toMatchObject({
+      status: 'failed',
+      errorCode: 'http_failure',
+    });
+
+    const malformed = createOpenAiCompatibleKnowledgeEmbeddingProvider({
+      enabled: true,
+      apiKey: 'test-key',
+      baseUrl: 'https://example.test/v1',
+      model: 'text-embedding-test',
+      fetchImpl: vi.fn(async () => ({ ok: true, json: async () => ({ data: [{ nope: [] }] }) })) as unknown as typeof fetch,
+    });
+    await expect(malformed.embed({ texts: ['冷敷'] })).resolves.toMatchObject({
+      status: 'failed',
+      errorCode: 'malformed_response',
+    });
+
+    const timeout = createOpenAiCompatibleKnowledgeEmbeddingProvider({
+      enabled: true,
+      apiKey: 'test-key',
+      baseUrl: 'https://example.test/v1',
+      model: 'text-embedding-test',
+      fetchImpl: vi.fn(async () => { throw Object.assign(new Error('aborted'), { name: 'AbortError' }); }) as unknown as typeof fetch,
+    });
+    await expect(timeout.embed({ texts: ['冷敷'], timeoutMs: 1 })).resolves.toMatchObject({
+      status: 'failed',
+      errorCode: 'timeout',
+    });
+  });
+
+  it('已有 matching embedding 不重复生成，rebuild 强制更新', async () => {
+    const repository = createRepository();
+    await generatePlatformKnowledgeChunkEmbeddingsService({ repository, params: { tenantId: 'tenant-a' } });
+
+    const skipped = await generatePlatformKnowledgeChunkEmbeddingsService({ repository, params: { tenantId: 'tenant-a' } });
+    expect(skipped).toMatchObject({ status: 'succeeded', embeddingCount: 0, skippedCount: 4 });
+
+    const rebuilt = await generatePlatformKnowledgeChunkEmbeddingsService({
+      repository,
+      params: { tenantId: 'tenant-a', rebuild: true },
+    });
+    expect(rebuilt).toMatchObject({ status: 'succeeded', embeddingCount: 4, skippedCount: 0 });
+  });
+
+  it('hybrid retrieval 按 chunkId 去重，支持 topK 3 / 5 / 10，并返回 rerank 后排序', async () => {
+    const repository = createRepository();
+    await generatePlatformKnowledgeChunkEmbeddingsService({ repository, params: { tenantId: 'tenant-a' } });
+
+    for (const topK of [3, 5, 10]) {
+      const response = await searchInstitutionKnowledgeRetrievalChunksService({
+        repository,
+        params: {
+          tenantId: 'tenant-a',
+          institutionId: 'inst-visible-a',
+          query: '术后护理冷敷',
+          keyword: '术后',
+          mode: 'hybrid',
+          topK,
+          pageSize: topK,
+        },
+      });
+      expect('records' in response).toBe(true);
+      if ('records' in response) {
+        expect(response.records.length).toBeLessThanOrEqual(topK);
+        expect(new Set(response.records.map((record) => record.chunkId)).size).toBe(response.records.length);
+        expect(response.records[0].rerankScore ?? 0).toBeGreaterThanOrEqual(response.records.at(-1)?.rerankScore ?? 0);
+        expect(response.records.every((record) => ['keyword', 'vector', 'hybrid'].includes(record.retrievalMode))).toBe(true);
+        expectSafePayload(response);
+      }
+    }
   });
 });

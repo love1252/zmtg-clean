@@ -10,7 +10,13 @@ import type { PlatformKnowledgeFileStorage } from '@/modules/open-platform/serve
 type InstitutionParsingRepository = Pick<
   PlatformKnowledgeDocumentParsingRepository,
   'findKnowledgeItem' | 'findKnowledgeFile' | 'findKnowledgeFileParse' | 'listKnowledgeFileParseChunks'
->;
+> & {
+  listKnowledgeVectorSearchCandidates?: (input: {
+    tenantId: string;
+    knowledgeId?: string;
+    fileId?: string;
+  }) => Promise<Array<{ chunkId: string; embeddingStatus: 'ready' | 'pending' | 'failed' }>>;
+};
 
 type InstitutionParseInput = {
   repository: InstitutionParsingRepository;
@@ -65,8 +71,23 @@ export async function listInstitutionKnowledgeDocumentFileChunksService(
   });
   if ('status' in response) return response;
 
+  const embeddingCandidates = input.repository.listKnowledgeVectorSearchCandidates
+    ? await input.repository.listKnowledgeVectorSearchCandidates({
+      tenantId: visible.tenantId,
+      knowledgeId: visible.knowledgeId,
+      fileId: visible.fileId,
+    })
+    : [];
+  const embeddingStatusByChunkId = new Map(
+    embeddingCandidates.map((candidate) => [candidate.chunkId, candidate.embeddingStatus]),
+  );
+
   return {
     ...response,
+    records: response.records.map((record) => ({
+      ...record,
+      embeddingStatus: embeddingStatusByChunkId.get(record.chunkId) ?? 'pending',
+    })),
     requestId: 'institution-knowledge-document-file-parse-chunks' as const,
     readonly: true as const,
   };

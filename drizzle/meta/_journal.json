@@ -190,6 +190,13 @@
       "when": 1782720000000,
       "tag": "0026_v06_ai_usage_service_project_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1783296000000,
+      "tag": "0027_v06_kb_hybrid_retrieval_embedding_status",
+      "breakpoints": true
     }
   ]
 }
