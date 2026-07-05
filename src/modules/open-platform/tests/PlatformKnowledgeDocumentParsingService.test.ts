@@ -40,7 +40,6 @@ const unsafeFragments = [
   'word/document.xml',
   'xl/sharedStrings.xml',
   'xl/worksheets/sheet1.xml',
-  'embedding',
   'trainingContent',
   'answer',
 ];

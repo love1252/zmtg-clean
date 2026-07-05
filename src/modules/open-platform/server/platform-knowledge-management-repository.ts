@@ -380,10 +380,9 @@ function mapChunkEmbeddingSummary(
     knowledgeId: row.knowledgeDocumentId,
     fileId: row.fileId,
     chunkId: row.chunkId,
-    embeddingProvider: row.embeddingProvider,
-    embeddingModel: row.embeddingModel,
     embeddingDimensions: row.embeddingDimensions,
-    status: row.status === 'ready' ? 'ready' : 'ready',
+    status: row.status === 'ready' ? 'ready' : 'failed',
+    failureReasonCode: row.failureReasonCode,
   };
 }
 
@@ -1260,6 +1259,7 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
           embeddingDimensions: record.embeddingDimensions,
           embeddingVectorJson: record.embeddingVectorJson,
           status: record.status,
+          failureReasonCode: record.failureReasonCode ?? null,
         })))
         .onConflictDoUpdate({
           target: [
@@ -1272,6 +1272,7 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
             embeddingDimensions: sql`excluded.embedding_dimensions`,
             embeddingVectorJson: sql`excluded.embedding_vector_json`,
             status: sql`excluded.status`,
+            failureReasonCode: sql`excluded.failure_reason_code`,
             updatedAt: new Date(),
           },
         })

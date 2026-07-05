@@ -145,6 +145,7 @@ describe('知识库 embedding 与向量检索 API route', () => {
         status: 'ready',
       },
     ]);
+    repository.listKnowledgeVectorSearchCandidates.mockResolvedValue([]);
 
     const response = await platformEmbeddingRoute.POST(
       new Request(platformEmbeddingUrl, {
@@ -219,7 +220,7 @@ describe('知识库 embedding 与向量检索 API route', () => {
         fileId: 'file-visible',
         chunkId: 'chunk-visible-0',
         score: expect.any(Number),
-        matchReason: expect.stringContaining('mock embedding 相似度'),
+        matchReason: expect.stringContaining('向量相似度'),
       }),
     ]);
     expectSafePayload(payload);

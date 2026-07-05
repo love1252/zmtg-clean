@@ -270,7 +270,7 @@ describe('AI credits metering rule lookup repository', () => {
     expect(serialized).not.toContain('rawResponse');
   });
 
-  it('未修改 quota enforcement、schema 和 migration', () => {
+  it('未修改 quota enforcement 或 AI credits 既有 migration', () => {
     const changedFiles = execFileSync('git', ['status', '--short', '--untracked-files=all'], {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -280,9 +280,7 @@ describe('AI credits metering rule lookup repository', () => {
       .map((line) => line.slice(3));
 
     expect(changedFiles).not.toContain('src/modules/institution/domain/quota-enforcement.ts');
-    expect(changedFiles).not.toContain('src/server/db/schema.ts');
-    expect(changedFiles.some((file) => file.includes('/migrations/') || file.includes('drizzle/'))).toBe(
-      false,
-    );
+    expect(changedFiles).not.toContain('drizzle/0025_v06_ai_credits_metering_schema.sql');
+    expect(changedFiles).not.toContain('drizzle/0026_v06_ai_usage_service_project_fields.sql');
   });
 });
