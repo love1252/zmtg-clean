@@ -1,3 +1,4 @@
+import type { KnowledgeIndexingJobRecord } from '@/modules/open-platform/server/platform-knowledge-indexing-job-service';
 import { describe, expect, it, vi } from 'vitest';
 import {
   uploadAndParseInstitutionKnowledgeFileService,
@@ -25,7 +26,27 @@ const pdfFile = (name = 'report.pdf') => ({
   arrayBuffer: async () => new Uint8Array(512).buffer as ArrayBuffer,
 });
 
+const visibleKnowledgeRecord = {
+  knowledgeId: 'doc',
+  tenantId: 't',
+  tenantName: '租户',
+  institutionId: 'i',
+  workspaceId: 'workspace',
+  title: 'x.txt',
+  version: 'v1',
+  sourceKind: 'demo' as const,
+  status: 'ready' as const,
+  readonlyStatus: 'readonly' as const,
+  category: '机构知识',
+  descriptionPreview: '低敏摘要',
+  chunkCount: 1,
+  visibleInstitutionIds: ['i'],
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
 function createMocks() {
+  let createdIndexingJob: KnowledgeIndexingJobRecord | null = null;
   const repository = {
     findKnowledgeItem: vi.fn(),
     createKnowledgeFile: vi.fn(),
@@ -34,6 +55,21 @@ function createMocks() {
     saveKnowledgeFileParseResult: vi.fn(),
     replaceKnowledgeFileParseChunks: vi.fn(),
     listKnowledgeFileParseChunks: vi.fn(),
+    createKnowledgeIndexingJob: vi.fn(async (record: KnowledgeIndexingJobRecord) => {
+      createdIndexingJob = record;
+      return record;
+    }),
+    updateKnowledgeIndexingJob: vi.fn(async (input: { patch: Partial<KnowledgeIndexingJobRecord> }) => {
+      if (!createdIndexingJob) return null;
+      createdIndexingJob = { ...createdIndexingJob, ...input.patch };
+      return createdIndexingJob;
+    }),
+    findKnowledgeIndexingJob: vi.fn(async (input: { tenantId: string; jobId: string }) => (
+      createdIndexingJob?.tenantId === input.tenantId && createdIndexingJob.jobId === input.jobId
+        ? createdIndexingJob
+        : null
+    )),
+    listKnowledgeIndexingJobs: vi.fn(async () => createdIndexingJob ? [createdIndexingJob] : []),
     createInstitutionKnowledgeSource: vi.fn(),
     createInstitutionKnowledgeDocument: vi.fn(),
   };
@@ -67,7 +103,7 @@ describe('机构知识库上传解析 service', () => {
       updatedAt: new Date(),
       archivedAt: null,
     });
-    repository.findKnowledgeItem.mockResolvedValue(null);
+    repository.findKnowledgeItem.mockResolvedValue({ ...visibleKnowledgeRecord, knowledgeId: 'inst-doc-test', tenantId: 'tenant-001', institutionId: 'inst-001', visibleInstitutionIds: ['inst-001'] });
     repository.findKnowledgeFile.mockResolvedValue(null);
     repository.findKnowledgeFileParse.mockResolvedValue(null);
     repository.saveKnowledgeFileParseResult.mockResolvedValue({
@@ -203,25 +239,19 @@ describe('机构知识库上传解析 service', () => {
       mimeType: 'text/plain', sizeBytes: 100, status: 'active' as const, sha256: 's',
       storageKey: 'k', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
     });
-    repository.findKnowledgeItem.mockResolvedValue({
-      knowledgeId: 'doc',
-      tenantId: 't',
-      institutionId: 'i',
-      title: 'x.txt',
-      status: 'ready',
-      visibleInstitutionIds: ['i'],
-    } as unknown as Parameters<typeof repository.findKnowledgeItem>[0] extends never ? never : ReturnType<typeof repository.findKnowledgeItem> extends Promise<infer T> ? T : never);
+    repository.findKnowledgeItem.mockResolvedValue(visibleKnowledgeRecord);
     repository.findKnowledgeFile.mockResolvedValue({
       fileId: 'f', tenantId: 't', knowledgeId: 'doc', originalFilename: 'x.txt',
       storageKey: 'k', mimeType: 'text/plain', sizeBytes: 100, sha256: 's',
       status: 'active', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
     });
-    repository.findKnowledgeFileParse.mockResolvedValue(null);
-    repository.saveKnowledgeFileParseResult.mockResolvedValue({
+    const parseRecord = {
       parseId: 'p', tenantId: 't', knowledgeId: 'doc', fileId: 'f', parseStatus: 'succeeded',
       failureReasonCode: null, safeFailureMessage: null, textContent: 'test', textLength: 4,
       chunkCount: 1, parserVersion: 'v1', createdAt: new Date(), updatedAt: new Date(),
-    });
+    };
+    repository.findKnowledgeFileParse.mockResolvedValue(parseRecord);
+    repository.saveKnowledgeFileParseResult.mockResolvedValue(parseRecord);
     repository.replaceKnowledgeFileParseChunks.mockResolvedValue([]);
     storage.read.mockResolvedValue(new Uint8Array(Buffer.from('test')));
 
@@ -244,25 +274,19 @@ describe('机构知识库上传解析 service', () => {
       mimeType: 'application/json', sizeBytes: 100, status: 'active' as const, sha256: 's',
       storageKey: 'k', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
     });
-    repository.findKnowledgeItem.mockResolvedValue({
-      knowledgeId: 'doc',
-      tenantId: 't',
-      institutionId: 'i',
-      title: 'data.json',
-      status: 'ready',
-      visibleInstitutionIds: ['i'],
-    } as unknown as Parameters<typeof repository.findKnowledgeItem>[0] extends never ? never : ReturnType<typeof repository.findKnowledgeItem> extends Promise<infer T> ? T : never);
+    repository.findKnowledgeItem.mockResolvedValue({ ...visibleKnowledgeRecord, title: 'data.json' });
     repository.findKnowledgeFile.mockResolvedValue({
       fileId: 'f', tenantId: 't', knowledgeId: 'doc', originalFilename: 'data.json',
       storageKey: 'k', mimeType: 'application/json', sizeBytes: 100, sha256: 's',
       status: 'active', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
     });
-    repository.findKnowledgeFileParse.mockResolvedValue(null);
-    repository.saveKnowledgeFileParseResult.mockResolvedValue({
+    const parseRecord = {
       parseId: 'p', tenantId: 't', knowledgeId: 'doc', fileId: 'f', parseStatus: 'succeeded',
       failureReasonCode: null, safeFailureMessage: null, textContent: '{"a":1}', textLength: 7,
       chunkCount: 1, parserVersion: 'v1', createdAt: new Date(), updatedAt: new Date(),
-    });
+    };
+    repository.findKnowledgeFileParse.mockResolvedValue(parseRecord);
+    repository.saveKnowledgeFileParseResult.mockResolvedValue(parseRecord);
     repository.replaceKnowledgeFileParseChunks.mockResolvedValue([]);
     storage.read.mockResolvedValue(new Uint8Array(Buffer.from('{"key":"value","items":[1,2,3]}')));
 

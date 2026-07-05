@@ -197,6 +197,13 @@
       "when": 1783296000000,
       "tag": "0027_v06_kb_hybrid_retrieval_embedding_status",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1783299600000,
+      "tag": "0028_v06_kb_indexing_job_pipeline",
+      "breakpoints": true
     }
   ]
 }

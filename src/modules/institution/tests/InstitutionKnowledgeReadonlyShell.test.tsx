@@ -28,6 +28,28 @@ describe('机构端知识库只读列表 UI', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/indexing-jobs')) {
+          return Response.json({
+            records: [
+              {
+                jobId: 'kb-index-job-ui-a',
+                jobType: 'rebuild_embeddings',
+                status: 'succeeded',
+                knowledgeId: 'knowledge-ui-a',
+                fileId: 'institution-file-a',
+                totalCount: 1,
+                processedCount: 1,
+                failedCount: 0,
+                failureReasonCode: null,
+                safeMessage: '向量索引任务已完成',
+                createdAt: '2026-06-13T08:00:00.000Z',
+                startedAt: '2026-06-13T08:00:01.000Z',
+                finishedAt: '2026-06-13T08:00:02.000Z',
+                updatedAt: '2026-06-13T08:00:02.000Z',
+              },
+            ],
+          });
+        }
         if (url.includes('/api/institution/entitlement-usage')) {
           return Response.json({
             tenantId: 'demo-tenant-001',
@@ -252,6 +274,11 @@ describe('机构端知识库只读列表 UI', () => {
     expect(screen.getByText('低敏摘要，不包含正文。')).toBeInTheDocument();
     expect(screen.getByText('分块 3')).toBeInTheDocument();
     expect(screen.getByText('平台授权')).toBeInTheDocument();
+    const indexingSection = screen.getByLabelText('机构端知识库索引任务');
+    expect(within(indexingSection).getByText('索引任务')).toBeInTheDocument();
+    expect(within(indexingSection).getByText(/DB-backed minimal job flow/)).toBeInTheDocument();
+    expect(within(indexingSection).getByText('重建文件向量索引')).toBeInTheDocument();
+    expect(within(indexingSection).getByText('向量索引任务已完成')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '查看文件' }));
     expect(await screen.findByText('机构文件.pdf')).toBeInTheDocument();

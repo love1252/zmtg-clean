@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
-import { generatePlatformKnowledgeChunkEmbeddingsService } from '@/modules/open-platform/server/platform-knowledge-embedding-vector-search-service';
+import {
+  createAndRunGenerateEmbeddingsJob,
+  createAndRunRebuildEmbeddingsJob,
+} from '@/modules/open-platform/server/platform-knowledge-indexing-job-service';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
@@ -37,21 +40,23 @@ export async function POST(
 
   try {
     const [{ knowledgeId, fileId }, body] = await Promise.all([context.params, readBody(request)]);
-    const result = await generatePlatformKnowledgeChunkEmbeddingsService({
-      repository: createPlatformKnowledgeManagementRepository(getDatabase()),
-      params: {
-        tenantId: accessContext.tenantId,
-        institutionId: accessContext.institutionId,
-        knowledgeId,
-        fileId,
-        rebuild: typeof body.rebuild === 'boolean' || typeof body.rebuild === 'string' ? body.rebuild : null,
-      },
-    });
+    const repository = createPlatformKnowledgeManagementRepository(getDatabase());
+    const taskInput = {
+      tenantId: accessContext.tenantId,
+      institutionId: accessContext.institutionId,
+      actorUserId: accessContext.userId,
+      knowledgeId,
+      fileId,
+    };
+    const rebuild = body.rebuild === true || body.rebuild === 'true' || body.rebuild === 1 || body.rebuild === '1';
+    const result = rebuild
+      ? await createAndRunRebuildEmbeddingsJob({ repository, input: taskInput })
+      : await createAndRunGenerateEmbeddingsJob({ repository, input: taskInput });
 
     const resultStatus = 'status' in result && typeof result.status === 'string'
       ? result.status
       : null;
-    return NextResponse.json(result, {
+    return NextResponse.json('job' in result ? result.job : result, {
       status: resultStatus ? statusCodeForResult(resultStatus) : 200,
     });
   } catch {

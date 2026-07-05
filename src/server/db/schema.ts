@@ -205,6 +205,19 @@ export const knowledgeBaseRuntimeReadonlyStatusEnum = pgEnum(
   'knowledge_base_runtime_readonly_status',
   ['readonly', 'blocked'],
 );
+export const knowledgeIndexingJobTypeEnum = pgEnum('knowledge_indexing_job_type', [
+  'parse_file',
+  'generate_embeddings',
+  'rebuild_embeddings',
+  'rebuild_knowledge_index',
+]);
+export const knowledgeIndexingJobStatusEnum = pgEnum('knowledge_indexing_job_status', [
+  'pending',
+  'running',
+  'succeeded',
+  'failed',
+  'cancelled',
+]);
 export const homepageBrandConfigStatusEnum = pgEnum('homepage_brand_config_status', [
   'draft',
   'published',
@@ -1206,6 +1219,62 @@ export const knowledgeDocumentFileParseChunkEmbeddings = pgTable(
     tenantProviderModelIdx: index(
       'knowledge_file_parse_chunk_embeddings_tenant_provider_model_idx',
     ).on(table.tenantId, table.embeddingProvider, table.embeddingModel),
+  }),
+);
+
+export const knowledgeIndexingJobs = pgTable(
+  'knowledge_indexing_jobs',
+  {
+    jobId: varchar('job_id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
+    actorUserId: varchar('actor_user_id', { length: 96 }),
+    knowledgeId: varchar('knowledge_id', { length: 64 }),
+    fileId: varchar('file_id', { length: 64 }),
+    jobType: knowledgeIndexingJobTypeEnum('job_type').notNull(),
+    status: knowledgeIndexingJobStatusEnum('status').notNull().default('pending'),
+    totalCount: integer('total_count').notNull().default(0),
+    processedCount: integer('processed_count').notNull().default(0),
+    failedCount: integer('failed_count').notNull().default(0),
+    failureReasonCode: varchar('failure_reason_code', { length: 64 }),
+    safeMessage: varchar('safe_message', { length: 240 }),
+    metadataJson: jsonb('metadata_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantStatusCreatedIdx: index('knowledge_indexing_jobs_tenant_status_created_idx').on(
+      table.tenantId,
+      table.status,
+      table.createdAt,
+    ),
+    tenantInstitutionCreatedIdx: index('knowledge_indexing_jobs_tenant_institution_created_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.createdAt,
+    ),
+    tenantKnowledgeCreatedIdx: index('knowledge_indexing_jobs_tenant_knowledge_created_idx').on(
+      table.tenantId,
+      table.knowledgeId,
+      table.createdAt,
+    ),
+    tenantFileCreatedIdx: index('knowledge_indexing_jobs_tenant_file_created_idx').on(
+      table.tenantId,
+      table.fileId,
+      table.createdAt,
+    ),
+    tenantJobTypeCreatedIdx: index('knowledge_indexing_jobs_tenant_job_type_created_idx').on(
+      table.tenantId,
+      table.jobType,
+      table.createdAt,
+    ),
   }),
 );
 

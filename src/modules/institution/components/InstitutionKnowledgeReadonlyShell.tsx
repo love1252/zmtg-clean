@@ -28,6 +28,23 @@ type InstitutionKnowledgeFileRecord = {
   safeFailureMessage: string | null;
   chunkCount: number;
 };
+type InstitutionKnowledgeIndexingJobRecord = {
+  jobId: string;
+  jobType: 'parse_file' | 'generate_embeddings' | 'rebuild_embeddings' | 'rebuild_knowledge_index';
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  knowledgeId: string | null;
+  fileId: string | null;
+  totalCount: number;
+  processedCount: number;
+  failedCount: number;
+  failureReasonCode: string | null;
+  safeMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  updatedAt: string;
+};
+
 type InstitutionKnowledgeChunkRecord = {
   chunkId: string;
   chunkIndex: number;
@@ -157,6 +174,21 @@ const qaRetrievalModeLabels: Record<InstitutionKnowledgeQaAuditRecord['retrieval
   vector: '语义',
 };
 
+const indexingJobTypeLabels: Record<InstitutionKnowledgeIndexingJobRecord['jobType'], string> = {
+  parse_file: '解析文件',
+  generate_embeddings: '生成向量索引',
+  rebuild_embeddings: '重建文件向量索引',
+  rebuild_knowledge_index: '重建知识索引',
+};
+
+const indexingJobStatusLabels: Record<InstitutionKnowledgeIndexingJobRecord['status'], string> = {
+  pending: '等待中',
+  running: '执行中',
+  succeeded: '已完成',
+  failed: '失败',
+  cancelled: '已取消',
+};
+
 const controlledTrialReadiness = getKnowledgeBaseControlledTrialReadiness();
 
 function visibleErrorMessage(error: TenantBusinessClientError | null) {
@@ -250,6 +282,9 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadMessage, setUploadMessage] = useState('选择文件后上传，支持 .txt、.md、.csv、.json 格式，最大 2MB');
   const [uploadedKnowledgeId, setUploadedKnowledgeId] = useState<string | null>(null);
+  const [indexingJobs, setIndexingJobs] = useState<InstitutionKnowledgeIndexingJobRecord[]>([]);
+  const [indexingJobMessage, setIndexingJobMessage] = useState('点击刷新查看最近索引任务');
+  const [isIndexingJobLoading, setIsIndexingJobLoading] = useState(false);
   const [pageInfo, setPageInfo] = useState<InstitutionKnowledgeListResponse['pageInfo']>({
     page: 1,
     pageSize: 10,
@@ -296,6 +331,7 @@ export function InstitutionKnowledgeReadonlyShell() {
 
   useEffect(() => {
     void loadAiQuota();
+    void loadIndexingJobs();
   }, []);
 
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
@@ -374,9 +410,10 @@ export function InstitutionKnowledgeReadonlyShell() {
       if (response.ok && payload?.status === 'created') {
         setUploadStatus('success');
         const chunkInfo = payload.chunkCount > 0 ? `，共 ${payload.chunkCount} 个片段` : '';
-        setUploadMessage(`文件已上传并解析成功${chunkInfo}`);
+        setUploadMessage(`文件已上传并创建解析任务${chunkInfo}`);
         setUploadedKnowledgeId(payload.knowledgeId ?? null);
         setUploadFile(null);
+        void loadIndexingJobs();
         refresh();
       } else {
         setUploadStatus('error');
@@ -532,8 +569,71 @@ export function InstitutionKnowledgeReadonlyShell() {
     }
   }
 
+  async function loadIndexingJobs() {
+    setIsIndexingJobLoading(true);
+    setIndexingJobMessage('正在读取索引任务...');
+    try {
+      const response = await fetch('/api/institution/knowledge-management/indexing-jobs?limit=10', {
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setIndexingJobs([]);
+        setIndexingJobMessage('索引任务暂时不可用');
+        return;
+      }
+
+      const records = payload.records as InstitutionKnowledgeIndexingJobRecord[];
+      setIndexingJobs(records);
+      setIndexingJobMessage(records.length > 0 ? `已读取 ${records.length} 条最近任务` : '暂无索引任务');
+    } catch {
+      setIndexingJobs([]);
+      setIndexingJobMessage('索引任务暂时不可用');
+    } finally {
+      setIsIndexingJobLoading(false);
+    }
+  }
+
+  async function createKnowledgeRebuildJob(knowledgeId: string) {
+    setIndexingJobMessage('正在创建当前知识索引重建任务...');
+    try {
+      const response = await fetch('/api/institution/knowledge-management/indexing-jobs', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jobType: 'rebuild_knowledge_index', knowledgeId }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || typeof payload.status !== 'string') {
+        setIndexingJobMessage(typeof payload?.error === 'string' ? payload.error : '知识索引重建任务暂时无法创建');
+        return;
+      }
+      setIndexingJobMessage(`知识索引任务已创建：${indexingJobStatusLabels[payload.status as InstitutionKnowledgeIndexingJobRecord['status']] ?? payload.status}`);
+      await loadIndexingJobs();
+    } catch {
+      setIndexingJobMessage('知识索引重建任务暂时无法创建');
+    }
+  }
+
+  async function cancelIndexingJob(jobId: string) {
+    setIndexingJobMessage('正在取消索引任务...');
+    try {
+      const response = await fetch(`/api/institution/knowledge-management/indexing-jobs/${encodeURIComponent(jobId)}/cancel`, {
+        method: 'POST',
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || typeof payload.status !== 'string') {
+        setIndexingJobMessage(typeof payload?.error === 'string' ? payload.error : '索引任务暂时无法取消');
+        return;
+      }
+      setIndexingJobMessage(payload.message ?? `任务状态：${indexingJobStatusLabels[payload.status as InstitutionKnowledgeIndexingJobRecord['status']] ?? payload.status}`);
+      await loadIndexingJobs();
+    } catch {
+      setIndexingJobMessage('索引任务暂时无法取消');
+    }
+  }
+
   async function rebuildFileEmbeddings(knowledgeId: string, file: InstitutionKnowledgeFileRecord) {
-    setFileMessage('正在生成 / 重建向量索引...');
+    setFileMessage('正在创建向量索引任务...');
     try {
       const response = await fetch(
         `/api/institution/knowledge-management/items/${encodeURIComponent(knowledgeId)}/files/${encodeURIComponent(file.fileId)}/embeddings`,
@@ -545,15 +645,17 @@ export function InstitutionKnowledgeReadonlyShell() {
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload || typeof payload.status !== 'string') {
-        setFileMessage('向量索引暂时无法生成');
+        setFileMessage('向量索引任务暂时无法创建');
         return;
       }
-      const count = typeof payload.embeddingCount === 'number' ? payload.embeddingCount : 0;
-      const skipped = typeof payload.skippedCount === 'number' ? payload.skippedCount : 0;
-      setFileMessage(`向量索引处理完成：生成 ${count} 个，跳过 ${skipped} 个`);
-      await loadFileChunks(knowledgeId, file);
+      const statusLabel = indexingJobStatusLabels[payload.status as InstitutionKnowledgeIndexingJobRecord['status']] ?? payload.status;
+      const progress = typeof payload.totalCount === 'number'
+        ? `，进度 ${payload.processedCount ?? 0}/${payload.totalCount}`
+        : '';
+      setFileMessage(`向量索引任务已创建：${statusLabel}${progress}`);
+      await Promise.all([loadFileChunks(knowledgeId, file), loadIndexingJobs()]);
     } catch {
-      setFileMessage('向量索引暂时无法生成');
+      setFileMessage('向量索引任务暂时无法创建');
     }
   }
 
@@ -789,6 +891,82 @@ export function InstitutionKnowledgeReadonlyShell() {
           )}
         >
           {uploadMessage}
+        </div>
+      </section>
+
+      <section
+        aria-label="机构端知识库索引任务"
+        className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4"
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold tracking-normal text-slate-950">索引任务</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+              当前是 DB-backed minimal job flow：请求内创建并执行任务记录，用于解析文件、生成向量索引和重建索引；不是生产级队列，不是 OCR，不是复杂文档解析，也不是训练系统。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={loadIndexingJobs}
+            disabled={isIndexingJobLoading}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className={cn('h-4 w-4', isIndexingJobLoading ? 'animate-spin' : '')} />
+            刷新任务
+          </button>
+        </div>
+        <div className="mt-3 rounded-xl border border-emerald-100 bg-white/80 px-3 py-2 text-xs font-semibold text-emerald-700">
+          {indexingJobMessage}
+        </div>
+        <div className="mt-3 grid gap-2 lg:grid-cols-2">
+          {indexingJobs.length === 0 ? (
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500">
+              暂无索引任务
+            </div>
+          ) : (
+            indexingJobs.map((job) => {
+              const total = Math.max(job.totalCount, 0);
+              const progress = total > 0 ? `${job.processedCount}/${total}` : '-';
+              return (
+                <article key={job.jobId} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-sm font-semibold text-slate-800">
+                      {indexingJobTypeLabels[job.jobType]}
+                    </div>
+                    <span
+                      className={cn(
+                        'rounded-full border px-2 py-0.5 text-xs font-semibold',
+                        job.status === 'succeeded'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : job.status === 'failed'
+                            ? 'border-rose-200 bg-rose-50 text-rose-700'
+                            : 'border-amber-200 bg-amber-50 text-amber-700',
+                      )}
+                    >
+                      {indexingJobStatusLabels[job.status]}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs font-semibold text-slate-500">
+                    进度 {progress} · 失败 {job.failedCount} · 更新于 {formatDate(job.updatedAt)}
+                  </div>
+                  {job.safeMessage || job.failureReasonCode ? (
+                    <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
+                      {job.safeMessage ?? job.failureReasonCode}
+                    </div>
+                  ) : null}
+                  {job.status === 'pending' ? (
+                    <button
+                      type="button"
+                      onClick={() => cancelIndexingJob(job.jobId)}
+                      className="mt-2 inline-flex h-8 items-center justify-center rounded-lg border border-amber-200 bg-white px-2.5 text-xs font-semibold text-amber-700 transition hover:border-amber-300"
+                    >
+                      取消等待任务
+                    </button>
+                  ) : null}
+                </article>
+              );
+            })
+          )}
         </div>
       </section>
 
@@ -1509,14 +1687,24 @@ export function InstitutionKnowledgeReadonlyShell() {
               </div>
 
               <div className="mt-4 border-t border-slate-100 pt-4">
-                <button
-                  type="button"
-                  onClick={() => loadKnowledgeFiles(item.knowledgeId)}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-3 text-xs font-semibold text-cyan-700 transition hover:border-cyan-300 hover:bg-cyan-100"
-                >
-                  <FileText className="h-4 w-4" />
-                  查看文件
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => loadKnowledgeFiles(item.knowledgeId)}
+                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-3 text-xs font-semibold text-cyan-700 transition hover:border-cyan-300 hover:bg-cyan-100"
+                  >
+                    <FileText className="h-4 w-4" />
+                    查看文件
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => createKnowledgeRebuildJob(item.knowledgeId)}
+                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    重建当前知识索引
+                  </button>
+                </div>
 
                 {expandedKnowledgeId === item.knowledgeId ? (
                   <div className="mt-3 space-y-2">
