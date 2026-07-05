@@ -174,7 +174,7 @@ type VectorSearchParams = {
   rebuild?: boolean | string | number | null;
 };
 
-type EmbeddingGenerateParams = Omit<VectorSearchParams, 'query' | 'institutionId'>;
+type EmbeddingGenerateParams = Omit<VectorSearchParams, 'query'>;
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
@@ -531,11 +531,41 @@ export async function generatePlatformKnowledgeChunkEmbeddingsService(input: {
 
   const knowledgeId = normalizeOptionalString(input.params.knowledgeId);
   const fileId = normalizeOptionalString(input.params.fileId);
+  const institutionId = normalizeOptionalString(input.params.institutionId);
   const rebuild = normalizeRebuild(input.params.rebuild);
   const provider = input.provider ?? createMockKnowledgeEmbeddingProvider();
   const providerId = provider.provider ?? PLATFORM_KNOWLEDGE_MOCK_EMBEDDING_PROVIDER;
   const providerModel = provider.model ?? PLATFORM_KNOWLEDGE_MOCK_EMBEDDING_MODEL;
   const providerDimensions = provider.dimensions ?? PLATFORM_KNOWLEDGE_MOCK_EMBEDDING_DIMENSIONS;
+  let visibleKnowledgeIds: Set<string> | null = null;
+  if (institutionId) {
+    const knowledgeItems = await input.repository.listKnowledgeItems({ tenantId: tenant.value });
+    const tenantKnowledge = knowledgeItems.filter((record) => record.tenantId === tenant.value);
+    const scopedKnowledge = knowledgeId
+      ? tenantKnowledge.find((record) => record.knowledgeId === knowledgeId)
+      : null;
+    if (knowledgeId && !scopedKnowledge) {
+      return {
+        status: 'not_found' as const,
+        embeddingCount: 0,
+        skippedCount: 0,
+        message: '当前知识项不存在或不可访问',
+      };
+    }
+    if (scopedKnowledge && !isKnowledgeVisibleToInstitution(scopedKnowledge, institutionId)) {
+      return {
+        status: 'forbidden' as const,
+        embeddingCount: 0,
+        skippedCount: 0,
+        message: '当前知识项不存在或不可访问',
+      };
+    }
+    visibleKnowledgeIds = new Set(
+      tenantKnowledge
+        .filter((record) => isKnowledgeVisibleToInstitution(record, institutionId))
+        .map((record) => record.knowledgeId),
+    );
+  }
   const candidates = await input.repository.listKnowledgeEmbeddingCandidates({
     tenantId: tenant.value,
     knowledgeId,
@@ -543,6 +573,7 @@ export async function generatePlatformKnowledgeChunkEmbeddingsService(input: {
   });
   const embeddable = candidates
     .filter((candidate) => candidate.tenantId === tenant.value)
+    .filter((candidate) => !visibleKnowledgeIds || visibleKnowledgeIds.has(candidate.knowledgeId))
     .filter(isEmbeddableCandidate)
     .sort((left, right) =>
       left.knowledgeId.localeCompare(right.knowledgeId) ||

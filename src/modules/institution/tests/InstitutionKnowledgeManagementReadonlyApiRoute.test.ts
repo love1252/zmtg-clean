@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import * as itemsRoute from '@/app/api/institution/knowledge-management/items/route';
+import * as embeddingsRoute from '@/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/embeddings/route';
 import { getDatabase } from '@/server/db/client';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
@@ -8,6 +9,9 @@ import { getDemoAccessContextFromRequest } from '@/modules/security/server/acces
 const database = { database: 'institution-knowledge-test-db' };
 const repository = {
   listKnowledgeItems: vi.fn(),
+  listKnowledgeEmbeddingCandidates: vi.fn(),
+  listKnowledgeVectorSearchCandidates: vi.fn(),
+  saveKnowledgeChunkEmbeddings: vi.fn(),
 };
 
 vi.mock('@/server/db/client', () => ({
@@ -100,6 +104,9 @@ async function readJson(response: Response) {
 describe('机构端知识库管理 V1 只读 API route', () => {
   beforeEach(() => {
     repository.listKnowledgeItems.mockReset();
+    repository.listKnowledgeEmbeddingCandidates.mockReset();
+    repository.listKnowledgeVectorSearchCandidates.mockReset();
+    repository.saveKnowledgeChunkEmbeddings.mockReset();
     vi.mocked(getDatabase).mockClear();
     vi.mocked(createPlatformKnowledgeManagementRepository).mockClear();
     vi.mocked(getDemoAccessContextFromRequest).mockReset();
@@ -135,6 +142,84 @@ describe('机构端知识库管理 V1 只读 API route', () => {
     forbiddenKnowledgeFields.forEach((field) => {
       expect(serialized).not.toContain(`"${field}"`);
     });
+  });
+
+  it('POST embeddings 把 institutionId 传入 service 并只允许当前机构可见 knowledge/file', async () => {
+    repository.listKnowledgeItems.mockResolvedValue(routeRecords);
+    repository.listKnowledgeEmbeddingCandidates.mockResolvedValue([
+      {
+        tenantId: 'tenant-route',
+        knowledgeId: 'knowledge-visible-route',
+        knowledgeTitle: '机构端授权可见知识',
+        fileId: 'file-visible-route',
+        fileName: '授权文件.txt',
+        fileStatus: 'active',
+        parseStatus: 'succeeded',
+        chunkId: 'chunk-visible-route-0',
+        chunkIndex: 0,
+        textPreview: '授权机构可生成向量索引的片段。',
+      },
+    ]);
+    repository.listKnowledgeVectorSearchCandidates.mockResolvedValue([]);
+    repository.saveKnowledgeChunkEmbeddings.mockResolvedValue([
+      {
+        embeddingId: 'embedding-visible-route-0',
+        tenantId: 'tenant-route',
+        knowledgeId: 'knowledge-visible-route',
+        fileId: 'file-visible-route',
+        chunkId: 'chunk-visible-route-0',
+        embeddingDimensions: 8,
+        status: 'ready',
+        failureReasonCode: null,
+      },
+    ]);
+
+    const response = await embeddingsRoute.POST(
+      new Request(`${apiUrl}/knowledge-visible-route/files/file-visible-route/embeddings`, {
+        method: 'POST',
+        body: JSON.stringify({ rebuild: true }),
+      }),
+      { params: Promise.resolve({ knowledgeId: 'knowledge-visible-route', fileId: 'file-visible-route' }) },
+    );
+    const payload = await readJson(response);
+    const serialized = JSON.stringify(payload);
+
+    expect(response.status).toBe(200);
+    expect(repository.listKnowledgeItems).toHaveBeenCalledWith({ tenantId: 'tenant-route' });
+    expect(repository.listKnowledgeEmbeddingCandidates).toHaveBeenCalledWith({
+      tenantId: 'tenant-route',
+      knowledgeId: 'knowledge-visible-route',
+      fileId: 'file-visible-route',
+    });
+    expect(payload).toEqual(expect.objectContaining({ status: 'succeeded', embeddingCount: 1 }));
+    expect(serialized).not.toContain('embeddingVectorJson');
+    expect(serialized).not.toMatch(/provider|model|token|cost|vendor/i);
+  });
+
+  it('POST embeddings 阻断同 tenant 其他机构不可见 knowledge/file', async () => {
+    repository.listKnowledgeItems.mockResolvedValue(routeRecords);
+
+    const response = await embeddingsRoute.POST(
+      new Request(`${apiUrl}/knowledge-hidden-route/files/file-hidden-route/embeddings`, {
+        method: 'POST',
+        body: JSON.stringify({ rebuild: true }),
+      }),
+      { params: Promise.resolve({ knowledgeId: 'knowledge-hidden-route', fileId: 'file-hidden-route' }) },
+    );
+    const payload = await readJson(response);
+    const serialized = JSON.stringify(payload);
+
+    expect(response.status).toBe(403);
+    expect(payload).toEqual({
+      status: 'forbidden',
+      embeddingCount: 0,
+      skippedCount: 0,
+      message: '当前知识项不存在或不可访问',
+    });
+    expect(repository.listKnowledgeEmbeddingCandidates).not.toHaveBeenCalled();
+    expect(repository.saveKnowledgeChunkEmbeddings).not.toHaveBeenCalled();
+    expect(serialized).not.toContain('embeddingVectorJson');
+    expect(serialized).not.toMatch(/provider|model|token|cost|vendor/i);
   });
 
   it('没有机构上下文时拒绝访问且不初始化 repository', async () => {

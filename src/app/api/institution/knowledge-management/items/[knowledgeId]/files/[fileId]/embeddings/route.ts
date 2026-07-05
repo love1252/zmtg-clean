@@ -6,6 +6,8 @@ import { getDatabase } from '@/server/db/client';
 
 function statusCodeForResult(status: string) {
   if (status === 'validation_failed') return 400;
+  if (status === 'not_found') return 404;
+  if (status === 'forbidden') return 403;
   if (status === 'failed') return 503;
   return 200;
 }
@@ -39,6 +41,7 @@ export async function POST(
       repository: createPlatformKnowledgeManagementRepository(getDatabase()),
       params: {
         tenantId: accessContext.tenantId,
+        institutionId: accessContext.institutionId,
         knowledgeId,
         fileId,
         rebuild: typeof body.rebuild === 'boolean' || typeof body.rebuild === 'string' ? body.rebuild : null,

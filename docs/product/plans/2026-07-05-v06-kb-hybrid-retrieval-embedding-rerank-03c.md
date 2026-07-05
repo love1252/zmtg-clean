@@ -10,16 +10,17 @@
 2. mock / dry-run embedding provider。
 3. OpenAI-compatible embeddings adapter，支持注入式 `fetchImpl`，测试只用 mock fetch。
 4. parse succeeded + active file 的 chunk embedding 生成。
-5. JSONB numeric array vector storage fallback。
-6. keyword / vector / hybrid retrieval。
-7. 按 `chunkId` 去重。
-8. topK 3 / 5 / 10。
-9. deterministic rerank。
-10. Answer API 使用 hybrid retrieval sources。
-11. 机构端检索测试台展示 keyword / vector / hybrid、matchReason、rerank 排序。
-12. 片段列表展示 `embeddingStatus`。
-13. 文件级“生成 / 重建向量索引”最小入口。
-14. 低敏 usage / audit 延续既有白名单字段策略。
+5. 机构端 embedding 生成按 institution visibility 限制，禁止跨机构生成 / 重建。
+6. JSONB numeric array vector storage fallback。
+7. keyword / vector / hybrid retrieval。
+8. 按 `chunkId` 去重。
+9. topK 3 / 5 / 10。
+10. deterministic rerank。
+11. Answer API 使用 hybrid retrieval sources。
+12. 机构端检索测试台展示 keyword / vector / hybrid、matchReason、rerank 排序。
+13. 片段列表展示 `embeddingStatus`。
+14. 文件级“生成 / 重建向量索引”最小入口。
+15. 低敏 usage / audit 延续既有白名单字段策略。
 
 ## 2. Embedding provider contract
 
@@ -88,7 +89,22 @@ contract 只在服务端使用：
 
 未新增 pgvector 依赖。
 
-## 5. Hybrid retrieval 策略
+## 5. Chunk embedding 机构可见性
+
+机构端文件级“生成 / 重建向量索引”入口会把当前 `accessContext.institutionId` 传入 service。
+
+当传入 `institutionId` 时：
+
+1. service 先调用 `repository.listKnowledgeItems({ tenantId })` 获取当前 tenant 的知识项。
+2. 若指定 `knowledgeId` 不存在于当前 tenant，返回低敏 `not_found`。
+3. 若指定 `knowledgeId` 存在但当前机构不可见，返回低敏 `forbidden`。
+4. 可见性规则与检索逻辑一致：`knowledge.institutionId === institutionId` 或 `visibleInstitutionIds` 包含 `institutionId`。
+5. 只有当前机构可见 knowledge 下的 active + parse succeeded chunk 才会生成 / 重建 embedding。
+6. 平台端调用不传 `institutionId`，保留平台端原有 tenant / knowledge / file 范围生成逻辑。
+
+响应仍不返回 embedding array、provider、model、token、cost、vendor。
+
+## 6. Hybrid retrieval 策略
 
 新增/扩展：
 
