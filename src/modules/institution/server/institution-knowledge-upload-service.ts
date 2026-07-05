@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { uploadPlatformKnowledgeFileService, type PlatformKnowledgeFileDto, type PlatformKnowledgeFileRepository, type PlatformKnowledgeFileStorage } from '@/modules/open-platform/server/platform-knowledge-file-management-service';
-import { parsePlatformKnowledgeDocumentFileService, type PlatformKnowledgeDocumentParsingRepository, type PlatformKnowledgeFileParseDto } from '@/modules/open-platform/server/platform-knowledge-document-parsing-service';
+import { type PlatformKnowledgeDocumentParsingRepository, type PlatformKnowledgeFileParseDto, type PlatformKnowledgeFileParseRecord } from '@/modules/open-platform/server/platform-knowledge-document-parsing-service';
 import type { PlatformKnowledgeFileParseStatus } from '@/modules/open-platform/server/platform-knowledge-document-parsing-service';
+import {
+  createAndRunParseFileJob,
+  type KnowledgeIndexingJobRepository,
+} from '@/modules/open-platform/server/platform-knowledge-indexing-job-service';
 
 export const INSTITUTION_KNOWLEDGE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 export type InstitutionKnowledgeUploadFileLike = {
@@ -31,7 +35,8 @@ export type InstitutionKnowledgeUploadRepository = Pick<
   PlatformKnowledgeFileRepository,
   'findKnowledgeItem' | 'createKnowledgeFile'
 > &
-  PlatformKnowledgeDocumentParsingRepository & {
+  PlatformKnowledgeDocumentParsingRepository &
+  KnowledgeIndexingJobRepository & {
     createInstitutionKnowledgeSource(input: {
       tenantId: string;
       institutionId: string;
@@ -87,6 +92,23 @@ function isAllowedFileType(input: { filename: string; mimeType: string }) {
   if (!allowedMimeTypes) return false;
   const normalizedMime = input.mimeType.trim().toLowerCase();
   return !normalizedMime || allowedMimeTypes.includes(normalizedMime);
+}
+
+function toParseDto(record: PlatformKnowledgeFileParseRecord): PlatformKnowledgeFileParseDto {
+  return {
+    parseId: record.parseId,
+    tenantId: record.tenantId,
+    knowledgeId: record.knowledgeId,
+    fileId: record.fileId,
+    parseStatus: record.parseStatus,
+    failureReasonCode: record.failureReasonCode,
+    safeFailureMessage: record.safeFailureMessage,
+    textLength: record.textLength,
+    chunkCount: record.chunkCount,
+    parserVersion: record.parserVersion,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
 }
 
 export async function uploadAndParseInstitutionKnowledgeFileService(
@@ -215,14 +237,22 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
     throw error;
   }
 
-  // 4. 自动解析文件
-  const parseResult = await parsePlatformKnowledgeDocumentFileService({
+  // 4. 自动创建并执行文件解析任务，同时保留同步上传响应
+  const jobResult = await createAndRunParseFileJob({
     repository: input.repository,
     storage: input.storage,
-    input: { tenantId, knowledgeId, fileId },
+    input: {
+      tenantId,
+      institutionId,
+      actorUserId: uploadedByUserId,
+      knowledgeId,
+      fileId,
+    },
   });
+  const parseRecord = await input.repository.findKnowledgeFileParse({ tenantId, knowledgeId, fileId });
+  const parse = parseRecord ? toParseDto(parseRecord) : null;
 
-  if (parseResult.status === 'succeeded' && parseResult.parse) {
+  if (jobResult.status === 'succeeded' && parse) {
     return {
       status: 'created',
       knowledgeId,
@@ -230,18 +260,19 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
       file: {
         ...fileRecord,
         parseStatus: 'succeeded',
-        failureReasonCode: parseResult.parse.failureReasonCode,
-        safeFailureMessage: parseResult.parse.safeFailureMessage,
-        textLength: parseResult.parse.textLength,
-        chunkCount: parseResult.parse.chunkCount,
-        parserVersion: parseResult.parse.parserVersion,
+        failureReasonCode: parse.failureReasonCode,
+        safeFailureMessage: parse.safeFailureMessage,
+        textLength: parse.textLength,
+        chunkCount: parse.chunkCount,
+        parserVersion: parse.parserVersion,
       },
-      parse: parseResult.parse,
-      chunkCount: parseResult.parse.chunkCount,
+      parse,
+      parseStatus: 'succeeded',
+      chunkCount: parse.chunkCount,
     };
   }
 
-  if (parseResult.status === 'failed' && 'parse' in parseResult && parseResult.parse) {
+  if (parse?.parseStatus === 'failed') {
     return {
       status: 'created',
       knowledgeId,
@@ -249,10 +280,11 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
       file: {
         ...fileRecord,
         parseStatus: 'failed',
-        failureReasonCode: (parseResult as { parse: PlatformKnowledgeFileParseDto }).parse.failureReasonCode,
-        safeFailureMessage: (parseResult as { parse: PlatformKnowledgeFileParseDto }).parse.safeFailureMessage,
+        failureReasonCode: parse.failureReasonCode,
+        safeFailureMessage: parse.safeFailureMessage,
       },
-      parse: (parseResult as { parse: PlatformKnowledgeFileParseDto }).parse,
+      parse,
+      parseStatus: 'failed',
       chunkCount: 0,
     };
   }
@@ -261,8 +293,9 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
     status: 'created',
     knowledgeId,
     sourceId,
-    file: { ...fileRecord, parseStatus: 'pending' },
-    parse: null,
-    chunkCount: 0,
+    file: { ...fileRecord, parseStatus: parse?.parseStatus ?? 'pending' },
+    parse,
+    parseStatus: parse?.parseStatus ?? 'pending',
+    chunkCount: parse?.chunkCount ?? 0,
   };
 }

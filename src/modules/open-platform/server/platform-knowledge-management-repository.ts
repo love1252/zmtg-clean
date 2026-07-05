@@ -10,11 +10,13 @@ import {
   knowledgeDocumentFiles,
   knowledgeDocuments,
   knowledgeIndexJobs,
+  knowledgeIndexingJobs,
   knowledgeQaAuditLogs,
   knowledgeSources,
   platformKnowledgeInstitutionVisibility,
   tenants,
 } from '@/server/db/schema';
+import type { KnowledgeIndexingJobRecord } from './platform-knowledge-indexing-job-service';
 import type { PlatformKnowledgeFileRepositoryRecord } from './platform-knowledge-file-management-service';
 import {
   PLATFORM_KNOWLEDGE_LIBRARY_WORKSPACE_ID,
@@ -53,6 +55,7 @@ type KnowledgeDocumentFileParseRow = typeof knowledgeDocumentFileParses.$inferSe
 type KnowledgeDocumentFileParseChunkRow = typeof knowledgeDocumentFileParseChunks.$inferSelect;
 type KnowledgeDocumentFileParseChunkEmbeddingRow =
   typeof knowledgeDocumentFileParseChunkEmbeddings.$inferSelect;
+type KnowledgeIndexingJobRow = typeof knowledgeIndexingJobs.$inferSelect;
 type KnowledgeQaAuditLogRow = typeof knowledgeQaAuditLogs.$inferSelect;
 type TenantRow = typeof tenants.$inferSelect;
 
@@ -426,6 +429,29 @@ function mapQaAuditLogRow(row: KnowledgeQaAuditLogRow): KnowledgeQaAuditLogDto {
     safeStatus: row.safeStatus,
     safeFailureMessage: row.safeFailureMessage,
     createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function mapIndexingJobRow(row: KnowledgeIndexingJobRow): KnowledgeIndexingJobRecord {
+  return {
+    jobId: row.jobId,
+    tenantId: row.tenantId,
+    institutionId: row.institutionId,
+    actorUserId: row.actorUserId,
+    knowledgeId: row.knowledgeId,
+    fileId: row.fileId,
+    jobType: row.jobType,
+    status: row.status,
+    totalCount: row.totalCount,
+    processedCount: row.processedCount,
+    failedCount: row.failedCount,
+    failureReasonCode: row.failureReasonCode,
+    safeMessage: row.safeMessage,
+    metadataJson: row.metadataJson ?? {},
+    startedAt: row.startedAt,
+    finishedAt: row.finishedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
@@ -1398,6 +1424,100 @@ export function createPlatformKnowledgeManagementRepository(database: TenantData
         .returning({ auditId: knowledgeQaAuditLogs.id });
 
       return { auditId: inserted[0]?.auditId ?? record.auditId };
+    },
+
+    async createKnowledgeIndexingJob(record: KnowledgeIndexingJobRecord) {
+      const inserted = await database
+        .insert(knowledgeIndexingJobs)
+        .values({
+          jobId: record.jobId,
+          tenantId: record.tenantId,
+          institutionId: record.institutionId,
+          actorUserId: record.actorUserId,
+          knowledgeId: record.knowledgeId,
+          fileId: record.fileId,
+          jobType: record.jobType,
+          status: record.status,
+          totalCount: record.totalCount,
+          processedCount: record.processedCount,
+          failedCount: record.failedCount,
+          failureReasonCode: record.failureReasonCode,
+          safeMessage: record.safeMessage,
+          metadataJson: record.metadataJson,
+          startedAt: record.startedAt,
+          finishedAt: record.finishedAt,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
+        })
+        .returning();
+
+      return mapIndexingJobRow(inserted[0]);
+    },
+
+    async updateKnowledgeIndexingJob(input: {
+      tenantId: string;
+      jobId: string;
+      patch: Partial<Pick<
+        KnowledgeIndexingJobRecord,
+        | 'status'
+        | 'totalCount'
+        | 'processedCount'
+        | 'failedCount'
+        | 'failureReasonCode'
+        | 'safeMessage'
+        | 'metadataJson'
+        | 'startedAt'
+        | 'finishedAt'
+        | 'updatedAt'
+      >>;
+    }) {
+      const updated = await database
+        .update(knowledgeIndexingJobs)
+        .set(input.patch)
+        .where(
+          and(
+            eq(knowledgeIndexingJobs.tenantId, input.tenantId),
+            eq(knowledgeIndexingJobs.jobId, input.jobId),
+          ),
+        )
+        .returning();
+
+      return updated[0] ? mapIndexingJobRow(updated[0]) : null;
+    },
+
+    async findKnowledgeIndexingJob(input: { tenantId: string; jobId: string }) {
+      const rows = await database
+        .select()
+        .from(knowledgeIndexingJobs)
+        .where(
+          and(
+            eq(knowledgeIndexingJobs.tenantId, input.tenantId),
+            eq(knowledgeIndexingJobs.jobId, input.jobId),
+          ),
+        )
+        .limit(1);
+
+      return rows[0] ? mapIndexingJobRow(rows[0]) : null;
+    },
+
+    async listKnowledgeIndexingJobs(input: {
+      tenantId: string;
+      institutionId?: string | null;
+      limit?: number;
+    }) {
+      const conditions = [eq(knowledgeIndexingJobs.tenantId, input.tenantId)];
+      if (input.institutionId) {
+        conditions.push(eq(knowledgeIndexingJobs.institutionId, input.institutionId));
+      }
+
+      const rows = await database
+        .select()
+        .from(knowledgeIndexingJobs)
+        .where(and(...conditions))
+        .orderBy(desc(knowledgeIndexingJobs.createdAt), desc(knowledgeIndexingJobs.jobId))
+        .limit(input.limit ?? 20);
+
+      return rows.map(mapIndexingJobRow);
     },
 
     async hasTenantInstitution(
