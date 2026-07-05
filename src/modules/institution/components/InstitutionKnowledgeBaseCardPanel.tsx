@@ -703,7 +703,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
             最小闭环说明
           </div>
           <p className="mt-1 text-xs leading-5">
-            上传、检索和 mock / dry-run 问答使用现有机构端 API；新建、重新训练、向量和复杂删除仍受控禁用。
+            上传、检索、新建 / 编辑 / 软归档和 mock / dry-run 问答使用现有机构端 API；重新训练、向量、复杂删除和真实外部 AI 仍受控禁用。
           </p>
         </div>
       </div>
