@@ -843,6 +843,54 @@ export async function requestInstitutionAiCallService(input: {
   }
 }
 
+export async function recordKnowledgeRagAnswerUsageSuccess(input: {
+  repository: AiCallUsageRepository;
+  rulesRepository?: AiCreditMeteringRulesRepository;
+  tenantId: string;
+  institutionId: string | null;
+  actorUserId: string;
+  vendor: string;
+  model: string;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  latencyMs?: number | null;
+  sources: Array<{
+    knowledgeId: string;
+    knowledgeTitle: string;
+    fileId: string;
+    fileName: string;
+    chunkId: string;
+    chunkIndex: number;
+    textPreview: string;
+    matchReason: string;
+  }>;
+}): Promise<AiCallUsageRecord> {
+  const promptTokens = input.promptTokens ?? null;
+  const completionTokens = input.completionTokens ?? null;
+  const totalTokens = promptTokens === null || completionTokens === null
+    ? null
+    : promptTokens + completionTokens;
+
+  return createMeteredUsageRecord({
+    repository: input.repository,
+    rulesRepository: input.rulesRepository,
+    id: generateRecordId(),
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    actorUserId: input.actorUserId,
+    provider: input.vendor,
+    model: input.model,
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    latencyMs: input.latencyMs ?? null,
+    status: 'succeeded',
+    errorCode: null,
+    metadata: buildAiCallUsageMetadata(input.sources),
+    serviceProject: KNOWLEDGE_BASE_QA_SERVICE_PROJECT,
+  });
+}
+
 export async function recordAiCallQuotaRejection(input: {
   repository: AiCallUsageRepository;
   tenantId: string;
