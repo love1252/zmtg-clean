@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { PlatformKnowledgeFileParseChunkRecord, PlatformKnowledgeFileParseRecord } from '@/modules/open-platform/server/platform-knowledge-document-parsing-service';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import {
   cancelKnowledgeIndexingJob,
@@ -10,6 +11,7 @@ import {
 } from '@/modules/open-platform/server/platform-knowledge-indexing-job-service';
 
 const now = new Date('2026-07-05T08:00:00.000Z');
+const encoder = new TextEncoder();
 
 const visibleKnowledge: PlatformKnowledgeRepositoryRecord = {
   knowledgeId: 'knowledge-visible',
@@ -69,10 +71,8 @@ function createJobRepository() {
 }
 
 function createEmbeddingRepository(options: { knowledge?: PlatformKnowledgeRepositoryRecord | null } = {}) {
-  return {
-    ...createJobRepository(),
-    findKnowledgeItem: vi.fn(async () => options.knowledge ?? visibleKnowledge),
-    findKnowledgeFile: vi.fn(async () => ({
+  const files = [
+    {
       fileId: 'file-visible',
       tenantId: 'tenant-a',
       knowledgeId: 'knowledge-visible',
@@ -94,7 +94,40 @@ function createEmbeddingRepository(options: { knowledge?: PlatformKnowledgeRepos
       textLength: 16,
       chunkCount: 1,
       parserVersion: 'test-parser',
-    })),
+    },
+  ];
+  const parseRecords = new Map<string, PlatformKnowledgeFileParseRecord>();
+  const chunks = new Map<string, PlatformKnowledgeFileParseChunkRecord[]>();
+  const repository = {
+    ...createJobRepository(),
+    files,
+    parseRecords,
+    chunks,
+    findKnowledgeItem: vi.fn(async () => options.knowledge ?? visibleKnowledge),
+    findKnowledgeFile: vi.fn(async (query: { tenantId: string; knowledgeId: string; fileId: string }) =>
+      files.find((file) => file.tenantId === query.tenantId && file.knowledgeId === query.knowledgeId && file.fileId === query.fileId) ?? null,
+    ),
+    listKnowledgeFiles: vi.fn(async (query: { tenantId: string; knowledgeId: string }) =>
+      files.filter((file) => file.tenantId === query.tenantId && file.knowledgeId === query.knowledgeId),
+    ),
+    findKnowledgeFileParse: vi.fn(async (query: { tenantId: string; fileId: string }) =>
+      parseRecords.get(`${query.tenantId}:${query.fileId}`) ?? null,
+    ),
+    saveKnowledgeFileParseResult: vi.fn(async (record: PlatformKnowledgeFileParseRecord) => {
+      parseRecords.set(`${record.tenantId}:${record.fileId}`, record);
+      return record;
+    }),
+    replaceKnowledgeFileParseChunks: vi.fn(async (input: {
+      tenantId: string;
+      fileId: string;
+      chunks: PlatformKnowledgeFileParseChunkRecord[];
+    }) => {
+      chunks.set(`${input.tenantId}:${input.fileId}`, input.chunks);
+      return input.chunks;
+    }),
+    listKnowledgeFileParseChunks: vi.fn(async (query: { tenantId: string; fileId: string }) =>
+      chunks.get(`${query.tenantId}:${query.fileId}`) ?? [],
+    ),
     listKnowledgeItems: vi.fn(async () => [visibleKnowledge]),
     listKnowledgeEmbeddingCandidates: vi.fn(async () => [
       {
@@ -107,7 +140,7 @@ function createEmbeddingRepository(options: { knowledge?: PlatformKnowledgeRepos
         parseStatus: 'succeeded' as const,
         chunkId: 'chunk-a',
         chunkIndex: 0,
-        textPreview: '术后护理需要冷敷。',
+        textPreview: chunks.get('tenant-a:file-visible')?.[0]?.textPreview ?? '术后护理需要冷敷。',
       },
     ]),
     listKnowledgeVectorSearchCandidates: vi.fn(async () => []),
@@ -123,6 +156,13 @@ function createEmbeddingRepository(options: { knowledge?: PlatformKnowledgeRepos
         failureReasonCode: null,
       },
     ]),
+  };
+  return repository;
+}
+
+function createStorage(content = '术后护理需要冷敷。') {
+  return {
+    read: vi.fn(async () => encoder.encode(content)),
   };
 }
 
@@ -218,8 +258,11 @@ describe('platform knowledge indexing job service', () => {
   it('支持重建当前知识索引 job', async () => {
     const repository = createEmbeddingRepository();
 
+    const storage = createStorage('重建解析文本进入 chunk。');
+
     const result = await createAndRunRebuildKnowledgeIndexJob({
       repository,
+      storage,
       input: {
         tenantId: 'tenant-a',
         institutionId: 'inst-current',
@@ -233,6 +276,13 @@ describe('platform knowledge indexing job service', () => {
       jobType: 'rebuild_knowledge_index',
       status: 'succeeded',
       fileId: null,
+    }));
+    expect(repository.listKnowledgeFiles).toHaveBeenCalledWith({ tenantId: 'tenant-a', knowledgeId: 'knowledge-visible' });
+    expect(storage.read).toHaveBeenCalledWith({ storageKey: 'safe-storage-key' });
+    expect(repository.replaceKnowledgeFileParseChunks).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a',
+      fileId: 'file-visible',
+      chunks: expect.arrayContaining([expect.objectContaining({ textPreview: expect.stringContaining('重建解析文本') })]),
     }));
     expect(repository.listKnowledgeEmbeddingCandidates).toHaveBeenCalledWith({
       tenantId: 'tenant-a',

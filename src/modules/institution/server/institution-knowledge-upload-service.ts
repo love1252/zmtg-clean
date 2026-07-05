@@ -64,8 +64,10 @@ type UploadServiceInput = {
 const institutionAllowedFiles = new Map<string, readonly string[]>([
   ['.txt', ['text/plain']],
   ['.md', ['text/markdown', 'text/plain']],
+  ['.pdf', ['application/pdf']],
+  ['.docx', ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']],
+  ['.xlsx', ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']],
   ['.csv', ['text/csv', 'application/csv', 'application/vnd.ms-excel']],
-  ['.json', ['application/json']],
 ]);
 
 function normalizeRequired(value: string | null | undefined) {
@@ -136,7 +138,7 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
   if (!ext || !institutionAllowedFiles.has(ext)) {
     return {
       status: 'validation_failed',
-      message: '文件类型暂不支持，当前支持 .txt、.md、.csv、.json 格式',
+      message: '文件类型暂不支持，当前支持 TXT、MD、PDF、DOCX、XLSX、CSV 格式',
     };
   }
 
@@ -144,7 +146,7 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
   if (!isAllowedFileType({ filename: originalFilename, mimeType })) {
     return {
       status: 'validation_failed',
-      message: '文件类型暂不支持，当前支持 .txt、.md、.csv、.json 格式',
+      message: '文件类型暂不支持，当前支持 TXT、MD、PDF、DOCX、XLSX、CSV 格式',
     };
   }
 

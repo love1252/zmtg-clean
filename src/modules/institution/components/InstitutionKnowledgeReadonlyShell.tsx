@@ -26,6 +26,8 @@ type InstitutionKnowledgeFileRecord = {
   sizeLabel: string;
   parseStatus: 'pending' | 'processing' | 'succeeded' | 'failed';
   safeFailureMessage: string | null;
+  failureReasonCode?: string | null;
+  parserVersion?: string | null;
   chunkCount: number;
 };
 type InstitutionKnowledgeIndexingJobRecord = {
@@ -280,7 +282,7 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [isAiUsageLoading, setIsAiUsageLoading] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
-  const [uploadMessage, setUploadMessage] = useState('选择文件后上传，支持 .txt、.md、.csv、.json 格式，最大 2MB');
+  const [uploadMessage, setUploadMessage] = useState('选择文件后上传，支持 TXT / MD / PDF / DOCX / XLSX / CSV，最大 2MB');
   const [uploadedKnowledgeId, setUploadedKnowledgeId] = useState<string | null>(null);
   const [indexingJobs, setIndexingJobs] = useState<InstitutionKnowledgeIndexingJobRecord[]>([]);
   const [indexingJobMessage, setIndexingJobMessage] = useState('点击刷新查看最近索引任务');
@@ -380,11 +382,11 @@ export function InstitutionKnowledgeReadonlyShell() {
       return;
     }
 
-    const allowedExtensions = ['.txt', '.md', '.csv', '.json'];
+    const allowedExtensions = ['.txt', '.md', '.pdf', '.docx', '.xlsx', '.csv'];
     const filename = uploadFile.name.toLowerCase();
     const hasValidExtension = allowedExtensions.some((ext) => filename.endsWith(ext));
     if (!hasValidExtension) {
-      setUploadMessage('文件类型暂不支持，当前支持 .txt、.md、.csv、.json 格式');
+      setUploadMessage('文件类型暂不支持，当前支持 TXT、MD、PDF、DOCX、XLSX、CSV 格式');
       setUploadStatus('error');
       return;
     }
@@ -854,18 +856,18 @@ export function InstitutionKnowledgeReadonlyShell() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-semibold tracking-normal text-slate-950">上传机构文件</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">上传低敏文件并自动解析，支持 .txt、.md、.csv、.json 格式，最大 2MB。</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">上传低敏文件并自动解析，支持 TXT / MD / PDF / DOCX / XLSX / CSV，最大 2MB；PDF 仅支持可复制文本，扫描件需后续 OCR，本轮不支持；Excel 仅抽取表格文本，不执行公式。</p>
           </div>
           <form onSubmit={handleUpload} className="flex w-full flex-col gap-2 sm:flex-row lg:w-[540px]">
             <label className="relative min-w-0 flex-1">
               <input
                 type="file"
-                accept=".txt,.md,.csv,.json"
+                accept=".txt,.md,.pdf,.docx,.xlsx,.csv"
                 onChange={(event) => {
                   const files = event.target.files;
                   setUploadFile(files?.length ? files[0] : null);
                   setUploadStatus('idle');
-                  setUploadMessage('选择文件后上传，支持 .txt、.md、.csv、.json 格式，最大 2MB');
+                  setUploadMessage('选择文件后上传，支持 TXT / MD / PDF / DOCX / XLSX / CSV，最大 2MB');
                 }}
                 className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-cyan-700 hover:file:bg-cyan-200 focus:border-cyan-400"
               />
@@ -902,7 +904,7 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div>
             <h2 className="text-lg font-semibold tracking-normal text-slate-950">索引任务</h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-              当前是 DB-backed minimal job flow：请求内创建并执行任务记录，用于解析文件、生成向量索引和重建索引；不是生产级队列，不是 OCR，不是复杂文档解析，也不是训练系统。
+              当前是 DB-backed minimal job flow：请求内创建并执行任务记录，用于解析文件、生成向量索引和重建索引；重建知识索引会重新解析当前知识文件后再生成向量；不是生产级队列，不做 OCR，不识别扫描件，也不是训练系统。
             </p>
           </div>
           <button
@@ -1176,7 +1178,7 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">检索测试台</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">支持 keyword / vector / hybrid，默认 hybrid；结果按 deterministic rerank 排序。仅使用已解析片段，不做 OCR、复杂文档解析或生产级训练队列。</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">支持 keyword / vector / hybrid，默认 hybrid；结果按 deterministic rerank 排序。仅使用已解析片段，不做 OCR、扫描件识别或生产级训练队列。</p>
             </div>
             <form onSubmit={searchChunks} className="flex w-full flex-col gap-2 lg:w-[720px]">
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -1733,7 +1735,13 @@ export function InstitutionKnowledgeReadonlyShell() {
                             </div>
                             <div className="mt-1 text-xs font-semibold text-slate-500">
                               {parseStatusLabels[file.parseStatus]} · {file.chunkCount} 片段
+                              {file.parserVersion ? ` · ${file.parserVersion}` : ''}
                             </div>
+                            {file.failureReasonCode ? (
+                              <div className="mt-1 text-xs font-semibold text-rose-600">
+                                失败原因：{file.failureReasonCode}
+                              </div>
+                            ) : null}
                             {file.safeFailureMessage ? (
                               <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700">
                                 {file.safeFailureMessage}

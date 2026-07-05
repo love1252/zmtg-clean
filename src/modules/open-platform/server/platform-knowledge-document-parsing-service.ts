@@ -17,7 +17,10 @@ export const PLATFORM_KNOWLEDGE_PARSE_TEXT_MAX_CHARS = v1KnowledgeBaseUploadPars
 export const PLATFORM_KNOWLEDGE_ZIP_ENTRY_MAX_INFLATED_BYTES = 5 * 1024 * 1024;
 export const PLATFORM_KNOWLEDGE_ZIP_TOTAL_MAX_INFLATED_BYTES = 12 * 1024 * 1024;
 export const PLATFORM_KNOWLEDGE_PDF_FLATE_MAX_INFLATED_BYTES = 8 * 1024 * 1024;
-export const PLATFORM_KNOWLEDGE_PARSER_VERSION = 'local-real-file-parser-v1';
+export const PLATFORM_KNOWLEDGE_PARSER_VERSION = 'local-real-file-parser-v2';
+export const PLATFORM_KNOWLEDGE_PARSE_MAX_PAGES = 200;
+export const PLATFORM_KNOWLEDGE_PARSE_MAX_SHEETS = 20;
+export const PLATFORM_KNOWLEDGE_PARSE_MAX_ROWS = 5000;
 
 export type PlatformKnowledgeFileParseStatus =
   | 'pending'
@@ -120,18 +123,76 @@ const supportedFileTypes = new Map<string, readonly string[]>([
   ['.txt', ['text/plain']],
   ['.md', ['text/markdown', 'text/plain']],
   ['.csv', ['text/csv', 'application/csv', 'application/vnd.ms-excel']],
-  ['.json', ['application/json']],
   ['.pdf', ['application/pdf']],
   ['.docx', ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']],
   ['.xlsx', ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']],
 ]);
+
+export type PlatformKnowledgeDocumentParserType = 'text' | 'markdown' | 'csv' | 'pdf' | 'docx' | 'xlsx';
+export type PlatformKnowledgeDocumentParseFailureReasonCode =
+  | 'unsupported_file_type'
+  | 'parse_empty_text'
+  | 'parse_file_too_large'
+  | 'parse_page_limit_exceeded'
+  | 'parse_sheet_limit_exceeded'
+  | 'parse_malformed_document'
+  | 'parse_scanned_pdf_unsupported'
+  | 'parse_service_failed';
+export type PlatformKnowledgeDocumentParseWarningCode =
+  | 'parse_text_truncated'
+  | 'parse_row_limit_exceeded';
+
+export type PlatformKnowledgeDocumentParseResult = {
+  status: 'succeeded';
+  text: string;
+  parserType: PlatformKnowledgeDocumentParserType;
+  pageCount?: number;
+  sheetCount?: number;
+  rowCount?: number;
+  warningCodes: PlatformKnowledgeDocumentParseWarningCode[];
+} | {
+  status: 'failed' | 'unsupported';
+  text: '';
+  parserType: PlatformKnowledgeDocumentParserType | null;
+  pageCount?: number;
+  sheetCount?: number;
+  rowCount?: number;
+  warningCodes: PlatformKnowledgeDocumentParseWarningCode[];
+  failureReasonCode: PlatformKnowledgeDocumentParseFailureReasonCode;
+  safeMessage: string;
+};
+
+export type PlatformKnowledgeDocumentParseInput = {
+  fileName: string;
+  mimeType: string;
+  buffer: Uint8Array;
+  tenantId: string;
+  institutionId?: string | null;
+  knowledgeId: string;
+  fileId: string;
+  maxChars?: number;
+  maxRows?: number;
+  maxSheets?: number;
+  maxPages?: number;
+};
+
 const unsupportedSafeFailureMessage = '当前文件类型暂不支持解析';
 const parseFailedSafeFailureMessage = '知识库文件解析失败，请稍后重试';
+const malformedSafeFailureMessage = '文件结构无法解析，请确认文件未损坏后重试';
 const emptyContentSafeFailureMessage = '文件未提取到可解析文本，扫描件或图片内容暂不支持';
+const scannedPdfSafeFailureMessage = 'PDF 未提取到可复制文本，扫描件或图片文字暂不支持 OCR';
 const oversizedFileSafeFailureMessage = '文件大小超过解析限制，请拆分后重新上传';
-const contentTruncatedSafeFailureMessage = '解析文本超过长度限制，已截断为低敏预览';
+const pageLimitSafeFailureMessage = 'PDF 页数超过解析限制，请拆分后重新上传';
+const sheetLimitSafeFailureMessage = 'Excel 工作表数量超过解析限制，请拆分后重新上传';
 
 class ParseSafetyLimitError extends Error {}
+class MalformedDocumentError extends Error {}
+class PageLimitExceededError extends Error {
+  constructor(readonly pageCount: number) { super('page_limit_exceeded'); }
+}
+class SheetLimitExceededError extends Error {
+  constructor(readonly sheetCount: number) { super('sheet_limit_exceeded'); }
+}
 
 function normalizeRequired(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -210,7 +271,7 @@ function stripXmlTags(value: string) {
   return xmlText(value.replace(/<[^>]+>/g, ' '));
 }
 
-function parseCsvText(content: Uint8Array) {
+function parseCsvText(content: Uint8Array, maxRows = PLATFORM_KNOWLEDGE_PARSE_MAX_ROWS) {
   const text = decodeUtf8(content).replace(/^\uFEFF/, '');
   const rows: string[][] = [];
   let row: string[] = [];
@@ -238,7 +299,10 @@ function parseCsvText(content: Uint8Array) {
     if ((char === '\n' || char === '\r') && !inQuotes) {
       if (char === '\r' && next === '\n') index += 1;
       row.push(cell.trim());
-      if (row.some((value) => value.length > 0)) rows.push(row);
+      if (row.some((value) => value.length > 0)) {
+        rows.push(row);
+        if (rows.length >= maxRows) break;
+      }
       row = [];
       cell = '';
       continue;
@@ -246,23 +310,11 @@ function parseCsvText(content: Uint8Array) {
     cell += char;
   }
 
+  if (inQuotes) throw new MalformedDocumentError('malformed_csv');
   row.push(cell.trim());
-  if (row.some((value) => value.length > 0)) rows.push(row);
+  if (row.some((value) => value.length > 0) && rows.length < maxRows) rows.push(row);
 
-  return rows.map((cells) => cells.join('\t')).join('\n');
-}
-
-function parseJsonText(content: Uint8Array) {
-  const text = decodeUtf8(content);
-  try {
-    const parsed = JSON.parse(text);
-    // \u5C06 JSON \u683C\u5F0F\u5316\u4E3A\u591A\u884C\u6587\u672C\uFF0C\u4FBF\u4E8E\u89E3\u6790\u5206\u5757
-    const formatted = JSON.stringify(parsed, null, 2);
-    return formatted;
-  } catch {
-    // JSON \u89E3\u6790\u5931\u8D25\uFF0C\u8FD4\u56DE\u539F\u59CB\u6587\u672C
-    return text;
-  }
+  return { text: rows.map((cells) => cells.join('\t')).join('\n'), rowCount: rows.length, truncatedRows: rows.length >= maxRows };
 }
 
 function readUint16(content: Uint8Array, offset: number) {
@@ -402,15 +454,11 @@ function readZipEntries(content: Uint8Array) {
 
 function extractDocxText(content: Uint8Array) {
   const entries = readZipEntries(content);
-  const documentEntries = [...entries.entries()]
-    .filter(([name]) =>
-      name === 'word/document.xml' ||
-      /^word\/(header|footer)\d+\.xml$/.test(name),
-    )
-    .sort(([left], [right]) => left.localeCompare(right));
+  const documentBytes = entries.get('word/document.xml');
+  if (!documentBytes) throw new MalformedDocumentError('missing_docx_document');
   const paragraphs: string[] = [];
 
-  documentEntries.forEach(([, bytes]) => {
+  [documentBytes].forEach((bytes) => {
     const xml = decodeUtf8(bytes)
       .replace(/<w:tab\b[^>]*\/>/g, '\t')
       .replace(/<w:br\b[^>]*\/>/g, '\n')
@@ -433,42 +481,87 @@ function extractSharedStrings(xml: string) {
   });
 }
 
-function extractXlsxText(content: Uint8Array) {
+function extractWorkbookRelationships(xml: string) {
+  const relationships = new Map<string, string>();
+  for (const match of xml.matchAll(/<Relationship\b([^>]*)\/>/g)) {
+    const attrs = match[1];
+    const id = /\bId="([^"]+)"/.exec(attrs)?.[1];
+    const target = /\bTarget="([^"]+)"/.exec(attrs)?.[1];
+    if (id && target) relationships.set(id, target.startsWith('/') ? target.slice(1) : `xl/${target.replace(/^\.\.\//, '')}`);
+  }
+  return relationships;
+}
+
+function extractXlsxSheets(entries: Map<string, Uint8Array>) {
+  const workbook = entries.get('xl/workbook.xml');
+  const rels = entries.get('xl/_rels/workbook.xml.rels');
+  const relationships = rels ? extractWorkbookRelationships(decodeUtf8(rels)) : new Map<string, string>();
+  if (workbook) {
+    const workbookXml = decodeUtf8(workbook);
+    const sheets = [...workbookXml.matchAll(/<sheet\b([^>]*)\/?>(?:<\/sheet>)?/g)].flatMap((match, index) => {
+      const attrs = match[1];
+      const name = xmlText(/\bname="([^"]*)"/.exec(attrs)?.[1] ?? `Sheet${index + 1}`);
+      const relId = /\br:id="([^"]+)"/.exec(attrs)?.[1];
+      const fallbackPath = `xl/worksheets/sheet${index + 1}.xml`;
+      const path = relId ? relationships.get(relId) ?? fallbackPath : fallbackPath;
+      return entries.has(path) ? [{ name, path, bytes: entries.get(path) ?? new Uint8Array() }] : [];
+    });
+    if (sheets.length > 0) return sheets;
+  }
+
+  return [...entries.entries()]
+    .filter(([name]) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([path, bytes], index) => ({ name: `Sheet${index + 1}`, path, bytes }));
+}
+
+function extractXlsxText(content: Uint8Array, options: { maxSheets: number; maxRows: number }) {
   const entries = readZipEntries(content);
   const sharedStrings = entries.has('xl/sharedStrings.xml')
     ? extractSharedStrings(decodeUtf8(entries.get('xl/sharedStrings.xml') ?? new Uint8Array()))
     : [];
+  const sheets = extractXlsxSheets(entries);
+  if (sheets.length === 0) throw new MalformedDocumentError('missing_xlsx_sheets');
+  if (sheets.length > options.maxSheets) throw new SheetLimitExceededError(sheets.length);
+
   const rows: string[] = [];
+  let rowCount = 0;
+  let truncatedRows = false;
 
-  [...entries.entries()]
-    .filter(([name]) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
-    .sort(([left], [right]) => left.localeCompare(right))
-    .forEach(([, bytes]) => {
-      const sheetXml = decodeUtf8(bytes);
-      [...sheetXml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)].forEach((rowMatch) => {
-        const cells = [...rowMatch[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)]
-          .map((cellMatch) => {
-            const attrs = cellMatch[1];
-            const body = cellMatch[2];
-            const type = /\bt="([^"]+)"/.exec(attrs)?.[1];
-            if (type === 's') {
-              const index = Number.parseInt(/<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? '', 10);
-              return Number.isFinite(index) ? sharedStrings[index] ?? '' : '';
-            }
-            if (type === 'inlineStr') {
-              return [...body.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)]
-                .map((match) => xmlText(match[1]))
-                .join('');
-            }
+  sheets.forEach((sheet) => {
+    rows.push(`[Sheet] ${sheet.name}`);
+    const sheetXml = decodeUtf8(sheet.bytes);
+    for (const rowMatch of sheetXml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+      if (rowCount >= options.maxRows) {
+        truncatedRows = true;
+        break;
+      }
+      const cells = [...rowMatch[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)]
+        .map((cellMatch) => {
+          const attrs = cellMatch[1];
+          const body = cellMatch[2];
+          const type = /\bt="([^"]+)"/.exec(attrs)?.[1];
+          if (type === 's') {
+            const index = Number.parseInt(/<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? '', 10);
+            return Number.isFinite(index) ? sharedStrings[index] ?? '' : '';
+          }
+          if (type === 'inlineStr') {
+            return [...body.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)]
+              .map((match) => xmlText(match[1]))
+              .join('');
+          }
 
-            return xmlText(/<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? '').trim();
-          })
-          .filter((value) => value.length > 0);
-        if (cells.length > 0) rows.push(cells.join('\t'));
-      });
-    });
+          return xmlText(/<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? '').trim();
+        })
+        .filter((value) => value.length > 0);
+      if (cells.length > 0) {
+        rows.push(cells.join('\t'));
+        rowCount += 1;
+      }
+    }
+  });
 
-  return rows.join('\n');
+  return { text: rows.join('\n'), sheetCount: sheets.length, rowCount, truncatedRows };
 }
 
 function unescapePdfString(value: string) {
@@ -534,8 +627,16 @@ function inflatePdfFlateStream(content: Uint8Array) {
   return inflated;
 }
 
-function extractPdfText(content: Uint8Array) {
+function countPdfPages(raw: string) {
+  const count = [...raw.matchAll(/\/Type\s*\/Page\b/g)].length;
+  return count || undefined;
+}
+
+function extractPdfText(content: Uint8Array, maxPages = PLATFORM_KNOWLEDGE_PARSE_MAX_PAGES) {
   const raw = decodeLatin1(content);
+  if (!raw.startsWith('%PDF-')) throw new MalformedDocumentError('malformed_pdf');
+  const pageCount = countPdfPages(raw);
+  if (pageCount && pageCount > maxPages) throw new PageLimitExceededError(pageCount);
   const streams = [...raw.matchAll(/<<(?:[\s\S](?!endobj))*?>>\s*stream\r?\n?([\s\S]*?)\r?\n?endstream/g)];
   const texts: string[] = [];
 
@@ -563,21 +664,115 @@ function extractPdfText(content: Uint8Array) {
     texts.push(extractPdfTextOperators(raw));
   }
 
-  return texts.join('\n');
+  return { text: texts.join('\n'), pageCount };
 }
 
-function extractTextFromFile(input: {
-  filename: string;
-  content: Uint8Array;
-}) {
-  const extension = extensionOf(input.filename);
-  if (extension === '.csv') return normalizeExtractedText(parseCsvText(input.content));
-  if (extension === '.json') return normalizeExtractedText(parseJsonText(input.content));
-  if (extension === '.pdf') return normalizeExtractedText(extractPdfText(input.content));
-  if (extension === '.docx') return normalizeExtractedText(extractDocxText(input.content));
-  if (extension === '.xlsx') return normalizeExtractedText(extractXlsxText(input.content));
+function parserTypeForExtension(extension: string): PlatformKnowledgeDocumentParserType | null {
+  if (extension === '.txt') return 'text';
+  if (extension === '.md') return 'markdown';
+  if (extension === '.csv') return 'csv';
+  if (extension === '.pdf') return 'pdf';
+  if (extension === '.docx') return 'docx';
+  if (extension === '.xlsx') return 'xlsx';
+  return null;
+}
 
-  return normalizeExtractedText(decodeUtf8(input.content));
+function failureResult(input: {
+  status?: 'failed' | 'unsupported';
+  parserType: PlatformKnowledgeDocumentParserType | null;
+  failureReasonCode: PlatformKnowledgeDocumentParseFailureReasonCode;
+  safeMessage: string;
+  pageCount?: number;
+  sheetCount?: number;
+  rowCount?: number;
+}): PlatformKnowledgeDocumentParseResult {
+  return {
+    status: input.status ?? 'failed',
+    text: '',
+    parserType: input.parserType,
+    failureReasonCode: input.failureReasonCode,
+    safeMessage: input.safeMessage,
+    pageCount: input.pageCount,
+    sheetCount: input.sheetCount,
+    rowCount: input.rowCount,
+    warningCodes: [],
+  };
+}
+
+export function parseKnowledgeDocumentFile(input: PlatformKnowledgeDocumentParseInput): PlatformKnowledgeDocumentParseResult {
+  const extension = extensionOf(input.fileName);
+  const parserType = parserTypeForExtension(extension);
+  if (!parserType || !isSupportedFile({ filename: input.fileName, mimeType: input.mimeType })) {
+    return failureResult({
+      status: 'unsupported',
+      parserType,
+      failureReasonCode: 'unsupported_file_type',
+      safeMessage: unsupportedSafeFailureMessage,
+    });
+  }
+
+  const maxChars = input.maxChars ?? PLATFORM_KNOWLEDGE_PARSE_TEXT_MAX_CHARS;
+  const maxRows = input.maxRows ?? PLATFORM_KNOWLEDGE_PARSE_MAX_ROWS;
+  const maxSheets = input.maxSheets ?? PLATFORM_KNOWLEDGE_PARSE_MAX_SHEETS;
+  const maxPages = input.maxPages ?? PLATFORM_KNOWLEDGE_PARSE_MAX_PAGES;
+  const warningCodes: PlatformKnowledgeDocumentParseWarningCode[] = [];
+
+  try {
+    let extractedText = '';
+    let pageCount: number | undefined;
+    let sheetCount: number | undefined;
+    let rowCount: number | undefined;
+
+    if (extension === '.csv') {
+      const parsed = parseCsvText(input.buffer, maxRows);
+      extractedText = parsed.text;
+      rowCount = parsed.rowCount;
+      if (parsed.truncatedRows) warningCodes.push('parse_row_limit_exceeded');
+    } else if (extension === '.pdf') {
+      const parsed = extractPdfText(input.buffer, maxPages);
+      extractedText = parsed.text;
+      pageCount = parsed.pageCount;
+    } else if (extension === '.docx') {
+      extractedText = extractDocxText(input.buffer);
+    } else if (extension === '.xlsx') {
+      const parsed = extractXlsxText(input.buffer, { maxSheets, maxRows });
+      extractedText = parsed.text;
+      sheetCount = parsed.sheetCount;
+      rowCount = parsed.rowCount;
+      if (parsed.truncatedRows) warningCodes.push('parse_row_limit_exceeded');
+    } else {
+      extractedText = decodeUtf8(input.buffer);
+    }
+
+    let text = normalizeExtractedText(extractedText);
+    if (!text) {
+      return failureResult({
+        parserType,
+        failureReasonCode: parserType === 'pdf' ? 'parse_scanned_pdf_unsupported' : 'parse_empty_text',
+        safeMessage: parserType === 'pdf' ? scannedPdfSafeFailureMessage : emptyContentSafeFailureMessage,
+        pageCount,
+        sheetCount,
+        rowCount,
+      });
+    }
+    if (text.length > maxChars) {
+      text = text.slice(0, maxChars);
+      warningCodes.push('parse_text_truncated');
+    }
+
+    return { status: 'succeeded', text, parserType, pageCount, sheetCount, rowCount, warningCodes };
+  } catch (error) {
+    if (error instanceof PageLimitExceededError) {
+      return failureResult({ parserType, failureReasonCode: 'parse_page_limit_exceeded', safeMessage: pageLimitSafeFailureMessage, pageCount: error.pageCount });
+    }
+    if (error instanceof SheetLimitExceededError) {
+      return failureResult({ parserType, failureReasonCode: 'parse_sheet_limit_exceeded', safeMessage: sheetLimitSafeFailureMessage, sheetCount: error.sheetCount });
+    }
+    if (error instanceof MalformedDocumentError) {
+      return failureResult({ parserType, failureReasonCode: 'parse_malformed_document', safeMessage: malformedSafeFailureMessage });
+    }
+    return failureResult({ parserType, failureReasonCode: 'parse_service_failed', safeMessage: parseFailedSafeFailureMessage });
+  }
 }
 
 function mapParseRecord(record: PlatformKnowledgeFileParseRecord): PlatformKnowledgeFileParseDto {
@@ -648,7 +843,7 @@ async function persistFailedParse(input: {
   const parse = await input.repository.saveKnowledgeFileParseResult({
     ...input.baseRecord,
     parseStatus: 'failed',
-    failureReasonCode: input.failureReasonCode ?? 'parse_failed',
+    failureReasonCode: input.failureReasonCode ?? 'parse_service_failed',
     safeFailureMessage: input.safeFailureMessage ?? parseFailedSafeFailureMessage,
     textContent: '',
     textLength: 0,
@@ -732,37 +927,37 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
     return persistFailedParse({
       repository: input.repository,
       baseRecord,
-      failureReasonCode: 'file_too_large',
+      failureReasonCode: 'parse_file_too_large',
       safeFailureMessage: oversizedFileSafeFailureMessage,
     });
   }
 
   try {
-    const extractedText = extractTextFromFile({
-      filename: found.file.originalFilename,
-      content: await input.storage.read({ storageKey: found.file.storageKey }),
+    const documentParse = parseKnowledgeDocumentFile({
+      fileName: found.file.originalFilename,
+      mimeType: found.file.mimeType,
+      buffer: await input.storage.read({ storageKey: found.file.storageKey }),
+      tenantId,
+      knowledgeId,
+      fileId,
     });
-    if (!extractedText) {
+    if (documentParse.status !== 'succeeded') {
       return persistFailedParse({
         repository: input.repository,
         baseRecord,
-        failureReasonCode: 'empty_content',
-        safeFailureMessage: emptyContentSafeFailureMessage,
+        failureReasonCode: documentParse.failureReasonCode,
+        safeFailureMessage: documentParse.safeMessage,
       });
     }
 
-    const isTruncated = extractedText.length > PLATFORM_KNOWLEDGE_PARSE_TEXT_MAX_CHARS;
-    const textContent = isTruncated
-      ? extractedText.slice(0, PLATFORM_KNOWLEDGE_PARSE_TEXT_MAX_CHARS)
-      : extractedText;
-    const chunks = splitTextIntoChunks({ tenantId, knowledgeId, fileId, text: textContent, now });
+    const chunks = splitTextIntoChunks({ tenantId, knowledgeId, fileId, text: documentParse.text, now });
     const parse = await input.repository.saveKnowledgeFileParseResult({
       ...baseRecord,
       parseStatus: 'succeeded',
-      failureReasonCode: isTruncated ? 'content_truncated' : null,
-      safeFailureMessage: isTruncated ? contentTruncatedSafeFailureMessage : null,
-      textContent,
-      textLength: textContent.length,
+      failureReasonCode: null,
+      safeFailureMessage: null,
+      textContent: documentParse.text,
+      textLength: documentParse.text.length,
       chunkCount: chunks.length,
     });
     await input.repository.replaceKnowledgeFileParseChunks({
@@ -772,11 +967,18 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
       chunks,
     });
 
-    return { status: 'succeeded' as const, parse: mapParseRecord(parse) };
+    return {
+      status: 'succeeded' as const,
+      parse: mapParseRecord(parse),
+      parserType: documentParse.parserType,
+      warningCodes: documentParse.warningCodes,
+    };
   } catch {
     return persistFailedParse({
       repository: input.repository,
       baseRecord,
+      failureReasonCode: 'parse_service_failed',
+      safeFailureMessage: parseFailedSafeFailureMessage,
     });
   }
 }

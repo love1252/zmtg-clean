@@ -185,8 +185,31 @@ describe('机构知识库上传解析 service', () => {
     expect(result.status).toBe('validation_failed');
   });
 
-  it('PDF 文件被拒绝', async () => {
+  it('PDF 文件允许上传并触发解析任务', async () => {
     const { repository, storage } = createMocks();
+    repository.createInstitutionKnowledgeSource.mockResolvedValue({ sourceId: 'src-pdf' });
+    repository.createInstitutionKnowledgeDocument.mockResolvedValue({ documentId: 'doc-pdf' });
+    storage.save.mockResolvedValue({ storageKey: 'k-pdf', sha256: 's-pdf', sizeBytes: 512 });
+    repository.createKnowledgeFile.mockResolvedValue({
+      fileId: 'f-pdf', tenantId: 't', knowledgeId: 'doc-pdf', originalFilename: 'report.pdf',
+      mimeType: 'application/pdf', sizeBytes: 512, status: 'active' as const, sha256: 's-pdf',
+      storageKey: 'k-pdf', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
+    });
+    repository.findKnowledgeItem.mockResolvedValue({ ...visibleKnowledgeRecord, knowledgeId: 'doc-pdf', tenantId: 't', institutionId: 'inst', visibleInstitutionIds: ['inst'] });
+    repository.findKnowledgeFile.mockResolvedValue({
+      fileId: 'f-pdf', tenantId: 't', knowledgeId: 'doc-pdf', originalFilename: 'report.pdf',
+      storageKey: 'k-pdf', mimeType: 'application/pdf', sizeBytes: 512, sha256: 's-pdf',
+      status: 'active', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
+    });
+    const parseRecord = {
+      parseId: 'p-pdf', tenantId: 't', knowledgeId: 'doc-pdf', fileId: 'f-pdf', parseStatus: 'failed',
+      failureReasonCode: 'parse_scanned_pdf_unsupported', safeFailureMessage: 'PDF 未提取到可复制文本，扫描件或图片文字暂不支持 OCR', textContent: '', textLength: 0,
+      chunkCount: 0, parserVersion: 'v1', createdAt: new Date(), updatedAt: new Date(),
+    };
+    repository.findKnowledgeFileParse.mockResolvedValue(parseRecord);
+    repository.saveKnowledgeFileParseResult.mockResolvedValue(parseRecord);
+    repository.replaceKnowledgeFileParseChunks.mockResolvedValue([]);
+    storage.read.mockResolvedValue(new Uint8Array(Buffer.from('%PDF-1.4\n/image-only scan bytes\n%%EOF')));
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({
       repository,
@@ -194,8 +217,10 @@ describe('机构知识库上传解析 service', () => {
       input: { tenantId: 't', institutionId: 'inst', uploadedByUserId: 'u', file: pdfFile() },
     });
 
-    expect(result.status).toBe('validation_failed');
-    expect(result.message).toContain('不支持');
+    expect(result.status).toBe('created');
+    expect(result.parseStatus).toBe('failed');
+    expect(result.parse?.failureReasonCode).toBe('parse_scanned_pdf_unsupported');
+    expect(repository.createKnowledgeIndexingJob).toHaveBeenCalledWith(expect.objectContaining({ jobType: 'parse_file' }));
   });
 
   it('超大文件被拒绝', async () => {
@@ -264,32 +289,8 @@ describe('机构知识库上传解析 service', () => {
     expect(result.chunkCount).toBe(1);
   });
 
-  it('JSON 文件上传解析成功且 chunks > 0', async () => {
+  it('JSON 文件不在机构上传白名单内', async () => {
     const { repository, storage } = createMocks();
-    repository.createInstitutionKnowledgeSource.mockResolvedValue({ sourceId: 'src' });
-    repository.createInstitutionKnowledgeDocument.mockResolvedValue({ documentId: 'doc' });
-    storage.save.mockResolvedValue({ storageKey: 'k', sha256: 's', sizeBytes: 100 });
-    repository.createKnowledgeFile.mockResolvedValue({
-      fileId: 'f', tenantId: 't', knowledgeId: 'doc', originalFilename: 'data.json',
-      mimeType: 'application/json', sizeBytes: 100, status: 'active' as const, sha256: 's',
-      storageKey: 'k', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
-    });
-    repository.findKnowledgeItem.mockResolvedValue({ ...visibleKnowledgeRecord, title: 'data.json' });
-    repository.findKnowledgeFile.mockResolvedValue({
-      fileId: 'f', tenantId: 't', knowledgeId: 'doc', originalFilename: 'data.json',
-      storageKey: 'k', mimeType: 'application/json', sizeBytes: 100, sha256: 's',
-      status: 'active', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
-    });
-    const parseRecord = {
-      parseId: 'p', tenantId: 't', knowledgeId: 'doc', fileId: 'f', parseStatus: 'succeeded',
-      failureReasonCode: null, safeFailureMessage: null, textContent: '{"a":1}', textLength: 7,
-      chunkCount: 1, parserVersion: 'v1', createdAt: new Date(), updatedAt: new Date(),
-    };
-    repository.findKnowledgeFileParse.mockResolvedValue(parseRecord);
-    repository.saveKnowledgeFileParseResult.mockResolvedValue(parseRecord);
-    repository.replaceKnowledgeFileParseChunks.mockResolvedValue([]);
-    storage.read.mockResolvedValue(new Uint8Array(Buffer.from('{"key":"value","items":[1,2,3]}')));
-
     const jsonFile = { name: 'data.json', type: 'application/json', size: 100, arrayBuffer: async () => new Uint8Array(Buffer.from('{"key":"value"}')).buffer as ArrayBuffer };
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({
@@ -297,8 +298,9 @@ describe('机构知识库上传解析 service', () => {
       input: { tenantId: 't', institutionId: 'i', uploadedByUserId: 'u', file: jsonFile },
     });
 
-    // JSON is on the allowlist, so upload should proceed, then parse with real chunks
-    expect(result.status).toBe('created');
-    expect(result.chunkCount).toBeGreaterThan(0);
+    expect(result.status).toBe('validation_failed');
+    expect(result.message).toBe('文件类型暂不支持，当前支持 TXT、MD、PDF、DOCX、XLSX、CSV 格式');
+    expect(repository.createInstitutionKnowledgeSource).not.toHaveBeenCalled();
+    expect(storage.save).not.toHaveBeenCalled();
   });
 });

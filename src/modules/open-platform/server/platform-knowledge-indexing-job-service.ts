@@ -102,7 +102,9 @@ type KnowledgeVisibilityRepository = {
 type ParseJobRepository = KnowledgeIndexingJobRepository & PlatformKnowledgeDocumentParsingRepository;
 type EmbeddingJobRepository = KnowledgeIndexingJobRepository &
   KnowledgeVisibilityRepository &
-  Parameters<typeof generatePlatformKnowledgeChunkEmbeddingsService>[0]['repository'];
+  Parameters<typeof generatePlatformKnowledgeChunkEmbeddingsService>[0]['repository'] & {
+    listKnowledgeFiles?: (input: { tenantId: string; knowledgeId: string }) => Promise<Array<{ fileId: string; status: string }>>;
+  };
 
 type CreateJobInput = {
   repository: KnowledgeIndexingJobRepository;
@@ -174,6 +176,13 @@ function sanitizeMetadata(value: JsonRecord | null | undefined): JsonRecord {
   }
   const mode = typeof value.mode === 'string' ? value.mode : null;
   if (mode && ['create', 'rebuild', 'parse', 'generate'].includes(mode)) safe.mode = mode;
+  const parserType = typeof value.parserType === 'string' ? value.parserType : null;
+  if (parserType && ['text', 'markdown', 'csv', 'pdf', 'docx', 'xlsx'].includes(parserType)) safe.parserType = parserType;
+  if (Array.isArray(value.warningCodes)) {
+    safe.warningCodes = value.warningCodes.filter((code) =>
+      typeof code === 'string' && ['parse_text_truncated', 'parse_row_limit_exceeded'].includes(code),
+    );
+  }
   return safe;
 }
 
@@ -423,7 +432,11 @@ function outcomeFromParseResult(input: {
       failedCount: 0,
       failureReasonCode: input.result.parse.failureReasonCode,
       safeMessage: input.result.parse.safeFailureMessage ?? '文件解析任务已完成',
-      metadataJson: baseMetadata({ ...input, mode: 'parse', counts: { total: 1, processed: 1, failed: 0 } }),
+      metadataJson: sanitizeMetadata({
+        ...baseMetadata({ ...input, mode: 'parse', counts: { total: 1, processed: 1, failed: 0 } }),
+        parserType: 'parserType' in input.result ? input.result.parserType : undefined,
+        warningCodes: 'warningCodes' in input.result ? input.result.warningCodes : [],
+      }),
     };
   }
   const parse = 'parse' in input.result ? input.result.parse : null;
@@ -557,6 +570,7 @@ export async function createAndRunRebuildEmbeddingsJob(input: {
 
 export async function createAndRunRebuildKnowledgeIndexJob(input: {
   repository: EmbeddingJobRepository;
+  storage: Pick<PlatformKnowledgeFileStorage, 'read'>;
   input: { tenantId?: string | null; institutionId?: string | null; actorUserId?: string | null; knowledgeId?: string | null };
   provider?: PlatformKnowledgeEmbeddingProvider;
 }) {
@@ -567,6 +581,7 @@ async function createAndRunEmbeddingJob(input: {
   repository: EmbeddingJobRepository;
   input: { tenantId?: string | null; institutionId?: string | null; actorUserId?: string | null; knowledgeId?: string | null; fileId?: string | null };
   provider?: PlatformKnowledgeEmbeddingProvider;
+  storage?: Pick<PlatformKnowledgeFileStorage, 'read'>;
   jobType: 'generate_embeddings' | 'rebuild_embeddings' | 'rebuild_knowledge_index';
   rebuild: boolean;
 }) {
@@ -589,23 +604,54 @@ async function createAndRunEmbeddingJob(input: {
     fileId,
     jobType: input.jobType,
     metadataJson: baseMetadata({ tenantId, institutionId, knowledgeId, fileId, mode }),
-    runner: async () => outcomeFromEmbeddingResult({
-      tenantId,
-      institutionId,
-      knowledgeId,
-      fileId,
-      mode,
-      result: await generatePlatformKnowledgeChunkEmbeddingsService({
-        repository: input.repository,
-        provider: input.provider,
-        params: {
-          tenantId,
-          institutionId,
-          knowledgeId,
-          fileId,
-          rebuild: input.rebuild,
-        },
-      }),
-    }),
+    runner: async () => {
+      if (input.jobType === 'rebuild_knowledge_index') {
+        if (!input.storage || !input.repository.listKnowledgeFiles) throw new Error('missing parse storage');
+        const parseRepository = input.repository as unknown as PlatformKnowledgeDocumentParsingRepository;
+        const files = (await input.repository.listKnowledgeFiles({ tenantId, knowledgeId }))
+          .filter((file) => file.status === 'active');
+        let parsed = 0;
+        let failed = 0;
+        for (const file of files) {
+          const parseResult = await parsePlatformKnowledgeDocumentFileService({
+            repository: parseRepository,
+            storage: input.storage,
+            input: { tenantId, knowledgeId, fileId: file.fileId },
+          });
+          if (parseResult.status === 'succeeded') parsed += 1;
+          else failed += 1;
+        }
+        if (failed > 0) {
+          return {
+            status: 'failed',
+            totalCount: files.length,
+            processedCount: parsed,
+            failedCount: failed,
+            failureReasonCode: 'parse_service_failed',
+            safeMessage: '知识库重建解析存在失败文件，请查看文件解析状态',
+            metadataJson: baseMetadata({ tenantId, institutionId, knowledgeId, fileId, mode, counts: { total: files.length, processed: parsed, failed } }),
+          } satisfies JobRunOutcome;
+        }
+      }
+
+      return outcomeFromEmbeddingResult({
+        tenantId,
+        institutionId,
+        knowledgeId,
+        fileId,
+        mode,
+        result: await generatePlatformKnowledgeChunkEmbeddingsService({
+          repository: input.repository,
+          provider: input.provider,
+          params: {
+            tenantId,
+            institutionId,
+            knowledgeId,
+            fileId,
+            rebuild: input.rebuild,
+          },
+        }),
+      });
+    },
   });
 }

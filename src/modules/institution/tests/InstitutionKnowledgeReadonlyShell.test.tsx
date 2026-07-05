@@ -590,7 +590,7 @@ describe('机构端知识库只读列表 UI', () => {
     const searchSection = screen.getByLabelText('机构端知识片段检索');
     expect(searchSection.textContent).toContain('支持 keyword / vector / hybrid');
     expect(searchSection.textContent).toContain('deterministic rerank');
-    expect(searchSection.textContent).toContain('不做 OCR、复杂文档解析或生产级训练队列');
+    expect(searchSection.textContent).toContain('不做 OCR、扫描件识别或生产级训练队列');
   });
 
   it('检索为空时不展示敏感字段', async () => {

@@ -107,8 +107,8 @@ const directorySeeds: Array<{
 ];
 
 const unsupportedDocumentExamples = [
-  '复杂 PDF / Word / Excel 深度解析仍为后续接入',
-  'OCR、扫描件识别、复杂表格抽取未接入',
+  '支持 TXT / MD / PDF / DOCX / XLSX / CSV 解析，PDF 仅支持可复制文本',
+  'OCR、扫描件识别、图片内文字和 Excel 公式执行未接入',
 ];
 
 const controlledActions: ControlledAction[] = [
@@ -175,12 +175,12 @@ function getDirectoryId(item: InstitutionKnowledgeItemDto): DirectoryId {
 function isAllowedUploadFile(file: File | null) {
   if (!file) return false;
   const name = file.name.toLowerCase();
-  return name.endsWith('.txt') || name.endsWith('.md');
+  return ['.txt', '.md', '.pdf', '.docx', '.xlsx', '.csv'].some((extension) => name.endsWith(extension));
 }
 
 function isReparseEnabled(file: InstitutionKnowledgeFileRecord) {
   const name = (file.originalFilename ?? '').toLowerCase();
-  return file.status === 'active' && (name.endsWith('.txt') || name.endsWith('.md'));
+  return file.status === 'active' && ['.txt', '.md', '.pdf', '.docx', '.xlsx', '.csv'].some((extension) => name.endsWith(extension));
 }
 
 function highlightKeyword(text: string, keyword: string) {
@@ -250,7 +250,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
   const [reparseMessageByFileId, setReparseMessageByFileId] = useState<Record<string, string>>({});
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
-  const [uploadMessage, setUploadMessage] = useState('支持上传 .txt / .md，上传后使用现有机构端 API 自动保存并简单解析。');
+  const [uploadMessage, setUploadMessage] = useState('支持上传 .txt / .md / .pdf / .docx / .xlsx / .csv，上传后使用现有机构端 API 自动保存并解析。');
   const [searchInput, setSearchInput] = useState('');
   const [searchTopK, setSearchTopK] = useState(5);
   const [activeSearchKeyword, setActiveSearchKeyword] = useState('');
@@ -313,7 +313,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
     setKnowledgeMessage(
       result.records.length > 0
         ? `已读取 ${result.pageInfo.total} 条机构可见知识，统计基于现有 API 返回。`
-        : '当前机构暂无可见知识库数据，请上传 txt / md 后查看。',
+        : '当前机构暂无可见知识库数据，请上传 TXT / MD / PDF / DOCX / XLSX / CSV 后查看。',
     );
     await loadKnowledgeFiles(result.records);
   }, [loadKnowledgeFiles]);
@@ -338,7 +338,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
       setKnowledgeMessage(
         result.records.length > 0
           ? `已读取 ${result.pageInfo.total} 条机构可见知识，统计基于现有 API 返回。`
-          : '当前机构暂无可见知识库数据，请上传 txt / md 后查看。',
+          : '当前机构暂无可见知识库数据，请上传 TXT / MD / PDF / DOCX / XLSX / CSV 后查看。',
       );
       await loadKnowledgeFiles(result.records);
     }
@@ -391,13 +391,13 @@ export function InstitutionKnowledgeBaseCardPanel() {
     setUploadFile(file);
     setUploadStatus('idle');
     if (!file) {
-      setUploadMessage('支持上传 .txt / .md，上传后使用现有机构端 API 自动保存并简单解析。');
+      setUploadMessage('支持上传 .txt / .md / .pdf / .docx / .xlsx / .csv，上传后使用现有机构端 API 自动保存并解析。');
       return;
     }
     setUploadMessage(
       isAllowedUploadFile(file)
-        ? `已选择 ${file.name}，可上传并触发现有简单解析。`
-        : '当前最小闭环仅开放 txt / md；复杂 PDF / Word / Excel 深度解析仍为后续接入。',
+        ? `已选择 ${file.name}，可上传并触发文档解析。`
+        : '当前支持 TXT / MD / PDF / DOCX / XLSX / CSV；PDF 仅支持可复制文本，扫描件和图片文字暂不支持 OCR。',
     );
   }
 
@@ -405,17 +405,17 @@ export function InstitutionKnowledgeBaseCardPanel() {
     event.preventDefault();
     if (!uploadFile) {
       setUploadStatus('error');
-      setUploadMessage('请先选择 txt / md 文件。');
+      setUploadMessage('请先选择 TXT / MD / PDF / DOCX / XLSX / CSV 文件。');
       return;
     }
     if (!isAllowedUploadFile(uploadFile)) {
       setUploadStatus('error');
-      setUploadMessage('当前最小闭环仅开放 txt / md；复杂 PDF / Word / Excel 深度解析仍为后续接入。');
+      setUploadMessage('当前支持 TXT / MD / PDF / DOCX / XLSX / CSV；PDF 仅支持可复制文本，扫描件和图片文字暂不支持 OCR。');
       return;
     }
 
     setUploadStatus('uploading');
-    setUploadMessage('正在上传并触发现有简单解析...');
+    setUploadMessage('正在上传并触发文档解析...');
     try {
       const formData = new FormData();
       formData.append('file', uploadFile);
@@ -432,7 +432,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
 
       setUploadStatus('success');
       const chunkCount = typeof payload?.chunkCount === 'number' ? payload.chunkCount : 0;
-      setUploadMessage(`上传成功，已触发现有简单解析，生成 ${chunkCount} 个片段。`);
+      setUploadMessage(`上传成功，已触发文档解析，生成 ${chunkCount} 个片段。`);
       setUploadFile(null);
       await loadKnowledgeItems();
     } catch {
@@ -706,10 +706,10 @@ export function InstitutionKnowledgeBaseCardPanel() {
           <p className="text-sm font-semibold text-cyan-700">机构端知识库最小闭环</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">机构知识库</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            用于维护机构内部话术、项目说明、服务流程和培训知识。当前接入现有机构端知识库列表、txt / md 上传和关键词检索测试。
+            用于维护机构内部话术、项目说明、服务流程和培训知识。当前接入现有机构端知识库列表、TXT / MD / PDF / DOCX / XLSX / CSV 上传解析和关键词检索测试。
           </p>
           <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-500">
-            本轮接入受控 real provider runtime、quota / entitlement 前置校验、usage metering 和低敏 audit；仍不是向量检索，不做 embedding / rerank / OCR / training / queue。
+            本轮接入受控 real provider runtime、quota / entitlement 前置校验、usage metering 和低敏 audit；当前已支持解析片段、embedding 与 hybrid retrieval，不展示模型名、Token、成本、厂商，不做 OCR / training / queue。
           </p>
         </div>
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
@@ -1012,7 +1012,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
             <div className="mt-4 grid gap-3 lg:grid-cols-3">
               {visibleFiles.length === 0 ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600 lg:col-span-3">
-                  当前范围暂无真实文件记录。上传 txt / md 成功后会显示在这里。
+                  当前范围暂无真实文件记录。上传 TXT / MD / PDF / DOCX / XLSX / CSV 成功后会显示在这里。
                 </div>
               ) : (
                 visibleFiles.map((document) => (
@@ -1063,7 +1063,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
                         type="button"
                         onClick={() => void reparseFile(document)}
                         disabled={reparseStatusByFileId[document.fileId] === 'loading' || !isReparseEnabled(document)}
-                        title={isReparseEnabled(document) ? '重新解析 txt / md 文件' : '当前仅支持 .txt / .md 文件重新解析'}
+                        title={isReparseEnabled(document) ? '重新解析支持格式文件' : '当前支持 .txt / .md / .pdf / .docx / .xlsx / .csv 文件重新解析'}
                         className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <RefreshCw className={cn('h-3.5 w-3.5', reparseStatusByFileId[document.fileId] === 'loading' ? 'animate-spin' : '')} />
@@ -1166,7 +1166,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
                 <p className="text-xs font-semibold text-cyan-700">受控问答闭环</p>
                 <h2 className="mt-1 text-lg font-semibold tracking-normal text-slate-950">知识库问答</h2>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
-                  当前基于机构知识库内容回答；当前为受控问答闭环；先使用关键词 / chunk 召回，当前仍不是向量检索，不宣称已接向量数据库、训练、embedding 或 rerank；不展示模型名、Token、成本、厂商。
+                  当前基于机构知识库内容回答；当前为受控问答闭环；使用 hybrid retrieval 召回已解析 chunk，不展示模型名、Token、成本、厂商。
                 </p>
                 <p className="mt-1 text-xs font-semibold leading-5 text-amber-700">
                   仅供内部运营参考，需人工确认。医美术后、复诊和风险类内容需由专业人员复核。
@@ -1334,7 +1334,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
             <div className="mt-4 grid gap-3">
               {allFiles.length === 0 ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-                  暂无解析任务记录。上传 txt / md 后会显示解析状态。
+                  暂无解析任务记录。上传 TXT / MD / PDF / DOCX / XLSX / CSV 后会显示解析状态。
                 </div>
               ) : (
                 allFiles.map((file) => (
@@ -1378,7 +1378,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
             </article>
             <article className="rounded-2xl border border-cyan-200 bg-cyan-50 p-3">
               <h3 className="text-sm font-semibold text-cyan-800">待补充资料</h3>
-              <p className="mt-1 text-xs leading-5 text-cyan-700">如检索为空，请先补充 txt / md 资料并确认解析成功。</p>
+              <p className="mt-1 text-xs leading-5 text-cyan-700">如检索为空，请先补充 TXT / MD / PDF / DOCX / XLSX / CSV 资料并确认解析成功。</p>
             </article>
             <article className="rounded-2xl border border-rose-200 bg-rose-50 p-3">
               <h3 className="text-sm font-semibold text-rose-800">解析失败文件</h3>
@@ -1386,12 +1386,12 @@ export function InstitutionKnowledgeBaseCardPanel() {
             </article>
             <article className="rounded-2xl border border-violet-200 bg-violet-50 p-3">
               <h3 className="text-sm font-semibold text-violet-800">待训练内容</h3>
-              <p className="mt-1 text-xs leading-5 text-violet-700">机构端知识库问答接入受控 real provider 治理闭环；当前仍不是向量检索，训练、embedding、rerank、OCR 和 queue 仍未接入。</p>
+              <p className="mt-1 text-xs leading-5 text-violet-700">机构端知识库问答接入受控 real provider 治理闭环；当前已接入 embedding 与 hybrid retrieval，不展示向量数组或内部配置；OCR、training 和 queue 仍未接入。</p>
             </article>
             <article className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <h3 className="text-sm font-semibold text-slate-800">建议动作</h3>
               <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-slate-600">
-                <li>优先上传 txt / md 并确认解析状态。</li>
+                <li>优先上传 TXT / MD / PDF / DOCX / XLSX / CSV 并确认解析状态。</li>
                 <li>使用关键词检索验证片段是否可命中。</li>
                 <li>后续再补审计、重新解析、删除和训练专项。</li>
               </ul>
