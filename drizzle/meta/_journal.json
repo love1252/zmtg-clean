@@ -204,6 +204,13 @@
       "when": 1783299600000,
       "tag": "0028_v06_kb_indexing_job_pipeline",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1783303200000,
+      "tag": "0029_v06_kb_ocr_file_job_type",
+      "breakpoints": true
     }
   ]
 }

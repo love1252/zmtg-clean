@@ -189,7 +189,7 @@ describe('机构知识库上传 API route', () => {
         fileId: 'f1', tenantId: 'demo-tenant-001', knowledgeId: 'k1',
         originalFilename: 'test.txt', mimeType: 'text/plain', sizeBytes: 100,
         status: 'active', fileType: 'TXT', sizeLabel: '1 KB',
-        parseStatus: 'succeeded', failureReasonCode: null, safeFailureMessage: null,
+        parseStatus: 'succeeded', ocrStatus: 'pending', failureReasonCode: null, safeFailureMessage: null,
         textLength: 12, chunkCount: 1, parserVersion: 'v1',
         uploadedByUserId: 'demo-user-admin', createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(), archivedAt: null,
@@ -204,5 +204,47 @@ describe('机构知识库上传 API route', () => {
     expect(response.status).toBe(201);
     expect(body.status).toBe('created');
     expect(body.chunkCount).toBe(1);
+  });
+
+  it('OCR-ready 上传响应不泄露原图路径、全文或 provider 字段', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
+    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
+      allowed: true,
+      current: 5,
+      limit: 20,
+      resource: 'knowledge_files',
+    });
+    vi.mocked(uploadAndParseInstitutionKnowledgeFileService).mockResolvedValueOnce({
+      status: 'created',
+      knowledgeId: 'k-image',
+      sourceId: 's-image',
+      file: {
+        fileId: 'f-image', tenantId: 'demo-tenant-001', knowledgeId: 'k-image',
+        originalFilename: 'scan.png', mimeType: 'image/png', sizeBytes: 100,
+        status: 'active', fileType: 'PNG', sizeLabel: '1 KB',
+        parseStatus: 'failed', ocrStatus: 'ocr_required', failureReasonCode: 'ocr_required',
+        safeFailureMessage: '该文件需要 OCR 识别；当前为 OCR-ready 最小闭环，尚未接入生产 OCR 服务',
+        textLength: 0, chunkCount: 0, parserVersion: 'local-real-file-parser-v2',
+        uploadedByUserId: 'demo-user-admin', createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(), archivedAt: null,
+      },
+      parse: {
+        parseId: 'p-image', tenantId: 'demo-tenant-001', knowledgeId: 'k-image', fileId: 'f-image',
+        parseStatus: 'failed', failureReasonCode: 'ocr_required',
+        safeFailureMessage: '该文件需要 OCR 识别；当前为 OCR-ready 最小闭环，尚未接入生产 OCR 服务',
+        textLength: 0, chunkCount: 0, parserVersion: 'local-real-file-parser-v2',
+        createdAt: new Date(), updatedAt: new Date(),
+      },
+      parseStatus: 'failed',
+      chunkCount: 0,
+    });
+
+    const response = await knowledgeUploadPost(createRequestWithMockFile());
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    expect(response.status).toBe(201);
+    expect(body.file.ocrStatus).toBe('ocr_required');
+    expect(serialized).not.toMatch(/storageKey|signedUrl|bucket|raw image|full OCR|textContent|ocrProviderType|provider|model|token|cost|vendor|secret|baseUrl/i);
   });
 });

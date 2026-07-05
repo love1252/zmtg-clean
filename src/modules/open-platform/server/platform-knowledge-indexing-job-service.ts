@@ -8,6 +8,7 @@ import {
   parsePlatformKnowledgeDocumentFileService,
   type PlatformKnowledgeDocumentParsingRepository,
 } from '@/modules/open-platform/server/platform-knowledge-document-parsing-service';
+import type { PlatformKnowledgeOcrProvider } from '@/modules/open-platform/server/platform-knowledge-ocr-provider';
 import type { PlatformKnowledgeFileStorage } from '@/modules/open-platform/server/platform-knowledge-file-management-service';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 
@@ -15,6 +16,7 @@ type JsonRecord = Record<string, unknown>;
 
 export type KnowledgeIndexingJobType =
   | 'parse_file'
+  | 'ocr_file'
   | 'generate_embeddings'
   | 'rebuild_embeddings'
   | 'rebuild_knowledge_index';
@@ -175,12 +177,20 @@ function sanitizeMetadata(value: JsonRecord | null | undefined): JsonRecord {
     };
   }
   const mode = typeof value.mode === 'string' ? value.mode : null;
-  if (mode && ['create', 'rebuild', 'parse', 'generate'].includes(mode)) safe.mode = mode;
+  if (mode && ['create', 'rebuild', 'parse', 'generate', 'ocr'].includes(mode)) safe.mode = mode;
   const parserType = typeof value.parserType === 'string' ? value.parserType : null;
-  if (parserType && ['text', 'markdown', 'csv', 'pdf', 'docx', 'xlsx'].includes(parserType)) safe.parserType = parserType;
+  if (parserType && ['text', 'markdown', 'csv', 'pdf', 'docx', 'xlsx', 'image'].includes(parserType)) safe.parserType = parserType;
+  const ocrStatus = typeof value.ocrStatus === 'string' ? value.ocrStatus : null;
+  if (ocrStatus && ['succeeded', 'failed', 'unsupported', 'ocr_required'].includes(ocrStatus)) safe.ocrStatus = ocrStatus;
   if (Array.isArray(value.warningCodes)) {
     safe.warningCodes = value.warningCodes.filter((code) =>
-      typeof code === 'string' && ['parse_text_truncated', 'parse_row_limit_exceeded'].includes(code),
+      typeof code === 'string' && [
+        'parse_text_truncated',
+        'parse_row_limit_exceeded',
+        'ocr_text_truncated',
+        'ocr_low_confidence',
+        'ocr_dry_run_result',
+      ].includes(code),
     );
   }
   return safe;
@@ -191,7 +201,7 @@ function baseMetadata(input: {
   institutionId: string | null;
   knowledgeId: string | null;
   fileId: string | null;
-  mode: 'create' | 'rebuild' | 'parse' | 'generate';
+  mode: 'create' | 'rebuild' | 'parse' | 'generate' | 'ocr';
   counts?: { total?: number; processed?: number; failed?: number; skipped?: number };
 }) {
   return sanitizeMetadata({
@@ -316,7 +326,7 @@ export async function runKnowledgeIndexingJob(input: RunJobInput) {
           institutionId: running.institutionId,
           knowledgeId: running.knowledgeId,
           fileId: running.fileId,
-          mode: running.jobType === 'parse_file' ? 'parse' : 'generate',
+          mode: running.jobType === 'parse_file' || running.jobType === 'ocr_file' ? 'parse' : 'generate',
           counts: { total: running.totalCount || 1, processed: running.processedCount, failed: 1 },
         }),
         finishedAt,
@@ -436,6 +446,7 @@ function outcomeFromParseResult(input: {
         ...baseMetadata({ ...input, mode: 'parse', counts: { total: 1, processed: 1, failed: 0 } }),
         parserType: 'parserType' in input.result ? input.result.parserType : undefined,
         warningCodes: 'warningCodes' in input.result ? input.result.warningCodes : [],
+        ocrStatus: 'ocrStatus' in input.result ? input.result.ocrStatus : undefined,
       }),
     };
   }
@@ -521,6 +532,26 @@ export async function createAndRunParseFileJob(input: {
   storage: Pick<PlatformKnowledgeFileStorage, 'read'>;
   input: { tenantId?: string | null; institutionId?: string | null; actorUserId?: string | null; knowledgeId?: string | null; fileId?: string | null };
 }) {
+  return createAndRunParseLikeJob({ ...input, jobType: 'parse_file', mode: 'parse' });
+}
+
+export async function createAndRunOcrFileJob(input: {
+  repository: ParseJobRepository;
+  storage: Pick<PlatformKnowledgeFileStorage, 'read'>;
+  ocrProvider?: PlatformKnowledgeOcrProvider;
+  input: { tenantId?: string | null; institutionId?: string | null; actorUserId?: string | null; knowledgeId?: string | null; fileId?: string | null };
+}) {
+  return createAndRunParseLikeJob({ ...input, jobType: 'ocr_file', mode: 'ocr' });
+}
+
+async function createAndRunParseLikeJob(input: {
+  repository: ParseJobRepository;
+  storage: Pick<PlatformKnowledgeFileStorage, 'read'>;
+  ocrProvider?: PlatformKnowledgeOcrProvider;
+  input: { tenantId?: string | null; institutionId?: string | null; actorUserId?: string | null; knowledgeId?: string | null; fileId?: string | null };
+  jobType: 'parse_file' | 'ocr_file';
+  mode: 'parse' | 'ocr';
+}) {
   const tenantId = normalizeString(input.input.tenantId);
   const institutionId = normalizeString(input.input.institutionId);
   const knowledgeId = normalizeString(input.input.knowledgeId);
@@ -536,8 +567,8 @@ export async function createAndRunParseFileJob(input: {
     actorUserId: normalizeString(input.input.actorUserId),
     knowledgeId,
     fileId,
-    jobType: 'parse_file',
-    metadataJson: baseMetadata({ tenantId, institutionId, knowledgeId, fileId, mode: 'parse' }),
+    jobType: input.jobType,
+    metadataJson: baseMetadata({ tenantId, institutionId, knowledgeId, fileId, mode: input.mode }),
     runner: async () => outcomeFromParseResult({
       tenantId,
       institutionId,
@@ -546,6 +577,7 @@ export async function createAndRunParseFileJob(input: {
       result: await parsePlatformKnowledgeDocumentFileService({
         repository: input.repository,
         storage: input.storage,
+        ocrProvider: input.ocrProvider,
         input: { tenantId, knowledgeId, fileId },
       }),
     }),
@@ -573,6 +605,7 @@ export async function createAndRunRebuildKnowledgeIndexJob(input: {
   storage: Pick<PlatformKnowledgeFileStorage, 'read'>;
   input: { tenantId?: string | null; institutionId?: string | null; actorUserId?: string | null; knowledgeId?: string | null };
   provider?: PlatformKnowledgeEmbeddingProvider;
+  ocrProvider?: PlatformKnowledgeOcrProvider;
 }) {
   return createAndRunEmbeddingJob({ ...input, jobType: 'rebuild_knowledge_index', rebuild: true });
 }
@@ -581,6 +614,7 @@ async function createAndRunEmbeddingJob(input: {
   repository: EmbeddingJobRepository;
   input: { tenantId?: string | null; institutionId?: string | null; actorUserId?: string | null; knowledgeId?: string | null; fileId?: string | null };
   provider?: PlatformKnowledgeEmbeddingProvider;
+  ocrProvider?: PlatformKnowledgeOcrProvider;
   storage?: Pick<PlatformKnowledgeFileStorage, 'read'>;
   jobType: 'generate_embeddings' | 'rebuild_embeddings' | 'rebuild_knowledge_index';
   rebuild: boolean;
@@ -616,6 +650,7 @@ async function createAndRunEmbeddingJob(input: {
           const parseResult = await parsePlatformKnowledgeDocumentFileService({
             repository: parseRepository,
             storage: input.storage,
+            ocrProvider: input.ocrProvider,
             input: { tenantId, knowledgeId, fileId: file.fileId },
           });
           if (parseResult.status === 'succeeded') parsed += 1;

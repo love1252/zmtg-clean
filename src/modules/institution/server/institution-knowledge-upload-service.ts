@@ -68,6 +68,9 @@ const institutionAllowedFiles = new Map<string, readonly string[]>([
   ['.docx', ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']],
   ['.xlsx', ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']],
   ['.csv', ['text/csv', 'application/csv', 'application/vnd.ms-excel']],
+  ['.png', ['image/png']],
+  ['.jpg', ['image/jpeg']],
+  ['.jpeg', ['image/jpeg']],
 ]);
 
 function normalizeRequired(value: string | null | undefined) {
@@ -94,6 +97,13 @@ function isAllowedFileType(input: { filename: string; mimeType: string }) {
   if (!allowedMimeTypes) return false;
   const normalizedMime = input.mimeType.trim().toLowerCase();
   return !normalizedMime || allowedMimeTypes.includes(normalizedMime);
+}
+
+function ocrStatusFromFailureReason(value: string | null | undefined): PlatformKnowledgeFileDto['ocrStatus'] {
+  if (!value?.startsWith('ocr_')) return 'pending';
+  if (value === 'ocr_required') return 'ocr_required';
+  if (value === 'ocr_unsupported_file_type') return 'unsupported';
+  return 'failed';
 }
 
 function toParseDto(record: PlatformKnowledgeFileParseRecord): PlatformKnowledgeFileParseDto {
@@ -138,7 +148,7 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
   if (!ext || !institutionAllowedFiles.has(ext)) {
     return {
       status: 'validation_failed',
-      message: '文件类型暂不支持，当前支持 TXT、MD、PDF、DOCX、XLSX、CSV 格式',
+      message: '文件类型暂不支持，当前支持 TXT、MD、PDF、DOCX、XLSX、CSV、PNG、JPG 格式',
     };
   }
 
@@ -146,7 +156,7 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
   if (!isAllowedFileType({ filename: originalFilename, mimeType })) {
     return {
       status: 'validation_failed',
-      message: '文件类型暂不支持，当前支持 TXT、MD、PDF、DOCX、XLSX、CSV 格式',
+      message: '文件类型暂不支持，当前支持 TXT、MD、PDF、DOCX、XLSX、CSV、PNG、JPG 格式',
     };
   }
 
@@ -224,6 +234,7 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
           ? `${(saved.sizeBytes / 1024 / 1024).toFixed(1)} MB`
           : `${Math.ceil(saved.sizeBytes / 1024)} KB`,
       parseStatus: 'pending' as PlatformKnowledgeFileParseStatus,
+      ocrStatus: 'pending',
       failureReasonCode: null,
       safeFailureMessage: null,
       textLength: 0,
@@ -262,6 +273,7 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
       file: {
         ...fileRecord,
         parseStatus: 'succeeded',
+        ocrStatus: ocrStatusFromFailureReason(parse.failureReasonCode),
         failureReasonCode: parse.failureReasonCode,
         safeFailureMessage: parse.safeFailureMessage,
         textLength: parse.textLength,
@@ -282,6 +294,7 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
       file: {
         ...fileRecord,
         parseStatus: 'failed',
+        ocrStatus: ocrStatusFromFailureReason(parse.failureReasonCode),
         failureReasonCode: parse.failureReasonCode,
         safeFailureMessage: parse.safeFailureMessage,
       },
@@ -295,7 +308,11 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
     status: 'created',
     knowledgeId,
     sourceId,
-    file: { ...fileRecord, parseStatus: parse?.parseStatus ?? 'pending' },
+    file: {
+      ...fileRecord,
+      parseStatus: parse?.parseStatus ?? 'pending',
+      ocrStatus: ocrStatusFromFailureReason(parse?.failureReasonCode),
+    },
     parse,
     parseStatus: parse?.parseStatus ?? 'pending',
     chunkCount: parse?.chunkCount ?? 0,

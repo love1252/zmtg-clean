@@ -207,6 +207,7 @@ export const knowledgeBaseRuntimeReadonlyStatusEnum = pgEnum(
 );
 export const knowledgeIndexingJobTypeEnum = pgEnum('knowledge_indexing_job_type', [
   'parse_file',
+  'ocr_file',
   'generate_embeddings',
   'rebuild_embeddings',
   'rebuild_knowledge_index',

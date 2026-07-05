@@ -26,6 +26,13 @@ const pdfFile = (name = 'report.pdf') => ({
   arrayBuffer: async () => new Uint8Array(512).buffer as ArrayBuffer,
 });
 
+const imageFile = (name: string, type: string) => ({
+  name,
+  type,
+  size: 1024,
+  arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer as ArrayBuffer,
+});
+
 const visibleKnowledgeRecord = {
   knowledgeId: 'doc',
   tenantId: 't',
@@ -203,7 +210,7 @@ describe('机构知识库上传解析 service', () => {
     });
     const parseRecord = {
       parseId: 'p-pdf', tenantId: 't', knowledgeId: 'doc-pdf', fileId: 'f-pdf', parseStatus: 'failed',
-      failureReasonCode: 'parse_scanned_pdf_unsupported', safeFailureMessage: 'PDF 未提取到可复制文本，扫描件或图片文字暂不支持 OCR', textContent: '', textLength: 0,
+      failureReasonCode: 'ocr_required', safeFailureMessage: '该文件需要 OCR 识别；当前为 OCR-ready 最小闭环，尚未接入生产 OCR 服务', textContent: '', textLength: 0,
       chunkCount: 0, parserVersion: 'v1', createdAt: new Date(), updatedAt: new Date(),
     };
     repository.findKnowledgeFileParse.mockResolvedValue(parseRecord);
@@ -219,8 +226,60 @@ describe('机构知识库上传解析 service', () => {
 
     expect(result.status).toBe('created');
     expect(result.parseStatus).toBe('failed');
-    expect(result.parse?.failureReasonCode).toBe('parse_scanned_pdf_unsupported');
+    expect(result.parse?.failureReasonCode).toBe('ocr_required');
+    expect(result.file?.ocrStatus).toBe('ocr_required');
     expect(repository.createKnowledgeIndexingJob).toHaveBeenCalledWith(expect.objectContaining({ jobType: 'parse_file' }));
+  });
+
+  it.each([
+    ['照片.png', 'image/png', 'PNG'],
+    ['照片.jpg', 'image/jpeg', 'JPG'],
+    ['照片.jpeg', 'image/jpeg', 'JPEG'],
+  ])('PNG/JPG 图片允许上传并进入 OCR-ready 低敏失败态：%s', async (name, mimeType, fileType) => {
+    const { repository, storage } = createMocks();
+    repository.createInstitutionKnowledgeSource.mockResolvedValue({ sourceId: 'src-image' });
+    repository.createInstitutionKnowledgeDocument.mockResolvedValue({ documentId: 'doc-image' });
+    storage.save.mockResolvedValue({ storageKey: 'k-image', sha256: 's-image', sizeBytes: 4 });
+    repository.createKnowledgeFile.mockResolvedValue({
+      fileId: 'f-image', tenantId: 't', knowledgeId: 'doc-image', originalFilename: name,
+      mimeType, sizeBytes: 4, status: 'active' as const, sha256: 's-image',
+      storageKey: 'k-image', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
+    });
+    repository.findKnowledgeItem.mockResolvedValue({ ...visibleKnowledgeRecord, knowledgeId: 'doc-image', tenantId: 't', institutionId: 'inst', visibleInstitutionIds: ['inst'] });
+    repository.findKnowledgeFile.mockResolvedValue({
+      fileId: 'f-image', tenantId: 't', knowledgeId: 'doc-image', originalFilename: name,
+      storageKey: 'k-image', mimeType, sizeBytes: 4, sha256: 's-image',
+      status: 'active', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
+    });
+    const parseRecord = {
+      parseId: 'p-image', tenantId: 't', knowledgeId: 'doc-image', fileId: 'f-image', parseStatus: 'failed',
+      failureReasonCode: 'ocr_required', safeFailureMessage: '该文件需要 OCR 识别；当前为 OCR-ready 最小闭环，尚未接入生产 OCR 服务', textContent: '', textLength: 0,
+      chunkCount: 0, parserVersion: 'v1', createdAt: new Date(), updatedAt: new Date(),
+    };
+    repository.findKnowledgeFileParse.mockResolvedValue(parseRecord);
+    repository.saveKnowledgeFileParseResult.mockResolvedValue(parseRecord);
+    repository.replaceKnowledgeFileParseChunks.mockResolvedValue([]);
+    storage.read.mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
+
+    const result = await uploadAndParseInstitutionKnowledgeFileService({
+      repository,
+      storage,
+      input: { tenantId: 't', institutionId: 'inst', uploadedByUserId: 'u', file: imageFile(name, mimeType) },
+    });
+    const serialized = JSON.stringify(result);
+
+    expect(result.status).toBe('created');
+    expect(result.file).toEqual(expect.objectContaining({
+      originalFilename: name,
+      mimeType,
+      fileType,
+      parseStatus: 'failed',
+      ocrStatus: 'ocr_required',
+      failureReasonCode: 'ocr_required',
+      chunkCount: 0,
+    }));
+    expect(repository.createKnowledgeIndexingJob).toHaveBeenCalledWith(expect.objectContaining({ jobType: 'parse_file' }));
+    expect(serialized).not.toMatch(/storageKey|signedUrl|ocrProviderType|provider|model|token|cost|vendor|secret|textContent/i);
   });
 
   it('超大文件被拒绝', async () => {
@@ -299,7 +358,7 @@ describe('机构知识库上传解析 service', () => {
     });
 
     expect(result.status).toBe('validation_failed');
-    expect(result.message).toBe('文件类型暂不支持，当前支持 TXT、MD、PDF、DOCX、XLSX、CSV 格式');
+    expect(result.message).toBe('文件类型暂不支持，当前支持 TXT、MD、PDF、DOCX、XLSX、CSV、PNG、JPG 格式');
     expect(repository.createInstitutionKnowledgeSource).not.toHaveBeenCalled();
     expect(storage.save).not.toHaveBeenCalled();
   });

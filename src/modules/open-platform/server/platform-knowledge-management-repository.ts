@@ -305,6 +305,9 @@ function mapOverviewFileRow(input: {
     taskStatus: overviewTaskStatus(parseStatus),
     parsedChars: input.parse?.textLength ?? 0,
     safeErrorMessage: input.parse?.safeFailureMessage ?? null,
+    failureReasonCode: input.parse?.failureReasonCode ?? null,
+    ocrStatus: ocrStatusFromFailureReason(input.parse?.failureReasonCode),
+    chunkCount: input.parse?.chunkCount ?? 0,
     createdAt: input.file.createdAt.toISOString(),
     updatedAt,
   };
@@ -453,6 +456,13 @@ function mapIndexingJobRow(row: KnowledgeIndexingJobRow): KnowledgeIndexingJobRe
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function ocrStatusFromFailureReason(value: string | null | undefined): PlatformKnowledgeFileDto['ocrStatus'] {
+  if (!value?.startsWith('ocr_')) return 'pending';
+  if (value === 'ocr_required') return 'ocr_required';
+  if (value === 'ocr_unsupported_file_type') return 'unsupported';
+  return 'failed';
 }
 
 function mapFileRow(
