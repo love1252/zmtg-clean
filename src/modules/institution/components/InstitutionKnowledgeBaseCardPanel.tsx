@@ -23,7 +23,7 @@ type DirectoryId = 'all' | 'consultation' | 'project' | 'aftercare' | 'campaign'
 type LoadStatus = 'idle' | 'loading' | 'success' | 'error';
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 type SearchStatus = 'idle' | 'searching' | 'success' | 'empty' | 'error';
-type AnswerStatus = 'idle' | 'loading' | 'answered' | 'no_answer' | 'error';
+type AnswerStatus = 'idle' | 'loading' | 'answered' | 'no_answer' | 'quota_exceeded' | 'provider_disabled' | 'provider_failure' | 'error';
 type ChunkLoadStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error';
 type KnowledgeFormMode = 'create' | 'edit';
 type MutationStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -71,7 +71,7 @@ type InstitutionKnowledgeAnswerSource = {
 };
 
 type InstitutionKnowledgeAnswerPayload = {
-  status: 'answered' | 'no_answer' | 'validation_failed' | 'provider_unavailable' | 'service_unavailable';
+  status: 'answered' | 'no_answer' | 'validation_failed' | 'quota_exceeded' | 'provider_disabled' | 'provider_failure' | 'service_unavailable';
   answer: string;
   sources: InstitutionKnowledgeAnswerSource[];
   noAnswerReason?: string;
@@ -673,6 +673,21 @@ export function InstitutionKnowledgeBaseCardPanel() {
         setAnswerMessage('未在当前知识库中找到足够依据');
         return;
       }
+      if (payload.status === 'quota_exceeded') {
+        setAnswerStatus('quota_exceeded');
+        setAnswerMessage(payload.message || 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐。');
+        return;
+      }
+      if (payload.status === 'provider_disabled') {
+        setAnswerStatus('provider_disabled');
+        setAnswerMessage(payload.message || '知识库问答服务未启用，请联系平台管理员。');
+        return;
+      }
+      if (payload.status === 'provider_failure') {
+        setAnswerStatus('provider_failure');
+        setAnswerMessage(payload.message || '知识库问答服务暂时不可用，请稍后重试。');
+        return;
+      }
       setAnswerStatus('error');
       setAnswerMessage(payload.message || '知识库问答服务暂时不可用，请稍后重试。');
     } catch {
@@ -694,7 +709,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
             用于维护机构内部话术、项目说明、服务流程和培训知识。当前接入现有机构端知识库列表、txt / md 上传和关键词检索测试。
           </p>
           <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-500">
-            本轮仅接入 mock / dry-run provider 的受控问答闭环；不接真实外部 AI、不接向量数据库、不做复杂 PDF / Word / Excel 深度解析，也不宣称生产可用。
+            本轮接入受控 real provider runtime、quota / entitlement 前置校验、usage metering 和低敏 audit；仍不是向量检索，不做 embedding / rerank / OCR / training / queue。
           </p>
         </div>
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
@@ -703,7 +718,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
             最小闭环说明
           </div>
           <p className="mt-1 text-xs leading-5">
-            上传、检索、新建 / 编辑 / 软归档和 mock / dry-run 问答使用现有机构端 API；重新训练、向量、复杂删除和真实外部 AI 仍受控禁用。
+            上传、检索、新建 / 编辑 / 软归档使用现有机构端 API；知识库问答由平台统一配置 provider，机构端不展示模型、Token、成本或厂商；向量、重新训练、复杂删除仍受控禁用。
           </p>
         </div>
       </div>
@@ -1151,7 +1166,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
                 <p className="text-xs font-semibold text-cyan-700">受控问答闭环</p>
                 <h2 className="mt-1 text-lg font-semibold tracking-normal text-slate-950">知识库问答</h2>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
-                  当前基于机构知识库内容回答；当前为受控问答闭环；先使用关键词 / chunk 召回，不宣称已接向量数据库、训练或真实外部 AI；不展示模型名、Token、成本、厂商。
+                  当前基于机构知识库内容回答；当前为受控问答闭环；先使用关键词 / chunk 召回，当前仍不是向量检索，不宣称已接向量数据库、训练、embedding 或 rerank；不展示模型名、Token、成本、厂商。
                 </p>
                 <p className="mt-1 text-xs font-semibold leading-5 text-amber-700">
                   仅供内部运营参考，需人工确认。医美术后、复诊和风险类内容需由专业人员复核。
@@ -1193,9 +1208,9 @@ export function InstitutionKnowledgeBaseCardPanel() {
                 'mt-4 rounded-xl border px-3 py-2 text-xs font-semibold',
                 answerStatus === 'answered'
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : answerStatus === 'error'
+                  : answerStatus === 'error' || answerStatus === 'provider_failure' || answerStatus === 'provider_disabled'
                     ? 'border-rose-200 bg-rose-50 text-rose-700'
-                    : answerStatus === 'no_answer'
+                    : answerStatus === 'no_answer' || answerStatus === 'quota_exceeded'
                       ? 'border-amber-200 bg-amber-50 text-amber-700'
                       : 'border-slate-200 bg-white/80 text-slate-500',
               )}
@@ -1205,7 +1220,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
             <div className="mt-4 grid gap-3">
               {answerStatus === 'loading' ? (
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-500">
-                  正在提问并等待 mock / dry-run provider 返回...
+                  正在提问并等待平台统一配置的受控 provider 返回...
                 </div>
               ) : answerText ? (
                 <article className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -1371,7 +1386,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
             </article>
             <article className="rounded-2xl border border-violet-200 bg-violet-50 p-3">
               <h3 className="text-sm font-semibold text-violet-800">待训练内容</h3>
-              <p className="mt-1 text-xs leading-5 text-violet-700">真实外部 AI、向量数据库和训练能力仍为后续专项；当前仅提供 mock / dry-run 受控问答闭环。</p>
+              <p className="mt-1 text-xs leading-5 text-violet-700">机构端知识库问答接入受控 real provider 治理闭环；当前仍不是向量检索，训练、embedding、rerank、OCR 和 queue 仍未接入。</p>
             </article>
             <article className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <h3 className="text-sm font-semibold text-slate-800">建议动作</h3>

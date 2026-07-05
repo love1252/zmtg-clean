@@ -282,6 +282,175 @@ describe('机构端知识库 RAG answer service', () => {
     expect(provider.chat).not.toHaveBeenCalled();
   });
 
+
+  it('no_answer 记录低敏 audit 且不扣 quota', async () => {
+    const provider = createProvider();
+    const quotaCheck = vi.fn(async () => ({ allowed: true }));
+    const usageRecorder = vi.fn(async () => undefined);
+    const audits: unknown[] = [];
+    const repository = {
+      ...createRepository([]),
+      createKnowledgeQaAuditLog: vi.fn(async (record: unknown) => {
+        audits.push(record);
+        return { auditId: 'kb-qa-audit-no-answer' };
+      }),
+    };
+
+    const result = await answerInstitutionKnowledgeRagQuestion({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-current',
+      actorUserId: 'user-a',
+      question: '不存在的知识问题',
+      repository,
+      provider,
+      quota: { check: quotaCheck },
+      usageRecorder,
+      now: () => now,
+    });
+
+    expect(result.status).toBe('no_answer');
+    expect(provider.chat).not.toHaveBeenCalled();
+    expect(quotaCheck).not.toHaveBeenCalled();
+    expect(usageRecorder).not.toHaveBeenCalled();
+    expect(audits).toHaveLength(1);
+    expect(JSON.stringify(audits[0])).toContain('status=no_answer');
+    expect(JSON.stringify(audits[0])).toContain('questionHash=');
+    expect(JSON.stringify(audits[0])).not.toContain('不存在的知识问题');
+  });
+
+  it('quota exceeded 不调用 provider，并记录低敏 audit', async () => {
+    const provider = createProvider();
+    const onRejected = vi.fn(async () => undefined);
+    const usageRecorder = vi.fn(async () => undefined);
+    const audits: unknown[] = [];
+    const repository = {
+      ...createRepository(),
+      createKnowledgeQaAuditLog: vi.fn(async (record: unknown) => {
+        audits.push(record);
+        return { auditId: 'kb-qa-audit-quota' };
+      }),
+    };
+
+    const result = await answerInstitutionKnowledgeRagQuestion({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-current',
+      actorUserId: 'user-a',
+      question: '术后冷敷注意事项是什么？',
+      repository,
+      provider,
+      quota: { check: vi.fn(async () => ({ allowed: false })), onRejected },
+      usageRecorder,
+      now: () => now,
+    });
+
+    expect(result.status).toBe('quota_exceeded');
+    expect(provider.chat).not.toHaveBeenCalled();
+    expect(onRejected).toHaveBeenCalledTimes(1);
+    expect(usageRecorder).not.toHaveBeenCalled();
+    expect(audits).toHaveLength(1);
+    expect(JSON.stringify(audits[0])).toContain('status=quota_exceeded');
+    expect(JSON.stringify(audits[0])).not.toContain('术后冷敷注意事项是什么？');
+    expectNoSensitiveFields(result);
+  });
+
+  it('provider disabled 不调用 provider，并记录低敏 audit', async () => {
+    const provider = createProvider();
+    const audits: unknown[] = [];
+    const result = await answerInstitutionKnowledgeRagQuestion({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-current',
+      actorUserId: 'user-a',
+      question: '术后冷敷注意事项是什么？',
+      repository: {
+        ...createRepository(),
+        createKnowledgeQaAuditLog: vi.fn(async (record: unknown) => {
+          audits.push(record);
+          return { auditId: 'kb-qa-audit-provider-disabled' };
+        }),
+      },
+      providerResolver: {
+        resolve: vi.fn(async () => ({ status: 'provider_disabled', providerStatus: 'missing_config' })),
+      },
+      now: () => now,
+    });
+
+    expect(result.status).toBe('provider_disabled');
+    expect(provider.chat).not.toHaveBeenCalled();
+    expect(audits).toHaveLength(1);
+    expect(JSON.stringify(audits[0])).toContain('status=provider_disabled');
+    expectNoSensitiveFields(result);
+  });
+
+  it('provider success 记录 usage 和 answered 低敏 audit', async () => {
+    const provider = createProvider('请按来源核对冷敷时长。');
+    const usageRecorder = vi.fn(async () => undefined);
+    const audits: unknown[] = [];
+    const result = await answerInstitutionKnowledgeRagQuestion({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-current',
+      actorUserId: 'user-a',
+      question: '术后冷敷注意事项是什么？',
+      repository: {
+        ...createRepository(),
+        createKnowledgeQaAuditLog: vi.fn(async (record: unknown) => {
+          audits.push(record);
+          return { auditId: 'kb-qa-audit-answered' };
+        }),
+      },
+      provider,
+      usageRecorder,
+      now: () => now,
+    });
+
+    expect(result.status).toBe('answered');
+    expect(usageRecorder).toHaveBeenCalledTimes(1);
+    expect(usageRecorder).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'dry_run',
+      model: 'dry_run',
+      usage: { inputTokens: 999, outputTokens: 99 },
+    }));
+    expect(audits).toHaveLength(1);
+    expect(JSON.stringify(audits[0])).toContain('status=answered');
+    expect(JSON.stringify(audits[0])).not.toContain('术后冷敷注意事项是什么？');
+    expectNoSensitiveFields(result);
+  });
+
+  it('provider failure 不记录成功 usage，记录失败低敏 audit', async () => {
+    const usageRecorder = vi.fn(async () => undefined);
+    const audits: unknown[] = [];
+    const provider: AiChatProvider = {
+      chat: vi.fn(async () => ({
+        status: 'provider_unavailable',
+        errorCode: 'DATABASE_URL postgres://root:password@localhost secret=key vendor=model cost token',
+        latencyMs: 1,
+      })),
+    };
+
+    const result = await answerInstitutionKnowledgeRagQuestion({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-current',
+      actorUserId: 'user-a',
+      question: '术后冷敷注意事项是什么？',
+      repository: {
+        ...createRepository(),
+        createKnowledgeQaAuditLog: vi.fn(async (record: unknown) => {
+          audits.push(record);
+          return { auditId: 'kb-qa-audit-failure' };
+        }),
+      },
+      provider,
+      usageRecorder,
+      now: () => now,
+    });
+
+    expect(result.status).toBe('provider_failure');
+    expect(usageRecorder).not.toHaveBeenCalled();
+    expect(audits).toHaveLength(1);
+    expect(JSON.stringify(audits[0])).toContain('status=provider_failure');
+    expect(JSON.stringify(audits[0])).not.toContain('术后冷敷注意事项是什么？');
+    expectNoSensitiveFields(result);
+  });
+
   it('有 chunk 命中时调用 provider，并返回 answer + 完整 sources 字段', async () => {
     const provider = createProvider('请按来源核对冷敷时长。');
     const result = await answerInstitutionKnowledgeRagQuestion({
@@ -328,7 +497,7 @@ describe('机构端知识库 RAG answer service', () => {
       provider,
     });
 
-    expect(result.status).toBe('provider_unavailable');
+    expect(result.status).toBe('provider_failure');
     expect(result.answer).toBe(`知识库问答服务暂时不可用，请稍后重试。${humanConfirmationText}`);
     expect('message' in result ? result.message : '').toBe('知识库问答服务暂时不可用，请稍后重试');
     expect(result.sources.length).toBeGreaterThan(0);

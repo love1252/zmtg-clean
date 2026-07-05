@@ -470,7 +470,7 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
       vi.fn(async (url: string) => {
         if (url.includes('/api/institution/knowledge-management/answer')) {
           return Response.json({
-            status: 'provider_unavailable',
+            status: 'provider_failure',
             answer: '知识库问答服务暂时不可用，请稍后重试。仅供内部运营参考，需人工确认',
             sources: [],
             message: '知识库问答服务暂时不可用，请稍后重试',
@@ -492,6 +492,93 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     expect(answerSection.textContent).not.toContain('DATABASE_URL');
     expect(answerSection.textContent).not.toContain('provider config');
     expect(answerSection.textContent).not.toContain('厂商：');
+  });
+
+
+  it('问答台展示 quota_exceeded 状态', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/answer')) {
+          return Response.json({
+            status: 'quota_exceeded',
+            answer: 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐。仅供内部运营参考，需人工确认',
+            sources: [],
+            message: 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐',
+          }, { status: 409 });
+        }
+        if (url.includes('/files')) return Response.json({ records: [], pageInfo });
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+    mockKnowledgeList();
+    render(<InstitutionKnowledgeBaseCardPanel />);
+    await screen.findByText('知识条目：本机构术后护理知识');
+
+    const answerSection = screen.getByLabelText('机构知识库问答台');
+    fireEvent.change(within(answerSection).getByLabelText('输入知识库问答问题'), { target: { value: '冷敷？' } });
+    fireEvent.click(within(answerSection).getByRole('button', { name: '提问' }));
+
+    expect(await within(answerSection).findByText('AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐')).toBeInTheDocument();
+    expect(answerSection.textContent).not.toContain('token=');
+    expect(answerSection.textContent).not.toContain('厂商：');
+  });
+
+  it('问答台展示 provider_disabled 状态', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/answer')) {
+          return Response.json({
+            status: 'provider_disabled',
+            answer: '知识库问答服务未启用，请联系平台管理员。仅供内部运营参考，需人工确认',
+            sources: [],
+            message: '知识库问答服务未启用，请联系平台管理员',
+          }, { status: 503 });
+        }
+        if (url.includes('/files')) return Response.json({ records: [], pageInfo });
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+    mockKnowledgeList();
+    render(<InstitutionKnowledgeBaseCardPanel />);
+    await screen.findByText('知识条目：本机构术后护理知识');
+
+    const answerSection = screen.getByLabelText('机构知识库问答台');
+    fireEvent.change(within(answerSection).getByLabelText('输入知识库问答问题'), { target: { value: '冷敷？' } });
+    fireEvent.click(within(answerSection).getByRole('button', { name: '提问' }));
+
+    expect(await within(answerSection).findByText('知识库问答服务未启用，请联系平台管理员')).toBeInTheDocument();
+    expect(answerSection.textContent).not.toContain('provider config');
+  });
+
+  it('问答台展示 provider_failure 状态', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/answer')) {
+          return Response.json({
+            status: 'provider_failure',
+            answer: '知识库问答服务暂时不可用，请稍后重试。仅供内部运营参考，需人工确认',
+            sources: [],
+            message: '知识库问答服务暂时不可用，请稍后重试',
+          }, { status: 502 });
+        }
+        if (url.includes('/files')) return Response.json({ records: [], pageInfo });
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+    mockKnowledgeList();
+    render(<InstitutionKnowledgeBaseCardPanel />);
+    await screen.findByText('知识条目：本机构术后护理知识');
+
+    const answerSection = screen.getByLabelText('机构知识库问答台');
+    fireEvent.change(within(answerSection).getByLabelText('输入知识库问答问题'), { target: { value: '冷敷？' } });
+    fireEvent.click(within(answerSection).getByRole('button', { name: '提问' }));
+
+    expect(await within(answerSection).findByText('知识库问答服务暂时不可用，请稍后重试')).toBeInTheDocument();
+    expect(answerSection.textContent).not.toContain('DATABASE_URL');
+    expect(answerSection.textContent).not.toContain('provider config');
   });
 
   it('新一轮提问会清空旧答案', async () => {
@@ -653,7 +740,7 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
 
     expect(screen.queryByText('其他机构不可见知识')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '重新训练（未接训练 runtime）' })).toBeDisabled();
-    expect(screen.getByText('真实外部 AI、向量数据库和训练能力仍为后续专项；当前仅提供 mock / dry-run 受控问答闭环。')).toBeInTheDocument();
+    expect(screen.getByText('机构端知识库问答接入受控 real provider 治理闭环；当前仍不是向量检索，训练、embedding、rerank、OCR 和 queue 仍未接入。')).toBeInTheDocument();
   });
 
   it('不出现误导真实能力已完成或已接入的文案', async () => {
@@ -662,7 +749,6 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
 
     [
       '真实训练已完成',
-      'AI provider 已接入',
       '向量数据库已接入',
       '复杂文档解析已完成',
       '生产可用闭环已完成',

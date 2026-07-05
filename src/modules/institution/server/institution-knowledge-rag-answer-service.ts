@@ -1,6 +1,11 @@
+import { createHash } from 'node:crypto';
 import { deriveKnowledgeSearchKeyword } from '@/modules/institution/domain/institution-knowledge-management';
 import type { KnowledgeChunkSearchRepositoryRecord } from '@/modules/institution/server/institution-knowledge-keyword-search-service';
-import type { AiChatMessage, AiChatProvider } from '@/modules/institution/server/institution-rag-answer-provider';
+import type {
+  AiChatProvider,
+  AiChatMessage,
+  InstitutionRagAnswerProviderResolver,
+} from '@/modules/institution/server/institution-rag-answer-provider';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 
 export type InstitutionKnowledgeRagAnswerSource = {
@@ -8,8 +13,30 @@ export type InstitutionKnowledgeRagAnswerSource = {
   knowledgeTitle: string;
   fileId: string;
   fileName: string;
+  chunkId: string;
   chunkIndex: number;
   textPreview: string;
+};
+
+export type InstitutionKnowledgeRagAnswerStatus =
+  | 'answered'
+  | 'no_answer'
+  | 'quota_exceeded'
+  | 'provider_disabled'
+  | 'provider_failure';
+
+export type InstitutionKnowledgeRagAnswerAuditRecord = {
+  tenantId: string;
+  institutionId: string;
+  actorUserId: string;
+  questionLength: number;
+  questionHash: string;
+  topK: number;
+  sourceCount: number;
+  status: InstitutionKnowledgeRagAnswerStatus;
+  providerStatus: string;
+  answerLength: number;
+  createdAt: Date;
 };
 
 export type InstitutionKnowledgeRagAnswerSuccess = {
@@ -26,7 +53,7 @@ export type InstitutionKnowledgeRagAnswerNoAnswer = {
 };
 
 export type InstitutionKnowledgeRagAnswerFailure = {
-  status: 'validation_failed' | 'provider_unavailable' | 'service_unavailable';
+  status: 'validation_failed' | 'quota_exceeded' | 'provider_disabled' | 'provider_failure' | 'service_unavailable';
   answer: string;
   sources: InstitutionKnowledgeRagAnswerSource[];
   message: string;
@@ -45,15 +72,47 @@ export type InstitutionKnowledgeRagAnswerRepository = {
     knowledgeId?: string;
     fileId?: string;
   }): Promise<KnowledgeChunkSearchRepositoryRecord[]>;
+  createKnowledgeQaAuditLog?(record: {
+    auditId: string;
+    tenantId: string;
+    institutionId: string | null;
+    actorScope: 'institution';
+    actorUserId: string;
+    question: string;
+    answerPreview: string;
+    retrievalMode: 'keyword';
+    citationCount: number;
+    safeStatus: 'answered' | 'no_citation';
+    safeFailureMessage: string | null;
+    createdAt: Date;
+  }): Promise<{ auditId: string }>;
 };
 
 export type InstitutionKnowledgeRagAnswerInput = {
   tenantId: string;
   institutionId: string;
+  actorUserId?: string | null;
   question?: string | number | null;
   topK?: string | number | null;
-  provider: AiChatProvider;
+  provider?: AiChatProvider;
+  providerResolver?: InstitutionRagAnswerProviderResolver;
   repository: InstitutionKnowledgeRagAnswerRepository;
+  quota?: {
+    allowed?: boolean;
+    check?: () => Promise<{ allowed: boolean }>;
+    onRejected?: () => Promise<void>;
+  };
+  usageRecorder?: (input: {
+    providerId: string;
+    model: string;
+    usage: {
+      inputTokens?: number;
+      outputTokens?: number;
+    } | undefined;
+    latencyMs?: number;
+    sources: Array<InstitutionKnowledgeRagAnswerSource & { matchReason: string }>;
+  }) => Promise<void>;
+  now?: () => Date;
 };
 
 const QUESTION_MAX_LENGTH = 500;
@@ -62,6 +121,8 @@ const ALLOWED_TOP_K = [3, 5, 10] as const;
 const HUMAN_CONFIRMATION_TEXT = '仅供内部运营参考，需人工确认';
 const NO_ANSWER_TEXT = `未在当前知识库中找到足够依据。${HUMAN_CONFIRMATION_TEXT}`;
 const PROVIDER_UNAVAILABLE_TEXT = `知识库问答服务暂时不可用，请稍后重试。${HUMAN_CONFIRMATION_TEXT}`;
+const PROVIDER_DISABLED_TEXT = `知识库问答服务未启用，请联系平台管理员。${HUMAN_CONFIRMATION_TEXT}`;
+const QUOTA_EXCEEDED_TEXT = `AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐。${HUMAN_CONFIRMATION_TEXT}`;
 const CONTEXT_MAX_CHARS_PER_SOURCE = 700;
 
 function normalizeRequiredString(value: string | number | null | undefined, label: string) {
@@ -136,6 +197,7 @@ function mapSource(record: KnowledgeChunkSearchRepositoryRecord): InstitutionKno
     knowledgeTitle: record.knowledgeTitle,
     fileId: record.fileId,
     fileName: record.fileName,
+    chunkId: record.chunkId,
     chunkIndex: record.chunkIndex,
     textPreview: truncateText(record.textPreview, 300),
   };
@@ -215,7 +277,104 @@ async function retrieveSources(input: {
       if (!deduped.has(chunk.chunkId)) deduped.set(chunk.chunkId, chunk);
     });
 
-  return Array.from(deduped.values()).slice(0, input.topK).map(mapSource);
+  return Array.from(deduped.values())
+    .slice(0, input.topK)
+    .map((record) => ({ ...mapSource(record), matchReason: 'keyword' }));
+}
+
+function questionHash(question: string) {
+  return createHash('sha256').update(question).digest('hex').slice(0, 24);
+}
+
+function auditId(input: {
+  tenantId: string;
+  institutionId: string;
+  actorUserId: string;
+  questionHash: string;
+  createdAt: Date;
+}) {
+  return `kb-qa-audit-${createHash('sha256')
+    .update([
+      input.tenantId,
+      input.institutionId,
+      input.actorUserId,
+      input.questionHash,
+      input.createdAt.toISOString(),
+    ].join(':'))
+    .digest('hex')
+    .slice(0, 40)}`;
+}
+
+function buildAuditQuestion(input: InstitutionKnowledgeRagAnswerAuditRecord) {
+  return [
+    `questionLength=${input.questionLength}`,
+    `questionHash=${input.questionHash}`,
+    `topK=${input.topK}`,
+    `sourceCount=${input.sourceCount}`,
+    `status=${input.status}`,
+    `providerStatus=${input.providerStatus}`,
+    `answerLength=${input.answerLength}`,
+  ].join(';');
+}
+
+async function recordLowSensitivityAudit(input: {
+  repository: InstitutionKnowledgeRagAnswerRepository;
+  tenantId: string;
+  institutionId: string;
+  actorUserId: string;
+  question: string;
+  topK: number;
+  sourceCount: number;
+  status: InstitutionKnowledgeRagAnswerStatus;
+  providerStatus: string;
+  answer: string;
+  createdAt: Date;
+}) {
+  if (!input.repository.createKnowledgeQaAuditLog) return;
+
+  const hash = questionHash(input.question);
+  const audit: InstitutionKnowledgeRagAnswerAuditRecord = {
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    actorUserId: input.actorUserId,
+    questionLength: input.question.length,
+    questionHash: hash,
+    topK: input.topK,
+    sourceCount: input.sourceCount,
+    status: input.status,
+    providerStatus: input.providerStatus,
+    answerLength: input.answer.length,
+    createdAt: input.createdAt,
+  };
+
+  await input.repository.createKnowledgeQaAuditLog({
+    auditId: auditId({
+      tenantId: input.tenantId,
+      institutionId: input.institutionId,
+      actorUserId: input.actorUserId,
+      questionHash: hash,
+      createdAt: input.createdAt,
+    }),
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    actorScope: 'institution',
+    actorUserId: input.actorUserId,
+    question: buildAuditQuestion(audit).slice(0, 512),
+    answerPreview: `answerLength=${audit.answerLength};status=${audit.status}`,
+    retrievalMode: 'keyword',
+    citationCount: input.sourceCount,
+    safeStatus: input.status === 'answered' ? 'answered' : 'no_citation',
+    safeFailureMessage: input.status === 'answered'
+      ? null
+      : input.status.slice(0, 256),
+    createdAt: input.createdAt,
+  });
+}
+
+function toPublicSources(
+  sources: Array<InstitutionKnowledgeRagAnswerSource & { matchReason: string }>,
+): InstitutionKnowledgeRagAnswerSource[] {
+  return sources.map(({ matchReason: _matchReason, ...source }) => source);
 }
 
 export async function answerInstitutionKnowledgeRagQuestion(
@@ -233,6 +392,17 @@ export async function answerInstitutionKnowledgeRagQuestion(
   const topK = normalizeTopK(input.topK);
   if (!topK.ok) return topK.error;
 
+  const actorUserId = String(input.actorUserId ?? 'anonymous').trim() || 'anonymous';
+  const now = input.now ?? (() => new Date());
+  const auditBase = {
+    repository: input.repository,
+    tenantId: tenant.value,
+    institutionId: institution.value,
+    actorUserId,
+    question: question.value,
+    topK: topK.value,
+  };
+
   const sources = await retrieveSources({
     repository: input.repository,
     tenantId: tenant.value,
@@ -242,6 +412,15 @@ export async function answerInstitutionKnowledgeRagQuestion(
   });
 
   if (sources.length === 0) {
+    await recordLowSensitivityAudit({
+      ...auditBase,
+      sourceCount: 0,
+      status: 'no_answer',
+      providerStatus: 'not_called',
+      answer: NO_ANSWER_TEXT,
+      createdAt: now(),
+    });
+
     return {
       status: 'no_answer',
       answer: NO_ANSWER_TEXT,
@@ -250,7 +429,59 @@ export async function answerInstitutionKnowledgeRagQuestion(
     };
   }
 
-  const providerResult = await input.provider.chat({
+  const quotaDecision = input.quota?.check
+    ? await input.quota.check()
+    : { allowed: input.quota?.allowed ?? true };
+
+  if (!quotaDecision.allowed) {
+    await input.quota?.onRejected?.();
+    await recordLowSensitivityAudit({
+      ...auditBase,
+      sourceCount: sources.length,
+      status: 'quota_exceeded',
+      providerStatus: 'not_called',
+      answer: QUOTA_EXCEEDED_TEXT,
+      createdAt: now(),
+    });
+
+    return {
+      status: 'quota_exceeded',
+      answer: QUOTA_EXCEEDED_TEXT,
+      sources: toPublicSources(sources),
+      message: 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐',
+    };
+  }
+
+  const resolved = input.providerResolver
+    ? await input.providerResolver.resolve()
+    : input.provider
+      ? {
+          status: 'ready' as const,
+          provider: input.provider,
+          providerId: 'dry_run',
+          model: 'dry_run',
+        }
+      : { status: 'provider_disabled' as const, providerStatus: 'missing_config' as const };
+
+  if (resolved.status !== 'ready') {
+    await recordLowSensitivityAudit({
+      ...auditBase,
+      sourceCount: sources.length,
+      status: 'provider_disabled',
+      providerStatus: resolved.providerStatus,
+      answer: PROVIDER_DISABLED_TEXT,
+      createdAt: now(),
+    });
+
+    return {
+      status: 'provider_disabled',
+      answer: PROVIDER_DISABLED_TEXT,
+      sources: toPublicSources(sources),
+      message: '知识库问答服务未启用，请联系平台管理员',
+    };
+  }
+
+  const providerResult = await resolved.provider.chat({
     messages: buildMessages({ question: question.value, sources }),
     temperature: 0,
     maxTokens: 800,
@@ -258,17 +489,43 @@ export async function answerInstitutionKnowledgeRagQuestion(
   });
 
   if (providerResult.status !== 'success' || !providerResult.answerText) {
-    return {
-      status: providerResult.status === 'provider_unavailable' ? 'provider_unavailable' : 'service_unavailable',
+    await recordLowSensitivityAudit({
+      ...auditBase,
+      sourceCount: sources.length,
+      status: 'provider_failure',
+      providerStatus: providerResult.status,
       answer: PROVIDER_UNAVAILABLE_TEXT,
-      sources,
+      createdAt: now(),
+    });
+
+    return {
+      status: 'provider_failure',
+      answer: PROVIDER_UNAVAILABLE_TEXT,
+      sources: toPublicSources(sources),
       message: '知识库问答服务暂时不可用，请稍后重试',
     };
   }
 
+  const answer = ensureHumanConfirmation(providerResult.answerText);
+  await input.usageRecorder?.({
+    providerId: resolved.providerId,
+    model: resolved.model,
+    usage: providerResult.usage,
+    latencyMs: providerResult.latencyMs,
+    sources,
+  });
+  await recordLowSensitivityAudit({
+    ...auditBase,
+    sourceCount: sources.length,
+    status: 'answered',
+    providerStatus: 'success',
+    answer,
+    createdAt: now(),
+  });
+
   return {
     status: 'answered',
-    answer: ensureHumanConfirmation(providerResult.answerText),
-    sources,
+    answer,
+    sources: toPublicSources(sources),
   };
 }

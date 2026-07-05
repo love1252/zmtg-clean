@@ -1,4 +1,4 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   aiCallUsageRecords,
@@ -129,14 +129,15 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
         .select()
         .from(aiCallUsageRecords)
         .where(
-          eq(aiCallUsageRecords.tenantId, input.tenantId),
+          and(
+            eq(aiCallUsageRecords.tenantId, input.tenantId),
+            eq(aiCallUsageRecords.institutionId, input.institutionId),
+          ),
         )
         .orderBy(desc(aiCallUsageRecords.createdAt))
         .limit(input.limit);
 
-      return rows
-        .filter((row) => row.institutionId === input.institutionId)
-        .map((row) => ({
+      return rows.map((row) => ({
           id: row.id,
           tenantId: row.tenantId,
           institutionId: row.institutionId,
