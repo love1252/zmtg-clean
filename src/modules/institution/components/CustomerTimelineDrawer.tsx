@@ -7,13 +7,16 @@ import {
   HeartPulse,
   History,
   Loader2,
+  MessageSquareText,
   PlusCircle,
   ShieldCheck,
+  Workflow,
   X,
 } from 'lucide-react';
 import {
   createAppointment,
   createTreatmentSummary,
+  recordManualFollowUpFeedback,
   type CreateAppointmentClientPayload,
   type CreateTreatmentSummaryClientPayload,
   type TenantBusinessClientError,
@@ -29,6 +32,10 @@ import type {
   CustomerTimelineFollowUpSummary,
   CustomerTimelineResponse,
 } from '@/modules/institution/domain/customer-timeline';
+import type {
+  FollowUpCustomerTimelineEventDto,
+  FollowUpManualFeedbackPayload,
+} from '@/modules/institution/domain/followup-customer-timeline';
 import type { FollowUpRiskLevel, FollowUpStatus } from '@/modules/institution/domain/followup-workflow';
 import type { CustomerTimelineTreatmentSummary } from '@/modules/institution/domain/treatment-summaries';
 import type { AppointmentStatus } from '@/modules/institution/domain/appointment-records';
@@ -50,6 +57,27 @@ type CustomerTimelineDrawerProps = {
   onTimelineRefresh: () => Promise<void>;
   timeline: CustomerTimelineResponse | null;
 };
+
+type ManualFeedbackFormState = {
+  safeSummary: string;
+  riskLevel: FollowUpRiskLevel;
+  relatedTaskId: string;
+};
+
+const emptyManualFeedbackForm: ManualFeedbackFormState = {
+  safeSummary: '',
+  riskLevel: 'normal',
+  relatedTaskId: '',
+};
+
+const sensitiveFollowUpFeedbackPatterns = [
+  /1[3-9]\d{9}/u,
+  /\d{6}(?:19|20)\d{2}\d{2}\d{2}\d{3}[\dXx]/u,
+  /\bMR[-_A-Z0-9]{3,}\b/iu,
+  /完整治疗|完整病历|咨询全文|病历号|身份证|手机号原文/u,
+  /\bHIS\b|his payload|externalSystemPayload/iu,
+  /\b(?:provider|model|token|vendor|cost|prompt|raw ai response|secret|api key|baseUrl)\b/iu,
+];
 
 type TreatmentSummaryFormState = {
   treatmentDate: string;
@@ -124,6 +152,77 @@ function splitTreatmentSummaryTags(tagsText: string) {
 function containsSensitiveTreatmentSummaryValue(value: string) {
   const normalized = value.normalize('NFKC');
   return sensitiveTreatmentSummaryValuePatterns.some((pattern) => pattern.test(normalized));
+}
+
+function containsSensitiveFollowUpFeedbackValue(value: string) {
+  const normalized = value.normalize('NFKC');
+  return sensitiveFollowUpFeedbackPatterns.some((pattern) => pattern.test(normalized));
+}
+
+function toManualFeedbackPayload(
+  form: ManualFeedbackFormState,
+): FollowUpManualFeedbackPayload {
+  const relatedTaskId = form.relatedTaskId.trim();
+
+  return {
+    safeSummary: form.safeSummary.normalize('NFKC').replace(/\s+/gu, ' ').trim(),
+    riskLevel: form.riskLevel,
+    ...(relatedTaskId ? { relatedTaskId } : {}),
+  };
+}
+
+function validateManualFeedbackPayload(payload: FollowUpManualFeedbackPayload) {
+  if (!payload.safeSummary.trim()) {
+    return '请填写低敏反馈或备注摘要';
+  }
+
+  if (payload.safeSummary.length > 240) {
+    return '低敏反馈或备注摘要不能超过 240 个字符';
+  }
+
+  const searchableValues = [payload.safeSummary, payload.relatedTaskId ?? ''];
+  if (searchableValues.some(containsSensitiveFollowUpFeedbackValue)) {
+    return '人工反馈只能记录低敏摘要，请移除手机号原文、身份证、病历号、HIS 或 provider 信息';
+  }
+
+  return null;
+}
+
+function followUpTimelineEventLabel(eventType: FollowUpCustomerTimelineEventDto['eventType']) {
+  const labels: Record<FollowUpCustomerTimelineEventDto['eventType'], string> = {
+    followup_path_enrolled: '纳入路径',
+    followup_path_cancelled: '路径取消',
+    followup_tasks_generated: '生成阶段任务',
+    followup_task_status_changed: '任务状态变化',
+    followup_task_escalated: '任务升级',
+    message_draft_created: '草稿生成',
+    message_draft_updated: '草稿更新',
+    message_draft_approved: '草稿确认',
+    message_draft_rejected: '草稿拒绝',
+    message_draft_marked_sent: '标记人工发送',
+    manual_feedback_recorded: '人工反馈',
+  };
+
+  return labels[eventType];
+}
+
+function followUpTimelineSourceLabel(sourceType: FollowUpCustomerTimelineEventDto['sourceType']) {
+  const labels: Record<FollowUpCustomerTimelineEventDto['sourceType'], string> = {
+    path_enrollment: '路径纳入',
+    followup_task: '随访任务',
+    message_draft: '消息草稿',
+    manual_note: '人工记录',
+  };
+
+  return labels[sourceType];
+}
+
+function followUpTimelineTone(eventType: FollowUpCustomerTimelineEventDto['eventType']) {
+  if (eventType === 'followup_task_escalated') return 'border-rose-200 bg-rose-50 text-rose-700';
+  if (eventType === 'message_draft_marked_sent') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (eventType.startsWith('message_draft')) return 'border-indigo-200 bg-indigo-50 text-indigo-700';
+  if (eventType === 'manual_feedback_recorded') return 'border-sky-200 bg-sky-50 text-sky-700';
+  return 'border-amber-200 bg-amber-50 text-amber-700';
 }
 
 function toTreatmentSummaryPayload(
@@ -354,6 +453,62 @@ function TimelineEventItem({ event }: { event: CustomerTimelineEvent }) {
   );
 }
 
+function FollowUpOverviewTile({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: number;
+  helper: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+      <p className="text-xs font-semibold text-slate-500">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-slate-950">{value}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p>
+    </div>
+  );
+}
+
+function FollowUpTimelineEventItem({ event }: { event: FollowUpCustomerTimelineEventDto }) {
+  const tone = followUpTimelineTone(event.eventType);
+
+  return (
+    <li className="relative pl-5">
+      <span className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-amber-500" />
+      <div className="rounded-2xl border border-slate-200 bg-white p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-semibold text-slate-950">{event.eventTitle}</span>
+          <span className="text-xs font-semibold text-slate-400">
+            {formatTimelineTime(event.occurredAt)}
+          </span>
+        </div>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{event.safeSummary}</p>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+          <span className={`rounded-full border px-2.5 py-1 font-semibold ${tone}`}>
+            {followUpTimelineEventLabel(event.eventType)}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-500">
+            来源：{followUpTimelineSourceLabel(event.sourceType)}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-500">
+            关联：{event.sourceId}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-500">
+            原因：{event.safeReasonCode}
+          </span>
+          {event.riskLevel ? (
+            <span className="rounded-full border border-rose-100 bg-rose-50 px-2.5 py-1 font-semibold text-rose-700">
+              风险：{followUpRiskLevelLabels[event.riskLevel]}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </li>
+  );
+}
+
 function AuditSummary({ auditEvent }: { auditEvent: CustomerTimelineAuditSummary }) {
   return (
     <li className="rounded-2xl border border-slate-200 bg-white p-3">
@@ -388,6 +543,19 @@ export function CustomerTimelineDrawer({
 }: CustomerTimelineDrawerProps) {
   const customer = timeline?.customer;
   const treatmentSummaries = timeline?.treatmentSummaries ?? [];
+  const followUpTimelineEvents = timeline?.followUpTimelineEvents ?? [];
+  const followUpOverview = timeline?.followUpOverview ?? {
+    activeEnrollmentCount: 0,
+    pendingTaskCount: 0,
+    overdueTaskCount: 0,
+    draftCount: 0,
+    approvedDraftCount: 0,
+    markedSentCount: 0,
+    escalatedCount: 0,
+  };
+  const latestPathEnrollmentEvent = followUpTimelineEvents.find(
+    (event) => event.eventType === 'followup_path_enrolled',
+  );
   const [isTreatmentSummaryFormOpen, setIsTreatmentSummaryFormOpen] = useState(false);
   const [treatmentSummaryForm, setTreatmentSummaryForm] =
     useState<TreatmentSummaryFormState>(emptyTreatmentSummaryForm);
@@ -485,6 +653,49 @@ export function CustomerTimelineDrawer({
   const [followUpSubmitError, setFollowUpSubmitError] = useState<string | null>(null);
   const [followUpSubmitSuccess, setFollowUpSubmitSuccess] = useState<string | null>(null);
   const [isFollowUpSubmitting, setIsFollowUpSubmitting] = useState(false);
+  const [isManualFeedbackFormOpen, setIsManualFeedbackFormOpen] = useState(false);
+  const [manualFeedbackForm, setManualFeedbackForm] =
+    useState<ManualFeedbackFormState>(emptyManualFeedbackForm);
+  const [manualFeedbackSubmitError, setManualFeedbackSubmitError] = useState<string | null>(null);
+  const [manualFeedbackSubmitSuccess, setManualFeedbackSubmitSuccess] = useState<string | null>(null);
+  const [isManualFeedbackSubmitting, setIsManualFeedbackSubmitting] = useState(false);
+
+  function updateManualFeedbackFormField<Key extends keyof ManualFeedbackFormState>(
+    key: Key,
+    value: ManualFeedbackFormState[Key],
+  ) {
+    setManualFeedbackForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function handleManualFeedbackSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const payload = toManualFeedbackPayload(manualFeedbackForm);
+    const validationError = validateManualFeedbackPayload(payload);
+    if (validationError) {
+      setManualFeedbackSubmitError(validationError);
+      setManualFeedbackSubmitSuccess(null);
+      return;
+    }
+
+    setIsManualFeedbackSubmitting(true);
+    setManualFeedbackSubmitError(null);
+    setManualFeedbackSubmitSuccess(null);
+
+    try {
+      const result = await recordManualFollowUpFeedback(customerId, payload);
+      if (result.ok) {
+        setManualFeedbackForm(emptyManualFeedbackForm);
+        setIsManualFeedbackFormOpen(false);
+        setManualFeedbackSubmitSuccess('低敏人工反馈已记录');
+        await onTimelineRefresh();
+      } else {
+        setManualFeedbackSubmitError(result.error.message || '低敏人工反馈记录失败');
+      }
+    } finally {
+      setIsManualFeedbackSubmitting(false);
+    }
+  }
 
   function updateFollowUpFormField<Key extends keyof FollowUpFormState>(
     key: Key,
@@ -941,6 +1152,185 @@ export function CustomerTimelineDrawer({
                 ) : !isFollowUpFormOpen ? (
                   <InstitutionPageState kind="empty" title="暂无随访任务" />
                 ) : null}
+              </section>
+
+              <section className="space-y-3 rounded-[24px] border border-amber-100 bg-amber-50/50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <SectionHeader icon={Workflow} title="治疗后管理 / 随访轨迹" />
+                  <button
+                    type="button"
+                    className="inline-flex h-9 items-center gap-2 rounded-full border border-sky-200 bg-white px-3 text-xs font-semibold text-sky-700"
+                    onClick={() => {
+                      setManualFeedbackSubmitError(null);
+                      setManualFeedbackSubmitSuccess(null);
+                      setIsManualFeedbackFormOpen((prev) => !prev);
+                    }}
+                  >
+                    <MessageSquareText className="h-4 w-4" />
+                    记录低敏反馈
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border border-amber-200 bg-white px-3 py-2 text-xs leading-5 text-amber-800">
+                  这里只展示内部随访执行记录，不代表已自动联系客户；标记已发送仅代表人工记录。当前没有企业微信 / 短信接入。
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <FollowUpOverviewTile
+                    label="有效路径"
+                    value={followUpOverview.activeEnrollmentCount}
+                    helper="当前仍在执行的路径纳入数"
+                  />
+                  <FollowUpOverviewTile
+                    label="待处理任务"
+                    value={followUpOverview.pendingTaskCount}
+                    helper="scheduled / in_progress 任务"
+                  />
+                  <FollowUpOverviewTile
+                    label="逾期任务"
+                    value={followUpOverview.overdueTaskCount}
+                    helper="已超过 dueAt 且未完成"
+                  />
+                  <FollowUpOverviewTile
+                    label="消息草稿"
+                    value={followUpOverview.draftCount}
+                    helper="已生成的低敏草稿总数"
+                  />
+                  <FollowUpOverviewTile
+                    label="已确认草稿"
+                    value={followUpOverview.approvedDraftCount}
+                    helper="运营确认可人工使用"
+                  />
+                  <FollowUpOverviewTile
+                    label="已人工发送 / 升级"
+                    value={followUpOverview.markedSentCount + followUpOverview.escalatedCount}
+                    helper={`发送 ${followUpOverview.markedSentCount} · 升级 ${followUpOverview.escalatedCount}`}
+                  />
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-950">当前路径</p>
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                      {followUpOverview.activeEnrollmentCount > 0 ? '执行中' : '暂无有效路径'}
+                    </span>
+                  </div>
+                  {latestPathEnrollmentEvent ? (
+                    <div className="mt-2 text-sm leading-6 text-slate-600">
+                      <p>{latestPathEnrollmentEvent.safeSummary}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        纳入时间：{formatTimelineTime(latestPathEnrollmentEvent.occurredAt)} · 路径记录：{latestPathEnrollmentEvent.sourceId}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      尚未沉淀路径纳入事件。后续治疗摘要纳入随访路径后会在这里展示。
+                    </p>
+                  )}
+                </div>
+
+                {manualFeedbackSubmitSuccess ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                    {manualFeedbackSubmitSuccess}
+                  </div>
+                ) : null}
+
+                {isManualFeedbackFormOpen ? (
+                  <form
+                    className="rounded-2xl border border-sky-100 bg-white p-4"
+                    onSubmit={handleManualFeedbackSubmit}
+                  >
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="sm:col-span-2">
+                        <label htmlFor="followup-feedback-summary" className="text-xs font-semibold text-slate-500">
+                          低敏反馈 / 备注摘要 *
+                        </label>
+                        <textarea
+                          id="followup-feedback-summary"
+                          className="mt-1 min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-300"
+                          maxLength={240}
+                          placeholder="仅记录低敏摘要，如：客户反馈恢复良好，建议按 D7 任务继续人工跟进。"
+                          value={manualFeedbackForm.safeSummary}
+                          onChange={(event) => updateManualFeedbackFormField('safeSummary', event.target.value)}
+                        />
+                        <p className="mt-1 text-xs leading-5 text-slate-400">
+                          不要填写手机号原文、身份证、病历号、完整治疗原文、HIS payload 或 provider 信息。
+                        </p>
+                      </div>
+                      <div>
+                        <label htmlFor="followup-feedback-risk" className="text-xs font-semibold text-slate-500">
+                          风险等级
+                        </label>
+                        <select
+                          id="followup-feedback-risk"
+                          className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-300"
+                          value={manualFeedbackForm.riskLevel}
+                          onChange={(event) => updateManualFeedbackFormField('riskLevel', event.target.value as FollowUpRiskLevel)}
+                        >
+                          {riskLevelOptions.map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="followup-feedback-task" className="text-xs font-semibold text-slate-500">
+                          关联随访任务（可选）
+                        </label>
+                        <select
+                          id="followup-feedback-task"
+                          className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-sky-300"
+                          value={manualFeedbackForm.relatedTaskId}
+                          onChange={(event) => updateManualFeedbackFormField('relatedTaskId', event.target.value)}
+                        >
+                          <option value="">不关联任务</option>
+                          {timeline.followups.map((followUp) => (
+                            <option key={followUp.id} value={followUp.id}>
+                              {followUp.stage} · {followUpStatusLabels[followUp.status]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    {manualFeedbackSubmitError ? (
+                      <div
+                        className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700"
+                        role="alert"
+                      >
+                        {manualFeedbackSubmitError}
+                      </div>
+                    ) : null}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="submit"
+                        disabled={isManualFeedbackSubmitting}
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-sky-600 px-4 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                      >
+                        {isManualFeedbackSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        {isManualFeedbackSubmitting ? '记录中...' : '保存反馈'}
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600"
+                        onClick={() => {
+                          setIsManualFeedbackFormOpen(false);
+                          setManualFeedbackSubmitError(null);
+                        }}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+
+                {followUpTimelineEvents.length > 0 ? (
+                  <ol className="space-y-3 border-l border-amber-200 pl-3">
+                    {followUpTimelineEvents.map((event) => (
+                      <FollowUpTimelineEventItem key={event.eventId} event={event} />
+                    ))}
+                  </ol>
+                ) : (
+                  <InstitutionPageState kind="empty" title="暂无随访轨迹事件" />
+                )}
               </section>
 
               <section className="space-y-3">

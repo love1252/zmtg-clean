@@ -118,6 +118,31 @@ const treatmentSummaries = [
   },
 ];
 
+const followUpTimelineEvents = [
+  {
+    eventId: 'ftl_001',
+    customerId: 'cust_001',
+    eventType: 'message_draft_marked_sent' as const,
+    eventTitle: '消息草稿标记已人工发送',
+    safeSummary: '标记已发送仅代表人工记录，不代表系统自动发送。',
+    riskLevel: null,
+    occurredAt: '2026-06-01T12:10:00.000Z',
+    sourceType: 'message_draft' as const,
+    sourceId: 'draft_001:message_draft_marked_sent',
+    safeReasonCode: 'message_draft_marked_sent',
+  },
+];
+
+const followUpOverview = {
+  activeEnrollmentCount: 1,
+  pendingTaskCount: 2,
+  overdueTaskCount: 1,
+  draftCount: 3,
+  approvedDraftCount: 1,
+  markedSentCount: 1,
+  escalatedCount: 0,
+};
+
 const voidedTreatmentSummary = {
   ...treatmentSummaries[0],
   id: 'trt_voided_001',
@@ -145,6 +170,8 @@ describe('客户详情时间线领域模型', () => {
       followups,
       treatmentSummaries,
       auditEvents,
+      followUpTimelineEvents,
+      followUpOverview,
     });
     const serialized = JSON.stringify(response);
 
@@ -219,6 +246,8 @@ describe('客户详情时间线领域模型', () => {
         updatedAt: '2026-06-01T12:00:00.000Z',
       },
     ]);
+    expect(response.followUpTimelineEvents).toEqual(followUpTimelineEvents);
+    expect(response.followUpOverview).toEqual(followUpOverview);
     expect(serialized).not.toContain('tenantId');
     expect(serialized).not.toContain('13800000000');
     expect(serialized).not.toContain('110101199001010011');

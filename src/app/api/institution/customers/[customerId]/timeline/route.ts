@@ -53,7 +53,7 @@ export async function GET(request: Request, context: CustomerTimelineRouteContex
       return NextResponse.json({ error: '记录不存在' }, { status: 404 });
     }
 
-    const [appointments, followups, treatmentSummaries, auditEvents] = await Promise.all([
+    const [appointments, followups, treatmentSummaries, auditEvents, followUpTimelineEvents, followUpOverview] = await Promise.all([
       repository.listAppointmentsByTenantAndCustomer({ tenantId, customerId }),
       repository.listFollowUpTasksByTenantAndCustomer({ tenantId, customerId }),
       treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer({
@@ -61,6 +61,16 @@ export async function GET(request: Request, context: CustomerTimelineRouteContex
         customerId,
       }),
       auditRepository.listCustomerAuditEventsByResourceId({ tenantId, customerId }),
+      repository.listCustomerFollowUpTimelineEvents({
+        tenantId,
+        institutionId: accessContext.institutionId ?? null,
+        customerId,
+      }),
+      repository.getCustomerFollowUpOverview({
+        tenantId,
+        institutionId: accessContext.institutionId ?? null,
+        customerId,
+      }),
     ]);
 
     return NextResponse.json(
@@ -70,6 +80,19 @@ export async function GET(request: Request, context: CustomerTimelineRouteContex
         followups,
         treatmentSummaries,
         auditEvents,
+        followUpTimelineEvents: followUpTimelineEvents.map((event) => ({
+          eventId: event.id,
+          customerId: event.customerId,
+          eventType: event.eventType,
+          eventTitle: event.eventTitle,
+          safeSummary: event.safeSummary,
+          riskLevel: event.riskLevel,
+          occurredAt: event.occurredAt,
+          sourceType: event.sourceType,
+          sourceId: event.sourceId,
+          safeReasonCode: event.safeReasonCode,
+        })),
+        followUpOverview,
       }),
     );
   } catch {

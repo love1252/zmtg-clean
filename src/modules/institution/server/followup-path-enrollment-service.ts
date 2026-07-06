@@ -15,6 +15,10 @@ import {
   serializeFollowUpPathTemplate,
   type FollowUpPathEnrollmentDto,
 } from '@/modules/institution/domain/followup-path-enrollment';
+import {
+  recordFollowUpTasksGeneratedTimelineEvent,
+  recordPathEnrollmentTimelineEvent,
+} from '@/modules/institution/server/followup-customer-timeline-service';
 import type { TreatmentPathTemplateNode } from '@/modules/institution/domain/treatment-path-templates';
 
 const templateVersion = 'v0.6-static';
@@ -30,6 +34,7 @@ type ServiceRepository = Pick<
   | 'listFollowUpPathEnrollmentsByTenant'
   | 'getFollowUpPathEnrollmentByTenant'
   | 'cancelFollowUpPathEnrollment'
+  | 'recordFollowUpCustomerTimelineEvent'
 >;
 
 export type CreateFollowUpPathEnrollmentFromTreatmentSummaryInput = {
@@ -222,10 +227,25 @@ export async function createEnrollmentFromTreatmentSummary(
     taskIds: tasks.map((task) => task.id),
     stages,
   };
+  const enrollmentDto = mapFollowUpPathEnrollmentToDto(completedEnrollment);
+
+  await recordPathEnrollmentTimelineEvent({
+    context: input.context,
+    tenantBusinessRepository: input.tenantBusinessRepository,
+    enrollment: enrollmentDto,
+    eventType: 'followup_path_enrolled',
+    occurredAt: input.occurredAt,
+  });
+  await recordFollowUpTasksGeneratedTimelineEvent({
+    context: input.context,
+    tenantBusinessRepository: input.tenantBusinessRepository,
+    enrollment: enrollmentDto,
+    occurredAt: input.occurredAt,
+  });
 
   return {
     kind: 'created',
-    enrollment: mapFollowUpPathEnrollmentToDto(completedEnrollment),
+    enrollment: enrollmentDto,
   };
 }
 
@@ -278,7 +298,10 @@ export async function getFollowUpPathEnrollment(input: {
 export async function cancelFollowUpPathEnrollment(input: {
   context: AccessContext;
   enrollmentId: string;
-  tenantBusinessRepository: Pick<ServiceRepository, 'cancelFollowUpPathEnrollment'>;
+  tenantBusinessRepository: Pick<
+    ServiceRepository,
+    'cancelFollowUpPathEnrollment' | 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'
+  >;
 }): Promise<CancelFollowUpPathEnrollmentServiceResult> {
   const decision = canUseFollowUpPath(input.context, 'update');
   if (!decision.allowed) {
@@ -296,7 +319,15 @@ export async function cancelFollowUpPathEnrollment(input: {
   });
 
   if (result.kind === 'cancelled') {
-    return { kind: 'cancelled', enrollment: mapFollowUpPathEnrollmentToDto(result.enrollment) };
+    const enrollment = mapFollowUpPathEnrollmentToDto(result.enrollment);
+    await recordPathEnrollmentTimelineEvent({
+      context: input.context,
+      tenantBusinessRepository: input.tenantBusinessRepository,
+      enrollment,
+      eventType: 'followup_path_cancelled',
+      occurredAt: new Date().toISOString(),
+    });
+    return { kind: 'cancelled', enrollment };
   }
 
   return result;

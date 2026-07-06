@@ -136,6 +136,27 @@ function createRepositories() {
       kind: 'cancelled' as const,
       enrollment: { ...baseEnrollment, status: 'cancelled' as const },
     })),
+    recordFollowUpCustomerTimelineEvent: vi.fn(async (input) => ({
+      kind: 'created' as const,
+      event: {
+        id: input.id,
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        customerId: input.customerId,
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+        eventType: input.eventType,
+        eventTitle: input.eventTitle,
+        safeSummary: input.safeSummary,
+        riskLevel: input.riskLevel,
+        occurredAt: input.occurredAt,
+        safeActorRole: input.safeActorRole,
+        safeReasonCode: input.safeReasonCode,
+        metadataJson: input.metadataJson,
+        createdAt: input.occurredAt,
+        updatedAt: input.occurredAt,
+      },
+    })),
   };
 
   return { treatmentSummaryRepository, tenantBusinessRepository };
@@ -190,6 +211,26 @@ describe('follow-up path enrollment service', () => {
         expect.objectContaining({ stageKey: 'D3', followUpTaskId: 'task-hydro_injection_d3_care' }),
         expect.objectContaining({ stageKey: 'D7', followUpTaskId: 'task-hydro_injection_d7_revisit' }),
       ]),
+    );
+    expect(repositories.tenantBusinessRepository.recordFollowUpCustomerTimelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        customerId: 'customer-1',
+        sourceType: 'path_enrollment',
+        sourceId: 'enrollment-1',
+        eventType: 'followup_path_enrolled',
+      }),
+    );
+    expect(repositories.tenantBusinessRepository.recordFollowUpCustomerTimelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        customerId: 'customer-1',
+        sourceType: 'path_enrollment',
+        sourceId: 'enrollment-1:tasks_generated',
+        eventType: 'followup_tasks_generated',
+      }),
     );
   });
 
@@ -250,5 +291,15 @@ describe('follow-up path enrollment service', () => {
       institutionId: 'inst-a',
       enrollmentId: 'enrollment-1',
     });
+    expect(repositories.tenantBusinessRepository.recordFollowUpCustomerTimelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        customerId: 'customer-1',
+        sourceType: 'path_enrollment',
+        sourceId: 'enrollment-1',
+        eventType: 'followup_path_cancelled',
+      }),
+    );
   });
 });

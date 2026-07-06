@@ -5,6 +5,11 @@ import type {
   InstitutionKnowledgeItemDto,
   InstitutionKnowledgeListResponse,
 } from '@/modules/institution/domain/institution-knowledge-management';
+import type {
+  FollowUpCustomerOverview,
+  FollowUpCustomerTimelineEventDto,
+  FollowUpManualFeedbackPayload,
+} from '@/modules/institution/domain/followup-customer-timeline';
 import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
 import type {
   FollowUpMessageDraftDto,
@@ -162,6 +167,14 @@ export type FollowUpMessageDraftListClientResult = TenantBusinessListResult<Foll
 
 export type FollowUpMessageDraftMutationClientResult = TenantBusinessMutationResult<FollowUpMessageDraftDto>;
 
+export type FollowUpCustomerTimelineListClientResult = TenantBusinessListResult<FollowUpCustomerTimelineEventDto>;
+
+export type FollowUpCustomerOverviewClientResult =
+  | { ok: true; overview: FollowUpCustomerOverview }
+  | { ok: false; error: TenantBusinessClientError };
+
+export type FollowUpManualFeedbackMutationClientResult = TenantBusinessMutationResult<FollowUpCustomerTimelineEventDto>;
+
 export type InstitutionKnowledgeListClientResult =
   | {
       ok: true;
@@ -238,6 +251,7 @@ const followUpPathEnrollmentCreatePayloadKeys = [
 ] as const;
 const followUpMessageDraftCreatePayloadKeys = ['followUpTaskId', 'templateId'] as const;
 const followUpMessageDraftUpdatePayloadKeys = ['content'] as const;
+const followUpManualFeedbackPayloadKeys = ['safeSummary', 'riskLevel', 'relatedTaskId'] as const;
 const institutionKnowledgeListQueryKeys = ['keyword', 'page', 'pageSize'] as const;
 
 function getFetcher(options?: TenantBusinessClientOptions) {
@@ -723,7 +737,10 @@ export async function getCustomerTimeline(
       !isJsonObject(payload.customer) ||
       !Array.isArray(payload.appointments) ||
       !Array.isArray(payload.followups) ||
+      !Array.isArray(payload.treatmentSummaries) ||
       !Array.isArray(payload.auditEvents) ||
+      !Array.isArray(payload.followUpTimelineEvents) ||
+      !isJsonObject(payload.followUpOverview) ||
       !Array.isArray(payload.timeline)
     ) {
       return {
@@ -973,6 +990,70 @@ export function markFollowUpMessageDraftAsSent(
     `/api/institution/followup-message-drafts/${encodeURIComponent(draftId)}/mark-sent`,
     'POST',
     {},
+    options,
+  );
+}
+
+export function listCustomerFollowUpTimelineEvents(
+  customerId: string,
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpCustomerTimelineListClientResult> {
+  return requestRecords<FollowUpCustomerTimelineEventDto>(
+    `/api/institution/customers/${encodeURIComponent(customerId)}/followup-timeline`,
+    options,
+  );
+}
+
+export async function getCustomerFollowUpOverview(
+  customerId: string,
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpCustomerOverviewClientResult> {
+  const fetcher = getFetcher(options);
+  if (!fetcher) {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+
+  try {
+    const response = await fetcher(
+      `/api/institution/customers/${encodeURIComponent(customerId)}/followup-overview`,
+      { cache: 'no-store' },
+    );
+    const payload = await readJson(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: createClientError({ status: response.status, payload }),
+      };
+    }
+
+    if (!isJsonObject(payload) || !isJsonObject(payload.overview)) {
+      return {
+        ok: false,
+        error: { kind: 'unknown', message: '请求失败', status: response.status },
+      };
+    }
+
+    return { ok: true, overview: payload.overview as FollowUpCustomerOverview };
+  } catch {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+}
+
+export function recordManualFollowUpFeedback(
+  customerId: string,
+  payload: FollowUpManualFeedbackPayload,
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpManualFeedbackMutationClientResult> {
+  return requestRecord<FollowUpCustomerTimelineEventDto>(
+    `/api/institution/customers/${encodeURIComponent(customerId)}/followup-feedback`,
+    'POST',
+    pickPayload(payload as unknown as Record<string, unknown>, followUpManualFeedbackPayloadKeys),
     options,
   );
 }

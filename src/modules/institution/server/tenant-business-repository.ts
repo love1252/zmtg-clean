@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import type {
   AppointmentRecordSummary,
   AppointmentStatus,
@@ -26,12 +26,19 @@ import type {
   FollowUpMessageTemplateType,
   FollowUpTaskPathContext,
 } from '@/modules/institution/domain/followup-message-drafts';
+import type {
+  FollowUpCustomerOverview,
+  FollowUpCustomerTimelineEvent,
+  FollowUpCustomerTimelineEventType,
+  FollowUpCustomerTimelineSourceType,
+} from '@/modules/institution/domain/followup-customer-timeline';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   followUpMessageDrafts,
   followUpMessageTemplates,
   appointments,
   customers,
+  followUpCustomerTimelineEvents,
   followUpPathEnrollments,
   followUpPathStages,
   followUpTasks,
@@ -46,7 +53,16 @@ type FollowUpMessageTemplateRow = typeof followUpMessageTemplates.$inferSelect;
 type FollowUpMessageDraftRow = typeof followUpMessageDrafts.$inferSelect;
 type FollowUpPathEnrollmentRow = typeof followUpPathEnrollments.$inferSelect;
 type FollowUpPathStageRow = typeof followUpPathStages.$inferSelect;
+type FollowUpCustomerTimelineEventRow = typeof followUpCustomerTimelineEvents.$inferSelect;
 type CreateFollowUpPathEnrollmentInput = typeof followUpPathEnrollments.$inferInsert;
+type CreateFollowUpCustomerTimelineEventInput = Omit<
+  typeof followUpCustomerTimelineEvents.$inferInsert,
+  'occurredAt' | 'createdAt' | 'updatedAt'
+> & {
+  occurredAt: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
 type CreateFollowUpMessageDraftInput = Omit<
   typeof followUpMessageDrafts.$inferInsert,
   | 'createdAt'
@@ -237,6 +253,17 @@ type FollowUpMessageDraftTransitionResult =
       reason: 'follow_up_message_draft_not_draft' | 'follow_up_message_draft_not_approved';
     };
 
+type RecordFollowUpCustomerTimelineEventResult =
+  | { kind: 'created'; event: FollowUpCustomerTimelineEvent }
+  | { kind: 'exists'; event: FollowUpCustomerTimelineEvent }
+  | { kind: 'customer_not_found' };
+
+type CustomerFollowUpTimelineLookupInput = {
+  tenantId: string;
+  institutionId?: string | null;
+  customerId: string;
+};
+
 const activeSourceFollowUpStatuses = new Set<FollowUpStatus>([
   'scheduled',
   'due',
@@ -392,6 +419,29 @@ function mapFollowUpMessageDraftRowToRecord(input: {
   };
 }
 
+function mapFollowUpCustomerTimelineEventRowToRecord(
+  row: FollowUpCustomerTimelineEventRow,
+): FollowUpCustomerTimelineEvent {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    institutionId: row.institutionId,
+    customerId: row.customerId,
+    sourceType: row.sourceType as FollowUpCustomerTimelineSourceType,
+    sourceId: row.sourceId,
+    eventType: row.eventType as FollowUpCustomerTimelineEventType,
+    eventTitle: row.eventTitle,
+    safeSummary: row.safeSummary,
+    riskLevel: row.riskLevel,
+    occurredAt: row.occurredAt.toISOString(),
+    safeActorRole: row.safeActorRole,
+    safeReasonCode: row.safeReasonCode,
+    metadataJson: row.metadataJson,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
 function mapFollowUpPathStageRowToRecord(row: FollowUpPathStageRow): FollowUpPathStageInstance {
   return {
     id: row.id,
@@ -524,6 +574,17 @@ function followUpMessageDraftInsertValues(input: CreateFollowUpMessageDraftInput
     approvedAt: normalizeDateInput(input.approvedAt),
     rejectedAt: normalizeDateInput(input.rejectedAt),
     markedSentAt: normalizeDateInput(input.markedSentAt),
+  };
+}
+
+function followUpCustomerTimelineInsertValues(input: CreateFollowUpCustomerTimelineEventInput) {
+  const occurredAt = new Date(input.occurredAt);
+
+  return {
+    ...input,
+    occurredAt,
+    createdAt: input.createdAt ? new Date(input.createdAt) : occurredAt,
+    updatedAt: input.updatedAt ? new Date(input.updatedAt) : occurredAt,
   };
 }
 
@@ -1023,6 +1084,140 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
       });
 
       return { kind: 'cancelled', enrollment: enrollment ?? createEmptyEnrollmentRecord(row) };
+    },
+    async recordFollowUpCustomerTimelineEvent(
+      input: CreateFollowUpCustomerTimelineEventInput,
+    ): Promise<RecordFollowUpCustomerTimelineEventResult> {
+      const customerExists = await this.customerExistsByTenant({
+        tenantId: input.tenantId,
+        id: input.customerId,
+      });
+
+      if (!customerExists) {
+        return { kind: 'customer_not_found' };
+      }
+
+      const [existing] = await database
+        .select()
+        .from(followUpCustomerTimelineEvents)
+        .where(
+          and(
+            eq(followUpCustomerTimelineEvents.tenantId, input.tenantId),
+            eq(followUpCustomerTimelineEvents.sourceType, input.sourceType),
+            eq(followUpCustomerTimelineEvents.sourceId, input.sourceId),
+            eq(followUpCustomerTimelineEvents.eventType, input.eventType),
+          ),
+        );
+
+      if (existing) {
+        return { kind: 'exists', event: mapFollowUpCustomerTimelineEventRowToRecord(existing) };
+      }
+
+      const [row] = await database
+        .insert(followUpCustomerTimelineEvents)
+        .values(followUpCustomerTimelineInsertValues(input))
+        .onConflictDoNothing()
+        .returning();
+
+      if (row) {
+        return { kind: 'created', event: mapFollowUpCustomerTimelineEventRowToRecord(row) };
+      }
+
+      const [createdByConcurrentRequest] = await database
+        .select()
+        .from(followUpCustomerTimelineEvents)
+        .where(
+          and(
+            eq(followUpCustomerTimelineEvents.tenantId, input.tenantId),
+            eq(followUpCustomerTimelineEvents.sourceType, input.sourceType),
+            eq(followUpCustomerTimelineEvents.sourceId, input.sourceId),
+            eq(followUpCustomerTimelineEvents.eventType, input.eventType),
+          ),
+        );
+
+      return createdByConcurrentRequest
+        ? { kind: 'exists', event: mapFollowUpCustomerTimelineEventRowToRecord(createdByConcurrentRequest) }
+        : { kind: 'customer_not_found' };
+    },
+    async listCustomerFollowUpTimelineEvents(
+      input: CustomerFollowUpTimelineLookupInput,
+    ): Promise<FollowUpCustomerTimelineEvent[]> {
+      const rows = await database
+        .select()
+        .from(followUpCustomerTimelineEvents)
+        .where(
+          and(
+            eq(followUpCustomerTimelineEvents.tenantId, input.tenantId),
+            eq(followUpCustomerTimelineEvents.customerId, input.customerId),
+          ),
+        )
+        .orderBy(desc(followUpCustomerTimelineEvents.occurredAt), asc(followUpCustomerTimelineEvents.id));
+
+      return rows
+        .filter((row) => {
+          if (row.tenantId !== input.tenantId) return false;
+          if (row.customerId !== input.customerId) return false;
+          if (input.institutionId && row.institutionId && row.institutionId !== input.institutionId) return false;
+          return true;
+        })
+        .map(mapFollowUpCustomerTimelineEventRowToRecord);
+    },
+    async getCustomerFollowUpOverview(
+      input: CustomerFollowUpTimelineLookupInput,
+    ): Promise<FollowUpCustomerOverview> {
+      const pendingTaskStatuses: FollowUpStatus[] = ['scheduled', 'due', 'in_progress'];
+      const now = new Date();
+      const enrollmentRows = await database
+        .select()
+        .from(followUpPathEnrollments)
+        .where(
+          and(
+            eq(followUpPathEnrollments.tenantId, input.tenantId),
+            eq(followUpPathEnrollments.customerId, input.customerId),
+          ),
+        );
+      const taskRows = await database
+        .select()
+        .from(followUpTasks)
+        .where(
+          and(
+            eq(followUpTasks.tenantId, input.tenantId),
+            eq(followUpTasks.customerId, input.customerId),
+          ),
+        );
+      const draftRows = await database
+        .select()
+        .from(followUpMessageDrafts)
+        .where(
+          and(
+            eq(followUpMessageDrafts.tenantId, input.tenantId),
+            eq(followUpMessageDrafts.customerId, input.customerId),
+          ),
+        );
+      const visibleEnrollments = enrollmentRows.filter((row) => {
+        if (row.tenantId !== input.tenantId) return false;
+        if (row.customerId !== input.customerId) return false;
+        if (input.institutionId && row.institutionId && row.institutionId !== input.institutionId) return false;
+        return true;
+      });
+      const visibleDrafts = draftRows.filter((row) => {
+        if (row.tenantId !== input.tenantId) return false;
+        if (row.customerId !== input.customerId) return false;
+        if (input.institutionId && row.institutionId && row.institutionId !== input.institutionId) return false;
+        return true;
+      });
+
+      return {
+        activeEnrollmentCount: visibleEnrollments.filter((row) => row.status === 'active').length,
+        pendingTaskCount: taskRows.filter((row) => pendingTaskStatuses.includes(row.status)).length,
+        overdueTaskCount: taskRows.filter(
+          (row) => pendingTaskStatuses.includes(row.status) && row.dueAt < now,
+        ).length,
+        draftCount: visibleDrafts.length,
+        approvedDraftCount: visibleDrafts.filter((row) => row.status === 'approved').length,
+        markedSentCount: visibleDrafts.filter((row) => row.status === 'marked_sent').length,
+        escalatedCount: taskRows.filter((row) => row.status === 'escalated').length,
+      };
     },
     async listFollowUpMessageTemplatesByTenant(input: {
       tenantId: string;

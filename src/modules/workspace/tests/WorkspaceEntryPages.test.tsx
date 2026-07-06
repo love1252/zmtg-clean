@@ -739,6 +739,16 @@ const customerTimelineResponse = {
       token: 'sk_test_phase7_should_not_render',
     },
   ],
+  followUpTimelineEvents: [],
+  followUpOverview: {
+    activeEnrollmentCount: 0,
+    pendingTaskCount: 0,
+    overdueTaskCount: 0,
+    draftCount: 0,
+    approvedDraftCount: 0,
+    markedSentCount: 0,
+    escalatedCount: 0,
+  },
   timeline: [
     {
       id: 'audit:audit_phase7_smoke',

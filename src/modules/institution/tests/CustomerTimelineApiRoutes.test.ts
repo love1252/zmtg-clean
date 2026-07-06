@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { POST as followUpFeedbackPost } from '@/app/api/institution/customers/[customerId]/followup-feedback/route';
 import { GET as customerTimelineGet } from '@/app/api/institution/customers/[customerId]/timeline/route';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
@@ -7,6 +8,8 @@ const routeMocks = vi.hoisted(() => {
     getCustomerByTenant: vi.fn(),
     listAppointmentsByTenantAndCustomer: vi.fn(),
     listFollowUpTasksByTenantAndCustomer: vi.fn(),
+    listCustomerFollowUpTimelineEvents: vi.fn(),
+    getCustomerFollowUpOverview: vi.fn(),
   };
   const auditRepository = {
     listCustomerAuditEventsByResourceId: vi.fn(),
@@ -194,6 +197,39 @@ const voidedTreatmentSummaryRecord = {
   updatedAt: '2026-06-02T13:00:00.000Z',
 };
 
+const followUpTimelineEvent = {
+  id: 'ftl_001',
+  tenantId: 'demo-tenant-001',
+  institutionId: 'demo-institution-001',
+  customerId: 'cust_001',
+  sourceType: 'path_enrollment',
+  sourceId: 'enroll_001',
+  eventType: 'followup_path_enrolled',
+  eventTitle: '纳入随访路径',
+  safeSummary: '王女士已纳入 post_treatment_repair，阶段 3 个，任务 3 个。',
+  riskLevel: null,
+  occurredAt: '2026-06-01T12:05:00.000Z',
+  safeActorRole: 'tenant_admin',
+  safeReasonCode: 'followup_path_enrolled',
+  metadataJson: {
+    templateKey: 'post_treatment_repair',
+    forbidAutoReachOut: true,
+    provider: 'blocked-provider',
+  },
+  createdAt: '2026-06-01T12:05:00.000Z',
+  updatedAt: '2026-06-01T12:05:00.000Z',
+};
+
+const followUpOverview = {
+  activeEnrollmentCount: 1,
+  pendingTaskCount: 2,
+  overdueTaskCount: 1,
+  draftCount: 3,
+  approvedDraftCount: 1,
+  markedSentCount: 1,
+  escalatedCount: 1,
+};
+
 function routeContext(customerId = 'cust_001') {
   return { params: Promise.resolve({ customerId }) };
 }
@@ -205,11 +241,17 @@ function timelineRequest(
   return new Request(path, init);
 }
 
+function followUpFeedbackRequest(body: unknown) {
+  return new Request('http://localhost/api/institution/customers/cust_001/followup-feedback', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 function expectNoPrivateData(payload: unknown) {
   const serialized = JSON.stringify(payload);
 
   expect(serialized).not.toContain('tenantId');
-  expect(serialized).not.toContain('customerId');
   expect(serialized).not.toContain('13800000000');
   expect(serialized).not.toContain('110101199001010011');
   expect(serialized).not.toContain('MR-RAW-001');
@@ -223,6 +265,7 @@ function expectNoPrivateData(payload: unknown) {
   expect(serialized).not.toContain('DATABASE_URL');
   expect(serialized).not.toContain('postgres://');
   expect(serialized).not.toContain('blocked-stack-value');
+  expect(serialized).not.toContain('blocked-provider');
   expect(serialized).not.toContain('sk_test');
   expect(serialized).not.toContain('access_token');
 }
@@ -241,6 +284,10 @@ beforeEach(() => {
   routeMocks.repository.listAppointmentsByTenantAndCustomer.mockResolvedValue([appointmentRecord]);
   routeMocks.repository.listFollowUpTasksByTenantAndCustomer.mockReset();
   routeMocks.repository.listFollowUpTasksByTenantAndCustomer.mockResolvedValue([followUpRecord]);
+  routeMocks.repository.listCustomerFollowUpTimelineEvents.mockReset();
+  routeMocks.repository.listCustomerFollowUpTimelineEvents.mockResolvedValue([followUpTimelineEvent]);
+  routeMocks.repository.getCustomerFollowUpOverview.mockReset();
+  routeMocks.repository.getCustomerFollowUpOverview.mockResolvedValue(followUpOverview);
   routeMocks.auditRepository.listCustomerAuditEventsByResourceId.mockReset();
   routeMocks.auditRepository.listCustomerAuditEventsByResourceId.mockResolvedValue([
     auditEventSummary,
@@ -279,6 +326,16 @@ describe('客户详情 timeline API', () => {
       routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer,
     ).toHaveBeenCalledWith({
       tenantId: 'demo-tenant-001',
+      customerId: 'cust_001',
+    });
+    expect(routeMocks.repository.listCustomerFollowUpTimelineEvents).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      institutionId: null,
+      customerId: 'cust_001',
+    });
+    expect(routeMocks.repository.getCustomerFollowUpOverview).toHaveBeenCalledWith({
+      tenantId: 'demo-tenant-001',
+      institutionId: null,
       customerId: 'cust_001',
     });
     expect(payload.customer).toEqual({
@@ -331,6 +388,21 @@ describe('客户详情 timeline API', () => {
         updatedAt: '2026-06-01T12:00:00.000Z',
       },
     ]);
+    expect(payload.followUpTimelineEvents).toEqual([
+      {
+        eventId: 'ftl_001',
+        customerId: 'cust_001',
+        eventType: 'followup_path_enrolled',
+        eventTitle: '纳入随访路径',
+        safeSummary: '王女士已纳入 post_treatment_repair，阶段 3 个，任务 3 个。',
+        riskLevel: null,
+        occurredAt: '2026-06-01T12:05:00.000Z',
+        sourceType: 'path_enrollment',
+        sourceId: 'enroll_001',
+        safeReasonCode: 'followup_path_enrolled',
+      },
+    ]);
+    expect(payload.followUpOverview).toEqual(followUpOverview);
     expect(payload.timeline.map((event: { id: string }) => event.id)).toEqual([
       'audit:audit_evt_001',
       'appointment:appt_001',
@@ -495,6 +567,25 @@ describe('客户详情 timeline API', () => {
     expect(response.status).toBe(503);
     expect(payload).toEqual({ error: '数据服务暂时不可用' });
     expectNoPrivateData(payload);
+  });
+
+  it('低敏反馈 payload 含禁止字段时不回显 provider / token 等字段名', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await followUpFeedbackPost(
+      followUpFeedbackRequest({
+        safeSummary: '客户反馈恢复良好，继续人工跟进。',
+        riskLevel: 'normal',
+        provider: 'blocked-provider',
+      }),
+      routeContext(),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload).toEqual({ error: '请求包含不允许的字段' });
+    expect(JSON.stringify(payload)).not.toMatch(/provider|model|token|cost|vendor/i);
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
   });
 
   it('治疗摘要查询异常时返回稳定 503 且不泄露错误详情', async () => {

@@ -176,6 +176,29 @@ const customerTimelineResponse = {
       token: 'sk_test_should_not_render',
     },
   ],
+  followUpTimelineEvents: [
+    {
+      eventId: 'ftl_wang_path_enrolled',
+      customerId: 'cust_wang_repurchase',
+      eventType: 'followup_path_enrolled',
+      eventTitle: '纳入随访路径',
+      safeSummary: '王女士已纳入 post_treatment_repair，阶段 3 个，任务 3 个。',
+      riskLevel: null,
+      occurredAt: '2026-06-01T12:20:00+08:00',
+      sourceType: 'path_enrollment',
+      sourceId: 'enroll_wang_001',
+      safeReasonCode: 'followup_path_enrolled',
+    },
+  ],
+  followUpOverview: {
+    activeEnrollmentCount: 1,
+    pendingTaskCount: 1,
+    overdueTaskCount: 1,
+    draftCount: 1,
+    approvedDraftCount: 0,
+    markedSentCount: 0,
+    escalatedCount: 1,
+  },
   timeline: [
     {
       id: 'audit:audit_evt_001',
