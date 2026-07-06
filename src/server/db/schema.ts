@@ -1699,6 +1699,10 @@ export const followUpPathStages = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    tenantIdIdUnique: unique('follow_up_path_stages_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
     enrollmentFk: foreignKey({
       name: 'follow_up_path_stages_tenant_enrollment_fk',
       columns: [table.tenantId, table.enrollmentId],

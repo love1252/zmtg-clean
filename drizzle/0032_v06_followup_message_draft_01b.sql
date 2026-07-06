@@ -81,6 +81,12 @@ EXCEPTION
 END $$;
 
 DO $$ BEGIN
+ ALTER TABLE "follow_up_path_stages" ADD CONSTRAINT "follow_up_path_stages_tenant_id_id_unique" UNIQUE ("tenant_id","id");
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
  ALTER TABLE "follow_up_message_drafts" ADD CONSTRAINT "follow_up_message_drafts_tenant_stage_fk" FOREIGN KEY ("tenant_id","stage_id") REFERENCES "public"."follow_up_path_stages"("tenant_id","id") ON DELETE no action ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
