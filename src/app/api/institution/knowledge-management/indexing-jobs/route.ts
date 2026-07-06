@@ -62,6 +62,7 @@ function statusCodeForResult(status: string) {
   if (status === 'forbidden') return 403;
   if (status === 'not_found') return 404;
   if (status === 'failed') return 503;
+  if (status === 'quota_exceeded') return 409;
   return 200;
 }
 
@@ -69,6 +70,7 @@ function errorPayloadForStatus(status: string, message?: string) {
   if (status === 'forbidden') return { code: 'forbidden', error: '没有访问权限' };
   if (status === 'not_found') return { code: 'not_found', error: '记录不存在' };
   if (status === 'validation_failed') return { code: 'validation_error', error: message ?? '请求参数不正确' };
+  if (status === 'quota_exceeded') return { code: 'quota_exceeded', error: message ?? '知识库任务额度已达到当前套餐上限，请联系平台管理员调整套餐' };
   return { code: 'service_unavailable', error: '知识库索引任务暂时不可用' };
 }
 
@@ -114,7 +116,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ code: 'validation_error', error: '索引任务类型不正确' }, { status: 400 });
     }
 
-    const repository = createPlatformKnowledgeManagementRepository(getDatabase());
+    const db = getDatabase();
+    const repository = createPlatformKnowledgeManagementRepository(db);
     const taskInput = {
       tenantId: access.accessContext.tenantId,
       institutionId: access.accessContext.institutionId,
@@ -124,21 +127,24 @@ export async function POST(request: Request) {
     };
     const result = jobType === 'parse_file'
       ? await createAndRunParseFileJob({
+        database: db,
         repository,
         storage: createLocalPlatformKnowledgeFileStorage(),
         input: taskInput,
       })
       : jobType === 'ocr_file'
         ? await createAndRunOcrFileJob({
+          database: db,
           repository,
           storage: createLocalPlatformKnowledgeFileStorage(),
           input: taskInput,
         })
         : jobType === 'generate_embeddings'
-        ? await createAndRunGenerateEmbeddingsJob({ repository, input: taskInput })
+        ? await createAndRunGenerateEmbeddingsJob({ database: db, repository, input: taskInput })
         : jobType === 'rebuild_embeddings'
-          ? await createAndRunRebuildEmbeddingsJob({ repository, input: taskInput })
+          ? await createAndRunRebuildEmbeddingsJob({ database: db, repository, input: taskInput })
           : await createAndRunRebuildKnowledgeIndexJob({
+            database: db,
             repository,
             storage: createLocalPlatformKnowledgeFileStorage(),
             input: {

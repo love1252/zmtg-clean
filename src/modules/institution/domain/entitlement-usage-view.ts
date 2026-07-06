@@ -47,18 +47,34 @@ export function buildEntitlementUsageView(input: {
   usages: {
     customers: number | null;
     staffSeats: number | null;
+    knowledgeItems: number | null;
     knowledgeFiles: number | null;
+    knowledgeTotalStorageMb: number | null;
+    knowledgeSingleFileSizeMb: number | null;
+    knowledgeParseJobsThisMonth: number | null;
+    knowledgeEmbeddingJobsThisMonth: number | null;
+    knowledgeOcrJobsThisMonth: number | null;
+    knowledgeRagAnswersThisMonth: number | null;
+    knowledgeIndexRebuildJobsThisMonth: number | null;
     aiCallsThisMonth: number | null;
   };
   limits: {
     maxCustomers: number | null;
     maxStaffSeats: number | null;
+    maxKnowledgeItems: number | null;
     maxKnowledgeFiles: number | null;
+    maxKnowledgeTotalStorageMb: number | null;
+    maxKnowledgeSingleFileSizeMb: number | null;
+    maxKnowledgeParseJobsMonthly: number | null;
+    maxKnowledgeEmbeddingJobsMonthly: number | null;
+    maxKnowledgeOcrJobsMonthly: number | null;
+    maxKnowledgeRagAnswersMonthly: number | null;
+    maxKnowledgeIndexRebuildJobsMonthly: number | null;
     maxAiCalls: number | null;
   };
 }): TenantEntitlementUsageView {
   const hasActivePlan = input.planCode !== null;
-  const hasLimits = [input.limits.maxCustomers, input.limits.maxStaffSeats, input.limits.maxKnowledgeFiles, input.limits.maxAiCalls].some(
+  const hasLimits = Object.values(input.limits).some(
     (v) => typeof v === 'number',
   );
 
@@ -90,6 +106,16 @@ export function buildEntitlementUsageView(input: {
         : 'no_active_plan',
     },
     {
+      resource: 'knowledge_items',
+      label: '知识库条目',
+      used: input.usages.knowledgeItems,
+      limit: input.limits.maxKnowledgeItems,
+      remaining: computeRemaining(input.usages.knowledgeItems, input.limits.maxKnowledgeItems),
+      status: hasActivePlan
+        ? computeStatus(input.usages.knowledgeItems, input.limits.maxKnowledgeItems)
+        : 'no_active_plan',
+    },
+    {
       resource: 'knowledge_files',
       label: '知识库文件',
       used: input.usages.knowledgeFiles,
@@ -97,6 +123,76 @@ export function buildEntitlementUsageView(input: {
       remaining: computeRemaining(input.usages.knowledgeFiles, input.limits.maxKnowledgeFiles),
       status: hasActivePlan
         ? computeStatus(input.usages.knowledgeFiles, input.limits.maxKnowledgeFiles)
+        : 'no_active_plan',
+    },
+    {
+      resource: 'knowledge_total_storage_mb',
+      label: '知识库容量（MB）',
+      used: input.usages.knowledgeTotalStorageMb,
+      limit: input.limits.maxKnowledgeTotalStorageMb,
+      remaining: computeRemaining(input.usages.knowledgeTotalStorageMb, input.limits.maxKnowledgeTotalStorageMb),
+      status: hasActivePlan
+        ? computeStatus(input.usages.knowledgeTotalStorageMb, input.limits.maxKnowledgeTotalStorageMb)
+        : 'no_active_plan',
+    },
+    {
+      resource: 'knowledge_single_file_size_mb',
+      label: '单文件大小（MB）',
+      used: input.usages.knowledgeSingleFileSizeMb,
+      limit: input.limits.maxKnowledgeSingleFileSizeMb,
+      remaining: computeRemaining(input.usages.knowledgeSingleFileSizeMb, input.limits.maxKnowledgeSingleFileSizeMb),
+      status: hasActivePlan
+        ? computeStatus(input.usages.knowledgeSingleFileSizeMb, input.limits.maxKnowledgeSingleFileSizeMb)
+        : 'no_active_plan',
+    },
+    {
+      resource: 'knowledge_parse_jobs_monthly',
+      label: '解析任务（本月）',
+      used: input.usages.knowledgeParseJobsThisMonth,
+      limit: input.limits.maxKnowledgeParseJobsMonthly,
+      remaining: computeRemaining(input.usages.knowledgeParseJobsThisMonth, input.limits.maxKnowledgeParseJobsMonthly),
+      status: hasActivePlan
+        ? computeStatus(input.usages.knowledgeParseJobsThisMonth, input.limits.maxKnowledgeParseJobsMonthly)
+        : 'no_active_plan',
+    },
+    {
+      resource: 'knowledge_embedding_jobs_monthly',
+      label: '向量任务（本月）',
+      used: input.usages.knowledgeEmbeddingJobsThisMonth,
+      limit: input.limits.maxKnowledgeEmbeddingJobsMonthly,
+      remaining: computeRemaining(input.usages.knowledgeEmbeddingJobsThisMonth, input.limits.maxKnowledgeEmbeddingJobsMonthly),
+      status: hasActivePlan
+        ? computeStatus(input.usages.knowledgeEmbeddingJobsThisMonth, input.limits.maxKnowledgeEmbeddingJobsMonthly)
+        : 'no_active_plan',
+    },
+    {
+      resource: 'knowledge_ocr_jobs_monthly',
+      label: 'OCR 任务（本月）',
+      used: input.usages.knowledgeOcrJobsThisMonth,
+      limit: input.limits.maxKnowledgeOcrJobsMonthly,
+      remaining: computeRemaining(input.usages.knowledgeOcrJobsThisMonth, input.limits.maxKnowledgeOcrJobsMonthly),
+      status: hasActivePlan
+        ? computeStatus(input.usages.knowledgeOcrJobsThisMonth, input.limits.maxKnowledgeOcrJobsMonthly)
+        : 'no_active_plan',
+    },
+    {
+      resource: 'knowledge_rag_answers_monthly',
+      label: '知识库问答（本月）',
+      used: input.usages.knowledgeRagAnswersThisMonth,
+      limit: input.limits.maxKnowledgeRagAnswersMonthly,
+      remaining: computeRemaining(input.usages.knowledgeRagAnswersThisMonth, input.limits.maxKnowledgeRagAnswersMonthly),
+      status: hasActivePlan
+        ? computeStatus(input.usages.knowledgeRagAnswersThisMonth, input.limits.maxKnowledgeRagAnswersMonthly)
+        : 'no_active_plan',
+    },
+    {
+      resource: 'knowledge_index_rebuild_jobs_monthly',
+      label: '索引重建（本月）',
+      used: input.usages.knowledgeIndexRebuildJobsThisMonth,
+      limit: input.limits.maxKnowledgeIndexRebuildJobsMonthly,
+      remaining: computeRemaining(input.usages.knowledgeIndexRebuildJobsThisMonth, input.limits.maxKnowledgeIndexRebuildJobsMonthly),
+      status: hasActivePlan
+        ? computeStatus(input.usages.knowledgeIndexRebuildJobsThisMonth, input.limits.maxKnowledgeIndexRebuildJobsMonthly)
         : 'no_active_plan',
     },
     {

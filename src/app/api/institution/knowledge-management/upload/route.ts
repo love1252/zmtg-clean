@@ -4,7 +4,6 @@ import { getDatabase } from '@/server/db/client';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import { createInstitutionKnowledgeWriteRepository } from '@/modules/institution/server/institution-knowledge-write-repository';
 import { createLocalPlatformKnowledgeFileStorage } from '@/modules/open-platform/server/platform-knowledge-file-storage';
-import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 import {
   uploadAndParseInstitutionKnowledgeFileService,
   type InstitutionKnowledgeUploadFileLike,
@@ -53,19 +52,6 @@ export async function POST(request: Request) {
   try {
     const db = getDatabase();
 
-    // 检查知识库文件数量配额（在解析文件和上传之前）
-    const quotaDecision = await checkTenantQuotaForCreate({
-      database: db,
-      tenantId: accessContext.tenantId,
-      resource: 'knowledge_files',
-    });
-    if (!quotaDecision.allowed) {
-      return NextResponse.json(
-        { code: 'quota_exceeded_knowledge_files', error: '知识库文件数量已达到当前套餐上限，请联系平台管理员调整套餐' },
-        { status: 409 },
-      );
-    }
-
     const repository = {
       ...createPlatformKnowledgeManagementRepository(db),
       ...createInstitutionKnowledgeWriteRepository(db),
@@ -73,6 +59,7 @@ export async function POST(request: Request) {
     const storage = createLocalPlatformKnowledgeFileStorage();
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({
+      database: db,
       repository: repository as unknown as Parameters<typeof uploadAndParseInstitutionKnowledgeFileService>[0]['repository'],
       storage,
       input: {
@@ -87,6 +74,13 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { code: 'validation_error', error: result.message ?? '文件验证失败' },
         { status: 400 },
+      );
+    }
+
+    if (result.status === 'quota_exceeded') {
+      return NextResponse.json(
+        { code: result.code ?? 'quota_exceeded', error: result.message ?? '知识库文件额度已达到当前套餐上限，请联系平台管理员调整套餐' },
+        { status: 409 },
       );
     }
 

@@ -48,7 +48,19 @@ const planCatalogPayload = {
           connectorEntitlementsJson: { connectors: ['企微'] },
           serviceEntitlementsJson: { services: ['基础培训'] },
           featureEntitlementsJson: { modules: ['客户运营'] },
-          quotaEntitlementsJson: { aiCallsPerMonth: 50000 },
+          quotaEntitlementsJson: {
+            aiCallsPerMonth: 50000,
+            knowledgeItemsLimit: 20,
+            knowledgeFilesLimit: 20,
+            knowledgeTotalStorageMb: 200,
+            knowledgeSingleFileSizeMb: 2,
+            knowledgeParseJobsMonthly: 80,
+            knowledgeEmbeddingJobsMonthly: 40,
+            knowledgeOcrJobsMonthly: 10,
+            knowledgeRagAnswersMonthly: 100,
+            knowledgeIndexRebuildJobsMonthly: 5,
+            knowledgeOcrEnabled: true,
+          },
           changeSummary: '首次发布',
           createdBy: 'platform-user',
           updatedBy: 'platform-user',
@@ -87,7 +99,19 @@ const planCatalogPayload = {
           },
           serviceEntitlementsJson: { services: ['实施支持', '季度复盘'] },
           featureEntitlementsJson: { modules: ['客户运营', '知识库'] },
-          quotaEntitlementsJson: { aiCallsPerMonth: 500000 },
+          quotaEntitlementsJson: {
+            aiCallsPerMonth: 500000,
+            knowledgeItemsLimit: 500,
+            knowledgeFilesLimit: 500,
+            knowledgeTotalStorageMb: 10240,
+            knowledgeSingleFileSizeMb: 20,
+            knowledgeParseJobsMonthly: 1500,
+            knowledgeEmbeddingJobsMonthly: 800,
+            knowledgeOcrJobsMonthly: 200,
+            knowledgeRagAnswersMonthly: 2500,
+            knowledgeIndexRebuildJobsMonthly: 100,
+            knowledgeOcrEnabled: true,
+          },
           changeSummary: '增加 AI 调用',
           createdBy: 'platform-user',
           updatedBy: 'platform-user',
@@ -112,7 +136,19 @@ const planCatalogPayload = {
           connectorEntitlementsJson: { connectors: ['企微', 'HIS', 'CRM'] },
           serviceEntitlementsJson: { services: ['实施支持'] },
           featureEntitlementsJson: { modules: ['客户运营'] },
-          quotaEntitlementsJson: { aiCallsPerMonth: 300000 },
+          quotaEntitlementsJson: {
+            aiCallsPerMonth: 300000,
+            knowledgeItemsLimit: 300,
+            knowledgeFilesLimit: 300,
+            knowledgeTotalStorageMb: 5120,
+            knowledgeSingleFileSizeMb: 10,
+            knowledgeParseJobsMonthly: 900,
+            knowledgeEmbeddingJobsMonthly: 480,
+            knowledgeOcrJobsMonthly: 120,
+            knowledgeRagAnswersMonthly: 1500,
+            knowledgeIndexRebuildJobsMonthly: 60,
+            knowledgeOcrEnabled: true,
+          },
           changeSummary: '首次发布',
           createdBy: 'platform-user',
           updatedBy: 'platform-user',
@@ -137,7 +173,19 @@ const planCatalogPayload = {
           connectorEntitlementsJson: { connectors: ['企微'] },
           serviceEntitlementsJson: { services: ['历史支持'] },
           featureEntitlementsJson: { modules: ['客户运营'] },
-          quotaEntitlementsJson: { aiCallsPerMonth: 200000 },
+          quotaEntitlementsJson: {
+            aiCallsPerMonth: 200000,
+            knowledgeItemsLimit: 200,
+            knowledgeFilesLimit: 200,
+            knowledgeTotalStorageMb: 4096,
+            knowledgeSingleFileSizeMb: 8,
+            knowledgeParseJobsMonthly: 600,
+            knowledgeEmbeddingJobsMonthly: 300,
+            knowledgeOcrJobsMonthly: 80,
+            knowledgeRagAnswersMonthly: 1000,
+            knowledgeIndexRebuildJobsMonthly: 40,
+            knowledgeOcrEnabled: true,
+          },
           changeSummary: '历史版本',
           createdBy: 'platform-user',
           updatedBy: 'platform-user',
@@ -173,7 +221,19 @@ const planCatalogPayload = {
           connectorEntitlementsJson: { connectors: ['企微'] },
           serviceEntitlementsJson: { services: ['新手引导'] },
           featureEntitlementsJson: { modules: ['客户运营'] },
-          quotaEntitlementsJson: { aiCallsPerMonth: 5000 },
+          quotaEntitlementsJson: {
+            aiCallsPerMonth: 5000,
+            knowledgeItemsLimit: 10,
+            knowledgeFilesLimit: 10,
+            knowledgeTotalStorageMb: 100,
+            knowledgeSingleFileSizeMb: 2,
+            knowledgeParseJobsMonthly: 30,
+            knowledgeEmbeddingJobsMonthly: 15,
+            knowledgeOcrJobsMonthly: 5,
+            knowledgeRagAnswersMonthly: 50,
+            knowledgeIndexRebuildJobsMonthly: 2,
+            knowledgeOcrEnabled: true,
+          },
           changeSummary: '试用版本',
           createdBy: 'platform-user',
           updatedBy: 'platform-user',
@@ -372,7 +432,11 @@ describe('产品与套餐面板', () => {
     fireEvent.click(screen.getByRole('button', { name: '权益对照' }));
 
     expect(screen.getByRole('table', { name: '套餐权益对照预览' })).toBeInTheDocument();
-    expect(screen.getByText('知识库存储')).toBeInTheDocument();
+    expect(screen.getByText('知识库条目')).toBeInTheDocument();
+    expect(screen.getByText('知识库文件')).toBeInTheDocument();
+    expect(screen.getByText('OCR / 月')).toBeInTheDocument();
+    expect(screen.getByText('索引重建 / 月')).toBeInTheDocument();
+    expect(screen.getAllByText('启用').length).toBeGreaterThan(0);
     expect(screen.getByText('企微 / HIS / CRM')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '版本记录' }));

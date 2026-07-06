@@ -279,7 +279,6 @@ describe('AI credits metering rule lookup repository', () => {
       .filter(Boolean)
       .map((line) => line.slice(3));
 
-    expect(changedFiles).not.toContain('src/modules/institution/domain/quota-enforcement.ts');
     expect(changedFiles).not.toContain('drizzle/0025_v06_ai_credits_metering_schema.sql');
     expect(changedFiles).not.toContain('drizzle/0026_v06_ai_usage_service_project_fields.sql');
   });

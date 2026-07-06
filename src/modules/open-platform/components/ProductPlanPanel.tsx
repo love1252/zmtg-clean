@@ -40,6 +40,16 @@ type DraftForm = {
   seatLimit: string;
   monthlyAiCallLimit: string;
   knowledgeStorageGb: string;
+  knowledgeItemsLimit: string;
+  knowledgeFilesLimit: string;
+  knowledgeTotalStorageMb: string;
+  knowledgeSingleFileSizeMb: string;
+  knowledgeParseJobsMonthly: string;
+  knowledgeEmbeddingJobsMonthly: string;
+  knowledgeOcrJobsMonthly: string;
+  knowledgeRagAnswersMonthly: string;
+  knowledgeIndexRebuildJobsMonthly: string;
+  knowledgeOcrEnabled: boolean;
   connectorText: string;
   serviceText: string;
   featureText: string;
@@ -84,12 +94,38 @@ function readStringList(json: unknown, key: string) {
     : [];
 }
 
+function readQuotaString(json: unknown, key: string) {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return '';
+  const value = (json as Record<string, unknown>)[key];
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+}
+
+function readQuotaBoolean(json: unknown, key: string) {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return false;
+  return (json as Record<string, unknown>)[key] === true;
+}
+
 function listText(items: string[]) {
   return items.length > 0 ? items.join(' / ') : '未配置';
 }
 
 function formatStorageMb(value: number | null) {
   return typeof value === 'number' ? `${formatNumber(value * 1024)} MB` : '不限';
+}
+
+function readQuotaNumber(json: unknown, key: string) {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  const value = (json as Record<string, unknown>)[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function formatQuotaEntitlement(version: PlanCatalogVersionDto, key: string, suffix = '') {
+  const value = readQuotaNumber(version.quotaEntitlementsJson, key);
+  return typeof value === 'number' ? `${formatNumber(value)}${suffix}` : '未配置';
+}
+
+function formatQuotaEnabled(version: PlanCatalogVersionDto, key: string) {
+  return readQuotaBoolean(version.quotaEntitlementsJson, key) ? '启用' : '未启用';
 }
 
 function numberText(value: string) {
@@ -141,6 +177,16 @@ function versionToDraftForm(version: PlanCatalogVersionDto): DraftForm {
     seatLimit: version.seatLimit?.toString() ?? '',
     monthlyAiCallLimit: version.monthlyAiCallLimit?.toString() ?? '',
     knowledgeStorageGb: version.knowledgeStorageGb?.toString() ?? '',
+    knowledgeItemsLimit: readQuotaString(version.quotaEntitlementsJson, 'knowledgeItemsLimit'),
+    knowledgeFilesLimit: readQuotaString(version.quotaEntitlementsJson, 'knowledgeFilesLimit'),
+    knowledgeTotalStorageMb: readQuotaString(version.quotaEntitlementsJson, 'knowledgeTotalStorageMb'),
+    knowledgeSingleFileSizeMb: readQuotaString(version.quotaEntitlementsJson, 'knowledgeSingleFileSizeMb'),
+    knowledgeParseJobsMonthly: readQuotaString(version.quotaEntitlementsJson, 'knowledgeParseJobsMonthly'),
+    knowledgeEmbeddingJobsMonthly: readQuotaString(version.quotaEntitlementsJson, 'knowledgeEmbeddingJobsMonthly'),
+    knowledgeOcrJobsMonthly: readQuotaString(version.quotaEntitlementsJson, 'knowledgeOcrJobsMonthly'),
+    knowledgeRagAnswersMonthly: readQuotaString(version.quotaEntitlementsJson, 'knowledgeRagAnswersMonthly'),
+    knowledgeIndexRebuildJobsMonthly: readQuotaString(version.quotaEntitlementsJson, 'knowledgeIndexRebuildJobsMonthly'),
+    knowledgeOcrEnabled: readQuotaBoolean(version.quotaEntitlementsJson, 'knowledgeOcrEnabled'),
     connectorText: readStringList(version.connectorEntitlementsJson, 'connectors').join('、'),
     serviceText: readStringList(version.serviceEntitlementsJson, 'services').join('、'),
     featureText: readStringList(version.featureEntitlementsJson, 'modules').join('、'),
@@ -164,6 +210,16 @@ function draftFormToPayload(form: DraftForm): PlanVersionDraftPayload {
     quotaEntitlementsJson: {
       aiCallsPerMonth: numberText(form.monthlyAiCallLimit),
       knowledgeStorageGb: numberText(form.knowledgeStorageGb),
+      knowledgeItemsLimit: numberText(form.knowledgeItemsLimit),
+      knowledgeFilesLimit: numberText(form.knowledgeFilesLimit),
+      knowledgeTotalStorageMb: numberText(form.knowledgeTotalStorageMb),
+      knowledgeSingleFileSizeMb: numberText(form.knowledgeSingleFileSizeMb),
+      knowledgeParseJobsMonthly: numberText(form.knowledgeParseJobsMonthly),
+      knowledgeEmbeddingJobsMonthly: numberText(form.knowledgeEmbeddingJobsMonthly),
+      knowledgeOcrJobsMonthly: numberText(form.knowledgeOcrJobsMonthly),
+      knowledgeRagAnswersMonthly: numberText(form.knowledgeRagAnswersMonthly),
+      knowledgeIndexRebuildJobsMonthly: numberText(form.knowledgeIndexRebuildJobsMonthly),
+      knowledgeOcrEnabled: form.knowledgeOcrEnabled,
     },
     changeSummary: form.changeSummary.trim(),
   };
@@ -303,7 +359,7 @@ function DraftEditor({
   planName: string;
   draftForm: DraftForm;
   isMutating: boolean;
-  onUpdateDraft: (field: keyof DraftForm, value: string) => void;
+  onUpdateDraft: <K extends keyof DraftForm>(field: K, value: DraftForm[K]) => void;
   onCancelDraft: () => void;
   onPublishDraft: () => void;
 }) {
@@ -409,6 +465,96 @@ function DraftEditor({
                   value={draftForm.knowledgeStorageGb}
                   onChange={(event) => onUpdateDraft('knowledgeStorageGb', event.target.value)}
                 />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                知识条目数
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.knowledgeItemsLimit}
+                  onChange={(event) => onUpdateDraft('knowledgeItemsLimit', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                知识文件数
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.knowledgeFilesLimit}
+                  onChange={(event) => onUpdateDraft('knowledgeFilesLimit', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                总容量 MB
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.knowledgeTotalStorageMb}
+                  onChange={(event) => onUpdateDraft('knowledgeTotalStorageMb', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                单文件 MB
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.knowledgeSingleFileSizeMb}
+                  onChange={(event) => onUpdateDraft('knowledgeSingleFileSizeMb', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                解析任务 / 月
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.knowledgeParseJobsMonthly}
+                  onChange={(event) => onUpdateDraft('knowledgeParseJobsMonthly', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                向量任务 / 月
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.knowledgeEmbeddingJobsMonthly}
+                  onChange={(event) => onUpdateDraft('knowledgeEmbeddingJobsMonthly', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                OCR 任务 / 月
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.knowledgeOcrJobsMonthly}
+                  onChange={(event) => onUpdateDraft('knowledgeOcrJobsMonthly', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                知识库问答 / 月
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.knowledgeRagAnswersMonthly}
+                  onChange={(event) => onUpdateDraft('knowledgeRagAnswersMonthly', event.target.value)}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                索引重建 / 月
+                <input
+                  className={fieldShell}
+                  inputMode="numeric"
+                  value={draftForm.knowledgeIndexRebuildJobsMonthly}
+                  onChange={(event) => onUpdateDraft('knowledgeIndexRebuildJobsMonthly', event.target.value)}
+                />
+              </label>
+              <label className="flex min-h-10 items-center gap-2 rounded-lg border border-[#dbe6f3] bg-white px-3 py-2 text-sm font-semibold text-slate-700 md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={draftForm.knowledgeOcrEnabled}
+                  onChange={(event) => onUpdateDraft('knowledgeOcrEnabled', event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200"
+                />
+                启用知识库 OCR 能力
               </label>
             </div>
           </EditorGroup>
@@ -535,7 +681,7 @@ export function ProductPlanPanel() {
     return catalog.plans.find((plan) => plan.planId === selectedDraftVersion.planId) ?? null;
   }, [catalog, selectedDraftVersion]);
 
-  function updateDraft(field: keyof DraftForm, value: string) {
+  function updateDraft<K extends keyof DraftForm>(field: K, value: DraftForm[K]) {
     setDraftForm((current) => (current ? { ...current, [field]: value } : current));
   }
 
@@ -694,6 +840,16 @@ export function ProductPlanPanel() {
                     <CompactInfo label="员工席位" value={`${formatNumber(displayVersion?.seatLimit ?? null)} 席`} />
                     <CompactInfo label="AI调用额度/月" value={`${formatNumber(displayVersion?.monthlyAiCallLimit ?? null)} 次`} />
                     <CompactInfo label="知识库容量" value={formatStorageMb(displayVersion?.knowledgeStorageGb ?? null)} />
+                    <CompactInfo
+                      label="知识库任务"
+                      value={displayVersion
+                        ? [
+                            `解析 ${formatQuotaEntitlement(displayVersion, 'knowledgeParseJobsMonthly')}`,
+                            `向量 ${formatQuotaEntitlement(displayVersion, 'knowledgeEmbeddingJobsMonthly')}`,
+                            `OCR ${formatQuotaEntitlement(displayVersion, 'knowledgeOcrJobsMonthly')}`,
+                          ].join(' / ')
+                        : '未配置'}
+                    />
                     <CompactInfo label="连接器" value={listText(connectors)} />
                     {draftVersion ? (
                       <button
@@ -755,7 +911,16 @@ export function ProductPlanPanel() {
                   <th className="px-3 py-3 font-semibold">Agent 数量</th>
                   <th className="px-3 py-3 font-semibold">员工席位</th>
                   <th className="px-3 py-3 font-semibold">AI 调用 / 月</th>
-                  <th className="px-3 py-3 font-semibold">知识库存储</th>
+                  <th className="px-3 py-3 font-semibold">知识库条目</th>
+                  <th className="px-3 py-3 font-semibold">知识库文件</th>
+                  <th className="px-3 py-3 font-semibold">总容量</th>
+                  <th className="px-3 py-3 font-semibold">单文件</th>
+                  <th className="px-3 py-3 font-semibold">解析 / 月</th>
+                  <th className="px-3 py-3 font-semibold">向量 / 月</th>
+                  <th className="px-3 py-3 font-semibold">OCR / 月</th>
+                  <th className="px-3 py-3 font-semibold">问答 / 月</th>
+                  <th className="px-3 py-3 font-semibold">索引重建 / 月</th>
+                  <th className="px-3 py-3 font-semibold">OCR 能力</th>
                   <th className="px-3 py-3 font-semibold">连接器</th>
                 </tr>
               </thead>
@@ -770,7 +935,16 @@ export function ProductPlanPanel() {
                       <td className="px-3 py-3">{formatNumber(version.agentLimit)}</td>
                       <td className="px-3 py-3">{formatNumber(version.seatLimit)}</td>
                       <td className="px-3 py-3">{formatNumber(version.monthlyAiCallLimit)}</td>
-                      <td className="px-3 py-3">{formatNumber(version.knowledgeStorageGb)} GB</td>
+                      <td className="px-3 py-3">{formatQuotaEntitlement(version, 'knowledgeItemsLimit')}</td>
+                      <td className="px-3 py-3">{formatQuotaEntitlement(version, 'knowledgeFilesLimit')}</td>
+                      <td className="px-3 py-3">{formatQuotaEntitlement(version, 'knowledgeTotalStorageMb', ' MB')}</td>
+                      <td className="px-3 py-3">{formatQuotaEntitlement(version, 'knowledgeSingleFileSizeMb', ' MB')}</td>
+                      <td className="px-3 py-3">{formatQuotaEntitlement(version, 'knowledgeParseJobsMonthly')}</td>
+                      <td className="px-3 py-3">{formatQuotaEntitlement(version, 'knowledgeEmbeddingJobsMonthly')}</td>
+                      <td className="px-3 py-3">{formatQuotaEntitlement(version, 'knowledgeOcrJobsMonthly')}</td>
+                      <td className="px-3 py-3">{formatQuotaEntitlement(version, 'knowledgeRagAnswersMonthly')}</td>
+                      <td className="px-3 py-3">{formatQuotaEntitlement(version, 'knowledgeIndexRebuildJobsMonthly')}</td>
+                      <td className="px-3 py-3">{formatQuotaEnabled(version, 'knowledgeOcrEnabled')}</td>
                       <td className="px-3 py-3">
                         {listText(readStringList(version.connectorEntitlementsJson, 'connectors'))}
                       </td>

@@ -250,6 +250,47 @@ function formatQuotaNumber(value: number | null) {
   return value === null ? '-' : String(value);
 }
 
+function findQuotaItem(items: InstitutionAiQuotaItem[], resource: string) {
+  return items.find((item) => item.resource === resource) ?? null;
+}
+
+function isQuotaUnavailable(item: InstitutionAiQuotaItem | null) {
+  return item?.status === 'exceeded' || item?.status === 'not_configured' || item?.status === 'no_active_plan';
+}
+
+function quotaUnavailableReason(item: InstitutionAiQuotaItem | null, fallback: string) {
+  if (!item) return null;
+  if (item.status === 'exceeded') return `${item.label}已用尽，请联系平台管理员调整套餐`;
+  if (item.status === 'not_configured') return `${item.label}未配置，请联系平台管理员确认套餐`;
+  if (item.status === 'no_active_plan') return '当前无有效套餐，请联系平台管理员配置套餐';
+  return fallback;
+}
+
+function uploadHelpMessage(maxFileSizeMb: number | null) {
+  const sizeText = typeof maxFileSizeMb === 'number' ? `当前套餐单文件上限 ${maxFileSizeMb}MB` : '单文件大小以当前套餐为准';
+  return `选择文件后上传，支持 TXT / MD / PDF / DOCX / XLSX / CSV / PNG / JPG，${sizeText}；扫描 PDF / 图片文字进入 OCR-ready 流程`;
+}
+
+function uploadDescription(maxFileSizeMb: number | null) {
+  const sizeText = typeof maxFileSizeMb === 'number' ? `当前套餐单文件上限 ${maxFileSizeMb}MB` : '单文件大小以当前套餐为准';
+  return `上传低敏文件并自动解析，支持 TXT / MD / PDF / DOCX / XLSX / CSV / PNG / JPG，${sizeText}；普通 PDF 支持文本抽取，扫描 PDF / 图片文字需要 OCR；当前为 OCR-ready 最小闭环，不接外部云 OCR，不做生产级批量 OCR 或 worker / queue / cron；Excel 仅抽取表格文本，不执行公式。`;
+}
+
+function quotaStatusLabel(status: string) {
+  if (status === 'exceeded') return '已用尽';
+  if (status === 'near_limit') return '接近上限';
+  if (status === 'not_configured') return '未配置';
+  if (status === 'no_active_plan') return '无套餐';
+  return '可用';
+}
+
+function quotaStatusTone(status: string) {
+  if (status === 'exceeded') return 'border-rose-200 bg-rose-50 text-rose-700';
+  if (status === 'near_limit') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (status === 'not_configured' || status === 'no_active_plan') return 'border-slate-200 bg-slate-50 text-slate-500';
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+}
+
 export function InstitutionKnowledgeReadonlyShell() {
   const [keywordInput, setKeywordInput] = useState('');
   const [keyword, setKeyword] = useState('');
@@ -286,13 +327,14 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [aiKnowledgeContext, setAiKnowledgeContext] = useState<InstitutionAiCallKnowledgeContext | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiQuotaItem, setAiQuotaItem] = useState<InstitutionAiQuotaItem | null>(null);
+  const [knowledgeQuotaItems, setKnowledgeQuotaItems] = useState<InstitutionAiQuotaItem[]>([]);
   const [aiQuotaMessage, setAiQuotaMessage] = useState('正在读取 AI 调用额度...');
   const [aiUsageRecords, setAiUsageRecords] = useState<InstitutionAiCallUsageRecord[]>([]);
   const [aiUsageMessage, setAiUsageMessage] = useState('点击刷新查看 AI 调用记录');
   const [isAiUsageLoading, setIsAiUsageLoading] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
-  const [uploadMessage, setUploadMessage] = useState('选择文件后上传，支持 TXT / MD / PDF / DOCX / XLSX / CSV / PNG / JPG，最大 2MB；扫描 PDF / 图片文字进入 OCR-ready 流程');
+  const [uploadMessage, setUploadMessage] = useState(uploadHelpMessage(null));
   const [uploadedKnowledgeId, setUploadedKnowledgeId] = useState<string | null>(null);
   const [indexingJobs, setIndexingJobs] = useState<InstitutionKnowledgeIndexingJobRecord[]>([]);
   const [indexingJobMessage, setIndexingJobMessage] = useState('点击刷新查看最近索引任务');
@@ -306,6 +348,35 @@ export function InstitutionKnowledgeReadonlyShell() {
     hasNextPage: false,
   });
   const [error, setError] = useState<TenantBusinessClientError | null>(null);
+
+  const knowledgeItemsQuotaItem = findQuotaItem(knowledgeQuotaItems, 'knowledge_items');
+  const knowledgeFilesQuotaItem = findQuotaItem(knowledgeQuotaItems, 'knowledge_files');
+  const knowledgeSingleFileSizeQuotaItem = findQuotaItem(knowledgeQuotaItems, 'knowledge_single_file_size_mb');
+  const knowledgeParseQuotaItem = findQuotaItem(knowledgeQuotaItems, 'knowledge_parse_jobs_monthly');
+  const knowledgeEmbeddingQuotaItem = findQuotaItem(knowledgeQuotaItems, 'knowledge_embedding_jobs_monthly');
+  const knowledgeOcrQuotaItem = findQuotaItem(knowledgeQuotaItems, 'knowledge_ocr_jobs_monthly');
+  const knowledgeRagQuotaItem = findQuotaItem(knowledgeQuotaItems, 'knowledge_rag_answers_monthly');
+  const knowledgeIndexRebuildQuotaItem = findQuotaItem(knowledgeQuotaItems, 'knowledge_index_rebuild_jobs_monthly');
+  const maxUploadFileSizeMb = typeof knowledgeSingleFileSizeQuotaItem?.limit === 'number'
+    ? knowledgeSingleFileSizeQuotaItem.limit
+    : null;
+  const isUploadQuotaUnavailable = isQuotaUnavailable(knowledgeItemsQuotaItem)
+    || isQuotaUnavailable(knowledgeFilesQuotaItem)
+    || isQuotaUnavailable(knowledgeSingleFileSizeQuotaItem)
+    || isQuotaUnavailable(knowledgeParseQuotaItem);
+  const uploadQuotaReason = quotaUnavailableReason(knowledgeItemsQuotaItem, '')
+    ?? quotaUnavailableReason(knowledgeFilesQuotaItem, '')
+    ?? quotaUnavailableReason(knowledgeSingleFileSizeQuotaItem, '')
+    ?? quotaUnavailableReason(knowledgeParseQuotaItem, '')
+    ?? '当前知识库上传额度不可用，请联系平台管理员确认套餐';
+  const isOcrQuotaUnavailable = isQuotaUnavailable(knowledgeOcrQuotaItem);
+  const ocrQuotaReason = quotaUnavailableReason(knowledgeOcrQuotaItem, 'OCR 任务额度暂不可用');
+  const isEmbeddingQuotaUnavailable = isQuotaUnavailable(knowledgeEmbeddingQuotaItem);
+  const embeddingQuotaReason = quotaUnavailableReason(knowledgeEmbeddingQuotaItem, '向量任务额度暂不可用');
+  const isRagQuotaUnavailable = isQuotaUnavailable(knowledgeRagQuotaItem);
+  const ragQuotaReason = quotaUnavailableReason(knowledgeRagQuotaItem, '知识库问答额度暂不可用');
+  const isIndexRebuildQuotaUnavailable = isQuotaUnavailable(knowledgeIndexRebuildQuotaItem);
+  const indexRebuildQuotaReason = quotaUnavailableReason(knowledgeIndexRebuildQuotaItem, '索引重建额度暂不可用');
 
   useEffect(() => {
     let isActive = true;
@@ -364,6 +435,7 @@ export function InstitutionKnowledgeReadonlyShell() {
       const payload = await response.json().catch(() => null);
       const items = Array.isArray(payload?.items) ? payload.items as InstitutionAiQuotaItem[] : [];
       const aiItem = items.find((item) => item.resource === 'ai_calls') ?? null;
+      setKnowledgeQuotaItems(items.filter((item) => item.resource.startsWith('knowledge_')));
       setAiQuotaItem(aiItem);
       if (!response.ok || !aiItem) {
         setAiQuotaMessage('AI 调用额度暂时不可用，请联系平台管理员确认套餐。');
@@ -380,6 +452,7 @@ export function InstitutionKnowledgeReadonlyShell() {
       setAiQuotaMessage('本月 AI 调用额度可用，接近上限时请先人工确认是否继续调用。');
     } catch {
       setAiQuotaItem(null);
+      setKnowledgeQuotaItems([]);
       setAiQuotaMessage('AI 调用额度暂时不可用，请稍后刷新或联系平台管理员。');
     }
   }
@@ -388,6 +461,12 @@ export function InstitutionKnowledgeReadonlyShell() {
     event.preventDefault();
     if (!uploadFile) {
       setUploadMessage('请选择要上传的文件');
+      setUploadStatus('error');
+      return;
+    }
+
+    if (isUploadQuotaUnavailable) {
+      setUploadMessage(uploadQuotaReason);
       setUploadStatus('error');
       return;
     }
@@ -401,9 +480,10 @@ export function InstitutionKnowledgeReadonlyShell() {
       return;
     }
 
-    const maxBytes = 2 * 1024 * 1024;
+    const maxFileSizeMb = maxUploadFileSizeMb ?? 2;
+    const maxBytes = maxFileSizeMb * 1024 * 1024;
     if (uploadFile.size > maxBytes) {
-      setUploadMessage('文件大小不能超过 2MB');
+      setUploadMessage(`文件大小不能超过当前套餐单文件上限 ${maxFileSizeMb}MB`);
       setUploadStatus('error');
       return;
     }
@@ -607,6 +687,11 @@ export function InstitutionKnowledgeReadonlyShell() {
   }
 
   async function createKnowledgeRebuildJob(knowledgeId: string) {
+    if (isIndexRebuildQuotaUnavailable) {
+      setIndexingJobMessage(indexRebuildQuotaReason ?? '索引重建额度暂不可用');
+      return;
+    }
+
     setIndexingJobMessage('正在创建当前知识索引重建任务...');
     try {
       const response = await fetch('/api/institution/knowledge-management/indexing-jobs', {
@@ -645,6 +730,11 @@ export function InstitutionKnowledgeReadonlyShell() {
   }
 
   async function createOcrFileJob(knowledgeId: string, file: InstitutionKnowledgeFileRecord) {
+    if (isOcrQuotaUnavailable) {
+      setFileMessage(ocrQuotaReason ?? 'OCR 任务额度暂不可用');
+      return;
+    }
+
     setFileMessage('正在创建 OCR 任务...');
     try {
       const response = await fetch('/api/institution/knowledge-management/indexing-jobs', {
@@ -666,6 +756,11 @@ export function InstitutionKnowledgeReadonlyShell() {
   }
 
   async function rebuildFileEmbeddings(knowledgeId: string, file: InstitutionKnowledgeFileRecord) {
+    if (isEmbeddingQuotaUnavailable) {
+      setFileMessage(embeddingQuotaReason ?? '向量任务额度暂不可用');
+      return;
+    }
+
     setFileMessage('正在创建向量索引任务...');
     try {
       const response = await fetch(
@@ -698,6 +793,12 @@ export function InstitutionKnowledgeReadonlyShell() {
     if (!question) {
       setQaResponse(null);
       setQaMessage('请输入知识库问答问题');
+      return;
+    }
+
+    if (isRagQuotaUnavailable) {
+      setQaResponse(null);
+      setQaMessage(ragQuotaReason ?? '知识库问答额度暂不可用');
       return;
     }
 
@@ -880,6 +981,45 @@ export function InstitutionKnowledgeReadonlyShell() {
 
       <InstitutionKnowledgeBaseCardPanel />
 
+      {knowledgeQuotaItems.length > 0 ? (
+        <section aria-label="机构知识库套餐权益" className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">我的知识库套餐权益</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                仅展示可用额度、已用量和剩余额度，不展示模型、厂商、Token、成本或内部计费规则。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadAiQuota()}
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:border-cyan-200 hover:text-cyan-700"
+            >
+              <RefreshCw className="h-4 w-4" />
+              刷新额度
+            </button>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {knowledgeQuotaItems.map((item) => (
+              <div key={item.resource} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-500">{item.label}</span>
+                  <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-semibold', quotaStatusTone(item.status))}>
+                    {quotaStatusLabel(item.status)}
+                  </span>
+                </div>
+                <div className="mt-1 text-base font-semibold text-slate-950">
+                  {formatQuotaNumber(item.used)} / {formatQuotaNumber(item.limit)}
+                </div>
+                <div className="mt-0.5 text-xs text-slate-500">
+                  剩余 {formatQuotaNumber(item.remaining)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section
         aria-label="机构端知识库文件上传"
         className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4"
@@ -887,7 +1027,7 @@ export function InstitutionKnowledgeReadonlyShell() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-semibold tracking-normal text-slate-950">上传机构文件</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">上传低敏文件并自动解析，支持 TXT / MD / PDF / DOCX / XLSX / CSV / PNG / JPG，最大 2MB；普通 PDF 支持文本抽取，扫描 PDF / 图片文字需要 OCR；当前为 OCR-ready 最小闭环，不接外部云 OCR，不做生产级批量 OCR 或 worker / queue / cron；Excel 仅抽取表格文本，不执行公式。</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{uploadDescription(maxUploadFileSizeMb)}</p>
           </div>
           <form onSubmit={handleUpload} className="flex w-full flex-col gap-2 sm:flex-row lg:w-[540px]">
             <label className="relative min-w-0 flex-1">
@@ -898,14 +1038,15 @@ export function InstitutionKnowledgeReadonlyShell() {
                   const files = event.target.files;
                   setUploadFile(files?.length ? files[0] : null);
                   setUploadStatus('idle');
-                  setUploadMessage('选择文件后上传，支持 TXT / MD / PDF / DOCX / XLSX / CSV / PNG / JPG，最大 2MB；扫描 PDF / 图片文字进入 OCR-ready 流程');
+                  setUploadMessage(uploadHelpMessage(maxUploadFileSizeMb));
                 }}
                 className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-cyan-700 hover:file:bg-cyan-200 focus:border-cyan-400"
               />
             </label>
             <button
               type="submit"
-              disabled={!uploadFile || uploadStatus === 'uploading'}
+              disabled={!uploadFile || uploadStatus === 'uploading' || isUploadQuotaUnavailable}
+              title={isUploadQuotaUnavailable ? uploadQuotaReason : undefined}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {uploadStatus === 'uploading' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -1390,7 +1531,8 @@ export function InstitutionKnowledgeReadonlyShell() {
                 </select>
                 <button
                   type="submit"
-                  disabled={isQaLoading}
+                  disabled={isQaLoading || isRagQuotaUnavailable}
+                  title={isRagQuotaUnavailable ? (ragQuotaReason ?? '知识库问答额度暂不可用') : undefined}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isQaLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <BookOpen className="h-4 w-4" />}
@@ -1564,8 +1706,8 @@ export function InstitutionKnowledgeReadonlyShell() {
                     AI 回答参考本机构知识库片段，仍需人工确认（共 {aiKnowledgeContext.sources.length} 条引用）
                   </p>
                   <div className="mt-2 space-y-2">
-                    {aiKnowledgeContext.sources.map((source) => (
-                      <div key={source.chunkId} className="rounded-lg border border-amber-100 bg-white/70 px-3 py-2">
+                    {aiKnowledgeContext.sources.map((source, index) => (
+                      <div key={`${source.chunkId}-${index}`} className="rounded-lg border border-amber-100 bg-white/70 px-3 py-2">
                         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
                           <span>{source.knowledgeTitle} · {source.fileName} · 片段 {source.chunkIndex + 1}</span>
                         </div>
@@ -1666,8 +1808,8 @@ export function InstitutionKnowledgeReadonlyShell() {
                   </div>
                   {record.status === 'succeeded' && ragUsed && ragSources.length > 0 ? (
                     <div className="mt-2 space-y-1.5">
-                      {ragSources.map((source) => (
-                        <div key={source.chunkId} className="rounded-lg border border-amber-100 bg-white/70 px-2.5 py-1.5">
+                      {ragSources.map((source, index) => (
+                        <div key={`${source.chunkId}-${index}`} className="rounded-lg border border-amber-100 bg-white/70 px-2.5 py-1.5">
                           <div className="text-xs font-semibold text-slate-500">
                             {source.fileName} · 片段 {source.chunkIndex + 1}
                           </div>
@@ -1750,7 +1892,9 @@ export function InstitutionKnowledgeReadonlyShell() {
                   <button
                     type="button"
                     onClick={() => createKnowledgeRebuildJob(item.knowledgeId)}
-                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                    disabled={isIndexRebuildQuotaUnavailable}
+                    title={isIndexRebuildQuotaUnavailable ? (indexRebuildQuotaReason ?? '索引重建额度暂不可用') : undefined}
+                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <RefreshCw className="h-4 w-4" />
                     重建当前知识索引
@@ -1809,7 +1953,9 @@ export function InstitutionKnowledgeReadonlyShell() {
                             <button
                               type="button"
                               onClick={() => createOcrFileJob(item.knowledgeId, file)}
-                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-700 transition hover:border-amber-300"
+                              disabled={isOcrQuotaUnavailable}
+                              title={isOcrQuotaUnavailable ? (ocrQuotaReason ?? 'OCR 任务额度暂不可用') : undefined}
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-700 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               <RefreshCw className="h-4 w-4" />
                               执行 OCR / 重建 OCR 索引
@@ -1817,7 +1963,9 @@ export function InstitutionKnowledgeReadonlyShell() {
                             <button
                               type="button"
                               onClick={() => rebuildFileEmbeddings(item.knowledgeId, file)}
-                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
+                              disabled={isEmbeddingQuotaUnavailable}
+                              title={isEmbeddingQuotaUnavailable ? (embeddingQuotaReason ?? '向量任务额度暂不可用') : undefined}
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               <RefreshCw className="h-4 w-4" />
                               生成 / 重建向量索引

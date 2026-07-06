@@ -211,6 +211,13 @@
       "when": 1783303200000,
       "tag": "0029_v06_kb_ocr_file_job_type",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1783306800000,
+      "tag": "0030_v06_kb_entitlement_quota_usage_records",
+      "breakpoints": true
     }
   ]
 }

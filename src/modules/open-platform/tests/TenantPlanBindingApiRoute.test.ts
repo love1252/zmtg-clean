@@ -91,6 +91,26 @@ const publishedPlanVersion = {
   quotaEntitlementsJson: { aiCallsPerMonth: 300000 },
 };
 
+function tenantQuotaLimits(overrides: Partial<ReturnType<typeof getTenantPlanQuotaLimitsByCode>> = {}) {
+  return {
+    maxAppointments: 120,
+    maxCustomers: 80,
+    maxKnowledgeItems: 20,
+    maxKnowledgeFiles: 20,
+    maxKnowledgeTotalStorageMb: 200,
+    maxKnowledgeSingleFileSizeMb: 2,
+    maxKnowledgeParseJobsMonthly: 80,
+    maxKnowledgeEmbeddingJobsMonthly: 40,
+    maxKnowledgeOcrJobsMonthly: 10,
+    maxKnowledgeRagAnswersMonthly: 100,
+    maxKnowledgeIndexRebuildJobsMonthly: 5,
+    knowledgeOcrEnabled: true,
+    maxStaffSeats: 5,
+    maxAiCalls: 100,
+    ...overrides,
+  };
+}
+
 function request(url: string, init?: RequestInit) {
   return new Request(`http://localhost${url}`, init);
 }
@@ -157,9 +177,7 @@ beforeEach(() => {
     snapshotAt: null,
   }));
   // Default: maxStaffSeats=5 (valid, allows creation)
-  vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue({
-    maxAppointments: 120, maxCustomers: 80, maxKnowledgeFiles: 20, maxStaffSeats: 5, maxAiCalls: 100,
-  });
+  vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue(tenantQuotaLimits());
 });
 
 describe('租户套餐绑定 API', () => {
@@ -320,9 +338,7 @@ describe('租户套餐绑定 API', () => {
 
   it('maxStaffSeats 有效时创建租户成功', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
-    vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue({
-      maxAppointments: 120, maxCustomers: 80, maxKnowledgeFiles: 20, maxStaffSeats: 5, maxAiCalls: 100,
-    });
+    vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue(tenantQuotaLimits());
 
     const response = await tenantCreateRoute.POST(
       createTenantRequest({
@@ -337,9 +353,7 @@ describe('租户套餐绑定 API', () => {
 
   it('maxStaffSeats 无效（返回 0）时拒绝创建租户', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
-    vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue({
-      maxAppointments: 120, maxCustomers: 80, maxKnowledgeFiles: 20, maxStaffSeats: 0, maxAiCalls: 100,
-    });
+    vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue(tenantQuotaLimits({ maxStaffSeats: 0 }));
 
     const response = await tenantCreateRoute.POST(
       createTenantRequest({
@@ -378,9 +392,7 @@ describe('租户套餐绑定 API', () => {
 
   it('staff 超限 response 不泄露敏感字段', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
-    vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue({
-      maxAppointments: 120, maxCustomers: 80, maxKnowledgeFiles: 20, maxStaffSeats: 0, maxAiCalls: 100,
-    });
+    vi.mocked(getTenantPlanQuotaLimitsByCode).mockReturnValue(tenantQuotaLimits({ maxStaffSeats: 0 }));
 
     const response = await tenantCreateRoute.POST(
       createTenantRequest({

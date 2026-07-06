@@ -10,13 +10,29 @@ describe('buildEntitlementUsageView', () => {
     usages: {
       customers: 50 as number | null,
       staffSeats: 15 as number | null,
+      knowledgeItems: 40 as number | null,
       knowledgeFiles: 90 as number | null,
+      knowledgeTotalStorageMb: 512 as number | null,
+      knowledgeSingleFileSizeMb: 0 as number | null,
+      knowledgeParseJobsThisMonth: 10 as number | null,
+      knowledgeEmbeddingJobsThisMonth: 12 as number | null,
+      knowledgeOcrJobsThisMonth: 3 as number | null,
+      knowledgeRagAnswersThisMonth: 60 as number | null,
+      knowledgeIndexRebuildJobsThisMonth: 1 as number | null,
       aiCallsThisMonth: 200 as number | null,
     },
     limits: {
       maxCustomers: 100 as number | null,
       maxStaffSeats: 20 as number | null,
+      maxKnowledgeItems: 80 as number | null,
       maxKnowledgeFiles: 100 as number | null,
+      maxKnowledgeTotalStorageMb: 1024 as number | null,
+      maxKnowledgeSingleFileSizeMb: 50 as number | null,
+      maxKnowledgeParseJobsMonthly: 30 as number | null,
+      maxKnowledgeEmbeddingJobsMonthly: 30 as number | null,
+      maxKnowledgeOcrJobsMonthly: 10 as number | null,
+      maxKnowledgeRagAnswersMonthly: 200 as number | null,
+      maxKnowledgeIndexRebuildJobsMonthly: 5 as number | null,
       maxAiCalls: 500 as number | null,
     },
   };
@@ -39,19 +55,56 @@ describe('buildEntitlementUsageView', () => {
       ...baseInput,
       planCode: null,
       planName: null,
-      usages: { customers: null, staffSeats: null, knowledgeFiles: null, aiCallsThisMonth: null },
-      limits: { maxCustomers: null, maxStaffSeats: null, maxKnowledgeFiles: null, maxAiCalls: null },
+      usages: {
+        customers: null,
+        staffSeats: null,
+        knowledgeItems: null,
+        knowledgeFiles: null,
+        knowledgeTotalStorageMb: null,
+        knowledgeSingleFileSizeMb: null,
+        knowledgeParseJobsThisMonth: null,
+        knowledgeEmbeddingJobsThisMonth: null,
+        knowledgeOcrJobsThisMonth: null,
+        knowledgeRagAnswersThisMonth: null,
+        knowledgeIndexRebuildJobsThisMonth: null,
+        aiCallsThisMonth: null,
+      },
+      limits: {
+        maxCustomers: null,
+        maxStaffSeats: null,
+        maxKnowledgeItems: null,
+        maxKnowledgeFiles: null,
+        maxKnowledgeTotalStorageMb: null,
+        maxKnowledgeSingleFileSizeMb: null,
+        maxKnowledgeParseJobsMonthly: null,
+        maxKnowledgeEmbeddingJobsMonthly: null,
+        maxKnowledgeOcrJobsMonthly: null,
+        maxKnowledgeRagAnswersMonthly: null,
+        maxKnowledgeIndexRebuildJobsMonthly: null,
+        maxAiCalls: null,
+      },
     });
     expect(view.planCode).toBeNull();
     expect(view.planName).toBeNull();
   });
 
   // 2. items 结构
-  it('返回 4 个 EntitlementUsageItem', () => {
+  it('返回 12 个 EntitlementUsageItem', () => {
     const view = buildEntitlementUsageView(baseInput);
-    expect(view.items).toHaveLength(4);
+    expect(view.items).toHaveLength(12);
     expect(view.items.map((i) => i.resource)).toEqual([
-      'customers', 'staff_seats', 'knowledge_files', 'ai_calls',
+      'customers',
+      'staff_seats',
+      'knowledge_items',
+      'knowledge_files',
+      'knowledge_total_storage_mb',
+      'knowledge_single_file_size_mb',
+      'knowledge_parse_jobs_monthly',
+      'knowledge_embedding_jobs_monthly',
+      'knowledge_ocr_jobs_monthly',
+      'knowledge_rag_answers_monthly',
+      'knowledge_index_rebuild_jobs_monthly',
+      'ai_calls',
     ]);
   });
 
@@ -168,8 +221,34 @@ describe('buildEntitlementUsageView', () => {
       ...baseInput,
       planCode: null,
       planName: null,
-      usages: { customers: null, staffSeats: null, knowledgeFiles: null, aiCallsThisMonth: null },
-      limits: { maxCustomers: null, maxStaffSeats: null, maxKnowledgeFiles: null, maxAiCalls: null },
+      usages: {
+        customers: null,
+        staffSeats: null,
+        knowledgeItems: null,
+        knowledgeFiles: null,
+        knowledgeTotalStorageMb: null,
+        knowledgeSingleFileSizeMb: null,
+        knowledgeParseJobsThisMonth: null,
+        knowledgeEmbeddingJobsThisMonth: null,
+        knowledgeOcrJobsThisMonth: null,
+        knowledgeRagAnswersThisMonth: null,
+        knowledgeIndexRebuildJobsThisMonth: null,
+        aiCallsThisMonth: null,
+      },
+      limits: {
+        maxCustomers: null,
+        maxStaffSeats: null,
+        maxKnowledgeItems: null,
+        maxKnowledgeFiles: null,
+        maxKnowledgeTotalStorageMb: null,
+        maxKnowledgeSingleFileSizeMb: null,
+        maxKnowledgeParseJobsMonthly: null,
+        maxKnowledgeEmbeddingJobsMonthly: null,
+        maxKnowledgeOcrJobsMonthly: null,
+        maxKnowledgeRagAnswersMonthly: null,
+        maxKnowledgeIndexRebuildJobsMonthly: null,
+        maxAiCalls: null,
+      },
     });
     for (const item of view.items) {
       expect(item.status).toBe('no_active_plan');
@@ -251,6 +330,19 @@ describe('buildEntitlementUsageView', () => {
   it('label 返回中文', () => {
     const view = buildEntitlementUsageView(baseInput);
     const labels = view.items.map((i) => i.label);
-    expect(labels).toEqual(['客户数', '员工席位', '知识库文件', 'AI 调用（本月）']);
+    expect(labels).toEqual([
+      '客户数',
+      '员工席位',
+      '知识库条目',
+      '知识库文件',
+      '知识库容量（MB）',
+      '单文件大小（MB）',
+      '解析任务（本月）',
+      '向量任务（本月）',
+      'OCR 任务（本月）',
+      '知识库问答（本月）',
+      '索引重建（本月）',
+      'AI 调用（本月）',
+    ]);
   });
 });

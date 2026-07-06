@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { POST as knowledgeUploadPost } from '@/app/api/institution/knowledge-management/upload/route';
 import { getDatabase } from '@/server/db/client';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
-import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
 import { uploadAndParseInstitutionKnowledgeFileService } from '@/modules/institution/server/institution-knowledge-upload-service';
 
 const database = { database: 'upload-api-test-db' };
@@ -42,14 +41,6 @@ vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository
 vi.mock('@/modules/institution/server/institution-knowledge-write-repository', () => ({
   createInstitutionKnowledgeWriteRepository: vi.fn(() => ({})),
 }));
-
-vi.mock('@/modules/institution/server/tenant-quota-enforcement', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/institution/server/tenant-quota-enforcement')>();
-  return {
-    ...actual,
-    checkTenantQuotaForCreate: vi.fn(),
-  };
-});
 
 const tenantContext = {
   userId: 'demo-user-admin',
@@ -134,14 +125,12 @@ describe('机构知识库上传 API route', () => {
     expect(serialized).not.toContain('token');
   });
 
-  it('知识库文件达到上限时返回 409 且不调用 upload service', async () => {
+  it('知识库文件达到上限时返回 409', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
-      allowed: false,
-      current: 20,
-      limit: 20,
-      reason: 'quota_exceeded_knowledge_files',
-      resource: 'knowledge_files',
+    vi.mocked(uploadAndParseInstitutionKnowledgeFileService).mockResolvedValueOnce({
+      status: 'quota_exceeded',
+      code: 'quota_exceeded_knowledge_files',
+      message: '知识库文件数量已达到当前套餐上限，请联系平台管理员调整套餐',
     });
 
     const response = await knowledgeUploadPost(createRequestWithMockFile());
@@ -150,17 +139,15 @@ describe('机构知识库上传 API route', () => {
     expect(response.status).toBe(409);
     expect(body.code).toBe('quota_exceeded_knowledge_files');
     expect(body.error).toContain('知识库文件');
-    expect(uploadAndParseInstitutionKnowledgeFileService).not.toHaveBeenCalled();
+    expect(uploadAndParseInstitutionKnowledgeFileService).toHaveBeenCalledOnce();
   });
 
   it('知识库超限 response 不泄露敏感字段', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
-      allowed: false,
-      current: 20,
-      limit: 20,
-      reason: 'quota_exceeded_knowledge_files',
-      resource: 'knowledge_files',
+    vi.mocked(uploadAndParseInstitutionKnowledgeFileService).mockResolvedValueOnce({
+      status: 'quota_exceeded',
+      code: 'quota_exceeded_knowledge_files',
+      message: '知识库文件数量已达到当前套餐上限，请联系平台管理员调整套餐',
     });
 
     const response = await knowledgeUploadPost(createRequestWithMockFile());
@@ -175,12 +162,6 @@ describe('机构知识库上传 API route', () => {
 
   it('知识库未超限时上传 .txt 成功（mock quota 放行）', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
-      allowed: true,
-      current: 5,
-      limit: 20,
-      resource: 'knowledge_files',
-    });
     vi.mocked(uploadAndParseInstitutionKnowledgeFileService).mockResolvedValueOnce({
       status: 'created',
       knowledgeId: 'k1',
@@ -208,12 +189,6 @@ describe('机构知识库上传 API route', () => {
 
   it('OCR-ready 上传响应不泄露原图路径、全文或 provider 字段', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(checkTenantQuotaForCreate).mockResolvedValueOnce({
-      allowed: true,
-      current: 5,
-      limit: 20,
-      resource: 'knowledge_files',
-    });
     vi.mocked(uploadAndParseInstitutionKnowledgeFileService).mockResolvedValueOnce({
       status: 'created',
       knowledgeId: 'k-image',

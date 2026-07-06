@@ -1317,6 +1317,41 @@ export const knowledgeQaAuditLogs = pgTable(
   }),
 );
 
+export const knowledgeQuotaUsageRecords = pgTable(
+  'knowledge_quota_usage_records',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
+    actorUserId: varchar('actor_user_id', { length: 96 }),
+    resourceKey: varchar('resource_key', { length: 96 }).notNull(),
+    action: varchar('action', { length: 96 }).notNull(),
+    status: varchar('status', { length: 32 }).notNull(),
+    quantity: integer('quantity').notNull().default(1),
+    safeReasonCode: varchar('safe_reason_code', { length: 96 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantCreatedIdx: index('knowledge_quota_usage_records_tenant_created_idx').on(
+      table.tenantId,
+      table.createdAt,
+    ),
+    tenantInstitutionCreatedIdx: index('knowledge_quota_usage_records_tenant_institution_created_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.createdAt,
+    ),
+    tenantResourceStatusCreatedIdx: index('knowledge_quota_usage_records_resource_status_created_idx').on(
+      table.tenantId,
+      table.resourceKey,
+      table.status,
+      table.createdAt,
+    ),
+  }),
+);
+
 export const aiCallUsageRecords = pgTable(
   'ai_call_usage_records',
   {

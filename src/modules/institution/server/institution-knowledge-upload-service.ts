@@ -1,7 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { uploadPlatformKnowledgeFileService, type PlatformKnowledgeFileDto, type PlatformKnowledgeFileRepository, type PlatformKnowledgeFileStorage } from '@/modules/open-platform/server/platform-knowledge-file-management-service';
+import { type PlatformKnowledgeFileDto, type PlatformKnowledgeFileRepository, type PlatformKnowledgeFileStorage } from '@/modules/open-platform/server/platform-knowledge-file-management-service';
 import { type PlatformKnowledgeDocumentParsingRepository, type PlatformKnowledgeFileParseDto, type PlatformKnowledgeFileParseRecord } from '@/modules/open-platform/server/platform-knowledge-document-parsing-service';
 import type { PlatformKnowledgeFileParseStatus } from '@/modules/open-platform/server/platform-knowledge-document-parsing-service';
+import { checkTenantQuotaForUsage } from '@/modules/institution/server/tenant-quota-enforcement';
+import {
+  createKnowledgeQuotaUsageRepository,
+  recordKnowledgeQuotaDecision,
+  recordKnowledgeQuotaOutcome,
+} from '@/modules/institution/server/knowledge-quota-usage-service';
+import type { TenantDatabase } from '@/server/db/client';
 import {
   createAndRunParseFileJob,
   type KnowledgeIndexingJobRepository,
@@ -21,7 +28,8 @@ type InstitutionKnowledgeUploadFileDto = Omit<PlatformKnowledgeFileDto, 'created
 };
 
 export type InstitutionKnowledgeUploadResponse = {
-  status: 'created' | 'validation_failed' | 'not_found' | 'service_unavailable';
+  status: 'created' | 'validation_failed' | 'quota_exceeded' | 'not_found' | 'service_unavailable';
+  code?: string;
   message?: string;
   knowledgeId?: string;
   sourceId?: string;
@@ -51,6 +59,7 @@ export type InstitutionKnowledgeUploadRepository = Pick<
   };
 
 type UploadServiceInput = {
+  database: TenantDatabase;
   repository: InstitutionKnowledgeUploadRepository;
   storage: PlatformKnowledgeFileStorage;
   input: {
@@ -160,11 +169,96 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
     };
   }
 
-  if (file.size > INSTITUTION_KNOWLEDGE_FILE_MAX_BYTES) {
-    return { status: 'validation_failed', message: '文件大小不能超过 2MB' };
-  }
   if (file.size <= 0) {
     return { status: 'validation_failed', message: '文件内容不能为空' };
+  }
+
+  const quotaUsageRepository = createKnowledgeQuotaUsageRepository(input.database);
+  const fileSizeMb = Math.max(1, Math.ceil(file.size / 1024 / 1024));
+  const uploadQuotaChecks = [
+    {
+      resourceKey: 'knowledge_items' as const,
+      quantity: 1,
+      message: '知识库条目数量已达到当前套餐上限，请联系平台管理员调整套餐',
+    },
+    {
+      resourceKey: 'knowledge_files' as const,
+      quantity: 1,
+      message: '知识库文件数量已达到当前套餐上限，请联系平台管理员调整套餐',
+    },
+    {
+      resourceKey: 'knowledge_single_file_size_mb' as const,
+      quantity: fileSizeMb,
+      message: '文件大小已超过当前套餐单文件上限，请联系平台管理员调整套餐',
+    },
+    {
+      resourceKey: 'knowledge_total_storage_mb' as const,
+      quantity: fileSizeMb,
+      message: '知识库总容量已达到当前套餐上限，请联系平台管理员调整套餐',
+    },
+  ];
+
+  for (const quotaCheck of uploadQuotaChecks) {
+    const decision = await checkTenantQuotaForUsage({
+      database: input.database,
+      tenantId,
+      resource: quotaCheck.resourceKey,
+      quantity: quotaCheck.quantity,
+    });
+    await recordKnowledgeQuotaDecision({
+      repository: quotaUsageRepository,
+      tenantId,
+      institutionId,
+      actorUserId: uploadedByUserId,
+      resourceKey: quotaCheck.resourceKey,
+      action: 'upload_file',
+      decision,
+      quantity: quotaCheck.quantity,
+    });
+    if (!decision.allowed) {
+      return { status: 'validation_failed', message: quotaCheck.message };
+    }
+  }
+
+  // 3. 读取文件内容并上传到存储
+  const buffer = new Uint8Array(await file.arrayBuffer());
+  if (buffer.byteLength <= 0) {
+    return { status: 'validation_failed', message: '文件内容不能为空' };
+  }
+  const actualFileSizeMb = Math.max(1, Math.ceil(buffer.byteLength / 1024 / 1024));
+  if (actualFileSizeMb > fileSizeMb) {
+    for (const quotaCheck of [
+      {
+        resourceKey: 'knowledge_single_file_size_mb' as const,
+        quantity: actualFileSizeMb,
+        message: '文件大小已超过当前套餐单文件上限，请联系平台管理员调整套餐',
+      },
+      {
+        resourceKey: 'knowledge_total_storage_mb' as const,
+        quantity: actualFileSizeMb,
+        message: '知识库总容量已达到当前套餐上限，请联系平台管理员调整套餐',
+      },
+    ]) {
+      const decision = await checkTenantQuotaForUsage({
+        database: input.database,
+        tenantId,
+        resource: quotaCheck.resourceKey,
+        quantity: quotaCheck.quantity,
+      });
+      await recordKnowledgeQuotaDecision({
+        repository: quotaUsageRepository,
+        tenantId,
+        institutionId,
+        actorUserId: uploadedByUserId,
+        resourceKey: quotaCheck.resourceKey,
+        action: 'upload_file',
+        decision,
+        quantity: quotaCheck.quantity,
+      });
+      if (!decision.allowed) {
+        return { status: 'quota_exceeded', code: decision.reason, message: quotaCheck.message };
+      }
+    }
   }
 
   // 1. 创建知识库来源
@@ -181,15 +275,6 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
     sourceId,
     title: originalFilename,
   });
-
-  // 3. 读取文件内容并上传到存储
-  const buffer = new Uint8Array(await file.arrayBuffer());
-  if (buffer.byteLength <= 0) {
-    return { status: 'validation_failed', message: '文件内容不能为空' };
-  }
-  if (buffer.byteLength > INSTITUTION_KNOWLEDGE_FILE_MAX_BYTES) {
-    return { status: 'validation_failed', message: '文件大小不能超过 2MB' };
-  }
 
   const fileId = `kb-file-${randomUUID()}`;
   const saved = await input.storage.save({
@@ -252,6 +337,7 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
 
   // 4. 自动创建并执行文件解析任务，同时保留同步上传响应
   const jobResult = await createAndRunParseFileJob({
+    database: input.database,
     repository: input.repository,
     storage: input.storage,
     input: {
@@ -261,6 +347,26 @@ export async function uploadAndParseInstitutionKnowledgeFileService(
       knowledgeId,
       fileId,
     },
+  });
+  await recordKnowledgeQuotaOutcome({
+    repository: quotaUsageRepository,
+    tenantId,
+    institutionId,
+    actorUserId: uploadedByUserId,
+    resourceKey: 'knowledge_files',
+    action: 'upload_file',
+    status: 'succeeded',
+    quantity: 1,
+  });
+  await recordKnowledgeQuotaOutcome({
+    repository: quotaUsageRepository,
+    tenantId,
+    institutionId,
+    actorUserId: uploadedByUserId,
+    resourceKey: 'knowledge_total_storage_mb',
+    action: 'upload_file',
+    status: 'succeeded',
+    quantity: actualFileSizeMb,
   });
   const parseRecord = await input.repository.findKnowledgeFileParse({ tenantId, knowledgeId, fileId });
   const parse = parseRecord ? toParseDto(parseRecord) : null;

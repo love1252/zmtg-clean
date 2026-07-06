@@ -258,14 +258,23 @@ describe('AI credits metering domain service', () => {
     expect(serialized).not.toContain('secret-token');
   });
 
-  it('不修改现有 quota resource 行为：ai_calls 仍是唯一 AI quota resource', () => {
+  it('不修改现有 AI quota resource 行为：ai_calls 仍保留且不新增 ai_credits', () => {
     expect(TENANT_QUOTA_RESOURCES).toEqual([
       'customers',
       'appointments',
+      'knowledge_items',
       'knowledge_files',
+      'knowledge_total_storage_mb',
+      'knowledge_single_file_size_mb',
+      'knowledge_parse_jobs_monthly',
+      'knowledge_embedding_jobs_monthly',
+      'knowledge_ocr_jobs_monthly',
+      'knowledge_rag_answers_monthly',
+      'knowledge_index_rebuild_jobs_monthly',
       'staff_seats',
       'ai_calls',
     ]);
+    expect(TENANT_QUOTA_RESOURCES).toContain('ai_calls');
     expect(TENANT_QUOTA_RESOURCES).not.toContain('ai_credits');
   });
 
