@@ -115,6 +115,22 @@ describe('治疗项目路径模板 domain catalog', () => {
     expect(match?.template.categoryKeys).toContain('skin_repair');
   });
 
+  it('双眼皮 / 手术治疗能匹配 post_surgery_repair', () => {
+    const match = expectTemplateMatch(
+      {
+        ...baseInput,
+        treatmentCategory: 'surgery_repair',
+        treatmentProject: '双眼皮手术术后修复',
+        recoveryStage: 'D3',
+        riskLevel: 'watch',
+        tags: ['眼周修复', '手术复查'],
+      },
+      'post_surgery_repair',
+    );
+
+    expect(match?.nodes.some((node) => node.recoveryStage === 'D3')).toBe(true);
+  });
+
   it('皮肤管理能匹配 skin_management', () => {
     const match = expectTemplateMatch(
       {

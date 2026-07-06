@@ -5,6 +5,7 @@ import type {
   InstitutionKnowledgeItemDto,
   InstitutionKnowledgeListResponse,
 } from '@/modules/institution/domain/institution-knowledge-management';
+import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
 import type {
   FollowUpStatus,
   TenantFollowUpTaskSource,
@@ -72,6 +73,12 @@ export type UpdateTreatmentSummaryClientPayload = Partial<
 
 export type VoidTreatmentSummaryClientPayload = VoidTreatmentSummaryDraft;
 
+export type FollowUpPathEnrollmentCreateClientPayload = {
+  sourceType: 'treatment_summary';
+  sourceId: string;
+  templateKey?: string | null;
+};
+
 export type TreatmentSummaryListClientQuery = {
   customerId?: string | number | null;
   treatmentProject?: string | number | null;
@@ -131,6 +138,10 @@ export type TreatmentSummaryListClientResult =
 export type TreatmentFollowUpSuggestionListClientResult =
   | { ok: true; suggestions: TreatmentFollowUpSuggestion[] }
   | { ok: false; error: TenantBusinessClientError };
+
+export type FollowUpPathEnrollmentListClientResult = TenantBusinessListResult<FollowUpPathEnrollmentDto>;
+
+export type FollowUpPathEnrollmentMutationClientResult = TenantBusinessMutationResult<FollowUpPathEnrollmentDto>;
 
 export type InstitutionKnowledgeListClientResult =
   | {
@@ -201,6 +212,11 @@ const treatmentSummaryListQueryKeys = [
   'cursor',
 ] as const;
 const followUpTaskListQueryKeys = ['source', 'sourceTreatmentSummaryId'] as const;
+const followUpPathEnrollmentCreatePayloadKeys = [
+  'sourceType',
+  'sourceId',
+  'templateKey',
+] as const;
 const institutionKnowledgeListQueryKeys = ['keyword', 'page', 'pageSize'] as const;
 
 function getFetcher(options?: TenantBusinessClientOptions) {
@@ -825,6 +841,39 @@ export function listFollowUpTasks(
     : options;
 
   return requestRecords<TenantFollowUpTask>(buildFollowUpTaskListPath(query), clientOptions);
+}
+
+export function listFollowUpPathEnrollments(
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpPathEnrollmentListClientResult> {
+  return requestRecords<FollowUpPathEnrollmentDto>(
+    '/api/institution/followup-paths/enrollments',
+    options,
+  );
+}
+
+export function createFollowUpPathEnrollment(
+  payload: FollowUpPathEnrollmentCreateClientPayload,
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpPathEnrollmentMutationClientResult> {
+  return requestRecord<FollowUpPathEnrollmentDto>(
+    '/api/institution/followup-paths/enrollments',
+    'POST',
+    pickPayload(payload as unknown as Record<string, unknown>, followUpPathEnrollmentCreatePayloadKeys),
+    options,
+  );
+}
+
+export function cancelFollowUpPathEnrollment(
+  enrollmentId: string,
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpPathEnrollmentMutationClientResult> {
+  return requestRecord<FollowUpPathEnrollmentDto>(
+    `/api/institution/followup-paths/enrollments/${encodeURIComponent(enrollmentId)}/cancel`,
+    'POST',
+    {},
+    options,
+  );
 }
 
 export function transitionFollowUpTask(

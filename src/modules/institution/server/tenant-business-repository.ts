@@ -1,4 +1,4 @@
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import type {
   AppointmentRecordSummary,
   AppointmentStatus,
@@ -11,13 +11,31 @@ import {
   type TenantFollowUpTaskFromTreatmentSummarySuggestion,
   type TenantFollowUpTask,
 } from '@/modules/institution/domain/followup-workflow';
+import type {
+  FollowUpPathEnrollment,
+  FollowUpPathEnrollmentSourceType,
+  FollowUpPathEnrollmentStatus,
+  FollowUpPathStageInstance,
+} from '@/modules/institution/domain/followup-path-enrollment';
+import type { TreatmentPathHandlerRole, TreatmentPathTemplateKey } from '@/modules/institution/domain/treatment-path-templates';
 import type { TenantDatabase } from '@/server/db/client';
-import { appointments, customers, followUpTasks, treatmentSummaries } from '@/server/db/schema';
+import { appointments, customers, followUpPathEnrollments, followUpPathStages, followUpTasks, treatmentSummaries } from '@/server/db/schema';
 import type { FollowUpTaskListFilters } from '@/modules/institution/server/follow-up-task-query-parser';
 
 type CustomerRow = typeof customers.$inferSelect;
 type AppointmentRow = typeof appointments.$inferSelect;
 type FollowUpTaskRow = typeof followUpTasks.$inferSelect;
+type FollowUpPathEnrollmentRow = typeof followUpPathEnrollments.$inferSelect;
+type FollowUpPathStageRow = typeof followUpPathStages.$inferSelect;
+type CreateFollowUpPathEnrollmentInput = typeof followUpPathEnrollments.$inferInsert;
+type CreateFollowUpPathStageInput = Omit<
+  typeof followUpPathStages.$inferInsert,
+  'dueAt' | 'createdAt' | 'updatedAt'
+> & {
+  dueAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
 type CreateCustomerInput = typeof customers.$inferInsert;
 type MutableCustomerUpdateValues = Pick<
   typeof customers.$inferInsert,
@@ -75,6 +93,7 @@ type CreateFollowUpTaskFromTreatmentSummarySuggestionInput = {
   riskLevel: FollowUpRiskLevel;
   sourceTreatmentSummaryId: string;
   sourceSuggestionKey: string;
+  skipActiveSourceConflict?: boolean;
 };
 type ListFollowUpTasksByTenantInput =
   | string
@@ -117,6 +136,37 @@ type CreateManualFollowUpTaskInput = {
 type CreateManualFollowUpTaskResult =
   | { kind: 'created'; task: TenantFollowUpTask }
   | { kind: 'customer_not_found' };
+
+type ListFollowUpPathEnrollmentsByTenantInput = {
+  tenantId: string;
+  institutionId?: string | null;
+  status?: FollowUpPathEnrollmentStatus | null;
+};
+
+type FollowUpPathEnrollmentSourceLookupInput = {
+  tenantId: string;
+  institutionId?: string | null;
+  sourceType: FollowUpPathEnrollmentSourceType;
+  sourceId: string;
+  templateKey: TreatmentPathTemplateKey;
+};
+
+type FollowUpPathEnrollmentLookupInput = {
+  tenantId: string;
+  institutionId?: string | null;
+  enrollmentId: string;
+};
+
+type CreateFollowUpPathEnrollmentResult =
+  | { kind: 'created'; enrollment: FollowUpPathEnrollment }
+  | { kind: 'conflict'; resourceId: string; reason: 'active_follow_up_path_enrollment_exists' }
+  | { kind: 'invalid_source'; reason: 'source_treatment_summary_not_found_or_cross_tenant' }
+  | { kind: 'customer_not_found' };
+
+type CancelFollowUpPathEnrollmentResult =
+  | { kind: 'cancelled'; enrollment: FollowUpPathEnrollment }
+  | { kind: 'not_found' }
+  | { kind: 'conflict'; resourceId: string; reason: 'follow_up_path_enrollment_not_active' };
 
 const activeSourceFollowUpStatuses = new Set<FollowUpStatus>([
   'scheduled',
@@ -204,6 +254,8 @@ export function mapFollowUpTaskRowToRecord(row: FollowUpTaskRow): TenantFollowUp
     source: hasTreatmentSummarySource ? 'treatment_summary' : null,
     sourceTreatmentSummaryId: hasTreatmentSummarySource ? row.sourceTreatmentSummaryId : null,
     sourceSuggestionKey: hasTreatmentSummarySource ? row.sourceSuggestionKey : null,
+    requiresHumanHandling: true,
+    forbidAutoReachOut: true,
   };
 }
 
@@ -216,6 +268,81 @@ export function mapFollowUpTaskSourceRowToRecord(
     sourceTreatmentSummaryId: row.sourceTreatmentSummaryId ?? '',
     sourceSuggestionKey: row.sourceSuggestionKey ?? '',
   };
+}
+
+function mapFollowUpPathStageRowToRecord(row: FollowUpPathStageRow): FollowUpPathStageInstance {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    institutionId: row.institutionId,
+    enrollmentId: row.enrollmentId,
+    nodeKey: row.nodeKey,
+    stageKey: row.stageKey,
+    dueAt: row.dueAt.toISOString(),
+    status: row.status,
+    followUpTaskId: row.followUpTaskId,
+    handlerRole: row.handlerRole as TreatmentPathHandlerRole,
+    riskLevel: row.riskLevel,
+    safeMessage: row.safeMessage,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function createEmptyEnrollmentRecord(row: FollowUpPathEnrollmentRow): FollowUpPathEnrollment {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    institutionId: row.institutionId,
+    customerId: row.customerId,
+    customerDisplayName: '客户',
+    treatmentSummaryId: row.treatmentSummaryId,
+    sourceType: row.sourceType,
+    sourceId: row.sourceId,
+    templateKey: row.templateKey as TreatmentPathTemplateKey,
+    templateVersion: row.templateVersion,
+    status: row.status,
+    startedAt: row.startedAt.toISOString(),
+    completedAt: row.completedAt?.toISOString() ?? null,
+    safeReasonCode: row.safeReasonCode,
+    metadataJson: row.metadataJson,
+    stageCount: 0,
+    taskCount: 0,
+    dueAt: null,
+    safeMessage: '路径任务需人工处理，不会主动向客户发送消息。',
+    taskIds: [],
+    stages: [],
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function hydrateFollowUpPathEnrollments(input: {
+  rows: FollowUpPathEnrollmentRow[];
+  customersById: Map<string, CustomerRow>;
+  stagesByEnrollmentId: Map<string, FollowUpPathStageRow[]>;
+}): FollowUpPathEnrollment[] {
+  return input.rows.map((row) => {
+    const stages = (input.stagesByEnrollmentId.get(row.id) ?? []).map(mapFollowUpPathStageRowToRecord);
+    const taskIds = stages
+      .map((stage) => stage.followUpTaskId)
+      .filter((taskId): taskId is string => Boolean(taskId));
+    const dueAt = stages
+      .filter((stage) => stage.status !== 'completed' && stage.status !== 'cancelled')
+      .sort((left, right) => Date.parse(left.dueAt) - Date.parse(right.dueAt))[0]?.dueAt ??
+      stages.sort((left, right) => Date.parse(left.dueAt) - Date.parse(right.dueAt))[0]?.dueAt ??
+      null;
+
+    return {
+      ...createEmptyEnrollmentRecord(row),
+      customerDisplayName: input.customersById.get(row.customerId)?.displayName ?? '客户',
+      stageCount: stages.length,
+      taskCount: taskIds.length,
+      dueAt,
+      taskIds,
+      stages,
+    };
+  });
 }
 
 function normalizeFollowUpTaskListInput(input: ListFollowUpTasksByTenantInput): {
@@ -305,16 +432,18 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         };
       }
 
-      const existingSourceRows = await database
-        .select()
-        .from(followUpTasks)
-        .where(
-          and(
-            eq(followUpTasks.tenantId, input.tenantId),
-            eq(followUpTasks.sourceTreatmentSummaryId, input.sourceTreatmentSummaryId),
-            eq(followUpTasks.sourceSuggestionKey, input.sourceSuggestionKey),
-          ),
-        );
+      const existingSourceRows = input.skipActiveSourceConflict
+        ? []
+        : await database
+            .select()
+            .from(followUpTasks)
+            .where(
+              and(
+                eq(followUpTasks.tenantId, input.tenantId),
+                eq(followUpTasks.sourceTreatmentSummaryId, input.sourceTreatmentSummaryId),
+                eq(followUpTasks.sourceSuggestionKey, input.sourceSuggestionKey),
+              ),
+            );
       const activeSourceTask = existingSourceRows.find(
         (row) =>
           row.tenantId === input.tenantId &&
@@ -513,6 +642,249 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         .from(followUpTasks)
         .where(buildFollowUpTaskListWhere(normalized));
       return rows.map(mapFollowUpTaskRowToRecord);
+    },
+    async findActiveFollowUpPathEnrollmentBySource(
+      input: FollowUpPathEnrollmentSourceLookupInput,
+    ): Promise<FollowUpPathEnrollment | null> {
+      const rows = await database
+        .select()
+        .from(followUpPathEnrollments)
+        .where(
+          and(
+            eq(followUpPathEnrollments.tenantId, input.tenantId),
+            eq(followUpPathEnrollments.sourceType, input.sourceType),
+            eq(followUpPathEnrollments.sourceId, input.sourceId),
+            eq(followUpPathEnrollments.templateKey, input.templateKey),
+            eq(followUpPathEnrollments.status, 'active'),
+          ),
+        );
+      const row = rows.find((candidate) => {
+        if (candidate.tenantId !== input.tenantId) return false;
+        if (candidate.sourceType !== input.sourceType) return false;
+        if (candidate.sourceId !== input.sourceId) return false;
+        if (candidate.templateKey !== input.templateKey) return false;
+        if (candidate.status !== 'active') return false;
+        if (input.institutionId && candidate.institutionId !== input.institutionId) return false;
+        return true;
+      });
+
+      if (!row) return null;
+
+      const [enrollment] = await this.getHydratedFollowUpPathEnrollments({
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        rows: [row],
+      });
+      return enrollment ?? null;
+    },
+    async getHydratedFollowUpPathEnrollments(input: {
+      tenantId: string;
+      institutionId?: string | null;
+      rows: FollowUpPathEnrollmentRow[];
+    }): Promise<FollowUpPathEnrollment[]> {
+      const visibleRows = input.rows.filter((row) => {
+        if (row.tenantId !== input.tenantId) return false;
+        if (input.institutionId && row.institutionId !== input.institutionId) return false;
+        return true;
+      });
+
+      if (visibleRows.length === 0) return [];
+
+      const customerIds = [...new Set(visibleRows.map((row) => row.customerId))];
+      const enrollmentIds = visibleRows.map((row) => row.id);
+      const customerRows = await database
+        .select()
+        .from(customers)
+        .where(
+          and(eq(customers.tenantId, input.tenantId), inArray(customers.id, customerIds)),
+        );
+      const stageRows = await database
+        .select()
+        .from(followUpPathStages)
+        .where(
+          and(
+            eq(followUpPathStages.tenantId, input.tenantId),
+            inArray(followUpPathStages.enrollmentId, enrollmentIds),
+          ),
+        );
+      const customersById = new Map(customerRows.map((row) => [row.id, row]));
+      const stagesByEnrollmentId = new Map<string, FollowUpPathStageRow[]>();
+
+      for (const stageRow of stageRows) {
+        if (stageRow.tenantId !== input.tenantId) continue;
+        if (!enrollmentIds.includes(stageRow.enrollmentId)) continue;
+        const current = stagesByEnrollmentId.get(stageRow.enrollmentId) ?? [];
+        current.push(stageRow);
+        stagesByEnrollmentId.set(stageRow.enrollmentId, current);
+      }
+
+      return hydrateFollowUpPathEnrollments({
+        rows: visibleRows,
+        customersById,
+        stagesByEnrollmentId,
+      });
+    },
+    async createFollowUpPathEnrollment(
+      input: CreateFollowUpPathEnrollmentInput,
+    ): Promise<CreateFollowUpPathEnrollmentResult> {
+      const existing = await this.findActiveFollowUpPathEnrollmentBySource({
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+        templateKey: input.templateKey as TreatmentPathTemplateKey,
+      });
+
+      if (existing) {
+        return {
+          kind: 'conflict',
+          resourceId: existing.id,
+          reason: 'active_follow_up_path_enrollment_exists',
+        };
+      }
+
+      const [customer] = await database
+        .select()
+        .from(customers)
+        .where(and(eq(customers.tenantId, input.tenantId), eq(customers.id, input.customerId)));
+
+      if (!customer) {
+        return { kind: 'customer_not_found' };
+      }
+
+      if (input.sourceType === 'treatment_summary') {
+        const [summary] = await database
+          .select({ id: treatmentSummaries.id, customerId: treatmentSummaries.customerId })
+          .from(treatmentSummaries)
+          .where(
+            and(
+              eq(treatmentSummaries.tenantId, input.tenantId),
+              eq(treatmentSummaries.id, input.sourceId),
+              eq(treatmentSummaries.customerId, input.customerId),
+            ),
+          );
+
+        if (!summary) {
+          return {
+            kind: 'invalid_source',
+            reason: 'source_treatment_summary_not_found_or_cross_tenant',
+          };
+        }
+      }
+
+      const [row] = await database.insert(followUpPathEnrollments).values(input).returning();
+      const [enrollment] = await this.getHydratedFollowUpPathEnrollments({
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        rows: [row],
+      });
+
+      return { kind: 'created', enrollment: enrollment ?? createEmptyEnrollmentRecord(row) };
+    },
+    async createFollowUpPathStages(
+      input: CreateFollowUpPathStageInput[],
+    ): Promise<FollowUpPathStageInstance[]> {
+      if (input.length === 0) return [];
+
+      const rows = await database
+        .insert(followUpPathStages)
+        .values(
+          input.map((stage) => ({
+            ...stage,
+            dueAt: new Date(stage.dueAt),
+            createdAt: new Date(stage.createdAt),
+            updatedAt: new Date(stage.updatedAt),
+          })),
+        )
+        .returning();
+      return rows.map(mapFollowUpPathStageRowToRecord);
+    },
+    async listFollowUpPathEnrollmentsByTenant(
+      input: ListFollowUpPathEnrollmentsByTenantInput,
+    ): Promise<FollowUpPathEnrollment[]> {
+      const conditions = [eq(followUpPathEnrollments.tenantId, input.tenantId)];
+      if (input.status) {
+        conditions.push(eq(followUpPathEnrollments.status, input.status));
+      }
+
+      const rows = await database
+        .select()
+        .from(followUpPathEnrollments)
+        .where(conditions.length === 1 ? conditions[0] : and(...conditions));
+      return this.getHydratedFollowUpPathEnrollments({
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        rows,
+      });
+    },
+    async getFollowUpPathEnrollmentByTenant(
+      input: FollowUpPathEnrollmentLookupInput,
+    ): Promise<FollowUpPathEnrollment | null> {
+      const rows = await database
+        .select()
+        .from(followUpPathEnrollments)
+        .where(
+          and(
+            eq(followUpPathEnrollments.tenantId, input.tenantId),
+            eq(followUpPathEnrollments.id, input.enrollmentId),
+          ),
+        );
+      const [enrollment] = await this.getHydratedFollowUpPathEnrollments({
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        rows,
+      });
+
+      return enrollment ?? null;
+    },
+    async cancelFollowUpPathEnrollment(
+      input: FollowUpPathEnrollmentLookupInput,
+    ): Promise<CancelFollowUpPathEnrollmentResult> {
+      const current = await this.getFollowUpPathEnrollmentByTenant(input);
+      if (!current) {
+        return { kind: 'not_found' };
+      }
+
+      if (current.status !== 'active') {
+        return {
+          kind: 'conflict',
+          resourceId: current.id,
+          reason: 'follow_up_path_enrollment_not_active',
+        };
+      }
+
+      const now = new Date();
+      const [row] = await database
+        .update(followUpPathEnrollments)
+        .set({
+          status: 'cancelled',
+          completedAt: now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(followUpPathEnrollments.tenantId, input.tenantId),
+            eq(followUpPathEnrollments.id, input.enrollmentId),
+            eq(followUpPathEnrollments.status, 'active'),
+          ),
+        )
+        .returning();
+
+      if (!row) {
+        return {
+          kind: 'conflict',
+          resourceId: current.id,
+          reason: 'follow_up_path_enrollment_not_active',
+        };
+      }
+
+      const [enrollment] = await this.getHydratedFollowUpPathEnrollments({
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        rows: [row],
+      });
+
+      return { kind: 'cancelled', enrollment: enrollment ?? createEmptyEnrollmentRecord(row) };
     },
     async listFollowUpPathAnalysisSourceTasksByTenant(
       tenantId: string,

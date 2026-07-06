@@ -9,6 +9,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import {
+  listFollowUpPathEnrollments,
   listFollowUpTasks,
   transitionFollowUpTask,
   type TenantBusinessClientError,
@@ -19,10 +20,8 @@ import {
   type InstitutionPageStateProps,
 } from '@/modules/institution/components/InstitutionPageState';
 import { InstitutionSectionHeader } from '@/modules/institution/components/InstitutionSectionHeader';
-import {
-  followUpJourneys,
-  followUpMessageSuggestions,
-} from '@/modules/institution/domain/followups';
+import { followUpMessageSuggestions } from '@/modules/institution/domain/followups';
+import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
 import type {
   FollowUpStatus,
   FollowUpTaskSource,
@@ -91,9 +90,12 @@ function sourceLabel(source: FollowUpTaskSource | undefined) {
 
 export function SmartFollowUpShell() {
   const [tasks, setTasks] = useState<TenantFollowUpTask[]>([]);
+  const [enrollments, setEnrollments] = useState<FollowUpPathEnrollmentDto[]>([]);
   const [sourceFilter, setSourceFilter] = useState<FollowUpSourceFilter>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [isEnrollmentLoading, setIsEnrollmentLoading] = useState(true);
   const [listErrorState, setListErrorState] = useState<InstitutionPageStateProps | null>(null);
+  const [enrollmentErrorState, setEnrollmentErrorState] = useState<InstitutionPageStateProps | null>(null);
   const [taskErrors, setTaskErrors] = useState<Record<string, string>>({});
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
 
@@ -127,6 +129,33 @@ export function SmartFollowUpShell() {
       isActive = false;
     };
   }, [sourceFilter]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadFollowUpPathEnrollments() {
+      setIsEnrollmentLoading(true);
+      setEnrollmentErrorState(null);
+      const result = await listFollowUpPathEnrollments();
+
+      if (!isActive) return;
+
+      if (result.ok) {
+        setEnrollments(result.records);
+      } else {
+        setEnrollments([]);
+        setEnrollmentErrorState(visibleListErrorState(result.error));
+      }
+
+      setIsEnrollmentLoading(false);
+    }
+
+    void loadFollowUpPathEnrollments();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const sortedTasks = useMemo(() => sortFollowUpTasksForWorkQueue(tasks), [tasks]);
 
@@ -170,6 +199,71 @@ export function SmartFollowUpShell() {
           </div>
         }
       />
+
+      <article className="rounded-[24px] border border-violet-100 bg-violet-50/70 p-5 shadow-sm backdrop-blur-xl">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-950">路径管理 / 路径实例</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              仅展示已纳入的随访路径实例。阶段任务全部进入人工队列，不会通过企业微信、短信或其他渠道主动触达客户。
+            </p>
+          </div>
+          <span className="inline-flex w-fit rounded-full border border-violet-200 bg-white px-3 py-1 text-xs font-semibold text-violet-700">
+            当前 active：{isEnrollmentLoading ? '--' : enrollments.filter((item) => item.status === 'active').length}
+          </span>
+        </div>
+
+        {isEnrollmentLoading ? (
+          <InstitutionPageState kind="loading" title="正在加载路径实例..." className="mt-4" />
+        ) : null}
+
+        {!isEnrollmentLoading && enrollmentErrorState ? (
+          <InstitutionPageState {...enrollmentErrorState} className="mt-4" />
+        ) : null}
+
+        {!isEnrollmentLoading && !enrollmentErrorState && enrollments.length === 0 ? (
+          <InstitutionPageState
+            kind="empty"
+            title="暂无路径实例"
+            description="治疗摘要纳入路径后，会在这里展示客户、路径、阶段任务和下一次到期时间。"
+            className="mt-4"
+          />
+        ) : null}
+
+        {!isEnrollmentLoading && !enrollmentErrorState && enrollments.length > 0 ? (
+          <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+            {enrollments.map((enrollment) => (
+              <div
+                key={enrollment.enrollmentId}
+                data-testid="followup-path-enrollment-card"
+                className="rounded-2xl border border-violet-100 bg-white/90 p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-950">
+                      {enrollment.customerDisplayName}
+                    </div>
+                    <p className="mt-1 text-xs font-semibold text-violet-700">
+                      路径：{enrollment.templateKey}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                    {enrollment.status}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-semibold text-slate-500">
+                  <span className="rounded-xl bg-slate-50 px-2 py-2">阶段 {enrollment.stageCount}</span>
+                  <span className="rounded-xl bg-slate-50 px-2 py-2">任务 {enrollment.taskCount}</span>
+                  <span className="rounded-xl bg-slate-50 px-2 py-2">
+                    下次 {enrollment.dueAt ? formatBusinessDateTime(enrollment.dueAt) : '--'}
+                  </span>
+                </div>
+                <p className="mt-3 text-xs leading-5 text-slate-500">{enrollment.safeMessage}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </article>
 
       <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         {statusCounts.map((item) => (
@@ -342,30 +436,50 @@ export function SmartFollowUpShell() {
               <Workflow className="h-5 w-5 text-violet-600" />
               <div>
                 <h3 className="text-lg font-semibold text-slate-950">随访旅程</h3>
-                <p className="mt-1 text-sm text-slate-500">仅用于说明运营路径，不代表外部客服接入能力。</p>
+                <p className="mt-1 text-sm text-slate-500">优先展示真实路径实例，不代表外部客服接入能力。</p>
               </div>
             </div>
-            {followUpJourneys.length > 0 ? (
+            {isEnrollmentLoading ? (
+              <InstitutionPageState kind="loading" title="正在加载随访旅程..." className="mt-4" />
+            ) : null}
+            {!isEnrollmentLoading && !enrollmentErrorState && enrollments.length > 0 ? (
               <div className="mt-4 space-y-3">
-                {followUpJourneys.map((journey) => (
-                <div key={journey.id} className="rounded-2xl border border-slate-200 bg-white p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-semibold text-slate-950">{journey.name}</span>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
-                      {journey.stageCount} 阶段
-                    </span>
+                {enrollments.slice(0, 3).map((enrollment) => (
+                  <div
+                    key={enrollment.enrollmentId}
+                    className="rounded-2xl border border-slate-200 bg-white p-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold text-slate-950">
+                        {enrollment.customerDisplayName}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
+                        {enrollment.stageCount} 阶段
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      {enrollment.templateKey} · {enrollment.taskCount} 个人工任务 · 下次到期：
+                      {enrollment.dueAt ? formatBusinessDateTime(enrollment.dueAt) : '--'}
+                    </p>
+                    <div className="mt-2 space-y-1">
+                      {enrollment.stages.slice(0, 3).map((stage) => (
+                        <div
+                          key={stage.nodeKey}
+                          className="rounded-xl bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-500"
+                        >
+                          {stage.stageKey} · {followUpStatusLabels[stage.status]} · 人工处理
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    {journey.activeCustomers} 位客户 · {journey.conversionHint}
-                  </p>
-                </div>
                 ))}
               </div>
-            ) : (
+            ) : null}
+            {!isEnrollmentLoading && (enrollmentErrorState || enrollments.length === 0) ? (
               <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white/70 px-4 py-6 text-sm leading-6 text-slate-500">
-                暂无真实随访旅程配置。
+                暂无真实随访路径实例。治疗摘要纳入路径后，会在这里展示客户随访旅程。
               </div>
-            )}
+            ) : null}
           </article>
 
           <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-sm backdrop-blur-xl">

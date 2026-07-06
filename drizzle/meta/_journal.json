@@ -218,6 +218,13 @@
       "when": 1783306800000,
       "tag": "0030_v06_kb_entitlement_quota_usage_records",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1783310400000,
+      "tag": "0031_v06_followup_path_enrollment_first_slice",
+      "breakpoints": true
     }
   ]
 }

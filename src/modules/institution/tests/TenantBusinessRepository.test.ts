@@ -299,6 +299,8 @@ describe('租户业务仓储映射', () => {
       dueAt: '2026-05-30T10:00:00.000Z',
       suggestedAction: '人工回访',
       riskLevel: 'urgent',
+      requiresHumanHandling: true,
+      forbidAutoReachOut: true,
       updatedBy: null,
       updatedAt: null,
       source: null,
