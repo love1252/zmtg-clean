@@ -84,6 +84,25 @@ export const followUpMessageDraftStatusEnum = pgEnum('follow_up_message_draft_st
   'marked_sent',
   'cancelled',
 ]);
+export const followUpCustomerTimelineSourceTypeEnum = pgEnum('follow_up_customer_timeline_source_type', [
+  'path_enrollment',
+  'followup_task',
+  'message_draft',
+  'manual_note',
+]);
+export const followUpCustomerTimelineEventTypeEnum = pgEnum('follow_up_customer_timeline_event_type', [
+  'followup_path_enrolled',
+  'followup_path_cancelled',
+  'followup_tasks_generated',
+  'followup_task_status_changed',
+  'followup_task_escalated',
+  'message_draft_created',
+  'message_draft_updated',
+  'message_draft_approved',
+  'message_draft_rejected',
+  'message_draft_marked_sent',
+  'manual_feedback_recorded',
+]);
 export const auditResultEnum = pgEnum('audit_result', ['allowed', 'denied', 'transitioned']);
 export const tenantPlanStatusEnum = pgEnum('tenant_plan_status', ['active', 'retired']);
 export const tenantPlanAssignmentStatusEnum = pgEnum('tenant_plan_assignment_status', [
@@ -1835,6 +1854,59 @@ export const followUpMessageDrafts = pgTable(
     customerIdx: index('follow_up_message_drafts_customer_idx').on(table.customerId),
     statusIdx: index('follow_up_message_drafts_status_idx').on(table.status),
     createdAtIdx: index('follow_up_message_drafts_created_at_idx').on(table.createdAt),
+  }),
+);
+
+export const followUpCustomerTimelineEvents = pgTable(
+  'follow_up_customer_timeline_events',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    sourceType: followUpCustomerTimelineSourceTypeEnum('source_type').notNull(),
+    sourceId: varchar('source_id', { length: 96 }).notNull(),
+    eventType: followUpCustomerTimelineEventTypeEnum('event_type').notNull(),
+    eventTitle: varchar('event_title', { length: 160 }).notNull(),
+    safeSummary: varchar('safe_summary', { length: 240 }).notNull(),
+    riskLevel: followUpRiskLevelEnum('risk_level'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    safeActorRole: varchar('safe_actor_role', { length: 64 }),
+    safeReasonCode: varchar('safe_reason_code', { length: 96 }).notNull(),
+    metadataJson: jsonb('metadata_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    ...timestamps,
+  },
+  (table) => ({
+    customerFk: foreignKey({
+      name: 'follow_up_customer_timeline_events_tenant_customer_fk',
+      columns: [table.tenantId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.id],
+    }),
+    tenantInstitutionCustomerOccurredIdx: index(
+      'follow_up_customer_timeline_events_tenant_institution_customer_occurred_idx',
+    ).on(table.tenantId, table.institutionId, table.customerId, table.occurredAt),
+    tenantSourceEventIdx: index('follow_up_customer_timeline_events_tenant_source_event_idx').on(
+      table.tenantId,
+      table.sourceType,
+      table.sourceId,
+      table.eventType,
+    ),
+    tenantEventTypeOccurredIdx: index('follow_up_customer_timeline_events_tenant_event_type_occurred_idx').on(
+      table.tenantId,
+      table.eventType,
+      table.occurredAt,
+    ),
+    sourceEventUniqueIdx: uniqueIndex('follow_up_customer_timeline_events_source_event_unique_idx').on(
+      table.tenantId,
+      table.sourceType,
+      table.sourceId,
+      table.eventType,
+    ),
   }),
 );
 

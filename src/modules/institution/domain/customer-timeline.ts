@@ -6,6 +6,10 @@ import type {
   CustomerRecordSummary,
 } from '@/modules/institution/domain/customer-records';
 import type {
+  FollowUpCustomerOverview,
+  FollowUpCustomerTimelineEventDto,
+} from '@/modules/institution/domain/followup-customer-timeline';
+import type {
   FollowUpRiskLevel,
   FollowUpStatus,
   TenantFollowUpTask,
@@ -89,6 +93,8 @@ export type CustomerTimelineResponse = {
   followups: CustomerTimelineFollowUpSummary[];
   treatmentSummaries: CustomerTimelineTreatmentSummary[];
   auditEvents: CustomerTimelineAuditSummary[];
+  followUpTimelineEvents: FollowUpCustomerTimelineEventDto[];
+  followUpOverview: FollowUpCustomerOverview;
   timeline: CustomerTimelineEvent[];
 };
 
@@ -98,6 +104,8 @@ type CustomerTimelineInput = {
   followups: TenantFollowUpTask[];
   treatmentSummaries: TreatmentSummaryRecord[];
   auditEvents: CustomerTimelineAuditSummary[];
+  followUpTimelineEvents?: FollowUpCustomerTimelineEventDto[];
+  followUpOverview?: FollowUpCustomerOverview;
 };
 
 function toCustomerSummary(customer: CustomerRecordSummary): CustomerTimelineCustomerSummary {
@@ -188,6 +196,16 @@ export function buildCustomerTimelineResponse(input: CustomerTimelineInput): Cus
 
     return left.id.localeCompare(right.id);
   });
+  const followUpTimelineEvents = input.followUpTimelineEvents ?? [];
+  const followUpOverview = input.followUpOverview ?? {
+    activeEnrollmentCount: 0,
+    pendingTaskCount: 0,
+    overdueTaskCount: 0,
+    draftCount: 0,
+    approvedDraftCount: 0,
+    markedSentCount: 0,
+    escalatedCount: 0,
+  };
 
   const timeline = sortTimelineEvents([
     ...auditEvents.map((event): CustomerTimelineEvent => ({
@@ -250,6 +268,8 @@ export function buildCustomerTimelineResponse(input: CustomerTimelineInput): Cus
     followups,
     treatmentSummaries,
     auditEvents,
+    followUpTimelineEvents,
+    followUpOverview,
     timeline,
   };
 }

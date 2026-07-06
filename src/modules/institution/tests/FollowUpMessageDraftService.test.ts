@@ -121,6 +121,28 @@ function createRepository() {
         safeReasonCode: 'draft_marked_sent',
       }),
     })),
+    getCustomerByTenant: vi.fn(async () => ({ id: 'customer-1', tenantId: 'tenant-a' })),
+    recordFollowUpCustomerTimelineEvent: vi.fn(async (input) => ({
+      kind: 'created' as const,
+      event: {
+        id: input.id,
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        customerId: input.customerId,
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+        eventType: input.eventType,
+        eventTitle: input.eventTitle,
+        safeSummary: input.safeSummary,
+        riskLevel: input.riskLevel,
+        occurredAt: input.occurredAt,
+        safeActorRole: input.safeActorRole,
+        safeReasonCode: input.safeReasonCode,
+        metadataJson: input.metadataJson,
+        createdAt: input.occurredAt,
+        updatedAt: input.occurredAt,
+      },
+    })),
   };
 }
 
@@ -154,6 +176,16 @@ describe('follow-up message draft service', () => {
         followUpTaskId: 'task-1',
         channelType: 'manual',
         status: 'draft',
+      }),
+    );
+    expect(repository.recordFollowUpCustomerTimelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        customerId: 'customer-1',
+        sourceType: 'message_draft',
+        sourceId: 'generated-draft-id:message_draft_created',
+        eventType: 'message_draft_created',
       }),
     );
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -233,6 +265,25 @@ describe('follow-up message draft service', () => {
     );
     expect(repository.markFollowUpMessageDraftAsSent).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: 'tenant-a', institutionId: 'inst-a', actorId: 'demo-user-admin' }),
+    );
+    expect(repository.recordFollowUpCustomerTimelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        customerId: 'customer-1',
+        sourceType: 'message_draft',
+        eventType: 'message_draft_approved',
+      }),
+    );
+    expect(repository.recordFollowUpCustomerTimelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        customerId: 'customer-1',
+        sourceType: 'message_draft',
+        eventType: 'message_draft_marked_sent',
+        safeSummary: expect.stringContaining('不代表系统自动发送'),
+      }),
     );
     expect(fetchSpy).not.toHaveBeenCalled();
   });

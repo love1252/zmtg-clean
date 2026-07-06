@@ -10,6 +10,7 @@ import { createTenantBusinessRepository } from '@/modules/institution/server/ten
 import {
   parseFollowUpTransitionPayload,
 } from '@/modules/institution/server/tenant-business-write-input';
+import { recordFollowUpTaskStatusTimelineEvent } from '@/modules/institution/server/followup-customer-timeline-service';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
 
@@ -78,18 +79,25 @@ export async function PATCH(request: Request) {
       action: 'update',
       mutate: ({ tenantId, successAuditEvent }) =>
         runTenantBusinessAuditTransaction(db, async ({ repository, auditRepository }) => {
+          const occurredAt = new Date().toISOString();
           const result = await repository.transitionFollowUpTask({
             tenantId,
             id: parsed.value.id,
             nextStatus: parsed.value.nextStatus,
             actorId: context.userId,
-            occurredAt: new Date().toISOString(),
+            occurredAt,
           });
 
           if (result.kind !== 'updated') {
             return result;
           }
 
+          await recordFollowUpTaskStatusTimelineEvent({
+            context,
+            tenantBusinessRepository: repository,
+            task: result.task,
+            occurredAt,
+          });
           await auditRepository.record({ ...successAuditEvent, resourceId: result.task.id });
 
           return { kind: 'success', record: result.task };

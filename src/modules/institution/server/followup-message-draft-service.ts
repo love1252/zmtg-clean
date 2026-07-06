@@ -10,6 +10,9 @@ import {
   type FollowUpMessageDraftDto,
   type FollowUpMessageTemplateDto,
 } from '@/modules/institution/domain/followup-message-drafts';
+import {
+  recordMessageDraftTimelineEvent,
+} from '@/modules/institution/server/followup-customer-timeline-service';
 import type { TenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 
 export type FollowUpMessageForbiddenReason =
@@ -21,6 +24,7 @@ export type FollowUpMessageForbiddenReason =
 type ServiceRepository = Pick<
   TenantBusinessRepository,
   | 'listFollowUpMessageTemplatesByTenant'
+  | 'getCustomerByTenant'
   | 'getFollowUpTaskPathContextByTenant'
   | 'createFollowUpMessageDraft'
   | 'listFollowUpMessageDraftsByTask'
@@ -29,6 +33,7 @@ type ServiceRepository = Pick<
   | 'approveFollowUpMessageDraft'
   | 'rejectFollowUpMessageDraft'
   | 'markFollowUpMessageDraftAsSent'
+  | 'recordFollowUpCustomerTimelineEvent'
 >;
 
 export type ListFollowUpMessageTemplatesResult =
@@ -98,8 +103,10 @@ export async function createMessageDraftForFollowUpTask(input: {
   tenantBusinessRepository: Pick<
     ServiceRepository,
     | 'listFollowUpMessageTemplatesByTenant'
+    | 'getCustomerByTenant'
     | 'getFollowUpTaskPathContextByTenant'
     | 'createFollowUpMessageDraft'
+    | 'recordFollowUpCustomerTimelineEvent'
   >;
   occurredAt: string;
 }): Promise<CreateFollowUpMessageDraftResult> {
@@ -137,7 +144,15 @@ export async function createMessageDraftForFollowUpTask(input: {
   });
 
   if (result.kind === 'created') {
-    return { kind: 'created', draft: mapFollowUpMessageDraftToDto(result.draft) };
+    const draftDto = mapFollowUpMessageDraftToDto(result.draft);
+    await recordMessageDraftTimelineEvent({
+      context: input.context,
+      tenantBusinessRepository: input.tenantBusinessRepository,
+      draft: draftDto,
+      eventType: 'message_draft_created',
+      occurredAt: input.occurredAt,
+    });
+    return { kind: 'created', draft: draftDto };
   }
 
   return result;
@@ -177,7 +192,7 @@ export async function updateMessageDraftContent(input: {
   content: string;
   tenantBusinessRepository: Pick<
     ServiceRepository,
-    'getFollowUpMessageDraftByTenant' | 'updateFollowUpMessageDraftContent'
+    'getFollowUpMessageDraftByTenant' | 'updateFollowUpMessageDraftContent' | 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'
   >;
   occurredAt: string;
 }): Promise<UpdateFollowUpMessageDraftResult> {
@@ -223,7 +238,15 @@ export async function updateMessageDraftContent(input: {
   });
 
   if (result.kind === 'updated') {
-    return { kind: 'updated', draft: mapFollowUpMessageDraftToDto(result.draft) };
+    const draftDto = mapFollowUpMessageDraftToDto(result.draft);
+    await recordMessageDraftTimelineEvent({
+      context: input.context,
+      tenantBusinessRepository: input.tenantBusinessRepository,
+      draft: draftDto,
+      eventType: 'message_draft_updated',
+      occurredAt: input.occurredAt,
+    });
+    return { kind: 'updated', draft: draftDto };
   }
 
   return result;
@@ -232,7 +255,7 @@ export async function updateMessageDraftContent(input: {
 export async function approveMessageDraft(input: {
   context: AccessContext;
   draftId: string;
-  tenantBusinessRepository: Pick<ServiceRepository, 'approveFollowUpMessageDraft'>;
+  tenantBusinessRepository: Pick<ServiceRepository, 'approveFollowUpMessageDraft' | 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
   occurredAt: string;
 }): Promise<UpdateFollowUpMessageDraftResult> {
   return transitionMessageDraft({
@@ -247,7 +270,7 @@ export async function approveMessageDraft(input: {
 export async function rejectMessageDraft(input: {
   context: AccessContext;
   draftId: string;
-  tenantBusinessRepository: Pick<ServiceRepository, 'rejectFollowUpMessageDraft'>;
+  tenantBusinessRepository: Pick<ServiceRepository, 'rejectFollowUpMessageDraft' | 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
   occurredAt: string;
 }): Promise<UpdateFollowUpMessageDraftResult> {
   return transitionMessageDraft({
@@ -262,7 +285,7 @@ export async function rejectMessageDraft(input: {
 export async function markMessageDraftAsSent(input: {
   context: AccessContext;
   draftId: string;
-  tenantBusinessRepository: Pick<ServiceRepository, 'markFollowUpMessageDraftAsSent'>;
+  tenantBusinessRepository: Pick<ServiceRepository, 'markFollowUpMessageDraftAsSent' | 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
   occurredAt: string;
 }): Promise<UpdateFollowUpMessageDraftResult> {
   return transitionMessageDraft({
@@ -277,12 +300,18 @@ export async function markMessageDraftAsSent(input: {
 async function transitionMessageDraft(input: {
   context: AccessContext;
   draftId: string;
-  tenantBusinessRepository: Partial<
-    Pick<
-      ServiceRepository,
-      'approveFollowUpMessageDraft' | 'rejectFollowUpMessageDraft' | 'markFollowUpMessageDraftAsSent'
-    >
-  >;
+  tenantBusinessRepository: Pick<
+    ServiceRepository,
+    'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'
+  > &
+    Partial<
+      Pick<
+        ServiceRepository,
+        | 'approveFollowUpMessageDraft'
+        | 'rejectFollowUpMessageDraft'
+        | 'markFollowUpMessageDraftAsSent'
+      >
+    >;
   occurredAt: string;
   operation: 'approve' | 'reject' | 'mark_sent';
 }): Promise<UpdateFollowUpMessageDraftResult> {
@@ -305,7 +334,20 @@ async function transitionMessageDraft(input: {
 
   if (!result) return { kind: 'not_found' };
   if (result.kind === 'updated') {
-    return { kind: 'updated', draft: mapFollowUpMessageDraftToDto(result.draft) };
+    const draftDto = mapFollowUpMessageDraftToDto(result.draft);
+    const eventType = input.operation === 'approve'
+      ? 'message_draft_approved'
+      : input.operation === 'reject'
+        ? 'message_draft_rejected'
+        : 'message_draft_marked_sent';
+    await recordMessageDraftTimelineEvent({
+      context: input.context,
+      tenantBusinessRepository: input.tenantBusinessRepository,
+      draft: draftDto,
+      eventType,
+      occurredAt: input.occurredAt,
+    });
+    return { kind: 'updated', draft: draftDto };
   }
 
   return result;
