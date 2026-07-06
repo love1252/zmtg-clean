@@ -1578,6 +1578,10 @@ export const followUpTasks = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    tenantIdIdUnique: unique('follow_up_tasks_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
     customerFk: foreignKey({
       name: 'follow_up_tasks_tenant_customer_fk',
       columns: [table.tenantId, table.customerId],
@@ -1597,6 +1601,121 @@ export const followUpTasks = pgTable(
       .where(
         sql`${table.sourceTreatmentSummaryId} is not null and ${table.sourceSuggestionKey} is not null and ${table.status} not in ('completed','cancelled')`,
       ),
+  }),
+);
+
+export const followUpPathEnrollments = pgTable(
+  'follow_up_path_enrollments',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    treatmentSummaryId: varchar('treatment_summary_id', { length: 64 }),
+    sourceType: varchar('source_type', { length: 40 })
+      .$type<'treatment_summary' | 'manual_treatment_event'>()
+      .notNull(),
+    sourceId: varchar('source_id', { length: 64 }).notNull(),
+    templateKey: varchar('template_key', { length: 64 }).notNull(),
+    templateVersion: varchar('template_version', { length: 64 }).notNull().default('v0.6-static'),
+    templateSnapshotJson: jsonb('template_snapshot_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    status: varchar('status', { length: 32 })
+      .$type<'active' | 'completed' | 'cancelled'>()
+      .notNull()
+      .default('active'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    safeReasonCode: varchar('safe_reason_code', { length: 96 }).notNull(),
+    metadataJson: jsonb('metadata_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantIdIdUnique: unique('follow_up_path_enrollments_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    customerFk: foreignKey({
+      name: 'follow_up_path_enrollments_tenant_customer_fk',
+      columns: [table.tenantId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.id],
+    }),
+    treatmentSummaryFk: foreignKey({
+      name: 'follow_up_path_enrollments_tenant_treatment_summary_fk',
+      columns: [table.tenantId, table.treatmentSummaryId],
+      foreignColumns: [treatmentSummaries.tenantId, treatmentSummaries.id],
+    }),
+    activeSourceTemplateUniqueIdx: uniqueIndex(
+      'follow_up_path_enrollments_active_source_template_unique_idx',
+    )
+      .on(table.tenantId, table.sourceType, table.sourceId, table.templateKey)
+      .where(sql`${table.status} = 'active'`),
+    tenantStatusIdx: index('follow_up_path_enrollments_tenant_status_idx').on(
+      table.tenantId,
+      table.status,
+    ),
+    tenantInstitutionStatusIdx: index(
+      'follow_up_path_enrollments_tenant_institution_status_idx',
+    ).on(table.tenantId, table.institutionId, table.status),
+    tenantCustomerIdx: index('follow_up_path_enrollments_tenant_customer_idx').on(
+      table.tenantId,
+      table.customerId,
+    ),
+  }),
+);
+
+export const followUpPathStages = pgTable(
+  'follow_up_path_stages',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
+    enrollmentId: varchar('enrollment_id', { length: 64 }).notNull(),
+    nodeKey: varchar('node_key', { length: 96 }).notNull(),
+    stageKey: varchar('stage_key', { length: 64 }).notNull(),
+    dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
+    status: followUpStatusEnum('status').notNull().default('scheduled'),
+    followUpTaskId: varchar('follow_up_task_id', { length: 64 }),
+    handlerRole: varchar('handler_role', { length: 64 }).notNull(),
+    riskLevel: followUpRiskLevelEnum('risk_level').notNull(),
+    safeMessage: varchar('safe_message', { length: 240 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    enrollmentFk: foreignKey({
+      name: 'follow_up_path_stages_tenant_enrollment_fk',
+      columns: [table.tenantId, table.enrollmentId],
+      foreignColumns: [followUpPathEnrollments.tenantId, followUpPathEnrollments.id],
+    }),
+    followUpTaskFk: foreignKey({
+      name: 'follow_up_path_stages_tenant_follow_up_task_fk',
+      columns: [table.tenantId, table.followUpTaskId],
+      foreignColumns: [followUpTasks.tenantId, followUpTasks.id],
+    }),
+    enrollmentNodeUnique: unique('follow_up_path_stages_enrollment_node_unique').on(
+      table.tenantId,
+      table.enrollmentId,
+      table.nodeKey,
+    ),
+    tenantEnrollmentIdx: index('follow_up_path_stages_tenant_enrollment_idx').on(
+      table.tenantId,
+      table.enrollmentId,
+    ),
+    tenantDueStatusIdx: index('follow_up_path_stages_tenant_due_status_idx').on(
+      table.tenantId,
+      table.status,
+      table.dueAt,
+    ),
   }),
 );
 

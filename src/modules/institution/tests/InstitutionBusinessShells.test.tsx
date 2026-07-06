@@ -299,7 +299,10 @@ function mockInstitutionFetch(responsesByPath: Record<string, Response[]>) {
   const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
     const path = fetchPath(input);
     const responses = responsesByPath[path];
-    const response = responses?.shift();
+    const response = responses?.shift() ??
+      (path === '/api/institution/followup-paths/enrollments'
+        ? jsonResponse({ records: [] })
+        : null);
     if (!response) {
       throw new Error(`没有为 ${path} 配置更多 fetch 响应`);
     }
@@ -1320,7 +1323,11 @@ describe('机构业务页面壳', () => {
       expect.stringContaining('王女士'),
       expect.stringContaining('李女士'),
     ]);
-    expect(fetchMock).toHaveBeenCalledWith('/api/institution/followups', { cache: 'no-store' });
+    const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
+    expect(requestPaths).toEqual(expect.arrayContaining([
+      '/api/institution/followups',
+      '/api/institution/followup-paths/enrollments',
+    ]));
   });
 
   it('智能随访展示治疗摘要来源标签并支持来源筛选', async () => {
@@ -1354,10 +1361,11 @@ describe('机构业务页面壳', () => {
     expect(screen.queryByText('D28 复购建议')).not.toBeInTheDocument();
 
     const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
-    expect(requestPaths).toEqual([
+    expect(requestPaths).toEqual(expect.arrayContaining([
       '/api/institution/followups',
+      '/api/institution/followup-paths/enrollments',
       '/api/institution/followups?source=treatment_summary',
-    ]);
+    ]));
     expect(requestPaths.join('\n')).not.toContain('tenantId');
 
     const text = container.textContent ?? '';
@@ -1378,6 +1386,64 @@ describe('机构业务页面壳', () => {
     expect(text).not.toContain('自动触达');
   });
 
+  it('智能随访展示路径实例和随访旅程进度', async () => {
+    mockInstitutionFetch({
+      '/api/institution/followups': [jsonResponse({ records: [treatmentSummaryFollowUpRecord] })],
+      '/api/institution/followup-paths/enrollments': [
+        jsonResponse({
+          records: [
+            {
+              enrollmentId: 'enrollment_001',
+              customerId: 'cust_chen',
+              customerDisplayName: '陈女士',
+              templateKey: 'hydro_injection_care',
+              status: 'active',
+              stageCount: 3,
+              taskCount: 3,
+              dueAt: '2026-06-02T10:00:00+08:00',
+              safeMessage: '路径任务需人工处理，不会主动向客户发送消息。',
+              taskIds: ['fu_path_d1', 'fu_path_d3', 'fu_path_d7'],
+              stages: [
+                {
+                  nodeKey: 'hydro_injection_d1_check',
+                  stageKey: 'D1',
+                  dueAt: '2026-06-02T10:00:00+08:00',
+                  status: 'scheduled',
+                  followUpTaskId: 'fu_path_d1',
+                  handlerRole: 'consultant',
+                  riskLevel: 'normal',
+                  safeMessage: '路径任务需人工处理，不会主动向客户发送消息。',
+                },
+              ],
+              createdAt: '2026-06-01T10:00:00+08:00',
+              updatedAt: '2026-06-01T10:00:00+08:00',
+            },
+          ],
+        }),
+      ],
+    });
+
+    const { container } = render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('路径管理 / 路径实例')).toBeInTheDocument();
+    expect(await screen.findByTestId('followup-path-enrollment-card')).toHaveTextContent('陈女士');
+    expect(screen.getAllByText('路径：hydro_injection_care').length).toBeGreaterThan(0);
+    expect(screen.getByText('阶段 3')).toBeInTheDocument();
+    expect(screen.getByText('任务 3')).toBeInTheDocument();
+    expect(screen.getByText(/hydro_injection_care · 3 个人工任务/)).toBeInTheDocument();
+    expect(container.textContent).toContain('D1');
+    expect(container.textContent).toContain('待处理');
+    expect(container.textContent).toContain('人工处理');
+
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('tenantId');
+    expect(text).not.toContain('institutionId');
+    expect(text).not.toContain('13800000000');
+    expect(text).not.toContain('完整治疗记录正文');
+    expect(text).not.toContain('自动发送微信');
+    expect(text).not.toContain('自动短信');
+  });
+
   it('智能随访展示空状态和真实配置空态说明', async () => {
     const fetchMock = mockInstitutionFetch({
       '/api/institution/followups': [jsonResponse({ records: [] })],
@@ -1386,12 +1452,13 @@ describe('机构业务页面壳', () => {
     render(<SmartFollowUpShell />);
 
     expect(await screen.findByText('暂无随访任务')).toBeInTheDocument();
-    expect(screen.getByText('暂无真实随访旅程配置。')).toBeInTheDocument();
+    expect(screen.getByText('暂无真实随访路径实例。治疗摘要纳入路径后，会在这里展示客户随访旅程。')).toBeInTheDocument();
     expect(screen.getByText('暂无真实话术建议。')).toBeInTheDocument();
     expect(screen.getByText('任务需人工处理，不会主动向客户发送消息。')).toBeInTheDocument();
-    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual([
+    expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual(expect.arrayContaining([
       '/api/institution/followups',
-    ]);
+      '/api/institution/followup-paths/enrollments',
+    ]));
   });
 
   it.each([

@@ -13,6 +13,11 @@ export type FollowUpRiskLevel = 'normal' | 'watch' | 'urgent';
 
 export type FollowUpTaskSource = 'treatment_summary' | null;
 
+export type FollowUpTaskManualHandlingPolicy = {
+  requiresHumanHandling: true;
+  forbidAutoReachOut: true;
+};
+
 export type TenantFollowUpTask = {
   id: string;
   tenantId: string;
@@ -29,6 +34,8 @@ export type TenantFollowUpTask = {
   source?: FollowUpTaskSource;
   sourceTreatmentSummaryId?: string | null;
   sourceSuggestionKey?: string | null;
+  requiresHumanHandling?: true;
+  forbidAutoReachOut?: true;
 };
 
 export type TenantFollowUpTaskSource = {

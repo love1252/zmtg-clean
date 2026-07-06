@@ -142,7 +142,7 @@ export const treatmentPathTemplates: readonly TreatmentPathTemplate[] = [
         nodeKey: 'hydro_injection_d1_check',
         offsetDays: 1,
         recoveryStage: 'D1',
-        riskLevels: ['watch', 'urgent'],
+        riskLevels: ['normal', 'watch', 'urgent'],
         taskTitle: '水光注射 D1 局部反应人工确认',
         handlerRole: 'medical_assistant',
         requiresHumanConfirmation: true,
