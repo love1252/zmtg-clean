@@ -7,6 +7,10 @@ import type {
 } from '@/modules/institution/domain/institution-knowledge-management';
 import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
 import type {
+  FollowUpMessageDraftDto,
+  FollowUpMessageTemplateDto,
+} from '@/modules/institution/domain/followup-message-drafts';
+import type {
   FollowUpStatus,
   TenantFollowUpTaskSource,
   TenantFollowUpTask,
@@ -79,6 +83,15 @@ export type FollowUpPathEnrollmentCreateClientPayload = {
   templateKey?: string | null;
 };
 
+export type FollowUpMessageDraftCreateClientPayload = {
+  followUpTaskId: string;
+  templateId?: string | null;
+};
+
+export type FollowUpMessageDraftUpdateClientPayload = {
+  content: string;
+};
+
 export type TreatmentSummaryListClientQuery = {
   customerId?: string | number | null;
   treatmentProject?: string | number | null;
@@ -142,6 +155,12 @@ export type TreatmentFollowUpSuggestionListClientResult =
 export type FollowUpPathEnrollmentListClientResult = TenantBusinessListResult<FollowUpPathEnrollmentDto>;
 
 export type FollowUpPathEnrollmentMutationClientResult = TenantBusinessMutationResult<FollowUpPathEnrollmentDto>;
+
+export type FollowUpMessageTemplateListClientResult = TenantBusinessListResult<FollowUpMessageTemplateDto>;
+
+export type FollowUpMessageDraftListClientResult = TenantBusinessListResult<FollowUpMessageDraftDto>;
+
+export type FollowUpMessageDraftMutationClientResult = TenantBusinessMutationResult<FollowUpMessageDraftDto>;
 
 export type InstitutionKnowledgeListClientResult =
   | {
@@ -217,6 +236,8 @@ const followUpPathEnrollmentCreatePayloadKeys = [
   'sourceId',
   'templateKey',
 ] as const;
+const followUpMessageDraftCreatePayloadKeys = ['followUpTaskId', 'templateId'] as const;
+const followUpMessageDraftUpdatePayloadKeys = ['content'] as const;
 const institutionKnowledgeListQueryKeys = ['keyword', 'page', 'pageSize'] as const;
 
 function getFetcher(options?: TenantBusinessClientOptions) {
@@ -870,6 +891,86 @@ export function cancelFollowUpPathEnrollment(
 ): Promise<FollowUpPathEnrollmentMutationClientResult> {
   return requestRecord<FollowUpPathEnrollmentDto>(
     `/api/institution/followup-paths/enrollments/${encodeURIComponent(enrollmentId)}/cancel`,
+    'POST',
+    {},
+    options,
+  );
+}
+
+export function listFollowUpMessageTemplates(
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpMessageTemplateListClientResult> {
+  return requestRecords<FollowUpMessageTemplateDto>(
+    '/api/institution/followup-message-templates',
+    options,
+  );
+}
+
+export function listFollowUpMessageDrafts(
+  followUpTaskId: string,
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpMessageDraftListClientResult> {
+  return requestRecords<FollowUpMessageDraftDto>(
+    `/api/institution/followup-message-drafts?taskId=${encodeURIComponent(followUpTaskId)}`,
+    options,
+  );
+}
+
+export function createFollowUpMessageDraft(
+  payload: FollowUpMessageDraftCreateClientPayload,
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpMessageDraftMutationClientResult> {
+  return requestRecord<FollowUpMessageDraftDto>(
+    '/api/institution/followup-message-drafts',
+    'POST',
+    pickPayload(payload as unknown as Record<string, unknown>, followUpMessageDraftCreatePayloadKeys),
+    options,
+  );
+}
+
+export function updateFollowUpMessageDraft(
+  draftId: string,
+  payload: FollowUpMessageDraftUpdateClientPayload,
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpMessageDraftMutationClientResult> {
+  return requestRecord<FollowUpMessageDraftDto>(
+    `/api/institution/followup-message-drafts/${encodeURIComponent(draftId)}`,
+    'PATCH',
+    pickPayload(payload as unknown as Record<string, unknown>, followUpMessageDraftUpdatePayloadKeys),
+    options,
+  );
+}
+
+export function approveFollowUpMessageDraft(
+  draftId: string,
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpMessageDraftMutationClientResult> {
+  return requestRecord<FollowUpMessageDraftDto>(
+    `/api/institution/followup-message-drafts/${encodeURIComponent(draftId)}/approve`,
+    'POST',
+    {},
+    options,
+  );
+}
+
+export function rejectFollowUpMessageDraft(
+  draftId: string,
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpMessageDraftMutationClientResult> {
+  return requestRecord<FollowUpMessageDraftDto>(
+    `/api/institution/followup-message-drafts/${encodeURIComponent(draftId)}/reject`,
+    'POST',
+    {},
+    options,
+  );
+}
+
+export function markFollowUpMessageDraftAsSent(
+  draftId: string,
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpMessageDraftMutationClientResult> {
+  return requestRecord<FollowUpMessageDraftDto>(
+    `/api/institution/followup-message-drafts/${encodeURIComponent(draftId)}/mark-sent`,
     'POST',
     {},
     options,

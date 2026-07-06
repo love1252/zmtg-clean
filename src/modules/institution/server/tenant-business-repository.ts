@@ -18,16 +18,49 @@ import type {
   FollowUpPathStageInstance,
 } from '@/modules/institution/domain/followup-path-enrollment';
 import type { TreatmentPathHandlerRole, TreatmentPathTemplateKey } from '@/modules/institution/domain/treatment-path-templates';
+import type {
+  FollowUpMessageDraft,
+  FollowUpMessageDraftStatus,
+  FollowUpMessageSafeReasonCode,
+  FollowUpMessageTemplate,
+  FollowUpMessageTemplateType,
+  FollowUpTaskPathContext,
+} from '@/modules/institution/domain/followup-message-drafts';
 import type { TenantDatabase } from '@/server/db/client';
-import { appointments, customers, followUpPathEnrollments, followUpPathStages, followUpTasks, treatmentSummaries } from '@/server/db/schema';
+import {
+  followUpMessageDrafts,
+  followUpMessageTemplates,
+  appointments,
+  customers,
+  followUpPathEnrollments,
+  followUpPathStages,
+  followUpTasks,
+  treatmentSummaries,
+} from '@/server/db/schema';
 import type { FollowUpTaskListFilters } from '@/modules/institution/server/follow-up-task-query-parser';
 
 type CustomerRow = typeof customers.$inferSelect;
 type AppointmentRow = typeof appointments.$inferSelect;
 type FollowUpTaskRow = typeof followUpTasks.$inferSelect;
+type FollowUpMessageTemplateRow = typeof followUpMessageTemplates.$inferSelect;
+type FollowUpMessageDraftRow = typeof followUpMessageDrafts.$inferSelect;
 type FollowUpPathEnrollmentRow = typeof followUpPathEnrollments.$inferSelect;
 type FollowUpPathStageRow = typeof followUpPathStages.$inferSelect;
 type CreateFollowUpPathEnrollmentInput = typeof followUpPathEnrollments.$inferInsert;
+type CreateFollowUpMessageDraftInput = Omit<
+  typeof followUpMessageDrafts.$inferInsert,
+  | 'createdAt'
+  | 'updatedAt'
+  | 'approvedAt'
+  | 'rejectedAt'
+  | 'markedSentAt'
+> & {
+  createdAt: string;
+  updatedAt: string;
+  approvedAt?: string | null;
+  rejectedAt?: string | null;
+  markedSentAt?: string | null;
+};
 type CreateFollowUpPathStageInput = Omit<
   typeof followUpPathStages.$inferInsert,
   'dueAt' | 'createdAt' | 'updatedAt'
@@ -168,6 +201,42 @@ type CancelFollowUpPathEnrollmentResult =
   | { kind: 'not_found' }
   | { kind: 'conflict'; resourceId: string; reason: 'follow_up_path_enrollment_not_active' };
 
+type FollowUpTaskPathContextLookupInput = {
+  tenantId: string;
+  institutionId?: string | null;
+  followUpTaskId: string;
+};
+
+type FollowUpMessageDraftLookupInput = {
+  tenantId: string;
+  institutionId?: string | null;
+  draftId: string;
+};
+
+type ListFollowUpMessageDraftsInput = {
+  tenantId: string;
+  institutionId?: string | null;
+  followUpTaskId: string;
+};
+
+type CreateFollowUpMessageDraftResult =
+  | { kind: 'created'; draft: FollowUpMessageDraft }
+  | { kind: 'conflict'; resourceId: string; reason: 'follow_up_message_draft_exists' };
+
+type UpdateFollowUpMessageDraftContentResult =
+  | { kind: 'updated'; draft: FollowUpMessageDraft }
+  | { kind: 'not_found' }
+  | { kind: 'conflict'; resourceId: string; reason: 'follow_up_message_draft_not_draft' };
+
+type FollowUpMessageDraftTransitionResult =
+  | { kind: 'updated'; draft: FollowUpMessageDraft }
+  | { kind: 'not_found' }
+  | {
+      kind: 'conflict';
+      resourceId: string;
+      reason: 'follow_up_message_draft_not_draft' | 'follow_up_message_draft_not_approved';
+    };
+
 const activeSourceFollowUpStatuses = new Set<FollowUpStatus>([
   'scheduled',
   'due',
@@ -267,6 +336,59 @@ export function mapFollowUpTaskSourceRowToRecord(
     source: 'treatment_summary',
     sourceTreatmentSummaryId: row.sourceTreatmentSummaryId ?? '',
     sourceSuggestionKey: row.sourceSuggestionKey ?? '',
+  };
+}
+
+function mapFollowUpMessageTemplateRowToRecord(row: FollowUpMessageTemplateRow): FollowUpMessageTemplate {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    institutionId: row.institutionId,
+    templateKey: row.templateKey,
+    templateName: row.templateName,
+    templateType: row.templateType as FollowUpMessageTemplateType,
+    applicableTemplateKey: row.applicableTemplateKey as TreatmentPathTemplateKey | null,
+    applicableNodeKey: row.applicableNodeKey,
+    channelType: 'manual',
+    contentTemplate: row.contentTemplate,
+    variablesJson: row.variablesJson,
+    status: row.status,
+    requiresHumanApproval: true,
+    forbidAutoSend: true,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function mapFollowUpMessageDraftRowToRecord(input: {
+  row: FollowUpMessageDraftRow;
+  task: FollowUpTaskRow;
+}): FollowUpMessageDraft {
+  return {
+    id: input.row.id,
+    tenantId: input.row.tenantId,
+    institutionId: input.row.institutionId,
+    followUpTaskId: input.row.followUpTaskId,
+    enrollmentId: input.row.enrollmentId,
+    stageId: input.row.stageId,
+    customerId: input.row.customerId,
+    customerDisplayName: input.task.customerDisplayName,
+    templateId: input.row.templateId,
+    channelType: 'manual',
+    status: input.row.status as FollowUpMessageDraftStatus,
+    draftContent: input.row.draftContent,
+    editedContent: input.row.editedContent,
+    safePreview: input.row.safePreview,
+    approvedBy: input.row.approvedBy,
+    approvedAt: input.row.approvedAt?.toISOString() ?? null,
+    rejectedBy: input.row.rejectedBy,
+    rejectedAt: input.row.rejectedAt?.toISOString() ?? null,
+    markedSentBy: input.row.markedSentBy,
+    markedSentAt: input.row.markedSentAt?.toISOString() ?? null,
+    safeReasonCode: input.row.safeReasonCode as FollowUpMessageSafeReasonCode,
+    metadataJson: input.row.metadataJson,
+    createdAt: input.row.createdAt.toISOString(),
+    updatedAt: input.row.updatedAt.toISOString(),
   };
 }
 
@@ -387,6 +509,22 @@ function buildFollowUpTaskListWhere(input: {
   }
 
   return conditions.length === 1 ? conditions[0] : and(...conditions);
+}
+
+function normalizeDateInput(input: string | Date | null | undefined) {
+  if (!input) return null;
+  return input instanceof Date ? input : new Date(input);
+}
+
+function followUpMessageDraftInsertValues(input: CreateFollowUpMessageDraftInput) {
+  return {
+    ...input,
+    createdAt: new Date(input.createdAt),
+    updatedAt: new Date(input.updatedAt),
+    approvedAt: normalizeDateInput(input.approvedAt),
+    rejectedAt: normalizeDateInput(input.rejectedAt),
+    markedSentAt: normalizeDateInput(input.markedSentAt),
+  };
 }
 
 export function createTenantBusinessRepository(database: TenantDatabase) {
@@ -885,6 +1023,308 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
       });
 
       return { kind: 'cancelled', enrollment: enrollment ?? createEmptyEnrollmentRecord(row) };
+    },
+    async listFollowUpMessageTemplatesByTenant(input: {
+      tenantId: string;
+      institutionId?: string | null;
+    }): Promise<FollowUpMessageTemplate[]> {
+      const rows = await database
+        .select()
+        .from(followUpMessageTemplates)
+        .where(eq(followUpMessageTemplates.status, 'active'));
+
+      return rows
+        .filter((row) => {
+          if (row.tenantId && row.tenantId !== input.tenantId) return false;
+          if (input.institutionId && row.institutionId && row.institutionId !== input.institutionId) return false;
+          return row.requiresHumanApproval && row.forbidAutoSend && row.channelType === 'manual';
+        })
+        .map(mapFollowUpMessageTemplateRowToRecord);
+    },
+    async getFollowUpTaskPathContextByTenant(
+      input: FollowUpTaskPathContextLookupInput,
+    ): Promise<FollowUpTaskPathContext | null> {
+      const [taskRow] = await database
+        .select()
+        .from(followUpTasks)
+        .where(and(eq(followUpTasks.tenantId, input.tenantId), eq(followUpTasks.id, input.followUpTaskId)));
+
+      if (!taskRow) return null;
+
+      const [stageRow] = await database
+        .select()
+        .from(followUpPathStages)
+        .where(
+          and(
+            eq(followUpPathStages.tenantId, input.tenantId),
+            eq(followUpPathStages.followUpTaskId, input.followUpTaskId),
+          ),
+        );
+
+      if (input.institutionId && stageRow?.institutionId && stageRow.institutionId !== input.institutionId) {
+        return null;
+      }
+
+      const [enrollmentRow] = stageRow
+        ? await database
+            .select()
+            .from(followUpPathEnrollments)
+            .where(
+              and(
+                eq(followUpPathEnrollments.tenantId, input.tenantId),
+                eq(followUpPathEnrollments.id, stageRow.enrollmentId),
+              ),
+            )
+        : [];
+
+      if (input.institutionId && enrollmentRow?.institutionId && enrollmentRow.institutionId !== input.institutionId) {
+        return null;
+      }
+
+      return {
+        task: mapFollowUpTaskRowToRecord(taskRow),
+        institutionId: stageRow?.institutionId ?? input.institutionId ?? null,
+        enrollmentId: stageRow?.enrollmentId ?? null,
+        stageId: stageRow?.id ?? null,
+        templateKey: (enrollmentRow?.templateKey as TreatmentPathTemplateKey | undefined) ?? null,
+        nodeKey: stageRow?.nodeKey ?? null,
+        stageKey: stageRow?.stageKey ?? null,
+      };
+    },
+    async listFollowUpMessageDraftsByTask(
+      input: ListFollowUpMessageDraftsInput,
+    ): Promise<FollowUpMessageDraft[]> {
+      const rows = await database
+        .select()
+        .from(followUpMessageDrafts)
+        .where(
+          and(
+            eq(followUpMessageDrafts.tenantId, input.tenantId),
+            eq(followUpMessageDrafts.followUpTaskId, input.followUpTaskId),
+          ),
+        );
+      const taskRows = await database
+        .select()
+        .from(followUpTasks)
+        .where(and(eq(followUpTasks.tenantId, input.tenantId), eq(followUpTasks.id, input.followUpTaskId)));
+      const taskRow = taskRows[0];
+
+      if (!taskRow) return [];
+
+      return rows
+        .filter((row) => {
+          if (row.tenantId !== input.tenantId) return false;
+          if (input.institutionId && row.institutionId && row.institutionId !== input.institutionId) return false;
+          return true;
+        })
+        .map((row) => mapFollowUpMessageDraftRowToRecord({ row, task: taskRow }));
+    },
+    async getFollowUpMessageDraftByTenant(
+      input: FollowUpMessageDraftLookupInput,
+    ): Promise<FollowUpMessageDraft | null> {
+      const [row] = await database
+        .select()
+        .from(followUpMessageDrafts)
+        .where(and(eq(followUpMessageDrafts.tenantId, input.tenantId), eq(followUpMessageDrafts.id, input.draftId)));
+
+      if (!row) return null;
+      if (input.institutionId && row.institutionId && row.institutionId !== input.institutionId) return null;
+
+      const [taskRow] = await database
+        .select()
+        .from(followUpTasks)
+        .where(and(eq(followUpTasks.tenantId, input.tenantId), eq(followUpTasks.id, row.followUpTaskId)));
+
+      return taskRow ? mapFollowUpMessageDraftRowToRecord({ row, task: taskRow }) : null;
+    },
+    async createFollowUpMessageDraft(
+      input: CreateFollowUpMessageDraftInput,
+    ): Promise<CreateFollowUpMessageDraftResult> {
+      const existing = await database
+        .select()
+        .from(followUpMessageDrafts)
+        .where(
+          and(
+            eq(followUpMessageDrafts.tenantId, input.tenantId),
+            eq(followUpMessageDrafts.followUpTaskId, input.followUpTaskId),
+          ),
+        );
+      const activeDraft = existing.find((row) => row.status !== 'cancelled');
+      if (activeDraft) {
+        return {
+          kind: 'conflict',
+          resourceId: activeDraft.id,
+          reason: 'follow_up_message_draft_exists',
+        };
+      }
+
+      const [row] = await database
+        .insert(followUpMessageDrafts)
+        .values(followUpMessageDraftInsertValues(input))
+        .returning();
+      const draft = await this.getFollowUpMessageDraftByTenant({
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        draftId: row.id,
+      });
+
+      if (draft) {
+        return { kind: 'created', draft };
+      }
+
+      const [taskRow] = await database
+        .select()
+        .from(followUpTasks)
+        .where(
+          and(
+            eq(followUpTasks.tenantId, input.tenantId),
+            eq(followUpTasks.id, input.followUpTaskId),
+          ),
+        );
+
+      if (!taskRow) {
+        throw new Error('follow_up_task_missing_after_message_draft_insert');
+      }
+
+      return { kind: 'created', draft: mapFollowUpMessageDraftRowToRecord({ row, task: taskRow }) };
+    },
+    async updateFollowUpMessageDraftContent(input: {
+      tenantId: string;
+      institutionId?: string | null;
+      draftId: string;
+      editedContent: string;
+      safePreview: string;
+      safeReasonCode: FollowUpMessageSafeReasonCode;
+      occurredAt: string;
+    }): Promise<UpdateFollowUpMessageDraftContentResult> {
+      const current = await this.getFollowUpMessageDraftByTenant(input);
+      if (!current) return { kind: 'not_found' };
+      if (current.status !== 'draft') {
+        return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_draft' };
+      }
+
+      const [row] = await database
+        .update(followUpMessageDrafts)
+        .set({
+          editedContent: input.editedContent,
+          safePreview: input.safePreview,
+          safeReasonCode: input.safeReasonCode,
+          updatedAt: new Date(input.occurredAt),
+        })
+        .where(
+          and(
+            eq(followUpMessageDrafts.tenantId, input.tenantId),
+            eq(followUpMessageDrafts.id, input.draftId),
+            eq(followUpMessageDrafts.status, 'draft'),
+          ),
+        )
+        .returning();
+
+      if (!row) return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_draft' };
+      const draft = await this.getFollowUpMessageDraftByTenant(input);
+      return draft ? { kind: 'updated', draft } : { kind: 'not_found' };
+    },
+    async approveFollowUpMessageDraft(input: {
+      tenantId: string;
+      institutionId?: string | null;
+      draftId: string;
+      actorId: string;
+      occurredAt: string;
+    }): Promise<FollowUpMessageDraftTransitionResult> {
+      const current = await this.getFollowUpMessageDraftByTenant(input);
+      if (!current) return { kind: 'not_found' };
+      if (current.status !== 'draft') {
+        return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_draft' };
+      }
+
+      const [row] = await database
+        .update(followUpMessageDrafts)
+        .set({
+          status: 'approved',
+          approvedBy: input.actorId,
+          approvedAt: new Date(input.occurredAt),
+          safeReasonCode: 'draft_approved',
+          updatedAt: new Date(input.occurredAt),
+        })
+        .where(
+          and(
+            eq(followUpMessageDrafts.tenantId, input.tenantId),
+            eq(followUpMessageDrafts.id, input.draftId),
+            eq(followUpMessageDrafts.status, 'draft'),
+          ),
+        )
+        .returning();
+      if (!row) return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_draft' };
+      const draft = await this.getFollowUpMessageDraftByTenant(input);
+      return draft ? { kind: 'updated', draft } : { kind: 'not_found' };
+    },
+    async rejectFollowUpMessageDraft(input: {
+      tenantId: string;
+      institutionId?: string | null;
+      draftId: string;
+      actorId: string;
+      occurredAt: string;
+    }): Promise<FollowUpMessageDraftTransitionResult> {
+      const current = await this.getFollowUpMessageDraftByTenant(input);
+      if (!current) return { kind: 'not_found' };
+      if (current.status !== 'draft') {
+        return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_draft' };
+      }
+
+      const [row] = await database
+        .update(followUpMessageDrafts)
+        .set({
+          status: 'rejected',
+          rejectedBy: input.actorId,
+          rejectedAt: new Date(input.occurredAt),
+          safeReasonCode: 'draft_rejected',
+          updatedAt: new Date(input.occurredAt),
+        })
+        .where(
+          and(
+            eq(followUpMessageDrafts.tenantId, input.tenantId),
+            eq(followUpMessageDrafts.id, input.draftId),
+            eq(followUpMessageDrafts.status, 'draft'),
+          ),
+        )
+        .returning();
+      if (!row) return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_draft' };
+      const draft = await this.getFollowUpMessageDraftByTenant(input);
+      return draft ? { kind: 'updated', draft } : { kind: 'not_found' };
+    },
+    async markFollowUpMessageDraftAsSent(input: {
+      tenantId: string;
+      institutionId?: string | null;
+      draftId: string;
+      actorId: string;
+      occurredAt: string;
+    }): Promise<FollowUpMessageDraftTransitionResult> {
+      const current = await this.getFollowUpMessageDraftByTenant(input);
+      if (!current) return { kind: 'not_found' };
+      if (current.status !== 'approved') {
+        return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_approved' };
+      }
+
+      const [row] = await database
+        .update(followUpMessageDrafts)
+        .set({
+          status: 'marked_sent',
+          markedSentBy: input.actorId,
+          markedSentAt: new Date(input.occurredAt),
+          safeReasonCode: 'draft_marked_sent',
+          updatedAt: new Date(input.occurredAt),
+        })
+        .where(
+          and(
+            eq(followUpMessageDrafts.tenantId, input.tenantId),
+            eq(followUpMessageDrafts.id, input.draftId),
+            eq(followUpMessageDrafts.status, 'approved'),
+          ),
+        )
+        .returning();
+      if (!row) return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_approved' };
+      const draft = await this.getFollowUpMessageDraftByTenant(input);
+      return draft ? { kind: 'updated', draft } : { kind: 'not_found' };
     },
     async listFollowUpPathAnalysisSourceTasksByTenant(
       tenantId: string,
