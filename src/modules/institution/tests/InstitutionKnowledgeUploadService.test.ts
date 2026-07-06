@@ -5,6 +5,31 @@ import {
   INSTITUTION_KNOWLEDGE_FILE_MAX_BYTES,
 } from '@/modules/institution/server/institution-knowledge-upload-service';
 
+vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => ({
+  checkTenantQuotaForCreate: vi.fn(async (input: { resource: string }) => ({
+    allowed: true,
+    current: 0,
+    limit: 100,
+    resource: input.resource,
+  })),
+  checkTenantQuotaForUsage: vi.fn(async (input: { resource: string }) => ({
+    allowed: true,
+    current: 0,
+    limit: 100,
+    resource: input.resource,
+  })),
+}));
+
+vi.mock('@/modules/institution/server/knowledge-quota-usage-service', () => ({
+  createKnowledgeQuotaUsageRepository: vi.fn(() => ({
+    createKnowledgeQuotaUsageRecord: vi.fn(async () => undefined),
+  })),
+  recordKnowledgeQuotaDecision: vi.fn(async () => undefined),
+  recordKnowledgeQuotaOutcome: vi.fn(async () => undefined),
+}));
+
+const quotaDatabase = {} as never;
+
 const validFile = (name = 'notes.txt') => ({
   name,
   type: 'text/plain',
@@ -142,6 +167,7 @@ describe('机构知识库上传解析 service', () => {
     storage.read.mockResolvedValue(new Uint8Array(Buffer.from('hello world', 'utf-8')));
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({
+      database: quotaDatabase,
       repository,
       storage,
       input: {
@@ -172,6 +198,7 @@ describe('机构知识库上传解析 service', () => {
     const { repository, storage } = createMocks();
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({
+      database: quotaDatabase,
       repository,
       storage,
       input: { tenantId: null, institutionId: 'inst-001', uploadedByUserId: 'u', file: validFile() },
@@ -184,6 +211,7 @@ describe('机构知识库上传解析 service', () => {
     const { repository, storage } = createMocks();
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({
+      database: quotaDatabase,
       repository,
       storage,
       input: { tenantId: 't', institutionId: null, uploadedByUserId: 'u', file: validFile() },
@@ -219,6 +247,7 @@ describe('机构知识库上传解析 service', () => {
     storage.read.mockResolvedValue(new Uint8Array(Buffer.from('%PDF-1.4\n/image-only scan bytes\n%%EOF')));
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({
+      database: quotaDatabase,
       repository,
       storage,
       input: { tenantId: 't', institutionId: 'inst', uploadedByUserId: 'u', file: pdfFile() },
@@ -262,6 +291,7 @@ describe('机构知识库上传解析 service', () => {
     storage.read.mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({
+      database: quotaDatabase,
       repository,
       storage,
       input: { tenantId: 't', institutionId: 'inst', uploadedByUserId: 'u', file: imageFile(name, mimeType) },
@@ -282,23 +312,48 @@ describe('机构知识库上传解析 service', () => {
     expect(serialized).not.toMatch(/storageKey|signedUrl|ocrProviderType|provider|model|token|cost|vendor|secret|textContent/i);
   });
 
-  it('超大文件被拒绝', async () => {
+  it('超大文件在套餐单文件上限允许时可继续进入创建流程', async () => {
     const { repository, storage } = createMocks();
+    repository.createInstitutionKnowledgeSource.mockResolvedValue({ sourceId: 'src-big' });
+    repository.createInstitutionKnowledgeDocument.mockResolvedValue({ documentId: 'doc-big' });
+    storage.save.mockResolvedValue({ storageKey: 'k-big', sha256: 's-big', sizeBytes: INSTITUTION_KNOWLEDGE_FILE_MAX_BYTES + 1 });
+    repository.createKnowledgeFile.mockResolvedValue({
+      fileId: 'f-big', tenantId: 't', knowledgeId: 'doc-big', originalFilename: 'big.txt',
+      mimeType: 'text/plain', sizeBytes: INSTITUTION_KNOWLEDGE_FILE_MAX_BYTES + 1, status: 'active' as const,
+      sha256: 's-big', storageKey: 'k-big', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
+    });
+    repository.findKnowledgeItem.mockResolvedValue({ ...visibleKnowledgeRecord, knowledgeId: 'doc-big', tenantId: 't', institutionId: 'inst', visibleInstitutionIds: ['inst'] });
+    repository.findKnowledgeFile.mockResolvedValue({
+      fileId: 'f-big', tenantId: 't', knowledgeId: 'doc-big', originalFilename: 'big.txt',
+      storageKey: 'k-big', mimeType: 'text/plain', sizeBytes: INSTITUTION_KNOWLEDGE_FILE_MAX_BYTES + 1, sha256: 's-big',
+      status: 'active', uploadedByUserId: 'u', createdAt: new Date(), updatedAt: new Date(), archivedAt: null,
+    });
+    const parseRecord = {
+      parseId: 'p-big', tenantId: 't', knowledgeId: 'doc-big', fileId: 'f-big', parseStatus: 'succeeded',
+      failureReasonCode: null, safeFailureMessage: null, textContent: 'big', textLength: 3,
+      chunkCount: 1, parserVersion: 'v1', createdAt: new Date(), updatedAt: new Date(),
+    };
+    repository.findKnowledgeFileParse.mockResolvedValue(parseRecord);
+    repository.saveKnowledgeFileParseResult.mockResolvedValue(parseRecord);
+    repository.replaceKnowledgeFileParseChunks.mockResolvedValue([]);
+    storage.read.mockResolvedValue(new Uint8Array(Buffer.from('big')));
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({
+      database: quotaDatabase,
       repository,
       storage,
       input: { tenantId: 't', institutionId: 'inst', uploadedByUserId: 'u', file: oversizedFile() },
     });
 
-    expect(result.status).toBe('validation_failed');
-    expect(result.message).toContain('2MB');
+    expect(result.status).toBe('created');
+    expect(repository.createInstitutionKnowledgeSource).toHaveBeenCalled();
   });
 
   it('空文件被拒绝', async () => {
     const { repository, storage } = createMocks();
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({
+      database: quotaDatabase,
       repository,
       storage,
       input: {
@@ -340,6 +395,7 @@ describe('机构知识库上传解析 service', () => {
     storage.read.mockResolvedValue(new Uint8Array(Buffer.from('test')));
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({
+      database: quotaDatabase,
       repository, storage,
       input: { tenantId: 't', institutionId: 'i', uploadedByUserId: 'u', file: validFile() },
     });
@@ -353,6 +409,7 @@ describe('机构知识库上传解析 service', () => {
     const jsonFile = { name: 'data.json', type: 'application/json', size: 100, arrayBuffer: async () => new Uint8Array(Buffer.from('{"key":"value"}')).buffer as ArrayBuffer };
 
     const result = await uploadAndParseInstitutionKnowledgeFileService({
+      database: quotaDatabase,
       repository, storage,
       input: { tenantId: 't', institutionId: 'i', uploadedByUserId: 'u', file: jsonFile },
     });

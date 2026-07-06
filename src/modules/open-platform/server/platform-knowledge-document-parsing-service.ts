@@ -5,6 +5,16 @@ import {
   v1KnowledgeBaseUploadParseChunkRuntimeMaxChars,
 } from '@/modules/knowledge-base/server/v1-knowledge-base-upload-parse-chunk-runtime';
 import {
+  checkTenantKnowledgeOcrFeature,
+  checkTenantQuotaForCreate,
+} from '@/modules/institution/server/tenant-quota-enforcement';
+import type { TenantDatabase } from '@/server/db/client';
+import {
+  createKnowledgeQuotaUsageRepository,
+  recordKnowledgeQuotaDecision,
+  recordKnowledgeQuotaOutcome,
+} from '@/modules/institution/server/knowledge-quota-usage-service';
+import {
   dryRunKnowledgeDocumentOcrProvider,
   performKnowledgeDocumentOcr,
   type PlatformKnowledgeOcrFailureReasonCode,
@@ -100,9 +110,12 @@ export type PlatformKnowledgeDocumentParsingRepository = {
 };
 
 type ParseServiceInput = {
+  database?: TenantDatabase;
   repository: PlatformKnowledgeDocumentParsingRepository;
   storage: Pick<PlatformKnowledgeFileStorage, 'read'>;
   ocrProvider?: PlatformKnowledgeOcrProvider;
+  actorUserId?: string | null;
+  ocrQuotaAlreadyChecked?: boolean;
   input: {
     tenantId?: string | null;
     knowledgeId?: string | null;
@@ -994,6 +1007,52 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
       fileId,
     });
     if (documentParse.status === 'ocr_required') {
+      if (input.database && !input.ocrQuotaAlreadyChecked) {
+        const quotaUsageRepository = createKnowledgeQuotaUsageRepository(input.database);
+        const actorUserId = normalizeRequired(input.actorUserId);
+        const featureDecision = await checkTenantKnowledgeOcrFeature({ database: input.database, tenantId });
+        await recordKnowledgeQuotaDecision({
+          repository: quotaUsageRepository,
+          tenantId,
+          institutionId: found.knowledge.institutionId,
+          actorUserId,
+          resourceKey: 'knowledge_ocr_jobs_monthly',
+          action: 'ocr_file',
+          decision: featureDecision,
+          quantity: 1,
+        });
+        if (!featureDecision.allowed) {
+          return persistFailedParse({
+            repository: input.repository,
+            baseRecord,
+            failureReasonCode: 'ocr_required',
+            safeFailureMessage: 'OCR 能力未包含在当前套餐中，请联系平台管理员调整套餐',
+          });
+        }
+        const quotaDecision = await checkTenantQuotaForCreate({
+          database: input.database,
+          tenantId,
+          resource: 'knowledge_ocr_jobs_monthly',
+        });
+        await recordKnowledgeQuotaDecision({
+          repository: quotaUsageRepository,
+          tenantId,
+          institutionId: found.knowledge.institutionId,
+          actorUserId,
+          resourceKey: 'knowledge_ocr_jobs_monthly',
+          action: 'ocr_file',
+          decision: quotaDecision,
+          quantity: 1,
+        });
+        if (!quotaDecision.allowed) {
+          return persistFailedParse({
+            repository: input.repository,
+            baseRecord,
+            failureReasonCode: 'ocr_required',
+            safeFailureMessage: 'OCR 任务额度已达到当前套餐上限，请联系平台管理员调整套餐',
+          });
+        }
+      }
       const ocrResult = await performKnowledgeDocumentOcr({
         fileName: found.file.originalFilename,
         mimeType: found.file.mimeType,
@@ -1004,6 +1063,18 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
         fileId,
       }, input.ocrProvider ?? dryRunKnowledgeDocumentOcrProvider);
       if (ocrResult.status !== 'succeeded') {
+        if (input.database && !input.ocrQuotaAlreadyChecked) {
+          await recordKnowledgeQuotaOutcome({
+            repository: createKnowledgeQuotaUsageRepository(input.database),
+            tenantId,
+            institutionId: found.knowledge.institutionId,
+            actorUserId: normalizeRequired(input.actorUserId),
+            resourceKey: 'knowledge_ocr_jobs_monthly',
+            action: 'ocr_file',
+            status: 'failed',
+            quantity: 1,
+          });
+        }
         return persistFailedParse({
           repository: input.repository,
           baseRecord,
@@ -1044,6 +1115,18 @@ export async function parsePlatformKnowledgeDocumentFileService(input: ParseServ
         fileId,
         chunks,
       });
+      if (input.database && !input.ocrQuotaAlreadyChecked) {
+        await recordKnowledgeQuotaOutcome({
+          repository: createKnowledgeQuotaUsageRepository(input.database),
+          tenantId,
+          institutionId: found.knowledge.institutionId,
+          actorUserId: normalizeRequired(input.actorUserId),
+          resourceKey: 'knowledge_ocr_jobs_monthly',
+          action: 'ocr_file',
+          status: 'succeeded',
+          quantity: 1,
+        });
+      }
 
       return {
         status: 'succeeded' as const,

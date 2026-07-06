@@ -8,6 +8,12 @@ import {
 } from '@/modules/institution/server/institution-ai-call-service';
 import { createInstitutionRagAnswerProviderResolver } from '@/modules/institution/server/institution-rag-answer-provider';
 import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
+import type { TenantQuotaDecision } from '@/modules/institution/domain/quota-enforcement';
+import {
+  createKnowledgeQuotaUsageRepository,
+  recordKnowledgeQuotaDecision,
+  recordKnowledgeQuotaOutcome,
+} from '@/modules/institution/server/knowledge-quota-usage-service';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
@@ -63,7 +69,9 @@ export async function POST(request: Request) {
     const db = getDatabase();
     const repository = createPlatformKnowledgeManagementRepository(db);
     const usageRepository = createAiCallUsageRepository(db);
+    const quotaUsageRepository = createKnowledgeQuotaUsageRepository(db);
     const vendor = getDefaultAiVendor();
+    let lastRagQuotaDecision: TenantQuotaDecision | null = null;
 
     const result = await answerInstitutionKnowledgeRagQuestion({
       repository,
@@ -72,12 +80,35 @@ export async function POST(request: Request) {
         vendor,
       }),
       quota: {
-        check: async () => checkTenantQuotaForCreate({
-          database: db,
-          tenantId: tenantId,
-          resource: 'ai_calls',
-        }),
+        check: async () => {
+          const ragQuotaDecision = await checkTenantQuotaForCreate({
+            database: db,
+            tenantId: tenantId,
+            resource: 'knowledge_rag_answers_monthly',
+          });
+          lastRagQuotaDecision = ragQuotaDecision;
+          await recordKnowledgeQuotaDecision({
+            repository: quotaUsageRepository,
+            tenantId,
+            institutionId,
+            actorUserId,
+            resourceKey: 'knowledge_rag_answers_monthly',
+            action: 'rag_answer',
+            decision: ragQuotaDecision,
+            quantity: 1,
+          });
+          if (!ragQuotaDecision.allowed) return ragQuotaDecision;
+
+          const aiQuotaDecision = await checkTenantQuotaForCreate({
+            database: db,
+            tenantId: tenantId,
+            resource: 'ai_calls',
+          });
+          if (!aiQuotaDecision.allowed) return aiQuotaDecision;
+          return ragQuotaDecision;
+        },
         onRejected: async () => {
+          if (lastRagQuotaDecision?.allowed === false && lastRagQuotaDecision.resource === 'knowledge_rag_answers_monthly') return;
           await recordAiCallQuotaRejection({
             repository: usageRepository,
             tenantId: tenantId,
@@ -108,6 +139,16 @@ export async function POST(request: Request) {
             textPreview: source.textPreview,
             matchReason: source.matchReason,
           })),
+        });
+        await recordKnowledgeQuotaOutcome({
+          repository: quotaUsageRepository,
+          tenantId,
+          institutionId,
+          actorUserId,
+          resourceKey: 'knowledge_rag_answers_monthly',
+          action: 'rag_answer',
+          status: 'succeeded',
+          quantity: 1,
         });
       },
       tenantId: tenantId,

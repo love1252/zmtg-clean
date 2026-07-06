@@ -1,4 +1,16 @@
 import { randomUUID } from 'node:crypto';
+import {
+  checkTenantKnowledgeOcrFeature,
+  checkTenantQuotaForCreate,
+} from '@/modules/institution/server/tenant-quota-enforcement';
+import {
+  createKnowledgeQuotaUsageRepository,
+  recordKnowledgeQuotaDecision,
+  recordKnowledgeQuotaOutcome,
+  type KnowledgeQuotaUsageAction,
+} from '@/modules/institution/server/knowledge-quota-usage-service';
+import type { TenantQuotaResource } from '@/modules/institution/domain/quota-enforcement';
+import type { TenantDatabase } from '@/server/db/client';
 import { isKnowledgeVisibleToInstitution } from '@/modules/open-platform/server/platform-knowledge-file-management-service';
 import {
   generatePlatformKnowledgeChunkEmbeddingsService,
@@ -495,7 +507,111 @@ function outcomeFromEmbeddingResult(input: {
   };
 }
 
+function quotaResourceForJobType(jobType: KnowledgeIndexingJobType): TenantQuotaResource {
+  switch (jobType) {
+    case 'parse_file':
+      return 'knowledge_parse_jobs_monthly';
+    case 'ocr_file':
+      return 'knowledge_ocr_jobs_monthly';
+    case 'generate_embeddings':
+    case 'rebuild_embeddings':
+      return 'knowledge_embedding_jobs_monthly';
+    case 'rebuild_knowledge_index':
+      return 'knowledge_index_rebuild_jobs_monthly';
+  }
+}
+
+function quotaActionForJobType(jobType: KnowledgeIndexingJobType): KnowledgeQuotaUsageAction {
+  switch (jobType) {
+    case 'parse_file':
+      return 'parse_file';
+    case 'ocr_file':
+      return 'ocr_file';
+    case 'generate_embeddings':
+      return 'generate_embeddings';
+    case 'rebuild_embeddings':
+      return 'rebuild_embeddings';
+    case 'rebuild_knowledge_index':
+      return 'rebuild_knowledge_index';
+  }
+}
+
+async function enforceKnowledgeJobQuota(input: {
+  database?: TenantDatabase;
+  tenantId: string;
+  institutionId: string | null;
+  actorUserId: string | null;
+  jobType: KnowledgeIndexingJobType;
+}) {
+  if (!input.database) return { status: 'allowed' as const };
+  const quotaRepository = createKnowledgeQuotaUsageRepository(input.database);
+  const resourceKey = quotaResourceForJobType(input.jobType);
+  const action = quotaActionForJobType(input.jobType);
+  if (input.jobType === 'ocr_file') {
+    const featureDecision = await checkTenantKnowledgeOcrFeature({
+      database: input.database,
+      tenantId: input.tenantId,
+    });
+    await recordKnowledgeQuotaDecision({
+      repository: quotaRepository,
+      tenantId: input.tenantId,
+      institutionId: input.institutionId,
+      actorUserId: input.actorUserId,
+      resourceKey,
+      action,
+      decision: featureDecision,
+      quantity: 1,
+    });
+    if (!featureDecision.allowed) {
+      return { status: 'rejected' as const, message: 'OCR 能力未包含在当前套餐中，请联系平台管理员调整套餐' };
+    }
+  }
+
+  const decision = await checkTenantQuotaForCreate({
+    database: input.database,
+    tenantId: input.tenantId,
+    resource: resourceKey,
+  });
+  await recordKnowledgeQuotaDecision({
+    repository: quotaRepository,
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    actorUserId: input.actorUserId,
+    resourceKey,
+    action,
+    decision,
+    quantity: 1,
+  });
+  if (!decision.allowed) {
+    return { status: 'rejected' as const, message: '知识库任务额度已达到当前套餐上限，请联系平台管理员调整套餐' };
+  }
+
+  return { status: 'allowed' as const, quotaRepository, resourceKey, action };
+}
+
+async function recordJobQuotaOutcome(input: {
+  database?: TenantDatabase;
+  tenantId: string;
+  institutionId: string | null;
+  actorUserId: string | null;
+  jobType: KnowledgeIndexingJobType;
+  status: 'succeeded' | 'failed';
+}) {
+  if (!input.database) return;
+  await recordKnowledgeQuotaOutcome({
+    repository: createKnowledgeQuotaUsageRepository(input.database),
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    actorUserId: input.actorUserId,
+    resourceKey: quotaResourceForJobType(input.jobType),
+    action: quotaActionForJobType(input.jobType),
+    status: input.status,
+    quantity: 1,
+  });
+}
+
 async function createAndRunJob(input: {
+  database?: TenantDatabase;
   repository: KnowledgeIndexingJobRepository;
   tenantId: string;
   institutionId: string | null;
@@ -506,6 +622,17 @@ async function createAndRunJob(input: {
   metadataJson: JsonRecord;
   runner: (job: KnowledgeIndexingJobRecord) => Promise<JobRunOutcome>;
 }) {
+  const quota = await enforceKnowledgeJobQuota({
+    database: input.database,
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    actorUserId: input.actorUserId,
+    jobType: input.jobType,
+  });
+  if (quota.status === 'rejected') {
+    return { status: 'quota_exceeded' as const, message: quota.message };
+  }
+
   const created = await createKnowledgeIndexingJob({
     repository: input.repository,
     input: {
@@ -519,15 +646,27 @@ async function createAndRunJob(input: {
     },
   });
   if (created.status !== 'created') return created;
-  return runKnowledgeIndexingJob({
+  const result = await runKnowledgeIndexingJob({
     repository: input.repository,
     tenantId: input.tenantId,
     jobId: created.record.jobId,
     runner: input.runner,
   });
+  if (result.status === 'succeeded' || result.status === 'failed') {
+    await recordJobQuotaOutcome({
+      database: input.database,
+      tenantId: input.tenantId,
+      institutionId: input.institutionId,
+      actorUserId: input.actorUserId,
+      jobType: input.jobType,
+      status: result.status,
+    });
+  }
+  return result;
 }
 
 export async function createAndRunParseFileJob(input: {
+  database?: TenantDatabase;
   repository: ParseJobRepository;
   storage: Pick<PlatformKnowledgeFileStorage, 'read'>;
   input: { tenantId?: string | null; institutionId?: string | null; actorUserId?: string | null; knowledgeId?: string | null; fileId?: string | null };
@@ -536,6 +675,7 @@ export async function createAndRunParseFileJob(input: {
 }
 
 export async function createAndRunOcrFileJob(input: {
+  database?: TenantDatabase;
   repository: ParseJobRepository;
   storage: Pick<PlatformKnowledgeFileStorage, 'read'>;
   ocrProvider?: PlatformKnowledgeOcrProvider;
@@ -545,6 +685,7 @@ export async function createAndRunOcrFileJob(input: {
 }
 
 async function createAndRunParseLikeJob(input: {
+  database?: TenantDatabase;
   repository: ParseJobRepository;
   storage: Pick<PlatformKnowledgeFileStorage, 'read'>;
   ocrProvider?: PlatformKnowledgeOcrProvider;
@@ -561,6 +702,7 @@ async function createAndRunParseLikeJob(input: {
   if (visible.status !== 'visible') return { status: visible.status };
 
   return createAndRunJob({
+    database: input.database,
     repository: input.repository,
     tenantId,
     institutionId,
@@ -575,9 +717,12 @@ async function createAndRunParseLikeJob(input: {
       knowledgeId,
       fileId,
       result: await parsePlatformKnowledgeDocumentFileService({
+        database: input.database,
         repository: input.repository,
         storage: input.storage,
         ocrProvider: input.ocrProvider,
+        actorUserId: normalizeString(input.input.actorUserId),
+        ocrQuotaAlreadyChecked: input.jobType === 'ocr_file',
         input: { tenantId, knowledgeId, fileId },
       }),
     }),
@@ -585,6 +730,7 @@ async function createAndRunParseLikeJob(input: {
 }
 
 export async function createAndRunGenerateEmbeddingsJob(input: {
+  database?: TenantDatabase;
   repository: EmbeddingJobRepository;
   input: { tenantId?: string | null; institutionId?: string | null; actorUserId?: string | null; knowledgeId?: string | null; fileId?: string | null };
   provider?: PlatformKnowledgeEmbeddingProvider;
@@ -593,6 +739,7 @@ export async function createAndRunGenerateEmbeddingsJob(input: {
 }
 
 export async function createAndRunRebuildEmbeddingsJob(input: {
+  database?: TenantDatabase;
   repository: EmbeddingJobRepository;
   input: { tenantId?: string | null; institutionId?: string | null; actorUserId?: string | null; knowledgeId?: string | null; fileId?: string | null };
   provider?: PlatformKnowledgeEmbeddingProvider;
@@ -601,6 +748,7 @@ export async function createAndRunRebuildEmbeddingsJob(input: {
 }
 
 export async function createAndRunRebuildKnowledgeIndexJob(input: {
+  database?: TenantDatabase;
   repository: EmbeddingJobRepository;
   storage: Pick<PlatformKnowledgeFileStorage, 'read'>;
   input: { tenantId?: string | null; institutionId?: string | null; actorUserId?: string | null; knowledgeId?: string | null };
@@ -611,6 +759,7 @@ export async function createAndRunRebuildKnowledgeIndexJob(input: {
 }
 
 async function createAndRunEmbeddingJob(input: {
+  database?: TenantDatabase;
   repository: EmbeddingJobRepository;
   input: { tenantId?: string | null; institutionId?: string | null; actorUserId?: string | null; knowledgeId?: string | null; fileId?: string | null };
   provider?: PlatformKnowledgeEmbeddingProvider;
@@ -630,6 +779,7 @@ async function createAndRunEmbeddingJob(input: {
 
   const mode = input.rebuild ? 'rebuild' : 'generate';
   return createAndRunJob({
+    database: input.database,
     repository: input.repository,
     tenantId,
     institutionId,
@@ -648,9 +798,11 @@ async function createAndRunEmbeddingJob(input: {
         let failed = 0;
         for (const file of files) {
           const parseResult = await parsePlatformKnowledgeDocumentFileService({
+            database: input.database,
             repository: parseRepository,
             storage: input.storage,
             ocrProvider: input.ocrProvider,
+            actorUserId: normalizeString(input.input.actorUserId),
             input: { tenantId, knowledgeId, fileId: file.fileId },
           });
           if (parseResult.status === 'succeeded') parsed += 1;

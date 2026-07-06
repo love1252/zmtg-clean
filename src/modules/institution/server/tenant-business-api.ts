@@ -56,9 +56,18 @@ const tenantQuotaDenialMessages: Record<TenantQuotaDenialReason, string> = {
   missing_quota_limit: '当前租户套餐配额未配置，暂时无法新增记录',
   quota_exceeded_appointments: '预约配额已达上限，请联系平台管理员调整套餐',
   quota_exceeded_customers: '客户数量已达到当前套餐上限，请联系平台管理员调整套餐',
+  quota_exceeded_knowledge_items: '知识库条目数量已达到当前套餐上限，请联系平台管理员调整套餐',
   quota_exceeded_knowledge_files: '知识库文件数量已达到当前套餐上限，请联系平台管理员调整套餐',
+  quota_exceeded_knowledge_total_storage_mb: '知识库总容量已达到当前套餐上限，请联系平台管理员调整套餐',
+  quota_exceeded_knowledge_single_file_size_mb: '文件大小已超过当前套餐单文件上限，请联系平台管理员调整套餐',
+  quota_exceeded_knowledge_parse_jobs_monthly: '知识库解析任务额度已达到当前套餐上限，请联系平台管理员调整套餐',
+  quota_exceeded_knowledge_embedding_jobs_monthly: '知识库向量任务额度已达到当前套餐上限，请联系平台管理员调整套餐',
+  quota_exceeded_knowledge_ocr_jobs_monthly: 'OCR 任务额度已达到当前套餐上限，请联系平台管理员调整套餐',
+  quota_exceeded_knowledge_rag_answers_monthly: '知识库问答额度已达到当前套餐上限，请联系平台管理员调整套餐',
+  quota_exceeded_knowledge_index_rebuild_jobs_monthly: '知识库索引重建额度已达到当前套餐上限，请联系平台管理员调整套餐',
   quota_exceeded_staff_seats: '员工席位已达到当前套餐上限，请联系平台管理员调整套餐',
   quota_exceeded_ai_calls: 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐',
+  feature_disabled: '当前套餐未包含该能力，请联系平台管理员调整套餐',
 };
 
 function getTenantQuotaDenialMessage(reason: TenantQuotaDenialReason) {

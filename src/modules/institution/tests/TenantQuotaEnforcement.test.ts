@@ -4,6 +4,7 @@ import {
   customers,
   tenantPlanAssignments,
   tenantPlans,
+  tenantPlanVersions,
   tenantQuotaSnapshots,
 } from '@/server/db/schema';
 import type { TenantDatabase } from '@/server/db/client';
@@ -34,6 +35,27 @@ const eqMock = vi.hoisted(() =>
   })),
 );
 
+const inArrayMock = vi.hoisted(() =>
+  vi.fn((column: unknown, values: unknown[]) => ({
+    column,
+    operator: 'inArray',
+    values,
+  })),
+);
+const sqlMock = vi.hoisted(() =>
+  vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+    operator: 'sql',
+    strings,
+    values,
+  })),
+);
+const sumMock = vi.hoisted(() =>
+  vi.fn((column: unknown) => ({
+    aggregate: 'sum',
+    column,
+  })),
+);
+
 vi.mock('drizzle-orm', async (importOriginal) => {
   const actual = await importOriginal<typeof import('drizzle-orm')>();
   return {
@@ -42,6 +64,9 @@ vi.mock('drizzle-orm', async (importOriginal) => {
     count: countMock,
     desc: descMock,
     eq: eqMock,
+    inArray: inArrayMock,
+    sql: sqlMock,
+    sum: sumMock,
   };
 });
 
@@ -58,6 +83,13 @@ type QuotaQueryRow = {
     code: string;
     description: string;
     status: 'active' | 'retired';
+  } | null;
+  planVersion: {
+    id: string;
+    quotaEntitlementsJson?: unknown;
+    knowledgeStorageGb?: number | null;
+    monthlyAiCallLimit?: number | null;
+    seatLimit?: number | null;
   } | null;
   quotaSnapshot: {
     id: string;
@@ -102,6 +134,7 @@ function createQuotaRow(input?: {
       description: '适合增长期机构的演示套餐',
       status: 'active',
     },
+    planVersion: null,
     quotaSnapshot: withSnapshot
       ? {
           id: 'quota-demo-tenant-001-current',
@@ -128,7 +161,8 @@ function createQuotaEnforcementDatabase(input?: {
   const orderBy = vi.fn(() => ({ limit }));
   const activePlanWhere = vi.fn(() => ({ orderBy }));
   const leftJoinQuotaSnapshots = vi.fn(() => ({ where: activePlanWhere }));
-  const innerJoinPlans = vi.fn(() => ({ leftJoin: leftJoinQuotaSnapshots }));
+  const leftJoinPlanVersions = vi.fn(() => ({ leftJoin: leftJoinQuotaSnapshots }));
+  const innerJoinPlans = vi.fn(() => ({ leftJoin: leftJoinPlanVersions }));
   const activePlanFrom = vi.fn(() => ({ innerJoin: innerJoinPlans }));
 
   const customerWhere = vi.fn(async (_condition: unknown) => [{ value: customerCount }]);
@@ -161,6 +195,7 @@ function createQuotaEnforcementDatabase(input?: {
     customerWhere,
     database: { select } as unknown as TenantDatabase,
     innerJoinPlans,
+    leftJoinPlanVersions,
     leftJoinQuotaSnapshots,
     limit,
     orderBy,
@@ -173,6 +208,9 @@ beforeEach(() => {
   countMock.mockClear();
   descMock.mockClear();
   eqMock.mockClear();
+  inArrayMock.mockClear();
+  sqlMock.mockClear();
+  sumMock.mockClear();
 });
 
 describe('租户套餐配额 enforcement helper', () => {
@@ -351,6 +389,10 @@ describe('租户套餐配额 enforcement helper', () => {
       tenantPlans,
       { column: tenantPlans.id, operator: 'eq', value: tenantPlanAssignments.planId },
     );
+    expect(query.leftJoinPlanVersions).toHaveBeenCalledWith(
+      tenantPlanVersions,
+      { column: tenantPlanVersions.id, operator: 'eq', value: tenantPlanAssignments.planVersionId },
+    );
     expect(query.leftJoinQuotaSnapshots).toHaveBeenCalledWith(
       tenantQuotaSnapshots,
       {
@@ -367,10 +409,16 @@ describe('租户套餐配额 enforcement helper', () => {
       ],
       operator: 'and',
     });
-    expect(query.orderBy).toHaveBeenCalledWith({
-      column: tenantQuotaSnapshots.snapshotAt,
-      direction: 'desc',
-    });
+    expect(query.orderBy).toHaveBeenCalledWith(
+      {
+        column: tenantQuotaSnapshots.snapshotAt,
+        direction: 'desc',
+      },
+      {
+        column: tenantPlanAssignments.updatedAt,
+        direction: 'desc',
+      },
+    );
   });
 
   it('enforcement 结果不包含 PII、SQL、stack 或连接串', async () => {
