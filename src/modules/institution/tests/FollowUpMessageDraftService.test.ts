@@ -1,0 +1,259 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  approveMessageDraft,
+  createMessageDraftForFollowUpTask,
+  listMessageDraftsForFollowUpTask,
+  markMessageDraftAsSent,
+  updateMessageDraftContent,
+} from '@/modules/institution/server/followup-message-draft-service';
+import type { FollowUpMessageDraft } from '@/modules/institution/domain/followup-message-drafts';
+import type { AccessContext } from '@/modules/security/domain/access-control';
+
+const context: AccessContext = {
+  userId: 'demo-user-admin',
+  role: 'tenant_admin',
+  scope: 'tenant',
+  tenantId: 'tenant-a',
+  institutionId: 'inst-a',
+  source: 'demo_session',
+};
+
+const task = {
+  id: 'task-1',
+  tenantId: 'tenant-a',
+  customerId: 'customer-1',
+  customerDisplayName: '陈女士',
+  journeyId: 'journey-1',
+  stage: 'D1 水光补水观察',
+  status: 'due' as const,
+  dueAt: '2026-07-07T00:00:00.000Z',
+  suggestedAction: '人工确认补水、防晒和泛红情况',
+  riskLevel: 'normal' as const,
+  updatedBy: null,
+  updatedAt: null,
+  source: 'treatment_summary' as const,
+  sourceTreatmentSummaryId: 'summary-1',
+  sourceSuggestionKey: 'hydro-d1',
+  requiresHumanHandling: true as const,
+  forbidAutoReachOut: true as const,
+};
+
+const pathContext = {
+  task,
+  institutionId: 'inst-a',
+  enrollmentId: 'enrollment-1',
+  stageId: 'stage-1',
+  templateKey: 'hydro_injection_care' as const,
+  nodeKey: 'hydro_injection_d1_check',
+  stageKey: 'D1',
+};
+
+function draft(overrides: Partial<FollowUpMessageDraft> = {}): FollowUpMessageDraft {
+  return {
+    id: 'draft-1',
+    tenantId: 'tenant-a',
+    institutionId: 'inst-a',
+    followUpTaskId: 'task-1',
+    enrollmentId: 'enrollment-1',
+    stageId: 'stage-1',
+    customerId: 'customer-1',
+    customerDisplayName: '陈女士',
+    templateId: null,
+    channelType: 'manual',
+    status: 'draft',
+    draftContent: '陈女士，D1 水光补水观察，请人工确认护理情况。',
+    editedContent: null,
+    safePreview: '陈女士，D1 水光补水观察，请人工确认护理情况。',
+    approvedBy: null,
+    approvedAt: null,
+    rejectedBy: null,
+    rejectedAt: null,
+    markedSentBy: null,
+    markedSentAt: null,
+    safeReasonCode: 'fallback_generated',
+    metadataJson: { requiresHumanApproval: true, forbidAutoSend: true },
+    createdAt: '2026-07-06T08:00:00.000Z',
+    updatedAt: '2026-07-06T08:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function createRepository() {
+  return {
+    listFollowUpMessageTemplatesByTenant: vi.fn(async () => []),
+    getFollowUpTaskPathContextByTenant: vi.fn(async () => pathContext),
+    createFollowUpMessageDraft: vi.fn(async (input) => ({
+      kind: 'created' as const,
+      draft: draft({
+        id: input.id,
+        draftContent: input.draftContent,
+        safePreview: input.safePreview,
+        safeReasonCode: input.safeReasonCode,
+      }),
+    })),
+    listFollowUpMessageDraftsByTask: vi.fn(async () => [draft()]),
+    getFollowUpMessageDraftByTenant: vi.fn(async () => draft()),
+    updateFollowUpMessageDraftContent: vi.fn(async (input) => ({
+      kind: 'updated' as const,
+      draft: draft({
+        editedContent: input.editedContent,
+        safePreview: input.safePreview,
+        safeReasonCode: input.safeReasonCode,
+        updatedAt: input.occurredAt,
+      }),
+    })),
+    approveFollowUpMessageDraft: vi.fn(async (input) => ({
+      kind: 'updated' as const,
+      draft: draft({
+        status: 'approved',
+        approvedBy: input.actorId,
+        approvedAt: input.occurredAt,
+        safeReasonCode: 'draft_approved',
+      }),
+    })),
+    rejectFollowUpMessageDraft: vi.fn(),
+    markFollowUpMessageDraftAsSent: vi.fn(async (input) => ({
+      kind: 'updated' as const,
+      draft: draft({
+        status: 'marked_sent',
+        markedSentBy: input.actorId,
+        markedSentAt: input.occurredAt,
+        safeReasonCode: 'draft_marked_sent',
+      }),
+    })),
+  };
+}
+
+beforeEach(() => {
+  vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('generated-draft-id');
+});
+
+describe('follow-up message draft service', () => {
+  it('创建草稿时带 tenant/institution 隔离，并不调用外部 provider', async () => {
+    const repository = createRepository();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const result = await createMessageDraftForFollowUpTask({
+      context,
+      followUpTaskId: 'task-1',
+      tenantBusinessRepository: repository,
+      occurredAt: '2026-07-06T08:00:00.000Z',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ kind: 'created' }));
+    expect(repository.getFollowUpTaskPathContextByTenant).toHaveBeenCalledWith({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-a',
+      followUpTaskId: 'task-1',
+    });
+    expect(repository.createFollowUpMessageDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'generated-draft-id',
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        followUpTaskId: 'task-1',
+        channelType: 'manual',
+        status: 'draft',
+      }),
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('列表读取先校验 task path context，跨机构不可读取', async () => {
+    const repository = createRepository();
+    repository.getFollowUpTaskPathContextByTenant.mockResolvedValueOnce(null);
+
+    const result = await listMessageDraftsForFollowUpTask({
+      context,
+      followUpTaskId: 'task-other-inst',
+      tenantBusinessRepository: repository,
+    });
+
+    expect(result).toEqual({ kind: 'not_found' });
+    expect(repository.listFollowUpMessageDraftsByTask).not.toHaveBeenCalled();
+  });
+
+  it('编辑草稿只传低敏内容和 safe reason，敏感内容返回 conflict', async () => {
+    const repository = createRepository();
+
+    const updated = await updateMessageDraftContent({
+      context,
+      draftId: 'draft-1',
+      content: '陈女士，D1 水光补水观察，请人工确认护理情况。',
+      tenantBusinessRepository: repository,
+      occurredAt: '2026-07-06T09:00:00.000Z',
+    });
+
+    expect(updated).toEqual(expect.objectContaining({ kind: 'updated' }));
+    expect(repository.updateFollowUpMessageDraftContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        draftId: 'draft-1',
+        safeReasonCode: 'draft_content_updated',
+      }),
+    );
+
+    const unsafe = await updateMessageDraftContent({
+      context,
+      draftId: 'draft-1',
+      content: '客户手机号 13812345678',
+      tenantBusinessRepository: repository,
+      occurredAt: '2026-07-06T09:00:00.000Z',
+    });
+
+    expect(unsafe).toEqual({
+      kind: 'conflict',
+      resourceId: 'draft-1',
+      reason: 'unsafe_follow_up_message_content',
+    });
+  });
+
+  it('人工确认和标记已发送只做内部状态流转，不真实发送', async () => {
+    const repository = createRepository();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const approved = await approveMessageDraft({
+      context,
+      draftId: 'draft-1',
+      tenantBusinessRepository: repository,
+      occurredAt: '2026-07-06T10:00:00.000Z',
+    });
+    const markedSent = await markMessageDraftAsSent({
+      context,
+      draftId: 'draft-1',
+      tenantBusinessRepository: repository,
+      occurredAt: '2026-07-06T11:00:00.000Z',
+    });
+
+    expect(approved).toEqual(expect.objectContaining({ kind: 'updated' }));
+    expect(markedSent).toEqual(expect.objectContaining({ kind: 'updated' }));
+    expect(repository.approveFollowUpMessageDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'tenant-a', institutionId: 'inst-a', actorId: 'demo-user-admin' }),
+    );
+    expect(repository.markFollowUpMessageDraftAsSent).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'tenant-a', institutionId: 'inst-a', actorId: 'demo-user-admin' }),
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('无 tenant 或无权限时禁止访问', async () => {
+    const repository = createRepository();
+    const missingTenant = await createMessageDraftForFollowUpTask({
+      context: { ...context, tenantId: null },
+      followUpTaskId: 'task-1',
+      tenantBusinessRepository: repository,
+      occurredAt: '2026-07-06T08:00:00.000Z',
+    });
+
+    const roleDenied = await createMessageDraftForFollowUpTask({
+      context: { ...context, role: 'security_auditor' },
+      followUpTaskId: 'task-1',
+      tenantBusinessRepository: repository,
+      occurredAt: '2026-07-06T08:00:00.000Z',
+    });
+
+    expect(missingTenant).toEqual({ kind: 'forbidden', reason: 'missing_tenant' });
+    expect(roleDenied).toEqual({ kind: 'forbidden', reason: 'role_denied' });
+  });
+});

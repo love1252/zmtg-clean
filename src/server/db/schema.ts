@@ -77,6 +77,13 @@ export const followUpStatusEnum = pgEnum('follow_up_status', [
   'cancelled',
 ]);
 export const followUpRiskLevelEnum = pgEnum('follow_up_risk_level', ['normal', 'watch', 'urgent']);
+export const followUpMessageDraftStatusEnum = pgEnum('follow_up_message_draft_status', [
+  'draft',
+  'approved',
+  'rejected',
+  'marked_sent',
+  'cancelled',
+]);
 export const auditResultEnum = pgEnum('audit_result', ['allowed', 'denied', 'transitioned']);
 export const tenantPlanStatusEnum = pgEnum('tenant_plan_status', ['active', 'retired']);
 export const tenantPlanAssignmentStatusEnum = pgEnum('tenant_plan_assignment_status', [
@@ -1716,6 +1723,114 @@ export const followUpPathStages = pgTable(
       table.status,
       table.dueAt,
     ),
+  }),
+);
+
+export const followUpMessageTemplates = pgTable(
+  'follow_up_message_templates',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 }).references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
+    templateKey: varchar('template_key', { length: 96 }).notNull(),
+    templateName: varchar('template_name', { length: 160 }).notNull(),
+    templateType: varchar('template_type', { length: 40 })
+      .$type<'post_care' | 'revisit' | 'risk_check' | 'manual'>()
+      .notNull(),
+    applicableTemplateKey: varchar('applicable_template_key', { length: 64 }),
+    applicableNodeKey: varchar('applicable_node_key', { length: 96 }),
+    channelType: varchar('channel_type', { length: 32 }).$type<'manual'>().notNull().default('manual'),
+    contentTemplate: text('content_template').notNull(),
+    variablesJson: jsonb('variables_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    status: varchar('status', { length: 32 }).$type<'active' | 'archived'>().notNull().default('active'),
+    requiresHumanApproval: boolean('requires_human_approval').notNull().default(true),
+    forbidAutoSend: boolean('forbid_auto_send').notNull().default(true),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantInstitutionIdx: index('follow_up_message_templates_tenant_institution_idx').on(
+      table.tenantId,
+      table.institutionId,
+    ),
+    templateKeyIdx: index('follow_up_message_templates_template_key_idx').on(table.templateKey),
+    statusIdx: index('follow_up_message_templates_status_idx').on(table.status),
+    applicableIdx: index('follow_up_message_templates_applicable_idx').on(
+      table.applicableTemplateKey,
+      table.applicableNodeKey,
+    ),
+  }),
+);
+
+export const followUpMessageDrafts = pgTable(
+  'follow_up_message_drafts',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
+    followUpTaskId: varchar('follow_up_task_id', { length: 64 }).notNull(),
+    enrollmentId: varchar('enrollment_id', { length: 64 }),
+    stageId: varchar('stage_id', { length: 64 }),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    templateId: varchar('template_id', { length: 64 }),
+    channelType: varchar('channel_type', { length: 32 }).$type<'manual'>().notNull().default('manual'),
+    status: followUpMessageDraftStatusEnum('status').notNull().default('draft'),
+    draftContent: text('draft_content').notNull(),
+    editedContent: text('edited_content'),
+    safePreview: varchar('safe_preview', { length: 240 }).notNull(),
+    approvedBy: varchar('approved_by', { length: 96 }),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    rejectedBy: varchar('rejected_by', { length: 96 }),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    markedSentBy: varchar('marked_sent_by', { length: 96 }),
+    markedSentAt: timestamp('marked_sent_at', { withTimezone: true }),
+    safeReasonCode: varchar('safe_reason_code', { length: 96 }).notNull(),
+    metadataJson: jsonb('metadata_json')
+      .$type<JsonRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    ...timestamps,
+  },
+  (table) => ({
+    followUpTaskFk: foreignKey({
+      name: 'follow_up_message_drafts_tenant_follow_up_task_fk',
+      columns: [table.tenantId, table.followUpTaskId],
+      foreignColumns: [followUpTasks.tenantId, followUpTasks.id],
+    }),
+    customerFk: foreignKey({
+      name: 'follow_up_message_drafts_tenant_customer_fk',
+      columns: [table.tenantId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.id],
+    }),
+    enrollmentFk: foreignKey({
+      name: 'follow_up_message_drafts_tenant_enrollment_fk',
+      columns: [table.tenantId, table.enrollmentId],
+      foreignColumns: [followUpPathEnrollments.tenantId, followUpPathEnrollments.id],
+    }),
+    stageFk: foreignKey({
+      name: 'follow_up_message_drafts_tenant_stage_fk',
+      columns: [table.tenantId, table.stageId],
+      foreignColumns: [followUpPathStages.tenantId, followUpPathStages.id],
+    }),
+    templateFk: foreignKey({
+      name: 'follow_up_message_drafts_template_fk',
+      columns: [table.templateId],
+      foreignColumns: [followUpMessageTemplates.id],
+    }),
+    tenantInstitutionIdx: index('follow_up_message_drafts_tenant_institution_idx').on(
+      table.tenantId,
+      table.institutionId,
+    ),
+    followUpTaskIdx: index('follow_up_message_drafts_follow_up_task_idx').on(
+      table.followUpTaskId,
+    ),
+    customerIdx: index('follow_up_message_drafts_customer_idx').on(table.customerId),
+    statusIdx: index('follow_up_message_drafts_status_idx').on(table.status),
+    createdAtIdx: index('follow_up_message_drafts_created_at_idx').on(table.createdAt),
   }),
 );
 

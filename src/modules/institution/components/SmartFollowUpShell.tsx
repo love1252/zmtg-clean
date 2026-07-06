@@ -9,9 +9,15 @@ import {
   Workflow,
 } from 'lucide-react';
 import {
+  approveFollowUpMessageDraft,
+  createFollowUpMessageDraft,
+  listFollowUpMessageDrafts,
   listFollowUpPathEnrollments,
   listFollowUpTasks,
+  markFollowUpMessageDraftAsSent,
+  rejectFollowUpMessageDraft,
   transitionFollowUpTask,
+  updateFollowUpMessageDraft,
   type TenantBusinessClientError,
 } from '@/modules/institution/client/tenant-business-client';
 import {
@@ -21,6 +27,7 @@ import {
 } from '@/modules/institution/components/InstitutionPageState';
 import { InstitutionSectionHeader } from '@/modules/institution/components/InstitutionSectionHeader';
 import { followUpMessageSuggestions } from '@/modules/institution/domain/followups';
+import type { FollowUpMessageDraftDto } from '@/modules/institution/domain/followup-message-drafts';
 import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
 import type {
   FollowUpStatus,
@@ -47,6 +54,26 @@ const riskToneClasses = {
   watch: 'border-amber-200 bg-amber-50 text-amber-700',
   normal: 'border-slate-200 bg-slate-50 text-slate-600',
 } as const;
+
+const draftStatusLabels: Record<FollowUpMessageDraftDto['status'], string> = {
+  draft: '草稿待确认',
+  approved: '已确认',
+  rejected: '已拒绝',
+  marked_sent: '已人工发送',
+  cancelled: '已取消',
+};
+
+function draftContentValue(draft: FollowUpMessageDraftDto) {
+  return draft.editedContent || draft.draftContent;
+}
+
+function isDraftEditable(draft: FollowUpMessageDraftDto | undefined) {
+  return draft?.status === 'draft';
+}
+
+function visibleDraftSummary(draft: FollowUpMessageDraftDto) {
+  return draft.safePreview || draftContentValue(draft).slice(0, 120);
+}
 
 function visibleErrorMessage(error: TenantBusinessClientError) {
   if (error.kind === 'unauthorized') {
@@ -97,6 +124,10 @@ export function SmartFollowUpShell() {
   const [listErrorState, setListErrorState] = useState<InstitutionPageStateProps | null>(null);
   const [enrollmentErrorState, setEnrollmentErrorState] = useState<InstitutionPageStateProps | null>(null);
   const [taskErrors, setTaskErrors] = useState<Record<string, string>>({});
+  const [draftsByTaskId, setDraftsByTaskId] = useState<Record<string, FollowUpMessageDraftDto[]>>({});
+  const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
+  const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
+  const [updatingDraftKey, setUpdatingDraftKey] = useState<string | null>(null);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -157,6 +188,33 @@ export function SmartFollowUpShell() {
     };
   }, []);
 
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadDraftsForTasks() {
+      if (tasks.length === 0) {
+        setDraftsByTaskId({});
+        return;
+      }
+
+      const entries = await Promise.all(
+        tasks.map(async (task) => {
+          const result = await listFollowUpMessageDrafts(task.id);
+          return [task.id, result.ok ? result.records : []] as const;
+        }),
+      );
+
+      if (!isActive) return;
+      setDraftsByTaskId(Object.fromEntries(entries));
+    }
+
+    void loadDraftsForTasks();
+
+    return () => {
+      isActive = false;
+    };
+  }, [tasks]);
+
   const sortedTasks = useMemo(() => sortFollowUpTasksForWorkQueue(tasks), [tasks]);
 
   const statusCounts = useMemo(() => buildStatusCounts(tasks), [tasks]);
@@ -183,6 +241,66 @@ export function SmartFollowUpShell() {
     }
 
     setUpdatingTaskId(null);
+  }
+
+  function replaceDraft(taskId: string, draft: FollowUpMessageDraftDto) {
+    setDraftsByTaskId((current) => ({
+      ...current,
+      [taskId]: [draft, ...(current[taskId] ?? []).filter((item) => item.draftId !== draft.draftId)],
+    }));
+    setDraftEdits((current) => ({ ...current, [draft.draftId]: draftContentValue(draft) }));
+  }
+
+  async function handleCreateDraft(task: TenantFollowUpTask) {
+    setUpdatingDraftKey(`${task.id}:create`);
+    setDraftErrors((current) => ({ ...current, [task.id]: '' }));
+    const result = await createFollowUpMessageDraft({ followUpTaskId: task.id });
+
+    if (result.ok) {
+      replaceDraft(task.id, result.record);
+    } else {
+      setDraftErrors((current) => ({ ...current, [task.id]: visibleErrorMessage(result.error) }));
+    }
+
+    setUpdatingDraftKey(null);
+  }
+
+  async function handleUpdateDraft(taskId: string, draft: FollowUpMessageDraftDto) {
+    setUpdatingDraftKey(`${draft.draftId}:update`);
+    setDraftErrors((current) => ({ ...current, [taskId]: '' }));
+    const result = await updateFollowUpMessageDraft(draft.draftId, {
+      content: draftEdits[draft.draftId] ?? draftContentValue(draft),
+    });
+
+    if (result.ok) {
+      replaceDraft(taskId, result.record);
+    } else {
+      setDraftErrors((current) => ({ ...current, [taskId]: visibleErrorMessage(result.error) }));
+    }
+
+    setUpdatingDraftKey(null);
+  }
+
+  async function handleDraftAction(
+    taskId: string,
+    draft: FollowUpMessageDraftDto,
+    action: 'approve' | 'reject' | 'mark_sent',
+  ) {
+    setUpdatingDraftKey(`${draft.draftId}:${action}`);
+    setDraftErrors((current) => ({ ...current, [taskId]: '' }));
+    const result = action === 'approve'
+      ? await approveFollowUpMessageDraft(draft.draftId)
+      : action === 'reject'
+        ? await rejectFollowUpMessageDraft(draft.draftId)
+        : await markFollowUpMessageDraftAsSent(draft.draftId);
+
+    if (result.ok) {
+      replaceDraft(taskId, result.record);
+    } else {
+      setDraftErrors((current) => ({ ...current, [taskId]: visibleErrorMessage(result.error) }));
+    }
+
+    setUpdatingDraftKey(null);
   }
 
   return (
@@ -334,6 +452,8 @@ export function SmartFollowUpShell() {
               {sortedTasks.map((task) => {
                 const nextStatuses = getAllowedFollowUpNextStatuses(task.status);
                 const currentSourceLabel = sourceLabel(task.source);
+                const draft = draftsByTaskId[task.id]?.[0];
+                const draftEdit = draft ? draftEdits[draft.draftId] ?? draftContentValue(draft) : '';
 
                 return (
                   <div
@@ -419,6 +539,126 @@ export function SmartFollowUpShell() {
                           <div className="mt-3 flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
                             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                             {taskErrors[task.id]}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <MessageSquareText className="h-4 w-4 text-violet-600" />
+                              <span className="text-sm font-semibold text-slate-950">消息草稿</span>
+                              {draft ? (
+                                <span className="rounded-full border border-violet-200 bg-white px-2.5 py-1 text-xs font-semibold text-violet-700">
+                                  {draftStatusLabels[draft.status]}
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-2 text-xs leading-5 text-slate-500">
+                              仅生成低敏草稿，不会自动发送消息；需要人工确认，当前没有企业微信 / 短信接入。
+                            </p>
+                          </div>
+                          {!draft ? (
+                            <button
+                              type="button"
+                              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-violet-200 bg-white px-3 text-xs font-semibold text-violet-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                              onClick={() => handleCreateDraft(task)}
+                              disabled={updatingDraftKey === `${task.id}:create`}
+                            >
+                              {updatingDraftKey === `${task.id}:create` ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : null}
+                              生成草稿
+                            </button>
+                          ) : null}
+                        </div>
+
+                        {draft ? (
+                          <div className="mt-3 space-y-3">
+                            <div className="rounded-2xl border border-white/80 bg-white/86 p-3">
+                              <div className="text-xs font-semibold text-slate-400">低敏预览</div>
+                              <p className="mt-2 text-sm leading-6 text-slate-700">
+                                {visibleDraftSummary(draft)}
+                              </p>
+                            </div>
+
+                            <label className="block text-xs font-semibold text-slate-500">
+                              草稿内容
+                              <textarea
+                                value={draftEdit}
+                                onChange={(event) =>
+                                  setDraftEdits((current) => ({
+                                    ...current,
+                                    [draft.draftId]: event.target.value,
+                                  }))
+                                }
+                                disabled={!isDraftEditable(draft)}
+                                className="mt-2 min-h-24 w-full rounded-2xl border border-violet-100 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-violet-300 disabled:bg-slate-100 disabled:text-slate-500"
+                              />
+                            </label>
+
+                            <div className="flex flex-wrap gap-2">
+                              {isDraftEditable(draft) ? (
+                                <button
+                                  type="button"
+                                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                                  onClick={() => handleUpdateDraft(task.id, draft)}
+                                  disabled={updatingDraftKey === `${draft.draftId}:update`}
+                                >
+                                  {updatingDraftKey === `${draft.draftId}:update` ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : null}
+                                  保存草稿
+                                </button>
+                              ) : null}
+                              {draft.status === 'draft' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                                    onClick={() => handleDraftAction(task.id, draft, 'approve')}
+                                    disabled={updatingDraftKey === `${draft.draftId}:approve`}
+                                  >
+                                    {updatingDraftKey === `${draft.draftId}:approve` ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : null}
+                                    人工确认
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 text-xs font-semibold text-rose-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                                    onClick={() => handleDraftAction(task.id, draft, 'reject')}
+                                    disabled={updatingDraftKey === `${draft.draftId}:reject`}
+                                  >
+                                    {updatingDraftKey === `${draft.draftId}:reject` ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : null}
+                                    拒绝草稿
+                                  </button>
+                                </>
+                              ) : null}
+                              {draft.status === 'approved' ? (
+                                <button
+                                  type="button"
+                                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                                  onClick={() => handleDraftAction(task.id, draft, 'mark_sent')}
+                                  disabled={updatingDraftKey === `${draft.draftId}:mark_sent`}
+                                >
+                                  {updatingDraftKey === `${draft.draftId}:mark_sent` ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : null}
+                                  标记已人工发送
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {draftErrors[task.id] ? (
+                          <div className="mt-3 flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            {draftErrors[task.id]}
                           </div>
                         ) : null}
                       </div>

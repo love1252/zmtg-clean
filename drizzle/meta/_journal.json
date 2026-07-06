@@ -225,6 +225,13 @@
       "when": 1783310400000,
       "tag": "0031_v06_followup_path_enrollment_first_slice",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1783314000000,
+      "tag": "0032_v06_followup_message_draft_01b",
+      "breakpoints": true
     }
   ]
 }

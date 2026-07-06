@@ -302,7 +302,9 @@ function mockInstitutionFetch(responsesByPath: Record<string, Response[]>) {
     const response = responses?.shift() ??
       (path === '/api/institution/followup-paths/enrollments'
         ? jsonResponse({ records: [] })
-        : null);
+        : path.startsWith('/api/institution/followup-message-drafts?taskId=')
+          ? jsonResponse({ records: [] })
+          : null);
     if (!response) {
       throw new Error(`没有为 ${path} 配置更多 fetch 响应`);
     }
@@ -1517,6 +1519,153 @@ describe('机构业务页面壳', () => {
     expect(serializedBody).not.toContain('medicalRecordNo');
     expect(serializedBody).not.toContain('treatmentRecord');
     expect(serializedBody).not.toContain('consultationTranscript');
+  });
+
+  it('智能随访展示消息草稿状态、人工边界并提交草稿白名单 payload', async () => {
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/followups': [jsonResponse({ records: [treatmentSummaryFollowUpRecord] })],
+      '/api/institution/followup-message-drafts?taskId=fu_treatment_summary_source': [
+        jsonResponse({ records: [] }),
+        jsonResponse({
+          records: [
+            {
+              draftId: 'draft_001',
+              followUpTaskId: 'fu_treatment_summary_source',
+              customerId: 'cust_wang_repurchase',
+              customerDisplayName: '陈女士',
+              channelType: 'manual',
+              status: 'draft',
+              safePreview: '陈女士，治疗摘要 D3 护理随访，请人工确认恢复情况。',
+              draftContent: '陈女士，治疗摘要 D3 护理随访，请人工确认恢复情况。',
+              editedContent: null,
+              approvedAt: null,
+              markedSentAt: null,
+              safeReasonCode: 'fallback_generated',
+              createdAt: '2026-07-06T08:00:00.000Z',
+              updatedAt: '2026-07-06T08:00:00.000Z',
+              tenantId: 'demo-tenant-001',
+              provider: 'forbidden-provider',
+              token: 'sk_test_should_not_render',
+            },
+          ],
+        }),
+      ],
+      '/api/institution/followup-message-drafts': [
+        jsonResponse({
+          record: {
+            draftId: 'draft_001',
+            followUpTaskId: 'fu_treatment_summary_source',
+            customerId: 'cust_wang_repurchase',
+            customerDisplayName: '陈女士',
+            channelType: 'manual',
+            status: 'draft',
+            safePreview: '陈女士，治疗摘要 D3 护理随访，请人工确认恢复情况。',
+            draftContent: '陈女士，治疗摘要 D3 护理随访，请人工确认恢复情况。',
+            editedContent: null,
+            approvedAt: null,
+            markedSentAt: null,
+            safeReasonCode: 'fallback_generated',
+            createdAt: '2026-07-06T08:00:00.000Z',
+            updatedAt: '2026-07-06T08:00:00.000Z',
+          },
+        }, { status: 201 }),
+      ],
+      '/api/institution/followup-message-drafts/draft_001': [
+        jsonResponse({
+          record: {
+            draftId: 'draft_001',
+            followUpTaskId: 'fu_treatment_summary_source',
+            customerId: 'cust_wang_repurchase',
+            customerDisplayName: '陈女士',
+            channelType: 'manual',
+            status: 'draft',
+            safePreview: '陈女士，已人工编辑低敏随访草稿。',
+            draftContent: '陈女士，治疗摘要 D3 护理随访，请人工确认恢复情况。',
+            editedContent: '陈女士，已人工编辑低敏随访草稿。',
+            approvedAt: null,
+            markedSentAt: null,
+            safeReasonCode: 'draft_content_updated',
+            createdAt: '2026-07-06T08:00:00.000Z',
+            updatedAt: '2026-07-06T09:00:00.000Z',
+          },
+        }),
+      ],
+      '/api/institution/followup-message-drafts/draft_001/approve': [
+        jsonResponse({
+          record: {
+            draftId: 'draft_001',
+            followUpTaskId: 'fu_treatment_summary_source',
+            customerId: 'cust_wang_repurchase',
+            customerDisplayName: '陈女士',
+            channelType: 'manual',
+            status: 'approved',
+            safePreview: '陈女士，已人工编辑低敏随访草稿。',
+            draftContent: '陈女士，治疗摘要 D3 护理随访，请人工确认恢复情况。',
+            editedContent: '陈女士，已人工编辑低敏随访草稿。',
+            approvedAt: '2026-07-06T10:00:00.000Z',
+            markedSentAt: null,
+            safeReasonCode: 'draft_approved',
+            createdAt: '2026-07-06T08:00:00.000Z',
+            updatedAt: '2026-07-06T10:00:00.000Z',
+          },
+        }),
+      ],
+      '/api/institution/followup-message-drafts/draft_001/mark-sent': [
+        jsonResponse({
+          record: {
+            draftId: 'draft_001',
+            followUpTaskId: 'fu_treatment_summary_source',
+            customerId: 'cust_wang_repurchase',
+            customerDisplayName: '陈女士',
+            channelType: 'manual',
+            status: 'marked_sent',
+            safePreview: '陈女士，已人工编辑低敏随访草稿。',
+            draftContent: '陈女士，治疗摘要 D3 护理随访，请人工确认恢复情况。',
+            editedContent: '陈女士，已人工编辑低敏随访草稿。',
+            approvedAt: '2026-07-06T10:00:00.000Z',
+            markedSentAt: '2026-07-06T11:00:00.000Z',
+            safeReasonCode: 'draft_marked_sent',
+            createdAt: '2026-07-06T08:00:00.000Z',
+            updatedAt: '2026-07-06T11:00:00.000Z',
+          },
+        }),
+      ],
+    });
+    const { container } = render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('消息草稿')).toBeInTheDocument();
+    expect(screen.getByText('仅生成低敏草稿，不会自动发送消息；需要人工确认，当前没有企业微信 / 短信接入。')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '生成草稿' }));
+
+    expect(await screen.findByText('草稿待确认')).toBeInTheDocument();
+    expect(screen.getAllByText('陈女士，治疗摘要 D3 护理随访，请人工确认恢复情况。').length).toBeGreaterThan(0);
+    const createBody = mutationBody(fetchMock, '/api/institution/followup-message-drafts', 'POST');
+    expect(createBody).toEqual({ followUpTaskId: 'fu_treatment_summary_source' });
+
+    fireEvent.change(screen.getByLabelText('草稿内容'), {
+      target: { value: '陈女士，已人工编辑低敏随访草稿。' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    expect(await screen.findByText('陈女士，已人工编辑低敏随访草稿。')).toBeInTheDocument();
+    expect(mutationBody(fetchMock, '/api/institution/followup-message-drafts/draft_001', 'PATCH')).toEqual({
+      content: '陈女士，已人工编辑低敏随访草稿。',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '人工确认' }));
+    expect(await screen.findByText('已确认')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '标记已人工发送' }));
+    expect(await screen.findByText('已人工发送')).toBeInTheDocument();
+
+    const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
+    expect(requestPaths).toEqual(expect.arrayContaining([
+      '/api/institution/followup-message-drafts/draft_001/approve',
+      '/api/institution/followup-message-drafts/draft_001/mark-sent',
+    ]));
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('provider');
+    expect(text).not.toContain('sk_test_should_not_render');
+    expect(text).not.toContain('自动发送微信');
+    expect(text).not.toContain('自动短信');
   });
 
   it('智能随访 409 冲突时提示刷新', async () => {
