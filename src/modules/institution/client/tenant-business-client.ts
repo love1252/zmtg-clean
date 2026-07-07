@@ -10,6 +10,9 @@ import type {
   FollowUpCustomerTimelineEventDto,
   FollowUpManualFeedbackPayload,
 } from '@/modules/institution/domain/followup-customer-timeline';
+import type {
+  FollowUpOperationsDashboard,
+} from '@/modules/institution/domain/followup-operations-dashboard';
 import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
 import type {
   FollowUpMessageDraftDto,
@@ -160,6 +163,10 @@ export type TreatmentFollowUpSuggestionListClientResult =
 export type FollowUpPathEnrollmentListClientResult = TenantBusinessListResult<FollowUpPathEnrollmentDto>;
 
 export type FollowUpPathEnrollmentMutationClientResult = TenantBusinessMutationResult<FollowUpPathEnrollmentDto>;
+
+export type FollowUpOperationsDashboardClientResult =
+  | { ok: true; dashboard: FollowUpOperationsDashboard }
+  | { ok: false; error: TenantBusinessClientError };
 
 export type FollowUpMessageTemplateListClientResult = TenantBusinessListResult<FollowUpMessageTemplateDto>;
 
@@ -888,6 +895,52 @@ export function listFollowUpPathEnrollments(
     '/api/institution/followup-paths/enrollments',
     options,
   );
+}
+
+export async function getFollowUpOperationsDashboard(
+  options?: TenantBusinessClientOptions,
+): Promise<FollowUpOperationsDashboardClientResult> {
+  const fetcher = getFetcher(options);
+  if (!fetcher) {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+
+  try {
+    const response = await fetcher('/api/institution/followup-operations/dashboard', {
+      cache: 'no-store',
+    });
+    const payload = await readJson(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: createClientError({ status: response.status, payload }),
+      };
+    }
+
+    if (
+      !isJsonObject(payload) ||
+      !isJsonObject(payload.overview) ||
+      !Array.isArray(payload.pathPerformance) ||
+      !Array.isArray(payload.workload) ||
+      !isJsonObject(payload.draftOperations) ||
+      !isJsonObject(payload.riskSummary)
+    ) {
+      return {
+        ok: false,
+        error: { kind: 'unknown', message: '请求失败', status: response.status },
+      };
+    }
+
+    return { ok: true, dashboard: payload as FollowUpOperationsDashboard };
+  } catch {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
 }
 
 export function createFollowUpPathEnrollment(

@@ -1,16 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Loader2,
   MessageSquareText,
   ShieldCheck,
+  TrendingUp,
   Workflow,
 } from 'lucide-react';
 import {
   approveFollowUpMessageDraft,
   createFollowUpMessageDraft,
+  getFollowUpOperationsDashboard,
   listFollowUpMessageDrafts,
   listFollowUpPathEnrollments,
   listFollowUpTasks,
@@ -28,6 +30,7 @@ import {
 import { InstitutionSectionHeader } from '@/modules/institution/components/InstitutionSectionHeader';
 import { followUpMessageSuggestions } from '@/modules/institution/domain/followups';
 import type { FollowUpMessageDraftDto } from '@/modules/institution/domain/followup-message-drafts';
+import type { FollowUpOperationsDashboard } from '@/modules/institution/domain/followup-operations-dashboard';
 import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
 import type {
   FollowUpStatus,
@@ -54,6 +57,48 @@ const riskToneClasses = {
   watch: 'border-amber-200 bg-amber-50 text-amber-700',
   normal: 'border-slate-200 bg-slate-50 text-slate-600',
 } as const;
+
+const handlerRoleLabels: Record<string, string> = {
+  consultant: '咨询师',
+  customer_service: '客服',
+  medical_assistant: '医助',
+  nursing_staff: '护理人员',
+  operations_lead: '运营负责人',
+  unassigned: '未分配',
+};
+
+const emptyOperationsDashboard: FollowUpOperationsDashboard = {
+  overview: {
+    activeEnrollmentCount: 0,
+    todayDueTaskCount: 0,
+    overdueTaskCount: 0,
+    pendingTaskCount: 0,
+    completedTaskCount: 0,
+    escalatedTaskCount: 0,
+    highRiskTaskCount: 0,
+    draftCount: 0,
+    approvedDraftCount: 0,
+    markedSentCount: 0,
+    approvedButNotMarkedSentCount: 0,
+    manualFeedbackCount: 0,
+  },
+  pathPerformance: [],
+  workload: [],
+  draftOperations: {
+    draftCount: 0,
+    approvedDraftCount: 0,
+    rejectedDraftCount: 0,
+    markedSentCount: 0,
+    approvedButNotMarkedSentCount: 0,
+  },
+  riskSummary: {
+    escalatedTaskCount: 0,
+    highRiskTaskCount: 0,
+    highRiskPendingTaskCount: 0,
+    overdueHighRiskTaskCount: 0,
+    manualFeedbackCount: 0,
+  },
+};
 
 const draftStatusLabels: Record<FollowUpMessageDraftDto['status'], string> = {
   draft: '草稿待确认',
@@ -115,6 +160,44 @@ function sourceLabel(source: FollowUpTaskSource | undefined) {
   return source === 'treatment_summary' ? '治疗摘要' : null;
 }
 
+function hasOperationsData(dashboard: FollowUpOperationsDashboard) {
+  return (
+    dashboard.overview.activeEnrollmentCount +
+      dashboard.overview.pendingTaskCount +
+      dashboard.overview.completedTaskCount +
+      dashboard.overview.draftCount +
+      dashboard.overview.manualFeedbackCount >
+    0
+  );
+}
+
+function formatPercent(value: number) {
+  return `${value.toFixed(value % 1 === 0 ? 0 : 1)}%`;
+}
+
+function OperationsMetricCard(input: {
+  label: string;
+  value: number | string;
+  description: string;
+  tone?: 'slate' | 'violet' | 'amber' | 'rose' | 'emerald';
+}) {
+  const toneClass = {
+    slate: 'border-slate-200 bg-white text-slate-950',
+    violet: 'border-violet-100 bg-violet-50 text-violet-700',
+    amber: 'border-amber-100 bg-amber-50 text-amber-700',
+    rose: 'border-rose-100 bg-rose-50 text-rose-700',
+    emerald: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+  }[input.tone ?? 'slate'];
+
+  return (
+    <div className={`rounded-2xl border p-4 ${toneClass}`}>
+      <div className="text-xs font-semibold opacity-75">{input.label}</div>
+      <div className="mt-2 text-2xl font-semibold">{input.value}</div>
+      <p className="mt-2 text-xs leading-5 opacity-75">{input.description}</p>
+    </div>
+  );
+}
+
 export function SmartFollowUpShell() {
   const [tasks, setTasks] = useState<TenantFollowUpTask[]>([]);
   const [enrollments, setEnrollments] = useState<FollowUpPathEnrollmentDto[]>([]);
@@ -129,6 +212,51 @@ export function SmartFollowUpShell() {
   const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
   const [updatingDraftKey, setUpdatingDraftKey] = useState<string | null>(null);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
+  const [operationsDashboard, setOperationsDashboard] = useState<FollowUpOperationsDashboard>(emptyOperationsDashboard);
+  const [isOperationsLoading, setIsOperationsLoading] = useState(true);
+  const [operationsErrorState, setOperationsErrorState] = useState<InstitutionPageStateProps | null>(null);
+
+  const refreshOperationsDashboard = useCallback(async () => {
+    setIsOperationsLoading(true);
+    setOperationsErrorState(null);
+    const result = await getFollowUpOperationsDashboard();
+
+    if (result.ok) {
+      setOperationsDashboard(result.dashboard);
+    } else {
+      setOperationsDashboard(emptyOperationsDashboard);
+      setOperationsErrorState(visibleListErrorState(result.error));
+    }
+
+    setIsOperationsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadOperationsDashboard() {
+      setIsOperationsLoading(true);
+      setOperationsErrorState(null);
+      const result = await getFollowUpOperationsDashboard();
+
+      if (!isActive) return;
+
+      if (result.ok) {
+        setOperationsDashboard(result.dashboard);
+      } else {
+        setOperationsDashboard(emptyOperationsDashboard);
+        setOperationsErrorState(visibleListErrorState(result.error));
+      }
+
+      setIsOperationsLoading(false);
+    }
+
+    void loadOperationsDashboard();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -233,6 +361,7 @@ export function SmartFollowUpShell() {
         current.map((record) => (record.id === result.record.id ? result.record : record)),
       );
       setTaskErrors((current) => ({ ...current, [task.id]: '' }));
+      void refreshOperationsDashboard();
     } else {
       setTaskErrors((current) => ({
         ...current,
@@ -258,6 +387,7 @@ export function SmartFollowUpShell() {
 
     if (result.ok) {
       replaceDraft(task.id, result.record);
+      void refreshOperationsDashboard();
     } else {
       setDraftErrors((current) => ({ ...current, [task.id]: visibleErrorMessage(result.error) }));
     }
@@ -274,6 +404,7 @@ export function SmartFollowUpShell() {
 
     if (result.ok) {
       replaceDraft(taskId, result.record);
+      void refreshOperationsDashboard();
     } else {
       setDraftErrors((current) => ({ ...current, [taskId]: visibleErrorMessage(result.error) }));
     }
@@ -296,12 +427,18 @@ export function SmartFollowUpShell() {
 
     if (result.ok) {
       replaceDraft(taskId, result.record);
+      void refreshOperationsDashboard();
     } else {
       setDraftErrors((current) => ({ ...current, [taskId]: visibleErrorMessage(result.error) }));
     }
 
     setUpdatingDraftKey(null);
   }
+
+  const overview = operationsDashboard.overview;
+  const draftOperations = operationsDashboard.draftOperations;
+  const riskSummary = operationsDashboard.riskSummary;
+  const dashboardHasData = hasOperationsData(operationsDashboard);
 
   return (
     <section className="space-y-5">
@@ -317,6 +454,178 @@ export function SmartFollowUpShell() {
           </div>
         }
       />
+
+      <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-violet-500">
+              <TrendingUp className="h-4 w-4" />
+              运营看板 / 路径效果
+            </div>
+            <h3 className="mt-2 text-lg font-semibold text-slate-950">智能随访运营看板</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              本区域为内部运营统计，不代表已自动联系客户；标记已发送仅代表人工记录。当前没有企业微信 / 短信接入，不做自动营销群发。
+            </p>
+          </div>
+          <span className="inline-flex w-fit rounded-full border border-violet-100 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+            只读聚合
+          </span>
+        </div>
+
+        {isOperationsLoading ? (
+          <InstitutionPageState kind="loading" title="正在加载运营看板..." className="mt-4" />
+        ) : null}
+
+        {!isOperationsLoading && operationsErrorState ? (
+          <InstitutionPageState {...operationsErrorState} className="mt-4" />
+        ) : null}
+
+        {!isOperationsLoading && !operationsErrorState ? (
+          <div className="mt-5 space-y-5">
+            {!dashboardHasData ? (
+              <InstitutionPageState
+                kind="empty"
+                title="暂无随访运营数据"
+                description="当前还没有路径、任务、草稿或时间线记录。这里仅展示内部统计，不会自动联系客户。"
+              />
+            ) : null}
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <OperationsMetricCard
+                label="今日待随访"
+                value={overview.todayDueTaskCount}
+                description="到期日在今日且仍需人工处理的任务。"
+                tone="violet"
+              />
+              <OperationsMetricCard
+                label="逾期任务"
+                value={overview.overdueTaskCount}
+                description="已超过到期时间，需优先跟进。"
+                tone={overview.overdueTaskCount > 0 ? 'rose' : 'slate'}
+              />
+              <OperationsMetricCard
+                label="高风险 / 已升级"
+                value={overview.highRiskTaskCount + overview.escalatedTaskCount}
+                description={`高风险 ${overview.highRiskTaskCount}，已升级 ${overview.escalatedTaskCount}。`}
+                tone={overview.highRiskTaskCount + overview.escalatedTaskCount > 0 ? 'amber' : 'slate'}
+              />
+              <OperationsMetricCard
+                label="已确认待人工发送"
+                value={overview.approvedButNotMarkedSentCount}
+                description="草稿已确认，但尚未标记为人工发送。"
+                tone="emerald"
+              />
+              <OperationsMetricCard
+                label="已人工发送"
+                value={overview.markedSentCount}
+                description="仅代表员工已手工记录发送动作。"
+                tone="slate"
+              />
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[1.4fr_0.6fr]">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-950">路径执行概览</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      按路径模板聚合 active enrollment、待办、完成、逾期和完成率。
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                    活跃路径 {overview.activeEnrollmentCount}
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {operationsDashboard.pathPerformance.map((path) => (
+                    <div key={path.templateKey} className="rounded-2xl border border-white bg-white p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-950">{path.pathName}</div>
+                          <p className="mt-1 text-xs font-semibold text-slate-400">{path.templateKey}</p>
+                        </div>
+                        <span className="rounded-full border border-violet-100 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">
+                          {formatPercent(path.completionRate)}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-4 gap-2 text-xs font-semibold text-slate-500">
+                        <span className="rounded-xl bg-slate-50 px-2 py-2">active {path.activeEnrollmentCount}</span>
+                        <span className="rounded-xl bg-slate-50 px-2 py-2">待办 {path.pendingTaskCount}</span>
+                        <span className="rounded-xl bg-slate-50 px-2 py-2">完成 {path.completedTaskCount}</span>
+                        <span className="rounded-xl bg-slate-50 px-2 py-2">逾期 {path.overdueTaskCount}</span>
+                      </div>
+                      <p className="mt-3 text-xs leading-5 text-slate-500">
+                        已生成任务 {path.generatedTaskCount}，升级 {path.escalatedTaskCount}；下次到期：{path.nextDueAt ? formatBusinessDateTime(path.nextDueAt) : '--'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
+                  <h4 className="text-sm font-semibold text-slate-950">草稿处理概览</h4>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-semibold text-slate-600">
+                    <span className="rounded-xl bg-white px-3 py-2">草稿数 {draftOperations.draftCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">已确认 {draftOperations.approvedDraftCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">已拒绝 {draftOperations.rejectedDraftCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">已人工发送 {draftOperations.markedSentCount}</span>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
+                    已确认但未标记发送：{draftOperations.approvedButNotMarkedSentCount}。所有草稿均需人工确认，不会自动发送消息。
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
+                  <h4 className="text-sm font-semibold text-slate-950">风险汇总</h4>
+                  <div className="mt-3 space-y-2 text-xs font-semibold text-amber-700">
+                    <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>已升级任务</span><span>{riskSummary.escalatedTaskCount}</span></div>
+                    <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>高风险任务</span><span>{riskSummary.highRiskTaskCount}</span></div>
+                    <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>高风险待办</span><span>{riskSummary.highRiskPendingTaskCount}</span></div>
+                    <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>逾期高风险</span><span>{riskSummary.overdueHighRiskTaskCount}</span></div>
+                    <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>人工反馈记录</span><span>{riskSummary.manualFeedbackCount}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-950">员工 / 角色工作量概览</h4>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    当前按路径阶段 handlerRole 聚合；现有任务模型没有个人负责人字段，因此不展示个人身份。
+                  </p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
+                  角色数 {operationsDashboard.workload.length}
+                </span>
+              </div>
+              {operationsDashboard.workload.length === 0 ? (
+                <p className="mt-3 rounded-2xl bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                  暂无角色工作量数据。
+                </p>
+              ) : (
+                <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  {operationsDashboard.workload.map((item) => (
+                    <div key={`${item.handlerRole}:${item.assignedUserId ?? 'none'}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                      <div className="text-sm font-semibold text-slate-950">
+                        {handlerRoleLabels[item.handlerRole] ?? item.handlerRole}
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-semibold text-slate-500">
+                        <span className="rounded-xl bg-white px-2 py-2">待办 {item.pendingTaskCount}</span>
+                        <span className="rounded-xl bg-white px-2 py-2">逾期 {item.overdueTaskCount}</span>
+                        <span className="rounded-xl bg-white px-2 py-2">完成 {item.completedTaskCount}</span>
+                        <span className="rounded-xl bg-white px-2 py-2">升级 {item.escalatedTaskCount}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </article>
 
       <article className="rounded-[24px] border border-violet-100 bg-violet-50/70 p-5 shadow-sm backdrop-blur-xl">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

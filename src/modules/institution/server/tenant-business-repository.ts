@@ -44,6 +44,10 @@ import {
   followUpTasks,
   treatmentSummaries,
 } from '@/server/db/schema';
+import type {
+  FollowUpOperationsSnapshot,
+  FollowUpOperationsTaskRecord,
+} from '@/modules/institution/domain/followup-operations-dashboard';
 import type { FollowUpTaskListFilters } from '@/modules/institution/server/follow-up-task-query-parser';
 
 type CustomerRow = typeof customers.$inferSelect;
@@ -439,6 +443,15 @@ function mapFollowUpCustomerTimelineEventRowToRecord(
     metadataJson: row.metadataJson,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function mapFollowUpOperationsTaskRow(row: FollowUpTaskRow): FollowUpOperationsTaskRecord {
+  return {
+    taskId: row.id,
+    status: row.status,
+    dueAt: row.dueAt.toISOString(),
+    riskLevel: row.riskLevel,
   };
 }
 
@@ -1520,6 +1533,127 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
       if (!row) return { kind: 'conflict', resourceId: current.id, reason: 'follow_up_message_draft_not_approved' };
       const draft = await this.getFollowUpMessageDraftByTenant(input);
       return draft ? { kind: 'updated', draft } : { kind: 'not_found' };
+    },
+    async listFollowUpOperationsSnapshot(input: {
+      tenantId: string;
+      institutionId?: string | null;
+    }): Promise<FollowUpOperationsSnapshot> {
+      const [taskRows, enrollmentRows, stageRows, draftRows, timelineRows] = await Promise.all([
+        database
+          .select()
+          .from(followUpTasks)
+          .where(eq(followUpTasks.tenantId, input.tenantId)),
+        database
+          .select()
+          .from(followUpPathEnrollments)
+          .where(
+            input.institutionId
+              ? and(
+                  eq(followUpPathEnrollments.tenantId, input.tenantId),
+                  eq(followUpPathEnrollments.institutionId, input.institutionId),
+                )
+              : eq(followUpPathEnrollments.tenantId, input.tenantId),
+          ),
+        database
+          .select()
+          .from(followUpPathStages)
+          .where(
+            input.institutionId
+              ? and(
+                  eq(followUpPathStages.tenantId, input.tenantId),
+                  eq(followUpPathStages.institutionId, input.institutionId),
+                )
+              : eq(followUpPathStages.tenantId, input.tenantId),
+          ),
+        database
+          .select()
+          .from(followUpMessageDrafts)
+          .where(
+            input.institutionId
+              ? and(
+                  eq(followUpMessageDrafts.tenantId, input.tenantId),
+                  eq(followUpMessageDrafts.institutionId, input.institutionId),
+                )
+              : eq(followUpMessageDrafts.tenantId, input.tenantId),
+          ),
+        database
+          .select()
+          .from(followUpCustomerTimelineEvents)
+          .where(
+            input.institutionId
+              ? and(
+                  eq(followUpCustomerTimelineEvents.tenantId, input.tenantId),
+                  eq(followUpCustomerTimelineEvents.institutionId, input.institutionId),
+                )
+              : eq(followUpCustomerTimelineEvents.tenantId, input.tenantId),
+          ),
+      ]);
+      const visibleEnrollments = enrollmentRows.filter((row) => {
+        if (row.tenantId !== input.tenantId) return false;
+        if (input.institutionId && row.institutionId !== input.institutionId) return false;
+        return true;
+      });
+      const visibleEnrollmentIds = new Set(visibleEnrollments.map((row) => row.id));
+      const visibleStages = stageRows.filter((row) => {
+        if (row.tenantId !== input.tenantId) return false;
+        if (!visibleEnrollmentIds.has(row.enrollmentId)) return false;
+        if (input.institutionId && row.institutionId !== input.institutionId) return false;
+        return true;
+      });
+      const visibleTaskIds = new Set(
+        visibleStages.map((row) => row.followUpTaskId).filter((id): id is string => Boolean(id)),
+      );
+      const visibleTasks = taskRows.filter((row) => {
+        if (row.tenantId !== input.tenantId) return false;
+        if (visibleTaskIds.has(row.id)) return true;
+        return !input.institutionId;
+      });
+      const visibleDrafts = draftRows.filter((row) => {
+        if (row.tenantId !== input.tenantId) return false;
+        if (input.institutionId && row.institutionId !== input.institutionId) return false;
+        if (row.enrollmentId && !visibleEnrollmentIds.has(row.enrollmentId)) return false;
+        return true;
+      });
+      const visibleTimelineEvents = timelineRows.filter((row) => {
+        if (row.tenantId !== input.tenantId) return false;
+        if (input.institutionId && row.institutionId !== input.institutionId) return false;
+        return true;
+      });
+
+      return {
+        tasks: visibleTasks.map(mapFollowUpOperationsTaskRow),
+        enrollments: visibleEnrollments.map((row) => ({
+          enrollmentId: row.id,
+          templateKey: row.templateKey as TreatmentPathTemplateKey,
+          status: row.status,
+        })),
+        stages: visibleStages.map((row) => ({
+          stageId: row.id,
+          enrollmentId: row.enrollmentId,
+          followUpTaskId: row.followUpTaskId,
+          handlerRole: row.handlerRole as TreatmentPathHandlerRole,
+          status: row.status,
+          dueAt: row.dueAt.toISOString(),
+          riskLevel: row.riskLevel,
+        })),
+        drafts: visibleDrafts.map((row) => ({
+          draftId: row.id,
+          followUpTaskId: row.followUpTaskId,
+          enrollmentId: row.enrollmentId,
+          stageId: row.stageId,
+          status: row.status as FollowUpMessageDraftStatus,
+          createdAt: row.createdAt.toISOString(),
+          updatedAt: row.updatedAt.toISOString(),
+          approvedAt: row.approvedAt?.toISOString() ?? null,
+          markedSentAt: row.markedSentAt?.toISOString() ?? null,
+        })),
+        timelineEvents: visibleTimelineEvents.map((row) => ({
+          eventId: row.id,
+          eventType: row.eventType as FollowUpCustomerTimelineEventType,
+          riskLevel: row.riskLevel,
+          occurredAt: row.occurredAt.toISOString(),
+        })),
+      };
     },
     async listFollowUpPathAnalysisSourceTasksByTenant(
       tenantId: string,
