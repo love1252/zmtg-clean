@@ -325,9 +325,42 @@ function mockInstitutionFetch(responsesByPath: Record<string, Response[]>) {
     const response = responses?.shift() ??
       (path === '/api/institution/followup-paths/enrollments'
         ? jsonResponse({ records: [] })
-        : path.startsWith('/api/institution/followup-message-drafts?taskId=')
-          ? jsonResponse({ records: [] })
-          : null);
+        : path === '/api/institution/followup-operations/dashboard'
+          ? jsonResponse({
+              overview: {
+                activeEnrollmentCount: 0,
+                todayDueTaskCount: 0,
+                overdueTaskCount: 0,
+                pendingTaskCount: 0,
+                completedTaskCount: 0,
+                escalatedTaskCount: 0,
+                highRiskTaskCount: 0,
+                draftCount: 0,
+                approvedDraftCount: 0,
+                markedSentCount: 0,
+                approvedButNotMarkedSentCount: 0,
+                manualFeedbackCount: 0,
+              },
+              pathPerformance: [],
+              workload: [],
+              draftOperations: {
+                draftCount: 0,
+                approvedDraftCount: 0,
+                rejectedDraftCount: 0,
+                markedSentCount: 0,
+                approvedButNotMarkedSentCount: 0,
+              },
+              riskSummary: {
+                escalatedTaskCount: 0,
+                highRiskTaskCount: 0,
+                highRiskPendingTaskCount: 0,
+                overdueHighRiskTaskCount: 0,
+                manualFeedbackCount: 0,
+              },
+            })
+          : path.startsWith('/api/institution/followup-message-drafts?taskId=')
+            ? jsonResponse({ records: [] })
+            : null);
     if (!response) {
       throw new Error(`没有为 ${path} 配置更多 fetch 响应`);
     }
@@ -1411,6 +1444,120 @@ describe('机构业务页面壳', () => {
     expect(text).not.toContain('自动触达');
   });
 
+  it('智能随访展示运营看板、路径效果、草稿处理和人工边界文案', async () => {
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/followups': [jsonResponse({ records: [followUpRecord] })],
+      '/api/institution/followup-operations/dashboard': [
+        jsonResponse({
+          overview: {
+            activeEnrollmentCount: 2,
+            todayDueTaskCount: 3,
+            overdueTaskCount: 1,
+            pendingTaskCount: 4,
+            completedTaskCount: 5,
+            escalatedTaskCount: 1,
+            highRiskTaskCount: 2,
+            draftCount: 6,
+            approvedDraftCount: 2,
+            markedSentCount: 1,
+            approvedButNotMarkedSentCount: 1,
+            manualFeedbackCount: 1,
+          },
+          pathPerformance: [
+            {
+              templateKey: 'hydro_injection_care',
+              pathName: '水光术后管理',
+              activeEnrollmentCount: 1,
+              generatedTaskCount: 3,
+              pendingTaskCount: 2,
+              completedTaskCount: 1,
+              overdueTaskCount: 1,
+              escalatedTaskCount: 0,
+              completionRate: 33.33,
+              nextDueAt: '2026-07-07T10:00:00.000Z',
+            },
+            {
+              templateKey: 'photoelectric_care',
+              pathName: '光电术后管理',
+              activeEnrollmentCount: 1,
+              generatedTaskCount: 2,
+              pendingTaskCount: 1,
+              completedTaskCount: 1,
+              overdueTaskCount: 0,
+              escalatedTaskCount: 1,
+              completionRate: 50,
+              nextDueAt: null,
+            },
+          ],
+          workload: [
+            {
+              handlerRole: 'medical_assistant',
+              assignedUserId: null,
+              pendingTaskCount: 2,
+              overdueTaskCount: 1,
+              completedTaskCount: 1,
+              escalatedTaskCount: 0,
+            },
+          ],
+          draftOperations: {
+            draftCount: 6,
+            approvedDraftCount: 2,
+            rejectedDraftCount: 1,
+            markedSentCount: 1,
+            approvedButNotMarkedSentCount: 1,
+          },
+          riskSummary: {
+            escalatedTaskCount: 1,
+            highRiskTaskCount: 2,
+            highRiskPendingTaskCount: 1,
+            overdueHighRiskTaskCount: 1,
+            manualFeedbackCount: 1,
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('智能随访运营看板')).toBeInTheDocument();
+    expect(screen.getByText('运营看板 / 路径效果')).toBeInTheDocument();
+    expect(screen.getByText('今日待随访')).toBeInTheDocument();
+    expect(screen.getByText('逾期任务')).toBeInTheDocument();
+    expect(screen.getByText('高风险 / 已升级')).toBeInTheDocument();
+    expect(screen.getByText('已确认待人工发送')).toBeInTheDocument();
+    expect(screen.getAllByText('已人工发送').length).toBeGreaterThan(0);
+    expect(screen.getByText('水光术后管理')).toBeInTheDocument();
+    expect(screen.getByText('光电术后管理')).toBeInTheDocument();
+    expect(screen.getByText('33.3%')).toBeInTheDocument();
+    expect(screen.getByText('草稿处理概览')).toBeInTheDocument();
+    expect(screen.getByText('员工 / 角色工作量概览')).toBeInTheDocument();
+    expect(screen.getByText('医助')).toBeInTheDocument();
+    expect(screen.getByText(/本区域为内部运营统计，不代表已自动联系客户/)).toBeInTheDocument();
+    expect(screen.getByText(/标记已发送仅代表人工记录/)).toBeInTheDocument();
+    expect(screen.getByText(/当前没有企业微信 \/ 短信接入，不做自动营销群发/)).toBeInTheDocument();
+
+    const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
+    expect(requestPaths).toEqual(expect.arrayContaining([
+      '/api/institution/followups',
+      '/api/institution/followup-paths/enrollments',
+      '/api/institution/followup-operations/dashboard',
+    ]));
+
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('tenantId');
+    expect(text).not.toContain('institutionId');
+    expect(text).not.toContain('13800000000');
+    expect(text).not.toContain('110101199001010011');
+    expect(text).not.toContain('MR-RAW-001');
+    expect(text).not.toContain('HIS payload');
+    expect(text).not.toContain('provider');
+    expect(text).not.toContain('model');
+    expect(text).not.toContain('token');
+    expect(text).not.toContain('cost');
+    expect(text).not.toContain('vendor');
+    expect(text).not.toContain('自动营销群发执行');
+  });
+
   it('智能随访展示路径实例和随访旅程进度', async () => {
     mockInstitutionFetch({
       '/api/institution/followups': [jsonResponse({ records: [treatmentSummaryFollowUpRecord] })],
@@ -1477,6 +1624,7 @@ describe('机构业务页面壳', () => {
     render(<SmartFollowUpShell />);
 
     expect(await screen.findByText('暂无随访任务')).toBeInTheDocument();
+    expect(screen.getByText('暂无随访运营数据')).toBeInTheDocument();
     expect(screen.getByText('暂无真实随访路径实例。治疗摘要纳入路径后，会在这里展示客户随访旅程。')).toBeInTheDocument();
     expect(screen.getByText('暂无真实话术建议。')).toBeInTheDocument();
     expect(screen.getByText('任务需人工处理，不会主动向客户发送消息。')).toBeInTheDocument();
