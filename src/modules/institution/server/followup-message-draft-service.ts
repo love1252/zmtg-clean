@@ -14,6 +14,7 @@ import {
 import {
   createMessageDeliveryFromApprovedDraft,
   mapMessageDeliveryToDto,
+  messageDeliveryContactSafetyAuditReason,
   messageDeliveryStatusAuditReason,
   type CreateMessageDeliveryOptions,
   type MessageDeliveryDto,
@@ -89,7 +90,7 @@ async function recordDeliveryAudit(input: {
   context: AccessContext;
   auditRepository?: Pick<AuditEventRepository, 'record'>;
   deliveryId: string;
-  reason: ReturnType<typeof messageDeliveryStatusAuditReason> | 'message_delivery_created';
+  reason: ReturnType<typeof messageDeliveryStatusAuditReason> | ReturnType<typeof messageDeliveryContactSafetyAuditReason> | 'message_delivery_created';
   occurredAt: string;
 }) {
   if (!input.auditRepository) return;
@@ -139,6 +140,13 @@ async function createDeliveryAfterDraftApproval(input: {
     auditRepository: input.auditRepository,
     deliveryId: deliveryResult.delivery.id,
     reason: 'message_delivery_created',
+    occurredAt: input.occurredAt,
+  });
+  await recordDeliveryAudit({
+    context: input.context,
+    auditRepository: input.auditRepository,
+    deliveryId: deliveryResult.delivery.id,
+    reason: messageDeliveryContactSafetyAuditReason(deliveryResult.delivery),
     occurredAt: input.occurredAt,
   });
   if (deliveryResult.delivery.status !== 'pending') {

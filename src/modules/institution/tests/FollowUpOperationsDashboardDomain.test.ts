@@ -144,6 +144,13 @@ const snapshot: FollowUpOperationsSnapshot = {
       createdAt: '2026-07-07T10:00:00.000Z',
       sentAt: '2026-07-07T10:00:00.000Z',
       updatedAt: '2026-07-07T10:00:00.000Z',
+      contactSafety: {
+        code: 'allowed',
+        allowed: true,
+        safeReasonLabel: '触达安全校验通过，仅允许模拟发送 / 人工记录。',
+        auditReason: 'contact_safety_allowed',
+        boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送',
+      },
     },
     {
       deliveryId: 'delivery_failed',
@@ -159,6 +166,13 @@ const snapshot: FollowUpOperationsSnapshot = {
       createdAt: '2026-07-07T10:05:00.000Z',
       sentAt: '2026-07-07T10:05:00.000Z',
       updatedAt: '2026-07-07T10:05:00.000Z',
+      contactSafety: {
+        code: 'allowed',
+        allowed: true,
+        safeReasonLabel: '触达安全校验通过，仅允许模拟发送 / 人工记录。',
+        auditReason: 'contact_safety_allowed',
+        boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送',
+      },
     },
     {
       deliveryId: 'delivery_skipped',
@@ -174,6 +188,13 @@ const snapshot: FollowUpOperationsSnapshot = {
       createdAt: '2026-07-07T10:10:00.000Z',
       sentAt: '2026-07-07T10:10:00.000Z',
       updatedAt: '2026-07-07T10:10:00.000Z',
+      contactSafety: {
+        code: 'blocked_consent_missing',
+        allowed: false,
+        safeReasonLabel: '未授权触达，已跳过。',
+        auditReason: 'contact_safety_consent_missing',
+        boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送',
+      },
     },
     {
       deliveryId: 'delivery_external_disabled',
@@ -185,10 +206,17 @@ const snapshot: FollowUpOperationsSnapshot = {
       recipientRef: 'customer:customer_demo',
       contentSnapshot: '低敏外部禁用内容快照',
       status: 'external_disabled',
-      failureReason: 'channel_disabled',
+      failureReason: 'external_channel_disabled',
       createdAt: '2026-07-07T10:15:00.000Z',
       sentAt: '2026-07-07T10:15:00.000Z',
       updatedAt: '2026-07-07T10:15:00.000Z',
+      contactSafety: {
+        code: 'blocked_external_channel_disabled',
+        allowed: false,
+        safeReasonLabel: '外部渠道默认关闭，已阻断。',
+        auditReason: 'channel_gray_external_disabled',
+        boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送',
+      },
     },
   ],
 };
@@ -212,6 +240,12 @@ describe('follow-up operations dashboard domain', () => {
       mockFailedCount: 1,
       skippedCount: 1,
       externalDisabledCount: 1,
+      contactSafetyAllowedCount: 2,
+      consentMissingBlockedCount: 1,
+      optOutBlockedCount: 0,
+      frequencyCapBlockedCount: 0,
+      channelDisabledCount: 1,
+      grayGuardBlockedCount: 0,
       manualFeedbackCount: 1,
     });
   });
@@ -284,6 +318,16 @@ describe('follow-up operations dashboard domain', () => {
       skippedCount: 1,
       externalDisabledCount: 1,
     }));
+    expect(buildFollowUpOperationsDashboard({ snapshot, now }).contactSafety).toEqual({
+      allowedCount: 2,
+      consentMissingBlockedCount: 1,
+      optOutBlockedCount: 0,
+      frequencyCapBlockedCount: 0,
+      channelDisabledCount: 1,
+      tenantGrayBlockedCount: 0,
+      institutionGrayBlockedCount: 0,
+      grayGuardBlockedCount: 0,
+    });
     expect(getFollowUpRiskSummary({ snapshot, now })).toEqual({
       escalatedTaskCount: 1,
       highRiskTaskCount: 2,
@@ -305,6 +349,7 @@ describe('follow-up operations dashboard domain', () => {
     expect(dashboard.workload).toEqual([]);
     expect(dashboard.draftOperations.approvedButNotMarkedSentCount).toBe(0);
     expect(dashboard.messageDeliveries.messageDeliveryCount).toBe(0);
+    expect(dashboard.contactSafety.allowedCount).toBe(0);
     expect(serialized).not.toMatch(
       /tenantId|institutionId|phoneNumber|idNumber|medicalRecordNo|HIS|provider|model|token|cost|vendor|prompt|raw|DATABASE_URL|secret/i,
     );

@@ -484,6 +484,7 @@ function mapTimelineRowsToMessageDeliveries(
       createdAt: dto.createdAt,
       sentAt: dto.sentAt,
       updatedAt: dto.updatedAt,
+      contactSafety: dto.contactSafety,
     });
   }
 

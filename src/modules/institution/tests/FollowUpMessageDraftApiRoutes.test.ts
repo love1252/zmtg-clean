@@ -98,10 +98,17 @@ const deliveryRecord: MessageDeliveryDto = {
   contentSnapshot: '陈女士，D1 护理随访，请人工确认恢复情况。',
   status: 'mock_sent',
   failureReason: null,
+  contactSafety: {
+    code: 'allowed',
+    allowed: true,
+    safeReasonLabel: '触达安全校验通过，仅允许模拟发送 / 人工记录。',
+    auditReason: 'contact_safety_allowed',
+    boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送',
+  },
   createdAt: '2026-07-06T10:00:00.000Z',
   sentAt: '2026-07-06T10:00:00.000Z',
   updatedAt: '2026-07-06T10:00:00.000Z',
-  boundaryLabel: '人工确认 / 模拟发送 / 不自动发送 / 未接真实企业微信 / 短信',
+  boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送 / 未接真实企业微信 / 短信',
 };
 
 const draftRecord: FollowUpMessageDraftDto = {
