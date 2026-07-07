@@ -1,4 +1,5 @@
 import type { FollowUpCustomerTimelineEventType } from '@/modules/institution/domain/followup-customer-timeline';
+import type { MessageDeliveryDto } from '@/modules/institution/domain/followup-message-deliveries';
 import type { FollowUpMessageDraftStatus } from '@/modules/institution/domain/followup-message-drafts';
 import type {
   FollowUpRiskLevel,
@@ -52,12 +53,30 @@ export type FollowUpOperationsTimelineRecord = {
   occurredAt: string;
 };
 
+export type FollowUpOperationsMessageDeliveryRecord = Pick<
+  MessageDeliveryDto,
+  | 'deliveryId'
+  | 'customerId'
+  | 'followUpTaskId'
+  | 'messageDraftId'
+  | 'channelType'
+  | 'deliveryMode'
+  | 'recipientRef'
+  | 'contentSnapshot'
+  | 'status'
+  | 'failureReason'
+  | 'createdAt'
+  | 'sentAt'
+  | 'updatedAt'
+>;
+
 export type FollowUpOperationsSnapshot = {
   tasks: FollowUpOperationsTaskRecord[];
   enrollments: FollowUpOperationsEnrollmentRecord[];
   stages: FollowUpOperationsStageRecord[];
   drafts: FollowUpOperationsDraftRecord[];
   timelineEvents: FollowUpOperationsTimelineRecord[];
+  messageDeliveries: FollowUpOperationsMessageDeliveryRecord[];
 };
 
 export type FollowUpOperationsOverview = {
@@ -72,6 +91,11 @@ export type FollowUpOperationsOverview = {
   approvedDraftCount: number;
   markedSentCount: number;
   approvedButNotMarkedSentCount: number;
+  messageDeliveryCount: number;
+  mockSentCount: number;
+  mockFailedCount: number;
+  skippedCount: number;
+  externalDisabledCount: number;
   manualFeedbackCount: number;
 };
 
@@ -105,6 +129,15 @@ export type FollowUpDraftOperationsSummary = {
   approvedButNotMarkedSentCount: number;
 };
 
+export type FollowUpMessageDeliveryOperationsSummary = {
+  messageDeliveryCount: number;
+  mockSentCount: number;
+  mockFailedCount: number;
+  skippedCount: number;
+  externalDisabledCount: number;
+  recentDeliveries: FollowUpOperationsMessageDeliveryRecord[];
+};
+
 export type FollowUpRiskSummary = {
   escalatedTaskCount: number;
   highRiskTaskCount: number;
@@ -118,6 +151,7 @@ export type FollowUpOperationsDashboard = {
   pathPerformance: FollowUpPathPerformanceItem[];
   workload: FollowUpTaskWorkloadItem[];
   draftOperations: FollowUpDraftOperationsSummary;
+  messageDeliveries: FollowUpMessageDeliveryOperationsSummary;
   riskSummary: FollowUpRiskSummary;
 };
 
@@ -211,6 +245,11 @@ export function getFollowUpOperationsOverview(input: {
     approvedDraftCount: snapshot.drafts.filter((draft) => draft.status === 'approved').length,
     markedSentCount: snapshot.drafts.filter((draft) => draft.status === 'marked_sent').length,
     approvedButNotMarkedSentCount: snapshot.drafts.filter((draft) => draft.status === 'approved').length,
+    messageDeliveryCount: snapshot.messageDeliveries.length,
+    mockSentCount: snapshot.messageDeliveries.filter((delivery) => delivery.status === 'mock_sent').length,
+    mockFailedCount: snapshot.messageDeliveries.filter((delivery) => delivery.status === 'mock_failed').length,
+    skippedCount: snapshot.messageDeliveries.filter((delivery) => delivery.status === 'skipped').length,
+    externalDisabledCount: snapshot.messageDeliveries.filter((delivery) => delivery.status === 'external_disabled').length,
     manualFeedbackCount: snapshot.timelineEvents.filter(
       (event) => event.eventType === 'manual_feedback_recorded',
     ).length,
@@ -293,6 +332,21 @@ export function getFollowUpDraftOperationsSummary(
   };
 }
 
+export function getFollowUpMessageDeliveryOperationsSummary(
+  snapshot: FollowUpOperationsSnapshot,
+): FollowUpMessageDeliveryOperationsSummary {
+  return {
+    messageDeliveryCount: snapshot.messageDeliveries.length,
+    mockSentCount: snapshot.messageDeliveries.filter((delivery) => delivery.status === 'mock_sent').length,
+    mockFailedCount: snapshot.messageDeliveries.filter((delivery) => delivery.status === 'mock_failed').length,
+    skippedCount: snapshot.messageDeliveries.filter((delivery) => delivery.status === 'skipped').length,
+    externalDisabledCount: snapshot.messageDeliveries.filter((delivery) => delivery.status === 'external_disabled').length,
+    recentDeliveries: [...snapshot.messageDeliveries]
+      .sort((left, right) => (timestamp(right.updatedAt) ?? 0) - (timestamp(left.updatedAt) ?? 0))
+      .slice(0, 6),
+  };
+}
+
 export function getFollowUpRiskSummary(input: {
   snapshot: FollowUpOperationsSnapshot;
   now: Date;
@@ -323,6 +377,7 @@ export function buildFollowUpOperationsDashboard(input: {
     pathPerformance: getFollowUpPathPerformance(input),
     workload: getFollowUpTaskWorkload(input),
     draftOperations: getFollowUpDraftOperationsSummary(input.snapshot),
+    messageDeliveries: getFollowUpMessageDeliveryOperationsSummary(input.snapshot),
     riskSummary: getFollowUpRiskSummary(input),
   };
 }

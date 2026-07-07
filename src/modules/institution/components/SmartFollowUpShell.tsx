@@ -80,6 +80,11 @@ const emptyOperationsDashboard: FollowUpOperationsDashboard = {
     approvedDraftCount: 0,
     markedSentCount: 0,
     approvedButNotMarkedSentCount: 0,
+    messageDeliveryCount: 0,
+    mockSentCount: 0,
+    mockFailedCount: 0,
+    skippedCount: 0,
+    externalDisabledCount: 0,
     manualFeedbackCount: 0,
   },
   pathPerformance: [],
@@ -90,6 +95,14 @@ const emptyOperationsDashboard: FollowUpOperationsDashboard = {
     rejectedDraftCount: 0,
     markedSentCount: 0,
     approvedButNotMarkedSentCount: 0,
+  },
+  messageDeliveries: {
+    messageDeliveryCount: 0,
+    mockSentCount: 0,
+    mockFailedCount: 0,
+    skippedCount: 0,
+    externalDisabledCount: 0,
+    recentDeliveries: [],
   },
   riskSummary: {
     escalatedTaskCount: 0,
@@ -166,6 +179,7 @@ function hasOperationsData(dashboard: FollowUpOperationsDashboard) {
       dashboard.overview.pendingTaskCount +
       dashboard.overview.completedTaskCount +
       dashboard.overview.draftCount +
+      dashboard.overview.messageDeliveryCount +
       dashboard.overview.manualFeedbackCount >
     0
   );
@@ -437,6 +451,7 @@ export function SmartFollowUpShell() {
 
   const overview = operationsDashboard.overview;
   const draftOperations = operationsDashboard.draftOperations;
+  const messageDeliveries = operationsDashboard.messageDeliveries;
   const riskSummary = operationsDashboard.riskSummary;
   const dashboardHasData = hasOperationsData(operationsDashboard);
 
@@ -490,7 +505,7 @@ export function SmartFollowUpShell() {
               />
             ) : null}
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
               <OperationsMetricCard
                 label="今日待随访"
                 value={overview.todayDueTaskCount}
@@ -516,10 +531,10 @@ export function SmartFollowUpShell() {
                 tone="emerald"
               />
               <OperationsMetricCard
-                label="已人工发送"
-                value={overview.markedSentCount}
-                description="仅代表员工已手工记录发送动作。"
-                tone="slate"
+                label="受控发送记录"
+                value={overview.messageDeliveryCount}
+                description={`模拟成功 ${overview.mockSentCount}，失败 ${overview.mockFailedCount}，跳过 ${overview.skippedCount}，外部禁用 ${overview.externalDisabledCount}。`}
+                tone="violet"
               />
             </div>
 
@@ -574,6 +589,31 @@ export function SmartFollowUpShell() {
                   <p className="mt-3 text-xs leading-5 text-slate-500">
                     已确认但未标记发送：{draftOperations.approvedButNotMarkedSentCount}。所有草稿均需人工确认，不会自动发送消息。
                   </p>
+                </div>
+
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+                  <h4 className="text-sm font-semibold text-slate-950">受控发送基础闭环</h4>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-semibold text-blue-700">
+                    <span className="rounded-xl bg-white px-3 py-2">发送记录 {messageDeliveries.messageDeliveryCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">mock_sent {messageDeliveries.mockSentCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">mock_failed {messageDeliveries.mockFailedCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">skipped {messageDeliveries.skippedCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">external_disabled {messageDeliveries.externalDisabledCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">低敏记录</span>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
+                    人工确认后才生成 MessageDelivery；仅模拟发送，不自动发送，未接真实企业微信 / 短信。
+                  </p>
+                  {messageDeliveries.recentDeliveries.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      {messageDeliveries.recentDeliveries.slice(0, 3).map((delivery) => (
+                        <div key={delivery.deliveryId} className="rounded-xl bg-white px-3 py-2 text-xs leading-5 text-slate-600">
+                          <div className="font-semibold text-slate-800">{delivery.status} · {delivery.channelType} / {delivery.deliveryMode}</div>
+                          <div className="mt-1">{delivery.contentSnapshot}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
@@ -865,7 +905,7 @@ export function SmartFollowUpShell() {
                               ) : null}
                             </div>
                             <p className="mt-2 text-xs leading-5 text-slate-500">
-                              仅生成低敏草稿，不会自动发送消息；需要人工确认，当前没有企业微信 / 短信接入。
+                              仅生成低敏草稿，不会自动发送消息；需要人工确认，人工确认后生成受控发送记录并模拟发送，当前未接真实企业微信 / 短信。
                             </p>
                           </div>
                           {!draft ? (

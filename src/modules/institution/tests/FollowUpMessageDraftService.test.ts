@@ -8,6 +8,8 @@ import {
 } from '@/modules/institution/server/followup-message-draft-service';
 import type { FollowUpMessageDraft } from '@/modules/institution/domain/followup-message-drafts';
 import type { AccessContext } from '@/modules/security/domain/access-control';
+import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
+import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
 
 const context: AccessContext = {
   userId: 'demo-user-admin',
@@ -36,6 +38,25 @@ const task = {
   sourceSuggestionKey: 'hydro-d1',
   requiresHumanHandling: true as const,
   forbidAutoReachOut: true as const,
+};
+
+const customerSummary: CustomerRecordSummary = {
+  id: 'customer-1',
+  tenantId: 'tenant-a',
+  displayName: '陈女士',
+  lifecycle: 'post_care',
+  priority: 'medium',
+  ownerUserId: 'owner-1',
+  projectInterest: '水光补水',
+  maskedPhone: '138****0000',
+  maskedMedicalRecordNo: 'MR***001',
+  lastTouchSummary: '低敏随访记录',
+  nextAction: '人工随访',
+  tags: ['demo'],
+  gender: 'female',
+  birthDate: '1990-01-01',
+  referralSource: 'demo',
+  notes: '低敏备注',
 };
 
 const pathContext = {
@@ -81,7 +102,7 @@ function draft(overrides: Partial<FollowUpMessageDraft> = {}): FollowUpMessageDr
 function createRepository() {
   return {
     listFollowUpMessageTemplatesByTenant: vi.fn(async () => []),
-    getFollowUpTaskPathContextByTenant: vi.fn(async () => pathContext),
+    getFollowUpTaskPathContextByTenant: vi.fn(async (): Promise<typeof pathContext | null> => pathContext),
     createFollowUpMessageDraft: vi.fn(async (input) => ({
       kind: 'created' as const,
       draft: draft({
@@ -102,7 +123,10 @@ function createRepository() {
         updatedAt: input.occurredAt,
       }),
     })),
-    approveFollowUpMessageDraft: vi.fn(async (input) => ({
+    approveFollowUpMessageDraft: vi.fn(async (input): Promise<
+      | { kind: 'updated'; draft: FollowUpMessageDraft }
+      | { kind: 'conflict'; resourceId: string; reason: 'follow_up_message_draft_not_draft' }
+    > => ({
       kind: 'updated' as const,
       draft: draft({
         status: 'approved',
@@ -121,7 +145,7 @@ function createRepository() {
         safeReasonCode: 'draft_marked_sent',
       }),
     })),
-    getCustomerByTenant: vi.fn(async () => ({ id: 'customer-1', tenantId: 'tenant-a' })),
+    getCustomerByTenant: vi.fn(async (): Promise<CustomerRecordSummary | null> => customerSummary),
     recordFollowUpCustomerTimelineEvent: vi.fn(async (input) => ({
       kind: 'created' as const,
       event: {
@@ -241,14 +265,16 @@ describe('follow-up message draft service', () => {
     });
   });
 
-  it('人工确认和标记已发送只做内部状态流转，不真实发送', async () => {
+  it('人工确认后生成受控发送记录、timeline 和 audit，且不真实发送', async () => {
     const repository = createRepository();
+    const auditRepository = { record: vi.fn(async (_event: TenantAuditEvent) => undefined) };
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
     const approved = await approveMessageDraft({
       context,
       draftId: 'draft-1',
       tenantBusinessRepository: repository,
+      auditRepository,
       occurredAt: '2026-07-06T10:00:00.000Z',
     });
     const markedSent = await markMessageDraftAsSent({
@@ -258,7 +284,27 @@ describe('follow-up message draft service', () => {
       occurredAt: '2026-07-06T11:00:00.000Z',
     });
 
-    expect(approved).toEqual(expect.objectContaining({ kind: 'updated' }));
+    expect(approved).toEqual(expect.objectContaining({
+      kind: 'updated_with_delivery',
+      deduped: false,
+      delivery: expect.objectContaining({
+        deliveryId: 'msg-delivery:draft-1',
+        customerId: 'customer-1',
+        followUpTaskId: 'task-1',
+        messageDraftId: 'draft-1',
+        channelType: 'mock',
+        deliveryMode: 'mock',
+        recipientRef: 'customer:customer-1',
+        contentSnapshot: '陈女士,D1 水光补水观察,请人工确认护理情况。',
+        status: 'mock_sent',
+        failureReason: null,
+        boundaryLabel: '人工确认 / 模拟发送 / 不自动发送 / 未接真实企业微信 / 短信',
+      }),
+    }));
+    if (approved.kind !== 'updated_with_delivery') return;
+    expect(JSON.stringify(approved.delivery)).not.toMatch(
+      /tenantId|institutionId|phoneNumber|idNumber|medicalRecordNo|HIS|provider|model|token|cost|vendor|prompt|raw|DATABASE_URL|secret/i,
+    );
     expect(markedSent).toEqual(expect.objectContaining({ kind: 'updated' }));
     expect(repository.approveFollowUpMessageDraft).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: 'tenant-a', institutionId: 'inst-a', actorId: 'demo-user-admin' }),
@@ -281,11 +327,120 @@ describe('follow-up message draft service', () => {
         institutionId: 'inst-a',
         customerId: 'customer-1',
         sourceType: 'message_draft',
+        sourceId: 'msg-delivery:draft-1:created',
+        eventType: 'message_draft_marked_sent',
+        eventTitle: '受控发送记录已生成',
+        safeReasonCode: 'message_delivery_created',
+        metadataJson: expect.objectContaining({
+          messageDeliveryId: 'msg-delivery:draft-1',
+          messageDeliveryStatus: 'mock_sent',
+          requiresHumanApproval: 'true',
+          forbidAutoSend: 'true',
+          externalChannelEnabled: 'false',
+        }),
+      }),
+    );
+    expect(repository.recordFollowUpCustomerTimelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        customerId: 'customer-1',
+        sourceType: 'message_draft',
+        sourceId: 'msg-delivery:draft-1:mock_sent',
+        eventType: 'message_draft_marked_sent',
+        eventTitle: '模拟发送成功',
+        safeSummary: expect.stringContaining('不代表真实企业微信或短信触达'),
+        safeReasonCode: 'message_delivery_mock_sent',
+      }),
+    );
+    expect(repository.recordFollowUpCustomerTimelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        customerId: 'customer-1',
+        sourceType: 'message_draft',
         eventType: 'message_draft_marked_sent',
         safeSummary: expect.stringContaining('不代表系统自动发送'),
       }),
     );
+    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+      resource: 'follow_up',
+      action: 'create',
+      result: 'allowed',
+      reason: 'message_delivery_created',
+      resourceId: 'msg-delivery:draft-1',
+    }));
+    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+      resource: 'follow_up',
+      action: 'create',
+      result: 'allowed',
+      reason: 'message_delivery_mock_sent',
+      resourceId: 'msg-delivery:draft-1',
+    }));
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('支持 mock_failed、skipped、external_disabled 低敏状态', async () => {
+    const cases = [
+      { status: 'mock_failed' as const, reason: 'mock_failure', sourceId: 'msg-delivery:draft-1:mock_failed', title: '模拟发送失败' },
+      { status: 'skipped' as const, reason: 'consent_missing', sourceId: 'msg-delivery:draft-1:skipped', title: '受控发送已跳过' },
+      { status: 'external_disabled' as const, reason: 'channel_disabled', sourceId: 'msg-delivery:draft-1:external_disabled', title: '外部渠道未启用', channelType: 'sms' as const, deliveryMode: 'external_disabled' as const },
+    ];
+
+    for (const item of cases) {
+      const repository = createRepository();
+      const result = await approveMessageDraft({
+        context,
+        draftId: 'draft-1',
+        tenantBusinessRepository: repository,
+        occurredAt: '2026-07-06T10:00:00.000Z',
+        deliveryOptions: {
+          status: item.status,
+          channelType: item.channelType,
+          deliveryMode: item.deliveryMode,
+        },
+      });
+
+      expect(result).toEqual(expect.objectContaining({
+        kind: 'updated_with_delivery',
+        delivery: expect.objectContaining({
+          status: item.status,
+          failureReason: item.reason,
+          channelType: item.channelType ?? 'mock',
+          deliveryMode: item.deliveryMode ?? 'mock',
+        }),
+      }));
+      expect(repository.recordFollowUpCustomerTimelineEvent).toHaveBeenCalledWith(expect.objectContaining({
+        sourceId: item.sourceId,
+        eventTitle: item.title,
+        safeReasonCode: item.reason,
+      }));
+    }
+  });
+
+  it('重复确认不会重复生成受控发送记录', async () => {
+    const repository = createRepository();
+    repository.approveFollowUpMessageDraft.mockResolvedValueOnce({
+      kind: 'conflict' as const,
+      resourceId: 'draft-1',
+      reason: 'follow_up_message_draft_not_draft' as const,
+    });
+
+    const result = await approveMessageDraft({
+      context,
+      draftId: 'draft-1',
+      tenantBusinessRepository: repository,
+      occurredAt: '2026-07-06T10:00:00.000Z',
+    });
+
+    expect(result).toEqual({
+      kind: 'conflict',
+      resourceId: 'draft-1',
+      reason: 'follow_up_message_draft_not_draft',
+    });
+    expect(repository.recordFollowUpCustomerTimelineEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ safeReasonCode: 'message_delivery_created' }),
+    );
   });
 
   it('无 tenant 或无权限时禁止访问', async () => {

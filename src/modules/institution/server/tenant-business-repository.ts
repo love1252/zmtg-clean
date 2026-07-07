@@ -26,6 +26,10 @@ import type {
   FollowUpMessageTemplateType,
   FollowUpTaskPathContext,
 } from '@/modules/institution/domain/followup-message-drafts';
+import {
+  mapMessageDeliveryToDto,
+  readMessageDeliveryFromMetadata,
+} from '@/modules/institution/domain/followup-message-deliveries';
 import type {
   FollowUpCustomerOverview,
   FollowUpCustomerTimelineEvent,
@@ -45,6 +49,7 @@ import {
   treatmentSummaries,
 } from '@/server/db/schema';
 import type {
+  FollowUpOperationsMessageDeliveryRecord,
   FollowUpOperationsSnapshot,
   FollowUpOperationsTaskRecord,
 } from '@/modules/institution/domain/followup-operations-dashboard';
@@ -58,6 +63,7 @@ type FollowUpMessageDraftRow = typeof followUpMessageDrafts.$inferSelect;
 type FollowUpPathEnrollmentRow = typeof followUpPathEnrollments.$inferSelect;
 type FollowUpPathStageRow = typeof followUpPathStages.$inferSelect;
 type FollowUpCustomerTimelineEventRow = typeof followUpCustomerTimelineEvents.$inferSelect;
+type MessageDeliveryReadModel = FollowUpOperationsMessageDeliveryRecord;
 type CreateFollowUpPathEnrollmentInput = typeof followUpPathEnrollments.$inferInsert;
 type CreateFollowUpCustomerTimelineEventInput = Omit<
   typeof followUpCustomerTimelineEvents.$inferInsert,
@@ -453,6 +459,35 @@ function mapFollowUpOperationsTaskRow(row: FollowUpTaskRow): FollowUpOperationsT
     dueAt: row.dueAt.toISOString(),
     riskLevel: row.riskLevel,
   };
+}
+
+function mapTimelineRowsToMessageDeliveries(
+  rows: FollowUpCustomerTimelineEventRow[],
+): MessageDeliveryReadModel[] {
+  const deliveriesById = new Map<string, MessageDeliveryReadModel>();
+
+  for (const row of rows) {
+    const delivery = readMessageDeliveryFromMetadata(row.metadataJson);
+    if (!delivery) continue;
+    const dto = mapMessageDeliveryToDto(delivery);
+    deliveriesById.set(delivery.id, {
+      deliveryId: dto.deliveryId,
+      customerId: dto.customerId,
+      followUpTaskId: dto.followUpTaskId,
+      messageDraftId: dto.messageDraftId,
+      channelType: dto.channelType,
+      deliveryMode: dto.deliveryMode,
+      recipientRef: dto.recipientRef,
+      contentSnapshot: dto.contentSnapshot,
+      status: dto.status,
+      failureReason: dto.failureReason,
+      createdAt: dto.createdAt,
+      sentAt: dto.sentAt,
+      updatedAt: dto.updatedAt,
+    });
+  }
+
+  return [...deliveriesById.values()];
 }
 
 function mapFollowUpPathStageRowToRecord(row: FollowUpPathStageRow): FollowUpPathStageInstance {
@@ -1653,6 +1688,7 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
           riskLevel: row.riskLevel,
           occurredAt: row.occurredAt.toISOString(),
         })),
+        messageDeliveries: mapTimelineRowsToMessageDeliveries(visibleTimelineEvents),
       };
     },
     async listFollowUpPathAnalysisSourceTasksByTenant(

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildFollowUpOperationsDashboard,
   getFollowUpDraftOperationsSummary,
+  getFollowUpMessageDeliveryOperationsSummary,
   getFollowUpOperationsOverview,
   getFollowUpPathPerformance,
   getFollowUpRiskSummary,
@@ -128,6 +129,68 @@ const snapshot: FollowUpOperationsSnapshot = {
       occurredAt: '2026-07-07T09:00:00.000Z',
     },
   ],
+  messageDeliveries: [
+    {
+      deliveryId: 'delivery_sent',
+      customerId: 'customer_demo',
+      followUpTaskId: 'task_today_due',
+      messageDraftId: 'draft_pending_send',
+      channelType: 'mock',
+      deliveryMode: 'mock',
+      recipientRef: 'customer:customer_demo',
+      contentSnapshot: '低敏人工确认内容快照',
+      status: 'mock_sent',
+      failureReason: null,
+      createdAt: '2026-07-07T10:00:00.000Z',
+      sentAt: '2026-07-07T10:00:00.000Z',
+      updatedAt: '2026-07-07T10:00:00.000Z',
+    },
+    {
+      deliveryId: 'delivery_failed',
+      customerId: 'customer_demo',
+      followUpTaskId: 'task_overdue_urgent',
+      messageDraftId: 'draft_rejected',
+      channelType: 'mock',
+      deliveryMode: 'mock',
+      recipientRef: 'customer:customer_demo',
+      contentSnapshot: '低敏失败内容快照',
+      status: 'mock_failed',
+      failureReason: 'mock_failure',
+      createdAt: '2026-07-07T10:05:00.000Z',
+      sentAt: '2026-07-07T10:05:00.000Z',
+      updatedAt: '2026-07-07T10:05:00.000Z',
+    },
+    {
+      deliveryId: 'delivery_skipped',
+      customerId: 'customer_demo',
+      followUpTaskId: 'task_escalated',
+      messageDraftId: 'draft_pending_send',
+      channelType: 'manual',
+      deliveryMode: 'manual',
+      recipientRef: 'customer:customer_demo',
+      contentSnapshot: '低敏跳过内容快照',
+      status: 'skipped',
+      failureReason: 'consent_missing',
+      createdAt: '2026-07-07T10:10:00.000Z',
+      sentAt: '2026-07-07T10:10:00.000Z',
+      updatedAt: '2026-07-07T10:10:00.000Z',
+    },
+    {
+      deliveryId: 'delivery_external_disabled',
+      customerId: 'customer_demo',
+      followUpTaskId: 'task_completed',
+      messageDraftId: 'draft_marked_sent',
+      channelType: 'sms',
+      deliveryMode: 'external_disabled',
+      recipientRef: 'customer:customer_demo',
+      contentSnapshot: '低敏外部禁用内容快照',
+      status: 'external_disabled',
+      failureReason: 'channel_disabled',
+      createdAt: '2026-07-07T10:15:00.000Z',
+      sentAt: '2026-07-07T10:15:00.000Z',
+      updatedAt: '2026-07-07T10:15:00.000Z',
+    },
+  ],
 };
 
 describe('follow-up operations dashboard domain', () => {
@@ -144,6 +207,11 @@ describe('follow-up operations dashboard domain', () => {
       approvedDraftCount: 1,
       markedSentCount: 1,
       approvedButNotMarkedSentCount: 1,
+      messageDeliveryCount: 4,
+      mockSentCount: 1,
+      mockFailedCount: 1,
+      skippedCount: 1,
+      externalDisabledCount: 1,
       manualFeedbackCount: 1,
     });
   });
@@ -209,6 +277,13 @@ describe('follow-up operations dashboard domain', () => {
       markedSentCount: 1,
       approvedButNotMarkedSentCount: 1,
     });
+    expect(getFollowUpMessageDeliveryOperationsSummary(snapshot)).toEqual(expect.objectContaining({
+      messageDeliveryCount: 4,
+      mockSentCount: 1,
+      mockFailedCount: 1,
+      skippedCount: 1,
+      externalDisabledCount: 1,
+    }));
     expect(getFollowUpRiskSummary({ snapshot, now })).toEqual({
       escalatedTaskCount: 1,
       highRiskTaskCount: 2,
@@ -220,7 +295,7 @@ describe('follow-up operations dashboard domain', () => {
 
   it('空数据返回 0 值结构且不暴露敏感字段', () => {
     const dashboard = buildFollowUpOperationsDashboard({
-      snapshot: { tasks: [], enrollments: [], stages: [], drafts: [], timelineEvents: [] },
+      snapshot: { tasks: [], enrollments: [], stages: [], drafts: [], timelineEvents: [], messageDeliveries: [] },
       now,
     });
     const serialized = JSON.stringify(dashboard);
@@ -229,6 +304,7 @@ describe('follow-up operations dashboard domain', () => {
     expect(dashboard.pathPerformance).toHaveLength(4);
     expect(dashboard.workload).toEqual([]);
     expect(dashboard.draftOperations.approvedButNotMarkedSentCount).toBe(0);
+    expect(dashboard.messageDeliveries.messageDeliveryCount).toBe(0);
     expect(serialized).not.toMatch(
       /tenantId|institutionId|phoneNumber|idNumber|medicalRecordNo|HIS|provider|model|token|cost|vendor|prompt|raw|DATABASE_URL|secret/i,
     );
