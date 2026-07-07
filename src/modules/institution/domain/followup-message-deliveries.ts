@@ -1,3 +1,14 @@
+import type {
+  ContactSafetyDecisionCode,
+  ContactSafetyDecision,
+  ContactSafetyPolicy,
+} from '@/modules/institution/domain/followup-contact-safety';
+import {
+  contactSafetyDecisionLabel,
+  createAllowedSandboxContactSafetyPolicy,
+  evaluateContactSafetyGuard,
+  readContactSafetyPolicyFromMetadata,
+} from '@/modules/institution/domain/followup-contact-safety';
 import type { FollowUpMessageDraft } from '@/modules/institution/domain/followup-message-drafts';
 
 export const messageDeliveryChannelTypes = [
@@ -29,6 +40,9 @@ export const messageDeliveryFailureReasons = [
   'draft_not_approved',
   'recipient_unavailable',
   'mock_failure',
+  'tenant_not_allowlisted',
+  'institution_not_allowlisted',
+  'external_channel_disabled',
 ] as const;
 
 export type MessageDeliveryChannelType = (typeof messageDeliveryChannelTypes)[number];
@@ -49,6 +63,7 @@ export type MessageDelivery = {
   contentSnapshot: string;
   status: MessageDeliveryStatus;
   failureReason: MessageDeliveryFailureReason | null;
+  contactSafetyDecision: ContactSafetyDecision;
   createdBy: string;
   confirmedBy: string;
   createdAt: string;
@@ -72,7 +87,8 @@ export type MessageDeliveryDto = Pick<
   | 'updatedAt'
 > & {
   deliveryId: string;
-  boundaryLabel: '人工确认 / 模拟发送 / 不自动发送 / 未接真实企业微信 / 短信';
+  contactSafety: Pick<ContactSafetyDecision, 'code' | 'allowed' | 'safeReasonLabel' | 'auditReason' | 'boundaryLabel'>;
+  boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送 / 未接真实企业微信 / 短信';
 };
 
 export type CreateMessageDeliveryOptions = {
@@ -80,6 +96,7 @@ export type CreateMessageDeliveryOptions = {
   deliveryMode?: MessageDeliveryMode;
   status?: MessageDeliveryStatus;
   failureReason?: MessageDeliveryFailureReason | null;
+  contactSafetyPolicy?: ContactSafetyPolicy | null;
 };
 
 const forbiddenDeliveryContentPatterns = [
@@ -131,35 +148,63 @@ function contentSnapshotForDraft(draft: FollowUpMessageDraft) {
   );
 }
 
-function normalizeDeliveryMode(input: {
-  channelType: MessageDeliveryChannelType;
-  deliveryMode?: MessageDeliveryMode;
-  status?: MessageDeliveryStatus;
-}) {
-  if (input.channelType === 'wechat_work' || input.channelType === 'sms') return 'external_disabled' as const;
-  if (input.deliveryMode) return input.deliveryMode;
-  if (input.status === 'pending') return 'manual' as const;
-  return 'mock' as const;
-}
-
-function normalizeDeliveryStatus(input: {
-  channelType: MessageDeliveryChannelType;
-  deliveryMode: MessageDeliveryMode;
-  status?: MessageDeliveryStatus;
-}) {
-  if (input.channelType === 'wechat_work' || input.channelType === 'sms') return 'external_disabled' as const;
-  if (input.deliveryMode === 'external_disabled') return 'external_disabled' as const;
-  return input.status ?? 'mock_sent';
-}
-
 function normalizeFailureReason(input: {
   status: MessageDeliveryStatus;
   failureReason?: MessageDeliveryFailureReason | null;
 }) {
   if (input.status === 'mock_failed') return input.failureReason ?? 'mock_failure';
   if (input.status === 'skipped') return input.failureReason ?? 'consent_missing';
-  if (input.status === 'external_disabled') return input.failureReason ?? 'channel_disabled';
+  if (input.status === 'external_disabled') return input.failureReason ?? 'external_channel_disabled';
   return null;
+}
+
+function contactSafetyDecisionFromStoredFields(input: {
+  status: MessageDeliveryStatus;
+  deliveryMode: MessageDeliveryMode;
+  failureReason: MessageDeliveryFailureReason | null;
+}): ContactSafetyDecision {
+  const codeByFailureReason: Partial<Record<MessageDeliveryFailureReason, Exclude<ContactSafetyDecisionCode, 'allowed'>>> = {
+    opt_out: 'blocked_opt_out',
+    frequency_cap_reached: 'blocked_frequency_cap',
+    consent_missing: 'blocked_consent_missing',
+    tenant_not_allowlisted: 'blocked_tenant_not_allowlisted',
+    institution_not_allowlisted: 'blocked_institution_not_allowlisted',
+    channel_disabled: 'blocked_channel_disabled',
+    external_channel_disabled: 'blocked_external_channel_disabled',
+  };
+  const code = input.failureReason ? codeByFailureReason[input.failureReason] : undefined;
+  if (code) {
+    const auditReasonByCode: Record<Exclude<ContactSafetyDecisionCode, 'allowed'>, ContactSafetyDecision['auditReason']> = {
+      blocked_consent_missing: 'contact_safety_consent_missing',
+      blocked_opt_out: 'contact_safety_opt_out',
+      blocked_frequency_cap: 'contact_safety_frequency_cap_reached',
+      blocked_channel_disabled: 'channel_gray_external_disabled',
+      blocked_tenant_not_allowlisted: 'channel_gray_tenant_blocked',
+      blocked_institution_not_allowlisted: 'channel_gray_institution_blocked',
+      blocked_external_channel_disabled: 'channel_gray_external_disabled',
+    };
+
+    return {
+      code,
+      allowed: false,
+      status: input.status,
+      deliveryMode: input.deliveryMode,
+      failureReason: input.failureReason,
+      safeReasonLabel: contactSafetyDecisionLabel(code),
+      auditReason: auditReasonByCode[code],
+      boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送',
+    };
+  }
+
+  const allowed = evaluateContactSafetyGuard({
+    tenantId: 'tenant',
+    institutionId: null,
+    channelType: input.deliveryMode === 'manual' ? 'manual' : 'mock',
+    policy: createAllowedSandboxContactSafetyPolicy({ tenantId: 'tenant', institutionId: null }),
+  });
+  return input.status === 'mock_failed'
+    ? { ...allowed, allowed: false, status: 'mock_failed', failureReason: 'mock_failure', safeReasonLabel: '模拟发送失败，失败原因使用低敏白名单记录。' }
+    : allowed;
 }
 
 export function createMessageDeliveryFromApprovedDraft(input: {
@@ -175,17 +220,35 @@ export function createMessageDeliveryFromApprovedDraft(input: {
   }
 
   const channelType = input.options?.channelType ?? 'mock';
-  const deliveryMode = normalizeDeliveryMode({
-    channelType,
-    deliveryMode: input.options?.deliveryMode,
-    status: input.options?.status,
+  const defaultPolicy = createAllowedSandboxContactSafetyPolicy({
+    tenantId: input.draft.tenantId,
+    institutionId: input.draft.institutionId,
+    channelTypes: ['manual', 'mock', channelType],
   });
-  const status = normalizeDeliveryStatus({
+  const metadataPolicy = readContactSafetyPolicyFromMetadata(input.draft.metadataJson);
+  const contactSafetyDecision = evaluateContactSafetyGuard({
+    tenantId: input.draft.tenantId,
+    institutionId: input.draft.institutionId,
     channelType,
-    deliveryMode,
-    status: input.options?.status,
+    policy: input.options?.contactSafetyPolicy ?? metadataPolicy ?? defaultPolicy,
   });
-  const failureReason = normalizeFailureReason({ status, failureReason: input.options?.failureReason });
+  const isExternalChannel = channelType === 'wechat_work' || channelType === 'sms';
+  const shouldForceSafetyDecision = isExternalChannel || !contactSafetyDecision.allowed;
+  const deliveryMode = shouldForceSafetyDecision
+    ? contactSafetyDecision.deliveryMode
+    : input.options?.deliveryMode ?? contactSafetyDecision.deliveryMode;
+  const status = shouldForceSafetyDecision
+    ? contactSafetyDecision.status
+    : input.options?.status ?? contactSafetyDecision.status;
+  const failureReason = normalizeFailureReason({
+    status,
+    failureReason: shouldForceSafetyDecision
+      ? contactSafetyDecision.failureReason
+      : input.options?.failureReason ?? contactSafetyDecision.failureReason,
+  });
+  const finalContactSafetyDecision = !shouldForceSafetyDecision && (input.options?.status || input.options?.failureReason || input.options?.deliveryMode)
+    ? contactSafetyDecisionFromStoredFields({ status, deliveryMode, failureReason })
+    : contactSafetyDecision;
   const sentAt = status === 'pending' ? null : input.occurredAt;
 
   return {
@@ -203,6 +266,7 @@ export function createMessageDeliveryFromApprovedDraft(input: {
       contentSnapshot: contentSnapshotForDraft(input.draft),
       status,
       failureReason,
+      contactSafetyDecision: finalContactSafetyDecision,
       createdBy: input.actorId,
       confirmedBy: input.draft.approvedBy ?? input.actorId,
       createdAt: input.occurredAt,
@@ -264,6 +328,11 @@ export function messageDeliveryToTimelineMetadata(delivery: MessageDelivery): Re
     messageDeliveryContentSnapshot: delivery.contentSnapshot,
     messageDeliveryStatus: delivery.status,
     messageDeliveryFailureReason: delivery.failureReason,
+    contactSafetyDecisionCode: delivery.contactSafetyDecision.code,
+    contactSafetyAllowed: String(delivery.contactSafetyDecision.allowed),
+    contactSafetySafeReasonLabel: delivery.contactSafetyDecision.safeReasonLabel,
+    contactSafetyAuditReason: delivery.contactSafetyDecision.auditReason,
+    contactSafetyBoundaryLabel: delivery.contactSafetyDecision.boundaryLabel,
     messageDeliveryCreatedBy: delivery.createdBy,
     messageDeliveryConfirmedBy: delivery.confirmedBy,
     messageDeliveryCreatedAt: delivery.createdAt,
@@ -322,6 +391,12 @@ export function readMessageDeliveryFromMetadata(metadata: Record<string, unknown
       ? rawFailureReason
       : null;
 
+  const contactSafetyDecision = contactSafetyDecisionFromStoredFields({
+    status,
+    deliveryMode,
+    failureReason,
+  });
+
   return {
     id,
     tenantId,
@@ -335,6 +410,7 @@ export function readMessageDeliveryFromMetadata(metadata: Record<string, unknown
     contentSnapshot,
     status,
     failureReason,
+    contactSafetyDecision,
     createdBy,
     confirmedBy,
     createdAt,
@@ -358,7 +434,14 @@ export function mapMessageDeliveryToDto(delivery: MessageDelivery): MessageDeliv
     createdAt: delivery.createdAt,
     sentAt: delivery.sentAt,
     updatedAt: delivery.updatedAt,
-    boundaryLabel: '人工确认 / 模拟发送 / 不自动发送 / 未接真实企业微信 / 短信',
+    contactSafety: {
+      code: delivery.contactSafetyDecision.code,
+      allowed: delivery.contactSafetyDecision.allowed,
+      safeReasonLabel: delivery.contactSafetyDecision.safeReasonLabel,
+      auditReason: delivery.contactSafetyDecision.auditReason,
+      boundaryLabel: delivery.contactSafetyDecision.boundaryLabel,
+    },
+    boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送 / 未接真实企业微信 / 短信',
   };
 }
 
@@ -368,4 +451,8 @@ export function messageDeliveryStatusAuditReason(status: MessageDeliveryStatus) 
   if (status === 'skipped') return 'message_delivery_skipped' as const;
   if (status === 'external_disabled') return 'message_delivery_external_disabled' as const;
   return 'message_delivery_created' as const;
+}
+
+export function messageDeliveryContactSafetyAuditReason(delivery: Pick<MessageDelivery, 'contactSafetyDecision'>) {
+  return delivery.contactSafetyDecision.auditReason;
 }

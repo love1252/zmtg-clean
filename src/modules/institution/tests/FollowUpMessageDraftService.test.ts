@@ -298,7 +298,12 @@ describe('follow-up message draft service', () => {
         contentSnapshot: '陈女士,D1 水光补水观察,请人工确认护理情况。',
         status: 'mock_sent',
         failureReason: null,
-        boundaryLabel: '人工确认 / 模拟发送 / 不自动发送 / 未接真实企业微信 / 短信',
+        boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送 / 未接真实企业微信 / 短信',
+        contactSafety: expect.objectContaining({
+          code: 'allowed',
+          allowed: true,
+          auditReason: 'contact_safety_allowed',
+        }),
       }),
     }));
     if (approved.kind !== 'updated_with_delivery') return;
@@ -334,6 +339,8 @@ describe('follow-up message draft service', () => {
         metadataJson: expect.objectContaining({
           messageDeliveryId: 'msg-delivery:draft-1',
           messageDeliveryStatus: 'mock_sent',
+          contactSafetyDecisionCode: 'allowed',
+          contactSafetyAuditReason: 'contact_safety_allowed',
           requiresHumanApproval: 'true',
           forbidAutoSend: 'true',
           externalChannelEnabled: 'false',
@@ -348,7 +355,7 @@ describe('follow-up message draft service', () => {
         sourceType: 'message_draft',
         sourceId: 'msg-delivery:draft-1:mock_sent',
         eventType: 'message_draft_marked_sent',
-        eventTitle: '模拟发送成功',
+        eventTitle: '触达安全校验通过',
         safeSummary: expect.stringContaining('不代表真实企业微信或短信触达'),
         safeReasonCode: 'message_delivery_mock_sent',
       }),
@@ -374,6 +381,13 @@ describe('follow-up message draft service', () => {
       resource: 'follow_up',
       action: 'create',
       result: 'allowed',
+      reason: 'contact_safety_allowed',
+      resourceId: 'msg-delivery:draft-1',
+    }));
+    expect(auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+      resource: 'follow_up',
+      action: 'create',
+      result: 'allowed',
       reason: 'message_delivery_mock_sent',
       resourceId: 'msg-delivery:draft-1',
     }));
@@ -383,8 +397,8 @@ describe('follow-up message draft service', () => {
   it('支持 mock_failed、skipped、external_disabled 低敏状态', async () => {
     const cases = [
       { status: 'mock_failed' as const, reason: 'mock_failure', sourceId: 'msg-delivery:draft-1:mock_failed', title: '模拟发送失败' },
-      { status: 'skipped' as const, reason: 'consent_missing', sourceId: 'msg-delivery:draft-1:skipped', title: '受控发送已跳过' },
-      { status: 'external_disabled' as const, reason: 'channel_disabled', sourceId: 'msg-delivery:draft-1:external_disabled', title: '外部渠道未启用', channelType: 'sms' as const, deliveryMode: 'external_disabled' as const },
+      { status: 'skipped' as const, reason: 'consent_missing', sourceId: 'msg-delivery:draft-1:skipped', title: '未授权触达' },
+      { status: 'external_disabled' as const, reason: 'external_channel_disabled', sourceId: 'msg-delivery:draft-1:external_disabled', title: '渠道未启用', channelType: 'sms' as const, deliveryMode: 'external_disabled' as const },
     ];
 
     for (const item of cases) {
@@ -408,11 +422,14 @@ describe('follow-up message draft service', () => {
           failureReason: item.reason,
           channelType: item.channelType ?? 'mock',
           deliveryMode: item.deliveryMode ?? 'mock',
+          contactSafety: expect.objectContaining({
+            auditReason: expect.stringMatching(/contact_safety|channel_gray/),
+          }),
         }),
       }));
       expect(repository.recordFollowUpCustomerTimelineEvent).toHaveBeenCalledWith(expect.objectContaining({
         sourceId: item.sourceId,
-        eventTitle: item.title,
+        eventTitle: expect.stringContaining(item.title),
         safeReasonCode: item.reason,
       }));
     }

@@ -68,6 +68,7 @@ export type FollowUpOperationsMessageDeliveryRecord = Pick<
   | 'createdAt'
   | 'sentAt'
   | 'updatedAt'
+  | 'contactSafety'
 >;
 
 export type FollowUpOperationsSnapshot = {
@@ -96,6 +97,12 @@ export type FollowUpOperationsOverview = {
   mockFailedCount: number;
   skippedCount: number;
   externalDisabledCount: number;
+  contactSafetyAllowedCount: number;
+  consentMissingBlockedCount: number;
+  optOutBlockedCount: number;
+  frequencyCapBlockedCount: number;
+  channelDisabledCount: number;
+  grayGuardBlockedCount: number;
   manualFeedbackCount: number;
 };
 
@@ -138,6 +145,17 @@ export type FollowUpMessageDeliveryOperationsSummary = {
   recentDeliveries: FollowUpOperationsMessageDeliveryRecord[];
 };
 
+export type FollowUpContactSafetyOperationsSummary = {
+  allowedCount: number;
+  consentMissingBlockedCount: number;
+  optOutBlockedCount: number;
+  frequencyCapBlockedCount: number;
+  channelDisabledCount: number;
+  tenantGrayBlockedCount: number;
+  institutionGrayBlockedCount: number;
+  grayGuardBlockedCount: number;
+};
+
 export type FollowUpRiskSummary = {
   escalatedTaskCount: number;
   highRiskTaskCount: number;
@@ -152,6 +170,7 @@ export type FollowUpOperationsDashboard = {
   workload: FollowUpTaskWorkloadItem[];
   draftOperations: FollowUpDraftOperationsSummary;
   messageDeliveries: FollowUpMessageDeliveryOperationsSummary;
+  contactSafety: FollowUpContactSafetyOperationsSummary;
   riskSummary: FollowUpRiskSummary;
 };
 
@@ -227,11 +246,37 @@ function effectiveStageTask(input: {
   };
 }
 
+function contactSafetySummaryFromDeliveries(
+  deliveries: readonly FollowUpOperationsMessageDeliveryRecord[],
+): FollowUpContactSafetyOperationsSummary {
+  const consentMissingBlockedCount = deliveries.filter((delivery) => delivery.failureReason === 'consent_missing').length;
+  const optOutBlockedCount = deliveries.filter((delivery) => delivery.failureReason === 'opt_out').length;
+  const frequencyCapBlockedCount = deliveries.filter((delivery) => delivery.failureReason === 'frequency_cap_reached').length;
+  const tenantGrayBlockedCount = deliveries.filter((delivery) => delivery.failureReason === 'tenant_not_allowlisted').length;
+  const institutionGrayBlockedCount = deliveries.filter((delivery) => delivery.failureReason === 'institution_not_allowlisted').length;
+  const channelDisabledCount = deliveries.filter((delivery) => (
+    delivery.status === 'external_disabled' &&
+    (delivery.failureReason === 'channel_disabled' || delivery.failureReason === 'external_channel_disabled')
+  )).length;
+
+  return {
+    allowedCount: deliveries.filter((delivery) => delivery.contactSafety.allowed).length,
+    consentMissingBlockedCount,
+    optOutBlockedCount,
+    frequencyCapBlockedCount,
+    channelDisabledCount,
+    tenantGrayBlockedCount,
+    institutionGrayBlockedCount,
+    grayGuardBlockedCount: tenantGrayBlockedCount + institutionGrayBlockedCount,
+  };
+}
+
 export function getFollowUpOperationsOverview(input: {
   snapshot: FollowUpOperationsSnapshot;
   now: Date;
 }): FollowUpOperationsOverview {
   const { snapshot, now } = input;
+  const contactSafety = contactSafetySummaryFromDeliveries(snapshot.messageDeliveries);
 
   return {
     activeEnrollmentCount: snapshot.enrollments.filter((item) => item.status === 'active').length,
@@ -250,6 +295,12 @@ export function getFollowUpOperationsOverview(input: {
     mockFailedCount: snapshot.messageDeliveries.filter((delivery) => delivery.status === 'mock_failed').length,
     skippedCount: snapshot.messageDeliveries.filter((delivery) => delivery.status === 'skipped').length,
     externalDisabledCount: snapshot.messageDeliveries.filter((delivery) => delivery.status === 'external_disabled').length,
+    contactSafetyAllowedCount: contactSafety.allowedCount,
+    consentMissingBlockedCount: contactSafety.consentMissingBlockedCount,
+    optOutBlockedCount: contactSafety.optOutBlockedCount,
+    frequencyCapBlockedCount: contactSafety.frequencyCapBlockedCount,
+    channelDisabledCount: contactSafety.channelDisabledCount,
+    grayGuardBlockedCount: contactSafety.grayGuardBlockedCount,
     manualFeedbackCount: snapshot.timelineEvents.filter(
       (event) => event.eventType === 'manual_feedback_recorded',
     ).length,
@@ -347,6 +398,12 @@ export function getFollowUpMessageDeliveryOperationsSummary(
   };
 }
 
+export function getFollowUpContactSafetyOperationsSummary(
+  snapshot: FollowUpOperationsSnapshot,
+): FollowUpContactSafetyOperationsSummary {
+  return contactSafetySummaryFromDeliveries(snapshot.messageDeliveries);
+}
+
 export function getFollowUpRiskSummary(input: {
   snapshot: FollowUpOperationsSnapshot;
   now: Date;
@@ -378,6 +435,7 @@ export function buildFollowUpOperationsDashboard(input: {
     workload: getFollowUpTaskWorkload(input),
     draftOperations: getFollowUpDraftOperationsSummary(input.snapshot),
     messageDeliveries: getFollowUpMessageDeliveryOperationsSummary(input.snapshot),
+    contactSafety: getFollowUpContactSafetyOperationsSummary(input.snapshot),
     riskSummary: getFollowUpRiskSummary(input),
   };
 }

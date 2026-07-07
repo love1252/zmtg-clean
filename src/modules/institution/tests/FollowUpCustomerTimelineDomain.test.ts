@@ -7,6 +7,7 @@ import {
 } from '@/modules/institution/domain/followup-customer-timeline';
 import { recordFollowUpTimelineEvent } from '@/modules/institution/server/followup-customer-timeline-service';
 import type { AccessContext } from '@/modules/security/domain/access-control';
+import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
 
 const tenantContext: AccessContext = {
   userId: 'demo-user-admin',
@@ -15,6 +16,25 @@ const tenantContext: AccessContext = {
   tenantId: 'demo-tenant-001',
   institutionId: 'demo-institution-001',
   source: 'demo_session',
+};
+
+const customerSummary: CustomerRecordSummary = {
+  id: 'cust_001',
+  tenantId: 'demo-tenant-001',
+  displayName: '陈女士',
+  lifecycle: 'post_care',
+  priority: 'medium',
+  ownerUserId: 'owner-1',
+  projectInterest: '水光补水',
+  maskedPhone: '138****0000',
+  maskedMedicalRecordNo: 'MR***001',
+  lastTouchSummary: '低敏随访记录',
+  nextAction: '人工随访',
+  tags: ['demo'],
+  gender: 'female',
+  birthDate: '1990-01-01',
+  referralSource: 'demo',
+  notes: '低敏备注',
 };
 
 describe('随访客户 timeline 领域模型', () => {
@@ -99,7 +119,7 @@ describe('随访客户 timeline 领域模型', () => {
       },
     }));
     const repository = {
-      getCustomerByTenant: vi.fn(async () => ({ id: 'cust_001' })),
+      getCustomerByTenant: vi.fn(async (): Promise<CustomerRecordSummary | null> => customerSummary),
       recordFollowUpCustomerTimelineEvent,
     };
 

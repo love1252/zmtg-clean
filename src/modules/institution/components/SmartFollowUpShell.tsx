@@ -85,6 +85,12 @@ const emptyOperationsDashboard: FollowUpOperationsDashboard = {
     mockFailedCount: 0,
     skippedCount: 0,
     externalDisabledCount: 0,
+    contactSafetyAllowedCount: 0,
+    consentMissingBlockedCount: 0,
+    optOutBlockedCount: 0,
+    frequencyCapBlockedCount: 0,
+    channelDisabledCount: 0,
+    grayGuardBlockedCount: 0,
     manualFeedbackCount: 0,
   },
   pathPerformance: [],
@@ -103,6 +109,16 @@ const emptyOperationsDashboard: FollowUpOperationsDashboard = {
     skippedCount: 0,
     externalDisabledCount: 0,
     recentDeliveries: [],
+  },
+  contactSafety: {
+    allowedCount: 0,
+    consentMissingBlockedCount: 0,
+    optOutBlockedCount: 0,
+    frequencyCapBlockedCount: 0,
+    channelDisabledCount: 0,
+    tenantGrayBlockedCount: 0,
+    institutionGrayBlockedCount: 0,
+    grayGuardBlockedCount: 0,
   },
   riskSummary: {
     escalatedTaskCount: 0,
@@ -452,6 +468,13 @@ export function SmartFollowUpShell() {
   const overview = operationsDashboard.overview;
   const draftOperations = operationsDashboard.draftOperations;
   const messageDeliveries = operationsDashboard.messageDeliveries;
+  const contactSafety = operationsDashboard.contactSafety ?? emptyOperationsDashboard.contactSafety;
+  const safetyBlockedCount =
+    (overview.consentMissingBlockedCount ?? contactSafety.consentMissingBlockedCount) +
+    (overview.optOutBlockedCount ?? contactSafety.optOutBlockedCount) +
+    (overview.frequencyCapBlockedCount ?? contactSafety.frequencyCapBlockedCount) +
+    (overview.channelDisabledCount ?? contactSafety.channelDisabledCount) +
+    (overview.grayGuardBlockedCount ?? contactSafety.grayGuardBlockedCount);
   const riskSummary = operationsDashboard.riskSummary;
   const dashboardHasData = hasOperationsData(operationsDashboard);
 
@@ -479,7 +502,7 @@ export function SmartFollowUpShell() {
             </div>
             <h3 className="mt-2 text-lg font-semibold text-slate-950">智能随访运营看板</h3>
             <p className="mt-1 text-sm leading-6 text-slate-600">
-              本区域为内部运营统计，不代表已自动联系客户；标记已发送仅代表人工记录。当前没有企业微信 / 短信接入，不做自动营销群发。
+              本区域为内部运营统计，不代表已自动联系客户；标记已发送仅代表人工记录。触达安全治理默认关闭，渠道灰度前置，当前没有企业微信 / 短信接入，不做自动营销群发。
             </p>
           </div>
           <span className="inline-flex w-fit rounded-full border border-violet-100 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
@@ -535,6 +558,12 @@ export function SmartFollowUpShell() {
                 value={overview.messageDeliveryCount}
                 description={`模拟成功 ${overview.mockSentCount}，失败 ${overview.mockFailedCount}，跳过 ${overview.skippedCount}，外部禁用 ${overview.externalDisabledCount}。`}
                 tone="violet"
+              />
+              <OperationsMetricCard
+                label="安全治理阻断"
+                value={safetyBlockedCount}
+                description={`未授权 ${overview.consentMissingBlockedCount ?? contactSafety.consentMissingBlockedCount}，退订 ${overview.optOutBlockedCount ?? contactSafety.optOutBlockedCount}，频控 ${overview.frequencyCapBlockedCount ?? contactSafety.frequencyCapBlockedCount}，渠道/灰度 ${(overview.channelDisabledCount ?? contactSafety.channelDisabledCount) + (overview.grayGuardBlockedCount ?? contactSafety.grayGuardBlockedCount)}。`}
+                tone="amber"
               />
             </div>
 
@@ -592,6 +621,21 @@ export function SmartFollowUpShell() {
                 </div>
 
                 <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+                  <h4 className="text-sm font-semibold text-slate-950">触达安全治理 / 渠道灰度前置</h4>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-semibold text-blue-700">
+                    <span className="rounded-xl bg-white px-3 py-2">允许触达 {contactSafety.allowedCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">未授权 {contactSafety.consentMissingBlockedCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">客户退订 {contactSafety.optOutBlockedCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">频率限制 {contactSafety.frequencyCapBlockedCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">渠道禁用 {contactSafety.channelDisabledCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">灰度阻断 {contactSafety.grayGuardBlockedCount}</span>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
+                    默认关闭、灰度前置、人工确认、模拟发送、不自动发送；未进入灰度不触达，客户退订 / 未授权 / 频率限制会阻断。
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
                   <h4 className="text-sm font-semibold text-slate-950">受控发送基础闭环</h4>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-semibold text-blue-700">
                     <span className="rounded-xl bg-white px-3 py-2">发送记录 {messageDeliveries.messageDeliveryCount}</span>
@@ -602,13 +646,14 @@ export function SmartFollowUpShell() {
                     <span className="rounded-xl bg-white px-3 py-2">低敏记录</span>
                   </div>
                   <p className="mt-3 text-xs leading-5 text-slate-500">
-                    人工确认后才生成 MessageDelivery；仅模拟发送，不自动发送，未接真实企业微信 / 短信。
+                    人工确认后才生成 MessageDelivery；先做触达安全治理，默认关闭、灰度前置，仅模拟发送，不自动发送，未接真实企业微信 / 短信。
                   </p>
                   {messageDeliveries.recentDeliveries.length > 0 ? (
                     <div className="mt-3 space-y-2">
                       {messageDeliveries.recentDeliveries.slice(0, 3).map((delivery) => (
                         <div key={delivery.deliveryId} className="rounded-xl bg-white px-3 py-2 text-xs leading-5 text-slate-600">
                           <div className="font-semibold text-slate-800">{delivery.status} · {delivery.channelType} / {delivery.deliveryMode}</div>
+                          <div className="mt-1">{delivery.contactSafety?.safeReasonLabel ?? '触达安全治理低敏记录：默认关闭、灰度前置、仅模拟发送。'}</div>
                           <div className="mt-1">{delivery.contentSnapshot}</div>
                         </div>
                       ))}
