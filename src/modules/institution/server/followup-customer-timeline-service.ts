@@ -1,6 +1,8 @@
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import { canAccessResource } from '@/modules/security/domain/access-control';
 import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
+import type { MessageDelivery } from '@/modules/institution/domain/followup-message-deliveries';
+import { messageDeliveryToTimelineMetadata } from '@/modules/institution/domain/followup-message-deliveries';
 import type { FollowUpMessageDraftDto } from '@/modules/institution/domain/followup-message-drafts';
 import {
   containsUnsafeFollowUpTimelineText,
@@ -290,6 +292,62 @@ export function recordMessageDraftTimelineEvent(input: {
       followUpTaskId: input.draft.followUpTaskId,
       forbidAutoSend: true,
     },
+  });
+}
+
+export async function recordMessageDeliveryTimelineEvents(input: {
+  context: AccessContext;
+  tenantBusinessRepository: Pick<TimelineRepository, 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
+  delivery: MessageDelivery;
+  occurredAt: string;
+}) {
+  const statusTitle: Record<MessageDelivery['status'], string> = {
+    pending: '受控发送记录已生成',
+    mock_sent: '模拟发送成功',
+    mock_failed: '模拟发送失败',
+    skipped: '受控发送已跳过',
+    external_disabled: '外部渠道未启用',
+  };
+  const statusSummary: Record<MessageDelivery['status'], string> = {
+    pending: '已在人工确认后生成受控发送记录，当前不自动发送。',
+    mock_sent: '已完成模拟发送状态记录，不代表真实企业微信或短信触达。',
+    mock_failed: '模拟发送失败，失败原因使用低敏白名单记录。',
+    skipped: '本次受控发送已按低敏原因跳过，不会自动触达客户。',
+    external_disabled: '外部企业微信 / 短信渠道未启用，本次不会真实发送。',
+  };
+  const metadataJson = messageDeliveryToTimelineMetadata(input.delivery);
+  const baseSummary = `发送记录 ${input.delivery.id}：${statusSummary[input.delivery.status]} 内容快照：${input.delivery.contentSnapshot}`;
+
+  await recordFollowUpTimelineEvent({
+    context: input.context,
+    tenantBusinessRepository: input.tenantBusinessRepository,
+    customerId: input.delivery.customerId,
+    sourceType: 'message_draft',
+    sourceId: `${input.delivery.id}:created`,
+    eventType: 'message_draft_marked_sent',
+    eventTitle: '受控发送记录已生成',
+    safeSummary: `人工确认后生成受控发送记录 ${input.delivery.id}，默认模拟发送 / 人工记录，不自动发送。`,
+    riskLevel: null,
+    occurredAt: input.occurredAt,
+    safeReasonCode: 'message_delivery_created',
+    metadataJson,
+  });
+
+  if (input.delivery.status === 'pending') return;
+
+  await recordFollowUpTimelineEvent({
+    context: input.context,
+    tenantBusinessRepository: input.tenantBusinessRepository,
+    customerId: input.delivery.customerId,
+    sourceType: 'message_draft',
+    sourceId: `${input.delivery.id}:${input.delivery.status}`,
+    eventType: 'message_draft_marked_sent',
+    eventTitle: statusTitle[input.delivery.status],
+    safeSummary: baseSummary,
+    riskLevel: null,
+    occurredAt: input.occurredAt,
+    safeReasonCode: input.delivery.failureReason ?? `message_delivery_${input.delivery.status}`,
+    metadataJson,
   });
 }
 

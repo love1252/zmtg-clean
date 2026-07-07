@@ -39,12 +39,13 @@ export async function POST(
         context,
         draftId,
         tenantBusinessRepository: createTenantBusinessRepository(transactionDb),
+        auditRepository: transactionAuditRepository,
         occurredAt,
       });
 
-      if (result.kind === 'updated') {
+      if (result.kind === 'updated' || result.kind === 'updated_with_delivery') {
         await transactionAuditRepository.record(allowedFollowUpMessageAudit({ context, action: 'update', reason: 'message_draft_approved', occurredAt, resourceId: result.draft.draftId }));
-        return NextResponse.json({ record: result.draft });
+        return NextResponse.json({ record: result.draft, delivery: result.kind === 'updated_with_delivery' ? result.delivery : null });
       }
 
       const reason = result.kind === 'conflict' ? result.reason : result.kind === 'forbidden' ? result.reason : 'not_found_or_not_owned';

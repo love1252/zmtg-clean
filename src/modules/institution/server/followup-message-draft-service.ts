@@ -7,13 +7,24 @@ import {
   mapFollowUpMessageTemplateToDto,
   selectFollowUpMessageTemplate,
   updateFollowUpMessageDraftContent as updateMessageDraftContentDomain,
+  type FollowUpMessageDraft,
   type FollowUpMessageDraftDto,
   type FollowUpMessageTemplateDto,
 } from '@/modules/institution/domain/followup-message-drafts';
 import {
+  createMessageDeliveryFromApprovedDraft,
+  mapMessageDeliveryToDto,
+  messageDeliveryStatusAuditReason,
+  type CreateMessageDeliveryOptions,
+  type MessageDeliveryDto,
+} from '@/modules/institution/domain/followup-message-deliveries';
+import {
+  recordMessageDeliveryTimelineEvents,
   recordMessageDraftTimelineEvent,
 } from '@/modules/institution/server/followup-customer-timeline-service';
 import type { TenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
+import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
+import { createAuditEvent } from '@/modules/audit/domain/audit-events';
 
 export type FollowUpMessageForbiddenReason =
   | 'missing_tenant'
@@ -53,6 +64,7 @@ export type CreateFollowUpMessageDraftResult =
 
 export type UpdateFollowUpMessageDraftResult =
   | { kind: 'updated'; draft: FollowUpMessageDraftDto }
+  | { kind: 'updated_with_delivery'; draft: FollowUpMessageDraftDto; delivery: MessageDeliveryDto; deduped: boolean }
   | { kind: 'not_found' }
   | {
       kind: 'conflict';
@@ -60,9 +72,90 @@ export type UpdateFollowUpMessageDraftResult =
       reason:
         | 'follow_up_message_draft_not_draft'
         | 'follow_up_message_draft_not_approved'
+        | 'message_delivery_exists'
         | 'unsafe_follow_up_message_content';
     }
   | { kind: 'forbidden'; reason: FollowUpMessageForbiddenReason };
+
+function isMessageDeliveryConflictReason(reason: string) {
+  return reason === 'message_delivery_exists';
+}
+
+function hasMessageDeliveryMetadata(draft: { metadataJson: Record<string, unknown> }) {
+  return Object.prototype.hasOwnProperty.call(draft.metadataJson, 'messageDeliveryId');
+}
+
+async function recordDeliveryAudit(input: {
+  context: AccessContext;
+  auditRepository?: Pick<AuditEventRepository, 'record'>;
+  deliveryId: string;
+  reason: ReturnType<typeof messageDeliveryStatusAuditReason> | 'message_delivery_created';
+  occurredAt: string;
+}) {
+  if (!input.auditRepository) return;
+
+  await input.auditRepository.record(createAuditEvent({
+    eventId: globalThis.crypto.randomUUID(),
+    context: input.context,
+    resource: 'follow_up',
+    action: 'create',
+    result: 'allowed',
+    reason: input.reason,
+    occurredAt: input.occurredAt,
+    resourceId: input.deliveryId,
+  }));
+}
+
+async function createDeliveryAfterDraftApproval(input: {
+  context: AccessContext;
+  draft: FollowUpMessageDraft;
+  tenantBusinessRepository: Pick<ServiceRepository, 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
+  auditRepository?: Pick<AuditEventRepository, 'record'>;
+  occurredAt: string;
+  deliveryOptions?: CreateMessageDeliveryOptions;
+}) {
+  if (hasMessageDeliveryMetadata(input.draft)) {
+    return { kind: 'conflict' as const, reason: 'message_delivery_exists' as const };
+  }
+
+  const deliveryResult = createMessageDeliveryFromApprovedDraft({
+    draft: input.draft,
+    actorId: input.context.userId,
+    occurredAt: input.occurredAt,
+    options: input.deliveryOptions,
+  });
+  if (deliveryResult.kind === 'invalid_status') {
+    return { kind: 'invalid_status' as const };
+  }
+
+  await recordMessageDeliveryTimelineEvents({
+    context: input.context,
+    tenantBusinessRepository: input.tenantBusinessRepository,
+    delivery: deliveryResult.delivery,
+    occurredAt: input.occurredAt,
+  });
+  await recordDeliveryAudit({
+    context: input.context,
+    auditRepository: input.auditRepository,
+    deliveryId: deliveryResult.delivery.id,
+    reason: 'message_delivery_created',
+    occurredAt: input.occurredAt,
+  });
+  if (deliveryResult.delivery.status !== 'pending') {
+    await recordDeliveryAudit({
+      context: input.context,
+      auditRepository: input.auditRepository,
+      deliveryId: deliveryResult.delivery.id,
+      reason: messageDeliveryStatusAuditReason(deliveryResult.delivery.status),
+      occurredAt: input.occurredAt,
+    });
+  }
+
+  return {
+    kind: 'created' as const,
+    delivery: mapMessageDeliveryToDto(deliveryResult.delivery),
+  };
+}
 
 function canUseFollowUpMessage(context: AccessContext, action: 'read_own_tenant' | 'create' | 'update') {
   return canAccessResource({
@@ -256,7 +349,9 @@ export async function approveMessageDraft(input: {
   context: AccessContext;
   draftId: string;
   tenantBusinessRepository: Pick<ServiceRepository, 'approveFollowUpMessageDraft' | 'getCustomerByTenant' | 'recordFollowUpCustomerTimelineEvent'>;
+  auditRepository?: Pick<AuditEventRepository, 'record'>;
   occurredAt: string;
+  deliveryOptions?: CreateMessageDeliveryOptions;
 }): Promise<UpdateFollowUpMessageDraftResult> {
   return transitionMessageDraft({
     context: input.context,
@@ -264,6 +359,8 @@ export async function approveMessageDraft(input: {
     tenantBusinessRepository: input.tenantBusinessRepository,
     occurredAt: input.occurredAt,
     operation: 'approve',
+    auditRepository: input.auditRepository,
+    deliveryOptions: input.deliveryOptions,
   });
 }
 
@@ -314,6 +411,8 @@ async function transitionMessageDraft(input: {
     >;
   occurredAt: string;
   operation: 'approve' | 'reject' | 'mark_sent';
+  auditRepository?: Pick<AuditEventRepository, 'record'>;
+  deliveryOptions?: CreateMessageDeliveryOptions;
 }): Promise<UpdateFollowUpMessageDraftResult> {
   const decision = canUseFollowUpMessage(input.context, 'update');
   if (!decision.allowed) return { kind: 'forbidden', reason: decision.reason };
@@ -347,6 +446,31 @@ async function transitionMessageDraft(input: {
       eventType,
       occurredAt: input.occurredAt,
     });
+
+    if (input.operation === 'approve') {
+      const deliveryResult = await createDeliveryAfterDraftApproval({
+        context: input.context,
+        draft: result.draft,
+        tenantBusinessRepository: input.tenantBusinessRepository,
+        auditRepository: input.auditRepository,
+        occurredAt: input.occurredAt,
+        deliveryOptions: input.deliveryOptions,
+      });
+
+      if (deliveryResult.kind === 'created') {
+        return {
+          kind: 'updated_with_delivery',
+          draft: draftDto,
+          delivery: deliveryResult.delivery,
+          deduped: false,
+        };
+      }
+
+      if (deliveryResult.kind === 'conflict' && isMessageDeliveryConflictReason(deliveryResult.reason)) {
+        return { kind: 'conflict', resourceId: draftDto.draftId, reason: deliveryResult.reason };
+      }
+    }
+
     return { kind: 'updated', draft: draftDto };
   }
 

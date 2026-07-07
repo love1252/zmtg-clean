@@ -102,5 +102,9 @@ export function responseForFollowUpMessageConflict(reason: string) {
     return NextResponse.json({ code: reason, error: '草稿内容包含不允许的敏感信息' }, { status: 409 });
   }
 
+  if (reason === 'message_delivery_exists') {
+    return NextResponse.json({ code: reason, error: '该草稿已生成受控发送记录' }, { status: 409 });
+  }
+
   return NextResponse.json({ code: reason, error: '消息草稿状态冲突' }, { status: 409 });
 }

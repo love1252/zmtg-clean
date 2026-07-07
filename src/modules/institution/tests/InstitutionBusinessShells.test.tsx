@@ -1461,6 +1461,11 @@ describe('机构业务页面壳', () => {
             approvedDraftCount: 2,
             markedSentCount: 1,
             approvedButNotMarkedSentCount: 1,
+            messageDeliveryCount: 4,
+            mockSentCount: 1,
+            mockFailedCount: 1,
+            skippedCount: 1,
+            externalDisabledCount: 1,
             manualFeedbackCount: 1,
           },
           pathPerformance: [
@@ -1506,6 +1511,30 @@ describe('机构业务页面壳', () => {
             markedSentCount: 1,
             approvedButNotMarkedSentCount: 1,
           },
+          messageDeliveries: {
+            messageDeliveryCount: 4,
+            mockSentCount: 1,
+            mockFailedCount: 1,
+            skippedCount: 1,
+            externalDisabledCount: 1,
+            recentDeliveries: [
+              {
+                deliveryId: 'msg-delivery:draft_001',
+                customerId: 'cust_001',
+                followUpTaskId: 'task_001',
+                messageDraftId: 'draft_001',
+                channelType: 'mock',
+                deliveryMode: 'mock',
+                recipientRef: 'customer:cust_001',
+                contentSnapshot: '低敏人工确认内容快照',
+                status: 'mock_sent',
+                failureReason: null,
+                createdAt: '2026-07-06T10:00:00.000Z',
+                sentAt: '2026-07-06T10:00:00.000Z',
+                updatedAt: '2026-07-06T10:00:00.000Z',
+              },
+            ],
+          },
           riskSummary: {
             escalatedTaskCount: 1,
             highRiskTaskCount: 2,
@@ -1525,7 +1554,18 @@ describe('机构业务页面壳', () => {
     expect(screen.getByText('逾期任务')).toBeInTheDocument();
     expect(screen.getByText('高风险 / 已升级')).toBeInTheDocument();
     expect(screen.getByText('已确认待人工发送')).toBeInTheDocument();
-    expect(screen.getAllByText('已人工发送').length).toBeGreaterThan(0);
+    expect(screen.getByText('受控发送记录')).toBeInTheDocument();
+    expect(screen.getByText('受控发送基础闭环')).toBeInTheDocument();
+    expect(screen.getByText(/发送记录 4/)).toBeInTheDocument();
+    expect(screen.getByText(/mock_sent 1/)).toBeInTheDocument();
+    expect(screen.getByText(/mock_failed 1/)).toBeInTheDocument();
+    expect(screen.getByText(/skipped 1/)).toBeInTheDocument();
+    expect(screen.getByText(/external_disabled 1/)).toBeInTheDocument();
+    expect(screen.getByText(/人工确认后才生成 MessageDelivery/)).toBeInTheDocument();
+    expect(screen.getByText(/仅模拟发送，不自动发送，未接真实企业微信 \/ 短信/)).toBeInTheDocument();
+    expect(screen.getByText('mock_sent · mock / mock')).toBeInTheDocument();
+    expect(screen.getByText('低敏人工确认内容快照')).toBeInTheDocument();
+    expect(container.textContent).toContain('已人工发送');
     expect(screen.getByText('水光术后管理')).toBeInTheDocument();
     expect(screen.getByText('光电术后管理')).toBeInTheDocument();
     expect(screen.getByText('33.3%')).toBeInTheDocument();
@@ -1619,6 +1659,53 @@ describe('机构业务页面壳', () => {
   it('智能随访展示空状态和真实配置空态说明', async () => {
     const fetchMock = mockInstitutionFetch({
       '/api/institution/followups': [jsonResponse({ records: [] })],
+      '/api/institution/followup-operations/dashboard': [
+        jsonResponse({
+          overview: {
+            activeEnrollmentCount: 0,
+            todayDueTaskCount: 0,
+            overdueTaskCount: 0,
+            pendingTaskCount: 0,
+            completedTaskCount: 0,
+            escalatedTaskCount: 0,
+            highRiskTaskCount: 0,
+            draftCount: 0,
+            approvedDraftCount: 0,
+            markedSentCount: 0,
+            approvedButNotMarkedSentCount: 0,
+            messageDeliveryCount: 0,
+            mockSentCount: 0,
+            mockFailedCount: 0,
+            skippedCount: 0,
+            externalDisabledCount: 0,
+            manualFeedbackCount: 0,
+          },
+          pathPerformance: [],
+          workload: [],
+          draftOperations: {
+            draftCount: 0,
+            approvedDraftCount: 0,
+            rejectedDraftCount: 0,
+            markedSentCount: 0,
+            approvedButNotMarkedSentCount: 0,
+          },
+          messageDeliveries: {
+            messageDeliveryCount: 0,
+            mockSentCount: 0,
+            mockFailedCount: 0,
+            skippedCount: 0,
+            externalDisabledCount: 0,
+            recentDeliveries: [],
+          },
+          riskSummary: {
+            escalatedTaskCount: 0,
+            highRiskTaskCount: 0,
+            highRiskPendingTaskCount: 0,
+            overdueHighRiskTaskCount: 0,
+            manualFeedbackCount: 0,
+          },
+        }),
+      ],
     });
 
     render(<SmartFollowUpShell />);
@@ -1805,7 +1892,7 @@ describe('机构业务页面壳', () => {
     const { container } = render(<SmartFollowUpShell />);
 
     expect(await screen.findByText('消息草稿')).toBeInTheDocument();
-    expect(screen.getByText('仅生成低敏草稿，不会自动发送消息；需要人工确认，当前没有企业微信 / 短信接入。')).toBeInTheDocument();
+    expect(screen.getByText('仅生成低敏草稿，不会自动发送消息；需要人工确认，人工确认后生成受控发送记录并模拟发送，当前未接真实企业微信 / 短信。')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '生成草稿' }));
 
     expect(await screen.findByText('草稿待确认')).toBeInTheDocument();

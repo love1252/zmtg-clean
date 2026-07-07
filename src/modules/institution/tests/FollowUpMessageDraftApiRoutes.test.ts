@@ -8,6 +8,7 @@ import { POST as draftApprovePost } from '@/app/api/institution/followup-message
 import { POST as draftRejectPost } from '@/app/api/institution/followup-message-drafts/[draftId]/reject/route';
 import { POST as draftMarkSentPost } from '@/app/api/institution/followup-message-drafts/[draftId]/mark-sent/route';
 import { GET as templatesGet } from '@/app/api/institution/followup-message-templates/route';
+import type { MessageDeliveryDto } from '@/modules/institution/domain/followup-message-deliveries';
 import type { FollowUpMessageDraftDto } from '@/modules/institution/domain/followup-message-drafts';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
@@ -83,6 +84,24 @@ const tenantContext: AccessContext = {
   tenantId: 'demo-tenant-001',
   institutionId: 'inst-001',
   source: 'demo_session',
+};
+
+
+const deliveryRecord: MessageDeliveryDto = {
+  deliveryId: 'msg-delivery:draft_001',
+  customerId: 'cust_001',
+  followUpTaskId: 'task_001',
+  messageDraftId: 'draft_001',
+  channelType: 'mock',
+  deliveryMode: 'mock',
+  recipientRef: 'customer:cust_001',
+  contentSnapshot: '陈女士，D1 护理随访，请人工确认恢复情况。',
+  status: 'mock_sent',
+  failureReason: null,
+  createdAt: '2026-07-06T10:00:00.000Z',
+  sentAt: '2026-07-06T10:00:00.000Z',
+  updatedAt: '2026-07-06T10:00:00.000Z',
+  boundaryLabel: '人工确认 / 模拟发送 / 不自动发送 / 未接真实企业微信 / 短信',
 };
 
 const draftRecord: FollowUpMessageDraftDto = {
@@ -239,8 +258,10 @@ describe('follow-up message draft API routes', () => {
 
   it('approve/reject/mark-sent 只做内部状态流转，不真实发送', async () => {
     routeMocks.approveMessageDraft.mockResolvedValue({
-      kind: 'updated',
+      kind: 'updated_with_delivery',
       draft: { ...draftRecord, status: 'approved', approvedAt: '2026-07-06T10:00:00.000Z' },
+      delivery: deliveryRecord,
+      deduped: false,
     });
     routeMocks.rejectMessageDraft.mockResolvedValue({
       kind: 'updated',
@@ -256,6 +277,7 @@ describe('follow-up message draft API routes', () => {
       request('/api/institution/followup-message-drafts/draft_001/approve', { method: 'POST' }),
       { params: Promise.resolve({ draftId: 'draft_001' }) },
     );
+    const approvePayload = await json(approveResponse);
     const rejectResponse = await draftRejectPost(
       request('/api/institution/followup-message-drafts/draft_001/reject', { method: 'POST' }),
       { params: Promise.resolve({ draftId: 'draft_001' }) },
@@ -266,10 +288,22 @@ describe('follow-up message draft API routes', () => {
     );
 
     expect(approveResponse.status).toBe(200);
+    expect(approvePayload).toEqual({
+      record: { ...draftRecord, status: 'approved', approvedAt: '2026-07-06T10:00:00.000Z' },
+      delivery: deliveryRecord,
+    });
+    expect(JSON.stringify(approvePayload.delivery)).not.toMatch(
+      /tenantId|institutionId|phoneNumber|idNumber|medicalRecordNo|HIS|provider|model|token|cost|vendor|prompt|raw|DATABASE_URL|secret/i,
+    );
     expect(rejectResponse.status).toBe(200);
     expect(markSentResponse.status).toBe(200);
     expect(routeMocks.approveMessageDraft).toHaveBeenCalledWith(
-      expect.objectContaining({ context: tenantContext, draftId: 'draft_001' }),
+      expect.objectContaining({
+        context: tenantContext,
+        draftId: 'draft_001',
+        tenantBusinessRepository: { repository: 'tenant-business' },
+        auditRepository: { record: routeMocks.auditRecord },
+      }),
     );
     expect(routeMocks.rejectMessageDraft).toHaveBeenCalledWith(
       expect.objectContaining({ context: tenantContext, draftId: 'draft_001' }),

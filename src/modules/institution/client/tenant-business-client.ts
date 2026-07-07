@@ -926,6 +926,7 @@ export async function getFollowUpOperationsDashboard(
       !Array.isArray(payload.pathPerformance) ||
       !Array.isArray(payload.workload) ||
       !isJsonObject(payload.draftOperations) ||
+      !isJsonObject(payload.messageDeliveries) ||
       !isJsonObject(payload.riskSummary)
     ) {
       return {
