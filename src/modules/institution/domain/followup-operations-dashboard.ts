@@ -1,3 +1,5 @@
+import type { WeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
+import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
 import type { FollowUpCustomerTimelineEventType } from '@/modules/institution/domain/followup-customer-timeline';
 import type { MessageDeliveryDto } from '@/modules/institution/domain/followup-message-deliveries';
 import type { FollowUpMessageDraftStatus } from '@/modules/institution/domain/followup-message-drafts';
@@ -78,6 +80,7 @@ export type FollowUpOperationsSnapshot = {
   drafts: FollowUpOperationsDraftRecord[];
   timelineEvents: FollowUpOperationsTimelineRecord[];
   messageDeliveries: FollowUpOperationsMessageDeliveryRecord[];
+  weComAuthorization?: WeComAuthorizationDashboardView | null;
 };
 
 export type FollowUpOperationsOverview = {
@@ -171,6 +174,7 @@ export type FollowUpOperationsDashboard = {
   draftOperations: FollowUpDraftOperationsSummary;
   messageDeliveries: FollowUpMessageDeliveryOperationsSummary;
   contactSafety: FollowUpContactSafetyOperationsSummary;
+  weComAuthorization: WeComAuthorizationDashboardView;
   riskSummary: FollowUpRiskSummary;
 };
 
@@ -436,6 +440,7 @@ export function buildFollowUpOperationsDashboard(input: {
     draftOperations: getFollowUpDraftOperationsSummary(input.snapshot),
     messageDeliveries: getFollowUpMessageDeliveryOperationsSummary(input.snapshot),
     contactSafety: getFollowUpContactSafetyOperationsSummary(input.snapshot),
+    weComAuthorization: input.snapshot.weComAuthorization ?? getDefaultWeComAuthorizationDashboardView(),
     riskSummary: getFollowUpRiskSummary(input),
   };
 }

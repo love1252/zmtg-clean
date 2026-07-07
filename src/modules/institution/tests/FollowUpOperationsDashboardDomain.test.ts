@@ -9,6 +9,11 @@ import {
   getFollowUpTaskWorkload,
   type FollowUpOperationsSnapshot,
 } from '@/modules/institution/domain/followup-operations-dashboard';
+import {
+  createWeComAuthorizationRecord,
+  getDefaultWeComAuthorizationDashboardView,
+  mapWeComAuthorizationToDashboardView,
+} from '@/modules/institution/domain/wecom-authorization';
 
 const now = new Date('2026-07-07T12:00:00.000Z');
 
@@ -219,6 +224,12 @@ const snapshot: FollowUpOperationsSnapshot = {
       },
     },
   ],
+  weComAuthorization: mapWeComAuthorizationToDashboardView(createWeComAuthorizationRecord({
+    tenantId: 'tenant-a',
+    institutionId: 'inst-a',
+    status: 'mock_authorized',
+    occurredAt: '2026-07-07T00:00:00.000Z',
+  })),
 };
 
 describe('follow-up operations dashboard domain', () => {
@@ -328,6 +339,22 @@ describe('follow-up operations dashboard domain', () => {
       institutionGrayBlockedCount: 0,
       grayGuardBlockedCount: 0,
     });
+    expect(buildFollowUpOperationsDashboard({ snapshot, now }).weComAuthorization).toEqual(expect.objectContaining({
+      accessTitle: '企业微信客户运营接入',
+      notLoginTitle: '不是企业微信登录',
+      status: 'mock_authorized',
+      statusLabel: '模拟已授权',
+      isMockAuthorized: true,
+      customerContactAuthorized: true,
+      externalContactSyncAuthorized: true,
+      weComReachOutAuthorized: true,
+      sessionArchivePostponed: true,
+      defaultClosed: true,
+      allowRealSend: false,
+      notConnectedToRealWeCom: true,
+      notWeComServiceApplied: true,
+      requiresHumanApprovalAndMessageDelivery: true,
+    }));
     expect(getFollowUpRiskSummary({ snapshot, now })).toEqual({
       escalatedTaskCount: 1,
       highRiskTaskCount: 2,
@@ -350,6 +377,15 @@ describe('follow-up operations dashboard domain', () => {
     expect(dashboard.draftOperations.approvedButNotMarkedSentCount).toBe(0);
     expect(dashboard.messageDeliveries.messageDeliveryCount).toBe(0);
     expect(dashboard.contactSafety.allowedCount).toBe(0);
+    expect(dashboard.weComAuthorization).toEqual(expect.objectContaining({
+      accessTitle: '企业微信客户运营接入',
+      status: 'not_configured',
+      statusLabel: '未配置',
+      isMockAuthorized: false,
+      defaultClosed: true,
+      allowRealSend: false,
+    }));
+    expect(dashboard.weComAuthorization).toEqual(expect.objectContaining(getDefaultWeComAuthorizationDashboardView()));
     expect(serialized).not.toMatch(
       /tenantId|institutionId|phoneNumber|idNumber|medicalRecordNo|HIS|provider|model|token|cost|vendor|prompt|raw|DATABASE_URL|secret/i,
     );

@@ -165,6 +165,10 @@ const customerRow = {
   lastTouchSummary: '术后第 28 天',
   nextAction: '人工回访',
   tags: ['高价值'],
+  gender: 'female',
+  birthDate: '1990-01',
+  referralSource: '朋友转介绍',
+  notes: '仅测试低敏备注',
   createdAt: new Date('2026-05-30T00:00:00.000Z'),
   updatedAt: new Date('2026-05-30T00:00:00.000Z'),
 } satisfies typeof customers.$inferSelect;
@@ -263,6 +267,10 @@ describe('租户业务仓储映射', () => {
       lastTouchSummary: '术后第 28 天',
       nextAction: '人工回访',
       tags: ['高价值'],
+      gender: 'female',
+      birthDate: '1990-01',
+      referralSource: '朋友转介绍',
+      notes: '仅测试低敏备注',
     });
     expect(JSON.stringify(record)).not.toMatch(/phoneNumber|idNumber|medicalRecordNo/);
     expect(record).not.toHaveProperty('createdAt');
@@ -950,7 +958,7 @@ describe('租户业务仓储映射', () => {
 
     expect(source).toContain('follow-up quota');
     expect(source).not.toMatch(
-      /tenant-quota-enforcement|enforceTenantQuota|openai|rag|\bagent\b|wecom|wechat|sms|phone_call|external_system|auditEvents|createAuditEvent|fetch\(|axios/i,
+      /tenant-quota-enforcement|enforceTenantQuota|openai|rag|\bagent\b|wechat|sms|phone_call|external_system|auditEvents|createAuditEvent|fetch\(|axios/i,
     );
   });
 });

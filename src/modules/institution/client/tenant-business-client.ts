@@ -927,6 +927,8 @@ export async function getFollowUpOperationsDashboard(
       !Array.isArray(payload.workload) ||
       !isJsonObject(payload.draftOperations) ||
       !isJsonObject(payload.messageDeliveries) ||
+      !isJsonObject(payload.contactSafety) ||
+      !isJsonObject(payload.weComAuthorization) ||
       !isJsonObject(payload.riskSummary)
     ) {
       return {

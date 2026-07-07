@@ -45,7 +45,11 @@ export type ContactSafetyDecision = {
     | 'contact_safety_frequency_cap_reached'
     | 'channel_gray_tenant_blocked'
     | 'channel_gray_institution_blocked'
-    | 'channel_gray_external_disabled';
+    | 'channel_gray_external_disabled'
+    | 'wecom_mock_authorization_read'
+    | 'wecom_mock_authorization_unavailable'
+    | 'wecom_channel_default_closed'
+    | 'wecom_reach_out_unauthorized';
   boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送';
 };
 
