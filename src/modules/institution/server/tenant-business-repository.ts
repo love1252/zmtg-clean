@@ -38,6 +38,10 @@ import type {
 } from '@/modules/institution/domain/followup-customer-timeline';
 import type { TenantDatabase } from '@/server/db/client';
 import {
+  createDefaultWeComAuthorizationRecord,
+  mapWeComAuthorizationToDashboardView,
+} from '@/modules/institution/domain/wecom-authorization';
+import {
   followUpMessageDrafts,
   followUpMessageTemplates,
   appointments,
@@ -1690,6 +1694,11 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
           occurredAt: row.occurredAt.toISOString(),
         })),
         messageDeliveries: mapTimelineRowsToMessageDeliveries(visibleTimelineEvents),
+        weComAuthorization: mapWeComAuthorizationToDashboardView(createDefaultWeComAuthorizationRecord({
+          tenantId: input.tenantId,
+          institutionId: input.institutionId ?? null,
+          occurredAt: '2026-07-07T00:00:00.000Z',
+        })),
       };
     },
     async listFollowUpPathAnalysisSourceTasksByTenant(

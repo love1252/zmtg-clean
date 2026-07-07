@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from '@/app/api/institution/followup-operations/dashboard/route';
 import type { FollowUpOperationsDashboard } from '@/modules/institution/domain/followup-operations-dashboard';
+import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
 const routeMocks = vi.hoisted(() => {
@@ -167,6 +168,7 @@ const dashboard: FollowUpOperationsDashboard = {
     institutionGrayBlockedCount: 0,
     grayGuardBlockedCount: 0,
   },
+  weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
   riskSummary: {
     escalatedTaskCount: 1,
     highRiskTaskCount: 2,

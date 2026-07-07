@@ -9,6 +9,10 @@ import {
   readMessageDeliveryFromMetadata,
   type MessageDelivery,
 } from '@/modules/institution/domain/followup-message-deliveries';
+import {
+  createDefaultWeComAuthorizationRecord,
+  createWeComAuthorizationRecord,
+} from '@/modules/institution/domain/wecom-authorization';
 import type { FollowUpMessageDraft } from '@/modules/institution/domain/followup-message-drafts';
 
 const occurredAt = '2026-07-06T10:00:00.000Z';
@@ -166,6 +170,187 @@ describe('follow-up message delivery domain', () => {
     }));
   });
 
+  it('企业微信授权状态作为 wechat_work 触达前置判断，均不允许真实发送', () => {
+    const cases = [
+      {
+        authorization: null,
+        failureReason: 'wecom_authorization_missing',
+        auditReason: 'wecom_mock_authorization_unavailable',
+        label: '企业微信授权未配置',
+      },
+      {
+        authorization: createWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', status: 'revoked', occurredAt }),
+        failureReason: 'wecom_authorization_revoked',
+        auditReason: 'wecom_mock_authorization_unavailable',
+        label: '已撤销',
+      },
+      {
+        authorization: createWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', status: 'expired', occurredAt }),
+        failureReason: 'wecom_authorization_expired',
+        auditReason: 'wecom_mock_authorization_unavailable',
+        label: '已过期',
+      },
+      {
+        authorization: createWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', status: 'disabled', occurredAt }),
+        failureReason: 'wecom_authorization_disabled',
+        auditReason: 'wecom_mock_authorization_unavailable',
+        label: '已禁用',
+      },
+      {
+        authorization: createWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', status: 'mock_authorized', weComReachOutAuthorized: false, occurredAt }),
+        failureReason: 'wecom_reach_out_unauthorized',
+        auditReason: 'wecom_reach_out_unauthorized',
+        label: '企业微信触达未授权',
+      },
+      {
+        authorization: createWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', status: 'external_channel_disabled', occurredAt }),
+        failureReason: 'wecom_external_channel_disabled',
+        auditReason: 'wecom_channel_default_closed',
+        label: '外部通道未启用',
+      },
+      {
+        authorization: createWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', status: 'mock_authorized', occurredAt }),
+        failureReason: 'wecom_external_channel_disabled',
+        auditReason: 'wecom_mock_authorization_read',
+        label: '模拟已授权仍不真实发送',
+      },
+    ] as const;
+
+    for (const item of cases) {
+      const result = createMessageDeliveryFromApprovedDraft({
+        draft: draft(),
+        actorId: 'operator-1',
+        occurredAt,
+        options: {
+          channelType: 'wechat_work',
+          weComAuthorization: item.authorization,
+        },
+      });
+
+      expect(result.kind === 'created' && result.delivery).toEqual(expect.objectContaining({
+        channelType: 'wechat_work',
+        deliveryMode: 'external_disabled',
+        status: 'external_disabled',
+        failureReason: item.failureReason,
+        contactSafetyDecision: expect.objectContaining({
+          allowed: false,
+          auditReason: item.auditReason,
+          safeReasonLabel: expect.any(String),
+        }),
+      }));
+    }
+  });
+
+  it('默认未配置企业微信授权阻断 MessageDelivery，保持低敏 external_disabled', () => {
+    const result = createMessageDeliveryFromApprovedDraft({
+      draft: draft(),
+      actorId: 'operator-1',
+      occurredAt,
+      options: {
+        channelType: 'wechat_work',
+        weComAuthorization: createDefaultWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', occurredAt }),
+      },
+    });
+
+    expect(result.kind === 'created' && mapMessageDeliveryToDto(result.delivery)).toEqual(expect.objectContaining({
+      channelType: 'wechat_work',
+      deliveryMode: 'external_disabled',
+      status: 'external_disabled',
+      failureReason: 'wecom_authorization_missing',
+      contactSafety: expect.objectContaining({
+        allowed: false,
+        auditReason: 'wecom_mock_authorization_unavailable',
+      }),
+    }));
+    expect(JSON.stringify(result)).not.toMatch(/corpId|secret|access_token|refresh_token|encodingAESKey|callback|13800000000|110101199001011234|完整聊天|HIS payload/i);
+  });
+
+  it('会话内容存档授权状态不影响当前 MessageDelivery 发送链路', () => {
+    const withArchive = createMessageDeliveryFromApprovedDraft({
+      draft: draft(),
+      actorId: 'operator-1',
+      occurredAt,
+      options: {
+        channelType: 'wechat_work',
+        weComAuthorization: createWeComAuthorizationRecord({
+          tenantId: 'tenant-a',
+          institutionId: 'inst-a',
+          status: 'mock_authorized',
+          sessionArchiveAuthorized: true,
+          occurredAt,
+        }),
+      },
+    });
+    const withoutArchive = createMessageDeliveryFromApprovedDraft({
+      draft: draft(),
+      actorId: 'operator-1',
+      occurredAt,
+      options: {
+        channelType: 'wechat_work',
+        weComAuthorization: createWeComAuthorizationRecord({
+          tenantId: 'tenant-a',
+          institutionId: 'inst-a',
+          status: 'mock_authorized',
+          sessionArchiveAuthorized: false,
+          occurredAt,
+        }),
+      },
+    });
+
+    expect(withArchive.kind === 'created' && withoutArchive.kind === 'created' && {
+      withArchive: withArchive.delivery.failureReason,
+      withoutArchive: withoutArchive.delivery.failureReason,
+      withArchiveStatus: withArchive.delivery.status,
+      withoutArchiveStatus: withoutArchive.delivery.status,
+    }).toEqual({
+      withArchive: 'wecom_external_channel_disabled',
+      withoutArchive: 'wecom_external_channel_disabled',
+      withArchiveStatus: 'external_disabled',
+      withoutArchiveStatus: 'external_disabled',
+    });
+  });
+
+  it('审计 reason 覆盖企业微信 mock 授权读取、不可用、默认关闭和触达未授权', () => {
+    const mockAuthorized = createMessageDeliveryFromApprovedDraft({
+      draft: draft(),
+      actorId: 'operator-1',
+      occurredAt,
+      options: {
+        channelType: 'wechat_work',
+        weComAuthorization: createWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', status: 'mock_authorized', occurredAt }),
+      },
+    });
+    const unavailable = createMessageDeliveryFromApprovedDraft({
+      draft: draft(),
+      actorId: 'operator-1',
+      occurredAt,
+      options: { channelType: 'wechat_work' },
+    });
+    const defaultClosed = createMessageDeliveryFromApprovedDraft({
+      draft: draft(),
+      actorId: 'operator-1',
+      occurredAt,
+      options: {
+        channelType: 'wechat_work',
+        weComAuthorization: createWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', status: 'external_channel_disabled', occurredAt }),
+      },
+    });
+    const reachOutUnauthorized = createMessageDeliveryFromApprovedDraft({
+      draft: draft(),
+      actorId: 'operator-1',
+      occurredAt,
+      options: {
+        channelType: 'wechat_work',
+        weComAuthorization: createWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', status: 'mock_authorized', weComReachOutAuthorized: false, occurredAt }),
+      },
+    });
+
+    expect(mockAuthorized.kind === 'created' && messageDeliveryContactSafetyAuditReason(mockAuthorized.delivery)).toBe('wecom_mock_authorization_read');
+    expect(unavailable.kind === 'created' && messageDeliveryContactSafetyAuditReason(unavailable.delivery)).toBe('wecom_mock_authorization_unavailable');
+    expect(defaultClosed.kind === 'created' && messageDeliveryContactSafetyAuditReason(defaultClosed.delivery)).toBe('wecom_channel_default_closed');
+    expect(reachOutUnauthorized.kind === 'created' && messageDeliveryContactSafetyAuditReason(reachOutUnauthorized.delivery)).toBe('wecom_reach_out_unauthorized');
+  });
+
   it('支持 mock_sent、mock_failed、skipped、external_disabled 状态和低敏 failureReason', () => {
     const mockSent = createMessageDeliveryFromApprovedDraft({ draft: draft(), actorId: 'operator-1', occurredAt });
     const mockFailed = createMessageDeliveryFromApprovedDraft({
@@ -184,7 +369,7 @@ describe('follow-up message delivery domain', () => {
       draft: draft(),
       actorId: 'operator-1',
       occurredAt,
-      options: { channelType: 'wechat_work', status: 'mock_sent' },
+      options: { channelType: 'sms', status: 'mock_sent' },
     });
 
     expect(mockSent.kind === 'created' && mockSent.delivery.status).toBe('mock_sent');
@@ -199,7 +384,7 @@ describe('follow-up message delivery domain', () => {
       deliveryMode: 'mock',
     }));
     expect(externalDisabled.kind === 'created' && externalDisabled.delivery).toEqual(expect.objectContaining({
-      channelType: 'wechat_work',
+      channelType: 'sms',
       deliveryMode: 'external_disabled',
       status: 'external_disabled',
       failureReason: 'external_channel_disabled',

@@ -31,6 +31,7 @@ import { InstitutionSectionHeader } from '@/modules/institution/components/Insti
 import { followUpMessageSuggestions } from '@/modules/institution/domain/followups';
 import type { FollowUpMessageDraftDto } from '@/modules/institution/domain/followup-message-drafts';
 import type { FollowUpOperationsDashboard } from '@/modules/institution/domain/followup-operations-dashboard';
+import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
 import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
 import type {
   FollowUpStatus,
@@ -120,6 +121,7 @@ const emptyOperationsDashboard: FollowUpOperationsDashboard = {
     institutionGrayBlockedCount: 0,
     grayGuardBlockedCount: 0,
   },
+  weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
   riskSummary: {
     escalatedTaskCount: 0,
     highRiskTaskCount: 0,
@@ -469,6 +471,7 @@ export function SmartFollowUpShell() {
   const draftOperations = operationsDashboard.draftOperations;
   const messageDeliveries = operationsDashboard.messageDeliveries;
   const contactSafety = operationsDashboard.contactSafety ?? emptyOperationsDashboard.contactSafety;
+  const weComAuthorization = operationsDashboard.weComAuthorization ?? emptyOperationsDashboard.weComAuthorization;
   const safetyBlockedCount =
     (overview.consentMissingBlockedCount ?? contactSafety.consentMissingBlockedCount) +
     (overview.optOutBlockedCount ?? contactSafety.optOutBlockedCount) +
@@ -632,6 +635,29 @@ export function SmartFollowUpShell() {
                   </div>
                   <p className="mt-3 text-xs leading-5 text-slate-500">
                     默认关闭、灰度前置、人工确认、模拟发送、不自动发送；未进入灰度不触达，客户退订 / 未授权 / 频率限制会阻断。
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4">
+                  <h4 className="text-sm font-semibold text-slate-950">企业微信客户运营接入</h4>
+                  <p className="mt-2 text-xs leading-5 text-slate-600">
+                    不是企业微信登录；机构员工仍使用现有账号体系。这里仅展示机构授权其自有企业微信主体后的低敏客户运营状态。
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-semibold text-cyan-700">
+                    <span className="rounded-xl bg-white px-3 py-2">状态：{weComAuthorization.statusLabel}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">模拟授权：{weComAuthorization.isMockAuthorized ? '是' : '否'}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">客户联系：{weComAuthorization.customerContactAuthorized ? '已授权' : '未授权'}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">外部联系人同步：{weComAuthorization.externalContactSyncAuthorized ? '已授权' : '后续能力'}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">企业微信触达：{weComAuthorization.weComReachOutAuthorized ? 'mock 可读' : '未授权'}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">会话内容存档：后置规划</span>
+                    <span className="rounded-xl bg-white px-3 py-2">默认关闭：{weComAuthorization.defaultClosed ? '是' : '否'}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">不真实发送：{weComAuthorization.allowRealSend ? '否' : '是'}</span>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
+                    未接真实企业微信，未申请服务商 / 未接真实接口；客户联系 / 外部联系人同步为后续能力，会话内容存档为高风险后置能力。企业微信触达必须经过人工确认和 MessageDelivery。
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    {weComAuthorization.deliveryRelation.description}
                   </p>
                 </div>
 

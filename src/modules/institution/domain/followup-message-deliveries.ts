@@ -9,6 +9,8 @@ import {
   evaluateContactSafetyGuard,
   readContactSafetyPolicyFromMetadata,
 } from '@/modules/institution/domain/followup-contact-safety';
+import type { WeComAuthorizationRecord } from '@/modules/institution/domain/wecom-authorization';
+import { evaluateWeComAuthorizationForDelivery } from '@/modules/institution/domain/wecom-authorization';
 import type { FollowUpMessageDraft } from '@/modules/institution/domain/followup-message-drafts';
 
 export const messageDeliveryChannelTypes = [
@@ -43,6 +45,12 @@ export const messageDeliveryFailureReasons = [
   'tenant_not_allowlisted',
   'institution_not_allowlisted',
   'external_channel_disabled',
+  'wecom_authorization_missing',
+  'wecom_authorization_revoked',
+  'wecom_authorization_expired',
+  'wecom_authorization_disabled',
+  'wecom_reach_out_unauthorized',
+  'wecom_external_channel_disabled',
 ] as const;
 
 export type MessageDeliveryChannelType = (typeof messageDeliveryChannelTypes)[number];
@@ -97,6 +105,7 @@ export type CreateMessageDeliveryOptions = {
   status?: MessageDeliveryStatus;
   failureReason?: MessageDeliveryFailureReason | null;
   contactSafetyPolicy?: ContactSafetyPolicy | null;
+  weComAuthorization?: WeComAuthorizationRecord | null;
 };
 
 const forbiddenDeliveryContentPatterns = [
@@ -171,6 +180,12 @@ function contactSafetyDecisionFromStoredFields(input: {
     institution_not_allowlisted: 'blocked_institution_not_allowlisted',
     channel_disabled: 'blocked_channel_disabled',
     external_channel_disabled: 'blocked_external_channel_disabled',
+    wecom_authorization_missing: 'blocked_external_channel_disabled',
+    wecom_authorization_revoked: 'blocked_external_channel_disabled',
+    wecom_authorization_expired: 'blocked_external_channel_disabled',
+    wecom_authorization_disabled: 'blocked_external_channel_disabled',
+    wecom_reach_out_unauthorized: 'blocked_external_channel_disabled',
+    wecom_external_channel_disabled: 'blocked_external_channel_disabled',
   };
   const code = input.failureReason ? codeByFailureReason[input.failureReason] : undefined;
   if (code) {
@@ -181,7 +196,7 @@ function contactSafetyDecisionFromStoredFields(input: {
       blocked_channel_disabled: 'channel_gray_external_disabled',
       blocked_tenant_not_allowlisted: 'channel_gray_tenant_blocked',
       blocked_institution_not_allowlisted: 'channel_gray_institution_blocked',
-      blocked_external_channel_disabled: 'channel_gray_external_disabled',
+      blocked_external_channel_disabled: input.failureReason?.startsWith('wecom_') ? 'wecom_mock_authorization_unavailable' : 'channel_gray_external_disabled',
     };
 
     return {
@@ -232,6 +247,9 @@ export function createMessageDeliveryFromApprovedDraft(input: {
     channelType,
     policy: input.options?.contactSafetyPolicy ?? metadataPolicy ?? defaultPolicy,
   });
+  const weComGate = channelType === 'wechat_work'
+    ? evaluateWeComAuthorizationForDelivery(input.options?.weComAuthorization)
+    : null;
   const isExternalChannel = channelType === 'wechat_work' || channelType === 'sms';
   const shouldForceSafetyDecision = isExternalChannel || !contactSafetyDecision.allowed;
   const deliveryMode = shouldForceSafetyDecision
@@ -242,13 +260,23 @@ export function createMessageDeliveryFromApprovedDraft(input: {
     : input.options?.status ?? contactSafetyDecision.status;
   const failureReason = normalizeFailureReason({
     status,
-    failureReason: shouldForceSafetyDecision
+    failureReason: weComGate?.messageDeliveryFailureReason ?? (shouldForceSafetyDecision
       ? contactSafetyDecision.failureReason
-      : input.options?.failureReason ?? contactSafetyDecision.failureReason,
+      : input.options?.failureReason ?? contactSafetyDecision.failureReason),
   });
   const finalContactSafetyDecision = !shouldForceSafetyDecision && (input.options?.status || input.options?.failureReason || input.options?.deliveryMode)
     ? contactSafetyDecisionFromStoredFields({ status, deliveryMode, failureReason })
-    : contactSafetyDecision;
+    : weComGate
+      ? {
+          ...contactSafetyDecision,
+          allowed: false,
+          status,
+          deliveryMode,
+          failureReason,
+          safeReasonLabel: weComGate.safeReasonLabel,
+          auditReason: weComGate.reason,
+        }
+      : contactSafetyDecision;
   const sentAt = status === 'pending' ? null : input.occurredAt;
 
   return {

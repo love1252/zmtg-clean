@@ -4,6 +4,7 @@ import { AppointmentCenterShell } from '@/modules/institution/components/Appoint
 import { InstitutionAuditEventsShell } from '@/modules/institution/components/InstitutionAuditEventsShell';
 import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
+import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
 
 const customerRecord = {
   id: 'cust_wang_repurchase',
@@ -350,6 +351,17 @@ function mockInstitutionFetch(responsesByPath: Record<string, Response[]>) {
                 markedSentCount: 0,
                 approvedButNotMarkedSentCount: 0,
               },
+              contactSafety: {
+                allowedCount: 0,
+                consentMissingBlockedCount: 0,
+                optOutBlockedCount: 0,
+                frequencyCapBlockedCount: 0,
+                channelDisabledCount: 0,
+                tenantGrayBlockedCount: 0,
+                institutionGrayBlockedCount: 0,
+                grayGuardBlockedCount: 0,
+              },
+              weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
               riskSummary: {
                 escalatedTaskCount: 0,
                 highRiskTaskCount: 0,
@@ -1535,6 +1547,27 @@ describe('机构业务页面壳', () => {
               },
             ],
           },
+          contactSafety: {
+            allowedCount: 1,
+            consentMissingBlockedCount: 0,
+            optOutBlockedCount: 0,
+            frequencyCapBlockedCount: 0,
+            channelDisabledCount: 1,
+            tenantGrayBlockedCount: 0,
+            institutionGrayBlockedCount: 0,
+            grayGuardBlockedCount: 0,
+          },
+          weComAuthorization: {
+            ...getDefaultWeComAuthorizationDashboardView(),
+            status: 'mock_authorized',
+            statusLabel: '模拟已授权',
+            isMockAuthorized: true,
+            customerContactAuthorized: true,
+            externalContactSyncAuthorized: true,
+            customerOwnerSyncAuthorized: true,
+            weComReachOutAuthorized: true,
+            lastErrorReason: '企业微信外部通道未启用，mock 授权也不能真实发送。',
+          },
           riskSummary: {
             escalatedTaskCount: 1,
             highRiskTaskCount: 2,
@@ -1575,6 +1608,19 @@ describe('机构业务页面壳', () => {
     expect(screen.getByText(/本区域为内部运营统计，不代表已自动联系客户/)).toBeInTheDocument();
     expect(screen.getByText(/标记已发送仅代表人工记录/)).toBeInTheDocument();
     expect(screen.getByText(/当前没有企业微信 \/ 短信接入，不做自动营销群发/)).toBeInTheDocument();
+    expect(screen.getByText('企业微信客户运营接入')).toBeInTheDocument();
+    expect(screen.getByText(/不是企业微信登录/)).toBeInTheDocument();
+    expect(screen.getByText('状态：模拟已授权')).toBeInTheDocument();
+    expect(screen.getByText('模拟授权：是')).toBeInTheDocument();
+    expect(screen.getByText('客户联系：已授权')).toBeInTheDocument();
+    expect(screen.getByText('外部联系人同步：已授权')).toBeInTheDocument();
+    expect(screen.getByText('企业微信触达：mock 可读')).toBeInTheDocument();
+    expect(screen.getByText('会话内容存档：后置规划')).toBeInTheDocument();
+    expect(screen.getByText('默认关闭：是')).toBeInTheDocument();
+    expect(screen.getByText('不真实发送：是')).toBeInTheDocument();
+    expect(screen.getByText(/未接真实企业微信，未申请服务商 \/ 未接真实接口/)).toBeInTheDocument();
+    expect(screen.getByText(/企业微信触达必须经过人工确认和 MessageDelivery/)).toBeInTheDocument();
+    expect(screen.getByText(/企业微信授权状态 → 触达安全治理 → MessageDelivery/)).toBeInTheDocument();
 
     const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
     expect(requestPaths).toEqual(expect.arrayContaining([
@@ -1697,6 +1743,17 @@ describe('机构业务页面壳', () => {
             externalDisabledCount: 0,
             recentDeliveries: [],
           },
+          contactSafety: {
+            allowedCount: 0,
+            consentMissingBlockedCount: 0,
+            optOutBlockedCount: 0,
+            frequencyCapBlockedCount: 0,
+            channelDisabledCount: 0,
+            tenantGrayBlockedCount: 0,
+            institutionGrayBlockedCount: 0,
+            grayGuardBlockedCount: 0,
+          },
+          weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
           riskSummary: {
             escalatedTaskCount: 0,
             highRiskTaskCount: 0,
@@ -1715,6 +1772,13 @@ describe('机构业务页面壳', () => {
     expect(screen.getByText('暂无真实随访路径实例。治疗摘要纳入路径后，会在这里展示客户随访旅程。')).toBeInTheDocument();
     expect(screen.getByText('暂无真实话术建议。')).toBeInTheDocument();
     expect(screen.getByText('任务需人工处理，不会主动向客户发送消息。')).toBeInTheDocument();
+    expect(screen.getByText('企业微信客户运营接入')).toBeInTheDocument();
+    expect(screen.getByText('不是企业微信登录；机构员工仍使用现有账号体系。这里仅展示机构授权其自有企业微信主体后的低敏客户运营状态。')).toBeInTheDocument();
+    expect(screen.getByText('状态：未配置')).toBeInTheDocument();
+    expect(screen.getByText('模拟授权：否')).toBeInTheDocument();
+    expect(screen.getByText('客户联系：未授权')).toBeInTheDocument();
+    expect(screen.getByText('外部联系人同步：后续能力')).toBeInTheDocument();
+    expect(screen.getByText('未接真实企业微信，未申请服务商 / 未接真实接口；客户联系 / 外部联系人同步为后续能力，会话内容存档为高风险后置能力。企业微信触达必须经过人工确认和 MessageDelivery。')).toBeInTheDocument();
     expect(fetchMock.mock.calls.map(([input]) => fetchPath(input))).toEqual(expect.arrayContaining([
       '/api/institution/followups',
       '/api/institution/followup-paths/enrollments',
