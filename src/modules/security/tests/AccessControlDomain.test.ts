@@ -79,6 +79,10 @@ describe('访问控制领域', () => {
       'customer',
       'appointment',
       'follow_up',
+      'message_delivery',
+      'dashboard',
+      'safety_switch',
+      'real_channel',
       'treatment_summary',
       'open_connection',
       'permission_policy',
@@ -87,8 +91,14 @@ describe('访问控制领域', () => {
       'ai_model_config',
       'knowledge_management',
     ]);
+    expect(ACCESS_ACTIONS).toContain('read');
     expect(ACCESS_ACTIONS).toContain('read_own_tenant');
     expect(ACCESS_ACTIONS).toContain('read_aggregate');
+    expect(ACCESS_ACTIONS).toContain('import');
+    expect(ACCESS_ACTIONS).toContain('export');
+    expect(ACCESS_ACTIONS).toContain('approve');
+    expect(ACCESS_ACTIONS).toContain('enable');
+    expect(ACCESS_ACTIONS).toContain('disable');
     expect(ACCESS_ACTIONS).toContain('export_report');
     expect(ACCESS_ACTIONS).toContain('manage_credentials');
     expect(ACCESS_ACTIONS).toContain('test_connection');
@@ -635,6 +645,79 @@ describe('访问控制领域', () => {
         action: 'update',
       }),
     ).toEqual({ allowed: false, reason: 'role_denied' });
+  });
+
+  it('覆盖商用最小角色权限矩阵并默认拒绝高风险动作', () => {
+    const allowCases = [
+      { context: platformAdminContext, resource: 'safety_switch', action: 'update' },
+      { context: tenantAdminContext, resource: 'customer', action: 'import' },
+      { context: tenantAdminContext, resource: 'follow_up', action: 'approve' },
+      { context: tenantOperatorContext, resource: 'follow_up', action: 'approve' },
+      { context: consultantContext, resource: 'dashboard', action: 'read' },
+      { context: customerServiceContext, resource: 'message_delivery', action: 'read' },
+      { context: tenantAdminContext, resource: 'real_channel', action: 'enable' },
+      { context: tenantAdminContext, resource: 'real_channel', action: 'disable' },
+    ] as const;
+
+    for (const testCase of allowCases) {
+      expect(
+        canAccessResource({
+          context: testCase.context,
+          resource: testCase.resource,
+          action: testCase.action,
+          targetTenantId: testCase.context.tenantId,
+        }),
+      ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+    }
+
+    const denyCases = [
+      { context: customerServiceContext, resource: 'safety_switch', action: 'update' },
+      { context: customerServiceContext, resource: 'real_channel', action: 'enable' },
+      { context: customerServiceContext, resource: 'customer', action: 'export' },
+      { context: customerServiceContext, resource: 'customer', action: 'import' },
+      { context: customerServiceContext, resource: 'audit_log', action: 'read_detail' },
+      { context: consultantContext, resource: 'message_delivery', action: 'approve' },
+    ] as const;
+
+    for (const testCase of denyCases) {
+      expect(
+        canAccessResource({
+          context: testCase.context,
+          resource: testCase.resource,
+          action: testCase.action,
+          targetTenantId: testCase.context.tenantId,
+        }),
+      ).toEqual({ allowed: false, reason: 'role_denied' });
+    }
+  });
+
+  it('未知角色、资源和操作默认拒绝', () => {
+    expect(
+      canAccessResource({
+        context: { ...tenantAdminContext, role: 'unknown_role' as typeof tenantAdminContext.role },
+        resource: 'customer',
+        action: 'read',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'unknown_role_denied' });
+
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'unknown_resource' as 'customer',
+        action: 'read',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'unknown_resource_denied' });
+
+    expect(
+      canAccessResource({
+        context: tenantAdminContext,
+        resource: 'customer',
+        action: 'unknown_action' as 'read',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'unknown_action_denied' });
   });
 
   it('默认拒绝未知策略组合', () => {

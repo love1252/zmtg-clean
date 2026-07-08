@@ -1,4 +1,4 @@
-import type { AccessContext } from '@/modules/security/domain/access-control';
+import type { AccessContext, AccessDecision } from '@/modules/security/domain/access-control';
 import { canAccessResource } from '@/modules/security/domain/access-control';
 import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
 import type { MessageDelivery } from '@/modules/institution/domain/followup-message-deliveries';
@@ -18,11 +18,7 @@ import {
 import type { FollowUpRiskLevel, TenantFollowUpTask } from '@/modules/institution/domain/followup-workflow';
 import type { TenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 
-export type FollowUpTimelineForbiddenReason =
-  | 'missing_tenant'
-  | 'cross_tenant_denied'
-  | 'role_denied'
-  | 'sensitive_detail_denied';
+export type FollowUpTimelineForbiddenReason = Extract<AccessDecision, { allowed: false }>['reason'];
 
 type TimelineRepository = Pick<
   TenantBusinessRepository,

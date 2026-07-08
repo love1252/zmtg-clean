@@ -1,4 +1,4 @@
-import type { AccessContext } from '@/modules/security/domain/access-control';
+import type { AccessContext, AccessDecision } from '@/modules/security/domain/access-control';
 import { canAccessResource } from '@/modules/security/domain/access-control';
 import {
   buildFollowUpOperationsDashboard,
@@ -17,11 +17,7 @@ import {
 } from '@/modules/institution/domain/followup-operations-dashboard';
 import type { TenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 
-export type FollowUpOperationsForbiddenReason =
-  | 'missing_tenant'
-  | 'cross_tenant_denied'
-  | 'role_denied'
-  | 'sensitive_detail_denied';
+export type FollowUpOperationsForbiddenReason = Extract<AccessDecision, { allowed: false }>['reason'];
 
 export type GetFollowUpOperationsDashboardResult =
   | { kind: 'success'; dashboard: FollowUpOperationsDashboard }

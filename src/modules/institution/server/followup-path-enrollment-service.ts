@@ -1,4 +1,4 @@
-import type { AccessContext } from '@/modules/security/domain/access-control';
+import type { AccessContext, AccessDecision } from '@/modules/security/domain/access-control';
 import { canAccessResource } from '@/modules/security/domain/access-control';
 import type { createTreatmentSummaryRepository } from '@/modules/institution/server/treatment-summary-repository';
 import type { TenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
@@ -20,6 +20,8 @@ import {
   recordPathEnrollmentTimelineEvent,
 } from '@/modules/institution/server/followup-customer-timeline-service';
 import type { TreatmentPathTemplateNode } from '@/modules/institution/domain/treatment-path-templates';
+
+type FollowUpPathForbiddenReason = Extract<AccessDecision, { allowed: false }>['reason'];
 
 const templateVersion = 'v0.6-static';
 
@@ -52,22 +54,22 @@ export type CreateFollowUpPathEnrollmentResult =
   | { kind: 'voided' }
   | { kind: 'no_matching_template'; safeReasonCode: 'no_matching_template' }
   | { kind: 'conflict'; resourceId: string; reason: 'active_follow_up_path_enrollment_exists' }
-  | { kind: 'forbidden'; reason: 'missing_tenant' | 'cross_tenant_denied' | 'role_denied' | 'sensitive_detail_denied' };
+  | { kind: 'forbidden'; reason: FollowUpPathForbiddenReason };
 
 export type ListFollowUpPathEnrollmentsResult =
   | { kind: 'success'; enrollments: FollowUpPathEnrollmentDto[] }
-  | { kind: 'forbidden'; reason: 'missing_tenant' | 'cross_tenant_denied' | 'role_denied' | 'sensitive_detail_denied' };
+  | { kind: 'forbidden'; reason: FollowUpPathForbiddenReason };
 
 export type GetFollowUpPathEnrollmentResult =
   | { kind: 'success'; enrollment: FollowUpPathEnrollmentDto }
   | { kind: 'not_found' }
-  | { kind: 'forbidden'; reason: 'missing_tenant' | 'cross_tenant_denied' | 'role_denied' | 'sensitive_detail_denied' };
+  | { kind: 'forbidden'; reason: FollowUpPathForbiddenReason };
 
 export type CancelFollowUpPathEnrollmentServiceResult =
   | { kind: 'cancelled'; enrollment: FollowUpPathEnrollmentDto }
   | { kind: 'not_found' }
   | { kind: 'conflict'; resourceId: string; reason: 'follow_up_path_enrollment_not_active' }
-  | { kind: 'forbidden'; reason: 'missing_tenant' | 'cross_tenant_denied' | 'role_denied' | 'sensitive_detail_denied' };
+  | { kind: 'forbidden'; reason: FollowUpPathForbiddenReason };
 
 function canUseFollowUpPath(context: AccessContext, action: 'read_own_tenant' | 'create' | 'update') {
   return canAccessResource({

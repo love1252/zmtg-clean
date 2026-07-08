@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { generateOpportunityPools } from '@/modules/institution/server/opportunity-pool-service';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 import { canAccessResource } from '@/modules/security/domain/access-control';
+import { deriveSafetySwitchViewModel, type SafetySwitchViewModel } from '@/modules/security/domain/safety-switch';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import { getDatabase } from '@/server/db/client';
 
@@ -10,6 +11,7 @@ export type InstitutionDashboardStatsResponse = {
   pendingFollowUpCount: number;
   completedFollowUpCount: number;
   opportunityCount: number;
+  safetySwitch: SafetySwitchViewModel;
 };
 
 export async function GET(request: Request) {
@@ -20,8 +22,8 @@ export async function GET(request: Request) {
 
   const decision = canAccessResource({
     context: accessContext,
-    resource: 'customer',
-    action: 'read_own_tenant',
+    resource: 'dashboard',
+    action: 'read',
     targetTenantId: accessContext.tenantId,
   });
 
@@ -53,6 +55,7 @@ export async function GET(request: Request) {
         (t) => t.status === 'completed',
       ).length,
       opportunityCount: opportunityPools.totalCount,
+      safetySwitch: deriveSafetySwitchViewModel(),
     } satisfies InstitutionDashboardStatsResponse);
   } catch {
     return NextResponse.json({ error: '数据服务暂时不可用' }, { status: 503 });

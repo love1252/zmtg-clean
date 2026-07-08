@@ -25,10 +25,10 @@ export async function POST(
     const db = getDatabase();
     const occurredAt = new Date().toISOString();
     const auditRepository = createAuditEventRepository(db);
-    const decision = canAccessResource({ context, resource: 'follow_up', action: 'update', targetTenantId: context.tenantId });
+    const decision = canAccessResource({ context, resource: 'follow_up', action: 'approve', targetTenantId: context.tenantId });
 
     if (!decision.allowed || !context.tenantId) {
-      await auditRepository.record(deniedFollowUpMessageAudit({ context, action: 'update', reason: decision.allowed ? 'missing_tenant' : decision.reason, occurredAt, resourceId: draftId }));
+      await auditRepository.record(deniedFollowUpMessageAudit({ context, action: 'approve', reason: decision.allowed ? 'missing_tenant' : decision.reason, occurredAt, resourceId: draftId }));
       return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
     }
 
@@ -44,12 +44,12 @@ export async function POST(
       });
 
       if (result.kind === 'updated' || result.kind === 'updated_with_delivery') {
-        await transactionAuditRepository.record(allowedFollowUpMessageAudit({ context, action: 'update', reason: 'message_draft_approved', occurredAt, resourceId: result.draft.draftId }));
+        await transactionAuditRepository.record(allowedFollowUpMessageAudit({ context, action: 'approve', reason: 'message_delivery_permission_checked', occurredAt, resourceId: result.draft.draftId }));
         return NextResponse.json({ record: result.draft, delivery: result.kind === 'updated_with_delivery' ? result.delivery : null });
       }
 
       const reason = result.kind === 'conflict' ? result.reason : result.kind === 'forbidden' ? result.reason : 'not_found_or_not_owned';
-      await transactionAuditRepository.record(deniedFollowUpMessageAudit({ context, action: 'update', reason, occurredAt, resourceId: draftId }));
+      await transactionAuditRepository.record(deniedFollowUpMessageAudit({ context, action: 'approve', reason, occurredAt, resourceId: draftId }));
       if (result.kind === 'conflict') return responseForFollowUpMessageConflict(result.reason);
       if (result.kind === 'forbidden') return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
       return NextResponse.json({ error: '记录不存在' }, { status: 404 });

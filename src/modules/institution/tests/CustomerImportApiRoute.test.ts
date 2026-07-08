@@ -204,9 +204,9 @@ describe('customer import API route', () => {
         actorId: 'tenant-operator-a',
         tenantId: 'tenant-a',
         resource: 'customer',
-        action: 'create',
+        action: 'import',
         result: 'allowed',
-        reason: 'customer_import_previewed',
+        reason: 'customer_import_permission_checked',
       }),
     );
     expect(JSON.stringify(payload)).not.toContain('evil-tenant');
@@ -301,6 +301,21 @@ describe('customer import API route', () => {
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(
       expect.objectContaining({ result: 'denied', reason: 'customer_import_rejected' }),
     );
+  });
+
+  it('普通员工不能导入或导出客户', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
+      ...tenantContext,
+      userId: 'staff-user',
+      role: 'customer_service',
+    });
+
+    const response = await customerImportPreviewPost(createRequest({ rows: [validLowSensitiveRow] }));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(403);
+    expect(payload.error).toBe('没有访问权限');
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
   });
 
   it('非租户上下文不能访问导入 API', async () => {
