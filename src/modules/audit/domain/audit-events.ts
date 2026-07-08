@@ -106,7 +106,12 @@ export type AuditReason =
   | 'compensation_running'
   | 'compensation_succeeded'
   | 'compensation_failed'
-  | 'manual_review_required';
+  | 'manual_review_required'
+  | 'customer_import_previewed'
+  | 'customer_import_completed'
+  | 'customer_import_partially_completed'
+  | 'customer_import_rejected'
+  | 'customer_import_sensitive_field_blocked';
 
 export type TenantAuditEvent = {
   eventId: string;

@@ -663,6 +663,119 @@ describe('机构业务页面壳', () => {
     expect(screen.getByLabelText('脱敏病历号展示值')).toBeInTheDocument();
   });
 
+  it('客户中心展示低敏导入预检、失败原因和执行结果', async () => {
+    const previewResponse = {
+      importBatch: {
+        importBatchId: 'customer-import:test-batch',
+        tenantId: 'tenant-a',
+        institutionId: 'inst-a',
+        operatorRef: 'operator-a',
+        fieldWhitelist: ['customerDisplayName', 'ageRange', 'treatmentProject', 'lastVisitDate', 'importedCustomerRef'],
+        rows: [
+          {
+            rowNumber: 1,
+            status: 'ready',
+            customerDisplayName: '低敏客户A',
+            importedCustomerRef: 'import-ref-a',
+            duplicateKey: 'imported_ref:import-ref-a',
+            issues: [],
+          },
+          {
+            rowNumber: 2,
+            status: 'skipped',
+            customerDisplayName: null,
+            importedCustomerRef: null,
+            duplicateKey: null,
+            issues: [
+              { reason: 'missing_required_field', field: 'customerDisplayName', message: '字段 customerDisplayName 必填' },
+            ],
+          },
+        ],
+        createdAt: '2026-07-08T10:00:00.000Z',
+        updatedAt: '2026-07-08T10:00:00.000Z',
+      },
+      totalCount: 2,
+      successCount: 1,
+      failureCount: 1,
+      skippedCount: 1,
+      canExecute: true,
+      boundary: {
+        mode: 'low_sensitive_customer_import',
+        supportsPreview: true,
+        writesCustomerRecordsOnExecute: true,
+        noHis: true,
+        noRealWeCom: true,
+        noSms: true,
+        noWebhook: true,
+        noRealSend: true,
+        forbiddenData: ['真实手机号', '身份证', '病历号', '聊天记录'],
+      },
+    };
+    const executeResponse = {
+      ...previewResponse,
+      importedCustomerIds: ['cust_import_a'],
+    };
+    const fetchMock = mockCustomerFetch([
+      jsonResponse({ records: [] }),
+      jsonResponse(previewResponse),
+      jsonResponse(executeResponse),
+      jsonResponse({
+        records: [
+          {
+            ...customerRecord,
+            id: 'cust_import_a',
+            displayName: '低敏客户A',
+            tags: ['低敏导入', 'institution_ref:inst-a'],
+            maskedPhone: 'masked-import-only',
+            maskedMedicalRecordNo: 'masked-import-record',
+          },
+        ],
+      }),
+    ]);
+
+    render(<CustomerCenterShell />);
+
+    expect(await screen.findByRole('heading', { name: '低敏客户导入' })).toBeInTheDocument();
+    expect(screen.getByText('不接 HIS')).toBeInTheDocument();
+    expect(screen.getByText('不接真实企业微信')).toBeInTheDocument();
+    expect(screen.getByText('不导入手机号 / 身份证 / 病历号')).toBeInTheDocument();
+    expect(screen.getByText('字段白名单')).toBeInTheDocument();
+
+    const textarea = screen.getByLabelText('导入 JSON 数组');
+    fireEvent.change(textarea, {
+      target: {
+        value: JSON.stringify([
+          { customerDisplayName: '低敏客户A', ageRange: '30-39', treatmentProject: '皮肤管理', lastVisitDate: '2026-07-01', importedCustomerRef: 'import-ref-a' },
+          { treatmentProject: '皮肤管理' },
+        ]),
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '导入预检' }));
+
+    expect(await screen.findByText('失败原因')).toBeInTheDocument();
+    expect(screen.getByText(/第 2 行 · 必填字段缺失/u)).toBeInTheDocument();
+    expect(screen.getByText('customer-import:test-batch')).toBeInTheDocument();
+
+    const previewBody = requestBody(fetchMock, 1);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/institution/customers/import', expect.objectContaining({
+      method: 'POST',
+    }));
+    expect(previewBody).toHaveProperty('rows');
+    expect(JSON.stringify(previewBody)).not.toContain('tenantId');
+    expect(JSON.stringify(previewBody)).not.toContain('institutionId');
+    expect(JSON.stringify(previewBody)).not.toContain('operatorRef');
+    expect(JSON.stringify(previewBody)).not.toContain('13800000000');
+
+    fireEvent.click(screen.getByRole('button', { name: '执行合法行导入' }));
+
+    expect(await screen.findByText('已写入 1 条低敏客户记录，并记录导入审计。')).toBeInTheDocument();
+    expect(await screen.findByText('低敏客户A')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/institution/customers/import', expect.objectContaining({
+      method: 'PUT',
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/institution/customers', { cache: 'no-store' });
+  });
+
   it.each([
     [401, '请先登录', '登录状态已失效，请重新登录'],
     [403, '没有访问权限', '当前账号没有访问客户数据的权限'],

@@ -1,11 +1,13 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Eye, Loader2, Pencil, Search, ShieldCheck, Tags } from 'lucide-react';
+import { ArrowRight, Eye, Loader2, Pencil, Search, ShieldCheck, Tags, UploadCloud } from 'lucide-react';
 import {
   createCustomer,
+  executeCustomerImport,
   getCustomerTimeline,
   listCustomers,
+  previewCustomerImport,
   updateCustomer,
   type CreateCustomerClientPayload,
   type TenantBusinessClientError,
@@ -17,6 +19,12 @@ import {
 } from '@/modules/institution/components/InstitutionPageState';
 import { InstitutionSectionHeader } from '@/modules/institution/components/InstitutionSectionHeader';
 import { CustomerTimelineDrawer } from '@/modules/institution/components/CustomerTimelineDrawer';
+import {
+  customerImportBoundary,
+  lowSensitiveCustomerImportAllowedFields,
+  type CustomerImportPreviewResult,
+  type CustomerImportResult,
+} from '@/modules/institution/domain/customer-import';
 import type {
   CustomerLifecycleStage,
   CustomerPriority,
@@ -99,10 +107,38 @@ const customerBoundaryItems = [
     description: '创建和更新仅发送展示名、分层、负责人、脱敏展示值、摘要、下一步动作与标签。',
   },
   {
+    title: '低敏客户导入',
+    description: '导入前必须预检字段白名单、失败原因和重复候选；不导入手机号、身份证、病历号或聊天记录。',
+  },
+  {
     title: '只展示脱敏标识',
     description: '手机号和病历号只使用脱敏展示值，不展示原始号码或完整咨询内容。',
   },
 ];
+
+const defaultImportRowsText = JSON.stringify(
+  [
+    {
+      customerDisplayName: '低敏客户A',
+      customerAlias: 'A 客户',
+      gender: '未指定',
+      ageRange: '30-39',
+      customerStage: 'consulting',
+      treatmentProject: '皮肤管理',
+      lastVisitDate: '2026-07-01',
+      nextFollowUpDate: '2026-07-15',
+      ownerEmployeeName: '咨询师A',
+      ownerEmployeeRef: 'employee-ref-a',
+      sourceChannel: '线下咨询低敏来源',
+      tagSummary: '低敏标签',
+      noteSummary: '仅导入低敏摘要',
+      externalCustomerRef: 'external-ref-low-sensitive-a',
+      importedCustomerRef: 'import-ref-a',
+    },
+  ],
+  null,
+  2,
+);
 
 function countDigits(value: string) {
   return value.match(/\p{Decimal_Number}/gu)?.length ?? 0;
@@ -290,6 +326,46 @@ function visibleErrorMessage(error: TenantBusinessClientError) {
   return error.message || '客户数据请求失败';
 }
 
+const importFailureReasonLabels: Record<string, string> = {
+  missing_required_field: '必填字段缺失',
+  unsupported_field: '字段不在白名单',
+  sensitive_field_detected: '识别到高敏字段或高敏内容',
+  invalid_date: '日期格式错误',
+  duplicated_customer: '重复客户候选',
+  empty_row: '空行',
+  unsafe_payload: '嵌套或不安全 payload',
+};
+
+function parseImportRowsText(value: string) {
+  try {
+    const rows = JSON.parse(value) as unknown;
+    if (!Array.isArray(rows)) {
+      return { ok: false as const, error: '导入内容必须是 JSON 数组' };
+    }
+
+    return { ok: true as const, rows };
+  } catch {
+    return { ok: false as const, error: '导入内容必须是合法 JSON' };
+  }
+}
+
+function collectImportIssues(preview: CustomerImportPreviewResult | null) {
+  if (!preview) return [];
+
+  return preview.importBatch.rows
+    .filter((row) => row.issues.length > 0)
+    .flatMap((row) =>
+      row.issues.map((issue) => ({
+        ...issue,
+        rowNumber: row.rowNumber,
+      })),
+    );
+}
+
+function formatImportReason(reason: string) {
+  return importFailureReasonLabels[reason] ?? reason;
+}
+
 export function CustomerCenterShell() {
   const [customers, setCustomers] = useState<CustomerRecordSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -299,6 +375,11 @@ export function CustomerCenterShell() {
   const [form, setForm] = useState<CustomerFormState>(emptyCustomerForm);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [importRowsText, setImportRowsText] = useState(defaultImportRowsText);
+  const [importPreview, setImportPreview] = useState<CustomerImportPreviewResult | null>(null);
+  const [importResult, setImportResult] = useState<CustomerImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
   const [selectedTimelineCustomer, setSelectedTimelineCustomer] =
     useState<CustomerRecordSummary | null>(null);
   const [customerTimeline, setCustomerTimeline] = useState<CustomerTimelineResponse | null>(null);
@@ -335,6 +416,8 @@ export function CustomerCenterShell() {
   }, []);
 
   const segmentStats = useMemo(() => buildCustomerSegmentStats(customers), [customers]);
+  const importIssues = useMemo(() => collectImportIssues(importPreview), [importPreview]);
+  const importedCustomerCount = importResult?.importedCustomerIds.length ?? 0;
 
   const filteredCustomers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -409,6 +492,59 @@ export function CustomerCenterShell() {
     } else {
       setTimelineErrorState(visibleTimelineErrorState(result.error));
     }
+  }
+
+  async function reloadCustomersAfterImport() {
+    const result = await listCustomers();
+    if (result.ok) {
+      setCustomers(result.records);
+      setListErrorState(null);
+    } else {
+      setListErrorState(visibleListErrorState(result.error));
+    }
+  }
+
+  async function handlePreviewCustomerImport() {
+    const parsed = parseImportRowsText(importRowsText);
+    if (!parsed.ok) {
+      setImportError(parsed.error);
+      return;
+    }
+
+    setIsImporting(true);
+    setImportError(null);
+    setImportResult(null);
+
+    const result = await previewCustomerImport({ rows: parsed.rows });
+    if (result.ok) {
+      setImportPreview(result.preview);
+    } else {
+      setImportError(visibleErrorMessage(result.error));
+    }
+
+    setIsImporting(false);
+  }
+
+  async function handleExecuteCustomerImport() {
+    const parsed = parseImportRowsText(importRowsText);
+    if (!parsed.ok) {
+      setImportError(parsed.error);
+      return;
+    }
+
+    setIsImporting(true);
+    setImportError(null);
+
+    const result = await executeCustomerImport({ rows: parsed.rows });
+    if (result.ok) {
+      setImportPreview(result.result);
+      setImportResult(result.result);
+      await reloadCustomersAfterImport();
+    } else {
+      setImportError(visibleErrorMessage(result.error));
+    }
+
+    setIsImporting(false);
   }
 
   function closeCustomerTimeline() {
@@ -783,13 +919,151 @@ export function CustomerCenterShell() {
             </button>
           </form>
 
+          <section className="rounded-[24px] border border-blue-100 bg-blue-50/70 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-blue-600 text-white">
+                <UploadCloud className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-950">低敏客户导入</h3>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  当前只支持低敏客户数据 JSON 导入；导入前预检字段白名单、重复候选和失败原因，导入后记录审计并进入现有客户运营 / 智能随访低敏链路。
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2 text-xs font-semibold text-blue-800 sm:grid-cols-2">
+              <span className="rounded-full border border-blue-200 bg-white px-3 py-2">{customerImportBoundary.noHis ? '不接 HIS' : 'HIS 未开启'}</span>
+              <span className="rounded-full border border-blue-200 bg-white px-3 py-2">{customerImportBoundary.noRealWeCom ? '不接真实企业微信' : '真实企业微信未开启'}</span>
+              <span className="rounded-full border border-blue-200 bg-white px-3 py-2">不导入手机号 / 身份证 / 病历号</span>
+              <span className="rounded-full border border-blue-200 bg-white px-3 py-2">{customerImportBoundary.noRealSend ? '不导入聊天记录 / 凭证 / 原始 payload' : '禁止真实发送'}</span>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-blue-100 bg-white p-3">
+              <div className="text-xs font-semibold text-slate-500">字段白名单</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {lowSensitiveCustomerImportAllowedFields.map((field) => (
+                  <span
+                    key={field}
+                    className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"
+                  >
+                    {field}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label htmlFor="customer-import-rows" className="text-xs font-semibold text-slate-500">
+                导入 JSON 数组
+              </label>
+              <textarea
+                id="customer-import-rows"
+                className="mt-1 min-h-64 w-full rounded-2xl border border-blue-100 bg-white px-3 py-2 font-mono text-xs leading-5 text-slate-700 outline-none focus:border-blue-300"
+                value={importRowsText}
+                onChange={(event) => setImportRowsText(event.target.value)}
+              />
+            </div>
+
+            {importError ? (
+              <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                {importError}
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-blue-200 bg-white px-4 text-sm font-semibold text-blue-700 disabled:cursor-not-allowed disabled:text-slate-400"
+                disabled={isImporting || Boolean(listErrorState)}
+                onClick={() => {
+                  void handlePreviewCustomerImport();
+                }}
+              >
+                {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                导入预检
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-blue-600 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                disabled={isImporting || Boolean(listErrorState) || !importPreview?.canExecute}
+                onClick={() => {
+                  void handleExecuteCustomerImport();
+                }}
+              >
+                {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                执行合法行导入
+              </button>
+            </div>
+
+            {importPreview ? (
+              <div className="mt-4 space-y-3">
+                <div className="grid gap-2 sm:grid-cols-4">
+                  <div className="rounded-2xl bg-white p-3">
+                    <div className="text-xs font-semibold text-slate-400">总行数</div>
+                    <div className="mt-1 text-xl font-semibold text-slate-950">{importPreview.totalCount}</div>
+                  </div>
+                  <div className="rounded-2xl bg-white p-3">
+                    <div className="text-xs font-semibold text-slate-400">可导入</div>
+                    <div className="mt-1 text-xl font-semibold text-emerald-600">{importPreview.successCount}</div>
+                  </div>
+                  <div className="rounded-2xl bg-white p-3">
+                    <div className="text-xs font-semibold text-slate-400">失败</div>
+                    <div className="mt-1 text-xl font-semibold text-rose-600">{importPreview.failureCount}</div>
+                  </div>
+                  <div className="rounded-2xl bg-white p-3">
+                    <div className="text-xs font-semibold text-slate-400">跳过</div>
+                    <div className="mt-1 text-xl font-semibold text-amber-600">{importPreview.skippedCount}</div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-blue-100 bg-white p-3 text-sm text-slate-600">
+                  <div className="font-semibold text-slate-950">导入批次</div>
+                  <div className="mt-1 break-all font-mono text-xs text-slate-500">
+                    {importPreview.importBatch.importBatchId}
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    tenant / institution 隔离来自登录上下文，页面不会提交 tenantId、institutionId 或 operatorRef。
+                  </div>
+                </div>
+
+                {importResult ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                    已写入 {importedCustomerCount} 条低敏客户记录，并记录导入审计。
+                  </div>
+                ) : null}
+
+                {importIssues.length > 0 ? (
+                  <div className="rounded-2xl border border-amber-200 bg-white p-3">
+                    <div className="text-sm font-semibold text-slate-950">失败原因</div>
+                    <div className="mt-2 space-y-2">
+                      {importIssues.map((issue, index) => (
+                        <div
+                          key={`${issue.rowNumber}-${issue.reason}-${issue.field ?? 'row'}-${index}`}
+                          className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800"
+                        >
+                          第 {issue.rowNumber} 行 · {formatImportReason(issue.reason)}
+                          {issue.field ? ` · ${issue.field}` : ''}：{issue.message}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700">
+                    当前预检未发现失败原因，可执行导入。
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </section>
+
           <div className="rounded-[24px] border border-slate-900/90 bg-[#071322] p-5 text-white shadow-[0_24px_80px_rgba(3,15,33,0.22)]">
             <div className="flex items-center gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-2xl bg-cyan-400/16 text-cyan-200">
                 <ShieldCheck className="h-5 w-5" />
               </div>
               <div>
-                  <h3 className="text-lg font-semibold">客户数据边界</h3>
+                <h3 className="text-lg font-semibold">客户数据边界</h3>
                 <p className="mt-1 text-sm text-slate-400">只展示脱敏客户摘要和下一步人工动作。</p>
               </div>
             </div>

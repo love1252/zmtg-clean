@@ -337,6 +337,7 @@ export function InstitutionWorkspace() {
   const [dashboardSummary, setDashboardSummary] = useState<InstitutionDashboardSummary>(
     emptyDashboardSummary,
   );
+  const [lowSensitiveImportCustomerCount, setLowSensitiveImportCustomerCount] = useState(0);
   const [dashboardStatus, setDashboardStatus] = useState<DashboardLoadStatus>('loading');
   const [dashboardErrorState, setDashboardErrorState] =
     useState<InstitutionPageStateProps | null>(null);
@@ -362,6 +363,7 @@ export function InstitutionWorkspace() {
 
     async function loadDashboardSummary() {
       setDashboardStatus('loading');
+      setLowSensitiveImportCustomerCount(0);
       setDashboardErrorState(null);
       setFollowUpPathAnalysisStatus('loading');
       setFollowUpPathAnalysis(null);
@@ -405,6 +407,11 @@ export function InstitutionWorkspace() {
           appointments: appointmentResult.ok ? appointmentResult.records : [],
           followUpTasks: followUpResult.ok ? followUpResult.records : [],
         }),
+      );
+      setLowSensitiveImportCustomerCount(
+        customerResult.ok
+          ? customerResult.records.filter((customer) => customer.tags.includes('低敏导入')).length
+          : 0,
       );
       setDashboardStatus('success');
     }
@@ -558,6 +565,7 @@ export function InstitutionWorkspace() {
                 errorState={dashboardErrorState}
                 followUpPathAnalysis={followUpPathAnalysis}
                 followUpPathAnalysisStatus={followUpPathAnalysisStatus}
+                lowSensitiveImportCustomerCount={lowSensitiveImportCustomerCount}
                 status={dashboardStatus}
                 summary={dashboardSummary}
               />
@@ -594,6 +602,7 @@ function InstitutionDashboardHome({
   errorState,
   followUpPathAnalysis,
   followUpPathAnalysisStatus,
+  lowSensitiveImportCustomerCount,
   status,
   summary,
 }: {
@@ -606,6 +615,7 @@ function InstitutionDashboardHome({
   errorState: InstitutionPageStateProps | null;
   followUpPathAnalysis: FollowUpPathAnalysisApiResponse | null;
   followUpPathAnalysisStatus: DashboardLoadStatus;
+  lowSensitiveImportCustomerCount: number;
   status: DashboardLoadStatus;
   summary: InstitutionDashboardSummary;
 }) {
@@ -702,6 +712,40 @@ function InstitutionDashboardHome({
             </article>
           );
         })}
+      </section>
+
+      <section className="rounded-[22px] border border-blue-100 bg-blue-50/80 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+              <Users className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">
+                低敏客户导入状态
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                dashboard 仅汇总低敏导入客户数量和安全边界；不展示手机号、身份证、病历号、聊天记录或外部系统 payload。
+              </p>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-blue-200 bg-white px-4 py-3 text-right">
+            <div className="text-xs font-semibold text-slate-400">低敏导入客户</div>
+            <div className="mt-1 text-3xl font-semibold text-blue-700">
+              {status === 'loading' ? '--' : lowSensitiveImportCustomerCount}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2 text-xs font-semibold text-blue-800 sm:grid-cols-3">
+          <span className="rounded-full border border-blue-200 bg-white px-3 py-2">字段白名单预检</span>
+          <span className="rounded-full border border-blue-200 bg-white px-3 py-2">失败原因可见</span>
+          <span className="rounded-full border border-blue-200 bg-white px-3 py-2">导入后记录审计</span>
+        </div>
+        {status === 'success' && lowSensitiveImportCustomerCount === 0 ? (
+          <div className="mt-4 rounded-2xl border border-dashed border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-500">
+            当前暂无低敏导入客户，可在客户中心使用预检 API 后执行合法行导入。
+          </div>
+        ) : null}
       </section>
 
       {entitlementView ? (
