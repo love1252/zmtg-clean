@@ -39,8 +39,12 @@ import type {
 import type { TenantDatabase } from '@/server/db/client';
 import {
   createDefaultWeComAuthorizationRecord,
+  createWeComAuthorizationRecord,
   mapWeComAuthorizationToDashboardView,
 } from '@/modules/institution/domain/wecom-authorization';
+import {
+  createWeComCustomerContactSyncDashboardView,
+} from '@/modules/institution/domain/wecom-customer-contact';
 import {
   followUpMessageDrafts,
   followUpMessageTemplates,
@@ -60,6 +64,7 @@ import type {
 import type { FollowUpTaskListFilters } from '@/modules/institution/server/follow-up-task-query-parser';
 
 type CustomerRow = typeof customers.$inferSelect;
+type WeComCustomerContactCustomerRow = Pick<CustomerRow, 'id' | 'tenantId' | 'displayName' | 'ownerUserId'>;
 type AppointmentRow = typeof appointments.$inferSelect;
 type FollowUpTaskRow = typeof followUpTasks.$inferSelect;
 type FollowUpMessageTemplateRow = typeof followUpMessageTemplates.$inferSelect;
@@ -639,6 +644,60 @@ function followUpCustomerTimelineInsertValues(input: CreateFollowUpCustomerTimel
     createdAt: input.createdAt ? new Date(input.createdAt) : occurredAt,
     updatedAt: input.updatedAt ? new Date(input.updatedAt) : occurredAt,
   };
+}
+
+function createWeComAuthorizationForOperationsSnapshot(input: {
+  tenantId: string;
+  institutionId: string | null;
+}) {
+  const occurredAt = '2026-07-08T00:00:00.000Z';
+
+  if (
+    input.tenantId === 'demo-tenant-001' ||
+    input.tenantId === 'v06-demo-low-sensitive-01-tenant' ||
+    input.tenantId.startsWith('growth-tenant-')
+  ) {
+    return createWeComAuthorizationRecord({
+      tenantId: input.tenantId,
+      institutionId: input.institutionId,
+      status: 'mock_authorized',
+      authorizedCorpDisplayName: '演示机构企业微信主体（mock）',
+      authorizedCorpRef: 'corp:mock-low-sensitive',
+      employeeScopeSummary: '企微员工A / 企微员工B 低敏映射；未映射员工显示空态。',
+      lastSyncedAt: occurredAt,
+      lastErrorReason: null,
+      inGray: false,
+      occurredAt,
+    });
+  }
+
+  return createDefaultWeComAuthorizationRecord({
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    occurredAt,
+  });
+}
+
+function createWeComCustomerContactSeeds(input: {
+  customerRows: WeComCustomerContactCustomerRow[];
+}) {
+  const customers = input.customerRows.slice(0, 3);
+  if (customers.length === 0) return [];
+
+  return customers.map((customer, index) => ({
+    customerId: index === 1 ? null : customer.id,
+    customerDisplayName: customer.displayName,
+    ownerEmployeeRef: index === 2 ? 'mock-employee:unmapped' : undefined,
+    ownerEmployeeDisplayName: index === 2 ? '未映射企微员工（低敏）' : undefined,
+    mappedSystemEmployeeRef: index === 2 ? null : customer.ownerUserId ?? `system-employee:mock-${index + 1}`,
+    source: index === 0 ? '术后随访低敏线索' : index === 1 ? '到院咨询低敏线索' : '复购窗口低敏线索',
+    tags: index === 0 ? ['术后关怀', '低敏标签'] : index === 1 ? ['到院咨询', '未关联'] : ['复购窗口', '人工确认'],
+    remarkSummary: index === 1
+      ? '外部联系人尚未关联系统客户，不能直接用于随访。'
+      : '客户联系 mock 低敏摘要，可作为后续人工随访候选。',
+    linkedToSystemCustomer: index !== 1,
+    availableForFollowUp: index !== 1 && index !== 2,
+  }));
 }
 
 export function createTenantBusinessRepository(database: TenantDatabase) {
@@ -1578,7 +1637,7 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
       tenantId: string;
       institutionId?: string | null;
     }): Promise<FollowUpOperationsSnapshot> {
-      const [taskRows, enrollmentRows, stageRows, draftRows, timelineRows] = await Promise.all([
+      const [taskRows, enrollmentRows, stageRows, draftRows, timelineRows, customerRows] = await Promise.all([
         database
           .select()
           .from(followUpTasks)
@@ -1627,6 +1686,15 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
                 )
               : eq(followUpCustomerTimelineEvents.tenantId, input.tenantId),
           ),
+        database
+          .select({
+            id: customers.id,
+            tenantId: customers.tenantId,
+            displayName: customers.displayName,
+            ownerUserId: customers.ownerUserId,
+          })
+          .from(customers)
+          .where(eq(customers.tenantId, input.tenantId)),
       ]);
       const visibleEnrollments = enrollmentRows.filter((row) => {
         if (row.tenantId !== input.tenantId) return false;
@@ -1658,6 +1726,18 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         if (row.tenantId !== input.tenantId) return false;
         if (input.institutionId && row.institutionId !== input.institutionId) return false;
         return true;
+      });
+      const visibleCustomerRows = customerRows.filter((row) => row.tenantId === input.tenantId);
+      const weComAuthorization = createWeComAuthorizationForOperationsSnapshot({
+        tenantId: input.tenantId,
+        institutionId: input.institutionId ?? null,
+      });
+      const weComCustomerContactSync = createWeComCustomerContactSyncDashboardView({
+        tenantId: input.tenantId,
+        institutionId: input.institutionId ?? null,
+        authorization: weComAuthorization,
+        customerSeeds: createWeComCustomerContactSeeds({ customerRows: visibleCustomerRows }),
+        occurredAt: weComAuthorization.lastSyncedAt ?? weComAuthorization.updatedAt,
       });
 
       return {
@@ -1694,11 +1774,8 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
           occurredAt: row.occurredAt.toISOString(),
         })),
         messageDeliveries: mapTimelineRowsToMessageDeliveries(visibleTimelineEvents),
-        weComAuthorization: mapWeComAuthorizationToDashboardView(createDefaultWeComAuthorizationRecord({
-          tenantId: input.tenantId,
-          institutionId: input.institutionId ?? null,
-          occurredAt: '2026-07-07T00:00:00.000Z',
-        })),
+        weComAuthorization: mapWeComAuthorizationToDashboardView(weComAuthorization),
+        weComCustomerContactSync,
       };
     },
     async listFollowUpPathAnalysisSourceTasksByTenant(

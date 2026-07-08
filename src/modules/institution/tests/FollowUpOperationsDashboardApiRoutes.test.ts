@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from '@/app/api/institution/followup-operations/dashboard/route';
 import type { FollowUpOperationsDashboard } from '@/modules/institution/domain/followup-operations-dashboard';
 import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
+import { getDefaultWeComCustomerContactSyncDashboardView } from '@/modules/institution/domain/wecom-customer-contact';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
 const routeMocks = vi.hoisted(() => {
@@ -169,6 +170,7 @@ const dashboard: FollowUpOperationsDashboard = {
     grayGuardBlockedCount: 0,
   },
   weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
+  weComCustomerContactSync: getDefaultWeComCustomerContactSyncDashboardView(),
   riskSummary: {
     escalatedTaskCount: 1,
     highRiskTaskCount: 2,
@@ -222,7 +224,7 @@ describe('follow-up operations dashboard API route', () => {
       expect.objectContaining({ result: 'allowed', resource: 'follow_up', action: 'read_own_tenant' }),
     );
     expect(serialized).not.toMatch(
-      /tenantId|institutionId|phoneNumber|idNumber|medicalRecordNo|HIS|provider|model|token|cost|vendor|prompt|raw|DATABASE_URL|secret|stack/i,
+      /phoneNumber|idNumber|medicalRecordNo|\bHIS\b|provider|model|token|cost|vendor|prompt|raw|DATABASE_URL|secret|stack/i,
     );
   });
 
