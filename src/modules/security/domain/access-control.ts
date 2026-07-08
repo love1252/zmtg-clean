@@ -28,6 +28,7 @@ export const ACCESS_RESOURCES = [
   'appointment',
   'follow_up',
   'message_delivery',
+  'ai_conversation',
   'dashboard',
   'safety_switch',
   'real_channel',
@@ -99,6 +100,7 @@ const tenantReadResources: ProtectedResource[] = [
   'appointment',
   'follow_up',
   'message_delivery',
+  'ai_conversation',
   'dashboard',
 ];
 
@@ -107,6 +109,7 @@ const tenantManagerResources: ProtectedResource[] = [
   'appointment',
   'follow_up',
   'message_delivery',
+  'ai_conversation',
   'dashboard',
 ];
 
@@ -196,6 +199,11 @@ const accessPolicies: AccessPolicy[] = [
   },
   {
     role: 'tenant_admin',
+    resource: 'ai_conversation',
+    actions: ['read', 'read_own_tenant', 'read_detail', 'update', 'approve', 'review', 'manage_status'],
+  },
+  {
+    role: 'tenant_admin',
     resource: 'dashboard',
     actions: ['read', 'read_own_tenant'],
   },
@@ -270,6 +278,7 @@ const sensitiveResources: ProtectedResource[] = [
   'appointment',
   'follow_up',
   'message_delivery',
+  'ai_conversation',
   'treatment_summary',
 ];
 
