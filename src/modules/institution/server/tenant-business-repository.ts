@@ -43,8 +43,13 @@ import {
   mapWeComAuthorizationToDashboardView,
 } from '@/modules/institution/domain/wecom-authorization';
 import {
+  createWeComCustomerContactMockRecords,
   createWeComCustomerContactSyncDashboardView,
 } from '@/modules/institution/domain/wecom-customer-contact';
+import {
+  createWeComMockReachOutDashboardView,
+  createWeComMockReachOutResult,
+} from '@/modules/institution/domain/wecom-reachout-mock';
 import {
   followUpMessageDrafts,
   followUpMessageTemplates,
@@ -493,11 +498,78 @@ function mapTimelineRowsToMessageDeliveries(
       createdAt: dto.createdAt,
       sentAt: dto.sentAt,
       updatedAt: dto.updatedAt,
+      weComMockReachOut: dto.weComMockReachOut,
       contactSafety: dto.contactSafety,
     });
   }
 
   return [...deliveriesById.values()];
+}
+
+function createWeComReachOutRecordsForDashboard(input: {
+  draftRows: FollowUpMessageDraftRow[];
+  customerSeeds: ReturnType<typeof createWeComCustomerContactSeeds>;
+  authorization: ReturnType<typeof createWeComAuthorizationForOperationsSnapshot>;
+  occurredAt: string;
+}) {
+  const contacts = createWeComCustomerContactMockRecords({
+    tenantId: input.authorization.tenantId,
+    institutionId: input.authorization.institutionId,
+    authorization: input.authorization,
+    customerSeeds: input.customerSeeds,
+    occurredAt: input.occurredAt,
+  });
+
+  return input.draftRows
+    .filter((draft) => draft.status === 'approved')
+    .slice(0, 6)
+    .map((draft, index) => {
+      const draftForReachOut = {
+        id: draft.id,
+        tenantId: draft.tenantId,
+        institutionId: draft.institutionId,
+        followUpTaskId: draft.followUpTaskId,
+        enrollmentId: draft.enrollmentId,
+        stageId: draft.stageId,
+        customerId: draft.customerId,
+        customerDisplayName: '低敏客户',
+        templateId: draft.templateId,
+        channelType: 'manual' as const,
+        status: 'approved' as const,
+        draftContent: draft.draftContent,
+        editedContent: draft.editedContent,
+        safePreview: draft.safePreview,
+        approvedBy: draft.approvedBy,
+        approvedAt: draft.approvedAt?.toISOString() ?? input.occurredAt,
+        rejectedBy: draft.rejectedBy,
+        rejectedAt: draft.rejectedAt?.toISOString() ?? null,
+        markedSentBy: draft.markedSentBy,
+        markedSentAt: draft.markedSentAt?.toISOString() ?? null,
+        safeReasonCode: draft.safeReasonCode as FollowUpMessageSafeReasonCode,
+        metadataJson: draft.metadataJson,
+        createdAt: draft.createdAt.toISOString(),
+        updatedAt: draft.updatedAt.toISOString(),
+      } satisfies FollowUpMessageDraft;
+
+      return createWeComMockReachOutResult({
+        draft: draftForReachOut,
+        deliveryId: `msg-delivery:${draft.id}`,
+        contactSafetyDecision: {
+          code: 'allowed',
+          allowed: true,
+          status: 'mock_sent',
+          deliveryMode: 'mock',
+          failureReason: null,
+          safeReasonLabel: '触达安全校验通过，仅允许模拟发送 / 人工记录。',
+          auditReason: 'contact_safety_allowed',
+          boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送',
+        },
+        authorization: input.authorization,
+        contacts,
+        occurredAt: draft.approvedAt?.toISOString() ?? input.occurredAt,
+        mockOutcome: index === 1 ? 'mock_failed' : 'mock_sent',
+      });
+    });
 }
 
 function mapFollowUpPathStageRowToRecord(row: FollowUpPathStageRow): FollowUpPathStageInstance {
@@ -1732,13 +1804,21 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         tenantId: input.tenantId,
         institutionId: input.institutionId ?? null,
       });
+      const weComCustomerContactSeeds = createWeComCustomerContactSeeds({ customerRows: visibleCustomerRows });
       const weComCustomerContactSync = createWeComCustomerContactSyncDashboardView({
         tenantId: input.tenantId,
         institutionId: input.institutionId ?? null,
         authorization: weComAuthorization,
-        customerSeeds: createWeComCustomerContactSeeds({ customerRows: visibleCustomerRows }),
+        customerSeeds: weComCustomerContactSeeds,
         occurredAt: weComAuthorization.lastSyncedAt ?? weComAuthorization.updatedAt,
       });
+      const weComReachOutRecords = createWeComReachOutRecordsForDashboard({
+        draftRows: visibleDrafts,
+        customerSeeds: weComCustomerContactSeeds,
+        authorization: weComAuthorization,
+        occurredAt: weComAuthorization.lastSyncedAt ?? weComAuthorization.updatedAt,
+      });
+      const messageDeliveries = mapTimelineRowsToMessageDeliveries(visibleTimelineEvents);
 
       return {
         tasks: visibleTasks.map(mapFollowUpOperationsTaskRow),
@@ -1773,9 +1853,15 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
           riskLevel: row.riskLevel,
           occurredAt: row.occurredAt.toISOString(),
         })),
-        messageDeliveries: mapTimelineRowsToMessageDeliveries(visibleTimelineEvents),
+        messageDeliveries,
         weComAuthorization: mapWeComAuthorizationToDashboardView(weComAuthorization),
         weComCustomerContactSync,
+        weComMockReachOut: createWeComMockReachOutDashboardView([
+          ...weComReachOutRecords,
+          ...messageDeliveries
+            .map((delivery) => delivery.weComMockReachOut)
+            .filter((record): record is NonNullable<typeof record> => Boolean(record)),
+        ]),
       };
     },
     async listFollowUpPathAnalysisSourceTasksByTenant(

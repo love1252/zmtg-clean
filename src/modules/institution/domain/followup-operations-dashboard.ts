@@ -2,6 +2,8 @@ import type { WeComAuthorizationDashboardView } from '@/modules/institution/doma
 import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
 import type { WeComCustomerContactSyncDashboardView } from '@/modules/institution/domain/wecom-customer-contact';
 import { getDefaultWeComCustomerContactSyncDashboardView } from '@/modules/institution/domain/wecom-customer-contact';
+import type { WeComMockReachOutDashboardView } from '@/modules/institution/domain/wecom-reachout-mock';
+import { createWeComMockReachOutDashboardView } from '@/modules/institution/domain/wecom-reachout-mock';
 import type { FollowUpCustomerTimelineEventType } from '@/modules/institution/domain/followup-customer-timeline';
 import type { MessageDeliveryDto } from '@/modules/institution/domain/followup-message-deliveries';
 import type { FollowUpMessageDraftStatus } from '@/modules/institution/domain/followup-message-drafts';
@@ -73,6 +75,7 @@ export type FollowUpOperationsMessageDeliveryRecord = Pick<
   | 'sentAt'
   | 'updatedAt'
   | 'contactSafety'
+  | 'weComMockReachOut'
 >;
 
 export type FollowUpOperationsSnapshot = {
@@ -84,6 +87,7 @@ export type FollowUpOperationsSnapshot = {
   messageDeliveries: FollowUpOperationsMessageDeliveryRecord[];
   weComAuthorization?: WeComAuthorizationDashboardView | null;
   weComCustomerContactSync?: WeComCustomerContactSyncDashboardView | null;
+  weComMockReachOut?: WeComMockReachOutDashboardView | null;
 };
 
 export type FollowUpOperationsOverview = {
@@ -179,6 +183,7 @@ export type FollowUpOperationsDashboard = {
   contactSafety: FollowUpContactSafetyOperationsSummary;
   weComAuthorization: WeComAuthorizationDashboardView;
   weComCustomerContactSync: WeComCustomerContactSyncDashboardView;
+  weComMockReachOut: WeComMockReachOutDashboardView;
   riskSummary: FollowUpRiskSummary;
 };
 
@@ -412,6 +417,16 @@ export function getFollowUpContactSafetyOperationsSummary(
   return contactSafetySummaryFromDeliveries(snapshot.messageDeliveries);
 }
 
+export function getFollowUpWeComMockReachOutSummary(
+  snapshot: FollowUpOperationsSnapshot,
+): WeComMockReachOutDashboardView {
+  return createWeComMockReachOutDashboardView(
+    snapshot.messageDeliveries
+      .map((delivery) => delivery.weComMockReachOut)
+      .filter((record): record is NonNullable<typeof record> => Boolean(record)),
+  );
+}
+
 export function getFollowUpRiskSummary(input: {
   snapshot: FollowUpOperationsSnapshot;
   now: Date;
@@ -446,6 +461,7 @@ export function buildFollowUpOperationsDashboard(input: {
     contactSafety: getFollowUpContactSafetyOperationsSummary(input.snapshot),
     weComAuthorization: input.snapshot.weComAuthorization ?? getDefaultWeComAuthorizationDashboardView(),
     weComCustomerContactSync: input.snapshot.weComCustomerContactSync ?? getDefaultWeComCustomerContactSyncDashboardView(),
+    weComMockReachOut: input.snapshot.weComMockReachOut ?? getFollowUpWeComMockReachOutSummary(input.snapshot),
     riskSummary: getFollowUpRiskSummary(input),
   };
 }

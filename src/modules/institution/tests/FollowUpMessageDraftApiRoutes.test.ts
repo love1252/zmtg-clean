@@ -98,6 +98,7 @@ const deliveryRecord: MessageDeliveryDto = {
   contentSnapshot: '陈女士，D1 护理随访，请人工确认恢复情况。',
   status: 'mock_sent',
   failureReason: null,
+  weComMockReachOut: null,
   contactSafety: {
     code: 'allowed',
     allowed: true,

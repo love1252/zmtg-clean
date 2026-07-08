@@ -49,7 +49,8 @@ export type ContactSafetyDecision = {
     | 'wecom_mock_authorization_read'
     | 'wecom_mock_authorization_unavailable'
     | 'wecom_channel_default_closed'
-    | 'wecom_reach_out_unauthorized';
+    | 'wecom_reach_out_unauthorized'
+    | 'wecom_mock_customer_contact_unavailable';
   boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送';
 };
 

@@ -3,6 +3,7 @@ import { canAccessResource } from '@/modules/security/domain/access-control';
 import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
 import type { MessageDelivery } from '@/modules/institution/domain/followup-message-deliveries';
 import { messageDeliveryToTimelineMetadata } from '@/modules/institution/domain/followup-message-deliveries';
+import { weComMockReachOutToTimelineMetadata } from '@/modules/institution/domain/wecom-reachout-mock';
 import type { FollowUpMessageDraftDto } from '@/modules/institution/domain/followup-message-drafts';
 import {
   containsUnsafeFollowUpTimelineText,
@@ -303,14 +304,18 @@ export async function recordMessageDeliveryTimelineEvents(input: {
 }) {
   const statusTitle: Record<MessageDelivery['status'], string> = {
     pending: '受控发送记录已生成',
-    mock_sent: input.delivery.contactSafetyDecision.allowed ? '触达安全校验通过' : '模拟发送成功',
-    mock_failed: '模拟发送失败',
-    skipped: input.delivery.failureReason === 'opt_out'
+    mock_sent: input.delivery.weComMockReachOut ? '企业微信 mock 触达成功' : input.delivery.contactSafetyDecision.allowed ? '触达安全校验通过' : '模拟发送成功',
+    mock_failed: input.delivery.weComMockReachOut ? '企业微信 mock 触达失败' : '模拟发送失败',
+    skipped: input.delivery.weComMockReachOut
+      ? '企业微信客户联系关系不可用，已跳过'
+      : input.delivery.failureReason === 'opt_out'
       ? '客户退订，已跳过'
       : input.delivery.failureReason === 'frequency_cap_reached'
         ? '达到频率限制，已跳过'
         : '未授权触达，已跳过',
-    external_disabled: input.delivery.failureReason === 'tenant_not_allowlisted'
+    external_disabled: input.delivery.weComMockReachOut
+      ? '企业微信外部通道未启用'
+      : input.delivery.failureReason === 'tenant_not_allowlisted'
       ? '租户未进入灰度，已阻断'
       : input.delivery.failureReason === 'institution_not_allowlisted'
         ? '机构未进入灰度，已阻断'
@@ -318,12 +323,17 @@ export async function recordMessageDeliveryTimelineEvents(input: {
   };
   const statusSummary: Record<MessageDelivery['status'], string> = {
     pending: '已在人工确认后生成受控发送记录，当前不自动发送。',
-    mock_sent: '触达安全治理校验通过，但仅完成模拟发送状态记录，不代表真实企业微信或短信触达。',
-    mock_failed: '模拟发送失败，失败原因使用低敏白名单记录。',
-    skipped: input.delivery.contactSafetyDecision.safeReasonLabel,
-    external_disabled: input.delivery.contactSafetyDecision.safeReasonLabel,
+    mock_sent: input.delivery.weComMockReachOut
+      ? '企业微信 mock 触达已成功写回：当前仅 mock，不真实发送，不真实出网，不调用真实企业微信 API。'
+      : '触达安全治理校验通过，但仅完成模拟发送状态记录，不代表真实企业微信或短信触达。',
+    mock_failed: input.delivery.weComMockReachOut
+      ? '企业微信 mock 触达失败，失败原因使用低敏白名单记录；当前仅 mock，不真实发送。'
+      : '模拟发送失败，失败原因使用低敏白名单记录。',
+    skipped: input.delivery.weComMockReachOut?.safeReasonLabel ?? input.delivery.contactSafetyDecision.safeReasonLabel,
+    external_disabled: input.delivery.weComMockReachOut?.safeReasonLabel ?? input.delivery.contactSafetyDecision.safeReasonLabel,
   };
   const metadataJson = messageDeliveryToTimelineMetadata(input.delivery);
+  const weComMetadataJson = input.delivery.weComMockReachOut ? weComMockReachOutToTimelineMetadata(input.delivery.weComMockReachOut) : null;
   const baseSummary = `发送记录 ${input.delivery.id}：${statusSummary[input.delivery.status]} 内容快照：${input.delivery.contentSnapshot}`;
 
   await recordFollowUpTimelineEvent({
@@ -341,6 +351,23 @@ export async function recordMessageDeliveryTimelineEvents(input: {
     metadataJson,
   });
 
+  if (weComMetadataJson) {
+    await recordFollowUpTimelineEvent({
+      context: input.context,
+      tenantBusinessRepository: input.tenantBusinessRepository,
+      customerId: input.delivery.customerId,
+      sourceType: 'message_draft',
+      sourceId: `${input.delivery.id}:wecom_mock_reachout_created`,
+      eventType: 'message_draft_marked_sent',
+      eventTitle: '企业微信 mock 触达已生成',
+      safeSummary: `企业微信 mock 触达记录 ${input.delivery.id} 已在 MessageDelivery 后生成；当前仅 mock，不真实发送、不真实出网、不调用真实企业微信 API、不使用 webhook。`,
+      riskLevel: null,
+      occurredAt: input.occurredAt,
+      safeReasonCode: 'wecom_mock_reachout_created',
+      metadataJson: weComMetadataJson,
+    });
+  }
+
   if (input.delivery.status === 'pending') return;
 
   await recordFollowUpTimelineEvent({
@@ -354,7 +381,7 @@ export async function recordMessageDeliveryTimelineEvents(input: {
     safeSummary: baseSummary,
     riskLevel: null,
     occurredAt: input.occurredAt,
-    safeReasonCode: input.delivery.failureReason ?? `message_delivery_${input.delivery.status}`,
+    safeReasonCode: input.delivery.weComMockReachOut?.auditReason ?? input.delivery.failureReason ?? `message_delivery_${input.delivery.status}`,
     metadataJson,
   });
 }

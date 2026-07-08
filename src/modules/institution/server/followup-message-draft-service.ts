@@ -16,6 +16,7 @@ import {
   mapMessageDeliveryToDto,
   messageDeliveryContactSafetyAuditReason,
   messageDeliveryStatusAuditReason,
+  messageDeliveryWeComMockReachOutAuditReason,
   type CreateMessageDeliveryOptions,
   type MessageDeliveryDto,
 } from '@/modules/institution/domain/followup-message-deliveries';
@@ -90,7 +91,12 @@ async function recordDeliveryAudit(input: {
   context: AccessContext;
   auditRepository?: Pick<AuditEventRepository, 'record'>;
   deliveryId: string;
-  reason: ReturnType<typeof messageDeliveryStatusAuditReason> | ReturnType<typeof messageDeliveryContactSafetyAuditReason> | 'message_delivery_created';
+  reason:
+    | ReturnType<typeof messageDeliveryStatusAuditReason>
+    | ReturnType<typeof messageDeliveryContactSafetyAuditReason>
+    | Exclude<ReturnType<typeof messageDeliveryWeComMockReachOutAuditReason>, null>
+    | 'wecom_mock_reachout_created'
+    | 'message_delivery_created';
   occurredAt: string;
 }) {
   if (!input.auditRepository) return;
@@ -149,6 +155,23 @@ async function createDeliveryAfterDraftApproval(input: {
     reason: messageDeliveryContactSafetyAuditReason(deliveryResult.delivery),
     occurredAt: input.occurredAt,
   });
+  const weComReachOutAuditReason = messageDeliveryWeComMockReachOutAuditReason(deliveryResult.delivery);
+  if (weComReachOutAuditReason) {
+    await recordDeliveryAudit({
+      context: input.context,
+      auditRepository: input.auditRepository,
+      deliveryId: deliveryResult.delivery.id,
+      reason: 'wecom_mock_reachout_created',
+      occurredAt: input.occurredAt,
+    });
+    await recordDeliveryAudit({
+      context: input.context,
+      auditRepository: input.auditRepository,
+      deliveryId: deliveryResult.delivery.id,
+      reason: weComReachOutAuditReason,
+      occurredAt: input.occurredAt,
+    });
+  }
   if (deliveryResult.delivery.status !== 'pending') {
     await recordDeliveryAudit({
       context: input.context,
