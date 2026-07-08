@@ -125,7 +125,16 @@ export type AuditReason =
   | 'ai_conversation_recommendation_used'
   | 'ai_conversation_message_mock_sent'
   | 'ai_conversation_risk_blocked'
-  | 'ai_conversation_closed';
+  | 'ai_conversation_closed'
+  | 'ai_auto_strategy_evaluated'
+  | 'ai_auto_reply_mock_allowed'
+  | 'ai_auto_followup_mock_allowed'
+  | 'ai_auto_reply_human_confirmation_required'
+  | 'ai_auto_followup_human_confirmation_required'
+  | 'ai_auto_reply_blocked'
+  | 'ai_auto_followup_blocked'
+  | 'ai_marketing_automation_blocked'
+  | 'ai_add_friend_blocked';
 
 export type TenantAuditEvent = {
   eventId: string;

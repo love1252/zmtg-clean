@@ -1,5 +1,12 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import {
+  aiAutoStrategyAuditReasons,
+  aiAutoStrategyLevelDefinitions,
+  assertAiAutoStrategyLowSensitivePayload,
+  evaluateAiAutoStrategy,
+  type AiAutoStrategyContext,
+} from '@/modules/institution/domain/ai-auto-strategy';
 import { AiConversationWorkbenchShell } from '@/modules/institution/components/AiConversationWorkbenchShell';
 import {
   aiConversationAuditReasons,
@@ -9,9 +16,14 @@ import {
   buildAiConversationWorkbenchStats,
   closeAiConversation,
   detectAiConversationSendRisks,
+  evaluateAiConversationAutomationStrategy,
   filterAiConversations,
   getAiConversationWorkbenchFixture,
+  markAiConversationAutomationBlocked,
+  markAiConversationAutomationNeedsHuman,
   mockSendAiConversationMessage,
+  simulateAiConversationAutoFollowupStrategy,
+  simulateAiConversationAutoReplyStrategy,
   takeoverAiConversation,
   useAiConversationRecommendation,
 } from '@/modules/institution/domain/ai-conversation-workbench';
@@ -45,6 +57,199 @@ function expectNoUnsafeText(text: string) {
   }
 }
 
+const baseStrategyContext: AiAutoStrategyContext = {
+  conversationId: 'ai-conv-test',
+  tenantId: 'tenant-low-sensitive-001',
+  institutionId: 'institution-low-sensitive-001',
+  customerMaskedRef: '客户 ZM****T01',
+  conversationStatus: 'ai_handling',
+  intentType: 'basic_faq',
+  riskTags: [],
+  hasConsent: true,
+  hasOptOut: false,
+  frequencyCapPassed: true,
+  isAftercareFollowup: false,
+  isMarketing: false,
+  isAddFriendIntent: false,
+  isComplaint: false,
+  isMedicalRisk: false,
+  isPriceCommitmentRisk: false,
+  safetySwitchSummary: {
+    emergencyStopEnabled: true,
+    allowRealSend: false,
+    externalChannelEnabled: false,
+  },
+  operatorRole: 'customer_service',
+};
+
+function evaluateStrategy(overrides: Partial<AiAutoStrategyContext> = {}) {
+  return evaluateAiAutoStrategy({ ...baseStrategyContext, ...overrides });
+}
+
+describe('自动回复与自动随访策略模拟 domain', () => {
+  it('定义 L0-L4 自动化等级模型并全部禁止真实通道', () => {
+    expect(aiAutoStrategyLevelDefinitions.map((level) => level.level)).toEqual(['L0', 'L1', 'L2', 'L3', 'L4']);
+    expect(aiAutoStrategyLevelDefinitions.map((level) => level.title)).toEqual([
+      'L0 AI 推荐',
+      'L1 AI 草稿 + 人工确认',
+      'L2 低风险自动回复',
+      'L3 受控自动随访',
+      'L4 营销自动化 / 群发 / 加好友 / 裂变',
+    ]);
+    for (const level of aiAutoStrategyLevelDefinitions) {
+      expect(level.realChannelAllowed).toBe(false);
+      expect(level.auditRequired).toBe(true);
+    }
+    expect(aiAutoStrategyLevelDefinitions.find((level) => level.level === 'L0')?.defaultClosed).toBe(false);
+    expect(aiAutoStrategyLevelDefinitions.find((level) => level.level === 'L1')?.requiresHumanConfirmation).toBe(true);
+    expect(aiAutoStrategyLevelDefinitions.find((level) => level.level === 'L2')?.mockExecutionAllowed).toBe(true);
+    expect(aiAutoStrategyLevelDefinitions.find((level) => level.level === 'L3')?.requiresOptOutCheck).toBe(true);
+    expect(aiAutoStrategyLevelDefinitions.find((level) => level.level === 'L4')?.defaultClosed).toBe(true);
+  });
+
+  it('L0 AI 推荐不自动发送，L1 AI 草稿需要人工确认', () => {
+    const recommendOnly = evaluateStrategy({ intentType: 'aftercare_question', isAftercareFollowup: false });
+    expect(recommendOnly.recommendedLevel).toBe('L0');
+    expect(recommendOnly.decision).toBe('recommend_only');
+    expect(recommendOnly.canAutoReplyMock).toBe(false);
+    expect(recommendOnly.canAutoFollowupMock).toBe(false);
+    expect(recommendOnly.requiresHumanConfirmation).toBe(true);
+
+    const draftRequiresHuman = evaluateStrategy({ intentType: 'price_question', isPriceCommitmentRisk: true });
+    expect(draftRequiresHuman.recommendedLevel).toBe('L1');
+    expect(draftRequiresHuman.decision).toBe('draft_requires_human');
+    expect(draftRequiresHuman.requiresHumanConfirmation).toBe(true);
+    expect(draftRequiresHuman.canAutoReplyMock).toBe(false);
+  });
+
+  it('L2 低风险基础问答或预约问题允许模拟自动回复', () => {
+    const faq = evaluateStrategy({ intentType: 'basic_faq' });
+    expect(faq.recommendedLevel).toBe('L2');
+    expect(faq.decision).toBe('mock_auto_reply_allowed');
+    expect(faq.canAutoReplyMock).toBe(true);
+    expect(faq.requiresHumanConfirmation).toBe(false);
+    expect(faq.allowRealSend).toBe(false);
+    expect(faq.externalChannelEnabled).toBe(false);
+
+    const appointment = evaluateStrategy({ intentType: 'appointment_question' });
+    expect(appointment.decision).toBe('mock_auto_reply_allowed');
+    expect(appointment.canAutoReplyMock).toBe(true);
+  });
+
+  it('L3 合规术后随访允许模拟自动随访', () => {
+    const result = evaluateStrategy({
+      intentType: 'aftercare_question',
+      isAftercareFollowup: true,
+      hasConsent: true,
+      hasOptOut: false,
+      frequencyCapPassed: true,
+    });
+
+    expect(result.recommendedLevel).toBe('L3');
+    expect(result.decision).toBe('mock_followup_allowed');
+    expect(result.canAutoFollowupMock).toBe(true);
+    expect(result.requiresHumanConfirmation).toBe(false);
+    expect(result.safeFollowupPlan.channelBoundary).toContain('仅模拟自动随访');
+  });
+
+  it('L4 营销自动化和自动加好友默认阻断', () => {
+    const marketing = evaluateStrategy({ intentType: 'marketing_campaign', isMarketing: true });
+    expect(marketing.recommendedLevel).toBe('L4');
+    expect(marketing.decision).toBe('blocked_marketing_automation');
+    expect(marketing.blocked).toBe(true);
+    expect(marketing.auditReason).toBe('ai_marketing_automation_blocked');
+
+    const addFriend = evaluateStrategy({
+      intentType: 'add_friend',
+      isAddFriendIntent: true,
+      isMedicalRisk: false,
+      isComplaint: false,
+      isPriceCommitmentRisk: false,
+    });
+    expect(addFriend.recommendedLevel).toBe('L4');
+    expect(addFriend.decision).toBe('blocked_add_friend');
+    expect(addFriend.blocked).toBe(true);
+    expect(addFriend.auditReason).toBe('ai_add_friend_blocked');
+  });
+
+  it('投诉、医疗风险和价格承诺风险必须人工确认或阻断', () => {
+    expect(evaluateStrategy({ intentType: 'complaint', isComplaint: true }).decision).toBe('blocked_high_risk');
+    expect(evaluateStrategy({ intentType: 'medical_risk', isMedicalRisk: true }).decision).toBe('blocked_high_risk');
+    const price = evaluateStrategy({ intentType: 'price_question', isPriceCommitmentRisk: true });
+    expect(price.decision).toBe('draft_requires_human');
+    expect(price.requiresHumanConfirmation).toBe(true);
+  });
+
+  it('opt-out、频率限制、未授权、未知意图和 emergency stop 守卫按保守规则处理', () => {
+    expect(evaluateStrategy({ hasOptOut: true }).decision).toBe('blocked_opt_out');
+    expect(evaluateStrategy({ frequencyCapPassed: false }).decision).toBe('blocked_frequency_cap');
+    expect(evaluateStrategy({ intentType: 'aftercare_question', isAftercareFollowup: true, hasConsent: false }).decision).toBe('blocked_missing_consent');
+    expect(evaluateStrategy({ intentType: 'unknown' }).decision).toBe('blocked_unknown_intent');
+
+    const result = evaluateStrategy({
+      safetySwitchSummary: {
+        emergencyStopEnabled: true,
+        allowRealSend: true,
+        externalChannelEnabled: true,
+      },
+    });
+    expect(result.decision).toBe('blocked_real_channel_disabled');
+    expect(result.allowRealSend).toBe(false);
+    expect(result.externalChannelEnabled).toBe(false);
+    expect(result.realChannelBlocked).toBe(true);
+    expect(result.safetySwitchSummary.emergencyStopEnabled).toBe(true);
+    expect(result.safetySwitchSummary.allowRealSend).toBe(false);
+    expect(result.safetySwitchSummary.externalChannelEnabled).toBe(false);
+    expect(result.blockReasons).toEqual(expect.arrayContaining([
+      '真实渠道阻断：emergency_stop_enabled',
+      '真实渠道阻断：allow_real_send_forced_false',
+      '真实渠道阻断：external_channel_forced_false',
+    ]));
+
+    const sensitive = evaluateStrategy({ customerMaskedRef: '13800000000' });
+    expect(sensitive.decision).toBe('blocked_sensitive_output');
+    expect(sensitive.blocked).toBe(true);
+  });
+
+  it('输出低敏策略结果、audit reason、时间线 metadata 和模拟动作', () => {
+    expect(aiAutoStrategyAuditReasons).toEqual([
+      'ai_auto_strategy_evaluated',
+      'ai_auto_reply_mock_allowed',
+      'ai_auto_followup_mock_allowed',
+      'ai_auto_reply_human_confirmation_required',
+      'ai_auto_followup_human_confirmation_required',
+      'ai_auto_reply_blocked',
+      'ai_auto_followup_blocked',
+      'ai_marketing_automation_blocked',
+      'ai_add_friend_blocked',
+    ]);
+
+    const [conversation] = getAiConversationWorkbenchFixture();
+    const autoReply = simulateAiConversationAutoReplyStrategy({
+      conversation,
+      context: { intentType: 'basic_faq', riskTags: [], isMedicalRisk: false, isComplaint: false },
+      occurredAt: '2026-07-08T10:00:00.000+08:00',
+    });
+    expect(autoReply.kind).toBe('evaluated');
+    expect(autoReply.conversation.timeline.at(-1)?.auditReason).toBe('ai_auto_reply_mock_allowed');
+    expect(autoReply.conversation.timeline.at(-1)?.metadata?.allowRealSend).toBe('false');
+
+    const autoFollowup = simulateAiConversationAutoFollowupStrategy({
+      conversation,
+      context: { intentType: 'aftercare_question', riskTags: [], isAftercareFollowup: true, isMedicalRisk: false },
+      occurredAt: '2026-07-08T10:01:00.000+08:00',
+    });
+    expect(autoFollowup.conversation.timeline.at(-1)?.auditReason).toBe('ai_auto_followup_mock_allowed');
+
+    expect(markAiConversationAutomationNeedsHuman({ conversation: autoReply.conversation, occurredAt: '2026-07-08T10:02:00.000+08:00' }).kind).toBe('requires_human_confirmation');
+    expect(markAiConversationAutomationBlocked({ conversation, occurredAt: '2026-07-08T10:03:00.000+08:00' }).kind).toBe('blocked');
+
+    const result = evaluateAiConversationAutomationStrategy({ conversation, occurredAt: '2026-07-08T10:04:00.000+08:00' });
+    expect(assertAiAutoStrategyLowSensitivePayload(result.conversation.automationStrategy)).toBe(true);
+    expect(assertAiAutoStrategyLowSensitivePayload({ raw: '13800000000' })).toBe(false);
+  });
+});
+
 describe('AI 会话工作台模拟版 domain', () => {
   it('支持会话列表状态筛选与四种会话状态', () => {
     const conversations = getAiConversationWorkbenchFixture();
@@ -68,6 +273,14 @@ describe('AI 会话工作台模拟版 domain', () => {
       recommendationCount: 3,
       mockSentCount: 0,
       closedCount: 1,
+      strategyEvaluatedCount: 4,
+      aiRecommendOnlyCount: 0,
+      humanConfirmationRequiredCount: 3,
+      mockAutoReplyAllowedCount: 1,
+      mockAutoFollowupAllowedCount: 0,
+      highRiskBlockedCount: 2,
+      marketingAutomationBlockedCount: 0,
+      addFriendBlockedCount: 0,
     });
   });
 
@@ -171,6 +384,15 @@ describe('AI 会话工作台模拟版 domain', () => {
       'ai_conversation_message_mock_sent',
       'ai_conversation_risk_blocked',
       'ai_conversation_closed',
+      'ai_auto_strategy_evaluated',
+      'ai_auto_reply_mock_allowed',
+      'ai_auto_followup_mock_allowed',
+      'ai_auto_reply_human_confirmation_required',
+      'ai_auto_followup_human_confirmation_required',
+      'ai_auto_reply_blocked',
+      'ai_auto_followup_blocked',
+      'ai_marketing_automation_blocked',
+      'ai_add_friend_blocked',
     ]);
     expect(assertAiConversationLowSensitivePayload(getAiConversationWorkbenchFixture())).toBe(true);
     expect(assertAiConversationLowSensitivePayload({ phoneNumber: '13800000000' })).toBe(false);
@@ -200,6 +422,19 @@ describe('AI 会话工作台模拟版 UI', () => {
     expect(screen.getByRole('button', { name: '接管会话' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '结束会话' })).toBeInTheDocument();
     expect(screen.getByText('AI 推荐回复')).toBeInTheDocument();
+    expect(screen.getByText('自动化策略')).toBeInTheDocument();
+    expect(screen.getByText('L0-L4 等级说明')).toBeInTheDocument();
+    expect(screen.getByText('L0 AI 推荐')).toBeInTheDocument();
+    expect(screen.getByText('L1 AI 草稿 + 人工确认')).toBeInTheDocument();
+    expect(screen.getByText('L2 低风险自动回复')).toBeInTheDocument();
+    expect(screen.getByText('L3 受控自动随访')).toBeInTheDocument();
+    expect(screen.getByText('L4 营销自动化 / 群发 / 加好友 / 裂变')).toBeInTheDocument();
+    expect(screen.getByText(/当前策略结果/u)).toBeInTheDocument();
+    expect(screen.getByText(/是否需要人工确认/u)).toBeInTheDocument();
+    expect(screen.getByText('阻断原因')).toBeInTheDocument();
+    expect(screen.getByText('低敏回复草稿')).toBeInTheDocument();
+    expect(screen.getByText(/低敏随访计划/u)).toBeInTheDocument();
+    expect(screen.getByText(/自动回复和自动随访当前仅策略模拟/u)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '生成模拟建议' })).toBeInTheDocument();
     expect(screen.getByText('推荐项目')).toBeInTheDocument();
     expect(screen.getByText('水光恢复期低敏回复')).toBeInTheDocument();
@@ -268,6 +503,41 @@ describe('AI 会话工作台模拟版 UI', () => {
     expectNoUnsafeText(container.textContent ?? '');
   });
 
+  it('支持自动化策略模拟动作并更新低敏时间线与统计', () => {
+    render(<AiConversationWorkbenchShell />);
+    const statsRegion = screen.getByLabelText('AI 会话工作台低敏统计');
+    const autoReplyCard = within(statsRegion).getByText('模拟自动回复允许数量').closest('article');
+    const followupCard = within(statsRegion).getByText('模拟自动随访允许数量').closest('article');
+    const marketingCard = within(statsRegion).getByText('营销自动化阻断数量').closest('article');
+
+    expect(autoReplyCard).not.toBeNull();
+    expect(followupCard).not.toBeNull();
+    expect(marketingCard).not.toBeNull();
+    expect(within(autoReplyCard as HTMLElement).getByText('1')).toBeInTheDocument();
+    expect(within(followupCard as HTMLElement).getByText('0')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '模拟生成自动回复策略' }));
+    expect(screen.getByText('已模拟生成自动回复策略：低风险场景只允许 mock，不接真实渠道。')).toBeInTheDocument();
+    expect(screen.getByText(/当前策略结果：允许低风险模拟自动回复/u)).toBeInTheDocument();
+    expect(screen.getAllByText(/ai_auto_reply_mock_allowed/u).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: '模拟生成自动随访策略' }));
+    expect(screen.getByText('已模拟生成自动随访策略：授权、未退订、频控通过且低风险才允许 mock。')).toBeInTheDocument();
+    expect(screen.getByText(/当前策略结果：允许受控模拟自动随访/u, { selector: 'span' })).toBeInTheDocument();
+    expect(screen.getAllByText(/ai_auto_followup_mock_allowed/u).length).toBeGreaterThan(0);
+    expect(within(followupCard as HTMLElement).getByText('1')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '模拟标记需要人工确认' }));
+    expect(screen.getByText('已模拟标记需要人工确认：自动化策略不发送客户。')).toBeInTheDocument();
+    expect(screen.getByText(/当前策略结果：未知意图需人工确认/u, { selector: 'span' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '模拟标记已阻断' }));
+    expect(screen.getByText('已模拟标记已阻断：L4 营销自动化默认关闭。')).toBeInTheDocument();
+    expect(screen.getByText(/当前策略结果：营销自动化默认阻断/u)).toBeInTheDocument();
+    expect(screen.getAllByText(/ai_marketing_automation_blocked/u).length).toBeGreaterThan(0);
+    expect(within(marketingCard as HTMLElement).getByText('1')).toBeInTheDocument();
+  });
+
   it('看板统计会随模拟发送增加，且只沉淀低敏统计', () => {
     render(<AiConversationWorkbenchShell />);
     const statsRegion = screen.getByLabelText('AI 会话工作台低敏统计');
@@ -280,6 +550,14 @@ describe('AI 会话工作台模拟版 UI', () => {
     expect(within(statsRegion).getByText('推荐回复数量')).toBeInTheDocument();
     expect(within(statsRegion).getByText('模拟发送数量')).toBeInTheDocument();
     expect(within(statsRegion).getByText('已结束会话数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('策略评估数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('AI 推荐数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('需要人工确认数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('模拟自动回复允许数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('模拟自动随访允许数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('高风险阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('营销自动化阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('加好友阻断数量')).toBeInTheDocument();
 
     const mockSentCard = within(statsRegion).getByText('模拟发送数量').closest('article');
     expect(mockSentCard).not.toBeNull();
