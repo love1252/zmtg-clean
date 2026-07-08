@@ -3,6 +3,7 @@ import { GET } from '@/app/api/institution/followup-operations/dashboard/route';
 import type { FollowUpOperationsDashboard } from '@/modules/institution/domain/followup-operations-dashboard';
 import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
 import { getDefaultWeComCustomerContactSyncDashboardView } from '@/modules/institution/domain/wecom-customer-contact';
+import { getDefaultWeComMockReachOutDashboardView } from '@/modules/institution/domain/wecom-reachout-mock';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
 const routeMocks = vi.hoisted(() => {
@@ -146,6 +147,7 @@ const dashboard: FollowUpOperationsDashboard = {
         contentSnapshot: '低敏人工确认内容快照',
         status: 'mock_sent',
         failureReason: null,
+        weComMockReachOut: null,
         contactSafety: {
           code: 'allowed',
           allowed: true,
@@ -171,6 +173,7 @@ const dashboard: FollowUpOperationsDashboard = {
   },
   weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
   weComCustomerContactSync: getDefaultWeComCustomerContactSyncDashboardView(),
+  weComMockReachOut: getDefaultWeComMockReachOutDashboardView(),
   riskSummary: {
     escalatedTaskCount: 1,
     highRiskTaskCount: 2,

@@ -11,7 +11,15 @@ import {
 } from '@/modules/institution/domain/followup-contact-safety';
 import type { WeComAuthorizationRecord } from '@/modules/institution/domain/wecom-authorization';
 import { evaluateWeComAuthorizationForDelivery } from '@/modules/institution/domain/wecom-authorization';
+import type { WeComCustomerContactMockRecord } from '@/modules/institution/domain/wecom-customer-contact';
 import type { FollowUpMessageDraft } from '@/modules/institution/domain/followup-message-drafts';
+import {
+  createWeComMockReachOutResult,
+  readWeComMockReachOutFromMetadata,
+  weComMockReachOutToTimelineMetadata,
+  type WeComMockReachOutAuditReason,
+  type WeComMockReachOutResult,
+} from '@/modules/institution/domain/wecom-reachout-mock';
 
 export const messageDeliveryChannelTypes = [
   'manual',
@@ -51,6 +59,10 @@ export const messageDeliveryFailureReasons = [
   'wecom_authorization_disabled',
   'wecom_reach_out_unauthorized',
   'wecom_external_channel_disabled',
+  'wecom_customer_contact_not_synced',
+  'wecom_external_contact_unlinked',
+  'wecom_owner_employee_unmapped',
+  'wecom_customer_unavailable',
 ] as const;
 
 export type MessageDeliveryChannelType = (typeof messageDeliveryChannelTypes)[number];
@@ -72,6 +84,7 @@ export type MessageDelivery = {
   status: MessageDeliveryStatus;
   failureReason: MessageDeliveryFailureReason | null;
   contactSafetyDecision: ContactSafetyDecision;
+  weComMockReachOut: WeComMockReachOutResult | null;
   createdBy: string;
   confirmedBy: string;
   createdAt: string;
@@ -90,6 +103,7 @@ export type MessageDeliveryDto = Pick<
   | 'contentSnapshot'
   | 'status'
   | 'failureReason'
+  | 'weComMockReachOut'
   | 'createdAt'
   | 'sentAt'
   | 'updatedAt'
@@ -106,6 +120,8 @@ export type CreateMessageDeliveryOptions = {
   failureReason?: MessageDeliveryFailureReason | null;
   contactSafetyPolicy?: ContactSafetyPolicy | null;
   weComAuthorization?: WeComAuthorizationRecord | null;
+  weComCustomerContacts?: WeComCustomerContactMockRecord[] | null;
+  weComMockOutcome?: 'mock_sent' | 'mock_failed';
 };
 
 const forbiddenDeliveryContentPatterns = [
@@ -186,6 +202,10 @@ function contactSafetyDecisionFromStoredFields(input: {
     wecom_authorization_disabled: 'blocked_external_channel_disabled',
     wecom_reach_out_unauthorized: 'blocked_external_channel_disabled',
     wecom_external_channel_disabled: 'blocked_external_channel_disabled',
+    wecom_customer_contact_not_synced: 'blocked_external_channel_disabled',
+    wecom_external_contact_unlinked: 'blocked_external_channel_disabled',
+    wecom_owner_employee_unmapped: 'blocked_external_channel_disabled',
+    wecom_customer_unavailable: 'blocked_external_channel_disabled',
   };
   const code = input.failureReason ? codeByFailureReason[input.failureReason] : undefined;
   if (code) {
@@ -235,54 +255,82 @@ export function createMessageDeliveryFromApprovedDraft(input: {
   }
 
   const channelType = input.options?.channelType ?? 'mock';
+  const contactSafetyChannelType = channelType === 'wechat_work' ? 'mock' : channelType;
   const defaultPolicy = createAllowedSandboxContactSafetyPolicy({
     tenantId: input.draft.tenantId,
     institutionId: input.draft.institutionId,
-    channelTypes: ['manual', 'mock', channelType],
+    channelTypes: ['manual', 'mock', contactSafetyChannelType],
   });
   const metadataPolicy = readContactSafetyPolicyFromMetadata(input.draft.metadataJson);
   const contactSafetyDecision = evaluateContactSafetyGuard({
     tenantId: input.draft.tenantId,
     institutionId: input.draft.institutionId,
-    channelType,
+    channelType: contactSafetyChannelType,
     policy: input.options?.contactSafetyPolicy ?? metadataPolicy ?? defaultPolicy,
   });
-  const weComGate = channelType === 'wechat_work'
-    ? evaluateWeComAuthorizationForDelivery(input.options?.weComAuthorization)
+  const deliveryId = deliveryIdForDraft(input.draft.id);
+  const weComMockReachOut = channelType === 'wechat_work'
+    ? createWeComMockReachOutResult({
+        draft: input.draft,
+        deliveryId,
+        contactSafetyDecision,
+        authorization: input.options?.weComAuthorization,
+        contacts: input.options?.weComCustomerContacts,
+        occurredAt: input.occurredAt,
+        mockOutcome: input.options?.weComMockOutcome ?? (input.options?.status === 'mock_failed' ? 'mock_failed' : undefined),
+      })
     : null;
-  const isExternalChannel = channelType === 'wechat_work' || channelType === 'sms';
+  const isExternalChannel = channelType === 'sms';
   const shouldForceSafetyDecision = isExternalChannel || !contactSafetyDecision.allowed;
-  const deliveryMode = shouldForceSafetyDecision
-    ? contactSafetyDecision.deliveryMode
-    : input.options?.deliveryMode ?? contactSafetyDecision.deliveryMode;
-  const status = shouldForceSafetyDecision
-    ? contactSafetyDecision.status
-    : input.options?.status ?? contactSafetyDecision.status;
+  const deliveryMode = weComMockReachOut
+    ? weComMockReachOut.deliveryMode
+    : shouldForceSafetyDecision
+      ? contactSafetyDecision.deliveryMode
+      : input.options?.deliveryMode ?? contactSafetyDecision.deliveryMode;
+  const status = weComMockReachOut
+    ? weComMockReachOut.status
+    : shouldForceSafetyDecision
+      ? contactSafetyDecision.status
+      : input.options?.status ?? contactSafetyDecision.status;
   const failureReason = normalizeFailureReason({
     status,
-    failureReason: weComGate?.messageDeliveryFailureReason ?? (shouldForceSafetyDecision
+    failureReason: weComMockReachOut?.failureReason ?? (shouldForceSafetyDecision
       ? contactSafetyDecision.failureReason
       : input.options?.failureReason ?? contactSafetyDecision.failureReason),
   });
-  const finalContactSafetyDecision = !shouldForceSafetyDecision && (input.options?.status || input.options?.failureReason || input.options?.deliveryMode)
-    ? contactSafetyDecisionFromStoredFields({ status, deliveryMode, failureReason })
-    : weComGate
+  const finalContactSafetyDecision = weComMockReachOut
+    ? weComMockReachOut.status === 'mock_sent' || weComMockReachOut.status === 'mock_failed'
       ? {
+          ...contactSafetyDecision,
+          status,
+          deliveryMode,
+          failureReason: contactSafetyDecision.failureReason,
+          safeReasonLabel: contactSafetyDecision.safeReasonLabel,
+        }
+      : {
           ...contactSafetyDecision,
           allowed: false,
           status,
           deliveryMode,
           failureReason,
-          safeReasonLabel: weComGate.safeReasonLabel,
-          auditReason: weComGate.reason,
+          safeReasonLabel: weComMockReachOut.safeReasonLabel,
+          auditReason: weComMockReachOut.failureReason?.startsWith('wecom_authorization') || weComMockReachOut.failureReason === 'wecom_reach_out_unauthorized'
+            ? 'wecom_mock_authorization_unavailable'
+            : weComMockReachOut.failureReason === 'wecom_external_channel_disabled'
+              ? 'wecom_channel_default_closed'
+              : weComMockReachOut.failureReason?.startsWith('wecom_')
+                ? 'wecom_mock_customer_contact_unavailable'
+                : contactSafetyDecision.auditReason,
         }
+    : !shouldForceSafetyDecision && (input.options?.status || input.options?.failureReason || input.options?.deliveryMode)
+      ? contactSafetyDecisionFromStoredFields({ status, deliveryMode, failureReason })
       : contactSafetyDecision;
   const sentAt = status === 'pending' ? null : input.occurredAt;
 
   return {
     kind: 'created',
     delivery: {
-      id: deliveryIdForDraft(input.draft.id),
+      id: deliveryId,
       tenantId: input.draft.tenantId,
       institutionId: input.draft.institutionId,
       customerId: input.draft.customerId,
@@ -295,6 +343,7 @@ export function createMessageDeliveryFromApprovedDraft(input: {
       status,
       failureReason,
       contactSafetyDecision: finalContactSafetyDecision,
+      weComMockReachOut,
       createdBy: input.actorId,
       confirmedBy: input.draft.approvedBy ?? input.actorId,
       createdAt: input.occurredAt,
@@ -344,6 +393,7 @@ function getRawDeliveryField(input: {
 
 export function messageDeliveryToTimelineMetadata(delivery: MessageDelivery): Record<string, string | null> {
   return {
+    ...(delivery.weComMockReachOut ? weComMockReachOutToTimelineMetadata(delivery.weComMockReachOut) : {}),
     messageDeliveryId: delivery.id,
     messageDeliveryTenantId: delivery.tenantId,
     messageDeliveryInstitutionId: delivery.institutionId,
@@ -424,6 +474,7 @@ export function readMessageDeliveryFromMetadata(metadata: Record<string, unknown
     deliveryMode,
     failureReason,
   });
+  const weComMockReachOut = readWeComMockReachOutFromMetadata(metadata);
 
   return {
     id,
@@ -439,6 +490,7 @@ export function readMessageDeliveryFromMetadata(metadata: Record<string, unknown
     status,
     failureReason,
     contactSafetyDecision,
+    weComMockReachOut,
     createdBy,
     confirmedBy,
     createdAt,
@@ -459,6 +511,7 @@ export function mapMessageDeliveryToDto(delivery: MessageDelivery): MessageDeliv
     contentSnapshot: delivery.contentSnapshot,
     status: delivery.status,
     failureReason: delivery.failureReason,
+    weComMockReachOut: delivery.weComMockReachOut,
     createdAt: delivery.createdAt,
     sentAt: delivery.sentAt,
     updatedAt: delivery.updatedAt,
@@ -479,6 +532,12 @@ export function messageDeliveryStatusAuditReason(status: MessageDeliveryStatus) 
   if (status === 'skipped') return 'message_delivery_skipped' as const;
   if (status === 'external_disabled') return 'message_delivery_external_disabled' as const;
   return 'message_delivery_created' as const;
+}
+
+export function messageDeliveryWeComMockReachOutAuditReason(
+  delivery: Pick<MessageDelivery, 'weComMockReachOut'>,
+): WeComMockReachOutAuditReason | null {
+  return delivery.weComMockReachOut?.auditReason ?? null;
 }
 
 export function messageDeliveryContactSafetyAuditReason(delivery: Pick<MessageDelivery, 'contactSafetyDecision'>) {

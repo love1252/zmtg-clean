@@ -6,6 +6,7 @@ import { CustomerCenterShell } from '@/modules/institution/components/CustomerCe
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
 import { getDefaultWeComCustomerContactSyncDashboardView } from '@/modules/institution/domain/wecom-customer-contact';
+import { getDefaultWeComMockReachOutDashboardView } from '@/modules/institution/domain/wecom-reachout-mock';
 
 const customerRecord = {
   id: 'cust_wang_repurchase',
@@ -383,6 +384,7 @@ function mockInstitutionFetch(responsesByPath: Record<string, Response[]>) {
               },
               weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
               weComCustomerContactSync: getDefaultWeComCustomerContactSyncDashboardView(),
+              weComMockReachOut: getDefaultWeComMockReachOutDashboardView(),
               riskSummary: {
                 escalatedTaskCount: 0,
                 highRiskTaskCount: 0,
@@ -1562,6 +1564,7 @@ describe('机构业务页面壳', () => {
                 contentSnapshot: '低敏人工确认内容快照',
                 status: 'mock_sent',
                 failureReason: null,
+                weComMockReachOut: null,
                 createdAt: '2026-07-06T10:00:00.000Z',
                 sentAt: '2026-07-06T10:00:00.000Z',
                 updatedAt: '2026-07-06T10:00:00.000Z',
@@ -1654,6 +1657,37 @@ describe('机构业务页面壳', () => {
               },
             ],
           },
+          weComMockReachOut: {
+            ...getDefaultWeComMockReachOutDashboardView(),
+            recordCount: 1,
+            mockSentCount: 1,
+            reachableCustomerCount: 1,
+            recentRecords: [
+              {
+                deliveryId: 'msg-delivery:draft_001',
+                messageDraftId: 'draft_001',
+                followUpTaskId: 'task_001',
+                customerId: 'cust_001',
+                mockExternalContactId: 'mock-external-contact:01',
+                ownerEmployeeRef: 'mock-employee:consultant-a',
+                channelType: 'wechat_work',
+                deliveryMode: 'mock',
+                status: 'mock_sent',
+                failureReason: null,
+                safeReasonLabel: '企业微信 mock 触达成功：当前仅本地状态回写，未真实发送、未真实出网、未调用企业微信 API。',
+                occurredAt: '2026-07-06T10:00:00.000Z',
+                updatedAt: '2026-07-06T10:00:00.000Z',
+                noRealSend: true,
+                noRealOutBound: true,
+                noRealWeComApiCall: true,
+                noWebhook: true,
+                currentOnlyMock: true,
+                externalChannelEnabled: false,
+                allowRealSend: false,
+                auditReason: 'wecom_mock_reachout_sent',
+              },
+            ],
+          },
           riskSummary: {
             escalatedTaskCount: 1,
             highRiskTaskCount: 2,
@@ -1676,10 +1710,10 @@ describe('机构业务页面壳', () => {
     expect(screen.getByText('受控发送记录')).toBeInTheDocument();
     expect(screen.getByText('受控发送基础闭环')).toBeInTheDocument();
     expect(screen.getByText(/发送记录 4/)).toBeInTheDocument();
-    expect(screen.getByText(/mock_sent 1/)).toBeInTheDocument();
-    expect(screen.getByText(/mock_failed 1/)).toBeInTheDocument();
-    expect(screen.getByText(/skipped 1/)).toBeInTheDocument();
-    expect(screen.getByText(/external_disabled 1/)).toBeInTheDocument();
+    expect(screen.getAllByText(/mock_sent 1/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/mock_failed 1/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/skipped 1/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/external_disabled 1/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/人工确认后才生成 MessageDelivery/)).toBeInTheDocument();
     expect(screen.getByText(/仅模拟发送，不自动发送，未接真实企业微信 \/ 短信/)).toBeInTheDocument();
     expect(screen.getByText('mock_sent · mock / mock')).toBeInTheDocument();
@@ -1694,6 +1728,16 @@ describe('机构业务页面壳', () => {
     expect(screen.getByText(/本区域为内部运营统计，不代表已自动联系客户/)).toBeInTheDocument();
     expect(screen.getByText(/标记已发送仅代表人工记录/)).toBeInTheDocument();
     expect(screen.getByText(/当前没有企业微信 \/ 短信接入，不做自动营销群发/)).toBeInTheDocument();
+    expect(screen.getByText('企业微信随访触达 mock')).toBeInTheDocument();
+    expect(screen.getByText(/当前仅 mock，未接真实企业微信，不真实发送，不真实出网/)).toBeInTheDocument();
+    expect(screen.getByText(/必须人工确认、经过 MessageDelivery/)).toBeInTheDocument();
+    expect(screen.getByText('记录总数 1')).toBeInTheDocument();
+    expect(screen.getByText('可触达客户 1')).toBeInTheDocument();
+    expect(screen.getByText('不可触达客户 0')).toBeInTheDocument();
+    expect(screen.getByText(/mock 已授权也不会真实发送/)).toBeInTheDocument();
+    expect(screen.getByText('mock_sent · wechat_work / mock')).toBeInTheDocument();
+    expect(screen.getByText(/企业微信 mock 触达成功/)).toBeInTheDocument();
+    expect(screen.getByText(/外部联系人：mock-external-contact:01；归属员工：mock-employee:consultant-a/)).toBeInTheDocument();
     expect(screen.getByText('企业微信客户运营接入')).toBeInTheDocument();
     expect(screen.getAllByText(/不是企业微信登录/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('状态：模拟已授权')).toBeInTheDocument();
@@ -1703,14 +1747,14 @@ describe('机构业务页面壳', () => {
     expect(screen.getByText('企业微信触达：mock 可读')).toBeInTheDocument();
     expect(screen.getByText('会话内容存档：后置规划')).toBeInTheDocument();
     expect(screen.getByText('默认关闭：是')).toBeInTheDocument();
-    expect(screen.getByText('不真实发送：是')).toBeInTheDocument();
+    expect(screen.getAllByText('不真实发送：是').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/未接真实企业微信，未申请服务商 \/ 未接真实接口/)).toBeInTheDocument();
     expect(screen.getByText(/企业微信触达必须经过人工确认和 MessageDelivery/)).toBeInTheDocument();
     expect(screen.getByText(/企业微信授权状态 → 触达安全治理 → MessageDelivery/)).toBeInTheDocument();
     expect(screen.getByText('企业微信客户联系')).toBeInTheDocument();
     expect(screen.getByText(/企业微信客户联系 \/ 外部联系人当前仅 mock/)).toBeInTheDocument();
-    expect(screen.getByText(/不是个人微信好友同步/)).toBeInTheDocument();
-    expect(screen.getByText(/不是聊天记录同步/)).toBeInTheDocument();
+    expect(screen.getAllByText(/不是个人微信好友同步/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/不是聊天记录同步/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/未接真实企业微信，不真实出网，不同步真实客户/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('同步状态：模拟已同步')).toBeInTheDocument();
     expect(screen.getByText('外部联系人 3')).toBeInTheDocument();
@@ -1725,7 +1769,7 @@ describe('机构业务页面壳', () => {
     expect(container.textContent).toContain('客户备注：客户联系 mock 低敏摘要 / 外部联系人尚未关联系统客户');
     expect(screen.getByText(/后续企业微信触达必须先有授权状态、客户联系关系、人工确认和 MessageDelivery/)).toBeInTheDocument();
     expect(screen.getByText(/低敏客户A · 模拟已同步 · 已关联系统客户/)).toBeInTheDocument();
-    expect(screen.getByText(/外部联系人：mock-external-contact:01/)).toHaveTextContent('客户归属员工：企微员工A（低敏）');
+    expect(container.textContent).toContain('外部联系人：mock-external-contact:01；客户归属员工：企微员工A（低敏）');
     expect(screen.getByText(/低敏客户B · 模拟已同步 · 未关联系统客户/)).toBeInTheDocument();
     expect(screen.getByText(/未映射机构员工，显示低敏空态/)).toBeInTheDocument();
 
@@ -1862,6 +1906,7 @@ describe('机构业务页面壳', () => {
           },
           weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
           weComCustomerContactSync: getDefaultWeComCustomerContactSyncDashboardView(),
+          weComMockReachOut: getDefaultWeComMockReachOutDashboardView(),
           riskSummary: {
             escalatedTaskCount: 0,
             highRiskTaskCount: 0,

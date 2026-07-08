@@ -153,6 +153,7 @@ const snapshot: FollowUpOperationsSnapshot = {
       createdAt: '2026-07-07T10:00:00.000Z',
       sentAt: '2026-07-07T10:00:00.000Z',
       updatedAt: '2026-07-07T10:00:00.000Z',
+      weComMockReachOut: null,
       contactSafety: {
         code: 'allowed',
         allowed: true,
@@ -175,6 +176,7 @@ const snapshot: FollowUpOperationsSnapshot = {
       createdAt: '2026-07-07T10:05:00.000Z',
       sentAt: '2026-07-07T10:05:00.000Z',
       updatedAt: '2026-07-07T10:05:00.000Z',
+      weComMockReachOut: null,
       contactSafety: {
         code: 'allowed',
         allowed: true,
@@ -197,6 +199,7 @@ const snapshot: FollowUpOperationsSnapshot = {
       createdAt: '2026-07-07T10:10:00.000Z',
       sentAt: '2026-07-07T10:10:00.000Z',
       updatedAt: '2026-07-07T10:10:00.000Z',
+      weComMockReachOut: null,
       contactSafety: {
         code: 'blocked_consent_missing',
         allowed: false,
@@ -219,6 +222,7 @@ const snapshot: FollowUpOperationsSnapshot = {
       createdAt: '2026-07-07T10:15:00.000Z',
       sentAt: '2026-07-07T10:15:00.000Z',
       updatedAt: '2026-07-07T10:15:00.000Z',
+      weComMockReachOut: null,
       contactSafety: {
         code: 'blocked_external_channel_disabled',
         allowed: false,

@@ -930,6 +930,7 @@ export async function getFollowUpOperationsDashboard(
       !isJsonObject(payload.contactSafety) ||
       !isJsonObject(payload.weComAuthorization) ||
       !isJsonObject(payload.weComCustomerContactSync) ||
+      !isJsonObject(payload.weComMockReachOut) ||
       !isJsonObject(payload.riskSummary)
     ) {
       return {

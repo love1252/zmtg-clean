@@ -33,6 +33,7 @@ import type { FollowUpMessageDraftDto } from '@/modules/institution/domain/follo
 import type { FollowUpOperationsDashboard } from '@/modules/institution/domain/followup-operations-dashboard';
 import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
 import { getDefaultWeComCustomerContactSyncDashboardView } from '@/modules/institution/domain/wecom-customer-contact';
+import { getDefaultWeComMockReachOutDashboardView } from '@/modules/institution/domain/wecom-reachout-mock';
 import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
 import type {
   FollowUpStatus,
@@ -124,6 +125,7 @@ const emptyOperationsDashboard: FollowUpOperationsDashboard = {
   },
   weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
   weComCustomerContactSync: getDefaultWeComCustomerContactSyncDashboardView(),
+  weComMockReachOut: getDefaultWeComMockReachOutDashboardView(),
   riskSummary: {
     escalatedTaskCount: 0,
     highRiskTaskCount: 0,
@@ -475,6 +477,7 @@ export function SmartFollowUpShell() {
   const contactSafety = operationsDashboard.contactSafety ?? emptyOperationsDashboard.contactSafety;
   const weComAuthorization = operationsDashboard.weComAuthorization ?? emptyOperationsDashboard.weComAuthorization;
   const weComCustomerContactSync = operationsDashboard.weComCustomerContactSync ?? emptyOperationsDashboard.weComCustomerContactSync;
+  const weComMockReachOut = operationsDashboard.weComMockReachOut ?? emptyOperationsDashboard.weComMockReachOut;
   const safetyBlockedCount =
     (overview.consentMissingBlockedCount ?? contactSafety.consentMissingBlockedCount) +
     (overview.optOutBlockedCount ?? contactSafety.optOutBlockedCount) +
@@ -564,6 +567,12 @@ export function SmartFollowUpShell() {
                 value={overview.messageDeliveryCount}
                 description={`模拟成功 ${overview.mockSentCount}，失败 ${overview.mockFailedCount}，跳过 ${overview.skippedCount}，外部禁用 ${overview.externalDisabledCount}。`}
                 tone="violet"
+              />
+              <OperationsMetricCard
+                label="企业微信 mock 触达"
+                value={weComMockReachOut.recordCount}
+                description={`成功 ${weComMockReachOut.mockSentCount}，失败 ${weComMockReachOut.mockFailedCount}，跳过 ${weComMockReachOut.skippedCount}，外部禁用 ${weComMockReachOut.externalDisabledCount}。`}
+                tone="emerald"
               />
               <OperationsMetricCard
                 label="安全治理阻断"
@@ -675,6 +684,37 @@ export function SmartFollowUpShell() {
                           </div>
                           <div className="mt-1">外部联系人：{contact.mockExternalContactId}；客户归属员工：{contact.ownerEmployeeDisplayName}；{contact.ownerEmployeeMapped ? '已低敏映射机构员工' : '未映射机构员工，显示低敏空态'}</div>
                           <div className="mt-1">来源：{contact.source}；标签：{contact.tags.join(' / ')}；{contact.remarkSummary}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                  <h4 className="text-sm font-semibold text-slate-950">企业微信随访触达 mock</h4>
+                  <p className="mt-2 text-xs leading-5 text-slate-600">
+                    当前仅 mock，未接真实企业微信，不真实发送，不真实出网，不使用真实 webhook；必须人工确认、经过 MessageDelivery、具备企业微信授权状态和客户联系 mock 关系后才写回本地状态。
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-semibold text-emerald-700">
+                    <span className="rounded-xl bg-white px-3 py-2">记录总数 {weComMockReachOut.recordCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">mock_sent {weComMockReachOut.mockSentCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">mock_failed {weComMockReachOut.mockFailedCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">skipped {weComMockReachOut.skippedCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">external_disabled {weComMockReachOut.externalDisabledCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">可触达客户 {weComMockReachOut.reachableCustomerCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">不可触达客户 {weComMockReachOut.unreachableCustomerCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">不真实发送：{weComMockReachOut.noRealSend ? '是' : '否'}</span>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
+                    {weComMockReachOut.safeSummary} 不是企业微信登录，不是个人微信好友同步，不是聊天记录同步；mock 已授权也不会真实发送。
+                  </p>
+                  {weComMockReachOut.recentRecords.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      {weComMockReachOut.recentRecords.slice(0, 3).map((record) => (
+                        <div key={`${record.deliveryId}:${record.status}`} className="rounded-xl bg-white px-3 py-2 text-xs leading-5 text-slate-600">
+                          <div className="font-semibold text-slate-800">{record.status} · {record.channelType} / {record.deliveryMode}</div>
+                          <div className="mt-1">{record.safeReasonLabel}</div>
+                          <div className="mt-1">外部联系人：{record.mockExternalContactId ?? '低敏空态'}；归属员工：{record.ownerEmployeeRef ?? '低敏空态'}</div>
                         </div>
                       ))}
                     </div>

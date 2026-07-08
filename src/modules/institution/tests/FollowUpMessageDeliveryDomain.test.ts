@@ -6,6 +6,7 @@ import {
   messageDeliveryContactSafetyAuditReason,
   messageDeliveryStatusAuditReason,
   messageDeliveryToTimelineMetadata,
+  messageDeliveryWeComMockReachOutAuditReason,
   readMessageDeliveryFromMetadata,
   type MessageDelivery,
 } from '@/modules/institution/domain/followup-message-deliveries';
@@ -14,6 +15,7 @@ import {
   createWeComAuthorizationRecord,
 } from '@/modules/institution/domain/wecom-authorization';
 import type { FollowUpMessageDraft } from '@/modules/institution/domain/followup-message-drafts';
+import { createWeComCustomerContactMockRecord } from '@/modules/institution/domain/wecom-customer-contact';
 
 const occurredAt = '2026-07-06T10:00:00.000Z';
 
@@ -45,6 +47,28 @@ function draft(overrides: Partial<FollowUpMessageDraft> = {}): FollowUpMessageDr
     updatedAt: occurredAt,
     ...overrides,
   };
+}
+
+function weComContact(overrides: Parameters<typeof createWeComCustomerContactMockRecord>[0]['seed'] = {}) {
+  return createWeComCustomerContactMockRecord({
+    tenantId: 'tenant-a',
+    institutionId: 'inst-a',
+    authorizationRecordId: 'wecom-auth:mock:tenant-a:inst-a',
+    index: 0,
+    occurredAt,
+    defaultSyncStatus: 'mock_synced',
+    seed: {
+      customerId: 'customer-1',
+      customerDisplayName: '低敏客户A',
+      linkedToSystemCustomer: true,
+      availableForFollowUp: true,
+      mappedSystemEmployeeRef: 'operator-1',
+      tags: ['术后关怀', '低敏标签'],
+      remarkSummary: '企业微信客户联系 mock 低敏摘要。',
+      source: '术后随访低敏线索',
+      ...overrides,
+    },
+  });
 }
 
 function delivery(overrides: Partial<MessageDelivery> = {}): MessageDelivery {
@@ -199,7 +223,7 @@ describe('follow-up message delivery domain', () => {
       {
         authorization: createWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', status: 'mock_authorized', weComReachOutAuthorized: false, occurredAt }),
         failureReason: 'wecom_reach_out_unauthorized',
-        auditReason: 'wecom_reach_out_unauthorized',
+        auditReason: 'wecom_mock_authorization_unavailable',
         label: '企业微信触达未授权',
       },
       {
@@ -210,9 +234,9 @@ describe('follow-up message delivery domain', () => {
       },
       {
         authorization: createWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', status: 'mock_authorized', occurredAt }),
-        failureReason: 'wecom_external_channel_disabled',
-        auditReason: 'wecom_mock_authorization_read',
-        label: '模拟已授权仍不真实发送',
+        failureReason: 'wecom_customer_contact_not_synced',
+        auditReason: 'wecom_mock_customer_contact_unavailable',
+        label: '模拟已授权仍需客户联系 mock 关系',
       },
     ] as const;
 
@@ -229,8 +253,8 @@ describe('follow-up message delivery domain', () => {
 
       expect(result.kind === 'created' && result.delivery).toEqual(expect.objectContaining({
         channelType: 'wechat_work',
-        deliveryMode: 'external_disabled',
-        status: 'external_disabled',
+        deliveryMode: item.failureReason === 'wecom_external_channel_disabled' ? 'external_disabled' : 'mock',
+        status: item.failureReason === 'wecom_external_channel_disabled' ? 'external_disabled' : 'skipped',
         failureReason: item.failureReason,
         contactSafetyDecision: expect.objectContaining({
           allowed: false,
@@ -254,8 +278,8 @@ describe('follow-up message delivery domain', () => {
 
     expect(result.kind === 'created' && mapMessageDeliveryToDto(result.delivery)).toEqual(expect.objectContaining({
       channelType: 'wechat_work',
-      deliveryMode: 'external_disabled',
-      status: 'external_disabled',
+      deliveryMode: 'mock',
+      status: 'skipped',
       failureReason: 'wecom_authorization_missing',
       contactSafety: expect.objectContaining({
         allowed: false,
@@ -303,10 +327,10 @@ describe('follow-up message delivery domain', () => {
       withArchiveStatus: withArchive.delivery.status,
       withoutArchiveStatus: withoutArchive.delivery.status,
     }).toEqual({
-      withArchive: 'wecom_external_channel_disabled',
-      withoutArchive: 'wecom_external_channel_disabled',
-      withArchiveStatus: 'external_disabled',
-      withoutArchiveStatus: 'external_disabled',
+      withArchive: 'wecom_customer_contact_not_synced',
+      withoutArchive: 'wecom_customer_contact_not_synced',
+      withArchiveStatus: 'skipped',
+      withoutArchiveStatus: 'skipped',
     });
   });
 
@@ -345,10 +369,10 @@ describe('follow-up message delivery domain', () => {
       },
     });
 
-    expect(mockAuthorized.kind === 'created' && messageDeliveryContactSafetyAuditReason(mockAuthorized.delivery)).toBe('wecom_mock_authorization_read');
+    expect(mockAuthorized.kind === 'created' && messageDeliveryContactSafetyAuditReason(mockAuthorized.delivery)).toBe('wecom_mock_customer_contact_unavailable');
     expect(unavailable.kind === 'created' && messageDeliveryContactSafetyAuditReason(unavailable.delivery)).toBe('wecom_mock_authorization_unavailable');
     expect(defaultClosed.kind === 'created' && messageDeliveryContactSafetyAuditReason(defaultClosed.delivery)).toBe('wecom_channel_default_closed');
-    expect(reachOutUnauthorized.kind === 'created' && messageDeliveryContactSafetyAuditReason(reachOutUnauthorized.delivery)).toBe('wecom_reach_out_unauthorized');
+    expect(reachOutUnauthorized.kind === 'created' && messageDeliveryContactSafetyAuditReason(reachOutUnauthorized.delivery)).toBe('wecom_mock_authorization_unavailable');
   });
 
   it('支持 mock_sent、mock_failed、skipped、external_disabled 状态和低敏 failureReason', () => {
@@ -391,6 +415,104 @@ describe('follow-up message delivery domain', () => {
     }));
   });
 
+  it('企业微信 mock 触达成功、失败、客户联系不可用和 timeline metadata 回写均保持低敏', () => {
+    const authorization = createWeComAuthorizationRecord({ tenantId: 'tenant-a', institutionId: 'inst-a', status: 'mock_authorized', occurredAt });
+    const success = createMessageDeliveryFromApprovedDraft({
+      draft: draft(),
+      actorId: 'operator-1',
+      occurredAt,
+      options: {
+        channelType: 'wechat_work',
+        weComAuthorization: authorization,
+        weComCustomerContacts: [weComContact()],
+      },
+    });
+    const failed = createMessageDeliveryFromApprovedDraft({
+      draft: draft(),
+      actorId: 'operator-1',
+      occurredAt,
+      options: {
+        channelType: 'wechat_work',
+        weComAuthorization: authorization,
+        weComCustomerContacts: [weComContact()],
+        weComMockOutcome: 'mock_failed',
+      },
+    });
+    const unlinked = createMessageDeliveryFromApprovedDraft({
+      draft: draft(),
+      actorId: 'operator-1',
+      occurredAt,
+      options: {
+        channelType: 'wechat_work',
+        weComAuthorization: authorization,
+        weComCustomerContacts: [weComContact({ customerId: 'customer-1', linkedToSystemCustomer: false, availableForFollowUp: false })],
+      },
+    });
+    const unmapped = createMessageDeliveryFromApprovedDraft({
+      draft: draft(),
+      actorId: 'operator-1',
+      occurredAt,
+      options: {
+        channelType: 'wechat_work',
+        weComAuthorization: authorization,
+        weComCustomerContacts: [weComContact({ mappedSystemEmployeeRef: null, availableForFollowUp: false })],
+      },
+    });
+
+    expect(success.kind === 'created' && success.delivery).toEqual(expect.objectContaining({
+      channelType: 'wechat_work',
+      deliveryMode: 'mock',
+      status: 'mock_sent',
+      failureReason: null,
+      weComMockReachOut: expect.objectContaining({
+        status: 'mock_sent',
+        auditReason: 'wecom_mock_reachout_sent',
+        noRealSend: true,
+        noRealOutBound: true,
+        noRealWeComApiCall: true,
+        noWebhook: true,
+        externalChannelEnabled: false,
+        allowRealSend: false,
+      }),
+    }));
+    expect(failed.kind === 'created' && failed.delivery).toEqual(expect.objectContaining({
+      status: 'mock_failed',
+      failureReason: 'mock_failure',
+      weComMockReachOut: expect.objectContaining({ auditReason: 'wecom_mock_reachout_failed' }),
+    }));
+    expect(unlinked.kind === 'created' && unlinked.delivery).toEqual(expect.objectContaining({
+      status: 'skipped',
+      failureReason: 'wecom_external_contact_unlinked',
+      weComMockReachOut: expect.objectContaining({ auditReason: 'wecom_mock_reachout_skipped' }),
+    }));
+    expect(unmapped.kind === 'created' && unmapped.delivery).toEqual(expect.objectContaining({
+      status: 'skipped',
+      failureReason: 'wecom_owner_employee_unmapped',
+    }));
+    expect(success.kind === 'created' && messageDeliveryWeComMockReachOutAuditReason(success.delivery)).toBe('wecom_mock_reachout_sent');
+
+    if (success.kind !== 'created') return;
+    const metadata = messageDeliveryToTimelineMetadata(success.delivery);
+    const parsed = readMessageDeliveryFromMetadata(metadata);
+    expect(metadata).toEqual(expect.objectContaining({
+      weComMockReachOutStatus: 'mock_sent',
+      weComMockReachOutAuditReason: 'wecom_mock_reachout_sent',
+      weComMockReachOutNoRealSend: 'true',
+      weComMockReachOutNoRealOutBound: 'true',
+      weComMockReachOutNoRealWeComApiCall: 'true',
+      weComMockReachOutNoWebhook: 'true',
+      weComMockReachOutExternalChannelEnabled: 'false',
+      weComMockReachOutAllowRealSend: 'false',
+    }));
+    expect(parsed?.weComMockReachOut).toEqual(expect.objectContaining({
+      status: 'mock_sent',
+      auditReason: 'wecom_mock_reachout_sent',
+      noRealSend: true,
+      noRealWeComApiCall: true,
+    }));
+    expect(JSON.stringify(mapMessageDeliveryToDto(success.delivery))).not.toMatch(/corpId|external_userid|userid|secret|access_token|refresh_token|encodingAESKey|callback|13800000000|110101199001011234|完整聊天|HIS payload|provider|model|token|cost|vendor|api key/i);
+  });
+
   it('contentSnapshot、recipientRef 和 DTO 使用低敏白名单', () => {
     expect(containsUnsafeMessageDeliveryText('手机号 13812345678')).toBe(true);
     expect(containsUnsafeMessageDeliveryText('身份证 110101199001011234')).toBe(true);
@@ -427,6 +549,7 @@ describe('follow-up message delivery domain', () => {
       'sentAt',
       'status',
       'updatedAt',
+      'weComMockReachOut',
     ].sort());
     expect(JSON.stringify(dto)).not.toMatch(
       /tenantId|institutionId|phoneNumber|idNumber|medicalRecordNo|HIS|provider|model|token|cost|vendor|prompt|raw|DATABASE_URL|secret/i,
