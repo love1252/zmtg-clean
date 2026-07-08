@@ -80,6 +80,7 @@ describe('访问控制领域', () => {
       'appointment',
       'follow_up',
       'message_delivery',
+      'ai_conversation',
       'dashboard',
       'safety_switch',
       'real_channel',
@@ -655,6 +656,8 @@ describe('访问控制领域', () => {
       { context: tenantOperatorContext, resource: 'follow_up', action: 'approve' },
       { context: consultantContext, resource: 'dashboard', action: 'read' },
       { context: customerServiceContext, resource: 'message_delivery', action: 'read' },
+      { context: customerServiceContext, resource: 'ai_conversation', action: 'read' },
+      { context: tenantAdminContext, resource: 'ai_conversation', action: 'manage_status' },
       { context: tenantAdminContext, resource: 'real_channel', action: 'enable' },
       { context: tenantAdminContext, resource: 'real_channel', action: 'disable' },
     ] as const;
@@ -677,6 +680,7 @@ describe('访问控制领域', () => {
       { context: customerServiceContext, resource: 'customer', action: 'import' },
       { context: customerServiceContext, resource: 'audit_log', action: 'read_detail' },
       { context: consultantContext, resource: 'message_delivery', action: 'approve' },
+      { context: customerServiceContext, resource: 'ai_conversation', action: 'manage_status' },
     ] as const;
 
     for (const testCase of denyCases) {

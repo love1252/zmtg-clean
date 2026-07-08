@@ -119,7 +119,13 @@ export type AuditReason =
   | 'customer_import_completed'
   | 'customer_import_partially_completed'
   | 'customer_import_rejected'
-  | 'customer_import_sensitive_field_blocked';
+  | 'customer_import_sensitive_field_blocked'
+  | 'ai_conversation_viewed'
+  | 'ai_conversation_takeover'
+  | 'ai_conversation_recommendation_used'
+  | 'ai_conversation_message_mock_sent'
+  | 'ai_conversation_risk_blocked'
+  | 'ai_conversation_closed';
 
 export type TenantAuditEvent = {
   eventId: string;

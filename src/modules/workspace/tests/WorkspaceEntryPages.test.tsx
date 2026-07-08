@@ -4135,24 +4135,34 @@ describe('工作台入口页面', () => {
     expect(text).not.toContain('secret');
   });
 
-  it('机构导航清晰标注开发主线和后续入口', async () => {
+  it('机构导航清晰标注开发主线并可进入 AI 会话工作台模拟版', async () => {
     const fetchMock = mockWorkspaceFetch();
     render(<HospitalPage />);
 
     expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
-    expect(screen.getAllByText('开发主线').length).toBeGreaterThanOrEqual(8);
-    expect(screen.getAllByText('后续').length).toBeGreaterThanOrEqual(4);
+    expect(screen.getAllByText('开发主线').length).toBeGreaterThanOrEqual(9);
+    expect(screen.getAllByText('后续').length).toBeGreaterThanOrEqual(3);
 
     expect(screen.queryByRole('button', { name: 'AI 模型' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客服工作台' }));
-    expect(screen.getByText('客服工作台暂不进入本次开发主线')).toBeInTheDocument();
-    expect(
-      screen.getByText((content) =>
-        content.includes('本次主线：工作台、客户中心、预约中心、智能随访、AI 服务使用、治疗摘要管理')
-        && content.includes('HIS 连接配置、知识库只读列表。'),
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText('后续：客服工作台、数据分析。')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'AI 会话工作台' })).toBeInTheDocument();
+    expect(screen.getAllByText('当前为模拟版').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: '全部' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'AI' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '待接管' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '人工' })).toBeInTheDocument();
+    expect(screen.getAllByText('AI 处理中').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: '接管会话' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '结束会话' })).toBeInTheDocument();
+    expect(screen.getByText('AI 推荐回复')).toBeInTheDocument();
+    expect(screen.getAllByText('风险预警').length).toBeGreaterThan(0);
+    expect(screen.getByText('推荐项目')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '档案 tab' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'AI tab' })).toBeInTheDocument();
+    expect(screen.getByText('不接真实企业微信 / 微信')).toBeInTheDocument();
+    expect(screen.getAllByText('不真实发送').length).toBeGreaterThan(0);
+    expect(screen.getByText('会话总数')).toBeInTheDocument();
+    expect(screen.getByText('模拟发送数量')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '知识库' }));
     expect(await screen.findByRole('heading', { name: '知识库' })).toBeInTheDocument();
