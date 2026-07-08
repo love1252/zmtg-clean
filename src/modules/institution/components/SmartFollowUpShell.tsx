@@ -32,6 +32,7 @@ import { followUpMessageSuggestions } from '@/modules/institution/domain/followu
 import type { FollowUpMessageDraftDto } from '@/modules/institution/domain/followup-message-drafts';
 import type { FollowUpOperationsDashboard } from '@/modules/institution/domain/followup-operations-dashboard';
 import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
+import { getDefaultWeComCustomerContactSyncDashboardView } from '@/modules/institution/domain/wecom-customer-contact';
 import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
 import type {
   FollowUpStatus,
@@ -122,6 +123,7 @@ const emptyOperationsDashboard: FollowUpOperationsDashboard = {
     grayGuardBlockedCount: 0,
   },
   weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
+  weComCustomerContactSync: getDefaultWeComCustomerContactSyncDashboardView(),
   riskSummary: {
     escalatedTaskCount: 0,
     highRiskTaskCount: 0,
@@ -472,6 +474,7 @@ export function SmartFollowUpShell() {
   const messageDeliveries = operationsDashboard.messageDeliveries;
   const contactSafety = operationsDashboard.contactSafety ?? emptyOperationsDashboard.contactSafety;
   const weComAuthorization = operationsDashboard.weComAuthorization ?? emptyOperationsDashboard.weComAuthorization;
+  const weComCustomerContactSync = operationsDashboard.weComCustomerContactSync ?? emptyOperationsDashboard.weComCustomerContactSync;
   const safetyBlockedCount =
     (overview.consentMissingBlockedCount ?? contactSafety.consentMissingBlockedCount) +
     (overview.optOutBlockedCount ?? contactSafety.optOutBlockedCount) +
@@ -636,6 +639,46 @@ export function SmartFollowUpShell() {
                   <p className="mt-3 text-xs leading-5 text-slate-500">
                     默认关闭、灰度前置、人工确认、模拟发送、不自动发送；未进入灰度不触达，客户退订 / 未授权 / 频率限制会阻断。
                   </p>
+                </div>
+
+                <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4">
+                  <h4 className="text-sm font-semibold text-slate-950">企业微信客户联系</h4>
+                  <p className="mt-2 text-xs leading-5 text-slate-600">
+                    企业微信客户联系 / 外部联系人当前仅 mock：不是企业微信登录，不是个人微信好友同步，不是聊天记录同步；未接真实企业微信，不真实出网，不同步真实客户。
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-semibold text-cyan-700">
+                    <span className="rounded-xl bg-white px-3 py-2">同步状态：{weComCustomerContactSync.statusLabel}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">外部联系人 {weComCustomerContactSync.externalContactCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">已关联系统客户 {weComCustomerContactSync.linkedSystemCustomerCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">未关联客户 {weComCustomerContactSync.unlinkedCustomerCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">可用于随访 {weComCustomerContactSync.availableForFollowUpCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">不可用于随访 {weComCustomerContactSync.unavailableForFollowUpCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">客户归属员工已映射 {weComCustomerContactSync.mappedOwnerEmployeeCount}</span>
+                    <span className="rounded-xl bg-white px-3 py-2">客户归属员工未映射 {weComCustomerContactSync.unmappedOwnerEmployeeCount}</span>
+                  </div>
+                  <div className="mt-3 space-y-2 rounded-2xl bg-white/80 p-3 text-xs leading-5 text-slate-600">
+                    <p><span className="font-semibold text-slate-800">客户标签：</span>{weComCustomerContactSync.tagsSummary}</p>
+                    <p><span className="font-semibold text-slate-800">客户来源：</span>{weComCustomerContactSync.sourceSummary}</p>
+                    <p><span className="font-semibold text-slate-800">客户归属员工：</span>{weComCustomerContactSync.ownerEmployeeSummary}</p>
+                    <p><span className="font-semibold text-slate-800">客户备注：</span>{weComCustomerContactSync.remarkSummary}</p>
+                    <p><span className="font-semibold text-slate-800">最近同步：</span>{weComCustomerContactSync.lastSyncedAt ? formatBusinessDateTime(weComCustomerContactSync.lastSyncedAt) : '--'}</p>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
+                    {weComCustomerContactSync.safeSummary} 会话内容存档后置；{weComCustomerContactSync.deliveryPrerequisites.description}
+                  </p>
+                  {weComCustomerContactSync.contacts.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      {weComCustomerContactSync.contacts.slice(0, 3).map((contact) => (
+                        <div key={contact.mockExternalContactId} className="rounded-xl bg-white px-3 py-2 text-xs leading-5 text-slate-600">
+                          <div className="font-semibold text-slate-800">
+                            {contact.customerDisplayName} · {contact.syncStatusLabel} · {contact.linkedToSystemCustomer ? '已关联系统客户' : '未关联系统客户'}
+                          </div>
+                          <div className="mt-1">外部联系人：{contact.mockExternalContactId}；客户归属员工：{contact.ownerEmployeeDisplayName}；{contact.ownerEmployeeMapped ? '已低敏映射机构员工' : '未映射机构员工，显示低敏空态'}</div>
+                          <div className="mt-1">来源：{contact.source}；标签：{contact.tags.join(' / ')}；{contact.remarkSummary}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4">

@@ -5,6 +5,7 @@ import { InstitutionAuditEventsShell } from '@/modules/institution/components/In
 import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
+import { getDefaultWeComCustomerContactSyncDashboardView } from '@/modules/institution/domain/wecom-customer-contact';
 
 const customerRecord = {
   id: 'cust_wang_repurchase',
@@ -340,6 +341,17 @@ function mockInstitutionFetch(responsesByPath: Record<string, Response[]>) {
                 approvedDraftCount: 0,
                 markedSentCount: 0,
                 approvedButNotMarkedSentCount: 0,
+                messageDeliveryCount: 0,
+                mockSentCount: 0,
+                mockFailedCount: 0,
+                skippedCount: 0,
+                externalDisabledCount: 0,
+                contactSafetyAllowedCount: 0,
+                consentMissingBlockedCount: 0,
+                optOutBlockedCount: 0,
+                frequencyCapBlockedCount: 0,
+                channelDisabledCount: 0,
+                grayGuardBlockedCount: 0,
                 manualFeedbackCount: 0,
               },
               pathPerformance: [],
@@ -350,6 +362,14 @@ function mockInstitutionFetch(responsesByPath: Record<string, Response[]>) {
                 rejectedDraftCount: 0,
                 markedSentCount: 0,
                 approvedButNotMarkedSentCount: 0,
+              },
+              messageDeliveries: {
+                messageDeliveryCount: 0,
+                mockSentCount: 0,
+                mockFailedCount: 0,
+                skippedCount: 0,
+                externalDisabledCount: 0,
+                recentDeliveries: [],
               },
               contactSafety: {
                 allowedCount: 0,
@@ -362,6 +382,7 @@ function mockInstitutionFetch(responsesByPath: Record<string, Response[]>) {
                 grayGuardBlockedCount: 0,
               },
               weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
+              weComCustomerContactSync: getDefaultWeComCustomerContactSyncDashboardView(),
               riskSummary: {
                 escalatedTaskCount: 0,
                 highRiskTaskCount: 0,
@@ -1568,6 +1589,71 @@ describe('机构业务页面壳', () => {
             weComReachOutAuthorized: true,
             lastErrorReason: '企业微信外部通道未启用，mock 授权也不能真实发送。',
           },
+          weComCustomerContactSync: {
+            ...getDefaultWeComCustomerContactSyncDashboardView(),
+            status: 'mock_synced',
+            statusLabel: '模拟已同步',
+            authorizationRecordId: 'wecom-auth:mock-low-sensitive',
+            externalContactCount: 3,
+            linkedSystemCustomerCount: 2,
+            unlinkedCustomerCount: 1,
+            availableForFollowUpCount: 1,
+            unavailableForFollowUpCount: 2,
+            mappedOwnerEmployeeCount: 2,
+            unmappedOwnerEmployeeCount: 1,
+            tagsSummary: '术后关怀 / 到院咨询 / 复购窗口',
+            sourceSummary: '术后随访低敏线索 / 到院咨询低敏线索',
+            ownerEmployeeSummary: '企微员工A（低敏） / 未映射企微员工（低敏）',
+            remarkSummary: '客户联系 mock 低敏摘要 / 外部联系人尚未关联系统客户',
+            lastSyncedAt: '2026-07-08T00:00:00.000Z',
+            lastErrorReason: null,
+            contacts: [
+              {
+                mockExternalContactId: 'mock-external-contact:01',
+                customerDisplayName: '低敏客户A',
+                weComCustomerRef: 'wecom-customer:mock:1',
+                ownerEmployeeRef: 'mock-employee:consultant-a',
+                ownerEmployeeDisplayName: '企微员工A（低敏）',
+                mappedSystemEmployeeRef: 'system-employee:consultant-a',
+                ownerEmployeeMapped: true,
+                source: '术后随访低敏线索',
+                tags: ['术后关怀', '低敏标签'],
+                remarkSummary: '客户联系 mock 低敏摘要，可作为后续人工随访候选。',
+                addedAt: '2026-07-08T00:00:00.000Z',
+                lastSyncedAt: '2026-07-08T00:00:00.000Z',
+                syncStatus: 'mock_synced',
+                syncStatusLabel: '模拟已同步',
+                lastErrorReason: null,
+                availableForFollowUp: true,
+                linkedToSystemCustomer: true,
+                customerId: 'customer:mock-linked-a',
+                notPersonalWechatFriend: true,
+                noChatHistorySynced: true,
+              },
+              {
+                mockExternalContactId: 'mock-external-contact:02',
+                customerDisplayName: '低敏客户B',
+                weComCustomerRef: 'wecom-customer:mock:2',
+                ownerEmployeeRef: 'mock-employee:unmapped',
+                ownerEmployeeDisplayName: '未映射企微员工（低敏）',
+                mappedSystemEmployeeRef: null,
+                ownerEmployeeMapped: false,
+                source: '到院咨询低敏线索',
+                tags: ['到院咨询', '未关联'],
+                remarkSummary: '外部联系人尚未关联系统客户，不能直接用于随访。',
+                addedAt: '2026-07-08T00:00:00.000Z',
+                lastSyncedAt: '2026-07-08T00:00:00.000Z',
+                syncStatus: 'mock_synced',
+                syncStatusLabel: '模拟已同步',
+                lastErrorReason: null,
+                availableForFollowUp: false,
+                linkedToSystemCustomer: false,
+                customerId: null,
+                notPersonalWechatFriend: true,
+                noChatHistorySynced: true,
+              },
+            ],
+          },
           riskSummary: {
             escalatedTaskCount: 1,
             highRiskTaskCount: 2,
@@ -1609,7 +1695,7 @@ describe('机构业务页面壳', () => {
     expect(screen.getByText(/标记已发送仅代表人工记录/)).toBeInTheDocument();
     expect(screen.getByText(/当前没有企业微信 \/ 短信接入，不做自动营销群发/)).toBeInTheDocument();
     expect(screen.getByText('企业微信客户运营接入')).toBeInTheDocument();
-    expect(screen.getByText(/不是企业微信登录/)).toBeInTheDocument();
+    expect(screen.getAllByText(/不是企业微信登录/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('状态：模拟已授权')).toBeInTheDocument();
     expect(screen.getByText('模拟授权：是')).toBeInTheDocument();
     expect(screen.getByText('客户联系：已授权')).toBeInTheDocument();
@@ -1621,6 +1707,27 @@ describe('机构业务页面壳', () => {
     expect(screen.getByText(/未接真实企业微信，未申请服务商 \/ 未接真实接口/)).toBeInTheDocument();
     expect(screen.getByText(/企业微信触达必须经过人工确认和 MessageDelivery/)).toBeInTheDocument();
     expect(screen.getByText(/企业微信授权状态 → 触达安全治理 → MessageDelivery/)).toBeInTheDocument();
+    expect(screen.getByText('企业微信客户联系')).toBeInTheDocument();
+    expect(screen.getByText(/企业微信客户联系 \/ 外部联系人当前仅 mock/)).toBeInTheDocument();
+    expect(screen.getByText(/不是个人微信好友同步/)).toBeInTheDocument();
+    expect(screen.getByText(/不是聊天记录同步/)).toBeInTheDocument();
+    expect(screen.getAllByText(/未接真实企业微信，不真实出网，不同步真实客户/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('同步状态：模拟已同步')).toBeInTheDocument();
+    expect(screen.getByText('外部联系人 3')).toBeInTheDocument();
+    expect(screen.getByText('已关联系统客户 2')).toBeInTheDocument();
+    expect(screen.getByText('未关联客户 1')).toBeInTheDocument();
+    expect(screen.getByText('可用于随访 1')).toBeInTheDocument();
+    expect(screen.getByText('客户归属员工已映射 2')).toBeInTheDocument();
+    expect(screen.getByText('客户归属员工未映射 1')).toBeInTheDocument();
+    expect(container.textContent).toContain('客户标签：术后关怀 / 到院咨询 / 复购窗口');
+    expect(container.textContent).toContain('客户来源：术后随访低敏线索 / 到院咨询低敏线索');
+    expect(container.textContent).toContain('客户归属员工：企微员工A（低敏） / 未映射企微员工（低敏）');
+    expect(container.textContent).toContain('客户备注：客户联系 mock 低敏摘要 / 外部联系人尚未关联系统客户');
+    expect(screen.getByText(/后续企业微信触达必须先有授权状态、客户联系关系、人工确认和 MessageDelivery/)).toBeInTheDocument();
+    expect(screen.getByText(/低敏客户A · 模拟已同步 · 已关联系统客户/)).toBeInTheDocument();
+    expect(screen.getByText(/外部联系人：mock-external-contact:01/)).toHaveTextContent('客户归属员工：企微员工A（低敏）');
+    expect(screen.getByText(/低敏客户B · 模拟已同步 · 未关联系统客户/)).toBeInTheDocument();
+    expect(screen.getByText(/未映射机构员工，显示低敏空态/)).toBeInTheDocument();
 
     const requestPaths = fetchMock.mock.calls.map(([input]) => fetchPath(input));
     expect(requestPaths).toEqual(expect.arrayContaining([
@@ -1754,6 +1861,7 @@ describe('机构业务页面壳', () => {
             grayGuardBlockedCount: 0,
           },
           weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
+          weComCustomerContactSync: getDefaultWeComCustomerContactSyncDashboardView(),
           riskSummary: {
             escalatedTaskCount: 0,
             highRiskTaskCount: 0,

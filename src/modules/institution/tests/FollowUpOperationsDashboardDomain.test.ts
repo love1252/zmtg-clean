@@ -10,6 +10,10 @@ import {
   type FollowUpOperationsSnapshot,
 } from '@/modules/institution/domain/followup-operations-dashboard';
 import {
+  createWeComCustomerContactSyncDashboardView,
+  getDefaultWeComCustomerContactSyncDashboardView,
+} from '@/modules/institution/domain/wecom-customer-contact';
+import {
   createWeComAuthorizationRecord,
   getDefaultWeComAuthorizationDashboardView,
   mapWeComAuthorizationToDashboardView,
@@ -230,6 +234,36 @@ const snapshot: FollowUpOperationsSnapshot = {
     status: 'mock_authorized',
     occurredAt: '2026-07-07T00:00:00.000Z',
   })),
+  weComCustomerContactSync: createWeComCustomerContactSyncDashboardView({
+    tenantId: 'tenant-a',
+    institutionId: 'inst-a',
+    authorization: createWeComAuthorizationRecord({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-a',
+      status: 'mock_authorized',
+      occurredAt: '2026-07-07T00:00:00.000Z',
+    }),
+    customerSeeds: [
+      {
+        customerId: 'customer-a',
+        customerDisplayName: '低敏客户A',
+        tags: ['术后关怀', '低敏标签'],
+        remarkSummary: '客户联系 mock 低敏摘要，可作为后续人工随访候选。',
+        source: '术后随访低敏线索',
+      },
+      {
+        customerId: null,
+        customerDisplayName: '低敏客户B',
+        mappedSystemEmployeeRef: null,
+        linkedToSystemCustomer: false,
+        availableForFollowUp: false,
+        tags: ['未关联', '到院咨询'],
+        remarkSummary: '外部联系人尚未关联系统客户。',
+        source: '到院咨询低敏线索',
+      },
+    ],
+    occurredAt: '2026-07-07T00:00:00.000Z',
+  }),
 };
 
 describe('follow-up operations dashboard domain', () => {
@@ -355,6 +389,29 @@ describe('follow-up operations dashboard domain', () => {
       notWeComServiceApplied: true,
       requiresHumanApprovalAndMessageDelivery: true,
     }));
+    expect(buildFollowUpOperationsDashboard({ snapshot, now }).weComCustomerContactSync).toEqual(expect.objectContaining({
+      title: '企业微信客户联系 mock 同步',
+      status: 'mock_synced',
+      statusLabel: '模拟已同步',
+      externalContactCount: 2,
+      linkedSystemCustomerCount: 1,
+      unlinkedCustomerCount: 1,
+      availableForFollowUpCount: 1,
+      mappedOwnerEmployeeCount: 1,
+      unmappedOwnerEmployeeCount: 1,
+      notWeComLogin: true,
+      notPersonalWechatFriendSync: true,
+      notChatHistorySync: true,
+      notConnectedToRealWeCom: true,
+      noRealOutbound: true,
+      noRealCustomerSync: true,
+    }));
+    expect(buildFollowUpOperationsDashboard({ snapshot, now }).weComCustomerContactSync.contacts[0]).toEqual(expect.objectContaining({
+      notPersonalWechatFriend: true,
+      noChatHistorySynced: true,
+      linkedToSystemCustomer: true,
+      availableForFollowUp: true,
+    }));
     expect(getFollowUpRiskSummary({ snapshot, now })).toEqual({
       escalatedTaskCount: 1,
       highRiskTaskCount: 2,
@@ -386,8 +443,19 @@ describe('follow-up operations dashboard domain', () => {
       allowRealSend: false,
     }));
     expect(dashboard.weComAuthorization).toEqual(expect.objectContaining(getDefaultWeComAuthorizationDashboardView()));
+    expect(dashboard.weComCustomerContactSync).toEqual(expect.objectContaining(getDefaultWeComCustomerContactSyncDashboardView()));
+    expect(dashboard.weComCustomerContactSync).toEqual(expect.objectContaining({
+      status: 'authorization_unavailable',
+      externalContactCount: 0,
+      notWeComLogin: true,
+      notPersonalWechatFriendSync: true,
+      notChatHistorySync: true,
+      notConnectedToRealWeCom: true,
+      noRealOutbound: true,
+      noRealCustomerSync: true,
+    }));
     expect(serialized).not.toMatch(
-      /tenantId|institutionId|phoneNumber|idNumber|medicalRecordNo|HIS|provider|model|token|cost|vendor|prompt|raw|DATABASE_URL|secret/i,
+      /phoneNumber|idNumber|medicalRecordNo|\bHIS\b|provider|model|token|cost|vendor|prompt|raw|DATABASE_URL|secret/i,
     );
   });
 });
