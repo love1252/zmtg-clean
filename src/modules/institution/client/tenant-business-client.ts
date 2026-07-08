@@ -1,5 +1,9 @@
 import type { AppointmentRecordSummary } from '@/modules/institution/domain/appointment-records';
 import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
+import type {
+  CustomerImportPreviewResult,
+  CustomerImportResult,
+} from '@/modules/institution/domain/customer-import';
 import type { CustomerTimelineResponse } from '@/modules/institution/domain/customer-timeline';
 import type {
   InstitutionKnowledgeItemDto,
@@ -144,6 +148,18 @@ export type TenantBusinessMutationResult<T> =
   | { ok: true; record: T }
   | { ok: false; error: TenantBusinessClientError };
 
+export type CustomerImportClientPayload = {
+  rows: unknown[];
+};
+
+export type CustomerImportPreviewClientResult =
+  | { ok: true; preview: CustomerImportPreviewResult }
+  | { ok: false; error: TenantBusinessClientError };
+
+export type CustomerImportExecuteClientResult =
+  | { ok: true; result: CustomerImportResult }
+  | { ok: false; error: TenantBusinessClientError };
+
 export type CustomerTimelineClientResult =
   | { ok: true; timeline: CustomerTimelineResponse }
   | { ok: false; error: TenantBusinessClientError };
@@ -260,6 +276,7 @@ const followUpMessageDraftCreatePayloadKeys = ['followUpTaskId', 'templateId'] a
 const followUpMessageDraftUpdatePayloadKeys = ['content'] as const;
 const followUpManualFeedbackPayloadKeys = ['safeSummary', 'riskLevel', 'relatedTaskId'] as const;
 const institutionKnowledgeListQueryKeys = ['keyword', 'page', 'pageSize'] as const;
+const customerImportPayloadKeys = ['rows'] as const;
 
 function getFetcher(options?: TenantBusinessClientOptions) {
   return options?.fetcher ?? globalThis.fetch;
@@ -708,6 +725,65 @@ async function requestRecord<T>(
       error: { kind: 'unknown', message: '请求失败', status: 0 },
     };
   }
+}
+
+async function requestCustomerImport<T>(
+  method: 'POST' | 'PUT',
+  payload: CustomerImportClientPayload,
+  options?: TenantBusinessClientOptions,
+): Promise<{ ok: true; value: T } | { ok: false; error: TenantBusinessClientError }> {
+  const fetcher = getFetcher(options);
+  if (!fetcher) {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+
+  try {
+    const response = await fetcher('/api/institution/customers/import', {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(pickPayload(payload as unknown as Record<string, unknown>, customerImportPayloadKeys)),
+    });
+    const responsePayload = await readJson(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: createClientError({ status: response.status, payload: responsePayload }),
+      };
+    }
+
+    if (!isJsonObject(responsePayload) || !isJsonObject(responsePayload.importBatch)) {
+      return {
+        ok: false,
+        error: { kind: 'unknown', message: '请求失败', status: response.status },
+      };
+    }
+
+    return { ok: true, value: responsePayload as T };
+  } catch {
+    return {
+      ok: false,
+      error: { kind: 'unknown', message: '请求失败', status: 0 },
+    };
+  }
+}
+
+export async function previewCustomerImport(
+  payload: CustomerImportClientPayload,
+  options?: TenantBusinessClientOptions,
+): Promise<CustomerImportPreviewClientResult> {
+  const result = await requestCustomerImport<CustomerImportPreviewResult>('POST', payload, options);
+  return result.ok ? { ok: true, preview: result.value } : result;
+}
+
+export async function executeCustomerImport(
+  payload: CustomerImportClientPayload,
+  options?: TenantBusinessClientOptions,
+): Promise<CustomerImportExecuteClientResult> {
+  const result = await requestCustomerImport<CustomerImportResult>('PUT', payload, options);
+  return result.ok ? { ok: true, result: result.value } : result;
 }
 
 export function listCustomers(options?: TenantBusinessClientOptions) {

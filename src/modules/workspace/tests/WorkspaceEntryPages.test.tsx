@@ -2530,6 +2530,13 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('知识库只读预览')).toBeInTheDocument();
     expect(screen.getByText('平台知识库 只读 预览')).toBeInTheDocument();
     expect(screen.getByText('机构知识库 开发数据 预览')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '低敏客户导入状态' })).toBeInTheDocument();
+    expect(screen.getByText('dashboard 仅汇总低敏导入客户数量和安全边界；不展示手机号、身份证、病历号、聊天记录或外部系统 payload。')).toBeInTheDocument();
+    expect(screen.getByText('字段白名单预检')).toBeInTheDocument();
+    expect(screen.getByText('失败原因可见')).toBeInTheDocument();
+    expect(screen.getByText('导入后记录审计')).toBeInTheDocument();
+    expect(screen.getByText('低敏导入客户')).toBeInTheDocument();
+    expect(screen.getByText('当前暂无低敏导入客户，可在客户中心使用预检 API 后执行合法行导入。')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'workspace dashboard readonly aggregation' })).toBeInTheDocument();
     expect(screen.getByText('workspace dashboard readonly aggregation 已就绪')).toBeInTheDocument();
     expect(screen.getByText('businessLoopSummary')).toBeInTheDocument();
