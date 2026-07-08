@@ -21,14 +21,23 @@ import {
   aiConversationStatusLabels,
   buildAiConversationWorkbenchStats,
   closeAiConversation,
+  evaluateAiConversationAutomationStrategy,
   filterAiConversations,
   getAiConversationWorkbenchFixture,
+  markAiConversationAutomationBlocked,
+  markAiConversationAutomationNeedsHuman,
   mockSendAiConversationMessage,
+  simulateAiConversationAutoFollowupStrategy,
+  simulateAiConversationAutoReplyStrategy,
   takeoverAiConversation,
   applyAiConversationRecommendation,
   type AiConversationFilter,
   type AiConversationRecord,
 } from '@/modules/institution/domain/ai-conversation-workbench';
+import {
+  aiAutoStrategyIntentLabels,
+  aiAutoStrategyLevelDefinitions,
+} from '@/modules/institution/domain/ai-auto-strategy';
 import { cn } from '@/shared/utils/cn';
 
 const filterItems = [
@@ -47,6 +56,14 @@ const statItems = [
   { key: 'recommendationCount', label: '推荐回复数量' },
   { key: 'mockSentCount', label: '模拟发送数量' },
   { key: 'closedCount', label: '已结束会话数量' },
+  { key: 'strategyEvaluatedCount', label: '策略评估数量' },
+  { key: 'aiRecommendOnlyCount', label: 'AI 推荐数量' },
+  { key: 'humanConfirmationRequiredCount', label: '需要人工确认数量' },
+  { key: 'mockAutoReplyAllowedCount', label: '模拟自动回复允许数量' },
+  { key: 'mockAutoFollowupAllowedCount', label: '模拟自动随访允许数量' },
+  { key: 'highRiskBlockedCount', label: '高风险阻断数量' },
+  { key: 'marketingAutomationBlockedCount', label: '营销自动化阻断数量' },
+  { key: 'addFriendBlockedCount', label: '加好友阻断数量' },
 ] as const;
 
 const messageBubbleClasses = {
@@ -156,6 +173,70 @@ export function AiConversationWorkbenchShell() {
         ? '会话已结束：已记录低敏 audit 和时间线。'
         : '会话已经处于已结束状态。',
     );
+  }
+
+  function handleEvaluateStrategy() {
+    const result = evaluateAiConversationAutomationStrategy({
+      conversation: activeConversation,
+      occurredAt: nowForMock,
+    });
+    updateConversation(result.conversation);
+    setNotice('已模拟生成自动化策略：只写入低敏时间线和 audit reason，不真实发送。');
+  }
+
+  function handleSimulateAutoReplyStrategy() {
+    const result = simulateAiConversationAutoReplyStrategy({
+      conversation: activeConversation,
+      context: {
+        intentType: 'basic_faq',
+        riskTags: [],
+        isComplaint: false,
+        isMedicalRisk: false,
+        isPriceCommitmentRisk: false,
+        isAftercareFollowup: false,
+      },
+      occurredAt: nowForMock,
+    });
+    updateConversation(result.conversation);
+    setNotice('已模拟生成自动回复策略：低风险场景只允许 mock，不接真实渠道。');
+  }
+
+  function handleSimulateAutoFollowupStrategy() {
+    const result = simulateAiConversationAutoFollowupStrategy({
+      conversation: activeConversation,
+      context: {
+        intentType: 'aftercare_question',
+        riskTags: [],
+        hasConsent: true,
+        hasOptOut: false,
+        frequencyCapPassed: true,
+        isAftercareFollowup: true,
+        isComplaint: false,
+        isMedicalRisk: false,
+        isPriceCommitmentRisk: false,
+      },
+      occurredAt: nowForMock,
+    });
+    updateConversation(result.conversation);
+    setNotice('已模拟生成自动随访策略：授权、未退订、频控通过且低风险才允许 mock。');
+  }
+
+  function handleMarkHumanConfirmation() {
+    const result = markAiConversationAutomationNeedsHuman({
+      conversation: activeConversation,
+      occurredAt: nowForMock,
+    });
+    updateConversation(result.conversation);
+    setNotice('已模拟标记需要人工确认：自动化策略不发送客户。');
+  }
+
+  function handleMarkBlocked() {
+    const result = markAiConversationAutomationBlocked({
+      conversation: activeConversation,
+      occurredAt: nowForMock,
+    });
+    updateConversation(result.conversation);
+    setNotice('已模拟标记已阻断：L4 营销自动化默认关闭。');
   }
 
   return (
@@ -413,7 +494,15 @@ export function AiConversationWorkbenchShell() {
           </div>
 
           {activePanel === 'ai' ? (
-            <AiPanel conversation={activeConversation} onUseRecommendation={handleUseRecommendation} />
+            <AiPanel
+              conversation={activeConversation}
+              onUseRecommendation={handleUseRecommendation}
+              onEvaluateStrategy={handleEvaluateStrategy}
+              onSimulateAutoReplyStrategy={handleSimulateAutoReplyStrategy}
+              onSimulateAutoFollowupStrategy={handleSimulateAutoFollowupStrategy}
+              onMarkHumanConfirmation={handleMarkHumanConfirmation}
+              onMarkBlocked={handleMarkBlocked}
+            />
           ) : (
             <ProfilePanel conversation={activeConversation} />
           )}
@@ -426,12 +515,117 @@ export function AiConversationWorkbenchShell() {
 function AiPanel({
   conversation,
   onUseRecommendation,
+  onEvaluateStrategy,
+  onSimulateAutoReplyStrategy,
+  onSimulateAutoFollowupStrategy,
+  onMarkHumanConfirmation,
+  onMarkBlocked,
 }: {
   conversation: AiConversationRecord;
   onUseRecommendation: (recommendationId: string) => void;
+  onEvaluateStrategy: () => void;
+  onSimulateAutoReplyStrategy: () => void;
+  onSimulateAutoFollowupStrategy: () => void;
+  onMarkHumanConfirmation: () => void;
+  onMarkBlocked: () => void;
 }) {
+  const strategy = conversation.automationStrategy.result;
+
   return (
     <div className="mt-4 space-y-4">
+      <PanelBlock icon={ShieldCheck} title="自动化策略" tone="blue">
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-700">
+                当前会话建议等级：{strategy.recommendedLevel}
+              </span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                当前策略结果：{strategy.decisionLabel}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-700 sm:grid-cols-2">
+              <span>意图：{aiAutoStrategyIntentLabels[conversation.automationStrategy.context.intentType]}</span>
+              <span>是否可模拟自动回复：{strategy.canAutoReplyMock ? '是' : '否'}</span>
+              <span>是否可模拟自动随访：{strategy.canAutoFollowupMock ? '是' : '否'}</span>
+              <span>是否需要人工确认：{strategy.requiresHumanConfirmation ? '是' : '否'}</span>
+              <span>是否已阻断：{strategy.blocked ? '是' : '否'}</span>
+              <span>真实通道：allowRealSend=false / externalChannelEnabled=false</span>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-blue-900">{strategy.lowSensitiveExplanation}</p>
+          </div>
+
+          <div className="grid gap-2 text-xs font-semibold sm:grid-cols-2">
+            <button type="button" onClick={onEvaluateStrategy} className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-blue-700">
+              模拟生成自动化策略
+            </button>
+            <button type="button" onClick={onSimulateAutoReplyStrategy} className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700">
+              模拟生成自动回复策略
+            </button>
+            <button type="button" onClick={onSimulateAutoFollowupStrategy} className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-cyan-700">
+              模拟生成自动随访策略
+            </button>
+            <button type="button" onClick={onMarkHumanConfirmation} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+              模拟标记需要人工确认
+            </button>
+            <button type="button" onClick={onMarkBlocked} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700 sm:col-span-2">
+              模拟标记已阻断
+            </button>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-sm font-semibold text-slate-950">阻断原因</div>
+            {strategy.blockReasons.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-600">
+                {strategy.blockReasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-slate-500">当前无业务阻断；真实渠道仍默认关闭。</p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-3">
+            <div className="text-sm font-semibold text-violet-950">低敏回复草稿</div>
+            <p className="mt-2 text-sm leading-6 text-violet-900">{strategy.safeReplyDraft}</p>
+          </div>
+
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
+            <div className="text-sm font-semibold text-emerald-950">低敏随访计划：{strategy.safeFollowupPlan.title}</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-emerald-900">
+              {strategy.safeFollowupPlan.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ul>
+            <div className="mt-2 text-xs font-semibold text-emerald-700">{strategy.safeFollowupPlan.channelBoundary}</div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-sm font-semibold text-slate-950">L0-L4 等级说明</div>
+            {aiAutoStrategyLevelDefinitions.map((level) => (
+              <article key={level.level} className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                <div className="text-sm font-semibold text-slate-950">{level.title}</div>
+                <p className="mt-1 text-xs leading-5 text-slate-600">{level.summary}</p>
+                <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-semibold text-slate-500">
+                  <span className="rounded-full bg-slate-50 px-2 py-1">客户可见：{level.customerVisible ? '是' : '否'}</span>
+                  <span className="rounded-full bg-slate-50 px-2 py-1">人工确认：{level.requiresHumanConfirmation ? '是' : '否'}</span>
+                  <span className="rounded-full bg-slate-50 px-2 py-1">模拟执行：{level.mockExecutionAllowed ? '允许' : '不允许'}</span>
+                  <span className="rounded-full bg-slate-50 px-2 py-1">真实通道：不允许</span>
+                  <span className="rounded-full bg-slate-50 px-2 py-1">频率限制：{level.requiresFrequencyCap ? '需要' : '建议'}</span>
+                  <span className="rounded-full bg-slate-50 px-2 py-1">退订检查：{level.requiresOptOutCheck ? '需要' : '不涉及发送'}</span>
+                  <span className="rounded-full bg-slate-50 px-2 py-1">必须写审计</span>
+                  <span className="rounded-full bg-slate-50 px-2 py-1">默认关闭：{level.defaultClosed ? '是' : '否'}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold leading-6 text-amber-900">
+            当前为模拟版；不接真实企业微信 / 微信；不真实发送；自动回复和自动随访当前仅策略模拟。
+          </div>
+        </div>
+      </PanelBlock>
       <PanelBlock icon={Bot} title="AI 推荐回复" tone="violet">
         {conversation.recommendations.length > 0 ? (
           <div className="space-y-3">

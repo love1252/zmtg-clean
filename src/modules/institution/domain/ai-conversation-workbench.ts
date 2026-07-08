@@ -1,5 +1,11 @@
 import type { AuditReason } from '@/modules/audit/domain/audit-events';
 import {
+  createAiAutoStrategyTimelineMetadata,
+  evaluateAiAutoStrategy,
+  type AiAutoStrategyContext,
+  type AiAutoStrategyResult,
+} from '@/modules/institution/domain/ai-auto-strategy';
+import {
   approveFollowUpMessageDraft,
   type FollowUpMessageDraft,
 } from '@/modules/institution/domain/followup-message-drafts';
@@ -27,6 +33,15 @@ export const aiConversationAuditReasons = [
   'ai_conversation_message_mock_sent',
   'ai_conversation_risk_blocked',
   'ai_conversation_closed',
+  'ai_auto_strategy_evaluated',
+  'ai_auto_reply_mock_allowed',
+  'ai_auto_followup_mock_allowed',
+  'ai_auto_reply_human_confirmation_required',
+  'ai_auto_followup_human_confirmation_required',
+  'ai_auto_reply_blocked',
+  'ai_auto_followup_blocked',
+  'ai_marketing_automation_blocked',
+  'ai_add_friend_blocked',
 ] as const satisfies readonly AuditReason[];
 
 export type AiConversationAuditReason = (typeof aiConversationAuditReasons)[number];
@@ -108,6 +123,11 @@ export type AiConversationTimelineEvent = {
   metadata?: Record<string, string | null>;
 };
 
+export type AiConversationAutomationStrategy = {
+  context: AiAutoStrategyContext;
+  result: AiAutoStrategyResult;
+};
+
 export type AiConversationRecord = {
   id: string;
   status: AiConversationStatus;
@@ -123,6 +143,7 @@ export type AiConversationRecord = {
   recommendedQuestions: string[];
   recommendations: AiConversationRecommendation[];
   projectRecommendations: AiConversationProjectRecommendation[];
+  automationStrategy: AiConversationAutomationStrategy;
   profile: AiConversationProfile;
   messages: AiConversationMessage[];
   timeline: AiConversationTimelineEvent[];
@@ -137,6 +158,14 @@ export type AiConversationWorkbenchStats = {
   recommendationCount: number;
   mockSentCount: number;
   closedCount: number;
+  strategyEvaluatedCount: number;
+  aiRecommendOnlyCount: number;
+  humanConfirmationRequiredCount: number;
+  mockAutoReplyAllowedCount: number;
+  mockAutoFollowupAllowedCount: number;
+  highRiskBlockedCount: number;
+  marketingAutomationBlockedCount: number;
+  addFriendBlockedCount: number;
 };
 
 const occurredAt = {
@@ -152,6 +181,8 @@ export const aiConversationBoundaryLabels = [
   '不接短信 / HIS / webhook',
   '不真实发送',
   '不真实出网',
+  '自动回复仅策略模拟',
+  '自动随访仅策略模拟',
   '发送前人工确认',
   '只展示低敏摘要',
 ] as const;
@@ -171,7 +202,7 @@ const forbiddenAiConversationTextPatterns = [
   /\bMR[-_A-Z0-9]{3,}\b/iu,
   /完整病历|病历号|身份证|手机号原文|真实微信|external_userid|userid|corpId|聊天原文|咨询全文/u,
   /机器编号|扫码托管|端口托管|uip|真实端口|真实扫码/u,
-  /\bHIS\b|his payload|webhook|access_token|secret|api key|DATABASE_URL/iu,
+  /\bHIS\b payload|his payload|webhook payload|webhook_secret|access_token|secret|api key|DATABASE_URL/iu,
 ];
 
 const highRiskSendPatterns: Array<{ tag: AiConversationRiskTag; pattern: RegExp }> = [
@@ -199,9 +230,98 @@ function createTimelineEvent(input: Omit<AiConversationTimelineEvent, 'safeSumma
   };
 }
 
+function createAutomationStrategyContext(input: {
+  conversationId: string;
+  customerMaskedRef: string;
+  conversationStatus: AiConversationStatus;
+  intentType: AiAutoStrategyContext['intentType'];
+  riskTags?: AiConversationRiskTag[];
+  hasConsent?: boolean;
+  hasOptOut?: boolean;
+  frequencyCapPassed?: boolean;
+  isAftercareFollowup?: boolean;
+  isMarketing?: boolean;
+  isAddFriendIntent?: boolean;
+  isComplaint?: boolean;
+  isMedicalRisk?: boolean;
+  isPriceCommitmentRisk?: boolean;
+  operatorRole?: AiAutoStrategyContext['operatorRole'];
+}): AiAutoStrategyContext {
+  const riskTags = input.riskTags ?? [];
+
+  return {
+    conversationId: input.conversationId,
+    tenantId: 'tenant-low-sensitive-001',
+    institutionId: 'institution-low-sensitive-001',
+    customerMaskedRef: safeText(input.customerMaskedRef, '客户 ZM****000'),
+    conversationStatus: input.conversationStatus,
+    intentType: input.intentType,
+    riskTags,
+    hasConsent: input.hasConsent ?? true,
+    hasOptOut: input.hasOptOut ?? false,
+    frequencyCapPassed: input.frequencyCapPassed ?? true,
+    isAftercareFollowup: input.isAftercareFollowup ?? false,
+    isMarketing: input.isMarketing ?? false,
+    isAddFriendIntent: input.isAddFriendIntent ?? false,
+    isComplaint: input.isComplaint ?? riskTags.includes('complaint_or_dissatisfaction_risk'),
+    isMedicalRisk: input.isMedicalRisk ?? riskTags.some((tag) => tag === 'medical_advice_risk' || tag === 'allergy_or_postoperative_abnormal_risk'),
+    isPriceCommitmentRisk: input.isPriceCommitmentRisk ?? riskTags.includes('price_commitment_risk'),
+    safetySwitchSummary: {
+      emergencyStopEnabled: true,
+      allowRealSend: false,
+      externalChannelEnabled: false,
+    },
+    operatorRole: input.operatorRole ?? 'customer_service',
+  };
+}
+
+function createAutomationStrategy(
+  context: AiAutoStrategyContext,
+): AiConversationAutomationStrategy {
+  return {
+    context,
+    result: evaluateAiAutoStrategy(context),
+  };
+}
+
+function createAutomationStrategyTimelineEvent(input: {
+  conversationId: string;
+  strategy: AiConversationAutomationStrategy;
+  occurredAt: string;
+}) {
+  return createTimelineEvent({
+    id: `${input.conversationId}:timeline:auto-strategy:${input.strategy.result.decision}:${input.occurredAt}`,
+    title: '自动化策略评估',
+    safeSummary: input.strategy.result.timelineSummary,
+    auditReason: input.strategy.result.auditReason,
+    occurredAt: input.occurredAt,
+    metadata: createAiAutoStrategyTimelineMetadata(input.strategy.result),
+  });
+}
+
+function withAutomationStrategy<T extends Omit<AiConversationRecord, 'automationStrategy' | 'timeline'> & { timeline: AiConversationTimelineEvent[] }>(
+  conversation: T,
+  context: AiAutoStrategyContext,
+): AiConversationRecord {
+  const automationStrategy = createAutomationStrategy(context);
+
+  return {
+    ...conversation,
+    automationStrategy,
+    timeline: [
+      ...conversation.timeline,
+      createAutomationStrategyTimelineEvent({
+        conversationId: conversation.id,
+        strategy: automationStrategy,
+        occurredAt: occurredAt.aiEntered,
+      }),
+    ],
+  };
+}
+
 export function getAiConversationWorkbenchFixture(): AiConversationRecord[] {
   return [
-    {
+    withAutomationStrategy({
       id: 'ai-conv-001',
       status: 'ai_handling',
       aiProcessingLabel: 'AI 处理中',
@@ -269,8 +389,15 @@ export function getAiConversationWorkbenchFixture(): AiConversationRecord[] {
           occurredAt: occurredAt.aiEntered,
         }),
       ],
-    },
-    {
+    }, createAutomationStrategyContext({
+      conversationId: 'ai-conv-001',
+      customerMaskedRef: '客户 QY****001',
+      conversationStatus: 'ai_handling',
+      intentType: 'medical_risk',
+      riskTags: ['medical_advice_risk', 'allergy_or_postoperative_abnormal_risk'],
+      isAftercareFollowup: true,
+    })),
+    withAutomationStrategy({
       id: 'ai-conv-002',
       status: 'waiting_human',
       aiProcessingLabel: '待接管',
@@ -345,8 +472,16 @@ export function getAiConversationWorkbenchFixture(): AiConversationRecord[] {
           occurredAt: occurredAt.waiting,
         }),
       ],
-    },
-    {
+    }, createAutomationStrategyContext({
+      conversationId: 'ai-conv-002',
+      customerMaskedRef: '客户 ZM****002',
+      conversationStatus: 'waiting_human',
+      intentType: 'complaint',
+      riskTags: ['price_commitment_risk', 'complaint_or_dissatisfaction_risk'],
+      isComplaint: true,
+      isPriceCommitmentRisk: true,
+    })),
+    withAutomationStrategy({
       id: 'ai-conv-003',
       status: 'human_takeover',
       aiProcessingLabel: '人工已接管',
@@ -428,8 +563,13 @@ export function getAiConversationWorkbenchFixture(): AiConversationRecord[] {
           occurredAt: '2026-07-08T09:20:00.000+08:00',
         }),
       ],
-    },
-    {
+    }, createAutomationStrategyContext({
+      conversationId: 'ai-conv-003',
+      customerMaskedRef: '客户 ZM****003',
+      conversationStatus: 'human_takeover',
+      intentType: 'appointment_question',
+    })),
+    withAutomationStrategy({
       id: 'ai-conv-004',
       status: 'closed',
       aiProcessingLabel: '已结束',
@@ -483,7 +623,12 @@ export function getAiConversationWorkbenchFixture(): AiConversationRecord[] {
           occurredAt: occurredAt.closed,
         }),
       ],
-    },
+    }, createAutomationStrategyContext({
+      conversationId: 'ai-conv-004',
+      customerMaskedRef: '客户 ZM****004',
+      conversationStatus: 'closed',
+      intentType: 'unknown',
+    })),
   ];
 }
 
@@ -512,6 +657,28 @@ export function buildAiConversationWorkbenchStats(
       0,
     ),
     closedCount: conversations.filter((conversation) => conversation.status === 'closed').length,
+    strategyEvaluatedCount: conversations.filter((conversation) => conversation.automationStrategy).length,
+    aiRecommendOnlyCount: conversations.filter(
+      (conversation) => conversation.automationStrategy.result.decision === 'recommend_only',
+    ).length,
+    humanConfirmationRequiredCount: conversations.filter(
+      (conversation) => conversation.automationStrategy.result.requiresHumanConfirmation,
+    ).length,
+    mockAutoReplyAllowedCount: conversations.filter(
+      (conversation) => conversation.automationStrategy.result.canAutoReplyMock,
+    ).length,
+    mockAutoFollowupAllowedCount: conversations.filter(
+      (conversation) => conversation.automationStrategy.result.canAutoFollowupMock,
+    ).length,
+    highRiskBlockedCount: conversations.filter(
+      (conversation) => conversation.automationStrategy.result.decision === 'blocked_high_risk',
+    ).length,
+    marketingAutomationBlockedCount: conversations.filter(
+      (conversation) => conversation.automationStrategy.result.decision === 'blocked_marketing_automation',
+    ).length,
+    addFriendBlockedCount: conversations.filter(
+      (conversation) => conversation.automationStrategy.result.decision === 'blocked_add_friend',
+    ).length,
   };
 }
 
@@ -584,6 +751,93 @@ export function applyAiConversationRecommendation(input: {
       ],
     },
   };
+}
+
+export function evaluateAiConversationAutomationStrategy(input: {
+  conversation: AiConversationRecord;
+  context?: Partial<AiAutoStrategyContext>;
+  occurredAt: string;
+}) {
+  const context: AiAutoStrategyContext = {
+    ...input.conversation.automationStrategy.context,
+    ...input.context,
+    conversationId: input.conversation.id,
+    customerMaskedRef: input.conversation.customerMaskedRef,
+    conversationStatus: input.context?.conversationStatus ?? input.conversation.status,
+    riskTags: input.context?.riskTags ?? input.conversation.riskTags,
+    safetySwitchSummary: {
+      ...input.conversation.automationStrategy.result.safetySwitchSummary,
+      ...input.context?.safetySwitchSummary,
+      allowRealSend: false,
+      externalChannelEnabled: false,
+    },
+  };
+  const automationStrategy = createAutomationStrategy(context);
+
+  const kind = automationStrategy.result.blocked
+    ? 'blocked'
+    : automationStrategy.result.requiresHumanConfirmation
+      ? 'requires_human_confirmation'
+      : 'evaluated';
+
+  return {
+    kind,
+    conversation: {
+      ...input.conversation,
+      automationStrategy,
+      timeline: [
+        ...input.conversation.timeline,
+        createAutomationStrategyTimelineEvent({
+          conversationId: input.conversation.id,
+          strategy: automationStrategy,
+          occurredAt: input.occurredAt,
+        }),
+      ],
+    },
+  };
+}
+
+export const simulateAiConversationAutoReplyStrategy = evaluateAiConversationAutomationStrategy;
+export const simulateAiConversationAutoFollowupStrategy = evaluateAiConversationAutomationStrategy;
+
+export function markAiConversationAutomationNeedsHuman(input: {
+  conversation: AiConversationRecord;
+  occurredAt: string;
+}) {
+  return evaluateAiConversationAutomationStrategy({
+    conversation: input.conversation,
+    context: {
+      intentType: 'unknown',
+      riskTags: [],
+      isAftercareFollowup: false,
+      isMarketing: false,
+      isAddFriendIntent: false,
+      isComplaint: false,
+      isMedicalRisk: false,
+      isPriceCommitmentRisk: false,
+    },
+    occurredAt: input.occurredAt,
+  });
+}
+
+export function markAiConversationAutomationBlocked(input: {
+  conversation: AiConversationRecord;
+  occurredAt: string;
+}) {
+  return evaluateAiConversationAutomationStrategy({
+    conversation: input.conversation,
+    context: {
+      isMarketing: true,
+      intentType: 'marketing_campaign',
+      riskTags: [],
+      isAftercareFollowup: false,
+      isAddFriendIntent: false,
+      isComplaint: false,
+      isMedicalRisk: false,
+      isPriceCommitmentRisk: false,
+    },
+    occurredAt: input.occurredAt,
+  });
 }
 
 export function detectAiConversationSendRisks(content: string) {
