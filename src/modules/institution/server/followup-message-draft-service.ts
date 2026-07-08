@@ -1,4 +1,4 @@
-import type { AccessContext } from '@/modules/security/domain/access-control';
+import type { AccessContext, AccessDecision } from '@/modules/security/domain/access-control';
 import { canAccessResource } from '@/modules/security/domain/access-control';
 import {
   builtInFollowUpMessageTemplates,
@@ -28,11 +28,7 @@ import type { TenantBusinessRepository } from '@/modules/institution/server/tena
 import type { AuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import { createAuditEvent } from '@/modules/audit/domain/audit-events';
 
-export type FollowUpMessageForbiddenReason =
-  | 'missing_tenant'
-  | 'cross_tenant_denied'
-  | 'role_denied'
-  | 'sensitive_detail_denied';
+export type FollowUpMessageForbiddenReason = Extract<AccessDecision, { allowed: false }>['reason'];
 
 type ServiceRepository = Pick<
   TenantBusinessRepository,

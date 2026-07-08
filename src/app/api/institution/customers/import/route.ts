@@ -65,7 +65,7 @@ async function authorizeCustomerImport(input: {
   const decision = canAccessResource({
     context: input.context,
     resource: 'customer',
-    action: 'create',
+    action: 'import',
     targetTenantId: input.context.tenantId,
   });
 
@@ -134,9 +134,11 @@ export async function POST(request: Request) {
         context: context as AccessContext,
         resource: 'customer',
         resourceId: preview.importBatch.importBatchId,
-        action: 'create',
+        action: 'import',
         result: preview.successCount > 0 ? 'allowed' : 'denied',
-        reason: auditReasonForPreview(preview),
+        reason: preview.successCount > 0
+          ? 'customer_import_permission_checked'
+          : auditReasonForPreview(preview),
         occurredAt,
       }),
     );
@@ -184,7 +186,7 @@ export async function PUT(request: Request) {
           context: context as AccessContext,
           resource: 'customer',
           resourceId: preview.importBatch.importBatchId,
-          action: 'create',
+          action: 'import',
           result: 'denied',
           reason: auditReasonForExecute(preview),
           occurredAt,
@@ -209,7 +211,7 @@ export async function PUT(request: Request) {
           context: context as AccessContext,
           resource: 'customer',
           resourceId: preview.importBatch.importBatchId,
-          action: 'create',
+          action: 'import',
           result: 'denied',
           reason: quotaDecision.reason,
           occurredAt,
@@ -232,7 +234,7 @@ export async function PUT(request: Request) {
           context: context as AccessContext,
           resource: 'customer',
           resourceId: preview.importBatch.importBatchId,
-          action: 'create',
+          action: 'import',
           result: 'allowed',
           reason: auditReasonForExecute(preview),
           occurredAt,

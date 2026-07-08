@@ -1,3 +1,5 @@
+import type { SafetySwitchViewModel } from '@/modules/security/domain/safety-switch';
+import { deriveSafetySwitchViewModel } from '@/modules/security/domain/safety-switch';
 import type { AppointmentRecordSummary } from '@/modules/institution/domain/appointment-records';
 import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
 import type { TenantFollowUpTask } from '@/modules/institution/domain/followup-workflow';
@@ -60,6 +62,7 @@ export type InstitutionDashboardSummary = {
   supportingStats: InstitutionDashboardSupportingStat[];
   actionItems: InstitutionDashboardActionItem[];
   journeyLanes: InstitutionDashboardJourneyLane[];
+  safetySwitch: SafetySwitchViewModel;
   isEmpty: boolean;
 };
 
@@ -295,6 +298,7 @@ export function buildInstitutionDashboardSummary(
     ],
     actionItems: buildActionItems(input),
     journeyLanes: buildJourneyLanes(input.customers),
+    safetySwitch: deriveSafetySwitchViewModel(),
     isEmpty:
       input.customers.length === 0 &&
       input.appointments.length === 0 &&

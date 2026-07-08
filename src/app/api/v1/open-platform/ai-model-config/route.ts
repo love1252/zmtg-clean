@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDatabase } from '@/server/db/client';
 import { createAuditEvent } from '@/modules/audit/domain/audit-events';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
-import { canAccessResource, type AccessContext, type ProtectedAction } from '@/modules/security/domain/access-control';
+import { canAccessResource, type AccessContext, type AccessDecision, type ProtectedAction } from '@/modules/security/domain/access-control';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import {
   getPlatformAiModelConfigPersistedView,
@@ -30,7 +30,7 @@ async function recordAccessAudit(input: {
   context: AccessContext;
   action: ProtectedAction;
   result: 'allowed' | 'denied';
-  reason: 'allowed_by_policy' | 'role_denied' | 'missing_tenant' | 'cross_tenant_denied' | 'sensitive_detail_denied';
+  reason: AccessDecision['reason'];
 }) {
   try {
     await repositories().auditRepository.record(createAuditEvent({

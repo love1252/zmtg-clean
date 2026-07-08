@@ -9,6 +9,14 @@ export type AuditResult = 'allowed' | 'denied' | 'transitioned';
 
 export type AuditReason =
   | AccessDecision['reason']
+  | 'permission_denied'
+  | 'sensitive_output_blocked'
+  | 'safety_switch_read'
+  | 'safety_switch_updated'
+  | 'real_channel_enable_blocked'
+  | 'real_channel_disabled'
+  | 'customer_import_permission_checked'
+  | 'message_delivery_permission_checked'
   | 'invalid_transition'
   | 'stale_transition'
   | 'not_found_or_not_owned'

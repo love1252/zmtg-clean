@@ -714,6 +714,37 @@ function InstitutionDashboardHome({
         })}
       </section>
 
+      <section className="rounded-[22px] border border-emerald-100 bg-emerald-50/80 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-slate-950">
+                权限与安全开关
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                当前权限 / 安全边界按最小权限展示；真实渠道默认关闭，当前仍为 mock。
+              </p>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-right">
+            <div className="text-xs font-semibold text-slate-400">真实渠道</div>
+            <div className="mt-1 text-sm font-semibold text-emerald-700">
+              {summary.safetySwitch.realChannelBlocked ? '已阻断' : '可用'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2 text-xs font-semibold text-emerald-800 sm:grid-cols-3 xl:grid-cols-5">
+          {summary.safetySwitch.boundaryLabels.map((label) => (
+            <span key={label} className="rounded-full border border-emerald-200 bg-white px-3 py-2">
+              {label}
+            </span>
+          ))}
+        </div>
+      </section>
+
       <section className="rounded-[22px] border border-blue-100 bg-blue-50/80 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">

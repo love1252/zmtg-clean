@@ -19,7 +19,7 @@ export function createFollowUpMessageAuditEventId() {
 
 export function deniedFollowUpMessageAudit(input: {
   context: AccessContext;
-  action: 'create' | 'read_own_tenant' | 'update';
+  action: 'create' | 'read_own_tenant' | 'update' | 'approve';
   reason: AuditReason;
   occurredAt: string;
   resourceId?: string | null;
@@ -37,7 +37,7 @@ export function deniedFollowUpMessageAudit(input: {
 
 export function allowedFollowUpMessageAudit(input: {
   context: AccessContext;
-  action: 'create' | 'read_own_tenant' | 'update';
+  action: 'create' | 'read_own_tenant' | 'update' | 'approve';
   reason: AuditReason;
   occurredAt: string;
   resourceId?: string | null;
