@@ -17,6 +17,7 @@ import {
   closeAiConversation,
   detectAiConversationSendRisks,
   evaluateAiConversationAutomationStrategy,
+  evaluateAiConversationRealChannelPreflight,
   filterAiConversations,
   getAiConversationWorkbenchFixture,
   markAiConversationAutomationBlocked,
@@ -52,8 +53,11 @@ const unsafeTerms = [
 ];
 
 function expectNoUnsafeText(text: string) {
+  const normalized = text
+    .replaceAll('不配置 secret / token', '')
+    .replaceAll('secret / token', '');
   for (const term of unsafeTerms) {
-    expect(text).not.toContain(term);
+    expect(normalized).not.toContain(term);
   }
 }
 
@@ -231,15 +235,15 @@ describe('自动回复与自动随访策略模拟 domain', () => {
       occurredAt: '2026-07-08T10:00:00.000+08:00',
     });
     expect(autoReply.kind).toBe('evaluated');
-    expect(autoReply.conversation.timeline.at(-1)?.auditReason).toBe('ai_auto_reply_mock_allowed');
-    expect(autoReply.conversation.timeline.at(-1)?.metadata?.allowRealSend).toBe('false');
+    expect(autoReply.conversation.timeline.at(-2)?.auditReason).toBe('ai_auto_reply_mock_allowed');
+    expect(autoReply.conversation.timeline.at(-2)?.metadata?.allowRealSend).toBe('false');
 
     const autoFollowup = simulateAiConversationAutoFollowupStrategy({
       conversation,
       context: { intentType: 'aftercare_question', riskTags: [], isAftercareFollowup: true, isMedicalRisk: false },
       occurredAt: '2026-07-08T10:01:00.000+08:00',
     });
-    expect(autoFollowup.conversation.timeline.at(-1)?.auditReason).toBe('ai_auto_followup_mock_allowed');
+    expect(autoFollowup.conversation.timeline.at(-2)?.auditReason).toBe('ai_auto_followup_mock_allowed');
 
     expect(markAiConversationAutomationNeedsHuman({ conversation: autoReply.conversation, occurredAt: '2026-07-08T10:02:00.000+08:00' }).kind).toBe('requires_human_confirmation');
     expect(markAiConversationAutomationBlocked({ conversation, occurredAt: '2026-07-08T10:03:00.000+08:00' }).kind).toBe('blocked');
@@ -281,6 +285,13 @@ describe('AI 会话工作台模拟版 domain', () => {
       highRiskBlockedCount: 2,
       marketingAutomationBlockedCount: 0,
       addFriendBlockedCount: 0,
+      preflightCheckCount: 4,
+      preflightMockEligibleCount: 1,
+      preflightRealSendBlockedCount: 4,
+      preflightSensitiveConfigBlockedCount: 0,
+      preflightAccountCustodyRouteBlockedCount: 0,
+      preflightMissingManualConfirmationBlockedCount: 3,
+      preflightSafetySwitchBlockedCount: 4,
     });
   });
 
@@ -297,7 +308,7 @@ describe('AI 会话工作台模拟版 domain', () => {
     expect(result.conversation.aiProcessingLabel).toBe('人工已接管');
     expect(result.conversation.canTakeover).toBe(false);
     expect(result.conversation.messages.at(-1)?.safeSummary).toBe('咨询师已接管会话。');
-    expect(result.conversation.timeline.at(-1)?.auditReason).toBe('ai_conversation_takeover');
+    expect(result.conversation.timeline.at(-2)?.auditReason).toBe('ai_conversation_takeover');
   });
 
   it('支持一键使用推荐回复生成发送前草稿', () => {
@@ -376,6 +387,30 @@ describe('AI 会话工作台模拟版 domain', () => {
     expect(result.conversation.timeline.at(-1)?.auditReason).toBe('ai_conversation_closed');
   });
 
+  it('支持真实通道前置检查、时间线事件和模拟 proof 准入状态', () => {
+    const [conversation] = getAiConversationWorkbenchFixture();
+    expect(conversation.realChannelPreflight.preflightStatus).toBe('blocked_safety_switch');
+    expect(conversation.timeline.some((event) => event.auditReason === 'real_channel_preflight_blocked')).toBe(true);
+
+    const takenOver = takeoverAiConversation({
+      conversation,
+      actorId: 'consultant-mock-001',
+      occurredAt: '2026-07-08T10:00:00.000+08:00',
+    }).conversation;
+    const result = evaluateAiConversationRealChannelPreflight({
+      conversation: takenOver,
+      hasManualConfirmation: true,
+      occurredAt: '2026-07-08T10:05:00.000+08:00',
+    });
+
+    expect(result.kind).toBe('blocked');
+    expect(result.conversation.realChannelPreflight.realSendAllowed).toBe(false);
+    expect(result.conversation.realChannelPreflight.allowRealSend).toBe(false);
+    expect(result.conversation.realChannelPreflight.externalChannelEnabled).toBe(false);
+    expect(result.conversation.timeline.at(-1)?.title).toBe('真实通道前置检查');
+    expect(result.conversation.timeline.at(-1)?.metadata?.allowRealSend).toBe('false');
+  });
+
   it('覆盖 AI 会话工作台 audit reason 并保持低敏 payload', () => {
     expect(aiConversationAuditReasons).toEqual([
       'ai_conversation_viewed',
@@ -393,6 +428,12 @@ describe('AI 会话工作台模拟版 domain', () => {
       'ai_auto_followup_blocked',
       'ai_marketing_automation_blocked',
       'ai_add_friend_blocked',
+      'real_channel_preflight_viewed',
+      'real_channel_preflight_evaluated',
+      'real_channel_preflight_blocked',
+      'real_channel_proof_mock_eligible',
+      'real_channel_sensitive_config_blocked',
+      'account_custody_route_blocked',
     ]);
     expect(assertAiConversationLowSensitivePayload(getAiConversationWorkbenchFixture())).toBe(true);
     expect(assertAiConversationLowSensitivePayload({ phoneNumber: '13800000000' })).toBe(false);
@@ -423,6 +464,16 @@ describe('AI 会话工作台模拟版 UI', () => {
     expect(screen.getByRole('button', { name: '结束会话' })).toBeInTheDocument();
     expect(screen.getByText('AI 推荐回复')).toBeInTheDocument();
     expect(screen.getByText('自动化策略')).toBeInTheDocument();
+    expect(screen.getAllByText('真实通道前置检查').length).toBeGreaterThan(0);
+    expect(screen.getByText(/当前通道路线/u)).toBeInTheDocument();
+    expect(screen.getByText(/proof 准入状态/u)).toBeInTheDocument();
+    expect(screen.getByText('是否允许真实发送：否')).toBeInTheDocument();
+    expect(screen.getByText(/是否允许模拟 proof/u)).toBeInTheDocument();
+    expect(screen.getAllByText('allowRealSend=false').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('externalChannelEnabled=false').length).toBeGreaterThan(0);
+    expect(screen.getByText(/需要人工完成的动作/u)).toBeInTheDocument();
+    expect(screen.getByText(/不接真实企业微信 \/ 微信；不配置 secret \/ token；不真实发送/u)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '模拟评估真实通道前置检查' })).toBeInTheDocument();
     expect(screen.getByText('L0-L4 等级说明')).toBeInTheDocument();
     expect(screen.getByText('L0 AI 推荐')).toBeInTheDocument();
     expect(screen.getByText('L1 AI 草稿 + 人工确认')).toBeInTheDocument();
@@ -431,7 +482,7 @@ describe('AI 会话工作台模拟版 UI', () => {
     expect(screen.getByText('L4 营销自动化 / 群发 / 加好友 / 裂变')).toBeInTheDocument();
     expect(screen.getByText(/当前策略结果/u)).toBeInTheDocument();
     expect(screen.getByText(/是否需要人工确认/u)).toBeInTheDocument();
-    expect(screen.getByText('阻断原因')).toBeInTheDocument();
+    expect(screen.getAllByText('阻断原因').length).toBeGreaterThan(0);
     expect(screen.getByText('低敏回复草稿')).toBeInTheDocument();
     expect(screen.getByText(/低敏随访计划/u)).toBeInTheDocument();
     expect(screen.getByText(/自动回复和自动随访当前仅策略模拟/u)).toBeInTheDocument();
@@ -558,6 +609,13 @@ describe('AI 会话工作台模拟版 UI', () => {
     expect(within(statsRegion).getByText('高风险阻断数量')).toBeInTheDocument();
     expect(within(statsRegion).getByText('营销自动化阻断数量')).toBeInTheDocument();
     expect(within(statsRegion).getByText('加好友阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('前置检查数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('模拟 proof 可进入数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('真实发送阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('敏感配置阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('账号托管路线阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('未人工确认阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('安全开关阻断数量')).toBeInTheDocument();
 
     const mockSentCard = within(statsRegion).getByText('模拟发送数量').closest('article');
     expect(mockSentCard).not.toBeNull();

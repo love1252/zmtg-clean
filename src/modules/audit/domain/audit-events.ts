@@ -134,7 +134,13 @@ export type AuditReason =
   | 'ai_auto_reply_blocked'
   | 'ai_auto_followup_blocked'
   | 'ai_marketing_automation_blocked'
-  | 'ai_add_friend_blocked';
+  | 'ai_add_friend_blocked'
+  | 'real_channel_preflight_viewed'
+  | 'real_channel_preflight_evaluated'
+  | 'real_channel_preflight_blocked'
+  | 'real_channel_proof_mock_eligible'
+  | 'real_channel_sensitive_config_blocked'
+  | 'account_custody_route_blocked';
 
 export type TenantAuditEvent = {
   eventId: string;
