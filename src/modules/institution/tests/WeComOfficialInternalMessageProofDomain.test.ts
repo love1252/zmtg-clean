@@ -25,6 +25,11 @@ function expectNoSensitiveOutput(payload: unknown) {
   expect(text).not.toContain(baseConfig.agentSecret);
   expect(text).not.toContain(baseConfig.internalTestUserId);
   expect(text).not.toContain('access_token');
+  expect(text).not.toContain('errmsg');
+}
+
+function expectNoDiagnostic(payload: { diagnostic?: unknown }) {
+  expect(payload.diagnostic).toBeUndefined();
 }
 
 describe('wecom official internal message proof domain', () => {
@@ -87,6 +92,7 @@ describe('wecom official internal message proof domain', () => {
       reason: 'missing_required_config',
     });
     expect(client.sendInternalTestMessage).not.toHaveBeenCalled();
+    expectNoDiagnostic(summary);
     expectNoSensitiveOutput(summary);
   });
 
@@ -107,6 +113,7 @@ describe('wecom official internal message proof domain', () => {
       reason: 'blocked_invalid_recipient',
     });
     expect(client.sendInternalTestMessage).not.toHaveBeenCalled();
+    expectNoDiagnostic(summary);
     expectNoSensitiveOutput(summary);
   });
 
@@ -127,6 +134,7 @@ describe('wecom official internal message proof domain', () => {
       reason: 'blocked_invalid_recipient',
     });
     expect(client.sendInternalTestMessage).not.toHaveBeenCalled();
+    expectNoDiagnostic(summary);
     expectNoSensitiveOutput(summary);
   });
 
@@ -208,30 +216,44 @@ describe('wecom official internal message proof domain', () => {
     expectNoSensitiveOutput(summary);
   });
 
-  it('auth failed 和 send failed 只返回低敏 reason code', async () => {
+  it('auth failed 和 send failed 可返回低敏数字 errcode 诊断', async () => {
     const authFailedClient: WeComOfficialInternalMessageProofClient = {
-      sendInternalTestMessage: vi.fn().mockResolvedValue({ ok: false, reason: 'auth_failed' }),
+      sendInternalTestMessage: vi.fn().mockResolvedValue({
+        ok: false,
+        reason: 'auth_failed',
+        diagnostic: { stage: 'gettoken', wecomErrcode: 40001 },
+      }),
     };
     const sendFailedClient: WeComOfficialInternalMessageProofClient = {
-      sendInternalTestMessage: vi.fn().mockResolvedValue({ ok: false, reason: 'send_failed' }),
+      sendInternalTestMessage: vi.fn().mockResolvedValue({
+        ok: false,
+        reason: 'send_failed',
+        diagnostic: { stage: 'message_send', wecomErrcode: 81013 },
+      }),
     };
 
-    await expect(evaluateWeComOfficialInternalMessageProof({
+    const authFailedSummary = await evaluateWeComOfficialInternalMessageProof({
       config: { ...baseConfig, networkEnabled: true, realSendEnabled: true },
       confirmed: true,
       client: authFailedClient,
-    })).resolves.toMatchObject({
+    });
+    expect(authFailedSummary).toMatchObject({
       messageProofStatus: 'internal_message_proof_auth_failed',
       reason: 'internal_message_proof_auth_failed',
+      diagnostic: { stage: 'gettoken', wecomErrcode: 40001 },
     });
+    expectNoSensitiveOutput(authFailedSummary);
 
-    await expect(evaluateWeComOfficialInternalMessageProof({
+    const sendFailedSummary = await evaluateWeComOfficialInternalMessageProof({
       config: { ...baseConfig, networkEnabled: true, realSendEnabled: true },
       confirmed: true,
       client: sendFailedClient,
-    })).resolves.toMatchObject({
+    });
+    expect(sendFailedSummary).toMatchObject({
       messageProofStatus: 'internal_message_proof_send_failed',
       reason: 'internal_message_proof_send_failed',
+      diagnostic: { stage: 'message_send', wecomErrcode: 81013 },
     });
+    expectNoSensitiveOutput(sendFailedSummary);
   });
 });

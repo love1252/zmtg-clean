@@ -92,7 +92,12 @@ function expectNoSensitiveOutput(payload: unknown) {
   expect(text).not.toContain(userIdValue);
   expect(text).not.toContain(tokenValue);
   expect(text).not.toContain('access_token');
+  expect(text).not.toContain('errmsg');
   expect(text).not.toContain('qyapi.weixin.qq.com');
+}
+
+function expectNoDiagnostic(payload: { diagnostic?: unknown }) {
+  expect(payload.diagnostic).toBeUndefined();
 }
 
 function validBody() {
@@ -186,6 +191,7 @@ describe('wecom official internal message proof API route', () => {
       reason: 'missing_required_config',
     });
     expect(fetchMock).not.toHaveBeenCalled();
+    expectNoDiagnostic(payload);
     expectNoSensitiveOutput(payload);
   });
 
@@ -204,6 +210,7 @@ describe('wecom official internal message proof API route', () => {
       reason: 'blocked_invalid_recipient',
     });
     expect(fetchMock).not.toHaveBeenCalled();
+    expectNoDiagnostic(payload);
     expectNoSensitiveOutput(payload);
   });
 
@@ -222,6 +229,7 @@ describe('wecom official internal message proof API route', () => {
       reason: 'blocked_invalid_recipient',
     });
     expect(fetchMock).not.toHaveBeenCalled();
+    expectNoDiagnostic(payload);
     expectNoSensitiveOutput(payload);
   });
 
@@ -240,6 +248,7 @@ describe('wecom official internal message proof API route', () => {
       reason: 'blocked_real_network_disabled',
     });
     expect(fetchMock).not.toHaveBeenCalled();
+    expectNoDiagnostic(payload);
   });
 
   it('realSend=false 时 POST 不 fetch', async () => {
@@ -257,6 +266,7 @@ describe('wecom official internal message proof API route', () => {
       reason: 'blocked_real_send_disabled',
     });
     expect(fetchMock).not.toHaveBeenCalled();
+    expectNoDiagnostic(payload);
   });
 
   it.each([
@@ -275,6 +285,7 @@ describe('wecom official internal message proof API route', () => {
     expect(response.status).toBe(400);
     expect(payload).toEqual({ error: 'invalid_action', reason: 'invalid_action' });
     expect(fetchMock).not.toHaveBeenCalled();
+    expectNoDiagnostic(payload);
     expectNoSensitiveOutput(payload);
   });
 
@@ -292,6 +303,7 @@ describe('wecom official internal message proof API route', () => {
     expect(response.status).toBe(400);
     expect(payload).toEqual({ error: 'invalid_confirmation', reason: 'invalid_confirmation' });
     expect(fetchMock).not.toHaveBeenCalled();
+    expectNoDiagnostic(payload);
     expectNoSensitiveOutput(payload);
   });
 
@@ -306,6 +318,7 @@ describe('wecom official internal message proof API route', () => {
     expect(response.status).toBe(400);
     expect(payload).toEqual({ error: '请求格式不正确' });
     expect(fetchMock).not.toHaveBeenCalled();
+    expectNoDiagnostic(payload);
     expectNoSensitiveOutput(payload);
   });
 
@@ -321,6 +334,7 @@ describe('wecom official internal message proof API route', () => {
     expect(response.status).toBe(403);
     expect(payload).toEqual({ error: '没有访问权限' });
     expect(fetchMock).not.toHaveBeenCalled();
+    expectNoDiagnostic(payload);
   });
 
   it('未登录返回 401 且不 fetch', async () => {
@@ -335,6 +349,7 @@ describe('wecom official internal message proof API route', () => {
     expect(response.status).toBe(401);
     expect(payload).toEqual({ error: '请先登录' });
     expect(fetchMock).not.toHaveBeenCalled();
+    expectNoDiagnostic(payload);
   });
 
   it('GET 继续使用 real_channel/read，tenant_operator 可读取低敏状态', async () => {
@@ -382,6 +397,7 @@ describe('wecom official internal message proof API route', () => {
       enable_id_trans: 0,
       enable_duplicate_check: 0,
     });
+    expectNoDiagnostic(payload);
     expectNoSensitiveOutput(payload);
   });
 
@@ -399,9 +415,15 @@ describe('wecom official internal message proof API route', () => {
     expectNoSensitiveOutput(payload);
   });
 
-  it('企业微信返回 auth failed 时只返回低敏 reason code', async () => {
+  it('企业微信 gettoken 返回 errcode=40001 时返回低敏数字 errcode 诊断', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ errcode: 40001, errmsg: 'credential invalid', access_token: tokenValue }), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        errcode: 40001,
+        errmsg: 'credential invalid',
+        access_token: tokenValue,
+        userid: userIdValue,
+        secret: credentialValue,
+      }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     stubCompleteWeComEnv({ networkEnabled: 'true', realSendEnabled: 'true' });
 
@@ -412,15 +434,22 @@ describe('wecom official internal message proof API route', () => {
     expect(payload).toMatchObject({
       messageProofStatus: 'internal_message_proof_auth_failed',
       reason: 'internal_message_proof_auth_failed',
+      diagnostic: { stage: 'gettoken', wecomErrcode: 40001 },
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expectNoSensitiveOutput(payload);
   });
 
-  it('企业微信 send failed 时只返回低敏 reason code', async () => {
+  it('企业微信 message/send 返回 errcode=81013 时返回低敏数字 errcode 诊断', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ errcode: 0, access_token: tokenValue }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ errcode: 81013, errmsg: 'bad userid', userid: userIdValue }), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        errcode: 81013,
+        errmsg: 'bad userid',
+        userid: userIdValue,
+        access_token: tokenValue,
+        secret: credentialValue,
+      }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     stubCompleteWeComEnv({ networkEnabled: 'true', realSendEnabled: 'true' });
 
@@ -431,6 +460,33 @@ describe('wecom official internal message proof API route', () => {
     expect(payload).toMatchObject({
       messageProofStatus: 'internal_message_proof_send_failed',
       reason: 'internal_message_proof_send_failed',
+      diagnostic: { stage: 'message_send', wecomErrcode: 81013 },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expectNoSensitiveOutput(payload);
+  });
+
+  it('企业微信 message/send 返回 errcode=60020 时返回低敏数字 errcode 诊断', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ errcode: 0, access_token: tokenValue }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        errcode: 60020,
+        errmsg: 'not allow ip',
+        userid: userIdValue,
+        access_token: tokenValue,
+        secret: credentialValue,
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    stubCompleteWeComEnv({ networkEnabled: 'true', realSendEnabled: 'true' });
+
+    const response = await POST(request('POST', validBody()));
+    const payload = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      messageProofStatus: 'internal_message_proof_auth_failed',
+      reason: 'internal_message_proof_auth_failed',
+      diagnostic: { stage: 'message_send', wecomErrcode: 60020 },
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expectNoSensitiveOutput(payload);

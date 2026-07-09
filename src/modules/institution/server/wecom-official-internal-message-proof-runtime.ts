@@ -2,6 +2,7 @@ import {
   weComOfficialInternalTestMessageContent,
   type WeComOfficialInternalMessageProofClient,
   type WeComOfficialInternalMessageProofConfig,
+  type WeComOfficialInternalMessageProofDiagnostic,
   type WeComOfficialInternalMessageProofSendOutcome,
 } from '@/modules/institution/domain/wecom-official-internal-message-proof';
 
@@ -32,9 +33,13 @@ export function readWeComOfficialInternalMessageProofConfig(
   };
 }
 
+function diagnostic(stage: WeComOfficialInternalMessageProofDiagnostic['stage'], errcode: number) {
+  return { stage, wecomErrcode: errcode } satisfies WeComOfficialInternalMessageProofDiagnostic;
+}
+
 function lowSensitiveTokenOutcomeFromResponse(payload: unknown):
   | { ok: true; accessToken: string }
-  | { ok: false; reason: 'auth_failed' | 'network_error' } {
+  | { ok: false; reason: 'auth_failed' | 'network_error'; diagnostic?: WeComOfficialInternalMessageProofDiagnostic } {
   if (typeof payload !== 'object' || payload === null) return { ok: false, reason: 'network_error' };
 
   const errcode = (payload as { errcode?: unknown }).errcode;
@@ -44,11 +49,13 @@ function lowSensitiveTokenOutcomeFromResponse(payload: unknown):
     return { ok: true, accessToken };
   }
 
+  if (typeof errcode !== 'number') return { ok: false, reason: 'network_error' };
+
   if (errcode === 40001 || errcode === 40013 || errcode === 48002 || errcode === 60020) {
-    return { ok: false, reason: 'auth_failed' };
+    return { ok: false, reason: 'auth_failed', diagnostic: diagnostic('gettoken', errcode) };
   }
 
-  return { ok: false, reason: 'network_error' };
+  return { ok: false, reason: 'network_error', diagnostic: diagnostic('gettoken', errcode) };
 }
 
 function lowSensitiveSendOutcomeFromResponse(payload: unknown): WeComOfficialInternalMessageProofSendOutcome {
@@ -56,11 +63,12 @@ function lowSensitiveSendOutcomeFromResponse(payload: unknown): WeComOfficialInt
 
   const errcode = (payload as { errcode?: unknown }).errcode;
   if (errcode === 0) return { ok: true };
+  if (typeof errcode !== 'number') return { ok: false, reason: 'send_failed' };
   if (errcode === 40001 || errcode === 40013 || errcode === 48002 || errcode === 60020) {
-    return { ok: false, reason: 'auth_failed' };
+    return { ok: false, reason: 'auth_failed', diagnostic: diagnostic('message_send', errcode) };
   }
 
-  return { ok: false, reason: 'send_failed' };
+  return { ok: false, reason: 'send_failed', diagnostic: diagnostic('message_send', errcode) };
 }
 
 export function createWeComOfficialInternalMessageProofClient(
@@ -77,7 +85,13 @@ export function createWeComOfficialInternalMessageProofClient(
         if (!tokenResponse.ok) return { ok: false, reason: 'network_error' };
 
         const tokenOutcome = lowSensitiveTokenOutcomeFromResponse(await tokenResponse.json());
-        if (!tokenOutcome.ok) return { ok: false, reason: tokenOutcome.reason };
+        if (!tokenOutcome.ok) {
+          return {
+            ok: false,
+            reason: tokenOutcome.reason,
+            ...(tokenOutcome.diagnostic ? { diagnostic: tokenOutcome.diagnostic } : {}),
+          };
+        }
 
         const sendUrl = new URL('https://qyapi.weixin.qq.com/cgi-bin/message/send');
         sendUrl.searchParams.set('access_token', tokenOutcome.accessToken);

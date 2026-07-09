@@ -68,6 +68,11 @@ export type MaskedWeComOfficialInternalMessageProofConfig = {
   internalTestUserId: MaskedWeComOfficialInternalMessageProofConfigField;
 };
 
+export type WeComOfficialInternalMessageProofDiagnostic = {
+  stage: 'gettoken' | 'message_send';
+  wecomErrcode: number;
+};
+
 export type WeComOfficialInternalMessageProofSummary = {
   configured: boolean;
   missingKeys: RequiredWeComOfficialInternalMessageProofEnvKey[];
@@ -76,6 +81,7 @@ export type WeComOfficialInternalMessageProofSummary = {
   realSendEnabled: boolean;
   messageProofStatus: WeComOfficialInternalMessageProofStatus;
   reason: WeComOfficialInternalMessageProofReason;
+  diagnostic?: WeComOfficialInternalMessageProofDiagnostic;
 };
 
 export type WeComOfficialInternalMessageProofSendInput = {
@@ -87,7 +93,11 @@ export type WeComOfficialInternalMessageProofSendInput = {
 
 export type WeComOfficialInternalMessageProofSendOutcome =
   | { ok: true }
-  | { ok: false; reason: 'auth_failed' | 'send_failed' | 'network_error' };
+  | {
+      ok: false;
+      reason: 'auth_failed' | 'send_failed' | 'network_error';
+      diagnostic?: WeComOfficialInternalMessageProofDiagnostic;
+    };
 
 export type WeComOfficialInternalMessageProofClient = {
   sendInternalTestMessage(
@@ -148,6 +158,7 @@ function createSummary(input: {
   config: WeComOfficialInternalMessageProofConfig;
   status: WeComOfficialInternalMessageProofStatus;
   reason: WeComOfficialInternalMessageProofReason;
+  diagnostic?: WeComOfficialInternalMessageProofDiagnostic;
 }): WeComOfficialInternalMessageProofSummary {
   const missingKeys = getWeComOfficialInternalMessageProofMissingKeys(input.config);
 
@@ -159,6 +170,7 @@ function createSummary(input: {
     realSendEnabled: input.config.realSendEnabled,
     messageProofStatus: input.status,
     reason: input.reason,
+    ...(input.diagnostic ? { diagnostic: input.diagnostic } : {}),
   };
 }
 
@@ -279,6 +291,7 @@ export async function evaluateWeComOfficialInternalMessageProof(
       config: input.config,
       status: 'internal_message_proof_auth_failed',
       reason: 'internal_message_proof_auth_failed',
+      diagnostic: outcome.diagnostic,
     });
   }
 
@@ -287,6 +300,7 @@ export async function evaluateWeComOfficialInternalMessageProof(
       config: input.config,
       status: 'internal_message_proof_network_error',
       reason: 'internal_message_proof_network_error',
+      diagnostic: outcome.diagnostic,
     });
   }
 
@@ -294,5 +308,6 @@ export async function evaluateWeComOfficialInternalMessageProof(
     config: input.config,
     status: 'internal_message_proof_send_failed',
     reason: 'internal_message_proof_send_failed',
+    diagnostic: outcome.diagnostic,
   });
 }
