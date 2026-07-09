@@ -23,6 +23,12 @@ const tenantAdminContext: AccessContext = {
   source: 'demo_session',
 };
 
+const tenantOperatorContext: AccessContext = {
+  ...tenantAdminContext,
+  userId: 'tenant-operator',
+  role: 'tenant_operator',
+};
+
 const corpValue = 'corp-local-precheck-001';
 const agentValue = '100001';
 const credentialValue = 'credential-local-precheck-001';
@@ -32,6 +38,13 @@ function request(method: 'GET' | 'POST', body?: unknown) {
   return new Request('http://localhost/api/institution/wecom-official-secret-precheck', {
     method,
     body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+function rawRequest(method: 'POST', body: string) {
+  return new Request('http://localhost/api/institution/wecom-official-secret-precheck', {
+    method,
+    body,
   });
 }
 
@@ -129,6 +142,73 @@ describe('wecom official secret precheck API route', () => {
     expectNoSensitiveOutput(payload);
   });
 
+  it('GET 继续使用 real_channel/read，tenant_operator 可读取低敏配置状态', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantOperatorContext);
+    stubWeComEnv({
+      corpId: corpValue,
+      agentId: agentValue,
+      agentSecret: credentialValue,
+      networkEnabled: 'false',
+      realSendEnabled: 'false',
+    });
+
+    const response = await GET(request('GET'));
+    const payload = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      configured: true,
+      preflightStatus: 'blocked_real_network_disabled',
+      reason: 'blocked_real_network_disabled',
+    });
+    expectNoSensitiveOutput(payload);
+  });
+
+  it.each([
+    ['缺少 action', {}],
+    ['未知 action', { action: 'unknown' }],
+    ['非字符串 action', { action: 123 }],
+    ['非对象 body', 'preflight'],
+  ])('POST %s 返回 invalid_action 且不调用 fetch', async (_caseName, body) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    stubWeComEnv({
+      corpId: corpValue,
+      agentId: agentValue,
+      agentSecret: credentialValue,
+      networkEnabled: 'true',
+      realSendEnabled: 'false',
+    });
+
+    const response = await POST(request('POST', body));
+    const payload = await json(response);
+
+    expect(response.status).toBe(400);
+    expect(payload).toEqual({ error: 'invalid_action', reason: 'invalid_action' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoSensitiveOutput(payload);
+  });
+
+  it('POST 非法 JSON 返回 400 且不调用 fetch', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    stubWeComEnv({
+      corpId: corpValue,
+      agentId: agentValue,
+      agentSecret: credentialValue,
+      networkEnabled: 'true',
+      realSendEnabled: 'false',
+    });
+
+    const response = await POST(rawRequest('POST', '{'));
+    const payload = await json(response);
+
+    expect(response.status).toBe(400);
+    expect(payload).toEqual({ error: '请求格式不正确' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNoSensitiveOutput(payload);
+  });
+
   it('POST 配置完整但 network disabled 时不出网', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -152,6 +232,39 @@ describe('wecom official secret precheck API route', () => {
     });
     expect(fetchMock).not.toHaveBeenCalled();
     expectNoSensitiveOutput(payload);
+  });
+
+  it('POST preflight 使用 open_connection/test_connection，tenant_operator 返回 403 且不调用 fetch', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantOperatorContext);
+    stubWeComEnv({
+      corpId: corpValue,
+      agentId: agentValue,
+      agentSecret: credentialValue,
+      networkEnabled: 'true',
+      realSendEnabled: 'false',
+    });
+
+    const response = await POST(request('POST', { action: 'preflight' }));
+    const payload = await json(response);
+
+    expect(response.status).toBe(403);
+    expect(payload).toEqual({ error: '没有访问权限' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('POST 未登录返回 401 且不调用 fetch', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
+
+    const response = await POST(request('POST', { action: 'preflight' }));
+    const payload = await json(response);
+
+    expect(response.status).toBe(401);
+    expect(payload).toEqual({ error: '请先登录' });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('POST real send disabled 时阻断 send 类动作且不调用 fetch', async () => {
