@@ -79,6 +79,13 @@ const statItems = [
   { key: 'dryRunRealSendBlockedCount', label: '真实发送阻断数量' },
   { key: 'dryRunCallbackPlaceholderMissingCount', label: 'callback 占位缺失数量' },
   { key: 'dryRunManualConfirmationMissingCount', label: '人工确认缺失数量' },
+  { key: 'officialDryRunCheckCount', label: '官方 dry-run 检查数量' },
+  { key: 'officialDryRunPlanReadyCount', label: 'dry-run plan ready 数量' },
+  { key: 'officialDryRunMockCompletedCount', label: 'mock dry-run completed 数量' },
+  { key: 'officialDryRunRealNetworkBlockedCount', label: '官方真实网络阻断数量' },
+  { key: 'officialDryRunRealSendBlockedCount', label: '官方真实发送阻断数量' },
+  { key: 'officialDryRunSensitivePayloadBlockedCount', label: '官方敏感 payload 阻断数量' },
+  { key: 'officialDryRunMissingManualConfirmationBlockedCount', label: '官方人工确认缺失阻断数量' },
 ] as const;
 
 const messageBubbleClasses = {
@@ -572,6 +579,7 @@ function AiPanel({
   const strategy = conversation.automationStrategy.result;
   const preflight = conversation.realChannelPreflight;
   const dryRunConfig = conversation.weComOfficialDryRunConfig;
+  const officialDryRun = conversation.weComOfficialDryRun;
 
   return (
     <div className="mt-4 space-y-4">
@@ -690,6 +698,75 @@ function AiPanel({
 
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold leading-6 text-amber-900">
             本任务不读取 secret；本任务不配置真实企业微信；不接 callback / webhook；不真实出网；不真实发送。
+          </div>
+        </div>
+      </PanelBlock>
+      <PanelBlock icon={ShieldCheck} title="官方路线 dry-run" tone="emerald">
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
+                当前官方路线：{officialDryRun.routeLabel}
+              </span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                dry-run 状态：{officialDryRun.dryRunStatusLabel}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-700 sm:grid-cols-2">
+              <span>networkMode：{officialDryRun.networkMode}</span>
+              <span>dry-run plan ready：{officialDryRun.dryRunPlanReady ? '是' : '否'}</span>
+              <span>mock dry-run completed：{officialDryRun.mockDryRunCompleted ? '是' : '否'}</span>
+              <span>noRealSend=true</span>
+              <span>noRealNetwork=true</span>
+              <span>noSecretRead=true</span>
+              <span>noSecretOutput=true</span>
+              <span>allowRealSend=false</span>
+              <span>externalChannelEnabled=false</span>
+              <span>realSendAllowed=false</span>
+              <span>当前仅 dry-run，不真实发送</span>
+              <span>当前不执行真实企业微信出网</span>
+              <span>audit reason：{officialDryRun.auditReason}</span>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-emerald-900">{officialDryRun.lowSensitiveExplanation}</p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-sm font-semibold text-slate-950">dry-run 步骤</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-600">
+              {officialDryRun.dryRunSteps.map((step) => (
+                <li key={step.id}>{step.label}（{step.status}）</li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-sm font-semibold text-slate-950">阻断原因</div>
+            {officialDryRun.blockReasons.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-600">
+                {officialDryRun.blockReasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-slate-500">当前无 dry-run 阻断；真实发送和真实出网仍为否。</p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-3">
+            <div className="text-sm font-semibold text-cyan-950">需要人工完成的动作</div>
+            {officialDryRun.requiredHumanActions.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-cyan-900">
+                {officialDryRun.requiredHumanActions.map((action) => (
+                  <li key={action}>{action}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-cyan-800">dry-run 仅限本地模拟；真实网络和真实发送需后续独立授权。</p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold leading-6 text-amber-900">
+            live_dry_run_requested 仅预留状态，本任务不执行真实 fetch；不读取密钥；不输出密钥；不真实发送。
           </div>
         </div>
       </PanelBlock>
