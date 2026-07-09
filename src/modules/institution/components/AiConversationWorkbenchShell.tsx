@@ -72,6 +72,13 @@ const statItems = [
   { key: 'preflightAccountCustodyRouteBlockedCount', label: '账号托管路线阻断数量' },
   { key: 'preflightMissingManualConfirmationBlockedCount', label: '未人工确认阻断数量' },
   { key: 'preflightSafetySwitchBlockedCount', label: '安全开关阻断数量' },
+  { key: 'dryRunConfigCheckCount', label: 'dry-run 配置检查数量' },
+  { key: 'dryRunReadyCount', label: 'dry-run ready 数量' },
+  { key: 'dryRunSecretInputBlockedCount', label: 'secret 输入阻断数量' },
+  { key: 'dryRunRealNetworkBlockedCount', label: '真实出网阻断数量' },
+  { key: 'dryRunRealSendBlockedCount', label: '真实发送阻断数量' },
+  { key: 'dryRunCallbackPlaceholderMissingCount', label: 'callback 占位缺失数量' },
+  { key: 'dryRunManualConfirmationMissingCount', label: '人工确认缺失数量' },
 ] as const;
 
 const messageBubbleClasses = {
@@ -163,6 +170,11 @@ export function AiConversationWorkbenchShell() {
 
     if (result.kind === 'risk_blocked') {
       setNotice(`高风险内容已阻断：${result.risks.map((risk) => aiConversationRiskTagLabels[risk]).join('、')}。`);
+      return;
+    }
+
+    if (result.kind === 'requires_takeover') {
+      setNotice('请先接管会话：接管后才允许人工确认并生成模拟发送记录。');
       return;
     }
 
@@ -274,7 +286,7 @@ export function AiConversationWorkbenchShell() {
               AI 会话工作台
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
-              参考补充截图与客服中心材料，模拟账号列、会话列表、聊天窗口、AI 推荐回复、风险预警、推荐项目、用户画像、人工接管、发送前确认、消息发送记录、时间线 / 审计 / 看板低敏沉淀。
+              参考补充截图与青焱 SCRM 教程中的客服中心、消息接入、分流详情和素材管理口径，模拟医美咨询账号、会话列表、聊天窗口、AI 推荐回复、风险预警、推荐项目、用户画像、人工接管、发送前确认、消息发送记录、时间线 / 审计 / 看板低敏沉淀。
             </p>
           </div>
           <div className="grid gap-2 text-xs font-semibold text-emerald-800 sm:grid-cols-2 xl:grid-cols-3">
@@ -319,6 +331,9 @@ export function AiConversationWorkbenchShell() {
               <p className="mt-1 text-xs text-slate-500">客户名称和员工标识均低敏展示</p>
             </div>
             <MessageCircle className="h-5 w-5 text-blue-500" />
+          </div>
+          <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold leading-5 text-blue-800">
+            医美咨询账号 · AI 接待中；接管前输入区只可准备草稿，不生成模拟发送记录。
           </div>
           <div className="mt-4 grid grid-cols-4 gap-2" aria-label="会话状态筛选">
             {filterItems.map((item) => (
@@ -467,17 +482,17 @@ export function AiConversationWorkbenchShell() {
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 className="mt-2 min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700 outline-none focus:border-blue-300"
-                placeholder="点击一键使用推荐回复后生成草稿；发送前必须人工确认。"
+                placeholder="点击「接管会话」后即可发送消息；推荐回复只生成草稿，发送前必须人工确认。"
               />
             </label>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs font-semibold text-slate-500">
-                当前不接真实企业微信 / 微信；不真实发送；高风险内容会提示或阻断。
+                当前不接真实企业微信 / 微信；未接管不生成发送记录；高风险内容会提示或阻断。
               </div>
               <button
                 type="button"
                 onClick={handleMockSend}
-                disabled={!draft.trim() || activeConversation.status === 'closed'}
+                disabled={!draft.trim() || activeConversation.status !== 'human_takeover'}
                 className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
               >
                 <Send className="h-4 w-4" />
@@ -556,6 +571,7 @@ function AiPanel({
 }) {
   const strategy = conversation.automationStrategy.result;
   const preflight = conversation.realChannelPreflight;
+  const dryRunConfig = conversation.weComOfficialDryRunConfig;
 
   return (
     <div className="mt-4 space-y-4">
@@ -615,6 +631,65 @@ function AiPanel({
 
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold leading-6 text-amber-900">
             当前仅前置检查，不接真实企业微信 / 微信；不配置 secret / token；不真实发送。
+          </div>
+        </div>
+      </PanelBlock>
+      <PanelBlock icon={ShieldCheck} title="官方企业微信 dry-run 配置" tone="blue">
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-700">
+                当前官方路线：{dryRunConfig.routeLabel}
+              </span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                dry-run 状态：{dryRunConfig.configStatusLabel}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-700 sm:grid-cols-2">
+              <span>测试机构低敏引用：{dryRunConfig.proofInstitutionRef ?? '未配置'}</span>
+              <span>callback URL 占位：{dryRunConfig.callbackUrlPlaceholder ?? '未配置'}</span>
+              <span>secret 保管方式：{dryRunConfig.configStatus === 'not_configured' ? '未确认' : '已确认 / 待复核'}</span>
+              <span>dry-run ready：{dryRunConfig.dryRunReady ? '是' : '否'}</span>
+              <span>是否允许真实出网：否</span>
+              <span>是否允许真实发送：否</span>
+              <span>allowRealSend=false</span>
+              <span>externalChannelEnabled=false</span>
+              <span>realSendAllowed=false</span>
+              <span>noSecretStored=true</span>
+              <span>noSecretRead=true</span>
+              <span>audit reason：{dryRunConfig.auditReason}</span>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-blue-900">{dryRunConfig.lowSensitiveExplanation}</p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-sm font-semibold text-slate-950">阻断原因</div>
+            {dryRunConfig.blockReasons.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-600">
+                {dryRunConfig.blockReasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-slate-500">当前仅 dry-run 低敏占位可进入；真实发送仍为否。</p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-3">
+            <div className="text-sm font-semibold text-cyan-950">需要人工完成的动作</div>
+            {dryRunConfig.requiredHumanActions.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-cyan-900">
+                {dryRunConfig.requiredHumanActions.map((action) => (
+                  <li key={action}>{action}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-cyan-800">保持低敏占位，后续真实接入需独立授权。</p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold leading-6 text-amber-900">
+            本任务不读取 secret；本任务不配置真实企业微信；不接 callback / webhook；不真实出网；不真实发送。
           </div>
         </div>
       </PanelBlock>
