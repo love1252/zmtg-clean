@@ -24,6 +24,14 @@ import {
   type RealChannelPreflightStats,
   type RealChannelRoute,
 } from '@/modules/institution/domain/real-channel-preflight';
+import {
+  buildWeComOfficialDryRunConfigStats,
+  createDefaultWeComOfficialDryRunConfigInput,
+  createWeComOfficialDryRunTimelineMetadata,
+  evaluateWeComOfficialDryRunConfig,
+  type WeComOfficialDryRunConfigResult,
+  type WeComOfficialDryRunConfigStats,
+} from '@/modules/institution/domain/wecom-official-dry-run-config';
 
 export const aiConversationStatuses = [
   'ai_handling',
@@ -57,6 +65,12 @@ export const aiConversationAuditReasons = [
   'real_channel_proof_mock_eligible',
   'real_channel_sensitive_config_blocked',
   'account_custody_route_blocked',
+  'wecom_dry_run_config_viewed',
+  'wecom_dry_run_config_evaluated',
+  'wecom_dry_run_ready',
+  'wecom_dry_run_blocked',
+  'wecom_dry_run_sensitive_value_blocked',
+  'wecom_dry_run_secret_read_blocked',
 ] as const satisfies readonly AuditReason[];
 
 export type AiConversationAuditReason = (typeof aiConversationAuditReasons)[number];
@@ -160,6 +174,7 @@ export type AiConversationRecord = {
   projectRecommendations: AiConversationProjectRecommendation[];
   automationStrategy: AiConversationAutomationStrategy;
   realChannelPreflight: RealChannelPreflightResult;
+  weComOfficialDryRunConfig: WeComOfficialDryRunConfigResult;
   profile: AiConversationProfile;
   messages: AiConversationMessage[];
   timeline: AiConversationTimelineEvent[];
@@ -182,7 +197,7 @@ export type AiConversationWorkbenchStats = {
   highRiskBlockedCount: number;
   marketingAutomationBlockedCount: number;
   addFriendBlockedCount: number;
-} & RealChannelPreflightStats;
+} & RealChannelPreflightStats & WeComOfficialDryRunConfigStats;
 
 const occurredAt = {
   aiEntered: '2026-07-08T09:05:00.000+08:00',
@@ -204,11 +219,14 @@ export const aiConversationBoundaryLabels = [
 ] as const;
 
 export const aiConversationReferenceLabels = [
-  '客服工作台：账号列、会话列表、聊天窗口、档案 / AI 面板',
+  '客服工作台：医美咨询账号列、会话列表、聊天窗口、档案 / AI 面板',
   '消息接入：全部 / AI / 待接管 / 人工状态筛选',
+  '接管边界：点击接管后才允许生成模拟发送记录',
   '快捷回复：推荐回复只填入草稿，发送前人工确认',
+  '右侧 AI 面板：推荐回复、风险预警、推荐项目、用户画像',
   '敏感词监控：风险词阻断并写低敏 audit',
-  '工作台 SOP：异常和下班提示只做模拟摘要',
+  '客服中心教程：客服管理、消息接入、分流详情仅作低敏参考',
+  '群发客服 / 素材收录：本任务不实现群发和真实触达',
   'AI 知识库：只展示低敏依据摘要',
 ] as const;
 
@@ -218,7 +236,7 @@ const forbiddenAiConversationTextPatterns = [
   /\bMR[-_A-Z0-9]{3,}\b/iu,
   /完整病历|病历号|身份证|手机号原文|真实微信|external_userid|userid|corpId|聊天原文|咨询全文/u,
   /机器编号|扫码托管|端口托管|uip|真实端口|真实扫码/u,
-  /\bHIS\b payload|his payload|webhook payload|webhook_secret|access_token|secret|api key|DATABASE_URL/iu,
+  /(?:\bHIS\b payload|his payload|webhook payload|webhook_secret|access_token|api key|DATABASE_URL)/iu,
 ];
 
 const highRiskSendPatterns: Array<{ tag: AiConversationRiskTag; pattern: RegExp }> = [
@@ -353,7 +371,43 @@ function createPreflightForConversation(input: {
   }));
 }
 
-function withAutomationStrategy<T extends Omit<AiConversationRecord, 'automationStrategy' | 'realChannelPreflight' | 'timeline'> & { timeline: AiConversationTimelineEvent[] }>(
+function createWeComOfficialDryRunTimelineEvent(input: {
+  conversationId: string;
+  config: WeComOfficialDryRunConfigResult;
+  occurredAt: string;
+}) {
+  return createTimelineEvent({
+    id: `${input.conversationId}:timeline:wecom-official-dry-run:${input.config.configStatus}:${input.occurredAt}:${input.config.auditReason}`,
+    title: '企微 dry-run 配置',
+    safeSummary: input.config.timelineSummary,
+    auditReason: input.config.auditReason,
+    occurredAt: input.occurredAt,
+    metadata: createWeComOfficialDryRunTimelineMetadata(input.config),
+  });
+}
+
+function createWeComDryRunConfigForConversation(input: {
+  preflight: RealChannelPreflightResult;
+  hasManualConfirmation?: boolean;
+  officialRoute?: RealChannelRoute;
+}) {
+  return evaluateWeComOfficialDryRunConfig(createDefaultWeComOfficialDryRunConfigInput({
+    officialRoute: input.officialRoute ?? input.preflight.channelRoute,
+    preflightStatus: input.preflight.preflightStatus,
+    proofEligibleMock: input.preflight.proofEligibleMock,
+    hasManualConfirmation: input.hasManualConfirmation ?? false,
+    hasSecretKeeperConfirmed: input.preflight.proofEligibleMock,
+    hasTestWeComEnvironment: true,
+    hasCallbackDomainPlaceholder: true,
+    callbackUrlPlaceholder: 'https://callback-placeholder.example.test/wecom/dry-run',
+    allowRealSend: false,
+    externalChannelEnabled: false,
+    realSendAllowed: false,
+    dryRunOnly: true,
+  }));
+}
+
+function withAutomationStrategy<T extends Omit<AiConversationRecord, 'automationStrategy' | 'realChannelPreflight' | 'weComOfficialDryRunConfig' | 'timeline'> & { timeline: AiConversationTimelineEvent[] }>(
   conversation: T,
   context: AiAutoStrategyContext,
 ): AiConversationRecord {
@@ -363,11 +417,16 @@ function withAutomationStrategy<T extends Omit<AiConversationRecord, 'automation
     strategy: automationStrategy,
     hasManualConfirmation: conversation.status === 'human_takeover',
   });
+  const weComOfficialDryRunConfig = createWeComDryRunConfigForConversation({
+    preflight: realChannelPreflight,
+    hasManualConfirmation: conversation.status === 'human_takeover',
+  });
 
   return {
     ...conversation,
     automationStrategy,
     realChannelPreflight,
+    weComOfficialDryRunConfig,
     timeline: [
       ...conversation.timeline,
       createAutomationStrategyTimelineEvent({
@@ -378,6 +437,11 @@ function withAutomationStrategy<T extends Omit<AiConversationRecord, 'automation
       createRealChannelPreflightTimelineEvent({
         conversationId: conversation.id,
         preflight: realChannelPreflight,
+        occurredAt: occurredAt.aiEntered,
+      }),
+      createWeComOfficialDryRunTimelineEvent({
+        conversationId: conversation.id,
+        config: weComOfficialDryRunConfig,
         occurredAt: occurredAt.aiEntered,
       }),
     ],
@@ -710,6 +774,7 @@ export function buildAiConversationWorkbenchStats(
   conversations: readonly AiConversationRecord[],
 ): AiConversationWorkbenchStats {
   const preflightStats = buildRealChannelPreflightStats(conversations.map((conversation) => conversation.realChannelPreflight));
+  const dryRunConfigStats = buildWeComOfficialDryRunConfigStats(conversations.map((conversation) => conversation.weComOfficialDryRunConfig));
 
   return {
     totalCount: conversations.length,
@@ -747,6 +812,7 @@ export function buildAiConversationWorkbenchStats(
       (conversation) => conversation.automationStrategy.result.decision === 'blocked_add_friend',
     ).length,
     ...preflightStats,
+    ...dryRunConfigStats,
   };
 }
 
@@ -771,11 +837,16 @@ export function takeoverAiConversation(input: {
     safetySwitchSummary: input.conversation.automationStrategy.result.safetySwitchSummary,
     emergencyStopEnabled: input.conversation.automationStrategy.result.safetySwitchSummary.emergencyStopEnabled,
   }));
+  const weComOfficialDryRunConfig = createWeComDryRunConfigForConversation({
+    preflight: realChannelPreflight,
+    hasManualConfirmation: true,
+  });
   return {
     kind: 'taken_over' as const,
     conversation: {
       ...input.conversation,
       realChannelPreflight,
+      weComOfficialDryRunConfig,
       status: 'human_takeover' as const,
       aiProcessingLabel: '人工已接管',
       canTakeover: false,
@@ -801,6 +872,11 @@ export function takeoverAiConversation(input: {
         createRealChannelPreflightTimelineEvent({
           conversationId: input.conversation.id,
           preflight: realChannelPreflight,
+          occurredAt: input.occurredAt,
+        }),
+        createWeComOfficialDryRunTimelineEvent({
+          conversationId: input.conversation.id,
+          config: weComOfficialDryRunConfig,
           occurredAt: input.occurredAt,
         }),
       ],
@@ -864,6 +940,11 @@ export function evaluateAiConversationAutomationStrategy(input: {
     hasManualConfirmation: input.conversation.status === 'human_takeover',
   });
 
+  const weComOfficialDryRunConfig = createWeComDryRunConfigForConversation({
+    preflight: realChannelPreflight,
+    hasManualConfirmation: input.conversation.status === 'human_takeover',
+  });
+
   const kind = automationStrategy.result.blocked
     ? 'blocked'
     : automationStrategy.result.requiresHumanConfirmation
@@ -876,6 +957,7 @@ export function evaluateAiConversationAutomationStrategy(input: {
       ...input.conversation,
       automationStrategy,
       realChannelPreflight,
+      weComOfficialDryRunConfig,
       timeline: [
         ...input.conversation.timeline,
         createAutomationStrategyTimelineEvent({
@@ -886,6 +968,11 @@ export function evaluateAiConversationAutomationStrategy(input: {
         createRealChannelPreflightTimelineEvent({
           conversationId: input.conversation.id,
           preflight: realChannelPreflight,
+          occurredAt: input.occurredAt,
+        }),
+        createWeComOfficialDryRunTimelineEvent({
+          conversationId: input.conversation.id,
+          config: weComOfficialDryRunConfig,
           occurredAt: input.occurredAt,
         }),
       ],
@@ -909,16 +996,28 @@ export function evaluateAiConversationRealChannelPreflight(input: {
     channelRoute: input.channelRoute,
   });
 
+  const weComOfficialDryRunConfig = createWeComDryRunConfigForConversation({
+    preflight: realChannelPreflight,
+    hasManualConfirmation: input.hasManualConfirmation ?? input.conversation.status === 'human_takeover',
+    officialRoute: input.channelRoute,
+  });
+
   return {
     kind: realChannelPreflight.proofEligibleMock ? 'mock_eligible' as const : 'blocked' as const,
     conversation: {
       ...input.conversation,
       realChannelPreflight,
+      weComOfficialDryRunConfig,
       timeline: [
         ...input.conversation.timeline,
         createRealChannelPreflightTimelineEvent({
           conversationId: input.conversation.id,
           preflight: realChannelPreflight,
+          occurredAt: input.occurredAt,
+        }),
+        createWeComOfficialDryRunTimelineEvent({
+          conversationId: input.conversation.id,
+          config: weComOfficialDryRunConfig,
           occurredAt: input.occurredAt,
         }),
       ],
@@ -1030,6 +1129,10 @@ export function mockSendAiConversationMessage(input: {
   actorId: string;
   occurredAt: string;
 }) {
+  if (input.conversation.status !== 'human_takeover') {
+    return { kind: 'requires_takeover' as const, conversation: input.conversation };
+  }
+
   const content = safeText(input.content, '低敏人工确认内容快照，未包含联系方式或外部渠道 payload。');
   const risks = detectAiConversationSendRisks(input.content);
 

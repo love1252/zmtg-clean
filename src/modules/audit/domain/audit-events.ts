@@ -140,7 +140,13 @@ export type AuditReason =
   | 'real_channel_preflight_blocked'
   | 'real_channel_proof_mock_eligible'
   | 'real_channel_sensitive_config_blocked'
-  | 'account_custody_route_blocked';
+  | 'account_custody_route_blocked'
+  | 'wecom_dry_run_config_viewed'
+  | 'wecom_dry_run_config_evaluated'
+  | 'wecom_dry_run_ready'
+  | 'wecom_dry_run_blocked'
+  | 'wecom_dry_run_sensitive_value_blocked'
+  | 'wecom_dry_run_secret_read_blocked';
 
 export type TenantAuditEvent = {
   eventId: string;

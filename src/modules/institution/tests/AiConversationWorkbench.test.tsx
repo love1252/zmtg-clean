@@ -55,7 +55,12 @@ const unsafeTerms = [
 function expectNoUnsafeText(text: string) {
   const normalized = text
     .replaceAll('不配置 secret / token', '')
-    .replaceAll('secret / token', '');
+    .replaceAll('secret / token', '')
+    .replaceAll('secret 输入阻断数量', '')
+    .replaceAll('secret 保管方式', '')
+    .replaceAll('不读取 secret', '')
+    .replaceAll('不保存 secret', '')
+    .replaceAll('secret 保管人', '');
   for (const term of unsafeTerms) {
     expect(normalized).not.toContain(term);
   }
@@ -235,15 +240,15 @@ describe('自动回复与自动随访策略模拟 domain', () => {
       occurredAt: '2026-07-08T10:00:00.000+08:00',
     });
     expect(autoReply.kind).toBe('evaluated');
-    expect(autoReply.conversation.timeline.at(-2)?.auditReason).toBe('ai_auto_reply_mock_allowed');
-    expect(autoReply.conversation.timeline.at(-2)?.metadata?.allowRealSend).toBe('false');
+    expect(autoReply.conversation.timeline.at(-3)?.auditReason).toBe('ai_auto_reply_mock_allowed');
+    expect(autoReply.conversation.timeline.at(-3)?.metadata?.allowRealSend).toBe('false');
 
     const autoFollowup = simulateAiConversationAutoFollowupStrategy({
       conversation,
       context: { intentType: 'aftercare_question', riskTags: [], isAftercareFollowup: true, isMedicalRisk: false },
       occurredAt: '2026-07-08T10:01:00.000+08:00',
     });
-    expect(autoFollowup.conversation.timeline.at(-2)?.auditReason).toBe('ai_auto_followup_mock_allowed');
+    expect(autoFollowup.conversation.timeline.at(-3)?.auditReason).toBe('ai_auto_followup_mock_allowed');
 
     expect(markAiConversationAutomationNeedsHuman({ conversation: autoReply.conversation, occurredAt: '2026-07-08T10:02:00.000+08:00' }).kind).toBe('requires_human_confirmation');
     expect(markAiConversationAutomationBlocked({ conversation, occurredAt: '2026-07-08T10:03:00.000+08:00' }).kind).toBe('blocked');
@@ -292,6 +297,13 @@ describe('AI 会话工作台模拟版 domain', () => {
       preflightAccountCustodyRouteBlockedCount: 0,
       preflightMissingManualConfirmationBlockedCount: 3,
       preflightSafetySwitchBlockedCount: 4,
+      dryRunConfigCheckCount: 4,
+      dryRunReadyCount: 0,
+      dryRunSecretInputBlockedCount: 0,
+      dryRunRealNetworkBlockedCount: 0,
+      dryRunRealSendBlockedCount: 4,
+      dryRunCallbackPlaceholderMissingCount: 0,
+      dryRunManualConfirmationMissingCount: 3,
     });
   });
 
@@ -308,7 +320,7 @@ describe('AI 会话工作台模拟版 domain', () => {
     expect(result.conversation.aiProcessingLabel).toBe('人工已接管');
     expect(result.conversation.canTakeover).toBe(false);
     expect(result.conversation.messages.at(-1)?.safeSummary).toBe('咨询师已接管会话。');
-    expect(result.conversation.timeline.at(-2)?.auditReason).toBe('ai_conversation_takeover');
+    expect(result.conversation.timeline.at(-3)?.auditReason).toBe('ai_conversation_takeover');
   });
 
   it('支持一键使用推荐回复生成发送前草稿', () => {
@@ -328,6 +340,14 @@ describe('AI 会话工作台模拟版 domain', () => {
 
   it('发送前确认后生成 MessageDelivery mock_sent 记录且不接真实渠道', () => {
     const [conversation] = getAiConversationWorkbenchFixture();
+    const notTakenOver = mockSendAiConversationMessage({
+      conversation,
+      content: '您好，已收到您的反馈，后续由人工为您确认到院复核安排。',
+      actorId: 'consultant-mock-001',
+      occurredAt: '2026-07-08T10:00:30.000+08:00',
+    });
+    expect(notTakenOver.kind).toBe('requires_takeover');
+
     const takenOver = takeoverAiConversation({
       conversation,
       actorId: 'consultant-mock-001',
@@ -355,6 +375,11 @@ describe('AI 会话工作台模拟版 domain', () => {
 
   it('高风险内容会阻断或提示并写风险审计', () => {
     const [conversation] = getAiConversationWorkbenchFixture();
+    const takenOver = takeoverAiConversation({
+      conversation,
+      actorId: 'consultant-mock-001',
+      occurredAt: '2026-07-08T10:01:00.000+08:00',
+    }).conversation;
 
     expect(detectAiConversationSendRisks('我们保证永久有效，也可以锁定最低价。')).toEqual([
       'efficacy_commitment_risk',
@@ -362,7 +387,7 @@ describe('AI 会话工作台模拟版 domain', () => {
     ]);
 
     const result = mockSendAiConversationMessage({
-      conversation,
+      conversation: takenOver,
       content: '我们保证永久有效，也可以锁定最低价。',
       actorId: 'consultant-mock-001',
       occurredAt: '2026-07-08T10:02:00.000+08:00',
@@ -407,8 +432,10 @@ describe('AI 会话工作台模拟版 domain', () => {
     expect(result.conversation.realChannelPreflight.realSendAllowed).toBe(false);
     expect(result.conversation.realChannelPreflight.allowRealSend).toBe(false);
     expect(result.conversation.realChannelPreflight.externalChannelEnabled).toBe(false);
-    expect(result.conversation.timeline.at(-1)?.title).toBe('真实通道前置检查');
-    expect(result.conversation.timeline.at(-1)?.metadata?.allowRealSend).toBe('false');
+    expect(result.conversation.timeline.at(-2)?.title).toBe('真实通道前置检查');
+    expect(result.conversation.timeline.at(-2)?.metadata?.allowRealSend).toBe('false');
+    expect(result.conversation.timeline.at(-1)?.title).toBe('企微 dry-run 配置');
+    expect(result.conversation.timeline.at(-1)?.metadata?.weComDryRunNoSecretRead).toBe('true');
   });
 
   it('覆盖 AI 会话工作台 audit reason 并保持低敏 payload', () => {
@@ -434,6 +461,12 @@ describe('AI 会话工作台模拟版 domain', () => {
       'real_channel_proof_mock_eligible',
       'real_channel_sensitive_config_blocked',
       'account_custody_route_blocked',
+      'wecom_dry_run_config_viewed',
+      'wecom_dry_run_config_evaluated',
+      'wecom_dry_run_ready',
+      'wecom_dry_run_blocked',
+      'wecom_dry_run_sensitive_value_blocked',
+      'wecom_dry_run_secret_read_blocked',
     ]);
     expect(assertAiConversationLowSensitivePayload(getAiConversationWorkbenchFixture())).toBe(true);
     expect(assertAiConversationLowSensitivePayload({ phoneNumber: '13800000000' })).toBe(false);
@@ -462,18 +495,33 @@ describe('AI 会话工作台模拟版 UI', () => {
     expect(screen.getAllByText('已有推荐回复').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '接管会话' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '结束会话' })).toBeInTheDocument();
+    expect(screen.getByText(/医美咨询账号 · AI 接待中/u)).toBeInTheDocument();
+    expect(screen.getByText(/接管前输入区只可准备草稿/u)).toBeInTheDocument();
+    expect(screen.getByText(/未接管不生成发送记录/u)).toBeInTheDocument();
     expect(screen.getByText('AI 推荐回复')).toBeInTheDocument();
     expect(screen.getByText('自动化策略')).toBeInTheDocument();
     expect(screen.getAllByText('真实通道前置检查').length).toBeGreaterThan(0);
     expect(screen.getByText(/当前通道路线/u)).toBeInTheDocument();
     expect(screen.getByText(/proof 准入状态/u)).toBeInTheDocument();
-    expect(screen.getByText('是否允许真实发送：否')).toBeInTheDocument();
+    expect(screen.getAllByText('是否允许真实发送：否').length).toBeGreaterThan(0);
     expect(screen.getByText(/是否允许模拟 proof/u)).toBeInTheDocument();
     expect(screen.getAllByText('allowRealSend=false').length).toBeGreaterThan(0);
     expect(screen.getAllByText('externalChannelEnabled=false').length).toBeGreaterThan(0);
-    expect(screen.getByText(/需要人工完成的动作/u)).toBeInTheDocument();
+    expect(screen.getAllByText('realSendAllowed=false').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/需要人工完成的动作/u).length).toBeGreaterThan(0);
     expect(screen.getByText(/不接真实企业微信 \/ 微信；不配置 secret \/ token；不真实发送/u)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '模拟评估真实通道前置检查' })).toBeInTheDocument();
+    expect(screen.getAllByText('官方企业微信 dry-run 配置').length).toBeGreaterThan(0);
+    expect(screen.getByText(/当前官方路线/u)).toBeInTheDocument();
+    expect(screen.getByText(/测试机构低敏引用/u)).toBeInTheDocument();
+    expect(screen.getByText(/callback URL 占位/u)).toBeInTheDocument();
+    expect(screen.getAllByText(/secret 保管方式/u).length).toBeGreaterThan(0);
+    expect(screen.getByText(/dry-run 状态/u)).toBeInTheDocument();
+    expect(screen.getByText('是否允许真实出网：否')).toBeInTheDocument();
+    expect(screen.getByText('noSecretStored=true')).toBeInTheDocument();
+    expect(screen.getByText('noSecretRead=true')).toBeInTheDocument();
+    expect(screen.getByText(/本任务不读取 secret/u)).toBeInTheDocument();
+    expect(screen.getByText(/本任务不配置真实企业微信/u)).toBeInTheDocument();
     expect(screen.getByText('L0-L4 等级说明')).toBeInTheDocument();
     expect(screen.getByText('L0 AI 推荐')).toBeInTheDocument();
     expect(screen.getByText('L1 AI 草稿 + 人工确认')).toBeInTheDocument();
@@ -519,6 +567,7 @@ describe('AI 会话工作台模拟版 UI', () => {
     expect(screen.getByText('王女士')).toBeInTheDocument();
     expect(screen.queryByText('林女士')).not.toBeInTheDocument();
 
+    expect(screen.getByRole('button', { name: '确认并模拟发送' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: '接管会话' }));
     expect(screen.getByText('人工已接管：已记录低敏 audit 和时间线，仍不真实发送。')).toBeInTheDocument();
     expect(screen.getByText('咨询师已接管会话。')).toBeInTheDocument();
@@ -543,6 +592,7 @@ describe('AI 会话工作台模拟版 UI', () => {
   it('高风险模拟发送会阻断并展示风险预警，不创建发送记录', () => {
     const { container } = render(<AiConversationWorkbenchShell />);
 
+    fireEvent.click(screen.getByRole('button', { name: '接管会话' }));
     fireEvent.change(screen.getByLabelText('AI 会话工作台模拟消息输入'), {
       target: { value: '我们保证永久有效，也可以锁定最低价。' },
     });
@@ -611,11 +661,18 @@ describe('AI 会话工作台模拟版 UI', () => {
     expect(within(statsRegion).getByText('加好友阻断数量')).toBeInTheDocument();
     expect(within(statsRegion).getByText('前置检查数量')).toBeInTheDocument();
     expect(within(statsRegion).getByText('模拟 proof 可进入数量')).toBeInTheDocument();
-    expect(within(statsRegion).getByText('真实发送阻断数量')).toBeInTheDocument();
+    const realSendCards = within(statsRegion).getAllByText('真实发送阻断数量');
+    expect(realSendCards.length).toBeGreaterThan(0);
     expect(within(statsRegion).getByText('敏感配置阻断数量')).toBeInTheDocument();
     expect(within(statsRegion).getByText('账号托管路线阻断数量')).toBeInTheDocument();
     expect(within(statsRegion).getByText('未人工确认阻断数量')).toBeInTheDocument();
     expect(within(statsRegion).getByText('安全开关阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('dry-run 配置检查数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('dry-run ready 数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('secret 输入阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('真实出网阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('callback 占位缺失数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('人工确认缺失数量')).toBeInTheDocument();
 
     const mockSentCard = within(statsRegion).getByText('模拟发送数量').closest('article');
     expect(mockSentCard).not.toBeNull();
