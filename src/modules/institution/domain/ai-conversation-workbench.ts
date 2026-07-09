@@ -15,6 +15,15 @@ import {
   messageDeliveryToTimelineMetadata,
   type MessageDeliveryDto,
 } from '@/modules/institution/domain/followup-message-deliveries';
+import {
+  buildRealChannelPreflightStats,
+  createDefaultRealChannelPreflightInput,
+  createRealChannelPreflightTimelineMetadata,
+  evaluateRealChannelPreflight,
+  type RealChannelPreflightResult,
+  type RealChannelPreflightStats,
+  type RealChannelRoute,
+} from '@/modules/institution/domain/real-channel-preflight';
 
 export const aiConversationStatuses = [
   'ai_handling',
@@ -42,6 +51,12 @@ export const aiConversationAuditReasons = [
   'ai_auto_followup_blocked',
   'ai_marketing_automation_blocked',
   'ai_add_friend_blocked',
+  'real_channel_preflight_viewed',
+  'real_channel_preflight_evaluated',
+  'real_channel_preflight_blocked',
+  'real_channel_proof_mock_eligible',
+  'real_channel_sensitive_config_blocked',
+  'account_custody_route_blocked',
 ] as const satisfies readonly AuditReason[];
 
 export type AiConversationAuditReason = (typeof aiConversationAuditReasons)[number];
@@ -144,6 +159,7 @@ export type AiConversationRecord = {
   recommendations: AiConversationRecommendation[];
   projectRecommendations: AiConversationProjectRecommendation[];
   automationStrategy: AiConversationAutomationStrategy;
+  realChannelPreflight: RealChannelPreflightResult;
   profile: AiConversationProfile;
   messages: AiConversationMessage[];
   timeline: AiConversationTimelineEvent[];
@@ -166,7 +182,7 @@ export type AiConversationWorkbenchStats = {
   highRiskBlockedCount: number;
   marketingAutomationBlockedCount: number;
   addFriendBlockedCount: number;
-};
+} & RealChannelPreflightStats;
 
 const occurredAt = {
   aiEntered: '2026-07-08T09:05:00.000+08:00',
@@ -299,20 +315,69 @@ function createAutomationStrategyTimelineEvent(input: {
   });
 }
 
-function withAutomationStrategy<T extends Omit<AiConversationRecord, 'automationStrategy' | 'timeline'> & { timeline: AiConversationTimelineEvent[] }>(
+function createRealChannelPreflightTimelineEvent(input: {
+  conversationId: string;
+  preflight: RealChannelPreflightResult;
+  occurredAt: string;
+}) {
+  return createTimelineEvent({
+    id: `${input.conversationId}:timeline:real-channel-preflight:${input.preflight.preflightStatus}:${input.occurredAt}:${input.preflight.auditReason}`,
+    title: '真实通道前置检查',
+    safeSummary: input.preflight.timelineSummary,
+    auditReason: input.preflight.auditReason,
+    occurredAt: input.occurredAt,
+    metadata: createRealChannelPreflightTimelineMetadata(input.preflight),
+  });
+}
+
+function createPreflightForConversation(input: {
+  conversation: Pick<AiConversationRecord, 'id' | 'riskTags'>;
+  strategy: AiConversationAutomationStrategy;
+  hasManualConfirmation?: boolean;
+  channelRoute?: RealChannelRoute;
+}) {
+  return evaluateRealChannelPreflight(createDefaultRealChannelPreflightInput({
+    channelRoute: input.channelRoute ?? 'official_wecom_self_built',
+    hasManualConfirmation: input.hasManualConfirmation ?? false,
+    hasConsent: input.strategy.context.hasConsent,
+    hasOptOut: input.strategy.context.hasOptOut,
+    frequencyCapPassed: input.strategy.context.frequencyCapPassed,
+    aiStrategyDecision: input.strategy.result.decision,
+    aiStrategyLevel: input.strategy.result.recommendedLevel,
+    riskTags: input.conversation.riskTags,
+    safetySwitchSummary: input.strategy.result.safetySwitchSummary,
+    allowRealSend: false,
+    externalChannelEnabled: false,
+    emergencyStopEnabled: input.strategy.result.safetySwitchSummary.emergencyStopEnabled,
+    isAccountCustodyRoute: input.channelRoute === 'account_custody',
+  }));
+}
+
+function withAutomationStrategy<T extends Omit<AiConversationRecord, 'automationStrategy' | 'realChannelPreflight' | 'timeline'> & { timeline: AiConversationTimelineEvent[] }>(
   conversation: T,
   context: AiAutoStrategyContext,
 ): AiConversationRecord {
   const automationStrategy = createAutomationStrategy(context);
+  const realChannelPreflight = createPreflightForConversation({
+    conversation,
+    strategy: automationStrategy,
+    hasManualConfirmation: conversation.status === 'human_takeover',
+  });
 
   return {
     ...conversation,
     automationStrategy,
+    realChannelPreflight,
     timeline: [
       ...conversation.timeline,
       createAutomationStrategyTimelineEvent({
         conversationId: conversation.id,
         strategy: automationStrategy,
+        occurredAt: occurredAt.aiEntered,
+      }),
+      createRealChannelPreflightTimelineEvent({
+        conversationId: conversation.id,
+        preflight: realChannelPreflight,
         occurredAt: occurredAt.aiEntered,
       }),
     ],
@@ -644,6 +709,8 @@ export function filterAiConversations(
 export function buildAiConversationWorkbenchStats(
   conversations: readonly AiConversationRecord[],
 ): AiConversationWorkbenchStats {
+  const preflightStats = buildRealChannelPreflightStats(conversations.map((conversation) => conversation.realChannelPreflight));
+
   return {
     totalCount: conversations.length,
     aiHandlingCount: conversations.filter((conversation) => conversation.status === 'ai_handling').length,
@@ -679,6 +746,7 @@ export function buildAiConversationWorkbenchStats(
     addFriendBlockedCount: conversations.filter(
       (conversation) => conversation.automationStrategy.result.decision === 'blocked_add_friend',
     ).length,
+    ...preflightStats,
   };
 }
 
@@ -692,10 +760,22 @@ export function takeoverAiConversation(input: {
   }
 
   const safeActorId = safeText(input.actorId, 'operator-low-sensitive');
+  const realChannelPreflight = evaluateRealChannelPreflight(createDefaultRealChannelPreflightInput({
+    hasManualConfirmation: true,
+    hasConsent: input.conversation.automationStrategy.context.hasConsent,
+    hasOptOut: input.conversation.automationStrategy.context.hasOptOut,
+    frequencyCapPassed: input.conversation.automationStrategy.context.frequencyCapPassed,
+    aiStrategyDecision: input.conversation.automationStrategy.result.decision,
+    aiStrategyLevel: input.conversation.automationStrategy.result.recommendedLevel,
+    riskTags: input.conversation.riskTags,
+    safetySwitchSummary: input.conversation.automationStrategy.result.safetySwitchSummary,
+    emergencyStopEnabled: input.conversation.automationStrategy.result.safetySwitchSummary.emergencyStopEnabled,
+  }));
   return {
     kind: 'taken_over' as const,
     conversation: {
       ...input.conversation,
+      realChannelPreflight,
       status: 'human_takeover' as const,
       aiProcessingLabel: '人工已接管',
       canTakeover: false,
@@ -716,6 +796,11 @@ export function takeoverAiConversation(input: {
           title: '人工接管',
           safeSummary: `${safeActorId} 接管会话，后续动作仍不触发真实渠道。`,
           auditReason: 'ai_conversation_takeover',
+          occurredAt: input.occurredAt,
+        }),
+        createRealChannelPreflightTimelineEvent({
+          conversationId: input.conversation.id,
+          preflight: realChannelPreflight,
           occurredAt: input.occurredAt,
         }),
       ],
@@ -773,6 +858,11 @@ export function evaluateAiConversationAutomationStrategy(input: {
     },
   };
   const automationStrategy = createAutomationStrategy(context);
+  const realChannelPreflight = createPreflightForConversation({
+    conversation: input.conversation,
+    strategy: automationStrategy,
+    hasManualConfirmation: input.conversation.status === 'human_takeover',
+  });
 
   const kind = automationStrategy.result.blocked
     ? 'blocked'
@@ -785,11 +875,17 @@ export function evaluateAiConversationAutomationStrategy(input: {
     conversation: {
       ...input.conversation,
       automationStrategy,
+      realChannelPreflight,
       timeline: [
         ...input.conversation.timeline,
         createAutomationStrategyTimelineEvent({
           conversationId: input.conversation.id,
           strategy: automationStrategy,
+          occurredAt: input.occurredAt,
+        }),
+        createRealChannelPreflightTimelineEvent({
+          conversationId: input.conversation.id,
+          preflight: realChannelPreflight,
           occurredAt: input.occurredAt,
         }),
       ],
@@ -799,6 +895,36 @@ export function evaluateAiConversationAutomationStrategy(input: {
 
 export const simulateAiConversationAutoReplyStrategy = evaluateAiConversationAutomationStrategy;
 export const simulateAiConversationAutoFollowupStrategy = evaluateAiConversationAutomationStrategy;
+
+export function evaluateAiConversationRealChannelPreflight(input: {
+  conversation: AiConversationRecord;
+  hasManualConfirmation?: boolean;
+  channelRoute?: RealChannelRoute;
+  occurredAt: string;
+}) {
+  const realChannelPreflight = createPreflightForConversation({
+    conversation: input.conversation,
+    strategy: input.conversation.automationStrategy,
+    hasManualConfirmation: input.hasManualConfirmation ?? input.conversation.status === 'human_takeover',
+    channelRoute: input.channelRoute,
+  });
+
+  return {
+    kind: realChannelPreflight.proofEligibleMock ? 'mock_eligible' as const : 'blocked' as const,
+    conversation: {
+      ...input.conversation,
+      realChannelPreflight,
+      timeline: [
+        ...input.conversation.timeline,
+        createRealChannelPreflightTimelineEvent({
+          conversationId: input.conversation.id,
+          preflight: realChannelPreflight,
+          occurredAt: input.occurredAt,
+        }),
+      ],
+    },
+  };
+}
 
 export function markAiConversationAutomationNeedsHuman(input: {
   conversation: AiConversationRecord;

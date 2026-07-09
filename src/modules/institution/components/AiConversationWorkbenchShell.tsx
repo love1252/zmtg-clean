@@ -22,6 +22,7 @@ import {
   buildAiConversationWorkbenchStats,
   closeAiConversation,
   evaluateAiConversationAutomationStrategy,
+  evaluateAiConversationRealChannelPreflight,
   filterAiConversations,
   getAiConversationWorkbenchFixture,
   markAiConversationAutomationBlocked,
@@ -64,6 +65,13 @@ const statItems = [
   { key: 'highRiskBlockedCount', label: '高风险阻断数量' },
   { key: 'marketingAutomationBlockedCount', label: '营销自动化阻断数量' },
   { key: 'addFriendBlockedCount', label: '加好友阻断数量' },
+  { key: 'preflightCheckCount', label: '前置检查数量' },
+  { key: 'preflightMockEligibleCount', label: '模拟 proof 可进入数量' },
+  { key: 'preflightRealSendBlockedCount', label: '真实发送阻断数量' },
+  { key: 'preflightSensitiveConfigBlockedCount', label: '敏感配置阻断数量' },
+  { key: 'preflightAccountCustodyRouteBlockedCount', label: '账号托管路线阻断数量' },
+  { key: 'preflightMissingManualConfirmationBlockedCount', label: '未人工确认阻断数量' },
+  { key: 'preflightSafetySwitchBlockedCount', label: '安全开关阻断数量' },
 ] as const;
 
 const messageBubbleClasses = {
@@ -237,6 +245,20 @@ export function AiConversationWorkbenchShell() {
     });
     updateConversation(result.conversation);
     setNotice('已模拟标记已阻断：L4 营销自动化默认关闭。');
+  }
+
+  function handleEvaluateRealChannelPreflight() {
+    const result = evaluateAiConversationRealChannelPreflight({
+      conversation: activeConversation,
+      hasManualConfirmation: activeConversation.status === 'human_takeover',
+      occurredAt: nowForMock,
+    });
+    updateConversation(result.conversation);
+    setNotice(
+      result.kind === 'mock_eligible'
+        ? '真实通道前置检查完成：仅允许进入模拟 proof，不允许真实发送。'
+        : '真实通道前置检查完成：已按安全门禁阻断。',
+    );
   }
 
   return (
@@ -502,6 +524,7 @@ export function AiConversationWorkbenchShell() {
               onSimulateAutoFollowupStrategy={handleSimulateAutoFollowupStrategy}
               onMarkHumanConfirmation={handleMarkHumanConfirmation}
               onMarkBlocked={handleMarkBlocked}
+              onEvaluateRealChannelPreflight={handleEvaluateRealChannelPreflight}
             />
           ) : (
             <ProfilePanel conversation={activeConversation} />
@@ -520,6 +543,7 @@ function AiPanel({
   onSimulateAutoFollowupStrategy,
   onMarkHumanConfirmation,
   onMarkBlocked,
+  onEvaluateRealChannelPreflight,
 }: {
   conversation: AiConversationRecord;
   onUseRecommendation: (recommendationId: string) => void;
@@ -528,11 +552,72 @@ function AiPanel({
   onSimulateAutoFollowupStrategy: () => void;
   onMarkHumanConfirmation: () => void;
   onMarkBlocked: () => void;
+  onEvaluateRealChannelPreflight: () => void;
 }) {
   const strategy = conversation.automationStrategy.result;
+  const preflight = conversation.realChannelPreflight;
 
   return (
     <div className="mt-4 space-y-4">
+      <PanelBlock icon={ShieldCheck} title="真实通道前置检查" tone="emerald">
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
+                当前通道路线：{preflight.routeLabel}
+              </span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                proof 准入状态：{preflight.preflightStatusLabel}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-700 sm:grid-cols-2">
+              <span>是否允许真实发送：否</span>
+              <span>是否允许模拟 proof：{preflight.proofEligibleMock ? '是' : '否'}</span>
+              <span>allowRealSend=false</span>
+              <span>externalChannelEnabled=false</span>
+              <span>emergency stop：{preflight.emergencyStopEnabled ? '已开启' : '未开启'}</span>
+              <span>audit reason：{preflight.auditReason}</span>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-emerald-900">{preflight.lowSensitiveExplanation}</p>
+          </div>
+
+          <div className="grid gap-2 text-xs font-semibold sm:grid-cols-2">
+            <button type="button" onClick={onEvaluateRealChannelPreflight} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-emerald-700 sm:col-span-2">
+              模拟评估真实通道前置检查
+            </button>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-sm font-semibold text-slate-950">阻断原因</div>
+            {preflight.blockReasons.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-600">
+                {preflight.blockReasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-slate-500">当前无业务阻断；真实发送仍为否。</p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
+            <div className="text-sm font-semibold text-blue-950">需要人工完成的动作</div>
+            {preflight.requiredHumanActions.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-blue-900">
+                {preflight.requiredHumanActions.map((action) => (
+                  <li key={action}>{action}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-blue-800">当前仅允许模拟 proof 前置进入，后续真实接入仍需单独授权。</p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold leading-6 text-amber-900">
+            当前仅前置检查，不接真实企业微信 / 微信；不配置 secret / token；不真实发送。
+          </div>
+        </div>
+      </PanelBlock>
       <PanelBlock icon={ShieldCheck} title="自动化策略" tone="blue">
         <div className="space-y-3">
           <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
@@ -688,8 +773,8 @@ function AiPanel({
 
       <PanelBlock icon={FileText} title="时间线 / 审计" tone="slate">
         <div className="space-y-3">
-          {conversation.timeline.map((event) => (
-            <article key={event.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          {conversation.timeline.map((event, index) => (
+            <article key={`${event.id}:${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <div className="text-sm font-semibold text-slate-950">{event.title}</div>
               <p className="mt-1 text-sm leading-6 text-slate-600">{event.safeSummary}</p>
               <div className="mt-2 text-xs font-semibold text-slate-500">
