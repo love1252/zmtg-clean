@@ -146,7 +146,15 @@ export type AuditReason =
   | 'wecom_dry_run_ready'
   | 'wecom_dry_run_blocked'
   | 'wecom_dry_run_sensitive_value_blocked'
-  | 'wecom_dry_run_secret_read_blocked';
+  | 'wecom_dry_run_secret_read_blocked'
+  | 'wecom_official_dry_run_viewed'
+  | 'wecom_official_dry_run_evaluated'
+  | 'wecom_official_dry_run_plan_ready'
+  | 'wecom_official_dry_run_mock_completed'
+  | 'wecom_official_dry_run_blocked'
+  | 'wecom_official_dry_run_sensitive_payload_blocked'
+  | 'wecom_official_dry_run_real_network_blocked'
+  | 'wecom_official_dry_run_real_send_blocked';
 
 export type TenantAuditEvent = {
   eventId: string;

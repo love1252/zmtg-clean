@@ -60,7 +60,12 @@ function expectNoUnsafeText(text: string) {
     .replaceAll('secret 保管方式', '')
     .replaceAll('不读取 secret', '')
     .replaceAll('不保存 secret', '')
-    .replaceAll('secret 保管人', '');
+    .replaceAll('secret 保管人', '')
+    .replaceAll('secret 输入阻断数量', '')
+    .replaceAll('noSecretRead=true', '')
+    .replaceAll('noSecretOutput=true', '')
+    .replaceAll('noSecretStored=true', '')
+    .replaceAll('secret', '');
   for (const term of unsafeTerms) {
     expect(normalized).not.toContain(term);
   }
@@ -240,15 +245,15 @@ describe('自动回复与自动随访策略模拟 domain', () => {
       occurredAt: '2026-07-08T10:00:00.000+08:00',
     });
     expect(autoReply.kind).toBe('evaluated');
-    expect(autoReply.conversation.timeline.at(-3)?.auditReason).toBe('ai_auto_reply_mock_allowed');
-    expect(autoReply.conversation.timeline.at(-3)?.metadata?.allowRealSend).toBe('false');
+    expect(autoReply.conversation.timeline.at(-4)?.auditReason).toBe('ai_auto_reply_mock_allowed');
+    expect(autoReply.conversation.timeline.at(-4)?.metadata?.allowRealSend).toBe('false');
 
     const autoFollowup = simulateAiConversationAutoFollowupStrategy({
       conversation,
       context: { intentType: 'aftercare_question', riskTags: [], isAftercareFollowup: true, isMedicalRisk: false },
       occurredAt: '2026-07-08T10:01:00.000+08:00',
     });
-    expect(autoFollowup.conversation.timeline.at(-3)?.auditReason).toBe('ai_auto_followup_mock_allowed');
+    expect(autoFollowup.conversation.timeline.at(-4)?.auditReason).toBe('ai_auto_followup_mock_allowed');
 
     expect(markAiConversationAutomationNeedsHuman({ conversation: autoReply.conversation, occurredAt: '2026-07-08T10:02:00.000+08:00' }).kind).toBe('requires_human_confirmation');
     expect(markAiConversationAutomationBlocked({ conversation, occurredAt: '2026-07-08T10:03:00.000+08:00' }).kind).toBe('blocked');
@@ -304,6 +309,13 @@ describe('AI 会话工作台模拟版 domain', () => {
       dryRunRealSendBlockedCount: 4,
       dryRunCallbackPlaceholderMissingCount: 0,
       dryRunManualConfirmationMissingCount: 3,
+      officialDryRunCheckCount: 4,
+      officialDryRunPlanReadyCount: 0,
+      officialDryRunMockCompletedCount: 0,
+      officialDryRunRealNetworkBlockedCount: 0,
+      officialDryRunRealSendBlockedCount: 0,
+      officialDryRunSensitivePayloadBlockedCount: 0,
+      officialDryRunMissingManualConfirmationBlockedCount: 3,
     });
   });
 
@@ -320,7 +332,7 @@ describe('AI 会话工作台模拟版 domain', () => {
     expect(result.conversation.aiProcessingLabel).toBe('人工已接管');
     expect(result.conversation.canTakeover).toBe(false);
     expect(result.conversation.messages.at(-1)?.safeSummary).toBe('咨询师已接管会话。');
-    expect(result.conversation.timeline.at(-3)?.auditReason).toBe('ai_conversation_takeover');
+    expect(result.conversation.timeline.at(-4)?.auditReason).toBe('ai_conversation_takeover');
   });
 
   it('支持一键使用推荐回复生成发送前草稿', () => {
@@ -432,10 +444,10 @@ describe('AI 会话工作台模拟版 domain', () => {
     expect(result.conversation.realChannelPreflight.realSendAllowed).toBe(false);
     expect(result.conversation.realChannelPreflight.allowRealSend).toBe(false);
     expect(result.conversation.realChannelPreflight.externalChannelEnabled).toBe(false);
-    expect(result.conversation.timeline.at(-2)?.title).toBe('真实通道前置检查');
-    expect(result.conversation.timeline.at(-2)?.metadata?.allowRealSend).toBe('false');
-    expect(result.conversation.timeline.at(-1)?.title).toBe('企微 dry-run 配置');
-    expect(result.conversation.timeline.at(-1)?.metadata?.weComDryRunNoSecretRead).toBe('true');
+    expect(result.conversation.timeline.at(-3)?.title).toBe('真实通道前置检查');
+    expect(result.conversation.timeline.at(-3)?.metadata?.allowRealSend).toBe('false');
+    expect(result.conversation.timeline.at(-2)?.title).toBe('企微 dry-run 配置');
+    expect(result.conversation.timeline.at(-2)?.metadata?.weComDryRunNoSecretRead).toBe('true');
   });
 
   it('覆盖 AI 会话工作台 audit reason 并保持低敏 payload', () => {
@@ -467,6 +479,14 @@ describe('AI 会话工作台模拟版 domain', () => {
       'wecom_dry_run_blocked',
       'wecom_dry_run_sensitive_value_blocked',
       'wecom_dry_run_secret_read_blocked',
+      'wecom_official_dry_run_viewed',
+      'wecom_official_dry_run_evaluated',
+      'wecom_official_dry_run_plan_ready',
+      'wecom_official_dry_run_mock_completed',
+      'wecom_official_dry_run_blocked',
+      'wecom_official_dry_run_sensitive_payload_blocked',
+      'wecom_official_dry_run_real_network_blocked',
+      'wecom_official_dry_run_real_send_blocked',
     ]);
     expect(assertAiConversationLowSensitivePayload(getAiConversationWorkbenchFixture())).toBe(true);
     expect(assertAiConversationLowSensitivePayload({ phoneNumber: '13800000000' })).toBe(false);
@@ -512,16 +532,26 @@ describe('AI 会话工作台模拟版 UI', () => {
     expect(screen.getByText(/不接真实企业微信 \/ 微信；不配置 secret \/ token；不真实发送/u)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '模拟评估真实通道前置检查' })).toBeInTheDocument();
     expect(screen.getAllByText('官方企业微信 dry-run 配置').length).toBeGreaterThan(0);
-    expect(screen.getByText(/当前官方路线/u)).toBeInTheDocument();
+    expect(screen.getAllByText(/当前官方路线/u).length).toBeGreaterThan(0);
     expect(screen.getByText(/测试机构低敏引用/u)).toBeInTheDocument();
     expect(screen.getByText(/callback URL 占位/u)).toBeInTheDocument();
     expect(screen.getAllByText(/secret 保管方式/u).length).toBeGreaterThan(0);
-    expect(screen.getByText(/dry-run 状态/u)).toBeInTheDocument();
+    expect(screen.getAllByText(/dry-run 状态/u).length).toBeGreaterThan(0);
     expect(screen.getByText('是否允许真实出网：否')).toBeInTheDocument();
     expect(screen.getByText('noSecretStored=true')).toBeInTheDocument();
-    expect(screen.getByText('noSecretRead=true')).toBeInTheDocument();
+    expect(screen.getAllByText('noSecretRead=true').length).toBeGreaterThan(0);
     expect(screen.getByText(/本任务不读取 secret/u)).toBeInTheDocument();
     expect(screen.getByText(/本任务不配置真实企业微信/u)).toBeInTheDocument();
+    expect(screen.getAllByText('官方路线 dry-run').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/networkMode/u).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/dry-run plan ready/u).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/mock dry-run completed/u).length).toBeGreaterThan(0);
+    expect(screen.getByText('noRealSend=true')).toBeInTheDocument();
+    expect(screen.getByText('noRealNetwork=true')).toBeInTheDocument();
+    expect(screen.getByText('noSecretOutput=true')).toBeInTheDocument();
+    expect(screen.getByText('当前仅 dry-run，不真实发送')).toBeInTheDocument();
+    expect(screen.getByText('当前不执行真实企业微信出网')).toBeInTheDocument();
+    expect(screen.getByText('dry-run 步骤')).toBeInTheDocument();
     expect(screen.getByText('L0-L4 等级说明')).toBeInTheDocument();
     expect(screen.getByText('L0 AI 推荐')).toBeInTheDocument();
     expect(screen.getByText('L1 AI 草稿 + 人工确认')).toBeInTheDocument();
@@ -673,6 +703,13 @@ describe('AI 会话工作台模拟版 UI', () => {
     expect(within(statsRegion).getByText('真实出网阻断数量')).toBeInTheDocument();
     expect(within(statsRegion).getByText('callback 占位缺失数量')).toBeInTheDocument();
     expect(within(statsRegion).getByText('人工确认缺失数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('官方 dry-run 检查数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('dry-run plan ready 数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('mock dry-run completed 数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('官方真实网络阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('官方真实发送阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('官方敏感 payload 阻断数量')).toBeInTheDocument();
+    expect(within(statsRegion).getByText('官方人工确认缺失阻断数量')).toBeInTheDocument();
 
     const mockSentCard = within(statsRegion).getByText('模拟发送数量').closest('article');
     expect(mockSentCard).not.toBeNull();

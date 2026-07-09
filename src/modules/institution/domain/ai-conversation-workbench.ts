@@ -25,9 +25,17 @@ import {
   type RealChannelRoute,
 } from '@/modules/institution/domain/real-channel-preflight';
 import {
+  buildWeComOfficialDryRunStats,
+  createDefaultWeComOfficialDryRunInput,
+  createWeComOfficialDryRunTimelineMetadata,
+  evaluateWeComOfficialDryRun,
+  type WeComOfficialDryRunResult,
+  type WeComOfficialDryRunStats,
+} from '@/modules/institution/domain/wecom-official-dry-run';
+import {
   buildWeComOfficialDryRunConfigStats,
   createDefaultWeComOfficialDryRunConfigInput,
-  createWeComOfficialDryRunTimelineMetadata,
+  createWeComOfficialDryRunTimelineMetadata as createWeComOfficialDryRunConfigTimelineMetadata,
   evaluateWeComOfficialDryRunConfig,
   type WeComOfficialDryRunConfigResult,
   type WeComOfficialDryRunConfigStats,
@@ -71,6 +79,14 @@ export const aiConversationAuditReasons = [
   'wecom_dry_run_blocked',
   'wecom_dry_run_sensitive_value_blocked',
   'wecom_dry_run_secret_read_blocked',
+  'wecom_official_dry_run_viewed',
+  'wecom_official_dry_run_evaluated',
+  'wecom_official_dry_run_plan_ready',
+  'wecom_official_dry_run_mock_completed',
+  'wecom_official_dry_run_blocked',
+  'wecom_official_dry_run_sensitive_payload_blocked',
+  'wecom_official_dry_run_real_network_blocked',
+  'wecom_official_dry_run_real_send_blocked',
 ] as const satisfies readonly AuditReason[];
 
 export type AiConversationAuditReason = (typeof aiConversationAuditReasons)[number];
@@ -175,6 +191,7 @@ export type AiConversationRecord = {
   automationStrategy: AiConversationAutomationStrategy;
   realChannelPreflight: RealChannelPreflightResult;
   weComOfficialDryRunConfig: WeComOfficialDryRunConfigResult;
+  weComOfficialDryRun: WeComOfficialDryRunResult;
   profile: AiConversationProfile;
   messages: AiConversationMessage[];
   timeline: AiConversationTimelineEvent[];
@@ -197,7 +214,7 @@ export type AiConversationWorkbenchStats = {
   highRiskBlockedCount: number;
   marketingAutomationBlockedCount: number;
   addFriendBlockedCount: number;
-} & RealChannelPreflightStats & WeComOfficialDryRunConfigStats;
+} & RealChannelPreflightStats & WeComOfficialDryRunConfigStats & WeComOfficialDryRunStats;
 
 const occurredAt = {
   aiEntered: '2026-07-08T09:05:00.000+08:00',
@@ -382,7 +399,22 @@ function createWeComOfficialDryRunTimelineEvent(input: {
     safeSummary: input.config.timelineSummary,
     auditReason: input.config.auditReason,
     occurredAt: input.occurredAt,
-    metadata: createWeComOfficialDryRunTimelineMetadata(input.config),
+    metadata: createWeComOfficialDryRunConfigTimelineMetadata(input.config),
+  });
+}
+
+function createOfficialRouteDryRunTimelineEvent(input: {
+  conversationId: string;
+  dryRun: WeComOfficialDryRunResult;
+  occurredAt: string;
+}) {
+  return createTimelineEvent({
+    id: `${input.conversationId}:timeline:wecom-official-route-dry-run:${input.dryRun.dryRunStatus}:${input.occurredAt}:${input.dryRun.auditReason}`,
+    title: '官方路线 dry-run',
+    safeSummary: input.dryRun.timelineSummary,
+    auditReason: input.dryRun.auditReason,
+    occurredAt: input.occurredAt,
+    metadata: createWeComOfficialDryRunTimelineMetadata(input.dryRun),
   });
 }
 
@@ -407,7 +439,34 @@ function createWeComDryRunConfigForConversation(input: {
   }));
 }
 
-function withAutomationStrategy<T extends Omit<AiConversationRecord, 'automationStrategy' | 'realChannelPreflight' | 'weComOfficialDryRunConfig' | 'timeline'> & { timeline: AiConversationTimelineEvent[] }>(
+function createOfficialRouteDryRunForConversation(input: {
+  preflight: RealChannelPreflightResult;
+  config: WeComOfficialDryRunConfigResult;
+  hasManualConfirmation?: boolean;
+  networkMode?: 'disabled' | 'mock';
+}) {
+  return evaluateWeComOfficialDryRun(createDefaultWeComOfficialDryRunInput({
+    tenantId: input.config.tenantId,
+    institutionId: input.config.institutionId ?? 'institution-low-sensitive-001',
+    operatorRole: input.config.operatorRole,
+    officialRoute: input.config.officialRoute,
+    dryRunConfigStatus: input.config.configStatus,
+    preflightStatus: input.preflight.preflightStatus,
+    proofEligibleMock: input.preflight.proofEligibleMock,
+    hasManualConfirmation: input.hasManualConfirmation ?? false,
+    hasSecretPlaceholder: input.config.dryRunReady,
+    hasCallbackUrlPlaceholder: Boolean(input.config.callbackUrlPlaceholder),
+    networkMode: input.networkMode ?? (input.config.dryRunReady ? 'mock' : 'disabled'),
+    allowRealSend: false,
+    externalChannelEnabled: false,
+    realSendAllowed: false,
+    noSecretRead: true,
+    noRealSend: true,
+    dryRunOnly: true,
+  }));
+}
+
+function withAutomationStrategy<T extends Omit<AiConversationRecord, 'automationStrategy' | 'realChannelPreflight' | 'weComOfficialDryRunConfig' | 'weComOfficialDryRun' | 'timeline'> & { timeline: AiConversationTimelineEvent[] }>(
   conversation: T,
   context: AiAutoStrategyContext,
 ): AiConversationRecord {
@@ -421,12 +480,18 @@ function withAutomationStrategy<T extends Omit<AiConversationRecord, 'automation
     preflight: realChannelPreflight,
     hasManualConfirmation: conversation.status === 'human_takeover',
   });
+  const weComOfficialDryRun = createOfficialRouteDryRunForConversation({
+    preflight: realChannelPreflight,
+    config: weComOfficialDryRunConfig,
+    hasManualConfirmation: conversation.status === 'human_takeover',
+  });
 
   return {
     ...conversation,
     automationStrategy,
     realChannelPreflight,
     weComOfficialDryRunConfig,
+    weComOfficialDryRun,
     timeline: [
       ...conversation.timeline,
       createAutomationStrategyTimelineEvent({
@@ -442,6 +507,11 @@ function withAutomationStrategy<T extends Omit<AiConversationRecord, 'automation
       createWeComOfficialDryRunTimelineEvent({
         conversationId: conversation.id,
         config: weComOfficialDryRunConfig,
+        occurredAt: occurredAt.aiEntered,
+      }),
+      createOfficialRouteDryRunTimelineEvent({
+        conversationId: conversation.id,
+        dryRun: weComOfficialDryRun,
         occurredAt: occurredAt.aiEntered,
       }),
     ],
@@ -775,6 +845,7 @@ export function buildAiConversationWorkbenchStats(
 ): AiConversationWorkbenchStats {
   const preflightStats = buildRealChannelPreflightStats(conversations.map((conversation) => conversation.realChannelPreflight));
   const dryRunConfigStats = buildWeComOfficialDryRunConfigStats(conversations.map((conversation) => conversation.weComOfficialDryRunConfig));
+  const officialDryRunStats = buildWeComOfficialDryRunStats(conversations.map((conversation) => conversation.weComOfficialDryRun));
 
   return {
     totalCount: conversations.length,
@@ -813,6 +884,7 @@ export function buildAiConversationWorkbenchStats(
     ).length,
     ...preflightStats,
     ...dryRunConfigStats,
+    ...officialDryRunStats,
   };
 }
 
@@ -841,12 +913,18 @@ export function takeoverAiConversation(input: {
     preflight: realChannelPreflight,
     hasManualConfirmation: true,
   });
+  const weComOfficialDryRun = createOfficialRouteDryRunForConversation({
+    preflight: realChannelPreflight,
+    config: weComOfficialDryRunConfig,
+    hasManualConfirmation: true,
+  });
   return {
     kind: 'taken_over' as const,
     conversation: {
       ...input.conversation,
       realChannelPreflight,
       weComOfficialDryRunConfig,
+      weComOfficialDryRun,
       status: 'human_takeover' as const,
       aiProcessingLabel: '人工已接管',
       canTakeover: false,
@@ -877,6 +955,11 @@ export function takeoverAiConversation(input: {
         createWeComOfficialDryRunTimelineEvent({
           conversationId: input.conversation.id,
           config: weComOfficialDryRunConfig,
+          occurredAt: input.occurredAt,
+        }),
+        createOfficialRouteDryRunTimelineEvent({
+          conversationId: input.conversation.id,
+          dryRun: weComOfficialDryRun,
           occurredAt: input.occurredAt,
         }),
       ],
@@ -944,6 +1027,11 @@ export function evaluateAiConversationAutomationStrategy(input: {
     preflight: realChannelPreflight,
     hasManualConfirmation: input.conversation.status === 'human_takeover',
   });
+  const weComOfficialDryRun = createOfficialRouteDryRunForConversation({
+    preflight: realChannelPreflight,
+    config: weComOfficialDryRunConfig,
+    hasManualConfirmation: input.conversation.status === 'human_takeover',
+  });
 
   const kind = automationStrategy.result.blocked
     ? 'blocked'
@@ -958,6 +1046,7 @@ export function evaluateAiConversationAutomationStrategy(input: {
       automationStrategy,
       realChannelPreflight,
       weComOfficialDryRunConfig,
+      weComOfficialDryRun,
       timeline: [
         ...input.conversation.timeline,
         createAutomationStrategyTimelineEvent({
@@ -973,6 +1062,11 @@ export function evaluateAiConversationAutomationStrategy(input: {
         createWeComOfficialDryRunTimelineEvent({
           conversationId: input.conversation.id,
           config: weComOfficialDryRunConfig,
+          occurredAt: input.occurredAt,
+        }),
+        createOfficialRouteDryRunTimelineEvent({
+          conversationId: input.conversation.id,
+          dryRun: weComOfficialDryRun,
           occurredAt: input.occurredAt,
         }),
       ],
@@ -1001,6 +1095,11 @@ export function evaluateAiConversationRealChannelPreflight(input: {
     hasManualConfirmation: input.hasManualConfirmation ?? input.conversation.status === 'human_takeover',
     officialRoute: input.channelRoute,
   });
+  const weComOfficialDryRun = createOfficialRouteDryRunForConversation({
+    preflight: realChannelPreflight,
+    config: weComOfficialDryRunConfig,
+    hasManualConfirmation: input.hasManualConfirmation ?? input.conversation.status === 'human_takeover',
+  });
 
   return {
     kind: realChannelPreflight.proofEligibleMock ? 'mock_eligible' as const : 'blocked' as const,
@@ -1008,6 +1107,7 @@ export function evaluateAiConversationRealChannelPreflight(input: {
       ...input.conversation,
       realChannelPreflight,
       weComOfficialDryRunConfig,
+      weComOfficialDryRun,
       timeline: [
         ...input.conversation.timeline,
         createRealChannelPreflightTimelineEvent({
@@ -1018,6 +1118,11 @@ export function evaluateAiConversationRealChannelPreflight(input: {
         createWeComOfficialDryRunTimelineEvent({
           conversationId: input.conversation.id,
           config: weComOfficialDryRunConfig,
+          occurredAt: input.occurredAt,
+        }),
+        createOfficialRouteDryRunTimelineEvent({
+          conversationId: input.conversation.id,
+          dryRun: weComOfficialDryRun,
           occurredAt: input.occurredAt,
         }),
       ],
