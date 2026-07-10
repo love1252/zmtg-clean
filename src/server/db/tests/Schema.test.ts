@@ -1417,6 +1417,39 @@ describe('数据库结构', () => {
     );
   });
 
+  it('正式 demo customer seed 使用明确且非空的机构归属', () => {
+    const customerRecords = getDemoCustomerSeedRecords();
+    const institutionByTenant = new Map([
+      ['growth-tenant-chengxing', 'growth-inst-chengxing'],
+      ['starter-tenant-xinghe', 'starter-inst-xinghe'],
+    ]);
+
+    expect(
+      customerRecords.every(
+        (record) =>
+          typeof record.institutionId === 'string' && record.institutionId.length > 0,
+      ),
+    ).toBe(true);
+    expect(
+      customerRecords.every(
+        (record) => institutionByTenant.get(record.tenantId) === record.institutionId,
+      ),
+    ).toBe(true);
+    expect(
+      customerRecords
+        .filter((record) => record.tenantId === 'growth-tenant-chengxing')
+        .every((record) => record.institutionId === 'growth-inst-chengxing'),
+    ).toBe(true);
+    expect(
+      customerRecords
+        .filter((record) => record.tenantId === 'starter-tenant-xinghe')
+        .every((record) => record.institutionId === 'starter-inst-xinghe'),
+    ).toBe(true);
+    expect(JSON.stringify(customerRecords)).not.toMatch(
+      /\b1[3-9]\d{9}\b|secret|access[_-]?token|api[_-]?key/i,
+    );
+  });
+
   it('演示种子数据覆盖 active、edited、voided 治疗摘要和来源随访任务', () => {
     const summaries = seedDemoData.getDemoTreatmentSummarySeedRecords();
     const followUpTasks = getSeedRecords<{
@@ -1519,6 +1552,7 @@ describe('数据库结构', () => {
     expect(seedSource).toContain('.insert(tenantPlanVersions)');
     expect(seedSource).toContain('.insert(tenantAuthorizationSnapshots)');
     expect(seedSource).toContain('.insert(tenantCommercialRecords)');
+    expect(seedSource).toContain('institutionId: sql`excluded.institution_id`');
     expect(seedSource).toContain('.update(tenantPlanVersions)');
     expect(seedSource).toContain('displayName: plan.name');
   });

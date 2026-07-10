@@ -23,8 +23,10 @@ import {
 const trialYunlanTenantId = 'trial-tenant-yunlan';
 const trialBaiyueTenantId = 'trial-tenant-baiyue';
 const starterXingheTenantId = 'starter-tenant-xinghe';
+const starterXingheInstitutionId = 'starter-inst-xinghe';
 const starterYubaiTenantId = 'starter-tenant-yubai';
 const growthChengxingTenantId = 'growth-tenant-chengxing';
+const growthChengxingInstitutionId = 'growth-inst-chengxing';
 const growthQingmangTenantId = 'growth-tenant-qingmang';
 const primaryDemoTenantId = growthChengxingTenantId;
 const demoTenantId = primaryDemoTenantId;
@@ -654,6 +656,7 @@ const demoCustomerSeedRecords: Array<typeof customers.$inferInsert> = [
   {
     id: 'demo-customer-shen-zhixia',
     tenantId: demoTenantId,
+    institutionId: growthChengxingInstitutionId,
     displayName: '沈知夏',
     lifecycle: 'post_care',
     priority: 'high',
@@ -668,6 +671,7 @@ const demoCustomerSeedRecords: Array<typeof customers.$inferInsert> = [
   {
     id: 'demo-customer-xu-ruoning',
     tenantId: demoTenantId,
+    institutionId: growthChengxingInstitutionId,
     displayName: '许若宁',
     lifecycle: 'scheduled',
     priority: 'medium',
@@ -682,6 +686,7 @@ const demoCustomerSeedRecords: Array<typeof customers.$inferInsert> = [
   {
     id: 'demo-customer-gu-anran',
     tenantId: demoTenantId,
+    institutionId: growthChengxingInstitutionId,
     displayName: '顾安然',
     lifecycle: 'post_care',
     priority: 'high',
@@ -696,6 +701,7 @@ const demoCustomerSeedRecords: Array<typeof customers.$inferInsert> = [
   {
     id: 'demo-customer-liang-siyu',
     tenantId: demoTenantId,
+    institutionId: growthChengxingInstitutionId,
     displayName: '梁思语',
     lifecycle: 'consulting',
     priority: 'medium',
@@ -710,6 +716,7 @@ const demoCustomerSeedRecords: Array<typeof customers.$inferInsert> = [
   {
     id: 'demo-customer-lu-qinghe',
     tenantId: demoTenantId,
+    institutionId: growthChengxingInstitutionId,
     displayName: '陆清禾',
     lifecycle: 'silent_reactivation',
     priority: 'observe',
@@ -724,6 +731,7 @@ const demoCustomerSeedRecords: Array<typeof customers.$inferInsert> = [
   {
     id: 'demo-customer-cheng-wanqing',
     tenantId: demoTenantId,
+    institutionId: growthChengxingInstitutionId,
     displayName: '程晚晴',
     lifecycle: 'repurchase_window',
     priority: 'high',
@@ -738,6 +746,7 @@ const demoCustomerSeedRecords: Array<typeof customers.$inferInsert> = [
   {
     id: 'demo-customer-ye-shuyan',
     tenantId: demoTenantId,
+    institutionId: growthChengxingInstitutionId,
     displayName: '叶舒颜',
     lifecycle: 'post_care',
     priority: 'medium',
@@ -752,6 +761,7 @@ const demoCustomerSeedRecords: Array<typeof customers.$inferInsert> = [
   {
     id: 'demo-customer-tang-yimo',
     tenantId: demoTenantId,
+    institutionId: growthChengxingInstitutionId,
     displayName: '唐以沫',
     lifecycle: 'post_care',
     priority: 'medium',
@@ -766,6 +776,7 @@ const demoCustomerSeedRecords: Array<typeof customers.$inferInsert> = [
   {
     id: 'demo-customer-other-tenant',
     tenantId: secondaryTenantId,
+    institutionId: starterXingheInstitutionId,
     displayName: '周若仪',
     lifecycle: 'consulting',
     priority: 'observe',
@@ -1586,6 +1597,7 @@ export async function seedDemoData(db: TenantDatabase) {
       target: customers.id,
       set: {
         tenantId: sql`excluded.tenant_id`,
+        institutionId: sql`excluded.institution_id`,
         displayName: sql`excluded.display_name`,
         lifecycle: sql`excluded.lifecycle`,
         priority: sql`excluded.priority`,
