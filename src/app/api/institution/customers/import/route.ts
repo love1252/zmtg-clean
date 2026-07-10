@@ -75,8 +75,18 @@ async function authorizeCustomerImport(input: {
       response: createForbiddenResponse(403, '没有访问权限'),
     };
   }
+  if (!input.context.institutionId) {
+    return {
+      ok: false as const,
+      response: createForbiddenResponse(403, '当前登录上下文缺少机构信息'),
+    };
+  }
 
-  return { ok: true as const, tenantId: input.context.tenantId };
+  return {
+    ok: true as const,
+    tenantId: input.context.tenantId,
+    institutionId: input.context.institutionId,
+  };
 }
 
 function hasSensitiveBlockedRows(preview: ReturnType<typeof previewLowSensitiveCustomerImport>) {
@@ -118,10 +128,14 @@ export async function POST(request: Request) {
     const repository = createTenantBusinessRepository(db);
     const auditRepository = createAuditEventRepository(db);
     const occurredAt = new Date().toISOString();
-    const existingCustomers = await repository.listCustomersByTenant(authorized.tenantId);
+    const existingCustomers = await repository.listCustomersByTenantAndInstitution({
+      tenantId: authorized.tenantId,
+      institutionId: authorized.institutionId,
+      limit: 20,
+    });
     const preview = previewLowSensitiveCustomerImport({
       tenantId: authorized.tenantId,
-      institutionId: context?.institutionId ?? null,
+      institutionId: authorized.institutionId,
       operatorRef: context?.userId ?? 'tenant-operator',
       rows: parsed.rows,
       existingCustomers,
@@ -168,10 +182,14 @@ export async function PUT(request: Request) {
     const db = getDatabase();
     const occurredAt = new Date().toISOString();
     const readRepository = createTenantBusinessRepository(db);
-    const existingCustomers = await readRepository.listCustomersByTenant(authorized.tenantId);
+    const existingCustomers = await readRepository.listCustomersByTenantAndInstitution({
+      tenantId: authorized.tenantId,
+      institutionId: authorized.institutionId,
+      limit: 20,
+    });
     const { preview, drafts } = getCustomerImportRowsForExecution({
       tenantId: authorized.tenantId,
-      institutionId: context?.institutionId ?? null,
+      institutionId: authorized.institutionId,
       operatorRef: context?.userId ?? 'tenant-operator',
       rows: parsed.rows,
       existingCustomers,

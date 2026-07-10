@@ -30,6 +30,7 @@ function createExistingCustomer(overrides: Partial<CustomerRecordSummary> = {}):
   return {
     id: 'cust_existing',
     tenantId: 'tenant-a',
+    institutionId: 'inst-a',
     displayName: '低敏客户A',
     lifecycle: 'consulting',
     priority: 'observe',
@@ -174,6 +175,7 @@ describe('low sensitive customer import domain', () => {
     expect(drafts).toHaveLength(1);
     expect(drafts[0]).toMatchObject({
       tenantId: 'tenant-a',
+      institutionId: 'inst-a',
       displayName: '低敏客户A',
       projectInterest: '皮肤管理',
       maskedPhone: 'masked-import-only',
@@ -181,8 +183,9 @@ describe('low sensitive customer import domain', () => {
       birthDate: '低敏年龄:30-39',
     });
     expect(drafts[0]?.tags).toEqual(
-      expect.arrayContaining(['低敏导入', 'institution_ref:inst-a', 'imported_ref:import-ref-a']),
+      expect.arrayContaining(['低敏导入', 'imported_ref:import-ref-a']),
     );
+    expect(drafts[0]?.tags.some((tag) => tag.startsWith('institution_ref:'))).toBe(false);
     expect(JSON.stringify(drafts)).not.toContain('13800000000');
     expect(JSON.stringify(drafts)).not.toContain('110101199001010011');
   });

@@ -16,6 +16,7 @@ const customerRecords: CustomerRecordSummary[] = [
   {
     id: 'cust_high_repurchase',
     tenantId: 'demo-tenant-001',
+    institutionId: null,
     displayName: '王女士',
     lifecycle: 'repurchase_window',
     priority: 'high',
@@ -30,6 +31,7 @@ const customerRecords: CustomerRecordSummary[] = [
   {
     id: 'cust_post_care',
     tenantId: 'demo-tenant-001',
+    institutionId: null,
     displayName: '赵女士',
     lifecycle: 'post_care',
     priority: 'medium',

@@ -109,7 +109,9 @@ type CreateFollowUpPathStageInput = Omit<
   createdAt: string;
   updatedAt: string;
 };
-type CreateCustomerInput = typeof customers.$inferInsert;
+type CreateCustomerInput = Omit<typeof customers.$inferInsert, 'institutionId'> & {
+  institutionId: string;
+};
 type MutableCustomerUpdateValues = Pick<
   typeof customers.$inferInsert,
   | 'displayName'
@@ -135,6 +137,14 @@ type CreateAppointmentInput = typeof appointments.$inferInsert;
 type CustomerLookupInput = {
   tenantId: string;
   id: string;
+};
+type InstitutionCustomerLookupInput = CustomerLookupInput & {
+  institutionId: string;
+};
+type InstitutionCustomerListInput = {
+  tenantId: string;
+  institutionId: string;
+  limit: number;
 };
 type CustomerTimelineRelatedLookupInput = {
   tenantId: string;
@@ -324,6 +334,7 @@ export function mapCustomerRowToRecord(row: CustomerRow): CustomerRecordSummary 
   return {
     id: row.id,
     tenantId: row.tenantId,
+    institutionId: row.institutionId,
     displayName: row.displayName,
     lifecycle: row.lifecycle,
     priority: row.priority,
@@ -914,6 +925,22 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
 
       return row ? mapCustomerRowToRecord(row) : null;
     },
+    async getCustomerByTenantAndInstitution(
+      input: InstitutionCustomerLookupInput,
+    ): Promise<CustomerRecordSummary | null> {
+      const [row] = await database
+        .select()
+        .from(customers)
+        .where(
+          and(
+            eq(customers.tenantId, input.tenantId),
+            eq(customers.institutionId, input.institutionId),
+            eq(customers.id, input.id),
+          ),
+        );
+
+      return row ? mapCustomerRowToRecord(row) : null;
+    },
     async listAppointmentsByTenantAndCustomer(
       input: CustomerTimelineRelatedLookupInput,
     ): Promise<AppointmentRecordSummary[]> {
@@ -1009,6 +1036,23 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
     },
     async listCustomersByTenant(tenantId: string) {
       const rows = await database.select().from(customers).where(eq(customers.tenantId, tenantId));
+      return rows.map(mapCustomerRowToRecord);
+    },
+    async listCustomersByTenantAndInstitution(input: InstitutionCustomerListInput) {
+      const requestedLimit = Number.isFinite(input.limit) ? Math.trunc(input.limit) : 1;
+      const limit = Math.min(Math.max(requestedLimit, 1), 20);
+
+      const rows = await database
+        .select()
+        .from(customers)
+        .where(
+          and(
+            eq(customers.tenantId, input.tenantId),
+            eq(customers.institutionId, input.institutionId),
+          ),
+        )
+        .orderBy(asc(customers.id))
+        .limit(limit);
       return rows.map(mapCustomerRowToRecord);
     },
     async listAppointmentsByTenant(tenantId: string) {

@@ -59,6 +59,10 @@ export async function POST(request: Request) {
   if (!parsed.ok) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
+  const institutionId = context.institutionId;
+  if (context.scope === 'tenant' && !institutionId) {
+    return NextResponse.json({ error: '当前登录上下文缺少机构信息' }, { status: 403 });
+  }
 
   try {
     const db = getDatabase();
@@ -82,6 +86,7 @@ export async function POST(request: Request) {
           const record = await repository.createCustomer({
             id: globalThis.crypto.randomUUID(),
             tenantId,
+            institutionId: institutionId as string,
             ...parsed.value,
           });
 

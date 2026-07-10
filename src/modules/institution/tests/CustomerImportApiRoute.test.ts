@@ -8,7 +8,7 @@ import type { AccessContext } from '@/modules/security/domain/access-control';
 
 const routeMocks = vi.hoisted(() => {
   const repository = {
-    listCustomersByTenant: vi.fn(),
+    listCustomersByTenantAndInstitution: vi.fn(),
     createCustomer: vi.fn(),
   };
   const auditRecord = vi.fn();
@@ -123,6 +123,7 @@ function createExistingCustomer(overrides: Partial<CustomerRecordSummary> = {}):
   return {
     id: 'cust_existing',
     tenantId: 'tenant-a',
+    institutionId: 'inst-a',
     displayName: '低敏客户A',
     lifecycle: 'consulting',
     priority: 'observe',
@@ -165,8 +166,8 @@ beforeEach(() => {
     limit: 5000,
     resource: 'customers',
   });
-  routeMocks.repository.listCustomersByTenant.mockReset();
-  routeMocks.repository.listCustomersByTenant.mockResolvedValue([]);
+  routeMocks.repository.listCustomersByTenantAndInstitution.mockReset();
+  routeMocks.repository.listCustomersByTenantAndInstitution.mockResolvedValue([]);
   routeMocks.repository.createCustomer.mockReset();
   routeMocks.repository.createCustomer.mockImplementation(async (draft: { id: string }) => ({
     ...draft,
@@ -197,7 +198,11 @@ describe('customer import API route', () => {
     expect(response.status).toBe(200);
     expect(payload.successCount).toBe(1);
     expect(payload.canExecute).toBe(true);
-    expect(routeMocks.repository.listCustomersByTenant).toHaveBeenCalledWith('tenant-a');
+    expect(routeMocks.repository.listCustomersByTenantAndInstitution).toHaveBeenCalledWith({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-a',
+      limit: 20,
+    });
     expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -221,6 +226,33 @@ describe('customer import API route', () => {
     expect(response.status).toBe(400);
     expect(payload.error).toContain('不允许提交 tenantId');
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+  });
+
+  it('上传行中的 institutionId 被拒绝且不能覆盖登录机构', async () => {
+    const response = await customerImportPreviewPost(
+      createRequest({
+        rows: [{ ...validLowSensitiveRow, institutionId: 'other-inst' }],
+      }),
+    );
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(payload.successCount).toBe(0);
+    expect(payload.importBatch).toMatchObject({
+      institutionId: 'inst-a',
+      rows: [
+        {
+          status: 'skipped',
+          issues: expect.arrayContaining([
+            expect.objectContaining({
+              reason: 'unsupported_field',
+              field: 'institutionId',
+            }),
+          ]),
+        },
+      ],
+    });
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
   });
 
   it('POST 预检阻断高敏字段并写入高敏阻断审计 reason', async () => {
@@ -278,19 +310,26 @@ describe('customer import API route', () => {
     expect(routeMocks.repository.createCustomer).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: 'tenant-a',
+        institutionId: 'inst-a',
         displayName: '低敏客户A',
         maskedPhone: 'masked-import-only',
         maskedMedicalRecordNo: 'masked-import-record',
-        tags: expect.arrayContaining(['低敏导入', 'institution_ref:inst-a']),
+        tags: expect.arrayContaining(['低敏导入']),
       }),
     );
+    const createInput = routeMocks.repository.createCustomer.mock.calls[0]?.[0] as {
+      tags: string[];
+    };
+    expect(createInput.tags.some((tag) => tag.startsWith('institution_ref:'))).toBe(false);
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(
       expect.objectContaining({ reason: 'customer_import_partially_completed' }),
     );
   });
 
   it('同机构重复客户候选执行返回受控错误且不写入客户', async () => {
-    routeMocks.repository.listCustomersByTenant.mockResolvedValue([createExistingCustomer()]);
+    routeMocks.repository.listCustomersByTenantAndInstitution.mockResolvedValue([
+      createExistingCustomer(),
+    ]);
 
     const response = await customerImportExecutePut(createRequest({ rows: [validLowSensitiveRow] }));
     const payload = await readJson(response);
@@ -301,6 +340,24 @@ describe('customer import API route', () => {
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(
       expect.objectContaining({ result: 'denied', reason: 'customer_import_rejected' }),
     );
+  });
+
+  it('缺少可信 institutionId 时拒绝导入', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
+      ...tenantContext,
+      institutionId: null,
+    });
+
+    const response = await customerImportExecutePut(
+      createRequest({ rows: [validLowSensitiveRow] }),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(readJson(response)).resolves.toMatchObject({
+      error: '当前登录上下文缺少机构信息',
+    });
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
   });
 
   it('普通员工不能导入或导出客户', async () => {

@@ -30,6 +30,7 @@ import {
 const customerRecord = {
   id: 'cust_phase5_closeout',
   tenantId: 'demo-tenant-001',
+  institutionId: null,
   displayName: 'Phase5 客户A',
   lifecycle: 'repurchase_window',
   priority: 'high',
@@ -2051,6 +2052,7 @@ function mapDemoCustomerSeed(record: DemoCustomerSeed): CustomerRecordSummary {
   return {
     id: record.id,
     tenantId: record.tenantId,
+    institutionId: record.institutionId ?? null,
     displayName: record.displayName,
     lifecycle: record.lifecycle,
     priority: record.priority,

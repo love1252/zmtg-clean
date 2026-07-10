@@ -103,6 +103,7 @@ export type CustomerImportExecuteInput = CustomerImportPreviewInput;
 export type CustomerImportCreateCustomerDraft = {
   id: string;
   tenantId: string;
+  institutionId: string;
   displayName: string;
   lifecycle: CustomerLifecycleStage;
   priority: CustomerPriority;
@@ -204,10 +205,6 @@ function buildImportBatchId(input: CustomerImportPreviewInput) {
   ].join('|'))}`;
 }
 
-function buildInstitutionTag(institutionId: string | null | undefined) {
-  return `institution_ref:${normalizeInstitutionId(institutionId)}`;
-}
-
 function buildImportedRefTag(importedCustomerRef: string) {
   return `imported_ref:${importedCustomerRef}`;
 }
@@ -288,11 +285,10 @@ function existingDuplicateKeys(input: {
   existingCustomers: CustomerRecordSummary[];
   institutionId?: string | null;
 }) {
-  const institutionTag = buildInstitutionTag(input.institutionId);
   const keys = new Set<string>();
 
   for (const customer of input.existingCustomers) {
-    if (!customer.tags.includes(institutionTag)) continue;
+    if (!input.institutionId || customer.institutionId !== input.institutionId) continue;
 
     for (const tag of customer.tags) {
       if (tag.startsWith('imported_ref:')) keys.add(tag);
@@ -464,7 +460,7 @@ export function previewLowSensitiveCustomerImport(
 
 export function mapCustomerImportRowToCreateCustomerDraft(input: {
   tenantId: string;
-  institutionId?: string | null;
+  institutionId: string;
   row: CustomerImportRowInput;
   rowNumber: number;
   importBatchId: string;
@@ -478,7 +474,6 @@ export function mapCustomerImportRowToCreateCustomerDraft(input: {
   const duplicateKey = createDuplicateKey(input.row) ?? `candidate:${compactText(input.row.customerDisplayName).toLowerCase()}||${treatmentProject.toLowerCase()}`;
   const tags = [
     '低敏导入',
-    buildInstitutionTag(input.institutionId),
     buildImportedRefTag(importedCustomerRef),
     buildCandidateTag(duplicateKey),
     compactText(input.row.sourceChannel),
@@ -491,6 +486,7 @@ export function mapCustomerImportRowToCreateCustomerDraft(input: {
   return {
     id: `cust_import_${stableHash(`${input.tenantId}|${normalizeInstitutionId(input.institutionId)}|${importedCustomerRef}|${input.rowNumber}`)}`,
     tenantId: input.tenantId,
+    institutionId: input.institutionId,
     displayName: compactText(input.row.customerDisplayName),
     lifecycle,
     priority: lifecycle === 'post_care' ? 'high' : 'observe',
@@ -514,7 +510,9 @@ export function mapCustomerImportRowToCreateCustomerDraft(input: {
   };
 }
 
-export function getCustomerImportRowsForExecution(input: CustomerImportExecuteInput) {
+export function getCustomerImportRowsForExecution(
+  input: CustomerImportExecuteInput & { institutionId: string },
+) {
   const preview = previewLowSensitiveCustomerImport(input);
   const readyRowNumbers = new Set(
     preview.importBatch.rows

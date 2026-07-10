@@ -34,6 +34,7 @@ const demoTenantCustomerRecords: TenantCustomerRecord[] = [
   {
     id: 'cust_wang_repurchase',
     tenantId: 'demo-tenant-001',
+    institutionId: null,
     displayName: '王女士',
     lifecycle: 'repurchase_window',
     priority: 'high',
@@ -48,6 +49,7 @@ const demoTenantCustomerRecords: TenantCustomerRecord[] = [
   {
     id: 'cust_chen_conversion',
     tenantId: 'demo-tenant-001',
+    institutionId: null,
     displayName: '陈女士',
     lifecycle: 'consulting',
     priority: 'high',
@@ -62,6 +64,7 @@ const demoTenantCustomerRecords: TenantCustomerRecord[] = [
   {
     id: 'cust_zhao_care',
     tenantId: 'demo-tenant-001',
+    institutionId: null,
     displayName: '赵女士',
     lifecycle: 'post_care',
     priority: 'high',
@@ -76,6 +79,7 @@ const demoTenantCustomerRecords: TenantCustomerRecord[] = [
   {
     id: 'cust_other_tenant',
     tenantId: 'demo-tenant-002',
+    institutionId: null,
     displayName: '周女士',
     lifecycle: 'scheduled',
     priority: 'medium',

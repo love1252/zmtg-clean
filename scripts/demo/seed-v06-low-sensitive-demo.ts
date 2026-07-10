@@ -297,6 +297,7 @@ export function buildDemoSeedRecords() {
   const customerRecords = customerProfiles.map((profile) => ({
     id: customerId(profile.key),
     tenantId: DEMO_TENANT_ID,
+    institutionId: DEMO_INSTITUTION_ID,
     displayName: profile.displayName,
     lifecycle: profile.lifecycle,
     priority: profile.priority,

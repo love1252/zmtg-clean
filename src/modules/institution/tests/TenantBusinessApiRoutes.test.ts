@@ -106,6 +106,7 @@ const tenantContext: AccessContext = {
   role: 'tenant_admin',
   scope: 'tenant',
   tenantId: 'demo-tenant-001',
+  institutionId: 'demo-inst-001',
   source: 'demo_session',
 };
 
@@ -924,6 +925,46 @@ describe('租户业务写入 API 路由', () => {
     expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
   });
 
+  it('创建客户请求体含 institutionId 时返回解析错误且不能覆盖登录机构', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await customersPost(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...validCreateCustomerPayload,
+          institutionId: 'other-inst',
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: '请求包含不允许的字段: institutionId',
+    });
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
+  });
+
+  it('缺少登录机构时拒绝创建客户', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
+      ...tenantContext,
+      institutionId: null,
+    });
+
+    const response = await customersPost(
+      new Request('http://localhost/api/institution/customers', {
+        method: 'POST',
+        body: JSON.stringify(validCreateCustomerPayload),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: '当前登录上下文缺少机构信息' });
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
+  });
+
   it('非法 JSON 返回 400 且不初始化数据库', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
 
@@ -980,6 +1021,7 @@ describe('租户业务写入 API 路由', () => {
       expect.objectContaining({
         id: expect.any(String),
         tenantId: 'demo-tenant-001',
+        institutionId: 'demo-inst-001',
         displayName: '王女士',
       }),
     );

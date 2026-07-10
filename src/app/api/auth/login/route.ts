@@ -180,12 +180,13 @@ export async function POST(request: Request) {
       user: formalLoginResult.user,
       passwordResetRequired: formalLoginResult.passwordResetRequired,
     });
-    if (formalLoginResult.user.tenantId) {
+    if (formalLoginResult.user.tenantId && formalLoginResult.user.institutionId) {
       try {
         const db = getDatabase();
         await provisionDemoDataForTenant({
           db,
           tenantId: formalLoginResult.user.tenantId,
+          institutionId: formalLoginResult.user.institutionId,
           userId: formalLoginResult.user.id,
         });
       } catch {
