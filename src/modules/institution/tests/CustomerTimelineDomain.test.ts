@@ -11,6 +11,7 @@ import type { TreatmentSummaryRecord } from '@/modules/institution/domain/treatm
 const customer = {
   id: 'cust_001',
   tenantId: 'demo-tenant-001',
+  institutionId: null,
   displayName: '王女士',
   lifecycle: 'repurchase_window',
   priority: 'high',

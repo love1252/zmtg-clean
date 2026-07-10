@@ -31,12 +31,19 @@ const isNotNullMock = vi.hoisted(() =>
     operator: 'isNotNull',
   })),
 );
+const ascMock = vi.hoisted(() =>
+  vi.fn((column: unknown) => ({
+    column,
+    direction: 'asc',
+  })),
+);
 
 vi.mock('drizzle-orm', async (importOriginal) => {
   const actual = await importOriginal<typeof import('drizzle-orm')>();
   return {
     ...actual,
     and: andMock,
+    asc: ascMock,
     eq: eqMock,
     isNotNull: isNotNullMock,
   };
@@ -155,6 +162,7 @@ function createFollowUpTransitionDatabase(currentRow: unknown | null, updatedRow
 const customerRow = {
   id: 'cust_001',
   tenantId: 'demo-tenant-001',
+  institutionId: 'inst-001',
   displayName: '王女士',
   lifecycle: 'repurchase_window',
   priority: 'high',
@@ -257,6 +265,7 @@ describe('租户业务仓储映射', () => {
     expect(record).toEqual({
       id: 'cust_001',
       tenantId: 'demo-tenant-001',
+      institutionId: 'inst-001',
       displayName: '王女士',
       lifecycle: 'repurchase_window',
       priority: 'high',
@@ -357,6 +366,121 @@ describe('租户业务仓储映射', () => {
       operator: 'eq',
       value: 'demo-tenant-001',
     });
+  });
+
+  it('机构范围客户查询同时绑定 tenantId、institutionId 并将 limit 限制为 20', async () => {
+    const limit = vi.fn(async () => [customerRow]);
+    const orderBy = vi.fn(() => ({ limit }));
+    const where = vi.fn(() => ({ orderBy }));
+    const from = vi.fn(() => ({ where }));
+    const select = vi.fn(() => ({ from }));
+    const database = { select } as unknown as TenantDatabase;
+
+    const records = await createTenantBusinessRepository(database).listCustomersByTenantAndInstitution({
+      tenantId: 'demo-tenant-001',
+      institutionId: 'inst-001',
+      limit: 99,
+    });
+
+    expect(where).toHaveBeenCalledWith({
+      conditions: [
+        { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: customers.institutionId, operator: 'eq', value: 'inst-001' },
+      ],
+      operator: 'and',
+    });
+    expect(orderBy).toHaveBeenCalledWith({ column: customers.id, direction: 'asc' });
+    expect(limit).toHaveBeenCalledWith(20);
+    expect(records).toEqual([mapCustomerRowToRecord(customerRow)]);
+  });
+
+  it('机构范围客户列表将非有限或非正 limit 安全限制为 1', async () => {
+    const limit = vi.fn(async () => []);
+    const orderBy = vi.fn(() => ({ limit }));
+    const where = vi.fn(() => ({ orderBy }));
+    const from = vi.fn(() => ({ where }));
+    const select = vi.fn(() => ({ from }));
+    const database = { select } as unknown as TenantDatabase;
+    const repository = createTenantBusinessRepository(database);
+
+    await expect(
+      repository.listCustomersByTenantAndInstitution({
+        tenantId: 'demo-tenant-001',
+        institutionId: 'inst-001',
+        limit: Number.NaN,
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      repository.listCustomersByTenantAndInstitution({
+        tenantId: 'demo-tenant-001',
+        institutionId: 'inst-001',
+        limit: Number.POSITIVE_INFINITY,
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      repository.listCustomersByTenantAndInstitution({
+        tenantId: 'demo-tenant-001',
+        institutionId: 'inst-001',
+        limit: 0,
+      }),
+    ).resolves.toEqual([]);
+
+    expect(limit).toHaveBeenCalledTimes(3);
+    expect(limit).toHaveBeenNthCalledWith(1, 1);
+    expect(limit).toHaveBeenNthCalledWith(2, 1);
+    expect(limit).toHaveBeenNthCalledWith(3, 1);
+    expect(orderBy).toHaveBeenCalledTimes(3);
+  });
+
+  it('导入专用机构客户列表覆盖 20 条以后记录并保持稳定排序', async () => {
+    const rows = Array.from({ length: 25 }, (_, index) => ({
+      ...customerRow,
+      id: `cust_${String(index + 1).padStart(3, '0')}`,
+    }));
+    const orderBy = vi.fn(async () => rows);
+    const where = vi.fn(() => ({ orderBy }));
+    const from = vi.fn(() => ({ where }));
+    const select = vi.fn(() => ({ from }));
+    const database = { select } as unknown as TenantDatabase;
+
+    const records = await createTenantBusinessRepository(
+      database,
+    ).listCustomersByTenantAndInstitutionForImport({
+      tenantId: 'demo-tenant-001',
+      institutionId: 'inst-001',
+    });
+
+    expect(where).toHaveBeenCalledWith({
+      conditions: [
+        { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: customers.institutionId, operator: 'eq', value: 'inst-001' },
+      ],
+      operator: 'and',
+    });
+    expect(orderBy).toHaveBeenCalledWith({ column: customers.id, direction: 'asc' });
+    expect(records).toHaveLength(25);
+    expect(records[20]?.id).toBe('cust_021');
+    expect(records[24]?.id).toBe('cust_025');
+  });
+
+  it('机构范围单客户查询拒绝同 tenant 下其他机构和 null 机构客户', async () => {
+    const query = createSelectDatabase([]);
+
+    const record = await createTenantBusinessRepository(query.database).getCustomerByTenantAndInstitution({
+      tenantId: 'demo-tenant-001',
+      institutionId: 'inst-001',
+      id: 'cust-other-inst',
+    });
+
+    expect(query.where).toHaveBeenCalledWith({
+      conditions: [
+        { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: customers.institutionId, operator: 'eq', value: 'inst-001' },
+        { column: customers.id, operator: 'eq', value: 'cust-other-inst' },
+      ],
+      operator: 'and',
+    });
+    expect(record).toBeNull();
   });
 
   it('按来源筛选随访任务时始终绑定当前 tenantId 并返回安全来源字段', async () => {

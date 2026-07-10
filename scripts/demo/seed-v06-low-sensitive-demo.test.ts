@@ -71,6 +71,7 @@ describe('V0.6 low sensitive demo seed', () => {
 
     expect(DEMO_SEED_KEY).toBe('v06_demo_low_sensitive_01');
     expect(records.customers.every((customer) => customer.tags.includes(`demoSeedKey:${DEMO_SEED_KEY}`))).toBe(true);
+    expect(records.customers.every((customer) => customer.institutionId === DEMO_INSTITUTION_ID)).toBe(true);
     expect(records.treatmentSummaries.every((summary) => summary.tags.includes(`demoSeedKey:${DEMO_SEED_KEY}`))).toBe(true);
     expect(records.followUpPathEnrollments.every((enrollment) => enrollment.metadataJson.demoSeedKey === DEMO_SEED_KEY)).toBe(true);
     expect(records.followUpMessageDrafts.every((draft) => draft.metadataJson.demoSeedKey === DEMO_SEED_KEY)).toBe(true);

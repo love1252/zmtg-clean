@@ -25,6 +25,7 @@ import {
   tenantMembers,
   tenants,
   treatmentSummaries,
+  weComCustomerMappingStates,
 } from '@/server/db/schema';
 
 type NamedColumn = { name: string };
@@ -723,6 +724,106 @@ describe('数据库结构', () => {
     );
   });
 
+  it('客户机构归属可空并提供机构范围复合唯一键', () => {
+    const config = getTableConfig(customers);
+    const institutionColumn = config.columns.find((column) => column.name === 'institution_id');
+    const tenantIdUnique = config.uniqueConstraints.find(
+      (constraint) => constraint.getName() === 'customers_tenant_id_id_unique',
+    );
+    const institutionUnique = config.uniqueConstraints.find(
+      (constraint) => constraint.getName() === 'customers_tenant_institution_id_id_unique',
+    );
+
+    expect(institutionColumn?.notNull).toBe(false);
+    expect(institutionColumn?.hasDefault).toBe(false);
+    expect(columnNames(tenantIdUnique?.columns ?? [])).toEqual(['tenant_id', 'id']);
+    expect(columnNames(institutionUnique?.columns ?? [])).toEqual([
+      'tenant_id',
+      'institution_id',
+      'id',
+    ]);
+  });
+
+  it('企业微信客户映射表使用严格机构范围复合外键、唯一约束和查询索引', () => {
+    const config = getTableConfig(weComCustomerMappingStates);
+    const columns = columnNames(config.columns);
+    const customerFk = config.foreignKeys.find(
+      (foreignKey) =>
+        foreignKey.getName() ===
+        'wecom_customer_mapping_states_tenant_institution_customer_fk',
+    );
+    const scopeUnique = config.uniqueConstraints.find(
+      (constraint) =>
+        constraint.getName() ===
+        'wecom_customer_mapping_states_tenant_institution_proof_contact_unique',
+    );
+    const indexes = config.indexes.map((index) => ({
+      name: index.config.name,
+      unique: index.config.unique,
+      columns: columnNames(index.config.columns as NamedColumn[]),
+    }));
+
+    expect(columns).toEqual([
+      'id',
+      'tenant_id',
+      'institution_id',
+      'proof_contact_id',
+      'proof_employee_id',
+      'source_mode',
+      'customer_id',
+      'status',
+      'decided_by',
+      'decided_at',
+      'created_at',
+      'updated_at',
+    ]);
+    expect(schema.weComCustomerMappingSourceModeEnum.enumValues).toEqual([
+      'real_readonly_proof',
+    ]);
+    expect(schema.weComCustomerMappingStatusEnum.enumValues).toEqual([
+      'confirmed',
+      'rejected',
+      'revoked',
+    ]);
+    for (const name of ['tenant_id', 'institution_id', 'customer_id']) {
+      expect(config.columns.find((column) => column.name === name)?.notNull).toBe(true);
+    }
+    expect(foreignKeyColumns(customerFk)).toEqual({
+      columns: ['tenant_id', 'institution_id', 'customer_id'],
+      foreignColumns: ['tenant_id', 'institution_id', 'id'],
+    });
+    expect(columnNames(scopeUnique?.columns ?? [])).toEqual([
+      'tenant_id',
+      'institution_id',
+      'proof_contact_id',
+    ]);
+    expect(indexes).toContainEqual({
+      name: 'wecom_customer_mapping_states_tenant_institution_customer_status_idx',
+      unique: false,
+      columns: ['tenant_id', 'institution_id', 'customer_id', 'status'],
+    });
+    expect(JSON.stringify({ columns, indexes })).not.toMatch(
+      /external_userid|userid|corp_id|phone|raw_payload|response_body|secret|token/i,
+    );
+  });
+
+  it('0034 migration 不回填历史客户并建立机构范围映射约束', () => {
+    const migrationSql = readMigrationSql('0034_v08_04f_ea_customer_mapping_data_foundation');
+
+    expect(migrationSql).toContain('alter table "customers" add column "institution_id" varchar(64)');
+    expect(migrationSql).not.toMatch(/add column "institution_id"[^;]*(not null|default)/i);
+    expect(migrationSql).toContain(
+      'foreign key ("tenant_id","institution_id","customer_id") references "public"."customers"("tenant_id","institution_id","id")',
+    );
+    expect(migrationSql).toContain(
+      'unique("tenant_id","institution_id","proof_contact_id")',
+    );
+    expect(migrationSql).not.toMatch(/\b(drop\s+(table|column)|truncate|delete\s+from)\b/i);
+    expect(migrationSql).not.toMatch(/\bupdate\s+"?customers"?\b/i);
+    expect(migrationSql).not.toMatch(/\bon\s+delete\s+cascade\b/i);
+    expect(migrationSql).not.toMatch(/external_userid|userid|corp_id|secret|token|raw_payload/i);
+  });
+
   it('定义正式租户账号、联系人表和账号状态枚举', () => {
     const schemaModule = schema as typeof schema & Record<string, unknown>;
     const authUsers = schemaModule.authUsers;
@@ -1316,6 +1417,39 @@ describe('数据库结构', () => {
     );
   });
 
+  it('正式 demo customer seed 使用明确且非空的机构归属', () => {
+    const customerRecords = getDemoCustomerSeedRecords();
+    const institutionByTenant = new Map([
+      ['growth-tenant-chengxing', 'growth-inst-chengxing'],
+      ['starter-tenant-xinghe', 'starter-inst-xinghe'],
+    ]);
+
+    expect(
+      customerRecords.every(
+        (record) =>
+          typeof record.institutionId === 'string' && record.institutionId.length > 0,
+      ),
+    ).toBe(true);
+    expect(
+      customerRecords.every(
+        (record) => institutionByTenant.get(record.tenantId) === record.institutionId,
+      ),
+    ).toBe(true);
+    expect(
+      customerRecords
+        .filter((record) => record.tenantId === 'growth-tenant-chengxing')
+        .every((record) => record.institutionId === 'growth-inst-chengxing'),
+    ).toBe(true);
+    expect(
+      customerRecords
+        .filter((record) => record.tenantId === 'starter-tenant-xinghe')
+        .every((record) => record.institutionId === 'starter-inst-xinghe'),
+    ).toBe(true);
+    expect(JSON.stringify(customerRecords)).not.toMatch(
+      /\b1[3-9]\d{9}\b|secret|access[_-]?token|api[_-]?key/i,
+    );
+  });
+
   it('演示种子数据覆盖 active、edited、voided 治疗摘要和来源随访任务', () => {
     const summaries = seedDemoData.getDemoTreatmentSummarySeedRecords();
     const followUpTasks = getSeedRecords<{
@@ -1418,6 +1552,7 @@ describe('数据库结构', () => {
     expect(seedSource).toContain('.insert(tenantPlanVersions)');
     expect(seedSource).toContain('.insert(tenantAuthorizationSnapshots)');
     expect(seedSource).toContain('.insert(tenantCommercialRecords)');
+    expect(seedSource).toContain('institutionId: sql`excluded.institution_id`');
     expect(seedSource).toContain('.update(tenantPlanVersions)');
     expect(seedSource).toContain('displayName: plan.name');
   });

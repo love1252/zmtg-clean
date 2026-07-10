@@ -37,7 +37,10 @@ import type {
   VoidTreatmentSummaryDraft,
 } from '@/modules/institution/domain/treatment-summaries';
 
-export type CreateCustomerClientPayload = Omit<CustomerRecordSummary, 'id' | 'tenantId'>;
+export type CreateCustomerClientPayload = Omit<
+  CustomerRecordSummary,
+  'id' | 'tenantId' | 'institutionId'
+>;
 
 export type UpdateCustomerClientPayload = Partial<CreateCustomerClientPayload> & {
   id: string;

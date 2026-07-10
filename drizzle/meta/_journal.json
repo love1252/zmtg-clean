@@ -239,6 +239,13 @@
       "when": 1783400400000,
       "tag": "0033_v06_followup_timeline_01c",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1783692000000,
+      "tag": "0034_v08_04f_ea_customer_mapping_data_foundation",
+      "breakpoints": true
     }
   ]
 }

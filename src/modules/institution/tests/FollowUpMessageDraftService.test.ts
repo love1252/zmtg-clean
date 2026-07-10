@@ -43,6 +43,7 @@ const task = {
 const customerSummary: CustomerRecordSummary = {
   id: 'customer-1',
   tenantId: 'tenant-a',
+  institutionId: 'inst-a',
   displayName: '陈女士',
   lifecycle: 'post_care',
   priority: 'medium',

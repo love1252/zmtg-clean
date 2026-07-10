@@ -19,6 +19,7 @@ export type CustomerPriority = 'high' | 'medium' | 'observe';
 export type TenantCustomerRecord = {
   id: string;
   tenantId: string;
+  institutionId: string | null;
   displayName: string;
   lifecycle: CustomerLifecycleStage;
   priority: CustomerPriority;
@@ -38,6 +39,7 @@ export type TenantCustomerRecord = {
 export type CustomerRecordSummary = {
   id: string;
   tenantId: string;
+  institutionId: string | null;
   displayName: string;
   lifecycle: CustomerLifecycleStage;
   priority: CustomerPriority;
@@ -58,6 +60,7 @@ function toCustomerSummary(record: TenantCustomerRecord): CustomerRecordSummary 
   return {
     id: record.id,
     tenantId: record.tenantId,
+    institutionId: record.institutionId,
     displayName: record.displayName,
     lifecycle: record.lifecycle,
     priority: record.priority,

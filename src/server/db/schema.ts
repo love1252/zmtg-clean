@@ -60,6 +60,14 @@ export const customerLifecycleEnum = pgEnum('customer_lifecycle', [
   'silent_reactivation',
 ]);
 export const customerPriorityEnum = pgEnum('customer_priority', ['high', 'medium', 'observe']);
+export const weComCustomerMappingSourceModeEnum = pgEnum('wecom_customer_mapping_source_mode', [
+  'real_readonly_proof',
+]);
+export const weComCustomerMappingStatusEnum = pgEnum('wecom_customer_mapping_status', [
+  'confirmed',
+  'rejected',
+  'revoked',
+]);
 export const appointmentStatusEnum = pgEnum('appointment_status', [
   'pending_confirmation',
   'confirmed',
@@ -1473,6 +1481,7 @@ export const customers = pgTable(
     tenantId: varchar('tenant_id', { length: 64 })
       .notNull()
       .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
     displayName: varchar('display_name', { length: 120 }).notNull(),
     lifecycle: customerLifecycleEnum('lifecycle').notNull(),
     priority: customerPriorityEnum('priority').notNull(),
@@ -1491,8 +1500,45 @@ export const customers = pgTable(
   },
   (table) => ({
     tenantIdIdUnique: unique('customers_tenant_id_id_unique').on(table.tenantId, table.id),
+    tenantInstitutionIdUnique: unique('customers_tenant_institution_id_id_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.id,
+    ),
     tenantIdx: index('customers_tenant_idx').on(table.tenantId),
     tenantPriorityIdx: index('customers_tenant_priority_idx').on(table.tenantId, table.priority),
+  }),
+);
+
+export const weComCustomerMappingStates = pgTable(
+  'wecom_customer_mapping_states',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    proofContactId: varchar('proof_contact_id', { length: 64 }).notNull(),
+    proofEmployeeId: varchar('proof_employee_id', { length: 64 }).notNull(),
+    sourceMode: weComCustomerMappingSourceModeEnum('source_mode').notNull(),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    status: weComCustomerMappingStatusEnum('status').notNull(),
+    decidedBy: varchar('decided_by', { length: 96 }).notNull(),
+    decidedAt: timestamp('decided_at', { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    customerFk: foreignKey({
+      name: 'wecom_customer_mapping_states_tenant_institution_customer_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.institutionId, customers.id],
+    }),
+    scopeProofContactUnique: unique(
+      'wecom_customer_mapping_states_tenant_institution_proof_contact_unique',
+    ).on(table.tenantId, table.institutionId, table.proofContactId),
+    scopeCustomerStatusIdx: index(
+      'wecom_customer_mapping_states_tenant_institution_customer_status_idx',
+    ).on(table.tenantId, table.institutionId, table.customerId, table.status),
   }),
 );
 

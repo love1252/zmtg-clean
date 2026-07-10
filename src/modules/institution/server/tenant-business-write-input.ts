@@ -53,6 +53,7 @@ export type FollowUpTransitionPayload = {
 
 const forbiddenKeys = new Set([
   'tenantId',
+  'institutionId',
   'phoneNumber',
   'idNumber',
   'medicalRecordNo',

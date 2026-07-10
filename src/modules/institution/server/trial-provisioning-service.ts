@@ -7,6 +7,7 @@ import type { FollowUpStatus, FollowUpRiskLevel } from '@/modules/institution/do
 type ProvisionDemoDataInput = {
   db: TenantDatabase;
   tenantId: string;
+  institutionId: string;
   userId: string;
 };
 
@@ -323,7 +324,7 @@ function buildAppointmentSeeds(tenantId: string, customerSeeds: CustomerSeed[]):
 export async function provisionDemoDataForTenant(
   input: ProvisionDemoDataInput,
 ): Promise<{ provisioned: boolean; customerCount: number; followUpCount: number }> {
-  const { db, tenantId, userId } = input;
+  const { db, tenantId, institutionId, userId } = input;
 
   const existingCustomers = await db
     .select({ id: customers.id })
@@ -347,6 +348,7 @@ export async function provisionDemoDataForTenant(
       await tx.insert(customers).values({
         id: seed.id,
         tenantId,
+        institutionId,
         displayName: seed.displayName,
         lifecycle: seed.lifecycle,
         priority: seed.priority,

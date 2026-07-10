@@ -21,6 +21,7 @@ const tenantContext: AccessContext = {
 const customerSummary: CustomerRecordSummary = {
   id: 'cust_001',
   tenantId: 'demo-tenant-001',
+  institutionId: 'demo-institution-001',
   displayName: '陈女士',
   lifecycle: 'post_care',
   priority: 'medium',
