@@ -154,7 +154,13 @@ export type AuditReason =
   | 'wecom_official_dry_run_blocked'
   | 'wecom_official_dry_run_sensitive_payload_blocked'
   | 'wecom_official_dry_run_real_network_blocked'
-  | 'wecom_official_dry_run_real_send_blocked';
+  | 'wecom_official_dry_run_real_send_blocked'
+  | 'wecom_customer_mapping_confirmed'
+  | 'wecom_customer_mapping_rejected'
+  | 'wecom_customer_mapping_revoked'
+  | 'wecom_customer_mapping_conflict_blocked'
+  | 'wecom_customer_mapping_invalid_transition'
+  | 'wecom_customer_mapping_customer_not_found';
 
 export type TenantAuditEvent = {
   eventId: string;

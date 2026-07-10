@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, within, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   aiAutoStrategyAuditReasons,
   aiAutoStrategyLevelDefinitions,
@@ -70,6 +70,36 @@ function expectNoUnsafeText(text: string) {
     expect(normalized).not.toContain(term);
   }
 }
+
+const mappingPanelResponse = {
+  mapping: {
+    proofContactId: 'live-contact-proof-01',
+    proofEmployeeId: 'live-employee-proof-01',
+    sourceMode: 'real_readonly_proof',
+    status: 'unreviewed',
+    customerId: null,
+  },
+  candidates: [],
+  currentCustomer: null,
+  canWrite: true,
+};
+
+beforeEach(() => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      new Response(JSON.stringify(mappingPanelResponse), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ),
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 const baseStrategyContext: AiAutoStrategyContext = {
   conversationId: 'ai-conv-test',
@@ -495,7 +525,7 @@ describe('AI 会话工作台模拟版 domain', () => {
 });
 
 describe('AI 会话工作台模拟版 UI', () => {
-  it('展示会话列表、聊天窗口、AI / 档案面板、风险预警、推荐项目和低敏用户画像', () => {
+  it('展示会话列表、聊天窗口、AI / 档案面板、风险预警、推荐项目和低敏用户画像', async () => {
     const { container } = render(<AiConversationWorkbenchShell />);
 
     expect(screen.getByRole('heading', { name: 'AI 会话工作台' })).toBeInTheDocument();
@@ -575,6 +605,13 @@ describe('AI 会话工作台模拟版 UI', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '档案 tab' }));
     expect(screen.getByText('用户画像')).toBeInTheDocument();
+    expect(screen.getByText('企业微信客户关联')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('当前状态：')).toBeInTheDocument());
+    expect(screen.getByText('仅人工关联')).toBeInTheDocument();
+    expect(screen.getByText('不自动匹配')).toBeInTheDocument();
+    expect(screen.getByText('不自动创建或合并客户')).toBeInTheDocument();
+    expect(screen.getByText('关联不代表允许触达')).toBeInTheDocument();
+    expect(screen.getByText('当前不调用真实企业微信')).toBeInTheDocument();
     expect(screen.getByText('消费能力')).toBeInTheDocument();
     expect(screen.getByText('项目偏好')).toBeInTheDocument();
     expect(screen.getByText('复购意向')).toBeInTheDocument();

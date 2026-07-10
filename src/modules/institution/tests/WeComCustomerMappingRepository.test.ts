@@ -64,13 +64,14 @@ describe('WeComCustomerMappingRepository', () => {
     );
   });
 
-  it('插入仅写显式低敏映射字段', async () => {
+  it('create-if-absent 使用 on-conflict-do-nothing，冲突时不覆盖已有状态', async () => {
     const returning = vi.fn(async () => [row]);
-    const values = vi.fn(() => ({ returning }));
+    const onConflictDoNothing = vi.fn(() => ({ returning }));
+    const values = vi.fn(() => ({ onConflictDoNothing }));
     const insert = vi.fn(() => ({ values }));
     const repository = createWeComCustomerMappingRepository({ insert } as unknown as TenantDatabase);
 
-    await repository.create({
+    const result = await repository.createIfAbsent({
       id: 'mapping-01',
       tenantId: 'tenant-a',
       institutionId: 'inst-a',
@@ -83,6 +84,8 @@ describe('WeComCustomerMappingRepository', () => {
       decidedAt: '2026-07-10T08:00:00.000Z',
     });
 
+    expect(onConflictDoNothing).toHaveBeenCalledOnce();
+    expect(result).toEqual(mapWeComCustomerMappingStateRow(row));
     expect(insert).toHaveBeenCalledWith(weComCustomerMappingStates);
     expect(values).toHaveBeenCalledWith({
       id: 'mapping-01',
@@ -98,6 +101,29 @@ describe('WeComCustomerMappingRepository', () => {
     });
   });
 
+  it('create-if-absent 冲突时返回 null', async () => {
+    const returning = vi.fn(async () => []);
+    const onConflictDoNothing = vi.fn(() => ({ returning }));
+    const values = vi.fn(() => ({ onConflictDoNothing }));
+    const insert = vi.fn(() => ({ values }));
+    const repository = createWeComCustomerMappingRepository({ insert } as unknown as TenantDatabase);
+
+    const result = await repository.createIfAbsent({
+      id: 'mapping-02',
+      tenantId: 'tenant-a',
+      institutionId: 'inst-a',
+      proofContactId: 'live-contact-proof-01',
+      proofEmployeeId: 'live-employee-proof-01',
+      sourceMode: 'real_readonly_proof',
+      customerId: 'customer-b',
+      status: 'rejected',
+      decidedBy: 'admin-a',
+      decidedAt: '2026-07-10T08:00:00.000Z',
+    });
+
+    expect(result).toBeNull();
+  });
+
   it('条件更新同时绑定 scope、customer 和当前状态，零返回行表示未更新', async () => {
     const returning = vi.fn(async () => []);
     const where = vi.fn(() => ({ returning }));
@@ -110,6 +136,7 @@ describe('WeComCustomerMappingRepository', () => {
       institutionId: 'inst-a',
       proofContactId: 'live-contact-proof-01',
       customerId: 'customer-a',
+      expectedCustomerId: 'customer-a',
       expectedStatus: 'confirmed',
       status: 'revoked',
       decidedBy: 'admin-a',
@@ -125,6 +152,7 @@ describe('WeComCustomerMappingRepository', () => {
           operator: 'eq',
           value: 'live-contact-proof-01',
         },
+        { column: weComCustomerMappingStates.customerId, operator: 'eq', value: 'customer-a' },
         { column: weComCustomerMappingStates.status, operator: 'eq', value: 'confirmed' },
       ],
       operator: 'and',
