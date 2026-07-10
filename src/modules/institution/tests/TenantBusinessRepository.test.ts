@@ -432,6 +432,37 @@ describe('租户业务仓储映射', () => {
     expect(orderBy).toHaveBeenCalledTimes(3);
   });
 
+  it('导入专用机构客户列表覆盖 20 条以后记录并保持稳定排序', async () => {
+    const rows = Array.from({ length: 25 }, (_, index) => ({
+      ...customerRow,
+      id: `cust_${String(index + 1).padStart(3, '0')}`,
+    }));
+    const orderBy = vi.fn(async () => rows);
+    const where = vi.fn(() => ({ orderBy }));
+    const from = vi.fn(() => ({ where }));
+    const select = vi.fn(() => ({ from }));
+    const database = { select } as unknown as TenantDatabase;
+
+    const records = await createTenantBusinessRepository(
+      database,
+    ).listCustomersByTenantAndInstitutionForImport({
+      tenantId: 'demo-tenant-001',
+      institutionId: 'inst-001',
+    });
+
+    expect(where).toHaveBeenCalledWith({
+      conditions: [
+        { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: customers.institutionId, operator: 'eq', value: 'inst-001' },
+      ],
+      operator: 'and',
+    });
+    expect(orderBy).toHaveBeenCalledWith({ column: customers.id, direction: 'asc' });
+    expect(records).toHaveLength(25);
+    expect(records[20]?.id).toBe('cust_021');
+    expect(records[24]?.id).toBe('cust_025');
+  });
+
   it('机构范围单客户查询拒绝同 tenant 下其他机构和 null 机构客户', async () => {
     const query = createSelectDatabase([]);
 

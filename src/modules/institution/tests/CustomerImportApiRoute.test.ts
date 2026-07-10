@@ -9,6 +9,7 @@ import type { AccessContext } from '@/modules/security/domain/access-control';
 const routeMocks = vi.hoisted(() => {
   const repository = {
     listCustomersByTenantAndInstitution: vi.fn(),
+    listCustomersByTenantAndInstitutionForImport: vi.fn(),
     createCustomer: vi.fn(),
   };
   const auditRecord = vi.fn();
@@ -142,6 +143,21 @@ function createExistingCustomer(overrides: Partial<CustomerRecordSummary> = {}):
   };
 }
 
+function createCustomersWithDuplicateAfterCandidateLimit() {
+  return Array.from({ length: 25 }, (_, index) => {
+    const position = index + 1;
+    if (position === 25) {
+      return createExistingCustomer({ id: 'cust_025' });
+    }
+
+    return createExistingCustomer({
+      id: `cust_${String(position).padStart(3, '0')}`,
+      displayName: `低敏客户${position}`,
+      tags: ['低敏导入', `imported_ref:other-ref-${position}`],
+    });
+  });
+}
+
 async function readJson(response: Response) {
   return (await response.json()) as Record<string, unknown>;
 }
@@ -168,6 +184,8 @@ beforeEach(() => {
   });
   routeMocks.repository.listCustomersByTenantAndInstitution.mockReset();
   routeMocks.repository.listCustomersByTenantAndInstitution.mockResolvedValue([]);
+  routeMocks.repository.listCustomersByTenantAndInstitutionForImport.mockReset();
+  routeMocks.repository.listCustomersByTenantAndInstitutionForImport.mockResolvedValue([]);
   routeMocks.repository.createCustomer.mockReset();
   routeMocks.repository.createCustomer.mockImplementation(async (draft: { id: string }) => ({
     ...draft,
@@ -198,11 +216,11 @@ describe('customer import API route', () => {
     expect(response.status).toBe(200);
     expect(payload.successCount).toBe(1);
     expect(payload.canExecute).toBe(true);
-    expect(routeMocks.repository.listCustomersByTenantAndInstitution).toHaveBeenCalledWith({
+    expect(routeMocks.repository.listCustomersByTenantAndInstitutionForImport).toHaveBeenCalledWith({
       tenantId: 'tenant-a',
       institutionId: 'inst-a',
-      limit: 20,
     });
+    expect(routeMocks.repository.listCustomersByTenantAndInstitution).not.toHaveBeenCalled();
     expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
     expect(routeMocks.auditRecord).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -326,10 +344,35 @@ describe('customer import API route', () => {
     );
   });
 
-  it('同机构重复客户候选执行返回受控错误且不写入客户', async () => {
-    routeMocks.repository.listCustomersByTenantAndInstitution.mockResolvedValue([
-      createExistingCustomer(),
-    ]);
+  it('POST 预览识别稳定排序后第 25 条重复客户', async () => {
+    routeMocks.repository.listCustomersByTenantAndInstitutionForImport.mockResolvedValue(
+      createCustomersWithDuplicateAfterCandidateLimit(),
+    );
+
+    const response = await customerImportPreviewPost(
+      createRequest({ rows: [validLowSensitiveRow] }),
+    );
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(payload.successCount).toBe(0);
+    expect(payload.importBatch).toMatchObject({
+      rows: [
+        {
+          status: 'skipped',
+          issues: expect.arrayContaining([
+            expect.objectContaining({ reason: 'duplicated_customer' }),
+          ]),
+        },
+      ],
+    });
+    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
+  });
+
+  it('PUT 执行识别稳定排序后第 25 条重复客户且不重复创建', async () => {
+    routeMocks.repository.listCustomersByTenantAndInstitutionForImport.mockResolvedValue(
+      createCustomersWithDuplicateAfterCandidateLimit(),
+    );
 
     const response = await customerImportExecutePut(createRequest({ rows: [validLowSensitiveRow] }));
     const payload = await readJson(response);

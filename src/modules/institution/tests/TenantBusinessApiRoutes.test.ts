@@ -1243,7 +1243,7 @@ describe('租户业务写入 API 路由', () => {
     }));
   });
 
-  it('平台上下文写入返回 403 且不调用客户写入方法', async () => {
+  it('缺少 institutionId 的平台上下文直接返回 403 且不调用客户写入方法', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
 
     const response = await customersPost(
@@ -1254,15 +1254,10 @@ describe('租户业务写入 API 路由', () => {
     );
 
     expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
-    expect(routeMocks.getDatabase).toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual({ error: '当前登录上下文缺少机构信息' });
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
     expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      resource: 'customer',
-      result: 'denied',
-      reason: 'role_denied',
-    }));
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
   });
 
   it('预约创建和更新绑定对应仓储方法并使用上下文 tenantId', async () => {

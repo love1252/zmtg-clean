@@ -146,6 +146,7 @@ type InstitutionCustomerListInput = {
   institutionId: string;
   limit: number;
 };
+type InstitutionCustomerImportListInput = Omit<InstitutionCustomerListInput, 'limit'>;
 type CustomerTimelineRelatedLookupInput = {
   tenantId: string;
   customerId: string;
@@ -1053,6 +1054,21 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         )
         .orderBy(asc(customers.id))
         .limit(limit);
+      return rows.map(mapCustomerRowToRecord);
+    },
+    async listCustomersByTenantAndInstitutionForImport(
+      input: InstitutionCustomerImportListInput,
+    ) {
+      const rows = await database
+        .select()
+        .from(customers)
+        .where(
+          and(
+            eq(customers.tenantId, input.tenantId),
+            eq(customers.institutionId, input.institutionId),
+          ),
+        )
+        .orderBy(asc(customers.id));
       return rows.map(mapCustomerRowToRecord);
     },
     async listAppointmentsByTenant(tenantId: string) {

@@ -128,10 +128,9 @@ export async function POST(request: Request) {
     const repository = createTenantBusinessRepository(db);
     const auditRepository = createAuditEventRepository(db);
     const occurredAt = new Date().toISOString();
-    const existingCustomers = await repository.listCustomersByTenantAndInstitution({
+    const existingCustomers = await repository.listCustomersByTenantAndInstitutionForImport({
       tenantId: authorized.tenantId,
       institutionId: authorized.institutionId,
-      limit: 20,
     });
     const preview = previewLowSensitiveCustomerImport({
       tenantId: authorized.tenantId,
@@ -182,10 +181,9 @@ export async function PUT(request: Request) {
     const db = getDatabase();
     const occurredAt = new Date().toISOString();
     const readRepository = createTenantBusinessRepository(db);
-    const existingCustomers = await readRepository.listCustomersByTenantAndInstitution({
+    const existingCustomers = await readRepository.listCustomersByTenantAndInstitutionForImport({
       tenantId: authorized.tenantId,
       institutionId: authorized.institutionId,
-      limit: 20,
     });
     const { preview, drafts } = getCustomerImportRowsForExecution({
       tenantId: authorized.tenantId,
