@@ -1,8 +1,11 @@
 import { and, eq } from 'drizzle-orm';
+import type {
+  PersistedWeComCustomerMappingStatus,
+} from '@/modules/institution/domain/wecom-customer-mapping';
 import type { TenantDatabase } from '@/server/db/client';
 import { weComCustomerMappingStates } from '@/server/db/schema';
 
-export type WeComCustomerMappingStatus = 'confirmed' | 'rejected' | 'revoked';
+export type WeComCustomerMappingStatus = PersistedWeComCustomerMappingStatus;
 export type WeComCustomerMappingSourceMode = 'real_readonly_proof';
 
 export type WeComCustomerMappingState = {
@@ -38,6 +41,7 @@ export type CreateWeComCustomerMappingStateInput = WeComCustomerMappingScope & {
 
 export type UpdateWeComCustomerMappingStateInput = WeComCustomerMappingScope & {
   customerId: string;
+  expectedCustomerId: string;
   expectedStatus: WeComCustomerMappingStatus;
   status: WeComCustomerMappingStatus;
   decidedBy: string;
@@ -84,9 +88,9 @@ export function createWeComCustomerMappingRepository(database: TenantDatabase) {
       return row ? mapWeComCustomerMappingStateRow(row) : null;
     },
 
-    async create(
+    async createIfAbsent(
       input: CreateWeComCustomerMappingStateInput,
-    ): Promise<WeComCustomerMappingState> {
+    ): Promise<WeComCustomerMappingState | null> {
       const [row] = await database
         .insert(weComCustomerMappingStates)
         .values({
@@ -101,9 +105,10 @@ export function createWeComCustomerMappingRepository(database: TenantDatabase) {
           decidedBy: input.decidedBy,
           decidedAt: new Date(input.decidedAt),
         })
+        .onConflictDoNothing()
         .returning();
 
-      return mapWeComCustomerMappingStateRow(row);
+      return row ? mapWeComCustomerMappingStateRow(row) : null;
     },
 
     async updateWhenCurrentStatus(
@@ -124,6 +129,7 @@ export function createWeComCustomerMappingRepository(database: TenantDatabase) {
             eq(weComCustomerMappingStates.tenantId, input.tenantId),
             eq(weComCustomerMappingStates.institutionId, input.institutionId),
             eq(weComCustomerMappingStates.proofContactId, input.proofContactId),
+            eq(weComCustomerMappingStates.customerId, input.expectedCustomerId),
             eq(weComCustomerMappingStates.status, input.expectedStatus),
           ),
         )

@@ -22,6 +22,10 @@ const customer = {
   lastTouchSummary: '术后第 28 天',
   nextAction: '人工回访',
   tags: ['高价值'],
+  gender: '',
+  birthDate: '',
+  referralSource: '',
+  notes: '',
   phoneNumber: '13800000000',
   idNumber: '110101199001010011',
   medicalRecordNo: 'MR-RAW-001',
@@ -69,6 +73,16 @@ const followups = [
 ];
 
 const auditEvents = [
+  {
+    id: 'audit_evt_mapping_confirmed',
+    action: 'update',
+    result: 'transitioned',
+    reason: 'wecom_customer_mapping_confirmed',
+    actor: { id: 'demo-user-admin', role: 'tenant_admin' },
+    occurredAt: '2026-06-03T10:00:00.000Z',
+    resource: 'customer',
+    resourceId: 'cust_001',
+  } satisfies CustomerTimelineAuditSummary,
   {
     id: 'audit_evt_001',
     action: 'update',
@@ -214,6 +228,16 @@ describe('客户详情时间线领域模型', () => {
     ]);
     expect(response.auditEvents).toEqual([
       {
+        id: 'audit_evt_mapping_confirmed',
+        action: 'update',
+        result: 'transitioned',
+        reason: 'wecom_customer_mapping_confirmed',
+        actor: { id: 'demo-user-admin', role: 'tenant_admin' },
+        occurredAt: '2026-06-03T10:00:00.000Z',
+        resource: 'customer',
+        resourceId: 'cust_001',
+      },
+      {
         id: 'audit_evt_001',
         action: 'update',
         result: 'allowed',
@@ -273,6 +297,7 @@ describe('客户详情时间线领域模型', () => {
     });
 
     expect(response.timeline.map((event) => event.id)).toEqual([
+      'audit:audit_evt_mapping_confirmed',
       'audit:audit_evt_001',
       'appointment:appt_001',
       'treatment_summary:trt_001',
@@ -280,6 +305,14 @@ describe('客户详情时间线领域模型', () => {
       'customer:cust_001',
     ]);
     expect(response.timeline).toEqual([
+      expect.objectContaining({
+        id: 'audit:audit_evt_mapping_confirmed',
+        type: 'audit',
+        occurredAt: '2026-06-03T10:00:00.000Z',
+        summary: 'transitioned / wecom_customer_mapping_confirmed',
+        source: 'customer',
+        relatedRecordId: 'cust_001',
+      }),
       expect.objectContaining({
         type: 'audit',
         occurredAt: '2026-06-03T09:00:00.000Z',

@@ -144,6 +144,12 @@ export const AUDIT_REASON_VALUES = [
   'customer_import_partially_completed',
   'customer_import_rejected',
   'customer_import_sensitive_field_blocked',
+  'wecom_customer_mapping_confirmed',
+  'wecom_customer_mapping_rejected',
+  'wecom_customer_mapping_revoked',
+  'wecom_customer_mapping_conflict_blocked',
+  'wecom_customer_mapping_invalid_transition',
+  'wecom_customer_mapping_customer_not_found',
 ] as const satisfies readonly AuditReason[];
 
 export type AuditEventQueryFilters = {

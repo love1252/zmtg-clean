@@ -39,6 +39,7 @@ import {
   aiAutoStrategyIntentLabels,
   aiAutoStrategyLevelDefinitions,
 } from '@/modules/institution/domain/ai-auto-strategy';
+import { WeComCustomerMappingPanel } from '@/modules/institution/components/WeComCustomerMappingPanel';
 import { cn } from '@/shared/utils/cn';
 
 const filterItems = [
@@ -955,6 +956,7 @@ function ProfilePanel({ conversation }: { conversation: AiConversationRecord }) 
 
   return (
     <div className="mt-4 space-y-4">
+      <WeComCustomerMappingPanel />
       <PanelBlock icon={Users} title="用户画像" tone="blue">
         <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
           <div className="text-base font-semibold text-blue-950">{conversation.profile.customerDisplayName}</div>
