@@ -9,6 +9,7 @@ import {
 } from '@/modules/institution/server/trusted-reachout-safety-repository';
 import {
   evaluateAndPersistWeComDryRunSnapshot,
+  trustedReadyWeComOfficialRoute,
   weComDryRunSnapshotConfirmation,
 } from '@/modules/institution/server/wecom-dry-run-snapshot-service';
 import { runTrustedReachOutSafetyTransaction } from '@/modules/institution/server/trusted-reachout-safety-transaction';
@@ -77,6 +78,7 @@ function parseRequest(value: unknown): SnapshotRequest | null {
   if (keys.length !== requestKeys.length || !requestKeys.every((key) => keys.includes(key))) return null;
   const body = value as Record<string, unknown>;
   if (!officialWeComDryRunRoutes.includes(body.officialRoute as OfficialWeComDryRunRoute)) return null;
+  if (body.officialRoute !== trustedReadyWeComOfficialRoute) return null;
   const proofInstitutionRef = lowSensitiveRef(body.proofInstitutionRef, 96);
   const callbackPlaceholderRef = lowSensitiveRef(body.callbackPlaceholderRef, 96);
   if (!proofInstitutionRef || !callbackPlaceholderRef || body.confirmation !== weComDryRunSnapshotConfirmation) return null;

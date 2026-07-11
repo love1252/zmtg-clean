@@ -103,6 +103,38 @@ describe('企业微信 dry-run 快照 API', () => {
     expect(input).not.toHaveProperty('dryRunReady');
   });
 
+  it('stale ready 请求的响应和 usable 基于数据库最终保留的 blocked 快照', async () => {
+    mocks.evaluateAndPersist.mockResolvedValue({
+      config: { configStatus: 'dry_run_ready' },
+      snapshot: {
+        ...snapshot,
+        configStatus: 'blocked_missing_callback_url',
+        preflightStatus: 'blocked_route_unverified',
+        proofEligibleMock: false,
+        evaluatedAt: '2026-07-11T02:00:00.000Z',
+        version: 2,
+      },
+    });
+    const response = await POST(request('POST'));
+    const payload = await response.json();
+    expect(payload.usable).toBe(false);
+    expect(payload.snapshot).toEqual(expect.objectContaining({
+      configStatus: 'blocked_missing_callback_url',
+      preflightStatus: 'blocked_route_unverified',
+      proofEligibleMock: false,
+    }));
+  });
+
+  it.each([
+    'official_wecom_third_party',
+    'official_wecom_service_provider',
+    'account_custody',
+  ])('V0.8 请求白名单拒绝非 self-built 路线：%s', async (officialRoute) => {
+    const response = await POST(request('POST', { ...body, officialRoute }));
+    expect(response.status).toBe(400);
+    expect(mocks.runTransaction).not.toHaveBeenCalled();
+  });
+
   it('audit/事务失败不返回成功', async () => {
     mocks.runTransaction.mockRejectedValue(new Error('audit unavailable'));
     expect((await POST(request('POST'))).status).toBe(503);

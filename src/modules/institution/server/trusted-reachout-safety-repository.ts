@@ -126,6 +126,15 @@ export function createTrustedReachOutSafetyRepository(database: TenantDatabase) 
       return row ? mapConsent(row) : null;
     },
 
+    async findConsentForUpdate(scope: WeComReachOutSafetyScope) {
+      const [row] = await database
+        .select()
+        .from(customerChannelContactConsents)
+        .where(customerScopeWhere(scope))
+        .for('update');
+      return row ? mapConsent(row) : null;
+    },
+
     async upsertConsent(input: WeComReachOutSafetyScope & {
       id: string;
       status: Exclude<WeComReachOutConsentStatus, 'unknown'>;
@@ -294,9 +303,10 @@ export function createTrustedReachOutSafetyRepository(database: TenantDatabase) 
             version: sql`${institutionChannelDryRunSnapshots.version} + 1`,
             updatedAt: input.evaluatedAt,
           },
+          setWhere: sql`${institutionChannelDryRunSnapshots.evaluatedAt} < ${input.evaluatedAt}`,
         })
         .returning();
-      return mapSnapshot(row);
+      return row ? mapSnapshot(row) : null;
     },
   };
 }

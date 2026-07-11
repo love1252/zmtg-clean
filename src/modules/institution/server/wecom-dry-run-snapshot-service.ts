@@ -10,6 +10,7 @@ import type { TrustedReachOutSafetyRepository } from '@/modules/institution/serv
 import type { AccessContext } from '@/modules/security/domain/access-control';
 
 export const weComDryRunSnapshotConfirmation = '我确认仅保存低敏 dry-run 评估快照且不启用真实发送';
+export const trustedReadyWeComOfficialRoute = 'official_wecom_self_built' as const;
 
 const placeholderRefPattern = /(?:placeholder|mock|dry[-_ ]?run|example|test|低敏|占位)/iu;
 const unsafeRefPattern = /secret|token|corp[_-]?id|userid|user_id|agent[_-]?id|encodingaeskey|qyapi|webhook|process\.env|\.env\.local/iu;
@@ -27,8 +28,9 @@ export function deriveWeComDryRunServerPreflight(input: {
   const hasCallbackDomainPlaceholder = placeholderRefPattern.test(input.callbackPlaceholderRef) &&
     !unsafeRefPattern.test(input.callbackPlaceholderRef);
   const hasOfficialRoute = officialWeComDryRunRoutes.includes(input.officialRoute);
+  const hasTrustedReadyRoute = input.officialRoute === trustedReadyWeComOfficialRoute;
   const proofEligibleMock = Boolean(
-    hasOfficialRoute &&
+    hasTrustedReadyRoute &&
     hasProofInstitutionRef &&
     hasCallbackDomainPlaceholder &&
     input.hasTestWeComEnvironment &&
@@ -39,7 +41,7 @@ export function deriveWeComDryRunServerPreflight(input: {
     ? 'mock_ready' as const
     : !hasManualConfirmation
       ? 'blocked_missing_manual_confirmation' as const
-      : !hasOfficialRoute || !hasProofInstitutionRef || !hasCallbackDomainPlaceholder
+      : !hasOfficialRoute || !hasTrustedReadyRoute || !hasProofInstitutionRef || !hasCallbackDomainPlaceholder
         ? 'blocked_route_unverified' as const
         : 'blocked_safety_switch' as const;
 
@@ -91,7 +93,7 @@ export async function evaluateAndPersistWeComDryRunSnapshot(input: {
     hasSensitiveValueInput: false,
     hasSecretReadAttempt: false,
   }));
-  const snapshot = await input.repositories.safetyRepository.upsertDryRunSnapshot({
+  const writtenSnapshot = await input.repositories.safetyRepository.upsertDryRunSnapshot({
     id: input.createId(),
     tenantId: input.tenantId,
     institutionId: input.institutionId,
@@ -109,13 +111,19 @@ export async function evaluateAndPersistWeComDryRunSnapshot(input: {
     realSendAllowed: false,
     dryRunOnly: true,
   });
+  const snapshot = writtenSnapshot ?? await input.repositories.safetyRepository.findDryRunSnapshot({
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+  });
+  if (!snapshot) throw new Error('dry_run_snapshot_stale_without_current');
+  const finalReady = snapshot.configStatus === 'dry_run_ready';
   await input.repositories.auditRepository.record(createAuditEvent({
     eventId: input.createId(),
     context: input.context,
     resource: 'real_channel',
     action: 'review',
-    result: config.configStatus === 'dry_run_ready' ? 'transitioned' : 'denied',
-    reason: config.configStatus === 'dry_run_ready'
+    result: finalReady ? 'transitioned' : 'denied',
+    reason: finalReady
       ? 'wecom_reachout_dry_run_snapshot_ready'
       : 'wecom_reachout_dry_run_snapshot_blocked',
     occurredAt: input.occurredAt,

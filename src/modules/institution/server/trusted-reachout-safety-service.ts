@@ -117,7 +117,7 @@ export async function recordWeComReachOutConsent(input: {
   const decision = decideWeComReachOutConsentTransition(input);
   if (decision.kind === 'invalid') return { kind: 'invalid_action' as const };
 
-  const current = await input.repositories.safetyRepository.findConsent(input.scope);
+  const current = await input.repositories.safetyRepository.findConsentForUpdate(input.scope);
   if (current?.status === decision.transition.status && current.sourceType === input.sourceType) {
     return { kind: 'idempotent' as const, consent: current };
   }
@@ -161,7 +161,7 @@ export async function reservePreparedAttempt(input: {
 }) {
   const operationRef = createWeComReachOutOperationRef(input.systemOperationId);
   if (!operationRef) return { kind: 'invalid_operation' as const };
-  const consent = await input.repositories.safetyRepository.findConsent(input.scope);
+  const consent = await input.repositories.safetyRepository.findConsentForUpdate(input.scope);
   const blockReason = consentBlocksPreparedAttempt(consent?.status ?? 'unknown');
   if (blockReason) return { kind: blockReason } as const;
 
