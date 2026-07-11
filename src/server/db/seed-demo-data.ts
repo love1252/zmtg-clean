@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import { eq, inArray, sql } from 'drizzle-orm';
 import { createDatabase, createPostgresClient, type TenantDatabase } from '@/server/db/client';
+import { assertDemoSeedAllowed } from '@/server/db/seed-guard';
 import {
   appointments,
   auditEvents,
@@ -48,7 +49,7 @@ const legacyDemoPlanVersionIds = [
 ];
 
 export const demoSeedProductionGuardMessage =
-  'demo seed 仅用于 local/demo 环境；生产环境如需运行必须显式设置 ZMTG_ENABLE_DEMO_SEED=true';
+  'demo seed 仅允许明确确认的 local/demo loopback 数据库；production/staging 环境始终拒绝';
 
 type DemoCustomerReference = {
   source: 'appointment' | 'follow_up_task' | 'treatment_summary';
@@ -1392,7 +1393,9 @@ export function assertDemoFollowUpSourceReferenceCoverage() {
 }
 
 export function assertDemoSeedExecutionAllowed(env: NodeJS.ProcessEnv = process.env) {
-  if (env.NODE_ENV === 'production' && env.ZMTG_ENABLE_DEMO_SEED !== 'true') {
+  try {
+    return assertDemoSeedAllowed(env);
+  } catch {
     throw new Error(demoSeedProductionGuardMessage);
   }
 }
@@ -1700,14 +1703,29 @@ export async function seedDemoData(db: TenantDatabase) {
     });
 }
 
-async function runSeed() {
-  assertDemoSeedExecutionAllowed();
+type SeedRuntimeDependencies = {
+  createPostgresClient: typeof createPostgresClient;
+  createDatabase: typeof createDatabase;
+  seedDemoData: typeof seedDemoData;
+};
 
-  const queryClient = createPostgresClient();
-  const db = createDatabase(queryClient);
+const defaultSeedRuntimeDependencies: SeedRuntimeDependencies = {
+  createPostgresClient,
+  createDatabase,
+  seedDemoData,
+};
+
+export async function runSeed(
+  env: NodeJS.ProcessEnv = process.env,
+  dependencies: SeedRuntimeDependencies = defaultSeedRuntimeDependencies,
+) {
+  const { databaseUrl } = assertDemoSeedExecutionAllowed(env);
+
+  const queryClient = dependencies.createPostgresClient(databaseUrl);
+  const db = dependencies.createDatabase(queryClient);
 
   try {
-    await seedDemoData(db);
+    await dependencies.seedDemoData(db);
   } finally {
     await queryClient.end();
   }
@@ -1718,8 +1736,8 @@ function isDirectRun() {
 }
 
 if (isDirectRun()) {
-  runSeed().catch((error) => {
-    console.error(error instanceof Error ? error.message : error);
+  runSeed().catch(() => {
+    console.error('demo seed 执行失败');
     process.exit(1);
   });
 }

@@ -18,7 +18,7 @@
     "test:watch": "node scripts/run-vitest.mjs",
     "preflight": "pnpm typecheck && pnpm test && pnpm build",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "node scripts/db/guarded-migrate.mjs",
     "db:seed": "tsx src/server/db/seed-demo-data.ts"
   },
   "dependencies": {
