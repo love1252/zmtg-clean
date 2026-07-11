@@ -9,7 +9,7 @@ import {
 } from '@/modules/audit/domain/audit-event-query';
 import { mapAuditEventRowToListItem } from '@/modules/audit/server/audit-event-dto';
 import type { TenantDatabase } from '@/server/db/client';
-import { auditEvents } from '@/server/db/schema';
+import { auditEvents, customers, followUpMessageDrafts } from '@/server/db/schema';
 
 type AuditEventRow = typeof auditEvents.$inferSelect;
 
@@ -166,20 +166,71 @@ export function createAuditEventRepository(database: TenantDatabase) {
     },
     async listCustomerAuditEventsByResourceId(input: {
       tenantId: string;
+      institutionId: string;
       customerId: string;
     }): Promise<CustomerAuditEventSummary[]> {
-      const rows = await database
-        .select()
-        .from(auditEvents)
-        .where(
-          and(
-            eq(auditEvents.tenantId, input.tenantId),
-            eq(auditEvents.resource, 'customer'),
-            eq(auditEvents.resourceId, input.customerId),
+      const [customerRows, followUpRows] = await Promise.all([
+        database
+          .select({ audit: auditEvents })
+          .from(auditEvents)
+          .innerJoin(
+            customers,
+            and(
+              eq(auditEvents.resourceId, customers.id),
+              eq(auditEvents.tenantId, customers.tenantId),
+            ),
+          )
+          .where(
+            and(
+              eq(auditEvents.tenantId, input.tenantId),
+              eq(auditEvents.resource, 'customer'),
+              eq(auditEvents.resourceId, input.customerId),
+              eq(customers.tenantId, input.tenantId),
+              eq(customers.institutionId, input.institutionId),
+              eq(customers.id, input.customerId),
+            ),
           ),
-        );
+        database
+          .select({ audit: auditEvents })
+          .from(auditEvents)
+          .innerJoin(
+            followUpMessageDrafts,
+            and(
+              eq(auditEvents.resourceId, followUpMessageDrafts.id),
+              eq(auditEvents.tenantId, followUpMessageDrafts.tenantId),
+            ),
+          )
+          .where(
+            and(
+              eq(auditEvents.tenantId, input.tenantId),
+              eq(auditEvents.resource, 'follow_up'),
+              eq(followUpMessageDrafts.institutionId, input.institutionId),
+              eq(followUpMessageDrafts.customerId, input.customerId),
+              inArray(auditEvents.reason, [
+                'wecom_controlled_reachout_ready_no_send',
+                'wecom_controlled_reachout_draft_not_approved',
+                'wecom_controlled_reachout_delivery_missing',
+                'wecom_controlled_reachout_delivery_not_unique',
+                'wecom_controlled_reachout_delivery_customer_mismatch',
+                'wecom_controlled_reachout_delivery_not_internal_mock',
+                'wecom_controlled_reachout_mapping_not_confirmed',
+                'wecom_controlled_reachout_mapping_customer_mismatch',
+                'wecom_controlled_reachout_customer_not_found',
+                'wecom_controlled_reachout_consent_missing',
+                'wecom_controlled_reachout_consent_revoked',
+                'wecom_controlled_reachout_opt_out',
+                'wecom_controlled_reachout_frequency_cap_reached',
+                'wecom_controlled_reachout_dry_run_not_ready',
+                'wecom_controlled_reachout_conflict',
+              ]),
+            ),
+          ),
+      ]);
 
-      return sortAuditEventSummaries(rows.map(mapAuditEventRowToSummary));
+      return sortAuditEventSummaries([
+        ...customerRows.map((row) => mapAuditEventRowToSummary(row.audit)),
+        ...followUpRows.map((row) => mapAuditEventRowToSummary(row.audit)),
+      ]);
     },
     async listAuditEvents(input: {
       scope: AuditEventQueryScope;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TenantDatabase } from '@/server/db/client';
-import { appointments, treatmentSummaries } from '@/server/db/schema';
+import { appointments, customers, treatmentSummaries } from '@/server/db/schema';
 import { mapTreatmentSummaryRecordToListItem } from '@/modules/institution/domain/treatment-summaries';
 import {
   decodeTreatmentSummaryCursor,
@@ -376,6 +376,37 @@ describe('治疗结构化摘要仓储', () => {
       { column: treatmentSummaries.id, direction: 'asc' },
     );
     expect(records).toEqual([mapTreatmentSummaryRowToRecord(treatmentSummaryRow)]);
+  });
+
+  it('客户 timeline 的治疗摘要查询通过 customers join 绑定 tenant + institution + customer', async () => {
+    const orderBy = vi.fn(async () => []);
+    const where = vi.fn(() => ({ orderBy }));
+    const innerJoin = vi.fn(() => ({ where }));
+    const from = vi.fn(() => ({ innerJoin }));
+    const select = vi.fn(() => ({ from }));
+    const repository = createTreatmentSummaryRepository({ select } as unknown as TenantDatabase);
+
+    await repository.listTreatmentSummariesByTenantInstitutionAndCustomer({
+      tenantId: 'demo-tenant-001',
+      institutionId: 'inst-001',
+      customerId: 'cust_qin_review',
+    });
+
+    expect(innerJoin).toHaveBeenCalledWith(customers, expect.any(Object));
+    expect(where).toHaveBeenCalledWith({
+      conditions: [
+        { column: treatmentSummaries.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: treatmentSummaries.customerId, operator: 'eq', value: 'cust_qin_review' },
+        { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: customers.institutionId, operator: 'eq', value: 'inst-001' },
+        { column: customers.id, operator: 'eq', value: 'cust_qin_review' },
+      ],
+      operator: 'and',
+    });
+    expect(orderBy).toHaveBeenCalledWith(
+      { column: treatmentSummaries.treatmentDate, direction: 'desc' },
+      { column: treatmentSummaries.id, direction: 'asc' },
+    );
   });
 
   it('即使数据库 mock 返回混合数据也不会跨租户或跨客户返回', async () => {

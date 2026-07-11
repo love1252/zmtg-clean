@@ -2,7 +2,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
-import { appointments, customers, followUpTasks, treatmentSummaries } from '@/server/db/schema';
+import {
+  appointments,
+  customers,
+  followUpCustomerTimelineEvents,
+  followUpMessageDrafts,
+  followUpPathEnrollments,
+  followUpTasks,
+  treatmentSummaries,
+} from '@/server/db/schema';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   createTenantBusinessRepository,
@@ -325,6 +333,126 @@ describe('租户业务仓储映射', () => {
       sourceSuggestionKey: null,
     });
     expect(followUpTask).not.toHaveProperty('createdAt');
+  });
+
+  it('客户 timeline 的预约查询通过 customers join 绑定 tenant + institution + customer', async () => {
+    const where = vi.fn(async () => []);
+    const innerJoin = vi.fn(() => ({ where }));
+    const from = vi.fn(() => ({ innerJoin }));
+    const select = vi.fn(() => ({ from }));
+    const repository = createTenantBusinessRepository({ select } as unknown as TenantDatabase);
+
+    await repository.listAppointmentsByTenantInstitutionAndCustomer({
+      tenantId: 'demo-tenant-001', institutionId: 'inst-001', customerId: 'cust_001',
+    });
+
+    expect(innerJoin).toHaveBeenCalledWith(customers, expect.any(Object));
+    expect(where).toHaveBeenCalledWith({
+      conditions: [
+        { column: appointments.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: appointments.customerId, operator: 'eq', value: 'cust_001' },
+        { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: customers.institutionId, operator: 'eq', value: 'inst-001' },
+        { column: customers.id, operator: 'eq', value: 'cust_001' },
+      ],
+      operator: 'and',
+    });
+  });
+
+  it('客户 timeline 的随访查询通过 customers join 绑定 tenant + institution + customer', async () => {
+    const where = vi.fn(async () => []);
+    const innerJoin = vi.fn(() => ({ where }));
+    const from = vi.fn(() => ({ innerJoin }));
+    const select = vi.fn(() => ({ from }));
+    const repository = createTenantBusinessRepository({ select } as unknown as TenantDatabase);
+
+    await repository.listFollowUpTasksByTenantInstitutionAndCustomer({
+      tenantId: 'demo-tenant-001', institutionId: 'inst-001', customerId: 'cust_001',
+    });
+
+    expect(innerJoin).toHaveBeenCalledWith(customers, expect.any(Object));
+    expect(where).toHaveBeenCalledWith({
+      conditions: [
+        { column: followUpTasks.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: followUpTasks.customerId, operator: 'eq', value: 'cust_001' },
+        { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: customers.institutionId, operator: 'eq', value: 'inst-001' },
+        { column: customers.id, operator: 'eq', value: 'cust_001' },
+      ],
+      operator: 'and',
+    });
+  });
+
+  it('客户 timeline 事件查询在 SQL 绑定 tenant + institution + customer', async () => {
+    const orderBy = vi.fn(async () => []);
+    const where = vi.fn(() => ({ orderBy }));
+    const from = vi.fn(() => ({ where }));
+    const select = vi.fn(() => ({ from }));
+    const repository = createTenantBusinessRepository({ select } as unknown as TenantDatabase);
+
+    await repository.listCustomerFollowUpTimelineEventsByTenantInstitutionAndCustomer({
+      tenantId: 'demo-tenant-001', institutionId: 'inst-001', customerId: 'cust_001',
+    });
+
+    expect(where).toHaveBeenCalledWith({
+      conditions: [
+        { column: followUpCustomerTimelineEvents.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: followUpCustomerTimelineEvents.institutionId, operator: 'eq', value: 'inst-001' },
+        { column: followUpCustomerTimelineEvents.customerId, operator: 'eq', value: 'cust_001' },
+      ],
+      operator: 'and',
+    });
+  });
+
+  it('客户 timeline overview 的 enrollment/task/draft 查询均绑定 tenant + institution + customer', async () => {
+    const enrollmentWhere = vi.fn(async () => []);
+    const taskWhere = vi.fn(async () => []);
+    const draftWhere = vi.fn(async () => []);
+    const taskInnerJoin = vi.fn(() => ({ where: taskWhere }));
+    let selectCount = 0;
+    const select = vi.fn(() => {
+      selectCount += 1;
+      if (selectCount === 1) {
+        return { from: vi.fn(() => ({ where: enrollmentWhere })) };
+      }
+      if (selectCount === 2) {
+        return { from: vi.fn(() => ({ innerJoin: taskInnerJoin })) };
+      }
+      return { from: vi.fn(() => ({ where: draftWhere })) };
+    });
+    const repository = createTenantBusinessRepository({ select } as unknown as TenantDatabase);
+
+    await repository.getCustomerFollowUpOverviewByTenantInstitutionAndCustomer({
+      tenantId: 'demo-tenant-001', institutionId: 'inst-001', customerId: 'cust_001',
+    });
+
+    expect(enrollmentWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: followUpPathEnrollments.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: followUpPathEnrollments.institutionId, operator: 'eq', value: 'inst-001' },
+        { column: followUpPathEnrollments.customerId, operator: 'eq', value: 'cust_001' },
+      ],
+      operator: 'and',
+    });
+    expect(taskInnerJoin).toHaveBeenCalledWith(customers, expect.any(Object));
+    expect(taskWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: followUpTasks.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: followUpTasks.customerId, operator: 'eq', value: 'cust_001' },
+        { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: customers.institutionId, operator: 'eq', value: 'inst-001' },
+        { column: customers.id, operator: 'eq', value: 'cust_001' },
+      ],
+      operator: 'and',
+    });
+    expect(draftWhere).toHaveBeenCalledWith({
+      conditions: [
+        { column: followUpMessageDrafts.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: followUpMessageDrafts.institutionId, operator: 'eq', value: 'inst-001' },
+        { column: followUpMessageDrafts.customerId, operator: 'eq', value: 'cust_001' },
+      ],
+      operator: 'and',
+    });
   });
 
   it('列表查询按 tenantId 过滤客户、预约和随访任务', async () => {

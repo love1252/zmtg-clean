@@ -44,6 +44,12 @@ const snapshotInput: Omit<InstitutionChannelDryRunSnapshot, 'version' | 'evaluat
   realSendAllowed: false,
   dryRunOnly: true,
 };
+const snapshotRow = {
+  ...snapshotInput,
+  version: 1,
+  createdAt: new Date('2026-07-11T02:00:00.000Z'),
+  updatedAt: new Date('2026-07-11T02:00:00.000Z'),
+} satisfies typeof institutionChannelDryRunSnapshots.$inferSelect;
 
 describe('TrustedReachOutSafetyRepository', () => {
   it('事务写链路通过 SELECT FOR UPDATE 锁定 consent row', async () => {
@@ -57,6 +63,23 @@ describe('TrustedReachOutSafetyRepository', () => {
 
     expect(forLock).toHaveBeenCalledWith('update');
     expect(result).toEqual(expect.objectContaining({ status: 'consented', version: 1 }));
+  });
+
+  it('受控触达事务通过 SELECT FOR UPDATE 锁定 dry-run snapshot', async () => {
+    const forLock = vi.fn(async () => [snapshotRow]);
+    const where = vi.fn(() => ({ for: forLock }));
+    const from = vi.fn(() => ({ where }));
+    const select = vi.fn(() => ({ from }));
+    const repository = createTrustedReachOutSafetyRepository({ select } as unknown as TenantDatabase);
+
+    const result = await repository.findDryRunSnapshotForUpdate({
+      tenantId: 'tenant-1', institutionId: 'institution-1',
+    });
+
+    expect(forLock).toHaveBeenCalledWith('update');
+    expect(result).toEqual(expect.objectContaining({
+      configStatus: 'dry_run_ready', officialRoute: 'official_wecom_self_built', version: 1,
+    }));
   });
 
   it('incoming ready 的冲突条件只编码较新 evaluatedAt', async () => {

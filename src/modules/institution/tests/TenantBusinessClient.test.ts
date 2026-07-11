@@ -5,11 +5,13 @@ import {
   createFollowUpTaskFromTreatmentSummary,
   createTreatmentSummary,
   getCustomerTimeline,
+  getWeComControlledReachOut,
   listAppointments,
   listCustomers,
   listFollowUpTasks,
   listTreatmentFollowUpSuggestions,
   listTreatmentSummaries,
+  prepareWeComControlledReachOut,
   transitionFollowUpTask,
   updateAppointment,
   updateCustomer,
@@ -39,6 +41,33 @@ function requestPath(fetcher: typeof fetch) {
 }
 
 describe('机构业务页面 client helper', () => {
+  it('企业微信受控触达 GET/POST 只使用 draftId 路径和固定 no-send payload', async () => {
+    const preflight = {
+      draft: { draftId: 'draft-a', status: 'approved', customerId: 'customer-a', updatedAt: '2026-07-11T08:00:00.000Z' },
+      delivery: null,
+      mapping: { proofContactId: 'live-contact-proof-01', status: 'missing', customerMatchesDraft: false },
+      consent: { status: 'unknown' },
+      frequency: { status: 'available', preparedCount: 0, maxPreparedCount: 1, nextAllowedAt: null },
+      dryRun: { status: 'not_ready', configStatus: 'missing', officialRoute: null, preflightStatus: 'missing', proofEligibleMock: false, allowRealSend: false, externalChannelEnabled: false, realSendAllowed: false, dryRunOnly: true },
+      controlledReachOut: null,
+      canPrepare: false,
+      blockReason: 'delivery_missing',
+      readOnly: false,
+      boundary: { singleCustomerOnly: true, manualConfirmationRequired: true, preparationOnly: true, noRealWeComCall: true, noCustomerVisibleMessage: true, notSent: true, allowRealSend: false, externalChannelEnabled: false, realSendAllowed: false },
+    };
+    const getFetcher = createFetchMock(jsonResponse({ preflight }));
+    const postFetcher = createFetchMock(jsonResponse({ preflight, idempotent: false }));
+
+    await expect(getWeComControlledReachOut('draft-a', { fetcher: getFetcher })).resolves.toMatchObject({ ok: true, preflight });
+    await expect(prepareWeComControlledReachOut('draft-a', { fetcher: postFetcher })).resolves.toMatchObject({ ok: true, preflight, idempotent: false });
+    expect(getFetcher).toHaveBeenCalledWith('/api/institution/followup-message-drafts/draft-a/wecom-controlled-reachout', { cache: 'no-store' });
+    expect(requestBody(postFetcher)).toEqual({
+      action: 'prepare_no_send',
+      confirmation: 'CONFIRM_SINGLE_CUSTOMER_WECOM_NO_SEND',
+    });
+    expect(JSON.stringify(requestBody(postFetcher))).not.toMatch(/tenantId|institutionId|customerId|proofContactId|external_userid|token|secret/i);
+  });
+
   it('解析客户、预约和随访列表 records 响应', async () => {
     const customerFetcher = createFetchMock(
       jsonResponse({ records: [{ id: 'cust_001', tenantId: 'demo-tenant-001', displayName: '王女士' }] }),

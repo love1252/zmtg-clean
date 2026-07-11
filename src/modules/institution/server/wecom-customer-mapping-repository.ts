@@ -88,6 +88,24 @@ export function createWeComCustomerMappingRepository(database: TenantDatabase) {
       return row ? mapWeComCustomerMappingStateRow(row) : null;
     },
 
+    async findByScopeForUpdate(
+      input: WeComCustomerMappingScope,
+    ): Promise<WeComCustomerMappingState | null> {
+      const [row] = await database
+        .select()
+        .from(weComCustomerMappingStates)
+        .where(
+          and(
+            eq(weComCustomerMappingStates.tenantId, input.tenantId),
+            eq(weComCustomerMappingStates.institutionId, input.institutionId),
+            eq(weComCustomerMappingStates.proofContactId, input.proofContactId),
+          ),
+        )
+        .for('update');
+
+      return row ? mapWeComCustomerMappingStateRow(row) : null;
+    },
+
     async createIfAbsent(
       input: CreateWeComCustomerMappingStateInput,
     ): Promise<WeComCustomerMappingState | null> {

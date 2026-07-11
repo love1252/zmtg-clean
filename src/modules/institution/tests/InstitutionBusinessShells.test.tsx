@@ -2226,6 +2226,7 @@ describe('机构业务页面壳', () => {
     fireEvent.click(screen.getByRole('button', { name: '生成草稿' }));
 
     expect(await screen.findByText('草稿待确认')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '企业微信受控触达' })).not.toBeInTheDocument();
     expect(screen.getAllByText('陈女士，治疗摘要 D3 护理随访，请人工确认恢复情况。').length).toBeGreaterThan(0);
     const createBody = mutationBody(fetchMock, '/api/institution/followup-message-drafts', 'POST');
     expect(createBody).toEqual({ followUpTaskId: 'fu_treatment_summary_source' });
@@ -2254,6 +2255,230 @@ describe('机构业务页面壳', () => {
     expect(text).not.toContain('sk_test_should_not_render');
     expect(text).not.toContain('自动发送微信');
     expect(text).not.toContain('自动短信');
+  });
+
+  it('智能随访 approved 草稿展示企业微信受控触达并只提交固定 no-send payload', async () => {
+    const draft = {
+      draftId: 'draft_controlled_001',
+      followUpTaskId: 'fu_treatment_summary_source',
+      customerId: 'cust_wang_repurchase',
+      customerDisplayName: '陈女士',
+      channelType: 'manual',
+      status: 'approved',
+      safePreview: '陈女士，低敏随访草稿。',
+      draftContent: '陈女士，低敏随访草稿。',
+      editedContent: null,
+      approvedAt: '2026-07-11T08:00:00.000Z',
+      markedSentAt: null,
+      safeReasonCode: 'draft_approved',
+      createdAt: '2026-07-11T07:00:00.000Z',
+      updatedAt: '2026-07-11T08:00:00.000Z',
+    };
+    const preflight = {
+      draft: { draftId: draft.draftId, status: 'approved', customerId: draft.customerId, updatedAt: draft.updatedAt },
+      delivery: {
+        messageDeliveryId: `msg-delivery:${draft.draftId}`,
+        customerId: draft.customerId,
+        channelType: 'mock',
+        deliveryMode: 'mock',
+        status: 'mock_sent',
+      },
+      mapping: { proofContactId: 'live-contact-proof-01', status: 'confirmed', customerMatchesDraft: true },
+      consent: { status: 'consented' },
+      frequency: { status: 'available', preparedCount: 0, maxPreparedCount: 1, nextAllowedAt: null },
+      dryRun: {
+        status: 'dry_run_ready', configStatus: 'dry_run_ready', officialRoute: 'official_wecom_self_built',
+        preflightStatus: 'mock_ready', proofEligibleMock: true, allowRealSend: false,
+        externalChannelEnabled: false, realSendAllowed: false, dryRunOnly: true,
+      },
+      controlledReachOut: null,
+      canPrepare: true,
+      blockReason: null,
+      readOnly: false,
+      boundary: {
+        singleCustomerOnly: true, manualConfirmationRequired: true, preparationOnly: true,
+        noRealWeComCall: true, noCustomerVisibleMessage: true, notSent: true,
+        allowRealSend: false, externalChannelEnabled: false, realSendAllowed: false,
+      },
+    };
+    const path = `/api/institution/followup-message-drafts/${draft.draftId}/wecom-controlled-reachout`;
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/followups': [jsonResponse({ records: [treatmentSummaryFollowUpRecord] })],
+      '/api/institution/followup-message-drafts?taskId=fu_treatment_summary_source': [
+        jsonResponse({ records: [draft] }),
+      ],
+      [path]: [
+        jsonResponse({ preflight }),
+        jsonResponse({
+          preflight: {
+            ...preflight,
+            controlledReachOut: {
+              controlledReachOutId: `wecom-controlled-reachout-${draft.draftId}`,
+              messageDeliveryId: `msg-delivery:${draft.draftId}`,
+              messageDraftId: draft.draftId,
+              customerId: draft.customerId,
+              proofContactId: 'live-contact-proof-01',
+              status: 'ready_no_send',
+              consentStatus: 'consented',
+              frequencyDecision: 'reserved',
+              dryRunStatus: 'dry_run_ready',
+              preparedBy: 'admin-a',
+              preparedAt: '2026-07-11T09:00:00.000Z',
+              realSendEnabled: false,
+              noRealSend: true,
+              noRealNetwork: true,
+            },
+            canPrepare: false,
+          },
+          idempotent: false,
+        }),
+      ],
+    });
+
+    const { container } = render(<SmartFollowUpShell />);
+    expect(await screen.findByRole('heading', { name: '企业微信受控触达' })).toBeInTheDocument();
+    expect(screen.getByText('仅单客户 · 必须人工确认 · 当前只完成发送前准备')).toBeInTheDocument();
+    expect(screen.getByText('不调用真实企业微信 · 不产生客户可见消息 · 不代表已经发送')).toBeInTheDocument();
+    expect(await screen.findByText('dry-run snapshot：dry_run_ready')).toBeInTheDocument();
+    expect(screen.getByText('内部模拟投递：已生成（仅内部 mock）')).toBeInTheDocument();
+    expect(screen.getByText('企业微信受控触达：尚未准备，未真实发送')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '准备受控触达（不发送）' }));
+    expect(await screen.findByText('ready_no_send')).toBeInTheDocument();
+    expect(screen.getByText('企业微信受控触达：仅准备，未真实发送')).toBeInTheDocument();
+    expect(mutationBody(fetchMock, path, 'POST')).toEqual({
+      action: 'prepare_no_send',
+      confirmation: 'CONFIRM_SINGLE_CUSTOMER_WECOM_NO_SEND',
+    });
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/external_userid|UserID|corpId|agentId|Secret|token|rawResponse/i);
+    expect(text).not.toMatch(/已发送成功|发送成功/u);
+  });
+
+  it('智能随访 operator 仅可只读查看企业微信受控触达', async () => {
+    const draft = {
+      draftId: 'draft_controlled_readonly', followUpTaskId: 'fu_treatment_summary_source',
+      customerId: 'cust_wang_repurchase', customerDisplayName: '陈女士', channelType: 'manual',
+      status: 'approved', safePreview: '低敏随访草稿。', draftContent: '低敏随访草稿。',
+      editedContent: null, approvedAt: '2026-07-11T08:00:00.000Z', markedSentAt: null,
+      safeReasonCode: 'draft_approved', createdAt: '2026-07-11T07:00:00.000Z',
+      updatedAt: '2026-07-11T08:00:00.000Z',
+    };
+    const path = `/api/institution/followup-message-drafts/${draft.draftId}/wecom-controlled-reachout`;
+    const fetchMock = mockInstitutionFetch({
+      '/api/institution/followups': [jsonResponse({ records: [treatmentSummaryFollowUpRecord] })],
+      '/api/institution/followup-message-drafts?taskId=fu_treatment_summary_source': [jsonResponse({ records: [draft] })],
+      [path]: [jsonResponse({
+        preflight: {
+          draft: { draftId: draft.draftId, status: 'approved', customerId: draft.customerId, updatedAt: draft.updatedAt },
+          delivery: {
+            messageDeliveryId: `msg-delivery:${draft.draftId}`, customerId: draft.customerId,
+            channelType: 'mock', deliveryMode: 'mock', status: 'pending',
+          },
+          mapping: { proofContactId: 'live-contact-proof-01', status: 'confirmed', customerMatchesDraft: true },
+          consent: { status: 'consented' },
+          frequency: { status: 'available', preparedCount: 0, maxPreparedCount: 1, nextAllowedAt: null },
+          dryRun: {
+            status: 'dry_run_ready', configStatus: 'dry_run_ready', officialRoute: 'official_wecom_self_built',
+            preflightStatus: 'mock_ready', proofEligibleMock: true, allowRealSend: false,
+            externalChannelEnabled: false, realSendAllowed: false, dryRunOnly: true,
+          },
+          controlledReachOut: null, canPrepare: false, blockReason: 'delivery_not_internal_mock', readOnly: true,
+          boundary: {
+            singleCustomerOnly: true, manualConfirmationRequired: true, preparationOnly: true,
+            noRealWeComCall: true, noCustomerVisibleMessage: true, notSent: true,
+            allowRealSend: false, externalChannelEnabled: false, realSendAllowed: false,
+          },
+        },
+      })],
+    });
+
+    render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('阻断：内部模拟投递不符合正式审批记录')).toBeInTheDocument();
+    expect(screen.getByText('只读权限')).toBeInTheDocument();
+    expect(screen.getByText('内部模拟投递：兼容只读，不能用于受控准备')).toBeInTheDocument();
+    const prepareButton = screen.getByRole('button', { name: '准备受控触达（不发送）' });
+    expect(prepareButton).toBeDisabled();
+    fireEvent.click(prepareButton);
+    expect(fetchMock.mock.calls.some(([request, init]) => String(request) === path && init?.method === 'POST')).toBe(false);
+  });
+
+  it('历史 ready_no_send 遇到当前 opt-out 时优先显示阻断并保留只读提示', async () => {
+    const draft = {
+      draftId: 'draft_controlled_blocked', followUpTaskId: 'fu_treatment_summary_source',
+      customerId: 'cust_wang_repurchase', customerDisplayName: '陈女士', channelType: 'manual',
+      status: 'approved', safePreview: '低敏随访草稿。', draftContent: '低敏随访草稿。',
+      editedContent: null, approvedAt: '2026-07-11T08:00:00.000Z', markedSentAt: null,
+      safeReasonCode: 'draft_approved', createdAt: '2026-07-11T07:00:00.000Z',
+      updatedAt: '2026-07-11T08:00:00.000Z',
+    };
+    const path = `/api/institution/followup-message-drafts/${draft.draftId}/wecom-controlled-reachout`;
+    mockInstitutionFetch({
+      '/api/institution/followups': [jsonResponse({ records: [treatmentSummaryFollowUpRecord] })],
+      '/api/institution/followup-message-drafts?taskId=fu_treatment_summary_source': [jsonResponse({ records: [draft] })],
+      [path]: [jsonResponse({
+        preflight: {
+          draft: { draftId: draft.draftId, status: 'approved', customerId: draft.customerId, updatedAt: draft.updatedAt },
+          delivery: {
+            messageDeliveryId: `msg-delivery:${draft.draftId}`, customerId: draft.customerId,
+            channelType: 'mock', deliveryMode: 'mock', status: 'mock_sent',
+          },
+          mapping: { proofContactId: 'live-contact-proof-01', status: 'confirmed', customerMatchesDraft: true },
+          consent: { status: 'opted_out' },
+          frequency: { status: 'reserved', preparedCount: 1, maxPreparedCount: 1, nextAllowedAt: '2026-07-12T08:00:00.000Z' },
+          dryRun: {
+            status: 'dry_run_ready', configStatus: 'dry_run_ready', officialRoute: 'official_wecom_self_built',
+            preflightStatus: 'mock_ready', proofEligibleMock: true, allowRealSend: false,
+            externalChannelEnabled: false, realSendAllowed: false, dryRunOnly: true,
+          },
+          controlledReachOut: {
+            controlledReachOutId: `wecom-controlled-reachout-${draft.draftId}`,
+            messageDraftId: draft.draftId, messageDeliveryId: `msg-delivery:${draft.draftId}`,
+            customerId: draft.customerId, proofContactId: 'live-contact-proof-01', status: 'ready_no_send',
+            consentStatus: 'consented', frequencyDecision: 'reserved', dryRunStatus: 'dry_run_ready',
+            preparedBy: 'admin-a', preparedAt: '2026-07-11T09:00:00.000Z', realSendEnabled: false,
+            noRealSend: true, noRealNetwork: true,
+          },
+          canPrepare: false, blockReason: 'opt_out', readOnly: true,
+          boundary: {
+            singleCustomerOnly: true, manualConfirmationRequired: true, preparationOnly: true,
+            noRealWeComCall: true, noCustomerVisibleMessage: true, notSent: true,
+            allowRealSend: false, externalChannelEnabled: false, realSendAllowed: false,
+          },
+        },
+      })],
+    });
+
+    render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('阻断：客户已拒绝触达')).toBeInTheDocument();
+    expect(screen.getByText('只读权限')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '准备受控触达（不发送）' })).toBeDisabled();
+  });
+
+  it('受控触达 GET 失败时明确保持阻断', async () => {
+    const draft = {
+      draftId: 'draft_controlled_unavailable', followUpTaskId: 'fu_treatment_summary_source',
+      customerId: 'cust_wang_repurchase', customerDisplayName: '陈女士', channelType: 'manual',
+      status: 'approved', safePreview: '低敏随访草稿。', draftContent: '低敏随访草稿。',
+      editedContent: null, approvedAt: '2026-07-11T08:00:00.000Z', markedSentAt: null,
+      safeReasonCode: 'draft_approved', createdAt: '2026-07-11T07:00:00.000Z',
+      updatedAt: '2026-07-11T08:00:00.000Z',
+    };
+    const path = `/api/institution/followup-message-drafts/${draft.draftId}/wecom-controlled-reachout`;
+    mockInstitutionFetch({
+      '/api/institution/followups': [jsonResponse({ records: [treatmentSummaryFollowUpRecord] })],
+      '/api/institution/followup-message-drafts?taskId=fu_treatment_summary_source': [jsonResponse({ records: [draft] })],
+      [path]: [jsonResponse({ error: '数据服务暂时不可用' }, { status: 503 })],
+    });
+
+    render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('阻断：门禁检查失败')).toBeInTheDocument();
+    expect(screen.getByText('受控触达门禁检查失败，当前保持阻断。')).toBeInTheDocument();
+    expect(screen.getByText('数据服务暂时不可用')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '准备受控触达（不发送）' })).toBeDisabled();
   });
 
   it('智能随访 409 冲突时提示刷新', async () => {

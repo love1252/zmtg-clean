@@ -23,6 +23,9 @@ import type {
   FollowUpMessageTemplateDto,
 } from '@/modules/institution/domain/followup-message-drafts';
 import type {
+  WeComControlledReachOutPreflight,
+} from '@/modules/institution/domain/wecom-controlled-reachout';
+import type {
   FollowUpStatus,
   TenantFollowUpTaskSource,
   TenantFollowUpTask,
@@ -193,6 +196,10 @@ export type FollowUpMessageDraftListClientResult = TenantBusinessListResult<Foll
 
 export type FollowUpMessageDraftMutationClientResult = TenantBusinessMutationResult<FollowUpMessageDraftDto>;
 
+export type WeComControlledReachOutClientResult =
+  | { ok: true; preflight: WeComControlledReachOutPreflight; idempotent?: boolean }
+  | { ok: false; error: TenantBusinessClientError };
+
 export type FollowUpCustomerTimelineListClientResult = TenantBusinessListResult<FollowUpCustomerTimelineEventDto>;
 
 export type FollowUpCustomerOverviewClientResult =
@@ -286,7 +293,7 @@ function getFetcher(options?: TenantBusinessClientOptions) {
 }
 
 function errorKindFromStatus(status: number): TenantBusinessClientErrorKind {
-  if (status === 400) return 'validation_error';
+  if (status === 400 || status === 413 || status === 422) return 'validation_error';
   if (status === 401) return 'unauthorized';
   if (status === 403) return 'forbidden';
   if (status === 404) return 'not_found';
@@ -1129,6 +1136,62 @@ export function markFollowUpMessageDraftAsSent(
     {},
     options,
   );
+}
+
+async function requestWeComControlledReachOut(
+  draftId: string,
+  method: 'GET' | 'POST',
+  options?: TenantBusinessClientOptions,
+): Promise<WeComControlledReachOutClientResult> {
+  const fetcher = getFetcher(options);
+  if (!fetcher) {
+    return { ok: false, error: { kind: 'unknown', message: '请求失败', status: 0 } };
+  }
+
+  try {
+    const response = await fetcher(
+      `/api/institution/followup-message-drafts/${encodeURIComponent(draftId)}/wecom-controlled-reachout`,
+      method === 'GET'
+        ? { cache: 'no-store' }
+        : {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              action: 'prepare_no_send',
+              confirmation: 'CONFIRM_SINGLE_CUSTOMER_WECOM_NO_SEND',
+            }),
+          },
+    );
+    const payload = await readJson(response);
+    if (!response.ok) {
+      return { ok: false, error: createClientError({ status: response.status, payload }) };
+    }
+    if (!isJsonObject(payload) || !isJsonObject(payload.preflight)) {
+      return { ok: false, error: { kind: 'unknown', message: '请求失败', status: response.status } };
+    }
+
+    return {
+      ok: true,
+      preflight: payload.preflight as WeComControlledReachOutPreflight,
+      ...(typeof payload.idempotent === 'boolean' ? { idempotent: payload.idempotent } : {}),
+    };
+  } catch {
+    return { ok: false, error: { kind: 'unknown', message: '请求失败', status: 0 } };
+  }
+}
+
+export function getWeComControlledReachOut(
+  draftId: string,
+  options?: TenantBusinessClientOptions,
+) {
+  return requestWeComControlledReachOut(draftId, 'GET', options);
+}
+
+export function prepareWeComControlledReachOut(
+  draftId: string,
+  options?: TenantBusinessClientOptions,
+) {
+  return requestWeComControlledReachOut(draftId, 'POST', options);
 }
 
 export function listCustomerFollowUpTimelineEvents(
