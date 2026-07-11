@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { getTableConfig } from 'drizzle-orm/pg-core';
+import { getTableConfig, PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
 import { createDatabaseUrlErrorMessage } from '@/server/db/client';
 import {
@@ -899,6 +899,54 @@ describe('数据库结构', () => {
     expect(migrationSql).not.toMatch(/\b(drop|truncate|delete\s+from|insert\s+into)\b|(^|;)\s*update\s+/i);
     expect(migrationSql).not.toMatch(/\bon\s+delete\s+cascade\b/i);
     expect(migrationSql).not.toMatch(/secret|token|corp_id|userid|agent_id|raw_payload|callback_url/i);
+  });
+
+  it('dry-run ready check 仅允许 self-built mock-ready eligible，blocked 保留三类规划路线', () => {
+    const snapshotConfig = getTableConfig(institutionChannelDryRunSnapshots);
+    const readyCheck = snapshotConfig.checks.find((constraint) =>
+      constraint.name === 'institution_channel_dry_run_snapshots_ready_check');
+    const migrationSql = readMigrationSql('0035_v08_04f_fa_trusted_reachout_safety_foundation');
+
+    expect(readyCheck).toBeDefined();
+    const schemaReadyCheckSql = new PgDialect().sqlToQuery(readyCheck!.value).sql
+      .replaceAll('"institution_channel_dry_run_snapshots".', '');
+    const expectedReadyRule = '"config_status" <> \'dry_run_ready\' or ("official_route" = \'official_wecom_self_built\' and "preflight_status" = \'mock_ready\' and "proof_eligible_mock" = true)';
+    expect(schemaReadyCheckSql.toLowerCase()).toContain(expectedReadyRule);
+    expect(migrationSql).toContain(`check (${expectedReadyRule})`);
+
+    const satisfiesReadyCheck = (input: {
+      officialRoute: 'official_wecom_self_built' | 'official_wecom_third_party' | 'official_wecom_service_provider';
+      configStatus: 'dry_run_ready' | 'blocked_route_unverified';
+      preflightStatus: 'mock_ready' | 'blocked_route_unverified';
+      proofEligibleMock: boolean;
+    }) => input.configStatus !== 'dry_run_ready' || (
+      input.officialRoute === 'official_wecom_self_built'
+      && input.preflightStatus === 'mock_ready'
+      && input.proofEligibleMock
+    );
+
+    expect(satisfiesReadyCheck({
+      officialRoute: 'official_wecom_self_built', configStatus: 'dry_run_ready',
+      preflightStatus: 'mock_ready', proofEligibleMock: true,
+    })).toBe(true);
+    expect(satisfiesReadyCheck({
+      officialRoute: 'official_wecom_third_party', configStatus: 'dry_run_ready',
+      preflightStatus: 'mock_ready', proofEligibleMock: true,
+    })).toBe(false);
+    expect(satisfiesReadyCheck({
+      officialRoute: 'official_wecom_service_provider', configStatus: 'dry_run_ready',
+      preflightStatus: 'mock_ready', proofEligibleMock: true,
+    })).toBe(false);
+    for (const officialRoute of [
+      'official_wecom_self_built',
+      'official_wecom_third_party',
+      'official_wecom_service_provider',
+    ] as const) {
+      expect(satisfiesReadyCheck({
+        officialRoute, configStatus: 'blocked_route_unverified',
+        preflightStatus: 'blocked_route_unverified', proofEligibleMock: false,
+      })).toBe(true);
+    }
   });
 
   it('定义正式租户账号、联系人表和账号状态枚举', () => {

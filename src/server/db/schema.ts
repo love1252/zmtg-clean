@@ -1691,7 +1691,7 @@ export const institutionChannelDryRunSnapshots = pgTable(
     ),
     readyCheck: check(
       'institution_channel_dry_run_snapshots_ready_check',
-      sql`${table.configStatus} <> 'dry_run_ready' OR (${table.preflightStatus} = 'mock_ready' AND ${table.proofEligibleMock} = true)`,
+      sql`${table.configStatus} <> 'dry_run_ready' OR (${table.officialRoute} = 'official_wecom_self_built' AND ${table.preflightStatus} = 'mock_ready' AND ${table.proofEligibleMock} = true)`,
     ),
     versionPositiveCheck: check(
       'institution_channel_dry_run_snapshots_version_positive_check',

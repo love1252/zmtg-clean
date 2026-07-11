@@ -303,7 +303,11 @@ export function createTrustedReachOutSafetyRepository(database: TenantDatabase) 
             version: sql`${institutionChannelDryRunSnapshots.version} + 1`,
             updatedAt: input.evaluatedAt,
           },
-          setWhere: sql`${institutionChannelDryRunSnapshots.evaluatedAt} < ${input.evaluatedAt}`,
+          setWhere: sql`${institutionChannelDryRunSnapshots.evaluatedAt} < ${input.evaluatedAt} OR (
+            ${institutionChannelDryRunSnapshots.evaluatedAt} = ${input.evaluatedAt}
+            AND ${institutionChannelDryRunSnapshots.configStatus} = 'dry_run_ready'
+            AND ${input.configStatus} <> 'dry_run_ready'
+          )`,
         })
         .returning();
       return row ? mapSnapshot(row) : null;

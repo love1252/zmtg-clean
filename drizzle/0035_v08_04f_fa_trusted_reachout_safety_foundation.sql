@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS "institution_channel_dry_run_snapshots" (
   CONSTRAINT "institution_channel_dry_run_snapshots_scope_unique" UNIQUE("tenant_id", "institution_id", "channel_type"),
   CONSTRAINT "institution_channel_dry_run_snapshots_safety_check" CHECK ("allow_real_send" = false AND "external_channel_enabled" = false AND "real_send_allowed" = false AND "dry_run_only" = true),
   CONSTRAINT "institution_channel_dry_run_snapshots_route_check" CHECK ("official_route" IN ('official_wecom_self_built', 'official_wecom_third_party', 'official_wecom_service_provider')),
-  CONSTRAINT "institution_channel_dry_run_snapshots_ready_check" CHECK ("config_status" <> 'dry_run_ready' OR ("preflight_status" = 'mock_ready' AND "proof_eligible_mock" = true)),
+  CONSTRAINT "institution_channel_dry_run_snapshots_ready_check" CHECK ("config_status" <> 'dry_run_ready' OR ("official_route" = 'official_wecom_self_built' AND "preflight_status" = 'mock_ready' AND "proof_eligible_mock" = true)),
   CONSTRAINT "institution_channel_dry_run_snapshots_version_positive_check" CHECK ("version" > 0)
 );
 

@@ -34,8 +34,15 @@ describe('企业微信 dry-run 最新评估快照服务', () => {
     sequence = 0;
     currentSnapshot = null;
     safetyRepository.upsertDryRunSnapshot.mockImplementation(async (input: SnapshotWrite) => {
-      if (currentSnapshot && new Date(currentSnapshot.evaluatedAt).getTime() >= input.evaluatedAt.getTime()) {
-        return null;
+      if (currentSnapshot) {
+        const currentTime = new Date(currentSnapshot.evaluatedAt).getTime();
+        const incomingTime = input.evaluatedAt.getTime();
+        const isSameTimeSafetyTightening = currentTime === incomingTime
+          && currentSnapshot.configStatus === 'dry_run_ready'
+          && input.configStatus !== 'dry_run_ready';
+        if (currentTime > incomingTime || (currentTime === incomingTime && !isSameTimeSafetyTightening)) {
+          return null;
+        }
       }
       const next: InstitutionChannelDryRunSnapshot = {
         ...input,
@@ -130,6 +137,62 @@ describe('企业微信 dry-run 最新评估快照服务', () => {
     expect(result.snapshot.version).toBe(1);
   });
 
+  it('相同 evaluatedAt 允许 ready → blocked 安全收紧并增加 version', async () => {
+    await evaluateAndPersistWeComDryRunSnapshot({
+      ...base, occurredAt: '2026-07-11T02:00:00.000Z', createId: () => `generated-${++sequence}`,
+      repositories: { safetyRepository, auditRepository } as never,
+    });
+    const result = await evaluateAndPersistWeComDryRunSnapshot({
+      ...base, callbackPlaceholderRef: 'callback-reference', occurredAt: '2026-07-11T02:00:00.000Z',
+      createId: () => `generated-${++sequence}`, repositories: { safetyRepository, auditRepository } as never,
+    });
+    expect(result.snapshot.configStatus).toBe('blocked_missing_callback_url');
+    expect(result.snapshot.version).toBe(2);
+    expect(auditRepository.record).toHaveBeenLastCalledWith(expect.objectContaining({
+      reason: 'wecom_reachout_dry_run_snapshot_blocked', result: 'denied',
+    }));
+  });
+
+  it('相同 evaluatedAt 的 ready → ready 不更新 version', async () => {
+    await evaluateAndPersistWeComDryRunSnapshot({
+      ...base, occurredAt: '2026-07-11T02:00:00.000Z', createId: () => `generated-${++sequence}`,
+      repositories: { safetyRepository, auditRepository } as never,
+    });
+    const result = await evaluateAndPersistWeComDryRunSnapshot({
+      ...base, occurredAt: '2026-07-11T02:00:00.000Z', createId: () => `generated-${++sequence}`,
+      repositories: { safetyRepository, auditRepository } as never,
+    });
+    expect(result.snapshot.configStatus).toBe('dry_run_ready');
+    expect(result.snapshot.version).toBe(1);
+  });
+
+  it('相同 evaluatedAt 的 blocked → blocked 不更新 version', async () => {
+    await evaluateAndPersistWeComDryRunSnapshot({
+      ...base, callbackPlaceholderRef: 'callback-reference', occurredAt: '2026-07-11T02:00:00.000Z',
+      createId: () => `generated-${++sequence}`, repositories: { safetyRepository, auditRepository } as never,
+    });
+    const result = await evaluateAndPersistWeComDryRunSnapshot({
+      ...base, callbackPlaceholderRef: 'callback-reference', occurredAt: '2026-07-11T02:00:00.000Z',
+      createId: () => `generated-${++sequence}`, repositories: { safetyRepository, auditRepository } as never,
+    });
+    expect(result.snapshot.configStatus).toBe('blocked_missing_callback_url');
+    expect(result.snapshot.version).toBe(1);
+  });
+
+  it('较旧 blocked 后到时不能覆盖较新的 ready', async () => {
+    await evaluateAndPersistWeComDryRunSnapshot({
+      ...base, occurredAt: '2026-07-11T02:00:00.000Z', createId: () => `generated-${++sequence}`,
+      repositories: { safetyRepository, auditRepository } as never,
+    });
+    const result = await evaluateAndPersistWeComDryRunSnapshot({
+      ...base, callbackPlaceholderRef: 'callback-reference', occurredAt: '2026-07-11T01:00:00.000Z',
+      createId: () => `generated-${++sequence}`, repositories: { safetyRepository, auditRepository } as never,
+    });
+    expect(result.config.configStatus).toBe('blocked_missing_callback_url');
+    expect(result.snapshot.configStatus).toBe('dry_run_ready');
+    expect(result.snapshot.version).toBe(1);
+  });
+
   it('近似确认不能伪造 ready 状态', async () => {
     const result = await evaluateAndPersistWeComDryRunSnapshot({
       ...base, confirmation: '确认保存', createId: () => `generated-${++sequence}`,
@@ -167,7 +230,11 @@ describe('企业微信 dry-run 最新评估快照服务', () => {
     expect(result.snapshot.proofEligibleMock).toBe(false);
   });
 
-  it('audit 失败使事务回滚已写入的最新快照', async () => {
+  it('同时间 ready → blocked 更新在 audit 失败时回滚', async () => {
+    await evaluateAndPersistWeComDryRunSnapshot({
+      ...base, occurredAt: '2026-07-11T02:00:00.000Z', createId: () => `generated-${++sequence}`,
+      repositories: { safetyRepository, auditRepository } as never,
+    });
     const before = currentSnapshot;
     auditRepository.record.mockRejectedValue(new Error('audit unavailable'));
     async function transaction<T>(operation: () => Promise<T>) {
@@ -180,9 +247,13 @@ describe('企业微信 dry-run 最新评估快照服务', () => {
       }
     }
     await expect(transaction(() => evaluateAndPersistWeComDryRunSnapshot({
-      ...base, createId: () => `generated-${++sequence}`,
+      ...base, callbackPlaceholderRef: 'callback-reference', occurredAt: '2026-07-11T02:00:00.000Z',
+      createId: () => `generated-${++sequence}`,
       repositories: { safetyRepository, auditRepository } as never,
     }))).rejects.toThrow('audit unavailable');
-    expect(currentSnapshot).toBe(before);
+    expect(currentSnapshot).toEqual(before);
+    expect(currentSnapshot).toEqual(expect.objectContaining({
+      configStatus: 'dry_run_ready', version: 1,
+    }));
   });
 });

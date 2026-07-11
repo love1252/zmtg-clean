@@ -59,9 +59,9 @@ describe('TrustedReachOutSafetyRepository', () => {
     expect(result).toEqual(expect.objectContaining({ status: 'consented', version: 1 }));
   });
 
-  it('快照 ON CONFLICT 仅在现有 evaluatedAt 更早时更新，stale 返回 null', async () => {
+  it('快照 ON CONFLICT 仅允许较新评估或同时间 ready → blocked 更新', async () => {
     const returning = vi.fn(async () => []);
-    const onConflictDoUpdate = vi.fn(() => ({ returning }));
+    const onConflictDoUpdate = vi.fn((_config: unknown) => ({ returning }));
     const values = vi.fn(() => ({ onConflictDoUpdate }));
     const insert = vi.fn(() => ({ values }));
     const repository = createTrustedReachOutSafetyRepository({ insert } as unknown as TenantDatabase);
@@ -75,7 +75,14 @@ describe('TrustedReachOutSafetyRepository', () => {
 
     expect(insert).toHaveBeenCalledWith(institutionChannelDryRunSnapshots);
     expect(query.sql).toContain('"evaluated_at" < $1');
-    expect(query.params).toEqual([snapshotInput.evaluatedAt]);
+    expect(query.sql).toContain('"evaluated_at" = $2');
+    expect(query.sql).toContain('"config_status" = \'dry_run_ready\'');
+    expect(query.sql).toContain('$3 <> \'dry_run_ready\'');
+    expect(query.params).toEqual([
+      snapshotInput.evaluatedAt,
+      snapshotInput.evaluatedAt,
+      snapshotInput.configStatus,
+    ]);
     expect(conflict.set.version).toBeDefined();
     expect(result).toBeNull();
   });
