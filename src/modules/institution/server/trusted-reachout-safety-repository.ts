@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, lt, or, sql } from 'drizzle-orm';
 import type {
   WeComReachOutConsentSourceType,
   WeComReachOutConsentStatus,
@@ -261,6 +261,20 @@ export function createTrustedReachOutSafetyRepository(database: TenantDatabase) 
     },
 
     async upsertDryRunSnapshot(input: Omit<InstitutionChannelDryRunSnapshot, 'version' | 'evaluatedAt'> & { evaluatedAt: Date }) {
+      const newerEvaluation = lt(
+        institutionChannelDryRunSnapshots.evaluatedAt,
+        input.evaluatedAt,
+      );
+      const updateCondition = input.configStatus === 'dry_run_ready'
+        ? newerEvaluation
+        : or(
+            newerEvaluation,
+            and(
+              eq(institutionChannelDryRunSnapshots.evaluatedAt, input.evaluatedAt),
+              eq(institutionChannelDryRunSnapshots.configStatus, 'dry_run_ready'),
+            ),
+          );
+
       const [row] = await database
         .insert(institutionChannelDryRunSnapshots)
         .values({
@@ -303,11 +317,7 @@ export function createTrustedReachOutSafetyRepository(database: TenantDatabase) 
             version: sql`${institutionChannelDryRunSnapshots.version} + 1`,
             updatedAt: input.evaluatedAt,
           },
-          setWhere: sql`${institutionChannelDryRunSnapshots.evaluatedAt} < ${input.evaluatedAt} OR (
-            ${institutionChannelDryRunSnapshots.evaluatedAt} = ${input.evaluatedAt}
-            AND ${institutionChannelDryRunSnapshots.configStatus} = 'dry_run_ready'
-            AND ${input.configStatus} <> 'dry_run_ready'
-          )`,
+          setWhere: updateCondition,
         })
         .returning();
       return row ? mapSnapshot(row) : null;
