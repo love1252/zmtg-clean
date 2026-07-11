@@ -59,7 +59,7 @@ describe('TrustedReachOutSafetyRepository', () => {
     expect(result).toEqual(expect.objectContaining({ status: 'consented', version: 1 }));
   });
 
-  it('快照 ON CONFLICT 仅允许较新评估或同时间 ready → blocked 更新', async () => {
+  it('incoming ready 的冲突条件只编码较新 evaluatedAt', async () => {
     const returning = vi.fn(async () => []);
     const onConflictDoUpdate = vi.fn((_config: unknown) => ({ returning }));
     const values = vi.fn(() => ({ onConflictDoUpdate }));
@@ -75,14 +75,41 @@ describe('TrustedReachOutSafetyRepository', () => {
 
     expect(insert).toHaveBeenCalledWith(institutionChannelDryRunSnapshots);
     expect(query.sql).toContain('"evaluated_at" < $1');
+    expect(query.sql).not.toContain('"evaluated_at" =');
+    expect(query.sql).not.toContain('"config_status"');
+    expect(query.params).toEqual(['2026-07-11T02:00:00.000Z']);
+    expect(query.params.every(parameter => !(parameter instanceof Date))).toBe(true);
+    expect(conflict.set.version).toBeDefined();
+    expect(result).toBeNull();
+  });
+
+  it('incoming blocked 的冲突条件编码较新评估与同时间 ready → blocked', async () => {
+    const returning = vi.fn(async () => []);
+    const onConflictDoUpdate = vi.fn((_config: unknown) => ({ returning }));
+    const values = vi.fn(() => ({ onConflictDoUpdate }));
+    const insert = vi.fn(() => ({ values }));
+    const repository = createTrustedReachOutSafetyRepository({ insert } as unknown as TenantDatabase);
+
+    const result = await repository.upsertDryRunSnapshot({
+      ...snapshotInput,
+      configStatus: 'blocked_missing_callback_url',
+    });
+    const conflict = onConflictDoUpdate.mock.calls[0][0] as {
+      setWhere: SQL;
+      set: { version: SQL };
+    };
+    const query = new PgDialect().sqlToQuery(conflict.setWhere);
+
+    expect(insert).toHaveBeenCalledWith(institutionChannelDryRunSnapshots);
+    expect(query.sql).toContain('"evaluated_at" < $1');
     expect(query.sql).toContain('"evaluated_at" = $2');
-    expect(query.sql).toContain('"config_status" = \'dry_run_ready\'');
-    expect(query.sql).toContain('$3 <> \'dry_run_ready\'');
+    expect(query.sql).toContain('"config_status" = $3');
     expect(query.params).toEqual([
-      snapshotInput.evaluatedAt,
-      snapshotInput.evaluatedAt,
-      snapshotInput.configStatus,
+      '2026-07-11T02:00:00.000Z',
+      '2026-07-11T02:00:00.000Z',
+      'dry_run_ready',
     ]);
+    expect(query.params.every(parameter => !(parameter instanceof Date))).toBe(true);
     expect(conflict.set.version).toBeDefined();
     expect(result).toBeNull();
   });
