@@ -150,6 +150,13 @@ export const AUDIT_REASON_VALUES = [
   'wecom_customer_mapping_conflict_blocked',
   'wecom_customer_mapping_invalid_transition',
   'wecom_customer_mapping_customer_not_found',
+  'wecom_reachout_consent_recorded',
+  'wecom_reachout_opt_out_recorded',
+  'wecom_reachout_consent_revoked',
+  'wecom_reachout_dry_run_snapshot_ready',
+  'wecom_reachout_dry_run_snapshot_blocked',
+  'wecom_reachout_frequency_reserved',
+  'wecom_reachout_frequency_blocked',
 ] as const satisfies readonly AuditReason[];
 
 export type AuditEventQueryFilters = {

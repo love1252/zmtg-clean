@@ -53,6 +53,39 @@ afterEach(() => {
 });
 
 describe('WeComCustomerMappingPanel', () => {
+  it('可信许可面板只显示在 confirmed 映射客户下', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response({
+        ...mappingResponse(true),
+        mapping: {
+          ...mappingResponse(true).mapping,
+          status: 'confirmed',
+          customerId: 'customer-a',
+        },
+        currentCustomer: candidates[0],
+      }))
+      .mockResolvedValueOnce(response({
+        safety: {
+          consent: { status: 'unknown', sourceType: null, recordedAt: null },
+          frequency: {
+            windowStartedAt: null, windowEndsAt: null, preparedCount: 0, completedCount: 0,
+            maxPreparedCount: 1, maxCompletedCount: 1, nextAllowedAt: null,
+          },
+        },
+        canWrite: true,
+        channelType: 'wechat_work',
+      }));
+
+    const { unmount } = render(<WeComCustomerMappingPanel />);
+    expect(await screen.findByText('企业微信触达许可')).toBeInTheDocument();
+    unmount();
+
+    vi.mocked(fetch).mockReset().mockResolvedValueOnce(response(mappingResponse(true)));
+    render(<WeComCustomerMappingPanel />);
+    await screen.findByText('待人工审核');
+    expect(screen.queryByText('企业微信触达许可')).not.toBeInTheDocument();
+  });
+
   it('tenant_admin 展示低敏候选、边界文案并可人工确认', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response(mappingResponse(true)))

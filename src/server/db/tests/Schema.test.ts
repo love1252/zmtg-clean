@@ -19,9 +19,12 @@ import * as schema from '@/server/db/schema';
 import {
   appointments,
   auditEvents,
+  customerChannelContactConsents,
+  customerChannelFrequencyStates,
   customers,
   followUpTasks,
   hisConnectionCredentialCompensationOperations,
+  institutionChannelDryRunSnapshots,
   tenantMembers,
   tenants,
   treatmentSummaries,
@@ -822,6 +825,80 @@ describe('数据库结构', () => {
     expect(migrationSql).not.toMatch(/\bupdate\s+"?customers"?\b/i);
     expect(migrationSql).not.toMatch(/\bon\s+delete\s+cascade\b/i);
     expect(migrationSql).not.toMatch(/external_userid|userid|corp_id|secret|token|raw_payload/i);
+  });
+
+  it('定义客户许可、系统频控和机构 dry-run 最新快照三类可信事实', () => {
+    const consentConfig = getTableConfig(customerChannelContactConsents);
+    const frequencyConfig = getTableConfig(customerChannelFrequencyStates);
+    const snapshotConfig = getTableConfig(institutionChannelDryRunSnapshots);
+    const consentFk = consentConfig.foreignKeys.find((foreignKey) =>
+      foreignKey.getName() === 'customer_channel_contact_consents_tenant_institution_customer_fk');
+    const frequencyFk = frequencyConfig.foreignKeys.find((foreignKey) =>
+      foreignKey.getName() === 'customer_channel_frequency_states_tenant_institution_customer_fk');
+
+    expect(schema.customerChannelTypeEnum.enumValues).toEqual(['wechat_work']);
+    expect(schema.customerChannelContactConsentStatusEnum.enumValues).toEqual([
+      'unknown',
+      'consented',
+      'opted_out',
+      'consent_revoked',
+    ]);
+    expect(schema.customerChannelContactConsentSourceTypeEnum.enumValues).toEqual([
+      'customer_explicit_verbal',
+      'customer_explicit_written',
+      'customer_opt_out_request',
+      'customer_consent_revocation',
+    ]);
+    expect(foreignKeyColumns(consentFk)).toEqual({
+      columns: ['tenant_id', 'institution_id', 'customer_id'],
+      foreignColumns: ['tenant_id', 'institution_id', 'id'],
+    });
+    expect(foreignKeyColumns(frequencyFk)).toEqual({
+      columns: ['tenant_id', 'institution_id', 'customer_id'],
+      foreignColumns: ['tenant_id', 'institution_id', 'id'],
+    });
+
+    const consentColumns = columnNames(consentConfig.columns);
+    const frequencyColumns = columnNames(frequencyConfig.columns);
+    const snapshotColumns = columnNames(snapshotConfig.columns);
+    expect(consentColumns).toEqual(expect.arrayContaining([
+      'status', 'source_type', 'evidence_ref', 'recorded_by', 'recorded_at', 'version',
+    ]));
+    expect(frequencyColumns).toEqual(expect.arrayContaining([
+      'window_started_at', 'window_ends_at', 'prepared_count', 'completed_count',
+      'max_prepared_count', 'max_completed_count', 'next_allowed_at',
+      'last_prepared_ref', 'last_completed_ref', 'version',
+    ]));
+    expect(snapshotColumns).toEqual(expect.arrayContaining([
+      'official_route', 'proof_institution_ref', 'callback_placeholder_ref',
+      'config_status', 'preflight_status', 'proof_eligible_mock', 'evaluated_by',
+      'evaluated_at', 'allow_real_send', 'external_channel_enabled',
+      'real_send_allowed', 'dry_run_only', 'version',
+    ]));
+    expect(JSON.stringify({ consentColumns, frequencyColumns, snapshotColumns })).not.toMatch(
+      /secret|token|corp_id|userid|user_id|agent_id|raw_payload|callback_url/i,
+    );
+  });
+
+  it('0035 migration 只新增安全事实并固定频控和 dry-run 安全约束', () => {
+    const migrationSql = readMigrationSql('0035_v08_04f_fa_trusted_reachout_safety_foundation');
+
+    expect(migrationSql).toContain('create table if not exists "customer_channel_contact_consents"');
+    expect(migrationSql).toContain('create table if not exists "customer_channel_frequency_states"');
+    expect(migrationSql).toContain('create table if not exists "institution_channel_dry_run_snapshots"');
+    expect(migrationSql).toContain('"max_prepared_count" = 1 and "max_completed_count" = 1');
+    expect(migrationSql).toContain('interval \'24 hours\'');
+    expect(migrationSql).toContain('"next_allowed_at" = "window_ends_at"');
+    expect(migrationSql).toContain('customer_channel_contact_consents_status_source_check');
+    expect(migrationSql).toContain('institution_channel_dry_run_snapshots_route_check');
+    expect(migrationSql).toContain('institution_channel_dry_run_snapshots_ready_check');
+    expect(migrationSql).toContain('"allow_real_send" = false');
+    expect(migrationSql).toContain('"external_channel_enabled" = false');
+    expect(migrationSql).toContain('"real_send_allowed" = false');
+    expect(migrationSql).toContain('"dry_run_only" = true');
+    expect(migrationSql).not.toMatch(/\b(drop|truncate|delete\s+from|insert\s+into)\b|(^|;)\s*update\s+/i);
+    expect(migrationSql).not.toMatch(/\bon\s+delete\s+cascade\b/i);
+    expect(migrationSql).not.toMatch(/secret|token|corp_id|userid|agent_id|raw_payload|callback_url/i);
   });
 
   it('定义正式租户账号、联系人表和账号状态枚举', () => {

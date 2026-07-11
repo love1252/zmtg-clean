@@ -683,6 +683,32 @@ describe('审计事件领域模型', () => {
       );
   });
 
+  it('支持可信触达固定审计原因且不携带敏感证据', () => {
+    const reasons = [
+      'wecom_reachout_consent_recorded',
+      'wecom_reachout_opt_out_recorded',
+      'wecom_reachout_consent_revoked',
+      'wecom_reachout_dry_run_snapshot_ready',
+      'wecom_reachout_dry_run_snapshot_blocked',
+      'wecom_reachout_frequency_reserved',
+      'wecom_reachout_frequency_blocked',
+    ] as const;
+    expect(AUDIT_REASON_VALUES).toEqual(expect.arrayContaining([...reasons]));
+    const events = reasons.map((reason, index) => createAuditEvent({
+      eventId: `audit_evt_reachout_${index}`,
+      context: tenantAdminContext,
+      resource: reason.includes('dry_run') ? 'real_channel' : 'customer',
+      resourceId: reason.includes('dry_run') ? null : 'customer-low-sensitive-1',
+      action: reason.includes('dry_run') ? 'review' : 'update',
+      result: reason.endsWith('blocked') ? 'denied' : 'transitioned',
+      reason,
+      occurredAt: `2026-07-11T10:0${index}:00.000Z`,
+    }));
+    expect(JSON.stringify(events)).not.toMatch(
+      /evidenceRef|freeText|secret|token|corpId|UserID|agentId|callbackUrl|rawPayload/i,
+    );
+  });
+
   it('预留 HIS 连接配置凭证 provider 失败与补偿审计 reason，且不扩展 result 或敏感材料', () => {
     expect(AUDIT_REASON_VALUES).toEqual(
       expect.arrayContaining([...hisCredentialProviderFailureCompensationReasons]),
