@@ -12,6 +12,7 @@ import {
   type WeComCustomerMappingCandidate,
   type WeComCustomerMappingReadResponse,
 } from '@/modules/institution/client/wecom-customer-mapping-client';
+import { TrustedReachOutSafetyPanel } from '@/modules/institution/components/TrustedReachOutSafetyPanel';
 
 const statusLabels: Record<WeComCustomerMappingStatus, string> = {
   unreviewed: '待人工审核',
@@ -188,6 +189,10 @@ export function WeComCustomerMappingPanel() {
               </div>
             )}
           </div>
+
+          {loaded.mapping.status === 'confirmed' && loaded.currentCustomer ? (
+            <TrustedReachOutSafetyPanel customerId={loaded.currentCustomer.customerId} />
+          ) : null}
 
           <label className="block text-xs font-semibold text-slate-600" htmlFor="wecom-mapping-candidate">
             本机构客户候选（最多 20 条）

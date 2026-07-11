@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   foreignKey,
   index,
   integer,
@@ -68,6 +69,20 @@ export const weComCustomerMappingStatusEnum = pgEnum('wecom_customer_mapping_sta
   'rejected',
   'revoked',
 ]);
+export const customerChannelTypeEnum = pgEnum('customer_channel_type', ['wechat_work']);
+export const customerChannelContactConsentStatusEnum = pgEnum(
+  'customer_channel_contact_consent_status',
+  ['unknown', 'consented', 'opted_out', 'consent_revoked'],
+);
+export const customerChannelContactConsentSourceTypeEnum = pgEnum(
+  'customer_channel_contact_consent_source_type',
+  [
+    'customer_explicit_verbal',
+    'customer_explicit_written',
+    'customer_opt_out_request',
+    'customer_consent_revocation',
+  ],
+);
 export const appointmentStatusEnum = pgEnum('appointment_status', [
   'pending_confirmation',
   'confirmed',
@@ -1539,6 +1554,149 @@ export const weComCustomerMappingStates = pgTable(
     scopeCustomerStatusIdx: index(
       'wecom_customer_mapping_states_tenant_institution_customer_status_idx',
     ).on(table.tenantId, table.institutionId, table.customerId, table.status),
+  }),
+);
+
+export const customerChannelContactConsents = pgTable(
+  'customer_channel_contact_consents',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    channelType: customerChannelTypeEnum('channel_type').notNull(),
+    status: customerChannelContactConsentStatusEnum('status').notNull(),
+    sourceType: customerChannelContactConsentSourceTypeEnum('source_type').notNull(),
+    evidenceRef: varchar('evidence_ref', { length: 96 }).notNull(),
+    recordedBy: varchar('recorded_by', { length: 96 }).notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull(),
+    version: integer('version').notNull().default(1),
+    ...timestamps,
+  },
+  (table) => ({
+    customerFk: foreignKey({
+      name: 'customer_channel_contact_consents_tenant_institution_customer_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.institutionId, customers.id],
+    }),
+    scopeUnique: unique('customer_channel_contact_consents_scope_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.customerId,
+      table.channelType,
+    ),
+    versionPositiveCheck: check(
+      'customer_channel_contact_consents_version_positive_check',
+      sql`${table.version} > 0`,
+    ),
+    statusSourceCheck: check(
+      'customer_channel_contact_consents_status_source_check',
+      sql`(${table.status} = 'consented' AND ${table.sourceType} IN ('customer_explicit_verbal', 'customer_explicit_written')) OR (${table.status} = 'opted_out' AND ${table.sourceType} = 'customer_opt_out_request') OR (${table.status} = 'consent_revoked' AND ${table.sourceType} = 'customer_consent_revocation')`,
+    ),
+  }),
+);
+
+export const customerChannelFrequencyStates = pgTable(
+  'customer_channel_frequency_states',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    channelType: customerChannelTypeEnum('channel_type').notNull(),
+    windowStartedAt: timestamp('window_started_at', { withTimezone: true }).notNull(),
+    windowEndsAt: timestamp('window_ends_at', { withTimezone: true }).notNull(),
+    preparedCount: integer('prepared_count').notNull().default(0),
+    completedCount: integer('completed_count').notNull().default(0),
+    maxPreparedCount: integer('max_prepared_count').notNull().default(1),
+    maxCompletedCount: integer('max_completed_count').notNull().default(1),
+    nextAllowedAt: timestamp('next_allowed_at', { withTimezone: true }).notNull(),
+    lastPreparedRef: varchar('last_prepared_ref', { length: 96 }),
+    lastCompletedRef: varchar('last_completed_ref', { length: 96 }),
+    version: integer('version').notNull().default(1),
+    ...timestamps,
+  },
+  (table) => ({
+    customerFk: foreignKey({
+      name: 'customer_channel_frequency_states_tenant_institution_customer_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.institutionId, customers.id],
+    }),
+    scopeUnique: unique('customer_channel_frequency_states_scope_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.customerId,
+      table.channelType,
+    ),
+    countsCheck: check(
+      'customer_channel_frequency_states_counts_check',
+      sql`${table.preparedCount} >= 0 AND ${table.completedCount} >= 0 AND ${table.preparedCount} <= ${table.maxPreparedCount} AND ${table.completedCount} <= ${table.maxCompletedCount}`,
+    ),
+    fixedCapsCheck: check(
+      'customer_channel_frequency_states_fixed_caps_check',
+      sql`${table.maxPreparedCount} = 1 AND ${table.maxCompletedCount} = 1`,
+    ),
+    windowCheck: check(
+      'customer_channel_frequency_states_window_check',
+      sql`${table.windowEndsAt} = ${table.windowStartedAt} + interval '24 hours' AND ${table.nextAllowedAt} = ${table.windowEndsAt}`,
+    ),
+    versionPositiveCheck: check(
+      'customer_channel_frequency_states_version_positive_check',
+      sql`${table.version} > 0`,
+    ),
+  }),
+);
+
+export const institutionChannelDryRunSnapshots = pgTable(
+  'institution_channel_dry_run_snapshots',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    channelType: customerChannelTypeEnum('channel_type').notNull(),
+    officialRoute: varchar('official_route', { length: 64 }).notNull(),
+    proofInstitutionRef: varchar('proof_institution_ref', { length: 96 }).notNull(),
+    callbackPlaceholderRef: varchar('callback_placeholder_ref', { length: 96 }).notNull(),
+    configStatus: varchar('config_status', { length: 64 }).notNull(),
+    preflightStatus: varchar('preflight_status', { length: 64 }).notNull(),
+    proofEligibleMock: boolean('proof_eligible_mock').notNull(),
+    evaluatedBy: varchar('evaluated_by', { length: 96 }).notNull(),
+    evaluatedAt: timestamp('evaluated_at', { withTimezone: true }).notNull(),
+    allowRealSend: boolean('allow_real_send').notNull().default(false),
+    externalChannelEnabled: boolean('external_channel_enabled').notNull().default(false),
+    realSendAllowed: boolean('real_send_allowed').notNull().default(false),
+    dryRunOnly: boolean('dry_run_only').notNull().default(true),
+    version: integer('version').notNull().default(1),
+    ...timestamps,
+  },
+  (table) => ({
+    scopeUnique: unique('institution_channel_dry_run_snapshots_scope_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.channelType,
+    ),
+    safetyCheck: check(
+      'institution_channel_dry_run_snapshots_safety_check',
+      sql`${table.allowRealSend} = false AND ${table.externalChannelEnabled} = false AND ${table.realSendAllowed} = false AND ${table.dryRunOnly} = true`,
+    ),
+    routeCheck: check(
+      'institution_channel_dry_run_snapshots_route_check',
+      sql`${table.officialRoute} IN ('official_wecom_self_built', 'official_wecom_third_party', 'official_wecom_service_provider')`,
+    ),
+    readyCheck: check(
+      'institution_channel_dry_run_snapshots_ready_check',
+      sql`${table.configStatus} <> 'dry_run_ready' OR (${table.officialRoute} = 'official_wecom_self_built' AND ${table.preflightStatus} = 'mock_ready' AND ${table.proofEligibleMock} = true)`,
+    ),
+    versionPositiveCheck: check(
+      'institution_channel_dry_run_snapshots_version_positive_check',
+      sql`${table.version} > 0`,
+    ),
   }),
 );
 
