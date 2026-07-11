@@ -116,6 +116,14 @@ function frequencyScopeWhere(scope: WeComReachOutSafetyScope) {
   );
 }
 
+function dryRunSnapshotScopeWhere(input: { tenantId: string; institutionId: string }) {
+  return and(
+    eq(institutionChannelDryRunSnapshots.tenantId, input.tenantId),
+    eq(institutionChannelDryRunSnapshots.institutionId, input.institutionId),
+    eq(institutionChannelDryRunSnapshots.channelType, 'wechat_work'),
+  );
+}
+
 export function createTrustedReachOutSafetyRepository(database: TenantDatabase) {
   return {
     async findConsent(scope: WeComReachOutSafetyScope) {
@@ -252,11 +260,16 @@ export function createTrustedReachOutSafetyRepository(database: TenantDatabase) 
       const [row] = await database
         .select()
         .from(institutionChannelDryRunSnapshots)
-        .where(and(
-          eq(institutionChannelDryRunSnapshots.tenantId, input.tenantId),
-          eq(institutionChannelDryRunSnapshots.institutionId, input.institutionId),
-          eq(institutionChannelDryRunSnapshots.channelType, 'wechat_work'),
-        ));
+        .where(dryRunSnapshotScopeWhere(input));
+      return row ? mapSnapshot(row) : null;
+    },
+
+    async findDryRunSnapshotForUpdate(input: { tenantId: string; institutionId: string }) {
+      const [row] = await database
+        .select()
+        .from(institutionChannelDryRunSnapshots)
+        .where(dryRunSnapshotScopeWhere(input))
+        .for('update');
       return row ? mapSnapshot(row) : null;
     },
 

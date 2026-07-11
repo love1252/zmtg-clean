@@ -44,8 +44,13 @@ export async function GET(request: Request, context: CustomerTimelineRouteContex
     const auditRepository = createAuditEventRepository(db);
     const treatmentSummaryRepository = createTreatmentSummaryRepository(db);
     const tenantId = accessContext.tenantId;
-    const customer = await repository.getCustomerByTenant({
+    const institutionId = accessContext.institutionId;
+    if (!institutionId) {
+      return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
+    }
+    const customer = await repository.getCustomerByTenantAndInstitution({
       tenantId,
+      institutionId,
       id: customerId,
     });
 
@@ -54,21 +59,22 @@ export async function GET(request: Request, context: CustomerTimelineRouteContex
     }
 
     const [appointments, followups, treatmentSummaries, auditEvents, followUpTimelineEvents, followUpOverview] = await Promise.all([
-      repository.listAppointmentsByTenantAndCustomer({ tenantId, customerId }),
-      repository.listFollowUpTasksByTenantAndCustomer({ tenantId, customerId }),
-      treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer({
+      repository.listAppointmentsByTenantInstitutionAndCustomer({ tenantId, institutionId, customerId }),
+      repository.listFollowUpTasksByTenantInstitutionAndCustomer({ tenantId, institutionId, customerId }),
+      treatmentSummaryRepository.listTreatmentSummariesByTenantInstitutionAndCustomer({
         tenantId,
+        institutionId,
         customerId,
       }),
-      auditRepository.listCustomerAuditEventsByResourceId({ tenantId, customerId }),
-      repository.listCustomerFollowUpTimelineEvents({
+      auditRepository.listCustomerAuditEventsByResourceId({ tenantId, institutionId, customerId }),
+      repository.listCustomerFollowUpTimelineEventsByTenantInstitutionAndCustomer({
         tenantId,
-        institutionId: accessContext.institutionId ?? null,
+        institutionId,
         customerId,
       }),
-      repository.getCustomerFollowUpOverview({
+      repository.getCustomerFollowUpOverviewByTenantInstitutionAndCustomer({
         tenantId,
-        institutionId: accessContext.institutionId ?? null,
+        institutionId,
         customerId,
       }),
     ]);

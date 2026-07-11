@@ -29,6 +29,7 @@ import type {
 import {
   mapMessageDeliveryToDto,
   readMessageDeliveryFromMetadata,
+  type MessageDelivery,
 } from '@/modules/institution/domain/followup-message-deliveries';
 import type {
   FollowUpCustomerOverview,
@@ -151,6 +152,9 @@ type CustomerTimelineRelatedLookupInput = {
   tenantId: string;
   customerId: string;
 };
+type InstitutionCustomerTimelineRelatedLookupInput = CustomerTimelineRelatedLookupInput & {
+  institutionId: string;
+};
 type UpdateAppointmentInput = {
   tenantId: string;
   id: string;
@@ -263,6 +267,23 @@ type FollowUpMessageDraftLookupInput = {
   institutionId?: string | null;
   draftId: string;
 };
+
+type StrictInstitutionFollowUpMessageDraftLookupInput = {
+  tenantId: string;
+  institutionId: string;
+  draftId: string;
+};
+
+type UpdateFollowUpMessageDraftControlledReachOutInput = StrictInstitutionFollowUpMessageDraftLookupInput & {
+  expectedUpdatedAt: string;
+  expectedMetadataJson: Record<string, unknown>;
+  metadataJson: Record<string, unknown>;
+  occurredAt: string;
+};
+
+type UpdateFollowUpMessageDraftControlledReachOutResult =
+  | { kind: 'updated'; draft: FollowUpMessageDraft }
+  | { kind: 'conflict'; resourceId: string; reason: 'conflict' };
 
 type ListFollowUpMessageDraftsInput = {
   tenantId: string;
@@ -957,6 +978,31 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
 
       return rows.map(mapAppointmentRowToRecord);
     },
+    async listAppointmentsByTenantInstitutionAndCustomer(
+      input: InstitutionCustomerTimelineRelatedLookupInput,
+    ): Promise<AppointmentRecordSummary[]> {
+      const rows = await database
+        .select({ appointment: appointments })
+        .from(appointments)
+        .innerJoin(
+          customers,
+          and(
+            eq(appointments.tenantId, customers.tenantId),
+            eq(appointments.customerId, customers.id),
+          ),
+        )
+        .where(
+          and(
+            eq(appointments.tenantId, input.tenantId),
+            eq(appointments.customerId, input.customerId),
+            eq(customers.tenantId, input.tenantId),
+            eq(customers.institutionId, input.institutionId),
+            eq(customers.id, input.customerId),
+          ),
+        );
+
+      return rows.map((row) => mapAppointmentRowToRecord(row.appointment));
+    },
     async listFollowUpTasksByTenantAndCustomer(
       input: CustomerTimelineRelatedLookupInput,
     ): Promise<TenantFollowUpTask[]> {
@@ -971,6 +1017,31 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         );
 
       return rows.map(mapFollowUpTaskRowToRecord);
+    },
+    async listFollowUpTasksByTenantInstitutionAndCustomer(
+      input: InstitutionCustomerTimelineRelatedLookupInput,
+    ): Promise<TenantFollowUpTask[]> {
+      const rows = await database
+        .select({ followUpTask: followUpTasks })
+        .from(followUpTasks)
+        .innerJoin(
+          customers,
+          and(
+            eq(followUpTasks.tenantId, customers.tenantId),
+            eq(followUpTasks.customerId, customers.id),
+          ),
+        )
+        .where(
+          and(
+            eq(followUpTasks.tenantId, input.tenantId),
+            eq(followUpTasks.customerId, input.customerId),
+            eq(customers.tenantId, input.tenantId),
+            eq(customers.institutionId, input.institutionId),
+            eq(customers.id, input.customerId),
+          ),
+        );
+
+      return rows.map((row) => mapFollowUpTaskRowToRecord(row.followUpTask));
     },
     async updateAppointment(
       input: UpdateAppointmentInput,
@@ -1406,6 +1477,23 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         })
         .map(mapFollowUpCustomerTimelineEventRowToRecord);
     },
+    async listCustomerFollowUpTimelineEventsByTenantInstitutionAndCustomer(
+      input: InstitutionCustomerTimelineRelatedLookupInput,
+    ): Promise<FollowUpCustomerTimelineEvent[]> {
+      const rows = await database
+        .select()
+        .from(followUpCustomerTimelineEvents)
+        .where(
+          and(
+            eq(followUpCustomerTimelineEvents.tenantId, input.tenantId),
+            eq(followUpCustomerTimelineEvents.institutionId, input.institutionId),
+            eq(followUpCustomerTimelineEvents.customerId, input.customerId),
+          ),
+        )
+        .orderBy(desc(followUpCustomerTimelineEvents.occurredAt), asc(followUpCustomerTimelineEvents.id));
+
+      return rows.map(mapFollowUpCustomerTimelineEventRowToRecord);
+    },
     async getCustomerFollowUpOverview(
       input: CustomerFollowUpTimelineLookupInput,
     ): Promise<FollowUpCustomerOverview> {
@@ -1461,6 +1549,64 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         approvedDraftCount: visibleDrafts.filter((row) => row.status === 'approved').length,
         markedSentCount: visibleDrafts.filter((row) => row.status === 'marked_sent').length,
         escalatedCount: taskRows.filter((row) => row.status === 'escalated').length,
+      };
+    },
+    async getCustomerFollowUpOverviewByTenantInstitutionAndCustomer(
+      input: InstitutionCustomerTimelineRelatedLookupInput,
+    ): Promise<FollowUpCustomerOverview> {
+      const pendingTaskStatuses: FollowUpStatus[] = ['scheduled', 'due', 'in_progress'];
+      const now = new Date();
+      const enrollmentRows = await database
+        .select()
+        .from(followUpPathEnrollments)
+        .where(
+          and(
+            eq(followUpPathEnrollments.tenantId, input.tenantId),
+            eq(followUpPathEnrollments.institutionId, input.institutionId),
+            eq(followUpPathEnrollments.customerId, input.customerId),
+          ),
+        );
+      const taskRows = await database
+        .select({ followUpTask: followUpTasks })
+        .from(followUpTasks)
+        .innerJoin(
+          customers,
+          and(
+            eq(followUpTasks.tenantId, customers.tenantId),
+            eq(followUpTasks.customerId, customers.id),
+          ),
+        )
+        .where(
+          and(
+            eq(followUpTasks.tenantId, input.tenantId),
+            eq(followUpTasks.customerId, input.customerId),
+            eq(customers.tenantId, input.tenantId),
+            eq(customers.institutionId, input.institutionId),
+            eq(customers.id, input.customerId),
+          ),
+        );
+      const draftRows = await database
+        .select()
+        .from(followUpMessageDrafts)
+        .where(
+          and(
+            eq(followUpMessageDrafts.tenantId, input.tenantId),
+            eq(followUpMessageDrafts.institutionId, input.institutionId),
+            eq(followUpMessageDrafts.customerId, input.customerId),
+          ),
+        );
+      const tasks = taskRows.map((row) => row.followUpTask);
+
+      return {
+        activeEnrollmentCount: enrollmentRows.filter((row) => row.status === 'active').length,
+        pendingTaskCount: tasks.filter((row) => pendingTaskStatuses.includes(row.status)).length,
+        overdueTaskCount: tasks.filter(
+          (row) => pendingTaskStatuses.includes(row.status) && row.dueAt < now,
+        ).length,
+        draftCount: draftRows.length,
+        approvedDraftCount: draftRows.filter((row) => row.status === 'approved').length,
+        markedSentCount: draftRows.filter((row) => row.status === 'marked_sent').length,
+        escalatedCount: tasks.filter((row) => row.status === 'escalated').length,
       };
     },
     async listFollowUpMessageTemplatesByTenant(input: {
@@ -1575,6 +1721,160 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         .where(and(eq(followUpTasks.tenantId, input.tenantId), eq(followUpTasks.id, row.followUpTaskId)));
 
       return taskRow ? mapFollowUpMessageDraftRowToRecord({ row, task: taskRow }) : null;
+    },
+    async getFollowUpMessageDraftByTenantAndInstitution(
+      input: StrictInstitutionFollowUpMessageDraftLookupInput,
+    ): Promise<FollowUpMessageDraft | null> {
+      const [row] = await database
+        .select()
+        .from(followUpMessageDrafts)
+        .where(
+          and(
+            eq(followUpMessageDrafts.tenantId, input.tenantId),
+            eq(followUpMessageDrafts.institutionId, input.institutionId),
+            eq(followUpMessageDrafts.id, input.draftId),
+          ),
+        );
+
+      if (!row) return null;
+      const [taskResult] = await database
+        .select({ task: followUpTasks })
+        .from(followUpTasks)
+        .innerJoin(
+          customers,
+          and(
+            eq(followUpTasks.tenantId, customers.tenantId),
+            eq(followUpTasks.customerId, customers.id),
+          ),
+        )
+        .where(
+          and(
+            eq(followUpTasks.tenantId, input.tenantId),
+            eq(followUpTasks.id, row.followUpTaskId),
+            eq(followUpTasks.customerId, row.customerId),
+            eq(customers.tenantId, input.tenantId),
+            eq(customers.institutionId, input.institutionId),
+            eq(customers.id, row.customerId),
+          ),
+        );
+      const taskRow = taskResult?.task;
+
+      return taskRow ? mapFollowUpMessageDraftRowToRecord({ row, task: taskRow }) : null;
+    },
+    async listMessageDeliveriesForDraft(
+      input: StrictInstitutionFollowUpMessageDraftLookupInput,
+    ): Promise<MessageDelivery[]> {
+      const rows = await database
+        .select({
+          customerId: followUpCustomerTimelineEvents.customerId,
+          sourceId: followUpCustomerTimelineEvents.sourceId,
+          safeReasonCode: followUpCustomerTimelineEvents.safeReasonCode,
+          metadataJson: followUpCustomerTimelineEvents.metadataJson,
+        })
+        .from(followUpCustomerTimelineEvents)
+        .where(
+          and(
+            eq(followUpCustomerTimelineEvents.tenantId, input.tenantId),
+            eq(followUpCustomerTimelineEvents.institutionId, input.institutionId),
+            eq(followUpCustomerTimelineEvents.sourceType, 'message_draft'),
+          ),
+        );
+      const deliveries = new Map<string, MessageDelivery>();
+      const matchingDraftDeliveryIds = new Set<string>();
+      const approvedDraftDeliveryIds = new Set<string>();
+      const scopeMismatchIds = new Set<string>();
+
+      for (const row of rows) {
+        const delivery = readMessageDeliveryFromMetadata(row.metadataJson);
+        if (!delivery) continue;
+        const existing = deliveries.get(delivery.id);
+        if (delivery.messageDraftId === input.draftId) matchingDraftDeliveryIds.add(delivery.id);
+        if (
+          row.sourceId === `${delivery.id}:created` &&
+          row.safeReasonCode === 'message_delivery_created'
+        ) {
+          approvedDraftDeliveryIds.add(delivery.id);
+        }
+        if (row.customerId !== delivery.customerId) {
+          scopeMismatchIds.add(delivery.id);
+        }
+        if (
+          existing && (
+            existing.tenantId !== delivery.tenantId ||
+            existing.institutionId !== delivery.institutionId ||
+            existing.messageDraftId !== delivery.messageDraftId ||
+            existing.customerId !== delivery.customerId ||
+            existing.followUpTaskId !== delivery.followUpTaskId
+          )
+        ) {
+          scopeMismatchIds.add(delivery.id);
+        }
+        deliveries.set(delivery.id, delivery);
+      }
+
+      return [...deliveries.values()]
+        .filter((delivery) =>
+          matchingDraftDeliveryIds.has(delivery.id) && approvedDraftDeliveryIds.has(delivery.id)
+        )
+        .map((delivery) =>
+          scopeMismatchIds.has(delivery.id)
+            ? {
+                ...delivery,
+                tenantId: 'scope_mismatch',
+                institutionId: 'scope_mismatch',
+                messageDraftId: 'scope_mismatch',
+                customerId: 'scope_mismatch',
+              }
+            : delivery
+        );
+    },
+    async updateFollowUpMessageDraftControlledReachOut(
+      input: UpdateFollowUpMessageDraftControlledReachOutInput,
+    ): Promise<UpdateFollowUpMessageDraftControlledReachOutResult> {
+      const [row] = await database
+        .update(followUpMessageDrafts)
+        .set({
+          metadataJson: input.metadataJson,
+          updatedAt: new Date(input.occurredAt),
+        })
+        .where(
+          and(
+            eq(followUpMessageDrafts.tenantId, input.tenantId),
+            eq(followUpMessageDrafts.institutionId, input.institutionId),
+            eq(followUpMessageDrafts.id, input.draftId),
+            eq(followUpMessageDrafts.status, 'approved'),
+            eq(followUpMessageDrafts.updatedAt, new Date(input.expectedUpdatedAt)),
+            eq(followUpMessageDrafts.metadataJson, input.expectedMetadataJson),
+          ),
+        )
+        .returning();
+
+      if (!row) return { kind: 'conflict', resourceId: input.draftId, reason: 'conflict' };
+      const [taskResult] = await database
+        .select({ task: followUpTasks })
+        .from(followUpTasks)
+        .innerJoin(
+          customers,
+          and(
+            eq(followUpTasks.tenantId, customers.tenantId),
+            eq(followUpTasks.customerId, customers.id),
+          ),
+        )
+        .where(
+          and(
+            eq(followUpTasks.tenantId, input.tenantId),
+            eq(followUpTasks.id, row.followUpTaskId),
+            eq(followUpTasks.customerId, row.customerId),
+            eq(customers.tenantId, input.tenantId),
+            eq(customers.institutionId, input.institutionId),
+            eq(customers.id, row.customerId),
+          ),
+        );
+      const taskRow = taskResult?.task;
+
+      return taskRow
+        ? { kind: 'updated', draft: mapFollowUpMessageDraftRowToRecord({ row, task: taskRow }) }
+        : { kind: 'conflict', resourceId: input.draftId, reason: 'conflict' };
     },
     async createFollowUpMessageDraft(
       input: CreateFollowUpMessageDraftInput,

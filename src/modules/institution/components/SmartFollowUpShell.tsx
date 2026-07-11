@@ -13,10 +13,12 @@ import {
   approveFollowUpMessageDraft,
   createFollowUpMessageDraft,
   getFollowUpOperationsDashboard,
+  getWeComControlledReachOut,
   listFollowUpMessageDrafts,
   listFollowUpPathEnrollments,
   listFollowUpTasks,
   markFollowUpMessageDraftAsSent,
+  prepareWeComControlledReachOut,
   rejectFollowUpMessageDraft,
   transitionFollowUpTask,
   updateFollowUpMessageDraft,
@@ -30,6 +32,10 @@ import {
 import { InstitutionSectionHeader } from '@/modules/institution/components/InstitutionSectionHeader';
 import { followUpMessageSuggestions } from '@/modules/institution/domain/followups';
 import type { FollowUpMessageDraftDto } from '@/modules/institution/domain/followup-message-drafts';
+import type {
+  WeComControlledReachOutFailureCode,
+  WeComControlledReachOutPreflight,
+} from '@/modules/institution/domain/wecom-controlled-reachout';
 import type { FollowUpOperationsDashboard } from '@/modules/institution/domain/followup-operations-dashboard';
 import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
 import { getDefaultWeComCustomerContactSyncDashboardView } from '@/modules/institution/domain/wecom-customer-contact';
@@ -143,6 +149,25 @@ const draftStatusLabels: Record<FollowUpMessageDraftDto['status'], string> = {
   cancelled: '已取消',
 };
 
+const controlledReachOutBlockReasonLabels: Record<WeComControlledReachOutFailureCode, string> = {
+  draft_not_found: '草稿不存在或不属于当前机构',
+  draft_not_approved: '草稿尚未批准',
+  delivery_missing: 'MessageDelivery 缺失',
+  delivery_not_unique: 'MessageDelivery 不唯一',
+  delivery_customer_mismatch: 'MessageDelivery 客户不匹配',
+  delivery_not_internal_mock: '内部模拟投递不符合正式审批记录',
+  mapping_not_confirmed: '客户映射尚未确认',
+  mapping_customer_mismatch: '客户映射不匹配',
+  customer_not_found: '客户不存在或不属于当前机构',
+  consent_missing: '客户授权状态未知',
+  consent_revoked: '客户授权已撤销',
+  opt_out: '客户已拒绝触达',
+  frequency_cap_reached: '当前频控窗口已达上限',
+  dry_run_not_ready: '官方 dry-run 尚未就绪',
+  manual_confirmation_invalid: '人工确认无效',
+  conflict: '状态冲突，请刷新后重试',
+};
+
 function draftContentValue(draft: FollowUpMessageDraftDto) {
   return draft.editedContent || draft.draftContent;
 }
@@ -173,6 +198,13 @@ function visibleErrorMessage(error: TenantBusinessClientError) {
   }
 
   return error.message || '随访任务请求失败';
+}
+
+function visibleControlledReachOutError(error: TenantBusinessClientError) {
+  if (error.kind === 'not_found') return '草稿不存在或不属于当前机构';
+  if (error.kind === 'conflict') return '受控触达状态已变化，请刷新后重试';
+  if (error.kind === 'validation_error') return '受控触达门禁未通过';
+  return visibleErrorMessage(error);
 }
 
 function visibleListErrorState(error: TenantBusinessClientError): InstitutionPageStateProps {
@@ -246,6 +278,8 @@ export function SmartFollowUpShell() {
   const [draftsByTaskId, setDraftsByTaskId] = useState<Record<string, FollowUpMessageDraftDto[]>>({});
   const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
   const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
+  const [controlledReachOutByDraftId, setControlledReachOutByDraftId] = useState<Record<string, WeComControlledReachOutPreflight>>({});
+  const [controlledReachOutErrors, setControlledReachOutErrors] = useState<Record<string, string>>({});
   const [updatingDraftKey, setUpdatingDraftKey] = useState<string | null>(null);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const [operationsDashboard, setOperationsDashboard] = useState<FollowUpOperationsDashboard>(emptyOperationsDashboard);
@@ -379,6 +413,45 @@ export function SmartFollowUpShell() {
     };
   }, [tasks]);
 
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadControlledReachOut() {
+      const approvedDrafts = Object.values(draftsByTaskId)
+        .flat()
+        .filter((draft) => draft.status === 'approved');
+      if (approvedDrafts.length === 0) {
+        setControlledReachOutByDraftId({});
+        setControlledReachOutErrors({});
+        return;
+      }
+
+      const results = await Promise.all(
+        approvedDrafts.map(async (draft) => {
+          const result = await getWeComControlledReachOut(draft.draftId);
+          return { draftId: draft.draftId, result };
+        }),
+      );
+      if (!isActive) return;
+      const preflights: Record<string, WeComControlledReachOutPreflight> = {};
+      const errors: Record<string, string> = {};
+      for (const entry of results) {
+        if (entry.result.ok) {
+          preflights[entry.draftId] = entry.result.preflight;
+        } else {
+          errors[entry.draftId] = visibleControlledReachOutError(entry.result.error);
+        }
+      }
+      setControlledReachOutByDraftId(preflights);
+      setControlledReachOutErrors(errors);
+    }
+
+    void loadControlledReachOut();
+    return () => {
+      isActive = false;
+    };
+  }, [draftsByTaskId]);
+
   const sortedTasks = useMemo(() => sortFollowUpTasksForWorkQueue(tasks), [tasks]);
 
   const statusCounts = useMemo(() => buildStatusCounts(tasks), [tasks]);
@@ -414,6 +487,18 @@ export function SmartFollowUpShell() {
       [taskId]: [draft, ...(current[taskId] ?? []).filter((item) => item.draftId !== draft.draftId)],
     }));
     setDraftEdits((current) => ({ ...current, [draft.draftId]: draftContentValue(draft) }));
+    if (draft.status !== 'approved') {
+      setControlledReachOutByDraftId((current) => {
+        const next = { ...current };
+        delete next[draft.draftId];
+        return next;
+      });
+      setControlledReachOutErrors((current) => {
+        const next = { ...current };
+        delete next[draft.draftId];
+        return next;
+      });
+    }
   }
 
   async function handleCreateDraft(task: TenantFollowUpTask) {
@@ -466,6 +551,25 @@ export function SmartFollowUpShell() {
       void refreshOperationsDashboard();
     } else {
       setDraftErrors((current) => ({ ...current, [taskId]: visibleErrorMessage(result.error) }));
+    }
+
+    setUpdatingDraftKey(null);
+  }
+
+  async function handleControlledReachOut(draft: FollowUpMessageDraftDto) {
+    setUpdatingDraftKey(`${draft.draftId}:wecom-controlled-reachout`);
+    setControlledReachOutErrors((current) => ({ ...current, [draft.draftId]: '' }));
+    const result = await prepareWeComControlledReachOut(draft.draftId);
+
+    if (result.ok) {
+      setControlledReachOutByDraftId((current) => ({ ...current, [draft.draftId]: result.preflight }));
+    } else {
+      setControlledReachOutErrors((current) => ({
+        ...current,
+        [draft.draftId]: result.error.kind === 'conflict'
+          ? '草稿状态已变化，当前请求发生冲突，请刷新后重试。'
+          : visibleErrorMessage(result.error),
+      }));
     }
 
     setUpdatingDraftKey(null);
@@ -957,6 +1061,8 @@ export function SmartFollowUpShell() {
                 const currentSourceLabel = sourceLabel(task.source);
                 const draft = draftsByTaskId[task.id]?.[0];
                 const draftEdit = draft ? draftEdits[draft.draftId] ?? draftContentValue(draft) : '';
+                const controlledReachOut = draft ? controlledReachOutByDraftId[draft.draftId] : undefined;
+                const controlledReachOutError = draft ? controlledReachOutErrors[draft.draftId] : undefined;
 
                 return (
                   <div
@@ -1155,6 +1261,98 @@ export function SmartFollowUpShell() {
                                 </button>
                               ) : null}
                             </div>
+
+                            {draft.status === 'approved' ? (
+                              <section
+                                aria-label="企业微信受控触达"
+                                className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-3"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div>
+                                    <h4 className="text-sm font-semibold text-slate-950">企业微信受控触达</h4>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      仅单客户 · 必须人工确认 · 当前只完成发送前准备
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-wrap items-center justify-end gap-2">
+                                    <span className="rounded-full border border-cyan-200 bg-white px-2.5 py-1 text-xs font-semibold text-cyan-700">
+                                      {controlledReachOutError
+                                        ? '阻断：门禁检查失败'
+                                        : controlledReachOut?.blockReason
+                                          ? `阻断：${controlledReachOutBlockReasonLabels[controlledReachOut.blockReason]}`
+                                          : controlledReachOut?.controlledReachOut?.status === 'ready_no_send'
+                                            ? 'ready_no_send'
+                                            : controlledReachOut?.readOnly
+                                              ? '只读'
+                                              : '待检查'}
+                                    </span>
+                                    {controlledReachOut?.readOnly ? (
+                                      <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
+                                        只读权限
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+
+                                {controlledReachOut ? (
+                                  <dl className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                                    <div>MessageDelivery：{controlledReachOut.delivery?.messageDeliveryId ?? '缺失'}</div>
+                                    <div>
+                                      内部模拟投递：{
+                                        controlledReachOut.delivery?.channelType === 'mock' &&
+                                        controlledReachOut.delivery.deliveryMode === 'mock' &&
+                                        controlledReachOut.delivery.status === 'mock_sent' &&
+                                        controlledReachOut.blockReason !== 'delivery_not_internal_mock'
+                                          ? '已生成（仅内部 mock）'
+                                          : controlledReachOut.delivery
+                                            ? '兼容只读，不能用于受控准备'
+                                            : '缺失'
+                                      }
+                                    </div>
+                                    <div>
+                                      企业微信受控触达：{
+                                        controlledReachOut.controlledReachOut?.status === 'ready_no_send'
+                                          ? '仅准备，未真实发送'
+                                          : '尚未准备，未真实发送'
+                                      }
+                                    </div>
+                                    <div>映射：{controlledReachOut.mapping.status}</div>
+                                    <div>consent：{controlledReachOut.consent.status}</div>
+                                    <div>frequency：{controlledReachOut.frequency.status}</div>
+                                    <div>dry-run snapshot：{controlledReachOut.dryRun.status}</div>
+                                    <div>真实发送开关：关闭</div>
+                                  </dl>
+                                ) : (
+                                  <p className="mt-3 text-xs text-slate-500">
+                                    {controlledReachOutError ? '受控触达门禁检查失败，当前保持阻断。' : '受控触达门禁正在加载。'}
+                                  </p>
+                                )}
+
+                                <p className="mt-3 text-xs leading-5 text-slate-500">
+                                  不调用真实企业微信 · 不产生客户可见消息 · 不代表已经发送
+                                </p>
+                                <button
+                                  type="button"
+                                  className="mt-3 inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-cyan-200 bg-white px-3 text-xs font-semibold text-cyan-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                                  onClick={() => handleControlledReachOut(draft)}
+                                  disabled={
+                                    !controlledReachOut?.canPrepare ||
+                                    controlledReachOut.readOnly ||
+                                    updatingDraftKey === `${draft.draftId}:wecom-controlled-reachout`
+                                  }
+                                >
+                                  {updatingDraftKey === `${draft.draftId}:wecom-controlled-reachout` ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : null}
+                                  准备受控触达（不发送）
+                                </button>
+                                {controlledReachOutError ? (
+                                  <p role="alert" className="mt-2 text-xs font-semibold text-rose-700">
+                                    {controlledReachOutError}
+                                  </p>
+                                ) : null}
+                              </section>
+                            ) : null}
                           </div>
                         ) : null}
 

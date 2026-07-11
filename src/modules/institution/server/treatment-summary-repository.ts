@@ -10,12 +10,15 @@ import {
 } from '@/modules/institution/domain/treatment-summaries';
 import { createTreatmentSummaryCursor } from '@/modules/institution/server/treatment-summary-query-parser';
 import type { TenantDatabase } from '@/server/db/client';
-import { appointments, treatmentSummaries } from '@/server/db/schema';
+import { appointments, customers, treatmentSummaries } from '@/server/db/schema';
 
 type TreatmentSummaryRow = typeof treatmentSummaries.$inferSelect;
 type TreatmentSummaryLookupInput = {
   tenantId: string;
   customerId: string;
+};
+type InstitutionTreatmentSummaryLookupInput = TreatmentSummaryLookupInput & {
+  institutionId: string;
 };
 type TreatmentSummaryByTenantInput = {
   tenantId: string;
@@ -314,6 +317,33 @@ export function createTreatmentSummaryRepository(database: TenantDatabase) {
           (row) => row.tenantId === input.tenantId && row.customerId === input.customerId,
         )
         .map(mapTreatmentSummaryRowToRecord);
+    },
+
+    async listTreatmentSummariesByTenantInstitutionAndCustomer(
+      input: InstitutionTreatmentSummaryLookupInput,
+    ): Promise<TreatmentSummaryRecord[]> {
+      const rows = await database
+        .select({ treatmentSummary: treatmentSummaries })
+        .from(treatmentSummaries)
+        .innerJoin(
+          customers,
+          and(
+            eq(treatmentSummaries.tenantId, customers.tenantId),
+            eq(treatmentSummaries.customerId, customers.id),
+          ),
+        )
+        .where(
+          and(
+            eq(treatmentSummaries.tenantId, input.tenantId),
+            eq(treatmentSummaries.customerId, input.customerId),
+            eq(customers.tenantId, input.tenantId),
+            eq(customers.institutionId, input.institutionId),
+            eq(customers.id, input.customerId),
+          ),
+        )
+        .orderBy(desc(treatmentSummaries.treatmentDate), asc(treatmentSummaries.id));
+
+      return rows.map((row) => mapTreatmentSummaryRowToRecord(row.treatmentSummary));
     },
 
     async getTreatmentSummaryByTenant(

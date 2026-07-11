@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { auditEvents } from '@/server/db/schema';
+import { auditEvents, customers, followUpMessageDrafts } from '@/server/db/schema';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   createAuditEventRepository,
@@ -77,6 +77,13 @@ const isNullMock = vi.hoisted(() =>
     operator: 'isNull',
   })),
 );
+const inArrayMock = vi.hoisted(() =>
+  vi.fn((column: unknown, values: readonly unknown[]) => ({
+    column,
+    operator: 'inArray',
+    values,
+  })),
+);
 
 vi.mock('drizzle-orm', async (importOriginal) => {
   const actual = await importOriginal<typeof import('drizzle-orm')>();
@@ -88,6 +95,7 @@ vi.mock('drizzle-orm', async (importOriginal) => {
     eq: eqMock,
     gt: gtMock,
     gte: gteMock,
+    inArray: inArrayMock,
     isNull: isNullMock,
     lt: ltMock,
     lte: lteMock,
@@ -148,6 +156,29 @@ function createSelectDatabase(rows: unknown[] = []) {
     from,
     select,
     where,
+  };
+}
+
+function createCustomerAuditSelectDatabase(customerRows: unknown[] = [], followUpRows: unknown[] = []) {
+  let selectCount = 0;
+  const customerWhere = vi.fn(async () => customerRows);
+  const followUpWhere = vi.fn(async () => followUpRows);
+  const customerInnerJoin = vi.fn(() => ({ where: customerWhere }));
+  const innerJoin = vi.fn(() => ({ where: followUpWhere }));
+  const from = vi.fn(() => {
+    selectCount += 1;
+    return selectCount === 1 ? { innerJoin: customerInnerJoin } : { innerJoin };
+  });
+  const select = vi.fn(() => ({ from }));
+
+  return {
+    database: { select } as unknown as TenantDatabase,
+    customerWhere,
+    customerInnerJoin,
+    followUpWhere,
+    from,
+    innerJoin,
+    select,
   };
 }
 
@@ -236,6 +267,7 @@ beforeEach(() => {
   gtMock.mockClear();
   gteMock.mockClear();
   isNullMock.mockClear();
+  inArrayMock.mockClear();
   ltMock.mockClear();
   lteMock.mockClear();
   orMock.mockClear();
@@ -297,25 +329,52 @@ describe('审计事件仓储映射', () => {
     expect(query.values).toHaveBeenCalledWith(expectedInsertRow);
   });
 
-  it('按当前租户和 customer resourceId 查询安全审计摘要', async () => {
-    const query = createSelectDatabase([auditEventRow]);
+  it('按当前租户、机构和 customer resourceId 查询安全审计摘要', async () => {
+    const query = createCustomerAuditSelectDatabase([{ audit: auditEventRow }], []);
 
     const result = await createAuditEventRepository(
       query.database,
     ).listCustomerAuditEventsByResourceId({
       tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
       customerId: 'cust_001',
     });
 
     expect(query.from).toHaveBeenCalledWith(auditEvents);
-    expect(query.where).toHaveBeenCalledWith({
+    expect(query.customerInnerJoin).toHaveBeenCalledWith(customers, expect.any(Object));
+    expect(query.customerWhere).toHaveBeenCalledWith({
       conditions: [
         { column: auditEvents.tenantId, operator: 'eq', value: 'demo-tenant-001' },
         { column: auditEvents.resource, operator: 'eq', value: 'customer' },
         { column: auditEvents.resourceId, operator: 'eq', value: 'cust_001' },
+        { column: customers.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: customers.institutionId, operator: 'eq', value: 'demo-institution-001' },
+        { column: customers.id, operator: 'eq', value: 'cust_001' },
       ],
       operator: 'and',
     });
+    expect(query.innerJoin).toHaveBeenCalledWith(
+      followUpMessageDrafts,
+      expect.any(Object),
+    );
+    expect(query.followUpWhere).toHaveBeenCalledWith({
+      conditions: expect.arrayContaining([
+        { column: auditEvents.tenantId, operator: 'eq', value: 'demo-tenant-001' },
+        { column: auditEvents.resource, operator: 'eq', value: 'follow_up' },
+        { column: followUpMessageDrafts.institutionId, operator: 'eq', value: 'demo-institution-001' },
+        { column: followUpMessageDrafts.customerId, operator: 'eq', value: 'cust_001' },
+      ]),
+      operator: 'and',
+    });
+    expect(inArrayMock).toHaveBeenCalledWith(
+      auditEvents.reason,
+      expect.arrayContaining([
+        'wecom_controlled_reachout_ready_no_send',
+        'wecom_controlled_reachout_delivery_not_internal_mock',
+        'wecom_controlled_reachout_opt_out',
+        'wecom_controlled_reachout_dry_run_not_ready',
+      ]),
+    );
     expect(result).toEqual([
       {
         id: 'audit_evt_001',
@@ -333,6 +392,45 @@ describe('审计事件仓储映射', () => {
     expect(JSON.stringify(result)).not.toContain('13800000000');
     expect(JSON.stringify(result)).not.toContain('DATABASE_URL');
     expect(JSON.stringify(result)).not.toContain('postgres://');
+  });
+
+  it('将受控触达 follow_up audit 按 draft 机构和客户聚合进 customer timeline', async () => {
+    const controlledReachOutRow = {
+      ...auditEventRow,
+      eventId: 'audit_wecom_controlled_001',
+      resource: 'follow_up' as const,
+      resourceId: 'draft-a',
+      action: 'approve' as const,
+      result: 'transitioned' as const,
+      reason: 'wecom_controlled_reachout_ready_no_send' as const,
+    };
+    const query = createCustomerAuditSelectDatabase([], [{ audit: controlledReachOutRow }]);
+
+    const result = await createAuditEventRepository(
+      query.database,
+    ).listCustomerAuditEventsByResourceId({
+      tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
+      customerId: 'cust_001',
+    });
+
+    expect(query.innerJoin).toHaveBeenCalledWith(
+      followUpMessageDrafts,
+      expect.any(Object),
+    );
+    expect(query.followUpWhere).toHaveBeenCalledWith(expect.objectContaining({ operator: 'and' }));
+    expect(result).toEqual([
+      {
+        id: 'audit_wecom_controlled_001',
+        action: 'approve',
+        result: 'transitioned',
+        reason: 'wecom_controlled_reachout_ready_no_send',
+        actor: { id: 'demo-user-admin', role: 'tenant_admin' },
+        occurredAt: '2026-05-30T09:00:00.000Z',
+        resource: 'follow_up',
+        resourceId: 'draft-a',
+      },
+    ]);
   });
 
   it('DTO mapper 只返回安全字段并保留 resourceId', () => {

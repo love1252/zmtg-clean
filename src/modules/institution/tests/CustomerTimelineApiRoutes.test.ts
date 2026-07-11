@@ -6,16 +6,17 @@ import type { AccessContext } from '@/modules/security/domain/access-control';
 const routeMocks = vi.hoisted(() => {
   const repository = {
     getCustomerByTenant: vi.fn(),
-    listAppointmentsByTenantAndCustomer: vi.fn(),
-    listFollowUpTasksByTenantAndCustomer: vi.fn(),
-    listCustomerFollowUpTimelineEvents: vi.fn(),
-    getCustomerFollowUpOverview: vi.fn(),
+    getCustomerByTenantAndInstitution: vi.fn(),
+    listAppointmentsByTenantInstitutionAndCustomer: vi.fn(),
+    listFollowUpTasksByTenantInstitutionAndCustomer: vi.fn(),
+    listCustomerFollowUpTimelineEventsByTenantInstitutionAndCustomer: vi.fn(),
+    getCustomerFollowUpOverviewByTenantInstitutionAndCustomer: vi.fn(),
   };
   const auditRepository = {
     listCustomerAuditEventsByResourceId: vi.fn(),
   };
   const treatmentSummaryRepository = {
-    listTreatmentSummariesByTenantAndCustomer: vi.fn(),
+    listTreatmentSummariesByTenantInstitutionAndCustomer: vi.fn(),
   };
   const database = { database: 'test-db' };
 
@@ -81,6 +82,7 @@ const tenantContext: AccessContext = {
   role: 'tenant_admin',
   scope: 'tenant',
   tenantId: 'demo-tenant-001',
+  institutionId: 'demo-institution-001',
   source: 'demo_session',
 };
 
@@ -280,20 +282,22 @@ beforeEach(() => {
   routeMocks.createTreatmentSummaryRepository.mockClear();
   routeMocks.repository.getCustomerByTenant.mockReset();
   routeMocks.repository.getCustomerByTenant.mockResolvedValue(customerRecord);
-  routeMocks.repository.listAppointmentsByTenantAndCustomer.mockReset();
-  routeMocks.repository.listAppointmentsByTenantAndCustomer.mockResolvedValue([appointmentRecord]);
-  routeMocks.repository.listFollowUpTasksByTenantAndCustomer.mockReset();
-  routeMocks.repository.listFollowUpTasksByTenantAndCustomer.mockResolvedValue([followUpRecord]);
-  routeMocks.repository.listCustomerFollowUpTimelineEvents.mockReset();
-  routeMocks.repository.listCustomerFollowUpTimelineEvents.mockResolvedValue([followUpTimelineEvent]);
-  routeMocks.repository.getCustomerFollowUpOverview.mockReset();
-  routeMocks.repository.getCustomerFollowUpOverview.mockResolvedValue(followUpOverview);
+  routeMocks.repository.getCustomerByTenantAndInstitution.mockReset();
+  routeMocks.repository.getCustomerByTenantAndInstitution.mockResolvedValue(customerRecord);
+  routeMocks.repository.listAppointmentsByTenantInstitutionAndCustomer.mockReset();
+  routeMocks.repository.listAppointmentsByTenantInstitutionAndCustomer.mockResolvedValue([appointmentRecord]);
+  routeMocks.repository.listFollowUpTasksByTenantInstitutionAndCustomer.mockReset();
+  routeMocks.repository.listFollowUpTasksByTenantInstitutionAndCustomer.mockResolvedValue([followUpRecord]);
+  routeMocks.repository.listCustomerFollowUpTimelineEventsByTenantInstitutionAndCustomer.mockReset();
+  routeMocks.repository.listCustomerFollowUpTimelineEventsByTenantInstitutionAndCustomer.mockResolvedValue([followUpTimelineEvent]);
+  routeMocks.repository.getCustomerFollowUpOverviewByTenantInstitutionAndCustomer.mockReset();
+  routeMocks.repository.getCustomerFollowUpOverviewByTenantInstitutionAndCustomer.mockResolvedValue(followUpOverview);
   routeMocks.auditRepository.listCustomerAuditEventsByResourceId.mockReset();
   routeMocks.auditRepository.listCustomerAuditEventsByResourceId.mockResolvedValue([
     auditEventSummary,
   ]);
-  routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer.mockReset();
-  routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer.mockResolvedValue(
+  routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantInstitutionAndCustomer.mockReset();
+  routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantInstitutionAndCustomer.mockResolvedValue(
     [treatmentSummaryRecord],
   );
 });
@@ -306,36 +310,41 @@ describe('客户详情 timeline API', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(routeMocks.repository.getCustomerByTenant).toHaveBeenCalledWith({
+    expect(routeMocks.repository.getCustomerByTenantAndInstitution).toHaveBeenCalledWith({
       tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
       id: 'cust_001',
     });
-    expect(routeMocks.repository.listAppointmentsByTenantAndCustomer).toHaveBeenCalledWith({
+    expect(routeMocks.repository.listAppointmentsByTenantInstitutionAndCustomer).toHaveBeenCalledWith({
       tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
       customerId: 'cust_001',
     });
-    expect(routeMocks.repository.listFollowUpTasksByTenantAndCustomer).toHaveBeenCalledWith({
+    expect(routeMocks.repository.listFollowUpTasksByTenantInstitutionAndCustomer).toHaveBeenCalledWith({
       tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
       customerId: 'cust_001',
     });
     expect(routeMocks.auditRepository.listCustomerAuditEventsByResourceId).toHaveBeenCalledWith({
       tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
       customerId: 'cust_001',
     });
     expect(
-      routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer,
+      routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantInstitutionAndCustomer,
     ).toHaveBeenCalledWith({
       tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
       customerId: 'cust_001',
     });
-    expect(routeMocks.repository.listCustomerFollowUpTimelineEvents).toHaveBeenCalledWith({
+    expect(routeMocks.repository.listCustomerFollowUpTimelineEventsByTenantInstitutionAndCustomer).toHaveBeenCalledWith({
       tenantId: 'demo-tenant-001',
-      institutionId: null,
+      institutionId: 'demo-institution-001',
       customerId: 'cust_001',
     });
-    expect(routeMocks.repository.getCustomerFollowUpOverview).toHaveBeenCalledWith({
+    expect(routeMocks.repository.getCustomerFollowUpOverviewByTenantInstitutionAndCustomer).toHaveBeenCalledWith({
       tenantId: 'demo-tenant-001',
-      institutionId: null,
+      institutionId: 'demo-institution-001',
       customerId: 'cust_001',
     });
     expect(payload.customer).toEqual({
@@ -431,7 +440,7 @@ describe('客户详情 timeline API', () => {
 
   it('作废治疗摘要在 timeline 中返回作废状态且不泄露敏感正文', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer.mockResolvedValueOnce([
+    routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantInstitutionAndCustomer.mockResolvedValueOnce([
       voidedTreatmentSummaryRecord,
     ]);
 
@@ -480,21 +489,22 @@ describe('客户详情 timeline API', () => {
     ]);
   });
 
-  it('URL、query、header 和 body 中的 tenantId 不影响服务端租户判断', async () => {
+  it('URL、query、header 和 body 中的 tenantId/institutionId 不影响服务端机构判断', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
 
     const response = await customerTimelineGet(
-      timelineRequest('http://localhost/api/institution/customers/cust_001/timeline?tenantId=other-tenant', {
+      timelineRequest('http://localhost/api/institution/customers/cust_001/timeline?tenantId=other-tenant&institutionId=other-inst', {
         method: 'POST',
-        headers: { 'x-tenant-id': 'other-tenant' },
-        body: JSON.stringify({ tenantId: 'other-tenant' }),
+        headers: { 'x-tenant-id': 'other-tenant', 'x-institution-id': 'other-inst' },
+        body: JSON.stringify({ tenantId: 'other-tenant', institutionId: 'other-inst' }),
       }),
       routeContext(),
     );
 
     expect(response.status).toBe(200);
-    expect(routeMocks.repository.getCustomerByTenant).toHaveBeenCalledWith({
+    expect(routeMocks.repository.getCustomerByTenantAndInstitution).toHaveBeenCalledWith({
       tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
       id: 'cust_001',
     });
     expect(routeMocks.repository.getCustomerByTenant).not.toHaveBeenCalledWith(
@@ -502,26 +512,27 @@ describe('客户详情 timeline API', () => {
     );
   });
 
-  it('其他租户客户或不存在客户返回稳定 404 且不继续查询关联数据', async () => {
+  it('其他租户/机构客户或不存在客户返回稳定 404 且不继续查询关联数据', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.repository.getCustomerByTenant.mockResolvedValueOnce(null);
+    routeMocks.repository.getCustomerByTenantAndInstitution.mockResolvedValueOnce(null);
 
     const response = await customerTimelineGet(timelineRequest(), routeContext('cust_other_tenant'));
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(routeMocks.repository.getCustomerByTenant).toHaveBeenCalledWith({
+    expect(routeMocks.repository.getCustomerByTenantAndInstitution).toHaveBeenCalledWith({
       tenantId: 'demo-tenant-001',
+      institutionId: 'demo-institution-001',
       id: 'cust_other_tenant',
     });
-    expect(routeMocks.repository.listAppointmentsByTenantAndCustomer).not.toHaveBeenCalled();
-    expect(routeMocks.repository.listFollowUpTasksByTenantAndCustomer).not.toHaveBeenCalled();
+    expect(routeMocks.repository.listAppointmentsByTenantInstitutionAndCustomer).not.toHaveBeenCalled();
+    expect(routeMocks.repository.listFollowUpTasksByTenantInstitutionAndCustomer).not.toHaveBeenCalled();
     expect(
-      routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer,
+      routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantInstitutionAndCustomer,
     ).not.toHaveBeenCalled();
     expect(routeMocks.auditRepository.listCustomerAuditEventsByResourceId).not.toHaveBeenCalled();
 
-    routeMocks.repository.getCustomerByTenant.mockResolvedValueOnce(null);
+    routeMocks.repository.getCustomerByTenantAndInstitution.mockResolvedValueOnce(null);
     const missingResponse = await customerTimelineGet(
       timelineRequest(),
       routeContext('missing_customer'),
@@ -590,7 +601,7 @@ describe('客户详情 timeline API', () => {
 
   it('治疗摘要查询异常时返回稳定 503 且不泄露错误详情', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantAndCustomer.mockRejectedValueOnce(
+    routeMocks.treatmentSummaryRepository.listTreatmentSummariesByTenantInstitutionAndCustomer.mockRejectedValueOnce(
       new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg'),
     );
 

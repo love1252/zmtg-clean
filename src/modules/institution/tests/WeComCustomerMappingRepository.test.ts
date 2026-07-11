@@ -64,6 +64,31 @@ describe('WeComCustomerMappingRepository', () => {
     );
   });
 
+  it('事务准备链路按完整 scope SELECT FOR UPDATE 锁定 mapping row', async () => {
+    const forLock = vi.fn(async () => [row]);
+    const where = vi.fn(() => ({ for: forLock }));
+    const from = vi.fn(() => ({ where }));
+    const select = vi.fn(() => ({ from }));
+    const repository = createWeComCustomerMappingRepository({ select } as unknown as TenantDatabase);
+
+    const result = await repository.findByScopeForUpdate({
+      tenantId: 'tenant-a',
+      institutionId: 'inst-a',
+      proofContactId: 'live-contact-proof-01',
+    });
+
+    expect(where).toHaveBeenCalledWith({
+      conditions: [
+        { column: weComCustomerMappingStates.tenantId, operator: 'eq', value: 'tenant-a' },
+        { column: weComCustomerMappingStates.institutionId, operator: 'eq', value: 'inst-a' },
+        { column: weComCustomerMappingStates.proofContactId, operator: 'eq', value: 'live-contact-proof-01' },
+      ],
+      operator: 'and',
+    });
+    expect(forLock).toHaveBeenCalledWith('update');
+    expect(result).toEqual(mapWeComCustomerMappingStateRow(row));
+  });
+
   it('create-if-absent 使用 on-conflict-do-nothing，冲突时不覆盖已有状态', async () => {
     const returning = vi.fn(async () => [row]);
     const onConflictDoNothing = vi.fn(() => ({ returning }));
