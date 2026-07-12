@@ -188,7 +188,7 @@ function createRepository(chunks: KnowledgeChunkSearchRepositoryRecord[] = baseC
 function createProvider(answerText = '基于召回片段，术后冷敷应控制时长并观察异常。'): AiChatProvider {
   return {
     chat: vi.fn(async () => ({
-      status: 'success',
+      status: 'success' as const,
       answerText,
       usage: { inputTokens: 999, outputTokens: 99 },
       latencyMs: 22,
@@ -387,7 +387,10 @@ describe('机构端知识库 RAG answer service', () => {
         }),
       },
       providerResolver: {
-        resolve: vi.fn(async () => ({ status: 'provider_disabled', providerStatus: 'missing_config' })),
+        resolve: vi.fn(async () => ({
+          status: 'provider_disabled' as const,
+          providerStatus: 'missing_config' as const,
+        })),
       },
       now: () => now,
     });
@@ -438,7 +441,7 @@ describe('机构端知识库 RAG answer service', () => {
     const audits: unknown[] = [];
     const provider: AiChatProvider = {
       chat: vi.fn(async () => ({
-        status: 'provider_unavailable',
+        status: 'provider_unavailable' as const,
         errorCode: 'DATABASE_URL postgres://root:password@localhost secret=key vendor=model cost token',
         latencyMs: 1,
       })),
@@ -503,7 +506,7 @@ describe('机构端知识库 RAG answer service', () => {
   it('provider failure 返回低敏错误，不返回 prompt、模型、token、成本或厂商', async () => {
     const provider: AiChatProvider = {
       chat: vi.fn(async () => ({
-        status: 'provider_unavailable',
+        status: 'provider_unavailable' as const,
         errorCode: 'DATABASE_URL postgres://root:password@localhost secret=key vendor=model cost token',
         latencyMs: 1,
       })),

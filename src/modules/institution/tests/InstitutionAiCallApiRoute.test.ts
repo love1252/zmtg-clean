@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as aiCallPost } from '@/app/api/institution/knowledge-management/ai-call/route';
 import { GET as aiCallUsageGet } from '@/app/api/institution/knowledge-management/ai-call/usage/route';
 import { GET as platformAiUsageGet } from '@/app/api/v1/open-platform/ai-usage/route';
@@ -164,6 +164,11 @@ describe('机构端 AI 调用 API route', () => {
       latencyMs: null,
       status: 'rejected',
       errorCode: 'quota_exceeded_ai_calls',
+      aiCreditsConsumed: null,
+      meteringStatus: null,
+      meteringVersion: null,
+      meteringDetails: null,
+      metadata: null,
       createdAt: new Date(),
     });
 
@@ -200,6 +205,11 @@ describe('机构端 AI 调用 API route', () => {
       latencyMs: null,
       status: 'rejected',
       errorCode: 'quota_exceeded_ai_calls',
+      aiCreditsConsumed: null,
+      meteringStatus: null,
+      meteringVersion: null,
+      meteringDetails: null,
+      metadata: null,
       createdAt: new Date(),
     });
 
@@ -242,6 +252,11 @@ describe('机构端 AI 调用 API route', () => {
       latencyMs: null,
       status: 'rejected' as const,
       errorCode: 'quota_exceeded_ai_calls',
+      aiCreditsConsumed: null,
+      meteringStatus: null,
+      meteringVersion: null,
+      meteringDetails: null,
+      metadata: null,
       createdAt: new Date(),
     };
     vi.mocked(recordAiCallQuotaRejection).mockResolvedValue(mockRecord);
@@ -378,7 +393,8 @@ describe('机构端 AI 调用 API route', () => {
       model: 'unknown',
       promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null,
       status: 'rejected', errorCode: 'quota_exceeded_ai_calls',
-      createdAt: new Date(),
+      aiCreditsConsumed: null, meteringStatus: null, meteringVersion: null, meteringDetails: null,
+      metadata: null, createdAt: new Date(),
     });
 
     const response = await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
@@ -408,8 +424,8 @@ describe('机构端 AI 调用 API route', () => {
       record: {
         id: 'rec-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
         actorUserId: 'demo-user-admin', serviceName: '平台 AI 服务',
-        promptTokens: 50, completionTokens: 30, totalTokens: 80, latencyMs: 500,
-        status: 'succeeded', errorCode: null, createdAt: new Date().toISOString(),
+        latencyMs: 500,
+        status: 'succeeded', errorCode: null, metadata: null, createdAt: new Date().toISOString(),
       },
       knowledgeContext: { used: false, query: '', sources: [] },
     });
@@ -449,8 +465,8 @@ describe('机构端 AI 调用记录 API route', () => {
       dataSource: 'repository',
       records: [{
         id: 'rec-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-        actorUserId: 'u', serviceName: '平台 AI 服务', promptTokens: 10, completionTokens: 5,
-        totalTokens: 15, latencyMs: 100, status: 'succeeded', errorCode: null,
+        actorUserId: 'u', serviceName: '平台 AI 服务', latencyMs: 100,
+        status: 'succeeded', errorCode: null,
         metadata: {
           knowledgeContext: {
             used: true,
@@ -484,8 +500,8 @@ describe('机构端 AI 调用记录 API route', () => {
       readonly: true,
       dataSource: 'repository',
       records: [
-        { id: 'old-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', serviceName: '平台 AI 服务', promptTokens: 10, completionTokens: 5, totalTokens: 15, latencyMs: 100, status: 'succeeded', errorCode: null, metadata: null, createdAt: new Date().toISOString() },
-        { id: 'rej-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', serviceName: '平台 AI 服务', promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null, status: 'rejected', errorCode: 'quota_exceeded_ai_calls', metadata: null, createdAt: new Date().toISOString() },
+        { id: 'old-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', serviceName: '平台 AI 服务', latencyMs: 100, status: 'succeeded', errorCode: null, metadata: null, createdAt: new Date().toISOString() },
+        { id: 'rej-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', serviceName: '平台 AI 服务', latencyMs: null, status: 'rejected', errorCode: 'quota_exceeded_ai_calls', metadata: null, createdAt: new Date().toISOString() },
       ],
       emptyState: { title: '暂无 AI 调用记录', description: '当前机构还没有发起过 AI 调用。' },
     });
@@ -507,7 +523,7 @@ describe('平台端 AI 用量聚合 API route', () => {
       requestId: 'platform-ai-usage-summary',
       readonly: true,
       dataSource: 'repository',
-      records: [{ tenantId: 't-001', callCount: 3, totalTokens: 300, succeededCount: 2, failedCount: 1 }],
+      records: [{ tenantId: 't-001', callCount: 3, totalTokens: 300, succeededCount: 2, failedCount: 1, rejectedCount: 0, quotaExceededCount: 0 }],
       emptyState: { title: '暂无 AI 调用数据', description: '还没有任何租户发起过 AI 调用。' },
     });
     const response = await platformAiUsageGet(new Request('http://localhost/api/v1/open-platform/ai-usage'));
@@ -530,7 +546,7 @@ describe('AI 试问 RAG 知识库检索闭环（安全顺序）', () => {
     vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
       status: 'created',
       answer: '根据参考资料回答。',
-      record: { id: 'r1', tenantId: 't', institutionId: 'i', actorUserId: 'u', serviceName: '平台 AI 服务', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
+      record: { id: 'r1', tenantId: 't', institutionId: 'i', actorUserId: 'u', serviceName: '平台 AI 服务', latencyMs: 100, status: 'succeeded', errorCode: null, metadata: null, createdAt: new Date().toISOString() },
       knowledgeContext: { used: true, query: '冷敷后怎么护理？', sources: [{ knowledgeId: 'kb-1', knowledgeTitle: '术后护理', fileId: 'f-1', fileName: '术后护理.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷后保持清洁。', matchReason: '包含"冷敷"' }] },
     });
 
@@ -617,9 +633,12 @@ describe('AI 试问 RAG 知识库检索闭环（安全顺序）', () => {
       allowed: false, current: 100, limit: 100, reason: 'quota_exceeded_ai_calls', resource: 'ai_calls',
     });
     vi.mocked(recordAiCallQuotaRejection).mockResolvedValue({
-      id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', serviceName: '平台 AI 服务',
+      id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u',
+      provider: 'deepseek', model: 'unknown', serviceName: '平台 AI 服务',
       promptTokens: null, completionTokens: null, totalTokens: null, latencyMs: null,
-      status: 'rejected', errorCode: 'quota_exceeded_ai_calls', createdAt: new Date(),
+      status: 'rejected', errorCode: 'quota_exceeded_ai_calls',
+      aiCreditsConsumed: null, meteringStatus: null, meteringVersion: null, meteringDetails: null,
+      metadata: null, createdAt: new Date(),
     });
 
     await aiCallPost(new Request('http://localhost/api/institution/knowledge-management/ai-call', {
@@ -665,7 +684,7 @@ describe('AI 试问 RAG 知识库检索闭环（安全顺序）', () => {
     vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
       status: 'created',
       answer: '根据参考资料回答。',
-      record: { id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', serviceName: '平台 AI 服务', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
+      record: { id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', serviceName: '平台 AI 服务', latencyMs: 100, status: 'succeeded', errorCode: null, metadata: null, createdAt: new Date().toISOString() },
       knowledgeContext: {
         used: true,
         query: '冷敷后怎么护理？',
@@ -696,7 +715,7 @@ describe('AI 试问 RAG 知识库检索闭环（安全顺序）', () => {
     vi.mocked(requestInstitutionAiCallService).mockResolvedValueOnce({
       status: 'created',
       answer: '知识库暂无相关依据，建议人工确认。',
-      record: { id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', serviceName: '平台 AI 服务', promptTokens: 10, completionTokens: 20, totalTokens: 30, latencyMs: 100, status: 'succeeded', errorCode: null, createdAt: new Date().toISOString() },
+      record: { id: 'r', tenantId: 't', institutionId: 'i', actorUserId: 'u', serviceName: '平台 AI 服务', latencyMs: 100, status: 'succeeded', errorCode: null, metadata: null, createdAt: new Date().toISOString() },
       knowledgeContext: { used: false, query: '随机问题', sources: [] },
     });
 

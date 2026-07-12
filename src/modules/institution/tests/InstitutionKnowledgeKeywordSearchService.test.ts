@@ -4,7 +4,10 @@ import {
   searchPlatformKnowledgeChunksService,
 } from '@/modules/open-platform/server/platform-knowledge-keyword-search-service';
 import type { KnowledgeChunkSearchRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-keyword-search-service';
-import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
+import type {
+  PlatformKnowledgeManagementRepository,
+  PlatformKnowledgeRepositoryRecord,
+} from '@/modules/open-platform/server/platform-knowledge-management-repository';
 
 const now = new Date('2026-06-13T08:00:00.000Z');
 
@@ -189,18 +192,17 @@ const searchChunks: KnowledgeChunkSearchRepositoryRecord[] = [
 
 const veryLongSnippet = '术后护理指南详细说明无断句无标点无空格连续文本'.repeat(15);
 
-function createRepository(overrides?: {
-  listKnowledgeItems?: typeof vi.fn;
-  searchKnowledgeFileParseChunks?: typeof vi.fn;
-}) {
+type SearchRepository = Pick<
+  PlatformKnowledgeManagementRepository,
+  'listKnowledgeItems' | 'searchKnowledgeFileParseChunks'
+>;
+
+function createRepository(overrides: Partial<SearchRepository> = {}): SearchRepository {
   return {
-    listKnowledgeItems: overrides?.listKnowledgeItems ?? vi.fn(async (input: { tenantId: string }) =>
+    listKnowledgeItems: overrides.listKnowledgeItems ?? vi.fn(async (input) =>
       knowledgeItems.filter((item) => item.tenantId === input.tenantId),
     ),
-    searchKnowledgeFileParseChunks: overrides?.searchKnowledgeFileParseChunks ?? vi.fn(async (input: {
-      tenantId: string;
-      keyword: string;
-    }) =>
+    searchKnowledgeFileParseChunks: overrides.searchKnowledgeFileParseChunks ?? vi.fn(async (input) =>
       searchChunks.filter(
         (chunk) =>
           chunk.tenantId === input.tenantId &&

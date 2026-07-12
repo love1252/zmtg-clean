@@ -33,6 +33,7 @@ const baseTenant: TenantManagementListItem = {
   authorizationSnapshotId: 'auth-snapshot-a',
   authorizationSnapshotStatus: 'active',
   authorizationGeneratedAt: '2026-06-01T00:00:00.000Z',
+  openingContact: null,
   maxCustomers: 100,
   maxAppointments: 200,
   maxFollowUps: 300,

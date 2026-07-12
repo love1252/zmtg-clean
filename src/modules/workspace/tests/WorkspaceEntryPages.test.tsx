@@ -2063,6 +2063,10 @@ function mapDemoCustomerSeed(record: DemoCustomerSeed): CustomerRecordSummary {
     lastTouchSummary: record.lastTouchSummary,
     nextAction: record.nextAction,
     tags: [...(record.tags ?? [])],
+    gender: record.gender ?? '',
+    birthDate: record.birthDate ?? '',
+    referralSource: record.referralSource ?? '',
+    notes: record.notes ?? '',
   };
 }
 
@@ -2200,6 +2204,7 @@ function buildDemoPlatformTenants(): OpenPlatformTenantRecord[] {
       authorizationSnapshotId: null,
       authorizationSnapshotStatus: null,
       authorizationGeneratedAt: null,
+      openingContact: null,
       maxCustomers: quota?.maxCustomers ?? null,
       maxAppointments: quota?.maxAppointments ?? null,
       maxFollowUps: quota?.maxFollowUps ?? null,

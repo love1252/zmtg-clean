@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyTenantPlanChangeService,
   previewTenantPlanChangeService,
+  type InitialPlanAssignmentInput,
+  type TenantPlanChangeApplyInput,
   type TenantPlanChangeRepository,
 } from '@/modules/open-platform/server/tenant-plan-change-service';
 import type { TenantPlanPublishedVersionRecord } from '@/modules/open-platform/domain/tenant-plan-binding';
@@ -92,7 +94,7 @@ const currentTenantState = {
   },
 };
 
-function createRepository(overrides: Partial<TenantPlanChangeRepository> = {}) {
+function createRepository(overrides: Partial<TenantPlanChangeRepository> = {}): TenantPlanChangeRepository {
   return {
     findCurrentTenantPlanState: vi.fn(async () => currentTenantState),
     findPublishedPlanVersionById: vi.fn(async () => targetPlanVersion),
@@ -103,7 +105,7 @@ function createRepository(overrides: Partial<TenantPlanChangeRepository> = {}) {
       createdAt: new Date('2026-06-01T00:00:00.000Z'),
       updatedAt: new Date('2026-06-20T00:00:00.000Z'),
     })),
-    applyTenantPlanChange: vi.fn(async (input) => ({
+    applyTenantPlanChange: vi.fn(async (input: TenantPlanChangeApplyInput) => ({
       status: 'plan_changed' as const,
       changeRecordId: input.changeRecord.id,
       auditEventId: input.auditEvent.eventId,
@@ -132,6 +134,7 @@ function createRepository(overrides: Partial<TenantPlanChangeRepository> = {}) {
         authorizationSnapshotId: input.newAuthorizationSnapshot.id,
         authorizationSnapshotStatus: input.newAuthorizationSnapshot.status,
         authorizationGeneratedAt: input.newAuthorizationSnapshot.generatedAt.toISOString(),
+        openingContact: openingContactSnapshot,
         maxCustomers: null,
         maxAppointments: null,
         maxFollowUps: null,
@@ -143,7 +146,7 @@ function createRepository(overrides: Partial<TenantPlanChangeRepository> = {}) {
         snapshotAt: null,
       },
     })),
-    applyInitialTenantPlanAssignment: vi.fn(async (input) => ({
+    applyInitialTenantPlanAssignment: vi.fn(async (input: InitialPlanAssignmentInput) => ({
       status: 'plan_changed' as const,
       changeRecordId: input.changeRecord.id,
       auditEventId: input.auditEvent.eventId,
@@ -172,6 +175,7 @@ function createRepository(overrides: Partial<TenantPlanChangeRepository> = {}) {
         authorizationSnapshotId: input.newAuthorizationSnapshot.id,
         authorizationSnapshotStatus: input.newAuthorizationSnapshot.status,
         authorizationGeneratedAt: input.newAuthorizationSnapshot.generatedAt.toISOString(),
+        openingContact: openingContactSnapshot,
         maxCustomers: null,
         maxAppointments: null,
         maxFollowUps: null,
@@ -201,7 +205,8 @@ describe('租户套餐变更 service', () => {
     });
 
     expect(result.status).toBe('preview_ready');
-    expect(result.preview?.changedItemCount).toBe(8);
+    if (result.status !== 'preview_ready') throw new Error('expected preview_ready result');
+    expect(result.preview.changedItemCount).toBe(8);
     expect(repository.findCurrentTenantPlanState).toHaveBeenCalledWith('tenant-001');
     expect(repository.findPublishedPlanVersionById).toHaveBeenCalledWith(
       'plan-version-professional-202606',
@@ -342,10 +347,11 @@ describe('租户套餐变更 service', () => {
       });
 
       expect(result.status).toBe('preview_ready');
-      expect(result.preview?.fromPlanVersionId).toBeNull();
-      expect(result.preview?.changedItemCount).toBeGreaterThan(0);
+      if (result.status !== 'preview_ready') throw new Error('expected preview_ready result');
+      expect(result.preview.fromPlanVersionId).toBeNull();
+      expect(result.preview.changedItemCount).toBeGreaterThan(0);
       // 所有项都 changed（从未配置到有套餐）
-      expect(result.preview?.unchangedItemCount).toBe(0);
+      expect(result.preview.unchangedItemCount).toBe(0);
     });
 
     it('无 active plan 租户可以 apply 首次分配', async () => {

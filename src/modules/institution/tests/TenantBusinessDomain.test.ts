@@ -45,6 +45,10 @@ const demoTenantCustomerRecords: TenantCustomerRecord[] = [
     lastTouchSummary: '术后第 28 天',
     nextAction: '安排资深咨询师人工回访',
     tags: ['高价值', '近期咨询补水', '适合人工承接'],
+    gender: '',
+    birthDate: '',
+    referralSource: '',
+    notes: '',
   },
   {
     id: 'cust_chen_conversion',
@@ -60,6 +64,10 @@ const demoTenantCustomerRecords: TenantCustomerRecord[] = [
     lastTouchSummary: '浏览案例页 3 次',
     nextAction: '发送案例对比与价格解释',
     tags: ['预算明确', '价格异议', '需跟进'],
+    gender: '',
+    birthDate: '',
+    referralSource: '',
+    notes: '',
   },
   {
     id: 'cust_zhao_care',
@@ -75,6 +83,10 @@ const demoTenantCustomerRecords: TenantCustomerRecord[] = [
     lastTouchSummary: 'D3 红肿反馈',
     nextAction: '转人工回访并记录恢复情况',
     tags: ['敏感反馈', '需安抚', '术后 D3'],
+    gender: '',
+    birthDate: '',
+    referralSource: '',
+    notes: '',
   },
   {
     id: 'cust_other_tenant',
@@ -90,6 +102,10 @@ const demoTenantCustomerRecords: TenantCustomerRecord[] = [
     lastTouchSummary: '明日到院',
     nextAction: '同步到院提醒',
     tags: ['跨租户测试记录'],
+    gender: '',
+    birthDate: '',
+    referralSource: '',
+    notes: '',
   },
 ];
 

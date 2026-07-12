@@ -27,6 +27,10 @@ const customerRecords: CustomerRecordSummary[] = [
     lastTouchSummary: '术后第 28 天',
     nextAction: '安排资深咨询师人工回访',
     tags: ['高价值'],
+    gender: '',
+    birthDate: '',
+    referralSource: '',
+    notes: '',
   },
   {
     id: 'cust_post_care',
@@ -42,6 +46,10 @@ const customerRecords: CustomerRecordSummary[] = [
     lastTouchSummary: 'D3 红肿反馈',
     nextAction: '客服回访并记录恢复情况',
     tags: ['术后'],
+    gender: '',
+    birthDate: '',
+    referralSource: '',
+    notes: '',
   },
 ];
 

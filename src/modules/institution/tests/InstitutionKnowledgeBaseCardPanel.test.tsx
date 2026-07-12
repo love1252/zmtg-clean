@@ -82,10 +82,15 @@ function mockKnowledgeList(nextRecords = records) {
   });
 }
 
+function requestUrl(input: string | URL | Request): string {
+  return input instanceof Request ? input.url : String(input);
+}
+
 function mockDefaultFetch() {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (url: string, init?: RequestInit) => {
+    vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = requestUrl(input);
       if (url.includes('/api/institution/knowledge-management/upload') && init?.method === 'POST') {
         return Response.json(
           {
@@ -247,7 +252,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
   it('上传失败时展示错误态', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
+      vi.fn(async (input: string | URL | Request) => {
+        const url = requestUrl(input);
         if (url.includes('/api/institution/knowledge-management/upload')) {
           return Response.json({ error: '文件上传失败，请稍后重试' }, { status: 503 });
         }
@@ -300,7 +306,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
   it('关键词检索空结果展示空态', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
+      vi.fn(async (input: string | URL | Request) => {
+        const url = requestUrl(input);
         if (url.includes('/api/institution/knowledge-management/search')) {
           return Response.json({ records: [], pageInfo, emptyState: { title: '暂无匹配片段', description: '无命中' } });
         }
@@ -322,7 +329,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
   it('关键词检索失败展示错误态', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
+      vi.fn(async (input: string | URL | Request) => {
+        const url = requestUrl(input);
         if (url.includes('/api/institution/knowledge-management/search')) {
           return Response.json({ error: '关键词检索暂时不可用' }, { status: 503 });
         }
@@ -357,7 +365,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
       expect.objectContaining({ cache: 'no-store' }),
     );
 
-    vi.mocked(globalThis.fetch).mockImplementation(async (url: string) => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = requestUrl(input);
       if (url.includes('/api/institution/knowledge-management/search')) {
         return Response.json({ records: [], pageInfo, emptyState: { title: '暂无匹配片段', description: '无命中' } });
       }
@@ -375,7 +384,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
   it('检索 validation_failed 使用低敏错误态展示', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
+      vi.fn(async (input: string | URL | Request) => {
+        const url = requestUrl(input);
         if (url.includes('/api/institution/knowledge-management/search')) {
           return Response.json({ status: 'validation_failed', message: '关键词过长，最多支持 80 个字符' }, { status: 400 });
         }
@@ -437,7 +447,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
   it('问答台 no_answer 状态不会展示旧答案或编造来源', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
+      vi.fn(async (input: string | URL | Request) => {
+        const url = requestUrl(input);
         if (url.includes('/api/institution/knowledge-management/answer')) {
           return Response.json({
             status: 'no_answer',
@@ -466,7 +477,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
   it('问答台 provider error 使用低敏错误态展示', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
+      vi.fn(async (input: string | URL | Request) => {
+        const url = requestUrl(input);
         if (url.includes('/api/institution/knowledge-management/answer')) {
           return Response.json({
             status: 'provider_failure',
@@ -497,7 +509,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
   it('问答台展示 quota_exceeded 状态', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
+      vi.fn(async (input: string | URL | Request) => {
+        const url = requestUrl(input);
         if (url.includes('/api/institution/knowledge-management/answer')) {
           return Response.json({
             status: 'quota_exceeded',
@@ -526,7 +539,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
   it('问答台展示 provider_disabled 状态', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
+      vi.fn(async (input: string | URL | Request) => {
+        const url = requestUrl(input);
         if (url.includes('/api/institution/knowledge-management/answer')) {
           return Response.json({
             status: 'provider_disabled',
@@ -554,7 +568,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
   it('问答台展示 provider_failure 状态', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
+      vi.fn(async (input: string | URL | Request) => {
+        const url = requestUrl(input);
         if (url.includes('/api/institution/knowledge-management/answer')) {
           return Response.json({
             status: 'provider_failure',
@@ -588,7 +603,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     fireEvent.click(within(answerSection).getByRole('button', { name: '提问' }));
     expect(await within(answerSection).findByText(/术后冷敷应控制时长/)).toBeInTheDocument();
 
-    vi.mocked(globalThis.fetch).mockImplementation(async (url: string) => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = requestUrl(input);
       if (url.includes('/api/institution/knowledge-management/answer')) {
         return Response.json({
           status: 'no_answer',
@@ -618,7 +634,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     expect(within(chunkSection).getByText('charCount 21')).toBeInTheDocument();
     expect(within(chunkSection).getByText('所属知识条目：本机构术后护理知识')).toBeInTheDocument();
 
-    vi.mocked(globalThis.fetch).mockImplementation(async (url: string) => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = requestUrl(input);
       if (url.includes('/parse/chunks')) return Response.json({ records: [] });
       if (url.includes('/files')) return Response.json({ records: files, pageInfo });
       return Response.json({ records: [], pageInfo });
@@ -626,7 +643,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '查看片段' }));
     expect(await within(chunkSection).findByText('当前文件暂无解析片段。')).toBeInTheDocument();
 
-    vi.mocked(globalThis.fetch).mockImplementation(async (url: string) => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = requestUrl(input);
       if (url.includes('/parse/chunks')) return Response.json({ error: '解析片段暂时不可用' }, { status: 503 });
       if (url.includes('/files')) return Response.json({ records: files, pageInfo });
       return Response.json({ records: [], pageInfo });
@@ -645,7 +663,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
       expect.objectContaining({ method: 'POST' }),
     );
 
-    vi.mocked(globalThis.fetch).mockImplementation(async (url: string) => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = requestUrl(input);
       if (url.includes('/files')) {
         return Response.json({
           records: url.includes('knowledge-owned-aftercare')
@@ -667,7 +686,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
 
   it('重新解析失败低敏展示', async () => {
     await renderLoaded();
-    vi.mocked(globalThis.fetch).mockImplementation(async (url: string, init?: RequestInit) => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = requestUrl(input);
       if (url.includes('/parse') && init?.method === 'POST') {
         return Response.json({ error: '文件重新解析失败' }, { status: 503 });
       }
@@ -706,7 +726,8 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
 
   it('新建和编辑知识失败时低敏展示错误', async () => {
     await renderLoaded();
-    vi.mocked(globalThis.fetch).mockImplementation(async (url: string, init?: RequestInit) => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = requestUrl(input);
       if (url.includes('/api/institution/knowledge-management/items') && init?.method === 'POST') {
         return Response.json({ error: '知识条目新建失败' }, { status: 503 });
       }

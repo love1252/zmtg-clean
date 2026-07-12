@@ -12,7 +12,7 @@ const NOW = '2026-06-01T00:00:00.000Z';
 function tenant(
   overrides: Partial<TenantManagementListItem> & { tenantId: string; tenantName: string },
 ): TenantManagementListItem {
-  const { tenantId, tenantName, ...rest } = overrides;
+  const { tenantId, tenantName, openingContact = null, ...rest } = overrides;
 
   return {
     tenantId,
@@ -39,6 +39,7 @@ function tenant(
     authorizationSnapshotId: 'auth-snapshot-growth-care',
     authorizationSnapshotStatus: 'active',
     authorizationGeneratedAt: '2026-05-31T08:00:00.000Z',
+    openingContact,
     maxCustomers: 100,
     maxAppointments: 100,
     maxFollowUps: 100,

@@ -19,6 +19,12 @@ function fetchPath(input: Parameters<typeof fetch>[0]) {
   return input.url;
 }
 
+function createFetcher(body: unknown, init?: ResponseInit) {
+  return vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>(async () =>
+    jsonResponse(body, init),
+  );
+}
+
 const ruleRecord = {
   id: 'rule-001',
   provider: 'deepseek',
@@ -44,7 +50,7 @@ function expectNoSensitivePayload(input: unknown) {
 
 describe('platform AI credit metering rules client', () => {
   it('读取规则列表且无过滤时不拼接 query', async () => {
-    const fetcher = vi.fn(async () => jsonResponse({ records: [ruleRecord] }));
+    const fetcher = createFetcher({ records: [ruleRecord] });
 
     const result = await listOpenPlatformAiCreditMeteringRules(undefined, { fetcher });
 
@@ -53,7 +59,7 @@ describe('platform AI credit metering rules client', () => {
   });
 
   it('读取规则列表时拼接 provider / model / enabled 过滤条件', async () => {
-    const fetcher = vi.fn(async () => jsonResponse({ records: [] }));
+    const fetcher = createFetcher({ records: [] });
 
     await listOpenPlatformAiCreditMeteringRules({
       provider: ' deepseek ',
@@ -69,7 +75,7 @@ describe('platform AI credit metering rules client', () => {
   });
 
   it('创建规则只提交低敏规则字段', async () => {
-    const fetcher = vi.fn(async () => jsonResponse({ record: ruleRecord }, { status: 201 }));
+    const fetcher = createFetcher({ record: ruleRecord }, { status: 201 });
     const payload = {
       provider: 'deepseek',
       model: 'deepseek-v4-flash',
@@ -97,7 +103,7 @@ describe('platform AI credit metering rules client', () => {
   });
 
   it('patch 规则只提交 enabled / effectiveFrom / effectiveTo', async () => {
-    const fetcher = vi.fn(async () => jsonResponse({ record: { ...ruleRecord, enabled: false } }));
+    const fetcher = createFetcher({ record: { ...ruleRecord, enabled: false } });
     const payload = {
       enabled: false,
       effectiveFrom: '2026-06-29T00:00:00.000Z',
@@ -126,7 +132,10 @@ describe('platform AI credit metering rules client', () => {
     [503, 'service_unavailable'],
     [418, 'unknown'],
   ])('映射 %s 错误为 %s', async (status, kind) => {
-    const fetcher = vi.fn(async () => jsonResponse({ errorCode: 'CONTROLLED_ERROR', errors: ['provider_required'] }, { status }));
+    const fetcher = createFetcher(
+      { errorCode: 'CONTROLLED_ERROR', errors: ['provider_required'] },
+      { status },
+    );
 
     const result = await listOpenPlatformAiCreditMeteringRules(undefined, { fetcher });
 
@@ -139,8 +148,10 @@ describe('platform AI credit metering rules client', () => {
   });
 
   it('处理异常响应和 fetch 异常', async () => {
-    const malformedFetcher = vi.fn(async () => jsonResponse({ unexpected: true }));
-    const throwingFetcher = vi.fn(async () => {
+    const malformedFetcher = createFetcher({ unexpected: true });
+    const throwingFetcher = vi.fn<
+      (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+    >(async () => {
       throw new Error('network failed');
     });
 

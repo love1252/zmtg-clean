@@ -72,8 +72,11 @@ const sources = [
     knowledgeTitle: '术后护理指南',
     fileId: 'file-a',
     fileName: '护理手册.txt',
+    chunkId: 'chunk-a',
     chunkIndex: 0,
     textPreview: '术后冷敷应每次15-20分钟。',
+    retrievalMode: 'keyword' as const,
+    matchReason: '包含“冷敷”',
   },
 ];
 

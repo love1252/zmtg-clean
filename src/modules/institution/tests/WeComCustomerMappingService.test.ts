@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TenantAuditEvent } from '@/modules/audit/domain/audit-events';
 import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
-import type { WeComCustomerMappingState } from '@/modules/institution/server/wecom-customer-mapping-repository';
+import type {
+  CreateWeComCustomerMappingStateInput,
+  UpdateWeComCustomerMappingStateInput,
+  WeComCustomerMappingScope,
+  WeComCustomerMappingState,
+} from '@/modules/institution/server/wecom-customer-mapping-repository';
 import {
   readWeComCustomerMapping,
   writeWeComCustomerMapping,
@@ -65,14 +70,17 @@ function writeRepositories(current: WeComCustomerMappingState | null = null) {
       listCustomersByTenantAndInstitution: vi.fn(),
     },
     mappingRepository: {
-      findByScope: vi.fn(async () => current),
+      findByScope: vi.fn<(input: WeComCustomerMappingScope) => Promise<WeComCustomerMappingState | null>>(
+        async () => current,
+      ),
+      findByScopeForUpdate: vi.fn<
+        (input: WeComCustomerMappingScope) => Promise<WeComCustomerMappingState | null>
+      >(async () => current),
       createIfAbsent: vi.fn<
-        (input: { status: WeComCustomerMappingState['status']; customerId: string }) =>
-          Promise<WeComCustomerMappingState | null>
+        (input: CreateWeComCustomerMappingStateInput) => Promise<WeComCustomerMappingState | null>
       >(async (input) => state(input.status, input.customerId)),
       updateWhenCurrentStatus: vi.fn<
-        (input: { status: WeComCustomerMappingState['status']; customerId: string }) =>
-          Promise<WeComCustomerMappingState | null>
+        (input: UpdateWeComCustomerMappingStateInput) => Promise<WeComCustomerMappingState | null>
       >(async (input) => state(input.status, input.customerId)),
     },
     auditRepository: {
