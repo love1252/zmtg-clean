@@ -19,6 +19,7 @@ import * as seedDemoData from '@/server/db/seed-demo-data';
 import * as schema from '@/server/db/schema';
 import {
   appointments,
+  authAccountInstitutionBindings,
   auditEvents,
   customerChannelContactConsents,
   customerChannelFrequencyStates,
@@ -29,6 +30,8 @@ import {
   tenantMembers,
   tenants,
   treatmentSummaries,
+  weComCustomerBroadcastRecipientBindings,
+  weComCustomerBroadcastTaskProviderAttempts,
   weComCustomerMappingStates,
   weComRealSendProductionAttestations,
   weComRealSendProofControls,
@@ -1097,13 +1100,238 @@ describe('数据库结构', () => {
       '6c36ba5c25344c33aab904ff1c09a091011e9d7373fcf053776106e26ecd8987',
     );
     expect(migration0035.toLowerCase()).toContain('"allow_real_send" = false and "external_channel_enabled" = false and "real_send_allowed" = false and "dry_run_only" = true');
-    expect(journal.entries.at(-1)).toEqual({
+    expect(journal.entries.at(-2)).toEqual({
       idx: 36,
       tag: '0036_v08_05b_a_single_real_send_proof_foundation',
       version: '7',
       when: 1783843200000,
       breakpoints: true,
     });
+  });
+
+  it('定义 formal institution binding、真实任务 outcome sidecar 与低敏 recipient metadata', () => {
+    const bindingConfig = getTableConfig(authAccountInstitutionBindings);
+    const attemptConfig = getTableConfig(weComCustomerBroadcastTaskProviderAttempts);
+    const recipientConfig = getTableConfig(weComCustomerBroadcastRecipientBindings);
+    const bindingColumns = columnNames(bindingConfig.columns);
+    const attemptColumns = columnNames(attemptConfig.columns);
+    const recipientColumns = columnNames(recipientConfig.columns);
+
+    expect(schema.authInstitutionBindingStatusEnum.enumValues).toEqual(['active', 'revoked']);
+    expect(schema.authInstitutionBindingSourceEnum.enumValues).toEqual([
+      'manual_admin', 'migration_placeholder', 'system',
+    ]);
+    expect(schema.weComCustomerBroadcastTaskDispatchStateEnum.enumValues).toEqual([
+      'not_started', 'task_create_attempted', 'task_created', 'task_create_failed',
+      'task_create_unknown',
+    ]);
+    expect(schema.weComCustomerBroadcastTaskSendResultStatusEnum.enumValues).toEqual([
+      'not_checked', 'awaiting_member_confirmation', 'target_sent', 'target_failed',
+      'target_unknown',
+    ]);
+    expect(schema.weComCustomerBroadcastTaskFinalizeStateEnum.enumValues).toEqual([
+      'not_finalized', 'success_recorded', 'failure_recorded', 'unknown_recorded',
+    ]);
+    expect(schema.weComCustomerBroadcastTaskReconciliationStateEnum.enumValues).toEqual([
+      'none', 'manual_review_required', 'reconciled',
+    ]);
+    expect(schema.weComCustomerBroadcastRecipientBindingSourceKindEnum.enumValues).toEqual([
+      'protected_vault_reference', 'protected_resolver_reference',
+    ]);
+    expect(schema.weComCustomerBroadcastRecipientBindingStatusEnum.enumValues).toEqual([
+      'active', 'revoked', 'stale',
+    ]);
+
+    expect(bindingColumns).toEqual(expect.arrayContaining([
+      'account_id', 'tenant_id', 'institution_id', 'status', 'source', 'assigned_by',
+      'assigned_at', 'expires_at', 'revoked_at', 'version',
+    ]));
+    expect(attemptColumns).toEqual(expect.arrayContaining([
+      'operation_id', 'operation_ref', 'tenant_id', 'institution_id', 'customer_id',
+      'capability_kind', 'provider_kind', 'dispatch_state', 'dispatch_count',
+      'dispatch_started_at', 'dispatch_terminal_at', 'task_ref_digest',
+      'member_confirmation_required', 'provider_result_category', 'send_result_status',
+      'send_result_checked_at', 'finalize_state', 'reconciliation_state',
+      'manual_review_required', 'automatic_retry_allowed', 'version',
+    ]));
+    expect(recipientColumns).toEqual(expect.arrayContaining([
+      'tenant_id', 'institution_id', 'customer_id', 'operation_id', 'operation_ref',
+      'mapping_id', 'recipient_binding_ref', 'recipient_binding_digest',
+      'recipient_binding_version', 'opaque_handle_ref', 'source_kind', 'status', 'revoked_at',
+    ]));
+
+    expect(bindingConfig.indexes.find(index =>
+      index.config.name === 'auth_account_institution_bindings_active_account_tenant_unique_idx')
+      ?.config.unique).toBe(true);
+    expect(bindingConfig.indexes.find(index =>
+      index.config.name === 'auth_account_institution_bindings_active_account_tenant_unique_idx')
+      ?.config.where).toBeDefined();
+    expect(recipientConfig.indexes.find(index =>
+      index.config.name === 'wecom_customer_broadcast_recipient_bindings_active_operation_unique_idx')
+      ?.config.unique).toBe(true);
+    expect(recipientConfig.indexes.find(index =>
+      index.config.name === 'wecom_customer_broadcast_recipient_bindings_active_operation_unique_idx')
+      ?.config.where).toBeDefined();
+    expect(recipientConfig.indexes.map(index => index.config.name)).toEqual(expect.arrayContaining([
+      'wecom_customer_broadcast_recipient_bindings_operation_id_idx',
+      'wecom_customer_broadcast_recipient_bindings_mapping_id_idx',
+    ]));
+    expect(attemptConfig.uniqueConstraints.map(constraint => constraint.getName())).toContain(
+      'wecom_customer_broadcast_task_provider_attempts_operation_unique',
+    );
+
+    expect(foreignKeyColumns(bindingConfig.foreignKeys.find(foreignKey =>
+      foreignKey.getName() === 'auth_account_institution_bindings_tenant_account_fk'))).toEqual({
+      columns: ['tenant_id', 'account_id'],
+      foreignColumns: ['tenant_id', 'user_id'],
+    });
+    expect(bindingConfig.foreignKeys.map(foreignKey => foreignKey.getName())).toEqual([
+      'auth_account_institution_bindings_tenant_account_fk',
+    ]);
+    expect(foreignKeyColumns(attemptConfig.foreignKeys.find(foreignKey =>
+      foreignKey.getName() ===
+        'wecom_customer_broadcast_task_provider_attempts_operation_scope_fk'))).toEqual({
+      columns: ['tenant_id', 'institution_id', 'customer_id', 'operation_ref', 'operation_id'],
+      foreignColumns: ['tenant_id', 'institution_id', 'customer_id', 'operation_ref', 'id'],
+    });
+    expect(foreignKeyColumns(recipientConfig.foreignKeys.find(foreignKey =>
+      foreignKey.getName() ===
+        'wecom_customer_broadcast_recipient_bindings_operation_scope_fk'))).toEqual({
+      columns: ['tenant_id', 'institution_id', 'customer_id', 'operation_ref', 'operation_id'],
+      foreignColumns: ['tenant_id', 'institution_id', 'customer_id', 'operation_ref', 'id'],
+    });
+    expect(foreignKeyColumns(recipientConfig.foreignKeys.find(foreignKey =>
+      foreignKey.getName() ===
+        'wecom_customer_broadcast_recipient_bindings_mapping_scope_fk'))).toEqual({
+      columns: ['tenant_id', 'institution_id', 'customer_id', 'mapping_id'],
+      foreignColumns: ['tenant_id', 'institution_id', 'customer_id', 'id'],
+    });
+
+    const dialect = new PgDialect();
+    const checkSql = (
+      checks: typeof attemptConfig.checks,
+      name: string,
+    ) => dialect
+      .sqlToQuery(checks.find(check => check.name === name)!.value)
+      .sql
+      .toLowerCase()
+      .replace(/"[^"]+"\./gu, '');
+    expect(checkSql(
+      bindingConfig.checks as typeof attemptConfig.checks,
+      'auth_account_institution_bindings_status_shape_check',
+    )).toContain('"status" = \'revoked\' and "revoked_at" is not null');
+    expect(checkSql(
+      bindingConfig.checks as typeof attemptConfig.checks,
+      'auth_account_institution_bindings_source_authority_check',
+    )).toContain('"status" <> \'active\' or "source" in (\'manual_admin\', \'system\')');
+    expect(checkSql(
+      attemptConfig.checks,
+      'wecom_customer_broadcast_task_provider_attempts_dispatch_once_check',
+    )).toContain('"dispatch_count" between 0 and 1');
+    expect(checkSql(
+      attemptConfig.checks,
+      'wecom_customer_broadcast_task_provider_attempts_task_ref_digest_check',
+    )).toContain("'^[0-9a-f]{64}$'");
+    expect(checkSql(
+      attemptConfig.checks,
+      'wecom_customer_broadcast_task_provider_attempts_finalize_candidate_check',
+    )).toContain('"finalize_state" = \'success_recorded\' and "send_result_status" = \'target_sent\'');
+    expect(checkSql(
+      attemptConfig.checks,
+      'wecom_customer_broadcast_task_provider_attempts_send_result_check',
+    )).toContain('"send_result_checked_at" >= "dispatch_terminal_at"');
+    expect(checkSql(
+      attemptConfig.checks,
+      'wecom_customer_broadcast_task_provider_attempts_unknown_review_check',
+    )).toContain('"automatic_retry_allowed" = false');
+    expect(checkSql(
+      recipientConfig.checks as typeof attemptConfig.checks,
+      'wecom_customer_broadcast_recipient_bindings_digest_length_check',
+    )).toContain("'^[0-9a-f]{64}$'");
+    expect(checkSql(
+      recipientConfig.checks as typeof attemptConfig.checks,
+      'wecom_customer_broadcast_recipient_bindings_status_shape_check',
+    )).toContain('"revoked_at" >= "created_at"');
+    expect(JSON.stringify({ bindingColumns, attemptColumns, recipientColumns })).not.toMatch(
+      /external_userid|userid|employee_id|phone|sender|recipient_plain|raw_msgid|msgid|raw_response|provider_url|access_token|secret|message_content|content_plain/i,
+    );
+    expect(attemptColumns).not.toContain('completed_count');
+  });
+
+  it('0037 forward-only 追加三表与 scope FK，且保持 0034/0035/0036 原文不变', () => {
+    const migrationSql = readMigrationSql('0037_v08_05b_b3a_real_task_readiness_foundation');
+    const migration0034 = readFileSync(
+      join(process.cwd(), 'drizzle/0034_v08_04f_ea_customer_mapping_data_foundation.sql'),
+      'utf8',
+    );
+    const migration0035 = readFileSync(
+      join(process.cwd(), 'drizzle/0035_v08_04f_fa_trusted_reachout_safety_foundation.sql'),
+      'utf8',
+    );
+    const migration0036 = readFileSync(
+      join(process.cwd(), 'drizzle/0036_v08_05b_a_single_real_send_proof_foundation.sql'),
+      'utf8',
+    );
+    const journal = JSON.parse(
+      readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8'),
+    ) as {
+      entries: Array<{
+        idx: number;
+        tag: string;
+        version: string;
+        when: number;
+        breakpoints: boolean;
+      }>;
+    };
+
+    expect(migrationSql).toContain('create table if not exists "auth_account_institution_bindings"');
+    expect(migrationSql).toContain('create table if not exists "wecom_customer_broadcast_task_provider_attempts"');
+    expect(migrationSql).toContain('create table if not exists "wecom_customer_broadcast_recipient_bindings"');
+    expect(migrationSql).toContain('wecom_real_send_proof_operations_scope_ref_id_unique');
+    expect(migrationSql).toContain('wecom_customer_broadcast_task_provider_attempts_operation_scope_fk');
+    expect(migrationSql).toContain('wecom_customer_broadcast_recipient_bindings_operation_scope_fk');
+    expect(migrationSql).toContain('wecom_customer_broadcast_recipient_bindings_mapping_scope_fk');
+    expect(migrationSql).toContain('wecom_customer_broadcast_recipient_bindings_operation_id_idx');
+    expect(migrationSql).toContain('wecom_customer_broadcast_recipient_bindings_mapping_id_idx');
+    expect(migrationSql).toContain('where "status" = \'active\'');
+    expect(migrationSql).toContain('"status" <> \'active\' or "source" in (\'manual_admin\', \'system\')');
+    expect(migrationSql).toContain('"dispatch_count" between 0 and 1');
+    expect(migrationSql).toContain('"task_ref_digest" ~ \'^[0-9a-f]{64}$\'');
+    expect(migrationSql).toContain('"recipient_binding_digest" ~ \'^[0-9a-f]{64}$\'');
+    expect(migrationSql).toContain('"automatic_retry_allowed" = false');
+    expect(migrationSql).toContain('"send_result_status" = \'target_sent\'');
+    expect(migrationSql).toContain('"send_result_checked_at" >= "dispatch_terminal_at"');
+    expect(migrationSql).not.toContain('"completed_count"');
+    expect(migrationSql).not.toMatch(
+      /external_userid|userid|employee_id|phone|sender|recipient_plain|raw_msgid|\bmsgid\b|raw_response|provider_url|access_token|secret|message_content|content_plain/i,
+    );
+    expect(migrationSql).not.toMatch(
+      /\b(drop|truncate|delete\s+from|insert\s+into)\b|(^|;)\s*update\s+/i,
+    );
+    expect(createHash('sha256').update(migration0034).digest('hex')).toBe(
+      '00e258a60d9975ac27e7c7dea5c9b6b10d242df19cd9cbfbe3d411b3abdfe701',
+    );
+    expect(createHash('sha256').update(migration0035).digest('hex')).toBe(
+      '6c36ba5c25344c33aab904ff1c09a091011e9d7373fcf053776106e26ecd8987',
+    );
+    expect(createHash('sha256').update(migration0036).digest('hex')).toBe(
+      '62328524a4f1a36a619e23a8ebbfb4bd70b25da6aede1db5751d6f795e8c2329',
+    );
+    expect(journal.entries.at(-2)).toEqual({
+      idx: 36,
+      tag: '0036_v08_05b_a_single_real_send_proof_foundation',
+      version: '7',
+      when: 1783843200000,
+      breakpoints: true,
+    });
+    expect(journal.entries.at(-1)).toEqual({
+      idx: 37,
+      tag: '0037_v08_05b_b3a_real_task_readiness_foundation',
+      version: '7',
+      when: 1783846800000,
+      breakpoints: true,
+    });
+    expect(journal.entries.filter(entry => entry.idx === 37)).toHaveLength(1);
   });
 
   it('定义正式租户账号、联系人表和账号状态枚举', () => {

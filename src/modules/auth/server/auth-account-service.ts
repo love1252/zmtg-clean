@@ -178,6 +178,12 @@ export function createAuthAccountService(input: {
         };
       }
 
+      const institutionBindings =
+        await input.repository.listActiveInstitutionBindingsByAccountAndTenant({
+          accountId: account.id,
+          tenantId: membership.tenantId,
+        });
+
       const status = nextSuccessStatus(account);
       await input.repository.recordLoginSuccess({
         accountId: account.id,
@@ -189,7 +195,12 @@ export function createAuthAccountService(input: {
       return {
         status: 'authenticated' as const,
         passwordResetRequired: loginDecision.passwordResetRequired,
-        user: toAuthSessionUser({ account, membership }),
+        user: toAuthSessionUser({
+          account,
+          membership,
+          institutionBindings,
+          now: timestamp,
+        }),
       };
     },
 

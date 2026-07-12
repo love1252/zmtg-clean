@@ -26,6 +26,7 @@ const routeMocks = vi.hoisted(() => {
     createAccount: vi.fn(),
     findAccountByUsername: vi.fn(),
     findPrimaryTenantMembershipByUserId: vi.fn(),
+    listActiveInstitutionBindingsByAccountAndTenant: vi.fn(),
     recordLoginFailure: vi.fn(),
     recordLoginSuccess: vi.fn(),
     updateAccountStatus: vi.fn(),
@@ -123,6 +124,7 @@ beforeEach(() => {
   routeMocks.service.authenticatePasswordAccount.mockReset();
   routeMocks.repository.findAccountByUsername.mockResolvedValue(routeMocks.account);
   routeMocks.repository.findPrimaryTenantMembershipByUserId.mockResolvedValue(routeMocks.membership);
+  routeMocks.repository.listActiveInstitutionBindingsByAccountAndTenant.mockResolvedValue([]);
   routeMocks.service.authenticatePasswordAccount.mockResolvedValue({
     status: 'authenticated',
     passwordResetRequired: true,
@@ -132,7 +134,7 @@ beforeEach(() => {
       name: '陈磊',
       role: 'tenant_admin',
       tenantId: 'tenant-zhengpu',
-      institutionId: null,
+      institutionId: 'institution-zhengpu',
     },
   });
 });
@@ -166,7 +168,7 @@ describe('正式账号登录路由', () => {
           name: '陈磊',
           role: 'tenant_admin',
           tenantId: 'tenant-zhengpu',
-          institutionId: null,
+          institutionId: 'institution-zhengpu',
         },
         passwordResetRequired: true,
       },
@@ -192,7 +194,7 @@ describe('正式账号登录路由', () => {
         name: '陈磊',
         role: 'tenant_admin',
         tenantId: 'tenant-zhengpu',
-        institutionId: null,
+        institutionId: 'institution-zhengpu',
       },
       expiresAt: expect.any(Number),
       source: 'server_session',
@@ -286,7 +288,7 @@ describe('正式账号登录路由', () => {
       authenticated: true,
       user: {
         id: 'auth-user-zhengpu-admin',
-        institutionId: null,
+        institutionId: 'institution-zhengpu',
       },
     });
   });

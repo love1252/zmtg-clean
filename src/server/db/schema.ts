@@ -99,6 +99,50 @@ export const weComRealSendProofPostcheckStatusEnum = pgEnum(
   'wecom_real_send_proof_postcheck_status',
   ['ready', 'blocked', 'expired'],
 );
+export const authInstitutionBindingStatusEnum = pgEnum(
+  'auth_institution_binding_status',
+  ['active', 'revoked'],
+);
+export const authInstitutionBindingSourceEnum = pgEnum(
+  'auth_institution_binding_source',
+  ['manual_admin', 'migration_placeholder', 'system'],
+);
+export const weComCustomerBroadcastTaskDispatchStateEnum = pgEnum(
+  'wecom_customer_broadcast_task_dispatch_state',
+  [
+    'not_started',
+    'task_create_attempted',
+    'task_created',
+    'task_create_failed',
+    'task_create_unknown',
+  ],
+);
+export const weComCustomerBroadcastTaskSendResultStatusEnum = pgEnum(
+  'wecom_customer_broadcast_task_send_result_status',
+  [
+    'not_checked',
+    'awaiting_member_confirmation',
+    'target_sent',
+    'target_failed',
+    'target_unknown',
+  ],
+);
+export const weComCustomerBroadcastTaskFinalizeStateEnum = pgEnum(
+  'wecom_customer_broadcast_task_finalize_state',
+  ['not_finalized', 'success_recorded', 'failure_recorded', 'unknown_recorded'],
+);
+export const weComCustomerBroadcastTaskReconciliationStateEnum = pgEnum(
+  'wecom_customer_broadcast_task_reconciliation_state',
+  ['none', 'manual_review_required', 'reconciled'],
+);
+export const weComCustomerBroadcastRecipientBindingSourceKindEnum = pgEnum(
+  'wecom_customer_broadcast_recipient_binding_source_kind',
+  ['protected_vault_reference', 'protected_resolver_reference'],
+);
+export const weComCustomerBroadcastRecipientBindingStatusEnum = pgEnum(
+  'wecom_customer_broadcast_recipient_binding_status',
+  ['active', 'revoked', 'stale'],
+);
 export const appointmentStatusEnum = pgEnum('appointment_status', [
   'pending_confirmation',
   'confirmed',
@@ -722,6 +766,53 @@ export const tenantMembers = pgTable(
       table.userId,
     ),
     tenantRoleIdx: index('tenant_members_tenant_role_idx').on(table.tenantId, table.role),
+  }),
+);
+
+export const authAccountInstitutionBindings = pgTable(
+  'auth_account_institution_bindings',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    accountId: varchar('account_id', { length: 96 }).notNull(),
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    status: authInstitutionBindingStatusEnum('status').notNull().default('active'),
+    source: authInstitutionBindingSourceEnum('source').notNull(),
+    assignedBy: varchar('assigned_by', { length: 96 }).notNull(),
+    assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    version: integer('version').notNull().default(1),
+    ...timestamps,
+  },
+  (table) => ({
+    tenantAccountFk: foreignKey({
+      name: 'auth_account_institution_bindings_tenant_account_fk',
+      columns: [table.tenantId, table.accountId],
+      foreignColumns: [tenantMembers.tenantId, tenantMembers.userId],
+    }),
+    activeAccountTenantUniqueIdx: uniqueIndex(
+      'auth_account_institution_bindings_active_account_tenant_unique_idx',
+    ).on(table.accountId, table.tenantId).where(sql`${table.status} = 'active'`),
+    accountTenantStatusIdx: index(
+      'auth_account_institution_bindings_account_tenant_status_idx',
+    ).on(table.accountId, table.tenantId, table.status),
+    statusShapeCheck: check(
+      'auth_account_institution_bindings_status_shape_check',
+      sql`(${table.status} = 'active' AND ${table.revokedAt} IS NULL AND ${table.institutionId} IS NOT NULL) OR (${table.status} = 'revoked' AND ${table.revokedAt} IS NOT NULL AND ${table.institutionId} IS NOT NULL AND ${table.revokedAt} >= ${table.assignedAt})`,
+    ),
+    expiryCheck: check(
+      'auth_account_institution_bindings_expiry_check',
+      sql`${table.expiresAt} IS NULL OR ${table.expiresAt} > ${table.assignedAt}`,
+    ),
+    sourceAuthorityCheck: check(
+      'auth_account_institution_bindings_source_authority_check',
+      sql`${table.status} <> 'active' OR ${table.source} IN ('manual_admin', 'system')`,
+    ),
+    versionPositiveCheck: check(
+      'auth_account_institution_bindings_version_positive_check',
+      sql`${table.version} > 0`,
+    ),
   }),
 );
 
@@ -1896,6 +1987,15 @@ export const weComRealSendProofOperations = pgTable(
       table.draftId,
       table.sourceReadyNoSendRef,
     ),
+    scopeRefIdUnique: unique(
+      'wecom_real_send_proof_operations_scope_ref_id_unique',
+    ).on(
+      table.tenantId,
+      table.institutionId,
+      table.customerId,
+      table.operationRef,
+      table.id,
+    ),
     customerFk: foreignKey({
       name: 'wecom_real_send_proof_operations_tenant_institution_customer_fk',
       columns: [table.tenantId, table.institutionId, table.customerId],
@@ -2006,6 +2106,204 @@ export const weComRealSendProofOperations = pgTable(
     versionPositiveCheck: check(
       'wecom_real_send_proof_operations_version_positive_check',
       sql`${table.version} > 0`,
+    ),
+  }),
+);
+
+export const weComCustomerBroadcastTaskProviderAttempts = pgTable(
+  'wecom_customer_broadcast_task_provider_attempts',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    operationId: varchar('operation_id', { length: 64 }).notNull(),
+    operationRef: varchar('operation_ref', { length: 96 }).notNull(),
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    capabilityKind: varchar('capability_kind', { length: 64 })
+      .notNull()
+      .default('customer_broadcast_task'),
+    providerKind: varchar('provider_kind', { length: 64 })
+      .notNull()
+      .default('wecom_official_customer_broadcast'),
+    dispatchState: weComCustomerBroadcastTaskDispatchStateEnum('dispatch_state')
+      .notNull()
+      .default('not_started'),
+    dispatchCount: integer('dispatch_count').notNull().default(0),
+    dispatchStartedAt: timestamp('dispatch_started_at', { withTimezone: true }),
+    dispatchTerminalAt: timestamp('dispatch_terminal_at', { withTimezone: true }),
+    taskRefDigest: varchar('task_ref_digest', { length: 64 }),
+    memberConfirmationRequired: boolean('member_confirmation_required')
+      .notNull()
+      .default(true),
+    providerResultCategory: weComRealSendProofProviderResultCategoryEnum(
+      'provider_result_category',
+    ),
+    sendResultStatus: weComCustomerBroadcastTaskSendResultStatusEnum('send_result_status')
+      .notNull()
+      .default('not_checked'),
+    sendResultCheckedAt: timestamp('send_result_checked_at', { withTimezone: true }),
+    finalizeState: weComCustomerBroadcastTaskFinalizeStateEnum('finalize_state')
+      .notNull()
+      .default('not_finalized'),
+    reconciliationState: weComCustomerBroadcastTaskReconciliationStateEnum(
+      'reconciliation_state',
+    ).notNull().default('none'),
+    manualReviewRequired: boolean('manual_review_required').notNull().default(false),
+    automaticRetryAllowed: boolean('automatic_retry_allowed').notNull().default(false),
+    version: integer('version').notNull().default(1),
+    ...timestamps,
+  },
+  (table) => ({
+    operationUnique: unique(
+      'wecom_customer_broadcast_task_provider_attempts_operation_unique',
+    ).on(table.operationId),
+    operationScopeFk: foreignKey({
+      name: 'wecom_customer_broadcast_task_provider_attempts_operation_scope_fk',
+      columns: [
+        table.tenantId,
+        table.institutionId,
+        table.customerId,
+        table.operationRef,
+        table.operationId,
+      ],
+      foreignColumns: [
+        weComRealSendProofOperations.tenantId,
+        weComRealSendProofOperations.institutionId,
+        weComRealSendProofOperations.customerId,
+        weComRealSendProofOperations.operationRef,
+        weComRealSendProofOperations.id,
+      ],
+    }),
+    scopeDispatchIdx: index(
+      'wecom_customer_broadcast_task_provider_attempts_scope_dispatch_idx',
+    ).on(table.tenantId, table.institutionId, table.dispatchState),
+    capabilityCheck: check(
+      'wecom_customer_broadcast_task_provider_attempts_capability_check',
+      sql`${table.capabilityKind} = 'customer_broadcast_task' AND ${table.providerKind} = 'wecom_official_customer_broadcast' AND ${table.memberConfirmationRequired} = true`,
+    ),
+    dispatchOnceCheck: check(
+      'wecom_customer_broadcast_task_provider_attempts_dispatch_once_check',
+      sql`${table.dispatchCount} BETWEEN 0 AND 1 AND ((${table.dispatchState} = 'not_started' AND ${table.dispatchCount} = 0) OR (${table.dispatchState} <> 'not_started' AND ${table.dispatchCount} = 1))`,
+    ),
+    dispatchTimingCheck: check(
+      'wecom_customer_broadcast_task_provider_attempts_dispatch_timing_check',
+      sql`(${table.dispatchState} = 'not_started' AND ${table.dispatchStartedAt} IS NULL AND ${table.dispatchTerminalAt} IS NULL) OR (${table.dispatchState} = 'task_create_attempted' AND ${table.dispatchStartedAt} IS NOT NULL AND ${table.dispatchTerminalAt} IS NULL) OR (${table.dispatchState} IN ('task_created', 'task_create_failed', 'task_create_unknown') AND ${table.dispatchStartedAt} IS NOT NULL AND ${table.dispatchTerminalAt} IS NOT NULL AND ${table.dispatchTerminalAt} >= ${table.dispatchStartedAt})`,
+    ),
+    taskRefDigestCheck: check(
+      'wecom_customer_broadcast_task_provider_attempts_task_ref_digest_check',
+      sql`(${table.taskRefDigest} IS NULL OR (length(${table.taskRefDigest}) = 64 AND ${table.taskRefDigest} ~ '^[0-9a-f]{64}$')) AND (${table.dispatchState} <> 'task_created' OR ${table.taskRefDigest} IS NOT NULL)`,
+    ),
+    providerResultCheck: check(
+      'wecom_customer_broadcast_task_provider_attempts_provider_result_check',
+      sql`(${table.dispatchState} IN ('not_started', 'task_create_attempted') AND ${table.providerResultCategory} IS NULL) OR (${table.dispatchState} = 'task_created' AND ${table.providerResultCategory} = 'accepted') OR (${table.dispatchState} = 'task_create_failed' AND ${table.providerResultCategory} = 'rejected') OR (${table.dispatchState} = 'task_create_unknown' AND ${table.providerResultCategory} IN ('transport_error', 'timeout', 'indeterminate'))`,
+    ),
+    sendResultCheck: check(
+      'wecom_customer_broadcast_task_provider_attempts_send_result_check',
+      sql`(${table.sendResultStatus} = 'not_checked' OR ${table.dispatchState} = 'task_created') AND ((${table.sendResultStatus} IN ('not_checked', 'awaiting_member_confirmation') AND ${table.sendResultCheckedAt} IS NULL) OR (${table.sendResultStatus} IN ('target_sent', 'target_failed', 'target_unknown') AND ${table.sendResultCheckedAt} IS NOT NULL AND ${table.dispatchTerminalAt} IS NOT NULL AND ${table.sendResultCheckedAt} >= ${table.dispatchTerminalAt}))`,
+    ),
+    finalizeCandidateCheck: check(
+      'wecom_customer_broadcast_task_provider_attempts_finalize_candidate_check',
+      sql`${table.finalizeState} = 'not_finalized' OR (${table.finalizeState} = 'success_recorded' AND ${table.sendResultStatus} = 'target_sent') OR (${table.finalizeState} = 'failure_recorded' AND (${table.dispatchState} = 'task_create_failed' OR ${table.sendResultStatus} = 'target_failed')) OR (${table.finalizeState} = 'unknown_recorded' AND (${table.dispatchState} = 'task_create_unknown' OR ${table.sendResultStatus} = 'target_unknown'))`,
+    ),
+    reconciliationCheck: check(
+      'wecom_customer_broadcast_task_provider_attempts_reconciliation_check',
+      sql`(${table.reconciliationState} = 'manual_review_required' AND ${table.manualReviewRequired} = true) OR (${table.reconciliationState} IN ('none', 'reconciled') AND ${table.manualReviewRequired} = false)`,
+    ),
+    unknownReviewCheck: check(
+      'wecom_customer_broadcast_task_provider_attempts_unknown_review_check',
+      sql`${table.automaticRetryAllowed} = false AND ((${table.dispatchState} <> 'task_create_unknown' AND ${table.sendResultStatus} <> 'target_unknown') OR ${table.reconciliationState} IN ('manual_review_required', 'reconciled'))`,
+    ),
+    versionPositiveCheck: check(
+      'wecom_customer_broadcast_task_provider_attempts_version_positive_check',
+      sql`${table.version} > 0`,
+    ),
+  }),
+);
+
+export const weComCustomerBroadcastRecipientBindings = pgTable(
+  'wecom_customer_broadcast_recipient_bindings',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    operationId: varchar('operation_id', { length: 64 }).notNull(),
+    operationRef: varchar('operation_ref', { length: 96 }).notNull(),
+    mappingId: varchar('mapping_id', { length: 64 }).notNull(),
+    recipientBindingRef: varchar('recipient_binding_ref', { length: 96 }).notNull(),
+    recipientBindingDigest: varchar('recipient_binding_digest', { length: 64 }).notNull(),
+    recipientBindingVersion: integer('recipient_binding_version').notNull(),
+    opaqueHandleRef: varchar('opaque_handle_ref', { length: 128 }).notNull(),
+    sourceKind: weComCustomerBroadcastRecipientBindingSourceKindEnum('source_kind').notNull(),
+    status: weComCustomerBroadcastRecipientBindingStatusEnum('status')
+      .notNull()
+      .default('active'),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => ({
+    operationScopeFk: foreignKey({
+      name: 'wecom_customer_broadcast_recipient_bindings_operation_scope_fk',
+      columns: [
+        table.tenantId,
+        table.institutionId,
+        table.customerId,
+        table.operationRef,
+        table.operationId,
+      ],
+      foreignColumns: [
+        weComRealSendProofOperations.tenantId,
+        weComRealSendProofOperations.institutionId,
+        weComRealSendProofOperations.customerId,
+        weComRealSendProofOperations.operationRef,
+        weComRealSendProofOperations.id,
+      ],
+    }),
+    mappingScopeFk: foreignKey({
+      name: 'wecom_customer_broadcast_recipient_bindings_mapping_scope_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId, table.mappingId],
+      foreignColumns: [
+        weComCustomerMappingStates.tenantId,
+        weComCustomerMappingStates.institutionId,
+        weComCustomerMappingStates.customerId,
+        weComCustomerMappingStates.id,
+      ],
+    }),
+    activeOperationUniqueIdx: uniqueIndex(
+      'wecom_customer_broadcast_recipient_bindings_active_operation_unique_idx',
+    ).on(
+      table.tenantId,
+      table.institutionId,
+      table.customerId,
+      table.operationRef,
+    ).where(sql`${table.status} = 'active'`),
+    scopeBindingRefUnique: unique(
+      'wecom_customer_broadcast_recipient_bindings_scope_ref_unique',
+    ).on(table.tenantId, table.institutionId, table.recipientBindingRef),
+    scopeStatusIdx: index(
+      'wecom_customer_broadcast_recipient_bindings_scope_status_idx',
+    ).on(table.tenantId, table.institutionId, table.customerId, table.status),
+    operationIdIdx: index(
+      'wecom_customer_broadcast_recipient_bindings_operation_id_idx',
+    ).on(table.operationId),
+    mappingIdIdx: index(
+      'wecom_customer_broadcast_recipient_bindings_mapping_id_idx',
+    ).on(table.mappingId),
+    digestLengthCheck: check(
+      'wecom_customer_broadcast_recipient_bindings_digest_length_check',
+      sql`length(${table.recipientBindingDigest}) = 64 AND ${table.recipientBindingDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    versionPositiveCheck: check(
+      'wecom_customer_broadcast_recipient_bindings_version_positive_check',
+      sql`${table.recipientBindingVersion} > 0`,
+    ),
+    referenceCheck: check(
+      'wecom_customer_broadcast_recipient_bindings_reference_check',
+      sql`length(trim(${table.recipientBindingRef})) > 0 AND length(trim(${table.opaqueHandleRef})) > 0`,
+    ),
+    statusShapeCheck: check(
+      'wecom_customer_broadcast_recipient_bindings_status_shape_check',
+      sql`(${table.status} = 'active' AND ${table.revokedAt} IS NULL) OR (${table.status} IN ('revoked', 'stale') AND ${table.revokedAt} IS NOT NULL AND ${table.revokedAt} >= ${table.createdAt})`,
     ),
   }),
 );
