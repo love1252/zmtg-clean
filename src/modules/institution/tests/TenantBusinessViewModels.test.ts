@@ -30,6 +30,10 @@ const customers: CustomerRecordSummary[] = [
     lastTouchSummary: '初次咨询',
     nextAction: '预约到店',
     tags: ['新客'],
+    gender: '',
+    birthDate: '',
+    referralSource: '',
+    notes: '',
   },
   {
     id: 'cust_post_care',
@@ -45,6 +49,10 @@ const customers: CustomerRecordSummary[] = [
     lastTouchSummary: '术后 D3',
     nextAction: '人工回访',
     tags: ['术后'],
+    gender: '',
+    birthDate: '',
+    referralSource: '',
+    notes: '',
   },
   {
     id: 'cust_repurchase',
@@ -60,6 +68,10 @@ const customers: CustomerRecordSummary[] = [
     lastTouchSummary: '术后第 28 天',
     nextAction: '复查邀约',
     tags: ['复购'],
+    gender: '',
+    birthDate: '',
+    referralSource: '',
+    notes: '',
   },
   {
     id: 'cust_silent',
@@ -75,6 +87,10 @@ const customers: CustomerRecordSummary[] = [
     lastTouchSummary: '48h 未回复',
     nextAction: '轻量唤醒',
     tags: ['沉默'],
+    gender: '',
+    birthDate: '',
+    referralSource: '',
+    notes: '',
   },
 ];
 

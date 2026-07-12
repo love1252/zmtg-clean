@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as searchGet } from '@/app/api/institution/knowledge-management/search/route';
 import { getDatabase } from '@/server/db/client';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
@@ -56,6 +56,7 @@ const searchResultRecords = [
     chunkId: 'chunk-a-0',
     chunkIndex: 0,
     textPreview: '术后冷敷应每次15-20分钟。',
+    parseStatus: 'succeeded' as const,
     matchReason: '片段包含关键词"冷敷"',
   },
 ];

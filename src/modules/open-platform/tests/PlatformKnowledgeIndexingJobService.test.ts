@@ -524,6 +524,7 @@ describe('platform knowledge indexing job service', () => {
     });
 
     expect(result.status).toBe('succeeded');
+    if (result.status !== 'succeeded') throw new Error('expected succeeded result');
     expect(result.records).toHaveLength(1);
     expect(result.records[0]?.jobId).toBe('job-current');
   });

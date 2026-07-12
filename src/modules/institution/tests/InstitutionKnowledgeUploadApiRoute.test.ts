@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as knowledgeUploadPost } from '@/app/api/institution/knowledge-management/upload/route';
 import { getDatabase } from '@/server/db/client';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
@@ -175,7 +175,20 @@ describe('机构知识库上传 API route', () => {
         uploadedByUserId: 'demo-user-admin', createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(), archivedAt: null,
       },
-      parse: { textLength: 12, chunkCount: 1, parserVersion: 'v1' },
+      parse: {
+        parseId: 'p1',
+        tenantId: 'demo-tenant-001',
+        knowledgeId: 'k1',
+        fileId: 'f1',
+        parseStatus: 'succeeded',
+        failureReasonCode: null,
+        safeFailureMessage: null,
+        textLength: 12,
+        chunkCount: 1,
+        parserVersion: 'v1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
       chunkCount: 1,
     });
 

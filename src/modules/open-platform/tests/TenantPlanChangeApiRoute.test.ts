@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as planChangePreviewRoute from '@/app/api/v1/open-platform/tenants/[tenantId]/plan-change-preview/route';
 import * as planChangeRoute from '@/app/api/v1/open-platform/tenants/[tenantId]/plan-change/route';
 import type { AccessContext } from '@/modules/security/domain/access-control';
+import type { TenantPlanChangeApplyInput } from '@/modules/open-platform/server/tenant-plan-change-service';
 
 const routeMocks = vi.hoisted(() => {
   const repository = {
@@ -178,7 +179,7 @@ beforeEach(() => {
     createdAt: new Date('2026-06-01T00:00:00.000Z'),
     updatedAt: new Date('2026-06-20T00:00:00.000Z'),
   });
-  routeMocks.repository.applyTenantPlanChange.mockImplementation(async (input: Record<string,unknown>) => ({
+  routeMocks.repository.applyTenantPlanChange.mockImplementation(async (input: TenantPlanChangeApplyInput) => ({
     status: 'plan_changed',
     changeRecordId: input.changeRecord.id,
     auditEventId: input.auditEvent.eventId,

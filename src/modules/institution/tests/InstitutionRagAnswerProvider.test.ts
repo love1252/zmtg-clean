@@ -19,11 +19,11 @@ const sensitiveFragments = [
 ];
 
 const encryptedApiKey = {
-  version: 1,
-  algorithm: 'aes-256-gcm',
+  algorithm: 'AES-256-GCM' as const,
+  keyVersion: 'v1' as const,
   iv: 'iv',
   ciphertext: 'ciphertext',
-  tag: 'tag',
+  authTag: 'tag',
 };
 
 vi.mock('@/modules/security/server/secretEncryption', () => ({
