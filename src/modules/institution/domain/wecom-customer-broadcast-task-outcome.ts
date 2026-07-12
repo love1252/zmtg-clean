@@ -35,6 +35,16 @@ export type WeComCustomerBroadcastTaskFinalizeState =
   (typeof weComCustomerBroadcastTaskFinalizeStates)[number];
 export type WeComCustomerBroadcastTaskReconciliationState =
   (typeof weComCustomerBroadcastTaskReconciliationStates)[number];
+
+/** 人工复核只接受固定低敏原因，禁止自由文本进入状态链路。 */
+export const weComCustomerBroadcastTaskManualReviewReasonCodes = [
+  'task_digest_not_found',
+  'provider_result_unmatched',
+  'employee_confirmation_reported_by_user',
+] as const;
+
+export type WeComCustomerBroadcastTaskManualReviewReasonCode =
+  (typeof weComCustomerBroadcastTaskManualReviewReasonCodes)[number];
 export type WeComCustomerBroadcastTaskProviderResultCategory =
   | 'accepted'
   | 'rejected'

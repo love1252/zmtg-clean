@@ -9,11 +9,18 @@ import {
   WE_COM_CUSTOMER_BROADCAST_TASK_MESSAGE_KIND,
   type WeComCustomerBroadcastTaskProviderInput,
 } from '@/modules/institution/domain/wecom-customer-broadcast-task-provider';
+import type { WeComCustomerBroadcastTaskProviderAttempt } from '@/modules/institution/domain/wecom-customer-broadcast-task-outcome';
 import { createWeComCustomerBroadcastTaskMockProvider } from '@/modules/institution/server/wecom-customer-broadcast-task-mock-provider';
+import {
+  createExplicitlyInjectedWeComCustomerBroadcastTaskRuntimeAdapter,
+  createFailClosedWeComCustomerBroadcastTaskRuntimeAdapter,
+} from '@/modules/institution/server/wecom-customer-broadcast-task-provider-runtime';
+import type { WeComCustomerBroadcastTaskOutcomeRepository } from '@/modules/institution/server/wecom-customer-broadcast-task-outcome-repository';
 import type { WeComRealSendProofRepository } from '@/modules/institution/server/wecom-real-send-proof-repository';
 import type { WeComRealSendProofEnvironment } from '@/modules/institution/server/wecom-real-send-proof-service';
 import {
   evaluateBroadcastTaskPreflight,
+  executeInjectedBroadcastTaskForControlledWorkflow,
   executeMockBroadcastTaskForTestOnly,
   issueBroadcastTaskConfirmation,
   rejectBroadcastTaskExecutionBecauseProviderDisabled,
@@ -246,6 +253,106 @@ describe('WeCom real-send execution shell service', () => {
       expect(result).not.toHaveProperty('status', 'succeeded');
       expect(result).not.toHaveProperty('operationStatus');
     }
+  });
+
+  it('受控执行服务默认 provider_disabled，且不进入 task_create_attempted', async () => {
+    const repository = {
+      findByScope: vi.fn(),
+      createNotStarted: vi.fn(),
+      updateWhenVersionMatches: vi.fn(),
+    } satisfies WeComCustomerBroadcastTaskOutcomeRepository;
+    const result = await executeInjectedBroadcastTaskForControlledWorkflow({
+      runtimeAdapter: createFailClosedWeComCustomerBroadcastTaskRuntimeAdapter(),
+      outcomeRepository: repository,
+      outcomeScope: {
+        tenantId: 'tenant-a',
+        institutionId: 'institution-a',
+        customerId: 'customer-a',
+        operationId: 'operation-id-a',
+        operationRef: providerInput.operationRef,
+      },
+      providerInput,
+      occurredAt,
+    });
+
+    expect(result).toEqual({
+      kind: 'blocked',
+      reasonCode: 'provider_disabled',
+      completedCountDelta: 0,
+      automaticRetryAllowed: false,
+    });
+    expect(repository.findByScope).not.toHaveBeenCalled();
+    expect(repository.updateWhenVersionMatches).not.toHaveBeenCalled();
+  });
+
+  it('显式注入 adapter 只推进 task_created / awaiting_member_confirmation', async () => {
+    let current: WeComCustomerBroadcastTaskProviderAttempt = {
+      id: 'attempt-a',
+      operationId: 'operation-id-a',
+      operationRef: providerInput.operationRef,
+      tenantId: 'tenant-a',
+      institutionId: 'institution-a',
+      customerId: 'customer-a',
+      capabilityKind: 'customer_broadcast_task' as const,
+      providerKind: 'wecom_official_customer_broadcast' as const,
+      dispatchState: 'not_started' as const,
+      dispatchCount: 0 as const,
+      dispatchStartedAt: null,
+      dispatchTerminalAt: null,
+      taskRefDigest: null,
+      memberConfirmationRequired: true as const,
+      providerResultCategory: null,
+      sendResultStatus: 'not_checked' as const,
+      sendResultCheckedAt: null,
+      finalizeState: 'not_finalized' as const,
+      reconciliationState: 'none' as const,
+      manualReviewRequired: false,
+      automaticRetryAllowed: false as const,
+      version: 1,
+      createdAt: occurredAt,
+      updatedAt: occurredAt,
+    };
+    const repository = {
+      findByScope: vi.fn(async () => current),
+      createNotStarted: vi.fn(),
+      updateWhenVersionMatches: vi.fn(async (input) => {
+        if (input.expectedVersion !== current.version) return null;
+        current = input.outcome;
+        return current;
+      }),
+    } satisfies WeComCustomerBroadcastTaskOutcomeRepository;
+    const result = await executeInjectedBroadcastTaskForControlledWorkflow({
+      runtimeAdapter: createExplicitlyInjectedWeComCustomerBroadcastTaskRuntimeAdapter({
+        fetcher: {},
+        tokenProvider: { acquire: async () => ({ kind: 'available', leaseId: 'lease-a' }) },
+        recipientResolver: { resolve: async () => ({ kind: 'resolved', opaqueHandle: 'handle-a' }) },
+        executor: { execute: async () => ({ kind: 'task_created', taskRefDigest: 'c'.repeat(64) }) },
+      }),
+      outcomeRepository: repository,
+      outcomeScope: {
+        tenantId: 'tenant-a',
+        institutionId: 'institution-a',
+        customerId: 'customer-a',
+        operationId: 'operation-id-a',
+        operationRef: providerInput.operationRef,
+      },
+      providerInput,
+      occurredAt,
+    });
+
+    expect(result).toEqual({
+      kind: 'task_created',
+      sendResultStatus: 'awaiting_member_confirmation',
+      completedCountDelta: 0,
+      automaticRetryAllowed: false,
+    });
+    expect(current).toMatchObject({
+      dispatchState: 'task_created',
+      sendResultStatus: 'awaiting_member_confirmation',
+      finalizeState: 'not_finalized',
+      automaticRetryAllowed: false,
+    });
+    expect(JSON.stringify(current)).not.toContain('succeeded');
   });
 
   it('execution shell 不实现 provider、consume、网络或环境读取，运行时 fetch=0', async () => {

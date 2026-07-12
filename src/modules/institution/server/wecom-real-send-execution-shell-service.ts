@@ -12,6 +12,17 @@ import {
 } from '@/modules/institution/domain/wecom-real-send-proof';
 import type { WeComRealSendProofRepository } from '@/modules/institution/server/wecom-real-send-proof-repository';
 import type { WeComCustomerBroadcastTaskMockProviderContract } from '@/modules/institution/server/wecom-customer-broadcast-task-provider-contract';
+import type {
+  WeComCustomerBroadcastTaskOutcomeRepository,
+  WeComCustomerBroadcastTaskOutcomeScope,
+} from '@/modules/institution/server/wecom-customer-broadcast-task-outcome-repository';
+import {
+  persistWeComCustomerBroadcastTaskOutcomeAction,
+} from '@/modules/institution/server/wecom-customer-broadcast-task-outcome-service';
+import type {
+  WeComCustomerBroadcastTaskRuntimeAdapter,
+  WeComCustomerBroadcastTaskRuntimeOutput,
+} from '@/modules/institution/server/wecom-customer-broadcast-task-provider-runtime';
 import {
   issueRealSendProofOperation,
   type WeComRealSendProofEnvironment,
@@ -272,4 +283,160 @@ export async function executeMockBroadcastTaskForTestOnly(input: Readonly<{
 }>): Promise<WeComBroadcastTaskMockExecutionOutcome> {
   const output = await input.mockProvider.createTask(input.providerInput);
   return evaluateMockBroadcastTaskProviderOutcome(output);
+}
+
+type FunctionalExecutionBase = Readonly<{
+  completedCountDelta: 0;
+  automaticRetryAllowed: false;
+}>;
+
+export type WeComBroadcastTaskFunctionalExecutionOutcome =
+  | (FunctionalExecutionBase & Readonly<{
+      kind: 'task_created';
+      sendResultStatus: 'awaiting_member_confirmation';
+    }>)
+  | (FunctionalExecutionBase & Readonly<{
+      kind: 'task_create_failed';
+    }>)
+  | (FunctionalExecutionBase & Readonly<{
+      kind: 'manual_review_required';
+      providerResultKind: 'timeout' | 'transport_error' | 'indeterminate' | 'provider_disabled';
+    }>)
+  | (FunctionalExecutionBase & Readonly<{
+      kind: 'blocked';
+      reasonCode: 'provider_disabled' | 'outcome_unavailable';
+    }>);
+
+const FUNCTIONAL_EXECUTION_BASE = Object.freeze({
+  completedCountDelta: 0 as const,
+  automaticRetryAllowed: false as const,
+});
+
+function outcomeUnavailable(): WeComBroadcastTaskFunctionalExecutionOutcome {
+  return Object.freeze({
+    ...FUNCTIONAL_EXECUTION_BASE,
+    kind: 'blocked' as const,
+    reasonCode: 'outcome_unavailable' as const,
+  });
+}
+
+async function persistFunctionalOutcome(input: Readonly<{
+  repository: WeComCustomerBroadcastTaskOutcomeRepository;
+  scope: WeComCustomerBroadcastTaskOutcomeScope;
+  action:
+    | { action: 'record_task_create_attempted'; occurredAt: string }
+    | { action: 'record_task_created'; occurredAt: string; taskRefDigest: string }
+    | { action: 'record_awaiting_member_confirmation'; occurredAt: string }
+    | { action: 'record_task_create_failed'; occurredAt: string }
+    | {
+        action: 'record_task_create_unknown';
+        occurredAt: string;
+        providerResultCategory: 'timeout' | 'transport_error' | 'indeterminate';
+      };
+}>) {
+  return persistWeComCustomerBroadcastTaskOutcomeAction(input);
+}
+
+/**
+ * 受控任务创建执行服务只在显式注入 adapter 时可运行。它只推进 0037 outcome
+ * sidecar 到 task_created / awaiting_member_confirmation 或人工复核；不触发
+ * proof 成功终态和 completedCount。
+ */
+export async function executeInjectedBroadcastTaskForControlledWorkflow(input: Readonly<{
+  runtimeAdapter: WeComCustomerBroadcastTaskRuntimeAdapter;
+  outcomeRepository: WeComCustomerBroadcastTaskOutcomeRepository;
+  outcomeScope: WeComCustomerBroadcastTaskOutcomeScope;
+  providerInput: WeComCustomerBroadcastTaskProviderInput;
+  occurredAt: string;
+}>): Promise<WeComBroadcastTaskFunctionalExecutionOutcome> {
+  if (input.runtimeAdapter.adapterKind !== 'explicitly_injected') {
+    return Object.freeze({
+      ...FUNCTIONAL_EXECUTION_BASE,
+      kind: 'blocked' as const,
+      reasonCode: 'provider_disabled' as const,
+    });
+  }
+
+  const started = await persistFunctionalOutcome({
+    repository: input.outcomeRepository,
+    scope: input.outcomeScope,
+    action: { action: 'record_task_create_attempted', occurredAt: input.occurredAt },
+  });
+  if (started.kind !== 'recorded') return outcomeUnavailable();
+
+  const providerOutput = await input.runtimeAdapter.createTask(input.providerInput);
+  return persistFunctionalProviderOutput({
+    repository: input.outcomeRepository,
+    scope: input.outcomeScope,
+    occurredAt: input.occurredAt,
+    providerOutput,
+  });
+}
+
+async function persistFunctionalProviderOutput(input: Readonly<{
+  repository: WeComCustomerBroadcastTaskOutcomeRepository;
+  scope: WeComCustomerBroadcastTaskOutcomeScope;
+  occurredAt: string;
+  providerOutput: WeComCustomerBroadcastTaskRuntimeOutput;
+}>): Promise<WeComBroadcastTaskFunctionalExecutionOutcome> {
+  switch (input.providerOutput.kind) {
+    case 'task_created': {
+      const created = await persistFunctionalOutcome({
+        repository: input.repository,
+        scope: input.scope,
+        action: {
+          action: 'record_task_created',
+          occurredAt: input.occurredAt,
+          taskRefDigest: input.providerOutput.taskRefDigest,
+        },
+      });
+      if (created.kind !== 'recorded') return outcomeUnavailable();
+      const awaiting = await persistFunctionalOutcome({
+        repository: input.repository,
+        scope: input.scope,
+        action: { action: 'record_awaiting_member_confirmation', occurredAt: input.occurredAt },
+      });
+      return awaiting.kind === 'recorded'
+        ? Object.freeze({
+            ...FUNCTIONAL_EXECUTION_BASE,
+            kind: 'task_created' as const,
+            sendResultStatus: 'awaiting_member_confirmation' as const,
+          })
+        : outcomeUnavailable();
+    }
+    case 'rejected': {
+      const failed = await persistFunctionalOutcome({
+        repository: input.repository,
+        scope: input.scope,
+        action: { action: 'record_task_create_failed', occurredAt: input.occurredAt },
+      });
+      return failed.kind === 'recorded'
+        ? Object.freeze({ ...FUNCTIONAL_EXECUTION_BASE, kind: 'task_create_failed' as const })
+        : outcomeUnavailable();
+    }
+    case 'timeout':
+    case 'transport_error':
+    case 'indeterminate':
+    case 'provider_disabled': {
+      const category = input.providerOutput.kind === 'provider_disabled'
+        ? 'indeterminate' as const
+        : input.providerOutput.kind;
+      const unknown = await persistFunctionalOutcome({
+        repository: input.repository,
+        scope: input.scope,
+        action: {
+          action: 'record_task_create_unknown',
+          occurredAt: input.occurredAt,
+          providerResultCategory: category,
+        },
+      });
+      return unknown.kind === 'recorded'
+        ? Object.freeze({
+            ...FUNCTIONAL_EXECUTION_BASE,
+            kind: 'manual_review_required' as const,
+            providerResultKind: input.providerOutput.kind,
+          })
+        : outcomeUnavailable();
+    }
+  }
 }

@@ -4,7 +4,10 @@ import type {
   WeComCustomerBroadcastTaskProviderAttempt,
 } from '@/modules/institution/domain/wecom-customer-broadcast-task-outcome';
 import type { TenantDatabase } from '@/server/db/client';
-import { weComCustomerBroadcastTaskProviderAttempts } from '@/server/db/schema';
+import {
+  weComCustomerBroadcastTaskProviderAttempts,
+  weComRealSendProofOperations,
+} from '@/server/db/schema';
 
 export type WeComCustomerBroadcastTaskOutcomeScope = Readonly<{
   tenantId: string;
@@ -13,6 +16,79 @@ export type WeComCustomerBroadcastTaskOutcomeScope = Readonly<{
   operationId: string;
   operationRef: string;
 }>;
+
+export type WeComCustomerBroadcastTaskOutcomeDraftScopeInput = Readonly<{
+  tenantId: string;
+  institutionId: string;
+  draftId: string;
+  operationRef: string;
+}>;
+
+/**
+ * 供 route 在进入 sidecar CAS 前按 tenant + institution + draft 解析完整 scope。
+ * 返回 null 统一表示不存在或越权，避免泄露其他机构的 operation。
+ */
+export async function findWeComCustomerBroadcastTaskOutcomeScopeForDraft(
+  database: TenantDatabase,
+  input: WeComCustomerBroadcastTaskOutcomeDraftScopeInput,
+): Promise<WeComCustomerBroadcastTaskOutcomeScope | null> {
+  const rows = await database
+    .select({
+      operationId: weComCustomerBroadcastTaskProviderAttempts.operationId,
+      operationRef: weComCustomerBroadcastTaskProviderAttempts.operationRef,
+      tenantId: weComCustomerBroadcastTaskProviderAttempts.tenantId,
+      institutionId: weComCustomerBroadcastTaskProviderAttempts.institutionId,
+      customerId: weComCustomerBroadcastTaskProviderAttempts.customerId,
+    })
+    .from(weComCustomerBroadcastTaskProviderAttempts)
+    .innerJoin(
+      weComRealSendProofOperations,
+      and(
+        eq(
+          weComCustomerBroadcastTaskProviderAttempts.operationId,
+          weComRealSendProofOperations.id,
+        ),
+        eq(
+          weComCustomerBroadcastTaskProviderAttempts.operationRef,
+          weComRealSendProofOperations.operationRef,
+        ),
+        eq(
+          weComCustomerBroadcastTaskProviderAttempts.tenantId,
+          weComRealSendProofOperations.tenantId,
+        ),
+        eq(
+          weComCustomerBroadcastTaskProviderAttempts.institutionId,
+          weComRealSendProofOperations.institutionId,
+        ),
+        eq(
+          weComCustomerBroadcastTaskProviderAttempts.customerId,
+          weComRealSendProofOperations.customerId,
+        ),
+      ),
+    )
+    .where(and(
+      eq(weComCustomerBroadcastTaskProviderAttempts.tenantId, input.tenantId),
+      eq(
+        weComCustomerBroadcastTaskProviderAttempts.institutionId,
+        input.institutionId,
+      ),
+      eq(weComCustomerBroadcastTaskProviderAttempts.operationRef, input.operationRef),
+      eq(weComRealSendProofOperations.draftId, input.draftId),
+      eq(weComRealSendProofOperations.tenantId, input.tenantId),
+      eq(weComRealSendProofOperations.institutionId, input.institutionId),
+    ))
+    .limit(2);
+  if (rows.length !== 1) return null;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    tenantId: row.tenantId,
+    institutionId: row.institutionId,
+    customerId: row.customerId,
+    operationId: row.operationId,
+    operationRef: row.operationRef,
+  };
+}
 
 export type CreateWeComCustomerBroadcastTaskProviderAttemptInput =
   WeComCustomerBroadcastTaskOutcomeScope & Readonly<{

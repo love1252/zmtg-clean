@@ -23,6 +23,7 @@ import {
 } from '@/modules/institution/server/wecom-customer-broadcast-task-outcome-repository';
 import {
   applyWeComCustomerBroadcastTaskOutcomeAction,
+  markWeComCustomerBroadcastTaskManualReview,
   persistWeComCustomerBroadcastTaskOutcomeAction,
   type WeComCustomerBroadcastTaskOutcomeAction,
 } from '@/modules/institution/server/wecom-customer-broadcast-task-outcome-service';
@@ -189,6 +190,79 @@ describe('WeCom customer broadcast task outcome sidecar', () => {
       reconciliationState: 'manual_review_required',
     });
     expect(result.automaticRetryAllowed).toBe(false);
+  });
+
+  it('人工复核服务只写 scoped 低敏 sidecar，不增加 completedCount 或触发成功', async () => {
+    const current = attempt();
+    const next = transitioned(markManualReviewRequired(current, later)).outcome;
+    const repository = {
+      findByScope: vi.fn().mockResolvedValue(current),
+      createNotStarted: vi.fn(),
+      updateWhenVersionMatches: vi.fn().mockResolvedValue(next),
+    } satisfies WeComCustomerBroadcastTaskOutcomeRepository;
+    const resolveScope = vi.fn().mockResolvedValue({
+      tenantId: current.tenantId,
+      institutionId: current.institutionId,
+      customerId: current.customerId,
+      operationId: current.operationId,
+      operationRef: current.operationRef,
+    });
+
+    const result = await markWeComCustomerBroadcastTaskManualReview({
+      tenantId: current.tenantId,
+      institutionId: current.institutionId,
+      draftId: 'draft-a',
+      operationRef: current.operationRef,
+      reasonCode: 'provider_result_unmatched',
+      occurredAt: later,
+      resolveScope,
+      repository,
+    });
+
+    expect(resolveScope).toHaveBeenCalledWith({
+      tenantId: current.tenantId,
+      institutionId: current.institutionId,
+      draftId: 'draft-a',
+      operationRef: current.operationRef,
+    });
+    expect(result).toEqual({
+      kind: 'recorded',
+      reconciliationState: 'manual_review_required',
+      manualReviewRequired: true,
+      completedCountDelta: 0,
+      automaticRetryAllowed: false,
+    });
+    expect(repository.updateWhenVersionMatches).toHaveBeenCalledWith(expect.objectContaining({
+      expectedVersion: current.version,
+      outcome: expect.objectContaining({
+        reconciliationState: 'manual_review_required',
+        manualReviewRequired: true,
+        finalizeState: 'not_finalized',
+      }),
+    }));
+  });
+
+  it('已处于 manual_review_required 时保持幂等，不重复写 sidecar', async () => {
+    const current = transitioned(markManualReviewRequired(attempt(), later)).outcome;
+    const repository = {
+      findByScope: vi.fn().mockResolvedValue(current),
+      createNotStarted: vi.fn(),
+      updateWhenVersionMatches: vi.fn(),
+    } satisfies WeComCustomerBroadcastTaskOutcomeRepository;
+    const result = await persistWeComCustomerBroadcastTaskOutcomeAction({
+      repository,
+      scope: {
+        tenantId: current.tenantId,
+        institutionId: current.institutionId,
+        customerId: current.customerId,
+        operationId: current.operationId,
+        operationRef: current.operationRef,
+      },
+      action: { action: 'mark_manual_review_required', occurredAt: afterLater },
+    });
+
+    expect(result).toMatchObject({ kind: 'recorded', outcome: current });
+    expect(repository.updateWhenVersionMatches).not.toHaveBeenCalled();
   });
 
   it('拒绝早于当前 sidecar updatedAt 的倒序事件时间', () => {

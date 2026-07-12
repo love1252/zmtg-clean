@@ -8,6 +8,7 @@ import {
   recordTaskCreateFailed,
   recordTaskCreated,
   recordTaskCreateUnknown,
+  type WeComCustomerBroadcastTaskManualReviewReasonCode,
   type WeComCustomerBroadcastTaskOutcomeFailureReason,
   type WeComCustomerBroadcastTaskOutcomeTransition,
   type WeComCustomerBroadcastTaskProviderAttempt,
@@ -144,6 +145,20 @@ export async function persistWeComCustomerBroadcastTaskOutcomeAction(input: {
   }
   if (!current) return { kind: 'blocked', reason: 'outcome_missing' };
 
+  if (
+    input.action.action === 'mark_manual_review_required' &&
+    current.reconciliationState === 'manual_review_required' &&
+    current.manualReviewRequired
+  ) {
+    return {
+      kind: 'recorded',
+      outcome: current,
+      targetSentCandidate: false,
+      completedCountDelta: 0,
+      automaticRetryAllowed: false,
+    };
+  }
+
   const transition = applyWeComCustomerBroadcastTaskOutcomeAction(
     current,
     input.action,
@@ -179,4 +194,88 @@ export async function persistWeComCustomerBroadcastTaskOutcomeAction(input: {
       automaticRetryAllowed: false,
     };
   }
+}
+
+export type WeComCustomerBroadcastTaskManualReviewScopeResolver = (input: Readonly<{
+  tenantId: string;
+  institutionId: string;
+  draftId: string;
+  operationRef: string;
+}>) => Promise<WeComCustomerBroadcastTaskOutcomeScope | null>;
+
+/**
+ * 人工复核只写 0037 sidecar 的固定低敏状态。reasonCode 是固定枚举，供 API
+ * 响应与后续审计使用；不接受或保存自由文本，也不触发发送结果或成功终态。
+ */
+export async function markWeComCustomerBroadcastTaskManualReview(input: Readonly<{
+  tenantId: string;
+  institutionId: string;
+  draftId: string;
+  operationRef: string;
+  reasonCode: WeComCustomerBroadcastTaskManualReviewReasonCode;
+  occurredAt: string;
+  resolveScope: WeComCustomerBroadcastTaskManualReviewScopeResolver;
+  repository: WeComCustomerBroadcastTaskOutcomeRepository;
+}>): Promise<
+  | Readonly<{
+      kind: 'recorded';
+      reconciliationState: 'manual_review_required';
+      manualReviewRequired: true;
+      completedCountDelta: 0;
+      automaticRetryAllowed: false;
+    }>
+  | Readonly<{
+      kind: 'blocked';
+      reason: 'operation_not_found' | 'persistence_unknown' | 'invalid_transition';
+      completedCountDelta: 0;
+      automaticRetryAllowed: false;
+    }>
+> {
+  let scope: WeComCustomerBroadcastTaskOutcomeScope | null;
+  try {
+    scope = await input.resolveScope({
+      tenantId: input.tenantId,
+      institutionId: input.institutionId,
+      draftId: input.draftId,
+      operationRef: input.operationRef,
+    });
+  } catch {
+    return {
+      kind: 'blocked',
+      reason: 'persistence_unknown',
+      completedCountDelta: 0,
+      automaticRetryAllowed: false,
+    };
+  }
+  if (!scope) {
+    return {
+      kind: 'blocked',
+      reason: 'operation_not_found',
+      completedCountDelta: 0,
+      automaticRetryAllowed: false,
+    };
+  }
+
+  const result = await persistWeComCustomerBroadcastTaskOutcomeAction({
+    repository: input.repository,
+    scope,
+    action: { action: 'mark_manual_review_required', occurredAt: input.occurredAt },
+  });
+  if (result.kind === 'recorded') {
+    return {
+      kind: 'recorded',
+      reconciliationState: 'manual_review_required',
+      manualReviewRequired: true,
+      completedCountDelta: 0,
+      automaticRetryAllowed: false,
+    };
+  }
+  return {
+    kind: 'blocked',
+    reason: result.kind === 'blocked' && result.reason === 'invalid_transition'
+      ? 'invalid_transition'
+      : 'persistence_unknown',
+    completedCountDelta: 0,
+    automaticRetryAllowed: false,
+  };
 }
