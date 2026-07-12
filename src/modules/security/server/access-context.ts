@@ -35,6 +35,6 @@ export function getDemoAccessContextFromRequest(
     scope,
     tenantId: session.user.tenantId,
     institutionId: scope === 'tenant' ? session.user.institutionId ?? null : null,
-    source: 'demo_session',
+    source: session.source ?? 'demo_session',
   };
 }

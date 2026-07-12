@@ -135,5 +135,7 @@ export function toAuthSessionUser(input: {
     name: input.membership.displayName || input.account.displayName,
     role: input.membership.role,
     tenantId: input.membership.tenantId,
+    // tenant_members 当前没有权威机构绑定；正式会话不得从租户或业务记录推断机构。
+    institutionId: null,
   };
 }

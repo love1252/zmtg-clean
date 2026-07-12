@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { AUTH_ROLES, isAuthRole } from '@/modules/auth/domain/session';
+import {
+  AUTH_ROLES,
+  AUTH_SESSION_SOURCES,
+  isAuthRole,
+  isAuthSessionSource,
+} from '@/modules/auth/domain/session';
 
 describe('认证会话领域', () => {
   it('暴露支持的角色边界', () => {
@@ -24,5 +29,13 @@ describe('认证会话领域', () => {
     expect(isAuthRole('security_auditor')).toBe(true);
     expect(isAuthRole('visitor')).toBe(false);
     expect(isAuthRole(null)).toBe(false);
+  });
+
+  it('只允许 demo 和 server 两类签名会话来源', () => {
+    expect(AUTH_SESSION_SOURCES).toEqual(['demo_session', 'server_session']);
+    expect(isAuthSessionSource('demo_session')).toBe(true);
+    expect(isAuthSessionSource('server_session')).toBe(true);
+    expect(isAuthSessionSource('trusted_gateway')).toBe(false);
+    expect(isAuthSessionSource(undefined)).toBe(false);
   });
 });

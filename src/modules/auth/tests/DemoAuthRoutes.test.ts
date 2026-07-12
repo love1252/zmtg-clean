@@ -42,6 +42,7 @@ describe('演示认证路由', () => {
         tenantId: 'demo-tenant-001',
       },
       expiresAt: Date.now() + 60_000,
+      source: 'demo_session' as const,
     };
 
     const encoded = encodeDemoSession(session);
@@ -62,6 +63,7 @@ describe('演示认证路由', () => {
         tenantId: 'demo-tenant-001',
       },
       expiresAt: Date.now() + 60_000,
+      source: 'demo_session' as const,
     };
 
     const encoded = encodeDemoSession(session);
@@ -82,6 +84,45 @@ describe('演示认证路由', () => {
     expect(decodeDemoSession(payload)).toBeNull();
   });
 
+  it('拒绝签名正确但来源枚举未知的会话', () => {
+    const encoded = encodeDemoSession({
+      user: {
+        id: 'bad-source-user',
+        username: 'bad-source',
+        name: '未知来源用户',
+        role: 'tenant_admin',
+        tenantId: 'demo-tenant-001',
+      },
+      expiresAt: Date.now() + 60_000,
+      source: 'trusted_gateway' as 'server_session',
+    });
+
+    expect(decodeDemoSession(encoded)).toBeNull();
+  });
+
+  it('兼容缺少来源的旧 cookie，不影响既有演示页面会话检查', async () => {
+    const encoded = encodeDemoSession({
+      user: {
+        id: 'legacy-demo-user',
+        username: 'legacy-demo',
+        name: '旧演示用户',
+        role: 'tenant_admin',
+        tenantId: 'demo-tenant-001',
+      },
+      expiresAt: Date.now() + 60_000,
+    });
+
+    expect(decodeDemoSession(encoded)?.source).toBeUndefined();
+    const response = await sessionGet(
+      requestWithCookie(`${DEMO_SESSION_COOKIE}=${encoded}`),
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      authenticated: true,
+      user: { id: 'legacy-demo-user' },
+    });
+  });
+
   it('生产环境编码前必须配置演示会话密钥', () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('ZMTG_ENABLE_DEMO_AUTH', 'true');
@@ -97,6 +138,7 @@ describe('演示认证路由', () => {
           tenantId: 'demo-tenant-001',
         },
         expiresAt: Date.now() + 60_000,
+        source: 'demo_session',
       }),
     ).toThrow('ZMTG_DEMO_SESSION_SECRET');
   });
@@ -117,6 +159,32 @@ describe('演示认证路由', () => {
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 
+  it('生产关闭演示认证时拒绝 demo 与缺少来源的旧会话', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('ZMTG_ENABLE_DEMO_AUTH', 'false');
+    vi.stubEnv('ZMTG_DEMO_SESSION_SECRET', 'demo-session-gate-test-signing-key');
+    const user = {
+      id: 'demo-disabled-user',
+      username: 'demo-disabled',
+      name: '已关闭演示用户',
+      role: 'tenant_admin' as const,
+      tenantId: 'demo-tenant-001',
+    };
+    const expiresAt = Date.now() + 60_000;
+    const demoSession = encodeDemoSession({ user, expiresAt, source: 'demo_session' });
+    const legacySession = encodeDemoSession({ user, expiresAt });
+
+    const demoResponse = await sessionGet(
+      requestWithCookie(`${DEMO_SESSION_COOKIE}=${demoSession}`),
+    );
+    const legacyResponse = await sessionGet(
+      requestWithCookie(`${DEMO_SESSION_COOKIE}=${legacySession}`),
+    );
+
+    expect(demoResponse.status).toBe(401);
+    expect(legacyResponse.status).toBe(401);
+  });
+
   it('登录机构演示用户并返回会话', async () => {
     const loginResponse = await loginPost(jsonRequest({ username: 'admin', password: 'admin123' }));
     const loginPayload = await loginResponse.json();
@@ -134,6 +202,8 @@ describe('演示认证路由', () => {
         },
       },
     });
+    const encodedSession = cookie.slice(`${DEMO_SESSION_COOKIE}=`.length);
+    expect(decodeDemoSession(encodedSession)?.source).toBe('demo_session');
 
     const sessionResponse = await sessionGet(requestWithCookie(cookie));
     const sessionPayload = await sessionResponse.json();
