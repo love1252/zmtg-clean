@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -29,6 +30,9 @@ import {
   tenants,
   treatmentSummaries,
   weComCustomerMappingStates,
+  weComRealSendProductionAttestations,
+  weComRealSendProofControls,
+  weComRealSendProofOperations,
 } from '@/server/db/schema';
 
 type NamedColumn = { name: string };
@@ -947,6 +951,159 @@ describe('数据库结构', () => {
         preflightStatus: 'blocked_route_unverified', proofEligibleMock: false,
       })).toBe(true);
     }
+  });
+
+  it('定义单条真实发送 proof operation、六层 controls 与 production attestation', () => {
+    const operationConfig = getTableConfig(weComRealSendProofOperations);
+    const controlConfig = getTableConfig(weComRealSendProofControls);
+    const attestationConfig = getTableConfig(weComRealSendProductionAttestations);
+    const operationColumns = columnNames(operationConfig.columns);
+    const controlColumns = columnNames(controlConfig.columns);
+    const attestationColumns = columnNames(attestationConfig.columns);
+
+    expect(schema.weComRealSendProofOperationStatusEnum.enumValues).toEqual([
+      'requested', 'aborted', 'attempted', 'succeeded', 'failed', 'unknown_outcome',
+    ]);
+    expect(schema.weComRealSendProofControlScopeKindEnum.enumValues).toEqual([
+      'global', 'tenant', 'institution', 'channel', 'customer', 'operator_role',
+    ]);
+    expect(schema.weComRealSendProofProviderResultCategoryEnum.enumValues).toEqual([
+      'accepted', 'rejected', 'transport_error', 'timeout', 'indeterminate',
+    ]);
+    expect(schema.weComRealSendProofPostcheckStatusEnum.enumValues).toEqual([
+      'ready', 'blocked', 'expired',
+    ]);
+    expect(operationColumns).toEqual(expect.arrayContaining([
+      'operation_ref', 'channel_type', 'source_ready_no_send_ref', 'source_ready_no_send_digest',
+      'readiness_fingerprint', 'content_hash', 'recipient_binding_ref',
+      'recipient_binding_digest', 'confirmation_token_digest', 'confirmation_issued_at',
+      'confirmation_expires_at', 'confirmation_consumed_at', 'attempt_count',
+      'provider_result_category', 'completed_frequency_ref', 'session_provenance',
+    ]));
+    expect(controlColumns).toEqual(expect.arrayContaining([
+      'scope_kind', 'proof_enabled', 'kill_switch_engaged', 'effective_at', 'expires_at',
+      'approval_ref', 'approved_by', 'updated_by', 'version',
+    ]));
+    expect(attestationColumns).toEqual(expect.arrayContaining([
+      'environment_ref', 'database_identity_ref', 'migration_target', 'migration_hash',
+      'journal_latest', 'postcheck_status', 'approval_ref', 'reviewed_by', 'attested_by',
+      'attested_at', 'expires_at', 'version',
+    ]));
+    expect(operationConfig.uniqueConstraints.map(constraint => constraint.getName())).toEqual(
+      expect.arrayContaining([
+        'wecom_real_send_proof_operations_operation_ref_unique',
+        'wecom_real_send_proof_operations_token_digest_unique',
+        'wecom_real_send_proof_operations_source_unique',
+      ]),
+    );
+    expect(operationConfig.foreignKeys.map(foreignKey => foreignKey.getName())).toEqual(
+      expect.arrayContaining([
+        'wecom_real_send_proof_operations_tenant_institution_customer_fk',
+        'wecom_real_send_proof_operations_scope_draft_fk',
+        'wecom_real_send_proof_operations_scope_mapping_fk',
+        'wecom_real_send_proof_operations_scope_consent_fk',
+        'wecom_real_send_proof_operations_scope_frequency_fk',
+        'wecom_real_send_proof_operations_scope_dry_run_snapshot_fk',
+        'wecom_real_send_proof_operations_production_attestation_fk',
+      ]),
+    );
+    expect(foreignKeyColumns(operationConfig.foreignKeys.find(foreignKey =>
+      foreignKey.getName() === 'wecom_real_send_proof_operations_production_attestation_fk')))
+      .toEqual({ columns: ['production_attestation_id'], foreignColumns: ['id'] });
+    expect(operationConfig.columns.find(column => column.name === 'confirmation_token_digest')?.notNull)
+      .toBe(true);
+    expect(operationConfig.columns.find(column => column.name === 'operator_id')?.notNull)
+      .toBe(true);
+    expect(operationConfig.checks.map(check => check.name)).toEqual(expect.arrayContaining([
+      'wecom_real_send_proof_operations_attempt_count_check',
+      'wecom_real_send_proof_operations_token_timing_check',
+      'wecom_real_send_proof_operations_consumed_operator_check',
+      'wecom_real_send_proof_operations_session_provenance_check',
+      'wecom_real_send_proof_operations_attempted_check',
+      'wecom_real_send_proof_operations_terminal_check',
+      'wecom_real_send_proof_operations_status_shape_check',
+      'wecom_real_send_proof_operations_completed_frequency_check',
+      'wecom_real_send_proof_operations_provider_result_check',
+    ]));
+    expect(controlConfig.checks.map(check => check.name)).toContain(
+      'wecom_real_send_proof_controls_scope_shape_check',
+    );
+    expect(controlConfig.checks.map(check => check.name)).toContain(
+      'wecom_real_send_proof_controls_operator_self_approval_check',
+    );
+    expect(attestationConfig.checks.map(check => check.name)).toContain(
+      'wecom_real_send_production_attestations_expiry_check',
+    );
+    expect(JSON.stringify({ operationColumns, controlColumns, attestationColumns })).not.toMatch(
+      /token_plaintext|confirmation_token(?!_digest)|external_userid|userid|user_id|provider_raw|raw_response|access_token|client_secret|database_url|password|callback_url/i,
+    );
+
+    const dialect = new PgDialect();
+    const checkSql = (
+      checks: typeof operationConfig.checks,
+      name: string,
+    ) => dialect
+      .sqlToQuery(checks.find(check => check.name === name)!.value)
+      .sql
+      .toLowerCase()
+      .replace(/"[^"]+"\./gu, '');
+    expect(checkSql(operationConfig.checks, 'wecom_real_send_proof_operations_token_timing_check'))
+      .toContain('"confirmation_consumed_at" > "confirmation_issued_at"');
+    expect(checkSql(operationConfig.checks, 'wecom_real_send_proof_operations_status_shape_check'))
+      .toContain('"status" in (\'succeeded\', \'failed\', \'unknown_outcome\')');
+    expect(checkSql(operationConfig.checks, 'wecom_real_send_proof_operations_provider_result_check'))
+      .toContain('"provider_result_category" is not null');
+    expect(checkSql(operationConfig.checks, 'wecom_real_send_proof_operations_provider_result_check'))
+      .toContain('"status" = \'failed\' and "provider_result_category" is not null and "provider_result_category" = \'rejected\'');
+    expect(checkSql(operationConfig.checks, 'wecom_real_send_proof_operations_completed_frequency_check'))
+      .toContain('"completed_frequency_ref" = "operation_ref"');
+    expect(checkSql(controlConfig.checks as typeof operationConfig.checks, 'wecom_real_send_proof_controls_scope_shape_check'))
+      .toContain('"channel_type" is not null');
+    expect(checkSql(controlConfig.checks as typeof operationConfig.checks, 'wecom_real_send_proof_controls_operator_self_approval_check'))
+      .toContain('"approved_by" <> "operator_id"');
+  });
+
+  it('0036 migration forward-only 建立 proof 基础且不修改 0034/0035 safety', () => {
+    const migrationSql = readMigrationSql('0036_v08_05b_a_single_real_send_proof_foundation');
+    const migration0034 = readFileSync(join(process.cwd(), 'drizzle/0034_v08_04f_ea_customer_mapping_data_foundation.sql'), 'utf8');
+    const migration0035 = readFileSync(join(process.cwd(), 'drizzle/0035_v08_04f_fa_trusted_reachout_safety_foundation.sql'), 'utf8');
+    const journal = JSON.parse(readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8')) as {
+      entries: Array<{ idx: number; tag: string; version: string; when: number; breakpoints: boolean }>;
+    };
+
+    expect(migrationSql).toContain('create table if not exists "wecom_real_send_proof_operations"');
+    expect(migrationSql).toContain('create table if not exists "wecom_real_send_proof_controls"');
+    expect(migrationSql).toContain('create table if not exists "wecom_real_send_production_attestations"');
+    expect(migrationSql).toContain('unique("operation_ref")');
+    expect(migrationSql).toContain('unique("confirmation_token_digest")');
+    expect(migrationSql).toContain('"attempt_count" between 0 and 1');
+    expect(migrationSql).toContain('"confirmation_expires_at" > "confirmation_issued_at"');
+    expect(migrationSql).toContain('"confirmation_consumed_at" > "confirmation_issued_at"');
+    expect(migrationSql).toContain('wecom_real_send_proof_operations_terminal_check');
+    expect(migrationSql).toContain('wecom_real_send_proof_operations_status_shape_check');
+    expect(migrationSql).toContain('wecom_real_send_proof_operations_completed_frequency_check');
+    expect(migrationSql).toContain('wecom_real_send_proof_controls_scope_shape_check');
+    expect(migrationSql).toContain('wecom_real_send_proof_controls_operator_self_approval_check');
+    expect(migrationSql).toContain('unique nulls not distinct');
+    expect(migrationSql).toContain('"channel_type" is not null and "channel_type" = \'wechat_work\'');
+    expect(migrationSql).toContain('"provider_result_category" is not null');
+    expect(migrationSql).toContain('"completed_frequency_ref" = "operation_ref"');
+    expect(migrationSql).not.toMatch(/\b(drop|truncate|delete\s+from|insert\s+into)\b|(^|;)\s*update\s+/i);
+    expect(migrationSql).not.toMatch(/external_userid|userid|provider_raw|raw_response|access_token|client_secret|database_url|password|callback_url/i);
+    expect(createHash('sha256').update(migration0034).digest('hex')).toBe(
+      '00e258a60d9975ac27e7c7dea5c9b6b10d242df19cd9cbfbe3d411b3abdfe701',
+    );
+    expect(createHash('sha256').update(migration0035).digest('hex')).toBe(
+      '6c36ba5c25344c33aab904ff1c09a091011e9d7373fcf053776106e26ecd8987',
+    );
+    expect(migration0035.toLowerCase()).toContain('"allow_real_send" = false and "external_channel_enabled" = false and "real_send_allowed" = false and "dry_run_only" = true');
+    expect(journal.entries.at(-1)).toEqual({
+      idx: 36,
+      tag: '0036_v08_05b_a_single_real_send_proof_foundation',
+      version: '7',
+      when: 1783843200000,
+      breakpoints: true,
+    });
   });
 
   it('定义正式租户账号、联系人表和账号状态枚举', () => {

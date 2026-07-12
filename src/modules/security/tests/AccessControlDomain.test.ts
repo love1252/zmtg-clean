@@ -14,6 +14,13 @@ const tenantAdminContext = {
   source: 'demo_session',
 } as const;
 
+const formalTenantAdminContext = {
+  ...tenantAdminContext,
+  userId: 'formal-user-admin',
+  institutionId: 'institution-001',
+  source: 'server_session',
+} as const;
+
 const tenantOperatorContext = {
   userId: 'demo-user-operator',
   role: 'tenant_operator',
@@ -101,6 +108,7 @@ describe('访问控制领域', () => {
     expect(ACCESS_ACTIONS).toContain('enable');
     expect(ACCESS_ACTIONS).toContain('disable');
     expect(ACCESS_ACTIONS).toContain('export_report');
+    expect(ACCESS_ACTIONS).toContain('execute_once');
     expect(ACCESS_ACTIONS).toContain('manage_credentials');
     expect(ACCESS_ACTIONS).toContain('test_connection');
   });
@@ -660,6 +668,7 @@ describe('访问控制领域', () => {
       { context: tenantAdminContext, resource: 'ai_conversation', action: 'manage_status' },
       { context: tenantAdminContext, resource: 'real_channel', action: 'enable' },
       { context: tenantAdminContext, resource: 'real_channel', action: 'disable' },
+      { context: formalTenantAdminContext, resource: 'real_channel', action: 'execute_once' },
     ] as const;
 
     for (const testCase of allowCases) {
@@ -681,6 +690,11 @@ describe('访问控制领域', () => {
       { context: customerServiceContext, resource: 'audit_log', action: 'read_detail' },
       { context: consultantContext, resource: 'message_delivery', action: 'approve' },
       { context: customerServiceContext, resource: 'ai_conversation', action: 'manage_status' },
+      { context: tenantOperatorContext, resource: 'real_channel', action: 'execute_once' },
+      { context: platformAdminContext, resource: 'real_channel', action: 'execute_once' },
+      { context: tenantAdminContext, resource: 'real_channel', action: 'execute_once' },
+      { context: { ...formalTenantAdminContext, institutionId: null }, resource: 'real_channel', action: 'execute_once' },
+      { context: { ...formalTenantAdminContext, source: 'trusted_gateway' as const }, resource: 'real_channel', action: 'execute_once' },
     ] as const;
 
     for (const testCase of denyCases) {

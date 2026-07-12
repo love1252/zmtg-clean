@@ -83,6 +83,22 @@ export const customerChannelContactConsentSourceTypeEnum = pgEnum(
     'customer_consent_revocation',
   ],
 );
+export const weComRealSendProofOperationStatusEnum = pgEnum(
+  'wecom_real_send_proof_operation_status',
+  ['requested', 'aborted', 'attempted', 'succeeded', 'failed', 'unknown_outcome'],
+);
+export const weComRealSendProofControlScopeKindEnum = pgEnum(
+  'wecom_real_send_proof_control_scope_kind',
+  ['global', 'tenant', 'institution', 'channel', 'customer', 'operator_role'],
+);
+export const weComRealSendProofProviderResultCategoryEnum = pgEnum(
+  'wecom_real_send_proof_provider_result_category',
+  ['accepted', 'rejected', 'transport_error', 'timeout', 'indeterminate'],
+);
+export const weComRealSendProofPostcheckStatusEnum = pgEnum(
+  'wecom_real_send_proof_postcheck_status',
+  ['ready', 'blocked', 'expired'],
+);
 export const appointmentStatusEnum = pgEnum('appointment_status', [
   'pending_confirmation',
   'confirmed',
@@ -1551,6 +1567,9 @@ export const weComCustomerMappingStates = pgTable(
     scopeProofContactUnique: unique(
       'wecom_customer_mapping_states_tenant_institution_proof_contact_unique',
     ).on(table.tenantId, table.institutionId, table.proofContactId),
+    scopeCustomerIdUnique: unique(
+      'wecom_customer_mapping_states_scope_customer_id_unique',
+    ).on(table.tenantId, table.institutionId, table.customerId, table.id),
     scopeCustomerStatusIdx: index(
       'wecom_customer_mapping_states_tenant_institution_customer_status_idx',
     ).on(table.tenantId, table.institutionId, table.customerId, table.status),
@@ -1586,6 +1605,13 @@ export const customerChannelContactConsents = pgTable(
       table.institutionId,
       table.customerId,
       table.channelType,
+    ),
+    scopeIdUnique: unique('customer_channel_contact_consents_scope_id_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.customerId,
+      table.channelType,
+      table.id,
     ),
     versionPositiveCheck: check(
       'customer_channel_contact_consents_version_positive_check',
@@ -1631,6 +1657,13 @@ export const customerChannelFrequencyStates = pgTable(
       table.institutionId,
       table.customerId,
       table.channelType,
+    ),
+    scopeIdUnique: unique('customer_channel_frequency_states_scope_id_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.customerId,
+      table.channelType,
+      table.id,
     ),
     countsCheck: check(
       'customer_channel_frequency_states_counts_check',
@@ -1681,6 +1714,12 @@ export const institutionChannelDryRunSnapshots = pgTable(
       table.institutionId,
       table.channelType,
     ),
+    scopeIdUnique: unique('institution_channel_dry_run_snapshots_scope_id_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.channelType,
+      table.id,
+    ),
     safetyCheck: check(
       'institution_channel_dry_run_snapshots_safety_check',
       sql`${table.allowRealSend} = false AND ${table.externalChannelEnabled} = false AND ${table.realSendAllowed} = false AND ${table.dryRunOnly} = true`,
@@ -1695,6 +1734,277 @@ export const institutionChannelDryRunSnapshots = pgTable(
     ),
     versionPositiveCheck: check(
       'institution_channel_dry_run_snapshots_version_positive_check',
+      sql`${table.version} > 0`,
+    ),
+  }),
+);
+
+export const weComRealSendProductionAttestations = pgTable(
+  'wecom_real_send_production_attestations',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    environmentRef: varchar('environment_ref', { length: 96 }).notNull(),
+    databaseIdentityRef: varchar('database_identity_ref', { length: 96 }).notNull(),
+    migrationTarget: varchar('migration_target', { length: 128 }).notNull(),
+    migrationHash: varchar('migration_hash', { length: 64 }).notNull(),
+    journalLatest: varchar('journal_latest', { length: 128 }).notNull(),
+    postcheckStatus: weComRealSendProofPostcheckStatusEnum('postcheck_status').notNull(),
+    approvalRef: varchar('approval_ref', { length: 96 }).notNull(),
+    reviewedBy: varchar('reviewed_by', { length: 96 }).notNull(),
+    attestedBy: varchar('attested_by', { length: 96 }).notNull(),
+    attestedAt: timestamp('attested_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    version: integer('version').notNull().default(1),
+    ...timestamps,
+  },
+  (table) => ({
+    identityUnique: unique('wecom_real_send_production_attestations_identity_unique').on(
+      table.environmentRef,
+      table.databaseIdentityRef,
+      table.migrationTarget,
+    ),
+    statusExpiresIdx: index('wecom_real_send_production_attestations_status_expires_idx').on(
+      table.postcheckStatus,
+      table.expiresAt,
+    ),
+    expiryCheck: check(
+      'wecom_real_send_production_attestations_expiry_check',
+      sql`${table.expiresAt} > ${table.attestedAt}`,
+    ),
+    hashCheck: check(
+      'wecom_real_send_production_attestations_hash_check',
+      sql`length(${table.migrationHash}) = 64`,
+    ),
+    versionPositiveCheck: check(
+      'wecom_real_send_production_attestations_version_positive_check',
+      sql`${table.version} > 0`,
+    ),
+  }),
+);
+
+export const weComRealSendProofControls = pgTable(
+  'wecom_real_send_proof_controls',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 }).references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
+    customerId: varchar('customer_id', { length: 64 }),
+    channelType: customerChannelTypeEnum('channel_type'),
+    operatorId: varchar('operator_id', { length: 96 }),
+    role: authRoleEnum('role'),
+    scopeKind: weComRealSendProofControlScopeKindEnum('scope_kind').notNull(),
+    proofEnabled: boolean('proof_enabled').notNull().default(false),
+    killSwitchEngaged: boolean('kill_switch_engaged').notNull().default(true),
+    effectiveAt: timestamp('effective_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    approvalRef: varchar('approval_ref', { length: 96 }).notNull(),
+    approvedBy: varchar('approved_by', { length: 96 }).notNull(),
+    updatedBy: varchar('updated_by', { length: 96 }).notNull(),
+    version: integer('version').notNull().default(1),
+    ...timestamps,
+  },
+  (table) => ({
+    scopeIdentityUnique: unique('wecom_real_send_proof_controls_scope_identity_unique').on(
+      table.scopeKind,
+      table.tenantId,
+      table.institutionId,
+      table.customerId,
+      table.channelType,
+      table.operatorId,
+      table.role,
+    ).nullsNotDistinct(),
+    customerFk: foreignKey({
+      name: 'wecom_real_send_proof_controls_tenant_institution_customer_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.institutionId, customers.id],
+    }),
+    scopeExpiresIdx: index('wecom_real_send_proof_controls_scope_expires_idx').on(
+      table.scopeKind,
+      table.expiresAt,
+    ),
+    timingCheck: check(
+      'wecom_real_send_proof_controls_timing_check',
+      sql`${table.expiresAt} > ${table.effectiveAt}`,
+    ),
+    versionPositiveCheck: check(
+      'wecom_real_send_proof_controls_version_positive_check',
+      sql`${table.version} > 0`,
+    ),
+    scopeShapeCheck: check(
+      'wecom_real_send_proof_controls_scope_shape_check',
+      sql`(${table.scopeKind} = 'global' AND ${table.tenantId} IS NULL AND ${table.institutionId} IS NULL AND ${table.customerId} IS NULL AND ${table.channelType} IS NULL AND ${table.operatorId} IS NULL AND ${table.role} IS NULL) OR (${table.scopeKind} = 'tenant' AND ${table.tenantId} IS NOT NULL AND ${table.institutionId} IS NULL AND ${table.customerId} IS NULL AND ${table.channelType} IS NULL AND ${table.operatorId} IS NULL AND ${table.role} IS NULL) OR (${table.scopeKind} = 'institution' AND ${table.tenantId} IS NOT NULL AND ${table.institutionId} IS NOT NULL AND ${table.customerId} IS NULL AND ${table.channelType} IS NULL AND ${table.operatorId} IS NULL AND ${table.role} IS NULL) OR (${table.scopeKind} = 'channel' AND ${table.tenantId} IS NULL AND ${table.institutionId} IS NULL AND ${table.customerId} IS NULL AND ${table.channelType} IS NOT NULL AND ${table.channelType} = 'wechat_work' AND ${table.operatorId} IS NULL AND ${table.role} IS NULL) OR (${table.scopeKind} = 'customer' AND ${table.tenantId} IS NOT NULL AND ${table.institutionId} IS NOT NULL AND ${table.customerId} IS NOT NULL AND ${table.channelType} IS NULL AND ${table.operatorId} IS NULL AND ${table.role} IS NULL) OR (${table.scopeKind} = 'operator_role' AND ${table.tenantId} IS NOT NULL AND ${table.institutionId} IS NOT NULL AND ${table.customerId} IS NULL AND ${table.channelType} IS NULL AND ${table.operatorId} IS NOT NULL AND ${table.role} IS NOT NULL)`,
+    ),
+    operatorSelfApprovalCheck: check(
+      'wecom_real_send_proof_controls_operator_self_approval_check',
+      sql`${table.scopeKind} <> 'operator_role' OR ${table.approvedBy} <> ${table.operatorId}`,
+    ),
+  }),
+);
+
+export const weComRealSendProofOperations = pgTable(
+  'wecom_real_send_proof_operations',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 })
+      .notNull()
+      .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    channelType: customerChannelTypeEnum('channel_type').notNull().default('wechat_work'),
+    draftId: varchar('draft_id', { length: 64 }).notNull(),
+    deliveryId: varchar('delivery_id', { length: 96 }).notNull(),
+    sourceReadyNoSendRef: varchar('source_ready_no_send_ref', { length: 128 }).notNull(),
+    sourceReadyNoSendDigest: varchar('source_ready_no_send_digest', { length: 64 }).notNull(),
+    readinessFingerprint: varchar('readiness_fingerprint', { length: 64 }).notNull(),
+    mappingId: varchar('mapping_id', { length: 64 }).notNull(),
+    consentId: varchar('consent_id', { length: 64 }).notNull(),
+    frequencyStateId: varchar('frequency_state_id', { length: 64 }).notNull(),
+    dryRunSnapshotId: varchar('dry_run_snapshot_id', { length: 64 }).notNull(),
+    productionAttestationId: varchar('production_attestation_id', { length: 64 }).notNull(),
+    operationRef: varchar('operation_ref', { length: 96 }).notNull(),
+    contentHash: varchar('content_hash', { length: 64 }).notNull(),
+    recipientBindingRef: varchar('recipient_binding_ref', { length: 96 }).notNull(),
+    recipientBindingDigest: varchar('recipient_binding_digest', { length: 64 }).notNull(),
+    status: weComRealSendProofOperationStatusEnum('status').notNull().default('requested'),
+    confirmationTokenDigest: varchar('confirmation_token_digest', { length: 64 }).notNull(),
+    confirmationIssuedAt: timestamp('confirmation_issued_at', { withTimezone: true }).notNull(),
+    confirmationExpiresAt: timestamp('confirmation_expires_at', { withTimezone: true }).notNull(),
+    confirmationConsumedAt: timestamp('confirmation_consumed_at', { withTimezone: true }),
+    operatorId: varchar('operator_id', { length: 96 }).notNull(),
+    sessionProvenance: varchar('session_provenance', { length: 32 })
+      .$type<'server_session' | 'formal_session'>()
+      .notNull(),
+    requestedAt: timestamp('requested_at', { withTimezone: true }).notNull(),
+    attemptedAt: timestamp('attempted_at', { withTimezone: true }),
+    terminalAt: timestamp('terminal_at', { withTimezone: true }),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    providerResultCategory: weComRealSendProofProviderResultCategoryEnum('provider_result_category'),
+    completedFrequencyRef: varchar('completed_frequency_ref', { length: 96 }),
+    version: integer('version').notNull().default(1),
+    ...timestamps,
+  },
+  (table) => ({
+    operationRefUnique: unique('wecom_real_send_proof_operations_operation_ref_unique').on(
+      table.operationRef,
+    ),
+    tokenDigestUnique: unique('wecom_real_send_proof_operations_token_digest_unique').on(
+      table.confirmationTokenDigest,
+    ),
+    sourceUnique: unique('wecom_real_send_proof_operations_source_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.draftId,
+      table.sourceReadyNoSendRef,
+    ),
+    customerFk: foreignKey({
+      name: 'wecom_real_send_proof_operations_tenant_institution_customer_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.institutionId, customers.id],
+    }),
+    draftFk: foreignKey({
+      name: 'wecom_real_send_proof_operations_scope_draft_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId, table.draftId],
+      foreignColumns: [
+        followUpMessageDrafts.tenantId,
+        followUpMessageDrafts.institutionId,
+        followUpMessageDrafts.customerId,
+        followUpMessageDrafts.id,
+      ],
+    }),
+    mappingFk: foreignKey({
+      name: 'wecom_real_send_proof_operations_scope_mapping_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId, table.mappingId],
+      foreignColumns: [
+        weComCustomerMappingStates.tenantId,
+        weComCustomerMappingStates.institutionId,
+        weComCustomerMappingStates.customerId,
+        weComCustomerMappingStates.id,
+      ],
+    }),
+    consentFk: foreignKey({
+      name: 'wecom_real_send_proof_operations_scope_consent_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId, table.channelType, table.consentId],
+      foreignColumns: [
+        customerChannelContactConsents.tenantId,
+        customerChannelContactConsents.institutionId,
+        customerChannelContactConsents.customerId,
+        customerChannelContactConsents.channelType,
+        customerChannelContactConsents.id,
+      ],
+    }),
+    frequencyFk: foreignKey({
+      name: 'wecom_real_send_proof_operations_scope_frequency_fk',
+      columns: [table.tenantId, table.institutionId, table.customerId, table.channelType, table.frequencyStateId],
+      foreignColumns: [
+        customerChannelFrequencyStates.tenantId,
+        customerChannelFrequencyStates.institutionId,
+        customerChannelFrequencyStates.customerId,
+        customerChannelFrequencyStates.channelType,
+        customerChannelFrequencyStates.id,
+      ],
+    }),
+    dryRunSnapshotFk: foreignKey({
+      name: 'wecom_real_send_proof_operations_scope_dry_run_snapshot_fk',
+      columns: [table.tenantId, table.institutionId, table.channelType, table.dryRunSnapshotId],
+      foreignColumns: [
+        institutionChannelDryRunSnapshots.tenantId,
+        institutionChannelDryRunSnapshots.institutionId,
+        institutionChannelDryRunSnapshots.channelType,
+        institutionChannelDryRunSnapshots.id,
+      ],
+    }),
+    productionAttestationFk: foreignKey({
+      name: 'wecom_real_send_proof_operations_production_attestation_fk',
+      columns: [table.productionAttestationId],
+      foreignColumns: [weComRealSendProductionAttestations.id],
+    }),
+    tenantStatusIdx: index('wecom_real_send_proof_operations_tenant_status_idx').on(
+      table.tenantId,
+      table.institutionId,
+      table.status,
+    ),
+    attemptCountCheck: check(
+      'wecom_real_send_proof_operations_attempt_count_check',
+      sql`${table.attemptCount} BETWEEN 0 AND 1`,
+    ),
+    tokenTimingCheck: check(
+      'wecom_real_send_proof_operations_token_timing_check',
+      sql`${table.confirmationExpiresAt} > ${table.confirmationIssuedAt} AND (${table.confirmationConsumedAt} IS NULL OR (${table.confirmationConsumedAt} > ${table.confirmationIssuedAt} AND ${table.confirmationConsumedAt} < ${table.confirmationExpiresAt}))`,
+    ),
+    consumedOperatorCheck: check(
+      'wecom_real_send_proof_operations_consumed_operator_check',
+      sql`${table.confirmationConsumedAt} IS NULL OR ${table.operatorId} IS NOT NULL`,
+    ),
+    sessionProvenanceCheck: check(
+      'wecom_real_send_proof_operations_session_provenance_check',
+      sql`${table.sessionProvenance} IN ('server_session', 'formal_session')`,
+    ),
+    attemptedCheck: check(
+      'wecom_real_send_proof_operations_attempted_check',
+      sql`${table.status} NOT IN ('attempted', 'succeeded', 'failed', 'unknown_outcome') OR (${table.attemptedAt} IS NOT NULL AND ${table.confirmationConsumedAt} IS NOT NULL AND ${table.attemptCount} = 1)`,
+    ),
+    terminalCheck: check(
+      'wecom_real_send_proof_operations_terminal_check',
+      sql`(${table.status} IN ('succeeded', 'failed', 'unknown_outcome', 'aborted') AND ${table.terminalAt} IS NOT NULL) OR (${table.status} NOT IN ('succeeded', 'failed', 'unknown_outcome', 'aborted') AND ${table.terminalAt} IS NULL)`,
+    ),
+    statusShapeCheck: check(
+      'wecom_real_send_proof_operations_status_shape_check',
+      sql`(${table.status} = 'requested' AND ${table.confirmationConsumedAt} IS NULL AND ${table.attemptedAt} IS NULL AND ${table.terminalAt} IS NULL AND ${table.attemptCount} = 0) OR (${table.status} = 'aborted' AND ${table.confirmationConsumedAt} IS NULL AND ${table.attemptedAt} IS NULL AND ${table.terminalAt} IS NOT NULL AND ${table.attemptCount} = 0) OR (${table.status} = 'attempted' AND ${table.confirmationConsumedAt} IS NOT NULL AND ${table.attemptedAt} IS NOT NULL AND ${table.terminalAt} IS NULL AND ${table.attemptCount} = 1) OR (${table.status} IN ('succeeded', 'failed', 'unknown_outcome') AND ${table.confirmationConsumedAt} IS NOT NULL AND ${table.attemptedAt} IS NOT NULL AND ${table.terminalAt} IS NOT NULL AND ${table.attemptCount} = 1)`,
+    ),
+    completedFrequencyCheck: check(
+      'wecom_real_send_proof_operations_completed_frequency_check',
+      sql`(${table.status} = 'succeeded' AND ${table.completedFrequencyRef} IS NOT NULL AND ${table.completedFrequencyRef} = ${table.operationRef}) OR (${table.status} <> 'succeeded' AND ${table.completedFrequencyRef} IS NULL)`,
+    ),
+    providerResultCheck: check(
+      'wecom_real_send_proof_operations_provider_result_check',
+      sql`(${table.status} = 'succeeded' AND ${table.providerResultCategory} IS NOT NULL AND ${table.providerResultCategory} = 'accepted') OR (${table.status} = 'failed' AND ${table.providerResultCategory} IS NOT NULL AND ${table.providerResultCategory} = 'rejected') OR (${table.status} = 'unknown_outcome' AND ${table.providerResultCategory} IS NOT NULL AND ${table.providerResultCategory} IN ('transport_error', 'timeout', 'indeterminate')) OR (${table.status} IN ('requested', 'aborted', 'attempted') AND ${table.providerResultCategory} IS NULL)`,
+    ),
+    digestLengthsCheck: check(
+      'wecom_real_send_proof_operations_digest_lengths_check',
+      sql`length(${table.sourceReadyNoSendDigest}) = 64 AND length(${table.readinessFingerprint}) = 64 AND length(${table.contentHash}) = 64 AND length(${table.recipientBindingDigest}) = 64 AND length(${table.confirmationTokenDigest}) = 64`,
+    ),
+    versionPositiveCheck: check(
+      'wecom_real_send_proof_operations_version_positive_check',
       sql`${table.version} > 0`,
     ),
   }),
@@ -2023,6 +2333,16 @@ export const followUpMessageDrafts = pgTable(
     ...timestamps,
   },
   (table) => ({
+    tenantIdIdUnique: unique('follow_up_message_drafts_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    scopeCustomerIdUnique: unique('follow_up_message_drafts_scope_customer_id_unique').on(
+      table.tenantId,
+      table.institutionId,
+      table.customerId,
+      table.id,
+    ),
     followUpTaskFk: foreignKey({
       name: 'follow_up_message_drafts_tenant_follow_up_task_fk',
       columns: [table.tenantId, table.followUpTaskId],

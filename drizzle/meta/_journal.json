@@ -253,6 +253,13 @@
       "when": 1783756800000,
       "tag": "0035_v08_04f_fa_trusted_reachout_safety_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1783843200000,
+      "tag": "0036_v08_05b_a_single_real_send_proof_foundation",
+      "breakpoints": true
     }
   ]
 }

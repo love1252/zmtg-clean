@@ -49,7 +49,50 @@ const hisTestConnectionAuditReasons = [
   'test_connection_completed',
 ] as const;
 
+const weComRealSendProofReasons = [
+  'wecom_real_send_proof_operation_requested',
+  'wecom_real_send_proof_operation_aborted',
+  'wecom_real_send_proof_operation_attempted',
+  'wecom_real_send_proof_operation_succeeded',
+  'wecom_real_send_proof_operation_failed',
+  'wecom_real_send_proof_operation_unknown',
+  'wecom_real_send_proof_control_blocked',
+  'wecom_real_send_proof_environment_blocked',
+  'wecom_real_send_proof_ready_source_blocked',
+  'wecom_real_send_proof_attestation_blocked',
+  'wecom_real_send_proof_readiness_changed',
+  'wecom_real_send_proof_confirmation_consumed',
+  'wecom_real_send_proof_confirmation_expired',
+  'wecom_real_send_proof_completed_count_recorded',
+] as const;
+
 describe('审计事件领域模型', () => {
+  it('固定真实发送 proof 审计 reason 白名单且事件仅含低敏结构字段', () => {
+    expect(AUDIT_REASON_VALUES).toEqual(expect.arrayContaining([...weComRealSendProofReasons]));
+    for (const reason of weComRealSendProofReasons) {
+      const event = createAuditEvent({
+        eventId: `audit-${reason}`,
+        context: {
+          userId: 'formal-admin-a', role: 'tenant_admin', scope: 'tenant', tenantId: 'tenant-a',
+          institutionId: 'inst-a', source: 'server_session',
+        },
+        resource: 'real_channel',
+        resourceId: 'wrsproof-low-sensitive-a',
+        action: 'execute_once',
+        result: reason.includes('blocked') || reason.includes('expired') ? 'denied' : 'transitioned',
+        reason,
+        occurredAt: '2026-07-12T08:00:00.000Z',
+      });
+      expect(event).toMatchObject({
+        action: 'execute_once', source: 'server_session', reason,
+        resourceId: 'wrsproof-low-sensitive-a',
+      });
+      expect(JSON.stringify(event)).not.toMatch(
+        /confirmationToken|opaque-token|external_userid|userid|providerRaw|rawResponse|access_token|secret|https?:\/\//i,
+      );
+    }
+  });
+
   it('创建允许访问审计事件并包含完整字段', () => {
     expect(
       createAuditEvent({

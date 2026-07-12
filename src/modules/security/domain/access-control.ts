@@ -62,6 +62,7 @@ export const ACCESS_ACTIONS = [
   'manage_policy',
   'review',
   'export_report',
+  'execute_once',
 ] as const;
 
 export type ProtectedAction = (typeof ACCESS_ACTIONS)[number];
@@ -220,7 +221,7 @@ const accessPolicies: AccessPolicy[] = [
   {
     role: 'tenant_admin',
     resource: 'real_channel',
-    actions: ['read', 'enable', 'disable'],
+    actions: ['read', 'enable', 'disable', 'execute_once'],
   },
   {
     role: 'tenant_admin',
@@ -343,6 +344,19 @@ export function canAccessResource(input: {
     context.scope === 'platform'
   ) {
     return { allowed: false, reason: 'sensitive_detail_denied' };
+  }
+
+  if (
+    resource === 'real_channel' &&
+    action === 'execute_once' &&
+    (
+      context.source !== 'server_session' ||
+      context.scope !== 'tenant' ||
+      !context.tenantId ||
+      !context.institutionId
+    )
+  ) {
+    return { allowed: false, reason: 'role_denied' };
   }
 
   if (!hasPolicy(context.role, resource, action)) {
