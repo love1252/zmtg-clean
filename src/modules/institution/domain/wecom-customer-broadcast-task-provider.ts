@@ -10,6 +10,8 @@ export const WE_COM_CUSTOMER_BROADCAST_TASK_MESSAGE_KIND = 'text' as const;
 export const WE_COM_CUSTOMER_BROADCAST_TASK_ACCEPTANCE_KIND = 'task_created' as const;
 export const WE_COM_CUSTOMER_BROADCAST_TASK_SUCCESS_EVIDENCE_KIND =
   'send_result_status_1' as const;
+export const WE_COM_CUSTOMER_BROADCAST_TASK_MOCK_RESULT_KIND =
+  'task_created_mock' as const;
 
 export const WE_COM_CUSTOMER_BROADCAST_TASK_CAPABILITY = Object.freeze({
   capabilityKind: WE_COM_CUSTOMER_BROADCAST_TASK_PROOF_KIND,
@@ -73,3 +75,12 @@ export type WeComCustomerBroadcastTaskProviderOutput =
   | Readonly<{ kind: 'timeout' }>
   | Readonly<{ kind: 'transport_error' }>
   | Readonly<{ kind: 'indeterminate' }>;
+
+export type WeComCustomerBroadcastTaskMockProviderOutput =
+  | Readonly<{
+      kind: 'accepted';
+      acceptanceKind: typeof WE_COM_CUSTOMER_BROADCAST_TASK_ACCEPTANCE_KIND;
+      mockResultKind: typeof WE_COM_CUSTOMER_BROADCAST_TASK_MOCK_RESULT_KIND;
+      requiresEmployeeConfirmation: true;
+    }>
+  | Exclude<WeComCustomerBroadcastTaskProviderOutput, Readonly<{ kind: 'accepted' }>>;

@@ -4,10 +4,17 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  WE_COM_CUSTOMER_BROADCAST_TASK_ACCEPTANCE_KIND,
+  WE_COM_CUSTOMER_BROADCAST_TASK_MESSAGE_KIND,
+  type WeComCustomerBroadcastTaskProviderInput,
+} from '@/modules/institution/domain/wecom-customer-broadcast-task-provider';
+import { createWeComCustomerBroadcastTaskMockProvider } from '@/modules/institution/server/wecom-customer-broadcast-task-mock-provider';
 import type { WeComRealSendProofRepository } from '@/modules/institution/server/wecom-real-send-proof-repository';
 import type { WeComRealSendProofEnvironment } from '@/modules/institution/server/wecom-real-send-proof-service';
 import {
   evaluateBroadcastTaskPreflight,
+  executeMockBroadcastTaskForTestOnly,
   issueBroadcastTaskConfirmation,
   rejectBroadcastTaskExecutionBecauseProviderDisabled,
 } from '@/modules/institution/server/wecom-real-send-execution-shell-service';
@@ -32,6 +39,16 @@ const environment: WeComRealSendProofEnvironment = {
   journalLatest: '0036_v08_05b_a_single_real_send_proof_foundation',
 };
 const occurredAt = '2026-07-12T08:00:00.000Z';
+const providerInput = {
+  operationRef: 'operation-a',
+  recipientBindingRef: 'binding-a',
+  recipientBindingDigest: 'a'.repeat(64),
+  recipientBindingVersion: 'version-a',
+  contentRef: 'content-a',
+  contentHash: 'b'.repeat(64),
+  messageKind: WE_COM_CUSTOMER_BROADCAST_TASK_MESSAGE_KIND,
+  acceptanceKind: WE_COM_CUSTOMER_BROADCAST_TASK_ACCEPTANCE_KIND,
+} satisfies WeComCustomerBroadcastTaskProviderInput;
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -177,6 +194,60 @@ describe('WeCom real-send execution shell service', () => {
     expect(result).not.toHaveProperty('operationStatus');
   });
 
+  it('只有显式注入 mock provider 才得到 task_created_mock，且不写真实状态', async () => {
+    const provider = createWeComCustomerBroadcastTaskMockProvider('accepted');
+    const createTask = vi.fn(provider.createTask);
+    const result = await executeMockBroadcastTaskForTestOnly({
+      mockProvider: { ...provider, createTask },
+      providerInput,
+    });
+
+    expect(createTask).toHaveBeenCalledTimes(1);
+    expect(createTask).toHaveBeenCalledWith(providerInput);
+    expect(result).toEqual({
+      mockOnly: true,
+      operationTransition: 'none',
+      completedCountDelta: 0,
+      automaticRetryAllowed: false,
+      kind: 'task_created_mock',
+      providerResultKind: 'accepted',
+      acceptanceKind: 'task_created',
+      requiresEmployeeConfirmation: true,
+    });
+    expect(result).not.toHaveProperty('status', 'succeeded');
+    expect(result).not.toHaveProperty('operationStatus');
+  });
+
+  it('mock rejected 与 unknown 分类均不写 completedCount 或自动重试', async () => {
+    const cases = [
+      ['rejected', 'mock_rejected'],
+      ['timeout', 'mock_unknown_outcome'],
+      ['transport_error', 'mock_unknown_outcome'],
+      ['indeterminate', 'mock_unknown_outcome'],
+    ] as const;
+
+    for (const [providerResultKind, expectedKind] of cases) {
+      const provider = createWeComCustomerBroadcastTaskMockProvider(providerResultKind);
+      const createTask = vi.fn(provider.createTask);
+      const result = await executeMockBroadcastTaskForTestOnly({
+        mockProvider: { ...provider, createTask },
+        providerInput,
+      });
+
+      expect(createTask).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({
+        mockOnly: true,
+        operationTransition: 'none',
+        completedCountDelta: 0,
+        automaticRetryAllowed: false,
+        kind: expectedKind,
+        providerResultKind,
+      });
+      expect(result).not.toHaveProperty('status', 'succeeded');
+      expect(result).not.toHaveProperty('operationStatus');
+    }
+  });
+
   it('execution shell 不实现 provider、consume、网络或环境读取，运行时 fetch=0', async () => {
     const source = readFileSync(
       resolve(
@@ -186,13 +257,17 @@ describe('WeCom real-send execution shell service', () => {
       'utf8',
     );
     expect(source).not.toMatch(
-      /\bfetch\s*\(|consumeRealSendProofConfirmation|https?:\/\/|process\.env|add_msg_template/iu,
+      /\bfetch\s*\(|consumeRealSendProofConfirmation|finalizeRealSendProofSuccess|recordCompletedFrequency|markSucceeded|markAttempted|https?:\/\/|process\.env|add_msg_template/iu,
     );
 
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     await evaluateBroadcastTaskPreflight({ context, draftId: 'draft-a', occurredAt });
     rejectBroadcastTaskExecutionBecauseProviderDisabled({ operationRef: 'wrsproof-a' });
+    await executeMockBroadcastTaskForTestOnly({
+      mockProvider: createWeComCustomerBroadcastTaskMockProvider('indeterminate'),
+      providerInput,
+    });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
