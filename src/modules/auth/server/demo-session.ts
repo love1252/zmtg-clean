@@ -1,5 +1,11 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { AuthRole, AuthSession, AuthSessionUser } from '@/modules/auth/domain/session';
+import {
+  isAuthSessionSource,
+  type AuthRole,
+  type AuthSession,
+  type AuthSessionUser,
+  type DecodedAuthSession,
+} from '@/modules/auth/domain/session';
 
 export const DEMO_SESSION_COOKIE = 'zmtg_demo_session';
 
@@ -129,6 +135,15 @@ export function createDemoSession(user: DemoSessionUser, now = Date.now()): Demo
   return {
     user,
     expiresAt: now + SESSION_TTL_SECONDS * 1000,
+    source: 'demo_session',
+  };
+}
+
+export function createServerSession(user: AuthSessionUser, now = Date.now()): AuthSession {
+  return {
+    user,
+    expiresAt: now + SESSION_TTL_SECONDS * 1000,
+    source: 'server_session',
   };
 }
 
@@ -163,7 +178,7 @@ function signatureMatches(actualSignature: string, expectedSignature: string) {
   return timingSafeEqual(actual, expected);
 }
 
-export function encodeDemoSession(session: DemoSession) {
+export function encodeDemoSession(session: DecodedAuthSession) {
   const payload = Buffer.from(JSON.stringify(session), 'utf8').toString('base64url');
   const secret = getDemoSessionSecret('encode');
   const signature = signPayload(payload, secret);
@@ -175,7 +190,10 @@ export function isMissingDemoSessionSecretError(error: unknown) {
   return error instanceof Error && error.message === MISSING_DEMO_SESSION_SECRET_ERROR;
 }
 
-export function decodeDemoSession(value: string | undefined | null, now = Date.now()): DemoSession | null {
+export function decodeDemoSession(
+  value: string | undefined | null,
+  now = Date.now(),
+): DecodedAuthSession | null {
   if (!value) return null;
 
   const parts = value.split('.');
@@ -192,11 +210,12 @@ export function decodeDemoSession(value: string | undefined | null, now = Date.n
 
   try {
     const raw = Buffer.from(payload, 'base64url').toString('utf8');
-    const parsed = JSON.parse(raw) as Partial<DemoSession>;
+    const parsed = JSON.parse(raw) as Partial<DecodedAuthSession> & { source?: unknown };
     if (!parsed.user || typeof parsed.expiresAt !== 'number') return null;
     if (parsed.expiresAt <= now) return null;
+    if (parsed.source !== undefined && !isAuthSessionSource(parsed.source)) return null;
 
-    return parsed as DemoSession;
+    return parsed as DecodedAuthSession;
   } catch {
     return null;
   }

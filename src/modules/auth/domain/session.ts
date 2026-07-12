@@ -10,6 +10,10 @@ export const AUTH_ROLES = [
 
 export type AuthRole = (typeof AUTH_ROLES)[number];
 
+export const AUTH_SESSION_SOURCES = ['demo_session', 'server_session'] as const;
+
+export type AuthSessionSource = (typeof AUTH_SESSION_SOURCES)[number];
+
 export type AuthSessionUser = {
   id: string;
   username: string;
@@ -22,7 +26,14 @@ export type AuthSessionUser = {
 export type AuthSession = {
   user: AuthSessionUser;
   expiresAt: number;
+  source: AuthSessionSource;
 };
+
+export type LegacyAuthSession = Omit<AuthSession, 'source'> & {
+  source?: undefined;
+};
+
+export type DecodedAuthSession = AuthSession | LegacyAuthSession;
 
 export type AuthSessionPayload = {
   authenticated: boolean;
@@ -31,4 +42,10 @@ export type AuthSessionPayload = {
 
 export function isAuthRole(value: unknown): value is AuthRole {
   return typeof value === 'string' && AUTH_ROLES.includes(value as AuthRole);
+}
+
+export function isAuthSessionSource(value: unknown): value is AuthSessionSource {
+  return (
+    typeof value === 'string' && AUTH_SESSION_SOURCES.includes(value as AuthSessionSource)
+  );
 }

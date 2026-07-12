@@ -171,6 +171,7 @@ describe('正式账号服务', () => {
         name: '陈磊',
         role: 'tenant_admin',
         tenantId: 'tenant-zhengpu',
+        institutionId: null,
       },
     });
   });

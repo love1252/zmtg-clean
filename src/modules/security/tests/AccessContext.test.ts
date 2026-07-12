@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEMO_SESSION_COOKIE, encodeDemoSession } from '@/modules/auth/server/demo-session';
+import { canAccessResource } from '@/modules/security/domain/access-control';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 
 function requestWithSession(sessionValue: string) {
@@ -26,9 +27,11 @@ describe('访问上下文', () => {
         institutionId: 'demo-inst-a',
       },
       expiresAt: Date.now() + 60_000,
+      source: 'demo_session',
     });
 
-    expect(getDemoAccessContextFromRequest(requestWithSession(session))).toEqual({
+    const context = getDemoAccessContextFromRequest(requestWithSession(session));
+    expect(context).toEqual({
       userId: 'demo-user-admin',
       role: 'tenant_admin',
       scope: 'tenant',
@@ -36,6 +39,80 @@ describe('访问上下文', () => {
       institutionId: 'demo-inst-a',
       source: 'demo_session',
     });
+    expect(
+      canAccessResource({
+        context: context!,
+        resource: 'real_channel',
+        action: 'execute_once',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
+  });
+
+  it('从签名 payload 读取正式来源，且只有完整机构上下文可执行一次', () => {
+    const session = encodeDemoSession({
+      user: {
+        id: 'formal-user-admin',
+        username: 'formal-admin',
+        name: '正式机构管理员',
+        role: 'tenant_admin',
+        tenantId: 'tenant-001',
+        institutionId: 'institution-001',
+      },
+      expiresAt: Date.now() + 60_000,
+      source: 'server_session',
+    });
+
+    const context = getDemoAccessContextFromRequest(requestWithSession(session));
+    expect(context).toEqual({
+      userId: 'formal-user-admin',
+      role: 'tenant_admin',
+      scope: 'tenant',
+      tenantId: 'tenant-001',
+      institutionId: 'institution-001',
+      source: 'server_session',
+    });
+    expect(
+      canAccessResource({
+        context: context!,
+        resource: 'real_channel',
+        action: 'execute_once',
+        targetTenantId: 'tenant-001',
+      }),
+    ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+  });
+
+  it('把缺少来源的旧 cookie 降级为 demo，保持普通访问但拒绝 execute_once', () => {
+    const session = encodeDemoSession({
+      user: {
+        id: 'legacy-user-admin',
+        username: 'legacy-admin',
+        name: '旧机构管理员',
+        role: 'tenant_admin',
+        tenantId: 'tenant-001',
+        institutionId: 'institution-001',
+      },
+      expiresAt: Date.now() + 60_000,
+    });
+
+    const context = getDemoAccessContextFromRequest(requestWithSession(session));
+    expect(context?.source).toBe('demo_session');
+    expect(
+      canAccessResource({
+        context: context!,
+        resource: 'real_channel',
+        action: 'execute_once',
+        targetTenantId: 'tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
+    expect(
+      canAccessResource({
+        context: context!,
+        resource: 'customer',
+        action: 'read',
+        targetTenantId: 'tenant-001',
+      }),
+    ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
   });
 
   it('租户会话缺少机构编号时不自动补默认机构', () => {
@@ -58,6 +135,33 @@ describe('访问上下文', () => {
       institutionId: null,
       source: 'demo_session',
     });
+  });
+
+  it('正式 server session 缺少权威机构编号时保持 fail-closed', () => {
+    const session = encodeDemoSession({
+      user: {
+        id: 'formal-user-no-institution',
+        username: 'formal-no-institution',
+        name: '无机构绑定管理员',
+        role: 'tenant_admin',
+        tenantId: 'tenant-001',
+        institutionId: null,
+      },
+      expiresAt: Date.now() + 60_000,
+      source: 'server_session',
+    });
+
+    const context = getDemoAccessContextFromRequest(requestWithSession(session));
+    expect(context?.source).toBe('server_session');
+    expect(context?.institutionId).toBeNull();
+    expect(
+      canAccessResource({
+        context: context!,
+        resource: 'real_channel',
+        action: 'execute_once',
+        targetTenantId: 'tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
   });
 
   it('把平台管理员演示会话转换为平台访问上下文', () => {

@@ -6,13 +6,14 @@ import type {
   AuthAccountRecord,
   AuthTenantMembershipRecord,
 } from '@/modules/auth/domain/auth-account';
-import type { AuthSessionUser } from '@/modules/auth/domain/session';
+import type { AuthSessionSource, AuthSessionUser } from '@/modules/auth/domain/session';
 import { normalizeAuthUsername } from '@/modules/auth/domain/auth-account';
 import { createAuthAccountRepository } from '@/modules/auth/server/auth-account-repository';
 import { createAuthAccountService } from '@/modules/auth/server/auth-account-service';
 import {
   authenticateDemoUser,
   createDemoSession,
+  createServerSession,
   DEMO_SESSION_COOKIE,
   encodeDemoSession,
   isMissingDemoSessionSecretError,
@@ -70,9 +71,13 @@ async function recordFormalLoginAudit(input: {
 
 function createLoginResponse(input: {
   user: AuthSessionUser;
+  source: AuthSessionSource;
   passwordResetRequired?: boolean;
 }) {
-  const session = createDemoSession(input.user);
+  const session =
+    input.source === 'server_session'
+      ? createServerSession(input.user)
+      : createDemoSession(input.user);
   let encodedSession: string;
   try {
     encodedSession = encodeDemoSession(session);
@@ -178,6 +183,7 @@ export async function POST(request: Request) {
   if (formalLoginResult.status === 'authenticated') {
     const response = createLoginResponse({
       user: formalLoginResult.user,
+      source: 'server_session',
       passwordResetRequired: formalLoginResult.passwordResetRequired,
     });
     if (formalLoginResult.user.tenantId && formalLoginResult.user.institutionId) {
@@ -208,5 +214,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ code: 401, message: '用户名或密码错误' }, { status: 401 });
   }
 
-  return createLoginResponse({ user });
+  return createLoginResponse({ user, source: 'demo_session' });
 }

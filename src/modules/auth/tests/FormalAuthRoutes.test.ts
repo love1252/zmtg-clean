@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GET as sessionGet } from '@/app/api/auth/session/route';
 import { decodeDemoSession, DEMO_SESSION_COOKIE } from '@/modules/auth/server/demo-session';
 import type { AuthAccountRepository } from '@/modules/auth/server/auth-account-service';
 
@@ -131,8 +132,13 @@ beforeEach(() => {
       name: '陈磊',
       role: 'tenant_admin',
       tenantId: 'tenant-zhengpu',
+      institutionId: null,
     },
   });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('正式账号登录路由', () => {
@@ -160,6 +166,7 @@ describe('正式账号登录路由', () => {
           name: '陈磊',
           role: 'tenant_admin',
           tenantId: 'tenant-zhengpu',
+          institutionId: null,
         },
         passwordResetRequired: true,
       },
@@ -178,12 +185,17 @@ describe('正式账号登录路由', () => {
       plaintextPassword: 'Init#2026-Strong',
       scope: 'institution',
     });
-    expect(decodeDemoSession(encodedSession)?.user).toEqual({
-      id: 'auth-user-zhengpu-admin',
-      username: 'zhengpu_admin',
-      name: '陈磊',
-      role: 'tenant_admin',
-      tenantId: 'tenant-zhengpu',
+    expect(decodeDemoSession(encodedSession)).toEqual({
+      user: {
+        id: 'auth-user-zhengpu-admin',
+        username: 'zhengpu_admin',
+        name: '陈磊',
+        role: 'tenant_admin',
+        tenantId: 'tenant-zhengpu',
+        institutionId: null,
+      },
+      expiresAt: expect.any(Number),
+      source: 'server_session',
     });
     expect(routeMocks.createAuditEventRepository).toHaveBeenCalledWith(routeMocks.database);
     expect(routeMocks.auditRepository.record).toHaveBeenCalledWith(
@@ -246,5 +258,36 @@ describe('正式账号登录路由', () => {
       /admin123|passwordHash|scrypt\$|requestBody|select \*/i,
     );
     expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('生产关闭演示认证时仍允许已验证的正式 server session 完成会话检查', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('ZMTG_ENABLE_DEMO_AUTH', 'false');
+    vi.stubEnv('ZMTG_DEMO_SESSION_SECRET', 'formal-session-test-signing-key');
+    const { POST } = await import('@/app/api/auth/login/route');
+
+    const loginResponse = await POST(
+      jsonRequest({
+        username: 'zhengpu_admin',
+        password: 'Init#2026-Strong',
+        scope: 'institution',
+      }),
+    );
+    const cookie = readCookie(loginResponse.headers.get('set-cookie'));
+    const sessionResponse = await sessionGet(
+      new Request('http://localhost/api/auth/session', {
+        headers: { cookie },
+      }),
+    );
+
+    expect(loginResponse.status).toBe(200);
+    expect(sessionResponse.status).toBe(200);
+    await expect(sessionResponse.json()).resolves.toMatchObject({
+      authenticated: true,
+      user: {
+        id: 'auth-user-zhengpu-admin',
+        institutionId: null,
+      },
+    });
   });
 });
