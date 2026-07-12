@@ -256,7 +256,6 @@ describe('WeCom controlled reach-out API', () => {
     ['consent_missing', () => routeMocks.safetyRepository.findConsent.mockResolvedValue(null)],
     ['consent_revoked', () => routeMocks.safetyRepository.findConsent.mockResolvedValue(trustedConsent('consent_revoked'))],
     ['opt_out', () => routeMocks.safetyRepository.findConsent.mockResolvedValue(trustedConsent('opted_out'))],
-    ['frequency_cap_reached', () => routeMocks.safetyRepository.findFrequency.mockResolvedValue(trustedFrequency({ lastPreparedRef: 'wrop_delivery_other' }))],
     ['dry_run_not_ready', () => routeMocks.safetyRepository.findDryRunSnapshotForUpdate.mockResolvedValue(trustedDryRun({ configStatus: 'blocked' }))],
   ] as const)('POST %s 阻断并写固定 denied audit', async (reason, arrange) => {
     arrange();
@@ -265,6 +264,27 @@ describe('WeCom controlled reach-out API', () => {
     expect(await response.json()).toMatchObject({ code: reason });
     expect(routeMocks.repository.updateFollowUpMessageDraftControlledReachOut).not.toHaveBeenCalled();
     expect(routeMocks.auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({ result: 'denied' }));
+  });
+
+  it('POST frequency_cap_reached 阻断并写固定 denied audit', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-11T12:00:00.000Z'));
+    try {
+      routeMocks.safetyRepository.findFrequency.mockResolvedValue(
+        trustedFrequency({ lastPreparedRef: 'wrop_delivery_other' }),
+      );
+
+      const response = await POST(postRequest(validBody), params);
+
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({ code: 'frequency_cap_reached' });
+      expect(routeMocks.repository.updateFollowUpMessageDraftControlledReachOut).not.toHaveBeenCalled();
+      expect(routeMocks.auditRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+        result: 'denied',
+      }));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each([
