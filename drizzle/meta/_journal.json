@@ -260,6 +260,13 @@
       "when": 1783843200000,
       "tag": "0036_v08_05b_a_single_real_send_proof_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1783846800000,
+      "tag": "0037_v08_05b_b3a_real_task_readiness_foundation",
+      "breakpoints": true
     }
   ]
 }

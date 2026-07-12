@@ -1,7 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AuthAccountRecord } from '@/modules/auth/domain/auth-account';
 import { createAuthAccountRepository } from '@/modules/auth/server/auth-account-repository';
 import type { TenantDatabase } from '@/server/db/client';
-import { authUsers, tenantMembers } from '@/server/db/schema';
+import {
+  authAccountInstitutionBindings,
+  authUsers,
+  tenantMembers,
+} from '@/server/db/schema';
+
+const andMock = vi.hoisted(() =>
+  vi.fn((...conditions: unknown[]) => ({
+    conditions,
+    operator: 'and',
+  })),
+);
 
 const eqMock = vi.hoisted(() =>
   vi.fn((column: unknown, value: unknown) => ({
@@ -15,11 +27,12 @@ vi.mock('drizzle-orm', async (importOriginal) => {
   const actual = await importOriginal<typeof import('drizzle-orm')>();
   return {
     ...actual,
+    and: andMock,
     eq: eqMock,
   };
 });
 
-const accountRow = {
+const accountRow: AuthAccountRecord = {
   id: 'auth-user-chenlei',
   username: 'chenlei_admin',
   displayName: '陈磊',
@@ -44,6 +57,22 @@ const membershipRow = {
   userId: 'auth-user-chenlei',
   role: 'tenant_admin',
   displayName: '陈磊',
+  createdAt: new Date('2026-06-25T07:00:00.000Z'),
+  updatedAt: new Date('2026-06-25T07:00:00.000Z'),
+};
+
+const institutionBindingRow = {
+  id: 'auth-binding-chenlei',
+  accountId: 'auth-user-chenlei',
+  tenantId: 'tenant-zhengpu',
+  institutionId: 'institution-zhengpu',
+  status: 'active',
+  source: 'manual_admin',
+  assignedBy: 'platform-admin',
+  assignedAt: new Date('2026-06-25T07:00:00.000Z'),
+  expiresAt: null,
+  revokedAt: null,
+  version: 1,
   createdAt: new Date('2026-06-25T07:00:00.000Z'),
   updatedAt: new Date('2026-06-25T07:00:00.000Z'),
 };
@@ -113,6 +142,7 @@ function createDatabase(input: {
 }
 
 beforeEach(() => {
+  andMock.mockClear();
   eqMock.mockClear();
 });
 
@@ -166,6 +196,45 @@ describe('正式账号 repository', () => {
     });
     expect(query.selectChains[0].limit).toHaveBeenCalledWith(1);
     expect(result).toEqual(membershipRow);
+  });
+
+  it('仅按账号、租户和 active 状态读取至多两个权威机构绑定', async () => {
+    const query = createDatabase({
+      selectRows: [[institutionBindingRow]],
+    });
+
+    const result = await createAuthAccountRepository(
+      query.database,
+    ).listActiveInstitutionBindingsByAccountAndTenant({
+      accountId: 'auth-user-chenlei',
+      tenantId: 'tenant-zhengpu',
+    });
+
+    expect(query.selectChains[0].from).toHaveBeenCalledWith(
+      authAccountInstitutionBindings,
+    );
+    expect(query.selectChains[0].where).toHaveBeenCalledWith({
+      operator: 'and',
+      conditions: [
+        {
+          column: authAccountInstitutionBindings.accountId,
+          operator: 'eq',
+          value: 'auth-user-chenlei',
+        },
+        {
+          column: authAccountInstitutionBindings.tenantId,
+          operator: 'eq',
+          value: 'tenant-zhengpu',
+        },
+        {
+          column: authAccountInstitutionBindings.status,
+          operator: 'eq',
+          value: 'active',
+        },
+      ],
+    });
+    expect(query.selectChains[0].limit).toHaveBeenCalledWith(2);
+    expect(result).toEqual([institutionBindingRow]);
   });
 
   it('记录登录失败时只更新失败计数、锁定状态和更新时间', async () => {

@@ -1,16 +1,25 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type {
+  AuthAccountInstitutionBindingRecord,
   AuthAccountRecord,
   AuthAccountStatus,
   AuthTenantMembershipRecord,
 } from '@/modules/auth/domain/auth-account';
 import type { TenantDatabase } from '@/server/db/client';
-import { authUsers, tenantMembers } from '@/server/db/schema';
+import {
+  authAccountInstitutionBindings,
+  authUsers,
+  tenantMembers,
+} from '@/server/db/schema';
 
 export type AuthAccountRepository = {
   createAccount(record: AuthAccountRecord): Promise<AuthAccountRecord>;
   findAccountByUsername(username: string): Promise<AuthAccountRecord | null>;
   findPrimaryTenantMembershipByUserId(userId: string): Promise<AuthTenantMembershipRecord | null>;
+  listActiveInstitutionBindingsByAccountAndTenant(input: {
+    accountId: string;
+    tenantId: string;
+  }): Promise<AuthAccountInstitutionBindingRecord[]>;
   recordLoginFailure(input: {
     accountId: string;
     failedAt: Date;
@@ -68,6 +77,20 @@ export function createAuthAccountRepository(database: TenantDatabase): AuthAccou
         .limit(1);
 
       return (rows[0] as AuthTenantMembershipRecord | undefined) ?? null;
+    },
+
+    async listActiveInstitutionBindingsByAccountAndTenant(input) {
+      const rows = await database
+        .select()
+        .from(authAccountInstitutionBindings)
+        .where(and(
+          eq(authAccountInstitutionBindings.accountId, input.accountId),
+          eq(authAccountInstitutionBindings.tenantId, input.tenantId),
+          eq(authAccountInstitutionBindings.status, 'active'),
+        ))
+        .limit(2);
+
+      return rows as AuthAccountInstitutionBindingRecord[];
     },
 
     async recordLoginFailure(input) {

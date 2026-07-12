@@ -37,6 +37,27 @@ Mock provider 返回 `accepted / task_created` 时，execution shell 只能将�
 
 运行时 API 边界保持不变：`create_task_once` 固定返回 `provider_disabled`，不调用 mock provider，不消费 confirmation token，不进入 `attempted`，也不执行 `fetch`。Mock provider 只能由测试或显式 service 注入路径调用，不能通过 route 激活。
 
+## 05B-B3-A 真实任务创建准入地基
+
+05B-B3-A 只解除后续真实任务创建所需的数据与身份准入阻断，不实现真实 provider。0037 只新增三类 sidecar 基础：正式账号机构绑定、客户群发任务 outcome、受保护 recipient binding metadata；不修改 0034、0035 或 0036。
+
+正式 `server_session` 的 `institutionId` 只能来自当前租户下唯一、未撤销、未过期且已生效的 active institution binding。无绑定、多 active 绑定、revoked 绑定、`migration_placeholder` 或非法时间/版本都返回 `institutionId=null` 并对 `execute_once` 失败关闭。禁止从请求体、客户、draft、租户单机构假设或演示常量推断；`demo_session` 不使用正式绑定。
+
+Outcome sidecar 将真实任务创建与后续发送结果分离：
+
+- `task_create_attempted` 最多一次；
+- `task_created` 只保存 64 位 `task_ref_digest`，仍需员工确认；
+- `awaiting_member_confirmation` 不表示客户已收到；
+- `target_sent` 只是后续 `succeeded` 的候选证据；
+- `task_create_failed`、`task_create_unknown`、`target_failed` 和 `target_unknown` 都不能增加 `completedCount`；
+- unknown 或 `manual_review_required` 固定禁止自动重试。
+
+05B-B3-A 的 outcome service 只接受闭合的九类 action，并通过完整 tenant/institution/customer/operation ID/operation reference scope 与 version CAS 写 sidecar；调用方不能注入任意 transition callback。它不调用 0036 success finalizer；即使得到 `target_sent`，也保持 `not_finalized`。只有后续独立授权任务确认精确发送结果 `status=1` 后，才可评估 0036 成功终态与 `completedCount` 回写。
+
+真实 recipient resolver 只按 tenant、institution、customer、operation、mapping、binding reference/digest/version 解析低敏 metadata，并最多返回 binding reference、digest、version 与 opaque handle。数据库不保存或返回真实 recipient 标识；revoked、stale、多条匹配、scope/digest/version 不一致及 resolver 不可用都失败关闭。
+
+本阶段运行时代码不配置或主动读取 secret，不获取 access token，不调用企业微信，不创建真实任务，不查询发送结果，也不真实发送。运行时 API 的 `create_task_once` 继续固定 `provider_disabled`。05B-B3-B、05B-B3-C、05C 和 05D 均需独立授权。
+
 ## Provider contract
 
 能力固定为：
@@ -83,8 +104,9 @@ Confirmation token 明文只允许在签发成功响应中返回一次；持久�
 ## 后续阶段
 
 - 05B-B2 仅覆盖 mock adapter、resolver mock 和显式 service 注入，不得真实出网。
-- 05B-B3 才可能在独立安全复核和明确授权后实现真实 provider。在此之前不得调用真实 `add_msg_template`；后续还必须补齐员工确认后的发送结果查询。
-- 0037 只在真实任务 outcome proof 的数据需求获得单独审批后再规划。05B-B2 不得新增 0037，也不得修改 0034、0035 或 0036。
+- 05B-B3-A 仅提供 formal institution binding、0037 sidecar 与 resolver 边界，不得调用真实 provider。
+- 05B-B3-B / B3-C 才可能在独立安全复核和明确授权后分别实现 provider 与 outcome proof；此前不得调用真实 `add_msg_template` 或发送结果查询。
+- 0037 只承载本手册所述准入地基，不授权真实任务创建，也不修改 0034、0035 或 0036。
 - 05C、05D 不属于本手册授权范围。
 
 ## B1 验收检查
