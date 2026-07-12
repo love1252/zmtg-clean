@@ -1,17 +1,24 @@
 import type {
   WeComCustomerBroadcastTaskCapability,
   WeComCustomerBroadcastTaskProviderInput,
+  WeComCustomerBroadcastTaskMockProviderOutput,
   WeComCustomerBroadcastTaskProviderOutput,
 } from '@/modules/institution/domain/wecom-customer-broadcast-task-provider';
 
-/**
- * 仅定义未来 adapter 必须满足的边界；05B-B1 不提供任何实现。
- */
+/** Provider adapter 的低敏边界；运行时必须显式注入具体实现。 */
 export interface WeComCustomerBroadcastTaskProviderContract {
   readonly capability: WeComCustomerBroadcastTaskCapability;
   createTask(
     input: WeComCustomerBroadcastTaskProviderInput,
   ): Promise<WeComCustomerBroadcastTaskProviderOutput>;
+}
+
+export interface WeComCustomerBroadcastTaskMockProviderContract
+  extends WeComCustomerBroadcastTaskProviderContract {
+  readonly providerKind: 'mock';
+  createTask(
+    input: WeComCustomerBroadcastTaskProviderInput,
+  ): Promise<WeComCustomerBroadcastTaskMockProviderOutput>;
 }
 
 export type ProtectedWeComCustomerBroadcastTaskRecipientResolutionInput = Readonly<{
@@ -20,6 +27,7 @@ export type ProtectedWeComCustomerBroadcastTaskRecipientResolutionInput = Readon
   operationRef: string;
   recipientBindingRef: string;
   recipientBindingDigest: string;
+  recipientBindingVersion: string;
 }>;
 
 export type ProtectedWeComCustomerBroadcastTaskRecipientResolution =
@@ -45,4 +53,9 @@ export interface ProtectedWeComCustomerBroadcastTaskRecipientResolverContract {
   resolve(
     input: ProtectedWeComCustomerBroadcastTaskRecipientResolutionInput,
   ): Promise<ProtectedWeComCustomerBroadcastTaskRecipientResolution>;
+}
+
+export interface ProtectedWeComCustomerBroadcastTaskRecipientResolverMockContract
+  extends ProtectedWeComCustomerBroadcastTaskRecipientResolverContract {
+  readonly resolverKind: 'mock';
 }

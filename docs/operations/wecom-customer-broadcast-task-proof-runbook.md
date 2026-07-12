@@ -20,6 +20,23 @@
 
 `create_task_once` 必须返回 `provider_disabled` 或等价的固定阻断结果。阻断发生在 confirmation token 被消费之前，因此 operation 不得进入 `attempted`，`attempt_count` 不得增加。
 
+## 05B-B2 mock-only 范围
+
+05B-B2 只增加可在测试或显式 service 注入中使用的 mock provider contract 和 protected recipient resolver mock。它用于验证低敏 contract、固定 outcome 分类及 fail-closed 分支，不接入运行时 API route，也不构成真实 provider 实现。
+
+Mock provider 必须保持纯本地、低敏且无副作用：不读取环境变量或 `.env.local`，不读取 secret，不获取 access token，不执行 `fetch`，不调用企业微信，也不保存真实 recipient、消息原文、原始 `msgid`、provider URL 或 raw response。
+
+Mock provider 返回 `accepted / task_created` 时，execution shell 只能将其映射为 `task_created_mock`。该结果只证明 mock provider 接受了“创建任务”意图，明确不代表：
+
+- 真实企业微信任务已创建；
+- 客户已收到消息；
+- proof operation 已 `succeeded`；
+- `completedCount` 可以增加。
+
+05B-B2 不得调用 0036 success finalize。当前也没有经审批的数据结构可持久化真实 `task_created` 或 `awaiting_member_confirmation` 状态，因此本阶段不新增 0037。
+
+运行时 API 边界保持不变：`create_task_once` 固定返回 `provider_disabled`，不调用 mock provider，不消费 confirmation token，不进入 `attempted`，也不执行 `fetch`。Mock provider 只能由测试或显式 service 注入路径调用，不能通过 route 激活。
+
 ## Provider contract
 
 能力固定为：
@@ -65,9 +82,9 @@ Confirmation token 明文只允许在签发成功响应中返回一次；持久�
 
 ## 后续阶段
 
-- 05B-B2 只允许在获得独立授权后增加 mock adapter，用于验证 contract 和 unknown-outcome 分支；不得真实出网。
-- 05B-B3 才可能在独立安全复核和明确授权后实现真实 provider，并必须补齐员工确认后的发送结果查询。
-- 0037 只在真实任务 outcome proof 的数据需求获得单独审批后再规划。本阶段不得新增 0037，也不得修改 0034、0035 或 0036。
+- 05B-B2 仅覆盖 mock adapter、resolver mock 和显式 service 注入，不得真实出网。
+- 05B-B3 才可能在独立安全复核和明确授权后实现真实 provider。在此之前不得调用真实 `add_msg_template`；后续还必须补齐员工确认后的发送结果查询。
+- 0037 只在真实任务 outcome proof 的数据需求获得单独审批后再规划。05B-B2 不得新增 0037，也不得修改 0034、0035 或 0036。
 - 05C、05D 不属于本手册授权范围。
 
 ## B1 验收检查
@@ -78,3 +95,12 @@ Confirmation token 明文只允许在签发成功响应中返回一次；持久�
 4. `create_task_once` 固定 fail-closed，不消费 token、不进入 `attempted`。
 5. 服务端 `fetch=0`，无 provider client、worker、queue、scheduler、webhook 或自动重试。
 6. 不运行 migration 或 seed，不配置 secret，不读取 `.env.local`。
+
+## B2 验收检查
+
+1. Mock provider 只接受低敏 contract 字段，并覆盖 `accepted`、`rejected`、`timeout`、`transport_error` 和 `indeterminate` 固定分类。
+2. Resolver mock 只校验 binding reference、digest 和 version，不返回真实 recipient 标识。
+3. Mock provider 只有显式注入 service 时可执行；默认 execution shell 和运行时 API 均保持 `provider_disabled`。
+4. `task_created_mock` 不进入 `succeeded`，不增加 `completedCount`，不调用 success finalize。
+5. API route 不 import 或调用 mock provider，不消费 token、不进入 `attempted`，服务端 `fetch=0`。
+6. 不读取环境变量、secret 或 `.env.local`，不获取 access token，不调用企业微信，不真实创建任务或发送。

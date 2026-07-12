@@ -308,7 +308,7 @@ describe('WeCom customer broadcast task API shell', () => {
     expect(JSON.stringify(await postResponse.json())).not.toContain('sensitive diagnostic');
   });
 
-  it('route 不实现 provider/consume/网络/环境读取，服务端 fetch=0', async () => {
+  it('route 不 import/call mock provider，且不实现 consume/网络/环境读取，服务端 fetch=0', async () => {
     const source = readFileSync(
       resolve(
         dirname(fileURLToPath(import.meta.url)),
@@ -317,7 +317,7 @@ describe('WeCom customer broadcast task API shell', () => {
       'utf8',
     );
     expect(source).not.toMatch(
-      /\bfetch\s*\(|consumeRealSendProofConfirmation|https?:\/\/|process\.env|add_msg_template/iu,
+      /\bfetch\s*\(|consumeRealSendProofConfirmation|https?:\/\/|process\.env|add_msg_template|wecom-customer-broadcast-task-mock-provider|createWeComCustomerBroadcastTaskMockProvider|createProtectedWeComCustomerBroadcastTaskRecipientResolverMock|executeMockBroadcastTaskForTestOnly|mockProvider/iu,
     );
 
     const fetchMock = vi.fn();
