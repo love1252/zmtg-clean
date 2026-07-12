@@ -126,3 +126,28 @@ Confirmation token 明文只允许在签发成功响应中返回一次；持久�
 4. `task_created_mock` 不进入 `succeeded`，不增加 `completedCount`，不调用 success finalize。
 5. API route 不 import 或调用 mock provider，不消费 token、不进入 `attempted`，服务端 `fetch=0`。
 6. 不读取环境变量、secret 或 `.env.local`，不获取 access token，不调用企业微信，不真实创建任务或发送。
+
+## 05B-E 功能化接入
+
+05B-E 将既有 0037 outcome sidecar 接入受控系统工作流，但仍不是企业微信
+真实执行发布。新增 runtime adapter 壳默认 `provider_disabled`：它不读取
+`.env.local` 或环境变量、不获取 access token、不执行网络请求，也不保存原始
+任务标识、provider 响应、真实 recipient 或消息正文。未来真实 adapter 必须在
+独立授权下显式注入 fetcher、token provider、recipient resolver 和 executor。
+
+受控执行服务仅允许把 sidecar 推进为：
+
+- `task_create_attempted`；
+- `task_created`；
+- `awaiting_member_confirmation`；
+- 因失败或不可判定而进入 `manual_review_required`。
+
+`task_created` 只代表企业微信任务创建被接受；它不等于客户已收到。05B-E 不自动
+查询发送结果，不进入 `succeeded`，不增加 `completedCount`，也不自动重试。
+
+POST route 继续默认让 `create_task_once` 返回 `provider_disabled`，不消费
+confirmation token、不进入 attempted。新增 `mark_manual_review_required` 仅接受
+固定低敏 reason code：`task_digest_not_found`、`provider_result_unmatched` 或
+`employee_confirmation_reported_by_user`；不接受人工自由文本。该动作按
+tenant + institution + draft + operation scope 解析 sidecar，并只写
+`manual_review_required` 状态，不能把人工反馈直接视为送达或成功。

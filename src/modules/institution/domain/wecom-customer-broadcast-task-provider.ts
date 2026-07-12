@@ -28,11 +28,13 @@ export type WeComCustomerBroadcastTaskCapability =
 export const weComCustomerBroadcastTaskActions = [
   'issue_confirmation',
   'create_task_once',
+  'mark_manual_review_required',
 ] as const;
 
 export type WeComCustomerBroadcastTaskAction =
   (typeof weComCustomerBroadcastTaskActions)[number];
 
+/** 只接受固定低敏原因，禁止把人工自由文本写入状态或审计。 */
 export const weComCustomerBroadcastTaskProviderInputKeys = [
   'operationRef',
   'recipientBindingRef',

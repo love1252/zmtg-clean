@@ -1,9 +1,20 @@
 import { NextResponse } from 'next/server';
 
 import {
+  weComCustomerBroadcastTaskManualReviewReasonCodes,
+  type WeComCustomerBroadcastTaskManualReviewReasonCode,
+} from '@/modules/institution/domain/wecom-customer-broadcast-task-outcome';
+import {
   WE_COM_CUSTOMER_BROADCAST_TASK_CAPABILITY,
   WE_COM_CUSTOMER_BROADCAST_TASK_PROOF_KIND,
 } from '@/modules/institution/domain/wecom-customer-broadcast-task-provider';
+import {
+  createWeComCustomerBroadcastTaskOutcomeRepository,
+  findWeComCustomerBroadcastTaskOutcomeScopeForDraft,
+} from '@/modules/institution/server/wecom-customer-broadcast-task-outcome-repository';
+import {
+  markWeComCustomerBroadcastTaskManualReview,
+} from '@/modules/institution/server/wecom-customer-broadcast-task-outcome-service';
 import {
   evaluateBroadcastTaskPreflight,
   issueBroadcastTaskConfirmation,
@@ -11,6 +22,7 @@ import {
 } from '@/modules/institution/server/wecom-real-send-execution-shell-service';
 import { canAccessResource, type AccessContext } from '@/modules/security/domain/access-control';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
+import { getDatabase } from '@/server/db/client';
 
 const MAX_BODY_BYTES = 1024;
 const NO_STORE_HEADERS = { 'cache-control': 'no-store' } as const;
@@ -29,6 +41,11 @@ type RequestBody =
       action: 'create_task_once';
       operationRef: string;
       confirmationToken: string;
+    }>
+  | Readonly<{
+      action: 'mark_manual_review_required';
+      operationRef: string;
+      reasonCode: WeComCustomerBroadcastTaskManualReviewReasonCode;
     }>;
 
 function jsonNoStore(payload: unknown, status = 200) {
@@ -109,22 +126,30 @@ function parseRequestBody(input: unknown): RequestBody | null {
   if (input.action === 'issue_confirmation') {
     return hasExactKeys(input, ['action']) ? { action: 'issue_confirmation' } : null;
   }
-  if (input.action !== 'create_task_once' || !hasExactKeys(
-    input,
-    ['action', 'operationRef', 'confirmationToken'],
-  )) return null;
-
   const operationRef = typeof input.operationRef === 'string' ? input.operationRef.trim() : '';
-  const confirmationToken = typeof input.confirmationToken === 'string'
-    ? input.confirmationToken.trim()
-    : '';
+  if (!operationRef || operationRef.length > 96) return null;
+  if (input.action === 'create_task_once') {
+    if (!hasExactKeys(input, ['action', 'operationRef', 'confirmationToken'])) return null;
+    const confirmationToken = typeof input.confirmationToken === 'string'
+      ? input.confirmationToken.trim()
+      : '';
+    return confirmationToken && confirmationToken.length <= 256
+      ? { action: 'create_task_once', operationRef, confirmationToken }
+      : null;
+  }
   if (
-    !operationRef ||
-    operationRef.length > 96 ||
-    !confirmationToken ||
-    confirmationToken.length > 256
+    input.action !== 'mark_manual_review_required' ||
+    !hasExactKeys(input, ['action', 'operationRef', 'reasonCode']) ||
+    typeof input.reasonCode !== 'string' ||
+    !weComCustomerBroadcastTaskManualReviewReasonCodes.includes(
+      input.reasonCode as WeComCustomerBroadcastTaskManualReviewReasonCode,
+    )
   ) return null;
-  return { action: 'create_task_once', operationRef, confirmationToken };
+  return {
+    action: 'mark_manual_review_required',
+    operationRef,
+    reasonCode: input.reasonCode as WeComCustomerBroadcastTaskManualReviewReasonCode,
+  };
 }
 
 function capabilityPayload() {
@@ -182,6 +207,44 @@ export async function POST(request: Request, { params }: RouteContext) {
         reasonCode: result.reasonCode,
         operationRef: result.operationRef,
       }, 503);
+    }
+
+    if (parsed.action === 'mark_manual_review_required') {
+      const database = getDatabase();
+      const result = await markWeComCustomerBroadcastTaskManualReview({
+        tenantId: access.context.tenantId,
+        institutionId: access.context.institutionId,
+        draftId,
+        operationRef: parsed.operationRef,
+        reasonCode: parsed.reasonCode,
+        occurredAt: new Date().toISOString(),
+        repository: createWeComCustomerBroadcastTaskOutcomeRepository(database),
+        resolveScope: (scope) => findWeComCustomerBroadcastTaskOutcomeScopeForDraft(
+          database,
+          scope,
+        ),
+      });
+      if (result.kind === 'blocked') {
+        const status = result.reason === 'operation_not_found'
+          ? 404
+          : result.reason === 'persistence_unknown'
+            ? 503
+            : 409;
+        return jsonNoStore({
+          status: 'blocked',
+          ...capabilityPayload(),
+          reasonCode: result.reason,
+        }, status);
+      }
+      return jsonNoStore({
+        status: 'manual_review_required',
+        ...capabilityPayload(),
+        operationRef: parsed.operationRef,
+        reasonCode: parsed.reasonCode,
+        manualReviewRequired: true,
+        automaticRetryAllowed: false,
+        completedCountDelta: 0,
+      });
     }
 
     const result = await issueBroadcastTaskConfirmation({

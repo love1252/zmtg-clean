@@ -9,6 +9,10 @@ const mocks = vi.hoisted(() => ({
   evaluatePreflight: vi.fn(),
   issueConfirmation: vi.fn(),
   rejectExecution: vi.fn(),
+  getDatabase: vi.fn(),
+  createOutcomeRepository: vi.fn(),
+  findOutcomeScope: vi.fn(),
+  markManualReview: vi.fn(),
 }));
 
 vi.mock('@/modules/security/server/access-context', async (importOriginal) => ({
@@ -23,6 +27,18 @@ vi.mock(
     issueBroadcastTaskConfirmation: mocks.issueConfirmation,
     rejectBroadcastTaskExecutionBecauseProviderDisabled: mocks.rejectExecution,
   }),
+);
+vi.mock('@/server/db/client', () => ({ getDatabase: mocks.getDatabase }));
+vi.mock(
+  '@/modules/institution/server/wecom-customer-broadcast-task-outcome-repository',
+  () => ({
+    createWeComCustomerBroadcastTaskOutcomeRepository: mocks.createOutcomeRepository,
+    findWeComCustomerBroadcastTaskOutcomeScopeForDraft: mocks.findOutcomeScope,
+  }),
+);
+vi.mock(
+  '@/modules/institution/server/wecom-customer-broadcast-task-outcome-service',
+  () => ({ markWeComCustomerBroadcastTaskManualReview: mocks.markManualReview }),
 );
 
 import {
@@ -78,6 +94,16 @@ beforeEach(() => {
     operationRef,
     reasonCode: 'provider_disabled',
   }));
+  mocks.getDatabase.mockReturnValue({});
+  mocks.createOutcomeRepository.mockReturnValue({});
+  mocks.findOutcomeScope.mockResolvedValue(null);
+  mocks.markManualReview.mockResolvedValue({
+    kind: 'recorded',
+    reconciliationState: 'manual_review_required',
+    manualReviewRequired: true,
+    completedCountDelta: 0,
+    automaticRetryAllowed: false,
+  });
 });
 
 describe('WeCom customer broadcast task API shell', () => {
@@ -198,6 +224,8 @@ describe('WeCom customer broadcast task API shell', () => {
       { action: 'issue_confirmation', operationRef: 'wrsproof-a' },
       { action: 'create_task_once', operationRef: 'wrsproof-a' },
       { action: 'create_task_once', confirmationToken: 'opaque' },
+      { action: 'mark_manual_review_required', operationRef: 'wrsproof-a' },
+      { action: 'mark_manual_review_required', operationRef: 'wrsproof-a', reasonCode: 'free-text' },
     ];
     for (const body of invalidBodies) {
       expect((await POST(postRequest(body), params)).status).toBe(400);
@@ -294,6 +322,38 @@ describe('WeCom customer broadcast task API shell', () => {
     expect(payload).not.toHaveProperty('operationStatus');
   });
 
+  it('mark_manual_review_required 只写固定低敏状态，不进入 succeeded 或 completedCount', async () => {
+    const response = await POST(postRequest({
+      action: 'mark_manual_review_required',
+      operationRef: 'wrsproof-a',
+      reasonCode: 'task_digest_not_found',
+    }), params);
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expectNoStore(response);
+    expect(mocks.getDatabase).toHaveBeenCalledTimes(1);
+    expect(mocks.markManualReview).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a',
+      institutionId: 'institution-a',
+      draftId: 'draft-a',
+      operationRef: 'wrsproof-a',
+      reasonCode: 'task_digest_not_found',
+    }));
+    expect(payload).toEqual({
+      status: 'manual_review_required',
+      proofKind: 'customer_broadcast_task',
+      directSend: false,
+      requiresEmployeeConfirmation: true,
+      operationRef: 'wrsproof-a',
+      reasonCode: 'task_digest_not_found',
+      manualReviewRequired: true,
+      automaticRetryAllowed: false,
+      completedCountDelta: 0,
+    });
+    expect(JSON.stringify(payload)).not.toMatch(/succeeded|recipient|external_userid|userid|secret|access_token|rawResponse|providerUrl|content/iu);
+  });
+
   it('GET/POST 服务异常只返回低敏 no-store 503', async () => {
     mocks.evaluatePreflight.mockRejectedValueOnce(new Error('sensitive diagnostic'));
     const getResponse = await GET(getRequest(), params);
@@ -308,7 +368,7 @@ describe('WeCom customer broadcast task API shell', () => {
     expect(JSON.stringify(await postResponse.json())).not.toContain('sensitive diagnostic');
   });
 
-  it('route 不接入 mock/real provider、0037 sidecar 或 resolver，且不实现 consume/网络，服务端 fetch=0', async () => {
+  it('route 不接入 mock/real provider、不实现 consume/网络，服务端 fetch=0', async () => {
     const source = readFileSync(
       resolve(
         dirname(fileURLToPath(import.meta.url)),
@@ -317,7 +377,7 @@ describe('WeCom customer broadcast task API shell', () => {
       'utf8',
     );
     expect(source).not.toMatch(
-      /\bfetch\s*\(|consumeRealSendProofConfirmation|https?:\/\/|process\.env|add_msg_template|wecom-customer-broadcast-task-(?:mock-provider|outcome|recipient-resolver)|createWeComCustomerBroadcastTaskMockProvider|createProtectedWeComCustomerBroadcastTaskRecipientResolverMock|executeMockBroadcastTaskForTestOnly|createWeComCustomerBroadcastTaskOutcomeRepository|createWeComCustomerBroadcastRecipientBindingRepository|recordTaskCreateAttempted|mockProvider/iu,
+      /\bfetch\s*\(|consumeRealSendProofConfirmation|https?:\/\/|process\.env|add_msg_template|wecom-customer-broadcast-task-(?:mock-provider|recipient-resolver)|createWeComCustomerBroadcastTaskMockProvider|createProtectedWeComCustomerBroadcastTaskRecipientResolverMock|executeMockBroadcastTaskForTestOnly|createWeComCustomerBroadcastRecipientBindingRepository|recordTaskCreateAttempted|mockProvider/iu,
     );
 
     const fetchMock = vi.fn();
@@ -328,6 +388,11 @@ describe('WeCom customer broadcast task API shell', () => {
       action: 'create_task_once',
       operationRef: 'wrsproof-a',
       confirmationToken: 'opaque-token-once',
+    }), params);
+    await POST(postRequest({
+      action: 'mark_manual_review_required',
+      operationRef: 'wrsproof-a',
+      reasonCode: 'task_digest_not_found',
     }), params);
     expect(fetchMock).not.toHaveBeenCalled();
     vi.unstubAllGlobals();

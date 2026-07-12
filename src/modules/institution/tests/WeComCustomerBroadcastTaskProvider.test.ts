@@ -22,6 +22,11 @@ import {
   createProtectedWeComCustomerBroadcastTaskRecipientResolverMock,
   createWeComCustomerBroadcastTaskMockProvider,
 } from '@/modules/institution/server/wecom-customer-broadcast-task-mock-provider';
+import {
+  createExplicitlyInjectedWeComCustomerBroadcastTaskRuntimeAdapter,
+  createFailClosedWeComCustomerBroadcastTaskRuntimeAdapter,
+  weComCustomerBroadcastTaskRuntimeResultKinds,
+} from '@/modules/institution/server/wecom-customer-broadcast-task-provider-runtime';
 
 const providerInput = {
   operationRef: 'operation-ref-a',
@@ -61,6 +66,7 @@ describe('企业微信客户群发任务 provider contract', () => {
     expect(weComCustomerBroadcastTaskActions).toEqual([
       'issue_confirmation',
       'create_task_once',
+      'mark_manual_review_required',
     ]);
   });
 
@@ -187,11 +193,45 @@ describe('企业微信客户群发任务 provider contract', () => {
     ).resolves.toEqual({ kind: 'blocked', reasonCode: 'binding_missing' });
   });
 
+  it('runtime adapter 默认 provider_disabled；显式注入只传递不透明 lease 与 handle', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const disabled = createFailClosedWeComCustomerBroadcastTaskRuntimeAdapter();
+    await expect(disabled.createTask(providerInput)).resolves.toEqual({
+      kind: 'provider_disabled',
+    });
+
+    const execute = vi.fn().mockResolvedValue({
+      kind: 'task_created',
+      taskRefDigest: 'c'.repeat(64),
+    });
+    const injected = createExplicitlyInjectedWeComCustomerBroadcastTaskRuntimeAdapter({
+      fetcher: {},
+      tokenProvider: { acquire: async () => ({ kind: 'available', leaseId: 'lease-a' }) },
+      recipientResolver: { resolve: async () => ({ kind: 'resolved', opaqueHandle: 'handle-a' }) },
+      executor: { execute },
+    });
+    await expect(injected.createTask(providerInput)).resolves.toEqual({
+      kind: 'task_created',
+      taskRefDigest: 'c'.repeat(64),
+    });
+    expect(execute).toHaveBeenCalledWith({
+      input: providerInput,
+      opaqueRecipientHandle: 'handle-a',
+      tokenLeaseId: 'lease-a',
+    });
+    expect(weComCustomerBroadcastTaskRuntimeResultKinds).toEqual([
+      'task_created', 'rejected', 'timeout', 'transport_error', 'indeterminate', 'provider_disabled',
+    ]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('contract 源码不实现网络调用，也不声明被禁止的敏感字段', () => {
     const sourceFiles = [
       'src/modules/institution/domain/wecom-customer-broadcast-task-provider.ts',
       'src/modules/institution/server/wecom-customer-broadcast-task-provider-contract.ts',
       'src/modules/institution/server/wecom-customer-broadcast-task-mock-provider.ts',
+      'src/modules/institution/server/wecom-customer-broadcast-task-provider-runtime.ts',
     ];
     const source = sourceFiles
       .map((file) => readFileSync(`${process.cwd()}/${file}`, 'utf8'))
