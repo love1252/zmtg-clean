@@ -176,6 +176,20 @@ export const AUDIT_REASON_VALUES = [
   'wecom_controlled_reachout_invalid_request',
   'wecom_controlled_reachout_body_too_large',
   'wecom_controlled_reachout_conflict',
+  'wecom_real_send_proof_operation_requested',
+  'wecom_real_send_proof_operation_aborted',
+  'wecom_real_send_proof_operation_attempted',
+  'wecom_real_send_proof_operation_succeeded',
+  'wecom_real_send_proof_operation_failed',
+  'wecom_real_send_proof_operation_unknown',
+  'wecom_real_send_proof_control_blocked',
+  'wecom_real_send_proof_environment_blocked',
+  'wecom_real_send_proof_ready_source_blocked',
+  'wecom_real_send_proof_attestation_blocked',
+  'wecom_real_send_proof_readiness_changed',
+  'wecom_real_send_proof_confirmation_consumed',
+  'wecom_real_send_proof_confirmation_expired',
+  'wecom_real_send_proof_completed_count_recorded',
 ] as const satisfies readonly AuditReason[];
 
 export type AuditEventQueryFilters = {
