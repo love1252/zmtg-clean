@@ -22,6 +22,7 @@ import { OpenPlatformAiReadonlyPanel } from '@/modules/open-platform/components/
 import { OpenPlatformAuditEventsPanel } from '@/modules/open-platform/components/OpenPlatformAuditEventsPanel';
 import { OpenPlatformKnowledgeManagementPanel } from '@/modules/open-platform/components/OpenPlatformKnowledgeManagementPanel';
 import { OpenPlatformTenantManagementPanel } from '@/modules/open-platform/components/OpenPlatformTenantManagementPanel';
+import { WeComCustomerDataGovernancePanel } from '@/modules/open-platform/components/WeComCustomerDataGovernancePanel';
 import { listOpenPlatformTenants } from '@/modules/open-platform/client/platform-tenant-management-client';
 import { PlatformSectionBanner } from '@/modules/open-platform/components/PlatformSectionBanner';
 import { TrialV01ExperienceHandoffPanel } from '@/modules/open-platform/components/TrialV01ExperienceHandoffPanel';
@@ -265,6 +266,8 @@ export function PlatformConsole() {
               <OpenPlatformAiReadonlyPanel />
             ) : activeNavLabel === '知识库管理' ? (
               <OpenPlatformKnowledgeManagementPanel />
+            ) : activeNavLabel === '企业微信治理' ? (
+              <WeComCustomerDataGovernancePanel />
             ) : activeNavLabel === '开放连接路线' ? (
               <OpenConnectionRoadmapPanel />
             ) : activeNavLabel === '商业化边界' ? (
