@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Server,
   Target,
+  UserRoundSearch,
   Users,
   Workflow,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ export type InstitutionViewId =
   | 'aiServiceUsage'
   | 'treatmentSummaries'
   | 'audit'
+  | 'wecomExternalContacts'
   | 'hisConnections'
   | 'conversations'
   | 'appointments'
@@ -43,6 +45,7 @@ export const institutionNavItems: InstitutionNavItem[] = [
   { id: 'treatmentSummaries', label: '治疗摘要管理', icon: ClipboardList },
   { id: 'opportunities', label: '机会池', icon: Target },
   { id: 'audit', label: '审计日志', icon: FileSearch },
+  { id: 'wecomExternalContacts', label: '企微外部联系人', icon: UserRoundSearch },
   { id: 'hisConnections', label: 'HIS 连接配置', icon: Server },
   { id: 'conversations', label: '客服工作台', icon: MessageCircle },
   { id: 'appointments', label: '预约中心', icon: CalendarCheck },

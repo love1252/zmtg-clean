@@ -35,6 +35,7 @@ import {
 } from '@/modules/institution/components/InstitutionPageState';
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 import { TreatmentSummaryManagementShell } from '@/modules/institution/components/TreatmentSummaryManagementShell';
+import { WeComExternalContactReadonlyPanel } from '@/modules/institution/components/WeComExternalContactReadonlyPanel';
 import type { V1KnowledgeBaseDemoReadonlyApiContractResponse } from '@/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-api-contract';
 import type { V1WorkspaceDashboardReadonlyAggregationApiContractResponse } from '@/modules/workspace/domain/v1-workspace-dashboard-readonly-api-contract';
 import {
@@ -188,6 +189,7 @@ const realInstitutionViews = [
   'aiServiceUsage',
   'treatmentSummaries',
   'audit',
+  'wecomExternalContacts',
   'hisConnections',
   'conversations',
   'knowledge',
@@ -585,6 +587,8 @@ export function InstitutionWorkspace() {
               <OpportunityPoolShell />
             ) : activeView === 'audit' ? (
               <InstitutionAuditEventsShell />
+            ) : activeView === 'wecomExternalContacts' ? (
+              <WeComExternalContactReadonlyPanel />
             ) : activeView === 'hisConnections' ? (
               <HisConnectionReadOnlyPanel />
             ) : activeView === 'conversations' ? (
