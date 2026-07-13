@@ -14,6 +14,7 @@ import {
   Plug,
   TrendingUp,
   Shield,
+  ShieldCheck,
   Presentation,
   RefreshCw,
 } from 'lucide-react';
@@ -72,6 +73,7 @@ export const platformNavItems: PlatformNavItem[] = [
   { label: 'AI 积分规则', icon: Coins },
   { label: 'AI用量与费用', icon: TrendingUp },
   { label: '知识库管理', icon: BookOpen },
+  { label: '企业微信治理', icon: ShieldCheck },
   { label: '开放连接路线', icon: Plug },
   { label: '体验版操作说明', icon: Presentation },
   { label: '体验数据重置', icon: RefreshCw },
