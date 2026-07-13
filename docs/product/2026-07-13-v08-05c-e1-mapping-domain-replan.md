@@ -121,7 +121,7 @@ PR #521 已记录原 WIP 的以下阻塞类型：
 
 所有入口按以下固定顺序判定，并且只报告第一个失败，避免同一输入因实现顺序不同产生不同 audit：
 
-1. plain-object shape、精确 key whitelist、全字符串敏感值扫描，三者按此顺序判定；
+1. plain-object shape、精确 key whitelist / forbidden nested container、全字符串统一敏感值扫描，三者按此顺序判定；
 2. root / nested `tenantId`；
 3. `occurredAt`；
 4. 其余 scalar、enum、digest 与 reference 的类型 / grammar；boolean 在此只校验类型，不判定固定 literal 或 attestation 语义；
@@ -133,9 +133,9 @@ PR #521 已记录原 WIP 的以下阻塞类型：
 10. authorization / provider / sync gate；
 11. 状态转换与 action-specific candidate / conflict guard，严格按下文 11a—11c 子顺序判定。
 
-guard 1 与 guard 4 的字段遍历顺序固定为第 4.4 节 whitelist 的书写顺序；数组按 index 升序，nested object 按表内字段顺序。多个 scalar 或多个数组项同时非法时只报告最先项，但 audit 仍不得包含字段原值。
+raw guard 1 的内部顺序固定为：1a root / discriminated command 必须是 plain object；1b exact keys 与 forbidden field name；1c whitelist 不允许的 nested object / array / raw container；1d 对每一个 string value 运行第 4.5 节同一个 sensitive scanner。字段遍历顺序固定为第 4.4 节 whitelist 的书写顺序；数组按 index 升序，nested object 按表内字段顺序。多个字符串、scalar 或数组项同时非法时只报告最先项，但 audit 仍不得包含字段原值。
 
-guard 1—4 只处理 raw command，不加载 aggregate。第 5 步内部顺序固定为：5a 动作对应的可信 context、aggregate、lineage index，以及动作 / 当前状态需要的 target / evidence 的 exact-shape、类型与 grammar 契约；5a 内再固定按 context shell（非 containment 为 MappingReadinessContext + authorization，containment 为 DisableContainmentContext）→ MappingAggregateContext → LineageLockIndex / records → target / evidence 的顺序，只报告首个失败；5b 安全布尔固定值检查，内部顺序为任一 `containsRealCustomerData` → aggregate / target 的 `autoMergePerformed` → aggregate / target 的 `realCustomerRelationshipWritten`；5c 任一 `fieldWhitelistApplied` attestation 检查；5d `sourceKind` / `dataMode` / tenant namespace cross-field；5e 非 containment 动作的 fixture registry provenance 与完整 source snapshot 绑定；5f root 与可信 context / authorization / aggregate / lineage index，以及 target 存在时的 tenant 一致性；5g 非 containment 动作的 authorized tuple 人工复核与时间一致性；5h 可信 aggregate 的 status / reason 与 target flag 真值表；5i target 存在时校验 candidate pair / evidence fingerprint、candidate digest 及 aggregate / target 绑定完整性；5j 仅对 candidate-bound action 且 5h 证明 target present 时，在当前 tenant 与 aggregate scope 内查找 raw candidate digest 并比对 target。其他 tenant 或 aggregate 的 digest 与不存在的 digest 一律返回 `candidate_target_not_found`，不得通过全局查询泄露其归属。5h 为 target absent 的 `unmatched` / `disabled` 状态不执行 5i / 5j，分别交由 step 11a / step 8 固定阻断，不能被 `candidate_target_not_found` 抢先；`disable_mapping` 没有 candidateDigest 或 action target，因此不执行 5e、5g、5i 或 5j，但仍须验证 containment context、aggregate 与 lineage index。
+guard 1—4 只处理 raw command，不加载 aggregate。第 5 步内部顺序固定为：5a 动作对应的可信 context、aggregate、lineage index，以及动作 / 当前状态需要的 target / evidence 的 exact-shape、统一 string sensitive scan、类型与 grammar 契约；5a 内每个对象都按 plain object → exact keys / nested container → 每个 string value 的统一 sensitive scan → 类型 / grammar 判定，且对象间固定按 context shell（非 containment 为 MappingReadinessContext + authorization，containment 为 DisableContainmentContext）→ MappingAggregateContext → LineageLockIndex / records → target / evidence 的顺序，只报告首个失败；5b 安全布尔固定值检查，内部顺序为任一 `containsRealCustomerData` → aggregate / target 的 `autoMergePerformed` → aggregate / target 的 `realCustomerRelationshipWritten`；5c 任一 `fieldWhitelistApplied` attestation 检查；5d `sourceKind` / `dataMode` / tenant namespace cross-field；5e 非 containment 动作的 fixture registry provenance 与完整 source snapshot 绑定；5f root 与可信 context / authorization / aggregate / lineage index，以及 target 存在时的 tenant 一致性；5g 非 containment 动作的 authorized tuple 人工复核与时间一致性；5h 可信 aggregate 的 status / reason 与 target flag 真值表；5i target 存在时校验 candidate pair / evidence fingerprint、candidate digest 及 aggregate / target 绑定完整性；5j 仅对 candidate-bound action 且 5h 证明 target present 时，在当前 tenant 与 aggregate scope 内查找 raw candidate digest 并比对 target。其他 tenant 或 aggregate 的 digest 与不存在的 digest 一律返回 `candidate_target_not_found`，不得通过全局查询泄露其归属。5h 为 target absent 的 `unmatched` / `disabled` 状态不执行 5i / 5j，分别交由 step 11a / step 8 固定阻断，不能被 `candidate_target_not_found` 抢先；`disable_mapping` 没有 candidateDigest 或 action target，因此不执行 5e、5g、5i 或 5j，但仍须验证 containment context、aggregate 与 lineage index。
 
 第 4 步对 raw / trusted boolean 只接受严格 `boolean` 类型；`true` / `false` 的契约语义不属于 scalar grammar。类型正确但 `containsRealCustomerData=true`、`autoMergePerformed=true` 或 `realCustomerRelationshipWritten=true` 的首个失败按上述 5b 内部顺序固定；类型正确但 `fieldWhitelistApplied=false` 的首个失败固定在 5c。source/mode 与 fixture provenance 同时失败时依次采用 5d、5e；后续 tenant、authorization tuple、aggregate truth table、target integrity 与 candidate lookup 不得抢先改变 event / reason。
 
@@ -169,6 +169,7 @@ guard 1—4 只处理 raw command，不加载 aggregate。第 5 步内部顺序�
 ### 4.1 总体规则
 
 - generation 与 review 的所有入口 payload 必须先经过 parser，成功产生不可变的 validated DTO 后，才能进入 domain。
+- raw command、可信 context / aggregate / lineage / target / evidence、domain 派生的 `mappingReview` / `mappingDecision` / `mappingConflict` 与 audit event 中，每一个 string value 都必须先经过第 4.5 节同一个无副作用 sensitive scanner，再执行该字段的类型、exact grammar、枚举或 cross-field 校验。该规则没有字段类别例外：tenant、reference、digest、timestamp、enum、action、reviewer role 与 reason code 都必须扫描。
 - raw command 中允许出现的 root / nested `tenantId`、digest、reference、`action`、`sourceKind`、`dataMode`、`occurredAt` 与 reviewer role 全部严格校验。`status` 与 `reasonCode` 只能由 domain 按固定映射生成，并在 domain gate 再次做 pair 校验；raw command 出现二者必须作为 unknown field 阻断。generation raw payload 出现 `candidateDigest` 或 `candidatePairDigest` 同样阻断。
 - 字符串校验必须证明全字符串匹配，例如同时校验匹配结果长度和 `match[0] === value`；不得把 JavaScript `$` 作为唯一结尾保证。
 - 标识、枚举、digest 和 timestamp 不接受前后空白，不允许 `trim()` 后继续使用原值。若未来确需规范化，必须生成独立 canonical 值，并禁止原始值进入 domain 或 audit。
@@ -246,7 +247,7 @@ guard 1—4 只处理 raw command，不加载 aggregate。第 5 步内部顺序�
 - `action` 只允许 `approve`、`reject`、`request_more_info`、`mark_conflict`、`clear_candidate`、`reopen`、`expire_candidate`；
 - `reviewerRole` 只允许 `institution_operator` 或 `platform_governance`；
 - candidate-bound review 所需的 MappingReadinessContext、action target candidate、aggregate 与 lineage locks 只能由 application boundary 从可信 mock/demo 状态注入，review 调用方不得声明；`disable_mapping` 改用独立 containment context；
-- review raw command 出现 `candidate`、`evidence`、`authorization`、`mappingReadinessContext`、`mappingReference`、`candidatePairDigest`、`evidenceFingerprint`、`candidateVersion`、`snapshotDigest`、`snapshotVersion`、`snapshotSequence`、`lineageTimestamp`、`sourceKind`、`dataMode`、`syncStatus`、`fixtureRegistryDigest`、`status`、`reasonCode`、`auditReady` 中任一字段，均按 unknown field 阻断。
+- review raw command 出现 `candidate`、`evidence`、`authorization`、`mappingReadinessContext`、`mappingReference`、`candidatePairDigest`、`evidenceFingerprint`、`candidateVersion`、`snapshotDigest`、`snapshotVersion`、`snapshotSequence`、`lineageTimestamp`、`sourceKind`、`dataMode`、`syncStatus`、`fixtureRegistryDigest`、`status`、`reasonCode`、`auditReady`、`mappingReview`、`mappingDecision`、`mappingConflict` 中任一字段，均按 unknown field 阻断。后三者是 domain-only output，调用方不得注入或覆盖。
 
 **Disable command** 使用独立的 exact shape，字段集合必须完全等于 `tenantId`、`action`、`reviewerRole`、`occurredAt`，且 `action` 只能等于 `disable_mapping`。它不接受 `candidateDigest`；若提交该字段同样按 unknown field 阻断。application boundary 必须注入独立的 **DisableContainmentContext**，字段集合完全等于 `tenantId`、`aggregate`、`lineageLockIndex`、`auditReady`。`auditReady` 在 5a 只校验严格 boolean 类型，并在 guard 7 要求为 `true`；`false` 固定映射为 `mapping_audit_not_ready_blocked / audit_not_ready`。该 context 不包含 authorization、provider、sync、fixture registry entry 或 action target，且不依赖 MappingReadinessContext 是否存在或有效。raw command 不得提交 DisableContainmentContext 中任一派生对象。
 
@@ -275,6 +276,19 @@ aggregate、registry entry、lineage index、每个 lock record 与 target（存
 
 `sourceTypeMatched` 只比较 external contact 与 system customer 的同名业务 `sourceType` 枚举；root `sourceKind` 仅表示 fixture provenance，不参与该 boolean 的相等判断。
 
+三个 domain-only output object 都必须由封闭 factory 在 mutation commit 前生成。它们不是 raw command，也不接受任意扩展字段；每个字段全部必填且不允许 `null`。factory 固定执行 plain object → exact allowed keys → 所有 string value 统一 sensitive scan → 类型 / grammar / enum → cross-field 绑定。缺键、多键、unknown / nested raw container、任一字符串扫描或绑定失败时不得返回部分对象，不得提交状态变更，并按第 7.2 节 fail-closed。
+
+| domain output object | exact allowed keys |
+| --- | --- |
+| `mappingReview` | `tenantId`、`mappingReference`、`candidateDigest`、`action`、`reviewerRole`、`mappingStatusBefore`、`occurredAt`、`sourceKind`、`dataMode` |
+| `mappingDecision` | `tenantId`、`mappingReference`、`candidateDigest`、`action`、`reviewerRole`、`mappingStatusBefore`、`mappingStatusAfter`、`reasonCode`、`occurredAt`、`sourceKind`、`dataMode` |
+| `mappingConflict` | `tenantId`、`mappingReference`、`candidateDigest`、`candidatePairDigest`、`evidenceFingerprint`、`conflictType`、`conflictStatus`、`unresolvedConflictCount`、`manualReviewRequired`、`createdAt`、`sourceKind`、`dataMode` |
+
+- `mappingReview` 与 `mappingDecision` 只在七个 candidate-bound action 成功且 mutation audit preflight 通过后成对产生；`generate_candidate` 与 `disable_mapping` 不产生这两个对象。两者的 `tenantId`、`mappingReference`、`candidateDigest`、`action`、`reviewerRole`、`mappingStatusBefore`、`occurredAt`、`sourceKind`、`dataMode` 必须逐项完全相等，并与已通过 5i 的可信 target、当前 aggregate 和 validated command 绑定。
+- `mappingDecision.mappingStatusAfter` / `reasonCode` 必须命中第 3.4 节及对应 action 的唯一转换；阻断路径不产生 `mappingReview` 或 `mappingDecision`，不能把 fail-closed audit 当作 decision。
+- `mappingConflict` 只投影 conflict-origin lineage，是只读摘要而不是解锁命令；普通 candidate 的 `clear_candidate` 会创建 clearance lock，但不产生 `mappingConflict`。`conflictType` 只允许 `multiple_system_customers_for_external_contact`、`multiple_external_contacts_for_system_customer`、`evidence_inconsistent`、`manual_marked`；`conflictStatus` 只允许 `unresolved_locked` / `cleared_locked`。前者必须对应 aggregate `conflict / mapping_conflict`、唯一 `lockType=conflict` record、locked active target、`unresolvedConflictCount=1—100` 与 `manualReviewRequired=true`；后者只表示该 conflict-origin lineage 已执行 clear，必须对应 `cleared_locked / candidate_cleared_locked`、仍保留的同一原始 conflict record、cleared inactive locked target、保留原 conflict count 与 `manualReviewRequired=false`。conflict-origin clear 不创建第二条 clearance record，避免重复 `{candidatePairDigest, evidenceFingerprint}` 对照键。
+- `mappingConflict` 的三个 digest 必须逐项绑定同一可信 target 和原始 `lockType=conflict` record，`createdAt` 始终等于该 conflict record 的 canonical timestamp；`cleared_locked` 由 aggregate、target 与成功 audit / history 证明 clear 已发生，不改变或替代原 conflict record。多个冲突使用多个单-lineage 投影，不得用可变数组合并身份，也不得借该投影删除、替换或解除永久 lock。
+
 内部 candidate scalar 规则固定为：`candidateVersion` 是 1—2,147,483,647 的整数；`candidateSourceStatus` 只允许 `active` / `inactive` / `stale` / `cleared` / `rejected` / `conflict_locked`；`unresolvedConflictCount` 是 0—100 的整数；所有 `*Matched` 字段与 candidate flag 都是严格 boolean；`displayNameSimilarity` 是 0—100 的整数；`tagNames` 仍受 0—50 项与逐项敏感扫描约束。aggregate 的 `mappingStatus` / `reasonCode` 必须命中第 3.4 节唯一 pair，并与 target presence / flags 命中下表唯一行。
 
 aggregate 状态、reason 与 target candidate flags 只允许下表组合；`—` 表示运行时 target 不存在，历史 candidate 只保留在不可变 audit/history 中：
@@ -297,17 +311,20 @@ aggregate 状态、reason 与 target candidate flags 只允许下表组合；`�
 
 ### 4.5 scalar grammar 与全字符串敏感值扫描
 
+- sensitive scanner 是所有 string value 的第一道内容校验。raw command 按第 3.6 节 guard 1d 扫描；每个可信对象和 domain output 按其 exact allowed keys 的书写顺序递归扫描，数组按 index 升序。digest、timestamp、enum、reference、tenant、action、reviewer role、reason code 与人类可读字段都没有豁免，扫描通过后才执行各自 exact grammar / enum / cross-field 校验。
 - digest 统一为 `sha256:` 加 64 个小写十六进制字符，总长度 71；大写、空白、行分隔符和长度偏差均阻断。全零 digest 仅可作 fail-closed audit 占位，raw command 禁止提交。
 - reference 统一为 `ref-(mock|demo)-` 加 3—48 个小写字母、数字或单连字符；首尾必须为字母或数字，不允许连续连字符，并以完整匹配长度校验。reference 后缀还必须执行与 human-readable 字段相同的敏感值扫描，不能把结构匹配当作低敏证明。
 - `YYYY-MM-DD` 字段必须是 canonical 真实日期；timestamp 字段遵守第 6 节。
 - `confidenceScore` 仅允许 0—100 的有限整数；`confidenceLevel` 固定对应 `low=0—49`、`medium=50—79`、`high=80—100`。
 - human-readable 字符串长度固定：名称与摘要 1—160 个 Unicode code point，`mockCustomerNumber` 3—32 个 ASCII 字符；空白-only、NUL、控制字符或行分隔符全部阻断。
 
-对 `displayName`、`remarkSummary`、`institutionSummary`、`tagName`、`tagNames[]`、`mockCustomerNumber`、`displayNameSummary`、`ownerSummary`、`systemCustomerSummary` 等每一个 human-readable 字符串逐项扫描，不能只扫描 root 或拼接后的摘要。scanner 对独立扫描副本执行 Unicode NFKC 与大小写折叠，但不得把规范化结果当作修正后的业务值继续使用；命中即阻断原值。
+对任一对象中的每一个字符串逐项扫描，不能只扫描 root、人类可读字段或拼接后的摘要；`displayName`、`remarkSummary`、`institutionSummary`、`tagName`、`tagNames[]`、`mockCustomerNumber`、`displayNameSummary`、`ownerSummary`、`systemCustomerSummary` 只是其中一部分。scanner 对独立扫描副本执行 Unicode NFKC 与大小写折叠，但不得把规范化结果当作修正后的业务值继续使用；命中即阻断原值。
 
 扫描必须覆盖：手机号、身份证号、邮箱、原始 `wm_` / `wo_` 标识；原始外部联系人或员工标识键及其 camelCase / snake_case 赋值变体；凭证类字段或值形态；`rawResponse`、`webhookPayload`、`apiResponse`、序列化 raw object / array、URL query 中的敏感键；聊天内容、会话内容与会话存档标记。结构合法但包含这些内容的值仍 fail-closed。
 
-命中只返回布尔结果与固定 reason code `sensitive_value_blocked`；audit、错误与返回值不得包含命中片段、原始字符串或自由文本诊断。digest、timestamp 与 enum 使用各自 exact grammar，不运行可能误判其合法字符的自由文本规则；reference 除 exact grammar 外必须运行上文 restricted 敏感值扫描。所有类别仍须拒绝 unknown key/value 与全部行分隔符。
+scanner 必须检查完整字符串，包括 LF、CRLF、U+2028 或 U+2029 之后的全部内容，不能遇到行分隔符就提前结束。若分隔符后的内容命中 phone、secret / credential 或原始 externalUserId 等模式，首个结果固定为 `sensitive_value_blocked`；若只存在行分隔符而未命中敏感模式，才由后续 tenant、timestamp、digest 或其他字段 grammar 返回其固定非法值 reason。
+
+命中只返回布尔结果与固定 reason code `sensitive_value_blocked`；audit、错误与返回值不得包含命中片段、原始字符串或自由文本诊断。digest、timestamp、enum、reference 及其他字符串均先运行该 scanner，再运行各自 exact grammar；禁止因字符串“看起来像 digest / timestamp / enum”而跳过扫描。所有类别仍须拒绝 unknown key/value 与全部行分隔符。
 
 `candidateDigest` 的确定算法见第 4.6 节。review 只接受格式合法、非全零且与当前动作的可信 target candidate 完全相等的 digest；格式正确但不存在、跨 tenant / aggregate，或 target 不满足第 3.6 节 action-specific 条件时 fail-closed。
 
@@ -362,7 +379,7 @@ suffix 首尾必须是字母或数字，禁止连续连字符。等价 matcher �
 
 规则如下：
 
-- root 与所有 nested `tenantId` 必须独立通过 parser；通过后再比较是否完全相等。
+- root 与所有 nested `tenantId` 必须先通过第 4.5 节统一 sensitive scanner，再独立执行 ASCII、长度与 tenant grammar parser；通过后再比较是否完全相等。
 - `tenant-mock-*` 必须对应 `dataMode=mock` 与 `sourceKind=controlled_mock_fixture`；`tenant-demo-*` 必须对应 `dataMode=demo` 与 `sourceKind=controlled_demo_fixture`。
 - external review command 只能提交 root `tenantId`；authorization、action target candidate 与 aggregate tenant 由可信内部状态注入，各自独立解析后再与 root 完全相等比较。
 - 非法 root `tenantId` 不得进入返回 payload 或 audit，统一使用固定低敏占位，例如 `tenant_blocked`。
@@ -390,7 +407,7 @@ parser 与测试必须覆盖以下内容及其大小写、snake_case / camelCase
 
 `occurredAt` 始终视为 untrusted input，只允许 canonical UTC ISO：`YYYY-MM-DDTHH:mm:ss.SSSZ`。
 
-- 必须先进行 ASCII 与固定长度检查，再进行全字符串格式和真实日历日期校验。
+- 必须先通过第 4.5 节统一 sensitive scanner，再进行 ASCII、固定长度、全字符串格式和真实日历日期校验。
 - 不使用 `Date.parse` 或 `new Date(string)` 宽松解析用户输入。
 - 非 ISO、非法日期、尾随换行、Unicode 行分隔符、时区偏移形式、缺少毫秒，以及带敏感附注的 timestamp 全部 fail-closed。
 - 非法值不得进入 candidate、review、decision、返回 payload 或 audit。
@@ -414,7 +431,7 @@ parser 与测试必须覆盖以下内容及其大小写、snake_case / camelCase
 - `sourceKind`：`controlled_mock_fixture` / `controlled_demo_fixture`，或 parser 前失败专用的 `input_blocked`；
 - `dataMode`：`mock` / `demo`，或 parser 前失败专用的 `input_blocked`。
 
-audit 禁止包含 root 原文、原始 payload、原始第三方响应、敏感字段值、自由文本错误信息或任意 unknown field。所有 audit event stringify 后必须进行整体敏感内容扫描。
+audit 禁止包含 root 原文、原始 payload、原始第三方响应、敏感字段值、自由文本错误信息或任意 unknown field。audit factory 必须先按固定字段顺序对每一个 string value 运行第 4.5 节同一个 scanner，再执行字段 enum / grammar；通过后还要对完整 event stringify 做整体敏感内容扫描作为 defense in depth。normal mutation event 任一步失败都不得提交 mutation，而应进入 compile-time-safe blocked constructor；blocked constructor 自检失败则按第 7.2 节停止 domain 初始化。
 
 audit `candidateDigest` 的来源按路径固定，不得因为 aggregate、lineage record 或 raw command 中碰巧存在格式合法 digest 而改变：
 
@@ -480,6 +497,7 @@ fail-closed 映射固定如下；不得由实现自行选择事件或 reason。�
 | 可信 DisableContainmentContext shell exact-shape / scalar 契约失败 | `mapping_input_blocked` | `trusted_disable_context_invalid` | `not_evaluated → not_evaluated` |
 | 可信 MappingAggregateContext exact-shape / scalar 契约失败 | `mapping_input_blocked` | `trusted_aggregate_contract_invalid` | `not_evaluated → not_evaluated` |
 | 可信 action target / evidence exact-shape / scalar 契约失败 | `mapping_input_blocked` | `trusted_target_contract_invalid` | 可信当前状态保持不变 |
+| `mappingReview` / `mappingDecision` / `mappingConflict` 的 exact-shape、wrong type、grammar、enum 或 cross-field 契约失败（不含 string scanner 命中） | `mapping_input_blocked` | `derived_output_contract_invalid` | 可信当前状态保持不变；generation 为 `unmatched → unmatched` |
 | 可信内部 `status` / `reasonCode` pair 不一致 | `mapping_input_blocked` | `status_reason_mismatch` | 可信当前状态保持不变 |
 | 重算 candidate pair / evidence fingerprint / candidate digest 不一致，或 aggregate / target / lock digest 绑定不一致 | `mapping_input_blocked` | `trusted_target_integrity_invalid` | 可信当前状态保持不变 |
 | `sourceKind` / `dataMode` / tenant namespace 组合不一致 | `mapping_input_blocked` | `source_mode_mismatch` | 可信当前状态保持不变；generation 为 `unmatched → unmatched` |
@@ -488,7 +506,11 @@ fail-closed 映射固定如下；不得由实现自行选择事件或 reason。�
 | 任一 `fieldWhitelistApplied` 不为 true | `mapping_input_blocked` | `whitelist_attestation_failed` | 可信当前状态保持不变；generation 为 `unmatched → unmatched` |
 | fixture registry provenance 无法验证，或本次完整 source snapshot 重算值与 entry 不一致 | `mapping_input_blocked` | `untrusted_fixture_provenance` | 可信当前状态保持不变；generation 为 `unmatched → unmatched` |
 | authorized tuple 的人工复核或时间字段不一致 | `mapping_input_blocked` | `authorization_state_inconsistent` | 可信当前状态保持不变；generation 为 `unmatched → unmatched` |
-| unknown field / forbidden field / allowed field 中藏敏感值 / nested raw payload | `forbidden_field_blocked` | `unknown_field_blocked` / `forbidden_field_blocked` / `sensitive_value_blocked` / `nested_raw_payload_blocked` | `not_evaluated → not_evaluated` |
+| raw command 出现 unknown field | `forbidden_field_blocked` | `unknown_field_blocked` | `not_evaluated → not_evaluated` |
+| raw command 出现 forbidden field | `forbidden_field_blocked` | `forbidden_field_blocked` | `not_evaluated → not_evaluated` |
+| raw command 的 allowed key 承载 nested raw object / array / container | `forbidden_field_blocked` | `nested_raw_payload_blocked` | `not_evaluated → not_evaluated` |
+| raw command 任一 string value 命中统一 sensitive scanner | `forbidden_field_blocked` | `sensitive_value_blocked` | `not_evaluated → not_evaluated` |
+| 可信 context / aggregate / target 或 domain output 任一 string value 命中统一 sensitive scanner | `forbidden_field_blocked` | `sensitive_value_blocked` | aggregate 尚未验证时 `not_evaluated → not_evaluated`；验证后保持可信当前状态；generation 为 `unmatched → unmatched` |
 | 非法 root / nested tenant | `unsafe_tenant_id_blocked` | `unsafe_tenant_id_blocked` | `not_evaluated → not_evaluated` |
 | tenant mismatch | `mapping_tenant_mismatch_blocked` | `tenant_mismatch` | 可信当前状态保持不变 |
 | 非法 `occurredAt` | `unsafe_occurred_at_blocked` | `unsafe_occurred_at_blocked` | `not_evaluated → not_evaluated` |
@@ -557,13 +579,26 @@ authorization / provider / sync guard 阻断的状态前后值均为可信当前
 | --- | --- |
 | 动作 | `approve`、`reject`、`request_more_info`、`mark_conflict`、`clear_candidate`、`reopen`、`expire_candidate`、`disable_mapping` |
 | payload shape | `null`、array、primitive、class instance、非 plain object、缺少对应 discriminated shape 的任一必填键、额外 root 键；candidate-bound 与 disable 两种 shape 不得混用 |
-| forbidden / unknown | snake/camel/case 别名；任意 forbidden field；`candidate`、`evidence`、`authorization`、`mappingReadinessContext`、`mappingReference`、`candidatePairDigest`、`evidenceFingerprint`、`candidateVersion`、`snapshotDigest`、`snapshotVersion`、`snapshotSequence`、`lineageTimestamp`、`sourceKind`、`dataMode`、`syncStatus`、`fixtureRegistryDigest`、`status`、`reasonCode`、`auditReady` 等所有非 whitelist 字段 |
-| nested raw | 提交 candidate、authorization、contact、customer、evidence 或任意 raw object / array 均阻断；review 只能以 digest 引用可信内部 action target candidate |
-| allowed-field taint | `tenantId`、`candidateDigest`、`action`、`reviewerRole`、`occurredAt` 分别注入敏感内容、NUL 与全部行分隔符；audit 不回显输入 |
+| forbidden / unknown | snake/camel/case 别名；任意 forbidden field；`candidate`、`evidence`、`authorization`、`mappingReadinessContext`、`mappingReference`、`candidatePairDigest`、`evidenceFingerprint`、`candidateVersion`、`snapshotDigest`、`snapshotVersion`、`snapshotSequence`、`lineageTimestamp`、`sourceKind`、`dataMode`、`syncStatus`、`fixtureRegistryDigest`、`status`、`reasonCode`、`auditReady`、`mappingReview`、`mappingDecision`、`mappingConflict` 等所有非 whitelist 字段 |
+| nested raw：`rawResponse` | 保持 candidate-bound review root keys 完整，但令 `candidateDigest={rawResponse: <受控占位内容>}`；必须在 guard 1c 以 `forbidden_field_blocked / nested_raw_payload_blocked` 阻断，不能降级成 digest wrong type，也不能回显 nested 内容；额外 root `rawResponse` 仍单独断言 `unknown_field_blocked` |
+| nested raw：`webhookPayload` | 保持 candidate-bound review root keys 完整，但令 `candidateDigest={webhookPayload: <受控占位内容>}`；必须在 guard 1c 以 `forbidden_field_blocked / nested_raw_payload_blocked` 阻断，不能降级成 digest wrong type，也不能回显 nested 内容；额外 root `webhookPayload` 仍单独断言 `unknown_field_blocked` |
+| nested raw：`apiResponse` | 保持 candidate-bound review root keys 完整，但令 `candidateDigest={apiResponse: <受控占位内容>}`；必须在 guard 1c 以 `forbidden_field_blocked / nested_raw_payload_blocked` 阻断，不能降级成 digest wrong type，也不能回显 nested 内容；额外 root `apiResponse` 仍单独断言 `unknown_field_blocked` |
+| `candidateDigest` 敏感值：phone | `candidateDigest=<受控手机号模式 fixture>`，并覆盖结构合法 digest 中出现手机号模式的样本；必须在 guard 1d、digest grammar / target lookup 之前以 `forbidden_field_blocked / sensitive_value_blocked` 阻断，audit 使用零值 digest |
+| `candidateDigest` 敏感值：secret | `candidateDigest=<受控 secret / credential 赋值模式 fixture>`；必须在 guard 1d、digest grammar / target lookup 之前以 `forbidden_field_blocked / sensitive_value_blocked` 阻断，audit 使用零值 digest |
+| `candidateDigest` 敏感值：externalUserId | `candidateDigest=<受控 wm_ / wo_ 原始 externalUserId 模式 fixture>`；必须在 guard 1d、digest grammar / target lookup 之前以 `forbidden_field_blocked / sensitive_value_blocked` 阻断，audit 使用零值 digest |
+| `tenantId + LF + phone` | `<canonical tenantId> + LF + <受控手机号模式 fixture>`；完整字符串扫描必须命中 `forbidden_field_blocked / sensitive_value_blocked`，不得返回 `unsafe_tenant_id_blocked` |
+| `tenantId + LF + secret` | `<canonical tenantId> + LF + <受控 secret / credential 模式 fixture>`；完整字符串扫描必须命中 `forbidden_field_blocked / sensitive_value_blocked`，不得返回 `unsafe_tenant_id_blocked` |
+| `tenantId + LF + externalUserId` | `<canonical tenantId> + LF + <受控 wm_ / wo_ 原始 externalUserId 模式 fixture>`；完整字符串扫描必须命中 `forbidden_field_blocked / sensitive_value_blocked`，不得返回 `unsafe_tenant_id_blocked` |
+| `occurredAt + LF + phone` | `<canonical occurredAt> + LF + <受控手机号模式 fixture>`；完整字符串扫描必须命中 `forbidden_field_blocked / sensitive_value_blocked`，不得返回 `unsafe_occurred_at_blocked` |
+| `occurredAt + LF + secret` | `<canonical occurredAt> + LF + <受控 secret / credential 模式 fixture>`；完整字符串扫描必须命中 `forbidden_field_blocked / sensitive_value_blocked`，不得返回 `unsafe_occurred_at_blocked` |
+| `occurredAt + LF + externalUserId` | `<canonical occurredAt> + LF + <受控 wm_ / wo_ 原始 externalUserId 模式 fixture>`；完整字符串扫描必须命中 `forbidden_field_blocked / sensitive_value_blocked`，不得返回 `unsafe_occurred_at_blocked` |
+| allowed-field taint 扩展 | `tenantId`、`candidateDigest`、`action`、`reviewerRole`、`occurredAt` 分别注入 NUL、仅 LF / CRLF / U+2028 / U+2029，以及上述三类敏感内容与 CRLF / U+2028 / U+2029 的组合；敏感模式命中优先 `sensitive_value_blocked`，仅行分隔符按字段 grammar 固定 reason，audit 均不回显输入 |
 | `candidateDigest` grammar | candidate-bound action 下测试缺失、wrong type、空值、错误前缀、63 / 65 hex、大写 / 非 hex、前后空白、LF / CRLF / U+2028 / U+2029、全零 digest；`disable_mapping` 提交该字段必须按 unknown field 阻断 |
 | `candidateDigest` reference | target-present 状态下测试格式合法但不存在、与可信 action target 不等、跨 tenant / aggregate，以及每个 action 不满足第 3.6 节 target 条件的组合；target-absent 的 `unmatched` / `disabled` 分别由 step 11a / step 8 阻断，不得抢先返回 candidate not found；显式断言 `conflict → clear_candidate` 可引用 locked target、`rejected → reopen` 可引用 historical target，而 approve 阻断 inactive / rejected / stale / cleared / locked target；伪造 candidate / lineage 字段不能覆盖内部状态 |
 | trusted readiness | MappingReadinessContext / authorization 非 plain object、逐字段缺失/额外、wrong type、tenant/source/mode mismatch、fixtureRegistryDigest 未注册、auditReady false；在 action guard 前按第 7.2 节阻断 |
 | trusted target shape | target / evidence 非 plain object、逐字段缺失或额外；所有 digest/reference 格式；human-readable/reference 敏感值；target tenant/sourceKind/dataMode mismatch |
+| domain output exact shape | 对 `mappingReview`、`mappingDecision`、`mappingConflict` 分别逐字段测试缺键、多键、unknown key、nested raw container、wrong type、grammar / enum / cross-field 不一致，固定断言 `mapping_input_blocked / derived_output_contract_invalid`；再对每个 string field（包括 digest、timestamp、enum）逐项注入 phone / secret / externalUserId 模式，固定断言 `forbidden_field_blocked / sensitive_value_blocked`。两类均要求统一 scanner 先于 grammar、factory 不返回部分对象且 mutation 不提交 |
+| `mappingConflict` 来源边界 | conflict-origin lineage 分别覆盖 `unresolved_locked` 与 clear 后 `cleared_locked` 对同一原始 `lockType=conflict` record、aggregate / target 状态与 audit / history 的绑定，并断言 clear 不新增重复 clearance record；普通 candidate clearance 明确断言只产生 clearance lock、不产生 `mappingConflict`，不得为其伪造 `conflictType` |
 | trusted target scalar | candidateVersion 的 0、负数、小数、NaN、Infinity、2,147,483,648；confidenceScore 越界/小数/NaN/Infinity 与 level band mismatch；evidence boolean wrong type；tagNames 非数组、元素 wrong type、51 项 |
 | trusted aggregate | MappingAggregateContext 非 plain object、逐字段缺失/额外、wrong type/null 规则；aggregateVersion 边界；mappingReference 在 candidate 之前确定；candidateDigest target absent/present 规则；source snapshot、fixture registry 与 lineage index digest 绑定 |
 | lineage index | LineageLockIndex / record 非 plain object、逐字段缺失/额外、wrong type；indexVersion/count 边界；`complete=false`；records 缺项、多项、重复、乱序、digest 重算不等；tenant/source scope/mapping/source mode 或 aggregate index digest 不一致均固定 `lineage_index_invalid` |
