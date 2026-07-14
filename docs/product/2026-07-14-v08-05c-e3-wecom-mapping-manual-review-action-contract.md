@@ -42,7 +42,7 @@
 | `mappingId` | 服务端已知的候选匹配内部标识；不是外部联系人标识、手机号或客户关系标识。 |
 | 人工复核结论 | 人员基于允许的低敏候选摘要作出的业务判断。 |
 | `expectedVersion` | 客户端从当前只读视图取得的正整数版本，用于乐观并发控制。 |
-| `idempotencyKey` | 客户端为一次用户动作生成的、不透明且有限长度的标识；不承载业务语义或敏感数据。 |
+| `idempotencyKey` | 必填、大小写敏感的 ASCII 字符串，必须匹配 `^[A-Za-z0-9_-]{16,128}$`；不承载业务语义或敏感数据。 |
 | 低敏备注 | 经 strict parser、长度上限、Unicode 与敏感文本扫描后允许的简短说明。 |
 | fail-closed | 无法安全验证认证、租户、权限、版本、请求、审计或输出时，不改变状态且只返回受控代码。 |
 
@@ -81,7 +81,7 @@
 | `mark_conflict` | `multiple_candidate_conflict`、`identity_evidence_conflict`、`ownership_conflict` | `mapping_review_conflict_marked` | `action_not_allowed`、`sensitive_input_blocked` |
 | `reopen_review` | `new_low_sensitive_evidence`、`prior_decision_reconsidered`、`version_reconciliation` | `mapping_review_reopened` | `action_not_allowed`、`version_conflict` |
 
-固定 fail-closed reason 仅可来自注册集合：`unauthenticated`、`permission_denied`、`tenant_context_missing`、`tenant_mismatch`、`mapping_unavailable`、`request_contract_invalid`、`sensitive_input_blocked`、`action_not_allowed`、`version_conflict`、`idempotency_conflict`、`idempotency_unavailable`、`audit_unavailable`、`transaction_failed`、`response_contract_invalid`。实现不得把异常原文、provider 响应或调用方文本映射为新的 code。
+固定 fail-closed reason 仅可来自注册集合：`unauthenticated`、`permission_denied`、`tenant_context_missing`、`tenant_mismatch`、`mapping_unavailable`、`request_contract_invalid`、`sensitive_input_blocked`、`action_not_allowed`、`version_conflict`、`idempotency_key_invalid`、`idempotency_conflict`、`idempotency_in_progress`、`idempotency_record_invalid`、`idempotency_unavailable`、`audit_unavailable`、`transaction_failed`、`response_contract_invalid`。实现不得把异常原文、provider 响应或调用方文本映射为新的 code。
 
 ## 5. 状态机与 transition matrix
 
@@ -111,7 +111,7 @@
 
 | 动作 | 允许起始状态 | 成功目标状态 | 禁止状态 | 必填输入 | 可选输入与备注 | 权限 | 幂等 / version | 低敏返回 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `approve_candidate` | `pending_review`、`needs_more_info`、`reopened` | `approved_pending_link` | `conflict`、`approved_pending_link`、`rejected`、`disabled` | `action`、`expectedVersion`、`idempotencyKey`、受控 approve reason | 低敏备注可选；不得含敏感标识或原始证据 | `customer:read` + 未来复核动作权限 | 相同 key / 相同指纹重放原结果；版本必须相等 | `mappingId`、前后状态、版本、动作、reason code、回放标记、低敏审计引用 |
+| `approve_candidate` | `pending_review`、`needs_more_info`、`reopened` | `approved_pending_link` | `conflict`、`approved_pending_link`、`rejected`、`disabled` | `action`、`expectedVersion`、`idempotencyKey`、受控 approve reason | 低敏备注可选；不得含敏感标识或原始证据 | `customer:read` + 未来复核动作权限 | 仅无已有记录时版本必须相等；相同 key / 相同指纹重放原结果且不重验当前版本 | `mappingId`、前后状态、版本、动作、reason code、回放标记、低敏审计引用 |
 | `reject_candidate` | `pending_review`、`needs_more_info`、`conflict`、`reopened` | `rejected` | `approved_pending_link`、`rejected`、`disabled` | 同上 + 受控 reject reason | `candidate_not_same_person` 时低敏备注必填；其他可选 | `customer:read` + 未来复核动作权限 | 同上 | 同上 |
 | `request_more_info` | `pending_review`、`conflict`、`reopened` | `needs_more_info` | `needs_more_info`、`approved_pending_link`、`rejected`、`disabled` | 同上 + 受控 reason | 低敏备注必填，描述所需信息类别而非原始数据 | `customer:read` + 未来补充信息请求权限 | 同上 | 同上 |
 | `mark_conflict` | `pending_review`、`needs_more_info`、`reopened` | `conflict` | `conflict`、`approved_pending_link`、`rejected`、`disabled` | 同上 + 受控 conflict reason | 低敏备注必填 | `customer:read` + 未来复核动作权限 | 同上 | 同上 |
@@ -162,8 +162,8 @@ POST /api/institution/wecom/customer-mapping-reviews/:mappingId/actions
 | 字段 | 类型与约束 |
 | --- | --- |
 | `action` | 第 4.2 节的五个受控动作之一。 |
-| `expectedVersion` | 正整数，必须等于服务端当前版本。 |
-| `idempotencyKey` | 不透明 ASCII 标识，建议 16–128 字符；不得包含业务数据。 |
+| `expectedVersion` | 正整数；仅在不存在已有幂等记录时，必须等于服务端当前版本。 |
+| `idempotencyKey` | 必填字符串，必须匹配 `^[A-Za-z0-9_-]{16,128}$`；大小写敏感，禁止自动 trim 或 Unicode normalization。禁止空格、换行、控制字符、非 ASCII 字符、`/`、`\\`、`.`、`:` 及其他未列字符；非法时固定返回 `idempotency_key_invalid`，不回显原始 key。 |
 | `reasonCode` | 与动作匹配的固定 reason code。 |
 | `note` | 可选低敏短文本；逐动作遵守“必填 / 可选”规则。 |
 
@@ -185,21 +185,71 @@ POST /api/institution/wecom/customer-mapping-reviews/:mappingId/actions
 
 ## 8. 幂等、版本与并发
 
-### 8.1 Idempotency key
+### 8.1 `idempotencyKey`、作用域与请求指纹
 
-- 作用域是 `(tenantId, mappingId, action, idempotencyKey)`；tenant 来自可信会话，不来自请求。
-- 服务端把该作用域与规范化请求指纹（动作、`expectedVersion`、reason code、允许的低敏备注摘要）原子保存。
-- 同一 key、相同指纹：返回第一次的同一低敏结果和 `idempotentReplay=true`，不重复变更状态或重复产生 accepted 审计。
-- 同一 key、不同指纹：固定返回 `idempotency_conflict`，不执行动作。
-- key 记录在保留期内不可跨 mapping、跨 tenant 或跨 action 复用；保留期和清理策略必须在后续实现评审中确定，不能默认为无限或立即删除。
+`idempotencyKey` 是强制契约，不是建议：它必须是必填字符串、长度为 16–128 个 ASCII 字符、大小写敏感，并且**只**匹配 `^[A-Za-z0-9_-]{16,128}$`。实现不得自动 trim、不得 Unicode normalization、不得接受空格、换行、控制字符、非 ASCII 字符、`/`、`\\`、`.`、`:` 或其他未列字符。任何不符合条件的值固定返回 `idempotency_key_invalid`，不得回显原始 key。
 
-### 8.2 乐观锁与竞态决策
+幂等记录的唯一作用域必须是 `(tenantId, institutionId, mappingId, action, idempotencyKey)`。`tenantId` 和 `institutionId` 均来自可信会话；不同 tenant、institution、mapping 或 action 绝不能共享幂等结果。日志和审计只能保存该 key 的受控摘要或 digest，绝不保存原始 key。
 
-- mutation 必须携带当前 `expectedVersion`；服务端在同一原子操作中比较当前版本、应用 transition、版本加一、写入 idempotency 记录和审计。
-- 当前版本不等于 `expectedVersion` 时返回 `version_conflict`，附带可安全展示的当前版本和刷新提示；不返回其他人的备注或候选内容。
-- 并发 approve / reject 中，第一个成功提交且完成审计的动作获胜；其余请求必须收到 `version_conflict` 或在同 key 重放首个结果。
+服务端必须在 strict parser 成功后，使用固定字段顺序与确定性 canonical encoding 生成请求指纹。指纹至少绑定：`mappingId`、`action`、`expectedVersion`、`reasonCode` 和低敏备注的规范值。指纹不得包含 `idempotencyKey` 本身、客户端 tenant、secret、token、原始请求体、原始异常或敏感客户标识；同一合法 payload 必须产生相同指纹，且不得依赖普通对象 insertion order。
+
+### 8.2 固定处理优先级
+
+后续实现必须按本节的固定顺序处理请求；不得使用“建议”“可考虑”或实现自行排序。
+
+#### 阶段 1：安全前置检查
+
+以下检查永远优先于幂等和版本处理，且任一失败均不得创建幂等成功记录：
+
+1. HTTP method；
+2. 身份认证；
+3. CSRF / Origin；
+4. 可信 tenant / institution；
+5. mutation 权限；
+6. 请求体大小；
+7. strict parser / exact keys；
+8. `action`、`reasonCode`、`idempotencyKey` 格式；
+9. tenant / mapping 归属。
+
+#### 阶段 2：查询已有幂等记录
+
+阶段 1 通过后，必须按 `(tenantId, institutionId, mappingId, action, idempotencyKey)` 查询已有记录。若记录存在，必须先处理记录，**不得**先校验当前 `expectedVersion`：
+
+1. 指纹不同：固定返回 `idempotency_conflict`；不校验版本、不改变状态、不覆盖旧记录。
+2. 指纹相同且记录为 `completed`：返回首次保存的低敏结果并标记 `idempotentReplay=true`；不重新校验当前版本、不重复状态变更、不重复生成 accepted 审计事件。
+3. 指纹相同且记录为 `in_progress`：固定返回 `idempotency_in_progress`；不校验版本，也不得并发执行第二次 mutation。
+4. 记录状态异常或完整性校验失败：固定返回 `idempotency_record_invalid`；不执行 mutation。
+
+#### 阶段 3：无已有幂等记录时校验版本
+
+只有不存在已有幂等记录时，才允许读取当前状态、校验 transition 和校验 `expectedVersion`。若版本过期，固定返回 `version_conflict`：不得创建 `completed` 或 `in_progress` 幂等记录，不得改变状态，并记录低敏 version-conflict 审计。客户端修正 `expectedVersion` 后，必须使用新的合法 key 重试。
+
+#### 阶段 4：原子占位与 mutation
+
+版本和 transition 合法后，服务端必须原子创建 `in_progress` 幂等记录，并依赖数据库或存储层的唯一约束防止重复占位。发生唯一约束竞争时，必须重新进入阶段 2 的“已有幂等记录”分支。
+
+状态变更、版本增长、accepted 审计、低敏响应和幂等记录转为 `completed` 必须在同一原子提交中完成。任一环节失败不得返回成功，也不得使用 last-write-wins。
+
+### 8.3 优先级表
+
+| 场景 | 优先结果 | 是否校验当前版本 | 是否改变状态 |
+| --- | --- | ---: | ---: |
+| 非法 key | `idempotency_key_invalid` | 否 | 否 |
+| 已有记录、指纹不同 | `idempotency_conflict` | 否 | 否 |
+| 已有 `completed`、指纹相同 | replay 首次结果 | 否 | 否 |
+| 已有 `in_progress`、指纹相同 | `idempotency_in_progress` | 否 | 否 |
+| 无记录、`expectedVersion` 过期 | `version_conflict` | 是 | 否 |
+| 无记录、版本合法 | 执行原子 mutation | 是 | 是 |
+| 并发占位冲突 | 回到阶段 2 的已有记录分支 | 按已有记录规则 | 否或仅首个成功 |
+
+优先级不可变：幂等 replay 优先于当前 version 漂移；指纹冲突优先于 `version_conflict`；无幂等记录时 `version_conflict` 优先于创建 mutation 记录；权限、租户和请求合法性永远优先于任何幂等 replay。
+
+### 8.4 乐观锁与竞态决策
+
+- mutation 必须携带当前 `expectedVersion`；仅在第 8.2 节阶段 3 才比较当前版本、验证 transition，并在阶段 4 原子完成版本加一、幂等记录和审计。
+- 并发 approve / reject 中，第一个成功提交且完成审计的动作获胜；其余不同 key 请求收到 `version_conflict`，相同 key / 相同指纹请求按阶段 2 重放首个结果。
 - 禁止 last-write-wins、静默覆盖、用客户端时间排序或以 UI 最后点击者覆盖服务端状态。
-- 对已完成动作的新 key 重复请求仍按 transition matrix 拒绝；只有相同 key / 相同指纹可以重放。
+- 对已完成动作的新 key 重复请求仍按 transition matrix 拒绝；只有相同 key / 相同指纹可以重放，且不得重复产生 accepted 审计事件。
 
 ## 9. 审计与原子性
 
