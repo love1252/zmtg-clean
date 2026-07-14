@@ -3,12 +3,28 @@ import type {
   WeComCustomerMappingSourceKind,
   WeComCustomerMappingStatus,
 } from '@/modules/institution/domain/wecom-customer-mapping-review';
+import {
+  type WeComCustomerMappingReviewState,
+} from '@/modules/institution/domain/wecom-customer-mapping-review-actions';
+
+export const weComCustomerMappingReviewStatusValues = [
+  'pending_review',
+  'needs_more_info',
+  'conflict',
+  'approved_pending_link',
+  'rejected',
+  'reopened',
+  'disabled',
+] as const satisfies readonly WeComCustomerMappingReviewState[];
 
 export const weComCustomerMappingCandidatesResponseKeys = [
   'sourceKind',
   'dataMode',
   'mockDemo',
   'readonly',
+  'mappingId',
+  'mappingVersion',
+  'mappingReviewStatus',
   'authorizationStatus',
   'providerStatus',
   'candidates',
@@ -154,6 +170,9 @@ export type WeComCustomerMappingCandidatesResponse = {
   dataMode: WeComCustomerMappingDataMode;
   mockDemo: true;
   readonly: true;
+  mappingId: string | null;
+  mappingVersion: number | null;
+  mappingReviewStatus: WeComCustomerMappingReviewState | null;
   authorizationStatus: WeComCustomerMappingAuthorizationStatus;
   providerStatus: WeComCustomerMappingProviderStatus;
   candidates: WeComCustomerMappingCandidateSummary[];
@@ -586,6 +605,42 @@ function isOneOf<const T extends readonly unknown[]>(value: unknown, choices: T)
   return choices.includes(value);
 }
 
+export function getWeComCustomerMappingReviewDisplay(
+  value: unknown,
+): Pick<WeComCustomerMappingCandidatesResponse, 'mappingStatus' | 'manualReviewStatus'> | null {
+  if (!isOneOf(value, weComCustomerMappingReviewStatusValues)) return null;
+
+  switch (value) {
+    case 'pending_review':
+    case 'approved_pending_link':
+    case 'reopened':
+      return {
+        mappingStatus: 'manual_review_required',
+        manualReviewStatus: 'required',
+      };
+    case 'needs_more_info':
+      return {
+        mappingStatus: 'needs_more_info',
+        manualReviewStatus: 'required',
+      };
+    case 'conflict':
+      return {
+        mappingStatus: 'conflict',
+        manualReviewStatus: 'required',
+      };
+    case 'rejected':
+      return {
+        mappingStatus: 'rejected',
+        manualReviewStatus: 'not_required',
+      };
+    case 'disabled':
+      return {
+        mappingStatus: 'disabled',
+        manualReviewStatus: 'unavailable',
+      };
+  }
+}
+
 function parseConflictSummary(value: unknown): WeComCustomerMappingConflictSummary | null {
   if (!isPlainDataRecord(value) || !hasExactKeys(value, conflictSummaryKeys)) return null;
   const status = ownDataValue(value, 'status');
@@ -707,6 +762,9 @@ export function createWeComCustomerMappingCandidatesFailClosedRawView(input: {
     dataMode: input.dataMode ?? 'mock',
     mockDemo: true,
     readonly: true,
+    mappingId: null,
+    mappingVersion: null,
+    mappingReviewStatus: null,
     authorizationStatus: input.authorizationStatus ?? 'unavailable',
     providerStatus: input.providerStatus ?? 'unavailable',
     candidates: [],
@@ -736,6 +794,9 @@ function parseResponseRecord(
   const dataMode = ownDataValue(value, 'dataMode');
   const mockDemo = ownDataValue(value, 'mockDemo');
   const readonly = ownDataValue(value, 'readonly');
+  const mappingId = ownDataValue(value, 'mappingId');
+  const mappingVersion = ownDataValue(value, 'mappingVersion');
+  const mappingReviewStatus = ownDataValue(value, 'mappingReviewStatus');
   const authorizationStatus = ownDataValue(value, 'authorizationStatus');
   const providerStatus = ownDataValue(value, 'providerStatus');
   const candidatesValue = ownDataValue(value, 'candidates');
@@ -751,6 +812,17 @@ function parseResponseRecord(
     !isOneOf(dataMode, ['mock', 'demo'] as const) ||
     mockDemo !== true ||
     readonly !== true ||
+    !(
+      (mappingId === null && mappingVersion === null && mappingReviewStatus === null) ||
+      (
+        typeof mappingId === 'string' &&
+        /^[A-Za-z0-9_-]{1,64}$/u.test(mappingId) &&
+        Number.isSafeInteger(mappingVersion) &&
+        (mappingVersion as number) >= 0 &&
+        (mappingVersion as number) <= 2_147_483_647 &&
+        isOneOf(mappingReviewStatus, weComCustomerMappingReviewStatusValues)
+      )
+    ) ||
     !isOneOf(authorizationStatus, authorizationStatuses) ||
     !isOneOf(providerStatus, providerStatuses) ||
     !Array.isArray(candidatesValue) ||
@@ -773,17 +845,37 @@ function parseResponseRecord(
     return null;
   }
   if (failClosedReason !== null && candidates.length > 0) return null;
+  if (failClosedReason !== null && mappingId !== null) return null;
+  if (failClosedReason === null && (candidates.length > 0) !== (mappingId !== null)) return null;
   if (failClosedReason !== null && auditSummary.reasonCode !== failClosedReason) return null;
   if (failClosedReason === null && auditSummary.status !== 'recorded') return null;
   if (failClosedReason !== null && auditSummary.status !== 'blocked') return null;
   if (dataMode === 'mock' && sourceKind !== 'controlled_mock_fixture') return null;
   if (dataMode === 'demo' && sourceKind !== 'controlled_demo_fixture') return null;
 
+  if (mappingReviewStatus !== null) {
+    const reviewDisplay = getWeComCustomerMappingReviewDisplay(mappingReviewStatus);
+    if (
+      !reviewDisplay
+      || mappingStatus !== reviewDisplay.mappingStatus
+      || manualReviewStatus !== reviewDisplay.manualReviewStatus
+      || candidates.some((candidate) => (
+        candidate?.mappingStatus !== reviewDisplay.mappingStatus
+        || candidate.manualReviewStatus !== reviewDisplay.manualReviewStatus
+      ))
+    ) {
+      return null;
+    }
+  }
+
   return {
     sourceKind,
     dataMode,
     mockDemo: true,
     readonly: true,
+    mappingId,
+    mappingVersion: mappingVersion as number | null,
+    mappingReviewStatus: mappingReviewStatus as WeComCustomerMappingReviewState | null,
     authorizationStatus,
     providerStatus,
     candidates: candidates as WeComCustomerMappingCandidateSummary[],

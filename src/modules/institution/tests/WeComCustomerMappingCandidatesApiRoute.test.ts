@@ -3,11 +3,17 @@ import { GET } from '@/app/api/institution/wecom/customer-mapping-candidates/rou
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import {
   createWeComCustomerMappingCandidatesFailClosedRawView,
+  getWeComCustomerMappingReviewDisplay,
   parseWeComCustomerMappingCandidatesReadonlyResponse,
   parseWeComCustomerMappingCandidatesResponse,
   weComCustomerMappingCandidatesResponseKeys,
+  weComCustomerMappingReviewStatusValues,
 } from '@/modules/institution/view-models/wecom-customer-mapping-candidates';
+import { weComCustomerMappingReviewStates } from '@/modules/institution/domain/wecom-customer-mapping-review-actions';
 import { readWeComCustomerMappingCandidatesResponse } from '@/modules/institution/view-models/wecom-customer-mapping-candidates-reader';
+import { createWeComCustomerMappingReviewActionMockRuntime } from '@/modules/institution/server/wecom-customer-mapping-review-action-mock-runtime';
+import { createWeComCustomerMappingCandidatesGetHandler } from '@/app/api/institution/wecom/customer-mapping-candidates/handler';
+import { createWeComCustomerMappingReviewActionsPostHandler } from '@/app/api/institution/wecom/customer-mapping-reviews/[mappingId]/actions/handler';
 
 const routeMocks = vi.hoisted(() => ({
   getDemoAccessContextFromRequest: vi.fn(),
@@ -25,8 +31,8 @@ const context: AccessContext = {
   userId: 'admin-mock',
   role: 'tenant_admin',
   scope: 'tenant',
-  tenantId: 'tenant-mock-001',
-  institutionId: 'institution-mock-001',
+  tenantId: 'growth-tenant-chengxing',
+  institutionId: 'growth-inst-chengxing',
   source: 'demo_session',
 };
 
@@ -40,6 +46,9 @@ function validPayload() {
     dataMode: 'mock',
     mockDemo: true,
     readonly: true,
+    mappingId: 'mock-wecom-mapping-pending-001',
+    mappingVersion: 0,
+    mappingReviewStatus: 'pending_review',
     authorizationStatus: 'authorized',
     providerStatus: 'mock_only',
     candidates: [{
@@ -58,15 +67,15 @@ function validPayload() {
         tagNames: ['[MOCK] 重点客户'],
         statusSummary: 'active',
       },
-      mappingStatus: 'candidate',
+      mappingStatus: 'manual_review_required',
       confidenceLevel: 'high',
       conflictSummary: { status: 'none', unresolvedCount: 0 },
-      manualReviewStatus: 'not_required',
+      manualReviewStatus: 'required',
     }],
-    mappingStatus: 'candidate',
+    mappingStatus: 'manual_review_required',
     confidenceLevel: 'high',
     conflictSummary: { status: 'none', unresolvedCount: 0 },
-    manualReviewStatus: 'not_required',
+    manualReviewStatus: 'required',
     auditSummary: {
       status: 'recorded',
       eventType: 'mapping_candidate_generated',
@@ -84,6 +93,490 @@ beforeEach(() => {
 });
 
 describe('WeCom customer mapping candidates readonly API', () => {
+  it('client-safe review status allowlist 与 E3-A canonical 状态保持一致', () => {
+    expect(weComCustomerMappingReviewStatusValues).toEqual(weComCustomerMappingReviewStates);
+  });
+
+  it('runtime snapshot 提供稳定 identity/version/status，读取无副作用且返回值不能改写内部状态', () => {
+    const runtime = createWeComCustomerMappingReviewActionMockRuntime({
+      fixtures: [{
+        mappingId: 'bridge-map-001',
+        tenantId: 'tenant-bridge',
+        institutionId: 'institution-bridge',
+        state: 'pending_review',
+        version: 7,
+        candidateReference: 'candidate-tenant-mock-001',
+      }],
+    });
+
+    const first = runtime.readMappingSnapshot({
+      tenantId: 'tenant-bridge',
+      institutionId: 'institution-bridge',
+      candidateReference: 'candidate-tenant-mock-001',
+    });
+    expect(first).toEqual({
+      mappingId: 'bridge-map-001',
+      mappingVersion: 7,
+      mappingReviewStatus: 'pending_review',
+    });
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(runtime.readMappingSnapshot({
+      tenantId: 'tenant-bridge',
+      institutionId: 'institution-bridge',
+      candidateReference: 'candidate-tenant-mock-001',
+    })).toEqual(first);
+    expect(first).not.toBe(runtime.readMappingSnapshot({
+      tenantId: 'tenant-bridge',
+      institutionId: 'institution-bridge',
+      candidateReference: 'candidate-tenant-mock-001',
+    }));
+    expect(runtime.readMappingSnapshot({
+      tenantId: 'tenant-bridge',
+      institutionId: 'institution-bridge',
+      candidateReference: 'candidate-other',
+    })).toBeNull();
+    expect(runtime.readMappingSnapshot({
+      tenantId: 'tenant-bridge',
+      institutionId: 'institution-other',
+      candidateReference: 'candidate-tenant-mock-001',
+    })).toBeNull();
+    expect(runtime.readMappingSnapshot({
+      tenantId: 'tenant-other',
+      institutionId: 'institution-bridge',
+      candidateReference: 'candidate-tenant-mock-001',
+    })).toBeNull();
+
+    const withoutProjection = createWeComCustomerMappingReviewActionMockRuntime({
+      fixtures: [{
+        mappingId: 'bridge-internal-map',
+        tenantId: 'tenant-bridge',
+        institutionId: 'institution-bridge',
+        state: 'pending_review',
+        version: 1,
+      }],
+    });
+    expect(withoutProjection.readMappingSnapshot({
+      tenantId: 'tenant-bridge',
+      institutionId: 'institution-bridge',
+      candidateReference: 'candidate-tenant-mock-001',
+    })).toBeNull();
+
+    const ambiguousProjection = createWeComCustomerMappingReviewActionMockRuntime({
+      fixtures: [
+        {
+          mappingId: 'bridge-projection-a',
+          tenantId: 'tenant-bridge',
+          institutionId: 'institution-bridge',
+          state: 'pending_review',
+          version: 0,
+          candidateReference: 'candidate-tenant-mock-001',
+        },
+        {
+          mappingId: 'bridge-projection-b',
+          tenantId: 'tenant-bridge',
+          institutionId: 'institution-bridge',
+          state: 'pending_review',
+          version: 0,
+          candidateReference: 'candidate-tenant-mock-001',
+        },
+      ],
+    });
+    expect(ambiguousProjection.readMappingSnapshot({
+      tenantId: 'tenant-bridge',
+      institutionId: 'institution-bridge',
+      candidateReference: 'candidate-tenant-mock-001',
+    })).toBeNull();
+    expect(ambiguousProjection.resolveMappingOwnership({
+      tenantId: 'tenant-bridge',
+      institutionId: 'institution-bridge',
+      mappingId: 'bridge-projection-a',
+    })).toBe('transaction_failed');
+  });
+
+  it('runtime factory 实例隔离，一侧 mutation 不改变另一侧 snapshot', () => {
+    const fixture = {
+      mappingId: 'bridge-isolated-map',
+      tenantId: 'tenant-bridge',
+      institutionId: 'institution-bridge',
+      state: 'pending_review' as const,
+      version: 0,
+      candidateReference: 'candidate-tenant-mock-001' as const,
+    };
+    const firstRuntime = createWeComCustomerMappingReviewActionMockRuntime({
+      fixtures: [fixture],
+      now: () => 1_000,
+    });
+    const secondRuntime = createWeComCustomerMappingReviewActionMockRuntime({
+      fixtures: [fixture],
+      now: () => 1_000,
+    });
+
+    expect(firstRuntime.execute({
+      context: {
+        ...context,
+        tenantId: fixture.tenantId,
+        institutionId: fixture.institutionId,
+      },
+      command: {
+        mappingId: fixture.mappingId,
+        action: 'approve_candidate',
+        expectedVersion: 0,
+        idempotencyKey: 'bridge-isolated-key-01',
+        reasonCode: 'manual_evidence_confirmed',
+      },
+    }).ok).toBe(true);
+
+    expect(firstRuntime.readMappingSnapshot({
+      tenantId: fixture.tenantId,
+      institutionId: fixture.institutionId,
+      candidateReference: 'candidate-tenant-mock-001',
+    })).toMatchObject({
+      mappingVersion: 1,
+      mappingReviewStatus: 'approved_pending_link',
+    });
+    expect(secondRuntime.readMappingSnapshot({
+      tenantId: fixture.tenantId,
+      institutionId: fixture.institutionId,
+      candidateReference: 'candidate-tenant-mock-001',
+    })).toEqual({
+      mappingId: fixture.mappingId,
+      mappingVersion: 0,
+      mappingReviewStatus: 'pending_review',
+    });
+  });
+
+  it('GET 必须按 E2 candidateReference 关联，不能把同 scope 的无关 mapping tuple 拼到候选上', async () => {
+    const unrelatedRuntime = createWeComCustomerMappingReviewActionMockRuntime({
+      fixtures: [{
+        mappingId: 'unrelated-same-scope-map',
+        tenantId: context.tenantId!,
+        institutionId: context.institutionId!,
+        state: 'pending_review',
+        version: 9,
+        candidateReference: 'candidate-unrelated',
+      }],
+    });
+    const get = createWeComCustomerMappingCandidatesGetHandler({
+      snapshotReader: unrelatedRuntime,
+      getAccessContext: () => context,
+    });
+
+    const payload = await (await get(request())).json();
+
+    expect(payload).toMatchObject({
+      candidates: [],
+      mappingId: null,
+      mappingVersion: null,
+      mappingReviewStatus: null,
+      failClosedReason: 'tenant_fixture_unavailable',
+    });
+    expect(JSON.stringify(payload)).not.toContain('unrelated-same-scope-map');
+  });
+
+  it('GET 从注入 runtime 取得字段，POST 后再次 GET 看到真实 next status/version，replay 不重复增长', async () => {
+    const runtime = createWeComCustomerMappingReviewActionMockRuntime({
+      fixtures: [{
+        mappingId: 'bridge-map-001',
+        tenantId: context.tenantId!,
+        institutionId: context.institutionId!,
+        state: 'pending_review',
+        version: 0,
+        candidateReference: 'candidate-tenant-mock-001',
+      }],
+    });
+    const get = createWeComCustomerMappingCandidatesGetHandler({
+      snapshotReader: runtime,
+      getAccessContext: () => context,
+    });
+    const post = createWeComCustomerMappingReviewActionsPostHandler({
+      runtime,
+      getSession: () => ({ authenticatedForTest: true } as never),
+      getAccessContext: () => context,
+      validateOrigin: () => ({ ok: true }),
+    });
+    const postRequest = new Request(
+      'http://localhost/api/institution/wecom/customer-mapping-reviews/bridge-map-001/actions',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'approve_candidate',
+          expectedVersion: 0,
+          idempotencyKey: 'bridge-idem-key-0001',
+          reasonCode: 'manual_evidence_confirmed',
+        }),
+      },
+    );
+
+    const initial = await (await get(request())).json();
+    expect(initial).toMatchObject({
+      mappingId: 'bridge-map-001',
+      mappingVersion: 0,
+      mappingReviewStatus: 'pending_review',
+    });
+
+    const mutation = await post(postRequest.clone(), {
+      params: Promise.resolve({ mappingId: initial.mappingId }),
+    });
+    expect(await mutation.json()).toMatchObject({
+      nextStatus: 'approved_pending_link',
+      nextVersion: 1,
+      idempotentReplay: false,
+      auditSummary: { acceptedMutationCount: 1, replayCount: 0 },
+    });
+    expect(await (await get(request())).json()).toMatchObject({
+      mappingId: 'bridge-map-001',
+      mappingVersion: 1,
+      mappingReviewStatus: 'approved_pending_link',
+    });
+
+    const replay = await post(postRequest.clone(), {
+      params: Promise.resolve({ mappingId: initial.mappingId }),
+    });
+    expect(await replay.json()).toMatchObject({ idempotentReplay: true, nextVersion: 1 });
+    expect(await (await get(request())).json()).toMatchObject({
+      mappingVersion: 1,
+      mappingReviewStatus: 'approved_pending_link',
+    });
+
+    const conflict = await post(
+      new Request(
+        'http://localhost/api/institution/wecom/customer-mapping-reviews/bridge-map-001/actions',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'reopen_review',
+            expectedVersion: 0,
+            idempotencyKey: 'bridge-idem-key-0002',
+            reasonCode: 'version_reconciliation',
+            note: '复核当前低敏版本',
+          }),
+        },
+      ),
+      { params: Promise.resolve({ mappingId: initial.mappingId }) },
+    );
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toEqual({ code: 'version_conflict' });
+    expect(await (await get(request())).json()).toMatchObject({
+      mappingVersion: 1,
+      mappingReviewStatus: 'approved_pending_link',
+    });
+  });
+
+  it.each([
+    ['approve_candidate', 'pending_review', 'manual_evidence_confirmed', undefined, 'approved_pending_link'],
+    ['reject_candidate', 'pending_review', 'evidence_not_sufficient', undefined, 'rejected'],
+    ['request_more_info', 'pending_review', 'missing_low_sensitive_evidence', '补充低敏依据', 'needs_more_info'],
+    ['mark_conflict', 'pending_review', 'multiple_candidate_conflict', '记录低敏冲突', 'conflict'],
+    ['reopen_review', 'conflict', 'new_low_sensitive_evidence', '已有新的低敏依据', 'reopened'],
+  ] as const)(
+    '%s 成功后 GET 返回对应 E3 状态且 version 只增长一次',
+    async (action, state, reasonCode, note, nextStatus) => {
+      const runtime = createWeComCustomerMappingReviewActionMockRuntime({
+        fixtures: [{
+          mappingId: 'bridge-action-map',
+          tenantId: context.tenantId!,
+          institutionId: context.institutionId!,
+          state,
+          version: 4,
+          candidateReference: 'candidate-tenant-mock-001',
+        }],
+      });
+      const get = createWeComCustomerMappingCandidatesGetHandler({
+        snapshotReader: runtime,
+        getAccessContext: () => context,
+      });
+      const post = createWeComCustomerMappingReviewActionsPostHandler({
+        runtime,
+        getSession: () => ({ authenticatedForTest: true } as never),
+        getAccessContext: () => context,
+        validateOrigin: () => ({ ok: true }),
+      });
+      const body = {
+        action,
+        expectedVersion: 4,
+        idempotencyKey: `bridge-${action}-key`,
+        reasonCode,
+        ...(note === undefined ? {} : { note }),
+      };
+
+      const initial = await (await get(request())).json();
+      expect(initial).toMatchObject({
+        mappingId: 'bridge-action-map',
+        mappingVersion: 4,
+        mappingReviewStatus: state,
+        ...getWeComCustomerMappingReviewDisplay(state),
+      });
+      const mutation = await post(
+        new Request(
+          'http://localhost/api/institution/wecom/customer-mapping-reviews/bridge-action-map/actions',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          },
+        ),
+        { params: Promise.resolve({ mappingId: initial.mappingId }) },
+      );
+      expect(mutation.status).toBe(200);
+      expect(await (await get(request())).json()).toMatchObject({
+        mappingId: 'bridge-action-map',
+        mappingVersion: 5,
+        mappingReviewStatus: nextStatus,
+        ...getWeComCustomerMappingReviewDisplay(nextStatus),
+      });
+    },
+  );
+
+  it('重复 snapshot GET 不读取时钟且不占用 audit/idempotency 容量', async () => {
+    const now = vi.fn(() => 1_000);
+    const runtime = createWeComCustomerMappingReviewActionMockRuntime({
+      fixtures: [{
+        mappingId: 'bridge-read-only-map',
+        tenantId: context.tenantId!,
+        institutionId: context.institutionId!,
+        state: 'pending_review',
+        version: 0,
+        candidateReference: 'candidate-tenant-mock-001',
+      }],
+      now,
+    });
+    const get = createWeComCustomerMappingCandidatesGetHandler({
+      snapshotReader: runtime,
+      getAccessContext: () => context,
+    });
+    const post = createWeComCustomerMappingReviewActionsPostHandler({
+      runtime,
+      getSession: () => ({ authenticatedForTest: true } as never),
+      getAccessContext: () => context,
+      validateOrigin: () => ({ ok: true }),
+    });
+
+    for (let index = 0; index < 5; index += 1) {
+      expect((await get(request())).status).toBe(200);
+    }
+    expect(now).not.toHaveBeenCalled();
+
+    const mutation = await post(
+      new Request(
+        'http://localhost/api/institution/wecom/customer-mapping-reviews/bridge-read-only-map/actions',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'approve_candidate',
+            expectedVersion: 0,
+            idempotencyKey: 'bridge-read-only-key-01',
+            reasonCode: 'manual_evidence_confirmed',
+          }),
+        },
+      ),
+      { params: Promise.resolve({ mappingId: 'bridge-read-only-map' }) },
+    );
+    expect(mutation.status).toBe(200);
+    expect(await mutation.json()).toMatchObject({
+      nextVersion: 1,
+      idempotentReplay: false,
+      auditSummary: { eventCount: 2, acceptedMutationCount: 1, replayCount: 0 },
+    });
+  });
+
+  it('route 与 reader strict parser 阻断非法 mapping identity/version/status 且 fail-closed 不残留字段', async () => {
+    for (const invalid of [
+      { mappingId: '../invalid', mappingVersion: 0, mappingReviewStatus: 'pending_review' },
+      { mappingId: 'bridge-map-001', mappingVersion: -1, mappingReviewStatus: 'pending_review' },
+      { mappingId: 'bridge-map-001', mappingVersion: 1.5, mappingReviewStatus: 'pending_review' },
+      { mappingId: 'bridge-map-001', mappingVersion: Number.MAX_SAFE_INTEGER + 1, mappingReviewStatus: 'pending_review' },
+      { mappingId: 'bridge-map-001', mappingVersion: 0, mappingReviewStatus: 'matched' },
+    ]) {
+      const payload = { ...validPayload(), ...invalid };
+      expect(parseWeComCustomerMappingCandidatesReadonlyResponse(payload)).toBeNull();
+      await expect(readWeComCustomerMappingCandidatesResponse(
+        new Response(JSON.stringify(payload), { status: 200 }),
+      )).resolves.toEqual({ ok: false, reason: 'response_contract_invalid' });
+    }
+
+    const failClosed = createWeComCustomerMappingCandidatesFailClosedRawView({
+      tenantId: context.tenantId!,
+      reason: 'response_contract_invalid',
+    });
+    expect(failClosed.mappingId).toBeNull();
+    expect(failClosed.mappingVersion).toBeNull();
+    expect(failClosed.mappingReviewStatus).toBeNull();
+
+    const maliciousSnapshots = [
+      {
+        mappingId: '../route-invalid',
+        mappingVersion: -1,
+        mappingReviewStatus: 'matched',
+      },
+      {
+        mappingId: 'bridge-map-001',
+        mappingVersion: 0,
+        mappingReviewStatus: 'unknown-review-state',
+      },
+    ];
+    for (const maliciousSnapshot of maliciousSnapshots) {
+      const maliciousRuntime = {
+        readMappingSnapshot: () => maliciousSnapshot,
+      } as never;
+      const get = createWeComCustomerMappingCandidatesGetHandler({
+        snapshotReader: maliciousRuntime,
+        getAccessContext: () => context,
+      });
+      const routeResponse = await get(request());
+      const routePayload = await routeResponse.json();
+      expect(routeResponse.status).toBe(200);
+      expect(routePayload).toMatchObject({
+        candidates: [],
+        mappingId: null,
+        mappingVersion: null,
+        mappingReviewStatus: null,
+        failClosedReason: 'response_contract_invalid',
+      });
+    }
+    const throwingRuntime = {
+      readMappingSnapshot: () => {
+        throw new Error('untrusted runtime failure');
+      },
+    } as never;
+    const throwingGet = createWeComCustomerMappingCandidatesGetHandler({
+      snapshotReader: throwingRuntime,
+      getAccessContext: () => context,
+    });
+    const throwingResponse = await throwingGet(request());
+    expect(throwingResponse.status).toBe(200);
+    expect(await throwingResponse.json()).toMatchObject({
+      candidates: [],
+      mappingId: null,
+      mappingVersion: null,
+      mappingReviewStatus: null,
+      failClosedReason: 'response_contract_invalid',
+    });
+  });
+
+  it('strict parser 拒绝 E3 状态与旧展示状态不一致的组合', () => {
+    for (const mutate of [
+      (payload: ReturnType<typeof validPayload>) => {
+        payload.mappingStatus = 'candidate';
+      },
+      (payload: ReturnType<typeof validPayload>) => {
+        payload.manualReviewStatus = 'not_required';
+      },
+      (payload: ReturnType<typeof validPayload>) => {
+        payload.candidates[0].mappingStatus = 'candidate';
+      },
+      (payload: ReturnType<typeof validPayload>) => {
+        payload.candidates[0].manualReviewStatus = 'not_required';
+      },
+    ]) {
+      const payload = validPayload();
+      mutate(payload);
+      expect(parseWeComCustomerMappingCandidatesReadonlyResponse(payload)).toBeNull();
+    }
+  });
+
   it('GET 返回 mock/demo 低敏候选、exact keys 和只读写入声明', async () => {
     const response = await GET(request());
     const payload = await response.json();
@@ -96,9 +589,13 @@ describe('WeCom customer mapping candidates readonly API', () => {
       dataMode: 'mock',
       mockDemo: true,
       readonly: true,
+      mappingId: 'mock-wecom-mapping-pending-001',
+      mappingVersion: 0,
+      mappingReviewStatus: 'pending_review',
       authorizationStatus: 'authorized',
       providerStatus: 'mock_only',
-      mappingStatus: 'candidate',
+      mappingStatus: 'manual_review_required',
+      manualReviewStatus: 'required',
       confidenceLevel: 'high',
       failClosedReason: null,
       autoMergePerformed: false,
@@ -151,6 +648,44 @@ describe('WeCom customer mapping candidates readonly API', () => {
     expect(payload.realCustomerRelationshipWritten).toBe(false);
   });
 
+  it.each([
+    ['trial-tenant-yunlan', 'trial-inst-yunlan', 'mock-wecom-mapping-yunlan-001'],
+    ['trial-tenant-baiyue', 'trial-inst-baiyue', 'mock-wecom-mapping-baiyue-001'],
+    ['starter-tenant-xinghe', 'starter-inst-xinghe', 'mock-wecom-mapping-xinghe-001'],
+    ['starter-tenant-yubai', 'starter-inst-yubai', 'mock-wecom-mapping-yubai-001'],
+    ['growth-tenant-chengxing', 'growth-inst-chengxing', 'mock-wecom-mapping-pending-001'],
+    ['growth-tenant-qingmang', 'growth-inst-qingmang', 'mock-wecom-mapping-qingmang-001'],
+  ] as const)(
+    '%s 默认 GET 只返回本机构稳定 mapping tuple',
+    async (tenantId, institutionId, mappingId) => {
+      routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
+        ...context,
+        tenantId,
+        institutionId,
+      });
+
+      const payload = await (await GET(request())).json();
+
+      expect(payload).toMatchObject({
+        mappingId,
+        mappingVersion: 0,
+        mappingReviewStatus: 'pending_review',
+        failClosedReason: null,
+      });
+      expect(payload.candidates).toHaveLength(1);
+      expect(JSON.stringify(payload)).not.toMatch(
+        new RegExp([
+          'mock-wecom-mapping-yunlan-001',
+          'mock-wecom-mapping-baiyue-001',
+          'mock-wecom-mapping-xinghe-001',
+          'mock-wecom-mapping-yubai-001',
+          'mock-wecom-mapping-pending-001',
+          'mock-wecom-mapping-qingmang-001',
+        ].filter((otherMappingId) => otherMappingId !== mappingId).join('|'), 'u'),
+      );
+    },
+  );
+
   it('现有机构演示会话映射到受控 mock fixture，不泄漏 fixture tenant', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
       ...context,
@@ -166,16 +701,23 @@ describe('WeCom customer mapping candidates readonly API', () => {
     expect(JSON.stringify(payload)).not.toContain('growth-tenant-chengxing');
   });
 
-  it('tenant mismatch/未知租户不显示候选并 fail-closed', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
-      ...context,
-      tenantId: 'tenant-other-001',
-    });
+  it('tenant 或 institution 不匹配时 GET 使用相同低敏 fail-closed 且不返回 mapping 字段', async () => {
+    const responses = [];
+    for (const accessContext of [
+      { ...context, tenantId: 'tenant-other-001' },
+      { ...context, institutionId: 'institution-other-001' },
+    ]) {
+      routeMocks.getDemoAccessContextFromRequest.mockReturnValue(accessContext);
+      responses.push(await (await GET(request())).json());
+    }
 
-    const payload = await (await GET(request())).json();
-
-    expect(payload.candidates).toEqual([]);
-    expect(payload.failClosedReason).toBe('tenant_fixture_unavailable');
+    for (const payload of responses) {
+      expect(payload.candidates).toEqual([]);
+      expect(payload.failClosedReason).toBe('tenant_fixture_unavailable');
+      expect(payload.mappingId).toBeNull();
+      expect(payload.mappingVersion).toBeNull();
+      expect(payload.mappingReviewStatus).toBeNull();
+    }
   });
 
   it('strict parser 对 unknown field 与 tenant mismatch fail-closed', () => {
@@ -934,6 +1476,9 @@ describe('WeCom customer mapping candidates readonly API', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(serialized).not.toMatch(
       /phone|mobile|idcard|external_?userid|externalUserId|userId|secret|token|credential|chatContent|conversationContent|sessionArchive|rawResponse|webhookPayload|apiResponse|payload/iu,
+    );
+    expect(serialized).not.toMatch(
+      /"(?:idempotencyKey|requestFingerprint|keyDigest|note|history|auditRecords|mappings|tenantId|institutionId)"\s*:/u,
     );
   });
 });
