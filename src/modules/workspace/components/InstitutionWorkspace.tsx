@@ -19,6 +19,8 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react';
+import type { AuthSessionPayload } from '@/modules/auth/domain/session';
+import { isAuthRole } from '@/modules/auth/domain/session';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { AppointmentCenterShell } from '@/modules/institution/components/AppointmentCenterShell';
 import { AiConversationWorkbenchShell } from '@/modules/institution/components/AiConversationWorkbenchShell';
@@ -35,6 +37,7 @@ import {
 } from '@/modules/institution/components/InstitutionPageState';
 import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 import { TreatmentSummaryManagementShell } from '@/modules/institution/components/TreatmentSummaryManagementShell';
+import { WeComCustomerMappingCandidatesReadonlyPanel } from '@/modules/institution/components/WeComCustomerMappingCandidatesReadonlyPanel';
 import { WeComExternalContactReadonlyPanel } from '@/modules/institution/components/WeComExternalContactReadonlyPanel';
 import type { V1KnowledgeBaseDemoReadonlyApiContractResponse } from '@/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-api-contract';
 import type { V1WorkspaceDashboardReadonlyAggregationApiContractResponse } from '@/modules/workspace/domain/v1-workspace-dashboard-readonly-api-contract';
@@ -44,8 +47,12 @@ import {
   listFollowUpTasks,
   type TenantBusinessClientError,
 } from '@/modules/institution/client/tenant-business-client';
-import { institutionNavItems } from '@/modules/workspace/domain/institution-dashboard';
+import {
+  institutionNavItems,
+  visibleInstitutionNavItems,
+} from '@/modules/workspace/domain/institution-dashboard';
 import type { InstitutionViewId } from '@/modules/workspace/domain/institution-dashboard';
+import type { AccessContext } from '@/modules/security/domain/access-control';
 import {
   buildInstitutionDashboardSummary,
   type InstitutionDashboardMetricKey,
@@ -190,6 +197,7 @@ const realInstitutionViews = [
   'treatmentSummaries',
   'audit',
   'wecomExternalContacts',
+  'wecomCustomerMappingCandidates',
   'hisConnections',
   'conversations',
   'knowledge',
@@ -336,7 +344,40 @@ async function loadFollowUpPathAnalysis(): Promise<
   }
 }
 
+type WorkspaceAccessStatus =
+  | { kind: 'loading' }
+  | { kind: 'denied' }
+  | { kind: 'allowed'; context: AccessContext };
+
+function parseWorkspaceAccessContext(value: unknown): AccessContext | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const payload = value as Partial<AuthSessionPayload>;
+  const user = payload.user;
+  if (
+    payload.authenticated !== true ||
+    !user ||
+    typeof user.id !== 'string' ||
+    !isAuthRole(user.role) ||
+    typeof user.tenantId !== 'string' ||
+    user.tenantId.length === 0 ||
+    typeof user.institutionId !== 'string' ||
+    user.institutionId.length === 0
+  ) {
+    return null;
+  }
+
+  return {
+    userId: user.id,
+    role: user.role,
+    scope: 'tenant',
+    tenantId: user.tenantId,
+    institutionId: user.institutionId,
+    source: 'demo_session',
+  };
+}
+
 export function InstitutionWorkspace() {
+  const [workspaceAccess, setWorkspaceAccess] = useState<WorkspaceAccessStatus>({ kind: 'loading' });
   const [activeView, setActiveView] = useState<InstitutionViewId>('dashboard');
   const [dashboardSummary, setDashboardSummary] = useState<InstitutionDashboardSummary>(
     emptyDashboardSummary,
@@ -355,12 +396,49 @@ export function InstitutionWorkspace() {
     planCode: string | null;
     planName: string | null;
   } | null>(null);
-  const activeNavItem = institutionNavItems.find((item) => item.id === activeView) ?? institutionNavItems[0];
+  const visibleNavItems = visibleInstitutionNavItems(
+    workspaceAccess.kind === 'allowed' ? workspaceAccess.context : null,
+  );
+  const canViewWeComCustomerMappingCandidates = visibleNavItems.some(
+    (item) => item.id === 'wecomCustomerMappingCandidates',
+  );
+  const activeNavItem = visibleNavItems.find((item) => item.id === activeView) ?? visibleNavItems[0] ?? institutionNavItems[0];
   const highPriorityMetric = dashboardSummary.metrics.find(
     (metric) => metric.key === 'high_priority_customers',
   );
   const highPriorityLabel =
     dashboardStatus === 'loading' ? '--' : highPriorityMetric?.value ?? '0';
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function loadWorkspaceAccess() {
+      try {
+        const response = await fetch('/api/auth/session', { cache: 'no-store' });
+        if (!response.ok) {
+          if (isCurrent) setWorkspaceAccess({ kind: 'denied' });
+          return;
+        }
+        const context = parseWorkspaceAccessContext(await response.json());
+        if (isCurrent) {
+          setWorkspaceAccess(context ? { kind: 'allowed', context } : { kind: 'denied' });
+        }
+      } catch {
+        if (isCurrent) setWorkspaceAccess({ kind: 'denied' });
+      }
+    }
+
+    void loadWorkspaceAccess();
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeView === 'wecomCustomerMappingCandidates' && !canViewWeComCustomerMappingCandidates) {
+      setActiveView('dashboard');
+    }
+  }, [activeView, canViewWeComCustomerMappingCandidates]);
 
   useEffect(() => {
     let isActive = true;
@@ -457,7 +535,7 @@ export function InstitutionWorkspace() {
           </div>
 
           <nav className="relative flex-1 space-y-1 overflow-y-auto px-4">
-            {institutionNavItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <button
                 key={item.label}
                 type="button"
@@ -528,7 +606,7 @@ export function InstitutionWorkspace() {
               </div>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {institutionNavItems.map((item) => (
+              {visibleNavItems.map((item) => (
                 <button
                   key={item.label}
                   type="button"
@@ -589,6 +667,12 @@ export function InstitutionWorkspace() {
               <InstitutionAuditEventsShell />
             ) : activeView === 'wecomExternalContacts' ? (
               <WeComExternalContactReadonlyPanel />
+            ) : activeView === 'wecomCustomerMappingCandidates' && canViewWeComCustomerMappingCandidates ? (
+              <WeComCustomerMappingCandidatesReadonlyPanel
+                requestScopeKey={workspaceAccess.kind === 'allowed'
+                  ? `${workspaceAccess.context.tenantId}:${workspaceAccess.context.institutionId}`
+                  : 'denied'}
+              />
             ) : activeView === 'hisConnections' ? (
               <HisConnectionReadOnlyPanel />
             ) : activeView === 'conversations' ? (
