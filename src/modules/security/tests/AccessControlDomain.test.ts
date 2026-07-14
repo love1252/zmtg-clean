@@ -29,6 +29,13 @@ const tenantOperatorContext = {
   source: 'demo_session',
 } as const;
 
+const formalTenantOperatorContext = {
+  ...tenantOperatorContext,
+  userId: 'formal-user-operator',
+  institutionId: 'institution-001',
+  source: 'server_session',
+} as const;
+
 const consultantContext = {
   userId: 'demo-user-consultant',
   role: 'consultant',
@@ -111,6 +118,84 @@ describe('访问控制领域', () => {
     expect(ACCESS_ACTIONS).toContain('execute_once');
     expect(ACCESS_ACTIONS).toContain('manage_credentials');
     expect(ACCESS_ACTIONS).toContain('test_connection');
+  });
+
+  it('人工复核 mutation 使用独立 mapping_review 动作并保持租户机构边界', () => {
+    expect(ACCESS_ACTIONS).toContain('mapping_review');
+
+    for (const context of [formalTenantAdminContext, formalTenantOperatorContext]) {
+      expect(
+        canAccessResource({
+          context,
+          resource: 'customer',
+          action: 'mapping_review',
+          targetTenantId: 'demo-tenant-001',
+        }),
+      ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+    }
+
+    for (const context of [
+      consultantContext,
+      customerServiceContext,
+      platformAdminContext,
+      platformOperatorContext,
+      securityAuditorContext,
+    ]) {
+      expect(
+        canAccessResource({
+          context,
+          resource: 'customer',
+          action: 'mapping_review',
+          targetTenantId: 'demo-tenant-001',
+        }),
+      ).toEqual({ allowed: false, reason: 'role_denied' });
+    }
+
+    expect(
+      canAccessResource({
+        context: { ...formalTenantAdminContext, tenantId: null },
+        resource: 'customer',
+        action: 'mapping_review',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'missing_tenant' });
+    expect(
+      canAccessResource({
+        context: formalTenantAdminContext,
+        resource: 'customer',
+        action: 'mapping_review',
+        targetTenantId: 'other-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'cross_tenant_denied' });
+    expect(
+      canAccessResource({
+        context: { ...formalTenantAdminContext, institutionId: null },
+        resource: 'customer',
+        action: 'mapping_review',
+        targetTenantId: 'demo-tenant-001',
+      }),
+    ).toEqual({ allowed: false, reason: 'role_denied' });
+  });
+
+  it('customer read 权限不代表 mapping_review mutation 权限', () => {
+    for (const context of [consultantContext, customerServiceContext]) {
+      expect(
+        canAccessResource({
+          context,
+          resource: 'customer',
+          action: 'read',
+          targetTenantId: 'demo-tenant-001',
+        }),
+      ).toEqual({ allowed: true, reason: 'allowed_by_policy' });
+      expect(
+        canAccessResource({
+          context,
+          resource: 'customer',
+          action: 'mapping_review',
+          targetTenantId: 'demo-tenant-001',
+        }),
+      ).toEqual({ allowed: false, reason: 'role_denied' });
+    }
   });
 
   it('允许机构管理员读取本租户资源', () => {

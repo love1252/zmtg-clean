@@ -63,6 +63,7 @@ export const ACCESS_ACTIONS = [
   'review',
   'export_report',
   'execute_once',
+  'mapping_review',
 ] as const;
 
 export type ProtectedAction = (typeof ACCESS_ACTIONS)[number];
@@ -181,7 +182,7 @@ const accessPolicies: AccessPolicy[] = [
   {
     role: 'tenant_admin',
     resource: 'customer',
-    actions: ['read', 'read_own_tenant', 'create', 'import', 'update'],
+    actions: ['read', 'read_own_tenant', 'create', 'import', 'update', 'mapping_review'],
   },
   {
     role: 'tenant_admin',
@@ -233,9 +234,11 @@ const accessPolicies: AccessPolicy[] = [
       role: 'tenant_operator',
       resource,
       actions:
-        resource === 'follow_up' || resource === 'message_delivery'
-          ? ['read', 'read_own_tenant', 'approve', 'review']
-          : ['read', 'read_own_tenant'],
+        resource === 'customer'
+          ? ['read', 'read_own_tenant', 'mapping_review']
+          : resource === 'follow_up' || resource === 'message_delivery'
+            ? ['read', 'read_own_tenant', 'approve', 'review']
+            : ['read', 'read_own_tenant'],
     }),
   ),
   {
@@ -344,6 +347,18 @@ export function canAccessResource(input: {
     context.scope === 'platform'
   ) {
     return { allowed: false, reason: 'sensitive_detail_denied' };
+  }
+
+  if (
+    resource === 'customer' &&
+    action === 'mapping_review' &&
+    (
+      context.scope !== 'tenant' ||
+      !context.tenantId ||
+      !context.institutionId
+    )
+  ) {
+    return { allowed: false, reason: 'role_denied' };
   }
 
   if (
