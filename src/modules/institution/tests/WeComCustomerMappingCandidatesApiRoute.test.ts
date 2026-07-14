@@ -201,6 +201,119 @@ describe('WeCom customer mapping candidates readonly API', () => {
     expect(parseWeComCustomerMappingCandidatesReadonlyResponse(nestedUnknown)).toBeNull();
   });
 
+  it('12 层会扫描末端，但 13 层嵌套由递归深度保护直接 fail-closed', () => {
+    function nestedPlainObjects(levels: number) {
+      const terminal: Record<string, unknown> = {};
+      let value: Record<string, unknown> = terminal;
+      for (let level = 1; level < levels; level += 1) value = { nested: value };
+      return { terminal, value };
+    }
+
+    const descriptorSpy = vi.spyOn(Object, 'getOwnPropertyDescriptors');
+    const twelveLevels = nestedPlainObjects(12);
+    const twelveLevelPayload: Record<string, unknown> = validPayload();
+    twelveLevelPayload.candidates = twelveLevels.value;
+
+    expect(
+      parseWeComCustomerMappingCandidatesReadonlyResponse(twelveLevelPayload),
+      '12 层输入虽然不符合 candidates 结构，但不应因递归深度超限而提前失败',
+    ).toBeNull();
+    expect(
+      descriptorSpy.mock.calls.some(([value]) => value === twelveLevels.terminal),
+      '12 层输入必须扫描到末端，以证明尚未触发递归深度保护',
+    ).toBe(true);
+
+    descriptorSpy.mockClear();
+    const thirteenLevels = nestedPlainObjects(13);
+    const thirteenLevelPayload: Record<string, unknown> = validPayload();
+    thirteenLevelPayload.candidates = thirteenLevels.value;
+
+    expect(
+      parseWeComCustomerMappingCandidatesReadonlyResponse(thirteenLevelPayload),
+      '13 层嵌套必须固定 fail-closed',
+    ).toBeNull();
+    expect(
+      descriptorSpy.mock.calls.some(([value]) => value === thirteenLevels.terminal),
+      '13 层嵌套末端不得被扫描；否则测试没有触达递归深度保护',
+    ).toBe(false);
+  });
+
+  it('13 层嵌套经 parser 与 reader fail-closed，不执行副作用或回显原始内容', async () => {
+    const sentinel = 'DEPTH_13_RAW_NESTED_CONTENT';
+    let getterCount = 0;
+    let setterCount = 0;
+    let proxyTrapCount = 0;
+    let toJsonCount = 0;
+    const proxy = new Proxy({}, {
+      getPrototypeOf() {
+        proxyTrapCount += 1;
+        return Object.prototype;
+      },
+      ownKeys() {
+        proxyTrapCount += 1;
+        return [];
+      },
+      getOwnPropertyDescriptor() {
+        proxyTrapCount += 1;
+        return undefined;
+      },
+      get() {
+        proxyTrapCount += 1;
+        return undefined;
+      },
+      set() {
+        proxyTrapCount += 1;
+        return false;
+      },
+    });
+    const terminal: Record<string, unknown> = {
+      sentinel,
+      proxy,
+      toJSON() {
+        toJsonCount += 1;
+        return { sentinel };
+      },
+    };
+    Object.defineProperty(terminal, 'accessor', {
+      enumerable: true,
+      get() {
+        getterCount += 1;
+        return sentinel;
+      },
+      set() {
+        setterCount += 1;
+      },
+    });
+    let nested: Record<string, unknown> = terminal;
+    for (let level = 1; level < 13; level += 1) nested = { nested };
+    const payload: Record<string, unknown> = validPayload();
+    payload.candidates = nested;
+
+    let parsed: ReturnType<typeof parseWeComCustomerMappingCandidatesReadonlyResponse>;
+    expect(() => {
+      parsed = parseWeComCustomerMappingCandidatesReadonlyResponse(payload);
+    }, '13 层嵌套 parser 不得抛出未捕获异常').not.toThrow();
+    expect(parsed!, '13 层嵌套 parser 必须 fail-closed').toBeNull();
+
+    const response = new Response(null, { status: 200 });
+    vi.spyOn(response, 'json').mockResolvedValue(payload);
+    const result = await readWeComCustomerMappingCandidatesResponse(response);
+
+    expect(result, '13 层嵌套 reader 必须返回固定低敏错误').toEqual({
+      ok: false,
+      reason: 'response_contract_invalid',
+    });
+    expect(result.ok ? result.data.candidates : [], '13 层嵌套 reader 不得保留 candidates').toEqual([]);
+    expect(JSON.stringify(result), '13 层嵌套 reader 不得回显原始内容').not.toContain(sentinel);
+    expect({ getterCount, setterCount, proxyTrapCount, toJsonCount },
+      '13 层嵌套不得执行 getter、setter、Proxy trap 或 toJSON').toEqual({
+      getterCount: 0,
+      setterCount: 0,
+      proxyTrapCount: 0,
+      toJsonCount: 0,
+    });
+  });
+
   it.each([
     ['手机号', '候选摘要 13812345678'],
     ['身份证号', '证件 110101199003071234'],
