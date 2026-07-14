@@ -1,3 +1,5 @@
+import type { AccessContext } from '@/modules/security/domain/access-control';
+import { canAccessResource } from '@/modules/security/domain/access-control';
 import type { LucideIcon } from 'lucide-react';
 import {
   BarChart3,
@@ -7,6 +9,7 @@ import {
   Gauge,
   FileSearch,
   LayoutDashboard,
+  Link2,
   MessageCircle,
   Server,
   Target,
@@ -30,6 +33,7 @@ export type InstitutionViewId =
   | 'treatmentSummaries'
   | 'audit'
   | 'wecomExternalContacts'
+  | 'wecomCustomerMappingCandidates'
   | 'hisConnections'
   | 'conversations'
   | 'appointments'
@@ -46,12 +50,41 @@ export const institutionNavItems: InstitutionNavItem[] = [
   { id: 'opportunities', label: '机会池', icon: Target },
   { id: 'audit', label: '审计日志', icon: FileSearch },
   { id: 'wecomExternalContacts', label: '企微外部联系人', icon: UserRoundSearch },
+  { id: 'wecomCustomerMappingCandidates', label: '企微匹配候选', icon: Link2 },
   { id: 'hisConnections', label: 'HIS 连接配置', icon: Server },
   { id: 'conversations', label: '客服工作台', icon: MessageCircle },
   { id: 'appointments', label: '预约中心', icon: CalendarCheck },
   { id: 'knowledge', label: '知识库', icon: BookOpen },
   { id: 'analytics', label: '数据分析', icon: BarChart3 },
 ];
+
+export function canShowWeComCustomerMappingCandidatesNavigation(
+  context: AccessContext | null,
+) {
+  if (
+    !context ||
+    context.scope !== 'tenant' ||
+    !context.tenantId ||
+    !context.institutionId
+  ) {
+    return false;
+  }
+
+  return canAccessResource({
+    context,
+    resource: 'customer',
+    action: 'read',
+    targetTenantId: context.tenantId,
+  }).allowed;
+}
+
+export function visibleInstitutionNavItems(context: AccessContext | null) {
+  return institutionNavItems.filter(
+    (item) =>
+      item.id !== 'wecomCustomerMappingCandidates' ||
+      canShowWeComCustomerMappingCandidatesNavigation(context),
+  );
+}
 
 export const institutionSegmentItems = [
   { label: '高价值活跃', value: '1250', color: '#10b981' },
