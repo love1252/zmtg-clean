@@ -373,6 +373,7 @@ describe('POST 企业微信客户匹配人工复核 mock Mutation API', () => {
     const execute = vi.fn();
     const baseRuntime = createWeComCustomerMappingReviewActionMockRuntime({ fixtures });
     const runtime: WeComCustomerMappingReviewActionMockRuntime = {
+      readMappingSnapshot: baseRuntime.readMappingSnapshot,
       resolveMappingOwnership: baseRuntime.resolveMappingOwnership,
       execute,
     };
@@ -1248,6 +1249,7 @@ describe('POST 企业微信客户匹配人工复核 mock Mutation API', () => {
     const order: string[] = [];
     const runtime = createWeComCustomerMappingReviewActionMockRuntime({ fixtures });
     const wrappedRuntime: WeComCustomerMappingReviewActionMockRuntime = {
+      readMappingSnapshot: (input) => runtime.readMappingSnapshot(input),
       resolveMappingOwnership: (input) => {
         order.push('ownership');
         return runtime.resolveMappingOwnership(input);

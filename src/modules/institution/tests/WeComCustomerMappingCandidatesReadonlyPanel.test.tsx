@@ -8,6 +8,9 @@ const responsePayload = {
   dataMode: 'mock',
   mockDemo: true,
   readonly: true,
+  mappingId: 'mock-wecom-mapping-pending-001',
+  mappingVersion: 0,
+  mappingReviewStatus: 'pending_review',
   authorizationStatus: 'authorized',
   providerStatus: 'mock_only',
   candidates: [{
@@ -26,15 +29,15 @@ const responsePayload = {
       tagNames: ['[MOCK] 重点客户'],
       statusSummary: 'active',
     },
-    mappingStatus: 'candidate',
+    mappingStatus: 'manual_review_required',
     confidenceLevel: 'high',
     conflictSummary: { status: 'none', unresolvedCount: 0 },
-    manualReviewStatus: 'not_required',
+    manualReviewStatus: 'required',
   }],
-  mappingStatus: 'candidate',
+  mappingStatus: 'manual_review_required',
   confidenceLevel: 'high',
   conflictSummary: { status: 'none', unresolvedCount: 0 },
-  manualReviewStatus: 'not_required',
+  manualReviewStatus: 'required',
   auditSummary: {
     status: 'recorded',
     eventType: 'mapping_candidate_generated',
@@ -365,10 +368,10 @@ describe('WeCom customer mapping candidates readonly panel', () => {
     expect(within(panel).getByText('外部联系人低敏摘要')).toBeInTheDocument();
     expect(within(panel).getByText('系统客户候选低敏摘要')).toBeInTheDocument();
     expect(within(panel).getAllByText('[MOCK] 客户甲')).toHaveLength(2);
-    expect(within(panel).getAllByText('候选待查看').length).toBeGreaterThan(0);
+    expect(within(panel).getAllByText('需要人工复核').length).toBeGreaterThan(0);
     expect(within(panel).getAllByText('高置信度').length).toBeGreaterThan(0);
     expect(within(panel).getByText('冲突：无')).toBeInTheDocument();
-    expect(within(panel).getAllByText('当前无需人工复核').length).toBeGreaterThan(0);
+    expect(within(panel).getAllByText('需要人工复核').length).toBeGreaterThan(0);
     expect(within(panel).getByText('当前不会自动合并客户、不会写真实客户关系。')).toBeInTheDocument();
   });
 
@@ -385,6 +388,9 @@ describe('WeCom customer mapping candidates readonly panel', () => {
   it('展示 fail-closed 提示且不渲染候选', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({
       ...responsePayload,
+      mappingId: null,
+      mappingVersion: null,
+      mappingReviewStatus: null,
       candidates: [],
       mappingStatus: 'disabled',
       confidenceLevel: null,

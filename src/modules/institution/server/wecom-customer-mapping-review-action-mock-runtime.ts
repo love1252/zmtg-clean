@@ -29,6 +29,7 @@ export type WeComCustomerMappingReviewMockFixture = Readonly<{
   institutionId: string;
   state: WeComCustomerMappingReviewState;
   version: number;
+  candidateReference?: string;
 }>;
 
 export type WeComCustomerMappingReviewMockRuntimeFault =
@@ -89,7 +90,22 @@ export type WeComCustomerMappingReviewMockRuntimeResult =
   | WeComCustomerMappingReviewFailure
   | RuntimeCapacityFailure;
 
-export type WeComCustomerMappingReviewActionMockRuntime = Readonly<{
+export type WeComCustomerMappingReviewMappingSnapshot = Readonly<{
+  mappingId: string;
+  mappingVersion: number;
+  mappingReviewStatus: WeComCustomerMappingReviewState;
+}>;
+
+export type WeComCustomerMappingReviewSnapshotReader = Readonly<{
+  readMappingSnapshot(input: {
+    tenantId: string;
+    institutionId: string;
+    candidateReference: string;
+  }): WeComCustomerMappingReviewMappingSnapshot | null;
+}>;
+
+export type WeComCustomerMappingReviewActionMockRuntime =
+  WeComCustomerMappingReviewSnapshotReader & Readonly<{
   resolveMappingOwnership(input: {
     tenantId: string;
     institutionId: string;
@@ -121,30 +137,9 @@ const capacityFailure: RuntimeCapacityFailure = Object.freeze({
   auditEvents: Object.freeze([]),
 });
 
-const defaultFixtures: readonly WeComCustomerMappingReviewMockFixture[] = Object.freeze([
-  Object.freeze({
-    mappingId: 'mock-wecom-mapping-pending-001',
-    tenantId: 'growth-tenant-chengxing',
-    institutionId: 'growth-inst-chengxing',
-    state: 'pending_review',
-    version: 0,
-  }),
-  Object.freeze({
-    mappingId: 'mock-wecom-mapping-conflict-001',
-    tenantId: 'growth-tenant-chengxing',
-    institutionId: 'growth-inst-chengxing',
-    state: 'conflict',
-    version: 1,
-  }),
-  Object.freeze({
-    mappingId: 'mock-wecom-mapping-disabled-001',
-    tenantId: 'growth-tenant-chengxing',
-    institutionId: 'growth-inst-chengxing',
-    state: 'disabled',
-    version: 1,
-  }),
-]);
 
+const fixtureKeys = ['mappingId', 'tenantId', 'institutionId', 'state', 'version'] as const;
+const candidateFixtureKeys = [...fixtureKeys, 'candidateReference'] as const;
 const idempotencyRecordKeys = [
   'tenantId',
   'institutionId',
@@ -171,6 +166,8 @@ const mutationResultKeys = [
 const actionSet = new Set<string>(weComCustomerMappingReviewActions);
 const stateSet = new Set<string>(weComCustomerMappingReviewStates);
 const safeIdentifierPattern = /^[A-Za-z0-9_-]{1,256}$/;
+const mappingIdPattern = /^[A-Za-z0-9_-]{1,64}$/;
+const maxVersion = 2_147_483_647;
 const idempotencyKeyPattern = /^[A-Za-z0-9_-]{16,128}$/;
 const digestPattern = /^sha256:[0-9a-f]{64}$/;
 const auditReferencePattern = /^audit:[0-9a-f]{32}$/;
@@ -315,6 +312,15 @@ function mappingKey(tenantId: string, institutionId: string, mappingId: string) 
   return `${scopeKey(tenantId, institutionId)}${mappingId.length}:${mappingId}`;
 }
 
+function candidateProjectionKey(
+  tenantId: string,
+  institutionId: string,
+  candidateReference: string,
+) {
+  const scope = scopeKey(tenantId, institutionId);
+  return `${scope}${candidateReference.length}:${candidateReference}`;
+}
+
 function idempotencyLookupKey(action: string, idempotencyKey: string) {
   return `${action.length}:${action}${idempotencyKey.length}:${idempotencyKey}`;
 }
@@ -404,14 +410,69 @@ export function createWeComCustomerMappingReviewActionMockRuntime(
   };
 
   const initialMappings = new Map<string, WeComCustomerMappingReviewMapping>();
+  const candidateProjectionKeys = new Map<string, string>();
   if (initializationFailure === null) {
-    for (const fixture of options.fixtures) {
-      const key = mappingKey(fixture.tenantId, fixture.institutionId, fixture.mappingId);
+    for (const rawFixture of options.fixtures) {
+      const expectedFixtureKeys =
+        captureExactDataObject(rawFixture, fixtureKeys)
+        ?? captureExactDataObject(rawFixture, candidateFixtureKeys);
+      if (!expectedFixtureKeys) {
+        initializationFailure = 'transaction_failed';
+        break;
+      }
+      const candidateReference = expectedFixtureKeys.candidateReference;
+      const mappingId = expectedFixtureKeys.mappingId;
+      const tenantId = expectedFixtureKeys.tenantId;
+      const institutionId = expectedFixtureKeys.institutionId;
+      const mappingState = expectedFixtureKeys.state;
+      const version = expectedFixtureKeys.version;
+      if (
+        typeof mappingId !== 'string'
+        || !mappingIdPattern.test(mappingId)
+        || typeof tenantId !== 'string'
+        || !safeIdentifierPattern.test(tenantId)
+        || typeof institutionId !== 'string'
+        || !safeIdentifierPattern.test(institutionId)
+        || typeof mappingState !== 'string'
+        || !stateSet.has(mappingState)
+        || !Number.isSafeInteger(version)
+        || (version as number) < 0
+        || (version as number) > maxVersion
+        || !(
+          candidateReference === undefined
+          || (
+            typeof candidateReference === 'string'
+            && safeIdentifierPattern.test(candidateReference)
+          )
+        )
+      ) {
+        initializationFailure = 'transaction_failed';
+        break;
+      }
+      const key = mappingKey(tenantId, institutionId, mappingId);
       if (initialMappings.has(key)) {
         initializationFailure = 'transaction_failed';
         break;
       }
-      initialMappings.set(key, Object.freeze({ ...fixture }));
+      initialMappings.set(key, Object.freeze({
+        mappingId,
+        tenantId,
+        institutionId,
+        state: mappingState as WeComCustomerMappingReviewState,
+        version: version as number,
+      }));
+      if (typeof candidateReference === 'string') {
+        const projectionKey = candidateProjectionKey(
+          tenantId,
+          institutionId,
+          candidateReference,
+        );
+        if (candidateProjectionKeys.has(projectionKey)) {
+          initializationFailure = 'transaction_failed';
+          break;
+        }
+        candidateProjectionKeys.set(projectionKey, key);
+      }
     }
   }
 
@@ -657,6 +718,25 @@ export function createWeComCustomerMappingReviewActionMockRuntime(
   };
 
   return Object.freeze({
+    readMappingSnapshot(input) {
+      if (initializationFailure !== null) return null;
+      const projectionKey = candidateProjectionKey(
+        input.tenantId,
+        input.institutionId,
+        input.candidateReference,
+      );
+      const projectedMappingKey = candidateProjectionKeys.get(projectionKey);
+      if (!projectedMappingKey) return null;
+      const matched = state.mappings.get(projectedMappingKey) ?? null;
+      return matched === null
+        ? null
+        : Object.freeze({
+            mappingId: matched.mappingId,
+            mappingVersion: matched.version,
+            mappingReviewStatus: matched.state,
+          });
+    },
+
     resolveMappingOwnership(input) {
       if (initializationFailure === 'mock_runtime_capacity_exceeded') {
         return 'mock_runtime_capacity_exceeded';
@@ -680,6 +760,3 @@ export function createWeComCustomerMappingReviewActionMockRuntime(
     },
   });
 }
-
-export const weComCustomerMappingReviewActionMockRuntime =
-  createWeComCustomerMappingReviewActionMockRuntime({ fixtures: defaultFixtures });
