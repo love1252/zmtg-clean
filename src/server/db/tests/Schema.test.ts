@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDatabaseUrlErrorMessage, type TenantDatabase } from '@/server/db/client';
 import { authenticateDemoUser } from '@/modules/auth/server/demo-session';
 import {
+  demoSeedAuthUserOwnershipConflictMessage,
   getDemoSeedAuthUserRecords,
   getDemoCustomerSeedRecords,
   getDemoTenantAuthorizationSnapshotSeedRecords,
@@ -88,6 +89,57 @@ function getSeedRecords<T>(getterName: string): T[] {
 
 function serializeSeedRecords(records: unknown[]) {
   return JSON.stringify(records);
+}
+
+type DemoSeedAuthUserRow = {
+  id: string;
+  username: string;
+  createdBy: string;
+};
+
+function createDemoSeedDatabaseMock(existingAuthUsers: DemoSeedAuthUserRow[] = []) {
+  const operationCalls: string[] = [];
+  const upsertCalls: Array<{ table: unknown; config: Record<string, unknown> }> = [];
+  const select = vi.fn(() => ({
+    from: vi.fn(() => ({
+      where: vi.fn(async () => existingAuthUsers),
+    })),
+  }));
+  const deleteMock = vi.fn(() => {
+    operationCalls.push('delete');
+    return { where: vi.fn(async () => undefined) };
+  });
+  const updateMock = vi.fn(() => {
+    operationCalls.push('update');
+    return {
+      set: vi.fn(() => ({ where: vi.fn(async () => undefined) })),
+    };
+  });
+  const insertMock = vi.fn((table: unknown) => ({
+    values: vi.fn(() => ({
+      onConflictDoUpdate: vi.fn(async (config: Record<string, unknown>) => {
+        operationCalls.push(
+          table === authUsers ? 'insert:auth_users' : table === tenantMembers ? 'insert:tenant_members' : 'insert',
+        );
+        upsertCalls.push({ table, config });
+      }),
+    })),
+  }));
+
+  return {
+    db: {
+      select,
+      delete: deleteMock,
+      update: updateMock,
+      insert: insertMock,
+    } as unknown as TenantDatabase,
+    deleteMock,
+    insertMock,
+    operationCalls,
+    select,
+    updateMock,
+    upsertCalls,
+  };
 }
 
 const sensitiveDemoSeedPattern =
@@ -1826,38 +1878,103 @@ describe('数据库结构', () => {
     );
   });
 
-  it('旧演示 auth users 在 tenant members 前执行幂等 upsert', async () => {
-    const insertOrder: unknown[] = [];
-    const upsertCalls: Array<{ table: unknown; config: Record<string, unknown> }> = [];
-    const db = {
-      delete: vi.fn(() => ({ where: vi.fn(async () => undefined) })),
-      update: vi.fn(() => ({
-        set: vi.fn(() => ({ where: vi.fn(async () => undefined) })),
-      })),
-      insert: vi.fn((table: unknown) => ({
-        values: vi.fn(() => ({
-          onConflictDoUpdate: vi.fn(async (config: Record<string, unknown>) => {
-            insertOrder.push(table);
-            upsertCalls.push({ table, config });
-          }),
-        })),
-      })),
-    } as unknown as TenantDatabase;
+  it.each([
+    [
+      '同 ID 的非 seed-owned 账号',
+      () => {
+        const expected = getDemoSeedAuthUserRecords()[0];
+        return {
+          id: expected.id,
+          username: 'manual-account',
+          createdBy: 'manual-operator',
+        };
+      },
+    ],
+    [
+      '同 ID 但 username 不匹配的账号',
+      () => {
+        const expected = getDemoSeedAuthUserRecords()[0];
+        return {
+          id: expected.id,
+          username: 'manual-account',
+          createdBy: 'legacy-demo-seed-actor',
+        };
+      },
+    ],
+    [
+      '同 ID 但 createdBy 不匹配的账号',
+      () => {
+        const expected = getDemoSeedAuthUserRecords()[0];
+        return {
+          id: expected.id,
+          username: expected.username,
+          createdBy: 'manual-operator',
+        };
+      },
+    ],
+    [
+      '预期 username 被其他 ID 占用的账号',
+      () => {
+        const expected = getDemoSeedAuthUserRecords()[0];
+        return {
+          id: 'manual-auth-user',
+          username: expected.username,
+          createdBy: 'legacy-demo-seed-actor',
+        };
+      },
+    ],
+  ])('旧演示 auth user 预检在%s时 fail-closed，且不执行任何写入', async (_scenario, createRow) => {
+    const mock = createDemoSeedDatabaseMock([createRow()]);
 
-    await seedDemoData.seedDemoData(db);
-    await seedDemoData.seedDemoData(db);
+    await expect(seedDemoData.seedDemoData(mock.db)).rejects.toThrow(
+      demoSeedAuthUserOwnershipConflictMessage,
+    );
 
-    expect(insertOrder.filter((table) => table === authUsers)).toHaveLength(2);
-    expect(insertOrder.filter((table) => table === tenantMembers)).toHaveLength(2);
-    expect(insertOrder.indexOf(authUsers)).toBeLessThan(insertOrder.indexOf(tenantMembers));
-    expect(insertOrder.lastIndexOf(authUsers)).toBeLessThan(insertOrder.lastIndexOf(tenantMembers));
+    expect(mock.select).toHaveBeenCalledTimes(1);
+    expect(mock.deleteMock).not.toHaveBeenCalled();
+    expect(mock.insertMock).not.toHaveBeenCalled();
+    expect(mock.updateMock).not.toHaveBeenCalled();
+    expect(mock.operationCalls).toEqual([]);
+  });
+
+  it('旧演示 auth user 预检允许全新空库继续', async () => {
+    const mock = createDemoSeedDatabaseMock();
+
+    await expect(seedDemoData.seedDemoData(mock.db)).resolves.toBeUndefined();
+
+    expect(mock.select).toHaveBeenCalledTimes(1);
+    expect(mock.deleteMock).toHaveBeenCalled();
+    expect(mock.insertMock).toHaveBeenCalled();
+  });
+
+  it('旧演示 auth user 预检允许正常 seed-owned 账号继续并保持幂等顺序', async () => {
+    const mock = createDemoSeedDatabaseMock(
+      getDemoSeedAuthUserRecords().map(({ id, username, createdBy }) => ({
+        id,
+        username,
+        createdBy,
+      })),
+    );
+
+    await seedDemoData.seedDemoData(mock.db);
+    await seedDemoData.seedDemoData(mock.db);
+
+    expect(mock.select).toHaveBeenCalledTimes(2);
+    expect(mock.operationCalls.filter((call) => call === 'insert:auth_users')).toHaveLength(2);
+    expect(mock.operationCalls.filter((call) => call === 'insert:tenant_members')).toHaveLength(2);
+    expect(mock.operationCalls.indexOf('insert:auth_users')).toBeLessThan(
+      mock.operationCalls.indexOf('insert:tenant_members'),
+    );
+    expect(mock.operationCalls.lastIndexOf('insert:auth_users')).toBeLessThan(
+      mock.operationCalls.lastIndexOf('insert:tenant_members'),
+    );
     expect(
-      upsertCalls
+      mock.upsertCalls
         .filter(({ table }) => table === authUsers)
         .every(
           ({ config }) =>
             config.target === authUsers.id &&
-            config.setWhere !== undefined &&
+            config.setWhere === undefined &&
             !Object.hasOwn(config.set as object, 'username'),
         ),
     ).toBe(true);

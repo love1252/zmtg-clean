@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray, or, sql } from 'drizzle-orm';
 import { createDatabase, createPostgresClient, type TenantDatabase } from '@/server/db/client';
 import { assertDemoSeedAllowed } from '@/server/db/seed-guard';
 import {
@@ -51,6 +51,8 @@ const legacyDemoPlanVersionIds = [
 
 export const demoSeedProductionGuardMessage =
   'demo seed 仅允许明确确认的 local/demo loopback 数据库；production/staging 环境始终拒绝';
+export const demoSeedAuthUserOwnershipConflictMessage =
+  'demo seed auth user ownership conflict';
 
 type DemoCustomerReference = {
   source: 'appointment' | 'follow_up_task' | 'treatment_summary';
@@ -1411,6 +1413,46 @@ export function assertDemoSeedAuthUserReferenceCoverage() {
   }
 }
 
+export async function assertDemoSeedAuthUserOwnership(db: TenantDatabase) {
+  const expectedUsers = getDemoSeedAuthUserRecords();
+  const expectedById = new Map(expectedUsers.map((user) => [user.id, user]));
+  const expectedByUsername = new Map(expectedUsers.map((user) => [user.username, user]));
+  const existingUsers = await db
+    .select({
+      id: authUsers.id,
+      username: authUsers.username,
+      createdBy: authUsers.createdBy,
+    })
+    .from(authUsers)
+    .where(
+      or(
+        inArray(
+          authUsers.id,
+          expectedUsers.map((user) => user.id),
+        ),
+        inArray(
+          authUsers.username,
+          expectedUsers.map((user) => user.username),
+        ),
+      ),
+    );
+
+  for (const existingUser of existingUsers) {
+    const expectedByIdUser = expectedById.get(existingUser.id);
+    const expectedByUsernameUser = expectedByUsername.get(existingUser.username);
+
+    if (
+      !expectedByIdUser ||
+      !expectedByUsernameUser ||
+      expectedByIdUser.id !== expectedByUsernameUser.id ||
+      existingUser.username !== expectedByIdUser.username ||
+      existingUser.createdBy !== legacySeedActorId
+    ) {
+      throw new Error(demoSeedAuthUserOwnershipConflictMessage);
+    }
+  }
+}
+
 export function assertDemoCustomerReferenceCoverage(
   customerRecords: Array<typeof customers.$inferInsert> = getDemoCustomerSeedRecords(),
 ) {
@@ -1491,6 +1533,7 @@ export async function seedDemoData(db: TenantDatabase) {
   assertDemoCustomerReferenceCoverage();
   assertDemoTreatmentAppointmentReferenceCoverage();
   assertDemoFollowUpSourceReferenceCoverage();
+  await assertDemoSeedAuthUserOwnership(db);
   await cleanupLegacyDemoSeedRecords(db);
 
   await db
@@ -1498,7 +1541,6 @@ export async function seedDemoData(db: TenantDatabase) {
     .values(getDemoSeedAuthUserRecords())
     .onConflictDoUpdate({
       target: authUsers.id,
-      setWhere: sql`${authUsers.username} like 'legacy_seed_%_anchor' and ${authUsers.createdBy} = ${legacySeedActorId}`,
       set: {
         displayName: sql`excluded.display_name`,
         phone: sql`excluded.phone`,
