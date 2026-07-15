@@ -2494,16 +2494,14 @@ describe('工作台入口页面', () => {
     await expectMetric('超时任务数', '1');
     await expectMetric('作废摘要阻断数', '1');
     await expectMetric('重复来源任务冲突数', '1');
-    expect(screen.getByText('只读聚合')).toBeInTheDocument();
-    expect(screen.getByText('只统计 template_path_followup 模板建议。')).toBeInTheDocument();
-    expect(screen.getByText('基于当前租户治疗摘要、模板驱动建议、来源随访任务和审计事件只读聚合。')).toBeInTheDocument();
-    expect(screen.getByText('仅返回聚合指标，不返回客户明细、任务列表、治疗正文或 raw audit payload。')).toBeInTheDocument();
-    expect(screen.getByText('当前为只读聚合指标')).toBeInTheDocument();
-    expect(screen.getByText('不展示客户明细')).toBeInTheDocument();
-    expect(screen.getByText('不展示任务列表')).toBeInTheDocument();
-    expect(screen.getByText('不展示治疗正文、病历正文、咨询全文')).toBeInTheDocument();
-    expect(screen.getAllByText('不自动触达客户').length).toBeGreaterThan(0);
-    expect(screen.getByText('不接 AI')).toBeInTheDocument();
+    expect(screen.getByText('运营聚合')).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-system-details')).not.toHaveAttribute('open');
+    expect(screen.queryByText('数据范围')).not.toBeInTheDocument();
+    expect(screen.queryByText('数据口径')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '开发边界' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('系统与数据详情'));
+    expect(screen.getByTestId('dashboard-system-details')).toHaveAttribute('open');
     expect(screen.getByRole('heading', { name: '知识库只读入口' })).toBeInTheDocument();
     expect(screen.getByText('只读入口')).toBeInTheDocument();
     expect(screen.getAllByText('未接入真实数据').length).toBeGreaterThan(0);
@@ -2590,7 +2588,7 @@ describe('工作台入口页面', () => {
     expect(screen.getByRole('button', { name: '移动导航：客户中心' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出工作台' })).toBeInTheDocument();
     expect(screen.getByText('近期需要人工处理')).toBeInTheDocument();
-    expect(screen.getAllByText(/客户、预约、随访任务统一进入运营视图/u).length).toBeGreaterThan(0);
+    expect(screen.getByText('客户、预约与随访任务统一汇总，优先处理需要人工确认的事项。')).toBeInTheDocument();
     expect(screen.getByText('客户旅程看板')).toBeInTheDocument();
     expect(screen.getByText('当前行动队列')).toBeInTheDocument();
     expectNoInstitutionDemoMisleadingClaims(container);
@@ -2626,11 +2624,11 @@ describe('工作台入口页面', () => {
     expect(analysisCall![1]?.body).toBeUndefined();
     expectNoInstitutionMutation(fetchMock);
 
-    fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
+    fireEvent.click(screen.getByRole('button', { name: '查看客户总数' }));
     expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
-    expect(screen.getByText('客户优先级队列')).toBeInTheDocument();
     expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
-    expect(screen.getByText('脱敏手机号：138****1252')).toBeInTheDocument();
+    const customerList = screen.getByRole('table', { name: '客户列表' });
+    expect(within(customerList).getByText('138****1252')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '预约中心' }));
     expect(screen.getByRole('heading', { name: '预约中心' })).toBeInTheDocument();
@@ -2663,6 +2661,68 @@ describe('工作台入口页面', () => {
     expect(await screen.findByText('audit_phase8_institution')).toBeInTheDocument();
     expect(screen.getByText('资源 ID：cust_phase5_closeout')).toBeInTheDocument();
     expectOnlyInstitutionReadCalls(fetchMock);
+  });
+
+  it('机构端桌面侧边栏固定在视口内，可收起为图标栏并保持栏目切换', async () => {
+    const fetchMock = mockWorkspaceFetch();
+    render(<HospitalPage />);
+
+    expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
+
+    const sidebar = screen.getByLabelText('机构端侧边栏');
+    const mainContent = screen.getByLabelText('机构端主内容');
+    const desktopNav = screen.getByRole('navigation', { name: '机构端桌面导航' });
+    const brandArea = screen.getByLabelText('机构端品牌区');
+    const accountActions = screen.getByLabelText('机构端账号操作');
+    const collapseButton = screen.getByRole('button', { name: '收起机构端侧边栏' });
+
+    expect(sidebar).toHaveAttribute('data-sidebar-state', 'expanded');
+    expect(sidebar).toHaveClass('fixed', 'h-screen', 'md:w-[276px]');
+    expect(mainContent).toHaveClass('md:pl-[276px]');
+    expect(collapseButton).toHaveAttribute('aria-expanded', 'true');
+    expect(within(brandArea).getByText('智美天工')).toBeInTheDocument();
+    expect(within(desktopNav).getByText('客户中心')).toBeInTheDocument();
+    expect(desktopNav).toHaveClass('space-y-0.5');
+    expect(within(desktopNav).getByRole('button', { name: '客户中心' })).toHaveClass('h-10');
+    expect(screen.queryByLabelText('搜索占位')).not.toBeInTheDocument();
+    expect(within(sidebar).queryByText(/高优先级客户/u)).not.toBeInTheDocument();
+    expect(accountActions).toHaveClass('items-center', 'gap-2');
+    expect(within(accountActions).getByText('系统管理员')).toBeInTheDocument();
+    expect(within(accountActions).getByRole('button', { name: '退出' })).toBeInTheDocument();
+
+    fireEvent.click(collapseButton);
+
+    expect(sidebar).toHaveAttribute('data-sidebar-state', 'collapsed');
+    expect(sidebar).toHaveClass('fixed', 'h-screen', 'md:w-16');
+    expect(mainContent).toHaveClass('md:pl-16');
+    expect(screen.getByRole('button', { name: '展开机构端侧边栏' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(within(brandArea).queryByText('智美天工')).not.toBeInTheDocument();
+    expect(within(desktopNav).queryByText('客户中心')).not.toBeInTheDocument();
+    expect(accountActions).toHaveClass('flex-col');
+    expect(within(accountActions).queryByText('系统管理员')).not.toBeInTheDocument();
+    expect(within(accountActions).getByRole('button', { name: '退出工作台' })).toBeInTheDocument();
+
+    const collapsedCustomerButton = within(desktopNav).getByRole('button', {
+      name: '客户中心',
+    });
+    expect(collapsedCustomerButton).toHaveAttribute('title', '客户中心');
+    fireEvent.click(collapsedCustomerButton);
+
+    expect(await screen.findByRole('heading', { name: '客户中心' })).toBeInTheDocument();
+    expect(collapsedCustomerButton).toHaveAttribute('aria-current', 'page');
+
+    fireEvent.click(screen.getByRole('button', { name: '展开机构端侧边栏' }));
+
+    expect(sidebar).toHaveAttribute('data-sidebar-state', 'expanded');
+    expect(sidebar).toHaveClass('md:w-[276px]');
+    expect(mainContent).toHaveClass('md:pl-[276px]');
+    expect(within(desktopNav).getByText('客户中心')).toBeInTheDocument();
+    expect(accountActions).not.toHaveClass('flex-col');
+    expect(within(accountActions).getByText('系统管理员')).toBeInTheDocument();
+    expectNoInstitutionMutation(fetchMock);
   });
 
   it('机构工作台知识库只读入口入口展示 loading 状态', async () => {
@@ -4077,6 +4137,7 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByRole('button', { name: '客户中心' }));
 
     expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '新建客户' }));
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: 'Phase10 客户' } });
     fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-phase10' } });
     fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: 'Phase10 修复项目' } });
@@ -4147,8 +4208,8 @@ describe('工作台入口页面', () => {
     render(<HospitalPage />);
 
     expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
-    expect(screen.getAllByText('开发主线').length).toBeGreaterThanOrEqual(9);
-    expect(screen.getAllByText('后续').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByText('开发主线').length).toBeGreaterThanOrEqual(10);
+    expect(screen.getAllByText('后续').length).toBeGreaterThanOrEqual(2);
 
     expect(screen.queryByRole('button', { name: 'AI 模型' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客服工作台' }));
@@ -4451,7 +4512,7 @@ describe('工作台入口页面', () => {
     await expectMetric('待确认预约', '0');
     await expectMetric('待处理随访', '0');
     await expectMetric('模板建议数', '0');
-    expect(screen.getByText('暂无随访路径运营指标')).toBeInTheDocument();
+    expect(screen.getByText('暂无指标')).toBeInTheDocument();
     expect(screen.getByText('当前没有客户、预约或随访任务可进入运营视图。')).toBeInTheDocument();
     expect(screen.getByText('当前没有可展示的待处理行动。')).toBeInTheDocument();
     expectNoInstitutionMutation(fetchMock);

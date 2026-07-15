@@ -1,7 +1,22 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Eye, Loader2, Pencil, Search, ShieldCheck, Tags, UploadCloud } from 'lucide-react';
+import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  BellRing,
+  Eye,
+  HeartPulse,
+  Loader2,
+  Pencil,
+  RefreshCcw,
+  Repeat2,
+  Search,
+  ShieldCheck,
+  Tags,
+  UploadCloud,
+  UserPlus,
+  UsersRound,
+  X,
+} from 'lucide-react';
 import {
   createCustomer,
   executeCustomerImport,
@@ -95,6 +110,27 @@ const segmentTrendLabels: Record<CustomerSegmentKey, string> = {
   post_care: '脱敏摘要',
   repurchase_window: '运营分层',
   silent_reactivation: '待人工确认',
+};
+
+const segmentIcons = {
+  high_priority: UsersRound,
+  post_care: HeartPulse,
+  repurchase_window: Repeat2,
+  silent_reactivation: BellRing,
+} as const satisfies Record<CustomerSegmentKey, typeof UsersRound>;
+
+const customerPriorityToneClasses: Record<CustomerPriority, string> = {
+  high: 'border-rose-200 bg-rose-50 text-rose-700',
+  medium: 'border-amber-200 bg-amber-50 text-amber-700',
+  observe: 'border-slate-200 bg-slate-100 text-slate-600',
+};
+
+const customerLifecycleToneClasses: Record<CustomerLifecycleStage, string> = {
+  consulting: 'border-violet-200 bg-violet-50 text-violet-700',
+  scheduled: 'border-blue-200 bg-blue-50 text-blue-700',
+  post_care: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  repurchase_window: 'border-amber-200 bg-amber-50 text-amber-700',
+  silent_reactivation: 'border-rose-200 bg-rose-50 text-rose-700',
 };
 
 const customerBoundaryItems = [
@@ -271,7 +307,7 @@ function visibleListErrorState(error: TenantBusinessClientError): InstitutionPag
   return getInstitutionPageStateFromClientError(error, {
     forbiddenMessage: '当前账号没有访问客户数据的权限',
     fallbackMessage: '客户运营视图暂时无法加载',
-    unavailableMessage: '数据服务暂时不可用，请稍后刷新或切换演示备份',
+    unavailableMessage: '数据服务暂时不可用，请稍后刷新',
   });
 }
 
@@ -371,6 +407,9 @@ export function CustomerCenterShell() {
   const [isLoading, setIsLoading] = useState(true);
   const [listErrorState, setListErrorState] = useState<InstitutionPageStateProps | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [lifecycleFilter, setLifecycleFilter] = useState<CustomerLifecycleStage | 'all'>('all');
+  const [priorityFilter, setPriorityFilter] = useState<CustomerPriority | 'all'>('all');
+  const [activePanel, setActivePanel] = useState<'customer' | 'import' | null>(null);
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [form, setForm] = useState<CustomerFormState>(emptyCustomerForm);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -387,6 +426,16 @@ export function CustomerCenterShell() {
   const [timelineErrorState, setTimelineErrorState] =
     useState<InstitutionPageStateProps | null>(null);
   const timelineRequestIdRef = useRef(0);
+  const importRequestIdRef = useRef(0);
+  const [importPreviewSource, setImportPreviewSource] = useState<string | null>(null);
+  const actionPanelRef = useRef<HTMLElement | null>(null);
+  const importRowsInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const panelBusyRef = useRef(false);
+
+  useEffect(() => {
+    panelBusyRef.current = isSubmitting || isImporting;
+  }, [isImporting, isSubmitting]);
 
   useEffect(() => {
     let isActive = true;
@@ -415,16 +464,73 @@ export function CustomerCenterShell() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!activePanel) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      if (activePanel === 'import') {
+        importRowsInputRef.current?.focus();
+      }
+    });
+
+    function closePanelFromKeyboard() {
+      if (panelBusyRef.current) return;
+      setActivePanel(null);
+      setEditingCustomerId(null);
+      setForm(emptyCustomerForm);
+      setSubmitError(null);
+    }
+
+    function handlePanelKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        closePanelFromKeyboard();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const panel = actionPanelRef.current;
+      if (!panel) return;
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => !element.hasAttribute('hidden'));
+      if (focusable.length === 0) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    window.addEventListener('keydown', handlePanelKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', handlePanelKeyDown);
+      returnFocusRef.current?.focus();
+      returnFocusRef.current = null;
+    };
+  }, [activePanel]);
+
   const segmentStats = useMemo(() => buildCustomerSegmentStats(customers), [customers]);
   const importIssues = useMemo(() => collectImportIssues(importPreview), [importPreview]);
   const importedCustomerCount = importResult?.importedCustomerIds.length ?? 0;
 
   const filteredCustomers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return customers;
+    return customers.filter((customer) => {
+      if (lifecycleFilter !== 'all' && customer.lifecycle !== lifecycleFilter) return false;
+      if (priorityFilter !== 'all' && customer.priority !== priorityFilter) return false;
+      if (!query) return true;
 
-    return customers.filter((customer) =>
-      [
+      return [
         customer.displayName,
         customer.ownerUserId,
         customer.projectInterest,
@@ -436,9 +542,12 @@ export function CustomerCenterShell() {
       ]
         .join(' ')
         .toLowerCase()
-        .includes(query),
-    );
-  }, [customers, searchQuery]);
+        .includes(query);
+    });
+  }, [customers, lifecycleFilter, priorityFilter, searchQuery]);
+
+  const hasActiveFilters =
+    searchQuery.trim().length > 0 || lifecycleFilter !== 'all' || priorityFilter !== 'all';
 
   function updateFormField<Key extends keyof CustomerFormState>(
     key: Key,
@@ -451,12 +560,53 @@ export function CustomerCenterShell() {
     setEditingCustomerId(customer.id);
     setForm(toFormState(customer));
     setSubmitError(null);
+    setActivePanel('customer');
   }
 
   function resetForm() {
     setEditingCustomerId(null);
     setForm(emptyCustomerForm);
     setSubmitError(null);
+  }
+
+  function closeActionPanel() {
+    if (panelBusyRef.current) return;
+    if (activePanel === 'customer') {
+      resetForm();
+    }
+    setActivePanel(null);
+  }
+
+  function rememberPanelTrigger(event: MouseEvent<HTMLButtonElement>) {
+    returnFocusRef.current = event.currentTarget;
+  }
+
+  function toggleCreatePanel() {
+    if (panelBusyRef.current) return;
+    if (activePanel === 'customer' && !editingCustomerId) {
+      closeActionPanel();
+      return;
+    }
+
+    resetForm();
+    setActivePanel('customer');
+  }
+
+  function toggleImportPanel() {
+    if (panelBusyRef.current) return;
+    if (activePanel === 'import') {
+      setActivePanel(null);
+      return;
+    }
+
+    resetForm();
+    setActivePanel('import');
+  }
+
+  function resetFilters() {
+    setSearchQuery('');
+    setLifecycleFilter('all');
+    setPriorityFilter('all');
   }
 
   async function openCustomerTimeline(customer: CustomerRecordSummary) {
@@ -505,19 +655,26 @@ export function CustomerCenterShell() {
   }
 
   async function handlePreviewCustomerImport() {
-    const parsed = parseImportRowsText(importRowsText);
+    const source = importRowsText;
+    const parsed = parseImportRowsText(source);
     if (!parsed.ok) {
       setImportError(parsed.error);
       return;
     }
 
+    const requestId = importRequestIdRef.current + 1;
+    importRequestIdRef.current = requestId;
     setIsImporting(true);
     setImportError(null);
+    setImportPreview(null);
+    setImportPreviewSource(null);
     setImportResult(null);
 
     const result = await previewCustomerImport({ rows: parsed.rows });
+    if (importRequestIdRef.current !== requestId) return;
     if (result.ok) {
       setImportPreview(result.preview);
+      setImportPreviewSource(source);
     } else {
       setImportError(visibleErrorMessage(result.error));
     }
@@ -526,20 +683,30 @@ export function CustomerCenterShell() {
   }
 
   async function handleExecuteCustomerImport() {
-    const parsed = parseImportRowsText(importRowsText);
+    const source = importRowsText;
+    if (importPreviewSource !== source || !importPreview?.canExecute) {
+      setImportError('导入内容已变化，请重新预检后再执行');
+      return;
+    }
+    const parsed = parseImportRowsText(source);
     if (!parsed.ok) {
       setImportError(parsed.error);
       return;
     }
 
+    const requestId = importRequestIdRef.current + 1;
+    importRequestIdRef.current = requestId;
     setIsImporting(true);
     setImportError(null);
 
     const result = await executeCustomerImport({ rows: parsed.rows });
+    if (importRequestIdRef.current !== requestId) return;
     if (result.ok) {
       setImportPreview(result.result);
+      setImportPreviewSource(source);
       setImportResult(result.result);
       await reloadCustomersAfterImport();
+      if (importRequestIdRef.current !== requestId) return;
     } else {
       setImportError(visibleErrorMessage(result.error));
     }
@@ -583,6 +750,7 @@ export function CustomerCenterShell() {
         );
       });
       resetForm();
+      setActivePanel(null);
     } else {
       setSubmitError(visibleErrorMessage(result.error));
     }
@@ -595,168 +763,358 @@ export function CustomerCenterShell() {
       <InstitutionSectionHeader
         eyebrow="客户运营"
         title="客户中心"
-        description="客户、预约、随访任务统一进入运营视图。这里仅展示 API 返回的脱敏客户摘要、负责人、优先级和下一步动作。"
+        description="管理客户分层、负责人和下一步动作，列表仅展示 API 返回的脱敏客户信息。"
+        className="p-4 lg:p-5"
         action={
-          <label className="relative block w-full lg:w-[320px]" aria-label="客户搜索">
+          <div className="flex w-full flex-wrap gap-2 lg:justify-end">
+            <button
+              type="button"
+              aria-pressed={activePanel === 'import'}
+              className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+              disabled={isImporting || isSubmitting}
+              onClick={(event) => {
+                rememberPanelTrigger(event);
+                toggleImportPanel();
+              }}
+            >
+              <UploadCloud className="h-4 w-4" />
+              低敏导入
+            </button>
+            <button
+              type="button"
+              aria-pressed={activePanel === 'customer' && !editingCustomerId}
+              className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none sm:flex-none"
+              disabled={isImporting || isSubmitting}
+              onClick={(event) => {
+                rememberPanelTrigger(event);
+                toggleCreatePanel();
+              }}
+            >
+              <UserPlus className="h-4 w-4" />
+              新建客户
+            </button>
+          </div>
+        }
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="客户分层概览">
+        {segmentStats.map((segment) => {
+          const SegmentIcon = segmentIcons[segment.key];
+          return (
+            <article
+              key={segment.key}
+              className="flex min-h-28 items-center gap-4 rounded-[20px] border border-white/80 bg-white/82 p-4 shadow-sm backdrop-blur-xl"
+            >
+              <div
+                className={cn(
+                  'grid h-11 w-11 shrink-0 place-items-center rounded-2xl border',
+                  segmentToneClasses[segment.key],
+                )}
+              >
+                <SegmentIcon className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-2xl font-semibold tabular-nums text-slate-950">
+                  {isLoading || listErrorState ? '--' : segment.count}
+                </div>
+                <div className="mt-0.5 truncate text-sm font-semibold text-slate-700">
+                  {segment.label}
+                </div>
+                <div className="mt-1 text-xs text-slate-400">{segmentTrendLabels[segment.key]}</div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      <section
+        className="rounded-[20px] border border-white/80 bg-white/82 p-3 shadow-sm backdrop-blur-xl sm:p-4"
+        aria-label="客户筛选"
+      >
+        <div className="grid gap-2 lg:grid-cols-[minmax(320px,1fr)_180px_160px_auto]">
+          <label className="relative block" aria-label="客户搜索">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
-              className="h-11 w-full rounded-2xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none placeholder:text-slate-400"
-              placeholder="搜索客户、标签或负责人"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+              placeholder="搜索客户、手机号、项目、标签或负责人"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
             />
           </label>
-        }
-      />
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {segmentStats.map((segment) => (
-          <article
-            key={segment.key}
-            className="rounded-[22px] border border-white/80 bg-white/78 p-5 shadow-sm backdrop-blur-xl"
+          <select
+            aria-label="生命周期筛选"
+            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+            value={lifecycleFilter}
+            onChange={(event) =>
+              setLifecycleFilter(event.target.value as CustomerLifecycleStage | 'all')
+            }
           >
-            <div
-              className={cn(
-                'inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold',
-                segmentToneClasses[segment.key],
-              )}
-            >
-              {segmentTrendLabels[segment.key]}
-            </div>
-            <div className="mt-4 text-3xl font-semibold text-slate-950">
-              {isLoading ? '--' : segment.count}
-            </div>
-            <div className="mt-1 text-sm font-medium text-slate-500">{segment.label}</div>
-          </article>
-        ))}
-      </div>
+            <option value="all">全部生命周期</option>
+            {lifecycleOptions.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="优先级筛选"
+            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+            value={priorityFilter}
+            onChange={(event) => setPriorityFilter(event.target.value as CustomerPriority | 'all')}
+          >
+            <option value="all">全部优先级</option>
+            {priorityOptions.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-700 disabled:cursor-default disabled:opacity-40"
+            disabled={!hasActiveFilters}
+            onClick={resetFilters}
+          >
+            <RefreshCcw className="h-4 w-4" />
+            重置
+          </button>
+        </div>
+      </section>
 
-      <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-        <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-slate-950">客户优先级队列</h3>
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
-              API 数据
-            </span>
+      <article className="overflow-hidden rounded-[22px] border border-white/80 bg-white/86 shadow-[0_20px_70px_rgba(32,61,104,0.08)] backdrop-blur-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-4 sm:px-5">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-950">客户列表</h3>
+            <p className="mt-1 text-xs text-slate-500">按客户分层查看当前负责人和待办动作</p>
           </div>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
+            {hasActiveFilters ? `显示 ${filteredCustomers.length} / ${customers.length} 位` : `共 ${customers.length} 位客户`}
+          </span>
+        </div>
 
-          {isLoading ? (
+        {isLoading ? (
+          <div className="p-4 sm:p-5">
             <InstitutionPageState
               kind="loading"
               title="正在加载客户数据..."
-              className="mt-4"
             />
-          ) : null}
+          </div>
+        ) : null}
 
-          {!isLoading && listErrorState ? (
-            <InstitutionPageState {...listErrorState} className="mt-4" />
-          ) : null}
+        {!isLoading && listErrorState ? (
+          <div className="p-4 sm:p-5">
+            <InstitutionPageState {...listErrorState} />
+          </div>
+        ) : null}
 
-          {!isLoading && !listErrorState && filteredCustomers.length === 0 ? (
+        {!isLoading && !listErrorState && filteredCustomers.length === 0 ? (
+          <div className="p-4 sm:p-5">
             <InstitutionPageState
               kind="empty"
-              title="暂无客户记录"
-              description="当前没有可展示的客户旅程记录，可先创建只包含脱敏展示字段的客户摘要。"
-              className="mt-4"
+              title={hasActiveFilters ? '没有符合条件的客户' : '暂无客户记录'}
+              description={
+                hasActiveFilters
+                  ? '可调整搜索词或筛选条件后重试。'
+                  : '当前没有可展示的客户记录，可通过右上角新建客户或导入低敏数据。'
+              }
             />
-          ) : null}
+          </div>
+        ) : null}
 
-          {!isLoading && !listErrorState && filteredCustomers.length > 0 ? (
-            <div className="mt-4 space-y-3">
-              {filteredCustomers.map((customer) => (
-                <div
-                  key={customer.id}
-                  className="rounded-2xl border border-slate-200/80 bg-white/86 p-4"
-                >
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-base font-semibold text-slate-950">
-                          {customer.displayName}
+        {!isLoading && !listErrorState && filteredCustomers.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1080px] table-fixed text-left" aria-label="客户列表">
+              <thead className="bg-slate-50/90 text-xs font-semibold text-slate-500">
+                <tr>
+                  <th className="w-[19%] px-5 py-3">客户信息</th>
+                  <th className="w-[15%] px-4 py-3">项目 / 负责人</th>
+                  <th className="w-[15%] px-4 py-3">生命周期 / 优先级</th>
+                  <th className="w-[15%] px-4 py-3">标签</th>
+                  <th className="w-[24%] px-4 py-3">最近动态 / 下一步</th>
+                  <th className="w-[12%] px-4 py-3 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200/80">
+                {filteredCustomers.map((customer) => (
+                  <tr key={customer.id} className="transition hover:bg-blue-50/35">
+                    <td className="px-5 py-4 align-top">
+                      <div className="flex items-start gap-3">
+                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-600 text-sm font-semibold text-white shadow-sm shadow-blue-500/20">
+                          {customer.displayName.slice(0, 1)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-slate-950">
+                            {customer.displayName}
+                          </div>
+                          <div className="mt-1 truncate text-xs text-slate-500">
+                            {customer.maskedPhone || '暂无脱敏手机号'}
+                          </div>
+                          <div className="mt-0.5 truncate text-[11px] text-slate-400">
+                            {customer.maskedMedicalRecordNo || '暂无脱敏病历号'}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 align-top">
+                      <div className="truncate text-sm font-medium text-slate-800">
+                        {customer.projectInterest || '暂无项目'}
+                      </div>
+                      <div className="mt-1.5 truncate text-xs text-slate-500">
+                        {customer.ownerUserId || '未分配负责人'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 align-top">
+                      <div className="flex flex-col items-start gap-1.5">
+                        <span
+                          className={cn(
+                            'rounded-full border px-2.5 py-1 text-xs font-semibold',
+                            customerLifecycleToneClasses[customer.lifecycle],
+                          )}
+                        >
+                          {customerLifecycleLabels[customer.lifecycle]}
                         </span>
-                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600">
+                        <span
+                          className={cn(
+                            'rounded-full border px-2.5 py-1 text-xs font-semibold',
+                            customerPriorityToneClasses[customer.priority],
+                          )}
+                        >
                           {customerPriorityLabels[customer.priority]}
                         </span>
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
-                          生命周期：{customerLifecycleLabels[customer.lifecycle]}
-                        </span>
                       </div>
-                      <p className="mt-2 text-sm text-slate-500">
-                        {customer.projectInterest} · {customer.lastTouchSummary}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {customer.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-500"
-                          >
-                            {tag}
+                    </td>
+                    <td className="px-4 py-4 align-top">
+                      <div className="flex flex-wrap gap-1.5">
+                        {customer.tags.length > 0 ? (
+                          customer.tags.slice(0, 3).map((tag) => (
+                            <span
+                              key={tag}
+                              className="rounded-full bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-700"
+                            >
+                              {tag}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-400">暂无标签</span>
+                        )}
+                        {customer.tags.length > 3 ? (
+                          <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-500">
+                            +{customer.tags.length - 3}
                           </span>
-                        ))}
+                        ) : null}
                       </div>
-                      <div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
-                        <span>脱敏手机号：{customer.maskedPhone}</span>
-                        <span>脱敏病历号：{customer.maskedMedicalRecordNo}</span>
+                    </td>
+                    <td className="px-4 py-4 align-top">
+                      <div className="line-clamp-1 text-sm font-medium text-slate-800">
+                        {customer.nextAction || '暂无下一步动作'}
                       </div>
-                    </div>
-                    <div className="min-w-[220px] rounded-2xl bg-slate-50 p-3">
-                      <div className="text-xs font-semibold text-slate-400">下一步动作</div>
-                      <div className="mt-1 text-sm font-semibold leading-6 text-slate-800">
-                        {customer.nextAction}
+                      <div className="mt-1.5 line-clamp-2 text-xs leading-5 text-slate-500">
+                        {customer.lastTouchSummary || '暂无最近触达摘要'}
                       </div>
-                      <div className="mt-2 text-xs text-slate-500">
-                        负责人：{customer.ownerUserId}
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
+                    </td>
+                    <td className="px-4 py-4 align-top">
+                      <div className="flex justify-end gap-1.5">
                         <button
                           type="button"
-                          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700"
+                          className="grid h-8 w-8 place-items-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100"
+                          aria-label={`查看详情 ${customer.displayName}`}
+                          title="查看详情"
                           onClick={() => {
                             void openCustomerTimeline(customer);
                           }}
                         >
-                          <Eye className="h-3.5 w-3.5" />
-                          查看详情 {customer.displayName}
+                          <Eye className="h-4 w-4" />
                         </button>
                         <button
                           type="button"
-                          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700"
+                          className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:text-blue-700"
+                          aria-label={`编辑 ${customer.displayName}`}
+                          title="编辑客户"
                           onClick={() => startEditing(customer)}
                         >
-                          <Pencil className="h-3.5 w-3.5" />
-                          编辑 {customer.displayName}
+                          <Pencil className="h-4 w-4" />
                         </button>
                       </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </article>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </article>
 
-        <aside className="space-y-5">
-          <form
-            className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl"
-            onSubmit={handleSubmit}
+      {activePanel ? (
+        <div className="fixed inset-0 z-50 flex justify-end" aria-hidden={false}>
+          <button
+            type="button"
+            aria-label="关闭操作面板背景"
+            disabled={isSubmitting || isImporting}
+            className="absolute inset-0 bg-slate-950/28 backdrop-blur-[2px] disabled:cursor-wait"
+            onClick={closeActionPanel}
+          />
+          <aside
+            ref={actionPanelRef}
+            role="dialog"
+            tabIndex={-1}
+            aria-modal="true"
+            aria-label={
+              activePanel === 'import'
+                ? '低敏客户导入'
+                : editingCustomerId
+                  ? '编辑客户'
+                  : '新建客户'
+            }
+            className={cn(
+              'relative z-10 flex h-full w-full flex-col border-l border-slate-200 bg-[#f8fafc] shadow-[-24px_0_80px_rgba(15,23,42,0.18)] sm:max-w-[520px]',
+              activePanel === 'import' && 'sm:max-w-[680px]',
+            )}
           >
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-950">
-                  {editingCustomerId ? '编辑客户' : '新建客户'}
+            <div className="flex h-18 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+              <div className="min-w-0">
+                <h3 className="truncate text-lg font-semibold text-slate-950">
+                  {activePanel === 'import'
+                    ? '低敏客户导入'
+                    : editingCustomerId
+                      ? '编辑客户'
+                      : '新建客户'}
                 </h3>
-                <p className="mt-1 text-sm text-slate-500">仅提交客户摘要白名单字段。</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {activePanel === 'import'
+                    ? '预检通过后，仅写入合法的低敏客户记录。'
+                    : '填写客户摘要、分层和下一步人工动作。'}
+                </p>
               </div>
-              {editingCustomerId ? (
-                <button
-                  type="button"
-                  className="h-9 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-500"
-                  onClick={resetForm}
-                >
-                  取消编辑
-                </button>
-              ) : null}
+              <button
+                type="button"
+                aria-label="关闭客户操作面板"
+                disabled={isSubmitting || isImporting}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:text-blue-700 disabled:cursor-wait disabled:opacity-50"
+                onClick={closeActionPanel}
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+              {activePanel === 'customer' ? (
+                <form
+                  className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+                  onSubmit={handleSubmit}
+                >
+                  <fieldset disabled={isSubmitting} className="contents">
+                  {editingCustomerId ? (
+                    <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
+                      <span className="text-xs font-semibold text-blue-700">正在编辑已选客户</span>
+                      <button
+                        type="button"
+                        className="h-8 rounded-lg border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700"
+                        onClick={closeActionPanel}
+                      >
+                        取消编辑
+                      </button>
+                    </div>
+                  ) : null}
 
             <div className="mt-4 grid gap-3">
               <div>
@@ -765,6 +1123,7 @@ export function CustomerCenterShell() {
                 </label>
                 <input
                   id="customer-display-name"
+                  autoFocus
                   className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
                   value={form.displayName}
                   onChange={(event) => updateFormField('displayName', event.target.value)}
@@ -911,25 +1270,25 @@ export function CustomerCenterShell() {
 
             <button
               type="submit"
-              className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+              className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm shadow-blue-500/20 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none"
               disabled={isSubmitting || Boolean(listErrorState)}
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {isSubmitting ? '提交中...' : editingCustomerId ? '保存客户' : '创建客户'}
             </button>
-          </form>
+                  </fieldset>
+                </form>
+              ) : null}
 
-          <section className="rounded-[24px] border border-blue-100 bg-blue-50/70 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
-            <div className="flex items-start gap-3">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-blue-600 text-white">
-                <UploadCloud className="h-5 w-5" />
+              {activePanel === 'import' ? (
+                <section className="rounded-[20px] border border-blue-100 bg-blue-50/70 p-4 shadow-sm sm:p-5">
+            <div className="flex items-start gap-3 rounded-2xl border border-blue-100 bg-white px-3 py-3">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-600 text-white">
+                <UploadCloud className="h-4 w-4" />
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-950">低敏客户导入</h3>
-                <p className="mt-1 text-sm leading-6 text-slate-600">
-                  当前只支持低敏客户数据 JSON 导入；导入前预检字段白名单、重复候选和失败原因，导入后记录审计并进入现有客户运营 / 智能随访低敏链路。
-                </p>
-              </div>
+              <p className="text-sm leading-6 text-slate-600">
+                当前仅支持低敏客户 JSON 数组；请先预检字段、重复候选和失败原因，再执行合法行导入。
+              </p>
             </div>
 
             <div className="mt-4 grid gap-2 text-xs font-semibold text-blue-800 sm:grid-cols-2">
@@ -958,10 +1317,20 @@ export function CustomerCenterShell() {
                 导入 JSON 数组
               </label>
               <textarea
+                ref={importRowsInputRef}
                 id="customer-import-rows"
                 className="mt-1 min-h-64 w-full rounded-2xl border border-blue-100 bg-white px-3 py-2 font-mono text-xs leading-5 text-slate-700 outline-none focus:border-blue-300"
                 value={importRowsText}
-                onChange={(event) => setImportRowsText(event.target.value)}
+                disabled={isImporting}
+                onChange={(event) => {
+                  setImportRowsText(event.target.value);
+                  importRequestIdRef.current += 1;
+                  setIsImporting(false);
+                  setImportPreview(null);
+                  setImportPreviewSource(null);
+                  setImportResult(null);
+                  setImportError(null);
+                }}
               />
             </div>
 
@@ -986,7 +1355,7 @@ export function CustomerCenterShell() {
               <button
                 type="button"
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-blue-600 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-                disabled={isImporting || Boolean(listErrorState) || !importPreview?.canExecute}
+                disabled={isImporting || Boolean(listErrorState) || importPreviewSource !== importRowsText || !importPreview?.canExecute}
                 onClick={() => {
                   void handleExecuteCustomerImport();
                 }}
@@ -1055,36 +1424,30 @@ export function CustomerCenterShell() {
                 )}
               </div>
             ) : null}
-          </section>
+                </section>
+              ) : null}
 
-          <div className="rounded-[24px] border border-slate-900/90 bg-[#071322] p-5 text-white shadow-[0_24px_80px_rgba(3,15,33,0.22)]">
-            <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-cyan-400/16 text-cyan-200">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">客户数据边界</h3>
-                <p className="mt-1 text-sm text-slate-400">只展示脱敏客户摘要和下一步人工动作。</p>
-              </div>
-            </div>
-            <div className="mt-5 space-y-3">
-              {customerBoundaryItems.map((item) => (
-                <div key={item.title} className="rounded-2xl border border-white/10 bg-white/8 p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                    <Tags className="h-4 w-4 text-cyan-300" />
-                    {item.title}
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-400">{item.description}</p>
+              <details className="mt-4 rounded-[18px] border border-slate-200 bg-white shadow-sm">
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-700">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                  客户数据说明
+                </summary>
+                <div className="grid gap-2 border-t border-slate-200 p-3 sm:grid-cols-2">
+                  {customerBoundaryItems.map((item) => (
+                    <div key={item.title} className="rounded-xl bg-slate-50 p-3">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                        <Tags className="h-3.5 w-3.5 text-blue-600" />
+                        {item.title}
+                      </div>
+                      <p className="mt-1.5 text-xs leading-5 text-slate-500">{item.description}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </details>
             </div>
-            <div className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950">
-              当前只展示脱敏 API 数据
-              <ArrowRight className="h-4 w-4" />
-            </div>
-          </div>
-        </aside>
-      </div>
+          </aside>
+        </div>
+      ) : null}
       {selectedTimelineCustomer ? (
         <CustomerTimelineDrawer
           customerId={selectedTimelineCustomer.id}

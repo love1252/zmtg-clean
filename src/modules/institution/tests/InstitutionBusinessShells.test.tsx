@@ -636,7 +636,7 @@ describe('机构业务页面壳', () => {
     render(<CustomerCenterShell />);
 
     expect(screen.getByRole('heading', { name: '客户中心' })).toBeInTheDocument();
-    expect(screen.getByText(/客户、预约、随访任务统一进入运营视图/u)).toBeInTheDocument();
+    expect(screen.getByText(/管理客户分层、负责人和下一步动作/u)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('虚构 demo 客户');
     expect(document.body.textContent).not.toContain('受控 demo');
     expect(screen.getByText('正在加载客户数据...')).toBeInTheDocument();
@@ -646,9 +646,50 @@ describe('机构业务页面壳', () => {
     expect(screen.getByText('术后关怀中')).toBeInTheDocument();
     expect(screen.getAllByText('高优先级').length).toBeGreaterThan(0);
     expect(screen.getAllByText('复购窗口期').length).toBeGreaterThan(0);
-    expect(screen.getByText('负责人：consultant-lin')).toBeInTheDocument();
-    expect(screen.getByText('脱敏手机号：138****1208')).toBeInTheDocument();
+    const customerTable = screen.getByRole('table', { name: '客户列表' });
+    const wangRow = within(customerTable).getByRole('row', { name: /王女士/u });
+    expect(within(wangRow).getByText('consultant-lin')).toBeInTheDocument();
+    expect(within(wangRow).getByText('138****1208')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/institution/customers', { cache: 'no-store' });
+  });
+
+  it('客户列表支持组合筛选并可在本地重置', async () => {
+    const fetchMock = mockCustomerFetch([
+      jsonResponse({
+        records: [
+          customerRecord,
+          {
+            ...customerRecord,
+            id: 'cust_zhao_post_care',
+            displayName: '赵女士',
+            lifecycle: 'post_care',
+            priority: 'medium',
+            ownerUserId: 'service-group-a',
+            maskedPhone: '137****8842',
+            maskedMedicalRecordNo: 'MR****003',
+          },
+        ],
+      }),
+    ]);
+
+    render(<CustomerCenterShell />);
+
+    expect(await screen.findByText('王女士')).toBeInTheDocument();
+    expect(screen.getByText('赵女士')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('生命周期筛选'), {
+      target: { value: 'post_care' },
+    });
+    expect(screen.queryByText('王女士')).not.toBeInTheDocument();
+    expect(screen.getByText('赵女士')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('优先级筛选'), { target: { value: 'high' } });
+    expect(screen.getByText('没有符合条件的客户')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '重置' }));
+    expect(screen.getByText('王女士')).toBeInTheDocument();
+    expect(screen.getByText('赵女士')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('客户中心展示空状态和创建入口', async () => {
@@ -657,10 +698,94 @@ describe('机构业务页面壳', () => {
     render(<CustomerCenterShell />);
 
     expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
-    expect(screen.getByText('当前没有可展示的客户旅程记录，可先创建只包含脱敏展示字段的客户摘要。')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '创建客户' })).toBeInTheDocument();
-    expect(screen.getByLabelText('脱敏手机号展示值')).toBeInTheDocument();
-    expect(screen.getByLabelText('脱敏病历号展示值')).toBeInTheDocument();
+    expect(screen.getByText('当前没有可展示的客户记录，可通过右上角新建客户或导入低敏数据。')).toBeInTheDocument();
+    expect(screen.queryByLabelText('脱敏手机号展示值')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '新建客户' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '新建客户' }));
+
+    const createDialog = screen.getByRole('dialog', { name: '新建客户' });
+    expect(within(createDialog).getByRole('button', { name: '创建客户' })).toBeInTheDocument();
+    expect(within(createDialog).getByLabelText('脱敏手机号展示值')).toBeInTheDocument();
+    expect(within(createDialog).getByLabelText('脱敏病历号展示值')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: '新建客户' })).not.toBeInTheDocument();
+  });
+
+  it('导入内容变化会使进行中的旧预检失效且不会解锁新内容执行', async () => {
+    let resolvePreview: ((response: Response) => void) | undefined;
+    const previewResponse = new Promise<Response>((resolve) => { resolvePreview = resolve; });
+    const fetchMock = vi.fn((input: Parameters<typeof fetch>[0]) => {
+      if (fetchPath(input) === '/api/institution/customers') {
+        return Promise.resolve(jsonResponse({ records: [] }));
+      }
+      return previewResponse;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CustomerCenterShell />);
+
+    expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '低敏导入' }));
+    const input = screen.getByLabelText('导入 JSON 数组');
+    fireEvent.click(screen.getByRole('button', { name: '导入预检' }));
+    expect(input).toBeDisabled();
+
+    resolvePreview?.(jsonResponse({
+      totalCount: 1,
+      successCount: 1,
+      failureCount: 0,
+      skippedCount: 0,
+      canExecute: true,
+      importBatch: { importBatchId: 'customer-import:old-preview', rows: [] },
+      importedCustomerIds: [],
+      auditRecorded: true,
+    }));
+    expect(await screen.findByText('customer-import:old-preview')).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: '[]' } });
+    expect(screen.queryByText('customer-import:old-preview')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '执行合法行导入' })).toBeDisabled();
+  });
+
+  it('客户提交期间锁定面板与表单，完成后关闭且恢复触发按钮焦点', async () => {
+    let resolveCreate: ((response: Response) => void) | undefined;
+    const createResponse = new Promise<Response>((resolve) => { resolveCreate = resolve; });
+    const fetchMock = vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      if (fetchPath(input) === '/api/institution/customers' && init?.method === 'POST') {
+        return createResponse;
+      }
+      return Promise.resolve(jsonResponse({ records: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CustomerCenterShell />);
+
+    expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
+    const trigger = screen.getByRole('button', { name: '新建客户' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
+    fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-lin' } });
+    fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: '皮肤管理' } });
+    fireEvent.change(screen.getByLabelText('脱敏手机号展示值'), { target: { value: '138****1208' } });
+    fireEvent.change(screen.getByLabelText('脱敏病历号展示值'), { target: { value: 'MR****001' } });
+    fireEvent.change(screen.getByLabelText('最近触达摘要'), { target: { value: '已人工确认' } });
+    fireEvent.change(screen.getByLabelText('下一步动作'), { target: { value: '安排回访' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建客户' }));
+
+    expect(screen.getByRole('button', { name: '关闭客户操作面板' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '关闭操作面板背景' })).toBeDisabled();
+    expect(screen.getByLabelText('客户姓名')).toBeDisabled();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByRole('dialog', { name: '新建客户' })).toBeInTheDocument();
+
+    resolveCreate?.(jsonResponse({ record: { ...customerRecord, id: 'cust_created' } }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: '新建客户' })).not.toBeInTheDocument();
+    });
+    expect(trigger).toHaveFocus();
   });
 
   it('客户中心展示低敏导入预检、失败原因和执行结果', async () => {
@@ -735,7 +860,11 @@ describe('机构业务页面壳', () => {
 
     render(<CustomerCenterShell />);
 
-    expect(await screen.findByRole('heading', { name: '低敏客户导入' })).toBeInTheDocument();
+    expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '低敏客户导入' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '低敏导入' }));
+    expect(screen.getByRole('dialog', { name: '低敏客户导入' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '低敏客户导入' })).toBeInTheDocument();
     expect(screen.getByText('不接 HIS')).toBeInTheDocument();
     expect(screen.getByText('不接真实企业微信')).toBeInTheDocument();
     expect(screen.getByText('不导入手机号 / 身份证 / 病历号')).toBeInTheDocument();
@@ -779,7 +908,7 @@ describe('机构业务页面壳', () => {
   it.each([
     [401, '请先登录', '登录状态已失效，请重新登录'],
     [403, '没有访问权限', '当前账号没有访问客户数据的权限'],
-    [503, '数据服务暂时不可用', '数据服务暂时不可用，请稍后刷新或切换演示备份'],
+    [503, '数据服务暂时不可用', '数据服务暂时不可用，请稍后刷新'],
   ])('客户中心处理 %s 错误态', async (status, apiMessage, visibleMessage) => {
     mockCustomerFetch([jsonResponse({ error: apiMessage }, { status })]);
 
@@ -797,6 +926,7 @@ describe('机构业务页面壳', () => {
     render(<CustomerCenterShell />);
 
     expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '新建客户' }));
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
     fireEvent.change(screen.getByLabelText('生命周期'), { target: { value: 'consulting' } });
     fireEvent.change(screen.getByLabelText('优先级'), { target: { value: 'high' } });
@@ -854,7 +984,13 @@ describe('机构业务页面壳', () => {
     fireEvent.change(screen.getByLabelText('优先级'), { target: { value: 'medium' } });
     fireEvent.click(screen.getByRole('button', { name: '保存客户' }));
 
-    expect(await screen.findByText('已安排明日人工回访')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: '编辑客户' })).not.toBeInTheDocument();
+    });
+    const updatedRow = within(screen.getByRole('table', { name: '客户列表' })).getByRole('row', {
+      name: /王女士/u,
+    });
+    expect(updatedRow).toHaveTextContent('已安排明日人工回访');
     const body = requestBody(fetchMock, 1);
     const serializedBody = JSON.stringify(body);
 
@@ -880,6 +1016,7 @@ describe('机构业务页面壳', () => {
     render(<CustomerCenterShell />);
 
     expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '新建客户' }));
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
     fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-lin' } });
     fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: '皮肤管理' } });
@@ -902,6 +1039,7 @@ describe('机构业务页面壳', () => {
     render(<CustomerCenterShell />);
 
     expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '新建客户' }));
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
     fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-lin' } });
     fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: '皮肤管理' } });
@@ -932,6 +1070,7 @@ describe('机构业务页面壳', () => {
     const { container } = render(<CustomerCenterShell />);
 
     expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '新建客户' }));
     fireEvent.change(screen.getByLabelText('客户姓名'), { target: { value: '林女士' } });
     fireEvent.change(screen.getByLabelText('负责人 ID'), { target: { value: 'consultant-lin' } });
     fireEvent.change(screen.getByLabelText('项目兴趣'), { target: { value: '皮肤管理' } });
@@ -1241,7 +1380,7 @@ describe('机构业务页面壳', () => {
 
     expect(screen.queryByRole('dialog', { name: '客户详情时间线' })).not.toBeInTheDocument();
     expect(screen.getByText('王女士')).toBeInTheDocument();
-    expect(screen.getByText('客户优先级队列')).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: '客户列表' })).toBeInTheDocument();
   });
 
   it('预约中心从真实 API 加载预约和客户 records', async () => {

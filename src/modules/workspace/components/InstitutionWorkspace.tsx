@@ -5,13 +5,13 @@ import { useEffect, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
-  Bell,
   BriefcaseBusiness,
   CalendarCheck,
   CheckCircle2,
   Clock3,
+  PanelLeftClose,
+  PanelLeftOpen,
   Route,
-  Search,
   ShieldCheck,
   ShieldQuestion,
   Sparkles,
@@ -52,7 +52,10 @@ import {
   visibleInstitutionNavItems,
 } from '@/modules/workspace/domain/institution-dashboard';
 import type { InstitutionViewId } from '@/modules/workspace/domain/institution-dashboard';
-import type { AccessContext } from '@/modules/security/domain/access-control';
+import {
+  canAccessResource,
+  type AccessContext,
+} from '@/modules/security/domain/access-control';
 import {
   buildInstitutionDashboardSummary,
   type InstitutionDashboardMetricKey,
@@ -75,6 +78,21 @@ const metricIcons = {
   completed_followups: CheckCircle2,
   opportunity_pool: Target,
 } satisfies Record<InstitutionDashboardMetricKey, typeof Users>;
+
+const metricDestinations = {
+  customer_total: 'customers',
+  high_priority_customers: 'customers',
+  pending_appointments: 'appointments',
+  due_followups: 'followups',
+  completed_followups: 'followups',
+  opportunity_pool: 'opportunities',
+} satisfies Record<InstitutionDashboardMetricKey, InstitutionViewId>;
+
+const actionDestinations = {
+  customer: 'customers',
+  appointment: 'appointments',
+  followup: 'followups',
+} satisfies Record<InstitutionDashboardSummary['actionItems'][number]['source'], InstitutionViewId>;
 
 const followUpPathAnalysisMetricItems = [
   {
@@ -161,15 +179,6 @@ type WorkspaceDashboardReadonlyAggregationEntryState =
   | { status: 'error' }
   | { status: 'loaded'; response: V1WorkspaceDashboardReadonlyAggregationApiContractResponse };
 
-const followUpPathBoundaryLabels = [
-  '当前为只读聚合指标',
-  '不展示客户明细',
-  '不展示任务列表',
-  '不展示治疗正文、病历正文、咨询全文',
-  '不自动触达客户',
-  '不接 AI',
-] as const;
-
 const emptyDashboardSummary = buildInstitutionDashboardSummary({
   customers: [],
   appointments: [],
@@ -195,6 +204,7 @@ const realInstitutionViews = [
   'followups',
   'aiServiceUsage',
   'treatmentSummaries',
+  'opportunities',
   'audit',
   'wecomExternalContacts',
   'wecomCustomerMappingCandidates',
@@ -379,6 +389,7 @@ function parseWorkspaceAccessContext(value: unknown): AccessContext | null {
 export function InstitutionWorkspace() {
   const [workspaceAccess, setWorkspaceAccess] = useState<WorkspaceAccessStatus>({ kind: 'loading' });
   const [activeView, setActiveView] = useState<InstitutionViewId>('dashboard');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [dashboardSummary, setDashboardSummary] = useState<InstitutionDashboardSummary>(
     emptyDashboardSummary,
   );
@@ -402,12 +413,27 @@ export function InstitutionWorkspace() {
   const canViewWeComCustomerMappingCandidates = visibleNavItems.some(
     (item) => item.id === 'wecomCustomerMappingCandidates',
   );
-  const activeNavItem = visibleNavItems.find((item) => item.id === activeView) ?? visibleNavItems[0] ?? institutionNavItems[0];
+  const canReviewWeComCustomerMappingCandidates = workspaceAccess.kind === 'allowed'
+    ? canAccessResource({
+        context: workspaceAccess.context,
+        resource: 'customer',
+        action: 'mapping_review',
+        targetTenantId: workspaceAccess.context.tenantId,
+      }).allowed
+    : false;
+  const displayedView = activeView === 'wecomCustomerMappingCandidates'
+    && !canViewWeComCustomerMappingCandidates
+    ? 'dashboard'
+    : activeView;
+  const activeNavItem = visibleNavItems.find((item) => item.id === displayedView)
+    ?? visibleNavItems[0]
+    ?? institutionNavItems[0];
   const highPriorityMetric = dashboardSummary.metrics.find(
     (metric) => metric.key === 'high_priority_customers',
   );
   const highPriorityLabel =
     dashboardStatus === 'loading' ? '--' : highPriorityMetric?.value ?? '0';
+  const SidebarToggleIcon = isSidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
 
   useEffect(() => {
     let isCurrent = true;
@@ -433,12 +459,6 @@ export function InstitutionWorkspace() {
       isCurrent = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (activeView === 'wecomCustomerMappingCandidates' && !canViewWeComCustomerMappingCandidates) {
-      setActiveView('dashboard');
-    }
-  }, [activeView, canViewWeComCustomerMappingCandidates]);
 
   useEffect(() => {
     let isActive = true;
@@ -507,89 +527,150 @@ export function InstitutionWorkspace() {
 
   return (
     <main
-      className="min-h-screen bg-[#eef4fb] bg-cover bg-center text-slate-950"
+      className="min-h-screen overflow-x-hidden bg-[#eef4fb] bg-cover bg-center text-slate-950"
       style={{
         backgroundImage:
           'linear-gradient(110deg, rgba(247,250,255,0.94) 0%, rgba(244,249,255,0.9) 46%, rgba(232,244,251,0.82) 100%), url("/homepage/zmtg-luxury-clinic-bg.png")',
       }}
     >
       <div className="flex min-h-screen">
-        <aside className="hidden w-[276px] shrink-0 flex-col border-r border-white/12 bg-[#071322]/95 text-slate-200 shadow-2xl shadow-slate-950/20 md:flex">
-          <div className="absolute inset-y-0 left-0 hidden w-[276px] bg-[linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[length:36px_36px] md:block" />
-          <div className="relative flex h-[84px] items-center gap-3 border-b border-white/10 px-5">
-            <Image src="/brand/logo-mark.png" alt="" width={50} height={50} className="h-[50px] w-[50px] rounded-xl bg-white object-contain p-1.5" />
-            <div>
-              <div className="text-lg font-semibold tracking-normal text-white">智美天工</div>
-              <div className="mt-0.5 text-xs text-slate-400">医美智能运营系统</div>
-            </div>
+        <aside
+          aria-label="机构端侧边栏"
+          data-sidebar-state={isSidebarCollapsed ? 'collapsed' : 'expanded'}
+          className={cn(
+            'fixed left-0 top-0 z-30 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-white/12 bg-[#071322]/95 text-slate-200 shadow-2xl shadow-slate-950/20 transition-[width] duration-200 md:flex',
+            isSidebarCollapsed ? 'md:w-16' : 'md:w-[276px]',
+          )}
+        >
+          <div className="absolute inset-y-0 left-0 hidden w-full bg-[linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[length:36px_36px] md:block" />
+          <div
+            aria-label="机构端品牌区"
+            className={cn(
+              'relative flex h-[84px] shrink-0 items-center border-b border-white/10 transition-[padding] duration-200',
+              isSidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-5',
+            )}
+          >
+            <Image
+              src="/brand/logo-mark.png"
+              alt=""
+              width={50}
+              height={50}
+              className={cn(
+                'shrink-0 rounded-xl bg-white object-contain transition-[width,height] duration-200',
+                isSidebarCollapsed ? 'h-10 w-10 p-1' : 'h-[50px] w-[50px] p-1.5',
+              )}
+            />
+            {!isSidebarCollapsed ? (
+              <div className="min-w-0">
+                <div className="truncate text-lg font-semibold tracking-normal text-white">智美天工</div>
+                <div className="mt-0.5 truncate text-xs text-slate-400">医美智能运营系统</div>
+              </div>
+            ) : null}
           </div>
 
-          <div className="relative px-5 py-5">
-            <label className="relative block" aria-label="搜索占位">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <input
-                className="h-10 w-full rounded-xl border border-white/10 bg-white/8 pl-9 pr-3 text-sm text-slate-200 outline-none placeholder:text-slate-500 focus:border-cyan-300/70"
-                placeholder="搜索暂未接入"
-              />
-            </label>
+          <div
+            className={cn(
+              'relative flex h-[54px] shrink-0 items-center border-b border-white/10 text-xs font-semibold text-slate-400',
+              isSidebarCollapsed ? 'justify-center px-2' : 'justify-between px-5',
+            )}
+          >
+            {!isSidebarCollapsed ? <span>机构菜单</span> : null}
+            <button
+              type="button"
+              aria-label={isSidebarCollapsed ? '展开机构端侧边栏' : '收起机构端侧边栏'}
+              aria-expanded={!isSidebarCollapsed}
+              title={isSidebarCollapsed ? '展开机构端侧边栏' : '收起机构端侧边栏'}
+              onClick={() => setIsSidebarCollapsed((collapsed) => !collapsed)}
+              className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-cyan-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
+            >
+              <SidebarToggleIcon className="h-4 w-4" />
+            </button>
           </div>
 
-          <nav className="relative flex-1 space-y-1 overflow-y-auto px-4">
+          <nav
+            aria-label="机构端桌面导航"
+            className={cn(
+              'relative flex-1 space-y-0.5 overflow-y-auto py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+              isSidebarCollapsed ? 'px-2' : 'px-4',
+            )}
+          >
             {visibleNavItems.map((item) => (
               <button
                 key={item.label}
                 type="button"
                 onClick={() => setActiveView(item.id)}
-                aria-current={activeView === item.id ? 'page' : undefined}
+                aria-label={item.label}
+                aria-current={displayedView === item.id ? 'page' : undefined}
+                title={isSidebarCollapsed ? item.label : undefined}
                 className={cn(
-                  'flex h-11 w-full items-center justify-between gap-3 rounded-xl px-3 text-left text-sm font-medium tracking-normal transition',
-                  activeView === item.id ? 'bg-blue-500/20 text-cyan-200 ring-1 ring-cyan-300/20' : 'text-slate-300 hover:bg-white/8 hover:text-white',
+                  'flex h-10 w-full items-center rounded-xl text-sm font-medium tracking-normal transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50',
+                  isSidebarCollapsed ? 'justify-center px-0' : 'justify-between gap-3 px-3 text-left',
+                  displayedView === item.id ? 'bg-blue-500/20 text-cyan-200 ring-1 ring-cyan-300/20' : 'text-slate-300 hover:bg-white/8 hover:text-white',
                 )}
               >
-                <span className="flex min-w-0 items-center gap-3">
+                <span className={cn('flex min-w-0 items-center', isSidebarCollapsed ? 'justify-center' : 'gap-3')}>
                   <item.icon className="h-5 w-5 shrink-0" />
-                  <span className="truncate">{item.label}</span>
+                  {!isSidebarCollapsed ? <span className="truncate">{item.label}</span> : null}
                 </span>
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold',
-                    navigationBoundaryClasses(item.id),
-                  )}
-                >
-                  {navigationBoundaryLabel(item.id)}
-                </span>
+                {!isSidebarCollapsed ? (
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold',
+                      navigationBoundaryClasses(item.id),
+                    )}
+                  >
+                    {navigationBoundaryLabel(item.id)}
+                  </span>
+                ) : null}
               </button>
             ))}
           </nav>
 
-          <div className="relative space-y-3 border-t border-white/10 p-5">
-            <div className="rounded-2xl border border-white/10 bg-white/8 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-white">
-                    高优先级客户 {highPriorityLabel} 位
+          <div className={cn('relative border-t border-white/10', isSidebarCollapsed ? 'space-y-2 p-3' : 'space-y-3 p-4')}>
+            <div
+              aria-label="机构端账号操作"
+              className={cn(
+                'flex',
+                isSidebarCollapsed ? 'flex-col items-center gap-2' : 'items-center gap-2',
+              )}
+            >
+              <div
+                title={isSidebarCollapsed ? '系统管理员 · 机构运营账号' : undefined}
+                className={cn(
+                  'flex items-center rounded-xl bg-white/8 py-2',
+                  isSidebarCollapsed ? 'w-10 justify-center px-0' : 'min-w-0 flex-1 gap-2.5 px-2.5',
+                )}
+              >
+                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-cyan-400/16 text-xs font-semibold text-cyan-200">管</div>
+                {!isSidebarCollapsed ? (
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-semibold text-white">系统管理员</div>
+                    <div className="truncate text-[11px] text-slate-400">机构运营账号</div>
                   </div>
-                  <div className="mt-1 text-xs text-slate-400">待人工承接客户</div>
-                </div>
-                <Bell className="h-5 w-5 text-cyan-300" />
+                ) : null}
               </div>
+              <LogoutButton
+                redirectTo="/login"
+                ariaLabel={isSidebarCollapsed ? '退出工作台' : undefined}
+                className={cn(
+                  'flex h-10 shrink-0 rounded-xl text-xs font-semibold text-rose-200 hover:bg-rose-500/10',
+                  isSidebarCollapsed ? 'w-10 px-0' : 'px-2.5',
+                )}
+              >
+                {isSidebarCollapsed ? '' : '退出'}
+              </LogoutButton>
             </div>
-            <div className="flex items-center gap-3 rounded-2xl bg-white/8 px-3 py-3">
-              <div className="grid h-9 w-9 place-items-center rounded-full bg-cyan-400/16 text-sm font-semibold text-cyan-200">管</div>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-white">系统管理员</div>
-                <div className="text-xs text-slate-400">机构运营账号</div>
-              </div>
-            </div>
-            <LogoutButton
-              redirectTo="/login"
-              className="flex h-10 w-full rounded-xl text-sm font-semibold text-rose-200 hover:bg-rose-500/10"
-            />
           </div>
         </aside>
 
-        <section className="min-w-0 flex-1 overflow-hidden">
+        <section
+          aria-label="机构端主内容"
+          className={cn(
+            'min-w-0 flex-1 overflow-hidden transition-[padding] duration-200',
+            isSidebarCollapsed ? 'md:pl-16' : 'md:pl-[276px]',
+          )}
+        >
           <nav aria-label="机构端移动导航" className="sticky top-0 z-20 border-b border-white/70 bg-white/84 px-4 py-3 shadow-sm shadow-slate-200/50 backdrop-blur-xl md:hidden">
             <div className="mb-2 flex items-center justify-between gap-3">
               <span className="text-xs font-semibold text-slate-500">机构导航</span>
@@ -612,10 +693,10 @@ export function InstitutionWorkspace() {
                   type="button"
                   aria-label={`移动导航：${item.label}`}
                   onClick={() => setActiveView(item.id)}
-                  aria-current={activeView === item.id ? 'page' : undefined}
+                  aria-current={displayedView === item.id ? 'page' : undefined}
                   className={cn(
                     'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold tracking-normal',
-                    activeView === item.id ? 'border-blue-200 bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'border-slate-200 bg-white/76 text-slate-600',
+                    displayedView === item.id ? 'border-blue-200 bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'border-slate-200 bg-white/76 text-slate-600',
                   )}
                 >
                   <item.icon className="h-3.5 w-3.5 shrink-0" />
@@ -625,10 +706,10 @@ export function InstitutionWorkspace() {
                     className={cn(
                       'ml-0.5 rounded-full border px-1.5 py-0.5 text-[10px]',
                       isRealInstitutionView(item.id)
-                        ? activeView === item.id
+                        ? displayedView === item.id
                           ? 'border-white/30 bg-white/16 text-white'
                           : 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : activeView === item.id
+                        : displayedView === item.id
                           ? 'border-white/30 bg-white/16 text-white'
                           : 'border-amber-200 bg-amber-50 text-amber-700',
                     )}
@@ -641,43 +722,45 @@ export function InstitutionWorkspace() {
           </nav>
 
           <div className="mx-auto w-full max-w-[1740px] space-y-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-7">
-            {activeView === 'dashboard' ? (
+            {displayedView === 'dashboard' ? (
               <InstitutionDashboardHome
                 entitlementView={entitlementView}
                 errorState={dashboardErrorState}
                 followUpPathAnalysis={followUpPathAnalysis}
                 followUpPathAnalysisStatus={followUpPathAnalysisStatus}
                 lowSensitiveImportCustomerCount={lowSensitiveImportCustomerCount}
+                onNavigate={setActiveView}
                 status={dashboardStatus}
                 summary={dashboardSummary}
               />
-            ) : activeView === 'customers' ? (
+            ) : displayedView === 'customers' ? (
               <CustomerCenterShell />
-            ) : activeView === 'appointments' ? (
+            ) : displayedView === 'appointments' ? (
               <AppointmentCenterShell />
-            ) : activeView === 'followups' ? (
+            ) : displayedView === 'followups' ? (
               <SmartFollowUpShell />
-            ) : activeView === 'aiServiceUsage' ? (
+            ) : displayedView === 'aiServiceUsage' ? (
               <InstitutionAiServiceUsageShell />
-            ) : activeView === 'treatmentSummaries' ? (
+            ) : displayedView === 'treatmentSummaries' ? (
               <TreatmentSummaryManagementShell />
-            ) : activeView === 'opportunities' ? (
+            ) : displayedView === 'opportunities' ? (
               <OpportunityPoolShell />
-            ) : activeView === 'audit' ? (
+            ) : displayedView === 'audit' ? (
               <InstitutionAuditEventsShell />
-            ) : activeView === 'wecomExternalContacts' ? (
+            ) : displayedView === 'wecomExternalContacts' ? (
               <WeComExternalContactReadonlyPanel />
-            ) : activeView === 'wecomCustomerMappingCandidates' && canViewWeComCustomerMappingCandidates ? (
+            ) : displayedView === 'wecomCustomerMappingCandidates' && canViewWeComCustomerMappingCandidates ? (
               <WeComCustomerMappingCandidatesReadonlyPanel
+                canReview={canReviewWeComCustomerMappingCandidates}
                 requestScopeKey={workspaceAccess.kind === 'allowed'
                   ? `${workspaceAccess.context.tenantId}:${workspaceAccess.context.institutionId}`
                   : 'denied'}
               />
-            ) : activeView === 'hisConnections' ? (
+            ) : displayedView === 'hisConnections' ? (
               <HisConnectionReadOnlyPanel />
-            ) : activeView === 'conversations' ? (
+            ) : displayedView === 'conversations' ? (
               <AiConversationWorkbenchShell />
-            ) : activeView === 'knowledge' ? (
+            ) : displayedView === 'knowledge' ? (
               <InstitutionKnowledgeReadonlyShell />
             ) : (
               <PlaceholderInstitutionView label={activeNavItem.label} />
@@ -695,6 +778,7 @@ function InstitutionDashboardHome({
   followUpPathAnalysis,
   followUpPathAnalysisStatus,
   lowSensitiveImportCustomerCount,
+  onNavigate,
   status,
   summary,
 }: {
@@ -708,14 +792,19 @@ function InstitutionDashboardHome({
   followUpPathAnalysis: FollowUpPathAnalysisApiResponse | null;
   followUpPathAnalysisStatus: DashboardLoadStatus;
   lowSensitiveImportCustomerCount: number;
+  onNavigate: (viewId: InstitutionViewId) => void;
   status: DashboardLoadStatus;
   summary: InstitutionDashboardSummary;
 }) {
+  const entitlementAlerts = entitlementView?.items.filter(
+    (item) => item.status === 'near_limit' || item.status === 'exceeded',
+  ) ?? [];
+
   return (
-    <>
-      <header className="overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-5 shadow-[0_24px_80px_rgba(32,61,104,0.12)] backdrop-blur-xl lg:p-7">
-        <div className="flex flex-col gap-6 2xl:flex-row 2xl:items-start 2xl:justify-between">
-          <div className="max-w-4xl">
+    <div className="flex flex-col gap-4">
+      <header className="overflow-hidden rounded-[24px] border border-white/80 bg-white/76 p-4 shadow-[0_20px_64px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl">
             <div className="flex items-center gap-3 md:hidden">
               <Image
                 src="/brand/logo-mark.png"
@@ -729,40 +818,36 @@ function InstitutionDashboardHome({
                 <div className="text-xs text-slate-500">机构工作台</div>
               </div>
             </div>
-            <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-cyan-200/80 bg-cyan-50/80 px-3.5 py-1.5 text-xs font-semibold text-cyan-700 md:mt-0">
+            <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-cyan-200/80 bg-cyan-50/80 px-3 py-1 text-xs font-semibold text-cyan-700 md:mt-0">
               <Sparkles className="h-4 w-4" />
               当前为 API 数据
             </div>
-            <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-normal text-slate-950 sm:text-5xl lg:text-[60px] xl:text-[64px]">
+            <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-normal text-slate-950 sm:text-4xl xl:text-[42px]">
               <span className="block">今日治疗后随访重点</span>
-              <span className="block whitespace-nowrap bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 bg-clip-text text-transparent">
+              <span className="block bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 bg-clip-text text-transparent sm:whitespace-nowrap">
                 待人工确认的后续动作
               </span>
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-              客户、预约、随访任务统一进入运营视图；无真实记录时展示空态，不创建真实业务动作。
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
+              客户、预约与随访任务统一汇总，优先处理需要人工确认的事项。
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 sm:gap-3 2xl:w-[520px]">
-            {[
-              { label: '数据范围', value: '当前租户' },
-              { label: '数据口径', value: 'API 派生' },
-              { label: '后续动作', value: '人工确认' },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-2xl border border-white/80 bg-white/70 p-3 shadow-sm sm:p-4"
-              >
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 sm:h-5 sm:w-5" />
-                <div className="mt-2 text-sm font-semibold tracking-normal text-slate-950 sm:mt-3 sm:text-lg">
-                  {item.value}
-                </div>
-                <div className="mt-1 text-[11px] leading-4 text-slate-500 sm:text-xs">
-                  {item.label}
-                </div>
-              </div>
-            ))}
+          <div className="flex flex-wrap gap-2 text-xs font-semibold xl:max-w-[460px] xl:justify-end">
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-600">
+              {status === 'loading' ? '数据加载中' : status === 'error' ? '数据暂不可用' : '数据已更新'}
+            </span>
+            <span className={cn(
+              'rounded-full border px-3 py-1.5',
+              summary.safetySwitch.realChannelBlocked
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-amber-200 bg-amber-50 text-amber-700',
+            )}>
+              真实渠道{summary.safetySwitch.realChannelBlocked ? '已阻断' : '可用'}
+            </span>
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-blue-700">
+              低敏导入 {status === 'success' ? lowSensitiveImportCustomerCount : '--'}
+            </span>
           </div>
         </div>
       </header>
@@ -775,37 +860,71 @@ function InstitutionDashboardHome({
         <InstitutionPageState {...errorState} />
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section aria-label="核心运营指标" className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         {summary.metrics.map((metric) => {
           const MetricIcon = metricIcons[metric.key];
 
           return (
             <article
               key={metric.key}
-              className="rounded-[22px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl"
+              className="overflow-hidden rounded-[18px] border border-white/80 bg-white/82 shadow-[0_14px_44px_rgba(32,61,104,0.08)] backdrop-blur-xl"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div
-                  className={cn(
-                    'grid h-12 w-12 place-items-center rounded-2xl border',
-                    statToneClasses[metric.tone],
-                  )}
-                >
-                  <MetricIcon className="h-5 w-5" />
+              <button
+                type="button"
+                aria-label={`查看${metric.label}`}
+                onClick={() => onNavigate(metricDestinations[metric.key])}
+                className="w-full p-4 text-left transition hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div
+                    className={cn(
+                      'grid h-9 w-9 place-items-center rounded-xl border',
+                      statToneClasses[metric.tone],
+                    )}
+                  >
+                    <MetricIcon className="h-4 w-4" />
+                  </div>
+                  <span className="truncate text-[11px] font-semibold text-slate-400">
+                    {metric.helper}
+                  </span>
                 </div>
-                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
-                  {metric.helper}
-                </span>
-              </div>
-              <div className="mt-5 text-4xl font-semibold tracking-normal text-slate-950">
-                {status === 'loading' ? '--' : metric.value}
-              </div>
-              <div className="mt-1 text-sm font-medium text-slate-500">{metric.label}</div>
+                <div className="mt-3 flex items-end justify-between gap-3">
+                  <div className="text-3xl font-semibold leading-none tracking-normal text-slate-950">
+                    {status === 'success' ? metric.value : '--'}
+                  </div>
+                  <div className="pb-0.5 text-right text-xs font-medium text-slate-500">
+                    {metric.label}
+                  </div>
+                </div>
+              </button>
             </article>
           );
         })}
       </section>
 
+      {entitlementAlerts.length > 0 ? (
+        <section className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+          <span className="font-semibold">套餐用量提醒</span>
+          <span className="text-amber-800">
+            {entitlementAlerts.map((item) => item.label).join('、')}已接近或达到上限
+          </span>
+        </section>
+      ) : null}
+
+      <details
+        data-testid="dashboard-system-details"
+        className="group order-last rounded-2xl border border-slate-200/80 bg-white/72 shadow-[0_12px_40px_rgba(32,61,104,0.07)] backdrop-blur-xl"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm font-semibold text-slate-700 marker:hidden">
+          <span className="flex items-center gap-2">
+            <ShieldQuestion className="h-4 w-4 text-slate-400" />
+            系统与数据详情
+          </span>
+          <span className="text-xs font-medium text-slate-400 group-open:hidden">按需展开</span>
+          <span className="hidden text-xs font-medium text-slate-400 group-open:inline">收起详情</span>
+        </summary>
+        <div className="space-y-4 border-t border-slate-200/70 p-4">
       <section className="rounded-[22px] border border-emerald-100 bg-emerald-50/80 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -924,151 +1043,100 @@ function InstitutionDashboardHome({
 
       <WorkspaceDashboardReadonlyAggregationEntrySection />
       <KnowledgeBaseDemoReadonlyEntrySection />
+        </div>
+      </details>
 
       <FollowUpPathAnalysisPanel
         analysis={followUpPathAnalysis}
         status={followUpPathAnalysisStatus}
       />
 
-      <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      <section className="order-1 grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
+        <article className="rounded-[22px] border border-white/80 bg-white/82 p-4 shadow-[0_16px_52px_rgba(32,61,104,0.09)] backdrop-blur-xl lg:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
-                <Activity className="h-5 w-5" />
+              <div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+                <Activity className="h-4 w-4" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold tracking-normal text-slate-950">
-                  近期需要人工处理
+                <div className="text-xs font-semibold text-blue-600">近期需要人工处理</div>
+                <h2 className="mt-0.5 text-lg font-semibold tracking-normal text-slate-950">
+                  当前行动队列
                 </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  客户、预约、随访任务统一进入运营视图。
-                </p>
               </div>
             </div>
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500">
-              人工确认后处理
-            </span>
+            <div className="flex gap-2">
+              {summary.supportingStats
+                .filter((item) => item.key === 'reschedule_appointments' || item.key === 'urgent_followups')
+                .map((item) => (
+                  <div key={item.key} className="rounded-xl bg-slate-100 px-3 py-2 text-right">
+                    <div className="text-[11px] font-medium text-slate-500">{item.label}</div>
+                    <div className="text-lg font-semibold leading-5 text-slate-950">
+                      {status === 'success' ? item.value : '--'}
+                    </div>
+                  </div>
+                ))}
+            </div>
           </div>
 
           {status === 'success' && summary.actionItems.length === 0 ? (
-            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm font-semibold text-slate-500">
+            <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-center text-sm font-semibold text-slate-500">
               当前没有可展示的待处理行动。
             </div>
           ) : null}
 
           {summary.actionItems.length > 0 ? (
-            <div className="mt-5 grid gap-3 lg:grid-cols-2">
+            <div className="mt-4 grid gap-2.5 lg:grid-cols-2">
               {summary.actionItems.map((item) => (
-                <article
+                <button
                   key={item.id}
-                  className="rounded-2xl border border-slate-200/80 bg-white/86 p-4"
+                  type="button"
+                  onClick={() => onNavigate(actionDestinations[item.source])}
+                  className="rounded-xl border border-slate-200/80 bg-white px-3.5 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
-                  <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600">
-                    {item.badge}
-                  </span>
-                  <h3 className="mt-3 text-base font-semibold tracking-normal text-slate-950">
-                    {item.title}
-                  </h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-500">{item.detail}</p>
-                </article>
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-600">
+                      {item.badge}
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-semibold tracking-normal text-slate-950">
+                        {item.title}
+                      </h3>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{item.detail}</p>
+                    </div>
+                  </div>
+                </button>
               ))}
             </div>
           ) : null}
         </article>
 
-        <article className="rounded-[24px] border border-slate-900/90 bg-[#071322] p-5 text-white shadow-[0_24px_80px_rgba(3,15,33,0.22)] lg:p-6">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold tracking-normal">当前行动队列</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                运营负责人可先看谁要跟、为什么跟、下一步由谁处理。
-              </p>
-            </div>
-            <Activity className="h-5 w-5 text-cyan-300" />
-          </div>
-          <div className="mt-5 space-y-3">
-            {summary.supportingStats.map((item) => (
-              <div key={item.key} className="rounded-2xl border border-white/10 bg-white/8 p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-semibold text-white">{item.label}</div>
-                    <div className="mt-1 text-xs leading-5 text-slate-400">{item.helper}</div>
-                  </div>
-                  <div className="rounded-full bg-cyan-300/14 px-2.5 py-1 text-sm font-semibold text-cyan-200">
-                    {status === 'loading' ? '--' : item.value}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-        <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <article className="rounded-[22px] border border-white/80 bg-white/82 p-4 shadow-[0_16px_52px_rgba(32,61,104,0.09)] backdrop-blur-xl lg:p-5">
+          <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">
                 客户旅程看板
               </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                按客户旅程阶段聚合，帮助判断治疗后服务和复诊机会。
-              </p>
+              <p className="mt-0.5 text-xs text-slate-500">治疗后服务与复诊机会分布</p>
             </div>
-            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
-              运营视图
-            </span>
+            <Target className="h-5 w-5 text-blue-500" />
           </div>
-          <div className="mt-5 grid gap-3 lg:grid-cols-4">
+          <div className="mt-3 grid grid-cols-2 gap-2">
             {summary.journeyLanes.map((lane) => (
-              <section
-                key={lane.key}
-                className="rounded-2xl border border-slate-200/80 bg-white/84 p-4"
-              >
-                <h3 className="text-sm font-semibold tracking-normal text-slate-950">
-                  {lane.title}
-                </h3>
-                <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-2xl font-semibold text-slate-950">
-                      {status === 'loading' ? '--' : lane.count}
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
-                      条
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-slate-500">{lane.detail}</div>
+              <div key={lane.key} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50/90 px-3 py-2.5">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-800">{lane.title}</h3>
+                  <div className="truncate text-[11px] text-slate-400">{lane.detail}</div>
                 </div>
-              </section>
-            ))}
-          </div>
-        </article>
-
-        <article className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold tracking-normal text-slate-950">开发边界</h2>
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
-              只读
-            </span>
-          </div>
-          <div className="mt-5 space-y-3">
-            {[
-              '工作台用于串联治疗后运营闭环，不展示原始诊疗、沟通或附件内容。',
-              '首页不提交 tenantId，也不创建、修改或删除业务记录。',
-              '无真实记录时保持空态或只读聚合说明，不用前端 mock 数据填充。',
-            ].map((item) => (
-              <div
-                key={item}
-                className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-sm leading-6 text-slate-600"
-              >
-                {item}
+                <div className="shrink-0 text-xl font-semibold text-slate-950">
+                  {status === 'success' ? lane.count : '--'}
+                </div>
               </div>
             ))}
           </div>
         </article>
       </section>
-    </>
+    </div>
   );
 }
 
@@ -2004,41 +2072,54 @@ function FollowUpPathAnalysisPanel({
     followUpPathAnalysisMetricItems.every((item) => analysis[item.key] === 0);
 
   return (
-    <section className="rounded-[24px] border border-white/80 bg-white/78 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl lg:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <section className="order-2 rounded-[22px] border border-white/80 bg-white/82 p-4 shadow-[0_16px_52px_rgba(32,61,104,0.09)] backdrop-blur-xl lg:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-cyan-600 text-white shadow-lg shadow-cyan-600/20">
-            <Route className="h-5 w-5" />
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-600 text-white shadow-lg shadow-cyan-600/20">
+            <Route className="h-4 w-4" />
           </div>
           <div>
             <h2 className="text-lg font-semibold tracking-normal text-slate-950">
               随访路径运营分析
             </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              基于既有只读 API 的聚合口径，用于运营负责人快速扫一眼。
+            <p className="mt-0.5 text-xs text-slate-500">
+              人工确认、完成进度与异常指标
             </p>
           </div>
         </div>
-        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
-          只读聚合
+        <span className={cn(
+          'rounded-full border px-3 py-1 text-xs font-semibold',
+          status === 'error'
+            ? 'border-amber-200 bg-amber-50 text-amber-700'
+            : status === 'loading' || hasNoData
+              ? 'border-slate-200 bg-slate-50 text-slate-500'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-600',
+        )}>
+          {status === 'error'
+            ? '暂不可用'
+            : status === 'loading'
+              ? '加载中'
+              : hasNoData
+                ? '暂无指标'
+                : '运营聚合'}
         </span>
       </div>
 
       {status === 'loading' ? (
-        <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm font-semibold text-slate-500">
+        <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-3 text-center text-sm font-semibold text-slate-500">
           正在加载随访路径运营分析...
         </div>
       ) : null}
 
       {status === 'error' ? (
-        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-5">
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <div>
               <h3 className="text-sm font-semibold text-amber-900">
                 随访路径运营分析暂时无法加载
               </h3>
-              <p className="mt-1 text-sm leading-6 text-amber-800">
+              <p className="mt-0.5 text-xs leading-5 text-amber-800">
                 请稍后刷新页面，当前模块不会影响客户、预约和随访摘要。
               </p>
             </div>
@@ -2048,11 +2129,11 @@ function FollowUpPathAnalysisPanel({
 
       {status === 'success' && analysis ? (
         <>
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
             {followUpPathAnalysisMetricItems.map((item) => (
               <article
                 key={item.key}
-                className="rounded-2xl border border-slate-200/80 bg-white/86 p-4"
+                className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-3 py-2.5"
               >
                 <div className="flex items-center justify-between gap-3">
                   <span
@@ -2063,58 +2144,34 @@ function FollowUpPathAnalysisPanel({
                   >
                     {item.helper}
                   </span>
-                  <ShieldCheck className="h-4 w-4 text-slate-400" />
+                  <div className="text-xl font-semibold leading-none text-slate-950">
+                    {analysis[item.key]}
+                  </div>
                 </div>
-                <div className="mt-4 text-3xl font-semibold tracking-normal text-slate-950">
-                  {analysis[item.key]}
-                </div>
-                <div className="mt-1 text-sm font-medium text-slate-500">{item.label}</div>
+                <div className="mt-2 text-xs font-medium text-slate-500">{item.label}</div>
               </article>
             ))}
           </div>
 
-          {hasNoData ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm font-semibold text-slate-500">
-              暂无随访路径运营指标
-            </div>
-          ) : null}
-
-          <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_1fr]">
-            <article className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
-              <h3 className="text-sm font-semibold tracking-normal text-slate-950">口径说明</h3>
-              <div className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
-                {analysis.notes.length > 0 ? (
-                  analysis.notes.map((note) => <p key={note}>{note}</p>)
-                ) : (
-                  <p>当前仅展示随访路径运营聚合结果。</p>
-                )}
-                {analysis.dataSourceNote ? <p>{analysis.dataSourceNote}</p> : null}
-                {analysis.boundaryNote ? <p>{analysis.boundaryNote}</p> : null}
+          <div className="mt-3 rounded-xl border border-cyan-100 bg-cyan-50/70 px-3 py-2 text-xs leading-5 text-slate-600">
+            <div className="font-semibold text-cyan-800">数据与操作边界</div>
+            {analysis.notes.length > 0 ? (
+              <div className="mt-1 space-y-1">
+                {analysis.notes.map((note) => <p key={note}>{note}</p>)}
               </div>
-            </article>
-
-            <article className="rounded-2xl border border-slate-200/80 bg-white/86 p-4">
-              <h3 className="text-sm font-semibold tracking-normal text-slate-950">边界</h3>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {followUpPathBoundaryLabels.map((label) => (
-                  <span
-                    key={label}
-                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600"
-                  >
-                    {label}
-                  </span>
-                ))}
-              </div>
-            </article>
+            ) : null}
+            {analysis.dataSourceNote ? <p className="mt-1">数据来源：{analysis.dataSourceNote}</p> : null}
+            {analysis.boundaryNote ? <p className="mt-1">操作边界：{analysis.boundaryNote}</p> : null}
+            <p className="mt-1">仅展示聚合指标，不展示客户明细、任务正文或治疗记录，不自动触达，也不接入 AI 决策。</p>
           </div>
 
           {analysis.warnings.length > 0 ? (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                 <div>
                   <h3 className="text-sm font-semibold text-amber-900">提示</h3>
-                  <div className="mt-1 space-y-1 text-sm leading-6 text-amber-800">
+                  <div className="mt-0.5 space-y-1 text-xs leading-5 text-amber-800">
                     {analysis.warnings.map((warning) => (
                       <p key={warning}>{warning}</p>
                     ))}
