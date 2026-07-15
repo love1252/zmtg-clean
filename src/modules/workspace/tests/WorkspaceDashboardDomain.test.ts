@@ -156,6 +156,7 @@ describe('工作台看板领域模型', () => {
       'opportunities',
       'audit',
       'wecomExternalContacts',
+      'wecomCustomerMappingCandidates',
       'hisConnections',
       'conversations',
       'appointments',

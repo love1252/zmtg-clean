@@ -48,6 +48,26 @@ const responsePayload = {
   realCustomerRelationshipWritten: false,
 };
 
+function reviewSuccess(overrides: Record<string, unknown> = {}) {
+  return {
+    ok: true,
+    mappingId: responsePayload.mappingId,
+    action: 'approve_candidate',
+    previousStatus: 'pending_review',
+    nextStatus: 'approved_pending_link',
+    previousVersion: 0,
+    nextVersion: 1,
+    reasonCode: 'manual_evidence_confirmed',
+    idempotentReplay: false,
+    auditSummary: { eventCount: 2, acceptedMutationCount: 1, replayCount: 0 },
+    mockDemo: true,
+    persistenceMode: 'volatile_process_memory',
+    autoMergePerformed: false,
+    realCustomerRelationshipWritten: false,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -81,7 +101,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('WeCom customer mapping candidates readonly panel', () => {
+describe('WeCom customer mapping review workbench', () => {
   it('租户 scope 变化时清空旧数据且过期请求不能覆盖当前响应', async () => {
     let resolveFirst: ((response: Response) => void) | undefined;
     let resolveSecond: ((response: Response) => void) | undefined;
@@ -360,11 +380,13 @@ describe('WeCom customer mapping candidates readonly panel', () => {
     )).toBe(false);
   });
 
-  it('展示 mock/demo、只读、候选、冲突与人工复核状态', async () => {
+  it('以紧凑工作台展示 mock/demo、候选对比、状态栏与人工复核状态', async () => {
     render(<WeComCustomerMappingCandidatesReadonlyPanel />);
 
-    const panel = await screen.findByRole('region', { name: '企业微信客户匹配候选只读视图' });
-    expect(within(panel).getByText('MOCK / DEMO · 只读')).toBeInTheDocument();
+    const panel = await screen.findByRole('region', { name: '企业微信客户匹配复核工作台' });
+    expect(within(panel).getByText('MOCK / DEMO · 人工复核')).toBeInTheDocument();
+    expect(within(panel).getByTestId('mapping-status-strip')).toBeInTheDocument();
+    expect(within(panel).getByTestId('mapping-comparison')).toBeInTheDocument();
     expect(within(panel).getByText('外部联系人低敏摘要')).toBeInTheDocument();
     expect(within(panel).getByText('系统客户候选低敏摘要')).toBeInTheDocument();
     expect(within(panel).getAllByText('[MOCK] 客户甲')).toHaveLength(2);
@@ -372,17 +394,124 @@ describe('WeCom customer mapping candidates readonly panel', () => {
     expect(within(panel).getAllByText('高置信度').length).toBeGreaterThan(0);
     expect(within(panel).getByText('冲突：无')).toBeInTheDocument();
     expect(within(panel).getAllByText('需要人工复核').length).toBeGreaterThan(0);
-    expect(within(panel).getByText('当前不会自动合并客户、不会写真实客户关系。')).toBeInTheDocument();
+    expect(within(panel).getByText(/不会自动合并或写入真实客户关系/u)).toBeInTheDocument();
+    expect(within(panel).getByText('查看审计与运行说明')).toBeInTheDocument();
   });
 
-  it('不展示敏感字段或人工复核、合并、发送、同步、会话按钮', async () => {
+  it('只读角色不展示敏感字段或人工复核动作按钮', async () => {
     render(<WeComCustomerMappingCandidatesReadonlyPanel />);
 
-    const panel = await screen.findByRole('region', { name: '企业微信客户匹配候选只读视图' });
+    const panel = await screen.findByRole('region', { name: '企业微信客户匹配复核工作台' });
     const text = panel.textContent ?? '';
     expect(text).not.toMatch(/138\d|external_?userid|userId|secret|token|聊天内容|会话内容/iu);
-    expect(within(panel).queryAllByRole('button')).toHaveLength(0);
-    expect(within(panel).queryByText(/确认匹配|驳回|重新打开|批量|自动合并按钮|真实同步|发送入口|会话内容入口/u)).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: '确认候选' })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: '拒绝候选' })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: '补充信息' })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: '标记冲突' })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: '重新打开' })).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/批量审批|真实同步|发送入口|会话内容入口/u)).not.toBeInTheDocument();
+    expect(within(panel).getByText('当前账号仅可查看候选，不能执行人工复核。')).toBeInTheDocument();
+  });
+
+  it('有复核权限时按当前状态展示动作，并对必填说明做行内校验', async () => {
+    render(<WeComCustomerMappingCandidatesReadonlyPanel canReview />);
+
+    expect(await screen.findByRole('button', { name: '确认候选' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '拒绝候选' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '补充信息' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '标记冲突' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '重新打开' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '补充信息' }));
+    expect(screen.getByRole('combobox', { name: '复核原因' })).toHaveValue('missing_low_sensitive_evidence');
+    expect(screen.getByRole('textbox', { name: /低敏说明/u })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
+
+    expect(await screen.findByText('请补充本次复核所依据的低敏说明。')).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('提交人工复核后重新读取候选，并展示新的状态与版本', async () => {
+    let candidateReadCount = 0;
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/institution/wecom/customer-mapping-candidates')) {
+        candidateReadCount += 1;
+        const payload = candidateReadCount === 1
+          ? responsePayload
+          : {
+              ...responsePayload,
+              mappingVersion: 1,
+              mappingReviewStatus: 'approved_pending_link',
+            };
+        return new Response(JSON.stringify(payload), { status: 200 });
+      }
+      if (url.includes('/api/institution/wecom/customer-mapping-reviews/')) {
+        return new Response(JSON.stringify(reviewSuccess()), { status: 200 });
+      }
+      return new Response(JSON.stringify({ code: 'response_unavailable' }), { status: 503 });
+    });
+
+    render(<WeComCustomerMappingCandidatesReadonlyPanel canReview />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '确认候选' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
+
+    expect(await screen.findAllByText('已确认，待后续关联')).toHaveLength(2);
+    expect(screen.getAllByText('v1')).toHaveLength(2);
+    expect(screen.getByText('复核结果已保存，页面状态已更新。')).toBeInTheDocument();
+    expect(candidateReadCount).toBe(2);
+
+    const postCall = vi.mocked(fetch).mock.calls.find(([input, init]) =>
+      String(input).includes('/api/institution/wecom/customer-mapping-reviews/')
+      && init?.method === 'POST'
+    );
+    expect(postCall?.[0]).toBe(
+      `/api/institution/wecom/customer-mapping-reviews/${responsePayload.mappingId}/actions`,
+    );
+    const body = JSON.parse(String(postCall?.[1]?.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      action: 'approve_candidate',
+      expectedVersion: 0,
+      reasonCode: 'manual_evidence_confirmed',
+    });
+    expect(body.idempotencyKey).toMatch(/^review_[A-Za-z0-9_-]{16,128}$/u);
+  });
+
+  it('提交成功后的刷新窗口立即隐藏旧版本动作', async () => {
+    let resolveReload: ((response: Response) => void) | undefined;
+    const reloadResponse = new Promise<Response>((resolve) => { resolveReload = resolve; });
+    let candidateReadCount = 0;
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/institution/wecom/customer-mapping-candidates')) {
+        candidateReadCount += 1;
+        if (candidateReadCount === 1) {
+          return new Response(JSON.stringify(responsePayload), { status: 200 });
+        }
+        return reloadResponse;
+      }
+      if (url.includes('/api/institution/wecom/customer-mapping-reviews/')) {
+        return new Response(JSON.stringify(reviewSuccess()), { status: 200 });
+      }
+      return new Response(JSON.stringify({ code: 'response_unavailable' }), { status: 503 });
+    });
+
+    render(<WeComCustomerMappingCandidatesReadonlyPanel canReview />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '确认候选' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
+
+    expect(await screen.findByText('正在加载匹配候选')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '确认候选' })).not.toBeInTheDocument();
+    expect(screen.queryByText('[MOCK] 客户甲')).not.toBeInTheDocument();
+
+    resolveReload?.(new Response(JSON.stringify({
+      ...responsePayload,
+      mappingVersion: 1,
+      mappingReviewStatus: 'approved_pending_link',
+    }), { status: 200 }));
+    expect(await screen.findAllByText('已确认，待后续关联')).toHaveLength(2);
   });
 
   it('展示 fail-closed 提示且不渲染候选', async () => {
@@ -438,8 +567,8 @@ describe('WeCom customer mapping candidates readonly panel', () => {
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith('/api/auth/session', { cache: 'no-store' });
     });
-    expect(screen.queryByRole('button', { name: /移动导航：企微匹配候选/u })).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: '企业微信客户匹配候选只读视图' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /移动导航：企微匹配复核/u })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '企业微信客户匹配复核工作台' })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -474,7 +603,7 @@ describe('WeCom customer mapping candidates readonly panel', () => {
 
     render(<InstitutionWorkspace />);
 
-    expect(await screen.findByRole('button', { name: /移动导航：企微匹配候选/u })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /移动导航：企微匹配复核/u })).toBeInTheDocument();
   });
 
   it.each([
@@ -507,20 +636,21 @@ describe('WeCom customer mapping candidates readonly panel', () => {
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith('/api/auth/session', { cache: 'no-store' });
     });
-    expect(screen.queryByRole('button', { name: /移动导航：企微匹配候选/u })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /移动导航：企微匹配复核/u })).not.toBeInTheDocument();
   });
 
-  it('正确机构读取权限角色显示 workspace 导航项并挂载只读面板', async () => {
+  it('正确机构读取权限角色显示 workspace 导航项并挂载复核工作台', async () => {
     render(<InstitutionWorkspace />);
 
-    const navigation = await screen.findByRole('button', { name: /移动导航：企微匹配候选/u });
+    const navigation = await screen.findByRole('button', { name: /移动导航：企微匹配复核/u });
     await act(async () => {
       fireEvent.click(navigation);
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('region', { name: '企业微信客户匹配候选只读视图' })).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: '企业微信客户匹配复核工作台' })).toBeInTheDocument();
     });
+    expect(screen.getByRole('button', { name: '确认候选' })).toBeInTheDocument();
     expect(navigation).toHaveAttribute('aria-current', 'page');
   });
 });
