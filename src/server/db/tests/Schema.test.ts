@@ -3,11 +3,15 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { getTableConfig, PgDialect } from 'drizzle-orm/pg-core';
-import { describe, expect, it } from 'vitest';
-import { createDatabaseUrlErrorMessage } from '@/server/db/client';
+import { describe, expect, it, vi } from 'vitest';
+import { createDatabaseUrlErrorMessage, type TenantDatabase } from '@/server/db/client';
+import { authenticateDemoUser } from '@/modules/auth/server/demo-session';
 import {
+  demoSeedAuthUserOwnershipConflictMessage,
+  getDemoSeedAuthUserRecords,
   getDemoCustomerSeedRecords,
   getDemoTenantAuthorizationSnapshotSeedRecords,
+  getDemoTenantCommercialRecordSeedRecords,
   getDemoTenantMemberSeedRecords,
   getDemoTenantPlanAssignmentSeedRecords,
   getDemoTenantPlanSeedRecords,
@@ -20,6 +24,7 @@ import * as schema from '@/server/db/schema';
 import {
   appointments,
   authAccountInstitutionBindings,
+  authUsers,
   auditEvents,
   customerChannelContactConsents,
   customerChannelFrequencyStates,
@@ -84,6 +89,57 @@ function getSeedRecords<T>(getterName: string): T[] {
 
 function serializeSeedRecords(records: unknown[]) {
   return JSON.stringify(records);
+}
+
+type DemoSeedAuthUserRow = {
+  id: string;
+  username: string;
+  createdBy: string;
+};
+
+function createDemoSeedDatabaseMock(existingAuthUsers: DemoSeedAuthUserRow[] = []) {
+  const operationCalls: string[] = [];
+  const upsertCalls: Array<{ table: unknown; config: Record<string, unknown> }> = [];
+  const select = vi.fn(() => ({
+    from: vi.fn(() => ({
+      where: vi.fn(async () => existingAuthUsers),
+    })),
+  }));
+  const deleteMock = vi.fn(() => {
+    operationCalls.push('delete');
+    return { where: vi.fn(async () => undefined) };
+  });
+  const updateMock = vi.fn(() => {
+    operationCalls.push('update');
+    return {
+      set: vi.fn(() => ({ where: vi.fn(async () => undefined) })),
+    };
+  });
+  const insertMock = vi.fn((table: unknown) => ({
+    values: vi.fn(() => ({
+      onConflictDoUpdate: vi.fn(async (config: Record<string, unknown>) => {
+        operationCalls.push(
+          table === authUsers ? 'insert:auth_users' : table === tenantMembers ? 'insert:tenant_members' : 'insert',
+        );
+        upsertCalls.push({ table, config });
+      }),
+    })),
+  }));
+
+  return {
+    db: {
+      select,
+      delete: deleteMock,
+      update: updateMock,
+      insert: insertMock,
+    } as unknown as TenantDatabase,
+    deleteMock,
+    insertMock,
+    operationCalls,
+    select,
+    updateMock,
+    upsertCalls,
+  };
 }
 
 const sensitiveDemoSeedPattern =
@@ -1774,6 +1830,202 @@ describe('数据库结构', () => {
         'raw_response',
         'provider_raw_response',
       ]),
+    );
+  });
+
+  it('旧演示 tenant member 均由唯一且不可登录的 auth user 外键记录覆盖', () => {
+    const authUsers = getDemoSeedAuthUserRecords();
+    const members = getDemoTenantMemberSeedRecords();
+    const authUserIds = authUsers.map((record) => record.id);
+    const memberUserIds = members.map((record) => record.userId);
+    const usernames = authUsers.map((record) => record.username);
+    const demoSessionUsernames = new Set([
+      'admin',
+      'platform',
+      'yunlan_admin',
+      'baiyue_admin',
+      'xinghe_admin',
+      'yubai_admin',
+      'chengxing_admin',
+      'qingmang_admin',
+    ]);
+
+    expect(authUsers).toHaveLength(11);
+    expect(new Set(authUserIds).size).toBe(authUsers.length);
+    expect(new Set(usernames).size).toBe(authUsers.length);
+    expect(new Set(memberUserIds)).toEqual(new Set(authUserIds));
+    expect(members.filter((record) => !authUserIds.includes(record.userId))).toEqual([]);
+    expect(authUsers.every((record) => !demoSessionUsernames.has(record.username))).toBe(true);
+    expect(
+      authUsers.every(
+        (record) =>
+          record.phone === null &&
+          record.email === null &&
+          record.passwordResetRequired === true &&
+          record.status === 'disabled' &&
+          record.lastLoginAt === null &&
+          record.failedLoginCount === 0 &&
+          record.lockedUntil === null &&
+          record.createdBy === 'legacy-demo-seed-actor' &&
+          record.updatedBy === 'legacy-demo-seed-actor' &&
+          record.passwordUpdatedAt?.toISOString() === '2026-06-01T01:00:00.000Z' &&
+          record.createdAt?.toISOString() === '2026-06-01T01:00:00.000Z' &&
+          record.updatedAt?.toISOString() === '2026-06-01T01:00:00.000Z',
+      ),
+    ).toBe(true);
+    expect(authUsers.map((record) => record.passwordHash).join('\n')).not.toMatch(
+      /admin123|platform|yunlan_admin|chengxing_admin|\$2[aby]\$|argon2|scrypt|pbkdf2/i,
+    );
+  });
+
+  it.each([
+    [
+      '同 ID 的非 seed-owned 账号',
+      () => {
+        const expected = getDemoSeedAuthUserRecords()[0];
+        return {
+          id: expected.id,
+          username: 'manual-account',
+          createdBy: 'manual-operator',
+        };
+      },
+    ],
+    [
+      '同 ID 但 username 不匹配的账号',
+      () => {
+        const expected = getDemoSeedAuthUserRecords()[0];
+        return {
+          id: expected.id,
+          username: 'manual-account',
+          createdBy: 'legacy-demo-seed-actor',
+        };
+      },
+    ],
+    [
+      '同 ID 但 createdBy 不匹配的账号',
+      () => {
+        const expected = getDemoSeedAuthUserRecords()[0];
+        return {
+          id: expected.id,
+          username: expected.username,
+          createdBy: 'manual-operator',
+        };
+      },
+    ],
+    [
+      '预期 username 被其他 ID 占用的账号',
+      () => {
+        const expected = getDemoSeedAuthUserRecords()[0];
+        return {
+          id: 'manual-auth-user',
+          username: expected.username,
+          createdBy: 'legacy-demo-seed-actor',
+        };
+      },
+    ],
+  ])('旧演示 auth user 预检在%s时 fail-closed，且不执行任何写入', async (_scenario, createRow) => {
+    const mock = createDemoSeedDatabaseMock([createRow()]);
+
+    await expect(seedDemoData.seedDemoData(mock.db)).rejects.toThrow(
+      demoSeedAuthUserOwnershipConflictMessage,
+    );
+
+    expect(mock.select).toHaveBeenCalledTimes(1);
+    expect(mock.deleteMock).not.toHaveBeenCalled();
+    expect(mock.insertMock).not.toHaveBeenCalled();
+    expect(mock.updateMock).not.toHaveBeenCalled();
+    expect(mock.operationCalls).toEqual([]);
+  });
+
+  it('旧演示 auth user 预检允许全新空库继续', async () => {
+    const mock = createDemoSeedDatabaseMock();
+
+    await expect(seedDemoData.seedDemoData(mock.db)).resolves.toBeUndefined();
+
+    expect(mock.select).toHaveBeenCalledTimes(1);
+    expect(mock.deleteMock).toHaveBeenCalled();
+    expect(mock.insertMock).toHaveBeenCalled();
+  });
+
+  it('旧演示 auth user 预检允许正常 seed-owned 账号继续并保持幂等顺序', async () => {
+    const mock = createDemoSeedDatabaseMock(
+      getDemoSeedAuthUserRecords().map(({ id, username, createdBy }) => ({
+        id,
+        username,
+        createdBy,
+      })),
+    );
+
+    await seedDemoData.seedDemoData(mock.db);
+    await seedDemoData.seedDemoData(mock.db);
+
+    expect(mock.select).toHaveBeenCalledTimes(2);
+    expect(mock.operationCalls.filter((call) => call === 'insert:auth_users')).toHaveLength(2);
+    expect(mock.operationCalls.filter((call) => call === 'insert:tenant_members')).toHaveLength(2);
+    expect(mock.operationCalls.indexOf('insert:auth_users')).toBeLessThan(
+      mock.operationCalls.indexOf('insert:tenant_members'),
+    );
+    expect(mock.operationCalls.lastIndexOf('insert:auth_users')).toBeLessThan(
+      mock.operationCalls.lastIndexOf('insert:tenant_members'),
+    );
+    expect(
+      mock.upsertCalls
+        .filter(({ table }) => table === authUsers)
+        .every(
+          ({ config }) =>
+            config.target === authUsers.id &&
+            config.setWhere === undefined &&
+            !Object.hasOwn(config.set as object, 'username'),
+        ),
+    ).toBe(true);
+  });
+
+  it('旧演示客户数量和 admin、platform 会话映射保持不变', () => {
+    const customers = getDemoCustomerSeedRecords();
+    const admin = authenticateDemoUser({ username: 'admin', password: 'admin123' });
+    const platform = authenticateDemoUser({
+      username: 'platform',
+      password: 'admin123',
+      scope: 'platform',
+    });
+
+    expect(customers).toHaveLength(9);
+    expect(
+      customers.filter((record) => record.tenantId === 'growth-tenant-chengxing'),
+    ).toHaveLength(8);
+    expect(admin).toMatchObject({
+      id: 'demo-user-admin',
+      tenantId: 'growth-tenant-chengxing',
+      institutionId: 'growth-inst-chengxing',
+    });
+    expect(platform).toMatchObject({
+      id: 'demo-user-platform',
+      role: 'platform_admin',
+      tenantId: null,
+      institutionId: null,
+    });
+  });
+
+  it('演示 seed 记录不包含真实手机号、身份证号、数据库地址或访问密钥', () => {
+    const allSeedRecords = [
+      ...getDemoSeedAuthUserRecords(),
+      ...getDemoTenantSeedRecords(),
+      ...getDemoTenantPlanSeedRecords(),
+      ...getDemoTenantPlanVersionSeedRecords(),
+      ...getDemoTenantPlanAssignmentSeedRecords(),
+      ...getDemoTenantAuthorizationSnapshotSeedRecords(),
+      ...getDemoTenantQuotaSnapshotSeedRecords(),
+      ...getDemoTenantCommercialRecordSeedRecords(),
+      ...getDemoTenantMemberSeedRecords(),
+      ...getDemoCustomerSeedRecords(),
+      ...getSeedRecords('getDemoAppointmentSeedRecords'),
+      ...seedDemoData.getDemoTreatmentSummarySeedRecords(),
+      ...getSeedRecords('getDemoFollowUpTaskSeedRecords'),
+      ...getSeedRecords('getDemoAuditEventSeedRecords'),
+    ];
+
+    expect(serializeSeedRecords(allSeedRecords)).not.toMatch(
+      /\b1[3-9]\d{9}\b|[1-9]\d{16}[\dXx]|(?:postgres(?:ql)?|mysql):\/\/|api[_-]?key|access[_-]?token|bearer\s+|secret/i,
     );
   });
 
