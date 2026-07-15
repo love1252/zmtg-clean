@@ -7,6 +7,7 @@ import { assertDemoSeedAllowed } from '@/server/db/seed-guard';
 import {
   appointments,
   auditEvents,
+  authUsers,
   customers,
   followUpTasks,
   tenantAuthorizationSnapshots,
@@ -505,11 +506,14 @@ const demoTenantQuotaSnapshotRecords: Array<typeof tenantQuotaSnapshots.$inferIn
   },
 ];
 
-const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> = [
+const legacySeedActorId = 'legacy-demo-seed-actor';
+const demoDisabledPasswordHash = 'disabled-demo-account-no-login-credential';
+const demoSeedMemberProfiles = [
   {
     id: 'member-trial-yunlan-admin',
     tenantId: trialYunlanTenantId,
     userId: 'trial-user-yunlan-admin',
+    username: 'legacy_seed_yunlan_admin_anchor',
     role: 'tenant_admin',
     displayName: '云澜管理员',
   },
@@ -517,6 +521,7 @@ const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> = [
     id: 'member-trial-baiyue-admin',
     tenantId: trialBaiyueTenantId,
     userId: 'trial-user-baiyue-admin',
+    username: 'legacy_seed_baiyue_admin_anchor',
     role: 'tenant_admin',
     displayName: '柏悦管理员',
   },
@@ -524,6 +529,7 @@ const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> = [
     id: 'member-starter-xinghe-admin',
     tenantId: starterXingheTenantId,
     userId: 'starter-user-xinghe-admin',
+    username: 'legacy_seed_xinghe_admin_anchor',
     role: 'tenant_admin',
     displayName: '星禾管理员',
   },
@@ -531,6 +537,7 @@ const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> = [
     id: 'member-starter-yubai-admin',
     tenantId: starterYubaiTenantId,
     userId: 'starter-user-yubai-admin',
+    username: 'legacy_seed_yubai_admin_anchor',
     role: 'tenant_admin',
     displayName: '予白管理员',
   },
@@ -538,6 +545,7 @@ const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> = [
     id: 'member-growth-chengxing-admin',
     tenantId: growthChengxingTenantId,
     userId: 'growth-user-chengxing-admin',
+    username: 'legacy_seed_chengxing_admin_anchor',
     role: 'tenant_admin',
     displayName: '澄星管理员',
   },
@@ -545,6 +553,7 @@ const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> = [
     id: 'member-growth-qingmang-admin',
     tenantId: growthQingmangTenantId,
     userId: 'growth-user-qingmang-admin',
+    username: 'legacy_seed_qingmang_admin_anchor',
     role: 'tenant_admin',
     displayName: '青芒管理员',
   },
@@ -552,6 +561,7 @@ const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> = [
     id: 'member-demo-admin',
     tenantId: growthChengxingTenantId,
     userId: 'demo-user-admin',
+    username: 'legacy_seed_demo_admin_anchor',
     role: 'tenant_admin',
     displayName: '演示管理员',
   },
@@ -559,6 +569,7 @@ const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> = [
     id: 'member-demo-ops',
     tenantId: growthChengxingTenantId,
     userId: 'demo-user-ops',
+    username: 'legacy_seed_demo_ops_anchor',
     role: 'tenant_operator',
     displayName: '周运营',
   },
@@ -566,6 +577,7 @@ const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> = [
     id: 'member-demo-consultant',
     tenantId: growthChengxingTenantId,
     userId: 'demo-user-consultant',
+    username: 'legacy_seed_demo_consultant_anchor',
     role: 'consultant',
     displayName: '许咨询',
   },
@@ -573,6 +585,7 @@ const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> = [
     id: 'member-demo-service',
     tenantId: growthChengxingTenantId,
     userId: 'demo-user-service',
+    username: 'legacy_seed_demo_service_anchor',
     role: 'customer_service',
     displayName: '赵客服',
   },
@@ -580,10 +593,41 @@ const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> = [
     id: 'member-demo-assistant',
     tenantId: growthChengxingTenantId,
     userId: 'demo-user-assistant',
+    username: 'legacy_seed_demo_assistant_anchor',
     role: 'tenant_operator',
     displayName: '陈医助',
   },
-];
+] as const;
+
+const demoSeedAuthUserRecords: Array<typeof authUsers.$inferInsert> = demoSeedMemberProfiles.map(
+  (profile) => ({
+    id: profile.userId,
+    username: profile.username,
+    displayName: profile.displayName,
+    phone: null,
+    email: null,
+    passwordHash: demoDisabledPasswordHash,
+    passwordUpdatedAt: demoSeedStartedAt,
+    passwordResetRequired: true,
+    status: 'disabled',
+    lastLoginAt: null,
+    failedLoginCount: 0,
+    lockedUntil: null,
+    createdBy: legacySeedActorId,
+    updatedBy: legacySeedActorId,
+    createdAt: demoSeedStartedAt,
+    updatedAt: demoSeedStartedAt,
+  }),
+);
+
+const demoTenantMemberRecords: Array<typeof tenantMembers.$inferInsert> =
+  demoSeedMemberProfiles.map((profile) => ({
+    id: profile.id,
+    tenantId: profile.tenantId,
+    userId: profile.userId,
+    role: profile.role,
+    displayName: profile.displayName,
+  }));
 
 
 const demoTenantCommercialRecordRecords: Array<typeof tenantCommercialRecords.$inferInsert> = [
@@ -1246,6 +1290,10 @@ export function getDemoTenantCommercialRecordSeedRecords() {
   return [...demoTenantCommercialRecordRecords];
 }
 
+export function getDemoSeedAuthUserRecords() {
+  return [...demoSeedAuthUserRecords];
+}
+
 export function getDemoTenantMemberSeedRecords() {
   return [...demoTenantMemberRecords];
 }
@@ -1345,6 +1393,24 @@ export function findMissingDemoFollowUpSourceReferences() {
   );
 }
 
+export function findMissingDemoSeedAuthUserReferences() {
+  const authUserIds = new Set(getDemoSeedAuthUserRecords().map((record) => record.id));
+
+  return getDemoTenantMemberSeedRecords().filter((record) => !authUserIds.has(record.userId));
+}
+
+export function assertDemoSeedAuthUserReferenceCoverage() {
+  const missingMembers = findMissingDemoSeedAuthUserReferences();
+
+  if (missingMembers.length > 0) {
+    throw new Error(
+      `Demo seed auth user references missing: ${missingMembers
+        .map((record) => `${record.id}->${record.userId}`)
+        .join(', ')}`,
+    );
+  }
+}
+
 export function assertDemoCustomerReferenceCoverage(
   customerRecords: Array<typeof customers.$inferInsert> = getDemoCustomerSeedRecords(),
 ) {
@@ -1421,10 +1487,34 @@ async function cleanupLegacyDemoSeedRecords(db: TenantDatabase) {
 }
 
 export async function seedDemoData(db: TenantDatabase) {
+  assertDemoSeedAuthUserReferenceCoverage();
   assertDemoCustomerReferenceCoverage();
   assertDemoTreatmentAppointmentReferenceCoverage();
   assertDemoFollowUpSourceReferenceCoverage();
   await cleanupLegacyDemoSeedRecords(db);
+
+  await db
+    .insert(authUsers)
+    .values(getDemoSeedAuthUserRecords())
+    .onConflictDoUpdate({
+      target: authUsers.id,
+      setWhere: sql`${authUsers.username} like 'legacy_seed_%_anchor' and ${authUsers.createdBy} = ${legacySeedActorId}`,
+      set: {
+        displayName: sql`excluded.display_name`,
+        phone: sql`excluded.phone`,
+        email: sql`excluded.email`,
+        passwordHash: sql`excluded.password_hash`,
+        passwordUpdatedAt: sql`excluded.password_updated_at`,
+        passwordResetRequired: sql`excluded.password_reset_required`,
+        status: sql`excluded.status`,
+        lastLoginAt: sql`excluded.last_login_at`,
+        failedLoginCount: sql`excluded.failed_login_count`,
+        lockedUntil: sql`excluded.locked_until`,
+        createdBy: sql`excluded.created_by`,
+        updatedBy: sql`excluded.updated_by`,
+        updatedAt: sql`excluded.updated_at`,
+      },
+    });
 
   await db
     .insert(tenants)

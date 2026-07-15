@@ -3,11 +3,14 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { getTableConfig, PgDialect } from 'drizzle-orm/pg-core';
-import { describe, expect, it } from 'vitest';
-import { createDatabaseUrlErrorMessage } from '@/server/db/client';
+import { describe, expect, it, vi } from 'vitest';
+import { createDatabaseUrlErrorMessage, type TenantDatabase } from '@/server/db/client';
+import { authenticateDemoUser } from '@/modules/auth/server/demo-session';
 import {
+  getDemoSeedAuthUserRecords,
   getDemoCustomerSeedRecords,
   getDemoTenantAuthorizationSnapshotSeedRecords,
+  getDemoTenantCommercialRecordSeedRecords,
   getDemoTenantMemberSeedRecords,
   getDemoTenantPlanAssignmentSeedRecords,
   getDemoTenantPlanSeedRecords,
@@ -20,6 +23,7 @@ import * as schema from '@/server/db/schema';
 import {
   appointments,
   authAccountInstitutionBindings,
+  authUsers,
   auditEvents,
   customerChannelContactConsents,
   customerChannelFrequencyStates,
@@ -1774,6 +1778,137 @@ describe('数据库结构', () => {
         'raw_response',
         'provider_raw_response',
       ]),
+    );
+  });
+
+  it('旧演示 tenant member 均由唯一且不可登录的 auth user 外键记录覆盖', () => {
+    const authUsers = getDemoSeedAuthUserRecords();
+    const members = getDemoTenantMemberSeedRecords();
+    const authUserIds = authUsers.map((record) => record.id);
+    const memberUserIds = members.map((record) => record.userId);
+    const usernames = authUsers.map((record) => record.username);
+    const demoSessionUsernames = new Set([
+      'admin',
+      'platform',
+      'yunlan_admin',
+      'baiyue_admin',
+      'xinghe_admin',
+      'yubai_admin',
+      'chengxing_admin',
+      'qingmang_admin',
+    ]);
+
+    expect(authUsers).toHaveLength(11);
+    expect(new Set(authUserIds).size).toBe(authUsers.length);
+    expect(new Set(usernames).size).toBe(authUsers.length);
+    expect(new Set(memberUserIds)).toEqual(new Set(authUserIds));
+    expect(members.filter((record) => !authUserIds.includes(record.userId))).toEqual([]);
+    expect(authUsers.every((record) => !demoSessionUsernames.has(record.username))).toBe(true);
+    expect(
+      authUsers.every(
+        (record) =>
+          record.phone === null &&
+          record.email === null &&
+          record.passwordResetRequired === true &&
+          record.status === 'disabled' &&
+          record.lastLoginAt === null &&
+          record.failedLoginCount === 0 &&
+          record.lockedUntil === null &&
+          record.createdBy === 'legacy-demo-seed-actor' &&
+          record.updatedBy === 'legacy-demo-seed-actor' &&
+          record.passwordUpdatedAt?.toISOString() === '2026-06-01T01:00:00.000Z' &&
+          record.createdAt?.toISOString() === '2026-06-01T01:00:00.000Z' &&
+          record.updatedAt?.toISOString() === '2026-06-01T01:00:00.000Z',
+      ),
+    ).toBe(true);
+    expect(authUsers.map((record) => record.passwordHash).join('\n')).not.toMatch(
+      /admin123|platform|yunlan_admin|chengxing_admin|\$2[aby]\$|argon2|scrypt|pbkdf2/i,
+    );
+  });
+
+  it('旧演示 auth users 在 tenant members 前执行幂等 upsert', async () => {
+    const insertOrder: unknown[] = [];
+    const upsertCalls: Array<{ table: unknown; config: Record<string, unknown> }> = [];
+    const db = {
+      delete: vi.fn(() => ({ where: vi.fn(async () => undefined) })),
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({ where: vi.fn(async () => undefined) })),
+      })),
+      insert: vi.fn((table: unknown) => ({
+        values: vi.fn(() => ({
+          onConflictDoUpdate: vi.fn(async (config: Record<string, unknown>) => {
+            insertOrder.push(table);
+            upsertCalls.push({ table, config });
+          }),
+        })),
+      })),
+    } as unknown as TenantDatabase;
+
+    await seedDemoData.seedDemoData(db);
+    await seedDemoData.seedDemoData(db);
+
+    expect(insertOrder.filter((table) => table === authUsers)).toHaveLength(2);
+    expect(insertOrder.filter((table) => table === tenantMembers)).toHaveLength(2);
+    expect(insertOrder.indexOf(authUsers)).toBeLessThan(insertOrder.indexOf(tenantMembers));
+    expect(insertOrder.lastIndexOf(authUsers)).toBeLessThan(insertOrder.lastIndexOf(tenantMembers));
+    expect(
+      upsertCalls
+        .filter(({ table }) => table === authUsers)
+        .every(
+          ({ config }) =>
+            config.target === authUsers.id &&
+            config.setWhere !== undefined &&
+            !Object.hasOwn(config.set as object, 'username'),
+        ),
+    ).toBe(true);
+  });
+
+  it('旧演示客户数量和 admin、platform 会话映射保持不变', () => {
+    const customers = getDemoCustomerSeedRecords();
+    const admin = authenticateDemoUser({ username: 'admin', password: 'admin123' });
+    const platform = authenticateDemoUser({
+      username: 'platform',
+      password: 'admin123',
+      scope: 'platform',
+    });
+
+    expect(customers).toHaveLength(9);
+    expect(
+      customers.filter((record) => record.tenantId === 'growth-tenant-chengxing'),
+    ).toHaveLength(8);
+    expect(admin).toMatchObject({
+      id: 'demo-user-admin',
+      tenantId: 'growth-tenant-chengxing',
+      institutionId: 'growth-inst-chengxing',
+    });
+    expect(platform).toMatchObject({
+      id: 'demo-user-platform',
+      role: 'platform_admin',
+      tenantId: null,
+      institutionId: null,
+    });
+  });
+
+  it('演示 seed 记录不包含真实手机号、身份证号、数据库地址或访问密钥', () => {
+    const allSeedRecords = [
+      ...getDemoSeedAuthUserRecords(),
+      ...getDemoTenantSeedRecords(),
+      ...getDemoTenantPlanSeedRecords(),
+      ...getDemoTenantPlanVersionSeedRecords(),
+      ...getDemoTenantPlanAssignmentSeedRecords(),
+      ...getDemoTenantAuthorizationSnapshotSeedRecords(),
+      ...getDemoTenantQuotaSnapshotSeedRecords(),
+      ...getDemoTenantCommercialRecordSeedRecords(),
+      ...getDemoTenantMemberSeedRecords(),
+      ...getDemoCustomerSeedRecords(),
+      ...getSeedRecords('getDemoAppointmentSeedRecords'),
+      ...seedDemoData.getDemoTreatmentSummarySeedRecords(),
+      ...getSeedRecords('getDemoFollowUpTaskSeedRecords'),
+      ...getSeedRecords('getDemoAuditEventSeedRecords'),
+    ];
+
+    expect(serializeSeedRecords(allSeedRecords)).not.toMatch(
+      /\b1[3-9]\d{9}\b|[1-9]\d{16}[\dXx]|(?:postgres(?:ql)?|mysql):\/\/|api[_-]?key|access[_-]?token|bearer\s+|secret/i,
     );
   });
 
