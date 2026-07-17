@@ -94,8 +94,8 @@ export function InstitutionWorkbenchShell({
     capabilityProjection.status === 'projected';
 
   return (
-    <main aria-label="机构工作台">
-      <h1>机构工作台</h1>
+    <section aria-labelledby="institution-workbench-heading">
+      <h1 id="institution-workbench-heading">工作台</h1>
       {hasVisibleProjection ? null : <p>工作台当前不可用</p>}
 
       {actionProjection.status !== 'projected' || actionProjection.cards.length === 0 ? null : (
@@ -146,6 +146,6 @@ export function InstitutionWorkbenchShell({
           )}
         </section>
       )}
-    </main>
+    </section>
   );
 }

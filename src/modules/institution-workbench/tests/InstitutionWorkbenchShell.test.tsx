@@ -41,7 +41,7 @@ const readyActionProjection: WorkbenchActionProjection = {
       status: 'ready',
       count: 3,
       observedAt: '2026-07-18T01:00:00.000Z',
-      canonicalHref: '/hospital/care/followups?bucket=today_due',
+      canonicalHref: '/hospital/care/followups?bucket=today',
     },
   ],
   desktopActions: [
@@ -98,7 +98,7 @@ const readyActionProjection: WorkbenchActionProjection = {
       priority: 'normal',
       slaAt: null,
       safeSummary: null,
-      businessState: 'reschedule_requested',
+      businessState: 'confirmed',
       cardKeys: ['reschedule_requested_appointments'],
       appointmentAt: '2026-07-18T06:00:00.000Z',
       riskLevel: 'normal',
@@ -181,7 +181,7 @@ const readyCapabilityProjection: WorkbenchCapabilityProjection = {
     {
       key: 'page_workbench',
       kind: 'page',
-      label: '机构工作台',
+      label: '工作台',
       decision: 'read_only',
       safeSummary: '当前仅展示已授权的低敏摘要。',
       diagnosticTarget: null,
@@ -195,7 +195,7 @@ const readyCapabilityProjection: WorkbenchCapabilityProjection = {
       {
         key: 'action_customer_create',
         label: '新建客户',
-        href: '/hospital/customers/new',
+        href: '/hospital/customers?create=1',
       },
     ],
   },
@@ -211,7 +211,9 @@ describe('InstitutionWorkbenchShell', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: '机构工作台', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '工作台', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '工作台' })).toBeInTheDocument();
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '待确认预约详情' })).toHaveAttribute(
       'href',
       '/hospital/care/appointments?status=pending_confirmation',
@@ -260,7 +262,7 @@ describe('InstitutionWorkbenchShell', () => {
     expect(screen.queryByText('silent_reactivation')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '新建客户' })).toHaveAttribute(
       'href',
-      '/hospital/customers/new',
+      '/hospital/customers?create=1',
     );
   });
 
@@ -328,7 +330,12 @@ describe('InstitutionWorkbenchShell', () => {
       <InstitutionWorkbenchShell
         actionProjection={partialActions}
         lifecycleProjection={degradedLifecycle}
-        capabilityProjection={{ ...readyCapabilityProjection, sourceReadiness: 'stale' }}
+        capabilityProjection={{
+          status: 'projected',
+          sourceReadiness: 'stale',
+          summaries: readyCapabilityProjection.summaries,
+          quickCreateMenu: readyCapabilityProjection.quickCreateMenu,
+        }}
       />,
     );
 
