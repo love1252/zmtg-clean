@@ -9,7 +9,7 @@
 | 任务编号 | `BASE-03` |
 | 唯一迁移单元 | `MIG-01` |
 | 文档日期 | 2026-07-18 |
-| 设计基线 | `origin/main` / `575a648cf73921e9f955acbd0ce24be989908f47` |
+| 设计基线 | `origin/main` / `b389a7de248a1f172f0222bdc4be40e740a2ea57` |
 | 任务性质 | docs-only 技术设计与数据变更申请 |
 | 目标 | 建立可证明的 `tenantId + institutionId` 数据归属、机构运行上下文和机构级审计持久化基础 |
 | 非目标 | 页面、API、业务服务、真实 migration、外部系统、凭证、生产放行 |
