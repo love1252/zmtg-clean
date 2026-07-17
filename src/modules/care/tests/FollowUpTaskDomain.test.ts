@@ -15,6 +15,8 @@ function pendingTask(overrides: Partial<FollowUpTask> = {}): FollowUpTask {
     institutionId: 'institution-a',
     state: 'pending',
     revision: 0,
+    riskLevel: 'none',
+    riskEscalation: null,
     completionResult: null,
     cancellationReason: null,
     ...overrides,
@@ -26,11 +28,23 @@ function taskInState(state: FollowUpTaskState): FollowUpTask {
     return pendingTask({
       state,
       revision: 5,
-      completionResult: { code: 'contact_completed' },
+      completionResult: { code: 'contact_completed', feedback: null },
     });
   }
   if (state === 'cancelled') {
     return pendingTask({ state, revision: 5, cancellationReason: 'duplicate_task' });
+  }
+  if (state === 'escalated') {
+    return pendingTask({
+      state,
+      revision: 5,
+      riskLevel: 'high',
+      riskEscalation: {
+        level: 'high',
+        kind: 'clinical',
+        riskEventId: 'risk-event-existing',
+      },
+    });
   }
   return pendingTask({ state, revision: 5 });
 }
@@ -111,11 +125,8 @@ describe('随访任务纯领域契约', () => {
     ] as const;
     const legalTransitions = new Set([
       'pending->in_progress',
-      'pending->escalated',
       'in_progress->waiting_customer',
-      'in_progress->escalated',
       'waiting_customer->in_progress',
-      'waiting_customer->escalated',
     ]);
 
     for (const sourceState of FOLLOW_UP_TASK_STATES) {
@@ -133,6 +144,11 @@ describe('随访任务纯领域契约', () => {
             ok: true,
             changed: true,
             task: { state: targetState, revision: 6 },
+          });
+        } else if (targetState === 'escalated') {
+          expect(result, transitionKey).toEqual({
+            ok: false,
+            code: 'risk_escalation_required',
           });
         } else {
           expect(result, transitionKey).toEqual({ ok: false, code: 'invalid_transition' });
@@ -173,7 +189,7 @@ describe('随访任务纯领域契约', () => {
       complete(task, { code: 'contact_completed', freeText: 'not allowed' }),
     ).toEqual({ ok: false, code: 'invalid_completion_result' });
 
-    const completed = complete(task, { code: 'contact_completed' });
+    const completed = complete(task, { code: 'contact_completed', feedback: null });
     expect(completed).toEqual({
       ok: true,
       changed: true,
@@ -181,29 +197,33 @@ describe('随访任务纯领域契约', () => {
         ...task,
         state: 'completed',
         revision: 4,
-        completionResult: { code: 'contact_completed' },
+        completionResult: { code: 'contact_completed', feedback: null },
       },
     });
     if (!completed.ok) throw new Error('expected completion success');
 
     expect(
-      complete(completed.task, { code: 'contact_completed' }),
+      complete(completed.task, { code: 'contact_completed', feedback: null }),
     ).toEqual({ ok: true, changed: false, task: completed.task });
     expect(
-      complete(completed.task, { code: 'customer_declined' }),
+      complete(completed.task, { code: 'customer_declined', feedback: null }),
     ).toEqual({ ok: false, code: 'terminal_conflict' });
     expect(
-      complete(taskInState('waiting_customer'), { code: 'no_response_closed' }),
+      complete(taskInState('waiting_customer'), { code: 'no_response_closed', feedback: null }),
     ).toMatchObject({
       ok: true,
       changed: true,
-      task: { state: 'completed', revision: 6, completionResult: { code: 'no_response_closed' } },
+      task: {
+        state: 'completed',
+        revision: 6,
+        completionResult: { code: 'no_response_closed', feedback: null },
+      },
     });
     expect(
-      complete(taskInState('pending'), { code: 'contact_completed' }),
+      complete(taskInState('pending'), { code: 'contact_completed', feedback: null }),
     ).toEqual({ ok: false, code: 'invalid_transition' });
     expect(
-      complete(taskInState('cancelled'), { code: 'contact_completed' }),
+      complete(taskInState('cancelled'), { code: 'contact_completed', feedback: null }),
     ).toEqual({ ok: false, code: 'terminal_state' });
     expect(FOLLOW_UP_COMPLETION_CODES).toEqual([
       'contact_completed',
@@ -215,10 +235,19 @@ describe('随访任务纯领域契约', () => {
   });
 
   it('禁止 escalated 普通完成或绕过受控风险关闭恢复', () => {
-    const escalated = pendingTask({ state: 'escalated', revision: 2 });
+    const escalated = pendingTask({
+      state: 'escalated',
+      revision: 2,
+      riskLevel: 'high',
+      riskEscalation: {
+        level: 'high',
+        kind: 'clinical',
+        riskEventId: 'risk-event-escalated',
+      },
+    });
 
     expect(
-      complete(escalated, { code: 'contact_completed' }),
+      complete(escalated, { code: 'contact_completed', feedback: null }),
     ).toEqual({ ok: false, code: 'escalated_completion_forbidden' });
     expect(
       transition(escalated, 'in_progress'),

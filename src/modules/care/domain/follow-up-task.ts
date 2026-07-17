@@ -1,4 +1,42 @@
 import { checkFollowUpCommandPreconditions } from './follow-up-command-preconditions';
+import {
+  FOLLOW_UP_COMPLETION_CODES,
+  isFollowUpCompletionCode,
+  parseFollowUpCompletionResult,
+  type FollowUpCompletionCode,
+  type FollowUpCompletionResult,
+} from './follow-up-completion-result';
+import {
+  isFollowUpRiskLevel,
+  parseFollowUpRiskEscalation,
+  type FollowUpRiskEscalation,
+  type FollowUpRiskLevel,
+} from './follow-up-risk-escalation';
+
+export {
+  FOLLOW_UP_COMPLETION_CODES,
+  FOLLOW_UP_MANUAL_FEEDBACK_KIND,
+  FOLLOW_UP_MANUAL_FEEDBACK_MAX_LENGTH,
+  isFollowUpCompletionCode,
+  parseFollowUpCompletionResult,
+} from './follow-up-completion-result';
+export type {
+  FollowUpCompletionCode,
+  FollowUpCompletionResult,
+  FollowUpManualFeedback,
+} from './follow-up-completion-result';
+export {
+  FOLLOW_UP_RISK_ESCALATION_KINDS,
+  FOLLOW_UP_RISK_LEVELS,
+  isFollowUpRiskEscalationKind,
+  isFollowUpRiskLevel,
+  parseFollowUpRiskEscalation,
+} from './follow-up-risk-escalation';
+export type {
+  FollowUpRiskEscalation,
+  FollowUpRiskEscalationKind,
+  FollowUpRiskLevel,
+} from './follow-up-risk-escalation';
 
 export const FOLLOW_UP_TASK_STATES = [
   'pending',
@@ -10,20 +48,6 @@ export const FOLLOW_UP_TASK_STATES = [
 ] as const;
 
 export type FollowUpTaskState = (typeof FOLLOW_UP_TASK_STATES)[number];
-
-export const FOLLOW_UP_COMPLETION_CODES = [
-  'contact_completed',
-  'no_response_closed',
-  'his_appointment_linked',
-  'customer_declined',
-  'invalid_or_duplicate',
-] as const;
-
-export type FollowUpCompletionCode = (typeof FOLLOW_UP_COMPLETION_CODES)[number];
-
-export type FollowUpCompletionResult = Readonly<{
-  code: FollowUpCompletionCode;
-}>;
 
 export const FOLLOW_UP_CANCELLATION_REASONS = [
   'created_in_error',
@@ -40,6 +64,8 @@ export type FollowUpTask = Readonly<{
   institutionId: string;
   state: FollowUpTaskState;
   revision: number;
+  riskLevel?: FollowUpRiskLevel;
+  riskEscalation?: FollowUpRiskEscalation | null;
   completionResult: FollowUpCompletionResult | null;
   cancellationReason: FollowUpCancellationReason | null;
 }>;
@@ -55,6 +81,10 @@ export type FollowUpTaskCommandError =
   | 'terminal_conflict'
   | 'completion_result_required'
   | 'invalid_completion_result'
+  | 'high_risk_escalation_required'
+  | 'risk_escalation_required'
+  | 'invalid_risk_escalation'
+  | 'escalation_conflict'
   | 'cancellation_reason_required'
   | 'invalid_cancellation_reason'
   | 'escalated_completion_forbidden';
@@ -64,9 +94,9 @@ export type FollowUpTaskCommandResult =
   | Readonly<{ ok: false; code: FollowUpTaskCommandError }>;
 
 const ORDINARY_TRANSITIONS: Readonly<Record<FollowUpTaskState, readonly FollowUpTaskState[]>> = {
-  pending: ['in_progress', 'escalated'],
-  in_progress: ['waiting_customer', 'escalated'],
-  waiting_customer: ['in_progress', 'escalated'],
+  pending: ['in_progress'],
+  in_progress: ['waiting_customer'],
+  waiting_customer: ['in_progress'],
   escalated: [],
   completed: [],
   cancelled: [],
@@ -84,40 +114,52 @@ export function isFollowUpTaskState(value: unknown): value is FollowUpTaskState 
   return includesValue(FOLLOW_UP_TASK_STATES, value);
 }
 
-export function isFollowUpCompletionCode(value: unknown): value is FollowUpCompletionCode {
-  return includesValue(FOLLOW_UP_COMPLETION_CODES, value);
-}
-
 export function isFollowUpCancellationReason(value: unknown): value is FollowUpCancellationReason {
   return includesValue(FOLLOW_UP_CANCELLATION_REASONS, value);
-}
-
-function readCompletionResult(value: unknown): FollowUpCompletionResult | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
-
-  const entries = Object.entries(value);
-  if (entries.length !== 1 || entries[0]?.[0] !== 'code') return null;
-
-  const code = entries[0][1];
-  return isFollowUpCompletionCode(code) ? { code } : null;
 }
 
 function isValidTask(task: FollowUpTask) {
   if (!isNonEmptyText(task.taskId) || !isNonEmptyText(task.institutionId)) return false;
   if (!isFollowUpTaskState(task.state)) return false;
   if (!Number.isSafeInteger(task.revision) || task.revision < 0) return false;
+  if (task.riskLevel !== undefined && !isFollowUpRiskLevel(task.riskLevel)) return false;
+  if (task.riskEscalation !== undefined && task.riskEscalation !== null) {
+    if (parseFollowUpRiskEscalation(task.riskEscalation) === null) return false;
+  }
+
+  const riskLevel = task.riskLevel ?? 'none';
+  const riskEscalation = task.riskEscalation ?? null;
 
   if (task.state === 'completed') {
-    return readCompletionResult(task.completionResult) !== null && task.cancellationReason === null;
+    return (
+      riskLevel === 'none' &&
+      riskEscalation === null &&
+      parseFollowUpCompletionResult(task.completionResult) !== null &&
+      task.cancellationReason === null
+    );
   }
 
   if (task.state === 'cancelled') {
     return (
+      riskEscalation === null &&
       task.completionResult === null && isFollowUpCancellationReason(task.cancellationReason)
     );
   }
 
-  return task.completionResult === null && task.cancellationReason === null;
+  if (task.state === 'escalated') {
+    return (
+      riskLevel === 'high' &&
+      parseFollowUpRiskEscalation(riskEscalation) !== null &&
+      task.completionResult === null &&
+      task.cancellationReason === null
+    );
+  }
+
+  return (
+    riskEscalation === null &&
+    task.completionResult === null &&
+    task.cancellationReason === null
+  );
 }
 
 function success(task: FollowUpTask, changed: boolean): FollowUpTaskCommandResult {
@@ -151,10 +193,14 @@ function withState(task: FollowUpTask, state: FollowUpTaskState): FollowUpTask |
   const revision = nextRevision(task);
   if (revision === null) return null;
 
+  const clearedRiskEscalation =
+    task.riskEscalation === undefined ? {} : { riskEscalation: null };
+
   return {
     ...task,
     state,
     revision,
+    ...clearedRiskEscalation,
     completionResult: null,
     cancellationReason: null,
   };
@@ -172,13 +218,14 @@ export function transitionFollowUpTask(input: Readonly<{
   if (preconditionFailure) return preconditionFailure;
   if (!isFollowUpTaskState(targetState)) return failure('invalid_target_state');
 
+  if (task.state === targetState) return success(task, false);
+  if (task.state === 'completed' || task.state === 'cancelled') return failure('terminal_state');
+  if (targetState === 'escalated') return failure('risk_escalation_required');
   if (task.state === 'escalated' && targetState === 'completed') {
     return failure('escalated_completion_forbidden');
   }
   if (targetState === 'completed') return failure('completion_result_required');
   if (targetState === 'cancelled') return failure('cancellation_reason_required');
-  if (task.state === 'completed' || task.state === 'cancelled') return failure('terminal_state');
-  if (task.state === targetState) return success(task, false);
   if (!ORDINARY_TRANSITIONS[task.state].includes(targetState)) {
     return failure('invalid_transition');
   }
@@ -198,15 +245,22 @@ export function completeFollowUpTask(input: Readonly<{
   const preconditionFailure = checkCommandPreconditions(input);
   if (preconditionFailure) return preconditionFailure;
   if (task.state === 'escalated') return failure('escalated_completion_forbidden');
+  if (task.riskLevel === 'high') return failure('high_risk_escalation_required');
   if (input.result === null || input.result === undefined) {
     return failure('completion_result_required');
   }
 
-  const result = readCompletionResult(input.result);
+  const result = parseFollowUpCompletionResult(input.result);
   if (!result) return failure('invalid_completion_result');
 
   if (task.state === 'completed') {
-    return task.completionResult?.code === result.code
+    const currentResult = parseFollowUpCompletionResult(task.completionResult);
+    return (
+      currentResult !== null &&
+      currentResult.code === result.code &&
+      currentResult.feedback?.kind === result.feedback?.kind &&
+      currentResult.feedback?.summary === result.feedback?.summary
+    )
       ? success(task, false)
       : failure('terminal_conflict');
   }
@@ -223,6 +277,7 @@ export function completeFollowUpTask(input: Readonly<{
       ...task,
       state: 'completed',
       revision,
+      ...(task.riskEscalation === undefined ? {} : { riskEscalation: null }),
       completionResult: result,
       cancellationReason: null,
     },
@@ -251,6 +306,8 @@ export function cancelFollowUpTask(input: Readonly<{
       : failure('terminal_conflict');
   }
   if (task.state === 'completed') return failure('terminal_state');
+  if (task.state === 'escalated') return failure('invalid_transition');
+  if (task.riskLevel === 'high') return failure('high_risk_escalation_required');
   if (
     task.state !== 'pending' &&
     task.state !== 'in_progress' &&
@@ -267,8 +324,64 @@ export function cancelFollowUpTask(input: Readonly<{
       ...task,
       state: 'cancelled',
       revision,
+      ...(task.riskEscalation === undefined ? {} : { riskEscalation: null }),
       completionResult: null,
       cancellationReason: reason,
+    },
+    true,
+  );
+}
+
+function sameEscalation(
+  left: FollowUpRiskEscalation,
+  right: FollowUpRiskEscalation,
+): boolean {
+  return (
+    left.level === right.level &&
+    left.kind === right.kind &&
+    left.riskEventId === right.riskEventId
+  );
+}
+
+/**
+ * Escalation records a controlled high-risk event only. It does not close the event, send a
+ * message, contact an external system, or restore an escalated task.
+ */
+export function escalateFollowUpTask(input: Readonly<{
+  task: FollowUpTask;
+  institutionId: unknown;
+  expectedRevision: unknown;
+  escalation: unknown;
+}>): FollowUpTaskCommandResult {
+  const { task } = input;
+  if (!isValidTask(task)) return failure('invalid_task');
+  const preconditionFailure = checkCommandPreconditions(input);
+  if (preconditionFailure) return preconditionFailure;
+
+  const escalation = parseFollowUpRiskEscalation(input.escalation);
+  if (!escalation) return failure('invalid_risk_escalation');
+
+  if (task.state === 'escalated') {
+    return task.riskEscalation !== null && sameEscalation(task.riskEscalation, escalation)
+      ? success(task, false)
+      : failure('escalation_conflict');
+  }
+  if (task.state === 'completed' || task.state === 'cancelled') {
+    return failure('terminal_state');
+  }
+
+  const revision = nextRevision(task);
+  if (revision === null) return failure('invalid_command_context');
+
+  return success(
+    {
+      ...task,
+      state: 'escalated',
+      revision,
+      riskLevel: 'high',
+      riskEscalation: escalation,
+      completionResult: null,
+      cancellationReason: null,
     },
     true,
   );
