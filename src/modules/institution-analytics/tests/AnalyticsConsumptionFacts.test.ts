@@ -91,6 +91,16 @@ describe('经营分析消费事实解析', () => {
     ['unknown currency', { currency: 'ZZZ' }, 'invalid_currency'],
     ['instant without offset', { eventAt: '2026-07-17T10:00:00' }, 'invalid_event_at'],
     ['invalid calendar instant', { eventAt: '2026-02-30T10:00:00Z' }, 'invalid_event_at'],
+    [
+      'instant before supported UTC year',
+      { eventAt: '1000-01-01T00:00:00+14:00' },
+      'invalid_event_at',
+    ],
+    [
+      'instant after supported UTC year',
+      { eventAt: '9999-12-31T23:59:59-14:00' },
+      'invalid_event_at',
+    ],
     ['blank trace reference', { sourceRevision: ' ' }, 'invalid_required_reference'],
   ] as const)(
     '对 %s fail-closed',
@@ -112,7 +122,177 @@ describe('经营分析消费事实解析', () => {
     },
   );
 
-  it('接受常见数据库微秒 instant 并按 JavaScript 可计算精度规范化', () => {
+  it('混合非法行时保留无关合法链并返回固定低敏 issue', () => {
+    const forbiddenInvalidRowRef = 'raw-invalid-row-do-not-return';
+    const result = resolveAnalyticsConsumptionFacts([
+      fact({ sourceRecordRef: 'valid-payment-chain-a', amountMinor: 800 }),
+      fact({
+        sourceRecordRef: forbiddenInvalidRowRef,
+        amountMinor: 0,
+      }),
+      refundFact({ sourceRecordRef: 'valid-refund-chain-b', amountMinor: 200 }),
+    ]);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: 'partial',
+        effectiveFacts: [
+          expect.objectContaining({ eventType: 'payment_succeeded', amountMinor: 800 }),
+          expect.objectContaining({ eventType: 'refund_confirmed', amountMinor: 200 }),
+        ],
+        rejectedChainCount: 1,
+        issues: [{ reasonCode: 'invalid_amount_minor', count: 1 }],
+      }),
+    );
+    expect(JSON.stringify(result)).not.toContain(forbiddenInvalidRowRef);
+  });
+
+  it('全部输入均非法时仍整批 rejected', () => {
+    const result = resolveAnalyticsConsumptionFacts([
+      fact({ sourceRecordRef: 'invalid-amount-row', amountMinor: 0 }),
+      fact({ sourceRecordRef: 'invalid-currency-row', currency: 'cny' }),
+    ]);
+
+    expect(result).toEqual({
+      ok: false,
+      status: 'rejected',
+      inputScopes: [],
+      effectiveFacts: [],
+      replayedFactCount: 0,
+      excludedFinalStateCount: 0,
+      rejectedChainCount: 0,
+      issues: [
+        { reasonCode: 'invalid_amount_minor', count: 1 },
+        { reasonCode: 'invalid_currency', count: 1 },
+      ],
+    });
+  });
+
+  it('非法 correction 隔离受影响链但不清空无关合法链', () => {
+    const affectedRoot = fact({
+      sourceRecordRef: 'affected-chain',
+      sourceRevision: 'affected-root',
+      amountMinor: 500,
+    });
+    const invalidCorrection = fact({
+      sourceRecordRef: 'affected-chain',
+      sourceRevision: 'affected-leaf',
+      supersedesSourceRevision: 'affected-root',
+      amountMinor: 0,
+    });
+    const unrelated = fact({
+      sourceRecordRef: 'unrelated-valid-chain',
+      amountMinor: 700,
+    });
+
+    const result = resolveAnalyticsConsumptionFacts([
+      affectedRoot,
+      invalidCorrection,
+      unrelated,
+    ]);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: 'partial',
+        effectiveFacts: [expect.objectContaining({ amountMinor: 700 })],
+        rejectedChainCount: 1,
+        issues: [{ reasonCode: 'invalid_amount_minor', count: 1 }],
+      }),
+    );
+  });
+
+  it('非法事件类型 correction 按来源记录隔离旧 root', () => {
+    const affectedRoot = fact({
+      sourceRecordRef: 'invalid-event-affected-chain',
+      sourceRevision: 'invalid-event-root',
+      amountMinor: 500,
+    });
+    const invalidCorrection = {
+      ...fact({
+        sourceRecordRef: 'invalid-event-affected-chain',
+        sourceRevision: 'invalid-event-leaf',
+        supersedesSourceRevision: 'invalid-event-root',
+        amountMinor: 700,
+      }),
+      eventType: 'payment_reversed',
+    } as unknown as AnalyticsConsumptionFactInput;
+    const unrelated = fact({
+      sourceRecordRef: 'invalid-event-unrelated-chain',
+      amountMinor: 900,
+    });
+
+    const result = resolveAnalyticsConsumptionFacts([
+      affectedRoot,
+      invalidCorrection,
+      unrelated,
+    ]);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: 'partial',
+        effectiveFacts: [expect.objectContaining({ amountMinor: 900 })],
+        rejectedChainCount: 1,
+        issues: [{ reasonCode: 'invalid_event_type', count: 1 }],
+      }),
+    );
+  });
+
+  it('跨 payment/refund family correction 不回退旧事实', () => {
+    const result = resolveAnalyticsConsumptionFacts([
+      fact({
+        sourceRecordRef: 'cross-family-chain',
+        sourceRevision: 'cross-family-root',
+        amountMinor: 500,
+      }),
+      refundFact({
+        sourceRecordRef: 'cross-family-chain',
+        sourceRevision: 'cross-family-leaf',
+        supersedesSourceRevision: 'cross-family-root',
+        amountMinor: 200,
+      }),
+      fact({ sourceRecordRef: 'cross-family-unrelated', amountMinor: 800 }),
+    ]);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: 'partial',
+        effectiveFacts: [expect.objectContaining({ amountMinor: 800 })],
+        rejectedChainCount: 2,
+        issues: [{ reasonCode: 'revision_chain_broken', count: 1 }],
+      }),
+    );
+  });
+
+  it('混合输入失败与断链时合并并稳定排序低敏 issues', () => {
+    const result = resolveAnalyticsConsumptionFacts([
+      fact({ sourceRecordRef: 'combined-valid-chain', amountMinor: 600 }),
+      fact({ sourceRecordRef: 'combined-invalid-row', amountMinor: 0 }),
+      fact({
+        sourceRecordRef: 'combined-broken-chain',
+        sourceRevision: 'combined-broken-leaf',
+        supersedesSourceRevision: 'combined-missing-root',
+      }),
+    ]);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: 'partial',
+        effectiveFacts: [expect.objectContaining({ amountMinor: 600 })],
+        rejectedChainCount: 2,
+        issues: [
+          { reasonCode: 'invalid_amount_minor', count: 1 },
+          { reasonCode: 'revision_chain_broken', count: 1 },
+        ],
+      }),
+    );
+  });
+
+  it('接受微秒/纳秒 instant 并保留规范化后的有效精度', () => {
     const result = resolveAnalyticsConsumptionFacts([
       fact({ eventAt: '2026-07-17T10:00:00.123456Z' }),
     ]);
@@ -121,8 +301,46 @@ describe('经营分析消费事实解析', () => {
       expect.objectContaining({
         ok: true,
         effectiveFacts: [
-          expect.objectContaining({ eventAt: '2026-07-17T10:00:00.123Z' }),
+          expect.objectContaining({ eventAt: '2026-07-17T10:00:00.123456Z' }),
         ],
+      }),
+    );
+  });
+
+  it('等价 offset instant 可重放，亚毫秒差异仍判为业务冲突', () => {
+    const equivalent = resolveAnalyticsConsumptionFacts([
+      fact({ eventAt: '2026-07-17T10:00:00.123400+08:00' }),
+      fact({
+        eventAt: '2026-07-17T02:00:00.1234Z',
+        receivedAt: '2026-07-17T03:00:00.000Z',
+        batchOrConnectionRef: 'equivalent-instant-replay',
+      }),
+    ]);
+    expect(equivalent).toEqual(
+      expect.objectContaining({
+        ok: true,
+        replayedFactCount: 1,
+        effectiveFacts: [
+          expect.objectContaining({ eventAt: '2026-07-17T02:00:00.1234Z' }),
+        ],
+      }),
+    );
+
+    const distinctNanoseconds = resolveAnalyticsConsumptionFacts([
+      fact({ eventAt: '2026-07-17T02:00:00.123456001Z' }),
+      fact({
+        eventAt: '2026-07-17T02:00:00.123456002Z',
+        receivedAt: '2026-07-17T03:00:00.000Z',
+      }),
+    ]);
+    expect(distinctNanoseconds).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: 'partial',
+        effectiveFacts: [],
+        replayedFactCount: 0,
+        rejectedChainCount: 1,
+        issues: [{ reasonCode: 'conflicting_replay', count: 1 }],
       }),
     );
   });
@@ -161,6 +379,43 @@ describe('经营分析消费事实解析', () => {
       rejectedChainCount: 1,
       issues: [{ reasonCode: 'conflicting_replay', count: 1 }],
     });
+  });
+
+  it('冲突重放质量统计与输入排列无关', () => {
+    const variantA = fact({ amountMinor: 10_000 });
+    const variantB = fact({
+      amountMinor: 10_001,
+      receivedAt: '2026-07-17T03:00:00.000Z',
+      batchOrConnectionRef: 'conflict-variant-b-first',
+    });
+    const variantBReplay = fact({
+      amountMinor: 10_001,
+      receivedAt: '2026-07-17T04:00:00.000Z',
+      batchOrConnectionRef: 'conflict-variant-b-replay',
+    });
+    const permutations = [
+      [variantA, variantB, variantBReplay],
+      [variantB, variantBReplay, variantA],
+      [variantBReplay, variantA, variantB],
+    ];
+
+    const results = permutations.map((inputs) =>
+      resolveAnalyticsConsumptionFacts(inputs),
+    );
+    for (const result of results) {
+      expect(result).toEqual({
+        ok: true,
+        status: 'partial',
+        inputScopes,
+        effectiveFacts: [],
+        replayedFactCount: 0,
+        excludedFinalStateCount: 0,
+        rejectedChainCount: 1,
+        issues: [{ reasonCode: 'conflicting_replay', count: 1 }],
+      });
+    }
+    expect(results[0]).toEqual(results[1]);
+    expect(results[1]).toEqual(results[2]);
   });
 
   it('只沿显式 predecessor 采用唯一叶 revision，不按数组顺序或 revision 文本猜测', () => {
@@ -295,6 +550,80 @@ describe('经营分析消费事实解析', () => {
       }),
     );
   });
+
+  it('客户与项目 pending_review 保留统一安全候选引用', () => {
+    const result = resolveAnalyticsConsumptionFacts([
+      fact({
+        customerAttribution: {
+          status: 'pending_review',
+          candidateReference: 'candidate-customer-safe-001',
+        },
+        projectAttribution: {
+          status: 'pending_review',
+          candidateReference: 'candidate-project-safe-001',
+        },
+      }),
+    ]);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        effectiveFacts: [
+          expect.objectContaining({
+            customerAttribution: {
+              status: 'pending_review',
+              candidateReference: 'candidate-customer-safe-001',
+            },
+            projectAttribution: {
+              status: 'pending_review',
+              candidateReference: 'candidate-project-safe-001',
+            },
+          }),
+        ],
+      }),
+    );
+  });
+
+  it.each([
+    [
+      '客户候选',
+      {
+        customerAttribution: {
+          status: 'pending_review',
+          candidateReference: 'unsafe/customer-reference',
+        },
+      },
+      'invalid_customer_attribution',
+      'unsafe/customer-reference',
+    ],
+    [
+      '项目候选',
+      {
+        projectAttribution: {
+          status: 'pending_review',
+          candidateReference: 'unsafe@project-reference',
+        },
+      },
+      'invalid_project_attribution',
+      'unsafe@project-reference',
+    ],
+  ] as const)(
+    '%s引用不满足内部低敏格式时拒绝且不回显原值',
+    (_label, patch, reasonCode, forbiddenValue) => {
+      const result = resolveAnalyticsConsumptionFacts([
+        fact(patch as Partial<AnalyticsConsumptionFactInput>),
+      ]);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          ok: false,
+          status: 'rejected',
+          issues: [{ reasonCode, count: 1 }],
+        }),
+      );
+      expect(JSON.stringify(result)).not.toContain(forbiddenValue);
+    },
+  );
 
   it('不修改输入且对输入排列给出确定结果', () => {
     const inputs = [

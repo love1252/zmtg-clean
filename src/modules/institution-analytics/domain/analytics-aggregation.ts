@@ -1,7 +1,7 @@
 import type {
-  AnalyticsFactChainIssueCode,
   AnalyticsFactIssueSummary,
   AnalyticsFactResolution,
+  AnalyticsFactResolutionIssueCode,
   EffectiveAnalyticsConsumptionFact,
 } from '@/modules/institution-analytics/domain/analytics-consumption-facts';
 import {
@@ -168,7 +168,7 @@ export type AnalyticsAggregationValue = Readonly<{
     replayedFactCount: number;
     excludedFinalStateCount: number;
     rejectedChainCount: number;
-    issues: readonly AnalyticsFactIssueSummary<AnalyticsFactChainIssueCode>[];
+    issues: readonly AnalyticsFactIssueSummary<AnalyticsFactResolutionIssueCode>[];
   }>;
   currencies: readonly AnalyticsCurrencyAggregation[];
 }>;
@@ -297,7 +297,7 @@ function addFactToBucket(
     bucket.stablePaymentRecordRefs.add(fact.stableConsumptionRecordRef);
   }
 
-  if (fact.customerAttribution.status === 'unmatched') {
+  if (fact.customerAttribution.status !== 'matched') {
     if (!addFactAmount(bucket.unmatchedCustomer, fact)) return false;
   } else {
     const customerId = fact.customerAttribution.customerId;
@@ -310,7 +310,7 @@ function addFactToBucket(
     }
   }
 
-  if (fact.projectAttribution.status === 'unmapped') {
+  if (fact.projectAttribution.status !== 'mapped') {
     if (!addFactAmount(bucket.unmappedProject, fact)) return false;
   } else {
     const projectKey = JSON.stringify([

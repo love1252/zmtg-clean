@@ -529,6 +529,50 @@ describe('经营分析按机构与币种聚合', () => {
     expect(value.currencies[0].current.averageNetAmountPerPaidCustomer).toBeNull();
   });
 
+  it('pending_review 金额进入总额与质量缺口但不进入客户分母或项目排行', () => {
+    const customerCandidateReference = 'candidate-customer-safe-aggregation';
+    const projectCandidateReference = 'candidate-project-safe-aggregation';
+    const value = expectAggregation([
+      fact('pending-review-payment', {
+        amountMinor: 900,
+        customerAttribution: {
+          status: 'pending_review',
+          candidateReference: customerCandidateReference,
+        },
+        projectAttribution: {
+          status: 'pending_review',
+          candidateReference: projectCandidateReference,
+        },
+      }),
+    ]);
+    const current = expectCalculatedMetrics(value.currencies[0].current);
+
+    expect(current).toEqual(
+      expect.objectContaining({
+        paidAmountMinor: 900,
+        refundAmountMinor: 0,
+        netAmountMinor: 900,
+        paidCustomerCount: 0,
+        averageNetAmountPerPaidCustomer: null,
+        mappedProjectRanking: [],
+      }),
+    );
+    expect(current.quality.unmatchedCustomer).toEqual({
+      paidAmountMinor: 900,
+      refundAmountMinor: 0,
+      netAmountMinor: 900,
+    });
+    expect(current.quality.unmappedProject).toEqual({
+      paidAmountMinor: 900,
+      refundAmountMinor: 0,
+      netAmountMinor: 900,
+    });
+    const serialized = JSON.stringify(value);
+    expect(serialized).not.toContain(customerCandidateReference);
+    expect(serialized).not.toContain(projectCandidateReference);
+    expect(serialized).not.toMatch(/candidateReference/iu);
+  });
+
   it('缺稳定消费单引用时保留金额但消费单数为 null 且不生成明细', () => {
     const value = expectAggregation([
       fact('payment-without-stable-record', {

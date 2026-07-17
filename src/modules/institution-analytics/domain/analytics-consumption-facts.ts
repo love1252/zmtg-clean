@@ -14,7 +14,8 @@ export type AnalyticsConsumptionEventType =
 
 export type AnalyticsCustomerAttribution =
   | Readonly<{ status: 'matched'; customerId: string }>
-  | Readonly<{ status: 'unmatched' }>;
+  | Readonly<{ status: 'unmatched' }>
+  | Readonly<{ status: 'pending_review'; candidateReference: string }>;
 
 export type AnalyticsProjectAttribution =
   | Readonly<{
@@ -22,7 +23,8 @@ export type AnalyticsProjectAttribution =
       hisDirectoryVersion: string;
       canonicalProjectId: string;
     }>
-  | Readonly<{ status: 'unmapped' }>;
+  | Readonly<{ status: 'unmapped' }>
+  | Readonly<{ status: 'pending_review'; candidateReference: string }>;
 
 export type AnalyticsRefundLinkStatus =
   | 'not_applicable'
@@ -93,6 +95,10 @@ export const ANALYTICS_FACT_CHAIN_ISSUE_CODES = [
 export type AnalyticsFactChainIssueCode =
   (typeof ANALYTICS_FACT_CHAIN_ISSUE_CODES)[number];
 
+export type AnalyticsFactResolutionIssueCode =
+  | AnalyticsFactInputFailureCode
+  | AnalyticsFactChainIssueCode;
+
 export type AnalyticsFactIssueSummary<Code extends string = string> = Readonly<{
   reasonCode: Code;
   count: number;
@@ -117,7 +123,7 @@ export type AnalyticsFactResolution =
       replayedFactCount: number;
       excludedFinalStateCount: number;
       rejectedChainCount: number;
-      issues: readonly AnalyticsFactIssueSummary<AnalyticsFactChainIssueCode>[];
+      issues: readonly AnalyticsFactIssueSummary<AnalyticsFactResolutionIssueCode>[];
     }>;
 
 type EventFamily = 'payment' | 'refund';
@@ -144,10 +150,16 @@ type NormalizedAnalyticsConsumptionFact = Readonly<{
 
 type NormalizationResult =
   | Readonly<{ ok: true; value: NormalizedAnalyticsConsumptionFact }>
-  | Readonly<{ ok: false; reasonCode: AnalyticsFactInputFailureCode }>;
+  | Readonly<{
+      ok: false;
+      reasonCode: AnalyticsFactInputFailureCode;
+      affectedGroupKey: string | null;
+      affectedRecordKey: string | null;
+    }>;
 
 const eventTypeSet = new Set<string>(ANALYTICS_CONSUMPTION_EVENT_TYPES);
 const supportedCurrencyCodes = new Set(Intl.supportedValuesOf('currency'));
+const safeCandidateReferencePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$/u;
 const explicitInstantPattern =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|([+-])(\d{2}):(\d{2}))$/u;
 
@@ -163,6 +175,47 @@ function isRequiredReference(value: unknown): value is string {
     value.trim() === value &&
     !/[\u0000-\u001f\u007f]/u.test(value)
   );
+}
+
+function isSafeCandidateReference(value: unknown): value is string {
+  return typeof value === 'string' && safeCandidateReferencePattern.test(value);
+}
+
+function deriveAffectedRecordKey(input: AnalyticsConsumptionFactInput) {
+  if (
+    !isRequiredReference(input?.tenantId) ||
+    !isRequiredReference(input?.institutionId) ||
+    !isRequiredReference(input?.source) ||
+    !isRequiredReference(input?.sourceRecordRef)
+  ) {
+    return null;
+  }
+
+  return JSON.stringify([
+    input.tenantId,
+    input.institutionId,
+    input.source,
+    input.sourceRecordRef,
+  ]);
+}
+
+function deriveAffectedGroupKey(input: AnalyticsConsumptionFactInput) {
+  if (
+    deriveAffectedRecordKey(input) === null ||
+    typeof input?.eventType !== 'string' ||
+    !eventTypeSet.has(input.eventType)
+  ) {
+    return null;
+  }
+
+  const eventFamily = input.eventType.startsWith('payment_') ? 'payment' : 'refund';
+  return JSON.stringify([
+    input.tenantId,
+    input.institutionId,
+    input.source,
+    input.sourceRecordRef,
+    eventFamily,
+  ]);
 }
 
 function normalizeInstant(value: unknown) {
@@ -205,8 +258,27 @@ function normalizeInstant(value: unknown) {
     return null;
   }
 
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+  const offsetSign = match[9] === '-' ? -1 : 1;
+  const offsetMinutes =
+    match[8] === 'Z'
+      ? 0
+      : offsetSign * (offsetHour * 60 + offsetMinute);
+  const utcSecondTimestamp =
+    Date.UTC(year, month - 1, day, hour, minute, second) -
+    offsetMinutes * 60_000;
+  if (!Number.isFinite(utcSecondTimestamp)) return null;
+
+  const utcDate = new Date(utcSecondTimestamp);
+  const utcYear = utcDate.getUTCFullYear();
+  if (utcYear < 1000 || utcYear > 9999) return null;
+
+  const nanoseconds = (match[7] ?? '').padEnd(9, '0');
+  const significantNanosecondLength = Math.max(
+    3,
+    nanoseconds.replace(/0+$/u, '').length,
+  );
+  const utcSecond = utcDate.toISOString().slice(0, 19);
+  return `${utcSecond}.${nanoseconds.slice(0, significantNanosecondLength)}Z`;
 }
 
 function isCurrencyCode(value: unknown): value is string {
@@ -224,6 +296,16 @@ function normalizeCustomerAttribution(value: unknown): AnalyticsCustomerAttribut
     return { status: 'unmatched' };
   }
 
+  if (
+    value.status === 'pending_review' &&
+    isSafeCandidateReference(value.candidateReference)
+  ) {
+    return {
+      status: 'pending_review',
+      candidateReference: value.candidateReference,
+    };
+  }
+
   if (value.status === 'matched' && isRequiredReference(value.customerId)) {
     return { status: 'matched', customerId: value.customerId };
   }
@@ -236,6 +318,16 @@ function normalizeProjectAttribution(value: unknown): AnalyticsProjectAttributio
 
   if (value.status === 'unmapped') {
     return { status: 'unmapped' };
+  }
+
+  if (
+    value.status === 'pending_review' &&
+    isSafeCandidateReference(value.candidateReference)
+  ) {
+    return {
+      status: 'pending_review',
+      candidateReference: value.candidateReference,
+    };
   }
 
   if (
@@ -254,6 +346,8 @@ function normalizeProjectAttribution(value: unknown): AnalyticsProjectAttributio
 }
 
 function normalizeFact(input: AnalyticsConsumptionFactInput): NormalizationResult {
+  const affectedGroupKey = deriveAffectedGroupKey(input);
+  const affectedRecordKey = deriveAffectedRecordKey(input);
   if (
     !isRequiredReference(input?.tenantId) ||
     !isRequiredReference(input?.institutionId) ||
@@ -262,53 +356,103 @@ function normalizeFact(input: AnalyticsConsumptionFactInput): NormalizationResul
     !isRequiredReference(input?.sourceRevision) ||
     !isRequiredReference(input?.batchOrConnectionRef)
   ) {
-    return { ok: false, reasonCode: 'invalid_required_reference' };
+    return {
+      ok: false,
+      reasonCode: 'invalid_required_reference',
+      affectedGroupKey,
+      affectedRecordKey,
+    };
   }
 
   if (!eventTypeSet.has(input.eventType)) {
-    return { ok: false, reasonCode: 'invalid_event_type' };
+    return {
+      ok: false,
+      reasonCode: 'invalid_event_type',
+      affectedGroupKey,
+      affectedRecordKey,
+    };
   }
 
   if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
-    return { ok: false, reasonCode: 'invalid_amount_minor' };
+    return {
+      ok: false,
+      reasonCode: 'invalid_amount_minor',
+      affectedGroupKey,
+      affectedRecordKey,
+    };
   }
 
   if (!isCurrencyCode(input.currency)) {
-    return { ok: false, reasonCode: 'invalid_currency' };
+    return {
+      ok: false,
+      reasonCode: 'invalid_currency',
+      affectedGroupKey,
+      affectedRecordKey,
+    };
   }
 
   const eventAt = normalizeInstant(input.eventAt);
   if (!eventAt) {
-    return { ok: false, reasonCode: 'invalid_event_at' };
+    return {
+      ok: false,
+      reasonCode: 'invalid_event_at',
+      affectedGroupKey,
+      affectedRecordKey,
+    };
   }
 
   const receivedAt = normalizeInstant(input.receivedAt);
   if (!receivedAt) {
-    return { ok: false, reasonCode: 'invalid_received_at' };
+    return {
+      ok: false,
+      reasonCode: 'invalid_received_at',
+      affectedGroupKey,
+      affectedRecordKey,
+    };
   }
 
   if (
     input.supersedesSourceRevision !== null &&
     !isRequiredReference(input.supersedesSourceRevision)
   ) {
-    return { ok: false, reasonCode: 'invalid_correction_reference' };
+    return {
+      ok: false,
+      reasonCode: 'invalid_correction_reference',
+      affectedGroupKey,
+      affectedRecordKey,
+    };
   }
 
   if (
     input.stableConsumptionRecordRef !== null &&
     !isRequiredReference(input.stableConsumptionRecordRef)
   ) {
-    return { ok: false, reasonCode: 'invalid_stable_consumption_reference' };
+    return {
+      ok: false,
+      reasonCode: 'invalid_stable_consumption_reference',
+      affectedGroupKey,
+      affectedRecordKey,
+    };
   }
 
   const customerAttribution = normalizeCustomerAttribution(input.customerAttribution);
   if (!customerAttribution) {
-    return { ok: false, reasonCode: 'invalid_customer_attribution' };
+    return {
+      ok: false,
+      reasonCode: 'invalid_customer_attribution',
+      affectedGroupKey,
+      affectedRecordKey,
+    };
   }
 
   const projectAttribution = normalizeProjectAttribution(input.projectAttribution);
   if (!projectAttribution) {
-    return { ok: false, reasonCode: 'invalid_project_attribution' };
+    return {
+      ok: false,
+      reasonCode: 'invalid_project_attribution',
+      affectedGroupKey,
+      affectedRecordKey,
+    };
   }
 
   const eventFamily = input.eventType.startsWith('payment_') ? 'payment' : 'refund';
@@ -319,7 +463,12 @@ function normalizeFact(input: AnalyticsConsumptionFactInput): NormalizationResul
       (refundLinkStatus === 'linked' || refundLinkStatus === 'orphan_verified'));
 
   if (!validRefundLinkStatus) {
-    return { ok: false, reasonCode: 'invalid_refund_link_status' };
+    return {
+      ok: false,
+      reasonCode: 'invalid_refund_link_status',
+      affectedGroupKey,
+      affectedRecordKey,
+    };
   }
 
   return {
@@ -357,6 +506,15 @@ function identityKey(fact: NormalizedAnalyticsConsumptionFact) {
   ]);
 }
 
+function recordKey(fact: NormalizedAnalyticsConsumptionFact) {
+  return JSON.stringify([
+    fact.tenantId,
+    fact.institutionId,
+    fact.source,
+    fact.sourceRecordRef,
+  ]);
+}
+
 function groupKey(fact: NormalizedAnalyticsConsumptionFact) {
   return JSON.stringify([
     fact.tenantId,
@@ -371,7 +529,9 @@ function businessSignature(fact: NormalizedAnalyticsConsumptionFact) {
   const customer =
     fact.customerAttribution.status === 'matched'
       ? ['matched', fact.customerAttribution.customerId]
-      : ['unmatched'];
+      : fact.customerAttribution.status === 'pending_review'
+        ? ['pending_review', fact.customerAttribution.candidateReference]
+        : ['unmatched'];
   const project =
     fact.projectAttribution.status === 'mapped'
       ? [
@@ -379,7 +539,9 @@ function businessSignature(fact: NormalizedAnalyticsConsumptionFact) {
           fact.projectAttribution.hisDirectoryVersion,
           fact.projectAttribution.canonicalProjectId,
         ]
-      : ['unmapped'];
+      : fact.projectAttribution.status === 'pending_review'
+        ? ['pending_review', fact.projectAttribution.candidateReference]
+        : ['unmapped'];
 
   return JSON.stringify([
     fact.supersedesSourceRevision,
@@ -391,6 +553,10 @@ function businessSignature(fact: NormalizedAnalyticsConsumptionFact) {
     project,
     fact.refundLinkStatus,
   ]);
+}
+
+function replayTieBreakKey(fact: NormalizedAnalyticsConsumptionFact) {
+  return JSON.stringify([fact.receivedAt, fact.batchOrConnectionRef]);
 }
 
 function summarizeIssues<Code extends string>(issues: readonly Code[]) {
@@ -480,22 +646,69 @@ function resolveChain(
   return { ok: true, leaf: current };
 }
 
+function findCrossFamilyCorrectionRecordKeys(
+  facts: readonly NormalizedAnalyticsConsumptionFact[],
+) {
+  const familiesByRecordRevision = new Map<
+    string,
+    Map<string, Set<EventFamily>>
+  >();
+
+  for (const fact of facts) {
+    const key = recordKey(fact);
+    const familiesByRevision = familiesByRecordRevision.get(key) ?? new Map();
+    const families = familiesByRevision.get(fact.sourceRevision) ?? new Set();
+    families.add(fact.eventFamily);
+    familiesByRevision.set(fact.sourceRevision, families);
+    familiesByRecordRevision.set(key, familiesByRevision);
+  }
+
+  const affectedRecordKeys = new Set<string>();
+  for (const fact of facts) {
+    if (fact.supersedesSourceRevision === null) continue;
+    const predecessorFamilies = familiesByRecordRevision
+      .get(recordKey(fact))
+      ?.get(fact.supersedesSourceRevision);
+    if (predecessorFamilies && !predecessorFamilies.has(fact.eventFamily)) {
+      affectedRecordKeys.add(recordKey(fact));
+    }
+  }
+
+  return affectedRecordKeys;
+}
+
 export function resolveAnalyticsConsumptionFacts(
   inputs: readonly AnalyticsConsumptionFactInput[],
 ): AnalyticsFactResolution {
   const normalizedFacts: NormalizedAnalyticsConsumptionFact[] = [];
   const inputFailures: AnalyticsFactInputFailureCode[] = [];
+  const invalidGroupKeys = new Set<string>();
+  const invalidRecordKeys = new Set<string>();
+  const groupRecordKeys = new Map<string, string>();
 
   for (const input of inputs) {
     const normalized = normalizeFact(input);
     if (!normalized.ok) {
       inputFailures.push(normalized.reasonCode);
+      if (normalized.affectedGroupKey !== null) {
+        invalidGroupKeys.add(normalized.affectedGroupKey);
+      }
+      if (normalized.affectedRecordKey !== null) {
+        invalidRecordKeys.add(normalized.affectedRecordKey);
+        if (normalized.affectedGroupKey !== null) {
+          groupRecordKeys.set(
+            normalized.affectedGroupKey,
+            normalized.affectedRecordKey,
+          );
+        }
+      }
       continue;
     }
     normalizedFacts.push(normalized.value);
+    groupRecordKeys.set(groupKey(normalized.value), recordKey(normalized.value));
   }
 
-  if (inputFailures.length > 0) {
+  if (normalizedFacts.length === 0 && inputFailures.length > 0) {
     return {
       ok: false,
       status: 'rejected',
@@ -508,13 +721,6 @@ export function resolveAnalyticsConsumptionFacts(
     };
   }
 
-  const uniqueByIdentity = new Map<
-    string,
-    Readonly<{
-      fact: NormalizedAnalyticsConsumptionFact;
-      signature: string;
-    }>
-  >();
   const inputScopes = [
     ...new Map(
       normalizedFacts.map((fact) => [
@@ -525,27 +731,46 @@ export function resolveAnalyticsConsumptionFacts(
   ]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([, scope]) => scope);
-  const conflictingGroups = new Set<string>();
-  let replayedFactCount = 0;
-
+  const factsByIdentity = new Map<string, NormalizedAnalyticsConsumptionFact[]>();
   for (const fact of normalizedFacts) {
     const identity = identityKey(fact);
-    const signature = businessSignature(fact);
-    const existing = uniqueByIdentity.get(identity);
-    if (!existing) {
-      uniqueByIdentity.set(identity, { fact, signature });
+    const identityFacts = factsByIdentity.get(identity) ?? [];
+    identityFacts.push(fact);
+    factsByIdentity.set(identity, identityFacts);
+  }
+
+  const conflictingGroups = new Set<string>();
+  const crossFamilyRecordKeys = findCrossFamilyCorrectionRecordKeys(normalizedFacts);
+  const uniqueFacts: NormalizedAnalyticsConsumptionFact[] = [];
+  let replayedFactCount = 0;
+
+  for (const identity of [...factsByIdentity.keys()].sort((left, right) =>
+    left.localeCompare(right),
+  )) {
+    const identityFacts = factsByIdentity.get(identity) ?? [];
+    const factsBySignature = new Map<string, NormalizedAnalyticsConsumptionFact[]>();
+    for (const fact of identityFacts) {
+      const signature = businessSignature(fact);
+      const signatureFacts = factsBySignature.get(signature) ?? [];
+      signatureFacts.push(fact);
+      factsBySignature.set(signature, signatureFacts);
+    }
+
+    if (factsBySignature.size > 1) {
+      conflictingGroups.add(groupKey(identityFacts[0]));
       continue;
     }
 
-    if (existing.signature === signature) {
-      replayedFactCount += 1;
-    } else {
-      conflictingGroups.add(groupKey(fact));
-    }
+    const equivalentFacts = [...factsBySignature.values()][0] ?? [];
+    equivalentFacts.sort((left, right) =>
+      replayTieBreakKey(left).localeCompare(replayTieBreakKey(right)),
+    );
+    replayedFactCount += Math.max(0, equivalentFacts.length - 1);
+    if (equivalentFacts[0]) uniqueFacts.push(equivalentFacts[0]);
   }
 
   const factsByGroup = new Map<string, NormalizedAnalyticsConsumptionFact[]>();
-  for (const { fact } of uniqueByIdentity.values()) {
+  for (const fact of uniqueFacts) {
     const key = groupKey(fact);
     const group = factsByGroup.get(key) ?? [];
     group.push(fact);
@@ -559,9 +784,32 @@ export function resolveAnalyticsConsumptionFacts(
   let excludedFinalStateCount = 0;
   let rejectedChainCount = 0;
 
-  for (const key of [...factsByGroup.keys()].sort((left, right) => left.localeCompare(right))) {
+  const allGroupKeys = new Set([
+    ...factsByGroup.keys(),
+    ...conflictingGroups,
+    ...invalidGroupKeys,
+  ]);
+  const reportedCrossFamilyRecordKeys = new Set<string>();
+  for (const key of [...allGroupKeys].sort((left, right) => left.localeCompare(right))) {
+    const currentRecordKey = groupRecordKeys.get(key);
+    let groupRejected =
+      invalidGroupKeys.has(key) ||
+      (currentRecordKey !== undefined && invalidRecordKeys.has(currentRecordKey));
+    if (
+      currentRecordKey !== undefined &&
+      crossFamilyRecordKeys.has(currentRecordKey)
+    ) {
+      groupRejected = true;
+      if (!reportedCrossFamilyRecordKeys.has(currentRecordKey)) {
+        chainIssues.push('revision_chain_broken');
+        reportedCrossFamilyRecordKeys.add(currentRecordKey);
+      }
+    }
     if (conflictingGroups.has(key)) {
       chainIssues.push('conflicting_replay');
+      groupRejected = true;
+    }
+    if (groupRejected) {
       rejectedChainCount += 1;
       continue;
     }
@@ -584,9 +832,17 @@ export function resolveAnalyticsConsumptionFacts(
     effectiveEntries.push({ sortKey: key, fact: toEffectiveFact(chain.leaf) });
   }
 
+  const resolutionIssues: AnalyticsFactResolutionIssueCode[] = [
+    ...inputFailures,
+    ...chainIssues,
+  ];
+
   return {
     ok: true,
-    status: rejectedChainCount === 0 ? 'complete' : 'partial',
+    status:
+      inputFailures.length === 0 && rejectedChainCount === 0
+        ? 'complete'
+        : 'partial',
     inputScopes,
     effectiveFacts: effectiveEntries
       .sort((left, right) => left.sortKey.localeCompare(right.sortKey))
@@ -594,6 +850,6 @@ export function resolveAnalyticsConsumptionFacts(
     replayedFactCount,
     excludedFinalStateCount,
     rejectedChainCount,
-    issues: summarizeIssues(chainIssues),
+    issues: summarizeIssues(resolutionIssues),
   };
 }
