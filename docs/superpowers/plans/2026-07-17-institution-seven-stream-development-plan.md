@@ -208,6 +208,151 @@ AccessContext（保留 source）
 
 **明确非范围：** 本节以单文件 docs-only 形式发布，不修改 `src/**`、认证 session、成员 provider、RBAC、route/API/UI、公共 DTO、数据库/schema/migration、审计写入、凭证、外部连接、测试 runtime 或任何 `BASE-02A` / `BASE-CAP` 实施。本文档的提交、推送、PR 或合并只发布设计，不构成任何 runtime 授权；后续实现前必须另行冻结 provider 接口、两级 guard、action matrix、失败映射和审计字段，并获得 runtime 授权。
 
+#### BASE-02B-RUNTIME：正式 provenance、成员资格与两级 guard 技术设计申请（仅设计）
+
+总协调台拥有 guard、不可变 action manifest、`decisionCode` 与外部映射；认证/网关 owner 只验证 provenance，成员/binding owner 只返回成员资格，anchor owner 只返回机构锚点，中央 registry 才能按 `resourceKind` 调 object owner reader。页面、route、provider 和业务方只能消费决定，不能构造 evidence、传 object scope/owner 结论、读取成员/锚点表或把 capability 当授权。本节沿用 BASE-02A `InstitutionAccessContextV1`，不新造 `authenticated_session`/`formal_session` 等 source。
+
+##### 1. server-only provider contract、anchor 与安全引用
+
+以下全是内部 server-only contract，不是 wire DTO；构造器不向页面、route 或栏目模块导出。解析先读 descriptor，再读值；extra key、accessor、symbol、prototype/Proxy、稀疏数组、宽松时间与未知状态都 fail-closed，不能从 cookie/header/URL/body/client storage/cache claim 补字段。
+
+所有 `userReference`、membership/binding/anchor/proof/request/correlation/digest reference 先过同一 `SafeGuardReferenceV1` validator，再过字段 prefix validator：`^(usr|mbr|bnd|anc|prf|req|cor|objd|mrv|brv|arv|prv|srv|crv)_v1_k[1-9][0-9]{0,2}_[A-Za-z0-9_-]{22,43}$`，真实总长度 32–56。`mrv`、`brv`、`arv`、`prv`、`srv`、`crv` 分别只用于 membership、binding、anchor、policy、object scope、capability revision，绝不是可互换的 `rev`。payload 必须是 owner 可验证的 opaque/digest reference，禁止可逆编码、顺序号、业务主键、PII、URL、cookie 或 token；未知 keyVersion、prefix/长度/验证失败均拒绝，审计绝不写原始 ID。
+
+```ts
+type SafeGuardReferenceV1 = string;
+type MembershipRevisionReferenceV1 = string; // mrv
+type BindingRevisionReferenceV1 = string; // brv
+type AnchorRevisionReferenceV1 = string; // arv
+type PolicyRevisionReferenceV1 = string; // prv
+type ObjectScopeRevisionReferenceV1 = string; // srv
+type CapabilityDecisionRevisionReferenceV1 = string; // crv
+type SafeObjectReferenceV1 = string;
+
+type FormalRequestProvenanceEvidenceV1 = Readonly<{
+  source: 'server_session' | 'trusted_gateway'; userReference: SafeGuardReferenceV1;
+  tenantId: string; institutionId: string; requestReference: SafeGuardReferenceV1;
+  proofReference: SafeGuardReferenceV1; issuedAt: string; verifiedAt: string; validUntil: string;
+}>;
+type ProvenanceResolutionV1 =
+  | Readonly<{ kind: 'verified'; evidence: FormalRequestProvenanceEvidenceV1 }>
+  | Readonly<{ kind: 'rejected'; code: 'provenance_missing' | 'provenance_invalid' | 'provenance_expired' | 'provenance_source_denied' }>;
+type FreshActiveMembershipResolutionV1 =
+  | Readonly<{
+      kind: 'fresh_active'; userReference: SafeGuardReferenceV1;
+      role: 'tenant_admin' | 'tenant_operator' | 'consultant' | 'customer_service';
+      tenantId: string; institutionId: string; membershipReference: SafeGuardReferenceV1;
+      membershipRevision: MembershipRevisionReferenceV1; bindingReference: SafeGuardReferenceV1;
+      bindingRevision: BindingRevisionReferenceV1; observedAt: string; freshUntil: string;
+    }>
+  | Readonly<{ kind: 'rejected'; code: 'membership_denied' | 'membership_invalid' | 'membership_unavailable' | 'membership_stale' }>;
+type ActiveInstitutionAnchorResolutionV1 =
+  | Readonly<{
+      kind: 'active'; tenantId: string; institutionId: string; anchorReference: SafeGuardReferenceV1;
+      anchorRevision: AnchorRevisionReferenceV1; observedAt: string; freshUntil: string;
+    }>
+  | Readonly<{ kind: 'denied'; code: 'institution_anchor_denied' }>
+  | Readonly<{ kind: 'unavailable'; code: 'institution_anchor_unavailable' }>;
+type ActiveInstitutionAnchorProviderV1 = Readonly<{
+  resolve(input: Readonly<{ tenantId: string; institutionId: string; now: string }>): ActiveInstitutionAnchorResolutionV1;
+}>;
+declare const trustedServerRequestMarkerV1: unique symbol;
+type TrustedServerRequestV1 = Readonly<{ readonly [trustedServerRequestMarkerV1]: 'authentication_or_gateway_owner_only' }>;
+type FormalProvenanceResolverV1 = Readonly<{ resolve(request: TrustedServerRequestV1): ProvenanceResolutionV1 }>;
+type FreshActiveMembershipProviderV1 = Readonly<{
+  resolve(input: Readonly<{ provenance: FormalRequestProvenanceEvidenceV1; requestedScope: Readonly<{ tenantId: string; institutionId: string }>; now: string }>): FreshActiveMembershipResolutionV1;
+}>;
+```
+
+认证 resolver 的唯一输入是认证模块已验证的 server request；gateway resolver 的唯一输入是网关 owner 已验证并绑定本次请求的 gateway request。`demo_session`、未知来源和无法证明请求绑定均为 `provenance_source_denied`。成员 provider 只判断成员/binding 当前性和四角色：真实无资格、停用、撤销、移出或 binding 无效为不枚举 `membership_denied`；payload/内部验证失败为 `membership_invalid`，依赖失败为 `membership_unavailable`，过期为 `membership_stale`。它绝不判断 action；role/action 不匹配只由 manifest 产生 `action_role_denied`。anchor provider 是唯一权威来源，业务方不可自报；active 必含 tenant/institution/reference/revision/freshness，明确无效为 denied，reader/验证不可用为 unavailable。若 owner 获单独授权原子组合成员/binding/anchor，结果仍须逐字段等同此 contract。
+
+evidence、membership 与 active anchor scope 精确匹配后，中央 guard 才在内存构造 `AccessContext`（`scope:'tenant'`，其余字段取权威事实）调用 BASE-02A。八类失败安全映射固定为：`unauthenticated`→401；`non_tenant_scope`、`unsupported_role`、`invalid_user`、`missing_tenant`、`missing_institution`、`invalid_source`→不枚举403；`invalid_context_shape`→内部安全503；不能绕过 provenance/membership/binding/anchor。
+
+##### 2. 分层 allow、action manifest 与唯一对象顺序
+
+```ts
+type InstitutionScopeAllowV1 = Readonly<{
+  kind: 'institution_scope_allow'; requestReference: SafeGuardReferenceV1;
+  userReference: SafeGuardReferenceV1; role: 'tenant_admin' | 'tenant_operator' | 'consultant' | 'customer_service';
+  source: 'server_session' | 'trusted_gateway'; tenantId: string; institutionId: string;
+  membershipRevision: MembershipRevisionReferenceV1; bindingRevision: BindingRevisionReferenceV1;
+  anchorRevision: AnchorRevisionReferenceV1; provenanceValidUntil: string;
+  membershipFreshUntil: string; anchorFreshUntil: string; decidedAt: string;
+  validUntil: string; // min(provenance.validUntil, membership.freshUntil, anchor.freshUntil)
+}>;
+type InstitutionSectionAllowV1 = Readonly<{
+  kind: 'institution_section_allow'; scopeAllow: InstitutionScopeAllowV1;
+  sectionId: 'workbench' | 'customers' | 'conversations' | 'care' | 'knowledge' | 'analytics' | 'system';
+  action: 'section_enter'; policyRevision: PolicyRevisionReferenceV1;
+}>;
+type ObjectScopeAllowV1 = Readonly<{
+  kind: 'object_scope_allow'; scopeAllow: InstitutionScopeAllowV1; resourceKind: string;
+  concreteAction: string; targetReference: SafeObjectReferenceV1; policyRevision: PolicyRevisionReferenceV1;
+  objectScopeRevision: ObjectScopeRevisionReferenceV1; validUntil: string;
+}>;
+type ResourceActionPreflightV1 = Readonly<{
+  kind: 'resource_action_preflight'; objectScopeAllow: ObjectScopeAllowV1;
+  capabilityDecisionRevision: CapabilityDecisionRevisionReferenceV1; capabilityFreshUntil: string; validUntil: string;
+}>;
+type ObjectTargetIntentV1 = Readonly<{ resourceKind: string; concreteAction: string; targetReference: SafeObjectReferenceV1 }>;
+type OwnerObjectScopeResolutionV1 =
+  | Readonly<{ kind: 'resolved'; tenantId: string; institutionId: string; targetReference: SafeObjectReferenceV1; scopeRevision: ObjectScopeRevisionReferenceV1 }>
+  | Readonly<{ kind: 'rejected'; code: 'not_found_or_scope_denied' | 'object_scope_unavailable' }>;
+```
+
+scope allow 仅证明当前机构范围，不能渲染壳、读对象、调 capability 或写入；它绑定权威 user/role/source、三 revision 和三有效期，因此 section audience、object allowedRoles、缓存与审计均不需旁路身份。section 仅从 scope allow 派生；object 也仅从 scope allow 派生，禁止把 `workbench/section_enter` allow 复用于 `system/section_enter` 或对象。
+
+| `{ resourceKind, concreteAction }` | 目标 | 获准角色 | 决定 |
+| --- | --- | --- | --- |
+| `institution_section/section_enter` | `workbench`、`customers`、`conversations`、`care` | 四角色 | section allow；仍须页面/对象重验。 |
+| `institution_section/section_enter` | `knowledge`、`analytics`、`system` | 管理员、运营 | section allow；仍受 capability/对象约束。 |
+| 已登记 concrete pair | 具体对象 | manifest 显式集合 | scope allow 后按唯一对象顺序。 |
+| 未登记或泛化 `object_read`/`object_preflight`/`object_commit` | 任意 | 无 | `action_unregistered`。 |
+
+manifest entry 固定为 `{resourceKind, concreteAction, allowedRoles, policyRevision, capabilityRequirement}`；调用方只交 `ObjectTargetIntentV1`，不能传 objectScope/owner assertion/业务主键或 allow policy。唯一对象顺序严格为：`registry → owner reader → ObjectScopeAllowV1（不含 capability） → BASE-CAP → ResourceActionPreflightV1（含 capabilityDecisionRevision/freshUntil）`；BASE-CAP 绝不早于 object scope allow。
+
+`SafeObjectReferenceV1` provider contract 为 `oref_v1_k<keyVersion>_<opaque>`：keyVersion 1–3 位正整数、opaque 22–43 个 base64url、真实总长度33–56。仅 owner/registry 在对象创建或权威读取时签发并 server-side 映射/验证；生命周期内跨部署稳定。轮换接受当前与未过期旧 keyVersion，窗口后拒绝。secret、签名/digest 算法、key 存储、mapping schema 和轮换任务未冻结：本轮只定义 provider contract，不虚构算法/secret/schema/runtime。
+
+##### 3. 分层 TTL、缓存与原子撤权
+
+服务端 UTC 时钟要求 `issuedAt <= verifiedAt <= now < provenance.validUntil`、membership/anchor `observedAt <= now < freshUntil`；future instant 直接拒绝，最大时钟偏差仅监控30秒、不提供 future-grace。provenance TTL 最大5分钟，membership/anchor TTL 各最大60秒；无效ISO、负值、超限或未知keyVersion fail-closed。
+
+scope TTL=`min(provenance.validUntil,membership.freshUntil,anchor.freshUntil)`；section默认继承 scope，只有该 section manifest 要求 capability 时才追加其 `freshUntil`；object scope allow 不含 capability，resource preflight TTL 才为 `min(objectScopeAllow.validUntil,capabilityFreshUntil)`。scope/section/object scope/preflight cache 必须物理分区：scope key 含 user/source/scope/request/membership+binding+anchor revisions；section另含 sectionId/action/policy和可选 capability revision；object另含 resource/action/target/objectScope/policy revisions；preflight默认不缓存，若批准才含 capability revision/freshUntil。变更 binding/anchor/member/role/policy/object/capability、机构停用或急停立即失效。
+
+每个写命令必须在同一事务、锁、权威CAS或审计预留/append策略中重验 provenance、membership/role、bindingRevision、anchorRevision、policy、object scope、`capabilityDecisionRevision + capabilityFreshUntil`、急停和 audit evidence。无法同一原子边界时，权威写端原子CAS全部 expected revisions；任一撤权、机构停用、急停、capability变化或审计失效返回 `revision_conflict`/unavailable 并完整回滚，不部分写入。
+
+##### 4. decision 映射、MIG-01 与审计
+
+闭集：`provenance_missing`、`provenance_invalid`、`provenance_expired`、`provenance_source_denied`、`membership_denied`、`membership_invalid`、`membership_unavailable`、`membership_stale`、`institution_anchor_denied`、`institution_anchor_unavailable`、`action_unregistered`、`action_role_denied`、`not_found_or_scope_denied`、`object_scope_unavailable`、`capability_not_operational`、`capability_unavailable`、`audit_unavailable`、`revision_conflict`；未知状态只给最早 closed failure。
+
+| code | 外部映射 |
+| --- | --- |
+| `provenance_missing`、`provenance_invalid`、`provenance_expired`、`provenance_source_denied` | 401，不调下游。 |
+| `membership_denied`、`institution_anchor_denied`、`action_unregistered`、`action_role_denied` | 403 / 既有 forbidden，不枚举真实原因。 |
+| `membership_invalid`、`membership_unavailable`、`membership_stale`、`institution_anchor_unavailable`、`object_scope_unavailable`、`capability_unavailable`、`audit_unavailable` | 503 / 既有 unavailable；shape/internal 与真实拒绝分离。 |
+| `not_found_or_scope_denied` | 统一404，不区分不存在/跨scope；页面状态交 BASE-05 待办。 |
+| `capability_not_operational` | 独立409，不能与 revision conflict/disabled混淆；页面状态交 BASE-05。 |
+| `revision_conflict` | 独立409重试；页面状态交 BASE-05。 |
+
+MIG-01 的 `institution_scopes` 与获批 provisioning manifest 仅是机构存在/回填锚点；active binding→active anchor 只是继续 guard 的必要条件，绝非用户、角色、对象或 action 授权。anchor 无效/不存在=denied，不可用/revision不可验=unavailable，不得以 session/list/cache/客户端机构替代。
+
+低敏审计只含 decision kind/code、resource/action/section、source、合规 user/membership/proof/request/correlation/object digest、scope、binding/anchor/member/policy/object/capability revisions 与 decidedAt；禁止原始ID、PII、cookie/token/header、payload和堆栈。BASE-04 必审写操作须有同一原子边界 audit reservation/append evidence，缺失=`audit_unavailable`。
+
+##### 5. 调用链、验收与非范围
+
+```text
+可信 session/gateway → provenance → membership/binding → active anchor
+→ 内部 AccessContext → BASE-02A → InstitutionScopeAllowV1
+├─ section audience → InstitutionSectionAllowV1（要求时再capability）
+└─ registry → owner reader → ObjectScopeAllowV1 → BASE-CAP → ResourceActionPreflightV1
+→ reader/原子写命令重验业务前置
+```
+
+BASE-CAP 的 `expectedScope`、诊断 target、五维状态或 `operational` 不能创建/扩大 allow；allow 也不能伪装 disabled/not released/stale/unavailable capability。只有 guard 与业务 provider 均成功才构造 `InstitutionSourceEnvelopeV1`；无权威 scope 的失败不是 empty/partial/stale envelope。
+
+后续 runtime 测试覆盖：anchor三分支及不可自报；scope allow 的 user/role/source/revision/三期 min；七栏目×四角色与 workbench→system复用拒绝；所有 manifest pair 的唯一对象顺序；demo/跨请求/future/TTL；成员拒绝与shape/unavailable/stale；字段级 revision prefixes、`SafeObjectReferenceV1` 的33–56长度/轮换/跨部署稳定/PII；全部 code与BASE-02A八类映射；分层TTL/缓存/急停撤权；capability/audit/revision变化下原子回滚。
+
+**本轮明确非范围：** 只修改本 Markdown；不实施 schema/migration、`institution_scopes`、manifest、session/gateway/member/binding/anchor/object provider、registry、guard、缓存、审计、BASE-02A/BASE-CAP runtime、API/route/UI/测试、凭证/secret、数据库或外部连接。本文仅为后续独立 runtime 的 provider/guard contract，不构成实现、接入、发布或生产放行授权。
+
 ### BASE-03：机构隔离 schema/migration 技术设计
 
 - [ ] 先形成独立技术设计、历史数据预检、回填策略、唯一约束、索引和回滚说明。
