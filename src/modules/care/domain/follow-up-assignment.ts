@@ -1,15 +1,25 @@
+import {
+  checkFollowUpAssignmentMemberEligibility,
+  checkFollowUpAssignmentTargetEligibility,
+  isFollowUpRolePoolRole,
+} from './follow-up-assignment-eligibility';
+import type {
+  FollowUpAssignmentEligibilityError,
+  FollowUpAssignmentTarget,
+  FollowUpRolePoolRole,
+} from './follow-up-assignment-eligibility';
+import { checkFollowUpCommandPreconditions } from './follow-up-command-preconditions';
+
+export { FOLLOW_UP_ROLE_POOL_ROLES, isFollowUpRolePoolRole } from './follow-up-assignment-eligibility';
+export type {
+  FollowUpAssignmentMember,
+  FollowUpAssignmentTarget,
+  FollowUpRolePoolRole,
+} from './follow-up-assignment-eligibility';
+
 export const FOLLOW_UP_ASSIGNMENT_KINDS = ['user', 'role_pool'] as const;
 
 export type FollowUpAssignmentKind = (typeof FOLLOW_UP_ASSIGNMENT_KINDS)[number];
-
-export const FOLLOW_UP_ROLE_POOL_ROLES = [
-  'tenant_admin',
-  'tenant_operator',
-  'consultant',
-  'customer_service',
-] as const;
-
-export type FollowUpRolePoolRole = (typeof FOLLOW_UP_ROLE_POOL_ROLES)[number];
 
 export const FOLLOW_UP_ASSIGNMENT_ADMINISTRATIVE_ROLES = [
   'tenant_admin',
@@ -46,40 +56,18 @@ export type FollowUpRolePoolAssignment = Readonly<{
 
 export type FollowUpAssignment = FollowUpUserAssignment | FollowUpRolePoolAssignment;
 
-export type FollowUpAssignmentTarget =
-  | Readonly<{
-      kind: 'user';
-      institutionId: string;
-      assigneeUserId: string;
-    }>
-  | Readonly<{
-      kind: 'role_pool';
-      institutionId: string;
-      role: unknown;
-    }>;
-
-export type FollowUpAssignmentMember = Readonly<{
-  institutionId: string;
-  userId: string;
-  role: unknown;
-  active: boolean;
-}>;
-
 export type FollowUpAssignmentAdministrativeControl = Readonly<{
   operation: 'reassign' | 'unclaim';
   actorRole: FollowUpAssignmentAdministrativeRole;
   reason: FollowUpAssignmentOverrideReason;
   requiredActorRoles: typeof FOLLOW_UP_ASSIGNMENT_ADMINISTRATIVE_ROLES;
+  authorizationRequired: true;
   auditRequired: true;
 }>;
 
 export type FollowUpAssignmentError =
+  | FollowUpAssignmentEligibilityError
   | 'invalid_assignment'
-  | 'invalid_member'
-  | 'invalid_target_assignment'
-  | 'scope_mismatch'
-  | 'role_mismatch'
-  | 'inactive_member'
   | 'assignment_not_claimable'
   | 'assignment_not_claimed'
   | 'claim_conflict'
@@ -102,15 +90,16 @@ function includesValue(values: readonly string[], value: unknown): value is stri
 }
 
 function isNonEmptyText(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.trim() === value &&
+    !/[\u0000-\u001f\u007f-\u009f]/u.test(value)
+  );
 }
 
 export function isFollowUpAssignmentKind(value: unknown): value is FollowUpAssignmentKind {
   return includesValue(FOLLOW_UP_ASSIGNMENT_KINDS, value);
-}
-
-export function isFollowUpRolePoolRole(value: unknown): value is FollowUpRolePoolRole {
-  return includesValue(FOLLOW_UP_ROLE_POOL_ROLES, value);
 }
 
 export function isFollowUpAssignmentAdministrativeRole(
@@ -126,10 +115,13 @@ export function isFollowUpAssignmentOverrideReason(
 }
 
 function isValidRevision(value: unknown) {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
-function isValidAssignment(assignment: FollowUpAssignment) {
+function isValidAssignment(value: unknown): value is FollowUpAssignment {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+
+  const assignment = value as Record<string, unknown>;
   if (!isFollowUpAssignmentKind(assignment.kind)) return false;
   if (!isNonEmptyText(assignment.institutionId) || !isValidRevision(assignment.revision)) {
     return false;
@@ -146,6 +138,25 @@ function isValidAssignment(assignment: FollowUpAssignment) {
 
 function failure(code: FollowUpAssignmentError): FollowUpAssignmentResult {
   return { ok: false, code };
+}
+
+function checkAssignmentCommandPreconditions(input: Readonly<{
+  assignment: FollowUpAssignment;
+  institutionId: unknown;
+  expectedRevision: unknown;
+}>): FollowUpAssignmentResult | null {
+  const result = checkFollowUpCommandPreconditions({
+    taskInstitutionId: input.assignment.institutionId,
+    currentRevision: input.assignment.revision,
+    institutionId: input.institutionId,
+    expectedRevision: input.expectedRevision,
+  });
+
+  return result.ok ? null : failure(result.code);
+}
+
+function nextRevision(assignment: FollowUpAssignment): number | null {
+  return assignment.revision < Number.MAX_SAFE_INTEGER ? assignment.revision + 1 : null;
 }
 
 function success(
@@ -189,83 +200,74 @@ function administrativeControl(input: Readonly<{
   return {
     ...input,
     requiredActorRoles: FOLLOW_UP_ASSIGNMENT_ADMINISTRATIVE_ROLES,
+    authorizationRequired: true,
     auditRequired: true,
   };
 }
 
 export function claimFollowUpRolePoolAssignment(input: Readonly<{
   assignment: FollowUpAssignment;
-  expectedRevision: number;
-  member: FollowUpAssignmentMember;
+  institutionId: unknown;
+  actorUserId: unknown;
+  expectedRevision: unknown;
+  member: unknown;
 }>): FollowUpAssignmentResult {
-  const { assignment, member } = input;
+  const { assignment } = input;
   if (!isValidAssignment(assignment)) return failure('invalid_assignment');
-  if (
-    !isNonEmptyText(member.institutionId) ||
-    !isNonEmptyText(member.userId) ||
-    !isFollowUpRolePoolRole(member.role) ||
-    typeof member.active !== 'boolean'
-  ) {
-    return failure('invalid_member');
-  }
-  if (member.institutionId !== assignment.institutionId) return failure('scope_mismatch');
-  if (!member.active) return failure('inactive_member');
+  const preconditionFailure = checkAssignmentCommandPreconditions(input);
+  if (preconditionFailure) return preconditionFailure;
+
+  const requiredRole =
+    assignment.kind === 'role_pool' ? assignment.role : assignment.claimedFromRolePool;
+  const memberResult = checkFollowUpAssignmentMemberEligibility({
+    institutionId: assignment.institutionId,
+    expectedUserId: input.actorUserId,
+    requiredRole,
+    member: input.member,
+  });
+  if (!memberResult.ok) return failure(memberResult.code);
 
   if (assignment.kind === 'user') {
     if (assignment.claimedFromRolePool === null) return failure('assignment_not_claimable');
-    if (
-      assignment.assigneeUserId !== member.userId ||
-      assignment.claimedFromRolePool !== member.role
-    ) {
-      return failure('claim_conflict');
-    }
-
-    const isCurrentNoop = input.expectedRevision === assignment.revision;
-    const isImmediateReplay =
-      assignment.revision > 0 && input.expectedRevision === assignment.revision - 1;
-    return isCurrentNoop || isImmediateReplay
+    return assignment.assigneeUserId === memberResult.userId
       ? success(assignment, false)
-      : failure('revision_conflict');
+      : failure('claim_conflict');
   }
 
-  if (member.role !== assignment.role) return failure('role_mismatch');
-  if (input.expectedRevision !== assignment.revision) return failure('revision_conflict');
+  const revision = nextRevision(assignment);
+  if (revision === null) return failure('invalid_command_context');
 
   return success(
     {
       kind: 'user',
       institutionId: assignment.institutionId,
-      revision: assignment.revision + 1,
-      assigneeUserId: member.userId,
+      revision,
+      assigneeUserId: memberResult.userId,
       claimedFromRolePool: assignment.role,
     },
     true,
   );
 }
 
-function readTargetAssignment(
+function assignmentFromTarget(
   target: FollowUpAssignmentTarget,
-  nextRevision: number,
+  revision: number,
 ): FollowUpAssignment | null {
-  if (!isNonEmptyText(target.institutionId)) return null;
-
   if (target.kind === 'user') {
-    return isNonEmptyText(target.assigneeUserId)
-      ? {
-          kind: 'user',
-          institutionId: target.institutionId,
-          revision: nextRevision,
-          assigneeUserId: target.assigneeUserId,
-          claimedFromRolePool: null,
-        }
-      : null;
+    return {
+      kind: 'user',
+      institutionId: target.institutionId,
+      revision,
+      assigneeUserId: target.assigneeUserId,
+      claimedFromRolePool: null,
+    };
   }
 
-  if (target.kind === 'role_pool' && isFollowUpRolePoolRole(target.role)) {
+  if (isFollowUpRolePoolRole(target.role)) {
     return {
       kind: 'role_pool',
       institutionId: target.institutionId,
-      revision: nextRevision,
+      revision,
       role: target.role,
     };
   }
@@ -273,14 +275,11 @@ function readTargetAssignment(
   return null;
 }
 
-function assignmentsMatch(left: FollowUpAssignment, right: FollowUpAssignment) {
+function assignmentMatchesTarget(left: FollowUpAssignment, right: FollowUpAssignmentTarget) {
   if (left.kind !== right.kind || left.institutionId !== right.institutionId) return false;
   if (left.kind === 'role_pool' && right.kind === 'role_pool') return left.role === right.role;
   if (left.kind === 'user' && right.kind === 'user') {
-    return (
-      left.assigneeUserId === right.assigneeUserId &&
-      left.claimedFromRolePool === right.claimedFromRolePool
-    );
+    return left.assigneeUserId === right.assigneeUserId && left.claimedFromRolePool === null;
   }
   return false;
 }
@@ -288,47 +287,59 @@ function assignmentsMatch(left: FollowUpAssignment, right: FollowUpAssignment) {
 export function reassignFollowUpAssignment(input: Readonly<{
   assignment: FollowUpAssignment;
   target: FollowUpAssignmentTarget;
-  expectedRevision: number;
-  institutionId: string;
+  targetMember: unknown;
+  expectedRevision: unknown;
+  institutionId: unknown;
   actorRole: unknown;
   reason: unknown;
 }>): FollowUpAssignmentResult {
   const { assignment } = input;
   if (!isValidAssignment(assignment)) return failure('invalid_assignment');
-  if (input.institutionId !== assignment.institutionId) return failure('scope_mismatch');
+  const preconditionFailure = checkAssignmentCommandPreconditions(input);
+  if (preconditionFailure) return preconditionFailure;
 
   const context = readAdministrativeContext(input);
   if (!context.ok) return failure(context.code);
 
-  const target = readTargetAssignment(input.target, assignment.revision + 1);
-  if (!target) return failure('invalid_target_assignment');
-  if (target.institutionId !== assignment.institutionId) return failure('scope_mismatch');
-  if (input.expectedRevision !== assignment.revision) return failure('revision_conflict');
+  const targetResult = checkFollowUpAssignmentTargetEligibility({
+    institutionId: assignment.institutionId,
+    target: input.target,
+    targetMember: input.targetMember,
+  });
+  if (!targetResult.ok) return failure(targetResult.code);
 
   const control = administrativeControl({
     operation: 'reassign',
     actorRole: context.actorRole,
     reason: context.reason,
   });
-  if (assignmentsMatch(assignment, target)) return success(assignment, false, control);
+  if (assignmentMatchesTarget(assignment, targetResult.target)) {
+    return success(assignment, false, control);
+  }
+
+  const revision = nextRevision(assignment);
+  if (revision === null) return failure('invalid_command_context');
+
+  const target = assignmentFromTarget(targetResult.target, revision);
+  if (!target) return failure('invalid_target_assignment');
 
   return success(target, true, control);
 }
 
 export function unclaimFollowUpAssignment(input: Readonly<{
   assignment: FollowUpAssignment;
-  expectedRevision: number;
-  institutionId: string;
+  expectedRevision: unknown;
+  institutionId: unknown;
   actorRole: unknown;
   reason: unknown;
 }>): FollowUpAssignmentResult {
   const { assignment } = input;
   if (!isValidAssignment(assignment)) return failure('invalid_assignment');
-  if (input.institutionId !== assignment.institutionId) return failure('scope_mismatch');
+  const preconditionFailure = checkAssignmentCommandPreconditions(input);
+  if (preconditionFailure) return preconditionFailure;
 
   const context = readAdministrativeContext(input);
   if (!context.ok) return failure(context.code);
-  if (input.expectedRevision !== assignment.revision) return failure('revision_conflict');
 
   const control = administrativeControl({
     operation: 'unclaim',
@@ -338,11 +349,14 @@ export function unclaimFollowUpAssignment(input: Readonly<{
   if (assignment.kind === 'role_pool') return success(assignment, false, control);
   if (assignment.claimedFromRolePool === null) return failure('assignment_not_claimed');
 
+  const revision = nextRevision(assignment);
+  if (revision === null) return failure('invalid_command_context');
+
   return success(
     {
       kind: 'role_pool',
       institutionId: assignment.institutionId,
-      revision: assignment.revision + 1,
+      revision,
       role: assignment.claimedFromRolePool,
     },
     true,
