@@ -10,6 +10,10 @@ import {
   type AnalyticsPeriodPair,
   type AnalyticsPeriodWindow,
 } from '@/modules/institution-analytics/domain/analytics-periods';
+import {
+  resolveAnalyticsStableConsumptionRecordGate,
+  type AnalyticsStableConsumptionRecordCurrencyGate,
+} from '@/modules/institution-analytics/domain/analytics-stable-consumption-record';
 
 export const ANALYTICS_AGGREGATION_COMPLETENESS = [
   'complete',
@@ -83,6 +87,10 @@ export type AnalyticsMappedProjectMetric = AnalyticsMoneyBreakdown &
 
 export type AnalyticsCurrencyQualitySummary = Readonly<{
   missingStableConsumptionReferenceCount: number;
+  conflictingStableConsumptionRecordCount: number;
+  linkedRefundWithoutPaymentCount: number;
+  linkedRefundAttributionMismatchCount: number;
+  linkedRefundCurrencyMismatchCount: number;
   unmatchedCustomer: AnalyticsMoneyBreakdown;
   unmappedProject: AnalyticsMoneyBreakdown;
   orphanRefundCount: number;
@@ -101,7 +109,10 @@ export type AnalyticsCalculatedPeriodCurrencyMetrics = AnalyticsMoneyBreakdown &
     paidCustomerCount: number;
     averageNetAmountPerPaidCustomer: AnalyticsAverageAmount | null;
     consumptionRecordCount: number | null;
-    countAvailability: 'available' | 'unavailable_unstable_reference';
+    countAvailability:
+      | 'available'
+      | 'unavailable_unstable_reference'
+      | 'unavailable_incomplete_source';
     mappedProjectRanking: readonly AnalyticsMappedProjectMetric[];
     quality: AnalyticsCurrencyQualitySummary;
   }>;
@@ -202,9 +213,6 @@ type MutableCurrencyBucket = {
   projectMetrics: Map<string, MutableProjectMetric>;
   paidCustomerIds: Set<string>;
   customerMetrics: Map<string, MutableMoneyBreakdown>;
-  stablePaymentRecordRefs: Set<string>;
-  missingStableConsumptionReferenceCount: number;
-  orphanRefundCount: number;
   orphanRefundAmountMinor: number;
 };
 
@@ -234,9 +242,6 @@ function emptyCurrencyBucket(): MutableCurrencyBucket {
     projectMetrics: new Map(),
     paidCustomerIds: new Set(),
     customerMetrics: new Map(),
-    stablePaymentRecordRefs: new Set(),
-    missingStableConsumptionReferenceCount: 0,
-    orphanRefundCount: 0,
     orphanRefundAmountMinor: 0,
   };
 }
@@ -291,12 +296,6 @@ function addFactToBucket(
   bucket.facts.push(fact);
   if (!addFactAmount(bucket.totals, fact)) return false;
 
-  if (fact.stableConsumptionRecordRef === null) {
-    bucket.missingStableConsumptionReferenceCount += 1;
-  } else if (fact.eventType === 'payment_succeeded') {
-    bucket.stablePaymentRecordRefs.add(fact.stableConsumptionRecordRef);
-  }
-
   if (fact.customerAttribution.status !== 'matched') {
     if (!addFactAmount(bucket.unmatchedCustomer, fact)) return false;
   } else {
@@ -333,13 +332,33 @@ function addFactToBucket(
     const nextAmount = safeAdd(bucket.orphanRefundAmountMinor, fact.amountMinor);
     if (nextAmount === null) return false;
     bucket.orphanRefundAmountMinor = nextAmount;
-    bucket.orphanRefundCount += 1;
   }
 
   return true;
 }
 
-function finalizeBucket(bucket: MutableCurrencyBucket): FinalizedBucketResult {
+function emptyStableConsumptionRecordCurrencyGate(): Omit<
+  AnalyticsStableConsumptionRecordCurrencyGate,
+  'currency'
+> {
+  return {
+    consumptionRecordCount: 0,
+    countAvailability: 'available',
+    quality: {
+      missingStableConsumptionReferenceCount: 0,
+      conflictingStableConsumptionRecordCount: 0,
+      linkedRefundWithoutPaymentCount: 0,
+      linkedRefundAttributionMismatchCount: 0,
+      linkedRefundCurrencyMismatchCount: 0,
+      orphanRefundCount: 0,
+    },
+  };
+}
+
+function finalizeBucket(
+  bucket: MutableCurrencyBucket,
+  stableConsumptionRecordGate?: AnalyticsStableConsumptionRecordCurrencyGate,
+): FinalizedBucketResult {
   const totals = finalizeMoneyBreakdown(bucket.totals);
   const unmatchedCustomer = finalizeMoneyBreakdown(bucket.unmatchedCustomer);
   const unmappedProject = finalizeMoneyBreakdown(bucket.unmappedProject);
@@ -398,8 +417,8 @@ function finalizeBucket(bucket: MutableCurrencyBucket): FinalizedBucketResult {
   });
 
   const paidCustomerCount = bucket.paidCustomerIds.size;
-  const hasMissingStableReference =
-    bucket.missingStableConsumptionReferenceCount > 0;
+  const stableGate =
+    stableConsumptionRecordGate ?? emptyStableConsumptionRecordCurrencyGate();
 
   return {
     ok: true,
@@ -414,19 +433,23 @@ function finalizeBucket(bucket: MutableCurrencyBucket): FinalizedBucketResult {
               numeratorMinor: matchedPaidCustomerNet,
               denominator: paidCustomerCount,
             },
-      consumptionRecordCount: hasMissingStableReference
-        ? null
-        : bucket.stablePaymentRecordRefs.size,
-      countAvailability: hasMissingStableReference
-        ? 'unavailable_unstable_reference'
-        : 'available',
+      consumptionRecordCount: stableGate.consumptionRecordCount,
+      countAvailability: stableGate.countAvailability,
       mappedProjectRanking,
       quality: {
         missingStableConsumptionReferenceCount:
-          bucket.missingStableConsumptionReferenceCount,
+          stableGate.quality.missingStableConsumptionReferenceCount,
+        conflictingStableConsumptionRecordCount:
+          stableGate.quality.conflictingStableConsumptionRecordCount,
+        linkedRefundWithoutPaymentCount:
+          stableGate.quality.linkedRefundWithoutPaymentCount,
+        linkedRefundAttributionMismatchCount:
+          stableGate.quality.linkedRefundAttributionMismatchCount,
+        linkedRefundCurrencyMismatchCount:
+          stableGate.quality.linkedRefundCurrencyMismatchCount,
         unmatchedCustomer,
         unmappedProject,
-        orphanRefundCount: bucket.orphanRefundCount,
+        orphanRefundCount: stableGate.quality.orphanRefundCount,
         orphanRefundAmountMinor: bucket.orphanRefundAmountMinor,
       },
     },
@@ -610,6 +633,7 @@ function periodCurrencyMetrics(input: Readonly<{
   completeness: AnalyticsAggregationCompleteness;
   resolutionStatus: 'complete' | 'partial';
   emptyBucket: FinalizedCurrencyMetrics;
+  stableConsumptionRecordGate?: AnalyticsStableConsumptionRecordCurrencyGate;
 }>): PeriodCurrencyMetricsResult {
   if (input.completeness === 'unavailable') {
     return { ok: true, value: unavailablePeriodMetrics(input.completeness) };
@@ -632,7 +656,10 @@ function periodCurrencyMetrics(input: Readonly<{
     return { ok: true, value: unavailablePeriodMetrics(input.completeness) };
   }
 
-  const finalized = finalizeBucket(input.bucket);
+  const finalized = finalizeBucket(
+    input.bucket,
+    input.stableConsumptionRecordGate,
+  );
   if (!finalized.ok) return finalized;
 
   const dataAvailability =
@@ -736,6 +763,31 @@ export function aggregateAnalyticsConsumptionFacts(
     return { ok: false, reasonCode: 'unsafe_integer_overflow' };
   }
 
+  const stableRecordGateForBucket = (
+    bucket: MutableCurrencyBucket | undefined,
+  ) => {
+    if (!bucket) return { ok: true as const, value: undefined };
+    const gate = resolveAnalyticsStableConsumptionRecordGate({
+      tenantId: input.tenantId,
+      institutionId: input.institutionId,
+      factResolution: input.factResolution,
+      periodFacts: bucket.facts,
+    });
+    if (!gate.ok) {
+      return {
+        ok: false as const,
+        reasonCode:
+          gate.reasonCode === 'scope_mismatch'
+            ? ('mixed_scope_input' as const)
+            : ('invalid_fact_resolution' as const),
+      };
+    }
+    if (gate.value.currencies.length !== 1) {
+      return { ok: false as const, reasonCode: 'invalid_fact_resolution' as const };
+    }
+    return { ok: true as const, value: gate.value.currencies[0] };
+  };
+
   const currencies = new Set([...currentBuckets.keys(), ...previousBuckets.keys()]);
   const currencySetsMatch = setsEqual(
     new Set(currentBuckets.keys()),
@@ -744,17 +796,33 @@ export function aggregateAnalyticsConsumptionFacts(
   const currencyAggregations: AnalyticsCurrencyAggregation[] = [];
 
   for (const currency of [...currencies].sort((left, right) => left.localeCompare(right))) {
+    const currentStableRecordGate = stableRecordGateForBucket(
+      currentBuckets.get(currency),
+    );
+    const previousStableRecordGate = stableRecordGateForBucket(
+      previousBuckets.get(currency),
+    );
+    if (!currentStableRecordGate.ok || !previousStableRecordGate.ok) {
+      return {
+        ok: false,
+        reasonCode: !currentStableRecordGate.ok
+          ? currentStableRecordGate.reasonCode
+          : previousStableRecordGate.reasonCode,
+      };
+    }
     const current = periodCurrencyMetrics({
       bucket: currentBuckets.get(currency),
       completeness: input.comparison.currentCompleteness,
       resolutionStatus: input.factResolution.status,
       emptyBucket: emptyBucket.value,
+      stableConsumptionRecordGate: currentStableRecordGate.value,
     });
     const previous = periodCurrencyMetrics({
       bucket: previousBuckets.get(currency),
       completeness: input.comparison.previousCompleteness,
       resolutionStatus: input.factResolution.status,
       emptyBucket: emptyBucket.value,
+      stableConsumptionRecordGate: previousStableRecordGate.value,
     });
     if (!current.ok || !previous.ok) {
       return { ok: false, reasonCode: 'unsafe_integer_overflow' };

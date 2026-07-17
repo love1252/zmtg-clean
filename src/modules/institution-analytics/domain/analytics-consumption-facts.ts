@@ -53,6 +53,7 @@ export type AnalyticsConsumptionFactInput = Readonly<{
 export type EffectiveAnalyticsConsumptionFact = Readonly<{
   tenantId: string;
   institutionId: string;
+  source: string;
   eventType: 'payment_succeeded' | 'refund_confirmed';
   eventAt: string;
   amountMinor: number;
@@ -576,6 +577,7 @@ function toEffectiveFact(
   return {
     tenantId: fact.tenantId,
     institutionId: fact.institutionId,
+    source: fact.source,
     eventType: fact.eventType as 'payment_succeeded' | 'refund_confirmed',
     eventAt: fact.eventAt,
     amountMinor: fact.amountMinor,
