@@ -64,7 +64,7 @@ describe('随访任务分配纯领域契约', () => {
     expect(isFollowUpRolePoolRole('doctor')).toBe(false);
   });
 
-  it('同机构同角色有效成员可按 expectedRevision 原子认领且输入不变', () => {
+  it('同机构同角色有效成员可按 expectedRevision 计算认领结果且输入不变', () => {
     const assignment = rolePoolAssignment();
     const member = activeConsultant();
     const assignmentBefore = structuredClone(assignment);
@@ -72,6 +72,8 @@ describe('随访任务分配纯领域契约', () => {
 
     const claimed = claimFollowUpRolePoolAssignment({
       assignment,
+      institutionId: 'institution-a',
+      actorUserId: 'user-consultant',
       expectedRevision: 4,
       member,
     });
@@ -94,13 +96,17 @@ describe('随访任务分配纯领域契约', () => {
     expect(
       claimFollowUpRolePoolAssignment({
         assignment: claimed.assignment,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 4,
         member,
       }),
-    ).toEqual({ ok: true, changed: false, assignment: claimed.assignment });
+    ).toEqual({ ok: false, code: 'revision_conflict' });
     expect(
       claimFollowUpRolePoolAssignment({
         assignment: claimed.assignment,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 5,
         member,
       }),
@@ -108,6 +114,8 @@ describe('随访任务分配纯领域契约', () => {
     expect(
       claimFollowUpRolePoolAssignment({
         assignment: claimed.assignment,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 3,
         member,
       }),
@@ -115,6 +123,8 @@ describe('随访任务分配纯领域契约', () => {
     expect(
       claimFollowUpRolePoolAssignment({
         assignment: claimed.assignment,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 6,
         member,
       }),
@@ -125,10 +135,21 @@ describe('随访任务分配纯领域契约', () => {
     expect(
       claimFollowUpRolePoolAssignment({
         assignment: directUserAssignment(),
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 4,
         member: activeConsultant(),
       }),
     ).toEqual({ ok: false, code: 'assignment_not_claimable' });
+    expect(
+      claimFollowUpRolePoolAssignment({
+        assignment: directUserAssignment(),
+        institutionId: 'institution-a',
+        actorUserId: null,
+        expectedRevision: 4,
+        member: activeConsultant(),
+      }),
+    ).toEqual({ ok: false, code: 'invalid_command_context' });
 
     const claimedByOther: FollowUpUserAssignment = {
       kind: 'user',
@@ -140,14 +161,27 @@ describe('随访任务分配纯领域契约', () => {
     expect(
       claimFollowUpRolePoolAssignment({
         assignment: claimedByOther,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 4,
         member: activeConsultant(),
       }),
-    ).toEqual({ ok: false, code: 'claim_conflict' });
+    ).toEqual({ ok: false, code: 'revision_conflict' });
     expect(
       claimFollowUpRolePoolAssignment({
         assignment: claimedByOther,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 99,
+        member: activeConsultant(),
+      }),
+    ).toEqual({ ok: false, code: 'revision_conflict' });
+    expect(
+      claimFollowUpRolePoolAssignment({
+        assignment: claimedByOther,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
+        expectedRevision: 5,
         member: activeConsultant(),
       }),
     ).toEqual({ ok: false, code: 'claim_conflict' });
@@ -159,6 +193,8 @@ describe('随访任务分配纯领域契约', () => {
     expect(
       claimFollowUpRolePoolAssignment({
         assignment,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 3,
         member: activeConsultant(),
       }),
@@ -166,6 +202,8 @@ describe('随访任务分配纯领域契约', () => {
     expect(
       claimFollowUpRolePoolAssignment({
         assignment,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 4,
         member: activeConsultant({ institutionId: 'institution-b' }),
       }),
@@ -173,6 +211,8 @@ describe('随访任务分配纯领域契约', () => {
     expect(
       claimFollowUpRolePoolAssignment({
         assignment,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 4,
         member: activeConsultant({ role: 'customer_service' }),
       }),
@@ -180,19 +220,40 @@ describe('随访任务分配纯领域契约', () => {
     expect(
       claimFollowUpRolePoolAssignment({
         assignment,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 4,
         member: activeConsultant({ active: false }),
       }),
     ).toEqual({ ok: false, code: 'inactive_member' });
+    expect(
+      claimFollowUpRolePoolAssignment({
+        assignment,
+        institutionId: 'institution-a',
+        actorUserId: 'user-other',
+        expectedRevision: 4,
+        member: activeConsultant(),
+      }),
+    ).toEqual({ ok: false, code: 'member_mismatch' });
+    expect(
+      claimFollowUpRolePoolAssignment({
+        assignment,
+        institutionId: 'institution-a',
+        actorUserId: null,
+        expectedRevision: 4,
+        member: activeConsultant(),
+      }),
+    ).toEqual({ ok: false, code: 'invalid_command_context' });
   });
 
-  it('改派只接受管理员/运营及受控 reason，并返回审计要求而不写审计', () => {
+  it('改派只表达管理员/运营及受控 reason 前置要求，不代表已授权或已写审计', () => {
     const assignment = directUserAssignment();
 
     expect(
       reassignFollowUpAssignment({
         assignment,
         target: { kind: 'role_pool', institutionId: 'institution-a', role: 'customer_service' },
+        targetMember: null,
         expectedRevision: 4,
         institutionId: 'institution-a',
         actorRole: 'consultant',
@@ -203,6 +264,7 @@ describe('随访任务分配纯领域契约', () => {
       reassignFollowUpAssignment({
         assignment,
         target: { kind: 'role_pool', institutionId: 'institution-a', role: 'customer_service' },
+        targetMember: null,
         expectedRevision: 4,
         institutionId: 'institution-a',
         actorRole: 'tenant_admin',
@@ -213,6 +275,7 @@ describe('随访任务分配纯领域契约', () => {
     const reassigned = reassignFollowUpAssignment({
       assignment,
       target: { kind: 'role_pool', institutionId: 'institution-a', role: 'customer_service' },
+      targetMember: null,
       expectedRevision: 4,
       institutionId: 'institution-a',
       actorRole: 'tenant_admin',
@@ -232,6 +295,7 @@ describe('随访任务分配纯领域契约', () => {
         actorRole: 'tenant_admin',
         reason: 'workload_rebalance',
         requiredActorRoles: FOLLOW_UP_ASSIGNMENT_ADMINISTRATIVE_ROLES,
+        authorizationRequired: true,
         auditRequired: true,
       },
     });
@@ -251,6 +315,7 @@ describe('随访任务分配纯领域契约', () => {
         institutionId: 'institution-a',
         assigneeUserId: 'user-consultant',
       },
+      targetMember: activeConsultant(),
       expectedRevision: 5,
       institutionId: 'institution-a',
       actorRole: 'tenant_admin',
@@ -286,6 +351,10 @@ describe('随访任务分配纯领域契约', () => {
       reassignFollowUpAssignment({
         assignment,
         target: { kind: 'user', institutionId: 'institution-b', assigneeUserId: 'user-next' },
+        targetMember: activeConsultant({
+          institutionId: 'institution-b',
+          userId: 'user-next',
+        }),
         expectedRevision: 4,
         institutionId: 'institution-a',
         actorRole: 'tenant_operator',
@@ -296,6 +365,7 @@ describe('随访任务分配纯领域契约', () => {
       reassignFollowUpAssignment({
         assignment,
         target: { kind: 'role_pool', institutionId: 'institution-a', role: 'doctor' },
+        targetMember: null,
         expectedRevision: 4,
         institutionId: 'institution-a',
         actorRole: 'tenant_operator',
@@ -306,12 +376,74 @@ describe('随访任务分配纯领域契约', () => {
       reassignFollowUpAssignment({
         assignment,
         target: { kind: 'user', institutionId: 'institution-a', assigneeUserId: 'user-next' },
+        targetMember: activeConsultant({ userId: 'user-next' }),
         expectedRevision: 3,
         institutionId: 'institution-a',
         actorRole: 'tenant_operator',
         reason: 'assignment_correction',
       }),
     ).toEqual({ ok: false, code: 'revision_conflict' });
+  });
+
+  it('具体员工改派必须重验目标成员事实且当前同事实可幂等', () => {
+    const assignment = directUserAssignment();
+    const target = {
+      kind: 'user' as const,
+      institutionId: 'institution-a',
+      assigneeUserId: 'user-direct',
+    };
+    const validInput = {
+      assignment,
+      target,
+      targetMember: activeConsultant({ userId: 'user-direct' }),
+      expectedRevision: 4,
+      institutionId: 'institution-a',
+      actorRole: 'tenant_operator',
+      reason: 'assignment_correction',
+    } as const;
+
+    expect(reassignFollowUpAssignment(validInput)).toEqual({
+      ok: true,
+      changed: false,
+      assignment,
+      control: {
+        operation: 'reassign',
+        actorRole: 'tenant_operator',
+        reason: 'assignment_correction',
+        requiredActorRoles: FOLLOW_UP_ASSIGNMENT_ADMINISTRATIVE_ROLES,
+        authorizationRequired: true,
+        auditRequired: true,
+      },
+    });
+    expect(
+      reassignFollowUpAssignment({ ...validInput, expectedRevision: 3 }),
+    ).toEqual({ ok: false, code: 'revision_conflict' });
+    expect(
+      reassignFollowUpAssignment({ ...validInput, targetMember: null }),
+    ).toEqual({ ok: false, code: 'target_member_required' });
+    expect(
+      reassignFollowUpAssignment({
+        ...validInput,
+        targetMember: activeConsultant({ userId: 'user-other' }),
+      }),
+    ).toEqual({ ok: false, code: 'member_mismatch' });
+    expect(
+      reassignFollowUpAssignment({
+        ...validInput,
+        targetMember: activeConsultant({ userId: 'user-direct', active: false }),
+      }),
+    ).toEqual({ ok: false, code: 'inactive_member' });
+    expect(
+      reassignFollowUpAssignment({
+        ...validInput,
+        target: {
+          kind: 'role_pool',
+          institutionId: 'institution-a',
+          role: 'consultant',
+        },
+        targetMember: activeConsultant(),
+      }),
+    ).toEqual({ ok: false, code: 'member_mismatch' });
   });
 
   it('撤销认领恢复原角色池并携带管理员/运营受控 reason 要求', () => {
@@ -384,6 +516,7 @@ describe('随访任务分配纯领域契约', () => {
         actorRole: 'tenant_operator',
         reason: 'member_unavailable',
         requiredActorRoles: FOLLOW_UP_ASSIGNMENT_ADMINISTRATIVE_ROLES,
+        authorizationRequired: true,
         auditRequired: true,
       },
     });
@@ -418,12 +551,108 @@ describe('随访任务分配纯领域契约', () => {
         actorRole: 'tenant_admin',
         reason: 'assignment_correction',
         requiredActorRoles: FOLLOW_UP_ASSIGNMENT_ADMINISTRATIVE_ROLES,
+        authorizationRequired: true,
         auditRequired: true,
       },
     });
   });
 
-  it('拒绝不完整或非法 assignment 快照', () => {
+  it('安全整数上界只允许当前事实 no-op，任何变化不得溢出', () => {
+    const lastRevision = Number.MAX_SAFE_INTEGER - 1;
+    const claimed = claimFollowUpRolePoolAssignment({
+      assignment: rolePoolAssignment({ revision: lastRevision }),
+      institutionId: 'institution-a',
+      actorUserId: 'user-consultant',
+      expectedRevision: lastRevision,
+      member: activeConsultant(),
+    });
+    expect(claimed).toMatchObject({
+      ok: true,
+      changed: true,
+      assignment: { revision: Number.MAX_SAFE_INTEGER },
+    });
+    if (!claimed.ok) throw new Error('expected upper-bound claim success');
+
+    expect(
+      claimFollowUpRolePoolAssignment({
+        assignment: claimed.assignment,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
+        expectedRevision: Number.MAX_SAFE_INTEGER,
+        member: activeConsultant(),
+      }),
+    ).toEqual({ ok: true, changed: false, assignment: claimed.assignment });
+    expect(
+      claimFollowUpRolePoolAssignment({
+        assignment: rolePoolAssignment({ revision: Number.MAX_SAFE_INTEGER }),
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
+        expectedRevision: Number.MAX_SAFE_INTEGER,
+        member: activeConsultant(),
+      }),
+    ).toEqual({ ok: false, code: 'invalid_command_context' });
+
+    const directAtLimit = directUserAssignment({ revision: Number.MAX_SAFE_INTEGER });
+    expect(
+      reassignFollowUpAssignment({
+        assignment: directAtLimit,
+        target: {
+          kind: 'user',
+          institutionId: 'institution-a',
+          assigneeUserId: 'user-direct',
+        },
+        targetMember: activeConsultant({ userId: 'user-direct' }),
+        expectedRevision: Number.MAX_SAFE_INTEGER,
+        institutionId: 'institution-a',
+        actorRole: 'tenant_admin',
+        reason: 'assignment_correction',
+      }),
+    ).toMatchObject({ ok: true, changed: false, assignment: directAtLimit });
+    expect(
+      reassignFollowUpAssignment({
+        assignment: directAtLimit,
+        target: {
+          kind: 'role_pool',
+          institutionId: 'institution-a',
+          role: 'consultant',
+        },
+        targetMember: null,
+        expectedRevision: Number.MAX_SAFE_INTEGER,
+        institutionId: 'institution-a',
+        actorRole: 'tenant_admin',
+        reason: 'assignment_correction',
+      }),
+    ).toEqual({ ok: false, code: 'invalid_command_context' });
+    expect(
+      unclaimFollowUpAssignment({
+        assignment: claimed.assignment,
+        expectedRevision: Number.MAX_SAFE_INTEGER,
+        institutionId: 'institution-a',
+        actorRole: 'tenant_admin',
+        reason: 'assignment_correction',
+      }),
+    ).toEqual({ ok: false, code: 'invalid_command_context' });
+    expect(
+      claimFollowUpRolePoolAssignment({
+        assignment: rolePoolAssignment({ revision: Number.MAX_SAFE_INTEGER + 1 }),
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
+        expectedRevision: Number.MAX_SAFE_INTEGER + 1,
+        member: activeConsultant(),
+      }),
+    ).toEqual({ ok: false, code: 'invalid_assignment' });
+    expect(
+      claimFollowUpRolePoolAssignment({
+        assignment: rolePoolAssignment(),
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
+        expectedRevision: Number.MAX_SAFE_INTEGER + 1,
+        member: activeConsultant(),
+      }),
+    ).toEqual({ ok: false, code: 'invalid_command_context' });
+  });
+
+  it('拒绝不完整、非法或非对象 assignment 快照', () => {
     const invalidAssignment = {
       kind: 'role_pool',
       institutionId: 'institution-a',
@@ -434,6 +663,8 @@ describe('随访任务分配纯领域契约', () => {
     expect(
       claimFollowUpRolePoolAssignment({
         assignment: invalidAssignment,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 1,
         member: activeConsultant(),
       }),
@@ -449,9 +680,44 @@ describe('随访任务分配纯领域契约', () => {
     expect(
       claimFollowUpRolePoolAssignment({
         assignment: invalidKind,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
         expectedRevision: 1,
         member: activeConsultant(),
       }),
     ).toEqual({ ok: false, code: 'invalid_assignment' });
+
+    for (const nonObject of [null, undefined, []]) {
+      const invalid = nonObject as unknown as FollowUpAssignment;
+      expect(
+        claimFollowUpRolePoolAssignment({
+          assignment: invalid,
+          institutionId: 'institution-a',
+          actorUserId: 'user-consultant',
+          expectedRevision: 1,
+          member: activeConsultant(),
+        }),
+      ).toEqual({ ok: false, code: 'invalid_assignment' });
+      expect(
+        reassignFollowUpAssignment({
+          assignment: invalid,
+          target: { kind: 'role_pool', institutionId: 'institution-a', role: 'consultant' },
+          targetMember: null,
+          expectedRevision: 1,
+          institutionId: 'institution-a',
+          actorRole: 'tenant_admin',
+          reason: 'assignment_correction',
+        }),
+      ).toEqual({ ok: false, code: 'invalid_assignment' });
+      expect(
+        unclaimFollowUpAssignment({
+          assignment: invalid,
+          expectedRevision: 1,
+          institutionId: 'institution-a',
+          actorRole: 'tenant_admin',
+          reason: 'assignment_correction',
+        }),
+      ).toEqual({ ok: false, code: 'invalid_assignment' });
+    }
   });
 });
