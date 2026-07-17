@@ -65,17 +65,32 @@ function snapshotExactDataRecord(
   }
 }
 
+function toDigitXSkeleton(value: string): string {
+  return Array.from(value.normalize('NFKC'), (character) => {
+    if (/\d/u.test(character)) return character;
+    if (character === 'X' || character === 'x') return 'X';
+    return ' ';
+  }).join('');
+}
+
+function containsMobileOrIdentityReference(value: string): boolean {
+  const skeleton = toDigitXSkeleton(value);
+  const mobile = /(?:^|[^0-9])(?:8[^0-9]*6[^0-9]*)?1[3-9](?:[^0-9]*\d){9}(?!\d)/u;
+  const identity = /(?:^|[^0-9X])\d(?:[^0-9]*\d){16}[^0-9]*[0-9X](?![0-9X])/u;
+  return mobile.test(skeleton) || identity.test(skeleton);
+}
+
 function isLowSensitivitySummary(value: unknown): value is string {
   if (typeof value !== 'string') return false;
-  const compactValue = value.replace(/[\s.\u00B7\u2010-\u2015\u2212\u3002\uFF0E-]/gu, '');
+  const normalizedValue = value.normalize('NFKC');
 
   return (
     value === value.trim() &&
     Array.from(value).length >= 1 &&
     Array.from(value).length <= FOLLOW_UP_MANUAL_FEEDBACK_MAX_LENGTH &&
     !/[\u0000-\u001F\u007F-\u009F]/u.test(value) &&
-    !/(?:\+?86)?1[3-9]\d{9}/u.test(compactValue) &&
-    !/(?:^|[^0-9])\d{17}[\dXx](?:$|[^0-9A-Za-z])/u.test(compactValue) &&
+    !/[\p{Cf}\u200B-\u200D\u2060\uFEFF]/u.test(normalizedValue) &&
+    !containsMobileOrIdentityReference(normalizedValue) &&
     !/(身份证|病历|病案|门诊号|住院号|病历号)/u.test(value)
   );
 }
