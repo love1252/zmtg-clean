@@ -10,19 +10,17 @@
 
 ---
 
-## 一、文档状态与启动检查
+## 一、文档状态与历史启动检查
 
-- 日期：`2026-07-17 CST`
-- 当前阶段：机构端七线并行开发的会话工作台第三轮字段定点修正，任务编号 `PLAN-CONV-REV-03`
-- 当前 Worktree：`/Users/dongxiaolong/.codex/worktrees/8fb6/zmtg-clean`
-- 当前分支：detached `HEAD`（规划 Worktree；不创建、切换或推送分支）
-- 当前 `HEAD`：`e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa`
-- 当前本地 `origin/main`：`e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa`
-- 启动时 `git status --short`：仅有第一轮新增且尚未跟踪的本文档，符合本轮唯一允许文件范围
+- 初始规划日期：`2026-07-17 CST`。
+- 初始任务链：`PLAN-CONV-01 → PLAN-CONV-REV-02 → PLAN-CONV-REV-03`，均为 docs-only 规划或修订。
+- 历史启动基线：第一轮文档从 `e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa` 的独立 detached Worktree 形成；旧 Worktree 路径和 detached 状态不再作为当前事实。
+- 发布载体：本文已纳入 Draft PR `#536` 的 `codex/institution-plans-customer-care-conversation` 分支；Draft 只表示候选，不代表已获合并或 runtime 授权。
+- 任何后续审查都必须以当次命令重新核验日期、分支、`HEAD`、`origin/main` 和 `git status --short`，不得复用历史启动快照。
 - 总计划：`docs/superpowers/plans/2026-07-17-institution-seven-stream-development-plan.md`
 - 产品规格：`docs/superpowers/specs/2026-07-15-institution-navigation-page-system-design.md`
-- 本轮允许：仅修改本文档
-- 本轮不是：不修改 `src/**`、`drizzle/**`、schema、migration、API、测试、配置、脚本或依赖；不读取凭证、不接 Webhook、不出网、不真实发送、不接入 AIBOTK runtime；不提交、推送、创建 PR、合并或继续任何 runtime 任务。
+- 文档文件边界：`docs/superpowers/plans/2026-07-17-institution-conversations-technical-plan.md`。
+- 授权边界：本计划本身不授权修改 `src/**`、`drizzle/**`、schema、migration、API、测试、配置、脚本或依赖，不授权读取凭证、接 Webhook、出网、真实发送、接入 AIBOTK runtime、提交、推送、创建/合并 PR 或继续任何 runtime；任何实际动作均需独立明确授权。
 
 本文的建议目录、API、表和测试名称仅是未来小 PR 的申请清单。它们在具体 `CONV-*` 获批前均不得创建。
 
@@ -82,8 +80,8 @@ InstitutionSourceEnvelopeV1<T,K>
 - reader 只作为消费服务的服务端输入依赖，不是 `InstitutionSourceEnvelopeV1<T,K>` 的响应字段，也不得序列化到浏览器。
 - 只有权威查询成功且确定没有记录、即 `readiness=empty` 时，计数才允许显示 `0`。`partial`、`unavailable`、`denied`、`disabled` 或未知结果显示 `--` 或对应受控状态。
 - `stale` 只允许展示带 `observedAt` 与 `freshUntil` 的已验证快照，不得驱动当前写操作、工作台行动队列、分配、自动完成或恢复判断。
-- 顶层 `denied`、`disabled`、`failureCode=scope_mismatch` 和跨机构请求固定返回 `data=null`，不返回业务数据、分区项目、计数或对象存在性。
-- 只有顶层 `readiness` 可以为 `partial`；分区 `readiness` 严格限于 `ready | empty | stale | unavailable | denied | disabled`。顶层 `partial` 必须逐分区标明状态与 freshness，不能把失败分区计作空数据，也不能用成功分区推断全量结果。
+- 顶层 `denied`、`disabled`、`failureCode=scope_mismatch` 和跨机构请求固定返回 `data=null`，不返回业务数据、分区项目、计数或对象存在性。任一分区出现 `failureCode=scope_mismatch` 时必须提升为顶层 `failureCode=scope_mismatch`，整包 `data=null`；不得用顶层 `partial` 保留其他成功分区。
+- 只有顶层 `readiness` 可以为 `partial`；分区 `readiness` 严格限于 `ready | empty | stale | unavailable | denied | disabled`。不存在任何 `scope_mismatch` 时，顶层 `partial` 才可逐分区保留已独立授权且验证成功的数据，并标明各分区状态与 freshness；不能把失败分区计作空数据，也不能用成功分区推断全量结果。
 - 顶层与分区 `failureCode` 只使用同一组 `null | upstream_unavailable | timeout | invalid_payload | scope_mismatch | permission_denied | not_released | data_incomplete`，不得出现自由文本或本线自定义 code。
 - `ConversationCareDispositionV1`、`IdentityMatchReviewV1`、`ConversationActionSourceV1`、`CustomerReferenceV1`、`CreateCustomerFromIdentityReviewV1` 及其他跨线公共声明均归总协调台所有。本文只记录已冻结字段需求和本线 provider/consumer 责任，不声称拥有或自行创建公共声明。
 
@@ -272,9 +270,11 @@ matched → revoked
 - `irreversibleIdentityReference` 是服务端生成的不可逆身份引用；原始手机号、外部账号 ID、备注、聊天原文、连接凭证和 provider payload 均不得进入契约、URL 或 audit。
 - `candidateReference` 只允许服务端 reader 在同一 scope 内解析候选，不进入跨线响应、浏览器状态或命令参数。跨线快照只暴露 `candidateSnapshotVersion` 与受控 `candidateSetDigest`；决定或建客命令不提交 `candidateReference`。
 - `consultant` 和 `customer_service` 只能为本人已分配的活动分段提交或补充低敏复核；`tenant_admin` 和 `tenant_operator` 才能决定匹配既有客户、拒绝、标记冲突、撤回或发起受控新建客户。
-- 每个决定命令必须同时绑定 `reviewId + expectedRevision + candidateSnapshotVersion + idempotencyKey`；任一 revision/candidate 变化、重复键载荷不一致、scope mismatch、跨机构、过期或已终态均 fail-closed，并且不返回候选或客户数据。
-- `CreateCustomerFromIdentityReviewV1` 的复核绑定控制字段统一命名为 `reviewId`、`expectedRevision`、`candidateSnapshotVersion`、`idempotencyKey`，不得使用本线别名。客户数据部分必须原样使用客户中心冻结的完整标准创建 DTO，不得用候选摘要拼装缩减 DTO。
-- 新建客户必须将 review 先转为 `awaiting_customer_creation`，再由会话/身份服务调用总协调台声明、客户中心实现的 `CreateCustomerFromIdentityReviewV1`。客户中心成功返回同 scope 的 `CustomerReferenceV1` 后，身份服务才可在一个本地事务中重新校验 `expectedRevision`、`candidateSnapshotVersion` 和 `idempotencyKey`，原子写入 `matched + resolvedCustomer + audit`；创建失败或身份事务失败不得产生部分匹配，重试只能读取同一幂等创建结果。
+- 每个复核决定命令必须同时绑定 `reviewId + expectedRevision + candidateSnapshotVersion + idempotencyKey`；委派新建客户还必须携带下述 `actionToken + createCustomer`。任一 revision/candidate 变化、重复键载荷不一致、scope mismatch、跨机构、过期或已终态均 fail-closed，并且不返回候选或客户数据。
+- `CreateCustomerFromIdentityReviewV1` 必须完整消费总协调台冻结形状，精确字段为 `contractVersion`、`reviewId`、`expectedRevision`、`candidateSnapshotVersion`、`idempotencyKey`、`actionToken`、`createCustomer`，不得遗漏 `actionToken` 或使用本线别名。`createCustomer` 必须原样使用客户中心冻结的完整标准创建 DTO，不得用候选摘要拼装缩减 DTO。
+- `actionToken` 只能由身份决定服务端在重新验证当前 `institutionId`、reader、review、revision、候选版本与完整创建 DTO 后签发，并绑定当前机构、reader、`reviewId`、`expectedRevision`、DTO 摘要和短时有效期；它是一次性服务间动作令牌。管理中心 UI 只向身份决定服务端提交最终确认意图和受控 DTO，不取得令牌；令牌绝不进入浏览器内存/响应/持久化、URL、日志或审计。会话/身份服务只在服务端编排调用中把原令牌透传给客户中心命令处理者，不返回客户端、不解析为客户事实，也不长期保存。
+- 新建客户必须将 review 先转为 `awaiting_customer_creation`，再由会话/身份服务调用总协调台声明、客户中心实现的 `CreateCustomerFromIdentityReviewV1`。客户中心必须原子验证并消费 `actionToken`；令牌过期、已被不同命令使用、绑定机构/reader/review/revision/DTO 摘要不一致或重放载荷不一致时 fail-closed，不创建客户，并要求重新读取 review 后取得新令牌。相同 `idempotencyKey` 与完全相同载荷的安全重试返回第一次已持久化结果，不因一次性令牌已消费而重复建客；不同载荷重放固定拒绝。
+- 客户中心成功返回同 scope 的 `CustomerReferenceV1` 后，身份服务才可在一个本地事务中重新校验 `expectedRevision`、`candidateSnapshotVersion`、`idempotencyKey` 和已消费令牌所绑定的命令结果，原子写入 `matched + resolvedCustomer + audit`；创建失败或身份事务失败不得产生部分匹配，重试只能读取同一幂等创建结果。
 - `matched` 后撤销关系使用 `revoked`，保留原决定和客户引用的低敏历史。`revoked` 后如需重新匹配必须创建新的 `reviewId`，不得重开、改写或复用旧 review。
 - 八种 review 状态向会话身份投影的映射固定为：`pending_review`/`awaiting_customer_creation` → `pending_review`，`conflict` → `conflict`，`matched` → `matched`，`rejected`/`withdrawn`/`expired`/`revoked` → `unmatched`。只有 `matched` 且 `resolvedCustomer` 经服务端 reader 当前校验成功后，当前会话才能保留客户引用；`pending_review`、`awaiting_customer_creation`、`conflict`、`rejected`、`withdrawn`、`expired` 的 `resolvedCustomer` 必须为 null。`revoked` review 可保留原客户的低敏历史引用用于审计，但当前会话必须清空 `customerReference`、保留 `identity_unconfirmed` blocker，不得沿用该引用或开放预约、随访等客户业务写入。
 
@@ -296,14 +296,30 @@ lastCustomerMessageAt, slaAt
 priority
 assignee
 safeSummary
-detailHref: "/hospital/conversations/:id"
+detailHref: "/hospital/conversations/:conversationId"
 ```
 
 - 只允许从真实持久化、未关闭的最新分段生成，且 `production=true`、`sourceVersion` 有效、`subject` 合法。`waiting_human` 收录 `conversationState=awaiting_human` 的人工待接管项；`unresolved_risk` 收录风险尚未解决的活动分段。`safeSummary` 不含消息正文、聊天原文、AI 全文或原始外部身份。
 - 排序信号由 provider 以 `priority + sortSignals + slaAt + lastCustomerMessageAt` 确定：未解决临床/高风险优先，其后按 SLA 到期与最后客户入站时间；工作台不得读取会话表自行复刻排序。同一 `segmentId` 同时命中两分区时，通过 `partitions` 保留两分区计数，跨分区行动队列去重并优先展示 `unresolved_risk`。
 - `tenant_admin`/`tenant_operator` 可读取当前机构内其有权处理的项目；`consultant`/`customer_service` 只读取本人已分配的活动分段。未分配项、其他员工分段和跨机构对象不向普通角色暴露，且不能通过计数、空态或错误文案泄露存在性。
-- `readiness=stale` 的快照可带截止时间显示为历史参考，但不得进入当前工作台行动队列或待办数字；`partial` 只展示成功分区并明确失败分区，`denied/disabled/scope mismatch` 不返回项目或计数。
-- `detailHref` 唯一指向 `/hospital/conversations/:id`；不得创建第二套会话详情路由、在 URL 携带消息正文/外部身份，或使用旧演示入口承载生产行动。`actionId`、`partitionKey`、`sortPriority`、`slaDueAt`、`canonicalHref` 及其他近义字段不属于 V1。
+- `readiness=stale` 的快照可带截止时间显示为历史参考，但不得进入当前工作台行动队列或待办数字；不存在 scope mismatch 时，`partial` 只展示成功分区并明确失败分区。任一分区 `scope_mismatch` 都必须提升为顶层同名错误并整包 `data=null`；`denied/disabled` 分区不返回对应项目或计数。
+- `detailHref` 唯一指向 `/hospital/conversations/:conversationId`；不得创建第二套会话详情路由、在 URL 携带消息正文/外部身份，或使用旧演示入口承载生产行动。`actionId`、`partitionKey`、`sortPriority`、`slaDueAt`、`canonicalHref` 及其他近义字段不属于 V1。
+
+### 4.9 规范页面与兼容路由
+
+会话工作台的页面路由固定为下表；`automations` 静态段必须优先于动态 `:conversationId` 解析，不能被识别为会话 ID：
+
+| 页面 | canonical 路由 | 交付与权限边界 |
+| --- | --- | --- |
+| 会话队列 | `/hospital/conversations` | `CONV-04`；仅展示服务端当前角色可读的生产会话。 |
+| 会话详情 | `/hospital/conversations/:conversationId` | `CONV-04`；桌面三栏中间主区域、移动端全屏，直达和刷新都重验 scope、角色、活动分配与对象版本。 |
+| 自动触达 | `/hospital/conversations/automations` | `CONV-08`；仅管理员/运营进入受控旅程列表，能力未发布时隐藏且不取数。 |
+| 自动触达详情 | `/hospital/conversations/automations/:journeyId` | `CONV-08`；桌面完整页，移动端只读详情与获准暂停入口；每次重验旅程机构归属、角色、revision 和触达安全状态。 |
+| 旧客服工作台 | `/hospital/service` | 仅由 `BASE-01A` 提供服务端兼容跳转至 `/hospital/conversations`，不保留第二套页面、状态或数据源；目标能力关闭或无权限时沿用目标页受控状态。 |
+
+- 两个顶部页签固定为“会话队列、自动触达”；各自 capability 独立，人工会话可先发布，自动触达未满足 `CONV-08` 门禁时不显示空壳。
+- URL 只允许对象 ID 和批准的安全结构化筛选，不传消息正文、外部身份、客户名称、令牌或 provider 参数。打开 canonical 页面不代表业务动作成功，所有操作仍在目标服务端命令重新授权。
+- `detailHref`、列表点击、直接访问、刷新、前进/后退和移动端入口必须使用同一 canonical URL；兼容路由只重定向，不承载业务 client 或请求旧数据源。
 
 ---
 
@@ -361,7 +377,7 @@ detailHref: "/hospital/conversations/:id"
 
 - **目标：** 在不接数据库、路由、UI、网络或凭证的前提下，实现本线内部 `ConversationV1`、分段、消息、分配、风险、处置 revision、身份复核和逐消息结果领域模型，并针对总协调台冻结的公共 V1 声明编写 provider 映射/兼容测试。
 - **建议范围：** 只申请新增 `src/modules/institution-conversations/domain/**`、`src/modules/institution-conversations/tests/**`。`src/modules/institution-contracts/v1/**` 的公共声明由总协调台单独拥有和修改，不能混入 `CONV-01`。
-- **必须测试：** 五态合法/非法转换、人工交回 AI 守卫、纯 AI auto-close、人工/强制结束语义、结束后新入站创建新分段、旧处置 revision 失效、Care 四类分类与守卫、风险独立状态、分配并发、消息幂等、发送/接收/送达/回复/业务完成分离、身份八状态、expected revision/候选版本/幂等绑定、低敏契约输出和四角色边界。
+- **必须测试：** 五态合法/非法转换、人工交回 AI 守卫、纯 AI auto-close、人工/强制结束语义、结束后新入站创建新分段、旧处置 revision 失效、Care 四类分类与守卫、风险独立状态、分配并发、消息幂等、发送/接收/送达/回复/业务完成分离、身份八状态、expected revision/候选版本/幂等绑定、`CreateCustomerFromIdentityReviewV1` 完整七字段，以及 `actionToken` 的服务端签发、机构/reader/review/revision/DTO 摘要绑定、短时过期、一次性消费、相同幂等重试、不同载荷重放拒绝和绝不返回浏览器；同时覆盖低敏契约输出和四角色边界。
 - **明确非范围：** schema/migration、repository、API、页面、渠道 adapter、AI 调用、真实消息、自动触达。
 
 ### `CONV-02`：会话数据模型申请与 `MIG-04` 排队
@@ -380,7 +396,7 @@ detailHref: "/hospital/conversations/:id"
 ### `CONV-04`：人工会话队列、详情与跨线结果
 
 - **前提：** `CONV-03` 已提供真实持久化服务，且 `BASE-01A` 分配了稳定路由壳。
-- **目标：** 实现 canonical `/hospital/conversations` 队列、`/hospital/conversations/:conversationId` 桌面三栏/移动全屏详情、接管/拒绝/改派/结束、风险状态和消息授权视图；为总协调台公共声明实现 `ConversationCareDispositionV1` 与 `ConversationActionSourceV1` provider。
+- **目标：** 实现 canonical `/hospital/conversations` 队列、`/hospital/conversations/:conversationId` 桌面三栏/移动全屏详情、接管/拒绝/改派/结束、风险状态和消息授权视图；为总协调台公共声明实现 `ConversationCareDispositionV1` 与 `ConversationActionSourceV1` provider。向 `BASE-01A` 提交 `/hospital/service` 只跳转新队列的兼容 request，并验证 `automations` 静态段不会被动态会话详情吞并；本切片不实现自动触达页面。
 - **展示规则：** 仅当前角色有权处理的唯一会话进入四项指标；默认排除已结束分段，按最后客户入站消息倒序；未知和局部失败显示 `--`。搜索只匹配低敏名称/脱敏引用且仅保留页面内存，不搜索正文。
 - **发送规则：** 未通过 `CONV-05` 时隐藏正式发送按钮；仅可展示已持久化的内部草稿/处理状态，不能显示“模拟发送成功”。
 
@@ -399,7 +415,7 @@ detailHref: "/hospital/conversations/:id"
 ### `CONV-06`：未知联系人复核
 
 - **前提：** `IdentityMatchReviewV1` 与 `CreateCustomerFromIdentityReviewV1` 已由总协调台冻结，管理中心决定界面与客户中心幂等创建 provider 已明确。
-- **目标：** 会话/身份服务持久化复核事实和八状态；`consultant`/`customer_service` 仅提交，`tenant_admin`/`tenant_operator` 通过管理中心决定。新建客户委派客户中心，成功返回 `CustomerReferenceV1` 后才原子匹配。
+- **目标：** 会话/身份服务持久化复核事实和八状态；`consultant`/`customer_service` 仅提交，`tenant_admin`/`tenant_operator` 通过管理中心决定。委派新建客户时完整消费含 `actionToken` 的 `CreateCustomerFromIdentityReviewV1`，覆盖服务端获取、原样透传、绑定验证、短时过期、一次性消费、相同幂等结果复用及不同载荷重放拒绝；客户中心成功返回 `CustomerReferenceV1` 后才原子匹配。
 - **禁止：** 管理中心拥有或另建复核事实、会话线直接创建/合并客户、把候选视为确认、复用 mock runtime、`candidateReference` 出现在客户端，或把原始外部标识/聊天正文带入跨线契约。`revoked` 复核不得重开。
 
 ### `CONV-07`：AI 建议与已发布知识引用
@@ -411,7 +427,7 @@ detailHref: "/hospital/conversations/:id"
 ### `CONV-08`：自动触达（最后且独立）
 
 - **前提：** `ReachOutSafetyV1`、版本模板、同意、退订、安静时段、去重、有限幂等重试、逐收件人结果、急停、单渠道生产门禁和用户再次明确授权全部满足。
-- **目标：** 只允许受控旅程和固定批准模板；营销回复回到会话队列，但预约提醒、治疗后服务和随访通知仍由预约与随访模块持有自己的业务状态。
+- **目标：** 只允许受控旅程和固定批准模板，并实现 `/hospital/conversations/automations` 与 `/hospital/conversations/automations/:journeyId`；营销回复回到会话队列，但预约提醒、治疗后服务和随访通知仍由预约与随访模块持有自己的业务状态。
 - **默认：** L4 营销自动化、群发、加好友、裂变、任意图形/SQL/代码旅程和跨渠道补发保持关闭。自动触达失败、跳过、退订、暂停、完成不能以 provider 接受替代。
 
 ---
@@ -425,8 +441,8 @@ detailHref: "/hospital/conversations/:id"
 | 纯领域 | 五态转换、交回 AI/auto-close/正常与强制结束守卫、处置 revision 失效、Care 四类分类与恢复守卫、身份八状态、低敏校验、分配冲突、幂等和逐消息结果语义 | fixture 截图、组件 `useState` 或 mock happy path。 |
 | repository / migration | 机构隔离、唯一约束、并发、历史数据预检、事务与审计原子性 | 共享开发库的偶然数据、跳过 migration 或把 mock 回填进表。 |
 | API / 权限 | `tenant_admin/tenant_operator/consultant/customer_service`、本人分配、跨机构、结束/风险/分配/复核的 401/403/409、expected revision、候选版本、幂等与审计失败 fail-closed | 仅客户端隐藏按钮或仅 tenant 前端筛选。 |
-| UI | 队列排序、`--`、局部失败、未发布、移动全屏、授权消息视图和无发送按钮 | 静态 `0`、演示会话或 `mock_sent` 指标。 |
-| 跨线契约 | 唯一 `InstitutionSourceEnvelopeV1<T,K>`、服务端 scope/reader 输入、readiness/freshness/分区/受控 failure code、Care 暂停恢复、身份复核、客户创建委派和工作台两分区行动源 | 第二套 envelope、reader 出现在响应、直接读其他模块 repository/table、自由文本、客户端 scope、stale 行动项或跨线共享内部 DTO。 |
+| UI | 队列排序、`--`、局部失败、未发布、移动全屏、授权消息视图和无发送按钮；五条规范/兼容路由、`automations` 静态优先级、直达/刷新/前进后退和 `/hospital/service` 单向跳转 | 静态 `0`、演示会话、`mock_sent` 指标、第二套旧客服页面或把 `automations` 当作 conversationId。 |
+| 跨线契约 | 唯一 `InstitutionSourceEnvelopeV1<T,K>`、服务端 scope/reader 输入、readiness/freshness/分区/受控 failure code、任一分区 scope mismatch 整包无数据、Care 暂停恢复、身份复核、含 `actionToken` 的客户创建委派和工作台两分区行动源 | 第二套 envelope、reader 出现在响应、scope mismatch 下保留其他分区、缺少/绕过一次性令牌、直接读其他模块 repository/table、自由文本、客户端 scope、stale 行动项或跨线共享内部 DTO。 |
 | `INT-CHAN-*` 消费验收 | 单 adapter 入站幂等、人工出站、窗口约束、回执、未知状态、紧急停止、故障回滚和审计 | 栏目内实现 adapter、dry-run、模拟 provider、HTTP 200 或 provider 接受。 |
 
 数据库测试和 migration 只能在总协调台批准的独立测试库/隔离容器或取得 DB lease 后运行；不得与其他 Worktree 共用写库环境。测试日志和 fixture 不得包含凭证、原始消息、外部账号、客户敏感字段或 provider payload。
@@ -441,8 +457,10 @@ detailHref: "/hospital/conversations/:id"
 - 已结束分段不可重开，重入站按新分段保存；未解决高风险不会被普通结束或 AI 自动处理绕过；
 - `ConversationCareDispositionV1`、`IdentityMatchReviewV1`、`ConversationActionSourceV1` provider 均符合总协调台公共 `v1` 声明，所有响应只使用 `InstitutionSourceEnvelopeV1<T,K>`；消费者只走服务端 reader 输入，stale/partial/denied/disabled/scope mismatch 按统一口径处理；
 - 工作台行动源只含 `waiting_human` 与 `unresolved_risk`，普通角色只见本人已分配活动分段；只有权威 `readiness=empty` 才显示 `0`；
+- 任一 envelope 分区出现 `scope_mismatch` 都提升为顶层同名错误并整包 `data=null`，不得以 `partial` 保留其他分区；
 - 队列、指标、SLA、时间线和工作台来源不包含 fixture、mock、dry-run、`mock_sent` 或客户端内存状态；
 - 没有独立交付并通过消费验收的 `INT-CHAN-*` 时，正式发送按钮和“已发送/已送达”指标均隐藏；
+- 会话队列和详情只使用 `/hospital/conversations` 与 `/hospital/conversations/:conversationId`，旧 `/hospital/service` 只做单向兼容跳转；自动触达两条路由在 `CONV-08` 独立验收前保持隐藏且不取数；
 - 发布开关对代码成熟度、机构授权、连接可用、数据状态和生产放行分别判断，未发布深链接返回统一未发布/无权限状态。
 
 ### 7.3 回滚原则

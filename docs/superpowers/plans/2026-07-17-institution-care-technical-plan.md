@@ -10,15 +10,13 @@
 
 ---
 
-## 一、文档状态与任务边界
+## 一、文档状态、历史启动基线与任务边界
 
-- 日期和时区：`2026-07-17 CST`
-- 当前阶段：机构端七线第三轮定点 docs-only 契约返修，任务编号 `PLAN-CARE-REV-03`
-- Worktree：`/Users/dongxiaolong/.codex/worktrees/7966/zmtg-clean`
-- 当前分支：`HEAD`（detached，不创建分支）
-- 当前 `HEAD`：`e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa`
-- 当前本地 `origin/main`：`e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa`
-- 第三轮启动时 `git status --short` 仅显示本文档为未跟踪文件；没有其他改动
+- 初始规划日期和时区：`2026-07-17 CST`。
+- 初始任务链：`PLAN-CARE-01 → PLAN-CARE-REV-02 → PLAN-CARE-REV-03`，均为 docs-only 规划或修订。
+- 历史启动基线：第一轮文档从 `e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa` 的独立 detached Worktree 形成；旧 Worktree 路径和 detached 状态不再作为当前事实。
+- 发布载体：本文已纳入 Draft PR `#536` 的 `codex/institution-plans-customer-care-conversation` 分支；Draft 只表示候选，不代表已获合并或 runtime 授权。
+- 任何后续审查都必须以当次命令重新核验日期、分支、`HEAD`、`origin/main` 和 `git status --short`，不得复用历史启动快照。
 - 规划依据：
   - `docs/superpowers/plans/2026-07-17-institution-seven-stream-development-plan.md`
   - `docs/superpowers/specs/2026-07-15-institution-navigation-page-system-design.md`
@@ -29,7 +27,7 @@
 docs/superpowers/plans/2026-07-17-institution-care-technical-plan.md
 ```
 
-本轮不是：不修改 `src/**`、`drizzle/**`、schema、migration、API、测试、配置、脚本或其他文档；不读取凭证或数据库；不调用真实消息、HIS 或任何外部网络；不提交、推送、创建 PR、合并或继续 runtime。本文涉及的字段只形成数据变更申请，不能据此直接创建表、列、索引或迁移。
+授权边界：本计划本身不授权修改 `src/**`、`drizzle/**`、schema、migration、API、测试、配置、脚本或其他文档，不授权读取凭证或数据库、调用真实消息/HIS/外部网络、提交、推送、创建/合并 PR 或继续 runtime。任何实际动作均需独立明确授权；本文涉及的字段只形成数据变更申请，不能据此直接创建表、列、索引或迁移。
 
 ---
 
@@ -89,6 +87,7 @@ drizzle/**
 | `ConversationCareDispositionV1` | 总协调台 | 会话工作台 | 完全消费当前快照；不复制定义、不读取或重新分类聊天。 |
 | `CustomerTimelineContributionV1` | 总协调台 | Care 等各业务线 | Care 只提供低敏 provider；不拥有最终聚合或直接写客户中心内部表。 |
 | `CareActionSourceV1` | 总协调台 | Care | Care 实现 provider；工作台通过服务端 reader 消费，双方都不另造声明。 |
+| `CustomerCareSummaryV1` | 总协调台 | Care | Care 以现有预约/随访 RBAC 提供客户只读摘要；客户中心只消费，不直读 Care repository/table。 |
 | `ReachOutSafetyV1` | 总协调台 | 获准渠道集成任务 | 未来只消费安全判定；不读取渠道内部状态、不发送消息。 |
 | `InstitutionOperatingContextV1` | 总协调台 | 机构设置/统一上下文 provider | 消费时区及其版本；管理中心只提供获准控制面，Care 不自行维护第二套机构时区。 |
 
@@ -123,9 +122,9 @@ InstitutionSourceEnvelopeV1<T, K> = {
 
 - provider 位于生产者模块；reader 只作为服务端输入，不进入响应 envelope。消费者只能调用服务端 reader，不能读取生产者 repository/table，也不能接受客户端提交的 scope。
 - 只有权威查询成功且确认结果确实为空时，整体或分区才能返回 `empty` 并显示 `0`。未知、失败、未授权、未发布和过期不得折算成 `0`。
-- `partial` 只允许出现在顶层；分区 readiness 不得返回 `partial`。顶层 `partial` 只保留已独立验证且对应分区为 `ready`/`empty` 的结果；失败分区显示 `--` 与同一受控 `failureCode`，不能污染成功分区。
+- `partial` 只允许出现在顶层；分区 readiness 不得返回 `partial`。顶层 `partial` 只保留契约明确允许且已独立验证的分区数据：通常为 `ready`/`empty`，第 5.7 节明确允许的同 scope 只读 `stale` 快照也必须携带 freshness；普通失败分区显示 `--` 与同一受控 `failureCode`，不能污染成功分区。任何 scope mismatch 不适用 partial，必须整包清空。
 - `stale` 可以显示带明确 `freshness.observedAt`/`freshness.freshUntil` 的已验证快照，但不得驱动当前写操作、认领、行动队列或需要当前事实的卡片计数。
-- 顶层为 `denied`、`disabled`，或顶层 `failureCode=scope_mismatch` 时必须返回 `data: null`；分区出现同类状态/错误时，`T` 中不含该分区业务数据。`unavailable` 也不返回未经验证的替代事实。
+- 顶层为 `denied`、`disabled`，或顶层 `failureCode=scope_mismatch` 时必须返回 `data: null`。分区为 `denied`、`disabled` 或 `unavailable` 时，`T` 中不含该分区业务数据；但任一分区出现 `failureCode=scope_mismatch` 时必须提升为顶层同名错误并整包 `data: null`，不得用 `partial` 保留其他成功分区。
 
 ---
 
@@ -240,11 +239,12 @@ actions[]:
 ```
 
 - `entityType`、`businessState`、`cardKeys`、`riskLevel`、`priority` 和 `sortSignals` 都使用总协调台冻结的受控枚举/结构；`sortSignals` 只表达未解决风险、是否逾期、SLA/行动时间、优先级和稳定对象 ID，不接受客户端排序权重或自由文本。
+- `reschedule_requested_appointments` 只由独立待改约请求事实命中并写入 `cardKeys`；action 的 `businessState` 继续返回原 HIS 预约事实状态，`appointmentAt` 继续返回原预约时间。HIS 原子接受新时段后才更新预约事实；不得把 `reschedule_requested` 持久化或投影为预约主状态。
 - `safeSummary` 必须是长度受控的低敏业务摘要，禁止 PII、聊天正文、治疗内容、HIS payload、外部账号、凭证或内部错误；不可安全生成时返回统一受控占位，不回退原文。
 - `entityType=appointment` 的 `detailHref` 只能是 `/hospital/care/appointments/:appointmentId`；`entityType=followup` 的 `detailHref` 只能是 `/hospital/care/followups/:taskId`。URL 不传姓名、摘要、负责人、消息或来源正文。
 - 同一对象可带多个受控业务徽标，但在 actions 中只出现一次；四卡、actions 和目标列表均使用第 4.2 节同一个服务端 RBAC predicate。管理员/运营按当前机构及 Care 权限；咨询师/客服的随访仅本人任务与本人角色池未认领任务，预约仅本人是 HIS 客户负责人的客户。
 - 每个 action 的 `sourceVersion` 用于重读详情和冲突校验；目标详情必须再次验证服务端 scope、当前分配/HIS 负责人和 revision，不能因为 action 曾返回就放行。
-- 卡片只有对应分区权威查询成功且确实为空时显示 `0`。顶层为 `partial` 时，其失败分区显示 `--`；`stale` 快照可显示截止时间与历史值，但不进入当前 actions、不驱动写操作；`denied`、`disabled`、`scope_mismatch` 和 `unavailable` 不返回该分区业务数据。
+- 卡片只有对应分区权威查询成功且确实为空时显示 `0`。不存在 scope mismatch 时，顶层为 `partial` 可让普通失败分区显示 `--` 并保留其他已验证分区；`stale` 快照可显示截止时间与历史值，但不进入当前 actions、不驱动写操作；`denied`、`disabled` 和 `unavailable` 不返回对应分区业务数据。任一分区 `scope_mismatch` 必须提升为顶层同名错误并整包 `data=null`。
 
 ### 5.2 完全消费 `TreatmentCareSourceV1`
 
@@ -295,7 +295,8 @@ Care 完全消费总协调台冻结的 `ConversationCareDispositionV1` 当前快
 
 | 变化 | 必须局部刷新 | 不应刷新 |
 | --- | --- | --- |
-| 认领、改派、状态、结果、升级 | 该任务详情、当前筛选列表、对应 CareAction 分区、该客户 Care 时间线 | 全局客户列表、无关机构、其他角色详情。 |
+| 认领、改派、状态、结果、升级 | 该任务详情、当前筛选列表、对应 CareAction 分区、该客户 Care 时间线和 CustomerCareSummary followups 分区 | 全局客户列表、无关机构、其他角色详情。 |
+| HIS 预约事实或其版本变化 | 预约详情/列表、对应 CareAction 分区和该客户 CustomerCareSummary appointments 分区 | 随访分区、其他客户或旧本地预约。 |
 | 治疗普通编辑 | 对应来源快照与需要显示来源的对象 | 自动重建/取消任何任务或路径。 |
 | 治疗作废 | 同源路径/未完成节点、该客户时间线、对应 CareAction 分区 | 手工/单次/其他来源/已完成/已发送事实。 |
 | 会话处置 revision 变化 | 关联任务/路径详情、该客户时间线、对应 CareAction 分区 | 原始会话内容、全局会话队列。 |
@@ -303,6 +304,74 @@ Care 完全消费总协调台冻结的 `ConversationCareDispositionV1` 当前快
 | 单一分区失败或过期 | 该分区显示 `--`/截止时间和低敏 failure code | 其他已验证分区或整页业务数据。 |
 
 预约通知、随访通知、provider 接受、渠道送达、客户回复和业务完成始终是不同事实：通知失败不回滚预约/HIS 事实或自动改变随访完成结果；业务完成也不倒推出发送或送达成功。首期没有实时推送承诺，同页 mutation 响应触发失效，跨线事实在用户刷新、受控轮询或未来获批的安全失效通知后重读。
+
+### 5.7 生产统一 `CustomerCareSummaryV1`
+
+`CustomerCareSummaryV1` 的公共声明由总协调台维护，Care 只在自身模块实现 provider；客户中心只通过服务端 reader 消费。两边必须完全使用以下冻结形状，不增加 CustomerReference、显示名、总数或第二套分页字段：
+
+```ts
+type AppointmentBusinessStateV1 =
+  | 'pending_confirmation'
+  | 'confirmed'
+  | 'arrived'
+  | 'completed'
+  | 'cancelled'
+  | 'no_show';
+
+type FollowUpTaskStateV1 =
+  | 'pending'
+  | 'in_progress'
+  | 'waiting_customer'
+  | 'escalated'
+  | 'completed'
+  | 'cancelled';
+
+type CustomerCareAppointmentSummaryItemV1 = {
+  appointmentId: string;
+  sourceVersion: string;
+  scheduledAt: string;
+  businessState: AppointmentBusinessStateV1;
+  rescheduleRequestState: 'pending' | null;
+  safeSummary: string | null;
+  detailHref: string;
+};
+
+type CustomerCareFollowUpSummaryItemV1 = {
+  taskId: string;
+  sourceVersion: string;
+  dueAt: string;
+  businessState: FollowUpTaskStateV1;
+  riskLevel: 'normal' | 'watch' | 'urgent';
+  safeSummary: string | null;
+  detailHref: string;
+};
+
+type CustomerCareSummaryPayloadV1 = {
+  customerId: string;
+  appointments: {
+    items: CustomerCareAppointmentSummaryItemV1[];
+    hasMore: boolean;
+  } | null;
+  followups: {
+    items: CustomerCareFollowUpSummaryItemV1[];
+    hasMore: boolean;
+  } | null;
+};
+
+type CustomerCareSummaryV1 = InstitutionSourceEnvelopeV1<
+  CustomerCareSummaryPayloadV1,
+  'appointments' | 'followups'
+>;
+```
+
+- `appointments.items` 与 `followups.items` 各最多 5 条；预约固定按 `scheduledAt DESC, appointmentId ASC`，随访固定按 `dueAt DESC, taskId ASC`。`hasMore` 必须由对应确定性排序下的同一次 Care RBAC 查询以固定 `limit + 1` 安全派生，不是精确总数，不得通过第二次全量统计或跨范围查询生成。客户中心不在抽屉内分页；`hasMore=true` 只用于显示“查看全部”并跳转 canonical Care 列表。
+- 对应分区为 `ready`、`empty` 或 `stale` 时字段可以非 null：`empty` 固定返回 `{ items: [], hasMore: false }`；`stale` 仅返回同一 scope、当前 reader 仍有权查看的已验证只读快照，并携带 envelope freshness，不得驱动新建、编辑、认领或其他写操作。`unavailable`、`denied`、`disabled` 分区对应字段必须为 null。
+- 不存在 scope mismatch 时，顶层 `partial` 可以保留一个已验证的 `ready`、`empty` 或 `stale` 分区，并令另一普通失败分区为 null；任一分区出现 `scope_mismatch` 必须提升为顶层同名错误并整包 `data:null`。
+- provider 对两个分区分别调用第 4.2 节同一 Care RBAC predicate。管理员/运营按当前机构和 Care 权限；咨询师/客服的预约只限本人为 HIS 客户负责人的客户，随访只限本人具体任务及本人角色池未认领任务。每组 `items + hasMore` 必须来自同一次相同权限、相同筛选和上述稳定排序的 `limit + 1` 查询，不能先查全机构再裁剪。
+- 预约 `businessState` 只表达 HIS 预约事实，不含 `reschedule_requested`。`rescheduleRequestState='pending'` 是独立改约请求的只读标记；HIS 原子接受新时段前必须继续返回原 `scheduledAt` 和原事实状态。HIS 接受后才更新预约时间、事实版本并清空该标记，完整改约请求和变更历史保留在 Care/HIS 边界而不塞入摘要。
+- `safeSummary` 只使用低敏白名单；预约 `detailHref` 只能是 `/hospital/care/appointments/:appointmentId`，随访 `detailHref` 只能是 `/hospital/care/followups/:taskId`。客户中心可以派生列表/创建 URL，但不得改写 item 详情链接或复制 Care 状态算法。
+- 客户详情上的 `create=1` 快捷入口必须调用 Care 服务端 write-authorizer 独立判定，不能从摘要读取权限、item 存在或 `hasMore` 推导。预约按当前机构 Care 权限及 HIS 客户负责人范围判断；普通手工随访只对管理员/运营开放。咨询师/客服的来源限定创建仍只能从本人已分配且客户已匹配的会话发起，不在客户详情提供普通新建入口。
+- 在真实 HIS 预约事实、机构隔离和预约 RBAC 验收前，`appointments` 分区固定 `disabled`、字段为 null；不得读取旧 tenant 级本地预约或返回静态空数组。随访分区只有在规范任务持久化、分配、机构隔离和审计均验收后才可 `ready/empty/stale`。
 
 ---
 
@@ -352,15 +421,16 @@ Care 只能向总协调台提出或消费申请，不能创建并行 migration �
 
 **验收：** 角色池只能由同机构、对应角色的员工原子认领；重复认领准确返回冲突；具体员工任务不显示认领；管理员/运营的改派有审计；咨询师/客服无法枚举其他员工任务；无来源、无客户或跨机构均不能创建；无任何发送、预约或 HIS 状态。
 
-### CARE-02：结构化结果、风险升级、时间线与会话回流
+### CARE-02：结构化结果、风险升级、时间线、客户摘要与会话回流
 
 **前置：** `CARE-01` 已合并并完成机构隔离验收；会话回流部分额外等待生产 `ConversationCareDispositionV1`。
 
 1. `CARE-02A`：实现状态机命令、结构化结果、低敏人工反馈、风险升级和强制处理。先覆盖纯领域与服务层测试，随后以窄路由接入；不得允许自由文本完成或从 `escalated` 普通完成。
 2. `CARE-02B`：按总协调台公共声明实现 `CustomerTimelineContributionV1` provider、四分区/四卡/actions 的 `CareActionSourceV1` provider 与局部失效键；客户中心/工作台各以独立消费者 PR 接入，Care 不改其页面、聚合或公共声明。
-3. `CARE-02C`：在会话线提供正式 provider 后，消费 `ConversationCareDispositionV1` 当前快照。落实简单确认全量守卫、实质/含糊 `blockingReasonCodes=[]` 与 60 分钟守卫、按 `dispositionId + revision` 幂等，以及第 5.3 节对临床外部关闭引用和非临床受控治理关闭引用的最新 revision、同机构、同客户、同风险事件、有效、未撤销、不可互相替代及人工复核守卫；没有正式快照时入口隐藏且不做模拟替代。
+3. `CARE-02C`：按第 5.7 节实现 `CustomerCareSummaryV1` provider 与合同测试。followups 分区复用任务列表同一 RBAC predicate，以固定 `limit + 1` 查询返回最多 5 条并安全派生 `hasMore`；appointments 分区在真实 HIS 预约、机构隔离和权限验收前固定 disabled/null。客户中心以独立 `CUS-01H` 消费，Care 不修改客户页面或公共声明。
+4. `CARE-02D`：在会话线提供正式 provider 后，消费 `ConversationCareDispositionV1` 当前快照。落实简单确认全量守卫、实质/含糊 `blockingReasonCodes=[]` 与 60 分钟守卫、按 `dispositionId + revision` 幂等，以及第 5.3 节对临床外部关闭引用和非临床受控治理关闭引用的最新 revision、同机构、同客户、同风险事件、有效、未撤销、不可互相替代及人工复核守卫；没有正式快照时入口隐藏且不做模拟替代。
 
-**验收：** 完成必有受控结果；高风险无法普通完成；实质咨询/含糊不完成且暂停关联路径；风险同时产生升级和低敏审计；会话新消息或处置版本更新令旧恢复资格失效；时间线与工作台只刷新受影响客户/对象。
+**验收：** 完成必有受控结果；高风险无法普通完成；实质咨询/含糊不完成且暂停关联路径；风险同时产生升级和低敏审计；会话新消息或处置版本更新令旧恢复资格失效；时间线、工作台和客户 Care 摘要只刷新受影响客户/对象。CustomerCare followups 保持原任务权限，appointments 在真实 HIS 前保持 disabled，任一分区 scope mismatch 均整包无数据。
 
 ### CARE-03：版本化线性路径与治疗来源
 
@@ -411,21 +481,22 @@ Care 不实现 HIS adapter。总协调台在唯一外部集成串行队列中独
 | 认领/改派/结果 | `/api/institution/followups/:taskId/claim`、`/reassign`、`/result` | 命令式端点均要求当前 revision、服务端 scope、分配范围和审计。 |
 | 路径 | `/api/institution/followup-paths/**` | 只处理运行实例与受控模板；无正式来源时不入组。 |
 
-`customerId`、`sourceConversationId` 只可作安全对象引用预填，目标页必须重新读取和验证。实际路径迁移由总协调台确认，不得以新增平行 v2 路由绕过共享 API 文件锁，也不得让旧 API 与新 API 对同一任务同时写入。
+`customerId`、`sourceConversationId` 只可作安全对象引用预填，目标页必须重新读取和验证。客户中心派生的列表链接固定使用 `/hospital/care/appointments?customerId=:customerId` 或 `/hospital/care/followups?customerId=:customerId`，新建入口额外使用受控 `create=1`；来源页面只有在 Care write-authorizer fresh allow 时才显示该入口，且普通手工随访只允许管理员/运营。`create=1` 只请求打开表单，不证明角色可写、HIS 可用、任务已创建或预约已成立。Care 必须重新校验 scope、角色、客户、HIS 负责人/任务分配、来源和 capability，非法/重复查询键 fail-closed。实际路径迁移由总协调台确认，不得以新增平行 v2 路由绕过共享 API 文件锁，也不得让旧 API 与新 API 对同一任务同时写入。
 
 ### 8.2 最小测试集
 
 | 层级 | 必测场景 |
 | --- | --- |
-| 统一 envelope | `InstitutionSourceEnvelopeV1<T, K>` 的 `contractVersion: 'v1'`、双 scope、顶层七种 readiness、唯一 freshness、分区六种 readiness 和统一 failure code；仅权威 `empty` 显示 `0`；`stale` 不返回当前 actions/写能力；`denied`、`disabled`、scope mismatch 不返回业务数据。 |
+| 统一 envelope | `InstitutionSourceEnvelopeV1<T, K>` 的 `contractVersion: 'v1'`、双 scope、顶层七种 readiness、唯一 freshness、分区六种 readiness 和统一 failure code；仅权威 `empty` 显示 `0`；`stale` 不返回当前 actions/写能力；`denied`、`disabled` 不返回对应业务数据，任一分区 scope mismatch 提升顶层并整包 `data:null`。 |
 | `CareActionSourceV1` | 四个固定 partition/card key、四卡 + actions，以及 `entityType/objectId/sourceVersion/customer/businessState/cardKeys/sortSignals/appointmentAt/dueAt/slaAt/riskLevel/priority/owner/safeSummary/detailHref`；四卡、actions、目标列表和详情使用同一 RBAC，部分失败只影响对应分区。 |
+| `CustomerCareSummaryV1` | 精确 `customerId + appointments/followups` payload、两类 item 字段和状态 union；预约事实状态与独立待改约标记分离；每组最多 5 条、稳定排序、同一 Care RBAC `limit + 1` 查询派生 `hasMore`、无 total/cursor/抽屉分页、ready/empty/stale 与 null 规则、真实 HIS 前 appointments disabled，以及任一分区 scope mismatch 整包 `data:null`。 |
 | 领域状态 | 全部合法/非法流转、结构化结果必填、风险优先级、simple confirmation 全量守卫、实质/含糊 `blockingReasonCodes=[]` 与 60 分钟、新消息重置；临床外部关闭引用与非临床受控治理关闭引用都验证最新 revision、同机构、同客户、同风险事件、有效、未撤销和人工复核，且不可互相替代。 |
 | 服务与 repository | `tenantId + institutionId`、客户/来源归属、具体成员/角色池资格、双人并发认领、claim conflict、revision conflict、任务事件与审计同事务。 |
 | RBAC/API | 四稳定角色、管理员/运营 Care 权限、咨询师/客服本人随访范围、HIS 客户负责人预约范围；未登录、缺机构、越权、跨机构、范围外详情、非法输入和审计失败。 |
-| 治疗来源 | 三类稳定幂等键分别使用 `institutionId + sourceId + suggestionKey`、`institutionId + sourceId + templateFamilyKey`、`institutionId + pathEnrollmentId + nodeKey` 且均不含 `sourceVersion`；重复回流不重复创建；普通治疗编辑不重建/取消；作废只影响同源路径/未完成节点/未来未发送触达并保留其他事实。 |
+| 治疗来源 | 与客户中心合同测试共同锁定三类稳定幂等键：`institutionId + sourceId + suggestionKey`、`institutionId + sourceId + templateFamilyKey`、`institutionId + pathEnrollmentId + nodeKey`，且均不含 `sourceVersion`；重复回流不重复创建；普通治疗编辑不重建/取消；作废只影响同源路径/未完成节点/未来未发送触达并保留其他事实。 |
 | 会话来源 | 不重新分类/不保存正文；四类 disposition、重复 revision 幂等、旧 revision 失效；临床外部关闭引用与非临床受控治理关闭引用分别覆盖最新 revision、同机构、同客户、同风险事件、有效/撤销、人工复核、不可互相替代，以及内部备注/会话结束不能替代引用。 |
 | 时区与事实分离 | `InstitutionOperatingContextV1.data.version` 与 `data.current.timeZone` 一致驱动卡片/actions/列表；版本变化不回写历史事实；通知待发送/接受/送达/失败与预约事实、回复和业务完成互不冒充。 |
-| 页面与失效 | 七条 canonical 路由、无省略 `/hospital` 前缀或重复路由、桌面抽屉/移动全屏、筛选恢复、空数据、过期、`--` 非零化、局部刷新不清空无关分区。 |
+| 页面与失效 | 七条 canonical 路由、客户来源的四条 customerId/create 安全跳转、create 入口独立 fresh write-authorizer、无省略 `/hospital` 前缀或重复路由、桌面抽屉/移动全屏、筛选恢复、空数据、过期、`--` 非零化、局部刷新不清空无关分区。 |
 
 建议验证顺序（均须在获批 runtime 任务中执行）：目标模块 Vitest → `pnpm typecheck` → 必要的页面测试 → 机构隔离/权限/审计回归。涉及数据库时使用 `.env*` 排除的隔离镜像与独立测试数据库；不得读取或复制 `.env.local`，也不得让多个 Worktree 同时写同一开发库。
 
@@ -433,8 +504,10 @@ Care 不实现 HIS adapter。总协调台在唯一外部集成串行队列中独
 
 - `CARE-01` 只能在 capability-off 状态合并，不能独立进入正式导航，也不能把“可创建/认领”描述成人工随访闭环已经发布。
 - 随访子能力正式进入导航至少等待 `CARE-02A` 与 `CARE-02B`：任务、分配/认领、合法流转、结构化结果、权限、机构隔离、审计、持久化、时间线贡献、统一 CareAction provider 和局部失败均完成真实验收。会话消费和路径仍可按各自 capability 后置。
+- `CustomerCareSummaryV1` 只有在 `CARE-02C` 的精确合同、每组最多 5 条、同一 Care RBAC `limit + 1` 派生 `hasMore`、机构隔离和局部状态验收完成后才可供客户中心消费。followups 与 appointments 独立报告分区状态；真实 HIS 预约未验收时 appointments 必须保持 disabled/null，不阻断已可靠的 followups 只读摘要。
 - `/hospital/care` 今日队列的正式发布还须等待 `CARE-06`，并且预约分区必须来自已验收的 HIS 事实；只有随访成熟时可只发布 `/hospital/care/followups`，不得用假预约补齐根页面。
 - 任何 Care 页面进入正式导航前，必须同时满足 capability、机构授权、统一 readiness/freshness、权限、审计和模块验收；未完成能力直接隐藏。未知、失败、顶层 `partial` 所含失败分区、`denied`、`disabled` 或过期不得显示 `0`。
+- 任一 envelope 分区出现 `scope_mismatch` 都必须提升为顶层同名错误并整包 `data:null`；不得以 `partial`、旧缓存或另一个成功分区保留任何业务数据。
 - 出现来源版本不一致、跨机构、审计失败、风险未关闭或结构化结果缺失时，阻断当前写入并保留既有事实；不以降级为假完成。
 - 回滚遵循新增规范服务/路由壳的可逆发布：先关闭 capability，保留任务历史、审计和时间线，不物理删除或回写治疗/会话来源；migration 回滚仅按获批 `MIG-02` 方案单独执行。
 
@@ -445,7 +518,8 @@ Care 不实现 HIS adapter。总协调台在唯一外部集成串行队列中独
 1. **`MIG-02` 执行排期与授权：** 范围已按第 6.1 节冻结，但仍须总协调台放入唯一迁移队列并单独批准；实施前 `CARE-01` 只能做纯领域契约，不能做持久化 UI/API。
 2. **成员与责任来源：** `BASE-02` 必须给出可验证的当前机构成员、固定角色池资格和客户责任成员来源；没有该来源，不实现认领、改派或咨询师/客服数据范围。
 3. **公共 contract/provider 可用性：** 总协调台须交付 v1 公共声明；客户中心、会话线和机构上下文分别提供 `CustomerReferenceV1`/`TreatmentCareSourceV1`、`ConversationCareDispositionV1`、`InstitutionOperatingContextV1` provider。未 ready 的消费者切片保持关闭。
-4. **预约数据：** `CARE-DCR-APPT-01` 仍需总协调台评审并分配后续唯一 migration ID；未分配前不创建预约数据结构。
-5. **HIS 集成：** `INT-HIS-01` 必须由总协调台外部集成串行队列独立授权和交付；Care 只消费、验收和发布。真实 HIS、凭证、网络和通知不从本计划自动获得许可。
+4. **客户 Care 摘要：** 总协调台须冻结 `CustomerCareSummaryV1`，Care 在 `CARE-02C` 提供精确 provider 后客户中心才能开始 `CUS-01H`；`hasMore` 同查询派生、RBAC 或机构隔离无法证明时停止，appointments 在真实 HIS 前保持 disabled/null。
+5. **预约数据：** `CARE-DCR-APPT-01` 仍需总协调台评审并分配后续唯一 migration ID；未分配前不创建预约数据结构。
+6. **HIS 集成：** `INT-HIS-01` 必须由总协调台外部集成串行队列独立授权和交付；Care 只消费、验收和发布。真实 HIS、凭证、网络和通知不从本计划自动获得许可。
 
 任何一项不满足，停止在对应前一小 PR，保持 capability-off，并向总协调台提交 integration request 或数据变更申请；不得通过 Mock、in-memory 状态、旧 tenant 级记录或客户端权限绕过。
