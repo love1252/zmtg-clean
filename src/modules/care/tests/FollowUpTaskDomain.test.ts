@@ -35,6 +35,33 @@ function taskInState(state: FollowUpTaskState): FollowUpTask {
   return pendingTask({ state, revision: 5 });
 }
 
+function transition(task: FollowUpTask, targetState: unknown) {
+  return transitionFollowUpTask({
+    task,
+    institutionId: task.institutionId,
+    expectedRevision: task.revision,
+    targetState,
+  });
+}
+
+function complete(task: FollowUpTask, result: unknown) {
+  return completeFollowUpTask({
+    task,
+    institutionId: task.institutionId,
+    expectedRevision: task.revision,
+    result,
+  });
+}
+
+function cancel(task: FollowUpTask, reason: unknown) {
+  return cancelFollowUpTask({
+    task,
+    institutionId: task.institutionId,
+    expectedRevision: task.revision,
+    reason,
+  });
+}
+
 describe('随访任务纯领域契约', () => {
   it('只允许六个持久化主状态，不把到期桶持久化为状态', () => {
     expect(FOLLOW_UP_TASK_STATES).toEqual([
@@ -53,7 +80,7 @@ describe('随访任务纯领域契约', () => {
     const original = pendingTask();
     const before = structuredClone(original);
 
-    const started = transitionFollowUpTask({ task: original, targetState: 'in_progress' });
+    const started = transition(original, 'in_progress');
 
     expect(original).toEqual(before);
     expect(started).toEqual({
@@ -68,10 +95,10 @@ describe('随访任务纯领域契约', () => {
     if (!started.ok) throw new Error('expected transition success');
 
     expect(
-      transitionFollowUpTask({ task: started.task, targetState: 'in_progress' }),
+      transition(started.task, 'in_progress'),
     ).toEqual({ ok: true, changed: false, task: started.task });
     expect(
-      transitionFollowUpTask({ task: started.task, targetState: 'waiting_customer' }),
+      transition(started.task, 'waiting_customer'),
     ).toMatchObject({ ok: true, changed: true, task: { state: 'waiting_customer', revision: 2 } });
   });
 
@@ -94,7 +121,7 @@ describe('随访任务纯领域契约', () => {
     for (const sourceState of FOLLOW_UP_TASK_STATES) {
       for (const targetState of ordinaryTargets) {
         const task = taskInState(sourceState);
-        const result = transitionFollowUpTask({ task, targetState });
+        const result = transition(task, targetState);
         const transitionKey = `${sourceState}->${targetState}`;
 
         if (sourceState === 'completed' || sourceState === 'cancelled') {
@@ -114,42 +141,39 @@ describe('随访任务纯领域契约', () => {
     }
 
     expect(
-      transitionFollowUpTask({ task: taskInState('in_progress'), targetState: 'completed' }),
+      transition(taskInState('in_progress'), 'completed'),
     ).toEqual({ ok: false, code: 'completion_result_required' });
     expect(
-      transitionFollowUpTask({ task: taskInState('pending'), targetState: 'cancelled' }),
+      transition(taskInState('pending'), 'cancelled'),
     ).toEqual({ ok: false, code: 'cancellation_reason_required' });
-    expect(transitionFollowUpTask({ task: pendingTask(), targetState: 'due_today' })).toEqual({
+    expect(transition(pendingTask(), 'due_today')).toEqual({
       ok: false,
       code: 'invalid_target_state',
     });
     expect(
-      transitionFollowUpTask({
-        task: pendingTask({ state: 'overdue' as FollowUpTask['state'] }),
-        targetState: 'in_progress',
-      }),
+      transition(
+        pendingTask({ state: 'overdue' as FollowUpTask['state'] }),
+        'in_progress',
+      ),
     ).toEqual({ ok: false, code: 'invalid_task' });
   });
 
   it('完成必须提交唯一受控 code 的结构化结果', () => {
     const task = pendingTask({ state: 'in_progress', revision: 3 });
 
-    expect(completeFollowUpTask({ task, result: undefined })).toEqual({
+    expect(complete(task, undefined)).toEqual({
       ok: false,
       code: 'completion_result_required',
     });
-    expect(completeFollowUpTask({ task, result: 'contact_completed' })).toEqual({
+    expect(complete(task, 'contact_completed')).toEqual({
       ok: false,
       code: 'invalid_completion_result',
     });
     expect(
-      completeFollowUpTask({
-        task,
-        result: { code: 'contact_completed', freeText: 'not allowed' },
-      }),
+      complete(task, { code: 'contact_completed', freeText: 'not allowed' }),
     ).toEqual({ ok: false, code: 'invalid_completion_result' });
 
-    const completed = completeFollowUpTask({ task, result: { code: 'contact_completed' } });
+    const completed = complete(task, { code: 'contact_completed' });
     expect(completed).toEqual({
       ok: true,
       changed: true,
@@ -163,29 +187,23 @@ describe('随访任务纯领域契约', () => {
     if (!completed.ok) throw new Error('expected completion success');
 
     expect(
-      completeFollowUpTask({ task: completed.task, result: { code: 'contact_completed' } }),
+      complete(completed.task, { code: 'contact_completed' }),
     ).toEqual({ ok: true, changed: false, task: completed.task });
     expect(
-      completeFollowUpTask({ task: completed.task, result: { code: 'customer_declined' } }),
+      complete(completed.task, { code: 'customer_declined' }),
     ).toEqual({ ok: false, code: 'terminal_conflict' });
     expect(
-      completeFollowUpTask({
-        task: taskInState('waiting_customer'),
-        result: { code: 'no_response_closed' },
-      }),
+      complete(taskInState('waiting_customer'), { code: 'no_response_closed' }),
     ).toMatchObject({
       ok: true,
       changed: true,
       task: { state: 'completed', revision: 6, completionResult: { code: 'no_response_closed' } },
     });
     expect(
-      completeFollowUpTask({ task: taskInState('pending'), result: { code: 'contact_completed' } }),
+      complete(taskInState('pending'), { code: 'contact_completed' }),
     ).toEqual({ ok: false, code: 'invalid_transition' });
     expect(
-      completeFollowUpTask({
-        task: taskInState('cancelled'),
-        result: { code: 'contact_completed' },
-      }),
+      complete(taskInState('cancelled'), { code: 'contact_completed' }),
     ).toEqual({ ok: false, code: 'terminal_state' });
     expect(FOLLOW_UP_COMPLETION_CODES).toEqual([
       'contact_completed',
@@ -200,26 +218,26 @@ describe('随访任务纯领域契约', () => {
     const escalated = pendingTask({ state: 'escalated', revision: 2 });
 
     expect(
-      completeFollowUpTask({ task: escalated, result: { code: 'contact_completed' } }),
+      complete(escalated, { code: 'contact_completed' }),
     ).toEqual({ ok: false, code: 'escalated_completion_forbidden' });
     expect(
-      transitionFollowUpTask({ task: escalated, targetState: 'in_progress' }),
+      transition(escalated, 'in_progress'),
     ).toEqual({ ok: false, code: 'invalid_transition' });
   });
 
   it('取消必须使用受控 reason，终态保持不可改写且同一命令幂等', () => {
     const task = pendingTask();
 
-    expect(cancelFollowUpTask({ task, reason: '' })).toEqual({
+    expect(cancel(task, '')).toEqual({
       ok: false,
       code: 'cancellation_reason_required',
     });
-    expect(cancelFollowUpTask({ task, reason: 'free_text_reason' })).toEqual({
+    expect(cancel(task, 'free_text_reason')).toEqual({
       ok: false,
       code: 'invalid_cancellation_reason',
     });
 
-    const cancelled = cancelFollowUpTask({ task, reason: 'duplicate_task' });
+    const cancelled = cancel(task, 'duplicate_task');
     expect(cancelled).toEqual({
       ok: true,
       changed: true,
@@ -232,22 +250,22 @@ describe('随访任务纯领域契约', () => {
     });
     if (!cancelled.ok) throw new Error('expected cancellation success');
 
-    expect(cancelFollowUpTask({ task: cancelled.task, reason: 'duplicate_task' })).toEqual({
+    expect(cancel(cancelled.task, 'duplicate_task')).toEqual({
       ok: true,
       changed: false,
       task: cancelled.task,
     });
-    expect(cancelFollowUpTask({ task: cancelled.task, reason: 'superseded' })).toEqual({
+    expect(cancel(cancelled.task, 'superseded')).toEqual({
       ok: false,
       code: 'terminal_conflict',
     });
     expect(
-      transitionFollowUpTask({ task: cancelled.task, targetState: 'in_progress' }),
+      transition(cancelled.task, 'in_progress'),
     ).toEqual({ ok: false, code: 'terminal_state' });
 
     for (const state of ['in_progress', 'waiting_customer'] as const) {
       expect(
-        cancelFollowUpTask({ task: taskInState(state), reason: 'source_invalidated' }),
+        cancel(taskInState(state), 'source_invalidated'),
         state,
       ).toMatchObject({
         ok: true,
@@ -256,10 +274,10 @@ describe('随访任务纯领域契约', () => {
       });
     }
     expect(
-      cancelFollowUpTask({ task: taskInState('escalated'), reason: 'source_invalidated' }),
+      cancel(taskInState('escalated'), 'source_invalidated'),
     ).toEqual({ ok: false, code: 'invalid_transition' });
     expect(
-      cancelFollowUpTask({ task: taskInState('completed'), reason: 'source_invalidated' }),
+      cancel(taskInState('completed'), 'source_invalidated'),
     ).toEqual({ ok: false, code: 'terminal_state' });
   });
 });
