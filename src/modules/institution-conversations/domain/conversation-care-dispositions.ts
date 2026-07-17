@@ -1,3 +1,5 @@
+import { types as nodeUtilTypes } from 'node:util';
+
 /** Internal pure reducer only; it performs no persistence, provider, or Care action. */
 
 export const careDispositionClassifications = Object.freeze([
@@ -72,6 +74,8 @@ export type CreatePendingCareDispositionInput = Readonly<{
   blockingReasonCodes: unknown;
   auditReference: unknown;
   snapshotCreatedAt: unknown;
+  /** Injected by the server; callers must never derive this from browser time. */
+  serverReferenceTime: unknown;
 }>;
 
 type CareCommandResult =
@@ -100,6 +104,8 @@ const safeIdentifierPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const canonicalTimestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const auditReferencePattern = /^audit_[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/u;
 const riskClosureReferencePattern = /^risk_closure_[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/u;
+const maximumServerReferenceTime = '2100-01-01T00:00:00.000Z';
+const sensitiveReferencePattern = /(?:\b1[3-9]\d{9}\b|\b\d{15,18}[0-9Xx]\b|phone|mobile|idcard|identity|diagnos|medical[_-]?record|patient|姓名|电话|手机号|身份证|诊断|病历)/iu;
 
 const dispositionKeys = Object.freeze([
   'dispositionId', 'revision', 'tenantId', 'institutionId', 'conversationId', 'segmentId',
@@ -113,25 +119,25 @@ const createKeys = Object.freeze([
   'dispositionId', 'tenantId', 'institutionId', 'conversationId', 'segmentId', 'sourceMessageId',
   'sourceMessageOccurredAt', 'sourceMessageRevision', 'lastCustomerMessageAt', 'identityState',
   'riskState', 'riskDomain', 'riskClosureReference', 'blockingReasonCodes', 'auditReference',
-  'snapshotCreatedAt',
+  'snapshotCreatedAt', 'serverReferenceTime',
 ] as const);
 
 const classifyKeys = Object.freeze([
   'tenantId', 'institutionId', 'dispositionId', 'expectedRevision', 'conversationId', 'segmentId',
   'sourceMessageId', 'classification', 'resolutionState', 'classifiedAt', 'resolvedAt', 'riskState',
-  'riskDomain', 'riskClosureReference', 'blockingReasonCodes', 'auditReference',
+  'riskDomain', 'riskClosureReference', 'blockingReasonCodes', 'auditReference', 'serverReferenceTime',
 ] as const);
 
 const inboundKeys = Object.freeze([
   'tenantId', 'institutionId', 'dispositionId', 'expectedRevision', 'conversationId', 'segmentId',
   'sourceMessageId', 'sourceMessageOccurredAt', 'sourceMessageRevision', 'lastCustomerMessageAt',
   'identityState', 'riskState', 'riskDomain', 'riskClosureReference', 'blockingReasonCodes',
-  'auditReference', 'snapshotCreatedAt',
+  'auditReference', 'snapshotCreatedAt', 'serverReferenceTime',
 ] as const);
 
 const closeKeys = Object.freeze([
   'tenantId', 'institutionId', 'dispositionId', 'expectedRevision', 'conversationId', 'segmentId',
-  'sourceMessageId', 'segmentClosedAt', 'auditReference',
+  'sourceMessageId', 'segmentClosedAt', 'auditReference', 'serverReferenceTime',
 ] as const);
 
 function deepFreeze<T>(value: T): T {
@@ -150,7 +156,7 @@ function isOneOf<T extends string>(value: unknown, values: readonly T[]): value 
 
 function captureExactRecord(raw: unknown, expectedKeys: readonly string[]): CapturedRecord | null {
   try {
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw) || Object.getPrototypeOf(raw) !== Object.prototype) return null;
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw) || nodeUtilTypes.isProxy(raw) || Object.getPrototypeOf(raw) !== Object.prototype) return null;
     const ownKeys = Reflect.ownKeys(raw);
     if (ownKeys.length !== expectedKeys.length || ownKeys.some((key) => typeof key !== 'string' || !expectedKeys.includes(key))) return null;
     const descriptors = Object.getOwnPropertyDescriptors(raw);
@@ -167,16 +173,36 @@ function captureExactRecord(raw: unknown, expectedKeys: readonly string[]): Capt
 }
 
 function captureString(value: unknown): string | null {
-  return typeof value === 'string' && safeIdentifierPattern.test(value) ? value : null;
+  return typeof value === 'string' && safeIdentifierPattern.test(value) && !sensitiveReferencePattern.test(value) ? value : null;
 }
 
 function captureTimestamp(value: unknown): string | null {
-  if (typeof value !== 'string' || !canonicalTimestampPattern.test(value) || Number.isNaN(Date.parse(value))) return null;
-  return value;
+  if (typeof value !== 'string' || !canonicalTimestampPattern.test(value)) return null;
+  const epochMs = Date.parse(value);
+  if (Number.isNaN(epochMs) || new Date(epochMs).toISOString() !== value) return null;
+  return epochMs <= Date.parse(maximumServerReferenceTime) ? value : null;
+}
+
+function captureServerReferenceTime(value: unknown): string | null {
+  return captureTimestamp(value);
+}
+
+function captureAuditReference(value: unknown): string | null {
+  return typeof value === 'string' && auditReferencePattern.test(value) && !sensitiveReferencePattern.test(value)
+    ? value
+    : null;
+}
+
+function isAtOrAfter(left: string, right: string): boolean {
+  return Date.parse(left) >= Date.parse(right);
+}
+
+function isAtOrBefore(left: string, right: string): boolean {
+  return Date.parse(left) <= Date.parse(right);
 }
 
 function capturePositiveInteger(value: unknown): number | null {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value < Number.MAX_SAFE_INTEGER ? value : null;
 }
 
 function captureNullableTimestamp(value: unknown): string | null | undefined {
@@ -186,7 +212,7 @@ function captureNullableTimestamp(value: unknown): string | null | undefined {
 
 function captureBlockers(value: unknown): readonly CareDispositionBlockingReasonCode[] | null {
   try {
-    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
+    if (!Array.isArray(value) || nodeUtilTypes.isProxy(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
     const descriptors = Object.getOwnPropertyDescriptors(value);
     const ownKeys = Reflect.ownKeys(value);
     const expectedKeys = [...Array.from({ length: value.length }, (_, index) => String(index)), 'length'];
@@ -212,7 +238,7 @@ function captureRisk(
 ): Readonly<{ state: CareDispositionRiskState; domain: CareDispositionRiskDomain | null; closureReference: string | null }> | null {
   if (!isOneOf(rawState, ['none', 'unconfirmed', 'confirmed', 'resolved'] as const)) return null;
   const domain = rawDomain === null ? null : isOneOf(rawDomain, ['clinical', 'non_clinical'] as const) ? rawDomain : undefined;
-  const closureReference = rawClosureReference === null ? null : typeof rawClosureReference === 'string' && riskClosureReferencePattern.test(rawClosureReference) ? rawClosureReference : undefined;
+  const closureReference = rawClosureReference === null ? null : typeof rawClosureReference === 'string' && riskClosureReferencePattern.test(rawClosureReference) && !sensitiveReferencePattern.test(rawClosureReference) ? rawClosureReference : undefined;
   if (domain === undefined || closureReference === undefined) return null;
   if (rawState === 'none' && (domain !== null || closureReference !== null || blockers.includes('clinical_risk'))) return null;
   if (rawState !== 'none' && domain === null) return null;
@@ -296,10 +322,15 @@ function captureDisposition(raw: unknown): CareDisposition | null {
   const segmentClosedAt = captureNullableTimestamp(snapshot.segmentClosedAt);
   const snapshotCreatedAt = captureTimestamp(snapshot.snapshotCreatedAt);
   const invalidatedAt = captureNullableTimestamp(snapshot.invalidatedAt);
-  const auditReference = typeof snapshot.auditReference === 'string' && auditReferencePattern.test(snapshot.auditReference) ? snapshot.auditReference : null;
+  const auditReference = captureAuditReference(snapshot.auditReference);
   if (!dispositionId || !revision || !tenantId || !institutionId || !conversationId || !segmentId || !sourceMessageId || !sourceMessageOccurredAt || !sourceMessageRevision || !lastCustomerMessageAt || !identityState || classification === undefined || !resolutionState || !segmentCloseKind || !blockers || classifiedAt === undefined || resolvedAt === undefined || segmentClosedAt === undefined || !snapshotCreatedAt || invalidatedAt === undefined || !auditReference) return null;
   const risk = captureRisk(snapshot.riskState, snapshot.riskDomain, snapshot.riskClosureReference, blockers);
   if (!risk || validateState({ classification, resolutionState, segmentCloseKind, risk, blockers, classifiedAt, resolvedAt, segmentClosedAt, invalidatedAt })) return null;
+  if (!isAtOrBefore(sourceMessageOccurredAt, lastCustomerMessageAt) || !isAtOrBefore(lastCustomerMessageAt, snapshotCreatedAt)) return null;
+  if ((classifiedAt !== null && (!isAtOrAfter(classifiedAt, lastCustomerMessageAt) || !isAtOrBefore(classifiedAt, snapshotCreatedAt)))
+    || (resolvedAt !== null && (classifiedAt === null || !isAtOrAfter(resolvedAt, classifiedAt) || !isAtOrBefore(resolvedAt, snapshotCreatedAt)))
+    || (segmentClosedAt !== null && (!isAtOrAfter(segmentClosedAt, lastCustomerMessageAt) || !isAtOrBefore(segmentClosedAt, snapshotCreatedAt)))
+    || (invalidatedAt !== null && !isAtOrAfter(invalidatedAt, lastCustomerMessageAt))) return null;
   return makeDisposition({ dispositionId, revision, tenantId, institutionId, conversationId, segmentId, sourceMessageId, sourceMessageOccurredAt, sourceMessageRevision, lastCustomerMessageAt, identityState, classification, resolutionState, segmentCloseKind, risk, blockers, classifiedAt, resolvedAt, segmentClosedAt, snapshotCreatedAt, invalidatedAt, auditReference });
 }
 
@@ -330,10 +361,11 @@ export function createPendingCareDisposition(rawInput: unknown): CareCreateResul
   const lastCustomerMessageAt = captureTimestamp(input.lastCustomerMessageAt);
   const identityState = isOneOf(input.identityState, ['matched', 'pending_review', 'unmatched', 'conflict'] as const) ? input.identityState : null;
   const blockers = captureBlockers(input.blockingReasonCodes);
-  const auditReference = typeof input.auditReference === 'string' && auditReferencePattern.test(input.auditReference) ? input.auditReference : null;
+  const auditReference = captureAuditReference(input.auditReference);
   const snapshotCreatedAt = captureTimestamp(input.snapshotCreatedAt);
-  if (!dispositionId || !tenantId || !institutionId || !conversationId || !segmentId || !sourceMessageId || !sourceMessageOccurredAt || !sourceMessageRevision || !lastCustomerMessageAt || !identityState || !blockers || !auditReference || !snapshotCreatedAt) return blocked('input_invalid');
-  if (Date.parse(lastCustomerMessageAt) < Date.parse(sourceMessageOccurredAt) || Date.parse(snapshotCreatedAt) < Date.parse(sourceMessageOccurredAt)) return blocked('timestamp_conflict');
+  const serverReferenceTime = captureServerReferenceTime(input.serverReferenceTime);
+  if (!dispositionId || !tenantId || !institutionId || !conversationId || !segmentId || !sourceMessageId || !sourceMessageOccurredAt || !sourceMessageRevision || !lastCustomerMessageAt || !identityState || !blockers || !auditReference || !snapshotCreatedAt || !serverReferenceTime) return blocked('input_invalid');
+  if (!isAtOrBefore(sourceMessageOccurredAt, lastCustomerMessageAt) || !isAtOrBefore(lastCustomerMessageAt, snapshotCreatedAt) || !isAtOrBefore(snapshotCreatedAt, serverReferenceTime)) return blocked('timestamp_conflict');
   const risk = captureRisk(input.riskState, input.riskDomain, input.riskClosureReference, blockers);
   if (!risk) return blocked('risk_conflict');
   const stateCode = validateState({ classification: null, resolutionState: 'open', segmentCloseKind: 'open', risk, blockers, classifiedAt: null, resolvedAt: null, segmentClosedAt: null, invalidatedAt: null });
@@ -372,6 +404,10 @@ function invalidatePrevious(current: CareDisposition, invalidatedAt: string): Ca
   });
 }
 
+function nextRevision(current: CareDisposition): number | null {
+  return current.revision >= Number.MAX_SAFE_INTEGER - 1 ? null : current.revision + 1;
+}
+
 function appended(previous: CareDisposition, current: CareDisposition): CareCommandResult {
   return deepFreeze({ kind: 'appended' as const, previous, current });
 }
@@ -388,18 +424,22 @@ export function classifyCareDisposition(rawCurrent: unknown, rawInput: unknown):
   const classifiedAt = captureTimestamp(input.classifiedAt);
   const resolvedAt = captureNullableTimestamp(input.resolvedAt);
   const blockers = captureBlockers(input.blockingReasonCodes);
-  const auditReference = typeof input.auditReference === 'string' && auditReferencePattern.test(input.auditReference) ? input.auditReference : null;
-  if (!classification || !resolutionState || !classifiedAt || resolvedAt === undefined || !blockers || !auditReference) return blocked('input_invalid');
-  if (Date.parse(classifiedAt) < Date.parse(current.snapshotCreatedAt) || (resolvedAt !== null && Date.parse(resolvedAt) < Date.parse(classifiedAt))) return blocked('timestamp_conflict');
+  const auditReference = captureAuditReference(input.auditReference);
+  const serverReferenceTime = captureServerReferenceTime(input.serverReferenceTime);
+  if (!classification || !resolutionState || !classifiedAt || resolvedAt === undefined || !blockers || !auditReference || !serverReferenceTime) return blocked('input_invalid');
+  if (!isAtOrAfter(classifiedAt, current.lastCustomerMessageAt) || !isAtOrAfter(classifiedAt, current.snapshotCreatedAt) || !isAtOrBefore(classifiedAt, serverReferenceTime) || (resolvedAt !== null && (!isAtOrAfter(resolvedAt, classifiedAt) || !isAtOrBefore(resolvedAt, serverReferenceTime)))) return blocked('timestamp_conflict');
   const risk = captureRisk(input.riskState, input.riskDomain, input.riskClosureReference, blockers);
   if (!risk) return blocked('risk_conflict');
   const stateCode = validateState({ classification, resolutionState, segmentCloseKind: current.segmentCloseKind, risk, blockers, classifiedAt, resolvedAt, segmentClosedAt: current.segmentClosedAt, invalidatedAt: null });
   if (stateCode) return blocked(stateCode);
+  const revision = nextRevision(current);
+  if (revision === null) return blocked('revision_conflict');
+  const snapshotCreatedAt = resolvedAt ?? classifiedAt;
   const next = makeDisposition({
-    ...current, revision: current.revision + 1, classification, resolutionState, risk, blockers, classifiedAt, resolvedAt,
-    snapshotCreatedAt: classifiedAt, invalidatedAt: null, auditReference,
+    ...current, revision, classification, resolutionState, risk, blockers, classifiedAt, resolvedAt,
+    snapshotCreatedAt, invalidatedAt: null, auditReference,
   });
-  return appended(invalidatePrevious(current, classifiedAt), next);
+  return appended(invalidatePrevious(current, snapshotCreatedAt), next);
 }
 
 export function invalidateCareDispositionForCustomerInbound(rawCurrent: unknown, rawInput: unknown): CareCommandResult {
@@ -415,16 +455,19 @@ export function invalidateCareDispositionForCustomerInbound(rawCurrent: unknown,
   const lastCustomerMessageAt = captureTimestamp(input.lastCustomerMessageAt);
   const identityState = isOneOf(input.identityState, ['matched', 'pending_review', 'unmatched', 'conflict'] as const) ? input.identityState : null;
   const blockers = captureBlockers(input.blockingReasonCodes);
-  const auditReference = typeof input.auditReference === 'string' && auditReferencePattern.test(input.auditReference) ? input.auditReference : null;
+  const auditReference = captureAuditReference(input.auditReference);
   const snapshotCreatedAt = captureTimestamp(input.snapshotCreatedAt);
-  if (!sourceMessageId || !sourceMessageOccurredAt || !sourceMessageRevision || !lastCustomerMessageAt || !identityState || !blockers || !auditReference || !snapshotCreatedAt) return blocked('input_invalid');
-  if (sourceMessageId === current.sourceMessageId || sourceMessageRevision <= current.sourceMessageRevision || Date.parse(sourceMessageOccurredAt) <= Date.parse(current.sourceMessageOccurredAt) || Date.parse(lastCustomerMessageAt) < Date.parse(sourceMessageOccurredAt) || Date.parse(snapshotCreatedAt) < Date.parse(sourceMessageOccurredAt)) return blocked('source_message_not_new');
+  const serverReferenceTime = captureServerReferenceTime(input.serverReferenceTime);
+  if (!sourceMessageId || !sourceMessageOccurredAt || !sourceMessageRevision || !lastCustomerMessageAt || !identityState || !blockers || !auditReference || !snapshotCreatedAt || !serverReferenceTime) return blocked('input_invalid');
+  if (sourceMessageId === current.sourceMessageId || sourceMessageRevision <= current.sourceMessageRevision || !isAtOrAfter(sourceMessageOccurredAt, current.lastCustomerMessageAt) || !isAtOrBefore(sourceMessageOccurredAt, lastCustomerMessageAt) || !isAtOrAfter(lastCustomerMessageAt, current.lastCustomerMessageAt) || !isAtOrBefore(lastCustomerMessageAt, snapshotCreatedAt) || !isAtOrBefore(snapshotCreatedAt, serverReferenceTime)) return blocked('source_message_not_new');
   const risk = captureRisk(input.riskState, input.riskDomain, input.riskClosureReference, blockers);
   if (!risk) return blocked('risk_conflict');
   const stateCode = validateState({ classification: null, resolutionState: 'open', segmentCloseKind: 'open', risk, blockers, classifiedAt: null, resolvedAt: null, segmentClosedAt: null, invalidatedAt: null });
   if (stateCode) return blocked(stateCode);
+  const revision = nextRevision(current);
+  if (revision === null) return blocked('revision_conflict');
   const next = makeDisposition({
-    ...current, revision: current.revision + 1, sourceMessageId, sourceMessageOccurredAt, sourceMessageRevision,
+    ...current, revision, sourceMessageId, sourceMessageOccurredAt, sourceMessageRevision,
     lastCustomerMessageAt, identityState, classification: null, resolutionState: 'open', segmentCloseKind: 'open',
     risk, blockers, classifiedAt: null, resolvedAt: null, segmentClosedAt: null, snapshotCreatedAt, invalidatedAt: null,
     auditReference,
@@ -440,9 +483,11 @@ function appendClose(rawCurrent: unknown, rawInput: unknown, kind: 'normal' | 'f
   if (targetCode) return blocked(targetCode);
   if (current.segmentCloseKind !== 'open') return blocked('state_conflict');
   const segmentClosedAt = captureTimestamp(input.segmentClosedAt);
-  const auditReference = typeof input.auditReference === 'string' && auditReferencePattern.test(input.auditReference) ? input.auditReference : null;
-  if (!segmentClosedAt || !auditReference) return blocked('input_invalid');
-  if (Date.parse(segmentClosedAt) < Date.parse(current.snapshotCreatedAt)) return blocked('timestamp_conflict');
+  const auditReference = captureAuditReference(input.auditReference);
+  const serverReferenceTime = captureServerReferenceTime(input.serverReferenceTime);
+  if (!segmentClosedAt || !auditReference || !serverReferenceTime) return blocked('input_invalid');
+  if (!isAtOrAfter(segmentClosedAt, current.lastCustomerMessageAt) || !isAtOrAfter(segmentClosedAt, current.snapshotCreatedAt) || !isAtOrBefore(segmentClosedAt, serverReferenceTime)) return blocked('timestamp_conflict');
+  if (kind === 'normal' && (current.classification === null || current.blockingReasonCodes.length > 0 || current.riskState === 'unconfirmed' || current.riskState === 'confirmed')) return blocked('state_conflict');
   const blockers = kind === 'forced'
     ? deepFreeze([...new Set([...current.blockingReasonCodes, 'forced_close_unresolved' as const])].sort((left, right) => careDispositionBlockingReasonCodes.indexOf(left) - careDispositionBlockingReasonCodes.indexOf(right)))
     : current.blockingReasonCodes;
@@ -451,8 +496,10 @@ function appendClose(rawCurrent: unknown, rawInput: unknown, kind: 'normal' | 'f
   const risk = { state: current.riskState, domain: current.riskDomain, closureReference: current.riskClosureReference } as const;
   const stateCode = validateState({ classification: current.classification, resolutionState, segmentCloseKind: kind, risk, blockers, classifiedAt: current.classifiedAt, resolvedAt, segmentClosedAt, invalidatedAt: null });
   if (stateCode) return blocked(stateCode);
+  const revision = nextRevision(current);
+  if (revision === null) return blocked('revision_conflict');
   const next = makeDisposition({
-    ...current, revision: current.revision + 1, resolutionState, segmentCloseKind: kind, resolvedAt, blockers,
+    ...current, revision, resolutionState, segmentCloseKind: kind, resolvedAt, blockers,
     risk, segmentClosedAt, snapshotCreatedAt: segmentClosedAt, invalidatedAt: null, auditReference,
   });
   return appended(invalidatePrevious(current, segmentClosedAt), next);
