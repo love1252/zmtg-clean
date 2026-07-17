@@ -15,6 +15,11 @@ import {
   type AnalyticsPeriodPreset,
   type AnalyticsPeriodWindow,
 } from '@/modules/institution-analytics/domain/analytics-periods';
+import {
+  ANALYTICS_PERIOD_RESOURCE_POLICY,
+  resolveAnalyticsCustomPeriodResourceBudget,
+  type AnalyticsPeriodResourceFailureCode,
+} from '@/modules/institution-analytics/domain/analytics-period-resource-policy';
 
 export type AnalyticsHourPeriodBucket = Readonly<{
   granularity: 'hour';
@@ -55,7 +60,7 @@ export type AnalyticsPeriodBucketRequest = Readonly<{
 
 export type AnalyticsPeriodBucketFailureCode =
   | AnalyticsChartGranularityFailureCode
-  | 'invalid_period_window'
+  | AnalyticsPeriodResourceFailureCode
   | 'unresolvable_period_boundary'
   | 'invalid_bucket_boundary'
   | 'non_contiguous_period_buckets';
@@ -68,7 +73,10 @@ export type AnalyticsPeriodBucketSequenceValidation =
   | Readonly<{ ok: true }>
   | Readonly<{
       ok: false;
-      reasonCode: 'invalid_bucket_boundary' | 'non_contiguous_period_buckets';
+      reasonCode:
+        | 'invalid_bucket_boundary'
+        | 'non_contiguous_period_buckets'
+        | 'period_bucket_count_limit_exceeded';
     }>;
 
 export type AnalyticsPeriodBucketSequenceInput = Readonly<{
@@ -109,7 +117,19 @@ export function validateAnalyticsPeriodBucketSequence(
 ): AnalyticsPeriodBucketSequenceValidation {
   if (
     !isPlainObject(input) ||
-    !Array.isArray(input.buckets) ||
+    !Array.isArray(input.buckets)
+  ) {
+    return Object.freeze({ ok: false, reasonCode: 'invalid_bucket_boundary' });
+  }
+  if (
+    input.buckets.length > ANALYTICS_PERIOD_RESOURCE_POLICY.maxBucketCount
+  ) {
+    return Object.freeze({
+      ok: false,
+      reasonCode: 'period_bucket_count_limit_exceeded',
+    });
+  }
+  if (
     parseCanonicalInstant(input.startInstant) === null ||
     parseCanonicalInstant(input.endInstantExclusive) === null
   ) {
@@ -228,14 +248,46 @@ function preloadPeriodBoundaryInstants(
   return true;
 }
 
-function generateHourBuckets(startInstant: string, endInstantExclusive: string) {
+type AnalyticsPeriodBucketGeneration<T extends AnalyticsPeriodBucket> =
+  | Readonly<{ ok: true; buckets: T[] }>
+  | Readonly<{
+      ok: false;
+      reasonCode:
+        | 'unresolvable_period_boundary'
+        | 'period_bucket_count_limit_exceeded';
+    }>;
+
+function generationFailure(
+  reasonCode:
+    | 'unresolvable_period_boundary'
+    | 'period_bucket_count_limit_exceeded',
+): Readonly<{
+  ok: false;
+  reasonCode:
+    | 'unresolvable_period_boundary'
+    | 'period_bucket_count_limit_exceeded';
+}> {
+  return Object.freeze({ ok: false, reasonCode });
+}
+
+function generateHourBuckets(
+  startInstant: string,
+  endInstantExclusive: string,
+): AnalyticsPeriodBucketGeneration<AnalyticsHourPeriodBucket> {
   const start = parseCanonicalInstant(startInstant);
   const end = parseCanonicalInstant(endInstantExclusive);
-  if (start === null || end === null || start >= end) return null;
+  if (start === null || end === null || start >= end) {
+    return generationFailure('unresolvable_period_boundary');
+  }
 
   const buckets: AnalyticsHourPeriodBucket[] = [];
   let cursor = start;
   while (cursor < end) {
+    if (
+      buckets.length >= ANALYTICS_PERIOD_RESOURCE_POLICY.maxBucketCount
+    ) {
+      return generationFailure('period_bucket_count_limit_exceeded');
+    }
     const next = Math.min(cursor + millisecondsPerHour, end);
     buckets.push(
       Object.freeze({
@@ -246,33 +298,42 @@ function generateHourBuckets(startInstant: string, endInstantExclusive: string) 
     );
     cursor = next;
   }
-  return buckets;
+  return Object.freeze({ ok: true, buckets });
 }
 
 function generateCalendarBuckets(
   window: AnalyticsPeriodWindow,
   granularity: AnalyticsCustomChartGranularity,
   boundaryCache: Map<string, string>,
-) {
+): AnalyticsPeriodBucketGeneration<AnalyticsCalendarPeriodBucket> {
   const start = parseAnalyticsLocalDate(window.startDate);
   const end = parseAnalyticsLocalDate(window.endDateExclusive);
-  if (!start || !end || start.ordinal >= end.ordinal) return null;
+  if (!start || !end || start.ordinal >= end.ordinal) {
+    return generationFailure('unresolvable_period_boundary');
+  }
 
   const buckets: AnalyticsCalendarPeriodBucket[] = [];
   let cursor = start.ordinal;
   while (cursor < end.ordinal) {
+    if (
+      buckets.length >= ANALYTICS_PERIOD_RESOURCE_POLICY.maxBucketCount
+    ) {
+      return generationFailure('period_bucket_count_limit_exceeded');
+    }
     const proposedEnd = nextCalendarBoundaryOrdinal(cursor, granularity);
     if (
       proposedEnd === null ||
       !Number.isSafeInteger(proposedEnd) ||
       proposedEnd <= cursor
     ) {
-      return null;
+      return generationFailure('unresolvable_period_boundary');
     }
     const next = Math.min(proposedEnd, end.ordinal);
     const startDate = localDateFromOrdinal(cursor);
     const endDateExclusive = localDateFromOrdinal(next);
-    if (!startDate || !endDateExclusive) return null;
+    if (!startDate || !endDateExclusive) {
+      return generationFailure('unresolvable_period_boundary');
+    }
 
     const startInstant = resolveBoundaryInstant(
       startDate,
@@ -284,7 +345,9 @@ function generateCalendarBuckets(
       window.timeZone,
       boundaryCache,
     );
-    if (!startInstant || !endInstantExclusive) return null;
+    if (!startInstant || !endInstantExclusive) {
+      return generationFailure('unresolvable_period_boundary');
+    }
 
     buckets.push(
       Object.freeze({
@@ -297,7 +360,7 @@ function generateCalendarBuckets(
     );
     cursor = next;
   }
-  return buckets;
+  return Object.freeze({ ok: true, buckets });
 }
 
 export function resolveAnalyticsPeriodBuckets(
@@ -313,16 +376,29 @@ export function resolveAnalyticsPeriodBuckets(
   });
   if (!granularity.ok) return failure(granularity.reasonCode);
 
-  if (
-    (input.side !== 'current' && input.side !== 'previous') ||
-    !isAnalyticsPeriodPairValid(input.period)
-  ) {
+  if (input.side !== 'current' && input.side !== 'previous') {
     return failure('invalid_period_window');
   }
 
   const window = input.period[input.side];
-  if (!isAnalyticsPeriodWindowValid(window)) {
+  if (
+    !isAnalyticsPeriodPairValid(input.period) ||
+    !isAnalyticsPeriodWindowValid(window)
+  ) {
     return failure('invalid_period_window');
+  }
+
+  let projectedBucketCount: number | null = null;
+  if (input.period.preset === 'custom') {
+    if (granularity.plan.granularity === 'hour') {
+      return failure('chart_granularity_not_allowed');
+    }
+    const resourceBudget = resolveAnalyticsCustomPeriodResourceBudget({
+      window,
+      granularity: granularity.plan.granularity,
+    });
+    if (!resourceBudget.ok) return failure(resourceBudget.reasonCode);
+    projectedBucketCount = resourceBudget.projectedBucketCount;
   }
   const boundaryCache = new Map<string, string>();
   if (!preloadPeriodBoundaryInstants(window, boundaryCache)) {
@@ -350,9 +426,15 @@ export function resolveAnalyticsPeriodBuckets(
           granularity.plan.granularity,
           boundaryCache,
         );
-  if (!generated) return failure('unresolvable_period_boundary');
+  if (!generated.ok) return failure(generated.reasonCode);
+  if (
+    projectedBucketCount !== null &&
+    generated.buckets.length !== projectedBucketCount
+  ) {
+    return failure('invalid_bucket_boundary');
+  }
 
-  const buckets = Object.freeze(generated);
+  const buckets = Object.freeze(generated.buckets);
   const validation = validateAnalyticsPeriodBucketSequence({
     startInstant,
     endInstantExclusive,
