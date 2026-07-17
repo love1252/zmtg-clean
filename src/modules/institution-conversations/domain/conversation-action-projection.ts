@@ -247,6 +247,7 @@ function captureOneOfExactRecords(
       if (
         descriptor === undefined
         || !Object.hasOwn(descriptor, 'value')
+        || !descriptor.enumerable
         || descriptor.get !== undefined
         || descriptor.set !== undefined
       ) {
@@ -369,15 +370,15 @@ function capturePartitions(raw: unknown): readonly ParsedPartition[] | null {
       return null;
     }
     const freshness = partition.freshness === null ? null : captureFreshness(partition.freshness);
+    const isCurrent = partition.readiness === 'ready' || partition.readiness === 'empty';
+    const isStale = partition.readiness === 'stale';
+    const isUnavailable = ['unavailable', 'denied', 'disabled'].includes(
+      partition.readiness as string,
+    );
     if (
-      (partition.readiness === 'ready' || partition.readiness === 'empty' || partition.readiness === 'stale')
-      && freshness === null
-    ) {
-      return null;
-    }
-    if (
-      ['unavailable', 'denied', 'disabled'].includes(partition.readiness as string)
-      && freshness !== null
+      (isCurrent && (freshness === null || partition.failureCode !== null))
+      || (isStale && freshness === null)
+      || (isUnavailable && (freshness !== null || partition.failureCode === null))
     ) {
       return null;
     }
@@ -506,11 +507,24 @@ function captureCandidate(
     !isSafeIdentifier(conversation.conversationId)
     || !isSafeIdentifier(segment.segmentId)
     || conversation.activeSegmentId !== segment.segmentId
+    || !isSafeIdentifier(conversation.channelType)
+    || !isSafeIdentifier(conversation.serviceProviderType)
+    || !isSafeIdentifier(conversation.connectionInstanceId)
+    || !isSafeIdentifier(conversation.channelConversationRef)
+    || !['matched', 'pending_review', 'unmatched', 'conflict'].includes(
+      conversation.identityState as string,
+    )
     || !isSafeIdentifier(segment.lastCustomerMessageId)
     || !isCanonicalTimestamp(segment.lastCustomerMessageAt)
     || typeof segment.latestInboundRevision !== 'number'
     || !Number.isSafeInteger(segment.latestInboundRevision)
     || segment.latestInboundRevision < 1
+  ) {
+    return 'invalid';
+  }
+  if (
+    conversation.identityState !== 'matched'
+    && conversation.customerReference !== null
   ) {
     return 'invalid';
   }
@@ -758,6 +772,7 @@ export function projectConversationActionSource(
   }
   const candidates: ParsedCandidate[] = [];
   const segmentIds = new Set<string>();
+  const sourceVersions = new Set<string>();
   for (const rawCandidate of rawCandidates) {
     const candidate = captureCandidate(rawCandidate, scope);
     if (candidate === 'scope_mismatch') {
@@ -770,7 +785,11 @@ export function projectConversationActionSource(
       if (segmentIds.has(candidate.item.segmentId)) {
         return { kind: 'projected', source: sourceFailure(scope, partitions, 'unavailable', 'invalid_payload') };
       }
+      if (sourceVersions.has(candidate.item.sourceVersion)) {
+        return { kind: 'projected', source: sourceFailure(scope, partitions, 'unavailable', 'invalid_payload') };
+      }
       segmentIds.add(candidate.item.segmentId);
+      sourceVersions.add(candidate.item.sourceVersion);
       candidates.push(candidate);
     }
   }

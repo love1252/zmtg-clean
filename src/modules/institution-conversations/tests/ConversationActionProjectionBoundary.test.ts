@@ -105,6 +105,63 @@ describe('conversation action projection boundaries', () => {
     expect(source).toMatchObject({ readiness: 'denied', data: null, failureCode: 'scope_mismatch' });
   });
 
+  it('partial 只保留 fresh ready 分区，stale 分区绝不贡献 action 状态', () => {
+    const raw = sourceInput();
+    const source = sourceOf(projectConversationActionSource({
+      ...raw,
+      partitions: [
+        { ...raw.partitions[0]!, readiness: 'stale', failureCode: 'data_incomplete' },
+        raw.partitions[1]!,
+      ],
+      candidates: [{
+        ...raw.candidates[0]!,
+        risk: {
+          state: 'confirmed',
+          riskId: 'risk_cccccccccccccccc',
+          ...scope,
+          conversationId,
+          segmentId,
+          sourceMessageId: 'message-safe',
+          riskDomain: 'non_clinical',
+          riskCode: 'risk_safe',
+          detectedAt: at,
+          confirmedAt: at,
+          resolvedAt: null,
+          clinicalClosureReferenceId: null,
+        },
+      }],
+    }));
+
+    expect(source).toMatchObject({ readiness: 'partial', failureCode: 'data_incomplete' });
+    expect(source.data?.actions).toEqual([
+      expect.objectContaining({ partitions: ['unresolved_risk'] }),
+    ]);
+  });
+
+  it('分区必须恰好覆盖两个键，且 current/不可用状态不得伪造 freshness 或 failure', () => {
+    const raw = sourceInput();
+    expect(projectConversationActionSource({
+      ...raw,
+      partitions: [raw.partitions[0]!, raw.partitions[0]!],
+    } as ConversationActionProjectionInput)).toEqual({ kind: 'blocked', code: 'invalid_input' });
+    expect(projectConversationActionSource({
+      ...raw,
+      partitions: raw.partitions.map((partition) => ({
+        ...partition,
+        failureCode: 'data_incomplete',
+      })),
+    } as ConversationActionProjectionInput)).toEqual({ kind: 'blocked', code: 'invalid_input' });
+    expect(projectConversationActionSource({
+      ...raw,
+      partitions: raw.partitions.map((partition) => ({
+        ...partition,
+        readiness: 'unavailable',
+        freshness: null,
+        failureCode: null,
+      })),
+    } as ConversationActionProjectionInput)).toEqual({ kind: 'blocked', code: 'invalid_input' });
+  });
+
   it('结束分段、失配事实、正文或 AI summary 均不得形成 action', () => {
     const raw = sourceInput();
     const candidate = raw.candidates[0]!;
@@ -176,5 +233,99 @@ describe('conversation action projection boundaries', () => {
       ...raw,
       candidates: [{ ...candidate, approved: { ...candidate.approved, sortSignals: ['unapproved'] as never } }],
     }))).toMatchObject({ readiness: 'unavailable', data: null });
+  });
+
+  it('未知角色来源、自由摘要和未知渠道或服务商均 fail-closed', () => {
+    const raw = sourceInput();
+    const candidate = raw.candidates[0]!;
+    expect(projectConversationActionSource({
+      ...raw,
+      viewer: { ...raw.viewer, authority: 'browser_inferred' } as never,
+    })).toEqual({ kind: 'blocked', code: 'invalid_input' });
+    expect(sourceOf(projectConversationActionSource({
+      ...raw,
+      candidates: [{
+        ...candidate,
+        lastCustomerMessage: {
+          ...candidate.lastCustomerMessage,
+          safeSummary: {
+            code: 'customer_message_received',
+            text: '任意自由文本',
+          } as never,
+        },
+      }],
+    }))).toMatchObject({ readiness: 'unavailable', data: null });
+    expect(sourceOf(projectConversationActionSource({
+      ...raw,
+      candidates: [{
+        ...candidate,
+        conversation: { ...candidate.conversation, channelType: '' },
+      }],
+    }))).toMatchObject({ readiness: 'unavailable', data: null });
+    expect(sourceOf(projectConversationActionSource({
+      ...raw,
+      candidates: [{
+        ...candidate,
+        conversation: { ...candidate.conversation, serviceProviderType: '' },
+      }],
+    }))).toMatchObject({ readiness: 'unavailable', data: null });
+  });
+
+  it('活动 action 不得复用 segment 或 sourceVersion', () => {
+    const raw = sourceInput();
+    const candidate = raw.candidates[0]!;
+    const duplicateSegment = {
+      ...candidate,
+      productionEvidence: { ...candidate.productionEvidence },
+    };
+    expect(sourceOf(projectConversationActionSource({
+      ...raw,
+      candidates: [candidate, duplicateSegment],
+    }))).toMatchObject({ readiness: 'unavailable', data: null, failureCode: 'invalid_payload' });
+
+    const duplicateSourceVersion = {
+      ...candidate,
+      productionEvidence: {
+        ...candidate.productionEvidence,
+        conversationId: 'con_other',
+        segmentId: 'seg_other',
+      },
+      conversation: {
+        ...candidate.conversation,
+        conversationId: 'con_other',
+        activeSegmentId: 'seg_other',
+      },
+      segment: {
+        ...candidate.segment,
+        conversationId: 'con_other',
+        segmentId: 'seg_other',
+      },
+      assignment: {
+        ...candidate.assignment,
+        conversationId: 'con_other',
+        segmentId: 'seg_other',
+      },
+      risk: {
+        ...candidate.risk,
+        conversationId: 'con_other',
+        segmentId: 'seg_other',
+      },
+      lastCustomerMessage: {
+        ...candidate.lastCustomerMessage,
+        conversationId: 'con_other',
+        segmentId: 'seg_other',
+      },
+    };
+    expect(sourceOf(projectConversationActionSource({
+      ...raw,
+      candidates: [candidate, duplicateSourceVersion],
+    }))).toMatchObject({ readiness: 'unavailable', data: null, failureCode: 'invalid_payload' });
+    expect(sourceOf(projectConversationActionSource({
+      ...raw,
+      candidates: [{
+        ...candidate,
+        approved: { ...candidate.approved, sourceVersion: 'srcv_other' },
+      }],
+    }))).toMatchObject({ readiness: 'unavailable', data: null, failureCode: 'invalid_payload' });
   });
 });
