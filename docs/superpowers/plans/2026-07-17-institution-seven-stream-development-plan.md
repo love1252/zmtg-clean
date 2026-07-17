@@ -203,6 +203,7 @@ BASE-01 导航与能力契约
 | `CustomerReferenceV1` | 客户中心 | 工作台、会话、预约随访、经营分析 | 低敏客户引用，不含非必要 PII |
 | `CustomerLifecycleSummaryV1` | 客户中心 | 客户列表、工作台 | 五类生命周期低敏聚合 |
 | `CustomerTimelineContributionV1` | 各业务事实生产线 | 客户中心 | 各模块贡献可解释时间线事件 |
+| `CustomerCareSummaryV1` | Care provider（预约与随访） | 客户中心 | 客户详情中的预约与随访低敏摘要、受控跳转和详情依据 |
 | `CareActionSourceV1` | 预约与随访 | 工作台 | 预约和随访行动项、计数、详情链接与数据状态 |
 | `ConversationActionSourceV1` | 会话工作台 | 工作台 | 生产会话的风险和人工行动项 |
 | `TreatmentCareSourceV1` | 客户中心治疗模块 | 预约与随访 | 治疗来源、建议、作废及路径/任务取消影响 |
@@ -287,7 +288,8 @@ reader、`AccessContext`、角色和查询对象只作为服务端输入，不�
 | --- | --- |
 | `CustomerReferenceV1` | 精确字段为 `contractVersion`、`customerId`、`displayName`、`maskedReference`；最后一项可空。 |
 | `CustomerLifecycleSummaryV1` | payload 只有 `buckets[{ key, count }]`；key 精确为 `consulting`、`scheduled`、`post_care`、`repurchase_window`、`silent_reactivation`，count 在未知时为 `null`，不增加 total。 |
-| `CareActionSourceV1` | 四分区固定为 `pending_confirmation_appointments`、`reschedule_requested_appointments`、`overdue_followups`、`today_due_followups`；payload 只有 `cards + actions`；action 字段固定为 `entityType`、`objectId`、`sourceVersion`、`customer`、`businessState`、`cardKeys`、`sortSignals`、`appointmentAt`、`dueAt`、`slaAt`、`riskLevel`、`priority`、`owner`、`safeSummary`、`detailHref`。 |
+| `CustomerCareSummaryV1` | PartitionKey 精确为 `'appointments' \| 'followups'`，唯一别名为 `InstitutionSourceEnvelopeV1<CustomerCareSummaryPayloadV1, 'appointments' \| 'followups'>`。payload 精确且仅含 `customerId: string`、`appointments`、`followups`，不得返回 `CustomerReferenceV1` 或 `displayName`；后二者各为 `null` 或 `{ items, hasMore: boolean }`，每组 `items` 最多 5 条。预约 item 精确为 `{ appointmentId, sourceVersion, scheduledAt, businessState, rescheduleRequestState: 'pending' \| null, safeSummary: string \| null, detailHref }`，其中预约事实 `businessState` 只允许 `'pending_confirmation' \| 'confirmed' \| 'arrived' \| 'completed' \| 'cancelled' \| 'no_show'`；`rescheduleRequestState='pending'` 只表示存在尚未由 HIS 原子接受的独立改约请求，不得覆盖原预约事实状态，HIS 接受新时段后更新预约事实并将该标记清空，完整请求历史仍由 Care/HIS 边界保存。随访 item 精确为 `{ taskId, sourceVersion, dueAt, businessState, riskLevel: 'normal' \| 'watch' \| 'urgent', safeSummary: string \| null, detailHref }`，其中 `businessState` 只允许 `'pending' \| 'in_progress' \| 'waiting_customer' \| 'escalated' \| 'completed' \| 'cancelled'`。预约组固定按 `scheduledAt DESC, appointmentId ASC`，随访组固定按 `dueAt DESC, taskId ASC`；每组 `items + hasMore` 必须来自该确定性排序下的同一次 Care 服务端 RBAC `limit + 1` 查询，不得返回或推导 exact total。`ready`、`empty`、`stale` 可对应非 `null` 分组；`empty` 精确返回 `{ items: [], hasMore: false }`；`stale` 只允许返回同 scope 已验证的只读快照并显示 freshness，且不得驱动写入。`unavailable`、`denied`、`disabled` 对应分组必须为 `null`。顶层 `partial` 允许一个分区成功、另一个分区发生普通失败；任一 `scope_mismatch` 必须提升为顶层状态并整包返回 `data: null`。 |
+| `CareActionSourceV1` | 四分区固定为 `pending_confirmation_appointments`、`reschedule_requested_appointments`、`overdue_followups`、`today_due_followups`；payload 只有 `cards + actions`；action 字段固定为 `entityType`、`objectId`、`sourceVersion`、`customer`、`businessState`、`cardKeys`、`sortSignals`、`appointmentAt`、`dueAt`、`slaAt`、`riskLevel`、`priority`、`owner`、`safeSummary`、`detailHref`。`reschedule_requested_appointments` 只由独立待改约请求事实命中并写入 `cardKeys`，不得把预约 `businessState` 覆盖为 `reschedule_requested`；HIS 接受新时段前原预约时间和事实状态继续有效。 |
 | `ConversationActionSourceV1` | 分区固定为 `waiting_human \| unresolved_risk`；行动字段固定为 `conversationId`、`segmentId`、`sourceVersion`、`production: true`、`subject`、`conversationState`、`riskState`、`partitions`、`sortSignals`、`lastCustomerMessageAt`、`slaAt`、`priority`、`assignee`、`safeSummary`、`detailHref`。废弃 `actionId`、`partitionKey`、`sortPriority`、`slaDueAt`、`canonicalHref` 等别名。 |
 | `TreatmentCareSourceV1` | payload 字段固定为 `sourceId`、`sourceVersion`、`customer`、`treatmentOccurredAt`、`projectRef`、`categoryCode`、`treatmentStageCode`、`recoveryStageCode`、`riskLevel`、`approvedTagCodes`、`sourceState`、`suggestion`、`voidedAt`、`voidReasonCode`。 |
 | `ConversationCareDispositionV1` | 当前快照的并发字段只叫 `revision`，不使用 `dispositionRevision`；blocker 只允许 `clinical_risk`、`complaint`、`refund_dispute`、`opt_out`、`privacy_request`、`unresolved_consultation`、`identity_unconfirmed`、`forced_close_unresolved`。 |
@@ -296,6 +298,8 @@ reader、`AccessContext`、角色和查询对象只作为服务端输入，不�
 | `InstitutionOperatingContextV1` | 唯一别名为 `InstitutionSourceEnvelopeV1<InstitutionOperatingContextPayloadV1, 'operating_context'>`；payload 只有 `version`、`source`、`current{ timeZone, defaultCurrency }`、`pending{ timeZone, defaultCurrency, requestedVersion, effectiveFromBusinessDate } \| null`、`updatedAt`、`updatedBy`。版本统一叫 `version`，不使用 `timezoneVersion`。 |
 | `AnalyticsCustomerConsumptionV1` | 唯一结果别名为 `InstitutionSourceEnvelopeV1<AnalyticsCustomerConsumptionPayloadV1, AnalyticsCustomerConsumptionPartitionKeyV1>`；payload 不重复 envelope 字段，只含 snapshot/version、安全 `customerId`、当前/上期周期、按币种金额、`paidCustomer`、可空消费单计数、可用性和获准低敏明细。 |
 | `ControlledImportCommandV1` | 精确十五字段为 `contractVersion`、`tenantId`、`institutionId`、`precheckId`、`fileSecurityReference`、`approvedScope`、`approvedRowCount`、`approvedRowsDigest`、`hisDirectoryVersion`、`mappingVersion`、`idempotencyKey`、`operatorReference`、`expectedVersion`、`sourceAuditReference`、`reasonCode`。 |
+
+`CustomerCareSummaryV1` 的 item `detailHref` 由 Care provider 提供，且只能使用 Care 的 canonical URL。客户详情不提供 cursor，也不在抽屉内继续加载；`hasMore: true` 时只显示“查看全部”，由 Customer 按 canonical 规则派生并跳转 Care 列表链接。创建链接同样由 Customer 派生、不进入公共 payload，但只能在 Care 服务端写权限 authorizer 对当前机构、角色、客户、来源和 capability 返回 fresh allow 时显示，绝不能由摘要可读或 `hasMore` 推导；普通手工随访的新建快捷入口只对管理员/运营开放，会话来源限定例外仍只能从已分配且已匹配的会话发起。打开详情、列表或创建入口后，目标 Care 模块必须重新校验当前角色、`tenantId + institutionId`、客户归属、对象状态和 capability；摘要可见不代表目标读取或写入获准。
 
 以下字段仍是 runtime 前真实阻塞，不能由任一栏目线自行猜测：
 
@@ -656,7 +660,8 @@ Codex-managed Worktree 不保证带有未跟踪的 `node_modules` 或 `.env.loca
 
 ### 13.2 分支规则
 
-- 第一轮 `PLAN-*` 规划 Worktree 必须等本文经单独授权提交、推送并合并后，基于包含本文的最新且干净 `origin/main` 创建；不得运行 runtime。
+- `PLAN-PUBLISH-01` 是一次明确的 docs-only 例外：七个 `PLAN-*` 规划 Worktree 已从共同启动基线 `e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa` 创建并只产出七份技术计划；连同共享契约基线分支形成四个 Draft PR `#535` 至 `#538`。该例外不授权任何 runtime、schema、migration、adapter、凭证或外部网络工作，也不得重复创建同一批规划 Worktree。
+- 当前规划 PR 列车固定为：先审查 `#535`；`#536`、`#537` 完成各自修订后，必须在 `#535` 获得后续明确合并授权并进入 `main` 后同步最新 `main`、重新执行范围与文档验证并复核；`#538` 最后审查。任何一步都不得从 Draft 状态或前序审查结果推导自动合并授权。
 - runtime Worktree 必须从共享底座合并后的同一个 `origin/main` commit 创建，不能沿用旧规划分支假装已经同步底座。
 - 每条线是长期逻辑责任，不是长期巨型分支。
 - 每个 PR 新建一个短分支，例如 `codex/institution-customers-cus01-readonly-detail`。
@@ -736,9 +741,9 @@ git status --short
 
 ## 十五、七个 Worktree 的启动提示词
 
-以下提示词用于启动七条线的第一轮 `PLAN-*` 技术计划。前置条件是本文已经提交、推送并合并到 `origin/main`。规划 Worktree 基于包含本文的最新且干净 `origin/main`，每条线只允许新增一个唯一 docs-only 文件；runtime 任务继续使用 `WB-* / CUS-* / CONV-* / CARE-* / KB-* / AN-* / SYS-*` 编号，并必须等共享底座合并后另行授权。
+以下提示词是七条线第一轮 `PLAN-*` 技术计划的已执行 docs-only 启动记录。`PLAN-PUBLISH-01` 明确允许七个规划 Worktree 以 `e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa` 为共同启动基线并行产出唯一技术计划文档，再与共享契约基线一起组成四个 Draft PR：`#535`、`#536`、`#537`、`#538`。这是本轮规划发布的受控例外，不是今后绕过最新 `origin/main` 的先例，也不授权 runtime。
 
-复制提示词时，先用 `date "+%Y-%m-%d"` 的结果替换 `<当天日期>`。规划任务完成后不得自动提交、推送、创建 PR、合并或继续 runtime。
+执行提示词时已先用 `date "+%Y-%m-%d"` 的结果替换 `<当天日期>`。各规划任务本身不授权提交、推送、创建 PR、合并或继续 runtime；四个 Draft PR 的创建来自后续独立的 `PLAN-PUBLISH-01` docs-only 授权。后续审查与同步遵循第 13.2 节的固定顺序。
 
 ### 15.1 工作台线提示词
 
@@ -942,15 +947,18 @@ schema 需求：无 / 有（附数据变更申请）
 
 ---
 
-## 二十一、下一步人工决策
+## 二十一、当前 docs-only 审批列车与后续人工决策
 
-本文获批后，仍需按顺序人工决定：
+`PLAN-PUBLISH-01` 已在共同启动基线 `e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa` 上完成七份规划文档和四个 Draft PR 的创建：`#535` 为共享契约基线，`#536` 为客户中心/Care/会话工作台，`#537` 为知识库/经营分析/管理中心，`#538` 为工作台。该状态只证明 docs-only 候选已经形成，不代表任何 PR 已获合并批准，也不代表任何 runtime 已获授权。
 
-1. 是否授权把本文作为单文件 docs-only 变更提交、推送并合并到 `main`，然后确认最新 `origin/main` 已包含本文且工作区干净。
-2. 是否基于包含本文的最新 `origin/main` 创建七个规划 Worktree，只执行 `PLAN-WB-01 / PLAN-CUS-01 / PLAN-CONV-01 / PLAN-CARE-01 / PLAN-KB-01 / PLAN-AN-01 / PLAN-SYS-01`，各自只新增一个技术计划文档。
-3. 七份计划交叉审查后，是否批准 `BASE-01` 与 `BASE-01A` 的 runtime 任务。
-4. 是否批准 `BASE-02` 机构访问控制任务。
-5. 是否批准独立的机构隔离 schema 技术设计；schema 与 migration 继续分别审批。
-6. 共享底座合并并验证后，是否从同一最新 `origin/main` 创建七条 runtime 短分支并逐线授权首个切片。
+后续仍须按顺序人工决定：
 
-推荐先执行第 1 项；本文尚未进入 `origin/main` 前不得创建七个规划 Worktree。随后七个规划 Worktree 只产出技术计划和只读证据；总协调台完成交叉审查、消除契约冲突并冻结共享底座后，再授权任何 runtime。
+1. 先完成 `#535` 的独立审查；只有用户后续明确批准合并后，才可按本计划规定的 merge commit 策略合并，并确认最新 `origin/main` 已包含共享契约基线且主工作区干净。
+2. `#536`、`#537` 完成各自修订后，同步包含 `#535` 的最新 `main`，重新执行文件范围、Markdown、契约交叉和 `git diff --check` 验证，再分别进入合并审批；两者不得因并行审查而自动合并。
+3. `#538` 最后同步已获批的前序规划结果并执行最终跨线一致性复核，再单独申请合并审批。
+4. 四个 docs-only PR 均按授权合并并完成主线复核后，才决定是否批准 `BASE-01` 与 `BASE-01A` 的 runtime 任务。
+5. 是否批准 `BASE-02` 机构访问控制任务。
+6. 是否批准独立的机构隔离 schema 技术设计；schema 与 migration 继续分别审批。
+7. 共享底座合并并验证后，是否从同一最新 `origin/main` 创建七条 runtime 短分支并逐线授权首个切片。
+
+现阶段不得重复创建第一轮规划 Worktree，也不得开始 runtime。七份规划文档和只读证据必须先完成上述合并列车与总协调台交叉审查；任何 runtime、schema、migration、adapter、真实凭证、外部网络或生产发布仍需后续逐项明确授权。
