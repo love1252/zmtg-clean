@@ -1,0 +1,54 @@
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import HospitalPage from '@/app/hospital/page';
+
+describe('WB-UI-01 工作台入口', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('只在通过 DemoSessionGate 后展示 capability-off 工作台，不读取旧工作台数据', async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        authenticated: true,
+        user: { role: 'tenant_admin' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<HospitalPage />);
+
+    expect(await screen.findByRole('heading', { name: '工作台', level: 1 })).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+
+    const desktopNavigation = screen.getByRole('navigation', { name: '机构端桌面导航' });
+    expect(within(desktopNavigation).getAllByRole('link')).toHaveLength(1);
+    expect(within(desktopNavigation).getByRole('link', { name: '工作台' })).toHaveAttribute(
+      'href',
+      '/hospital',
+    );
+    expect(within(desktopNavigation).queryByText('客户中心')).not.toBeInTheDocument();
+    expect(within(desktopNavigation).queryByText('预约与随访')).not.toBeInTheDocument();
+    expect(within(desktopNavigation).queryByText('经营分析')).not.toBeInTheDocument();
+
+    expect(screen.getByText('工作台当前不可用')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '行动队列' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Care 行动概览')).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: '客户旅程' })).not.toBeInTheDocument();
+    expect(screen.queryByText('机构能力')).not.toBeInTheDocument();
+    expect(screen.queryByText('0')).not.toBeInTheDocument();
+    expect(screen.queryByText(/nextAction/u)).not.toBeInTheDocument();
+
+    const mobileNavigation = screen.getByRole('navigation', { name: '机构端移动导航' });
+    expect(within(mobileNavigation).getAllByRole('link')).toHaveLength(1);
+    expect(within(mobileNavigation).getByRole('link', { name: '工作台' })).toHaveAttribute(
+      'href',
+      '/hospital',
+    );
+    expect(within(mobileNavigation).queryByRole('button', { name: '更多' })).not.toBeInTheDocument();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/session', { cache: 'no-store' });
+  });
+});

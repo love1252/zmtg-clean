@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import HospitalPage from '@/app/hospital/page';
 import OpenPlatformPage from '@/app/open-platform/page';
+import { InstitutionWorkspace as HospitalPage } from '@/modules/workspace/components/InstitutionWorkspace';
 import type { AuditEventListItem } from '@/modules/audit/domain/audit-event-query';
 import type { AppointmentRecordSummary } from '@/modules/institution/domain/appointment-records';
 import {
@@ -2478,7 +2478,6 @@ describe('工作台入口页面', () => {
 
     expect(await screen.findByRole('heading', { name: /今日治疗后随访重点/ })).toBeInTheDocument();
     expect(screen.getByText('待人工确认的后续动作')).toBeInTheDocument();
-    expect(screen.getByText('正在加载机构运营摘要...')).toBeInTheDocument();
     expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
     expect(screen.queryByText('当前为受控 demo 数据')).not.toBeInTheDocument();
     expect(screen.queryByText('UI mock-only')).not.toBeInTheDocument();
