@@ -1,27 +1,52 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  classifyCareDisposition,
-  closeCareDispositionNormally,
-  createPendingCareDisposition,
-  forceCloseCareDisposition,
-  invalidateCareDispositionForCustomerInbound,
+  classifyCareDisposition as reduceClassifyCareDisposition,
+  closeCareDispositionNormally as reduceCloseCareDispositionNormally,
+  createPendingCareDisposition as reduceCreatePendingCareDisposition,
+  forceCloseCareDisposition as reduceForceCloseCareDisposition,
+  invalidateCareDispositionForCustomerInbound as reduceInvalidateCareDispositionForCustomerInbound,
   isCareDispositionConsumable,
   isValidCareDisposition,
   type CareDisposition,
   type CreatePendingCareDispositionInput,
 } from '@/modules/institution-conversations/domain/conversation-care-dispositions';
 
+const token = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+const nextToken = 'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210';
+const references = Object.freeze({
+  dispositionId: `disp_${token}`,
+  conversationId: `conv_${token}`,
+  segmentId: `seg_${token}`,
+  sourceMessageId: `msg_${token}`,
+  nextSourceMessageId: `msg_${nextToken}`,
+  createdAudit: `audit_${token}`,
+  classifiedAudit: `audit_${nextToken}`,
+  newMessageAudit: `audit_${'a'.repeat(64)}`,
+  closedAudit: `audit_${'b'.repeat(64)}`,
+  forcedAudit: `audit_${'c'.repeat(64)}`,
+});
+
+function serverClock(): { referenceTime: string } {
+  return { referenceTime: '2026-07-18T01:00:00.000Z' };
+}
+
+const createPendingCareDisposition = (rawInput: unknown) => reduceCreatePendingCareDisposition(rawInput, serverClock());
+const classifyCareDisposition = (rawCurrent: unknown, rawInput: unknown) => reduceClassifyCareDisposition(rawCurrent, rawInput, serverClock());
+const invalidateCareDispositionForCustomerInbound = (rawCurrent: unknown, rawInput: unknown) => reduceInvalidateCareDispositionForCustomerInbound(rawCurrent, rawInput, serverClock());
+const closeCareDispositionNormally = (rawCurrent: unknown, rawInput: unknown) => reduceCloseCareDispositionNormally(rawCurrent, rawInput, serverClock());
+const forceCloseCareDisposition = (rawCurrent: unknown, rawInput: unknown) => reduceForceCloseCareDisposition(rawCurrent, rawInput, serverClock());
+
 function createInput(
   overrides: Partial<CreatePendingCareDispositionInput> = {},
 ): CreatePendingCareDispositionInput {
   return {
-    dispositionId: 'disposition-1',
+    dispositionId: references.dispositionId,
     tenantId: 'tenant-1',
     institutionId: 'institution-1',
-    conversationId: 'conversation-1',
-    segmentId: 'segment-1',
-    sourceMessageId: 'message-1',
+    conversationId: references.conversationId,
+    segmentId: references.segmentId,
+    sourceMessageId: references.sourceMessageId,
     sourceMessageOccurredAt: '2026-07-18T00:00:00.000Z',
     sourceMessageRevision: 1,
     lastCustomerMessageAt: '2026-07-18T00:00:00.000Z',
@@ -30,9 +55,8 @@ function createInput(
     riskDomain: null,
     riskClosureReference: null,
     blockingReasonCodes: [],
-    auditReference: 'audit_created_1',
+    auditReference: references.createdAudit,
     snapshotCreatedAt: '2026-07-18T00:00:01.000Z',
-    serverReferenceTime: '2026-07-18T01:00:00.000Z',
     ...overrides,
   };
 }
@@ -72,13 +96,12 @@ describe('Conversation care disposition domain', () => {
 
   it('appends a classified revision and invalidates the preceding snapshot', () => {
     const result = classifyCareDisposition(pending(), {
-      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: 'disposition-1',
-      expectedRevision: 1, conversationId: 'conversation-1', segmentId: 'segment-1',
-      sourceMessageId: 'message-1', classification: 'simple_confirmation',
+      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: references.dispositionId,
+      expectedRevision: 1, conversationId: references.conversationId, segmentId: references.segmentId,
+      sourceMessageId: references.sourceMessageId, classification: 'simple_confirmation',
       resolutionState: 'resolved', classifiedAt: '2026-07-18T00:01:00.000Z',
       resolvedAt: '2026-07-18T00:01:00.000Z', riskState: 'none', riskDomain: null,
-      riskClosureReference: null, blockingReasonCodes: [], auditReference: 'audit_classified_1',
-      serverReferenceTime: '2026-07-18T01:00:00.000Z',
+      riskClosureReference: null, blockingReasonCodes: [], auditReference: references.classifiedAudit,
     });
 
     expect(result.kind).toBe('appended');
@@ -92,12 +115,11 @@ describe('Conversation care disposition domain', () => {
 
   it('does not expand classification for blocker-only facts', () => {
     const result = classifyCareDisposition(pending(), {
-      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: 'disposition-1',
-      expectedRevision: 1, conversationId: 'conversation-1', segmentId: 'segment-1',
-      sourceMessageId: 'message-1', classification: 'ambiguous', resolutionState: 'open',
+      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: references.dispositionId,
+      expectedRevision: 1, conversationId: references.conversationId, segmentId: references.segmentId,
+      sourceMessageId: references.sourceMessageId, classification: 'ambiguous', resolutionState: 'open',
       classifiedAt: '2026-07-18T00:01:00.000Z', resolvedAt: null, riskState: 'none', riskDomain: null,
-      riskClosureReference: null, blockingReasonCodes: ['complaint'], auditReference: 'audit_classified_1',
-      serverReferenceTime: '2026-07-18T01:00:00.000Z',
+      riskClosureReference: null, blockingReasonCodes: ['complaint'], auditReference: references.classifiedAudit,
     });
 
     expect(result.kind).toBe('appended');
@@ -108,12 +130,12 @@ describe('Conversation care disposition domain', () => {
 
   it('requires risk classification and a controlled domain for risk facts', () => {
     const invalid = classifyCareDisposition(pending(), {
-      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: 'disposition-1',
-      expectedRevision: 1, conversationId: 'conversation-1', segmentId: 'segment-1',
-      sourceMessageId: 'message-1', classification: 'simple_confirmation', resolutionState: 'open',
+      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: references.dispositionId,
+      expectedRevision: 1, conversationId: references.conversationId, segmentId: references.segmentId,
+      sourceMessageId: references.sourceMessageId, classification: 'simple_confirmation', resolutionState: 'open',
       classifiedAt: '2026-07-18T00:01:00.000Z', resolvedAt: null, riskState: 'confirmed',
       riskDomain: 'clinical', riskClosureReference: null, blockingReasonCodes: ['clinical_risk'],
-      auditReference: 'audit_classified_1', serverReferenceTime: '2026-07-18T01:00:00.000Z',
+      auditReference: references.classifiedAudit,
     });
 
     expect(invalid).toEqual({ kind: 'blocked', code: 'risk_conflict' });
@@ -121,45 +143,42 @@ describe('Conversation care disposition domain', () => {
 
   it('requires a new customer message to atomically invalidate and open a new unclassified revision', () => {
     const classified = classifyCareDisposition(pending(), {
-      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: 'disposition-1',
-      expectedRevision: 1, conversationId: 'conversation-1', segmentId: 'segment-1',
-      sourceMessageId: 'message-1', classification: 'substantive_consultation', resolutionState: 'resolved',
+      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: references.dispositionId,
+      expectedRevision: 1, conversationId: references.conversationId, segmentId: references.segmentId,
+      sourceMessageId: references.sourceMessageId, classification: 'substantive_consultation', resolutionState: 'resolved',
       classifiedAt: '2026-07-18T00:01:00.000Z', resolvedAt: '2026-07-18T00:01:00.000Z',
       riskState: 'none', riskDomain: null, riskClosureReference: null, blockingReasonCodes: [],
-      auditReference: 'audit_classified_1', serverReferenceTime: '2026-07-18T01:00:00.000Z',
+      auditReference: references.classifiedAudit,
     });
     if (classified.kind !== 'appended') throw new Error('expected classified disposition');
 
     const next = invalidateCareDispositionForCustomerInbound(classified.current, {
-      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: 'disposition-1',
-      expectedRevision: 2, conversationId: 'conversation-1', segmentId: 'segment-1',
-      sourceMessageId: 'message-2', sourceMessageOccurredAt: '2026-07-18T00:02:00.000Z',
+      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: references.dispositionId,
+      expectedRevision: 2, conversationId: references.conversationId, segmentId: references.segmentId,
+      sourceMessageId: references.nextSourceMessageId, sourceMessageOccurredAt: '2026-07-18T00:02:00.000Z',
       sourceMessageRevision: 2, lastCustomerMessageAt: '2026-07-18T00:02:00.000Z',
       identityState: 'matched', riskState: 'none', riskDomain: null, riskClosureReference: null,
-      blockingReasonCodes: [], auditReference: 'audit_new_message_1', snapshotCreatedAt: '2026-07-18T00:02:01.000Z',
-      serverReferenceTime: '2026-07-18T01:00:00.000Z',
+      blockingReasonCodes: [], auditReference: references.newMessageAudit, snapshotCreatedAt: '2026-07-18T00:02:01.000Z',
     });
 
     expect(next.kind).toBe('appended');
     if (next.kind !== 'appended') return;
     expect(next.previous).toMatchObject({ resolutionState: 'invalidated', invalidatedAt: '2026-07-18T00:02:01.000Z' });
-    expect(next.current).toMatchObject({ revision: 3, sourceMessageId: 'message-2', classification: null, resolutionState: 'open' });
+    expect(next.current).toMatchObject({ revision: 3, sourceMessageId: references.nextSourceMessageId, classification: null, resolutionState: 'open' });
   });
 
   it('normal close only closes an already-classified no-risk window and does not fabricate resolution', () => {
     const classified = classifyCareDisposition(pending(), {
-      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: 'disposition-1',
-      expectedRevision: 1, conversationId: 'conversation-1', segmentId: 'segment-1', sourceMessageId: 'message-1',
+      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: references.dispositionId,
+      expectedRevision: 1, conversationId: references.conversationId, segmentId: references.segmentId, sourceMessageId: references.sourceMessageId,
       classification: 'ambiguous', resolutionState: 'open', classifiedAt: '2026-07-18T00:01:00.000Z', resolvedAt: null,
-      riskState: 'none', riskDomain: null, riskClosureReference: null, blockingReasonCodes: [], auditReference: 'audit_classified_1',
-      serverReferenceTime: '2026-07-18T01:00:00.000Z',
+      riskState: 'none', riskDomain: null, riskClosureReference: null, blockingReasonCodes: [], auditReference: references.classifiedAudit,
     });
     if (classified.kind !== 'appended') throw new Error('expected classified disposition');
     const result = closeCareDispositionNormally(classified.current, {
-      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: 'disposition-1',
-      expectedRevision: 2, conversationId: 'conversation-1', segmentId: 'segment-1',
-      sourceMessageId: 'message-1', segmentClosedAt: '2026-07-18T00:03:00.000Z', auditReference: 'audit_closed_1',
-      serverReferenceTime: '2026-07-18T01:00:00.000Z',
+      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: references.dispositionId,
+      expectedRevision: 2, conversationId: references.conversationId, segmentId: references.segmentId,
+      sourceMessageId: references.sourceMessageId, segmentClosedAt: '2026-07-18T00:03:00.000Z', auditReference: references.closedAudit,
     });
 
     expect(result.kind).toBe('appended');
@@ -171,10 +190,9 @@ describe('Conversation care disposition domain', () => {
     const result = forceCloseCareDisposition(pending({
       riskState: 'confirmed', riskDomain: 'clinical', blockingReasonCodes: ['clinical_risk'],
     }), {
-      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: 'disposition-1',
-      expectedRevision: 1, conversationId: 'conversation-1', segmentId: 'segment-1',
-      sourceMessageId: 'message-1', segmentClosedAt: '2026-07-18T00:03:00.000Z', auditReference: 'audit_forced_1',
-      serverReferenceTime: '2026-07-18T01:00:00.000Z',
+      tenantId: 'tenant-1', institutionId: 'institution-1', dispositionId: references.dispositionId,
+      expectedRevision: 1, conversationId: references.conversationId, segmentId: references.segmentId,
+      sourceMessageId: references.sourceMessageId, segmentClosedAt: '2026-07-18T00:03:00.000Z', auditReference: references.forcedAudit,
     });
 
     expect(result.kind).toBe('appended');
