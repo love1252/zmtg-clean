@@ -122,6 +122,92 @@ flowchart LR
 - [ ] 管理员、运营、咨询师、客服分别覆盖导航、深链接、读取和写入矩阵。
 - [ ] 建立统一机构访问 guard，避免各 API 自行拼接权限判断。
 
+#### BASE-02B：正式来源证明与当前机构成员资格 provider（仅设计）
+
+**目标：** 为 `BASE-CAP`、`BASE-02A` 和后续栏目服务端 guard 补齐正式来源证明与当前成员资格，不把演示会话、缓存角色、客户端机构选择或结构校验当成授权事实。本节沿用现有 `AccessContext`，不新造外部 session 来源枚举，也不在本轮实现 session、provider、API、schema、migration 或审计写入。
+
+**编辑与发布边界：** 本节初稿来源于旧 SYS worktree `codex/institution-system-sys-01a-r1-a4`，其基线早于后续发布时的 `main`，因此不得直接把旧分支作为发布分支。发布时必须把本节搬到基于最新 `main` 创建的独立 docs 分支，并复核为单文件 docs-only diff 后再进入提交、推送和 PR 流程。
+
+**所有权：** 总协调台拥有 guard 公共语义、受控 decision code 和 action matrix；认证模块拥有正式 `server_session` 证明；受信网关所有者拥有 `trusted_gateway` 证明；机构成员事实的权威生产者拥有成员状态、当前角色、停用和撤销事实。栏目 provider、页面和路由只能消费 guard 决定，不能读取成员表、从 session claim 补机构，或复制另一份角色矩阵。
+
+##### 1. 沿用现有 `AccessContext` 的逐来源规则
+
+BASE-02B 的输入必须与现有 `AccessContext` 字段兼容：`userId`、`role`、`scope`、`tenantId`、`institutionId`、`source`。其中 `source` 只沿用现有三种值，不增加 `authenticated_session`、`formal_session` 或其他外部别名。
+
+| `AccessContext.source` | 正式 guard 规则 | 必须保留的证明与限制 |
+| --- | --- | --- |
+| `demo_session` | 永远拒绝 | 仅用于开发、测试或显式演示 fixture；不得进入正式导航、深链接 reader、对象 reader 或写命令，不得由环境变量、前端标记或 fallback 提升为其他来源。 |
+| `server_session` | 只有在认证模块已于服务端验证正式会话，且当前成员资格 provider 返回 fresh、`active` 结果后才可继续 | 不信任客户端传入或自行解码得到的 role、`tenantId`、`institutionId`；会话有效不等于成员资格仍有效。 |
+| `trusted_gateway` | 只有在受信网关证明可验证，且当前成员资格与目标 action 校验均通过后才可继续 | 网关证明必须绑定当前 `userId` 与请求，不能扩大 role、scope、机构或 action；缺证明、证明过期或来源不匹配均拒绝。 |
+
+`source` 必须贯穿正式 context、guard decision 和低敏审计投影，不能在转换时丢失或被统一改写。`server_session` 与 `trusted_gateway` 都只证明请求来源满足其各自前置条件；二者都不能替代当前成员资格、机构 scope、角色或对象归属校验。
+
+##### 2. 当前机构成员资格 provider 的最小语义
+
+provider 的输入只能来自已验证的服务器端来源证明与服务器端当前机构选择意图。客户端 body、query、header、URL、localStorage 或 sessionStorage 中的 tenant、机构和 role 只能是请求意图，不能成为授权事实。provider 必须从权威成员关系重新确认当前结果。
+
+成功结果必须至少证明以下事实；任一必需事实缺失都不能产生正式机构访问 context：
+
+| 字段或结论 | 固定要求 |
+| --- | --- |
+| `userId` | 与现有 `AccessContext.userId` 兼容，并由来源证明绑定到当前请求；不得由栏目自行替换。 |
+| `role` | 仅允许 `tenant_admin`、`tenant_operator`、`consultant`、`customer_service`；以权威成员关系中的当前角色为准。 |
+| `tenantId`、`institutionId` | 非空且由同一条当前成员关系权威给出；不能分别从 session、网关和请求参数拼接。 |
+| `source` | 保留原始且已验证的 `server_session` 或 `trusted_gateway`；不得转换成新造来源值。 |
+| 成员状态与 freshness | 只有 fresh、`active` 可继续；停用、移出、撤销、过期、待确认、未知、无记录、provider unavailable 或 stale 均 fail-closed。 |
+
+`membershipReference`、`membershipRevision`、`observedAt` 和 `freshUntil` 可作为后续 runtime 的低敏补充，用于重验、并发控制和审计，但它们不能替代 `userId`、`role`、`tenantId`、`institutionId`、`source`，也不能改变 BASE-02A 的 V1 context 形状。是否把这些补充字段放在内部 provider result 或独立 guard evidence 中，须在 runtime 技术设计中另行冻结。
+
+角色变化必须使用 provider 返回的新角色重新计算 action；停用、撤销或移出必须拒绝。已打开页面、已有列表结果或旧 session claim 不构成继续许可；详情读取、写入预检和写入提交都重新校验所需的最新事实。
+
+##### 3. 与 `BASE-02A`、`BASE-CAP` 的状态和关系
+
+以下状态以 2026-07-18 的实际 GitHub / `main` 状态为准，不能解释为生产放行：
+
+| 任务或 PR | 所有者 | 当前状态 | 与 BASE-02B 的关系 |
+| --- | --- | --- | --- |
+| `BASE-CAP` / PR #568 | 总协调台拥有公共能力状态 reader；能力生产者拥有各分区事实 | Draft、NO-GO、保持 capability-off；当前输入没有正式成员资格或逐目标授权来源 | BASE-02B 先提供可信 context 与 guard decision；PR #568 后续只能消费已授权结果，不能仅凭 `expectedScope`、provider payload 或 `reachableDiagnosticTargetKeys` 自证可达。 |
+| `BASE-02A` / PR #569 | 总协调台与 security 边界所有者 | 已合并至 `main`；只定义严格 context 结构收窄、同机构 scope 比较和角色上限，不是成员授权器 | BASE-02B 的 provider/guard 是其上游授权前置。V1 context 继续保持 `userId`、`role`、`tenantId`、`institutionId`、`source`；结构合法不等于当前成员有效，也不等于对象或 action 已授权。 |
+| `BASE-02B` | 总协调台统筹；认证、受信网关和成员事实所有者分别提供权威证明 | 本节仅为 docs-only 设计，尚无 runtime | 后续独立 runtime 任务组合来源证明、当前成员资格和两级 guard；不得把实现塞回栏目线或把文档当成可调用 provider。 |
+
+##### 4. 两级 guard：机构级与对象级
+
+后续 runtime 必须拆成两个明确层级，不能要求所有机构级读取先伪造对象，也不能让对象级读取跳过权威对象 scope：
+
+1. **institution-scoped guard：** 用于机构导航、机构级聚合、能力摘要和不绑定单一业务对象的操作。它验证来源证明、fresh active 成员关系、请求机构与权威 `tenantId + institutionId` 精确一致，并按当前 role/action matrix 决策；不需要对象 reader。
+2. **object-scoped guard：** 用于客户、会话、预约、随访、消费单、报告等具体对象。它必须先通过 institution-scoped guard，再由目标资源的权威 reader 读取对象真实 `tenantId + institutionId` 及必要对象约束，精确匹配后计算 action；URL ID、列表缓存、客户端过滤器或“曾经可见”都不能替代对象 reader。
+
+两级 guard 都不接受“管理员绕过 scope”。未知 role、未知 action、scope 缺失、跨租户、跨机构、对象无法证明归属或权威 reader 不可用均拒绝。对象级拒绝不得泄露对象是否存在、名称、计数、链接或其他业务数据。
+
+```text
+AccessContext（保留 source）
+  → 逐来源证明
+  → 当前成员资格 provider（fresh + active）
+  → BASE-02A 兼容 context：{ userId, role, tenantId, institutionId, source }
+  → institution-scoped guard
+  → [仅对象操作] 权威对象 scope reader → object-scoped guard
+```
+
+##### 5. 无权威 context 时的失败关闭
+
+当来源证明、当前成员资格、权威 tenant/机构或必要对象 scope 任一不可得时，不得用默认机构、客户端值、`scope_unavailable`、哨兵 ID 或历史缓存强行构造 `InstitutionSourceEnvelopeV1`。没有权威 scope 的失败不是“带虚构 scope 的 V1 业务 envelope”。
+
+| 条件 | 服务端边界 | 页面边界 |
+| --- | --- | --- |
+| 会话缺失、失效或无法认证；`trusted_gateway` 证明缺失、无效或过期 | route/API 返回受控 `401`，不调用业务 provider | 清除受保护 display model，按统一登录/未认证状态处理。 |
+| `demo_session`、成员无记录/停用/撤销、role 不获准、scope 不获准或 action 不获准 | route/API 返回受控 `403`，不返回业务数据或目标存在性 | 使用统一无权限 `InstitutionPageState`；未知值不显示为 `0` 或 empty。 |
+| 成员 provider、对象 scope reader 或其他授权前置不可用/过期 | 在 BASE-01A/BASE-05 冻结的受控失败映射中 fail-closed，不构造强制 scope envelope | 清除受保护 display model，只使用现有 `kind='unavailable'` 的 `InstitutionPageState`；不能降级到 demo、旧 claim 或本地默认机构。 |
+
+只有 guard 已建立权威 `tenantId + institutionId` 后，业务 reader 才能按公共契约构造 `InstitutionSourceEnvelopeV1`；只有权威业务 provider 明确返回空，才允许 `empty`。`stale` 只允许作为已建立权威 scope 后业务 envelope 的 readiness，不新增 stale 页面 kind，也不能用于表达授权前置失败。HTTP 映射和文案仍由 BASE-01A/BASE-05 统一冻结，本节不新建第二套页面状态枚举。
+
+##### 6. 审计与后续验收边界
+
+后续 runtime 的低敏审计投影至少保留受控 `decisionCode`、`actionKey`、安全 `userId`/成员/目标引用、权威 `tenantId + institutionId`、原始 `source` 和服务器决策时间；若 provider 提供 `membershipRevision`，可作为补充证据。不得写入 cookie、token、原始认证或网关 payload、客户端提交的 scope、手机号、邮箱、外部账号、完整对象内容、provider 原始错误或堆栈。
+
+后续 runtime 最小验收必须覆盖：三种现有 source 的逐来源行为；伪造、过期和撤销证明；fresh active、stale、停用、移出、角色变化和 provider unavailable；institution-scoped 与 object-scoped 分流；跨 tenant/机构、对象归属缺失、reader unavailable；未知 role/action；未建立权威 context 时不构造 V1 envelope；401、403 与 `InstitutionPageState` 一致；拒绝结果无业务数据、计数、名称、链接、PII 或原始错误泄露。
+
+**明确非范围：** 本节以单文件 docs-only 形式发布，不修改 `src/**`、认证 session、成员 provider、RBAC、route/API/UI、公共 DTO、数据库/schema/migration、审计写入、凭证、外部连接、测试 runtime 或任何 `BASE-02A` / `BASE-CAP` 实施。本文档的提交、推送、PR 或合并只发布设计，不构成任何 runtime 授权；后续实现前必须另行冻结 provider 接口、两级 guard、action matrix、失败映射和审计字段，并获得 runtime 授权。
+
 ### BASE-03：机构隔离 schema/migration 技术设计
 
 - [ ] 先形成独立技术设计、历史数据预检、回填策略、唯一约束、索引和回滚说明。
