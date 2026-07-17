@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import HospitalPage from '@/app/hospital/page';
+import { InstitutionWorkspace as HospitalPage } from '@/modules/workspace/components/InstitutionWorkspace';
 
 type KnowledgeBaseDemoReadonlyMockStatus = 'disabled' | 'denied' | 'empty' | 'ready';
 
