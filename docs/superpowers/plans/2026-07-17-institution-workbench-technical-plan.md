@@ -53,7 +53,7 @@
 
 | 范围 | 已有能力 | 缺口与工作台约束 |
 |---|---|---|
-| 预约 | `AppointmentStatus` 已含 `pending_confirmation`、`reschedule_requested`；现有记录有预约 ID、客户低敏显示名、预约时间、负责人和状态。 | 当前列表和 repository 按 `tenantId` 读取；预约没有可供工作台消费的机构级 source、新鲜度、逐卡错误或详情 URL。Care 线必须以机构级、角色过滤后的 source 输出。 |
+| 预约 | 旧 `AppointmentStatus` 虽含 `reschedule_requested`；现有记录有预约 ID、客户低敏显示名、预约时间、负责人和状态。 | 旧枚举不得作为冻结预约事实口径；Care 必须将事实 `businessState` 与独立 `rescheduleRequestState` 分离，并以机构级、角色过滤后的 source 输出。当前列表和 repository 仍按 `tenantId` 读取，且没有工作台所需的新鲜度、逐卡错误或详情 URL。 |
 | 随访 | 任务有 `dueAt`、`riskLevel`、`status`、`suggestedAction`；状态含 `due`、`in_progress`、`escalated`、`completed`、`cancelled`。 | “逾期”和“今日到期”尚不是稳定 source bucket；须由 Care 按机构时区计算，排除已完成/取消，并输出可解释的过滤口径。 |
 | 客户 | Customer record 已有 `institutionId` 与低敏显示字段，客户时间线可关联预约、随访和审计。 | `nextAction` 是自由文本，禁止作为工作台行动来源。客户旅程条只消费客户中心 provider 的 `CustomerLifecycleSummaryV1`；行动项中的客户信息由 Care/Conversation 以低敏 `CustomerReferenceV1` 随行提供。工作台不单独读取客户列表、时间线或客户 repository。 |
 | 会话 | `AiConversationWorkbenchShell` 使用 `getAiConversationWorkbenchFixture()` 在浏览器内存中模拟；明确为 mock、不真实发送。 | 不存在持久化生产会话 source、机构级列表或生产详情路由。任何 fixture、mock、dry-run 或仅前端状态都不得进入队列。`ConversationActionSourceV1` 未交付前，工作台不显示会话行动或以静态零值补位。 |
@@ -182,7 +182,7 @@ V1 payload 结构固定为 `cards + actions`。正常可用时 `cards` 覆盖四
 | `objectId` | 非空对象 ID；预约和随访统一使用此字段。 |
 | `sourceVersion` | 非空权威来源版本；不得替代 WB-03 的刷新 revision。 |
 | `CustomerReferenceV1` | 必含低敏客户引用；具体嵌套字段名沿用公共声明，不在工作台重命名。不得含手机号、病历号、渠道账号或外部 ID。 |
-| `businessState` | `pending_confirmation \| reschedule_requested \| pending \| in_progress \| waiting_customer \| escalated` |
+| `businessState` | 预约事实只允许 `pending_confirmation \| confirmed \| arrived \| completed \| cancelled \| no_show`；随访事实只允许 `pending \| in_progress \| waiting_customer \| escalated \| completed \| cancelled`。 |
 | `cardKeys` | 只能引用 `pending_confirmation_appointments \| reschedule_requested_appointments \| overdue_followups \| today_due_followups`。 |
 | `sortSignals` | 只能引用 `urgent \| overdue \| sla_due \| today \| high_priority`。 |
 | `appointmentAt` | 有效 ISO 时间或 `null`。 |
@@ -194,14 +194,14 @@ V1 payload 结构固定为 `cards + actions`。正常可用时 `cards` 覆盖四
 | `safeSummary` | 受控低敏摘要或 `null`；非空时规范化后最多 120 个 Unicode 字符。 |
 | `detailHref` | 仅允许第 3.5 节 canonical 对象详情路由。 |
 
-`entityType: 'appointment'` 只允许 `businessState: 'pending_confirmation' | 'reschedule_requested'`；`entityType: 'followup'` 只允许 `businessState: 'pending' | 'in_progress' | 'waiting_customer' | 'escalated'`。`overdue` 与 `today_due` 只能由机构时区和业务时间派生为 `overdue_followups`/`today_due_followups` 卡片归属及 `overdue`/`today` 排序信号，绝不能写入 `businessState`。
+`entityType: 'appointment'` 的 `businessState` 只表达 HIS 预约事实，精确允许 `pending_confirmation | confirmed | arrived | completed | cancelled | no_show`；`entityType: 'followup'` 精确允许 `pending | in_progress | waiting_customer | escalated | completed | cancelled`。`reschedule_requested_appointments` 只由 Care 的独立待改约请求事实（`rescheduleRequestState='pending'`）命中并写入 `cardKeys`；action 继续返回原预约 `businessState` 与 `appointmentAt`，不得把 `reschedule_requested` 写入或投影为预约事实状态。HIS 原子接受新时段后才更新预约事实并清除待改约标记。`overdue` 与 `today_due` 只能由机构时区和业务时间派生为 `overdue_followups`/`today_due_followups` 卡片归属及 `overdue`/`today` 排序信号，绝不能写入 `businessState`。
 
 固定卡与目标链接是不可变的产品口径：
 
 | 卡片 key | 显示名称 | 权威口径 | 固定 href |
 |---|---|---|---|
 | `pending_confirmation_appointments` | 待确认预约 | 当前角色可处理、状态仍为 `pending_confirmation` 的真实预约，按预约 ID 去重。 | `/hospital/care/appointments?status=pending_confirmation` |
-| `reschedule_requested_appointments` | 改约申请 | 当前角色可处理、HIS 尚未原子接受新时段的 `reschedule_requested` 请求，按预约 ID 去重。 | `/hospital/care/appointments?status=reschedule_requested` |
+| `reschedule_requested_appointments` | 改约申请 | 当前角色可处理、独立 `rescheduleRequestState='pending'` 且 HIS 尚未原子接受新时段的请求，按预约 ID 去重；原预约事实状态保持不变。 | `/hospital/care/appointments?status=reschedule_requested` |
 | `overdue_followups` | 逾期随访 | 机构时区下，未完成且未取消、到期时间早于今日起点的随访任务，按任务 ID 去重。 | `/hospital/care/followups?bucket=overdue` |
 | `today_due_followups` | 今日到期随访 | 机构时区下，未完成且未取消、到期时间落在今日的随访任务，按任务 ID 去重。 | `/hospital/care/followups?bucket=today` |
 
@@ -229,7 +229,7 @@ Care 必须保证卡片数字与**相同服务端范围**下的目标列表筛�
 | `priority` | 使用公共声明的受控优先级。 |
 | `assignee` | 使用公共声明的低敏分配信息；不得改名 `owner`。 |
 | `safeSummary` | 使用公共声明的受控低敏摘要；不得从消息正文生成。 |
-| `detailHref` | 仅允许 `/hospital/conversations/:id`。 |
+| `detailHref` | 仅允许 `/hospital/conversations/:conversationId`。 |
 
 已匹配联系人只通过 `subject` 的 `customer(CustomerReferenceV1)` variant 提供低敏客户引用；未匹配联系人必须使用 `unmatched_contact('待匹配联系人')` variant，不得伪造客户引用。provider 与工作台 display model 均不得包含渠道昵称、渠道名片、外部账号、手机号、完整消息正文、最近消息片段、provider payload、模型思考或凭证。
 
@@ -249,9 +249,9 @@ conversation:${conversationId}
 
 | 实体 | canonical `detailHref` | 工作台动作 |
 |---|---|---|
-| 预约 | `/hospital/care/appointments/:id` | “查看详情”，不在工作台编辑预约。 |
-| 随访 | `/hospital/care/followups/:id` | “查看详情”，不在工作台流转、认领或完成。 |
-| 生产会话 | `/hospital/conversations/:id` | “查看详情”，不在工作台发送消息。 |
+| 预约 | `/hospital/care/appointments/:appointmentId` | “查看详情”，不在工作台编辑预约。 |
+| 随访 | `/hospital/care/followups/:taskId` | “查看详情”，不在工作台流转、认领或完成。 |
+| 生产会话 | `/hospital/conversations/:conversationId` | “查看详情”，不在工作台发送消息。 |
 
 工作台按实体从受控对象 ID 构造并验证路径，不透传任意 URL、任意 query 或生产者提供的显示文本。字段白名单不含 scope ID、手机号、病历号、渠道账号、消息正文、客户自由备注、金额、provider payload、凭证、请求体、堆栈或 audit payload。目标页必须以同一服务端 scope 重新验证角色、机构归属、对象存在性和当前状态；工作台能生成链接不代表目标操作获准。
 
@@ -552,7 +552,7 @@ Care 四卡计数、Care 队列、点击后的预约/随访目标列表必须使
 
 - [ ] 分区集合精确等于 `pending_confirmation_appointments`、`reschedule_requested_appointments`、`overdue_followups`、`today_due_followups`，正常 payload 为四卡与 actions，未知分区拒绝。
 - [ ] `CareActionItemV1` 字段集合精确为 `entityType`、`objectId`、`sourceVersion`、嵌套 `CustomerReferenceV1`、`businessState`、`cardKeys`、`sortSignals`、`appointmentAt`、`dueAt`、`slaAt`、`riskLevel`、`priority`、`owner`、`safeSummary`、`detailHref`，旧别名与额外字段被拒绝。
-- [ ] 预约/随访的 `businessState` 分别限于第 3.3 节枚举；`overdue`/`today_due` 只作为卡片/排序派生，统一五种 `sortSignals`、空时间与 nullable 字段均有边界测试。
+- [ ] 预约 `businessState` 精确限于 `pending_confirmation | confirmed | arrived | completed | cancelled | no_show`，随访精确限于 `pending | in_progress | waiting_customer | escalated | completed | cancelled`；独立 `rescheduleRequestState='pending'` 只派生 `reschedule_requested_appointments` `cardKeys`，action 保留原 `businessState`/`appointmentAt`，并拒绝把 `reschedule_requested` 当作预约事实状态。`overdue`/`today_due` 只作为卡片/排序派生，统一五种 `sortSignals`、空时间与 nullable 字段均有边界测试。
 - [ ] 四张可用卡的 key、中文名称、计数口径和筛选 href 完全匹配第 3.3 节；卡片、队列和目标列表在四角色下使用相同服务端范围。
 - [ ] 无真实 HIS 时两个预约分区精确为 `disabled`，响应不含预约卡片、`0`、行动或链接，UI 不合成占位卡。
 
@@ -561,7 +561,7 @@ Care 四卡计数、Care 队列、点击后的预约/随访目标列表必须使
 - [ ] `ConversationActionItemV1` 精确保留 `conversationId`、`segmentId`、`sourceVersion`、`production: true`、`subject`、`conversationState`、`riskState`、`partitions`、统一 `sortSignals`、`lastCustomerMessageAt`、`slaAt`、`priority`、`assignee`、`safeSummary`、`detailHref`；旧字段名与缺字段均拒绝。
 - [ ] 分区集合精确等于 `waiting_human`、`unresolved_risk`；只有持久化真实生产分段进入，fixture/mock/dry-run/缺 `conversationId`/`segmentId` 或 `production !== true` 均拒绝。
 - [ ] `subject` 只接受 customer `CustomerReferenceV1` 或 unmatched_contact“待匹配联系人”；渠道昵称、外部账号、手机号、消息正文/片段和 provider payload 即使出现也不得进入 display model。
-- [ ] 咨询师/客服只收到本人已分配活动分段；未分配待人工只给当前机构且有权限的管理员/运营；会话详情只使用 `/hospital/conversations/:id`。
+- [ ] 咨询师/客服只收到本人已分配活动分段；未分配待人工只给当前机构且有权限的管理员/运营；会话详情只使用 `/hospital/conversations/:conversationId`。
 
 **`CustomerLifecycleSummaryV1` 消费验收：**
 
@@ -617,7 +617,7 @@ git diff --check
 |---|---|---|---|
 | `IR-WB-01` | 总协调台 | 在 `src/modules/institution-contracts/v1/**` 声明四项公共契约、`CustomerReferenceV1` 和第 3.2 节精确 `InstitutionSourceEnvelopeV1<T, K>`；reader 仅为服务端输入。另唯一决定刷新 revision 位于既有公共契约还是工作台 API，`409` 仅归工作台 API 传输语义。 | `WB-01` 不能自行定义 envelope/freshness/failure code，WB-03 不能自行选择 revision 形态。 |
 | `IR-WB-02` | Care 线 + `BASE-02` | 实现四固定分区的 `cards + actions` provider、机构时区 bucket/跨日 freshness、第 4.1 节精确 RBAC、`sourceVersion`、低敏字段与同范围目标列表；无真实 HIS 时两预约分区返回 `disabled` 且无业务 payload。 | 当前普通预约/随访列表为 tenant 范围，不能直接消费。 |
-| `IR-WB-03` | Conversation 线 + `BASE-02` | 实现 `waiting_human`/`unresolved_risk` 持久化生产 provider、第 4.1 节分配范围、低敏 action 和 `/hospital/conversations/:id` 详情；模拟/干跑数据与消息正文绝不输出。 | `WB-04` 之前不得显示会话行动。 |
+| `IR-WB-03` | Conversation 线 + `BASE-02` | 实现 `waiting_human`/`unresolved_risk` 持久化生产 provider、第 4.1 节分配范围、低敏 action 和 `/hospital/conversations/:conversationId` 详情；模拟/干跑数据与消息正文绝不输出。 | `WB-04` 之前不得显示会话行动。 |
 | `IR-WB-04` | Customer 线 + `BASE-02` | 实现五类 `CustomerLifecycleSummaryV1` provider，并保证 `/hospital/customers?lifecycle=...` 列表使用同一服务端范围。 | `WB-05` 不得读取 Customer repository 或自行分段。 |
 | `IR-WB-05` | 总协调台 + 能力所有者 | 实现 `CapabilityStatusV1` provider，统一代码成熟度、机构授权、连接可用、数据 freshness、生产放行五维判断和三个创建动作权限。 | 工作台不能从配置、凭证或连接错误推断 capability。 |
 | `IR-WB-06` | 总协调台（`BASE-01A`/`BASE-05`） | 建立真实 `/hospital` RSC 路由壳、移动壳、统一 `InstitutionPageState` 插槽并审查 WB-03 API 挂载；保持 `InstitutionWorkspace` 冻结直到获准迁移 PR。 | 工作台组件无法自行替换当前 `activeView` 页面。 |
