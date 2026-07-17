@@ -67,7 +67,7 @@ function snapshotExactDataRecord(
 
 function isLowSensitivitySummary(value: unknown): value is string {
   if (typeof value !== 'string') return false;
-  const compactValue = value.replace(/[\s-]/gu, '');
+  const compactValue = value.replace(/[\s.\u00B7\u2010-\u2015\u2212\u3002\uFF0E-]/gu, '');
 
   return (
     value === value.trim() &&

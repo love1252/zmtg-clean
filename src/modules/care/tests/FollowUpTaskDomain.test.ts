@@ -350,7 +350,9 @@ describe('随访任务纯领域契约', () => {
       `含${String.fromCharCode(0x85)}C1 控制字符`,
       '联系电话 13800138000',
       '联系电话 138 0013 8000',
+      '联系电话 138.0013.8000',
       '身份证 11010519491231002X',
+      '身份证 110105-19491231-002X',
       '病历提示需继续联系',
     ];
 
@@ -473,5 +475,64 @@ describe('随访任务纯领域契约', () => {
         escalation,
       }),
     ).toEqual({ ok: true, changed: false, task: escalated.task });
+  });
+
+  it('命令 wrapper 的 getter、Proxy 或未知字段 fail-closed，结果与嵌套输出均冻结', () => {
+    const getterWrapper = {
+      institutionId: 'institution-a',
+      expectedRevision: 0,
+      targetState: 'in_progress',
+    };
+    Object.defineProperty(getterWrapper, 'task', {
+      enumerable: true,
+      get: () => pendingTask(),
+    });
+    const hostileWrapper = new Proxy(
+      {
+        task: pendingTask(),
+        institutionId: 'institution-a',
+        expectedRevision: 0,
+        targetState: 'in_progress',
+      },
+      {
+        ownKeys: () => {
+          throw new Error('hostile command wrapper');
+        },
+      },
+    );
+    const unknownFieldWrapper = {
+      task: pendingTask(),
+      institutionId: 'institution-a',
+      expectedRevision: 0,
+      targetState: 'in_progress',
+      unexpected: true,
+    };
+
+    expect(() => transitionFollowUpTask(getterWrapper as never)).not.toThrow();
+    expect(transitionFollowUpTask(getterWrapper as never)).toEqual({
+      ok: false,
+      code: 'invalid_command_context',
+    });
+    expect(() => transitionFollowUpTask(hostileWrapper)).not.toThrow();
+    expect(transitionFollowUpTask(hostileWrapper)).toEqual({
+      ok: false,
+      code: 'invalid_command_context',
+    });
+    expect(transitionFollowUpTask(unknownFieldWrapper)).toEqual({
+      ok: false,
+      code: 'invalid_command_context',
+    });
+
+    const completed = complete(pendingTask({ state: 'in_progress' }), {
+      code: 'contact_completed',
+      feedback: { kind: 'manual_low_sensitivity', summary: '已完成受控回访' },
+    });
+    const invalid = transition(pendingTask(), 'invalid_target');
+    expect(Object.isFrozen(completed)).toBe(true);
+    if (!completed.ok) throw new Error('expected completion success');
+    expect(Object.isFrozen(completed.task)).toBe(true);
+    expect(Object.isFrozen(completed.task.completionResult)).toBe(true);
+    expect(Object.isFrozen(completed.task.completionResult?.feedback)).toBe(true);
+    expect(Object.isFrozen(invalid)).toBe(true);
   });
 });

@@ -155,6 +155,42 @@ function snapshotTaskRecord(value: unknown): Readonly<Record<string, unknown>> |
   }
 }
 
+function snapshotCommandRecord(
+  value: unknown,
+  expectedKeys: readonly string[],
+): Readonly<Record<string, unknown>> | null {
+  try {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const ownKeys = Reflect.ownKeys(descriptors);
+    if (
+      ownKeys.length !== expectedKeys.length ||
+      ownKeys.some((key) => typeof key !== 'string') ||
+      expectedKeys.some((key) => !Object.prototype.hasOwnProperty.call(descriptors, key))
+    ) {
+      return null;
+    }
+
+    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+    for (const key of expectedKeys) {
+      const descriptor = descriptors[key];
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) return null;
+      Object.defineProperty(snapshot, key, {
+        value: descriptor.value,
+        enumerable: true,
+        configurable: false,
+        writable: false,
+      });
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
+}
+
 export function isFollowUpTaskState(value: unknown): value is FollowUpTaskState {
   return includesValue(FOLLOW_UP_TASK_STATES, value);
 }
@@ -168,7 +204,8 @@ function parseFollowUpTask(value: unknown): FollowUpTask | null {
   if (!snapshot) return null;
   if (!isNonEmptyText(snapshot.taskId) || !isNonEmptyText(snapshot.institutionId)) return null;
   if (!isFollowUpTaskState(snapshot.state)) return null;
-  if (!Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0) return null;
+  const revision = snapshot.revision;
+  if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0) return null;
 
   const riskLevel = snapshot.riskLevel === undefined ? 'none' : snapshot.riskLevel;
   if (!isFollowUpRiskLevel(riskLevel)) return null;
@@ -221,7 +258,7 @@ function parseFollowUpTask(value: unknown): FollowUpTask | null {
     taskId: snapshot.taskId,
     institutionId: snapshot.institutionId,
     state: snapshot.state,
-    revision: snapshot.revision,
+    revision,
     riskLevel,
     riskEscalation,
     completionResult,
@@ -229,12 +266,45 @@ function parseFollowUpTask(value: unknown): FollowUpTask | null {
   });
 }
 
+function freezeFollowUpTask(task: FollowUpTask): FollowUpTask {
+  const riskEscalation =
+    task.riskEscalation === null
+      ? null
+      : Object.freeze({
+          level: 'high' as const,
+          kind: task.riskEscalation.kind,
+          riskEventId: task.riskEscalation.riskEventId,
+        });
+  const feedback =
+    task.completionResult?.feedback === null || task.completionResult === null
+      ? null
+      : Object.freeze({
+          kind: task.completionResult.feedback.kind,
+          summary: task.completionResult.feedback.summary,
+        });
+  const completionResult =
+    task.completionResult === null
+      ? null
+      : Object.freeze({ code: task.completionResult.code, feedback });
+
+  return Object.freeze({
+    taskId: task.taskId,
+    institutionId: task.institutionId,
+    state: task.state,
+    revision: task.revision,
+    riskLevel: task.riskLevel,
+    riskEscalation,
+    completionResult,
+    cancellationReason: task.cancellationReason,
+  });
+}
+
 function success(task: FollowUpTask, changed: boolean): FollowUpTaskCommandResult {
-  return { ok: true, changed, task };
+  return Object.freeze({ ok: true, changed, task: freezeFollowUpTask(task) });
 }
 
 function failure(code: FollowUpTaskCommandError): FollowUpTaskCommandResult {
-  return { ok: false, code };
+  return Object.freeze({ ok: false, code });
 }
 
 function checkCommandPreconditions(input: Readonly<{
@@ -265,7 +335,7 @@ function taskSnapshot(input: Readonly<{
   completionResult?: FollowUpCompletionResult | null;
   cancellationReason?: FollowUpCancellationReason | null;
 }>): FollowUpTask {
-  return Object.freeze({
+  return freezeFollowUpTask({
     taskId: input.task.taskId,
     institutionId: input.task.institutionId,
     state: input.state,
@@ -302,32 +372,39 @@ export function transitionFollowUpTask(input: Readonly<{
   expectedRevision: unknown;
   targetState: unknown;
 }>): FollowUpTaskCommandResult {
-  const task = parseFollowUpTask(input.task);
+  const command = snapshotCommandRecord(input, [
+    'task',
+    'institutionId',
+    'expectedRevision',
+    'targetState',
+  ]);
+  if (!command) return failure('invalid_command_context');
+  const task = parseFollowUpTask(command.task);
   if (!task) return failure('invalid_task');
   const preconditionFailure = checkCommandPreconditions({
     task,
-    institutionId: input.institutionId,
-    expectedRevision: input.expectedRevision,
+    institutionId: command.institutionId,
+    expectedRevision: command.expectedRevision,
   });
   if (preconditionFailure) return preconditionFailure;
-  if (!isFollowUpTaskState(input.targetState)) return failure('invalid_target_state');
+  if (!isFollowUpTaskState(command.targetState)) return failure('invalid_target_state');
 
   if (task.state === 'completed' || task.state === 'cancelled') return failure('terminal_state');
   if (task.state !== 'escalated' && task.riskLevel === 'high') {
     return failure('high_risk_escalation_required');
   }
-  if (task.state === input.targetState) return success(task, false);
-  if (input.targetState === 'escalated') return failure('risk_escalation_required');
-  if (task.state === 'escalated' && input.targetState === 'completed') {
+  if (task.state === command.targetState) return success(task, false);
+  if (command.targetState === 'escalated') return failure('risk_escalation_required');
+  if (task.state === 'escalated' && command.targetState === 'completed') {
     return failure('escalated_completion_forbidden');
   }
-  if (input.targetState === 'completed') return failure('completion_result_required');
-  if (input.targetState === 'cancelled') return failure('cancellation_reason_required');
-  if (!ORDINARY_TRANSITIONS[task.state].includes(input.targetState)) {
+  if (command.targetState === 'completed') return failure('completion_result_required');
+  if (command.targetState === 'cancelled') return failure('cancellation_reason_required');
+  if (!ORDINARY_TRANSITIONS[task.state].includes(command.targetState)) {
     return failure('invalid_transition');
   }
 
-  const nextTask = withState(task, input.targetState);
+  const nextTask = withState(task, command.targetState);
   return nextTask ? success(nextTask, true) : failure('invalid_command_context');
 }
 
@@ -337,21 +414,28 @@ export function completeFollowUpTask(input: Readonly<{
   expectedRevision: unknown;
   result: unknown;
 }>): FollowUpTaskCommandResult {
-  const task = parseFollowUpTask(input.task);
+  const command = snapshotCommandRecord(input, [
+    'task',
+    'institutionId',
+    'expectedRevision',
+    'result',
+  ]);
+  if (!command) return failure('invalid_command_context');
+  const task = parseFollowUpTask(command.task);
   if (!task) return failure('invalid_task');
   const preconditionFailure = checkCommandPreconditions({
     task,
-    institutionId: input.institutionId,
-    expectedRevision: input.expectedRevision,
+    institutionId: command.institutionId,
+    expectedRevision: command.expectedRevision,
   });
   if (preconditionFailure) return preconditionFailure;
   if (task.state === 'escalated') return failure('escalated_completion_forbidden');
   if (task.riskLevel === 'high') return failure('high_risk_escalation_required');
-  if (input.result === null || input.result === undefined) {
+  if (command.result === null || command.result === undefined) {
     return failure('completion_result_required');
   }
 
-  const result = parseFollowUpCompletionResultForWrite(input.result);
+  const result = parseFollowUpCompletionResultForWrite(command.result);
   if (!result) return failure('invalid_completion_result');
 
   if (task.state === 'completed') {
@@ -392,13 +476,20 @@ export function cancelFollowUpTask(input: Readonly<{
   expectedRevision: unknown;
   reason: unknown;
 }>): FollowUpTaskCommandResult {
-  const task = parseFollowUpTask(input.task);
-  const reason = input.reason;
+  const command = snapshotCommandRecord(input, [
+    'task',
+    'institutionId',
+    'expectedRevision',
+    'reason',
+  ]);
+  if (!command) return failure('invalid_command_context');
+  const task = parseFollowUpTask(command.task);
+  const reason = command.reason;
   if (!task) return failure('invalid_task');
   const preconditionFailure = checkCommandPreconditions({
     task,
-    institutionId: input.institutionId,
-    expectedRevision: input.expectedRevision,
+    institutionId: command.institutionId,
+    expectedRevision: command.expectedRevision,
   });
   if (preconditionFailure) return preconditionFailure;
   if (reason === null || reason === undefined || reason === '') {
@@ -459,16 +550,23 @@ export function escalateFollowUpTask(input: Readonly<{
   expectedRevision: unknown;
   escalation: unknown;
 }>): FollowUpTaskCommandResult {
-  const task = parseFollowUpTask(input.task);
+  const command = snapshotCommandRecord(input, [
+    'task',
+    'institutionId',
+    'expectedRevision',
+    'escalation',
+  ]);
+  if (!command) return failure('invalid_command_context');
+  const task = parseFollowUpTask(command.task);
   if (!task) return failure('invalid_task');
   const preconditionFailure = checkCommandPreconditions({
     task,
-    institutionId: input.institutionId,
-    expectedRevision: input.expectedRevision,
+    institutionId: command.institutionId,
+    expectedRevision: command.expectedRevision,
   });
   if (preconditionFailure) return preconditionFailure;
 
-  const escalation = parseFollowUpRiskEscalation(input.escalation);
+  const escalation = parseFollowUpRiskEscalation(command.escalation);
   if (!escalation) return failure('invalid_risk_escalation');
 
   if (task.state === 'escalated') {
