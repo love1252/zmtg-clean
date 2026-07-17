@@ -114,87 +114,50 @@ export type ClinicalClosureVerification = Readonly<{
   verifiedAt: string;
 }>;
 
-export type ConversationRiskTarget = Readonly<{
-  tenantId: string;
-  institutionId: string;
-  conversationId: string;
-  segmentId: string;
-}>;
-
 export type CurrentClinicalClosureCheck = Readonly<{
-  riskId: string;
   referenceId: string;
   tenantId: string;
   institutionId: string;
-  conversationId: string;
-  segmentId: string;
-  verificationState: 'valid';
-  revocationState: 'not_revoked';
+  valid: boolean;
+  revoked: boolean;
   checkedAt: string;
+  validUntil: string;
 }>;
 
-export type ProjectedRiskSetEntry =
+export type ConversationRiskNormalCloseBlockCode =
+  | 'invalid_timestamp'
+  | 'risk_history_invalid'
+  | 'risk_set_completeness_unverified'
+  | 'risk_target_mismatch'
+  | 'risk_not_resolved'
+  | 'clinical_closure_reference_required'
+  | 'clinical_closure_reference_mismatch'
+  | 'clinical_closure_scope_mismatch'
+  | 'clinical_closure_reference_invalid'
+  | 'clinical_closure_reference_revoked'
+  | 'clinical_closure_verification_expired';
+
+export type ConversationRiskNormalCloseResult =
   | Readonly<{
-      riskId: string;
-      state: 'unconfirmed' | 'confirmed';
-      riskDomain: ConversationRiskDomain;
-      clinicalClosureCheckState: 'not_applicable';
+      kind: 'allowed';
     }>
   | Readonly<{
-      riskId: string;
-      state: 'resolved';
-      riskDomain: 'non_clinical';
-      clinicalClosureCheckState: 'not_required';
-    }>
-  | Readonly<{
-      riskId: string;
-      state: 'resolved';
-      riskDomain: 'clinical';
-      clinicalClosureCheckState: 'missing' | 'current';
+      kind: 'blocked';
+      code: ConversationRiskNormalCloseBlockCode;
     }>;
 
-export type CompleteConversationRiskProjection = Readonly<{
+export type ConversationRiskNormalCloseInput = Readonly<{
   tenantId: string;
   institutionId: string;
   conversationId: string;
   segmentId: string;
-  provenance: 'caller_declared_complete_histories';
-  risks: readonly ProjectedRiskSetEntry[];
+  decisionAt: string;
+  currentClinicalClosureChecks: readonly CurrentClinicalClosureCheck[];
 }>;
-
-export type ConversationRiskSetBlockCode =
-  | 'invalid_target'
-  | 'invalid_identifier'
-  | 'invalid_timestamp'
-  | 'invalid_risk_histories'
-  | 'scope_mismatch'
-  | 'target_mismatch'
-  | 'invalid_clinical_closure_checks';
-
-export type ConversationRiskSetProjectionResult =
-  | Readonly<{
-      kind: 'projected';
-      projection: CompleteConversationRiskProjection;
-    }>
-  | Readonly<{
-      kind: 'blocked';
-      code: ConversationRiskSetBlockCode;
-    }>;
 
 const safeObjectIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const safeRiskCodePattern = /^[a-z][a-z0-9._-]{0,63}$/u;
 const canonicalUtcTimestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
-const opaqueReferencePatterns = {
-  tenantId: /^ten_[a-f][a-f0-9]{15,63}$/u,
-  institutionId: /^ins_[a-f][a-f0-9]{15,63}$/u,
-  conversationId: /^con_[a-f][a-f0-9]{15,63}$/u,
-  segmentId: /^seg_[a-f][a-f0-9]{15,63}$/u,
-  riskId: /^rsk_[a-f][a-f0-9]{15,63}$/u,
-  riskEventId: /^rke_[a-f][a-f0-9]{15,63}$/u,
-  messageId: /^msg_[a-f][a-f0-9]{15,63}$/u,
-  userId: /^usr_[a-f][a-f0-9]{15,63}$/u,
-  clinicalClosureReferenceId: /^ccr_[a-f][a-f0-9]{15,63}$/u,
-} as const;
 
 const riskUnconfirmedEventKeys = [
   'kind',
@@ -232,40 +195,66 @@ const clinicalClosureReferenceKeys = [
   'verifiedAt',
 ] as const;
 const institutionScopeKeys = ['tenantId', 'institutionId'] as const;
-const riskTargetKeys = ['tenantId', 'institutionId', 'conversationId', 'segmentId'] as const;
 const currentClinicalClosureCheckKeys = [
-  'riskId',
   'referenceId',
+  'tenantId',
+  'institutionId',
+  'valid',
+  'revoked',
+  'checkedAt',
+  'validUntil',
+] as const;
+const normalCloseInputKeys = [
   'tenantId',
   'institutionId',
   'conversationId',
   'segmentId',
-  'verificationState',
-  'revocationState',
-  'checkedAt',
+  'decisionAt',
+  'currentClinicalClosureChecks',
+] as const;
+const recordRiskInputKeys = [
+  'eventId',
+  'riskId',
+  'tenantId',
+  'institutionId',
+  'conversationId',
+  'segmentId',
+  'sourceMessageId',
+  'riskDomain',
+  'riskCode',
+  'occurredAt',
+] as const;
+const confirmRiskInputKeys = [
+  'eventId',
+  'riskId',
+  'actorId',
+  'actorKind',
+  'occurredAt',
+] as const;
+const resolveRiskInputKeys = [
+  'eventId',
+  'riskId',
+  'actorId',
+  'actorKind',
+  'occurredAt',
+] as const;
+const resolveClinicalRiskInputKeys = [
+  ...resolveRiskInputKeys,
+  'clinicalClosureVerification',
+] as const;
+const clinicalClosureVerificationKeys = [
+  'referenceId',
+  'tenantId',
+  'institutionId',
+  'valid',
+  'revoked',
+  'verifiedAt',
 ] as const;
 
-const deepFreeze = <T>(value: T): T => {
-  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) {
-    return value;
-  }
-  for (const key of Reflect.ownKeys(value)) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (descriptor && 'value' in descriptor) {
-      deepFreeze(descriptor.value);
-    }
-  }
-  return Object.freeze(value);
-};
-
-const mutationBlocked = (code: ConversationRiskBlockCode): ConversationRiskMutationResult => deepFreeze({
+const mutationBlocked = (code: ConversationRiskBlockCode): ConversationRiskMutationResult => ({
   kind: 'blocked',
   code,
 });
-
-const riskSetBlocked = (code: ConversationRiskSetBlockCode): ConversationRiskSetProjectionResult => (
-  deepFreeze({ kind: 'blocked', code })
-);
 
 const isValidTimestamp = (value: unknown): value is string => {
   if (typeof value !== 'string' || !canonicalUtcTimestampPattern.test(value)) {
@@ -287,38 +276,213 @@ const isRecord = (value: unknown): value is Record<PropertyKey, unknown> => (
   && !Array.isArray(value)
 );
 
-const hasExactOwnKeys = (
-  value: Record<PropertyKey, unknown>,
+const captureDataRecord = (
+  value: unknown,
+  expectedKeySets: readonly (readonly string[])[],
+): Record<string, unknown> | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value) as unknown as Record<
+    PropertyKey,
+    PropertyDescriptor
+  >;
+  const ownKeys = Reflect.ownKeys(descriptors);
+  const expectedKeys = expectedKeySets.find((keys) => (
+    ownKeys.length === keys.length
+    && ownKeys.every((key) => typeof key === 'string' && keys.includes(key))
+  ));
+  if (!expectedKeys) {
+    return null;
+  }
+  const captured: Record<string, unknown> = {};
+  for (const key of expectedKeys) {
+    const descriptor = descriptors[key];
+    if (
+      descriptor === undefined
+      || !Object.hasOwn(descriptor, 'value')
+      || descriptor.get !== undefined
+      || descriptor.set !== undefined
+    ) {
+      return null;
+    }
+    captured[key] = descriptor.value;
+  }
+  return captured;
+};
+
+const hasCapturedKeys = (
+  value: Record<string, unknown>,
   expectedKeys: readonly string[],
 ): boolean => {
-  const actualKeys = Reflect.ownKeys(value);
-  return actualKeys.length === expectedKeys.length
-    && actualKeys.every((key) => typeof key === 'string' && expectedKeys.includes(key));
+  const keys = Object.keys(value);
+  return keys.length === expectedKeys.length && keys.every((key) => expectedKeys.includes(key));
 };
 
-const hasExactRiskEventKeys = (value: unknown, expectedKind: ConversationRiskEvent['kind']): boolean => {
-  if (!isRecord(value) || value.kind !== expectedKind) {
-    return false;
+const captureDenseDataArray = (value: unknown): readonly unknown[] | null => {
+  if (!Array.isArray(value)) {
+    return null;
   }
-  if (expectedKind === 'risk_unconfirmed') {
-    return hasExactOwnKeys(value, riskUnconfirmedEventKeys);
+  const descriptors = Object.getOwnPropertyDescriptors(value) as unknown as Record<
+    PropertyKey,
+    PropertyDescriptor
+  >;
+  const ownKeys = Reflect.ownKeys(descriptors);
+  const lengthDescriptor = descriptors.length;
+  if (
+    lengthDescriptor === undefined
+    || !Object.hasOwn(lengthDescriptor, 'value')
+    || lengthDescriptor.get !== undefined
+    || lengthDescriptor.set !== undefined
+    || typeof lengthDescriptor.value !== 'number'
+    || !Number.isSafeInteger(lengthDescriptor.value)
+    || lengthDescriptor.value < 0
+    ||
+    ownKeys.some((key) => (
+      typeof key === 'symbol'
+      || (key !== 'length' && !/^(0|[1-9]\d*)$/u.test(key))
+    ))
+  ) {
+    return null;
   }
-  if (expectedKind === 'risk_confirmed') {
-    return hasExactOwnKeys(value, riskConfirmedEventKeys);
+  const length = lengthDescriptor.value;
+  if (ownKeys.length !== length + 1) {
+    return null;
   }
-  return hasExactOwnKeys(value, riskResolvedEventKeys);
+  const captured: unknown[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const descriptor = descriptors[String(index)];
+    if (
+      descriptor === undefined
+      || !Object.hasOwn(descriptor, 'value')
+      || descriptor.get !== undefined
+      || descriptor.set !== undefined
+    ) {
+      return null;
+    }
+    captured.push(descriptor.value);
+  }
+  return captured;
 };
 
-function inspectParsedRiskHistory(history: ConversationRiskHistory): ConversationRiskProjectionResult {
+const captureClinicalClosureReference = (
+  value: unknown,
+): LowSensitiveClinicalClosureReference | null => {
+  const reference = captureDataRecord(value, [clinicalClosureReferenceKeys]);
+  if (reference === null) {
+    return null;
+  }
+  const scope = captureDataRecord(reference.scope, [institutionScopeKeys]);
+  if (scope === null) {
+    return null;
+  }
+  return {
+    referenceId: reference.referenceId as string,
+    scope: {
+      tenantId: scope.tenantId as string,
+      institutionId: scope.institutionId as string,
+    },
+    verificationState: reference.verificationState as 'valid',
+    revocationState: reference.revocationState as 'not_revoked',
+    verifiedAt: reference.verifiedAt as string,
+  };
+};
+
+const captureRiskEvent = (value: unknown): ConversationRiskEvent | null => {
+  const captured = captureDataRecord(value, [
+    riskUnconfirmedEventKeys,
+    riskConfirmedEventKeys,
+    riskResolvedEventKeys,
+  ]);
+  if (captured === null) {
+    return null;
+  }
+  if (captured.kind === 'risk_unconfirmed' && hasCapturedKeys(captured, riskUnconfirmedEventKeys)) {
+    return {
+      kind: 'risk_unconfirmed',
+      eventId: captured.eventId as string,
+      riskId: captured.riskId as string,
+      tenantId: captured.tenantId as string,
+      institutionId: captured.institutionId as string,
+      conversationId: captured.conversationId as string,
+      segmentId: captured.segmentId as string,
+      sourceMessageId: captured.sourceMessageId as string,
+      riskDomain: captured.riskDomain as ConversationRiskDomain,
+      riskCode: captured.riskCode as string,
+      occurredAt: captured.occurredAt as string,
+    };
+  }
+  if (captured.kind === 'risk_confirmed' && hasCapturedKeys(captured, riskConfirmedEventKeys)) {
+    return {
+      kind: 'risk_confirmed',
+      eventId: captured.eventId as string,
+      riskId: captured.riskId as string,
+      confirmedByActorId: captured.confirmedByActorId as string,
+      occurredAt: captured.occurredAt as string,
+    };
+  }
+  if (captured.kind === 'risk_resolved' && hasCapturedKeys(captured, riskResolvedEventKeys)) {
+    const clinicalClosureReference = captured.clinicalClosureReference === null
+      ? null
+      : captureClinicalClosureReference(captured.clinicalClosureReference);
+    if (captured.clinicalClosureReference !== null && clinicalClosureReference === null) {
+      return null;
+    }
+    return {
+      kind: 'risk_resolved',
+      eventId: captured.eventId as string,
+      riskId: captured.riskId as string,
+      resolvedByActorId: captured.resolvedByActorId as string,
+      occurredAt: captured.occurredAt as string,
+      clinicalClosureReference,
+    };
+  }
+  return null;
+};
+
+type InspectedRiskHistory = Readonly<{
+  result: ConversationRiskProjectionResult;
+  history: ConversationRiskHistory | null;
+}>;
+
+function inspectRiskHistory(historyValue: unknown): InspectedRiskHistory {
+  try {
+    const rawEvents = captureDenseDataArray(historyValue);
+    if (rawEvents === null) {
+      return {
+        result: { kind: 'blocked', code: 'invalid_risk_history' },
+        history: null,
+      };
+    }
+    const history: ConversationRiskEvent[] = [];
+    for (const rawEvent of rawEvents) {
+      const event = captureRiskEvent(rawEvent);
+      if (event === null) {
+        return {
+          result: { kind: 'blocked', code: 'invalid_risk_history' },
+          history: null,
+        };
+      }
+      history.push(event);
+    }
   if (history.length === 0) {
-    return { kind: 'projected', projection: { state: 'none' } };
+      return {
+        result: { kind: 'projected', projection: { state: 'none' } },
+        history,
+      };
   }
   if (history.length > 3) {
-    return { kind: 'blocked', code: 'invalid_risk_history' };
+      return {
+        result: { kind: 'blocked', code: 'invalid_risk_history' },
+        history: null,
+      };
   }
   const expectedKinds = ['risk_unconfirmed', 'risk_confirmed', 'risk_resolved'] as const;
-  if (history.some((event, index) => !hasExactRiskEventKeys(event, expectedKinds[index]!))) {
-    return { kind: 'blocked', code: 'invalid_risk_history' };
+    if (history.some((event, index) => event.kind !== expectedKinds[index])) {
+      return {
+        result: { kind: 'blocked', code: 'invalid_risk_history' },
+        history: null,
+      };
   }
 
   const unconfirmed = history[0];
@@ -335,7 +499,10 @@ function inspectParsedRiskHistory(history: ConversationRiskHistory): Conversatio
     || !isSafeRiskCode(unconfirmed.riskCode)
     || !isValidTimestamp(unconfirmed.occurredAt)
   ) {
-    return { kind: 'blocked', code: 'invalid_risk_history' };
+      return {
+        result: { kind: 'blocked', code: 'invalid_risk_history' },
+        history: null,
+      };
   }
 
   const eventIds = new Set<string>();
@@ -349,24 +516,29 @@ function inspectParsedRiskHistory(history: ConversationRiskHistory): Conversatio
       || !isValidTimestamp(event.occurredAt)
       || event.occurredAt < previousOccurredAt
     ) {
-      return { kind: 'blocked', code: 'invalid_risk_history' };
+        return {
+          result: { kind: 'blocked', code: 'invalid_risk_history' },
+          history: null,
+        };
     }
     if (event.kind === 'risk_confirmed' && !isSafeObjectId(event.confirmedByActorId)) {
-      return { kind: 'blocked', code: 'invalid_risk_history' };
+        return {
+          result: { kind: 'blocked', code: 'invalid_risk_history' },
+          history: null,
+        };
     }
     if (event.kind === 'risk_resolved') {
       if (!isSafeObjectId(event.resolvedByActorId)) {
-        return { kind: 'blocked', code: 'invalid_risk_history' };
+        return {
+          result: { kind: 'blocked', code: 'invalid_risk_history' },
+          history: null,
+        };
       }
       if (
         unconfirmed.riskDomain === 'clinical'
         && (
           event.clinicalClosureReference === null
-          || !isRecord(event.clinicalClosureReference)
-          || !hasExactOwnKeys(event.clinicalClosureReference, clinicalClosureReferenceKeys)
           || !isSafeObjectId(event.clinicalClosureReference.referenceId)
-          || !isRecord(event.clinicalClosureReference.scope)
-          || !hasExactOwnKeys(event.clinicalClosureReference.scope, institutionScopeKeys)
           || event.clinicalClosureReference.scope.tenantId !== unconfirmed.tenantId
           || event.clinicalClosureReference.scope.institutionId !== unconfirmed.institutionId
           || event.clinicalClosureReference.verificationState !== 'valid'
@@ -375,10 +547,16 @@ function inspectParsedRiskHistory(history: ConversationRiskHistory): Conversatio
           || event.clinicalClosureReference.verifiedAt > event.occurredAt
         )
       ) {
-        return { kind: 'blocked', code: 'invalid_risk_history' };
+          return {
+            result: { kind: 'blocked', code: 'invalid_risk_history' },
+            history: null,
+          };
       }
       if (unconfirmed.riskDomain === 'non_clinical' && event.clinicalClosureReference !== null) {
-        return { kind: 'blocked', code: 'invalid_risk_history' };
+          return {
+            result: { kind: 'blocked', code: 'invalid_risk_history' },
+            history: null,
+          };
       }
     }
     eventIds.add(event.eventId);
@@ -393,9 +571,10 @@ function inspectParsedRiskHistory(history: ConversationRiskHistory): Conversatio
       ? 'confirmed'
       : 'unconfirmed';
 
-  return {
-    kind: 'projected',
-    projection: {
+    return {
+      result: {
+        kind: 'projected',
+        projection: {
       state,
       riskId: unconfirmed.riskId,
       tenantId: unconfirmed.tenantId,
@@ -409,260 +588,241 @@ function inspectParsedRiskHistory(history: ConversationRiskHistory): Conversatio
       confirmedAt: confirmed?.occurredAt ?? null,
       resolvedAt: resolved?.occurredAt ?? null,
       clinicalClosureReferenceId: resolved?.clinicalClosureReference?.referenceId ?? null,
-    },
-  };
-}
-
-type CapturedDataRecord = Readonly<{
-  keys: readonly string[];
-  values: Readonly<Record<string, unknown>>;
-}>;
-
-const captureDataRecord = (raw: unknown): CapturedDataRecord | null => {
-  try {
-    if (
-      typeof raw !== 'object'
-      || raw === null
-      || Array.isArray(raw)
-      || Object.getPrototypeOf(raw) !== Object.prototype
-    ) {
-      return null;
-    }
-    const ownKeys = Reflect.ownKeys(raw);
-    if (ownKeys.some((key) => typeof key !== 'string')) {
-      return null;
-    }
-    const keys = ownKeys as string[];
-    const descriptors = Object.getOwnPropertyDescriptors(raw);
-    const values: Record<string, unknown> = {};
-    for (const key of keys) {
-      const descriptor = descriptors[key];
-      if (!descriptor || !('value' in descriptor)) {
-        return null;
-      }
-      values[key] = descriptor.value;
-    }
-    return { keys, values };
+        },
+      },
+      history,
+    };
   } catch {
-    return null;
-  }
-};
-
-const hasCapturedKeys = (
-  captured: CapturedDataRecord,
-  expectedKeys: readonly string[],
-): boolean => (
-  captured.keys.length === expectedKeys.length
-  && captured.keys.every((key) => expectedKeys.includes(key))
-);
-
-const captureExactDataRecord = (
-  raw: unknown,
-  expectedKeys: readonly string[],
-): CapturedDataRecord | null => {
-  const captured = captureDataRecord(raw);
-  return captured && hasCapturedKeys(captured, expectedKeys) ? captured : null;
-};
-
-const captureDenseArray = (raw: unknown): readonly unknown[] | null => {
-  try {
-    if (!Array.isArray(raw) || Object.getPrototypeOf(raw) !== Array.prototype) {
-      return null;
-    }
-    const ownKeys = Reflect.ownKeys(raw);
-    const lengthDescriptor = Object.getOwnPropertyDescriptor(raw, 'length');
-    if (
-      ownKeys.some((key) => typeof key !== 'string')
-      || !lengthDescriptor
-      || !('value' in lengthDescriptor)
-      || !Number.isSafeInteger(lengthDescriptor.value)
-      || lengthDescriptor.value < 0
-      || ownKeys.length !== lengthDescriptor.value + 1
-      || !ownKeys.includes('length')
-    ) {
-      return null;
-    }
-    const values: unknown[] = [];
-    for (let index = 0; index < lengthDescriptor.value; index += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(raw, String(index));
-      if (!descriptor || !('value' in descriptor)) {
-        return null;
-      }
-      values.push(descriptor.value);
-    }
-    return values;
-  } catch {
-    return null;
-  }
-};
-
-const isStructuredCloneable = (raw: unknown): boolean => {
-  try {
-    structuredClone(raw);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const parseClinicalClosureReference = (
-  raw: unknown,
-): LowSensitiveClinicalClosureReference | null => {
-  const captured = captureExactDataRecord(raw, clinicalClosureReferenceKeys);
-  if (!captured) {
-    return null;
-  }
-  const scope = captureExactDataRecord(captured.values.scope, institutionScopeKeys);
-  if (
-    !scope
-    || !isSafeObjectId(captured.values.referenceId)
-    || !isSafeObjectId(scope.values.tenantId)
-    || !isSafeObjectId(scope.values.institutionId)
-    || captured.values.verificationState !== 'valid'
-    || captured.values.revocationState !== 'not_revoked'
-    || !isValidTimestamp(captured.values.verifiedAt)
-    || !isStructuredCloneable(captured.values.scope)
-    || !isStructuredCloneable(raw)
-  ) {
-    return null;
-  }
-  return {
-    referenceId: captured.values.referenceId as string,
-    scope: {
-      tenantId: scope.values.tenantId as string,
-      institutionId: scope.values.institutionId as string,
-    },
-    verificationState: captured.values.verificationState as 'valid',
-    revocationState: captured.values.revocationState as 'not_revoked',
-    verifiedAt: captured.values.verifiedAt as string,
-  };
-};
-
-const parseRiskEvent = (raw: unknown): ConversationRiskEvent | null => {
-  const captured = captureDataRecord(raw);
-  if (!captured) {
-    return null;
-  }
-  const kind = captured.values.kind;
-  if (kind === 'risk_unconfirmed' && hasCapturedKeys(captured, riskUnconfirmedEventKeys)) {
-    if (
-      !isSafeObjectId(captured.values.eventId)
-      || !isSafeObjectId(captured.values.riskId)
-      || !isSafeObjectId(captured.values.tenantId)
-      || !isSafeObjectId(captured.values.institutionId)
-      || !isSafeObjectId(captured.values.conversationId)
-      || !isSafeObjectId(captured.values.segmentId)
-      || !isSafeObjectId(captured.values.sourceMessageId)
-      || !conversationRiskDomains.includes(captured.values.riskDomain as ConversationRiskDomain)
-      || !isSafeRiskCode(captured.values.riskCode)
-      || !isValidTimestamp(captured.values.occurredAt)
-      || !isStructuredCloneable(raw)
-    ) {
-      return null;
-    }
     return {
-      kind,
-      eventId: captured.values.eventId as string,
-      riskId: captured.values.riskId as string,
-      tenantId: captured.values.tenantId as string,
-      institutionId: captured.values.institutionId as string,
-      conversationId: captured.values.conversationId as string,
-      segmentId: captured.values.segmentId as string,
-      sourceMessageId: captured.values.sourceMessageId as string,
-      riskDomain: captured.values.riskDomain as ConversationRiskDomain,
-      riskCode: captured.values.riskCode as string,
-      occurredAt: captured.values.occurredAt as string,
+      result: { kind: 'blocked', code: 'invalid_risk_history' },
+      history: null,
     };
   }
-  if (kind === 'risk_confirmed' && hasCapturedKeys(captured, riskConfirmedEventKeys)) {
-    if (
-      !isSafeObjectId(captured.values.eventId)
-      || !isSafeObjectId(captured.values.riskId)
-      || !isSafeObjectId(captured.values.confirmedByActorId)
-      || !isValidTimestamp(captured.values.occurredAt)
-      || !isStructuredCloneable(raw)
-    ) {
-      return null;
-    }
-    return {
-      kind,
-      eventId: captured.values.eventId as string,
-      riskId: captured.values.riskId as string,
-      confirmedByActorId: captured.values.confirmedByActorId as string,
-      occurredAt: captured.values.occurredAt as string,
-    };
-  }
-  if (kind === 'risk_resolved' && hasCapturedKeys(captured, riskResolvedEventKeys)) {
-    const rawReference = captured.values.clinicalClosureReference;
-    const clinicalClosureReference = rawReference === null
-      ? null
-      : parseClinicalClosureReference(rawReference);
-    if (
-      (rawReference !== null && clinicalClosureReference === null)
-      || !isSafeObjectId(captured.values.eventId)
-      || !isSafeObjectId(captured.values.riskId)
-      || !isSafeObjectId(captured.values.resolvedByActorId)
-      || !isValidTimestamp(captured.values.occurredAt)
-      || !isStructuredCloneable(raw)
-    ) {
-      return null;
-    }
-    return {
-      kind,
-      eventId: captured.values.eventId as string,
-      riskId: captured.values.riskId as string,
-      resolvedByActorId: captured.values.resolvedByActorId as string,
-      occurredAt: captured.values.occurredAt as string,
-      clinicalClosureReference,
-    };
-  }
-  return null;
-};
-
-const parseRiskHistorySnapshot = (raw: unknown): ConversationRiskHistory | null => {
-  const captured = captureDenseArray(raw);
-  if (!captured) {
-    return null;
-  }
-  const events = captured.map(parseRiskEvent);
-  if (events.some((event) => event === null) || !isStructuredCloneable(raw)) {
-    return null;
-  }
-  return events as ConversationRiskEvent[];
-};
-
-function inspectRiskHistory(rawHistory: unknown): ConversationRiskProjectionResult {
-  const snapshot = parseRiskHistorySnapshot(rawHistory);
-  return snapshot === null
-    ? { kind: 'blocked', code: 'invalid_risk_history' }
-    : inspectParsedRiskHistory(snapshot);
 }
 
 export function projectConversationRisk(
   history: Readonly<ConversationRiskHistory>,
 ): ConversationRiskProjectionResult {
-  return deepFreeze(inspectRiskHistory(history));
+  return inspectRiskHistory(history).result;
+}
+
+const normalCloseBlocked = (
+  code: ConversationRiskNormalCloseBlockCode,
+): ConversationRiskNormalCloseResult => ({ kind: 'blocked', code });
+
+export function checkConversationRiskSetForNormalClose(
+  histories: readonly ConversationRiskHistory[],
+  input: ConversationRiskNormalCloseInput,
+): ConversationRiskNormalCloseResult {
+  try {
+    const capturedInput = captureDataRecord(input, [normalCloseInputKeys]);
+    if (
+      capturedInput === null
+      || !isSafeObjectId(capturedInput.tenantId)
+      || !isSafeObjectId(capturedInput.institutionId)
+      || !isSafeObjectId(capturedInput.conversationId)
+      || !isSafeObjectId(capturedInput.segmentId)
+    ) {
+      return normalCloseBlocked('risk_target_mismatch');
+    }
+    if (!isValidTimestamp(capturedInput.decisionAt)) {
+      return normalCloseBlocked('invalid_timestamp');
+    }
+
+    const capturedHistories = captureDenseDataArray(histories);
+    const capturedChecks = captureDenseDataArray(capturedInput.currentClinicalClosureChecks);
+    if (capturedHistories === null || capturedChecks === null) {
+      return normalCloseBlocked('risk_history_invalid');
+    }
+    if (capturedHistories.length === 0) {
+      return normalCloseBlocked('risk_set_completeness_unverified');
+    }
+
+    const projections: Exclude<ConversationRiskProjection, { state: 'none' }>[] = [];
+    const riskIds = new Set<string>();
+    const eventIds = new Set<string>();
+    const clinicalClosureReferenceIds = new Set<string>();
+    for (const history of capturedHistories) {
+      const capturedHistory = captureDenseDataArray(history);
+      if (capturedHistory === null || capturedHistory.length === 0) {
+        return normalCloseBlocked('risk_history_invalid');
+      }
+      const anchor = captureDataRecord(capturedHistory[0], [riskUnconfirmedEventKeys]);
+      if (anchor === null) {
+        return normalCloseBlocked('risk_history_invalid');
+      }
+      if (
+        isSafeObjectId(anchor.tenantId)
+        && isSafeObjectId(anchor.institutionId)
+        && isSafeObjectId(anchor.conversationId)
+        && isSafeObjectId(anchor.segmentId)
+        && (
+          anchor.tenantId !== capturedInput.tenantId
+          || anchor.institutionId !== capturedInput.institutionId
+          || anchor.conversationId !== capturedInput.conversationId
+          || anchor.segmentId !== capturedInput.segmentId
+        )
+      ) {
+        return normalCloseBlocked('risk_target_mismatch');
+      }
+      const inspected = inspectRiskHistory(history);
+      if (
+        inspected.result.kind === 'blocked'
+        || inspected.result.projection.state === 'none'
+        || inspected.history === null
+      ) {
+        return normalCloseBlocked('risk_history_invalid');
+      }
+      const projection = inspected.result.projection;
+      if (
+        projection.tenantId !== capturedInput.tenantId
+        || projection.institutionId !== capturedInput.institutionId
+        || projection.conversationId !== capturedInput.conversationId
+        || projection.segmentId !== capturedInput.segmentId
+      ) {
+        return normalCloseBlocked('risk_target_mismatch');
+      }
+      if (riskIds.has(projection.riskId)) {
+        return normalCloseBlocked('risk_history_invalid');
+      }
+      riskIds.add(projection.riskId);
+      for (const event of inspected.history) {
+        if (eventIds.has(event.eventId)) {
+          return normalCloseBlocked('risk_history_invalid');
+        }
+        eventIds.add(event.eventId);
+      }
+      if (
+        projection.state === 'resolved'
+        && projection.riskDomain === 'clinical'
+        && projection.clinicalClosureReferenceId !== null
+      ) {
+        if (clinicalClosureReferenceIds.has(projection.clinicalClosureReferenceId)) {
+          return normalCloseBlocked('risk_history_invalid');
+        }
+        clinicalClosureReferenceIds.add(projection.clinicalClosureReferenceId);
+      }
+      projections.push(projection);
+    }
+
+    const checks: CurrentClinicalClosureCheck[] = [];
+    for (const rawCheck of capturedChecks) {
+      const check = captureDataRecord(rawCheck, [currentClinicalClosureCheckKeys]);
+      if (check === null) {
+        return normalCloseBlocked('clinical_closure_reference_invalid');
+      }
+      if (
+        isSafeObjectId(check.tenantId)
+        && isSafeObjectId(check.institutionId)
+        && (
+          check.tenantId !== capturedInput.tenantId
+          || check.institutionId !== capturedInput.institutionId
+        )
+      ) {
+        return normalCloseBlocked('clinical_closure_scope_mismatch');
+      }
+      checks.push({
+        referenceId: check.referenceId as string,
+        tenantId: check.tenantId as string,
+        institutionId: check.institutionId as string,
+        valid: check.valid as boolean,
+        revoked: check.revoked as boolean,
+        checkedAt: check.checkedAt as string,
+        validUntil: check.validUntil as string,
+      });
+    }
+
+    const requiredClinicalReferences = new Set<string>();
+    for (const projection of projections) {
+      if (projection.state !== 'resolved') {
+        return normalCloseBlocked('risk_not_resolved');
+      }
+      if (projection.resolvedAt === null || projection.resolvedAt > capturedInput.decisionAt) {
+        return normalCloseBlocked('risk_history_invalid');
+      }
+      if (projection.riskDomain !== 'clinical') {
+        continue;
+      }
+      if (
+        projection.clinicalClosureReferenceId === null
+      ) {
+        return normalCloseBlocked('clinical_closure_reference_required');
+      }
+      requiredClinicalReferences.add(projection.clinicalClosureReferenceId);
+      const matchingChecks = checks.filter(
+        (check) => check.referenceId === projection.clinicalClosureReferenceId,
+      );
+      if (matchingChecks.length === 0) {
+        return normalCloseBlocked(
+          checks.length === 0
+            ? 'clinical_closure_reference_required'
+            : 'clinical_closure_reference_mismatch',
+        );
+      }
+      if (matchingChecks.length !== 1) {
+        return normalCloseBlocked('clinical_closure_reference_mismatch');
+      }
+      const check = matchingChecks[0]!;
+      if (
+        !isSafeObjectId(check.referenceId)
+        || !isSafeObjectId(check.tenantId)
+        || !isSafeObjectId(check.institutionId)
+        || typeof check.valid !== 'boolean'
+        || typeof check.revoked !== 'boolean'
+        || !isValidTimestamp(check.checkedAt)
+        || !isValidTimestamp(check.validUntil)
+        || check.checkedAt > capturedInput.decisionAt
+        || check.checkedAt < projection.resolvedAt
+        || check.validUntil < check.checkedAt
+      ) {
+        return normalCloseBlocked('clinical_closure_reference_invalid');
+      }
+      if (
+        check.tenantId !== capturedInput.tenantId
+        || check.institutionId !== capturedInput.institutionId
+        || check.tenantId !== projection.tenantId
+        || check.institutionId !== projection.institutionId
+      ) {
+        return normalCloseBlocked('clinical_closure_scope_mismatch');
+      }
+      if (check.valid !== true) {
+        return normalCloseBlocked('clinical_closure_reference_invalid');
+      }
+      if (check.revoked !== false) {
+        return normalCloseBlocked('clinical_closure_reference_revoked');
+      }
+      if (check.validUntil < capturedInput.decisionAt) {
+        return normalCloseBlocked('clinical_closure_verification_expired');
+      }
+    }
+
+    if (
+      checks.length !== requiredClinicalReferences.size
+      || checks.some((check) => !requiredClinicalReferences.has(check.referenceId))
+    ) {
+      return normalCloseBlocked('clinical_closure_reference_mismatch');
+    }
+    return { kind: 'allowed' };
+  } catch {
+    return normalCloseBlocked('risk_history_invalid');
+  }
 }
 
 const appendEvent = (
   history: ConversationRiskHistory,
   event: ConversationRiskEvent,
 ): ConversationRiskMutationResult => {
-  const currentSnapshot = parseRiskHistorySnapshot(history);
-  if (currentSnapshot === null) {
+  const nextHistory = [...history, event];
+  const inspected = inspectRiskHistory(nextHistory);
+  if (inspected.result.kind === 'blocked' || inspected.history === null) {
     return mutationBlocked('invalid_risk_history');
   }
-  const nextHistory = [...currentSnapshot, structuredClone(event)];
-  const projected = inspectRiskHistory(nextHistory);
-  if (projected.kind === 'blocked') {
-    return mutationBlocked('invalid_risk_history');
-  }
-  return deepFreeze({
+  return {
     kind: 'applied',
-    history: nextHistory,
-    projection: projected.projection,
-    appendedEvent: nextHistory[nextHistory.length - 1]!,
-  });
+    history: inspected.history,
+    projection: inspected.result.projection,
+    appendedEvent: event,
+  };
 };
 
 export function recordUnconfirmedRisk(
@@ -680,46 +840,52 @@ export function recordUnconfirmedRisk(
     occurredAt: string;
   }>,
 ): ConversationRiskMutationResult {
-  const current = inspectRiskHistory(history);
-  if (current.kind === 'blocked') {
+  try {
+    const current = inspectRiskHistory(history);
+    if (current.result.kind === 'blocked' || current.history === null) {
+      return mutationBlocked('invalid_risk_history');
+    }
+    if (current.result.projection.state !== 'none') {
+      return mutationBlocked('risk_already_recorded');
+    }
+    const capturedInput = captureDataRecord(input, [recordRiskInputKeys]);
+    if (
+      capturedInput === null
+      || !isSafeObjectId(capturedInput.eventId)
+      || !isSafeObjectId(capturedInput.riskId)
+      || !isSafeObjectId(capturedInput.tenantId)
+      || !isSafeObjectId(capturedInput.institutionId)
+      || !isSafeObjectId(capturedInput.conversationId)
+      || !isSafeObjectId(capturedInput.segmentId)
+      || !isSafeObjectId(capturedInput.sourceMessageId)
+    ) {
+      return mutationBlocked('invalid_object_id');
+    }
+    if (!conversationRiskDomains.includes(capturedInput.riskDomain as ConversationRiskDomain)) {
+      return mutationBlocked('invalid_risk_domain');
+    }
+    if (!isSafeRiskCode(capturedInput.riskCode)) {
+      return mutationBlocked('invalid_risk_code');
+    }
+    if (!isValidTimestamp(capturedInput.occurredAt)) {
+      return mutationBlocked('invalid_timestamp');
+    }
+    return appendEvent(current.history, {
+      kind: 'risk_unconfirmed',
+      eventId: capturedInput.eventId,
+      riskId: capturedInput.riskId,
+      tenantId: capturedInput.tenantId,
+      institutionId: capturedInput.institutionId,
+      conversationId: capturedInput.conversationId,
+      segmentId: capturedInput.segmentId,
+      sourceMessageId: capturedInput.sourceMessageId,
+      riskDomain: capturedInput.riskDomain as ConversationRiskDomain,
+      riskCode: capturedInput.riskCode,
+      occurredAt: capturedInput.occurredAt,
+    });
+  } catch {
     return mutationBlocked('invalid_risk_history');
   }
-  if (current.projection.state !== 'none') {
-    return mutationBlocked('risk_already_recorded');
-  }
-  if (
-    !isSafeObjectId(input.eventId)
-    || !isSafeObjectId(input.riskId)
-    || !isSafeObjectId(input.tenantId)
-    || !isSafeObjectId(input.institutionId)
-    || !isSafeObjectId(input.conversationId)
-    || !isSafeObjectId(input.segmentId)
-    || !isSafeObjectId(input.sourceMessageId)
-  ) {
-    return mutationBlocked('invalid_object_id');
-  }
-  if (!conversationRiskDomains.includes(input.riskDomain)) {
-    return mutationBlocked('invalid_risk_domain');
-  }
-  if (!isSafeRiskCode(input.riskCode)) {
-    return mutationBlocked('invalid_risk_code');
-  }
-  if (!isValidTimestamp(input.occurredAt)) {
-    return mutationBlocked('invalid_timestamp');
-  }
-  return appendEvent(history, {
-    kind: 'risk_unconfirmed',
-    eventId: input.eventId,
-    riskId: input.riskId,
-    tenantId: input.tenantId,
-    institutionId: input.institutionId,
-    conversationId: input.conversationId,
-    segmentId: input.segmentId,
-    sourceMessageId: input.sourceMessageId,
-    riskDomain: input.riskDomain,
-    riskCode: input.riskCode,
-    occurredAt: input.occurredAt,
-  });
 }
 
 export function confirmConversationRisk(
@@ -732,36 +898,44 @@ export function confirmConversationRisk(
     occurredAt: string;
   }>,
 ): ConversationRiskMutationResult {
-  const current = inspectRiskHistory(history);
-  if (current.kind === 'blocked') {
+  try {
+    const current = inspectRiskHistory(history);
+    if (current.result.kind === 'blocked' || current.history === null) {
+      return mutationBlocked('invalid_risk_history');
+    }
+    if (current.result.projection.state !== 'unconfirmed') {
+      return mutationBlocked('risk_confirmation_requires_unconfirmed');
+    }
+    const capturedInput = captureDataRecord(input, [confirmRiskInputKeys]);
+    if (capturedInput === null) {
+      return mutationBlocked('invalid_object_id');
+    }
+    if (current.result.projection.riskId !== capturedInput.riskId) {
+      return mutationBlocked('risk_id_mismatch');
+    }
+    if (capturedInput.actorKind !== 'human') {
+      return mutationBlocked('human_confirmation_required');
+    }
+    if (!isSafeObjectId(capturedInput.eventId) || !isSafeObjectId(capturedInput.actorId)) {
+      return mutationBlocked('invalid_object_id');
+    }
+    const lastOccurredAt = current.history[current.history.length - 1]?.occurredAt;
+    if (
+      !isValidTimestamp(capturedInput.occurredAt)
+      || (lastOccurredAt && capturedInput.occurredAt < lastOccurredAt)
+    ) {
+      return mutationBlocked('invalid_timestamp');
+    }
+    return appendEvent(current.history, {
+      kind: 'risk_confirmed',
+      eventId: capturedInput.eventId,
+      riskId: capturedInput.riskId as string,
+      confirmedByActorId: capturedInput.actorId,
+      occurredAt: capturedInput.occurredAt,
+    });
+  } catch {
     return mutationBlocked('invalid_risk_history');
   }
-  if (current.projection.state !== 'unconfirmed') {
-    return mutationBlocked('risk_confirmation_requires_unconfirmed');
-  }
-  if (current.projection.riskId !== input.riskId) {
-    return mutationBlocked('risk_id_mismatch');
-  }
-  if (input.actorKind !== 'human') {
-    return mutationBlocked('human_confirmation_required');
-  }
-  if (!isSafeObjectId(input.eventId) || !isSafeObjectId(input.actorId)) {
-    return mutationBlocked('invalid_object_id');
-  }
-  const lastOccurredAt = history[history.length - 1]?.occurredAt;
-  if (
-    !isValidTimestamp(input.occurredAt)
-    || (lastOccurredAt && input.occurredAt < lastOccurredAt)
-  ) {
-    return mutationBlocked('invalid_timestamp');
-  }
-  return appendEvent(history, {
-    kind: 'risk_confirmed',
-    eventId: input.eventId,
-    riskId: input.riskId,
-    confirmedByActorId: input.actorId,
-    occurredAt: input.occurredAt,
-  });
 }
 
 export function resolveConversationRisk(
@@ -775,391 +949,92 @@ export function resolveConversationRisk(
     clinicalClosureVerification?: ClinicalClosureVerification;
   }>,
 ): ConversationRiskMutationResult {
-  const current = inspectRiskHistory(history);
-  if (current.kind === 'blocked') {
+  try {
+    const current = inspectRiskHistory(history);
+    if (current.result.kind === 'blocked' || current.history === null) {
+      return mutationBlocked('invalid_risk_history');
+    }
+    if (current.result.projection.state !== 'confirmed') {
+      return mutationBlocked('risk_resolution_requires_confirmed');
+    }
+    const capturedInput = captureDataRecord(input, [
+      resolveRiskInputKeys,
+      resolveClinicalRiskInputKeys,
+    ]);
+    if (capturedInput === null) {
+      return mutationBlocked('invalid_object_id');
+    }
+    if (current.result.projection.riskId !== capturedInput.riskId) {
+      return mutationBlocked('risk_id_mismatch');
+    }
+    if (capturedInput.actorKind !== 'human') {
+      return mutationBlocked('human_confirmation_required');
+    }
+    if (!isSafeObjectId(capturedInput.eventId) || !isSafeObjectId(capturedInput.actorId)) {
+      return mutationBlocked('invalid_object_id');
+    }
+    const lastOccurredAt = current.history[current.history.length - 1]?.occurredAt;
+    if (
+      !isValidTimestamp(capturedInput.occurredAt)
+      || (lastOccurredAt && capturedInput.occurredAt < lastOccurredAt)
+    ) {
+      return mutationBlocked('invalid_timestamp');
+    }
+
+    let clinicalClosureReference: LowSensitiveClinicalClosureReference | null = null;
+    if (current.result.projection.riskDomain === 'clinical') {
+      if (capturedInput.clinicalClosureVerification === undefined) {
+        return mutationBlocked('clinical_closure_reference_required');
+      }
+      const verification = captureDataRecord(
+        capturedInput.clinicalClosureVerification,
+        [clinicalClosureVerificationKeys],
+      );
+      if (verification === null) {
+        return mutationBlocked('clinical_closure_reference_invalid');
+      }
+      if (
+        verification.tenantId !== current.result.projection.tenantId
+        || verification.institutionId !== current.result.projection.institutionId
+      ) {
+        return mutationBlocked('clinical_closure_scope_mismatch');
+      }
+      if (verification.valid !== true) {
+        return mutationBlocked('clinical_closure_reference_invalid');
+      }
+      if (verification.revoked !== false) {
+        return mutationBlocked('clinical_closure_reference_revoked');
+      }
+      if (
+        !isSafeObjectId(verification.referenceId)
+        || !isValidTimestamp(verification.verifiedAt)
+        || verification.verifiedAt > capturedInput.occurredAt
+      ) {
+        return mutationBlocked('clinical_closure_reference_invalid');
+      }
+      clinicalClosureReference = {
+        referenceId: verification.referenceId,
+        scope: {
+          tenantId: verification.tenantId as string,
+          institutionId: verification.institutionId as string,
+        },
+        verificationState: 'valid',
+        revocationState: 'not_revoked',
+        verifiedAt: verification.verifiedAt,
+      };
+    } else if (capturedInput.clinicalClosureVerification !== undefined) {
+      return mutationBlocked('clinical_closure_reference_invalid');
+    }
+
+    return appendEvent(current.history, {
+      kind: 'risk_resolved',
+      eventId: capturedInput.eventId,
+      riskId: capturedInput.riskId as string,
+      resolvedByActorId: capturedInput.actorId,
+      occurredAt: capturedInput.occurredAt,
+      clinicalClosureReference,
+    });
+  } catch {
     return mutationBlocked('invalid_risk_history');
   }
-  if (current.projection.state !== 'confirmed') {
-    return mutationBlocked('risk_resolution_requires_confirmed');
-  }
-  if (current.projection.riskId !== input.riskId) {
-    return mutationBlocked('risk_id_mismatch');
-  }
-  if (input.actorKind !== 'human') {
-    return mutationBlocked('human_confirmation_required');
-  }
-  if (!isSafeObjectId(input.eventId) || !isSafeObjectId(input.actorId)) {
-    return mutationBlocked('invalid_object_id');
-  }
-  const lastOccurredAt = history[history.length - 1]?.occurredAt;
-  if (
-    !isValidTimestamp(input.occurredAt)
-    || (lastOccurredAt && input.occurredAt < lastOccurredAt)
-  ) {
-    return mutationBlocked('invalid_timestamp');
-  }
-
-  let clinicalClosureReference: LowSensitiveClinicalClosureReference | null = null;
-  if (current.projection.riskDomain === 'clinical') {
-    const verification = input.clinicalClosureVerification;
-    if (!verification) {
-      return mutationBlocked('clinical_closure_reference_required');
-    }
-    if (
-      verification.tenantId !== current.projection.tenantId
-      || verification.institutionId !== current.projection.institutionId
-    ) {
-      return mutationBlocked('clinical_closure_scope_mismatch');
-    }
-    if (verification.valid !== true) {
-      return mutationBlocked('clinical_closure_reference_invalid');
-    }
-    if (verification.revoked !== false) {
-      return mutationBlocked('clinical_closure_reference_revoked');
-    }
-    if (
-      !isSafeObjectId(verification.referenceId)
-      || !isValidTimestamp(verification.verifiedAt)
-      || verification.verifiedAt > input.occurredAt
-    ) {
-      return mutationBlocked('clinical_closure_reference_invalid');
-    }
-    clinicalClosureReference = {
-      referenceId: verification.referenceId,
-      scope: {
-        tenantId: verification.tenantId,
-        institutionId: verification.institutionId,
-      },
-      verificationState: 'valid',
-      revocationState: 'not_revoked',
-      verifiedAt: verification.verifiedAt,
-    };
-  }
-
-  return appendEvent(history, {
-    kind: 'risk_resolved',
-    eventId: input.eventId,
-    riskId: input.riskId,
-    resolvedByActorId: input.actorId,
-    occurredAt: input.occurredAt,
-    clinicalClosureReference,
-  });
-}
-
-const parseRiskTarget = (raw: unknown): ConversationRiskTarget | null => {
-  const captured = captureExactDataRecord(raw, riskTargetKeys);
-  if (!captured) {
-    return null;
-  }
-  const target = {
-    tenantId: captured.values.tenantId,
-    institutionId: captured.values.institutionId,
-    conversationId: captured.values.conversationId,
-    segmentId: captured.values.segmentId,
-  };
-  if (
-    typeof target.tenantId !== 'string'
-    || !opaqueReferencePatterns.tenantId.test(target.tenantId)
-    || typeof target.institutionId !== 'string'
-    || !opaqueReferencePatterns.institutionId.test(target.institutionId)
-    || typeof target.conversationId !== 'string'
-    || !opaqueReferencePatterns.conversationId.test(target.conversationId)
-    || typeof target.segmentId !== 'string'
-    || !opaqueReferencePatterns.segmentId.test(target.segmentId)
-    || !isStructuredCloneable(raw)
-  ) {
-    return null;
-  }
-  return target as ConversationRiskTarget;
-};
-
-type RiskSetAnchor = Readonly<{
-  rawHistory: unknown;
-  values: CapturedDataRecord['values'];
-}>;
-
-type ClinicalCheckAnchor = Readonly<{
-  rawCheck: unknown;
-  values: CapturedDataRecord['values'];
-}>;
-
-export function projectCompleteConversationRiskHistories(
-  rawHistories: unknown,
-  rawTarget: unknown,
-  rawChecks: unknown,
-  rawOccurredAt: unknown,
-): ConversationRiskSetProjectionResult {
-  const target = parseRiskTarget(rawTarget);
-  if (!target) {
-    return riskSetBlocked('invalid_target');
-  }
-
-  const capturedHistories = captureDenseArray(rawHistories);
-  if (!capturedHistories) {
-    return riskSetBlocked('invalid_risk_histories');
-  }
-  const riskAnchors: RiskSetAnchor[] = [];
-  let hasInvalidRiskHistoryStructure = false;
-  for (const rawHistory of capturedHistories) {
-    const capturedHistory = captureDenseArray(rawHistory);
-    if (!capturedHistory || capturedHistory.length === 0) {
-      hasInvalidRiskHistoryStructure = true;
-      continue;
-    }
-    const firstEvent = captureDataRecord(capturedHistory[0]);
-    if (!firstEvent) {
-      hasInvalidRiskHistoryStructure = true;
-      continue;
-    }
-    if (
-      typeof firstEvent.values.tenantId !== 'string'
-      || typeof firstEvent.values.institutionId !== 'string'
-    ) {
-      hasInvalidRiskHistoryStructure = true;
-      continue;
-    }
-    if (
-      firstEvent.values.tenantId !== target.tenantId
-      || firstEvent.values.institutionId !== target.institutionId
-    ) {
-      return riskSetBlocked('scope_mismatch');
-    }
-    if (!hasCapturedKeys(firstEvent, riskUnconfirmedEventKeys)) {
-      hasInvalidRiskHistoryStructure = true;
-      continue;
-    }
-    riskAnchors.push({ rawHistory, values: firstEvent.values });
-  }
-
-  const capturedChecks = captureDenseArray(rawChecks);
-  if (!capturedChecks) {
-    return riskSetBlocked('invalid_clinical_closure_checks');
-  }
-  const checkAnchors: ClinicalCheckAnchor[] = [];
-  let hasInvalidClinicalCheckStructure = false;
-  for (const rawCheck of capturedChecks) {
-    const captured = captureDataRecord(rawCheck);
-    if (!captured) {
-      hasInvalidClinicalCheckStructure = true;
-      continue;
-    }
-    if (
-      typeof captured.values.tenantId !== 'string'
-      || typeof captured.values.institutionId !== 'string'
-    ) {
-      hasInvalidClinicalCheckStructure = true;
-      continue;
-    }
-    if (
-      captured.values.tenantId !== target.tenantId
-      || captured.values.institutionId !== target.institutionId
-    ) {
-      return riskSetBlocked('scope_mismatch');
-    }
-    if (!hasCapturedKeys(captured, currentClinicalClosureCheckKeys)) {
-      hasInvalidClinicalCheckStructure = true;
-      continue;
-    }
-    checkAnchors.push({ rawCheck, values: captured.values });
-  }
-
-  for (const anchor of riskAnchors) {
-    if (
-      typeof anchor.values.conversationId !== 'string'
-      || typeof anchor.values.segmentId !== 'string'
-    ) {
-      return riskSetBlocked('invalid_risk_histories');
-    }
-    if (
-      anchor.values.conversationId !== target.conversationId
-      || anchor.values.segmentId !== target.segmentId
-    ) {
-      return riskSetBlocked('target_mismatch');
-    }
-  }
-
-  for (const anchor of checkAnchors) {
-    if (
-      typeof anchor.values.conversationId !== 'string'
-      || typeof anchor.values.segmentId !== 'string'
-    ) {
-      return riskSetBlocked('invalid_clinical_closure_checks');
-    }
-    if (
-      anchor.values.conversationId !== target.conversationId
-      || anchor.values.segmentId !== target.segmentId
-    ) {
-      return riskSetBlocked('target_mismatch');
-    }
-  }
-
-  if (hasInvalidRiskHistoryStructure) {
-    return riskSetBlocked('invalid_risk_histories');
-  }
-  if (hasInvalidClinicalCheckStructure) {
-    return riskSetBlocked('invalid_clinical_closure_checks');
-  }
-
-  if (!isValidTimestamp(rawOccurredAt)) {
-    return riskSetBlocked('invalid_timestamp');
-  }
-
-  const riskIds = new Set<string>();
-  const eventIds = new Set<string>();
-  const closureReferenceIds = new Set<string>();
-  const inspectedRisks: Array<Readonly<{
-    projection: Exclude<ConversationRiskProjection, { state: 'none' }>;
-    clinicalClosureReferenceId: string | null;
-  }>> = [];
-
-  for (const anchor of riskAnchors) {
-    const snapshot = parseRiskHistorySnapshot(anchor.rawHistory);
-    if (!snapshot) {
-      return riskSetBlocked('invalid_risk_histories');
-    }
-    const inspected = inspectParsedRiskHistory(snapshot);
-    if (inspected.kind === 'blocked' || inspected.projection.state === 'none') {
-      return riskSetBlocked('invalid_risk_histories');
-    }
-    const projection = inspected.projection;
-    if (
-      projection.tenantId !== target.tenantId
-      || projection.institutionId !== target.institutionId
-    ) {
-      return riskSetBlocked('scope_mismatch');
-    }
-    if (
-      projection.conversationId !== target.conversationId
-      || projection.segmentId !== target.segmentId
-    ) {
-      return riskSetBlocked('target_mismatch');
-    }
-    if (!opaqueReferencePatterns.riskId.test(projection.riskId)) {
-      return riskSetBlocked('invalid_identifier');
-    }
-    if (riskIds.has(projection.riskId)) {
-      return riskSetBlocked('invalid_risk_histories');
-    }
-    riskIds.add(projection.riskId);
-
-    for (const event of snapshot) {
-      if (
-        !opaqueReferencePatterns.riskEventId.test(event.eventId)
-        || (
-          event.kind === 'risk_unconfirmed'
-          && !opaqueReferencePatterns.messageId.test(event.sourceMessageId)
-        )
-        || (
-          event.kind === 'risk_confirmed'
-          && !opaqueReferencePatterns.userId.test(event.confirmedByActorId)
-        )
-        || (
-          event.kind === 'risk_resolved'
-          && !opaqueReferencePatterns.userId.test(event.resolvedByActorId)
-        )
-      ) {
-        return riskSetBlocked('invalid_identifier');
-      }
-      if (eventIds.has(event.eventId) || event.occurredAt > rawOccurredAt) {
-        return riskSetBlocked(
-          event.occurredAt > rawOccurredAt ? 'invalid_timestamp' : 'invalid_risk_histories',
-        );
-      }
-      eventIds.add(event.eventId);
-    }
-
-    let clinicalClosureReferenceId: string | null = null;
-    if (projection.state === 'resolved' && projection.riskDomain === 'clinical') {
-      const resolvedEvent = snapshot[2];
-      if (
-        resolvedEvent?.kind !== 'risk_resolved'
-        || resolvedEvent.clinicalClosureReference === null
-        || !opaqueReferencePatterns.clinicalClosureReferenceId.test(
-          resolvedEvent.clinicalClosureReference.referenceId,
-        )
-      ) {
-        return riskSetBlocked('invalid_identifier');
-      }
-      clinicalClosureReferenceId = resolvedEvent.clinicalClosureReference.referenceId;
-      if (closureReferenceIds.has(clinicalClosureReferenceId)) {
-        return riskSetBlocked('invalid_risk_histories');
-      }
-      closureReferenceIds.add(clinicalClosureReferenceId);
-    }
-    inspectedRisks.push({ projection, clinicalClosureReferenceId });
-  }
-
-  const consumedChecks = new Set<string>();
-  for (const anchor of checkAnchors) {
-    const values = anchor.values;
-    if (
-      typeof values.riskId !== 'string'
-      || !opaqueReferencePatterns.riskId.test(values.riskId)
-      || typeof values.referenceId !== 'string'
-      || !opaqueReferencePatterns.clinicalClosureReferenceId.test(values.referenceId)
-      || values.verificationState !== 'valid'
-      || values.revocationState !== 'not_revoked'
-      || !isValidTimestamp(values.checkedAt)
-      || values.checkedAt !== rawOccurredAt
-      || !isStructuredCloneable(anchor.rawCheck)
-    ) {
-      return riskSetBlocked('invalid_clinical_closure_checks');
-    }
-    const key = `${values.riskId}:${values.referenceId}`;
-    if (consumedChecks.has(key)) {
-      return riskSetBlocked('invalid_clinical_closure_checks');
-    }
-    const matchingRisk = inspectedRisks.find((risk) => (
-      risk.projection.riskId === values.riskId
-      && risk.clinicalClosureReferenceId === values.referenceId
-    ));
-    if (!matchingRisk) {
-      return riskSetBlocked('invalid_clinical_closure_checks');
-    }
-    consumedChecks.add(key);
-  }
-
-  if (
-    !isStructuredCloneable(rawHistories)
-    || !isStructuredCloneable(rawChecks)
-  ) {
-    return riskSetBlocked('invalid_risk_histories');
-  }
-
-  const risks: ProjectedRiskSetEntry[] = inspectedRisks.map((risk) => {
-    const { projection, clinicalClosureReferenceId } = risk;
-    if (projection.state === 'unconfirmed' || projection.state === 'confirmed') {
-      return {
-        riskId: projection.riskId,
-        state: projection.state,
-        riskDomain: projection.riskDomain,
-        clinicalClosureCheckState: 'not_applicable',
-      };
-    }
-    if (projection.riskDomain === 'non_clinical') {
-      return {
-        riskId: projection.riskId,
-        state: 'resolved',
-        riskDomain: 'non_clinical',
-        clinicalClosureCheckState: 'not_required',
-      };
-    }
-    const checkKey = `${projection.riskId}:${clinicalClosureReferenceId}`;
-    return {
-      riskId: projection.riskId,
-      state: 'resolved',
-      riskDomain: 'clinical',
-      clinicalClosureCheckState: consumedChecks.has(checkKey) ? 'current' : 'missing',
-    };
-  });
-  risks.sort((left, right) => left.riskId.localeCompare(right.riskId));
-
-  return deepFreeze({
-    kind: 'projected',
-    projection: {
-      ...target,
-      provenance: 'caller_declared_complete_histories',
-      risks,
-    },
-  });
 }

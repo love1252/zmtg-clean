@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  checkConversationRiskSetForNormalClose,
   confirmConversationRisk,
   conversationRiskDomains,
   conversationRiskStates,
-  projectCompleteConversationRiskHistories,
   projectConversationRisk,
   recordUnconfirmedRisk,
   resolveConversationRisk,
@@ -11,7 +11,7 @@ import {
   type ConversationRiskHistory,
   type ConversationRiskMutationResult,
   type ConversationRiskProjection,
-  type ConversationRiskTarget,
+  type CurrentClinicalClosureCheck,
 } from '@/modules/institution-conversations/domain/conversation-risks';
 import type { ConversationSegment } from '@/modules/institution-conversations/domain/conversation-segments';
 
@@ -56,12 +56,30 @@ const resolveInput = {
   clinicalClosureVerification: closureVerification,
 } as const;
 
-const compositionTarget: ConversationRiskTarget = {
-  tenantId: 'ten_aaaaaaaaaaaaaaaa',
-  institutionId: 'ins_bbbbbbbbbbbbbbbb',
-  conversationId: 'con_cccccccccccccccc',
-  segmentId: 'seg_dddddddddddddddd',
-};
+const currentClosureCheck = (
+  overrides: Partial<CurrentClinicalClosureCheck> = {},
+): CurrentClinicalClosureCheck => ({
+  referenceId: closureVerification.referenceId,
+  tenantId: closureVerification.tenantId,
+  institutionId: closureVerification.institutionId,
+  valid: true,
+  revoked: false,
+  checkedAt: '2026-07-17T01:04:00.000Z',
+  validUntil: '2026-07-17T01:06:00.000Z',
+  ...overrides,
+});
+
+const normalCloseCheckInput = (
+  overrides: Partial<Parameters<typeof checkConversationRiskSetForNormalClose>[1]> = {},
+): Parameters<typeof checkConversationRiskSetForNormalClose>[1] => ({
+  tenantId: recordInput.tenantId,
+  institutionId: recordInput.institutionId,
+  conversationId: recordInput.conversationId,
+  segmentId: recordInput.segmentId,
+  decisionAt: '2026-07-17T01:05:00.000Z',
+  currentClinicalClosureChecks: [],
+  ...overrides,
+});
 
 const applied = (result: ConversationRiskMutationResult): Extract<
   ConversationRiskMutationResult,
@@ -343,7 +361,7 @@ describe('conversation risk domain', () => {
     })).toEqual({ kind: 'blocked', code: 'invalid_timestamp' });
   });
 
-  it('非法历史顺序、重复 eventId、riskId 混用和时间回退均拒绝投影', () => {
+  it('非法历史顺序、稀疏/accessor 事实、重复 ID 和时间回退均拒绝投影', () => {
     const unconfirmed = unconfirmedHistory();
     const confirmed = confirmedHistory();
     const confirmedEvent = confirmed[1];
@@ -372,6 +390,33 @@ describe('conversation risk domain', () => {
         code: 'invalid_risk_history',
       });
     }
+
+    const sparseHistory = new Array(1) as ConversationRiskHistory;
+    expect(projectConversationRisk(sparseHistory)).toEqual({
+      kind: 'blocked',
+      code: 'invalid_risk_history',
+    });
+    const accessorEvent = { ...unconfirmed[0]! };
+    Object.defineProperty(accessorEvent, 'riskId', {
+      enumerable: true,
+      get: () => recordInput.riskId,
+    });
+    expect(projectConversationRisk([accessorEvent] as ConversationRiskHistory)).toEqual({
+      kind: 'blocked',
+      code: 'invalid_risk_history',
+    });
+    let rawProxyReads = 0;
+    const proxiedEvent = new Proxy(unconfirmed[0]!, {
+      get: (target, property, receiver) => {
+        rawProxyReads += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    expect(projectConversationRisk([proxiedEvent])).toMatchObject({
+      kind: 'projected',
+      projection: { state: 'unconfirmed' },
+    });
+    expect(rawProxyReads).toBe(0);
   });
 
   it('临床 resolved 历史对跨 scope、失效、撤销及未来验证逐项 fail-closed', () => {
@@ -456,8 +501,150 @@ describe('conversation risk domain', () => {
     }
   });
 
+  it('普通结束风险集守卫对未解决风险、非法历史和跨目标 fail-closed', () => {
+    expect(checkConversationRiskSetForNormalClose([], normalCloseCheckInput())).toEqual({
+      kind: 'blocked',
+      code: 'risk_set_completeness_unverified',
+    });
+    expect(checkConversationRiskSetForNormalClose(
+      [unconfirmedHistory()],
+      normalCloseCheckInput(),
+    )).toEqual({ kind: 'blocked', code: 'risk_not_resolved' });
+    expect(checkConversationRiskSetForNormalClose(
+      [confirmedHistory()],
+      normalCloseCheckInput(),
+    )).toEqual({ kind: 'blocked', code: 'risk_not_resolved' });
+    expect(checkConversationRiskSetForNormalClose(
+      [[confirmedHistory()[1]!]],
+      normalCloseCheckInput(),
+    )).toEqual({ kind: 'blocked', code: 'risk_history_invalid' });
+    expect(checkConversationRiskSetForNormalClose(
+      [unconfirmedHistory({ conversationId: 'conversation-other' })],
+      normalCloseCheckInput(),
+    )).toEqual({ kind: 'blocked', code: 'risk_target_mismatch' });
+    expect(checkConversationRiskSetForNormalClose(
+      [unconfirmedHistory({ segmentId: 'segment-other' })],
+      normalCloseCheckInput(),
+    )).toEqual({ kind: 'blocked', code: 'risk_target_mismatch' });
+    expect(checkConversationRiskSetForNormalClose(
+      [unconfirmedHistory({ tenantId: 'tenant-other' })],
+      normalCloseCheckInput(),
+    )).toEqual({ kind: 'blocked', code: 'risk_target_mismatch' });
+    expect(checkConversationRiskSetForNormalClose(
+      [unconfirmedHistory({ institutionId: 'institution-other' })],
+      normalCloseCheckInput(),
+    )).toEqual({ kind: 'blocked', code: 'risk_target_mismatch' });
+  });
+
+  it('非临床 resolved 风险可普通结束，不得伪造临床引用', () => {
+    const history = applied(resolveConversationRisk(
+      confirmedHistory({ riskDomain: 'non_clinical' }),
+      { ...resolveInput, clinicalClosureVerification: undefined },
+    )).history;
+    expect(checkConversationRiskSetForNormalClose(
+      [history],
+      normalCloseCheckInput(),
+    )).toEqual({ kind: 'allowed' });
+    expect(checkConversationRiskSetForNormalClose(
+      [history],
+      normalCloseCheckInput({ currentClinicalClosureChecks: [currentClosureCheck()] }),
+    )).toEqual({ kind: 'blocked', code: 'clinical_closure_reference_mismatch' });
+    expect(checkConversationRiskSetForNormalClose(
+      [history],
+      normalCloseCheckInput({ decisionAt: '2026-07-17T01:02:59.999Z' }),
+    )).toEqual({ kind: 'blocked', code: 'risk_history_invalid' });
+  });
+
+  it.each([
+    [[], 'clinical_closure_reference_required'],
+    [[currentClosureCheck({ referenceId: 'clinical-closure-other' })], 'clinical_closure_reference_mismatch'],
+    [[currentClosureCheck({ tenantId: 'tenant-other' })], 'clinical_closure_scope_mismatch'],
+    [[currentClosureCheck({ institutionId: 'institution-other' })], 'clinical_closure_scope_mismatch'],
+    [[currentClosureCheck({ valid: false })], 'clinical_closure_reference_invalid'],
+    [[currentClosureCheck({ revoked: true })], 'clinical_closure_reference_revoked'],
+    [[currentClosureCheck({ checkedAt: '2026-07-17T01:05:00.001Z' })], 'clinical_closure_reference_invalid'],
+    [[currentClosureCheck({ validUntil: '2026-07-17T01:04:59.999Z' })], 'clinical_closure_verification_expired'],
+    [[currentClosureCheck({ checkedAt: '2026-07-17T01:02:59.999Z' })], 'clinical_closure_reference_invalid'],
+  ] as const)('已解决临床风险在普通结束时重新校验当前引用：%j', (checks, code) => {
+    const history = applied(resolveConversationRisk(confirmedHistory(), resolveInput)).history;
+    expect(checkConversationRiskSetForNormalClose(
+      [history],
+      normalCloseCheckInput({ currentClinicalClosureChecks: checks }),
+    )).toEqual({ kind: 'blocked', code });
+  });
+
+  it('临床引用解决后撤销会重新阻断普通结束，但不改写追加式历史', () => {
+    const history = applied(resolveConversationRisk(confirmedHistory(), resolveInput)).history;
+    const before = structuredClone(history);
+    const validCheck = currentClosureCheck();
+    const validBefore = structuredClone(validCheck);
+    expect(checkConversationRiskSetForNormalClose(
+      [history],
+      normalCloseCheckInput({ currentClinicalClosureChecks: [validCheck] }),
+    )).toEqual({ kind: 'allowed' });
+    expect(checkConversationRiskSetForNormalClose(
+      [history],
+      normalCloseCheckInput({
+        currentClinicalClosureChecks: [currentClosureCheck({ revoked: true })],
+      }),
+    )).toEqual({ kind: 'blocked', code: 'clinical_closure_reference_revoked' });
+    expect(projectConversationRisk(history)).toMatchObject({
+      kind: 'projected',
+      projection: { state: 'resolved' },
+    });
+    expect(history).toEqual(before);
+    expect(validCheck).toEqual(validBefore);
+  });
+
+  it('普通结束风险守卫拒绝重复风险、多义引用和携带 provider payload 的当前校验', () => {
+    const history = applied(resolveConversationRisk(confirmedHistory(), resolveInput)).history;
+    expect(checkConversationRiskSetForNormalClose(
+      [history, history],
+      normalCloseCheckInput({ currentClinicalClosureChecks: [currentClosureCheck()] }),
+    )).toEqual({ kind: 'blocked', code: 'risk_history_invalid' });
+    expect(checkConversationRiskSetForNormalClose(
+      [history],
+      normalCloseCheckInput({
+        currentClinicalClosureChecks: [currentClosureCheck(), currentClosureCheck()],
+      }),
+    )).toEqual({ kind: 'blocked', code: 'clinical_closure_reference_mismatch' });
+    expect(checkConversationRiskSetForNormalClose(
+      [history],
+      normalCloseCheckInput({
+        currentClinicalClosureChecks: [
+          { ...currentClosureCheck(), providerPayload: '虚构 provider 数据' } as never,
+        ],
+      }),
+    )).toEqual({ kind: 'blocked', code: 'clinical_closure_reference_invalid' });
+
+    const accessorCheck = { ...currentClosureCheck() };
+    Object.defineProperty(accessorCheck, 'revoked', {
+      enumerable: true,
+      get: () => false,
+    });
+    expect(checkConversationRiskSetForNormalClose(
+      [history],
+      normalCloseCheckInput({ currentClinicalClosureChecks: [accessorCheck] }),
+    )).toEqual({ kind: 'blocked', code: 'clinical_closure_reference_invalid' });
+
+    let rawProxyReads = 0;
+    const proxiedCheck = new Proxy(currentClosureCheck(), {
+      get: (target, property, receiver) => {
+        rawProxyReads += 1;
+        return property === 'revoked' ? true : Reflect.get(target, property, receiver);
+      },
+    });
+    expect(checkConversationRiskSetForNormalClose(
+      [history],
+      normalCloseCheckInput({ currentClinicalClosureChecks: [proxiedCheck] }),
+    )).toEqual({ kind: 'allowed' });
+    expect(rawProxyReads).toBe(0);
+  });
+
   it('风险状态机与 segment 正交，不关闭分段、不清 blocker、不制造临床结论', () => {
     const currentSegment: ConversationSegment = {
+      tenantId: 'tenant-001',
+      institutionId: 'institution-001',
       segmentId: 'segment-001',
       conversationId: 'conversation-001',
       sequenceNo: 1,
@@ -466,6 +653,12 @@ describe('conversation risk domain', () => {
       everHumanHandled: false,
       openedByCustomerMessageId: 'message-inbound-001',
       openedAt: '2026-07-17T01:00:00.000Z',
+      lastCustomerMessageId: 'message-inbound-001',
+      lastCustomerMessageAt: '2026-07-17T01:00:00.000Z',
+      latestInboundRevision: 1,
+      waitingAfterCustomerMessageId: null,
+      waitingAfterCustomerMessageAt: null,
+      waitingAfterInboundRevision: null,
       stateChangedAt: '2026-07-17T01:00:00.000Z',
       closedAt: null,
       segmentCloseKind: 'open',
@@ -512,6 +705,16 @@ describe('conversation risk domain', () => {
     });
     expect(history).toEqual(historyBefore);
     expect(revokedCommand).toEqual(revokedBefore);
+
+    let commandProxyReads = 0;
+    const proxiedCommand = new Proxy(command, {
+      get: (target, property, receiver) => {
+        commandProxyReads += 1;
+        return property === 'actorKind' ? 'ai' : Reflect.get(target, property, receiver);
+      },
+    });
+    expect(resolveConversationRisk(history, proxiedCommand).kind).toBe('applied');
+    expect(commandProxyReads).toBe(0);
   });
 
   it('完整历史可分别投影 unconfirmed、confirmed、resolved', () => {
@@ -522,71 +725,5 @@ describe('conversation risk domain', () => {
     expect(projection(unconfirmed).state).toBe('unconfirmed');
     expect(projection(confirmed).state).toBe('confirmed');
     expect(projection(resolved).state).toBe('resolved');
-  });
-
-  it('target-bound 完整集合稳定排序并保留 caller 声明 provenance', () => {
-    const historyB = unconfirmedHistory({
-      eventId: 'rke_bbbbbbbbbbbbbbb1',
-      riskId: 'rsk_bbbbbbbbbbbbbbbb',
-      ...compositionTarget,
-      sourceMessageId: 'msg_bbbbbbbbbbbbbbbb',
-    });
-    const historyA = unconfirmedHistory({
-      eventId: 'rke_aaaaaaaaaaaaaaa1',
-      riskId: 'rsk_aaaaaaaaaaaaaaaa',
-      ...compositionTarget,
-      sourceMessageId: 'msg_aaaaaaaaaaaaaaaa',
-    });
-
-    expect(projectCompleteConversationRiskHistories(
-      [historyB, historyA],
-      compositionTarget,
-      [],
-      '2026-07-17T01:05:00.000Z',
-    )).toEqual({
-      kind: 'projected',
-      projection: {
-        ...compositionTarget,
-        provenance: 'caller_declared_complete_histories',
-        risks: [
-          {
-            riskId: 'rsk_aaaaaaaaaaaaaaaa',
-            state: 'unconfirmed',
-            riskDomain: 'clinical',
-            clinicalClosureCheckState: 'not_applicable',
-          },
-          {
-            riskId: 'rsk_bbbbbbbbbbbbbbbb',
-            state: 'unconfirmed',
-            riskDomain: 'clinical',
-            clinicalClosureCheckState: 'not_applicable',
-          },
-        ],
-      },
-    });
-  });
-
-  it('单链投影对 sparse、Proxy 和 accessor 历史受控 fail-closed', () => {
-    const sparse = new Array(1) as ConversationRiskHistory;
-    const proxied = new Proxy(unconfirmedHistory(), {});
-    const accessor = structuredClone(unconfirmedHistory()) as ConversationRiskHistory;
-    let reads = 0;
-    Object.defineProperty(accessor[0] as object, 'riskCode', {
-      enumerable: true,
-      configurable: true,
-      get: () => {
-        reads += 1;
-        return 'clinical_alert';
-      },
-    });
-
-    for (const history of [sparse, proxied, accessor]) {
-      expect(() => projectConversationRisk(history)).not.toThrow();
-      expect(projectConversationRisk(history)).toEqual({
-        kind: 'blocked',
-        code: 'invalid_risk_history',
-      });
-    }
-    expect(reads).toBe(0);
   });
 });
