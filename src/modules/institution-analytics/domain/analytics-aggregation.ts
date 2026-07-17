@@ -802,12 +802,16 @@ export function aggregateAnalyticsConsumptionFacts(
     const previousStableRecordGate = stableRecordGateForBucket(
       previousBuckets.get(currency),
     );
-    if (!currentStableRecordGate.ok || !previousStableRecordGate.ok) {
+    if (!currentStableRecordGate.ok) {
       return {
         ok: false,
-        reasonCode: !currentStableRecordGate.ok
-          ? currentStableRecordGate.reasonCode
-          : previousStableRecordGate.reasonCode,
+        reasonCode: currentStableRecordGate.reasonCode,
+      };
+    }
+    if (!previousStableRecordGate.ok) {
+      return {
+        ok: false,
+        reasonCode: previousStableRecordGate.reasonCode,
       };
     }
     const current = periodCurrencyMetrics({
