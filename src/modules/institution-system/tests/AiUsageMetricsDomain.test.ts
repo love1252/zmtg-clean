@@ -11,6 +11,16 @@ const scope = {
   institutionId: 'institution-1',
 } as const;
 
+const timeWindow = {
+  startInclusiveEpochMs: 1_000,
+  endExclusiveEpochMs: 2_000,
+} as const;
+
+const recordBase = {
+  ...scope,
+  occurredAtEpochMs: 1_500,
+} as const;
+
 const terminalStatusPolicy = {
   succeeded: 'success',
   failed: 'failure',
@@ -26,11 +36,18 @@ const serviceKeyPolicy = [
   'analytics_report',
 ] as const satisfies AiUsageServiceKeyPolicy;
 
+const validRecord = {
+  ...recordBase,
+  status: 'succeeded',
+  serviceKey: 'conversation_ai',
+  serviceUnits: 1,
+} as const satisfies AiUsageMetricRecord;
+
 describe('AI usage metrics domain', () => {
   it('聚合总量与三个稳定业务 serviceKey，并保留精确成功率分子分母', () => {
     const records = [
       {
-        ...scope,
+        ...recordBase,
         status: 'succeeded',
         serviceKey: 'conversation_ai',
         serviceUnits: 2,
@@ -46,7 +63,7 @@ describe('AI usage metrics domain', () => {
         errorMessage: 'sensitive full error text',
       },
       {
-        ...scope,
+        ...recordBase,
         status: 'failed',
         serviceKey: 'conversation_ai',
         serviceUnits: 1,
@@ -55,37 +72,39 @@ describe('AI usage metrics domain', () => {
         serviceName: 'sensitive service name b',
       },
       {
-        ...scope,
+        ...recordBase,
         status: 'sensitive_input_rejected',
         serviceKey: 'knowledge_qa',
         serviceUnits: 0,
       },
       {
-        ...scope,
+        ...recordBase,
         status: 'queued',
         serviceKey: 'knowledge_qa',
         serviceUnits: 0,
       },
       {
-        ...scope,
+        ...recordBase,
         status: 'succeeded',
         serviceKey: 'analytics_report',
         serviceUnits: 3,
       },
       {
-        ...scope,
+        ...recordBase,
         status: 'rejected',
         serviceKey: 'analytics_report',
         serviceUnits: 1,
       },
     ];
     const before = structuredClone(records);
+    const timeWindowBefore = structuredClone(timeWindow);
 
     const result = aggregateAiUsageMetrics({
       scope,
       records,
       terminalStatusPolicy,
       serviceKeyPolicy,
+      timeWindow,
     });
 
     expect(result).toEqual({
@@ -145,6 +164,7 @@ describe('AI usage metrics domain', () => {
       },
     });
     expect(records).toEqual(before);
+    expect(timeWindow).toEqual(timeWindowBefore);
 
     const serialized = JSON.stringify(result);
     for (const forbiddenValue of [
@@ -164,6 +184,9 @@ describe('AI usage metrics domain', () => {
       'cost',
       'errorMessage',
       'sensitive full error text',
+      'occurredAtEpochMs',
+      'startInclusiveEpochMs',
+      'endExclusiveEpochMs',
     ]) {
       expect(serialized).not.toContain(forbiddenValue);
     }
@@ -174,21 +197,22 @@ describe('AI usage metrics domain', () => {
       scope,
       terminalStatusPolicy,
       serviceKeyPolicy,
+      timeWindow,
       records: [
         {
-          ...scope,
+          ...recordBase,
           status: 'succeeded',
           serviceKey: 'conversation_ai',
           serviceUnits: null,
         },
         {
-          ...scope,
+          ...recordBase,
           status: 'succeeded',
           serviceKey: 'knowledge_qa',
           serviceUnits: 2,
         },
         {
-          ...scope,
+          ...recordBase,
           status: 'failed',
           serviceKey: 'analytics_report',
         },
@@ -226,9 +250,10 @@ describe('AI usage metrics domain', () => {
         scope,
         terminalStatusPolicy,
         serviceKeyPolicy,
+        timeWindow,
         records: [
           {
-            ...scope,
+            ...recordBase,
             status: 'succeeded',
             serviceKey: 'conversation_ai',
             serviceUnits: invalidServiceUnits,
@@ -250,15 +275,16 @@ describe('AI usage metrics domain', () => {
       scope,
       terminalStatusPolicy,
       serviceKeyPolicy,
+      timeWindow,
       records: [
         {
-          ...scope,
+          ...recordBase,
           status: 'queued',
           serviceKey: 'conversation_ai',
           serviceUnits: 0,
         },
         {
-          ...scope,
+          ...recordBase,
           status: 'future_status',
           serviceKey: 'conversation_ai',
           serviceUnits: 0,
@@ -291,12 +317,13 @@ describe('AI usage metrics domain', () => {
   ])('跨机构记录整批 fail-closed，不返回部分指标：$tenantId/$institutionId', (mixedScope) => {
     const records: readonly AiUsageMetricRecord[] = [
       {
-        ...scope,
+        ...recordBase,
         status: 'succeeded',
         serviceKey: 'conversation_ai',
         serviceUnits: 1,
       },
       {
+        ...recordBase,
         ...mixedScope,
         status: 'succeeded',
         serviceKey: 'knowledge_qa',
@@ -309,6 +336,7 @@ describe('AI usage metrics domain', () => {
       records,
       terminalStatusPolicy,
       serviceKeyPolicy,
+      timeWindow,
     });
 
     expect(result).toEqual({
@@ -322,7 +350,7 @@ describe('AI usage metrics domain', () => {
   it('拒绝缺失的显式 serviceKey，不从 model/provider/serviceName 回退推断', () => {
     const records = [
       {
-        ...scope,
+        ...recordBase,
         status: 'succeeded',
         serviceKey: '',
         serviceUnits: 1,
@@ -335,6 +363,7 @@ describe('AI usage metrics domain', () => {
       scope,
       terminalStatusPolicy,
       serviceKeyPolicy,
+      timeWindow,
       records,
     });
 
@@ -348,13 +377,13 @@ describe('AI usage metrics domain', () => {
   it('格式合法但未获准的 serviceKey 使整批失败且不返回部分指标', () => {
     const records = [
       {
-        ...scope,
+        ...recordBase,
         status: 'succeeded',
         serviceKey: 'conversation_ai',
         serviceUnits: 1,
       },
       {
-        ...scope,
+        ...recordBase,
         status: 'succeeded',
         serviceKey: 'future_unapproved_ai',
         serviceUnits: 1,
@@ -371,6 +400,7 @@ describe('AI usage metrics domain', () => {
       records,
       terminalStatusPolicy,
       serviceKeyPolicy,
+      timeWindow,
     });
 
     expect(result).toEqual({
@@ -384,12 +414,205 @@ describe('AI usage metrics domain', () => {
     expect(records).toEqual(before);
   });
 
+  it('即使记录为空也拒绝非法时间窗，且不返回指标或窗口值', () => {
+    const result = aggregateAiUsageMetrics({
+      scope,
+      records: [],
+      terminalStatusPolicy,
+      serviceKeyPolicy,
+      timeWindow: {
+        startInclusiveEpochMs: 1_000,
+        endExclusiveEpochMs: 1_000,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'invalid_time_window',
+    });
+    expect('metrics' in result).toBe(false);
+    expect(JSON.stringify(result)).not.toMatch(/startInclusiveEpochMs|endExclusiveEpochMs|1000/u);
+  });
+
+  it('只接受半开窗起点和终点前一毫秒，边界外记录整批拒绝', () => {
+    const insideResult = aggregateAiUsageMetrics({
+      scope,
+      terminalStatusPolicy,
+      serviceKeyPolicy,
+      timeWindow,
+      records: [
+        { ...validRecord, occurredAtEpochMs: timeWindow.startInclusiveEpochMs },
+        { ...validRecord, occurredAtEpochMs: timeWindow.endExclusiveEpochMs - 1 },
+      ],
+    });
+
+    expect(insideResult.ok).toBe(true);
+    if (!insideResult.ok) {
+      throw new Error(insideResult.code);
+    }
+    expect(insideResult.metrics.totalCallCount).toBe(2);
+
+    for (const occurredAtEpochMs of [
+      timeWindow.startInclusiveEpochMs - 1,
+      timeWindow.endExclusiveEpochMs,
+    ]) {
+      const outsideResult = aggregateAiUsageMetrics({
+        scope,
+        terminalStatusPolicy,
+        serviceKeyPolicy,
+        timeWindow,
+        records: [{ ...validRecord, occurredAtEpochMs }],
+      });
+
+      expect(outsideResult).toEqual({
+        ok: false,
+        code: 'record_outside_time_window',
+        recordIndex: 0,
+      });
+      expect('metrics' in outsideResult).toBe(false);
+    }
+  });
+
+  it.each([
+    { name: 'null', value: null },
+    { name: 'undefined', value: undefined },
+    { name: '字符串', value: '1500' },
+    { name: 'NaN', value: Number.NaN },
+    { name: '正无穷', value: Number.POSITIVE_INFINITY },
+    { name: '负无穷', value: Number.NEGATIVE_INFINITY },
+    { name: '小数', value: 1_500.5 },
+    { name: '超过最大安全整数', value: Number.MAX_SAFE_INTEGER + 1 },
+    { name: '小于最小安全整数', value: Number.MIN_SAFE_INTEGER - 1 },
+  ])('记录时间为$name时整批失败且不返回原值或部分指标', ({ value }) => {
+    const records = [
+      validRecord,
+      {
+        ...validRecord,
+        occurredAtEpochMs: value as number | null,
+        prompt: 'sensitive prompt in invalid record',
+        errorMessage: 'sensitive error in invalid record',
+      },
+    ];
+    const before = structuredClone(records);
+
+    const result = aggregateAiUsageMetrics({
+      scope,
+      records,
+      terminalStatusPolicy,
+      serviceKeyPolicy,
+      timeWindow,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'invalid_occurred_at',
+      recordIndex: 1,
+    });
+    expect('metrics' in result).toBe(false);
+    expect(JSON.stringify(result)).not.toMatch(/occurredAtEpochMs|sensitive|1500/u);
+    expect(records).toEqual(before);
+  });
+
+  it('跨整批严格执行 scope、serviceKey、时间合法性和落窗优先级', () => {
+    const scopeFirst = aggregateAiUsageMetrics({
+      scope,
+      terminalStatusPolicy,
+      serviceKeyPolicy,
+      timeWindow,
+      records: [
+        {
+          ...validRecord,
+          serviceKey: 'future_unapproved_ai',
+          occurredAtEpochMs: timeWindow.endExclusiveEpochMs,
+        },
+        {
+          ...validRecord,
+          tenantId: 'tenant-2',
+        },
+      ],
+    });
+    const serviceKeyFirst = aggregateAiUsageMetrics({
+      scope,
+      terminalStatusPolicy,
+      serviceKeyPolicy,
+      timeWindow,
+      records: [
+        { ...validRecord, occurredAtEpochMs: Number.NaN },
+        { ...validRecord, serviceKey: 'future_unapproved_ai' },
+      ],
+    });
+    const invalidTimeFirst = aggregateAiUsageMetrics({
+      scope,
+      terminalStatusPolicy,
+      serviceKeyPolicy,
+      timeWindow,
+      records: [
+        { ...validRecord, occurredAtEpochMs: timeWindow.endExclusiveEpochMs },
+        { ...validRecord, occurredAtEpochMs: null },
+      ],
+    });
+
+    expect(scopeFirst).toEqual({
+      ok: false,
+      code: 'scope_mismatch',
+      recordIndex: 1,
+    });
+    expect(serviceKeyFirst).toEqual({
+      ok: false,
+      code: 'invalid_service_key',
+      recordIndex: 1,
+    });
+    expect(invalidTimeFirst).toEqual({
+      ok: false,
+      code: 'invalid_occurred_at',
+      recordIndex: 1,
+    });
+  });
+
+  it('后续窗外记录不泄露部分指标、原时间或夹带字段，并保持输入不变', () => {
+    const mutableTimeWindow = {
+      startInclusiveEpochMs: 1_000,
+      endExclusiveEpochMs: 2_000,
+    };
+    const records = [
+      validRecord,
+      {
+        ...validRecord,
+        occurredAtEpochMs: 2_001,
+        prompt: 'sensitive prompt in outside record',
+        provider: 'sensitive provider in outside record',
+        cost: 999,
+      },
+    ];
+    const recordsBefore = structuredClone(records);
+    const timeWindowBefore = structuredClone(mutableTimeWindow);
+
+    const result = aggregateAiUsageMetrics({
+      scope,
+      records,
+      terminalStatusPolicy,
+      serviceKeyPolicy,
+      timeWindow: mutableTimeWindow,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'record_outside_time_window',
+      recordIndex: 1,
+    });
+    expect(Object.keys(result).sort()).toEqual(['code', 'ok', 'recordIndex']);
+    expect(JSON.stringify(result)).not.toMatch(/2001|sensitive|provider|cost|metrics/u);
+    expect(records).toEqual(recordsBefore);
+    expect(mutableTimeWindow).toEqual(timeWindowBefore);
+  });
+
   it('拒绝非法 serviceKey 策略，即使记录为空也不返回指标', () => {
     const result = aggregateAiUsageMetrics({
       scope,
       records: [],
       terminalStatusPolicy,
       serviceKeyPolicy: [],
+      timeWindow,
     });
 
     expect(result).toEqual({
@@ -404,6 +627,7 @@ describe('AI usage metrics domain', () => {
       scope,
       records: [],
       serviceKeyPolicy,
+      timeWindow,
       terminalStatusPolicy: {
         succeeded: 'incomplete',
       } as unknown as AiUsageTerminalStatusPolicy,
@@ -422,6 +646,7 @@ describe('AI usage metrics domain', () => {
       records: [],
       terminalStatusPolicy,
       serviceKeyPolicy,
+      timeWindow,
     });
 
     expect(result).toEqual({
@@ -440,5 +665,9 @@ describe('AI usage metrics domain', () => {
         byServiceKey: [],
       },
     });
+    expect(result).not.toHaveProperty('readiness');
+    expect(result).not.toHaveProperty('freshness');
+    expect(result).not.toHaveProperty('envelope');
+    expect(result).not.toHaveProperty('empty');
   });
 });
