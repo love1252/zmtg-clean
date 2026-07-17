@@ -5,12 +5,12 @@ import {
   type CustomerLifecycle,
   type CustomerPriority,
 } from '@/modules/customer-center/domain/customer-query';
-
-export type CustomerOverviewCustomerV1 = {
-  customerId: string;
-  displayName: string;
-  maskedReference: string | null;
-};
+import {
+  mapCustomerReferenceV1,
+  type CustomerReferenceProjectionInput,
+  type CustomerReferenceProjectionPolicy,
+} from '@/modules/customer-center/domain/customer-projections';
+import type { CustomerReferenceV1 } from '@/modules/institution-contracts/v1/customer';
 
 export type CustomerOverviewOwnerV1 = {
   userId: string;
@@ -36,7 +36,7 @@ export type CustomerOverviewLifecycleBasisV1 = {
 
 export type CustomerOverviewV1 = {
   contractVersion: 'v1';
-  customer: CustomerOverviewCustomerV1;
+  customer: CustomerReferenceV1;
   lifecycle: CustomerLifecycle;
   priority: CustomerPriority;
   owner: CustomerOverviewOwnerV1 | null;
@@ -48,15 +48,15 @@ export type CustomerOverviewV1 = {
 };
 
 export type CustomerOverviewProjectionInput = {
-  customer: CustomerOverviewCustomerV1;
-  lifecycle: string;
-  priority: string;
-  owner: CustomerOverviewOwnerV1 | null;
-  primaryProject: CustomerOverviewProjectV1 | null;
-  projects: readonly CustomerOverviewProjectV1[];
-  tags: readonly CustomerOverviewTagV1[];
-  lifecycleBasis: CustomerOverviewLifecycleBasisV1 | null;
-  updatedAt: string;
+  customer: CustomerReferenceProjectionInput;
+  lifecycle: unknown;
+  priority: unknown;
+  owner: unknown;
+  primaryProject: unknown;
+  projects: unknown;
+  tags: unknown;
+  lifecycleBasis: unknown;
+  updatedAt: unknown;
 };
 
 export type CustomerOverviewProjectionPolicy = {
@@ -74,24 +74,206 @@ export type CustomerOverviewProjectionPolicy = {
 const normalizedIdentifierPattern = /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/u;
 const controlledTimestampPattern =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(?:Z|[+-](\d{2}):(\d{2}))$/u;
+const OVERVIEW_INPUT_KEYS = Object.freeze([
+  'customer',
+  'lifecycle',
+  'priority',
+  'owner',
+  'primaryProject',
+  'projects',
+  'tags',
+  'lifecycleBasis',
+  'updatedAt',
+] as const);
+const OWNER_KEYS = Object.freeze(['userId', 'displayName'] as const);
+const PROJECT_KEYS = Object.freeze(['projectId', 'displayName'] as const);
+const TAG_KEYS = Object.freeze(['tagCode', 'displayName'] as const);
+const LIFECYCLE_BASIS_KEYS = Object.freeze([
+  'basisCode',
+  'sourceKind',
+  'sourceId',
+  'occurredAt',
+] as const);
+const OVERVIEW_POLICY_KEYS = Object.freeze([
+  'allowedLifecycleBasisCodes',
+  'allowedLifecycleBasisSourceKinds',
+  'isTrustedCustomerId',
+  'isApprovedDisplayName',
+  'isApprovedMaskedReference',
+  'isApprovedOwner',
+  'isApprovedProject',
+  'isApprovedTag',
+  'isTrustedLifecycleBasisSourceId',
+] as const);
 
-function isOneOf<const TValues extends readonly string[]>(
-  value: string,
-  values: TValues,
-): value is TValues[number] {
-  return (values as readonly string[]).includes(value);
+type CustomerOverviewPolicySnapshot = CustomerReferenceProjectionPolicy & {
+  isApprovedOwner: (userId: string, displayName: string) => boolean;
+  isApprovedProject: (projectId: string, displayName: string) => boolean;
+  isApprovedTag: (tagCode: string, displayName: string) => boolean;
+  isTrustedLifecycleBasisSourceId: (sourceId: string) => boolean;
+  isAllowedLifecycleBasisCode: (basisCode: string) => boolean;
+  isAllowedLifecycleBasisSourceKind: (sourceKind: string) => boolean;
+};
+
+function snapshotRequiredDataFields(
+  value: unknown,
+  requiredKeys: readonly string[],
+): Readonly<Record<string, unknown>> | null {
+  try {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const snapshot: Record<string, unknown> = Object.create(null) as Record<
+      string,
+      unknown
+    >;
+    for (const key of requiredKeys) {
+      const descriptor = descriptors[key];
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) return null;
+      Object.defineProperty(snapshot, key, {
+        value: descriptor.value,
+        enumerable: true,
+        configurable: false,
+        writable: false,
+      });
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
 }
 
-function normalizeIdentifier(value: string) {
+function snapshotArrayDataItems(value: unknown): readonly unknown[] | null {
+  try {
+    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value) as Record<
+      string,
+      PropertyDescriptor
+    >;
+    const lengthDescriptor = descriptors.length;
+    const length = lengthDescriptor?.value;
+    if (
+      !lengthDescriptor ||
+      !('value' in lengthDescriptor) ||
+      typeof length !== 'number' ||
+      !Number.isSafeInteger(length) ||
+      length < 0
+    ) {
+      return null;
+    }
+
+    const items: unknown[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = descriptors[String(index)];
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) return null;
+      items.push(descriptor.value);
+    }
+    return Object.freeze(items);
+  } catch {
+    return null;
+  }
+}
+
+function snapshotSetMembership(
+  value: unknown,
+): ((candidate: string) => boolean) | null {
+  try {
+    if (
+      value === null ||
+      (typeof value !== 'object' && typeof value !== 'function')
+    ) {
+      return null;
+    }
+    const has = Reflect.get(value, 'has');
+    if (typeof has !== 'function') return null;
+    return (candidate: string) => Reflect.apply(has, value, [candidate]) === true;
+  } catch {
+    return null;
+  }
+}
+
+function snapshotOverviewPolicy(
+  value: unknown,
+): CustomerOverviewPolicySnapshot | null {
+  const snapshot = snapshotRequiredDataFields(value, OVERVIEW_POLICY_KEYS);
+  if (!snapshot) return null;
+
+  const isTrustedCustomerId = snapshot.isTrustedCustomerId;
+  const isApprovedDisplayName = snapshot.isApprovedDisplayName;
+  const isApprovedMaskedReference = snapshot.isApprovedMaskedReference;
+  const isApprovedOwner = snapshot.isApprovedOwner;
+  const isApprovedProject = snapshot.isApprovedProject;
+  const isApprovedTag = snapshot.isApprovedTag;
+  const isTrustedLifecycleBasisSourceId = snapshot.isTrustedLifecycleBasisSourceId;
+  const isAllowedLifecycleBasisCode = snapshotSetMembership(
+    snapshot.allowedLifecycleBasisCodes,
+  );
+  const isAllowedLifecycleBasisSourceKind = snapshotSetMembership(
+    snapshot.allowedLifecycleBasisSourceKinds,
+  );
+
+  if (
+    typeof isTrustedCustomerId !== 'function' ||
+    typeof isApprovedDisplayName !== 'function' ||
+    typeof isApprovedMaskedReference !== 'function' ||
+    typeof isApprovedOwner !== 'function' ||
+    typeof isApprovedProject !== 'function' ||
+    typeof isApprovedTag !== 'function' ||
+    typeof isTrustedLifecycleBasisSourceId !== 'function' ||
+    !isAllowedLifecycleBasisCode ||
+    !isAllowedLifecycleBasisSourceKind
+  ) {
+    return null;
+  }
+
+  return Object.freeze({
+    isTrustedCustomerId: isTrustedCustomerId as (customerId: string) => boolean,
+    isApprovedDisplayName: isApprovedDisplayName as (displayName: string) => boolean,
+    isApprovedMaskedReference: isApprovedMaskedReference as (
+      maskedReference: string,
+    ) => boolean,
+    isApprovedOwner: isApprovedOwner as (
+      userId: string,
+      displayName: string,
+    ) => boolean,
+    isApprovedProject: isApprovedProject as (
+      projectId: string,
+      displayName: string,
+    ) => boolean,
+    isApprovedTag: isApprovedTag as (
+      tagCode: string,
+      displayName: string,
+    ) => boolean,
+    isTrustedLifecycleBasisSourceId: isTrustedLifecycleBasisSourceId as (
+      sourceId: string,
+    ) => boolean,
+    isAllowedLifecycleBasisCode,
+    isAllowedLifecycleBasisSourceKind,
+  });
+}
+
+function isOneOf<const TValues extends readonly string[]>(
+  value: unknown,
+  values: TValues,
+): value is TValues[number] {
+  return typeof value === 'string' && (values as readonly string[]).includes(value);
+}
+
+function normalizeIdentifier(value: unknown) {
+  if (typeof value !== 'string') return null;
   return value === value.trim() && normalizedIdentifierPattern.test(value) ? value : null;
 }
 
-function normalizeDisplayName(value: string) {
+function normalizeDisplayName(value: unknown) {
+  if (typeof value !== 'string') return null;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
 }
 
-function normalizeTimestamp(value: string) {
+function normalizeTimestamp(value: unknown) {
+  if (typeof value !== 'string') return null;
   const match = controlledTimestampPattern.exec(value);
   if (!match) return null;
 
@@ -126,40 +308,16 @@ function passesPolicyCheck<TArgs extends readonly unknown[]>(
   }
 }
 
-function normalizeCustomer(
-  input: CustomerOverviewCustomerV1,
-  policy: CustomerOverviewProjectionPolicy,
-): CustomerOverviewCustomerV1 | null {
-  const customerId = normalizeIdentifier(input.customerId);
-  const displayName = normalizeDisplayName(input.displayName);
-  const maskedReference =
-    input.maskedReference === null ? null : normalizeDisplayName(input.maskedReference);
-
-  if (
-    !customerId ||
-    !displayName ||
-    !isLowSensitiveCustomerText(displayName) ||
-    !passesPolicyCheck(policy.isTrustedCustomerId, customerId) ||
-    !passesPolicyCheck(policy.isApprovedDisplayName, displayName) ||
-    (input.maskedReference !== null &&
-      (!maskedReference ||
-        !isLowSensitiveCustomerText(maskedReference) ||
-        !passesPolicyCheck(policy.isApprovedMaskedReference, maskedReference)))
-  ) {
-    return null;
-  }
-
-  return { customerId, displayName, maskedReference };
-}
-
 function normalizeOwner(
-  input: CustomerOverviewOwnerV1 | null,
-  policy: CustomerOverviewProjectionPolicy,
+  input: unknown,
+  policy: CustomerOverviewPolicySnapshot,
 ) {
   if (input === null) return null;
+  const owner = snapshotRequiredDataFields(input, OWNER_KEYS);
+  if (!owner) return null;
 
-  const userId = normalizeIdentifier(input.userId);
-  const displayName = normalizeDisplayName(input.displayName);
+  const userId = normalizeIdentifier(owner.userId);
+  const displayName = normalizeDisplayName(owner.displayName);
   return userId &&
     displayName &&
     isLowSensitiveCustomerText(displayName) &&
@@ -169,11 +327,13 @@ function normalizeOwner(
 }
 
 function normalizeProject(
-  input: CustomerOverviewProjectV1,
-  policy: CustomerOverviewProjectionPolicy,
+  input: unknown,
+  policy: CustomerOverviewPolicySnapshot,
 ) {
-  const projectId = normalizeIdentifier(input.projectId);
-  const displayName = normalizeDisplayName(input.displayName);
+  const project = snapshotRequiredDataFields(input, PROJECT_KEYS);
+  if (!project) return null;
+  const projectId = normalizeIdentifier(project.projectId);
+  const displayName = normalizeDisplayName(project.displayName);
   return projectId &&
     displayName &&
     isLowSensitiveCustomerText(displayName) &&
@@ -183,8 +343,8 @@ function normalizeProject(
 }
 
 function normalizeProjects(
-  inputs: readonly CustomerOverviewProjectV1[],
-  policy: CustomerOverviewProjectionPolicy,
+  inputs: readonly unknown[],
+  policy: CustomerOverviewPolicySnapshot,
 ) {
   const projectIds = new Set<string>();
   const projects: CustomerOverviewProjectV1[] = [];
@@ -200,15 +360,17 @@ function normalizeProjects(
 }
 
 function normalizeTags(
-  inputs: readonly CustomerOverviewTagV1[],
-  policy: CustomerOverviewProjectionPolicy,
+  inputs: readonly unknown[],
+  policy: CustomerOverviewPolicySnapshot,
 ) {
   const tagCodes = new Set<string>();
   const tags: CustomerOverviewTagV1[] = [];
 
   for (const input of inputs) {
-    const tagCode = normalizeIdentifier(input.tagCode);
-    const displayName = normalizeDisplayName(input.displayName);
+    const tag = snapshotRequiredDataFields(input, TAG_KEYS);
+    if (!tag) continue;
+    const tagCode = normalizeIdentifier(tag.tagCode);
+    const displayName = normalizeDisplayName(tag.displayName);
     if (
       !tagCode ||
       !displayName ||
@@ -226,19 +388,25 @@ function normalizeTags(
 }
 
 function normalizeLifecycleBasis(
-  input: CustomerOverviewLifecycleBasisV1 | null,
-  policy: CustomerOverviewProjectionPolicy,
+  input: unknown,
+  policy: CustomerOverviewPolicySnapshot,
 ) {
   if (input === null) return null;
+  const basis = snapshotRequiredDataFields(input, LIFECYCLE_BASIS_KEYS);
+  if (!basis) return null;
+  const basisCode = basis.basisCode;
+  const sourceKind = basis.sourceKind;
   if (
-    !policy.allowedLifecycleBasisCodes.has(input.basisCode) ||
-    !policy.allowedLifecycleBasisSourceKinds.has(input.sourceKind)
+    typeof basisCode !== 'string' ||
+    typeof sourceKind !== 'string' ||
+    !passesPolicyCheck(policy.isAllowedLifecycleBasisCode, basisCode) ||
+    !passesPolicyCheck(policy.isAllowedLifecycleBasisSourceKind, sourceKind)
   ) {
     return null;
   }
 
-  const sourceId = normalizeIdentifier(input.sourceId);
-  const occurredAt = normalizeTimestamp(input.occurredAt);
+  const sourceId = normalizeIdentifier(basis.sourceId);
+  const occurredAt = normalizeTimestamp(basis.occurredAt);
   if (
     !sourceId ||
     !occurredAt ||
@@ -248,51 +416,97 @@ function normalizeLifecycleBasis(
   }
 
   return {
-    basisCode: input.basisCode,
-    sourceKind: input.sourceKind,
+    basisCode,
+    sourceKind,
     sourceId,
     occurredAt,
   };
 }
 
 export function mapCustomerOverviewV1(
-  input: CustomerOverviewProjectionInput,
+  input: unknown,
   policy: CustomerOverviewProjectionPolicy,
 ): CustomerOverviewV1 | null {
-  const customer = normalizeCustomer(input.customer, policy);
-  const updatedAt = normalizeTimestamp(input.updatedAt);
-  if (
-    !customer ||
-    !updatedAt ||
-    !isOneOf(input.lifecycle, CUSTOMER_LIFECYCLES) ||
-    !isOneOf(input.priority, CUSTOMER_PRIORITIES) ||
-    !Array.isArray(input.projects) ||
-    !Array.isArray(input.tags)
-  ) {
-    return null;
-  }
+  try {
+    const source = snapshotRequiredDataFields(input, OVERVIEW_INPUT_KEYS);
+    const policySnapshot = snapshotOverviewPolicy(policy);
+    if (!source || !policySnapshot) return null;
 
-  const projects = normalizeProjects(input.projects, policy);
-  const normalizedPrimaryProject =
-    input.primaryProject === null ? null : normalizeProject(input.primaryProject, policy);
-  const primaryProject = normalizedPrimaryProject
-    ? projects.find(
+    const customerInput = source.customer;
+    const lifecycle = source.lifecycle;
+    const priority = source.priority;
+    const ownerInput = source.owner;
+    const primaryProjectInput = source.primaryProject;
+    const projectsInput = snapshotArrayDataItems(source.projects);
+    const tagsInput = snapshotArrayDataItems(source.tags);
+    const lifecycleBasisInput = source.lifecycleBasis;
+    const updatedAtInput = source.updatedAt;
+
+    const customer = mapCustomerReferenceV1(customerInput, policySnapshot);
+    const updatedAt = normalizeTimestamp(updatedAtInput);
+    if (
+      !customer ||
+      !updatedAt ||
+      !isOneOf(lifecycle, CUSTOMER_LIFECYCLES) ||
+      !isOneOf(priority, CUSTOMER_PRIORITIES) ||
+      !projectsInput ||
+      !tagsInput
+    ) {
+      return null;
+    }
+
+    const projects = normalizeProjects(projectsInput, policySnapshot);
+    let primaryProject: CustomerOverviewProjectV1 | null = null;
+    if (primaryProjectInput !== null) {
+      const normalizedPrimaryProject = normalizeProject(
+        primaryProjectInput,
+        policySnapshot,
+      );
+      if (!normalizedPrimaryProject) return null;
+
+      const matchedPrimaryProject = projects.find(
         (project) =>
           project.projectId === normalizedPrimaryProject.projectId &&
           project.displayName === normalizedPrimaryProject.displayName,
-      ) ?? null
-    : null;
+      );
+      if (!matchedPrimaryProject) return null;
+      primaryProject = matchedPrimaryProject;
+    }
 
-  return {
-    contractVersion: 'v1',
-    customer,
-    lifecycle: input.lifecycle,
-    priority: input.priority,
-    owner: normalizeOwner(input.owner, policy),
-    primaryProject: primaryProject ? { ...primaryProject } : null,
-    projects,
-    tags: normalizeTags(input.tags, policy),
-    lifecycleBasis: normalizeLifecycleBasis(input.lifecycleBasis, policy),
-    updatedAt,
-  };
+    return {
+      contractVersion: 'v1',
+      customer,
+      lifecycle,
+      priority,
+      owner: normalizeOwner(ownerInput, policySnapshot),
+      primaryProject: primaryProject ? { ...primaryProject } : null,
+      projects,
+      tags: normalizeTags(tagsInput, policySnapshot),
+      lifecycleBasis: normalizeLifecycleBasis(lifecycleBasisInput, policySnapshot),
+      updatedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** The first list slice intentionally reuses the same minimum whitelist as the overview DTO. */
+export type CustomerListItemV1 = {
+  contractVersion: 'v1';
+  customer: CustomerReferenceV1;
+  lifecycle: CustomerLifecycle;
+  priority: CustomerPriority;
+  owner: CustomerOverviewOwnerV1 | null;
+  primaryProject: CustomerOverviewProjectV1 | null;
+  projects: CustomerOverviewProjectV1[];
+  tags: CustomerOverviewTagV1[];
+  lifecycleBasis: CustomerOverviewLifecycleBasisV1 | null;
+  updatedAt: string;
+};
+
+export function mapCustomerListItemV1(
+  input: unknown,
+  policy: CustomerOverviewProjectionPolicy,
+): CustomerListItemV1 | null {
+  return mapCustomerOverviewV1(input, policy);
 }
