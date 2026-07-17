@@ -29,6 +29,7 @@ const bodyContentHashA = `sha256:${'1'.repeat(64)}`;
 const bodyContentHashB = `sha256:${'2'.repeat(64)}`;
 const fileContentHashA = `sha256:${'3'.repeat(64)}`;
 const fileContentHashB = `sha256:${'4'.repeat(64)}`;
+const actorId = 'actor-knowledge-editor-1';
 
 function metadata(
   overrides: Partial<KnowledgeMetadataSnapshot> = {},
@@ -533,6 +534,7 @@ function createDraft(): KnowledgeVersion {
     versionNumber: 1,
     previousVersionNumber: null,
     contentManifest: contentManifest(),
+    createdByActorId: actorId,
     createdAt: '2026-07-17T01:00:00.000Z',
   });
 
@@ -555,6 +557,27 @@ function publishVersion(version: KnowledgeVersion): KnowledgeVersion {
   });
   if (!published.ok) throw new Error(published.reasonCode);
   return published.version;
+}
+
+function readOnlyPlatformVersion(
+  lifecycle: KnowledgeVersion['lifecycle'],
+): KnowledgeVersion {
+  const manifest = contentManifest({ ownershipSource: 'platform' });
+  return Object.freeze({
+    knowledgeId: manifest.knowledgeId,
+    versionId: 'platform-version-1',
+    versionNumber: 1,
+    lifecycle,
+    metadataSnapshot: manifest.metadataSnapshot,
+    bodyRevisionId: manifest.body.bodyRevisionId,
+    fileRevisionIds: Object.freeze(
+      manifest.attachments.map((attachment) => attachment.fileRevisionId),
+    ),
+    manifestHash: manifest.manifestHash,
+    contentManifest: manifest,
+    createdByActorId: 'actor-platform-publisher-1',
+    createdAt: '2026-07-17T01:00:00.000Z',
+  });
 }
 
 describe('knowledge versioning domain', () => {
@@ -600,6 +623,7 @@ describe('knowledge versioning domain', () => {
       versionNumber: 1,
       previousVersionNumber: null,
       contentManifest: mutableManifest,
+      createdByActorId: actorId,
       createdAt: '2026-07-17T01:00:00.000Z',
     });
 
@@ -621,6 +645,7 @@ describe('knowledge versioning domain', () => {
       bodyRevisionId: 'body-revision-1',
       fileRevisionIds: ['file-revision-1', 'file-revision-2'],
       manifestHash: expectedManifest.manifestHash,
+      createdByActorId: actorId,
     });
     expect(result.version.metadataSnapshot.title).toBe('术后护理 FAQ');
     expect(result.version.metadataSnapshot.tags).toEqual(['术后', '护理']);
@@ -652,6 +677,7 @@ describe('knowledge versioning domain', () => {
         },
         attachments: [],
       }),
+      createdByActorId: actorId,
       createdAt: '2026-07-17T02:00:00.000Z',
     });
 
@@ -677,6 +703,7 @@ describe('knowledge versioning domain', () => {
       versionNumber: 1,
       previousVersionNumber: null,
       contentManifest: duplicateManifest,
+      createdByActorId: actorId,
       createdAt: '2026-07-17T01:00:00.000Z',
     });
     const tamperedHash = createKnowledgeDraftVersion({
@@ -687,6 +714,7 @@ describe('knowledge versioning domain', () => {
         ...structuredClone(contentManifest({ attachments: [] })),
         manifestHash: `sha256:${'f'.repeat(64)}`,
       },
+      createdByActorId: actorId,
       createdAt: '2026-07-17T01:00:00.000Z',
     });
 
@@ -735,6 +763,7 @@ describe('knowledge versioning domain', () => {
       previousVersionNumber: null,
       contentManifest: contentManifest(),
       manifestHash: `sha256:${'f'.repeat(64)}`,
+      createdByActorId: actorId,
       createdAt: '2026-07-17T01:00:00.000Z',
     } as unknown as Parameters<typeof createKnowledgeDraftVersion>[0]);
     expect(rawHashBypass).toEqual({ ok: false, reasonCode: 'input_invalid' });
@@ -839,6 +868,7 @@ describe('knowledge versioning domain', () => {
     expect(draft.lifecycle).toBe('draft');
     expect(publishing.version.metadataSnapshot).toEqual(draft.metadataSnapshot);
     expect(publishing.version.manifestHash).toBe(draft.manifestHash);
+    expect(publishing.version.createdByActorId).toBe(actorId);
 
     if (!published.ok) return;
     expect(transitionKnowledgeVersionLifecycle({
@@ -898,6 +928,7 @@ describe('knowledge versioning domain', () => {
           versionNumber: 1,
           previousVersionNumber: null,
           contentManifest: contentManifest(),
+          createdByActorId: actorId,
           createdAt: '2026-07-17T01:00:00.000Z',
         };
         return createKnowledgeDraftVersion(
@@ -921,6 +952,7 @@ describe('knowledge versioning domain', () => {
               tags: '护理',
             } as unknown as KnowledgeMetadataSnapshot,
           },
+          createdByActorId: actorId,
           createdAt: '2026-07-17T01:00:00.000Z',
         }),
     },
@@ -932,6 +964,7 @@ describe('knowledge versioning domain', () => {
           versionNumber: 1,
           previousVersionNumber: null,
           contentManifest: contentManifest(),
+          createdByActorId: actorId,
           createdAt: '2026-07-17T01:00:00.000Z',
         }),
     },
@@ -943,6 +976,7 @@ describe('knowledge versioning domain', () => {
           versionNumber: 1,
           previousVersionNumber: null,
           contentManifest: contentManifest(),
+          createdByActorId: actorId,
           createdAt: 'not-a-date',
         }),
     },
@@ -957,6 +991,7 @@ describe('knowledge versioning domain', () => {
             ...structuredClone(contentManifest()),
             metadataSnapshot: metadata({ effectiveAt: 'not-a-date' }),
           },
+          createdByActorId: actorId,
           createdAt: '2026-07-17T01:00:00.000Z',
         }),
     },
@@ -992,6 +1027,7 @@ describe('knowledge versioning domain', () => {
             },
             attachments: [],
           }),
+          createdByActorId: actorId,
           createdAt: '2026-07-17T03:00:00.000Z',
         } as unknown as Parameters<
           typeof createNextDraftFromPublishedVersion
@@ -1027,6 +1063,7 @@ describe('knowledge versioning domain', () => {
       sourceVersion: published,
       versionId: 'version-2',
       contentManifest: nextManifest,
+      createdByActorId: 'actor-knowledge-editor-2',
       createdAt: '2026-07-17T03:00:00.000Z',
     });
 
@@ -1040,6 +1077,7 @@ describe('knowledge versioning domain', () => {
       lifecycle: 'draft',
       bodyRevisionId: 'body-revision-2',
       manifestHash: nextManifest.manifestHash,
+      createdByActorId: 'actor-knowledge-editor-2',
     });
     expect(published).toMatchObject({
       versionId: 'version-1',
@@ -1053,6 +1091,7 @@ describe('knowledge versioning domain', () => {
       sourceVersion: createDraft(),
       versionId: 'version-2',
       contentManifest: nextManifest,
+      createdByActorId: 'actor-knowledge-editor-2',
       createdAt: '2026-07-17T03:00:00.000Z',
     });
     expect(fromDraft).toEqual({
@@ -1068,6 +1107,7 @@ describe('knowledge versioning domain', () => {
         ...manifestInput(),
         metadataSnapshot: metadata({ title: '不应接受的修订' }),
       }),
+      createdByActorId: 'actor-knowledge-editor-2',
       createdAt: '2026-07-17T03:00:00.000Z',
     });
     expect(reusedVersionId).toEqual({
@@ -1091,6 +1131,7 @@ describe('knowledge versioning domain', () => {
         },
         attachments: [],
       }),
+      createdByActorId: 'actor-knowledge-editor-2',
       createdAt: '2026-07-17T03:00:00.000Z',
     });
     expect(overflow).toEqual({
@@ -1114,6 +1155,7 @@ describe('knowledge versioning domain', () => {
       sourceVersion: published,
       versionId: 'version-2',
       contentManifest: foreignManifest,
+      createdByActorId: 'actor-knowledge-editor-2',
       createdAt: '2026-07-17T03:00:00.000Z',
     });
 
@@ -1131,9 +1173,114 @@ describe('knowledge versioning domain', () => {
       sourceVersion: published,
       versionId: 'version-2',
       contentManifest: contentManifest(),
+      createdByActorId: 'actor-knowledge-editor-2',
       createdAt: '2026-07-17T00:59:59.999Z',
     });
 
     expect(result).toEqual({ ok: false, reasonCode: 'input_invalid' });
+  });
+
+  it('keeps platform-owned versions readable but rejects every institution mutation entry point', () => {
+    const platformManifest = contentManifest({ ownershipSource: 'platform' });
+    const createInput = {
+      versionId: 'platform-version-1',
+      versionNumber: 1,
+      previousVersionNumber: null,
+      contentManifest: platformManifest,
+      createdByActorId: actorId,
+      createdAt: '2026-07-17T01:00:00.000Z',
+    } as const;
+    const platformDraft = readOnlyPlatformVersion('draft');
+    const platformPublished = readOnlyPlatformVersion('published');
+    const nextManifest = contentManifest({
+      ownershipSource: 'platform',
+      body: {
+        ...manifestInput().body,
+        bodyRevisionId: 'body-revision-2',
+        contentHash: bodyContentHashB,
+      },
+      attachments: [],
+    });
+    const nextInput = {
+      sourceVersion: platformPublished,
+      versionId: 'platform-version-2',
+      contentManifest: nextManifest,
+      createdByActorId: actorId,
+      createdAt: '2026-07-17T03:00:00.000Z',
+    } as const;
+    const createBefore = structuredClone(createInput);
+    const transitionBefore = structuredClone(platformDraft);
+    const nextBefore = structuredClone(nextInput);
+
+    expect(isValidKnowledgeVersion(platformDraft)).toBe(true);
+    expect(isValidKnowledgeVersion(platformPublished)).toBe(true);
+    expect(createKnowledgeDraftVersion(createInput)).toEqual({
+      ok: false,
+      reasonCode: 'platform_read_only',
+    });
+    expect(
+      transitionKnowledgeVersionLifecycle({
+        version: platformDraft,
+        to: 'publishing',
+      }),
+    ).toEqual({ ok: false, reasonCode: 'platform_read_only' });
+    expect(createNextDraftFromPublishedVersion(nextInput)).toEqual({
+      ok: false,
+      reasonCode: 'platform_read_only',
+    });
+    expect(createInput).toEqual(createBefore);
+    expect(platformDraft).toEqual(transitionBefore);
+    expect(nextInput).toEqual(nextBefore);
+  });
+
+  it('requires controlled version actors and records a new actor for each new draft', () => {
+    const missingActor = {
+      versionId: 'version-missing-actor',
+      versionNumber: 1,
+      previousVersionNumber: null,
+      contentManifest: contentManifest(),
+      createdAt: '2026-07-17T01:00:00.000Z',
+    };
+    const invalidActor = {
+      ...missingActor,
+      createdByActorId: 'actor with spaces',
+    };
+
+    for (const input of [missingActor, invalidActor]) {
+      expect(() =>
+        createKnowledgeDraftVersion(
+          input as unknown as Parameters<
+            typeof createKnowledgeDraftVersion
+          >[0],
+        ),
+      ).not.toThrow();
+      expect(
+        createKnowledgeDraftVersion(
+          input as unknown as Parameters<
+            typeof createKnowledgeDraftVersion
+          >[0],
+        ),
+      ).toEqual({ ok: false, reasonCode: 'input_invalid' });
+    }
+
+    const published = publishVersion(createDraft());
+    const next = createNextDraftFromPublishedVersion({
+      sourceVersion: published,
+      versionId: 'version-actor-2',
+      contentManifest: contentManifest({
+        body: {
+          ...manifestInput().body,
+          bodyRevisionId: 'body-revision-actor-2',
+          contentHash: bodyContentHashB,
+        },
+        attachments: [],
+      }),
+      createdByActorId: 'actor-knowledge-editor-2',
+      createdAt: '2026-07-17T03:00:00.000Z',
+    });
+    expect(next.ok).toBe(true);
+    if (!next.ok) return;
+    expect(published.createdByActorId).toBe(actorId);
+    expect(next.version.createdByActorId).toBe('actor-knowledge-editor-2');
   });
 });

@@ -57,6 +57,7 @@ export type KnowledgeVersion = Readonly<{
   fileRevisionIds: readonly string[];
   manifestHash: string;
   contentManifest: KnowledgeContentManifest;
+  createdByActorId: string;
   createdAt: string;
 }>;
 
@@ -65,6 +66,7 @@ export type CreateKnowledgeDraftVersionInput = Readonly<{
   versionNumber: number;
   previousVersionNumber: number | null;
   contentManifest: KnowledgeContentManifest;
+  createdByActorId: string;
   createdAt: string;
 }>;
 
@@ -72,6 +74,7 @@ export type CreateNextDraftFromPublishedVersionInput = Readonly<{
   sourceVersion: KnowledgeVersion;
   versionId: string;
   contentManifest: KnowledgeContentManifest;
+  createdByActorId: string;
   createdAt: string;
 }>;
 
@@ -80,6 +83,7 @@ export type KnowledgeVersioningFailureCode =
   | 'input_invalid'
   | 'manifest_binding_mismatch'
   | 'manifest_hash_mismatch'
+  | 'platform_read_only'
   | 'source_version_not_published'
   | 'version_id_reused'
   | 'version_lifecycle_transition_invalid'
@@ -312,6 +316,7 @@ function validateKnowledgeVersion(value: unknown): KnowledgeVersionValidation {
         'fileRevisionIds',
         'manifestHash',
         'contentManifest',
+        'createdByActorId',
         'createdAt',
       ]) ||
       !isReferenceId(value.knowledgeId) ||
@@ -325,6 +330,7 @@ function validateKnowledgeVersion(value: unknown): KnowledgeVersionValidation {
       !value.fileRevisionIds.every(isReferenceId) ||
       typeof value.manifestHash !== 'string' ||
       !manifestHashPattern.test(value.manifestHash) ||
+      !isReferenceId(value.createdByActorId) ||
       !isIsoTimestamp(value.createdAt)
     ) {
       return Object.freeze({ ok: false, reasonCode: 'input_invalid' });
@@ -387,6 +393,7 @@ function freezeVersion(input: Readonly<{
   versionNumber: number;
   lifecycle: KnowledgeVersionLifecycle;
   contentManifest: KnowledgeContentManifest;
+  createdByActorId: string;
   createdAt: string;
 }>): KnowledgeVersion {
   const manifest = input.contentManifest;
@@ -402,6 +409,7 @@ function freezeVersion(input: Readonly<{
     ),
     manifestHash: manifest.manifestHash,
     contentManifest: manifest,
+    createdByActorId: input.createdByActorId,
     createdAt: input.createdAt,
   });
 }
@@ -425,6 +433,7 @@ export function createKnowledgeDraftVersion(
         'versionNumber',
         'previousVersionNumber',
         'contentManifest',
+        'createdByActorId',
         'createdAt',
       ]) ||
       !isReferenceId(input.versionId) ||
@@ -434,6 +443,7 @@ export function createKnowledgeDraftVersion(
         (Number.isSafeInteger(input.previousVersionNumber) &&
           input.previousVersionNumber > 0)
       ) ||
+      !isReferenceId(input.createdByActorId) ||
       !isIsoTimestamp(input.createdAt)
     ) {
       return failure('input_invalid');
@@ -444,6 +454,10 @@ export function createKnowledgeDraftVersion(
     );
     if (!manifestValidation.ok) {
       return failure(mapManifestFailure(manifestValidation.reasonCode));
+    }
+
+    if (manifestValidation.manifest.ownershipSource === 'platform') {
+      return failure('platform_read_only');
     }
 
     if (
@@ -461,6 +475,7 @@ export function createKnowledgeDraftVersion(
         versionNumber: input.versionNumber,
         lifecycle: 'draft',
         contentManifest: manifestValidation.manifest,
+        createdByActorId: input.createdByActorId,
         createdAt: input.createdAt,
       }),
     });
@@ -485,6 +500,10 @@ export function transitionKnowledgeVersionLifecycle(input: Readonly<{
     const validation = validateKnowledgeVersion(input.version);
     if (!validation.ok) return failure(validation.reasonCode);
 
+    if (validation.contentManifest.ownershipSource === 'platform') {
+      return failure('platform_read_only');
+    }
+
     const allowedTargets =
       allowedLifecycleTransitions[validation.version.lifecycle];
     if (!allowedTargets.includes(input.to)) {
@@ -498,6 +517,7 @@ export function transitionKnowledgeVersionLifecycle(input: Readonly<{
         versionNumber: validation.version.versionNumber,
         lifecycle: input.to,
         contentManifest: validation.contentManifest,
+        createdByActorId: validation.version.createdByActorId,
         createdAt: validation.version.createdAt,
       }),
     });
@@ -516,9 +536,11 @@ export function createNextDraftFromPublishedVersion(
         'sourceVersion',
         'versionId',
         'contentManifest',
+        'createdByActorId',
         'createdAt',
       ]) ||
       !isReferenceId(input.versionId) ||
+      !isReferenceId(input.createdByActorId) ||
       !isIsoTimestamp(input.createdAt)
     ) {
       return failure('input_invalid');
@@ -532,6 +554,10 @@ export function createNextDraftFromPublishedVersion(
     );
     if (!manifestValidation.ok) {
       return failure(mapManifestFailure(manifestValidation.reasonCode));
+    }
+
+    if (sourceValidation.contentManifest.ownershipSource === 'platform') {
+      return failure('platform_read_only');
     }
 
     if (sourceValidation.version.lifecycle !== 'published') {
@@ -567,6 +593,7 @@ export function createNextDraftFromPublishedVersion(
       versionNumber: sourceValidation.version.versionNumber + 1,
       previousVersionNumber: sourceValidation.version.versionNumber,
       contentManifest: manifestValidation.manifest,
+      createdByActorId: input.createdByActorId,
       createdAt: input.createdAt,
     });
   } catch {

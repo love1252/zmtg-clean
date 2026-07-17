@@ -1,14 +1,12 @@
 import { isProxy } from 'node:util/types';
 
 import {
-  knowledgeAssetApprovalStatuses,
   knowledgeItemLifecycles,
   knowledgeSafetyStatuses,
   knowledgeUseScopes,
   knowledgeVersionLifecycles,
   isValidKnowledgeVersion,
   transitionKnowledgeVersionLifecycle,
-  type KnowledgeAssetApprovalStatus,
   type KnowledgeItemLifecycle,
   type KnowledgeSafetyStatus,
   type KnowledgeUseScope,
@@ -31,6 +29,16 @@ export const knowledgePublicationLifecycles = Object.freeze([
 export type KnowledgePublicationLifecycle =
   (typeof knowledgePublicationLifecycles)[number];
 
+export const knowledgeWithdrawalReasonCodes = Object.freeze([
+  'content_error',
+  'content_outdated',
+  'safety_revoked',
+  'policy_revoked',
+] as const);
+
+export type KnowledgeWithdrawalReasonCode =
+  (typeof knowledgeWithdrawalReasonCodes)[number];
+
 export type KnowledgePublication = Readonly<{
   publicationId: string;
   knowledgeId: string;
@@ -41,8 +49,11 @@ export type KnowledgePublication = Readonly<{
   complete: boolean;
   safetyStatus: KnowledgeSafetyStatus;
   useScope: KnowledgeUseScope;
+  publishedByActorId: string;
   publishedAt: string;
   withdrawnAt: string | null;
+  withdrawnByActorId: string | null;
+  withdrawReasonCode: KnowledgeWithdrawalReasonCode | null;
 }>;
 
 export type KnowledgePublicationState = Readonly<{
@@ -54,6 +65,7 @@ export type KnowledgePublicationState = Readonly<{
     lifecycle: KnowledgeItemLifecycle;
     revision: number;
     lastDecidedAt: string | null;
+    lastDecidedByActorId: string | null;
   }>;
   currentPublicationId: string | null;
   publications: readonly KnowledgePublication[];
@@ -67,9 +79,23 @@ export type KnowledgePublicationGateEvidence = Readonly<{
   useScopeEligible: boolean;
 }>;
 
+export type KnowledgeRollbackGateEvidence = Readonly<{
+  targetPublicationId: string;
+  targetVersionId: string;
+  targetVersionNumber: number;
+  observedManifestHash: string;
+  observedRevision: number;
+  observedAt: string;
+  parseReady: boolean;
+  indexReady: boolean;
+  safetyStatus: KnowledgeSafetyStatus;
+  useScopeEligible: boolean;
+}>;
+
 type KnowledgePublicationCommandBase = Readonly<{
   idempotencyKey: string;
   expectedRevision: number;
+  actorId: string;
   decidedAt: string;
 }>;
 
@@ -85,11 +111,13 @@ export type KnowledgePublicationCommand =
       Readonly<{
         kind: 'rollback';
         targetPublicationId: string;
+        gateEvidence: KnowledgeRollbackGateEvidence;
       }>)
   | (KnowledgePublicationCommandBase &
       Readonly<{
         kind: 'withdraw';
         targetPublicationId: string;
+        reasonCode: KnowledgeWithdrawalReasonCode;
       }>)
   | (KnowledgePublicationCommandBase & Readonly<{ kind: 'retire' }>);
 
@@ -113,9 +141,12 @@ export type KnowledgePublicationFailureCode =
   | 'item_retired'
   | 'manifest_mismatch'
   | 'parse_not_ready'
+  | 'platform_read_only'
   | 'publication_id_reused'
   | 'revision_overflow'
   | 'rollback_target_incomplete'
+  | 'rollback_target_binding_mismatch'
+  | 'rollback_evidence_stale'
   | 'rollback_target_not_found'
   | 'rollback_target_not_historical'
   | 'rollback_target_unsafe'
@@ -182,10 +213,7 @@ export type KnowledgeUseAvailability = Readonly<{
 }>;
 
 export type KnowledgeUseAvailabilityReasonCode =
-  | 'asset_approval_blocked'
-  | 'asset_approval_invalid'
-  | 'asset_approval_withdrawn'
-  | 'asset_not_approved'
+  | 'asset_binding_unavailable'
   | 'current_publication_unavailable'
   | 'item_retired'
   | 'publication_incomplete'
@@ -206,8 +234,11 @@ function freezePublication(
     complete: publication.complete,
     safetyStatus: publication.safetyStatus,
     useScope: publication.useScope,
+    publishedByActorId: publication.publishedByActorId,
     publishedAt: publication.publishedAt,
     withdrawnAt: publication.withdrawnAt,
+    withdrawnByActorId: publication.withdrawnByActorId,
+    withdrawReasonCode: publication.withdrawReasonCode,
   });
 }
 
@@ -220,6 +251,7 @@ function freezeState(state: KnowledgePublicationState): KnowledgePublicationStat
     lifecycle: state.item.lifecycle,
     revision: state.item.revision,
     lastDecidedAt: state.item.lastDecidedAt,
+    lastDecidedByActorId: state.item.lastDecidedByActorId,
   });
   const publications = Object.freeze(
     state.publications.map((publication) => freezePublication(publication)),
@@ -261,6 +293,7 @@ function freezeCandidateVersion(
     fileRevisionIds: Object.freeze([...version.fileRevisionIds]),
     manifestHash: version.manifestHash,
     contentManifest: manifestValidation.manifest,
+    createdByActorId: version.createdByActorId,
     createdAt: version.createdAt,
   });
 }
@@ -474,6 +507,7 @@ function commandPayloadFingerprint(
       previousState.item.lifecycle,
       previousState.item.revision,
       previousState.item.lastDecidedAt,
+      previousState.item.lastDecidedByActorId,
     ],
     previousState.currentPublicationId,
     previousState.publications.map((publication) => [
@@ -486,14 +520,18 @@ function commandPayloadFingerprint(
       publication.complete,
       publication.safetyStatus,
       publication.useScope,
+      publication.publishedByActorId,
       publication.publishedAt,
       publication.withdrawnAt,
+      publication.withdrawnByActorId,
+      publication.withdrawReasonCode,
     ]),
   ];
   const commonFields = [
     knowledgeId,
     command.kind,
     command.expectedRevision,
+    command.actorId,
     command.decidedAt,
     previousStateFields,
   ];
@@ -511,6 +549,7 @@ function commandPayloadFingerprint(
       candidateVersion.bodyRevisionId,
       [...candidateVersion.fileRevisionIds],
       candidateVersion.manifestHash,
+      candidateVersion.createdByActorId,
       candidateVersion.createdAt,
       gateEvidence.observedManifestHash,
       gateEvidence.parseReady,
@@ -520,8 +559,29 @@ function commandPayloadFingerprint(
     ]);
   }
 
-  if (command.kind === 'rollback' || command.kind === 'withdraw') {
-    return encodeCanonicalJson([...commonFields, command.targetPublicationId]);
+  if (command.kind === 'rollback') {
+    return encodeCanonicalJson([
+      ...commonFields,
+      command.targetPublicationId,
+      command.gateEvidence.targetPublicationId,
+      command.gateEvidence.targetVersionId,
+      command.gateEvidence.targetVersionNumber,
+      command.gateEvidence.observedManifestHash,
+      command.gateEvidence.observedRevision,
+      command.gateEvidence.observedAt,
+      command.gateEvidence.parseReady,
+      command.gateEvidence.indexReady,
+      command.gateEvidence.safetyStatus,
+      command.gateEvidence.useScopeEligible,
+    ]);
+  }
+
+  if (command.kind === 'withdraw') {
+    return encodeCanonicalJson([
+      ...commonFields,
+      command.targetPublicationId,
+      command.reasonCode,
+    ]);
   }
 
   return encodeCanonicalJson(commonFields);
@@ -565,6 +625,7 @@ function normalizedCandidatesEqual(
       left.contentManifest,
       right.contentManifest,
     ) &&
+    left.createdByActorId === right.createdByActorId &&
     left.createdAt === right.createdAt
   );
 }
@@ -782,20 +843,27 @@ function isValidPublication(value: unknown): value is KnowledgePublication {
       'complete',
       'safetyStatus',
       'useScope',
+      'publishedByActorId',
       'publishedAt',
       'withdrawnAt',
+      'withdrawnByActorId',
+      'withdrawReasonCode',
     ])
   ) {
     return false;
   }
 
   const hasValidPublishedAt = isIsoTimestamp(value.publishedAt);
-  const hasValidWithdrawnAt =
+  const hasValidWithdrawalFields =
     value.lifecycle === 'withdrawn'
       ? isIsoTimestamp(value.withdrawnAt) &&
+        isReferenceId(value.withdrawnByActorId) &&
+        isOneOf(value.withdrawReasonCode, knowledgeWithdrawalReasonCodes) &&
         hasValidPublishedAt &&
         isAtOrAfterTimestamp(value.withdrawnAt, value.publishedAt as string)
-      : value.withdrawnAt === null;
+      : value.withdrawnAt === null &&
+        value.withdrawnByActorId === null &&
+        value.withdrawReasonCode === null;
 
   return (
     isReferenceId(value.publicationId) &&
@@ -809,9 +877,46 @@ function isValidPublication(value: unknown): value is KnowledgePublication {
     typeof value.complete === 'boolean' &&
     isOneOf(value.safetyStatus, knowledgeSafetyStatuses) &&
     isOneOf(value.useScope, knowledgeUseScopes) &&
+    isReferenceId(value.publishedByActorId) &&
     hasValidPublishedAt &&
-    hasValidWithdrawnAt
+    hasValidWithdrawalFields
   );
+}
+
+function hasContinuousPublicationHistory(
+  item: KnowledgePublicationState['item'],
+  publications: readonly KnowledgePublication[],
+): boolean {
+  if (item.revision < publications.length) return false;
+  if (
+    (publications.length > 0 || item.lifecycle === 'retired') &&
+    (item.lastDecidedAt === null || item.lastDecidedByActorId === null)
+  ) {
+    return false;
+  }
+
+  for (let index = 0; index < publications.length; index += 1) {
+    const publication = publications[index];
+    if (publication === undefined || publication.versionNumber !== index + 1) {
+      return false;
+    }
+    const previous = publications[index - 1];
+    if (
+      previous !== undefined &&
+      !isAtOrAfterTimestamp(publication.publishedAt, previous.publishedAt)
+    ) {
+      return false;
+    }
+    if (
+      item.lastDecidedAt === null ||
+      !isAtOrAfterTimestamp(item.lastDecidedAt, publication.publishedAt) ||
+      (publication.withdrawnAt !== null &&
+        !isAtOrAfterTimestamp(item.lastDecidedAt, publication.withdrawnAt))
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function isValidState(state: unknown): state is KnowledgePublicationState {
@@ -831,6 +936,7 @@ function isValidState(state: unknown): state is KnowledgePublicationState {
       'lifecycle',
       'revision',
       'lastDecidedAt',
+      'lastDecidedByActorId',
     ]) ||
     !isDenseDataArray(state.publications) ||
     !(state.currentPublicationId === null ||
@@ -841,9 +947,13 @@ function isValidState(state: unknown): state is KnowledgePublicationState {
     !isOneOf(state.item.ownershipSource, knowledgeOwnershipSources) ||
     !isOneOf(state.item.lifecycle, knowledgeItemLifecycles) ||
     !Number.isSafeInteger(state.item.revision) ||
-    (state.item.revision as number) < 0 ||
-    !(state.item.lastDecidedAt === null ||
-      isIsoTimestamp(state.item.lastDecidedAt)) ||
+    (state.item.revision as number) <= 0 ||
+    !(
+      (state.item.lastDecidedAt === null &&
+        state.item.lastDecidedByActorId === null) ||
+      (isIsoTimestamp(state.item.lastDecidedAt) &&
+        isReferenceId(state.item.lastDecidedByActorId))
+    ) ||
     !state.publications.every(isValidPublication)
   ) {
     return false;
@@ -864,7 +974,8 @@ function isValidState(state: unknown): state is KnowledgePublicationState {
     new Set(versionNumbers).size !== versionNumbers.length ||
     publications.some(
       (publication) => publication.knowledgeId !== item.knowledgeId,
-    )
+    ) ||
+    !hasContinuousPublicationHistory(item, publications)
   ) {
     return false;
   }
@@ -1066,8 +1177,11 @@ function decidePublish(
     complete: true,
     safetyStatus: command.gateEvidence.safetyStatus,
     useScope: candidate.metadataSnapshot.useScope,
+    publishedByActorId: command.actorId,
     publishedAt: command.decidedAt,
     withdrawnAt: null,
+    withdrawnByActorId: null,
+    withdrawReasonCode: null,
   });
 
   const publicationTransitions: KnowledgePublicationTransition[] = [];
@@ -1085,6 +1199,7 @@ function decidePublish(
         ...state.item,
         revision: state.item.revision + 1,
         lastDecidedAt: command.decidedAt,
+        lastDecidedByActorId: command.actorId,
       },
       currentPublicationId: command.publicationId,
       publications,
@@ -1111,6 +1226,34 @@ function decideRollback(
   }
 
   const reasonCodes: KnowledgePublicationFailureCode[] = [];
+  const gateEvidence = command.gateEvidence;
+  if (
+    gateEvidence.targetPublicationId !== command.targetPublicationId ||
+    gateEvidence.targetPublicationId !== target.publicationId ||
+    gateEvidence.targetVersionId !== target.versionId ||
+    gateEvidence.targetVersionNumber !== target.versionNumber ||
+    gateEvidence.observedManifestHash !== target.manifestHash
+  ) {
+    reasonCodes.push('rollback_target_binding_mismatch');
+  }
+  if (
+    gateEvidence.observedRevision !== state.item.revision ||
+    gateEvidence.observedAt !== command.decidedAt
+  ) {
+    reasonCodes.push('rollback_evidence_stale');
+  }
+  if (!gateEvidence.parseReady) {
+    reasonCodes.push('parse_not_ready');
+  }
+  if (!gateEvidence.indexReady) {
+    reasonCodes.push('index_not_ready');
+  }
+  if (gateEvidence.safetyStatus !== 'allowed') {
+    reasonCodes.push('safety_not_allowed');
+  }
+  if (!gateEvidence.useScopeEligible) {
+    reasonCodes.push('use_scope_ineligible');
+  }
   if (target.lifecycle === 'withdrawn') {
     reasonCodes.push('rollback_target_withdrawn');
   } else if (target.lifecycle !== 'superseded') {
@@ -1164,6 +1307,7 @@ function decideRollback(
         ...state.item,
         revision: state.item.revision + 1,
         lastDecidedAt: command.decidedAt,
+        lastDecidedByActorId: command.actorId,
       },
       currentPublicationId: target.publicationId,
       publications,
@@ -1202,6 +1346,8 @@ function decideWithdraw(
       ...publication,
       lifecycle: 'withdrawn' as const,
       withdrawnAt: command.decidedAt,
+      withdrawnByActorId: command.actorId,
+      withdrawReasonCode: command.reasonCode,
     };
   });
   const withdrewCurrent = state.currentPublicationId === target.publicationId;
@@ -1213,6 +1359,7 @@ function decideWithdraw(
         ...state.item,
         revision: state.item.revision + 1,
         lastDecidedAt: command.decidedAt,
+        lastDecidedByActorId: command.actorId,
       },
       currentPublicationId: withdrewCurrent
         ? null
@@ -1261,6 +1408,7 @@ function decideRetire(
         lifecycle: 'retired',
         revision: state.item.revision + 1,
         lastDecidedAt: command.decidedAt,
+        lastDecidedByActorId: command.actorId,
       },
       currentPublicationId: null,
       publications,
@@ -1285,8 +1433,42 @@ function hasValidCommandBase(command: Record<string, unknown>): boolean {
   return (
     typeof command.idempotencyKey === 'string' &&
     Number.isSafeInteger(command.expectedRevision) &&
-    (command.expectedRevision as number) >= 0 &&
+    (command.expectedRevision as number) > 0 &&
+    isReferenceId(command.actorId) &&
     isIsoTimestamp(command.decidedAt)
+  );
+}
+
+function isValidRollbackGateEvidence(
+  value: unknown,
+): value is KnowledgeRollbackGateEvidence {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, [
+      'targetPublicationId',
+      'targetVersionId',
+      'targetVersionNumber',
+      'observedManifestHash',
+      'observedRevision',
+      'observedAt',
+      'parseReady',
+      'indexReady',
+      'safetyStatus',
+      'useScopeEligible',
+    ]) &&
+    isReferenceId(value.targetPublicationId) &&
+    isReferenceId(value.targetVersionId) &&
+    Number.isSafeInteger(value.targetVersionNumber) &&
+    (value.targetVersionNumber as number) > 0 &&
+    typeof value.observedManifestHash === 'string' &&
+    manifestHashPattern.test(value.observedManifestHash) &&
+    Number.isSafeInteger(value.observedRevision) &&
+    (value.observedRevision as number) > 0 &&
+    isIsoTimestamp(value.observedAt) &&
+    typeof value.parseReady === 'boolean' &&
+    typeof value.indexReady === 'boolean' &&
+    isOneOf(value.safetyStatus, knowledgeSafetyStatuses) &&
+    typeof value.useScopeEligible === 'boolean'
   );
 }
 
@@ -1305,6 +1487,7 @@ function isValidCommandShape(
         'kind',
         'idempotencyKey',
         'expectedRevision',
+        'actorId',
         'decidedAt',
         'publicationId',
         'candidateVersion',
@@ -1335,20 +1518,37 @@ function isValidCommandShape(
     );
   }
 
-  if (
-    kindDescriptor.value === 'rollback' ||
-    kindDescriptor.value === 'withdraw'
-  ) {
+  if (kindDescriptor.value === 'rollback') {
     return (
       hasExactKeys(command, [
         'kind',
         'idempotencyKey',
         'expectedRevision',
+        'actorId',
         'decidedAt',
         'targetPublicationId',
+        'gateEvidence',
       ]) &&
       hasValidCommandBase(command) &&
-      isReferenceId(command.targetPublicationId)
+      isReferenceId(command.targetPublicationId) &&
+      isValidRollbackGateEvidence(command.gateEvidence)
+    );
+  }
+
+  if (kindDescriptor.value === 'withdraw') {
+    return (
+      hasExactKeys(command, [
+        'kind',
+        'idempotencyKey',
+        'expectedRevision',
+        'actorId',
+        'decidedAt',
+        'targetPublicationId',
+        'reasonCode',
+      ]) &&
+      hasValidCommandBase(command) &&
+      isReferenceId(command.targetPublicationId) &&
+      isOneOf(command.reasonCode, knowledgeWithdrawalReasonCodes)
     );
   }
 
@@ -1358,6 +1558,7 @@ function isValidCommandShape(
       'kind',
       'idempotencyKey',
       'expectedRevision',
+      'actorId',
       'decidedAt',
     ]) &&
     hasValidCommandBase(command)
@@ -1471,6 +1672,7 @@ const invalidInputState = freezeState({
     lifecycle: 'active',
     revision: 0,
     lastDecidedAt: null,
+    lastDecidedByActorId: null,
   }),
   currentPublicationId: null,
   publications: Object.freeze([]),
@@ -1551,6 +1753,10 @@ function decideKnowledgePublicationInternal(
 
   if (!isValidState(input.state)) {
     return blockedDecision(invalidInputState, 'state_invalid');
+  }
+
+  if (input.state.item.ownershipSource === 'platform') {
+    return blockedDecision(freezeState(input.state), 'platform_read_only');
   }
 
   const existingRecord = input.existingIdempotencyRecord;
@@ -1685,7 +1891,6 @@ function unavailable(
 
 type KnowledgeUseAvailabilityInput = Readonly<{
   state: KnowledgePublicationState;
-  assetApprovalStatus: KnowledgeAssetApprovalStatus;
 }>;
 
 function evaluateKnowledgeUseAvailabilityInternal(
@@ -1693,11 +1898,6 @@ function evaluateKnowledgeUseAvailabilityInternal(
 ): KnowledgeUseAvailability {
   if (!isValidState(input.state)) {
     return unavailable('state_invalid');
-  }
-  if (
-    !isOneOf(input.assetApprovalStatus, knowledgeAssetApprovalStatuses)
-  ) {
-    return unavailable('asset_approval_invalid');
   }
   if (input.state.item.lifecycle === 'retired') {
     return unavailable('item_retired');
@@ -1718,20 +1918,12 @@ function evaluateKnowledgeUseAvailabilityInternal(
   if (currentPublication.useScope === 'internal_only') {
     reasonCodes.push('use_scope_internal_only');
   }
-  if (input.assetApprovalStatus === 'not_approved') {
-    reasonCodes.push('asset_not_approved');
-  } else if (input.assetApprovalStatus === 'withdrawn') {
-    reasonCodes.push('asset_approval_withdrawn');
-  } else if (input.assetApprovalStatus === 'blocked') {
-    reasonCodes.push('asset_approval_blocked');
-  }
+  reasonCodes.push('asset_binding_unavailable');
 
   return Object.freeze({
     canRetrieve: true,
     canAnswer: currentPublication.useScope === 'ai_customer_reply',
-    canSendAttachment:
-      currentPublication.useScope === 'ai_customer_reply' &&
-      input.assetApprovalStatus === 'approved',
+    canSendAttachment: false,
     reasonCodes: Object.freeze(reasonCodes),
   });
 }
@@ -1740,16 +1932,11 @@ export function evaluateKnowledgeUseAvailability(
   value: KnowledgeUseAvailabilityInput,
 ): KnowledgeUseAvailability {
   try {
-    if (!isRecord(value) || !hasExactKeys(value, [
-      'state',
-      'assetApprovalStatus',
-    ])) {
+    if (!isRecord(value) || !hasExactKeys(value, ['state'])) {
       return unavailable('state_invalid');
     }
     return evaluateKnowledgeUseAvailabilityInternal({
       state: value.state as KnowledgePublicationState,
-      assetApprovalStatus:
-        value.assetApprovalStatus as KnowledgeAssetApprovalStatus,
     });
   } catch {
     return unavailable('state_invalid');
