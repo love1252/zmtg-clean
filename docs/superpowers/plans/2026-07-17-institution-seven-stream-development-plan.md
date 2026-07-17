@@ -1,6 +1,6 @@
 # 机构端七线并行开发总计划
 
-> **给智能体执行者：** 本文用于把机构端七栏目规格拆成可并行规划、可独立审查、可分批发布的开发线。本文已获准创建，但不构成任何 runtime 授权。执行源码、API、schema、migration、adapter、外部网络、真实凭证、消息发送、worker、scheduler、提交、推送、PR 或合并前，必须由用户针对具体任务再次明确批准。
+> **给智能体执行者：** 本文用于把机构端七栏目规格拆成可并行规划、可独立审查、可分批发布的开发线。本文已获准创建，但不构成任何 runtime 授权。执行源码、API、schema、migration、adapter、外部网络、真实凭证、消息发送、worker、scheduler、提交、推送、PR 或合并前，必须由用户针对具体任务再次明确批准。`PLAN-PUBLISH-01` 仅批准本轮 docs-only 提交、推送和创建草稿 PR；合并及任何 runtime 仍需后续单独授权。
 
 **目标：** 建立一个总协调台和七条独立业务开发线，使工作台、客户中心、会话工作台、预约与随访、知识库、经营分析、管理中心能够在独立 Worktree 中同步推进，同时保证共享底座、机构隔离、数据库迁移、审计、合并和正式发布不会失控。
 
@@ -13,14 +13,14 @@
 ## 一、文档状态与当前基线
 
 - 日期：`2026-07-17 CST`
-- 当前阶段：机构端七线并行开发规划，任务编号 `PAR-00`
-- 当前分支：`main`
-- 当前 `HEAD`：`dae9993a8b3de3047386f401598970f26242b809`
-- 当前 `origin/main`：`dae9993a8b3de3047386f401598970f26242b809`
-- 任务开始时工作区干净，`main` 与 `origin/main` 一致；当前仅新增本文档
+- 当前阶段：机构端七线技术计划 docs-only 发布，任务编号 `PLAN-PUBLISH-01`
+- 当前分支：`codex/institution-plan-contract-baseline`
+- 当前 `HEAD`：`e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa`
+- 当前 `main` 与 `origin/main`：`e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa`
+- 任务开始时主工作区干净，`main` 与 `origin/main` 一致；本分支仅允许修改本文档
 - 产品规格：`docs/superpowers/specs/2026-07-15-institution-navigation-page-system-design.md`
-- 本轮允许：仅新增本文档
-- 本轮不是：不修改 `src/**`、`drizzle/**`、schema、migration、API、配置、脚本、依赖或数据库，不创建 Worktree，不启动七条 runtime 任务，不提交、不推送、不创建或合并 PR
+- 本轮允许：仅修订本文档，冻结七份栏目技术计划共同依赖的规划契约，并提交、推送本 docs-only 分支和创建草稿 PR
+- 本轮不是：不修改 `src/**`、`drizzle/**`、schema、migration、API、配置、脚本、依赖或数据库，不启动七条 runtime 任务，不合并 PR
 
 产品规格确认的是产品方向，不是七条线的通用开发许可证。每个切片仍需分别确认任务编号、允许文件、禁止范围、数据影响、验证命令和停止条件。
 
@@ -195,19 +195,30 @@ BASE-01 导航与能力契约
 
 ### 4.3 跨线契约
 
-| 契约 | 所有者 | 主要消费者 | 用途 |
+所有跨线公共声明均由总协调台唯一维护。下表中的“事实/provider 所有者”只负责本模块事实和实现，不拥有第二份公共类型。
+
+| 公共契约 | 事实/provider 所有者 | 主要消费者 | 用途 |
 | --- | --- | --- | --- |
-| `CustomerReferenceV1` | 客户中心 | 工作台、会话、预约随访、经营分析 | 低敏客户引用，不含姓名以外的非必要 PII |
-| `CustomerTimelineContributionV1` | 总协调台定义接口；各业务线实现 provider | 客户中心 | 各模块贡献可解释时间线事件 |
+| `InstitutionSourceEnvelopeV1<T, K>` | 总协调台提供公共 reader 边界；各生产者返回合规结果 | 全部跨线读取 | 统一 scope、readiness、freshness、分区和失败语义 |
+| `CustomerReferenceV1` | 客户中心 | 工作台、会话、预约随访、经营分析 | 低敏客户引用，不含非必要 PII |
+| `CustomerLifecycleSummaryV1` | 客户中心 | 客户列表、工作台 | 五类生命周期低敏聚合 |
+| `CustomerTimelineContributionV1` | 各业务事实生产线 | 客户中心 | 各模块贡献可解释时间线事件 |
 | `CareActionSourceV1` | 预约与随访 | 工作台 | 预约和随访行动项、计数、详情链接与数据状态 |
 | `ConversationActionSourceV1` | 会话工作台 | 工作台 | 生产会话的风险和人工行动项 |
-| `TreatmentCareSourceV1` | 客户中心 | 预约与随访 | 治疗来源、建议、作废及路径/任务取消影响 |
+| `TreatmentCareSourceV1` | 客户中心治疗模块 | 预约与随访 | 治疗来源、建议、作废及路径/任务取消影响 |
 | `ConversationCareDispositionV1` | 会话工作台 | 预约与随访 | 简单确认、实质咨询、含糊、风险、解决时间和最后消息时间 |
-| `IdentityMatchReviewV1` | 总协调台定义接口；会话线提交、管理线确认 | 会话、管理中心、客户中心 | 未知联系人复核、候选版本和最终客户匹配 |
-| `ReachOutSafetyV1` | 总协调台定义接口；获准渠道集成任务实现 provider | 预约与随访、会话、管理中心 | 客户级渠道同意、退订、安静时段和安全发送判定 |
-| `PublishedKnowledgeReferenceV1` | 知识库 | 会话、受控 AI | 当前发布知识版本和批准素材引用 |
-| `AnalyticsCustomerConsumptionV1` | 经营分析 | 客户中心 | 客户消费只读视图，不复制金额算法 |
-| `CapabilityStatusV1` | 总协调台定义接口；各能力线实现 provider | 管理中心、公共导航 | 代码成熟度、机构授权、连接可用、生产放行和数据新鲜度摘要 |
+| `IdentityMatchReviewV1` | 会话/身份服务 | 会话、管理中心、客户中心 | 未知联系人复核、候选版本和最终客户匹配 |
+| `CreateCustomerFromIdentityReviewV1` | 客户中心处理命令；会话/身份服务编排 | 会话、客户中心 | 从已验证复核委派幂等建客，不跨库伪装原子事务 |
+| `ReachOutSafetyV1` | 获准渠道集成任务 | 预约与随访、会话、管理中心 | 客户级渠道同意、退订、安静时段和安全发送判定 |
+| `PublishedKnowledgeReferenceV1` | 知识库 | 会话、受控 AI | 当前发布知识版本和精确内容引用 |
+| `ApprovedKnowledgeAssetReferenceV1` | 知识库 | 会话素材发送、获准渠道流程 | 当前 publication 内逐附件发送批准引用 |
+| `RestrictedCustomerKnowledgeAccessV1` | 多个权威 provider；公共 reader 组合 | 客户中心、获准单客户 AI | 单客户受限附件最小安全引用与敏感 AI 门禁 |
+| `AnalyticsCustomerConsumptionV1`（内含 `AnalyticsCustomerConsumptionPayloadV1`） | 经营分析 | 客户中心 | 统一 envelope 结果别名；payload 不复制金额算法 |
+| `AnalyticsDataGovernanceSummaryV1` | 经营分析 | 管理中心 | 低敏来源覆盖、高水位、批次和治理异常摘要 |
+| `InstitutionOperatingContextV1` | 机构设置生产者 | Care、经营分析、管理中心 | 当前及待生效时区、默认币种和版本 |
+| `ControlledImportCommandV1` | 独立受控导入任务 | 管理中心发起；经营分析验收结果 | 绑定预检、映射、幂等、审计与批准行摘要的十五字段命令 |
+| `AnalyticsReportInputV1` | 经营分析 | 独立 AI 经营报告 provider | 只发送固定模板所需的机构级低敏指标 |
+| `CapabilityStatusV1` | 各能力所有者 | 工作台、管理中心、公共导航 | 代码成熟度、机构授权、连接可用、生产放行和数据新鲜度摘要 |
 
 契约规则：
 
@@ -216,6 +227,84 @@ BASE-01 导航与能力契约
 - 契约变更采用 `V1 → V2`，保留兼容窗口。
 - URL 只传对象 ID、日期和安全结构化筛选，不传姓名、金额、消息正文、外部账号或凭证。
 - 打开目标页面不等于业务操作成功，目标模块必须重新验证权限和机构归属。
+
+### 4.4 共享契约冻结基线（v1，规范性）
+
+本节是七份栏目技术计划的公共规划基线。栏目计划只可镜像或消费本节字段；出现别名或竞争形状时，以本节为准并在发布前修正文档。它仍是 docs-only 设计，不代表 `src/modules/institution-contracts/v1/**` 已存在，也不授权实现。
+
+稳定角色固定为 `tenant_admin | tenant_operator | consultant | customer_service`。统一读取外层精确为：
+
+```ts
+type InstitutionSourceReadinessV1 =
+  | 'ready'
+  | 'empty'
+  | 'partial'
+  | 'stale'
+  | 'unavailable'
+  | 'denied'
+  | 'disabled';
+
+type InstitutionSourcePartitionReadinessV1 = Exclude<
+  InstitutionSourceReadinessV1,
+  'partial'
+>;
+
+type InstitutionSourceFailureCodeV1 =
+  | 'upstream_unavailable'
+  | 'timeout'
+  | 'invalid_payload'
+  | 'scope_mismatch'
+  | 'permission_denied'
+  | 'not_released'
+  | 'data_incomplete';
+
+type InstitutionSourceFreshnessV1 = {
+  observedAt: string;
+  freshUntil: string;
+};
+
+type InstitutionSourceEnvelopeV1<T, K extends string> = {
+  contractVersion: 'v1';
+  scope: { tenantId: string; institutionId: string };
+  readiness: InstitutionSourceReadinessV1;
+  freshness: InstitutionSourceFreshnessV1 | null;
+  partitions: Array<{
+    key: K;
+    readiness: InstitutionSourcePartitionReadinessV1;
+    freshness: InstitutionSourceFreshnessV1 | null;
+    failureCode: InstitutionSourceFailureCodeV1 | null;
+  }>;
+  data: T | null;
+  failureCode: InstitutionSourceFailureCodeV1 | null;
+};
+```
+
+reader、`AccessContext`、角色和查询对象只作为服务端输入，不进入响应。只有权威查询成功并确认真实为空时才能返回 `empty` 和业务 `0`；只有顶层允许 `partial`；`stale` 不驱动当前写操作、报告生成或行动队列；顶层 `denied`、`disabled` 或任一 `scope_mismatch` 必须 fail-closed 且不返回业务 data。
+
+已冻结的专属字段与命名如下：
+
+| 契约 | v1 冻结基线 |
+| --- | --- |
+| `CustomerReferenceV1` | 精确字段为 `contractVersion`、`customerId`、`displayName`、`maskedReference`；最后一项可空。 |
+| `CustomerLifecycleSummaryV1` | payload 只有 `buckets[{ key, count }]`；key 精确为 `consulting`、`scheduled`、`post_care`、`repurchase_window`、`silent_reactivation`，count 在未知时为 `null`，不增加 total。 |
+| `CareActionSourceV1` | 四分区固定为 `pending_confirmation_appointments`、`reschedule_requested_appointments`、`overdue_followups`、`today_due_followups`；payload 只有 `cards + actions`；action 字段固定为 `entityType`、`objectId`、`sourceVersion`、`customer`、`businessState`、`cardKeys`、`sortSignals`、`appointmentAt`、`dueAt`、`slaAt`、`riskLevel`、`priority`、`owner`、`safeSummary`、`detailHref`。 |
+| `ConversationActionSourceV1` | 分区固定为 `waiting_human \| unresolved_risk`；行动字段固定为 `conversationId`、`segmentId`、`sourceVersion`、`production: true`、`subject`、`conversationState`、`riskState`、`partitions`、`sortSignals`、`lastCustomerMessageAt`、`slaAt`、`priority`、`assignee`、`safeSummary`、`detailHref`。废弃 `actionId`、`partitionKey`、`sortPriority`、`slaDueAt`、`canonicalHref` 等别名。 |
+| `TreatmentCareSourceV1` | payload 字段固定为 `sourceId`、`sourceVersion`、`customer`、`treatmentOccurredAt`、`projectRef`、`categoryCode`、`treatmentStageCode`、`recoveryStageCode`、`riskLevel`、`approvedTagCodes`、`sourceState`、`suggestion`、`voidedAt`、`voidReasonCode`。 |
+| `ConversationCareDispositionV1` | 当前快照的并发字段只叫 `revision`，不使用 `dispositionRevision`；blocker 只允许 `clinical_risk`、`complaint`、`refund_dispute`、`opt_out`、`privacy_request`、`unresolved_consultation`、`identity_unconfirmed`、`forced_close_unresolved`。 |
+| `IdentityMatchReviewV1` | 使用 `connectionInstanceId`、`irreversibleIdentityReference`、`lastDecisionReasonCode`、`lastDecisionActorReference` 和 `auditReference`；状态固定八种，其他栏目不得改名为 `channelConnectionId`、`channelIdentityReference` 或 `sourceAuditReference`。 |
+| `CreateCustomerFromIdentityReviewV1` | 精确字段为 `contractVersion`、`reviewId`、`expectedRevision`、`candidateSnapshotVersion`、`idempotencyKey`、`actionToken`、`createCustomer`。`createCustomer` 精确包含 `displayName`、`ownerUserId`、`sourceCode`、`projectRefs`、`primaryProjectRef`、`priority`、`nextAction`；`nextAction` 可空，非空时只含 `actionCode`、`plannedAt`、`safeNote`。 |
+| `InstitutionOperatingContextV1` | 唯一别名为 `InstitutionSourceEnvelopeV1<InstitutionOperatingContextPayloadV1, 'operating_context'>`；payload 只有 `version`、`source`、`current{ timeZone, defaultCurrency }`、`pending{ timeZone, defaultCurrency, requestedVersion, effectiveFromBusinessDate } \| null`、`updatedAt`、`updatedBy`。版本统一叫 `version`，不使用 `timezoneVersion`。 |
+| `AnalyticsCustomerConsumptionV1` | 唯一结果别名为 `InstitutionSourceEnvelopeV1<AnalyticsCustomerConsumptionPayloadV1, AnalyticsCustomerConsumptionPartitionKeyV1>`；payload 不重复 envelope 字段，只含 snapshot/version、安全 `customerId`、当前/上期周期、按币种金额、`paidCustomer`、可空消费单计数、可用性和获准低敏明细。 |
+| `ControlledImportCommandV1` | 精确十五字段为 `contractVersion`、`tenantId`、`institutionId`、`precheckId`、`fileSecurityReference`、`approvedScope`、`approvedRowCount`、`approvedRowsDigest`、`hisDirectoryVersion`、`mappingVersion`、`idempotencyKey`、`operatorReference`、`expectedVersion`、`sourceAuditReference`、`reasonCode`。 |
+
+以下字段仍是 runtime 前真实阻塞，不能由任一栏目线自行猜测：
+
+1. `AnalyticsCustomerConsumptionPartitionKeyV1` 的固定 key 集合；在总协调台冻结前，经营分析 provider 与客户消费 consumer 均不得实现。
+2. `RestrictedCustomerKnowledgePartitionKeyV1` 的固定 key 集合、组合 reader 所有者、敏感 AI 授权权威来源和撤回传播时限。
+3. `CapabilityStatusV1` 与 `ReachOutSafetyV1` 的逐字段公共形状。
+4. 工作台局部刷新 revision 的层级、字段位置和生成方。
+
+这些阻塞不影响本轮发布技术计划，但阻断相应 runtime 切片；不得用 fixture、本地 DTO、默认泛型或近义字段绕过。
 
 ---
 
@@ -274,7 +363,7 @@ BASE-01 导航与能力契约
 - [ ] `CUS-04`：客户创建编辑、稳定外部引用、多项目及主项目、结构化下一步行动；如需 schema，先提交数据变更申请。
 - [ ] `CUS-05`：CSV/XLSX 预检、精确重复阻断和模糊重复复核；导入执行另行授权。
 - [ ] `CUS-06`：可逆归档与合并；只有管理员可执行，责任转交、审计和回滚必须原子化。
-- [ ] `CUS-07`：消费页签只消费 `AnalyticsCustomerConsumptionV1`，不复制金额计算和交易存储。
+- [ ] `CUS-07`：消费页签只消费统一结果 `AnalyticsCustomerConsumptionV1`，不复制金额计算和交易存储。
 
 ### 6.3 发布门禁
 
@@ -491,12 +580,12 @@ BASE-01 导航与能力契约
 ### 12.2 建议迁移顺序
 
 ```text
-MIG-01 机构归属与机构级审计
-→ MIG-02 客户稳定引用、责任归属与随访结构化结果
-→ MIG-03 知识不可变版本与发布指针
-→ MIG-04 会话、消息、分配、风险和逐消息结果
-→ MIG-05 消费、支付、退款、导入批次和项目映射
-→ MIG-06 指标快照、AI 报告与持久化安全状态
+MIG-01 机构归属、机构级审计与 InstitutionOperatingContextV1 持久化设置
+→ MIG-02 客户稳定引用、责任归属、随访任务/认领/结构化结果与线性路径最小持久化
+→ MIG-03 知识不可变版本、publication/current pointer、附件修订、parse/chunk/index/job、受限客户附件与回答快照
+→ MIG-04 会话根/分段/消息/逐消息结果/分配/风险、处置 revision 与身份复核
+→ MIG-05 消费来源、导入批次与行、稳定消费单、支付退款、客户匹配、HIS 项目映射、幂等与追加纠正
+→ MIG-06 分析 snapshot、报告输入输出/版本/归档/来源变化状态与持久化渠道安全状态
 ```
 
 `BASE-03` 是 `MIG-01` 的技术设计任务，`MIG-01` 是获批后的实际迁移单元，两者不是两次机构归属迁移。schema 与 migration 范围分别获批后，应在一个原子 migration PR 中保持应用 schema、SQL、Drizzle 元数据和迁移测试一致；如果需要 `expand → backfill → enforce`，则预先批准为连续多 PR，并保证每个中间 main 都可运行和回滚。
@@ -516,14 +605,19 @@ HIS/ERP/POS、受控文件导入、渠道服务商、OCR、索引和 AI provider
 
 | 集成任务 | 契约提出者与验收者 | 控制面消费者 | 独立审批内容 |
 | --- | --- | --- | --- |
-| HIS 预约 adapter | 预约与随访线 | 管理中心 | 凭证、出站网络、时段读取、原子占位、错误映射 |
-| ERP/POS adapter | 经营分析线 | 管理中心 | 来源契约、支付退款、幂等、同步和纠正 |
+| HIS adapter | 预约与随访线、经营分析线分别验收所需能力 | 管理中心 | 凭证、出站网络、预约时段/原子占位、标准项目目录和获准消费事实分别验收 |
+| ERP adapter | 经营分析线 | 管理中心 | 来源契约、支付退款、幂等、同步和纠正 |
+| POS adapter | 经营分析线 | 管理中心 | 来源契约、支付退款、幂等、同步和纠正 |
 | 受控文件导入规范化 | 经营分析线 | 管理中心 | 文件契约、批次、预检、行级结果、去重和追加纠正 |
-| 微信/企微/微信客服/AIBOTK adapter 与触达安全 | 会话工作台线；Care 验收 `ReachOutSafetyV1` | 管理中心 | 授权、回调、签名、幂等、同意/退订、送达、急停和生产放行 |
-| OCR/索引/知识 AI provider | 知识库线 | 管理中心只读取全局 AI 使用 | 文件安全、解析质量、索引隔离、无答案和引用 |
+| 单一渠道官方接口 | 会话工作台线；Care 验收 `ReachOutSafetyV1` | 管理中心 | 个人微信、企业微信客户联系、微信客服分别交付授权、回调、签名、幂等、同意/退订、送达、急停和生产放行 |
+| AIBOTK 受控试点 adapter | 会话工作台线；Care 验收 `ReachOutSafetyV1` | 管理中心 | 非核心试点账号、人工接管、授权、回调、幂等、急停与独立生产放行 |
+| OCR provider | 知识库线 | 管理中心只读取低敏治理状态 | 文件安全、解析质量、失败与恢复 |
+| embedding provider | 知识库线 | 管理中心只读取低敏治理状态 | 机构隔离、版本绑定和向量生成质量 |
+| rerank provider | 知识库线 | 管理中心只读取低敏治理状态 | 机构隔离、质量阈值和失败降级 |
+| 知识 AI provider | 知识库线 | 管理中心只读取全局 AI 使用 | 无答案、精确引用、安全和用途边界 |
 | AI 经营报告 provider | 经营分析线 | 管理中心只读取全局 AI 使用 | 低敏指标、固定模板、输出校验、快照和留档 |
 
-每个临时集成任务必须有独立分支、允许路径、fake 契约测试、真实网络/凭证审批和生产放行门禁。栏目线只消费正式契约，不直接实现 provider 私有逻辑。
+每个临时集成任务必须有独立分支、允许路径、fake 契约测试、真实网络/凭证审批和生产放行门禁。ERP 与 POS、三种官方渠道、AIBOTK、OCR、embedding、rerank、知识 AI 和 AI 经营报告均是独立交付单元；任一时刻只允许一个任务进入真实凭证或网络阶段。栏目线只消费正式契约，不直接实现 provider 私有逻辑。
 
 ---
 
