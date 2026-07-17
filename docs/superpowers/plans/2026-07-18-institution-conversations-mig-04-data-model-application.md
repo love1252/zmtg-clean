@@ -2,6 +2,8 @@
 
 > **状态：** `CONV-02-DESIGN` docs-only 申请。本文是总协调台的审批输入，不是 schema、Drizzle、SQL、migration、API、渠道或 runtime 授权。
 
+> **时效复核：** `2026-07-18` 已按 `origin/main=4fa0706d` 复核本申请的排队前提；该基线只更新时效说明，main 上的 UI、路由或文档漂移不构成 `MIG-04` schema 范围或授权。
+
 ## 一、结论、顺序与硬边界
 
 申请 `MIG-04` 的唯一范围是：会话根、分段、不可变消息、逐消息结果、分配、风险、`ConversationCareDispositionV1` revision/失效事实和 `IdentityMatchReviewV1` 复核事实。
@@ -77,9 +79,9 @@ matched → revoked
 
 `lastDecision` 仅允许 `confirm_existing`、`delegate_create_customer`、`reject`、`withdraw`、`revoke` 或 `null`；冲突和过期只是状态事实，不新增 decision 值。新枚举值必须进入 V2。
 
-提交/决定命令必须以 `(scope, reviewId, expectedRevision, candidateSnapshotVersion, idempotencyKey)` 去重；同键只允许相同载荷重试。不同载荷、候选版本变化、过期、终态或跨 scope 一律拒绝。`candidateReference`、原始外部身份和候选详情只允许服务端 reader 同 scope 解析，不进入跨线响应、URL 或 audit。`revoked` 后重新匹配必须新建 review。
+提交/决定命令的幂等身份严格唯一为 `(scope, reviewId, idempotencyKey)`，其中 scope 展开为 `(tenantId, institutionId)`；`expectedRevision`、`candidateSnapshotVersion`、action 和覆盖完整命令载荷的 `payloadDigest` 是该键首次提交时持久化的绑定载荷，而不是幂等键的一部分。同一键只可复用完全相同的绑定载荷并返回首次持久化的命令结果；任一 revision、候选版本、action 或 digest 不同都必须拒绝，即使 review 随后已推进 revision 或候选版本也不得把它解释为新的幂等请求。跨 scope、过期或不允许的终态同样拒绝。`candidateReference`、原始外部身份和候选详情只允许服务端 reader 同 scope 解析，不进入跨线响应、URL 或 audit。`revoked` 后重新匹配必须新建 review。
 
-咨询师/客服只能提交本人已分配活动分段的复核；管理员/运营才可决定。建客必须委派客户中心冻结的 `CreateCustomerFromIdentityReviewV1`；只有成功返回同 scope `CustomerReferenceV1` 后，身份服务才可在本地事务中匹配，失败不得留下部分匹配。
+咨询师/客服只能提交本人已分配活动分段的复核；管理员/运营才可决定。建客必须委派客户中心冻结的 `CreateCustomerFromIdentityReviewV1`。客户中心必须以同一 `(scope, reviewId, idempotencyKey)` 持久化首次成功的 `CustomerReferenceV1` 与命令结果，才可视为建客成功；身份服务随后才可在自己的本地事务中按同一绑定载荷写入匹配和 audit。若跨服务建客已成功但身份本地事务失败，不得留下部分匹配，也绝不得再次建客：同键且绑定载荷相同的重试只能复用已持久化的 `CustomerReferenceV1`/命令结果后重试本地事务；同键但载荷不同的重放必须拒绝。该恢复约束不声称跨服务原子事务，也不允许以 fixture、mock 或 dry-run 回填结果。
 
 ## 五、内容保留、审计和删除语义
 
