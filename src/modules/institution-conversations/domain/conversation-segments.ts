@@ -1,3 +1,11 @@
+import {
+  projectCompleteConversationRiskHistories,
+  type ConversationRiskHistory,
+  type ConversationRiskTarget,
+  type CurrentClinicalClosureCheck,
+  type ProjectedRiskSetEntry,
+} from '@/modules/institution-conversations/domain/conversation-risks';
+
 export const conversationSegmentStates = [
   'ai_handling',
   'awaiting_human',
@@ -7,12 +15,10 @@ export const conversationSegmentStates = [
 ] as const;
 
 export const conversationSegmentCloseKinds = ['open', 'normal', 'forced'] as const;
-export const conversationSegmentRiskStates = ['none', 'unconfirmed', 'confirmed', 'resolved'] as const;
 export const segmentLocalBlockingReasonCodes = ['forced_close_unresolved'] as const;
 
 export type ConversationSegmentState = (typeof conversationSegmentStates)[number];
 export type ConversationSegmentCloseKind = (typeof conversationSegmentCloseKinds)[number];
-export type ConversationSegmentRiskState = (typeof conversationSegmentRiskStates)[number];
 export type SegmentLocalBlockingReasonCode = (typeof segmentLocalBlockingReasonCodes)[number];
 export type SegmentResolutionState = 'open' | 'resolved';
 export type SegmentGuardReadiness = 'ready' | 'not_ready' | 'unknown';
@@ -44,7 +50,10 @@ export type SegmentTransitionBlockCode =
   | 'multiple_active_assignments'
   | 'operator_not_active_assignee'
   | 'operator_not_current_handler'
+  | 'risk_guard_invalid'
   | 'risk_not_none'
+  | 'risk_not_resolved'
+  | 'clinical_closure_check_required'
   | 'blocking_reason_present'
   | 'unconfirmed_business_action'
   | 'outbound_pending'
@@ -92,7 +101,8 @@ export type ActiveAssignmentGuard = Readonly<{
 export type SegmentReturnToAiInput = Readonly<{
   operatorId: string;
   occurredAt: string;
-  riskState: ConversationSegmentRiskState;
+  riskTarget: ConversationRiskTarget;
+  completeRiskHistories: readonly ConversationRiskHistory[];
   hasBlockingReason: boolean;
   hasUnconfirmedBusinessAction: boolean;
   outboundState: SegmentOutboundGuardState;
@@ -105,7 +115,8 @@ export type SegmentReturnToAiInput = Readonly<{
 
 export type SegmentAutoCloseInput = Readonly<{
   occurredAt: string;
-  riskState: ConversationSegmentRiskState;
+  riskTarget: ConversationRiskTarget;
+  completeRiskHistories: readonly ConversationRiskHistory[];
   hasBlockingReason: boolean;
   outboundState: SegmentOutboundGuardState;
   waitWindowEndsAt: string;
@@ -122,17 +133,148 @@ export type SegmentManualCloseResolution =
       resolvedAt: string;
     }>;
 
+export type SegmentManualCloseInput = Readonly<{
+  operatorId: string;
+  occurredAt: string;
+  resolution: SegmentManualCloseResolution;
+  riskTarget: ConversationRiskTarget;
+  completeRiskHistories: readonly ConversationRiskHistory[];
+  currentClinicalClosureChecks: readonly CurrentClinicalClosureCheck[];
+}>;
+
 const safeIdentifierPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const canonicalUtcTimestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
+const returnToAiInputKeys = [
+  'operatorId',
+  'occurredAt',
+  'riskTarget',
+  'completeRiskHistories',
+  'hasBlockingReason',
+  'hasUnconfirmedBusinessAction',
+  'outboundState',
+  'aiReadiness',
+  'knowledgeReadiness',
+  'sensitiveAuthorizationReadiness',
+  'messageTypeAllowed',
+  'institutionPolicyAllowsAi',
+] as const;
+const autoCloseInputKeys = [
+  'occurredAt',
+  'riskTarget',
+  'completeRiskHistories',
+  'hasBlockingReason',
+  'outboundState',
+  'waitWindowEndsAt',
+  'channelAllowsAutoClose',
+  'newInboundState',
+] as const;
+const manualCloseInputKeys = [
+  'operatorId',
+  'occurredAt',
+  'resolution',
+  'riskTarget',
+  'completeRiskHistories',
+  'currentClinicalClosureChecks',
+] as const;
 
-const blocked = (code: SegmentTransitionBlockCode): SegmentTransitionResult => ({
+const deepFreeze = <T>(value: T): T => {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) {
+    return value;
+  }
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor && 'value' in descriptor) {
+      deepFreeze(descriptor.value);
+    }
+  }
+  return Object.freeze(value);
+};
+
+type CapturedSegmentInput = Readonly<Record<string, unknown>>;
+
+const captureExactSegmentInput = (
+  raw: unknown,
+  expectedKeys: readonly string[],
+): CapturedSegmentInput | null => {
+  try {
+    if (
+      typeof raw !== 'object'
+      || raw === null
+      || Array.isArray(raw)
+      || Object.getPrototypeOf(raw) !== Object.prototype
+    ) {
+      return null;
+    }
+    const ownKeys = Reflect.ownKeys(raw);
+    if (
+      ownKeys.length !== expectedKeys.length
+      || ownKeys.some((key) => typeof key !== 'string' || !expectedKeys.includes(key))
+    ) {
+      return null;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(raw);
+    const values: Record<string, unknown> = {};
+    for (const key of expectedKeys) {
+      const descriptor = descriptors[key];
+      if (!descriptor || !('value' in descriptor)) {
+        return null;
+      }
+      values[key] = descriptor.value;
+    }
+    return values;
+  } catch {
+    return null;
+  }
+};
+
+const isStructuredCloneable = (raw: unknown): boolean => {
+  try {
+    structuredClone(raw);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const isReturnToAiInputValueSetValid = (values: CapturedSegmentInput): boolean => (
+  typeof values.operatorId === 'string'
+  && safeIdentifierPattern.test(values.operatorId)
+  && typeof values.hasBlockingReason === 'boolean'
+  && typeof values.hasUnconfirmedBusinessAction === 'boolean'
+  && ['clear', 'pending', 'unknown'].includes(values.outboundState as string)
+  && ['ready', 'not_ready', 'unknown'].includes(values.aiReadiness as string)
+  && ['ready', 'not_ready', 'unknown'].includes(values.knowledgeReadiness as string)
+  && ['ready', 'not_ready', 'unknown'].includes(
+    values.sensitiveAuthorizationReadiness as string,
+  )
+  && typeof values.messageTypeAllowed === 'boolean'
+  && typeof values.institutionPolicyAllowsAi === 'boolean'
+);
+
+const isAutoCloseInputValueSetValid = (values: CapturedSegmentInput): boolean => (
+  typeof values.hasBlockingReason === 'boolean'
+  && ['clear', 'pending', 'unknown'].includes(values.outboundState as string)
+  && typeof values.waitWindowEndsAt === 'string'
+  && typeof values.channelAllowsAutoClose === 'boolean'
+  && ['none', 'present', 'unknown'].includes(values.newInboundState as string)
+);
+
+const isManualCloseInputValueSetValid = (values: CapturedSegmentInput): boolean => (
+  typeof values.operatorId === 'string'
+  && safeIdentifierPattern.test(values.operatorId)
+);
+
+const blocked = (code: SegmentTransitionBlockCode): SegmentTransitionResult => deepFreeze({
   kind: 'blocked',
   code,
 });
 
-const applied = (segment: ConversationSegment): SegmentTransitionResult => ({
+const applied = (segment: ConversationSegment): SegmentTransitionResult => deepFreeze({
   kind: 'applied',
-  segment,
+  segment: {
+    ...segment,
+    blockingReasonCodes: [...segment.blockingReasonCodes],
+  },
 });
 
 const parseCanonicalUtcTimestamp = (value: string): number | null => {
@@ -193,12 +335,49 @@ const operatorIsCurrentHandler = (
     : blocked('operator_not_current_handler')
 );
 
+const projectSegmentRiskSet = (
+  segment: Readonly<ConversationSegment>,
+  values: CapturedSegmentInput,
+  rawChecks: unknown,
+): readonly ProjectedRiskSetEntry[] | null => {
+  const result = projectCompleteConversationRiskHistories(
+    values.completeRiskHistories,
+    values.riskTarget,
+    rawChecks,
+    values.occurredAt,
+  );
+  if (
+    result.kind === 'blocked'
+    || result.projection.conversationId !== segment.conversationId
+    || result.projection.segmentId !== segment.segmentId
+  ) {
+    return null;
+  }
+  return result.projection.risks;
+};
+
+const parseManualCloseResolution = (raw: unknown): SegmentManualCloseResolution | null => {
+  const unresolved = captureExactSegmentInput(raw, ['kind']);
+  if (unresolved?.kind === 'unresolved' && isStructuredCloneable(raw)) {
+    return { kind: 'unresolved' };
+  }
+  const resolved = captureExactSegmentInput(raw, ['kind', 'resolvedAt']);
+  if (
+    resolved?.kind === 'resolved'
+    && typeof resolved.resolvedAt === 'string'
+    && isStructuredCloneable(raw)
+  ) {
+    return { kind: 'resolved', resolvedAt: resolved.resolvedAt };
+  }
+  return null;
+};
+
 export function checkConversationSegmentCanSend(
   segment: Readonly<ConversationSegment>,
 ): SegmentSendEligibilityResult {
-  return segment.state === 'closed'
+  return deepFreeze(segment.state === 'closed'
     ? { kind: 'blocked', code: 'segment_closed' }
-    : { kind: 'allowed' };
+    : { kind: 'allowed' });
 }
 
 export function requestHumanHandling(
@@ -292,47 +471,59 @@ export function returnSegmentToAi(
   segment: Readonly<ConversationSegment>,
   input: SegmentReturnToAiInput,
 ): SegmentTransitionResult {
+  const values = captureExactSegmentInput(input, returnToAiInputKeys);
+  if (!values) {
+    return blocked('risk_guard_invalid');
+  }
+  const risks = projectSegmentRiskSet(segment, values, []);
+  if (
+    risks === null
+    || !isReturnToAiInputValueSetValid(values)
+    || !isStructuredCloneable(input)
+  ) {
+    return blocked('risk_guard_invalid');
+  }
   if (segment.state === 'closed') {
     return blocked('segment_closed');
   }
   if (segment.state !== 'human_handling' && segment.state !== 'waiting_customer') {
     return blocked('transition_not_allowed');
   }
-  const handlerFailure = operatorIsCurrentHandler(segment, input.operatorId);
+  const handlerFailure = operatorIsCurrentHandler(segment, values.operatorId as string);
   if (handlerFailure) {
     return handlerFailure;
   }
-  if (input.riskState !== 'none') {
+  if (risks.length > 0) {
     return blocked('risk_not_none');
   }
-  if (input.hasBlockingReason || segment.blockingReasonCodes.length > 0) {
+  if (values.hasBlockingReason === true || segment.blockingReasonCodes.length > 0) {
     return blocked('blocking_reason_present');
   }
-  if (input.hasUnconfirmedBusinessAction) {
+  if (values.hasUnconfirmedBusinessAction === true) {
     return blocked('unconfirmed_business_action');
   }
-  if (input.outboundState === 'pending') {
+  if (values.outboundState === 'pending') {
     return blocked('outbound_pending');
   }
-  if (input.outboundState === 'unknown') {
+  if (values.outboundState === 'unknown') {
     return blocked('outbound_unknown');
   }
-  if (input.aiReadiness !== 'ready') {
+  if (values.aiReadiness !== 'ready') {
     return blocked('ai_not_ready');
   }
-  if (input.knowledgeReadiness !== 'ready') {
+  if (values.knowledgeReadiness !== 'ready') {
     return blocked('knowledge_not_ready');
   }
-  if (input.sensitiveAuthorizationReadiness !== 'ready') {
+  if (values.sensitiveAuthorizationReadiness !== 'ready') {
     return blocked('sensitive_authorization_not_ready');
   }
-  if (!input.messageTypeAllowed) {
+  if (values.messageTypeAllowed !== true) {
     return blocked('message_type_not_allowed');
   }
-  if (!input.institutionPolicyAllowsAi) {
+  if (values.institutionPolicyAllowsAi !== true) {
     return blocked('institution_policy_not_allowed');
   }
-  return transition(segment, input.occurredAt, {
+  return transition(segment, values.occurredAt as string, {
     state: 'ai_handling',
     currentHandlerId: null,
     everHumanHandled: true,
@@ -343,6 +534,18 @@ export function autoCloseConversationSegment(
   segment: Readonly<ConversationSegment>,
   input: SegmentAutoCloseInput,
 ): SegmentTransitionResult {
+  const values = captureExactSegmentInput(input, autoCloseInputKeys);
+  if (!values) {
+    return blocked('risk_guard_invalid');
+  }
+  const risks = projectSegmentRiskSet(segment, values, []);
+  if (
+    risks === null
+    || !isAutoCloseInputValueSetValid(values)
+    || !isStructuredCloneable(input)
+  ) {
+    return blocked('risk_guard_invalid');
+  }
   if (segment.state === 'closed') {
     return blocked('segment_closed');
   }
@@ -353,38 +556,38 @@ export function autoCloseConversationSegment(
     return blocked('ever_human_handled');
   }
   if (
-    !isValidTransitionTime(segment, input.occurredAt)
-    || parseCanonicalUtcTimestamp(input.waitWindowEndsAt) === null
+    !isValidTransitionTime(segment, values.occurredAt as string)
+    || parseCanonicalUtcTimestamp(values.waitWindowEndsAt as string) === null
   ) {
     return blocked('invalid_timestamp');
   }
-  if (input.riskState !== 'none') {
+  if (risks.length > 0) {
     return blocked('risk_not_none');
   }
-  if (input.hasBlockingReason || segment.blockingReasonCodes.length > 0) {
+  if (values.hasBlockingReason === true || segment.blockingReasonCodes.length > 0) {
     return blocked('blocking_reason_present');
   }
-  if (input.outboundState === 'pending') {
+  if (values.outboundState === 'pending') {
     return blocked('outbound_pending');
   }
-  if (input.outboundState === 'unknown') {
+  if (values.outboundState === 'unknown') {
     return blocked('outbound_unknown');
   }
-  if (Date.parse(input.occurredAt) < Date.parse(input.waitWindowEndsAt)) {
+  if (Date.parse(values.occurredAt as string) < Date.parse(values.waitWindowEndsAt as string)) {
     return blocked('waiting_window_not_elapsed');
   }
-  if (!input.channelAllowsAutoClose) {
+  if (values.channelAllowsAutoClose !== true) {
     return blocked('channel_auto_close_not_allowed');
   }
-  if (input.newInboundState === 'present') {
+  if (values.newInboundState === 'present') {
     return blocked('new_inbound_during_wait');
   }
-  if (input.newInboundState === 'unknown') {
+  if (values.newInboundState === 'unknown') {
     return blocked('inbound_status_unknown');
   }
-  return transition(segment, input.occurredAt, {
+  return transition(segment, values.occurredAt as string, {
     state: 'closed',
-    closedAt: input.occurredAt,
+    closedAt: values.occurredAt as string,
     segmentCloseKind: 'normal',
     resolutionState: 'open',
     resolvedAt: null,
@@ -393,34 +596,59 @@ export function autoCloseConversationSegment(
 
 export function closeConversationSegmentManually(
   segment: Readonly<ConversationSegment>,
-  input: Readonly<{
-    operatorId: string;
-    occurredAt: string;
-    resolution: SegmentManualCloseResolution;
-  }>,
+  input: SegmentManualCloseInput,
 ): SegmentTransitionResult {
+  const values = captureExactSegmentInput(input, manualCloseInputKeys);
+  if (!values) {
+    return blocked('risk_guard_invalid');
+  }
+  const risks = projectSegmentRiskSet(
+    segment,
+    values,
+    values.currentClinicalClosureChecks,
+  );
+  if (risks === null) {
+    return blocked('risk_guard_invalid');
+  }
+  if (!isManualCloseInputValueSetValid(values)) {
+    return blocked('risk_guard_invalid');
+  }
+  const resolution = parseManualCloseResolution(values.resolution);
+  if (!resolution) {
+    return blocked('close_result_invalid');
+  }
+  if (!isStructuredCloneable(input)) {
+    return blocked('risk_guard_invalid');
+  }
   if (segment.state === 'closed') {
     return blocked('segment_closed');
   }
   if (segment.state !== 'human_handling' && segment.state !== 'waiting_customer') {
     return blocked('transition_not_allowed');
   }
-  const handlerFailure = operatorIsCurrentHandler(segment, input.operatorId);
+  const handlerFailure = operatorIsCurrentHandler(segment, values.operatorId as string);
   if (handlerFailure) {
     return handlerFailure;
   }
-  if (input.resolution.kind !== 'unresolved' && input.resolution.kind !== 'resolved') {
-    return blocked('close_result_invalid');
+  if (risks.some((risk) => risk.state !== 'resolved')) {
+    return blocked('risk_not_resolved');
   }
-  if (!isValidTransitionTime(segment, input.occurredAt)) {
+  if (risks.some((risk) => (
+    risk.state === 'resolved'
+    && risk.riskDomain === 'clinical'
+    && risk.clinicalClosureCheckState !== 'current'
+  ))) {
+    return blocked('clinical_closure_check_required');
+  }
+  if (!isValidTransitionTime(segment, values.occurredAt as string)) {
     return blocked('invalid_timestamp');
   }
   if (
-    input.resolution.kind === 'resolved'
+    resolution.kind === 'resolved'
     && (
-      parseCanonicalUtcTimestamp(input.resolution.resolvedAt) === null
-      || Date.parse(input.resolution.resolvedAt) < Date.parse(segment.openedAt)
-      || Date.parse(input.resolution.resolvedAt) > Date.parse(input.occurredAt)
+      parseCanonicalUtcTimestamp(resolution.resolvedAt) === null
+      || Date.parse(resolution.resolvedAt) < Date.parse(segment.openedAt)
+      || Date.parse(resolution.resolvedAt) > Date.parse(values.occurredAt as string)
     )
   ) {
     return blocked('invalid_timestamp');
@@ -428,11 +656,11 @@ export function closeConversationSegmentManually(
   return applied({
     ...segment,
     state: 'closed',
-    stateChangedAt: input.occurredAt,
-    closedAt: input.occurredAt,
+    stateChangedAt: values.occurredAt as string,
+    closedAt: values.occurredAt as string,
     segmentCloseKind: 'normal',
-    resolutionState: input.resolution.kind === 'resolved' ? 'resolved' : 'open',
-    resolvedAt: input.resolution.kind === 'resolved' ? input.resolution.resolvedAt : null,
+    resolutionState: resolution.kind === 'resolved' ? 'resolved' : 'open',
+    resolvedAt: resolution.kind === 'resolved' ? resolution.resolvedAt : null,
   });
 }
 

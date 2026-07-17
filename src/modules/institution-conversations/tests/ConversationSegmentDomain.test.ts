@@ -5,7 +5,6 @@ import {
   checkConversationSegmentCanSend,
   closeConversationSegmentManually,
   conversationSegmentCloseKinds,
-  conversationSegmentRiskStates,
   conversationSegmentStates,
   forceCloseConversationSegment,
   markWaitingForCustomer,
@@ -15,17 +14,25 @@ import {
   returnSegmentToAi,
   type ConversationSegment,
   type SegmentAutoCloseInput,
+  type SegmentManualCloseInput,
   type SegmentReturnToAiInput,
   type SegmentTransitionResult,
 } from '@/modules/institution-conversations/domain/conversation-segments';
+import type { ConversationRiskTarget } from '@/modules/institution-conversations/domain/conversation-risks';
 
 const baseTime = '2026-07-17T01:00:00.000Z';
+const riskTarget: ConversationRiskTarget = {
+  tenantId: 'ten_aaaaaaaaaaaaaaaa',
+  institutionId: 'ins_bbbbbbbbbbbbbbbb',
+  conversationId: 'con_cccccccccccccccc',
+  segmentId: 'seg_dddddddddddddddd',
+};
 
 const segment = (
   overrides: Partial<ConversationSegment> = {},
 ): ConversationSegment => ({
-  segmentId: 'segment-001',
-  conversationId: 'conversation-001',
+  segmentId: riskTarget.segmentId,
+  conversationId: riskTarget.conversationId,
   sequenceNo: 1,
   state: 'ai_handling',
   currentHandlerId: null,
@@ -62,7 +69,8 @@ const returnToAiInput = (
 ): SegmentReturnToAiInput => ({
   operatorId: 'actor-handler-001',
   occurredAt: '2026-07-17T01:03:00.000Z',
-  riskState: 'none',
+  riskTarget,
+  completeRiskHistories: [],
   hasBlockingReason: false,
   hasUnconfirmedBusinessAction: false,
   outboundState: 'clear',
@@ -78,12 +86,25 @@ const autoCloseInput = (
   overrides: Partial<SegmentAutoCloseInput> = {},
 ): SegmentAutoCloseInput => ({
   occurredAt: '2026-07-17T01:06:00.000Z',
-  riskState: 'none',
+  riskTarget,
+  completeRiskHistories: [],
   hasBlockingReason: false,
   outboundState: 'clear',
   waitWindowEndsAt: '2026-07-17T01:05:00.000Z',
   channelAllowsAutoClose: true,
   newInboundState: 'none',
+  ...overrides,
+});
+
+const manualCloseInput = (
+  overrides: Partial<SegmentManualCloseInput> = {},
+): SegmentManualCloseInput => ({
+  operatorId: 'actor-handler-001',
+  occurredAt: '2026-07-17T01:05:00.000Z',
+  resolution: { kind: 'unresolved' },
+  riskTarget,
+  completeRiskHistories: [],
+  currentClinicalClosureChecks: [],
   ...overrides,
 });
 
@@ -96,7 +117,7 @@ const appliedSegment = (result: SegmentTransitionResult): ConversationSegment =>
 };
 
 describe('conversation segment domain', () => {
-  it('冻结五个主状态、三个关闭类型和四个风险投影输入', () => {
+  it('冻结五个主状态和三个关闭类型', () => {
     expect(conversationSegmentStates).toEqual([
       'ai_handling',
       'awaiting_human',
@@ -105,7 +126,6 @@ describe('conversation segment domain', () => {
       'closed',
     ]);
     expect(conversationSegmentCloseKinds).toEqual(['open', 'normal', 'forced']);
-    expect(conversationSegmentRiskStates).toEqual(['none', 'unconfirmed', 'confirmed', 'resolved']);
   });
 
   it('执行 ai → awaiting_human → human_handling 的合法链路', () => {
@@ -184,9 +204,6 @@ describe('conversation segment domain', () => {
 
   it.each([
     [{ operatorId: 'actor-other-001' }, 'operator_not_current_handler'],
-    [{ riskState: 'unconfirmed' }, 'risk_not_none'],
-    [{ riskState: 'confirmed' }, 'risk_not_none'],
-    [{ riskState: 'resolved' }, 'risk_not_none'],
     [{ hasBlockingReason: true }, 'blocking_reason_present'],
     [{ hasUnconfirmedBusinessAction: true }, 'unconfirmed_business_action'],
     [{ outboundState: 'pending' }, 'outbound_pending'],
@@ -231,9 +248,6 @@ describe('conversation segment domain', () => {
   );
 
   it.each([
-    [{ riskState: 'unconfirmed' }, 'risk_not_none'],
-    [{ riskState: 'confirmed' }, 'risk_not_none'],
-    [{ riskState: 'resolved' }, 'risk_not_none'],
     [{ hasBlockingReason: true }, 'blocking_reason_present'],
     [{ outboundState: 'pending' }, 'outbound_pending'],
     [{ outboundState: 'unknown' }, 'outbound_unknown'],
@@ -313,11 +327,10 @@ describe('conversation segment domain', () => {
   });
 
   it('人工正常结束要求当前处理人，并由显式 resolution 输入决定 resolvedAt', () => {
-    const unresolved = appliedSegment(closeConversationSegmentManually(humanSegment(), {
-      operatorId: 'actor-handler-001',
-      occurredAt: '2026-07-17T01:05:00.000Z',
-      resolution: { kind: 'unresolved' },
-    }));
+    const unresolved = appliedSegment(closeConversationSegmentManually(
+      humanSegment(),
+      manualCloseInput(),
+    ));
     expect(unresolved).toMatchObject({
       state: 'closed',
       segmentCloseKind: 'normal',
@@ -327,14 +340,12 @@ describe('conversation segment domain', () => {
 
     const resolved = appliedSegment(closeConversationSegmentManually(
       humanSegment('waiting_customer'),
-      {
-        operatorId: 'actor-handler-001',
-        occurredAt: '2026-07-17T01:05:00.000Z',
+      manualCloseInput({
         resolution: {
           kind: 'resolved',
           resolvedAt: '2026-07-17T01:04:00.000Z',
         },
-      },
+      }),
     ));
     expect(resolved).toMatchObject({
       state: 'closed',
@@ -342,28 +353,22 @@ describe('conversation segment domain', () => {
       resolvedAt: '2026-07-17T01:04:00.000Z',
     });
 
-    expect(closeConversationSegmentManually(humanSegment(), {
+    expect(closeConversationSegmentManually(humanSegment(), manualCloseInput({
       operatorId: 'actor-other-001',
-      occurredAt: '2026-07-17T01:05:00.000Z',
-      resolution: { kind: 'unresolved' },
-    })).toEqual({ kind: 'blocked', code: 'operator_not_current_handler' });
+    }))).toEqual({ kind: 'blocked', code: 'operator_not_current_handler' });
   });
 
   it('拒绝未知人工关闭结果和调用者提供的非法时间', () => {
-    expect(closeConversationSegmentManually(humanSegment(), {
-      operatorId: 'actor-handler-001',
-      occurredAt: '2026-07-17T01:05:00.000Z',
+    expect(closeConversationSegmentManually(humanSegment(), manualCloseInput({
       resolution: { kind: 'other' } as never,
-    })).toEqual({ kind: 'blocked', code: 'close_result_invalid' });
+    }))).toEqual({ kind: 'blocked', code: 'close_result_invalid' });
 
-    expect(closeConversationSegmentManually(humanSegment(), {
-      operatorId: 'actor-handler-001',
-      occurredAt: '2026-07-17T01:05:00.000Z',
+    expect(closeConversationSegmentManually(humanSegment(), manualCloseInput({
       resolution: {
         kind: 'resolved',
         resolvedAt: '2026-07-17T01:06:00.000Z',
       },
-    })).toEqual({ kind: 'blocked', code: 'invalid_timestamp' });
+    }))).toEqual({ kind: 'blocked', code: 'invalid_timestamp' });
   });
 
   it.each([
@@ -439,11 +444,9 @@ describe('conversation segment domain', () => {
     })).toEqual(expected);
     expect(returnSegmentToAi(current, returnToAiInput())).toEqual(expected);
     expect(autoCloseConversationSegment(current, autoCloseInput())).toEqual(expected);
-    expect(closeConversationSegmentManually(current, {
-      operatorId: 'actor-handler-001',
+    expect(closeConversationSegmentManually(current, manualCloseInput({
       occurredAt: '2026-07-17T01:06:00.000Z',
-      resolution: { kind: 'unresolved' },
-    })).toEqual(expected);
+    }))).toEqual(expected);
     expect(forceCloseConversationSegment(current, {
       forceCloseAuthorized: true,
       occurredAt: '2026-07-17T01:06:00.000Z',
@@ -464,12 +467,12 @@ describe('conversation segment domain', () => {
     const current = closedSegment();
     const before = structuredClone(current);
     const next = appliedSegment(openNextSegmentFromCustomerInbound(current, {
-      segmentId: 'segment-002',
+      segmentId: 'seg_eeeeeeeeeeeeeeee',
       customerMessageId: 'message-inbound-002',
       occurredAt: '2026-07-17T01:06:00.000Z',
     }));
     expect(next).toEqual({
-      segmentId: 'segment-002',
+      segmentId: 'seg_eeeeeeeeeeeeeeee',
       conversationId: current.conversationId,
       sequenceNo: 2,
       state: 'ai_handling',
@@ -486,7 +489,7 @@ describe('conversation segment domain', () => {
     });
     expect(current).toEqual(before);
     expect(openNextSegmentFromCustomerInbound(segment(), {
-      segmentId: 'segment-002',
+      segmentId: 'seg_eeeeeeeeeeeeeeee',
       customerMessageId: 'message-inbound-002',
       occurredAt: '2026-07-17T01:06:00.000Z',
     })).toEqual({ kind: 'blocked', code: 'segment_not_closed' });
@@ -494,7 +497,7 @@ describe('conversation segment domain', () => {
 
   it('新入站要求 closedAt 存在且为 canonical UTC，并且不早于 closedAt', () => {
     const input = {
-      segmentId: 'segment-002',
+      segmentId: 'seg_eeeeeeeeeeeeeeee',
       customerMessageId: 'message-inbound-002',
       occurredAt: '2026-07-17T01:06:00.000Z',
     } as const;
@@ -541,11 +544,10 @@ describe('conversation segment domain', () => {
       kind: 'blocked',
       code: 'transition_not_allowed',
     });
-    expect(closeConversationSegmentManually(segment(), {
-      operatorId: 'actor-handler-001',
-      occurredAt: '2026-07-17T01:05:00.000Z',
-      resolution: { kind: 'unresolved' },
-    })).toEqual({ kind: 'blocked', code: 'transition_not_allowed' });
+    expect(closeConversationSegmentManually(segment(), manualCloseInput())).toEqual({
+      kind: 'blocked',
+      code: 'transition_not_allowed',
+    });
   });
 
   it('成功与阻断路径均不修改只读 segment 或守卫输入', () => {

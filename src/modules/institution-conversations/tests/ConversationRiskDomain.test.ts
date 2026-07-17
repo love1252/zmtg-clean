@@ -3,6 +3,7 @@ import {
   confirmConversationRisk,
   conversationRiskDomains,
   conversationRiskStates,
+  projectCompleteConversationRiskHistories,
   projectConversationRisk,
   recordUnconfirmedRisk,
   resolveConversationRisk,
@@ -10,6 +11,7 @@ import {
   type ConversationRiskHistory,
   type ConversationRiskMutationResult,
   type ConversationRiskProjection,
+  type ConversationRiskTarget,
 } from '@/modules/institution-conversations/domain/conversation-risks';
 import type { ConversationSegment } from '@/modules/institution-conversations/domain/conversation-segments';
 
@@ -53,6 +55,13 @@ const resolveInput = {
   occurredAt: '2026-07-17T01:03:00.000Z',
   clinicalClosureVerification: closureVerification,
 } as const;
+
+const compositionTarget: ConversationRiskTarget = {
+  tenantId: 'ten_aaaaaaaaaaaaaaaa',
+  institutionId: 'ins_bbbbbbbbbbbbbbbb',
+  conversationId: 'con_cccccccccccccccc',
+  segmentId: 'seg_dddddddddddddddd',
+};
 
 const applied = (result: ConversationRiskMutationResult): Extract<
   ConversationRiskMutationResult,
@@ -513,5 +522,71 @@ describe('conversation risk domain', () => {
     expect(projection(unconfirmed).state).toBe('unconfirmed');
     expect(projection(confirmed).state).toBe('confirmed');
     expect(projection(resolved).state).toBe('resolved');
+  });
+
+  it('target-bound 完整集合稳定排序并保留 caller 声明 provenance', () => {
+    const historyB = unconfirmedHistory({
+      eventId: 'rke_bbbbbbbbbbbbbbb1',
+      riskId: 'rsk_bbbbbbbbbbbbbbbb',
+      ...compositionTarget,
+      sourceMessageId: 'msg_bbbbbbbbbbbbbbbb',
+    });
+    const historyA = unconfirmedHistory({
+      eventId: 'rke_aaaaaaaaaaaaaaa1',
+      riskId: 'rsk_aaaaaaaaaaaaaaaa',
+      ...compositionTarget,
+      sourceMessageId: 'msg_aaaaaaaaaaaaaaaa',
+    });
+
+    expect(projectCompleteConversationRiskHistories(
+      [historyB, historyA],
+      compositionTarget,
+      [],
+      '2026-07-17T01:05:00.000Z',
+    )).toEqual({
+      kind: 'projected',
+      projection: {
+        ...compositionTarget,
+        provenance: 'caller_declared_complete_histories',
+        risks: [
+          {
+            riskId: 'rsk_aaaaaaaaaaaaaaaa',
+            state: 'unconfirmed',
+            riskDomain: 'clinical',
+            clinicalClosureCheckState: 'not_applicable',
+          },
+          {
+            riskId: 'rsk_bbbbbbbbbbbbbbbb',
+            state: 'unconfirmed',
+            riskDomain: 'clinical',
+            clinicalClosureCheckState: 'not_applicable',
+          },
+        ],
+      },
+    });
+  });
+
+  it('单链投影对 sparse、Proxy 和 accessor 历史受控 fail-closed', () => {
+    const sparse = new Array(1) as ConversationRiskHistory;
+    const proxied = new Proxy(unconfirmedHistory(), {});
+    const accessor = structuredClone(unconfirmedHistory()) as ConversationRiskHistory;
+    let reads = 0;
+    Object.defineProperty(accessor[0] as object, 'riskCode', {
+      enumerable: true,
+      configurable: true,
+      get: () => {
+        reads += 1;
+        return 'clinical_alert';
+      },
+    });
+
+    for (const history of [sparse, proxied, accessor]) {
+      expect(() => projectConversationRisk(history)).not.toThrow();
+      expect(projectConversationRisk(history)).toEqual({
+        kind: 'blocked',
+        code: 'invalid_risk_history',
+      });
+    }
+    expect(reads).toBe(0);
   });
 });
