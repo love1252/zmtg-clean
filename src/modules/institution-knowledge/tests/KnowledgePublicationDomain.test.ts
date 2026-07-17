@@ -1,22 +1,33 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  createKnowledgeContentManifest,
+  type CreateKnowledgeContentManifestInput,
+  type KnowledgeAttachmentRevisionDescriptor,
+  type KnowledgeContentManifest,
+} from '../domain/knowledge-content-manifest';
+import {
   decideKnowledgePublication,
   evaluateKnowledgeUseAvailability,
   knowledgePublicationLifecycles,
+  knowledgeWithdrawalReasonCodes,
   type KnowledgePublication,
   type KnowledgePublicationCommand,
   type KnowledgePublicationState,
 } from '../domain/knowledge-publication';
 import {
   createKnowledgeDraftVersion,
+  isValidKnowledgeVersion,
   type KnowledgeMetadataSnapshot,
   type KnowledgeVersion,
 } from '../domain/knowledge-versioning';
 
-const manifestHashA = `sha256:${'a'.repeat(64)}`;
-const manifestHashB = `sha256:${'b'.repeat(64)}`;
-const manifestHashC = `sha256:${'c'.repeat(64)}`;
+const bodyContentHashA = `sha256:${'1'.repeat(64)}`;
+const bodyContentHashB = `sha256:${'2'.repeat(64)}`;
+const bodyContentHashC = `sha256:${'3'.repeat(64)}`;
+const fileContentHashA = `sha256:${'4'.repeat(64)}`;
+const authorActorId = 'actor-knowledge-author-1';
+const operatorActorId = 'actor-knowledge-operator-1';
 
 function metadata(
   overrides: Partial<KnowledgeMetadataSnapshot> = {},
@@ -35,20 +46,109 @@ function metadata(
   };
 }
 
-function candidateVersion(
-  overrides: Partial<Parameters<typeof createKnowledgeDraftVersion>[0]> = {},
-): KnowledgeVersion {
-  const result = createKnowledgeDraftVersion({
+function manifestInput(
+  overrides: Partial<CreateKnowledgeContentManifestInput> = {},
+): CreateKnowledgeContentManifestInput {
+  return {
+    manifestFormatVersion: 1,
     knowledgeId: 'knowledge-1',
-    versionId: 'version-2',
-    versionNumber: 2,
-    previousVersionNumber: 1,
+    tenantId: 'tenant-1',
+    institutionId: 'institution-1',
+    ownershipSource: 'institution',
     metadataSnapshot: metadata(),
-    bodyRevisionId: 'body-revision-2',
-    fileRevisionIds: ['file-revision-2'],
-    manifestHash: manifestHashB,
-    createdAt: '2026-07-17T02:00:00.000Z',
+    body: {
+      bodyRevisionId: 'body-revision-2',
+      contentHash: bodyContentHashB,
+      schemaVersion: 'body-schema-v1',
+      templateVersion: 'faq-template-v1',
+    },
+    attachments: [
+      {
+        fileRevisionId: 'file-revision-2',
+        contentHash: fileContentHashA,
+        mimeType: 'application/pdf',
+        sizeBytes: 1024,
+        safetyStatus: 'allowed',
+        displayName: '护理说明.pdf',
+      },
+    ],
     ...overrides,
+  };
+}
+
+function contentManifest(
+  overrides: Partial<CreateKnowledgeContentManifestInput> = {},
+): KnowledgeContentManifest {
+  const result = createKnowledgeContentManifest(manifestInput(overrides));
+  if (!result.ok) throw new Error(result.reasonCode);
+  return result.manifest;
+}
+
+const manifestHashA = contentManifest({
+  body: {
+    ...manifestInput().body,
+    bodyRevisionId: 'body-revision-1',
+    contentHash: bodyContentHashA,
+  },
+  attachments: [],
+}).manifestHash;
+const manifestHashB = contentManifest().manifestHash;
+const manifestHashC = contentManifest({
+  body: {
+    ...manifestInput().body,
+    bodyRevisionId: 'body-revision-3',
+    contentHash: bodyContentHashC,
+  },
+  attachments: [],
+}).manifestHash;
+
+type CandidateVersionOverrides = Partial<{
+  versionId: string;
+  versionNumber: number;
+  previousVersionNumber: number | null;
+  createdByActorId: string;
+  createdAt: string;
+  metadataSnapshot: KnowledgeMetadataSnapshot;
+  manifestInput: Partial<CreateKnowledgeContentManifestInput>;
+}>;
+
+function candidateVersion(
+  overrides: CandidateVersionOverrides = {},
+): KnowledgeVersion {
+  const manifestOverrides = overrides.manifestInput ?? {};
+  const manifest = contentManifest({
+    ...manifestOverrides,
+    metadataSnapshot:
+      overrides.metadataSnapshot ??
+      manifestOverrides.metadataSnapshot ??
+      metadata(),
+  });
+  if (manifest.ownershipSource === 'platform') {
+    const readOnlySnapshot = Object.freeze({
+      knowledgeId: manifest.knowledgeId,
+      versionId: overrides.versionId ?? 'version-2',
+      versionNumber: overrides.versionNumber ?? 2,
+      lifecycle: 'draft' as const,
+      metadataSnapshot: manifest.metadataSnapshot,
+      bodyRevisionId: manifest.body.bodyRevisionId,
+      fileRevisionIds: Object.freeze(
+        manifest.attachments.map((attachment) => attachment.fileRevisionId),
+      ),
+      manifestHash: manifest.manifestHash,
+      contentManifest: manifest,
+      createdByActorId: overrides.createdByActorId ?? authorActorId,
+      createdAt: overrides.createdAt ?? '2026-07-17T02:00:00.000Z',
+    });
+    expect(isValidKnowledgeVersion(readOnlySnapshot)).toBe(true);
+    return readOnlySnapshot;
+  }
+  const result = createKnowledgeDraftVersion({
+    versionId: overrides.versionId ?? 'version-2',
+    versionNumber: overrides.versionNumber ?? 2,
+    previousVersionNumber: overrides.previousVersionNumber ?? 1,
+    contentManifest: manifest,
+    createdByActorId: overrides.createdByActorId ?? authorActorId,
+    createdAt: overrides.createdAt ?? '2026-07-17T02:00:00.000Z',
   });
   if (!result.ok) throw new Error(result.reasonCode);
   return result.version;
@@ -68,9 +168,14 @@ function oldPublication(
     complete: true,
     safetyStatus: 'allowed',
     useScope: 'ai_customer_reply',
+    publishedByActorId: operatorActorId,
     publishedAt: '2026-07-16T01:00:00.000Z',
     withdrawnAt:
       lifecycle === 'withdrawn' ? '2026-07-16T03:00:00.000Z' : null,
+    withdrawnByActorId:
+      lifecycle === 'withdrawn' ? operatorActorId : null,
+    withdrawReasonCode:
+      lifecycle === 'withdrawn' ? 'content_outdated' : null,
     ...overrides,
   };
 }
@@ -81,8 +186,13 @@ function publicationState(
   return {
     item: {
       knowledgeId: 'knowledge-1',
+      tenantId: 'tenant-1',
+      institutionId: 'institution-1',
+      ownershipSource: 'institution',
       lifecycle: 'active',
       revision: 7,
+      lastDecidedAt: '2026-07-16T01:00:00.000Z',
+      lastDecidedByActorId: operatorActorId,
     },
     currentPublicationId: 'publication-1',
     publications: [oldPublication()],
@@ -98,6 +208,7 @@ function publishCommand(
     kind: 'publish',
     idempotencyKey: 'publish-key-0001',
     expectedRevision: 7,
+    actorId: operatorActorId,
     decidedAt: '2026-07-17T04:00:00.000Z',
     publicationId: 'publication-2',
     candidateVersion: candidate,
@@ -108,6 +219,70 @@ function publishCommand(
       safetyStatus: 'allowed',
       useScopeEligible: true,
     },
+    ...overrides,
+  };
+}
+
+function rollbackCommand(
+  target: KnowledgePublication,
+  overrides: Partial<
+    Extract<KnowledgePublicationCommand, { kind: 'rollback' }>
+  > = {},
+): Extract<KnowledgePublicationCommand, { kind: 'rollback' }> {
+  const expectedRevision = overrides.expectedRevision ?? 7;
+  const decidedAt = overrides.decidedAt ?? '2026-07-17T05:00:00.000Z';
+  return {
+    kind: 'rollback',
+    idempotencyKey: 'rollback-key-0001',
+    expectedRevision,
+    actorId: operatorActorId,
+    decidedAt,
+    targetPublicationId: target.publicationId,
+    gateEvidence: {
+      targetPublicationId: target.publicationId,
+      targetVersionId: target.versionId,
+      targetVersionNumber: target.versionNumber,
+      observedManifestHash: target.manifestHash,
+      observedRevision: expectedRevision,
+      observedAt: decidedAt,
+      parseReady: true,
+      indexReady: true,
+      safetyStatus: 'allowed',
+      useScopeEligible: true,
+    },
+    ...overrides,
+  };
+}
+
+function withdrawCommand(
+  targetPublicationId: string,
+  overrides: Partial<
+    Extract<KnowledgePublicationCommand, { kind: 'withdraw' }>
+  > = {},
+): Extract<KnowledgePublicationCommand, { kind: 'withdraw' }> {
+  return {
+    kind: 'withdraw',
+    idempotencyKey: 'withdraw-key-0001',
+    expectedRevision: 7,
+    actorId: operatorActorId,
+    decidedAt: '2026-07-17T06:00:00.000Z',
+    targetPublicationId,
+    reasonCode: 'content_outdated',
+    ...overrides,
+  };
+}
+
+function retireCommand(
+  overrides: Partial<
+    Extract<KnowledgePublicationCommand, { kind: 'retire' }>
+  > = {},
+): Extract<KnowledgePublicationCommand, { kind: 'retire' }> {
+  return {
+    kind: 'retire',
+    idempotencyKey: 'retire-key-00001',
+    expectedRevision: 7,
+    actorId: operatorActorId,
+    decidedAt: '2026-07-17T07:00:00.000Z',
     ...overrides,
   };
 }
@@ -136,6 +311,105 @@ const metadataConflictCases: readonly Readonly<{
   { name: 'useScope', patch: { useScope: 'internal_only' } },
 ];
 
+const secondAttachment: KnowledgeAttachmentRevisionDescriptor = {
+  fileRevisionId: 'file-revision-3',
+  contentHash: `sha256:${'5'.repeat(64)}`,
+  mimeType: 'image/png',
+  sizeBytes: 2048,
+  safetyStatus: 'allowed',
+  displayName: '护理示意图.png',
+};
+
+const manifestConflictCases: readonly Readonly<{
+  name: string;
+  patch: () => Partial<CreateKnowledgeContentManifestInput>;
+}>[] = [
+  { name: 'tenantId', patch: () => ({ tenantId: 'tenant-2' }) },
+  {
+    name: 'institutionId',
+    patch: () => ({ institutionId: 'institution-2' }),
+  },
+  {
+    name: 'ownershipSource',
+    patch: () => ({ ownershipSource: 'platform' }),
+  },
+  {
+    name: 'bodyRevisionId',
+    patch: () => ({
+      body: { ...manifestInput().body, bodyRevisionId: 'body-revision-3' },
+    }),
+  },
+  {
+    name: 'body content hash',
+    patch: () => ({
+      body: { ...manifestInput().body, contentHash: bodyContentHashC },
+    }),
+  },
+  {
+    name: 'body schema version',
+    patch: () => ({
+      body: { ...manifestInput().body, schemaVersion: 'body-schema-v2' },
+    }),
+  },
+  {
+    name: 'body template version',
+    patch: () => ({
+      body: { ...manifestInput().body, templateVersion: 'faq-template-v2' },
+    }),
+  },
+  {
+    name: 'fileRevisionId',
+    patch: () => ({
+      attachments: [
+        { ...manifestInput().attachments[0], fileRevisionId: 'file-revision-3' },
+      ],
+    }),
+  },
+  {
+    name: 'attachment content hash',
+    patch: () => ({
+      attachments: [
+        {
+          ...manifestInput().attachments[0],
+          contentHash: `sha256:${'6'.repeat(64)}`,
+        },
+      ],
+    }),
+  },
+  {
+    name: 'attachment MIME',
+    patch: () => ({
+      attachments: [
+        { ...manifestInput().attachments[0], mimeType: 'application/octet-stream' },
+      ],
+    }),
+  },
+  {
+    name: 'attachment size',
+    patch: () => ({
+      attachments: [
+        { ...manifestInput().attachments[0], sizeBytes: 1025 },
+      ],
+    }),
+  },
+  {
+    name: 'attachment safety',
+    patch: () => ({
+      attachments: [
+        { ...manifestInput().attachments[0], safetyStatus: 'pending' },
+      ],
+    }),
+  },
+  {
+    name: 'attachment display name',
+    patch: () => ({
+      attachments: [
+        { ...manifestInput().attachments[0], displayName: '护理说明-修订.pdf' },
+      ],
+    }),
+  },
+];
+
 describe('knowledge publication domain', () => {
   it('keeps publication disposition separate from version lifecycle', () => {
     expect(knowledgePublicationLifecycles).toEqual([
@@ -144,6 +418,13 @@ describe('knowledge publication domain', () => {
       'withdrawn',
     ]);
     expect(Object.isFrozen(knowledgePublicationLifecycles)).toBe(true);
+    expect(knowledgeWithdrawalReasonCodes).toEqual([
+      'content_error',
+      'content_outdated',
+      'safety_revoked',
+      'policy_revoked',
+    ]);
+    expect(Object.isFrozen(knowledgeWithdrawalReasonCodes)).toBe(true);
   });
 
   it('publishes through draft -> publishing -> published and supersedes the old current only after all gates pass', () => {
@@ -163,6 +444,10 @@ describe('knowledge publication domain', () => {
     expect(decision.idempotentReplay).toBe(false);
     expect(decision.shouldApplyNextState).toBe(true);
     expect(decision.nextState.item.revision).toBe(8);
+    expect(decision.nextState.item.lastDecidedAt).toBe(command.decidedAt);
+    expect(decision.nextState.item.lastDecidedByActorId).toBe(
+      command.actorId,
+    );
     expect(decision.nextState.currentPublicationId).toBe('publication-2');
     expect(decision.nextState.publications).toEqual([
       expect.objectContaining({
@@ -175,6 +460,9 @@ describe('knowledge publication domain', () => {
         lifecycle: 'current',
         complete: true,
         safetyStatus: 'allowed',
+        publishedByActorId: command.actorId,
+        withdrawnByActorId: null,
+        withdrawReasonCode: null,
       }),
     ]);
     expect(decision.candidateVersion?.lifecycle).toBe('published');
@@ -196,12 +484,46 @@ describe('knowledge publication domain', () => {
     expect(Object.isFrozen(decision.nextState.publications[0])).toBe(true);
     expect(Object.isFrozen(decision.candidateVersion)).toBe(true);
     expect(Object.isFrozen(decision.candidateVersion?.metadataSnapshot.tags)).toBe(true);
+    expect(Object.isFrozen(decision.candidateVersion?.contentManifest)).toBe(
+      true,
+    );
+    expect(
+      Object.isFrozen(decision.candidateVersion?.contentManifest.body),
+    ).toBe(true);
+    expect(
+      Object.isFrozen(decision.candidateVersion?.contentManifest.attachments),
+    ).toBe(true);
+    expect(
+      Object.isFrozen(
+        decision.candidateVersion?.contentManifest.attachments[0],
+      ),
+    ).toBe(true);
     expect(Object.isFrozen(decision.candidateLifecyclePath)).toBe(true);
     expect(Object.isFrozen(decision.publicationTransitions[0]?.path)).toBe(true);
     expect(Object.isFrozen(decision.idempotencyRecord)).toBe(true);
     expect(Object.isFrozen(decision.idempotencyRecord?.previousState)).toBe(
       true,
     );
+  });
+
+  it.each([
+    ['tenantId', { tenantId: 'tenant-2' }],
+    ['institutionId', { institutionId: 'institution-2' }],
+    ['ownershipSource', { ownershipSource: 'platform' as const }],
+  ])('rejects a candidate whose manifest changes the item %s', (_field, manifestOverrides) => {
+    const state = publicationState();
+    const candidate = candidateVersion({ manifestInput: manifestOverrides });
+    const decision = decideKnowledgePublication({
+      state,
+      command: publishCommand({ candidateVersion: candidate }),
+      existingIdempotencyRecord: null,
+    });
+
+    expect(decision.ok).toBe(false);
+    if (decision.ok) return;
+    expect(decision.reasonCodes).toEqual(['candidate_scope_mismatch']);
+    expect(decision.nextState).toEqual(state);
+    expect(decision.shouldApplyNextState).toBe(false);
   });
 
   it.each([
@@ -294,6 +616,41 @@ describe('knowledge publication domain', () => {
     expect(replay.publicationTransitions).toEqual([]);
   });
 
+  it.each(['pending', 'blocked', 'expired'] as const)(
+    'rejects publication when one manifest attachment is %s even if aggregate gate evidence says allowed',
+    (safetyStatus) => {
+      const state = publicationState();
+      const candidate = candidateVersion({
+        manifestInput: {
+          attachments: [
+            {
+              ...manifestInput().attachments[0],
+              safetyStatus,
+            },
+          ],
+        },
+      });
+      const command = publishCommand({ candidateVersion: candidate });
+      const decision = decideKnowledgePublication({
+        state,
+        command,
+        existingIdempotencyRecord: null,
+      });
+
+      expect(decision.ok).toBe(false);
+      if (decision.ok) return;
+      expect(decision.reasonCodes).toEqual(['safety_not_allowed']);
+      expect(decision.nextState).toEqual(state);
+      expect(decision.nextState.currentPublicationId).toBe('publication-1');
+      expect(decision.candidateVersion?.lifecycle).toBe('draft');
+      expect(decision.candidateLifecyclePath).toEqual([
+        'draft',
+        'publishing',
+        'draft',
+      ]);
+    },
+  );
+
   it('rejects a publish candidate that reuses any historical versionId', () => {
     const state = publicationState();
     const reusedCandidate = candidateVersion({
@@ -319,10 +676,50 @@ describe('knowledge publication domain', () => {
     expect(command).toEqual(commandBefore);
   });
 
+  it('rejects a split-brain candidate shell before evaluating publication gates', () => {
+    const state = publicationState();
+    const candidate = candidateVersion();
+    const splitCandidate = {
+      ...candidate,
+      metadataSnapshot: {
+        ...candidate.metadataSnapshot,
+        useScope: 'internal_only' as const,
+      },
+    };
+    const command = publishCommand({
+      candidateVersion: splitCandidate,
+    });
+    const stateBefore = structuredClone(state);
+    const commandBefore = structuredClone(command);
+
+    const decision = decideKnowledgePublication({
+      state,
+      command,
+      existingIdempotencyRecord: null,
+    });
+
+    expect(decision.ok).toBe(false);
+    if (decision.ok) return;
+    expect(decision.reasonCodes).toEqual(['command_invalid']);
+    expect(decision.nextState).toEqual(state);
+    expect(decision.nextState.currentPublicationId).toBe('publication-1');
+    expect(decision.idempotencyRecord).toBeNull();
+    expect(state).toEqual(stateBefore);
+    expect(command).toEqual(commandBefore);
+  });
+
   it('reuses the exact idempotent result before checking the advanced revision and rejects another payload with the same key', () => {
     const state = publicationState();
     const command = publishCommand({
       candidateVersion: candidateVersion({
+        manifestInput: {
+          attachments: [
+            {
+              ...manifestInput().attachments[0],
+              displayName: 'SENSITIVE_FILE_NAME_SENTINEL.pdf',
+            },
+          ],
+        },
         metadataSnapshot: metadata({
           title: 'SENSITIVE_TITLE_SENTINEL',
           category: 'SENSITIVE_CATEGORY_SENTINEL',
@@ -385,7 +782,7 @@ describe('knowledge publication domain', () => {
       'submittedCandidateReference',
     ]);
     expect(recordedJson).not.toMatch(
-      /prompt|provider|completion|vector|providerPayload|metadataSnapshot/i,
+      /prompt|provider|completion|vector|providerPayload|metadataSnapshot|contentManifest|displayName|mimeType/i,
     );
     for (const sensitiveValue of [
       command.candidateVersion.metadataSnapshot.title,
@@ -396,6 +793,9 @@ describe('knowledge publication domain', () => {
       command.candidateVersion.metadataSnapshot.riskLevel,
       command.candidateVersion.metadataSnapshot.effectiveAt,
       command.candidateVersion.metadataSnapshot.reviewAt,
+      ...command.candidateVersion.contentManifest.attachments.map(
+        (attachment) => attachment.displayName,
+      ),
     ]) {
       if (sensitiveValue !== null) {
         expect(recordedJson).not.toContain(sensitiveValue);
@@ -519,6 +919,13 @@ describe('knowledge publication domain', () => {
       replayFromDeserializedRecord.candidateVersion?.metadataSnapshot.tags,
     )).toBe(true);
     expect(Object.isFrozen(
+      replayFromDeserializedRecord.candidateVersion?.contentManifest,
+    )).toBe(true);
+    expect(Object.isFrozen(
+      replayFromDeserializedRecord.candidateVersion?.contentManifest
+        .attachments[0],
+    )).toBe(true);
+    expect(Object.isFrozen(
       replayFromDeserializedRecord.candidateLifecyclePath,
     )).toBe(true);
     expect(Object.isFrozen(
@@ -542,7 +949,14 @@ describe('knowledge publication domain', () => {
       versionId: 'version-3',
       versionNumber: 3,
       previousVersionNumber: 2,
-      manifestHash: manifestHashC,
+      manifestInput: {
+        body: {
+          ...manifestInput().body,
+          bodyRevisionId: 'body-revision-3',
+          contentHash: bodyContentHashC,
+        },
+        attachments: [],
+      },
     });
     const conflictCommand = publishCommand({
       candidateVersion: changedCandidate,
@@ -621,6 +1035,76 @@ describe('knowledge publication domain', () => {
     },
   );
 
+  it.each(manifestConflictCases)(
+    'rejects the same idempotency key when manifest semantic field $name changes',
+    ({ patch }) => {
+      const state = publicationState();
+      const originalCommand = publishCommand();
+      const first = decideKnowledgePublication({
+        state,
+        command: originalCommand,
+        existingIdempotencyRecord: null,
+      });
+      expect(first.ok).toBe(true);
+      expect(first.idempotencyRecord).not.toBeNull();
+      if (!first.idempotencyRecord) return;
+
+      const retryCommand = publishCommand({
+        candidateVersion: candidateVersion({ manifestInput: patch() }),
+      });
+      const decision = decideKnowledgePublication({
+        state: first.nextState,
+        command: retryCommand,
+        existingIdempotencyRecord: first.idempotencyRecord,
+        recordedSubmittedCandidateVersion: originalCommand.candidateVersion,
+      });
+
+      expect(decision.ok).toBe(false);
+      if (decision.ok) return;
+      expect(decision.reasonCodes).toEqual(['idempotency_conflict']);
+      expect(decision.idempotentReplay).toBe(false);
+      expect(decision.shouldApplyNextState).toBe(false);
+      expect(decision.nextState).toEqual(first.nextState);
+      expect(decision.idempotencyRecord).toBeNull();
+    },
+  );
+
+  it('treats attachment declaration order as part of the idempotent candidate', () => {
+    const attachments = [manifestInput().attachments[0], secondAttachment];
+    const originalCandidate = candidateVersion({
+      manifestInput: { attachments },
+    });
+    const originalCommand = publishCommand({
+      candidateVersion: originalCandidate,
+    });
+    const first = decideKnowledgePublication({
+      state: publicationState(),
+      command: originalCommand,
+      existingIdempotencyRecord: null,
+    });
+    expect(first.ok).toBe(true);
+    expect(first.idempotencyRecord).not.toBeNull();
+    if (!first.idempotencyRecord) return;
+
+    const reorderedCommand = publishCommand({
+      candidateVersion: candidateVersion({
+        manifestInput: { attachments: [...attachments].reverse() },
+      }),
+    });
+    const decision = decideKnowledgePublication({
+      state: first.nextState,
+      command: reorderedCommand,
+      existingIdempotencyRecord: first.idempotencyRecord,
+      recordedSubmittedCandidateVersion: originalCandidate,
+    });
+
+    expect(decision.ok).toBe(false);
+    if (decision.ok) return;
+    expect(decision.reasonCodes).toEqual(['idempotency_conflict']);
+    expect(decision.idempotentReplay).toBe(false);
+    expect(decision.nextState).toEqual(first.nextState);
+  });
+
   it('rejects an idempotency record from another knowledge item', () => {
     const state = publicationState();
     const command = publishCommand();
@@ -636,8 +1120,13 @@ describe('knowledge publication domain', () => {
     const otherState = publicationState({
       item: {
         knowledgeId: 'knowledge-2',
+        tenantId: 'tenant-1',
+        institutionId: 'institution-1',
+        ownershipSource: 'institution',
         lifecycle: 'active',
         revision: 7,
+        lastDecidedAt: '2026-07-16T01:00:00.000Z',
+        lastDecidedByActorId: operatorActorId,
       },
       publications: [oldPublication({ knowledgeId: 'knowledge-2' })],
     });
@@ -734,8 +1223,7 @@ describe('knowledge publication domain', () => {
     'fails closed before a $kind decision can overflow the item revision',
     (kind) => {
       const baseItem = {
-        knowledgeId: 'knowledge-1',
-        lifecycle: 'active' as const,
+        ...publicationState().item,
         revision: Number.MAX_SAFE_INTEGER,
       };
       const historical = oldPublication({ lifecycle: 'superseded' });
@@ -757,27 +1245,22 @@ describe('knowledge publication domain', () => {
         kind === 'publish'
           ? publishCommand({ expectedRevision: Number.MAX_SAFE_INTEGER })
           : kind === 'rollback'
-            ? {
-                kind,
+            ? rollbackCommand(historical, {
                 idempotencyKey: 'rollback-overflow',
                 expectedRevision: Number.MAX_SAFE_INTEGER,
                 decidedAt: '2026-07-17T04:45:00.000Z',
-                targetPublicationId: historical.publicationId,
-              }
+              })
             : kind === 'withdraw'
-              ? {
-                  kind,
+              ? withdrawCommand('publication-1', {
                   idempotencyKey: 'withdraw-overflow',
                   expectedRevision: Number.MAX_SAFE_INTEGER,
                   decidedAt: '2026-07-17T04:45:00.000Z',
-                  targetPublicationId: 'publication-1',
-                }
-              : {
-                  kind,
+                })
+              : retireCommand({
                   idempotencyKey: 'retire-overflow',
                   expectedRevision: Number.MAX_SAFE_INTEGER,
                   decidedAt: '2026-07-17T04:45:00.000Z',
-                };
+                });
       const stateBefore = structuredClone(state);
       const commandBefore = structuredClone(command);
       let decision: ReturnType<typeof decideKnowledgePublication> | undefined;
@@ -794,6 +1277,9 @@ describe('knowledge publication domain', () => {
       if (decision?.ok !== false) return;
       expect(decision.reasonCodes).toEqual(['revision_overflow']);
       expect(decision.nextState).toEqual(state);
+      expect(Object.isFrozen(decision.nextState)).toBe(true);
+      expect(Object.isFrozen(decision.nextState.item)).toBe(true);
+      expect(Object.isFrozen(decision.nextState.publications)).toBe(true);
       expect(decision.shouldApplyNextState).toBe(false);
       expect(decision.publicationTransitions).toEqual([]);
       expect(decision.idempotencyRecord).toBeNull();
@@ -805,8 +1291,7 @@ describe('knowledge publication domain', () => {
   it('allows the final safe revision increment and still replays it at MAX_SAFE_INTEGER', () => {
     const state = publicationState({
       item: {
-        knowledgeId: 'knowledge-1',
-        lifecycle: 'active',
+        ...publicationState().item,
         revision: Number.MAX_SAFE_INTEGER - 1,
       },
     });
@@ -887,31 +1372,75 @@ describe('knowledge publication domain', () => {
       }),
     },
     {
+      name: 'command actor is missing',
+      build: () => {
+        const { actorId: _actorId, ...command } = publishCommand();
+        return command;
+      },
+    },
+    {
+      name: 'command actor is not a reference id',
+      build: () => ({ ...publishCommand(), actorId: 'bad actor' }),
+    },
+    {
+      name: 'command actor has the wrong type',
+      build: () => ({ ...publishCommand(), actorId: 42 }),
+    },
+    {
+      name: 'expected revision is zero',
+      build: () => ({ ...publishCommand(), expectedRevision: 0 }),
+    },
+    {
+      name: 'rollback gate evidence is missing',
+      build: () => {
+        const { gateEvidence: _gateEvidence, ...command } = rollbackCommand(
+          oldPublication({ lifecycle: 'superseded' }),
+        );
+        return command;
+      },
+    },
+    {
       name: 'rollback target is missing',
-      build: () => ({
-        kind: 'rollback',
-        idempotencyKey: 'rollback-key-0001',
-        expectedRevision: 7,
-        decidedAt: '2026-07-17T04:30:00.000Z',
-      }),
+      build: () => {
+        const { targetPublicationId: _targetPublicationId, ...command } =
+          rollbackCommand(oldPublication({ lifecycle: 'superseded' }));
+        return command;
+      },
     },
     {
       name: 'withdraw target has the wrong type',
       build: () => ({
-        kind: 'withdraw',
-        idempotencyKey: 'withdraw-key-0001',
-        expectedRevision: 7,
-        decidedAt: '2026-07-17T04:30:00.000Z',
+        ...withdrawCommand('publication-1'),
         targetPublicationId: 42,
+      }),
+    },
+    {
+      name: 'withdraw reason is missing',
+      build: () => {
+        const { reasonCode: _reasonCode, ...command } =
+          withdrawCommand('publication-1');
+        return command;
+      },
+    },
+    {
+      name: 'withdraw reason is not controlled',
+      build: () => ({
+        ...withdrawCommand('publication-1'),
+        reasonCode: 'free text',
+      }),
+    },
+    {
+      name: 'withdraw reason has the wrong type',
+      build: () => ({
+        ...withdrawCommand('publication-1'),
+        reasonCode: 42,
       }),
     },
     {
       name: 'retire revision has the wrong type',
       build: () => ({
-        kind: 'retire',
-        idempotencyKey: 'retire-key-00001',
+        ...retireCommand(),
         expectedRevision: '7',
-        decidedAt: '2026-07-17T04:30:00.000Z',
       }),
     },
     {
@@ -949,6 +1478,481 @@ describe('knowledge publication domain', () => {
     expect(decision.idempotencyRecord).toBeNull();
     expect(state).toEqual(stateBefore);
     expect(command).toEqual(commandBefore);
+  });
+
+  it('rejects command getters and Proxy commands without throwing or executing traps', () => {
+    const state = publicationState();
+    let accessorReads = 0;
+    const getterCommand = { ...publishCommand() } as Record<string, unknown>;
+    Object.defineProperty(getterCommand, 'kind', {
+      enumerable: true,
+      get() {
+        accessorReads += 1;
+        throw new Error('must not escape');
+      },
+    });
+
+    let proxyTrapCount = 0;
+    const proxyCommand = new Proxy(publishCommand(), {
+      get(target, property, receiver) {
+        proxyTrapCount += 1;
+        return Reflect.get(target, property, receiver);
+      },
+      getOwnPropertyDescriptor(target, property) {
+        proxyTrapCount += 1;
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      },
+      getPrototypeOf(target) {
+        proxyTrapCount += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys(target) {
+        proxyTrapCount += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+
+    for (const command of [getterCommand, proxyCommand]) {
+      let decision: ReturnType<typeof decideKnowledgePublication> | undefined;
+      expect(() => {
+        decision = decideKnowledgePublication({
+          state,
+          command: command as unknown as KnowledgePublicationCommand,
+          existingIdempotencyRecord: null,
+        });
+      }).not.toThrow();
+      expect(decision?.ok).toBe(false);
+      if (decision?.ok !== false) continue;
+      expect(decision.reasonCodes).toEqual(['command_invalid']);
+      expect(decision.nextState).toEqual(state);
+      expect(decision.idempotencyRecord).toBeNull();
+    }
+    expect(accessorReads).toBe(0);
+    expect(proxyTrapCount).toBe(0);
+  });
+
+  it('rejects malformed and trapped rollback evidence without reading accessors or throwing', () => {
+    const historical = oldPublication({ lifecycle: 'superseded' });
+    const state = publicationState();
+    const baseCommand = rollbackCommand(historical);
+    let accessorReads = 0;
+    const getterEvidence = { ...baseCommand.gateEvidence } as Record<
+      string,
+      unknown
+    >;
+    Object.defineProperty(getterEvidence, 'observedRevision', {
+      enumerable: true,
+      get: () => {
+        accessorReads += 1;
+        return 7;
+      },
+    });
+    const proxiedEvidence = new Proxy({ ...baseCommand.gateEvidence }, {});
+    const revoked = Proxy.revocable({ ...baseCommand.gateEvidence }, {});
+    revoked.revoke();
+    const invalidEvidenceValues: readonly unknown[] = [
+      { ...baseCommand.gateEvidence, unexpected: 'SENSITIVE_SENTINEL' },
+      { ...baseCommand.gateEvidence, targetVersionNumber: '1' },
+      getterEvidence,
+      proxiedEvidence,
+      revoked.proxy,
+    ];
+
+    for (const gateEvidence of invalidEvidenceValues) {
+      let decision: ReturnType<typeof decideKnowledgePublication> | undefined;
+      expect(() => {
+        decision = decideKnowledgePublication({
+          state,
+          command: {
+            ...baseCommand,
+            gateEvidence,
+          } as unknown as KnowledgePublicationCommand,
+          existingIdempotencyRecord: null,
+        });
+      }).not.toThrow();
+      expect(decision?.ok).toBe(false);
+      if (decision?.ok !== false) continue;
+      expect(decision.reasonCodes).toEqual(['command_invalid']);
+      expect(decision.nextState).toEqual(state);
+      expect(decision.shouldApplyNextState).toBe(false);
+      expect(JSON.stringify(decision)).not.toContain('SENSITIVE_SENTINEL');
+    }
+    expect(accessorReads).toBe(0);
+  });
+
+  it('rejects revoked top-level and command proxies with a frozen low-sensitive result', () => {
+    const state = publicationState();
+    const revokedCommand = Proxy.revocable(publishCommand(), {});
+    const revokedInput = Proxy.revocable(
+      {
+        state,
+        command: publishCommand(),
+        existingIdempotencyRecord: null,
+      },
+      {},
+    );
+    revokedCommand.revoke();
+    revokedInput.revoke();
+
+    let commandDecision:
+      | ReturnType<typeof decideKnowledgePublication>
+      | undefined;
+    expect(() => {
+      commandDecision = decideKnowledgePublication({
+        state,
+        command: revokedCommand.proxy,
+        existingIdempotencyRecord: null,
+      });
+    }).not.toThrow();
+    expect(commandDecision?.ok).toBe(false);
+    if (commandDecision?.ok === false) {
+      expect(commandDecision.reasonCodes).toEqual(['command_invalid']);
+      expect(commandDecision.nextState).toEqual(state);
+      expect(Object.isFrozen(commandDecision.nextState)).toBe(true);
+    }
+
+    let inputDecision:
+      | ReturnType<typeof decideKnowledgePublication>
+      | undefined;
+    expect(() => {
+      inputDecision = decideKnowledgePublication(
+        revokedInput.proxy as Parameters<
+          typeof decideKnowledgePublication
+        >[0],
+      );
+    }).not.toThrow();
+    expect(inputDecision?.ok).toBe(false);
+    if (inputDecision?.ok === false) {
+      expect(inputDecision.reasonCodes).toEqual(['command_invalid']);
+      expect(inputDecision.nextState).toEqual({
+        item: {
+          knowledgeId: 'invalid',
+          tenantId: 'invalid',
+          institutionId: 'invalid',
+          ownershipSource: 'institution',
+          lifecycle: 'active',
+          revision: 0,
+          lastDecidedAt: null,
+          lastDecidedByActorId: null,
+        },
+        currentPublicationId: null,
+        publications: [],
+      });
+      expect(Object.isFrozen(inputDecision.nextState)).toBe(true);
+      expect(JSON.stringify(inputDecision)).not.toContain('SENSITIVE');
+    }
+  });
+
+  it('rejects state accessors without invoking them', () => {
+    let accessorReads = 0;
+    const state = { ...publicationState() } as Record<string, unknown>;
+    Object.defineProperty(state, 'item', {
+      enumerable: true,
+      get() {
+        accessorReads += 1;
+        throw new Error('must not escape');
+      },
+    });
+    let decision: ReturnType<typeof decideKnowledgePublication> | undefined;
+
+    expect(() => {
+      decision = decideKnowledgePublication({
+        state: state as unknown as KnowledgePublicationState,
+        command: publishCommand(),
+        existingIdempotencyRecord: null,
+      });
+    }).not.toThrow();
+    expect(decision?.ok).toBe(false);
+    if (decision?.ok === false) {
+      expect(decision.reasonCodes).toEqual(['state_invalid']);
+      expect(decision.idempotencyRecord).toBeNull();
+      expect(decision.nextState).toEqual({
+        item: {
+          knowledgeId: 'invalid',
+          tenantId: 'invalid',
+          institutionId: 'invalid',
+          ownershipSource: 'institution',
+          lifecycle: 'active',
+          revision: 0,
+          lastDecidedAt: null,
+          lastDecidedByActorId: null,
+        },
+        currentPublicationId: null,
+        publications: [],
+      });
+      expect(Object.isFrozen(decision.nextState)).toBe(true);
+      expect(Object.isFrozen(decision.nextState.item)).toBe(true);
+      expect(Object.isFrozen(decision.nextState.publications)).toBe(true);
+      expect(() => JSON.stringify(decision)).not.toThrow();
+    }
+    expect(accessorReads).toBe(0);
+  });
+
+  it('rejects Array-subclass publication collections before inherited methods can be overridden', () => {
+    class PublicationArraySubclass extends Array<KnowledgePublication> {}
+    const publications = new PublicationArraySubclass();
+    publications.push(oldPublication());
+    const state = publicationState({ publications });
+
+    const decision = decideKnowledgePublication({
+      state,
+      command: publishCommand(),
+      existingIdempotencyRecord: null,
+    });
+
+    expect(decision.ok).toBe(false);
+    if (decision.ok) return;
+    expect(decision.reasonCodes).toEqual(['state_invalid']);
+    expect(decision.nextState).toEqual({
+      item: {
+        knowledgeId: 'invalid',
+        tenantId: 'invalid',
+        institutionId: 'invalid',
+        ownershipSource: 'institution',
+        lifecycle: 'active',
+        revision: 0,
+        lastDecidedAt: null,
+        lastDecidedByActorId: null,
+      },
+      currentPublicationId: null,
+      publications: [],
+    });
+    expect(Object.isFrozen(decision.nextState)).toBe(true);
+  });
+
+  it('rejects non-enumerable state and command fields before transition construction', () => {
+    const item = { ...publicationState().item };
+    Object.defineProperty(item, 'knowledgeId', {
+      value: item.knowledgeId,
+      enumerable: false,
+    });
+    const itemDecision = decideKnowledgePublication({
+      state: publicationState({ item }),
+      command: publishCommand(),
+      existingIdempotencyRecord: null,
+    });
+    expect(itemDecision.ok).toBe(false);
+    if (itemDecision.ok) return;
+    expect(itemDecision.reasonCodes).toEqual(['state_invalid']);
+    expect(itemDecision.nextState).toEqual({
+      item: {
+        knowledgeId: 'invalid',
+        tenantId: 'invalid',
+        institutionId: 'invalid',
+        ownershipSource: 'institution',
+        lifecycle: 'active',
+        revision: 0,
+        lastDecidedAt: null,
+        lastDecidedByActorId: null,
+      },
+      currentPublicationId: null,
+      publications: [],
+    });
+
+    const publication = { ...oldPublication() };
+    Object.defineProperty(publication, 'knowledgeId', {
+      value: publication.knowledgeId,
+      enumerable: false,
+    });
+    const publicationDecision = decideKnowledgePublication({
+      state: publicationState({ publications: [publication] }),
+      command: publishCommand(),
+      existingIdempotencyRecord: null,
+    });
+    expect(publicationDecision.ok).toBe(false);
+    if (publicationDecision.ok) return;
+    expect(publicationDecision.reasonCodes).toEqual(['state_invalid']);
+
+    const command = publishCommand();
+    Object.defineProperty(command, 'publicationId', {
+      value: command.publicationId,
+      enumerable: false,
+    });
+    const commandDecision = decideKnowledgePublication({
+      state: publicationState(),
+      command,
+      existingIdempotencyRecord: null,
+    });
+    expect(commandDecision.ok).toBe(false);
+    if (commandDecision.ok) return;
+    expect(commandDecision.reasonCodes).toEqual(['command_invalid']);
+  });
+
+  it('does not let inherited array serialization hooks collapse idempotency fingerprints', () => {
+    const previous = Object.getOwnPropertyDescriptor(Array.prototype, 'toJSON');
+    try {
+      Object.defineProperty(Array.prototype, 'toJSON', {
+        configurable: true,
+        value: () => ['collapsed'],
+      });
+
+      const state = publicationState();
+      const command = publishCommand();
+      const first = decideKnowledgePublication({
+        state,
+        command,
+        existingIdempotencyRecord: null,
+      });
+      expect(first.ok).toBe(true);
+      expect(first.idempotencyRecord).not.toBeNull();
+      if (!first.ok || first.idempotencyRecord === null) return;
+
+      const changedCommand = publishCommand({
+        candidateVersion: command.candidateVersion,
+        gateEvidence: {
+          ...command.gateEvidence,
+          indexReady: false,
+        },
+      });
+      const replay = decideKnowledgePublication({
+        state: first.nextState,
+        command: changedCommand,
+        existingIdempotencyRecord: first.idempotencyRecord,
+        recordedSubmittedCandidateVersion: command.candidateVersion,
+      });
+      expect(replay.ok).toBe(false);
+      if (replay.ok) return;
+      expect(replay.reasonCodes).toEqual(['idempotency_conflict']);
+      expect(replay.idempotentReplay).toBe(false);
+    } finally {
+      if (previous === undefined) {
+        delete (Array.prototype as { toJSON?: unknown }).toJSON;
+      } else {
+        Object.defineProperty(Array.prototype, 'toJSON', previous);
+      }
+    }
+  });
+
+  it('rejects inverted publication timelines and commands before applying state', () => {
+    const invertedPersisted = oldPublication({
+      lifecycle: 'withdrawn',
+      publishedAt: '2026-07-17T10:00:00.000Z',
+      withdrawnAt: '2026-07-17T09:00:00.000Z',
+    });
+    const invalidStateDecision = decideKnowledgePublication({
+      state: publicationState({
+        currentPublicationId: null,
+        publications: [invertedPersisted],
+      }),
+      command: retireCommand({
+        idempotencyKey: 'retire-time-0001',
+        decidedAt: '2026-07-17T11:00:00.000Z',
+      }),
+      existingIdempotencyRecord: null,
+    });
+    expect(invalidStateDecision.ok).toBe(false);
+    if (!invalidStateDecision.ok) {
+      expect(invalidStateDecision.reasonCodes).toEqual(['state_invalid']);
+    }
+
+    const futureState = publicationState({
+      item: {
+        ...publicationState().item,
+        lastDecidedAt: '2026-07-17T10:00:00.000Z',
+      },
+      publications: [
+        oldPublication({ publishedAt: '2026-07-17T10:00:00.000Z' }),
+      ],
+    });
+    const earlyWithdraw = decideKnowledgePublication({
+      state: futureState,
+      command: withdrawCommand('publication-1', {
+        idempotencyKey: 'withdraw-time-0001',
+        decidedAt: '2026-07-17T09:00:00.000Z',
+      }),
+      existingIdempotencyRecord: null,
+    });
+    expect(earlyWithdraw.ok).toBe(false);
+    if (!earlyWithdraw.ok) {
+      expect(earlyWithdraw.reasonCodes).toEqual(['command_invalid']);
+      expect(earlyWithdraw.shouldApplyNextState).toBe(false);
+    }
+
+    const earlyPublish = decideKnowledgePublication({
+      state: publicationState(),
+      command: publishCommand({
+        decidedAt: '2026-07-17T01:59:59.999Z',
+      }),
+      existingIdempotencyRecord: null,
+    });
+    expect(earlyPublish.ok).toBe(false);
+    if (!earlyPublish.ok) {
+      expect(earlyPublish.reasonCodes).toEqual(['command_invalid']);
+      expect(earlyPublish.shouldApplyNextState).toBe(false);
+    }
+  });
+
+  it('persists rollback decision time and rejects a later revision with an earlier command time', () => {
+    const historical = oldPublication({
+      publicationId: 'publication-1',
+      versionId: 'version-1',
+      versionNumber: 1,
+      lifecycle: 'superseded',
+      publishedAt: '2026-07-16T01:00:00.000Z',
+    });
+    const current = oldPublication({
+      publicationId: 'publication-2',
+      versionId: 'version-2',
+      versionNumber: 2,
+      manifestHash: manifestHashB,
+      lifecycle: 'current',
+      publishedAt: '2026-07-17T02:00:00.000Z',
+    });
+    const state = publicationState({
+      item: {
+        ...publicationState().item,
+        lastDecidedAt: '2026-07-17T02:00:00.000Z',
+      },
+      currentPublicationId: 'publication-2',
+      publications: [historical, current],
+    });
+    const rollback = decideKnowledgePublication({
+      state,
+      command: rollbackCommand(historical, {
+        idempotencyKey: 'rollback-time-0001',
+        decidedAt: '2026-07-17T05:00:00.000Z',
+      }),
+      existingIdempotencyRecord: null,
+    });
+    expect(rollback.ok).toBe(true);
+    if (!rollback.ok) return;
+    expect(rollback.nextState.item.lastDecidedAt).toBe(
+      '2026-07-17T05:00:00.000Z',
+    );
+
+    const earlierNextCommand = decideKnowledgePublication({
+      state: rollback.nextState,
+      command: retireCommand({
+        idempotencyKey: 'retire-time-0002',
+        expectedRevision: 8,
+        decidedAt: '2026-07-17T04:30:00.000Z',
+      }),
+      existingIdempotencyRecord: null,
+    });
+    expect(earlierNextCommand.ok).toBe(false);
+    if (!earlierNextCommand.ok) {
+      expect(earlierNextCommand.reasonCodes).toEqual(['command_invalid']);
+      expect(earlierNextCommand.shouldApplyNextState).toBe(false);
+    }
+  });
+
+  it.each([
+    '2026-02-30T04:00:00.000Z',
+    '2026-07-17T24:00:00.000Z',
+    '2026-07-17T04:00:00.000+24:00',
+    '2026-07-17T04:00:00.0001Z',
+  ])('rejects impossible publication decision timestamp %s', (decidedAt) => {
+    const state = publicationState();
+    const decision = decideKnowledgePublication({
+      state,
+      command: publishCommand({ decidedAt }),
+      existingIdempotencyRecord: null,
+    });
+
+    expect(decision.ok).toBe(false);
+    if (decision.ok) return;
+    expect(decision.reasonCodes).toEqual(['command_invalid']);
+    expect(decision.nextState).toEqual(state);
   });
 
   it('fails closed when an untyped caller supplies an unknown command kind', () => {
@@ -1001,13 +2005,7 @@ describe('knowledge publication domain', () => {
     });
     const decision = decideKnowledgePublication({
       state,
-      command: {
-        kind: 'rollback',
-        idempotencyKey: 'rollback-key-0001',
-        expectedRevision: 7,
-        decidedAt: '2026-07-17T05:00:00.000Z',
-        targetPublicationId: historical.publicationId,
-      },
+      command: rollbackCommand(historical),
       existingIdempotencyRecord: null,
     });
 
@@ -1038,18 +2036,18 @@ describe('knowledge publication domain', () => {
       manifestHash: manifestHashB,
     });
     const state = publicationState({
+      item: {
+        ...publicationState().item,
+        lastDecidedAt: '2026-07-16T03:00:00.000Z',
+      },
       currentPublicationId: current.publicationId,
       publications: [target, current],
     });
     const decision = decideKnowledgePublication({
       state,
-      command: {
-        kind: 'rollback',
+      command: rollbackCommand(target, {
         idempotencyKey: `rollback-${reason}`,
-        expectedRevision: 7,
-        decidedAt: '2026-07-17T05:00:00.000Z',
-        targetPublicationId: target.publicationId,
-      },
+      }),
       existingIdempotencyRecord: null,
     });
 
@@ -1064,13 +2062,7 @@ describe('knowledge publication domain', () => {
     const state = publicationState();
     const decision = decideKnowledgePublication({
       state,
-      command: {
-        kind: 'withdraw',
-        idempotencyKey: 'withdraw-key-0001',
-        expectedRevision: 7,
-        decidedAt: '2026-07-17T06:00:00.000Z',
-        targetPublicationId: 'publication-1',
-      },
+      command: withdrawCommand('publication-1'),
       existingIdempotencyRecord: null,
     });
 
@@ -1083,6 +2075,8 @@ describe('knowledge publication domain', () => {
         versionId: 'version-1',
         lifecycle: 'withdrawn',
         withdrawnAt: '2026-07-17T06:00:00.000Z',
+        withdrawnByActorId: operatorActorId,
+        withdrawReasonCode: 'content_outdated',
       }),
     ]);
     expect(decision.candidateLifecyclePath).toEqual([]);
@@ -1091,7 +2085,6 @@ describe('knowledge publication domain', () => {
     ]);
     expect(evaluateKnowledgeUseAvailability({
       state: decision.nextState,
-      assetApprovalStatus: 'approved',
     })).toEqual({
       canRetrieve: false,
       canAnswer: false,
@@ -1104,12 +2097,7 @@ describe('knowledge publication domain', () => {
     const state = publicationState();
     const decision = decideKnowledgePublication({
       state,
-      command: {
-        kind: 'retire',
-        idempotencyKey: 'retire-key-00001',
-        expectedRevision: 7,
-        decidedAt: '2026-07-17T07:00:00.000Z',
-      },
+      command: retireCommand(),
       existingIdempotencyRecord: null,
     });
 
@@ -1130,7 +2118,6 @@ describe('knowledge publication domain', () => {
     ]);
     expect(evaluateKnowledgeUseAvailability({
       state: decision.nextState,
-      assetApprovalStatus: 'approved',
     })).toEqual({
       canRetrieve: false,
       canAnswer: false,
@@ -1140,47 +2127,44 @@ describe('knowledge publication domain', () => {
   });
 
   it('keeps AI-readable knowledge and attachment sending approval as independent decisions', () => {
-    const approvalCases = [
-      { status: 'approved' as const, reason: null },
-      { status: 'not_approved' as const, reason: 'asset_not_approved' },
-      { status: 'withdrawn' as const, reason: 'asset_approval_withdrawn' },
-      { status: 'blocked' as const, reason: 'asset_approval_blocked' },
-    ];
-
     for (const useScope of ['ai_customer_reply', 'internal_only'] as const) {
       const state = publicationState({
         publications: [oldPublication({ useScope })],
       });
-      for (const approvalCase of approvalCases) {
-        const reasonCodes = [
+      expect(evaluateKnowledgeUseAvailability({ state })).toEqual({
+        canRetrieve: true,
+        canAnswer: useScope === 'ai_customer_reply',
+        canSendAttachment: false,
+        reasonCodes: [
           ...(useScope === 'internal_only'
             ? ['use_scope_internal_only']
             : []),
-          ...(approvalCase.reason === null ? [] : [approvalCase.reason]),
-        ];
-        expect(evaluateKnowledgeUseAvailability({
-          state,
-          assetApprovalStatus: approvalCase.status,
-        })).toEqual({
-          canRetrieve: true,
-          canAnswer: useScope === 'ai_customer_reply',
-          canSendAttachment:
-            useScope === 'ai_customer_reply' &&
-            approvalCase.status === 'approved',
-          reasonCodes,
-        });
-      }
+          'asset_binding_unavailable',
+        ],
+      });
     }
 
-    expect(evaluateKnowledgeUseAvailability({
-      state: publicationState(),
-      assetApprovalStatus: 'unknown' as never,
-    })).toEqual({
-      canRetrieve: false,
-      canAnswer: false,
-      canSendAttachment: false,
-      reasonCodes: ['asset_approval_invalid'],
-    });
+    for (const unboundInput of [
+      { state: publicationState(), assetApprovalStatus: 'approved' },
+      {
+        state: publicationState(),
+        publicationId: 'publication-1',
+        fileRevisionId: 'file-revision-2',
+      },
+    ]) {
+      expect(
+        evaluateKnowledgeUseAvailability(
+          unboundInput as unknown as Parameters<
+            typeof evaluateKnowledgeUseAvailability
+          >[0],
+        ),
+      ).toEqual({
+        canRetrieve: false,
+        canAnswer: false,
+        canSendAttachment: false,
+        reasonCodes: ['state_invalid'],
+      });
+    }
   });
 
   it.each([
@@ -1197,7 +2181,6 @@ describe('knowledge publication domain', () => {
   ])('blocks use when the current publication is $name', ({ publication, reason }) => {
     expect(evaluateKnowledgeUseAvailability({
       state: publicationState({ publications: [publication] }),
-      assetApprovalStatus: 'approved',
     })).toEqual({
       canRetrieve: false,
       canAnswer: false,
@@ -1273,12 +2256,10 @@ describe('knowledge publication domain', () => {
     expect(() => {
       decision = decideKnowledgePublication({
         state,
-        command: {
-          kind: 'retire',
+        command: retireCommand({
           idempotencyKey: 'retire-invalid-state',
-          expectedRevision: 7,
           decidedAt: '2026-07-17T08:00:00.000Z',
-        },
+        }),
         existingIdempotencyRecord: null,
       });
     }).not.toThrow();
@@ -1292,7 +2273,6 @@ describe('knowledge publication domain', () => {
     expect(state).toEqual(stateBefore);
     expect(evaluateKnowledgeUseAvailability({
       state,
-      assetApprovalStatus: 'approved',
     })).toEqual({
       canRetrieve: false,
       canAnswer: false,
@@ -1308,12 +2288,469 @@ describe('knowledge publication domain', () => {
 
     expect(evaluateKnowledgeUseAvailability({
       state: invalidState,
-      assetApprovalStatus: 'approved',
     })).toEqual({
       canRetrieve: false,
       canAnswer: false,
       canSendAttachment: false,
       reasonCodes: ['state_invalid'],
     });
+  });
+
+  it.each(['publish', 'rollback', 'withdraw', 'retire'] as const)(
+    'rejects $kind for platform-owned knowledge before idempotency or mutation',
+    (kind) => {
+      const historical = oldPublication({ lifecycle: 'superseded' });
+      const current = oldPublication({
+        publicationId: 'publication-2',
+        versionId: 'version-2',
+        versionNumber: 2,
+        manifestHash: manifestHashB,
+      });
+      const baseState =
+        kind === 'rollback'
+          ? publicationState({
+              item: {
+                ...publicationState().item,
+                ownershipSource: 'platform',
+              },
+              currentPublicationId: current.publicationId,
+              publications: [historical, current],
+            })
+          : publicationState({
+              item: {
+                ...publicationState().item,
+                ownershipSource: 'platform',
+              },
+            });
+      const command: KnowledgePublicationCommand =
+        kind === 'publish'
+          ? publishCommand({
+              candidateVersion: candidateVersion({
+                manifestInput: { ownershipSource: 'platform' },
+              }),
+            })
+          : kind === 'rollback'
+            ? rollbackCommand(historical)
+            : kind === 'withdraw'
+              ? withdrawCommand('publication-1')
+              : retireCommand();
+      const stateBefore = structuredClone(baseState);
+      const commandBefore = structuredClone(command);
+
+      const decision = decideKnowledgePublication({
+        state: baseState,
+        command,
+        existingIdempotencyRecord: null,
+      });
+
+      expect(decision.ok).toBe(false);
+      if (decision.ok) return;
+      expect(decision.reasonCodes).toEqual(['platform_read_only']);
+      expect(decision.nextState).toEqual(baseState);
+      expect(decision.shouldApplyNextState).toBe(false);
+      expect(decision.idempotencyRecord).toBeNull();
+      expect(decision.publicationTransitions).toEqual([]);
+      expect(baseState).toEqual(stateBefore);
+      expect(command).toEqual(commandBefore);
+    },
+  );
+
+  it('does not replay an institution idempotency record against platform-owned knowledge', () => {
+    const institutionState = publicationState();
+    const command = publishCommand();
+    const first = decideKnowledgePublication({
+      state: institutionState,
+      command,
+      existingIdempotencyRecord: null,
+    });
+    expect(first.idempotencyRecord).not.toBeNull();
+    if (!first.idempotencyRecord) return;
+    const platformState = publicationState({
+      item: {
+        ...publicationState().item,
+        ownershipSource: 'platform',
+      },
+    });
+
+    const replay = decideKnowledgePublication({
+      state: platformState,
+      command,
+      existingIdempotencyRecord: first.idempotencyRecord,
+      recordedSubmittedCandidateVersion: command.candidateVersion,
+    });
+    expect(replay.ok).toBe(false);
+    if (!replay.ok) {
+      expect(replay.reasonCodes).toEqual(['platform_read_only']);
+      expect(replay.idempotentReplay).toBe(false);
+      expect(replay.idempotencyRecord).toBeNull();
+    }
+  });
+
+  it.each([
+    {
+      name: 'publication binding',
+      patch: { targetPublicationId: 'publication-other' },
+      reason: 'rollback_target_binding_mismatch',
+    },
+    {
+      name: 'version binding',
+      patch: { targetVersionId: 'version-other' },
+      reason: 'rollback_target_binding_mismatch',
+    },
+    {
+      name: 'version number binding',
+      patch: { targetVersionNumber: 9 },
+      reason: 'rollback_target_binding_mismatch',
+    },
+    {
+      name: 'manifest binding',
+      patch: { observedManifestHash: manifestHashC },
+      reason: 'rollback_target_binding_mismatch',
+    },
+    {
+      name: 'observed revision freshness',
+      patch: { observedRevision: 6 },
+      reason: 'rollback_evidence_stale',
+    },
+    {
+      name: 'observed time freshness',
+      patch: { observedAt: '2026-07-17T04:59:59.999Z' },
+      reason: 'rollback_evidence_stale',
+    },
+    {
+      name: 'parse gate',
+      patch: { parseReady: false },
+      reason: 'parse_not_ready',
+    },
+    {
+      name: 'index gate',
+      patch: { indexReady: false },
+      reason: 'index_not_ready',
+    },
+    {
+      name: 'fresh safety pending gate',
+      patch: { safetyStatus: 'pending' as const },
+      reason: 'safety_not_allowed',
+    },
+    {
+      name: 'fresh safety blocked gate',
+      patch: { safetyStatus: 'blocked' as const },
+      reason: 'safety_not_allowed',
+    },
+    {
+      name: 'fresh safety expired gate',
+      patch: { safetyStatus: 'expired' as const },
+      reason: 'safety_not_allowed',
+    },
+    {
+      name: 'use scope gate',
+      patch: { useScopeEligible: false },
+      reason: 'use_scope_ineligible',
+    },
+  ])('keeps the old current when rollback $name fails', ({ patch, reason }) => {
+    const historical = oldPublication({ lifecycle: 'superseded' });
+    const current = oldPublication({
+      publicationId: 'publication-2',
+      versionId: 'version-2',
+      versionNumber: 2,
+      manifestHash: manifestHashB,
+    });
+    const state = publicationState({
+      currentPublicationId: current.publicationId,
+      publications: [historical, current],
+    });
+    const validCommand = rollbackCommand(historical);
+    const command = {
+      ...validCommand,
+      idempotencyKey: 'rollback-gate-failure',
+      gateEvidence: { ...validCommand.gateEvidence, ...patch },
+    };
+    const stateBefore = structuredClone(state);
+    const commandBefore = structuredClone(command);
+
+    const decision = decideKnowledgePublication({
+      state,
+      command,
+      existingIdempotencyRecord: null,
+    });
+    expect(decision.ok).toBe(false);
+    if (decision.ok) return;
+    expect(decision.reasonCodes).toContain(reason);
+    expect(decision.nextState).toEqual(state);
+    expect(decision.nextState.currentPublicationId).toBe('publication-2');
+    expect(decision.nextState.item.revision).toBe(7);
+    expect(decision.shouldApplyNextState).toBe(false);
+    expect(state).toEqual(stateBefore);
+    expect(command).toEqual(commandBefore);
+  });
+
+  it('binds rollback idempotency to fresh evidence and actor without copying payloads', () => {
+    const historical = oldPublication({ lifecycle: 'superseded' });
+    const current = oldPublication({
+      publicationId: 'publication-2',
+      versionId: 'version-2',
+      versionNumber: 2,
+      manifestHash: manifestHashB,
+    });
+    const state = publicationState({
+      currentPublicationId: current.publicationId,
+      publications: [historical, current],
+    });
+    const command = rollbackCommand(historical);
+    const first = decideKnowledgePublication({
+      state,
+      command,
+      existingIdempotencyRecord: null,
+    });
+    expect(first.ok).toBe(true);
+    expect(first.idempotencyRecord).not.toBeNull();
+    if (!first.ok || !first.idempotencyRecord) return;
+    expect(first.nextState.item.lastDecidedByActorId).toBe(operatorActorId);
+
+    const replay = decideKnowledgePublication({
+      state: first.nextState,
+      command: structuredClone(command),
+      existingIdempotencyRecord: structuredClone(first.idempotencyRecord),
+    });
+    expect(replay.ok).toBe(true);
+    expect(replay.idempotentReplay).toBe(true);
+    expect(replay.shouldApplyNextState).toBe(false);
+
+    const evidencePatches: readonly Partial<typeof command.gateEvidence>[] = [
+      { targetPublicationId: 'publication-other' },
+      { targetVersionId: 'version-other' },
+      { targetVersionNumber: 9 },
+      { observedManifestHash: manifestHashC },
+      { observedRevision: 6 },
+      { observedAt: '2026-07-17T04:59:59.999Z' },
+      { parseReady: false },
+      { indexReady: false },
+      { safetyStatus: 'pending' },
+      { useScopeEligible: false },
+    ];
+    const changedCommands = [
+      ...evidencePatches.map((patch) => ({
+        ...command,
+        gateEvidence: { ...command.gateEvidence, ...patch },
+      })),
+      { ...command, actorId: 'actor-knowledge-operator-2' },
+    ];
+    for (const changedCommand of changedCommands) {
+      const conflict = decideKnowledgePublication({
+        state: first.nextState,
+        command: changedCommand,
+        existingIdempotencyRecord: first.idempotencyRecord,
+      });
+      expect(conflict.ok).toBe(false);
+      if (!conflict.ok) {
+        expect(conflict.reasonCodes).toEqual(['idempotency_conflict']);
+      }
+    }
+    expect(JSON.stringify(first.idempotencyRecord)).not.toMatch(
+      /prompt|provider|completion|vector/i,
+    );
+  });
+
+  it('binds withdrawal idempotency to the controlled reason and actor', () => {
+    const state = publicationState();
+    const command = withdrawCommand('publication-1');
+    const first = decideKnowledgePublication({
+      state,
+      command,
+      existingIdempotencyRecord: null,
+    });
+    expect(first.ok).toBe(true);
+    expect(first.idempotencyRecord).not.toBeNull();
+    if (!first.ok || !first.idempotencyRecord) return;
+    expect(first.nextState.item.lastDecidedByActorId).toBe(operatorActorId);
+    expect(first.nextState.publications[0]).toMatchObject({
+      publishedByActorId: operatorActorId,
+      withdrawnByActorId: operatorActorId,
+      withdrawReasonCode: 'content_outdated',
+    });
+
+    for (const changedCommand of [
+      { ...command, reasonCode: 'policy_revoked' as const },
+      { ...command, actorId: 'actor-knowledge-operator-2' },
+    ]) {
+      const conflict = decideKnowledgePublication({
+        state: first.nextState,
+        command: changedCommand,
+        existingIdempotencyRecord: first.idempotencyRecord,
+      });
+      expect(conflict.ok).toBe(false);
+      if (!conflict.ok) {
+        expect(conflict.reasonCodes).toEqual(['idempotency_conflict']);
+      }
+    }
+  });
+
+  it.each([
+    {
+      name: 'revision is zero',
+      build: () =>
+        publicationState({
+          item: { ...publicationState().item, revision: 0 },
+        }),
+    },
+    {
+      name: 'history begins at version two',
+      build: () =>
+        publicationState({
+          publications: [
+            oldPublication({ versionId: 'version-2', versionNumber: 2 }),
+          ],
+        }),
+    },
+    {
+      name: 'history has a version gap',
+      build: () =>
+        publicationState({
+          currentPublicationId: 'publication-3',
+          publications: [
+            oldPublication({ lifecycle: 'superseded' }),
+            oldPublication({
+              publicationId: 'publication-3',
+              versionId: 'version-3',
+              versionNumber: 3,
+              manifestHash: manifestHashC,
+            }),
+          ],
+        }),
+    },
+    {
+      name: 'history is out of order',
+      build: () =>
+        publicationState({
+          currentPublicationId: 'publication-2',
+          publications: [
+            oldPublication({
+              publicationId: 'publication-2',
+              versionId: 'version-2',
+              versionNumber: 2,
+            }),
+            oldPublication({ lifecycle: 'superseded' }),
+          ],
+        }),
+    },
+    {
+      name: 'publication time moves backward',
+      build: () =>
+        publicationState({
+          item: {
+            ...publicationState().item,
+            lastDecidedAt: '2026-07-17T03:00:00.000Z',
+          },
+          currentPublicationId: 'publication-2',
+          publications: [
+            oldPublication({
+              lifecycle: 'superseded',
+              publishedAt: '2026-07-17T02:00:00.000Z',
+            }),
+            oldPublication({
+              publicationId: 'publication-2',
+              versionId: 'version-2',
+              versionNumber: 2,
+              publishedAt: '2026-07-17T01:00:00.000Z',
+            }),
+          ],
+        }),
+    },
+    {
+      name: 'history count exceeds item revision',
+      build: () =>
+        publicationState({
+          item: { ...publicationState().item, revision: 1 },
+          currentPublicationId: 'publication-2',
+          publications: [
+            oldPublication({ lifecycle: 'superseded' }),
+            oldPublication({
+              publicationId: 'publication-2',
+              versionId: 'version-2',
+              versionNumber: 2,
+            }),
+          ],
+        }),
+    },
+    {
+      name: 'history lacks last decision actor and time',
+      build: () =>
+        publicationState({
+          item: {
+            ...publicationState().item,
+            lastDecidedAt: null,
+            lastDecidedByActorId: null,
+          },
+        }),
+    },
+    {
+      name: 'last decision precedes publication history',
+      build: () =>
+        publicationState({
+          item: {
+            ...publicationState().item,
+            lastDecidedAt: '2026-07-15T00:00:00.000Z',
+          },
+        }),
+    },
+    {
+      name: 'published actor is invalid',
+      build: () =>
+        publicationState({
+          publications: [oldPublication({ publishedByActorId: 'bad actor' })],
+        }),
+    },
+    {
+      name: 'withdrawn actor is missing',
+      build: () =>
+        publicationState({
+          item: {
+            ...publicationState().item,
+            lastDecidedAt: '2026-07-16T03:00:00.000Z',
+          },
+          currentPublicationId: null,
+          publications: [
+            oldPublication({
+              lifecycle: 'withdrawn',
+              withdrawnByActorId: null,
+            }),
+          ],
+        }),
+    },
+    {
+      name: 'withdrawal reason is not controlled',
+      build: () =>
+        publicationState({
+          item: {
+            ...publicationState().item,
+            lastDecidedAt: '2026-07-16T03:00:00.000Z',
+          },
+          currentPublicationId: null,
+          publications: [
+            oldPublication({
+              lifecycle: 'withdrawn',
+              withdrawReasonCode:
+                'free text' as KnowledgePublication['withdrawReasonCode'],
+            }),
+          ],
+        }),
+    },
+  ])('rejects invalid immutable history when $name', ({ build }) => {
+    const state = build();
+    const before = structuredClone(state);
+    const decision = decideKnowledgePublication({
+      state,
+      command: retireCommand({
+        expectedRevision: Math.max(1, state.item.revision),
+      }),
+      existingIdempotencyRecord: null,
+    });
+    expect(decision.ok).toBe(false);
+    if (decision.ok) return;
+    expect(decision.reasonCodes).toEqual(['state_invalid']);
+    expect(decision.shouldApplyNextState).toBe(false);
+    expect(decision.idempotencyRecord).toBeNull();
+    expect(state).toEqual(before);
+    expect(JSON.stringify(decision)).not.toContain('free text');
   });
 });
