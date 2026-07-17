@@ -1,3 +1,5 @@
+import { isProxy } from 'node:util/types';
+
 import {
   knowledgeAssetApprovalStatuses,
   knowledgeItemLifecycles,
@@ -13,6 +15,12 @@ import {
   type KnowledgeVersion,
   type KnowledgeVersionLifecycle,
 } from './knowledge-versioning';
+import {
+  knowledgeOwnershipSources,
+  knowledgeContentManifestsEqual,
+  validateKnowledgeContentManifest,
+  type KnowledgeOwnershipSource,
+} from './knowledge-content-manifest';
 
 export const knowledgePublicationLifecycles = Object.freeze([
   'current',
@@ -40,8 +48,12 @@ export type KnowledgePublication = Readonly<{
 export type KnowledgePublicationState = Readonly<{
   item: Readonly<{
     knowledgeId: string;
+    tenantId: string;
+    institutionId: string;
+    ownershipSource: KnowledgeOwnershipSource;
     lifecycle: KnowledgeItemLifecycle;
     revision: number;
+    lastDecidedAt: string | null;
   }>;
   currentPublicationId: string | null;
   publications: readonly KnowledgePublication[];
@@ -88,6 +100,7 @@ export type KnowledgePublicationTransition = Readonly<{
 
 export type KnowledgePublicationFailureCode =
   | 'candidate_knowledge_mismatch'
+  | 'candidate_scope_mismatch'
   | 'candidate_not_draft'
   | 'candidate_version_not_monotonic'
   | 'candidate_version_reused'
@@ -201,8 +214,12 @@ function freezePublication(
 function freezeState(state: KnowledgePublicationState): KnowledgePublicationState {
   const item = Object.freeze({
     knowledgeId: state.item.knowledgeId,
+    tenantId: state.item.tenantId,
+    institutionId: state.item.institutionId,
+    ownershipSource: state.item.ownershipSource,
     lifecycle: state.item.lifecycle,
     revision: state.item.revision,
+    lastDecidedAt: state.item.lastDecidedAt,
   });
   const publications = Object.freeze(
     state.publications.map((publication) => freezePublication(publication)),
@@ -215,7 +232,13 @@ function freezeState(state: KnowledgePublicationState): KnowledgePublicationStat
   });
 }
 
-function freezeCandidateVersion(version: KnowledgeVersion): KnowledgeVersion {
+function freezeCandidateVersion(
+  version: KnowledgeVersion,
+): KnowledgeVersion | null {
+  const manifestValidation = validateKnowledgeContentManifest(
+    version.contentManifest,
+  );
+  if (!manifestValidation.ok) return null;
   const metadataSnapshot = Object.freeze({
     title: version.metadataSnapshot.title,
     category: version.metadataSnapshot.category,
@@ -237,6 +260,7 @@ function freezeCandidateVersion(version: KnowledgeVersion): KnowledgeVersion {
     bodyRevisionId: version.bodyRevisionId,
     fileRevisionIds: Object.freeze([...version.fileRevisionIds]),
     manifestHash: version.manifestHash,
+    contentManifest: manifestValidation.manifest,
     createdAt: version.createdAt,
   });
 }
@@ -263,12 +287,13 @@ function freezePublicationTransitions(
 function freezeSnapshot(
   snapshot: KnowledgePublicationDecisionSnapshot,
 ): KnowledgePublicationDecisionSnapshot {
+  const candidateVersion =
+    snapshot.candidateVersion === null
+      ? null
+      : freezeCandidateVersion(snapshot.candidateVersion);
   const shared = {
     nextState: freezeState(snapshot.nextState),
-    candidateVersion:
-      snapshot.candidateVersion === null
-        ? null
-        : freezeCandidateVersion(snapshot.candidateVersion),
+    candidateVersion,
     candidateLifecyclePath: freezeCandidateLifecyclePath(
       snapshot.candidateLifecyclePath,
     ),
@@ -276,6 +301,16 @@ function freezeSnapshot(
       snapshot.publicationTransitions,
     ),
   };
+
+  if (snapshot.candidateVersion !== null && candidateVersion === null) {
+    return Object.freeze({
+      ok: false,
+      ...shared,
+      reasonCodes: Object.freeze([
+        'command_invalid' as KnowledgePublicationFailureCode,
+      ]),
+    });
+  }
 
   if (snapshot.ok) {
     return Object.freeze({ ok: true, ...shared });
@@ -368,6 +403,63 @@ function failureSnapshot(
   };
 }
 
+type CanonicalJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly CanonicalJsonValue[];
+
+function quoteCanonicalJsonString(value: string): string {
+  let encoded = '"';
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    switch (codeUnit) {
+      case 0x08:
+        encoded += '\\b';
+        break;
+      case 0x09:
+        encoded += '\\t';
+        break;
+      case 0x0a:
+        encoded += '\\n';
+        break;
+      case 0x0c:
+        encoded += '\\f';
+        break;
+      case 0x0d:
+        encoded += '\\r';
+        break;
+      case 0x22:
+        encoded += '\\"';
+        break;
+      case 0x5c:
+        encoded += '\\\\';
+        break;
+      default:
+        encoded +=
+          codeUnit <= 0x1f
+            ? `\\u${codeUnit.toString(16).padStart(4, '0')}`
+            : value[index];
+    }
+  }
+  return `${encoded}"`;
+}
+
+function encodeCanonicalJson(value: CanonicalJsonValue): string {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return quoteCanonicalJsonString(value);
+  if (typeof value === 'number') return Object.is(value, -0) ? '0' : `${value}`;
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+
+  let encoded = '[';
+  for (let index = 0; index < value.length; index += 1) {
+    if (index > 0) encoded += ',';
+    encoded += encodeCanonicalJson(value[index] as CanonicalJsonValue);
+  }
+  return `${encoded}]`;
+}
+
 function commandPayloadFingerprint(
   command: KnowledgePublicationCommand,
   knowledgeId: string,
@@ -376,8 +468,12 @@ function commandPayloadFingerprint(
   const previousStateFields = [
     [
       previousState.item.knowledgeId,
+      previousState.item.tenantId,
+      previousState.item.institutionId,
+      previousState.item.ownershipSource,
       previousState.item.lifecycle,
       previousState.item.revision,
+      previousState.item.lastDecidedAt,
     ],
     previousState.currentPublicationId,
     previousState.publications.map((publication) => [
@@ -405,7 +501,7 @@ function commandPayloadFingerprint(
   if (command.kind === 'publish') {
     const { candidateVersion, gateEvidence } = command;
 
-    return JSON.stringify([
+    return encodeCanonicalJson([
       ...commonFields,
       command.publicationId,
       candidateVersion.knowledgeId,
@@ -425,10 +521,10 @@ function commandPayloadFingerprint(
   }
 
   if (command.kind === 'rollback' || command.kind === 'withdraw') {
-    return JSON.stringify([...commonFields, command.targetPublicationId]);
+    return encodeCanonicalJson([...commonFields, command.targetPublicationId]);
   }
 
-  return JSON.stringify(commonFields);
+  return encodeCanonicalJson(commonFields);
 }
 
 function arraysEqual(
@@ -465,6 +561,10 @@ function normalizedCandidatesEqual(
     left.bodyRevisionId === right.bodyRevisionId &&
     arraysEqual(left.fileRevisionIds, right.fileRevisionIds) &&
     left.manifestHash === right.manifestHash &&
+    knowledgeContentManifestsEqual(
+      left.contentManifest,
+      right.contentManifest,
+    ) &&
     left.createdAt === right.createdAt
   );
 }
@@ -505,32 +605,75 @@ function restoreRecordedCandidate(input: Readonly<{
     return Object.freeze({ ok: false });
   }
 
-  return Object.freeze({
-    ok: true,
-    candidateVersion: freezeCandidateVersion(recordedCandidate),
-  });
+  const candidateVersion = freezeCandidateVersion(recordedCandidate);
+  return candidateVersion === null
+    ? Object.freeze({ ok: false })
+    : Object.freeze({ ok: true, candidateVersion });
 }
 
 const manifestHashPattern = /^sha256:[a-f0-9]{64}$/;
 const referenceIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const isoTimestampPattern =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(?:Z|([+-])(\d{2}):(\d{2}))$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !isProxy(value) &&
+    !Array.isArray(value)
+  );
 }
 
 function hasExactKeys(
   value: Record<string, unknown>,
   expectedKeys: readonly string[],
 ): boolean {
-  const actualKeys = Reflect.ownKeys(value);
-  return (
-    actualKeys.length === expectedKeys.length &&
-    actualKeys.every(
-      (key) => typeof key === 'string' && expectedKeys.includes(key),
-    )
-  );
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const keys = Reflect.ownKeys(descriptors);
+  if (
+    keys.length !== expectedKeys.length ||
+    !expectedKeys.every((key) => keys.includes(key))
+  ) {
+    return false;
+  }
+
+  return expectedKeys.every((key) => {
+    const descriptor = descriptors[key];
+    return (
+      descriptor !== undefined &&
+      descriptor.enumerable === true &&
+      'value' in descriptor
+    );
+  });
+}
+
+function isDenseDataArray(value: unknown): value is readonly unknown[] {
+  if (
+    isProxy(value) ||
+    !Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype
+  ) {
+    return false;
+  }
+  const keys = Reflect.ownKeys(value);
+  if (keys.some((key) => typeof key === 'symbol')) return false;
+  if (keys.length !== value.length + 1 || !keys.includes('length')) return false;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (
+      descriptor === undefined ||
+      descriptor.enumerable !== true ||
+      !('value' in descriptor)
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function isOneOf<T extends string>(
@@ -545,7 +688,85 @@ function isReferenceId(value: unknown): value is string {
 }
 
 function isIsoTimestamp(value: unknown): value is string {
-  return typeof value === 'string' && isoTimestampPattern.test(value);
+  if (typeof value !== 'string') return false;
+  const match = isoTimestampPattern.exec(value);
+  if (match === null) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = match[8] === undefined ? 0 : Number(match[8]);
+  const offsetMinute = match[9] === undefined ? 0 : Number(match[9]);
+  const isLeapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [
+    31,
+    isLeapYear ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ][month - 1];
+
+  return (
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    daysInMonth !== undefined &&
+    day <= daysInMonth &&
+    hour <= 23 &&
+    minute <= 59 &&
+    second <= 59 &&
+    offsetHour <= 23 &&
+    offsetMinute <= 59 &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+function isAtOrAfterTimestamp(value: string, reference: string): boolean {
+  return Date.parse(value) >= Date.parse(reference);
+}
+
+function commandFollowsStateTimeline(
+  state: KnowledgePublicationState,
+  decidedAt: string,
+): boolean {
+  if (
+    state.item.lastDecidedAt !== null &&
+    !isAtOrAfterTimestamp(decidedAt, state.item.lastDecidedAt)
+  ) {
+    return false;
+  }
+  for (const publication of state.publications) {
+    if (!isAtOrAfterTimestamp(decidedAt, publication.publishedAt)) return false;
+    if (
+      publication.withdrawnAt !== null &&
+      !isAtOrAfterTimestamp(decidedAt, publication.withdrawnAt)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function itemScopesEqual(
+  left: KnowledgePublicationState['item'],
+  right: KnowledgePublicationState['item'],
+): boolean {
+  return (
+    left.knowledgeId === right.knowledgeId &&
+    left.tenantId === right.tenantId &&
+    left.institutionId === right.institutionId &&
+    left.ownershipSource === right.ownershipSource
+  );
 }
 
 function isValidPublication(value: unknown): value is KnowledgePublication {
@@ -568,9 +789,12 @@ function isValidPublication(value: unknown): value is KnowledgePublication {
     return false;
   }
 
+  const hasValidPublishedAt = isIsoTimestamp(value.publishedAt);
   const hasValidWithdrawnAt =
     value.lifecycle === 'withdrawn'
-      ? isIsoTimestamp(value.withdrawnAt)
+      ? isIsoTimestamp(value.withdrawnAt) &&
+        hasValidPublishedAt &&
+        isAtOrAfterTimestamp(value.withdrawnAt, value.publishedAt as string)
       : value.withdrawnAt === null;
 
   return (
@@ -585,7 +809,7 @@ function isValidPublication(value: unknown): value is KnowledgePublication {
     typeof value.complete === 'boolean' &&
     isOneOf(value.safetyStatus, knowledgeSafetyStatuses) &&
     isOneOf(value.useScope, knowledgeUseScopes) &&
-    isIsoTimestamp(value.publishedAt) &&
+    hasValidPublishedAt &&
     hasValidWithdrawnAt
   );
 }
@@ -599,14 +823,27 @@ function isValidState(state: unknown): state is KnowledgePublicationState {
       'publications',
     ]) ||
     !isRecord(state.item) ||
-    !hasExactKeys(state.item, ['knowledgeId', 'lifecycle', 'revision']) ||
-    !Array.isArray(state.publications) ||
+    !hasExactKeys(state.item, [
+      'knowledgeId',
+      'tenantId',
+      'institutionId',
+      'ownershipSource',
+      'lifecycle',
+      'revision',
+      'lastDecidedAt',
+    ]) ||
+    !isDenseDataArray(state.publications) ||
     !(state.currentPublicationId === null ||
       isReferenceId(state.currentPublicationId)) ||
     !isReferenceId(state.item.knowledgeId) ||
+    !isReferenceId(state.item.tenantId) ||
+    !isReferenceId(state.item.institutionId) ||
+    !isOneOf(state.item.ownershipSource, knowledgeOwnershipSources) ||
     !isOneOf(state.item.lifecycle, knowledgeItemLifecycles) ||
     !Number.isSafeInteger(state.item.revision) ||
     (state.item.revision as number) < 0 ||
+    !(state.item.lastDecidedAt === null ||
+      isIsoTimestamp(state.item.lastDecidedAt)) ||
     !state.publications.every(isValidPublication)
   ) {
     return false;
@@ -728,6 +965,16 @@ function decidePublish(
     return failureSnapshot(state, ['candidate_knowledge_mismatch'], candidate);
   }
   if (
+    candidate.contentManifest.tenantId !== state.item.tenantId ||
+    candidate.contentManifest.institutionId !== state.item.institutionId ||
+    candidate.contentManifest.ownershipSource !== state.item.ownershipSource
+  ) {
+    return failureSnapshot(state, ['candidate_scope_mismatch'], candidate);
+  }
+  if (!isAtOrAfterTimestamp(command.decidedAt, candidate.createdAt)) {
+    return failureSnapshot(state, ['command_invalid'], candidate);
+  }
+  if (
     state.publications.some(
       (publication) => publication.publicationId === command.publicationId,
     )
@@ -765,6 +1012,14 @@ function decidePublish(
     gateFailureCodes.push('index_not_ready');
   }
   if (command.gateEvidence.safetyStatus !== 'allowed') {
+    gateFailureCodes.push('safety_not_allowed');
+  }
+  if (
+    candidate.contentManifest.attachments.some(
+      (attachment) => attachment.safetyStatus !== 'allowed',
+    ) &&
+    !gateFailureCodes.includes('safety_not_allowed')
+  ) {
     gateFailureCodes.push('safety_not_allowed');
   }
   if (!command.gateEvidence.useScopeEligible) {
@@ -826,7 +1081,11 @@ function decidePublish(
   return {
     ok: true,
     nextState: {
-      item: { ...state.item, revision: state.item.revision + 1 },
+      item: {
+        ...state.item,
+        revision: state.item.revision + 1,
+        lastDecidedAt: command.decidedAt,
+      },
       currentPublicationId: command.publicationId,
       publications,
     },
@@ -901,7 +1160,11 @@ function decideRollback(
   return {
     ok: true,
     nextState: {
-      item: { ...state.item, revision: state.item.revision + 1 },
+      item: {
+        ...state.item,
+        revision: state.item.revision + 1,
+        lastDecidedAt: command.decidedAt,
+      },
       currentPublicationId: target.publicationId,
       publications,
     },
@@ -928,6 +1191,9 @@ function decideWithdraw(
   if (target.lifecycle === 'withdrawn') {
     return failureSnapshot(state, ['withdraw_target_already_withdrawn']);
   }
+  if (!isAtOrAfterTimestamp(command.decidedAt, target.publishedAt)) {
+    return failureSnapshot(state, ['command_invalid']);
+  }
 
   const publications = state.publications.map((publication) => {
     if (publication.publicationId !== target.publicationId) return publication;
@@ -943,7 +1209,11 @@ function decideWithdraw(
   return {
     ok: true,
     nextState: {
-      item: { ...state.item, revision: state.item.revision + 1 },
+      item: {
+        ...state.item,
+        revision: state.item.revision + 1,
+        lastDecidedAt: command.decidedAt,
+      },
       currentPublicationId: withdrewCurrent
         ? null
         : state.currentPublicationId,
@@ -965,6 +1235,7 @@ function decideWithdraw(
 
 function decideRetire(
   state: KnowledgePublicationState,
+  command: Extract<KnowledgePublicationCommand, { kind: 'retire' }>,
 ): KnowledgePublicationDecisionSnapshot {
   if (state.item.lifecycle === 'retired') {
     return failureSnapshot(state, ['item_already_retired']);
@@ -989,6 +1260,7 @@ function decideRetire(
         ...state.item,
         lifecycle: 'retired',
         revision: state.item.revision + 1,
+        lastDecidedAt: command.decidedAt,
       },
       currentPublicationId: null,
       publications,
@@ -1021,9 +1293,13 @@ function hasValidCommandBase(command: Record<string, unknown>): boolean {
 function isValidCommandShape(
   command: unknown,
 ): command is KnowledgePublicationCommand {
-  if (!isRecord(command) || !hasValidCommandBase(command)) return false;
+  if (!isRecord(command)) return false;
+  const kindDescriptor = Object.getOwnPropertyDescriptor(command, 'kind');
+  if (kindDescriptor === undefined || !('value' in kindDescriptor)) {
+    return false;
+  }
 
-  if (command.kind === 'publish') {
+  if (kindDescriptor.value === 'publish') {
     if (
       !hasExactKeys(command, [
         'kind',
@@ -1034,6 +1310,7 @@ function isValidCommandShape(
         'candidateVersion',
         'gateEvidence',
       ]) ||
+      !hasValidCommandBase(command) ||
       !isReferenceId(command.publicationId) ||
       !isValidKnowledgeVersion(command.candidateVersion) ||
       !isRecord(command.gateEvidence) ||
@@ -1058,7 +1335,10 @@ function isValidCommandShape(
     );
   }
 
-  if (command.kind === 'rollback' || command.kind === 'withdraw') {
+  if (
+    kindDescriptor.value === 'rollback' ||
+    kindDescriptor.value === 'withdraw'
+  ) {
     return (
       hasExactKeys(command, [
         'kind',
@@ -1066,18 +1346,21 @@ function isValidCommandShape(
         'expectedRevision',
         'decidedAt',
         'targetPublicationId',
-      ]) && isReferenceId(command.targetPublicationId)
+      ]) &&
+      hasValidCommandBase(command) &&
+      isReferenceId(command.targetPublicationId)
     );
   }
 
   return (
-    command.kind === 'retire' &&
+    kindDescriptor.value === 'retire' &&
     hasExactKeys(command, [
       'kind',
       'idempotencyKey',
       'expectedRevision',
       'decidedAt',
-    ])
+    ]) &&
+    hasValidCommandBase(command)
   );
 }
 
@@ -1155,6 +1438,9 @@ function decideCommandSnapshot(
   if (state.item.revision === Number.MAX_SAFE_INTEGER) {
     return failureSnapshot(state, ['revision_overflow']);
   }
+  if (!commandFollowsStateTimeline(state, command.decidedAt)) {
+    return failureSnapshot(state, ['command_invalid']);
+  }
 
   switch (command.kind) {
     case 'publish':
@@ -1164,27 +1450,107 @@ function decideCommandSnapshot(
     case 'withdraw':
       return decideWithdraw(state, command);
     case 'retire':
-      return decideRetire(state);
+      return decideRetire(state, command);
   }
 }
 
-export function decideKnowledgePublication(input: Readonly<{
+type KnowledgePublicationDecisionInput = Readonly<{
   state: KnowledgePublicationState;
   command: KnowledgePublicationCommand;
   existingIdempotencyRecord: KnowledgePublicationIdempotencyRecord | null;
   /** Server-authoritative immutable snapshot resolved from the record reference. */
   recordedSubmittedCandidateVersion?: KnowledgeVersion | null;
-}>): KnowledgePublicationDecision {
+}>;
+
+const invalidInputState = freezeState({
+  item: Object.freeze({
+    knowledgeId: 'invalid',
+    tenantId: 'invalid',
+    institutionId: 'invalid',
+    ownershipSource: 'institution',
+    lifecycle: 'active',
+    revision: 0,
+    lastDecidedAt: null,
+  }),
+  currentPublicationId: null,
+  publications: Object.freeze([]),
+});
+
+function captureDecisionInput(
+  value: unknown,
+): Readonly<{ ok: true; input: KnowledgePublicationDecisionInput }> | Readonly<{
+  ok: false;
+}> {
+  if (!isRecord(value)) return Object.freeze({ ok: false });
+
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const keys = Reflect.ownKeys(descriptors);
+  const requiredKeys = [
+    'state',
+    'command',
+    'existingIdempotencyRecord',
+  ] as const;
+  const allowedKeys = [
+    ...requiredKeys,
+    'recordedSubmittedCandidateVersion',
+  ] as const;
+  if (
+    keys.some(
+      (key) =>
+        typeof key !== 'string' ||
+        !(allowedKeys as readonly string[]).includes(key),
+    ) ||
+    !requiredKeys.every((key) => keys.includes(key)) ||
+    keys.length > allowedKeys.length ||
+    keys.some((key) => {
+      const descriptor = descriptors[key as string];
+      return (
+        descriptor === undefined ||
+        descriptor.enumerable !== true ||
+        !('value' in descriptor)
+      );
+    })
+  ) {
+    return Object.freeze({ ok: false });
+  }
+
+  return Object.freeze({
+    ok: true,
+    input: Object.freeze({
+      state: descriptors.state?.value as KnowledgePublicationState,
+      command: descriptors.command?.value as KnowledgePublicationCommand,
+      existingIdempotencyRecord: descriptors.existingIdempotencyRecord
+        ?.value as KnowledgePublicationIdempotencyRecord | null,
+      ...(descriptors.recordedSubmittedCandidateVersion === undefined
+        ? {}
+        : {
+            recordedSubmittedCandidateVersion: descriptors
+              .recordedSubmittedCandidateVersion
+              .value as KnowledgeVersion | null,
+          }),
+    }),
+  });
+}
+
+function decideKnowledgePublicationInternal(
+  input: KnowledgePublicationDecisionInput,
+): KnowledgePublicationDecision {
   if (!isValidCommandShape(input.command)) {
-    return blockedDecision(input.state, 'command_invalid');
+    return blockedDecision(
+      isValidState(input.state) ? freezeState(input.state) : invalidInputState,
+      'command_invalid',
+    );
   }
 
   if (!idempotencyKeyPattern.test(input.command.idempotencyKey)) {
-    return blockedDecision(input.state, 'idempotency_key_invalid');
+    return blockedDecision(
+      isValidState(input.state) ? freezeState(input.state) : invalidInputState,
+      'idempotency_key_invalid',
+    );
   }
 
   if (!isValidState(input.state)) {
-    return blockedDecision(input.state, 'state_invalid');
+    return blockedDecision(invalidInputState, 'state_invalid');
   }
 
   const existingRecord = input.existingIdempotencyRecord;
@@ -1194,8 +1560,7 @@ export function decideKnowledgePublication(input: Readonly<{
       isValidIdempotencyRecord(existingRecord) &&
       existingRecord.knowledgeId === input.state.item.knowledgeId &&
       existingRecord.idempotencyKey === input.command.idempotencyKey &&
-      existingRecord.previousState.item.knowledgeId ===
-        input.state.item.knowledgeId &&
+      itemScopesEqual(existingRecord.previousState.item, input.state.item) &&
       existingRecord.payloadFingerprint ===
         commandPayloadFingerprint(
           input.command,
@@ -1282,7 +1647,7 @@ export function decideKnowledgePublication(input: Readonly<{
   );
   const snapshot = decideCommandSnapshot(input.state, input.command);
   if (!snapshot.ok && snapshot.reasonCodes.includes('revision_overflow')) {
-    return blockedDecision(input.state, 'revision_overflow');
+    return blockedDecision(freezeState(input.state), 'revision_overflow');
   }
 
   return finalizeNewDecision(
@@ -1291,6 +1656,20 @@ export function decideKnowledgePublication(input: Readonly<{
     input.command,
     payloadFingerprint,
   );
+}
+
+export function decideKnowledgePublication(
+  value: KnowledgePublicationDecisionInput,
+): KnowledgePublicationDecision {
+  try {
+    const captured = captureDecisionInput(value);
+    if (!captured.ok) {
+      return blockedDecision(invalidInputState, 'command_invalid');
+    }
+    return decideKnowledgePublicationInternal(captured.input);
+  } catch {
+    return blockedDecision(invalidInputState, 'command_invalid');
+  }
 }
 
 function unavailable(
@@ -1304,10 +1683,14 @@ function unavailable(
   });
 }
 
-export function evaluateKnowledgeUseAvailability(input: Readonly<{
+type KnowledgeUseAvailabilityInput = Readonly<{
   state: KnowledgePublicationState;
   assetApprovalStatus: KnowledgeAssetApprovalStatus;
-}>): KnowledgeUseAvailability {
+}>;
+
+function evaluateKnowledgeUseAvailabilityInternal(
+  input: KnowledgeUseAvailabilityInput,
+): KnowledgeUseAvailability {
   if (!isValidState(input.state)) {
     return unavailable('state_invalid');
   }
@@ -1351,4 +1734,24 @@ export function evaluateKnowledgeUseAvailability(input: Readonly<{
       input.assetApprovalStatus === 'approved',
     reasonCodes: Object.freeze(reasonCodes),
   });
+}
+
+export function evaluateKnowledgeUseAvailability(
+  value: KnowledgeUseAvailabilityInput,
+): KnowledgeUseAvailability {
+  try {
+    if (!isRecord(value) || !hasExactKeys(value, [
+      'state',
+      'assetApprovalStatus',
+    ])) {
+      return unavailable('state_invalid');
+    }
+    return evaluateKnowledgeUseAvailabilityInternal({
+      state: value.state as KnowledgePublicationState,
+      assetApprovalStatus:
+        value.assetApprovalStatus as KnowledgeAssetApprovalStatus,
+    });
+  } catch {
+    return unavailable('state_invalid');
+  }
 }
