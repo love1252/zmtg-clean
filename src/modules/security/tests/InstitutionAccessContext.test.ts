@@ -40,6 +40,14 @@ describe('InstitutionAccessContextResolutionV1', () => {
       if (result.ok) {
         expect(Object.isFrozen(result.context)).toBe(true);
         expectTypeOf(result.context).toEqualTypeOf<InstitutionAccessContextV1>();
+        expect(Object.keys(result.context)).toEqual([
+          'userId',
+          'role',
+          'tenantId',
+          'institutionId',
+          'source',
+        ]);
+        expect('reachableCapabilityKeys' in result.context).toBe(false);
       }
 
       source.institutionId = 'mutated-after-resolution';
@@ -85,6 +93,22 @@ describe('InstitutionAccessContextResolutionV1', () => {
         accessContext({ institutionId: `institution-${'x'.repeat(129)}` }),
       ),
     ).toEqual({ ok: false, reason: 'missing_institution' });
+  });
+
+  it.each([
+    ['tenantId', 'tenant with spaces', 'missing_tenant'],
+    ['tenantId', 'tenant\ncontrol', 'missing_tenant'],
+    ['tenantId', 'tenant/other', 'missing_tenant'],
+    ['tenantId', `tenant-${'x'.repeat(129)}`, 'missing_tenant'],
+    ['institutionId', 'institution with spaces', 'missing_institution'],
+    ['institutionId', 'institution\ncontrol', 'missing_institution'],
+    ['institutionId', 'institution/other', 'missing_institution'],
+    ['institutionId', `institution-${'x'.repeat(129)}`, 'missing_institution'],
+  ] as const)('fails closed for malformed %s scope IDs', (field, value, reason) => {
+    expect(resolveInstitutionAccessContextV1(accessContext({ [field]: value }))).toEqual({
+      ok: false,
+      reason,
+    });
   });
 
   it('rejects and does not expose a client institution override', () => {

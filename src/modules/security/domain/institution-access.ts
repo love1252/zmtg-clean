@@ -36,6 +36,10 @@ export type InstitutionAccessContextSourceV1 = Exclude<
   'demo_session'
 >;
 
+/**
+ * A structurally narrowed tenant/institution scope. It is not evidence that the member is
+ * currently active in that institution and it grants no resource, action, or capability access.
+ */
 export type InstitutionAccessContextV1 = Readonly<{
   userId: string;
   role: InstitutionRoleV1;
@@ -107,12 +111,16 @@ function snapshotExactDataRecord(
   }
 }
 
-export function isNonEmptyInstitutionReferenceV1(value: unknown): value is string {
+/**
+ * Shared lexical guard for tenant and institution IDs. It is format-only and never proves
+ * membership, authorization, or capability reachability.
+ */
+export function isInstitutionScopeIdV1(value: unknown): value is string {
   return (
     typeof value === 'string' &&
     value.length >= 1 &&
     value.length <= 128 &&
-    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(value)
+    /^[A-Za-z0-9._:-]+$/u.test(value)
   );
 }
 
@@ -149,10 +157,10 @@ function parseInstitutionAccessContextV1(
   if (!snapshot) return null;
 
   if (
-    !isNonEmptyInstitutionReferenceV1(snapshot.userId) ||
+    !isInstitutionScopeIdV1(snapshot.userId) ||
     !isInstitutionRoleV1(snapshot.role) ||
-    !isNonEmptyInstitutionReferenceV1(snapshot.tenantId) ||
-    !isNonEmptyInstitutionReferenceV1(snapshot.institutionId) ||
+    !isInstitutionScopeIdV1(snapshot.tenantId) ||
+    !isInstitutionScopeIdV1(snapshot.institutionId) ||
     !isInstitutionAccessContextSourceV1(snapshot.source)
   ) {
     return null;
@@ -247,8 +255,8 @@ export function authorizeInstitutionScopeV1(input: {
   }
 
   if (
-    !isNonEmptyInstitutionReferenceV1(snapshot.targetTenantId) ||
-    !isNonEmptyInstitutionReferenceV1(snapshot.targetInstitutionId)
+    !isInstitutionScopeIdV1(snapshot.targetTenantId) ||
+    !isInstitutionScopeIdV1(snapshot.targetInstitutionId)
   ) {
     return Object.freeze({ allowed: false, reason: 'invalid_target_scope' });
   }

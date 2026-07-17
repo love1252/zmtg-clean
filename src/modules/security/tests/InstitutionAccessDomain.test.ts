@@ -8,6 +8,7 @@ import {
   authorizeInstitutionScopeV1,
   isInstitutionAccessContextFailureReasonV1,
   isInstitutionAccessContextV1,
+  isInstitutionScopeIdV1,
   isInstitutionScopeDenialReasonV1,
   type InstitutionAccessContextV1,
   type InstitutionScopeDecisionV1,
@@ -214,20 +215,31 @@ describe('InstitutionAccessDomainV1', () => {
     });
   });
 
-  it('rejects unsafe scope reference characters and excessive length consistently', () => {
-    for (const targetTenantId of [
+  it('rejects unsafe scope IDs consistently for both target fields', () => {
+    for (const scopeId of [
+      '',
       'tenant with spaces',
       'tenant\ncontrol',
+      'tenant/other',
       `tenant-${'x'.repeat(129)}`,
     ]) {
-      expect(
-        authorizeInstitutionScopeV1({
-          context: context(),
-          targetTenantId,
-          targetInstitutionId: 'institution-safe-reference',
-          allowedRoles: ['tenant_admin'],
-        }),
-      ).toEqual({ allowed: false, reason: 'invalid_target_scope' });
+      expect(isInstitutionScopeIdV1(scopeId)).toBe(false);
+      for (const [targetTenantId, targetInstitutionId] of [
+        [scopeId, 'institution-safe-reference'],
+        ['tenant-safe-reference', scopeId],
+      ]) {
+        expect(
+          authorizeInstitutionScopeV1({
+            context: context(),
+            targetTenantId,
+            targetInstitutionId,
+            allowedRoles: ['tenant_admin'],
+          }),
+        ).toEqual({ allowed: false, reason: 'invalid_target_scope' });
+      }
     }
+
+    expect(isInstitutionScopeIdV1(`scope-${'x'.repeat(122)}`)).toBe(true);
+    expect(isInstitutionScopeIdV1('.scope_reference:1')).toBe(true);
   });
 });

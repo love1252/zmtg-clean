@@ -1,7 +1,7 @@
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import {
   isInstitutionAccessContextSourceV1,
-  isNonEmptyInstitutionReferenceV1,
+  isInstitutionScopeIdV1,
   type InstitutionAccessContextFailureReasonV1,
   type InstitutionAccessContextV1,
 } from '@/modules/security/domain/institution-access';
@@ -76,11 +76,11 @@ function snapshotStrictAccessContext(
 }
 
 /**
- * Narrows an already server-resolved access context to the strict institution partition. This
- * function deliberately has no client-supplied institution argument. It rejects demo sessions,
- * but it does not query the member directory or authorize a page/object/action: the caller must
- * first obtain a fresh formal session context from the current-member reader and must reauthorize
- * the target operation after this scope narrowing succeeds.
+ * Structurally narrows an already server-resolved access context to the institution partition.
+ * This function deliberately has no client-supplied institution argument. It rejects demo
+ * sessions, but does not verify current member eligibility or authorize a page, object, action,
+ * or capability key. The caller must obtain a fresh formal member context and reauthorize the
+ * target operation after this scope narrowing succeeds.
  */
 export function resolveInstitutionAccessContextV1(
   accessContext: AccessContext | null,
@@ -90,9 +90,9 @@ export function resolveInstitutionAccessContextV1(
   if (!snapshot) return fail('invalid_context_shape');
   if (snapshot.scope !== 'tenant') return fail('non_tenant_scope');
   if (!isInstitutionRoleV1(snapshot.role)) return fail('unsupported_role');
-  if (!isNonEmptyInstitutionReferenceV1(snapshot.userId)) return fail('invalid_user');
-  if (!isNonEmptyInstitutionReferenceV1(snapshot.tenantId)) return fail('missing_tenant');
-  if (!isNonEmptyInstitutionReferenceV1(snapshot.institutionId)) {
+  if (!isInstitutionScopeIdV1(snapshot.userId)) return fail('invalid_user');
+  if (!isInstitutionScopeIdV1(snapshot.tenantId)) return fail('missing_tenant');
+  if (!isInstitutionScopeIdV1(snapshot.institutionId)) {
     return fail('missing_institution');
   }
   if (!isInstitutionAccessContextSourceV1(snapshot.source)) return fail('invalid_source');
