@@ -9,7 +9,7 @@
 | 任务编号 | `BASE-03` |
 | 唯一迁移单元 | `MIG-01` |
 | 文档日期 | 2026-07-18 |
-| 设计基线 | `origin/main` / `b389a7de248a1f172f0222bdc4be40e740a2ea57` |
+| 设计基线 | `origin/main` / `4fa0706d74a400055a5259ac3a13eba91d41bd1a` |
 | 任务性质 | docs-only 技术设计与数据变更申请 |
 | 目标 | 建立可证明的 `tenantId + institutionId` 数据归属、机构运行上下文和机构级审计持久化基础 |
 | 非目标 | 页面、API、业务服务、真实 migration、外部系统、凭证、生产放行 |
@@ -35,6 +35,7 @@
 - `customers` 已有可空 `institution_id`，并存在 `(tenant_id, institution_id, id)` 唯一约束；该字段尚未完成非空和历史归属闭环。
 - `follow_up_path_enrollments`、`follow_up_path_stages`、`follow_up_message_drafts`、`follow_up_customer_timeline_events` 已有可空 `institution_id`，但外键仍主要使用 tenant-only 组合。
 - `AccessContext` 已能携带可选 `institutionId`，但现有通用访问范围仍只有 `platform | tenant`，不能证明所有服务端路径已经强制机构隔离。
+- `institution_scopes` 与获批 provisioning manifest 只证明机构存在性，并为历史回填提供必要锚点；它们不能单独证明当前用户、成员身份或任何 action 授权。正式 reader/write 仍必须取得 BASE-02B 的来源证明与 fresh active membership，经过 institution-scoped guard，并在具体资源上再次执行 object-scoped guard。
 
 ### 3.2 仍缺机构归属的核心事实
 
@@ -94,7 +95,9 @@
 
 主键固定为 `(tenant_id, institution_id)`，不建立仅按 `institution_id` 的全局唯一假设。首批行只能来自逐 tenant 审批的 provisioning manifest。manifest 必须由正式机构开户/合同侧受控记录或经平台管理员复核的迁移清单形成，至少绑定 tenant、institution、来源记录摘要、批准人、批准时间和清单版本；账号绑定、负责人、客户记录或“整条关系一致”都不能自行创建锚点。
 
-`auth_account_institution_bindings` 只有在 MIG-01A2 已按获批 manifest 写入全部机构锚点后，才增加 `(tenant_id, institution_id)` 指向 `institution_scopes` 的 `NOT VALID` 复合 FK。BASE-02 只有在 active 账号绑定指向 active 机构锚点时才能签发机构 `AccessContext`；缺锚点、停用、冲突或过期一律 fail-closed。
+`institution_scopes` 与 manifest 是机构存在和可回填历史记录的必要条件，不是当前成员或 action 的授权证据。任何正式 reader/write 不得仅因锚点或 manifest 存在而放行；必须由 BASE-02B 提供来源证明和 fresh active membership，先经 institution-scoped guard，再在目标对象上经 object-scoped guard。
+
+`auth_account_institution_bindings` 只有在 MIG-01A2 已按获批 manifest 写入全部机构锚点后，才增加 `(tenant_id, institution_id)` 指向 `institution_scopes` 的 `NOT VALID` 复合 FK。BASE-02B 只有在 active 账号绑定指向 active 机构锚点时才能签发机构 `AccessContext`；缺锚点、停用、冲突或过期一律 fail-closed。
 
 ### 5.2 机构运行上下文版本
 
@@ -234,8 +237,8 @@ audit_resource | attributable_count | legacy_count | conflict_count
 ### 7.3 BASE-02 后续切片：服务端双写
 
 - 先形成目标表全部 writer 清单，覆盖现有 API、repository、导入、任务、seed、维护脚本、测试 fixture 和可能仍运行的旧实例；任何未纳入清单的 writer 都阻断回填。
-- 所有新机构业务写入只从已验证服务端 `AccessContext` 取得 `tenantId + institutionId`。
-- BASE-02 只在 active account binding 指向 active `institution_scopes` 时签发机构上下文；绑定本身不能创建机构锚点。
+- 所有正式 reader/write 都只从已验证服务端 `AccessContext` 取得 `tenantId + institutionId`：必须先由 BASE-02B 证明来源并确认 fresh active membership，再经过 institution-scoped guard；每个客户、任务、审计或其他目标还必须通过自己的 object-scoped guard。`institution_scopes`、provisioning manifest 与账号绑定只提供机构存在性或回填锚点，不能单独授权任何 action。
+- BASE-02B 只在 active account binding 指向 active `institution_scopes` 时签发机构上下文；绑定本身不能创建机构锚点。
 - 客户端提交的 institution、当前负责人或对象显示字段不能覆盖服务端 scope。
 - 父子对象在写入事务内重新验证机构一致性。
 - 机构审计写入与高风险业务写入保持事务一致；审计不可写时 fail-closed。
