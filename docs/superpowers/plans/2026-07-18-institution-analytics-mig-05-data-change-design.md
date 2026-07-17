@@ -71,7 +71,7 @@ MIG-01 → MIG-02 → MIG-03 → MIG-04 → MIG-05 → MIG-06
 
 ### 4.3 来源覆盖、高水位与过期
 
-每个来源需保留可审计的最后成功观测、可比较的来源高水位、已接受/拒绝/冲突记录计数和质量摘要。高水位只能在一批规范化、幂等和纠正校验均成功提交后推进；部分行非法时，已接受合法事实可提交，但高水位和批次摘要必须明确 `partial` 覆盖及拒绝计数，不能伪称完整同步。来源过期、断连、拒绝或未发布不能把未知来源解释为零，也不能驱动当前写操作。
+每个来源需保留可审计的最后成功观测、可比较的来源高水位、已接受/拒绝/冲突记录计数和质量摘要。高水位只能在同批全部已接受的合法事实完成规范化、幂等和纠正校验，并与拒绝/冲突行的低敏结果一起原子提交后推进；部分行非法时，已接受合法事实可提交，但高水位和批次摘要必须明确 `partial` 覆盖及拒绝计数，不能伪称完整同步。来源过期、断连、拒绝或未发布不能把未知来源解释为零，也不能驱动当前写操作。
 
 ## 五、幂等、重放与追加纠正
 
@@ -128,6 +128,7 @@ tenantId + institutionId + source + sourceRecordReference + sourceRevision + eve
 - 持久化与治理输出只使用低敏安全引用和受控原因码。禁止存入或返回原始订单/支付/退款号、文件内容、客户姓名/联系方式、外部账号、凭证、自由文本、SQL、堆栈或 provider payload。
 - 本申请不声明或复制 `InstitutionSourceEnvelopeV1`、`InstitutionOperatingContextV1`、`ControlledImportCommandV1` 或公共 readiness/failure-code 枚举。公共声明只归总协调台；独立受控导入任务生产和执行其已冻结的 15 字段命令，本线只验收规范化结果。
 - 经营分析后续只允许 `tenant_admin`、`tenant_operator` 在服务端当前机构范围读取低敏经营结果；本迁移本身不新增 API、UI 或权限端点。
+- `institution_scopes` 或任何已持久化的双 scope 只证明数据归属，不能替代 `BASE-02B` 的服务端当前成员与具体 action guard。未来来源启停、批次批准、客户/项目复核、追加纠正、有效性切换和高水位推进均须先通过该独立授权门禁；本申请不定义其角色矩阵、接口或实现。
 
 ## 九、回滚、停止条件与验收
 
@@ -145,6 +146,7 @@ tenantId + institutionId + source + sourceRecordReference + sourceRevision + eve
 - [ ] 覆盖成功支付、确认退款、失败/取消排除、部分/全额/孤儿退款、负净额、重放、同身份冲突、断链/分叉纠正。
 - [ ] 覆盖 CNY/USD 等币种隔离、未匹配/待复核客户、未映射/待复核项目、无稳定消费单引用和跨机构 scope mismatch。
 - [ ] 验证来源高水位、partial/rejected 批次、逐行低敏失败结果、停启/回滚和回填断点恢复；未知、缺失或过期绝不显示为 `0`。
+- [ ] 验证双 scope 或 `institution_scopes` 不能替代 `BASE-02B` 的服务端成员/具体 action guard；缺失、失效或越权成员不得批准批次、复核映射、追加纠正或推进高水位。
 - [ ] 验证没有真实、隔离、版本化和可审计的 HIS 标准项目目录时，项目标准排行/详情与统一发布门禁保持阻断；金额质量摘要仍如实保留。
 - [ ] 确认外部 HIS/ERP/POS、受控导入 runtime、API/UI、snapshot/报告、AI/provider、schema 实施和 migration 执行均不在本 docs-only PR。
 
