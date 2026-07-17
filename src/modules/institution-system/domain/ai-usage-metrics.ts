@@ -3,6 +3,10 @@ import {
   type AiUsageOutcome,
   type AiUsageTerminalStatusPolicy,
 } from '@/modules/institution-system/domain/ai-usage-outcomes';
+import {
+  createAiUsageServiceKeyPolicySnapshot,
+  type AiUsageServiceKeyPolicy,
+} from '@/modules/institution-system/domain/ai-usage-service-keys';
 
 export type InstitutionAiUsageScope = Readonly<{
   tenantId: string;
@@ -47,7 +51,10 @@ export type AiUsageMetricsAggregationResult =
     }>
   | Readonly<{
       ok: false;
-      code: 'invalid_scope' | 'invalid_terminal_status_policy';
+      code:
+        | 'invalid_scope'
+        | 'invalid_terminal_status_policy'
+        | 'invalid_service_key_policy';
     }>
   | Readonly<{
       ok: false;
@@ -78,10 +85,6 @@ function createMutableSummary(): MutableSummary {
 }
 
 function isValidScopeValue(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.trim() === value;
-}
-
-function isValidServiceKey(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.trim() === value;
 }
 
@@ -158,6 +161,7 @@ export function aggregateAiUsageMetrics(input: Readonly<{
   scope: InstitutionAiUsageScope;
   records: readonly AiUsageMetricRecord[];
   terminalStatusPolicy: AiUsageTerminalStatusPolicy;
+  serviceKeyPolicy: AiUsageServiceKeyPolicy;
 }>): AiUsageMetricsAggregationResult {
   if (
     !isValidScopeValue(input.scope.tenantId)
@@ -171,6 +175,11 @@ export function aggregateAiUsageMetrics(input: Readonly<{
     return { ok: false, code: classifierResult.code };
   }
 
+  const serviceKeyPolicyResult = createAiUsageServiceKeyPolicySnapshot(input.serviceKeyPolicy);
+  if (!serviceKeyPolicyResult.ok) {
+    return { ok: false, code: serviceKeyPolicyResult.code };
+  }
+
   const total = createMutableSummary();
   const summariesByServiceKey = new Map<string, MutableSummary>();
 
@@ -182,7 +191,7 @@ export function aggregateAiUsageMetrics(input: Readonly<{
       return { ok: false, code: 'scope_mismatch', recordIndex };
     }
 
-    if (!isValidServiceKey(record.serviceKey)) {
+    if (!serviceKeyPolicyResult.isAllowed(record.serviceKey)) {
       return { ok: false, code: 'invalid_service_key', recordIndex };
     }
 

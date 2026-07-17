@@ -4,6 +4,7 @@ import {
   type AiUsageMetricRecord,
 } from '@/modules/institution-system/domain/ai-usage-metrics';
 import type { AiUsageTerminalStatusPolicy } from '@/modules/institution-system/domain/ai-usage-outcomes';
+import type { AiUsageServiceKeyPolicy } from '@/modules/institution-system/domain/ai-usage-service-keys';
 
 const scope = {
   tenantId: 'tenant-1',
@@ -18,6 +19,12 @@ const terminalStatusPolicy = {
   rejected: 'rejection',
   sensitive_input_rejected: 'rejection',
 } satisfies AiUsageTerminalStatusPolicy;
+
+const serviceKeyPolicy = [
+  'conversation_ai',
+  'knowledge_qa',
+  'analytics_report',
+] as const satisfies AiUsageServiceKeyPolicy;
 
 describe('AI usage metrics domain', () => {
   it('聚合总量与三个稳定业务 serviceKey，并保留精确成功率分子分母', () => {
@@ -78,6 +85,7 @@ describe('AI usage metrics domain', () => {
       scope,
       records,
       terminalStatusPolicy,
+      serviceKeyPolicy,
     });
 
     expect(result).toEqual({
@@ -165,6 +173,7 @@ describe('AI usage metrics domain', () => {
     const result = aggregateAiUsageMetrics({
       scope,
       terminalStatusPolicy,
+      serviceKeyPolicy,
       records: [
         {
           ...scope,
@@ -216,6 +225,7 @@ describe('AI usage metrics domain', () => {
       const invalidUnitsResult = aggregateAiUsageMetrics({
         scope,
         terminalStatusPolicy,
+        serviceKeyPolicy,
         records: [
           {
             ...scope,
@@ -239,6 +249,7 @@ describe('AI usage metrics domain', () => {
     const result = aggregateAiUsageMetrics({
       scope,
       terminalStatusPolicy,
+      serviceKeyPolicy,
       records: [
         {
           ...scope,
@@ -297,6 +308,7 @@ describe('AI usage metrics domain', () => {
       scope,
       records,
       terminalStatusPolicy,
+      serviceKeyPolicy,
     });
 
     expect(result).toEqual({
@@ -322,6 +334,7 @@ describe('AI usage metrics domain', () => {
     const result = aggregateAiUsageMetrics({
       scope,
       terminalStatusPolicy,
+      serviceKeyPolicy,
       records,
     });
 
@@ -332,10 +345,65 @@ describe('AI usage metrics domain', () => {
     });
   });
 
+  it('格式合法但未获准的 serviceKey 使整批失败且不返回部分指标', () => {
+    const records = [
+      {
+        ...scope,
+        status: 'succeeded',
+        serviceKey: 'conversation_ai',
+        serviceUnits: 1,
+      },
+      {
+        ...scope,
+        status: 'succeeded',
+        serviceKey: 'future_unapproved_ai',
+        serviceUnits: 1,
+        model: 'future_unapproved_ai',
+        provider: 'future_unapproved_ai',
+        serviceName: 'future_unapproved_ai',
+        errorMessage: 'sensitive full error text',
+      },
+    ];
+    const before = structuredClone(records);
+
+    const result = aggregateAiUsageMetrics({
+      scope,
+      records,
+      terminalStatusPolicy,
+      serviceKeyPolicy,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'invalid_service_key',
+      recordIndex: 1,
+    });
+    expect('metrics' in result).toBe(false);
+    expect(JSON.stringify(result)).not.toContain('future_unapproved_ai');
+    expect(JSON.stringify(result)).not.toContain('sensitive full error text');
+    expect(records).toEqual(before);
+  });
+
+  it('拒绝非法 serviceKey 策略，即使记录为空也不返回指标', () => {
+    const result = aggregateAiUsageMetrics({
+      scope,
+      records: [],
+      terminalStatusPolicy,
+      serviceKeyPolicy: [],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'invalid_service_key_policy',
+    });
+    expect('metrics' in result).toBe(false);
+  });
+
   it('拒绝非法终态策略，不返回任何指标', () => {
     const result = aggregateAiUsageMetrics({
       scope,
       records: [],
+      serviceKeyPolicy,
       terminalStatusPolicy: {
         succeeded: 'incomplete',
       } as unknown as AiUsageTerminalStatusPolicy,
@@ -353,6 +421,7 @@ describe('AI usage metrics domain', () => {
       scope,
       records: [],
       terminalStatusPolicy,
+      serviceKeyPolicy,
     });
 
     expect(result).toEqual({
