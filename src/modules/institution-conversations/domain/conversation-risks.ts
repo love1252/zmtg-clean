@@ -640,9 +640,37 @@ export function checkConversationRiskSetForNormalClose(
 
     const projections: Exclude<ConversationRiskProjection, { state: 'none' }>[] = [];
     const riskIds = new Set<string>();
+    const eventIds = new Set<string>();
+    const clinicalClosureReferenceIds = new Set<string>();
     for (const history of capturedHistories) {
+      const capturedHistory = captureDenseDataArray(history);
+      if (capturedHistory === null || capturedHistory.length === 0) {
+        return normalCloseBlocked('risk_history_invalid');
+      }
+      const anchor = captureDataRecord(capturedHistory[0], [riskUnconfirmedEventKeys]);
+      if (anchor === null) {
+        return normalCloseBlocked('risk_history_invalid');
+      }
+      if (
+        isSafeObjectId(anchor.tenantId)
+        && isSafeObjectId(anchor.institutionId)
+        && isSafeObjectId(anchor.conversationId)
+        && isSafeObjectId(anchor.segmentId)
+        && (
+          anchor.tenantId !== capturedInput.tenantId
+          || anchor.institutionId !== capturedInput.institutionId
+          || anchor.conversationId !== capturedInput.conversationId
+          || anchor.segmentId !== capturedInput.segmentId
+        )
+      ) {
+        return normalCloseBlocked('risk_target_mismatch');
+      }
       const inspected = inspectRiskHistory(history);
-      if (inspected.result.kind === 'blocked' || inspected.result.projection.state === 'none') {
+      if (
+        inspected.result.kind === 'blocked'
+        || inspected.result.projection.state === 'none'
+        || inspected.history === null
+      ) {
         return normalCloseBlocked('risk_history_invalid');
       }
       const projection = inspected.result.projection;
@@ -658,6 +686,22 @@ export function checkConversationRiskSetForNormalClose(
         return normalCloseBlocked('risk_history_invalid');
       }
       riskIds.add(projection.riskId);
+      for (const event of inspected.history) {
+        if (eventIds.has(event.eventId)) {
+          return normalCloseBlocked('risk_history_invalid');
+        }
+        eventIds.add(event.eventId);
+      }
+      if (
+        projection.state === 'resolved'
+        && projection.riskDomain === 'clinical'
+        && projection.clinicalClosureReferenceId !== null
+      ) {
+        if (clinicalClosureReferenceIds.has(projection.clinicalClosureReferenceId)) {
+          return normalCloseBlocked('risk_history_invalid');
+        }
+        clinicalClosureReferenceIds.add(projection.clinicalClosureReferenceId);
+      }
       projections.push(projection);
     }
 
@@ -666,6 +710,16 @@ export function checkConversationRiskSetForNormalClose(
       const check = captureDataRecord(rawCheck, [currentClinicalClosureCheckKeys]);
       if (check === null) {
         return normalCloseBlocked('clinical_closure_reference_invalid');
+      }
+      if (
+        isSafeObjectId(check.tenantId)
+        && isSafeObjectId(check.institutionId)
+        && (
+          check.tenantId !== capturedInput.tenantId
+          || check.institutionId !== capturedInput.institutionId
+        )
+      ) {
+        return normalCloseBlocked('clinical_closure_scope_mismatch');
       }
       checks.push({
         referenceId: check.referenceId as string,
