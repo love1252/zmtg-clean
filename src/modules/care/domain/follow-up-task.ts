@@ -1,3 +1,5 @@
+import { checkFollowUpCommandPreconditions } from './follow-up-command-preconditions';
+
 export const FOLLOW_UP_TASK_STATES = [
   'pending',
   'in_progress',
@@ -44,6 +46,9 @@ export type FollowUpTask = Readonly<{
 
 export type FollowUpTaskCommandError =
   | 'invalid_task'
+  | 'invalid_command_context'
+  | 'scope_mismatch'
+  | 'revision_conflict'
   | 'invalid_target_state'
   | 'invalid_transition'
   | 'terminal_state'
@@ -100,7 +105,7 @@ function readCompletionResult(value: unknown): FollowUpCompletionResult | null {
 function isValidTask(task: FollowUpTask) {
   if (!isNonEmptyText(task.taskId) || !isNonEmptyText(task.institutionId)) return false;
   if (!isFollowUpTaskState(task.state)) return false;
-  if (!Number.isInteger(task.revision) || task.revision < 0) return false;
+  if (!Number.isSafeInteger(task.revision) || task.revision < 0) return false;
 
   if (task.state === 'completed') {
     return readCompletionResult(task.completionResult) !== null && task.cancellationReason === null;
@@ -123,11 +128,33 @@ function failure(code: FollowUpTaskCommandError): FollowUpTaskCommandResult {
   return { ok: false, code };
 }
 
-function withState(task: FollowUpTask, state: FollowUpTaskState): FollowUpTask {
+function checkCommandPreconditions(input: Readonly<{
+  task: FollowUpTask;
+  institutionId: unknown;
+  expectedRevision: unknown;
+}>): FollowUpTaskCommandResult | null {
+  const result = checkFollowUpCommandPreconditions({
+    taskInstitutionId: input.task.institutionId,
+    currentRevision: input.task.revision,
+    institutionId: input.institutionId,
+    expectedRevision: input.expectedRevision,
+  });
+
+  return result.ok ? null : failure(result.code);
+}
+
+function nextRevision(task: FollowUpTask): number | null {
+  return task.revision < Number.MAX_SAFE_INTEGER ? task.revision + 1 : null;
+}
+
+function withState(task: FollowUpTask, state: FollowUpTaskState): FollowUpTask | null {
+  const revision = nextRevision(task);
+  if (revision === null) return null;
+
   return {
     ...task,
     state,
-    revision: task.revision + 1,
+    revision,
     completionResult: null,
     cancellationReason: null,
   };
@@ -135,10 +162,14 @@ function withState(task: FollowUpTask, state: FollowUpTaskState): FollowUpTask {
 
 export function transitionFollowUpTask(input: Readonly<{
   task: FollowUpTask;
+  institutionId: unknown;
+  expectedRevision: unknown;
   targetState: unknown;
 }>): FollowUpTaskCommandResult {
   const { task, targetState } = input;
   if (!isValidTask(task)) return failure('invalid_task');
+  const preconditionFailure = checkCommandPreconditions(input);
+  if (preconditionFailure) return preconditionFailure;
   if (!isFollowUpTaskState(targetState)) return failure('invalid_target_state');
 
   if (task.state === 'escalated' && targetState === 'completed') {
@@ -152,15 +183,20 @@ export function transitionFollowUpTask(input: Readonly<{
     return failure('invalid_transition');
   }
 
-  return success(withState(task, targetState), true);
+  const nextTask = withState(task, targetState);
+  return nextTask ? success(nextTask, true) : failure('invalid_command_context');
 }
 
 export function completeFollowUpTask(input: Readonly<{
   task: FollowUpTask;
+  institutionId: unknown;
+  expectedRevision: unknown;
   result: unknown;
 }>): FollowUpTaskCommandResult {
   const { task } = input;
   if (!isValidTask(task)) return failure('invalid_task');
+  const preconditionFailure = checkCommandPreconditions(input);
+  if (preconditionFailure) return preconditionFailure;
   if (task.state === 'escalated') return failure('escalated_completion_forbidden');
   if (input.result === null || input.result === undefined) {
     return failure('completion_result_required');
@@ -179,11 +215,14 @@ export function completeFollowUpTask(input: Readonly<{
     return failure('invalid_transition');
   }
 
+  const revision = nextRevision(task);
+  if (revision === null) return failure('invalid_command_context');
+
   return success(
     {
       ...task,
       state: 'completed',
-      revision: task.revision + 1,
+      revision,
       completionResult: result,
       cancellationReason: null,
     },
@@ -193,10 +232,14 @@ export function completeFollowUpTask(input: Readonly<{
 
 export function cancelFollowUpTask(input: Readonly<{
   task: FollowUpTask;
+  institutionId: unknown;
+  expectedRevision: unknown;
   reason: unknown;
 }>): FollowUpTaskCommandResult {
   const { task, reason } = input;
   if (!isValidTask(task)) return failure('invalid_task');
+  const preconditionFailure = checkCommandPreconditions(input);
+  if (preconditionFailure) return preconditionFailure;
   if (reason === null || reason === undefined || reason === '') {
     return failure('cancellation_reason_required');
   }
@@ -216,11 +259,14 @@ export function cancelFollowUpTask(input: Readonly<{
     return failure('invalid_transition');
   }
 
+  const revision = nextRevision(task);
+  if (revision === null) return failure('invalid_command_context');
+
   return success(
     {
       ...task,
       state: 'cancelled',
-      revision: task.revision + 1,
+      revision,
       completionResult: null,
       cancellationReason: reason,
     },
