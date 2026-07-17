@@ -218,6 +218,14 @@ describe('InstitutionAccessDomainV1', () => {
   it('rejects unsafe scope IDs consistently for both target fields', () => {
     for (const scopeId of [
       '',
+      '.',
+      '---',
+      ':::',
+      '___',
+      '.scope-reference',
+      '-scope-reference',
+      ':scope-reference',
+      '_scope-reference',
       'tenant with spaces',
       'tenant\ncontrol',
       'tenant/other',
@@ -240,6 +248,6 @@ describe('InstitutionAccessDomainV1', () => {
     }
 
     expect(isInstitutionScopeIdV1(`scope-${'x'.repeat(122)}`)).toBe(true);
-    expect(isInstitutionScopeIdV1('.scope_reference:1')).toBe(true);
+    expect(isInstitutionScopeIdV1('scope_reference:1')).toBe(true);
   });
 });

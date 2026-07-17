@@ -96,13 +96,19 @@ describe('InstitutionAccessContextResolutionV1', () => {
   });
 
   it.each([
+    ['userId', '---', 'invalid_user'],
+    ['userId', '.user-safe-reference', 'invalid_user'],
     ['tenantId', 'tenant with spaces', 'missing_tenant'],
     ['tenantId', 'tenant\ncontrol', 'missing_tenant'],
     ['tenantId', 'tenant/other', 'missing_tenant'],
+    ['tenantId', '...', 'missing_tenant'],
+    ['tenantId', '-tenant-safe-reference', 'missing_tenant'],
     ['tenantId', `tenant-${'x'.repeat(129)}`, 'missing_tenant'],
     ['institutionId', 'institution with spaces', 'missing_institution'],
     ['institutionId', 'institution\ncontrol', 'missing_institution'],
     ['institutionId', 'institution/other', 'missing_institution'],
+    ['institutionId', ':::', 'missing_institution'],
+    ['institutionId', '_institution-safe-reference', 'missing_institution'],
     ['institutionId', `institution-${'x'.repeat(129)}`, 'missing_institution'],
   ] as const)('fails closed for malformed %s scope IDs', (field, value, reason) => {
     expect(resolveInstitutionAccessContextV1(accessContext({ [field]: value }))).toEqual({
