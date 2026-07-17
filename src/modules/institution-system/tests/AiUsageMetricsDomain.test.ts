@@ -3,6 +3,7 @@ import {
   aggregateAiUsageMetrics,
   type AiUsageMetricRecord,
 } from '@/modules/institution-system/domain/ai-usage-metrics';
+import { createAiUsageMetricsSnapshot } from '@/modules/institution-system/domain/ai-usage-metrics-snapshot';
 import type { AiUsageTerminalStatusPolicy } from '@/modules/institution-system/domain/ai-usage-outcomes';
 import type { AiUsageServiceKeyPolicy } from '@/modules/institution-system/domain/ai-usage-service-keys';
 
@@ -166,6 +167,22 @@ describe('AI usage metrics domain', () => {
     expect(records).toEqual(before);
     expect(timeWindow).toEqual(timeWindowBefore);
 
+    if (!result.ok) {
+      throw new Error(result.code);
+    }
+    const snapshotResult = createAiUsageMetricsSnapshot({
+      metrics: result.metrics,
+      serviceKeyPolicy,
+    });
+    expect(snapshotResult).toEqual({
+      ok: true,
+      snapshot: result.metrics,
+    });
+    if (!snapshotResult.ok) {
+      throw new Error(snapshotResult.code);
+    }
+    expect(Object.isFrozen(snapshotResult.snapshot)).toBe(true);
+
     const serialized = JSON.stringify(result);
     for (const forbiddenValue of [
       'prompt',
@@ -268,6 +285,44 @@ describe('AI usage metrics domain', () => {
       expect(invalidUnitsResult.metrics.serviceUnits).toBeNull();
       expect(invalidUnitsResult.metrics.byServiceKey[0]?.serviceUnits).toBeNull();
     }
+  });
+
+  it('值快照不按 serviceKey 重排后重新累加浮点单位', () => {
+    const result = aggregateAiUsageMetrics({
+      scope,
+      terminalStatusPolicy,
+      serviceKeyPolicy,
+      timeWindow,
+      records: [
+        {
+          ...recordBase,
+          status: 'succeeded',
+          serviceKey: 'conversation_ai',
+          serviceUnits: Number.MAX_VALUE,
+        },
+        ...Array.from({ length: 20 }, () => ({
+          ...recordBase,
+          status: 'succeeded',
+          serviceKey: 'analytics_report',
+          serviceUnits: 1e291,
+        })),
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.code);
+    }
+    expect(result.metrics.serviceUnits).toBe(Number.MAX_VALUE);
+
+    const snapshotResult = createAiUsageMetricsSnapshot({
+      metrics: result.metrics,
+      serviceKeyPolicy,
+    });
+    expect(snapshotResult).toEqual({
+      ok: true,
+      snapshot: result.metrics,
+    });
   });
 
   it('incomplete 不进入成功率分母，分母为 0 时返回不可计算语义', () => {
