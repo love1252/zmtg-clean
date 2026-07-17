@@ -223,7 +223,19 @@ describe('InstitutionWorkbenchShell', () => {
 
     const queue = screen.getByRole('list', { name: '行动队列' });
     expect(within(queue).getAllByRole('listitem')).toHaveLength(6);
-    expect(within(queue).getAllByRole('link', { name: '查看详情' })).toHaveLength(6);
+    expect(within(queue).getAllByRole('link', { name: /查看.+详情/ })).toHaveLength(6);
+    expect(
+      within(queue)
+        .getAllByRole('link', { name: /查看.+详情/ })
+        .map((link) => link.getAttribute('aria-label')),
+    ).toEqual([
+      '查看客户甲的预约详情',
+      '查看客户乙的随访详情',
+      '查看待匹配联系人的会话详情',
+      '查看客户丙的预约详情',
+      '查看客户丁的随访详情',
+      '查看客户戊的会话详情',
+    ]);
     expect(within(queue).getAllByTestId('mobile-action')).toHaveLength(4);
     expect(within(queue).getAllByTestId('mobile-action').map((item) => item.textContent)).toEqual(
       expect.arrayContaining([
@@ -233,7 +245,7 @@ describe('InstitutionWorkbenchShell', () => {
         expect.stringContaining('客户丙'),
       ]),
     );
-    expect(within(queue).getAllByRole('link', { name: '查看详情' })[0]).toHaveAttribute(
+    expect(within(queue).getByRole('link', { name: '查看客户甲的预约详情' })).toHaveAttribute(
       'href',
       '/hospital/care/appointments/appointment-1',
     );

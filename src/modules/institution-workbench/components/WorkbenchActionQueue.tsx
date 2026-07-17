@@ -26,6 +26,17 @@ function actionTime(action: WorkbenchActionRowViewModel): string {
   }
 }
 
+function actionKindLabel(action: WorkbenchActionRowViewModel): string {
+  switch (action.kind) {
+    case 'appointment':
+      return '预约';
+    case 'followup':
+      return '随访';
+    case 'conversation':
+      return '会话';
+  }
+}
+
 /**
  * 只消费已聚合的工作台行动投影；不读取来源、不会重新排序或构造业务链接。
  * 移动端从桌面安全前缀派生，以保证其始终是桌面队列的前缀。
@@ -57,7 +68,12 @@ export function WorkbenchActionQueue({ projection }: WorkbenchActionQueueProps) 
                 <p>{actionSubjectLabel(action)}</p>
                 <p>{actionTime(action)}</p>
                 {action.safeSummary === null ? null : <p>{action.safeSummary}</p>}
-                <a href={action.detailHref}>查看详情</a>
+                <a
+                  aria-label={`查看${actionSubjectLabel(action)}的${actionKindLabel(action)}详情`}
+                  href={action.detailHref}
+                >
+                  查看详情
+                </a>
               </li>
             );
           })}
