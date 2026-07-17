@@ -25,13 +25,15 @@ fixture、内存 Map、React `useState`、demo session、`mock_sent`、`proofEli
 | 会话根 | `conversationId`、scope、`channelType`、`serviceProviderType`、`connectionInstanceId`、安全 `channelConversationRef`、身份投影、`activeSegmentId`、最新客户入站指针、时间 | 根只保存跨分段稳定事实；连接绑定按 `(scope, channelType, serviceProviderType, connectionInstanceId, channelConversationRef)` 去重；非 `matched` 清空当前客户引用。 |
 | 分段 | `segmentId`、scope、`conversationId`、`sequenceNo`、五态、开段客户消息、时间锚点、当前处理人、`everHumanHandled`、关闭/解决、blocker | `(scope, conversationId, sequenceNo)` 唯一；每根最多一个未关闭活动分段；`closed` 不可重开，新客户入站只能创建新 sequence。 |
 | 不可变消息 | `messageId`、scope、根/分段、方向、sender kind、`occurredAt`、`receivedAt`、授权内容引用、固定低敏摘要、`sourceMessageRef`、幂等键 | 创建后不更新或删除；入站幂等绑定 scope、连接实例、方向和受信任键；同键不同载荷拒绝。 |
-| 逐消息结果/回复关联 | `resultId`、scope、`messageId`、stage/status、`attemptNo`、`dedupeKey`、低敏 provider/channel 引用、failure、时间；outbound—inbound link | `(scope, messageId, stage, attemptNo, dedupeKey)` 去重；provider 接受绝不推导渠道送达；回复是新入站消息。 |
-| 分配事件/投影 | `assignmentId`、scope、根/分段、revision、`assigned|accepted|rejected|released`、受控原因、低敏 actor/assignee、时间、幂等键 | 追加事件产生 0 或 1 活动分配；活动目标 `(scope, conversationId, segmentId)` 唯一。 |
-| 风险事件 | `riskId`、scope、根/分段/来源消息、风险域、受控 code、状态事件、低敏关闭引用、时间 | 只允许 `unconfirmed → confirmed → resolved`；禁止回退、跳级、覆盖历史；分段关闭不解除风险。 |
+| 逐消息结果/回复关联 | `resultId`、scope、`messageId`、stage/status、`attemptNo`、`dedupeKey`、服务端生成的不可逆回执引用、failure、时间；outbound—inbound link | `(scope, messageId, stage, attemptNo, dedupeKey)` 去重；provider 接受绝不推导渠道送达；回复是新入站消息。 |
+| 分配事件/投影 | `assignmentId`、scope、根/分段、revision、`assigned|accepted|rejected|released`、受控原因、低敏 actor/assignee、时间、幂等键 | `(scope, assignmentId, revision)` 唯一；追加事件产生 0 或 1 活动分配，活动投影对 `(scope, conversationId, segmentId)` 局部唯一。 |
+| 风险事件 | `riskId`、scope、根/分段/来源消息、风险域、受控 code、状态事件序号、低敏关闭引用、时间 | `(scope, riskId, eventSequence)` 唯一且只能 `unconfirmed → confirmed → resolved`；禁止回退、跳级、覆盖历史；分段关闭不解除风险。 |
 | Care 处置 revision | `dispositionId`、scope、根/分段/来源消息、revision、分类/解决/关闭/风险/blocker 快照、时间、`invalidatedAt`、audit 引用 | `(scope, dispositionId, revision)` 唯一；每段最多一个当前未失效 revision。 |
 | 身份复核 revision | `reviewId`、scope、根/分段/连接、不可逆身份引用、revision、候选版本/digest、状态、决定、低敏 actor/reason/audit、客户引用、时间 | `(scope, reviewId, revision)` 唯一；同连接和不可逆身份引用最多一个活动 review。 |
 
 消息结果必须保持发送/接收、provider 接受、渠道送达、客户回复和业务完成五类事实分离。消息级一旦存在权威 `channel_delivered`，迟到 `unknown`、失败或新 attempt 不得降级它或伪造重试。出站幂等另绑定已授权命令和目标分段，不得复用浏览器草稿 ID。
+
+本文出现的“安全”“低敏”内容/回执/关闭/audit 引用均指服务端生成或验证的不可逆对象引用，只可用于同 scope 授权解析；它们不是 provider payload、凭证、原始外部账号、手机号、展示名称、完整正文或其可逆编码。任何无法满足该定义的引用不得写入 `MIG-04` 或低敏 audit。
 
 ## 三、`ConversationCareDispositionV1` revision 与失效
 
@@ -85,7 +87,7 @@ matched → revoked
 
 保留期、合法留置、清理审批和最终清理时点由隐私/审计权威策略决定，本申请不猜测天数。到期清理应撤销正文/附件内容引用或执行已批准的不可逆清理，同时保留最小低敏事实骨架（对象 ID、scope、受控状态、时间、audit 引用）；不得从 audit 恢复正文。
 
-会话、分配、风险、复核、强制结束、失效、发送尝试和内容清理写入机构级低敏 audit：受控 action/reason、对象引用、scope、actor reference、时间和结果。audit 禁止正文、自由摘要、候选原文、敏感客户资料、外部账号、payload、凭证、令牌、内部错误堆栈和临床结论。默认不级联物理删除会话事实。
+会话、分配、风险、复核、强制结束、失效、发送尝试和内容清理写入机构级低敏 audit：受控 action/reason、不可逆对象引用、scope、actor reference、时间和结果。audit 禁止正文、自由摘要、候选原文、敏感客户资料、原始外部账号、provider/channel payload、凭证、令牌、内部错误堆栈和临床结论。默认不级联物理删除会话事实。
 
 ## 六、`expand → backfill → enforce` 与回滚
 
