@@ -60,12 +60,22 @@ export type AnalyticsPeriodContainmentResult =
   | Readonly<{ ok: true; contains: boolean; businessDate: string }>
   | Readonly<{ ok: false; reasonCode: AnalyticsPeriodFailureCode }>;
 
-type ParsedLocalDate = Readonly<{
+export type AnalyticsLocalDateParts = Readonly<{
   year: number;
   month: number;
   day: number;
   ordinal: number;
 }>;
+
+export type AnalyticsLocalDateStartResolution =
+  | Readonly<{ ok: true; instant: string }>
+  | Readonly<{
+      ok: false;
+      reasonCode:
+        | 'invalid_local_date'
+        | 'invalid_time_zone'
+        | 'unresolvable_local_date_start';
+    }>;
 
 const millisecondsPerCalendarDay = 86_400_000;
 const periodPresetSet = new Set<string>(ANALYTICS_PERIOD_PRESETS);
@@ -140,7 +150,10 @@ function createDateFormatter(timeZone: unknown) {
   }
 }
 
-function localDateFromFormatter(formatter: Intl.DateTimeFormat, timestamp: number) {
+function localDatePartsFromFormatter(
+  formatter: Intl.DateTimeFormat,
+  timestamp: number,
+) {
   let year = '';
   let month = '';
   let day = '';
@@ -151,12 +164,52 @@ function localDateFromFormatter(formatter: Intl.DateTimeFormat, timestamp: numbe
     if (part.type === 'day') day = part.value;
   }
 
-  return /^\d{4}-\d{2}-\d{2}$/u.test(`${year}-${month}-${day}`)
-    ? `${year}-${month}-${day}`
-    : null;
+  if (!/^\d+$/u.test(year) || !/^\d+$/u.test(month) || !/^\d+$/u.test(day)) {
+    return null;
+  }
+
+  const numericYear = Number(year);
+  const numericMonth = Number(month);
+  const numericDay = Number(day);
+  if (
+    !Number.isSafeInteger(numericYear) ||
+    !Number.isSafeInteger(numericMonth) ||
+    !Number.isSafeInteger(numericDay)
+  ) {
+    return null;
+  }
+
+  const date = new Date(0);
+  date.setUTCFullYear(numericYear, numericMonth - 1, numericDay);
+  date.setUTCHours(0, 0, 0, 0);
+  if (
+    date.getUTCFullYear() !== numericYear ||
+    date.getUTCMonth() !== numericMonth - 1 ||
+    date.getUTCDate() !== numericDay
+  ) {
+    return null;
+  }
+
+  return {
+    year: numericYear,
+    month: numericMonth,
+    day: numericDay,
+    ordinal: date.getTime() / millisecondsPerCalendarDay,
+  };
 }
 
-function parseLocalDate(value: unknown): ParsedLocalDate | null {
+function localDateFromFormatter(formatter: Intl.DateTimeFormat, timestamp: number) {
+  const parts = localDatePartsFromFormatter(formatter, timestamp);
+  if (!parts || parts.year < 1000 || parts.year > 9999) return null;
+  return `${String(parts.year).padStart(4, '0')}-${String(parts.month).padStart(
+    2,
+    '0',
+  )}-${String(parts.day).padStart(2, '0')}`;
+}
+
+export function parseAnalyticsLocalDate(
+  value: unknown,
+): AnalyticsLocalDateParts | null {
   if (typeof value !== 'string') return null;
 
   const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
@@ -230,6 +283,65 @@ export function toInstitutionBusinessDate(input: {
     : { ok: false, reasonCode: 'invalid_instant' };
 }
 
+export function resolveAnalyticsLocalDateStartInstant(input: {
+  readonly localDate: string;
+  readonly timeZone: string;
+}): AnalyticsLocalDateStartResolution {
+  const localDate = parseAnalyticsLocalDate(input?.localDate);
+  if (!localDate) {
+    return { ok: false, reasonCode: 'invalid_local_date' };
+  }
+
+  const formatter = createDateFormatter(input?.timeZone);
+  if (!formatter) {
+    return { ok: false, reasonCode: 'invalid_time_zone' };
+  }
+
+  const searchPadding = millisecondsPerCalendarDay * 2;
+  let lower = localDate.ordinal * millisecondsPerCalendarDay - searchPadding;
+  let upper = localDate.ordinal * millisecondsPerCalendarDay + searchPadding;
+  const lowerOrdinal = localDatePartsFromFormatter(formatter, lower)?.ordinal;
+  const upperOrdinal = localDatePartsFromFormatter(formatter, upper)?.ordinal;
+  if (
+    lowerOrdinal === undefined ||
+    upperOrdinal === undefined ||
+    lowerOrdinal >= localDate.ordinal ||
+    upperOrdinal < localDate.ordinal
+  ) {
+    return { ok: false, reasonCode: 'unresolvable_local_date_start' };
+  }
+
+  while (lower < upper) {
+    const midpoint = lower + Math.floor((upper - lower) / 2);
+    const midpointOrdinal = localDatePartsFromFormatter(
+      formatter,
+      midpoint,
+    )?.ordinal;
+    if (midpointOrdinal === undefined) {
+      return { ok: false, reasonCode: 'unresolvable_local_date_start' };
+    }
+    if (midpointOrdinal < localDate.ordinal) {
+      lower = midpoint + 1;
+    } else {
+      upper = midpoint;
+    }
+  }
+
+  const resolvedOrdinal = localDatePartsFromFormatter(formatter, lower)?.ordinal;
+  const previousOrdinal = localDatePartsFromFormatter(
+    formatter,
+    lower - 1,
+  )?.ordinal;
+  if (
+    resolvedOrdinal !== localDate.ordinal ||
+    previousOrdinal === localDate.ordinal
+  ) {
+    return { ok: false, reasonCode: 'unresolvable_local_date_start' };
+  }
+
+  return { ok: true, instant: new Date(lower).toISOString() };
+}
+
 export function resolveAnalyticsPeriod(
   input: AnalyticsPeriodRequest,
 ): AnalyticsPeriodResolution {
@@ -245,7 +357,7 @@ export function resolveAnalyticsPeriod(
     return asOfDateResult;
   }
 
-  const asOfDate = parseLocalDate(asOfDateResult.businessDate);
+  const asOfDate = parseAnalyticsLocalDate(asOfDateResult.businessDate);
   if (!asOfDate) {
     return { ok: false, reasonCode: 'invalid_local_date' };
   }
@@ -254,8 +366,8 @@ export function resolveAnalyticsPeriod(
   let endOrdinalExclusive: number;
 
   if (input.preset === 'custom') {
-    const startDate = parseLocalDate(input.startDate);
-    const endDate = parseLocalDate(input.endDateInclusive);
+    const startDate = parseAnalyticsLocalDate(input.startDate);
+    const endDate = parseAnalyticsLocalDate(input.endDateInclusive);
     if (!startDate || !endDate) {
       return { ok: false, reasonCode: 'invalid_local_date' };
     }
@@ -275,16 +387,16 @@ export function resolveAnalyticsPeriod(
       const daysSinceMonday = (sundayBasedWeekday + 6) % 7;
       startOrdinal = asOfDate.ordinal - daysSinceMonday;
     } else if (input.preset === 'month') {
-      startOrdinal = parseLocalDate(
+      startOrdinal = parseAnalyticsLocalDate(
         localDateFromParts(asOfDate.year, asOfDate.month, 1),
       )?.ordinal ?? Number.NaN;
     } else if (input.preset === 'quarter') {
       const quarterStartMonth = Math.floor((asOfDate.month - 1) / 3) * 3 + 1;
-      startOrdinal = parseLocalDate(
+      startOrdinal = parseAnalyticsLocalDate(
         localDateFromParts(asOfDate.year, quarterStartMonth, 1),
       )?.ordinal ?? Number.NaN;
     } else if (input.preset === 'year') {
-      startOrdinal = parseLocalDate(
+      startOrdinal = parseAnalyticsLocalDate(
         localDateFromParts(asOfDate.year, 1, 1),
       )?.ordinal ?? Number.NaN;
     } else {
@@ -301,32 +413,95 @@ export function resolveAnalyticsPeriod(
   }
 
   const localDayCount = endOrdinalExclusive - startOrdinal;
+  const value = {
+    preset: input.preset,
+    asOfBusinessDate: asOfDateResult.businessDate,
+    current: windowFromOrdinals(input.timeZone, startOrdinal, endOrdinalExclusive),
+    previous: windowFromOrdinals(
+      input.timeZone,
+      startOrdinal - localDayCount,
+      startOrdinal,
+    ),
+  } satisfies AnalyticsPeriodPair;
+  if (!isAnalyticsPeriodPairValid(value)) {
+    return { ok: false, reasonCode: 'invalid_local_date' };
+  }
+
   return {
     ok: true,
-    value: {
-      preset: input.preset,
-      asOfBusinessDate: asOfDateResult.businessDate,
-      current: windowFromOrdinals(input.timeZone, startOrdinal, endOrdinalExclusive),
-      previous: windowFromOrdinals(
-        input.timeZone,
-        startOrdinal - localDayCount,
-        startOrdinal,
-      ),
-    },
+    value,
   };
 }
 
-export function isAnalyticsPeriodWindowValid(window: AnalyticsPeriodWindow) {
-  const startDate = parseLocalDate(window.startDate);
-  const endDate = parseLocalDate(window.endDateExclusive);
+export function isAnalyticsPeriodWindowValid(
+  window: AnalyticsPeriodWindow | null | undefined,
+) {
+  const startDate = parseAnalyticsLocalDate(window?.startDate);
+  const endDate = parseAnalyticsLocalDate(window?.endDateExclusive);
+  const localDayCount = window?.localDayCount;
   return Boolean(
     startDate &&
       endDate &&
-      Number.isSafeInteger(window.localDayCount) &&
-      window.localDayCount > 0 &&
-      endDate.ordinal - startDate.ordinal === window.localDayCount &&
-      createDateFormatter(window.timeZone),
+      typeof localDayCount === 'number' &&
+      Number.isSafeInteger(localDayCount) &&
+      localDayCount > 0 &&
+      endDate.ordinal - startDate.ordinal === localDayCount &&
+      createDateFormatter(window?.timeZone),
   );
+}
+
+export function isAnalyticsPeriodPairValid(
+  periods: AnalyticsPeriodPair | null | undefined,
+) {
+  const current = periods?.current;
+  const previous = periods?.previous;
+  if (
+    typeof periods?.preset !== 'string' ||
+    !periodPresetSet.has(periods.preset) ||
+    !parseAnalyticsLocalDate(periods.asOfBusinessDate) ||
+    !isAnalyticsPeriodWindowValid(current) ||
+    !isAnalyticsPeriodWindowValid(previous) ||
+    !current ||
+    !previous ||
+    current.timeZone !== previous.timeZone ||
+    previous.endDateExclusive !== current.startDate ||
+    previous.localDayCount !== current.localDayCount
+  ) {
+    return false;
+  }
+
+  const start = parseAnalyticsLocalDate(current.startDate);
+  const end = parseAnalyticsLocalDate(current.endDateExclusive);
+  const asOf = parseAnalyticsLocalDate(periods.asOfBusinessDate);
+  if (!start || !end || !asOf) return false;
+  if (periods.preset === 'custom') return true;
+  if (end.ordinal !== asOf.ordinal + 1) return false;
+
+  if (periods.preset === 'today') {
+    return current.localDayCount === 1;
+  }
+  if (periods.preset === 'week') {
+    const weekday = new Date(start.ordinal * millisecondsPerCalendarDay).getUTCDay();
+    return weekday === 1 && current.localDayCount <= 7;
+  }
+  if (periods.preset === 'month') {
+    const nextMonth = Date.UTC(start.year, start.month, 1) / millisecondsPerCalendarDay;
+    return start.day === 1 && end.ordinal <= nextMonth;
+  }
+  if (periods.preset === 'quarter') {
+    const nextQuarter =
+      Date.UTC(start.year, start.month + 2, 1) / millisecondsPerCalendarDay;
+    return (
+      start.day === 1 &&
+      [1, 4, 7, 10].includes(start.month) &&
+      end.ordinal <= nextQuarter
+    );
+  }
+  if (periods.preset === 'year') {
+    const nextYear = Date.UTC(start.year + 1, 0, 1) / millisecondsPerCalendarDay;
+    return start.month === 1 && start.day === 1 && end.ordinal <= nextYear;
+  }
+  return false;
 }
 
 export function isInstantInAnalyticsPeriod(
