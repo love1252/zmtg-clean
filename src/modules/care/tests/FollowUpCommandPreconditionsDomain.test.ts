@@ -17,6 +17,8 @@ function task(overrides: Partial<FollowUpTask> = {}): FollowUpTask {
     institutionId: 'institution-a',
     state: 'pending',
     revision: 2,
+    riskLevel: 'none',
+    riskEscalation: null,
     completionResult: null,
     cancellationReason: null,
     ...overrides,
@@ -241,22 +243,29 @@ describe('随访任务命令前置守卫', () => {
     const completedAtLimit = task({
       state: 'completed',
       revision: Number.MAX_SAFE_INTEGER,
-      completionResult: { code: 'contact_completed' },
+      completionResult: { code: 'contact_completed' } as never,
     });
     expect(
       completeFollowUpTask({
         task: completedAtLimit,
         institutionId: 'institution-a',
         expectedRevision: Number.MAX_SAFE_INTEGER,
-        result: { code: 'contact_completed' },
+        result: { code: 'contact_completed', feedback: null },
       }),
-    ).toEqual({ ok: true, changed: false, task: completedAtLimit });
+    ).toEqual({
+      ok: true,
+      changed: false,
+      task: {
+        ...completedAtLimit,
+        completionResult: { code: 'contact_completed', feedback: null },
+      },
+    });
     expect(
       completeFollowUpTask({
         task: task({ state: 'in_progress', revision: Number.MAX_SAFE_INTEGER }),
         institutionId: 'institution-a',
         expectedRevision: Number.MAX_SAFE_INTEGER,
-        result: { code: 'contact_completed' },
+        result: { code: 'contact_completed', feedback: null },
       }),
     ).toEqual({ ok: false, code: 'invalid_command_context' });
 
@@ -299,7 +308,7 @@ describe('随访任务命令前置守卫', () => {
       task: original,
       institutionId: 'institution-a',
       expectedRevision: 4,
-      result: Object.freeze({ code: 'contact_completed' as const }),
+      result: Object.freeze({ code: 'contact_completed' as const, feedback: null }),
     });
     const inputBefore = structuredClone(input);
     const completed = completeFollowUpTask(input);
@@ -311,7 +320,7 @@ describe('随访任务命令前置守卫', () => {
       task: {
         state: 'completed',
         revision: 5,
-        completionResult: { code: 'contact_completed' },
+        completionResult: { code: 'contact_completed', feedback: null },
       },
     });
     if (!completed.ok) throw new Error('expected completion success');
@@ -321,7 +330,7 @@ describe('随访任务命令前置守卫', () => {
         task: completed.task,
         institutionId: 'institution-a',
         expectedRevision: 5,
-        result: { code: 'contact_completed' },
+        result: { code: 'contact_completed', feedback: null },
       }),
     ).toEqual({ ok: true, changed: false, task: completed.task });
     expect(
@@ -329,7 +338,7 @@ describe('随访任务命令前置守卫', () => {
         task: completed.task,
         institutionId: 'institution-a',
         expectedRevision: 4,
-        result: { code: 'contact_completed' },
+        result: { code: 'contact_completed', feedback: null },
       }),
     ).toEqual({ ok: false, code: 'revision_conflict' });
   });
@@ -387,7 +396,7 @@ describe('随访任务命令前置守卫', () => {
         task: original,
         institutionId: 'institution-a',
         expectedRevision: 5,
-        result: { code: 'contact_completed' },
+        result: { code: 'contact_completed', feedback: null },
       }),
       cancelFollowUpTask({
         task: original,
