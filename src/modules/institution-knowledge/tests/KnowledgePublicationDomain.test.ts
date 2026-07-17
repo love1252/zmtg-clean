@@ -1882,7 +1882,7 @@ describe('knowledge publication domain', () => {
     }
   });
 
-  it('persists rollback decision time and rejects a later revision with an earlier command time', () => {
+  it('does not advance decision time for a rejected rollback and still rejects earlier commands', () => {
     const historical = oldPublication({
       publicationId: 'publication-1',
       versionId: 'version-1',
@@ -1914,18 +1914,19 @@ describe('knowledge publication domain', () => {
       }),
       existingIdempotencyRecord: null,
     });
-    expect(rollback.ok).toBe(true);
-    if (!rollback.ok) return;
-    expect(rollback.nextState.item.lastDecidedAt).toBe(
-      '2026-07-17T05:00:00.000Z',
-    );
+    expect(rollback.ok).toBe(false);
+    if (rollback.ok) return;
+    expect(rollback.reasonCodes).toEqual([
+      'rollback_current_safety_unavailable',
+    ]);
+    expect(rollback.nextState).toEqual(state);
 
     const earlierNextCommand = decideKnowledgePublication({
       state: rollback.nextState,
       command: retireCommand({
         idempotencyKey: 'retire-time-0002',
-        expectedRevision: 8,
-        decidedAt: '2026-07-17T04:30:00.000Z',
+        expectedRevision: 7,
+        decidedAt: '2026-07-17T01:30:00.000Z',
       }),
       existingIdempotencyRecord: null,
     });
@@ -1990,7 +1991,7 @@ describe('knowledge publication domain', () => {
     }
   });
 
-  it('rolls back only to an existing, complete, unwithdrawn, safety-allowed historical publication', () => {
+  it('keeps current publication when a historically-safe rollback lacks current authoritative safety rules', () => {
     const historical = oldPublication({ lifecycle: 'superseded' });
     const current = oldPublication({
       publicationId: 'publication-2',
@@ -2009,18 +2010,53 @@ describe('knowledge publication domain', () => {
       existingIdempotencyRecord: null,
     });
 
-    expect(decision.ok).toBe(true);
-    if (!decision.ok) return;
-    expect(decision.nextState.currentPublicationId).toBe('publication-1');
-    expect(decision.nextState.publications).toEqual([
-      expect.objectContaining({ publicationId: 'publication-1', lifecycle: 'current' }),
-      expect.objectContaining({ publicationId: 'publication-2', lifecycle: 'superseded' }),
+    expect(decision.ok).toBe(false);
+    if (decision.ok) return;
+    expect(decision.reasonCodes).toEqual([
+      'rollback_current_safety_unavailable',
     ]);
+    expect(decision.nextState).toEqual(state);
+    expect(decision.nextState.currentPublicationId).toBe('publication-2');
     expect(decision.candidateLifecyclePath).toEqual([]);
-    expect(decision.publicationTransitions).toEqual([
-      { publicationId: 'publication-1', path: ['superseded', 'current'] },
-      { publicationId: 'publication-2', path: ['current', 'superseded'] },
+    expect(decision.publicationTransitions).toEqual([]);
+    expect(decision.idempotencyRecord).not.toBeNull();
+  });
+
+  it('fails closed rollback when only caller-supplied current safety evidence is available', () => {
+    const historical = oldPublication({ lifecycle: 'superseded' });
+    const current = oldPublication({
+      publicationId: 'publication-2',
+      versionId: 'version-2',
+      versionNumber: 2,
+      manifestHash: manifestHashB,
+      lifecycle: 'current',
+    });
+    const state = publicationState({
+      currentPublicationId: current.publicationId,
+      publications: [historical, current],
+    });
+    const command = rollbackCommand(historical);
+    const stateBefore = structuredClone(state);
+    const commandBefore = structuredClone(command);
+
+    const decision = decideKnowledgePublication({
+      state,
+      command,
+      existingIdempotencyRecord: null,
+    });
+
+    expect(decision.ok).toBe(false);
+    if (decision.ok) return;
+    expect(decision.reasonCodes).toEqual([
+      'rollback_current_safety_unavailable',
     ]);
+    expect(decision.nextState).toEqual(state);
+    expect(decision.nextState.currentPublicationId).toBe('publication-2');
+    expect(decision.shouldApplyNextState).toBe(false);
+    expect(decision.publicationTransitions).toEqual([]);
+    expect(decision.idempotencyRecord).not.toBeNull();
+    expect(state).toEqual(stateBefore);
+    expect(command).toEqual(commandBefore);
   });
 
   it.each([
@@ -2502,19 +2538,25 @@ describe('knowledge publication domain', () => {
       command,
       existingIdempotencyRecord: null,
     });
-    expect(first.ok).toBe(true);
+    expect(first.ok).toBe(false);
     expect(first.idempotencyRecord).not.toBeNull();
-    if (!first.ok || !first.idempotencyRecord) return;
-    expect(first.nextState.item.lastDecidedByActorId).toBe(operatorActorId);
+    if (first.ok || !first.idempotencyRecord) return;
+    expect(first.reasonCodes).toEqual(['rollback_current_safety_unavailable']);
+    expect(first.nextState).toEqual(state);
 
     const replay = decideKnowledgePublication({
       state: first.nextState,
       command: structuredClone(command),
       existingIdempotencyRecord: structuredClone(first.idempotencyRecord),
     });
-    expect(replay.ok).toBe(true);
+    expect(replay.ok).toBe(false);
+    if (replay.ok) return;
     expect(replay.idempotentReplay).toBe(true);
     expect(replay.shouldApplyNextState).toBe(false);
+    expect(replay.reasonCodes).toEqual([
+      'rollback_current_safety_unavailable',
+    ]);
+    expect(replay.nextState).toEqual(state);
 
     const evidencePatches: readonly Partial<typeof command.gateEvidence>[] = [
       { targetPublicationId: 'publication-other' },

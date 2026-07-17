@@ -144,6 +144,7 @@ export type KnowledgePublicationFailureCode =
   | 'platform_read_only'
   | 'publication_id_reused'
   | 'revision_overflow'
+  | 'rollback_current_safety_unavailable'
   | 'rollback_target_incomplete'
   | 'rollback_target_binding_mismatch'
   | 'rollback_evidence_stale'
@@ -1269,53 +1270,11 @@ function decideRollback(
     return failureSnapshot(state, reasonCodes);
   }
 
-  const oldCurrent = findCurrentPublication(state);
-  const publications = state.publications.map((publication) => {
-    if (publication.publicationId === target.publicationId) {
-      return {
-        ...publication,
-        lifecycle: 'current' as const,
-        withdrawnAt: null,
-      };
-    }
-    if (publication.publicationId === oldCurrent?.publicationId) {
-      return {
-        ...publication,
-        lifecycle: 'superseded' as const,
-      };
-    }
-    return publication;
-  });
+  // This pure domain kernel cannot prove that caller-supplied gate evidence
+  // was derived from the current authoritative safety rule. Keep rollback
+  // capability-off until a server-authoritative reader provides that binding.
+  return failureSnapshot(state, ['rollback_current_safety_unavailable']);
 
-  const publicationTransitions: KnowledgePublicationTransition[] = [
-    {
-      publicationId: target.publicationId,
-      path: ['superseded', 'current'],
-    },
-  ];
-  if (oldCurrent !== null) {
-    publicationTransitions.push({
-      publicationId: oldCurrent.publicationId,
-      path: ['current', 'superseded'],
-    });
-  }
-
-  return {
-    ok: true,
-    nextState: {
-      item: {
-        ...state.item,
-        revision: state.item.revision + 1,
-        lastDecidedAt: command.decidedAt,
-        lastDecidedByActorId: command.actorId,
-      },
-      currentPublicationId: target.publicationId,
-      publications,
-    },
-    candidateVersion: null,
-    candidateLifecyclePath: [],
-    publicationTransitions,
-  };
 }
 
 function decideWithdraw(
