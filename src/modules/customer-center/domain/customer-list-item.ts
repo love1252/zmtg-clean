@@ -15,12 +15,12 @@ import type { CustomerReferenceV1 } from '@/modules/institution-contracts/v1/cus
 /** Local customer-center list DTO; it is not a shared/public wire contract. */
 export type CustomerListItemV1 = Readonly<{
   contractVersion: 'v1';
-  customer: CustomerReferenceV1;
+  customer: Readonly<CustomerReferenceV1>;
   lifecycle: CustomerLifecycle;
   priority: CustomerPriority;
-  owner: CustomerOverviewOwnerV1 | null;
-  primaryProject: CustomerOverviewProjectV1 | null;
-  tags: CustomerOverviewTagV1[];
+  owner: Readonly<CustomerOverviewOwnerV1> | null;
+  primaryProject: Readonly<CustomerOverviewProjectV1> | null;
+  tags: ReadonlyArray<Readonly<CustomerOverviewTagV1>>;
   lastTouchedAt: string;
   updatedAt: string;
 }>;
@@ -111,6 +111,10 @@ function normalizeTimestamp(value: unknown): string | null {
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
+function isExplicitNullOrRecord(value: unknown): boolean {
+  return value === null || (typeof value === 'object' && !Array.isArray(value));
+}
+
 /**
  * Projects a fully local, low-sensitivity customer list item. Scope and authorization are never
  * accepted as input; callers must establish them before calling this pure mapper.
@@ -122,6 +126,13 @@ export function mapCustomerListItemV1(
   try {
     const snapshot = snapshotExactDataRecord(input);
     if (!snapshot) return null;
+
+    if (
+      !isExplicitNullOrRecord(snapshot.owner) ||
+      !isExplicitNullOrRecord(snapshot.lifecycleBasis)
+    ) {
+      return null;
+    }
 
     const lastTouchedAt = normalizeTimestamp(snapshot.lastTouchedAt);
     if (!lastTouchedAt) return null;
@@ -152,7 +163,9 @@ export function mapCustomerListItemV1(
         overview.primaryProject === null
           ? null
           : Object.freeze({ ...overview.primaryProject }),
-      tags: overview.tags.map((tag) => ({ ...tag })),
+      tags: Object.freeze(
+        overview.tags.map((tag) => Object.freeze({ ...tag })),
+      ),
       lastTouchedAt,
       updatedAt: overview.updatedAt,
     });

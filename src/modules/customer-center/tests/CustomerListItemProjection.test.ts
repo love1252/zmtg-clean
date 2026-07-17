@@ -114,7 +114,7 @@ describe('客户中心 CustomerListItemV1 本地投影', () => {
     ).toBe('2026-07-17T08:00:00.000Z');
   });
 
-  it('输入不变，输出所有嵌套值均为新引用', () => {
+  it('输入不变，输出所有嵌套值均为新引用且不可变', () => {
     const source = createInput();
     const before = structuredClone(source);
     const first = requireListItem(source);
@@ -128,6 +128,12 @@ describe('客户中心 CustomerListItemV1 本地投影', () => {
     expect(first.primaryProject).not.toBe(source.primaryProject);
     expect(first.tags).not.toBe(source.tags);
     expect(first.tags[0]).not.toBe(source.tags[0]);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(first.customer)).toBe(true);
+    expect(Object.isFrozen(first.owner)).toBe(true);
+    expect(Object.isFrozen(first.primaryProject)).toBe(true);
+    expect(Object.isFrozen(first.tags)).toBe(true);
+    expect(Object.isFrozen(first.tags[0] ?? {})).toBe(true);
 
     source.customer.displayName = '客户乙';
     source.tags[0].displayName = '标签已变更';

@@ -110,6 +110,32 @@ describe('客户中心 CustomerListItemV1 边界', () => {
     }
   });
 
+  it('可空关系与依据只能使用显式 null，畸形空值整体 fail-closed', () => {
+    for (const input of [
+      { ...createInput(), owner: undefined },
+      { ...createInput(), owner: '' },
+      { ...createInput(), owner: [] },
+      { ...createInput(), lifecycleBasis: undefined },
+      { ...createInput(), lifecycleBasis: '' },
+      { ...createInput(), lifecycleBasis: [] },
+    ]) {
+      expect(mapCustomerListItemV1(input, policy)).toBeNull();
+    }
+  });
+
+  it('精确重复的已批准标签只投影一次，不携带来源引用', () => {
+    const tag = { tagCode: 'tag_followup', displayName: '待跟进' };
+    const sourceTags = [tag, { ...tag }];
+    const item = mapCustomerListItemV1(
+      { ...createInput(), tags: sourceTags },
+      policy,
+    );
+
+    expect(item?.tags).toEqual([tag]);
+    expect(item?.tags).not.toBe(sourceTags);
+    expect(item?.tags[0]).not.toBe(tag);
+  });
+
   it('未批准关系不投影，非 null 主项目不可靠时整体 fail-closed', () => {
     const relationshipLimited = mapCustomerListItemV1(
       {
