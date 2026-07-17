@@ -338,7 +338,7 @@ SYS-01 仍是唯一首个 runtime 候选，但本轮不授权实施。/hospital/
 1. consultant 与 customer_service 只能从其已分配会话提交 review；不能在管理中心作决定。
 2. tenant_admin 与 tenant_operator 在管理中心确认既有客户、拒绝、撤销或委派创建客户；对已匹配关系的 revoke 也必须走受控决定。
 3. confirm_existing、delegate_create_customer、reject、withdraw、revoke 都必须携带 expectedRevision、candidateSnapshotVersion 和 idempotencyKey，并在服务端重验 scope、角色和候选版本。
-4. `candidateReference` 仅服务端解析，不进入 URL、客户端持久化或审计。`IdentityMatchReviewV1` 跨线快照只暴露 `candidateSnapshotVersion` 和 `candidateSetDigest`；低敏候选摘要与短时效行动令牌若需要，必须定义为独立、短时、服务端授权的 UI 投影，不能并入该公共契约。
+4. `candidateReference` 仅服务端解析，不进入 URL、客户端持久化或审计。`IdentityMatchReviewV1` 跨线快照只暴露 `candidateSnapshotVersion` 和 `candidateSetDigest`；低敏候选摘要如需展示，必须定义为独立、短时、服务端授权的 UI 投影，不能并入该公共契约。管理中心 UI 只向身份决定服务端提交最终确认意图和受控 DTO；`actionToken` 仅由身份决定服务端在重新校验当前机构、reader、review、revision、候选版本和 DTO 摘要后签发，作为短时、一次性的服务间行动令牌原样透传给客户中心命令处理者，绝不得作为 UI 投影，也不得进入浏览器内存、响应或持久化、URL、日志或审计。
 5. 管理中心不写客户表。delegate_create_customer 只委派客户中心的幂等命令。
 6. 客户中心返回 CustomerReferenceV1 后，由身份服务重新校验机构、review revision 和候选版本，再原子转为 matched；失败时不得留下部分匹配或重复客户。
 7. 客户创建与匹配审计以 reviewId 关联，不记录原始外部 ID、候选原文、消息正文或表单正文。
@@ -396,8 +396,8 @@ AIBOTK 永远是接入服务商，不是渠道类型，也不是系统状态。�
 - [ ] SYS-03C2：实现桌面/移动急停确认和状态反馈 UI。
 - [ ] SYS-03D1：实现管理员授权、重连、撤销和重新启用命令适配，不含 provider runtime。
 - [ ] SYS-03D2：实现仅桌面管理员可见的控制 UI。
-- [ ] SYS-03E1：实现 IdentityMatchReviewV1 服务端 reader 与命令适配；不实现候选算法或客户写入。
-- [ ] SYS-03E2：实现管理员/运营身份复核桌面 UI；会话提交入口仍归会话线。
+- [ ] SYS-03E1：实现 IdentityMatchReviewV1 服务端 reader 与命令适配；身份决定服务端按冻结绑定规则签发并服务间透传 `actionToken`，不向 UI 返回令牌；不实现候选算法或客户写入。
+- [ ] SYS-03E2：实现管理员/运营身份复核桌面 UI；UI 只提交最终确认意图和受控 DTO，不接收、读取、保存或续期 `actionToken`；会话提交入口仍归会话线。
 - [ ] 外部渠道/AIBOTK adapter：进入总协调台串行队列，独立于全部 SYS PR。
 
 ---
@@ -658,6 +658,8 @@ MIG-01 → MIG-02 → MIG-03 → MIG-04 → MIG-05 → MIG-06
 
 SYS-01 额外门禁：使用、成功率、失败/拒绝、未完成调用和业务 serviceKey 摘要来自真实持久化记录；成功数只用于成功率；remaining 只有可信 provider 为 ready 才显示，否则整个额度剩余区块隐藏。
 
+SYS-03 身份复核额外门禁：测试必须覆盖 `actionToken` 的服务端签发、机构/reader/review/revision/DTO 摘要绑定、候选版本签发前重验、短时过期、一次性消费、服务间原样透传和重放失败关闭，并证明任何 UI 响应、浏览器状态、URL、日志和审计均不含令牌。
+
 ### 15.2 本文档返修验证
 
 - Markdown 标题层级连续，表格各行列数一致；
@@ -665,6 +667,7 @@ SYS-01 额外门禁：使用、成功率、失败/拒绝、未完成调用和业
 - InstitutionSourceEnvelopeV1<T,K> 的 scope、七种顶层 readiness、六种分区 readiness、freshness、data，以及 null + 七个非空受控 failureCode 逐字段一致；
 - 固定四角色代码、三层渠道模型、四类状态、八个 IdentityMatchReviewV1 状态均可检索；
 - ControlledImportCommandV1 的十五个冻结字段、AnalyticsDataGovernanceSummaryV1 的指定治理维度和 AI serviceKey 摘要均可检索；
+- actionToken 只能由身份决定服务端签发并服务间透传，且“不得作为 UI 投影”和浏览器/响应/持久化/URL/日志/审计排除项均可检索；
 - MIG-01 至 MIG-06 只使用唯一顺序；
 - 旧 wecom/his 路由只作为兼容跳转；
 - git diff --check 通过；
@@ -693,7 +696,7 @@ SYS-01 额外门禁：使用、成功率、失败/拒绝、未完成调用和业
 - [x] 公共声明归总协调台，管理中心不读生产者 repository/table。
 - [x] 首个候选仍是 AI 与额度只读页，恢复未完成调用与业务 serviceKey 摘要，fixture 剩余额度隐藏，且不展示 prompt、answer、模型、Token、provider、价格或成本。
 - [x] 固定渠道三层模型、独立四状态、AIBOTK 试点边界和管理员/运营控制边界。
-- [x] 完整记录 IdentityMatchReviewV1 的 reviewId/revision、八状态、受控决定、CustomerReferenceV1 原子回填和服务端 candidateReference。
+- [x] 完整记录 IdentityMatchReviewV1 的 reviewId/revision、八状态、受控决定、CustomerReferenceV1 原子回填和服务端 candidateReference；管理中心 UI 只提交最终确认意图和受控 DTO，actionToken 仅由身份决定服务端签发并服务间透传，绝不成为 UI 投影。
 - [x] 冻结 InstitutionOperatingContextV1、AnalyticsDataGovernanceSummaryV1 指定治理维度和 ControlledImportCommandV1 十五字段超集。
 - [x] 客户级授权不批量视为同意，知识受限资料投影不扩大数据范围。
 - [x] migration 唯一顺序和外部 adapter 唯一串行队列已收口；AI 经营报告 provider 只接收 AnalyticsReportInputV1，报告 snapshot/完整性/留档/版本归经营分析。
