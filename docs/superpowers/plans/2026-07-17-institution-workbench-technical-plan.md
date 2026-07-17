@@ -181,7 +181,7 @@ V1 payload 结构固定为 `cards + actions`。正常可用时 `cards` 覆盖四
 | `entityType` | `appointment \| followup` |
 | `objectId` | 非空对象 ID；预约和随访统一使用此字段。 |
 | `sourceVersion` | 非空权威来源版本；不得替代 WB-03 的刷新 revision。 |
-| `CustomerReferenceV1` | 必含低敏客户引用；具体嵌套字段名沿用公共声明，不在工作台重命名。不得含手机号、病历号、渠道账号或外部 ID。 |
+| `customer` | `CustomerReferenceV1`；必含低敏客户引用，嵌套字段沿用公共声明，不在工作台重命名。不得含手机号、病历号、渠道账号或外部 ID。 |
 | `businessState` | 预约事实只允许 `pending_confirmation \| confirmed \| arrived \| completed \| cancelled \| no_show`；随访事实只允许 `pending \| in_progress \| waiting_customer \| escalated \| completed \| cancelled`。 |
 | `cardKeys` | 只能引用 `pending_confirmation_appointments \| reschedule_requested_appointments \| overdue_followups \| today_due_followups`。 |
 | `sortSignals` | 只能引用 `urgent \| overdue \| sla_due \| today \| high_priority`。 |
@@ -551,7 +551,7 @@ Care 四卡计数、Care 队列、点击后的预约/随访目标列表必须使
 **`CareActionSourceV1` 消费验收：**
 
 - [ ] 分区集合精确等于 `pending_confirmation_appointments`、`reschedule_requested_appointments`、`overdue_followups`、`today_due_followups`，正常 payload 为四卡与 actions，未知分区拒绝。
-- [ ] `CareActionItemV1` 字段集合精确为 `entityType`、`objectId`、`sourceVersion`、嵌套 `CustomerReferenceV1`、`businessState`、`cardKeys`、`sortSignals`、`appointmentAt`、`dueAt`、`slaAt`、`riskLevel`、`priority`、`owner`、`safeSummary`、`detailHref`，旧别名与额外字段被拒绝。
+- [ ] `CareActionItemV1` 字段集合精确为 `entityType`、`objectId`、`sourceVersion`、`customer: CustomerReferenceV1`、`businessState`、`cardKeys`、`sortSignals`、`appointmentAt`、`dueAt`、`slaAt`、`riskLevel`、`priority`、`owner`、`safeSummary`、`detailHref`，旧别名与额外字段被拒绝。
 - [ ] 预约 `businessState` 精确限于 `pending_confirmation | confirmed | arrived | completed | cancelled | no_show`，随访精确限于 `pending | in_progress | waiting_customer | escalated | completed | cancelled`；独立 `rescheduleRequestState='pending'` 只派生 `reschedule_requested_appointments` `cardKeys`，action 保留原 `businessState`/`appointmentAt`，并拒绝把 `reschedule_requested` 当作预约事实状态。`overdue`/`today_due` 只作为卡片/排序派生，统一五种 `sortSignals`、空时间与 nullable 字段均有边界测试。
 - [ ] 四张可用卡的 key、中文名称、计数口径和筛选 href 完全匹配第 3.3 节；卡片、队列和目标列表在四角色下使用相同服务端范围。
 - [ ] 无真实 HIS 时两个预约分区精确为 `disabled`，响应不含预约卡片、`0`、行动或链接，UI 不合成占位卡。
