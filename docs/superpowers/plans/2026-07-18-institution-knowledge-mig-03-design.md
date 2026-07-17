@@ -45,7 +45,7 @@ MIG-01 → MIG-02 → MIG-03 → MIG-04 → MIG-05 → MIG-06
 | --- | --- |
 | 机构隔离 | 通用知识事实带非空 `tenantId + institutionId`；受限客户实体和索引引用必须再带唯一 `customerId`。复合外键和唯一索引必须保持完整 scope；客户端 scope 只能是待校验引用。 |
 | 所有权 | `ownershipSource` 精确为 `institution` 或 `platform`。机构侧写命令遇到 `platform` 一律 `platform_read_only`；平台可见关系不赋予机构修改权。 |
-| 不可变性 | body/file revision、version/manifest、publication fact、decision event、批准 fact 与低敏 audit reference 均只 append；不得 update 覆盖内容、hash、actor、时间或撤回原因。唯一允许更新的是有 revision 条件的 current projection。 |
+| 不可变性 | body/file revision、version/manifest、publication/approval fact、decision event、attempt history 与低敏 audit reference 始终只 append；不得 update 覆盖内容、hash、actor、时间或撤回原因。仅 current/approval projection 可携带 `expectedRevision` 通过 CAS 更新；active work/lease 状态仅可携带 `leaseToken + attempt` 条件更新，且每次决定另追加 attempt history。 |
 | 状态分离 | item lifecycle、version lifecycle、safety status、asset approval status 和 job status 独立列/表表达，禁止合并为单一 `status`。 |
 | 低敏边界 | `storageKey`、原始正文、parse 原文、chunk 原文、provider payload、凭证、prompt/completion 不能进入列表、公共引用、普通审计或迁移日志。 |
 | 失败处理 | 未通过 safety、parse、index、用途或 attachment binding 时，旧 current 不变；未知 safety 与缺失 binding 均 fail-closed。 |
@@ -64,10 +64,10 @@ MIG-01 → MIG-02 → MIG-03 → MIG-04 → MIG-05 → MIG-06
 | immutable publication fact | `publicationId`、item/scope、`versionId`/version number/manifest hash、complete/safety/use-scope 快照、published actor/time | `(knowledgeId, publicationId)` 与 `(knowledgeId, versionId)` 唯一；该行从不改写为 superseded/withdrawn。 |
 | publication decision event / lineage | `eventId`、`publicationId`、前一 current publication、`publish`、`supersede`、`withdraw`、`retire` 或 `correction`、受控 reason、actor/time、command/result/audit reference、supersedes/corrects reference | `(publicationId, eventSequence)` 连续唯一；withdraw/correction 都是新 event，且 correction 必须指向被更正的不可变 fact/event。 |
 | current projection | item 的 nullable `currentPublicationId`、projection revision、as-of event | 仅通过 `expectedRevision` 的 CAS 更新；同事务追加 decision event 和低敏 audit reference。未 retired item 的 pointer 必须指向唯一有效 fact；retired item 必须为 `NULL`。 |
-| asset approval fact / projection | `approvalFactId`、publication/version/file revision、safety/渠道证据、decided actor/time；当前 approval projection | 复合外键证明 file 属于 version manifest；批准、撤回、阻断均追加 decision fact，projection 仅 CAS 更新。`approved` 不是发送能力，缺 current binding、撤回、阻断、未知 safety 或渠道不兼容均不可发送。 |
+| asset approval fact / projection | `approvalFactId`、publication/version/file revision、safety/渠道证据、decided actor/time；当前 approval projection | approval fact 与其 decision event 始终 append-only；复合外键证明 file 属于 version manifest，只有当前 approval projection 可携带 `expectedRevision` 通过 CAS 更新。`approved` 不是发送能力，缺 current binding、撤回、阻断、未知 safety 或渠道不兼容均不可发送。 |
 | parse/OCR/chunk/index evidence | 输入 body/file revision、`ocr_required`、`unavailable` 或 `succeeded`、processor/config version、artifact hash、completedAt、受控失败码 | 四类 evidence 分别追加并通过 revision/hash 绑定；job 成功、mock 结果或旧 preview 绝不等于 index 完成。 |
 | knowledge command result | action、完整 scope、target revision、永久 idempotency key、payload fingerprint、首次结果 reference、actor/time | `(scope, action, idempotencyKey)` 永久唯一；同 key 任一 fingerprint/target revision 不同固定冲突，重放只返回既有结果。 |
-| active work / attempt | job identity、scope、目标 revision、kind、dedupe fingerprint、attempt、lease token/until、受控失败码 | active-work dedupe 只在活跃窗口生效，独立于永久 command idempotency；完成/失败不删除 attempt 事实。 |
+| active work / lease state 与 attempt history | active work identity、scope、目标 revision、kind、dedupe fingerprint、`leaseToken`/`leaseUntil`；append-only attempt identity、attempt、结果/失败码、actor/time | active-work dedupe 只在活跃窗口生效，独立于永久 command idempotency；仅 active work/lease state 可携带 `leaseToken + attempt` 条件更新，领取/完成/失败/续租/取消均追加 attempt history，不得覆盖或删除历史。 |
 | restricted customer knowledge | `customerKnowledgeId`、`tenantId`、`institutionId`、`customerId`、body/file revision、独立 parse/chunk/index namespace reference | 三元 scope 是所有唯一键、外键和索引前缀；不得与通用 knowledge item、通用 chunk 或索引 namespace 混用。 |
 | migration batch / audit reference | batch identity、来源证明 digest、scope、阶段、计数、lineage/correction reference、低敏 audit reference | batch 只追加；不存正文、客户资料、provider payload 或凭证，且能追溯每个 backfill/correction 的受控结果。 |
 
@@ -106,7 +106,7 @@ rollback 必须额外获得当前权威 safety-rule 的新鲜绑定证据；在�
 
 ### 4.4 独立 DB 与 lease 边界
 
-`MIG-03` 只持久化 job/attempt/lease 事实，不启动 worker。未来 worker 必须使用独立于 HTTP request 的数据库事务和连接生命周期：以短事务 claim、`leaseToken + leaseUntil` 和条件更新领取工作；长时间 parse/OCR/index 不得持有 item publication 锁。完成、失败、续租和取消都必须带 lease token/attempt 条件，失效 lease 不得覆盖后继 attempt。测试使用独立临时数据库，不能连接开发或生产数据库。
+`MIG-03` 只持久化 job/attempt/lease 事实，不启动 worker。未来 worker 的可变边界仅为 active work/lease state，且必须以 `leaseToken + attempt` 条件更新；领取、完成、失败、续租和取消均追加不可变 attempt history，不能 update 或 delete 既有 attempt。worker 必须使用独立于 HTTP request 的数据库事务和连接生命周期：以短事务 claim、`leaseToken + leaseUntil` 和条件更新领取工作；长时间 parse/OCR/index 不得持有 item publication 锁。失效 lease 不得覆盖后继 attempt。测试使用独立临时数据库，不能连接开发或生产数据库。
 
 ### 4.5 所有操作的 BASE-02B 授权链
 
@@ -193,7 +193,7 @@ rollback 必须额外获得当前权威 safety-rule 的新鲜绑定证据；在�
 | 验收主题 | 必须通过的证据 | 不通过时的行为 |
 | --- | --- | --- |
 | 可重复迁移与谱系 | 独立测试数据库可重复执行 expand、受控 backfill、verify；每个 batch 有来源证明 digest、计数、低敏 audit reference，且 correction/supersession lineage 可重建 | 不产生新的 current projection；批次以受控失败码结束。 |
-| 不可变事实与投影 | 重复执行不产生重复 version/publication/job；publication/approval fact 与 decision event 不可更新，只有携带 `expectedRevision` 的 projection 可 CAS 变更 | 拒绝更新 immutable fact；旧 current 保持可解释。 |
+| 不可变事实、投影与 lease | 重复执行不产生重复 version/publication/job；publication/approval fact、decision event、attempt history 与 audit reference 不可更新；仅 current/approval projection 可携带 `expectedRevision` 通过 CAS 变更，active work/lease state 仅可携带 `leaseToken + attempt` 条件变更且每次追加 attempt history | 拒绝更新 immutable fact 或无条件 lease 变更；旧 current 与既有 attempt 保持可解释。 |
 | 原子 current | 同一 item 并发 publication 至多一个 current；门禁失败、CAS 冲突或事务异常后旧 current 仍可读 | 不先下架旧版，不产生半写入。 |
 | 完整授权链 | reader、writer、job、asset 操作均有 `verified source provenance → fresh active membership → institution guard → authoritative object scope reader → object guard` 的服务端证据；`institution_scopes`/manifest 仅作锚点 | 任一环缺失返回受控 denied/disabled，不返回业务数据或执行写入。 |
 | scope 与受限客户隔离 | 跨 tenant/institution/item 的 body、file、version、publication、approval、job 引用被约束拒绝；受限客户资料必须精确绑定 `tenantId + institutionId + customerId` 和独立 content/index namespace | 缺 customer scope、namespace 或来源证明不回填、不读取、不索引。 |
