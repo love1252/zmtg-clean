@@ -7,6 +7,10 @@ import {
   createAiUsageServiceKeyPolicySnapshot,
   type AiUsageServiceKeyPolicy,
 } from '@/modules/institution-system/domain/ai-usage-service-keys';
+import {
+  createAiUsageTimeWindowSnapshot,
+  type AiUsageTimeWindow,
+} from '@/modules/institution-system/domain/ai-usage-time-window';
 
 export type InstitutionAiUsageScope = Readonly<{
   tenantId: string;
@@ -18,6 +22,7 @@ export type AiUsageMetricRecord = Readonly<{
   institutionId: string | null;
   status: string | null;
   serviceKey: string | null;
+  occurredAtEpochMs: number | null;
   serviceUnits?: number | null;
 }>;
 
@@ -54,11 +59,16 @@ export type AiUsageMetricsAggregationResult =
       code:
         | 'invalid_scope'
         | 'invalid_terminal_status_policy'
-        | 'invalid_service_key_policy';
+        | 'invalid_service_key_policy'
+        | 'invalid_time_window';
     }>
   | Readonly<{
       ok: false;
-      code: 'scope_mismatch' | 'invalid_service_key';
+      code:
+        | 'scope_mismatch'
+        | 'invalid_service_key'
+        | 'invalid_occurred_at'
+        | 'record_outside_time_window';
       recordIndex: number;
     }>;
 
@@ -162,6 +172,7 @@ export function aggregateAiUsageMetrics(input: Readonly<{
   records: readonly AiUsageMetricRecord[];
   terminalStatusPolicy: AiUsageTerminalStatusPolicy;
   serviceKeyPolicy: AiUsageServiceKeyPolicy;
+  timeWindow: AiUsageTimeWindow;
 }>): AiUsageMetricsAggregationResult {
   if (
     !isValidScopeValue(input.scope.tenantId)
@@ -180,8 +191,10 @@ export function aggregateAiUsageMetrics(input: Readonly<{
     return { ok: false, code: serviceKeyPolicyResult.code };
   }
 
-  const total = createMutableSummary();
-  const summariesByServiceKey = new Map<string, MutableSummary>();
+  const timeWindowResult = createAiUsageTimeWindowSnapshot(input.timeWindow);
+  if (!timeWindowResult.ok) {
+    return { ok: false, code: timeWindowResult.code };
+  }
 
   for (const [recordIndex, record] of input.records.entries()) {
     if (
@@ -190,20 +203,56 @@ export function aggregateAiUsageMetrics(input: Readonly<{
     ) {
       return { ok: false, code: 'scope_mismatch', recordIndex };
     }
+  }
 
-    if (!serviceKeyPolicyResult.isAllowed(record.serviceKey)) {
+  const validatedRecords: Array<Readonly<{
+    record: AiUsageMetricRecord;
+    serviceKey: string;
+  }>> = [];
+
+  for (const [recordIndex, record] of input.records.entries()) {
+    const serviceKey = record.serviceKey;
+    if (!serviceKeyPolicyResult.isAllowed(serviceKey)) {
       return { ok: false, code: 'invalid_service_key', recordIndex };
     }
 
+    validatedRecords.push({ record, serviceKey });
+  }
+
+  const timeWindowPositions = validatedRecords.map(({ record }) => (
+    timeWindowResult.classify(record.occurredAtEpochMs)
+  ));
+  const invalidOccurredAtIndex = timeWindowPositions.indexOf('invalid');
+  if (invalidOccurredAtIndex >= 0) {
+    return {
+      ok: false,
+      code: 'invalid_occurred_at',
+      recordIndex: invalidOccurredAtIndex,
+    };
+  }
+
+  const outsideTimeWindowIndex = timeWindowPositions.indexOf('outside');
+  if (outsideTimeWindowIndex >= 0) {
+    return {
+      ok: false,
+      code: 'record_outside_time_window',
+      recordIndex: outsideTimeWindowIndex,
+    };
+  }
+
+  const total = createMutableSummary();
+  const summariesByServiceKey = new Map<string, MutableSummary>();
+
+  for (const { record, serviceKey } of validatedRecords) {
     const outcome = classifierResult.classify(record.status);
-    const serviceSummary = summariesByServiceKey.get(record.serviceKey)
+    const serviceSummary = summariesByServiceKey.get(serviceKey)
       ?? createMutableSummary();
 
     addOutcome(total, outcome);
     addServiceUnits(total, record.serviceUnits);
     addOutcome(serviceSummary, outcome);
     addServiceUnits(serviceSummary, record.serviceUnits);
-    summariesByServiceKey.set(record.serviceKey, serviceSummary);
+    summariesByServiceKey.set(serviceKey, serviceSummary);
   }
 
   const byServiceKey = [...summariesByServiceKey.entries()]
