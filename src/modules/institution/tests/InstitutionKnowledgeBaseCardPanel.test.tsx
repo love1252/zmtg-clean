@@ -210,6 +210,29 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     expect(screen.queryByText('术后冷敷护理提醒')).not.toBeInTheDocument();
   });
 
+  it('items API 503 时保持指标和目录未知，并暂停资料库操作', async () => {
+    vi.mocked(listInstitutionKnowledgeItems).mockResolvedValue({
+      ok: false,
+      error: { kind: 'service_unavailable', message: '机构知识库资料库暂未启用。', status: 503 },
+    });
+
+    render(<InstitutionKnowledgeBaseCardPanel />);
+
+    await screen.findByText('机构知识库资料库暂未启用。');
+    const metrics = screen.getByLabelText('机构知识库顶部指标');
+    expect(within(metrics).getAllByText('--')).toHaveLength(4);
+    expect(within(metrics).queryByText('0 / 0')).not.toBeInTheDocument();
+    expect(within(metrics).queryByText('0')).not.toBeInTheDocument();
+
+    const directory = screen.getByLabelText('机构知识目录');
+    expect(within(directory).getAllByText('--')).toHaveLength(7);
+    within(directory).getAllByRole('button').forEach((button) => expect(button).toBeDisabled());
+    expect(screen.getByRole('status')).toHaveTextContent('资料库暂时不可用，上传、新建、编辑和归档已暂停。');
+    expect(screen.queryByRole('button', { name: '上传文档' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '新建知识' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('选择知识库上传文件')).not.toBeInTheDocument();
+  });
+
   it('支持目录本地切换并只显示当前目录真实数据', async () => {
     await renderLoaded();
 
