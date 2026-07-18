@@ -18,9 +18,12 @@ describe('经营报告输入候选边界', () => {
       { key: 'paid_customer_count', value: -1, currency: null },
       { key: 'paid_customer_count', value: 1.5, currency: null },
       { key: 'paid_minor', value: 1, currency: null },
+      { key: 'paid_minor', value: 1, currency: 'ZZZ' },
       { key: 'paid_customer_count', value: 1, currency: 'CNY' },
     ];
     for (const metric of cases) { const value = validInput(); value.metrics = [{ ...metric, evidenceReferences: [evidence] }]; blocked(value); }
+    const validCurrency = validInput(); validCurrency.metrics = [{ key: 'paid_minor', value: 1, currency: 'CNY', evidenceReferences: [evidence] }];
+    expect(proposeAnalyticsReportInput(validCurrency)).toMatchObject({ outcome: 'frozen_non_authorizing_candidate' });
     const duplicate = validInput(); duplicate.metrics = [
       { key: 'net_minor', value: 1, currency: 'CNY', evidenceReferences: [evidence] },
       { key: 'net_minor', value: 2, currency: 'CNY', evidenceReferences: [evidence] },

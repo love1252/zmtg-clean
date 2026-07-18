@@ -36,7 +36,6 @@ const MISSING_KEYS = ['severity', 'code', 'evidenceReferences'] as const;
 const MAX_METRIC_COUNT = 32;
 const MAX_MISSING_COUNT = 16;
 const MAX_EVIDENCE_REFERENCE_COUNT = 8;
-const MAX_REFERENCE_LENGTH = 96;
 const OWNER_REQUIREMENTS = Object.freeze([
   'central_contract_owner_must_declare_report_input',
   'owner_authoritative_snapshot_projection_required',
@@ -81,7 +80,7 @@ export type AnalyticsReportInputProposalCandidate = Readonly<{
 export type AnalyticsReportInputProposalResult =
   | Readonly<{
       outcome: 'blocked';
-      reasonCodes: readonly ('invalid_input' | 'critical_missing')[];
+      reasonCodes: readonly 'invalid_input'[];
       ownerRequirements: readonly AnalyticsReportProposalOwnerRequirement[];
     }>
   | Readonly<{
@@ -94,6 +93,18 @@ function includesValue<T extends readonly string[]>(
   value: unknown,
 ): value is T[number] {
   return typeof value === 'string' && values.includes(value);
+}
+
+const ISO_4217_CURRENCIES = (() => {
+  try {
+    return new Set(Intl.supportedValuesOf('currency'));
+  } catch {
+    return null;
+  }
+})();
+
+function isSupportedCurrency(value: string): boolean {
+  return ISO_4217_CURRENCIES !== null && ISO_4217_CURRENCIES.has(value);
 }
 
 function isRuntimeProxy(value: object): boolean {
@@ -239,7 +250,7 @@ function metricIsSemanticallyValid(
     'mapped_project_amount_minor', 'unmapped_project_amount_minor',
   ]);
   if (monetary.has(key)) {
-    if (currency === null || !/^[A-Z]{3}$/.test(currency) || !Number.isSafeInteger(value)) return false;
+    if (currency === null || !isSupportedCurrency(currency) || !Number.isSafeInteger(value)) return false;
     return key === 'net_minor' ? true : value >= 0;
   }
   return currency === null && Number.isSafeInteger(value) && value >= 0;
@@ -298,7 +309,7 @@ function snapshotMissing(value: unknown): AnalyticsReportInputProposalMissing | 
 }
 
 function blocked(
-  reasonCodes: readonly ('invalid_input' | 'critical_missing')[],
+  reasonCodes: readonly 'invalid_input'[],
 ): AnalyticsReportInputProposalResult {
   return Object.freeze({
     outcome: 'blocked',
