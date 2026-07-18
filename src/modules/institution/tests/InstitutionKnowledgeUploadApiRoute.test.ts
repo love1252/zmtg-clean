@@ -1,238 +1,160 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { POST as knowledgeUploadPost } from '@/app/api/institution/knowledge-management/upload/route';
-import { getDatabase } from '@/server/db/client';
-import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
-import { uploadAndParseInstitutionKnowledgeFileService } from '@/modules/institution/server/institution-knowledge-upload-service';
 
-const database = { database: 'upload-api-test-db' };
-
-vi.mock('@/server/db/client', () => ({
-  getDatabase: vi.fn(() => database),
+const sideEffects = vi.hoisted(() => ({
+  getAccessContext: vi.fn(() => {
+    throw new Error('session must not be read');
+  }),
+  getDatabase: vi.fn(() => {
+    throw new Error('database must not be opened');
+  }),
+  createPlatformRepository: vi.fn(() => {
+    throw new Error('platform repository must not be created');
+  }),
+  createInstitutionRepository: vi.fn(() => {
+    throw new Error('institution repository must not be created');
+  }),
+  createStorage: vi.fn(() => {
+    throw new Error('storage must not be created');
+  }),
+  uploadService: vi.fn(() => {
+    throw new Error('upload service must not run');
+  }),
 }));
 
 vi.mock('@/modules/security/server/access-context', () => ({
-  getDemoAccessContextFromRequest: vi.fn(),
+  getDemoAccessContextFromRequest: sideEffects.getAccessContext,
 }));
 
-vi.mock('@/modules/institution/server/institution-knowledge-upload-service', async () => {
-  const actual = await vi.importActual<
-    typeof import('@/modules/institution/server/institution-knowledge-upload-service')
-  >('@/modules/institution/server/institution-knowledge-upload-service');
-  return {
-    ...actual,
-    uploadAndParseInstitutionKnowledgeFileService: vi.fn(),
-  };
-});
-
-vi.mock('@/modules/open-platform/server/platform-knowledge-file-storage', () => ({
-  createLocalPlatformKnowledgeFileStorage: vi.fn(() => ({})),
+vi.mock('@/server/db/client', () => ({
+  getDatabase: sideEffects.getDatabase,
 }));
 
-vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository', async () => {
-  const actual = await vi.importActual<
-    typeof import('@/modules/open-platform/server/platform-knowledge-management-repository')
-  >('@/modules/open-platform/server/platform-knowledge-management-repository');
-  return {
-    ...actual,
-    createPlatformKnowledgeManagementRepository: vi.fn(() => ({})),
-  };
-});
+vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository', () => ({
+  createPlatformKnowledgeManagementRepository: sideEffects.createPlatformRepository,
+}));
 
 vi.mock('@/modules/institution/server/institution-knowledge-write-repository', () => ({
-  createInstitutionKnowledgeWriteRepository: vi.fn(() => ({})),
+  createInstitutionKnowledgeWriteRepository: sideEffects.createInstitutionRepository,
 }));
 
-const tenantContext = {
-  userId: 'demo-user-admin',
-  role: 'tenant_admin' as const,
-  scope: 'tenant' as const,
-  tenantId: 'demo-tenant-001',
-  institutionId: 'demo-inst-001',
-  source: 'demo_session' as const,
-};
+vi.mock('@/modules/open-platform/server/platform-knowledge-file-storage', () => ({
+  createLocalPlatformKnowledgeFileStorage: sideEffects.createStorage,
+}));
 
-const platformContext = {
-  userId: 'demo-user-platform',
-  role: 'platform_admin' as const,
-  scope: 'platform' as const,
-  tenantId: null,
-  institutionId: null,
-  source: 'demo_session' as const,
-};
+vi.mock('@/modules/institution/server/institution-knowledge-upload-service', () => ({
+  uploadAndParseInstitutionKnowledgeFileService: sideEffects.uploadService,
+}));
+
+import { POST as knowledgeUploadPost } from '@/app/api/institution/knowledge-management/upload/route';
+
+const expectedBody = Object.freeze({
+  code: 'capability_disabled',
+  error: '机构知识库上传能力暂未启用。',
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-/**
- * Create a Request whose formData() returns a valid file object.
- * We override formData on the instance so the route can read a file
- * without depending on jsdom multipart parsing.
- */
-function createRequestWithMockFile(): Request {
-  const req = new Request('http://localhost/api/institution/knowledge-management/upload', {
-    method: 'POST',
-    headers: { 'content-type': 'multipart/form-data; boundary=test' },
-  });
-  const mockFile = {
-    name: 'test.txt',
-    type: 'text/plain',
-    size: 6,
-    arrayBuffer: async () => new ArrayBuffer(6),
-  };
-  const mockFormData = {
-    get: (key: string) => (key === 'file' ? mockFile : null),
-    has: (key: string) => key === 'file',
-  };
-  // Override instance formData to return our mock
-  Object.defineProperty(req, 'formData', {
-    value: async () => mockFormData,
-    writable: true,
-    configurable: true,
-  });
-  return req;
+function expectNoUploadSideEffects() {
+  expect(sideEffects.getAccessContext).not.toHaveBeenCalled();
+  expect(sideEffects.getDatabase).not.toHaveBeenCalled();
+  expect(sideEffects.createPlatformRepository).not.toHaveBeenCalled();
+  expect(sideEffects.createInstitutionRepository).not.toHaveBeenCalled();
+  expect(sideEffects.createStorage).not.toHaveBeenCalled();
+  expect(sideEffects.uploadService).not.toHaveBeenCalled();
 }
 
-describe('机构知识库上传 API route', () => {
-  it('未登录返回 401', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(null);
-    const response = await knowledgeUploadPost(new Request('http://localhost/api/institution/knowledge-management/upload', { method: 'POST' }));
-    expect(response.status).toBe(401);
+describe('机构知识库上传 API capability-off route', () => {
+  it('对不可读取的 Request 和 route params 仍固定返回无缓存 503', async () => {
+    const hostileRequest = new Proxy({} as Request, {
+      get() {
+        throw new Error('request must not be inspected');
+      },
+      ownKeys() {
+        throw new Error('request keys must not be inspected');
+      },
+    });
+    const hostileRouteContext = new Proxy({}, {
+      get() {
+        throw new Error('route params must not be inspected');
+      },
+    });
+
+    const response = await (
+      knowledgeUploadPost as unknown as (
+        request: Request,
+        context: unknown,
+      ) => Response | Promise<Response>
+    )(hostileRequest, hostileRouteContext);
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    await expect(response.json()).resolves.toEqual(expectedBody);
+    expectNoUploadSideEffects();
   });
 
-  it('平台上下文返回 403', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(platformContext);
-    const response = await knowledgeUploadPost(new Request('http://localhost/api/institution/knowledge-management/upload', { method: 'POST' }));
-    expect(response.status).toBe(403);
-  });
+  it('不读取 formData、arrayBuffer、headers、URL 或 body，也不产生文件和记录', async () => {
+    const formData = vi.fn(() => {
+      throw new Error('formData must not be read');
+    });
+    const arrayBuffer = vi.fn(() => {
+      throw new Error('arrayBuffer must not be read');
+    });
+    const json = vi.fn(() => {
+      throw new Error('body must not be read');
+    });
+    const request = {
+      formData,
+      arrayBuffer,
+      json,
+      headers: new Proxy({}, {
+        get() {
+          throw new Error('headers must not be read');
+        },
+      }),
+      url: 'http://localhost/api/institution/knowledge-management/upload?filename=private-record.pdf',
+      body: 'raw-private-treatment-record',
+    } as unknown as Request;
 
-  it('无文件字段返回 400', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    const response = await knowledgeUploadPost(
-      new Request('http://localhost/api/institution/knowledge-management/upload', { method: 'POST' }),
+    const response = await knowledgeUploadPost(request);
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const body = await response.json();
+    expect(body).toEqual(expectedBody);
+    expect(JSON.stringify(body)).not.toMatch(
+      /private-record|treatment|filename|storage|database|session|provider|token|secret/iu,
     );
-    expect(response.status).toBe(400);
+    expect(formData).not.toHaveBeenCalled();
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(json).not.toHaveBeenCalled();
+    expectNoUploadSideEffects();
   });
 
-  it('response 不泄露敏感字段', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(null);
-    const response = await knowledgeUploadPost(new Request('http://localhost/api/institution/knowledge-management/upload', { method: 'POST' }));
-    const body = await response.json();
-    const serialized = JSON.stringify(body);
-    expect(serialized).not.toContain('DATABASE_URL');
-    expect(serialized).not.toContain('postgres://');
-    expect(serialized).not.toContain('secret');
-    expect(serialized).not.toContain('token');
-  });
+  it('源码不保留旧认证、数据库、repository、storage 或上传服务链路', () => {
+    const implementation = readFileSync(
+      resolve(
+        process.cwd(),
+        'src/app/api/institution/knowledge-management/upload/route.ts',
+      ),
+      'utf8',
+    );
 
-  it('知识库文件达到上限时返回 409', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(uploadAndParseInstitutionKnowledgeFileService).mockResolvedValueOnce({
-      status: 'quota_exceeded',
-      code: 'quota_exceeded_knowledge_files',
-      message: '知识库文件数量已达到当前套餐上限，请联系平台管理员调整套餐',
-    });
-
-    const response = await knowledgeUploadPost(createRequestWithMockFile());
-    const body = await response.json();
-
-    expect(response.status).toBe(409);
-    expect(body.code).toBe('quota_exceeded_knowledge_files');
-    expect(body.error).toContain('知识库文件');
-    expect(uploadAndParseInstitutionKnowledgeFileService).toHaveBeenCalledOnce();
-  });
-
-  it('知识库超限 response 不泄露敏感字段', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(uploadAndParseInstitutionKnowledgeFileService).mockResolvedValueOnce({
-      status: 'quota_exceeded',
-      code: 'quota_exceeded_knowledge_files',
-      message: '知识库文件数量已达到当前套餐上限，请联系平台管理员调整套餐',
-    });
-
-    const response = await knowledgeUploadPost(createRequestWithMockFile());
-    const body = await response.json();
-    const serialized = JSON.stringify(body);
-    expect(serialized).not.toContain('DATABASE_URL');
-    expect(serialized).not.toContain('postgres://');
-    expect(serialized).not.toContain('secret');
-    expect(serialized).not.toContain('stack');
-    expect(serialized).not.toContain('token');
-  });
-
-  it('知识库未超限时上传 .txt 成功（mock quota 放行）', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(uploadAndParseInstitutionKnowledgeFileService).mockResolvedValueOnce({
-      status: 'created',
-      knowledgeId: 'k1',
-      sourceId: 's1',
-      file: {
-        fileId: 'f1', tenantId: 'demo-tenant-001', knowledgeId: 'k1',
-        originalFilename: 'test.txt', mimeType: 'text/plain', sizeBytes: 100,
-        status: 'active', fileType: 'TXT', sizeLabel: '1 KB',
-        parseStatus: 'succeeded', ocrStatus: 'pending', failureReasonCode: null, safeFailureMessage: null,
-        textLength: 12, chunkCount: 1, parserVersion: 'v1',
-        uploadedByUserId: 'demo-user-admin', createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(), archivedAt: null,
-      },
-      parse: {
-        parseId: 'p1',
-        tenantId: 'demo-tenant-001',
-        knowledgeId: 'k1',
-        fileId: 'f1',
-        parseStatus: 'succeeded',
-        failureReasonCode: null,
-        safeFailureMessage: null,
-        textLength: 12,
-        chunkCount: 1,
-        parserVersion: 'v1',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-      chunkCount: 1,
-    });
-
-    const response = await knowledgeUploadPost(createRequestWithMockFile());
-    const body = await response.json();
-
-    expect(response.status).toBe(201);
-    expect(body.status).toBe('created');
-    expect(body.chunkCount).toBe(1);
-  });
-
-  it('OCR-ready 上传响应不泄露原图路径、全文或 provider 字段', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(uploadAndParseInstitutionKnowledgeFileService).mockResolvedValueOnce({
-      status: 'created',
-      knowledgeId: 'k-image',
-      sourceId: 's-image',
-      file: {
-        fileId: 'f-image', tenantId: 'demo-tenant-001', knowledgeId: 'k-image',
-        originalFilename: 'scan.png', mimeType: 'image/png', sizeBytes: 100,
-        status: 'active', fileType: 'PNG', sizeLabel: '1 KB',
-        parseStatus: 'failed', ocrStatus: 'ocr_required', failureReasonCode: 'ocr_required',
-        safeFailureMessage: '该文件需要 OCR 识别；当前为 OCR-ready 最小闭环，尚未接入生产 OCR 服务',
-        textLength: 0, chunkCount: 0, parserVersion: 'local-real-file-parser-v2',
-        uploadedByUserId: 'demo-user-admin', createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(), archivedAt: null,
-      },
-      parse: {
-        parseId: 'p-image', tenantId: 'demo-tenant-001', knowledgeId: 'k-image', fileId: 'f-image',
-        parseStatus: 'failed', failureReasonCode: 'ocr_required',
-        safeFailureMessage: '该文件需要 OCR 识别；当前为 OCR-ready 最小闭环，尚未接入生产 OCR 服务',
-        textLength: 0, chunkCount: 0, parserVersion: 'local-real-file-parser-v2',
-        createdAt: new Date(), updatedAt: new Date(),
-      },
-      parseStatus: 'failed',
-      chunkCount: 0,
-    });
-
-    const response = await knowledgeUploadPost(createRequestWithMockFile());
-    const body = await response.json();
-    const serialized = JSON.stringify(body);
-
-    expect(response.status).toBe(201);
-    expect(body.file.ocrStatus).toBe('ocr_required');
-    expect(serialized).not.toMatch(/storageKey|signedUrl|bucket|raw image|full OCR|textContent|ocrProviderType|provider|model|token|cost|vendor|secret|baseUrl/i);
+    for (const forbidden of [
+      'getDemoAccessContextFromRequest',
+      'getDatabase',
+      'createPlatformKnowledgeManagementRepository',
+      'createInstitutionKnowledgeWriteRepository',
+      'createLocalPlatformKnowledgeFileStorage',
+      'uploadAndParseInstitutionKnowledgeFileService',
+      '_request.formData(',
+      '_request.arrayBuffer(',
+      '_request.json(',
+    ]) {
+      expect(implementation).not.toContain(forbidden);
+    }
   });
 });
