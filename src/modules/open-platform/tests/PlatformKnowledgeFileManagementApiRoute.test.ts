@@ -353,7 +353,7 @@ describe('知识库文件管理 API route', () => {
     });
   });
 
-  it('机构端只暴露 GET 列表和 GET 下载，不暴露上传删除归档', async () => {
+  it('机构端 files-root 保持只读，下载入口固定 capability disabled', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantAccessContext);
 
     expect(Object.keys(institutionFilesRoute).sort()).toEqual(['GET']);
@@ -380,8 +380,13 @@ describe('知识库文件管理 API route', () => {
       ),
       { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
-    expect(downloadResponse.status).toBe(200);
-    expect(await downloadResponse.text()).toBe('file bytes');
+    expect(downloadResponse.status).toBe(503);
+    expect(downloadResponse.headers.get('cache-control')).toBe('no-store');
+    expect(await readJson(downloadResponse)).toEqual({
+      status: 'capability_disabled',
+      code: 'capability_disabled',
+      error: '机构知识库文件下载暂未启用。',
+    });
   });
 
   it('机构端未授权、跨 institution 或底层异常时安全返回', async () => {
