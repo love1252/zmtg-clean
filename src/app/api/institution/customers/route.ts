@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import {
-  handleTenantBusinessListRequest,
   handleTenantBusinessMutationRequest,
 } from '@/modules/institution/server/tenant-business-api';
 import { runTenantBusinessAuditTransaction } from '@/modules/institution/server/tenant-business-audit-transaction';
@@ -22,26 +21,17 @@ async function readJsonBody(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
-  const context = getDemoAccessContextFromRequest(request);
-  if (!context) {
-    return NextResponse.json({ error: '请先登录' }, { status: 401 });
-  }
+const customerListReadDisabled = Object.freeze({
+  code: 'customer_list_capability_disabled',
+  error: '客户列表能力暂未启用',
+});
 
-  try {
-    const db = getDatabase();
-    const repository = createTenantBusinessRepository(db);
-    const auditRepository = createAuditEventRepository(db);
-
-    return await handleTenantBusinessListRequest({
-      context,
-      resource: 'customer',
-      list: repository.listCustomersByTenant,
-      auditRepository,
-    });
-  } catch {
-    return NextResponse.json({ error: '数据服务暂时不可用' }, { status: 503 });
-  }
+/**
+ * No request data is inspected until an institution-scoped server guard and reader exist.
+ * This deliberately avoids demo-session, database, repository, audit, and fetch side effects.
+ */
+export async function GET() {
+  return NextResponse.json(customerListReadDisabled, { status: 503 });
 }
 
 export async function POST(request: Request) {
