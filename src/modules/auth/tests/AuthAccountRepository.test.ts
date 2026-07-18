@@ -77,16 +77,49 @@ const institutionBindingRow = {
   updatedAt: new Date('2026-06-25T07:00:00.000Z'),
 };
 
+const institutionMembershipFactRow = {
+  accountId: 'auth-user-chenlei',
+  accountStatus: 'active',
+  accountPasswordResetRequired: false,
+  accountLockedUntil: null,
+  membershipId: 'tenant-member-chenlei',
+  membershipTenantId: 'tenant-zhengpu',
+  membershipUserId: 'auth-user-chenlei',
+  membershipRole: 'tenant_admin',
+  membershipUpdatedAt: new Date('2026-06-25T07:00:00.000Z'),
+  bindingId: 'auth-binding-chenlei',
+  bindingAccountId: 'auth-user-chenlei',
+  bindingTenantId: 'tenant-zhengpu',
+  bindingInstitutionId: 'institution-zhengpu',
+  bindingStatus: 'active',
+  bindingSource: 'manual_admin',
+  bindingAssignedAt: new Date('2026-06-25T07:00:00.000Z'),
+  bindingExpiresAt: null,
+  bindingRevokedAt: null,
+  bindingVersion: 1,
+};
+
 function createSelectChain(rows: unknown[]) {
   const limit = vi.fn(async () => rows);
-  const where = vi.fn(() => ({ limit }));
-  const from = vi.fn(() => ({ where }));
+  const chain = {
+    from: vi.fn(),
+    innerJoin: vi.fn(),
+    leftJoin: vi.fn(),
+    limit,
+    where: vi.fn(),
+  };
+  chain.from.mockReturnValue(chain);
+  chain.innerJoin.mockReturnValue(chain);
+  chain.leftJoin.mockReturnValue(chain);
+  chain.where.mockReturnValue(chain);
 
   return {
-    chain: { from },
-    from,
+    chain,
+    from: chain.from,
+    innerJoin: chain.innerJoin,
+    leftJoin: chain.leftJoin,
     limit,
-    where,
+    where: chain.where,
   };
 }
 
@@ -235,6 +268,91 @@ describe('正式账号 repository', () => {
     });
     expect(query.selectChains[0].limit).toHaveBeenCalledWith(2);
     expect(result).toEqual([institutionBindingRow]);
+  });
+
+  it('用一次低敏 JOIN 查询读取账号、租户成员和 active 机构绑定事实', async () => {
+    const query = createDatabase({
+      selectRows: [[institutionMembershipFactRow]],
+    });
+
+    const result = await createAuthAccountRepository(
+      query.database,
+    ).findCurrentInstitutionMembershipFacts({
+      accountId: 'auth-user-chenlei',
+      tenantId: 'tenant-zhengpu',
+    });
+
+    expect(query.select).toHaveBeenCalledTimes(1);
+    expect(query.select).toHaveBeenCalledWith({
+      accountId: authUsers.id,
+      accountStatus: authUsers.status,
+      accountPasswordResetRequired: authUsers.passwordResetRequired,
+      accountLockedUntil: authUsers.lockedUntil,
+      membershipId: tenantMembers.id,
+      membershipTenantId: tenantMembers.tenantId,
+      membershipUserId: tenantMembers.userId,
+      membershipRole: tenantMembers.role,
+      membershipUpdatedAt: tenantMembers.updatedAt,
+      bindingId: authAccountInstitutionBindings.id,
+      bindingAccountId: authAccountInstitutionBindings.accountId,
+      bindingTenantId: authAccountInstitutionBindings.tenantId,
+      bindingInstitutionId: authAccountInstitutionBindings.institutionId,
+      bindingStatus: authAccountInstitutionBindings.status,
+      bindingSource: authAccountInstitutionBindings.source,
+      bindingAssignedAt: authAccountInstitutionBindings.assignedAt,
+      bindingExpiresAt: authAccountInstitutionBindings.expiresAt,
+      bindingRevokedAt: authAccountInstitutionBindings.revokedAt,
+      bindingVersion: authAccountInstitutionBindings.version,
+    });
+    expect(query.selectChains[0].from).toHaveBeenCalledWith(authUsers);
+    expect(query.selectChains[0].innerJoin).toHaveBeenCalledWith(
+      tenantMembers,
+      {
+        operator: 'and',
+        conditions: [
+          {
+            column: tenantMembers.userId,
+            operator: 'eq',
+            value: authUsers.id,
+          },
+          {
+            column: tenantMembers.tenantId,
+            operator: 'eq',
+            value: 'tenant-zhengpu',
+          },
+        ],
+      },
+    );
+    expect(query.selectChains[0].leftJoin).toHaveBeenCalledWith(
+      authAccountInstitutionBindings,
+      {
+        operator: 'and',
+        conditions: [
+          {
+            column: authAccountInstitutionBindings.accountId,
+            operator: 'eq',
+            value: authUsers.id,
+          },
+          {
+            column: authAccountInstitutionBindings.tenantId,
+            operator: 'eq',
+            value: tenantMembers.tenantId,
+          },
+          {
+            column: authAccountInstitutionBindings.status,
+            operator: 'eq',
+            value: 'active',
+          },
+        ],
+      },
+    );
+    expect(query.selectChains[0].where).toHaveBeenCalledWith({
+      column: authUsers.id,
+      operator: 'eq',
+      value: 'auth-user-chenlei',
+    });
+    expect(query.selectChains[0].limit).toHaveBeenCalledWith(2);
+    expect(result).toEqual([institutionMembershipFactRow]);
   });
 
   it('记录登录失败时只更新失败计数、锁定状态和更新时间', async () => {

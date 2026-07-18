@@ -5,12 +5,46 @@ import type {
   AuthAccountStatus,
   AuthTenantMembershipRecord,
 } from '@/modules/auth/domain/auth-account';
+import type { AuthRole } from '@/modules/auth/domain/session';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   authAccountInstitutionBindings,
   authUsers,
   tenantMembers,
 } from '@/server/db/schema';
+
+/**
+ * Low-sensitivity row returned by the single authoritative membership query.
+ * It deliberately excludes credentials and contact/profile fields.
+ */
+export type CurrentInstitutionMembershipFactRow = {
+  accountId: string;
+  accountStatus: AuthAccountStatus;
+  accountPasswordResetRequired: boolean;
+  accountLockedUntil: Date | null;
+  membershipId: string;
+  membershipTenantId: string;
+  membershipUserId: string;
+  membershipRole: AuthRole;
+  membershipUpdatedAt: Date;
+  bindingId: string | null;
+  bindingAccountId: string | null;
+  bindingTenantId: string | null;
+  bindingInstitutionId: string | null;
+  bindingStatus: AuthAccountInstitutionBindingRecord['status'] | null;
+  bindingSource: AuthAccountInstitutionBindingRecord['source'] | null;
+  bindingAssignedAt: Date | null;
+  bindingExpiresAt: Date | null;
+  bindingRevokedAt: Date | null;
+  bindingVersion: number | null;
+};
+
+export type AuthAccountInstitutionMembershipFactRepository = {
+  findCurrentInstitutionMembershipFacts(input: {
+    accountId: string;
+    tenantId: string;
+  }): Promise<CurrentInstitutionMembershipFactRow[]>;
+};
 
 export type AuthAccountRepository = {
   createAccount(record: AuthAccountRecord): Promise<AuthAccountRecord>;
@@ -52,7 +86,9 @@ export type AuthAccountRepository = {
   }): Promise<void>;
 };
 
-export function createAuthAccountRepository(database: TenantDatabase): AuthAccountRepository {
+export function createAuthAccountRepository(
+  database: TenantDatabase,
+): AuthAccountRepository & AuthAccountInstitutionMembershipFactRepository {
   return {
     async createAccount(record) {
       const rows = await database.insert(authUsers).values(record).returning();
@@ -91,6 +127,51 @@ export function createAuthAccountRepository(database: TenantDatabase): AuthAccou
         .limit(2);
 
       return rows as AuthAccountInstitutionBindingRecord[];
+    },
+
+    async findCurrentInstitutionMembershipFacts(input) {
+      const rows = await database
+        .select({
+          accountId: authUsers.id,
+          accountStatus: authUsers.status,
+          accountPasswordResetRequired: authUsers.passwordResetRequired,
+          accountLockedUntil: authUsers.lockedUntil,
+          membershipId: tenantMembers.id,
+          membershipTenantId: tenantMembers.tenantId,
+          membershipUserId: tenantMembers.userId,
+          membershipRole: tenantMembers.role,
+          membershipUpdatedAt: tenantMembers.updatedAt,
+          bindingId: authAccountInstitutionBindings.id,
+          bindingAccountId: authAccountInstitutionBindings.accountId,
+          bindingTenantId: authAccountInstitutionBindings.tenantId,
+          bindingInstitutionId: authAccountInstitutionBindings.institutionId,
+          bindingStatus: authAccountInstitutionBindings.status,
+          bindingSource: authAccountInstitutionBindings.source,
+          bindingAssignedAt: authAccountInstitutionBindings.assignedAt,
+          bindingExpiresAt: authAccountInstitutionBindings.expiresAt,
+          bindingRevokedAt: authAccountInstitutionBindings.revokedAt,
+          bindingVersion: authAccountInstitutionBindings.version,
+        })
+        .from(authUsers)
+        .innerJoin(
+          tenantMembers,
+          and(
+            eq(tenantMembers.userId, authUsers.id),
+            eq(tenantMembers.tenantId, input.tenantId),
+          ),
+        )
+        .leftJoin(
+          authAccountInstitutionBindings,
+          and(
+            eq(authAccountInstitutionBindings.accountId, authUsers.id),
+            eq(authAccountInstitutionBindings.tenantId, tenantMembers.tenantId),
+            eq(authAccountInstitutionBindings.status, 'active'),
+          ),
+        )
+        .where(eq(authUsers.id, input.accountId))
+        .limit(2);
+
+      return rows as CurrentInstitutionMembershipFactRow[];
     },
 
     async recordLoginFailure(input) {
