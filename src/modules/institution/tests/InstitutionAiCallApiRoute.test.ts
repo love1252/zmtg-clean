@@ -1,26 +1,34 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as aiCallUsageGet } from '@/app/api/institution/knowledge-management/ai-call/usage/route';
 import { GET as platformAiUsageGet } from '@/app/api/v1/open-platform/ai-usage/route';
-import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 
-const database = { database: 'ai-call-api-test-db' };
-
-vi.mock('@/server/db/client', () => ({
-  getDatabase: vi.fn(() => database),
-}));
-
-vi.mock('@/modules/security/server/access-context', () => ({
+const routeMocks = vi.hoisted(() => ({
+  createAiCallUsageRepository: vi.fn(),
+  getDatabase: vi.fn(),
   getDemoAccessContextFromRequest: vi.fn(),
-}));
-
-vi.mock('@/modules/institution/server/institution-ai-call-service', () => ({
   listInstitutionAiCallUsageService: vi.fn(),
   listPlatformAiUsageSummaryService: vi.fn(),
 }));
 
-vi.mock('@/modules/institution/server/institution-ai-call-usage-repository', () => ({
-  createAiCallUsageRepository: vi.fn(() => ({})),
+vi.mock('@/server/db/client', () => ({ getDatabase: routeMocks.getDatabase }));
+vi.mock('@/modules/security/server/access-context', () => ({
+  getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
 }));
+vi.mock('@/modules/institution/server/institution-ai-call-service', () => ({
+  listInstitutionAiCallUsageService: routeMocks.listInstitutionAiCallUsageService,
+  listPlatformAiUsageSummaryService: routeMocks.listPlatformAiUsageSummaryService,
+}));
+vi.mock('@/modules/institution/server/institution-ai-call-usage-repository', () => ({
+  createAiCallUsageRepository: routeMocks.createAiCallUsageRepository,
+}));
+
+const capabilityDisabledResponse = {
+  code: 'capability_disabled',
+  error: '机构 AI 调用记录能力暂未启用。',
+};
 
 const tenantContext = {
   userId: 'demo-user-admin',
@@ -40,100 +48,151 @@ const platformContext = {
   source: 'demo_session' as const,
 };
 
+const fetchMock = vi.fn();
+type RouteHandler = (...args: readonly unknown[]) => Promise<Response>;
+const institutionHandler = aiCallUsageGet as RouteHandler;
+
+function request() {
+  return new Request(
+    'http://localhost/api/institution/knowledge-management/ai-call/usage?tenantId=other-tenant&serviceName=should-not-read',
+    { headers: { cookie: 'demo_session=should-not-read; token=should-not-read' } },
+  );
+}
+
+function hostileRequest() {
+  const traps = { get: 0, ownKeys: 0, descriptor: 0 };
+  const value = new Proxy({} as Request, {
+    get() {
+      traps.get += 1;
+      throw new Error('request must not be read');
+    },
+    getOwnPropertyDescriptor() {
+      traps.descriptor += 1;
+      throw new Error('request descriptors must not be read');
+    },
+    ownKeys() {
+      traps.ownKeys += 1;
+      throw new Error('request keys must not be read');
+    },
+  });
+  return { traps, value };
+}
+
+function expectNoInstitutionDownstreamCalls() {
+  expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+  expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+  expect(routeMocks.createAiCallUsageRepository).not.toHaveBeenCalled();
+  expect(routeMocks.listInstitutionAiCallUsageService).not.toHaveBeenCalled();
+  expect(routeMocks.listPlatformAiUsageSummaryService).not.toHaveBeenCalled();
+  expect(fetchMock).not.toHaveBeenCalled();
+}
+
+async function expectInstitutionCapabilityDisabled(input: unknown) {
+  const response = await institutionHandler(input);
+  const result = await response.json();
+
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  expect(result).toEqual(capabilityDisabledResponse);
+  expect(Object.keys(result as object).sort()).toEqual(['code', 'error']);
+  expect(JSON.stringify(result)).not.toMatch(
+    /other-tenant|serviceName|records|usage|count|token|model|provider|prompt|answer/i,
+  );
+  expectNoInstitutionDownstreamCalls();
+}
+
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.restoreAllMocks();
+  vi.stubGlobal('fetch', fetchMock);
+  fetchMock.mockReset();
+  Object.values(routeMocks).forEach((mock) => mock.mockReset());
+  routeMocks.getDatabase.mockReturnValue({ database: 'ai-call-api-test-db' });
+  routeMocks.createAiCallUsageRepository.mockReturnValue({});
 });
 
-describe('机构端 AI 调用记录 API route', () => {
-  it('未登录返回 401', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(null);
-    const response = await aiCallUsageGet(new Request('http://localhost/api/institution/knowledge-management/ai-call/usage'));
-    expect(response.status).toBe(401);
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('机构端 AI 调用记录 capability-off API route', () => {
+  it('普通或非法查询固定返回低敏 503，DB/service 异常不伪装为 200 空记录', async () => {
+    routeMocks.getDatabase.mockImplementation(() => {
+      throw new Error('DATABASE_URL must not be reached');
+    });
+    routeMocks.listInstitutionAiCallUsageService.mockRejectedValue(
+      new Error('service failure must not become records=[]'),
+    );
+
+    await expectInstitutionCapabilityDisabled(
+      new Request(
+        'http://localhost/api/institution/knowledge-management/ai-call/usage',
+      ),
+    );
+    await expectInstitutionCapabilityDisabled(request());
   });
 
-  it('平台账号返回 403', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(platformContext);
-    const response = await aiCallUsageGet(new Request('http://localhost/api/institution/knowledge-management/ai-call/usage'));
+  it('不解引用 hostile Request', async () => {
+    const hostileInput = hostileRequest();
+
+    await expectInstitutionCapabilityDisabled(hostileInput.value);
+    expect(hostileInput.traps).toEqual({ get: 0, ownKeys: 0, descriptor: 0 });
+  });
+
+  it('route 仅导入 NextResponse，且不含 session、持久化、服务或 AI 用量事实路径', () => {
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        'src/app/api/institution/knowledge-management/ai-call/usage/route.ts',
+      ),
+      'utf8',
+    );
+    const imports = source.match(/^import .*$/gmu) ?? [];
+
+    expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
+    expect(source).not.toMatch(
+      /getDemoAccessContextFromRequest|getDatabase|createAiCallUsageRepository|listInstitutionAiCallUsageService|request\.|cookie|session|repository|service|records|emptyState|count|token|model|provider|prompt|answer|fetch\(|process\.env/i,
+    );
+  });
+});
+
+describe('平台端 AI 用量聚合 API route 保持正向契约', () => {
+  it('机构账号访问仍返回 403', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+
+    const response = await platformAiUsageGet(
+      new Request('http://localhost/api/v1/open-platform/ai-usage'),
+    );
+
     expect(response.status).toBe(403);
   });
 
-  it('usage API 返回受控的历史 RAG 摘要', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    const { listInstitutionAiCallUsageService } = await import('@/modules/institution/server/institution-ai-call-service');
-    vi.mocked(listInstitutionAiCallUsageService).mockResolvedValue({
-      requestId: 'institution-ai-call-usage',
+  it('平台管理员仍可读取 service 结果', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
+    routeMocks.listPlatformAiUsageSummaryService.mockResolvedValue({
+      requestId: 'platform-ai-usage-summary',
       readonly: true,
       dataSource: 'repository',
-      records: [{
-        id: 'rec-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001',
-        actorUserId: 'u', serviceName: '平台 AI 服务', latencyMs: 100,
-        status: 'succeeded', errorCode: null,
-        metadata: {
-          knowledgeContext: {
-            used: true,
-            sources: [{ knowledgeId: 'kb-1', knowledgeTitle: '指南', fileId: 'f-1', fileName: '指南.pdf', chunkId: 'c-1', chunkIndex: 0, textPreview: '冷敷需间隔观察。', matchReason: '包含“冷敷”' }],
-          },
-        },
-        createdAt: new Date().toISOString(),
-      }],
-      emptyState: { title: '暂无 AI 调用记录', description: '当前机构还没有发起过 AI 调用。' },
+      records: [{ tenantId: 'tenant-a', callCount: 3 }],
     });
 
-    const response = await aiCallUsageGet(new Request('http://localhost/api/institution/knowledge-management/ai-call/usage'));
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.records[0].metadata.knowledgeContext.used).toBe(true);
-    expect(body.records[0].metadata.knowledgeContext.sources).toHaveLength(1);
-    expect(body.records[0].metadata.knowledgeContext.sources[0].fileName).toBe('指南.pdf');
-    expect(body.records[0].serviceName).toBe('平台 AI 服务');
-    const serialized = JSON.stringify(body);
-    expect(serialized).not.toMatch(/storageKey|bucket|signedUrl|embedding|api_key|baseUrl|Authorization/i);
-    expect(serialized).not.toMatch(/"provider"|"model"|deepseek|deepseek-v4-flash/i);
-    expect(serialized).not.toMatch(/"query"|"searchKeyword"/i);
-  });
+    const response = await platformAiUsageGet(
+      new Request('http://localhost/api/v1/open-platform/ai-usage'),
+    );
 
-  it('usage API 的旧记录不伪造 RAG metadata', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    const { listInstitutionAiCallUsageService } = await import('@/modules/institution/server/institution-ai-call-service');
-    vi.mocked(listInstitutionAiCallUsageService).mockResolvedValue({
-      requestId: 'institution-ai-call-usage', readonly: true, dataSource: 'repository',
-      records: [
-        { id: 'old-succeeded-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', serviceName: '平台 AI 服务', latencyMs: 100, status: 'succeeded', errorCode: null, metadata: null, createdAt: new Date().toISOString() },
-        { id: 'old-rejected-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', serviceName: '平台 AI 服务', latencyMs: null, status: 'rejected', errorCode: 'quota_exceeded_ai_calls', metadata: null, createdAt: new Date().toISOString() },
-      ],
-      emptyState: { title: '暂无 AI 调用记录', description: '当前机构还没有发起过 AI 调用。' },
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      records: [{ tenantId: 'tenant-a', callCount: 3 }],
     });
-
-    const response = await aiCallUsageGet(new Request('http://localhost/api/institution/knowledge-management/ai-call/usage'));
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.records[0].metadata).toBeNull();
-    expect(body.records[1].metadata).toBeNull();
-  });
-});
-
-describe('平台端 AI 用量聚合 API route', () => {
-  it('机构账号访问平台端 AI 用量仍 403', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    const response = await platformAiUsageGet(new Request('http://localhost/api/v1/open-platform/ai-usage'));
-    expect(response.status).toBe(403);
+    expect(routeMocks.listPlatformAiUsageSummaryService).toHaveBeenCalledTimes(1);
   });
 
-  it('平台管理员可访问', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(platformContext);
-    const { listPlatformAiUsageSummaryService } = await import('@/modules/institution/server/institution-ai-call-service');
-    vi.mocked(listPlatformAiUsageSummaryService).mockResolvedValue({
-      requestId: 'platform-ai-usage-summary', readonly: true, dataSource: 'repository',
-      records: [{ tenantId: 't-001', callCount: 3, totalTokens: 300, succeededCount: 2, failedCount: 1, rejectedCount: 0, quotaExceededCount: 0 }],
-      emptyState: { title: '暂无 AI 调用数据', description: '还没有任何租户发起过 AI 调用。' },
-    });
-    const response = await platformAiUsageGet(new Request('http://localhost/api/v1/open-platform/ai-usage'));
-    expect(response.status).toBe(200);
-  });
+  it('未登录仍返回 401', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
 
-  it('未登录返回 401', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(null);
-    const response = await platformAiUsageGet(new Request('http://localhost/api/v1/open-platform/ai-usage'));
+    const response = await platformAiUsageGet(
+      new Request('http://localhost/api/v1/open-platform/ai-usage'),
+    );
+
     expect(response.status).toBe(401);
   });
 });
