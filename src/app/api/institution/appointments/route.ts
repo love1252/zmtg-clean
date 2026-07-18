@@ -1,172 +1,26 @@
 import { NextResponse } from 'next/server';
-import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
-import {
-  handleTenantBusinessMutationRequest,
-} from '@/modules/institution/server/tenant-business-api';
-import { runTenantBusinessAuditTransaction } from '@/modules/institution/server/tenant-business-audit-transaction';
-import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
-import { checkTenantQuotaForCreate } from '@/modules/institution/server/tenant-quota-enforcement';
-import {
-  parseCreateAppointmentPayload,
-  parseUpdateAppointmentPayload,
-} from '@/modules/institution/server/tenant-business-write-input';
-import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
-import { getDatabase } from '@/server/db/client';
 
-async function readJsonBody(request: Request) {
-  try {
-    return { ok: true as const, value: await request.json() };
-  } catch {
-    return { ok: false as const };
-  }
-}
-
-function isAppointmentCustomerReferenceError(error: unknown) {
-  const databaseError = error as {
-    code?: unknown;
-    constraint?: unknown;
-    constraint_name?: unknown;
-    message?: unknown;
-  };
-  const constraintName = databaseError.constraint_name ?? databaseError.constraint;
-
-  return (
-    databaseError.code === '23503' &&
-    (constraintName === 'appointments_tenant_customer_fk' ||
-      (typeof databaseError.message === 'string' &&
-        databaseError.message.includes('appointments_tenant_customer_fk')))
-  );
-}
-
-const appointmentListReadDisabled = Object.freeze({
-  code: 'appointment_list_capability_disabled',
-  error: '预约列表能力暂未启用',
+const noStoreHeaders = { 'cache-control': 'no-store' } as const;
+const capabilityDisabledPayload = Object.freeze({
+  code: 'capability_disabled',
+  error: '预约能力暂未启用',
 });
 
-/**
- * No request data is inspected until an institution-scoped server guard and reader exist.
- * This deliberately avoids demo-session, database, repository, and audit side effects.
- */
-export async function GET(_request: Request) {
-  return NextResponse.json(appointmentListReadDisabled, { status: 503 });
+function capabilityDisabledResponse() {
+  return NextResponse.json(capabilityDisabledPayload, {
+    status: 503,
+    headers: noStoreHeaders,
+  });
 }
 
-export async function POST(request: Request) {
-  const context = getDemoAccessContextFromRequest(request);
-  if (!context) {
-    return NextResponse.json({ error: '请先登录' }, { status: 401 });
-  }
-
-  const body = await readJsonBody(request);
-  if (!body.ok) {
-    return NextResponse.json({ error: '请求格式不正确' }, { status: 400 });
-  }
-
-  const parsed = parseCreateAppointmentPayload(body.value);
-  if (!parsed.ok) {
-    return NextResponse.json({ error: parsed.error }, { status: 400 });
-  }
-
-  try {
-    const db = getDatabase();
-    const auditRepository = createAuditEventRepository(db);
-
-    return await handleTenantBusinessMutationRequest({
-      context,
-      resource: 'appointment',
-      action: 'create',
-      mutate: async ({ tenantId, successAuditEvent }) => {
-        const quotaDecision = await checkTenantQuotaForCreate({
-          database: db,
-          tenantId,
-          resource: 'appointments',
-        });
-        if (!quotaDecision.allowed) {
-          return { kind: 'quota_denied', decision: quotaDecision };
-        }
-
-        try {
-          return await runTenantBusinessAuditTransaction(
-            db,
-            async ({ repository, auditRepository }) => {
-              const customerExists = await repository.customerExistsByTenant({
-                tenantId,
-                id: parsed.value.customerId,
-              });
-              if (!customerExists) {
-                return { kind: 'not_found' };
-              }
-
-              const record = await repository.createAppointment({
-                ...parsed.value,
-                id: globalThis.crypto.randomUUID(),
-                tenantId,
-                scheduledAt: new Date(parsed.value.scheduledAt),
-              });
-
-              await auditRepository.record({ ...successAuditEvent, resourceId: record.id });
-
-              return { kind: 'success', record };
-            },
-          );
-        } catch (error) {
-          if (isAppointmentCustomerReferenceError(error)) {
-            return { kind: 'not_found' };
-          }
-
-          throw error;
-        }
-      },
-      auditRepository,
-      successStatus: 201,
-    });
-  } catch {
-    return NextResponse.json({ error: '数据服务暂时不可用' }, { status: 503 });
-  }
+export function GET(_request: Request) {
+  return capabilityDisabledResponse();
 }
 
-export async function PATCH(request: Request) {
-  const context = getDemoAccessContextFromRequest(request);
-  if (!context) {
-    return NextResponse.json({ error: '请先登录' }, { status: 401 });
-  }
+export function POST(_request: Request) {
+  return capabilityDisabledResponse();
+}
 
-  const body = await readJsonBody(request);
-  if (!body.ok) {
-    return NextResponse.json({ error: '请求格式不正确' }, { status: 400 });
-  }
-
-  const parsed = parseUpdateAppointmentPayload(body.value);
-  if (!parsed.ok) {
-    return NextResponse.json({ error: parsed.error }, { status: 400 });
-  }
-
-  try {
-    const db = getDatabase();
-    const auditRepository = createAuditEventRepository(db);
-
-    return await handleTenantBusinessMutationRequest({
-      context,
-      resource: 'appointment',
-      action: 'update',
-      mutate: ({ tenantId, successAuditEvent }) =>
-        runTenantBusinessAuditTransaction(db, async ({ repository, auditRepository }) => {
-          const record = await repository.updateAppointment({
-            tenantId,
-            ...parsed.value,
-          });
-
-          if (!record) {
-            return { kind: 'not_found' };
-          }
-
-          await auditRepository.record({ ...successAuditEvent, resourceId: record.id });
-
-          return { kind: 'success', record };
-        }),
-      auditRepository,
-    });
-  } catch {
-    return NextResponse.json({ error: '数据服务暂时不可用' }, { status: 503 });
-  }
+export function PATCH(_request: Request) {
+  return capabilityDisabledResponse();
 }

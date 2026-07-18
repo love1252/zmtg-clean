@@ -61,6 +61,7 @@ const routeMocks = vi.hoisted(() => {
     database,
     getDatabase: vi.fn(),
     getDemoAccessContextFromRequest: vi.fn(),
+    recordFollowUpTaskStatusTimelineEvent: vi.fn(),
     repository,
     transactionDatabase,
   };
@@ -110,6 +111,16 @@ vi.mock('@/modules/institution/server/tenant-quota-enforcement', async (importOr
   };
 });
 
+vi.mock('@/modules/institution/server/followup-customer-timeline-service', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@/modules/institution/server/followup-customer-timeline-service')
+  >();
+  return {
+    ...actual,
+    recordFollowUpTaskStatusTimelineEvent: routeMocks.recordFollowUpTaskStatusTimelineEvent,
+  };
+});
+
 const tenantContext: AccessContext = {
   userId: 'demo-user-admin',
   role: 'tenant_admin',
@@ -149,6 +160,8 @@ beforeEach(() => {
   routeMocks.createAuditEventRepository.mockClear();
   routeMocks.auditRecord.mockReset();
   routeMocks.auditRecord.mockResolvedValue(undefined);
+  routeMocks.recordFollowUpTaskStatusTimelineEvent.mockReset();
+  routeMocks.recordFollowUpTaskStatusTimelineEvent.mockResolvedValue(undefined);
   routeMocks.repository.listCustomersByTenant.mockReset();
   routeMocks.repository.listCustomersByTenant.mockResolvedValue([
     { id: 'cust_001', tenantId: 'demo-tenant-001' },
@@ -200,7 +213,6 @@ beforeEach(() => {
     task: { id: 'fu_created', tenantId: 'demo-tenant-001', status: 'scheduled' },
   });
 });
-
 const validCreateCustomerPayload = {
   displayName: '王女士',
   lifecycle: 'consulting',
@@ -726,518 +738,280 @@ describe('客户 API capability-off 路由', () => {
   });
 });
 
-describe('租户业务只读 API 路由', () => {
-  it('appointments / followups 列表固定 capability-disabled，不读取普通、查询或 hostile 请求', async () => {
-    const routeCases = [
-      {
-        handler: appointmentsGet,
-        requests: [
-          new Request('http://localhost/api/institution/appointments'),
-          new Request('http://localhost/api/institution/appointments?tenantId=other-tenant'),
-        ],
-        disabled: {
-          code: 'appointment_list_capability_disabled',
-          error: '预约列表能力暂未启用',
-        },
-      },
-      {
-        handler: followupsGet,
-        requests: [
-          new Request('http://localhost/api/institution/followups'),
-          new Request('http://localhost/api/institution/followups?source=ai&tenantId=other-tenant'),
-        ],
-        disabled: {
-          code: 'follow_up_list_capability_disabled',
-          error: '随访列表能力暂未启用',
-        },
-      },
-    ] as const;
+type CareRouteHandler = (
+  request: Request,
+  context?: unknown,
+) => Response | Promise<Response>;
 
-    for (const routeCase of routeCases) {
-      for (const request of routeCase.requests) {
-        const response = await routeCase.handler(request);
-        const payload = await response.json();
+type CareDisabledPayload = {
+  code: 'capability_disabled';
+  error: string;
+};
 
-        expect(response.status).toBe(503);
-        expect(payload).toEqual(routeCase.disabled);
-        expect(payload).not.toHaveProperty('records');
-      }
+type CareRequestCase = {
+  name: string;
+  handler: CareRouteHandler;
+  request: Request;
+  expected: CareDisabledPayload;
+};
 
-      const traps = { get: 0, ownKeys: 0, descriptor: 0 };
-      const hostileRequest = new Proxy({}, {
-        get() { traps.get += 1; throw new Error('request must not be read'); },
-        ownKeys() { traps.ownKeys += 1; throw new Error('request must not be enumerated'); },
-        getOwnPropertyDescriptor() { traps.descriptor += 1; throw new Error('request must not be described'); },
-      }) as Request;
-      const hostileResponse = await routeCase.handler(hostileRequest);
-
-      expect(hostileResponse.status).toBe(503);
-      await expect(hostileResponse.json()).resolves.toEqual(routeCase.disabled);
-      expect(traps).toEqual({ get: 0, ownKeys: 0, descriptor: 0 });
-    }
-
-    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
-    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
-    expect(routeMocks.repository.listAppointmentsByTenant).not.toHaveBeenCalled();
-    expect(routeMocks.repository.listFollowUpTasksByTenant).not.toHaveBeenCalled();
-  });
+const appointmentCapabilityDisabledPayload = Object.freeze({
+  code: 'capability_disabled' as const,
+  error: '预约能力暂未启用',
 });
 
-describe('租户业务写入 API 路由', () => {
-  it('无 quota limit 时拒绝创建预约并 fail closed', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.checkTenantQuotaForCreate.mockResolvedValueOnce({
-      allowed: false,
-      current: null,
-      limit: null,
-      reason: 'missing_quota_limit',
-      resource: 'appointments',
-    });
+const followUpCapabilityDisabledPayload = Object.freeze({
+  code: 'capability_disabled' as const,
+  error: '随访能力暂未启用',
+});
 
-    const response = await appointmentsPost(
-      new Request('http://localhost/api/institution/appointments', {
+const careRouteSources = [
+  {
+    name: 'appointments',
+    source: readFileSync(
+      resolve(process.cwd(), 'src/app/api/institution/appointments/route.ts'),
+      'utf8',
+    ),
+  },
+  {
+    name: 'followups',
+    source: readFileSync(
+      resolve(process.cwd(), 'src/app/api/institution/followups/route.ts'),
+      'utf8',
+    ),
+  },
+] as const;
+
+function createCareRequestCases(input: {
+  path: 'appointments' | 'followups';
+  handlers: {
+    GET: CareRouteHandler;
+    POST: CareRouteHandler;
+    PATCH: CareRouteHandler;
+  };
+  expected: CareDisabledPayload;
+  createPayload: Record<string, unknown>;
+  updatePayload: Record<string, unknown>;
+}): CareRequestCase[] {
+  const url = `http://localhost/api/institution/${input.path}`;
+  return [
+    {
+      name: `${input.path} GET 普通及伪造 query/header 请求`,
+      handler: input.handlers.GET,
+      request: new Request(
+        `${url}?tenantId=MOCK-input-tenant&raw=%7Bbad-json&customerId=DEMO-input-customer`,
+        {
+          headers: {
+            cookie: 'demo_session=DEMO-care-input',
+            'x-institution-id': 'MOCK-input-institution',
+          },
+        },
+      ),
+      expected: input.expected,
+    },
+    {
+      name: `${input.path} POST 普通 JSON 请求`,
+      handler: input.handlers.POST,
+      request: new Request(url, {
         method: 'POST',
-        body: JSON.stringify(validCreateAppointmentPayload),
+        headers: {
+          cookie: 'demo_session=DEMO-care-input',
+          'content-type': 'application/json',
+          'x-tenant-id': 'MOCK-input-tenant',
+        },
+        body: JSON.stringify({ ...input.createPayload, rawInput: 'DEMO-care-input' }),
       }),
-    );
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      code: 'missing_quota_limit', error: '当前租户套餐配额未配置，暂时无法新增记录',
-    });
-    expect(routeMocks.repository.createAppointment).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'missing_quota_limit',
-      result: 'denied',
-    }));
-  });
-
-  it('预约创建和更新绑定对应仓储方法并使用上下文 tenantId', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const createResponse = await appointmentsPost(
-      new Request('http://localhost/api/institution/appointments?tenantId=other-tenant', {
+      expected: input.expected,
+    },
+    {
+      name: `${input.path} POST 非法 JSON 请求`,
+      handler: input.handlers.POST,
+      request: new Request(url, {
         method: 'POST',
-        body: JSON.stringify(validCreateAppointmentPayload),
+        headers: { 'content-type': 'application/json' },
+        body: '{bad-json-DEMO-care-input',
       }),
-    );
-    const patchResponse = await appointmentsPatch(
-      new Request('http://localhost/api/institution/appointments', {
+      expected: input.expected,
+    },
+    {
+      name: `${input.path} PATCH 普通 JSON 请求`,
+      handler: input.handlers.PATCH,
+      request: new Request(url, {
         method: 'PATCH',
-        headers: { 'x-tenant-id': 'other-tenant' },
-        body: JSON.stringify(validUpdateAppointmentPayload),
+        headers: {
+          cookie: 'demo_session=DEMO-care-input',
+          'content-type': 'application/json',
+          'x-institution-id': 'MOCK-input-institution',
+        },
+        body: JSON.stringify({ ...input.updatePayload, rawInput: 'MOCK-care-input' }),
       }),
-    );
-
-    expect(createResponse.status).toBe(201);
-    expect(patchResponse.status).toBe(200);
-    expect(routeMocks.repository.createAppointment).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: expect.any(String),
-        tenantId: 'demo-tenant-001',
-        customerId: 'cust_001',
-        scheduledAt: new Date('2026-06-01T10:30:00+08:00'),
-      }),
-    );
-    expect(routeMocks.repository.updateAppointment).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      ...validUpdateAppointmentPayload,
-    });
-    expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledTimes(1);
-    expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledWith({
-      database: routeMocks.database,
-      resource: 'appointments',
-      tenantId: 'demo-tenant-001',
-    });
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      resource: 'appointment',
-      resourceId: 'appt_created',
-      result: 'allowed',
-      tenantId: 'demo-tenant-001',
-    }));
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      resource: 'appointment',
-      resourceId: 'appt_001',
-      result: 'allowed',
-      tenantId: 'demo-tenant-001',
-    }));
-    expect(routeMocks.auditRecord.mock.calls).toHaveLength(2);
-    routeMocks.auditRecord.mock.calls.forEach(([event]) =>
-      expectAuditEventDoesNotContainPrivateBody(event),
-    );
-  });
-
-  it('无 quota snapshot 但 helper 按 active plan limit 和 live count 放行时继续创建预约', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.checkTenantQuotaForCreate.mockResolvedValueOnce({
-      allowed: true,
-      current: 399,
-      limit: 400,
-      resource: 'appointments',
-    });
-
-    const response = await appointmentsPost(
-      new Request('http://localhost/api/institution/appointments', {
-        method: 'POST',
-        body: JSON.stringify(validCreateAppointmentPayload),
-      }),
-    );
-
-    expect(response.status).toBe(201);
-    expect(routeMocks.repository.createAppointment).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'demo-tenant-001' }),
-    );
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      resource: 'appointment',
-      result: 'allowed',
-    }));
-  });
-
-  it('预约已达配额时拒绝创建、不写业务表并记录拒绝审计', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.checkTenantQuotaForCreate.mockResolvedValueOnce({
-      allowed: false,
-      current: 2000,
-      limit: 2000,
-      reason: 'quota_exceeded_appointments',
-      resource: 'appointments',
-    });
-
-    const response = await appointmentsPost(
-      new Request('http://localhost/api/institution/appointments?tenantId=other-tenant', {
-        method: 'POST',
-        headers: { 'x-tenant-id': 'other-tenant' },
-        body: JSON.stringify(validCreateAppointmentPayload),
-      }),
-    );
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      code: 'quota_exceeded_appointments', error: '预约配额已达上限，请联系平台管理员调整套餐',
-    });
-    expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledWith({
-      database: routeMocks.database,
-      resource: 'appointments',
-      tenantId: 'demo-tenant-001',
-    });
-    expect(routeMocks.repository.customerExistsByTenant).not.toHaveBeenCalled();
-    expect(routeMocks.repository.createAppointment).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      reason: 'quota_exceeded_appointments',
-      resource: 'appointment',
-      result: 'denied',
-      tenantId: 'demo-tenant-001',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('更新预约不受数量配额阻断', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.checkTenantQuotaForCreate.mockResolvedValue({
-      allowed: false,
-      current: 2000,
-      limit: 2000,
-      reason: 'quota_exceeded_appointments',
-      resource: 'appointments',
-    });
-
-    const response = await appointmentsPatch(
-      new Request('http://localhost/api/institution/appointments', {
+      expected: input.expected,
+    },
+    {
+      name: `${input.path} PATCH 非法 JSON 请求`,
+      handler: input.handlers.PATCH,
+      request: new Request(url, {
         method: 'PATCH',
-        body: JSON.stringify(validUpdateAppointmentPayload),
+        headers: { 'content-type': 'application/json' },
+        body: '{bad-json-MOCK-care-input',
       }),
-    );
+      expected: input.expected,
+    },
+  ];
+}
 
-    expect(response.status).toBe(200);
-    expect(routeMocks.repository.updateAppointment).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      ...validUpdateAppointmentPayload,
-    });
-    expect(routeMocks.checkTenantQuotaForCreate).not.toHaveBeenCalled();
+const careRequestCases = [
+  ...createCareRequestCases({
+    path: 'appointments',
+    handlers: {
+      GET: appointmentsGet,
+      POST: appointmentsPost,
+      PATCH: appointmentsPatch,
+    },
+    expected: appointmentCapabilityDisabledPayload,
+    createPayload: validCreateAppointmentPayload,
+    updatePayload: validUpdateAppointmentPayload,
+  }),
+  ...createCareRequestCases({
+    path: 'followups',
+    handlers: {
+      GET: followupsGet,
+      POST: followupsPost,
+      PATCH: followupsPatch,
+    },
+    expected: followUpCapabilityDisabledPayload,
+    createPayload: validCreateFollowUpPayload,
+    updatePayload: validFollowUpTransitionPayload,
+  }),
+];
+
+function hostileCareValue(message: string) {
+  const traps = { get: 0, ownKeys: 0, descriptor: 0, has: 0 };
+  const value = new Proxy(Object.create(null), {
+    get() {
+      traps.get += 1;
+      throw new Error(`${message} must not be read`);
+    },
+    getOwnPropertyDescriptor() {
+      traps.descriptor += 1;
+      throw new Error(`${message} must not be described`);
+    },
+    has() {
+      traps.has += 1;
+      throw new Error(`${message} must not be inspected`);
+    },
+    ownKeys() {
+      traps.ownKeys += 1;
+      throw new Error(`${message} must not be enumerated`);
+    },
   });
 
-  it('预约创建客户不属于当前租户时返回 404 并记录拒绝审计', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.repository.customerExistsByTenant.mockResolvedValueOnce(false);
+  return { value, traps };
+}
 
-    const response = await appointmentsPost(
-      new Request('http://localhost/api/institution/appointments', {
-        method: 'POST',
-        body: JSON.stringify(validCreateAppointmentPayload),
-      }),
+async function expectCareCapabilityDisabled(
+  response: Response,
+  expected: CareDisabledPayload,
+) {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  await expect(response.json()).resolves.toEqual(expected);
+}
+
+function expectNoCareRouteSideEffects() {
+  expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+  expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+  expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+  expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+  expect(routeMocks.checkTenantQuotaForCreate).not.toHaveBeenCalled();
+  expect(routeMocks.database.transaction).not.toHaveBeenCalled();
+  expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+  expect(routeMocks.recordFollowUpTaskStatusTimelineEvent).not.toHaveBeenCalled();
+  expect(routeMocks.repository.listAppointmentsByTenant).not.toHaveBeenCalled();
+  expect(routeMocks.repository.listFollowUpTasksByTenant).not.toHaveBeenCalled();
+  expect(routeMocks.repository.customerExistsByTenant).not.toHaveBeenCalled();
+  expect(routeMocks.repository.createAppointment).not.toHaveBeenCalled();
+  expect(routeMocks.repository.updateAppointment).not.toHaveBeenCalled();
+  expect(routeMocks.repository.transitionFollowUpTask).not.toHaveBeenCalled();
+  expect(routeMocks.repository.createManualFollowUpTask).not.toHaveBeenCalled();
+}
+
+describe('预约与随访 API capability-off 路由', () => {
+  it.each(careRequestCases)(
+    '$name 固定返回无缓存 503，且不读取或回显输入',
+    async ({ handler, request, expected }) => {
+      const response = await handler(request);
+      const responseCopy = response.clone();
+
+      await expectCareCapabilityDisabled(response, expected);
+      const serialized = JSON.stringify(await responseCopy.json());
+
+      expect(request.bodyUsed).toBe(false);
+      expect(serialized).not.toMatch(
+        /mock|demo|input|tenant|institution|customer|appointment|followup|bad-json/iu,
+      );
+      expectNoCareRouteSideEffects();
+    },
+  );
+
+  it.each([
+    ['appointments GET', appointmentsGet, appointmentCapabilityDisabledPayload],
+    ['appointments POST', appointmentsPost, appointmentCapabilityDisabledPayload],
+    ['appointments PATCH', appointmentsPatch, appointmentCapabilityDisabledPayload],
+    ['followups GET', followupsGet, followUpCapabilityDisabledPayload],
+    ['followups POST', followupsPost, followUpCapabilityDisabledPayload],
+    ['followups PATCH', followupsPatch, followUpCapabilityDisabledPayload],
+  ] as const)('%s 对 hostile Request 和 params 零读取、零副作用', async (
+    _name,
+    handler,
+    expected,
+  ) => {
+    const hostileRequest = hostileCareValue('request');
+    const hostileContext = hostileCareValue('route context');
+
+    await expectCareCapabilityDisabled(
+      await (handler as CareRouteHandler)(
+        hostileRequest.value as Request,
+        hostileContext.value,
+      ),
+      expected,
     );
 
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(routeMocks.repository.customerExistsByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      id: 'cust_001',
-    });
-    expect(routeMocks.repository.createAppointment).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      resource: 'appointment',
-      result: 'denied',
-      reason: 'not_found_or_not_owned',
-    }));
-    expect(routeMocks.auditRecord.mock.lastCall?.[0]).not.toHaveProperty('resourceId');
+    expect(hostileRequest.traps).toEqual({ get: 0, ownKeys: 0, descriptor: 0, has: 0 });
+    expect(hostileContext.traps).toEqual({ get: 0, ownKeys: 0, descriptor: 0, has: 0 });
+    expectNoCareRouteSideEffects();
   });
 
-  it('预约创建遇到客户外键竞态时返回 404 并记录拒绝审计', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.repository.createAppointment.mockRejectedValueOnce(
-      Object.assign(new Error('insert violates appointment customer foreign key'), {
-        code: '23503',
-        constraint_name: 'appointments_tenant_customer_fk',
-      }),
-    );
+  it('routes 只加载响应工具，不装配 session、数据库、repository、quota、audit 或 timeline', () => {
+    for (const route of careRouteSources) {
+      expect(route.source.split('\n').filter((line) => line.startsWith('import '))).toEqual([
+        "import { NextResponse } from 'next/server';",
+      ]);
+      for (const method of ['GET', 'POST', 'PATCH']) {
+        expect(route.source).toContain(`export function ${method}(_request: Request)`);
+      }
+      expect(route.source).not.toMatch(/\b_request\s*(?:\.|\[)/u);
 
-    const response = await appointmentsPost(
-      new Request('http://localhost/api/institution/appointments', {
-        method: 'POST',
-        body: JSON.stringify(validCreateAppointmentPayload),
-      }),
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      resource: 'appointment',
-      result: 'denied',
-      reason: 'not_found_or_not_owned',
-    }));
-    expect(routeMocks.auditRecord.mock.lastCall?.[0]).not.toHaveProperty('resourceId');
-  });
-
-  it('随访状态流转绑定仓储方法、操作者和上下文 tenantId', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.checkTenantQuotaForCreate.mockResolvedValue({
-      allowed: false,
-      current: 2000,
-      limit: 2000,
-      reason: 'quota_exceeded_appointments',
-      resource: 'appointments',
-    });
-
-    const response = await followupsPatch(
-      new Request('http://localhost/api/institution/followups?tenantId=other-tenant', {
-        method: 'PATCH',
-        body: JSON.stringify(validFollowUpTransitionPayload),
-      }),
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      record: { id: 'fu_001', tenantId: 'demo-tenant-001', status: 'in_progress' },
-    });
-    expect(routeMocks.repository.transitionFollowUpTask).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      id: 'fu_001',
-      nextStatus: 'in_progress',
-      actorId: 'demo-user-admin',
-      occurredAt: expect.any(String),
-    });
-    expect(routeMocks.checkTenantQuotaForCreate).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      resource: 'follow_up',
-      resourceId: 'fu_001',
-      result: 'allowed',
-      tenantId: 'demo-tenant-001',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('随访非法流转返回 409 并记录拒绝审计', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.repository.transitionFollowUpTask.mockResolvedValueOnce({
-      kind: 'invalid_transition',
-      resourceId: 'fu_001',
-      from: 'completed',
-      to: 'in_progress',
-    });
-
-    const response = await followupsPatch(
-      new Request('http://localhost/api/institution/followups', {
-        method: 'PATCH',
-        body: JSON.stringify(validFollowUpTransitionPayload),
-      }),
-    );
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({ error: '随访状态不允许这样流转' });
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      resource: 'follow_up',
-      resourceId: 'fu_001',
-      result: 'denied',
-      reason: 'invalid_transition',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('随访状态冲突返回 409 并记录拒绝审计', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.repository.transitionFollowUpTask.mockResolvedValueOnce({
-      kind: 'conflict',
-      resourceId: 'fu_001',
-      reason: 'stale_transition',
-    });
-
-    const response = await followupsPatch(
-      new Request('http://localhost/api/institution/followups', {
-        method: 'PATCH',
-        body: JSON.stringify(validFollowUpTransitionPayload),
-      }),
-    );
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({ error: '随访状态已变化，请刷新后重试' });
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      resource: 'follow_up',
-      resourceId: 'fu_001',
-      result: 'denied',
-      reason: 'stale_transition',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('机构账号手动创建随访成功 201', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await followupsPost(
-      new Request('http://localhost/api/institution/followups', {
-        method: 'POST',
-        body: JSON.stringify(validCreateFollowUpPayload),
-      }),
-    );
-
-    expect(response.status).toBe(201);
-    await expect(response.json()).resolves.toMatchObject({
-      record: { id: 'fu_created', tenantId: 'demo-tenant-001' },
-    });
-    expect(routeMocks.repository.createManualFollowUpTask).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: 'demo-tenant-001',
-        customerId: 'cust_001',
-        stage: '术后回访',
-        status: 'scheduled',
-        riskLevel: 'normal',
-      }),
-    );
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      resource: 'follow_up',
-      resourceId: 'fu_created',
-      result: 'allowed',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('未登录创建随访返回 401', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
-
-    const response = await followupsPost(
-      new Request('http://localhost/api/institution/followups', {
-        method: 'POST',
-        body: JSON.stringify(validCreateFollowUpPayload),
-      }),
-    );
-
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({ error: '请先登录' });
-    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-  });
-
-  it('平台上下文创建随访返回 403 且不调用写入', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
-
-    const response = await followupsPost(
-      new Request('http://localhost/api/institution/followups', {
-        method: 'POST',
-        body: JSON.stringify(validCreateFollowUpPayload),
-      }),
-    );
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
-    expect(routeMocks.repository.createManualFollowUpTask).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      result: 'denied',
-      reason: 'role_denied',
-    }));
-  });
-
-  it('跨租户客户写入随访被隔离拒绝', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
-      ...tenantContext,
-      tenantId: 'other-tenant-002',
-    });
-    routeMocks.repository.createManualFollowUpTask.mockResolvedValueOnce({
-      kind: 'customer_not_found',
-    });
-
-    const response = await followupsPost(
-      new Request('http://localhost/api/institution/followups', {
-        method: 'POST',
-        body: JSON.stringify(validCreateFollowUpPayload),
-      }),
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-  });
-
-  it('无效 customerId 创建随访返回 404', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.repository.createManualFollowUpTask.mockResolvedValueOnce({
-      kind: 'customer_not_found',
-    });
-
-    const response = await followupsPost(
-      new Request('http://localhost/api/institution/followups', {
-        method: 'POST',
-        body: JSON.stringify(validCreateFollowUpPayload),
-      }),
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-  });
-
-  it('体验版套餐机构创建预约成功（trial-care quota 已配置）', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
-      ...tenantContext,
-      tenantId: 'trial-tenant-test',
-    });
-    routeMocks.checkTenantQuotaForCreate.mockResolvedValueOnce({
-      allowed: true,
-      current: 5,
-      limit: 120,
-      resource: 'appointments',
-    });
-
-    const response = await appointmentsPost(
-      new Request('http://localhost/api/institution/appointments', {
-        method: 'POST',
-        body: JSON.stringify(validCreateAppointmentPayload),
-      }),
-    );
-
-    expect(response.status).toBe(201);
-    expect(routeMocks.checkTenantQuotaForCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ resource: 'appointments' }),
-    );
-    expect(routeMocks.repository.createAppointment).toHaveBeenCalled();
+      for (const forbiddenSource of [
+        'request.json',
+        'params',
+        'access-context',
+        'getDemoAccessContextFromRequest',
+        'getDatabase',
+        'tenant-business',
+        'repository',
+        'quota',
+        'audit',
+        'timeline',
+        'parse',
+        'globalThis',
+        'crypto',
+        'new URL',
+        'searchParams',
+        'fetch',
+      ]) {
+        expect(route.source).not.toContain(forbiddenSource);
+      }
+    }
   });
 });
