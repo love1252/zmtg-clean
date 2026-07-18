@@ -77,6 +77,14 @@ function careCardStatusLabel(status: WorkbenchCareCardViewModel['status']): stri
   }
 }
 
+function careCardAccessibleName(card: WorkbenchCareCardViewModel): string {
+  if (card.status === 'ready') {
+    return `${card.title}，数据可用，${card.count}项，查看详情`;
+  }
+
+  return `${card.title}，已确认暂无待办，查看详情`;
+}
+
 function lifecycleStatusLabel(status: WorkbenchLifecycleItemViewModel['status']): string {
   switch (status) {
     case 'ready':
@@ -157,7 +165,7 @@ function CareCard({ card }: Readonly<{ card: WorkbenchCareCardViewModel }>) {
     return (
       <li data-card-status={card.status} className="min-w-0">
         <a
-          aria-label={`${card.title}详情`}
+          aria-label={careCardAccessibleName(card)}
           href={card.canonicalHref}
           className="group block h-full min-h-40 rounded-[24px] border border-white/90 bg-white/86 p-4 shadow-[0_16px_42px_rgba(32,61,104,0.08)] transition hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-[0_20px_52px_rgba(32,61,104,0.13)] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 sm:p-5"
         >
