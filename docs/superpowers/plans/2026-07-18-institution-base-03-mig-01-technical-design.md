@@ -7,9 +7,10 @@
 | 项目 | 内容 |
 | --- | --- |
 | 任务编号 | `BASE-03` |
+| 一致性修订 | `BASE-DESIGN-R2` |
 | 唯一迁移单元 | `MIG-01` |
 | 文档日期 | 2026-07-18 |
-| 设计基线 | `origin/main` / `4fa0706d74a400055a5259ac3a13eba91d41bd1a` |
+| 设计基线 | `origin/main` / `448734bc2cdacdc5b9839c125ed18661cc4b6abd` |
 | 任务性质 | docs-only 技术设计与数据变更申请 |
 | 目标 | 建立可证明的 `tenantId + institutionId` 数据归属、机构运行上下文和机构级审计持久化基础 |
 | 非目标 | 页面、API、业务服务、真实 migration、外部系统、凭证、生产放行 |
@@ -24,6 +25,7 @@
 6. 机构业务表完成迁移后，正式 reader、writer、唯一约束、外键和审计查询都使用 `tenantId + institutionId`；tenant-only 路径不得继续承载机构端正式能力。
 7. `audit_events.institution_id` 保持可空，并增加受控机构归因分类，以区分平台/租户事件、已验证机构事件和无法归属的 legacy 事件；新的机构业务事件必须由机构级审计写入口强制写入有效机构锚点。
 8. 默认时区为 `Asia/Shanghai`、默认币种为 `CNY`，但必须记录为显式默认来源；不得把默认值伪装成机构人工配置。
+9. `institution_scopes.revision` 是机构锚点授权语义的唯一持久化 revision：创建时显式写 `1`，所有 active/suspended 或其他影响授权语义的变更都必须执行 expected-revision CAS 并严格单调递增；禁止默认值、回退、复用和 `active → suspended → active` 的 ABA。
 
 ## 三、当前事实基线
 
@@ -88,6 +90,7 @@
 | `tenant_id` | 非空，引用 `tenants.id` |
 | `institution_id` | 非空、稳定；只在当前 tenant 内有意义 |
 | `status` | `active \| suspended`；不得用删除表示停用 |
+| `revision` | `integer NOT NULL CHECK (revision > 0)` 且无数据库 default；A2 创建锚点时显式写 `1`，后续授权语义变更只允许 expected-revision CAS 后加一 |
 | `provisioning_source` | `formal_onboarding \| approved_migration_manifest` |
 | `provisioning_reference_digest` | 非空低敏摘要，引用获批来源，不保存合同正文或外部 payload |
 | `approved_by / approved_at` | 非空人工批准证据 |
@@ -95,9 +98,11 @@
 
 主键固定为 `(tenant_id, institution_id)`，不建立仅按 `institution_id` 的全局唯一假设。首批行只能来自逐 tenant 审批的 provisioning manifest。manifest 必须由正式机构开户/合同侧受控记录或经平台管理员复核的迁移清单形成，至少绑定 tenant、institution、来源记录摘要、批准人、批准时间和清单版本；账号绑定、负责人、客户记录或“整条关系一致”都不能自行创建锚点。
 
+`revision` 不允许由 insert default、trigger、时间戳或客户端补齐。A2 对每个获批锚点显式写入 manifest 已批准的 `status` 和 `revision=1`；重复执行不得用 upsert 覆盖既有行，完全一致的既有行只作 no-op，既有行与 manifest、状态或 revision 不一致时立即停止。`provisioning_source`、`provisioning_reference_digest`、`approved_by`、`approved_at` 和创建证据写入后不可覆盖；纠错必须另行设计追加式证据。后续任何能改变锚点授权结论的持久化 mutation——包括 active/suspended 切换及未来新增的授权相关字段——都必须带 `expectedRevision`，以 `WHERE tenant_id=? AND institution_id=? AND revision=?` 原子更新并写 `revision=expectedRevision+1`。无实际变化的命令不得写库；整数上溢、旧 revision、批量无条件更新、revision 递减或复用全部 fail-closed。`active → suspended → active` 必须形成 `1 → 2 → 3`，不得恢复旧值造成 ABA。
+
 `institution_scopes` 与 manifest 是机构存在和可回填历史记录的必要条件，不是当前成员或 action 的授权证据。任何正式 reader/write 不得仅因锚点或 manifest 存在而放行；必须由 BASE-02B 提供来源证明和 fresh active membership，先经 institution-scoped guard，再在目标对象上经 object-scoped guard。
 
-`auth_account_institution_bindings` 只有在 MIG-01A2 已按获批 manifest 写入全部机构锚点后，才增加 `(tenant_id, institution_id)` 指向 `institution_scopes` 的 `NOT VALID` 复合 FK。BASE-02B 只有在 active 账号绑定指向 active 机构锚点时才能签发机构 `AccessContext`；缺锚点、停用、冲突或过期一律 fail-closed。
+`auth_account_institution_bindings` 只有在 MIG-01A2 已按获批 manifest 写入全部机构锚点后，才增加 `(tenant_id, institution_id)` 指向 `institution_scopes` 的 `NOT VALID` 复合 FK。BASE-02B 只有在 active 账号绑定指向 active 机构锚点时才能签发机构 `AccessContext`；anchor provider 必须从权威行读取正整数 `revision`，在 owner 内通过获批的 guard-reference issuer 将 `(tenant_id, institution_id, revision)` 签发为 opaque `arv_v1_kN_<base64url>`，不得把原始 revision、业务主键或 PII 输出给 guard、页面或审计。缺锚点、停用、revision 不可验、签发依赖不可用、冲突或过期一律 fail-closed。
 
 ### 5.2 机构运行上下文版本
 
@@ -227,9 +232,9 @@ audit_resource | attributable_count | legacy_count | conflict_count
 
 ### 7.2 MIG-01A：expand 与锚点 provisioning
 
-- `MIG-01A1` 先新增 `institution_scopes`、机构运行上下文 head/version 表，并为缺失业务表新增可空 `institution_id`。
+- `MIG-01A1` 先新增 `institution_scopes`、机构运行上下文 head/version 表，并为缺失业务表新增可空 `institution_id`；`institution_scopes.revision` 必须精确为 `integer NOT NULL CHECK (revision > 0)` 且没有数据库 default，schema、SQL、Drizzle metadata 和 schema tests 必须一致。
 - `MIG-01A1` 为审计事件新增可空 `institution_id` 和可空 `institution_attribution`；存量在回填前不得被默认分类。
-- `MIG-01A2` 在独立事务按获批 provisioning manifest 写入 `institution_scopes`、product-default version 1 和 context head；manifest 未获批或锚点计数不一致即停止。
+- `MIG-01A2` 在独立事务按获批 provisioning manifest 写入 `institution_scopes`、product-default version 1 和 context head；每个 scope 显式写 manifest 已批准的 `status` 与 `revision=1`，禁止通过 default 或覆盖式 upsert 补值；manifest 未获批、既有行不一致、revision 非 `1` 或锚点计数不一致即停止。
 - 只有 MIG-01A2 锚点就绪后，才创建复合唯一键、辅助索引和 `NOT VALID` 锚点/业务外键；这样 `NOT VALID` 对新增行的即时检查不会因空锚点阻断 BASE-02 双写。
 - 应用 schema、SQL、Drizzle metadata 和 schema tests 必须在同一审批单元保持一致。
 - 不设置默认 institution，不执行回填，不收紧非空。
@@ -238,7 +243,7 @@ audit_resource | attributable_count | legacy_count | conflict_count
 
 - 先形成目标表全部 writer 清单，覆盖现有 API、repository、导入、任务、seed、维护脚本、测试 fixture 和可能仍运行的旧实例；任何未纳入清单的 writer 都阻断回填。
 - 所有正式 reader/write 都只从已验证服务端 `AccessContext` 取得 `tenantId + institutionId`：必须先由 BASE-02B 证明来源并确认 fresh active membership，再经过 institution-scoped guard；每个客户、任务、审计或其他目标还必须通过自己的 object-scoped guard。`institution_scopes`、provisioning manifest 与账号绑定只提供机构存在性或回填锚点，不能单独授权任何 action。
-- BASE-02B 只在 active account binding 指向 active `institution_scopes` 时签发机构上下文；绑定本身不能创建机构锚点。
+- BASE-02B 只在 active account binding 指向 active `institution_scopes` 时签发机构上下文；anchor provider 必须读取当前 scope revision，并由专用 server-only guard-reference issuer 生成 opaque `arv`，原始 scope revision 不离开 owner。绑定本身不能创建机构锚点；issuer/key-ring/crypto 依赖不可用时返回 unavailable，不得复用旧 `arv`、raw ID 或历史缓存。
 - 客户端提交的 institution、当前负责人或对象显示字段不能覆盖服务端 scope。
 - 父子对象在写入事务内重新验证机构一致性。
 - 机构审计写入与高风险业务写入保持事务一致；审计不可写时 fail-closed。
@@ -295,6 +300,8 @@ customers
 - 任何核心业务目标表存在无法唯一归属的事实；已分类的合法平台/tenant 审计及 `legacy_unattributed` 审计除外。
 - 已有 institution 与权威父事实冲突。
 - 复合外键验证失败、产生孤儿记录或回填前后行数不守恒。
+- `institution_scopes.revision` 出现 default、非正数、缺失、递减、复用、上溢、非 CAS writer，或无法证明 active/suspended 往返没有 ABA。
+- anchor provider 无法从当前持久化 revision 签发/验证 opaque `arv`，或 guard-reference issuer/key-ring 依赖不可用却尝试降级到 raw ID、旧 `arv`、其他用途密钥或 401。
 - runtime 尚未稳定双写，或仍允许客户端控制 institution。
 - writer 清单不完整、仍有 tenant-only 实例写入、增量高水位后出现新空值，或无法建立 enforce 静默窗口/写入栅栏。
 - 最小审计兼容 writer 未覆盖全部审计调用方，或高水位后出现 attribution 空值/非法 shape。
@@ -311,6 +318,8 @@ customers
 - 重复执行预检/回填不产生第二次变更。
 - 同一 tenant 两个 institution 使用相同业务局部 ID 时不串线。
 - provisioning manifest 之外的 institution 无法创建锚点，账号 binding 不能指向缺失/停用锚点。
+- `institution_scopes.revision` 无 default、只能为正整数；A2 新建锚点全部显式为 `1` 且 status 与获批 manifest 一致，重复 A2 不覆盖既有行。
+- 相同 expected revision 的并发 mutation 只有一个成功；stale expected revision 被拒绝，成功 mutation 每次只加一，`active → suspended → active` 产生不同 revision 且旧 `arv` 不能重新生效。
 - 跨机构客户、预约、治疗摘要、任务和随访子事实关联被数据库拒绝。
 - 草稿引用跨机构模板在预检中被识别并阻断；正式模板引用在独立数据变更获批并交付前保持未发布。
 - `NOT VALID → VALIDATE → NOT NULL` 顺序可复现，中间版本保持可运行。
@@ -323,6 +332,7 @@ customers
 - 管理员、运营、咨询师、客服只读取当前机构及各自正式数据范围。
 - tenant-only repository 不得用于机构页面、API 或聚合。
 - 父对象属于其他机构时统一返回无权限或不存在，不泄露对象存在性。
+- anchor provider 只从当前 `institution_scopes.revision` 签发 opaque `arv`；raw revision、业务主键、PII、key material 不进入 guard 输出或审计，issuer/key-ring 不可用映射为 unavailable。
 
 ### 9.3 审计
 
@@ -372,13 +382,15 @@ git diff --check
 5. 四角色和同租户双机构测试通过。
 6. 隔离数据库升级、回填、enforce、回滚演练通过。
 7. `.env*` 排除的零信任复核、TypeScript、ESLint 和 diff-check 通过。
-8. 人工确认实际 migration、回滚窗口和上线顺序。
+8. scope revision 的无 default/正数约束、A2 显式 `1`、CAS 单调递增、ABA 拒绝和 `arv` 失效测试全部通过。
+9. 人工确认实际 migration、回滚窗口和上线顺序。
 
 代码合并不等于导航发布。客户中心、工作台、预约随访、会话、知识库、经营分析和管理中心仍须分别满足自身 capability 门禁。
 
 ### 10.2 回滚原则
 
 - `expand` 阶段在双写开始前可回滚应用版本；新增可空列和表先保留，不执行破坏性 drop。
+- `institution_scopes` 一旦写入不得通过回滚重置、递减或复用 revision；撤销一次状态变化只能执行新的 expected-revision CAS 补偿 mutation，并产生更大的 revision。旧应用若不能读取并维护 revision，必须保持写入冻结，不能回滚上线。
 - 双写一旦开始，禁止回滚到 tenant-only writer。确需应用回滚时先冻结所有目标表写入，回滚到仍支持 institution 双写的兼容版本。
 - 双写或回填失败时关闭相关 capability、冻结或维持双写、停止新批次，保留证据并修复来源；不得把已验证 institution 清空。
 - `enforce` 前保留完整预检和回填快照摘要；约束失败只撤销约束切换，不删除业务记录。
@@ -389,15 +401,17 @@ git diff --check
 
 本文通过后仍需按顺序分别授权：
 
-1. `MIG-01A`：expand schema/migration。
-2. `BASE-02` 后续 runtime 切片：机构锚点绑定验证、全部 writer 盘点/双写、复合归属校验与 capability-off 验收。
-3. 最小审计兼容 writer：扩展事件 DTO/mapper/repository 和全部调用方，只解决 MIG-01 期间新事件 institution/attribution 连续写入，不提前开放 BASE-04 页面能力。
-4. 模板保护切片：冻结 `templateId` 草稿 writer，或交付临时同 scope fail-closed guard；正式模板归属/版本化模型另提数据变更申请，由总协调台分配唯一 migration 单元，不得并入 MIG-02。
-5. `MIG-01B`：确定性回填、审计分类、高水位追赶和冲突清零。
-6. `MIG-01C`：外键验证、业务 institution 非空、audit attribution 非空和 shape 约束收紧。
-7. `BASE-04`：机构级审计 reader、正式 writer 治理、角色范围和低敏审计策略。
-8. `BASE-05`：统一页面状态和局部失效。
-9. 各栏目在最新 `main` 上重新同步并执行自己的机构隔离验收。
+1. `MIG-01A1`：expand schema/migration，精确包含 scope revision 的无 default、正数约束及 schema/metadata/tests 一致性；不含任何真实 secret 或 runtime issuer。
+2. `MIG-01A2`：按获批 manifest 显式 provision 已批准的 status 与 `revision=1`，验证计数和重复执行停止条件；不得覆盖既有锚点。
+3. `BASE-02B` 后续 runtime 切片：机构锚点绑定验证、scope revision CAS reader、anchor provider、guard-reference issuer/verifier 与 `provenance_unavailable` 映射；issuer runtime 和专用 server-only key-ring/secret/config 必须分别取得精确文件及配置授权，真实 key material 不进入本文或 migration PR。
+4. `BASE-02` 其余 runtime 切片：全部 writer 盘点/双写、复合归属校验与 capability-off 验收。
+5. 最小审计兼容 writer：扩展事件 DTO/mapper/repository 和全部调用方，只解决 MIG-01 期间新事件 institution/attribution 连续写入，不提前开放 BASE-04 页面能力。
+6. 模板保护切片：冻结 `templateId` 草稿 writer，或交付临时同 scope fail-closed guard；正式模板归属/版本化模型另提数据变更申请，由总协调台分配唯一 migration 单元，不得并入 MIG-02。
+7. `MIG-01B`：确定性回填、审计分类、高水位追赶和冲突清零。
+8. `MIG-01C`：外键验证、业务 institution 非空、audit attribution 非空和 shape 约束收紧。
+9. `BASE-04`：机构级审计 reader、正式 writer 治理、角色范围和低敏审计策略。
+10. `BASE-05`：统一页面状态和局部失效。
+11. 各栏目在最新 `main` 上重新同步并执行自己的机构隔离验收。
 
 `MIG-01` 是现有客户、预约、治疗、随访任务及既有随访子事实 institution 归属/非空回填的唯一所有者；本结论取代 Care 计划中把这些 institution 回填留给 MIG-02 的旧表述。`MIG-02` 只有在 `MIG-01` 完成后才能验证并消费其结果，再处理客户稳定引用、责任归属、认领、结构化结果和新的线性路径最小持久化，不得二次推断或覆盖 institution。消息模板正式归属/版本化引用不属于 MIG-02，必须另提数据变更申请并由总协调台分配唯一 migration 单元。`MIG-03` 至 `MIG-06` 继续严格串行。任何外部集成仍进入独立串行队列，不因本文获得授权。
 
@@ -410,6 +424,7 @@ git diff --check
 - MIG-01 的事实基线、目标表、目标约束和唯一顺序已明确；
 - 历史归属采用确定性证据，不允许默认机构或人工猜测；
 - 机构运行上下文、核心业务事实和机构级审计的持久化边界已冻结；
+- 机构锚点 revision 的无 default、显式初值、expected-revision CAS、单调递增和禁止 ABA 边界已冻结；
 - expand、双写、回填、enforce、停止条件、验证和回滚已形成可审查方案；
 - 后续实际 schema、migration 和 runtime 仍处于未授权状态。
 
