@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import {
-  handleTenantBusinessListRequest,
   handleTenantBusinessMutationRequest,
 } from '@/modules/institution/server/tenant-business-api';
-import { parseFollowUpTaskListQuery } from '@/modules/institution/server/follow-up-task-query-parser';
 import { runTenantBusinessAuditTransaction } from '@/modules/institution/server/tenant-business-audit-transaction';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 import {
@@ -22,35 +20,17 @@ async function readJsonBody(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
-  const context = getDemoAccessContextFromRequest(request);
-  if (!context) {
-    return NextResponse.json({ error: '请先登录' }, { status: 401 });
-  }
+const followUpListReadDisabled = Object.freeze({
+  code: 'follow_up_list_capability_disabled',
+  error: '随访列表能力暂未启用',
+});
 
-  const parsedQuery = parseFollowUpTaskListQuery(new URL(request.url).searchParams);
-  if (!parsedQuery.ok) {
-    return NextResponse.json({ error: parsedQuery.error }, { status: 400 });
-  }
-
-  try {
-    const db = getDatabase();
-    const repository = createTenantBusinessRepository(db);
-    const auditRepository = createAuditEventRepository(db);
-
-    return await handleTenantBusinessListRequest({
-      context,
-      resource: 'follow_up',
-      list: (tenantId) =>
-        repository.listFollowUpTasksByTenant({
-          tenantId,
-          filters: parsedQuery.filters,
-        }),
-      auditRepository,
-    });
-  } catch {
-    return NextResponse.json({ error: '数据服务暂时不可用' }, { status: 503 });
-  }
+/**
+ * No request data is inspected until an institution-scoped server guard and reader exist.
+ * This deliberately avoids demo-session, parser, database, repository, and audit side effects.
+ */
+export async function GET(_request: Request) {
+  return NextResponse.json(followUpListReadDisabled, { status: 503 });
 }
 
 export async function PATCH(request: Request) {
