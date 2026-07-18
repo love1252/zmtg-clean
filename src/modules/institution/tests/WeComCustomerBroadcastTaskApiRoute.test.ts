@@ -1,400 +1,192 @@
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({
-  getContext: vi.fn(),
-  evaluatePreflight: vi.fn(),
-  issueConfirmation: vi.fn(),
-  rejectExecution: vi.fn(),
-  getDatabase: vi.fn(),
+const downstreams = vi.hoisted(() => ({
   createOutcomeRepository: vi.fn(),
+  evaluatePreflight: vi.fn(),
   findOutcomeScope: vi.fn(),
+  getDatabase: vi.fn(),
+  getDemoAccessContextFromRequest: vi.fn(),
+  issueConfirmation: vi.fn(),
   markManualReview: vi.fn(),
+  rejectExecution: vi.fn(),
 }));
 
-vi.mock('@/modules/security/server/access-context', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  getDemoAccessContextFromRequest: mocks.getContext,
+vi.mock('@/modules/security/server/access-context', () => ({
+  getDemoAccessContextFromRequest: downstreams.getDemoAccessContextFromRequest,
 }));
-vi.mock(
-  '@/modules/institution/server/wecom-real-send-execution-shell-service',
-  async (importOriginal) => ({
-    ...(await importOriginal<object>()),
-    evaluateBroadcastTaskPreflight: mocks.evaluatePreflight,
-    issueBroadcastTaskConfirmation: mocks.issueConfirmation,
-    rejectBroadcastTaskExecutionBecauseProviderDisabled: mocks.rejectExecution,
-  }),
-);
-vi.mock('@/server/db/client', () => ({ getDatabase: mocks.getDatabase }));
-vi.mock(
-  '@/modules/institution/server/wecom-customer-broadcast-task-outcome-repository',
-  () => ({
-    createWeComCustomerBroadcastTaskOutcomeRepository: mocks.createOutcomeRepository,
-    findWeComCustomerBroadcastTaskOutcomeScopeForDraft: mocks.findOutcomeScope,
-  }),
-);
-vi.mock(
-  '@/modules/institution/server/wecom-customer-broadcast-task-outcome-service',
-  () => ({ markWeComCustomerBroadcastTaskManualReview: mocks.markManualReview }),
-);
+vi.mock('@/modules/institution/server/wecom-real-send-execution-shell-service', () => ({
+  evaluateBroadcastTaskPreflight: downstreams.evaluatePreflight,
+  issueBroadcastTaskConfirmation: downstreams.issueConfirmation,
+  rejectBroadcastTaskExecutionBecauseProviderDisabled: downstreams.rejectExecution,
+}));
+vi.mock('@/server/db/client', () => ({ getDatabase: downstreams.getDatabase }));
+vi.mock('@/modules/institution/server/wecom-customer-broadcast-task-outcome-repository', () => ({
+  createWeComCustomerBroadcastTaskOutcomeRepository: downstreams.createOutcomeRepository,
+  findWeComCustomerBroadcastTaskOutcomeScopeForDraft: downstreams.findOutcomeScope,
+}));
+vi.mock('@/modules/institution/server/wecom-customer-broadcast-task-outcome-service', () => ({
+  markWeComCustomerBroadcastTaskManualReview: downstreams.markManualReview,
+}));
 
 import {
   GET,
   POST,
 } from '@/app/api/institution/followup-message-drafts/[draftId]/wecom-customer-broadcast-task/route';
-import type { AccessContext } from '@/modules/security/domain/access-control';
 
-const adminContext: AccessContext = {
-  userId: 'admin-a',
-  role: 'tenant_admin',
-  scope: 'tenant',
-  tenantId: 'tenant-a',
-  institutionId: 'institution-a',
-  source: 'server_session',
-};
-const params = { params: Promise.resolve({ draftId: 'draft-a' }) };
+const routePath =
+  'src/app/api/institution/followup-message-drafts/[draftId]/wecom-customer-broadcast-task/route.ts';
+const routeSource = readFileSync(resolve(process.cwd(), routePath), 'utf8');
 const endpoint =
-  'http://localhost/api/institution/followup-message-drafts/draft-a/wecom-customer-broadcast-task';
+  'http://localhost/api/institution/followup-message-drafts/draft-input-secret/wecom-customer-broadcast-task';
+const capabilityDisabledPayload = {
+  code: 'capability_disabled',
+  error: '企业微信客户群发任务能力当前未启用',
+} as const;
+const forbiddenResponseKeys = [
+  'audit',
+  'confirmationToken',
+  'customerId',
+  'draftId',
+  'manualReviewRequired',
+  'mockDemo',
+  'operationRef',
+  'preflight',
+  'provider',
+  'ready_no_send',
+  'result',
+  'status',
+] as const;
 
-function getRequest() {
-  return new Request(endpoint);
+function context(draftId = 'draft-input-secret') {
+  return { params: Promise.resolve({ draftId }) };
 }
 
-function postRequest(body: unknown, headers?: HeadersInit) {
-  return new Request(endpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  });
+function hostileInput<T>(label: string) {
+  let trapCount = 0;
+  const value = new Proxy(Object.create(null), {
+    get() {
+      trapCount += 1;
+      throw new Error(`${label} must not be read`);
+    },
+    getOwnPropertyDescriptor() {
+      trapCount += 1;
+      throw new Error(`${label} must not be inspected`);
+    },
+    has() {
+      trapCount += 1;
+      throw new Error(`${label} must not be inspected`);
+    },
+    ownKeys() {
+      trapCount += 1;
+      throw new Error(`${label} must not be enumerated`);
+    },
+  }) as T;
+  return { value, trapCount: () => trapCount };
 }
 
-function expectNoStore(response: Response) {
-  expect(response.headers.get('cache-control')).toContain('no-store');
+async function expectCapabilityDisabled(response: Response, secret = '') {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  const payload = await response.json();
+  expect(payload).toEqual(capabilityDisabledPayload);
+  for (const key of forbiddenResponseKeys) expect(payload).not.toHaveProperty(key);
+  if (secret) expect(JSON.stringify(payload)).not.toContain(secret);
+}
+
+function expectDownstreamsIdle() {
+  for (const dependency of Object.values(downstreams)) {
+    expect(dependency).not.toHaveBeenCalled();
+  }
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getContext.mockReturnValue(adminContext);
-  mocks.evaluatePreflight.mockResolvedValue({
-    status: 'blocked',
-    proofKind: 'customer_broadcast_task',
-    directSend: false,
-    requiresEmployeeConfirmation: true,
-    reasonCode: 'proof_environment_unavailable',
-  });
-  mocks.issueConfirmation.mockResolvedValue({
-    kind: 'blocked',
-    reasonCode: 'proof_environment_unavailable',
-  });
-  mocks.rejectExecution.mockImplementation(({ operationRef }) => ({
-    kind: 'blocked',
-    operationRef,
-    reasonCode: 'provider_disabled',
-  }));
-  mocks.getDatabase.mockReturnValue({});
-  mocks.createOutcomeRepository.mockReturnValue({});
-  mocks.findOutcomeScope.mockResolvedValue(null);
-  mocks.markManualReview.mockResolvedValue({
-    kind: 'recorded',
-    reconciliationState: 'manual_review_required',
-    manualReviewRequired: true,
-    completedCountDelta: 0,
-    automaticRetryAllowed: false,
-  });
 });
 
-describe('WeCom customer broadcast task API shell', () => {
-  it('GET 对未登录和非正式会话分别返回 401/403，不进入 preflight service', async () => {
-    mocks.getContext.mockReturnValueOnce(null);
-    const response401 = await GET(getRequest(), params);
-    expect(response401.status).toBe(401);
-    expectNoStore(response401);
-
-    mocks.getContext.mockReturnValue({ ...adminContext, source: 'demo_session' });
-    const response403 = await GET(getRequest(), params);
-    expect(response403.status).toBe(403);
-    expectNoStore(response403);
-    expect(mocks.evaluatePreflight).not.toHaveBeenCalled();
+describe('WeCom customer broadcast task API capability-off route', () => {
+  it.each([
+    ['GET 普通输入', () => GET(new Request(endpoint, {
+      headers: { cookie: 'demo_session=forged', 'x-institution-id': 'forged-institution' },
+    }), context())],
+    ['GET 非法参数', () => GET(new Request(`${endpoint}?draftId=forged`), context(''))],
+    ['POST 普通输入', () => POST(new Request(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: 'demo_session=forged' },
+      body: JSON.stringify({ action: 'issue_confirmation', secret: 'body-input-secret' }),
+    }), context())],
+    ['POST 畸形输入', () => POST(new Request(endpoint, {
+      method: 'POST', body: '{not-json', headers: { 'content-type': 'application/json' },
+    }), context(''))],
+    ['POST 超大输入', () => POST(new Request(endpoint, {
+      method: 'POST', body: 'x'.repeat(8_192), headers: { 'content-length': '8192' },
+    }), context('cross-scope-draft'))],
+  ])('%s 固定返回低敏 503，且不触发下游', async (_name, invoke) => {
+    await expectCapabilityDisabled(await invoke(), 'body-input-secret');
+    expectDownstreamsIdle();
   });
 
-  it('GET 不读取 body，只返回低敏 no-store preflight', async () => {
-    const request = getRequest();
+  it.each([
+    ['GET', GET],
+    ['POST', POST],
+  ] as const)('%s 对 hostile Request 与 params 零读取、零副作用', async (_method, handler) => {
+    const request = hostileInput<Request>('request');
+    const routeContext = hostileInput<ReturnType<typeof context>>('params');
+
+    await expectCapabilityDisabled(await handler(request.value, routeContext.value));
+
+    expect(request.trapCount()).toBe(0);
+    expect(routeContext.trapCount()).toBe(0);
+    expectDownstreamsIdle();
+  });
+
+  it('不读取 body、不出网，也不回显 URL、参数或请求内容', async () => {
+    const secret = 'must-not-echo-opaque-input';
+    const request = new Request(`${endpoint}?input=${secret}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: secret, confirmationToken: secret }),
+    });
     const text = vi.spyOn(request, 'text');
-    const response = await GET(request, params);
-
-    expect(response.status).toBe(200);
-    expectNoStore(response);
-    expect(text).not.toHaveBeenCalled();
-    expect(mocks.evaluatePreflight).toHaveBeenCalledWith(expect.objectContaining({
-      context: adminContext,
-      draftId: 'draft-a',
-    }));
-    expect(await response.json()).toEqual({
-      status: 'blocked',
-      proofKind: 'customer_broadcast_task',
-      directSend: false,
-      requiresEmployeeConfirmation: true,
-      reasonCode: 'proof_environment_unavailable',
-    });
-  });
-
-  it('POST 401/403 在读取 body 前返回，且不进入 shell', async () => {
-    mocks.getContext.mockReturnValueOnce(null);
-    const unauthenticated = postRequest({ action: 'issue_confirmation' });
-    const unauthenticatedText = vi.spyOn(unauthenticated, 'text');
-    const response401 = await POST(unauthenticated, params);
-    expect(response401.status).toBe(401);
-    expectNoStore(response401);
-    expect(unauthenticatedText).not.toHaveBeenCalled();
-
-    for (const deniedContext of [
-      { ...adminContext, source: 'demo_session' as const },
-      { ...adminContext, role: 'tenant_operator' as const },
-      { ...adminContext, institutionId: null },
-      { ...adminContext, source: undefined } as unknown as AccessContext,
-    ]) {
-      mocks.getContext.mockReturnValue(deniedContext);
-      const forbidden = postRequest({ action: 'issue_confirmation' });
-      const forbiddenText = vi.spyOn(forbidden, 'text');
-      const response403 = await POST(forbidden, params);
-      expect(response403.status).toBe(403);
-      expectNoStore(response403);
-      expect(forbiddenText).not.toHaveBeenCalled();
-    }
-    expect(mocks.issueConfirmation).not.toHaveBeenCalled();
-    expect(mocks.rejectExecution).not.toHaveBeenCalled();
-  });
-
-  it('POST 仅接受 application/json media type，检查发生在读取 body 前', async () => {
-    for (const contentType of ['text/plain', 'application/x-www-form-urlencoded', '']) {
-      const request = postRequest(
-        { action: 'issue_confirmation' },
-        { 'content-type': contentType },
-      );
-      const text = vi.spyOn(request, 'text');
-      const response = await POST(request, params);
-      expect(response.status).toBe(415);
-      expectNoStore(response);
-      expect(text).not.toHaveBeenCalled();
-    }
-
-    const charsetJson = postRequest(
-      { action: 'issue_confirmation' },
-      { 'content-type': 'application/json; charset=utf-8' },
-    );
-    expect((await POST(charsetJson, params)).status).toBe(503);
-  });
-
-  it('POST 执行 Content-Length 与实际 UTF-8 1024 bytes 双重上限', async () => {
-    const headerOversized = postRequest(
-      { action: 'issue_confirmation' },
-      { 'content-length': '1025' },
-    );
-    const headerText = vi.spyOn(headerOversized, 'text');
-    const headerResponse = await POST(headerOversized, params);
-    expect(headerResponse.status).toBe(413);
-    expect(headerText).not.toHaveBeenCalled();
-
-    const utf8Oversized = new Request(endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify('客'.repeat(400)),
-    });
-    expect(utf8Oversized.headers.get('content-length')).toBeNull();
-    const utf8Response = await POST(utf8Oversized, params);
-    expect(utf8Response.status).toBe(413);
-    expectNoStore(utf8Response);
-    expect(mocks.issueConfirmation).not.toHaveBeenCalled();
-  });
-
-  it('exact union 拒绝 malformed JSON、unknown action、缺字段和禁止业务字段', async () => {
-    const malformed = new Request(endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{',
-    });
-    expect((await POST(malformed, params)).status).toBe(400);
-
-    const invalidBodies = [
-      {},
-      { action: 'unknown' },
-      { action: 'issue_confirmation', operationRef: 'wrsproof-a' },
-      { action: 'create_task_once', operationRef: 'wrsproof-a' },
-      { action: 'create_task_once', confirmationToken: 'opaque' },
-      { action: 'mark_manual_review_required', operationRef: 'wrsproof-a' },
-      { action: 'mark_manual_review_required', operationRef: 'wrsproof-a', reasonCode: 'free-text' },
-    ];
-    for (const body of invalidBodies) {
-      expect((await POST(postRequest(body), params)).status).toBe(400);
-    }
-
-    for (const forbiddenField of [
-      'tenantId', 'institutionId', 'customerId', 'content', 'recipient',
-      'external_userid', 'UserID', 'providerUrl', 'secret', 'access_token', 'rawResponse',
-    ]) {
-      const response = await POST(postRequest({
-        action: 'issue_confirmation',
-        [forbiddenField]: 'forbidden',
-      }), params);
-      expect(response.status).toBe(400);
-    }
-    expect(mocks.issueConfirmation).not.toHaveBeenCalled();
-    expect(mocks.rejectExecution).not.toHaveBeenCalled();
-  });
-
-  it('issue_confirmation 仅 action，签发响应 no-store 且低敏', async () => {
-    mocks.issueConfirmation.mockResolvedValue({
-      kind: 'issued',
-      operationRef: 'wrsproof-a',
-      confirmationToken: 'opaque-token-once',
-      expiresAt: '2026-07-12T08:04:00.000Z',
-      idempotent: false,
-    });
-    const response = await POST(postRequest({ action: 'issue_confirmation' }), params);
-    const payload = await response.json();
-
-    expect(response.status).toBe(200);
-    expectNoStore(response);
-    expect(mocks.issueConfirmation).toHaveBeenCalledWith(expect.objectContaining({
-      context: adminContext,
-      draftId: 'draft-a',
-    }));
-    expect(payload).toEqual({
-      status: 'ready',
-      proofKind: 'customer_broadcast_task',
-      directSend: false,
-      requiresEmployeeConfirmation: true,
-      reasonCode: 'confirmation_issued',
-      operationRef: 'wrsproof-a',
-      confirmationToken: 'opaque-token-once',
-      expiresAt: '2026-07-12T08:04:00.000Z',
-    });
-    expect(JSON.stringify(payload)).not.toMatch(
-      /recipient|external_userid|userid|secret|access_token|rawResponse|providerUrl|tenantId|institutionId|customerId|content/iu,
-    );
-  });
-
-  it('existing operation 不重发旧 token', async () => {
-    mocks.issueConfirmation.mockResolvedValue({
-      kind: 'existing',
-      operationRef: 'wrsproof-a',
-      operationStatus: 'requested',
-      idempotent: true,
-    });
-    const response = await POST(postRequest({ action: 'issue_confirmation' }), params);
-    const payload = await response.json();
-
-    expect(response.status).toBe(409);
-    expectNoStore(response);
-    expect(payload).toMatchObject({
-      status: 'blocked',
-      reasonCode: 'confirmation_already_issued',
-      operationStatus: 'requested',
-    });
-    expect(payload).not.toHaveProperty('confirmationToken');
-  });
-
-  it('create_task_once 固定 provider_disabled，不向 shell 传 token、不 consume/attempted', async () => {
-    const response = await POST(postRequest({
-      action: 'create_task_once',
-      operationRef: 'wrsproof-a',
-      confirmationToken: 'opaque-token-once',
-    }), params);
-    const payload = await response.json();
-
-    expect(response.status).toBe(503);
-    expectNoStore(response);
-    expect(mocks.rejectExecution).toHaveBeenCalledWith({ operationRef: 'wrsproof-a' });
-    expect(mocks.issueConfirmation).not.toHaveBeenCalled();
-    expect(payload).toEqual({
-      status: 'blocked',
-      proofKind: 'customer_broadcast_task',
-      directSend: false,
-      requiresEmployeeConfirmation: true,
-      reasonCode: 'provider_disabled',
-      operationRef: 'wrsproof-a',
-    });
-    expect(JSON.stringify(mocks.rejectExecution.mock.calls)).not.toContain('opaque-token-once');
-    expect(payload).not.toHaveProperty('confirmationToken');
-    expect(payload).not.toHaveProperty('operationStatus');
-  });
-
-  it('mark_manual_review_required 只写固定低敏状态，不进入 succeeded 或 completedCount', async () => {
-    const response = await POST(postRequest({
-      action: 'mark_manual_review_required',
-      operationRef: 'wrsproof-a',
-      reasonCode: 'task_digest_not_found',
-    }), params);
-    const payload = await response.json();
-
-    expect(response.status).toBe(200);
-    expectNoStore(response);
-    expect(mocks.getDatabase).toHaveBeenCalledTimes(1);
-    expect(mocks.markManualReview).toHaveBeenCalledWith(expect.objectContaining({
-      tenantId: 'tenant-a',
-      institutionId: 'institution-a',
-      draftId: 'draft-a',
-      operationRef: 'wrsproof-a',
-      reasonCode: 'task_digest_not_found',
-    }));
-    expect(payload).toEqual({
-      status: 'manual_review_required',
-      proofKind: 'customer_broadcast_task',
-      directSend: false,
-      requiresEmployeeConfirmation: true,
-      operationRef: 'wrsproof-a',
-      reasonCode: 'task_digest_not_found',
-      manualReviewRequired: true,
-      automaticRetryAllowed: false,
-      completedCountDelta: 0,
-    });
-    expect(JSON.stringify(payload)).not.toMatch(/succeeded|recipient|external_userid|userid|secret|access_token|rawResponse|providerUrl|content/iu);
-  });
-
-  it('GET/POST 服务异常只返回低敏 no-store 503', async () => {
-    mocks.evaluatePreflight.mockRejectedValueOnce(new Error('sensitive diagnostic'));
-    const getResponse = await GET(getRequest(), params);
-    expect(getResponse.status).toBe(503);
-    expectNoStore(getResponse);
-    expect(JSON.stringify(await getResponse.json())).not.toContain('sensitive diagnostic');
-
-    mocks.issueConfirmation.mockRejectedValueOnce(new Error('sensitive diagnostic'));
-    const postResponse = await POST(postRequest({ action: 'issue_confirmation' }), params);
-    expect(postResponse.status).toBe(503);
-    expectNoStore(postResponse);
-    expect(JSON.stringify(await postResponse.json())).not.toContain('sensitive diagnostic');
-  });
-
-  it('route 不接入 mock/real provider、不实现 consume/网络，服务端 fetch=0', async () => {
-    const source = readFileSync(
-      resolve(
-        dirname(fileURLToPath(import.meta.url)),
-        '../../../app/api/institution/followup-message-drafts/[draftId]/wecom-customer-broadcast-task/route.ts',
-      ),
-      'utf8',
-    );
-    expect(source).not.toMatch(
-      /\bfetch\s*\(|consumeRealSendProofConfirmation|https?:\/\/|process\.env|add_msg_template|wecom-customer-broadcast-task-(?:mock-provider|recipient-resolver)|createWeComCustomerBroadcastTaskMockProvider|createProtectedWeComCustomerBroadcastTaskRecipientResolverMock|executeMockBroadcastTaskForTestOnly|createWeComCustomerBroadcastRecipientBindingRepository|recordTaskCreateAttempted|mockProvider/iu,
-    );
-
+    const json = vi.spyOn(request, 'json');
+    const arrayBuffer = vi.spyOn(request, 'arrayBuffer');
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    await GET(getRequest(), params);
-    await POST(postRequest({ action: 'issue_confirmation' }), params);
-    await POST(postRequest({
-      action: 'create_task_once',
-      operationRef: 'wrsproof-a',
-      confirmationToken: 'opaque-token-once',
-    }), params);
-    await POST(postRequest({
-      action: 'mark_manual_review_required',
-      operationRef: 'wrsproof-a',
-      reasonCode: 'task_digest_not_found',
-    }), params);
-    expect(fetchMock).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
+
+    try {
+      await expectCapabilityDisabled(await POST(request, context(secret)), secret);
+      expect(text).not.toHaveBeenCalled();
+      expect(json).not.toHaveBeenCalled();
+      expect(arrayBuffer).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+      expectDownstreamsIdle();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('源码仅装配 NextResponse，不创建确认、审计、manual review 或 ready_no_send 事实', () => {
+    const importLines = routeSource.split('\n').filter((line) => line.startsWith('import '));
+    expect(importLines).toEqual(["import { NextResponse } from 'next/server';"]);
+    for (const forbiddenSource of [
+      'access-context',
+      'audit',
+      'confirmation',
+      'execution-shell',
+      'fetch(',
+      'getDatabase',
+      'manualReview',
+      'provider',
+      'ready_no_send',
+      'repository',
+      'request.',
+      'request[',
+      'session',
+      'transaction',
+    ]) {
+      expect(routeSource).not.toContain(forbiddenSource);
+    }
   });
 });
