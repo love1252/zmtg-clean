@@ -1,5 +1,6 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import type { TenantDatabase } from '@/server/db/client';
+import { INSTITUTION_AI_USAGE_METRICS_MAX_RECORDS } from '@/modules/institution-system/server/institution-ai-usage-metrics-reader';
 import {
   aiCallUsageRecords,
   platformAiProviderConfigs,
@@ -162,6 +163,41 @@ export function createAiCallUsageRepository(database: TenantDatabase) {
           serviceVersion: row.serviceVersion,
           createdAt: row.createdAt,
         }));
+    },
+
+    async listInstitutionUsageMetricRecords(input: {
+      tenantId: string;
+      institutionId: string;
+      startInclusiveEpochMs: number;
+      endExclusiveEpochMs: number;
+    }): Promise<Array<{
+      tenantId: string;
+      institutionId: string | null;
+      status: string;
+      serviceCategory: string | null;
+      serviceAction: string | null;
+      createdAt: Date;
+    }>> {
+      const rows = await database
+        .select({
+          tenantId: aiCallUsageRecords.tenantId,
+          institutionId: aiCallUsageRecords.institutionId,
+          status: aiCallUsageRecords.status,
+          serviceCategory: aiCallUsageRecords.serviceCategory,
+          serviceAction: aiCallUsageRecords.serviceAction,
+          createdAt: aiCallUsageRecords.createdAt,
+        })
+        .from(aiCallUsageRecords)
+        .where(and(
+          eq(aiCallUsageRecords.tenantId, input.tenantId),
+          eq(aiCallUsageRecords.institutionId, input.institutionId),
+          gte(aiCallUsageRecords.createdAt, new Date(input.startInclusiveEpochMs)),
+          lt(aiCallUsageRecords.createdAt, new Date(input.endExclusiveEpochMs)),
+        ))
+        .orderBy(desc(aiCallUsageRecords.createdAt))
+        .limit(INSTITUTION_AI_USAGE_METRICS_MAX_RECORDS + 1);
+
+      return rows;
     },
 
     async listPlatformUsageSummary(): Promise<PlatformAiUsageSummary[]> {
