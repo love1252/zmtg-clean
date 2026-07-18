@@ -32,7 +32,12 @@ describe('WB-UI-01 工作台入口', () => {
     expect(within(desktopNavigation).queryByText('预约与随访')).not.toBeInTheDocument();
     expect(within(desktopNavigation).queryByText('经营分析')).not.toBeInTheDocument();
 
-    expect(screen.getByText('工作台当前不可用')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '数据服务/能力尚未安全开放', level: 2 }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/当前工作台不会展示模拟数字、演示客户或未授权业务入口/u),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: '行动队列' })).not.toBeInTheDocument();
     expect(screen.queryByText('Care 行动概览')).not.toBeInTheDocument();
     expect(screen.queryByRole('list', { name: '客户旅程' })).not.toBeInTheDocument();

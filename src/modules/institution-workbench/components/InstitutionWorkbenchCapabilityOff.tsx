@@ -28,10 +28,12 @@ const capabilityOffCapabilityProjection: WorkbenchCapabilityProjection = {
  */
 export function InstitutionWorkbenchCapabilityOff() {
   return (
-    <InstitutionWorkbenchShell
-      actionProjection={capabilityOffActionProjection}
-      lifecycleProjection={capabilityOffLifecycleProjection}
-      capabilityProjection={capabilityOffCapabilityProjection}
-    />
+    <div data-capability-state="blocked" className="min-w-0">
+      <InstitutionWorkbenchShell
+        actionProjection={capabilityOffActionProjection}
+        lifecycleProjection={capabilityOffLifecycleProjection}
+        capabilityProjection={capabilityOffCapabilityProjection}
+      />
+    </div>
   );
 }
