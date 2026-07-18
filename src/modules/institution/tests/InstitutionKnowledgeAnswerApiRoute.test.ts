@@ -1,6 +1,45 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import * as answerRoute from '@/app/api/institution/knowledge-management/answer/route';
+const forbiddenDependencyState = vi.hoisted(() => ({
+  initialized: [] as string[],
+}));
+
+vi.mock('@/modules/security/server/access-context', () => {
+  forbiddenDependencyState.initialized.push('auth');
+  throw new Error('auth must not initialize');
+});
+vi.mock('@/server/db/client', () => {
+  forbiddenDependencyState.initialized.push('db');
+  throw new Error('db must not initialize');
+});
+vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository', () => {
+  forbiddenDependencyState.initialized.push('repository');
+  throw new Error('repository must not initialize');
+});
+vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => {
+  forbiddenDependencyState.initialized.push('quota');
+  throw new Error('quota must not initialize');
+});
+vi.mock('@/modules/institution/server/knowledge-quota-usage-service', () => {
+  forbiddenDependencyState.initialized.push('quota-usage');
+  throw new Error('quota usage must not initialize');
+});
+vi.mock('@/modules/institution/server/institution-knowledge-rag-answer-service', () => {
+  forbiddenDependencyState.initialized.push('rag');
+  throw new Error('RAG must not initialize');
+});
+vi.mock('@/modules/institution/server/institution-rag-answer-provider', () => {
+  forbiddenDependencyState.initialized.push('provider');
+  throw new Error('provider must not initialize');
+});
+vi.mock('@/modules/institution/server/institution-ai-call-service', () => {
+  forbiddenDependencyState.initialized.push('ai-call');
+  throw new Error('AI call service must not initialize');
+});
+vi.mock('@/modules/institution/server/institution-ai-call-usage-repository', () => {
+  forbiddenDependencyState.initialized.push('ai-call-usage');
+  throw new Error('AI call usage repository must not initialize');
+});
 
 const expectedPayload = {
   status: 'capability_disabled',
@@ -9,90 +48,145 @@ const expectedPayload = {
   sources: [],
 };
 
-async function expectCapabilityDisabled(request?: Request) {
-  const response = await answerRoute.POST(request);
+type AnswerRouteModule = typeof import('@/app/api/institution/knowledge-management/answer/route');
 
-  expect(response.status).toBe(503);
-  await expect(response.json()).resolves.toEqual(expectedPayload);
-}
+beforeEach(() => {
+  vi.resetModules();
+  forbiddenDependencyState.initialized.length = 0;
+});
 
-function requestWithThrowingAccessors() {
-  let headersRead = 0;
-  let jsonRead = 0;
-  const request = {};
-  Object.defineProperties(request, {
-    headers: {
-      enumerable: true,
-      get: () => {
-        headersRead += 1;
-        throw new Error('headers must not be read');
-      },
-    },
-    json: {
-      enumerable: true,
-      get: () => {
-        jsonRead += 1;
-        throw new Error('json must not be read');
-      },
-    },
-  });
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
+async function loadRouteWithoutForbiddenDependencies() {
+  const fetchSpy = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation(async () => {
+      throw new Error('fetch must not be called');
+    });
+  const route = (await import(
+    '@/app/api/institution/knowledge-management/answer/route'
+  )) as AnswerRouteModule;
+
+  expect(forbiddenDependencyState.initialized).toEqual([]);
+  expect(fetchSpy).not.toHaveBeenCalled();
   return {
-    request: request as Request,
-    reads: () => ({ headersRead, jsonRead }),
+    route,
+    assertNoFetch: () => expect(fetchSpy).not.toHaveBeenCalled(),
   };
 }
 
-describe('机构端知识库 answer API route', () => {
-  it('只导出 POST，不提供 GET handler', () => {
-    expect(Object.keys(answerRoute).sort()).toEqual(['POST']);
+async function expectCapabilityDisabled(
+  route: AnswerRouteModule,
+  assertNoFetch: () => void,
+  request?: Request,
+) {
+  const response = await route.POST(request);
+
+  expect(response.status).toBe(503);
+  await expect(response.json()).resolves.toEqual(expectedPayload);
+  expect(forbiddenDependencyState.initialized).toEqual([]);
+  assertNoFetch();
+}
+
+function fullyTrappedRequest() {
+  const counts = {
+    apply: 0,
+    construct: 0,
+    defineProperty: 0,
+    deleteProperty: 0,
+    get: 0,
+    getOwnPropertyDescriptor: 0,
+    getPrototypeOf: 0,
+    has: 0,
+    isExtensible: 0,
+    ownKeys: 0,
+    preventExtensions: 0,
+    set: 0,
+    setPrototypeOf: 0,
+  };
+  const trap = <T extends keyof typeof counts>(name: T): never => {
+    counts[name] += 1;
+    throw new Error(`${name} trap must not run`);
+  };
+  const request = new Proxy(function poisonedRequest() {}, {
+    apply: () => trap('apply'),
+    construct: () => trap('construct'),
+    defineProperty: () => trap('defineProperty'),
+    deleteProperty: () => trap('deleteProperty'),
+    get: () => trap('get'),
+    getOwnPropertyDescriptor: () => trap('getOwnPropertyDescriptor'),
+    getPrototypeOf: () => trap('getPrototypeOf'),
+    has: () => trap('has'),
+    isExtensible: () => trap('isExtensible'),
+    ownKeys: () => trap('ownKeys'),
+    preventExtensions: () => trap('preventExtensions'),
+    set: () => trap('set'),
+    setPrototypeOf: () => trap('setPrototypeOf'),
   });
 
-  it('普通请求固定返回低敏 capability_disabled', async () => {
-    await expectCapabilityDisabled(
+  return { request: request as unknown as Request, counts };
+}
+
+describe('机构端知识库 answer API route', () => {
+  it('动态加载后只导出 POST，不初始化 auth/db/repository/quota/RAG/provider', async () => {
+    const { route, assertNoFetch } = await loadRouteWithoutForbiddenDependencies();
+
+    expect(Object.keys(route).sort()).toEqual(['POST']);
+    await expectCapabilityDisabled(route, assertNoFetch);
+  });
+
+  it('普通、未登录、伪造 header 与 provider/model 请求均得到同一固定响应', async () => {
+    const { route, assertNoFetch } = await loadRouteWithoutForbiddenDependencies();
+    const requests = [
       new Request('http://localhost/api/institution/knowledge-management/answer', {
         method: 'POST',
         body: JSON.stringify({ question: '术后冷敷注意事项？' }),
       }),
-    );
-  });
-
-  it('未登录和伪造 scope/header 的请求得到同一固定响应', async () => {
-    await expectCapabilityDisabled(
       new Request('http://localhost/api/institution/knowledge-management/answer', {
         method: 'POST',
       }),
-    );
-    await expectCapabilityDisabled(
       new Request('http://localhost/api/institution/knowledge-management/answer', {
         method: 'POST',
         headers: {
           'x-tenant-id': 'forged-tenant',
           'x-institution-id': 'forged-institution',
           authorization: 'Bearer forged',
+          'content-type': 'application/json',
         },
-      }),
-    );
-  });
-
-  it('带 provider/model 字段的请求不触发字段解析或不同状态', async () => {
-    await expectCapabilityDisabled(
-      new Request('http://localhost/api/institution/knowledge-management/answer', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           provider: 'forged-provider',
           model: 'forged-model',
           question: 'ignored',
         }),
       }),
-    );
+    ];
+
+    for (const request of requests) {
+      await expectCapabilityDisabled(route, assertNoFetch, request);
+    }
   });
 
-  it('不读取 request.json 或 headers accessor', async () => {
-    const poisoned = requestWithThrowingAccessors();
+  it('完全 trapped 的 Proxy Request 不触发任何 trap', async () => {
+    const { route, assertNoFetch } = await loadRouteWithoutForbiddenDependencies();
+    const poisoned = fullyTrappedRequest();
 
-    await expect(expectCapabilityDisabled(poisoned.request)).resolves.toBeUndefined();
-    expect(poisoned.reads()).toEqual({ headersRead: 0, jsonRead: 0 });
+    await expectCapabilityDisabled(route, assertNoFetch, poisoned.request);
+    expect(poisoned.counts).toEqual({
+      apply: 0,
+      construct: 0,
+      defineProperty: 0,
+      deleteProperty: 0,
+      get: 0,
+      getOwnPropertyDescriptor: 0,
+      getPrototypeOf: 0,
+      has: 0,
+      isExtensible: 0,
+      ownKeys: 0,
+      preventExtensions: 0,
+      set: 0,
+      setPrototypeOf: 0,
+    });
   });
 });
