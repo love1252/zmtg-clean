@@ -720,4 +720,180 @@ describe('随访任务分配纯领域契约', () => {
       ).toEqual({ ok: false, code: 'invalid_assignment' });
     }
   });
+
+  it('将 hostile command、assignment、member 和 target 快照 fail-closed，且不抛异常', () => {
+    const validClaimCommand = {
+      assignment: rolePoolAssignment(),
+      institutionId: 'institution-a',
+      actorUserId: 'user-consultant',
+      expectedRevision: 4,
+      member: activeConsultant(),
+    };
+    const hostileCommand = new Proxy(
+      validClaimCommand,
+      {
+        ownKeys() {
+          throw new Error('hostile command');
+        },
+      },
+    );
+    const hostileAssignment = new Proxy(rolePoolAssignment(), {
+      getOwnPropertyDescriptor() {
+        throw new Error('hostile assignment');
+      },
+    });
+    const hostileMember = new Proxy(activeConsultant(), {
+      ownKeys() {
+        throw new Error('hostile member');
+      },
+    });
+    const hostileTarget = new Proxy(
+      { kind: 'role_pool', institutionId: 'institution-a', role: 'consultant' },
+      {
+        getPrototypeOf() {
+          throw new Error('hostile target');
+        },
+      },
+    );
+    let descriptorAmplificationCommandDescriptorCalls = 0;
+    let descriptorAmplificationMemberDescriptorCalls = 0;
+    const descriptorAmplificationCommand = new Proxy(
+      {
+        ...validClaimCommand,
+        ...Object.fromEntries(
+          Array.from({ length: 2048 }, (_, index) => [`extra_${index}`, index]),
+        ),
+      },
+      {
+        getOwnPropertyDescriptor(target, key) {
+          descriptorAmplificationCommandDescriptorCalls += 1;
+          return Reflect.getOwnPropertyDescriptor(target, key);
+        },
+      },
+    );
+    const descriptorAmplificationMember = new Proxy(
+      {
+        ...activeConsultant(),
+        ...Object.fromEntries(
+          Array.from({ length: 2048 }, (_, index) => [`extra_${index}`, index]),
+        ),
+      },
+      {
+        getOwnPropertyDescriptor(target, key) {
+          descriptorAmplificationMemberDescriptorCalls += 1;
+          return Reflect.getOwnPropertyDescriptor(target, key);
+        },
+      },
+    );
+    const accessorCommand = { ...validClaimCommand };
+    let accessorReads = 0;
+    Object.defineProperty(accessorCommand, 'member', {
+      enumerable: true,
+      get() {
+        accessorReads += 1;
+        return validClaimCommand.member;
+      },
+    });
+    const hiddenFieldCommand = { ...validClaimCommand };
+    Object.defineProperty(hiddenFieldCommand, 'hidden', {
+      enumerable: false,
+      value: 'hidden',
+    });
+    const symbolFieldCommand = { ...validClaimCommand };
+    Object.defineProperty(symbolFieldCommand, Symbol('hidden'), {
+      enumerable: true,
+      value: 'hidden',
+    });
+    const revokedCommand = Proxy.revocable({ ...validClaimCommand }, {});
+    revokedCommand.revoke();
+    const nullPrototypeCommand = Object.assign(Object.create(null), validClaimCommand);
+
+    expect(() => claimFollowUpRolePoolAssignment(hostileCommand as never)).not.toThrow();
+    expect(claimFollowUpRolePoolAssignment(hostileCommand as never)).toEqual({
+      ok: false,
+      code: 'invalid_command_context',
+    });
+    expect(() =>
+      claimFollowUpRolePoolAssignment({
+        assignment: hostileAssignment as never,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
+        expectedRevision: 4,
+        member: activeConsultant(),
+      }),
+    ).not.toThrow();
+    expect(
+      claimFollowUpRolePoolAssignment({
+        assignment: hostileAssignment as never,
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
+        expectedRevision: 4,
+        member: activeConsultant(),
+      }),
+    ).toEqual({ ok: false, code: 'invalid_assignment' });
+    expect(
+      claimFollowUpRolePoolAssignment({
+        assignment: rolePoolAssignment(),
+        institutionId: 'institution-a',
+        actorUserId: 'user-consultant',
+        expectedRevision: 4,
+        member: hostileMember,
+      }),
+    ).toEqual({ ok: false, code: 'invalid_member' });
+    expect(() =>
+      reassignFollowUpAssignment({
+        assignment: rolePoolAssignment(),
+        target: hostileTarget as never,
+        targetMember: null,
+        expectedRevision: 4,
+        institutionId: 'institution-a',
+        actorRole: 'tenant_admin',
+        reason: 'assignment_correction',
+      }),
+    ).not.toThrow();
+    expect(
+      reassignFollowUpAssignment({
+        assignment: rolePoolAssignment(),
+        target: hostileTarget as never,
+        targetMember: null,
+        expectedRevision: 4,
+        institutionId: 'institution-a',
+        actorRole: 'tenant_admin',
+        reason: 'assignment_correction',
+      }),
+    ).toEqual({ ok: false, code: 'invalid_target_assignment' });
+    expect(
+      claimFollowUpRolePoolAssignment(descriptorAmplificationCommand as never),
+    ).toEqual({ ok: false, code: 'invalid_command_context' });
+    expect(descriptorAmplificationCommandDescriptorCalls).toBe(0);
+    expect(
+      claimFollowUpRolePoolAssignment({
+        ...validClaimCommand,
+        member: descriptorAmplificationMember,
+      }),
+    ).toEqual({ ok: false, code: 'invalid_member' });
+    expect(descriptorAmplificationMemberDescriptorCalls).toBe(0);
+    expect(claimFollowUpRolePoolAssignment(accessorCommand)).toEqual({
+      ok: false,
+      code: 'invalid_command_context',
+    });
+    expect(accessorReads).toBe(0);
+    expect(claimFollowUpRolePoolAssignment(hiddenFieldCommand)).toEqual({
+      ok: false,
+      code: 'invalid_command_context',
+    });
+    expect(claimFollowUpRolePoolAssignment(symbolFieldCommand)).toEqual({
+      ok: false,
+      code: 'invalid_command_context',
+    });
+    expect(() => claimFollowUpRolePoolAssignment(revokedCommand.proxy as never)).not.toThrow();
+    expect(claimFollowUpRolePoolAssignment(revokedCommand.proxy as never)).toEqual({
+      ok: false,
+      code: 'invalid_command_context',
+    });
+    expect(claimFollowUpRolePoolAssignment(nullPrototypeCommand)).toMatchObject({
+      ok: true,
+      changed: true,
+    });
+  });
 });
