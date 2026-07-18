@@ -7,15 +7,6 @@ export const RAW_DATA_RETENTION_MAX_DAYS = 365 as const;
 
 export type RawDataRetentionPolicyKey = typeof RAW_DATA_RETENTION_POLICY_KEY;
 export type RawDataRetentionPolicySource = 'product_default' | 'institution_config';
-export type RawDataRetentionPolicyReadiness =
-  | 'ready'
-  | 'stale'
-  | 'partial'
-  | 'unavailable'
-  | 'invalid'
-  | 'denied'
-  | 'disabled'
-  | 'scope_mismatch';
 export type RawDataRetentionReasonCode =
   | 'periodic_policy_review'
   | 'data_minimization'
@@ -24,53 +15,54 @@ export type RawDataRetentionReasonCode =
   | 'correct_pending_change'
   | 'withdraw_pending_change';
 
-export type RawDataRetentionPolicyScope = Readonly<{
-  tenantId: string;
-  institutionId: string;
-  policyKey: RawDataRetentionPolicyKey;
-}>;
+export type RawDataRetentionOwnerRequirement =
+  | 'authenticated_actor_identity'
+  | 'fresh_institution_membership'
+  | 'institution_scope_allow'
+  | 'object_scope_allow'
+  | 'capability_evidence'
+  | 'release_evidence'
+  | 'current_policy_revision_with_ttl'
+  | 'trusted_institution_time_zone'
+  | 'independent_server_reference_time'
+  | 'audit_writer_readiness'
+  | 'authoritative_idempotency_record'
+  | 'atomic_policy_change_transaction';
 
-export type RawDataRetentionCurrentPolicy = Readonly<{
-  retentionDays: number;
-  source: RawDataRetentionPolicySource;
-}>;
-
-export type RawDataRetentionPendingPolicy = Readonly<{
-  targetRetentionDays: number;
-  effectiveAt: string;
-  effectiveBusinessDate: string;
-  effectiveTimeZone: string;
-  requestedAt: string;
-  reasonCode: RawDataRetentionReasonCode;
-  operatorReference: string;
-}>;
-
-export type RawDataRetentionPolicyValueSnapshot = Readonly<{
-  readiness: 'ready' | 'stale';
-  scope: RawDataRetentionPolicyScope;
-  revision: string;
-  current: RawDataRetentionCurrentPolicy;
-  pending: RawDataRetentionPendingPolicy | null;
-}>;
-
-export type RawDataRetentionPolicyUnavailableSnapshot = Readonly<{
-  readiness: Exclude<RawDataRetentionPolicyReadiness, 'ready' | 'stale'>;
-  scope: RawDataRetentionPolicyScope;
-}>;
-
-export type RawDataRetentionPolicySnapshot =
-  | RawDataRetentionPolicyValueSnapshot
-  | RawDataRetentionPolicyUnavailableSnapshot;
+export const RAW_DATA_RETENTION_OWNER_REQUIREMENTS = Object.freeze([
+  'authenticated_actor_identity',
+  'fresh_institution_membership',
+  'institution_scope_allow',
+  'object_scope_allow',
+  'capability_evidence',
+  'release_evidence',
+  'current_policy_revision_with_ttl',
+  'trusted_institution_time_zone',
+  'independent_server_reference_time',
+  'audit_writer_readiness',
+  'authoritative_idempotency_record',
+  'atomic_policy_change_transaction',
+] satisfies readonly RawDataRetentionOwnerRequirement[]);
 
 export type ParseRawDataRetentionPolicySnapshotResult =
-  | Readonly<{ ok: true; snapshot: RawDataRetentionPolicySnapshot }>
-  | Readonly<{ ok: false; code: 'invalid_input' }>;
+  | Readonly<{ kind: 'blocked'; code: 'invalid_input' }>
+  | Readonly<{
+      kind: 'non_authorizing_candidate';
+      code: 'owner_evidence_required';
+      ownerRequirements: readonly RawDataRetentionOwnerRequirement[];
+    }>;
 
 const objectGetPrototypeOf = Object.getPrototypeOf;
 const objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const objectFreeze = Object.freeze;
 const reflectOwnKeys = Reflect.ownKeys;
 const isProxy = nodeUtilTypes.isProxy;
+
+const MAX_RECORD_KEYS = 12;
+const MAX_SAFE_TOKEN_LENGTH = 128;
+const MAX_TIME_ZONE_LENGTH = 64;
+const MAX_ISO_INSTANT_LENGTH = 35;
+const MAX_ENUM_LENGTH = 64;
 
 const reasonCodes = new Set<RawDataRetentionReasonCode>([
   'periodic_policy_review',
@@ -80,9 +72,8 @@ const reasonCodes = new Set<RawDataRetentionReasonCode>([
   'correct_pending_change',
   'withdraw_pending_change',
 ]);
-
-const valueReadiness = new Set<RawDataRetentionPolicyReadiness>(['ready', 'stale']);
-const unavailableReadiness = new Set<RawDataRetentionPolicyReadiness>([
+const valueClaims = new Set(['ready', 'stale']);
+const unavailableClaims = new Set([
   'partial',
   'unavailable',
   'invalid',
@@ -111,53 +102,58 @@ function readExactPlainRecord(
   value: unknown,
   expectedKeys: readonly string[],
 ): ExactRecord | null {
-  if (
-    value === null
-    || typeof value !== 'object'
-    || Array.isArray(value)
-    || isProxy(value)
-  ) {
+  if (value === null || typeof value !== 'object') return null;
+
+  try {
+    if (isProxy(value)) return null;
+  } catch {
     return null;
   }
 
-  const prototype = objectGetPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) {
-    return null;
-  }
+  try {
+    // The public raw schemas accept no arrays, so the accepted item limit is zero.
+    if (Array.isArray(value)) return null;
+    if (objectGetPrototypeOf(value) !== Object.prototype) return null;
 
-  const ownKeys = reflectOwnKeys(value);
-  if (
-    ownKeys.length !== expectedKeys.length
-    || ownKeys.some((key) => typeof key !== 'string' || !expectedKeys.includes(key))
-  ) {
-    return null;
-  }
-
-  const result: ExactRecord = {};
-  for (const key of expectedKeys) {
-    const descriptor = objectGetOwnPropertyDescriptor(value, key);
-    if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+    const ownKeys = reflectOwnKeys(value);
+    if (
+      expectedKeys.length > MAX_RECORD_KEYS
+      || ownKeys.length > MAX_RECORD_KEYS
+      || ownKeys.length !== expectedKeys.length
+      || ownKeys.some((key) => typeof key !== 'string' || !expectedKeys.includes(key))
+    ) {
       return null;
     }
-    result[key] = descriptor.value;
+
+    const result: ExactRecord = {};
+    for (const key of expectedKeys) {
+      const descriptor = objectGetOwnPropertyDescriptor(value, key);
+      if (
+        !descriptor
+        || !descriptor.enumerable
+        || !('value' in descriptor)
+      ) {
+        return null;
+      }
+      result[key] = descriptor.value;
+    }
+    return result;
+  } catch {
+    return null;
   }
-  return result;
 }
 
 export function isRawDataRetentionSafeToken(value: unknown): value is string {
   return (
     typeof value === 'string'
     && value.length > 0
-    && value.length <= 256
+    && value.length <= MAX_SAFE_TOKEN_LENGTH
     && /^[A-Za-z0-9._:-]+$/u.test(value)
   );
 }
 
 export function isRawDataRetentionOperatorReference(value: unknown): value is string {
-  return (
-    isRawDataRetentionSafeToken(value)
-    && /[A-Za-z]/u.test(value)
-  );
+  return isRawDataRetentionSafeToken(value) && /[A-Za-z]/u.test(value);
 }
 
 export function isRawDataRetentionDays(value: unknown): value is number {
@@ -171,7 +167,11 @@ export function isRawDataRetentionDays(value: unknown): value is number {
 }
 
 function isReasonCode(value: unknown): value is RawDataRetentionReasonCode {
-  return typeof value === 'string' && reasonCodes.has(value as RawDataRetentionReasonCode);
+  return (
+    typeof value === 'string'
+    && value.length <= MAX_ENUM_LENGTH
+    && reasonCodes.has(value as RawDataRetentionReasonCode)
+  );
 }
 
 function isLeapYear(year: number): boolean {
@@ -198,14 +198,14 @@ function isCalendarDate(year: number, month: number, day: number): boolean {
 }
 
 function isBusinessDate(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
+  if (typeof value !== 'string' || value.length !== 10) return false;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
-  if (!match) return false;
-  return isCalendarDate(Number(match[1]), Number(match[2]), Number(match[3]));
+  return Boolean(
+    match && isCalendarDate(Number(match[1]), Number(match[2]), Number(match[3])),
+  );
 }
 
 type ParsedIsoInstant = Readonly<{
-  value: string;
   epochMs: number;
   millisecond: number;
 }>;
@@ -224,7 +224,13 @@ function daysFromCivil(year: number, month: number, day: number): number {
 }
 
 function parseIsoInstant(value: unknown): ParsedIsoInstant | null {
-  if (typeof value !== 'string') return null;
+  if (
+    typeof value !== 'string'
+    || value.length === 0
+    || value.length > MAX_ISO_INSTANT_LENGTH
+  ) {
+    return null;
+  }
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?(Z|[+-]\d{2}:\d{2})$/u.exec(value);
   if (!match) return null;
   const year = Number(match[1]);
@@ -234,15 +240,20 @@ function parseIsoInstant(value: unknown): ParsedIsoInstant | null {
   const minute = Number(match[5]);
   const second = Number(match[6]);
   const millisecond = match[7] === undefined ? 0 : Number(match[7]);
-  if (!isCalendarDate(year, month, day)) return null;
-  if (hour > 23 || minute > 59 || second > 59) return null;
+  if (!isCalendarDate(year, month, day) || hour > 23 || minute > 59 || second > 59) {
+    return null;
+  }
+
   let offsetMinutes = 0;
   if (match[8] !== 'Z') {
     const offsetMatch = /^[+-](\d{2}):(\d{2})$/u.exec(match[8]!);
-    if (!offsetMatch || Number(offsetMatch[1]) > 23 || Number(offsetMatch[2]) > 59) return null;
+    if (!offsetMatch || Number(offsetMatch[1]) > 23 || Number(offsetMatch[2]) > 59) {
+      return null;
+    }
     const absoluteOffsetMinutes = Number(offsetMatch[1]) * 60 + Number(offsetMatch[2]);
     offsetMinutes = match[8]!.startsWith('-') ? -absoluteOffsetMinutes : absoluteOffsetMinutes;
   }
+
   const epochMs = (
     daysFromCivil(year, month, day) * 86_400_000
     + hour * 3_600_000
@@ -251,15 +262,16 @@ function parseIsoInstant(value: unknown): ParsedIsoInstant | null {
     + millisecond
     - offsetMinutes * 60_000
   );
-  return Number.isSafeInteger(epochMs) ? { value, epochMs, millisecond } : null;
+  return Number.isSafeInteger(epochMs) ? { epochMs, millisecond } : null;
 }
 
 export function isRawDataRetentionTimeZone(value: unknown): value is string {
   if (
     typeof value !== 'string'
     || value.length === 0
+    || value.length > MAX_TIME_ZONE_LENGTH
     || value.trim() !== value
-    || /\s/u.test(value)
+    || !/^[A-Za-z0-9._+-]+(?:\/[A-Za-z0-9._+-]+)*$/u.test(value)
   ) {
     return false;
   }
@@ -271,43 +283,36 @@ export function isRawDataRetentionTimeZone(value: unknown): value is string {
   }
 }
 
-function parseScope(value: unknown): RawDataRetentionPolicyScope | null {
+function isValidScopeClaim(value: unknown): boolean {
   const record = readExactPlainRecord(value, scopeKeys);
+  return Boolean(
+    record
+    && isRawDataRetentionSafeToken(record.tenantId)
+    && isRawDataRetentionSafeToken(record.institutionId)
+    && record.policyKey === RAW_DATA_RETENTION_POLICY_KEY,
+  );
+}
+
+function isValidCurrentClaim(value: unknown): boolean {
+  const record = readExactPlainRecord(value, currentKeys);
   if (
     !record
-    || !isRawDataRetentionSafeToken(record.tenantId)
-    || !isRawDataRetentionSafeToken(record.institutionId)
-    || record.policyKey !== RAW_DATA_RETENTION_POLICY_KEY
+    || !isRawDataRetentionDays(record.retentionDays)
+    || typeof record.source !== 'string'
+    || record.source.length > MAX_ENUM_LENGTH
   ) {
-    return null;
+    return false;
   }
-  return objectFreeze({
-    tenantId: record.tenantId,
-    institutionId: record.institutionId,
-    policyKey: RAW_DATA_RETENTION_POLICY_KEY,
-  });
-}
-
-function parseCurrent(value: unknown): RawDataRetentionCurrentPolicy | null {
-  const record = readExactPlainRecord(value, currentKeys);
-  if (!record || !isRawDataRetentionDays(record.retentionDays)) return null;
   if (record.source === 'product_default') {
-    if (record.retentionDays !== RAW_DATA_RETENTION_DEFAULT_DAYS) return null;
-  } else if (record.source !== 'institution_config') {
-    return null;
+    return record.retentionDays === RAW_DATA_RETENTION_DEFAULT_DAYS;
   }
-  return objectFreeze({
-    retentionDays: record.retentionDays,
-    source: record.source,
-  });
+  return record.source === 'institution_config';
 }
 
-function instantMatchesBusinessMidnight(
+function formatBusinessDateAtInstant(
   instant: ParsedIsoInstant,
-  businessDate: string,
   timeZone: string,
-): boolean {
-  if (instant.millisecond !== 0) return false;
+): Readonly<{ date: string; isMidnight: boolean }> | null {
   try {
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone,
@@ -322,33 +327,16 @@ function instantMatchesBusinessMidnight(
       hourCycle: 'h23',
     }).formatToParts(instant.epochMs);
     const byType = new Map(parts.map((part) => [part.type, part.value]));
-    const localDate = `${byType.get('year')}-${byType.get('month')}-${byType.get('day')}`;
-    return (
-      localDate === businessDate
-      && byType.get('hour') === '00'
-      && byType.get('minute') === '00'
-      && byType.get('second') === '00'
-    );
-  } catch {
-    return false;
-  }
-}
-
-function formatBusinessDateAtInstant(instant: ParsedIsoInstant, timeZone: string): string | null {
-  try {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone,
-      calendar: 'iso8601',
-      numberingSystem: 'latn',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(instant.epochMs);
-    const byType = new Map(parts.map((part) => [part.type, part.value]));
     const year = byType.get('year');
     const month = byType.get('month');
     const day = byType.get('day');
-    return year && month && day ? `${year}-${month}-${day}` : null;
+    if (!year || !month || !day) return null;
+    return {
+      date: `${year}-${month}-${day}`,
+      isMidnight: byType.get('hour') === '00'
+        && byType.get('minute') === '00'
+        && byType.get('second') === '00',
+    };
   } catch {
     return null;
   }
@@ -389,96 +377,78 @@ function nextBusinessDate(value: string): string | null {
   return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function parsePending(value: unknown): RawDataRetentionPendingPolicy | null {
+function isValidPendingClaim(value: unknown): boolean {
   const record = readExactPlainRecord(value, pendingKeys);
-  const effectiveAt = parseIsoInstant(record?.effectiveAt);
-  const requestedAt = parseIsoInstant(record?.requestedAt);
-  const requestedBusinessDate = requestedAt && typeof record?.effectiveTimeZone === 'string'
-    ? formatBusinessDateAtInstant(requestedAt, record.effectiveTimeZone)
-    : null;
+  if (!record) return false;
   if (
-    !record
-    || !isRawDataRetentionDays(record.targetRetentionDays)
-    || !effectiveAt
+    !isRawDataRetentionDays(record.targetRetentionDays)
     || !isBusinessDate(record.effectiveBusinessDate)
     || !isRawDataRetentionTimeZone(record.effectiveTimeZone)
-    || !requestedAt
-    || !instantMatchesBusinessMidnight(
-      effectiveAt,
-      record.effectiveBusinessDate,
-      record.effectiveTimeZone,
-    )
-    || requestedAt.epochMs >= effectiveAt.epochMs
-    || requestedBusinessDate === null
-    || nextBusinessDate(requestedBusinessDate) !== record.effectiveBusinessDate
     || !isReasonCode(record.reasonCode)
     || record.reasonCode === 'withdraw_pending_change'
     || !isRawDataRetentionOperatorReference(record.operatorReference)
   ) {
-    return null;
+    return false;
   }
-  return objectFreeze({
-    targetRetentionDays: record.targetRetentionDays,
-    effectiveAt: effectiveAt.value,
-    effectiveBusinessDate: record.effectiveBusinessDate,
-    effectiveTimeZone: record.effectiveTimeZone,
-    requestedAt: requestedAt.value,
-    reasonCode: record.reasonCode,
-    operatorReference: record.operatorReference,
-  });
+
+  const effectiveAt = parseIsoInstant(record.effectiveAt);
+  const requestedAt = parseIsoInstant(record.requestedAt);
+  if (!effectiveAt || !requestedAt || requestedAt.epochMs >= effectiveAt.epochMs) return false;
+
+  const effectiveBusinessDate = formatBusinessDateAtInstant(
+    effectiveAt,
+    record.effectiveTimeZone,
+  );
+  const requestedBusinessDate = formatBusinessDateAtInstant(
+    requestedAt,
+    record.effectiveTimeZone,
+  );
+  return (
+    effectiveAt.millisecond === 0
+    && effectiveBusinessDate?.isMidnight === true
+    && effectiveBusinessDate.date === record.effectiveBusinessDate
+    && requestedBusinessDate !== null
+    && nextBusinessDate(requestedBusinessDate.date) === record.effectiveBusinessDate
+  );
 }
 
-const invalidInput = objectFreeze({ ok: false, code: 'invalid_input' } as const);
+const blockedResult = objectFreeze({ kind: 'blocked', code: 'invalid_input' } as const);
+const candidateResult = objectFreeze({
+  kind: 'non_authorizing_candidate',
+  code: 'owner_evidence_required',
+  ownerRequirements: RAW_DATA_RETENTION_OWNER_REQUIREMENTS,
+} as const);
 
 export function parseRawDataRetentionPolicySnapshot(
   input: unknown,
 ): ParseRawDataRetentionPolicySnapshotResult {
-  const discriminatorRecord = readExactPlainRecord(input, valueSnapshotKeys)
-    ?? readExactPlainRecord(input, unavailableSnapshotKeys);
-  if (!discriminatorRecord) return invalidInput;
-
-  const readiness = discriminatorRecord.readiness;
-  if (typeof readiness !== 'string') return invalidInput;
-  const scope = parseScope(discriminatorRecord.scope);
-  if (!scope) return invalidInput;
-
-  if (unavailableReadiness.has(readiness as RawDataRetentionPolicyReadiness)) {
-    if (reflectOwnKeys(discriminatorRecord).length !== unavailableSnapshotKeys.length) {
-      return invalidInput;
+  const valueRecord = readExactPlainRecord(input, valueSnapshotKeys);
+  if (valueRecord) {
+    const pendingValid = valueRecord.pending === null
+      || isValidPendingClaim(valueRecord.pending);
+    if (
+      typeof valueRecord.readiness === 'string'
+      && valueRecord.readiness.length <= MAX_ENUM_LENGTH
+      && valueClaims.has(valueRecord.readiness)
+      && isValidScopeClaim(valueRecord.scope)
+      && isRawDataRetentionSafeToken(valueRecord.revision)
+      && isValidCurrentClaim(valueRecord.current)
+      && pendingValid
+    ) {
+      return candidateResult;
     }
-    return objectFreeze({
-      ok: true,
-      snapshot: objectFreeze({
-        readiness: readiness as RawDataRetentionPolicyUnavailableSnapshot['readiness'],
-        scope,
-      }),
-    });
+    return blockedResult;
   }
 
-  if (!valueReadiness.has(readiness as RawDataRetentionPolicyReadiness)) return invalidInput;
-  if (reflectOwnKeys(discriminatorRecord).length !== valueSnapshotKeys.length) return invalidInput;
-  const revision = discriminatorRecord.revision;
-  const current = parseCurrent(discriminatorRecord.current);
-  const pending = discriminatorRecord.pending === null
-    ? null
-    : parsePending(discriminatorRecord.pending);
+  const unavailableRecord = readExactPlainRecord(input, unavailableSnapshotKeys);
   if (
-    !isRawDataRetentionSafeToken(revision)
-    || !current
-    || (discriminatorRecord.pending !== null && !pending)
-    || (pending !== null && pending.targetRetentionDays === current.retentionDays)
+    unavailableRecord
+    && typeof unavailableRecord.readiness === 'string'
+    && unavailableRecord.readiness.length <= MAX_ENUM_LENGTH
+    && unavailableClaims.has(unavailableRecord.readiness)
+    && isValidScopeClaim(unavailableRecord.scope)
   ) {
-    return invalidInput;
+    return candidateResult;
   }
-
-  return objectFreeze({
-    ok: true,
-    snapshot: objectFreeze({
-      readiness: readiness as 'ready' | 'stale',
-      scope,
-      revision,
-      current,
-      pending,
-    }),
-  });
+  return blockedResult;
 }
