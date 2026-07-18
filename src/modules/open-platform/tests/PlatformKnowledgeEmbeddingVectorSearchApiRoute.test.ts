@@ -226,47 +226,24 @@ describe('知识库 embedding 与向量检索 API route', () => {
     expectSafePayload(payload);
   });
 
-  it('机构端只能用 access context 做只读向量检索，忽略 query tenant/institution 注入', async () => {
-    institutionContext();
-    repository.listKnowledgeItems.mockResolvedValue([visibleKnowledge]);
-    repository.listKnowledgeVectorSearchCandidates.mockResolvedValue([
-      {
-        tenantId: 'tenant-route',
-        knowledgeId: 'knowledge-visible',
-        knowledgeTitle: '机构可见知识',
-        fileId: 'file-visible',
-        fileName: '护理.txt',
-        fileStatus: 'active',
-        parseStatus: 'succeeded',
-        chunkId: 'chunk-visible-0',
-        chunkIndex: 0,
-        textPreview: '冷敷片段。',
-        embeddingId: 'embedding-visible-0',
-        embeddingProvider: 'mock_local_embedding',
-        embeddingModel: 'mock-local-embedding-v1',
-        embeddingDimensions: 8,
-        embeddingVectorJson: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-        embeddingStatus: 'ready',
-      },
-    ]);
-
+  it('机构端向量检索固定 capability disabled，且不初始化认证或 repository', async () => {
     const response = await institutionVectorSearchRoute.GET(
       new Request(
         `${institutionVectorUrl}?tenantId=tenant-other&institutionId=inst-other&query=${encodeURIComponent('冷敷')}`,
       ),
     );
-    const payload = await readJson(response);
 
-    expect(response.status).toBe(200);
-    expect(repository.listKnowledgeVectorSearchCandidates).toHaveBeenCalledWith({
-      tenantId: 'tenant-route',
-      knowledgeId: undefined,
-      fileId: undefined,
+    expect(response.status).toBe(503);
+    expect(await readJson(response)).toEqual({
+      status: 'capability_disabled',
+      code: 'knowledge_vector_search_capability_disabled',
+      message: '机构知识库向量检索暂未启用。',
     });
-    expect(payload.records).toEqual([
-      expect.objectContaining({ knowledgeId: 'knowledge-visible', chunkId: 'chunk-visible-0' }),
-    ]);
-    expectSafePayload(payload);
+    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeItems).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeVectorSearchCandidates).not.toHaveBeenCalled();
   });
 
   it('机构端不暴露 embedding 生成接口，只保留 GET 只读检索', () => {
