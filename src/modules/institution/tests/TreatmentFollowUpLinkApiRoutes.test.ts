@@ -139,9 +139,6 @@ const voidedTreatmentSummaryRecord = {
   voidReason: '重复录入，保留较新的治疗摘要',
 };
 
-const templateSuggestionKey =
-  'trt_phase15_confirm:template_path_followup:1d:post_surgery_repair:post_surgery_d1_urgent';
-
 const customerRecord = {
   id: 'cust_phase15_confirm',
   tenantId: 'demo-tenant-001',
@@ -178,16 +175,6 @@ const createdFollowUpTask = {
   stack: 'DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
   token: 'sk_test_phase15_should_not_return',
   secret: 'phase15-secret',
-};
-
-const createdTemplateFollowUpTask = {
-  ...createdFollowUpTask,
-  id: 'fu_phase20_template_confirm',
-  journeyId: 'treatment_followup_template_path_followup',
-  stage: '术后修复 D1 高风险人工处理',
-  dueAt: '2026-06-03T08:30:00.000Z',
-  suggestedAction: '请人工确认“术后修复 D1 高风险人工处理”。建议处理角色：运营负责人。禁止自动触达。',
-  sourceSuggestionKey: templateSuggestionKey,
 };
 
 function routeContext(summaryId = 'trt_phase15_confirm') {
@@ -376,371 +363,152 @@ describe('治疗摘要随访建议 GET API', () => {
 });
 
 describe('治疗摘要人工确认创建随访任务 POST API', () => {
-  it('人工确认后创建随访任务成功、返回安全 DTO 并写 allowed audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+  const expectedDisabledPayload = {
+    code: 'capability_disabled',
+    error: '治疗摘要创建随访任务能力暂未启用',
+  };
 
-    const response = await followUpTasksPost(
-      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks?tenantId=other-tenant', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          suggestionKey: 'trt_phase15_confirm:urgent_risk_followup:1d',
-        }),
-      }),
-      routeContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(201);
-    expect(payload).toEqual({
-      record: {
-        id: 'fu_phase15_confirm',
-        customerId: 'cust_phase15_confirm',
-        customerDisplayName: '王女士',
-        journeyId: 'treatment_followup_urgent_risk_followup',
-        stage: '高风险治疗后随访',
-        status: 'scheduled',
-        dueAt: '2026-06-03T08:30:00.000Z',
-        suggestedAction: '请优先安排人工随访，确认风险反馈和护理执行情况。',
-        riskLevel: 'urgent',
-        updatedBy: null,
-        updatedAt: null,
-        sourceTreatmentSummaryId: 'trt_phase15_confirm',
-        sourceSuggestionKey: 'trt_phase15_confirm:urgent_risk_followup:1d',
-      },
-    });
-    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: expect.any(String),
-        tenantId: 'demo-tenant-001',
-        customerId: 'cust_phase15_confirm',
-        customerDisplayName: '王女士',
-        journeyId: 'treatment_followup_urgent_risk_followup',
-        stage: '高风险治疗后随访',
-        dueAt: '2026-06-03T08:30:00.000Z',
-        suggestedAction: '请优先安排人工随访，确认风险反馈和护理执行情况。',
-        riskLevel: 'urgent',
-        sourceTreatmentSummaryId: 'trt_phase15_confirm',
-        sourceSuggestionKey: 'trt_phase15_confirm:urgent_risk_followup:1d',
-      }),
-    );
-    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'other-tenant' }),
-    );
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      resource: 'follow_up',
-      resourceId: 'fu_phase15_confirm',
-      result: 'allowed',
-      reason: 'allowed_by_policy',
-      tenantId: 'demo-tenant-001',
-    }));
-    expectNoPrivateData(payload);
-    expectNoPrivateData(routeMocks.auditRecord.mock.lastCall?.[0], { allowAuditTenant: true });
-  });
-
-  it('人工确认后可使用模板建议 key 创建来源任务', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion.mockResolvedValueOnce({
-      kind: 'created',
-      task: createdTemplateFollowUpTask,
-    });
-
-    const response = await followUpTasksPost(
-      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          suggestionKey: templateSuggestionKey,
-        }),
-      }),
-      routeContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(201);
-    expect(payload).toEqual({
-      record: {
-        id: 'fu_phase20_template_confirm',
-        customerId: 'cust_phase15_confirm',
-        customerDisplayName: '王女士',
-        journeyId: 'treatment_followup_template_path_followup',
-        stage: '术后修复 D1 高风险人工处理',
-        status: 'scheduled',
-        dueAt: '2026-06-03T08:30:00.000Z',
-        suggestedAction:
-          '请人工确认“术后修复 D1 高风险人工处理”。建议处理角色：运营负责人。禁止自动触达。',
-        riskLevel: 'urgent',
-        updatedBy: null,
-        updatedAt: null,
-        sourceTreatmentSummaryId: 'trt_phase15_confirm',
-        sourceSuggestionKey: templateSuggestionKey,
-      },
-    });
-    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).toHaveBeenCalledWith(
-      expect.objectContaining({
-        journeyId: 'treatment_followup_template_path_followup',
-        stage: '术后修复 D1 高风险人工处理',
-        dueAt: '2026-06-03T08:30:00.000Z',
-        suggestedAction:
-          '请人工确认“术后修复 D1 高风险人工处理”。建议处理角色：运营负责人。禁止自动触达。',
-        sourceTreatmentSummaryId: 'trt_phase15_confirm',
-        sourceSuggestionKey: templateSuggestionKey,
-      }),
-    );
-    expectNoPrivateData(payload);
-  });
-
-  it('重复确认返回稳定冲突提示并写 duplicate audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion.mockResolvedValueOnce({
-      kind: 'conflict',
-      resourceId: 'fu_phase15_confirm',
-      reason: 'active_source_follow_up_exists',
-    });
-
-    const response = await followUpTasksPost(
-      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks', {
-        method: 'POST',
-        body: JSON.stringify({ suggestionKey: 'trt_phase15_confirm:urgent_risk_followup:1d' }),
-      }),
-      routeContext(),
-    );
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      error: '该护理随访任务已存在，请勿重复创建',
-    });
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      resource: 'follow_up',
-      resourceId: 'fu_phase15_confirm',
-      result: 'denied',
-      reason: 'active_source_follow_up_exists',
-      tenantId: 'demo-tenant-001',
-    }));
-  });
-
-  it('模板建议重复确认仍走来源任务去重治理', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion.mockResolvedValueOnce({
-      kind: 'conflict',
-      resourceId: 'fu_phase20_template_confirm',
-      reason: 'active_source_follow_up_exists',
-    });
-
-    const response = await followUpTasksPost(
-      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks', {
-        method: 'POST',
-        body: JSON.stringify({ suggestionKey: templateSuggestionKey }),
-      }),
-      routeContext(),
-    );
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      error: '该护理随访任务已存在，请勿重复创建',
-    });
-    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sourceTreatmentSummaryId: 'trt_phase15_confirm',
-        sourceSuggestionKey: templateSuggestionKey,
-      }),
-    );
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      resource: 'follow_up',
-      resourceId: 'fu_phase20_template_confirm',
-      result: 'denied',
-      reason: 'active_source_follow_up_exists',
-      tenantId: 'demo-tenant-001',
-    }));
-  });
-
-  it('suggestionKey 不属于服务端确定性建议时返回 409 并写稳定 audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await followUpTasksPost(
-      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks', {
-        method: 'POST',
-        body: JSON.stringify({ suggestionKey: 'trt_phase15_confirm:unknown_rule:1d' }),
-      }),
-      routeContext(),
-    );
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      error: '随访建议已失效，请重新生成后再确认',
-    });
-    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      resource: 'follow_up',
-      result: 'denied',
-      reason: 'invalid_follow_up_suggestion',
-    }));
-    expect(routeMocks.auditRecord).not.toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'voided_treatment_summary_follow_up_blocked',
-    }));
-  });
-
-  it('summary 不存在或跨租户时返回 404 并写 not_found audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant.mockResolvedValueOnce(null);
-
-    const response = await followUpTasksPost(
-      request('http://localhost/api/institution/treatment-summaries/trt_other_tenant/follow-up-tasks', {
-        method: 'POST',
-        body: JSON.stringify({ suggestionKey: 'trt_other_tenant:urgent_risk_followup:1d' }),
-      }),
-      routeContext('trt_other_tenant'),
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      resource: 'follow_up',
-      result: 'denied',
-      reason: 'not_found_or_not_owned',
-    }));
-    expect(routeMocks.auditRecord).not.toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'voided_treatment_summary_follow_up_blocked',
-    }));
-  });
-
-  it('已作废 summary 不允许创建来源随访任务，返回 409 并写稳定 denied audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant.mockResolvedValueOnce(
-      voidedTreatmentSummaryRecord,
-    );
-
-    const response = await followUpTasksPost(
-      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks', {
-        method: 'POST',
-        body: JSON.stringify({ suggestionKey: 'trt_phase15_confirm:urgent_risk_followup:1d' }),
-      }),
-      routeContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(409);
-    expect(payload).toEqual({ error: '治疗摘要已作废，不能继续创建来源随访任务' });
-    expect(routeMocks.tenantBusinessRepository.getCustomerByTenant).not.toHaveBeenCalled();
-    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      resource: 'follow_up',
-      resourceId: 'trt_phase15_confirm',
-      result: 'denied',
-      reason: 'voided_treatment_summary_follow_up_blocked',
-      tenantId: 'demo-tenant-001',
-    }));
-    expectNoPrivateData(payload);
-    expectNoPrivateData(routeMocks.auditRecord.mock.lastCall?.[0], { allowAuditTenant: true });
-  });
-
-  it('未登录返回 401，且不初始化数据库', async () => {
-    const response = await followUpTasksPost(
-      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks', {
-        method: 'POST',
-        body: JSON.stringify({ suggestionKey: 'trt_phase15_confirm:urgent_risk_followup:1d' }),
-      }),
-      routeContext(),
-    );
-
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({ error: '请先登录' });
+  function expectNoPostSideEffects() {
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-  });
+    expect(routeMocks.database.transaction).not.toHaveBeenCalled();
+    expect(routeMocks.createTreatmentSummaryRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant).not.toHaveBeenCalled();
+    expect(routeMocks.tenantBusinessRepository.getCustomerByTenant).not.toHaveBeenCalled();
+    expect(
+      routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion,
+    ).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+  }
 
-  it('无权限返回 403，写 denied audit，且不创建随访任务', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
-
-    const response = await followUpTasksPost(
-      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks', {
-        method: 'POST',
-        body: JSON.stringify({ suggestionKey: 'trt_phase15_confirm:urgent_risk_followup:1d' }),
-      }),
-      routeContext(),
-    );
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
-    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      resource: 'follow_up',
-      result: 'denied',
-      reason: 'role_denied',
-    }));
-    expect(routeMocks.auditRecord).not.toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'voided_treatment_summary_follow_up_blocked',
-    }));
-  });
-
-  it('请求体包含 tenantId 或完整建议内容时返回 400 且不创建任务', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await followUpTasksPost(
-      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks', {
-        method: 'POST',
-        body: JSON.stringify({
-          suggestionKey: 'trt_phase15_confirm:urgent_risk_followup:1d',
-          tenantId: 'other-tenant',
-          customerId: 'cust_phase15_confirm',
-          riskLevel: 'urgent',
-        }),
-      }),
-      routeContext(),
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: '请求包含不允许的字段: tenantId',
-    });
-    expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      resource: 'follow_up',
-      result: 'denied',
-      reason: 'invalid_follow_up_suggestion',
-    }));
-  });
-
-  it('错误不泄露 SQL / stack / token / secret / DATABASE_URL', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion.mockRejectedValueOnce(
-      new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg token stack'),
-    );
-
-    const response = await followUpTasksPost(
-      request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks', {
-        method: 'POST',
-        body: JSON.stringify({ suggestionKey: 'trt_phase15_confirm:urgent_risk_followup:1d' }),
-      }),
-      routeContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(503);
-    expect(payload).toEqual({ error: '数据服务暂时不可用' });
-    expectNoPrivateData(payload);
-  });
-
-  it('route 源码不调用 AI / RAG / Agent / 外部触达能力', () => {
-    const source = [
-      readFileSync(
-        join(
-          process.cwd(),
-          'src/app/api/institution/treatment-summaries/[summaryId]/follow-up-suggestions/route.ts',
+  it('对普通、查询和非法输入固定返回低敏 503、no-store 且不回显输入', async () => {
+    const responses = await Promise.all([
+      followUpTasksPost(
+        request(
+          'http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks',
+          { method: 'POST' },
         ),
-        'utf8',
+        routeContext(),
       ),
-      readFileSync(
-        join(
-          process.cwd(),
-          'src/app/api/institution/treatment-summaries/[summaryId]/follow-up-tasks/route.ts',
+      followUpTasksPost(
+        request(
+          'http://localhost/api/institution/treatment-summaries/summary_secret/follow-up-tasks?tenantId=other-tenant',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              suggestionKey: 'suggestion_secret',
+              sourceTreatmentSummaryId: 'source_secret',
+              customerId: 'customer_secret',
+            }),
+          },
         ),
-        'utf8',
+        routeContext('summary_secret'),
       ),
-    ].join('\n');
+      followUpTasksPost(
+        request(
+          'http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-tasks',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: '{invalid-json',
+          },
+        ),
+        routeContext(),
+      ),
+    ]);
 
+    for (const response of responses) {
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      const payload = await response.json();
+      expect(payload).toEqual(expectedDisabledPayload);
+      const serialized = JSON.stringify(payload);
+      expect(serialized).not.toContain('record');
+      expect(serialized).not.toContain('source');
+      expect(serialized).not.toContain('summary_secret');
+      expect(serialized).not.toContain('suggestion_secret');
+      expect(serialized).not.toContain('customer_secret');
+      expect(serialized).not.toContain('task');
+      expect(serialized).not.toContain('audit');
+      expectNoPrivateData(payload);
+    }
+
+    expectNoPostSideEffects();
+  });
+
+  it('对 hostile Request 和 context 不触发 trap、外部请求或下游调用', async () => {
+    let requestTraps = 0;
+    let contextTraps = 0;
+    const hostileRequest = new Proxy(
+      {},
+      {
+        get() {
+          requestTraps += 1;
+          throw new Error('request must not be read');
+        },
+        has() {
+          requestTraps += 1;
+          throw new Error('request must not be checked');
+        },
+        ownKeys() {
+          requestTraps += 1;
+          throw new Error('request must not be enumerated');
+        },
+      },
+    ) as unknown as Request;
+    const hostileContext = new Proxy(
+      {},
+      {
+        get() {
+          contextTraps += 1;
+          throw new Error('context must not be read');
+        },
+        has() {
+          contextTraps += 1;
+          throw new Error('context must not be checked');
+        },
+        ownKeys() {
+          contextTraps += 1;
+          throw new Error('context must not be enumerated');
+        },
+      },
+    ) as unknown as ReturnType<typeof routeContext>;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const response = await followUpTasksPost(hostileRequest, hostileContext);
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      await expect(response.json()).resolves.toEqual(expectedDisabledPayload);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(requestTraps).toBe(0);
+    expect(contextTraps).toBe(0);
+    expectNoPostSideEffects();
+  });
+
+  it('route 源码不包含已关闭写路径、外部触达或成功事实', () => {
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        'src/app/api/institution/treatment-summaries/[summaryId]/follow-up-tasks/route.ts',
+      ),
+      'utf8',
+    );
+
+    expect(source).not.toMatch(
+      /getDemoAccessContextFromRequest|getDatabase|createAuditEventRepository|createTenantBusinessRepository|createTreatmentSummaryRepository|confirmTreatmentFollowUpTask|parseTreatmentFollowUpSuggestionSelection/,
+    );
     expect(source).not.toMatch(
       /openai|rag|\bagent\b|wecom|wechat|sms|phone_call|external_system|fetch\(|axios|webhook|oauth/i,
     );
+    expect(source).not.toContain('已创建内部随访任务');
   });
 });

@@ -857,12 +857,20 @@ describe('治疗摘要管理页面', () => {
     expectNoSensitiveTreatmentSummaryContent(container);
   });
 
-  it('安全详情中可查看随访建议并人工确认创建任务', async () => {
+  it('安全详情中人工确认创建任务时展示 capability-off 错误且不伪造成功', async () => {
     const fetchMock = mockTreatmentSummaryFetch(
       [treatmentSummariesResponse([treatmentSummaryRecord])],
       {
         followUpSuggestionResponses: [jsonResponse({ suggestions: [followUpSuggestion] })],
-        followUpTaskResponses: [jsonResponse({ record: createdFollowUpTask }, { status: 201 })],
+        followUpTaskResponses: [
+          jsonResponse(
+            {
+              code: 'capability_disabled',
+              error: '治疗摘要创建随访任务能力暂未启用',
+            },
+            { status: 503, headers: { 'cache-control': 'no-store' } },
+          ),
+        ],
       },
     );
     const { container } = render(<TreatmentSummaryManagementShell />);
@@ -884,7 +892,10 @@ describe('治疗摘要管理页面', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: '确认创建随访任务' }));
 
-    expect(await within(dialog).findByText('已创建内部随访任务')).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText('治疗摘要创建随访任务能力暂未启用'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText('已创建内部随访任务')).not.toBeInTheDocument();
     const suggestionCall = fetchMock.mock.calls.find(([input]) =>
       fetchPath(input).endsWith('/follow-up-suggestions'),
     );
@@ -909,14 +920,22 @@ describe('治疗摘要管理页面', () => {
     expectNoSensitiveTreatmentSummaryContent(container);
   });
 
-  it('模板驱动建议轻量展示路径信息、人工确认边界并保留创建任务操作', async () => {
+  it('模板驱动建议保留人工确认入口但 capability-off 不伪造创建成功', async () => {
     const fetchMock = mockTreatmentSummaryFetch(
       [treatmentSummariesResponse([treatmentSummaryRecord])],
       {
         followUpSuggestionResponses: [
           jsonResponse({ suggestions: [templateFollowUpSuggestion, followUpSuggestion] }),
         ],
-        followUpTaskResponses: [jsonResponse({ record: createdFollowUpTask }, { status: 201 })],
+        followUpTaskResponses: [
+          jsonResponse(
+            {
+              code: 'capability_disabled',
+              error: '治疗摘要创建随访任务能力暂未启用',
+            },
+            { status: 503, headers: { 'cache-control': 'no-store' } },
+          ),
+        ],
       },
     );
     const { container } = render(<TreatmentSummaryManagementShell />);
@@ -945,7 +964,10 @@ describe('治疗摘要管理页面', () => {
 
     fireEvent.click(templateCardView.getByRole('button', { name: '确认创建随访任务' }));
 
-    expect(await within(dialog).findByText('已创建内部随访任务')).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText('治疗摘要创建随访任务能力暂未启用'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText('已创建内部随访任务')).not.toBeInTheDocument();
     const createCall = fetchMock.mock.calls.find(([input]) =>
       fetchPath(input).endsWith('/follow-up-tasks'),
     );
@@ -1048,7 +1070,7 @@ describe('治疗摘要管理页面', () => {
     expectNoSensitiveTreatmentSummaryContent(container);
   });
 
-  it('已完成或已取消的同来源任务不阻断人工确认创建', async () => {
+  it('已完成或已取消的同来源任务不阻断确认入口但创建能力仍关闭', async () => {
     const completedSourceTask = {
       ...createdFollowUpTask,
       status: 'completed',
@@ -1060,7 +1082,15 @@ describe('治疗摘要管理页面', () => {
       [treatmentSummariesResponse([treatmentSummaryRecord])],
       {
         followUpSuggestionResponses: [jsonResponse({ suggestions: [followUpSuggestion] })],
-        followUpTaskResponses: [jsonResponse({ record: createdFollowUpTask }, { status: 201 })],
+        followUpTaskResponses: [
+          jsonResponse(
+            {
+              code: 'capability_disabled',
+              error: '治疗摘要创建随访任务能力暂未启用',
+            },
+            { status: 503, headers: { 'cache-control': 'no-store' } },
+          ),
+        ],
         followUpListResponses: {
           '/api/institution/followups?source=treatment_summary&sourceTreatmentSummaryId=trt_phase14_main': [
             jsonResponse({ records: [completedSourceTask] }),
@@ -1082,7 +1112,10 @@ describe('治疗摘要管理页面', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: '确认创建随访任务' }));
 
-    expect(await within(dialog).findByText('已创建内部随访任务')).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText('治疗摘要创建随访任务能力暂未启用'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText('已创建内部随访任务')).not.toBeInTheDocument();
     const createCall = fetchMock.mock.calls.find(([input]) =>
       fetchPath(input).endsWith('/follow-up-tasks'),
     );

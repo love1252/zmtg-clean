@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as templatesGet } from '@/app/api/institution/followup-paths/templates/route';
 import {
@@ -240,63 +243,116 @@ describe('follow-up path enrollment API routes', () => {
     expect(routeMocks.auditRecord).not.toHaveBeenCalled();
   });
 
-  it('POST enrollments 支持治疗摘要纳入并只接收白名单字段', async () => {
-    routeMocks.createEnrollmentFromTreatmentSummary.mockResolvedValue({
-      kind: 'created',
-      enrollment: enrollmentRecord,
-    });
-
-    const response = await enrollmentsPost(
-      request('/api/institution/followup-paths/enrollments', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          sourceType: 'treatment_summary',
-          sourceId: 'summary_001',
-          templateKey: 'hydro_injection_care',
+  it('POST enrollments 对普通、查询和非法输入固定返回低敏 503 且不回显输入', async () => {
+    const expectedPayload = {
+      code: 'capability_disabled',
+      error: '随访路径纳入能力暂未启用',
+    };
+    const responses = await Promise.all([
+      enrollmentsPost(
+        request('/api/institution/followup-paths/enrollments', { method: 'POST' }),
+      ),
+      enrollmentsPost(
+        request('/api/institution/followup-paths/enrollments?tenantId=other-tenant', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            sourceType: 'treatment_summary',
+            sourceId: 'summary_secret_001',
+            templateKey: 'hydro_injection_care',
+          }),
         }),
-      }),
-    );
-    const payload = await json(response);
+      ),
+      enrollmentsPost(
+        request('/api/institution/followup-paths/enrollments', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{invalid-json',
+        }),
+      ),
+    ]);
 
-    expect(response.status).toBe(201);
-    expect(payload.record).toEqual(enrollmentRecord);
-    expect(routeMocks.createEnrollmentFromTreatmentSummary).toHaveBeenCalledWith(
-      expect.objectContaining({
-        context: tenantContext,
-        sourceId: 'summary_001',
-        templateKey: 'hydro_injection_care',
-      }),
-    );
+    for (const response of responses) {
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      const payload = await json(response);
+      expect(payload).toEqual(expectedPayload);
+      const serialized = JSON.stringify(payload);
+      expect(serialized).not.toContain('record');
+      expect(serialized).not.toContain('source');
+      expect(serialized).not.toContain('summary_secret_001');
+      expect(serialized).not.toContain('customer');
+      expect(serialized).not.toContain('stages');
+      expect(serialized).not.toContain('task');
+      expect(serialized).not.toContain('audit');
+    }
+
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.database.transaction).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createTreatmentSummaryRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createEnrollmentFromTreatmentSummary).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
   });
 
-  it('POST enrollments 对重复纳入返回低敏 conflict 且不创建重复任务', async () => {
-    routeMocks.createEnrollmentFromTreatmentSummary.mockResolvedValue({
-      kind: 'conflict',
-      resourceId: 'enrollment_001',
-      reason: 'active_follow_up_path_enrollment_exists',
-    });
+  it('POST enrollments 对 hostile Request 不触发 trap、外部请求或下游调用', async () => {
+    let requestTraps = 0;
+    const hostileRequest = new Proxy(
+      {},
+      {
+        get() {
+          requestTraps += 1;
+          throw new Error('request must not be read');
+        },
+        has() {
+          requestTraps += 1;
+          throw new Error('request must not be checked');
+        },
+        ownKeys() {
+          requestTraps += 1;
+          throw new Error('request must not be enumerated');
+        },
+      },
+    ) as unknown as Request;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
-    const response = await enrollmentsPost(
-      request('/api/institution/followup-paths/enrollments', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sourceType: 'treatment_summary', sourceId: 'summary_001' }),
-      }),
-    );
-    const payload = await json(response);
+    try {
+      const response = await enrollmentsPost(hostileRequest);
 
-    expect(response.status).toBe(409);
-    expect(payload).toEqual({
-      code: 'active_follow_up_path_enrollment_exists',
-      error: '该治疗摘要已纳入当前路径，请刷新后查看',
-    });
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        result: 'denied',
-        reason: 'active_follow_up_path_enrollment_exists',
-      }),
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(await json(response)).toEqual({
+        code: 'capability_disabled',
+        error: '随访路径纳入能力暂未启用',
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(requestTraps).toBe(0);
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.database.transaction).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createTreatmentSummaryRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createEnrollmentFromTreatmentSummary).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+  });
+
+  it('POST enrollments 源码不包含已关闭的解析、授权、持久化或审计路径', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/app/api/institution/followup-paths/enrollments/route.ts'),
+      'utf8',
     );
+
+    expect(source).not.toMatch(
+      /readJsonBody|parseCreatePayload|getDemoAccessContextFromRequest|getDatabase|createAuditEventRepository|createTenantBusinessRepository|createTreatmentSummaryRepository|createEnrollmentFromTreatmentSummary|canAccessResource/,
+    );
+    expect(source).not.toMatch(/fetch\(|axios|webhook|oauth|\bHIS\b|已创建/i);
   });
 
   it('GET enrollment detail 固定关闭且不读取普通请求或路径参数', async () => {
