@@ -64,7 +64,7 @@ describe('WeCom customer mapping default read/write runtime bridge', () => {
       'default-bridge-qingmang-01',
     ],
   ] as const)(
-    '%s 的默认 GET tuple 可直接提交到默认 POST，随后 GET 返回唯一一次 version 增长',
+    '%s 的默认 GET tuple 提交到已关闭 POST 时不产生任何 mapping 事实变化',
     async (tenantId, institutionId, mappingId, idempotencyKey) => {
       const request = getRequest(tenantId, institutionId);
       const initial = await (await GET(request)).json();
@@ -97,28 +97,28 @@ describe('WeCom customer mapping default read/write runtime bridge', () => {
       const mutation = await POST(mutationRequest.clone(), {
         params: Promise.resolve({ mappingId: initial.mappingId }),
       });
-      expect(mutation.status).toBe(200);
-      expect(await mutation.json()).toMatchObject({
-        nextStatus: 'approved_pending_link',
-        nextVersion: initial.mappingVersion + 1,
-        idempotentReplay: false,
-      });
+      expect(mutation.status).toBe(503);
+      expect(mutation.headers.get('cache-control')).toBe('no-store');
+      const mutationBody = await mutation.json();
+      expect(mutationBody).toEqual({ code: 'capability_disabled' });
+      expect(mutationBody).not.toHaveProperty('mockDemo');
+      expect(mutationBody).not.toHaveProperty('nextStatus');
+      expect(mutationBody).not.toHaveProperty('nextVersion');
+      expect(mutationBody).not.toHaveProperty('idempotentReplay');
+      expect(mutationBody).not.toHaveProperty('mappingId');
 
       const replay = await POST(mutationRequest.clone(), {
         params: Promise.resolve({ mappingId: initial.mappingId }),
       });
-      expect(replay.status).toBe(200);
-      expect(await replay.json()).toMatchObject({
-        nextStatus: 'approved_pending_link',
-        nextVersion: initial.mappingVersion + 1,
-        idempotentReplay: true,
-      });
+      expect(replay.status).toBe(503);
+      expect(replay.headers.get('cache-control')).toBe('no-store');
+      expect(await replay.json()).toEqual({ code: 'capability_disabled' });
 
       const next = await (await GET(getRequest(tenantId, institutionId))).json();
       expect(next).toMatchObject({
         mappingId: initial.mappingId,
-        mappingVersion: initial.mappingVersion + 1,
-        mappingReviewStatus: 'approved_pending_link',
+        mappingVersion: initial.mappingVersion,
+        mappingReviewStatus: initial.mappingReviewStatus,
         mappingStatus: 'manual_review_required',
         manualReviewStatus: 'required',
       });
