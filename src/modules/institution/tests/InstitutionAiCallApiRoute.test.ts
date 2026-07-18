@@ -81,7 +81,12 @@ describe('机构端 AI 调用记录 API route', () => {
 
     const response = await aiCallUsageGet(new Request('http://localhost/api/institution/knowledge-management/ai-call/usage'));
     expect(response.status).toBe(200);
-    const serialized = JSON.stringify(await response.json());
+    const body = await response.json();
+    expect(body.records[0].metadata.knowledgeContext.used).toBe(true);
+    expect(body.records[0].metadata.knowledgeContext.sources).toHaveLength(1);
+    expect(body.records[0].metadata.knowledgeContext.sources[0].fileName).toBe('指南.pdf');
+    expect(body.records[0].serviceName).toBe('平台 AI 服务');
+    const serialized = JSON.stringify(body);
     expect(serialized).not.toMatch(/storageKey|bucket|signedUrl|embedding|api_key|baseUrl|Authorization/i);
     expect(serialized).not.toMatch(/"provider"|"model"|deepseek|deepseek-v4-flash/i);
     expect(serialized).not.toMatch(/"query"|"searchKeyword"/i);
@@ -92,13 +97,18 @@ describe('机构端 AI 调用记录 API route', () => {
     const { listInstitutionAiCallUsageService } = await import('@/modules/institution/server/institution-ai-call-service');
     vi.mocked(listInstitutionAiCallUsageService).mockResolvedValue({
       requestId: 'institution-ai-call-usage', readonly: true, dataSource: 'repository',
-      records: [{ id: 'old-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', serviceName: '平台 AI 服务', latencyMs: 100, status: 'succeeded', errorCode: null, metadata: null, createdAt: new Date().toISOString() }],
+      records: [
+        { id: 'old-succeeded-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', serviceName: '平台 AI 服务', latencyMs: 100, status: 'succeeded', errorCode: null, metadata: null, createdAt: new Date().toISOString() },
+        { id: 'old-rejected-1', tenantId: 'demo-tenant-001', institutionId: 'demo-inst-001', actorUserId: 'u', serviceName: '平台 AI 服务', latencyMs: null, status: 'rejected', errorCode: 'quota_exceeded_ai_calls', metadata: null, createdAt: new Date().toISOString() },
+      ],
       emptyState: { title: '暂无 AI 调用记录', description: '当前机构还没有发起过 AI 调用。' },
     });
 
     const response = await aiCallUsageGet(new Request('http://localhost/api/institution/knowledge-management/ai-call/usage'));
     expect(response.status).toBe(200);
-    expect((await response.json()).records[0].metadata).toBeNull();
+    const body = await response.json();
+    expect(body.records[0].metadata).toBeNull();
+    expect(body.records[1].metadata).toBeNull();
   });
 });
 
