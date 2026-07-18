@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import {
   GET as draftsGet,
   POST as draftsPost,
@@ -8,34 +12,21 @@ import { POST as draftApprovePost } from '@/app/api/institution/followup-message
 import { POST as draftRejectPost } from '@/app/api/institution/followup-message-drafts/[draftId]/reject/route';
 import { POST as draftMarkSentPost } from '@/app/api/institution/followup-message-drafts/[draftId]/mark-sent/route';
 import { GET as templatesGet } from '@/app/api/institution/followup-message-templates/route';
-import type { MessageDeliveryDto } from '@/modules/institution/domain/followup-message-deliveries';
-import type { FollowUpMessageDraftDto } from '@/modules/institution/domain/followup-message-drafts';
-import type { AccessContext } from '@/modules/security/domain/access-control';
 
 const routeMocks = vi.hoisted(() => {
   const auditRecord = vi.fn();
-  const transactionDatabase = { database: 'transaction-db' };
-  const database = {
-    database: 'test-db',
-    transaction: vi.fn(async (operation: (tx: typeof transactionDatabase) => unknown) =>
-      operation(transactionDatabase),
-    ),
-  };
-
   return {
     approveMessageDraft: vi.fn(),
     auditRecord,
     createAuditEventRepository: vi.fn(() => ({ record: auditRecord })),
     createMessageDraftForFollowUpTask: vi.fn(),
     createTenantBusinessRepository: vi.fn(() => ({ repository: 'tenant-business' })),
-    database,
-    getDatabase: vi.fn(),
+    getDatabase: vi.fn(() => ({ database: 'test-db' })),
     getDemoAccessContextFromRequest: vi.fn(),
     listFollowUpMessageTemplates: vi.fn(),
     listMessageDraftsForFollowUpTask: vi.fn(),
     markMessageDraftAsSent: vi.fn(),
     rejectMessageDraft: vi.fn(),
-    transactionDatabase,
     updateMessageDraftContent: vi.fn(),
   };
 });
@@ -47,10 +38,7 @@ vi.mock('@/server/db/client', async (importOriginal) => {
 
 vi.mock('@/modules/security/server/access-context', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/modules/security/server/access-context')>();
-  return {
-    ...actual,
-    getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
-  };
+  return { ...actual, getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest };
 });
 
 vi.mock('@/modules/audit/server/audit-event-repository', async (importOriginal) => {
@@ -77,248 +65,249 @@ vi.mock('@/modules/institution/server/followup-message-draft-service', async (im
   };
 });
 
-const tenantContext: AccessContext = {
-  userId: 'demo-user-admin',
-  role: 'tenant_admin',
-  scope: 'tenant',
-  tenantId: 'demo-tenant-001',
-  institutionId: 'inst-001',
-  source: 'demo_session',
-};
+const capabilityDisabledPayload = {
+  code: 'capability_disabled',
+  error: '随访消息草稿能力当前未启用',
+} as const;
 
+const disabledRoutePaths = [
+  'src/app/api/institution/followup-message-drafts/route.ts',
+  'src/app/api/institution/followup-message-drafts/[draftId]/route.ts',
+  'src/app/api/institution/followup-message-drafts/[draftId]/approve/route.ts',
+  'src/app/api/institution/followup-message-drafts/[draftId]/reject/route.ts',
+  'src/app/api/institution/followup-message-drafts/[draftId]/mark-sent/route.ts',
+] as const;
 
-const deliveryRecord: MessageDeliveryDto = {
-  deliveryId: 'msg-delivery:draft_001',
-  customerId: 'cust_001',
-  followUpTaskId: 'task_001',
-  messageDraftId: 'draft_001',
-  channelType: 'mock',
-  deliveryMode: 'mock',
-  recipientRef: 'customer:cust_001',
-  contentSnapshot: '陈女士，D1 护理随访，请人工确认恢复情况。',
-  status: 'mock_sent',
-  failureReason: null,
-  weComMockReachOut: null,
-  contactSafety: {
-    code: 'allowed',
-    allowed: true,
-    safeReasonLabel: '触达安全校验通过，仅允许模拟发送 / 人工记录。',
-    auditReason: 'contact_safety_allowed',
-    boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送',
-  },
-  createdAt: '2026-07-06T10:00:00.000Z',
-  sentAt: '2026-07-06T10:00:00.000Z',
-  updatedAt: '2026-07-06T10:00:00.000Z',
-  boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送 / 未接真实企业微信 / 短信',
-};
-
-const draftRecord: FollowUpMessageDraftDto = {
-  draftId: 'draft_001',
-  followUpTaskId: 'task_001',
-  customerId: 'cust_001',
-  customerDisplayName: '陈女士',
-  channelType: 'manual',
-  status: 'draft',
-  safePreview: '陈女士，D1 护理随访，请人工确认恢复情况。',
-  draftContent: '陈女士，D1 护理随访，请人工确认恢复情况。',
-  editedContent: null,
-  approvedAt: null,
-  markedSentAt: null,
-  safeReasonCode: 'fallback_generated',
-  createdAt: '2026-07-06T08:00:00.000Z',
-  updatedAt: '2026-07-06T08:00:00.000Z',
-};
+const forbiddenResponseKeys = [
+  'record',
+  'records',
+  'delivery',
+  'draftId',
+  'customerId',
+  'status',
+  'audit',
+  'mockDemo',
+  'outcome',
+  'result',
+] as const;
 
 function request(path: string, init?: RequestInit) {
   return new Request(`http://localhost${path}`, init);
 }
 
-async function json(response: Response) {
-  return response.json() as Promise<Record<string, unknown>>;
+function params(draftId = 'draft_001') {
+  return { params: Promise.resolve({ draftId }) };
+}
+
+function hostileRequest() {
+  let trapCount = 0;
+  const request = new Proxy(Object.create(null), {
+    get() {
+      trapCount += 1;
+      throw new Error('request must not be read');
+    },
+    getOwnPropertyDescriptor() {
+      trapCount += 1;
+      throw new Error('request must not be inspected');
+    },
+    has() {
+      trapCount += 1;
+      throw new Error('request must not be inspected');
+    },
+    ownKeys() {
+      trapCount += 1;
+      throw new Error('request must not be enumerated');
+    },
+  }) as Request;
+  return { request, trapCount: () => trapCount };
+}
+
+function hostileParams() {
+  let trapCount = 0;
+  const context = new Proxy({ params: Promise.resolve({ draftId: 'draft-hostile' }) }, {
+    get() {
+      trapCount += 1;
+      throw new Error('params must not be read');
+    },
+    getOwnPropertyDescriptor() {
+      trapCount += 1;
+      throw new Error('params must not be inspected');
+    },
+    has() {
+      trapCount += 1;
+      throw new Error('params must not be inspected');
+    },
+    ownKeys() {
+      trapCount += 1;
+      throw new Error('params must not be enumerated');
+    },
+  }) as { params: Promise<{ draftId: string }> };
+  return { context, trapCount: () => trapCount };
+}
+
+async function expectCapabilityDisabled(response: Response, secret = '') {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  const payload = await response.json();
+  expect(payload).toEqual(capabilityDisabledPayload);
+  for (const key of forbiddenResponseKeys) {
+    expect(payload).not.toHaveProperty(key);
+  }
+  if (secret) expect(JSON.stringify(payload)).not.toContain(secret);
+}
+
+function expectDisabledRouteDownstreamsIdle() {
+  for (const dependency of [
+    routeMocks.approveMessageDraft,
+    routeMocks.auditRecord,
+    routeMocks.createAuditEventRepository,
+    routeMocks.createMessageDraftForFollowUpTask,
+    routeMocks.createTenantBusinessRepository,
+    routeMocks.getDatabase,
+    routeMocks.getDemoAccessContextFromRequest,
+    routeMocks.listFollowUpMessageTemplates,
+    routeMocks.listMessageDraftsForFollowUpTask,
+    routeMocks.markMessageDraftAsSent,
+    routeMocks.rejectMessageDraft,
+    routeMocks.updateMessageDraftContent,
+  ]) {
+    expect(dependency).not.toHaveBeenCalled();
+  }
 }
 
 beforeEach(() => {
-  routeMocks.approveMessageDraft.mockReset();
-  routeMocks.auditRecord.mockReset();
+  for (const dependency of Object.values(routeMocks)) {
+    if (typeof dependency === 'function') dependency.mockReset();
+  }
   routeMocks.auditRecord.mockResolvedValue(undefined);
-  routeMocks.createAuditEventRepository.mockClear();
-  routeMocks.createMessageDraftForFollowUpTask.mockReset();
-  routeMocks.createTenantBusinessRepository.mockClear();
-  routeMocks.database.transaction.mockReset();
-  routeMocks.database.transaction.mockImplementation(async (operation) =>
-    operation(routeMocks.transactionDatabase),
-  );
-  routeMocks.getDatabase.mockReset();
-  routeMocks.getDatabase.mockReturnValue(routeMocks.database);
-  routeMocks.getDemoAccessContextFromRequest.mockReset();
-  routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-  routeMocks.listFollowUpMessageTemplates.mockReset();
-  routeMocks.listMessageDraftsForFollowUpTask.mockReset();
-  routeMocks.markMessageDraftAsSent.mockReset();
-  routeMocks.rejectMessageDraft.mockReset();
-  routeMocks.updateMessageDraftContent.mockReset();
+  routeMocks.createAuditEventRepository.mockReturnValue({ record: routeMocks.auditRecord });
+  routeMocks.createTenantBusinessRepository.mockReturnValue({ repository: 'tenant-business' });
+  routeMocks.getDatabase.mockReturnValue({ database: 'test-db' });
+  routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
+    userId: 'demo-user-admin',
+    role: 'tenant_admin',
+    scope: 'tenant',
+    tenantId: 'demo-tenant-001',
+    institutionId: 'inst-001',
+    source: 'demo_session',
+  });
 });
 
 describe('follow-up message draft API routes', () => {
-  it('GET templates 返回模板白名单且隐藏 provider/token/prompt 字段', async () => {
+  it('GET templates 保持既有白名单读取契约', async () => {
     routeMocks.listFollowUpMessageTemplates.mockResolvedValue({
       kind: 'success',
-      templates: [
-        {
-          id: 'tpl_001',
-          templateKey: 'hydro_manual',
-          templateName: '水光人工话术',
-          templateType: 'post_care',
-          applicableTemplateKey: 'hydro_injection_care',
-          applicableNodeKey: null,
-          channelType: 'manual',
-          status: 'active',
-          requiresHumanApproval: true,
-          forbidAutoSend: true,
-          safePreview: '低敏预览',
-          createdAt: '2026-07-06T08:00:00.000Z',
-          updatedAt: '2026-07-06T08:00:00.000Z',
-        },
-      ],
+      templates: [{
+        id: 'tpl_001',
+        templateKey: 'hydro_manual',
+        templateName: '水光人工话术',
+        templateType: 'post_care',
+        applicableTemplateKey: 'hydro_injection_care',
+        applicableNodeKey: null,
+        channelType: 'manual',
+        status: 'active',
+        requiresHumanApproval: true,
+        forbidAutoSend: true,
+        safePreview: '低敏预览',
+        createdAt: '2026-07-06T08:00:00.000Z',
+        updatedAt: '2026-07-06T08:00:00.000Z',
+      }],
     });
 
     const response = await templatesGet(request('/api/institution/followup-message-templates'));
-    const payload = await json(response);
-
     expect(response.status).toBe(200);
-    expect(payload.records).toEqual(expect.arrayContaining([expect.objectContaining({ templateKey: 'hydro_manual' })]));
-    expect(JSON.stringify(payload)).not.toContain('provider');
-    expect(JSON.stringify(payload)).not.toContain('token');
-    expect(JSON.stringify(payload)).not.toContain('prompt');
+    expect(await response.json()).toEqual(expect.objectContaining({ records: expect.any(Array) }));
+    expect(routeMocks.listFollowUpMessageTemplates).toHaveBeenCalledOnce();
   });
 
-  it('GET drafts 按 taskId 返回草稿白名单并记录低敏审计', async () => {
-    routeMocks.listMessageDraftsForFollowUpTask.mockResolvedValue({
-      kind: 'success',
-      drafts: [draftRecord],
-    });
+  it('所有草稿 handler 对普通与非法输入固定 fail-closed，且不回显输入', async () => {
+    const secret = 'draft-input-must-not-echo';
+    const ordinary = [
+      () => draftsGet(request(`/api/institution/followup-message-drafts?taskId=${secret}`, {
+        headers: { cookie: 'demo_session=forged' },
+      })),
+      () => draftsPost(request('/api/institution/followup-message-drafts', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ followUpTaskId: secret, templateId: 'template-forged' }),
+      })),
+      () => draftPatch(request(`/api/institution/followup-message-drafts/${secret}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: secret }),
+      }), params(secret)),
+      () => draftApprovePost(request(`/api/institution/followup-message-drafts/${secret}/approve`, { method: 'POST' }), params(secret)),
+      () => draftRejectPost(request(`/api/institution/followup-message-drafts/${secret}/reject`, { method: 'POST' }), params(secret)),
+      () => draftMarkSentPost(request(`/api/institution/followup-message-drafts/${secret}/mark-sent`, { method: 'POST' }), params(secret)),
+    ];
+    const invalid = [
+      () => draftsGet(request('/api/institution/followup-message-drafts?taskId=')),
+      () => draftsPost(request('/api/institution/followup-message-drafts', { method: 'POST', body: '{invalid' })),
+      () => draftPatch(request('/api/institution/followup-message-drafts/', { method: 'PATCH', body: '{invalid' }), params('')),
+      () => draftApprovePost(request('/api/institution/followup-message-drafts//approve', { method: 'POST' }), params('')),
+      () => draftRejectPost(request('/api/institution/followup-message-drafts//reject', { method: 'POST' }), params('')),
+      () => draftMarkSentPost(request('/api/institution/followup-message-drafts//mark-sent', { method: 'POST' }), params('')),
+    ];
 
-    const response = await draftsGet(request('/api/institution/followup-message-drafts?taskId=task_001'));
-    const payload = await json(response);
-
-    expect(response.status).toBe(200);
-    expect(payload).toEqual({ records: [draftRecord] });
-    expect(routeMocks.listMessageDraftsForFollowUpTask).toHaveBeenCalledWith(
-      expect.objectContaining({ context: tenantContext, followUpTaskId: 'task_001' }),
-    );
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ result: 'allowed', resource: 'follow_up', resourceId: 'task_001' }),
-    );
-    expect(JSON.stringify(payload)).not.toContain('tenantId');
-    expect(JSON.stringify(payload)).not.toContain('institutionId');
-    expect(JSON.stringify(payload)).not.toContain('provider');
+    for (const invoke of [...ordinary, ...invalid]) {
+      await expectCapabilityDisabled(await invoke(), secret);
+    }
+    expectDisabledRouteDownstreamsIdle();
   });
 
-  it('POST drafts 只接收 followUpTaskId/templateId 白名单字段并返回 201', async () => {
-    routeMocks.createMessageDraftForFollowUpTask.mockResolvedValue({ kind: 'created', draft: draftRecord });
+  it('所有草稿 handler 对 hostile Request/params 既不读 body 也不触发下游', async () => {
+    const getRequest = hostileRequest();
+    const postRequest = hostileRequest();
+    const patchRequest = hostileRequest();
+    const approveRequest = hostileRequest();
+    const rejectRequest = hostileRequest();
+    const markSentRequest = hostileRequest();
+    const patchParams = hostileParams();
+    const approveParams = hostileParams();
+    const rejectParams = hostileParams();
+    const markSentParams = hostileParams();
 
-    const response = await draftsPost(
-      request('/api/institution/followup-message-drafts', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          followUpTaskId: 'task_001',
-          templateId: 'tpl_001',
-        }),
-      }),
-    );
-    const payload = await json(response);
+    for (const invoke of [
+      () => draftsGet(getRequest.request),
+      () => draftsPost(postRequest.request),
+      () => draftPatch(patchRequest.request, patchParams.context),
+      () => draftApprovePost(approveRequest.request, approveParams.context),
+      () => draftRejectPost(rejectRequest.request, rejectParams.context),
+      () => draftMarkSentPost(markSentRequest.request, markSentParams.context),
+    ]) {
+      await expectCapabilityDisabled(await invoke());
+    }
 
-    expect(response.status).toBe(201);
-    expect(payload).toEqual({ record: draftRecord });
-    expect(routeMocks.createMessageDraftForFollowUpTask).toHaveBeenCalledWith(
-      expect.objectContaining({ followUpTaskId: 'task_001', templateId: 'tpl_001' }),
-    );
-    expect(routeMocks.createMessageDraftForFollowUpTask).toHaveBeenCalledTimes(1);
+    for (const hostile of [
+      getRequest, postRequest, patchRequest, approveRequest, rejectRequest, markSentRequest,
+      patchParams, approveParams, rejectParams, markSentParams,
+    ]) {
+      expect(hostile.trapCount()).toBe(0);
+    }
+    expectDisabledRouteDownstreamsIdle();
   });
 
-  it('PATCH drafts 只接收 content 并对 unsafe content 返回 409', async () => {
-    routeMocks.updateMessageDraftContent.mockResolvedValueOnce({
-      kind: 'conflict',
-      resourceId: 'draft_001',
-      reason: 'unsafe_follow_up_message_content',
-    });
-
-    const response = await draftPatch(
-      request('/api/institution/followup-message-drafts/draft_001', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content: '客户手机号 13812345678' }),
-      }),
-      { params: Promise.resolve({ draftId: 'draft_001' }) },
-    );
-    const payload = await json(response);
-
-    expect(response.status).toBe(409);
-    expect(payload).toEqual({
-      code: 'unsafe_follow_up_message_content',
-      error: '草稿内容包含不允许的敏感信息',
-    });
-    expect(routeMocks.updateMessageDraftContent).toHaveBeenCalledWith(
-      expect.objectContaining({ draftId: 'draft_001', content: '客户手机号 13812345678' }),
-    );
-  });
-
-  it('approve/reject/mark-sent 只做内部状态流转，不真实发送', async () => {
-    routeMocks.approveMessageDraft.mockResolvedValue({
-      kind: 'updated_with_delivery',
-      draft: { ...draftRecord, status: 'approved', approvedAt: '2026-07-06T10:00:00.000Z' },
-      delivery: deliveryRecord,
-      deduped: false,
-    });
-    routeMocks.rejectMessageDraft.mockResolvedValue({
-      kind: 'updated',
-      draft: { ...draftRecord, status: 'rejected' },
-    });
-    routeMocks.markMessageDraftAsSent.mockResolvedValue({
-      kind: 'updated',
-      draft: { ...draftRecord, status: 'marked_sent', markedSentAt: '2026-07-06T11:00:00.000Z' },
-    });
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-
-    const approveResponse = await draftApprovePost(
-      request('/api/institution/followup-message-drafts/draft_001/approve', { method: 'POST' }),
-      { params: Promise.resolve({ draftId: 'draft_001' }) },
-    );
-    const approvePayload = await json(approveResponse);
-    const rejectResponse = await draftRejectPost(
-      request('/api/institution/followup-message-drafts/draft_001/reject', { method: 'POST' }),
-      { params: Promise.resolve({ draftId: 'draft_001' }) },
-    );
-    const markSentResponse = await draftMarkSentPost(
-      request('/api/institution/followup-message-drafts/draft_001/mark-sent', { method: 'POST' }),
-      { params: Promise.resolve({ draftId: 'draft_001' }) },
-    );
-
-    expect(approveResponse.status).toBe(200);
-    expect(approvePayload).toEqual({
-      record: { ...draftRecord, status: 'approved', approvedAt: '2026-07-06T10:00:00.000Z' },
-      delivery: deliveryRecord,
-    });
-    expect(JSON.stringify(approvePayload.delivery)).not.toMatch(
-      /tenantId|institutionId|phoneNumber|idNumber|medicalRecordNo|HIS|provider|model|token|cost|vendor|prompt|raw|DATABASE_URL|secret/i,
-    );
-    expect(rejectResponse.status).toBe(200);
-    expect(markSentResponse.status).toBe(200);
-    expect(routeMocks.approveMessageDraft).toHaveBeenCalledWith(
-      expect.objectContaining({
-        context: tenantContext,
-        draftId: 'draft_001',
-        tenantBusinessRepository: { repository: 'tenant-business' },
-        auditRepository: { record: routeMocks.auditRecord },
-      }),
-    );
-    expect(routeMocks.rejectMessageDraft).toHaveBeenCalledWith(
-      expect.objectContaining({ context: tenantContext, draftId: 'draft_001' }),
-    );
-    expect(routeMocks.markMessageDraftAsSent).toHaveBeenCalledWith(
-      expect.objectContaining({ context: tenantContext, draftId: 'draft_001' }),
-    );
-    expect(fetchSpy).not.toHaveBeenCalled();
+  it('所有关闭 route 只保留 NextResponse，且不装配 request、params、session、DB、审计或交付下游', () => {
+    for (const routePath of disabledRoutePaths) {
+      const source = readFileSync(resolve(process.cwd(), routePath), 'utf8');
+      expect(source).toContain("import { NextResponse } from 'next/server';");
+      for (const forbiddenSource of [
+        'access-context',
+        'audit-event-repository',
+        'followup-message-draft-api',
+        'followup-message-draft-service',
+        'tenant-business-repository',
+        'getDatabase',
+        'canAccessResource',
+        'fetch(',
+        'request.',
+        'request[',
+        '_request.',
+        '_request[',
+        'params.',
+        'params[',
+        '_context.',
+        '_context[',
+      ]) {
+        expect(source).not.toContain(forbiddenSource);
+      }
+    }
   });
 });
