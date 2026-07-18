@@ -60,6 +60,7 @@ const routeMocks = vi.hoisted(() => {
     createAuditEventRepository: vi.fn(() => auditRepository),
     database: { database: 'formal-auth-db' },
     getDatabase: vi.fn(),
+    provisionDemoDataForTenant: vi.fn(),
     repository,
     service,
   };
@@ -100,6 +101,10 @@ vi.mock('@/modules/audit/server/audit-event-repository', async (importOriginal) 
   };
 });
 
+vi.mock('@/modules/institution/server/trial-provisioning-service', () => ({
+  provisionDemoDataForTenant: routeMocks.provisionDemoDataForTenant,
+}));
+
 function jsonRequest(body: unknown) {
   return new Request('http://localhost/api/auth/login', {
     method: 'POST',
@@ -119,6 +124,7 @@ beforeEach(() => {
   routeMocks.createAuthAccountRepository.mockClear();
   routeMocks.createAuthAccountService.mockClear();
   routeMocks.createAuditEventRepository.mockClear();
+  routeMocks.provisionDemoDataForTenant.mockReset();
   Object.values(routeMocks.repository).forEach((mock) => mock.mockReset());
   Object.values(routeMocks.auditRepository).forEach((mock) => mock.mockReset());
   routeMocks.service.authenticatePasswordAccount.mockReset();
@@ -174,6 +180,8 @@ describe('正式账号登录路由', () => {
       },
     });
     expect(routeMocks.getDatabase).toHaveBeenCalledWith();
+    expect(routeMocks.getDatabase).toHaveBeenCalledTimes(1);
+    expect(routeMocks.provisionDemoDataForTenant).not.toHaveBeenCalled();
     expect(routeMocks.createAuthAccountRepository).toHaveBeenCalledWith(routeMocks.database);
     expect(routeMocks.repository.findAccountByUsername).toHaveBeenCalledWith('zhengpu_admin');
     expect(routeMocks.repository.findPrimaryTenantMembershipByUserId).toHaveBeenCalledWith(
