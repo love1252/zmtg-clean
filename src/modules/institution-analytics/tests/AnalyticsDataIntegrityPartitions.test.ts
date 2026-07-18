@@ -168,6 +168,37 @@ describe('经营分析候选完整性分区', () => {
     ).toEqual({ ok: false, reasonCode: 'invalid_partition_set' });
   });
 
+  it('超过固定币种分区上限时不读取元素 descriptor 或复制数组', () => {
+    const oversized = [] as unknown[];
+    oversized.length = Intl.supportedValuesOf('currency').length + 1;
+    let getterReads = 0;
+    Object.defineProperty(oversized, '0', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        return partition('CNY');
+      },
+    });
+
+    const originalGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
+    let oversizedDescriptorReads = 0;
+    const descriptorSpy = vi
+      .spyOn(Object, 'getOwnPropertyDescriptors')
+      .mockImplementation((value) => {
+        if (value === oversized) oversizedDescriptorReads += 1;
+        return originalGetOwnPropertyDescriptors(value);
+      });
+    try {
+      expect(
+        adjudicateAnalyticsDataIntegrity({ partitions: oversized }),
+      ).toEqual({ ok: false, reasonCode: 'invalid_partition_set' });
+      expect(getterReads).toBe(0);
+      expect(oversizedDescriptorReads).toBe(0);
+    } finally {
+      descriptorSpy.mockRestore();
+    }
+  });
+
   it('缺少 Node Proxy detector 时整体 fail-closed', async () => {
     vi.resetModules();
     vi.doMock('node:util/types', () => ({

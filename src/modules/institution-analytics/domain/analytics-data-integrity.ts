@@ -88,6 +88,7 @@ export type AnalyticsDataIntegrityResult =
     }>;
 
 const ISO_4217_CURRENCIES = new Set(Intl.supportedValuesOf('currency'));
+const MAX_PARTITION_COUNT = ISO_4217_CURRENCIES.size;
 
 function includesValue<T extends readonly string[]>(
   values: T,
@@ -163,21 +164,21 @@ function snapshotDenseExactArray(value: unknown): readonly unknown[] | null {
       return null;
     }
 
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    const keys = Reflect.ownKeys(descriptors);
-    const lengthDescriptor = descriptors['length'] as
-      | PropertyDescriptor
-      | undefined;
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
     if (
       lengthDescriptor === undefined ||
       !('value' in lengthDescriptor) ||
       typeof lengthDescriptor.value !== 'number' ||
       !Number.isSafeInteger(lengthDescriptor.value) ||
-      lengthDescriptor.value < 0
+      lengthDescriptor.value < 0 ||
+      lengthDescriptor.value > MAX_PARTITION_COUNT
     ) {
       return null;
     }
     const length = lengthDescriptor.value;
+
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const keys = Reflect.ownKeys(descriptors);
     if (keys.length !== length + 1) return null;
 
     const snapshot: unknown[] = [];
