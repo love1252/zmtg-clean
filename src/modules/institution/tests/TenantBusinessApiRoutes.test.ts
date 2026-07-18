@@ -14,7 +14,6 @@ import {
   PATCH as followupsPatch,
   POST as followupsPost,
 } from '@/app/api/institution/followups/route';
-import { DEMO_SESSION_COOKIE } from '@/modules/auth/server/demo-session';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import {
   handleTenantBusinessListRequest,
@@ -117,10 +116,6 @@ const platformContext: AccessContext = {
   tenantId: null,
   source: 'demo_session',
 };
-
-function unsignedSession(session: unknown) {
-  return Buffer.from(JSON.stringify(session), 'utf8').toString('base64url');
-}
 
 beforeEach(() => {
   routeMocks.getDatabase.mockReset();
@@ -582,13 +577,13 @@ describe('租户业务写入 API 处理器', () => {
 });
 
 describe('租户业务只读 API 路由', () => {
-  it('未登录时优先返回 401 且不初始化数据库', async () => {
+  it('未登录时 appointments / followups 优先返回 401 且不初始化数据库', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
     routeMocks.getDatabase.mockImplementation(() => {
       throw new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg');
     });
 
-    const routeHandlers = [customersGet, appointmentsGet, followupsGet];
+    const routeHandlers = [appointmentsGet, followupsGet];
 
     for (const routeHandler of routeHandlers) {
       const response = await routeHandler(new Request('http://localhost/api/institution/customers'));
@@ -599,81 +594,34 @@ describe('租户业务只读 API 路由', () => {
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
   });
 
-  it('伪造未签名 cookie 请求客户路由时返回 401 且不初始化数据库', async () => {
-    const actualAccessContext = await vi.importActual<typeof import('@/modules/security/server/access-context')>(
-      '@/modules/security/server/access-context',
-    );
-    routeMocks.getDemoAccessContextFromRequest.mockImplementation((request: Request) =>
-      actualAccessContext.getDemoAccessContextFromRequest(request),
-    );
-    routeMocks.getDatabase.mockImplementation(() => {
-      throw new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg');
-    });
-
-    const forged = unsignedSession({
-      user: {
-        id: 'forged-user-admin',
-        username: 'forged',
-        name: '伪造机构管理员',
-        role: 'tenant_admin',
-        tenantId: 'demo-tenant-001',
-      },
-      expiresAt: Date.now() + 60_000,
-    });
-
-    const response = await customersGet(
-      new Request('http://localhost/api/institution/customers', {
-        headers: { cookie: `${DEMO_SESSION_COOKIE}=${forged}` },
-      }),
-    );
-
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({ error: '请先登录' });
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-  });
-
-  it('带恶意 URL 和请求头租户时仍使用访问上下文租户', async () => {
+  it('客户列表固定 capability-disabled，任意 hostile Request / Proxy 均无副作用', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
+    const traps = { get: 0, ownKeys: 0, descriptor: 0 };
+    const hostileRequest = new Proxy({}, {
+      get() { traps.get += 1; throw new Error('request must not be read'); },
+      ownKeys() { traps.ownKeys += 1; throw new Error('request must not be enumerated'); },
+      getOwnPropertyDescriptor() { traps.descriptor += 1; throw new Error('request must not be described'); },
+    }) as Request;
 
-    const response = await customersGet(
-      new Request('http://localhost/api/institution/customers?tenantId=other-tenant', {
-        headers: { 'x-tenant-id': 'other-tenant' },
-      }),
-    );
+    const response = await customersGet(hostileRequest);
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
-      records: [{ id: 'cust_001', tenantId: 'demo-tenant-001' }],
+      code: 'customer_list_capability_disabled',
+      error: '客户列表能力暂未启用',
     });
-    expect(routeMocks.repository.listCustomersByTenant).toHaveBeenCalledWith('demo-tenant-001');
-    expect(routeMocks.repository.listCustomersByTenant).not.toHaveBeenCalledWith('other-tenant');
-  });
-
-  it('权限拒绝时返回 403 且不被路由捕获为 503', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
-
-    const response = await customersGet(new Request('http://localhost/api/institution/customers'));
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
+    expect(traps).toEqual({ get: 0, ownKeys: 0, descriptor: 0 });
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
     expect(routeMocks.repository.listCustomersByTenant).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'role_denied',
-      resource: 'customer',
-      result: 'denied',
-    }));
   });
 
   it('三个路由绑定各自的列表方法和审计资源', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
 
     const routeCases = [
-      {
-        handler: customersGet,
-        path: '/api/institution/customers',
-        list: routeMocks.repository.listCustomersByTenant,
-        resource: 'customer',
-      },
       {
         handler: appointmentsGet,
         path: '/api/institution/appointments',
@@ -853,7 +801,7 @@ describe('租户业务只读 API 路由', () => {
       throw new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg');
     });
 
-    const routeHandlers = [customersGet, appointmentsGet, followupsGet];
+    const routeHandlers = [appointmentsGet, followupsGet];
 
     for (const routeHandler of routeHandlers) {
       const response = await routeHandler(new Request('http://localhost/api/institution/customers'));
@@ -868,7 +816,7 @@ describe('租户业务只读 API 路由', () => {
     }
   });
 
-  it('审计写入失败时失败关闭并返回 503 且不泄露错误详情', async () => {
+  it('客户列表忽略审计故障并保持固定 capability-disabled 响应', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.auditRecord.mockRejectedValue(
       new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg'),
@@ -879,10 +827,14 @@ describe('租户业务只读 API 路由', () => {
     const serializedPayload = JSON.stringify(payload);
 
     expect(response.status).toBe(503);
-    expect(payload).toEqual({ error: '数据服务暂时不可用' });
+    expect(payload).toEqual({
+      code: 'customer_list_capability_disabled',
+      error: '客户列表能力暂未启用',
+    });
     expect(serializedPayload).not.toContain('DATABASE_URL');
     expect(serializedPayload).not.toContain('postgres://');
     expect(serializedPayload).not.toContain('secret');
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
   });
 });
 
