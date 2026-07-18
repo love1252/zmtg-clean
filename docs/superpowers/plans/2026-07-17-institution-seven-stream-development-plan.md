@@ -17,6 +17,7 @@
 - 当前分支：`codex/institution-plan-contract-baseline`
 - 当前 `HEAD`：`e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa`
 - 当前 `main` 与 `origin/main`：`e7450909b794c5dfa54e07e2fd878bdd2ab8b7aa`
+- `BASE-DESIGN-R2` 一致性修订基线：`origin/main` / `448734bc2cdacdc5b9839c125ed18661cc4b6abd`；本次只同步本文与 `2026-07-18-institution-base-03-mig-01-technical-design.md` 的 guard/anchor 契约，不改写上述 `PLAN-PUBLISH-01` 历史启动证据。
 - 任务开始时主工作区干净，`main` 与 `origin/main` 一致；本分支仅允许修改本文档
 - 产品规格：`docs/superpowers/specs/2026-07-15-institution-navigation-page-system-design.md`
 - 本轮允许：仅修订本文档，冻结七份栏目技术计划共同依赖的规划契约，并提交、推送本 docs-only 分支和创建草稿 PR
@@ -196,7 +197,7 @@ AccessContext（保留 source）
 | --- | --- | --- |
 | 会话缺失、失效或无法认证；`trusted_gateway` 证明缺失、无效或过期 | route/API 返回受控 `401`，不调用业务 provider | 清除受保护 display model，按统一登录/未认证状态处理。 |
 | `demo_session`、成员无记录/停用/撤销、role 不获准、scope 不获准或 action 不获准 | route/API 返回受控 `403`，不返回业务数据或目标存在性 | 使用统一无权限 `InstitutionPageState`；未知值不显示为 `0` 或 empty。 |
-| 成员 provider、对象 scope reader 或其他授权前置不可用/过期 | 在 BASE-01A/BASE-05 冻结的受控失败映射中 fail-closed，不构造强制 scope envelope | 清除受保护 display model，只使用现有 `kind='unavailable'` 的 `InstitutionPageState`；不能降级到 demo、旧 claim 或本地默认机构。 |
+| provenance verifier/issuer/key-ring 或成员 provider、对象 scope reader、其他授权前置不可用/过期 | route/API 返回受控 `503` 或 BASE-01A/BASE-05 既有 unavailable，fail-closed 且不构造强制 scope envelope；依赖故障不得伪装成 `401` | 清除受保护 display model，只使用现有 `kind='unavailable'` 的 `InstitutionPageState`；不能降级到 demo、旧 claim、本地默认机构或登录循环。 |
 
 只有 guard 已建立权威 `tenantId + institutionId` 后，业务 reader 才能按公共契约构造 `InstitutionSourceEnvelopeV1`；只有权威业务 provider 明确返回空，才允许 `empty`。`stale` 只允许作为已建立权威 scope 后业务 envelope 的 readiness，不新增 stale 页面 kind，也不能用于表达授权前置失败。HTTP 映射和文案仍由 BASE-01A/BASE-05 统一冻结，本节不新建第二套页面状态枚举。
 
@@ -204,7 +205,7 @@ AccessContext（保留 source）
 
 后续 runtime 的低敏审计投影至少保留受控 `decisionCode`、`actionKey`、安全 `userId`/成员/目标引用、权威 `tenantId + institutionId`、原始 `source` 和服务器决策时间；若 provider 提供 `membershipRevision`，可作为补充证据。不得写入 cookie、token、原始认证或网关 payload、客户端提交的 scope、手机号、邮箱、外部账号、完整对象内容、provider 原始错误或堆栈。
 
-后续 runtime 最小验收必须覆盖：三种现有 source 的逐来源行为；伪造、过期和撤销证明；fresh active、stale、停用、移出、角色变化和 provider unavailable；institution-scoped 与 object-scoped 分流；跨 tenant/机构、对象归属缺失、reader unavailable；未知 role/action；未建立权威 context 时不构造 V1 envelope；401、403 与 `InstitutionPageState` 一致；拒绝结果无业务数据、计数、名称、链接、PII 或原始错误泄露。
+后续 runtime 最小验收必须覆盖：三种现有 source 的逐来源行为；伪造、过期和撤销证明；provenance verifier/issuer/key-ring unavailable 独立返回 `provenance_unavailable`/503；fresh active、stale、停用、移出、角色变化和 provider unavailable；institution-scoped 与 object-scoped 分流；跨 tenant/机构、对象归属缺失、reader unavailable；未知 role/action；未建立权威 context 时不构造 V1 envelope；401、403、503 与 `InstitutionPageState` 一致；拒绝结果无业务数据、计数、名称、链接、PII 或原始错误泄露。
 
 **明确非范围：** 本节以单文件 docs-only 形式发布，不修改 `src/**`、认证 session、成员 provider、RBAC、route/API/UI、公共 DTO、数据库/schema/migration、审计写入、凭证、外部连接、测试 runtime 或任何 `BASE-02A` / `BASE-CAP` 实施。本文档的提交、推送、PR 或合并只发布设计，不构成任何 runtime 授权；后续实现前必须另行冻结 provider 接口、两级 guard、action matrix、失败映射和审计字段，并获得 runtime 授权。
 
@@ -217,6 +218,12 @@ AccessContext（保留 source）
 以下全是内部 server-only contract，不是 wire DTO；构造器不向页面、route 或栏目模块导出。解析先读 descriptor，再读值；extra key、accessor、symbol、prototype/Proxy、稀疏数组、宽松时间与未知状态都 fail-closed，不能从 cookie/header/URL/body/client storage/cache claim 补字段。
 
 所有 `userReference`、membership/binding/anchor/proof/request/correlation/digest reference 先过同一 `SafeGuardReferenceV1` validator，再过字段 prefix validator：`^(usr|mbr|bnd|anc|prf|req|cor|objd|mrv|brv|arv|prv|srv|crv)_v1_k[1-9][0-9]{0,2}_[A-Za-z0-9_-]{22,43}$`，真实总长度 32–56。`mrv`、`brv`、`arv`、`prv`、`srv`、`crv` 分别只用于 membership、binding、anchor、policy、object scope、capability revision，绝不是可互换的 `rev`。payload 必须是 owner 可验证的 opaque/digest reference，禁止可逆编码、顺序号、业务主键、PII、URL、cookie 或 token；未知 keyVersion、prefix/长度/验证失败均拒绝，审计绝不写原始 ID。
+
+guard-reference issuer 方向冻结为**专用、版本化、域分离的 server-only keyed HMAC-SHA-256**，不得复用 session/cookie、Webhook、加密、provider 或其他业务密钥。权威 owner 在自身边界内调用共享 server-only issuer；canonical message 使用无歧义的长度前缀 UTF-8 tuple，至少绑定固定协议域 `zmtg.guard-reference.v1`、精确 prefix、`keyVersion`、owner domain、权威 tenant/institution scope（适用时）及不可变 owner-local raw identifier。PII 不得作为签发输入；raw identifier、canonical bytes 和原始整数 revision 不得离开 owner，也不得进入 guard 参数、wire DTO、URL、审计或日志。issuer 计算完整 32-byte HMAC-SHA-256 tag，以无 padding base64url 编码为 43 字符 opaque，并输出既有 `<prefix>_v1_k<keyVersion>_<opaque>`；现有结构 validator 的 22–43 范围不构成授权，新 issuer/verifier 只接受其 HMAC profile 的完整 43 字符 tag，并使用 constant-time 比较。
+
+key ring 仅来自受控 server-side 配置，精确包含一个 current issue key 和按 `keyVersion + verifyUntil` 管理的 verify-only 旧 key；issuer 只用 current key，verifier 仅在明确未过期的旧 key 窗口内接受旧版本，未知/过期 key fail-closed。已知且仍在窗口内的 key material 缺失、key ring shape/时钟/crypto 依赖不可用属于 unavailable，不得尝试 raw ID、其他用途密钥、默认 key、历史缓存或宽松验证。持久 `oref` 的旧 key 退役前，owner 必须证明 owner-local mapping/reissue/alias 迁移完成；否则 capability 保持关闭并延长经审批的 verify-only 窗口，不能静默使仍有效对象指向错误目标。轮换只允许新 key 签发，不允许把旧 tag 重新标记为新 `keyVersion`。
+
+安全审计可以记录已签发的 opaque reference、prefix、keyVersion、owner domain、结果码和服务器时间；禁止记录 key material、raw identifier、canonical message、完整 HMAC 中间值、PII 或底层 crypto/config 错误。HMAC 方向在本文冻结，但 issuer/verifier runtime、owner-local object mapping、真实 key ring、secret 注入/轮换配置与运维动作仍须分别取得精确授权，本文不创建配置或真实密钥。
 
 ```ts
 type SafeGuardReferenceV1 = string;
@@ -235,7 +242,8 @@ type FormalRequestProvenanceEvidenceV1 = Readonly<{
 }>;
 type ProvenanceResolutionV1 =
   | Readonly<{ kind: 'verified'; evidence: FormalRequestProvenanceEvidenceV1 }>
-  | Readonly<{ kind: 'rejected'; code: 'provenance_missing' | 'provenance_invalid' | 'provenance_expired' | 'provenance_source_denied' }>;
+  | Readonly<{ kind: 'rejected'; code: 'provenance_missing' | 'provenance_invalid' | 'provenance_expired' | 'provenance_source_denied' }>
+  | Readonly<{ kind: 'unavailable'; code: 'provenance_unavailable' }>;
 type FreshActiveMembershipResolutionV1 =
   | Readonly<{
       kind: 'fresh_active'; userReference: SafeGuardReferenceV1;
@@ -263,7 +271,9 @@ type FreshActiveMembershipProviderV1 = Readonly<{
 }>;
 ```
 
-认证 resolver 的唯一输入是认证模块已验证的 server request；gateway resolver 的唯一输入是网关 owner 已验证并绑定本次请求的 gateway request。`demo_session`、未知来源和无法证明请求绑定均为 `provenance_source_denied`。成员 provider 只判断成员/binding 当前性和四角色：真实无资格、停用、撤销、移出或 binding 无效为不枚举 `membership_denied`；payload/内部验证失败为 `membership_invalid`，依赖失败为 `membership_unavailable`，过期为 `membership_stale`。它绝不判断 action；role/action 不匹配只由 manifest 产生 `action_role_denied`。anchor provider 是唯一权威来源，业务方不可自报；active 必含 tenant/institution/reference/revision/freshness，明确无效为 denied，reader/验证不可用为 unavailable。若 owner 获单独授权原子组合成员/binding/anchor，结果仍须逐字段等同此 contract。
+认证 resolver 的唯一输入是认证模块已验证的 server request；gateway resolver 的唯一输入是网关 owner 已验证并绑定本次请求的 gateway request。`demo_session`、未知来源和无法证明请求绑定均为 `provenance_source_denied`；签名/verifier/issuer、已知有效窗口内 key material、server clock、crypto 或受控 key-ring 配置不可用必须精确返回 `provenance_unavailable`，不得折叠为 `provenance_invalid`、401 或登录循环。成员 provider 只判断成员/binding 当前性和四角色：真实无资格、停用、撤销、移出或 binding 无效为不枚举 `membership_denied`；payload/内部验证失败为 `membership_invalid`，依赖失败为 `membership_unavailable`，过期为 `membership_stale`。它绝不判断 action；role/action 不匹配只由 manifest 产生 `action_role_denied`。anchor provider 是唯一权威来源，业务方不可自报；active 必含 tenant/institution/reference/revision/freshness，明确无效为 denied，reader/issuer/key-ring 不可用为 unavailable。若 owner 获单独授权原子组合成员/binding/anchor，结果仍须逐字段等同此 contract。
+
+anchor provider 的 raw revision 唯一来自当前 `(tenant_id, institution_id)` 对应 `institution_scopes.revision`。该列精确为正整数、无 default，由 A2 显式写 `1`；所有 active/suspended 或其他授权语义 mutation 都必须带 expected revision CAS 并严格加一，禁止回退、复用、上溢和 ABA。provider 在 owner 内将 scope 双键与该整数 revision 送入上述 HMAC issuer，输出 opaque `arv`；原始整数不进入 allow 或审计。status、revision 或 `arv` 任一不可验均不得签发 active anchor。
 
 evidence、membership 与 active anchor scope 精确匹配后，中央 guard 才在内存构造 `AccessContext`（`scope:'tenant'`，其余字段取权威事实）调用 BASE-02A。八类失败安全映射固定为：`unauthenticated`→401；`non_tenant_scope`、`unsupported_role`、`invalid_user`、`missing_tenant`、`missing_institution`、`invalid_source`→不枚举403；`invalid_context_shape`→内部安全503；不能绕过 provenance/membership/binding/anchor。
 
@@ -310,11 +320,11 @@ scope allow 仅证明当前机构范围，不能渲染壳、读对象、调 capa
 
 manifest entry 固定为 `{resourceKind, concreteAction, allowedRoles, policyRevision, capabilityRequirement}`；调用方只交 `ObjectTargetIntentV1`，不能传 objectScope/owner assertion/业务主键或 allow policy。唯一对象顺序严格为：`registry → owner reader → ObjectScopeAllowV1（不含 capability） → BASE-CAP → ResourceActionPreflightV1（含 capabilityDecisionRevision/freshUntil）`；BASE-CAP 绝不早于 object scope allow。
 
-`SafeObjectReferenceV1` provider contract 为 `oref_v1_k<keyVersion>_<opaque>`：keyVersion 1–3 位正整数、opaque 22–43 个 base64url、真实总长度33–56。仅 owner/registry 在对象创建或权威读取时签发并 server-side 映射/验证；生命周期内跨部署稳定。轮换接受当前与未过期旧 keyVersion，窗口后拒绝。secret、签名/digest 算法、key 存储、mapping schema 和轮换任务未冻结：本轮只定义 provider contract，不虚构算法/secret/schema/runtime。
+`SafeObjectReferenceV1` provider contract 继续使用 `oref_v1_k<keyVersion>_<opaque>`：keyVersion 1–3 位正整数，结构 validator 保留 opaque 22–43 个 base64url、真实总长度33–56；获批 HMAC issuer 固定输出完整 43 字符 tag。仅 owner/registry 在对象创建或权威读取时于 owner 边界内签发、映射和验证；同一 keyVersion、owner domain、scope 与不可变 raw identifier 在跨部署时必须稳定。HMAC 是不可逆引用，不解决反向查找；owner-local mapping/index/reissue 方案及其 schema 仍需独立设计和批准，raw ID 不得为方便映射而交给中央 guard。轮换遵守 current issue key、verify-only 旧 key 窗口和持久 `oref` 退役门禁；窗口后拒绝，依赖不可用返回对应 unavailable。
 
 ##### 3. 分层 TTL、缓存与原子撤权
 
-服务端 UTC 时钟要求 `issuedAt <= verifiedAt <= now < provenance.validUntil`、membership/anchor `observedAt <= now < freshUntil`；future instant 直接拒绝，最大时钟偏差仅监控30秒、不提供 future-grace。provenance TTL 最大5分钟，membership/anchor TTL 各最大60秒；无效ISO、负值、超限或未知keyVersion fail-closed。
+服务端 UTC 时钟要求 `issuedAt <= verifiedAt <= now < provenance.validUntil`、membership/anchor `observedAt <= now < freshUntil`；future instant 直接拒绝，最大时钟偏差仅监控30秒、不提供 future-grace。provenance TTL 最大5分钟，membership/anchor TTL 各最大60秒；无效 ISO、负值、超限、未知或已过期 keyVersion fail-closed；已知且仍在 verify-only 窗口内的 key、时钟或 crypto 依赖不可用则返回对应 unavailable。
 
 scope TTL=`min(provenance.validUntil,membership.freshUntil,anchor.freshUntil)`；section默认继承 scope，只有该 section manifest 要求 capability 时才追加其 `freshUntil`；object scope allow 不含 capability，resource preflight TTL 才为 `min(objectScopeAllow.validUntil,capabilityFreshUntil)`。scope/section/object scope/preflight cache 必须物理分区：scope key 含 user/source/scope/request/membership+binding+anchor revisions；section另含 sectionId/action/policy和可选 capability revision；object另含 resource/action/target/objectScope/policy revisions；preflight默认不缓存，若批准才含 capability revision/freshUntil。变更 binding/anchor/member/role/policy/object/capability、机构停用或急停立即失效。
 
@@ -322,20 +332,21 @@ scope TTL=`min(provenance.validUntil,membership.freshUntil,anchor.freshUntil)`�
 
 ##### 4. decision 映射、MIG-01 与审计
 
-闭集：`provenance_missing`、`provenance_invalid`、`provenance_expired`、`provenance_source_denied`、`membership_denied`、`membership_invalid`、`membership_unavailable`、`membership_stale`、`institution_anchor_denied`、`institution_anchor_unavailable`、`action_unregistered`、`action_role_denied`、`not_found_or_scope_denied`、`object_scope_unavailable`、`capability_not_operational`、`capability_unavailable`、`audit_unavailable`、`revision_conflict`；未知状态只给最早 closed failure。
+闭集：`provenance_missing`、`provenance_invalid`、`provenance_expired`、`provenance_source_denied`、`provenance_unavailable`、`membership_denied`、`membership_invalid`、`membership_unavailable`、`membership_stale`、`institution_anchor_denied`、`institution_anchor_unavailable`、`action_unregistered`、`action_role_denied`、`not_found_or_scope_denied`、`object_scope_unavailable`、`capability_not_operational`、`capability_unavailable`、`audit_unavailable`、`revision_conflict`；未知状态只给最早 closed failure。
 
 | code | 外部映射 |
 | --- | --- |
 | `provenance_missing`、`provenance_invalid`、`provenance_expired`、`provenance_source_denied` | 401，不调下游。 |
 | `membership_denied`、`institution_anchor_denied`、`action_unregistered`、`action_role_denied` | 403 / 既有 forbidden，不枚举真实原因。 |
+| `provenance_unavailable` | 503 / 既有 unavailable，不调成员、anchor 或业务 provider；verifier/issuer/key-ring 依赖故障不得伪装成 401。 |
 | `membership_invalid`、`membership_unavailable`、`membership_stale`、`institution_anchor_unavailable`、`object_scope_unavailable`、`capability_unavailable`、`audit_unavailable` | 503 / 既有 unavailable；shape/internal 与真实拒绝分离。 |
 | `not_found_or_scope_denied` | 统一404，不区分不存在/跨scope；页面状态交 BASE-05 待办。 |
 | `capability_not_operational` | 独立409，不能与 revision conflict/disabled混淆；页面状态交 BASE-05。 |
 | `revision_conflict` | 独立409重试；页面状态交 BASE-05。 |
 
-MIG-01 的 `institution_scopes` 与获批 provisioning manifest 仅是机构存在/回填锚点；active binding→active anchor 只是继续 guard 的必要条件，绝非用户、角色、对象或 action 授权。anchor 无效/不存在=denied，不可用/revision不可验=unavailable，不得以 session/list/cache/客户端机构替代。
+MIG-01 的 `institution_scopes` 与获批 provisioning manifest 仅是机构存在/回填锚点；active binding→active anchor 只是继续 guard 的必要条件，绝非用户、角色、对象或 action 授权。`institution_scopes.revision` 是 anchor 授权语义的唯一持久化 revision：无 default、A2 显式 `1`、mutation expected-revision CAS 加一且禁止 ABA；anchor provider 只从当前值签发 opaque `arv`。anchor 无效/不存在=denied，不可用/revision或 issuer 不可验=unavailable，不得以 session/list/cache/客户端机构、raw revision 或旧 `arv` 替代。
 
-低敏审计只含 decision kind/code、resource/action/section、source、合规 user/membership/proof/request/correlation/object digest、scope、binding/anchor/member/policy/object/capability revisions 与 decidedAt；禁止原始ID、PII、cookie/token/header、payload和堆栈。BASE-04 必审写操作须有同一原子边界 audit reservation/append evidence，缺失=`audit_unavailable`。
+低敏审计只含 decision kind/code、resource/action/section、source、合规 opaque user/membership/proof/request/correlation/object digest、reference prefix/keyVersion、scope、binding/anchor/member/policy/object/capability revisions 与 decidedAt；禁止 key material、raw identifier/revision、canonical/HMAC 中间值、PII、cookie/token/header、payload和堆栈。BASE-04 必审写操作须有同一原子边界 audit reservation/append evidence，缺失=`audit_unavailable`。
 
 ##### 5. 调用链、验收与非范围
 
@@ -349,9 +360,9 @@ MIG-01 的 `institution_scopes` 与获批 provisioning manifest 仅是机构存�
 
 BASE-CAP 的 `expectedScope`、诊断 target、五维状态或 `operational` 不能创建/扩大 allow；allow 也不能伪装 disabled/not released/stale/unavailable capability。只有 guard 与业务 provider 均成功才构造 `InstitutionSourceEnvelopeV1`；无权威 scope 的失败不是 empty/partial/stale envelope。
 
-后续 runtime 测试覆盖：anchor三分支及不可自报；scope allow 的 user/role/source/revision/三期 min；七栏目×四角色与 workbench→system复用拒绝；所有 manifest pair 的唯一对象顺序；demo/跨请求/future/TTL；成员拒绝与shape/unavailable/stale；字段级 revision prefixes、`SafeObjectReferenceV1` 的33–56长度/轮换/跨部署稳定/PII；全部 code与BASE-02A八类映射；分层TTL/缓存/急停撤权；capability/audit/revision变化下原子回滚。
+后续 runtime 测试覆盖：anchor三分支及不可自报；scope revision 无 default/显式1/CAS并发/单调递增/ABA拒绝/旧`arv`失效；scope allow 的 user/role/source/revision/三期 min；七栏目×四角色与 workbench→system复用拒绝；所有 manifest pair 的唯一对象顺序；demo/跨请求/future/TTL；provenance 的四类 rejected 与独立 `provenance_unavailable`，并验证 unavailable=503、不触发登录循环或下游；成员拒绝与shape/unavailable/stale；字段级 revision prefixes、HMAC 域分离/完整43字符tag/constant-time验证、未知key、已过期key、窗口内key缺失、轮换、旧key窗口、持久`oref`退役门禁、跨部署稳定及 raw ID/PII 不外泄；全部 code与BASE-02A八类映射；分层TTL/缓存/急停撤权；capability/audit/revision变化下原子回滚。
 
-**本轮明确非范围：** 只修改本 Markdown；不实施 schema/migration、`institution_scopes`、manifest、session/gateway/member/binding/anchor/object provider、registry、guard、缓存、审计、BASE-02A/BASE-CAP runtime、API/route/UI/测试、凭证/secret、数据库或外部连接。本文仅为后续独立 runtime 的 provider/guard contract，不构成实现、接入、发布或生产放行授权。
+**本轮明确非范围：** 本次 `BASE-DESIGN-R2` 只修改本文与 `2026-07-18-institution-base-03-mig-01-technical-design.md`；不实施 schema/migration、`institution_scopes`、manifest、session/gateway/member/binding/anchor/object provider、reference issuer/verifier、registry、guard、缓存、审计、BASE-02A/BASE-CAP runtime、API/route/UI/测试、真实 key ring/secret/config、数据库或外部连接。本文仅冻结后续独立 runtime 的 provider/guard/crypto 方向，不构成实现、接入、发布或生产放行授权。
 
 ### BASE-03：机构隔离 schema/migration 技术设计
 
@@ -360,6 +371,7 @@ BASE-CAP 的 `expectedScope`、诊断 target、五维状态或 `operational` 不
 - [ ] 优先覆盖客户、预约、治疗、随访和审计的机构归属。
 - [ ] 无法可靠回填的历史数据不得猜测机构归属。
 - [ ] 本任务只形成 `MIG-01` 的设计，不重复生成第二套机构隔离迁移。
+- [ ] `institution_scopes.revision` 必须无 default、A2 显式写 `1`，授权语义 mutation 只允许 expected-revision CAS 严格加一并禁止 ABA；anchor provider 只从当前值签发 opaque `arv`。
 - [ ] 实际 migration 只允许在唯一迁移队列中执行，不与栏目 PR 混合。
 
 ### BASE-04：机构级审计
@@ -1149,7 +1161,7 @@ schema 需求：无 / 有（附数据变更申请）
 5. 明确区分产品方向、计划批准、runtime 授权、代码合并和正式发布。
 6. 明确 schema/migration、外部 adapter、凭证、worker/scheduler 的单独审批。
 7. `git diff --check` 通过。
-8. 最终 diff 只包含本文档。
+8. `BASE-DESIGN-R2` 最终 diff 精确且仅包含本文与 `docs/superpowers/plans/2026-07-18-institution-base-03-mig-01-technical-design.md`。
 
 ---
 
