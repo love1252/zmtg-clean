@@ -73,10 +73,40 @@ function isStableIdentifier(value: unknown): value is string {
   );
 }
 
-function hasExactKeys(value: object, expectedKeys: readonly string[]) {
-  const keys = Object.keys(value).sort();
-  const expected = [...expectedKeys].sort();
-  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+function snapshotExactDataRecord(
+  value: unknown,
+  expectedKeys: readonly string[],
+): Readonly<Record<string, unknown>> | null {
+  try {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+
+    const ownKeys = Reflect.ownKeys(value);
+    if (
+      ownKeys.length !== expectedKeys.length ||
+      ownKeys.some(
+        (key) => typeof key !== 'string' || !expectedKeys.includes(key),
+      )
+    ) {
+      return null;
+    }
+
+    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+    for (const key of expectedKeys) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) return null;
+      Object.defineProperty(snapshot, key, {
+        value: descriptor.value,
+        enumerable: true,
+        configurable: false,
+        writable: false,
+      });
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
 }
 
 export function isFollowUpRolePoolRole(value: unknown): value is FollowUpRolePoolRole {
@@ -84,10 +114,13 @@ export function isFollowUpRolePoolRole(value: unknown): value is FollowUpRolePoo
 }
 
 function readMember(value: unknown): FollowUpAssignmentMember | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
-  if (!hasExactKeys(value, ['institutionId', 'userId', 'role', 'active'])) return null;
-
-  const member = value as Record<string, unknown>;
+  const member = snapshotExactDataRecord(value, [
+    'institutionId',
+    'userId',
+    'role',
+    'active',
+  ]);
+  if (!member) return null;
   if (
     !isStableIdentifier(member.institutionId) ||
     !isStableIdentifier(member.userId) ||
@@ -111,24 +144,31 @@ export function checkFollowUpAssignmentMemberEligibility(input: Readonly<{
   requiredRole: unknown;
   member: unknown;
 }>): FollowUpAssignmentMemberEligibilityResult {
+  const command = snapshotExactDataRecord(input, [
+    'institutionId',
+    'expectedUserId',
+    'requiredRole',
+    'member',
+  ]);
+  if (!command) return { ok: false, code: 'invalid_command_context' };
   if (
-    !isStableIdentifier(input.institutionId) ||
-    !isStableIdentifier(input.expectedUserId) ||
-    (input.requiredRole !== null && !isFollowUpRolePoolRole(input.requiredRole))
+    !isStableIdentifier(command.institutionId) ||
+    !isStableIdentifier(command.expectedUserId) ||
+    (command.requiredRole !== null && !isFollowUpRolePoolRole(command.requiredRole))
   ) {
     return { ok: false, code: 'invalid_command_context' };
   }
 
-  const member = readMember(input.member);
+  const member = readMember(command.member);
   if (!member) return { ok: false, code: 'invalid_member' };
-  if (member.institutionId !== input.institutionId) {
+  if (member.institutionId !== command.institutionId) {
     return { ok: false, code: 'scope_mismatch' };
   }
   if (!member.active) return { ok: false, code: 'inactive_member' };
-  if (member.userId !== input.expectedUserId) {
+  if (member.userId !== command.expectedUserId) {
     return { ok: false, code: 'member_mismatch' };
   }
-  if (input.requiredRole !== null && member.role !== input.requiredRole) {
+  if (command.requiredRole !== null && member.role !== command.requiredRole) {
     return { ok: false, code: 'role_mismatch' };
   }
 
@@ -140,33 +180,40 @@ export function checkFollowUpAssignmentTargetEligibility(input: Readonly<{
   target: unknown;
   targetMember: unknown;
 }>): FollowUpAssignmentTargetEligibilityResult {
-  if (!isStableIdentifier(input.institutionId)) {
+  const command = snapshotExactDataRecord(input, [
+    'institutionId',
+    'target',
+    'targetMember',
+  ]);
+  if (!command || !isStableIdentifier(command.institutionId)) {
     return { ok: false, code: 'invalid_command_context' };
   }
-  if (typeof input.target !== 'object' || input.target === null || Array.isArray(input.target)) {
+  const target =
+    snapshotExactDataRecord(command.target, [
+      'kind',
+      'institutionId',
+      'assigneeUserId',
+    ]) ?? snapshotExactDataRecord(command.target, ['kind', 'institutionId', 'role']);
+  if (!target) {
     return { ok: false, code: 'invalid_target_assignment' };
   }
 
-  const target = input.target as Record<string, unknown>;
   if (target.kind === 'user') {
-    if (!hasExactKeys(target, ['kind', 'institutionId', 'assigneeUserId'])) {
-      return { ok: false, code: 'invalid_target_assignment' };
-    }
     if (!isStableIdentifier(target.institutionId) || !isStableIdentifier(target.assigneeUserId)) {
       return { ok: false, code: 'invalid_target_assignment' };
     }
-    if (target.institutionId !== input.institutionId) {
+    if (target.institutionId !== command.institutionId) {
       return { ok: false, code: 'scope_mismatch' };
     }
-    if (input.targetMember === null || input.targetMember === undefined) {
+    if (command.targetMember === null || command.targetMember === undefined) {
       return { ok: false, code: 'target_member_required' };
     }
 
     const memberResult = checkFollowUpAssignmentMemberEligibility({
-      institutionId: input.institutionId,
+      institutionId: command.institutionId,
       expectedUserId: target.assigneeUserId,
       requiredRole: null,
-      member: input.targetMember,
+      member: command.targetMember,
     });
     if (!memberResult.ok) return memberResult;
 
@@ -181,16 +228,13 @@ export function checkFollowUpAssignmentTargetEligibility(input: Readonly<{
   }
 
   if (target.kind === 'role_pool') {
-    if (!hasExactKeys(target, ['kind', 'institutionId', 'role'])) {
-      return { ok: false, code: 'invalid_target_assignment' };
-    }
     if (!isStableIdentifier(target.institutionId) || !isFollowUpRolePoolRole(target.role)) {
       return { ok: false, code: 'invalid_target_assignment' };
     }
-    if (target.institutionId !== input.institutionId) {
+    if (target.institutionId !== command.institutionId) {
       return { ok: false, code: 'scope_mismatch' };
     }
-    if (input.targetMember !== null) return { ok: false, code: 'member_mismatch' };
+    if (command.targetMember !== null) return { ok: false, code: 'member_mismatch' };
 
     return {
       ok: true,

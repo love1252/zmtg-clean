@@ -114,26 +114,95 @@ export function isFollowUpAssignmentOverrideReason(
   return includesValue(FOLLOW_UP_ASSIGNMENT_OVERRIDE_REASONS, value);
 }
 
-function isValidRevision(value: unknown) {
+function isValidRevision(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
-function isValidAssignment(value: unknown): value is FollowUpAssignment {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+function snapshotExactDataRecord(
+  value: unknown,
+  expectedKeys: readonly string[],
+): Readonly<Record<string, unknown>> | null {
+  try {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
 
-  const assignment = value as Record<string, unknown>;
-  if (!isFollowUpAssignmentKind(assignment.kind)) return false;
-  if (!isNonEmptyText(assignment.institutionId) || !isValidRevision(assignment.revision)) {
-    return false;
+    const ownKeys = Reflect.ownKeys(value);
+    if (
+      ownKeys.length !== expectedKeys.length ||
+      ownKeys.some(
+        (key) => typeof key !== 'string' || !expectedKeys.includes(key),
+      )
+    ) {
+      return null;
+    }
+
+    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+    for (const key of expectedKeys) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) return null;
+      Object.defineProperty(snapshot, key, {
+        value: descriptor.value,
+        enumerable: true,
+        configurable: false,
+        writable: false,
+      });
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
+}
+
+function parseFollowUpAssignment(value: unknown): FollowUpAssignment | null {
+  const rolePool = snapshotExactDataRecord(value, [
+    'kind',
+    'institutionId',
+    'revision',
+    'role',
+  ]);
+  if (rolePool) {
+    if (
+      rolePool.kind !== 'role_pool' ||
+      !isNonEmptyText(rolePool.institutionId) ||
+      !isValidRevision(rolePool.revision) ||
+      !isFollowUpRolePoolRole(rolePool.role)
+    ) {
+      return null;
+    }
+    return Object.freeze({
+      kind: 'role_pool',
+      institutionId: rolePool.institutionId,
+      revision: rolePool.revision,
+      role: rolePool.role,
+    });
   }
 
-  if (assignment.kind === 'role_pool') return isFollowUpRolePoolRole(assignment.role);
-
-  return (
-    isNonEmptyText(assignment.assigneeUserId) &&
-    (assignment.claimedFromRolePool === null ||
-      isFollowUpRolePoolRole(assignment.claimedFromRolePool))
-  );
+  const user = snapshotExactDataRecord(value, [
+    'kind',
+    'institutionId',
+    'revision',
+    'assigneeUserId',
+    'claimedFromRolePool',
+  ]);
+  if (
+    !user ||
+    user.kind !== 'user' ||
+    !isNonEmptyText(user.institutionId) ||
+    !isValidRevision(user.revision) ||
+    !isNonEmptyText(user.assigneeUserId) ||
+    (user.claimedFromRolePool !== null &&
+      !isFollowUpRolePoolRole(user.claimedFromRolePool))
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    kind: 'user',
+    institutionId: user.institutionId,
+    revision: user.revision,
+    assigneeUserId: user.assigneeUserId,
+    claimedFromRolePool: user.claimedFromRolePool,
+  });
 }
 
 function failure(code: FollowUpAssignmentError): FollowUpAssignmentResult {
@@ -212,18 +281,30 @@ export function claimFollowUpRolePoolAssignment(input: Readonly<{
   expectedRevision: unknown;
   member: unknown;
 }>): FollowUpAssignmentResult {
-  const { assignment } = input;
-  if (!isValidAssignment(assignment)) return failure('invalid_assignment');
-  const preconditionFailure = checkAssignmentCommandPreconditions(input);
+  const command = snapshotExactDataRecord(input, [
+    'assignment',
+    'institutionId',
+    'actorUserId',
+    'expectedRevision',
+    'member',
+  ]);
+  if (!command) return failure('invalid_command_context');
+  const assignment = parseFollowUpAssignment(command.assignment);
+  if (!assignment) return failure('invalid_assignment');
+  const preconditionFailure = checkAssignmentCommandPreconditions({
+    assignment,
+    institutionId: command.institutionId,
+    expectedRevision: command.expectedRevision,
+  });
   if (preconditionFailure) return preconditionFailure;
 
   const requiredRole =
     assignment.kind === 'role_pool' ? assignment.role : assignment.claimedFromRolePool;
   const memberResult = checkFollowUpAssignmentMemberEligibility({
     institutionId: assignment.institutionId,
-    expectedUserId: input.actorUserId,
+    expectedUserId: command.actorUserId,
     requiredRole,
-    member: input.member,
+    member: command.member,
   });
   if (!memberResult.ok) return failure(memberResult.code);
 
@@ -293,18 +374,35 @@ export function reassignFollowUpAssignment(input: Readonly<{
   actorRole: unknown;
   reason: unknown;
 }>): FollowUpAssignmentResult {
-  const { assignment } = input;
-  if (!isValidAssignment(assignment)) return failure('invalid_assignment');
-  const preconditionFailure = checkAssignmentCommandPreconditions(input);
+  const command = snapshotExactDataRecord(input, [
+    'assignment',
+    'target',
+    'targetMember',
+    'expectedRevision',
+    'institutionId',
+    'actorRole',
+    'reason',
+  ]);
+  if (!command) return failure('invalid_command_context');
+  const assignment = parseFollowUpAssignment(command.assignment);
+  if (!assignment) return failure('invalid_assignment');
+  const preconditionFailure = checkAssignmentCommandPreconditions({
+    assignment,
+    institutionId: command.institutionId,
+    expectedRevision: command.expectedRevision,
+  });
   if (preconditionFailure) return preconditionFailure;
 
-  const context = readAdministrativeContext(input);
+  const context = readAdministrativeContext({
+    actorRole: command.actorRole,
+    reason: command.reason,
+  });
   if (!context.ok) return failure(context.code);
 
   const targetResult = checkFollowUpAssignmentTargetEligibility({
     institutionId: assignment.institutionId,
-    target: input.target,
-    targetMember: input.targetMember,
+    target: command.target,
+    targetMember: command.targetMember,
   });
   if (!targetResult.ok) return failure(targetResult.code);
 
@@ -333,12 +431,27 @@ export function unclaimFollowUpAssignment(input: Readonly<{
   actorRole: unknown;
   reason: unknown;
 }>): FollowUpAssignmentResult {
-  const { assignment } = input;
-  if (!isValidAssignment(assignment)) return failure('invalid_assignment');
-  const preconditionFailure = checkAssignmentCommandPreconditions(input);
+  const command = snapshotExactDataRecord(input, [
+    'assignment',
+    'expectedRevision',
+    'institutionId',
+    'actorRole',
+    'reason',
+  ]);
+  if (!command) return failure('invalid_command_context');
+  const assignment = parseFollowUpAssignment(command.assignment);
+  if (!assignment) return failure('invalid_assignment');
+  const preconditionFailure = checkAssignmentCommandPreconditions({
+    assignment,
+    institutionId: command.institutionId,
+    expectedRevision: command.expectedRevision,
+  });
   if (preconditionFailure) return preconditionFailure;
 
-  const context = readAdministrativeContext(input);
+  const context = readAdministrativeContext({
+    actorRole: command.actorRole,
+    reason: command.reason,
+  });
   if (!context.ok) return failure(context.code);
 
   const control = administrativeControl({
