@@ -255,7 +255,7 @@ beforeEach(() => {
 });
 
 describe('治疗摘要随访建议 GET API', () => {
-  it('成功返回确定性建议且不写审计、不创建随访任务', async () => {
+  it('固定返回低敏 503，不读取已授权的 demo 上下文或治疗摘要', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
 
     const response = await suggestionsGet(
@@ -264,44 +264,21 @@ describe('治疗摘要随访建议 GET API', () => {
     );
     const payload = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(payload.suggestions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          suggestionKey: 'trt_phase15_confirm:urgent_risk_followup:1d',
-          title: '高风险治疗后随访',
-          recommendedDueAt: '2026-06-03T08:30:00.000Z',
-          priority: 'high',
-          riskLevel: 'urgent',
-          sourceTreatmentSummaryId: 'trt_phase15_confirm',
-          sourceCustomerId: 'cust_phase15_confirm',
-          sourceAppointmentId: 'appt_phase15_confirm',
-        }),
-        expect.objectContaining({
-          suggestionKey: templateSuggestionKey,
-          title: '术后修复 D1 高风险人工处理',
-          recommendedDueAt: '2026-06-03T08:30:00.000Z',
-          priority: 'high',
-          riskLevel: 'urgent',
-          sourceTreatmentSummaryId: 'trt_phase15_confirm',
-          sourceCustomerId: 'cust_phase15_confirm',
-          sourceAppointmentId: 'appt_phase15_confirm',
-        }),
-      ]),
-    );
-    expect(routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      id: 'trt_phase15_confirm',
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      code: 'treatment_followup_suggestions_capability_disabled',
+      error: '治疗随访建议能力暂未启用',
     });
-    expect(routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant).not.toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'other-tenant' }),
-    );
+    expect(payload).not.toHaveProperty('suggestions');
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant).not.toHaveBeenCalled();
     expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalled();
     expect(routeMocks.auditRecord).not.toHaveBeenCalled();
     expectNoPrivateData(payload);
   });
 
-  it('跨租户或不存在的 summary 返回 404', async () => {
+  it('未知 summaryId 也固定返回低敏 503', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant.mockResolvedValueOnce(null);
 
@@ -310,13 +287,17 @@ describe('治疗摘要随访建议 GET API', () => {
       routeContext('trt_other_tenant'),
     );
 
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      code: 'treatment_followup_suggestions_capability_disabled',
+      error: '治疗随访建议能力暂未启用',
+    });
+    expect(routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant).not.toHaveBeenCalled();
     expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalled();
     expect(routeMocks.auditRecord).not.toHaveBeenCalled();
   });
 
-  it('已作废 summary 返回 409 且不返回随访建议、不创建任务、不写审计', async () => {
+  it('已作废 summary 也固定返回低敏 503', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
     routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant.mockResolvedValueOnce(
       voidedTreatmentSummaryRecord,
@@ -328,26 +309,34 @@ describe('治疗摘要随访建议 GET API', () => {
     );
     const payload = await response.json();
 
-    expect(response.status).toBe(409);
-    expect(payload).toEqual({ error: '治疗摘要已作废，不能继续生成随访建议' });
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      code: 'treatment_followup_suggestions_capability_disabled',
+      error: '治疗随访建议能力暂未启用',
+    });
     expect(payload).not.toHaveProperty('suggestions');
+    expect(routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant).not.toHaveBeenCalled();
     expect(routeMocks.tenantBusinessRepository.createFollowUpTaskFromTreatmentSummarySuggestion).not.toHaveBeenCalled();
     expect(routeMocks.auditRecord).not.toHaveBeenCalled();
     expectNoPrivateData(payload);
   });
 
-  it('未登录返回 401，且不初始化数据库', async () => {
+  it('未登录时仍固定返回低敏 503，且不读取认证或数据库', async () => {
     const response = await suggestionsGet(
       request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-suggestions'),
       routeContext(),
     );
 
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({ error: '请先登录' });
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      code: 'treatment_followup_suggestions_capability_disabled',
+      error: '治疗随访建议能力暂未启用',
+    });
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
   });
 
-  it('无权限返回 403，且不查询治疗摘要', async () => {
+  it('无权限上下文也固定返回低敏 503，且不查询治疗摘要', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
 
     const response = await suggestionsGet(
@@ -355,17 +344,18 @@ describe('治疗摘要随访建议 GET API', () => {
       routeContext(),
     );
 
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      code: 'treatment_followup_suggestions_capability_disabled',
+      error: '治疗随访建议能力暂未启用',
+    });
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
     expect(routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant).not.toHaveBeenCalled();
   });
 
-  it('错误响应不泄露 SQL / stack / token / secret / DATABASE_URL', async () => {
+  it('服务异常预置也不泄露 SQL / stack / token / secret / DATABASE_URL', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant.mockRejectedValueOnce(
-      new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg token stack'),
-    );
 
     const response = await suggestionsGet(
       request('http://localhost/api/institution/treatment-summaries/trt_phase15_confirm/follow-up-suggestions'),
@@ -374,7 +364,13 @@ describe('治疗摘要随访建议 GET API', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(503);
-    expect(payload).toEqual({ error: '数据服务暂时不可用' });
+    expect(payload).toEqual({
+      code: 'treatment_followup_suggestions_capability_disabled',
+      error: '治疗随访建议能力暂未启用',
+    });
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant).not.toHaveBeenCalled();
     expectNoPrivateData(payload);
   });
 });
