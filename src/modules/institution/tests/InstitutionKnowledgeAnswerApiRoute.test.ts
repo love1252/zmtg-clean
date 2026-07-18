@@ -1,295 +1,192 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { POST as answerPost } from '@/app/api/institution/knowledge-management/answer/route';
-import { getDatabase } from '@/server/db/client';
-import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
-import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
-import { createAiCallUsageRepository } from '@/modules/institution/server/institution-ai-call-usage-repository';
-import { answerInstitutionKnowledgeRagQuestion } from '@/modules/institution/server/institution-knowledge-rag-answer-service';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const database = { database: 'knowledge-answer-api-test-db' };
-
-vi.mock('@/server/db/client', () => ({
-  getDatabase: vi.fn(() => database),
+const forbiddenDependencyState = vi.hoisted(() => ({
+  initialized: [] as string[],
 }));
 
-vi.mock('@/modules/security/server/access-context', () => ({
-  getDemoAccessContextFromRequest: vi.fn(),
-}));
-
-vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository', () => ({
-  createPlatformKnowledgeManagementRepository: vi.fn(() => ({ repository: 'knowledge-answer-repository' })),
-}));
-
-vi.mock('@/modules/institution/server/institution-ai-call-usage-repository', () => ({
-  createAiCallUsageRepository: vi.fn(() => ({ usageRepository: 'knowledge-answer-usage-repository' })),
-}));
-
-vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => ({
-  checkTenantQuotaForCreate: vi.fn(async () => ({ allowed: true })),
-}));
-
-vi.mock('@/modules/institution/server/institution-ai-call-service', () => ({
-  getDefaultAiVendor: vi.fn(() => 'deepseek'),
-  recordAiCallQuotaRejection: vi.fn(async () => undefined),
-  recordKnowledgeRagAnswerUsageSuccess: vi.fn(async () => undefined),
-}));
-
-vi.mock('@/modules/institution/server/institution-rag-answer-provider', () => ({
-  createInstitutionRagAnswerProviderResolver: vi.fn(() => ({ resolve: vi.fn() })),
-}));
-
-vi.mock('@/modules/institution/server/institution-knowledge-rag-answer-service', async () => {
-  const actual = await vi.importActual<
-    typeof import('@/modules/institution/server/institution-knowledge-rag-answer-service')
-  >('@/modules/institution/server/institution-knowledge-rag-answer-service');
-  return {
-    ...actual,
-    answerInstitutionKnowledgeRagQuestion: vi.fn(),
-  };
+vi.mock('@/modules/security/server/access-context', () => {
+  forbiddenDependencyState.initialized.push('auth');
+  throw new Error('auth must not initialize');
+});
+vi.mock('@/server/db/client', () => {
+  forbiddenDependencyState.initialized.push('db');
+  throw new Error('db must not initialize');
+});
+vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository', () => {
+  forbiddenDependencyState.initialized.push('repository');
+  throw new Error('repository must not initialize');
+});
+vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => {
+  forbiddenDependencyState.initialized.push('quota');
+  throw new Error('quota must not initialize');
+});
+vi.mock('@/modules/institution/server/knowledge-quota-usage-service', () => {
+  forbiddenDependencyState.initialized.push('quota-usage');
+  throw new Error('quota usage must not initialize');
+});
+vi.mock('@/modules/institution/server/institution-knowledge-rag-answer-service', () => {
+  forbiddenDependencyState.initialized.push('rag');
+  throw new Error('RAG must not initialize');
+});
+vi.mock('@/modules/institution/server/institution-rag-answer-provider', () => {
+  forbiddenDependencyState.initialized.push('provider');
+  throw new Error('provider must not initialize');
+});
+vi.mock('@/modules/institution/server/institution-ai-call-service', () => {
+  forbiddenDependencyState.initialized.push('ai-call');
+  throw new Error('AI call service must not initialize');
+});
+vi.mock('@/modules/institution/server/institution-ai-call-usage-repository', () => {
+  forbiddenDependencyState.initialized.push('ai-call-usage');
+  throw new Error('AI call usage repository must not initialize');
 });
 
-const tenantContext = {
-  userId: 'demo-user-admin',
-  role: 'tenant_admin' as const,
-  scope: 'tenant' as const,
-  tenantId: 'demo-tenant-001',
-  institutionId: 'demo-inst-001',
-  source: 'demo_session' as const,
+const expectedPayload = {
+  status: 'capability_disabled',
+  code: 'knowledge_capability_disabled',
+  answer: '机构知识库问答暂未启用。仅供内部运营参考，需人工确认',
+  sources: [],
 };
 
-const platformContext = {
-  userId: 'demo-user-platform',
-  role: 'platform_admin' as const,
-  scope: 'platform' as const,
-  tenantId: null,
-  institutionId: null,
-  source: 'demo_session' as const,
-};
-
-const sources = [
-  {
-    knowledgeId: 'knowledge-a',
-    knowledgeTitle: '术后护理指南',
-    fileId: 'file-a',
-    fileName: '护理手册.txt',
-    chunkId: 'chunk-a',
-    chunkIndex: 0,
-    textPreview: '术后冷敷应每次15-20分钟。',
-    retrievalMode: 'keyword' as const,
-    matchReason: '包含“冷敷”',
-  },
-];
-
-const sensitiveFragments = [
-  'api_key',
-  'DATABASE_URL',
-  'postgres://',
-  'secret',
-  'password',
-  'Bearer',
-  'Authorization',
-  'baseUrl',
-  'provider config',
-  'model',
-  'vendor',
-  'cost',
-  'usage',
-  'latencyMs',
-  'errorCode',
-  'messages',
-  'prompt',
-  'Token',
-];
-
-function createRequest(body: unknown) {
-  return new Request('http://localhost/api/institution/knowledge-management/answer', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-}
-
-function expectNoSensitiveFields(payload: unknown) {
-  const serialized = JSON.stringify(payload);
-  sensitiveFragments.forEach((fragment) => {
-    expect(serialized).not.toContain(fragment);
-  });
-  expect(serialized).not.toContain('问题：');
-  expect(serialized).not.toContain('召回片段：');
-}
+type AnswerRouteModule = typeof import('@/app/api/institution/knowledge-management/answer/route');
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetModules();
+  forbiddenDependencyState.initialized.length = 0;
 });
 
-describe('机构端知识库 RAG answer API route', () => {
-  it('未登录返回 401', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(null);
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
-    const response = await answerPost(createRequest({ question: '冷敷？' }));
-
-    expect(response.status).toBe(401);
-  });
-
-  it('非机构 tenant scope 返回 403', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(platformContext);
-
-    const response = await answerPost(createRequest({ question: '冷敷？' }));
-
-    expect(response.status).toBe(403);
-  });
-
-  it('scope 为 tenant 但缺少 institutionId 返回 403', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue({ ...tenantContext, institutionId: null });
-
-    const response = await answerPost(createRequest({ question: '冷敷？' }));
-
-    expect(response.status).toBe(403);
-  });
-
-
-  it('禁止机构端选择 provider / model / vendor', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-
-    const response = await answerPost(createRequest({ question: '冷敷？', provider: 'evil', model: 'evil-model' }));
-    const body = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(body.code).toBe('INSTITUTION_AI_MODEL_SELECTION_FORBIDDEN');
-    expect(answerInstitutionKnowledgeRagQuestion).not.toHaveBeenCalled();
-    expectNoSensitiveFields(body);
-  });
-
-  it('机构账号成功问答，只使用 accessContext 的 tenantId/institutionId', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(answerInstitutionKnowledgeRagQuestion).mockResolvedValue({
-      status: 'answered',
-      answer: '基于片段回答。仅供内部运营参考，需人工确认',
-      sources,
+async function loadRouteWithoutForbiddenDependencies() {
+  const fetchSpy = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation(async () => {
+      throw new Error('fetch must not be called');
     });
+  const route = (await import(
+    '@/app/api/institution/knowledge-management/answer/route'
+  )) as AnswerRouteModule;
 
-    const response = await answerPost(createRequest({
-      question: '术后冷敷注意事项？',
-      topK: 5,
-      tenantId: 'evil-tenant',
-      institutionId: 'evil-inst',
-    }));
-    const body = await response.json();
+  expect(forbiddenDependencyState.initialized).toEqual([]);
+  expect(fetchSpy).not.toHaveBeenCalled();
+  return {
+    route,
+    assertNoFetch: () => expect(fetchSpy).not.toHaveBeenCalled(),
+  };
+}
 
-    expect(response.status).toBe(200);
-    expect(body).toEqual({
-      status: 'answered',
-      answer: '基于片段回答。仅供内部运营参考，需人工确认',
-      sources,
-    });
-    expect(getDatabase).toHaveBeenCalledTimes(1);
-    expect(createPlatformKnowledgeManagementRepository).toHaveBeenCalledWith(database);
-    expect(createAiCallUsageRepository).toHaveBeenCalledWith(database);
-    expect(answerInstitutionKnowledgeRagQuestion).toHaveBeenCalledWith(expect.objectContaining({
-      tenantId: 'demo-tenant-001',
-      institutionId: 'demo-inst-001',
-      question: '术后冷敷注意事项？',
-      topK: 5,
-      repository: { repository: 'knowledge-answer-repository' },
-      providerResolver: expect.objectContaining({ resolve: expect.any(Function) }),
-      quota: expect.objectContaining({
-        check: expect.any(Function),
-        onRejected: expect.any(Function),
+async function expectCapabilityDisabled(
+  route: AnswerRouteModule,
+  assertNoFetch: () => void,
+  request?: Request,
+) {
+  const response = await route.POST(request);
+
+  expect(response.status).toBe(503);
+  await expect(response.json()).resolves.toEqual(expectedPayload);
+  expect(forbiddenDependencyState.initialized).toEqual([]);
+  assertNoFetch();
+}
+
+function fullyTrappedRequest() {
+  const counts = {
+    apply: 0,
+    construct: 0,
+    defineProperty: 0,
+    deleteProperty: 0,
+    get: 0,
+    getOwnPropertyDescriptor: 0,
+    getPrototypeOf: 0,
+    has: 0,
+    isExtensible: 0,
+    ownKeys: 0,
+    preventExtensions: 0,
+    set: 0,
+    setPrototypeOf: 0,
+  };
+  const trap = <T extends keyof typeof counts>(name: T): never => {
+    counts[name] += 1;
+    throw new Error(`${name} trap must not run`);
+  };
+  const request = new Proxy(function poisonedRequest() {}, {
+    apply: () => trap('apply'),
+    construct: () => trap('construct'),
+    defineProperty: () => trap('defineProperty'),
+    deleteProperty: () => trap('deleteProperty'),
+    get: () => trap('get'),
+    getOwnPropertyDescriptor: () => trap('getOwnPropertyDescriptor'),
+    getPrototypeOf: () => trap('getPrototypeOf'),
+    has: () => trap('has'),
+    isExtensible: () => trap('isExtensible'),
+    ownKeys: () => trap('ownKeys'),
+    preventExtensions: () => trap('preventExtensions'),
+    set: () => trap('set'),
+    setPrototypeOf: () => trap('setPrototypeOf'),
+  });
+
+  return { request: request as unknown as Request, counts };
+}
+
+describe('机构端知识库 answer API route', () => {
+  it('动态加载后只导出 POST，不初始化 auth/db/repository/quota/RAG/provider', async () => {
+    const { route, assertNoFetch } = await loadRouteWithoutForbiddenDependencies();
+
+    expect(Object.keys(route).sort()).toEqual(['POST']);
+    await expectCapabilityDisabled(route, assertNoFetch);
+  });
+
+  it('普通、未登录、伪造 header 与 provider/model 请求均得到同一固定响应', async () => {
+    const { route, assertNoFetch } = await loadRouteWithoutForbiddenDependencies();
+    const requests = [
+      new Request('http://localhost/api/institution/knowledge-management/answer', {
+        method: 'POST',
+        body: JSON.stringify({ question: '术后冷敷注意事项？' }),
       }),
-      usageRecorder: expect.any(Function),
-      actorUserId: 'demo-user-admin',
-    }));
-    expectNoSensitiveFields(body);
+      new Request('http://localhost/api/institution/knowledge-management/answer', {
+        method: 'POST',
+      }),
+      new Request('http://localhost/api/institution/knowledge-management/answer', {
+        method: 'POST',
+        headers: {
+          'x-tenant-id': 'forged-tenant',
+          'x-institution-id': 'forged-institution',
+          authorization: 'Bearer forged',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'forged-provider',
+          model: 'forged-model',
+          question: 'ignored',
+        }),
+      }),
+    ];
+
+    for (const request of requests) {
+      await expectCapabilityDisabled(route, assertNoFetch, request);
+    }
   });
 
-  it('validation_failed 返回 400', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(answerInstitutionKnowledgeRagQuestion).mockResolvedValue({
-      status: 'validation_failed',
-      answer: '仅供内部运营参考，需人工确认',
-      sources: [],
-      message: '问题不能为空',
+  it('完全 trapped 的 Proxy Request 不触发任何 trap', async () => {
+    const { route, assertNoFetch } = await loadRouteWithoutForbiddenDependencies();
+    const poisoned = fullyTrappedRequest();
+
+    await expectCapabilityDisabled(route, assertNoFetch, poisoned.request);
+    expect(poisoned.counts).toEqual({
+      apply: 0,
+      construct: 0,
+      defineProperty: 0,
+      deleteProperty: 0,
+      get: 0,
+      getOwnPropertyDescriptor: 0,
+      getPrototypeOf: 0,
+      has: 0,
+      isExtensible: 0,
+      ownKeys: 0,
+      preventExtensions: 0,
+      set: 0,
+      setPrototypeOf: 0,
     });
-
-    const response = await answerPost(createRequest({ question: '' }));
-    const body = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(body.status).toBe('validation_failed');
-    expect(body.message).toBe('问题不能为空');
-    expectNoSensitiveFields(body);
-  });
-
-  it('no_answer 返回 noAnswerReason 且不泄露内部信息', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(answerInstitutionKnowledgeRagQuestion).mockResolvedValue({
-      status: 'no_answer',
-      answer: '未在当前知识库中找到足够依据。仅供内部运营参考，需人工确认',
-      sources: [],
-      noAnswerReason: 'no_retrieval_hit',
-    });
-
-    const response = await answerPost(createRequest({ question: '未知问题', topK: 3 }));
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body).toEqual({
-      status: 'no_answer',
-      answer: '未在当前知识库中找到足够依据。仅供内部运营参考，需人工确认',
-      sources: [],
-      noAnswerReason: 'no_retrieval_hit',
-    });
-    expectNoSensitiveFields(body);
-  });
-
-
-  it('quota_exceeded 低敏返回', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(answerInstitutionKnowledgeRagQuestion).mockResolvedValue({
-      status: 'quota_exceeded',
-      answer: 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐。仅供内部运营参考，需人工确认',
-      sources,
-      message: 'AI 调用次数已达到当前套餐上限，请联系平台管理员调整套餐',
-    });
-
-    const response = await answerPost(createRequest({ question: '冷敷？' }));
-    const body = await response.json();
-
-    expect(response.status).toBe(409);
-    expect(body.status).toBe('quota_exceeded');
-    expectNoSensitiveFields(body);
-  });
-
-  it('provider failure 低敏返回，不返回 prompt、模型、token、成本或厂商', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(answerInstitutionKnowledgeRagQuestion).mockResolvedValue({
-      status: 'provider_failure',
-      answer: '知识库问答服务暂时不可用，请稍后重试。仅供内部运营参考，需人工确认',
-      sources,
-      message: '知识库问答服务暂时不可用，请稍后重试',
-    });
-
-    const response = await answerPost(createRequest({ question: '冷敷？' }));
-    const body = await response.json();
-
-    expect(response.status).toBe(502);
-    expect(body.status).toBe('provider_failure');
-    expect(body.answer).toContain('知识库问答服务暂时不可用');
-    expectNoSensitiveFields(body);
-  });
-
-  it('service 异常时返回 503 且不泄露内部信息', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantContext);
-    vi.mocked(answerInstitutionKnowledgeRagQuestion).mockRejectedValue(
-      new Error('DATABASE_URL postgres://root:password@localhost secret=key prompt model token cost vendor stack'),
-    );
-
-    const response = await answerPost(createRequest({ question: '冷敷？' }));
-    const body = await response.json();
-
-    expect(response.status).toBe(503);
-    expect(body.status).toBe('service_unavailable');
-    expect(body.answer).toBe('知识库问答服务暂时不可用，请稍后重试。仅供内部运营参考，需人工确认');
-    expectNoSensitiveFields(body);
   });
 });
