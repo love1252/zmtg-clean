@@ -341,326 +341,46 @@ beforeEach(() => {
 });
 
 describe('治疗摘要创建 API route', () => {
-  it('合法 payload 创建成功，返回安全 DTO，并写 allowed audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await treatmentSummariesPost(
-      postRequest(validCreateTreatmentSummaryPayload),
-      routeContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(201);
-    expect(payload).toEqual({
-      record: {
-        id: 'trt_created_001',
-        appointmentId: 'appt_001',
-        treatmentDate: '2026-06-01T04:00:00.000Z',
-        treatmentProject: '光电修复',
-        treatmentCategory: 'laser_repair',
-        treatmentStage: 'D7 复诊',
-        recoveryStage: 'D7',
-        riskLevel: 'watch',
-        ownerUserId: 'doctor-lin',
-        summary: '结构化摘要：红肿减轻，安排补水护理。',
-        nextCareAction: 'D14 人工回访恢复阶段。',
-        tags: ['结构化摘要', '术后关怀'],
-        createdAt: '2026-06-01T04:01:00.000Z',
-        updatedAt: '2026-06-01T04:01:00.000Z',
-      },
-    });
-    expectNoPrivateData(payload);
-    expect(routeMocks.tenantBusinessRepository.getCustomerByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      id: 'cust_001',
-    });
-    expect(
-      routeMocks.treatmentSummaryRepository.checkAppointmentBelongsToTenantAndCustomer,
-    ).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      customerId: 'cust_001',
-      appointmentId: 'appt_001',
-    });
-    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: expect.any(String),
-        tenantId: 'demo-tenant-001',
-        customerId: 'cust_001',
-        appointmentId: 'appt_001',
-        treatmentDate: new Date('2026-06-01T04:00:00.000Z'),
-        treatmentProject: '光电修复',
-      }),
-    );
-    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).not.toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'other-tenant' }),
-    );
-    expect(routeMocks.database.transaction).toHaveBeenCalledTimes(1);
-    expect(routeMocks.createTenantBusinessRepository).toHaveBeenCalledWith(
-      routeMocks.transactionDatabase,
-    );
-    expect(routeMocks.createTreatmentSummaryRepository).toHaveBeenCalledWith(
-      routeMocks.transactionDatabase,
-    );
-    expect(routeMocks.createAuditEventRepository).toHaveBeenCalledWith(
-      routeMocks.transactionDatabase,
-    );
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      reason: 'allowed_by_policy',
-      resource: 'treatment_summary',
-      resourceId: 'trt_created_001',
-      result: 'allowed',
-      tenantId: 'demo-tenant-001',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('未登录返回 401，且不初始化数据库', async () => {
-    const response = await treatmentSummariesPost(
-      postRequest(validCreateTreatmentSummaryPayload),
-      routeContext(),
-    );
-
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({ error: '请先登录' });
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).not.toHaveBeenCalled();
-  });
-
-  it('无权限返回 403，写 denied audit，且不创建治疗摘要', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
-
-    const response = await treatmentSummariesPost(
-      postRequest(validCreateTreatmentSummaryPayload),
-      routeContext(),
-    );
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
-    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      reason: 'role_denied',
-      resource: 'treatment_summary',
-      result: 'denied',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('customer 不存在时返回 404，并写 not_found audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.tenantBusinessRepository.getCustomerByTenant.mockResolvedValueOnce(null);
-
-    const response = await treatmentSummariesPost(
-      postRequest(validCreateTreatmentSummaryPayload),
-      routeContext('cust_missing'),
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(routeMocks.tenantBusinessRepository.getCustomerByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      id: 'cust_missing',
-    });
-    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      reason: 'not_found_or_not_owned',
-      resource: 'treatment_summary',
-      result: 'denied',
-      tenantId: 'demo-tenant-001',
-    }));
-  });
-
-  it('跨租户 customer 返回 404，并写 not_found audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.tenantBusinessRepository.getCustomerByTenant.mockResolvedValueOnce(null);
-
-    const response = await treatmentSummariesPost(
-      postRequest(validCreateTreatmentSummaryPayload),
-      routeContext('cust_other_tenant'),
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(routeMocks.tenantBusinessRepository.getCustomerByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      id: 'cust_other_tenant',
-    });
-    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      reason: 'not_found_or_not_owned',
-      resource: 'treatment_summary',
-      result: 'denied',
-      tenantId: 'demo-tenant-001',
-    }));
-  });
-
-  it('appointmentId 不存在时返回 404，并写 not_found audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.checkAppointmentBelongsToTenantAndCustomer.mockResolvedValueOnce({
-      kind: 'not_found_or_not_owned',
-    });
-
-    const response = await treatmentSummariesPost(
-      postRequest({
-        ...validCreateTreatmentSummaryPayload,
-        appointmentId: 'appt_missing',
-      }),
-      routeContext(),
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(
-      routeMocks.treatmentSummaryRepository.checkAppointmentBelongsToTenantAndCustomer,
-    ).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      customerId: 'cust_001',
-      appointmentId: 'appt_missing',
-    });
-    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'not_found_or_not_owned',
-      result: 'denied',
-    }));
-  });
-
-  it('appointmentId 跨租户时返回 404，并写 not_found audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.checkAppointmentBelongsToTenantAndCustomer.mockResolvedValueOnce({
-      kind: 'not_found_or_not_owned',
-    });
-
-    const response = await treatmentSummariesPost(
-      postRequest({
-        ...validCreateTreatmentSummaryPayload,
-        appointmentId: 'appt_other_tenant',
-      }),
-      routeContext(),
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(
-      routeMocks.treatmentSummaryRepository.checkAppointmentBelongsToTenantAndCustomer,
-    ).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      customerId: 'cust_001',
-      appointmentId: 'appt_other_tenant',
-    });
-    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'not_found_or_not_owned',
-      result: 'denied',
-    }));
-  });
-
-  it('appointmentId 不属于当前 customer 时返回 409，并写稳定 invalid reference audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.checkAppointmentBelongsToTenantAndCustomer.mockResolvedValueOnce({
-      kind: 'customer_mismatch',
-    });
-
-    const response = await treatmentSummariesPost(
-      postRequest({
-        ...validCreateTreatmentSummaryPayload,
-        appointmentId: 'appt_other_customer',
-      }),
-      routeContext(),
-    );
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({ error: '预约不属于当前客户' });
-    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      reason: 'invalid_treatment_summary_reference',
-      resource: 'treatment_summary',
-      result: 'denied',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
+  const disabledResponse = {
+    code: 'capability_disabled',
+    error: '客户治疗摘要创建能力暂未启用',
+  };
 
   it.each([
-    ['tenantId 注入', { tenantId: 'other-tenant' }],
-    ['未知字段', { unexpectedField: 'x' }],
-    ['完整治疗正文', { fullTreatmentRecord: '完整治疗记录正文' }],
-    ['完整病历正文', { medicalRecordText: '完整病历正文' }],
-    ['咨询全文', { consultationTranscript: '咨询对话全文' }],
-    ['手机号原文', { summary: '客户手机号 13800000000' }],
-    ['身份证号', { summary: '身份证号 110101199001010011' }],
-    ['病历号原文', { summary: '病历号 MR-RAW-001' }],
-    ['图片原文', { imageUrl: 'https://example.com/raw.png' }],
-    ['文件原文', { fileUrl: 'https://example.com/raw.pdf' }],
-    ['AI 生成内容', { aiGeneratedContent: 'AI 生成治疗建议' }],
-    ['外部系统原文', { externalSystemPayload: { raw: true } }],
-  ])('payload 含 %s 时返回 400，并写 invalid payload audit', async (_label, patch) => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await treatmentSummariesPost(
-      postRequest({
-        ...validCreateTreatmentSummaryPayload,
-        ...patch,
-      }),
-      routeContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(payload).toHaveProperty('error');
-    expectNoPrivateData(payload, {
-      allowRejectedFieldNames: true,
-      allowTenantBoundaryFields: true,
-    });
-    expect(routeMocks.tenantBusinessRepository.getCustomerByTenant).not.toHaveBeenCalled();
-    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'create',
-      reason: 'invalid_treatment_summary_payload',
-      resource: 'treatment_summary',
-      result: 'denied',
-      tenantId: 'demo-tenant-001',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('非法 JSON 返回 400，并写 invalid payload audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await treatmentSummariesPost(
+    ['原合法创建请求', postRequest(validCreateTreatmentSummaryPayload), routeContext()],
+    [
+      '原跨边界请求',
+      postRequest({ ...validCreateTreatmentSummaryPayload, tenantId: 'other-tenant' }),
+      routeContext('cust_other_tenant'),
+    ],
+    [
+      '原非法 JSON 请求',
       new Request('http://localhost/api/institution/customers/cust_001/treatment-summaries', {
         method: 'POST',
         body: '{not-json',
       }),
       routeContext(),
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: '请求格式不正确' });
-    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'invalid_treatment_summary_payload',
-      result: 'denied',
-    }));
-  });
-
-  it('数据异常返回 503，错误响应不泄露 SQL、stack、DATABASE_URL、token 或 secret', async () => {
+    ],
+  ])('%s 固定返回低敏 503，且不进入旧创建链', async (_label, request, context) => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.createTreatmentSummary.mockRejectedValueOnce(
-      new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg token stack'),
-    );
 
-    const response = await treatmentSummariesPost(
-      postRequest(validCreateTreatmentSummaryPayload),
-      routeContext(),
-    );
-    const payload = await response.json();
+    const response = await treatmentSummariesPost(request, context);
 
     expect(response.status).toBe(503);
-    expect(payload).toEqual({ error: '数据服务暂时不可用' });
-    expectNoPrivateData(payload);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    await expect(response.json()).resolves.toEqual(disabledResponse);
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.database.transaction).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createTreatmentSummaryRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.tenantBusinessRepository.getCustomerByTenant).not.toHaveBeenCalled();
+    expect(
+      routeMocks.treatmentSummaryRepository.checkAppointmentBelongsToTenantAndCustomer,
+    ).not.toHaveBeenCalled();
+    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
   });
 });
 
