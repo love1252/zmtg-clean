@@ -1,431 +1,344 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  POST as customerImportPreviewPost,
-  PUT as customerImportExecutePut,
-} from '@/app/api/institution/customers/import/route';
-import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
-import type { AccessContext } from '@/modules/security/domain/access-control';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
-const routeMocks = vi.hoisted(() => {
-  const repository = {
-    listCustomersByTenantAndInstitution: vi.fn(),
-    listCustomersByTenantAndInstitutionForImport: vi.fn(),
-    createCustomer: vi.fn(),
-  };
-  const auditRecord = vi.fn();
-  const checkTenantQuotaForUsage = vi.fn();
-  const transactionDatabase = { database: 'transaction-db' };
-  const database = {
-    database: 'test-db',
-    transaction: vi.fn(async (operation: (tx: typeof transactionDatabase) => unknown) =>
-      operation(transactionDatabase),
-    ),
-  };
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const downstream = vi.hoisted(() => {
+  const auditRecord = vi.fn(() => {
+    throw new Error('audit record must not run');
+  });
+  const createCustomer = vi.fn(() => {
+    throw new Error('customer create must not run');
+  });
+  const databaseTransaction = vi.fn(() => {
+    throw new Error('database transaction must not run');
+  });
+  const listCustomersForImport = vi.fn(() => {
+    throw new Error('customer import query must not run');
+  });
 
   return {
     auditRecord,
-    checkTenantQuotaForUsage,
+    canAccessResource: vi.fn(() => {
+      throw new Error('authorization must not run');
+    }),
+    checkTenantQuotaForUsage: vi.fn(() => {
+      throw new Error('quota check must not run');
+    }),
+    createAuditEvent: vi.fn(() => {
+      throw new Error('audit event must not be created');
+    }),
     createAuditEventRepository: vi.fn(() => ({ record: auditRecord })),
-    createTenantBusinessRepository: vi.fn(() => repository),
-    database,
-    getDatabase: vi.fn(),
-    getDemoAccessContextFromRequest: vi.fn(),
-    repository,
-    transactionDatabase,
+    createCustomer,
+    createTenantBusinessRepository: vi.fn(() => ({
+      createCustomer,
+      listCustomersByTenantAndInstitutionForImport: listCustomersForImport,
+    })),
+    databaseTransaction,
+    getCustomerImportRowsForExecution: vi.fn(() => {
+      throw new Error('customer import execution parser must not run');
+    }),
+    getDatabase: vi.fn(() => ({ transaction: databaseTransaction })),
+    getDemoAccessContextFromRequest: vi.fn(() => {
+      throw new Error('session must not be read');
+    }),
+    listCustomersForImport,
+    previewLowSensitiveCustomerImport: vi.fn(() => {
+      throw new Error('customer import preview parser must not run');
+    }),
+    runTenantBusinessAuditTransaction: vi.fn(() => {
+      throw new Error('business audit transaction must not run');
+    }),
   };
 });
 
-vi.mock('@/server/db/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/server/db/client')>();
-  return {
-    ...actual,
-    getDatabase: routeMocks.getDatabase,
-  };
+vi.mock('@/modules/audit/domain/audit-events', () => ({
+  createAuditEvent: downstream.createAuditEvent,
+}));
+
+vi.mock('@/modules/audit/server/audit-event-repository', () => ({
+  createAuditEventRepository: downstream.createAuditEventRepository,
+}));
+
+vi.mock('@/modules/institution/server/customer-import', () => ({
+  getCustomerImportRowsForExecution: downstream.getCustomerImportRowsForExecution,
+  previewLowSensitiveCustomerImport: downstream.previewLowSensitiveCustomerImport,
+}));
+
+vi.mock('@/modules/institution/server/tenant-business-audit-transaction', () => ({
+  runTenantBusinessAuditTransaction: downstream.runTenantBusinessAuditTransaction,
+}));
+
+vi.mock('@/modules/institution/server/tenant-business-repository', () => ({
+  createTenantBusinessRepository: downstream.createTenantBusinessRepository,
+}));
+
+vi.mock('@/modules/institution/server/tenant-quota-enforcement', () => ({
+  checkTenantQuotaForUsage: downstream.checkTenantQuotaForUsage,
+}));
+
+vi.mock('@/modules/security/domain/access-control', () => ({
+  canAccessResource: downstream.canAccessResource,
+}));
+
+vi.mock('@/modules/security/server/access-context', () => ({
+  getDemoAccessContextFromRequest: downstream.getDemoAccessContextFromRequest,
+}));
+
+vi.mock('@/server/db/client', () => ({
+  getDatabase: downstream.getDatabase,
+}));
+
+import {
+  POST as customerImportPost,
+  PUT as customerImportPut,
+} from '@/app/api/institution/customers/import/route';
+
+type CustomerImportHandler = (request: Request) => Response;
+
+const expectedPayload = Object.freeze({
+  code: 'capability_disabled',
+  error: '机构客户导入能力暂未启用。',
 });
+const routeSourcePath = 'src/app/api/institution/customers/import/route.ts';
 
-vi.mock('@/modules/security/server/access-context', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/security/server/access-context')>();
-  return {
-    ...actual,
-    getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
-  };
-});
-
-vi.mock('@/modules/institution/server/tenant-business-repository', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('@/modules/institution/server/tenant-business-repository')
-  >();
-  return {
-    ...actual,
-    createTenantBusinessRepository: routeMocks.createTenantBusinessRepository,
-  };
-});
-
-vi.mock('@/modules/audit/server/audit-event-repository', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/audit/server/audit-event-repository')>();
-  return {
-    ...actual,
-    createAuditEventRepository: routeMocks.createAuditEventRepository,
-  };
-});
-
-vi.mock('@/modules/institution/server/tenant-quota-enforcement', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('@/modules/institution/server/tenant-quota-enforcement')
-  >();
-  return {
-    ...actual,
-    checkTenantQuotaForUsage: routeMocks.checkTenantQuotaForUsage,
-  };
-});
-
-const tenantContext: AccessContext = {
-  userId: 'tenant-operator-a',
-  role: 'tenant_admin',
-  scope: 'tenant',
-  tenantId: 'tenant-a',
-  institutionId: 'inst-a',
-  source: 'demo_session',
-};
-
-const platformContext: AccessContext = {
-  userId: 'platform-admin',
-  role: 'platform_admin',
-  scope: 'platform',
-  tenantId: null,
-  source: 'demo_session',
-};
-
-const validLowSensitiveRow = {
-  customerDisplayName: '低敏客户A',
-  ageRange: '30-39',
-  customerStage: 'consulting',
-  treatmentProject: '皮肤管理',
-  lastVisitDate: '2026-07-01',
-  nextFollowUpDate: '2026-07-15',
-  ownerEmployeeRef: 'employee-ref-a',
-  sourceChannel: '线下咨询低敏来源',
-  noteSummary: '仅导入低敏摘要',
-  importedCustomerRef: 'import-ref-a',
-};
-
-function createRequest(body: unknown) {
-  return new Request('http://localhost/api/institution/customers/import?tenantId=evil-tenant', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-tenant-id': 'evil-tenant',
-    },
-    body: JSON.stringify(body),
-  });
-}
-
-function createExistingCustomer(overrides: Partial<CustomerRecordSummary> = {}): CustomerRecordSummary {
-  return {
-    id: 'cust_existing',
-    tenantId: 'tenant-a',
-    institutionId: 'inst-a',
-    displayName: '低敏客户A',
-    lifecycle: 'consulting',
-    priority: 'observe',
-    ownerUserId: 'employee-ref-a',
-    projectInterest: '皮肤管理',
-    maskedPhone: 'masked-import-only',
-    maskedMedicalRecordNo: 'masked-import-record',
-    lastTouchSummary: '最近到访:2026-07-01',
-    nextAction: '下次随访:2026-07-15',
-    tags: ['低敏导入', 'institution_ref:inst-a', 'imported_ref:import-ref-a'],
-    gender: '未指定',
-    birthDate: '低敏年龄:30-39',
-    referralSource: '线下咨询低敏来源',
-    notes: 'importBatch:batch-a；importedCustomerRef:import-ref-a',
-    ...overrides,
-  };
-}
-
-function createCustomersWithDuplicateAfterCandidateLimit() {
-  return Array.from({ length: 25 }, (_, index) => {
-    const position = index + 1;
-    if (position === 25) {
-      return createExistingCustomer({ id: 'cust_025' });
-    }
-
-    return createExistingCustomer({
-      id: `cust_${String(position).padStart(3, '0')}`,
-      displayName: `低敏客户${position}`,
-      tags: ['低敏导入', `imported_ref:other-ref-${position}`],
-    });
-  });
-}
-
-async function readJson(response: Response) {
-  return (await response.json()) as Record<string, unknown>;
-}
+const handlers = [
+  { method: 'POST', handler: customerImportPost },
+  { method: 'PUT', handler: customerImportPut },
+] as const;
 
 beforeEach(() => {
-  routeMocks.getDatabase.mockReset();
-  routeMocks.getDatabase.mockReturnValue(routeMocks.database);
-  routeMocks.database.transaction.mockReset();
-  routeMocks.database.transaction.mockImplementation(async (operation) =>
-    operation(routeMocks.transactionDatabase),
-  );
-  routeMocks.getDemoAccessContextFromRequest.mockReset();
-  routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-  routeMocks.createTenantBusinessRepository.mockClear();
-  routeMocks.createAuditEventRepository.mockClear();
-  routeMocks.auditRecord.mockReset();
-  routeMocks.auditRecord.mockResolvedValue(undefined);
-  routeMocks.checkTenantQuotaForUsage.mockReset();
-  routeMocks.checkTenantQuotaForUsage.mockResolvedValue({
-    allowed: true,
-    current: 1,
-    limit: 5000,
-    resource: 'customers',
-  });
-  routeMocks.repository.listCustomersByTenantAndInstitution.mockReset();
-  routeMocks.repository.listCustomersByTenantAndInstitution.mockResolvedValue([]);
-  routeMocks.repository.listCustomersByTenantAndInstitutionForImport.mockReset();
-  routeMocks.repository.listCustomersByTenantAndInstitutionForImport.mockResolvedValue([]);
-  routeMocks.repository.createCustomer.mockReset();
-  routeMocks.repository.createCustomer.mockImplementation(async (draft: { id: string }) => ({
-    ...draft,
-    id: draft.id,
-  }));
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
-describe('customer import API route', () => {
-  it('未登录时 POST / PUT 返回 401 受控错误且不访问数据库', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
+function expectNoDownstreamCalls() {
+  for (const dependency of Object.values(downstream)) {
+    expect(dependency).not.toHaveBeenCalled();
+  }
+}
 
-    const previewResponse = await customerImportPreviewPost(createRequest({ rows: [validLowSensitiveRow] }));
-    const executeResponse = await customerImportExecutePut(createRequest({ rows: [validLowSensitiveRow] }));
+async function expectCapabilityDisabledResponse(response: Response) {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  await expect(response.json()).resolves.toEqual(expectedPayload);
+}
 
-    await expect(readJson(previewResponse)).resolves.toMatchObject({ error: '请先登录' });
-    await expect(readJson(executeResponse)).resolves.toMatchObject({ error: '请先登录' });
-    expect(previewResponse.status).toBe(401);
-    expect(executeResponse.status).toBe(401);
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+function createRequest(input: {
+  method: 'POST' | 'PUT';
+  body: string;
+  forged?: boolean;
+}) {
+  const marker = input.forged ? 'private-forged-import-marker' : 'ordinary-import-marker';
+
+  return new Request(
+    `http://localhost/api/institution/customers/import?tenantId=${marker}&payload=${marker}`,
+    {
+      method: input.method,
+      headers: {
+        authorization: `Bearer ${marker}`,
+        cookie: `demo_session=${marker}`,
+        'content-type': 'application/json',
+        'x-institution-id': marker,
+        'x-tenant-id': marker,
+      },
+      body: input.body,
+    },
+  );
+}
+
+function createHostileRequest() {
+  const traps = {
+    get: 0,
+    getOwnPropertyDescriptor: 0,
+    getPrototypeOf: 0,
+    has: 0,
+    ownKeys: 0,
+  };
+  const request = new Proxy({} as Request, {
+    get() {
+      traps.get += 1;
+      throw new Error('Request must not be inspected');
+    },
+    getOwnPropertyDescriptor() {
+      traps.getOwnPropertyDescriptor += 1;
+      throw new Error('Request descriptors must not be read');
+    },
+    getPrototypeOf() {
+      traps.getPrototypeOf += 1;
+      throw new Error('Request prototype must not be read');
+    },
+    has() {
+      traps.has += 1;
+      throw new Error('Request keys must not be checked');
+    },
+    ownKeys() {
+      traps.ownKeys += 1;
+      throw new Error('Request keys must not be enumerated');
+    },
   });
 
-  it('POST 预检返回低敏统计、白名单和审计，不写入客户', async () => {
-    const response = await customerImportPreviewPost(createRequest({ rows: [validLowSensitiveRow] }));
-    const payload = await readJson(response);
+  return { request, traps };
+}
 
-    expect(response.status).toBe(200);
-    expect(payload.successCount).toBe(1);
-    expect(payload.canExecute).toBe(true);
-    expect(routeMocks.repository.listCustomersByTenantAndInstitutionForImport).toHaveBeenCalledWith({
-      tenantId: 'tenant-a',
-      institutionId: 'inst-a',
+describe('客户导入 API capability-off 边界', () => {
+  it.each(handlers)('$method 普通 JSON 请求同步固定返回无缓存 503', async ({ method, handler }) => {
+    const request = createRequest({
+      method,
+      body: JSON.stringify({ rows: [{ customerDisplayName: '普通导入输入' }] }),
     });
-    expect(routeMocks.repository.listCustomersByTenantAndInstitution).not.toHaveBeenCalled();
-    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        actorId: 'tenant-operator-a',
-        tenantId: 'tenant-a',
-        resource: 'customer',
-        action: 'import',
-        result: 'allowed',
-        reason: 'customer_import_permission_checked',
-      }),
-    );
-    expect(JSON.stringify(payload)).not.toContain('evil-tenant');
+
+    const response = (handler as CustomerImportHandler)(request);
+
+    expect(response).toBeInstanceOf(Response);
+    expect(request.bodyUsed).toBe(false);
+    await expectCapabilityDisabledResponse(response);
+    expectNoDownstreamCalls();
   });
 
-  it('拒绝 body 中提交 tenantId / institutionId / operatorRef', async () => {
-    const response = await customerImportPreviewPost(
-      createRequest({ tenantId: 'evil-tenant', rows: [validLowSensitiveRow] }),
-    );
-    const payload = await readJson(response);
-
-    expect(response.status).toBe(400);
-    expect(payload.error).toContain('不允许提交 tenantId');
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-  });
-
-  it('上传行中的 institutionId 被拒绝且不能覆盖登录机构', async () => {
-    const response = await customerImportPreviewPost(
-      createRequest({
-        rows: [{ ...validLowSensitiveRow, institutionId: 'other-inst' }],
+  it.each(handlers)('$method 伪造上下文和敏感输入不被读取或回显', async ({ method, handler }) => {
+    const privateMarker = 'private-forged-import-marker';
+    const request = createRequest({
+      method,
+      forged: true,
+      body: JSON.stringify({
+        institutionId: privateMarker,
+        operatorRef: privateMarker,
+        rows: [{ accessToken: privateMarker, phoneNumber: privateMarker }],
+        tenantId: privateMarker,
       }),
-    );
-    const payload = await readJson(response);
-
-    expect(response.status).toBe(200);
-    expect(payload.successCount).toBe(0);
-    expect(payload.importBatch).toMatchObject({
-      institutionId: 'inst-a',
-      rows: [
-        {
-          status: 'skipped',
-          issues: expect.arrayContaining([
-            expect.objectContaining({
-              reason: 'unsupported_field',
-              field: 'institutionId',
-            }),
-          ]),
-        },
-      ],
     });
-    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
+
+    const response = (handler as CustomerImportHandler)(request);
+    const responseCopy = response.clone();
+
+    expect(response).toBeInstanceOf(Response);
+    expect(request.bodyUsed).toBe(false);
+    await expectCapabilityDisabledResponse(response);
+    const serialized = JSON.stringify(await responseCopy.json());
+    expect(serialized).not.toContain(privateMarker);
+    expect(serialized).not.toMatch(/accessToken|authorization|cookie|institutionId|operatorRef|phoneNumber|tenantId/iu);
+    expectNoDownstreamCalls();
   });
 
-  it('POST 预检阻断高敏字段并写入高敏阻断审计 reason', async () => {
-    const response = await customerImportPreviewPost(
-      createRequest({
-        rows: [
-          {
-            ...validLowSensitiveRow,
-            phoneNumber: '13800000000',
-            chatRecord: '聊天记录',
-            accessToken: 'zmtg_sk_secret_token',
-          },
-        ],
-      }),
-    );
-    const payload = await readJson(response);
+  it.each(handlers)('$method 非法 JSON 仍同步固定返回无缓存 503 且 body 未消费', async ({ method, handler }) => {
+    const invalidMarker = 'private-invalid-json-import-marker';
+    const request = createRequest({
+      method,
+      body: `{broken-json:${invalidMarker}`,
+    });
 
-    expect(response.status).toBe(200);
-    expect(payload.successCount).toBe(0);
-    expect(payload.skippedCount).toBe(1);
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        result: 'denied',
-        reason: 'customer_import_sensitive_field_blocked',
-      }),
-    );
-    expect(JSON.stringify(payload)).not.toContain('phoneNumber');
-    expect(JSON.stringify(payload)).not.toContain('chatRecord');
-    expect(JSON.stringify(payload)).not.toContain('accessToken');
-    expect(JSON.stringify(payload)).not.toContain('13800000000');
-    expect(JSON.stringify(payload)).not.toContain('zmtg_sk_secret_token');
-    expect(JSON.stringify(payload)).not.toContain('DATABASE_URL');
-    expect(JSON.stringify(payload)).not.toContain('postgres://');
+    const response = (handler as CustomerImportHandler)(request);
+    const responseCopy = response.clone();
+
+    expect(response).toBeInstanceOf(Response);
+    expect(request.bodyUsed).toBe(false);
+    await expectCapabilityDisabledResponse(response);
+    expect(JSON.stringify(await responseCopy.json())).not.toContain(invalidMarker);
+    expectNoDownstreamCalls();
   });
 
-  it('PUT 执行仅写入合法行，非法行跳过并记录部分完成审计', async () => {
-    const response = await customerImportExecutePut(
-      createRequest({
-        rows: [
-          validLowSensitiveRow,
-          { ...validLowSensitiveRow, customerDisplayName: '', importedCustomerRef: 'bad-row' },
-        ],
-      }),
-    );
-    const payload = await readJson(response);
+  it.each(handlers)('$method 对 hostile Proxy Request 零读取、零副作用', async ({ handler }) => {
+    const hostile = createHostileRequest();
 
-    expect(response.status).toBe(200);
-    expect(payload.successCount).toBe(1);
-    expect(payload.skippedCount).toBe(1);
-    expect(Array.isArray(payload.importedCustomerIds)).toBe(true);
-    expect(routeMocks.checkTenantQuotaForUsage).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'tenant-a', resource: 'customers', quantity: 1 }),
-    );
-    expect(routeMocks.repository.createCustomer).toHaveBeenCalledTimes(1);
-    expect(routeMocks.repository.createCustomer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: 'tenant-a',
-        institutionId: 'inst-a',
-        displayName: '低敏客户A',
-        maskedPhone: 'masked-import-only',
-        maskedMedicalRecordNo: 'masked-import-record',
-        tags: expect.arrayContaining(['低敏导入']),
-      }),
-    );
-    const createInput = routeMocks.repository.createCustomer.mock.calls[0]?.[0] as {
-      tags: string[];
+    const response = (handler as CustomerImportHandler)(hostile.request);
+
+    expect(response).toBeInstanceOf(Response);
+    await expectCapabilityDisabledResponse(response);
+    expect(hostile.traps).toEqual({
+      get: 0,
+      getOwnPropertyDescriptor: 0,
+      getPrototypeOf: 0,
+      has: 0,
+      ownKeys: 0,
+    });
+    expectNoDownstreamCalls();
+  });
+
+  it.each(handlers)('$method 不读取 body、headers、method、URL 或任一 body reader', async ({ method, handler }) => {
+    const privateMarker = `private-input-${method.toLowerCase()}`;
+    const bodyReaders = {
+      arrayBuffer: vi.fn(async () => new TextEncoder().encode(privateMarker).buffer),
+      blob: vi.fn(async () => new Blob([privateMarker])),
+      formData: vi.fn(async () => new FormData()),
+      json: vi.fn(async () => ({ payload: privateMarker })),
+      text: vi.fn(async () => privateMarker),
     };
-    expect(createInput.tags.some((tag) => tag.startsWith('institution_ref:'))).toBe(false);
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ reason: 'customer_import_partially_completed' }),
-    );
-  });
-
-  it('POST 预览识别稳定排序后第 25 条重复客户', async () => {
-    routeMocks.repository.listCustomersByTenantAndInstitutionForImport.mockResolvedValue(
-      createCustomersWithDuplicateAfterCandidateLimit(),
-    );
-
-    const response = await customerImportPreviewPost(
-      createRequest({ rows: [validLowSensitiveRow] }),
-    );
-    const payload = await readJson(response);
-
-    expect(response.status).toBe(200);
-    expect(payload.successCount).toBe(0);
-    expect(payload.importBatch).toMatchObject({
-      rows: [
-        {
-          status: 'skipped',
-          issues: expect.arrayContaining([
-            expect.objectContaining({ reason: 'duplicated_customer' }),
-          ]),
+    const requestFieldRead = vi.fn((value: unknown) => value);
+    const request = Object.defineProperties(
+      { ...bodyReaders },
+      {
+        body: { get: () => requestFieldRead(privateMarker) },
+        bodyUsed: { get: () => requestFieldRead(false) },
+        headers: {
+          get: () => requestFieldRead(new Headers({ authorization: privateMarker })),
         },
-      ],
-    });
-    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
+        method: { get: () => requestFieldRead(method) },
+        url: {
+          get: () =>
+            requestFieldRead(
+              `http://localhost/api/institution/customers/import?payload=${privateMarker}`,
+            ),
+        },
+      },
+    ) as unknown as Request;
+
+    const response = (handler as CustomerImportHandler)(request);
+    const responseCopy = response.clone();
+
+    expect(response).toBeInstanceOf(Response);
+    await expectCapabilityDisabledResponse(response);
+    expect(JSON.stringify(await responseCopy.json())).not.toContain(privateMarker);
+    for (const reader of Object.values(bodyReaders)) {
+      expect(reader).not.toHaveBeenCalled();
+    }
+    expect(requestFieldRead).not.toHaveBeenCalled();
+    expectNoDownstreamCalls();
   });
 
-  it('PUT 执行识别稳定排序后第 25 条重复客户且不重复创建', async () => {
-    routeMocks.repository.listCustomersByTenantAndInstitutionForImport.mockResolvedValue(
-      createCustomersWithDuplicateAfterCandidateLimit(),
-    );
+  it('route 仅加载 NextResponse，且源码不保留输入、权限或下游执行链路', () => {
+    const source = readFileSync(resolve(process.cwd(), routeSourcePath), 'utf8');
+    const importLines = source.split('\n').filter((line) => line.startsWith('import '));
 
-    const response = await customerImportExecutePut(createRequest({ rows: [validLowSensitiveRow] }));
-    const payload = await readJson(response);
+    expect(importLines).toEqual(["import { NextResponse } from 'next/server';"]);
+    for (const method of ['POST', 'PUT']) {
+      expect(source).toContain(`export function ${method}(_request: Request)`);
+      expect(source).not.toContain(`export async function ${method}`);
+    }
+    expect(source).not.toMatch(/\b_request\s*(?:\.|\[)/u);
 
-    expect(response.status).toBe(409);
-    expect(payload.successCount).toBe(0);
-    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ result: 'denied', reason: 'customer_import_rejected' }),
-    );
-  });
-
-  it('缺少可信 institutionId 时拒绝导入', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
-      ...tenantContext,
-      institutionId: null,
-    });
-
-    const response = await customerImportExecutePut(
-      createRequest({ rows: [validLowSensitiveRow] }),
-    );
-
-    expect(response.status).toBe(403);
-    await expect(readJson(response)).resolves.toMatchObject({
-      error: '当前登录上下文缺少机构信息',
-    });
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-    expect(routeMocks.repository.createCustomer).not.toHaveBeenCalled();
-  });
-
-  it('普通员工不能导入或导出客户', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
-      ...tenantContext,
-      userId: 'staff-user',
-      role: 'customer_service',
-    });
-
-    const response = await customerImportPreviewPost(createRequest({ rows: [validLowSensitiveRow] }));
-    const payload = await readJson(response);
-
-    expect(response.status).toBe(403);
-    expect(payload.error).toBe('没有访问权限');
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-  });
-
-  it('非租户上下文不能访问导入 API', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
-
-    const response = await customerImportPreviewPost(createRequest({ rows: [validLowSensitiveRow] }));
-    const payload = await readJson(response);
-
-    expect(response.status).toBe(403);
-    expect(payload.error).toBe('没有访问权限');
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    for (const forbiddenSource of [
+      '_request.json(',
+      '_request.text(',
+      '_request.formData(',
+      '_request.arrayBuffer(',
+      '_request.blob(',
+      '_request.body',
+      '_request.headers',
+      '_request.method',
+      '_request.url',
+      'new URL',
+      'searchParams',
+      'getDemoAccessContextFromRequest',
+      'canAccessResource',
+      'getDatabase',
+      'createTenantBusinessRepository',
+      'listCustomersByTenantAndInstitutionForImport',
+      'checkTenantQuotaForUsage',
+      'createAuditEvent',
+      'createAuditEventRepository',
+      'runTenantBusinessAuditTransaction',
+      'previewLowSensitiveCustomerImport',
+      'getCustomerImportRowsForExecution',
+      'repository',
+      'quota',
+      'audit',
+      'transaction',
+      'fetch',
+      'globalThis',
+      'process.env',
+    ]) {
+      expect(source).not.toContain(forbiddenSource);
+    }
   });
 });
