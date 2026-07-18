@@ -108,6 +108,7 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
 
   it('只解析冻结的 canonical 栏目根路径，不接受未知前缀', () => {
     expect(resolveInstitutionRouteSectionV1(['customers'])?.id).toBe('customers');
+    expect(resolveInstitutionRouteSectionV1(['conversations'])?.id).toBe('conversations');
     expect(resolveInstitutionRouteSectionV1(['care', 'followups'])?.id).toBe('care');
     expect(resolveInstitutionRouteSectionV1(['analytics', 'opportunities'])?.id).toBe(
       'analytics',
@@ -143,5 +144,19 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
     );
     expect(screen.queryByText(/开发中|mock|fixture/i)).not.toBeInTheDocument();
     expect(screen.queryByText('0')).not.toBeInTheDocument();
+  });
+
+  it('正式会话根路由仍解析为 capability-off，且不显示模拟会话控件', () => {
+    const conversations = resolveInstitutionRouteSectionV1(['conversations']);
+
+    expect(conversations?.rootPath).toBe('/hospital/conversations');
+    if (!conversations) throw new Error('conversations section must resolve');
+
+    render(<InstitutionCapabilityOffPage section={conversations} />);
+
+    expect(screen.getByText('会话工作台尚未开放')).toBeInTheDocument();
+    expect(screen.getByText(/当前机构尚未获得该能力的生产放行。/u)).toBeInTheDocument();
+    expect(screen.queryByText(/fixture|mock_sent|dry-run|模拟发送|不真实发送/u)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '接管会话' })).not.toBeInTheDocument();
   });
 });

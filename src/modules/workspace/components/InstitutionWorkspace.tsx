@@ -23,7 +23,6 @@ import type { AuthSessionPayload } from '@/modules/auth/domain/session';
 import { isAuthRole } from '@/modules/auth/domain/session';
 import { LogoutButton } from '@/modules/auth/components/LogoutButton';
 import { AppointmentCenterShell } from '@/modules/institution/components/AppointmentCenterShell';
-import { AiConversationWorkbenchShell } from '@/modules/institution/components/AiConversationWorkbenchShell';
 import { InstitutionAiServiceUsageShell } from '@/modules/institution/components/InstitutionAiServiceUsageShell';
 import { CustomerCenterShell } from '@/modules/institution/components/CustomerCenterShell';
 import { HisConnectionReadOnlyPanel } from '@/modules/institution/components/HisConnectionReadOnlyPanel';
@@ -759,7 +758,12 @@ export function InstitutionWorkspace() {
             ) : displayedView === 'hisConnections' ? (
               <HisConnectionReadOnlyPanel />
             ) : displayedView === 'conversations' ? (
-              <AiConversationWorkbenchShell />
+              <InstitutionPageState
+                kind="placeholder"
+                title="会话工作台尚未开放"
+                description="当前机构尚未获得会话工作台的生产能力放行。不会加载模拟会话或消息发送入口。"
+                className="items-start text-left"
+              />
             ) : displayedView === 'knowledge' ? (
               <InstitutionKnowledgeReadonlyShell />
             ) : (

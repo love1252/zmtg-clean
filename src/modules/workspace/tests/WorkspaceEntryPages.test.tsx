@@ -4202,7 +4202,7 @@ describe('工作台入口页面', () => {
     expect(text).not.toContain('secret');
   });
 
-  it('机构导航清晰标注开发主线并可进入 AI 会话工作台模拟版', async () => {
+  it('机构导航对旧会话工作台入口 fail-closed，不加载 fixture 或发送控件', async () => {
     const fetchMock = mockWorkspaceFetch();
     render(<HospitalPage />);
 
@@ -4212,24 +4212,12 @@ describe('工作台入口页面', () => {
 
     expect(screen.queryByRole('button', { name: 'AI 模型' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '客服工作台' }));
-    expect(await screen.findByRole('heading', { name: 'AI 会话工作台' })).toBeInTheDocument();
-    expect(screen.getAllByText('当前为模拟版').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: '全部' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'AI' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '待接管' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '人工' })).toBeInTheDocument();
-    expect(screen.getAllByText('AI 处理中').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: '接管会话' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '结束会话' })).toBeInTheDocument();
-    expect(screen.getByText('AI 推荐回复')).toBeInTheDocument();
-    expect(screen.getAllByText('风险预警').length).toBeGreaterThan(0);
-    expect(screen.getByText('推荐项目')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '档案 tab' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'AI tab' })).toBeInTheDocument();
-    expect(screen.getByText('不接真实企业微信 / 微信')).toBeInTheDocument();
-    expect(screen.getAllByText('不真实发送').length).toBeGreaterThan(0);
-    expect(screen.getByText('会话总数')).toBeInTheDocument();
-    expect(screen.getByText('模拟发送数量')).toBeInTheDocument();
+    expect(await screen.findByText('会话工作台尚未开放')).toBeInTheDocument();
+    expect(screen.getByText(/当前机构尚未获得会话工作台的生产能力放行。/u)).toBeInTheDocument();
+    expect(screen.queryByText('当前为模拟版')).not.toBeInTheDocument();
+    expect(screen.queryByText('不真实发送')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '接管会话' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '结束会话' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '知识库' }));
     expect(await screen.findByRole('heading', { name: '知识库' })).toBeInTheDocument();
