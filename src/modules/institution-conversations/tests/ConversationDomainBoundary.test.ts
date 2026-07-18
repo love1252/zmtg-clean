@@ -338,6 +338,82 @@ describe('ConversationV1 root boundary', () => {
     }).toThrow();
   });
 
+  it.each([
+    ['displayName', { displayName: 'd'.repeat(80) }],
+    ['maskedReference', { maskedReference: 'm'.repeat(128) }],
+  ] as const)(
+    'allows the %s field exactly at its conservative local limit before proposing',
+    (_field, overrides) => {
+      let customerPolicyCalls = 0;
+      const inspectingPolicy: ConversationRootPolicy = {
+        ...policy,
+        isTrustedCustomerReferenceForScope: (scope, reference) => {
+          customerPolicyCalls += 1;
+          return policy.isTrustedCustomerReferenceForScope(scope, reference);
+        },
+      };
+      const current = {
+        ...root(),
+        identityState: 'matched' as const,
+        customerReference: { ...customer, ...overrides },
+      };
+
+      const result = applyConversationIdentityReview(
+        current,
+        {
+          reviewState: 'conflict',
+          customerReference: null,
+          occurredAt: '2026-07-18T00:10:00.000Z',
+        },
+        inspectingPolicy,
+      );
+
+      expect(result.kind).toBe('non_authorizing_projection_proposal');
+      expect(customerPolicyCalls).toBe(1);
+    },
+  );
+
+  it.each([
+    ['displayName plus one', { displayName: 'd'.repeat(81) }],
+    ['displayName over-limit whitespace', { displayName: ' '.repeat(81) }],
+    ['displayName million characters', { displayName: 'd'.repeat(1_000_000) }],
+    ['maskedReference plus one', { maskedReference: 'm'.repeat(129) }],
+    ['maskedReference over-limit whitespace', { maskedReference: ' '.repeat(129) }],
+    ['maskedReference million characters', { maskedReference: 'm'.repeat(1_000_000) }],
+  ] as const)(
+    'rejects %s before trim, copying, freezing, or customer policy invocation',
+    (_label, overrides) => {
+      let customerPolicyCalls = 0;
+      const inspectingPolicy: ConversationRootPolicy = {
+        ...policy,
+        isTrustedCustomerReferenceForScope: () => {
+          customerPolicyCalls += 1;
+          return true;
+        },
+      };
+      const current = {
+        ...root(),
+        identityState: 'matched' as const,
+        customerReference: { ...customer, ...overrides },
+      };
+      const before = structuredClone(current);
+
+      expect(
+        applyConversationIdentityReview(
+          current,
+          {
+            reviewState: 'conflict',
+            customerReference: null,
+            occurredAt: '2026-07-18T00:10:00.000Z',
+          },
+          inspectingPolicy,
+        ),
+      ).toEqual({ kind: 'blocked', code: 'conversation_invalid' });
+      expect(customerPolicyCalls).toBe(0);
+      expect(current).toEqual(before);
+    },
+  );
+
   it('fails closed when policy functions throw or the policy shape is malformed', () => {
     const throwingPolicy: ConversationRootPolicy = {
       ...policy,

@@ -161,6 +161,10 @@ export type ConversationRootMutationResult =
 const safeIdentifierPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const canonicalUtcTimestampPattern =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
+// Local conservative caps for low-sensitivity customer display fields. They
+// bound validation work before trim, copying, freezing, or policy invocation.
+const customerDisplayNameMaxLength = 80;
+const customerMaskedReferenceMaxLength = 128;
 
 const rootKeys = Object.freeze([
   'conversationId',
@@ -489,10 +493,12 @@ function captureTrustedCustomerReference(
     snapshot.contractVersion !== 'v1' ||
     !isSafeIdentifier(snapshot.customerId) ||
     typeof snapshot.displayName !== 'string' ||
+    snapshot.displayName.length > customerDisplayNameMaxLength ||
     snapshot.displayName.trim().length === 0 ||
     !(
       snapshot.maskedReference === null ||
       (typeof snapshot.maskedReference === 'string' &&
+        snapshot.maskedReference.length <= customerMaskedReferenceMaxLength &&
         snapshot.maskedReference.trim().length > 0)
     )
   ) {
