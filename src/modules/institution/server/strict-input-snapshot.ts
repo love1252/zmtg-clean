@@ -1,4 +1,9 @@
+import { isProxy } from 'node:util/types';
+
 export type StrictDataRecordSnapshot = Readonly<Record<string, unknown>>;
+
+export const STRICT_DATA_RECORD_MAX_KEYS = 64 as const;
+export const STRICT_ARRAY_MAX_ITEMS = 256 as const;
 
 /**
  * Captures an untrusted plain object exactly once through own property descriptors. Callers must
@@ -9,14 +14,37 @@ export function snapshotStrictDataRecord(
   value: unknown,
 ): StrictDataRecordSnapshot | null {
   try {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      isProxy(value) ||
+      Object.getPrototypeOf(value) !== Object.prototype
+    ) {
+      return null;
+    }
 
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
+    const preflightKeys = Reflect.ownKeys(value);
+    if (
+      preflightKeys.length > STRICT_DATA_RECORD_MAX_KEYS ||
+      preflightKeys.some((key) => typeof key !== 'string')
+    ) {
+      return null;
+    }
 
     const descriptors = Object.getOwnPropertyDescriptors(value);
     const keys = Reflect.ownKeys(descriptors);
-    if (keys.some((key) => typeof key !== 'string')) return null;
+    if (
+      keys.length !== preflightKeys.length ||
+      keys.some((key) => typeof key !== 'string') ||
+      preflightKeys.some(
+        (key) =>
+          typeof key !== 'string' ||
+          !Object.prototype.hasOwnProperty.call(descriptors, key),
+      )
+    ) {
+      return null;
+    }
 
     const snapshot: Record<string, unknown> = Object.create(null) as Record<
       string,
@@ -79,7 +107,17 @@ export function snapshotStrictArray(
   maximumLength: number,
 ): readonly unknown[] | null {
   try {
-    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
+    if (
+      !Number.isSafeInteger(maximumLength) ||
+      maximumLength < 0 ||
+      maximumLength > STRICT_ARRAY_MAX_ITEMS ||
+      !Array.isArray(value) ||
+      isProxy(value) ||
+      Object.getPrototypeOf(value) !== Array.prototype ||
+      value.length > maximumLength
+    ) {
+      return null;
+    }
 
     const descriptors = Object.getOwnPropertyDescriptors(value);
     const descriptorMap = descriptors as unknown as Record<
@@ -96,7 +134,8 @@ export function snapshotStrictArray(
       typeof length !== 'number' ||
       !Number.isSafeInteger(length) ||
       length < 0 ||
-      length > maximumLength
+      length > maximumLength ||
+      length !== value.length
     ) {
       return null;
     }

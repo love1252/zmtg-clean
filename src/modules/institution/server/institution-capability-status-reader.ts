@@ -2,80 +2,163 @@ import {
   isInstitutionSourceFailureCodeV1,
   isInstitutionSourcePartitionReadinessV1,
   type InstitutionSourceFailureCodeV1,
-  type InstitutionSourceFreshnessV1,
   type InstitutionSourcePartitionReadinessV1,
 } from '@/modules/institution-contracts/v1/institution-source';
-import type {
-  CapabilityStatusItemV1,
-  CapabilityStatusV1,
-} from '@/modules/institution-contracts/v1/institution-capability';
+import type { CapabilityStatusDimensionsV1 } from '@/modules/institution-contracts/v1/institution-capability';
 import {
   INSTITUTION_CAPABILITY_REGISTRY_V1,
   isInstitutionCapabilityKeyV1,
-  isInstitutionDiagnosticTargetCapabilityKeyV1,
   type InstitutionCapabilityKeyV1,
   type InstitutionDiagnosticTargetCapabilityKeyV1,
 } from '@/modules/institution-contracts/v1/institution-capability-registry';
 import {
-  deriveInstitutionCapabilityDecisionV1,
-  evaluateInstitutionCapabilityStatusV1,
-  type InstitutionCapabilityEvaluationInputV1,
+  evaluateInstitutionCapabilityCandidateV1,
+  INSTITUTION_CAPABILITY_OWNER_REQUIREMENTS_V1,
+  type InstitutionCapabilityEvaluationCandidateInputV1,
+  type InstitutionCapabilityEvaluationCandidateV1,
 } from '@/modules/institution/server/institution-capability-status-evaluator';
 import {
   hasExactSnapshotKeys,
   snapshotExactDataRecord,
   snapshotStrictArray,
   snapshotStrictDataRecord,
-  type StrictDataRecordSnapshot,
 } from '@/modules/institution/server/strict-input-snapshot';
 
-const SAFE_SCOPE_SENTINEL = 'scope_unavailable';
-const SCOPE_KEYS = Object.freeze(['tenantId', 'institutionId'] as const);
-const PROVIDER_INPUT_KEYS = Object.freeze(['scope', 'partitions', 'evaluations'] as const);
-const PARTITION_INPUT_KEYS = Object.freeze([
-  'key',
-  'readiness',
-  'freshness',
-  'failureCode',
+const SCOPE_INTENT_KEYS = Object.freeze([
+  'tenantIdIntent',
+  'institutionIdIntent',
 ] as const);
-const FRESHNESS_KEYS = Object.freeze(['observedAt', 'freshUntil'] as const);
-const READ_INPUT_KEYS = Object.freeze([
-  'expectedScope',
-  'provider',
-  'reachableDiagnosticTargetKeys',
+const SCOPE_CLAIM_KEYS = Object.freeze([
+  'tenantIdClaim',
+  'institutionIdClaim',
 ] as const);
+const PROVIDER_CANDIDATE_KEYS = Object.freeze([
+  'scopeClaim',
+  'sourcePartitionClaims',
+  'capabilityEvaluationCandidates',
+] as const);
+const PARTITION_CLAIM_KEYS = Object.freeze([
+  'candidateCapabilityKey',
+  'sourceReadinessClaim',
+  'freshnessClaim',
+  'sourceFailureClaim',
+] as const);
+const FRESHNESS_CLAIM_KEYS = Object.freeze([
+  'observedAtClaim',
+  'freshUntilClaim',
+] as const);
+const READ_CANDIDATE_KEYS = Object.freeze([
+  'scopeIntent',
+  'providerCandidate',
+] as const);
+
 const capabilityDisplayOrder = new Map<InstitutionCapabilityKeyV1, number>(
   INSTITUTION_CAPABILITY_REGISTRY_V1.map((definition, index) => [definition.key, index]),
 );
 
-export type InstitutionCapabilityStatusScopeV1 = Readonly<{
-  tenantId: string;
-  institutionId: string;
+declare class InstitutionCapabilityOwnerEvidenceSealV1 {
+  private readonly ownerSeal;
+}
+
+/**
+ * Future composition-root-only evidence. The private nominal seal has no exported constructor,
+ * parser, assertion, or raw-value promotion path in this candidate-only slice.
+ */
+export type InstitutionCapabilityOwnerEvidenceV1 =
+  InstitutionCapabilityOwnerEvidenceSealV1 &
+    Readonly<{
+      formalProvenance: Readonly<{ evidenceKind: 'formal_provenance' }>;
+      freshActiveMembership: Readonly<{
+        evidenceKind: 'fresh_active_membership';
+      }>;
+      activeInstitutionAnchor: Readonly<{
+        evidenceKind: 'active_institution_anchor';
+      }>;
+      ownerCapabilityFacts: readonly Readonly<{
+        capabilityKey: InstitutionCapabilityKeyV1;
+        dimensions: Readonly<CapabilityStatusDimensionsV1>;
+        observedAt: string;
+        freshUntil: string;
+      }>[];
+      trustedServerNow: string;
+      diagnosticRouteGuard: Readonly<{
+        reachableTargets: readonly InstitutionDiagnosticTargetCapabilityKeyV1[];
+      }>;
+      capabilityRevision: Readonly<{
+        evidenceKind: 'capability_revision';
+        reference: string;
+      }>;
+    }>;
+
+export type InstitutionCapabilityScopeIntentV1 = Readonly<{
+  tenantIdIntent: string;
+  institutionIdIntent: string;
 }>;
 
-export type InstitutionCapabilityStatusProviderPartitionInputV1 = Readonly<{
-  key: InstitutionCapabilityKeyV1;
-  readiness: InstitutionSourcePartitionReadinessV1;
-  freshness: InstitutionSourceFreshnessV1 | null;
-  failureCode: InstitutionSourceFailureCodeV1 | null;
+export type InstitutionCapabilityProviderScopeClaimV1 = Readonly<{
+  tenantIdClaim: string;
+  institutionIdClaim: string;
 }>;
 
-export type InstitutionCapabilityStatusProviderInputV1 = Readonly<{
-  scope: InstitutionCapabilityStatusScopeV1;
-  partitions: readonly InstitutionCapabilityStatusProviderPartitionInputV1[];
-  evaluations: readonly InstitutionCapabilityEvaluationInputV1[];
+export type InstitutionCapabilityFreshnessClaimV1 = Readonly<{
+  observedAtClaim: string;
+  freshUntilClaim: string;
 }>;
 
-export type InstitutionCapabilityStatusReadInputV1 = Readonly<{
-  expectedScope: InstitutionCapabilityStatusScopeV1;
-  provider: InstitutionCapabilityStatusProviderInputV1;
-  /** Server-authorized diagnostic pages reachable by the current AccessContext. */
-  reachableDiagnosticTargetKeys: readonly InstitutionDiagnosticTargetCapabilityKeyV1[];
+export type InstitutionCapabilitySourcePartitionClaimV1 = Readonly<{
+  candidateCapabilityKey: InstitutionCapabilityKeyV1;
+  sourceReadinessClaim: InstitutionSourcePartitionReadinessV1;
+  freshnessClaim: InstitutionCapabilityFreshnessClaimV1 | null;
+  sourceFailureClaim: InstitutionSourceFailureCodeV1 | null;
 }>;
 
-type ParsedPartition = InstitutionCapabilityStatusProviderPartitionInputV1;
+export type InstitutionCapabilityProviderCandidateInputV1 = Readonly<{
+  scopeClaim: InstitutionCapabilityProviderScopeClaimV1;
+  sourcePartitionClaims: readonly InstitutionCapabilitySourcePartitionClaimV1[];
+  capabilityEvaluationCandidates: readonly InstitutionCapabilityEvaluationCandidateInputV1[];
+}>;
 
-function isSafeScopeId(value: unknown): value is string {
+export type InstitutionCapabilityStatusCandidateReadInputV1 = Readonly<{
+  scopeIntent: InstitutionCapabilityScopeIntentV1;
+  providerCandidate: InstitutionCapabilityProviderCandidateInputV1;
+}>;
+
+export type InstitutionCapabilityStatusCandidateBlockReasonV1 =
+  | 'invalid_input'
+  | 'invalid_scope_intent'
+  | 'invalid_provider_candidate'
+  | 'scope_intent_mismatch'
+  | 'invalid_partition_candidate'
+  | 'invalid_evaluation_candidate'
+  | 'duplicate_candidate'
+  | 'candidate_key_mismatch';
+
+export type InstitutionCapabilityStatusCandidateReadResultV1 =
+  | Readonly<{
+      kind: 'non_authorizing_candidate';
+      tenantIntentCandidate: string;
+      institutionIntentCandidate: string;
+      sourcePartitionCandidates: readonly InstitutionCapabilitySourcePartitionClaimV1[];
+      capabilityCandidates: readonly InstitutionCapabilityEvaluationCandidateV1[];
+      ownerRequirements: typeof INSTITUTION_CAPABILITY_OWNER_REQUIREMENTS_V1;
+    }>
+  | Readonly<{
+      kind: 'blocked';
+      blockReason: InstitutionCapabilityStatusCandidateBlockReasonV1;
+      ownerRequirements: typeof INSTITUTION_CAPABILITY_OWNER_REQUIREMENTS_V1;
+    }>;
+
+function blocked(
+  blockReason: InstitutionCapabilityStatusCandidateBlockReasonV1,
+): InstitutionCapabilityStatusCandidateReadResultV1 {
+  return Object.freeze({
+    kind: 'blocked',
+    blockReason,
+    ownerRequirements: INSTITUTION_CAPABILITY_OWNER_REQUIREMENTS_V1,
+  });
+}
+
+function isSafeScopeIntentId(value: unknown): value is string {
   return (
     typeof value === 'string' &&
     value.length >= 1 &&
@@ -84,404 +167,250 @@ function isSafeScopeId(value: unknown): value is string {
   );
 }
 
-function normalizeScopeId(value: unknown): { valid: boolean; value: string } {
-  if (isSafeScopeId(value)) return { valid: true, value };
-  return { valid: false, value: SAFE_SCOPE_SENTINEL };
-}
-
-function safeExpectedScope(value: unknown): {
-  valid: boolean;
-  scope: InstitutionCapabilityStatusScopeV1;
-} {
-  let tenantId: unknown;
-  let institutionId: unknown;
-  let exactShape = false;
-
-  try {
-    const snapshot = snapshotStrictDataRecord(value);
-    if (snapshot) {
-      exactShape = hasExactSnapshotKeys(snapshot, SCOPE_KEYS);
-      tenantId = snapshot.tenantId;
-      institutionId = snapshot.institutionId;
-    }
-  } catch {
-    exactShape = false;
-  }
-
-  const safeTenantId = normalizeScopeId(tenantId);
-  const safeInstitutionId = normalizeScopeId(institutionId);
-  return {
-    valid: exactShape && safeTenantId.valid && safeInstitutionId.valid,
-    scope: Object.freeze({
-      tenantId: safeTenantId.value,
-      institutionId: safeInstitutionId.value,
-    }),
-  };
-}
-
-function parseSourceScope(value: unknown): InstitutionCapabilityStatusScopeV1 | null {
-  const snapshot = snapshotExactDataRecord(value, SCOPE_KEYS);
-  if (!snapshot) return null;
-  if (!isSafeScopeId(snapshot.tenantId) || !isSafeScopeId(snapshot.institutionId)) {
+function parseScopeIntent(value: unknown): InstitutionCapabilityScopeIntentV1 | null {
+  const snapshot = snapshotExactDataRecord(value, SCOPE_INTENT_KEYS);
+  if (
+    !snapshot ||
+    !isSafeScopeIntentId(snapshot.tenantIdIntent) ||
+    !isSafeScopeIntentId(snapshot.institutionIdIntent)
+  ) {
     return null;
   }
   return Object.freeze({
-    tenantId: snapshot.tenantId,
-    institutionId: snapshot.institutionId,
+    tenantIdIntent: snapshot.tenantIdIntent,
+    institutionIdIntent: snapshot.institutionIdIntent,
   });
 }
 
-function parseCanonicalInstant(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
+function parseScopeClaim(
+  value: unknown,
+): InstitutionCapabilityProviderScopeClaimV1 | null {
+  const snapshot = snapshotExactDataRecord(value, SCOPE_CLAIM_KEYS);
+  if (
+    !snapshot ||
+    !isSafeScopeIntentId(snapshot.tenantIdClaim) ||
+    !isSafeScopeIntentId(snapshot.institutionIdClaim)
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    tenantIdClaim: snapshot.tenantIdClaim,
+    institutionIdClaim: snapshot.institutionIdClaim,
+  });
+}
+
+function parseCanonicalInstantClaim(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length !== 24) return null;
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return null;
   return new Date(timestamp).toISOString() === value ? value : null;
 }
 
-function parseFreshness(value: unknown): InstitutionSourceFreshnessV1 | null {
-  const snapshot = snapshotExactDataRecord(value, FRESHNESS_KEYS);
+function parseFreshnessClaim(
+  value: unknown,
+): InstitutionCapabilityFreshnessClaimV1 | null {
+  const snapshot = snapshotExactDataRecord(value, FRESHNESS_CLAIM_KEYS);
   if (!snapshot) return null;
-  const observedAt = parseCanonicalInstant(snapshot.observedAt);
-  const freshUntil = parseCanonicalInstant(snapshot.freshUntil);
-  if (!observedAt || !freshUntil || Date.parse(observedAt) > Date.parse(freshUntil)) {
+  const observedAtClaim = parseCanonicalInstantClaim(snapshot.observedAtClaim);
+  const freshUntilClaim = parseCanonicalInstantClaim(snapshot.freshUntilClaim);
+  if (
+    !observedAtClaim ||
+    !freshUntilClaim ||
+    Date.parse(observedAtClaim) > Date.parse(freshUntilClaim)
+  ) {
     return null;
   }
-  return Object.freeze({ observedAt, freshUntil });
+  return Object.freeze({ observedAtClaim, freshUntilClaim });
 }
 
-function isValidPartitionCrossFields(partition: ParsedPartition) {
+function isCandidateCrossFieldShapeValid(
+  candidate: InstitutionCapabilitySourcePartitionClaimV1,
+) {
   if (
-    partition.readiness === 'ready' ||
-    partition.readiness === 'empty'
+    candidate.sourceReadinessClaim === 'ready' ||
+    candidate.sourceReadinessClaim === 'empty'
   ) {
-    return partition.freshness !== null && partition.failureCode === null;
+    return candidate.freshnessClaim !== null && candidate.sourceFailureClaim === null;
   }
-  if (partition.readiness === 'stale') {
-    return partition.freshness !== null && partition.failureCode === 'data_incomplete';
-  }
-  if (partition.readiness === 'denied') {
+  if (candidate.sourceReadinessClaim === 'stale') {
     return (
-      partition.freshness === null &&
-      (partition.failureCode === 'permission_denied' ||
-        partition.failureCode === 'scope_mismatch')
+      candidate.freshnessClaim !== null &&
+      candidate.sourceFailureClaim === 'data_incomplete'
     );
   }
-  if (partition.readiness === 'disabled') {
-    return partition.freshness === null && partition.failureCode === 'not_released';
+  if (candidate.sourceReadinessClaim === 'denied') {
+    return (
+      candidate.freshnessClaim === null &&
+      (candidate.sourceFailureClaim === 'permission_denied' ||
+        candidate.sourceFailureClaim === 'scope_mismatch')
+    );
+  }
+  if (candidate.sourceReadinessClaim === 'disabled') {
+    return (
+      candidate.freshnessClaim === null &&
+      candidate.sourceFailureClaim === 'not_released'
+    );
   }
   return (
-    partition.freshness === null &&
-    (partition.failureCode === 'upstream_unavailable' ||
-      partition.failureCode === 'timeout' ||
-      partition.failureCode === 'invalid_payload' ||
-      partition.failureCode === 'data_incomplete')
+    candidate.freshnessClaim === null &&
+    (candidate.sourceFailureClaim === 'upstream_unavailable' ||
+      candidate.sourceFailureClaim === 'timeout' ||
+      candidate.sourceFailureClaim === 'invalid_payload' ||
+      candidate.sourceFailureClaim === 'data_incomplete')
   );
 }
 
-function parsePartition(value: unknown): ParsedPartition | null {
-  const snapshot = snapshotExactDataRecord(value, PARTITION_INPUT_KEYS);
+function parsePartitionClaim(
+  value: unknown,
+): InstitutionCapabilitySourcePartitionClaimV1 | null {
+  const snapshot = snapshotExactDataRecord(value, PARTITION_CLAIM_KEYS);
   if (!snapshot) return null;
-  if (!isInstitutionCapabilityKeyV1(snapshot.key)) return null;
-  if (!isInstitutionSourcePartitionReadinessV1(snapshot.readiness)) return null;
+  if (!isInstitutionCapabilityKeyV1(snapshot.candidateCapabilityKey)) return null;
+  if (!isInstitutionSourcePartitionReadinessV1(snapshot.sourceReadinessClaim)) {
+    return null;
+  }
   if (
-    snapshot.failureCode !== null &&
-    !isInstitutionSourceFailureCodeV1(snapshot.failureCode)
+    snapshot.sourceFailureClaim !== null &&
+    !isInstitutionSourceFailureCodeV1(snapshot.sourceFailureClaim)
   ) {
     return null;
   }
 
-  const freshness =
-    snapshot.freshness === null ? null : parseFreshness(snapshot.freshness);
-  if (snapshot.freshness !== null && freshness === null) return null;
+  const freshnessClaim =
+    snapshot.freshnessClaim === null
+      ? null
+      : parseFreshnessClaim(snapshot.freshnessClaim);
+  if (snapshot.freshnessClaim !== null && freshnessClaim === null) return null;
 
-  const partition = Object.freeze({
-    key: snapshot.key,
-    readiness: snapshot.readiness,
-    freshness,
-    failureCode: snapshot.failureCode,
-  }) satisfies ParsedPartition;
-  return isValidPartitionCrossFields(partition) ? partition : null;
+  const candidate = Object.freeze({
+    candidateCapabilityKey: snapshot.candidateCapabilityKey,
+    sourceReadinessClaim: snapshot.sourceReadinessClaim,
+    freshnessClaim,
+    sourceFailureClaim: snapshot.sourceFailureClaim,
+  }) satisfies InstitutionCapabilitySourcePartitionClaimV1;
+  return isCandidateCrossFieldShapeValid(candidate) ? candidate : null;
 }
 
-function isDataBearingPartition(readiness: InstitutionSourcePartitionReadinessV1) {
-  return readiness === 'ready' || readiness === 'empty' || readiness === 'stale';
-}
-
-function deriveTopLevelReadiness(partitions: readonly ParsedPartition[]) {
-  const readinessValues = new Set(partitions.map((partition) => partition.readiness));
-  const dataBearingCount = partitions.filter((partition) =>
-    isDataBearingPartition(partition.readiness),
-  ).length;
-
-  if (dataBearingCount > 0 && dataBearingCount < partitions.length) return 'partial' as const;
-  if (dataBearingCount === partitions.length) {
-    if (readinessValues.size === 1 && readinessValues.has('empty')) return 'empty' as const;
-    if (readinessValues.size === 1 && readinessValues.has('stale')) return 'stale' as const;
-    if (readinessValues.has('stale')) return 'partial' as const;
-    return 'ready' as const;
-  }
-  if (readinessValues.has('denied')) return 'denied' as const;
-  if (readinessValues.has('unavailable')) return 'unavailable' as const;
-  return 'disabled' as const;
-}
-
-const failurePriority = Object.freeze([
-  'scope_mismatch',
-  'permission_denied',
-  'invalid_payload',
-  'upstream_unavailable',
-  'timeout',
-  'not_released',
-  'data_incomplete',
-] as const satisfies readonly InstitutionSourceFailureCodeV1[]);
-
-function deriveTopLevelFailureCode(
-  readiness: CapabilityStatusV1['readiness'],
-  partitions: readonly ParsedPartition[],
-): InstitutionSourceFailureCodeV1 | null {
-  if (readiness === 'ready' || readiness === 'empty') return null;
-  if (readiness === 'stale') return 'data_incomplete';
-
-  for (const failureCode of failurePriority) {
-    if (partitions.some((partition) => partition.failureCode === failureCode)) {
-      return failureCode;
-    }
-  }
-  return 'invalid_payload';
-}
-
-function aggregateFreshness(
-  partitions: readonly ParsedPartition[],
-): InstitutionSourceFreshnessV1 | null | false {
-  const relevant = partitions.filter((partition) =>
-    isDataBearingPartition(partition.readiness),
+function isDataBearingClaim(readinessClaim: InstitutionSourcePartitionReadinessV1) {
+  return (
+    readinessClaim === 'ready' ||
+    readinessClaim === 'empty' ||
+    readinessClaim === 'stale'
   );
-  if (relevant.length === 0) return null;
-  if (relevant.some((partition) => partition.freshness === null)) return false;
-
-  const freshnessValues = relevant.map(
-    (partition) => partition.freshness as InstitutionSourceFreshnessV1,
-  );
-  const observedAt = freshnessValues.reduce((latest, current) =>
-    Date.parse(current.observedAt) > Date.parse(latest) ? current.observedAt : latest,
-  freshnessValues[0].observedAt);
-  const freshUntil = freshnessValues.reduce((earliest, current) =>
-    Date.parse(current.freshUntil) < Date.parse(earliest) ? current.freshUntil : earliest,
-  freshnessValues[0].freshUntil);
-
-  if (Date.parse(observedAt) > Date.parse(freshUntil)) return false;
-  return Object.freeze({ observedAt, freshUntil });
 }
 
-function failClosedEnvelope(
-  scope: InstitutionCapabilityStatusScopeV1,
-  failureCode: 'scope_mismatch' | 'invalid_payload',
-): CapabilityStatusV1 {
-  const partitions: CapabilityStatusV1['partitions'] = [];
-  Object.freeze(partitions);
-  const envelope: CapabilityStatusV1 = {
-    contractVersion: 'v1',
-    scope,
-    readiness: failureCode === 'scope_mismatch' ? 'denied' : 'unavailable',
-    freshness: null,
-    partitions,
-    data: null,
-    failureCode,
-  };
-  return Object.freeze(envelope);
-}
-
-function boundItemForSourceReadiness(
-  item: Readonly<CapabilityStatusItemV1>,
-  readiness: CapabilityStatusV1['readiness'],
-  reachableDiagnosticTargetKeys: ReadonlySet<InstitutionDiagnosticTargetCapabilityKeyV1>,
-): Readonly<CapabilityStatusItemV1> {
-  const decision =
-    (readiness === 'partial' || readiness === 'stale') &&
-    item.decision === 'operational'
-      ? 'read_only'
-      : item.decision;
-  const diagnosticTargetKey =
-    item.diagnosticTargetKey !== null &&
-    reachableDiagnosticTargetKeys.has(item.diagnosticTargetKey)
-      ? item.diagnosticTargetKey
-      : null;
-
-  if (
-    decision !== item.decision ||
-    diagnosticTargetKey !== item.diagnosticTargetKey
-  ) {
-    return Object.freeze({ ...item, decision, diagnosticTargetKey });
-  }
-  return item;
-}
-
-function parseReachableDiagnosticTargetKeys(
-  value: unknown,
-): ReadonlySet<InstitutionDiagnosticTargetCapabilityKeyV1> | null {
-  const keys = snapshotStrictArray(
-    value,
-    INSTITUTION_CAPABILITY_REGISTRY_V1.length,
-  );
-  if (!keys) return null;
-
-  const parsed = new Set<InstitutionDiagnosticTargetCapabilityKeyV1>();
-  for (const key of keys) {
-    if (!isInstitutionDiagnosticTargetCapabilityKeyV1(key) || parsed.has(key)) {
-      return null;
-    }
-    parsed.add(key);
-  }
-  return parsed;
-}
-
-function itemsAreSelfConsistent(
-  items: readonly Readonly<CapabilityStatusItemV1>[],
-  readiness: CapabilityStatusV1['readiness'],
-) {
-  for (const item of items) {
-    const derived = deriveInstitutionCapabilityDecisionV1(item.dimensions);
-    const expected =
-      (readiness === 'partial' || readiness === 'stale') && derived === 'operational'
-        ? 'read_only'
-        : derived;
-    if (item.decision !== expected) return false;
-  }
-  return true;
-}
-
-export function readInstitutionCapabilityStatusV1(input: unknown): CapabilityStatusV1 {
-  const inputSnapshot = snapshotStrictDataRecord(input);
-  let expectedScopeResult: ReturnType<typeof safeExpectedScope>;
+/**
+ * Parses a candidate bundle only. It performs shape and self-consistency checks but never creates
+ * CapabilityStatusV1, current/ready state, a display decision, diagnostic reachability, or allow.
+ * Future-time and TTL validity remain owned by the trusted server clock requirement above.
+ */
+export function readInstitutionCapabilityStatusCandidateV1(
+  input: unknown,
+): InstitutionCapabilityStatusCandidateReadResultV1 {
   try {
-    const expectedScopeValue = inputSnapshot?.expectedScope ?? null;
-    expectedScopeResult = safeExpectedScope(expectedScopeValue);
-  } catch {
-    expectedScopeResult = safeExpectedScope(null);
-  }
-
-  const expectedScope = expectedScopeResult.scope;
-  if (!expectedScopeResult.valid) {
-    return failClosedEnvelope(expectedScope, 'scope_mismatch');
-  }
-
-  try {
-    if (!inputSnapshot || !hasExactSnapshotKeys(inputSnapshot, READ_INPUT_KEYS)) {
-      return failClosedEnvelope(expectedScope, 'invalid_payload');
-    }
-    const providerSnapshot = snapshotStrictDataRecord(inputSnapshot.provider);
-    if (!providerSnapshot) {
-      return failClosedEnvelope(expectedScope, 'scope_mismatch');
+    const inputSnapshot = snapshotStrictDataRecord(input);
+    if (!inputSnapshot || !hasExactSnapshotKeys(inputSnapshot, READ_CANDIDATE_KEYS)) {
+      return blocked('invalid_input');
     }
 
-    const sourceScope = parseSourceScope(providerSnapshot.scope);
+    const scopeIntent = parseScopeIntent(inputSnapshot.scopeIntent);
+    if (!scopeIntent) return blocked('invalid_scope_intent');
+
+    const providerSnapshot = snapshotStrictDataRecord(inputSnapshot.providerCandidate);
     if (
-      !sourceScope ||
-      sourceScope.tenantId !== expectedScope.tenantId ||
-      sourceScope.institutionId !== expectedScope.institutionId
+      !providerSnapshot ||
+      !hasExactSnapshotKeys(providerSnapshot, PROVIDER_CANDIDATE_KEYS)
     ) {
-      return failClosedEnvelope(expectedScope, 'scope_mismatch');
-    }
-    if (!hasExactSnapshotKeys(providerSnapshot, PROVIDER_INPUT_KEYS)) {
-      return failClosedEnvelope(expectedScope, 'invalid_payload');
-    }
-    const rawPartitions = snapshotStrictArray(
-      providerSnapshot.partitions,
-      INSTITUTION_CAPABILITY_REGISTRY_V1.length,
-    );
-    const rawEvaluations = snapshotStrictArray(
-      providerSnapshot.evaluations,
-      INSTITUTION_CAPABILITY_REGISTRY_V1.length,
-    );
-    const reachableDiagnosticTargetKeys = parseReachableDiagnosticTargetKeys(
-      inputSnapshot.reachableDiagnosticTargetKeys,
-    );
-    if (!rawPartitions || rawPartitions.length === 0) {
-      return failClosedEnvelope(expectedScope, 'invalid_payload');
-    }
-    if (!rawEvaluations || !reachableDiagnosticTargetKeys) {
-      return failClosedEnvelope(expectedScope, 'invalid_payload');
+      return blocked('invalid_provider_candidate');
     }
 
-    const partitions: ParsedPartition[] = [];
+    const scopeClaim = parseScopeClaim(providerSnapshot.scopeClaim);
+    if (!scopeClaim) return blocked('invalid_provider_candidate');
+    if (
+      scopeClaim.tenantIdClaim !== scopeIntent.tenantIdIntent ||
+      scopeClaim.institutionIdClaim !== scopeIntent.institutionIdIntent
+    ) {
+      return blocked('scope_intent_mismatch');
+    }
+
+    const rawPartitionClaims = snapshotStrictArray(
+      providerSnapshot.sourcePartitionClaims,
+      INSTITUTION_CAPABILITY_REGISTRY_V1.length,
+    );
+    const rawEvaluationCandidates = snapshotStrictArray(
+      providerSnapshot.capabilityEvaluationCandidates,
+      INSTITUTION_CAPABILITY_REGISTRY_V1.length,
+    );
+    if (!rawPartitionClaims || rawPartitionClaims.length === 0 || !rawEvaluationCandidates) {
+      return blocked('invalid_provider_candidate');
+    }
+
+    const sourcePartitionCandidates: InstitutionCapabilitySourcePartitionClaimV1[] = [];
     const partitionKeys = new Set<InstitutionCapabilityKeyV1>();
-    for (const rawPartition of rawPartitions) {
-      const partition = parsePartition(rawPartition);
-      if (!partition || partitionKeys.has(partition.key)) {
-        return failClosedEnvelope(expectedScope, 'invalid_payload');
+    for (const rawPartitionClaim of rawPartitionClaims) {
+      const partitionCandidate = parsePartitionClaim(rawPartitionClaim);
+      if (!partitionCandidate) return blocked('invalid_partition_candidate');
+      if (partitionKeys.has(partitionCandidate.candidateCapabilityKey)) {
+        return blocked('duplicate_candidate');
       }
-      partitionKeys.add(partition.key);
-      partitions.push(partition);
-    }
-    if (partitions.some((partition) => partition.failureCode === 'scope_mismatch')) {
-      return failClosedEnvelope(expectedScope, 'scope_mismatch');
+      partitionKeys.add(partitionCandidate.candidateCapabilityKey);
+      sourcePartitionCandidates.push(partitionCandidate);
     }
 
-    const evaluatedItems: Readonly<CapabilityStatusItemV1>[] = [];
-    const itemKeys = new Set<InstitutionCapabilityKeyV1>();
-    for (const evaluation of rawEvaluations) {
-      const result = evaluateInstitutionCapabilityStatusV1(evaluation);
-      if (!result.ok || itemKeys.has(result.item.key)) {
-        return failClosedEnvelope(expectedScope, 'invalid_payload');
+    const capabilityCandidates: InstitutionCapabilityEvaluationCandidateV1[] = [];
+    const capabilityKeys = new Set<InstitutionCapabilityKeyV1>();
+    for (const rawEvaluationCandidate of rawEvaluationCandidates) {
+      const evaluationCandidate = evaluateInstitutionCapabilityCandidateV1(
+        rawEvaluationCandidate,
+      );
+      if (evaluationCandidate.kind === 'blocked') {
+        return blocked('invalid_evaluation_candidate');
       }
-      itemKeys.add(result.item.key);
-      evaluatedItems.push(result.item);
+      if (capabilityKeys.has(evaluationCandidate.candidateCapabilityKey)) {
+        return blocked('duplicate_candidate');
+      }
+      capabilityKeys.add(evaluationCandidate.candidateCapabilityKey);
+      capabilityCandidates.push(evaluationCandidate);
     }
-    partitions.sort(
-      (left, right) =>
-        (capabilityDisplayOrder.get(left.key) ?? Number.MAX_SAFE_INTEGER) -
-        (capabilityDisplayOrder.get(right.key) ?? Number.MAX_SAFE_INTEGER),
-    );
-    evaluatedItems.sort(
-      (left, right) =>
-        (capabilityDisplayOrder.get(left.key) ?? Number.MAX_SAFE_INTEGER) -
-        (capabilityDisplayOrder.get(right.key) ?? Number.MAX_SAFE_INTEGER),
-    );
 
-    const dataBearingPartitionKeys = new Set(
-      partitions
-        .filter((partition) => isDataBearingPartition(partition.readiness))
-        .map((partition) => partition.key),
+    const dataBearingClaimKeys = new Set(
+      sourcePartitionCandidates
+        .filter((candidate) => isDataBearingClaim(candidate.sourceReadinessClaim))
+        .map((candidate) => candidate.candidateCapabilityKey),
     );
     if (
-      dataBearingPartitionKeys.size !== itemKeys.size ||
-      [...dataBearingPartitionKeys].some((key) => !itemKeys.has(key))
+      dataBearingClaimKeys.size !== capabilityKeys.size ||
+      [...dataBearingClaimKeys].some((key) => !capabilityKeys.has(key))
     ) {
-      return failClosedEnvelope(expectedScope, 'invalid_payload');
+      return blocked('candidate_key_mismatch');
     }
 
-    const readiness = deriveTopLevelReadiness(partitions);
-    const freshness = aggregateFreshness(partitions);
-    if (freshness === false) {
-      return failClosedEnvelope(expectedScope, 'invalid_payload');
-    }
-    const items: CapabilityStatusItemV1[] = evaluatedItems.map((item) =>
-      boundItemForSourceReadiness(item, readiness, reachableDiagnosticTargetKeys),
+    sourcePartitionCandidates.sort(
+      (left, right) =>
+        (capabilityDisplayOrder.get(left.candidateCapabilityKey) ??
+          Number.MAX_SAFE_INTEGER) -
+        (capabilityDisplayOrder.get(right.candidateCapabilityKey) ??
+          Number.MAX_SAFE_INTEGER),
     );
-    if (!itemsAreSelfConsistent(items, readiness)) {
-      return failClosedEnvelope(expectedScope, 'invalid_payload');
-    }
+    capabilityCandidates.sort(
+      (left, right) =>
+        (capabilityDisplayOrder.get(left.candidateCapabilityKey) ??
+          Number.MAX_SAFE_INTEGER) -
+        (capabilityDisplayOrder.get(right.candidateCapabilityKey) ??
+          Number.MAX_SAFE_INTEGER),
+    );
 
-    Object.freeze(partitions);
-    Object.freeze(items);
-    const data: CapabilityStatusV1['data'] =
-      readiness === 'denied' ||
-      readiness === 'disabled' ||
-      readiness === 'unavailable'
-        ? null
-        : Object.freeze({ capabilities: items });
-
-    const envelope: CapabilityStatusV1 = {
-      contractVersion: 'v1',
-      scope: expectedScope,
-      readiness,
-      freshness,
-      partitions,
-      data,
-      failureCode: deriveTopLevelFailureCode(readiness, partitions),
-    };
-    return Object.freeze(envelope);
+    Object.freeze(sourcePartitionCandidates);
+    Object.freeze(capabilityCandidates);
+    return Object.freeze({
+      kind: 'non_authorizing_candidate',
+      tenantIntentCandidate: scopeIntent.tenantIdIntent,
+      institutionIntentCandidate: scopeIntent.institutionIdIntent,
+      sourcePartitionCandidates,
+      capabilityCandidates,
+      ownerRequirements: INSTITUTION_CAPABILITY_OWNER_REQUIREMENTS_V1,
+    });
   } catch {
-    return failClosedEnvelope(expectedScope, 'invalid_payload');
+    return blocked('invalid_input');
   }
 }

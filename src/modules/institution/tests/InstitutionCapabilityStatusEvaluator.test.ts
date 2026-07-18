@@ -1,266 +1,263 @@
 import { describe, expect, it } from 'vitest';
 
+import * as evaluatorModule from '@/modules/institution/server/institution-capability-status-evaluator';
 import {
-  deriveInstitutionCapabilityDecisionV1,
-  evaluateInstitutionCapabilityStatusV1,
-  isInstitutionCapabilitySafeSummaryV1,
+  evaluateInstitutionCapabilityCandidateV1,
+  INSTITUTION_CAPABILITY_OWNER_REQUIREMENTS_V1,
+  isInstitutionCapabilitySummaryCandidateV1,
 } from '@/modules/institution/server/institution-capability-status-evaluator';
+import { STRICT_DATA_RECORD_MAX_KEYS } from '@/modules/institution/server/strict-input-snapshot';
 
-const baseDimensions = {
-  codeMaturity: 'verified',
-  institutionAuthorization: 'authorized',
-  connectionAvailability: 'not_required',
-  dataReadiness: 'ready',
-  productionRelease: 'released',
-} as const;
+const dimensionClaims = {
+  codeMaturityClaim: 'verified',
+  institutionAuthorizationClaim: 'authorized',
+  connectionAvailabilityClaim: 'available',
+  dataReadinessClaim: 'ready',
+  productionReleaseClaim: 'released',
+};
 
 function evaluation(overrides: Record<string, unknown> = {}) {
   return {
-    key: 'page_customer_list',
-    dimensions: baseDimensions,
-    safeSummary: '当前能力已核验',
-    diagnosticTargetKey: null,
+    candidateCapabilityKey: 'action_customer_create',
+    dimensionClaims,
+    summaryCandidate: '当前能力已核验',
     ...overrides,
   };
 }
 
-describe('InstitutionCapabilityStatusEvaluator', () => {
-  it.each([
-    ['available', 'ready', 'pilot_released'],
-    ['available', 'empty', 'released'],
-    ['not_required', 'not_required', 'pilot_released'],
-  ] as const)(
-    '仅 verified、authorized、连接可用、数据可用和已放行时 operational',
-    (connectionAvailability, dataReadiness, productionRelease) => {
-      const result = evaluateInstitutionCapabilityStatusV1(
-        evaluation({
-          dimensions: {
-            ...baseDimensions,
-            connectionAvailability,
-            dataReadiness,
-            productionRelease,
-          },
-        }),
-      );
-
-      expect(result).toMatchObject({ ok: true, item: { decision: 'operational' } });
-    },
-  );
-
-  it.each([
-    ['codeMaturity', 'unverified'],
-    ['institutionAuthorization', 'not_authorized'],
-    ['connectionAvailability', 'unavailable'],
-    ['dataReadiness', 'unavailable'],
-    ['productionRelease', 'not_released'],
-    ['productionRelease', 'suspended'],
-  ] as const)('%s=%s 时 authoritative decision 固定 hidden', (field, value) => {
-    const result = evaluateInstitutionCapabilityStatusV1(
-      evaluation({ dimensions: { ...baseDimensions, [field]: value } }),
-    );
-
-    expect(result).toMatchObject({ ok: true, item: { decision: 'hidden' } });
-  });
-
-  it.each(['partial', 'stale'] as const)(
-    'dataReadiness=%s 最多 read_only',
-    (dataReadiness) => {
-      const result = evaluateInstitutionCapabilityStatusV1(
-        evaluation({ dimensions: { ...baseDimensions, dataReadiness } }),
-      );
-
-      expect(result).toMatchObject({ ok: true, item: { decision: 'read_only' } });
-    },
-  );
-
-  it('not_authorized 不回显业务摘要或诊断目标', () => {
-    const result = evaluateInstitutionCapabilityStatusV1(
-      evaluation({
-        dimensions: {
-          ...baseDimensions,
-          institutionAuthorization: 'not_authorized',
-        },
-        diagnosticTargetKey: 'page_system_overview',
-      }),
-    );
+describe('InstitutionCapabilityStatusEvaluator candidate boundary', () => {
+  it('只返回冻结的 non-authorizing candidate 和完整 owner 前置', () => {
+    const result = evaluateInstitutionCapabilityCandidateV1(evaluation());
 
     expect(result).toEqual({
-      ok: true,
-      item: {
-        key: 'page_customer_list',
-        decision: 'hidden',
+      kind: 'non_authorizing_candidate',
+      candidateCapabilityKey: 'action_customer_create',
+      untrustedDimensionClaims: dimensionClaims,
+      untrustedSummaryClaim: '当前能力已核验',
+      ownerRequirements: [
+        'formal_provenance',
+        'fresh_active_membership',
+        'active_institution_anchor',
+        'owner_capability_facts',
+        'trusted_server_clock',
+        'diagnostic_route_guard',
+        'capability_revision',
+      ],
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(INSTITUTION_CAPABILITY_OWNER_REQUIREMENTS_V1)).toBe(true);
+    if (result.kind === 'blocked') throw new Error('expected candidate');
+    expect(Object.isFrozen(result.untrustedDimensionClaims)).toBe(true);
+  });
+
+  it('不存在 raw status evaluator 或 decision helper 导出', () => {
+    expect(evaluatorModule).not.toHaveProperty('evaluateInstitutionCapabilityStatusV1');
+    expect(evaluatorModule).not.toHaveProperty('deriveInstitutionCapabilityDecisionV1');
+  });
+
+  it('即使 raw claims 全部自报为已授权和已发布也不产生权威字段', () => {
+    const result = evaluateInstitutionCapabilityCandidateV1(evaluation());
+
+    expect(result.kind).toBe('non_authorizing_candidate');
+    expect(result).not.toHaveProperty('decision');
+    expect(result).not.toHaveProperty('readiness');
+    expect(result).not.toHaveProperty('data');
+    expect(result).not.toHaveProperty('diagnosticTargetKey');
+    expect(JSON.stringify(result)).not.toContain('operational');
+    expect(JSON.stringify(result)).not.toContain('read_only');
+  });
+
+  it('拒绝旧 authority-bearing raw 形状', () => {
+    expect(
+      evaluateInstitutionCapabilityCandidateV1({
+        key: 'action_customer_create',
         dimensions: {
-          ...baseDimensions,
-          institutionAuthorization: 'not_authorized',
+          codeMaturity: 'verified',
+          institutionAuthorization: 'authorized',
+          connectionAvailability: 'available',
+          dataReadiness: 'ready',
+          productionRelease: 'released',
         },
-        safeSummary: null,
-        diagnosticTargetKey: null,
-      },
-    });
+        safeSummary: '当前能力已核验',
+        diagnosticTargetKey: 'page_system_data',
+      }),
+    ).toMatchObject({ kind: 'blocked', blockReason: 'invalid_input' });
   });
 
-  it('严格拒绝未知 key、缺 key、额外字段和客户端 decision', () => {
-    expect(
-      evaluateInstitutionCapabilityStatusV1(evaluation({ key: 'page_unknown' })),
-    ).toEqual({ ok: false, failureReason: 'unknown_capability' });
+  it('不接受任何 raw 诊断目标自报字段', () => {
+    const result = evaluateInstitutionCapabilityCandidateV1(
+      evaluation({ diagnosticTargetKey: 'page_system_data' }),
+    );
 
-    const missingKey = evaluation();
-    delete (missingKey as { key?: unknown }).key;
-    expect(evaluateInstitutionCapabilityStatusV1(missingKey)).toEqual({
-      ok: false,
-      failureReason: 'invalid_input',
+    expect(result).toMatchObject({ kind: 'blocked', blockReason: 'invalid_input' });
+    expect(result).not.toHaveProperty('diagnosticTargetKey');
+  });
+
+  it('拒绝 unknown capability、缺字段和额外字段', () => {
+    expect(
+      evaluateInstitutionCapabilityCandidateV1(
+        evaluation({ candidateCapabilityKey: 'page_unknown' }),
+      ),
+    ).toMatchObject({ kind: 'blocked', blockReason: 'unknown_capability' });
+
+    const missing = evaluation();
+    delete (missing as { summaryCandidate?: unknown }).summaryCandidate;
+    expect(evaluateInstitutionCapabilityCandidateV1(missing)).toMatchObject({
+      kind: 'blocked',
+      blockReason: 'invalid_input',
     });
     expect(
-      evaluateInstitutionCapabilityStatusV1({ ...evaluation(), extra: true }),
-    ).toEqual({ ok: false, failureReason: 'invalid_input' });
-    expect(
-      evaluateInstitutionCapabilityStatusV1({
-        ...evaluation(),
-        decision: 'operational',
-      }),
-    ).toEqual({ ok: false, failureReason: 'invalid_input' });
+      evaluateInstitutionCapabilityCandidateV1(evaluation({ extra: true })),
+    ).toMatchObject({ kind: 'blocked', blockReason: 'invalid_input' });
   });
 
   it.each([
-    ['codeMaturity', 'ready'],
-    ['institutionAuthorization', true],
-    ['connectionAvailability', 'connected'],
-    ['dataReadiness', 'denied'],
-    ['productionRelease', 'enabled'],
-  ])('拒绝未知五维词汇 %s=%s', (field, value) => {
+    ['codeMaturityClaim', 'ready'],
+    ['institutionAuthorizationClaim', true],
+    ['connectionAvailabilityClaim', 'connected'],
+    ['dataReadinessClaim', 'denied'],
+    ['productionReleaseClaim', 'enabled'],
+  ])('拒绝未知 dimension claim %s=%s', (field, value) => {
     expect(
-      evaluateInstitutionCapabilityStatusV1(
-        evaluation({ dimensions: { ...baseDimensions, [field]: value } }),
+      evaluateInstitutionCapabilityCandidateV1(
+        evaluation({ dimensionClaims: { ...dimensionClaims, [field]: value } }),
       ),
-    ).toEqual({ ok: false, failureReason: 'invalid_dimensions' });
+    ).toMatchObject({ kind: 'blocked', blockReason: 'invalid_dimension_claims' });
   });
 
-  it('五维对象必须字段完整且不能携带第二套状态', () => {
-    const missing = { ...baseDimensions } as Record<string, unknown>;
-    delete missing.dataReadiness;
+  it('dimension claims 必须字段完整且无额外字段', () => {
+    const missing = { ...dimensionClaims } as Record<string, unknown>;
+    delete missing.dataReadinessClaim;
     expect(
-      evaluateInstitutionCapabilityStatusV1(evaluation({ dimensions: missing })),
-    ).toEqual({ ok: false, failureReason: 'invalid_dimensions' });
+      evaluateInstitutionCapabilityCandidateV1(evaluation({ dimensionClaims: missing })),
+    ).toMatchObject({ kind: 'blocked', blockReason: 'invalid_dimension_claims' });
     expect(
-      evaluateInstitutionCapabilityStatusV1(
-        evaluation({ dimensions: { ...baseDimensions, released: true } }),
+      evaluateInstitutionCapabilityCandidateV1(
+        evaluation({ dimensionClaims: { ...dimensionClaims, released: true } }),
       ),
-    ).toEqual({ ok: false, failureReason: 'invalid_dimensions' });
+    ).toMatchObject({ kind: 'blocked', blockReason: 'invalid_dimension_claims' });
   });
 
-  it('safeSummary 只接受固定低敏文案或 null', () => {
-    expect(isInstitutionCapabilitySafeSummaryV1('当前能力已核验')).toBe(true);
-    expect(isInstitutionCapabilitySafeSummaryV1('当前能力数据已过期')).toBe(true);
-    expect(isInstitutionCapabilitySafeSummaryV1('好'.repeat(120))).toBe(false);
-    expect(isInstitutionCapabilitySafeSummaryV1('🙂'.repeat(120))).toBe(false);
-    expect(isInstitutionCapabilitySafeSummaryV1('')).toBe(false);
-    expect(isInstitutionCapabilitySafeSummaryV1('   ')).toBe(false);
-    expect(isInstitutionCapabilitySafeSummaryV1(null)).toBe(true);
+  it('summary candidate 只接受固定低敏文案或 null', () => {
+    expect(isInstitutionCapabilitySummaryCandidateV1('当前能力已核验')).toBe(true);
+    expect(isInstitutionCapabilitySummaryCandidateV1(null)).toBe(true);
+    expect(isInstitutionCapabilitySummaryCandidateV1('')).toBe(false);
+    expect(isInstitutionCapabilitySummaryCandidateV1('任意说明')).toBe(false);
+  });
+
+  it('巨大 summary 在 Array.from 前被阻断且不回显', () => {
+    const hugeSummary = '🙂'.repeat(10_000);
+    const result = evaluateInstitutionCapabilityCandidateV1(
+      evaluation({ summaryCandidate: hugeSummary }),
+    );
+
+    expect(result).toMatchObject({
+      kind: 'blocked',
+      blockReason: 'unsafe_summary_candidate',
+    });
+    expect(JSON.stringify(result)).not.toContain(hugeSummary);
   });
 
   it.each([
-    '低敏状态\n第二行',
-    '请访问 https://internal.example.com',
-    'provider returned error ECONNRESET',
-    'AIBOTK adapter endpoint unavailable',
-    'access_token=secret-value',
-    'token=secret-value',
-    '上游提供商返回 TypeError',
-    '连接 localhost:5432 失败',
-    '连接 127.0.0.1 失败',
-    '手机号：13800000000',
-    '手机号：138-0000-0000',
-    '身份证：110105199001011234',
-    '联系：admin@example.com',
-    '文件位于 /Users/example/service.ts:12',
-    '密码为 abcdef',
-    'ETIMEDOUT',
-    '请访问 internal.example.ai',
-    'github_pat_11AA22BB33CC44DD55EE66FF77GG88HH99II',
-    'ｐａｓｓｗｏｒｄ＝secret',
-  ])('不接受控制符、URL、provider、错误、凭证或 PII：%s', (unsafeSummary) => {
-    const result = evaluateInstitutionCapabilityStatusV1(
-      evaluation({ safeSummary: unsafeSummary }),
+    'https://internal.example.com',
+    'provider ECONNRESET',
+    'access_token=secret',
+    '手机号 13800000000',
+    '/Users/example/private.ts:12',
+  ])('拒绝敏感或内部 summary：%s', (summaryCandidate) => {
+    const result = evaluateInstitutionCapabilityCandidateV1(
+      evaluation({ summaryCandidate }),
     );
-
-    expect(result).toEqual({ ok: false, failureReason: 'unsafe_summary' });
-    expect(JSON.stringify(result)).not.toContain(unsafeSummary);
-  });
-
-  it('diagnosticTargetKey 只接受公共管理诊断白名单，不接受页面或 URL', () => {
-    expect(
-      evaluateInstitutionCapabilityStatusV1(
-        evaluation({ diagnosticTargetKey: 'page_system_data' }),
-      ),
-    ).toMatchObject({
-      ok: true,
-      item: { diagnosticTargetKey: 'page_system_data' },
+    expect(result).toMatchObject({
+      kind: 'blocked',
+      blockReason: 'unsafe_summary_candidate',
     });
-    expect(
-      evaluateInstitutionCapabilityStatusV1(
-        evaluation({ diagnosticTargetKey: 'page_system_organization' }),
-      ),
-    ).toEqual({ ok: false, failureReason: 'invalid_diagnostic_target' });
-    expect(
-      evaluateInstitutionCapabilityStatusV1(
-        evaluation({ diagnosticTargetKey: '/hospital/system/data' }),
-      ),
-    ).toEqual({ ok: false, failureReason: 'invalid_diagnostic_target' });
+    expect(JSON.stringify(result)).not.toContain(summaryCandidate);
   });
 
-  it('action capability 只返回展示投影，不签发 action 权限', () => {
-    const result = evaluateInstitutionCapabilityStatusV1(
-      evaluation({ key: 'action_customer_create' }),
-    );
-    expect(result).toMatchObject({ ok: true, item: { decision: 'operational' } });
-    if (!result.ok) throw new Error('expected successful evaluation');
-    expect(Object.keys(result.item).sort()).toEqual(
-      ['key', 'decision', 'dimensions', 'safeSummary', 'diagnosticTargetKey'].sort(),
-    );
-    expect(result.item).not.toHaveProperty('allowed');
-    expect(result.item).not.toHaveProperty('actionAuthorization');
-  });
-
-  it('导出的 decision helper 对缺失、非法或夹带字段的五维固定 fail-closed', () => {
+  it('拒绝 record Proxy、throwing Proxy 和 null-prototype', () => {
     expect(
-      deriveInstitutionCapabilityDecisionV1({
-        codeMaturity: 'verified',
-        institutionAuthorization: 'authorized',
-      }),
-    ).toBe('hidden');
-    expect(
-      deriveInstitutionCapabilityDecisionV1({ ...baseDimensions, extra: true }),
-    ).toBe('hidden');
-  });
+      evaluateInstitutionCapabilityCandidateV1(new Proxy(evaluation(), {})),
+    ).toMatchObject({ kind: 'blocked', blockReason: 'invalid_input' });
 
-  it('拒绝 accessor、Symbol、不可枚举额外字段并阻断二次读取', () => {
-    let keyReadCount = 0;
-    const accessorInput = {
-      get key() {
-        keyReadCount += 1;
-        return keyReadCount === 1 ? 'page_customer_list' : 'page_unknown';
+    let trapCalled = false;
+    const throwingProxy = new Proxy(evaluation(), {
+      ownKeys() {
+        trapCalled = true;
+        throw new Error('must not run');
       },
-      dimensions: baseDimensions,
-      safeSummary: '当前能力已核验',
-      diagnosticTargetKey: null,
-    };
-    expect(evaluateInstitutionCapabilityStatusV1(accessorInput)).toEqual({
-      ok: false,
-      failureReason: 'invalid_input',
     });
+    expect(evaluateInstitutionCapabilityCandidateV1(throwingProxy)).toMatchObject({
+      kind: 'blocked',
+      blockReason: 'invalid_input',
+    });
+    expect(trapCalled).toBe(false);
+
+    const nullPrototype = Object.assign(Object.create(null), evaluation());
+    expect(evaluateInstitutionCapabilityCandidateV1(nullPrototype)).toMatchObject({
+      kind: 'blocked',
+      blockReason: 'invalid_input',
+    });
+  });
+
+  it('嵌套 dimension claims 同样拒绝 Proxy 和 null-prototype', () => {
+    expect(
+      evaluateInstitutionCapabilityCandidateV1(
+        evaluation({ dimensionClaims: new Proxy(dimensionClaims, {}) }),
+      ),
+    ).toMatchObject({ kind: 'blocked', blockReason: 'invalid_dimension_claims' });
+
+    expect(
+      evaluateInstitutionCapabilityCandidateV1(
+        evaluation({
+          dimensionClaims: Object.assign(Object.create(null), dimensionClaims),
+        }),
+      ),
+    ).toMatchObject({ kind: 'blocked', blockReason: 'invalid_dimension_claims' });
+  });
+
+  it('拒绝 accessor、Symbol 和 hidden extra', () => {
+    let readCount = 0;
+    const accessorInput = evaluation();
+    Object.defineProperty(accessorInput, 'candidateCapabilityKey', {
+      enumerable: true,
+      get() {
+        readCount += 1;
+        return 'action_customer_create';
+      },
+    });
+    expect(evaluateInstitutionCapabilityCandidateV1(accessorInput)).toMatchObject({
+      kind: 'blocked',
+      blockReason: 'invalid_input',
+    });
+    expect(readCount).toBe(0);
 
     const symbolExtra = evaluation();
     Object.defineProperty(symbolExtra, Symbol('extra'), { value: true });
-    expect(evaluateInstitutionCapabilityStatusV1(symbolExtra)).toEqual({
-      ok: false,
-      failureReason: 'invalid_input',
+    expect(evaluateInstitutionCapabilityCandidateV1(symbolExtra)).toMatchObject({
+      kind: 'blocked',
+      blockReason: 'invalid_input',
     });
 
     const hiddenExtra = evaluation();
     Object.defineProperty(hiddenExtra, 'extra', { value: true, enumerable: false });
-    expect(evaluateInstitutionCapabilityStatusV1(hiddenExtra)).toEqual({
-      ok: false,
-      failureReason: 'invalid_input',
+    expect(evaluateInstitutionCapabilityCandidateV1(hiddenExtra)).toMatchObject({
+      kind: 'blocked',
+      blockReason: 'invalid_input',
+    });
+  });
+
+  it('拒绝超过固定 key 上限的巨大 record', () => {
+    const hugeRecord = Object.fromEntries(
+      Array.from({ length: STRICT_DATA_RECORD_MAX_KEYS + 1 }, (_, index) => [
+        `key${index}`,
+        index,
+      ]),
+    );
+
+    expect(evaluateInstitutionCapabilityCandidateV1(hugeRecord)).toMatchObject({
+      kind: 'blocked',
+      blockReason: 'invalid_input',
     });
   });
 });
