@@ -1,276 +1,159 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { GET } from '@/app/api/institution/followup-operations/dashboard/route';
-import type { FollowUpOperationsDashboard } from '@/modules/institution/domain/followup-operations-dashboard';
-import { getDefaultWeComAuthorizationDashboardView } from '@/modules/institution/domain/wecom-authorization';
-import { getDefaultWeComCustomerContactSyncDashboardView } from '@/modules/institution/domain/wecom-customer-contact';
-import { getDefaultWeComMockReachOutDashboardView } from '@/modules/institution/domain/wecom-reachout-mock';
-import type { AccessContext } from '@/modules/security/domain/access-control';
+import { getFollowUpOperationsDashboard } from '@/modules/institution/client/tenant-business-client';
+import { SmartFollowUpShell } from '@/modules/institution/components/SmartFollowUpShell';
 
-const routeMocks = vi.hoisted(() => {
-  const auditRecord = vi.fn();
-  const database = { database: 'test-db' };
+const routeMocks = vi.hoisted(() => ({
+  createAuditEventRepository: vi.fn(),
+  createTenantBusinessRepository: vi.fn(),
+  getDatabase: vi.fn(),
+  getDemoAccessContextFromRequest: vi.fn(),
+  getFollowUpOperationsDashboard: vi.fn(),
+}));
 
-  return {
-    auditRecord,
-    createAuditEventRepository: vi.fn(() => ({ record: auditRecord })),
-    createTenantBusinessRepository: vi.fn(() => ({ repository: 'tenant-business' })),
-    database,
-    getDatabase: vi.fn(),
-    getDemoAccessContextFromRequest: vi.fn(),
-    getFollowUpOperationsDashboard: vi.fn(),
-  };
-});
+vi.mock('@/server/db/client', () => ({ getDatabase: routeMocks.getDatabase }));
+vi.mock('@/modules/security/server/access-context', () => ({
+  getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
+}));
+vi.mock('@/modules/audit/server/audit-event-repository', () => ({
+  createAuditEventRepository: routeMocks.createAuditEventRepository,
+}));
+vi.mock('@/modules/institution/server/tenant-business-repository', () => ({
+  createTenantBusinessRepository: routeMocks.createTenantBusinessRepository,
+}));
+vi.mock('@/modules/institution/server/followup-operations-dashboard-service', () => ({
+  getFollowUpOperationsDashboard: routeMocks.getFollowUpOperationsDashboard,
+}));
 
-vi.mock('@/server/db/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/server/db/client')>();
-  return {
-    ...actual,
-    getDatabase: routeMocks.getDatabase,
-  };
-});
-
-vi.mock('@/modules/security/server/access-context', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/security/server/access-context')>();
-  return {
-    ...actual,
-    getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
-  };
-});
-
-vi.mock('@/modules/audit/server/audit-event-repository', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/audit/server/audit-event-repository')>();
-  return {
-    ...actual,
-    createAuditEventRepository: routeMocks.createAuditEventRepository,
-  };
-});
-
-vi.mock('@/modules/institution/server/tenant-business-repository', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/institution/server/tenant-business-repository')>();
-  return {
-    ...actual,
-    createTenantBusinessRepository: routeMocks.createTenantBusinessRepository,
-  };
-});
-
-vi.mock('@/modules/institution/server/followup-operations-dashboard-service', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('@/modules/institution/server/followup-operations-dashboard-service')
-  >();
-  return {
-    ...actual,
-    getFollowUpOperationsDashboard: routeMocks.getFollowUpOperationsDashboard,
-  };
-});
-
-const tenantContext: AccessContext = {
-  userId: 'demo-user-admin',
-  role: 'tenant_admin',
-  scope: 'tenant',
-  tenantId: 'demo-tenant-001',
-  institutionId: 'inst-001',
-  source: 'demo_session',
+const disabledPayload = {
+  code: 'follow_up_operations_dashboard_capability_disabled',
+  error: '随访运营看板能力暂未启用',
 };
 
-const dashboard: FollowUpOperationsDashboard = {
-  overview: {
-    activeEnrollmentCount: 2,
-    todayDueTaskCount: 3,
-    overdueTaskCount: 1,
-    pendingTaskCount: 4,
-    completedTaskCount: 5,
-    escalatedTaskCount: 1,
-    highRiskTaskCount: 2,
-    draftCount: 6,
-    approvedDraftCount: 2,
-    markedSentCount: 1,
-    approvedButNotMarkedSentCount: 1,
-    messageDeliveryCount: 4,
-    mockSentCount: 1,
-    mockFailedCount: 1,
-    skippedCount: 1,
-    externalDisabledCount: 1,
-    contactSafetyAllowedCount: 1,
-    consentMissingBlockedCount: 0,
-    optOutBlockedCount: 0,
-    frequencyCapBlockedCount: 0,
-    channelDisabledCount: 1,
-    grayGuardBlockedCount: 0,
-    manualFeedbackCount: 1,
-  },
-  pathPerformance: [
-    {
-      templateKey: 'hydro_injection_care',
-      pathName: '水光术后管理',
-      activeEnrollmentCount: 1,
-      generatedTaskCount: 3,
-      pendingTaskCount: 2,
-      completedTaskCount: 1,
-      overdueTaskCount: 1,
-      escalatedTaskCount: 0,
-      completionRate: 33.33,
-      nextDueAt: '2026-07-07T10:00:00.000Z',
-    },
-  ],
-  workload: [
-    {
-      handlerRole: 'medical_assistant',
-      assignedUserId: null,
-      pendingTaskCount: 2,
-      overdueTaskCount: 1,
-      completedTaskCount: 1,
-      escalatedTaskCount: 0,
-    },
-  ],
-  draftOperations: {
-    draftCount: 6,
-    approvedDraftCount: 2,
-    rejectedDraftCount: 1,
-    markedSentCount: 1,
-    approvedButNotMarkedSentCount: 1,
-  },
-  messageDeliveries: {
-    messageDeliveryCount: 4,
-    mockSentCount: 1,
-    mockFailedCount: 1,
-    skippedCount: 1,
-    externalDisabledCount: 1,
-    recentDeliveries: [
-      {
-        deliveryId: 'msg-delivery:draft_001',
-        customerId: 'cust_001',
-        followUpTaskId: 'task_001',
-        messageDraftId: 'draft_001',
-        channelType: 'mock',
-        deliveryMode: 'mock',
-        recipientRef: 'customer:cust_001',
-        contentSnapshot: '低敏人工确认内容快照',
-        status: 'mock_sent',
-        failureReason: null,
-        weComMockReachOut: null,
-        contactSafety: {
-          code: 'allowed',
-          allowed: true,
-          safeReasonLabel: '触达安全校验通过，仅允许模拟发送 / 人工记录。',
-          auditReason: 'contact_safety_allowed',
-          boundaryLabel: '触达安全治理 / 默认关闭 / 灰度前置 / 人工确认 / 模拟发送 / 不自动发送',
-        },
-        createdAt: '2026-07-06T10:00:00.000Z',
-        sentAt: '2026-07-06T10:00:00.000Z',
-        updatedAt: '2026-07-06T10:00:00.000Z',
-      },
-    ],
-  },
-  contactSafety: {
-    allowedCount: 1,
-    consentMissingBlockedCount: 0,
-    optOutBlockedCount: 0,
-    frequencyCapBlockedCount: 0,
-    channelDisabledCount: 1,
-    tenantGrayBlockedCount: 0,
-    institutionGrayBlockedCount: 0,
-    grayGuardBlockedCount: 0,
-  },
-  weComAuthorization: getDefaultWeComAuthorizationDashboardView(),
-  weComCustomerContactSync: getDefaultWeComCustomerContactSyncDashboardView(),
-  weComMockReachOut: getDefaultWeComMockReachOutDashboardView(),
-  riskSummary: {
-    escalatedTaskCount: 1,
-    highRiskTaskCount: 2,
-    highRiskPendingTaskCount: 1,
-    overdueHighRiskTaskCount: 1,
-    manualFeedbackCount: 1,
-  },
-};
-
-function request(path: string) {
-  return new Request(`http://localhost${path}`);
+function expectNoRouteSideEffects() {
+  expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+  expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+  expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+  expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+  expect(routeMocks.getFollowUpOperationsDashboard).not.toHaveBeenCalled();
 }
 
-async function json(response: Response) {
-  return response.json() as Promise<Record<string, unknown>>;
+function response(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
 }
 
 beforeEach(() => {
-  routeMocks.auditRecord.mockReset();
-  routeMocks.auditRecord.mockResolvedValue(undefined);
-  routeMocks.createAuditEventRepository.mockClear();
-  routeMocks.createTenantBusinessRepository.mockClear();
-  routeMocks.getDatabase.mockReset();
-  routeMocks.getDatabase.mockReturnValue(routeMocks.database);
-  routeMocks.getDemoAccessContextFromRequest.mockReset();
-  routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-  routeMocks.getFollowUpOperationsDashboard.mockReset();
+  for (const mock of Object.values(routeMocks)) mock.mockReset();
 });
 
-describe('follow-up operations dashboard API route', () => {
-  it('GET 返回只读运营看板且不暴露租户、隐私或 provider 字段', async () => {
-    routeMocks.getFollowUpOperationsDashboard.mockResolvedValue({
-      kind: 'success',
-      dashboard,
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('follow-up operations dashboard capability gate', () => {
+  it('普通及带查询参数请求固定返回低敏 503，且不返回运营业务字段', async () => {
+    for (const request of [
+      new Request('http://localhost/api/institution/followup-operations/dashboard'),
+      new Request('http://localhost/api/institution/followup-operations/dashboard?tenantId=other-tenant&institutionId=other-institution'),
+    ]) {
+      const apiResponse = await GET(request);
+      const payload = await apiResponse.json();
+
+      expect(apiResponse.status).toBe(503);
+      expect(payload).toEqual(disabledPayload);
+      expect(payload).not.toHaveProperty('overview');
+      expect(payload).not.toHaveProperty('pathPerformance');
+      expect(payload).not.toHaveProperty('workload');
+      expect(payload).not.toHaveProperty('draftOperations');
+      expect(payload).not.toHaveProperty('messageDeliveries');
+      expect(payload).not.toHaveProperty('contactSafety');
+      expect(payload).not.toHaveProperty('weComAuthorization');
+      expect(payload).not.toHaveProperty('weComCustomerContactSync');
+      expect(payload).not.toHaveProperty('weComMockReachOut');
+      expect(payload).not.toHaveProperty('riskSummary');
+    }
+
+    expectNoRouteSideEffects();
+  });
+
+  it('hostile Request Proxy traps 为零，且不触发 fetch 或任何服务', async () => {
+    const traps = { get: 0, ownKeys: 0, descriptor: 0 };
+    const hostileRequest = new Proxy({}, {
+      get() { traps.get += 1; throw new Error('request must not be read'); },
+      ownKeys() { traps.ownKeys += 1; throw new Error('request must not be enumerated'); },
+      getOwnPropertyDescriptor() { traps.descriptor += 1; throw new Error('request must not be described'); },
+    }) as Request;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const apiResponse = await GET(hostileRequest);
+
+      expect(apiResponse.status).toBe(503);
+      await expect(apiResponse.json()).resolves.toEqual(disabledPayload);
+      expect(traps).toEqual({ get: 0, ownKeys: 0, descriptor: 0 });
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expectNoRouteSideEffects();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('客户端将 capability-disabled 保持为不可用错误，不构造 dashboard', async () => {
+    const fetcher = vi.fn(async () => response(disabledPayload, 503)) as unknown as typeof fetch;
+
+    const result = await getFollowUpOperationsDashboard({ fetcher });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'service_unavailable',
+        message: '随访运营看板能力暂未启用',
+        status: 503,
+      },
     });
-
-    const response = await GET(request('/api/institution/followup-operations/dashboard'));
-    const payload = await json(response);
-    const serialized = JSON.stringify(payload);
-
-    expect(response.status).toBe(200);
-    expect(payload).toEqual(dashboard);
-    expect(routeMocks.getFollowUpOperationsDashboard).toHaveBeenCalledWith(
-      expect.objectContaining({
-        context: tenantContext,
-        tenantBusinessRepository: { repository: 'tenant-business' },
-        now: expect.any(Date),
-      }),
-    );
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ result: 'allowed', resource: 'follow_up', action: 'read_own_tenant' }),
-    );
-    expect(serialized).not.toMatch(
-      /phoneNumber|idNumber|medicalRecordNo|\bHIS\b|provider|model|token|cost|vendor|prompt|raw|DATABASE_URL|secret|stack/i,
+    expect(result).not.toHaveProperty('dashboard');
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/institution/followup-operations/dashboard',
+      { cache: 'no-store' },
     );
   });
 
-  it('未登录时返回 401 且不初始化数据库', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
-
-    const response = await GET(request('/api/institution/followup-operations/dashboard'));
-    const payload = await json(response);
-
-    expect(response.status).toBe(401);
-    expect(payload).toEqual({ error: '请先登录' });
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-    expect(routeMocks.getFollowUpOperationsDashboard).not.toHaveBeenCalled();
-  });
-
-  it('缺少 tenant 或 service 拒绝时返回 403 并记录 denied audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
-      ...tenantContext,
-      tenantId: null,
+  it('SmartFollowUpShell 在看板不可用时展示错误态，不渲染伪 0 指标', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/institution/followup-operations/dashboard')) {
+        return response(disabledPayload, 503);
+      }
+      if (url.includes('/api/institution/followups')) {
+        return response({
+          code: 'follow_up_list_capability_disabled',
+          error: '随访列表能力暂未启用',
+        }, 503);
+      }
+      if (url.includes('/api/institution/followup-paths/enrollments')) {
+        return response({ records: [] });
+      }
+      throw new Error(`unexpected request: ${url}`);
     });
+    vi.stubGlobal('fetch', fetchMock);
 
-    const response = await GET(request('/api/institution/followup-operations/dashboard'));
-    const payload = await json(response);
+    render(createElement(SmartFollowUpShell));
 
-    expect(response.status).toBe(403);
-    expect(payload).toEqual({ error: '没有访问权限' });
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ result: 'denied', reason: 'missing_tenant' }),
-    );
-    expect(routeMocks.getFollowUpOperationsDashboard).not.toHaveBeenCalled();
-  });
-
-  it('数据异常时返回稳定 503 文案且不泄露错误详情', async () => {
-    routeMocks.getFollowUpOperationsDashboard.mockRejectedValue(
-      new Error('select * from follow_up_tasks; DATABASE_URL=postgres://secret; token=abc'),
-    );
-
-    const response = await GET(request('/api/institution/followup-operations/dashboard'));
-    const payload = await json(response);
-    const serialized = JSON.stringify(payload);
-
-    expect(response.status).toBe(503);
-    expect(payload).toEqual({ error: '数据服务暂时不可用' });
-    expect(serialized).not.toMatch(/select \*|DATABASE_URL|postgres:\/\/|token|secret|stack/i);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/institution/followup-operations/dashboard',
+        { cache: 'no-store' },
+      );
+    });
+    expect(
+      (await screen.findAllByText('数据服务暂时不可用，请稍后刷新或切换演示备份')).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText('今日待随访')).not.toBeInTheDocument();
+    expect(screen.queryByText('逾期任务')).not.toBeInTheDocument();
   });
 });
