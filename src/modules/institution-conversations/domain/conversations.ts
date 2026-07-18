@@ -1,3 +1,5 @@
+import { types as nodeUtilTypes } from 'node:util';
+
 import type { CustomerReferenceV1 } from '@/modules/institution-contracts/v1/customer';
 import type {
   ConversationSegment,
@@ -104,6 +106,31 @@ export type ApplyConversationIdentityReviewInput = Readonly<{
   occurredAt: unknown;
 }>;
 
+/**
+ * Raw identity-review input can only request this non-authorizing projection.
+ * The identity owner must resolve every requirement before it can change a
+ * persisted conversation or customer relation.
+ */
+export const conversationIdentityProjectionOwnerRequirements = Object.freeze([
+  'owner_repository_current_snapshot',
+  'revision_cas',
+  'trusted_server_clock',
+  'fresh_institution_action_object_guard',
+  'customer_center_same_institution_owner_verified_customer_reference',
+  'low_sensitivity_audit_append',
+  'idempotency',
+] as const);
+
+export type ConversationIdentityProjectionProposal = Readonly<{
+  kind: 'non_authorizing_projection_proposal';
+  conversationId: string;
+  scope: ConversationRootScope;
+  expectedIdentityUpdatedAt: string;
+  requestedReviewState: ConversationIdentityReviewState;
+  projectedIdentityState: ConversationRootIdentityState;
+  ownerRequirements: typeof conversationIdentityProjectionOwnerRequirements;
+}>;
+
 export type RecordConversationCustomerInboundInput = SegmentCustomerInboundFact;
 export type CloseConversationActiveSegmentInput = ConversationSegment;
 
@@ -118,6 +145,7 @@ export type ConversationRootBlockCode =
   | 'customer_inbound_untrusted'
   | 'closed_segment_conflict'
   | 'identity_customer_mismatch'
+  | 'identity_owner_transition_required'
   | 'input_invalid'
   | 'segment_inbound_mismatch'
   | 'target_mismatch'
@@ -127,6 +155,7 @@ export type ConversationRootBlockCode =
 export type ConversationRootMutationResult =
   | Readonly<{ kind: 'applied'; conversation: ConversationV1 }>
   | Readonly<{ kind: 'replayed'; conversation: ConversationV1 }>
+  | ConversationIdentityProjectionProposal
   | Readonly<{ kind: 'blocked'; code: ConversationRootBlockCode }>;
 
 const safeIdentifierPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
@@ -240,6 +269,7 @@ function captureExactRecord(
       typeof raw !== 'object' ||
       raw === null ||
       Array.isArray(raw) ||
+      nodeUtilTypes.isProxy(raw) ||
       Object.getPrototypeOf(raw) !== Object.prototype
     ) {
       return null;
@@ -628,21 +658,6 @@ export function projectConversationRootIdentityState(
   return 'unmatched';
 }
 
-function customerReferencesEqual(
-  left: CustomerReferenceV1 | null,
-  right: CustomerReferenceV1 | null,
-): boolean {
-  return (
-    left === right ||
-    (left !== null &&
-      right !== null &&
-      left.contractVersion === right.contractVersion &&
-      left.customerId === right.customerId &&
-      left.displayName === right.displayName &&
-      left.maskedReference === right.maskedReference)
-  );
-}
-
 function latestTimestamp(left: string, right: string): string {
   return left >= right ? left : right;
 }
@@ -849,6 +864,25 @@ function replayed(conversation: ConversationV1): ConversationRootMutationResult 
   });
 }
 
+function proposeIdentityProjection(
+  conversation: ConversationV1,
+  requestedReviewState: ConversationIdentityReviewState,
+  projectedIdentityState: ConversationRootIdentityState,
+): ConversationIdentityProjectionProposal {
+  return Object.freeze({
+    kind: 'non_authorizing_projection_proposal' as const,
+    conversationId: conversation.conversationId,
+    scope: Object.freeze({
+      tenantId: conversation.tenantId,
+      institutionId: conversation.institutionId,
+    }),
+    expectedIdentityUpdatedAt: conversation.identityUpdatedAt,
+    requestedReviewState,
+    projectedIdentityState,
+    ownerRequirements: conversationIdentityProjectionOwnerRequirements,
+  });
+}
+
 export function createConversation(
   rawInput: CreateConversationInput,
   rawPolicy: ConversationRootPolicy,
@@ -889,27 +923,16 @@ export function createConversation(
   const identityState = projectConversationRootIdentityState(
     input.identityReviewState,
   );
-  const scope = freezeScope(binding.tenantId, binding.institutionId);
-  const customerReference =
-    input.customerReference === null
-      ? null
-      : captureTrustedCustomerReference(
-          input.customerReference,
-          scope,
-          policy,
-        );
+  if (!identityState) return blocked('input_invalid');
   if (
-    !identityState ||
-    (identityState === 'matched' && !customerReference) ||
-    (identityState !== 'matched' && input.customerReference !== null)
-  ) {
-    return blocked('identity_customer_mismatch');
-  }
+    input.customerReference !== null ||
+    (identityState !== 'pending_review' && identityState !== 'unmatched')
+  ) return blocked('identity_owner_transition_required');
 
   return applied({
     conversationId: input.conversationId,
     ...binding,
-    customerReference,
+    customerReference: null,
     identityState,
     activeSegmentId: customerInboundFact.segmentId,
     latestCustomerInboundMessageId: customerInboundFact.messageId,
@@ -942,41 +965,18 @@ export function applyConversationIdentityReview(
     return blocked('input_invalid');
   }
 
-  const identityState = projectConversationRootIdentityState(input.reviewState);
-  const scope = freezeScope(conversation.tenantId, conversation.institutionId);
-  const customerReference =
-    input.customerReference === null
-      ? null
-      : captureTrustedCustomerReference(
-          input.customerReference,
-          scope,
-          policy,
-        );
-  if (
-    !identityState ||
-    (identityState === 'matched' && !customerReference) ||
-    (identityState !== 'matched' && input.customerReference !== null)
-  ) {
-    return blocked('identity_customer_mismatch');
-  }
+  const requestedReviewState = isOneOf(input.reviewState, conversationIdentityReviewStates)
+    ? input.reviewState
+    : null;
+  const projectedIdentityState = projectConversationRootIdentityState(requestedReviewState);
+  if (!requestedReviewState || !projectedIdentityState) return blocked('input_invalid');
+  if (input.customerReference !== null) return blocked('identity_owner_transition_required');
 
-  if (input.occurredAt < conversation.identityUpdatedAt) {
-    return blocked('timestamp_regression');
-  }
-  if (input.occurredAt === conversation.identityUpdatedAt) {
-    return identityState === conversation.identityState &&
-      customerReferencesEqual(customerReference, conversation.customerReference)
-      ? replayed(conversation)
-      : blocked('timestamp_conflict');
-  }
-
-  return applied({
-    ...conversation,
-    identityState,
-    customerReference: identityState === 'matched' ? customerReference : null,
-    identityUpdatedAt: input.occurredAt,
-    updatedAt: latestTimestamp(input.occurredAt, conversation.segmentUpdatedAt),
-  });
+  return proposeIdentityProjection(
+    conversation,
+    requestedReviewState,
+    projectedIdentityState,
+  );
 }
 
 export function recordConversationCustomerInbound(

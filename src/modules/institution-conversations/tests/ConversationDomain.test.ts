@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyConversationIdentityReview,
   closeConversationActiveSegment,
+  conversationIdentityProjectionOwnerRequirements,
   createConversation,
   isValidConversationRoot,
   projectConversationRootIdentityState,
@@ -188,7 +189,7 @@ describe('ConversationV1 root domain', () => {
     expect(projectConversationRootIdentityState(review)).toBe(root);
   });
 
-  it('creates a matched root only with a trusted scoped customer reference', () => {
+  it('blocks raw matched creation even when the callback claims a customer is trusted', () => {
     const result = createConversation(
       createInput({
         identityReviewState: 'matched',
@@ -197,39 +198,38 @@ describe('ConversationV1 root domain', () => {
       policy,
     );
 
-    expect(result.kind).toBe('applied');
-    if (result.kind !== 'applied') return;
-    expect(result.conversation.identityState).toBe('matched');
-    expect(result.conversation.customerReference).toEqual(customerReference);
+    expect(result).toEqual({
+      kind: 'blocked',
+      code: 'identity_owner_transition_required',
+    });
   });
 
-  it('projects a later matched review and clears the reference for non-matched state', () => {
+  it('turns a raw review into a frozen non-authorizing projection without a customer reference', () => {
     const pending = createRoot();
-    const matched = applyConversationIdentityReview(
+    const proposal = applyConversationIdentityReview(
       pending,
       {
         reviewState: 'matched',
-        customerReference,
+        customerReference: null,
         occurredAt: '2026-07-18T00:01:00.000Z',
       },
       policy,
     );
-    expect(matched.kind).toBe('applied');
-    if (matched.kind !== 'applied') return;
-
-    const revoked = applyConversationIdentityReview(
-      matched.conversation,
-      {
-        reviewState: 'revoked',
-        customerReference: null,
-        occurredAt: '2026-07-18T00:02:00.000Z',
-      },
-      policy,
-    );
-    expect(revoked.kind).toBe('applied');
-    if (revoked.kind !== 'applied') return;
-    expect(revoked.conversation.identityState).toBe('unmatched');
-    expect(revoked.conversation.customerReference).toBeNull();
+    expect(proposal.kind).toBe('non_authorizing_projection_proposal');
+    if (proposal.kind !== 'non_authorizing_projection_proposal') return;
+    expect(proposal).toMatchObject({
+      conversationId: pending.conversationId,
+      scope: { tenantId: pending.tenantId, institutionId: pending.institutionId },
+      expectedIdentityUpdatedAt: pending.identityUpdatedAt,
+      requestedReviewState: 'matched',
+      projectedIdentityState: 'matched',
+      ownerRequirements: conversationIdentityProjectionOwnerRequirements,
+    });
+    expect(proposal).not.toHaveProperty('conversation');
+    expect(proposal).not.toHaveProperty('customerReference');
+    expect(Object.isFrozen(proposal)).toBe(true);
+    expect(Object.isFrozen(proposal.scope)).toBe(true);
+    expect(Object.isFrozen(proposal.ownerRequirements)).toBe(true);
   });
 
   it('records a newer trusted inbound fact in the same active segment', () => {
@@ -297,7 +297,7 @@ describe('ConversationV1 root domain', () => {
     );
   });
 
-  it('returns deterministic replay for the same identity and inbound facts', () => {
+  it('keeps identity requests non-authorizing while retaining inbound replay', () => {
     const root = createRoot();
     const identityReplay = applyConversationIdentityReview(
       root,
@@ -314,7 +314,7 @@ describe('ConversationV1 root domain', () => {
       policy,
     );
 
-    expect(identityReplay.kind).toBe('replayed');
+    expect(identityReplay.kind).toBe('non_authorizing_projection_proposal');
     expect(inboundReplay.kind).toBe('replayed');
   });
 

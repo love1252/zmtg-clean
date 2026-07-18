@@ -123,23 +123,23 @@ function closedSegment(
 }
 
 describe('ConversationV1 root boundary', () => {
-  it('fails closed on unknown review states and matched/reference mismatch', () => {
+  it('fails closed on unknown review states and raw authority claims during creation', () => {
     expect(projectConversationRootIdentityState('unknown')).toBeNull();
     expect(
       createConversation(
         input({ identityReviewState: 'matched', customerReference: null }),
         policy,
       ),
-    ).toEqual({ kind: 'blocked', code: 'identity_customer_mismatch' });
+    ).toEqual({ kind: 'blocked', code: 'identity_owner_transition_required' });
     expect(
       createConversation(
         input({ identityReviewState: 'revoked', customerReference: customer }),
         policy,
       ),
-    ).toEqual({ kind: 'blocked', code: 'identity_customer_mismatch' });
+    ).toEqual({ kind: 'blocked', code: 'identity_owner_transition_required' });
   });
 
-  it('rejects untrusted scoped customer references and extra fields', () => {
+  it('rejects raw customer claims before any policy callback can treat them as trusted', () => {
     expect(
       createConversation(
         input({
@@ -148,7 +148,7 @@ describe('ConversationV1 root boundary', () => {
         }),
         policy,
       ),
-    ).toEqual({ kind: 'blocked', code: 'identity_customer_mismatch' });
+    ).toEqual({ kind: 'blocked', code: 'identity_owner_transition_required' });
     expect(
       createConversation(
         input({
@@ -157,7 +157,40 @@ describe('ConversationV1 root boundary', () => {
         }),
         policy,
       ),
-    ).toEqual({ kind: 'blocked', code: 'identity_customer_mismatch' });
+    ).toEqual({ kind: 'blocked', code: 'identity_owner_transition_required' });
+  });
+
+  it('does not let a forged policy, customer string, or terminal-state revival apply a root fact', () => {
+    let customerTrustCalls = 0;
+    const permissivePolicy: ConversationRootPolicy = {
+      ...policy,
+      isTrustedCustomerReferenceForScope: () => {
+        customerTrustCalls += 1;
+        return true;
+      },
+    };
+    const terminalRoot = root({ identityReviewState: 'revoked' });
+    const before = structuredClone(terminalRoot);
+
+    expect(
+      createConversation(
+        input({ identityReviewState: 'matched', customerReference: customer }),
+        permissivePolicy,
+      ),
+    ).toEqual({ kind: 'blocked', code: 'identity_owner_transition_required' });
+    expect(
+      applyConversationIdentityReview(
+        terminalRoot,
+        {
+          reviewState: 'matched',
+          customerReference: 'cust_' + 'a'.repeat(64),
+          occurredAt: '2099-01-01T00:00:00.000Z',
+        },
+        permissivePolicy,
+      ),
+    ).toEqual({ kind: 'blocked', code: 'identity_owner_transition_required' });
+    expect(customerTrustCalls).toBe(0);
+    expect(terminalRoot).toEqual(before);
   });
 
   it('rejects a forged connection combination and raw external channel reference', () => {
@@ -231,7 +264,7 @@ describe('ConversationV1 root boundary', () => {
     });
   });
 
-  it('rejects extra keys, accessors, arrays, null-prototype objects and revoked proxies', () => {
+  it('rejects extra keys, accessors, arrays, null-prototype objects and all proxy wrappers', () => {
     const extra = { ...input(), providerPayload: { token: 'secret' } };
     const accessor = { ...input() } as Record<string, unknown>;
     Object.defineProperty(accessor, 'conversationId', {
@@ -239,15 +272,70 @@ describe('ConversationV1 root boundary', () => {
       get: () => 'conversation-1',
     });
     const nullPrototype = Object.assign(Object.create(null), input());
+    const transparentProxy = new Proxy(input(), {});
     const revocable = Proxy.revocable(input(), {});
     revocable.revoke();
 
-    for (const candidate of [extra, accessor, [], nullPrototype, revocable.proxy]) {
+    for (const candidate of [extra, accessor, [], nullPrototype, transparentProxy, revocable.proxy]) {
       expect(createConversation(candidate as CreateConversationInput, policy)).toEqual({
         kind: 'blocked',
         code: 'input_invalid',
       });
     }
+  });
+
+  it('rejects Proxy, accessor, symbol, hidden prototype, extra key, and null-prototype identity commands', () => {
+    const command = {
+      reviewState: 'conflict',
+      customerReference: null,
+      occurredAt: '2026-07-18T00:10:00.000Z',
+    };
+    const accessor = { ...command } as Record<string, unknown>;
+    Object.defineProperty(accessor, 'reviewState', { enumerable: true, get: () => 'conflict' });
+    const symbolic = { ...command } as Record<PropertyKey, unknown>;
+    symbolic[Symbol('hidden')] = 'nope';
+    const hiddenPrototype = Object.assign(Object.create({ hidden: true }), command);
+    const nullPrototype = Object.assign(Object.create(null), command);
+
+    for (const candidate of [
+      new Proxy(command, {}),
+      accessor,
+      symbolic,
+      hiddenPrototype,
+      nullPrototype,
+      { ...command, expectedRevision: 999 },
+      { ...command, tenantId: 'tenant-other', institutionId: 'institution-other' },
+    ]) {
+      expect(applyConversationIdentityReview(root(), candidate as never, policy)).toEqual({
+        kind: 'blocked',
+        code: 'input_invalid',
+      });
+    }
+  });
+
+  it('does not retain caller customer or clock data in a deeply frozen proposal', () => {
+    const command = {
+      reviewState: 'conflict',
+      customerReference: null,
+      occurredAt: '2099-01-01T00:00:00.000Z',
+    };
+    const before = structuredClone(command);
+    const result = applyConversationIdentityReview(root(), command, policy);
+
+    expect(command).toEqual(before);
+    expect(result.kind).toBe('non_authorizing_projection_proposal');
+    if (result.kind !== 'non_authorizing_projection_proposal') return;
+    expect(result).not.toHaveProperty('customerReference');
+    expect(result).not.toHaveProperty('occurredAt');
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(result.scope)).toBe(true);
+    expect(Object.isFrozen(result.ownerRequirements)).toBe(true);
+    expect(() => {
+      (result.scope as { tenantId: string }).tenantId = 'tenant-other';
+    }).toThrow();
+    expect(() => {
+      (result.ownerRequirements as unknown as string[]).push('forged_requirement');
+    }).toThrow();
   });
 
   it('fails closed when policy functions throw or the policy shape is malformed', () => {
@@ -361,7 +449,7 @@ describe('ConversationV1 root boundary', () => {
     ).toEqual({ kind: 'blocked', code: 'customer_inbound_not_new' });
   });
 
-  it('uses the last close boundary when identity changed after close', () => {
+  it('does not let an identity proposal change the close boundary', () => {
     const closed = closeConversationActiveSegment(
       root(),
       closedSegment(),
@@ -378,11 +466,10 @@ describe('ConversationV1 root boundary', () => {
       },
       policy,
     );
-    expect(identityChanged.kind).toBe('applied');
-    if (identityChanged.kind !== 'applied') return;
+    expect(identityChanged.kind).toBe('non_authorizing_projection_proposal');
 
     const next = recordConversationCustomerInbound(
-      identityChanged.conversation,
+      closed.conversation,
       inbound({
         messageId: 'message-a-trusted-2',
         segmentId: 'segment-2',
@@ -401,9 +488,10 @@ describe('ConversationV1 root boundary', () => {
     );
   });
 
-  it('orders identity and segment streams independently while preserving overall updatedAt', () => {
-    const identityChanged = applyConversationIdentityReview(
-      root(),
+  it('does not let an identity proposal alter the segment stream or root timestamps', () => {
+    const conversation = root();
+    const identityProposal = applyConversationIdentityReview(
+      conversation,
       {
         reviewState: 'conflict',
         customerReference: null,
@@ -411,8 +499,7 @@ describe('ConversationV1 root boundary', () => {
       },
       policy,
     );
-    expect(identityChanged.kind).toBe('applied');
-    if (identityChanged.kind !== 'applied') return;
+    expect(identityProposal.kind).toBe('non_authorizing_projection_proposal');
 
     const delayedInboundFact = inbound({
       messageId: 'message-a-trusted-2',
@@ -421,21 +508,17 @@ describe('ConversationV1 root boundary', () => {
       receivedAt: '2026-07-18T00:02:01.000Z',
     });
     const delayedInbound = recordConversationCustomerInbound(
-      identityChanged.conversation,
+      conversation,
       delayedInboundFact,
       policy,
     );
     expect(delayedInbound.kind).toBe('applied');
     if (delayedInbound.kind !== 'applied') return;
-    expect(delayedInbound.conversation.identityUpdatedAt).toBe(
-      '2026-07-18T00:04:00.000Z',
-    );
+    expect(delayedInbound.conversation.identityUpdatedAt).toBe(conversation.identityUpdatedAt);
     expect(delayedInbound.conversation.segmentUpdatedAt).toBe(
       '2026-07-18T00:02:01.000Z',
     );
-    expect(delayedInbound.conversation.updatedAt).toBe(
-      '2026-07-18T00:04:00.000Z',
-    );
+    expect(delayedInbound.conversation.updatedAt).toBe('2026-07-18T00:02:01.000Z');
     expect(
       recordConversationCustomerInbound(
         delayedInbound.conversation,
@@ -458,9 +541,7 @@ describe('ConversationV1 root boundary', () => {
     expect(closed.conversation.segmentUpdatedAt).toBe(
       '2026-07-18T00:03:00.000Z',
     );
-    expect(closed.conversation.updatedAt).toBe(
-      '2026-07-18T00:04:00.000Z',
-    );
+    expect(closed.conversation.updatedAt).toBe('2026-07-18T00:03:00.000Z');
   });
 
   it('allows a different new segment at the exact close millisecond', () => {
@@ -489,30 +570,31 @@ describe('ConversationV1 root boundary', () => {
     expect(isValidConversationRoot(next.conversation, policy)).toBe(true);
   });
 
-  it('rejects identity timestamp regression and same-time conflicting facts', () => {
+  it('does not let caller timestamps, revisions, or digests authorize a root mutation', () => {
     const conversation = root();
+    for (const occurredAt of ['2026-07-18T00:00:00.000Z', '2099-01-01T00:00:00.000Z']) {
+      const result = applyConversationIdentityReview(
+        conversation,
+        { reviewState: 'matched', customerReference: null, occurredAt },
+        policy,
+      );
+      expect(result.kind).toBe('non_authorizing_projection_proposal');
+      expect(result).not.toHaveProperty('conversation');
+      expect(result).not.toHaveProperty('occurredAt');
+    }
     expect(
       applyConversationIdentityReview(
         conversation,
         {
           reviewState: 'matched',
-          customerReference: customer,
-          occurredAt: '2026-07-18T00:00:00.000Z',
-        },
-        policy,
-      ),
-    ).toEqual({ kind: 'blocked', code: 'timestamp_regression' });
-    expect(
-      applyConversationIdentityReview(
-        conversation,
-        {
-          reviewState: 'conflict',
           customerReference: null,
           occurredAt: conversation.updatedAt,
-        },
+          expectedRevision: 999,
+          candidateSetDigest: 'candsum_' + 'a'.repeat(64),
+        } as never,
         policy,
       ),
-    ).toEqual({ kind: 'blocked', code: 'timestamp_conflict' });
+    ).toEqual({ kind: 'blocked', code: 'input_invalid' });
   });
 
   it('closes only from a trusted closed snapshot for the exact target', () => {
@@ -602,7 +684,7 @@ describe('ConversationV1 root boundary', () => {
     },
   );
 
-  it('replays the exact close after a later identity update and rejects altered closure', () => {
+  it('keeps close replay independent from a later identity proposal and rejects altered closure', () => {
     const closed = closeConversationActiveSegment(
       root(),
       closedSegment(),
@@ -619,19 +701,18 @@ describe('ConversationV1 root boundary', () => {
       },
       policy,
     );
-    expect(identityChanged.kind).toBe('applied');
-    if (identityChanged.kind !== 'applied') return;
+    expect(identityChanged.kind).toBe('non_authorizing_projection_proposal');
 
     expect(
       closeConversationActiveSegment(
-        identityChanged.conversation,
+        closed.conversation,
         closedSegment(),
         policy,
       ),
     ).toMatchObject({ kind: 'replayed' });
     expect(
       closeConversationActiveSegment(
-        identityChanged.conversation,
+        closed.conversation,
         closedSegment({
           stateChangedAt: '2026-07-18T00:04:00.000Z',
           closedAt: '2026-07-18T00:04:00.000Z',
@@ -733,14 +814,10 @@ describe('ConversationV1 root boundary', () => {
     ).toEqual({ kind: 'blocked', code: 'closed_segment_untrusted' });
   });
 
-  it('passes frozen scope, customer, inbound and closed snapshots to policy callbacks', () => {
+  it('passes frozen inbound and closed snapshots to policy callbacks', () => {
     const observed: boolean[] = [];
     const inspectingPolicy: ConversationRootPolicy = {
       ...policy,
-      isTrustedCustomerReferenceForScope: (scope, reference) => {
-        observed.push(Object.isFrozen(scope), Object.isFrozen(reference));
-        return policy.isTrustedCustomerReferenceForScope(scope, reference);
-      },
       isTrustedCustomerInboundFactForConnection: (binding, fact) => {
         observed.push(Object.isFrozen(binding), Object.isFrozen(fact));
         return policy.isTrustedCustomerInboundFactForConnection(binding, fact);
@@ -754,7 +831,7 @@ describe('ConversationV1 root boundary', () => {
       },
     };
     const created = createConversation(
-      input({ identityReviewState: 'matched', customerReference: customer }),
+      input(),
       inspectingPolicy,
     );
     expect(created.kind).toBe('applied');
@@ -770,18 +847,11 @@ describe('ConversationV1 root boundary', () => {
       true,
       true,
       true,
-      true,
-      true,
-      true,
-      true,
     ]);
   });
 
   it('rejects forged roots with untrusted connection or identity inconsistency', () => {
-    const valid = root({
-      identityReviewState: 'matched',
-      customerReference: customer,
-    });
+    const valid = root();
     expect(
       isValidConversationRoot(
         { ...valid, connectionInstanceId: 'connection-foreign' },
@@ -790,7 +860,7 @@ describe('ConversationV1 root boundary', () => {
     ).toBe(false);
     expect(
       isValidConversationRoot(
-        { ...valid, identityState: 'unmatched' },
+        { ...valid, identityState: 'matched', customerReference: null },
         policy,
       ),
     ).toBe(false);
