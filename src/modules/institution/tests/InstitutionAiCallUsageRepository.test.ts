@@ -1,3 +1,5 @@
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createAiCallUsageRepository } from '@/modules/institution/server/institution-ai-call-usage-repository';
@@ -217,5 +219,41 @@ describe('AI call usage repository metering 写入', () => {
       serviceAction: null,
       serviceVersion: null,
     });
+  });
+
+  it('institution metrics read projects only low-sensitivity fields and binds tenant, institution, and a half-open time window', async () => {
+    const limit = vi.fn(async () => []);
+    const orderBy = vi.fn(() => ({ limit }));
+    const where = vi.fn((_condition: SQL) => ({ orderBy }));
+    const from = vi.fn(() => ({ where }));
+    const select = vi.fn(() => ({ from }));
+    const repository = createAiCallUsageRepository({ select } as unknown as TenantDatabase);
+    const startInclusiveEpochMs = 1_700_000_000_000;
+    const endExclusiveEpochMs = 1_700_000_100_000;
+
+    await repository.listInstitutionUsageMetricRecords({
+      tenantId: 'tenant-a', institutionId: 'institution-a', startInclusiveEpochMs, endExclusiveEpochMs,
+    });
+
+    expect(select).toHaveBeenCalledWith({
+      tenantId: aiCallUsageRecords.tenantId,
+      institutionId: aiCallUsageRecords.institutionId,
+      status: aiCallUsageRecords.status,
+      serviceCategory: aiCallUsageRecords.serviceCategory,
+      serviceAction: aiCallUsageRecords.serviceAction,
+      createdAt: aiCallUsageRecords.createdAt,
+    });
+    const condition = where.mock.calls[0]?.[0];
+    expect(condition).toBeDefined();
+    const query = new PgDialect().sqlToQuery(condition!);
+    expect(query.sql).toContain('"tenant_id" =');
+    expect(query.sql).toContain('"institution_id" =');
+    expect(query.sql).toContain('"created_at" >=');
+    expect(query.sql).toContain('"created_at" <');
+    expect(query.params).toEqual([
+      'tenant-a', 'institution-a',
+      new Date(startInclusiveEpochMs).toISOString(), new Date(endExclusiveEpochMs).toISOString(),
+    ]);
+    expect(limit).toHaveBeenCalledWith(10_001);
   });
 });
