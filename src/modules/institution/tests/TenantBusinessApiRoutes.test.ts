@@ -827,7 +827,7 @@ describe('租户业务只读 API 路由', () => {
       new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg'),
     );
 
-    const response = await customersGet(new Request('http://localhost/api/institution/customers'));
+    const response = await customersGet();
     const payload = await response.json();
     const serializedPayload = JSON.stringify(payload);
 
