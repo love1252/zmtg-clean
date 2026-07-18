@@ -1,24 +1,14 @@
 import { NextResponse } from 'next/server';
-import { listFollowUpPathTemplates } from '@/modules/institution/server/followup-path-enrollment-service';
-import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
-import { canAccessResource } from '@/modules/security/domain/access-control';
 
-export async function GET(request: Request) {
-  const context = getDemoAccessContextFromRequest(request);
-  if (!context) {
-    return NextResponse.json({ error: '请先登录' }, { status: 401 });
-  }
+const noStoreHeaders = { 'cache-control': 'no-store' } as const;
+const capabilityDisabledPayload = Object.freeze({
+  code: 'capability_disabled',
+  error: '随访路径模板能力暂未启用',
+});
 
-  const decision = canAccessResource({
-    context,
-    resource: 'follow_up',
-    action: 'read_own_tenant',
-    targetTenantId: context.tenantId,
+export function GET(_request: Request) {
+  return NextResponse.json(capabilityDisabledPayload, {
+    status: 503,
+    headers: noStoreHeaders,
   });
-
-  if (!decision.allowed || !context.tenantId) {
-    return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
-  }
-
-  return NextResponse.json({ records: listFollowUpPathTemplates() });
 }
