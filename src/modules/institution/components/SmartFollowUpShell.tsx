@@ -1145,7 +1145,10 @@ export function SmartFollowUpShell() {
                         )}
 
                         {taskErrors[task.id] ? (
-                          <div className="mt-3 flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                          <div
+                            role="alert"
+                            className="mt-3 flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
+                          >
                             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                             {taskErrors[task.id]}
                           </div>
@@ -1357,7 +1360,10 @@ export function SmartFollowUpShell() {
                         ) : null}
 
                         {draftErrors[task.id] ? (
-                          <div className="mt-3 flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                          <div
+                            role="alert"
+                            className="mt-3 flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
+                          >
                             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                             {draftErrors[task.id]}
                           </div>
