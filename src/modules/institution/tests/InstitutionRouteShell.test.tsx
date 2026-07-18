@@ -136,6 +136,7 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
 
     render(<InstitutionCapabilityOffPage section={customers} />);
 
+    expect(screen.getByRole('heading', { name: '客户中心能力未开放', level: 1 })).toBeInTheDocument();
     expect(screen.getByText('客户中心尚未开放')).toBeInTheDocument();
     expect(screen.getByText(/当前机构尚未获得该能力的生产放行。/u)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '返回工作台' })).toHaveAttribute(
@@ -144,6 +145,47 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
     );
     expect(screen.queryByText(/开发中|mock|fixture/i)).not.toBeInTheDocument();
     expect(screen.queryByText('0')).not.toBeInTheDocument();
+  });
+
+  it('五个经营分析页面及合法详情深链只解析为同一阻断状态', () => {
+    const analytics = INSTITUTION_NAVIGATION_SECTIONS_V1.find(
+      (section) => section.id === 'analytics',
+    );
+
+    if (!analytics) throw new Error('analytics section must exist');
+
+    const canonicalAnalyticsSlugs = [
+      ['analytics'],
+      ['analytics', 'consumption'],
+      ['analytics', 'consumption', 'record-001'],
+      ['analytics', 'projects'],
+      ['analytics', 'projects', 'project:001'],
+      ['analytics', 'opportunities'],
+      ['analytics', 'opportunities', 'customer-001'],
+      ['analytics', 'reports'],
+      ['analytics', 'reports', 'report-001'],
+    ];
+
+    for (const slug of canonicalAnalyticsSlugs) {
+      expect(resolveInstitutionRouteSectionV1(slug)?.id).toBe('analytics');
+    }
+
+    render(<InstitutionCapabilityOffPage section={analytics} />);
+
+    expect(screen.getByRole('heading', { name: '经营分析能力未开放', level: 1 }).parentElement).toHaveAttribute(
+      'data-capability-state',
+      'blocked',
+    );
+    expect(screen.getByText('经营分析尚未开放')).toBeInTheDocument();
+    expect(screen.queryByText(/unknown|stale|empty|mock|demo/iu)).not.toBeInTheDocument();
+    expect(screen.queryByText('0')).not.toBeInTheDocument();
+  });
+
+  it('拒绝无效经营分析详情和旧机会兼容路径', () => {
+    expect(resolveInstitutionRouteSectionV1(['analytics', 'consumption', 'bad id'])).toBeNull();
+    expect(resolveInstitutionRouteSectionV1(['analytics', 'reports', 'report/001'])).toBeNull();
+    expect(resolveInstitutionRouteSectionV1(['opportunities'])).toBeNull();
+    expect(resolveInstitutionRouteSectionV1(['opportunities', 'customer-001'])).toBeNull();
   });
 
   it('正式会话根路由仍解析为 capability-off，且不显示模拟会话控件', () => {

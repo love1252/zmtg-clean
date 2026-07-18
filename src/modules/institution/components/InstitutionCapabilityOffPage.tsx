@@ -48,11 +48,18 @@ export function InstitutionCapabilityOffPage({
 }: {
   section: InstitutionNavigationSectionV1;
 }) {
+  const title = `${section.label}尚未开放`;
+  const semanticTitle = `${section.label}能力未开放`;
+
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-3xl items-center justify-center">
+    <div
+      data-capability-state="blocked"
+      className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-3xl items-center justify-center"
+    >
+      <h1 className="sr-only">{semanticTitle}</h1>
       <InstitutionPageState
         kind="placeholder"
-        title={`${section.label}尚未开放`}
+        title={title}
         description="当前机构尚未获得该能力的生产放行。能力开放后仍会由服务端重新校验机构、角色和数据范围。"
         className="w-full border-white/90 bg-white/86 px-6 py-12 shadow-xl shadow-slate-200/60"
         action={
