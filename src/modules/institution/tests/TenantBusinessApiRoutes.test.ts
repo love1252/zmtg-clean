@@ -14,7 +14,6 @@ import {
   PATCH as followupsPatch,
   POST as followupsPost,
 } from '@/app/api/institution/followups/route';
-import { DEMO_SESSION_COOKIE } from '@/modules/auth/server/demo-session';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import {
   handleTenantBusinessListRequest,
@@ -117,10 +116,6 @@ const platformContext: AccessContext = {
   tenantId: null,
   source: 'demo_session',
 };
-
-function unsignedSession(session: unknown) {
-  return Buffer.from(JSON.stringify(session), 'utf8').toString('base64url');
-}
 
 beforeEach(() => {
   routeMocks.getDatabase.mockReset();
@@ -608,7 +603,7 @@ describe('租户业务只读 API 路由', () => {
       getOwnPropertyDescriptor() { traps.descriptor += 1; throw new Error('request must not be described'); },
     }) as Request;
 
-    const response = await Reflect.apply(customersGet, null, [hostileRequest]);
+    const response = await customersGet(hostileRequest);
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
@@ -827,7 +822,7 @@ describe('租户业务只读 API 路由', () => {
       new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg'),
     );
 
-    const response = await customersGet();
+    const response = await customersGet(new Request('http://localhost/api/institution/customers'));
     const payload = await response.json();
     const serializedPayload = JSON.stringify(payload);
 

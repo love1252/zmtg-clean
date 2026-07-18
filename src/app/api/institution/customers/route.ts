@@ -30,7 +30,7 @@ const customerListReadDisabled = Object.freeze({
  * No request data is inspected until an institution-scoped server guard and reader exist.
  * This deliberately avoids demo-session, database, repository, audit, and fetch side effects.
  */
-export async function GET() {
+export async function GET(_request: Request) {
   return NextResponse.json(customerListReadDisabled, { status: 503 });
 }
 
