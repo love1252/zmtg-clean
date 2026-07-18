@@ -39,6 +39,11 @@ const MAX_EVIDENCE_REFERENCE_COUNT = 8;
 const MAX_REFERENCE_LENGTH = 96;
 const OWNER_REQUIREMENTS = Object.freeze([
   'central_contract_owner_must_declare_report_input',
+  'owner_authoritative_snapshot_projection_required',
+  'owner_readiness_and_freshness_required',
+  'owner_direction_required_metrics_required',
+  'owner_missing_classification_revalidation_required',
+  'trusted_evidence_registry_scope_validation_required',
   'server_scope_allow_must_be_verified',
   'approved_report_provider_adapter_required',
   'manual_generation_authorization_required',
@@ -67,9 +72,9 @@ export type AnalyticsReportInputProposalCandidate = Readonly<{
   snapshotVersion: string;
   timeZone: string;
   period: Readonly<{ startDate: string; endDateExclusive: string }>;
-  metrics: readonly AnalyticsReportInputProposalMetric[];
-  missing: readonly AnalyticsReportInputProposalMissing[];
-  manualConfirmationRequired: boolean;
+  untrustedMetricClaims: readonly AnalyticsReportInputProposalMetric[];
+  untrustedMissingClaims: readonly AnalyticsReportInputProposalMissing[];
+  manualConfirmationRequired: true;
   ownerRequirements: readonly AnalyticsReportProposalOwnerRequirement[];
 }>;
 
@@ -201,9 +206,43 @@ function isIanaTimeZone(value: unknown): value is string {
 function isReference(value: unknown): value is string {
   return (
     typeof value === 'string' &&
-    value.length <= MAX_REFERENCE_LENGTH &&
-    /^[a-z][a-z0-9:_-]*$/.test(value)
+    value.length === 70 &&
+    /^evref_[a-f0-9]{64}$/.test(value)
   );
+}
+
+function isMissingCode(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(value);
+}
+
+function isCalendarDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match === null) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function metricIsSemanticallyValid(
+  key: AnalyticsReportMetricKey,
+  value: number,
+  currency: string | null,
+): boolean {
+  const monetary = new Set<AnalyticsReportMetricKey>([
+    'paid_minor', 'refund_minor', 'net_minor', 'average_order_value_minor',
+    'mapped_project_amount_minor', 'unmapped_project_amount_minor',
+  ]);
+  if (monetary.has(key)) {
+    if (currency === null || !/^[A-Z]{3}$/.test(currency) || !Number.isSafeInteger(value)) return false;
+    return key === 'net_minor' ? true : value >= 0;
+  }
+  return currency === null && Number.isSafeInteger(value) && value >= 0;
 }
 
 function snapshotReferences(value: unknown): readonly string[] | null {
@@ -225,8 +264,8 @@ function snapshotMetric(value: unknown): AnalyticsReportInputProposalMetric | nu
     !includesValue(METRIC_KEYS, snapshot.key) ||
     typeof snapshot.value !== 'number' ||
     !Number.isFinite(snapshot.value) ||
-    (snapshot.currency !== null &&
-      (typeof snapshot.currency !== 'string' || !/^[A-Z]{3}$/.test(snapshot.currency)))
+    (snapshot.currency !== null && typeof snapshot.currency !== 'string') ||
+    !metricIsSemanticallyValid(snapshot.key, snapshot.value, snapshot.currency)
   ) {
     return null;
   }
@@ -245,7 +284,7 @@ function snapshotMissing(value: unknown): AnalyticsReportInputProposalMissing | 
   if (
     snapshot === null ||
     (snapshot.severity !== 'critical' && snapshot.severity !== 'non_critical') ||
-    !isReference(snapshot.code)
+    !isMissingCode(snapshot.code)
   ) {
     return null;
   }
@@ -290,8 +329,8 @@ export function proposeAnalyticsReportInput(
     period === null ||
     typeof period.startDate !== 'string' ||
     typeof period.endDateExclusive !== 'string' ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(period.startDate) ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(period.endDateExclusive) ||
+    !isCalendarDate(period.startDate) ||
+    !isCalendarDate(period.endDateExclusive) ||
     period.startDate >= period.endDateExclusive
   ) {
     return blocked(['invalid_input']);
@@ -305,9 +344,13 @@ export function proposeAnalyticsReportInput(
   if (metrics.some((metric) => metric === null) || missing.some((item) => item === null)) {
     return blocked(['invalid_input']);
   }
+  const frozenMetrics = Object.freeze(metrics as AnalyticsReportInputProposalMetric[]);
   const frozenMissing = Object.freeze(missing as AnalyticsReportInputProposalMissing[]);
-  if (frozenMissing.some((item) => item.severity === 'critical')) {
-    return blocked(['critical_missing']);
+  const identities = new Set<string>();
+  for (const metric of frozenMetrics) {
+    const identity = metric.currency === null ? metric.key : `${metric.key}:${metric.currency}`;
+    if (identities.has(identity)) return blocked(['invalid_input']);
+    identities.add(identity);
   }
   return Object.freeze({
     outcome: 'frozen_non_authorizing_candidate',
@@ -319,9 +362,9 @@ export function proposeAnalyticsReportInput(
         startDate: period.startDate,
         endDateExclusive: period.endDateExclusive,
       }),
-      metrics: Object.freeze(metrics as AnalyticsReportInputProposalMetric[]),
-      missing: frozenMissing,
-      manualConfirmationRequired: frozenMissing.length > 0,
+      untrustedMetricClaims: frozenMetrics,
+      untrustedMissingClaims: frozenMissing,
+      manualConfirmationRequired: true,
       ownerRequirements: OWNER_REQUIREMENTS,
     }),
   });
