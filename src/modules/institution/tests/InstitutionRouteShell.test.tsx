@@ -136,8 +136,8 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
 
     render(<InstitutionCapabilityOffPage section={customers} />);
 
-    expect(screen.getByRole('heading', { name: '客户中心尚未开放', level: 1 })).toBeInTheDocument();
-    expect(screen.getByText('生产放行尚未完成')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '客户中心能力未开放', level: 1 })).toBeInTheDocument();
+    expect(screen.getByText('客户中心尚未开放')).toBeInTheDocument();
     expect(screen.getByText(/当前机构尚未获得该能力的生产放行。/u)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '返回工作台' })).toHaveAttribute(
       'href',
@@ -172,11 +172,11 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
 
     render(<InstitutionCapabilityOffPage section={analytics} />);
 
-    expect(screen.getByRole('heading', { name: '经营分析尚未开放', level: 1 }).parentElement).toHaveAttribute(
+    expect(screen.getByRole('heading', { name: '经营分析能力未开放', level: 1 }).parentElement).toHaveAttribute(
       'data-capability-state',
       'blocked',
     );
-    expect(screen.getByRole('heading', { name: '经营分析尚未开放', level: 1 })).toBeInTheDocument();
+    expect(screen.getByText('经营分析尚未开放')).toBeInTheDocument();
     expect(screen.queryByText(/unknown|stale|empty|mock|demo/iu)).not.toBeInTheDocument();
     expect(screen.queryByText('0')).not.toBeInTheDocument();
   });
