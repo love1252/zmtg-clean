@@ -1,6 +1,13 @@
-import { createWeComCustomerMappingReviewActionsPostHandler } from './handler';
-import { weComCustomerMappingReviewActionMockRuntime } from '@/modules/institution/server/wecom-customer-mapping-review-action-default-runtime';
+import { NextResponse } from 'next/server';
 
-export const POST = createWeComCustomerMappingReviewActionsPostHandler({
-  runtime: weComCustomerMappingReviewActionMockRuntime,
-});
+const noStoreHeaders = { 'cache-control': 'no-store' } as const;
+
+export function POST(
+  _request: Request,
+  _routeContext: { params: Promise<{ mappingId: string }> },
+) {
+  return NextResponse.json(
+    { code: 'capability_disabled' },
+    { status: 503, headers: noStoreHeaders },
+  );
+}

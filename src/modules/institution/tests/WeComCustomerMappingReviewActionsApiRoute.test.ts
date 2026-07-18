@@ -186,36 +186,68 @@ function successKeys() {
   ].sort();
 }
 
-describe('POST 企业微信客户匹配人工复核 mock Mutation API', () => {
-  it('route 使用 module-owned 默认 runtime 与现有签名 session', async () => {
-    const session = encodeDemoSession({
+describe('POST 企业微信客户匹配人工复核路由关闭与 handler 单测', () => {
+  it('route 对所有输入 capability-off，既不读取请求/参数也不返回 mock 或事实字段', async () => {
+    let requestTrapCount = 0;
+    let contextTrapCount = 0;
+    const hostileRequest = new Proxy({}, {
+      get() {
+        requestTrapCount += 1;
+        throw new Error('request must not be read');
+      },
+      ownKeys() {
+        requestTrapCount += 1;
+        throw new Error('request keys must not be read');
+      },
+    }) as Request;
+    const hostileContext = new Proxy({}, {
+      get() {
+        contextTrapCount += 1;
+        throw new Error('params must not be read');
+      },
+      ownKeys() {
+        contextTrapCount += 1;
+        throw new Error('params keys must not be read');
+      },
+    }) as { params: Promise<{ mappingId: string }> };
+    const oversized = streamRequest({
+      chunks: [new Uint8Array(4097)],
+      requestMethodSpies: true,
+    });
+    const crossScopeSession = encodeDemoSession({
       user: {
-        id: 'demo-user-admin',
-        username: 'admin',
-        name: '系统管理员',
+        id: 'demo-user-tenant-b',
+        username: 'tenant-b',
+        name: '机构 B 管理员',
         role: 'tenant_admin',
-        tenantId: 'growth-tenant-chengxing',
-        institutionId: 'growth-inst-chengxing',
+        tenantId: 'tenant-b',
+        institutionId: 'institution-b',
       },
       expiresAt: Date.now() + 60_000,
       source: 'demo_session',
     });
-    const mappingId = 'mock-wecom-mapping-pending-001';
-    const response = await POST(
-      request(validBody({ idempotencyKey: 'route-default-key-01' }), {
-        url: `${origin}/api/institution/wecom/customer-mapping-reviews/${mappingId}/actions`,
-        headers: { cookie: `${DEMO_SESSION_COOKIE}=${session}` },
-      }),
-      params(mappingId),
-    );
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      mappingId,
-      previousVersion: 0,
-      nextVersion: 1,
-      mockDemo: true,
-      persistenceMode: 'volatile_process_memory',
-    });
+    const responses = await Promise.all([
+      POST(request(), params()),
+      POST(request({ invalid: true }), params('invalid-mapping')),
+      POST(request(validBody(), {
+        headers: { cookie: `${DEMO_SESSION_COOKIE}=${crossScopeSession}` },
+      }), params('mock-map-pending')),
+      POST(request(undefined, {
+        url: routeUrl.replace('mock-map-pending', 'mock-map-tenant-b'),
+      }), params('mock-map-tenant-b')),
+      POST(oversized.request, params('mock-map-pending')),
+      POST(hostileRequest, hostileContext),
+    ]);
+
+    for (const response of responses) {
+      expect(response.status).toBe(503);
+      expectNoStore(response);
+      await expect(response.json()).resolves.toEqual({ code: 'capability_disabled' });
+    }
+    expect(requestTrapCount).toBe(0);
+    expect(contextTrapCount).toBe(0);
+    expect(oversized.pullCount).toBe(0);
+    for (const spy of oversized.methodSpies) expect(spy).not.toHaveBeenCalled();
   });
 
   it('未登录先返回 401，且不因 Content-Type 泄漏后续校验', async () => {
