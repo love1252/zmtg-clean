@@ -33,9 +33,6 @@ vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository
 const platformUrl = 'http://localhost/api/v1/open-platform/knowledge-management/search';
 const institutionUrl = 'http://localhost/api/institution/knowledge-management/search';
 const now = new Date('2026-06-13T08:00:00.000Z');
-const unsafeError = new Error(
-  'SQL select * from chunks at /Users/demo/path postgres://root:password@localhost token=secret stack',
-);
 const unsafeFragments = [
   'SQL',
   'select *',
@@ -68,13 +65,6 @@ const visibleKnowledge = {
   visibleInstitutionIds: [],
   createdAt: now,
   updatedAt: now,
-};
-
-const hiddenKnowledge = {
-  ...visibleKnowledge,
-  knowledgeId: 'knowledge-hidden',
-  institutionId: 'inst-other',
-  title: '未授权知识',
 };
 
 async function readJson(response: Response) {
@@ -191,7 +181,7 @@ describe('知识库关键词检索 API route', () => {
     expect(repository.searchKnowledgeFileParseChunks).not.toHaveBeenCalled();
   });
 
-  it('机构端 GET 只使用 access context 的 tenant/institution，忽略 query 注入范围', async () => {
+  it('机构端 GET 固定 capability disabled，不读取 access context 或查询参数', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue({
       userId: 'tenant-user',
       role: 'tenant_admin',
@@ -200,34 +190,6 @@ describe('知识库关键词检索 API route', () => {
       institutionId: 'inst-current',
       source: 'demo_session',
     });
-    repository.listKnowledgeItems.mockResolvedValue([visibleKnowledge, hiddenKnowledge]);
-    repository.searchKnowledgeFileParseChunks.mockResolvedValue([
-      {
-        tenantId: 'tenant-route',
-        knowledgeId: 'knowledge-visible',
-        knowledgeTitle: '机构可见知识',
-        fileId: 'file-visible',
-        fileName: '护理.txt',
-        fileStatus: 'active',
-        parseStatus: 'succeeded',
-        chunkId: 'chunk-visible-0',
-        chunkIndex: 0,
-        textPreview: '冷敷片段。',
-      },
-      {
-        tenantId: 'tenant-route',
-        knowledgeId: 'knowledge-hidden',
-        knowledgeTitle: '未授权知识',
-        fileId: 'file-hidden',
-        fileName: '隐藏.txt',
-        fileStatus: 'active',
-        parseStatus: 'succeeded',
-        chunkId: 'chunk-hidden-0',
-        chunkIndex: 0,
-        textPreview: '隐藏冷敷片段。',
-      },
-    ]);
-
     const response = await institutionSearchRoute.GET(
       new Request(
         `${institutionUrl}?tenantId=tenant-other&institutionId=inst-other&keyword=${encodeURIComponent('冷敷')}`,
@@ -235,24 +197,21 @@ describe('知识库关键词检索 API route', () => {
     );
     const payload = await readJson(response);
 
-    expect(response.status).toBe(200);
-    expect(repository.searchKnowledgeFileParseChunks).toHaveBeenCalledWith({
-      tenantId: 'tenant-route',
-      keyword: '冷敷',
-      knowledgeId: undefined,
-      fileId: undefined,
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      status: 'capability_disabled',
+      code: 'institution_knowledge_search_capability_disabled',
+      message: '机构知识库检索暂未启用。',
     });
-    expect(payload.records).toEqual([
-      expect.objectContaining({
-        knowledgeId: 'knowledge-visible',
-        chunkId: 'chunk-visible-0',
-      }),
-    ]);
-    expect(JSON.stringify(payload)).not.toContain('chunk-hidden-0');
+    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeItems).not.toHaveBeenCalled();
+    expect(repository.searchKnowledgeFileParseChunks).not.toHaveBeenCalled();
     expectSafePayload(payload);
   });
 
-  it('机构端底层异常时返回固定中文安全错误', async () => {
+  it('机构端 GET 在底层依赖不可用时仍返回固定 capability disabled', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue({
       userId: 'tenant-user',
       role: 'tenant_admin',
@@ -261,8 +220,6 @@ describe('知识库关键词检索 API route', () => {
       institutionId: 'inst-current',
       source: 'demo_session',
     });
-    repository.searchKnowledgeFileParseChunks.mockRejectedValue(unsafeError);
-
     const response = await institutionSearchRoute.GET(
       new Request(`${institutionUrl}?keyword=${encodeURIComponent('冷敷')}`),
     );
@@ -270,9 +227,15 @@ describe('知识库关键词检索 API route', () => {
 
     expect(response.status).toBe(503);
     expect(payload).toEqual({
-      code: 'service_unavailable',
-      error: '知识库片段检索暂时不可用',
+      status: 'capability_disabled',
+      code: 'institution_knowledge_search_capability_disabled',
+      message: '机构知识库检索暂未启用。',
     });
+    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeItems).not.toHaveBeenCalled();
+    expect(repository.searchKnowledgeFileParseChunks).not.toHaveBeenCalled();
     expectSafePayload(payload);
   });
 });
