@@ -1263,7 +1263,10 @@ export function CustomerCenterShell() {
             </div>
 
             {submitError ? (
-              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+              <div
+                role="alert"
+                className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700"
+              >
                 {submitError}
               </div>
             ) : null}
@@ -1335,7 +1338,10 @@ export function CustomerCenterShell() {
             </div>
 
             {importError ? (
-              <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+              <div
+                role="alert"
+                className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700"
+              >
                 {importError}
               </div>
             ) : null}
