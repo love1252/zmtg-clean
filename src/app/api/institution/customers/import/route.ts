@@ -4,7 +4,7 @@ import { createAuditEventRepository } from '@/modules/audit/server/audit-event-r
 import {
   getCustomerImportRowsForExecution,
   previewLowSensitiveCustomerImport,
-} from '@/modules/institution/domain/customer-import';
+} from '@/modules/institution/server/customer-import';
 import { runTenantBusinessAuditTransaction } from '@/modules/institution/server/tenant-business-audit-transaction';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 import { checkTenantQuotaForUsage } from '@/modules/institution/server/tenant-quota-enforcement';

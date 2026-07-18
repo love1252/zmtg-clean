@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { lowSensitiveCustomerImportAllowedFields } from '@/modules/institution/domain/customer-import';
+// Runtime parser is server-only; DTO constants remain in the client-safe domain module.
 import {
   getCustomerImportRowsForExecution,
-  lowSensitiveCustomerImportAllowedFields,
   previewLowSensitiveCustomerImport,
-} from '@/modules/institution/domain/customer-import';
+} from '@/modules/institution/server/customer-import';
 import type { CustomerRecordSummary } from '@/modules/institution/domain/customer-records';
 
 const occurredAt = '2026-07-08T10:00:00.000Z';

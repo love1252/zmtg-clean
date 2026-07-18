@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   getCustomerImportRowsForExecution,
   previewLowSensitiveCustomerImport,
-} from '@/modules/institution/domain/customer-import';
+} from '@/modules/institution/server/customer-import';
 
 const occurredAt = '2026-07-18T08:00:00.000Z';
 
@@ -133,5 +133,51 @@ describe('customer import parser boundary', () => {
     expect(Object.isFrozen(input)).toBe(true);
     expect(Object.isFrozen(rows)).toBe(true);
     expect(Object.isFrozen(row)).toBe(true);
+  });
+
+  it('rejects a Proxy before any prototype, own-key, or descriptor trap runs', () => {
+    const calls = { prototype: 0, keys: 0, descriptor: 0 };
+    const hostile = new Proxy(validRow(), {
+      getPrototypeOf() { calls.prototype += 1; return Object.prototype; },
+      ownKeys() { calls.keys += 1; return []; },
+      getOwnPropertyDescriptor() { calls.descriptor += 1; return undefined; },
+    });
+
+    expectUnsafeOnly(preview([hostile]));
+    expect(calls).toEqual({ prototype: 0, keys: 0, descriptor: 0 });
+  });
+
+  it('rejects oversize containers before reading an element descriptor', () => {
+    const descriptor = vi.spyOn(Object, 'getOwnPropertyDescriptor');
+    const rows = Array.from({ length: 257 }, () => validRow());
+    expectUnsafeOnly(preview(rows));
+    expect(descriptor).not.toHaveBeenCalledWith(rows, 'length');
+
+    const existingCustomers = Array.from({ length: 10_001 }, () => ({
+      id: 'customer-fixture', tenantId: 'tenant-fixture', institutionId: 'institution-fixture',
+      displayName: '示例客户', lifecycle: 'consulting' as const, priority: 'observe' as const, ownerUserId: 'owner-fixture',
+      projectInterest: '皮肤管理', maskedPhone: 'masked', maskedMedicalRecordNo: 'masked',
+      lastTouchSummary: '', nextAction: '', tags: [], gender: '', birthDate: '', referralSource: '', notes: '',
+    }));
+    expectUnsafeOnly(previewLowSensitiveCustomerImport({
+      tenantId: 'tenant-fixture', institutionId: 'institution-fixture', operatorRef: 'operator-fixture',
+      rows: [validRow()], existingCustomers, occurredAt,
+    }));
+    descriptor.mockRestore();
+  });
+
+  it('bounds metadata and nested tags without echoing values', () => {
+    expectUnsafeOnly(previewLowSensitiveCustomerImport({
+      tenantId: 't'.repeat(257), institutionId: 'institution-fixture', operatorRef: 'operator-fixture', rows: [validRow()], occurredAt,
+    }));
+    const existingCustomer = {
+      id: 'customer-fixture', tenantId: 'tenant-fixture', institutionId: 'institution-fixture', displayName: '示例客户',
+      lifecycle: 'consulting' as const, priority: 'observe' as const, ownerUserId: 'owner-fixture', projectInterest: '皮肤管理',
+      maskedPhone: 'masked', maskedMedicalRecordNo: 'masked', lastTouchSummary: '', nextAction: '',
+      tags: Array.from({ length: 65 }, (_, index) => `tag-${index}`), gender: '', birthDate: '', referralSource: '', notes: '',
+    };
+    expectUnsafeOnly(previewLowSensitiveCustomerImport({
+      tenantId: 'tenant-fixture', institutionId: 'institution-fixture', operatorRef: 'operator-fixture', rows: [validRow()], existingCustomers: [existingCustomer], occurredAt,
+    }));
   });
 });
