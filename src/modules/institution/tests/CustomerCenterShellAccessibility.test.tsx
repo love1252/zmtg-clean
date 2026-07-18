@@ -156,4 +156,29 @@ describe('CustomerCenterShell 无障碍错误告警', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  it('关闭导入面板后重开不会重新挂载旧告警', async () => {
+    mockCustomerFetch([jsonResponse({ records: [] })]);
+
+    render(<CustomerCenterShell />);
+
+    expect(await screen.findByText('暂无客户记录')).toBeInTheDocument();
+    const importTrigger = screen.getByRole('button', { name: '低敏导入' });
+    fireEvent.click(importTrigger);
+    fireEvent.change(screen.getByLabelText('导入 JSON 数组'), { target: { value: '{' } });
+    fireEvent.click(screen.getByRole('button', { name: '导入预检' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('导入内容必须是合法 JSON');
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+
+    fireEvent.click(importTrigger);
+    expect(screen.queryByRole('dialog', { name: '低敏客户导入' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('导入内容必须是合法 JSON')).not.toBeInTheDocument();
+
+    fireEvent.click(importTrigger);
+    expect(screen.getByRole('dialog', { name: '低敏客户导入' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('导入内容必须是合法 JSON')).not.toBeInTheDocument();
+  });
 });

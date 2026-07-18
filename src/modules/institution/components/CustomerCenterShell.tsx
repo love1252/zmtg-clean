@@ -479,6 +479,7 @@ export function CustomerCenterShell() {
       setEditingCustomerId(null);
       setForm(emptyCustomerForm);
       setSubmitError(null);
+      setImportError(null);
     }
 
     function handlePanelKeyDown(event: KeyboardEvent) {
@@ -574,6 +575,7 @@ export function CustomerCenterShell() {
     if (activePanel === 'customer') {
       resetForm();
     }
+    setImportError(null);
     setActivePanel(null);
   }
 
@@ -588,12 +590,14 @@ export function CustomerCenterShell() {
       return;
     }
 
+    setImportError(null);
     resetForm();
     setActivePanel('customer');
   }
 
   function toggleImportPanel() {
     if (panelBusyRef.current) return;
+    setImportError(null);
     if (activePanel === 'import') {
       setActivePanel(null);
       return;
