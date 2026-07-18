@@ -1,3 +1,5 @@
+import { types as nodeUtilTypes } from 'node:util';
+
 import {
   CONVERSATION_ACTION_SAFE_SUMMARY_MAX_LENGTH_V1,
   type ConversationActionItemV1,
@@ -216,6 +218,10 @@ const assigneeKeys = ['userId', 'displayName'] as const;
 const customerReferenceKeys = ['contractVersion', 'customerId', 'displayName', 'maskedReference'] as const;
 
 const actionPartitionOrder = ['waiting_human', 'unresolved_risk'] as const;
+const maximumPartitionCount = actionPartitionOrder.length;
+const maximumSortSignalCount = INSTITUTION_ACTION_SORT_SIGNALS_V1.length;
+// The future repository reader must enforce its own SQL limit; this bounds only this projection.
+const maximumCandidateCount = 2048;
 
 function captureOneOfExactRecords(
   raw: unknown,
@@ -226,12 +232,12 @@ function captureOneOfExactRecords(
       typeof raw !== 'object'
       || raw === null
       || Array.isArray(raw)
+      || nodeUtilTypes.isProxy(raw)
       || Object.getPrototypeOf(raw) !== Object.prototype
     ) {
       return null;
     }
-    const descriptors = Object.getOwnPropertyDescriptors(raw);
-    const ownKeys = Reflect.ownKeys(descriptors);
+    const ownKeys = Reflect.ownKeys(raw);
     const expectedKeys = expectedKeySets.find((keys) => (
       ownKeys.length === keys.length
       && ownKeys.every((key) => typeof key === 'string' && keys.includes(key))
@@ -243,7 +249,7 @@ function captureOneOfExactRecords(
     }
     const captured: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
     for (const key of expectedKeys) {
-      const descriptor = descriptors[key];
+      const descriptor = Object.getOwnPropertyDescriptor(raw, key);
       if (
         descriptor === undefined
         || !Object.hasOwn(descriptor, 'value')
@@ -265,30 +271,37 @@ function captureExactRecord(raw: unknown, expectedKeys: readonly string[]): Capt
   return captureOneOfExactRecords(raw, [expectedKeys]);
 }
 
-function captureDenseArray(raw: unknown): readonly unknown[] | null {
+function captureDenseArray(raw: unknown, maximumLength: number): readonly unknown[] | null {
   try {
-    if (!Array.isArray(raw)) {
+    if (!Array.isArray(raw) || nodeUtilTypes.isProxy(raw)) {
       return null;
     }
-    const descriptors = Object.getOwnPropertyDescriptors(raw) as unknown as Record<
-      PropertyKey,
-      PropertyDescriptor
-    >;
-    const length = descriptors.length;
-    const ownKeys = Reflect.ownKeys(descriptors);
+    const length = Object.getOwnPropertyDescriptor(raw, 'length');
     if (
       length === undefined
       || !Object.hasOwn(length, 'value')
       || typeof length.value !== 'number'
       || !Number.isSafeInteger(length.value)
       || length.value < 0
-      || ownKeys.length !== length.value + 1
+      || length.value > maximumLength
     ) {
+      return null;
+    }
+    const ownKeys = Reflect.ownKeys(raw);
+    if (ownKeys.length !== length.value + 1) {
+      return null;
+    }
+    const ownKeySet = new Set(ownKeys);
+    if (!ownKeySet.has('length')) {
       return null;
     }
     const captured: unknown[] = [];
     for (let index = 0; index < length.value; index += 1) {
-      const descriptor = descriptors[String(index)];
+      const key = String(index);
+      if (!ownKeySet.has(key)) {
+        return null;
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(raw, key);
       if (
         descriptor === undefined
         || !Object.hasOwn(descriptor, 'value')
@@ -347,7 +360,7 @@ function captureFreshness(raw: unknown): InstitutionSourceFreshnessV1 | null {
 }
 
 function capturePartitions(raw: unknown): readonly ParsedPartition[] | null {
-  const values = captureDenseArray(raw);
+  const values = captureDenseArray(raw, maximumPartitionCount);
   if (values === null || values.length !== actionPartitionOrder.length) {
     return null;
   }
@@ -602,7 +615,7 @@ function captureCandidate(
     return 'scope_mismatch';
   }
 
-  const sortSignals = captureDenseArray(approved.sortSignals);
+  const sortSignals = captureDenseArray(approved.sortSignals, maximumSortSignalCount);
   if (
     sortSignals === null
     || new Set(sortSignals).size !== sortSignals.length
@@ -763,7 +776,7 @@ export function projectConversationActionSource(
   const viewer = captureViewer(input.viewer);
   const freshness = captureFreshness(input.freshness);
   const partitions = capturePartitions(input.partitions);
-  const rawCandidates = captureDenseArray(input.candidates);
+  const rawCandidates = captureDenseArray(input.candidates, maximumCandidateCount);
   if (scope === null || viewer === null || freshness === null || partitions === null || rawCandidates === null) {
     return { kind: 'blocked', code: 'invalid_input' };
   }

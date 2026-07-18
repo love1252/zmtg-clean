@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   projectConversationActionSource,
@@ -10,6 +10,8 @@ const conversationId = 'con_cccccccccccccccc';
 const segmentId = 'seg_cccccccccccccccc';
 const at = '2026-07-18T02:00:00.000Z';
 const freshUntil = '2026-07-18T02:10:00.000Z';
+const maximumCandidateCount = 2048;
+const maximumSortSignalCount = 5;
 
 const sourceOf = (result: ReturnType<typeof projectConversationActionSource>) => {
   expect(result.kind).toBe('projected');
@@ -69,6 +71,71 @@ const sourceInput = (): ConversationActionProjectionInput => ({
     },
   }],
 });
+
+const candidateWithUniqueTarget = (
+  candidate: ConversationActionProjectionInput['candidates'][number],
+  index: number,
+) => {
+  const suffix = index.toString(36).padStart(4, '0');
+  const nextConversationId = `con_candidate_${suffix}`;
+  const nextSegmentId = `seg_candidate_${suffix}`;
+  const nextMessageId = `msg_candidate_${suffix}`;
+  const nextSourceVersion = `srcv_candidate_${suffix}`;
+  return {
+    ...candidate,
+    productionEvidence: {
+      ...candidate.productionEvidence,
+      conversationId: nextConversationId,
+      segmentId: nextSegmentId,
+      sourceVersion: nextSourceVersion,
+    },
+    conversation: {
+      ...candidate.conversation,
+      conversationId: nextConversationId,
+      activeSegmentId: nextSegmentId,
+      latestCustomerInboundMessageId: nextMessageId,
+    },
+    segment: {
+      ...candidate.segment,
+      conversationId: nextConversationId,
+      segmentId: nextSegmentId,
+      openedByCustomerMessageId: nextMessageId,
+      lastCustomerMessageId: nextMessageId,
+    },
+    assignment: {
+      ...candidate.assignment,
+      conversationId: nextConversationId,
+      segmentId: nextSegmentId,
+    },
+    lastCustomerMessage: {
+      ...candidate.lastCustomerMessage,
+      conversationId: nextConversationId,
+      segmentId: nextSegmentId,
+      messageId: nextMessageId,
+    },
+    approved: { ...candidate.approved, sourceVersion: nextSourceVersion },
+  };
+};
+
+const expectRejectedBeforeDescriptorSnapshot = (
+  oversized: object,
+  project: () => ReturnType<typeof projectConversationActionSource>,
+  assertRejection: (result: ReturnType<typeof projectConversationActionSource>) => void,
+  expectedDescriptorReads: number,
+) => {
+  const descriptorSnapshot = vi.spyOn(Object, 'getOwnPropertyDescriptors');
+  const descriptorRead = vi.spyOn(Object, 'getOwnPropertyDescriptor');
+  try {
+    assertRejection(project());
+    expect(descriptorSnapshot).not.toHaveBeenCalledWith(oversized);
+    expect(descriptorRead.mock.calls.filter(([value]) => value === oversized)).toHaveLength(
+      expectedDescriptorReads,
+    );
+  } finally {
+    descriptorRead.mockRestore();
+    descriptorSnapshot.mockRestore();
+  }
+};
 
 describe('conversation action projection boundaries', () => {
   it.each([
@@ -233,6 +300,126 @@ describe('conversation action projection boundaries', () => {
       ...raw,
       candidates: [{ ...candidate, approved: { ...candidate.approved, sortSignals: ['unapproved'] as never } }],
     }))).toMatchObject({ readiness: 'unavailable', data: null });
+  });
+
+  it('透明 Proxy 只能触发受控拒绝，不得投影 action 给工作台消费者', () => {
+    const raw = sourceInput();
+    const candidate = raw.candidates[0]!;
+
+    expect(projectConversationActionSource(new Proxy(raw, {}))).toEqual({
+      kind: 'blocked',
+      code: 'invalid_input',
+    });
+    expect(sourceOf(projectConversationActionSource({
+      ...raw,
+      candidates: [new Proxy(candidate, {})],
+    }))).toMatchObject({ readiness: 'unavailable', data: null, failureCode: 'invalid_payload' });
+    expect(projectConversationActionSource({
+      ...raw,
+      candidates: new Proxy([...raw.candidates], {}),
+    })).toEqual({ kind: 'blocked', code: 'invalid_input' });
+  });
+
+  it('嵌套 record/array/revoked Proxy 只返回稳定受控拒绝，不抛出原始错误', () => {
+    const raw = sourceInput();
+    const candidate = raw.candidates[0]!;
+    const revokedConversation = Proxy.revocable({ ...candidate.conversation }, {});
+    revokedConversation.revoke();
+    const attempts = [
+      () => projectConversationActionSource({
+        ...raw,
+        candidates: [{
+          ...candidate,
+          productionEvidence: new Proxy({ ...candidate.productionEvidence }, {}),
+        }],
+      }),
+      () => projectConversationActionSource({
+        ...raw,
+        candidates: [{
+          ...candidate,
+          approved: { ...candidate.approved, sortSignals: new Proxy([], {}) },
+        }],
+      }),
+      () => projectConversationActionSource({
+        ...raw,
+        candidates: [{ ...candidate, conversation: revokedConversation.proxy as never }],
+      }),
+    ];
+
+    for (const attempt of attempts) {
+      expect(attempt).not.toThrow();
+      expect(sourceOf(attempt())).toMatchObject({
+        readiness: 'unavailable', data: null, failureCode: 'invalid_payload',
+      });
+    }
+  });
+
+  it('超额 record key 在全量 descriptor 快照前受控拒绝', () => {
+    const raw = sourceInput();
+    const oversizedInput = Object.assign(
+      { ...raw },
+      Object.fromEntries(Array.from({ length: 4096 }, (_, index) => [`extra_${index}`, null])),
+    );
+
+    expectRejectedBeforeDescriptorSnapshot(oversizedInput, () => (
+      projectConversationActionSource(oversizedInput as never)
+    ), (result) => expect(result).toEqual({ kind: 'blocked', code: 'invalid_input' }), 0);
+  });
+
+  it('分区、排序信号和候选均有固定上限，超限不创建全量 descriptor 快照', () => {
+    const raw = sourceInput();
+    const candidate = raw.candidates[0]!;
+    const maximumCandidates = Array.from(
+      { length: maximumCandidateCount },
+      (_, index) => candidateWithUniqueTarget(candidate, index),
+    );
+    const maximumCandidateSource = sourceOf(projectConversationActionSource({
+      ...raw,
+      candidates: maximumCandidates,
+    }));
+    expect(maximumCandidateSource).toMatchObject({
+      readiness: 'ready',
+      data: { actions: expect.any(Array) },
+    });
+    expect(maximumCandidateSource.data?.actions).toHaveLength(maximumCandidateCount);
+    expect(sourceOf(projectConversationActionSource(raw)).partitions).toHaveLength(raw.partitions.length);
+    expect(sourceOf(projectConversationActionSource({
+      ...raw,
+      candidates: [{
+        ...candidate,
+        approved: {
+          ...candidate.approved,
+          sortSignals: ['urgent', 'overdue', 'sla_due', 'today', 'high_priority'],
+        },
+      }],
+    })).data?.actions[0]?.sortSignals).toEqual([
+      'urgent', 'overdue', 'sla_due', 'today', 'high_priority',
+    ]);
+
+    const oversizedPartitions = [...raw.partitions, raw.partitions[0]!];
+    expectRejectedBeforeDescriptorSnapshot(oversizedPartitions, () => (
+      projectConversationActionSource({ ...raw, partitions: oversizedPartitions })
+    ), (result) => expect(result).toEqual({ kind: 'blocked', code: 'invalid_input' }), 1);
+
+    const oversizedSortSignals = [
+      'urgent', 'overdue', 'sla_due', 'today', 'high_priority', 'urgent',
+    ];
+    expectRejectedBeforeDescriptorSnapshot(oversizedSortSignals, () => (
+      projectConversationActionSource({
+        ...raw,
+        candidates: [{
+          ...candidate,
+          approved: { ...candidate.approved, sortSignals: oversizedSortSignals as never },
+        }],
+      })
+    ), (result) => expect(sourceOf(result)).toMatchObject({
+      readiness: 'unavailable', data: null, failureCode: 'invalid_payload',
+    }), 1);
+
+    const oversizedCandidates = new Array(maximumCandidateCount + 1);
+    expectRejectedBeforeDescriptorSnapshot(oversizedCandidates, () => (
+      projectConversationActionSource({ ...raw, candidates: oversizedCandidates as never })
+    ), (result) => expect(result).toEqual({ kind: 'blocked', code: 'invalid_input' }), 1);
   });
 
   it('未知角色来源、自由摘要和未知渠道或服务商均 fail-closed', () => {
