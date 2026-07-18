@@ -249,20 +249,107 @@ describe('follow-up path enrollment API routes', () => {
     );
   });
 
-  it('GET enrollment detail 和 cancel 都按 enrollmentId 返回低敏 DTO', async () => {
-    routeMocks.getFollowUpPathEnrollment.mockResolvedValue({
-      kind: 'success',
-      enrollment: enrollmentRecord,
-    });
+  it('GET enrollment detail 固定关闭且不读取普通请求或路径参数', async () => {
+    const plainResponse = await enrollmentGet(
+      request('/api/institution/followup-paths/enrollments/enrollment_001'),
+      { params: Promise.resolve({ enrollmentId: 'enrollment_001' }) },
+    );
+    const parameterizedResponse = await enrollmentGet(
+      request('/api/institution/followup-paths/enrollments/enrollment_002?include=stages'),
+      { params: Promise.resolve({ enrollmentId: 'enrollment_002' }) },
+    );
+
+    const expectedPayload = {
+      code: 'follow_up_path_enrollment_detail_capability_disabled',
+      error: '随访路径详情能力暂未启用',
+    };
+    expect(plainResponse.status).toBe(503);
+    expect(await json(plainResponse)).toEqual(expectedPayload);
+    expect(parameterizedResponse.status).toBe(503);
+    expect(await json(parameterizedResponse)).toEqual(expectedPayload);
+
+    const payloadText = JSON.stringify(expectedPayload);
+    expect(payloadText).not.toContain('record');
+    expect(payloadText).not.toContain('stages');
+    expect(payloadText).not.toContain('taskIds');
+    expect(payloadText).not.toContain('customerId');
+    expect(payloadText).not.toContain('customerDisplayName');
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+    expect(routeMocks.getFollowUpPathEnrollment).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+  });
+
+  it('GET enrollment detail 对 hostile Request 和 context 不触发 trap 或依赖调用', async () => {
+    let requestTraps = 0;
+    let contextTraps = 0;
+    const hostileRequest = new Proxy(
+      {},
+      {
+        get() {
+          requestTraps += 1;
+          throw new Error('request must not be read');
+        },
+        has() {
+          requestTraps += 1;
+          throw new Error('request must not be checked');
+        },
+        ownKeys() {
+          requestTraps += 1;
+          throw new Error('request must not be enumerated');
+        },
+      },
+    ) as unknown as Request;
+    const hostileContext = new Proxy(
+      {},
+      {
+        get() {
+          contextTraps += 1;
+          throw new Error('context must not be read');
+        },
+        has() {
+          contextTraps += 1;
+          throw new Error('context must not be checked');
+        },
+        ownKeys() {
+          contextTraps += 1;
+          throw new Error('context must not be enumerated');
+        },
+      },
+    ) as unknown as { params: Promise<{ enrollmentId: string }> };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const response = await enrollmentGet(hostileRequest, hostileContext);
+
+      expect(response.status).toBe(503);
+      expect(await json(response)).toEqual({
+        code: 'follow_up_path_enrollment_detail_capability_disabled',
+        error: '随访路径详情能力暂未启用',
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(requestTraps).toBe(0);
+    expect(contextTraps).toBe(0);
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+    expect(routeMocks.getFollowUpPathEnrollment).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+  });
+
+  it('POST cancel 保持按 enrollmentId 返回低敏 DTO', async () => {
     routeMocks.cancelFollowUpPathEnrollment.mockResolvedValue({
       kind: 'cancelled',
       enrollment: { ...enrollmentRecord, status: 'cancelled' },
     });
 
-    const detailResponse = await enrollmentGet(
-      request('/api/institution/followup-paths/enrollments/enrollment_001'),
-      { params: Promise.resolve({ enrollmentId: 'enrollment_001' }) },
-    );
     const cancelResponse = await enrollmentCancelPost(
       request('/api/institution/followup-paths/enrollments/enrollment_001/cancel', {
         method: 'POST',
@@ -270,15 +357,10 @@ describe('follow-up path enrollment API routes', () => {
       { params: Promise.resolve({ enrollmentId: 'enrollment_001' }) },
     );
 
-    expect(detailResponse.status).toBe(200);
-    expect(await json(detailResponse)).toEqual({ record: enrollmentRecord });
     expect(cancelResponse.status).toBe(200);
     expect(await json(cancelResponse)).toEqual({
       record: { ...enrollmentRecord, status: 'cancelled' },
     });
-    expect(routeMocks.getFollowUpPathEnrollment).toHaveBeenCalledWith(
-      expect.objectContaining({ enrollmentId: 'enrollment_001' }),
-    );
     expect(routeMocks.cancelFollowUpPathEnrollment).toHaveBeenCalledWith(
       expect.objectContaining({ enrollmentId: 'enrollment_001' }),
     );
