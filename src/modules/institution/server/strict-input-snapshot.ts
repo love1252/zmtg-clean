@@ -119,13 +119,31 @@ export function snapshotStrictArray(
       return null;
     }
 
+    const preflightKeys = Reflect.ownKeys(value);
+    if (
+      preflightKeys.length > maximumLength + 1 ||
+      preflightKeys.some((key) => typeof key !== 'string')
+    ) {
+      return null;
+    }
+
     const descriptors = Object.getOwnPropertyDescriptors(value);
     const descriptorMap = descriptors as unknown as Record<
       PropertyKey,
       PropertyDescriptor
     >;
     const descriptorKeys = Reflect.ownKeys(descriptors);
-    if (descriptorKeys.some((key) => typeof key !== 'string')) return null;
+    if (
+      descriptorKeys.length !== preflightKeys.length ||
+      descriptorKeys.some((key) => typeof key !== 'string') ||
+      preflightKeys.some(
+        (key) =>
+          typeof key !== 'string' ||
+          !Object.prototype.hasOwnProperty.call(descriptors, key),
+      )
+    ) {
+      return null;
+    }
 
     const lengthDescriptor = descriptorMap.length;
     if (!lengthDescriptor || !('value' in lengthDescriptor)) return null;

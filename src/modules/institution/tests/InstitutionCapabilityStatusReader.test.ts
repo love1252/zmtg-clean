@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { INSTITUTION_CAPABILITY_REGISTRY_V1 } from '@/modules/institution-contracts/v1/institution-capability-registry';
 import * as readerModule from '@/modules/institution/server/institution-capability-status-reader';
@@ -530,6 +530,29 @@ describe('InstitutionCapabilityStatusReader candidate boundary', () => {
       (_, index) => index,
     );
     expect(snapshotStrictArray(globalOverflow, STRICT_ARRAY_MAX_ITEMS)).toBeNull();
+
+    const namedKeyOverflow: unknown[] = [];
+    for (let index = 0; index <= STRICT_ARRAY_MAX_ITEMS; index += 1) {
+      Object.defineProperty(namedKeyOverflow, `extra_${index}`, {
+        enumerable: true,
+        value: index,
+      });
+    }
+    const originalGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
+    let targetDescriptorCalls = 0;
+    const descriptorsSpy = vi
+      .spyOn(Object, 'getOwnPropertyDescriptors')
+      .mockImplementation(<T>(target: T) => {
+        if (target === namedKeyOverflow) targetDescriptorCalls += 1;
+        return originalGetOwnPropertyDescriptors(target);
+      });
+    const namedKeyOverflowResult = snapshotStrictArray(
+      namedKeyOverflow,
+      STRICT_ARRAY_MAX_ITEMS,
+    );
+    descriptorsSpy.mockRestore();
+    expect(namedKeyOverflowResult).toBeNull();
+    expect(targetDescriptorCalls).toBe(0);
   });
 
   it('strict snapshot helpers 直接拒绝 Proxy 和 null-prototype', () => {
