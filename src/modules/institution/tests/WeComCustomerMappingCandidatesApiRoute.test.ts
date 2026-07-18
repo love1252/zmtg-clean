@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from '@/app/api/institution/wecom/customer-mapping-candidates/route';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import {
@@ -6,7 +9,6 @@ import {
   getWeComCustomerMappingReviewDisplay,
   parseWeComCustomerMappingCandidatesReadonlyResponse,
   parseWeComCustomerMappingCandidatesResponse,
-  weComCustomerMappingCandidatesResponseKeys,
   weComCustomerMappingReviewStatusValues,
 } from '@/modules/institution/view-models/wecom-customer-mapping-candidates';
 import { weComCustomerMappingReviewStates } from '@/modules/institution/domain/wecom-customer-mapping-review-actions';
@@ -15,17 +17,12 @@ import { createWeComCustomerMappingReviewActionMockRuntime } from '@/modules/ins
 import { createWeComCustomerMappingCandidatesGetHandler } from '@/app/api/institution/wecom/customer-mapping-candidates/handler';
 import { createWeComCustomerMappingReviewActionsPostHandler } from '@/app/api/institution/wecom/customer-mapping-reviews/[mappingId]/actions/handler';
 
-const routeMocks = vi.hoisted(() => ({
-  getDemoAccessContextFromRequest: vi.fn(),
-}));
+const routeSource = readFileSync(
+  resolve(process.cwd(), 'src/app/api/institution/wecom/customer-mapping-candidates/route.ts'),
+  'utf8',
+);
 
-vi.mock('@/modules/security/server/access-context', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/security/server/access-context')>();
-  return {
-    ...actual,
-    getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
-  };
-});
+const capabilityDisabledPayload = Object.freeze({ code: 'capability_disabled' });
 
 const context: AccessContext = {
   userId: 'admin-mock',
@@ -38,6 +35,36 @@ const context: AccessContext = {
 
 function request() {
   return new Request('http://localhost/api/institution/wecom/customer-mapping-candidates');
+}
+
+function hostileRequest() {
+  let trapCount = 0;
+  const hostile = new Proxy(Object.create(null), {
+    get() {
+      trapCount += 1;
+      throw new Error('request must not be read');
+    },
+    getOwnPropertyDescriptor() {
+      trapCount += 1;
+      throw new Error('request must not be inspected');
+    },
+    has() {
+      trapCount += 1;
+      throw new Error('request must not be inspected');
+    },
+    ownKeys() {
+      trapCount += 1;
+      throw new Error('request must not be enumerated');
+    },
+  }) as Request;
+
+  return { request: hostile, trapCount: () => trapCount };
+}
+
+async function expectCapabilityDisabled(response: Response) {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  await expect(response.json()).resolves.toEqual(capabilityDisabledPayload);
 }
 
 function validPayload() {
@@ -89,7 +116,10 @@ function validPayload() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  routeMocks.getDemoAccessContextFromRequest.mockReturnValue(context);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('WeCom customer mapping candidates readonly API', () => {
@@ -577,146 +607,70 @@ describe('WeCom customer mapping candidates readonly API', () => {
     }
   });
 
-  it('GET 返回 mock/demo 低敏候选、exact keys 和只读写入声明', async () => {
-    const response = await GET(request());
-    const payload = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(Object.keys(payload)).toEqual(weComCustomerMappingCandidatesResponseKeys);
-    expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(payload).toMatchObject({
-      sourceKind: 'controlled_mock_fixture',
-      dataMode: 'mock',
-      mockDemo: true,
-      readonly: true,
-      mappingId: 'mock-wecom-mapping-pending-001',
-      mappingVersion: 0,
-      mappingReviewStatus: 'pending_review',
-      authorizationStatus: 'authorized',
-      providerStatus: 'mock_only',
-      mappingStatus: 'manual_review_required',
-      manualReviewStatus: 'required',
-      confidenceLevel: 'high',
-      failClosedReason: null,
-      autoMergePerformed: false,
-      realCustomerRelationshipWritten: false,
+  it.each([
+    ['普通请求', request()],
+    [
+      '伪造 query、cookie 和机构头',
+      new Request(
+        'http://localhost/api/institution/wecom/customer-mapping-candidates?scenario=ready&customerId=MOCK-customer-input',
+        {
+          headers: {
+            cookie: 'demo_session=DEMO-candidate-input',
+            'x-tenant-id': 'MOCK-tenant-input',
+            'x-institution-id': 'DEMO-institution-input',
+          },
+        },
+      ),
+    ],
+  ])('%s 固定返回无缓存 503，且不回显输入或候选记录', async (_name, input) => {
+    const fetchMock = vi.fn(() => {
+      throw new Error('provider must not be called');
     });
-    expect(payload.candidates).toHaveLength(1);
-    expect(Object.keys(payload.candidates[0])).toEqual([
-      'externalContactSummary',
-      'systemCustomerSummary',
-      'mappingStatus',
-      'confidenceLevel',
-      'conflictSummary',
-      'manualReviewStatus',
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = GET(input);
+    const responseCopy = response.clone();
+    await expectCapabilityDisabled(response);
+    const serialized = JSON.stringify(await responseCopy.json());
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(serialized).not.toMatch(/mock|demo|customer|contact|candidate|tenant|institution/iu);
+    expect(serialized).not.toContain('MOCK-customer-input');
+    expect(serialized).not.toContain('DEMO-candidate-input');
+  });
+
+  it('在读取 Request、URL、query、session 或 headers 前返回', async () => {
+    const hostile = hostileRequest();
+
+    await expectCapabilityDisabled(GET(hostile.request));
+
+    expect(hostile.trapCount()).toBe(0);
+  });
+
+  it('route 仅加载响应工具，不装配 session、mock runtime、scenario、fixture、数据库或 provider', () => {
+    expect(routeSource.split('\n').filter((line) => line.startsWith('import '))).toEqual([
+      "import { NextResponse } from 'next/server';",
     ]);
-    expect(payload.candidates[0].externalContactSummary.displayName).toBe('[MOCK] 客户甲');
-    expect(payload.candidates[0].systemCustomerSummary.mockCustomerNumber).toBe('MOCK-001');
-  });
+    expect(routeSource).toContain('export function GET(_request: Request)');
+    expect(routeSource).not.toMatch(/\b_request\s*(?:\.|\[)/u);
 
-  it('未登录 401，无机构权限 403，且不会进入候选读取', async () => {
-    routeMocks.getDemoAccessContextFromRequest
-      .mockReturnValueOnce(null)
-      .mockReturnValueOnce({
-        ...context,
-        role: 'platform_admin',
-        scope: 'platform',
-        tenantId: null,
-        institutionId: null,
-      });
-
-    expect((await GET(request())).status).toBe(401);
-    expect((await GET(request())).status).toBe(403);
-  });
-
-  it.each([
-    ['tenant-mock-002', 'provider_disabled', 'disabled'],
-    ['tenant-mock-003', 'external_provider_disabled', 'external_disabled'],
-    ['tenant-demo-001', 'authorization_revoked', 'mock_only'],
-  ] as const)('%s provider/authorization 不可用时 fail-closed', async (tenantId, reason, providerStatus) => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({ ...context, tenantId });
-
-    const response = await GET(request());
-    const payload = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(payload.candidates).toEqual([]);
-    expect(payload.failClosedReason).toBe(reason);
-    expect(payload.providerStatus).toBe(providerStatus);
-    expect(payload.auditSummary.status).toBe('blocked');
-    expect(payload.autoMergePerformed).toBe(false);
-    expect(payload.realCustomerRelationshipWritten).toBe(false);
-  });
-
-  it.each([
-    ['trial-tenant-yunlan', 'trial-inst-yunlan', 'mock-wecom-mapping-yunlan-001'],
-    ['trial-tenant-baiyue', 'trial-inst-baiyue', 'mock-wecom-mapping-baiyue-001'],
-    ['starter-tenant-xinghe', 'starter-inst-xinghe', 'mock-wecom-mapping-xinghe-001'],
-    ['starter-tenant-yubai', 'starter-inst-yubai', 'mock-wecom-mapping-yubai-001'],
-    ['growth-tenant-chengxing', 'growth-inst-chengxing', 'mock-wecom-mapping-pending-001'],
-    ['growth-tenant-qingmang', 'growth-inst-qingmang', 'mock-wecom-mapping-qingmang-001'],
-  ] as const)(
-    '%s 默认 GET 只返回本机构稳定 mapping tuple',
-    async (tenantId, institutionId, mappingId) => {
-      routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
-        ...context,
-        tenantId,
-        institutionId,
-      });
-
-      const payload = await (await GET(request())).json();
-
-      expect(payload).toMatchObject({
-        mappingId,
-        mappingVersion: 0,
-        mappingReviewStatus: 'pending_review',
-        failClosedReason: null,
-      });
-      expect(payload.candidates).toHaveLength(1);
-      expect(JSON.stringify(payload)).not.toMatch(
-        new RegExp([
-          'mock-wecom-mapping-yunlan-001',
-          'mock-wecom-mapping-baiyue-001',
-          'mock-wecom-mapping-xinghe-001',
-          'mock-wecom-mapping-yubai-001',
-          'mock-wecom-mapping-pending-001',
-          'mock-wecom-mapping-qingmang-001',
-        ].filter((otherMappingId) => otherMappingId !== mappingId).join('|'), 'u'),
-      );
-    },
-  );
-
-  it('现有机构演示会话映射到受控 mock fixture，不泄漏 fixture tenant', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue({
-      ...context,
-      tenantId: 'growth-tenant-chengxing',
-      institutionId: 'growth-inst-chengxing',
-    });
-
-    const payload = await (await GET(request())).json();
-
-    expect(payload.candidates).toHaveLength(1);
-    expect(payload.failClosedReason).toBeNull();
-    expect(JSON.stringify(payload)).not.toContain('tenant-mock-001');
-    expect(JSON.stringify(payload)).not.toContain('growth-tenant-chengxing');
-  });
-
-  it('tenant 或 institution 不匹配时 GET 使用相同低敏 fail-closed 且不返回 mapping 字段', async () => {
-    const responses = [];
-    for (const accessContext of [
-      { ...context, tenantId: 'tenant-other-001' },
-      { ...context, institutionId: 'institution-other-001' },
+    for (const forbiddenSource of [
+      './handler',
+      'access-context',
+      'getDemoAccessContextFromRequest',
+      'new URL',
+      'searchParams',
+      'scenario',
+      'fixture',
+      'mock',
+      'demo',
+      'getDatabase',
+      'repository',
+      'provider',
+      'fetch',
+      'weComCustomerMappingReviewActionMockRuntime',
     ]) {
-      routeMocks.getDemoAccessContextFromRequest.mockReturnValue(accessContext);
-      responses.push(await (await GET(request())).json());
-    }
-
-    for (const payload of responses) {
-      expect(payload.candidates).toEqual([]);
-      expect(payload.failClosedReason).toBe('tenant_fixture_unavailable');
-      expect(payload.mappingId).toBeNull();
-      expect(payload.mappingVersion).toBeNull();
-      expect(payload.mappingReviewStatus).toBeNull();
+      expect(routeSource).not.toContain(forbiddenSource);
     }
   });
 
