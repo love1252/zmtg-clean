@@ -12,6 +12,7 @@ import {
   listTreatmentFollowUpSuggestions,
   listTreatmentSummaries,
   prepareWeComControlledReachOut,
+  recordManualFollowUpFeedback,
   transitionFollowUpTask,
   updateAppointment,
   updateCustomer,
@@ -342,6 +343,50 @@ describe('机构业务页面 client helper', () => {
     expect(String(path)).not.toContain('tenantId');
     expect(init?.method).toBeUndefined();
     expect(init?.body).toBeUndefined();
+  });
+
+  it('随访反馈 capability-off 映射为低敏 service_unavailable 且仅发送白名单字段', async () => {
+    const fetcher = createFetchMock(
+      jsonResponse(
+        {
+          code: 'capability_disabled',
+          error: '客户随访反馈记录能力暂未启用',
+        },
+        { status: 503 },
+      ),
+    );
+
+    const result = await recordManualFollowUpFeedback(
+      'cust_001',
+      {
+        safeSummary: '低敏人工反馈',
+        riskLevel: 'watch',
+        relatedTaskId: 'task_001',
+        tenantId: 'other-tenant',
+        customerId: 'private_customer',
+        rawPayload: 'private_feedback',
+      } as never,
+      { fetcher },
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'service_unavailable',
+        message: '客户随访反馈记录能力暂未启用',
+        status: 503,
+      },
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/institution/customers/cust_001/followup-feedback',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(requestBody(fetcher)).toEqual({
+      safeSummary: '低敏人工反馈',
+      riskLevel: 'watch',
+      relatedTaskId: 'task_001',
+    });
+    expect(JSON.stringify(result)).not.toMatch(/private_|other-tenant|rawPayload/u);
   });
 
   it('治疗摘要列表错误响应保持稳定且不透出敏感细节', async () => {

@@ -1,5 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CustomerTimelineDrawer } from '@/modules/institution/components/CustomerTimelineDrawer';
 import type { CustomerTimelineResponse } from '@/modules/institution/domain/customer-timeline';
 
@@ -84,6 +84,10 @@ function expectNoSensitiveTimelineContent(container: HTMLElement) {
   expect(text).not.toContain('token');
   expect(text).not.toContain('secret');
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('客户详情时间线抽屉', () => {
   it('作废治疗摘要节点显示已作废和历史追溯提示', async () => {
@@ -188,5 +192,43 @@ describe('客户详情时间线抽屉', () => {
     expect(within(dialog).getByText('消息草稿标记已人工发送')).toBeInTheDocument();
     expect(within(dialog).getByText('记录低敏反馈')).toBeInTheDocument();
     expectNoSensitiveTimelineContent(container);
+  });
+
+  it('随访反馈 capability-off 时保留输入、不显示成功且不刷新时间线', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      code: 'capability_disabled',
+      error: '客户随访反馈记录能力暂未启用',
+    }), {
+      status: 503,
+      headers: { 'content-type': 'application/json' },
+    }));
+    const onTimelineRefresh = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+
+    render(
+      <CustomerTimelineDrawer
+        customerId="cust_voided"
+        customerName="王女士"
+        errorState={null}
+        isLoading={false}
+        onClose={vi.fn()}
+        onTimelineRefresh={onTimelineRefresh}
+        timeline={voidedTimeline}
+      />,
+    );
+
+    const dialog = screen.getByRole('dialog', { name: '客户详情时间线' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '记录低敏反馈' }));
+    const summary = within(dialog).getByLabelText('低敏反馈 / 备注摘要 *');
+    fireEvent.change(summary, { target: { value: '低敏人工反馈' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '保存反馈' }));
+
+    expect(
+      await within(dialog).findByRole('alert'),
+    ).toHaveTextContent('客户随访反馈记录能力暂未启用');
+    expect(summary).toHaveValue('低敏人工反馈');
+    expect(within(dialog).queryByText('低敏人工反馈已记录')).not.toBeInTheDocument();
+    expect(onTimelineRefresh).not.toHaveBeenCalled();
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
   });
 });
