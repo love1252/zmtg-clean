@@ -1,37 +1,20 @@
 import { NextResponse } from 'next/server';
-import { buildV1WorkspaceDashboardReadonlyAggregationApiContractResponse } from '@/modules/workspace/domain/v1-workspace-dashboard-readonly-api-contract';
-import {
-  buildV1WorkspaceDashboardReadonlyAggregationSummary,
-  type V1WorkspaceDashboardReadonlyAggregationInput,
-  type V1WorkspaceDashboardReadonlyAggregationPolicy,
-} from '@/modules/workspace/domain/v1-workspace-dashboard-readonly-aggregation-view-models';
 
-const demoReadonlyPolicy = {
-  featureEnabled: true,
-  canReadWorkspaceDashboardAggregation: true,
-  tenantScopeMatched: true,
-  workspaceScopeMatched: true,
-  institutionScopeMatched: true,
-} as const satisfies V1WorkspaceDashboardReadonlyAggregationPolicy;
+const noStoreHeaders = { 'cache-control': 'no-store' } as const;
 
-const demoReadonlyInput = {
-  businessLoopCandidates: [],
-  managementConfigCandidates: [],
-  knowledgeGovernanceInput: {
-    knowledgeBaseCandidates: [],
-    auditCandidates: [],
-  },
-} as const satisfies V1WorkspaceDashboardReadonlyAggregationInput;
+const capabilityDisabledPayload = Object.freeze({
+  code: 'capability_disabled',
+  error: '工作台聚合能力暂未启用。',
+});
 
+/**
+ * Keep the legacy aggregation endpoint fail-closed until a formal institution guard and
+ * production business providers exist. Request data and demo aggregation builders must not be
+ * inspected or initialized here.
+ */
 export function GET(_request: Request) {
-  const aggregation = buildV1WorkspaceDashboardReadonlyAggregationSummary(
-    demoReadonlyInput,
-    demoReadonlyPolicy,
-  );
-  const response = buildV1WorkspaceDashboardReadonlyAggregationApiContractResponse({
-    requestId: 'workspace-dashboard-readonly-aggregation-route-request',
-    aggregation,
+  return NextResponse.json(capabilityDisabledPayload, {
+    status: 503,
+    headers: noStoreHeaders,
   });
-
-  return NextResponse.json(response, { status: 200 });
 }
