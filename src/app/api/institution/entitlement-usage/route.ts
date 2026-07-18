@@ -1,30 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
-import { getDatabase } from '@/server/db/client';
-import { getTenantEntitlementUsageService } from '@/modules/institution/server/entitlement-usage-service';
 
-export async function GET(request: Request) {
-  const accessContext = getDemoAccessContextFromRequest(request);
-  if (!accessContext) {
-    return NextResponse.json({ code: 'unauthorized', error: '请先登录' }, { status: 401 });
-  }
+const capabilityDisabledResponseContent = Object.freeze({
+  code: 'capability_disabled',
+  error: '机构套餐权益用量能力暂未启用。',
+});
 
-  if (accessContext.scope !== 'tenant' || !accessContext.tenantId) {
-    return NextResponse.json({ code: 'forbidden', error: '没有访问权限' }, { status: 403 });
-  }
-
-  try {
-    const view = await getTenantEntitlementUsageService({
-      database: getDatabase(),
-      tenantId: accessContext.tenantId,
-      institutionId: accessContext.institutionId,
-    });
-
-    return NextResponse.json(view, { status: 200 });
-  } catch {
-    return NextResponse.json(
-      { code: 'service_unavailable', error: '套餐权益数据暂时不可用' },
-      { status: 503 },
-    );
-  }
+export async function GET() {
+  return NextResponse.json(capabilityDisabledResponseContent, {
+    status: 503,
+    headers: { 'cache-control': 'no-store' },
+  });
 }
