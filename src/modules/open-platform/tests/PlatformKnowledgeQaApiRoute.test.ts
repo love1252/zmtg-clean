@@ -333,7 +333,7 @@ describe('知识库 QA API route', () => {
     expect(await readJson(response)).toEqual({ code: 'forbidden', error: '没有访问权限' });
   });
 
-  it('机构端 POST QA 只使用 access context 的 tenant 和 institution', async () => {
+  it('机构端 POST QA 在真实 publication/citation 能力接入前固定 fail-closed', async () => {
     institutionContext();
     repository.listKnowledgeItems.mockResolvedValue([visibleKnowledge, hiddenKnowledge]);
     repository.searchKnowledgeFileParseChunks.mockResolvedValue([visibleChunk, hiddenChunk]);
@@ -352,24 +352,15 @@ describe('知识库 QA API route', () => {
     );
     const payload = await readJson(response);
 
-    expect(response.status).toBe(200);
-    expect(repository.searchKnowledgeFileParseChunks).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'tenant-route' }),
-    );
-    expect(payload.citations).toEqual([
-      expect.objectContaining({
-        knowledgeId: 'knowledge-visible',
-        chunkId: 'chunk-visible-0',
-      }),
-    ]);
-    expect(JSON.stringify(payload)).not.toContain('chunk-hidden-0');
-    expect(repository.createKnowledgeQaAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: 'tenant-route',
-        institutionId: 'inst-current',
-        actorScope: 'institution',
-      }),
-    );
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      status: 'capability_disabled',
+      code: 'knowledge_qa_capability_disabled',
+      answer: '机构知识库问答暂未启用。仅供内部运营参考，需人工确认',
+      citations: [],
+    });
+    expect(repository.searchKnowledgeFileParseChunks).not.toHaveBeenCalled();
+    expect(repository.createKnowledgeQaAuditLog).not.toHaveBeenCalled();
     expectSafePayload(payload);
   });
 
@@ -468,7 +459,7 @@ describe('知识库 QA API route', () => {
     expect(repository.listKnowledgeVectorSearchCandidates).not.toHaveBeenCalled();
   });
 
-  it('institution 每日 QA 超限时返回中文安全文案且不执行召回', async () => {
+  it('机构端 QA 不读取配额或执行召回', async () => {
     institutionContext();
     repository.countKnowledgeQaAuditLogsForDay.mockResolvedValueOnce(30);
 
@@ -483,17 +474,14 @@ describe('知识库 QA API route', () => {
     );
     const payload = await readJson(response);
 
-    expect(response.status).toBe(429);
+    expect(response.status).toBe(503);
     expect(payload).toEqual({
-      status: 'usage_limited',
-      message: '当前知识库问答次数已达上限，请稍后再试',
+      status: 'capability_disabled',
+      code: 'knowledge_qa_capability_disabled',
+      answer: '机构知识库问答暂未启用。仅供内部运营参考，需人工确认',
+      citations: [],
     });
-    expect(repository.countKnowledgeQaAuditLogsForDay).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: 'tenant-route',
-        institutionId: 'inst-current',
-      }),
-    );
+    expect(repository.countKnowledgeQaAuditLogsForDay).not.toHaveBeenCalled();
     expect(repository.searchKnowledgeFileParseChunks).not.toHaveBeenCalled();
     expect(repository.listKnowledgeVectorSearchCandidates).not.toHaveBeenCalled();
   });

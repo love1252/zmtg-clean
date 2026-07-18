@@ -1,60 +1,12 @@
 import { NextResponse } from 'next/server';
-import { composeInstitutionKnowledgeQaService } from '@/modules/institution/server/institution-knowledge-qa-service';
-import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
-import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
-import { getDatabase } from '@/server/db/client';
 
-function statusCodeForResult(status: string) {
-  if (status === 'validation_failed') return 400;
-  if (status === 'usage_limited') return 429;
-  return 200;
-}
+const capabilityDisabledPayload = Object.freeze({
+  status: 'capability_disabled',
+  code: 'knowledge_qa_capability_disabled',
+  answer: '机构知识库问答暂未启用。仅供内部运营参考，需人工确认',
+  citations: [],
+});
 
-async function readBody(request: Request) {
-  try {
-    const body = await request.json();
-    return Object.prototype.toString.call(body) === '[object Object]'
-      ? body as Record<string, unknown>
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-export async function POST(request: Request) {
-  const accessContext = getDemoAccessContextFromRequest(request);
-  if (!accessContext) {
-    return NextResponse.json({ code: 'unauthorized', error: '请先登录' }, { status: 401 });
-  }
-  if (accessContext.scope !== 'tenant' || !accessContext.tenantId || !accessContext.institutionId) {
-    return NextResponse.json({ code: 'forbidden', error: '没有访问权限' }, { status: 403 });
-  }
-
-  try {
-    const body = await readBody(request);
-    const result = await composeInstitutionKnowledgeQaService({
-      repository: createPlatformKnowledgeManagementRepository(getDatabase()),
-      actorUserId: accessContext.userId,
-      params: {
-        tenantId: accessContext.tenantId,
-        institutionId: accessContext.institutionId,
-        question: typeof body.question === 'string' ? body.question : null,
-        knowledgeId: typeof body.knowledgeId === 'string' ? body.knowledgeId : null,
-        fileId: typeof body.fileId === 'string' ? body.fileId : null,
-        retrievalMode: typeof body.retrievalMode === 'string' ? body.retrievalMode : null,
-      },
-    });
-
-    const resultStatus = 'status' in result && typeof result.status === 'string'
-      ? result.status
-      : null;
-    return NextResponse.json(result, {
-      status: resultStatus ? statusCodeForResult(resultStatus) : 200,
-    });
-  } catch {
-    return NextResponse.json(
-      { code: 'service_unavailable', error: '知识库问答暂时不可用' },
-      { status: 503 },
-    );
-  }
+export async function POST(_request?: Request) {
+  return NextResponse.json(capabilityDisabledPayload, { status: 503 });
 }
