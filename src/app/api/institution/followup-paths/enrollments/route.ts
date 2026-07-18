@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAuditEvent, createDeniedAccessAuditEvent, type AuditReason } from '@/modules/audit/domain/audit-events';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
-import {
-  createEnrollmentFromTreatmentSummary,
-  listFollowUpPathEnrollments,
-} from '@/modules/institution/server/followup-path-enrollment-service';
+import { createEnrollmentFromTreatmentSummary } from '@/modules/institution/server/followup-path-enrollment-service';
 import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 import { createTreatmentSummaryRepository } from '@/modules/institution/server/treatment-summary-repository';
 import { treatmentPathTemplateKeys, type TreatmentPathTemplateKey } from '@/modules/institution/domain/treatment-path-templates';
@@ -83,63 +80,18 @@ function parseCreatePayload(payload: unknown) {
   };
 }
 
-export async function GET(request: Request) {
-  const context = getDemoAccessContextFromRequest(request);
-  if (!context) {
-    return NextResponse.json({ error: '请先登录' }, { status: 401 });
-  }
+const disabledListResponse = Object.freeze({
+  code: 'follow_up_path_enrollment_list_capability_disabled',
+  error: '随访路径实例列表能力暂未启用',
+});
 
-  try {
-    const db = getDatabase();
-    const auditRepository = createAuditEventRepository(db);
-    const occurredAt = new Date().toISOString();
-    const decision = canAccessResource({
-      context,
-      resource: 'follow_up',
-      action: 'read_own_tenant',
-      targetTenantId: context.tenantId,
-    });
-
-    if (!decision.allowed || !context.tenantId) {
-      await auditRepository.record(
-        deniedAudit({
-          context,
-          action: 'read_own_tenant',
-          reason: decision.allowed ? 'missing_tenant' : decision.reason,
-          occurredAt,
-        }),
-      );
-      return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
-    }
-
-    const result = await listFollowUpPathEnrollments({
-      context,
-      tenantBusinessRepository: createTenantBusinessRepository(db),
-    });
-
-    if (result.kind !== 'success') {
-      await auditRepository.record(
-        deniedAudit({ context, action: 'read_own_tenant', reason: result.reason, occurredAt }),
-      );
-      return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
-    }
-
-    await auditRepository.record(
-      createAuditEvent({
-        eventId: createAuditEventId(),
-        context,
-        resource: 'follow_up',
-        action: 'read_own_tenant',
-        result: 'allowed',
-        reason: decision.reason,
-        occurredAt,
-      }),
-    );
-
-    return NextResponse.json({ records: result.enrollments });
-  } catch {
-    return NextResponse.json({ error: '数据服务暂时不可用' }, { status: 503 });
-  }
+/**
+ * This endpoint remains disabled until the list has a formal institution-scoped reader.
+ * Do not inspect the request here: a disabled list must not trigger session, data,
+ * audit, or service side effects from untrusted input.
+ */
+export async function GET(_request: Request) {
+  return NextResponse.json(disabledListResponse, { status: 503 });
 }
 
 export async function POST(request: Request) {

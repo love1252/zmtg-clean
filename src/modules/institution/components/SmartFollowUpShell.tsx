@@ -934,7 +934,7 @@ export function SmartFollowUpShell() {
             </p>
           </div>
           <span className="inline-flex w-fit rounded-full border border-violet-200 bg-white px-3 py-1 text-xs font-semibold text-violet-700">
-            当前 active：{isEnrollmentLoading ? '--' : enrollments.filter((item) => item.status === 'active').length}
+            当前 active：{isEnrollmentLoading || enrollmentErrorState ? '--' : enrollments.filter((item) => item.status === 'active').length}
           </span>
         </div>
 
@@ -1416,7 +1416,7 @@ export function SmartFollowUpShell() {
                 ))}
               </div>
             ) : null}
-            {!isEnrollmentLoading && (enrollmentErrorState || enrollments.length === 0) ? (
+            {!isEnrollmentLoading && !enrollmentErrorState && enrollments.length === 0 ? (
               <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white/70 px-4 py-6 text-sm leading-6 text-slate-500">
                 暂无真实随访路径实例。治疗摘要纳入路径后，会在这里展示客户随访旅程。
               </div>

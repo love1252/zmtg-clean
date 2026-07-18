@@ -2204,6 +2204,30 @@ describe('机构业务页面壳', () => {
     expect(await screen.findByText(visibleMessage)).toBeInTheDocument();
   });
 
+  it('路径实例列表 503 显示 unavailable，且不把未知值显示为零或空列表', async () => {
+    mockInstitutionFetch({
+      '/api/institution/followups': [jsonResponse({ records: [] })],
+      '/api/institution/followup-paths/enrollments': [
+        jsonResponse(
+          {
+            code: 'follow_up_path_enrollment_list_capability_disabled',
+            error: '随访路径实例列表能力暂未启用',
+          },
+          { status: 503 },
+        ),
+      ],
+    });
+
+    render(<SmartFollowUpShell />);
+
+    expect(await screen.findByText('数据服务暂时不可用，请稍后刷新或切换演示备份')).toBeInTheDocument();
+    expect(screen.getByText('当前 active：--')).toBeInTheDocument();
+    expect(screen.queryByText('当前 active：0')).not.toBeInTheDocument();
+    expect(screen.queryByText('暂无路径实例')).not.toBeInTheDocument();
+    expect(screen.queryByText('暂无真实随访路径实例。治疗摘要纳入路径后，会在这里展示客户随访旅程。')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('followup-path-enrollment-card')).not.toBeInTheDocument();
+  });
+
   it('智能随访只展示当前状态允许的流转按钮', async () => {
     mockInstitutionFetch({
       '/api/institution/followups': [jsonResponse({ records: [followUpRecord] })],
