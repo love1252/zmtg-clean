@@ -48,6 +48,10 @@ type InstitutionKnowledgeIndexingJobRecord = {
   updatedAt: string;
 };
 
+type IndexingCapabilityStatus = 'checking' | 'ready' | 'disabled';
+
+const indexingCapabilityDisabledMessage = '机构知识库索引任务暂未启用。';
+
 type InstitutionKnowledgeChunkRecord = {
   chunkId: string;
   chunkIndex: number;
@@ -337,7 +341,8 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [uploadMessage, setUploadMessage] = useState(uploadHelpMessage(null));
   const [uploadedKnowledgeId, setUploadedKnowledgeId] = useState<string | null>(null);
   const [indexingJobs, setIndexingJobs] = useState<InstitutionKnowledgeIndexingJobRecord[]>([]);
-  const [indexingJobMessage, setIndexingJobMessage] = useState('点击刷新查看最近索引任务');
+  const [indexingCapabilityStatus, setIndexingCapabilityStatus] = useState<IndexingCapabilityStatus>('checking');
+  const [indexingJobMessage, setIndexingJobMessage] = useState('正在确认索引任务能力状态...');
   const [isIndexingJobLoading, setIsIndexingJobLoading] = useState(false);
   const [pageInfo, setPageInfo] = useState<InstitutionKnowledgeListResponse['pageInfo']>({
     page: 1,
@@ -377,6 +382,7 @@ export function InstitutionKnowledgeReadonlyShell() {
   const ragQuotaReason = quotaUnavailableReason(knowledgeRagQuotaItem, '知识库问答额度暂不可用');
   const isIndexRebuildQuotaUnavailable = isQuotaUnavailable(knowledgeIndexRebuildQuotaItem);
   const indexRebuildQuotaReason = quotaUnavailableReason(knowledgeIndexRebuildQuotaItem, '索引重建额度暂不可用');
+  const indexingCapabilityAvailable = indexingCapabilityStatus === 'ready';
 
   useEffect(() => {
     let isActive = true;
@@ -663,7 +669,9 @@ export function InstitutionKnowledgeReadonlyShell() {
 
   async function loadIndexingJobs() {
     setIsIndexingJobLoading(true);
-    setIndexingJobMessage('正在读取索引任务...');
+    setIndexingCapabilityStatus('checking');
+    setIndexingJobs([]);
+    setIndexingJobMessage('正在确认索引任务能力状态...');
     try {
       const response = await fetch('/api/institution/knowledge-management/indexing-jobs?limit=10', {
         cache: 'no-store',
@@ -671,22 +679,29 @@ export function InstitutionKnowledgeReadonlyShell() {
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload || !Array.isArray(payload.records)) {
         setIndexingJobs([]);
-        setIndexingJobMessage('索引任务暂时不可用');
+        setIndexingCapabilityStatus('disabled');
+        setIndexingJobMessage(indexingCapabilityDisabledMessage);
         return;
       }
 
       const records = payload.records as InstitutionKnowledgeIndexingJobRecord[];
       setIndexingJobs(records);
+      setIndexingCapabilityStatus('ready');
       setIndexingJobMessage(records.length > 0 ? `已读取 ${records.length} 条最近任务` : '暂无索引任务');
     } catch {
       setIndexingJobs([]);
-      setIndexingJobMessage('索引任务暂时不可用');
+      setIndexingCapabilityStatus('disabled');
+      setIndexingJobMessage(indexingCapabilityDisabledMessage);
     } finally {
       setIsIndexingJobLoading(false);
     }
   }
 
   async function createKnowledgeRebuildJob(knowledgeId: string) {
+    if (!indexingCapabilityAvailable) {
+      setIndexingJobMessage(indexingCapabilityDisabledMessage);
+      return;
+    }
     if (isIndexRebuildQuotaUnavailable) {
       setIndexingJobMessage(indexRebuildQuotaReason ?? '索引重建额度暂不可用');
       return;
@@ -712,6 +727,10 @@ export function InstitutionKnowledgeReadonlyShell() {
   }
 
   async function cancelIndexingJob(jobId: string) {
+    if (!indexingCapabilityAvailable) {
+      setIndexingJobMessage(indexingCapabilityDisabledMessage);
+      return;
+    }
     setIndexingJobMessage('正在取消索引任务...');
     try {
       const response = await fetch(`/api/institution/knowledge-management/indexing-jobs/${encodeURIComponent(jobId)}/cancel`, {
@@ -730,6 +749,10 @@ export function InstitutionKnowledgeReadonlyShell() {
   }
 
   async function createOcrFileJob(knowledgeId: string, file: InstitutionKnowledgeFileRecord) {
+    if (!indexingCapabilityAvailable) {
+      setFileMessage(indexingCapabilityDisabledMessage);
+      return;
+    }
     if (isOcrQuotaUnavailable) {
       setFileMessage(ocrQuotaReason ?? 'OCR 任务额度暂不可用');
       return;
@@ -756,6 +779,10 @@ export function InstitutionKnowledgeReadonlyShell() {
   }
 
   async function rebuildFileEmbeddings(knowledgeId: string, file: InstitutionKnowledgeFileRecord) {
+    if (!indexingCapabilityAvailable) {
+      setFileMessage(indexingCapabilityDisabledMessage);
+      return;
+    }
     if (isEmbeddingQuotaUnavailable) {
       setFileMessage(embeddingQuotaReason ?? '向量任务额度暂不可用');
       return;
@@ -1076,7 +1103,9 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div>
             <h2 className="text-lg font-semibold tracking-normal text-slate-950">索引任务</h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-              当前是 DB-backed minimal job flow：请求内创建并执行任务记录，用于解析文件、执行 OCR-ready 文件、生成向量索引和重建索引；重建知识索引会重新解析当前知识文件，扫描 PDF / 图片文字按 OCR 状态处理后再生成向量；不接外部云 OCR，不做生产级队列、worker 或 cron，也不是训练系统。
+              {indexingCapabilityAvailable
+                ? '当前索引任务仅展示已确认的机构范围任务状态。'
+                : '索引任务未获得生产放行，当前不展示任务数据或执行入口。'}
             </p>
           </div>
           <button
@@ -1093,7 +1122,11 @@ export function InstitutionKnowledgeReadonlyShell() {
           {indexingJobMessage}
         </div>
         <div className="mt-3 grid gap-2 lg:grid-cols-2">
-          {indexingJobs.length === 0 ? (
+          {!indexingCapabilityAvailable ? (
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500">
+              {indexingCapabilityStatus === 'checking' ? '正在确认索引任务能力状态。' : '索引任务当前不可用，未展示任务数据。'}
+            </div>
+          ) : indexingJobs.length === 0 ? (
             <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500">
               暂无索引任务
             </div>
@@ -1128,7 +1161,7 @@ export function InstitutionKnowledgeReadonlyShell() {
                       {job.safeMessage ?? job.failureReasonCode}
                     </div>
                   ) : null}
-                  {job.status === 'pending' ? (
+                  {indexingCapabilityAvailable && job.status === 'pending' ? (
                     <button
                       type="button"
                       onClick={() => cancelIndexingJob(job.jobId)}
@@ -1889,16 +1922,18 @@ export function InstitutionKnowledgeReadonlyShell() {
                     <FileText className="h-4 w-4" />
                     查看文件
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => createKnowledgeRebuildJob(item.knowledgeId)}
-                    disabled={isIndexRebuildQuotaUnavailable}
-                    title={isIndexRebuildQuotaUnavailable ? (indexRebuildQuotaReason ?? '索引重建额度暂不可用') : undefined}
-                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    重建当前知识索引
-                  </button>
+                  {indexingCapabilityAvailable ? (
+                    <button
+                      type="button"
+                      onClick={() => createKnowledgeRebuildJob(item.knowledgeId)}
+                      disabled={isIndexRebuildQuotaUnavailable}
+                      title={isIndexRebuildQuotaUnavailable ? (indexRebuildQuotaReason ?? '索引重建额度暂不可用') : undefined}
+                      className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      重建当前知识索引
+                    </button>
+                  ) : null}
                 </div>
 
                 {expandedKnowledgeId === item.knowledgeId ? (
@@ -1950,26 +1985,30 @@ export function InstitutionKnowledgeReadonlyShell() {
                               <FileText className="h-4 w-4" />
                               查看解析片段
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => createOcrFileJob(item.knowledgeId, file)}
-                              disabled={isOcrQuotaUnavailable}
-                              title={isOcrQuotaUnavailable ? (ocrQuotaReason ?? 'OCR 任务额度暂不可用') : undefined}
-                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-700 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                              执行 OCR / 重建 OCR 索引
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => rebuildFileEmbeddings(item.knowledgeId, file)}
-                              disabled={isEmbeddingQuotaUnavailable}
-                              title={isEmbeddingQuotaUnavailable ? (embeddingQuotaReason ?? '向量任务额度暂不可用') : undefined}
-                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                              生成 / 重建向量索引
-                            </button>
+                            {indexingCapabilityAvailable ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => createOcrFileJob(item.knowledgeId, file)}
+                                  disabled={isOcrQuotaUnavailable}
+                                  title={isOcrQuotaUnavailable ? (ocrQuotaReason ?? 'OCR 任务额度暂不可用') : undefined}
+                                  className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-700 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <RefreshCw className="h-4 w-4" />
+                                  执行 OCR / 重建 OCR 索引
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => rebuildFileEmbeddings(item.knowledgeId, file)}
+                                  disabled={isEmbeddingQuotaUnavailable}
+                                  title={isEmbeddingQuotaUnavailable ? (embeddingQuotaReason ?? '向量任务额度暂不可用') : undefined}
+                                  className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <RefreshCw className="h-4 w-4" />
+                                  生成 / 重建向量索引
+                                </button>
+                              </>
+                            ) : null}
                             <button
                               type="button"
                               onClick={() => downloadKnowledgeFile(item.knowledgeId, file)}
