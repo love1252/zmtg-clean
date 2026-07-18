@@ -111,6 +111,21 @@ function lifecycleStatusClassName(status: WorkbenchLifecycleItemViewModel['statu
   }
 }
 
+function lifecycleAccessibleName(item: WorkbenchLifecycleItemViewModel): string {
+  const prefix = `查看${item.label}客户`;
+
+  switch (item.status) {
+    case 'ready':
+      return `${prefix}，数据可用，${item.count}位`;
+    case 'empty':
+      return `${prefix}，已确认暂无客户`;
+    case 'stale':
+      return `${prefix}，数据已过期，截至 ${item.observedAt ?? '--'}`;
+    case 'unavailable':
+      return `${prefix}，数据未知`;
+  }
+}
+
 function CareCard({ card }: Readonly<{ card: WorkbenchCareCardViewModel }>) {
   const Icon = careCardIcons[card.key];
   const content = (
@@ -233,7 +248,7 @@ function LifecycleItem({ item }: Readonly<{ item: WorkbenchLifecycleItemViewMode
         content
       ) : (
         <a
-          aria-label={`查看${item.label}客户`}
+          aria-label={lifecycleAccessibleName(item)}
           href={item.canonicalHref}
           className="group block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
         >

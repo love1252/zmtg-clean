@@ -80,16 +80,22 @@ describe('InstitutionWorkbenchShell customer lifecycle status', () => {
     expect(within(lifecycle).getByText('数据未知')).toHaveClass('text-slate-600');
     expect(within(lifecycle).getAllByText('--')).toHaveLength(2);
     expect(within(lifecycle).getByText('截至 2026-07-18T01:00:00.000Z')).toBeInTheDocument();
-    expect(within(lifecycle).getByRole('link', { name: '查看咨询中客户' })).toHaveAttribute(
+    expect(
+      within(lifecycle).getByRole('link', { name: '查看咨询中客户，已确认暂无客户' }),
+    ).toHaveAttribute(
       'href',
       '/hospital/customers?lifecycle=consulting',
     );
-    expect(within(lifecycle).getByRole('link', { name: '查看已预约客户' })).toHaveAttribute(
+    expect(
+      within(lifecycle).getByRole('link', {
+        name: '查看已预约客户，数据已过期，截至 2026-07-18T01:00:00.000Z',
+      }),
+    ).toHaveAttribute(
       'href',
       '/hospital/customers?lifecycle=scheduled',
     );
-    expect(within(lifecycle).queryByRole('link', { name: '查看术后关怀客户' })).not.toBeInTheDocument();
-    expect(within(lifecycle).queryByRole('link', { name: '查看复购窗口客户' })).not.toBeInTheDocument();
+    expect(within(lifecycle).queryByRole('link', { name: /术后关怀/ })).not.toBeInTheDocument();
+    expect(within(lifecycle).queryByRole('link', { name: /复购窗口/ })).not.toBeInTheDocument();
   });
 
   it('将 ready 与 empty 区分为当前可用和权威确认空态', () => {
@@ -133,6 +139,18 @@ describe('InstitutionWorkbenchShell customer lifecycle status', () => {
     expect(within(lifecycle).getAllByText('数据可用')).toHaveLength(3);
     expect(within(lifecycle).getByText('暂无客户')).toBeInTheDocument();
     expect(within(lifecycle).getByText('0')).toBeInTheDocument();
+    expect(
+      within(lifecycle).getByRole('link', { name: '查看咨询中客户，数据可用，2位' }),
+    ).toHaveAttribute('href', '/hospital/customers?lifecycle=consulting');
+    expect(
+      within(lifecycle).getByRole('link', { name: '查看已预约客户，已确认暂无客户' }),
+    ).toHaveAttribute('href', '/hospital/customers?lifecycle=scheduled');
+    expect(
+      within(lifecycle).getByRole('link', { name: '查看术后关怀客户，数据可用，1位' }),
+    ).toHaveAttribute('href', '/hospital/customers?lifecycle=post_care');
+    expect(
+      within(lifecycle).getByRole('link', { name: '查看复购窗口客户，数据可用，4位' }),
+    ).toHaveAttribute('href', '/hospital/customers?lifecycle=repurchase_window');
   });
 
   it.each(['denied', 'disabled'] as const)('在 %s 被投影阻断时不输出客户旅程业务项', () => {
