@@ -1,6 +1,11 @@
-import { createWeComCustomerMappingCandidatesGetHandler } from './handler';
-import { weComCustomerMappingReviewActionMockRuntime } from '@/modules/institution/server/wecom-customer-mapping-review-action-default-runtime';
+import { NextResponse } from 'next/server';
 
-export const GET = createWeComCustomerMappingCandidatesGetHandler({
-  snapshotReader: weComCustomerMappingReviewActionMockRuntime,
-});
+const noStoreHeaders = { 'cache-control': 'no-store' } as const;
+const capabilityDisabledPayload = Object.freeze({ code: 'capability_disabled' });
+
+export function GET(_request: Request) {
+  return NextResponse.json(capabilityDisabledPayload, {
+    status: 503,
+    headers: noStoreHeaders,
+  });
+}
