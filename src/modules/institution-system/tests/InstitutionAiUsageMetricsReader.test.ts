@@ -11,11 +11,6 @@ const terminalStatusPolicy = {
   failed: 'failure',
   rejected: 'rejection',
 } as const;
-const serviceKeyMappings = [
-  { serviceCategory: 'conversation', serviceAction: 'assist', serviceKey: 'conversation_ai' },
-  { serviceCategory: 'knowledge', serviceAction: 'answer', serviceKey: 'knowledge_qa' },
-  { serviceCategory: 'analytics', serviceAction: 'report', serviceKey: 'analytics_report' },
-] as const;
 const timeWindow = { startInclusiveEpochMs: 1_000, endExclusiveEpochMs: 5_000 } as const;
 const maximumRecords = 10_000;
 
@@ -28,14 +23,14 @@ function sourceWithRows(
 describe('Institution AI usage metrics reader', () => {
   it('reads only scoped records and returns the strict low-sensitivity metrics projection', async () => {
     const source = sourceWithRows([
-      { tenantId: 'tenant-a', institutionId: 'institution-a', status: 'succeeded', serviceCategory: 'conversation', serviceAction: 'assist', createdAt: new Date(1_000) },
-      { tenantId: 'tenant-a', institutionId: 'institution-a', status: 'failed', serviceCategory: 'knowledge', serviceAction: 'answer', createdAt: new Date(2_000) },
-      { tenantId: 'tenant-a', institutionId: 'institution-a', status: 'rejected', serviceCategory: 'analytics', serviceAction: 'report', createdAt: new Date(3_000) },
-      { tenantId: 'tenant-a', institutionId: 'institution-a', status: 'unknown_status', serviceCategory: 'conversation', serviceAction: 'assist', createdAt: new Date(4_000) },
+      { tenantId: 'tenant-a', institutionId: 'institution-a', status: 'succeeded', serviceCategory: 'ai_qa', serviceAction: 'direct_answer', createdAt: new Date(1_000) },
+      { tenantId: 'tenant-a', institutionId: 'institution-a', status: 'failed', serviceCategory: 'knowledge_base_qa', serviceAction: 'rag_answer', createdAt: new Date(2_000) },
+      { tenantId: 'tenant-a', institutionId: 'institution-a', status: 'rejected', serviceCategory: 'ai_qa', serviceAction: 'quota_rejected', createdAt: new Date(3_000) },
+      { tenantId: 'tenant-a', institutionId: 'institution-a', status: 'unknown_status', serviceCategory: 'ai_qa', serviceAction: 'direct_answer', createdAt: new Date(4_000) },
     ]);
     const reader = createInstitutionAiUsageMetricsReader(source);
 
-    const result = await reader.read({ scope, terminalStatusPolicy, serviceKeyMappings, timeWindow });
+    const result = await reader.read({ scope, terminalStatusPolicy, timeWindow });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('expected metrics');
@@ -51,8 +46,7 @@ describe('Institution AI usage metrics reader', () => {
         incompleteCount: 1,
         successRate: { numerator: 1, denominator: 3, value: 1 / 3 },
         byServiceKey: [
-          { serviceKey: 'analytics_report', totalCallCount: 1, serviceUnits: null, failureCount: 0, rejectionCount: 1, incompleteCount: 0, successRate: { numerator: 0, denominator: 1, value: 0 } },
-          { serviceKey: 'conversation_ai', totalCallCount: 2, serviceUnits: null, failureCount: 0, rejectionCount: 0, incompleteCount: 1, successRate: { numerator: 1, denominator: 1, value: 1 } },
+          { serviceKey: 'conversation_ai', totalCallCount: 3, serviceUnits: null, failureCount: 0, rejectionCount: 1, incompleteCount: 1, successRate: { numerator: 1, denominator: 2, value: 1 / 2 } },
           { serviceKey: 'knowledge_qa', totalCallCount: 1, serviceUnits: null, failureCount: 1, rejectionCount: 0, incompleteCount: 0, successRate: { numerator: 0, denominator: 1, value: 0 } },
         ],
       },
@@ -65,31 +59,48 @@ describe('Institution AI usage metrics reader', () => {
 
   it('fails closed when a persistent record cannot map to an approved business service key', async () => {
     const reader = createInstitutionAiUsageMetricsReader(sourceWithRows([
-      { tenantId: 'tenant-a', institutionId: 'institution-a', status: 'succeeded', serviceCategory: 'conversation', serviceAction: 'unapproved', createdAt: new Date(1_000) },
+      { tenantId: 'tenant-a', institutionId: 'institution-a', status: 'succeeded', serviceCategory: 'openai_gpt_5', serviceAction: 'provider_cost', createdAt: new Date(1_000) },
     ]));
 
-    await expect(reader.read({ scope, terminalStatusPolicy, serviceKeyMappings, timeWindow }))
+    await expect(reader.read({ scope, terminalStatusPolicy, timeWindow }))
       .resolves.toEqual({ ok: false, code: 'invalid_service_key' });
+  });
+
+  it('rejects a caller-provided mapping instead of letting it expand the owner policy', async () => {
+    const source = sourceWithRows([]);
+    const reader = createInstitutionAiUsageMetricsReader(source);
+
+    await expect(reader.read({
+      scope,
+      terminalStatusPolicy,
+      timeWindow,
+      serviceKeyMappings: [{
+        serviceCategory: 'openai_gpt_5',
+        serviceAction: 'provider_cost',
+        serviceKey: 'provider_cost',
+      }],
+    } as never)).resolves.toEqual({ ok: false, code: 'invalid_input' });
+    expect(source.listInstitutionUsageMetricRecords).not.toHaveBeenCalled();
   });
 
   it('fails closed when the record source returns a cross-institution row or is unavailable', async () => {
     const mismatchReader = createInstitutionAiUsageMetricsReader(sourceWithRows([
-      { tenantId: 'tenant-a', institutionId: 'institution-b', status: 'succeeded', serviceCategory: 'conversation', serviceAction: 'assist', createdAt: new Date(1_000) },
+      { tenantId: 'tenant-a', institutionId: 'institution-b', status: 'succeeded', serviceCategory: 'ai_qa', serviceAction: 'direct_answer', createdAt: new Date(1_000) },
     ]));
     const unavailableReader = createInstitutionAiUsageMetricsReader({
       listInstitutionUsageMetricRecords: vi.fn().mockRejectedValue(new Error('database unavailable')),
     });
 
-    await expect(mismatchReader.read({ scope, terminalStatusPolicy, serviceKeyMappings, timeWindow }))
+    await expect(mismatchReader.read({ scope, terminalStatusPolicy, timeWindow }))
       .resolves.toEqual({ ok: false, code: 'scope_mismatch' });
-    await expect(unavailableReader.read({ scope, terminalStatusPolicy, serviceKeyMappings, timeWindow }))
+    await expect(unavailableReader.read({ scope, terminalStatusPolicy, timeWindow }))
       .resolves.toEqual({ ok: false, code: 'source_unavailable' });
   });
 
   it('accepts the fixed maximum record count but rejects the MAX + 1 sentinel without returning partial metrics', async () => {
     const row = {
       tenantId: 'tenant-a', institutionId: 'institution-a', status: 'succeeded',
-      serviceCategory: 'conversation', serviceAction: 'assist', createdAt: new Date(1_000),
+      serviceCategory: 'ai_qa', serviceAction: 'direct_answer', createdAt: new Date(1_000),
     };
     const maximumReader = createInstitutionAiUsageMetricsReader(sourceWithRows(
       Array.from({ length: maximumRecords }, () => row),
@@ -98,8 +109,8 @@ describe('Institution AI usage metrics reader', () => {
       Array.from({ length: maximumRecords + 1 }, () => row),
     ));
 
-    const maximumResult = await maximumReader.read({ scope, terminalStatusPolicy, serviceKeyMappings, timeWindow });
-    const sentinelResult = await sentinelReader.read({ scope, terminalStatusPolicy, serviceKeyMappings, timeWindow });
+    const maximumResult = await maximumReader.read({ scope, terminalStatusPolicy, timeWindow });
+    const sentinelResult = await sentinelReader.read({ scope, terminalStatusPolicy, timeWindow });
 
     expect(maximumResult).toEqual(expect.objectContaining({
       ok: true,
@@ -117,7 +128,7 @@ describe('Institution AI usage metrics reader', () => {
         mutableScope.institutionId = 'institution-b';
         return [{
           tenantId: 'tenant-a', institutionId: 'institution-a', status: 'succeeded',
-          serviceCategory: 'conversation', serviceAction: 'assist', createdAt: new Date(1_000),
+          serviceCategory: 'ai_qa', serviceAction: 'direct_answer', createdAt: new Date(1_000),
         }];
       }),
     } satisfies InstitutionAiUsageMetricsRecordSource;
@@ -125,7 +136,6 @@ describe('Institution AI usage metrics reader', () => {
     const result = await createInstitutionAiUsageMetricsReader(source).read({
       scope: mutableScope,
       terminalStatusPolicy,
-      serviceKeyMappings,
       timeWindow,
     });
 
@@ -158,7 +168,7 @@ describe('Institution AI usage metrics reader', () => {
         mutableTimeWindow.endExclusiveEpochMs = 1_000;
         return [{
           tenantId: 'tenant-a', institutionId: 'institution-a', status: 'succeeded',
-          serviceCategory: 'conversation', serviceAction: 'assist', createdAt: new Date(1_000),
+          serviceCategory: 'ai_qa', serviceAction: 'direct_answer', createdAt: new Date(1_000),
         }];
       }),
     } satisfies InstitutionAiUsageMetricsRecordSource;
@@ -166,7 +176,6 @@ describe('Institution AI usage metrics reader', () => {
     const result = await createInstitutionAiUsageMetricsReader(source).read({
       scope,
       terminalStatusPolicy: mutablePolicy,
-      serviceKeyMappings,
       timeWindow: mutableTimeWindow,
     });
 
@@ -190,7 +199,7 @@ describe('Institution AI usage metrics reader', () => {
     });
     const source = sourceWithRows([]);
     const reader = createInstitutionAiUsageMetricsReader(source);
-    const common = { terminalStatusPolicy, serviceKeyMappings, timeWindow };
+    const common = { terminalStatusPolicy, timeWindow };
 
     await expect(reader.read({ ...common, scope: accessorScope as typeof scope }))
       .resolves.toEqual({ ok: false, code: 'invalid_input' });
@@ -226,7 +235,7 @@ describe('Institution AI usage metrics reader', () => {
   it('fails closed for malformed, sparse, accessor, symbol, or proxy source rows without leaking source errors', async () => {
     const validRow = {
       tenantId: 'tenant-a', institutionId: 'institution-a', status: 'succeeded',
-      serviceCategory: 'conversation', serviceAction: 'assist', createdAt: new Date(1_000),
+      serviceCategory: 'ai_qa', serviceAction: 'direct_answer', createdAt: new Date(1_000),
     };
     const accessorRow = { ...validRow } as Record<string, unknown>;
     Object.defineProperty(accessorRow, 'status', {
@@ -256,7 +265,7 @@ describe('Institution AI usage metrics reader', () => {
       const reader = createInstitutionAiUsageMetricsReader({
         listInstitutionUsageMetricRecords: vi.fn().mockResolvedValue(rows),
       } as InstitutionAiUsageMetricsRecordSource);
-      await expect(reader.read({ scope, terminalStatusPolicy, serviceKeyMappings, timeWindow }))
+      await expect(reader.read({ scope, terminalStatusPolicy, timeWindow }))
         .resolves.toEqual({ ok: false, code: 'source_unavailable' });
     }
 
@@ -264,7 +273,7 @@ describe('Institution AI usage metrics reader', () => {
       enumerable: true,
       get() { throw new Error('source failure'); },
     }) as InstitutionAiUsageMetricsRecordSource);
-    await expect(reader.read({ scope, terminalStatusPolicy, serviceKeyMappings, timeWindow }))
+    await expect(reader.read({ scope, terminalStatusPolicy, timeWindow }))
       .resolves.toEqual({ ok: false, code: 'source_unavailable' });
   });
 });

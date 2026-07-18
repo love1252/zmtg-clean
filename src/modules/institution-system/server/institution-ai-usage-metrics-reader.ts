@@ -14,6 +14,7 @@ import {
   createAiUsageServiceKeyPolicySnapshot,
   type AiUsageServiceKeyPolicy,
 } from '@/modules/institution-system/domain/ai-usage-service-keys';
+import { getInstitutionAiUsageServiceKeyPolicySnapshot } from '@/modules/institution-system/server/institution-ai-usage-service-key-policy';
 import {
   createAiUsageTimeWindowSnapshot,
   type AiUsageTimeWindow,
@@ -37,12 +38,6 @@ export type InstitutionAiUsageMetricsRecordSource = Readonly<{
   }>[]>;
 }>;
 
-export type InstitutionAiUsageServiceKeyMapping = Readonly<{
-  serviceCategory: string;
-  serviceAction: string;
-  serviceKey: string;
-}>;
-
 type InstitutionAiUsageMetricsReadFailureCode =
   | 'source_unavailable'
   | 'too_many_records'
@@ -53,6 +48,7 @@ type InstitutionAiUsageMetricsReadFailureCode =
   | 'invalid_service_key_policy'
   | 'invalid_metrics_snapshot'
   | 'invalid_time_window'
+  | 'owner_policy_unavailable'
   | 'scope_mismatch'
   | 'invalid_occurred_at'
   | 'record_outside_time_window';
@@ -66,7 +62,6 @@ type ExactPlainSnapshot = Readonly<Record<string, unknown>>;
 type ReaderInputSnapshot = Readonly<{
   scope: InstitutionAiUsageScope;
   terminalStatusPolicy: AiUsageTerminalStatusPolicy;
-  serviceKeyMappings: readonly InstitutionAiUsageServiceKeyMapping[];
   timeWindow: AiUsageTimeWindow;
 }>;
 
@@ -82,12 +77,10 @@ type UsageRecordSnapshot = Readonly<{
 const readerInputKeys = [
   'scope',
   'terminalStatusPolicy',
-  'serviceKeyMappings',
   'timeWindow',
 ] as const;
 const scopeKeys = ['tenantId', 'institutionId'] as const;
 const timeWindowKeys = ['startInclusiveEpochMs', 'endExclusiveEpochMs'] as const;
-const serviceKeyMappingKeys = ['serviceCategory', 'serviceAction', 'serviceKey'] as const;
 const usageRecordKeys = [
   'tenantId',
   'institutionId',
@@ -240,44 +233,16 @@ function snapshotTimeWindow(value: unknown): AiUsageTimeWindow | null {
   });
 }
 
-function snapshotServiceKeyMappings(
-  value: unknown,
-): readonly InstitutionAiUsageServiceKeyMapping[] | null {
-  const raw = snapshotExactDenseArray(value);
-  if (!raw || raw === tooManySourceRows) return null;
-
-  const snapshot: InstitutionAiUsageServiceKeyMapping[] = [];
-  for (const item of raw) {
-    const mapping = snapshotExactPlainObject(item, serviceKeyMappingKeys);
-    if (
-      !mapping
-      || typeof mapping.serviceCategory !== 'string'
-      || mapping.serviceCategory.length === 0
-      || typeof mapping.serviceAction !== 'string'
-      || mapping.serviceAction.length === 0
-      || typeof mapping.serviceKey !== 'string'
-      || mapping.serviceKey.length === 0
-    ) return null;
-    snapshot.push(Object.freeze({
-      serviceCategory: mapping.serviceCategory,
-      serviceAction: mapping.serviceAction,
-      serviceKey: mapping.serviceKey,
-    }));
-  }
-  return Object.freeze(snapshot);
-}
-
 function snapshotReaderInput(value: unknown): ReaderInputSnapshot | null {
   const raw = snapshotExactPlainObject(value, readerInputKeys);
   if (!raw) return null;
 
   const scope = snapshotScope(raw.scope);
   const terminalStatusPolicy = snapshotTerminalStatusPolicy(raw.terminalStatusPolicy);
-  const serviceKeyMappings = snapshotServiceKeyMappings(raw.serviceKeyMappings);
   const timeWindow = snapshotTimeWindow(raw.timeWindow);
-  if (!scope || !terminalStatusPolicy || !serviceKeyMappings || !timeWindow) return null;
+  if (!scope || !terminalStatusPolicy || !timeWindow) return null;
 
-  return Object.freeze({ scope, terminalStatusPolicy, serviceKeyMappings, timeWindow });
+  return Object.freeze({ scope, terminalStatusPolicy, timeWindow });
 }
 
 function snapshotOccurredAtEpochMs(value: unknown): number | null {
@@ -332,28 +297,6 @@ function snapshotSourceRows(
     : Object.freeze(snapshot);
 }
 
-function createServiceKeyResolver(mappings: readonly InstitutionAiUsageServiceKeyMapping[]): Readonly<{
-  resolve: (serviceCategory: string | null, serviceAction: string | null) => string | null;
-  serviceKeyPolicy: readonly string[];
-}> | null {
-  const mapping = new Map<string, string>();
-  const serviceKeyPolicy: string[] = [];
-  for (const item of mappings) {
-    const key = `${item.serviceCategory}\u0000${item.serviceAction}`;
-    if (mapping.has(key)) return null;
-    mapping.set(key, item.serviceKey);
-    serviceKeyPolicy.push(item.serviceKey);
-  }
-  return Object.freeze({
-    resolve: (serviceCategory, serviceAction) => (
-      typeof serviceCategory === 'string' && typeof serviceAction === 'string'
-        ? mapping.get(`${serviceCategory}\u0000${serviceAction}`) ?? null
-        : null
-    ),
-    serviceKeyPolicy: Object.freeze(serviceKeyPolicy),
-  });
-}
-
 function failure(code: InstitutionAiUsageMetricsReadFailureCode): InstitutionAiUsageMetricsReadResult {
   return Object.freeze({ ok: false, code });
 }
@@ -369,21 +312,20 @@ export function createInstitutionAiUsageMetricsReader(
     async read(input: Readonly<{
       scope: InstitutionAiUsageScope;
       terminalStatusPolicy: AiUsageTerminalStatusPolicy;
-      serviceKeyMappings: readonly InstitutionAiUsageServiceKeyMapping[];
       timeWindow: AiUsageTimeWindow;
     }>): Promise<InstitutionAiUsageMetricsReadResult> {
       try {
         const inputSnapshot = snapshotReaderInput(input);
         if (!inputSnapshot) return failure('invalid_input');
+        const ownerPolicy = getInstitutionAiUsageServiceKeyPolicySnapshot();
+        if (!ownerPolicy.ok) return failure(ownerPolicy.code);
 
         const terminalStatus = createAiUsageOutcomeClassifier(inputSnapshot.terminalStatusPolicy);
         if (!terminalStatus.ok) return failure(terminalStatus.code);
         const timeWindow = createAiUsageTimeWindowSnapshot(inputSnapshot.timeWindow);
         if (!timeWindow.ok) return failure(timeWindow.code);
-        const serviceKeyResolver = createServiceKeyResolver(inputSnapshot.serviceKeyMappings);
-        if (!serviceKeyResolver) return failure('invalid_service_key');
         const serviceKeyPolicy = createAiUsageServiceKeyPolicySnapshot(
-          serviceKeyResolver.serviceKeyPolicy,
+          ownerPolicy.snapshot.allowedServiceKeys,
         );
         if (!serviceKeyPolicy.ok) return failure(serviceKeyPolicy.code);
 
@@ -410,7 +352,7 @@ export function createInstitutionAiUsageMetricsReader(
           occurredAtEpochMs: number | null;
         }>;
         for (const row of rows) {
-          const serviceKey = serviceKeyResolver.resolve(row.serviceCategory, row.serviceAction);
+          const serviceKey = ownerPolicy.snapshot.resolve(row.serviceCategory, row.serviceAction);
           if (!serviceKey) return failure('invalid_service_key');
           records.push(Object.freeze({
             tenantId: row.tenantId,
@@ -425,14 +367,14 @@ export function createInstitutionAiUsageMetricsReader(
           scope: inputSnapshot.scope,
           records: Object.freeze(records),
           terminalStatusPolicy: inputSnapshot.terminalStatusPolicy,
-          serviceKeyPolicy: serviceKeyResolver.serviceKeyPolicy as AiUsageServiceKeyPolicy,
+          serviceKeyPolicy: ownerPolicy.snapshot.allowedServiceKeys as AiUsageServiceKeyPolicy,
           timeWindow: inputSnapshot.timeWindow,
         });
         if (!result.ok) return failure(result.code);
 
         const metricsSnapshot = createAiUsageMetricsSnapshot({
           metrics: result.metrics,
-          serviceKeyPolicy: serviceKeyResolver.serviceKeyPolicy as AiUsageServiceKeyPolicy,
+          serviceKeyPolicy: ownerPolicy.snapshot.allowedServiceKeys as AiUsageServiceKeyPolicy,
         });
         return metricsSnapshot.ok
           ? success(metricsSnapshot.snapshot)
