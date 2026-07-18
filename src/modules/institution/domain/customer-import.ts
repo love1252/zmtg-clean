@@ -124,6 +124,55 @@ const allowedFieldSet = new Set<string>(lowSensitiveCustomerImportAllowedFields)
 const requiredFields = ['customerDisplayName'] as const;
 const dateFields = ['lastVisitDate', 'nextFollowUpDate'] as const;
 const refFields = ['externalCustomerRef', 'importedCustomerRef', 'ownerEmployeeRef'] as const;
+const previewInputKeys = [
+  'tenantId',
+  'institutionId',
+  'operatorRef',
+  'rows',
+  'existingCustomers',
+  'occurredAt',
+  'importBatchId',
+] as const;
+const existingCustomerKeys = [
+  'id',
+  'tenantId',
+  'institutionId',
+  'displayName',
+  'lifecycle',
+  'priority',
+  'ownerUserId',
+  'projectInterest',
+  'maskedPhone',
+  'maskedMedicalRecordNo',
+  'lastTouchSummary',
+  'nextAction',
+  'tags',
+  'gender',
+  'birthDate',
+  'referralSource',
+  'notes',
+] as const;
+const MAX_IMPORT_ROW_COUNT = 256;
+const MAX_EXISTING_CUSTOMER_COUNT = 10_000;
+const MAX_TAG_COUNT = 64;
+const MAX_IMPORT_TEXT_LENGTH = 4096;
+const MAX_IMPORT_METADATA_LENGTH = 256;
+
+type StrictDataRecord = Readonly<Record<string, unknown>>;
+type RejectedImportRow = Readonly<{
+  reasons: readonly Extract<CustomerImportFailureReason, 'unsupported_field' | 'sensitive_field_detected' | 'unsafe_payload'>[];
+  publicFields?: readonly 'institutionId'[];
+}>;
+type PreparedImportRow = StrictDataRecord | RejectedImportRow;
+type PreparedCustomerImportInput = Readonly<{
+  tenantId: string;
+  institutionId: string | null | undefined;
+  operatorRef: string;
+  rows: readonly PreparedImportRow[];
+  existingCustomers: readonly CustomerRecordSummary[];
+  occurredAt: string;
+  importBatchId: string | undefined;
+}>;
 
 const customerStageMap: Record<string, CustomerLifecycleStage> = {
   consulting: 'consulting',
@@ -164,8 +213,124 @@ export const customerImportBoundary: CustomerImportBoundary = {
   ],
 };
 
-function isPlainObject(input: unknown): input is Record<string, unknown> {
-  return Object.prototype.toString.call(input) === '[object Object]';
+function isCloneableData(value: object): boolean {
+  try {
+    const clone = globalThis.structuredClone;
+    if (typeof clone !== 'function') return false;
+    clone(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function snapshotDataRecord(
+  value: unknown,
+  allowedKeys: readonly string[],
+): StrictDataRecord | null {
+  try {
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      Array.isArray(value) ||
+      Object.getPrototypeOf(value) !== Object.prototype
+    ) {
+      return null;
+    }
+
+    const ownKeys = Reflect.ownKeys(value);
+    if (
+      ownKeys.length > allowedKeys.length ||
+      ownKeys.some((key) => typeof key !== 'string' || !allowedKeys.includes(key))
+    ) {
+      return null;
+    }
+
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const descriptorKeys = Reflect.ownKeys(descriptors);
+    if (
+      descriptorKeys.length !== ownKeys.length ||
+      descriptorKeys.some((key) => typeof key !== 'string') ||
+      ownKeys.some(
+        (key) => typeof key !== 'string' || !Object.prototype.hasOwnProperty.call(descriptors, key),
+      )
+    ) {
+      return null;
+    }
+
+    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+    for (const key of descriptorKeys as string[]) {
+      const descriptor = descriptors[key];
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) return null;
+      snapshot[key] = descriptor.value;
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
+}
+
+function snapshotDenseArray(value: unknown, maximumLength: number): readonly unknown[] | null {
+  try {
+    if (
+      !Array.isArray(value) ||
+      Object.getPrototypeOf(value) !== Array.prototype
+    ) {
+      return null;
+    }
+
+    const ownKeys = Reflect.ownKeys(value);
+    const descriptors = Object.getOwnPropertyDescriptors(value) as Record<string, PropertyDescriptor>;
+    const descriptorKeys = Reflect.ownKeys(descriptors);
+    const lengthDescriptor = descriptors.length;
+    if (
+      !lengthDescriptor ||
+      !('value' in lengthDescriptor) ||
+      typeof lengthDescriptor.value !== 'number' ||
+      !Number.isSafeInteger(lengthDescriptor.value) ||
+      lengthDescriptor.value < 0 ||
+      lengthDescriptor.value > maximumLength
+    ) {
+      return null;
+    }
+
+    const length = lengthDescriptor.value;
+    const expectedKeys = [
+      ...Array.from({ length }, (_, index) => String(index)),
+      'length',
+    ];
+    if (
+      ownKeys.length !== expectedKeys.length ||
+      descriptorKeys.length !== expectedKeys.length ||
+      ownKeys.some((key) => typeof key !== 'string') ||
+      descriptorKeys.some((key) => typeof key !== 'string') ||
+      expectedKeys.some(
+        (key) =>
+          !Object.prototype.hasOwnProperty.call(descriptors, key) ||
+          !ownKeys.includes(key),
+      )
+    ) {
+      return null;
+    }
+
+    const snapshot: unknown[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = descriptors[String(index)];
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) return null;
+      snapshot.push(descriptor.value);
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
+}
+
+function snapshotBoundedText(value: unknown, maximumLength = MAX_IMPORT_TEXT_LENGTH): string | null {
+  return typeof value === 'string' && value.length <= maximumLength ? value : null;
+}
+
+function hasRequiredSnapshotKeys(snapshot: StrictDataRecord, requiredKeys: readonly string[]): boolean {
+  return requiredKeys.every((key) => Object.prototype.hasOwnProperty.call(snapshot, key));
 }
 
 function normalizeText(value: unknown) {
@@ -194,7 +359,7 @@ function normalizeInstitutionId(institutionId: string | null | undefined) {
   return normalized.length > 0 ? normalized : 'default-institution';
 }
 
-function buildImportBatchId(input: CustomerImportPreviewInput) {
+function buildImportBatchId(input: Pick<PreparedCustomerImportInput, 'tenantId' | 'institutionId' | 'operatorRef' | 'occurredAt' | 'rows' | 'importBatchId'>) {
   if (input.importBatchId) return input.importBatchId;
   return `customer-import:${stableHash([
     input.tenantId,
@@ -253,6 +418,169 @@ function looksLikeRawExternalRef(field: string, value: string) {
   return /external_userid|corpId|corp_id|userid|user_id|真实|raw|wm[A-Za-z0-9_-]{12,}/iu.test(value);
 }
 
+function snapshotImportRow(value: unknown): PreparedImportRow {
+  let rowKeys: string[];
+  try {
+    const ownKeys = Reflect.ownKeys(value as object);
+    if (
+      ownKeys.length > lowSensitiveCustomerImportAllowedFields.length + 16 ||
+      ownKeys.some((key) => typeof key !== 'string')
+    ) {
+      return Object.freeze({ reasons: Object.freeze(['unsafe_payload'] as const) });
+    }
+    rowKeys = ownKeys as string[];
+  } catch {
+    return Object.freeze({ reasons: Object.freeze(['unsafe_payload'] as const) });
+  }
+
+  const snapshot = snapshotDataRecord(value, rowKeys);
+  if (!snapshot) {
+    return Object.freeze({ reasons: Object.freeze(['unsafe_payload'] as const) });
+  }
+
+  const extraReasons = new Set<RejectedImportRow['reasons'][number]>();
+  const publicFields: 'institutionId'[] = [];
+  for (const key of rowKeys) {
+    if (looksLikeSensitiveField(key)) {
+      extraReasons.add('sensitive_field_detected');
+    } else if (!allowedFieldSet.has(key)) {
+      extraReasons.add('unsupported_field');
+      if (key === 'institutionId') publicFields.push('institutionId');
+    }
+  }
+
+  for (const key of Reflect.ownKeys(snapshot)) {
+    if (typeof key !== 'string') return Object.freeze({ reasons: Object.freeze(['unsafe_payload'] as const) });
+    const valueAtKey = snapshot[key];
+    if (
+      valueAtKey !== null &&
+      valueAtKey !== undefined &&
+      snapshotBoundedText(valueAtKey) === null
+    ) {
+      return Object.freeze({ reasons: Object.freeze(['unsafe_payload'] as const) });
+    }
+  }
+
+  if (!isCloneableData(value as object)) {
+    return Object.freeze({ reasons: Object.freeze(['unsafe_payload'] as const) });
+  }
+
+  if (extraReasons.size > 0) {
+    return Object.freeze({
+      reasons: Object.freeze([...extraReasons]),
+      ...(publicFields.length > 0 ? { publicFields: Object.freeze(publicFields) } : {}),
+    });
+  }
+
+  return snapshot;
+}
+
+function snapshotExistingCustomer(value: unknown): CustomerRecordSummary | null {
+  const snapshot = snapshotDataRecord(value, existingCustomerKeys);
+  if (!snapshot || !hasRequiredSnapshotKeys(snapshot, existingCustomerKeys)) return null;
+
+  const tags = snapshotDenseArray(snapshot.tags, MAX_TAG_COUNT);
+  if (!tags || !tags.every((tag) => snapshotBoundedText(tag) !== null)) return null;
+
+  for (const key of existingCustomerKeys) {
+    if (key === 'tags' || key === 'institutionId') continue;
+    if (snapshotBoundedText(snapshot[key]) === null) return null;
+  }
+  if (snapshot.institutionId !== null && snapshotBoundedText(snapshot.institutionId) === null) {
+    return null;
+  }
+  if (!isCloneableData(value as object) || !isCloneableData(snapshot.tags as object)) return null;
+
+  return Object.freeze({
+    id: snapshot.id as string,
+    tenantId: snapshot.tenantId as string,
+    institutionId: snapshot.institutionId as string | null,
+    displayName: snapshot.displayName as string,
+    lifecycle: snapshot.lifecycle as CustomerLifecycleStage,
+    priority: snapshot.priority as CustomerPriority,
+    ownerUserId: snapshot.ownerUserId as string,
+    projectInterest: snapshot.projectInterest as string,
+    maskedPhone: snapshot.maskedPhone as string,
+    maskedMedicalRecordNo: snapshot.maskedMedicalRecordNo as string,
+    lastTouchSummary: snapshot.lastTouchSummary as string,
+    nextAction: snapshot.nextAction as string,
+    tags: tags as string[],
+    gender: snapshot.gender as string,
+    birthDate: snapshot.birthDate as string,
+    referralSource: snapshot.referralSource as string,
+    notes: snapshot.notes as string,
+  });
+}
+
+function snapshotCustomerImportInput(input: unknown): PreparedCustomerImportInput | null {
+  const snapshot = snapshotDataRecord(input, previewInputKeys);
+  if (
+    !snapshot ||
+    !hasRequiredSnapshotKeys(snapshot, ['tenantId', 'operatorRef', 'rows', 'occurredAt'])
+  ) {
+    return null;
+  }
+
+  const tenantId = snapshotBoundedText(snapshot.tenantId, MAX_IMPORT_METADATA_LENGTH);
+  const operatorRef = snapshotBoundedText(snapshot.operatorRef, MAX_IMPORT_METADATA_LENGTH);
+  const occurredAt = snapshotBoundedText(snapshot.occurredAt, MAX_IMPORT_METADATA_LENGTH);
+  if (!tenantId || !operatorRef || !occurredAt) return null;
+
+  const institutionId = snapshot.institutionId;
+  if (
+    institutionId !== undefined &&
+    institutionId !== null &&
+    snapshotBoundedText(institutionId, MAX_IMPORT_METADATA_LENGTH) === null
+  ) {
+    return null;
+  }
+  const importBatchId = snapshot.importBatchId;
+  if (
+    importBatchId !== undefined &&
+    snapshotBoundedText(importBatchId, MAX_IMPORT_METADATA_LENGTH) === null
+  ) {
+    return null;
+  }
+
+  const rawRows = snapshotDenseArray(snapshot.rows, MAX_IMPORT_ROW_COUNT);
+  if (!rawRows) return null;
+  const rows = rawRows.map(snapshotImportRow);
+  if (!isCloneableData(snapshot.rows as object)) return null;
+
+  const rawExistingCustomers = snapshot.existingCustomers === undefined
+    ? Object.freeze([])
+    : snapshotDenseArray(snapshot.existingCustomers, MAX_EXISTING_CUSTOMER_COUNT);
+  if (!rawExistingCustomers) return null;
+  const existingCustomers: CustomerRecordSummary[] = [];
+  for (const customer of rawExistingCustomers) {
+    const safeCustomer = snapshotExistingCustomer(customer);
+    if (!safeCustomer) return null;
+    existingCustomers.push(safeCustomer);
+  }
+  if (
+    snapshot.existingCustomers !== undefined &&
+    !isCloneableData(snapshot.existingCustomers as object)
+  ) {
+    return null;
+  }
+
+  if (!isCloneableData(input as object)) return null;
+
+  return Object.freeze({
+    tenantId,
+    institutionId: institutionId as string | null | undefined,
+    operatorRef,
+    rows: Object.freeze(rows),
+    existingCustomers: Object.freeze(existingCustomers),
+    occurredAt,
+    importBatchId: importBatchId as string | undefined,
+  });
+}
+
+function isRejectedImportRow(row: PreparedImportRow): row is RejectedImportRow {
+  return Object.prototype.hasOwnProperty.call(row, 'reasons');
+}
+
 function addIssue(
   issues: CustomerImportRowIssue[],
   issue: CustomerImportRowIssue,
@@ -306,21 +634,31 @@ function existingDuplicateKeys(input: {
 }
 
 function validateImportRow(input: {
-  row: unknown;
+  row: PreparedImportRow;
   rowNumber: number;
   seenKeys: Set<string>;
   existingKeys: Set<string>;
 }) : CustomerImportRow {
   const issues: CustomerImportRowIssue[] = [];
 
-  if (!isPlainObject(input.row)) {
+  if (isRejectedImportRow(input.row)) {
     return {
       rowNumber: input.rowNumber,
       status: 'skipped',
       customerDisplayName: null,
       importedCustomerRef: null,
       duplicateKey: null,
-      issues: [{ reason: 'unsafe_payload', message: '导入行必须是低敏 JSON object' }],
+      issues: input.row.reasons.map((reason) => ({
+        reason,
+        ...(reason === 'unsupported_field' && input.row.publicFields?.includes('institutionId')
+          ? { field: 'institutionId' }
+          : {}),
+        message: reason === 'sensitive_field_detected'
+          ? '导入行包含高敏字段，已阻断'
+          : reason === 'unsupported_field'
+            ? '导入行包含未批准字段，已阻断'
+            : '导入行格式不安全，已阻断',
+      })),
     };
   }
 
@@ -351,24 +689,21 @@ function validateImportRow(input: {
     if (!allowedFieldSet.has(key)) {
       addIssue(issues, {
         reason: 'unsupported_field',
-        field: key,
-        message: `字段 ${key} 不在低敏字段白名单内`,
+        message: '导入行包含未批准字段，已阻断',
       });
     }
 
     if (looksLikeUnsafePayload(value)) {
       addIssue(issues, {
         reason: 'unsafe_payload',
-        field: key,
-        message: `字段 ${key} 不允许携带嵌套 payload`,
+        message: '导入行包含不安全 payload，已阻断',
       });
     }
 
     if (valueText && (looksLikeSensitiveValue(valueText) || looksLikeRawExternalRef(key, valueText))) {
       addIssue(issues, {
         reason: 'sensitive_field_detected',
-        field: key,
-        message: `字段 ${key} 含疑似高敏内容，已阻断`,
+        message: '导入行包含疑似高敏内容，已阻断',
       });
     }
   }
@@ -412,9 +747,9 @@ function validateImportRow(input: {
   return {
     rowNumber: input.rowNumber,
     status: issues.length === 0 ? 'ready' : 'skipped',
-    customerDisplayName: compactText(row.customerDisplayName) || null,
-    importedCustomerRef: compactText(row.importedCustomerRef) || null,
-    duplicateKey,
+    customerDisplayName: issues.length === 0 ? compactText(row.customerDisplayName) || null : null,
+    importedCustomerRef: issues.length === 0 ? compactText(row.importedCustomerRef) || null : null,
+    duplicateKey: issues.length === 0 ? duplicateKey : null,
     issues,
   };
 }
@@ -422,9 +757,46 @@ function validateImportRow(input: {
 export function previewLowSensitiveCustomerImport(
   input: CustomerImportPreviewInput,
 ): CustomerImportPreviewResult {
+  const prepared = snapshotCustomerImportInput(input);
+  if (!prepared) return createUnsafeImportPreview();
+  return previewPreparedCustomerImport(prepared);
+}
+
+function createUnsafeImportPreview(): CustomerImportPreviewResult {
+  const unsafeRow: CustomerImportRow = {
+    rowNumber: 1,
+    status: 'skipped',
+    customerDisplayName: null,
+    importedCustomerRef: null,
+    duplicateKey: null,
+    issues: [{ reason: 'unsafe_payload', message: '导入内容格式不安全，已阻断' }],
+  };
+  return {
+    importBatch: {
+      importBatchId: 'customer-import:unsafe-payload',
+      tenantId: '',
+      institutionId: null,
+      operatorRef: '',
+      fieldWhitelist: [...lowSensitiveCustomerImportAllowedFields],
+      rows: [unsafeRow],
+      createdAt: '',
+      updatedAt: '',
+    },
+    totalCount: 1,
+    successCount: 0,
+    failureCount: 1,
+    skippedCount: 1,
+    canExecute: false,
+    boundary: customerImportBoundary,
+  };
+}
+
+function previewPreparedCustomerImport(
+  input: PreparedCustomerImportInput,
+): CustomerImportPreviewResult {
   const seenKeys = new Set<string>();
   const existingKeys = existingDuplicateKeys({
-    existingCustomers: input.existingCustomers ?? [],
+    existingCustomers: input.existingCustomers,
     institutionId: input.institutionId,
   });
   const rows = input.rows.map((row, index) =>
@@ -513,7 +885,12 @@ export function mapCustomerImportRowToCreateCustomerDraft(input: {
 export function getCustomerImportRowsForExecution(
   input: CustomerImportExecuteInput & { institutionId: string },
 ) {
-  const preview = previewLowSensitiveCustomerImport(input);
+  const prepared = snapshotCustomerImportInput(input);
+  if (!prepared || typeof prepared.institutionId !== 'string') {
+    return { preview: createUnsafeImportPreview(), drafts: [] };
+  }
+
+  const preview = previewPreparedCustomerImport(prepared);
   const readyRowNumbers = new Set(
     preview.importBatch.rows
       .filter((row) => row.status === 'ready')
@@ -522,14 +899,14 @@ export function getCustomerImportRowsForExecution(
 
   return {
     preview,
-    drafts: input.rows
+    drafts: prepared.rows
       .map((row, index) => ({ row, rowNumber: index + 1 }))
-      .filter((item): item is { row: CustomerImportRowInput; rowNumber: number } =>
-        readyRowNumbers.has(item.rowNumber) && isPlainObject(item.row),
+      .filter((item): item is { row: StrictDataRecord; rowNumber: number } =>
+        readyRowNumbers.has(item.rowNumber) && !isRejectedImportRow(item.row),
       )
       .map((item) => mapCustomerImportRowToCreateCustomerDraft({
-        tenantId: input.tenantId,
-        institutionId: input.institutionId,
+        tenantId: prepared.tenantId,
+        institutionId: prepared.institutionId,
         row: item.row,
         rowNumber: item.rowNumber,
         importBatchId: preview.importBatch.importBatchId,
