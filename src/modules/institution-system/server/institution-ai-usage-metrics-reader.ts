@@ -7,7 +7,6 @@ import {
 } from '@/modules/institution-system/domain/ai-usage-metrics';
 import {
   createAiUsageOutcomeClassifier,
-  type AiUsageTerminalStatusPolicy,
 } from '@/modules/institution-system/domain/ai-usage-outcomes';
 import { createAiUsageMetricsSnapshot } from '@/modules/institution-system/domain/ai-usage-metrics-snapshot';
 import {
@@ -15,6 +14,7 @@ import {
   type AiUsageServiceKeyPolicy,
 } from '@/modules/institution-system/domain/ai-usage-service-keys';
 import { getInstitutionAiUsageServiceKeyPolicySnapshot } from '@/modules/institution-system/server/institution-ai-usage-service-key-policy';
+import { getInstitutionAiUsageTerminalStatusPolicySnapshot } from '@/modules/institution-system/server/institution-ai-usage-terminal-status-policy';
 import {
   createAiUsageTimeWindowSnapshot,
   type AiUsageTimeWindow,
@@ -49,6 +49,7 @@ type InstitutionAiUsageMetricsReadFailureCode =
   | 'invalid_metrics_snapshot'
   | 'invalid_time_window'
   | 'owner_policy_unavailable'
+  | 'owner_terminal_status_policy_unavailable'
   | 'scope_mismatch'
   | 'invalid_occurred_at'
   | 'record_outside_time_window';
@@ -61,7 +62,6 @@ type ExactPlainSnapshot = Readonly<Record<string, unknown>>;
 
 type ReaderInputSnapshot = Readonly<{
   scope: InstitutionAiUsageScope;
-  terminalStatusPolicy: AiUsageTerminalStatusPolicy;
   timeWindow: AiUsageTimeWindow;
 }>;
 
@@ -76,7 +76,6 @@ type UsageRecordSnapshot = Readonly<{
 
 const readerInputKeys = [
   'scope',
-  'terminalStatusPolicy',
   'timeWindow',
 ] as const;
 const scopeKeys = ['tenantId', 'institutionId'] as const;
@@ -201,23 +200,6 @@ function snapshotScope(value: unknown): InstitutionAiUsageScope | null {
   return Object.freeze({ tenantId: raw.tenantId, institutionId: raw.institutionId });
 }
 
-function snapshotTerminalStatusPolicy(value: unknown): AiUsageTerminalStatusPolicy | null {
-  const raw = snapshotExactPlainObject(value);
-  if (!raw || Reflect.ownKeys(raw).some(key => typeof key !== 'string')) return null;
-
-  const snapshot: Record<string, string> = {};
-  for (const [status, outcome] of Object.entries(raw)) {
-    if (typeof outcome !== 'string') return null;
-    Object.defineProperty(snapshot, status, {
-      configurable: false,
-      enumerable: true,
-      value: outcome,
-      writable: false,
-    });
-  }
-  return Object.freeze(snapshot) as AiUsageTerminalStatusPolicy;
-}
-
 function snapshotTimeWindow(value: unknown): AiUsageTimeWindow | null {
   const raw = snapshotExactPlainObject(value, timeWindowKeys);
   if (
@@ -238,11 +220,10 @@ function snapshotReaderInput(value: unknown): ReaderInputSnapshot | null {
   if (!raw) return null;
 
   const scope = snapshotScope(raw.scope);
-  const terminalStatusPolicy = snapshotTerminalStatusPolicy(raw.terminalStatusPolicy);
   const timeWindow = snapshotTimeWindow(raw.timeWindow);
-  if (!scope || !terminalStatusPolicy || !timeWindow) return null;
+  if (!scope || !timeWindow) return null;
 
-  return Object.freeze({ scope, terminalStatusPolicy, timeWindow });
+  return Object.freeze({ scope, timeWindow });
 }
 
 function snapshotOccurredAtEpochMs(value: unknown): number | null {
@@ -311,7 +292,6 @@ export function createInstitutionAiUsageMetricsReader(
   return Object.freeze({
     async read(input: Readonly<{
       scope: InstitutionAiUsageScope;
-      terminalStatusPolicy: AiUsageTerminalStatusPolicy;
       timeWindow: AiUsageTimeWindow;
     }>): Promise<InstitutionAiUsageMetricsReadResult> {
       try {
@@ -319,8 +299,12 @@ export function createInstitutionAiUsageMetricsReader(
         if (!inputSnapshot) return failure('invalid_input');
         const ownerPolicy = getInstitutionAiUsageServiceKeyPolicySnapshot();
         if (!ownerPolicy.ok) return failure(ownerPolicy.code);
+        const ownerTerminalStatusPolicy = getInstitutionAiUsageTerminalStatusPolicySnapshot();
+        if (!ownerTerminalStatusPolicy.ok) return failure(ownerTerminalStatusPolicy.code);
 
-        const terminalStatus = createAiUsageOutcomeClassifier(inputSnapshot.terminalStatusPolicy);
+        const terminalStatus = createAiUsageOutcomeClassifier(
+          ownerTerminalStatusPolicy.snapshot.terminalStatusPolicy,
+        );
         if (!terminalStatus.ok) return failure(terminalStatus.code);
         const timeWindow = createAiUsageTimeWindowSnapshot(inputSnapshot.timeWindow);
         if (!timeWindow.ok) return failure(timeWindow.code);
@@ -366,7 +350,7 @@ export function createInstitutionAiUsageMetricsReader(
         const result = aggregateAiUsageMetrics({
           scope: inputSnapshot.scope,
           records: Object.freeze(records),
-          terminalStatusPolicy: inputSnapshot.terminalStatusPolicy,
+          terminalStatusPolicy: ownerTerminalStatusPolicy.snapshot.terminalStatusPolicy,
           serviceKeyPolicy: ownerPolicy.snapshot.allowedServiceKeys as AiUsageServiceKeyPolicy,
           timeWindow: inputSnapshot.timeWindow,
         });

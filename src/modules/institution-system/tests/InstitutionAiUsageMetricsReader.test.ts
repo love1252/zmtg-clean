@@ -6,11 +6,6 @@ import {
 } from '@/modules/institution-system/server/institution-ai-usage-metrics-reader';
 
 const scope = { tenantId: 'tenant-a', institutionId: 'institution-a' } as const;
-const terminalStatusPolicy = {
-  succeeded: 'success',
-  failed: 'failure',
-  rejected: 'rejection',
-} as const;
 const timeWindow = { startInclusiveEpochMs: 1_000, endExclusiveEpochMs: 5_000 } as const;
 const maximumRecords = 10_000;
 
@@ -30,7 +25,7 @@ describe('Institution AI usage metrics reader', () => {
     ]);
     const reader = createInstitutionAiUsageMetricsReader(source);
 
-    const result = await reader.read({ scope, terminalStatusPolicy, timeWindow });
+    const result = await reader.read({ scope, timeWindow });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('expected metrics');
@@ -62,23 +57,27 @@ describe('Institution AI usage metrics reader', () => {
       { tenantId: 'tenant-a', institutionId: 'institution-a', status: 'succeeded', serviceCategory: 'openai_gpt_5', serviceAction: 'provider_cost', createdAt: new Date(1_000) },
     ]));
 
-    await expect(reader.read({ scope, terminalStatusPolicy, timeWindow }))
+    await expect(reader.read({ scope, timeWindow }))
       .resolves.toEqual({ ok: false, code: 'invalid_service_key' });
   });
 
-  it('rejects a caller-provided mapping instead of letting it expand the owner policy', async () => {
+  it('rejects caller-provided service or terminal policies before querying the source', async () => {
     const source = sourceWithRows([]);
     const reader = createInstitutionAiUsageMetricsReader(source);
 
     await expect(reader.read({
       scope,
-      terminalStatusPolicy,
       timeWindow,
       serviceKeyMappings: [{
         serviceCategory: 'openai_gpt_5',
         serviceAction: 'provider_cost',
         serviceKey: 'provider_cost',
       }],
+    } as never)).resolves.toEqual({ ok: false, code: 'invalid_input' });
+    await expect(reader.read({
+      scope,
+      timeWindow,
+      terminalStatusPolicy: { succeeded: 'failure' },
     } as never)).resolves.toEqual({ ok: false, code: 'invalid_input' });
     expect(source.listInstitutionUsageMetricRecords).not.toHaveBeenCalled();
   });
@@ -91,9 +90,9 @@ describe('Institution AI usage metrics reader', () => {
       listInstitutionUsageMetricRecords: vi.fn().mockRejectedValue(new Error('database unavailable')),
     });
 
-    await expect(mismatchReader.read({ scope, terminalStatusPolicy, timeWindow }))
+    await expect(mismatchReader.read({ scope, timeWindow }))
       .resolves.toEqual({ ok: false, code: 'scope_mismatch' });
-    await expect(unavailableReader.read({ scope, terminalStatusPolicy, timeWindow }))
+    await expect(unavailableReader.read({ scope, timeWindow }))
       .resolves.toEqual({ ok: false, code: 'source_unavailable' });
   });
 
@@ -109,8 +108,8 @@ describe('Institution AI usage metrics reader', () => {
       Array.from({ length: maximumRecords + 1 }, () => row),
     ));
 
-    const maximumResult = await maximumReader.read({ scope, terminalStatusPolicy, timeWindow });
-    const sentinelResult = await sentinelReader.read({ scope, terminalStatusPolicy, timeWindow });
+    const maximumResult = await maximumReader.read({ scope, timeWindow });
+    const sentinelResult = await sentinelReader.read({ scope, timeWindow });
 
     expect(maximumResult).toEqual(expect.objectContaining({
       ok: true,
@@ -135,7 +134,6 @@ describe('Institution AI usage metrics reader', () => {
 
     const result = await createInstitutionAiUsageMetricsReader(source).read({
       scope: mutableScope,
-      terminalStatusPolicy,
       timeWindow,
     });
 
@@ -157,14 +155,10 @@ describe('Institution AI usage metrics reader', () => {
     });
   });
 
-  it('snapshots terminal policy and time window before querying and never rereads either after the source returns', async () => {
-    const mutablePolicy: Record<string, 'success' | 'failure' | 'rejection'> = {
-      succeeded: 'success', failed: 'failure',
-    };
+  it('snapshots the time window before querying and never rereads it after the source returns', async () => {
     const mutableTimeWindow = { startInclusiveEpochMs: 1_000, endExclusiveEpochMs: 5_000 };
     const source = {
       listInstitutionUsageMetricRecords: vi.fn(async () => {
-        mutablePolicy.succeeded = 'failure';
         mutableTimeWindow.endExclusiveEpochMs = 1_000;
         return [{
           tenantId: 'tenant-a', institutionId: 'institution-a', status: 'succeeded',
@@ -175,7 +169,6 @@ describe('Institution AI usage metrics reader', () => {
 
     const result = await createInstitutionAiUsageMetricsReader(source).read({
       scope,
-      terminalStatusPolicy: mutablePolicy,
       timeWindow: mutableTimeWindow,
     });
 
@@ -199,20 +192,24 @@ describe('Institution AI usage metrics reader', () => {
     });
     const source = sourceWithRows([]);
     const reader = createInstitutionAiUsageMetricsReader(source);
-    const common = { terminalStatusPolicy, timeWindow };
+    const common = { timeWindow };
 
     await expect(reader.read({ ...common, scope: accessorScope as typeof scope }))
       .resolves.toEqual({ ok: false, code: 'invalid_input' });
     expect(getterReads).toBe(0);
     expect(source.listInstitutionUsageMetricRecords).not.toHaveBeenCalled();
 
-    const accessorPolicy = { succeeded: 'success' } as Record<string, unknown>;
-    Object.defineProperty(accessorPolicy, 'failed', {
+    const accessorTerminalPolicyInput = { ...common, scope } as Record<string, unknown>;
+    Object.defineProperty(accessorTerminalPolicyInput, 'terminalStatusPolicy', {
       enumerable: true,
-      get() { throw new Error('do not read'); },
+      get() {
+        getterReads += 1;
+        throw new Error('do not read');
+      },
     });
-    await expect(reader.read({ ...common, scope, terminalStatusPolicy: accessorPolicy as never }))
+    await expect(reader.read(accessorTerminalPolicyInput as never))
       .resolves.toEqual({ ok: false, code: 'invalid_input' });
+    expect(getterReads).toBe(0);
 
     const accessorWindow = { endExclusiveEpochMs: 5_000 } as Record<string, unknown>;
     Object.defineProperty(accessorWindow, 'startInclusiveEpochMs', {
@@ -265,7 +262,7 @@ describe('Institution AI usage metrics reader', () => {
       const reader = createInstitutionAiUsageMetricsReader({
         listInstitutionUsageMetricRecords: vi.fn().mockResolvedValue(rows),
       } as InstitutionAiUsageMetricsRecordSource);
-      await expect(reader.read({ scope, terminalStatusPolicy, timeWindow }))
+      await expect(reader.read({ scope, timeWindow }))
         .resolves.toEqual({ ok: false, code: 'source_unavailable' });
     }
 
@@ -273,7 +270,7 @@ describe('Institution AI usage metrics reader', () => {
       enumerable: true,
       get() { throw new Error('source failure'); },
     }) as InstitutionAiUsageMetricsRecordSource);
-    await expect(reader.read({ scope, terminalStatusPolicy, timeWindow }))
+    await expect(reader.read({ scope, timeWindow }))
       .resolves.toEqual({ ok: false, code: 'source_unavailable' });
   });
 });
