@@ -55,28 +55,6 @@ vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository
 
 const apiUrl = 'http://localhost/api/institution/knowledge-management/items';
 const now = new Date('2026-06-13T08:00:00.000Z');
-const unsafeError = new Error(
-  'DATABASE_URL postgres://root:password@localhost token=secret /Users/demo/path SQL stack',
-);
-const unsafeFragments = [
-  'DATABASE_URL',
-  'postgres',
-  'password',
-  'token',
-  'secret',
-  '/Users/',
-  'SQL',
-  'stack',
-];
-const forbiddenKnowledgeFields = [
-  'content',
-  'rawContent',
-  'parsedContent',
-  'embedding',
-  'embeddingVectorJson',
-  'trainingContent',
-];
-
 const routeRecords: PlatformKnowledgeRepositoryRecord[] = [
   {
     knowledgeId: 'knowledge-visible-route',
@@ -152,28 +130,19 @@ describe('机构端知识库管理 V1 只读 API route', () => {
     });
   });
 
-  it('GET 只返回当前机构被平台授权可见的低敏知识库记录', async () => {
-    repository.listKnowledgeItems.mockResolvedValue(routeRecords);
-
-    const response = await itemsRoute.GET(
-      new Request(`${apiUrl}?keyword=${encodeURIComponent('授权')}&page=1&pageSize=10`),
-    );
+  it('GET 固定返回资料库 capability disabled，且不初始化旧 repository', async () => {
+    const response = await itemsRoute.GET(new Request(`${apiUrl}?keyword=${encodeURIComponent('授权')}&page=1&pageSize=10`));
     const payload = await readJson(response);
-    const serialized = JSON.stringify(payload);
 
-    expect(response.status).toBe(200);
-    expect(repository.listKnowledgeItems).toHaveBeenCalledWith({ tenantId: 'tenant-route' });
-    expect(payload.records).toEqual([
-      expect.objectContaining({
-        knowledgeId: 'knowledge-visible-route',
-        title: '机构端授权可见知识',
-        visibility: 'platform_authorized',
-      }),
-    ]);
-    expect(serialized).not.toContain('knowledge-hidden-route');
-    forbiddenKnowledgeFields.forEach((field) => {
-      expect(serialized).not.toContain(`"${field}"`);
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      status: 'capability_disabled',
+      code: 'knowledge_items_capability_disabled',
+      message: '机构知识库资料库暂未启用。',
     });
+    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
   });
 
   it('POST embeddings 把 institutionId 传入 service 并只允许当前机构可见 knowledge/file', async () => {
@@ -292,39 +261,4 @@ describe('机构端知识库管理 V1 只读 API route', () => {
     expect(serialized).not.toMatch(/provider|model|token|cost|vendor/i);
   });
 
-  it('没有机构上下文时拒绝访问且不初始化 repository', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValueOnce({
-      userId: 'demo-user-admin',
-      role: 'tenant_admin',
-      scope: 'tenant',
-      tenantId: 'tenant-route',
-      institutionId: null,
-      source: 'demo_session',
-    });
-
-    const response = await itemsRoute.GET(new Request(apiUrl));
-    const payload = await readJson(response);
-
-    expect(response.status).toBe(403);
-    expect(payload).toEqual({ code: 'forbidden', error: '没有访问权限' });
-    expect(getDatabase).not.toHaveBeenCalled();
-    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
-  });
-
-  it('底层异常时返回固定中文安全错误文案', async () => {
-    repository.listKnowledgeItems.mockRejectedValue(unsafeError);
-
-    const response = await itemsRoute.GET(new Request(apiUrl));
-    const payload = await readJson(response);
-    const serialized = JSON.stringify(payload);
-
-    expect(response.status).toBe(503);
-    expect(payload).toEqual({
-      code: 'service_unavailable',
-      error: '知识库只读数据暂时不可用',
-    });
-    unsafeFragments.forEach((fragment) => {
-      expect(serialized).not.toContain(fragment);
-    });
-  });
 });
