@@ -77,6 +77,32 @@ function careCardStatusLabel(status: WorkbenchCareCardViewModel['status']): stri
   }
 }
 
+function lifecycleStatusLabel(status: WorkbenchLifecycleItemViewModel['status']): string {
+  switch (status) {
+    case 'ready':
+      return '数据可用';
+    case 'empty':
+      return '暂无客户';
+    case 'stale':
+      return '数据已过期';
+    case 'unavailable':
+      return '数据未知';
+  }
+}
+
+function lifecycleStatusClassName(status: WorkbenchLifecycleItemViewModel['status']): string {
+  switch (status) {
+    case 'ready':
+      return 'border-emerald-100 bg-emerald-50 text-emerald-700';
+    case 'empty':
+      return 'border-slate-200 bg-slate-100 text-slate-600';
+    case 'stale':
+      return 'border-amber-200 bg-amber-50 text-amber-700';
+    case 'unavailable':
+      return 'border-slate-200 bg-slate-100 text-slate-500';
+  }
+}
+
 function CareCard({ card }: Readonly<{ card: WorkbenchCareCardViewModel }>) {
   const Icon = careCardIcons[card.key];
   const content = (
@@ -163,6 +189,14 @@ function LifecycleItem({ item }: Readonly<{ item: WorkbenchLifecycleItemViewMode
           )}
         />
         <h3 className="truncate text-sm font-semibold text-slate-700">{item.label}</h3>
+        <span
+          className={cn(
+            'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold',
+            lifecycleStatusClassName(item.status),
+          )}
+        >
+          {lifecycleStatusLabel(item.status)}
+        </span>
       </div>
       <div className="mt-3 flex items-end justify-between gap-2 pl-5">
         <p className="text-2xl font-bold tracking-tight text-slate-950">
@@ -358,6 +392,15 @@ export function InstitutionWorkbenchShell({
                     <UsersRound aria-hidden="true" className="h-[18px] w-[18px]" />
                   </span>
                 </div>
+                {lifecycleProjection.status === 'projected' &&
+                lifecycleProjection.sourceReadiness === 'partial' ? (
+                  <p
+                    role="status"
+                    className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800"
+                  >
+                    客户旅程仅部分可验证；其余数据当前不可用
+                  </p>
+                ) : null}
                 <ul aria-label="客户旅程" className="mt-4 grid min-w-0 grid-cols-2 gap-3">
                   {lifecycleItems.map((item) => (
                     <LifecycleItem key={item.key} item={item} />
