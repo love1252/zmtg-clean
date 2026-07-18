@@ -214,11 +214,11 @@ describe('InstitutionWorkbenchShell', () => {
     expect(screen.getByRole('heading', { name: '工作台', level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '工作台' })).toBeInTheDocument();
     expect(screen.queryByRole('main')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '待确认预约详情' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '待确认预约，数据可用，2项，查看详情' })).toHaveAttribute(
       'href',
       '/hospital/care/appointments?status=pending_confirmation',
     );
-    expect(screen.getByRole('link', { name: '改约申请详情' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '改约申请，已确认暂无待办，查看详情' })).toHaveAttribute(
       'href',
       '/hospital/care/appointments?status=reschedule_requested',
     );
