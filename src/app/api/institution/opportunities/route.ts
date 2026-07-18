@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
-import { generateOpportunityPools } from '@/modules/institution/server/opportunity-pool-service';
-import { createTenantBusinessRepository } from '@/modules/institution/server/tenant-business-repository';
 import { canAccessResource } from '@/modules/security/domain/access-control';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
-import { getDatabase } from '@/server/db/client';
 
 export async function GET(request: Request) {
   const accessContext = getDemoAccessContextFromRequest(request);
@@ -22,17 +19,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: '没有访问权限' }, { status: 403 });
   }
 
-  try {
-    const db = getDatabase();
-    const repository = createTenantBusinessRepository(db);
-    const customers = await repository.listCustomersByTenant(accessContext.tenantId);
-    const response = generateOpportunityPools({
-      customers,
-      generatedAt: new Date().toISOString(),
-    });
-
-    return NextResponse.json(response);
-  } catch {
-    return NextResponse.json({ error: '数据服务暂时不可用' }, { status: 503 });
-  }
+  return NextResponse.json(
+    {
+      error: '旧机会池不提供机构级经营分析数据',
+      code: 'legacy_opportunity_pool_disabled',
+    },
+    { status: 410 },
+  );
 }
