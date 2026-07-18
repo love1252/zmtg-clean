@@ -70,7 +70,10 @@ import type {
 import type { FollowUpTaskListFilters } from '@/modules/institution/server/follow-up-task-query-parser';
 
 type CustomerRow = typeof customers.$inferSelect;
-type WeComCustomerContactCustomerRow = Pick<CustomerRow, 'id' | 'tenantId' | 'displayName' | 'ownerUserId'>;
+type WeComCustomerContactCustomerRow = Pick<
+  CustomerRow,
+  'id' | 'tenantId' | 'institutionId' | 'displayName' | 'ownerUserId'
+>;
 type AppointmentRow = typeof appointments.$inferSelect;
 type FollowUpTaskRow = typeof followUpTasks.$inferSelect;
 type FollowUpMessageTemplateRow = typeof followUpMessageTemplates.$inferSelect;
@@ -2122,11 +2125,19 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
           .select({
             id: customers.id,
             tenantId: customers.tenantId,
+            institutionId: customers.institutionId,
             displayName: customers.displayName,
             ownerUserId: customers.ownerUserId,
           })
           .from(customers)
-          .where(eq(customers.tenantId, input.tenantId)),
+          .where(
+            input.institutionId
+              ? and(
+                  eq(customers.tenantId, input.tenantId),
+                  eq(customers.institutionId, input.institutionId),
+                )
+              : eq(customers.tenantId, input.tenantId),
+          ),
       ]);
       const visibleEnrollments = enrollmentRows.filter((row) => {
         if (row.tenantId !== input.tenantId) return false;
@@ -2159,7 +2170,11 @@ export function createTenantBusinessRepository(database: TenantDatabase) {
         if (input.institutionId && row.institutionId !== input.institutionId) return false;
         return true;
       });
-      const visibleCustomerRows = customerRows.filter((row) => row.tenantId === input.tenantId);
+      const visibleCustomerRows = customerRows.filter((row) => {
+        if (row.tenantId !== input.tenantId) return false;
+        if (input.institutionId && row.institutionId !== input.institutionId) return false;
+        return true;
+      });
       const weComAuthorization = createWeComAuthorizationForOperationsSnapshot({
         tenantId: input.tenantId,
         institutionId: input.institutionId ?? null,
