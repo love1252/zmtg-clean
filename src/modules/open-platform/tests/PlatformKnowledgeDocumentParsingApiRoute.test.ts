@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
@@ -138,6 +140,12 @@ const unsafeFragments = [
   'trainingContent',
 ];
 
+const institutionParseDisabledPayload = Object.freeze({
+  status: 'capability_disabled',
+  code: 'knowledge_file_parse_capability_disabled',
+  error: '机构知识库文件解析暂未启用。',
+});
+
 vi.mock('@/server/db/client', () => ({
   getDatabase: vi.fn(() => database),
 }));
@@ -187,6 +195,37 @@ function expectSafePayload(payload: unknown) {
   unsafeFragments.forEach((fragment) => {
     expect(serialized).not.toContain(fragment);
   });
+}
+
+function hostileProxy<T extends object>() {
+  const counts = {
+    get: 0,
+    set: 0,
+    has: 0,
+    ownKeys: 0,
+    getOwnPropertyDescriptor: 0,
+    getPrototypeOf: 0,
+  };
+  const trap = <K extends keyof typeof counts>(name: K): never => {
+    counts[name] += 1;
+    throw new Error(`${name} must not run`);
+  };
+  const value = new Proxy({}, {
+    get: () => trap('get'),
+    set: () => trap('set'),
+    has: () => trap('has'),
+    ownKeys: () => trap('ownKeys'),
+    getOwnPropertyDescriptor: () => trap('getOwnPropertyDescriptor'),
+    getPrototypeOf: () => trap('getPrototypeOf'),
+  }) as T;
+
+  return { value, counts };
+}
+
+async function expectInstitutionParseDisabled(response: Response) {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  await expect(response.json()).resolves.toEqual(institutionParseDisabledPayload);
 }
 
 describe('知识库文档解析 API route', () => {
@@ -367,27 +406,95 @@ describe('知识库文档解析 API route', () => {
     expectSafePayload(payload);
   });
 
-  it('机构端只读查看解析状态和 chunk，且 tenant/institution 来自 access context', async () => {
+  it('机构端 parse GET/POST 对普通、非法和伪造输入固定返回无缓存 503 且零下游调用', async () => {
     vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantAccessContext);
-
     expect(Object.keys(institutionParseRoute).sort()).toEqual(['GET', 'POST']);
-    expect(Object.keys(institutionChunksRoute).sort()).toEqual(['GET']);
 
-    const statusResponse = await institutionParseRoute.GET(
-      new Request(institutionParseUrl('?tenantId=tenant-b&institutionId=inst-b')),
-      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
-    );
-    expect(statusResponse.status).toBe(200);
-    expect(await readJson(statusResponse)).toEqual(
-      expect.objectContaining({
-        status: 'succeeded',
-        parse: expect.objectContaining({ parseStatus: 'succeeded' }),
-      }),
-    );
-    expect(repository.findKnowledgeItem).toHaveBeenCalledWith({
-      tenantId: 'tenant-route-a',
-      knowledgeId: 'knowledge-route-a',
-    });
+    const sensitiveMarker = 'private-patient-provider-token';
+    const requests = [
+      {
+        handler: institutionParseRoute.GET,
+        request: undefined,
+        context: undefined,
+      },
+      {
+        handler: institutionParseRoute.GET,
+        request: new Request(institutionParseUrl(`?tenantId=${sensitiveMarker}&institutionId=${sensitiveMarker}`), {
+          headers: { authorization: `Bearer ${sensitiveMarker}` },
+        }),
+        context: { params: sensitiveMarker },
+      },
+      {
+        handler: institutionParseRoute.POST,
+        request: new Request(institutionParseUrl(), {
+          method: 'POST',
+          body: JSON.stringify({ textContent: sensitiveMarker, provider: sensitiveMarker }),
+        }),
+        context: { params: Promise.resolve({ knowledgeId: sensitiveMarker, fileId: sensitiveMarker }) },
+      },
+    ] as const;
+
+    for (const { handler, request, context } of requests) {
+      const response = await (
+        handler as unknown as (
+          request?: Request,
+          context?: unknown,
+        ) => Response | Promise<Response>
+      )(request, context);
+      const replay = response.clone();
+      await expectInstitutionParseDisabled(response);
+      expect(JSON.stringify(await replay.json())).not.toContain(sensitiveMarker);
+    }
+
+    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(createLocalPlatformKnowledgeFileStorage).not.toHaveBeenCalled();
+    expect(repository.findKnowledgeItem).not.toHaveBeenCalled();
+    expect(repository.findKnowledgeFileParse).not.toHaveBeenCalled();
+    expect(repository.saveKnowledgeFileParseResult).not.toHaveBeenCalled();
+    expect(storage.read).not.toHaveBeenCalled();
+  });
+
+  it('机构端 parse GET/POST 不触碰 hostile Request 或 params 的任一 trap', async () => {
+    for (const handler of [institutionParseRoute.GET, institutionParseRoute.POST]) {
+      const request = hostileProxy<Request>();
+      const context = hostileProxy<object>();
+      const response = await (
+        handler as unknown as (
+          request?: Request,
+          context?: unknown,
+        ) => Response | Promise<Response>
+      )(request.value, context.value);
+
+      await expectInstitutionParseDisabled(response);
+      expect(request.counts).toEqual({
+        get: 0,
+        set: 0,
+        has: 0,
+        ownKeys: 0,
+        getOwnPropertyDescriptor: 0,
+        getPrototypeOf: 0,
+      });
+      expect(context.counts).toEqual({
+        get: 0,
+        set: 0,
+        has: 0,
+        ownKeys: 0,
+        getOwnPropertyDescriptor: 0,
+        getPrototypeOf: 0,
+      });
+    }
+
+    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(createLocalPlatformKnowledgeFileStorage).not.toHaveBeenCalled();
+  });
+
+  it('机构端 chunk 只读端点保持 tenant/institution 可见性回归', async () => {
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantAccessContext);
+    expect(Object.keys(institutionChunksRoute).sort()).toEqual(['GET']);
 
     const chunksResponse = await institutionChunksRoute.GET(
       new Request(institutionChunksUrl('?tenantId=tenant-b&institutionId=inst-b')),
@@ -400,6 +507,10 @@ describe('知识库文档解析 API route', () => {
         records: [expect.objectContaining({ textPreview: '术后护理文本。' })],
       }),
     );
+    expect(repository.findKnowledgeItem).toHaveBeenCalledWith({
+      tenantId: 'tenant-route-a',
+      knowledgeId: 'knowledge-route-a',
+    });
   });
 
   it('机构端未授权文件返回 403 且不泄露底层异常', async () => {
@@ -410,8 +521,8 @@ describe('知识库文档解析 API route', () => {
       institutionId: 'inst-other',
     });
 
-    const forbidden = await institutionParseRoute.GET(
-      new Request(institutionParseUrl()),
+    const forbidden = await institutionChunksRoute.GET(
+      new Request(institutionChunksUrl()),
       { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
     );
     expect(forbidden.status).toBe(403);
@@ -429,5 +540,21 @@ describe('知识库文档解析 API route', () => {
       error: '知识库文件解析暂时不可用',
     });
     expectSafePayload(payload);
+  });
+
+  it('机构端 parse route 源码仅依赖 NextResponse，禁止旧数据链和输入读取', () => {
+    const source = readFileSync(
+      resolve(
+        process.cwd(),
+        'src/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/parse/route.ts',
+      ),
+      'utf8',
+    );
+    const imports = source.match(/^import .+;$/gmu) ?? [];
+
+    expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
+    expect(source).not.toMatch(
+      /getDemoAccessContextFromRequest|getDatabase|repository|storage|provider|reparseInstitutionKnowledgeDocumentFileService|getInstitutionKnowledgeDocumentFileParseStatusService|\b_?request\s*(?:\.|\[)|\b_?context\s*(?:\.|\[)|fetch\(/u,
+    );
   });
 });

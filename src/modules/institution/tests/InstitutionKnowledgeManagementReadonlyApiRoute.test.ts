@@ -1,264 +1,228 @@
-import type { Mock } from 'vitest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/server/platform-knowledge-management-repository';
-import type { KnowledgeIndexingJobRecord } from '@/modules/open-platform/server/platform-knowledge-indexing-job-service';
-import * as itemsRoute from '@/app/api/institution/knowledge-management/items/route';
-import * as embeddingsRoute from '@/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/embeddings/route';
-import { getDatabase } from '@/server/db/client';
-import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
-import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const database = { database: 'institution-knowledge-test-db' };
-let createdIndexingJob: KnowledgeIndexingJobRecord | null = null;
-const repository = {
-  listKnowledgeItems: vi.fn(),
-  findKnowledgeItem: vi.fn(),
-  findKnowledgeFile: vi.fn(),
-  listKnowledgeEmbeddingCandidates: vi.fn(),
-  listKnowledgeVectorSearchCandidates: vi.fn(),
-  saveKnowledgeChunkEmbeddings: vi.fn(),
-  createKnowledgeIndexingJob: vi.fn(async (record: KnowledgeIndexingJobRecord) => {
-    createdIndexingJob = record;
-    return record;
-  }),
-  updateKnowledgeIndexingJob: vi.fn(async (input: {
-    tenantId: string;
-    jobId: string;
-    patch: Partial<KnowledgeIndexingJobRecord>;
-  }) => {
-    if (!createdIndexingJob) return null;
-    createdIndexingJob = { ...createdIndexingJob, ...input.patch };
-    return createdIndexingJob;
-  }),
-  findKnowledgeIndexingJob: vi.fn(),
-  listKnowledgeIndexingJobs: vi.fn(),
-};
+const initialized: string[] = [];
+const forbiddenModulePaths = [
+  '@/modules/security/server/access-context',
+  '@/server/db/client',
+  '@/modules/open-platform/server/platform-knowledge-management-repository',
+  '@/modules/open-platform/server/platform-knowledge-indexing-job-service',
+  '@/modules/institution/server/institution-knowledge-write-repository',
+  '@/modules/institution/server/institution-knowledge-management-service',
+] as const;
 
-vi.mock('@/server/db/client', () => ({
-  getDatabase: vi.fn(() => database),
-}));
+type DisabledHandler = (
+  request?: Request,
+  context?: unknown,
+) => Response | Promise<Response>;
 
-vi.mock('@/modules/security/server/access-context', () => ({
-  getDemoAccessContextFromRequest: vi.fn(),
-}));
-
-vi.mock('@/modules/open-platform/server/platform-knowledge-management-repository', async () => {
-  const actual = await vi.importActual<
-    typeof import('@/modules/open-platform/server/platform-knowledge-management-repository')
-  >('@/modules/open-platform/server/platform-knowledge-management-repository');
-
-  return {
-    ...actual,
-    createPlatformKnowledgeManagementRepository: vi.fn(() => repository),
-  };
+const embeddingsDisabledPayload = Object.freeze({
+  status: 'capability_disabled',
+  code: 'knowledge_embeddings_capability_disabled',
+  error: '机构知识库向量索引暂未启用。',
 });
 
-const apiUrl = 'http://localhost/api/institution/knowledge-management/items';
-const now = new Date('2026-06-13T08:00:00.000Z');
-const routeRecords: PlatformKnowledgeRepositoryRecord[] = [
-  {
-    knowledgeId: 'knowledge-visible-route',
-    tenantId: 'tenant-route',
-    tenantName: '路由租户',
-    institutionId: 'inst-owner',
-    workspaceId: 'workspace-route',
-    title: '机构端授权可见知识',
-    version: 'v1',
-    sourceKind: 'demo',
-    status: 'ready',
-    readonlyStatus: 'readonly',
-    category: '术后护理',
-    descriptionPreview: '机构端只读低敏摘要。',
-    chunkCount: 2,
-    visibleInstitutionIds: ['inst-current'],
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    knowledgeId: 'knowledge-hidden-route',
-    tenantId: 'tenant-route',
-    tenantName: '路由租户',
-    institutionId: 'inst-other',
-    workspaceId: 'workspace-hidden',
-    title: '未授权知识',
-    version: 'v1',
-    sourceKind: 'seed',
-    status: 'ready',
-    readonlyStatus: 'readonly',
-    category: '不可见',
-    descriptionPreview: '不应可见。',
-    chunkCount: 1,
-    visibleInstitutionIds: [],
-    createdAt: now,
-    updatedAt: now,
-  },
-];
+const cancelDisabledPayload = Object.freeze({
+  status: 'capability_disabled',
+  code: 'knowledge_indexing_job_cancel_capability_disabled',
+  error: '机构知识库索引任务取消暂未启用。',
+});
 
-async function readJson(response: Response) {
-  expect(response.headers.get('content-type')).toContain('application/json');
-  return response.json() as Promise<Record<string, unknown>>;
+const apiUrl = 'http://localhost/api/institution/knowledge-management';
+
+beforeEach(() => {
+  vi.resetModules();
+  initialized.length = 0;
+  forbiddenModulePaths.forEach((modulePath) => vi.doUnmock(modulePath));
+});
+
+afterEach(() => vi.restoreAllMocks());
+
+function rejectInitialization(modulePath: string, label: string) {
+  vi.doMock(modulePath, () => {
+    initialized.push(label);
+    throw new Error(`${label} must not initialize`);
+  });
+}
+
+async function loadBlockedRoutes() {
+  for (const [modulePath, label] of [
+    ['@/modules/security/server/access-context', 'auth'],
+    ['@/server/db/client', 'db'],
+    ['@/modules/open-platform/server/platform-knowledge-management-repository', 'repository'],
+    ['@/modules/open-platform/server/platform-knowledge-indexing-job-service', 'job-service'],
+    ['@/modules/institution/server/institution-knowledge-write-repository', 'write-repository'],
+    ['@/modules/institution/server/institution-knowledge-management-service', 'management-service'],
+  ] as const) {
+    rejectInitialization(modulePath, label);
+  }
+
+  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+    throw new Error('fetch must not run');
+  });
+  const [itemsRoute, embeddingsRoute, cancelRoute] = await Promise.all([
+    import('@/app/api/institution/knowledge-management/items/route'),
+    import('@/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/embeddings/route'),
+    import('@/app/api/institution/knowledge-management/indexing-jobs/[jobId]/cancel/route'),
+  ]);
+
+  expect(initialized).toEqual([]);
+  expect(fetchSpy).not.toHaveBeenCalled();
+
+  return {
+    itemsRoute,
+    embeddingsRoute,
+    cancelRoute,
+    assertNoSideEffects: () => {
+      expect(initialized).toEqual([]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  };
+}
+
+function hostileProxy<T extends object>() {
+  const counts = {
+    get: 0,
+    set: 0,
+    has: 0,
+    ownKeys: 0,
+    getOwnPropertyDescriptor: 0,
+    getPrototypeOf: 0,
+  };
+  const trap = <K extends keyof typeof counts>(name: K): never => {
+    counts[name] += 1;
+    throw new Error(`${name} must not run`);
+  };
+  const value = new Proxy({}, {
+    get: () => trap('get'),
+    set: () => trap('set'),
+    has: () => trap('has'),
+    ownKeys: () => trap('ownKeys'),
+    getOwnPropertyDescriptor: () => trap('getOwnPropertyDescriptor'),
+    getPrototypeOf: () => trap('getPrototypeOf'),
+  }) as T;
+
+  return { value, counts };
+}
+
+async function expectDisabled(
+  response: Response,
+  expectedPayload: typeof embeddingsDisabledPayload | typeof cancelDisabledPayload,
+) {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  await expect(response.json()).resolves.toEqual(expectedPayload);
 }
 
 describe('机构端知识库管理 V1 只读 API route', () => {
-  beforeEach(() => {
-    createdIndexingJob = null;
-    (repository.listKnowledgeItems as Mock).mockReset();
-    (repository.findKnowledgeItem as Mock).mockReset();
-    (repository.findKnowledgeFile as Mock).mockReset();
-    (repository.listKnowledgeEmbeddingCandidates as Mock).mockReset();
-    (repository.listKnowledgeVectorSearchCandidates as Mock).mockReset();
-    (repository.saveKnowledgeChunkEmbeddings as Mock).mockReset();
-    (repository.createKnowledgeIndexingJob as Mock).mockClear();
-    (repository.updateKnowledgeIndexingJob as Mock).mockClear();
-    (repository.findKnowledgeIndexingJob as Mock).mockReset();
-    (repository.findKnowledgeIndexingJob as Mock).mockImplementation(async (input: { tenantId: string; jobId: string }) => (
-      createdIndexingJob?.tenantId === input.tenantId && createdIndexingJob.jobId === input.jobId
-        ? createdIndexingJob
-        : null
-    ));
-    (repository.listKnowledgeIndexingJobs as Mock).mockReset();
-    vi.mocked(getDatabase).mockClear();
-    vi.mocked(createPlatformKnowledgeManagementRepository).mockClear();
-    vi.mocked(getDemoAccessContextFromRequest).mockReset();
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue({
-      userId: 'demo-user-admin',
-      role: 'tenant_admin',
-      scope: 'tenant',
-      tenantId: 'tenant-route',
-      institutionId: 'inst-current',
-      source: 'demo_session',
-    });
-  });
-
-  it('GET 固定返回资料库 capability disabled，且不初始化旧 repository', async () => {
-    const response = await itemsRoute.GET(new Request(`${apiUrl}?keyword=${encodeURIComponent('授权')}&page=1&pageSize=10`));
-    const payload = await readJson(response);
+  it('资料库根 route 保持固定 capability disabled', async () => {
+    const { itemsRoute, assertNoSideEffects } = await loadBlockedRoutes();
+    const response = await itemsRoute.GET(
+      new Request(`${apiUrl}/items?keyword=forged`),
+    );
 
     expect(response.status).toBe(503);
-    expect(payload).toEqual({
+    await expect(response.json()).resolves.toEqual({
       status: 'capability_disabled',
       code: 'knowledge_items_capability_disabled',
       message: '机构知识库资料库暂未启用。',
     });
-    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
-    expect(getDatabase).not.toHaveBeenCalled();
-    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    assertNoSideEffects();
   });
 
-  it('POST embeddings 把 institutionId 传入 service 并只允许当前机构可见 knowledge/file', async () => {
-    repository.listKnowledgeItems.mockResolvedValue(routeRecords);
-    repository.findKnowledgeItem.mockResolvedValue(routeRecords[0]);
-    repository.findKnowledgeFile.mockResolvedValue({
-      fileId: 'file-visible-route',
-      tenantId: 'tenant-route',
-      knowledgeId: 'knowledge-visible-route',
-      originalFilename: '授权文件.txt',
-      storageKey: 'safe-storage-key',
-      mimeType: 'text/plain',
-      sizeBytes: 32,
-      sha256: 'hash',
-      status: 'active',
-      uploadedByUserId: 'demo-user-admin',
-      createdAt: now,
-      updatedAt: now,
-      archivedAt: null,
-      fileType: 'TXT',
-      sizeLabel: '1 KB',
-      parseStatus: 'succeeded',
-      failureReasonCode: null,
-      safeFailureMessage: null,
-      textLength: 32,
-      chunkCount: 1,
-      parserVersion: 'test-parser',
-    });
-    repository.listKnowledgeEmbeddingCandidates.mockResolvedValue([
+  it('embeddings 与 cancel 对普通、缺失和伪造输入固定返回无缓存 503', async () => {
+    const { embeddingsRoute, cancelRoute, assertNoSideEffects } = await loadBlockedRoutes();
+    const sensitiveMarker = 'private-customer-name-token-provider-payload';
+    const requests: Array<{
+      handler: DisabledHandler;
+      request?: Request;
+      context?: unknown;
+      payload: typeof embeddingsDisabledPayload | typeof cancelDisabledPayload;
+    }> = [
       {
-        tenantId: 'tenant-route',
-        knowledgeId: 'knowledge-visible-route',
-        knowledgeTitle: '机构端授权可见知识',
-        fileId: 'file-visible-route',
-        fileName: '授权文件.txt',
-        fileStatus: 'active',
-        parseStatus: 'succeeded',
-        chunkId: 'chunk-visible-route-0',
-        chunkIndex: 0,
-        textPreview: '授权机构可生成向量索引的片段。',
+        handler: embeddingsRoute.POST as DisabledHandler,
+        payload: embeddingsDisabledPayload,
       },
-    ]);
-    repository.listKnowledgeVectorSearchCandidates.mockResolvedValue([]);
-    repository.saveKnowledgeChunkEmbeddings.mockResolvedValue([
       {
-        embeddingId: 'embedding-visible-route-0',
-        tenantId: 'tenant-route',
-        knowledgeId: 'knowledge-visible-route',
-        fileId: 'file-visible-route',
-        chunkId: 'chunk-visible-route-0',
-        embeddingDimensions: 8,
-        status: 'ready',
-        failureReasonCode: null,
+        handler: embeddingsRoute.POST as DisabledHandler,
+        request: new Request(`${apiUrl}/items/${sensitiveMarker}/files/${sensitiveMarker}/embeddings`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${sensitiveMarker}`, 'x-institution-id': sensitiveMarker },
+          body: JSON.stringify({ rebuild: true, provider: sensitiveMarker }),
+        }),
+        context: { params: Promise.resolve({ knowledgeId: sensitiveMarker, fileId: sensitiveMarker }) },
+        payload: embeddingsDisabledPayload,
       },
-    ]);
+      {
+        handler: cancelRoute.POST as DisabledHandler,
+        payload: cancelDisabledPayload,
+      },
+      {
+        handler: cancelRoute.POST as DisabledHandler,
+        request: new Request(`${apiUrl}/indexing-jobs/${sensitiveMarker}/cancel`, {
+          method: 'POST',
+          headers: { cookie: `zmtg_demo_session=${sensitiveMarker}` },
+        }),
+        context: { params: Promise.resolve({ jobId: sensitiveMarker }) },
+        payload: cancelDisabledPayload,
+      },
+    ];
 
-    const response = await embeddingsRoute.POST(
-      new Request(`${apiUrl}/knowledge-visible-route/files/file-visible-route/embeddings`, {
-        method: 'POST',
-        body: JSON.stringify({ rebuild: true }),
-      }),
-      { params: Promise.resolve({ knowledgeId: 'knowledge-visible-route', fileId: 'file-visible-route' }) },
-    );
-    const payload = await readJson(response);
-    const serialized = JSON.stringify(payload);
-
-    expect(response.status).toBe(200);
-    expect(repository.findKnowledgeItem).toHaveBeenCalledWith({
-      tenantId: 'tenant-route',
-      knowledgeId: 'knowledge-visible-route',
-    });
-    expect(repository.listKnowledgeEmbeddingCandidates).toHaveBeenCalledWith({
-      tenantId: 'tenant-route',
-      knowledgeId: 'knowledge-visible-route',
-      fileId: 'file-visible-route',
-    });
-    expect(repository.createKnowledgeIndexingJob).toHaveBeenCalledWith(expect.objectContaining({
-      tenantId: 'tenant-route',
-      institutionId: 'inst-current',
-      knowledgeId: 'knowledge-visible-route',
-      fileId: 'file-visible-route',
-      jobType: 'rebuild_embeddings',
-      status: 'pending',
-    }));
-    expect(payload).toEqual(expect.objectContaining({
-      jobType: 'rebuild_embeddings',
-      status: 'succeeded',
-      totalCount: 1,
-      processedCount: 1,
-      failedCount: 0,
-    }));
-    expect(serialized).not.toContain('embeddingVectorJson');
-    expect(serialized).not.toMatch(/provider|model|token|cost|vendor/i);
+    for (const { handler, request, context, payload } of requests) {
+      const response = await handler(request, context);
+      const replay = response.clone();
+      await expectDisabled(response, payload);
+      expect(JSON.stringify(await replay.json())).not.toContain(sensitiveMarker);
+      assertNoSideEffects();
+    }
   });
 
-  it('POST embeddings 阻断同 tenant 其他机构不可见 knowledge/file', async () => {
-    repository.listKnowledgeItems.mockResolvedValue(routeRecords);
-    repository.findKnowledgeItem.mockResolvedValue(routeRecords[1]);
+  it('embeddings 与 cancel 不触碰 hostile Request 或 params 的任一 trap', async () => {
+    const { embeddingsRoute, cancelRoute, assertNoSideEffects } = await loadBlockedRoutes();
 
-    const response = await embeddingsRoute.POST(
-      new Request(`${apiUrl}/knowledge-hidden-route/files/file-hidden-route/embeddings`, {
-        method: 'POST',
-        body: JSON.stringify({ rebuild: true }),
-      }),
-      { params: Promise.resolve({ knowledgeId: 'knowledge-hidden-route', fileId: 'file-hidden-route' }) },
-    );
-    const payload = await readJson(response);
-    const serialized = JSON.stringify(payload);
+    for (const [handler, payload] of [
+      [embeddingsRoute.POST as DisabledHandler, embeddingsDisabledPayload],
+      [cancelRoute.POST as DisabledHandler, cancelDisabledPayload],
+    ] as const) {
+      const request = hostileProxy<Request>();
+      const context = hostileProxy<object>();
+      const response = await handler(request.value, context.value);
 
-    expect(response.status).toBe(403);
-    expect(payload).toEqual({ status: 'forbidden' });
-    expect(repository.createKnowledgeIndexingJob).not.toHaveBeenCalled();
-    expect(repository.listKnowledgeEmbeddingCandidates).not.toHaveBeenCalled();
-    expect(repository.saveKnowledgeChunkEmbeddings).not.toHaveBeenCalled();
-    expect(serialized).not.toContain('embeddingVectorJson');
-    expect(serialized).not.toMatch(/provider|model|token|cost|vendor/i);
+      await expectDisabled(response, payload);
+      expect(request.counts).toEqual({
+        get: 0,
+        set: 0,
+        has: 0,
+        ownKeys: 0,
+        getOwnPropertyDescriptor: 0,
+        getPrototypeOf: 0,
+      });
+      expect(context.counts).toEqual({
+        get: 0,
+        set: 0,
+        has: 0,
+        ownKeys: 0,
+        getOwnPropertyDescriptor: 0,
+        getPrototypeOf: 0,
+      });
+      assertNoSideEffects();
+    }
   });
 
+  it('两个叶子 route 源码仅依赖 NextResponse，禁止旧数据链和输入读取', () => {
+    const routePaths = [
+      'src/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/embeddings/route.ts',
+      'src/app/api/institution/knowledge-management/indexing-jobs/[jobId]/cancel/route.ts',
+    ];
+
+    for (const routePath of routePaths) {
+      const source = readFileSync(resolve(process.cwd(), routePath), 'utf8');
+      const imports = source.match(/^import .+;$/gmu) ?? [];
+      expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
+      expect(source).not.toMatch(
+        /getDemoAccessContextFromRequest|getDatabase|repository|storage|provider|cancelKnowledgeIndexingJob|createAndRun|\b_?request\s*(?:\.|\[)|\b_?context\s*(?:\.|\[)|fetch\(/u,
+      );
+    }
+  });
 });
