@@ -3,6 +3,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstitutionKnowledgeReadonlyShell } from '@/modules/institution/components/InstitutionKnowledgeReadonlyShell';
 import { listInstitutionKnowledgeItems } from '@/modules/institution/client/tenant-business-client';
 
+type IndexingJobsRoute = typeof import('@/app/api/institution/knowledge-management/indexing-jobs/route');
+
+const indexingRouteModulePaths = [
+  '@/modules/security/server/access-context',
+  '@/server/db/client',
+  '@/modules/open-platform/server/platform-knowledge-management-repository',
+  '@/modules/open-platform/server/platform-knowledge-file-storage',
+  '@/modules/open-platform/server/platform-knowledge-indexing-job-service',
+] as const;
+
+const indexingCapabilityDisabledPayload = {
+  status: 'capability_disabled',
+  code: 'knowledge_indexing_jobs_capability_disabled',
+  message: '机构知识库索引任务暂未启用。',
+};
+
+let indexingJobsEnabled = true;
+
 vi.mock('@/modules/institution/client/tenant-business-client', async () => {
   const actual = await vi.importActual<
     typeof import('@/modules/institution/client/tenant-business-client')
@@ -25,10 +43,14 @@ const pageInfo = {
 
 describe('机构端知识库只读列表 UI', () => {
   beforeEach(() => {
+    indexingJobsEnabled = true;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         if (url.includes('/api/institution/knowledge-management/indexing-jobs')) {
+          if (!indexingJobsEnabled) {
+            return Response.json(indexingCapabilityDisabledPayload, { status: 503 });
+          }
           if (init?.method === 'POST') {
             return Response.json({
               status: 'failed',
@@ -320,7 +342,7 @@ describe('机构端知识库只读列表 UI', () => {
     expect(screen.getByText('平台授权')).toBeInTheDocument();
     const indexingSection = screen.getByLabelText('机构端知识库索引任务');
     expect(within(indexingSection).getByText('索引任务')).toBeInTheDocument();
-    expect(within(indexingSection).getByText(/DB-backed minimal job flow/)).toBeInTheDocument();
+    expect(within(indexingSection).getByText('当前索引任务仅展示已确认的机构范围任务状态。')).toBeInTheDocument();
     expect(within(indexingSection).getByText('重建文件向量索引')).toBeInTheDocument();
     expect(within(indexingSection).getByText('向量索引任务已完成')).toBeInTheDocument();
     expect(screen.getByLabelText('机构端 OCR-ready 边界说明').textContent).toContain('OCR-ready 最小闭环');
@@ -377,6 +399,23 @@ describe('机构端知识库只读列表 UI', () => {
     expect(listInstitutionKnowledgeItems).toHaveBeenLastCalledWith(
       expect.objectContaining({ keyword: '护理', page: 1 }),
     );
+  });
+
+  it('索引 root API 返回 503 时隐藏任务、OCR、重建和取消动作，仅保留刷新', async () => {
+    indexingJobsEnabled = false;
+    render(<InstitutionKnowledgeReadonlyShell />);
+
+    await screen.findByText('机构知识库索引任务暂未启用。');
+    const section = screen.getByLabelText('机构端知识库索引任务');
+    expect(within(section).getByRole('button', { name: '刷新任务' })).toBeInTheDocument();
+    expect(within(section).queryByText('暂无索引任务')).not.toBeInTheDocument();
+    expect(within(section).queryByRole('button', { name: '取消等待任务' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '重建当前知识索引' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看文件' }));
+    await screen.findByText('机构文件.pdf');
+    expect(screen.queryByRole('button', { name: '执行 OCR / 重建 OCR 索引' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '生成 / 重建向量索引' })).not.toBeInTheDocument();
   });
 
   it('机构端知识库入口展示卡片功能壳且操作仍受控', async () => {
@@ -1194,5 +1233,72 @@ describe('机构端知识库只读列表 UI', () => {
       expect(screen.getAllByText('已使用知识库')).toHaveLength(1);
       expect(screen.getAllByText('未使用知识库参考')).toHaveLength(1);
     });
+  });
+
+  it('indexing root GET/POST 固定 capability disabled，且 route 初始化和调用均无副作用', async () => {
+    vi.resetModules();
+    const initialized: string[] = [];
+    const rejectInitialization = (modulePath: string, label: string) => {
+      vi.doMock(modulePath, () => {
+        initialized.push(label);
+        throw new Error(`${label} must not initialize`);
+      });
+    };
+    rejectInitialization('@/modules/security/server/access-context', 'auth');
+    rejectInitialization('@/server/db/client', 'db');
+    rejectInitialization('@/modules/open-platform/server/platform-knowledge-management-repository', 'repository');
+    rejectInitialization('@/modules/open-platform/server/platform-knowledge-file-storage', 'storage');
+    rejectInitialization('@/modules/open-platform/server/platform-knowledge-indexing-job-service', 'job-service');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw new Error('fetch must not run');
+    });
+
+    const route = (await import('@/app/api/institution/knowledge-management/indexing-jobs/route')) as IndexingJobsRoute;
+    expect(Object.keys(route).sort()).toEqual(['GET', 'POST']);
+    expect(initialized).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    const hostileRequest = () => {
+      const counts = { get: 0, set: 0, has: 0, ownKeys: 0, getOwnPropertyDescriptor: 0, getPrototypeOf: 0 };
+      const trap = <T extends keyof typeof counts>(name: T): never => {
+        counts[name] += 1;
+        throw new Error(`${name} must not run`);
+      };
+      const request = new Proxy({}, {
+        get: () => trap('get'), set: () => trap('set'), has: () => trap('has'), ownKeys: () => trap('ownKeys'),
+        getOwnPropertyDescriptor: () => trap('getOwnPropertyDescriptor'), getPrototypeOf: () => trap('getPrototypeOf'),
+      }) as Request;
+      return { request, counts };
+    };
+
+    for (const [method, request] of [
+      ['GET', undefined],
+      ['GET', new Request('http://localhost/api/institution/knowledge-management/indexing-jobs?limit=999', {
+        headers: { authorization: 'Bearer forged', 'x-institution-id': 'forged' },
+      })],
+      ['POST', new Request('http://localhost/api/institution/knowledge-management/indexing-jobs', {
+        method: 'POST', body: JSON.stringify({ jobType: 'ocr_file', knowledgeId: 'forged', fileId: 'forged' }),
+      })],
+    ] as const) {
+      const response = await route[method](request);
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toEqual(indexingCapabilityDisabledPayload);
+      expect(initialized).toEqual([]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    }
+
+    for (const method of ['GET', 'POST'] as const) {
+      const { request, counts } = hostileRequest();
+      const response = await route[method](request);
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toEqual(indexingCapabilityDisabledPayload);
+      expect(counts).toEqual({ get: 0, set: 0, has: 0, ownKeys: 0, getOwnPropertyDescriptor: 0, getPrototypeOf: 0 });
+      expect(initialized).toEqual([]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    }
+
+    fetchSpy.mockRestore();
+    indexingRouteModulePaths.forEach((modulePath) => vi.doUnmock(modulePath));
+    vi.resetModules();
   });
 });
