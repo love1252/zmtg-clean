@@ -1,3 +1,5 @@
+import { isProxy } from 'node:util/types';
+
 const SOURCE_STATES = [
   'complete',
   'unknown',
@@ -21,9 +23,6 @@ const QUALITY_KEYS = [
   'unmappedProject',
 ] as const;
 
-const AUTHORITY_CONTEXT_BRAND = Symbol('analytics-data-integrity-authority');
-const issuedAuthorityContexts = new WeakSet<object>();
-
 export type AnalyticsDataIntegritySourceState = (typeof SOURCE_STATES)[number];
 export type AnalyticsDataIntegrityFactState = (typeof FACT_STATES)[number];
 export type AnalyticsDataIntegrityQualityState = (typeof QUALITY_STATES)[number];
@@ -46,21 +45,31 @@ export type AnalyticsDataIntegrityInput = Readonly<{
   partitions: readonly AnalyticsDataIntegrityPartitionInput[];
 }>;
 
-declare const analyticsDataIntegrityAuthorityContext: unique symbol;
+declare const futureAnalyticsPartitionAuthorityEvidence: unique symbol;
 
 /**
- * Opaque capability minted only at a trusted server composition root. The
- * nominal marker is private, non-enumerable, and verified by object identity.
+ * Reserved owner-sealed evidence for a future server adapter. This slice has
+ * no constructor, validator, or promotion path for it.
  */
-export type AnalyticsDataIntegrityAuthorityContext = Readonly<{
-  readonly [analyticsDataIntegrityAuthorityContext]: true;
+export type FutureAnalyticsPartitionAuthorityEvidence = Readonly<{
+  readonly [futureAnalyticsPartitionAuthorityEvidence]: Readonly<{
+    tenantId: string;
+    institutionId: string;
+    currency: string;
+    timeWindow: Readonly<{
+      startInclusive: string;
+      endExclusive: string;
+    }>;
+    sourceRevision: string;
+    coverage: 'complete';
+  }>;
 }>;
 
 export type AnalyticsDataIntegrityPartitionDecision = Readonly<{
   currency: string;
   availability: AnalyticsDataIntegritySourceState;
   financialFacts: AnalyticsDataIntegrityFactState;
-  zeroDisplay: 'allowed' | 'withheld';
+  zeroDisplay: 'authority_required' | 'withheld';
   quality: AnalyticsDataIntegrityQuality;
 }>;
 
@@ -80,24 +89,6 @@ export type AnalyticsDataIntegrityResult =
 
 const ISO_4217_CURRENCIES = new Set(Intl.supportedValuesOf('currency'));
 
-/**
- * This factory belongs at the server composition root, after that root has
- * independently verified source authority. Candidate data never carries this
- * capability and object expansion cannot preserve its issued identity.
- */
-export function createAnalyticsDataIntegrityAuthorityContextForServerCompositionRoot(): AnalyticsDataIntegrityAuthorityContext {
-  const context = Object.freeze(
-    Object.defineProperty({}, AUTHORITY_CONTEXT_BRAND, {
-      value: true,
-      enumerable: false,
-      writable: false,
-      configurable: false,
-    }),
-  );
-  issuedAuthorityContexts.add(context);
-  return context as AnalyticsDataIntegrityAuthorityContext;
-}
-
 function includesValue<T extends readonly string[]>(
   values: T,
   value: unknown,
@@ -107,18 +98,7 @@ function includesValue<T extends readonly string[]>(
 
 function isRuntimeProxy(value: object): boolean {
   try {
-    const processLike = globalThis as unknown as {
-      process?: {
-        getBuiltinModule?: (moduleName: string) => {
-          types?: { isProxy?: (candidate: object) => boolean };
-        };
-      };
-    };
-    return (
-      processLike.process
-        ?.getBuiltinModule?.('node:util')
-        .types?.isProxy?.(value) === true
-    );
+    return typeof isProxy !== 'function' || isProxy(value);
   } catch {
     return true;
   }
@@ -279,12 +259,6 @@ function snapshotPartition(
   });
 }
 
-function hasIssuedAuthorityContext(
-  value: unknown,
-): value is AnalyticsDataIntegrityAuthorityContext {
-  return typeof value === 'object' && value !== null && issuedAuthorityContexts.has(value);
-}
-
 function unknownQuality(): AnalyticsDataIntegrityQuality {
   return Object.freeze({
     duplicateExcluded: 'unknown',
@@ -294,46 +268,18 @@ function unknownQuality(): AnalyticsDataIntegrityQuality {
   });
 }
 
-function qualityForPartial(
-  quality: AnalyticsDataIntegrityQuality,
-): AnalyticsDataIntegrityQuality {
-  return Object.freeze({
-    duplicateExcluded:
-      quality.duplicateExcluded === 'present' ? 'present' : 'unknown',
-    orphanRefund: quality.orphanRefund === 'present' ? 'present' : 'unknown',
-    unmatchedCustomer:
-      quality.unmatchedCustomer === 'present' ? 'present' : 'unknown',
-    unmappedProject:
-      quality.unmappedProject === 'present' ? 'present' : 'unknown',
-  });
-}
-
 function createDecision(
   partition: AnalyticsDataIntegrityPartitionInput,
-  authorityInjected: boolean,
 ): AnalyticsDataIntegrityPartitionDecision {
-  const authoritativeComplete =
-    authorityInjected && partition.sourceState === 'complete';
-  const authoritativePartial =
-    authorityInjected && partition.sourceState === 'partial';
+  const authorityRequired =
+    partition.sourceState === 'complete' && partition.financialFacts === 'empty';
 
   return Object.freeze({
     currency: partition.currency,
-    availability: authorityInjected ? partition.sourceState : 'unknown',
-    financialFacts: authoritativeComplete
-      ? partition.financialFacts
-      : authoritativePartial && partition.financialFacts === 'present'
-        ? 'present'
-        : 'unknown',
-    zeroDisplay:
-      authoritativeComplete && partition.financialFacts === 'empty'
-        ? 'allowed'
-        : 'withheld',
-    quality: authoritativeComplete
-      ? partition.quality
-      : authoritativePartial
-        ? qualityForPartial(partition.quality)
-        : unknownQuality(),
+    availability: partition.sourceState,
+    financialFacts: 'unknown',
+    zeroDisplay: authorityRequired ? 'authority_required' : 'withheld',
+    quality: unknownQuality(),
   });
 }
 
@@ -344,13 +290,13 @@ function failure(
 }
 
 /**
- * Produces only per-currency integrity decisions. It never carries monetary
- * values or a cross-currency total. Without an injected authority capability,
- * every result remains a fail-closed candidate and can never display zero.
+ * Produces only per-currency candidate integrity decisions. It never carries
+ * monetary values or a cross-currency total, and cannot display zero. A future
+ * server adapter may consume owner-sealed scope-bound evidence to promote one
+ * partition after BASE scope guards exist; that path is intentionally absent.
  */
 export function adjudicateAnalyticsDataIntegrity(
   input: unknown,
-  authorityContext?: AnalyticsDataIntegrityAuthorityContext,
 ): AnalyticsDataIntegrityResult {
   const root = snapshotExactPlainDataObject(input, ROOT_KEYS);
   if (root === null) return failure('invalid_input');
@@ -362,7 +308,6 @@ export function adjudicateAnalyticsDataIntegrity(
 
   const currencies = new Set<string>();
   const decisions: AnalyticsDataIntegrityPartitionDecision[] = [];
-  const authorityInjected = hasIssuedAuthorityContext(authorityContext);
 
   for (const rawPartition of rawPartitions) {
     const partition = snapshotPartition(rawPartition);
@@ -371,7 +316,7 @@ export function adjudicateAnalyticsDataIntegrity(
       return failure('duplicate_currency_partition');
     }
     currencies.add(partition.currency);
-    decisions.push(createDecision(partition, authorityInjected));
+    decisions.push(createDecision(partition));
   }
 
   decisions.sort((left, right) => left.currency.localeCompare(right.currency));
