@@ -363,7 +363,10 @@ describe('InstitutionWorkbenchShell', () => {
       />,
     );
 
-    expect(screen.getByText('工作台当前不可用')).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: '数据服务/能力尚未安全开放' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('这不是“零数据”状态，因此未知值不会显示为 0。')).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: '行动队列' })).not.toBeInTheDocument();
     expect(screen.queryByRole('list', { name: '客户旅程' })).not.toBeInTheDocument();
     expect(screen.queryByText('新建')).not.toBeInTheDocument();
