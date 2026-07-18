@@ -93,15 +93,21 @@ describe('follow-up operations dashboard repository institution boundary', () =>
       operator: 'and',
     });
     expect(query.whereByTable.get(customers)).toHaveBeenCalledTimes(1);
-    expect(snapshot.weComCustomerContactSync.contacts).toHaveLength(1);
-    expect(snapshot.weComCustomerContactSync.contacts[0]).toEqual(
+    const contactSync = snapshot.weComCustomerContactSync;
+    expect(contactSync).toBeDefined();
+    if (!contactSync) throw new Error('expected customer contact sync snapshot');
+    expect(contactSync.contacts).toHaveLength(1);
+    const firstContact = contactSync.contacts[0];
+    expect(firstContact).toBeDefined();
+    if (!firstContact) throw new Error('expected current institution contact');
+    expect(firstContact).toEqual(
       expect.objectContaining({
         customerDisplayName: '当前机构客户',
         customerId: 'cust-inst-a',
       }),
     );
-    expect(JSON.stringify(snapshot.weComCustomerContactSync)).not.toContain('其他机构客户');
-    expect(JSON.stringify(snapshot.weComCustomerContactSync)).not.toContain('其他租户客户');
+    expect(JSON.stringify(contactSync)).not.toContain('其他机构客户');
+    expect(JSON.stringify(contactSync)).not.toContain('其他租户客户');
   });
 
   it('未提供 institutionId 时保留既有 tenant-only 内部快照条件', async () => {
