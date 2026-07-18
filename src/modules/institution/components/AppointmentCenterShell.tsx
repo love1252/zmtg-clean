@@ -424,7 +424,10 @@ export function AppointmentCenterShell() {
                         </div>
 
                         {statusErrors[appointment.id] ? (
-                          <div className="mt-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                          <div
+                            role="alert"
+                            className="mt-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
+                          >
                             {statusErrors[appointment.id]}
                           </div>
                         ) : null}
@@ -556,7 +559,10 @@ export function AppointmentCenterShell() {
             </div>
 
             {submitError ? (
-              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+              <div
+                role="alert"
+                className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700"
+              >
                 {submitError}
               </div>
             ) : null}
