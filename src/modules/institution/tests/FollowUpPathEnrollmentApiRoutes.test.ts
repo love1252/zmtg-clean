@@ -169,25 +169,75 @@ describe('follow-up path enrollment API routes', () => {
     expect(JSON.stringify(payload)).not.toContain('DATABASE_URL');
   });
 
-  it('GET enrollments 按租户和机构上下文列出低敏路径实例', async () => {
-    routeMocks.listFollowUpPathEnrollments.mockResolvedValue({
-      kind: 'success',
-      enrollments: [enrollmentRecord],
-    });
-
-    const response = await enrollmentsGet(request('/api/institution/followup-paths/enrollments'));
-    const payload = await json(response);
-
-    expect(response.status).toBe(200);
-    expect(payload.records).toEqual([enrollmentRecord]);
-    expect(routeMocks.listFollowUpPathEnrollments).toHaveBeenCalledWith(
-      expect.objectContaining({ context: tenantContext }),
+  it('GET enrollments 固定关闭且不读取普通请求或查询参数', async () => {
+    const plainResponse = await enrollmentsGet(request('/api/institution/followup-paths/enrollments'));
+    const queryResponse = await enrollmentsGet(
+      request('/api/institution/followup-paths/enrollments?status=active&include=stages'),
     );
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ result: 'allowed', resource: 'follow_up' }),
-    );
-    expect(JSON.stringify(payload)).not.toContain('institutionId');
-    expect(JSON.stringify(payload)).not.toContain('完整治疗记录正文');
+    const expectedPayload = {
+      code: 'follow_up_path_enrollment_list_capability_disabled',
+      error: '随访路径实例列表能力暂未启用',
+    };
+
+    expect(plainResponse.status).toBe(503);
+    expect(await json(plainResponse)).toEqual(expectedPayload);
+    expect(queryResponse.status).toBe(503);
+    expect(await json(queryResponse)).toEqual(expectedPayload);
+
+    const payloadText = JSON.stringify(expectedPayload);
+    expect(payloadText).not.toContain('records');
+    expect(payloadText).not.toContain('customer');
+    expect(payloadText).not.toContain('stages');
+    expect(payloadText).not.toContain('task');
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+    expect(routeMocks.listFollowUpPathEnrollments).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+  });
+
+  it('GET enrollments 对 hostile Request 不触发 trap 或依赖调用', async () => {
+    let requestTraps = 0;
+    const hostileRequest = new Proxy(
+      {},
+      {
+        get() {
+          requestTraps += 1;
+          throw new Error('request must not be read');
+        },
+        has() {
+          requestTraps += 1;
+          throw new Error('request must not be checked');
+        },
+        ownKeys() {
+          requestTraps += 1;
+          throw new Error('request must not be enumerated');
+        },
+      },
+    ) as unknown as Request;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const response = await enrollmentsGet(hostileRequest);
+
+      expect(response.status).toBe(503);
+      expect(await json(response)).toEqual({
+        code: 'follow_up_path_enrollment_list_capability_disabled',
+        error: '随访路径实例列表能力暂未启用',
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(requestTraps).toBe(0);
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+    expect(routeMocks.listFollowUpPathEnrollments).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
   });
 
   it('POST enrollments 支持治疗摘要纳入并只接收白名单字段', async () => {
