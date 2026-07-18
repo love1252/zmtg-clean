@@ -77,7 +77,7 @@ describe('InstitutionWorkbenchShell customer lifecycle status', () => {
     expect(within(lifecycle).getAllByRole('listitem')).toHaveLength(4);
     expect(within(lifecycle).getByText('暂无客户')).toBeInTheDocument();
     expect(within(lifecycle).getAllByText('数据已过期')).toHaveLength(2);
-    expect(within(lifecycle).getByText('数据未知')).toBeInTheDocument();
+    expect(within(lifecycle).getByText('数据未知')).toHaveClass('text-slate-600');
     expect(within(lifecycle).getAllByText('--')).toHaveLength(2);
     expect(within(lifecycle).getByText('截至 2026-07-18T01:00:00.000Z')).toBeInTheDocument();
     expect(within(lifecycle).getByRole('link', { name: '查看咨询中客户' })).toHaveAttribute(

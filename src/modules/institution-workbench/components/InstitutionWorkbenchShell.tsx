@@ -99,7 +99,7 @@ function lifecycleStatusClassName(status: WorkbenchLifecycleItemViewModel['statu
     case 'stale':
       return 'border-amber-200 bg-amber-50 text-amber-700';
     case 'unavailable':
-      return 'border-slate-200 bg-slate-100 text-slate-500';
+      return 'border-slate-200 bg-slate-100 text-slate-600';
   }
 }
 
