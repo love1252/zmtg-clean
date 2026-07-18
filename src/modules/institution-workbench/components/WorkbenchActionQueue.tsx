@@ -2,6 +2,7 @@ import {
   ArrowRight,
   CalendarClock,
   CheckCircle2,
+  CircleAlert,
   Clock3,
   ListChecks,
   MessageSquareText,
@@ -71,6 +72,14 @@ function actionTimeLabel(action: WorkbenchActionRowViewModel): string {
   }
 }
 
+function hasConfirmedEmptySources(
+  sourceReadiness: Extract<WorkbenchActionProjection, { status: 'projected' }>['sourceReadiness'],
+): boolean {
+  return [sourceReadiness.care, sourceReadiness.conversation].every(
+    (readiness) => readiness === 'ready' || readiness === 'empty',
+  );
+}
+
 /**
  * 只消费已聚合的工作台行动投影；不读取来源、不会重新排序或构造业务链接。
  * 移动端从桌面安全前缀派生，以保证其始终是桌面队列的前缀。
@@ -82,6 +91,8 @@ export function WorkbenchActionQueue({ projection }: WorkbenchActionQueueProps) 
 
   const desktopActions = projection.desktopActions.slice(0, WORKBENCH_DESKTOP_ACTION_LIMIT);
   const mobileActionCount = Math.min(desktopActions.length, WORKBENCH_MOBILE_ACTION_LIMIT);
+  const isConfirmedEmpty = hasConfirmedEmptySources(projection.sourceReadiness);
+  const hasDegradedSource = !isConfirmedEmpty;
 
   return (
     <section
@@ -101,10 +112,22 @@ export function WorkbenchActionQueue({ projection }: WorkbenchActionQueueProps) 
         </span>
       </div>
 
+      {hasDegradedSource && desktopActions.length > 0 ? (
+        <p role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+          部分行动数据当前不可用；仅显示可验证行动
+        </p>
+      ) : null}
+
       {desktopActions.length === 0 ? (
         <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-5 py-10 text-center">
-          <CheckCircle2 aria-hidden="true" className="mx-auto h-7 w-7 text-slate-300" />
-          <p className="mt-3 text-sm font-semibold text-slate-600">当前筛选暂无行动</p>
+          {isConfirmedEmpty ? (
+            <CheckCircle2 aria-hidden="true" className="mx-auto h-7 w-7 text-slate-300" />
+          ) : (
+            <CircleAlert aria-hidden="true" className="mx-auto h-7 w-7 text-amber-600" />
+          )}
+          <p className="mt-3 text-sm font-semibold text-slate-600">
+            {isConfirmedEmpty ? '当前筛选暂无行动' : '部分行动数据当前不可用；仅显示可验证行动'}
+          </p>
           <p className="mt-1 text-xs leading-5 text-slate-400">这里不会使用客户自由文本补齐任务。</p>
         </div>
       ) : (

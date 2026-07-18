@@ -224,6 +224,7 @@ describe('InstitutionWorkbenchShell', () => {
     );
 
     const queue = screen.getByRole('list', { name: '行动队列' });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(within(queue).getAllByRole('listitem')).toHaveLength(6);
     expect(within(queue).getAllByRole('link', { name: /查看.+详情/ })).toHaveLength(6);
     expect(
@@ -345,8 +346,104 @@ describe('InstitutionWorkbenchShell', () => {
     expect(screen.getAllByText('--')).toHaveLength(3);
     expect(screen.queryByRole('link', { name: '逾期随访详情' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '今日到期随访详情' })).not.toBeInTheDocument();
-    expect(screen.getByText('当前筛选暂无行动')).toBeInTheDocument();
+    const queue = screen.getByRole('region', { name: '行动队列' });
+    expect(within(queue).getByText('部分行动数据当前不可用；仅显示可验证行动')).toBeInTheDocument();
+    expect(within(queue).queryByText('当前筛选暂无行动')).not.toBeInTheDocument();
+    expect(within(queue).queryByRole('list', { name: '行动队列' })).not.toBeInTheDocument();
+    expect(within(queue).queryAllByRole('link', { name: /查看.+详情/ })).toHaveLength(0);
+    expect(within(queue).queryAllByTestId('mobile-action')).toHaveLength(0);
   });
+
+  it.each([
+    { care: 'stale', conversation: 'ready' },
+    { care: 'ready', conversation: 'unavailable' },
+    { care: 'denied', conversation: 'ready' },
+    { care: 'ready', conversation: 'disabled' },
+  ] as const)(
+    '在任一行动来源为 $care/$conversation 且无行动时，桌面与移动端均保持未知值语义',
+    (sourceReadiness) => {
+      render(
+        <InstitutionWorkbenchShell
+          actionProjection={{
+            status: 'projected',
+            filter: 'all',
+            sourceReadiness,
+            cards: [],
+            desktopActions: [],
+            mobileActions: [],
+          }}
+          lifecycleProjection={readyLifecycleProjection}
+          capabilityProjection={readyCapabilityProjection}
+        />,
+      );
+
+      const queue = screen.getByRole('region', { name: '行动队列' });
+      expect(within(queue).getByText('部分行动数据当前不可用；仅显示可验证行动')).toBeInTheDocument();
+      expect(within(queue).queryByText('当前筛选暂无行动')).not.toBeInTheDocument();
+      expect(within(queue).queryByRole('list', { name: '行动队列' })).not.toBeInTheDocument();
+      expect(within(queue).queryAllByRole('link', { name: /查看.+详情/ })).toHaveLength(0);
+      expect(within(queue).queryAllByTestId('mobile-action')).toHaveLength(0);
+    },
+  );
+
+  it('在来源部分可用且仍有已验证行动时保留行动，并提示队列不是完整视图', () => {
+    const action = readyActionProjection.desktopActions[0];
+    if (action === undefined) {
+      throw new Error('expected ready action fixture');
+    }
+
+    render(
+      <InstitutionWorkbenchShell
+        actionProjection={{
+          ...readyActionProjection,
+          sourceReadiness: { care: 'partial', conversation: 'ready' },
+          desktopActions: [action],
+          mobileActions: [action],
+        }}
+        lifecycleProjection={readyLifecycleProjection}
+        capabilityProjection={readyCapabilityProjection}
+      />,
+    );
+
+    const queue = screen.getByRole('region', { name: '行动队列' });
+    expect(within(queue).getByRole('status')).toHaveTextContent(
+      '部分行动数据当前不可用；仅显示可验证行动',
+    );
+    expect(within(queue).getByRole('list', { name: '行动队列' })).toBeInTheDocument();
+    expect(within(queue).getByRole('link', { name: '查看客户甲的预约详情' })).toBeInTheDocument();
+  });
+
+  it.each([
+    { care: 'ready', conversation: 'ready' },
+    { care: 'ready', conversation: 'empty' },
+    { care: 'empty', conversation: 'ready' },
+    { care: 'empty', conversation: 'empty' },
+  ] as const)(
+    '仅在 Care 与会话均为 ready 或 empty（$care/$conversation）且无行动时显示确认空态',
+    (sourceReadiness) => {
+      render(
+        <InstitutionWorkbenchShell
+          actionProjection={{
+            status: 'projected',
+            filter: 'all',
+            sourceReadiness,
+            cards: [],
+            desktopActions: [],
+            mobileActions: [],
+          }}
+          lifecycleProjection={readyLifecycleProjection}
+          capabilityProjection={readyCapabilityProjection}
+        />,
+      );
+
+      const queue = screen.getByRole('region', { name: '行动队列' });
+      expect(within(queue).getByText('当前筛选暂无行动')).toBeInTheDocument();
+      expect(within(queue).queryByText('部分行动数据当前不可用；仅显示可验证行动')).not.toBeInTheDocument();
+      expect(within(queue).queryByRole('list', { name: '行动队列' })).not.toBeInTheDocument();
+      expect(within(queue).queryAllByRole('link', { name: /查看.+详情/ })).toHaveLength(0);
+      expect(within(queue).queryAllByTestId('mobile-action')).toHaveLength(0);
+    },
+  );
 
   it('在 denied 或 disabled 已被投影阻断时不展示业务数据或受控创建入口', () => {
     render(
