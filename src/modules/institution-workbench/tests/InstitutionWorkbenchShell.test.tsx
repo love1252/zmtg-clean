@@ -463,9 +463,31 @@ describe('InstitutionWorkbenchShell', () => {
     expect(
       screen.getByRole('region', { name: '数据服务/能力尚未安全开放' }),
     ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '工作台行动数据暂未开放', level: 3 })).toBeInTheDocument();
+    expect(screen.getByText('待确认预约、改约申请、逾期随访、今日到期随访和行动队列当前保持隐藏。')).toBeInTheDocument();
+    expect(screen.getByText('只有可验证来源、机构隔离、服务端成员与对象权限完成后，才会显示低敏投影。')).toBeInTheDocument();
     expect(screen.getByText('这不是“零数据”状态，因此未知值不会显示为 0。')).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: '行动队列' })).not.toBeInTheDocument();
     expect(screen.queryByRole('list', { name: '客户旅程' })).not.toBeInTheDocument();
     expect(screen.queryByText('新建')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('link', { name: /查看|新建/u })).toHaveLength(0);
+  });
+
+  it('任一 projection 已投影时不展示全局行动阻断说明', () => {
+    render(
+      <InstitutionWorkbenchShell
+        actionProjection={{
+          status: 'blocked',
+          filter: 'all',
+          cards: [],
+          desktopActions: [],
+          mobileActions: [],
+        }}
+        lifecycleProjection={{ status: 'blocked', items: [] }}
+        capabilityProjection={readyCapabilityProjection}
+      />,
+    );
+
+    expect(screen.queryByRole('heading', { name: '工作台行动数据暂未开放', level: 3 })).not.toBeInTheDocument();
   });
 });
