@@ -208,6 +208,7 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
     );
     expect(screen.queryByText(/开发中|mock|fixture/i)).not.toBeInTheDocument();
     expect(screen.queryByText('0')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('会话能力静态边界')).not.toBeInTheDocument();
   });
 
   it('五个经营分析页面及合法详情深链只解析为同一阻断状态', () => {
@@ -269,5 +270,43 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
     expect(screen.getByText(/当前机构尚未获得该能力的生产放行。/u)).toBeInTheDocument();
     expect(screen.queryByText(/fixture|mock_sent|dry-run|模拟发送|不真实发送/u)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '接管会话' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [['conversations'], '会话队列'],
+    [['conversations', 'conversation-001'], '会话详情'],
+    [['conversations', 'automations'], '自动触达'],
+    [['conversations', 'automations', 'journey-001'], '自动触达详情'],
+  ] as const)('会话 canonical 路由 %j 统一显示未读取、未验证和未启用边界', (slug, pageLabel) => {
+    const route = resolveInstitutionCapabilityOffRouteV1(slug);
+    if (!route) throw new Error('conversation route must resolve');
+
+    const { unmount } = render(
+      <InstitutionCapabilityOffPage section={route.section} pageLabel={pageLabel} />,
+    );
+
+    const boundary = screen.getByLabelText('会话能力静态边界');
+    expect(within(boundary).getByText('会话事实')).toBeInTheDocument();
+    expect(within(boundary).getByText('未读取')).toBeInTheDocument();
+    expect(within(boundary).getByText('渠道状态')).toBeInTheDocument();
+    expect(within(boundary).getByText('未验证')).toBeInTheDocument();
+    expect(within(boundary).getByText('发送与自动触达')).toBeInTheDocument();
+    expect(within(boundary).getByText('未启用')).toBeInTheDocument();
+    expect(boundary).toHaveClass('sm:grid-cols-3');
+    expect(
+      screen.getByText(
+        '当前未读取任何会话或渠道事实；未知状态不会被解释为零记录、空会话、历史消息或渠道已可用。',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '返回工作台' })).toHaveAttribute(
+      'href',
+      '/hospital',
+    );
+    expect(screen.queryByText(/^0$/u)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^暂无会话$/u)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^渠道可用$/u)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+
+    unmount();
   });
 });

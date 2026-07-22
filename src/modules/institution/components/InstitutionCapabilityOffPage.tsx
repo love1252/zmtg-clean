@@ -125,6 +125,44 @@ export function InstitutionCapabilityOffPage({
 }) {
   const title = `${pageLabel}尚未开放`;
   const semanticTitle = `${section.label} · ${pageLabel}能力未开放`;
+  const isConversationSection = section.id === 'conversations';
+
+  const returnToWorkbenchLink = (
+    <Link
+      href="/hospital"
+      className="inline-flex h-10 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+    >
+      返回工作台
+    </Link>
+  );
+
+  const action = isConversationSection ? (
+    <div className="mx-auto w-full max-w-2xl space-y-4">
+      <p className="text-left text-sm font-normal leading-6 text-slate-500 sm:text-center">
+        当前未读取任何会话或渠道事实；未知状态不会被解释为零记录、空会话、历史消息或渠道已可用。
+      </p>
+      <dl
+        aria-label="会话能力静态边界"
+        className="grid gap-3 text-left sm:grid-cols-3"
+      >
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <dt className="text-xs font-medium text-slate-500">会话事实</dt>
+          <dd className="mt-1 text-sm font-semibold text-slate-800">未读取</dd>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <dt className="text-xs font-medium text-slate-500">渠道状态</dt>
+          <dd className="mt-1 text-sm font-semibold text-slate-800">未验证</dd>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <dt className="text-xs font-medium text-slate-500">发送与自动触达</dt>
+          <dd className="mt-1 text-sm font-semibold text-slate-800">未启用</dd>
+        </div>
+      </dl>
+      {returnToWorkbenchLink}
+    </div>
+  ) : (
+    returnToWorkbenchLink
+  );
 
   return (
     <div
@@ -137,14 +175,7 @@ export function InstitutionCapabilityOffPage({
         title={title}
         description="当前机构尚未获得该能力的生产放行。能力开放后仍会由服务端重新校验机构、角色和数据范围。"
         className="w-full border-white/90 bg-white/86 px-6 py-12 shadow-xl shadow-slate-200/60"
-        action={
-          <Link
-            href="/hospital"
-            className="inline-flex h-10 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
-          >
-            返回工作台
-          </Link>
-        }
+        action={action}
       />
     </div>
   );
