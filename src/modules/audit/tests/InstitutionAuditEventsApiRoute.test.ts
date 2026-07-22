@@ -38,6 +38,7 @@ describe('机构端审计日志 capability gate', () => {
       const payload = await response.json();
 
       expect(response.status).toBe(503);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
       expect(payload).toEqual({
         code: 'institution_audit_events_capability_disabled',
         error: '机构审计日志能力暂未启用',
@@ -67,6 +68,7 @@ describe('机构端审计日志 capability gate', () => {
     const response = await institutionAuditEventsGet(new Request(path));
 
     expect(response.status).toBe(503);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     await expect(response.json()).resolves.toEqual({
       code: 'institution_audit_events_capability_disabled',
       error: '机构审计日志能力暂未启用',

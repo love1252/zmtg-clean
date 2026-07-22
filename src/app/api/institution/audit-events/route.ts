@@ -10,5 +10,8 @@ const institutionAuditEventsReadDisabled = Object.freeze({
  * This deliberately avoids demo-session, authorization, query parsing, database, repository, and fetch side effects.
  */
 export async function GET(_request: Request) {
-  return NextResponse.json(institutionAuditEventsReadDisabled, { status: 503 });
+  return NextResponse.json(institutionAuditEventsReadDisabled, {
+    status: 503,
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
