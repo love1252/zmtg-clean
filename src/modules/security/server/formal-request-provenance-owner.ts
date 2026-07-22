@@ -13,9 +13,10 @@ import {
   type ProvenanceResolutionV1,
   type SafeGuardReferenceV1,
 } from '@/modules/security/server/institution-guard-evidence';
-import type {
-  InstitutionGuardReferenceCodecV1,
-  InstitutionGuardReferenceOwnerSubjectV1,
+import {
+  isInstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceOwnerSubjectV1,
 } from '@/modules/security/server/institution-guard-reference';
 
 const AUTH_ACCOUNT_OWNER_DOMAIN_V1 = 'zmtg.auth-account.v1';
@@ -30,6 +31,19 @@ const COMPOSER_INPUT_KEYS = Object.freeze([
   'referenceCodec',
   'now',
 ] as const);
+const RESOLUTION_COMPOSER_INPUT_KEYS = Object.freeze([
+  'ownerResolution',
+  'referenceCodec',
+  'now',
+] as const);
+const FAILURE_RESOLUTION_COMPOSER_INPUT_KEYS = Object.freeze([
+  'ownerResolution',
+] as const);
+const VERIFIED_OWNER_RESOLUTION_KEYS = Object.freeze([
+  'kind',
+  'ownerInput',
+] as const);
+const FAILURE_OWNER_RESOLUTION_KEYS = Object.freeze(['kind', 'code'] as const);
 const OWNER_INPUT_KEYS = Object.freeze([
   'source',
   'accountId',
@@ -65,6 +79,24 @@ export type FormalRequestProvenanceOwnerInputV1 = Readonly<{
   proofValidUntil: string;
   readonly [formalRequestProvenanceOwnerInputMarkerV1]: 'request_bound_owner_only';
 }>;
+
+export type FormalRequestProvenanceOwnerResolutionV1 =
+  | Readonly<{
+      kind: 'verified';
+      ownerInput: FormalRequestProvenanceOwnerInputV1;
+    }>
+  | Readonly<{
+      kind: 'rejected';
+      code:
+        | 'provenance_missing'
+        | 'provenance_invalid'
+        | 'provenance_expired'
+        | 'provenance_source_denied';
+    }>
+  | Readonly<{
+      kind: 'unavailable';
+      code: 'provenance_unavailable';
+    }>;
 
 type OwnerInputSnapshotV1 = Readonly<Record<string, unknown>>;
 type IssueReferenceV1 = InstitutionGuardReferenceCodecV1['issue'];
@@ -140,6 +172,7 @@ function snapshotExactPlainRecord(
 }
 
 function snapshotCodecIssue(value: unknown): IssueReferenceV1 | null {
+  if (!isInstitutionGuardReferenceCodecV1(value)) return null;
   const snapshot = snapshotExactPlainRecord(value, CODEC_KEYS);
   if (
     !snapshot ||
@@ -333,6 +366,120 @@ export function isFormalProvenanceResolverV1(
   }
 }
 
+function createRegisteredResolver(
+  resolveOnce: () => ProvenanceResolutionV1,
+): FormalProvenanceResolverV1 {
+  let consumed = false;
+  const resolver = Object.freeze({
+    async resolveCurrentRequest(): Promise<ProvenanceResolutionV1> {
+      if (consumed) return sourceDenied;
+      consumed = true;
+      return resolveOnce();
+    },
+  });
+  authenticFormalProvenanceResolvers.add(resolver);
+  return resolver as unknown as FormalProvenanceResolverV1;
+}
+
+function snapshotOwnerResolution(
+  value: unknown,
+):
+  | Readonly<{
+      kind: 'verified';
+      ownerInput: OwnerInputSnapshotV1;
+    }>
+  | Exclude<ProvenanceResolutionV1, { kind: 'verified' }>
+  | null {
+  const verified = snapshotExactPlainRecord(
+    value,
+    VERIFIED_OWNER_RESOLUTION_KEYS,
+  );
+  if (verified?.kind === 'verified') {
+    const ownerInputSnapshot = snapshotExactPlainRecord(
+      verified.ownerInput,
+      OWNER_INPUT_KEYS,
+    );
+    return ownerInputSnapshot
+      ? Object.freeze({ kind: 'verified', ownerInput: ownerInputSnapshot })
+      : null;
+  }
+
+  const failure = snapshotExactPlainRecord(
+    value,
+    FAILURE_OWNER_RESOLUTION_KEYS,
+  );
+  if (failure?.kind === 'rejected') {
+    if (failure.code === 'provenance_missing') return missing;
+    if (failure.code === 'provenance_invalid') return invalid;
+    if (failure.code === 'provenance_expired') return expired;
+    if (failure.code === 'provenance_source_denied') return sourceDenied;
+    return null;
+  }
+  if (
+    failure?.kind === 'unavailable' &&
+    failure.code === 'provenance_unavailable'
+  ) {
+    return unavailable;
+  }
+  return null;
+}
+
+/**
+ * Composes a genuine single-consumption resolver from one explicit low-sensitive owner result.
+ * Authentication owners use this boundary to preserve their failure class without manufacturing
+ * malformed request facts. It does not parse cookies, sessions, or caller-selected scope.
+ */
+export function createFormalRequestProvenanceResolverFromOwnerResolutionV1(
+  input:
+    | Readonly<{
+        ownerResolution: Extract<
+          FormalRequestProvenanceOwnerResolutionV1,
+          { kind: 'rejected' | 'unavailable' }
+        >;
+      }>
+    | Readonly<{
+        ownerResolution: Extract<
+          FormalRequestProvenanceOwnerResolutionV1,
+          { kind: 'verified' }
+        >;
+        referenceCodec: InstitutionGuardReferenceCodecV1;
+        now: () => Date;
+      }>,
+): FormalProvenanceResolverV1 {
+  const failureComposition = snapshotExactPlainRecord(
+    input,
+    FAILURE_RESOLUTION_COMPOSER_INPUT_KEYS,
+  );
+  const failureResolution = failureComposition
+    ? snapshotOwnerResolution(failureComposition.ownerResolution)
+    : null;
+  if (failureResolution && failureResolution.kind !== 'verified') {
+    return createRegisteredResolver(() => failureResolution);
+  }
+
+  const composition = snapshotExactPlainRecord(
+    input,
+    RESOLUTION_COMPOSER_INPUT_KEYS,
+  );
+  const ownerResolution = composition
+    ? snapshotOwnerResolution(composition.ownerResolution)
+    : null;
+  if (!composition || ownerResolution?.kind !== 'verified') {
+    return createRegisteredResolver(() => unavailable);
+  }
+  const issue = snapshotCodecIssue(composition.referenceCodec);
+  const now =
+    typeof composition.now === 'function' &&
+    !isProxy(composition.now)
+      ? (composition.now as () => Date)
+      : null;
+
+  return createRegisteredResolver(() => {
+    if (!issue || !now) return unavailable;
+    return resolveOwnerInput(ownerResolution.ownerInput, issue, now);
+  });
+}
+
 /**
  * Composes a single-consumption resolver around one owner-verified request snapshot. It neither
  * reads authentication state nor accepts caller-selected scope, domains, or timestamps.
@@ -357,19 +504,11 @@ export function createFormalRequestProvenanceResolverV1(input: Readonly<{
     !isProxy(composition.now)
       ? (composition.now as () => Date)
       : null;
-  let consumed = false;
-
-  const resolver = Object.freeze({
-    async resolveCurrentRequest(): Promise<ProvenanceResolutionV1> {
-      if (consumed) return sourceDenied;
-      consumed = true;
-      if (!composition) return unavailable;
-      if (ownerInputMissing) return missing;
-      if (!ownerInputSnapshot) return invalid;
-      if (!issue || !now) return unavailable;
-      return resolveOwnerInput(ownerInputSnapshot, issue, now);
-    },
+  return createRegisteredResolver(() => {
+    if (!composition) return unavailable;
+    if (ownerInputMissing) return missing;
+    if (!ownerInputSnapshot) return invalid;
+    if (!issue || !now) return unavailable;
+    return resolveOwnerInput(ownerInputSnapshot, issue, now);
   });
-  authenticFormalProvenanceResolvers.add(resolver);
-  return resolver as unknown as FormalProvenanceResolverV1;
 }
