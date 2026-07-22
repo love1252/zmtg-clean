@@ -82,6 +82,7 @@ describe('机构端知识库 search capability route', () => {
     ]) {
       const response = await route.GET(request);
       expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(disabledPayload);
       assertNoSideEffects();
     }
@@ -92,6 +93,7 @@ describe('机构端知识库 search capability route', () => {
     const poisoned = trappedRequest();
     const response = await route.GET(poisoned.request);
     expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
     await expect(response.json()).resolves.toEqual(disabledPayload);
     expect(poisoned.counts).toEqual({ get: 0, set: 0, has: 0, ownKeys: 0, getOwnPropertyDescriptor: 0, getPrototypeOf: 0 });
     assertNoSideEffects();
