@@ -29,6 +29,12 @@ const cancelDisabledPayload = Object.freeze({
   error: '机构知识库索引任务取消暂未启用。',
 });
 
+const detailDisabledPayload = Object.freeze({
+  status: 'capability_disabled',
+  code: 'knowledge_indexing_job_capability_disabled',
+  error: '机构知识库索引任务详情暂未启用。',
+});
+
 const apiUrl = 'http://localhost/api/institution/knowledge-management';
 
 beforeEach(() => {
@@ -61,10 +67,11 @@ async function loadBlockedRoutes() {
   const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
     throw new Error('fetch must not run');
   });
-  const [itemsRoute, embeddingsRoute, cancelRoute] = await Promise.all([
+  const [itemsRoute, embeddingsRoute, cancelRoute, detailRoute] = await Promise.all([
     import('@/app/api/institution/knowledge-management/items/route'),
     import('@/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/embeddings/route'),
     import('@/app/api/institution/knowledge-management/indexing-jobs/[jobId]/cancel/route'),
+    import('@/app/api/institution/knowledge-management/indexing-jobs/[jobId]/route'),
   ]);
 
   expect(initialized).toEqual([]);
@@ -74,6 +81,7 @@ async function loadBlockedRoutes() {
     itemsRoute,
     embeddingsRoute,
     cancelRoute,
+    detailRoute,
     assertNoSideEffects: () => {
       expect(initialized).toEqual([]);
       expect(fetchSpy).not.toHaveBeenCalled();
@@ -108,7 +116,10 @@ function hostileProxy<T extends object>() {
 
 async function expectDisabled(
   response: Response,
-  expectedPayload: typeof embeddingsDisabledPayload | typeof cancelDisabledPayload,
+  expectedPayload:
+    | typeof embeddingsDisabledPayload
+    | typeof cancelDisabledPayload
+    | typeof detailDisabledPayload,
 ) {
   expect(response.status).toBe(503);
   expect(response.headers.get('cache-control')).toBe('no-store');
@@ -131,14 +142,22 @@ describe('机构端知识库管理 V1 只读 API route', () => {
     assertNoSideEffects();
   });
 
-  it('embeddings 与 cancel 对普通、缺失和伪造输入固定返回无缓存 503', async () => {
-    const { embeddingsRoute, cancelRoute, assertNoSideEffects } = await loadBlockedRoutes();
+  it('embeddings、cancel 与索引详情对普通、缺失和伪造输入固定返回无缓存 503', async () => {
+    const {
+      embeddingsRoute,
+      cancelRoute,
+      detailRoute,
+      assertNoSideEffects,
+    } = await loadBlockedRoutes();
     const sensitiveMarker = 'private-customer-name-token-provider-payload';
     const requests: Array<{
       handler: DisabledHandler;
       request?: Request;
       context?: unknown;
-      payload: typeof embeddingsDisabledPayload | typeof cancelDisabledPayload;
+      payload:
+        | typeof embeddingsDisabledPayload
+        | typeof cancelDisabledPayload
+        | typeof detailDisabledPayload;
     }> = [
       {
         handler: embeddingsRoute.POST as DisabledHandler,
@@ -157,6 +176,22 @@ describe('机构端知识库管理 V1 只读 API route', () => {
       {
         handler: cancelRoute.POST as DisabledHandler,
         payload: cancelDisabledPayload,
+      },
+      {
+        handler: detailRoute.GET as DisabledHandler,
+        payload: detailDisabledPayload,
+      },
+      {
+        handler: detailRoute.GET as DisabledHandler,
+        request: new Request(`${apiUrl}/indexing-jobs/${sensitiveMarker}?status=failed`, {
+          headers: {
+            authorization: `Bearer ${sensitiveMarker}`,
+            cookie: `zmtg_demo_session=${sensitiveMarker}`,
+            'x-institution-id': sensitiveMarker,
+          },
+        }),
+        context: { params: Promise.resolve({ jobId: sensitiveMarker }) },
+        payload: detailDisabledPayload,
       },
       {
         handler: cancelRoute.POST as DisabledHandler,
@@ -178,12 +213,18 @@ describe('机构端知识库管理 V1 只读 API route', () => {
     }
   });
 
-  it('embeddings 与 cancel 不触碰 hostile Request 或 params 的任一 trap', async () => {
-    const { embeddingsRoute, cancelRoute, assertNoSideEffects } = await loadBlockedRoutes();
+  it('embeddings、cancel 与索引详情不触碰 hostile Request 或 params 的任一 trap', async () => {
+    const {
+      embeddingsRoute,
+      cancelRoute,
+      detailRoute,
+      assertNoSideEffects,
+    } = await loadBlockedRoutes();
 
     for (const [handler, payload] of [
       [embeddingsRoute.POST as DisabledHandler, embeddingsDisabledPayload],
       [cancelRoute.POST as DisabledHandler, cancelDisabledPayload],
+      [detailRoute.GET as DisabledHandler, detailDisabledPayload],
     ] as const) {
       const request = hostileProxy<Request>();
       const context = hostileProxy<object>();
@@ -210,10 +251,11 @@ describe('机构端知识库管理 V1 只读 API route', () => {
     }
   });
 
-  it('两个叶子 route 源码仅依赖 NextResponse，禁止旧数据链和输入读取', () => {
+  it('三个叶子 route 源码仅依赖 NextResponse，禁止旧数据链和输入读取', () => {
     const routePaths = [
       'src/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/embeddings/route.ts',
       'src/app/api/institution/knowledge-management/indexing-jobs/[jobId]/cancel/route.ts',
+      'src/app/api/institution/knowledge-management/indexing-jobs/[jobId]/route.ts',
     ];
 
     for (const routePath of routePaths) {
@@ -221,7 +263,7 @@ describe('机构端知识库管理 V1 只读 API route', () => {
       const imports = source.match(/^import .+;$/gmu) ?? [];
       expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
       expect(source).not.toMatch(
-        /getDemoAccessContextFromRequest|getDatabase|repository|storage|provider|cancelKnowledgeIndexingJob|createAndRun|\b_?request\s*(?:\.|\[)|\b_?context\s*(?:\.|\[)|fetch\(/u,
+        /getDemoAccessContextFromRequest|requireInstitutionAccess|getDatabase|repository|storage|provider|getKnowledgeIndexingJob|cancelKnowledgeIndexingJob|createAndRun|process\.env|\b_?request\s*(?:\.|\[)|\b_?context\s*(?:\.|\[)|fetch\(/u,
       );
     }
   });
