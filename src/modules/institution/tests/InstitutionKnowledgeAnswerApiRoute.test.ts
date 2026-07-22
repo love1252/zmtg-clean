@@ -85,6 +85,7 @@ async function expectCapabilityDisabled(
   const response = await route.POST(request);
 
   expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
   await expect(response.json()).resolves.toEqual(expectedPayload);
   expect(forbiddenDependencyState.initialized).toEqual([]);
   assertNoFetch();
