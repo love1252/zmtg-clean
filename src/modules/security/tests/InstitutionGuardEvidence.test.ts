@@ -196,4 +196,16 @@ describe('BASE-02B-R1 guard evidence contracts', () => {
     expectTypeOf<ActiveInstitutionAnchorProviderV1['resolve']>()
       .returns.toEqualTypeOf<Promise<ActiveInstitutionAnchorResolutionV1>>();
   });
+
+  it('keeps provenance dependency failure distinct from authentication rejection', () => {
+    const unavailable = {
+      kind: 'unavailable',
+      code: 'provenance_unavailable',
+    } as const satisfies ProvenanceResolutionV1;
+
+    expect(unavailable).toEqual({
+      kind: 'unavailable',
+      code: 'provenance_unavailable',
+    });
+  });
 });
