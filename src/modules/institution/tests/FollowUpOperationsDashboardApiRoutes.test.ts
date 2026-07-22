@@ -1,4 +1,6 @@
 import { createElement } from 'react';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { GET } from '@/app/api/institution/followup-operations/dashboard/route';
@@ -60,12 +62,21 @@ describe('follow-up operations dashboard capability gate', () => {
     for (const request of [
       new Request('http://localhost/api/institution/followup-operations/dashboard'),
       new Request('http://localhost/api/institution/followup-operations/dashboard?tenantId=other-tenant&institutionId=other-institution'),
+      new Request('http://localhost/api/institution/followup-operations/dashboard', {
+        headers: {
+          cookie: 'session=header-secret',
+          'x-institution-id': 'header-institution-secret',
+        },
+      }),
     ]) {
       const apiResponse = await GET(request);
       const payload = await apiResponse.json();
 
       expect(apiResponse.status).toBe(503);
+      expect(apiResponse.headers.get('cache-control')).toBe('no-store');
       expect(payload).toEqual(disabledPayload);
+      expect(JSON.stringify(payload)).not.toContain('header-secret');
+      expect(JSON.stringify(payload)).not.toContain('header-institution-secret');
       expect(payload).not.toHaveProperty('overview');
       expect(payload).not.toHaveProperty('pathPerformance');
       expect(payload).not.toHaveProperty('workload');
@@ -79,6 +90,18 @@ describe('follow-up operations dashboard capability gate', () => {
     }
 
     expectNoRouteSideEffects();
+  });
+
+  it('route source 不导入或初始化 capability-off 以外的依赖', async () => {
+    const source = await readFile(
+      resolve(process.cwd(), 'src/app/api/institution/followup-operations/dashboard/route.ts'),
+      'utf8',
+    );
+
+    expect(source).toMatch(/^import \{ NextResponse \} from 'next\/server';/u);
+    expect(source).not.toMatch(
+      /getDemoAccessContextFromRequest|getDatabase|create(?:AuditEvent|TenantBusiness)Repository|getFollowUpOperationsDashboard|fetch\(/u,
+    );
   });
 
   it('hostile Request Proxy traps 为零，且不触发 fetch 或任何服务', async () => {
