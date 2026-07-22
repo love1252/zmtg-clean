@@ -1,170 +1,199 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET, PATCH } from '@/app/api/institution/safety-switch/route';
-import type { AccessContext } from '@/modules/security/domain/access-control';
 
-const routeMocks = vi.hoisted(() => {
-  const auditRecord = vi.fn();
-  const database = { database: 'test-db' };
+const routeMocks = vi.hoisted(() => ({
+  auditDomainInitialized: vi.fn(),
+  auditRepositoryInitialized: vi.fn(),
+  safetySwitchDomainInitialized: vi.fn(),
+  accessControlInitialized: vi.fn(),
+  accessContextInitialized: vi.fn(),
+  databaseInitialized: vi.fn(),
+  createAuditEvent: vi.fn(() => ({})),
+  createDeniedAccessAuditEvent: vi.fn(() => ({})),
+  auditRecord: vi.fn(),
+  createAuditEventRepository: vi.fn(() => ({ record: routeMocks.auditRecord })),
+  deriveSafetySwitchViewModel: vi.fn(() => ({
+    status: 'mock_only',
+    realChannelBlocked: true,
+  })),
+  hasRealChannelEnableAttempt: vi.fn(() => false),
+  canAccessResource: vi.fn(() => ({ allowed: true })),
+  getDemoAccessContextFromRequest: vi.fn(() => ({
+    userId: 'tenant-admin',
+    role: 'tenant_admin',
+    scope: 'tenant',
+    tenantId: 'tenant-a',
+    institutionId: 'institution-a',
+    source: 'demo_session',
+  })),
+  getDatabase: vi.fn(() => ({})),
+}));
 
+vi.mock('@/modules/audit/domain/audit-events', () => {
+  routeMocks.auditDomainInitialized();
   return {
-    auditRecord,
-    createAuditEventRepository: vi.fn(() => ({ record: auditRecord })),
-    database,
-    getDatabase: vi.fn(),
-    getDemoAccessContextFromRequest: vi.fn(),
+    createAuditEvent: routeMocks.createAuditEvent,
+    createDeniedAccessAuditEvent: routeMocks.createDeniedAccessAuditEvent,
   };
 });
 
-vi.mock('@/server/db/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/server/db/client')>();
+vi.mock('@/modules/audit/server/audit-event-repository', () => {
+  routeMocks.auditRepositoryInitialized();
+  return { createAuditEventRepository: routeMocks.createAuditEventRepository };
+});
+
+vi.mock('@/modules/security/domain/safety-switch', () => {
+  routeMocks.safetySwitchDomainInitialized();
   return {
-    ...actual,
-    getDatabase: routeMocks.getDatabase,
+    deriveSafetySwitchViewModel: routeMocks.deriveSafetySwitchViewModel,
+    hasRealChannelEnableAttempt: routeMocks.hasRealChannelEnableAttempt,
   };
 });
 
-vi.mock('@/modules/security/server/access-context', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/security/server/access-context')>();
-  return {
-    ...actual,
-    getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
-  };
+vi.mock('@/modules/security/domain/access-control', () => {
+  routeMocks.accessControlInitialized();
+  return { canAccessResource: routeMocks.canAccessResource };
 });
 
-vi.mock('@/modules/audit/server/audit-event-repository', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/audit/server/audit-event-repository')>();
-  return {
-    ...actual,
-    createAuditEventRepository: routeMocks.createAuditEventRepository,
-  };
+vi.mock('@/modules/security/server/access-context', () => {
+  routeMocks.accessContextInitialized();
+  return { getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest };
 });
 
-const tenantAdminContext: AccessContext = {
-  userId: 'tenant-admin',
-  role: 'tenant_admin',
-  scope: 'tenant',
-  tenantId: 'tenant-a',
-  institutionId: 'inst-a',
-  source: 'demo_session',
+vi.mock('@/server/db/client', () => {
+  routeMocks.databaseInitialized();
+  return { getDatabase: routeMocks.getDatabase };
+});
+
+const capabilityDisabledBody = {
+  code: 'capability_disabled',
+  error: '安全开关能力当前未启用。',
 };
 
-const staffContext: AccessContext = {
-  ...tenantAdminContext,
-  userId: 'staff-user',
-  role: 'customer_service',
-};
+const initializationMocks = [
+  routeMocks.auditDomainInitialized,
+  routeMocks.auditRepositoryInitialized,
+  routeMocks.safetySwitchDomainInitialized,
+  routeMocks.accessControlInitialized,
+  routeMocks.accessContextInitialized,
+  routeMocks.databaseInitialized,
+];
 
-function request(body?: unknown) {
-  return new Request('http://localhost/api/institution/safety-switch', {
-    method: body === undefined ? 'GET' : 'PATCH',
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+const downstreamMocks = [
+  routeMocks.createAuditEvent,
+  routeMocks.createDeniedAccessAuditEvent,
+  routeMocks.auditRecord,
+  routeMocks.createAuditEventRepository,
+  routeMocks.deriveSafetySwitchViewModel,
+  routeMocks.hasRealChannelEnableAttempt,
+  routeMocks.canAccessResource,
+  routeMocks.getDemoAccessContextFromRequest,
+  routeMocks.getDatabase,
+];
+
+type RouteHandler = (request: Request) => Response | Promise<Response>;
+
+function ordinaryRequest(method: 'GET' | 'PATCH') {
+  return new Request(
+    'http://localhost/api/institution/safety-switch?tenantId=tenant_should_not_echo&current=blocked_should_not_echo',
+    {
+      method,
+      headers: {
+        cookie: 'demo_session=should-not-read; token=secret_should_not_echo',
+        'content-type': 'application/json',
+      },
+      body: method === 'PATCH'
+        ? '{"allowRealSend":true,"boundaryLabels":["caller_should_not_echo"]}'
+        : undefined,
+    },
+  );
 }
 
-async function json(response: Response) {
-  return (await response.json()) as Record<string, unknown>;
+function hostileRequest() {
+  let trapCount = 0;
+  const value = new Proxy({} as Request, {
+    get() {
+      trapCount += 1;
+      throw new Error('request must not be read');
+    },
+    getOwnPropertyDescriptor() {
+      trapCount += 1;
+      throw new Error('request descriptors must not be read');
+    },
+    ownKeys() {
+      trapCount += 1;
+      throw new Error('request keys must not be read');
+    },
+  });
+  return { value, trapCount: () => trapCount };
+}
+
+function expectNoLegacyInitializationOrCalls() {
+  for (const mock of initializationMocks) expect(mock).not.toHaveBeenCalled();
+  for (const mock of downstreamMocks) expect(mock).not.toHaveBeenCalled();
+}
+
+async function expectCapabilityDisabled(handler: RouteHandler, request: Request) {
+  const response = await handler(request);
+  const body = await response.json();
+
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  expect(body).toEqual(capabilityDisabledBody);
+  expect(Object.keys(body as object).sort()).toEqual(['code', 'error']);
+  expect(JSON.stringify(body)).not.toMatch(
+    /tenant|institution|scope|boolean|status|block.?reasons|boundary.?labels|current|updated|blocked|mock.?only|caller_should_not_echo|secret|token/i,
+  );
+  expectNoLegacyInitializationOrCalls();
 }
 
 beforeEach(() => {
-  routeMocks.getDatabase.mockReset();
-  routeMocks.getDatabase.mockReturnValue(routeMocks.database);
-  routeMocks.getDemoAccessContextFromRequest.mockReset();
-  routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantAdminContext);
-  routeMocks.createAuditEventRepository.mockClear();
-  routeMocks.auditRecord.mockReset();
-  routeMocks.auditRecord.mockResolvedValue(undefined);
+  for (const mock of downstreamMocks) mock.mockClear();
 });
 
-describe('safety switch API route', () => {
-  it('读取默认关闭的安全开关并写入低敏审计', async () => {
-    const response = await GET(request());
-    const payload = await json(response);
-
-    expect(response.status).toBe(200);
-    expect(payload).toMatchObject({
-      tenantRealChannelEnabled: false,
-      institutionRealChannelEnabled: false,
-      weComRealSendEnabled: false,
-      smsRealSendEnabled: false,
-      webhookEnabled: false,
-      emergencyStopEnabled: true,
-      allowRealSend: false,
-      externalChannelEnabled: false,
-      realChannelBlocked: true,
-      status: 'mock_only',
-    });
-    expect(payload.boundaryLabels).toEqual(
-      expect.arrayContaining([
-        '真实渠道默认关闭',
-        '企业微信真实发送关闭',
-        '短信真实发送关闭',
-        'webhook 关闭',
-        '当前仍为 mock',
-        '不接真实 HIS / 企业微信 / 短信 / webhook',
-        '不真实发送 / 不真实出网',
-      ]),
-    );
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resource: 'safety_switch',
-        action: 'read',
-        reason: 'safety_switch_read',
-      }),
-    );
+describe('safety-switch capability-off API route', () => {
+  it.each([
+    ['GET', GET],
+    ['PATCH', PATCH],
+  ] as const)('%s 对普通、query/cookie/body 输入固定返回低敏 503', async (method, handler) => {
+    await expectCapabilityDisabled(handler, ordinaryRequest(method));
   });
 
-  it('普通员工不能更新安全开关或开启真实渠道', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(staffContext);
-
-    const response = await PATCH(request({ weComRealSendEnabled: true, allowRealSend: true }));
-    const payload = await json(response);
-
-    expect(response.status).toBe(403);
-    expect(payload.error).toBe('没有访问权限');
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resource: 'safety_switch',
-        action: 'update',
-        reason: 'role_denied',
-        result: 'denied',
-      }),
+  it('PATCH 不读取非法 JSON 或 body', async () => {
+    const request = new Request(
+      'http://localhost/api/institution/safety-switch?malformed=%ZZ',
+      { method: 'PATCH', body: '{"allowRealSend":true' },
     );
+    const json = vi.spyOn(request, 'json');
+
+    await expectCapabilityDisabled(PATCH, request);
+    expect(json).not.toHaveBeenCalled();
+    expect(request.bodyUsed).toBe(false);
   });
 
-  it('管理员尝试开启真实渠道也会被 mock policy 阻断', async () => {
-    const response = await PATCH(
-      request({
-        tenantRealChannelEnabled: true,
-        institutionRealChannelEnabled: true,
-        weComRealSendEnabled: true,
-        smsRealSendEnabled: true,
-        webhookEnabled: true,
-        emergencyStopEnabled: false,
-        allowRealSend: true,
-        externalChannelEnabled: true,
-      }),
-    );
-    const payload = await json(response);
+  it.each([
+    ['GET', GET],
+    ['PATCH', PATCH],
+  ] as const)('%s 不解引用 hostile Request Proxy', async (_method, handler) => {
+    const hostile = hostileRequest();
 
-    expect(response.status).toBe(200);
-    expect(payload.allowRealSend).toBe(false);
-    expect(payload.externalChannelEnabled).toBe(false);
-    expect(payload.realChannelBlocked).toBe(true);
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resource: 'safety_switch',
-        action: 'update',
-        reason: 'real_channel_enable_blocked',
-        result: 'denied',
-      }),
+    await expectCapabilityDisabled(handler, hostile.value);
+    expect(hostile.trapCount()).toBe(0);
+  });
+
+  it('route 仅导入 NextResponse，且不含 session、RBAC、DB、审计或 safety-switch domain', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/app/api/institution/safety-switch/route.ts'),
+      'utf8',
     );
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resource: 'safety_switch',
-        action: 'update',
-        reason: 'safety_switch_updated',
-        result: 'allowed',
-      }),
+    const imports = source.match(/^import .*$/gmu) ?? [];
+
+    expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
+    expect(source).not.toMatch(
+      /getDemoAccessContextFromRequest|canAccessResource|getDatabase|createAuditEvent|deriveSafetySwitchViewModel|hasRealChannelEnableAttempt|request\.|query|cookie|body|session|tenant|institution|scope|blockReasons|boundaryLabels|current|updated|process\.env|fetch\(|Date\.|crypto|random/i,
     );
   });
 });
