@@ -6,6 +6,7 @@ import type { AuthRole, AuthSessionPayload } from '@/modules/auth/domain/session
 
 type DemoSessionGateProps = {
   allowedRole: AuthRole;
+  allowedRoles?: readonly AuthRole[];
   loginHref: string;
   wrongRoleHref: string;
   children: ReactNode;
@@ -13,7 +14,13 @@ type DemoSessionGateProps = {
 
 type SessionPayload = Partial<AuthSessionPayload>;
 
-export function DemoSessionGate({ allowedRole, loginHref, wrongRoleHref, children }: DemoSessionGateProps) {
+export function DemoSessionGate({
+  allowedRole,
+  allowedRoles,
+  loginHref,
+  wrongRoleHref,
+  children,
+}: DemoSessionGateProps) {
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
@@ -33,7 +40,8 @@ export function DemoSessionGate({ allowedRole, loginHref, wrongRoleHref, childre
           return;
         }
 
-        if (payload.user.role !== allowedRole) {
+        const authorizedRoles = allowedRoles ?? [allowedRole];
+        if (!authorizedRoles.includes(payload.user.role)) {
           window.location.href = wrongRoleHref;
           return;
         }
@@ -49,7 +57,7 @@ export function DemoSessionGate({ allowedRole, loginHref, wrongRoleHref, childre
     return () => {
       cancelled = true;
     };
-  }, [allowedRole, loginHref, wrongRoleHref]);
+  }, [allowedRole, allowedRoles, loginHref, wrongRoleHref]);
 
   if (!authorized) {
     return (
