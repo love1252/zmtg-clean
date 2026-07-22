@@ -4,13 +4,37 @@ import { resolve } from 'node:path';
 
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
-import type { CurrentInstitutionMembershipFactRow } from '@/modules/auth/server/auth-account-repository';
+const cryptoMocks = vi.hoisted(() => ({
+  randomUUID: vi.fn<typeof import('node:crypto').randomUUID>(),
+}));
+
+vi.mock('node:crypto', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:crypto')>();
+  cryptoMocks.randomUUID.mockImplementation(actual.randomUUID);
+  return {
+    ...actual,
+    randomUUID: cryptoMocks.randomUUID,
+  };
+});
+
 import {
+  consumeFormalServerSessionUserSnapshotV1,
+  createAuthAccountRepository,
+  isFormalServerSessionUserSnapshotV1,
+  type CurrentInstitutionMembershipFactRow,
+  type FormalServerSessionUserSnapshotV1,
+} from '@/modules/auth/server/auth-account-repository';
+import {
+  consumeFormalServerSessionVerifiedClaimsV1,
   consumeFormalServerSessionRequestOwnerV1,
   createFormalServerSessionRequestOwnerV1,
   createFormalServerSessionProvenanceResolverV1,
   FORMAL_SERVER_SESSION_COOKIE_V1,
+  isFormalServerSessionVerifiedClaimsV1,
   isFormalServerSessionRequestOwnerV1,
+  issueFormalServerSessionCookieV1,
+  verifyFormalServerSessionCookieClaimsV1,
+  type FormalServerSessionVerifiedClaimsV1,
   type FormalServerSessionRequestOwnerV1,
   type FormalServerSessionKeyRingV1,
 } from '@/modules/auth/server/formal-server-session-provenance-owner';
@@ -24,6 +48,7 @@ import {
   type AuthoritativeInstitutionMembershipFactReaderV1,
 } from '@/modules/security/server/institution-membership-provider';
 import { createInstitutionGuardReferenceCodecV1 } from '@/modules/security/server/institution-guard-reference';
+import type { TenantDatabase } from '@/server/db/client';
 
 const SESSION_KEY = new Uint8Array(32).fill(0x73);
 const OLD_SESSION_KEY = new Uint8Array(32).fill(0x6f);
@@ -152,6 +177,536 @@ function requestOwner(input: Readonly<{
     }),
   };
 }
+
+const formalSessionUserRow = Object.freeze({
+  accountId: payload.accountId,
+  accountUsername: 'account_operator',
+  accountDisplayName: '账号操作员',
+  accountStatus: 'active',
+  accountPasswordResetRequired: false,
+  accountLockedUntil: null,
+  membershipTenantId: payload.tenantId,
+  membershipUserId: payload.accountId,
+  membershipRole: 'tenant_operator',
+  membershipDisplayName: '机构操作员',
+  bindingId: 'binding-001',
+  bindingAccountId: payload.accountId,
+  bindingTenantId: payload.tenantId,
+  bindingInstitutionId: payload.institutionId,
+  bindingStatus: 'active',
+  bindingSource: 'manual_admin',
+  bindingAssignedAt: new Date('2026-07-22T08:00:00.000Z'),
+  bindingExpiresAt: null,
+  bindingRevokedAt: null,
+  bindingVersion: 1,
+});
+
+async function repositorySessionUserSnapshot(): Promise<FormalServerSessionUserSnapshotV1> {
+  const limit = vi.fn(async () => [formalSessionUserRow]);
+  const chain = {
+    from: vi.fn(),
+    innerJoin: vi.fn(),
+    limit,
+    where: vi.fn(),
+  };
+  chain.from.mockReturnValue(chain);
+  chain.innerJoin.mockReturnValue(chain);
+  chain.where.mockReturnValue(chain);
+  const database = {
+    select: vi.fn(() => chain),
+  } as unknown as TenantDatabase;
+  const snapshot = await createAuthAccountRepository(
+    database,
+  ).findCurrentFormalSessionUser({
+    accountId: payload.accountId,
+    tenantId: payload.tenantId,
+    institutionId: payload.institutionId,
+  });
+  if (snapshot.kind !== 'resolved') {
+    throw new Error('expected formal session user snapshot');
+  }
+  return snapshot.snapshot;
+}
+
+describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
+  it('issues one canonical current-key V1 cookie only from a genuine repository snapshot', async () => {
+    const sessionUserSnapshot = await repositorySessionUserSnapshot();
+    const now = vi.fn(() => VERIFIED_AT);
+    cryptoMocks.randomUUID.mockClear();
+    const result = issueFormalServerSessionCookieV1({
+      sessionUserSnapshot,
+      sessionKeyRing: keyRing(),
+      now,
+    });
+
+    expect(result).toMatchObject({
+      kind: 'issued',
+      expiresAt: '2026-07-22T16:02:00.000Z',
+      maxAgeSeconds: 28_800,
+    });
+    expect(now).toHaveBeenCalledTimes(1);
+    expect(cryptoMocks.randomUUID).toHaveBeenCalledTimes(1);
+    expect(isFormalServerSessionUserSnapshotV1(sessionUserSnapshot)).toBe(false);
+    if (result.kind !== 'issued') throw new Error('expected issued cookie');
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(result.sessionUser).toEqual({
+      id: payload.accountId,
+      username: 'account_operator',
+      name: '机构操作员',
+      role: 'tenant_operator',
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+    });
+    expect(Object.isFrozen(result.sessionUser)).toBe(true);
+    const [version, keyVersion, payloadSegment, tagSegment] = result.cookieValue.split('.');
+    expect([version, keyVersion]).toEqual(['v1', 'k2']);
+    expect(tagSegment).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    const decoded = JSON.parse(
+      Buffer.from(payloadSegment ?? '', 'base64url').toString('utf8'),
+    ) as Record<string, unknown>;
+    expect(Object.keys(decoded)).toEqual([
+      'source',
+      'sessionId',
+      'accountId',
+      'tenantId',
+      'institutionId',
+      'issuedAt',
+      'expiresAt',
+    ]);
+    expect(decoded).toMatchObject({
+      source: 'server_session',
+      accountId: payload.accountId,
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+      issuedAt: VERIFIED_AT.toISOString(),
+      expiresAt: '2026-07-22T16:02:00.000Z',
+    });
+    expect(decoded.sessionId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+    );
+    expect(Buffer.from(JSON.stringify(decoded)).toString('base64url')).toBe(payloadSegment);
+  });
+
+  it('round-trips issued cookies through an authentic opaque single-use verified-claims handle', async () => {
+    const sessionUserSnapshot = await repositorySessionUserSnapshot();
+    const issued = issueFormalServerSessionCookieV1({
+      sessionUserSnapshot,
+      sessionKeyRing: keyRing(),
+      now: () => VERIFIED_AT,
+    });
+    if (issued.kind !== 'issued') throw new Error('expected issued cookie');
+
+    const resolution = verifyFormalServerSessionCookieClaimsV1({
+      cookieHeader: `${FORMAL_SERVER_SESSION_COOKIE_V1}=${issued.cookieValue}`,
+      sessionKeyRing: keyRing(),
+      now: () => VERIFIED_AT,
+    });
+    expect(resolution.kind).toBe('verified');
+    if (resolution.kind !== 'verified') throw new Error('expected verified claims');
+    expectTypeOf(resolution.verifiedClaims).toEqualTypeOf<FormalServerSessionVerifiedClaimsV1>();
+    expect(Object.isFrozen(resolution)).toBe(true);
+    expect(Object.isFrozen(resolution.verifiedClaims)).toBe(true);
+    expect(Object.keys(resolution.verifiedClaims)).toEqual([]);
+    expect(isFormalServerSessionVerifiedClaimsV1(resolution.verifiedClaims)).toBe(true);
+    expect(JSON.stringify(resolution.verifiedClaims)).toBe('{}');
+
+    expect(consumeFormalServerSessionVerifiedClaimsV1(resolution.verifiedClaims)).toEqual({
+      accountId: payload.accountId,
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+    });
+    expect(consumeFormalServerSessionVerifiedClaimsV1(resolution.verifiedClaims)).toBeNull();
+    expect(isFormalServerSessionVerifiedClaimsV1(resolution.verifiedClaims)).toBe(false);
+  });
+
+  it('prevents callers from injecting claims and rejects handle lookalikes without property access', () => {
+    type IssueInput = Parameters<typeof issueFormalServerSessionCookieV1>[0];
+    type VerifyInput = Parameters<typeof verifyFormalServerSessionCookieClaimsV1>[0];
+    type ConsumeInput = Parameters<typeof consumeFormalServerSessionVerifiedClaimsV1>[0];
+    expectTypeOf<keyof IssueInput>().toEqualTypeOf<
+      'sessionUserSnapshot' | 'sessionKeyRing' | 'now'
+    >();
+    expectTypeOf<keyof VerifyInput>().toEqualTypeOf<
+      'cookieHeader' | 'sessionKeyRing' | 'now'
+    >();
+    expectTypeOf<ConsumeInput>().toEqualTypeOf<unknown>();
+
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor: Record<string, unknown> = {};
+    Object.defineProperty(accessor, 'accountId', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('claims getter must not run');
+      },
+    });
+    const proxy = new Proxy({}, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('claims proxy trap must not run');
+      },
+    });
+    for (const value of [{}, accessor, proxy]) {
+      expect(isFormalServerSessionVerifiedClaimsV1(value)).toBe(false);
+      expect(consumeFormalServerSessionVerifiedClaimsV1(value)).toBeNull();
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  it('never falls back to verify-only signing material and consumes the snapshot on failure', async () => {
+    const sessionUserSnapshot = await repositorySessionUserSnapshot();
+    const sessionKeyRing = keyRing({
+      currentKey: { keyVersion: 2, keyMaterial: null },
+      verifyOnlyKeys: [
+        {
+          keyVersion: 1,
+          keyMaterial: OLD_SESSION_KEY,
+          verifyUntil: '2026-07-22T08:30:00.000Z',
+        },
+      ],
+    });
+    cryptoMocks.randomUUID.mockClear();
+    const result = issueFormalServerSessionCookieV1({
+      sessionUserSnapshot,
+      sessionKeyRing,
+      now: () => VERIFIED_AT,
+    });
+
+    expect(result).toEqual({
+      kind: 'unavailable',
+      code: 'formal_session_unavailable',
+    });
+    expect(isFormalServerSessionUserSnapshotV1(sessionUserSnapshot)).toBe(false);
+    expect(cryptoMocks.randomUUID).not.toHaveBeenCalled();
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(Buffer.from(SESSION_KEY).toString('hex'));
+    expect(serialized).not.toContain(Buffer.from(OLD_SESSION_KEY).toString('hex'));
+    expect(serialized).not.toContain(payload.accountId);
+  });
+
+  it('rejects forged or revoked snapshots before key, clock, or random access', async () => {
+    const revoked = await repositorySessionUserSnapshot();
+    expect(consumeFormalServerSessionUserSnapshotV1(revoked)).not.toBeNull();
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor: Record<string, unknown> = {};
+    Object.defineProperty(accessor, 'user', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('snapshot getter must not run');
+      },
+    });
+    const proxy = new Proxy({}, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('snapshot proxy trap must not run');
+      },
+    });
+    const nullPrototype = Object.create(null) as object;
+    const hostileKeyRing: Record<string, unknown> = {};
+    Object.defineProperty(hostileKeyRing, 'currentKey', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('key getter must not run');
+      },
+    });
+    const now = vi.fn(() => {
+      throw new Error('clock must not run');
+    });
+    cryptoMocks.randomUUID.mockClear();
+
+    for (const sessionUserSnapshot of [
+      {},
+      { user: formalSessionUserRow },
+      nullPrototype,
+      accessor,
+      proxy,
+      revoked,
+    ]) {
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot: sessionUserSnapshot as FormalServerSessionUserSnapshotV1,
+        sessionKeyRing: hostileKeyRing as never,
+        now,
+      })).toEqual({
+        kind: 'unavailable',
+        code: 'formal_session_unavailable',
+      });
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+    expect(now).not.toHaveBeenCalled();
+    expect(cryptoMocks.randomUUID).not.toHaveBeenCalled();
+  });
+
+  it('atomically consumes once so dependency failure cannot be retried', async () => {
+    const sessionUserSnapshot = await repositorySessionUserSnapshot();
+    const now = vi.fn(() => VERIFIED_AT);
+    cryptoMocks.randomUUID.mockClear();
+    expect(issueFormalServerSessionCookieV1({
+      sessionUserSnapshot,
+      sessionKeyRing: keyRing({
+        currentKey: { keyVersion: 2, keyMaterial: null },
+      }),
+      now,
+    })).toEqual({
+      kind: 'unavailable',
+      code: 'formal_session_unavailable',
+    });
+    expect(now).not.toHaveBeenCalled();
+    expect(cryptoMocks.randomUUID).not.toHaveBeenCalled();
+
+    let keyReads = 0;
+    const hostileKeyRing: Record<string, unknown> = {};
+    Object.defineProperty(hostileKeyRing, 'currentKey', {
+      enumerable: true,
+      get() {
+        keyReads += 1;
+        throw new Error('consumed snapshot must reject before key access');
+      },
+    });
+    const retryNow = vi.fn(() => VERIFIED_AT);
+    expect(issueFormalServerSessionCookieV1({
+      sessionUserSnapshot,
+      sessionKeyRing: hostileKeyRing as never,
+      now: retryNow,
+    })).toEqual({
+      kind: 'unavailable',
+      code: 'formal_session_unavailable',
+    });
+    expect(keyReads).toBe(0);
+    expect(retryNow).not.toHaveBeenCalled();
+    expect(cryptoMocks.randomUUID).not.toHaveBeenCalled();
+  });
+
+  it('consumes permanently when clock throws or returns an invalid Date', async () => {
+    for (const now of [
+      () => {
+        throw new Error('clock unavailable');
+      },
+      () => new Date(Number.NaN),
+    ]) {
+      const sessionUserSnapshot = await repositorySessionUserSnapshot();
+      cryptoMocks.randomUUID.mockClear();
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot,
+        sessionKeyRing: keyRing(),
+        now,
+      })).toEqual({
+        kind: 'unavailable',
+        code: 'formal_session_unavailable',
+      });
+      expect(isFormalServerSessionUserSnapshotV1(sessionUserSnapshot)).toBe(false);
+      expect(cryptoMocks.randomUUID).not.toHaveBeenCalled();
+
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot,
+        sessionKeyRing: keyRing(),
+        now: () => VERIFIED_AT,
+      })).toEqual({
+        kind: 'unavailable',
+        code: 'formal_session_unavailable',
+      });
+      expect(cryptoMocks.randomUUID).not.toHaveBeenCalled();
+    }
+  });
+
+  it('requires a canonical random UUID and consumes permanently on random failure', async () => {
+    const randomFailures = [
+      () => {
+        throw new Error('random unavailable');
+      },
+      () => 'not-a-canonical-uuid' as ReturnType<typeof cryptoMocks.randomUUID>,
+    ];
+
+    for (const randomFailure of randomFailures) {
+      const sessionUserSnapshot = await repositorySessionUserSnapshot();
+      cryptoMocks.randomUUID.mockImplementationOnce(randomFailure);
+      const callsBefore = cryptoMocks.randomUUID.mock.calls.length;
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot,
+        sessionKeyRing: keyRing(),
+        now: () => VERIFIED_AT,
+      })).toEqual({
+        kind: 'unavailable',
+        code: 'formal_session_unavailable',
+      });
+      expect(cryptoMocks.randomUUID.mock.calls.length).toBe(callsBefore + 1);
+      expect(isFormalServerSessionUserSnapshotV1(sessionUserSnapshot)).toBe(false);
+
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot,
+        sessionKeyRing: keyRing(),
+        now: () => VERIFIED_AT,
+      })).toEqual({
+        kind: 'unavailable',
+        code: 'formal_session_unavailable',
+      });
+      expect(cryptoMocks.randomUUID.mock.calls.length).toBe(callsBefore + 1);
+    }
+  });
+
+  it('copies current key before clock-side mutation and never signs with verify-only keys', async () => {
+    const sessionUserSnapshot = await repositorySessionUserSnapshot();
+    const mutableCurrentKey = Uint8Array.from(SESSION_KEY);
+    const issued = issueFormalServerSessionCookieV1({
+      sessionUserSnapshot,
+      sessionKeyRing: keyRing({
+        currentKey: { keyVersion: 2, keyMaterial: mutableCurrentKey },
+      }),
+      now: () => {
+        mutableCurrentKey.fill(0);
+        return VERIFIED_AT;
+      },
+    });
+    expect(issued.kind).toBe('issued');
+    if (issued.kind !== 'issued') throw new Error('expected issued cookie');
+    expect(issued.cookieValue.startsWith('v1.k2.')).toBe(true);
+    expect(verifyFormalServerSessionCookieClaimsV1({
+      cookieHeader: `${FORMAL_SERVER_SESSION_COOKIE_V1}=${issued.cookieValue}`,
+      sessionKeyRing: keyRing(),
+      now: () => VERIFIED_AT,
+    }).kind).toBe('verified');
+  });
+
+  it('signs from currentKey only and never reads or traverses verifyOnlyKeys', async () => {
+    let verifyOnlyGetterReads = 0;
+    let verifyOnlyProxyTraps = 0;
+    let currentKeyGetterReads = 0;
+    let keyRingProxyTraps = 0;
+    const accessorRing: Record<string, unknown> = {
+      currentKey: {
+        keyVersion: 2,
+        keyMaterial: SESSION_KEY,
+      },
+    };
+    Object.defineProperty(accessorRing, 'verifyOnlyKeys', {
+      enumerable: true,
+      get() {
+        verifyOnlyGetterReads += 1;
+        throw new Error('signing must ignore verify-only getter');
+      },
+    });
+    const verifyOnlyPoison = new Proxy([], {
+      get() {
+        verifyOnlyProxyTraps += 1;
+        throw new Error('signing must not read verify-only contents');
+      },
+      getOwnPropertyDescriptor() {
+        verifyOnlyProxyTraps += 1;
+        throw new Error('signing must not inspect verify-only contents');
+      },
+      getPrototypeOf() {
+        verifyOnlyProxyTraps += 1;
+        throw new Error('signing must not inspect verify-only prototype');
+      },
+      ownKeys() {
+        verifyOnlyProxyTraps += 1;
+        throw new Error('signing must not traverse verify-only contents');
+      },
+    });
+    const poisonRing = {
+      currentKey: {
+        keyVersion: 2,
+        keyMaterial: SESSION_KEY,
+      },
+      verifyOnlyKeys: verifyOnlyPoison,
+    };
+
+    for (const sessionKeyRing of [accessorRing, poisonRing]) {
+      const sessionUserSnapshot = await repositorySessionUserSnapshot();
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot,
+        sessionKeyRing: sessionKeyRing as FormalServerSessionKeyRingV1,
+        now: () => VERIFIED_AT,
+      }).kind).toBe('issued');
+    }
+    expect(verifyOnlyGetterReads).toBe(0);
+    expect(verifyOnlyProxyTraps).toBe(0);
+
+    const accessorCurrentKeyRing: Record<string, unknown> = {
+      verifyOnlyKeys: [],
+    };
+    Object.defineProperty(accessorCurrentKeyRing, 'currentKey', {
+      enumerable: true,
+      get() {
+        currentKeyGetterReads += 1;
+        throw new Error('current signing key must be a data descriptor');
+      },
+    });
+    const proxyKeyRing = new Proxy(keyRing(), {
+      getOwnPropertyDescriptor() {
+        keyRingProxyTraps += 1;
+        throw new Error('signing key-ring proxy trap must not run');
+      },
+      getPrototypeOf() {
+        keyRingProxyTraps += 1;
+        throw new Error('signing key-ring proxy trap must not run');
+      },
+      ownKeys() {
+        keyRingProxyTraps += 1;
+        throw new Error('signing key-ring proxy trap must not run');
+      },
+    });
+    const now = vi.fn(() => VERIFIED_AT);
+    cryptoMocks.randomUUID.mockClear();
+    for (const sessionKeyRing of [accessorCurrentKeyRing, proxyKeyRing]) {
+      const sessionUserSnapshot = await repositorySessionUserSnapshot();
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot,
+        sessionKeyRing: sessionKeyRing as FormalServerSessionKeyRingV1,
+        now,
+      })).toEqual({
+        kind: 'unavailable',
+        code: 'formal_session_unavailable',
+      });
+    }
+    expect(currentKeyGetterReads).toBe(0);
+    expect(keyRingProxyTraps).toBe(0);
+    expect(now).not.toHaveBeenCalled();
+    expect(cryptoMocks.randomUUID).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [null, keyRing(), 'provenance_missing'],
+    ['zmtg_demo_session=present', keyRing(), 'provenance_source_denied'],
+    [
+      `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken().slice(0, -1)}A`,
+      keyRing(),
+      'provenance_invalid',
+    ],
+    [
+      `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken({
+        ...payload,
+        expiresAt: VERIFIED_AT.toISOString(),
+      })}`,
+      keyRing(),
+      'provenance_expired',
+    ],
+    [
+      `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken()}`,
+      keyRing({ currentKey: { keyVersion: 2, keyMaterial: null } }),
+      'provenance_unavailable',
+    ],
+  ] as const)(
+    'fails cookie claims verification closed without exposing claims or keys',
+    (cookieHeader, sessionKeyRing, expectedCode) => {
+      const result = verifyFormalServerSessionCookieClaimsV1({
+        cookieHeader,
+        sessionKeyRing,
+        now: () => VERIFIED_AT,
+      });
+      expect(result).toEqual(expect.objectContaining({ code: expectedCode }));
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain(payload.accountId);
+      expect(serialized).not.toContain(Buffer.from(SESSION_KEY).toString('hex'));
+      expect(serialized).not.toContain(Buffer.from(OLD_SESSION_KEY).toString('hex'));
+    },
+  );
+});
 
 describe('AUTH-SESSION-01A formal server session provenance owner', () => {
   it('issues an opaque authentic request owner with atomic single-use consumption', () => {
