@@ -1063,6 +1063,192 @@ describe('机构端知识库只读列表 UI', () => {
     });
   });
 
+  it.each([
+    ['503', () => Response.json({ code: 'capability_disabled' }, { status: 503 })],
+    ['非法 payload', () => Response.json({ records: null })],
+    ['异常', () => { throw new Error('retrieval failed'); }],
+  ] as const)('检索 %s 后清空旧结果并保持不可用，不伪装为空态', async (_label, responseFactory) => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    const input = within(searchSection).getByLabelText('输入片段检索内容');
+    fireEvent.change(input, { target: { value: '初始检索' } });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
+    expect(await within(searchSection).findByText('机构端 hybrid rerank 引用片段')).toBeInTheDocument();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/retrieval')) {
+          return responseFactory();
+        }
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+
+    fireEvent.change(input, { target: { value: '当前失败检索' } });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
+
+    expect(await within(searchSection).findByText('知识库检索暂时不可用')).toBeInTheDocument();
+    expect(within(searchSection).queryByText('机构端 hybrid rerank 引用片段')).not.toBeInTheDocument();
+    expect(within(searchSection).queryByText('暂无匹配片段')).not.toBeInTheDocument();
+  });
+
+  it('检索 loading 时不显示空态或旧结果', async () => {
+    let resolveRetrieval!: (response: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/retrieval')) {
+          return new Promise<Response>((resolve) => {
+            resolveRetrieval = resolve;
+          });
+        }
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+
+    render(<InstitutionKnowledgeReadonlyShell />);
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索内容'), {
+      target: { value: '等待检索' },
+    });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
+
+    expect(within(searchSection).getByText('正在执行 hybrid/vector/keyword 检索并重排片段...')).toBeInTheDocument();
+    expect(within(searchSection).queryByText('暂无匹配片段')).not.toBeInTheDocument();
+    resolveRetrieval(Response.json({ records: [], pageInfo }));
+    expect(await within(searchSection).findByText('暂无匹配片段')).toBeInTheDocument();
+  });
+
+  it('旧检索 pending 时提交空查询会立即退出 loading，且旧回包不能回填', async () => {
+    let resolveOlder!: (response: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/retrieval')) {
+          return new Promise<Response>((resolve) => {
+            resolveOlder = resolve;
+          });
+        }
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+
+    render(<InstitutionKnowledgeReadonlyShell />);
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    const input = within(searchSection).getByLabelText('输入片段检索内容');
+    const button = within(searchSection).getByRole('button', { name: '检索片段' });
+    const form = button.closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.change(input, { target: { value: '旧检索' } });
+    fireEvent.click(button);
+    expect(button).toBeDisabled();
+
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(await within(searchSection).findByText('请输入检索内容后再检索知识片段')).toBeInTheDocument();
+    expect(button).not.toBeDisabled();
+    expect(within(searchSection).queryByText('暂无匹配片段')).not.toBeInTheDocument();
+    expect(within(searchSection).getByText('—')).toBeInTheDocument();
+
+    resolveOlder(Response.json({
+      records: [{
+        knowledgeId: 'knowledge-old', knowledgeTitle: '过期知识', fileId: 'file-old', fileName: '过期文件.pdf',
+        chunkId: 'chunk-old', chunkIndex: 0, textPreview: '过期敏感检索结果', retrievalMode: 'hybrid', matchReason: 'old',
+      }],
+      pageInfo,
+    }));
+
+    await waitFor(() => expect(within(searchSection).queryByText('过期敏感检索结果')).not.toBeInTheDocument());
+    expect(within(searchSection).getByText('请输入检索内容后再检索知识片段')).toBeInTheDocument();
+  });
+
+  it('新检索失败后，晚到旧成功不能回填结果或空态', async () => {
+    let resolveOlder!: (response: Response) => void;
+    let retrievalCall = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/retrieval')) {
+          retrievalCall += 1;
+          if (retrievalCall === 1) {
+            return new Promise<Response>((resolve) => {
+              resolveOlder = resolve;
+            });
+          }
+          return Response.json({ code: 'capability_disabled' }, { status: 503 });
+        }
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+
+    render(<InstitutionKnowledgeReadonlyShell />);
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    const form = within(searchSection).getByRole('button', { name: '检索片段' }).closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索内容'), { target: { value: '旧检索' } });
+    fireEvent.submit(form as HTMLFormElement);
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索内容'), { target: { value: '新检索' } });
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(await within(searchSection).findByText('知识库检索暂时不可用')).toBeInTheDocument();
+    resolveOlder(Response.json({
+      records: [{
+        knowledgeId: 'knowledge-old', knowledgeTitle: '过期知识', fileId: 'file-old', fileName: '过期文件.pdf',
+        chunkId: 'chunk-old', chunkIndex: 0, textPreview: '过期敏感检索结果', retrievalMode: 'hybrid', matchReason: 'old',
+      }],
+      pageInfo,
+    }));
+
+    await waitFor(() => expect(within(searchSection).queryByText('过期敏感检索结果')).not.toBeInTheDocument());
+    expect(within(searchSection).queryByText('暂无匹配片段')).not.toBeInTheDocument();
+  });
+
+  it('新权威空结果后，晚到旧失败不能覆盖当前空态', async () => {
+    let rejectOlder!: (error: Error) => void;
+    let retrievalCall = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/retrieval')) {
+          retrievalCall += 1;
+          if (retrievalCall === 1) {
+            return new Promise<Response>((_resolve, reject) => {
+              rejectOlder = reject;
+            });
+          }
+          return Response.json({ records: [], pageInfo });
+        }
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+
+    render(<InstitutionKnowledgeReadonlyShell />);
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    const form = within(searchSection).getByRole('button', { name: '检索片段' }).closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索内容'), { target: { value: '旧检索' } });
+    fireEvent.submit(form as HTMLFormElement);
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索内容'), { target: { value: '新检索' } });
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(await within(searchSection).findByText('暂无匹配片段')).toBeInTheDocument();
+    rejectOlder(new Error('older request failed'));
+    await waitFor(() => expect(within(searchSection).getByText('暂无匹配片段')).toBeInTheDocument());
+    expect(within(searchSection).queryByText('知识库检索暂时不可用')).not.toBeInTheDocument();
+  });
+
   it('检索结果中不展示敏感字段', async () => {
     render(<InstitutionKnowledgeReadonlyShell />);
     expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();

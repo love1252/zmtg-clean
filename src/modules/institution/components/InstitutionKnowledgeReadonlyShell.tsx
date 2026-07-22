@@ -18,6 +18,7 @@ import { cn } from '@/shared/utils/cn';
 type LoadStatus = 'loading' | 'success' | 'error';
 type FileListLoadStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
 type QaAuditLoadStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
+type ChunkSearchLoadStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
 type InstitutionKnowledgeFileRecord = {
   fileId: string;
   originalFilename: string;
@@ -315,8 +316,10 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [chunkSearchMode, setChunkSearchMode] = useState<'keyword' | 'vector' | 'hybrid'>('hybrid');
   const [chunkSearchTopK, setChunkSearchTopK] = useState<'3' | '5' | '10'>('5');
   const [chunkSearchResults, setChunkSearchResults] = useState<InstitutionKnowledgeSearchResultRecord[]>([]);
+  const [chunkSearchStatus, setChunkSearchStatus] = useState<ChunkSearchLoadStatus>('idle');
   const [chunkSearchMessage, setChunkSearchMessage] = useState('默认使用 hybrid 检索：keyword + vector 召回后按 deterministic rerank 排序，不会展示向量数组或内部配置');
   const [isChunkSearching, setIsChunkSearching] = useState(false);
+  const chunkSearchRequestRevisionRef = useRef(0);
   const [vectorSearchInput, setVectorSearchInput] = useState('');
   const [vectorSearchResults, setVectorSearchResults] = useState<InstitutionKnowledgeVectorSearchResultRecord[]>([]);
   const [vectorSearchMessage, setVectorSearchMessage] = useState('请输入内容进行语义检索');
@@ -623,14 +626,19 @@ export function InstitutionKnowledgeReadonlyShell() {
 
   async function searchChunks(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const requestRevision = chunkSearchRequestRevisionRef.current + 1;
+    chunkSearchRequestRevisionRef.current = requestRevision;
     const query = chunkSearchInput.trim();
+    setChunkSearchResults([]);
     if (!query) {
-      setChunkSearchResults([]);
+      setIsChunkSearching(false);
+      setChunkSearchStatus('idle');
       setChunkSearchMessage('请输入检索内容后再检索知识片段');
       return;
     }
 
     setIsChunkSearching(true);
+    setChunkSearchStatus('loading');
     setChunkSearchMessage('正在执行 hybrid/vector/keyword 检索并重排片段...');
     try {
       const params = new URLSearchParams({
@@ -644,20 +652,27 @@ export function InstitutionKnowledgeReadonlyShell() {
         cache: 'no-store',
       });
       const payload = await response.json().catch(() => null);
+      if (chunkSearchRequestRevisionRef.current !== requestRevision) return;
       if (!response.ok || !payload || !Array.isArray(payload.records)) {
         setChunkSearchResults([]);
+        setChunkSearchStatus('unavailable');
         setChunkSearchMessage('知识库检索暂时不可用');
         return;
       }
 
       const records = payload.records as InstitutionKnowledgeSearchResultRecord[];
       setChunkSearchResults(records);
-      setChunkSearchMessage(records.length > 0 ? `已按 rerank 排序命中 ${records.length} 个引用片段` : '暂无匹配片段');
+      setChunkSearchStatus('ready');
+      setChunkSearchMessage(records.length > 0 ? `已按 rerank 排序命中 ${records.length} 个引用片段` : '权威检索结果为空');
     } catch {
+      if (chunkSearchRequestRevisionRef.current !== requestRevision) return;
       setChunkSearchResults([]);
+      setChunkSearchStatus('unavailable');
       setChunkSearchMessage('知识库检索暂时不可用');
     } finally {
-      setIsChunkSearching(false);
+      if (chunkSearchRequestRevisionRef.current === requestRevision) {
+        setIsChunkSearching(false);
+      }
     }
   }
 
@@ -1479,9 +1494,13 @@ export function InstitutionKnowledgeReadonlyShell() {
             {chunkSearchMessage}
           </div>
           <div className="mt-3 grid gap-3 xl:grid-cols-2">
-            {chunkSearchResults.length === 0 ? (
+            {chunkSearchStatus === 'ready' && chunkSearchResults.length === 0 ? (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
                 暂无匹配片段
+              </div>
+            ) : chunkSearchResults.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
+                {chunkSearchStatus === 'unavailable' ? '检索结果暂不可用' : '—'}
               </div>
             ) : (
               chunkSearchResults.map((result) => (
