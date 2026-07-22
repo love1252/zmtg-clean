@@ -1,0 +1,656 @@
+import { createHmac } from 'node:crypto';
+
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+
+import type { CurrentInstitutionMembershipFactRow } from '@/modules/auth/server/auth-account-repository';
+import {
+  createFormalServerSessionRequestOwnerV1,
+  FORMAL_SERVER_SESSION_COOKIE_V1,
+  type FormalServerSessionKeyRingV1,
+  type FormalServerSessionRequestOwnerV1,
+} from '@/modules/auth/server/formal-server-session-provenance-owner';
+import {
+  createActiveInstitutionAnchorProviderV1,
+  createAuthoritativeInstitutionAnchorFactReaderV1,
+} from '@/modules/security/server/institution-anchor-provider';
+import type { CurrentInstitutionAnchorFactRowV1 } from '@/modules/security/server/institution-anchor-repository';
+import type { ActiveInstitutionAnchorProviderV1 } from '@/modules/security/server/institution-guard-evidence';
+import {
+  createInstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceCodecV1,
+} from '@/modules/security/server/institution-guard-reference';
+import {
+  createAuthoritativeInstitutionMembershipFactReaderV1,
+} from '@/modules/security/server/institution-membership-provider';
+import {
+  createInstitutionRequestAuthorizationV1,
+  isInstitutionRequestAuthorizationV1,
+  type InstitutionRequestAuthorizationV1,
+} from '@/modules/security/server/institution-request-authorization';
+import {
+  isInstitutionSectionAllowV1,
+  type InstitutionSectionGuardInputV1,
+} from '@/modules/security/server/institution-section-guard';
+
+const NOW = new Date('2026-07-22T08:02:00.000Z');
+const SESSION_KEY = new Uint8Array(32).fill(0x73);
+const REFERENCE_KEY = new Uint8Array(32).fill(0x72);
+const SESSION_PROTOCOL = 'zmtg.formal-server-session-cookie.v1';
+const payload = Object.freeze({
+  source: 'server_session' as const,
+  sessionId: 'session-compose-001',
+  accountId: 'account-compose-001',
+  tenantId: 'tenant-compose-001',
+  institutionId: 'institution-compose-001',
+  issuedAt: '2026-07-22T08:00:00.000Z',
+  expiresAt: '2026-07-22T09:00:00.000Z',
+});
+
+function signToken(value: Record<string, unknown> = payload) {
+  const payloadSegment = Buffer.from(JSON.stringify(value)).toString('base64url');
+  const signingInput = `${SESSION_PROTOCOL}\n2\n${payloadSegment}`;
+  const tag = createHmac('sha256', SESSION_KEY)
+    .update(signingInput)
+    .digest('base64url');
+  return `v1.k2.${payloadSegment}.${tag}`;
+}
+
+function tamperToken(token: string) {
+  const parts = token.split('.');
+  const tag = parts.at(-1);
+  if (!tag) throw new Error('expected token tag');
+  parts[parts.length - 1] = `${tag[0] === 'A' ? 'B' : 'A'}${tag.slice(1)}`;
+  return parts.join('.');
+}
+
+function sessionKeyRing(
+  keyMaterial: Uint8Array | null = SESSION_KEY,
+): FormalServerSessionKeyRingV1 {
+  return {
+    currentKey: { keyVersion: 2, keyMaterial },
+    verifyOnlyKeys: [],
+  };
+}
+
+function referenceCodec(keyMaterial: Uint8Array | null = REFERENCE_KEY) {
+  return createInstitutionGuardReferenceCodecV1({
+    keyRing: {
+      currentIssueKey: { keyVersion: 1, keyMaterial },
+      verifyOnlyKeys: [],
+    },
+    now: () => NOW,
+  });
+}
+
+const membershipRow: CurrentInstitutionMembershipFactRow = {
+  accountId: payload.accountId,
+  accountStatus: 'active',
+  accountPasswordResetRequired: false,
+  accountLockedUntil: null,
+  membershipId: 'membership-compose-001',
+  membershipTenantId: payload.tenantId,
+  membershipUserId: payload.accountId,
+  membershipRole: 'tenant_admin',
+  membershipUpdatedAt: new Date('2026-07-22T08:01:00.000Z'),
+  bindingId: 'binding-compose-001',
+  bindingAccountId: payload.accountId,
+  bindingTenantId: payload.tenantId,
+  bindingInstitutionId: payload.institutionId,
+  bindingStatus: 'active',
+  bindingSource: 'manual_admin',
+  bindingAssignedAt: new Date('2026-07-22T08:00:00.000Z'),
+  bindingExpiresAt: null,
+  bindingRevokedAt: null,
+  bindingVersion: 1,
+};
+
+const anchorRow: CurrentInstitutionAnchorFactRowV1 = {
+  tenantId: payload.tenantId,
+  institutionId: payload.institutionId,
+  status: 'active',
+  revision: 1,
+};
+
+type FixtureOptions = Readonly<{
+  cookieHeader?: string | null;
+  sessionKeyRing?: FormalServerSessionKeyRingV1;
+  compositionNow?: () => Date;
+}>;
+
+function fixture(options: FixtureOptions = {}) {
+  const codec = referenceCodec();
+  const membershipRead = vi.fn(async () => [membershipRow]);
+  const membershipFactReader =
+    createAuthoritativeInstitutionMembershipFactReaderV1({
+      repository: { findCurrentInstitutionMembershipFacts: membershipRead },
+      now: () => NOW,
+    });
+  const owner = createFormalServerSessionRequestOwnerV1({
+    cookieHeader:
+      options.cookieHeader === undefined
+        ? `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken()}`
+        : options.cookieHeader,
+    sessionKeyRing: options.sessionKeyRing ?? sessionKeyRing(),
+    membershipFactReader,
+    referenceCodec: codec,
+    now: () => NOW,
+  });
+  const anchorRead = vi.fn(async () => [anchorRow]);
+  const anchorFactReader = createAuthoritativeInstitutionAnchorFactReaderV1({
+    repository: { findCurrentInstitutionAnchorFacts: anchorRead },
+    now: () => NOW,
+  });
+  const anchorProvider = createActiveInstitutionAnchorProviderV1({
+    factReader: anchorFactReader,
+    referenceCodec: codec,
+    now: () => NOW,
+  });
+  const compositionNow =
+    options.compositionNow ?? vi.fn(() => new Date(NOW.getTime()));
+
+  return {
+    owner,
+    codec,
+    anchorProvider,
+    membershipRead,
+    anchorRead,
+    compositionNow,
+  };
+}
+
+function compose(
+  created: ReturnType<typeof fixture>,
+  overrides: Partial<{
+    requestOwner: FormalServerSessionRequestOwnerV1;
+    anchorProvider: ActiveInstitutionAnchorProviderV1;
+    referenceCodec: InstitutionGuardReferenceCodecV1;
+    now: () => Date;
+  }> = {},
+) {
+  return createInstitutionRequestAuthorizationV1({
+    requestOwner: overrides.requestOwner ?? created.owner,
+    anchorProvider: overrides.anchorProvider ?? created.anchorProvider,
+    referenceCodec: overrides.referenceCodec ?? created.codec,
+    now: overrides.now ?? created.compositionNow,
+  });
+}
+
+const workbenchInput = Object.freeze({ sectionId: 'workbench' as const });
+
+describe('AUTH-COMPOSE-01C institution request authorization', () => {
+  it('seals the exact factory and public method inputs', () => {
+    type FactoryInput = Parameters<
+      typeof createInstitutionRequestAuthorizationV1
+    >[0];
+    type PublicInput = Parameters<
+      InstitutionRequestAuthorizationV1['authorizeCurrentInstitutionSectionV1']
+    >[0];
+
+    expectTypeOf<keyof FactoryInput>().toEqualTypeOf<
+      'requestOwner' | 'anchorProvider' | 'referenceCodec' | 'now'
+    >();
+    expectTypeOf<PublicInput>().toEqualTypeOf<InstitutionSectionGuardInputV1>();
+    expectTypeOf<keyof PublicInput>().toEqualTypeOf<'sectionId'>();
+    expectTypeOf<{
+      authorizeCurrentInstitutionSectionV1: InstitutionRequestAuthorizationV1['authorizeCurrentInstitutionSectionV1'];
+    }>().not.toMatchTypeOf<InstitutionRequestAuthorizationV1>();
+  });
+
+  it('returns one genuine frozen low-sensitive workbench allow without extending validUntil', async () => {
+    const created = fixture();
+    const authorization = compose(created);
+
+    expect(Object.isFrozen(authorization)).toBe(true);
+    expect(isInstitutionRequestAuthorizationV1(authorization)).toBe(true);
+    const result = await authorization.authorizeCurrentInstitutionSectionV1(
+      workbenchInput,
+    );
+
+    expect(isInstitutionSectionAllowV1(result)).toBe(true);
+    expect(result).toEqual({
+      kind: 'institution_section_allow',
+      sectionId: 'workbench',
+      action: 'section_enter',
+      policyRevision: expect.stringMatching(/^prv_v1_k1_[A-Za-z0-9_-]{43}$/u),
+      decidedAt: NOW.toISOString(),
+      validUntil: '2026-07-22T08:03:00.000Z',
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(created.membershipRead).toHaveBeenCalledTimes(1);
+    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+    const serialized = JSON.stringify(result);
+    for (const forbidden of [
+      payload.accountId,
+      payload.sessionId,
+      payload.tenantId,
+      payload.institutionId,
+      membershipRow.membershipId,
+    ]) {
+      expect(serialized).not.toContain(String(forbidden));
+    }
+    for (const forbiddenField of [
+      'accountId',
+      'tenantId',
+      'institutionId',
+      'role',
+      'evidence',
+      'provider',
+      'scopeAllow',
+      'anchorRevision',
+    ]) {
+      expect(serialized).not.toContain(`"${forbiddenField}"`);
+    }
+
+    await expect(
+      authorization.authorizeCurrentInstitutionSectionV1(workbenchInput),
+    ).resolves.toEqual({ kind: 'rejected', code: 'scope_unavailable' });
+    expect(created.membershipRead).toHaveBeenCalledTimes(1);
+    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+  });
+
+  it('recognizes only the exact factory-issued authorization without property access', () => {
+    const authorization = compose(fixture());
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor: Record<string, unknown> = {};
+    Object.defineProperty(accessor, 'authorizeCurrentInstitutionSectionV1', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('authorization getter must not run');
+      },
+    });
+    const traps: ProxyHandler<object> = {
+      get() {
+        proxyTraps += 1;
+        throw new Error('authorization get trap must not run');
+      },
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('authorization prototype trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('authorization ownKeys trap must not run');
+      },
+    };
+    const proxy = new Proxy(authorization, traps);
+    const revoked = Proxy.revocable(authorization, traps);
+    revoked.revoke();
+
+    for (const value of [
+      {},
+      { ...authorization },
+      Object.create(authorization) as object,
+      accessor,
+      proxy,
+      revoked.proxy,
+    ]) {
+      expect(isInstitutionRequestAuthorizationV1(value)).toBe(false);
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  it('validates every dependency before consuming the genuine owner', async () => {
+    const created = fixture();
+    const fakeAnchorResolve = vi.fn();
+    const fakeIssue = vi.fn();
+    const fakeVerify = vi.fn();
+    let dependencyGetterReads = 0;
+    let dependencyProxyTraps = 0;
+    let nowApplyTraps = 0;
+    const fakeAnchorAccessor: Record<string, unknown> = {};
+    Object.defineProperty(fakeAnchorAccessor, 'resolve', {
+      enumerable: true,
+      get() {
+        dependencyGetterReads += 1;
+        throw new Error('anchor getter must not run');
+      },
+    });
+    const fakeCodecAccessor: Record<string, unknown> = {
+      verify: fakeVerify,
+    };
+    Object.defineProperty(fakeCodecAccessor, 'issue', {
+      enumerable: true,
+      get() {
+        dependencyGetterReads += 1;
+        throw new Error('codec getter must not run');
+      },
+    });
+    const dependencyTraps: ProxyHandler<object> = {
+      get() {
+        dependencyProxyTraps += 1;
+        throw new Error('dependency get trap must not run');
+      },
+      getPrototypeOf() {
+        dependencyProxyTraps += 1;
+        throw new Error('dependency prototype trap must not run');
+      },
+      ownKeys() {
+        dependencyProxyTraps += 1;
+        throw new Error('dependency ownKeys trap must not run');
+      },
+    };
+    const anchorProxy = new Proxy(created.anchorProvider, dependencyTraps);
+    const revokedAnchor = Proxy.revocable(
+      created.anchorProvider,
+      dependencyTraps,
+    );
+    revokedAnchor.revoke();
+    const codecProxy = new Proxy(created.codec, dependencyTraps);
+    const revokedCodec = Proxy.revocable(created.codec, dependencyTraps);
+    revokedCodec.revoke();
+    const proxyNow = new Proxy(created.compositionNow, {
+      apply() {
+        nowApplyTraps += 1;
+        throw new Error('composition clock must not run');
+      },
+    });
+
+    for (const authorization of [
+      compose(created, {
+        anchorProvider: { resolve: fakeAnchorResolve } as unknown as ActiveInstitutionAnchorProviderV1,
+      }),
+      compose(created, {
+        referenceCodec: {
+          issue: fakeIssue,
+          verify: fakeVerify,
+        } as unknown as InstitutionGuardReferenceCodecV1,
+      }),
+      compose(created, {
+        anchorProvider:
+          fakeAnchorAccessor as unknown as ActiveInstitutionAnchorProviderV1,
+      }),
+      compose(created, {
+        anchorProvider: {
+          ...created.anchorProvider,
+        } as ActiveInstitutionAnchorProviderV1,
+      }),
+      compose(created, {
+        anchorProvider: Object.create(
+          created.anchorProvider,
+        ) as ActiveInstitutionAnchorProviderV1,
+      }),
+      compose(created, {
+        anchorProvider:
+          anchorProxy as unknown as ActiveInstitutionAnchorProviderV1,
+      }),
+      compose(created, {
+        anchorProvider:
+          revokedAnchor.proxy as unknown as ActiveInstitutionAnchorProviderV1,
+      }),
+      compose(created, {
+        referenceCodec:
+          fakeCodecAccessor as unknown as InstitutionGuardReferenceCodecV1,
+      }),
+      compose(created, {
+        referenceCodec: {
+          ...created.codec,
+        } as InstitutionGuardReferenceCodecV1,
+      }),
+      compose(created, {
+        referenceCodec: Object.create(
+          created.codec,
+        ) as InstitutionGuardReferenceCodecV1,
+      }),
+      compose(created, {
+        referenceCodec:
+          codecProxy as unknown as InstitutionGuardReferenceCodecV1,
+      }),
+      compose(created, {
+        referenceCodec:
+          revokedCodec.proxy as unknown as InstitutionGuardReferenceCodecV1,
+      }),
+      compose(created, { now: proxyNow }),
+    ]) {
+      expect(isInstitutionRequestAuthorizationV1(authorization)).toBe(true);
+      await expect(
+        authorization.authorizeCurrentInstitutionSectionV1(workbenchInput),
+      ).resolves.toMatchObject({ kind: 'rejected' });
+    }
+    expect(fakeAnchorResolve).not.toHaveBeenCalled();
+    expect(fakeIssue).not.toHaveBeenCalled();
+    expect(fakeVerify).not.toHaveBeenCalled();
+    expect(dependencyGetterReads).toBe(0);
+    expect(dependencyProxyTraps).toBe(0);
+    expect(nowApplyTraps).toBe(0);
+    expect(created.membershipRead).not.toHaveBeenCalled();
+    expect(created.anchorRead).not.toHaveBeenCalled();
+
+    await expect(
+      compose(created).authorizeCurrentInstitutionSectionV1(workbenchInput),
+    ).resolves.toMatchObject({ kind: 'institution_section_allow' });
+  });
+
+  it('rejects spent owner composition without clock, membership or anchor access', async () => {
+    const created = fixture();
+    compose(created);
+    const spent = compose(created);
+
+    await expect(
+      spent.authorizeCurrentInstitutionSectionV1(workbenchInput),
+    ).resolves.toEqual({ kind: 'rejected', code: 'scope_unavailable' });
+    expect(created.compositionNow).not.toHaveBeenCalled();
+    expect(created.membershipRead).not.toHaveBeenCalled();
+    expect(created.anchorRead).not.toHaveBeenCalled();
+  });
+
+  it('rejects hostile factory and owner shapes without getters, traps or owner consumption', async () => {
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const created = fixture();
+    const base = {
+      requestOwner: created.owner,
+      anchorProvider: created.anchorProvider,
+      referenceCodec: created.codec,
+      now: created.compositionNow,
+    };
+    const accessor = { ...base };
+    Object.defineProperty(accessor, 'requestOwner', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('owner getter must not run');
+      },
+    });
+    const hostileFactory = new Proxy(base, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('factory prototype trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('factory ownKeys trap must not run');
+      },
+    });
+    const ownerProxy = new Proxy(created.owner, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('owner prototype trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('owner ownKeys trap must not run');
+      },
+    });
+    const revokedFactory = Proxy.revocable(base, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('revoked factory prototype trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('revoked factory ownKeys trap must not run');
+      },
+    });
+    revokedFactory.revoke();
+    const revokedOwner = Proxy.revocable(created.owner, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('revoked owner prototype trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('revoked owner ownKeys trap must not run');
+      },
+    });
+    revokedOwner.revoke();
+    const {
+      requestOwner,
+      anchorProvider,
+      referenceCodec: codec,
+      now,
+    } = base;
+    const hostileInputs = [
+      { anchorProvider, referenceCodec: codec, now },
+      { requestOwner, referenceCodec: codec, now },
+      { requestOwner, anchorProvider, now },
+      { requestOwner, anchorProvider, referenceCodec: codec },
+      { ...base, extra: true },
+      Object.assign({ ...base }, { [Symbol('raw')]: true }),
+      accessor,
+      Object.assign(Object.create({ inherited: true }), base),
+      hostileFactory,
+      revokedFactory.proxy,
+      { ...base, requestOwner: { ...created.owner } },
+      { ...base, requestOwner: Object.create(created.owner) },
+      { ...base, requestOwner: ownerProxy },
+      { ...base, requestOwner: revokedOwner.proxy },
+    ];
+
+    for (const input of hostileInputs) {
+      const authorization = createInstitutionRequestAuthorizationV1(
+        input as never,
+      );
+      expect(isInstitutionRequestAuthorizationV1(authorization)).toBe(true);
+      await expect(
+        authorization.authorizeCurrentInstitutionSectionV1(workbenchInput),
+      ).resolves.toEqual({ kind: 'rejected', code: 'scope_unavailable' });
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+    expect(created.compositionNow).not.toHaveBeenCalled();
+    expect(created.membershipRead).not.toHaveBeenCalled();
+    expect(created.anchorRead).not.toHaveBeenCalled();
+
+    await expect(
+      compose(created).authorizeCurrentInstitutionSectionV1(workbenchInput),
+    ).resolves.toMatchObject({ kind: 'institution_section_allow' });
+  });
+
+  it.each([
+    ['missing', null, sessionKeyRing()],
+    ['demo', 'zmtg_demo_session=present', sessionKeyRing()],
+    [
+      'tampered',
+      `${FORMAL_SERVER_SESSION_COOKIE_V1}=${tamperToken(signToken())}`,
+      sessionKeyRing(),
+    ],
+    [
+      'expired',
+      `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken({
+        ...payload,
+        expiresAt: NOW.toISOString(),
+      })}`,
+      sessionKeyRing(),
+    ],
+    [
+      'unavailable',
+      `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken()}`,
+      sessionKeyRing(null),
+    ],
+  ] as const)(
+    'keeps authentic %s owner failure low-sensitive and skips membership plus anchor',
+    async (_label, cookieHeader, keyRing) => {
+      const created = fixture({ cookieHeader, sessionKeyRing: keyRing });
+      const authorization = compose(created);
+
+      expect(isInstitutionRequestAuthorizationV1(authorization)).toBe(true);
+      await expect(
+        authorization.authorizeCurrentInstitutionSectionV1(workbenchInput),
+      ).resolves.toEqual({ kind: 'rejected', code: 'scope_unavailable' });
+      expect(created.membershipRead).not.toHaveBeenCalled();
+      expect(created.anchorRead).not.toHaveBeenCalled();
+      expect(created.compositionNow).not.toHaveBeenCalled();
+    },
+  );
+
+  it('maps a genuine unavailable policy codec without leaking its failure', async () => {
+    const created = fixture();
+    const unavailableCodec = referenceCodec(null);
+
+    await expect(
+      compose(created, {
+        referenceCodec: unavailableCodec,
+      }).authorizeCurrentInstitutionSectionV1(workbenchInput),
+    ).resolves.toEqual({ kind: 'rejected', code: 'policy_unavailable' });
+    expect(created.membershipRead).toHaveBeenCalledTimes(1);
+    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects hostile section inputs before spending the request or touching downstream owners', async () => {
+    const created = fixture();
+    const authorization = compose(created);
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor: Record<string, unknown> = {};
+    Object.defineProperty(accessor, 'sectionId', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('section getter must not run');
+      },
+    });
+    const hostileSection = new Proxy(workbenchInput, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('section prototype trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('section ownKeys trap must not run');
+      },
+    });
+    const revokedSection = Proxy.revocable(workbenchInput, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('revoked section prototype trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('revoked section ownKeys trap must not run');
+      },
+    });
+    revokedSection.revoke();
+    const invalidInputs = [
+      {},
+      { ...workbenchInput, extra: true },
+      Object.assign({ ...workbenchInput }, { [Symbol('section')]: true }),
+      accessor,
+      Object.assign(Object.create({ inherited: true }), workbenchInput),
+      hostileSection,
+      revokedSection.proxy,
+      { sectionId: 'unknown' },
+    ];
+
+    for (const input of invalidInputs) {
+      await expect(
+        authorization.authorizeCurrentInstitutionSectionV1(
+          input as InstitutionSectionGuardInputV1,
+        ),
+      ).resolves.toEqual({ kind: 'rejected', code: 'action_unregistered' });
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+    expect(created.compositionNow).not.toHaveBeenCalled();
+    expect(created.membershipRead).not.toHaveBeenCalled();
+    expect(created.anchorRead).not.toHaveBeenCalled();
+
+    await expect(
+      authorization.authorizeCurrentInstitutionSectionV1(workbenchInput),
+    ).resolves.toMatchObject({ kind: 'institution_section_allow' });
+    expect(created.membershipRead).toHaveBeenCalledTimes(1);
+    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+  });
+});
