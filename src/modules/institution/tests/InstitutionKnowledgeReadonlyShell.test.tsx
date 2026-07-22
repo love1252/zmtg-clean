@@ -676,6 +676,74 @@ describe('机构端知识库只读列表 UI', () => {
     expect(auditSection.textContent).not.toContain('runtime');
   });
 
+  it('问答审计先成功后刷新 pending/503 时立即清除旧问题和回答预览', async () => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+    const auditSection = screen.getByLabelText('机构端问答审计');
+    fireEvent.click(within(auditSection).getByRole('button', { name: '刷新审计' }));
+    expect(await screen.findByText('复诊前怎么准备？')).toBeInTheDocument();
+    expect(screen.getByText('基于已召回的知识片段：机构端审计回答预览。')).toBeInTheDocument();
+
+    let resolvePendingAudit!: (response: Response) => void;
+    vi.mocked(globalThis.fetch).mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolvePendingAudit = resolve;
+        }),
+    );
+
+    fireEvent.click(within(auditSection).getByRole('button', { name: '刷新审计' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('复诊前怎么准备？')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('基于已召回的知识片段：机构端审计回答预览。'),
+      ).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('正在读取问答审计...')).toBeInTheDocument();
+    expect(screen.queryByText('暂无问答审计')).not.toBeInTheDocument();
+
+    resolvePendingAudit(
+      Response.json(
+        {
+          status: 'capability_disabled',
+          code: 'knowledge_qa_audits_capability_disabled',
+          error: '机构知识库问答审计暂未启用。',
+        },
+        { status: 503 },
+      ),
+    );
+
+    expect(await screen.findByText('问答审计暂时不可用')).toBeInTheDocument();
+    expect(screen.queryByText('复诊前怎么准备？')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('基于已召回的知识片段：机构端审计回答预览。'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('暂无问答审计')).not.toBeInTheDocument();
+  });
+
+  it('问答审计异常或非法 payload 后保持 unavailable，不冒充确认空数据', async () => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+    const auditSection = screen.getByLabelText('机构端问答审计');
+    vi.mocked(globalThis.fetch).mockRejectedValueOnce(new Error('audit request failed'));
+
+    fireEvent.click(within(auditSection).getByRole('button', { name: '刷新审计' }));
+
+    expect(await screen.findByText('问答审计暂时不可用')).toBeInTheDocument();
+    expect(screen.queryByText('暂无问答审计')).not.toBeInTheDocument();
+
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      Response.json({ status: 'succeeded', records: 'not-an-array' }),
+    );
+    fireEvent.click(within(auditSection).getByRole('button', { name: '刷新审计' }));
+
+    expect(await screen.findByText('问答审计暂时不可用')).toBeInTheDocument();
+    expect(screen.queryByText('暂无问答审计')).not.toBeInTheDocument();
+  });
+
   it('展示 empty 和 error 状态，并且不出现上传下载导出解析训练等 CTA', async () => {
     vi.mocked(listInstitutionKnowledgeItems).mockResolvedValueOnce({
       ok: true,

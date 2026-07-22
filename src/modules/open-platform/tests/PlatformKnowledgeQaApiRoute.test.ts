@@ -1,9 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as platformQaRoute from '@/app/api/v1/open-platform/knowledge-management/qa/route';
 import * as platformQaAuditsRoute from '@/app/api/v1/open-platform/knowledge-management/qa/audits/route';
 import * as platformCapabilitiesRoute from '@/app/api/v1/open-platform/knowledge-management/capabilities/route';
 import * as institutionQaRoute from '@/app/api/institution/knowledge-management/qa/route';
-import * as institutionQaAuditsRoute from '@/app/api/institution/knowledge-management/qa/audits/route';
 import * as platformEmbeddingRoute from '@/app/api/v1/open-platform/knowledge-management/embeddings/route';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
@@ -62,6 +63,12 @@ const unsafeFragments = [
   'system prompt',
   '真实 AI 原始响应',
 ];
+
+const institutionQaAuditsDisabledPayload = Object.freeze({
+  status: 'capability_disabled',
+  code: 'knowledge_qa_audits_capability_disabled',
+  error: '机构知识库问答审计暂未启用。',
+});
 
 const visibleKnowledge = {
   knowledgeId: 'knowledge-visible',
@@ -144,6 +151,39 @@ function expectSafePayload(payload: unknown) {
   unsafeFragments.forEach((fragment) => {
     expect(serialized).not.toContain(fragment);
   });
+}
+
+async function expectInstitutionQaAuditsDisabled(response: Response) {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  await expect(response.json()).resolves.toEqual(institutionQaAuditsDisabledPayload);
+}
+
+function hostileProxy<T extends object>() {
+  const counts = {
+    get: 0,
+    set: 0,
+    has: 0,
+    ownKeys: 0,
+    getOwnPropertyDescriptor: 0,
+    getPrototypeOf: 0,
+  };
+  const trap = <K extends keyof typeof counts>(name: K): never => {
+    counts[name] += 1;
+    throw new Error(`${name} must not run`);
+  };
+
+  return {
+    value: new Proxy({}, {
+      get: () => trap('get'),
+      set: () => trap('set'),
+      has: () => trap('has'),
+      ownKeys: () => trap('ownKeys'),
+      getOwnPropertyDescriptor: () => trap('getOwnPropertyDescriptor'),
+      getPrototypeOf: () => trap('getPrototypeOf'),
+    }) as T,
+    counts,
+  };
 }
 
 describe('知识库 QA API route', () => {
@@ -364,56 +404,73 @@ describe('知识库 QA API route', () => {
     expectSafePayload(payload);
   });
 
-  it('机构端只能查看 access context 本机构 QA 审计', async () => {
-    institutionContext();
-    repository.listKnowledgeQaAuditLogs.mockResolvedValue({
-      records: [
-        {
-          auditId: 'audit-institution-a',
-          tenantId: 'tenant-route',
-          institutionId: 'inst-current',
-          actorScope: 'institution',
-          actorUserId: 'tenant-user',
-          question: '复诊前怎么准备？',
-          answerPreview: '基于已召回的知识片段：复诊准备片段。',
-          retrievalMode: 'keyword',
-          citationCount: 1,
-          safeStatus: 'answered',
-          safeFailureMessage: null,
-          createdAt: '2026-06-14T08:10:00.000Z',
-        },
-      ],
-      pageInfo: {
-        page: 1,
-        pageSize: 10,
-        total: 1,
-        pageCount: 1,
-        hasPreviousPage: false,
-        hasNextPage: false,
-      },
-    });
-
-    const response = await institutionQaAuditsRoute.GET(
-      new Request(`${institutionQaAuditsUrl}?tenantId=tenant-other&institutionId=inst-other`),
+  it('机构端 QA 审计对普通、伪造和非法输入固定 capability-off，且不回显输入', async () => {
+    const route = await import(
+      '@/app/api/institution/knowledge-management/qa/audits/route'
     );
-    const payload = await readJson(response);
+    const invokeGet = route.GET as unknown as (
+      request?: unknown,
+    ) => Response | Promise<Response>;
+    const sensitiveMarkers = [
+      'private-question-preview',
+      'private-answer-preview',
+      'private-institution-id',
+    ];
+    const responses = [
+      invokeGet(),
+      invokeGet(
+        new Request(
+          `${institutionQaAuditsUrl}?tenantId=${sensitiveMarkers[2]}&question=${sensitiveMarkers[0]}`,
+          {
+            headers: {
+              authorization: `Bearer ${sensitiveMarkers[1]}`,
+              'x-provider': 'mock-embedding',
+            },
+          },
+        ),
+      ),
+      invokeGet(null),
+    ];
 
-    expect(response.status).toBe(200);
-    expect(repository.listKnowledgeQaAuditLogs).toHaveBeenCalledWith({
-      tenantId: 'tenant-route',
-      institutionId: 'inst-current',
-      page: 1,
-      pageSize: 10,
+    for (const pendingResponse of responses) {
+      const response = await pendingResponse;
+      const replay = response.clone();
+      await expectInstitutionQaAuditsDisabled(response);
+      const serialized = JSON.stringify(await replay.json());
+      sensitiveMarkers.forEach((marker) => expect(serialized).not.toContain(marker));
+      expect(serialized).not.toContain('mock-embedding');
+    }
+
+    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeQaAuditLogs).not.toHaveBeenCalled();
+  });
+
+  it('机构端 QA 审计不触碰 hostile Request 的任一 trap', async () => {
+    const route = await import(
+      '@/app/api/institution/knowledge-management/qa/audits/route'
+    );
+    const request = hostileProxy<Request>();
+    const invokeGet = route.GET as unknown as (
+      request?: unknown,
+    ) => Response | Promise<Response>;
+
+    const response = await invokeGet(request.value);
+
+    await expectInstitutionQaAuditsDisabled(response);
+    expect(request.counts).toEqual({
+      get: 0,
+      set: 0,
+      has: 0,
+      ownKeys: 0,
+      getOwnPropertyDescriptor: 0,
+      getPrototypeOf: 0,
     });
-    expect(payload.records).toEqual([
-      expect.objectContaining({
-        auditId: 'audit-institution-a',
-        tenantId: 'tenant-route',
-        institutionId: 'inst-current',
-      }),
-    ]);
-    expect(JSON.stringify(payload)).not.toContain('inst-other');
-    expectSafePayload(payload);
+    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeQaAuditLogs).not.toHaveBeenCalled();
   });
 
   it('空问题返回中文 validation_failed', async () => {
@@ -532,5 +589,56 @@ describe('知识库 QA API route', () => {
       error: '知识库问答暂时无法处理',
     });
     expectSafePayload(payload);
+  });
+
+  it('机构端 QA 审计 route 源码仅依赖 NextResponse，禁止旧数据链和输入读取', () => {
+    const source = readFileSync(
+      resolve(
+        process.cwd(),
+        'src/app/api/institution/knowledge-management/qa/audits/route.ts',
+      ),
+      'utf8',
+    );
+    const imports = source.match(/^import .+;$/gmu) ?? [];
+
+    expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
+    expect(source).not.toMatch(
+      /getDemoAccessContextFromRequest|getDatabase|repository|storage|provider|embedding|listInstitutionKnowledgeQaAuditsService|\b_?request\s*(?:\.|\[)|fetch\(/u,
+    );
+  });
+
+  it('机构端 QA 审计 route 动态加载时不初始化旧依赖或 fetch', async () => {
+    vi.resetModules();
+    const initialized: string[] = [];
+    const forbiddenModules = [
+      ['@/modules/security/server/access-context', 'auth'],
+      ['@/server/db/client', 'db'],
+      ['@/modules/open-platform/server/platform-knowledge-management-repository', 'repository'],
+      ['@/modules/open-platform/server/platform-knowledge-qa-service', 'qa-service'],
+      ['@/modules/open-platform/server/platform-knowledge-embedding-vector-search-service', 'mock-embedding'],
+      ['@/modules/open-platform/server/platform-knowledge-ai-provider-adapter', 'provider'],
+    ] as const;
+    forbiddenModules.forEach(([modulePath, label]) => {
+      vi.doMock(modulePath, () => {
+        initialized.push(label);
+        throw new Error(`${label} must not initialize`);
+      });
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw new Error('fetch must not run');
+    });
+
+    try {
+      const route = await import(
+        '@/app/api/institution/knowledge-management/qa/audits/route'
+      );
+      const response = route.GET();
+
+      expect(initialized).toEqual([]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      await expectInstitutionQaAuditsDisabled(response);
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 });

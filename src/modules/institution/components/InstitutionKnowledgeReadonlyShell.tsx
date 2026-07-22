@@ -16,6 +16,7 @@ import { InstitutionKnowledgeBaseCardPanel } from '@/modules/institution/compone
 import { cn } from '@/shared/utils/cn';
 
 type LoadStatus = 'loading' | 'success' | 'error';
+type QaAuditLoadStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
 type InstitutionKnowledgeFileRecord = {
   fileId: string;
   originalFilename: string;
@@ -325,6 +326,7 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [qaAuditRecords, setQaAuditRecords] = useState<InstitutionKnowledgeQaAuditRecord[]>([]);
   const [qaAuditMessage, setQaAuditMessage] = useState('点击刷新查看问答审计');
   const [isQaAuditLoading, setIsQaAuditLoading] = useState(false);
+  const [qaAuditLoadStatus, setQaAuditLoadStatus] = useState<QaAuditLoadStatus>('idle');
   const [aiQuestion, setAiQuestion] = useState('');
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
   const [aiMessage, setAiMessage] = useState('AI 试问将自动参考本机构知识库中的匹配片段，辅助生成更可靠的回答。');
@@ -871,6 +873,8 @@ export function InstitutionKnowledgeReadonlyShell() {
 
   async function loadQaAudits() {
     setIsQaAuditLoading(true);
+    setQaAuditLoadStatus('loading');
+    setQaAuditRecords([]);
     setQaAuditMessage('正在读取问答审计...');
     try {
       const response = await fetch('/api/institution/knowledge-management/qa/audits', {
@@ -879,15 +883,18 @@ export function InstitutionKnowledgeReadonlyShell() {
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload || !Array.isArray(payload.records)) {
         setQaAuditRecords([]);
+        setQaAuditLoadStatus('unavailable');
         setQaAuditMessage('问答审计暂时不可用');
         return;
       }
 
       const records = payload.records as InstitutionKnowledgeQaAuditRecord[];
       setQaAuditRecords(records);
+      setQaAuditLoadStatus('ready');
       setQaAuditMessage(records.length > 0 ? `已读取 ${records.length} 条问答审计` : '暂无问答审计记录');
     } catch {
       setQaAuditRecords([]);
+      setQaAuditLoadStatus('unavailable');
       setQaAuditMessage('问答审计暂时不可用');
     } finally {
       setIsQaAuditLoading(false);
@@ -1642,7 +1649,9 @@ export function InstitutionKnowledgeReadonlyShell() {
           <div className="mt-3 grid gap-3 xl:grid-cols-2">
             {qaAuditRecords.length === 0 ? (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
-                暂无问答审计
+                {qaAuditLoadStatus === 'ready'
+                  ? '暂无问答审计'
+                  : '—'}
               </div>
             ) : (
               qaAuditRecords.map((record) => (
