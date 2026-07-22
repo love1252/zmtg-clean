@@ -138,6 +138,57 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
     expect(screen.queryByRole('dialog', { name: '更多栏目' })).not.toBeInTheDocument();
   });
 
+  it('将全七栏可见性明确标记为导航边界，不冒充授权或能力开放', () => {
+    render(
+      <InstitutionNavigationShell
+        activeSectionId="customers"
+        availableSectionIds={allSectionIds}
+      >
+        <div>客户中心内容</div>
+      </InstitutionNavigationShell>,
+    );
+
+    const desktopSidebar = screen.getByLabelText('机构端公共侧边栏');
+    const expandedBoundary = '当前仅展示导航入口，不代表已授权或能力已开放';
+
+    expect(within(desktopSidebar).getByText(expandedBoundary)).toHaveAttribute(
+      'aria-label',
+      expandedBoundary,
+    );
+    expect(within(desktopSidebar).getByText(expandedBoundary)).toHaveAttribute(
+      'title',
+      expandedBoundary,
+    );
+    expect(
+      within(desktopSidebar).queryByText('栏目可见性由服务端权限与能力状态共同决定'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('安全边界')).toBeInTheDocument();
+    expect(screen.queryByText('安全访问')).not.toBeInTheDocument();
+
+    for (const misleadingCurrentFact of ['已授权', '能力已开放', '生产放行']) {
+      expect(screen.queryByText(misleadingCurrentFact)).not.toBeInTheDocument();
+    }
+
+    fireEvent.click(
+      within(desktopSidebar).getByRole('button', { name: '收起机构端侧边栏' }),
+    );
+    expect(within(desktopSidebar).getByText('界')).toHaveAttribute(
+      'aria-label',
+      expandedBoundary,
+    );
+    expect(within(desktopSidebar).getByText('界')).toHaveAttribute('title', expandedBoundary);
+    expect(within(desktopSidebar).queryByText(expandedBoundary)).not.toBeInTheDocument();
+    expect(
+      within(desktopSidebar).getByRole('button', { name: '展开机构端侧边栏' }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      within(desktopSidebar).getByRole('button', { name: '展开机构端侧边栏' }),
+    );
+    expect(within(desktopSidebar).getByText(expandedBoundary)).toBeInTheDocument();
+    expect(within(desktopSidebar).queryByText('界')).not.toBeInTheDocument();
+  });
+
   it('未知 capability 默认 fail-closed，只展示明确可用的栏目', () => {
     render(
       <InstitutionNavigationShell
