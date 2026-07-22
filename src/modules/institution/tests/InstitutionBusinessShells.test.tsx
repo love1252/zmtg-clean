@@ -686,6 +686,36 @@ describe('机构业务页面壳', () => {
     expect(auditStatisticValues(container)).toEqual(['--', '--', '--']);
   });
 
+  it('审计日志 append 启动时立即清除旧快照并只显示加载状态', async () => {
+    const appendPending = deferredResponse();
+    const nextRecord = { ...auditEventRecord, id: 'audit_evt_append_next' };
+    const fetchMock = vi.fn(() => {
+      if (fetchMock.mock.calls.length === 1) {
+        return Promise.resolve(auditEventsResponse([auditEventRecord], { hasMore: true, limit: 50, nextCursor: 'next-page' }));
+      }
+      return appendPending.promise;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = render(<InstitutionAuditEventsShell />);
+
+    expect(await screen.findByText('audit_evt_customer')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '加载更多审计事件' }));
+
+    expect(screen.getByText('正在加载审计事件...')).toBeInTheDocument();
+    expect(screen.queryByText('audit_evt_customer')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '加载更多审计事件' })).not.toBeInTheDocument();
+    expect(screen.getByText('limit 默认')).toBeInTheDocument();
+    expect(auditStatisticValues(container)).toEqual(['--', '--', '--']);
+
+    await act(async () => {
+      appendPending.resolve(auditEventsResponse([nextRecord]));
+      await appendPending.promise;
+    });
+
+    expect(await screen.findByText('audit_evt_append_next')).toBeInTheDocument();
+    expect(auditStatisticValues(container)).toEqual(['1', '0', '0']);
+  });
+
   it('审计日志忽略晚到的旧成功结果，不回填新 replace 的不可用状态', async () => {
     const oldSuccess = deferredResponse();
     const fetchMock = vi.fn(() => {
@@ -733,6 +763,121 @@ describe('机构业务页面壳', () => {
     expect(screen.queryByText('关键操作记录暂时不可用')).not.toBeInTheDocument();
     expect(screen.getByText('audit_evt_newest')).toBeInTheDocument();
     expect(auditStatisticValues(container)).toEqual(['1', '0', '0']);
+  });
+
+  it('审计日志忽略晚到的旧 append 成功结果，不回填后续 replace 的不可用状态', async () => {
+    const oldAppend = deferredResponse();
+    const fetchMock = vi.fn(() => {
+      if (fetchMock.mock.calls.length === 1) {
+        return Promise.resolve(auditEventsResponse([auditEventRecord], { hasMore: true, limit: 50, nextCursor: 'next-page' }));
+      }
+      if (fetchMock.mock.calls.length === 2) return oldAppend.promise;
+      return Promise.resolve(jsonResponse({ error: '数据服务暂时不可用' }, { status: 503 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = render(<InstitutionAuditEventsShell />);
+
+    expect(await screen.findByText('audit_evt_customer')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '加载更多审计事件' }));
+    fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
+    expect(await screen.findByText('关键操作记录暂时不可用')).toBeInTheDocument();
+
+    await act(async () => {
+      oldAppend.resolve(auditEventsResponse([{ ...auditEventRecord, id: 'audit_evt_old_append' }]));
+      await oldAppend.promise;
+    });
+
+    expect(screen.getByText('关键操作记录暂时不可用')).toBeInTheDocument();
+    expect(screen.queryByText('audit_evt_old_append')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '加载更多审计事件' })).not.toBeInTheDocument();
+    expect(screen.getByText('limit 默认')).toBeInTheDocument();
+    expect(auditStatisticValues(container)).toEqual(['--', '--', '--']);
+  });
+
+  it.each([
+    ['503', (pending: ReturnType<typeof deferredResponse>) => pending.resolve(jsonResponse({ error: '数据服务暂时不可用' }, { status: 503 }))],
+    ['异常', (pending: ReturnType<typeof deferredResponse>) => pending.reject(new Error('old append failed'))],
+  ])('审计日志忽略晚到的旧 append %s，不结束后续 replace 的加载状态', async (_scenario, settleOldAppend) => {
+    const oldAppend = deferredResponse();
+    const currentReplace = deferredResponse();
+    const fetchMock = vi.fn(() => {
+      if (fetchMock.mock.calls.length === 1) {
+        return Promise.resolve(auditEventsResponse([auditEventRecord], { hasMore: true, limit: 50, nextCursor: 'next-page' }));
+      }
+      if (fetchMock.mock.calls.length === 2) return oldAppend.promise;
+      return currentReplace.promise;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = render(<InstitutionAuditEventsShell />);
+
+    expect(await screen.findByText('audit_evt_customer')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '加载更多审计事件' }));
+    fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
+    expect(screen.getByText('正在加载审计事件...')).toBeInTheDocument();
+
+    await act(async () => {
+      settleOldAppend(oldAppend);
+      await oldAppend.promise.catch(() => undefined);
+    });
+
+    expect(screen.getByText('正在加载审计事件...')).toBeInTheDocument();
+    expect(screen.queryByText('关键操作记录暂时不可用')).not.toBeInTheDocument();
+    expect(screen.queryByText('audit_evt_customer')).not.toBeInTheDocument();
+    expect(auditStatisticValues(container)).toEqual(['--', '--', '--']);
+
+    await act(async () => {
+      currentReplace.resolve(auditEventsResponse([{ ...auditEventRecord, id: 'audit_evt_current_replace' }]));
+      await currentReplace.promise;
+    });
+
+    expect(await screen.findByText('audit_evt_current_replace')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['initial', 'success'],
+    ['replace', 'failure'],
+    ['append', 'success'],
+  ] as const)('审计日志卸载后丢弃 pending %s 的晚到 %s 回包', async (mode, outcome) => {
+    const pending = deferredResponse();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const fetchMock = vi.fn(() => {
+      if (mode === 'initial') return pending.promise;
+      if (fetchMock.mock.calls.length === 1) {
+        return Promise.resolve(auditEventsResponse([auditEventRecord], { hasMore: mode === 'append', limit: 50, nextCursor: mode === 'append' ? 'next-page' : null }));
+      }
+      return pending.promise;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const { container, unmount } = render(<InstitutionAuditEventsShell />);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(mode === 'initial' ? 1 : 1));
+
+      if (mode === 'replace') {
+        expect(await screen.findByText('audit_evt_customer')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
+      }
+      if (mode === 'append') {
+        expect(await screen.findByText('audit_evt_customer')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '加载更多审计事件' }));
+      }
+
+      unmount();
+      await act(async () => {
+        if (outcome === 'success') {
+          pending.resolve(auditEventsResponse([{ ...auditEventRecord, id: 'audit_evt_late_unmounted' }]));
+          await pending.promise;
+        } else {
+          pending.reject(new Error('late request failed'));
+          await pending.promise.catch(() => undefined);
+        }
+      });
+
+      expect(container).toBeEmptyDOMElement();
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('客户中心从真实 API 加载并展示客户 records', async () => {

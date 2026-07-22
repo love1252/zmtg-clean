@@ -137,6 +137,7 @@ export function InstitutionAuditEventsShell() {
   const [hasAuthoritativeSnapshot, setHasAuthoritativeSnapshot] = useState(false);
   const requestRevisionRef = useRef(0);
   const isMountedRef = useRef(false);
+  const authoritativeRecordsRef = useRef<InstitutionAuditEventRecord[]>([]);
 
   function beginRequest() {
     requestRevisionRef.current += 1;
@@ -147,7 +148,10 @@ export function InstitutionAuditEventsShell() {
     return isMountedRef.current && requestRevisionRef.current === revision;
   }
 
-  function clearAuditSnapshot() {
+  function clearAuditSnapshot(input?: { preserveRecordsForCurrentAppend?: boolean }) {
+    if (!input?.preserveRecordsForCurrentAppend) {
+      authoritativeRecordsRef.current = [];
+    }
     setRecords([]);
     setPageInfo(null);
     setHasAuthoritativeSnapshot(false);
@@ -171,12 +175,12 @@ export function InstitutionAuditEventsShell() {
 
     if (mode === 'append') {
       setIsLoadingMore(true);
+      clearAuditSnapshot({ preserveRecordsForCurrentAppend: true });
     } else {
       setIsLoading(true);
       setIsLoadingMore(false);
       clearAuditSnapshot();
     }
-    setHasAuthoritativeSnapshot(false);
     setErrorState(null);
 
     try {
@@ -184,9 +188,11 @@ export function InstitutionAuditEventsShell() {
       if (!isCurrentRequest(revision)) return;
 
       if (result.ok) {
-        setRecords((current) =>
-          mode === 'append' ? [...current, ...result.records] : result.records,
-        );
+        const nextRecords = mode === 'append'
+          ? [...authoritativeRecordsRef.current, ...result.records]
+          : [...result.records];
+        authoritativeRecordsRef.current = nextRecords;
+        setRecords(nextRecords);
         setPageInfo(result.pageInfo);
         setHasAuthoritativeSnapshot(true);
       } else {
@@ -260,6 +266,7 @@ export function InstitutionAuditEventsShell() {
       })),
     [records],
   );
+  const isAuditLoading = isLoading || isLoadingMore;
 
   function handleFieldChange(key: keyof AuditFilterForm, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -469,7 +476,7 @@ export function InstitutionAuditEventsShell() {
           </span>
         </div>
 
-        {isLoading ? (
+        {isAuditLoading ? (
           <InstitutionPageState
             kind="loading"
             title="正在加载审计事件..."
@@ -477,11 +484,11 @@ export function InstitutionAuditEventsShell() {
           />
         ) : null}
 
-        {!isLoading && errorState ? (
+        {!isAuditLoading && errorState ? (
           <InstitutionPageState {...errorState} className="mt-4" />
         ) : null}
 
-        {!isLoading && !errorState && hasAuthoritativeSnapshot && records.length === 0 ? (
+        {!isAuditLoading && !errorState && hasAuthoritativeSnapshot && records.length === 0 ? (
           <InstitutionPageState
             kind="empty"
             title="暂无审计事件"
@@ -490,7 +497,7 @@ export function InstitutionAuditEventsShell() {
           />
         ) : null}
 
-        {!isLoading && !errorState && records.length > 0 ? (
+        {!isAuditLoading && !errorState && records.length > 0 ? (
           <div className="mt-4 space-y-3">
             {records.map((record) => (
               <section
