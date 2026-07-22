@@ -227,11 +227,18 @@ export async function POST(request: Request) {
     return json({ code: 503, message: '登录暂不可用' }, 503);
   }
 
-  const snapshot = await formalLogin.repository.findCurrentFormalSessionUser({
-    accountId: formalLogin.user.id,
-    tenantId: formalLogin.user.tenantId,
-    institutionId: formalLogin.user.institutionId,
-  });
+  let snapshot: Awaited<
+    ReturnType<typeof formalLogin.repository.findCurrentFormalSessionUser>
+  >;
+  try {
+    snapshot = await formalLogin.repository.findCurrentFormalSessionUser({
+      accountId: formalLogin.user.id,
+      tenantId: formalLogin.user.tenantId,
+      institutionId: formalLogin.user.institutionId,
+    });
+  } catch {
+    return json({ code: 503, message: '登录暂不可用' }, 503);
+  }
   if (snapshot.kind === 'denied') {
     return json({ code: 401, message: '用户名或密码错误' }, 401);
   }

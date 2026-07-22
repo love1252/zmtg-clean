@@ -292,6 +292,7 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
 
     expect(response.status).toBe(503);
     expectNoStore(response);
+    expect(routeMocks.resolveRuntimeConfig).not.toHaveBeenCalled();
     expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
   });
 
@@ -307,6 +308,9 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
 
     expect(response.status).toBe(401);
     expectNoStore(response);
+    expect(routeMocks.resolveRuntimeConfig).not.toHaveBeenCalled();
+    expect(routeMocks.repository.findCurrentFormalSessionUser).not.toHaveBeenCalled();
+    expect(routeMocks.issueFormalCookie).not.toHaveBeenCalled();
     expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
   });
 
@@ -339,8 +343,9 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     ['snapshot denied', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue({ kind: 'denied' }), 401],
     ['snapshot invalid', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue({ kind: 'invalid' }), 503],
     ['snapshot unavailable', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue({ kind: 'unavailable' }), 503],
+    ['snapshot throws', () => routeMocks.repository.findCurrentFormalSessionUser.mockRejectedValue(new Error('database unavailable')), 503],
     ['issuer unavailable', () => routeMocks.issueFormalCookie.mockReturnValue({ kind: 'unavailable', code: 'formal_session_unavailable' }), 503],
-  ])('%s fail-closes without demo fallback', async (_label, arrange, status) => {
+  ])('%s fail-closes without demo fallback', async (label, arrange, status) => {
     arrange();
     const { POST } = await import('@/app/api/auth/login/route');
     const response = await POST(
@@ -349,6 +354,9 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
 
     expect(response.status).toBe(status);
     expectNoStore(response);
+    if (label !== 'issuer unavailable') {
+      expect(routeMocks.issueFormalCookie).not.toHaveBeenCalled();
+    }
     expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
   });
 
@@ -375,6 +383,7 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
 
     expect(response.status).toBe(503);
     expectNoStore(response);
+    expect(routeMocks.verifyFormalCookie).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
     expect(routeMocks.decodeDemoSession).not.toHaveBeenCalled();
   });
