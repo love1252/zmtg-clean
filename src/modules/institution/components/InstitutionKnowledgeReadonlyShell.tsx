@@ -574,6 +574,7 @@ export function InstitutionKnowledgeReadonlyShell() {
   async function loadFileChunks(knowledgeId: string, file: InstitutionKnowledgeFileRecord) {
     setExpandedChunkFileId(file.fileId);
     setFileMessage(null);
+    setChunksByFileId((current) => ({ ...current, [file.fileId]: [] }));
     try {
       const response = await fetch(
         `/api/institution/knowledge-management/items/${encodeURIComponent(knowledgeId)}/files/${encodeURIComponent(file.fileId)}/parse/chunks`,
@@ -581,6 +582,7 @@ export function InstitutionKnowledgeReadonlyShell() {
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload || !Array.isArray(payload.records)) {
+        setChunksByFileId((current) => ({ ...current, [file.fileId]: [] }));
         setFileMessage('解析片段暂时不可用');
         return;
       }
@@ -589,6 +591,7 @@ export function InstitutionKnowledgeReadonlyShell() {
         [file.fileId]: payload.records as InstitutionKnowledgeChunkRecord[],
       }));
     } catch {
+      setChunksByFileId((current) => ({ ...current, [file.fileId]: [] }));
       setFileMessage('解析片段暂时不可用');
     }
   }

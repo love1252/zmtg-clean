@@ -401,6 +401,30 @@ describe('机构端知识库只读列表 UI', () => {
     );
   });
 
+  it('解析片段先成功后返回 503 时清除旧 textPreview 并显示受控错误', async () => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+
+    await screen.findByRole('heading', { name: '授权可见术后护理' });
+    fireEvent.click(screen.getByRole('button', { name: '查看文件' }));
+    await screen.findByText('机构文件.pdf');
+    fireEvent.click(screen.getAllByRole('button', { name: '查看解析片段' })[0]);
+    expect(await screen.findByText('机构端授权可见解析片段')).toBeInTheDocument();
+
+    vi.mocked(globalThis.fetch).mockImplementation(async () => Response.json({
+      status: 'capability_disabled',
+      code: 'capability_disabled',
+      error: '机构知识库解析片段暂未启用。',
+    }, {
+      status: 503,
+      headers: { 'Cache-Control': 'no-store' },
+    }));
+
+    fireEvent.click(screen.getAllByRole('button', { name: '查看解析片段' })[0]);
+
+    expect(await screen.findByText('解析片段暂时不可用')).toBeInTheDocument();
+    expect(screen.queryByText('机构端授权可见解析片段')).not.toBeInTheDocument();
+  });
+
   it('索引 root API 返回 503 时隐藏任务、OCR、重建和取消动作，仅保留刷新', async () => {
     indexingJobsEnabled = false;
     render(<InstitutionKnowledgeReadonlyShell />);

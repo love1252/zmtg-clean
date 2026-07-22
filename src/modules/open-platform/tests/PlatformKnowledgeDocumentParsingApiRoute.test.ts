@@ -146,6 +146,12 @@ const institutionParseDisabledPayload = Object.freeze({
   error: '机构知识库文件解析暂未启用。',
 });
 
+const institutionChunksDisabledPayload = Object.freeze({
+  status: 'capability_disabled',
+  code: 'capability_disabled',
+  error: '机构知识库解析片段暂未启用。',
+});
+
 vi.mock('@/server/db/client', () => ({
   getDatabase: vi.fn(() => database),
 }));
@@ -226,6 +232,12 @@ async function expectInstitutionParseDisabled(response: Response) {
   expect(response.status).toBe(503);
   expect(response.headers.get('cache-control')).toBe('no-store');
   await expect(response.json()).resolves.toEqual(institutionParseDisabledPayload);
+}
+
+async function expectInstitutionChunksDisabled(response: Response) {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  await expect(response.json()).resolves.toEqual(institutionChunksDisabledPayload);
 }
 
 describe('知识库文档解析 API route', () => {
@@ -316,20 +328,32 @@ describe('知识库文档解析 API route', () => {
       expectedStatus: 403,
       expectedPayload: { code: 'forbidden', error: '没有访问权限' },
     },
-  ])('平台端 $label 不能发起解析且不初始化 repository/storage', async ({
+  ])('平台端 $label 时 parse/status/chunks 均拒绝且不初始化 repository/storage', async ({
     context,
     expectedStatus,
     expectedPayload,
   }) => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValueOnce(context);
+    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(context);
 
-    const response = await platformParseRoute.POST(
-      new Request(platformParseUrl('?tenantId=tenant-route-a'), { method: 'POST' }),
-      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
-    );
+    const responses = [
+      await platformParseRoute.POST(
+        new Request(platformParseUrl('?tenantId=tenant-route-a'), { method: 'POST' }),
+        { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
+      ),
+      await platformParseRoute.GET(
+        new Request(platformParseUrl('?tenantId=tenant-route-a')),
+        { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
+      ),
+      await platformChunksRoute.GET(
+        new Request(platformChunksUrl('?tenantId=tenant-route-a')),
+        { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
+      ),
+    ];
 
-    expect(response.status).toBe(expectedStatus);
-    expect(await readJson(response)).toEqual(expectedPayload);
+    for (const response of responses) {
+      expect(response.status).toBe(expectedStatus);
+      expect(await readJson(response)).toEqual(expectedPayload);
+    }
     expect(getDatabase).not.toHaveBeenCalled();
     expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
     expect(createLocalPlatformKnowledgeFileStorage).not.toHaveBeenCalled();
@@ -492,69 +516,126 @@ describe('知识库文档解析 API route', () => {
     expect(createLocalPlatformKnowledgeFileStorage).not.toHaveBeenCalled();
   });
 
-  it('机构端 chunk 只读端点保持 tenant/institution 可见性回归', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantAccessContext);
+  it('机构端 chunks 对普通、非法和伪造输入固定返回无缓存 503 且零下游调用', async () => {
     expect(Object.keys(institutionChunksRoute).sort()).toEqual(['GET']);
+    const invokeChunks = institutionChunksRoute.GET as unknown as (
+      request?: unknown,
+      context?: unknown,
+    ) => Response;
+    const sensitiveMarkers = [
+      'private-textPreview-content',
+      'private-fileName.pdf',
+      'private-institution-id',
+      'embeddingStatus-ready',
+    ];
 
-    const chunksResponse = await institutionChunksRoute.GET(
-      new Request(institutionChunksUrl('?tenantId=tenant-b&institutionId=inst-b')),
-      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
-    );
-    expect(chunksResponse.status).toBe(200);
-    expect(await readJson(chunksResponse)).toEqual(
-      expect.objectContaining({
-        readonly: true,
-        records: [expect.objectContaining({ textPreview: '术后护理文本。' })],
-      }),
-    );
-    expect(repository.findKnowledgeItem).toHaveBeenCalledWith({
-      tenantId: 'tenant-route-a',
-      knowledgeId: 'knowledge-route-a',
-    });
-  });
-
-  it('机构端未授权文件返回 403 且不泄露底层异常', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantAccessContext);
-    repository.findKnowledgeItem.mockResolvedValueOnce({
-      ...knowledgeRecord,
-      visibleInstitutionIds: [],
-      institutionId: 'inst-other',
-    });
-
-    const forbidden = await institutionChunksRoute.GET(
-      new Request(institutionChunksUrl()),
-      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
-    );
-    expect(forbidden.status).toBe(403);
-    expect(await readJson(forbidden)).toEqual({ code: 'forbidden', error: '没有访问权限' });
-
-    repository.findKnowledgeItem.mockRejectedValueOnce(unsafeError);
-    const failed = await institutionChunksRoute.GET(
-      new Request(institutionChunksUrl()),
-      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a', fileId: 'file-route-a' }) },
-    );
-    const payload = await readJson(failed);
-    expect(failed.status).toBe(503);
-    expect(payload).toEqual({
-      code: 'service_unavailable',
-      error: '知识库文件解析暂时不可用',
-    });
-    expectSafePayload(payload);
-  });
-
-  it('机构端 parse route 源码仅依赖 NextResponse，禁止旧数据链和输入读取', () => {
-    const source = readFileSync(
-      resolve(
-        process.cwd(),
-        'src/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/parse/route.ts',
+    const responses = [
+      institutionChunksRoute.GET(),
+      invokeChunks(
+        new Request(
+          institutionChunksUrl(
+            `?tenantId=${sensitiveMarkers[2]}&institutionId=${sensitiveMarkers[2]}&textPreview=${sensitiveMarkers[0]}&embeddingStatus=${sensitiveMarkers[3]}`,
+          ),
+          { headers: { authorization: `Bearer ${sensitiveMarkers[1]}` } },
+        ),
+        { params: Promise.resolve({ knowledgeId: sensitiveMarkers[0], fileId: sensitiveMarkers[1] }) },
       ),
-      'utf8',
-    );
-    const imports = source.match(/^import .+;$/gmu) ?? [];
+      invokeChunks(null, { params: sensitiveMarkers }),
+    ];
 
-    expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
-    expect(source).not.toMatch(
-      /getDemoAccessContextFromRequest|getDatabase|repository|storage|provider|reparseInstitutionKnowledgeDocumentFileService|getInstitutionKnowledgeDocumentFileParseStatusService|\b_?request\s*(?:\.|\[)|\b_?context\s*(?:\.|\[)|fetch\(/u,
+    for (const response of responses) {
+      const replay = response.clone();
+      await expectInstitutionChunksDisabled(response);
+      const serialized = JSON.stringify(await replay.json());
+      sensitiveMarkers.forEach((marker) => expect(serialized).not.toContain(marker));
+      expectSafePayload(JSON.parse(serialized));
+    }
+
+    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(createLocalPlatformKnowledgeFileStorage).not.toHaveBeenCalled();
+    expect(repository.findKnowledgeItem).not.toHaveBeenCalled();
+    expect(repository.findKnowledgeFile).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeFileParseChunks).not.toHaveBeenCalled();
+    expect(storage.read).not.toHaveBeenCalled();
+  });
+
+  it('机构端 chunks 不触碰 hostile Request 或 context 的任一 trap', async () => {
+    const request = hostileProxy<Request>();
+    const context = hostileProxy<object>();
+    const invokeChunks = institutionChunksRoute.GET as unknown as (
+      request?: unknown,
+      context?: unknown,
+    ) => Response;
+
+    const response = invokeChunks(request.value, context.value);
+
+    await expectInstitutionChunksDisabled(response);
+    expect(request.counts).toEqual({
+      get: 0,
+      set: 0,
+      has: 0,
+      ownKeys: 0,
+      getOwnPropertyDescriptor: 0,
+      getPrototypeOf: 0,
+    });
+    expect(context.counts).toEqual({
+      get: 0,
+      set: 0,
+      has: 0,
+      ownKeys: 0,
+      getOwnPropertyDescriptor: 0,
+      getPrototypeOf: 0,
+    });
+    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeFileParseChunks).not.toHaveBeenCalled();
+  });
+
+  it('机构端 parse/chunks route 源码仅依赖 NextResponse，禁止旧数据链和输入读取', () => {
+    for (const routePath of [
+      'src/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/parse/route.ts',
+      'src/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/parse/chunks/route.ts',
+    ]) {
+      const source = readFileSync(resolve(process.cwd(), routePath), 'utf8');
+      const imports = source.match(/^import .+;$/gmu) ?? [];
+
+      expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
+      expect(source).not.toMatch(
+        /getDemoAccessContextFromRequest|getDatabase|repository|storage|provider|embeddingStatus|textPreview|listInstitutionKnowledgeDocumentFileChunksService|reparseInstitutionKnowledgeDocumentFileService|getInstitutionKnowledgeDocumentFileParseStatusService|\b_?request\s*(?:\.|\[)|\b_?context\s*(?:\.|\[)|fetch\(/u,
+      );
+    }
+  });
+
+  it('机构端 chunks route 动态加载时不初始化旧依赖或 fetch', async () => {
+    vi.resetModules();
+    const initialized: string[] = [];
+    const forbiddenModules = [
+      ['@/modules/security/server/access-context', 'auth'],
+      ['@/server/db/client', 'db'],
+      ['@/modules/open-platform/server/platform-knowledge-management-repository', 'repository'],
+      ['@/modules/institution/server/institution-knowledge-file-parsing-service', 'service'],
+    ] as const;
+    forbiddenModules.forEach(([modulePath, label]) => {
+      vi.doMock(modulePath, () => {
+        initialized.push(label);
+        throw new Error(`${label} must not initialize`);
+      });
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw new Error('fetch must not run');
+    });
+
+    const route = await import(
+      '@/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/parse/chunks/route'
     );
+    const response = route.GET();
+
+    expect(initialized).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    await expectInstitutionChunksDisabled(response);
+    fetchSpy.mockRestore();
   });
 });
