@@ -102,8 +102,7 @@ export type AnalyticsCalculatedPeriodCurrencyMetrics = AnalyticsMoneyBreakdown &
     dataAvailability:
       | 'observed'
       | 'partial_observation'
-      | 'stale_snapshot'
-      | 'authoritative_empty';
+      | 'stale_snapshot';
     completeness: AnalyticsAggregationCompleteness;
     hasFinancialFacts: boolean;
     paidCustomerCount: number;
@@ -513,6 +512,17 @@ function compareMetric(
   previous: number | null,
   baseReason: Exclude<AnalyticsComparisonReason, 'previous_zero' | 'metric_unavailable'> | null,
 ): AnalyticsMetricComparison | null {
+  if (
+    baseReason === 'currency_set_changed' &&
+    (current === null || previous === null)
+  ) {
+    return {
+      status: 'not_comparable',
+      reasonCode: 'metric_unavailable',
+      delta: null,
+      percentageRatio: null,
+    };
+  }
   if (baseReason) {
     return {
       status: 'not_comparable',
@@ -553,6 +563,17 @@ function compareAverage(
   previous: AnalyticsAverageAmount | null,
   baseReason: Exclude<AnalyticsComparisonReason, 'previous_zero' | 'metric_unavailable'> | null,
 ): AnalyticsAverageComparison {
+  if (
+    baseReason === 'currency_set_changed' &&
+    (!current || !previous)
+  ) {
+    return {
+      status: 'not_comparable',
+      reasonCode: 'metric_unavailable',
+      delta: null,
+      percentageRatio: null,
+    };
+  }
   if (baseReason) {
     return {
       status: 'not_comparable',
@@ -605,10 +626,6 @@ function compareAverage(
   };
 }
 
-function emptyFinalizedBucket() {
-  return finalizeBucket(emptyCurrencyBucket());
-}
-
 function unavailablePeriodMetrics(
   completeness: AnalyticsAggregationCompleteness,
 ): AnalyticsUnavailablePeriodCurrencyMetrics {
@@ -632,7 +649,6 @@ function periodCurrencyMetrics(input: Readonly<{
   bucket: MutableCurrencyBucket | undefined;
   completeness: AnalyticsAggregationCompleteness;
   resolutionStatus: 'complete' | 'partial';
-  emptyBucket: FinalizedCurrencyMetrics;
   stableConsumptionRecordGate?: AnalyticsStableConsumptionRecordCurrencyGate;
 }>): PeriodCurrencyMetricsResult {
   if (input.completeness === 'unavailable') {
@@ -640,19 +656,6 @@ function periodCurrencyMetrics(input: Readonly<{
   }
 
   if (!input.bucket) {
-    if (
-      input.completeness === 'complete' &&
-      input.resolutionStatus === 'complete'
-    ) {
-      return {
-        ok: true,
-        value: {
-          ...input.emptyBucket,
-          dataAvailability: 'authoritative_empty',
-          completeness: input.completeness,
-        },
-      };
-    }
     return { ok: true, value: unavailablePeriodMetrics(input.completeness) };
   }
 
@@ -758,11 +761,6 @@ export function aggregateAnalyticsConsumptionFacts(
     targetBuckets.set(fact.currency, bucket);
   }
 
-  const emptyBucket = emptyFinalizedBucket();
-  if (!emptyBucket.ok) {
-    return { ok: false, reasonCode: 'unsafe_integer_overflow' };
-  }
-
   const stableRecordGateForBucket = (
     bucket: MutableCurrencyBucket | undefined,
   ) => {
@@ -818,14 +816,12 @@ export function aggregateAnalyticsConsumptionFacts(
       bucket: currentBuckets.get(currency),
       completeness: input.comparison.currentCompleteness,
       resolutionStatus: input.factResolution.status,
-      emptyBucket: emptyBucket.value,
       stableConsumptionRecordGate: currentStableRecordGate.value,
     });
     const previous = periodCurrencyMetrics({
       bucket: previousBuckets.get(currency),
       completeness: input.comparison.previousCompleteness,
       resolutionStatus: input.factResolution.status,
-      emptyBucket: emptyBucket.value,
       stableConsumptionRecordGate: previousStableRecordGate.value,
     });
     if (!current.ok || !previous.ok) {
