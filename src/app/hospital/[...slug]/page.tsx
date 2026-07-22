@@ -1,18 +1,16 @@
 import { notFound } from 'next/navigation';
-import { DemoSessionGate } from '@/modules/auth/components/DemoSessionGate';
 import {
   InstitutionCapabilityOffPage,
   resolveInstitutionCapabilityOffRouteV1,
 } from '@/modules/institution/components/InstitutionCapabilityOffPage';
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
+import { INSTITUTION_NAVIGATION_SECTION_IDS_V1 } from '@/modules/institution-contracts/v1/institution-navigation';
 
 type HospitalCapabilityOffRouteProps = {
   params: Promise<{
     slug: string[];
   }>;
 };
-
-const SAFE_AVAILABLE_SECTION_IDS = ['workbench'] as const;
 
 export default async function HospitalCapabilityOffRoute({
   params,
@@ -23,13 +21,11 @@ export default async function HospitalCapabilityOffRoute({
   if (!route) notFound();
 
   return (
-    <DemoSessionGate allowedRole="tenant_admin" loginHref="/login" wrongRoleHref="/open-platform">
-      <InstitutionNavigationShell
-        activeSectionId={route.section.id}
-        availableSectionIds={SAFE_AVAILABLE_SECTION_IDS}
-      >
-        <InstitutionCapabilityOffPage pageLabel={route.pageLabel} section={route.section} />
-      </InstitutionNavigationShell>
-    </DemoSessionGate>
+    <InstitutionNavigationShell
+      activeSectionId={route.section.id}
+      availableSectionIds={INSTITUTION_NAVIGATION_SECTION_IDS_V1}
+    >
+      <InstitutionCapabilityOffPage pageLabel={route.pageLabel} section={route.section} />
+    </InstitutionNavigationShell>
   );
 }

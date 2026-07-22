@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import HospitalPage from '@/app/hospital/page';
@@ -39,6 +39,21 @@ const NOW = new Date('2026-07-22T08:02:00.000Z');
 const SESSION_KEY = new Uint8Array(32).fill(0x73);
 const REFERENCE_KEY = new Uint8Array(32).fill(0x72);
 const SESSION_PROTOCOL = 'zmtg.formal-server-session-cookie.v1';
+const DESKTOP_NAVIGATION = [
+  ['工作台', '/hospital'],
+  ['客户中心', '/hospital/customers'],
+  ['会话工作台', '/hospital/conversations'],
+  ['预约与随访', '/hospital/care'],
+  ['知识库', '/hospital/knowledge'],
+  ['经营分析', '/hospital/analytics'],
+  ['管理中心', '/hospital/system'],
+] as const;
+const MOBILE_NAVIGATION_LABELS = ['工作台', '客户', '会话', '待办', '更多'] as const;
+const MOBILE_MORE_NAVIGATION = [
+  ['知识库', '/hospital/knowledge'],
+  ['经营分析', '/hospital/analytics'],
+  ['管理中心', '/hospital/system'],
+] as const;
 const payload = Object.freeze({
   source: 'server_session' as const,
   sessionId: 'session-workbench-entry-001',
@@ -409,7 +424,7 @@ describe('WB-ENTRY-02A /hospital capability-off 页面', () => {
     vi.unstubAllGlobals();
   });
 
-  it('不再读取浏览器 demo session，直接渲染唯一 capability-off 工作台', () => {
+  it('不读浏览器 demo session，以冻结顺序展示七栏与移动五入口', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -419,19 +434,50 @@ describe('WB-ENTRY-02A /hospital capability-off 页面', () => {
     expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByText('正在检查登录状态...')).not.toBeInTheDocument();
+    expect(
+      screen.getByText('当前仅展示导航入口，不代表已授权或能力已开放'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('安全边界')).toBeInTheDocument();
+    expect(
+      screen.queryByText('栏目可见性由服务端权限与能力状态共同决定'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('安全访问')).not.toBeInTheDocument();
 
     const desktopNavigation = screen.getByRole('navigation', { name: '机构端桌面导航' });
-    expect(within(desktopNavigation).getAllByRole('link')).toHaveLength(1);
-    expect(within(desktopNavigation).getByRole('link', { name: '工作台' })).toHaveAttribute(
-      'href',
-      '/hospital',
+    const desktopLinks = within(desktopNavigation).getAllByRole('link');
+    expect(desktopLinks.map((link) => link.getAttribute('aria-label'))).toEqual(
+      DESKTOP_NAVIGATION.map(([label]) => label),
     );
+    for (const [label, href] of DESKTOP_NAVIGATION) {
+      expect(within(desktopNavigation).getByRole('link', { name: label })).toHaveAttribute(
+        'href',
+        href,
+      );
+    }
+
     const mobileNavigation = screen.getByRole('navigation', { name: '机构端移动导航' });
-    expect(within(mobileNavigation).getAllByRole('link')).toHaveLength(1);
-    expect(within(mobileNavigation).getByRole('link', { name: '工作台' })).toHaveAttribute(
-      'href',
-      '/hospital',
+    expect(
+      Array.from(mobileNavigation.querySelectorAll('a, button')).map((entry) =>
+        entry.textContent?.trim(),
+      ),
+    ).toEqual(MOBILE_NAVIGATION_LABELS);
+    expect(within(mobileNavigation).getByRole('link', { name: '工作台' })).toHaveAttribute('href', '/hospital');
+    expect(within(mobileNavigation).getByRole('link', { name: '客户' })).toHaveAttribute('href', '/hospital/customers');
+    expect(within(mobileNavigation).getByRole('link', { name: '会话' })).toHaveAttribute('href', '/hospital/conversations');
+    expect(within(mobileNavigation).getByRole('link', { name: '待办' })).toHaveAttribute('href', '/hospital/care');
+
+    fireEvent.click(within(mobileNavigation).getByRole('button', { name: '更多' }));
+    const moreNavigation = screen.getByRole('dialog', { name: '更多栏目' });
+    const moreLinks = within(moreNavigation).getAllByRole('link');
+    expect(moreLinks.map((link) => link.textContent?.trim())).toEqual(
+      MOBILE_MORE_NAVIGATION.map(([label]) => label),
     );
+    for (const [label, href] of MOBILE_MORE_NAVIGATION) {
+      expect(within(moreNavigation).getByRole('link', { name: label })).toHaveAttribute(
+        'href',
+        href,
+      );
+    }
   });
 
   it('保持低敏阻断外观，不渲染授权细节、假事实、业务入口或零值', () => {

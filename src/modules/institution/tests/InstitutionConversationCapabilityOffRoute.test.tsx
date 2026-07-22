@@ -1,38 +1,48 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import HospitalCapabilityOffRoute from '@/app/hospital/[...slug]/page';
+
+const DESKTOP_NAVIGATION = [
+  ['工作台', '/hospital'],
+  ['客户中心', '/hospital/customers'],
+  ['会话工作台', '/hospital/conversations'],
+  ['预约与随访', '/hospital/care'],
+  ['知识库', '/hospital/knowledge'],
+  ['经营分析', '/hospital/analytics'],
+  ['管理中心', '/hospital/system'],
+] as const;
+const MOBILE_NAVIGATION_LABELS = ['工作台', '客户', '会话', '待办', '更多'] as const;
+const MOBILE_MORE_NAVIGATION = [
+  ['知识库', '/hospital/knowledge'],
+  ['经营分析', '/hospital/analytics'],
+  ['管理中心', '/hospital/system'],
+] as const;
 
 describe('CONV-SAFE-02B 会话 canonical capability-off 路由', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('仅在通过既有认证门后渲染低敏不可用状态，不加载模拟会话或发送能力', async () => {
-    let resolveSession: ((response: Response) => void) | undefined;
-    const sessionResponse = new Promise<Response>((resolve) => {
-      resolveSession = resolve;
-    });
-    const fetchMock = vi.fn(() => sessionResponse);
+  it('会话深链接零 fetch 渲染低敏 capability-off，并展示冻结七栏与移动五入口', async () => {
+    const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
     const page = await HospitalCapabilityOffRoute({
-      params: Promise.resolve({ slug: ['conversations'] }),
+      params: Promise.resolve({ slug: ['conversations', 'conversation-001'] }),
     });
     render(page);
 
-    expect(screen.getByText('正在检查登录状态...')).toBeInTheDocument();
-    expect(screen.queryByText('会话队列尚未开放')).not.toBeInTheDocument();
-    if (!resolveSession) throw new Error('session resolver must be initialized');
-    resolveSession(
-      Response.json({
-        authenticated: true,
-        user: { role: 'tenant_admin' },
-      }),
-    );
-
-    expect(await screen.findByText('会话队列尚未开放')).toBeInTheDocument();
+    expect(screen.getByText('会话详情尚未开放')).toBeInTheDocument();
     expect(screen.getByText(/当前机构尚未获得该能力的生产放行。/u)).toBeInTheDocument();
+    expect(
+      screen.getByText('当前仅展示导航入口，不代表已授权或能力已开放'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('安全边界')).toBeInTheDocument();
+    expect(
+      screen.queryByText('栏目可见性由服务端权限与能力状态共同决定'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('安全访问')).not.toBeInTheDocument();
     const conversationBoundary = screen.getByLabelText('会话能力静态边界');
     expect(within(conversationBoundary).getByText('会话事实')).toBeInTheDocument();
     expect(within(conversationBoundary).getByText('未读取')).toBeInTheDocument();
@@ -49,12 +59,34 @@ describe('CONV-SAFE-02B 会话 canonical capability-off 路由', () => {
     expect(screen.getAllByRole('main')).toHaveLength(1);
 
     const desktopNavigation = screen.getByRole('navigation', { name: '机构端桌面导航' });
-    expect(within(desktopNavigation).getAllByRole('link')).toHaveLength(1);
-    expect(within(desktopNavigation).getByRole('link', { name: '工作台' })).toHaveAttribute(
-      'href',
-      '/hospital',
+    const desktopLinks = within(desktopNavigation).getAllByRole('link');
+    expect(desktopLinks.map((link) => link.getAttribute('aria-label'))).toEqual(
+      DESKTOP_NAVIGATION.map(([label]) => label),
     );
-    expect(within(desktopNavigation).queryByRole('link', { name: '会话工作台' })).not.toBeInTheDocument();
+    for (const [label, href] of DESKTOP_NAVIGATION) {
+      expect(within(desktopNavigation).getByRole('link', { name: label })).toHaveAttribute(
+        'href',
+        href,
+      );
+    }
+
+    const mobileNavigation = screen.getByRole('navigation', { name: '机构端移动导航' });
+    expect(
+      Array.from(mobileNavigation.querySelectorAll('a, button')).map((entry) =>
+        entry.textContent?.trim(),
+      ),
+    ).toEqual(MOBILE_NAVIGATION_LABELS);
+    fireEvent.click(within(mobileNavigation).getByRole('button', { name: '更多' }));
+    const moreNavigation = screen.getByRole('dialog', { name: '更多栏目' });
+    expect(within(moreNavigation).getAllByRole('link').map((link) => link.textContent?.trim())).toEqual(
+      MOBILE_MORE_NAVIGATION.map(([label]) => label),
+    );
+    for (const [label, href] of MOBILE_MORE_NAVIGATION) {
+      expect(within(moreNavigation).getByRole('link', { name: label })).toHaveAttribute(
+        'href',
+        href,
+      );
+    }
 
     expect(screen.queryByText(/fixture|mock_sent|dry-run|模拟发送|不真实发送/u)).not.toBeInTheDocument();
     expect(screen.queryByText(/^0$/u)).not.toBeInTheDocument();
@@ -64,7 +96,22 @@ describe('CONV-SAFE-02B 会话 canonical capability-off 路由', () => {
     expect(screen.queryByRole('button', { name: '结束会话' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '发送' })).not.toBeInTheDocument();
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/session', { cache: 'no-store' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByText('正在检查登录状态...')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/^(已授权|授权成功|渠道已可用|生产能力已开放)$/u),
+    ).not.toBeInTheDocument();
+  });
+
+  it('未知 slug 继续 notFound，且不读取 fetch', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      HospitalCapabilityOffRoute({
+        params: Promise.resolve({ slug: ['unknown-section'] }),
+      }),
+    ).rejects.toThrow(/404/u);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
