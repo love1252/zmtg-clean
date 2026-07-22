@@ -212,6 +212,42 @@ describe('AUTH-SESSION-01A formal server session provenance owner', () => {
     ).resolves.toEqual({ kind: 'rejected', code: 'provenance_source_denied' });
   });
 
+  it('treats every exact demo cookie-name trace as source denied without prefix guesses', async () => {
+    const validFormal = `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken()}`;
+    for (const cookieHeader of [
+      'zmtg_demo_session',
+      '  zmtg_demo_session  ',
+      'zmtg_demo_session=',
+      `zmtg_demo_session; ${validFormal}`,
+      `malformed; zmtg_demo_session ; ${FORMAL_SERVER_SESSION_COOKIE_V1}=invalid`,
+      `zmtg_demo_session=; broken; ${validFormal}`,
+      `broken; zmtg_demo_session; zmtg_demo_session=invalid; ${validFormal}`,
+    ]) {
+      await expect(resolver({ cookieHeader }).resolveCurrentRequest()).resolves.toEqual({
+        kind: 'rejected',
+        code: 'provenance_source_denied',
+      });
+    }
+
+    for (const nearName of [
+      'zmtg_demo_session_backup',
+      'prefix_zmtg_demo_session',
+      'zmtg_demo_sessionx',
+    ]) {
+      await expect(resolver({ cookieHeader: nearName }).resolveCurrentRequest()).resolves.toEqual({
+        kind: 'rejected',
+        code: 'provenance_missing',
+      });
+      expect(
+        (
+          await resolver({
+            cookieHeader: `${nearName}; ${validFormal}`,
+          }).resolveCurrentRequest()
+        ).kind,
+      ).toBe('verified');
+    }
+  });
+
   it('classifies missing and demo presence before key-ring, clock or codec validation', async () => {
     let keyGetterReads = 0;
     let codecTraps = 0;
@@ -244,7 +280,15 @@ describe('AUTH-SESSION-01A formal server session provenance owner', () => {
         { kind: 'rejected', code: 'provenance_source_denied' },
       ],
       [
+        '  zmtg_demo_session  ',
+        { kind: 'rejected', code: 'provenance_source_denied' },
+      ],
+      [
         `zmtg_demo_session=not-even-a-token; ${FORMAL_SERVER_SESSION_COOKIE_V1}=invalid`,
+        { kind: 'rejected', code: 'provenance_source_denied' },
+      ],
+      [
+        `broken; zmtg_demo_session ; ${FORMAL_SERVER_SESSION_COOKIE_V1}=invalid`,
         { kind: 'rejected', code: 'provenance_source_denied' },
       ],
     ] as const) {

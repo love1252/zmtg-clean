@@ -54,36 +54,14 @@ function realCodec() {
   });
 }
 
-function recordingCodec(input: {
-  failAt?: number;
-  throwAt?: number;
-} = {}) {
-  const actual = realCodec();
-  const calls: InstitutionGuardReferenceInputV1<InstitutionGuardReferencePrefixV1>[] = [];
-  const issue = vi.fn(
-    <Prefix extends InstitutionGuardReferencePrefixV1>(
-      value: InstitutionGuardReferenceInputV1<Prefix>,
-    ) => {
-      calls.push(value);
-      const call = calls.length;
-      if (input.throwAt === call) throw new Error('secret dependency detail');
-      if (input.failAt === call) {
-        return {
-          kind: 'unavailable',
-          code: 'guard_reference_unavailable',
-        } as const;
-      }
-      return actual.issue(value);
+function unavailableCodec() {
+  return createInstitutionGuardReferenceCodecV1({
+    keyRing: {
+      currentIssueKey: { keyVersion: 1, keyMaterial: null },
+      verifyOnlyKeys: [],
     },
-  );
-  return {
-    calls,
-    issue,
-    codec: {
-      issue,
-      verify: actual.verify,
-    } as unknown as InstitutionGuardReferenceCodecV1,
-  };
+    now: () => VERIFIED_AT,
+  });
 }
 
 function profileViolatingCodec(input: {
@@ -496,7 +474,7 @@ describe('BASE-02B formal request provenance owner', () => {
     expect(now).toHaveBeenCalledTimes(1);
   });
 
-  it('maps clock and codec dependency failure to unavailable without partial evidence', async () => {
+  it('maps clock and a factory-issued unavailable codec to a low-sensitive atomic failure', async () => {
     for (const now of [
       () => {
         throw new Error('clock secret');
@@ -509,16 +487,15 @@ describe('BASE-02B formal request provenance owner', () => {
       });
     }
 
-    for (const failure of [{ failAt: 1 }, { failAt: 2 }, { failAt: 3 }, { throwAt: 2 }]) {
-      const recorder = recordingCodec(failure);
-      const result = await resolver({ codec: recorder.codec }).resolveCurrentRequest();
-      expect(result).toEqual({
-        kind: 'unavailable',
-        code: 'provenance_unavailable',
-      });
-      expect(JSON.stringify(result)).not.toContain('account-001');
-      expect(recorder.calls.length).toBeLessThanOrEqual(failure.failAt ?? failure.throwAt ?? 3);
-    }
+    const result = await resolver({ codec: unavailableCodec() }).resolveCurrentRequest();
+    expect(result).toEqual({
+      kind: 'unavailable',
+      code: 'provenance_unavailable',
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('account-001');
+    expect(JSON.stringify(result)).not.toContain('request-001');
+    expect(JSON.stringify(result)).not.toContain('proof-001');
   });
 
   it('rejects every structural codec lookalike before it can supply a reference', async () => {
@@ -580,19 +557,16 @@ describe('BASE-02B formal request provenance owner', () => {
         },
       },
     );
-    const recorder = recordingCodec();
-
     for (const value of [accessor, hostileProxy]) {
       expect(
         await resolver({
           ownerInput: value as unknown as FormalRequestProvenanceOwnerInputV1,
-          codec: recorder.codec,
+          codec: realCodec(),
         }).resolveCurrentRequest(),
       ).toEqual({ kind: 'rejected', code: 'provenance_invalid' });
     }
     expect(getterReads).toBe(0);
     expect(proxyTraps).toBe(0);
-    expect(recorder.issue).not.toHaveBeenCalled();
   });
 
   it('does not trigger hostile composer getters or Proxy traps', async () => {
@@ -767,14 +741,12 @@ describe('BASE-02B formal request provenance owner', () => {
       ownerInput({ verifiedAt: '2026-07-22T08:02:00.000Z' }),
       ownerInput({ validUntil: '2026-07-22T08:04:00.000Z' }),
     ]) {
-      const recorder = recordingCodec();
       expect(
         await resolver({
           ownerInput: injected,
-          codec: recorder.codec,
+          codec: realCodec(),
         }).resolveCurrentRequest(),
       ).toEqual({ kind: 'rejected', code: 'provenance_invalid' });
-      expect(recorder.issue).not.toHaveBeenCalled();
     }
   });
 

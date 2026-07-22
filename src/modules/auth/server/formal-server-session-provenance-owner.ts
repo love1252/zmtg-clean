@@ -335,12 +335,12 @@ function readFormalCookie(
   for (const rawPart of parts) {
     const part = rawPart.trim();
     const separator = part.indexOf('=');
-    if (separator <= 0) continue;
-    const name = part.slice(0, separator).trim();
+    const name = (separator < 0 ? part : part.slice(0, separator)).trim();
     if (name === DEMO_SESSION_COOKIE) {
       demoPresent = true;
       continue;
     }
+    if (separator <= 0) continue;
     if (name === FORMAL_SERVER_SESSION_COOKIE_V1) {
       formalValues.push(part.slice(separator + 1));
     }
