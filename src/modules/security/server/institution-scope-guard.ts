@@ -9,29 +9,42 @@ import {
 } from '@/modules/security/domain/institution-access';
 import { isInstitutionRoleV1, type InstitutionRoleV1 } from '@/modules/institution-contracts/v1/institution-navigation';
 import { resolveInstitutionAccessContextV1 } from '@/modules/security/server/institution-access-context';
+import { isActiveInstitutionAnchorProviderV1 } from '@/modules/security/server/institution-anchor-provider';
+import { isFormalProvenanceResolverV1 } from '@/modules/security/server/formal-request-provenance-owner';
 import {
   INSTITUTION_GUARD_ACCEPTED_KEY_VERSIONS_V1,
+  MEMBERSHIP_REJECTION_CODES_V1,
+  PROVENANCE_REJECTION_CODES_V1,
   type ActiveInstitutionAnchorEvidenceV1,
+  type ActiveInstitutionAnchorProviderV1,
   type AnchorRevisionReferenceV1,
   type BindingRevisionReferenceV1,
   type FormalRequestProvenanceEvidenceV1,
+  type FormalProvenanceResolverV1,
   type FreshActiveMembershipEvidenceV1,
+  type FreshActiveMembershipProviderV1,
   type MembershipRevisionReferenceV1,
   type RequestReferenceV1,
   type UserReferenceV1,
 } from '@/modules/security/server/institution-guard-evidence';
+import { isFreshActiveMembershipProviderV1 } from '@/modules/security/server/institution-membership-provider';
 
 const MAX_PROVENANCE_TTL_MS = 5 * 60 * 1_000;
 const MAX_CURRENT_FACT_TTL_MS = 60 * 1_000;
 const CANONICAL_UTC_INSTANT =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 
-const FACTORY_INPUT_KEYS = Object.freeze(['now'] as const);
-const EVALUATE_INPUT_KEYS = Object.freeze([
-  'provenance',
-  'membership',
-  'anchor',
+const FACTORY_INPUT_KEYS = Object.freeze([
+  'provenanceResolver',
+  'membershipProvider',
+  'anchorProvider',
+  'now',
 ] as const);
+const PROVENANCE_RESOLVER_KEYS = Object.freeze([
+  'resolveCurrentRequest',
+] as const);
+const MEMBERSHIP_PROVIDER_KEYS = Object.freeze(['resolve'] as const);
+const ANCHOR_PROVIDER_KEYS = Object.freeze(['resolve'] as const);
 const PROVENANCE_KEYS = Object.freeze([
   'source',
   'userReference',
@@ -76,11 +89,16 @@ declare class InstitutionScopeGuardSealV1 {
 
 export const INSTITUTION_SCOPE_GUARD_FAILURE_CODES_V1 = Object.freeze([
   'invalid_context_shape',
+  'provenance_missing',
+  'provenance_invalid',
   'provenance_source_denied',
   'provenance_expired',
   'provenance_unavailable',
+  'membership_denied',
   'membership_invalid',
+  'membership_unavailable',
   'membership_stale',
+  'institution_anchor_denied',
   'institution_anchor_unavailable',
 ] as const);
 
@@ -113,18 +131,13 @@ export type InstitutionScopeGuardResolutionV1 =
       code: InstitutionScopeGuardFailureCodeV1;
     }>;
 
-export type InstitutionScopeGuardInputV1 = Readonly<{
-  provenance: FormalRequestProvenanceEvidenceV1;
-  membership: FreshActiveMembershipEvidenceV1;
-  anchor: ActiveInstitutionAnchorEvidenceV1;
-}>;
-
 export type InstitutionScopeGuardV1 = InstitutionScopeGuardSealV1 &
   Readonly<{
-    evaluate: (
-      input: InstitutionScopeGuardInputV1,
-    ) => InstitutionScopeGuardResolutionV1;
+    authorizeCurrentRequest: () => Promise<InstitutionScopeGuardResolutionV1>;
   }>;
+
+const authenticGuards = new WeakSet<object>();
+const authenticAllows = new WeakSet<object>();
 
 type CanonicalInstantV1 = Readonly<{ raw: string; epochMs: number }>;
 
@@ -246,9 +259,23 @@ function isSafeReferenceShape(
   );
   if (!match || match[1] !== expectedPrefix) return false;
   const keyVersion = Number(match[2]);
-  return INSTITUTION_GUARD_ACCEPTED_KEY_VERSIONS_V1.some(
-    (accepted) => accepted === keyVersion,
-  );
+  const encodedTag = match[3];
+  if (
+    !encodedTag ||
+    !INSTITUTION_GUARD_ACCEPTED_KEY_VERSIONS_V1.some(
+      (accepted) => accepted === keyVersion,
+    )
+  ) {
+    return false;
+  }
+  try {
+    const decoded = Buffer.from(encodedTag, 'base64url');
+    return (
+      decoded.byteLength === 32 && decoded.toString('base64url') === encodedTag
+    );
+  } catch {
+    return false;
+  }
 }
 
 function parseProvenance(value: unknown): ProvenanceSnapshotV1 | null {
@@ -367,67 +394,12 @@ function trustedNow(now: (() => Date) | null): CanonicalInstantV1 | null {
   }
 }
 
-function evaluate(
-  now: (() => Date) | null,
-  value: InstitutionScopeGuardInputV1,
+function decideInstitutionScope(
+  provenance: ProvenanceSnapshotV1,
+  membership: MembershipSnapshotV1,
+  anchor: AnchorSnapshotV1,
+  decisionTime: CanonicalInstantV1,
 ): InstitutionScopeGuardResolutionV1 {
-  const input = snapshotExactPlainRecord(value, EVALUATE_INPUT_KEYS);
-  if (!input) return reject('invalid_context_shape');
-
-  const rawProvenance = snapshotExactPlainRecord(
-    input.provenance,
-    PROVENANCE_KEYS,
-  );
-  if (!rawProvenance) return reject('invalid_context_shape');
-  if (!isInstitutionAccessContextSourceV1(rawProvenance.source)) {
-    return reject('provenance_source_denied');
-  }
-
-  const provenance = parseProvenance(input.provenance);
-  if (!provenance) return reject('invalid_context_shape');
-  const decisionTime = trustedNow(now);
-  if (!decisionTime) return reject('provenance_unavailable');
-  if (
-    provenance.issuedAt.epochMs > decisionTime.epochMs ||
-    provenance.verifiedAt.epochMs > decisionTime.epochMs
-  ) {
-    return reject('invalid_context_shape');
-  }
-  if (decisionTime.epochMs >= provenance.validUntil.epochMs) {
-    return reject('provenance_expired');
-  }
-
-  const membership = parseMembership(input.membership);
-  if (!membership) return reject('membership_invalid');
-  if (
-    membership.userReference !== provenance.userReference ||
-    membership.tenantId !== provenance.tenantId ||
-    membership.institutionId !== provenance.institutionId
-  ) {
-    return reject('membership_invalid');
-  }
-  if (membership.observedAt.epochMs > decisionTime.epochMs) {
-    return reject('membership_invalid');
-  }
-  if (decisionTime.epochMs >= membership.freshUntil.epochMs) {
-    return reject('membership_stale');
-  }
-
-  const anchor = parseAnchor(input.anchor);
-  if (!anchor) return reject('institution_anchor_unavailable');
-  if (
-    anchor.tenantId !== provenance.tenantId ||
-    anchor.institutionId !== provenance.institutionId
-  ) {
-    return reject('institution_anchor_unavailable');
-  }
-  if (anchor.observedAt.epochMs > decisionTime.epochMs) {
-    return reject('institution_anchor_unavailable');
-  }
-  if (decisionTime.epochMs >= anchor.freshUntil.epochMs) {
-    return reject('institution_anchor_unavailable');
-  }
-
   const contextResolution = resolveInstitutionAccessContextV1({
     userId: provenance.userReference,
     role: membership.role,
@@ -450,7 +422,7 @@ function evaluate(
     membership.freshUntil.epochMs,
     anchor.freshUntil.epochMs,
   );
-  return Object.freeze({
+  const allow = Object.freeze({
     kind: 'institution_scope_allow',
     requestReference: provenance.requestReference,
     userReference: provenance.userReference,
@@ -466,22 +438,265 @@ function evaluate(
     anchorFreshUntil: anchor.freshUntil.raw,
     decidedAt: decisionTime.raw,
     validUntil: new Date(validUntilEpochMs).toISOString(),
-  }) as unknown as InstitutionScopeAllowV1;
+  });
+  authenticAllows.add(allow);
+  return allow as unknown as InstitutionScopeAllowV1;
+}
+
+type ScopeGuardDependenciesV1 = Readonly<{
+  resolveCurrentRequest: FormalProvenanceResolverV1['resolveCurrentRequest'] | null;
+  resolveMembership: FreshActiveMembershipProviderV1['resolve'] | null;
+  resolveAnchor: ActiveInstitutionAnchorProviderV1['resolve'] | null;
+  now: (() => Date) | null;
+}>;
+
+function snapshotMethod(
+  value: unknown,
+  expectedKeys: readonly string[],
+  methodName: string,
+): ((...args: never[]) => unknown) | null {
+  const snapshot = snapshotExactPlainRecord(value, expectedKeys);
+  const method = snapshot?.[methodName];
+  return typeof method === 'function' && !isProxy(method)
+    ? (method as (...args: never[]) => unknown)
+    : null;
+}
+
+function snapshotDependencies(value: unknown): ScopeGuardDependenciesV1 {
+  const input = snapshotExactPlainRecord(value, FACTORY_INPUT_KEYS);
+  const provenanceResolverCandidate = input?.provenanceResolver;
+  const membershipProviderCandidate = input?.membershipProvider;
+  const anchorProviderCandidate = input?.anchorProvider;
+  const provenanceResolverIsAuthentic =
+    isFormalProvenanceResolverV1(provenanceResolverCandidate);
+  const membershipProviderIsAuthentic =
+    isFreshActiveMembershipProviderV1(membershipProviderCandidate);
+  const anchorProviderIsAuthentic =
+    isActiveInstitutionAnchorProviderV1(anchorProviderCandidate);
+  const resolveCurrentRequest = provenanceResolverIsAuthentic
+    ? snapshotMethod(
+        provenanceResolverCandidate,
+        PROVENANCE_RESOLVER_KEYS,
+        'resolveCurrentRequest',
+      )
+    : null;
+  const resolveMembership = membershipProviderIsAuthentic
+    ? snapshotMethod(
+        membershipProviderCandidate,
+        MEMBERSHIP_PROVIDER_KEYS,
+        'resolve',
+      )
+    : null;
+  const resolveAnchor = anchorProviderIsAuthentic
+    ? snapshotMethod(anchorProviderCandidate, ANCHOR_PROVIDER_KEYS, 'resolve')
+    : null;
+  const now =
+    input && typeof input.now === 'function' && !isProxy(input.now)
+      ? (input.now as () => Date)
+      : null;
+  return Object.freeze({
+    resolveCurrentRequest:
+      resolveCurrentRequest as FormalProvenanceResolverV1['resolveCurrentRequest'] | null,
+    resolveMembership:
+      resolveMembership as FreshActiveMembershipProviderV1['resolve'] | null,
+    resolveAnchor:
+      resolveAnchor as ActiveInstitutionAnchorProviderV1['resolve'] | null,
+    now,
+  });
+}
+
+function isProvenanceRejectionCode(
+  value: unknown,
+): value is (typeof PROVENANCE_REJECTION_CODES_V1)[number] {
+  return PROVENANCE_REJECTION_CODES_V1.some((code) => code === value);
+}
+
+function isMembershipRejectionCode(
+  value: unknown,
+): value is (typeof MEMBERSHIP_REJECTION_CODES_V1)[number] {
+  return MEMBERSHIP_REJECTION_CODES_V1.some((code) => code === value);
+}
+
+async function authorizeCurrentRequest(
+  dependencies: ScopeGuardDependenciesV1,
+): Promise<InstitutionScopeGuardResolutionV1> {
+  if (!dependencies.resolveCurrentRequest) {
+    return reject('provenance_unavailable');
+  }
+
+  let rawProvenanceResolution: unknown;
+  try {
+    rawProvenanceResolution = await dependencies.resolveCurrentRequest();
+  } catch {
+    return reject('provenance_unavailable');
+  }
+
+  const verifiedProvenanceResolution = snapshotExactPlainRecord(
+    rawProvenanceResolution,
+    ['kind', 'evidence'],
+  );
+  if (verifiedProvenanceResolution?.kind !== 'verified') {
+    const failedProvenanceResolution = snapshotExactPlainRecord(
+      rawProvenanceResolution,
+      ['kind', 'code'],
+    );
+    if (
+      failedProvenanceResolution?.kind === 'rejected' &&
+      isProvenanceRejectionCode(failedProvenanceResolution.code)
+    ) {
+      return reject(failedProvenanceResolution.code);
+    }
+    if (
+      failedProvenanceResolution?.kind === 'unavailable' &&
+      failedProvenanceResolution.code === 'provenance_unavailable'
+    ) {
+      return reject('provenance_unavailable');
+    }
+    return reject('provenance_unavailable');
+  }
+
+  const rawProvenance = snapshotExactPlainRecord(
+    verifiedProvenanceResolution.evidence,
+    PROVENANCE_KEYS,
+  );
+  if (!rawProvenance) return reject('invalid_context_shape');
+  if (!isInstitutionAccessContextSourceV1(rawProvenance.source)) {
+    return reject('provenance_source_denied');
+  }
+  const provenance = parseProvenance(verifiedProvenanceResolution.evidence);
+  if (!provenance) return reject('invalid_context_shape');
+
+  const decisionTime = trustedNow(dependencies.now);
+  if (!decisionTime) return reject('provenance_unavailable');
+  if (
+    provenance.issuedAt.epochMs > decisionTime.epochMs ||
+    provenance.verifiedAt.epochMs > decisionTime.epochMs
+  ) {
+    return reject('invalid_context_shape');
+  }
+  if (decisionTime.epochMs >= provenance.validUntil.epochMs) {
+    return reject('provenance_expired');
+  }
+  if (!dependencies.resolveMembership) {
+    return reject('membership_unavailable');
+  }
+
+  const requestedScope = Object.freeze({
+    tenantId: provenance.tenantId,
+    institutionId: provenance.institutionId,
+  });
+  const membershipRequest = Object.freeze({
+    provenance:
+      verifiedProvenanceResolution.evidence as FormalRequestProvenanceEvidenceV1,
+    requestedScope,
+  });
+  let rawMembershipResolution: unknown;
+  try {
+    rawMembershipResolution =
+      await dependencies.resolveMembership(membershipRequest);
+  } catch {
+    return reject('membership_unavailable');
+  }
+
+  const failedMembershipResolution = snapshotExactPlainRecord(
+    rawMembershipResolution,
+    ['kind', 'code'],
+  );
+  if (
+    failedMembershipResolution?.kind === 'rejected' &&
+    isMembershipRejectionCode(failedMembershipResolution.code)
+  ) {
+    return reject(failedMembershipResolution.code);
+  }
+  const membership = parseMembership(rawMembershipResolution);
+  if (!membership) return reject('membership_invalid');
+  if (
+    membership.userReference !== provenance.userReference ||
+    membership.tenantId !== provenance.tenantId ||
+    membership.institutionId !== provenance.institutionId ||
+    membership.observedAt.epochMs > decisionTime.epochMs
+  ) {
+    return reject('membership_invalid');
+  }
+  if (decisionTime.epochMs >= membership.freshUntil.epochMs) {
+    return reject('membership_stale');
+  }
+  if (!dependencies.resolveAnchor) {
+    return reject('institution_anchor_unavailable');
+  }
+
+  let rawAnchorResolution: unknown;
+  try {
+    rawAnchorResolution = await dependencies.resolveAnchor(requestedScope);
+  } catch {
+    return reject('institution_anchor_unavailable');
+  }
+  const failedAnchorResolution = snapshotExactPlainRecord(
+    rawAnchorResolution,
+    ['kind', 'code'],
+  );
+  if (
+    failedAnchorResolution?.kind === 'denied' &&
+    failedAnchorResolution.code === 'institution_anchor_denied'
+  ) {
+    return reject('institution_anchor_denied');
+  }
+  if (
+    failedAnchorResolution?.kind === 'unavailable' &&
+    failedAnchorResolution.code === 'institution_anchor_unavailable'
+  ) {
+    return reject('institution_anchor_unavailable');
+  }
+  const anchor = parseAnchor(rawAnchorResolution);
+  if (!anchor) return reject('institution_anchor_unavailable');
+  if (
+    anchor.tenantId !== provenance.tenantId ||
+    anchor.institutionId !== provenance.institutionId ||
+    anchor.observedAt.epochMs > decisionTime.epochMs ||
+    decisionTime.epochMs >= anchor.freshUntil.epochMs
+  ) {
+    return reject('institution_anchor_unavailable');
+  }
+
+  return decideInstitutionScope(provenance, membership, anchor, decisionTime);
+}
+
+export function isInstitutionScopeGuardV1(
+  value: unknown,
+): value is InstitutionScopeGuardV1 {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !isProxy(value) &&
+    authenticGuards.has(value)
+  );
+}
+
+export function isInstitutionScopeAllowV1(
+  value: unknown,
+): value is InstitutionScopeAllowV1 {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !isProxy(value) &&
+    authenticAllows.has(value)
+  );
 }
 
 /**
- * Creates a pure request-time scope guard. The result grants no section, object, action, or
- * capability access and is intentionally not serializable back into an allow through any parser.
+ * Composes owner-held request evidence into a non-serializable scope decision. The public handle
+ * accepts no caller scope or evidence and grants no section, object, action, or capability access.
  */
 export function createInstitutionScopeGuardV1(input: Readonly<{
+  provenanceResolver: FormalProvenanceResolverV1;
+  membershipProvider: FreshActiveMembershipProviderV1;
+  anchorProvider: ActiveInstitutionAnchorProviderV1;
   now: () => Date;
 }>): InstitutionScopeGuardV1 {
-  const snapshot = snapshotExactPlainRecord(input, FACTORY_INPUT_KEYS);
-  const now =
-    snapshot && typeof snapshot.now === 'function' && !isProxy(snapshot.now)
-      ? (snapshot.now as () => Date)
-      : null;
-  return Object.freeze({
-    evaluate: (value: InstitutionScopeGuardInputV1) => evaluate(now, value),
-  }) as unknown as InstitutionScopeGuardV1;
+  const dependencies = snapshotDependencies(input);
+  const guard = Object.freeze({
+    authorizeCurrentRequest: () => authorizeCurrentRequest(dependencies),
+  });
+  authenticGuards.add(guard);
+  return guard as unknown as InstitutionScopeGuardV1;
 }
