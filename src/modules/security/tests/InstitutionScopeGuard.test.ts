@@ -122,7 +122,7 @@ type HarnessOptions = Readonly<{
   anchorNow?: () => Date;
   order?: string[];
   membershipAccountId?: string;
-  referenceCodecMode?: 'genuine' | 'controlled';
+  controlledReferenceCodecStage?: 'provenance' | 'membership' | 'anchor';
 }>;
 
 function ownRecord(value: unknown): Record<string, unknown> | null {
@@ -238,24 +238,25 @@ function ownerHarness(options: HarnessOptions = {}) {
     throw new Error('expected owner evidence fixtures');
   }
 
-  const useControlledCodec = options.referenceCodecMode === 'controlled';
-  const provenanceCodec = useControlledCodec
-    ? controlledCodec({
-        usr: provenanceEvidence.userReference,
-        req: provenanceEvidence.requestReference,
-        prf: provenanceEvidence.proofReference,
-      })
-    : genuineCodec();
-  const membershipCodec = useControlledCodec
-    ? controlledCodec({
-        usr: membershipEvidence.userReference,
-        mbr: membershipEvidence.membershipReference,
-        mrv: membershipEvidence.membershipRevision,
-        bnd: membershipEvidence.bindingReference,
-        brv: membershipEvidence.bindingRevision,
-      })
-    : genuineCodec();
-  const anchorCodec = useControlledCodec
+  const provenanceCodec =
+    options.controlledReferenceCodecStage === 'provenance'
+      ? controlledCodec({
+          usr: provenanceEvidence.userReference,
+          req: provenanceEvidence.requestReference,
+          prf: provenanceEvidence.proofReference,
+        })
+      : genuineCodec();
+  const membershipCodec =
+    options.controlledReferenceCodecStage === 'membership'
+      ? controlledCodec({
+          usr: membershipEvidence.userReference,
+          mbr: membershipEvidence.membershipReference,
+          mrv: membershipEvidence.membershipRevision,
+          bnd: membershipEvidence.bindingReference,
+          brv: membershipEvidence.bindingRevision,
+        })
+      : genuineCodec();
+  const anchorCodec = options.controlledReferenceCodecStage === 'anchor'
     ? controlledCodec({
         anc: anchorEvidence.anchorReference,
         arv: anchorEvidence.anchorRevision,
@@ -529,6 +530,22 @@ describe('BASE-02B institution scope guard composition', () => {
       ),
     ).toBe(true);
   });
+
+  it.each(['provenance', 'membership', 'anchor'] as const)(
+    'uses a controlled codec only for the %s stage',
+    (stage) => {
+      const harness = ownerHarness({ controlledReferenceCodecStage: stage });
+      expect(
+        harness.referenceCodecs.map((codec) =>
+          isInstitutionGuardReferenceCodecV1(codec),
+        ),
+      ).toEqual([
+        stage !== 'provenance',
+        stage !== 'membership',
+        stage !== 'anchor',
+      ]);
+    },
+  );
 
   it.each(OWNER_LOOKALIKE_KINDS)(
     'rejects a %s provenance resolver lookalike before invoking any owner method',
@@ -990,7 +1007,7 @@ describe('BASE-02B institution scope guard composition', () => {
         membershipResolution: membership({
           userReference: reference('usr', 'Q'.repeat(43)),
         }),
-        referenceCodecMode: 'controlled',
+        controlledReferenceCodecStage: 'membership',
       },
       'membership_invalid',
     ],
@@ -1007,39 +1024,39 @@ describe('BASE-02B institution scope guard composition', () => {
 
   it.each([
     [
-      'provenance request reference',
+      'controlled provenance codec before a noncanonical request reference',
       {
         provenanceResolution: verified(
           provenance({
             requestReference: reference('req', `${'A'.repeat(42)}B`),
           }),
         ),
-        referenceCodecMode: 'controlled',
+        controlledReferenceCodecStage: 'provenance',
       },
-      'invalid_context_shape',
+      'provenance_unavailable',
     ],
     [
-      'membership revision',
+      'noncanonical membership revision',
       {
         membershipResolution: membership({
           membershipRevision: reference('mrv', `${'A'.repeat(42)}B`),
         }),
-        referenceCodecMode: 'controlled',
+        controlledReferenceCodecStage: 'membership',
       },
       'membership_invalid',
     ],
     [
-      'anchor revision',
+      'noncanonical anchor revision',
       {
         anchorResolution: anchor({
           anchorRevision: reference('arv', `${'A'.repeat(42)}B`),
         }),
-        referenceCodecMode: 'controlled',
+        controlledReferenceCodecStage: 'anchor',
       },
       'institution_anchor_unavailable',
     ],
   ] as const)(
-    'rejects noncanonical full43 encoding for %s',
+    'rejects %s',
     async (_name, options, code) => {
       await expect(
         ownerHarness(options).guard.authorizeCurrentRequest(),
@@ -1049,36 +1066,36 @@ describe('BASE-02B institution scope guard composition', () => {
 
   it.each([
     [
-      'wrong prefix',
+      'controlled provenance codec before a wrong-prefix request reference',
       {
         provenanceResolution: verified(
           provenance({ requestReference: reference('prf') }),
         ),
-        referenceCodecMode: 'controlled',
+        controlledReferenceCodecStage: 'provenance',
       },
       'provenance_unavailable',
     ],
     [
-      'unknown key version',
+      'unknown membership key version',
       {
         membershipResolution: membership({
           bindingRevision: reference('brv', TOKEN, 2),
         }),
-        referenceCodecMode: 'controlled',
+        controlledReferenceCodecStage: 'membership',
       },
       'membership_invalid',
     ],
     [
-      'short tag',
+      'short anchor tag',
       {
         anchorResolution: anchor({
           anchorRevision: reference('arv', 'A'.repeat(22)),
         }),
-        referenceCodecMode: 'controlled',
+        controlledReferenceCodecStage: 'anchor',
       },
       'institution_anchor_unavailable',
     ],
-  ] as const)('rejects %s reference shape', async (_name, options, code) => {
+  ] as const)('rejects %s', async (_name, options, code) => {
     await expect(
       ownerHarness(options).guard.authorizeCurrentRequest(),
     ).resolves.toEqual({ kind: 'rejected', code });
