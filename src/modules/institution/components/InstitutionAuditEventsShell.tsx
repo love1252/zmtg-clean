@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Filter, Loader2, Search, ShieldCheck } from 'lucide-react';
 import {
   AUDIT_REASON_VALUES,
@@ -134,68 +134,122 @@ export function InstitutionAuditEventsShell() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [errorState, setErrorState] = useState<InstitutionPageStateProps | null>(null);
+  const [hasAuthoritativeSnapshot, setHasAuthoritativeSnapshot] = useState(false);
+  const requestRevisionRef = useRef(0);
+  const isMountedRef = useRef(false);
+
+  function beginRequest() {
+    requestRevisionRef.current += 1;
+    return requestRevisionRef.current;
+  }
+
+  function isCurrentRequest(revision: number) {
+    return isMountedRef.current && requestRevisionRef.current === revision;
+  }
+
+  function clearAuditSnapshot() {
+    setRecords([]);
+    setPageInfo(null);
+    setHasAuthoritativeSnapshot(false);
+  }
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      requestRevisionRef.current += 1;
+    };
+  }, []);
 
   async function loadAuditEvents(input: {
     query: InstitutionAuditEventsQuery;
     mode: 'replace' | 'append';
   }) {
     const { mode, query } = input;
+    const revision = beginRequest();
+
     if (mode === 'append') {
       setIsLoadingMore(true);
     } else {
       setIsLoading(true);
+      setIsLoadingMore(false);
+      clearAuditSnapshot();
     }
+    setHasAuthoritativeSnapshot(false);
     setErrorState(null);
 
-    const result = await listInstitutionAuditEvents(query);
+    try {
+      const result = await listInstitutionAuditEvents(query);
+      if (!isCurrentRequest(revision)) return;
 
-    if (result.ok) {
-      setRecords((current) =>
-        mode === 'append' ? [...current, ...result.records] : result.records,
-      );
-      setPageInfo(result.pageInfo);
-    } else {
-      if (mode === 'replace') {
-        setRecords([]);
-        setPageInfo(null);
+      if (result.ok) {
+        setRecords((current) =>
+          mode === 'append' ? [...current, ...result.records] : result.records,
+        );
+        setPageInfo(result.pageInfo);
+        setHasAuthoritativeSnapshot(true);
+      } else {
+        clearAuditSnapshot();
+        setErrorState(visibleAuditErrorState(result.error));
       }
-      setErrorState(visibleAuditErrorState(result.error));
-    }
+    } catch {
+      if (!isCurrentRequest(revision)) return;
 
-    if (mode === 'append') {
-      setIsLoadingMore(false);
-    } else {
-      setIsLoading(false);
+      clearAuditSnapshot();
+      setErrorState(visibleAuditErrorState({
+        kind: 'unknown',
+        message: '关键操作记录请求失败',
+        status: 0,
+      }));
+    } finally {
+      if (!isCurrentRequest(revision)) return;
+
+      if (mode === 'append') {
+        setIsLoadingMore(false);
+      } else {
+        setIsLoading(false);
+      }
     }
   }
 
   useEffect(() => {
-    let isActive = true;
-
     async function loadInitialAuditEvents() {
+      const revision = beginRequest();
       setIsLoading(true);
+      setIsLoadingMore(false);
+      clearAuditSnapshot();
       setErrorState(null);
-      const result = await listInstitutionAuditEvents();
 
-      if (!isActive) return;
+      try {
+        const result = await listInstitutionAuditEvents();
+        if (!isCurrentRequest(revision)) return;
 
-      if (result.ok) {
-        setRecords(result.records);
-        setPageInfo(result.pageInfo);
-      } else {
-        setRecords([]);
-        setPageInfo(null);
-        setErrorState(visibleAuditErrorState(result.error));
+        if (result.ok) {
+          setRecords(result.records);
+          setPageInfo(result.pageInfo);
+          setHasAuthoritativeSnapshot(true);
+        } else {
+          clearAuditSnapshot();
+          setErrorState(visibleAuditErrorState(result.error));
+        }
+      } catch {
+        if (!isCurrentRequest(revision)) return;
+
+        clearAuditSnapshot();
+        setErrorState(visibleAuditErrorState({
+          kind: 'unknown',
+          message: '关键操作记录请求失败',
+          status: 0,
+        }));
+      } finally {
+        if (isCurrentRequest(revision)) {
+          setIsLoading(false);
+        }
       }
-
-      setIsLoading(false);
     }
 
     void loadInitialAuditEvents();
-
-    return () => {
-      isActive = false;
-    };
   }, []);
 
   const resultCounts = useMemo(
@@ -397,7 +451,9 @@ export function InstitutionAuditEventsShell() {
             className={`rounded-[22px] border p-4 shadow-sm ${resultToneClasses[item.result]}`}
           >
             <div className="text-xs font-semibold opacity-80">{item.result}</div>
-            <div className="mt-2 text-2xl font-semibold">{isLoading ? '--' : item.count}</div>
+            <div className="mt-2 text-2xl font-semibold">
+              {hasAuthoritativeSnapshot ? item.count : '--'}
+            </div>
           </article>
         ))}
       </section>
@@ -425,7 +481,7 @@ export function InstitutionAuditEventsShell() {
           <InstitutionPageState {...errorState} className="mt-4" />
         ) : null}
 
-        {!isLoading && !errorState && records.length === 0 ? (
+        {!isLoading && !errorState && hasAuthoritativeSnapshot && records.length === 0 ? (
           <InstitutionPageState
             kind="empty"
             title="暂无审计事件"
