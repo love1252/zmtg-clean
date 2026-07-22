@@ -28,12 +28,20 @@ const eqMock = vi.hoisted(() =>
   })),
 );
 
+const isNullMock = vi.hoisted(() =>
+  vi.fn((column: unknown) => ({
+    column,
+    operator: 'isNull',
+  })),
+);
+
 vi.mock('drizzle-orm', async (importOriginal) => {
   const actual = await importOriginal<typeof import('drizzle-orm')>();
   return {
     ...actual,
     and: andMock,
     eq: eqMock,
+    isNull: isNullMock,
   };
 });
 
@@ -55,6 +63,34 @@ const accountRow: AuthAccountRecord = {
   createdAt: new Date('2026-06-25T07:00:00.000Z'),
   updatedAt: new Date('2026-06-25T07:00:00.000Z'),
 };
+
+const loginTimestamp = new Date('2026-06-25T08:00:00.000Z');
+
+function expectedLoginAccountState(
+  overrides: Partial<Pick<
+    AuthAccountRecord,
+    | 'passwordHash'
+    | 'passwordUpdatedAt'
+    | 'passwordResetRequired'
+    | 'status'
+    | 'lastLoginAt'
+    | 'failedLoginCount'
+    | 'lockedUntil'
+    | 'updatedAt'
+  >> = {},
+) {
+  return {
+    passwordHash: accountRow.passwordHash,
+    passwordUpdatedAt: accountRow.passwordUpdatedAt,
+    passwordResetRequired: accountRow.passwordResetRequired,
+    status: accountRow.status,
+    lastLoginAt: accountRow.lastLoginAt,
+    failedLoginCount: accountRow.failedLoginCount,
+    lockedUntil: accountRow.lockedUntil,
+    updatedAt: accountRow.updatedAt,
+    ...overrides,
+  };
+}
 
 const membershipRow = {
   id: 'tenant-member-chenlei',
@@ -163,12 +199,14 @@ function createInsertChain(rows: unknown[]) {
   };
 }
 
-function createUpdateChain() {
-  const where = vi.fn(async () => undefined);
-  const set = vi.fn(() => ({ where }));
+function createUpdateChain(rows: unknown[]) {
+  const returning = vi.fn(async () => rows);
+  const where = vi.fn(() => ({ returning }));
+  const set = vi.fn((_values: unknown) => ({ where }));
   const update = vi.fn((table: unknown) => ({ set }));
 
   return {
+    returning,
     set,
     update,
     where,
@@ -178,11 +216,14 @@ function createUpdateChain() {
 function createDatabase(input: {
   insertRows?: unknown[];
   selectRows?: unknown[][];
+  updateRows?: unknown[];
 } = {}) {
   const allSelectChains = (input.selectRows ?? []).map(createSelectChain);
   const selectChains = [...allSelectChains];
   const insertChain = createInsertChain(input.insertRows ?? []);
-  const updateChain = createUpdateChain();
+  const updateChain = createUpdateChain(
+    input.updateRows ?? [{ accountId: accountRow.id }],
+  );
   const select = vi.fn(() => {
     const next = selectChains.shift();
     if (!next) throw new Error('没有配置更多 select chain');
@@ -205,6 +246,7 @@ function createDatabase(input: {
 beforeEach(() => {
   andMock.mockClear();
   eqMock.mockClear();
+  isNullMock.mockClear();
 });
 
 describe('正式账号 repository', () => {
@@ -779,13 +821,15 @@ describe('正式账号 repository', () => {
     expect(isFormalServerSessionUserSnapshotV1(snapshot)).toBe(false);
   });
 
-  it('记录登录失败时只更新失败计数、锁定状态和更新时间', async () => {
+  it('记录登录失败时以完整旧状态 CAS 且只更新失败计数、锁定状态和更新时间', async () => {
     const query = createDatabase();
     const failedAt = new Date('2026-06-25T08:00:00.000Z');
     const lockedUntil = new Date('2026-06-25T08:15:00.000Z');
+    const expectedState = expectedLoginAccountState();
 
-    await createAuthAccountRepository(query.database).recordLoginFailure({
+    const result = await createAuthAccountRepository(query.database).recordLoginFailure({
       accountId: 'auth-user-chenlei',
+      expectedState,
       failedAt,
       updatedBy: 'auth-user-chenlei',
       failedLoginCount: 5,
@@ -802,18 +846,47 @@ describe('正式账号 repository', () => {
       updatedBy: 'auth-user-chenlei',
     });
     expect(query.updateChain.where).toHaveBeenCalledWith({
-      column: authUsers.id,
-      operator: 'eq',
-      value: 'auth-user-chenlei',
+      operator: 'and',
+      conditions: [
+        { column: authUsers.id, operator: 'eq', value: 'auth-user-chenlei' },
+        { column: authUsers.passwordHash, operator: 'eq', value: expectedState.passwordHash },
+        {
+          column: authUsers.passwordUpdatedAt,
+          operator: 'eq',
+          value: expectedState.passwordUpdatedAt,
+        },
+        {
+          column: authUsers.passwordResetRequired,
+          operator: 'eq',
+          value: expectedState.passwordResetRequired,
+        },
+        { column: authUsers.status, operator: 'eq', value: expectedState.status },
+        { column: authUsers.lastLoginAt, operator: 'isNull' },
+        {
+          column: authUsers.failedLoginCount,
+          operator: 'eq',
+          value: expectedState.failedLoginCount,
+        },
+        { column: authUsers.lockedUntil, operator: 'isNull' },
+        { column: authUsers.updatedAt, operator: 'eq', value: expectedState.updatedAt },
+      ],
     });
+    expect(query.updateChain.returning).toHaveBeenCalledWith({ accountId: authUsers.id });
+    expect(result).toBe('recorded');
+    const mutation = query.updateChain.set.mock.calls[0]?.[0];
+    expect(mutation).not.toHaveProperty('passwordHash');
+    expect(mutation).not.toHaveProperty('passwordUpdatedAt');
+    expect(mutation).not.toHaveProperty('passwordResetRequired');
   });
 
-  it('记录登录成功时清空锁定与失败计数并保留重置状态', async () => {
+  it('记录登录成功时以完整旧状态 CAS，清空锁定与失败计数并保留重置状态', async () => {
     const query = createDatabase();
     const loggedInAt = new Date('2026-06-25T08:00:00.000Z');
+    const expectedState = expectedLoginAccountState();
 
-    await createAuthAccountRepository(query.database).recordLoginSuccess({
+    const result = await createAuthAccountRepository(query.database).recordLoginSuccess({
       accountId: 'auth-user-chenlei',
+      expectedState,
       loggedInAt,
       updatedBy: 'auth-user-chenlei',
       status: 'password_reset_required',
@@ -827,5 +900,92 @@ describe('正式账号 repository', () => {
       updatedAt: loggedInAt,
       updatedBy: 'auth-user-chenlei',
     });
+    expect(query.updateChain.where).toHaveBeenCalledWith({
+      operator: 'and',
+      conditions: [
+        { column: authUsers.id, operator: 'eq', value: 'auth-user-chenlei' },
+        { column: authUsers.passwordHash, operator: 'eq', value: expectedState.passwordHash },
+        {
+          column: authUsers.passwordUpdatedAt,
+          operator: 'eq',
+          value: expectedState.passwordUpdatedAt,
+        },
+        {
+          column: authUsers.passwordResetRequired,
+          operator: 'eq',
+          value: expectedState.passwordResetRequired,
+        },
+        { column: authUsers.status, operator: 'eq', value: expectedState.status },
+        { column: authUsers.lastLoginAt, operator: 'isNull' },
+        {
+          column: authUsers.failedLoginCount,
+          operator: 'eq',
+          value: expectedState.failedLoginCount,
+        },
+        { column: authUsers.lockedUntil, operator: 'isNull' },
+        { column: authUsers.updatedAt, operator: 'eq', value: expectedState.updatedAt },
+      ],
+    });
+    expect(query.updateChain.returning).toHaveBeenCalledWith({ accountId: authUsers.id });
+    expect(result).toBe('recorded');
+  });
+
+  it('非空可空字段使用等值 CAS 而不是 isNull', async () => {
+    const lastLoginAt = new Date('2026-06-25T07:30:00.000Z');
+    const lockedUntil = new Date('2026-06-25T08:15:00.000Z');
+    const expectedState = expectedLoginAccountState({ lastLoginAt, lockedUntil });
+    const query = createDatabase();
+
+    await createAuthAccountRepository(query.database).recordLoginFailure({
+      accountId: accountRow.id,
+      expectedState,
+      failedAt: loginTimestamp,
+      updatedBy: accountRow.id,
+      failedLoginCount: 5,
+      status: 'locked',
+      lockedUntil,
+    });
+
+    expect(eqMock).toHaveBeenCalledWith(authUsers.lastLoginAt, lastLoginAt);
+    expect(eqMock).toHaveBeenCalledWith(authUsers.lockedUntil, lockedUntil);
+    expect(isNullMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['零行', []],
+    ['多行', [{ accountId: accountRow.id }, { accountId: accountRow.id }]],
+    ['错误账号行', [{ accountId: 'auth-user-other' }]],
+  ])('登录失败 CAS 返回%s时报告 state_changed', async (_label, updateRows) => {
+    const query = createDatabase({ updateRows });
+
+    const result = await createAuthAccountRepository(query.database).recordLoginFailure({
+      accountId: accountRow.id,
+      expectedState: expectedLoginAccountState(),
+      failedAt: loginTimestamp,
+      updatedBy: accountRow.id,
+      failedLoginCount: 1,
+      status: 'active',
+      lockedUntil: null,
+    });
+
+    expect(result).toBe('state_changed');
+  });
+
+  it.each([
+    ['零行', []],
+    ['多行', [{ accountId: accountRow.id }, { accountId: accountRow.id }]],
+    ['错误账号行', [{ accountId: 'auth-user-other' }]],
+  ])('登录成功 CAS 返回%s时报告 state_changed', async (_label, updateRows) => {
+    const query = createDatabase({ updateRows });
+
+    const result = await createAuthAccountRepository(query.database).recordLoginSuccess({
+      accountId: accountRow.id,
+      expectedState: expectedLoginAccountState(),
+      loggedInAt: loginTimestamp,
+      updatedBy: accountRow.id,
+      status: 'active',
+    });
+
+    expect(result).toBe('state_changed');
   });
 });

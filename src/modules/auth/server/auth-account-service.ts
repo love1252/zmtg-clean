@@ -12,7 +12,10 @@ import {
   hashPasswordScrypt,
   verifyPasswordScrypt,
 } from '@/modules/auth/server/password-hash';
-import type { AuthAccountRepository } from '@/modules/auth/server/auth-account-repository';
+import type {
+  AuthAccountRepository,
+  ExpectedLoginAccountState,
+} from '@/modules/auth/server/auth-account-repository';
 
 export type { AuthAccountRepository } from '@/modules/auth/server/auth-account-repository';
 
@@ -68,6 +71,40 @@ function nextSuccessStatus(account: AuthAccountRecord): AuthAccountStatus {
   return account.passwordResetRequired || account.status === 'password_reset_required'
     ? 'password_reset_required'
     : 'active';
+}
+
+function frozenDate(value: Date): Date {
+  return Object.freeze(new Date(value.getTime()));
+}
+
+function frozenNullableDate(value: Date | null): Date | null {
+  return value === null ? null : frozenDate(value);
+}
+
+function freezeAuthAccountSnapshot(account: AuthAccountRecord): Readonly<AuthAccountRecord> {
+  return Object.freeze({
+    ...account,
+    passwordUpdatedAt: frozenDate(account.passwordUpdatedAt),
+    lastLoginAt: frozenNullableDate(account.lastLoginAt),
+    lockedUntil: frozenNullableDate(account.lockedUntil),
+    createdAt: frozenDate(account.createdAt),
+    updatedAt: frozenDate(account.updatedAt),
+  });
+}
+
+function freezeExpectedLoginAccountState(
+  account: Readonly<AuthAccountRecord>,
+): ExpectedLoginAccountState {
+  return Object.freeze({
+    passwordHash: account.passwordHash,
+    passwordUpdatedAt: frozenDate(account.passwordUpdatedAt),
+    passwordResetRequired: account.passwordResetRequired,
+    status: account.status,
+    lastLoginAt: frozenNullableDate(account.lastLoginAt),
+    failedLoginCount: account.failedLoginCount,
+    lockedUntil: frozenNullableDate(account.lockedUntil),
+    updatedAt: frozenDate(account.updatedAt),
+  });
 }
 
 export function createAuthAccountService(input: {
@@ -138,7 +175,9 @@ export function createAuthAccountService(input: {
         };
       }
 
-      const loginDecision = canStartPasswordCredentialLogin(account, timestamp);
+      const accountSnapshot = freezeAuthAccountSnapshot(account);
+      const expectedState = freezeExpectedLoginAccountState(accountSnapshot);
+      const loginDecision = canStartPasswordCredentialLogin(accountSnapshot, timestamp);
       if (!loginDecision.allowed) {
         return {
           status: 'rejected' as const,
@@ -148,21 +187,29 @@ export function createAuthAccountService(input: {
 
       const passwordMatched = await passwordHasher.verify(
         command.plaintextPassword,
-        account.passwordHash,
+        accountSnapshot.passwordHash,
       );
 
       if (!passwordMatched) {
-        const failureState = buildFailedPasswordLoginState(account, {
+        const failureState = buildFailedPasswordLoginState(accountSnapshot, {
           now: timestamp,
           maxFailedAttempts: lockPolicy.maxFailedAttempts,
           lockMinutes: lockPolicy.lockMinutes,
         });
-        await input.repository.recordLoginFailure({
-          accountId: account.id,
+        const writeResult = await input.repository.recordLoginFailure({
+          accountId: accountSnapshot.id,
+          expectedState,
           failedAt: timestamp,
-          updatedBy: account.id,
+          updatedBy: accountSnapshot.id,
           ...failureState,
         });
+
+        if (writeResult === 'state_changed') {
+          return {
+            status: 'rejected' as const,
+            reason: 'state_changed' as const,
+          };
+        }
 
         return {
           status: 'rejected' as const,
@@ -170,7 +217,9 @@ export function createAuthAccountService(input: {
         };
       }
 
-      const membership = await input.repository.findPrimaryTenantMembershipByUserId(account.id);
+      const membership = await input.repository.findPrimaryTenantMembershipByUserId(
+        accountSnapshot.id,
+      );
       if (!membership || command.scope !== 'institution') {
         return {
           status: 'rejected' as const,
@@ -180,23 +229,31 @@ export function createAuthAccountService(input: {
 
       const institutionBindings =
         await input.repository.listActiveInstitutionBindingsByAccountAndTenant({
-          accountId: account.id,
+          accountId: accountSnapshot.id,
           tenantId: membership.tenantId,
         });
 
-      const status = nextSuccessStatus(account);
-      await input.repository.recordLoginSuccess({
-        accountId: account.id,
+      const status = nextSuccessStatus(accountSnapshot);
+      const writeResult = await input.repository.recordLoginSuccess({
+        accountId: accountSnapshot.id,
+        expectedState,
         loggedInAt: timestamp,
-        updatedBy: account.id,
+        updatedBy: accountSnapshot.id,
         status,
       });
+
+      if (writeResult === 'state_changed') {
+        return {
+          status: 'rejected' as const,
+          reason: 'state_changed' as const,
+        };
+      }
 
       return {
         status: 'authenticated' as const,
         passwordResetRequired: loginDecision.passwordResetRequired,
         user: toAuthSessionUser({
-          account,
+          account: accountSnapshot,
           membership,
           institutionBindings,
           now: timestamp,
