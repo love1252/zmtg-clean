@@ -12,5 +12,8 @@ const capabilityDisabledPayload = Object.freeze({
  * data or initialize authentication, persistence, retrieval, quota, or AI.
  */
 export async function POST(_request?: Request) {
-  return NextResponse.json(capabilityDisabledPayload, { status: 503 });
+  return NextResponse.json(capabilityDisabledPayload, {
+    status: 503,
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
