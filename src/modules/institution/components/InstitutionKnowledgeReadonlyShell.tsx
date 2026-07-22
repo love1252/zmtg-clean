@@ -18,6 +18,7 @@ import { cn } from '@/shared/utils/cn';
 type LoadStatus = 'loading' | 'success' | 'error';
 type FileListLoadStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
 type QaAuditLoadStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
+type ChunkSearchLoadStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
 type InstitutionKnowledgeFileRecord = {
   fileId: string;
   originalFilename: string;
@@ -74,6 +75,20 @@ type InstitutionKnowledgeSearchResultRecord = {
   vectorScore?: number;
   rerankScore?: number;
   matchReason: string;
+};
+
+type InstitutionKnowledgeHybridPageInfo = {
+  page: number;
+  pageSize: number;
+  total: number;
+  pageCount: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+};
+
+type InstitutionKnowledgeHybridEmptyState = {
+  title: string;
+  description: string;
 };
 type InstitutionKnowledgeVectorSearchResultRecord = InstitutionKnowledgeSearchResultRecord & {
   score?: number;
@@ -209,6 +224,185 @@ const indexingJobStatusLabels: Record<InstitutionKnowledgeIndexingJobRecord['sta
 
 const controlledTrialReadiness = getKnowledgeBaseControlledTrialReadiness();
 
+const hybridEnvelopeRequiredKeys = ['requestId', 'readonly', 'dataSource', 'records', 'pageInfo', 'emptyState'] as const;
+const hybridPageInfoRequiredKeys = ['page', 'pageSize', 'total', 'pageCount', 'hasPreviousPage', 'hasNextPage'] as const;
+const hybridEmptyStateRequiredKeys = ['title', 'description'] as const;
+const hybridRecordRequiredKeys = [
+  'knowledgeId',
+  'knowledgeTitle',
+  'fileId',
+  'fileName',
+  'chunkId',
+  'chunkIndex',
+  'textPreview',
+  'retrievalMode',
+  'matchReason',
+] as const;
+const hybridRecordOptionalKeys = ['keywordScore', 'vectorScore', 'rerankScore'] as const;
+
+function isDataDescriptor(
+  descriptor: PropertyDescriptor | undefined,
+): descriptor is PropertyDescriptor & { value: unknown } {
+  return Boolean(descriptor && 'value' in descriptor && !descriptor.get && !descriptor.set);
+}
+
+function isEnumerableDataDescriptor(
+  descriptor: PropertyDescriptor | undefined,
+): descriptor is PropertyDescriptor & { value: unknown } {
+  return Boolean(isDataDescriptor(descriptor) && descriptor.enumerable);
+}
+
+function snapshotPlainDataRecord(
+  value: unknown,
+  requiredKeys: readonly string[],
+  optionalKeys: readonly string[] = [],
+): Readonly<Record<string, unknown>> | null {
+  try {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+    const ownKeys = Reflect.ownKeys(value);
+    const expectedKeys = new Set([...requiredKeys, ...optionalKeys]);
+    if (
+      ownKeys.some((key) => typeof key !== 'string' || !expectedKeys.has(key))
+      || requiredKeys.some((key) => !ownKeys.includes(key))
+      || ownKeys.length > expectedKeys.size
+    ) return null;
+    if (Object.getPrototypeOf(value) !== Object.prototype) return null;
+
+    const descriptors = Object.getOwnPropertyDescriptors(value) as Record<string, PropertyDescriptor>;
+    const descriptorKeys = Reflect.ownKeys(descriptors);
+    if (descriptorKeys.length !== ownKeys.length || descriptorKeys.some((key) => !ownKeys.includes(key))) return null;
+    const snapshot = Object.create(null) as Record<string, unknown>;
+    for (const key of ownKeys) {
+      if (typeof key !== 'string') return null;
+      const descriptor = descriptors[key];
+      if (!isEnumerableDataDescriptor(descriptor)) return null;
+      snapshot[key] = descriptor.value;
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
+}
+
+function snapshotDenseDataArray(value: unknown): readonly unknown[] | null {
+  try {
+    if (!Array.isArray(value)) return null;
+    const ownKeys = Reflect.ownKeys(value);
+    if (ownKeys.some((key) => typeof key !== 'string')) return null;
+    if (Object.getPrototypeOf(value) !== Array.prototype) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value) as Record<string, PropertyDescriptor>;
+    const descriptorKeys = Reflect.ownKeys(descriptors);
+    if (descriptorKeys.length !== ownKeys.length || descriptorKeys.some((key) => !ownKeys.includes(key))) return null;
+    const lengthDescriptor = descriptors.length;
+    if (!isDataDescriptor(lengthDescriptor) || typeof lengthDescriptor.value !== 'number') return null;
+    const { value: length } = lengthDescriptor;
+    if (!Number.isSafeInteger(length) || length < 0) return null;
+    if (ownKeys.length !== length + 1 || !ownKeys.includes('length')) return null;
+
+    const snapshot: unknown[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = descriptors[String(index)];
+      if (!isEnumerableDataDescriptor(descriptor)) return null;
+      snapshot.push(descriptor.value);
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function snapshotHybridPageInfo(value: unknown): InstitutionKnowledgeHybridPageInfo | null {
+  const pageInfo = snapshotPlainDataRecord(value, hybridPageInfoRequiredKeys);
+  if (!pageInfo) return null;
+  const { page, pageSize, total, pageCount, hasPreviousPage, hasNextPage } = pageInfo;
+  if (!isNonNegativeSafeInteger(page) || page < 1) return null;
+  if (!isNonNegativeSafeInteger(pageSize) || pageSize < 1) return null;
+  if (!isNonNegativeSafeInteger(total) || !isNonNegativeSafeInteger(pageCount)) return null;
+  if (typeof hasPreviousPage !== 'boolean' || typeof hasNextPage !== 'boolean') return null;
+  return {
+    page,
+    pageSize,
+    total,
+    pageCount,
+    hasPreviousPage,
+    hasNextPage,
+  };
+}
+
+function snapshotHybridEmptyState(value: unknown): InstitutionKnowledgeHybridEmptyState | null {
+  const emptyState = snapshotPlainDataRecord(value, hybridEmptyStateRequiredKeys);
+  if (!emptyState) return null;
+  const { title, description } = emptyState;
+  if (typeof title !== 'string' || typeof description !== 'string' || !title.trim() || !description.trim()) return null;
+  return { title, description };
+}
+
+function snapshotHybridSearchRecord(value: unknown): InstitutionKnowledgeSearchResultRecord | null {
+  const record = snapshotPlainDataRecord(value, hybridRecordRequiredKeys, hybridRecordOptionalKeys);
+  if (!record) return null;
+  const { knowledgeId, knowledgeTitle, fileId, fileName, chunkId, chunkIndex, textPreview, retrievalMode, matchReason } = record;
+  if (
+    !isNonBlankString(knowledgeId)
+    || !isNonBlankString(knowledgeTitle)
+    || !isNonBlankString(fileId)
+    || !isNonBlankString(fileName)
+    || !isNonBlankString(chunkId)
+    || !isNonBlankString(textPreview)
+    || !isNonBlankString(matchReason)
+  ) return null;
+  if (!isNonNegativeSafeInteger(chunkIndex)) return null;
+  if (retrievalMode !== 'keyword' && retrievalMode !== 'vector' && retrievalMode !== 'hybrid') return null;
+
+  const optionalScores = ['keywordScore', 'vectorScore', 'rerankScore'] as const;
+  if (optionalScores.some((field) => Object.hasOwn(record, field) && (typeof record[field] !== 'number' || !Number.isFinite(record[field])))) {
+    return null;
+  }
+
+  return {
+    knowledgeId,
+    knowledgeTitle,
+    fileId,
+    fileName,
+    chunkId,
+    chunkIndex,
+    textPreview,
+    retrievalMode,
+    ...(Object.hasOwn(record, 'keywordScore') ? { keywordScore: record.keywordScore as number } : {}),
+    ...(Object.hasOwn(record, 'vectorScore') ? { vectorScore: record.vectorScore as number } : {}),
+    ...(Object.hasOwn(record, 'rerankScore') ? { rerankScore: record.rerankScore as number } : {}),
+    matchReason,
+  };
+}
+
+function snapshotAuthoritativeInstitutionHybridSearchResponse(
+  value: unknown,
+): InstitutionKnowledgeSearchResultRecord[] | null {
+  const payload = snapshotPlainDataRecord(value, hybridEnvelopeRequiredKeys);
+  if (!payload) return null;
+  if (payload.requestId !== 'institution-knowledge-hybrid-search' || payload.readonly !== true || payload.dataSource !== 'repository') {
+    return null;
+  }
+  if (!snapshotHybridPageInfo(payload.pageInfo) || !snapshotHybridEmptyState(payload.emptyState)) return null;
+
+  const records = snapshotDenseDataArray(payload.records);
+  if (!records) return null;
+  const snapshot: InstitutionKnowledgeSearchResultRecord[] = [];
+  for (const record of records) {
+    const capturedRecord = snapshotHybridSearchRecord(record);
+    if (!capturedRecord) return null;
+    snapshot.push(capturedRecord);
+  }
+  return snapshot;
+}
+
 function visibleErrorMessage(error: TenantBusinessClientError | null) {
   if (!error) return '知识库只读数据暂时不可用';
   if (error.kind === 'forbidden') return '当前账号没有访问机构知识库的权限';
@@ -315,8 +509,10 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [chunkSearchMode, setChunkSearchMode] = useState<'keyword' | 'vector' | 'hybrid'>('hybrid');
   const [chunkSearchTopK, setChunkSearchTopK] = useState<'3' | '5' | '10'>('5');
   const [chunkSearchResults, setChunkSearchResults] = useState<InstitutionKnowledgeSearchResultRecord[]>([]);
+  const [chunkSearchStatus, setChunkSearchStatus] = useState<ChunkSearchLoadStatus>('idle');
   const [chunkSearchMessage, setChunkSearchMessage] = useState('默认使用 hybrid 检索：keyword + vector 召回后按 deterministic rerank 排序，不会展示向量数组或内部配置');
   const [isChunkSearching, setIsChunkSearching] = useState(false);
+  const chunkSearchRequestRevisionRef = useRef(0);
   const [vectorSearchInput, setVectorSearchInput] = useState('');
   const [vectorSearchResults, setVectorSearchResults] = useState<InstitutionKnowledgeVectorSearchResultRecord[]>([]);
   const [vectorSearchMessage, setVectorSearchMessage] = useState('请输入内容进行语义检索');
@@ -623,14 +819,19 @@ export function InstitutionKnowledgeReadonlyShell() {
 
   async function searchChunks(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const requestRevision = chunkSearchRequestRevisionRef.current + 1;
+    chunkSearchRequestRevisionRef.current = requestRevision;
     const query = chunkSearchInput.trim();
+    setChunkSearchResults([]);
     if (!query) {
-      setChunkSearchResults([]);
+      setIsChunkSearching(false);
+      setChunkSearchStatus('idle');
       setChunkSearchMessage('请输入检索内容后再检索知识片段');
       return;
     }
 
     setIsChunkSearching(true);
+    setChunkSearchStatus('loading');
     setChunkSearchMessage('正在执行 hybrid/vector/keyword 检索并重排片段...');
     try {
       const params = new URLSearchParams({
@@ -644,20 +845,27 @@ export function InstitutionKnowledgeReadonlyShell() {
         cache: 'no-store',
       });
       const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+      if (chunkSearchRequestRevisionRef.current !== requestRevision) return;
+      const records = response.ok ? snapshotAuthoritativeInstitutionHybridSearchResponse(payload) : null;
+      if (!records) {
         setChunkSearchResults([]);
+        setChunkSearchStatus('unavailable');
         setChunkSearchMessage('知识库检索暂时不可用');
         return;
       }
 
-      const records = payload.records as InstitutionKnowledgeSearchResultRecord[];
       setChunkSearchResults(records);
-      setChunkSearchMessage(records.length > 0 ? `已按 rerank 排序命中 ${records.length} 个引用片段` : '暂无匹配片段');
+      setChunkSearchStatus('ready');
+      setChunkSearchMessage(records.length > 0 ? `已按 rerank 排序命中 ${records.length} 个引用片段` : '权威检索结果为空');
     } catch {
+      if (chunkSearchRequestRevisionRef.current !== requestRevision) return;
       setChunkSearchResults([]);
+      setChunkSearchStatus('unavailable');
       setChunkSearchMessage('知识库检索暂时不可用');
     } finally {
-      setIsChunkSearching(false);
+      if (chunkSearchRequestRevisionRef.current === requestRevision) {
+        setIsChunkSearching(false);
+      }
     }
   }
 
@@ -1479,9 +1687,13 @@ export function InstitutionKnowledgeReadonlyShell() {
             {chunkSearchMessage}
           </div>
           <div className="mt-3 grid gap-3 xl:grid-cols-2">
-            {chunkSearchResults.length === 0 ? (
+            {chunkSearchStatus === 'ready' && chunkSearchResults.length === 0 ? (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
                 暂无匹配片段
+              </div>
+            ) : chunkSearchResults.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
+                {chunkSearchStatus === 'unavailable' ? '检索结果暂不可用' : '—'}
               </div>
             ) : (
               chunkSearchResults.map((result) => (
