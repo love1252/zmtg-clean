@@ -77,6 +77,19 @@ function genuineCodec(): InstitutionGuardReferenceCodecV1 {
   });
 }
 
+function genuineUnavailableCodec(): InstitutionGuardReferenceCodecV1 {
+  return createInstitutionGuardReferenceCodecV1({
+    keyRing: {
+      currentIssueKey: {
+        keyVersion: 1,
+        keyMaterial: null,
+      },
+      verifyOnlyKeys: [],
+    },
+    now: () => SECTION_NOW,
+  });
+}
+
 type ScopeTimingOptions = Readonly<{
   provenanceValidUntil?: string;
   membershipObservedAt?: string;
@@ -90,6 +103,9 @@ function genuineScopeComposition(
   const provenanceCodec = genuineCodec();
   const membershipCodec = genuineCodec();
   const anchorCodec = genuineCodec();
+  const provenanceNow = vi.fn(() =>
+    new Date('2026-07-22T07:59:01.000Z'),
+  );
   const provenanceResolver = createFormalRequestProvenanceResolverV1({
     ownerInput: {
       source: 'server_session',
@@ -103,43 +119,46 @@ function genuineScopeComposition(
         timing.provenanceValidUntil ?? '2026-07-22T08:04:00.000Z',
     } as unknown as FormalRequestProvenanceOwnerInputV1,
     referenceCodec: provenanceCodec,
-    now: () => new Date('2026-07-22T07:59:01.000Z'),
+    now: provenanceNow,
   });
+  const resolveMembershipFact = vi.fn(async () =>
+    Object.freeze({
+      kind: 'current_membership_fact',
+      accountId: 'account-a',
+      tenantId: 'tenant-a',
+      institutionId: 'institution-a',
+      role,
+      membershipId: 'membership-a',
+      membershipRevisionAt: '2026-07-22T07:58:00.000Z',
+      bindingId: 'binding-a',
+      bindingRevision: 7,
+      bindingRevisionAt: '2026-07-01T00:00:00.000Z',
+      bindingExpiresAt: null,
+      observedAt:
+        timing.membershipObservedAt ?? '2026-07-22T08:00:00.000Z',
+    }),
+  );
   const membershipProvider = createRequestBoundFreshActiveMembershipProviderV1({
     accountId: 'account-a',
     factReader: Object.freeze({
-      resolve: vi.fn(async () =>
-        Object.freeze({
-          kind: 'current_membership_fact',
-          accountId: 'account-a',
-          tenantId: 'tenant-a',
-          institutionId: 'institution-a',
-          role,
-          membershipId: 'membership-a',
-          membershipRevisionAt: '2026-07-22T07:58:00.000Z',
-          bindingId: 'binding-a',
-          bindingRevision: 7,
-          bindingRevisionAt: '2026-07-01T00:00:00.000Z',
-          bindingExpiresAt: null,
-          observedAt:
-            timing.membershipObservedAt ?? '2026-07-22T08:00:00.000Z',
-        }),
-      ),
+      resolve: resolveMembershipFact,
     }) as AuthoritativeInstitutionMembershipFactReaderV1,
     referenceCodec: membershipCodec,
     now: () => SCOPE_NOW,
   });
+  const resolveAnchorFact = vi.fn(async () =>
+    Object.freeze({
+      kind: 'current_anchor_fact',
+      tenantId: 'tenant-a',
+      institutionId: 'institution-a',
+      revision: 7,
+      observedAt:
+        timing.anchorObservedAt ?? '2026-07-22T08:00:00.000Z',
+    }),
+  );
   const anchorProvider = createActiveInstitutionAnchorProviderV1({
     factReader: Object.freeze({
-      resolve: vi.fn(async () =>
-        Object.freeze({
-          kind: 'current_anchor_fact',
-          tenantId: 'tenant-a',
-          institutionId: 'institution-a',
-          revision: 7,
-          observedAt: timing.anchorObservedAt ?? '2026-07-22T08:00:00.000Z',
-        }),
-      ),
+      resolve: resolveAnchorFact,
     }) as AuthoritativeInstitutionAnchorFactReaderV1,
     referenceCodec: anchorCodec,
     now: () => SCOPE_NOW,
@@ -156,6 +175,11 @@ function genuineScopeComposition(
       membershipCodec,
       anchorCodec,
     ]),
+    downstream: Object.freeze({
+      provenanceNow,
+      resolveMembershipFact,
+      resolveAnchorFact,
+    }),
   };
 }
 
@@ -206,6 +230,94 @@ const LOOKALIKE_KINDS = Object.freeze([
   'proxy',
   'revoked_proxy',
 ] as const);
+
+type LookalikeKind = (typeof LOOKALIKE_KINDS)[number];
+
+function codecLookalike(
+  kind: LookalikeKind,
+  authentic: InstitutionGuardReferenceCodecV1,
+) {
+  const issue = vi.fn(() => {
+    throw new Error('fake codec issue must not run');
+  });
+  const verify = vi.fn(() => {
+    throw new Error('fake codec verify must not run');
+  });
+  let getterReads = 0;
+  let traps = 0;
+  const plain = { issue, verify };
+  let value: object;
+  switch (kind) {
+    case 'plain':
+      value = Object.freeze(plain);
+      break;
+    case 'spread':
+      value = Object.freeze({ ...authentic, issue, verify });
+      break;
+    case 'cast':
+      value = Object.freeze({ issue, verify });
+      break;
+    case 'custom_proto':
+      value = Object.freeze(
+        Object.assign(Object.create({ owner: 'fake' }), plain),
+      );
+      break;
+    case 'accessor': {
+      value = {};
+      Object.defineProperties(value, {
+        issue: {
+          enumerable: true,
+          get() {
+            getterReads += 1;
+            return issue;
+          },
+        },
+        verify: {
+          enumerable: true,
+          get() {
+            getterReads += 1;
+            return verify;
+          },
+        },
+      });
+      Object.freeze(value);
+      break;
+    }
+    case 'proxy':
+      value = new Proxy(Object.freeze(plain), {
+        get() {
+          traps += 1;
+          throw new Error('codec get trap');
+        },
+        getPrototypeOf() {
+          traps += 1;
+          throw new Error('codec prototype trap');
+        },
+        getOwnPropertyDescriptor() {
+          traps += 1;
+          throw new Error('codec descriptor trap');
+        },
+        ownKeys() {
+          traps += 1;
+          throw new Error('codec ownKeys trap');
+        },
+      });
+      break;
+    case 'revoked_proxy': {
+      const revocable = Proxy.revocable(Object.freeze(plain), {});
+      revocable.revoke();
+      value = revocable.proxy;
+      break;
+    }
+  }
+  return {
+    value: value as InstitutionGuardReferenceCodecV1,
+    issue,
+    verify,
+    getterReads: () => getterReads,
+    traps: () => traps,
+  };
+}
 
 function scopeLookalike(kind: (typeof LOOKALIKE_KINDS)[number], authentic: object) {
   const fakeMethod = vi.fn(async () => {
@@ -281,6 +393,13 @@ function expectedPolicyOwnerSubject(): InstitutionGuardReferenceOwnerSubjectV1 {
   return `manifest-sha256:${createHash('sha256').update(output).digest('base64url')}` as InstitutionGuardReferenceOwnerSubjectV1;
 }
 
+const CODEC_BOUNDARY_CASES = LOOKALIKE_KINDS.flatMap((kind) =>
+  (['accessor_input', 'proxy_input'] as const).map((inputKind) => ({
+    kind,
+    inputKind,
+  })),
+);
+
 describe('WB-BASE-SECTION-GUARD-04A', () => {
   it('uses only genuine reference codecs in positive scope and section fixtures', () => {
     const scope = genuineScopeComposition();
@@ -290,6 +409,93 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
         isInstitutionGuardReferenceCodecV1(codec),
       ),
     ).toBe(true);
+  });
+
+  it.each(CODEC_BOUNDARY_CASES)(
+    'rejects $kind codec before reading $inputKind or invoking downstream',
+    async ({ kind, inputKind }) => {
+      const scope = genuineScopeComposition();
+      const lookalike = codecLookalike(kind, genuineCodec());
+      const secondNow = vi.fn(() => SECTION_NOW);
+      let inputReads = 0;
+      let inputTraps = 0;
+      let input: object;
+      if (inputKind === 'accessor_input') {
+        input = {};
+        Object.defineProperty(input, 'sectionId', {
+          enumerable: true,
+          get() {
+            inputReads += 1;
+            return 'workbench';
+          },
+        });
+      } else {
+        input = new Proxy(
+          { sectionId: 'workbench' },
+          {
+            get() {
+              inputTraps += 1;
+              throw new Error('input get trap');
+            },
+            getPrototypeOf() {
+              inputTraps += 1;
+              throw new Error('input prototype trap');
+            },
+            getOwnPropertyDescriptor() {
+              inputTraps += 1;
+              throw new Error('input descriptor trap');
+            },
+            ownKeys() {
+              inputTraps += 1;
+              throw new Error('input ownKeys trap');
+            },
+          },
+        );
+      }
+
+      const guard = createInstitutionSectionGuardV1({
+        scopeGuard: scope.guard,
+        referenceCodec: lookalike.value,
+        now: secondNow,
+      });
+
+      expect(isInstitutionSectionGuardV1(guard)).toBe(true);
+      await expect(
+        guard.authorizeCurrentSection(input as InstitutionSectionGuardInputV1),
+      ).resolves.toEqual({ kind: 'rejected', code: 'policy_unavailable' });
+      expect(lookalike.getterReads()).toBe(0);
+      expect(lookalike.traps()).toBe(0);
+      expect(lookalike.issue).not.toHaveBeenCalled();
+      expect(lookalike.verify).not.toHaveBeenCalled();
+      expect(scope.downstream.provenanceNow).not.toHaveBeenCalled();
+      expect(scope.downstream.resolveMembershipFact).not.toHaveBeenCalled();
+      expect(scope.downstream.resolveAnchorFact).not.toHaveBeenCalled();
+      expect(secondNow).not.toHaveBeenCalled();
+      expect(inputReads).toBe(0);
+      expect(inputTraps).toBe(0);
+    },
+  );
+
+  it('accepts a genuine-but-unavailable codec and returns low-sensitive policy unavailability', async () => {
+    const scope = genuineScopeComposition();
+    const codec = genuineUnavailableCodec();
+    const secondNow = vi.fn(() => SECTION_NOW);
+    expect(isInstitutionGuardReferenceCodecV1(codec)).toBe(true);
+
+    const result = await createInstitutionSectionGuardV1({
+      scopeGuard: scope.guard,
+      referenceCodec: codec,
+      now: secondNow,
+    }).authorizeCurrentSection({ sectionId: 'workbench' });
+
+    expect(result).toEqual({ kind: 'rejected', code: 'policy_unavailable' });
+    expect(scope.downstream.provenanceNow).toHaveBeenCalledTimes(1);
+    expect(scope.downstream.resolveMembershipFact).toHaveBeenCalledTimes(1);
+    expect(scope.downstream.resolveAnchorFact).toHaveBeenCalledTimes(1);
+    expect(secondNow).toHaveBeenCalledTimes(1);
+    expect(result).not.toHaveProperty('scopeAllow');
+    expect(result).not.toHaveProperty('tenantId');
+    expect(result).not.toHaveProperty('institutionId');
   });
 
   it.each(ROLE_MATRIX)(
@@ -371,10 +577,9 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
     async (kind) => {
       const authentic = genuineScopeGuard();
       const lookalike = scopeLookalike(kind, authentic);
-      const { codec, issue, verify } = controlledCodec();
       const guard = createInstitutionSectionGuardV1({
         scopeGuard: lookalike.value as InstitutionScopeGuardV1,
-        referenceCodec: codec,
+        referenceCodec: genuineUnavailableCodec(),
         now: () => SECTION_NOW,
       });
       await expect(guard.authorizeCurrentSection({ sectionId: 'workbench' })).resolves.toEqual({
@@ -384,8 +589,6 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
       expect(lookalike.fakeMethod).not.toHaveBeenCalled();
       expect(lookalike.getterReads()).toBe(0);
       expect(lookalike.traps()).toBe(0);
-      expect(issue).not.toHaveBeenCalled();
-      expect(verify).not.toHaveBeenCalled();
     },
   );
 
@@ -460,9 +663,8 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
         revocable.revoke();
         value = revocable.proxy;
       }
-      const policy = controlledCodec();
       const { guard } = sectionHarness('tenant_admin', {
-        referenceCodec: policy.codec,
+        referenceCodec: genuineUnavailableCodec(),
       });
       await expect(guard.authorizeCurrentSection(value as never)).resolves.toEqual({
         kind: 'rejected',
@@ -470,8 +672,6 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
       });
       expect(reads).toBe(0);
       expect(traps).toBe(0);
-      expect(policy.issue).not.toHaveBeenCalled();
-      expect(policy.verify).not.toHaveBeenCalled();
     },
   );
 
@@ -485,20 +685,16 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
     'tenantId',
     'institutionId',
   ] as const)('rejects caller-controlled %s without a policy call', async (key) => {
-    const policy = controlledCodec();
     const { guard } = sectionHarness('tenant_admin', {
-      referenceCodec: policy.codec,
+      referenceCodec: genuineUnavailableCodec(),
     });
     await expect(
       guard.authorizeCurrentSection({ sectionId: 'workbench', [key]: 'caller-value' } as never),
     ).resolves.toEqual({ kind: 'rejected', code: 'action_unregistered' });
-    expect(policy.issue).not.toHaveBeenCalled();
-    expect(policy.verify).not.toHaveBeenCalled();
   });
 
   it('calls scope first and does not inspect caller input or policy after scope rejection', async () => {
     const scopeGuard = createInstitutionScopeGuardV1({} as never);
-    const { codec, issue, verify } = controlledCodec();
     let getterReads = 0;
     const input = {};
     Object.defineProperty(input, 'sectionId', {
@@ -511,7 +707,7 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
     const secondNow = vi.fn(() => SECTION_NOW);
     const { guard } = sectionHarness('tenant_admin', {
       scopeGuard,
-      referenceCodec: codec,
+      referenceCodec: genuineUnavailableCodec(),
       now: secondNow,
     });
     await expect(guard.authorizeCurrentSection(input as never)).resolves.toEqual({
@@ -520,8 +716,6 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
     });
     expect(getterReads).toBe(0);
     expect(secondNow).not.toHaveBeenCalled();
-    expect(issue).not.toHaveBeenCalled();
-    expect(verify).not.toHaveBeenCalled();
   });
 
   it('issues a prv that verifies only with the exact private manifest input', async () => {
@@ -565,18 +759,37 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
     ['verify unavailable', undefined, () => Object.freeze({ kind: 'unavailable', code: 'guard_reference_unavailable' })],
     ['verify throws', undefined, () => { throw new Error('verify'); }],
     ['verify mismatch', undefined, () => Object.freeze({ kind: 'verified', reference: reference('prv').replace(/A$/u, 'B') })],
-  ] as const)('fails atomically when policy %s', async (_label, issueOverride, verifyOverride) => {
-    const normal = controlledCodec();
-    const codec = Object.freeze({
-      issue: vi.fn(issueOverride ?? normal.issue),
-      verify: vi.fn(verifyOverride ?? normal.verify),
-    }) as unknown as InstitutionGuardReferenceCodecV1;
-    const { guard } = sectionHarness('tenant_admin', { referenceCodec: codec });
-    await expect(guard.authorizeCurrentSection({ sectionId: 'workbench' })).resolves.toEqual({
-      kind: 'rejected',
-      code: 'policy_unavailable',
-    });
-  });
+  ] as const)(
+    'rejects an unauthentic codec before simulated policy %s',
+    async (_label, issueOverride, verifyOverride) => {
+      const normal = controlledCodec();
+      const issue = vi.fn(issueOverride ?? normal.issue);
+      const verify = vi.fn(verifyOverride ?? normal.verify);
+      const codec = Object.freeze({
+        issue,
+        verify,
+      }) as unknown as InstitutionGuardReferenceCodecV1;
+      const scope = genuineScopeComposition();
+      const secondNow = vi.fn(() => SECTION_NOW);
+      const guard = createInstitutionSectionGuardV1({
+        scopeGuard: scope.guard,
+        referenceCodec: codec,
+        now: secondNow,
+      });
+      await expect(
+        guard.authorizeCurrentSection({ sectionId: 'workbench' }),
+      ).resolves.toEqual({
+        kind: 'rejected',
+        code: 'policy_unavailable',
+      });
+      expect(issue).not.toHaveBeenCalled();
+      expect(verify).not.toHaveBeenCalled();
+      expect(scope.downstream.provenanceNow).not.toHaveBeenCalled();
+      expect(scope.downstream.resolveMembershipFact).not.toHaveBeenCalled();
+      expect(scope.downstream.resolveAnchorFact).not.toHaveBeenCalled();
+      expect(secondNow).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['expired', () => new Date('2026-07-22T08:01:00.000Z')],
