@@ -3,6 +3,7 @@ import { isProxy } from 'node:util/types';
 
 import { isInstitutionScopeIdV1 } from '@/modules/security/domain/institution-access';
 import {
+  INSTITUTION_GUARD_ACCEPTED_KEY_VERSIONS_V1,
   INSTITUTION_GUARD_REFERENCE_PREFIXES_V1,
   type InstitutionGuardReferencePrefixV1,
   type SafeGuardReferenceV1,
@@ -251,6 +252,15 @@ function isKeyVersion(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 999;
 }
 
+function isAcceptedKeyVersion(value: unknown): value is number {
+  return (
+    isKeyVersion(value) &&
+    INSTITUTION_GUARD_ACCEPTED_KEY_VERSIONS_V1.some(
+      (accepted) => accepted === value,
+    )
+  );
+}
+
 function snapshotKeyMaterial(value: unknown): Uint8Array | null | undefined {
   if (value === null) return null;
   try {
@@ -273,7 +283,7 @@ function parseCanonicalUtcInstant(value: unknown): number | null {
 
 function snapshotCurrentKey(value: unknown): SnapshottedKeyV1 | null {
   const snapshot = snapshotExactPlainRecord(value, CURRENT_KEY_KEYS);
-  if (!snapshot || !isKeyVersion(snapshot.keyVersion)) return null;
+  if (!snapshot || !isAcceptedKeyVersion(snapshot.keyVersion)) return null;
   const keyMaterial = snapshotKeyMaterial(snapshot.keyMaterial);
   if (keyMaterial === undefined) return null;
   return Object.freeze({ keyVersion: snapshot.keyVersion, keyMaterial });
@@ -283,7 +293,7 @@ function snapshotVerifyOnlyKey(
   value: unknown,
 ): SnapshottedVerifyOnlyKeyV1 | null {
   const snapshot = snapshotExactPlainRecord(value, VERIFY_ONLY_KEY_KEYS);
-  if (!snapshot || !isKeyVersion(snapshot.keyVersion)) return null;
+  if (!snapshot || !isAcceptedKeyVersion(snapshot.keyVersion)) return null;
   const keyMaterial = snapshotKeyMaterial(snapshot.keyMaterial);
   const verifyUntilEpochMs = parseCanonicalUtcInstant(snapshot.verifyUntil);
   if (

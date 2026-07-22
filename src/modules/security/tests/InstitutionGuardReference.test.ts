@@ -2,11 +2,15 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import {
   createInstitutionGuardReferenceCodecV1,
-  type InstitutionGuardReferenceKeyRingV1,
   type InstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceKeyRingV1,
   type InstitutionGuardReferenceOwnerSubjectV1,
 } from '@/modules/security/server/institution-guard-reference';
-import type { SafeGuardReferenceV1 } from '@/modules/security/server/institution-guard-evidence';
+import {
+  INSTITUTION_GUARD_ACCEPTED_KEY_VERSIONS_V1,
+  isGuardReferenceCandidateV1,
+  type SafeGuardReferenceV1,
+} from '@/modules/security/server/institution-guard-evidence';
 
 const NOW = new Date('2026-07-22T08:00:00.000Z');
 const KEY_1 = new Uint8Array(32).fill(0x11);
@@ -92,6 +96,7 @@ describe('BASE-02B guard reference HMAC codec', () => {
     expect(Object.isFrozen(first)).toBe(true);
     if (first.kind === 'issued') {
       expect(first.reference).toMatch(/^arv_v1_k1_[A-Za-z0-9_-]{43}$/u);
+      expect(isGuardReferenceCandidateV1(first.reference, 'arv')).toBe(true);
       expectTypeOf(first.reference).toEqualTypeOf<SafeGuardReferenceV1<'arv'>>();
     }
   });
@@ -161,106 +166,43 @@ describe('BASE-02B guard reference HMAC codec', () => {
     }
   });
 
-  it('rotates by issuing only with current key and verifying old key only inside its window', () => {
-    const oldReference = issuedReference(createCodec(keyRing()), referenceInput());
-    const rotated = createCodec(
+  it('uses the shared accepted-key policy and keeps unsupported rotation closed', () => {
+    expect(INSTITUTION_GUARD_ACCEPTED_KEY_VERSIONS_V1).toEqual([1]);
+    const currentReference = issuedReference(createCodec(), referenceInput());
+    const unsupportedIssueCodec = createCodec(
+      keyRing({ currentVersion: 2, currentMaterial: KEY_2 }),
+    );
+    expect(unsupportedIssueCodec.issue(referenceInput())).toEqual({
+      kind: 'unavailable',
+      code: 'guard_reference_unavailable',
+    });
+
+    const unsupportedReference = currentReference.replace('_k1_', '_k2_');
+    expect(
+      createCodec().verify({
+        ...referenceInput(),
+        reference: unsupportedReference,
+      }),
+    ).toEqual({ kind: 'rejected', code: 'guard_reference_invalid' });
+
+    const unsupportedVerifyOnlyCodec = createCodec(
       keyRing({
-        currentVersion: 2,
-        currentMaterial: KEY_2,
         verifyOnlyKeys: [
           {
-            keyVersion: 1,
-            keyMaterial: KEY_1,
+            keyVersion: 2,
+            keyMaterial: KEY_2,
             verifyUntil: '2026-07-22T08:05:00.000Z',
           },
         ],
       }),
     );
-
-    const newReference = issuedReference(rotated, referenceInput());
-    expect(newReference).toMatch(/^arv_v1_k2_[A-Za-z0-9_-]{43}$/u);
-    expect(
-      rotated.verify({ ...referenceInput(), reference: oldReference }),
-    ).toEqual({ kind: 'verified', reference: oldReference });
-
-    const expired = createCodec(
-      keyRing({
-        currentVersion: 2,
-        currentMaterial: KEY_2,
-        verifyOnlyKeys: [
-          {
-            keyVersion: 1,
-            keyMaterial: KEY_1,
-            verifyUntil: '2026-07-22T08:00:00.000Z',
-          },
-        ],
-      }),
-    );
-    expect(
-      expired.verify({ ...referenceInput(), reference: oldReference }),
-    ).toEqual({ kind: 'rejected', code: 'guard_reference_invalid' });
+    expect(unsupportedVerifyOnlyCodec.issue(referenceInput())).toEqual({
+      kind: 'unavailable',
+      code: 'guard_reference_unavailable',
+    });
   });
 
-  it('never relabels an old tag as a new key version or falls back to another key', () => {
-    const oldReference = issuedReference(createCodec(), referenceInput());
-    const relabelled = oldReference.replace('_k1_', '_k2_');
-    const rotated = createCodec(
-      keyRing({
-        currentVersion: 2,
-        currentMaterial: KEY_2,
-        verifyOnlyKeys: [
-          {
-            keyVersion: 1,
-            keyMaterial: KEY_1,
-            verifyUntil: '2026-07-22T08:05:00.000Z',
-          },
-        ],
-      }),
-    );
-
-    expect(
-      rotated.verify({ ...referenceInput(), reference: relabelled }),
-    ).toEqual({ kind: 'rejected', code: 'guard_reference_invalid' });
-  });
-
-  it('treats a known in-window missing key as unavailable but an expired key as invalid', () => {
-    const oldReference = issuedReference(createCodec(), referenceInput());
-    const inWindow = createCodec(
-      keyRing({
-        currentVersion: 2,
-        currentMaterial: KEY_2,
-        verifyOnlyKeys: [
-          {
-            keyVersion: 1,
-            keyMaterial: null,
-            verifyUntil: '2026-07-22T08:05:00.000Z',
-          },
-        ],
-      }),
-    );
-    const expired = createCodec(
-      keyRing({
-        currentVersion: 2,
-        currentMaterial: KEY_2,
-        verifyOnlyKeys: [
-          {
-            keyVersion: 1,
-            keyMaterial: null,
-            verifyUntil: '2026-07-22T08:00:00.000Z',
-          },
-        ],
-      }),
-    );
-
-    expect(
-      inWindow.verify({ ...referenceInput(), reference: oldReference }),
-    ).toEqual({ kind: 'unavailable', code: 'guard_reference_unavailable' });
-    expect(
-      expired.verify({ ...referenceInput(), reference: oldReference }),
-    ).toEqual({ kind: 'rejected', code: 'guard_reference_invalid' });
-  });
-
-  it('does not use a missing current key, an unknown key version or a broken old-key clock', () => {
+  it('does not use a missing current key or an unknown key version', () => {
     const goodReference = issuedReference(createCodec(), referenceInput());
     const missingCurrent = createCodec(keyRing({ currentMaterial: null }));
     expect(missingCurrent.issue(referenceInput())).toEqual({
@@ -279,25 +221,6 @@ describe('BASE-02B guard reference HMAC codec', () => {
       }),
     ).toEqual({ kind: 'rejected', code: 'guard_reference_invalid' });
 
-    const clockFailure = createCodec(
-      keyRing({
-        currentVersion: 2,
-        currentMaterial: KEY_2,
-        verifyOnlyKeys: [
-          {
-            keyVersion: 1,
-            keyMaterial: KEY_1,
-            verifyUntil: '2026-07-22T08:05:00.000Z',
-          },
-        ],
-      }),
-      () => {
-        throw new Error('clock details must not escape');
-      },
-    );
-    expect(
-      clockFailure.verify({ ...referenceInput(), reference: goodReference }),
-    ).toEqual({ kind: 'unavailable', code: 'guard_reference_unavailable' });
   });
 
   it('does not apply evidence TTL to a current-key reference', () => {
