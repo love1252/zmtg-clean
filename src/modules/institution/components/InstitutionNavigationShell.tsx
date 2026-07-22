@@ -39,6 +39,8 @@ const sectionIcons = {
   system: Settings2,
 } satisfies Record<InstitutionNavigationSectionIdV1, typeof LayoutDashboard>;
 
+const navigationVisibilityBoundary = '当前仅展示导航入口，不代表已授权或能力已开放';
+
 export function InstitutionNavigationShell({
   activeSectionId,
   availableSectionIds,
@@ -194,12 +196,14 @@ export function InstitutionNavigationShell({
 
         <div className={cn('relative border-t border-white/10', isCollapsed ? 'p-3' : 'p-4')}>
           <div
+            aria-label={navigationVisibilityBoundary}
             className={cn(
               'rounded-2xl bg-white/[0.06] text-slate-400',
               isCollapsed ? 'grid h-10 place-items-center text-xs font-bold' : 'px-3 py-2.5 text-xs leading-5',
             )}
+            title={navigationVisibilityBoundary}
           >
-            {isCollapsed ? '安' : '栏目可见性由服务端权限与能力状态共同决定'}
+            {isCollapsed ? '界' : navigationVisibilityBoundary}
           </div>
         </div>
       </aside>
@@ -220,7 +224,7 @@ export function InstitutionNavigationShell({
                 <div className="truncate text-[11px] text-slate-500">{activeSection?.label ?? '机构端'}</div>
               </div>
             </div>
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">安全访问</span>
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">安全边界</span>
           </div>
         </header>
 

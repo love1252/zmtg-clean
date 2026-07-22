@@ -48,11 +48,12 @@ function expectNoLegacyDependencyCalls() {
   expect(routeMocks.resolveInstitutionAiServiceUsagePeriod).not.toHaveBeenCalled();
 }
 
-async function expectCapabilityOff(request: Request) {
-  const response = await GET(request);
+async function expectCapabilityOff(request: Request, handler = GET) {
+  const response = await handler(request);
   const body = await response.json();
 
   expect(response.status).toBe(410);
+  expect(response.headers.get('Cache-Control')).toBe('no-store');
   expect(body).toEqual(capabilityOffBody);
   expect(Object.keys(body)).toEqual(['code', 'error']);
   expect(JSON.stringify(body)).not.toMatch(
@@ -93,6 +94,43 @@ describe('机构端 GET /api/institution/ai-service-usage', () => {
 
     await expectCapabilityOff(hostileRequest);
     expect(trapCount).toBe(0);
+  });
+
+  it('不加载动态毒化依赖、不调用 fetch，也不回显伪造输入', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    vi.resetModules();
+    vi.doMock('@/server/db/client', () => {
+      throw new Error('database must not be loaded');
+    });
+    vi.doMock('@/modules/security/server/access-context', () => {
+      throw new Error('access context must not be loaded');
+    });
+    vi.doMock('@/modules/institution/server/institution-ai-service-usage', () => {
+      throw new Error('AI usage service must not be loaded');
+    });
+
+    try {
+      const { GET: isolatedGET } = await import('@/app/api/institution/ai-service-usage/route');
+      const request = new Request(
+        'http://localhost:3000/api/institution/ai-service-usage?tenantId=forged-tenant&prompt=forged-prompt',
+        { headers: { authorization: 'Bearer forged-token', cookie: 'session=forged-session' } },
+      );
+      const response = await isolatedGET(request);
+      const text = await response.text();
+
+      expect(response.status).toBe(410);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(text).toBe(JSON.stringify(capabilityOffBody));
+      expect(text).not.toMatch(/forged-tenant|forged-prompt|forged-token|forged-session/i);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.doUnmock('@/server/db/client');
+      vi.doUnmock('@/modules/security/server/access-context');
+      vi.doUnmock('@/modules/institution/server/institution-ai-service-usage');
+      vi.resetModules();
+    }
   });
 });
 

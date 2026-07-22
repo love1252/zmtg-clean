@@ -6,5 +6,8 @@ const capabilityOffBody = Object.freeze({
 });
 
 export async function GET(_request?: Request) {
-  return NextResponse.json(capabilityOffBody, { status: 410 });
+  return NextResponse.json(capabilityOffBody, {
+    status: 410,
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
