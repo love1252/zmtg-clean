@@ -172,6 +172,9 @@ async function renderLoaded(nextRecords = records) {
   mockDefaultFetch();
   render(<InstitutionKnowledgeBaseCardPanel />);
   await screen.findByText(nextRecords.length > 0 ? `知识条目：${nextRecords[0].title}` : '当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。');
+  if (nextRecords.some((record) => record.knowledgeId === 'knowledge-owned-aftercare')) {
+    await screen.findByText('术后护理.md');
+  }
 }
 
 describe('InstitutionKnowledgeBaseCardPanel', () => {
@@ -231,6 +234,401 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     expect(screen.queryByRole('button', { name: '上传文档' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '新建知识' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('选择知识库上传文件')).not.toBeInTheDocument();
+  });
+
+  it('刷新资料库时立即清除旧条目和文件，503 不得把 unknown 冒充为空数据', async () => {
+    await renderLoaded();
+
+    expect(screen.getByText('知识条目：本机构术后护理知识')).toBeInTheDocument();
+    expect(screen.getByText('术后护理.md')).toBeInTheDocument();
+
+    let resolveRefresh!: (result: Awaited<ReturnType<typeof listInstitutionKnowledgeItems>>) => void;
+    vi.mocked(listInstitutionKnowledgeItems).mockImplementationOnce(
+      () => new Promise((resolve) => { resolveRefresh = resolve; }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('正在加载机构知识库卡片数据...')).toBeInTheDocument();
+      expect(screen.queryByText('知识条目：本机构术后护理知识')).not.toBeInTheDocument();
+      expect(screen.queryByText('术后护理.md')).not.toBeInTheDocument();
+    });
+    const metrics = screen.getByLabelText('机构知识库顶部指标');
+    expect(within(metrics).getAllByText('--')).toHaveLength(4);
+    const pendingFiles = screen.getByLabelText('机构知识库文件文档卡片');
+    expect(within(pendingFiles).getByText('正在确认当前资料库文件快照...')).toBeInTheDocument();
+    expect(within(pendingFiles).queryByText(/暂无真实文件记录/)).not.toBeInTheDocument();
+    const pendingTasks = screen.getByLabelText('机构知识库解析训练任务记录');
+    expect(within(pendingTasks).getByText('文件快照尚未确认，解析任务事实未展示。')).toBeInTheDocument();
+    expect(within(pendingTasks).queryByText(/暂无解析任务记录/)).not.toBeInTheDocument();
+    const pendingRisks = screen.getByLabelText('机构知识库运营建议风险提示');
+    expect(within(pendingRisks).getAllByText('文件快照暂时不可用，暂不展示判断。')).toHaveLength(2);
+    expect(within(pendingRisks).queryByText('当前可见知识均有基础片段。')).not.toBeInTheDocument();
+    expect(within(pendingRisks).queryByText('当前未发现解析失败文件。')).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveRefresh({
+        ok: false,
+        error: { kind: 'service_unavailable', message: '机构知识库资料库暂未启用。', status: 503 },
+      });
+    });
+
+    expect(await screen.findByText('机构知识库资料库暂未启用。')).toBeInTheDocument();
+    expect(screen.queryByText('知识条目：本机构术后护理知识')).not.toBeInTheDocument();
+    expect(screen.queryByText('术后护理.md')).not.toBeInTheDocument();
+    expect(screen.queryByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText('机构知识库文件文档卡片')).queryByText(/暂无真实文件记录/)).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText('机构知识库解析训练任务记录')).queryByText(/暂无解析任务记录/)).not.toBeInTheDocument();
+  });
+
+  it.each(['success', 'failure', 'throw'] as const)(
+    '过期 files %s 回包不能在较新的 root 503 后回填或覆盖状态',
+    async (outcome) => {
+    let resolveOldFiles!: (response: Response) => void;
+    let rejectOldFiles!: (reason: unknown) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string | URL | Request) => {
+        if (requestUrl(input).includes('/files')) {
+          return new Promise<Response>((resolve, reject) => {
+            resolveOldFiles = resolve;
+            rejectOldFiles = reject;
+          });
+        }
+        return Promise.resolve(Response.json({ records: [], pageInfo }));
+      }),
+    );
+    mockKnowledgeList();
+    render(<InstitutionKnowledgeBaseCardPanel />);
+
+    expect(await screen.findByText('知识条目：本机构术后护理知识')).toBeInTheDocument();
+    vi.mocked(listInstitutionKnowledgeItems).mockResolvedValueOnce({
+      ok: false,
+      error: { kind: 'service_unavailable', message: '机构知识库资料库暂未启用。', status: 503 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+    expect(await screen.findByText('机构知识库资料库暂未启用。')).toBeInTheDocument();
+
+    await act(async () => {
+      if (outcome === 'success') resolveOldFiles(Response.json({ records: files, pageInfo }));
+      if (outcome === 'failure') resolveOldFiles(Response.json({ error: 'STALE_FILES_FAILURE' }, { status: 503 }));
+      if (outcome === 'throw') rejectOldFiles(new Error('STALE_FILES_THROW'));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('术后护理.md')).not.toBeInTheDocument();
+      expect(screen.queryByText('已读取 1 个真实文件记录。')).not.toBeInTheDocument();
+      expect(screen.queryByText(/STALE_FILES/)).not.toBeInTheDocument();
+      expect(screen.getByText('文件快照暂时不可用，未展示文件、解析或失败状态。')).toBeInTheDocument();
+    });
+    },
+  );
+
+  it.each([
+    ['503', async () => Response.json({ status: 'capability_disabled' }, { status: 503 })],
+    ['非法 payload', async () => Response.json({ records: null, pageInfo })],
+    ['异常', async () => { throw new Error('files snapshot failed'); }],
+  ])('files %s 时整批 fail-closed，所有文件派生事实保持不可用', async (_label, filesResponse) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string | URL | Request) => {
+        if (requestUrl(input).includes('/files')) return filesResponse();
+        return Promise.resolve(Response.json({ records: [], pageInfo }));
+      }),
+    );
+    mockKnowledgeList([records[0]]);
+    render(<InstitutionKnowledgeBaseCardPanel />);
+
+    expect(await screen.findByText('文件快照暂时不可用，未展示文件、解析或失败状态。')).toBeInTheDocument();
+
+    const metrics = screen.getByLabelText('机构知识库顶部指标');
+    expect(within(metrics).getByText('1')).toBeInTheDocument();
+    expect(within(metrics).getAllByText('--')).toHaveLength(3);
+    expect(within(metrics).queryByText('0')).not.toBeInTheDocument();
+    expect(within(metrics).queryByText('0 / 0')).not.toBeInTheDocument();
+
+    const knowledgeSection = screen.getByLabelText('机构知识条目卡片');
+    expect(within(knowledgeSection).getByText('片段数 --')).toBeInTheDocument();
+    expect(within(knowledgeSection).getByText('命中基础暂不可用')).toBeInTheDocument();
+    expect(within(knowledgeSection).queryByText(/低命中提示/)).not.toBeInTheDocument();
+
+    const fileSection = screen.getByLabelText('机构知识库文件文档卡片');
+    expect(within(fileSection).queryByText(/暂无真实文件记录/)).not.toBeInTheDocument();
+    expect(within(fileSection).queryByText('术后护理.md')).not.toBeInTheDocument();
+
+    const taskSection = screen.getByLabelText('机构知识库解析训练任务记录');
+    expect(within(taskSection).getByText('文件快照暂时不可用，解析任务事实未展示。')).toBeInTheDocument();
+    expect(within(taskSection).queryByText(/暂无解析任务记录/)).not.toBeInTheDocument();
+
+    const riskSection = screen.getByLabelText('机构知识库运营建议风险提示');
+    expect(within(riskSection).getAllByText('文件快照暂时不可用，暂不展示判断。')).toHaveLength(2);
+    expect(within(riskSection).queryByText('当前可见知识均有基础片段。')).not.toBeInTheDocument();
+    expect(within(riskSection).queryByText('当前未发现解析失败文件。')).not.toBeInTheDocument();
+  });
+
+  it('多条目 files 一成功一失败时不发布部分文件快照', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url = requestUrl(input);
+        if (url.includes('knowledge-owned-aftercare/files')) return Response.json({ records: files, pageInfo });
+        if (url.includes('knowledge-authorized-project/files')) {
+          return Response.json({ status: 'capability_disabled' }, { status: 503 });
+        }
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+    mockKnowledgeList();
+    render(<InstitutionKnowledgeBaseCardPanel />);
+
+    expect(await screen.findByText('文件快照暂时不可用，未展示文件、解析或失败状态。')).toBeInTheDocument();
+    expect(screen.queryByText('术后护理.md')).not.toBeInTheDocument();
+    expect(screen.queryByText('已读取 1 个真实文件记录。')).not.toBeInTheDocument();
+    const metrics = screen.getByLabelText('机构知识库顶部指标');
+    expect(within(metrics).getAllByText('--')).toHaveLength(3);
+  });
+
+  it.each(['success', 'failure', 'throw'] as const)(
+    '过期 root list %s 结果不能覆盖较新 revision 的权威空态',
+    async (outcome) => {
+      await renderLoaded();
+
+      let resolveOldList!: (result: Awaited<ReturnType<typeof listInstitutionKnowledgeItems>>) => void;
+      let rejectOldList!: (reason: unknown) => void;
+      vi.mocked(listInstitutionKnowledgeItems).mockImplementationOnce(
+        () => new Promise((resolve, reject) => {
+          resolveOldList = resolve;
+          rejectOldList = reject;
+        }),
+      );
+      vi.mocked(listInstitutionKnowledgeItems).mockResolvedValueOnce({
+        ok: true,
+        records: [],
+        pageInfo: { ...pageInfo, total: 0 },
+      });
+
+      let resolveUpload!: (response: Response) => void;
+      vi.mocked(globalThis.fetch).mockImplementation((input: string | URL | Request) => {
+        const url = requestUrl(input);
+        if (url.includes('/upload')) {
+          return new Promise<Response>((resolve) => { resolveUpload = resolve; });
+        }
+        if (url.includes('/files')) return Promise.resolve(Response.json({ records: files, pageInfo }));
+        return Promise.resolve(Response.json({ records: [], pageInfo }));
+      });
+      const uploadFile = new File(['old upload'], 'old-upload.md', { type: 'text/markdown' });
+      fireEvent.change(screen.getByLabelText('选择知识库上传文件'), { target: { files: [uploadFile] } });
+      fireEvent.click(screen.getByRole('button', { name: '上传文档' }));
+
+      const refreshButton = screen.getByRole('button', { name: '刷新真实数据' });
+      fireEvent.click(refreshButton);
+      await screen.findByText('正在加载机构知识库卡片数据...');
+      await act(async () => {
+        resolveUpload(Response.json({ chunkCount: 0 }, { status: 201 }));
+      });
+      expect(await screen.findByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).toBeInTheDocument();
+
+      await act(async () => {
+        if (outcome === 'success') {
+          resolveOldList({
+            ok: true,
+            records: [{ ...records[0], knowledgeId: 'STALE_KNOWLEDGE_ID', title: 'STALE_KNOWLEDGE_TITLE' }],
+            pageInfo: { ...pageInfo, total: 1 },
+          });
+        }
+        if (outcome === 'failure') {
+          resolveOldList({
+            ok: false,
+            error: { kind: 'service_unavailable', message: 'STALE_LIST_FAILURE', status: 503 },
+          });
+        }
+        if (outcome === 'throw') rejectOldList(new Error('STALE_LIST_THROW'));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).toBeInTheDocument();
+        expect(document.body.textContent).not.toContain('STALE_');
+      });
+    },
+  );
+
+  it('编辑态在 root pending、503 与后续权威空态中清除字段和旧 PATCH 目标', async () => {
+    await renderLoaded();
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    expect(screen.getByLabelText('知识标题')).toHaveValue('本机构术后护理知识');
+    expect(screen.getByLabelText('分类 / 目录口径')).toHaveValue('术后护理');
+    expect(screen.getByLabelText('摘要 / 描述')).toHaveValue('真实 API 返回的本机构护理摘要。');
+    fireEvent.change(screen.getByLabelText('知识标题'), { target: { value: 'STALE_EDIT_TITLE' } });
+    fireEvent.change(screen.getByLabelText('分类 / 目录口径'), { target: { value: 'STALE_EDIT_CATEGORY' } });
+    fireEvent.change(screen.getByLabelText('摘要 / 描述'), { target: { value: 'STALE_EDIT_DESCRIPTION' } });
+    const staleUpload = new File(['sensitive'], 'STALE_UPLOAD_NAME.md', { type: 'text/markdown' });
+    fireEvent.change(screen.getByLabelText('选择知识库上传文件'), { target: { files: [staleUpload] } });
+    expect(screen.getByText(/STALE_UPLOAD_NAME\.md/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '归档' }));
+
+    let resolveRefresh!: (result: Awaited<ReturnType<typeof listInstitutionKnowledgeItems>>) => void;
+    vi.mocked(listInstitutionKnowledgeItems).mockImplementationOnce(
+      () => new Promise((resolve) => { resolveRefresh = resolve; }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+
+    expect(await screen.findByText('正在加载机构知识库卡片数据...')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('STALE_EDIT_TITLE')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('STALE_UPLOAD_NAME');
+    expect(screen.queryByText(/确认软归档/)).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveRefresh({
+        ok: false,
+        error: { kind: 'service_unavailable', message: '机构知识库资料库暂未启用。', status: 503 },
+      });
+    });
+    expect(await screen.findByText('机构知识库资料库暂未启用。')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('STALE_EDIT_');
+
+    vi.mocked(listInstitutionKnowledgeItems).mockResolvedValueOnce({
+      ok: true,
+      records: [],
+      pageInfo: { ...pageInfo, total: 0 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+    expect(await screen.findByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).toBeInTheDocument();
+    expect(screen.getByLabelText('知识标题')).toHaveValue('');
+    expect(screen.getByLabelText('分类 / 目录口径')).toHaveValue('');
+    expect(screen.getByLabelText('摘要 / 描述')).toHaveValue('');
+    expect((screen.getByLabelText('选择知识库上传文件') as HTMLInputElement).files).toHaveLength(0);
+    expect(screen.getByRole('button', { name: '新建知识' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('知识标题'), { target: { value: '全新条目' } });
+    fireEvent.click(screen.getByRole('button', { name: '新建知识' }));
+    await waitFor(() => {
+      const itemMutationCalls = vi.mocked(globalThis.fetch).mock.calls.filter(([, init]) => init?.method === 'POST' || init?.method === 'PATCH');
+      expect(itemMutationCalls.some(([, init]) => init?.method === 'POST')).toBe(true);
+      expect(itemMutationCalls.some(([, init]) => init?.method === 'PATCH')).toBe(false);
+    });
+  });
+
+  it.each([
+    ['chunk', 'success'], ['chunk', 'failure'], ['chunk', 'throw'],
+    ['search', 'success'], ['search', 'failure'], ['search', 'throw'],
+    ['answer', 'success'], ['answer', 'failure'], ['answer', 'throw'],
+  ] as const)('过期 %s %s 回包不能在新 root revision 后恢复旧敏感展示', async (operation, outcome) => {
+    await renderLoaded();
+
+    let resolveOldRequest!: (response: Response) => void;
+    let rejectOldRequest!: (reason: unknown) => void;
+    const oldRequest = new Promise<Response>((resolve, reject) => {
+      resolveOldRequest = resolve;
+      rejectOldRequest = reject;
+    });
+    vi.mocked(globalThis.fetch).mockImplementation((input: string | URL | Request) => {
+      const url = requestUrl(input);
+      const isOldOperation = operation === 'chunk'
+        ? url.includes('/parse/chunks')
+        : operation === 'search'
+          ? url.includes('/search')
+          : url.includes('/answer');
+      if (isOldOperation) return oldRequest;
+      if (url.includes('/files')) return Promise.resolve(Response.json({ records: files, pageInfo }));
+      return Promise.resolve(Response.json({ records: [], pageInfo }));
+    });
+
+    if (operation === 'chunk') {
+      fireEvent.click(screen.getByRole('button', { name: '查看片段' }));
+    } else if (operation === 'search') {
+      const searchSection = screen.getByLabelText('机构知识库检索测试卡片');
+      fireEvent.change(within(searchSection).getByLabelText('输入知识库检索关键词'), { target: { value: '旧检索问题' } });
+      fireEvent.click(within(searchSection).getByRole('button', { name: '开始检索测试' }));
+    } else {
+      const answerSection = screen.getByLabelText('机构知识库问答台');
+      fireEvent.change(within(answerSection).getByLabelText('输入知识库问答问题'), { target: { value: '旧问答问题' } });
+      fireEvent.click(within(answerSection).getByRole('button', { name: '提问' }));
+    }
+
+    vi.mocked(listInstitutionKnowledgeItems).mockResolvedValueOnce({
+      ok: true,
+      records: [],
+      pageInfo: { ...pageInfo, total: 0 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+    expect(await screen.findByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).toBeInTheDocument();
+
+    await act(async () => {
+      if (outcome === 'throw') {
+        rejectOldRequest(new Error('STALE_ASYNC_THROW'));
+        return;
+      }
+      if (outcome === 'failure') {
+        resolveOldRequest(Response.json({ error: 'STALE_ASYNC_FAILURE' }, { status: 503 }));
+        return;
+      }
+      if (operation === 'chunk') {
+        resolveOldRequest(Response.json({
+          records: [{ chunkId: 'stale-chunk', chunkIndex: 0, textPreview: 'STALE_ASYNC_SECRET', charCount: 18 }],
+        }));
+      } else if (operation === 'search') {
+        resolveOldRequest(Response.json({
+          records: [{
+            knowledgeId: 'stale-knowledge',
+            knowledgeTitle: 'STALE_ASYNC_SECRET',
+            fileId: 'stale-file',
+            fileName: 'STALE_ASYNC_SECRET.md',
+            chunkId: 'stale-chunk',
+            chunkIndex: 0,
+            textPreview: 'STALE_ASYNC_SECRET',
+            matchReason: 'STALE_ASYNC_SECRET',
+            parseStatus: 'succeeded',
+          }],
+          pageInfo,
+        }));
+      } else {
+        resolveOldRequest(Response.json({
+          status: 'answered',
+          answer: 'STALE_ASYNC_SECRET',
+          sources: [{
+            knowledgeId: 'stale-knowledge',
+            knowledgeTitle: 'STALE_ASYNC_SECRET',
+            fileId: 'stale-file',
+            fileName: 'STALE_ASYNC_SECRET.md',
+            chunkIndex: 0,
+            textPreview: 'STALE_ASYNC_SECRET',
+          }],
+        }));
+      }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('STALE_ASYNC');
+    });
+  });
+
+  it('仅当前 revision 的权威空结果显示空态；非法结果和异常保持 unavailable', async () => {
+    await renderLoaded();
+
+    vi.mocked(listInstitutionKnowledgeItems).mockResolvedValueOnce({
+      ok: true,
+      records: [],
+      pageInfo: { ...pageInfo, total: 0 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+    expect(await screen.findByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).toBeInTheDocument();
+    expect(within(screen.getByLabelText('机构知识库顶部指标')).getAllByText('0')).toHaveLength(2);
+
+    vi.mocked(listInstitutionKnowledgeItems).mockRejectedValueOnce(new Error('unexpected client failure'));
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+    expect(await screen.findByText('机构知识库数据暂时不可用')).toBeInTheDocument();
+    expect(screen.queryByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).not.toBeInTheDocument();
+
+    vi.mocked(listInstitutionKnowledgeItems).mockResolvedValueOnce({
+      ok: false,
+      error: { kind: 'unknown', message: '非法资料库响应', status: 200 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+    expect(await screen.findByText('非法资料库响应')).toBeInTheDocument();
+    expect(screen.queryByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).not.toBeInTheDocument();
   });
 
   it('支持目录本地切换并只显示当前目录真实数据', async () => {
@@ -303,6 +701,7 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
 
     expect(screen.getByText('已选择 护理.pdf，可上传并触发文档解析。')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '上传文档' }));
+    expect(await screen.findByText('上传成功，已触发文档解析，生成 2 个片段。')).toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith('/api/institution/knowledge-management/upload', expect.objectContaining({ method: 'POST', body: expect.any(FormData) }));
   });
 
