@@ -11,6 +11,7 @@ import {
 import type { CurrentInstitutionAnchorFactRowV1 } from '@/modules/security/server/institution-anchor-repository';
 import {
   createInstitutionGuardReferenceCodecV1,
+  isInstitutionGuardReferenceCodecV1,
   type InstitutionGuardReferenceCodecV1,
 } from '@/modules/security/server/institution-guard-reference';
 
@@ -396,6 +397,141 @@ describe('机构锚点 owner-sealed provider', () => {
     });
   });
 
+  it('仅接受 factory 创建的 codec，结构克隆与 hostile wrapper 在读取依赖前失败关闭', async () => {
+    const genuine = referenceCodec();
+    expect(isInstitutionGuardReferenceCodecV1(genuine)).toBe(true);
+
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const cases = [
+      () => {
+        const issue = vi.fn(genuine.issue.bind(genuine));
+        const verify = vi.fn(genuine.verify.bind(genuine));
+        return {
+          candidate: Object.freeze({ issue, verify }),
+          issue,
+          verify,
+        };
+      },
+      () => {
+        const issue = vi.fn(genuine.issue.bind(genuine));
+        const verify = vi.fn(genuine.verify.bind(genuine));
+        return { candidate: { ...genuine, issue, verify }, issue, verify };
+      },
+      () => {
+        const issue = vi.fn(genuine.issue.bind(genuine));
+        const verify = vi.fn(genuine.verify.bind(genuine));
+        return {
+          candidate: Object.freeze({ issue, verify }) as unknown as InstitutionGuardReferenceCodecV1,
+          issue,
+          verify,
+        };
+      },
+      () => {
+        const issue = vi.fn(genuine.issue.bind(genuine));
+        const verify = vi.fn(genuine.verify.bind(genuine));
+        return {
+          candidate: Object.assign(Object.create({ inherited: true }), {
+            issue,
+            verify,
+          }),
+          issue,
+          verify,
+        };
+      },
+      () => {
+        const issue = vi.fn(genuine.issue.bind(genuine));
+        const verify = vi.fn(genuine.verify.bind(genuine));
+        const candidate = {};
+        Object.defineProperties(candidate, {
+          issue: {
+            enumerable: true,
+            get() {
+              getterReads += 1;
+              return issue;
+            },
+          },
+          verify: {
+            enumerable: true,
+            get() {
+              getterReads += 1;
+              return verify;
+            },
+          },
+        });
+        return { candidate, issue, verify };
+      },
+      () => {
+        const issue = vi.fn(genuine.issue.bind(genuine));
+        const verify = vi.fn(genuine.verify.bind(genuine));
+        const candidate = new Proxy(
+          { issue, verify },
+          {
+            get() {
+              proxyTraps += 1;
+              throw new Error('codec get trap');
+            },
+            ownKeys() {
+              proxyTraps += 1;
+              throw new Error('codec ownKeys trap');
+            },
+          },
+        );
+        return { candidate, issue, verify };
+      },
+      () => {
+        const issue = vi.fn(genuine.issue.bind(genuine));
+        const verify = vi.fn(genuine.verify.bind(genuine));
+        const revoked = Proxy.revocable({ issue, verify }, {});
+        revoked.revoke();
+        return { candidate: revoked.proxy, issue, verify };
+      },
+    ];
+
+    for (const createCase of cases) {
+      const { candidate, issue, verify } = createCase();
+      const resolveFact = vi.fn(async () => currentFact());
+      const now = vi.fn(() => new Date('2026-07-22T05:00:01.000Z'));
+      const provider = createActiveInstitutionAnchorProviderV1({
+        factReader: { resolve: resolveFact },
+        referenceCodec: candidate as InstitutionGuardReferenceCodecV1,
+        now,
+      });
+
+      expect(isActiveInstitutionAnchorProviderV1(provider)).toBe(true);
+      await expect(provider.resolve(requestedAnchor)).resolves.toEqual({
+        kind: 'unavailable',
+        code: 'institution_anchor_unavailable',
+      });
+      expect(resolveFact).not.toHaveBeenCalled();
+      expect(now).not.toHaveBeenCalled();
+      expect(issue).not.toHaveBeenCalled();
+      expect(verify).not.toHaveBeenCalled();
+    }
+
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  it('接受 genuine-but-unavailable codec 真实性并保持低敏 unavailable', async () => {
+    const codec = createInstitutionGuardReferenceCodecV1({
+      keyRing: {
+        currentIssueKey: { keyVersion: 1, keyMaterial: null },
+        verifyOnlyKeys: [],
+      },
+      now: () => NOW,
+    });
+    expect(isInstitutionGuardReferenceCodecV1(codec)).toBe(true);
+    const { provider, resolveFact, now } = activeProvider({ codec });
+
+    await expect(provider.resolve(requestedAnchor)).resolves.toEqual({
+      kind: 'unavailable',
+      code: 'institution_anchor_unavailable',
+    });
+    expect(resolveFact).toHaveBeenCalledTimes(1);
+    expect(now).toHaveBeenCalledTimes(1);
+  });
+
   it('模块不导出 handle 注册、集合、解析、rehydrate 或 promotion 能力', () => {
     expect(Object.keys(anchorProviderModule).sort()).toEqual([
       'createActiveInstitutionAnchorProviderV1',
@@ -522,31 +658,35 @@ describe('机构锚点 owner-sealed provider', () => {
   });
 
   it('只以机构作用域和 owner 私有非敏感 subject 签发两个引用', async () => {
-    const realCodec = referenceCodec();
-    const issue = vi.fn(realCodec.issue.bind(realCodec));
-    const codec = {
-      issue,
-      verify: realCodec.verify,
-    } as unknown as InstitutionGuardReferenceCodecV1;
-    const { provider } = activeProvider({ codec });
-
-    await expect(provider.resolve(requestedAnchor)).resolves.toMatchObject({
-      kind: 'active',
-    });
-    expect(issue).toHaveBeenNthCalledWith(1, {
+    const codec = referenceCodec();
+    const expectedAnchor = codec.issue({
       prefix: 'anc',
       ownerDomain: 'security.institution-anchor',
       tenantId: 'tenant-zhengpu',
       institutionId: 'institution-zhengpu',
-      ownerSubject: 'institution-anchor',
+      ownerSubject: 'institution-anchor' as never,
     });
-    expect(issue).toHaveBeenNthCalledWith(2, {
+    const expectedRevision = codec.issue({
       prefix: 'arv',
       ownerDomain: 'security.institution-anchor',
       tenantId: 'tenant-zhengpu',
       institutionId: 'institution-zhengpu',
-      ownerSubject: 'revision-7',
+      ownerSubject: 'revision-7' as never,
     });
+    const { provider } = activeProvider({ codec });
+
+    const result = await provider.resolve(requestedAnchor);
+    expect(expectedAnchor.kind).toBe('issued');
+    expect(expectedRevision.kind).toBe('issued');
+    expect(result.kind).toBe('active');
+    if (
+      result.kind === 'active' &&
+      expectedAnchor.kind === 'issued' &&
+      expectedRevision.kind === 'issued'
+    ) {
+      expect(result.anchorReference).toBe(expectedAnchor.reference);
+      expect(result.anchorRevision).toBe(expectedRevision.reference);
+    }
   });
 
   it.each([
@@ -591,15 +731,12 @@ describe('机构锚点 owner-sealed provider', () => {
       }),
     ],
   ] as const)('%s 时返回 unavailable 且不签发', async (_label, resolution) => {
-    const issue = vi.fn();
-    const codec = { issue, verify: vi.fn() } as unknown as InstitutionGuardReferenceCodecV1;
-    const { provider } = activeProvider({ resolutions: [resolution], codec });
+    const { provider } = activeProvider({ resolutions: [resolution] });
 
     await expect(provider.resolve(requestedAnchor)).resolves.toEqual({
       kind: 'unavailable',
       code: 'institution_anchor_unavailable',
     });
-    expect(issue).not.toHaveBeenCalled();
   });
 
   it('非法调用 scope 不访问权威 reader', async () => {
@@ -618,32 +755,26 @@ describe('机构锚点 owner-sealed provider', () => {
     expect(resolveFact).not.toHaveBeenCalled();
   });
 
-  it('anc 或 arv 任一签发失败均不发布部分 evidence', async () => {
-    const issuedAnc = Object.freeze({
-      kind: 'issued',
-      reference: `anc_v1_k1_${'A'.repeat(43)}`,
+  it('genuine codec 无可用签发密钥时不发布部分 evidence', async () => {
+    const codec = createInstitutionGuardReferenceCodecV1({
+      keyRing: {
+        currentIssueKey: { keyVersion: 1, keyMaterial: null },
+        verifyOnlyKeys: [],
+      },
+      now: () => NOW,
     });
-    const unavailable = Object.freeze({
+    const { provider } = activeProvider({ codec });
+
+    const result = await provider.resolve(requestedAnchor);
+    expect(result).toEqual({
       kind: 'unavailable',
-      code: 'guard_reference_unavailable',
+      code: 'institution_anchor_unavailable',
     });
-
-    for (const results of [[unavailable], [issuedAnc, unavailable]]) {
-      const issue = vi.fn()
-        .mockReturnValueOnce(results[0])
-        .mockReturnValueOnce(results[1]);
-      const codec = { issue, verify: vi.fn() } as unknown as InstitutionGuardReferenceCodecV1;
-      const { provider } = activeProvider({ codec });
-
-      await expect(provider.resolve(requestedAnchor)).resolves.toEqual({
-        kind: 'unavailable',
-        code: 'institution_anchor_unavailable',
-      });
-      expect(issue).toHaveBeenCalledTimes(results.length);
-    }
+    expect(result).not.toHaveProperty('anchorReference');
+    expect(result).not.toHaveProperty('anchorRevision');
   });
 
-  it('拒绝非 owner-issued 的错误前缀、短标签、额外字段与 hostile 结果', async () => {
+  it('拒绝可伪造 codec 的错误前缀、短标签、额外字段与 hostile 结果且不调用', async () => {
     const malformedResults = [
       { kind: 'issued', reference: `arv_v1_k1_${'A'.repeat(43)}` },
       { kind: 'issued', reference: `anc_v1_k1_${'A'.repeat(22)}` },
@@ -668,13 +799,15 @@ describe('机构锚点 owner-sealed provider', () => {
         issue,
         verify: vi.fn(),
       } as unknown as InstitutionGuardReferenceCodecV1;
-      const { provider } = activeProvider({ codec });
+      const { provider, resolveFact, now } = activeProvider({ codec });
 
       await expect(provider.resolve(requestedAnchor)).resolves.toEqual({
         kind: 'unavailable',
         code: 'institution_anchor_unavailable',
       });
-      expect(issue).toHaveBeenCalledTimes(1);
+      expect(resolveFact).not.toHaveBeenCalled();
+      expect(now).not.toHaveBeenCalled();
+      expect(issue).not.toHaveBeenCalled();
     }
   });
 
@@ -712,13 +845,7 @@ describe('机构锚点 owner-sealed provider', () => {
   });
 
   it('可信时钟抛错时保持 unavailable 且不签发', async () => {
-    const issue = vi.fn();
-    const codec = {
-      issue,
-      verify: vi.fn(),
-    } as unknown as InstitutionGuardReferenceCodecV1;
-    const { provider } = activeProvider({
-      codec,
+    const { provider, resolveFact, now } = activeProvider({
       now: () => {
         throw new Error('trusted clock unavailable');
       },
@@ -728,6 +855,7 @@ describe('机构锚点 owner-sealed provider', () => {
       kind: 'unavailable',
       code: 'institution_anchor_unavailable',
     });
-    expect(issue).not.toHaveBeenCalled();
+    expect(resolveFact).toHaveBeenCalledTimes(1);
+    expect(now).toHaveBeenCalledTimes(1);
   });
 });

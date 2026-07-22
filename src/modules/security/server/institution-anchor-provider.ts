@@ -12,9 +12,10 @@ import type {
   CurrentInstitutionAnchorFactRowV1,
   InstitutionAnchorFactRepositoryV1 as RepositoryV1,
 } from '@/modules/security/server/institution-anchor-repository';
-import type {
-  InstitutionGuardReferenceCodecV1,
-  InstitutionGuardReferenceOwnerSubjectV1,
+import {
+  isInstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceOwnerSubjectV1,
 } from '@/modules/security/server/institution-guard-reference';
 
 export type InstitutionAnchorFactRepositoryV1 = RepositoryV1;
@@ -327,6 +328,10 @@ function snapshotActiveProviderDependencies(
 ): ActiveProviderDependenciesV1 | null {
   const input = snapshotExactPlainRecord(value, ACTIVE_PROVIDER_INPUT_KEYS);
   if (!input || typeof input.now !== 'function' || isProxy(input.now)) {
+    return null;
+  }
+
+  if (!isInstitutionGuardReferenceCodecV1(input.referenceCodec)) {
     return null;
   }
 
