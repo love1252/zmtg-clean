@@ -8,6 +8,9 @@ const treatmentFollowUpSuggestionsReadDisabled = Object.freeze({
   code: 'treatment_followup_suggestions_capability_disabled',
   error: '治疗随访建议能力暂未启用',
 });
+const noStoreHeaders = Object.freeze({
+  'cache-control': 'no-store',
+});
 
 /**
  * No request or route data is inspected until an institution-scoped reader exists.
@@ -17,5 +20,8 @@ export async function GET(
   _request: Request,
   _context: TreatmentFollowUpSuggestionRouteContext,
 ) {
-  return NextResponse.json(treatmentFollowUpSuggestionsReadDisabled, { status: 503 });
+  return NextResponse.json(treatmentFollowUpSuggestionsReadDisabled, {
+    status: 503,
+    headers: noStoreHeaders,
+  });
 }

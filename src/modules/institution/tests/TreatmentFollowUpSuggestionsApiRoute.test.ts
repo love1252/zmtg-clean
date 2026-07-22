@@ -35,6 +35,30 @@ beforeEach(() => {
 });
 
 describe('机构端治疗随访建议 capability gate', () => {
+  it('对普通 summaryId query 和 Cookie 仍只返回低敏且不可缓存的 503', async () => {
+    const response = await treatmentFollowUpSuggestionsGet(
+      new Request(
+        'http://localhost/api/institution/treatment-summaries/summary-other/follow-up-suggestions?include=customer',
+        { headers: { cookie: 'session=not-read' } },
+      ),
+      { params: Promise.resolve({ summaryId: 'summary-other' }) },
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    await expect(response.json()).resolves.toEqual({
+      code: 'treatment_followup_suggestions_capability_disabled',
+      error: '治疗随访建议能力暂未启用',
+    });
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.canAccessResource).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createTreatmentSummaryRepository).not.toHaveBeenCalled();
+    expect(routeMocks.getTreatmentFollowUpSuggestionsForSummary).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+  });
+
   it('固定返回低敏 503，且 hostile Request 和 context 不触发任何读取或服务副作用', async () => {
     const requestTraps = { get: 0, ownKeys: 0, descriptor: 0 };
     const contextTraps = { get: 0, ownKeys: 0, descriptor: 0 };
@@ -55,6 +79,7 @@ describe('机构端治疗随访建议 capability gate', () => {
       const payload = await response.json();
 
       expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
       expect(payload).toEqual({
         code: 'treatment_followup_suggestions_capability_disabled',
         error: '治疗随访建议能力暂未启用',
