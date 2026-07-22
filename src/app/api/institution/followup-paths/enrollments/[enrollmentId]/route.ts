@@ -8,6 +8,9 @@ const disabledResponse = Object.freeze({
   code: 'follow_up_path_enrollment_detail_capability_disabled',
   error: '随访路径详情能力暂未启用',
 });
+const noStoreHeaders = Object.freeze({
+  'cache-control': 'no-store',
+});
 
 /**
  * This endpoint remains disabled until an institution-scoped reader is available.
@@ -15,5 +18,8 @@ const disabledResponse = Object.freeze({
  * depend on untrusted input or trigger data, audit, or session side effects.
  */
 export async function GET(_request: Request, _context: RouteContext) {
-  return NextResponse.json(disabledResponse, { status: 503 });
+  return NextResponse.json(disabledResponse, {
+    status: 503,
+    headers: noStoreHeaders,
+  });
 }

@@ -22,6 +22,7 @@ const routeMocks = vi.hoisted(() => {
 
   return {
     auditRecord,
+    canAccessResource: vi.fn(),
     cancelFollowUpPathEnrollment: vi.fn(),
     createAuditEventRepository: vi.fn(() => ({ record: auditRecord })),
     createEnrollmentFromTreatmentSummary: vi.fn(),
@@ -52,6 +53,10 @@ vi.mock('@/modules/security/server/access-context', async (importOriginal) => {
     getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
   };
 });
+
+vi.mock('@/modules/security/domain/access-control', () => ({
+  canAccessResource: routeMocks.canAccessResource,
+}));
 
 vi.mock('@/modules/audit/server/audit-event-repository', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/modules/audit/server/audit-event-repository')>();
@@ -193,7 +198,9 @@ describe('follow-up path enrollment API routes', () => {
   it('GET enrollments 固定关闭且不读取普通请求或查询参数', async () => {
     const plainResponse = await enrollmentsGet(request('/api/institution/followup-paths/enrollments'));
     const queryResponse = await enrollmentsGet(
-      request('/api/institution/followup-paths/enrollments?status=active&include=stages'),
+      request('/api/institution/followup-paths/enrollments?status=active&include=stages', {
+        headers: { cookie: 'session=secret-cookie' },
+      }),
     );
     const expectedPayload = {
       code: 'follow_up_path_enrollment_list_capability_disabled',
@@ -201,16 +208,20 @@ describe('follow-up path enrollment API routes', () => {
     };
 
     expect(plainResponse.status).toBe(503);
+    expect(plainResponse.headers.get('cache-control')).toBe('no-store');
     expect(await json(plainResponse)).toEqual(expectedPayload);
     expect(queryResponse.status).toBe(503);
+    expect(queryResponse.headers.get('cache-control')).toBe('no-store');
     expect(await json(queryResponse)).toEqual(expectedPayload);
 
     const payloadText = JSON.stringify(expectedPayload);
+    expect(payloadText).not.toMatch(/active|stages|secret-cookie/i);
     expect(payloadText).not.toContain('records');
     expect(payloadText).not.toContain('customer');
     expect(payloadText).not.toContain('stages');
     expect(payloadText).not.toContain('task');
     expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.canAccessResource).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
     expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
     expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
@@ -243,6 +254,7 @@ describe('follow-up path enrollment API routes', () => {
       const response = await enrollmentsGet(hostileRequest);
 
       expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
       expect(await json(response)).toEqual({
         code: 'follow_up_path_enrollment_list_capability_disabled',
         error: '随访路径实例列表能力暂未启用',
@@ -254,6 +266,7 @@ describe('follow-up path enrollment API routes', () => {
 
     expect(requestTraps).toBe(0);
     expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.canAccessResource).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
     expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
     expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
@@ -379,7 +392,9 @@ describe('follow-up path enrollment API routes', () => {
       { params: Promise.resolve({ enrollmentId: 'enrollment_001' }) },
     );
     const parameterizedResponse = await enrollmentGet(
-      request('/api/institution/followup-paths/enrollments/enrollment_002?include=stages'),
+      request('/api/institution/followup-paths/enrollments/enrollment_002?include=stages', {
+        headers: { cookie: 'session=secret-cookie' },
+      }),
       { params: Promise.resolve({ enrollmentId: 'enrollment_002' }) },
     );
 
@@ -388,17 +403,21 @@ describe('follow-up path enrollment API routes', () => {
       error: '随访路径详情能力暂未启用',
     };
     expect(plainResponse.status).toBe(503);
+    expect(plainResponse.headers.get('cache-control')).toBe('no-store');
     expect(await json(plainResponse)).toEqual(expectedPayload);
     expect(parameterizedResponse.status).toBe(503);
+    expect(parameterizedResponse.headers.get('cache-control')).toBe('no-store');
     expect(await json(parameterizedResponse)).toEqual(expectedPayload);
 
     const payloadText = JSON.stringify(expectedPayload);
+    expect(payloadText).not.toMatch(/enrollment_001|enrollment_002|stages|secret-cookie/i);
     expect(payloadText).not.toContain('record');
     expect(payloadText).not.toContain('stages');
     expect(payloadText).not.toContain('taskIds');
     expect(payloadText).not.toContain('customerId');
     expect(payloadText).not.toContain('customerDisplayName');
     expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.canAccessResource).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
     expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
     expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
@@ -449,6 +468,7 @@ describe('follow-up path enrollment API routes', () => {
       const response = await enrollmentGet(hostileRequest, hostileContext);
 
       expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
       expect(await json(response)).toEqual({
         code: 'follow_up_path_enrollment_detail_capability_disabled',
         error: '随访路径详情能力暂未启用',
@@ -461,6 +481,7 @@ describe('follow-up path enrollment API routes', () => {
     expect(requestTraps).toBe(0);
     expect(contextTraps).toBe(0);
     expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.canAccessResource).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
     expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
     expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
