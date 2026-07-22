@@ -84,6 +84,7 @@ describe('机构端 AI 调用 capability route', () => {
     ]) {
       const response = await route.POST(request);
       expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(disabledPayload);
       assertNoSideEffects();
     }
@@ -94,6 +95,7 @@ describe('机构端 AI 调用 capability route', () => {
     const poisoned = trappedRequest();
     const response = await route.POST(poisoned.request);
     expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
     await expect(response.json()).resolves.toEqual(disabledPayload);
     expect(poisoned.counts).toEqual({ get: 0, set: 0, has: 0, ownKeys: 0, getOwnPropertyDescriptor: 0, getPrototypeOf: 0 });
     assertNoSideEffects();
