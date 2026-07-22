@@ -55,6 +55,7 @@ describe('客户完整 timeline capability gate', () => {
       const payload = await response.json();
 
       expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
       expect(payload).toEqual(disabledPayload);
       expect(payload).not.toHaveProperty('customer');
       expect(payload).not.toHaveProperty('timeline');
@@ -64,6 +65,7 @@ describe('客户完整 timeline capability gate', () => {
       expect(payload).not.toHaveProperty('treatmentSummaries');
       expect(payload).not.toHaveProperty('audit');
       expect(payload).not.toHaveProperty('auditEvents');
+      expect(JSON.stringify(payload)).not.toMatch(/other-tenant|other-institution|cust_001/i);
     }
 
     expectNoRouteSideEffects();
@@ -88,6 +90,7 @@ describe('客户完整 timeline capability gate', () => {
       const response = await customerTimelineGet(hostileRequest, hostileContext as never);
 
       expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(disabledPayload);
       expect(requestTraps).toEqual({ get: 0, ownKeys: 0, descriptor: 0 });
       expect(contextTraps).toEqual({ get: 0, ownKeys: 0, descriptor: 0 });

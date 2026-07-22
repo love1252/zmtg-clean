@@ -323,7 +323,9 @@ export function InstitutionWorkbenchShell({
               工作台
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              聚合已授权的预约、随访与会话信息，帮助团队优先处理需要关注的事项。
+              {hasVisibleProjection
+                ? '聚合已授权的预约、随访与会话信息，帮助团队优先处理需要关注的事项。'
+                : '当前仅展示安全阻断状态；业务数据和业务入口保持隐藏。'}
             </p>
           </div>
         </div>
