@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from '@/app/api/institution/wecom-official-dry-run/evaluate/route';
 import { GET } from '@/app/api/institution/wecom-official-dry-run/route';
@@ -69,6 +70,11 @@ const readyBody = {
   dryRunOnly: true,
 };
 
+const capabilityDisabledPayload = {
+  code: 'capability_disabled',
+  error: '企业微信官方 dry-run 评估能力当前未启用',
+};
+
 function request(method: 'GET' | 'POST', body?: unknown) {
   return new Request('http://localhost/api/institution/wecom-official-dry-run', {
     method,
@@ -96,6 +102,27 @@ function expectLowSensitivePayload(payload: unknown) {
   expect(text).not.toContain('qyapi.weixin.qq.com');
 }
 
+async function expectCapabilityDisabled(input: Request) {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+  try {
+    const response = await POST(input);
+    const payload = await json(response);
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(payload).toStrictEqual(capabilityDisabledPayload);
+    expectLowSensitivePayload(payload);
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  } finally {
+    fetchSpy.mockRestore();
+  }
+}
+
 beforeEach(() => {
   routeMocks.getDatabase.mockReset();
   routeMocks.getDatabase.mockReturnValue(routeMocks.database);
@@ -107,18 +134,16 @@ beforeEach(() => {
 });
 
 describe('wecom official route dry-run API route', () => {
-  it('未登录 GET 和 POST 返回 401 且不记录 audit', async () => {
+  it('未登录 GET 仍返回 401 且不记录 audit', async () => {
     routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
 
-    const getResponse = await GET(request('GET'));
-    const postResponse = await POST(request('POST', readyBody));
+    const response = await GET(request('GET'));
 
-    expect(getResponse.status).toBe(401);
-    expect(postResponse.status).toBe(401);
+    expect(response.status).toBe(401);
     expect(routeMocks.auditRecord).not.toHaveBeenCalled();
   });
 
-  it('GET 返回当前机构 dry-run 计划状态并记录 viewed audit reason', async () => {
+  it('GET 保持返回当前机构 dry-run 计划状态并记录 viewed audit reason', async () => {
     const response = await GET(request('GET'));
     const payload = await json(response);
 
@@ -154,119 +179,77 @@ describe('wecom official route dry-run API route', () => {
     );
   });
 
-  it('POST networkMode=mock 返回 mock_dry_run_completed 且只做本地模拟', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const response = await POST(request('POST', readyBody));
-    const payload = await json(response);
-
-    expect(response.status).toBe(200);
-    expect(payload).toMatchObject({
-      dryRun: {
-        dryRunStatus: 'mock_dry_run_completed',
-        dryRunPlanReady: true,
-        mockDryRunCompleted: true,
-        networkMode: 'mock',
-        allowRealSend: false,
-        externalChannelEnabled: false,
-        realSendAllowed: false,
-        noRealSend: true,
-        noRealNetwork: true,
-        noSecretRead: true,
-        noSecretOutput: true,
-        auditReason: 'wecom_official_dry_run_mock_completed',
-      },
-      boundary: {
-        localSimulationOnly: true,
-        noSecretOutput: true,
-        noRealNetwork: true,
-        noRealSend: true,
-      },
-    });
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expectLowSensitivePayload(payload);
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resource: 'real_channel',
-        action: 'review',
-        reason: 'wecom_official_dry_run_mock_completed',
-        result: 'allowed',
-      }),
-    );
-    fetchSpy.mockRestore();
-  });
-
-  it('POST networkMode=live_dry_run_requested 返回 blocked_real_network_disabled', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const response = await POST(request('POST', { ...readyBody, networkMode: 'live_dry_run_requested' }));
-    const payload = await json(response);
-
-    expect(response.status).toBe(200);
-    expect(payload).toMatchObject({
-      dryRun: {
-        dryRunStatus: 'blocked_real_network_disabled',
-        networkMode: 'live_dry_run_requested',
-        noRealNetwork: true,
-        auditReason: 'wecom_official_dry_run_real_network_blocked',
-      },
-    });
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expectLowSensitivePayload(payload);
-    fetchSpy.mockRestore();
-  });
-
-  it('POST 含敏感字段和值会阻断且不回显真实值', async () => {
-    const response = await POST(request('POST', {
+  it.each([
+    ['普通请求', () => request('POST', {})],
+    ['未认证请求', () => request('POST')],
+    ['伪造 scope 与角色', () => request('POST', {
+      tenantId: 'tenant-forged',
+      institutionId: 'institution-forged',
+      operatorRole: 'platform_admin',
+    })],
+    ['非法 JSON', () => new Request(
+      'http://localhost/api/institution/wecom-official-dry-run/evaluate',
+      { method: 'POST', body: '{invalid-json' },
+    )],
+    ['超大 body', () => request('POST', { padding: 'x'.repeat(2_000_000) })],
+    ['敏感和 mock-ready 输入', () => request('POST', {
       ...readyBody,
       corpId: 'corp-real',
       secret: 'secret-real',
       token: 'access_token_real',
-      encodingAESKey: 'encoding-key-real',
-      webhook_secret: 'webhook-secret-real',
-      external_userid: 'external_userid_real',
-      userid: 'userid_real',
-      agentId: 'agent-real',
-      appId: 'wx-real-app',
-      DATABASE_URL: 'postgres://real-db',
-      hisPayload: 'HIS payload raw body',
-    }));
-    const payload = await json(response);
-
-    expect(response.status).toBe(200);
-    expect(payload).toMatchObject({
-      dryRun: {
-        dryRunStatus: 'blocked_sensitive_payload',
-        mockDryRunCompleted: false,
-        auditReason: 'wecom_official_dry_run_sensitive_payload_blocked',
-        realSendAllowed: false,
-      },
-    });
-    expectLowSensitivePayload(payload);
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        reason: 'wecom_official_dry_run_sensitive_payload_blocked',
-        result: 'denied',
-      }),
-    );
+      endpoint: 'https://qyapi.weixin.qq.com/cgi-bin/gettoken',
+      auditReason: 'caller-forged-audit',
+    })],
+  ])('POST 对%s在读取输入前固定返回 capability-disabled', async (_name, createRequest) => {
+    await expectCapabilityDisabled(createRequest());
   });
 
-  it('POST 检测 secret 读取、真实出网和真实发送企图并阻断', async () => {
-    const secretRead = await json(await POST(request('POST', { ...readyBody, readSecret: true })));
-    expect(secretRead).toMatchObject({ dryRun: { dryRunStatus: 'blocked_secret_read_attempt' } });
-    expectLowSensitivePayload(secretRead);
-
-    const realNetwork = await json(await POST(request('POST', { ...readyBody, endpoint: 'https://qyapi.weixin.qq.com/cgi-bin/gettoken' })));
-    expect(realNetwork).toMatchObject({ dryRun: { dryRunStatus: 'blocked_real_network_disabled', noRealNetwork: true } });
-    expectLowSensitivePayload(realNetwork);
-
-    const realSend = await json(await POST(request('POST', { ...readyBody, allowRealSend: true, externalChannelEnabled: true, realSendAllowed: true })));
-    expect(realSend).toMatchObject({
-      dryRun: {
-        dryRunStatus: 'blocked_real_send_forbidden',
-        allowRealSend: false,
-        externalChannelEnabled: false,
-        realSendAllowed: false,
-      },
+  it('POST 对 hostile Request 不触发任何 trap', async () => {
+    let traps = 0;
+    const fail = () => {
+      traps += 1;
+      throw new Error('request must not be inspected');
+    };
+    const hostileRequest = new Proxy({} as Request, {
+      get: fail,
+      getOwnPropertyDescriptor: fail,
+      getPrototypeOf: fail,
+      has: fail,
+      ownKeys: fail,
     });
-    expectLowSensitivePayload(realSend);
+
+    await expectCapabilityDisabled(hostileRequest);
+    expect(traps).toBe(0);
+  });
+
+  it('evaluate route 源码只装配 NextResponse 且不读取输入或下游依赖', () => {
+    const source = readFileSync(
+      'src/app/api/institution/wecom-official-dry-run/evaluate/route.ts',
+      'utf8',
+    );
+    const imports = source.match(/^import .+;$/gm) ?? [];
+
+    expect(imports).toStrictEqual(["import { NextResponse } from 'next/server';"]);
+    expect(source).toContain('export function POST(_request: Request)');
+    expect(source.match(/_request/g)).toHaveLength(1);
+    for (const forbidden of [
+      '@/modules/',
+      '@/server/',
+      'getDemoAccessContextFromRequest',
+      'getDatabase',
+      'createAuditEventRepository',
+      'evaluateWeComOfficialDryRun',
+      'process.env',
+      '.json()',
+      '.text()',
+      '.headers',
+      '.cookies',
+      '.url',
+      'fetch(',
+      'mockDryRunCompleted',
+      'auditReason',
+    ]) {
+      expect(source).not.toContain(forbidden);
+    }
   });
 });
