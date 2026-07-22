@@ -45,6 +45,7 @@ describe('机构端知识库 QA capability route', () => {
     for (const request of [undefined, new Request('http://localhost/api/institution/knowledge-management/qa', { method: 'POST', headers: { authorization: 'Bearer forged' }, body: JSON.stringify({ provider: 'forged', question: 'ignored' }) })]) {
       const response = await route.POST(request);
       expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual({ status: 'capability_disabled', code: 'knowledge_qa_capability_disabled', answer: '机构知识库问答暂未启用。仅供内部运营参考，需人工确认', citations: [] });
       expect(forbidden.initialized).toEqual([]);
       assertNoFetch();
@@ -56,6 +57,7 @@ describe('机构端知识库 QA capability route', () => {
     const poisoned = trappedRequest();
     const response = await route.POST(poisoned.request);
     expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
     expect(poisoned.counts).toEqual({ get: 0, set: 0, has: 0, ownKeys: 0, getOwnPropertyDescriptor: 0, getPrototypeOf: 0 });
     expect(forbidden.initialized).toEqual([]);
     assertNoFetch();

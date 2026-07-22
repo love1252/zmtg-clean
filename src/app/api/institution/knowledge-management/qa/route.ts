@@ -8,5 +8,8 @@ const capabilityDisabledPayload = Object.freeze({
 });
 
 export async function POST(_request?: Request) {
-  return NextResponse.json(capabilityDisabledPayload, { status: 503 });
+  return NextResponse.json(capabilityDisabledPayload, {
+    status: 503,
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
