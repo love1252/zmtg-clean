@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isProxy } from 'node:util/types';
 
 import { NextResponse } from 'next/server';
 
@@ -9,9 +10,10 @@ import type {
   AuthTenantMembershipRecord,
 } from '@/modules/auth/domain/auth-account';
 import { normalizeAuthUsername } from '@/modules/auth/domain/auth-account';
-import type { AuthSessionUser } from '@/modules/auth/domain/session';
+import { isAuthRole, type AuthSessionUser } from '@/modules/auth/domain/session';
 import {
   createAuthAccountRepository,
+  type FormalServerSessionUserSnapshotV1,
 } from '@/modules/auth/server/auth-account-repository';
 import { createAuthAccountService } from '@/modules/auth/server/auth-account-service';
 import {
@@ -24,17 +26,16 @@ import {
   DEMO_SESSION_COOKIE,
   encodeDemoSession,
   isDemoAuthEnabled,
-  isMissingDemoSessionSecretError,
   sessionMaxAgeSeconds,
 } from '@/modules/auth/server/demo-session';
 import { resolveInstitutionGuardRuntimeConfigV1 } from '@/modules/security/server/institution-guard-runtime-config';
 import { getDatabase, type TenantDatabase } from '@/server/db/client';
 
-type LoginPayload = {
-  username?: unknown;
-  password?: unknown;
-  scope?: unknown;
-};
+type LoginPayload = Readonly<{
+  username: string;
+  password: string;
+  scope: 'institution';
+}>;
 
 type FormalLoginResult =
   | Readonly<{ kind: 'not_found' }>
@@ -42,12 +43,121 @@ type FormalLoginResult =
   | Readonly<{ kind: 'unavailable' }>
   | Readonly<{
       kind: 'authenticated';
+      database: TenantDatabase;
+      account: AuthAccountRecord;
+      membership: AuthTenantMembershipRecord | null;
       repository: ReturnType<typeof createAuthAccountRepository>;
       user: AuthSessionUser;
       passwordResetRequired: boolean;
     }>;
 
 type FormalLoginAuditReason = 'tenant_login_succeeded' | 'tenant_login_failed';
+
+const LOGIN_PAYLOAD_KEYS = Object.freeze(['username', 'password', 'scope'] as const);
+const SESSION_USER_KEYS = Object.freeze([
+  'id',
+  'username',
+  'name',
+  'role',
+  'tenantId',
+  'institutionId',
+] as const);
+const RUNTIME_CONFIG_KEYS = Object.freeze([
+  'kind',
+  'formalServerSessionKeyRing',
+  'institutionGuardReferenceKeyRing',
+] as const);
+const ISSUED_COOKIE_KEYS = Object.freeze([
+  'kind',
+  'cookieValue',
+  'expiresAt',
+  'maxAgeSeconds',
+  'sessionUser',
+] as const);
+
+function snapshotExactPlainRecord(
+  value: unknown,
+  expectedKeys: readonly string[],
+): Readonly<Record<string, unknown>> | null {
+  try {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      isProxy(value) ||
+      Object.getPrototypeOf(value) !== Object.prototype
+    ) {
+      return null;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const ownKeys = Reflect.ownKeys(descriptors);
+    if (
+      ownKeys.length !== expectedKeys.length ||
+      ownKeys.some((key) => typeof key !== 'string') ||
+      expectedKeys.some(
+        (key) => !Object.prototype.hasOwnProperty.call(descriptors, key),
+      )
+    ) {
+      return null;
+    }
+
+    const snapshot = Object.create(null) as Record<string, unknown>;
+    for (const key of expectedKeys) {
+      const descriptor = descriptors[key];
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+        return null;
+      }
+      Object.defineProperty(snapshot, key, {
+        value: descriptor.value,
+        enumerable: true,
+        configurable: false,
+        writable: false,
+      });
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
+}
+
+function snapshotLoginPayload(value: unknown): LoginPayload | null {
+  const payload = snapshotExactPlainRecord(value, LOGIN_PAYLOAD_KEYS);
+  if (
+    !payload ||
+    typeof payload.username !== 'string' ||
+    typeof payload.password !== 'string' ||
+    payload.scope !== 'institution'
+  ) {
+    return null;
+  }
+  const username = payload.username.trim();
+  if (!username || !payload.password) return null;
+  return Object.freeze({ username, password: payload.password, scope: 'institution' });
+}
+
+function snapshotSessionUser(value: unknown): AuthSessionUser | null {
+  const user = snapshotExactPlainRecord(value, SESSION_USER_KEYS);
+  if (
+    !user ||
+    typeof user.id !== 'string' ||
+    user.id.length === 0 ||
+    typeof user.username !== 'string' ||
+    typeof user.name !== 'string' ||
+    !isAuthRole(user.role) ||
+    (typeof user.tenantId !== 'string' && user.tenantId !== null) ||
+    (typeof user.institutionId !== 'string' && user.institutionId !== null)
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    role: user.role,
+    tenantId: user.tenantId,
+    institutionId: user.institutionId,
+  });
+}
 
 function noStore(response: NextResponse): NextResponse {
   response.headers.set('Cache-Control', 'no-store');
@@ -62,7 +172,6 @@ function clearCookie(response: NextResponse, name: string): void {
   response.cookies.set(name, '', {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
     maxAge: 0,
     path: '/',
   });
@@ -101,29 +210,27 @@ async function recordFormalLoginAudit(input: {
   }
 }
 
-async function authenticateFormalAccount(input: {
-  username: string;
-  password: string;
-}): Promise<FormalLoginResult> {
+async function authenticateFormalAccount(input: LoginPayload): Promise<FormalLoginResult> {
   try {
     const database = getDatabase();
     const repository = createAuthAccountRepository(database);
     const account = await repository.findAccountByUsername(
       normalizeAuthUsername(input.username),
     );
-    if (!account) return Object.freeze({ kind: 'not_found' });
+    if (account === null) return Object.freeze({ kind: 'not_found' });
+    if (!account || typeof account.id !== 'string') {
+      return Object.freeze({ kind: 'unavailable' });
+    }
 
-    const membership = await repository.findPrimaryTenantMembershipByUserId(
-      account.id,
-    );
+    const membership = await repository.findPrimaryTenantMembershipByUserId(account.id);
     const service = createAuthAccountService({ repository });
     const result = await service.authenticatePasswordAccount({
       username: input.username,
       plaintextPassword: input.password,
       scope: 'institution',
     });
-
-    if (result.status !== 'authenticated') {
+    const rejected = snapshotExactPlainRecord(result, ['status', 'reason']);
+    if (rejected?.status === 'rejected' && typeof rejected.reason === 'string') {
       await recordFormalLoginAudit({
         database,
         account,
@@ -134,71 +241,143 @@ async function authenticateFormalAccount(input: {
       return Object.freeze({ kind: 'rejected' });
     }
 
-    await recordFormalLoginAudit({
-      database,
-      account,
-      membership,
-      result: 'allowed',
-      reason: 'tenant_login_succeeded',
-    });
+    const authenticated = snapshotExactPlainRecord(result, [
+      'status',
+      'passwordResetRequired',
+      'user',
+    ]);
+    const user = authenticated ? snapshotSessionUser(authenticated.user) : null;
+    if (
+      !authenticated ||
+      authenticated.status !== 'authenticated' ||
+      typeof authenticated.passwordResetRequired !== 'boolean' ||
+      !user
+    ) {
+      return Object.freeze({ kind: 'unavailable' });
+    }
 
     return Object.freeze({
       kind: 'authenticated',
+      database,
+      account,
+      membership,
       repository,
-      user: result.user,
-      passwordResetRequired: result.passwordResetRequired,
+      user,
+      passwordResetRequired: authenticated.passwordResetRequired,
     });
   } catch {
     return Object.freeze({ kind: 'unavailable' });
   }
 }
 
-function createDemoLoginResponse(user: Parameters<typeof createDemoSession>[0]): NextResponse {
-  let encodedSession: string;
+function createDemoLoginResponse(user: AuthSessionUser): NextResponse {
   try {
-    encodedSession = encodeDemoSession(createDemoSession(user));
-  } catch (error) {
-    if (isMissingDemoSessionSecretError(error)) {
-      return json({ code: 503, message: '演示登录未配置' }, 503);
+    const encodedSession = encodeDemoSession(createDemoSession(user));
+    if (typeof encodedSession !== 'string' || encodedSession.length === 0) {
+      return json({ code: 503, message: '登录暂不可用' }, 503);
     }
+    const response = json({ code: 0, data: { user } });
+    response.cookies.set(DEMO_SESSION_COOKIE, encodedSession, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: sessionMaxAgeSeconds(),
+      path: '/',
+    });
+    clearCookie(response, FORMAL_SERVER_SESSION_COOKIE_V1);
+    return response;
+  } catch {
     return json({ code: 503, message: '登录暂不可用' }, 503);
   }
+}
 
-  const response = json({ code: 0, data: { user } });
-  response.cookies.set(DEMO_SESSION_COOKIE, encodedSession, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: sessionMaxAgeSeconds(),
-    path: '/',
+function snapshotAvailableRuntimeConfig(value: unknown): Readonly<{
+  formalServerSessionKeyRing: unknown;
+}> | null {
+  const config = snapshotExactPlainRecord(value, RUNTIME_CONFIG_KEYS);
+  if (!config || config.kind !== 'available') return null;
+  return Object.freeze({ formalServerSessionKeyRing: config.formalServerSessionKeyRing });
+}
+
+function snapshotFormalSessionLookup(
+  value: unknown,
+): Readonly<{ kind: 'denied' | 'invalid' | 'unavailable'; snapshot?: never }> | Readonly<{
+  kind: 'resolved';
+  snapshot: unknown;
+}> | null {
+  const basic = snapshotExactPlainRecord(value, ['kind']);
+  if (
+    basic &&
+    (basic.kind === 'denied' || basic.kind === 'invalid' || basic.kind === 'unavailable')
+  ) {
+    return Object.freeze({ kind: basic.kind });
+  }
+  const resolved = snapshotExactPlainRecord(value, ['kind', 'snapshot']);
+  if (!resolved || resolved.kind !== 'resolved') return null;
+  return Object.freeze({ kind: 'resolved', snapshot: resolved.snapshot });
+}
+
+function snapshotIssuedCookie(value: unknown): Readonly<{
+  cookieValue: string;
+  maxAgeSeconds: number;
+  sessionUser: AuthSessionUser;
+}> | null {
+  const issued = snapshotExactPlainRecord(value, ISSUED_COOKIE_KEYS);
+  const user = issued ? snapshotSessionUser(issued.sessionUser) : null;
+  const maxAgeSeconds = issued?.maxAgeSeconds;
+  if (
+    !issued ||
+    issued.kind !== 'issued' ||
+    typeof issued.cookieValue !== 'string' ||
+    issued.cookieValue.length === 0 ||
+    issued.cookieValue.length > 4_096 ||
+    typeof issued.expiresAt !== 'string' ||
+    typeof maxAgeSeconds !== 'number' ||
+    !Number.isSafeInteger(maxAgeSeconds) ||
+    maxAgeSeconds <= 0 ||
+    !user
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    cookieValue: issued.cookieValue,
+    maxAgeSeconds,
+    sessionUser: user,
   });
-  clearCookie(response, FORMAL_SERVER_SESSION_COOKIE_V1);
-  return response;
 }
 
 export async function POST(request: Request) {
-  let payload: LoginPayload;
+  let payload: LoginPayload | null = null;
   try {
-    payload = (await request.json()) as LoginPayload;
+    payload = snapshotLoginPayload(await request.json());
   } catch {
     return json({ code: 400, message: '请求格式不正确' }, 400);
   }
+  if (!payload) return json({ code: 400, message: '请求格式不正确' }, 400);
 
-  const username = typeof payload.username === 'string' ? payload.username.trim() : '';
-  const password = typeof payload.password === 'string' ? payload.password : '';
-  if (!username || !password) {
-    return json({ code: 400, message: '请输入用户名和密码' }, 400);
-  }
-  if (payload.scope !== 'institution') {
-    return json({ code: 400, message: '请求范围不正确' }, 400);
-  }
-
-  const formalLogin = await authenticateFormalAccount({ username, password });
+  const formalLogin = await authenticateFormalAccount(payload);
   if (formalLogin.kind === 'not_found') {
-    if (!isDemoAuthEnabled()) {
+    let demoEnabled: unknown;
+    try {
+      demoEnabled = isDemoAuthEnabled();
+    } catch {
+      return json({ code: 503, message: '登录暂不可用' }, 503);
+    }
+    if (demoEnabled !== true) {
       return json({ code: 401, message: '用户名或密码错误' }, 401);
     }
-    const demoUser = authenticateDemoUser({ username, password, scope: 'institution' });
+    let demoUser: AuthSessionUser | null = null;
+    try {
+      demoUser = snapshotSessionUser(
+        authenticateDemoUser({
+          username: payload.username,
+          password: payload.password,
+          scope: 'institution',
+        }),
+      );
+    } catch {
+      return json({ code: 503, message: '登录暂不可用' }, 503);
+    }
     return demoUser
       ? createDemoLoginResponse(demoUser)
       : json({ code: 401, message: '用户名或密码错误' }, 401);
@@ -222,23 +401,29 @@ export async function POST(request: Request) {
     return json({ code: 401, message: '用户名或密码错误' }, 401);
   }
 
-  const runtimeConfig = resolveInstitutionGuardRuntimeConfigV1();
-  if (runtimeConfig.kind !== 'available') {
-    return json({ code: 503, message: '登录暂不可用' }, 503);
-  }
-
-  let snapshot: Awaited<
-    ReturnType<typeof formalLogin.repository.findCurrentFormalSessionUser>
-  >;
+  let runtimeConfig: Readonly<{ formalServerSessionKeyRing: unknown }> | null = null;
   try {
-    snapshot = await formalLogin.repository.findCurrentFormalSessionUser({
-      accountId: formalLogin.user.id,
-      tenantId: formalLogin.user.tenantId,
-      institutionId: formalLogin.user.institutionId,
-    });
+    runtimeConfig = snapshotAvailableRuntimeConfig(
+      resolveInstitutionGuardRuntimeConfigV1(),
+    );
   } catch {
     return json({ code: 503, message: '登录暂不可用' }, 503);
   }
+  if (!runtimeConfig) return json({ code: 503, message: '登录暂不可用' }, 503);
+
+  let snapshot: ReturnType<typeof snapshotFormalSessionLookup>;
+  try {
+    snapshot = snapshotFormalSessionLookup(
+      await formalLogin.repository.findCurrentFormalSessionUser({
+        accountId: formalLogin.user.id,
+        tenantId: formalLogin.user.tenantId,
+        institutionId: formalLogin.user.institutionId,
+      }),
+    );
+  } catch {
+    return json({ code: 503, message: '登录暂不可用' }, 503);
+  }
+  if (!snapshot) return json({ code: 503, message: '登录暂不可用' }, 503);
   if (snapshot.kind === 'denied') {
     return json({ code: 401, message: '用户名或密码错误' }, 401);
   }
@@ -246,23 +431,40 @@ export async function POST(request: Request) {
     return json({ code: 503, message: '登录暂不可用' }, 503);
   }
 
-  const issued = issueFormalServerSessionCookieV1({
-    sessionUserSnapshot: snapshot.snapshot,
-    sessionKeyRing: runtimeConfig.formalServerSessionKeyRing,
-    now: () => new Date(),
-  });
-  if (issued.kind !== 'issued') {
+  let issued: ReturnType<typeof snapshotIssuedCookie>;
+  try {
+    issued = snapshotIssuedCookie(
+      issueFormalServerSessionCookieV1({
+        sessionUserSnapshot: snapshot.snapshot as FormalServerSessionUserSnapshotV1,
+        sessionKeyRing: runtimeConfig.formalServerSessionKeyRing as never,
+        now: () => new Date(),
+      }),
+    );
+  } catch {
     return json({ code: 503, message: '登录暂不可用' }, 503);
   }
+  if (!issued) return json({ code: 503, message: '登录暂不可用' }, 503);
 
-  const response = json({ code: 0, data: { user: issued.sessionUser } });
-  response.cookies.set(FORMAL_SERVER_SESSION_COOKIE_V1, issued.cookieValue, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: issued.maxAgeSeconds,
-    path: '/',
+  let response: NextResponse;
+  try {
+    response = json({ code: 0, data: { user: issued.sessionUser } });
+    response.cookies.set(FORMAL_SERVER_SESSION_COOKIE_V1, issued.cookieValue, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: issued.maxAgeSeconds,
+      path: '/',
+    });
+    clearCookie(response, DEMO_SESSION_COOKIE);
+  } catch {
+    return json({ code: 503, message: '登录暂不可用' }, 503);
+  }
+  await recordFormalLoginAudit({
+    database: formalLogin.database,
+    account: formalLogin.account,
+    membership: formalLogin.membership,
+    result: 'allowed',
+    reason: 'tenant_login_succeeded',
   });
-  clearCookie(response, DEMO_SESSION_COOKIE);
   return response;
 }

@@ -146,10 +146,32 @@ function loginRequest(body: unknown) {
   });
 }
 
+function hostileLoginRequest(body: unknown) {
+  return { json: vi.fn().mockResolvedValue(body) } as unknown as Request;
+}
+
+function hostileProxy() {
+  return new Proxy(
+    {},
+    {
+      get() {
+        throw new Error('hostile property access');
+      },
+      getPrototypeOf() {
+        throw new Error('hostile prototype access');
+      },
+    },
+  );
+}
+
 function sessionRequest(cookie?: string) {
   return new Request('http://localhost/api/auth/session', {
     headers: cookie ? { cookie } : undefined,
   });
+}
+
+function hostileSessionRequest(getCookie: () => unknown) {
+  return { headers: { get: getCookie } } as unknown as Request;
 }
 
 function expectNoStore(response: Response) {
@@ -229,6 +251,28 @@ afterEach(() => {
 });
 
 describe('AUTH-FORMAL-COOKIE-02B', () => {
+  it.each([
+    ['null', null],
+    ['string', 'not-a-record'],
+    ['null-prototype', Object.assign(Object.create(null), { username: 'formal_user', password: 'not-a-secret', scope: 'institution' })],
+    ['extra key', { username: 'formal_user', password: 'not-a-secret', scope: 'institution', extra: true }],
+    ['proxy', hostileProxy()],
+    ['accessor', (() => {
+      const value: Record<string, unknown> = { password: 'not-a-secret', scope: 'institution' };
+      Object.defineProperty(value, 'username', { enumerable: true, get: () => { throw new Error('getter'); } });
+      return value;
+    })()],
+  ])('login hostile body %s 返回 400 且零下游', async (_label, body) => {
+    const { POST } = await import('@/app/api/auth/login/route');
+    const response = await POST(hostileLoginRequest(body));
+
+    expect(response.status).toBe(400);
+    expectNoStore(response);
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.resolveRuntimeConfig).not.toHaveBeenCalled();
+    expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
+  });
+
   it('formal 登录经 snapshot issuer 写 formal cookie、清 demo 且 no-store', async () => {
     const { POST } = await import('@/app/api/auth/login/route');
 
@@ -249,6 +293,7 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expect(response.headers.get('set-cookie')).toContain(`${FORMAL_SERVER_SESSION_COOKIE_V1}=v1.k1.formal-payload.formal-tag`);
     expectCookieCleared(response, DEMO_SESSION_COOKIE);
     expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
+    expect(routeMocks.auditRepository.record).toHaveBeenCalledTimes(1);
   });
 
   it('scope 缺失 fail-closed 且零 DB、零 keyring、零 demo', async () => {
@@ -358,6 +403,40 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
       expect(routeMocks.issueFormalCookie).not.toHaveBeenCalled();
     }
     expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
+    expect(routeMocks.auditRepository.record).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['runtime throws', () => routeMocks.resolveRuntimeConfig.mockImplementation(() => { throw new Error('unavailable'); })],
+    ['runtime undefined', () => routeMocks.resolveRuntimeConfig.mockReturnValue(undefined)],
+    ['runtime null', () => routeMocks.resolveRuntimeConfig.mockReturnValue(null)],
+    ['runtime string', () => routeMocks.resolveRuntimeConfig.mockReturnValue('available')],
+    ['runtime object', () => routeMocks.resolveRuntimeConfig.mockReturnValue({ kind: 'available' })],
+    ['runtime proxy', () => routeMocks.resolveRuntimeConfig.mockReturnValue(hostileProxy())],
+    ['runtime unknown', () => routeMocks.resolveRuntimeConfig.mockReturnValue({ kind: 'unknown', formalServerSessionKeyRing: null, institutionGuardReferenceKeyRing: null })],
+    ['snapshot undefined', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue(undefined)],
+    ['snapshot null', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue(null)],
+    ['snapshot string', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue('resolved')],
+    ['snapshot object', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue({ kind: 'resolved' })],
+    ['snapshot unknown', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue({ kind: 'unknown' })],
+    ['snapshot proxy', () => routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue(hostileProxy())],
+    ['issuer throws', () => routeMocks.issueFormalCookie.mockImplementation(() => { throw new Error('unavailable'); })],
+    ['issuer undefined', () => routeMocks.issueFormalCookie.mockReturnValue(undefined)],
+    ['issuer null', () => routeMocks.issueFormalCookie.mockReturnValue(null)],
+    ['issuer string', () => routeMocks.issueFormalCookie.mockReturnValue('issued')],
+    ['issuer object', () => routeMocks.issueFormalCookie.mockReturnValue({ kind: 'unavailable' })],
+    ['issuer proxy', () => routeMocks.issueFormalCookie.mockReturnValue(hostileProxy())],
+    ['issuer unknown', () => routeMocks.issueFormalCookie.mockReturnValue({ kind: 'unknown' })],
+    ['issuer malformed issued', () => routeMocks.issueFormalCookie.mockReturnValue({ kind: 'issued', cookieValue: 'value' })],
+  ])('formal 后半段 hostile %s 低敏 503 且不记成功审计', async (_label, arrange) => {
+    arrange();
+    const { POST } = await import('@/app/api/auth/login/route');
+    const response = await POST(loginRequest({ username: 'formal_user', password: 'not-a-secret', scope: 'institution' }));
+
+    expect(response.status).toBe(503);
+    expectNoStore(response);
+    expect(routeMocks.auditRepository.record).not.toHaveBeenCalled();
+    expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
   });
 
   it('mixed cookie 清两者且不验证、不读 DB、不走 demo', async () => {
@@ -370,6 +449,40 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expectNoStore(response);
     expectCookieCleared(response, FORMAL_SERVER_SESSION_COOKIE_V1);
     expectCookieCleared(response, DEMO_SESSION_COOKIE);
+    expect(routeMocks.resolveRuntimeConfig).not.toHaveBeenCalled();
+    expect(routeMocks.verifyFormalCookie).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.decodeDemoSession).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['header getter throws', () => { throw new Error('hostile header'); }],
+    ['header type unknown', () => ({ cookie: 'not-a-string' })],
+  ])('session %s 返回 401 且零下游', async (_label, getCookie) => {
+    const { GET } = await import('@/app/api/auth/session/route');
+    const response = await GET(hostileSessionRequest(getCookie));
+
+    expect(response.status).toBe(401);
+    expectNoStore(response);
+    expect(routeMocks.resolveRuntimeConfig).not.toHaveBeenCalled();
+    expect(routeMocks.verifyFormalCookie).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.decodeDemoSession).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['duplicate formal', `${FORMAL_SERVER_SESSION_COOKIE_V1}=one; ${FORMAL_SERVER_SESSION_COOKIE_V1}=two`, [FORMAL_SERVER_SESSION_COOKIE_V1]],
+    ['bare formal', FORMAL_SERVER_SESSION_COOKIE_V1, [FORMAL_SERVER_SESSION_COOKIE_V1]],
+    ['duplicate demo', `${DEMO_SESSION_COOKIE}=one; ${DEMO_SESSION_COOKIE}=two`, [DEMO_SESSION_COOKIE]],
+    ['bare demo', DEMO_SESSION_COOKIE, [DEMO_SESSION_COOKIE]],
+    ['oversized formal', `${FORMAL_SERVER_SESSION_COOKIE_V1}=${'x'.repeat(8_193)}`, [FORMAL_SERVER_SESSION_COOKIE_V1, DEMO_SESSION_COOKIE]],
+  ])('session %s fail-closed、清理冲突 Cookie 且零下游', async (_label, cookie, cleared) => {
+    const { GET } = await import('@/app/api/auth/session/route');
+    const response = await GET(sessionRequest(cookie));
+
+    expect(response.status).toBe(401);
+    expectNoStore(response);
+    cleared.forEach((name) => expectCookieCleared(response, name));
     expect(routeMocks.resolveRuntimeConfig).not.toHaveBeenCalled();
     expect(routeMocks.verifyFormalCookie).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
@@ -430,6 +543,42 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expect(routeMocks.decodeDemoSession).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['runtime throws', () => routeMocks.resolveRuntimeConfig.mockImplementation(() => { throw new Error('unavailable'); })],
+    ['runtime proxy', () => routeMocks.resolveRuntimeConfig.mockReturnValue(hostileProxy())],
+    ['verifier throws', () => routeMocks.verifyFormalCookie.mockImplementation(() => { throw new Error('unavailable'); })],
+    ['verifier unknown', () => routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'unknown' })],
+    ['claims consumer throws', () => {
+      routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims });
+      routeMocks.consumeClaims.mockImplementation(() => { throw new Error('unavailable'); });
+    }],
+    ['claims consumer proxy', () => {
+      routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims });
+      routeMocks.consumeClaims.mockReturnValue(hostileProxy());
+    }],
+    ['snapshot proxy', () => {
+      routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims });
+      routeMocks.repository.findCurrentFormalSessionUser.mockResolvedValue(hostileProxy());
+    }],
+    ['snapshot consumer throws', () => {
+      routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims });
+      routeMocks.consumeSnapshot.mockImplementation(() => { throw new Error('unavailable'); });
+    }],
+    ['snapshot consumer unknown user', () => {
+      routeMocks.verifyFormalCookie.mockReturnValue({ kind: 'verified', verifiedClaims: routeMocks.verifiedClaims });
+      routeMocks.consumeSnapshot.mockReturnValue({ id: 'truthy-only' });
+    }],
+  ])('formal session hostile %s 返回低敏 503，绝不发布 truthy user', async (_label, arrange) => {
+    arrange();
+    const { GET } = await import('@/app/api/auth/session/route');
+    const response = await GET(sessionRequest(`${FORMAL_SERVER_SESSION_COOKIE_V1}=formal`));
+
+    expect(response.status).toBe(503);
+    expectNoStore(response);
+    await expect(response.json()).resolves.toEqual({ authenticated: false, user: null });
+    expect(routeMocks.decodeDemoSession).not.toHaveBeenCalled();
+  });
+
   it('formal session DB throw 返回 503 而不混成 401', async () => {
     routeMocks.verifyFormalCookie.mockReturnValue({
       kind: 'verified',
@@ -457,6 +606,25 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['enable throws', () => routeMocks.isDemoAuthEnabled.mockImplementation(() => { throw new Error('disabled'); })],
+    ['enable unknown', () => routeMocks.isDemoAuthEnabled.mockReturnValue({ enabled: true })],
+    ['decoder throws', () => routeMocks.decodeDemoSession.mockImplementation(() => { throw new Error('invalid'); })],
+    ['decoder unknown', () => routeMocks.decodeDemoSession.mockReturnValue({ source: 'demo_session', user: { id: 'truthy-only' } })],
+    ['decoder proxy', () => routeMocks.decodeDemoSession.mockReturnValue(hostileProxy())],
+  ])('demo session hostile %s 返回 401 且不发布 truthy user', async (_label, arrange) => {
+    arrange();
+    const { GET } = await import('@/app/api/auth/session/route');
+    const response = await GET(sessionRequest(`${DEMO_SESSION_COOKIE}=demo`));
+
+    expect(response.status).toBe(401);
+    expectNoStore(response);
+    await expect(response.json()).resolves.toEqual({ authenticated: false, user: null });
+    expectCookieCleared(response, DEMO_SESSION_COOKIE);
+    expect(routeMocks.resolveRuntimeConfig).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+  });
+
   it('logout 零 config/DB 并清除两种 cookie', async () => {
     const { POST } = await import('@/app/api/auth/logout/route');
     const response = await POST();
@@ -467,5 +635,6 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expectCookieCleared(response, DEMO_SESSION_COOKIE);
     expect(routeMocks.resolveRuntimeConfig).not.toHaveBeenCalled();
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(response.headers.get('set-cookie')).not.toContain('Secure');
   });
 });
