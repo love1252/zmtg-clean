@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { AuthAccountRecord } from '@/modules/auth/domain/auth-account';
 import { createAuthAccountRepository } from '@/modules/auth/server/auth-account-repository';
 import type { TenantDatabase } from '@/server/db/client';
@@ -97,6 +97,25 @@ const institutionMembershipFactRow = {
   bindingExpiresAt: null,
   bindingRevokedAt: null,
   bindingVersion: 1,
+};
+
+const formalSessionUserRow = {
+  accountId: 'auth-user-chenlei',
+  accountUsername: 'chenlei_admin',
+  accountDisplayName: '账号陈磊',
+  accountStatus: 'active',
+  accountPasswordResetRequired: false,
+  accountLockedUntil: null,
+  membershipTenantId: 'tenant-zhengpu',
+  membershipUserId: 'auth-user-chenlei',
+  membershipRole: 'tenant_operator',
+  membershipDisplayName: '机构陈磊',
+  bindingAccountId: 'auth-user-chenlei',
+  bindingTenantId: 'tenant-zhengpu',
+  bindingInstitutionId: 'institution-zhengpu',
+  bindingStatus: 'active',
+  bindingExpiresAt: null,
+  bindingRevokedAt: null,
 };
 
 function createSelectChain(rows: unknown[]) {
@@ -353,6 +372,130 @@ describe('正式账号 repository', () => {
     });
     expect(query.selectChains[0].limit).toHaveBeenCalledWith(2);
     expect(result).toEqual([institutionMembershipFactRow]);
+  });
+
+  it('按已验证的账号、租户、机构三元组单次查询并从数据库生成低敏会话用户', async () => {
+    type LookupInput = Parameters<
+      ReturnType<typeof createAuthAccountRepository>['findCurrentFormalSessionUser']
+    >[0];
+    expectTypeOf<keyof LookupInput>().toEqualTypeOf<
+      'accountId' | 'tenantId' | 'institutionId'
+    >();
+    const query = createDatabase({
+      selectRows: [[formalSessionUserRow]],
+    });
+
+    const result = await createAuthAccountRepository(
+      query.database,
+    ).findCurrentFormalSessionUser({
+      accountId: 'auth-user-chenlei',
+      tenantId: 'tenant-zhengpu',
+      institutionId: 'institution-zhengpu',
+    });
+
+    expect(query.select).toHaveBeenCalledTimes(1);
+    expect(query.select).toHaveBeenCalledWith({
+      accountId: authUsers.id,
+      accountUsername: authUsers.username,
+      accountDisplayName: authUsers.displayName,
+      accountStatus: authUsers.status,
+      accountPasswordResetRequired: authUsers.passwordResetRequired,
+      accountLockedUntil: authUsers.lockedUntil,
+      membershipTenantId: tenantMembers.tenantId,
+      membershipUserId: tenantMembers.userId,
+      membershipRole: tenantMembers.role,
+      membershipDisplayName: tenantMembers.displayName,
+      bindingAccountId: authAccountInstitutionBindings.accountId,
+      bindingTenantId: authAccountInstitutionBindings.tenantId,
+      bindingInstitutionId: authAccountInstitutionBindings.institutionId,
+      bindingStatus: authAccountInstitutionBindings.status,
+      bindingExpiresAt: authAccountInstitutionBindings.expiresAt,
+      bindingRevokedAt: authAccountInstitutionBindings.revokedAt,
+    });
+    expect(query.selectChains[0].from).toHaveBeenCalledWith(authUsers);
+    expect(query.selectChains[0].innerJoin).toHaveBeenNthCalledWith(
+      1,
+      tenantMembers,
+      {
+        operator: 'and',
+        conditions: [
+          {
+            column: tenantMembers.userId,
+            operator: 'eq',
+            value: authUsers.id,
+          },
+          {
+            column: tenantMembers.tenantId,
+            operator: 'eq',
+            value: 'tenant-zhengpu',
+          },
+        ],
+      },
+    );
+    expect(query.selectChains[0].innerJoin).toHaveBeenNthCalledWith(
+      2,
+      authAccountInstitutionBindings,
+      {
+        operator: 'and',
+        conditions: [
+          {
+            column: authAccountInstitutionBindings.accountId,
+            operator: 'eq',
+            value: authUsers.id,
+          },
+          {
+            column: authAccountInstitutionBindings.tenantId,
+            operator: 'eq',
+            value: tenantMembers.tenantId,
+          },
+          {
+            column: authAccountInstitutionBindings.institutionId,
+            operator: 'eq',
+            value: 'institution-zhengpu',
+          },
+        ],
+      },
+    );
+    expect(query.selectChains[0].where).toHaveBeenCalledWith({
+      column: authUsers.id,
+      operator: 'eq',
+      value: 'auth-user-chenlei',
+    });
+    expect(query.selectChains[0].limit).toHaveBeenCalledWith(2);
+    expect(result).toEqual({
+      id: 'auth-user-chenlei',
+      username: 'chenlei_admin',
+      name: '机构陈磊',
+      role: 'tenant_operator',
+      tenantId: 'tenant-zhengpu',
+      institutionId: 'institution-zhengpu',
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+
+  it('拒绝重置密码、锁定、撤销、过期、多行和作用域不一致的会话账号快照', async () => {
+    const cases: unknown[][] = [
+      [{ ...formalSessionUserRow, accountPasswordResetRequired: true }],
+      [{ ...formalSessionUserRow, accountStatus: 'locked' }],
+      [{ ...formalSessionUserRow, accountLockedUntil: new Date('2099-01-01T00:00:00.000Z') }],
+      [{ ...formalSessionUserRow, bindingStatus: 'revoked', bindingRevokedAt: new Date() }],
+      [{ ...formalSessionUserRow, bindingExpiresAt: new Date('2000-01-01T00:00:00.000Z') }],
+      [formalSessionUserRow, { ...formalSessionUserRow }],
+      [{ ...formalSessionUserRow, membershipTenantId: 'tenant-other' }],
+      [{ ...formalSessionUserRow, bindingInstitutionId: 'institution-other' }],
+    ];
+
+    for (const rows of cases) {
+      const query = createDatabase({ selectRows: [rows] });
+      await expect(
+        createAuthAccountRepository(query.database).findCurrentFormalSessionUser({
+          accountId: 'auth-user-chenlei',
+          tenantId: 'tenant-zhengpu',
+          institutionId: 'institution-zhengpu',
+        }),
+      ).resolves.toBeNull();
+      expect(query.select).toHaveBeenCalledTimes(1);
+    }
   });
 
   it('记录登录失败时只更新失败计数、锁定状态和更新时间', async () => {

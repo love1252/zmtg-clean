@@ -5,7 +5,7 @@ import type {
   AuthAccountStatus,
   AuthTenantMembershipRecord,
 } from '@/modules/auth/domain/auth-account';
-import type { AuthRole } from '@/modules/auth/domain/session';
+import type { AuthRole, AuthSessionUser } from '@/modules/auth/domain/session';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   authAccountInstitutionBindings,
@@ -44,6 +44,33 @@ export type AuthAccountInstitutionMembershipFactRepository = {
     accountId: string;
     tenantId: string;
   }): Promise<CurrentInstitutionMembershipFactRow[]>;
+};
+
+export type FormalServerSessionUserRepositoryV1 = {
+  findCurrentFormalSessionUser(input: {
+    accountId: string;
+    tenantId: string;
+    institutionId: string;
+  }): Promise<Readonly<AuthSessionUser> | null>;
+};
+
+type FormalServerSessionUserRowV1 = {
+  accountId: string;
+  accountUsername: string;
+  accountDisplayName: string;
+  accountStatus: AuthAccountStatus;
+  accountPasswordResetRequired: boolean;
+  accountLockedUntil: Date | null;
+  membershipTenantId: string;
+  membershipUserId: string;
+  membershipRole: AuthRole;
+  membershipDisplayName: string;
+  bindingAccountId: string;
+  bindingTenantId: string;
+  bindingInstitutionId: string;
+  bindingStatus: AuthAccountInstitutionBindingRecord['status'];
+  bindingExpiresAt: Date | null;
+  bindingRevokedAt: Date | null;
 };
 
 export type AuthAccountRepository = {
@@ -88,7 +115,9 @@ export type AuthAccountRepository = {
 
 export function createAuthAccountRepository(
   database: TenantDatabase,
-): AuthAccountRepository & AuthAccountInstitutionMembershipFactRepository {
+): AuthAccountRepository &
+  AuthAccountInstitutionMembershipFactRepository &
+  FormalServerSessionUserRepositoryV1 {
   return {
     async createAccount(record) {
       const rows = await database.insert(authUsers).values(record).returning();
@@ -172,6 +201,94 @@ export function createAuthAccountRepository(
         .limit(2);
 
       return rows as CurrentInstitutionMembershipFactRow[];
+    },
+
+    async findCurrentFormalSessionUser(input) {
+      const rows = await database
+        .select({
+          accountId: authUsers.id,
+          accountUsername: authUsers.username,
+          accountDisplayName: authUsers.displayName,
+          accountStatus: authUsers.status,
+          accountPasswordResetRequired: authUsers.passwordResetRequired,
+          accountLockedUntil: authUsers.lockedUntil,
+          membershipTenantId: tenantMembers.tenantId,
+          membershipUserId: tenantMembers.userId,
+          membershipRole: tenantMembers.role,
+          membershipDisplayName: tenantMembers.displayName,
+          bindingAccountId: authAccountInstitutionBindings.accountId,
+          bindingTenantId: authAccountInstitutionBindings.tenantId,
+          bindingInstitutionId: authAccountInstitutionBindings.institutionId,
+          bindingStatus: authAccountInstitutionBindings.status,
+          bindingExpiresAt: authAccountInstitutionBindings.expiresAt,
+          bindingRevokedAt: authAccountInstitutionBindings.revokedAt,
+        })
+        .from(authUsers)
+        .innerJoin(
+          tenantMembers,
+          and(
+            eq(tenantMembers.userId, authUsers.id),
+            eq(tenantMembers.tenantId, input.tenantId),
+          ),
+        )
+        .innerJoin(
+          authAccountInstitutionBindings,
+          and(
+            eq(authAccountInstitutionBindings.accountId, authUsers.id),
+            eq(authAccountInstitutionBindings.tenantId, tenantMembers.tenantId),
+            eq(
+              authAccountInstitutionBindings.institutionId,
+              input.institutionId,
+            ),
+          ),
+        )
+        .where(eq(authUsers.id, input.accountId))
+        .limit(2);
+
+      if (rows.length !== 1) return null;
+      const row = rows[0] as FormalServerSessionUserRowV1 | undefined;
+      if (!row) return null;
+      const nowEpochMs = Date.now();
+      let lockedUntilEpochMs: number | null = null;
+      let expiresAtEpochMs: number | null = null;
+      try {
+        lockedUntilEpochMs = row.accountLockedUntil === null
+          ? null
+          : Date.prototype.getTime.call(row.accountLockedUntil);
+        expiresAtEpochMs = row.bindingExpiresAt === null
+          ? null
+          : Date.prototype.getTime.call(row.bindingExpiresAt);
+      } catch {
+        return null;
+      }
+      if (
+        !Number.isFinite(nowEpochMs) ||
+        (lockedUntilEpochMs !== null && !Number.isFinite(lockedUntilEpochMs)) ||
+        (expiresAtEpochMs !== null && !Number.isFinite(expiresAtEpochMs)) ||
+        row.accountId !== input.accountId ||
+        row.membershipUserId !== input.accountId ||
+        row.bindingAccountId !== input.accountId ||
+        row.membershipTenantId !== input.tenantId ||
+        row.bindingTenantId !== input.tenantId ||
+        row.bindingInstitutionId !== input.institutionId ||
+        row.accountStatus !== 'active' ||
+        row.accountPasswordResetRequired ||
+        (lockedUntilEpochMs !== null && lockedUntilEpochMs > nowEpochMs) ||
+        row.bindingStatus !== 'active' ||
+        row.bindingRevokedAt !== null ||
+        (expiresAtEpochMs !== null && expiresAtEpochMs <= nowEpochMs)
+      ) {
+        return null;
+      }
+
+      return Object.freeze({
+        id: row.accountId,
+        username: row.accountUsername,
+        name: row.membershipDisplayName || row.accountDisplayName,
+        role: row.membershipRole,
+        tenantId: row.membershipTenantId,
+        institutionId: row.bindingInstitutionId,
+      });
     },
 
     async recordLoginFailure(input) {

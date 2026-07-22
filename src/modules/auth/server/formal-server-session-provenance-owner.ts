@@ -34,10 +34,25 @@ const MAX_VERIFY_ONLY_KEYS = 16;
 const MAX_SESSION_TTL_MS = 8 * 60 * 60 * 1_000;
 const PROVENANCE_TTL_MS = 5 * 60 * 1_000;
 
+export const FORMAL_SERVER_SESSION_COOKIE_MAX_AGE_SECONDS_V1 =
+  MAX_SESSION_TTL_MS / 1_000;
+
 const FACTORY_INPUT_KEYS = Object.freeze([
   'cookieHeader',
   'sessionKeyRing',
   'referenceCodec',
+  'now',
+] as const);
+const COOKIE_ISSUER_INPUT_KEYS = Object.freeze([
+  'accountId',
+  'tenantId',
+  'institutionId',
+  'sessionKeyRing',
+  'now',
+] as const);
+const VERIFIED_CLAIMS_INPUT_KEYS = Object.freeze([
+  'cookieHeader',
+  'sessionKeyRing',
   'now',
 ] as const);
 const REQUEST_OWNER_FACTORY_INPUT_KEYS = Object.freeze([
@@ -123,6 +138,37 @@ type OwnerFailureResolutionV1 = Extract<
   { kind: 'rejected' | 'unavailable' }
 >;
 
+export type FormalServerSessionCookieIssueResolutionV1 =
+  | Readonly<{
+      kind: 'issued';
+      cookieValue: string;
+      expiresAt: string;
+      maxAgeSeconds: typeof FORMAL_SERVER_SESSION_COOKIE_MAX_AGE_SECONDS_V1;
+    }>
+  | Readonly<{
+      kind: 'unavailable';
+      code: 'formal_session_unavailable';
+    }>;
+
+declare const formalServerSessionVerifiedClaimsMarkerV1: unique symbol;
+
+export type FormalServerSessionVerifiedClaimsV1 = Readonly<{
+  readonly [formalServerSessionVerifiedClaimsMarkerV1]: 'formal_server_session_verified_claims_v1';
+}>;
+
+export type FormalServerSessionVerifiedClaimsConsumptionV1 = Readonly<{
+  accountId: string;
+  tenantId: string;
+  institutionId: string;
+}>;
+
+export type FormalServerSessionVerifiedClaimsResolutionV1 =
+  | Readonly<{
+      kind: 'verified';
+      verifiedClaims: FormalServerSessionVerifiedClaimsV1;
+    }>
+  | OwnerFailureResolutionV1;
+
 declare const formalServerSessionRequestOwnerMarkerV1: unique symbol;
 
 export type FormalServerSessionRequestOwnerV1 = Readonly<{
@@ -138,6 +184,11 @@ const formalServerSessionRequestOwnerHandlesV1 = new WeakSet<object>();
 const formalServerSessionRequestOwnerConsumptionsV1 = new WeakMap<
   object,
   FormalServerSessionRequestOwnerConsumptionV1
+>();
+const formalServerSessionVerifiedClaimsHandlesV1 = new WeakSet<object>();
+const formalServerSessionVerifiedClaimsConsumptionsV1 = new WeakMap<
+  object,
+  FormalServerSessionVerifiedClaimsConsumptionV1
 >();
 
 const missing = Object.freeze({
@@ -159,6 +210,10 @@ const sourceDenied = Object.freeze({
 const unavailable = Object.freeze({
   kind: 'unavailable',
   code: 'provenance_unavailable',
+} as const);
+const formalSessionUnavailable = Object.freeze({
+  kind: 'unavailable',
+  code: 'formal_session_unavailable',
 } as const);
 
 function snapshotExactPlainRecord(
@@ -501,6 +556,151 @@ function verifyToken(
   return parsedPayload
     ? Object.freeze({ kind: 'verified', payload: parsedPayload })
     : invalid;
+}
+
+/**
+ * Issues one canonical formal-session cookie with the current signing key. Callers provide only
+ * authoritative scope identifiers and a trusted clock; session id and lifetime are internal.
+ */
+export function issueFormalServerSessionCookieV1(input: Readonly<{
+  accountId: string;
+  tenantId: string;
+  institutionId: string;
+  sessionKeyRing: FormalServerSessionKeyRingV1;
+  now: () => Date;
+}>): FormalServerSessionCookieIssueResolutionV1 {
+  try {
+    const snapshot = snapshotExactPlainRecord(input, COOKIE_ISSUER_INPUT_KEYS);
+    if (
+      !snapshot ||
+      !isInstitutionScopeIdV1(snapshot.accountId) ||
+      !isInstitutionScopeIdV1(snapshot.tenantId) ||
+      !isInstitutionScopeIdV1(snapshot.institutionId)
+    ) {
+      return formalSessionUnavailable;
+    }
+    const keyRing = snapshotKeyRing(snapshot.sessionKeyRing);
+    const now = snapshot.now;
+    if (
+      !keyRing ||
+      !keyRing.currentKey.keyMaterial ||
+      typeof now !== 'function' ||
+      isProxy(now)
+    ) {
+      return formalSessionUnavailable;
+    }
+    const issuedAtEpochMs = trustedDateEpochMs(now());
+    if (issuedAtEpochMs === null) return formalSessionUnavailable;
+    const expiresAtEpochMs = issuedAtEpochMs + MAX_SESSION_TTL_MS;
+    if (!Number.isFinite(expiresAtEpochMs)) return formalSessionUnavailable;
+    const sessionId = randomUUID();
+    if (!isInstitutionScopeIdV1(sessionId)) return formalSessionUnavailable;
+    const issuedAt = new Date(issuedAtEpochMs).toISOString();
+    const expiresAt = new Date(expiresAtEpochMs).toISOString();
+    const payloadSegment = Buffer.from(JSON.stringify({
+      source: 'server_session',
+      sessionId,
+      accountId: snapshot.accountId,
+      tenantId: snapshot.tenantId,
+      institutionId: snapshot.institutionId,
+      issuedAt,
+      expiresAt,
+    })).toString('base64url');
+    const keyVersion = keyRing.currentKey.keyVersion;
+    const tagSegment = createHmac('sha256', keyRing.currentKey.keyMaterial)
+      .update(`${PROTOCOL_DOMAIN_V1}\n${keyVersion}\n${payloadSegment}`)
+      .digest('base64url');
+    const cookieValue = `v1.k${keyVersion}.${payloadSegment}.${tagSegment}`;
+    if (!TOKEN_PROFILE.test(cookieValue)) return formalSessionUnavailable;
+    return Object.freeze({
+      kind: 'issued',
+      cookieValue,
+      expiresAt,
+      maxAgeSeconds: FORMAL_SERVER_SESSION_COOKIE_MAX_AGE_SECONDS_V1,
+    });
+  } catch {
+    return formalSessionUnavailable;
+  }
+}
+
+/**
+ * Verifies one cookie into a genuine opaque handle. No caller can construct or inject the claims
+ * behind that handle, and the companion consumer releases the low-sensitive tuple only once.
+ */
+export function verifyFormalServerSessionCookieClaimsV1(input: Readonly<{
+  cookieHeader: string | null;
+  sessionKeyRing: FormalServerSessionKeyRingV1;
+  now: () => Date;
+}>): FormalServerSessionVerifiedClaimsResolutionV1 {
+  const snapshot = snapshotExactPlainRecord(input, VERIFIED_CLAIMS_INPUT_KEYS);
+  const cookieHeader = snapshot?.cookieHeader;
+  if (
+    !snapshot ||
+    (typeof cookieHeader !== 'string' && cookieHeader !== null)
+  ) {
+    return unavailable;
+  }
+  const cookie = readFormalCookie(cookieHeader);
+  if (typeof cookie !== 'string') return cookie;
+  const keyRing = snapshotKeyRing(snapshot.sessionKeyRing);
+  if (!keyRing) return unavailable;
+  const token = parseToken(cookie);
+  if (!token) return invalid;
+  const verificationKey = findVerificationKey(keyRing, token.keyVersion);
+  if (!verificationKey) return invalid;
+  const now = snapshot.now;
+  let nowEpochMs: number | null = null;
+  if (typeof now === 'function' && !isProxy(now)) {
+    try {
+      nowEpochMs = trustedDateEpochMs(now());
+    } catch {
+      nowEpochMs = null;
+    }
+  }
+  if (nowEpochMs === null) return unavailable;
+  const verification = verifyToken(token, verificationKey, nowEpochMs);
+  if (verification.kind !== 'verified') return verification;
+  if (verification.payload.issuedAtEpochMs > nowEpochMs) return invalid;
+  if (nowEpochMs >= verification.payload.expiresAtEpochMs) return expired;
+
+  const consumption = Object.freeze({
+    accountId: verification.payload.accountId,
+    tenantId: verification.payload.tenantId,
+    institutionId: verification.payload.institutionId,
+  });
+  const verifiedClaims = Object.freeze({}) as FormalServerSessionVerifiedClaimsV1;
+  formalServerSessionVerifiedClaimsHandlesV1.add(verifiedClaims);
+  formalServerSessionVerifiedClaimsConsumptionsV1.set(
+    verifiedClaims,
+    consumption,
+  );
+  return Object.freeze({ kind: 'verified', verifiedClaims });
+}
+
+export function isFormalServerSessionVerifiedClaimsV1(
+  value: unknown,
+): value is FormalServerSessionVerifiedClaimsV1 {
+  try {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      !isProxy(value) &&
+      formalServerSessionVerifiedClaimsHandlesV1.has(value)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function consumeFormalServerSessionVerifiedClaimsV1(
+  value: unknown,
+): FormalServerSessionVerifiedClaimsConsumptionV1 | null {
+  if (!isFormalServerSessionVerifiedClaimsV1(value)) return null;
+  const consumption = formalServerSessionVerifiedClaimsConsumptionsV1.get(value);
+  if (!consumption) return null;
+  formalServerSessionVerifiedClaimsConsumptionsV1.delete(value);
+  formalServerSessionVerifiedClaimsHandlesV1.delete(value);
+  return consumption;
 }
 
 function resolveSessionOwner(

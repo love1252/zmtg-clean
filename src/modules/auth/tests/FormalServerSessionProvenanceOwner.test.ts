@@ -6,11 +6,16 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import type { CurrentInstitutionMembershipFactRow } from '@/modules/auth/server/auth-account-repository';
 import {
+  consumeFormalServerSessionVerifiedClaimsV1,
   consumeFormalServerSessionRequestOwnerV1,
   createFormalServerSessionRequestOwnerV1,
   createFormalServerSessionProvenanceResolverV1,
   FORMAL_SERVER_SESSION_COOKIE_V1,
+  isFormalServerSessionVerifiedClaimsV1,
   isFormalServerSessionRequestOwnerV1,
+  issueFormalServerSessionCookieV1,
+  verifyFormalServerSessionCookieClaimsV1,
+  type FormalServerSessionVerifiedClaimsV1,
   type FormalServerSessionRequestOwnerV1,
   type FormalServerSessionKeyRingV1,
 } from '@/modules/auth/server/formal-server-session-provenance-owner';
@@ -152,6 +157,188 @@ function requestOwner(input: Readonly<{
     }),
   };
 }
+
+describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
+  it('issues one canonical current-key V1 cookie with an internal session id and fixed eight-hour TTL', () => {
+    const now = vi.fn(() => VERIFIED_AT);
+    const result = issueFormalServerSessionCookieV1({
+      accountId: payload.accountId,
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+      sessionKeyRing: keyRing(),
+      now,
+    });
+
+    expect(result).toMatchObject({
+      kind: 'issued',
+      expiresAt: '2026-07-22T16:02:00.000Z',
+      maxAgeSeconds: 28_800,
+    });
+    expect(now).toHaveBeenCalledTimes(1);
+    if (result.kind !== 'issued') throw new Error('expected issued cookie');
+    expect(Object.isFrozen(result)).toBe(true);
+    const [version, keyVersion, payloadSegment, tagSegment] = result.cookieValue.split('.');
+    expect([version, keyVersion]).toEqual(['v1', 'k2']);
+    expect(tagSegment).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    const decoded = JSON.parse(
+      Buffer.from(payloadSegment ?? '', 'base64url').toString('utf8'),
+    ) as Record<string, unknown>;
+    expect(Object.keys(decoded)).toEqual([
+      'source',
+      'sessionId',
+      'accountId',
+      'tenantId',
+      'institutionId',
+      'issuedAt',
+      'expiresAt',
+    ]);
+    expect(decoded).toMatchObject({
+      source: 'server_session',
+      accountId: payload.accountId,
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+      issuedAt: VERIFIED_AT.toISOString(),
+      expiresAt: '2026-07-22T16:02:00.000Z',
+    });
+    expect(decoded.sessionId).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(Buffer.from(JSON.stringify(decoded)).toString('base64url')).toBe(payloadSegment);
+  });
+
+  it('round-trips issued cookies through an authentic opaque single-use verified-claims handle', () => {
+    const issued = issueFormalServerSessionCookieV1({
+      accountId: payload.accountId,
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+      sessionKeyRing: keyRing(),
+      now: () => VERIFIED_AT,
+    });
+    if (issued.kind !== 'issued') throw new Error('expected issued cookie');
+
+    const resolution = verifyFormalServerSessionCookieClaimsV1({
+      cookieHeader: `${FORMAL_SERVER_SESSION_COOKIE_V1}=${issued.cookieValue}`,
+      sessionKeyRing: keyRing(),
+      now: () => VERIFIED_AT,
+    });
+    expect(resolution.kind).toBe('verified');
+    if (resolution.kind !== 'verified') throw new Error('expected verified claims');
+    expectTypeOf(resolution.verifiedClaims).toEqualTypeOf<FormalServerSessionVerifiedClaimsV1>();
+    expect(Object.isFrozen(resolution)).toBe(true);
+    expect(Object.isFrozen(resolution.verifiedClaims)).toBe(true);
+    expect(Object.keys(resolution.verifiedClaims)).toEqual([]);
+    expect(isFormalServerSessionVerifiedClaimsV1(resolution.verifiedClaims)).toBe(true);
+    expect(JSON.stringify(resolution.verifiedClaims)).toBe('{}');
+
+    expect(consumeFormalServerSessionVerifiedClaimsV1(resolution.verifiedClaims)).toEqual({
+      accountId: payload.accountId,
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+    });
+    expect(consumeFormalServerSessionVerifiedClaimsV1(resolution.verifiedClaims)).toBeNull();
+    expect(isFormalServerSessionVerifiedClaimsV1(resolution.verifiedClaims)).toBe(false);
+  });
+
+  it('prevents callers from injecting claims and rejects handle lookalikes without property access', () => {
+    type IssueInput = Parameters<typeof issueFormalServerSessionCookieV1>[0];
+    type VerifyInput = Parameters<typeof verifyFormalServerSessionCookieClaimsV1>[0];
+    type ConsumeInput = Parameters<typeof consumeFormalServerSessionVerifiedClaimsV1>[0];
+    expectTypeOf<keyof IssueInput>().toEqualTypeOf<
+      'accountId' | 'tenantId' | 'institutionId' | 'sessionKeyRing' | 'now'
+    >();
+    expectTypeOf<keyof VerifyInput>().toEqualTypeOf<
+      'cookieHeader' | 'sessionKeyRing' | 'now'
+    >();
+    expectTypeOf<ConsumeInput>().toEqualTypeOf<unknown>();
+
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor: Record<string, unknown> = {};
+    Object.defineProperty(accessor, 'accountId', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('claims getter must not run');
+      },
+    });
+    const proxy = new Proxy({}, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('claims proxy trap must not run');
+      },
+    });
+    for (const value of [{}, accessor, proxy]) {
+      expect(isFormalServerSessionVerifiedClaimsV1(value)).toBe(false);
+      expect(consumeFormalServerSessionVerifiedClaimsV1(value)).toBeNull();
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  it('never falls back to verify-only signing material and returns one low-sensitive unavailable result', () => {
+    const sessionKeyRing = keyRing({
+      currentKey: { keyVersion: 2, keyMaterial: null },
+      verifyOnlyKeys: [
+        {
+          keyVersion: 1,
+          keyMaterial: OLD_SESSION_KEY,
+          verifyUntil: '2026-07-22T08:30:00.000Z',
+        },
+      ],
+    });
+    const result = issueFormalServerSessionCookieV1({
+      accountId: payload.accountId,
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+      sessionKeyRing,
+      now: () => VERIFIED_AT,
+    });
+
+    expect(result).toEqual({
+      kind: 'unavailable',
+      code: 'formal_session_unavailable',
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(Buffer.from(SESSION_KEY).toString('hex'));
+    expect(serialized).not.toContain(Buffer.from(OLD_SESSION_KEY).toString('hex'));
+    expect(serialized).not.toContain(payload.accountId);
+  });
+
+  it.each([
+    [null, keyRing(), 'provenance_missing'],
+    ['zmtg_demo_session=present', keyRing(), 'provenance_source_denied'],
+    [
+      `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken().slice(0, -1)}A`,
+      keyRing(),
+      'provenance_invalid',
+    ],
+    [
+      `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken({
+        ...payload,
+        expiresAt: VERIFIED_AT.toISOString(),
+      })}`,
+      keyRing(),
+      'provenance_expired',
+    ],
+    [
+      `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken()}`,
+      keyRing({ currentKey: { keyVersion: 2, keyMaterial: null } }),
+      'provenance_unavailable',
+    ],
+  ] as const)(
+    'fails cookie claims verification closed without exposing claims or keys',
+    (cookieHeader, sessionKeyRing, expectedCode) => {
+      const result = verifyFormalServerSessionCookieClaimsV1({
+        cookieHeader,
+        sessionKeyRing,
+        now: () => VERIFIED_AT,
+      });
+      expect(result).toEqual(expect.objectContaining({ code: expectedCode }));
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain(payload.accountId);
+      expect(serialized).not.toContain(Buffer.from(SESSION_KEY).toString('hex'));
+      expect(serialized).not.toContain(Buffer.from(OLD_SESSION_KEY).toString('hex'));
+    },
+  );
+});
 
 describe('AUTH-SESSION-01A formal server session provenance owner', () => {
   it('issues an opaque authentic request owner with atomic single-use consumption', () => {
