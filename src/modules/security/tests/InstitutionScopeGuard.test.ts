@@ -3,6 +3,14 @@ import { resolve } from 'node:path';
 
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
+import {
+  createActiveInstitutionAnchorProviderV1,
+  type AuthoritativeInstitutionAnchorFactReaderV1,
+} from '@/modules/security/server/institution-anchor-provider';
+import {
+  createFormalRequestProvenanceResolverV1,
+  type FormalRequestProvenanceOwnerInputV1,
+} from '@/modules/security/server/formal-request-provenance-owner';
 import type {
   ActiveInstitutionAnchorEvidenceV1,
   ActiveInstitutionAnchorProviderV1,
@@ -11,6 +19,11 @@ import type {
   FreshActiveMembershipEvidenceV1,
   FreshActiveMembershipProviderV1,
 } from '@/modules/security/server/institution-guard-evidence';
+import type { InstitutionGuardReferenceCodecV1 } from '@/modules/security/server/institution-guard-reference';
+import {
+  createRequestBoundFreshActiveMembershipProviderV1,
+  type AuthoritativeInstitutionMembershipFactReaderV1,
+} from '@/modules/security/server/institution-membership-provider';
 import {
   createInstitutionScopeGuardV1,
   INSTITUTION_SCOPE_GUARD_FAILURE_CODES_V1,
@@ -94,45 +107,464 @@ type HarnessOptions = Readonly<{
   membershipError?: unknown;
   anchorError?: unknown;
   now?: () => Date;
+  membershipNow?: () => Date;
+  anchorNow?: () => Date;
+  order?: string[];
+  membershipAccountId?: string;
 }>;
 
-function ownerHarness(options: HarnessOptions = {}) {
-  const resolveCurrentRequest = vi.fn(async () => {
-    if (options.provenanceError !== undefined) {
-      throw options.provenanceError;
+function ownRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function evidenceFromResolution(value: unknown) {
+  const resolution = ownRecord(value);
+  return resolution?.kind === 'verified'
+    ? ownRecord(resolution.evidence)
+    : null;
+}
+
+function controlledCodec(
+  references: Readonly<Record<string, unknown>> = {},
+): InstitutionGuardReferenceCodecV1 {
+  return Object.freeze({
+    issue: vi.fn((input: { prefix: string }) =>
+      Object.freeze({
+        kind: 'issued',
+        reference:
+          typeof references[input.prefix] === 'string'
+            ? references[input.prefix]
+            : reference(input.prefix),
+      }),
+    ),
+    verify: vi.fn((input: { reference: unknown }) =>
+      Object.freeze({
+        kind: 'verified',
+        reference: input.reference,
+      }),
+    ),
+  }) as unknown as InstitutionGuardReferenceCodecV1;
+}
+
+function ownerInputFromResolution(
+  value: unknown,
+): FormalRequestProvenanceOwnerInputV1 | null {
+  const resolution = ownRecord(value);
+  if (resolution?.kind === 'rejected') {
+    switch (resolution.code) {
+      case 'provenance_missing':
+        return null;
+      case 'provenance_source_denied':
+        return {
+          source: 'demo_session',
+          accountId: 'account-a',
+          tenantId: 'tenant-a',
+          institutionId: 'institution-a',
+          requestIdentifier: 'request-a',
+          proofIdentifier: 'proof-a',
+          issuedAt: '2026-07-22T07:59:00.000Z',
+          proofValidUntil: '2026-07-22T08:04:00.000Z',
+        } as unknown as FormalRequestProvenanceOwnerInputV1;
+      case 'provenance_invalid':
+        return {
+          source: 'server_session',
+          accountId: 'invalid/account',
+          tenantId: 'tenant-a',
+          institutionId: 'institution-a',
+          requestIdentifier: 'request-a',
+          proofIdentifier: 'proof-a',
+          issuedAt: '2026-07-22T07:59:00.000Z',
+          proofValidUntil: '2026-07-22T08:04:00.000Z',
+        } as unknown as FormalRequestProvenanceOwnerInputV1;
+      default:
+        break;
     }
-    return options.provenanceResolution ?? verified();
+  }
+  const evidence = evidenceFromResolution(value) ?? ownRecord(provenance());
+  if (!evidence) throw new Error('expected provenance fixture');
+  return {
+    source: evidence.source,
+    accountId: 'account-a',
+    tenantId: evidence.tenantId,
+    institutionId: evidence.institutionId,
+    requestIdentifier: 'request-a',
+    proofIdentifier: 'proof-a',
+    issuedAt: evidence.issuedAt,
+    proofValidUntil: evidence.validUntil,
+  } as unknown as FormalRequestProvenanceOwnerInputV1;
+}
+
+function ownerHarness(options: HarnessOptions = {}) {
+  const provenanceEvidence =
+    evidenceFromResolution(options.provenanceResolution) ??
+    ownRecord(provenance());
+  if (!provenanceEvidence) throw new Error('expected provenance fixture');
+  const membershipEvidence =
+    ownRecord(options.membershipResolution)?.kind === 'fresh_active'
+      ? ownRecord(options.membershipResolution)
+      : ownRecord(membership());
+  const anchorEvidence =
+    ownRecord(options.anchorResolution)?.kind === 'active'
+      ? ownRecord(options.anchorResolution)
+      : ownRecord(anchor());
+  if (!membershipEvidence || !anchorEvidence) {
+    throw new Error('expected owner evidence fixtures');
+  }
+
+  const provenanceCodec = controlledCodec({
+    usr: provenanceEvidence.userReference,
+    req: provenanceEvidence.requestReference,
+    prf: provenanceEvidence.proofReference,
   });
-  const resolveMembership = vi.fn(async () => {
+  const membershipCodec = controlledCodec({
+    usr: membershipEvidence.userReference,
+    mbr: membershipEvidence.membershipReference,
+    mrv: membershipEvidence.membershipRevision,
+    bnd: membershipEvidence.bindingReference,
+    brv: membershipEvidence.bindingRevision,
+  });
+  const anchorCodec = controlledCodec({
+    anc: anchorEvidence.anchorReference,
+    arv: anchorEvidence.anchorRevision,
+  });
+
+  const requestedProvenanceResolution = ownRecord(options.provenanceResolution);
+  const provenanceNowValue =
+    requestedProvenanceResolution?.kind === 'rejected' &&
+    requestedProvenanceResolution.code === 'provenance_expired'
+      ? new Date('2026-07-22T08:04:00.000Z')
+      : typeof provenanceEvidence.verifiedAt === 'string'
+        ? new Date(provenanceEvidence.verifiedAt)
+        : NOW;
+  const provenanceNow = vi.fn(() => {
+    options.order?.push('provenance');
+    if (options.provenanceError !== undefined) throw options.provenanceError;
+    if (
+      requestedProvenanceResolution?.kind === 'unavailable' ||
+      requestedProvenanceResolution?.kind === 'unknown'
+    ) {
+      throw new Error('controlled provenance unavailable');
+    }
+    return provenanceNowValue;
+  });
+  const provenanceResolver = createFormalRequestProvenanceResolverV1({
+    ownerInput: ownerInputFromResolution(
+      options.provenanceResolution ?? verified(provenanceEvidence),
+    ),
+    referenceCodec:
+      ownRecord(options.provenanceResolution)?.kind === 'unavailable'
+        ? ({ issue: null, verify: null } as never)
+        : provenanceCodec,
+    now: provenanceNow,
+  });
+
+  const membershipResolution = ownRecord(options.membershipResolution);
+  const membershipObservedAt =
+    typeof membershipEvidence.observedAt === 'string'
+      ? membershipEvidence.observedAt
+      : '2026-07-22T08:00:00.000Z';
+  const membershipFreshUntil =
+    typeof membershipEvidence.freshUntil === 'string'
+      ? Date.parse(membershipEvidence.freshUntil)
+      : Number.NaN;
+  const membershipObservedEpochMs = Date.parse(membershipObservedAt);
+  const membershipTtlIsInvalid =
+    Number.isFinite(membershipFreshUntil) &&
+    Number.isFinite(membershipObservedEpochMs) &&
+    membershipFreshUntil - membershipObservedEpochMs > 60_000;
+  const resolveMembershipFact = vi.fn(async () => {
+    options.order?.push('membership');
     if (options.membershipError !== undefined) throw options.membershipError;
-    return options.membershipResolution ?? membership();
+    if (membershipTtlIsInvalid) return Object.freeze({ kind: 'invalid' }) as never;
+    if (
+      membershipResolution?.kind === 'rejected' &&
+      membershipResolution.code !== 'membership_stale'
+    ) {
+      return options.membershipResolution as never;
+    }
+    if (membershipResolution?.kind === 'unknown') {
+      return options.membershipResolution as never;
+    }
+    const observedAt =
+      membershipResolution?.kind === 'rejected' &&
+      membershipResolution.code === 'membership_stale'
+        ? '2026-07-22T07:59:00.000Z'
+        : typeof membershipEvidence.freshUntil === 'string' &&
+            membershipEvidence.freshUntil !== '2026-07-22T08:01:00.000Z' &&
+            !membershipTtlIsInvalid
+          ? new Date(
+              Date.parse(membershipEvidence.freshUntil) - 60_000,
+            ).toISOString()
+          : membershipObservedAt;
+    return Object.freeze({
+      kind: 'current_membership_fact',
+      accountId: options.membershipAccountId ?? 'account-a',
+      tenantId: membershipEvidence.tenantId,
+      institutionId: membershipEvidence.institutionId,
+      role: membershipEvidence.role,
+      membershipId: 'membership-a',
+      membershipRevisionAt: '2026-07-22T07:58:00.000Z',
+      bindingId: 'binding-a',
+      bindingRevision: 7,
+      bindingRevisionAt: '2026-07-01T00:00:00.000Z',
+      bindingExpiresAt: null,
+      observedAt,
+    }) as never;
   });
-  const resolveAnchor = vi.fn(async () => {
+  const membershipProvider =
+    createRequestBoundFreshActiveMembershipProviderV1({
+      accountId: options.membershipAccountId ?? 'account-a',
+      factReader: Object.freeze({
+        resolve: resolveMembershipFact,
+      }) as AuthoritativeInstitutionMembershipFactReaderV1,
+      referenceCodec: membershipCodec,
+      now: options.membershipNow ?? (() => NOW),
+    });
+
+  const anchorResolution = ownRecord(options.anchorResolution);
+  const anchorObservedAt =
+    typeof anchorEvidence.observedAt === 'string'
+      ? anchorEvidence.observedAt
+      : '2026-07-22T08:00:00.000Z';
+  const anchorFreshUntil =
+    typeof anchorEvidence.freshUntil === 'string'
+      ? Date.parse(anchorEvidence.freshUntil)
+      : Number.NaN;
+  const anchorObservedEpochMs = Date.parse(anchorObservedAt);
+  const anchorTtlIsInvalid =
+    Number.isFinite(anchorFreshUntil) &&
+    Number.isFinite(anchorObservedEpochMs) &&
+    anchorFreshUntil - anchorObservedEpochMs > 60_000;
+  const resolveAnchorFact = vi.fn(async () => {
+    options.order?.push('anchor');
     if (options.anchorError !== undefined) throw options.anchorError;
-    return options.anchorResolution ?? anchor();
+    if (anchorTtlIsInvalid) return Object.freeze({ kind: 'invalid' }) as never;
+    if (
+      anchorResolution?.kind === 'denied' ||
+      anchorResolution?.kind === 'unavailable' ||
+      anchorResolution?.kind === 'unknown'
+    ) {
+      return options.anchorResolution as never;
+    }
+    const observedAt =
+      typeof anchorEvidence.freshUntil === 'string' &&
+      anchorEvidence.freshUntil !== '2026-07-22T08:01:00.000Z' &&
+      !anchorTtlIsInvalid
+        ? new Date(Date.parse(anchorEvidence.freshUntil) - 60_000).toISOString()
+        : anchorObservedAt;
+    return Object.freeze({
+      kind: 'current_anchor_fact',
+      tenantId: anchorEvidence.tenantId,
+      institutionId: anchorEvidence.institutionId,
+      revision: 7,
+      observedAt,
+    }) as never;
   });
+  const anchorProvider = createActiveInstitutionAnchorProviderV1({
+    factReader: Object.freeze({
+      resolve: resolveAnchorFact,
+    }) as AuthoritativeInstitutionAnchorFactReaderV1,
+    referenceCodec: anchorCodec,
+    now: options.anchorNow ?? (() => NOW),
+  });
+
   const factoryInput = {
-    provenanceResolver: Object.freeze({
-      resolveCurrentRequest,
-    }) as unknown as FormalProvenanceResolverV1,
-    membershipProvider: Object.freeze({
-      resolve: resolveMembership,
-    }) as unknown as FreshActiveMembershipProviderV1,
-    anchorProvider: Object.freeze({
-      resolve: resolveAnchor,
-    }) as unknown as ActiveInstitutionAnchorProviderV1,
+    provenanceResolver,
+    membershipProvider,
+    anchorProvider,
     now: options.now ?? (() => NOW),
   };
   return {
     factoryInput,
-    resolveCurrentRequest,
-    resolveMembership,
-    resolveAnchor,
+    provenanceResolver,
+    membershipProvider,
+    anchorProvider,
+    provenanceNow,
+    resolveMembershipFact,
+    resolveAnchorFact,
+    resolveCurrentRequest: provenanceNow,
+    resolveMembership: resolveMembershipFact,
+    resolveAnchor: resolveAnchorFact,
     guard: createInstitutionScopeGuardV1(factoryInput),
   };
 }
 
+const OWNER_LOOKALIKE_KINDS = Object.freeze([
+  'plain',
+  'spread',
+  'cast',
+  'custom_proto',
+  'accessor',
+  'proxy',
+  'revoked_proxy',
+] as const);
+
+type OwnerLookalikeKind = (typeof OWNER_LOOKALIKE_KINDS)[number];
+
+function ownerLookalike(
+  kind: OwnerLookalikeKind,
+  authenticHandle: object,
+  methodName: 'resolveCurrentRequest' | 'resolve',
+) {
+  const fakeMethod = vi.fn(async () => {
+    throw new Error('lookalike method must not run');
+  });
+  let getterReads = 0;
+  let proxyTraps = 0;
+  const plain = { [methodName]: fakeMethod };
+  let value: object;
+
+  switch (kind) {
+    case 'plain':
+      value = Object.freeze(plain);
+      break;
+    case 'spread':
+      value = Object.freeze({ ...authenticHandle });
+      break;
+    case 'cast':
+      value = Object.freeze({ [methodName]: fakeMethod });
+      break;
+    case 'custom_proto':
+      value = Object.freeze(
+        Object.assign(Object.create({ owner: 'lookalike' }), plain),
+      );
+      break;
+    case 'accessor': {
+      const accessor = {};
+      Object.defineProperty(accessor, methodName, {
+        enumerable: true,
+        get() {
+          getterReads += 1;
+          return fakeMethod;
+        },
+      });
+      value = Object.freeze(accessor);
+      break;
+    }
+    case 'proxy':
+      value = new Proxy(Object.freeze(plain), {
+        get() {
+          proxyTraps += 1;
+          throw new Error('lookalike get trap');
+        },
+        getOwnPropertyDescriptor() {
+          proxyTraps += 1;
+          throw new Error('lookalike descriptor trap');
+        },
+        getPrototypeOf() {
+          proxyTraps += 1;
+          throw new Error('lookalike prototype trap');
+        },
+        has() {
+          proxyTraps += 1;
+          throw new Error('lookalike has trap');
+        },
+        ownKeys() {
+          proxyTraps += 1;
+          throw new Error('lookalike ownKeys trap');
+        },
+      });
+      break;
+    case 'revoked_proxy': {
+      const revocable = Proxy.revocable(Object.freeze(plain), {});
+      revocable.revoke();
+      value = revocable.proxy;
+      break;
+    }
+  }
+
+  return Object.freeze({
+    value,
+    fakeMethod,
+    getterReads: () => getterReads,
+    proxyTraps: () => proxyTraps,
+  });
+}
+
 describe('BASE-02B institution scope guard composition', () => {
+  it.each(OWNER_LOOKALIKE_KINDS)(
+    'rejects a %s provenance resolver lookalike before invoking any owner method',
+    async (kind) => {
+      const harness = ownerHarness();
+      const lookalike = ownerLookalike(
+        kind,
+        harness.provenanceResolver,
+        'resolveCurrentRequest',
+      );
+      const guard = createInstitutionScopeGuardV1({
+        ...harness.factoryInput,
+        provenanceResolver: lookalike.value as FormalProvenanceResolverV1,
+      });
+
+      await expect(guard.authorizeCurrentRequest()).resolves.toEqual({
+        kind: 'rejected',
+        code: 'provenance_unavailable',
+      });
+      expect(lookalike.fakeMethod).not.toHaveBeenCalled();
+      expect(lookalike.getterReads()).toBe(0);
+      expect(lookalike.proxyTraps()).toBe(0);
+      expect(harness.resolveCurrentRequest).not.toHaveBeenCalled();
+      expect(harness.resolveMembership).not.toHaveBeenCalled();
+      expect(harness.resolveAnchor).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(OWNER_LOOKALIKE_KINDS)(
+    'rejects a %s membership provider lookalike after genuine provenance',
+    async (kind) => {
+      const harness = ownerHarness();
+      const lookalike = ownerLookalike(
+        kind,
+        harness.membershipProvider,
+        'resolve',
+      );
+      const guard = createInstitutionScopeGuardV1({
+        ...harness.factoryInput,
+        membershipProvider: lookalike.value as FreshActiveMembershipProviderV1,
+      });
+
+      await expect(guard.authorizeCurrentRequest()).resolves.toEqual({
+        kind: 'rejected',
+        code: 'membership_unavailable',
+      });
+      expect(harness.resolveCurrentRequest).toHaveBeenCalledTimes(1);
+      expect(lookalike.fakeMethod).not.toHaveBeenCalled();
+      expect(lookalike.getterReads()).toBe(0);
+      expect(lookalike.proxyTraps()).toBe(0);
+      expect(harness.resolveMembership).not.toHaveBeenCalled();
+      expect(harness.resolveAnchor).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(OWNER_LOOKALIKE_KINDS)(
+    'rejects a %s anchor provider lookalike after genuine provenance and membership',
+    async (kind) => {
+      const harness = ownerHarness();
+      const lookalike = ownerLookalike(
+        kind,
+        harness.anchorProvider,
+        'resolve',
+      );
+      const guard = createInstitutionScopeGuardV1({
+        ...harness.factoryInput,
+        anchorProvider: lookalike.value as ActiveInstitutionAnchorProviderV1,
+      });
+
+      await expect(guard.authorizeCurrentRequest()).resolves.toEqual({
+        kind: 'rejected',
+        code: 'institution_anchor_unavailable',
+      });
+      expect(harness.resolveCurrentRequest).toHaveBeenCalledTimes(1);
+      expect(harness.resolveMembership).toHaveBeenCalledTimes(1);
+      expect(lookalike.fakeMethod).not.toHaveBeenCalled();
+      expect(lookalike.getterReads()).toBe(0);
+      expect(lookalike.proxyTraps()).toBe(0);
+      expect(harness.resolveAnchor).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(['server_session', 'trusted_gateway'] as const)(
     'allows all four institution roles from owner-held %s evidence',
     async (source) => {
@@ -227,63 +659,39 @@ describe('BASE-02B institution scope guard composition', () => {
 
   it('calls owners in order with provenance-derived scope only', async () => {
     const calls: string[] = [];
-    const evidence = provenance({
-      tenantId: 'tenant-owner',
-      institutionId: 'institution-owner',
-    });
-    const resolveCurrentRequest = vi.fn(async () => {
-      calls.push('provenance');
-      return verified(evidence);
-    });
-    const resolveMembership = vi.fn(async (input: unknown) => {
-      calls.push('membership');
-      expect(input).toEqual({
-        provenance: evidence,
-        requestedScope: {
+    const harness = ownerHarness({
+      order: calls,
+      provenanceResolution: verified(
+        provenance({
           tenantId: 'tenant-owner',
           institutionId: 'institution-owner',
-        },
-      });
-      expect(Object.isFrozen(input)).toBe(true);
-      expect(Object.isFrozen((input as { requestedScope: object }).requestedScope)).toBe(
-        true,
-      );
-      return membership({
+        }),
+      ),
+      membershipResolution: membership({
         tenantId: 'tenant-owner',
         institutionId: 'institution-owner',
-      });
-    });
-    const resolveAnchor = vi.fn(async (input: unknown) => {
-      calls.push('anchor');
-      expect(input).toEqual({
+      }),
+      anchorResolution: anchor({
         tenantId: 'tenant-owner',
         institutionId: 'institution-owner',
-      });
-      expect(Object.isFrozen(input)).toBe(true);
-      return anchor({
-        tenantId: 'tenant-owner',
-        institutionId: 'institution-owner',
-      });
-    });
-    const guard = createInstitutionScopeGuardV1({
-      provenanceResolver: Object.freeze({
-        resolveCurrentRequest,
-      }) as unknown as FormalProvenanceResolverV1,
-      membershipProvider: Object.freeze({
-        resolve: resolveMembership,
-      }) as unknown as FreshActiveMembershipProviderV1,
-      anchorProvider: Object.freeze({
-        resolve: resolveAnchor,
-      }) as unknown as ActiveInstitutionAnchorProviderV1,
-      now: () => NOW,
+      }),
     });
 
-    await expect(guard.authorizeCurrentRequest()).resolves.toMatchObject({
+    await expect(harness.guard.authorizeCurrentRequest()).resolves.toMatchObject({
       kind: 'institution_scope_allow',
       tenantId: 'tenant-owner',
       institutionId: 'institution-owner',
     });
     expect(calls).toEqual(['provenance', 'membership', 'anchor']);
+    expect(harness.resolveMembership).toHaveBeenCalledWith({
+      accountId: 'account-a',
+      tenantId: 'tenant-owner',
+      institutionId: 'institution-owner',
+    });
+    expect(harness.resolveAnchor).toHaveBeenCalledWith({
+      tenantId: 'tenant-owner',
+      institutionId: 'institution-owner',
+    });
   });
 
   it.each([
@@ -393,31 +801,16 @@ describe('BASE-02B institution scope guard composition', () => {
   });
 
   it('consumes request provenance once per authorization and never retries it', async () => {
-    const resolveCurrentRequest = vi
-      .fn()
-      .mockResolvedValueOnce(verified())
-      .mockResolvedValueOnce(
-        Object.freeze({
-          kind: 'rejected',
-          code: 'provenance_source_denied',
-        }),
-      );
     const harness = ownerHarness();
-    const guard = createInstitutionScopeGuardV1({
-      ...harness.factoryInput,
-      provenanceResolver: Object.freeze({
-        resolveCurrentRequest,
-      }) as unknown as FormalProvenanceResolverV1,
-    });
 
-    await expect(guard.authorizeCurrentRequest()).resolves.toMatchObject({
+    await expect(harness.guard.authorizeCurrentRequest()).resolves.toMatchObject({
       kind: 'institution_scope_allow',
     });
-    await expect(guard.authorizeCurrentRequest()).resolves.toEqual({
+    await expect(harness.guard.authorizeCurrentRequest()).resolves.toEqual({
       kind: 'rejected',
       code: 'provenance_source_denied',
     });
-    expect(resolveCurrentRequest).toHaveBeenCalledTimes(2);
+    expect(harness.resolveCurrentRequest).toHaveBeenCalledTimes(1);
     expect(harness.resolveMembership).toHaveBeenCalledTimes(1);
     expect(harness.resolveAnchor).toHaveBeenCalledTimes(1);
   });
@@ -489,11 +882,6 @@ describe('BASE-02B institution scope guard composition', () => {
 
   it.each([
     [
-      'provenance TTL over five minutes',
-      { provenanceResolution: verified(provenance({ validUntil: '2026-07-22T08:04:00.001Z' })) },
-      'invalid_context_shape',
-    ],
-    [
       'membership TTL over sixty seconds',
       { membershipResolution: membership({ freshUntil: '2026-07-22T08:01:00.001Z' }) },
       'membership_invalid',
@@ -529,6 +917,19 @@ describe('BASE-02B institution scope guard composition', () => {
     await expect(
       ownerHarness(options).guard.authorizeCurrentRequest(),
     ).resolves.toEqual({ kind: 'rejected', code });
+  });
+
+  it('uses the owner-capped five-minute provenance deadline', async () => {
+    await expect(
+      ownerHarness({
+        provenanceResolution: verified(
+          provenance({ validUntil: '2026-07-22T08:04:00.001Z' }),
+        ),
+      }).guard.authorizeCurrentRequest(),
+    ).resolves.toMatchObject({
+      kind: 'institution_scope_allow',
+      provenanceValidUntil: '2026-07-22T08:04:00.000Z',
+    });
   });
 
   it.each([
@@ -582,7 +983,7 @@ describe('BASE-02B institution scope guard composition', () => {
     [
       'wrong prefix',
       { provenanceResolution: verified(provenance({ requestReference: reference('prf') })) },
-      'invalid_context_shape',
+      'provenance_unavailable',
     ],
     [
       'unknown key version',
@@ -741,30 +1142,76 @@ describe('BASE-02B institution scope guard composition', () => {
   it('rejects hostile owner output shapes without accessor or Proxy enumeration', async () => {
     let getterReads = 0;
     let proxyTraps = 0;
-    const accessorEvidence = {};
-    Object.defineProperty(accessorEvidence, 'source', {
+    const harness = ownerHarness();
+    const accessorOwnerInput = {
+      accountId: 'account-a',
+      tenantId: 'tenant-a',
+      institutionId: 'institution-a',
+      requestIdentifier: 'request-a',
+      proofIdentifier: 'proof-a',
+      issuedAt: '2026-07-22T07:59:00.000Z',
+      proofValidUntil: '2026-07-22T08:04:00.000Z',
+    };
+    Object.defineProperty(accessorOwnerInput, 'source', {
       enumerable: true,
       get() {
         getterReads += 1;
         return 'server_session';
       },
     });
-    const proxyMembership = new Proxy(membership(), {
-      ownKeys() {
-        proxyTraps += 1;
-        throw new Error('membership trap');
-      },
+    const provenanceResolver = createFormalRequestProvenanceResolverV1({
+      ownerInput:
+        accessorOwnerInput as unknown as FormalRequestProvenanceOwnerInputV1,
+      referenceCodec: controlledCodec(),
+      now: () => NOW,
+    });
+    const provenanceGuard = createInstitutionScopeGuardV1({
+      ...harness.factoryInput,
+      provenanceResolver,
     });
 
     await expect(
-      ownerHarness({
-        provenanceResolution: verified(accessorEvidence),
-      }).guard.authorizeCurrentRequest(),
-    ).resolves.toEqual({ kind: 'rejected', code: 'invalid_context_shape' });
+      provenanceGuard.authorizeCurrentRequest(),
+    ).resolves.toEqual({ kind: 'rejected', code: 'provenance_invalid' });
+
+    const hostileFact = new Proxy(
+      Object.freeze({
+        kind: 'current_membership_fact',
+        accountId: 'account-a',
+        tenantId: 'tenant-a',
+        institutionId: 'institution-a',
+        role: 'tenant_admin',
+        membershipId: 'membership-a',
+        membershipRevisionAt: '2026-07-22T07:58:00.000Z',
+        bindingId: 'binding-a',
+        bindingRevision: 7,
+        bindingRevisionAt: '2026-07-01T00:00:00.000Z',
+        bindingExpiresAt: null,
+        observedAt: '2026-07-22T08:00:00.000Z',
+      }),
+      {
+        ownKeys() {
+          proxyTraps += 1;
+          throw new Error('membership ownKeys trap');
+        },
+      },
+    );
+    const membershipProvider =
+      createRequestBoundFreshActiveMembershipProviderV1({
+        accountId: 'account-a',
+        factReader: Object.freeze({
+          resolve: vi.fn(async () => hostileFact),
+        }) as AuthoritativeInstitutionMembershipFactReaderV1,
+        referenceCodec: controlledCodec(),
+        now: () => NOW,
+      });
+    const membershipHarness = ownerHarness();
+    const membershipGuard = createInstitutionScopeGuardV1({
+      ...membershipHarness.factoryInput,
+      membershipProvider,
+    });
     await expect(
-      ownerHarness({
-        membershipResolution: proxyMembership,
-      }).guard.authorizeCurrentRequest(),
+      membershipGuard.authorizeCurrentRequest(),
     ).resolves.toEqual({ kind: 'rejected', code: 'membership_invalid' });
     expect(getterReads).toBe(0);
     expect(proxyTraps).toBe(0);

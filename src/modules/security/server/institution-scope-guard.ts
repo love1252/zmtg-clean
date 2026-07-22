@@ -9,6 +9,8 @@ import {
 } from '@/modules/security/domain/institution-access';
 import { isInstitutionRoleV1, type InstitutionRoleV1 } from '@/modules/institution-contracts/v1/institution-navigation';
 import { resolveInstitutionAccessContextV1 } from '@/modules/security/server/institution-access-context';
+import { isActiveInstitutionAnchorProviderV1 } from '@/modules/security/server/institution-anchor-provider';
+import { isFormalProvenanceResolverV1 } from '@/modules/security/server/formal-request-provenance-owner';
 import {
   INSTITUTION_GUARD_ACCEPTED_KEY_VERSIONS_V1,
   MEMBERSHIP_REJECTION_CODES_V1,
@@ -25,6 +27,7 @@ import {
   type RequestReferenceV1,
   type UserReferenceV1,
 } from '@/modules/security/server/institution-guard-evidence';
+import { isFreshActiveMembershipProviderV1 } from '@/modules/security/server/institution-membership-provider';
 
 const MAX_PROVENANCE_TTL_MS = 5 * 60 * 1_000;
 const MAX_CURRENT_FACT_TTL_MS = 60 * 1_000;
@@ -461,22 +464,31 @@ function snapshotMethod(
 
 function snapshotDependencies(value: unknown): ScopeGuardDependenciesV1 {
   const input = snapshotExactPlainRecord(value, FACTORY_INPUT_KEYS);
-  const resolveCurrentRequest = input
+  const provenanceResolverCandidate = input?.provenanceResolver;
+  const membershipProviderCandidate = input?.membershipProvider;
+  const anchorProviderCandidate = input?.anchorProvider;
+  const provenanceResolverIsAuthentic =
+    isFormalProvenanceResolverV1(provenanceResolverCandidate);
+  const membershipProviderIsAuthentic =
+    isFreshActiveMembershipProviderV1(membershipProviderCandidate);
+  const anchorProviderIsAuthentic =
+    isActiveInstitutionAnchorProviderV1(anchorProviderCandidate);
+  const resolveCurrentRequest = provenanceResolverIsAuthentic
     ? snapshotMethod(
-        input.provenanceResolver,
+        provenanceResolverCandidate,
         PROVENANCE_RESOLVER_KEYS,
         'resolveCurrentRequest',
       )
     : null;
-  const resolveMembership = input
+  const resolveMembership = membershipProviderIsAuthentic
     ? snapshotMethod(
-        input.membershipProvider,
+        membershipProviderCandidate,
         MEMBERSHIP_PROVIDER_KEYS,
         'resolve',
       )
     : null;
-  const resolveAnchor = input
-    ? snapshotMethod(input.anchorProvider, ANCHOR_PROVIDER_KEYS, 'resolve')
+  const resolveAnchor = anchorProviderIsAuthentic
+    ? snapshotMethod(anchorProviderCandidate, ANCHOR_PROVIDER_KEYS, 'resolve')
     : null;
   const now =
     input && typeof input.now === 'function' && !isProxy(input.now)
