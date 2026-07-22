@@ -26,6 +26,9 @@ import {
 const FACTORY_INPUT_KEYS = Object.freeze(['scopeGuard', 'referenceCodec', 'now'] as const);
 const REFERENCE_CODEC_KEYS = Object.freeze(['issue', 'verify'] as const);
 const AUTHORIZE_INPUT_KEYS = Object.freeze(['sectionId'] as const);
+const NAVIGATION_AUTHORIZE_INPUT_KEYS = Object.freeze([
+  'targetSectionId',
+] as const);
 const ISSUE_RESULT_KEYS = Object.freeze(['kind', 'reference'] as const);
 const VERIFY_RESULT_KEYS = Object.freeze(['kind', 'reference'] as const);
 const POLICY_OWNER_DOMAIN = 'security.institution-section-policy';
@@ -44,6 +47,16 @@ const MANAGEMENT_ROLES = Object.freeze([
   'tenant_operator',
 ] as const satisfies readonly InstitutionRoleV1[]);
 
+const CANONICAL_SECTION_ORDER = Object.freeze([
+  'workbench',
+  'customers',
+  'conversations',
+  'care',
+  'knowledge',
+  'analytics',
+  'system',
+] as const satisfies readonly InstitutionNavigationSectionIdV1[]);
+
 const SECTION_ROLE_MANIFEST = Object.freeze({
   workbench: ALL_ROLES,
   customers: ALL_ROLES,
@@ -61,15 +74,7 @@ const POLICY_MANIFEST_FIELDS = Object.freeze([
   'resource=institution_section',
   'action=section_enter',
   ...(
-    [
-      'workbench',
-      'customers',
-      'conversations',
-      'care',
-      'knowledge',
-      'analytics',
-      'system',
-    ] as const
+    CANONICAL_SECTION_ORDER
   ).flatMap((sectionId) =>
     ALL_ROLES.map(
       (role) =>
@@ -104,6 +109,9 @@ declare class InstitutionSectionGuardSealV1 {
 declare class InstitutionSectionAllowSealV1 {
   private readonly ownerSeal;
 }
+declare class InstitutionNavigationAuthorizationSealV1 {
+  private readonly ownerSeal;
+}
 
 export const INSTITUTION_SECTION_GUARD_FAILURE_CODES_V1 = Object.freeze([
   'scope_unavailable',
@@ -118,6 +126,19 @@ export type InstitutionSectionGuardFailureCodeV1 =
 export type InstitutionSectionGuardInputV1 = Readonly<{
   sectionId: InstitutionNavigationSectionIdV1;
 }>;
+
+export type InstitutionNavigationAuthorizationInputV1 = Readonly<{
+  targetSectionId: InstitutionNavigationSectionIdV1;
+}>;
+
+export type InstitutionNavigationAuthorizationV1 =
+  InstitutionNavigationAuthorizationSealV1 &
+    Readonly<{
+      kind: 'institution_navigation_authorization';
+      targetSectionId: InstitutionNavigationSectionIdV1 | null;
+      targetAccess: 'allowed' | 'blocked';
+      availableSectionIds: readonly InstitutionNavigationSectionIdV1[];
+    }>;
 
 export type InstitutionSectionAllowV1 = InstitutionSectionAllowSealV1 &
   Readonly<{
@@ -141,6 +162,9 @@ export type InstitutionSectionGuardV1 = InstitutionSectionGuardSealV1 &
     authorizeCurrentSection: (
       input: InstitutionSectionGuardInputV1,
     ) => Promise<InstitutionSectionGuardResolutionV1>;
+    authorizeCurrentNavigation: (
+      input: InstitutionNavigationAuthorizationInputV1,
+    ) => Promise<InstitutionNavigationAuthorizationV1>;
   }>;
 
 type DependenciesV1 = Readonly<{
@@ -155,6 +179,10 @@ type CanonicalInstantV1 = Readonly<{ raw: string; epochMs: number }>;
 
 const authenticGuards = new WeakSet<object>();
 const authenticAllows = new WeakSet<object>();
+const authenticNavigationAuthorizations = new WeakSet<object>();
+const emptyAvailableSectionIds = Object.freeze(
+  [] as InstitutionNavigationSectionIdV1[],
+);
 const failures = Object.freeze(
   Object.fromEntries(
     INSTITUTION_SECTION_GUARD_FAILURE_CODES_V1.map((code) => [
@@ -171,6 +199,35 @@ function reject(
   code: InstitutionSectionGuardFailureCodeV1,
 ): InstitutionSectionGuardResolutionV1 {
   return failures[code];
+}
+
+function mintNavigationAuthorization(
+  targetSectionId: InstitutionNavigationSectionIdV1 | null,
+  targetAccess: 'allowed' | 'blocked',
+  availableSectionIds: readonly InstitutionNavigationSectionIdV1[],
+): InstitutionNavigationAuthorizationV1 {
+  const frozenAvailableSectionIds =
+    availableSectionIds === emptyAvailableSectionIds
+      ? emptyAvailableSectionIds
+      : Object.freeze([...availableSectionIds]);
+  const decision = Object.freeze({
+    kind: 'institution_navigation_authorization',
+    targetSectionId,
+    targetAccess,
+    availableSectionIds: frozenAvailableSectionIds,
+  });
+  authenticNavigationAuthorizations.add(decision);
+  return decision as unknown as InstitutionNavigationAuthorizationV1;
+}
+
+function blockNavigation(
+  targetSectionId: InstitutionNavigationSectionIdV1 | null,
+): InstitutionNavigationAuthorizationV1 {
+  return mintNavigationAuthorization(
+    targetSectionId,
+    'blocked',
+    emptyAvailableSectionIds,
+  );
 }
 
 function snapshotExactPlainRecord(
@@ -412,6 +469,58 @@ async function authorizeCurrentSection(
   return allow as unknown as InstitutionSectionAllowV1;
 }
 
+async function authorizeCurrentNavigation(
+  dependencies: DependenciesV1,
+  value: InstitutionNavigationAuthorizationInputV1,
+): Promise<InstitutionNavigationAuthorizationV1> {
+  const input = snapshotExactPlainRecord(
+    value,
+    NAVIGATION_AUTHORIZE_INPUT_KEYS,
+  );
+  if (!input || !isInstitutionNavigationSectionIdV1(input.targetSectionId)) {
+    return blockNavigation(null);
+  }
+  const targetSectionId = input.targetSectionId;
+  if (dependencies.preflightFailure || !dependencies.authorizeCurrentRequest) {
+    return blockNavigation(targetSectionId);
+  }
+
+  let rawScopeResolution: unknown;
+  try {
+    rawScopeResolution = await dependencies.authorizeCurrentRequest();
+  } catch {
+    return blockNavigation(targetSectionId);
+  }
+  if (!isInstitutionScopeAllowV1(rawScopeResolution)) {
+    return blockNavigation(targetSectionId);
+  }
+  const decisionTime = trustedNow(dependencies.now);
+  if (!decisionTime || !scopeIsCurrent(rawScopeResolution, decisionTime)) {
+    return blockNavigation(targetSectionId);
+  }
+  if (!issuePolicyRevision(dependencies)) {
+    return blockNavigation(targetSectionId);
+  }
+
+  const availableSectionIds = Object.freeze(
+    CANONICAL_SECTION_ORDER.filter((sectionId) =>
+      SECTION_ROLE_MANIFEST[sectionId].some(
+        (allowedRole) => allowedRole === rawScopeResolution.role,
+      ),
+    ),
+  );
+  const targetAccess = availableSectionIds.some(
+    (sectionId) => sectionId === targetSectionId,
+  )
+    ? 'allowed'
+    : 'blocked';
+  return mintNavigationAuthorization(
+    targetSectionId,
+    targetAccess,
+    availableSectionIds,
+  );
+}
+
 export function isInstitutionSectionGuardV1(
   value: unknown,
 ): value is InstitutionSectionGuardV1 {
@@ -424,10 +533,25 @@ export function isInstitutionSectionAllowV1(
   return value !== null && typeof value === 'object' && !isProxy(value) && authenticAllows.has(value);
 }
 
+export function isInstitutionNavigationAuthorizationV1(
+  value: unknown,
+): value is InstitutionNavigationAuthorizationV1 {
+  try {
+    return (
+      value !== null &&
+      typeof value === 'object' &&
+      !isProxy(value) &&
+      authenticNavigationAuthorizations.has(value)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Composes a genuine request scope guard into section-entry authorization. It accepts no caller
- * scope, role, evidence, policy revision, or business permission and exposes no parser or handle
- * registration surface.
+ * Composes a genuine request scope guard into section-entry and canonical navigation
+ * authorization. It accepts no caller scope, role, evidence, policy revision, or business
+ * permission and exposes no parser or handle registration surface.
  */
 export function createInstitutionSectionGuardV1(input: Readonly<{
   scopeGuard: InstitutionScopeGuardV1;
@@ -438,6 +562,9 @@ export function createInstitutionSectionGuardV1(input: Readonly<{
   const guard = Object.freeze({
     authorizeCurrentSection: (value: InstitutionSectionGuardInputV1) =>
       authorizeCurrentSection(dependencies, value),
+    authorizeCurrentNavigation: (
+      value: InstitutionNavigationAuthorizationInputV1,
+    ) => authorizeCurrentNavigation(dependencies, value),
   });
   authenticGuards.add(guard);
   return guard as unknown as InstitutionSectionGuardV1;

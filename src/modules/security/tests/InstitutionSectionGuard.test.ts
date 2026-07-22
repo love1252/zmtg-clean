@@ -35,8 +35,11 @@ import {
 import {
   createInstitutionSectionGuardV1,
   INSTITUTION_SECTION_GUARD_FAILURE_CODES_V1,
+  isInstitutionNavigationAuthorizationV1,
   isInstitutionSectionAllowV1,
   isInstitutionSectionGuardV1,
+  type InstitutionNavigationAuthorizationInputV1,
+  type InstitutionNavigationAuthorizationV1,
   type InstitutionSectionAllowV1,
   type InstitutionSectionGuardInputV1,
   type InstitutionSectionGuardV1,
@@ -900,6 +903,7 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
     expect(Object.keys(runtime).sort()).toEqual([
       'INSTITUTION_SECTION_GUARD_FAILURE_CODES_V1',
       'createInstitutionSectionGuardV1',
+      'isInstitutionNavigationAuthorizationV1',
       'isInstitutionSectionAllowV1',
       'isInstitutionSectionGuardV1',
     ]);
@@ -912,5 +916,204 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
       'action_role_denied',
       'policy_unavailable',
     ]);
+  });
+});
+
+describe('BASE-NAV-01 canonical visible navigation authorization', () => {
+  const managementSections = INSTITUTION_NAVIGATION_SECTION_IDS_V1;
+  const frontlineSections = Object.freeze([
+    'workbench',
+    'customers',
+    'conversations',
+    'care',
+  ] as const satisfies readonly InstitutionNavigationSectionIdV1[]);
+
+  it.each([
+    ['tenant_admin', 'system', 'allowed', managementSections],
+    ['tenant_operator', 'knowledge', 'allowed', managementSections],
+    ['consultant', 'care', 'allowed', frontlineSections],
+    ['customer_service', 'analytics', 'blocked', frontlineSections],
+  ] as const)(
+    'returns one frozen canonical decision for %s targeting %s',
+    async (role, targetSectionId, targetAccess, availableSectionIds) => {
+      const scope = genuineScopeComposition(role);
+      const guard = sectionHarness(role, { scopeGuard: scope.guard }).guard;
+
+      const decision = await guard.authorizeCurrentNavigation({
+        targetSectionId,
+      });
+
+      expect(decision).toEqual({
+        kind: 'institution_navigation_authorization',
+        targetSectionId,
+        targetAccess,
+        availableSectionIds,
+      });
+      expect(isInstitutionNavigationAuthorizationV1(decision)).toBe(true);
+      expect(Object.isFrozen(decision)).toBe(true);
+      expect(Object.isFrozen(decision.availableSectionIds)).toBe(true);
+      expect(new Set(decision.availableSectionIds).size).toBe(
+        decision.availableSectionIds.length,
+      );
+      expect(scope.downstream.resolveMembershipFact).toHaveBeenCalledTimes(1);
+      expect(scope.downstream.resolveAnchorFact).toHaveBeenCalledTimes(1);
+      expect(Object.keys(decision)).toEqual([
+        'kind',
+        'targetSectionId',
+        'targetAccess',
+        'availableSectionIds',
+      ]);
+    },
+  );
+
+  it('accepts only exact targetSectionId input and keeps the old method compatible', async () => {
+    expectTypeOf<InstitutionNavigationAuthorizationInputV1>().toEqualTypeOf<
+      Readonly<{ targetSectionId: InstitutionNavigationSectionIdV1 }>
+    >();
+    type NavigationInput = Parameters<
+      InstitutionSectionGuardV1['authorizeCurrentNavigation']
+    >[0];
+    expectTypeOf<keyof NavigationInput>().toEqualTypeOf<'targetSectionId'>();
+
+    const invalidGuard = sectionHarness().guard;
+    await expect(
+      invalidGuard.authorizeCurrentNavigation({
+        targetSectionId: 'system',
+        role: 'tenant_admin',
+      } as never),
+    ).resolves.toEqual({
+      kind: 'institution_navigation_authorization',
+      targetSectionId: null,
+      targetAccess: 'blocked',
+      availableSectionIds: [],
+    });
+
+    const oldGuard = sectionHarness().guard;
+    await expect(
+      oldGuard.authorizeCurrentSection({ sectionId: 'workbench' }),
+    ).resolves.toMatchObject({
+      kind: 'institution_section_allow',
+      sectionId: 'workbench',
+    });
+  });
+
+  it.each([
+    [
+      'scope rejection',
+      createInstitutionScopeGuardV1({} as never),
+      genuineCodec(),
+      () => SECTION_NOW,
+    ],
+    [
+      'expired scope',
+      genuineScopeGuard(),
+      genuineCodec(),
+      () => new Date('2026-07-22T08:01:00.000Z'),
+    ],
+    [
+      'trusted clock exception',
+      genuineScopeGuard(),
+      genuineCodec(),
+      () => {
+        throw new Error('navigation clock');
+      },
+    ],
+    ['policy', genuineScopeGuard(), genuineUnavailableCodec(), () => SECTION_NOW],
+  ] as const)(
+    'fails closed with empty navigation when %s is unavailable',
+    async (_label, scopeGuard, referenceCodec, now) => {
+      const guard = sectionHarness('tenant_admin', {
+        scopeGuard,
+        referenceCodec,
+        now,
+      }).guard;
+      const decision = await guard.authorizeCurrentNavigation({
+        targetSectionId: 'workbench',
+      });
+
+      expect(decision).toEqual({
+        kind: 'institution_navigation_authorization',
+        targetSectionId: 'workbench',
+        targetAccess: 'blocked',
+        availableSectionIds: [],
+      });
+      expect(isInstitutionNavigationAuthorizationV1(decision)).toBe(true);
+    },
+  );
+
+  it('spends one guard once across both methods and cannot concatenate navigation grants', async () => {
+    const scope = genuineScopeComposition('tenant_admin');
+    const guard = sectionHarness('tenant_admin', { scopeGuard: scope.guard }).guard;
+
+    await expect(
+      guard.authorizeCurrentNavigation({ targetSectionId: 'workbench' }),
+    ).resolves.toMatchObject({ targetAccess: 'allowed' });
+    await expect(
+      guard.authorizeCurrentNavigation({ targetSectionId: 'system' }),
+    ).resolves.toEqual({
+      kind: 'institution_navigation_authorization',
+      targetSectionId: 'system',
+      targetAccess: 'blocked',
+      availableSectionIds: [],
+    });
+    await expect(
+      guard.authorizeCurrentSection({ sectionId: 'workbench' }),
+    ).resolves.toEqual({ kind: 'rejected', code: 'scope_unavailable' });
+    expect(scope.downstream.resolveMembershipFact).toHaveBeenCalledTimes(1);
+    expect(scope.downstream.resolveAnchorFact).toHaveBeenCalledTimes(1);
+  });
+
+  it('recognizes only genuine decisions without reading hostile values', async () => {
+    const genuine = await sectionHarness().guard.authorizeCurrentNavigation({
+      targetSectionId: 'workbench',
+    });
+    let getterReads = 0;
+    let traps = 0;
+    const accessor: Record<string, unknown> = {};
+    Object.defineProperty(accessor, 'targetAccess', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('decision getter must not run');
+      },
+    });
+    const handler: ProxyHandler<object> = {
+      get() {
+        traps += 1;
+        throw new Error('decision get trap must not run');
+      },
+      getPrototypeOf() {
+        traps += 1;
+        throw new Error('decision prototype trap must not run');
+      },
+    };
+    const proxy = new Proxy(genuine, handler);
+    const revoked = Proxy.revocable(genuine, handler);
+    revoked.revoke();
+
+    for (const value of [
+      {},
+      Object.freeze({
+        kind: 'institution_navigation_authorization',
+        targetSectionId: 'system',
+        targetAccess: 'allowed',
+        availableSectionIds: Object.freeze(['system']),
+      }),
+      { ...genuine },
+      Object.create(genuine) as object,
+      accessor,
+      proxy,
+      revoked.proxy,
+    ]) {
+      expect(isInstitutionNavigationAuthorizationV1(value)).toBe(false);
+    }
+    expect(getterReads).toBe(0);
+    expect(traps).toBe(0);
+    expectTypeOf<{
+      kind: 'institution_navigation_authorization';
+      targetSectionId: InstitutionNavigationSectionIdV1 | null;
+      targetAccess: 'allowed' | 'blocked';
+      availableSectionIds: readonly InstitutionNavigationSectionIdV1[];
+    }>().not.toMatchTypeOf<InstitutionNavigationAuthorizationV1>();
   });
 });
