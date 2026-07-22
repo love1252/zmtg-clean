@@ -1,5 +1,40 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const wireMocks = vi.hoisted(() => {
+  const authorizeCurrentInstitutionNavigationV1 = vi.fn();
+  const authorization = Object.freeze({
+    authorizeCurrentInstitutionNavigationV1,
+  });
+  return {
+    authorization,
+    authorizeCurrentInstitutionNavigationV1,
+    genuineDecisions: new WeakSet<object>(),
+    resolveInstitutionServerAuthorizationV1: vi.fn(),
+  };
+});
+
+vi.mock('@/modules/institution/server/institution-server-runtime', () => ({
+  resolveInstitutionServerAuthorizationV1:
+    wireMocks.resolveInstitutionServerAuthorizationV1,
+}));
+
+vi.mock('@/modules/security/server/institution-request-authorization', () => ({
+  isInstitutionRequestAuthorizationV1: vi.fn(
+    (value: unknown) => value === wireMocks.authorization,
+  ),
+}));
+
+vi.mock('@/modules/security/server/institution-section-guard', () => ({
+  isInstitutionNavigationAuthorizationV1: vi.fn(
+    (value: unknown) =>
+      value !== null &&
+      typeof value === 'object' &&
+      wireMocks.genuineDecisions.has(value),
+  ),
+}));
+
+import HospitalCapabilityOffRoute from '@/app/hospital/[...slug]/page';
 import {
   INSTITUTION_NAVIGATION_SECTION_IDS_V1,
   INSTITUTION_NAVIGATION_SECTIONS_V1,
@@ -359,5 +394,272 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
 
     unmount();
+  });
+});
+
+function mintNavigationDecision(
+  targetSectionId: string,
+  targetAccess: 'allowed' | 'blocked',
+  availableSectionIds: readonly string[],
+) {
+  const decision = Object.freeze({
+    kind: 'institution_navigation_authorization' as const,
+    targetSectionId,
+    targetAccess,
+    availableSectionIds: Object.freeze([...availableSectionIds]),
+  });
+  wireMocks.genuineDecisions.add(decision);
+  return decision;
+}
+
+describe('BASE-WIRE-01 canonical route authorization wiring', () => {
+  beforeEach(() => {
+    wireMocks.resolveInstitutionServerAuthorizationV1.mockReset();
+    wireMocks.authorizeCurrentInstitutionNavigationV1.mockReset();
+    wireMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValue(
+      wireMocks.authorization,
+    );
+  });
+
+  it('resolves an unknown slug before authorization and keeps notFound at zero calls', async () => {
+    await expect(
+      HospitalCapabilityOffRoute({
+        params: Promise.resolve({ slug: ['unknown-section'] }),
+      }),
+    ).rejects.toThrow(/404/u);
+    expect(
+      wireMocks.resolveInstitutionServerAuthorizationV1,
+    ).not.toHaveBeenCalled();
+    expect(
+      wireMocks.authorizeCurrentInstitutionNavigationV1,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('uses one genuine admin decision for the exact target and seven-section capability-off shell', async () => {
+    wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+      mintNavigationDecision('system', 'allowed', allSectionIds),
+    );
+
+    render(
+      await HospitalCapabilityOffRoute({
+        params: Promise.resolve({ slug: ['system'] }),
+      }),
+    );
+
+    expect(
+      wireMocks.resolveInstitutionServerAuthorizationV1,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      wireMocks.authorizeCurrentInstitutionNavigationV1,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      wireMocks.authorizeCurrentInstitutionNavigationV1,
+    ).toHaveBeenCalledWith({ targetSectionId: 'system' });
+    expect(screen.getByText('系统概览尚未开放')).toBeInTheDocument();
+    const desktopNavigation = screen.getByRole('navigation', {
+      name: '机构端桌面导航',
+    });
+    expect(within(desktopNavigation).getAllByRole('link')).toHaveLength(7);
+    expect(
+      within(desktopNavigation).getByRole('link', { name: '管理中心' }),
+    ).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('uses one genuine frontline decision for the canonical first four sections', async () => {
+    wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+      mintNavigationDecision('customers', 'allowed', [
+        'workbench',
+        'customers',
+        'conversations',
+        'care',
+      ]),
+    );
+
+    render(
+      await HospitalCapabilityOffRoute({
+        params: Promise.resolve({ slug: ['customers'] }),
+      }),
+    );
+
+    expect(screen.getByText('客户列表尚未开放')).toBeInTheDocument();
+    const desktopNavigation = screen.getByRole('navigation', {
+      name: '机构端桌面导航',
+    });
+    expect(
+      within(desktopNavigation)
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('aria-label')),
+    ).toEqual(['工作台', '客户中心', '会话工作台', '预约与随访']);
+    expect(
+      screen
+        .getByRole('navigation', { name: '机构端移动导航' })
+        .querySelector('button'),
+    ).toBeNull();
+  });
+
+  it('renders forbidden with the frontline navigation when a genuine management target is blocked', async () => {
+    wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+      mintNavigationDecision('knowledge', 'blocked', [
+        'workbench',
+        'customers',
+        'conversations',
+        'care',
+      ]),
+    );
+
+    render(
+      await HospitalCapabilityOffRoute({
+        params: Promise.resolve({ slug: ['knowledge'] }),
+      }),
+    );
+
+    expect(screen.getByText('当前账号不可访问该栏目')).toBeInTheDocument();
+    expect(
+      screen.getByText('当前仅确认栏目访问受限；未读取或展示任何业务数据。'),
+    ).toBeInTheDocument();
+    const desktopNavigation = screen.getByRole('navigation', {
+      name: '机构端桌面导航',
+    });
+    expect(within(desktopNavigation).getAllByRole('link')).toHaveLength(4);
+    expect(
+      within(desktopNavigation).queryByRole('link', { name: '知识库' }),
+    ).not.toBeInTheDocument();
+    expect(document.querySelector('[aria-current="page"]')).toBeNull();
+    const main = screen.getByRole('main');
+    expect(within(main).queryByText(/^\d+$/u)).not.toBeInTheDocument();
+    expect(within(main).queryAllByRole('button')).toHaveLength(0);
+    expect(within(main).queryAllByRole('link')).toHaveLength(0);
+  });
+
+  it('maps dependency, authenticity, empty and target-mismatch failures to unavailable with empty navigation', async () => {
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const fakeAuthorizationAccessor: Record<string, unknown> = {};
+    Object.defineProperty(
+      fakeAuthorizationAccessor,
+      'authorizeCurrentInstitutionNavigationV1',
+      {
+        enumerable: true,
+        get() {
+          getterReads += 1;
+          throw new Error('authorization getter must not run');
+        },
+      },
+    );
+    const genuineDecision = mintNavigationDecision('analytics', 'allowed', [
+      'workbench',
+      'customers',
+      'conversations',
+      'care',
+      'knowledge',
+      'analytics',
+      'system',
+    ]);
+    const decisionAccessor: Record<string, unknown> = {};
+    Object.defineProperty(decisionAccessor, 'targetAccess', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('decision getter must not run');
+      },
+    });
+    const decisionProxy = new Proxy(genuineDecision, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('decision proxy trap must not run');
+      },
+    });
+    const revokedDecision = Proxy.revocable(genuineDecision, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('revoked decision trap must not run');
+      },
+    });
+    revokedDecision.revoke();
+
+    const cases: readonly (() => void)[] = [
+      () => {
+        wireMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(
+          null,
+        );
+      },
+      () => {
+        wireMocks.resolveInstitutionServerAuthorizationV1.mockRejectedValueOnce(
+          new Error('server authorization unavailable'),
+        );
+      },
+      () => {
+        wireMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(
+          fakeAuthorizationAccessor,
+        );
+      },
+      () => {
+        wireMocks.authorizeCurrentInstitutionNavigationV1.mockRejectedValueOnce(
+          new Error('navigation unavailable'),
+        );
+      },
+      () => {
+        wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce({
+          kind: 'institution_navigation_authorization',
+          targetSectionId: 'analytics',
+          targetAccess: 'allowed',
+          availableSectionIds: allSectionIds,
+        });
+      },
+      () => {
+        wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce({
+          ...genuineDecision,
+        });
+      },
+      () => {
+        wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+          decisionAccessor,
+        );
+      },
+      () => {
+        wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+          decisionProxy,
+        );
+      },
+      () => {
+        wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+          revokedDecision.proxy,
+        );
+      },
+      () => {
+        wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+          mintNavigationDecision('system', 'allowed', allSectionIds),
+        );
+      },
+      () => {
+        wireMocks.authorizeCurrentInstitutionNavigationV1.mockResolvedValueOnce(
+          mintNavigationDecision('analytics', 'blocked', []),
+        );
+      },
+    ];
+
+    for (const configure of cases) {
+      wireMocks.resolveInstitutionServerAuthorizationV1.mockReset();
+      wireMocks.authorizeCurrentInstitutionNavigationV1.mockReset();
+      wireMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValue(
+        wireMocks.authorization,
+      );
+      configure();
+      const { unmount } = render(
+        await HospitalCapabilityOffRoute({
+          params: Promise.resolve({ slug: ['analytics'] }),
+        }),
+      );
+
+      expect(screen.getByText('机构访问状态暂时不可用')).toBeInTheDocument();
+      const desktopNavigation = screen.getByRole('navigation', {
+        name: '机构端桌面导航',
+      });
+      expect(within(desktopNavigation).queryAllByRole('link')).toHaveLength(0);
+      expect(document.querySelector('[aria-current="page"]')).toBeNull();
+      unmount();
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
   });
 });

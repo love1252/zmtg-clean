@@ -3,15 +3,15 @@ import { createHmac } from 'node:crypto';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
-const workbenchRuntimeMocks = vi.hoisted(() => ({
-  resolveInstitutionWorkbenchRuntimeV1: vi.fn(),
+const serverRuntimeMocks = vi.hoisted(() => ({
+  resolveInstitutionServerAuthorizationV1: vi.fn(),
 }));
 
 vi.mock(
-  '@/modules/institution-workbench/server/institution-workbench-runtime',
+  '@/modules/institution/server/institution-server-runtime',
   () => ({
-    resolveInstitutionWorkbenchRuntimeV1:
-      workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1,
+    resolveInstitutionServerAuthorizationV1:
+      serverRuntimeMocks.resolveInstitutionServerAuthorizationV1,
   }),
 );
 
@@ -75,7 +75,6 @@ const payload = Object.freeze({
   issuedAt: '2026-07-22T08:00:00.000Z',
   expiresAt: '2026-07-22T09:00:00.000Z',
 });
-
 const membershipRow: CurrentInstitutionMembershipFactRow = {
   accountId: payload.accountId,
   accountStatus: 'active',
@@ -121,7 +120,9 @@ function sessionKeyRing(): FormalServerSessionKeyRingV1 {
   };
 }
 
-function authorizationFixture() {
+function authorizationFixture(
+  role: CurrentInstitutionMembershipFactRow['membershipRole'] = 'tenant_admin',
+) {
   const codec = createInstitutionGuardReferenceCodecV1({
     keyRing: {
       currentIssueKey: { keyVersion: 1, keyMaterial: REFERENCE_KEY },
@@ -129,7 +130,9 @@ function authorizationFixture() {
     },
     now: () => NOW,
   });
-  const membershipRead = vi.fn(async () => [membershipRow]);
+  const membershipRead = vi.fn(async () => [
+    { ...membershipRow, membershipRole: role },
+  ]);
   const membershipFactReader = createAuthoritativeInstitutionMembershipFactReaderV1({
     repository: { findCurrentInstitutionMembershipFacts: membershipRead },
     now: () => NOW,
@@ -431,255 +434,234 @@ describe('WB-ENTRY-02A server-owned 工作台入口', () => {
   });
 });
 
-describe('WB-ENTRY-02A /hospital capability-off 页面', () => {
+describe('BASE-WIRE-01 /hospital server navigation authorization', () => {
   beforeEach(() => {
-    workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockReset();
-    workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockResolvedValue({
-      kind: 'blocked',
-      view: 'capability_off',
-    });
+    serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockReset();
+    serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValue(
+      createInstitutionRequestAuthorizationV1({} as never),
+    );
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('不读浏览器 demo session，以冻结顺序展示七栏与移动五入口', async () => {
+  it('uses one genuine admin navigation authorization for seven sections and the authorized boundary', async () => {
+    const created = authorizationFixture('tenant_admin');
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
+    serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(
+      created.authorization,
+    );
 
     render(await HospitalPage());
 
-    expect(screen.getByRole('heading', { name: '工作台', level: 1 })).toBeInTheDocument();
-    expect(screen.getAllByRole('main')).toHaveLength(1);
+    expect(serverRuntimeMocks.resolveInstitutionServerAuthorizationV1).toHaveBeenCalledTimes(1);
+    expect(serverRuntimeMocks.resolveInstitutionServerAuthorizationV1).toHaveBeenCalledWith();
+    expect(created.membershipRead).toHaveBeenCalledTimes(1);
+    expect(created.anchorRead).toHaveBeenCalledTimes(1);
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.queryByText('正在检查登录状态...')).not.toBeInTheDocument();
     expect(
-      workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1,
-    ).toHaveBeenCalledTimes(1);
-    expect(
-      screen.getByText('当前仅展示导航入口，不代表已授权或能力已开放'),
+      screen
+        .getByRole('main')
+        .querySelector('[data-capability-state="authorized-boundary"]'),
     ).toBeInTheDocument();
-    expect(screen.getByText('安全边界')).toBeInTheDocument();
     expect(
-      screen.queryByText('栏目可见性由服务端权限与能力状态共同决定'),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText('安全访问')).not.toBeInTheDocument();
+      screen.getByRole('heading', { name: '工作台访问已核验', level: 2 }),
+    ).toBeInTheDocument();
 
-    const desktopNavigation = screen.getByRole('navigation', { name: '机构端桌面导航' });
-    const desktopLinks = within(desktopNavigation).getAllByRole('link');
-    expect(desktopLinks.map((link) => link.getAttribute('aria-label'))).toEqual(
-      DESKTOP_NAVIGATION.map(([label]) => label),
-    );
-    for (const [label, href] of DESKTOP_NAVIGATION) {
-      expect(within(desktopNavigation).getByRole('link', { name: label })).toHaveAttribute(
-        'href',
-        href,
-      );
-    }
+    const desktopNavigation = screen.getByRole('navigation', {
+      name: '机构端桌面导航',
+    });
+    expect(
+      within(desktopNavigation)
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('aria-label')),
+    ).toEqual(DESKTOP_NAVIGATION.map(([label]) => label));
+    expect(
+      within(desktopNavigation).getByRole('link', { name: '工作台' }),
+    ).toHaveAttribute('aria-current', 'page');
 
-    const mobileNavigation = screen.getByRole('navigation', { name: '机构端移动导航' });
+    const mobileNavigation = screen.getByRole('navigation', {
+      name: '机构端移动导航',
+    });
     expect(
       Array.from(mobileNavigation.querySelectorAll('a, button')).map((entry) =>
         entry.textContent?.trim(),
       ),
     ).toEqual(MOBILE_NAVIGATION_LABELS);
-    expect(within(mobileNavigation).getByRole('link', { name: '工作台' })).toHaveAttribute('href', '/hospital');
-    expect(within(mobileNavigation).getByRole('link', { name: '客户' })).toHaveAttribute('href', '/hospital/customers');
-    expect(within(mobileNavigation).getByRole('link', { name: '会话' })).toHaveAttribute('href', '/hospital/conversations');
-    expect(within(mobileNavigation).getByRole('link', { name: '待办' })).toHaveAttribute('href', '/hospital/care');
-
-    fireEvent.click(within(mobileNavigation).getByRole('button', { name: '更多' }));
-    const moreNavigation = screen.getByRole('dialog', { name: '更多栏目' });
-    const moreLinks = within(moreNavigation).getAllByRole('link');
-    expect(moreLinks.map((link) => link.textContent?.trim())).toEqual(
-      MOBILE_MORE_NAVIGATION.map(([label]) => label),
+    fireEvent.click(
+      within(mobileNavigation).getByRole('button', { name: '更多' }),
     );
-    for (const [label, href] of MOBILE_MORE_NAVIGATION) {
-      expect(within(moreNavigation).getByRole('link', { name: label })).toHaveAttribute(
-        'href',
-        href,
+    expect(
+      within(screen.getByRole('dialog', { name: '更多栏目' }))
+        .getAllByRole('link')
+        .map((link) => link.textContent?.trim()),
+    ).toEqual(MOBILE_MORE_NAVIGATION.map(([label]) => label));
+
+    await expect(
+      created.authorization.authorizeCurrentInstitutionSectionV1({
+        sectionId: 'workbench',
+      }),
+    ).resolves.toEqual({ kind: 'rejected', code: 'scope_unavailable' });
+  });
+
+  it.each(['consultant', 'customer_service'] as const)(
+    'uses the genuine %s snapshot for the canonical first four sections',
+    async (role) => {
+      const created = authorizationFixture(role);
+      serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(
+        created.authorization,
       );
-    }
-  });
 
-  it('保持低敏阻断外观，不渲染授权细节、假事实、业务入口或零值', async () => {
-    render(await HospitalPage());
+      render(await HospitalPage());
 
-    expect(
-      screen.getByRole('heading', { name: '数据服务/能力尚未安全开放', level: 2 }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('当前仅展示安全阻断状态；业务数据和业务入口保持隐藏。'),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: '工作台行动数据暂未开放', level: 3 }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: '行动队列' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Care 行动概览')).not.toBeInTheDocument();
-    expect(screen.queryByRole('list', { name: '客户旅程' })).not.toBeInTheDocument();
-    expect(screen.queryByText('机构能力')).not.toBeInTheDocument();
-    expect(screen.queryByText('0')).not.toBeInTheDocument();
-    expect(screen.queryByText(/nextAction/u)).not.toBeInTheDocument();
-    expect(screen.queryAllByRole('link', { name: /查看|新建/u })).toHaveLength(0);
-    for (const forbidden of [
-      /tenant_admin/u,
-      /customer_service/u,
-      /scope_unavailable/u,
-      /action_role_denied/u,
-      /policyRevision/u,
-      /validUntil/u,
-      /accountId/u,
-      /tenantId/u,
-      /institutionId/u,
-      /登录失败/u,
-      /授权失败/u,
-    ]) {
-      expect(screen.queryByText(forbidden)).not.toBeInTheDocument();
-    }
-  });
+      expect(
+        screen
+          .getByRole('main')
+          .querySelector('[data-capability-state="authorized-boundary"]'),
+      ).toBeInTheDocument();
+      const desktopNavigation = screen.getByRole('navigation', {
+        name: '机构端桌面导航',
+      });
+      expect(
+        within(desktopNavigation)
+          .getAllByRole('link')
+          .map((link) => link.getAttribute('aria-label')),
+      ).toEqual(DESKTOP_NAVIGATION.slice(0, 4).map(([label]) => label));
+      const mobileNavigation = screen.getByRole('navigation', {
+        name: '机构端移动导航',
+      });
+      expect(
+        within(mobileNavigation)
+          .getAllByRole('link')
+          .map((link) => link.textContent?.trim()),
+      ).toEqual(['工作台', '客户', '会话', '待办']);
+      expect(
+        within(mobileNavigation).queryByRole('button', { name: '更多' }),
+      ).not.toBeInTheDocument();
+      expect(created.membershipRead).toHaveBeenCalledTimes(1);
+      expect(created.anchorRead).toHaveBeenCalledTimes(1);
+    },
+  );
 
-  it.each(['fake_allowed', 'blocked', 'reject', 'sync_throw'] as const)(
-    'runtime %s 时保持原 capability-off UI',
+  it.each(['null', 'reject', 'sync throw'] as const)(
+    'fails closed with empty navigation when the shared root is %s',
     async (runtimeCase) => {
-      if (runtimeCase === 'reject') {
-        workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockRejectedValueOnce(
-          new Error('runtime unavailable'),
+      if (runtimeCase === 'null') {
+        serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(
+          null,
         );
-      } else if (runtimeCase === 'sync_throw') {
-        workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockImplementationOnce(
-          () => {
-            throw new Error('runtime unavailable');
-          },
+      } else if (runtimeCase === 'reject') {
+        serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockRejectedValueOnce(
+          new Error('shared authorization unavailable'),
         );
       } else {
-        workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockResolvedValueOnce({
-          kind: runtimeCase === 'fake_allowed' ? 'allowed' : 'blocked',
-          view: 'capability_off',
-        });
+        serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockImplementationOnce(
+          () => {
+            throw new Error('shared authorization unavailable');
+          },
+        );
       }
 
       render(await HospitalPage());
 
+      expect(serverRuntimeMocks.resolveInstitutionServerAuthorizationV1).toHaveBeenCalledTimes(1);
+      const desktopNavigation = screen.getByRole('navigation', {
+        name: '机构端桌面导航',
+      });
+      const mobileNavigation = screen.getByRole('navigation', {
+        name: '机构端移动导航',
+      });
+      expect(within(desktopNavigation).queryAllByRole('link')).toHaveLength(0);
+      expect(within(mobileNavigation).queryAllByRole('link')).toHaveLength(0);
+      expect(
+        within(mobileNavigation).queryByRole('button', { name: '更多' }),
+      ).not.toBeInTheDocument();
       expect(
         screen.getByRole('heading', {
           name: '数据服务/能力尚未安全开放',
           level: 2,
         }),
       ).toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: '行动队列' })).not.toBeInTheDocument();
-      expect(screen.queryByText(/accountId|tenantId|institutionId|policy|key/iu)).not.toBeInTheDocument();
       expect(
-        workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1,
-      ).toHaveBeenCalledTimes(1);
+        screen.queryByRole('heading', { name: '工作台访问已核验', level: 2 }),
+      ).not.toBeInTheDocument();
     },
   );
 
-  it('仅 genuine allowed 进入低敏 authorized-boundary，仍保留桌面七栏和移动五入口', async () => {
-    const created = authorizationFixture();
-    const genuineDecision = await createControlledInstitutionWorkbenchEntryV1({
-      authorization: created.authorization,
-    });
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockResolvedValueOnce(
-      genuineDecision,
-    );
-
-    render(await HospitalPage());
-
-    const main = screen.getByRole('main');
-    expect(
-      main.querySelector('[data-capability-state="authorized-boundary"]'),
-    ).toBeInTheDocument();
-    expect(
-      within(main).getByRole('heading', { name: '工作台访问已核验', level: 2 }),
-    ).toBeInTheDocument();
-    expect(
-      within(main).getByText('当前仅确认工作台访问边界；业务数据、操作入口和实时统计仍未开放。'),
-    ).toBeInTheDocument();
-    expect(within(main).queryByRole('region', { name: '行动队列' })).not.toBeInTheDocument();
-    expect(within(main).queryAllByRole('link')).toHaveLength(0);
-    expect(within(main).queryAllByRole('button')).toHaveLength(0);
-    expect(within(main).queryByText('0')).not.toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
-
-    const desktopNavigation = screen.getByRole('navigation', { name: '机构端桌面导航' });
-    expect(
-      within(desktopNavigation)
-        .getAllByRole('link')
-        .map((link) => link.getAttribute('aria-label')),
-    ).toEqual(DESKTOP_NAVIGATION.map(([label]) => label));
-    const mobileNavigation = screen.getByRole('navigation', { name: '机构端移动导航' });
-    expect(
-      Array.from(mobileNavigation.querySelectorAll('a, button')).map((entry) =>
-        entry.textContent?.trim(),
-      ),
-    ).toEqual(MOBILE_NAVIGATION_LABELS);
-
-    for (const forbidden of [
-      /accountId|tenantId|institutionId|role|scope|policy|key|reference|resolution/iu,
-      /Care 行动概览|机构能力|查看|新建/u,
-    ]) {
-      expect(within(main).queryByText(forbidden)).not.toBeInTheDocument();
-    }
-  });
-
-  it('plain fake、clone、accessor、Proxy 与 revoked allowed 均不能打开 authorized-boundary', async () => {
-    const created = authorizationFixture();
-    const genuineDecision = await createControlledInstitutionWorkbenchEntryV1({
-      authorization: created.authorization,
-    });
+  it('rejects fake, clone, accessor, Proxy and revoked authorizations without method access', async () => {
+    const genuine = createInstitutionRequestAuthorizationV1({} as never);
     let getterReads = 0;
     let proxyTraps = 0;
     const accessor: Record<string, unknown> = {};
-    Object.defineProperty(accessor, 'kind', {
-      enumerable: true,
-      get() {
-        getterReads += 1;
-        throw new Error('decision getter must not run');
+    Object.defineProperty(
+      accessor,
+      'authorizeCurrentInstitutionNavigationV1',
+      {
+        enumerable: true,
+        get() {
+          getterReads += 1;
+          throw new Error('authorization method getter must not run');
+        },
       },
-    });
-    const hostileProxy = new Proxy(genuineDecision, {
+    );
+    const proxy = new Proxy(genuine, {
       getPrototypeOf() {
         proxyTraps += 1;
-        throw new Error('decision proxy trap must not run');
+        throw new Error('authorization proxy trap must not run');
       },
     });
-    const revoked = Proxy.revocable(genuineDecision, {
+    const revoked = Proxy.revocable(genuine, {
       getPrototypeOf() {
         proxyTraps += 1;
-        throw new Error('revoked decision trap must not run');
+        throw new Error('revoked authorization trap must not run');
       },
     });
     revoked.revoke();
 
-    for (const forgedDecision of [
-      Object.freeze({ kind: 'allowed', view: 'capability_off' }),
-      Object.freeze({ ...genuineDecision }),
+    for (const value of [
+      {},
+      { ...genuine },
+      Object.create(genuine) as object,
       accessor,
-      hostileProxy,
+      proxy,
       revoked.proxy,
     ]) {
-      workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockResolvedValueOnce(
-        forgedDecision as never,
+      serverRuntimeMocks.resolveInstitutionServerAuthorizationV1.mockResolvedValueOnce(
+        value,
       );
       const { unmount } = render(await HospitalPage());
 
+      const desktopNavigation = screen.getByRole('navigation', {
+        name: '机构端桌面导航',
+      });
+      expect(within(desktopNavigation).queryAllByRole('link')).toHaveLength(0);
       expect(
         screen
           .getByRole('main')
           .querySelector('[data-capability-state="blocked"]'),
       ).toBeInTheDocument();
-      expect(
-        screen.queryByRole('heading', { name: '工作台访问已核验', level: 2 }),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.getByRole('heading', { name: '数据服务/能力尚未安全开放', level: 2 }),
-      ).toBeInTheDocument();
       unmount();
     }
     expect(getterReads).toBe(0);
     expect(proxyTraps).toBe(0);
+  });
+
+  it('does not render authorization details, numbers, buttons or business entry points', async () => {
+    render(await HospitalPage());
+
+    const main = screen.getByRole('main');
+    expect(within(main).queryByText('0')).not.toBeInTheDocument();
+    expect(within(main).queryAllByRole('button')).toHaveLength(0);
+    expect(within(main).queryAllByRole('link')).toHaveLength(0);
+    expect(
+      within(main).queryByText(
+        /role|accountId|tenantId|institutionId|scope|policy|key|provider/iu,
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(main).queryByText(/Care 行动概览|机构能力|查看|新建/u),
+    ).not.toBeInTheDocument();
   });
 });

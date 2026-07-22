@@ -1,25 +1,47 @@
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
-import { INSTITUTION_NAVIGATION_SECTION_IDS_V1 } from '@/modules/institution-contracts/v1/institution-navigation';
+import type { InstitutionNavigationSectionIdV1 } from '@/modules/institution-contracts/v1/institution-navigation';
+import { resolveInstitutionServerAuthorizationV1 } from '@/modules/institution/server/institution-server-runtime';
 import { InstitutionWorkbenchCapabilityOff } from '@/modules/institution-workbench/components/InstitutionWorkbenchCapabilityOff';
-import { isInstitutionWorkbenchEntryDecisionV1 } from '@/modules/institution-workbench/server/institution-workbench-entry';
-import { resolveInstitutionWorkbenchRuntimeV1 } from '@/modules/institution-workbench/server/institution-workbench-runtime';
+import { isInstitutionRequestAuthorizationV1 } from '@/modules/security/server/institution-request-authorization';
+import {
+  isInstitutionNavigationAuthorizationV1,
+  type InstitutionNavigationAuthorizationV1,
+} from '@/modules/security/server/institution-section-guard';
+
+const TARGET_SECTION_ID = 'workbench' as const;
+const EMPTY_SECTION_IDS = Object.freeze([]) as readonly InstitutionNavigationSectionIdV1[];
 
 export default async function HospitalPage() {
-  let decision: unknown;
+  let navigationAuthorization: unknown;
   try {
-    decision = await resolveInstitutionWorkbenchRuntimeV1();
+    const requestAuthorization = await resolveInstitutionServerAuthorizationV1();
+    if (isInstitutionRequestAuthorizationV1(requestAuthorization)) {
+      navigationAuthorization =
+        await requestAuthorization.authorizeCurrentInstitutionNavigationV1({
+          targetSectionId: TARGET_SECTION_ID,
+        });
+    }
   } catch {
-    decision = undefined;
+    navigationAuthorization = undefined;
   }
+
+  let exactNavigationAuthorization: InstitutionNavigationAuthorizationV1 | null = null;
+  if (
+    isInstitutionNavigationAuthorizationV1(navigationAuthorization) &&
+    navigationAuthorization.targetSectionId === TARGET_SECTION_ID
+  ) {
+    exactNavigationAuthorization = navigationAuthorization;
+  }
+  const availableSectionIds = exactNavigationAuthorization
+    ? exactNavigationAuthorization.availableSectionIds
+    : EMPTY_SECTION_IDS;
   const genuineAllowed =
-    isInstitutionWorkbenchEntryDecisionV1(decision) &&
-    decision.kind === 'allowed' &&
-    decision.view === 'capability_off';
+    exactNavigationAuthorization?.targetAccess === 'allowed';
 
   return (
     <InstitutionNavigationShell
-      activeSectionId="workbench"
-      availableSectionIds={INSTITUTION_NAVIGATION_SECTION_IDS_V1}
+      activeSectionId={TARGET_SECTION_ID}
+      availableSectionIds={availableSectionIds}
     >
       <InstitutionWorkbenchCapabilityOff genuineAllowed={genuineAllowed} />
     </InstitutionNavigationShell>
