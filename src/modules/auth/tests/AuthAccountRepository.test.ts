@@ -4,7 +4,7 @@ import {
   consumeFormalServerSessionUserSnapshotV1,
   createAuthAccountRepository,
   isFormalServerSessionUserSnapshotV1,
-  type FormalServerSessionUserSnapshotV1,
+  type FormalServerSessionUserResolutionV1,
 } from '@/modules/auth/server/auth-account-repository';
 import type { TenantDatabase } from '@/server/db/client';
 import {
@@ -383,7 +383,7 @@ describe('正式账号 repository', () => {
     expect(result).toEqual([institutionMembershipFactRow]);
   });
 
-  it('按已验证的账号、租户、机构三元组单次查询并从数据库生成低敏会话用户', async () => {
+  it('按三元组和 active 状态 JOIN，使 revoked 历史不与当前 active 绑定形成多行', async () => {
     type LookupInput = Parameters<
       ReturnType<typeof createAuthAccountRepository>['findCurrentFormalSessionUser']
     >[0];
@@ -394,7 +394,7 @@ describe('正式账号 repository', () => {
       selectRows: [[formalSessionUserRow]],
     });
 
-    const result = await createAuthAccountRepository(
+    const resolution = await createAuthAccountRepository(
       query.database,
     ).findCurrentFormalSessionUser({
       accountId: 'auth-user-chenlei',
@@ -466,6 +466,11 @@ describe('正式账号 repository', () => {
             operator: 'eq',
             value: 'institution-zhengpu',
           },
+          {
+            column: authAccountInstitutionBindings.status,
+            operator: 'eq',
+            value: 'active',
+          },
         ],
       },
     );
@@ -475,13 +480,16 @@ describe('正式账号 repository', () => {
       value: 'auth-user-chenlei',
     });
     expect(query.selectChains[0].limit).toHaveBeenCalledWith(2);
-    expectTypeOf(result).toEqualTypeOf<FormalServerSessionUserSnapshotV1 | null>();
-    expect(result).not.toBeNull();
-    if (!result) throw new Error('expected formal session user snapshot');
-    expect(Object.isFrozen(result)).toBe(true);
-    expect(Object.keys(result)).toEqual([]);
-    expect(isFormalServerSessionUserSnapshotV1(result)).toBe(true);
-    expect(consumeFormalServerSessionUserSnapshotV1(result)).toEqual({
+    expectTypeOf(resolution).toEqualTypeOf<FormalServerSessionUserResolutionV1>();
+    expect(resolution.kind).toBe('resolved');
+    if (resolution.kind !== 'resolved') {
+      throw new Error('expected formal session user snapshot');
+    }
+    expect(Object.isFrozen(resolution)).toBe(true);
+    expect(Object.isFrozen(resolution.snapshot)).toBe(true);
+    expect(Object.keys(resolution.snapshot)).toEqual([]);
+    expect(isFormalServerSessionUserSnapshotV1(resolution.snapshot)).toBe(true);
+    expect(consumeFormalServerSessionUserSnapshotV1(resolution.snapshot)).toEqual({
       id: 'auth-user-chenlei',
       username: 'chenlei_admin',
       name: '机构陈磊',
@@ -489,23 +497,48 @@ describe('正式账号 repository', () => {
       tenantId: 'tenant-zhengpu',
       institutionId: 'institution-zhengpu',
     });
-    expect(consumeFormalServerSessionUserSnapshotV1(result)).toBeNull();
-    expect(isFormalServerSessionUserSnapshotV1(result)).toBe(false);
+    expect(consumeFormalServerSessionUserSnapshotV1(resolution.snapshot)).toBeNull();
+    expect(isFormalServerSessionUserSnapshotV1(resolution.snapshot)).toBe(false);
   });
 
-  it('拒绝重置密码、锁定、撤销、过期、多行和作用域不一致的会话账号快照', async () => {
+  it('把账号和绑定业务状态统一分类为低敏 denied', async () => {
     const cases: unknown[][] = [
+      [],
       [{ ...formalSessionUserRow, accountPasswordResetRequired: true }],
       [{ ...formalSessionUserRow, accountStatus: 'locked' }],
       [{ ...formalSessionUserRow, accountLockedUntil: new Date('2099-01-01T00:00:00.000Z') }],
       [{ ...formalSessionUserRow, membershipRole: 'platform_admin' }],
       [{ ...formalSessionUserRow, bindingStatus: 'revoked', bindingRevokedAt: new Date() }],
       [{ ...formalSessionUserRow, bindingSource: 'migration_placeholder' }],
-      [{ ...formalSessionUserRow, bindingSource: 'unknown_source' }],
       [{ ...formalSessionUserRow, bindingAssignedAt: new Date('2099-01-01T00:00:00.000Z') }],
-      [{ ...formalSessionUserRow, bindingAssignedAt: new Date(Number.NaN) }],
       [{ ...formalSessionUserRow, bindingExpiresAt: new Date('2000-01-01T00:00:00.000Z') }],
+      [{ ...formalSessionUserRow, bindingRevokedAt: new Date('2026-06-25T07:00:00.000Z') }],
+    ];
+
+    for (const rows of cases) {
+      const query = createDatabase({ selectRows: [rows] });
+      await expect(
+        createAuthAccountRepository(query.database).findCurrentFormalSessionUser({
+          accountId: 'auth-user-chenlei',
+          tenantId: 'tenant-zhengpu',
+          institutionId: 'institution-zhengpu',
+        }),
+      ).resolves.toEqual({ kind: 'denied' });
+      expect(query.select).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('把结构、类型、多行和作用域完整性错误统一分类为低敏 invalid', async () => {
+    const cases: unknown[][] = [
+      [{ ...formalSessionUserRow, accountStatus: 'unknown_status' }],
+      [{ ...formalSessionUserRow, accountPasswordResetRequired: 'false' }],
+      [{ ...formalSessionUserRow, membershipRole: 'unknown_role' }],
+      [{ ...formalSessionUserRow, bindingStatus: 'unknown_status' }],
+      [{ ...formalSessionUserRow, bindingSource: 'unknown_source' }],
+      [{ ...formalSessionUserRow, accountLockedUntil: new Date(Number.NaN) }],
+      [{ ...formalSessionUserRow, bindingAssignedAt: new Date(Number.NaN) }],
       [{ ...formalSessionUserRow, bindingExpiresAt: new Date(Number.NaN) }],
+      [{ ...formalSessionUserRow, bindingRevokedAt: new Date(Number.NaN) }],
       [{ ...formalSessionUserRow, bindingVersion: 0 }],
       [{ ...formalSessionUserRow, bindingVersion: 1.5 }],
       [formalSessionUserRow, { ...formalSessionUserRow }],
@@ -523,7 +556,7 @@ describe('正式账号 repository', () => {
           tenantId: 'tenant-zhengpu',
           institutionId: 'institution-zhengpu',
         }),
-      ).resolves.toBeNull();
+      ).resolves.toEqual({ kind: 'invalid' });
       expect(query.select).toHaveBeenCalledTimes(1);
     }
   });
@@ -574,7 +607,7 @@ describe('正式账号 repository', () => {
         createAuthAccountRepository(query.database).findCurrentFormalSessionUser(
           input as never,
         ),
-      ).resolves.toBeNull();
+      ).resolves.toEqual({ kind: 'invalid' });
       expect(query.select).not.toHaveBeenCalled();
     }
     expect(getterReads).toBe(0);
@@ -615,27 +648,75 @@ describe('正式账号 repository', () => {
         tenantId: 'tenant-zhengpu',
         institutionId: 'institution-zhengpu',
       });
-      expect(result).toBeNull();
+      expect(result).toEqual({ kind: 'invalid' });
       expect(isFormalServerSessionUserSnapshotV1(result)).toBe(false);
     }
     expect(getterReads).toBe(0);
     expect(proxyTraps).toBe(0);
   });
 
+  it('把数据库与系统时钟故障统一分类为低敏 unavailable', async () => {
+    const databaseFailure = {
+      select: vi.fn(() => {
+        throw new Error('database unavailable');
+      }),
+    } as unknown as TenantDatabase;
+    const databaseResolution = await createAuthAccountRepository(
+      databaseFailure,
+    ).findCurrentFormalSessionUser({
+      accountId: 'auth-user-chenlei',
+      tenantId: 'tenant-zhengpu',
+      institutionId: 'institution-zhengpu',
+    });
+    expect(databaseResolution).toEqual({ kind: 'unavailable' });
+    expect(Object.isFrozen(databaseResolution)).toBe(true);
+
+    for (const clockFailure of [
+      () => {
+        throw new Error('clock unavailable');
+      },
+      () => Number.NaN,
+    ]) {
+      const query = createDatabase({ selectRows: [[formalSessionUserRow]] });
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(clockFailure);
+      try {
+        const resolution = await createAuthAccountRepository(
+          query.database,
+        ).findCurrentFormalSessionUser({
+          accountId: 'auth-user-chenlei',
+          tenantId: 'tenant-zhengpu',
+          institutionId: 'institution-zhengpu',
+        });
+        expect(resolution).toEqual({ kind: 'unavailable' });
+        expect(Object.isFrozen(resolution)).toBe(true);
+        expect(JSON.stringify(resolution)).not.toContain('auth-user-chenlei');
+      } finally {
+        nowSpy.mockRestore();
+      }
+    }
+  });
+
   it('只认可 genuine handle，普通、clone、null-prototype、accessor、proxy 和 revoked 均零读取拒绝', async () => {
     const query = createDatabase({ selectRows: [[formalSessionUserRow], [formalSessionUserRow]] });
     const repository = createAuthAccountRepository(query.database);
-    const genuine = await repository.findCurrentFormalSessionUser({
+    const genuineResolution = await repository.findCurrentFormalSessionUser({
       accountId: 'auth-user-chenlei',
       tenantId: 'tenant-zhengpu',
       institutionId: 'institution-zhengpu',
     });
-    const revoked = await repository.findCurrentFormalSessionUser({
+    const revokedResolution = await repository.findCurrentFormalSessionUser({
       accountId: 'auth-user-chenlei',
       tenantId: 'tenant-zhengpu',
       institutionId: 'institution-zhengpu',
     });
-    if (!genuine || !revoked) throw new Error('expected genuine snapshots');
+    if (
+      genuineResolution.kind !== 'resolved' ||
+      revokedResolution.kind !== 'resolved'
+    ) {
+      throw new Error('expected genuine snapshots');
+    }
+    const genuine = genuineResolution.snapshot;
+    const revoked = revokedResolution.snapshot;
     expect(consumeFormalServerSessionUserSnapshotV1(revoked)).not.toBeNull();
     let getterReads = 0;
     let proxyTraps = 0;
@@ -676,14 +757,17 @@ describe('正式账号 repository', () => {
 
   it('并发双消费只有一次得到冻结 session user', async () => {
     const query = createDatabase({ selectRows: [[formalSessionUserRow]] });
-    const snapshot = await createAuthAccountRepository(
+    const resolution = await createAuthAccountRepository(
       query.database,
     ).findCurrentFormalSessionUser({
       accountId: 'auth-user-chenlei',
       tenantId: 'tenant-zhengpu',
       institutionId: 'institution-zhengpu',
     });
-    if (!snapshot) throw new Error('expected formal session user snapshot');
+    if (resolution.kind !== 'resolved') {
+      throw new Error('expected formal session user snapshot');
+    }
+    const snapshot = resolution.snapshot;
     const results = await Promise.all([
       Promise.resolve().then(() => consumeFormalServerSessionUserSnapshotV1(snapshot)),
       Promise.resolve().then(() => consumeFormalServerSessionUserSnapshotV1(snapshot)),

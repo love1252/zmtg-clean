@@ -87,6 +87,8 @@ const CANONICAL_UTC_INSTANT =
 const TOKEN_PROFILE =
   /^v1\.k([1-9][0-9]{0,2})\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/u;
 const BASE64URL = /^[A-Za-z0-9_-]+$/u;
+const CANONICAL_RANDOM_UUID_V4 =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 export type FormalServerSessionCurrentKeyV1 = Readonly<{
   keyVersion: number;
@@ -405,6 +407,43 @@ function snapshotKeyRing(value: unknown): SnapshotKeyRingV1 | null {
   });
 }
 
+function snapshotSigningCurrentKey(
+  value: unknown,
+): SnapshotKeyV1 | null {
+  try {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      isProxy(value) ||
+      Object.getPrototypeOf(value) !== Object.prototype
+    ) {
+      return null;
+    }
+    const ownKeys = Reflect.ownKeys(value);
+    if (
+      ownKeys.length !== KEY_RING_KEYS.length ||
+      !KEY_RING_KEYS.every((key) => ownKeys.includes(key))
+    ) {
+      return null;
+    }
+    const currentKeyDescriptor = Object.getOwnPropertyDescriptor(
+      value,
+      'currentKey',
+    );
+    if (
+      !currentKeyDescriptor ||
+      !currentKeyDescriptor.enumerable ||
+      !('value' in currentKeyDescriptor)
+    ) {
+      return null;
+    }
+    return snapshotCurrentKey(currentKeyDescriptor.value);
+  } catch {
+    return null;
+  }
+}
+
 function findVerificationKey(
   keyRing: SnapshotKeyRingV1,
   keyVersion: number,
@@ -586,11 +625,11 @@ export function issueFormalServerSessionCookieV1(input: Readonly<{
     ) {
       return formalSessionUnavailable;
     }
-    const keyRing = snapshotKeyRing(snapshot.sessionKeyRing);
+    const currentKey = snapshotSigningCurrentKey(snapshot.sessionKeyRing);
     const now = snapshot.now;
     if (
-      !keyRing ||
-      !keyRing.currentKey.keyMaterial ||
+      !currentKey ||
+      !currentKey.keyMaterial ||
       typeof now !== 'function' ||
       isProxy(now)
     ) {
@@ -601,7 +640,9 @@ export function issueFormalServerSessionCookieV1(input: Readonly<{
     const expiresAtEpochMs = issuedAtEpochMs + MAX_SESSION_TTL_MS;
     if (!Number.isFinite(expiresAtEpochMs)) return formalSessionUnavailable;
     const sessionId = crypto.randomUUID();
-    if (!isInstitutionScopeIdV1(sessionId)) return formalSessionUnavailable;
+    if (!CANONICAL_RANDOM_UUID_V4.test(sessionId)) {
+      return formalSessionUnavailable;
+    }
     const issuedAt = new Date(issuedAtEpochMs).toISOString();
     const expiresAt = new Date(expiresAtEpochMs).toISOString();
     const payloadSegment = Buffer.from(JSON.stringify({
@@ -613,8 +654,8 @@ export function issueFormalServerSessionCookieV1(input: Readonly<{
       issuedAt,
       expiresAt,
     })).toString('base64url');
-    const keyVersion = keyRing.currentKey.keyVersion;
-    const tagSegment = createHmac('sha256', keyRing.currentKey.keyMaterial)
+    const keyVersion = currentKey.keyVersion;
+    const tagSegment = createHmac('sha256', currentKey.keyMaterial)
       .update(`${PROTOCOL_DOMAIN_V1}\n${keyVersion}\n${payloadSegment}`)
       .digest('base64url');
     const cookieValue = `v1.k${keyVersion}.${payloadSegment}.${tagSegment}`;
@@ -733,7 +774,7 @@ function resolveSessionOwner(
   } catch {
     return unavailable;
   }
-  if (!isInstitutionScopeIdV1(requestIdentifier)) return unavailable;
+  if (!CANONICAL_RANDOM_UUID_V4.test(requestIdentifier)) return unavailable;
 
   const ownerInput = Object.freeze({
     source: 'server_session',

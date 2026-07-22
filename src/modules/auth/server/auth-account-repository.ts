@@ -1,12 +1,17 @@
 import { and, eq } from 'drizzle-orm';
 import { isProxy } from 'node:util/types';
-import type {
-  AuthAccountInstitutionBindingRecord,
-  AuthAccountRecord,
-  AuthAccountStatus,
-  AuthTenantMembershipRecord,
+import {
+  isAuthAccountStatus,
+  type AuthAccountInstitutionBindingRecord,
+  type AuthAccountRecord,
+  type AuthAccountStatus,
+  type AuthTenantMembershipRecord,
 } from '@/modules/auth/domain/auth-account';
-import type { AuthRole, AuthSessionUser } from '@/modules/auth/domain/session';
+import {
+  isAuthRole,
+  type AuthRole,
+  type AuthSessionUser,
+} from '@/modules/auth/domain/session';
 import { isInstitutionRoleV1 } from '@/modules/institution-contracts/v1/institution-navigation';
 import { isInstitutionScopeIdV1 } from '@/modules/security/domain/institution-access';
 import type { TenantDatabase } from '@/server/db/client';
@@ -54,7 +59,7 @@ export type FormalServerSessionUserRepositoryV1 = {
     accountId: string;
     tenantId: string;
     institutionId: string;
-  }): Promise<FormalServerSessionUserSnapshotV1 | null>;
+  }): Promise<FormalServerSessionUserResolutionV1>;
 };
 
 declare const formalServerSessionUserSnapshotMarkerV1: unique symbol;
@@ -62,6 +67,15 @@ declare const formalServerSessionUserSnapshotMarkerV1: unique symbol;
 export type FormalServerSessionUserSnapshotV1 = Readonly<{
   readonly [formalServerSessionUserSnapshotMarkerV1]: 'formal_server_session_user_snapshot_v1';
 }>;
+
+export type FormalServerSessionUserResolutionV1 =
+  | Readonly<{
+      kind: 'resolved';
+      snapshot: FormalServerSessionUserSnapshotV1;
+    }>
+  | Readonly<{ kind: 'denied' }>
+  | Readonly<{ kind: 'invalid' }>
+  | Readonly<{ kind: 'unavailable' }>;
 
 type FormalServerSessionUserRowV1 = {
   accountId: string;
@@ -126,6 +140,11 @@ const formalServerSessionUserSnapshotValuesV1 = new WeakMap<
   object,
   Readonly<AuthSessionUser>
 >();
+const formalSessionUserDeniedV1 = Object.freeze({ kind: 'denied' } as const);
+const formalSessionUserInvalidV1 = Object.freeze({ kind: 'invalid' } as const);
+const formalSessionUserUnavailableV1 = Object.freeze({
+  kind: 'unavailable',
+} as const);
 
 function snapshotExactPlainRecord(
   value: unknown,
@@ -417,7 +436,7 @@ export function createAuthAccountRepository(
 
     async findCurrentFormalSessionUser(input) {
       const query = parseFormalSessionUserQueryV1(input);
-      if (!query) return null;
+      if (!query) return formalSessionUserInvalidV1;
 
       let rowsValue: unknown;
       try {
@@ -461,27 +480,33 @@ export function createAuthAccountRepository(
                 authAccountInstitutionBindings.institutionId,
                 query.institutionId,
               ),
+              eq(authAccountInstitutionBindings.status, 'active'),
             ),
           )
           .where(eq(authUsers.id, query.accountId))
           .limit(2);
       } catch {
-        return null;
+        return formalSessionUserUnavailableV1;
       }
 
       const rows = snapshotExactRows(rowsValue);
-      if (!rows || rows.length !== 1) return null;
+      if (!rows) return formalSessionUserInvalidV1;
+      if (rows.length === 0) return formalSessionUserDeniedV1;
+      if (rows.length !== 1) return formalSessionUserInvalidV1;
       const row = snapshotExactPlainRecord(
         rows[0],
         FORMAL_SESSION_USER_ROW_KEYS,
       );
-      if (!row) return null;
+      if (!row) return formalSessionUserInvalidV1;
 
       let nowEpochMs: number;
       try {
         nowEpochMs = Date.now();
       } catch {
-        return null;
+        return formalSessionUserUnavailableV1;
+      }
+      if (!Number.isFinite(nowEpochMs)) {
+        return formalSessionUserUnavailableV1;
       }
       const lockedUntilEpochMs = row.accountLockedUntil === null
         ? null
@@ -494,7 +519,6 @@ export function createAuthAccountRepository(
         ? null
         : dateEpochMs(row.bindingRevokedAt);
       if (
-        !Number.isFinite(nowEpochMs) ||
         !isInstitutionScopeIdV1(row.accountId) ||
         !isInstitutionScopeIdV1(row.membershipUserId) ||
         !isInstitutionScopeIdV1(row.membershipTenantId) ||
@@ -506,8 +530,13 @@ export function createAuthAccountRepository(
         row.accountUsername.length === 0 ||
         typeof row.accountDisplayName !== 'string' ||
         typeof row.membershipDisplayName !== 'string' ||
+        !isAuthAccountStatus(row.accountStatus) ||
         typeof row.accountPasswordResetRequired !== 'boolean' ||
-        !isInstitutionRoleV1(row.membershipRole) ||
+        !isAuthRole(row.membershipRole) ||
+        (row.bindingStatus !== 'active' && row.bindingStatus !== 'revoked') ||
+        (row.bindingSource !== 'manual_admin' &&
+          row.bindingSource !== 'migration_placeholder' &&
+          row.bindingSource !== 'system') ||
         !Number.isSafeInteger(row.bindingVersion) ||
         Number(row.bindingVersion) <= 0 ||
         (row.accountLockedUntil !== null && lockedUntilEpochMs === null) ||
@@ -519,29 +548,38 @@ export function createAuthAccountRepository(
         row.bindingAccountId !== query.accountId ||
         row.membershipTenantId !== query.tenantId ||
         row.bindingTenantId !== query.tenantId ||
-        row.bindingInstitutionId !== query.institutionId ||
+        row.bindingInstitutionId !== query.institutionId
+      ) {
+        return formalSessionUserInvalidV1;
+      }
+
+      if (
         row.accountStatus !== 'active' ||
         row.accountPasswordResetRequired ||
         (lockedUntilEpochMs !== null && lockedUntilEpochMs > nowEpochMs) ||
-        row.bindingStatus !== 'active' ||
-        (row.bindingSource !== 'manual_admin' && row.bindingSource !== 'system') ||
+        !isInstitutionRoleV1(row.membershipRole) ||
+        row.bindingStatus === 'revoked' ||
+        row.bindingSource === 'migration_placeholder' ||
         assignedAtEpochMs > nowEpochMs ||
         revokedAtEpochMs !== null ||
         (expiresAtEpochMs !== null && expiresAtEpochMs <= nowEpochMs)
       ) {
-        return null;
+        return formalSessionUserDeniedV1;
       }
 
-      return mintFormalServerSessionUserSnapshotV1(
-        Object.freeze({
-          id: row.accountId,
-          username: row.accountUsername,
-          name: row.membershipDisplayName || row.accountDisplayName,
-          role: row.membershipRole,
-          tenantId: row.membershipTenantId,
-          institutionId: row.bindingInstitutionId,
-        }),
-      );
+      return Object.freeze({
+        kind: 'resolved',
+        snapshot: mintFormalServerSessionUserSnapshotV1(
+          Object.freeze({
+            id: row.accountId,
+            username: row.accountUsername,
+            name: row.membershipDisplayName || row.accountDisplayName,
+            role: row.membershipRole,
+            tenantId: row.membershipTenantId,
+            institutionId: row.bindingInstitutionId,
+          }),
+        ),
+      });
     },
 
     async recordLoginFailure(input) {

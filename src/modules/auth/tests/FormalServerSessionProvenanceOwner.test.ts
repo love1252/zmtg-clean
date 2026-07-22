@@ -222,8 +222,10 @@ async function repositorySessionUserSnapshot(): Promise<FormalServerSessionUserS
     tenantId: payload.tenantId,
     institutionId: payload.institutionId,
   });
-  if (!snapshot) throw new Error('expected formal session user snapshot');
-  return snapshot;
+  if (snapshot.kind !== 'resolved') {
+    throw new Error('expected formal session user snapshot');
+  }
+  return snapshot.snapshot;
 }
 
 describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
@@ -279,7 +281,9 @@ describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
       issuedAt: VERIFIED_AT.toISOString(),
       expiresAt: '2026-07-22T16:02:00.000Z',
     });
-    expect(decoded.sessionId).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(decoded.sessionId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+    );
     expect(Buffer.from(JSON.stringify(decoded)).toString('base64url')).toBe(payloadSegment);
   });
 
@@ -478,6 +482,73 @@ describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
     expect(cryptoMocks.randomUUID).not.toHaveBeenCalled();
   });
 
+  it('consumes permanently when clock throws or returns an invalid Date', async () => {
+    for (const now of [
+      () => {
+        throw new Error('clock unavailable');
+      },
+      () => new Date(Number.NaN),
+    ]) {
+      const sessionUserSnapshot = await repositorySessionUserSnapshot();
+      cryptoMocks.randomUUID.mockClear();
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot,
+        sessionKeyRing: keyRing(),
+        now,
+      })).toEqual({
+        kind: 'unavailable',
+        code: 'formal_session_unavailable',
+      });
+      expect(isFormalServerSessionUserSnapshotV1(sessionUserSnapshot)).toBe(false);
+      expect(cryptoMocks.randomUUID).not.toHaveBeenCalled();
+
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot,
+        sessionKeyRing: keyRing(),
+        now: () => VERIFIED_AT,
+      })).toEqual({
+        kind: 'unavailable',
+        code: 'formal_session_unavailable',
+      });
+      expect(cryptoMocks.randomUUID).not.toHaveBeenCalled();
+    }
+  });
+
+  it('requires a canonical random UUID and consumes permanently on random failure', async () => {
+    const randomFailures = [
+      () => {
+        throw new Error('random unavailable');
+      },
+      () => 'not-a-canonical-uuid' as ReturnType<typeof cryptoMocks.randomUUID>,
+    ];
+
+    for (const randomFailure of randomFailures) {
+      const sessionUserSnapshot = await repositorySessionUserSnapshot();
+      cryptoMocks.randomUUID.mockImplementationOnce(randomFailure);
+      const callsBefore = cryptoMocks.randomUUID.mock.calls.length;
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot,
+        sessionKeyRing: keyRing(),
+        now: () => VERIFIED_AT,
+      })).toEqual({
+        kind: 'unavailable',
+        code: 'formal_session_unavailable',
+      });
+      expect(cryptoMocks.randomUUID.mock.calls.length).toBe(callsBefore + 1);
+      expect(isFormalServerSessionUserSnapshotV1(sessionUserSnapshot)).toBe(false);
+
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot,
+        sessionKeyRing: keyRing(),
+        now: () => VERIFIED_AT,
+      })).toEqual({
+        kind: 'unavailable',
+        code: 'formal_session_unavailable',
+      });
+      expect(cryptoMocks.randomUUID.mock.calls.length).toBe(callsBefore + 1);
+    }
+  });
+
   it('copies current key before clock-side mutation and never signs with verify-only keys', async () => {
     const sessionUserSnapshot = await repositorySessionUserSnapshot();
     const mutableCurrentKey = Uint8Array.from(SESSION_KEY);
@@ -499,6 +570,104 @@ describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
       sessionKeyRing: keyRing(),
       now: () => VERIFIED_AT,
     }).kind).toBe('verified');
+  });
+
+  it('signs from currentKey only and never reads or traverses verifyOnlyKeys', async () => {
+    let verifyOnlyGetterReads = 0;
+    let verifyOnlyProxyTraps = 0;
+    let currentKeyGetterReads = 0;
+    let keyRingProxyTraps = 0;
+    const accessorRing: Record<string, unknown> = {
+      currentKey: {
+        keyVersion: 2,
+        keyMaterial: SESSION_KEY,
+      },
+    };
+    Object.defineProperty(accessorRing, 'verifyOnlyKeys', {
+      enumerable: true,
+      get() {
+        verifyOnlyGetterReads += 1;
+        throw new Error('signing must ignore verify-only getter');
+      },
+    });
+    const verifyOnlyPoison = new Proxy([], {
+      get() {
+        verifyOnlyProxyTraps += 1;
+        throw new Error('signing must not read verify-only contents');
+      },
+      getOwnPropertyDescriptor() {
+        verifyOnlyProxyTraps += 1;
+        throw new Error('signing must not inspect verify-only contents');
+      },
+      getPrototypeOf() {
+        verifyOnlyProxyTraps += 1;
+        throw new Error('signing must not inspect verify-only prototype');
+      },
+      ownKeys() {
+        verifyOnlyProxyTraps += 1;
+        throw new Error('signing must not traverse verify-only contents');
+      },
+    });
+    const poisonRing = {
+      currentKey: {
+        keyVersion: 2,
+        keyMaterial: SESSION_KEY,
+      },
+      verifyOnlyKeys: verifyOnlyPoison,
+    };
+
+    for (const sessionKeyRing of [accessorRing, poisonRing]) {
+      const sessionUserSnapshot = await repositorySessionUserSnapshot();
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot,
+        sessionKeyRing: sessionKeyRing as FormalServerSessionKeyRingV1,
+        now: () => VERIFIED_AT,
+      }).kind).toBe('issued');
+    }
+    expect(verifyOnlyGetterReads).toBe(0);
+    expect(verifyOnlyProxyTraps).toBe(0);
+
+    const accessorCurrentKeyRing: Record<string, unknown> = {
+      verifyOnlyKeys: [],
+    };
+    Object.defineProperty(accessorCurrentKeyRing, 'currentKey', {
+      enumerable: true,
+      get() {
+        currentKeyGetterReads += 1;
+        throw new Error('current signing key must be a data descriptor');
+      },
+    });
+    const proxyKeyRing = new Proxy(keyRing(), {
+      getOwnPropertyDescriptor() {
+        keyRingProxyTraps += 1;
+        throw new Error('signing key-ring proxy trap must not run');
+      },
+      getPrototypeOf() {
+        keyRingProxyTraps += 1;
+        throw new Error('signing key-ring proxy trap must not run');
+      },
+      ownKeys() {
+        keyRingProxyTraps += 1;
+        throw new Error('signing key-ring proxy trap must not run');
+      },
+    });
+    const now = vi.fn(() => VERIFIED_AT);
+    cryptoMocks.randomUUID.mockClear();
+    for (const sessionKeyRing of [accessorCurrentKeyRing, proxyKeyRing]) {
+      const sessionUserSnapshot = await repositorySessionUserSnapshot();
+      expect(issueFormalServerSessionCookieV1({
+        sessionUserSnapshot,
+        sessionKeyRing: sessionKeyRing as FormalServerSessionKeyRingV1,
+        now,
+      })).toEqual({
+        kind: 'unavailable',
+        code: 'formal_session_unavailable',
+      });
+    }
+    expect(currentKeyGetterReads).toBe(0);
+    expect(keyRingProxyTraps).toBe(0);
+    expect(now).not.toHaveBeenCalled();
+    expect(cryptoMocks.randomUUID).not.toHaveBeenCalled();
   });
 
   it.each([
