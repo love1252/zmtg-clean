@@ -22,7 +22,7 @@ describe('CONV-SAFE-02B 会话 canonical capability-off 路由', () => {
     render(page);
 
     expect(screen.getByText('正在检查登录状态...')).toBeInTheDocument();
-    expect(screen.queryByText('会话工作台尚未开放')).not.toBeInTheDocument();
+    expect(screen.queryByText('会话队列尚未开放')).not.toBeInTheDocument();
     if (!resolveSession) throw new Error('session resolver must be initialized');
     resolveSession(
       Response.json({
@@ -31,8 +31,20 @@ describe('CONV-SAFE-02B 会话 canonical capability-off 路由', () => {
       }),
     );
 
-    expect(await screen.findByText('会话工作台尚未开放')).toBeInTheDocument();
+    expect(await screen.findByText('会话队列尚未开放')).toBeInTheDocument();
     expect(screen.getByText(/当前机构尚未获得该能力的生产放行。/u)).toBeInTheDocument();
+    const conversationBoundary = screen.getByLabelText('会话能力静态边界');
+    expect(within(conversationBoundary).getByText('会话事实')).toBeInTheDocument();
+    expect(within(conversationBoundary).getByText('未读取')).toBeInTheDocument();
+    expect(within(conversationBoundary).getByText('渠道状态')).toBeInTheDocument();
+    expect(within(conversationBoundary).getByText('未验证')).toBeInTheDocument();
+    expect(within(conversationBoundary).getByText('发送与自动触达')).toBeInTheDocument();
+    expect(within(conversationBoundary).getByText('未启用')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        '当前未读取任何会话或渠道事实；未知状态不会被解释为零记录、空会话、历史消息或渠道已可用。',
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '返回工作台' })).toHaveAttribute('href', '/hospital');
     expect(screen.getAllByRole('main')).toHaveLength(1);
 
@@ -45,6 +57,9 @@ describe('CONV-SAFE-02B 会话 canonical capability-off 路由', () => {
     expect(within(desktopNavigation).queryByRole('link', { name: '会话工作台' })).not.toBeInTheDocument();
 
     expect(screen.queryByText(/fixture|mock_sent|dry-run|模拟发送|不真实发送/u)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^0$/u)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^暂无会话$/u)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^渠道可用$/u)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '接管会话' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '结束会话' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '发送' })).not.toBeInTheDocument();
