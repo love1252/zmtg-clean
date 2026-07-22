@@ -35,6 +35,14 @@ describe('CONV-SAFE-02B 会话 canonical capability-off 路由', () => {
 
     expect(screen.getByText('会话详情尚未开放')).toBeInTheDocument();
     expect(screen.getByText(/当前机构尚未获得该能力的生产放行。/u)).toBeInTheDocument();
+    expect(
+      screen.getByText('当前仅展示导航入口，不代表已授权或能力已开放'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('安全边界')).toBeInTheDocument();
+    expect(
+      screen.queryByText('栏目可见性由服务端权限与能力状态共同决定'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('安全访问')).not.toBeInTheDocument();
     const conversationBoundary = screen.getByLabelText('会话能力静态边界');
     expect(within(conversationBoundary).getByText('会话事实')).toBeInTheDocument();
     expect(within(conversationBoundary).getByText('未读取')).toBeInTheDocument();

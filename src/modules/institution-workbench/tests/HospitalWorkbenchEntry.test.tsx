@@ -434,6 +434,14 @@ describe('WB-ENTRY-02A /hospital capability-off 页面', () => {
     expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByText('正在检查登录状态...')).not.toBeInTheDocument();
+    expect(
+      screen.getByText('当前仅展示导航入口，不代表已授权或能力已开放'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('安全边界')).toBeInTheDocument();
+    expect(
+      screen.queryByText('栏目可见性由服务端权限与能力状态共同决定'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('安全访问')).not.toBeInTheDocument();
 
     const desktopNavigation = screen.getByRole('navigation', { name: '机构端桌面导航' });
     const desktopLinks = within(desktopNavigation).getAllByRole('link');
