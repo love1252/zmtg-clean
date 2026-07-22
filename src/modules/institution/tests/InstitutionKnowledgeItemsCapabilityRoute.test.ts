@@ -89,6 +89,7 @@ describe('机构端知识库资料库 capability route', () => {
     ] as const) {
       const response = await route[method](request);
       expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(disabledPayload);
       assertNoSideEffects();
     }
@@ -101,6 +102,7 @@ describe('机构端知识库资料库 capability route', () => {
       const { request, counts } = hostileRequest();
       const response = await route[method](request);
       expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(disabledPayload);
       expect(counts).toEqual({ get: 0, set: 0, has: 0, ownKeys: 0, getOwnPropertyDescriptor: 0, getPrototypeOf: 0 });
       assertNoSideEffects();
