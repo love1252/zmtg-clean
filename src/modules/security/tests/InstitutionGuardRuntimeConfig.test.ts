@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolve } from 'node:path';
 
 import {
@@ -57,7 +57,39 @@ function expectUnavailable(value: unknown) {
   expect(JSON.stringify(value)).not.toContain(encoded(GUARD_CURRENT));
 }
 
+function stubDefaultEnvironment(
+  overrides: Partial<Record<(typeof ENVIRONMENT_KEYS)[number], string | undefined>> = {},
+) {
+  const values = environment(overrides);
+  for (const key of ENVIRONMENT_KEYS) vi.stubEnv(key, values[key]);
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
+
 describe('institution guard runtime config', () => {
+  it('默认路径仅使用受控环境值与有限时钟', () => {
+    stubDefaultEnvironment();
+    vi.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
+
+    expect(resolveInstitutionGuardRuntimeConfigV1()).toMatchObject({ kind: 'available' });
+  });
+
+  it.each([
+    ['抛出异常', () => {
+      throw new Error('clock unavailable');
+    }],
+    ['返回 NaN', () => Number.NaN],
+    ['返回 Infinity', () => Number.POSITIVE_INFINITY],
+  ])('默认 Date.now %s 时 fail-closed', (_description, implementation) => {
+    stubDefaultEnvironment();
+    vi.spyOn(Date, 'now').mockImplementation(implementation);
+
+    expectUnavailable(resolveInstitutionGuardRuntimeConfigV1());
+  });
+
   it('仅从受控注入环境构造冻结的两套 key ring', () => {
     const result = resolveInstitutionGuardRuntimeConfigV1(input());
 

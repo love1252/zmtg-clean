@@ -106,13 +106,26 @@ function snapshotEnvironment(value: unknown): RuntimeEnvironmentV1 | null {
   return Object.freeze(environment);
 }
 
-function readDefaultEnvironment(): RuntimeEnvironmentV1 {
-  const environment: Record<RuntimeEnvironmentKeyV1, string | undefined> = Object.create(null) as Record<
-    RuntimeEnvironmentKeyV1,
-    string | undefined
-  >;
-  for (const key of ENVIRONMENT_KEYS) environment[key] = process.env[key];
-  return Object.freeze(environment);
+function readDefaultEnvironment(): RuntimeEnvironmentV1 | null {
+  try {
+    const environment: Record<RuntimeEnvironmentKeyV1, string | undefined> = Object.create(null) as Record<
+      RuntimeEnvironmentKeyV1,
+      string | undefined
+    >;
+    for (const key of ENVIRONMENT_KEYS) environment[key] = process.env[key];
+    return Object.freeze(environment);
+  } catch {
+    return null;
+  }
+}
+
+function readDefaultNowEpochMs(): number | null {
+  try {
+    const epochMs = Date.now();
+    return Number.isFinite(epochMs) ? epochMs : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseKeyVersion(
@@ -327,7 +340,10 @@ export function resolveInstitutionGuardRuntimeConfigV1(
   input?: InstitutionGuardRuntimeConfigInputV1,
 ): InstitutionGuardRuntimeConfigResolutionV1 {
   if (input === undefined) {
-    return resolveRuntimeConfig(readDefaultEnvironment(), Date.now());
+    const environment = readDefaultEnvironment();
+    const nowEpochMs = readDefaultNowEpochMs();
+    if (!environment || nowEpochMs === null) return unavailable;
+    return resolveRuntimeConfig(environment, nowEpochMs);
   }
   const snapshot = snapshotExactPlainRecord(input, INPUT_KEYS);
   const environment = snapshotEnvironment(snapshot?.environment);
