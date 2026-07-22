@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { AuthAccountRecord } from '@/modules/auth/domain/auth-account';
-import { createAuthAccountRepository } from '@/modules/auth/server/auth-account-repository';
+import {
+  consumeFormalServerSessionUserSnapshotV1,
+  createAuthAccountRepository,
+  isFormalServerSessionUserSnapshotV1,
+  type FormalServerSessionUserSnapshotV1,
+} from '@/modules/auth/server/auth-account-repository';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   authAccountInstitutionBindings,
@@ -110,12 +115,16 @@ const formalSessionUserRow = {
   membershipUserId: 'auth-user-chenlei',
   membershipRole: 'tenant_operator',
   membershipDisplayName: '机构陈磊',
+  bindingId: 'auth-binding-chenlei',
   bindingAccountId: 'auth-user-chenlei',
   bindingTenantId: 'tenant-zhengpu',
   bindingInstitutionId: 'institution-zhengpu',
   bindingStatus: 'active',
+  bindingSource: 'manual_admin',
+  bindingAssignedAt: new Date('2026-06-25T07:00:00.000Z'),
   bindingExpiresAt: null,
   bindingRevokedAt: null,
+  bindingVersion: 1,
 };
 
 function createSelectChain(rows: unknown[]) {
@@ -405,12 +414,16 @@ describe('正式账号 repository', () => {
       membershipUserId: tenantMembers.userId,
       membershipRole: tenantMembers.role,
       membershipDisplayName: tenantMembers.displayName,
+      bindingId: authAccountInstitutionBindings.id,
       bindingAccountId: authAccountInstitutionBindings.accountId,
       bindingTenantId: authAccountInstitutionBindings.tenantId,
       bindingInstitutionId: authAccountInstitutionBindings.institutionId,
       bindingStatus: authAccountInstitutionBindings.status,
+      bindingSource: authAccountInstitutionBindings.source,
+      bindingAssignedAt: authAccountInstitutionBindings.assignedAt,
       bindingExpiresAt: authAccountInstitutionBindings.expiresAt,
       bindingRevokedAt: authAccountInstitutionBindings.revokedAt,
+      bindingVersion: authAccountInstitutionBindings.version,
     });
     expect(query.selectChains[0].from).toHaveBeenCalledWith(authUsers);
     expect(query.selectChains[0].innerJoin).toHaveBeenNthCalledWith(
@@ -462,7 +475,13 @@ describe('正式账号 repository', () => {
       value: 'auth-user-chenlei',
     });
     expect(query.selectChains[0].limit).toHaveBeenCalledWith(2);
-    expect(result).toEqual({
+    expectTypeOf(result).toEqualTypeOf<FormalServerSessionUserSnapshotV1 | null>();
+    expect(result).not.toBeNull();
+    if (!result) throw new Error('expected formal session user snapshot');
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.keys(result)).toEqual([]);
+    expect(isFormalServerSessionUserSnapshotV1(result)).toBe(true);
+    expect(consumeFormalServerSessionUserSnapshotV1(result)).toEqual({
       id: 'auth-user-chenlei',
       username: 'chenlei_admin',
       name: '机构陈磊',
@@ -470,7 +489,8 @@ describe('正式账号 repository', () => {
       tenantId: 'tenant-zhengpu',
       institutionId: 'institution-zhengpu',
     });
-    expect(Object.isFrozen(result)).toBe(true);
+    expect(consumeFormalServerSessionUserSnapshotV1(result)).toBeNull();
+    expect(isFormalServerSessionUserSnapshotV1(result)).toBe(false);
   });
 
   it('拒绝重置密码、锁定、撤销、过期、多行和作用域不一致的会话账号快照', async () => {
@@ -478,11 +498,21 @@ describe('正式账号 repository', () => {
       [{ ...formalSessionUserRow, accountPasswordResetRequired: true }],
       [{ ...formalSessionUserRow, accountStatus: 'locked' }],
       [{ ...formalSessionUserRow, accountLockedUntil: new Date('2099-01-01T00:00:00.000Z') }],
+      [{ ...formalSessionUserRow, membershipRole: 'platform_admin' }],
       [{ ...formalSessionUserRow, bindingStatus: 'revoked', bindingRevokedAt: new Date() }],
+      [{ ...formalSessionUserRow, bindingSource: 'migration_placeholder' }],
+      [{ ...formalSessionUserRow, bindingSource: 'unknown_source' }],
+      [{ ...formalSessionUserRow, bindingAssignedAt: new Date('2099-01-01T00:00:00.000Z') }],
+      [{ ...formalSessionUserRow, bindingAssignedAt: new Date(Number.NaN) }],
       [{ ...formalSessionUserRow, bindingExpiresAt: new Date('2000-01-01T00:00:00.000Z') }],
+      [{ ...formalSessionUserRow, bindingExpiresAt: new Date(Number.NaN) }],
+      [{ ...formalSessionUserRow, bindingVersion: 0 }],
+      [{ ...formalSessionUserRow, bindingVersion: 1.5 }],
       [formalSessionUserRow, { ...formalSessionUserRow }],
       [{ ...formalSessionUserRow, membershipTenantId: 'tenant-other' }],
       [{ ...formalSessionUserRow, bindingInstitutionId: 'institution-other' }],
+      [{ ...formalSessionUserRow, bindingId: 'unsafe/binding' }],
+      [{ ...formalSessionUserRow, extra: 'not-an-exact-row' }],
     ];
 
     for (const rows of cases) {
@@ -496,6 +526,173 @@ describe('正式账号 repository', () => {
       ).resolves.toBeNull();
       expect(query.select).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it('先安全快照和校验查询三元组，非法输入不读取数据库或 accessor/proxy', async () => {
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor = {
+      accountId: 'auth-user-chenlei',
+      tenantId: 'tenant-zhengpu',
+      institutionId: 'institution-zhengpu',
+    };
+    Object.defineProperty(accessor, 'accountId', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('query getter must not run');
+      },
+    });
+    const proxy = new Proxy({
+      accountId: 'auth-user-chenlei',
+      tenantId: 'tenant-zhengpu',
+      institutionId: 'institution-zhengpu',
+    }, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('query proxy trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('query proxy trap must not run');
+      },
+    });
+    const nullPrototype = Object.assign(Object.create(null) as object, {
+      accountId: 'auth-user-chenlei',
+      tenantId: 'tenant-zhengpu',
+      institutionId: 'institution-zhengpu',
+    });
+    for (const input of [
+      { accountId: 'unsafe/id', tenantId: 'tenant-zhengpu', institutionId: 'institution-zhengpu' },
+      { accountId: 'auth-user-chenlei', tenantId: 'tenant-zhengpu', institutionId: 'institution-zhengpu', extra: true },
+      accessor,
+      proxy,
+      nullPrototype,
+    ]) {
+      const query = createDatabase();
+      await expect(
+        createAuthAccountRepository(query.database).findCurrentFormalSessionUser(
+          input as never,
+        ),
+      ).resolves.toBeNull();
+      expect(query.select).not.toHaveBeenCalled();
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  it('拒绝 accessor、Proxy、null-prototype 和非精确数据库行且不发布 handle', async () => {
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor = { ...formalSessionUserRow };
+    Object.defineProperty(accessor, 'accountId', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('row getter must not run');
+      },
+    });
+    const proxy = new Proxy({ ...formalSessionUserRow }, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('row proxy trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('row proxy trap must not run');
+      },
+    });
+    const nullPrototype = Object.assign(
+      Object.create(null) as object,
+      formalSessionUserRow,
+    );
+    for (const row of [accessor, proxy, nullPrototype]) {
+      const query = createDatabase({ selectRows: [[row]] });
+      const result = await createAuthAccountRepository(
+        query.database,
+      ).findCurrentFormalSessionUser({
+        accountId: 'auth-user-chenlei',
+        tenantId: 'tenant-zhengpu',
+        institutionId: 'institution-zhengpu',
+      });
+      expect(result).toBeNull();
+      expect(isFormalServerSessionUserSnapshotV1(result)).toBe(false);
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  it('只认可 genuine handle，普通、clone、null-prototype、accessor、proxy 和 revoked 均零读取拒绝', async () => {
+    const query = createDatabase({ selectRows: [[formalSessionUserRow], [formalSessionUserRow]] });
+    const repository = createAuthAccountRepository(query.database);
+    const genuine = await repository.findCurrentFormalSessionUser({
+      accountId: 'auth-user-chenlei',
+      tenantId: 'tenant-zhengpu',
+      institutionId: 'institution-zhengpu',
+    });
+    const revoked = await repository.findCurrentFormalSessionUser({
+      accountId: 'auth-user-chenlei',
+      tenantId: 'tenant-zhengpu',
+      institutionId: 'institution-zhengpu',
+    });
+    if (!genuine || !revoked) throw new Error('expected genuine snapshots');
+    expect(consumeFormalServerSessionUserSnapshotV1(revoked)).not.toBeNull();
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor: Record<string, unknown> = {};
+    Object.defineProperty(accessor, 'user', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('handle getter must not run');
+      },
+    });
+    const proxy = new Proxy(genuine, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('handle proxy trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('handle proxy trap must not run');
+      },
+    });
+    for (const value of [
+      {},
+      { ...genuine },
+      Object.create(null) as object,
+      Object.create(genuine) as object,
+      accessor,
+      proxy,
+      revoked,
+    ]) {
+      expect(isFormalServerSessionUserSnapshotV1(value)).toBe(false);
+      expect(consumeFormalServerSessionUserSnapshotV1(value)).toBeNull();
+    }
+    expect(isFormalServerSessionUserSnapshotV1(genuine)).toBe(true);
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  it('并发双消费只有一次得到冻结 session user', async () => {
+    const query = createDatabase({ selectRows: [[formalSessionUserRow]] });
+    const snapshot = await createAuthAccountRepository(
+      query.database,
+    ).findCurrentFormalSessionUser({
+      accountId: 'auth-user-chenlei',
+      tenantId: 'tenant-zhengpu',
+      institutionId: 'institution-zhengpu',
+    });
+    if (!snapshot) throw new Error('expected formal session user snapshot');
+    const results = await Promise.all([
+      Promise.resolve().then(() => consumeFormalServerSessionUserSnapshotV1(snapshot)),
+      Promise.resolve().then(() => consumeFormalServerSessionUserSnapshotV1(snapshot)),
+    ]);
+    const users = results.filter((value) => value !== null);
+    expect(users).toHaveLength(1);
+    expect(Object.isFrozen(users[0])).toBe(true);
+    expect(results.filter((value) => value === null)).toHaveLength(1);
+    expect(isFormalServerSessionUserSnapshotV1(snapshot)).toBe(false);
   });
 
   it('记录登录失败时只更新失败计数、锁定状态和更新时间', async () => {

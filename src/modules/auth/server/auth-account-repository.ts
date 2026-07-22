@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm';
+import { isProxy } from 'node:util/types';
 import type {
   AuthAccountInstitutionBindingRecord,
   AuthAccountRecord,
@@ -6,6 +7,8 @@ import type {
   AuthTenantMembershipRecord,
 } from '@/modules/auth/domain/auth-account';
 import type { AuthRole, AuthSessionUser } from '@/modules/auth/domain/session';
+import { isInstitutionRoleV1 } from '@/modules/institution-contracts/v1/institution-navigation';
+import { isInstitutionScopeIdV1 } from '@/modules/security/domain/institution-access';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   authAccountInstitutionBindings,
@@ -51,8 +54,14 @@ export type FormalServerSessionUserRepositoryV1 = {
     accountId: string;
     tenantId: string;
     institutionId: string;
-  }): Promise<Readonly<AuthSessionUser> | null>;
+  }): Promise<FormalServerSessionUserSnapshotV1 | null>;
 };
+
+declare const formalServerSessionUserSnapshotMarkerV1: unique symbol;
+
+export type FormalServerSessionUserSnapshotV1 = Readonly<{
+  readonly [formalServerSessionUserSnapshotMarkerV1]: 'formal_server_session_user_snapshot_v1';
+}>;
 
 type FormalServerSessionUserRowV1 = {
   accountId: string;
@@ -65,13 +74,216 @@ type FormalServerSessionUserRowV1 = {
   membershipUserId: string;
   membershipRole: AuthRole;
   membershipDisplayName: string;
+  bindingId: string;
   bindingAccountId: string;
   bindingTenantId: string;
   bindingInstitutionId: string;
   bindingStatus: AuthAccountInstitutionBindingRecord['status'];
+  bindingSource: AuthAccountInstitutionBindingRecord['source'];
+  bindingAssignedAt: Date;
   bindingExpiresAt: Date | null;
   bindingRevokedAt: Date | null;
+  bindingVersion: number;
 };
+
+type FormalServerSessionUserQueryV1 = Readonly<{
+  accountId: string;
+  tenantId: string;
+  institutionId: string;
+}>;
+
+const FORMAL_SESSION_USER_QUERY_KEYS = Object.freeze([
+  'accountId',
+  'tenantId',
+  'institutionId',
+] as const);
+
+const FORMAL_SESSION_USER_ROW_KEYS = Object.freeze([
+  'accountId',
+  'accountUsername',
+  'accountDisplayName',
+  'accountStatus',
+  'accountPasswordResetRequired',
+  'accountLockedUntil',
+  'membershipTenantId',
+  'membershipUserId',
+  'membershipRole',
+  'membershipDisplayName',
+  'bindingId',
+  'bindingAccountId',
+  'bindingTenantId',
+  'bindingInstitutionId',
+  'bindingStatus',
+  'bindingSource',
+  'bindingAssignedAt',
+  'bindingExpiresAt',
+  'bindingRevokedAt',
+  'bindingVersion',
+] as const satisfies readonly (keyof FormalServerSessionUserRowV1)[]);
+
+const formalServerSessionUserSnapshotHandlesV1 = new WeakSet<object>();
+const formalServerSessionUserSnapshotValuesV1 = new WeakMap<
+  object,
+  Readonly<AuthSessionUser>
+>();
+
+function snapshotExactPlainRecord(
+  value: unknown,
+  expectedKeys: readonly string[],
+): Readonly<Record<string, unknown>> | null {
+  try {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      isProxy(value) ||
+      Object.getPrototypeOf(value) !== Object.prototype
+    ) {
+      return null;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const ownKeys = Reflect.ownKeys(descriptors);
+    if (
+      ownKeys.length !== expectedKeys.length ||
+      ownKeys.some((key) => typeof key !== 'string') ||
+      expectedKeys.some(
+        (key) => !Object.prototype.hasOwnProperty.call(descriptors, key),
+      )
+    ) {
+      return null;
+    }
+    const snapshot: Record<string, unknown> = Object.create(null) as Record<
+      string,
+      unknown
+    >;
+    for (const key of expectedKeys) {
+      const descriptor = descriptors[key];
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+        return null;
+      }
+      Object.defineProperty(snapshot, key, {
+        value: descriptor.value,
+        enumerable: true,
+        configurable: false,
+        writable: false,
+      });
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
+}
+
+function snapshotExactRows(value: unknown): readonly unknown[] | null {
+  try {
+    if (
+      !Array.isArray(value) ||
+      isProxy(value) ||
+      Object.getPrototypeOf(value) !== Array.prototype ||
+      value.length > 2
+    ) {
+      return null;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const expectedKeys = [
+      ...Array.from({ length: value.length }, (_, index) => String(index)),
+      'length',
+    ];
+    if (
+      Reflect.ownKeys(descriptors).length !== expectedKeys.length ||
+      expectedKeys.some(
+        (key) => !Object.prototype.hasOwnProperty.call(descriptors, key),
+      )
+    ) {
+      return null;
+    }
+    const rows: unknown[] = [];
+    for (let index = 0; index < value.length; index += 1) {
+      const descriptor = descriptors[String(index)];
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+        return null;
+      }
+      rows.push(descriptor.value);
+    }
+    return Object.freeze(rows);
+  } catch {
+    return null;
+  }
+}
+
+function dateEpochMs(value: unknown): number | null {
+  try {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      isProxy(value) ||
+      Object.getPrototypeOf(value) !== Date.prototype
+    ) {
+      return null;
+    }
+    const epochMs = Date.prototype.getTime.call(value);
+    return Number.isFinite(epochMs) ? epochMs : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseFormalSessionUserQueryV1(
+  value: unknown,
+): FormalServerSessionUserQueryV1 | null {
+  const snapshot = snapshotExactPlainRecord(
+    value,
+    FORMAL_SESSION_USER_QUERY_KEYS,
+  );
+  if (
+    !snapshot ||
+    !isInstitutionScopeIdV1(snapshot.accountId) ||
+    !isInstitutionScopeIdV1(snapshot.tenantId) ||
+    !isInstitutionScopeIdV1(snapshot.institutionId)
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    accountId: snapshot.accountId,
+    tenantId: snapshot.tenantId,
+    institutionId: snapshot.institutionId,
+  });
+}
+
+function mintFormalServerSessionUserSnapshotV1(
+  sessionUser: Readonly<AuthSessionUser>,
+): FormalServerSessionUserSnapshotV1 {
+  const handle = Object.freeze({}) as FormalServerSessionUserSnapshotV1;
+  formalServerSessionUserSnapshotHandlesV1.add(handle);
+  formalServerSessionUserSnapshotValuesV1.set(handle, sessionUser);
+  return handle;
+}
+
+export function isFormalServerSessionUserSnapshotV1(
+  value: unknown,
+): value is FormalServerSessionUserSnapshotV1 {
+  try {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      !isProxy(value) &&
+      formalServerSessionUserSnapshotHandlesV1.has(value)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function consumeFormalServerSessionUserSnapshotV1(
+  value: unknown,
+): Readonly<AuthSessionUser> | null {
+  if (!isFormalServerSessionUserSnapshotV1(value)) return null;
+  const sessionUser = formalServerSessionUserSnapshotValuesV1.get(value);
+  if (!sessionUser) return null;
+  formalServerSessionUserSnapshotValuesV1.delete(value);
+  formalServerSessionUserSnapshotHandlesV1.delete(value);
+  return sessionUser;
+}
 
 export type AuthAccountRepository = {
   createAccount(record: AuthAccountRecord): Promise<AuthAccountRecord>;
@@ -204,91 +416,132 @@ export function createAuthAccountRepository(
     },
 
     async findCurrentFormalSessionUser(input) {
-      const rows = await database
-        .select({
-          accountId: authUsers.id,
-          accountUsername: authUsers.username,
-          accountDisplayName: authUsers.displayName,
-          accountStatus: authUsers.status,
-          accountPasswordResetRequired: authUsers.passwordResetRequired,
-          accountLockedUntil: authUsers.lockedUntil,
-          membershipTenantId: tenantMembers.tenantId,
-          membershipUserId: tenantMembers.userId,
-          membershipRole: tenantMembers.role,
-          membershipDisplayName: tenantMembers.displayName,
-          bindingAccountId: authAccountInstitutionBindings.accountId,
-          bindingTenantId: authAccountInstitutionBindings.tenantId,
-          bindingInstitutionId: authAccountInstitutionBindings.institutionId,
-          bindingStatus: authAccountInstitutionBindings.status,
-          bindingExpiresAt: authAccountInstitutionBindings.expiresAt,
-          bindingRevokedAt: authAccountInstitutionBindings.revokedAt,
-        })
-        .from(authUsers)
-        .innerJoin(
-          tenantMembers,
-          and(
-            eq(tenantMembers.userId, authUsers.id),
-            eq(tenantMembers.tenantId, input.tenantId),
-          ),
-        )
-        .innerJoin(
-          authAccountInstitutionBindings,
-          and(
-            eq(authAccountInstitutionBindings.accountId, authUsers.id),
-            eq(authAccountInstitutionBindings.tenantId, tenantMembers.tenantId),
-            eq(
-              authAccountInstitutionBindings.institutionId,
-              input.institutionId,
-            ),
-          ),
-        )
-        .where(eq(authUsers.id, input.accountId))
-        .limit(2);
+      const query = parseFormalSessionUserQueryV1(input);
+      if (!query) return null;
 
-      if (rows.length !== 1) return null;
-      const row = rows[0] as FormalServerSessionUserRowV1 | undefined;
-      if (!row) return null;
-      const nowEpochMs = Date.now();
-      let lockedUntilEpochMs: number | null = null;
-      let expiresAtEpochMs: number | null = null;
+      let rowsValue: unknown;
       try {
-        lockedUntilEpochMs = row.accountLockedUntil === null
-          ? null
-          : Date.prototype.getTime.call(row.accountLockedUntil);
-        expiresAtEpochMs = row.bindingExpiresAt === null
-          ? null
-          : Date.prototype.getTime.call(row.bindingExpiresAt);
+        rowsValue = await database
+          .select({
+            accountId: authUsers.id,
+            accountUsername: authUsers.username,
+            accountDisplayName: authUsers.displayName,
+            accountStatus: authUsers.status,
+            accountPasswordResetRequired: authUsers.passwordResetRequired,
+            accountLockedUntil: authUsers.lockedUntil,
+            membershipTenantId: tenantMembers.tenantId,
+            membershipUserId: tenantMembers.userId,
+            membershipRole: tenantMembers.role,
+            membershipDisplayName: tenantMembers.displayName,
+            bindingId: authAccountInstitutionBindings.id,
+            bindingAccountId: authAccountInstitutionBindings.accountId,
+            bindingTenantId: authAccountInstitutionBindings.tenantId,
+            bindingInstitutionId: authAccountInstitutionBindings.institutionId,
+            bindingStatus: authAccountInstitutionBindings.status,
+            bindingSource: authAccountInstitutionBindings.source,
+            bindingAssignedAt: authAccountInstitutionBindings.assignedAt,
+            bindingExpiresAt: authAccountInstitutionBindings.expiresAt,
+            bindingRevokedAt: authAccountInstitutionBindings.revokedAt,
+            bindingVersion: authAccountInstitutionBindings.version,
+          })
+          .from(authUsers)
+          .innerJoin(
+            tenantMembers,
+            and(
+              eq(tenantMembers.userId, authUsers.id),
+              eq(tenantMembers.tenantId, query.tenantId),
+            ),
+          )
+          .innerJoin(
+            authAccountInstitutionBindings,
+            and(
+              eq(authAccountInstitutionBindings.accountId, authUsers.id),
+              eq(authAccountInstitutionBindings.tenantId, tenantMembers.tenantId),
+              eq(
+                authAccountInstitutionBindings.institutionId,
+                query.institutionId,
+              ),
+            ),
+          )
+          .where(eq(authUsers.id, query.accountId))
+          .limit(2);
       } catch {
         return null;
       }
+
+      const rows = snapshotExactRows(rowsValue);
+      if (!rows || rows.length !== 1) return null;
+      const row = snapshotExactPlainRecord(
+        rows[0],
+        FORMAL_SESSION_USER_ROW_KEYS,
+      );
+      if (!row) return null;
+
+      let nowEpochMs: number;
+      try {
+        nowEpochMs = Date.now();
+      } catch {
+        return null;
+      }
+      const lockedUntilEpochMs = row.accountLockedUntil === null
+        ? null
+        : dateEpochMs(row.accountLockedUntil);
+      const assignedAtEpochMs = dateEpochMs(row.bindingAssignedAt);
+      const expiresAtEpochMs = row.bindingExpiresAt === null
+        ? null
+        : dateEpochMs(row.bindingExpiresAt);
+      const revokedAtEpochMs = row.bindingRevokedAt === null
+        ? null
+        : dateEpochMs(row.bindingRevokedAt);
       if (
         !Number.isFinite(nowEpochMs) ||
-        (lockedUntilEpochMs !== null && !Number.isFinite(lockedUntilEpochMs)) ||
-        (expiresAtEpochMs !== null && !Number.isFinite(expiresAtEpochMs)) ||
-        row.accountId !== input.accountId ||
-        row.membershipUserId !== input.accountId ||
-        row.bindingAccountId !== input.accountId ||
-        row.membershipTenantId !== input.tenantId ||
-        row.bindingTenantId !== input.tenantId ||
-        row.bindingInstitutionId !== input.institutionId ||
+        !isInstitutionScopeIdV1(row.accountId) ||
+        !isInstitutionScopeIdV1(row.membershipUserId) ||
+        !isInstitutionScopeIdV1(row.membershipTenantId) ||
+        !isInstitutionScopeIdV1(row.bindingId) ||
+        !isInstitutionScopeIdV1(row.bindingAccountId) ||
+        !isInstitutionScopeIdV1(row.bindingTenantId) ||
+        !isInstitutionScopeIdV1(row.bindingInstitutionId) ||
+        typeof row.accountUsername !== 'string' ||
+        row.accountUsername.length === 0 ||
+        typeof row.accountDisplayName !== 'string' ||
+        typeof row.membershipDisplayName !== 'string' ||
+        typeof row.accountPasswordResetRequired !== 'boolean' ||
+        !isInstitutionRoleV1(row.membershipRole) ||
+        !Number.isSafeInteger(row.bindingVersion) ||
+        Number(row.bindingVersion) <= 0 ||
+        (row.accountLockedUntil !== null && lockedUntilEpochMs === null) ||
+        assignedAtEpochMs === null ||
+        (row.bindingExpiresAt !== null && expiresAtEpochMs === null) ||
+        (row.bindingRevokedAt !== null && revokedAtEpochMs === null) ||
+        row.accountId !== query.accountId ||
+        row.membershipUserId !== query.accountId ||
+        row.bindingAccountId !== query.accountId ||
+        row.membershipTenantId !== query.tenantId ||
+        row.bindingTenantId !== query.tenantId ||
+        row.bindingInstitutionId !== query.institutionId ||
         row.accountStatus !== 'active' ||
         row.accountPasswordResetRequired ||
         (lockedUntilEpochMs !== null && lockedUntilEpochMs > nowEpochMs) ||
         row.bindingStatus !== 'active' ||
-        row.bindingRevokedAt !== null ||
+        (row.bindingSource !== 'manual_admin' && row.bindingSource !== 'system') ||
+        assignedAtEpochMs > nowEpochMs ||
+        revokedAtEpochMs !== null ||
         (expiresAtEpochMs !== null && expiresAtEpochMs <= nowEpochMs)
       ) {
         return null;
       }
 
-      return Object.freeze({
-        id: row.accountId,
-        username: row.accountUsername,
-        name: row.membershipDisplayName || row.accountDisplayName,
-        role: row.membershipRole,
-        tenantId: row.membershipTenantId,
-        institutionId: row.bindingInstitutionId,
-      });
+      return mintFormalServerSessionUserSnapshotV1(
+        Object.freeze({
+          id: row.accountId,
+          username: row.accountUsername,
+          name: row.membershipDisplayName || row.accountDisplayName,
+          role: row.membershipRole,
+          tenantId: row.membershipTenantId,
+          institutionId: row.bindingInstitutionId,
+        }),
+      );
     },
 
     async recordLoginFailure(input) {

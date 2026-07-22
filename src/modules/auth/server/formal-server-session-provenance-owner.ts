@@ -1,6 +1,12 @@
-import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import * as crypto from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { isProxy } from 'node:util/types';
 
+import type { AuthSessionUser } from '@/modules/auth/domain/session';
+import {
+  consumeFormalServerSessionUserSnapshotV1,
+  type FormalServerSessionUserSnapshotV1,
+} from '@/modules/auth/server/auth-account-repository';
 import { isInstitutionScopeIdV1 } from '@/modules/security/domain/institution-access';
 import {
   createFormalRequestProvenanceResolverFromOwnerResolutionV1,
@@ -44,9 +50,7 @@ const FACTORY_INPUT_KEYS = Object.freeze([
   'now',
 ] as const);
 const COOKIE_ISSUER_INPUT_KEYS = Object.freeze([
-  'accountId',
-  'tenantId',
-  'institutionId',
+  'sessionUserSnapshot',
   'sessionKeyRing',
   'now',
 ] as const);
@@ -144,6 +148,7 @@ export type FormalServerSessionCookieIssueResolutionV1 =
       cookieValue: string;
       expiresAt: string;
       maxAgeSeconds: typeof FORMAL_SERVER_SESSION_COOKIE_MAX_AGE_SECONDS_V1;
+      sessionUser: Readonly<AuthSessionUser>;
     }>
   | Readonly<{
       kind: 'unavailable';
@@ -559,23 +564,25 @@ function verifyToken(
 }
 
 /**
- * Issues one canonical formal-session cookie with the current signing key. Callers provide only
- * authoritative scope identifiers and a trusted clock; session id and lifetime are internal.
+ * Consumes one authoritative repository snapshot before touching signing dependencies, then issues
+ * one canonical formal-session cookie. A consumed snapshot can never be retried after failure.
  */
 export function issueFormalServerSessionCookieV1(input: Readonly<{
-  accountId: string;
-  tenantId: string;
-  institutionId: string;
+  sessionUserSnapshot: FormalServerSessionUserSnapshotV1;
   sessionKeyRing: FormalServerSessionKeyRingV1;
   now: () => Date;
 }>): FormalServerSessionCookieIssueResolutionV1 {
   try {
     const snapshot = snapshotExactPlainRecord(input, COOKIE_ISSUER_INPUT_KEYS);
+    if (!snapshot) return formalSessionUnavailable;
+    const sessionUser = consumeFormalServerSessionUserSnapshotV1(
+      snapshot.sessionUserSnapshot,
+    );
     if (
-      !snapshot ||
-      !isInstitutionScopeIdV1(snapshot.accountId) ||
-      !isInstitutionScopeIdV1(snapshot.tenantId) ||
-      !isInstitutionScopeIdV1(snapshot.institutionId)
+      !sessionUser ||
+      !isInstitutionScopeIdV1(sessionUser.id) ||
+      !isInstitutionScopeIdV1(sessionUser.tenantId) ||
+      !isInstitutionScopeIdV1(sessionUser.institutionId)
     ) {
       return formalSessionUnavailable;
     }
@@ -593,16 +600,16 @@ export function issueFormalServerSessionCookieV1(input: Readonly<{
     if (issuedAtEpochMs === null) return formalSessionUnavailable;
     const expiresAtEpochMs = issuedAtEpochMs + MAX_SESSION_TTL_MS;
     if (!Number.isFinite(expiresAtEpochMs)) return formalSessionUnavailable;
-    const sessionId = randomUUID();
+    const sessionId = crypto.randomUUID();
     if (!isInstitutionScopeIdV1(sessionId)) return formalSessionUnavailable;
     const issuedAt = new Date(issuedAtEpochMs).toISOString();
     const expiresAt = new Date(expiresAtEpochMs).toISOString();
     const payloadSegment = Buffer.from(JSON.stringify({
       source: 'server_session',
       sessionId,
-      accountId: snapshot.accountId,
-      tenantId: snapshot.tenantId,
-      institutionId: snapshot.institutionId,
+      accountId: sessionUser.id,
+      tenantId: sessionUser.tenantId,
+      institutionId: sessionUser.institutionId,
       issuedAt,
       expiresAt,
     })).toString('base64url');
@@ -617,6 +624,7 @@ export function issueFormalServerSessionCookieV1(input: Readonly<{
       cookieValue,
       expiresAt,
       maxAgeSeconds: FORMAL_SERVER_SESSION_COOKIE_MAX_AGE_SECONDS_V1,
+      sessionUser,
     });
   } catch {
     return formalSessionUnavailable;
@@ -721,7 +729,7 @@ function resolveSessionOwner(
   if (!Number.isFinite(proofValidUntilEpochMs)) return unavailable;
   let requestIdentifier: string;
   try {
-    requestIdentifier = randomUUID();
+    requestIdentifier = crypto.randomUUID();
   } catch {
     return unavailable;
   }
