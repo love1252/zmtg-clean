@@ -5,6 +5,8 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import {
   createInstitutionGuardReferenceCodecV1,
+  isInstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceCodecV1,
   type InstitutionGuardReferenceOwnerSubjectV1,
 } from '@/modules/security/server/institution-guard-reference';
 
@@ -71,6 +73,90 @@ describe('guard reference hostile and low-sensitivity boundaries', () => {
     expect(moduleExports).not.toHaveProperty('parseOwnerSubject');
     expect(moduleExports).not.toHaveProperty('canonicalizeGuardReference');
     expect(moduleExports).not.toHaveProperty('readKeyRing');
+  });
+
+  it('recognizes only factory-created handles without reading hostile values', () => {
+    const authentic = createCodec();
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor = Object.defineProperty({}, 'issue', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        return authentic.issue;
+      },
+    });
+    const hostile = new Proxy(
+      {},
+      {
+        get() {
+          proxyTraps += 1;
+          throw new Error('get trap must not run');
+        },
+        getPrototypeOf() {
+          proxyTraps += 1;
+          throw new Error('prototype trap must not run');
+        },
+        ownKeys() {
+          proxyTraps += 1;
+          throw new Error('ownKeys trap must not run');
+        },
+      },
+    );
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+
+    expect(Object.isFrozen(authentic)).toBe(true);
+    expect(isInstitutionGuardReferenceCodecV1(authentic)).toBe(true);
+    for (const value of [
+      null,
+      {},
+      { issue: authentic.issue, verify: authentic.verify },
+      { ...authentic },
+      accessor,
+      Object.create(authentic),
+      hostile,
+      revoked.proxy,
+      authentic as unknown as Record<string, unknown>,
+    ]) {
+      const expected = value === authentic;
+      expect(isInstitutionGuardReferenceCodecV1(value)).toBe(expected);
+    }
+    expect(
+      isInstitutionGuardReferenceCodecV1(
+        { ...authentic } as unknown as InstitutionGuardReferenceCodecV1,
+      ),
+    ).toBe(false);
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  it('returns an authentic unavailable handle for invalid factory dependencies', () => {
+    let applyTraps = 0;
+    const hostileNow = new Proxy(() => NOW, {
+      apply() {
+        applyTraps += 1;
+        throw new Error('apply trap must not run');
+      },
+    });
+    const codec = createInstitutionGuardReferenceCodecV1({
+      keyRing: {
+        currentIssueKey: { keyVersion: 1, keyMaterial: KEY },
+        verifyOnlyKeys: [],
+      },
+      now: hostileNow,
+    });
+
+    expect(isInstitutionGuardReferenceCodecV1(codec)).toBe(true);
+    expect(codec.issue(input())).toEqual({
+      kind: 'unavailable',
+      code: 'guard_reference_unavailable',
+    });
+    expect(codec.verify({ ...input(), reference: issuedReference() })).toEqual({
+      kind: 'unavailable',
+      code: 'guard_reference_unavailable',
+    });
+    expect(applyTraps).toBe(0);
   });
 
   it('returns only fixed low-sensitive outcomes and never echoes owner input or key material', () => {
@@ -246,7 +332,12 @@ describe('guard reference hostile and low-sensitivity boundaries', () => {
         keyRing: keyRing as never,
         now: () => NOW,
       });
+      expect(isInstitutionGuardReferenceCodecV1(codec)).toBe(true);
       expect(codec.issue(input())).toEqual({
+        kind: 'unavailable',
+        code: 'guard_reference_unavailable',
+      });
+      expect(codec.verify({ ...input(), reference: issuedReference() })).toEqual({
         kind: 'unavailable',
         code: 'guard_reference_unavailable',
       });
