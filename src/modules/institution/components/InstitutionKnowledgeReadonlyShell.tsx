@@ -224,6 +224,22 @@ const indexingJobStatusLabels: Record<InstitutionKnowledgeIndexingJobRecord['sta
 
 const controlledTrialReadiness = getKnowledgeBaseControlledTrialReadiness();
 
+const hybridEnvelopeRequiredKeys = ['requestId', 'readonly', 'dataSource', 'records', 'pageInfo', 'emptyState'] as const;
+const hybridPageInfoRequiredKeys = ['page', 'pageSize', 'total', 'pageCount', 'hasPreviousPage', 'hasNextPage'] as const;
+const hybridEmptyStateRequiredKeys = ['title', 'description'] as const;
+const hybridRecordRequiredKeys = [
+  'knowledgeId',
+  'knowledgeTitle',
+  'fileId',
+  'fileName',
+  'chunkId',
+  'chunkIndex',
+  'textPreview',
+  'retrievalMode',
+  'matchReason',
+] as const;
+const hybridRecordOptionalKeys = ['keywordScore', 'vectorScore', 'rerankScore'] as const;
+
 function isDataDescriptor(
   descriptor: PropertyDescriptor | undefined,
 ): descriptor is PropertyDescriptor & { value: unknown } {
@@ -236,14 +252,29 @@ function isEnumerableDataDescriptor(
   return Boolean(isDataDescriptor(descriptor) && descriptor.enumerable);
 }
 
-function snapshotPlainDataRecord(value: unknown): Readonly<Record<string, unknown>> | null {
+function snapshotPlainDataRecord(
+  value: unknown,
+  requiredKeys: readonly string[],
+  optionalKeys: readonly string[] = [],
+): Readonly<Record<string, unknown>> | null {
   try {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
-    if (Object.getPrototypeOf(value) !== Object.prototype || Object.getOwnPropertySymbols(value).length > 0) return null;
+    const ownKeys = Reflect.ownKeys(value);
+    const expectedKeys = new Set([...requiredKeys, ...optionalKeys]);
+    if (
+      ownKeys.some((key) => typeof key !== 'string' || !expectedKeys.has(key))
+      || requiredKeys.some((key) => !ownKeys.includes(key))
+      || ownKeys.length > expectedKeys.size
+    ) return null;
+    if (Object.getPrototypeOf(value) !== Object.prototype) return null;
 
     const descriptors = Object.getOwnPropertyDescriptors(value) as Record<string, PropertyDescriptor>;
+    const descriptorKeys = Reflect.ownKeys(descriptors);
+    if (descriptorKeys.length !== ownKeys.length || descriptorKeys.some((key) => !ownKeys.includes(key))) return null;
     const snapshot = Object.create(null) as Record<string, unknown>;
-    for (const [key, descriptor] of Object.entries(descriptors)) {
+    for (const key of ownKeys) {
+      if (typeof key !== 'string') return null;
+      const descriptor = descriptors[key];
       if (!isEnumerableDataDescriptor(descriptor)) return null;
       snapshot[key] = descriptor.value;
     }
@@ -255,14 +286,18 @@ function snapshotPlainDataRecord(value: unknown): Readonly<Record<string, unknow
 
 function snapshotDenseDataArray(value: unknown): readonly unknown[] | null {
   try {
-    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype || Object.getOwnPropertySymbols(value).length > 0) {
-      return null;
-    }
+    if (!Array.isArray(value)) return null;
+    const ownKeys = Reflect.ownKeys(value);
+    if (ownKeys.some((key) => typeof key !== 'string')) return null;
+    if (Object.getPrototypeOf(value) !== Array.prototype) return null;
     const descriptors = Object.getOwnPropertyDescriptors(value) as Record<string, PropertyDescriptor>;
+    const descriptorKeys = Reflect.ownKeys(descriptors);
+    if (descriptorKeys.length !== ownKeys.length || descriptorKeys.some((key) => !ownKeys.includes(key))) return null;
     const lengthDescriptor = descriptors.length;
     if (!isDataDescriptor(lengthDescriptor) || typeof lengthDescriptor.value !== 'number') return null;
     const { value: length } = lengthDescriptor;
     if (!Number.isSafeInteger(length) || length < 0) return null;
+    if (ownKeys.length !== length + 1 || !ownKeys.includes('length')) return null;
 
     const snapshot: unknown[] = [];
     for (let index = 0; index < length; index += 1) {
@@ -270,7 +305,6 @@ function snapshotDenseDataArray(value: unknown): readonly unknown[] | null {
       if (!isEnumerableDataDescriptor(descriptor)) return null;
       snapshot.push(descriptor.value);
     }
-    if (Object.keys(descriptors).some((key) => key !== 'length' && !/^(?:0|[1-9]\d*)$/u.test(key))) return null;
     return Object.freeze(snapshot);
   } catch {
     return null;
@@ -286,7 +320,7 @@ function isNonBlankString(value: unknown): value is string {
 }
 
 function snapshotHybridPageInfo(value: unknown): InstitutionKnowledgeHybridPageInfo | null {
-  const pageInfo = snapshotPlainDataRecord(value);
+  const pageInfo = snapshotPlainDataRecord(value, hybridPageInfoRequiredKeys);
   if (!pageInfo) return null;
   const { page, pageSize, total, pageCount, hasPreviousPage, hasNextPage } = pageInfo;
   if (!isNonNegativeSafeInteger(page) || page < 1) return null;
@@ -304,7 +338,7 @@ function snapshotHybridPageInfo(value: unknown): InstitutionKnowledgeHybridPageI
 }
 
 function snapshotHybridEmptyState(value: unknown): InstitutionKnowledgeHybridEmptyState | null {
-  const emptyState = snapshotPlainDataRecord(value);
+  const emptyState = snapshotPlainDataRecord(value, hybridEmptyStateRequiredKeys);
   if (!emptyState) return null;
   const { title, description } = emptyState;
   if (typeof title !== 'string' || typeof description !== 'string' || !title.trim() || !description.trim()) return null;
@@ -312,7 +346,7 @@ function snapshotHybridEmptyState(value: unknown): InstitutionKnowledgeHybridEmp
 }
 
 function snapshotHybridSearchRecord(value: unknown): InstitutionKnowledgeSearchResultRecord | null {
-  const record = snapshotPlainDataRecord(value);
+  const record = snapshotPlainDataRecord(value, hybridRecordRequiredKeys, hybridRecordOptionalKeys);
   if (!record) return null;
   const { knowledgeId, knowledgeTitle, fileId, fileName, chunkId, chunkIndex, textPreview, retrievalMode, matchReason } = record;
   if (
@@ -351,7 +385,7 @@ function snapshotHybridSearchRecord(value: unknown): InstitutionKnowledgeSearchR
 function snapshotAuthoritativeInstitutionHybridSearchResponse(
   value: unknown,
 ): InstitutionKnowledgeSearchResultRecord[] | null {
-  const payload = snapshotPlainDataRecord(value);
+  const payload = snapshotPlainDataRecord(value, hybridEnvelopeRequiredKeys);
   if (!payload) return null;
   if (payload.requestId !== 'institution-knowledge-hybrid-search' || payload.readonly !== true || payload.dataSource !== 'repository') {
     return null;

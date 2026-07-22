@@ -58,6 +58,49 @@ function authoritativeHybridRetrievalPayload(overrides: Record<string, unknown> 
   };
 }
 
+function authoritativeHybridRetrievalRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    knowledgeId: 'knowledge-authoritative',
+    knowledgeTitle: '权威知识条目',
+    fileId: 'file-authoritative',
+    fileName: '权威文件.pdf',
+    chunkId: 'chunk-authoritative',
+    chunkIndex: 0,
+    textPreview: '权威检索结果',
+    retrievalMode: 'hybrid',
+    matchReason: '权威匹配',
+    ...overrides,
+  };
+}
+
+function withEnumerableOwnData<T extends object>(target: T, key: PropertyKey, value: unknown): T {
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
+  return target;
+}
+
+function withEnumerableAccessor<T extends object>(target: T, key: PropertyKey): T {
+  Object.defineProperty(target, key, {
+    get() {
+      throw new Error(`${String(key)} accessor must not run`);
+    },
+    enumerable: true,
+    configurable: true,
+  });
+  return target;
+}
+
+function directJsonResponse(payload: unknown): Response {
+  return {
+    ok: true,
+    json: async () => payload,
+  } as Response;
+}
+
 describe('机构端知识库只读列表 UI', () => {
   beforeEach(() => {
     indexingJobsEnabled = true;
@@ -1118,12 +1161,71 @@ describe('机构端知识库只读列表 UI', () => {
         matchReason: 'invalid',
       }],
     })],
+    ['top extra key', authoritativeHybridRetrievalPayload({ legacy: true })],
+    ['top own __proto__', withEnumerableOwnData(authoritativeHybridRetrievalPayload(), '__proto__', { polluted: true })],
+    ['top accessor', withEnumerableAccessor(authoritativeHybridRetrievalPayload(), 'requestId')],
+    ['top custom prototype', Object.setPrototypeOf(authoritativeHybridRetrievalPayload(), { legacy: true })],
+    ['pageInfo extra key', (() => {
+      const payload = authoritativeHybridRetrievalPayload();
+      withEnumerableOwnData(payload.pageInfo, 'legacy', true);
+      return payload;
+    })()],
+    ['pageInfo own __proto__', (() => {
+      const payload = authoritativeHybridRetrievalPayload();
+      withEnumerableOwnData(payload.pageInfo, '__proto__', { polluted: true });
+      return payload;
+    })()],
+    ['pageInfo accessor', (() => {
+      const payload = authoritativeHybridRetrievalPayload();
+      withEnumerableAccessor(payload.pageInfo, 'page');
+      return payload;
+    })()],
+    ['emptyState extra key', (() => {
+      const payload = authoritativeHybridRetrievalPayload();
+      withEnumerableOwnData(payload.emptyState, 'legacy', true);
+      return payload;
+    })()],
+    ['emptyState own __proto__', (() => {
+      const payload = authoritativeHybridRetrievalPayload();
+      withEnumerableOwnData(payload.emptyState, '__proto__', { polluted: true });
+      return payload;
+    })()],
+    ['emptyState accessor', (() => {
+      const payload = authoritativeHybridRetrievalPayload();
+      withEnumerableAccessor(payload.emptyState, 'title');
+      return payload;
+    })()],
+    ['record extra key', authoritativeHybridRetrievalPayload({
+      records: [authoritativeHybridRetrievalRecord({ providerPayload: 'must-not-publish' })],
+    })],
+    ['record own __proto__', authoritativeHybridRetrievalPayload({
+      records: [withEnumerableOwnData(authoritativeHybridRetrievalRecord(), '__proto__', { polluted: true })],
+    })],
+    ['record symbol key', authoritativeHybridRetrievalPayload({
+      records: [withEnumerableOwnData(authoritativeHybridRetrievalRecord(), Symbol('legacy'), true)],
+    })],
+    ['record accessor', authoritativeHybridRetrievalPayload({
+      records: [withEnumerableAccessor(authoritativeHybridRetrievalRecord(), 'textPreview')],
+    })],
+    ['records sparse', (() => {
+      const records = new Array(1);
+      return authoritativeHybridRetrievalPayload({ records });
+    })()],
+    ['records accessor', authoritativeHybridRetrievalPayload({
+      records: withEnumerableAccessor([], '0'),
+    })],
+    ['records extra key', authoritativeHybridRetrievalPayload({
+      records: withEnumerableOwnData([], 'legacy', true),
+    })],
+    ['records symbol key', authoritativeHybridRetrievalPayload({
+      records: withEnumerableOwnData([], Symbol('legacy'), true),
+    })],
   ] as const)('检索 %s 的 200 伪造信封必须不可用而非空态', async (_label, payload) => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
         if (url.includes('/api/institution/knowledge-management/retrieval')) {
-          return Response.json(payload);
+          return directJsonResponse(payload);
         }
         return Response.json({ records: [], pageInfo });
       }),
@@ -1144,6 +1246,42 @@ describe('机构端知识库只读列表 UI', () => {
     expect(within(searchSection).queryByText('不应显示的部分检索结果')).not.toBeInTheDocument();
   });
 
+  it.each([
+    ['ownKeys Proxy', new Proxy(authoritativeHybridRetrievalPayload(), {
+      ownKeys() {
+        throw new Error('ownKeys trap');
+      },
+    })],
+    ['getPrototypeOf Proxy', new Proxy(authoritativeHybridRetrievalPayload(), {
+      getPrototypeOf() {
+        throw new Error('getPrototypeOf trap');
+      },
+    })],
+    ['revoked Proxy', (() => {
+      const revocable = Proxy.revocable(authoritativeHybridRetrievalPayload(), {});
+      revocable.revoke();
+      return revocable.proxy;
+    })()],
+  ] as const)('检索 %s payload 安全失败且不发布数据', async (_label, payload) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/retrieval')) return directJsonResponse(payload);
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+
+    render(<InstitutionKnowledgeReadonlyShell />);
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索内容'), { target: { value: '冷敷' } });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
+
+    expect(await within(searchSection).findByText('知识库检索暂时不可用')).toBeInTheDocument();
+    expect(within(searchSection).queryByText('暂无匹配片段')).not.toBeInTheDocument();
+    expect(within(searchSection).queryByText('权威检索结果')).not.toBeInTheDocument();
+  });
+
   it('仅精确合法的权威信封才能发布空态与结果', async () => {
     let retrievalCall = 0;
     vi.stubGlobal(
@@ -1153,20 +1291,11 @@ describe('机构端知识库只读列表 UI', () => {
           retrievalCall += 1;
           if (retrievalCall === 1) return Response.json(authoritativeHybridRetrievalPayload());
           return Response.json(authoritativeHybridRetrievalPayload({
-            records: [{
-              knowledgeId: 'knowledge-authoritative',
-              knowledgeTitle: '权威知识条目',
-              fileId: 'file-authoritative',
-              fileName: '权威文件.pdf',
-              chunkId: 'chunk-authoritative',
-              chunkIndex: 0,
-              textPreview: '权威检索结果',
-              retrievalMode: 'hybrid',
+            records: [authoritativeHybridRetrievalRecord({
               keywordScore: 1,
               vectorScore: 0.8,
               rerankScore: 0.9,
-              matchReason: '权威匹配',
-            }],
+            })],
             pageInfo,
           }));
         }
