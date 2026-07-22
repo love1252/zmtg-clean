@@ -1,25 +1,33 @@
 import { randomUUID } from 'node:crypto';
+
 import { NextResponse } from 'next/server';
+
 import { createAuditEvent } from '@/modules/audit/domain/audit-events';
 import { createAuditEventRepository } from '@/modules/audit/server/audit-event-repository';
 import type {
   AuthAccountRecord,
   AuthTenantMembershipRecord,
 } from '@/modules/auth/domain/auth-account';
-import type { AuthSessionSource, AuthSessionUser } from '@/modules/auth/domain/session';
 import { normalizeAuthUsername } from '@/modules/auth/domain/auth-account';
-import { createAuthAccountRepository } from '@/modules/auth/server/auth-account-repository';
+import type { AuthSessionUser } from '@/modules/auth/domain/session';
+import {
+  createAuthAccountRepository,
+} from '@/modules/auth/server/auth-account-repository';
 import { createAuthAccountService } from '@/modules/auth/server/auth-account-service';
+import {
+  FORMAL_SERVER_SESSION_COOKIE_V1,
+  issueFormalServerSessionCookieV1,
+} from '@/modules/auth/server/formal-server-session-provenance-owner';
 import {
   authenticateDemoUser,
   createDemoSession,
-  createServerSession,
   DEMO_SESSION_COOKIE,
   encodeDemoSession,
-  isMissingDemoSessionSecretError,
   isDemoAuthEnabled,
+  isMissingDemoSessionSecretError,
   sessionMaxAgeSeconds,
 } from '@/modules/auth/server/demo-session';
+import { resolveInstitutionGuardRuntimeConfigV1 } from '@/modules/security/server/institution-guard-runtime-config';
 import { getDatabase, type TenantDatabase } from '@/server/db/client';
 
 type LoginPayload = {
@@ -29,11 +37,36 @@ type LoginPayload = {
 };
 
 type FormalLoginResult =
-  | { status: 'authenticated'; user: AuthSessionUser; passwordResetRequired: boolean }
-  | { status: 'rejected' }
-  | { status: 'not_found_or_unavailable' };
+  | Readonly<{ kind: 'not_found' }>
+  | Readonly<{ kind: 'rejected' }>
+  | Readonly<{ kind: 'unavailable' }>
+  | Readonly<{
+      kind: 'authenticated';
+      repository: ReturnType<typeof createAuthAccountRepository>;
+      user: AuthSessionUser;
+      passwordResetRequired: boolean;
+    }>;
 
 type FormalLoginAuditReason = 'tenant_login_succeeded' | 'tenant_login_failed';
+
+function noStore(response: NextResponse): NextResponse {
+  response.headers.set('Cache-Control', 'no-store');
+  return response;
+}
+
+function json(value: unknown, status = 200): NextResponse {
+  return noStore(NextResponse.json(value, { status }));
+}
+
+function clearCookie(response: NextResponse, name: string): void {
+  response.cookies.set(name, '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 0,
+    path: '/',
+  });
+}
 
 async function recordFormalLoginAudit(input: {
   database: TenantDatabase;
@@ -68,64 +101,21 @@ async function recordFormalLoginAudit(input: {
   }
 }
 
-function createLoginResponse(input: {
-  user: AuthSessionUser;
-  source: AuthSessionSource;
-  passwordResetRequired?: boolean;
-}) {
-  const session =
-    input.source === 'server_session'
-      ? createServerSession(input.user)
-      : createDemoSession(input.user);
-  let encodedSession: string;
-  try {
-    encodedSession = encodeDemoSession(session);
-  } catch (error) {
-    if (isMissingDemoSessionSecretError(error)) {
-      return NextResponse.json({ code: 503, message: '演示登录未配置' }, { status: 503 });
-    }
-    throw error;
-  }
-
-  const response = NextResponse.json({
-    code: 0,
-    data: {
-      user: input.user,
-      ...(input.passwordResetRequired == null
-        ? {}
-        : { passwordResetRequired: input.passwordResetRequired }),
-    },
-  });
-  response.cookies.set(DEMO_SESSION_COOKIE, encodedSession, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: sessionMaxAgeSeconds(),
-    path: '/',
-  });
-
-  return response;
-}
-
 async function authenticateFormalAccount(input: {
   username: string;
   password: string;
-  scope?: string;
 }): Promise<FormalLoginResult> {
-  const requestedScope = input.scope === 'platform' ? 'platform' : 'institution';
-  if (requestedScope !== 'institution') {
-    return { status: 'not_found_or_unavailable' };
-  }
-
   try {
     const database = getDatabase();
     const repository = createAuthAccountRepository(database);
-    const account = await repository.findAccountByUsername(normalizeAuthUsername(input.username));
-    if (!account) {
-      return { status: 'not_found_or_unavailable' };
-    }
-    const membership = await repository.findPrimaryTenantMembershipByUserId(account.id);
+    const account = await repository.findAccountByUsername(
+      normalizeAuthUsername(input.username),
+    );
+    if (!account) return Object.freeze({ kind: 'not_found' });
 
+    const membership = await repository.findPrimaryTenantMembershipByUserId(
+      account.id,
+    );
     const service = createAuthAccountService({ repository });
     const result = await service.authenticatePasswordAccount({
       username: input.username,
@@ -141,7 +131,7 @@ async function authenticateFormalAccount(input: {
         result: 'denied',
         reason: 'tenant_login_failed',
       });
-      return { status: 'rejected' };
+      return Object.freeze({ kind: 'rejected' });
     }
 
     await recordFormalLoginAudit({
@@ -152,14 +142,38 @@ async function authenticateFormalAccount(input: {
       reason: 'tenant_login_succeeded',
     });
 
-    return {
-      status: 'authenticated',
+    return Object.freeze({
+      kind: 'authenticated',
+      repository,
       user: result.user,
       passwordResetRequired: result.passwordResetRequired,
-    };
+    });
   } catch {
-    return { status: 'not_found_or_unavailable' };
+    return Object.freeze({ kind: 'unavailable' });
   }
+}
+
+function createDemoLoginResponse(user: Parameters<typeof createDemoSession>[0]): NextResponse {
+  let encodedSession: string;
+  try {
+    encodedSession = encodeDemoSession(createDemoSession(user));
+  } catch (error) {
+    if (isMissingDemoSessionSecretError(error)) {
+      return json({ code: 503, message: '演示登录未配置' }, 503);
+    }
+    return json({ code: 503, message: '登录暂不可用' }, 503);
+  }
+
+  const response = json({ code: 0, data: { user } });
+  response.cookies.set(DEMO_SESSION_COOKIE, encodedSession, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: sessionMaxAgeSeconds(),
+    path: '/',
+  });
+  clearCookie(response, FORMAL_SERVER_SESSION_COOKIE_V1);
+  return response;
 }
 
 export async function POST(request: Request) {
@@ -167,37 +181,81 @@ export async function POST(request: Request) {
   try {
     payload = (await request.json()) as LoginPayload;
   } catch {
-    return NextResponse.json({ code: 400, message: '请求格式不正确' }, { status: 400 });
+    return json({ code: 400, message: '请求格式不正确' }, 400);
   }
 
   const username = typeof payload.username === 'string' ? payload.username.trim() : '';
   const password = typeof payload.password === 'string' ? payload.password : '';
-  const scope = typeof payload.scope === 'string' ? payload.scope : undefined;
-
   if (!username || !password) {
-    return NextResponse.json({ code: 400, message: '请输入用户名和密码' }, { status: 400 });
+    return json({ code: 400, message: '请输入用户名和密码' }, 400);
+  }
+  if (payload.scope !== 'institution') {
+    return json({ code: 400, message: '请求范围不正确' }, 400);
   }
 
-  const formalLoginResult = await authenticateFormalAccount({ username, password, scope });
-  if (formalLoginResult.status === 'authenticated') {
-    return createLoginResponse({
-      user: formalLoginResult.user,
-      source: 'server_session',
-      passwordResetRequired: formalLoginResult.passwordResetRequired,
-    });
+  const formalLogin = await authenticateFormalAccount({ username, password });
+  if (formalLogin.kind === 'not_found') {
+    if (!isDemoAuthEnabled()) {
+      return json({ code: 401, message: '用户名或密码错误' }, 401);
+    }
+    const demoUser = authenticateDemoUser({ username, password, scope: 'institution' });
+    return demoUser
+      ? createDemoLoginResponse(demoUser)
+      : json({ code: 401, message: '用户名或密码错误' }, 401);
   }
-  if (formalLoginResult.status === 'rejected') {
-    return NextResponse.json({ code: 401, message: '用户名或密码错误' }, { status: 401 });
+  if (formalLogin.kind === 'unavailable') {
+    return json({ code: 503, message: '登录暂不可用' }, 503);
+  }
+  if (formalLogin.kind === 'rejected') {
+    return json({ code: 401, message: '用户名或密码错误' }, 401);
+  }
+  if (formalLogin.passwordResetRequired) {
+    return json(
+      { code: 'PASSWORD_RESET_REQUIRED', message: '需要先完成密码重置' },
+      403,
+    );
+  }
+  if (
+    typeof formalLogin.user.tenantId !== 'string' ||
+    typeof formalLogin.user.institutionId !== 'string'
+  ) {
+    return json({ code: 401, message: '用户名或密码错误' }, 401);
   }
 
-  if (!isDemoAuthEnabled()) {
-    return NextResponse.json({ code: 503, message: '演示登录已禁用' }, { status: 503 });
+  const runtimeConfig = resolveInstitutionGuardRuntimeConfigV1();
+  if (runtimeConfig.kind !== 'available') {
+    return json({ code: 503, message: '登录暂不可用' }, 503);
   }
 
-  const user = authenticateDemoUser({ username, password, scope });
-  if (!user) {
-    return NextResponse.json({ code: 401, message: '用户名或密码错误' }, { status: 401 });
+  const snapshot = await formalLogin.repository.findCurrentFormalSessionUser({
+    accountId: formalLogin.user.id,
+    tenantId: formalLogin.user.tenantId,
+    institutionId: formalLogin.user.institutionId,
+  });
+  if (snapshot.kind === 'denied') {
+    return json({ code: 401, message: '用户名或密码错误' }, 401);
+  }
+  if (snapshot.kind !== 'resolved') {
+    return json({ code: 503, message: '登录暂不可用' }, 503);
   }
 
-  return createLoginResponse({ user, source: 'demo_session' });
+  const issued = issueFormalServerSessionCookieV1({
+    sessionUserSnapshot: snapshot.snapshot,
+    sessionKeyRing: runtimeConfig.formalServerSessionKeyRing,
+    now: () => new Date(),
+  });
+  if (issued.kind !== 'issued') {
+    return json({ code: 503, message: '登录暂不可用' }, 503);
+  }
+
+  const response = json({ code: 0, data: { user: issued.sessionUser } });
+  response.cookies.set(FORMAL_SERVER_SESSION_COOKIE_V1, issued.cookieValue, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: issued.maxAgeSeconds,
+    path: '/',
+  });
+  clearCookie(response, DEMO_SESSION_COOKIE);
+  return response;
 }
