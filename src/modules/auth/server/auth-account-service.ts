@@ -204,7 +204,7 @@ export function createAuthAccountService(input: {
           ...failureState,
         });
 
-        if (writeResult === 'state_changed') {
+        if (writeResult !== 'recorded') {
           return {
             status: 'rejected' as const,
             reason: 'state_changed' as const,
@@ -242,7 +242,7 @@ export function createAuthAccountService(input: {
         status,
       });
 
-      if (writeResult === 'state_changed') {
+      if (writeResult !== 'recorded') {
         return {
           status: 'rejected' as const,
           reason: 'state_changed' as const,

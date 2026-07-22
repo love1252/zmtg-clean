@@ -69,6 +69,84 @@ function mutateLiveAccountAfterRead(account: AuthAccountRecord) {
   account.updatedAt.setTime(0);
 }
 
+type UnexpectedLoginWriteResultCase = Readonly<{
+  label: string;
+  create: () => Readonly<{
+    value: unknown;
+    assertUntouched: () => void;
+  }>;
+}>;
+
+const unexpectedLoginWriteResultCases: readonly UnexpectedLoginWriteResultCase[] = [
+  {
+    label: 'undefined',
+    create: () => ({ value: undefined, assertUntouched: () => undefined }),
+  },
+  {
+    label: 'null',
+    create: () => ({ value: null, assertUntouched: () => undefined }),
+  },
+  {
+    label: '未知字符串',
+    create: () => ({ value: 'unexpected_runtime_value', assertUntouched: () => undefined }),
+  },
+  {
+    label: '带 getter 的对象',
+    create: () => {
+      const getter = vi.fn(() => {
+        throw new Error('不得读取未知 runtime 对象 getter');
+      });
+      const value = Object.defineProperty(Object.create(null), 'secret', {
+        enumerable: true,
+        get: getter,
+      });
+      return {
+        value,
+        assertUntouched: () => expect(getter).not.toHaveBeenCalled(),
+      };
+    },
+  },
+  {
+    label: 'hostile Proxy',
+    create: () => {
+      const getter = vi.fn(() => {
+        throw new Error('不得读取 Proxy target getter');
+      });
+      const target = Object.defineProperty(Object.create(null), 'secret', {
+        enumerable: true,
+        get: getter,
+      });
+      const traps = [
+        vi.fn(() => {
+          throw new Error('不得触发 Proxy getPrototypeOf trap');
+        }),
+        vi.fn(() => {
+          throw new Error('不得触发 Proxy ownKeys trap');
+        }),
+        vi.fn(() => {
+          throw new Error('不得触发 Proxy descriptor trap');
+        }),
+        vi.fn(() => {
+          throw new Error('不得触发 Proxy has trap');
+        }),
+      ] as const;
+      const value = new Proxy(target, {
+        getPrototypeOf: traps[0],
+        ownKeys: traps[1],
+        getOwnPropertyDescriptor: traps[2],
+        has: traps[3],
+      });
+      return {
+        value,
+        assertUntouched: () => {
+          expect(getter).not.toHaveBeenCalled();
+          for (const trap of traps) expect(trap).not.toHaveBeenCalled();
+        },
+      };
+    },
+  },
+];
+
 const tenantAdminMembership: AuthTenantMembershipRecord = {
   id: 'tenant-member-chenlei',
   tenantId: 'tenant-zhengpu',
@@ -420,6 +498,72 @@ describe('正式账号服务', () => {
     expect(JSON.stringify(result)).not.toContain(account.id);
     expect(JSON.stringify(result)).not.toContain('scrypt$');
   });
+
+  it.each(unexpectedLoginWriteResultCases)(
+    '登录成功写入返回 $label 时失败关闭且不触碰未知值',
+    async ({ create }) => {
+      const runtimeResult = create();
+      const account = createAccount();
+      const repository = createRepository({
+        findAccountByUsername: vi.fn(async () => account),
+        findPrimaryTenantMembershipByUserId: vi.fn(async () => tenantAdminMembership),
+        listActiveInstitutionBindingsByAccountAndTenant: vi.fn(async () => [
+          institutionBinding(),
+        ]),
+        recordLoginSuccess: vi.fn(async () => runtimeResult.value as never),
+      });
+      const service = createAuthAccountService({
+        repository,
+        passwordHasher: {
+          hash: vi.fn(),
+          verify: vi.fn(async () => true),
+        },
+        now: () => now,
+      });
+
+      const result = await service.authenticatePasswordAccount({
+        username: account.username,
+        plaintextPassword: 'Init#2026-Strong',
+        scope: 'institution',
+      });
+
+      expect(result).toEqual({ status: 'rejected', reason: 'state_changed' });
+      expect(JSON.stringify(result)).toBe('{"status":"rejected","reason":"state_changed"}');
+      expect('user' in result).toBe(false);
+      runtimeResult.assertUntouched();
+    },
+  );
+
+  it.each(unexpectedLoginWriteResultCases)(
+    '登录失败写入返回 $label 时失败关闭、不继续成员读取且不触碰未知值',
+    async ({ create }) => {
+      const runtimeResult = create();
+      const account = createAccount();
+      const repository = createRepository({
+        findAccountByUsername: vi.fn(async () => account),
+        recordLoginFailure: vi.fn(async () => runtimeResult.value as never),
+      });
+      const service = createAuthAccountService({
+        repository,
+        passwordHasher: {
+          hash: vi.fn(),
+          verify: vi.fn(async () => false),
+        },
+        now: () => now,
+      });
+
+      const result = await service.authenticatePasswordAccount({
+        username: account.username,
+        plaintextPassword: 'wrong-password',
+        scope: 'institution',
+      });
+
+      expect(result).toEqual({ status: 'rejected', reason: 'state_changed' });
+      expect(JSON.stringify(result)).toBe('{"status":"rejected","reason":"state_changed"}');
+      expect(repository.findPrimaryTenantMembershipByUserId).not.toHaveBeenCalled();
+      runtimeResult.assertUntouched();
+    },
+  );
 
   it.each(['recorded', 'state_changed'] as const)(
     '登录失败 deferred 期间 live account 变更时仍只用冻结快照并返回 %s 对应结果',

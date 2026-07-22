@@ -988,4 +988,38 @@ describe('正式账号 repository', () => {
 
     expect(result).toBe('state_changed');
   });
+
+  it('登录失败 CAS 的 returning 拒绝会原样向上传播', async () => {
+    const databaseError = new Error('record login failure returning failed');
+    const query = createDatabase();
+    query.updateChain.returning.mockRejectedValueOnce(databaseError);
+
+    const result = createAuthAccountRepository(query.database).recordLoginFailure({
+      accountId: accountRow.id,
+      expectedState: expectedLoginAccountState(),
+      failedAt: loginTimestamp,
+      updatedBy: accountRow.id,
+      failedLoginCount: 1,
+      status: 'active',
+      lockedUntil: null,
+    });
+
+    await expect(result).rejects.toBe(databaseError);
+  });
+
+  it('登录成功 CAS 的 returning 拒绝会原样向上传播', async () => {
+    const databaseError = new Error('record login success returning failed');
+    const query = createDatabase();
+    query.updateChain.returning.mockRejectedValueOnce(databaseError);
+
+    const result = createAuthAccountRepository(query.database).recordLoginSuccess({
+      accountId: accountRow.id,
+      expectedState: expectedLoginAccountState(),
+      loggedInAt: loginTimestamp,
+      updatedBy: accountRow.id,
+      status: 'active',
+    });
+
+    await expect(result).rejects.toBe(databaseError);
+  });
 });
