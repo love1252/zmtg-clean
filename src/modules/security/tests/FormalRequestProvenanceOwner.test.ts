@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import {
+  createFormalRequestProvenanceResolverFromOwnerResolutionV1,
   createFormalRequestProvenanceResolverV1,
   isFormalProvenanceResolverV1,
   type FormalRequestProvenanceOwnerInputV1,
@@ -139,6 +140,65 @@ async function verifiedEvidence(input: {
 }
 
 describe('BASE-02B formal request provenance owner', () => {
+  it('maps an explicit upstream owner resolution without malformed-field sentinels', async () => {
+    const cases = [
+      {
+        ownerResolution: { kind: 'rejected', code: 'provenance_missing' },
+        expected: { kind: 'rejected', code: 'provenance_missing' },
+      },
+      {
+        ownerResolution: { kind: 'rejected', code: 'provenance_source_denied' },
+        expected: { kind: 'rejected', code: 'provenance_source_denied' },
+      },
+      {
+        ownerResolution: { kind: 'rejected', code: 'provenance_invalid' },
+        expected: { kind: 'rejected', code: 'provenance_invalid' },
+      },
+      {
+        ownerResolution: { kind: 'rejected', code: 'provenance_expired' },
+        expected: { kind: 'rejected', code: 'provenance_expired' },
+      },
+      {
+        ownerResolution: { kind: 'unavailable', code: 'provenance_unavailable' },
+        expected: { kind: 'unavailable', code: 'provenance_unavailable' },
+      },
+    ] as const;
+
+    for (const value of cases) {
+      const result = await createFormalRequestProvenanceResolverFromOwnerResolutionV1({
+        ownerResolution: value.ownerResolution,
+      }).resolveCurrentRequest();
+      expect(result).toEqual(value.expected);
+      expect(Object.isFrozen(result)).toBe(true);
+    }
+  });
+
+  it('keeps explicit owner resolution single-use and exact', async () => {
+    const owner = createFormalRequestProvenanceResolverFromOwnerResolutionV1({
+      ownerResolution: { kind: 'verified', ownerInput: ownerInput() },
+      referenceCodec: realCodec(),
+      now: () => VERIFIED_AT,
+    });
+    expect(isFormalProvenanceResolverV1(owner)).toBe(true);
+    expect((await owner.resolveCurrentRequest()).kind).toBe('verified');
+    await expect(owner.resolveCurrentRequest()).resolves.toEqual({
+      kind: 'rejected',
+      code: 'provenance_source_denied',
+    });
+
+    await expect(
+      createFormalRequestProvenanceResolverFromOwnerResolutionV1({
+        ownerResolution: {
+          kind: 'rejected',
+          code: 'provenance_missing',
+          rawSession: 'must-not-be-accepted',
+        } as never,
+        referenceCodec: realCodec(),
+        now: () => VERIFIED_AT,
+      }).resolveCurrentRequest(),
+    ).resolves.toEqual({ kind: 'unavailable', code: 'provenance_unavailable' });
+  });
+
   it('keeps the request-bound owner input and resolver nominally sealed', () => {
     expectTypeOf<Unbranded<FormalRequestProvenanceOwnerInputV1>>().not.toMatchTypeOf<
       FormalRequestProvenanceOwnerInputV1
@@ -252,57 +312,83 @@ describe('BASE-02B formal request provenance owner', () => {
   });
 
   it('issues the fixed global user profile and source-bound institution request profiles', async () => {
-    const serverRecorder = recordingCodec();
-    const server = await verifiedEvidence({ codec: serverRecorder.codec });
-    const gatewayRecorder = recordingCodec();
+    const codec = realCodec();
+    const server = await verifiedEvidence({ codec });
     const gateway = await verifiedEvidence({
       ownerInput: ownerInput({
         source: 'trusted_gateway',
         requestIdentifier: 'request-gateway-001',
         proofIdentifier: 'proof-gateway-001',
       }),
-      codec: gatewayRecorder.codec,
+      codec,
     });
 
-    expect(serverRecorder.calls).toEqual([
-      {
+    const expectedServerReferences = [
+      codec.issue({
         prefix: 'usr',
         ownerDomain: 'zmtg.auth-account.v1',
         tenantId: null,
         institutionId: null,
-        ownerSubject: 'account-001',
-      },
-      {
+        ownerSubject: 'account-001' as never,
+      }),
+      codec.issue({
         prefix: 'req',
         ownerDomain: 'zmtg.formal-provenance.server-session.v1',
         tenantId: 'tenant-001',
         institutionId: 'institution-001',
-        ownerSubject: 'request-001',
-      },
-      {
+        ownerSubject: 'request-001' as never,
+      }),
+      codec.issue({
         prefix: 'prf',
         ownerDomain: 'zmtg.formal-provenance.server-session.v1',
         tenantId: 'tenant-001',
         institutionId: 'institution-001',
-        ownerSubject: 'proof-001',
-      },
-    ]);
-    expect(gatewayRecorder.calls.slice(1)).toEqual([
-      {
+        ownerSubject: 'proof-001' as never,
+      }),
+    ];
+    const expectedGatewayReferences = [
+      codec.issue({
         prefix: 'req',
         ownerDomain: 'zmtg.formal-provenance.trusted-gateway.v1',
         tenantId: 'tenant-001',
         institutionId: 'institution-001',
-        ownerSubject: 'request-gateway-001',
-      },
-      {
+        ownerSubject: 'request-gateway-001' as never,
+      }),
+      codec.issue({
         prefix: 'prf',
         ownerDomain: 'zmtg.formal-provenance.trusted-gateway.v1',
         tenantId: 'tenant-001',
         institutionId: 'institution-001',
-        ownerSubject: 'proof-gateway-001',
-      },
-    ]);
+        ownerSubject: 'proof-gateway-001' as never,
+      }),
+    ];
+    expect(expectedServerReferences.every((value) => value.kind === 'issued')).toBe(true);
+    expect(expectedGatewayReferences.every((value) => value.kind === 'issued')).toBe(true);
+    expect(server.userReference).toBe(
+      expectedServerReferences[0]?.kind === 'issued'
+        ? expectedServerReferences[0].reference
+        : null,
+    );
+    expect(server.requestReference).toBe(
+      expectedServerReferences[1]?.kind === 'issued'
+        ? expectedServerReferences[1].reference
+        : null,
+    );
+    expect(server.proofReference).toBe(
+      expectedServerReferences[2]?.kind === 'issued'
+        ? expectedServerReferences[2].reference
+        : null,
+    );
+    expect(gateway.requestReference).toBe(
+      expectedGatewayReferences[0]?.kind === 'issued'
+        ? expectedGatewayReferences[0].reference
+        : null,
+    );
+    expect(gateway.proofReference).toBe(
+      expectedGatewayReferences[1]?.kind === 'issued'
+        ? expectedGatewayReferences[1].reference
+        : null,
+    );
     expect(server.userReference).toBe(gateway.userReference);
     expect(server.requestReference).not.toBe(gateway.requestReference);
     expect(server.proofReference).not.toBe(gateway.proofReference);
@@ -435,7 +521,7 @@ describe('BASE-02B formal request provenance owner', () => {
     }
   });
 
-  it('rejects every non-REF-profile usr, req or prf output without partial evidence', async () => {
+  it('rejects every structural codec lookalike before it can supply a reference', async () => {
     const wrongPrefix = {
       usr: 'req',
       req: 'prf',
@@ -461,7 +547,7 @@ describe('BASE-02B formal request provenance owner', () => {
           kind: 'unavailable',
           code: 'provenance_unavailable',
         });
-        expect(hostile.issue).toHaveBeenCalledTimes(targetCall);
+        expect(hostile.issue).not.toHaveBeenCalled();
         expect(JSON.stringify(result)).not.toContain('evidence');
         expect(JSON.stringify(result)).not.toContain('account-001');
         expect(JSON.stringify(result)).not.toContain('request-001');
@@ -591,6 +677,81 @@ describe('BASE-02B formal request provenance owner', () => {
           now,
         }).resolveCurrentRequest(),
       ).toEqual({
+        kind: 'unavailable',
+        code: 'provenance_unavailable',
+      });
+      expect(now).not.toHaveBeenCalled();
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  it('accepts only genuine codec handles and rejects lookalikes without property reads', async () => {
+    const genuine = realCodec();
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor = {};
+    Object.defineProperties(accessor, {
+      issue: {
+        enumerable: true,
+        get() {
+          getterReads += 1;
+          return genuine.issue;
+        },
+      },
+      verify: {
+        enumerable: true,
+        get() {
+          getterReads += 1;
+          return genuine.verify;
+        },
+      },
+    });
+    const customPrototype = Object.assign(
+      Object.create({ codec: 'lookalike' }),
+      { issue: genuine.issue, verify: genuine.verify },
+    );
+    const proxy = new Proxy(genuine, {
+      get() {
+        proxyTraps += 1;
+        throw new Error('codec getter trap');
+      },
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('codec prototype trap');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('codec ownKeys trap');
+      },
+    });
+    const revoked = Proxy.revocable(genuine, {
+      get() {
+        proxyTraps += 1;
+        throw new Error('revoked codec trap');
+      },
+    });
+    revoked.revoke();
+
+    for (const referenceCodec of [
+      { issue: genuine.issue, verify: genuine.verify },
+      { ...genuine },
+      {
+        issue: genuine.issue,
+        verify: genuine.verify,
+      } as unknown as InstitutionGuardReferenceCodecV1,
+      customPrototype,
+      accessor,
+      proxy,
+      revoked.proxy,
+    ]) {
+      const now = vi.fn(() => VERIFIED_AT);
+      await expect(
+        resolver({
+          codec: referenceCodec as InstitutionGuardReferenceCodecV1,
+          now,
+        }).resolveCurrentRequest(),
+      ).resolves.toEqual({
         kind: 'unavailable',
         code: 'provenance_unavailable',
       });
