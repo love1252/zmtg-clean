@@ -463,6 +463,12 @@ describe('InstitutionWorkbenchShell', () => {
     expect(
       screen.getByRole('region', { name: '数据服务/能力尚未安全开放' }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText('当前仅展示安全阻断状态；业务数据和业务入口保持隐藏。'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('聚合已授权的预约、随访与会话信息，帮助团队优先处理需要关注的事项。'),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '工作台行动数据暂未开放', level: 3 })).toBeInTheDocument();
     expect(screen.getByText('待确认预约、改约申请、逾期随访、今日到期随访和行动队列当前保持隐藏。')).toBeInTheDocument();
     expect(screen.getByText('只有可验证来源、机构隔离、服务端成员与对象权限完成后，才会显示低敏投影。')).toBeInTheDocument();
@@ -489,5 +495,11 @@ describe('InstitutionWorkbenchShell', () => {
     );
 
     expect(screen.queryByRole('heading', { name: '工作台行动数据暂未开放', level: 3 })).not.toBeInTheDocument();
+    expect(
+      screen.getByText('聚合已授权的预约、随访与会话信息，帮助团队优先处理需要关注的事项。'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('当前仅展示安全阻断状态；业务数据和业务入口保持隐藏。'),
+    ).not.toBeInTheDocument();
   });
 });
