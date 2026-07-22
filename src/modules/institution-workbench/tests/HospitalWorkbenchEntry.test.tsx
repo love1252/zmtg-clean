@@ -38,12 +38,16 @@ describe('WB-UI-01 工作台入口', () => {
     expect(
       screen.getByText(/当前工作台不会展示模拟数字、演示客户或未授权业务入口/u),
     ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '工作台行动数据暂未开放', level: 3 })).toBeInTheDocument();
+    expect(screen.getByText('待确认预约、改约申请、逾期随访、今日到期随访和行动队列当前保持隐藏。')).toBeInTheDocument();
+    expect(screen.getByText('只有可验证来源、机构隔离、服务端成员与对象权限完成后，才会显示低敏投影。')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: '行动队列' })).not.toBeInTheDocument();
     expect(screen.queryByText('Care 行动概览')).not.toBeInTheDocument();
     expect(screen.queryByRole('list', { name: '客户旅程' })).not.toBeInTheDocument();
     expect(screen.queryByText('机构能力')).not.toBeInTheDocument();
     expect(screen.queryByText('0')).not.toBeInTheDocument();
     expect(screen.queryByText(/nextAction/u)).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('link', { name: /查看|新建/u })).toHaveLength(0);
 
     const mobileNavigation = screen.getByRole('navigation', { name: '机构端移动导航' });
     expect(within(mobileNavigation).getAllByRole('link')).toHaveLength(1);

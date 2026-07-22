@@ -366,6 +366,15 @@ export function InstitutionWorkbenchShell({
               <p className="mt-3 text-sm leading-7 text-slate-600">
                 当前工作台不会展示模拟数字、演示客户或未授权业务入口。只有真实数据来源、机构隔离与服务端权限校验完成后，才会呈现可用的运营信息。
               </p>
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm leading-6 text-slate-600">
+                <h3 className="font-semibold text-slate-800">工作台行动数据暂未开放</h3>
+                <p className="mt-1.5">
+                  待确认预约、改约申请、逾期随访、今日到期随访和行动队列当前保持隐藏。
+                </p>
+                <p className="mt-1.5">
+                  只有可验证来源、机构隔离、服务端成员与对象权限完成后，才会显示低敏投影。
+                </p>
+              </div>
               <div className="mt-5 flex items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm leading-6 text-slate-600">
                 <CircleAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
                 <span>这不是“零数据”状态，因此未知值不会显示为 0。</span>
