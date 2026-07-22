@@ -4,11 +4,20 @@ import { isProxy } from 'node:util/types';
 import { isInstitutionScopeIdV1 } from '@/modules/security/domain/institution-access';
 import {
   createFormalRequestProvenanceResolverFromOwnerResolutionV1,
+  isFormalProvenanceResolverV1,
   type FormalRequestProvenanceOwnerInputV1,
   type FormalRequestProvenanceOwnerResolutionV1,
 } from '@/modules/security/server/formal-request-provenance-owner';
-import type { FormalProvenanceResolverV1 } from '@/modules/security/server/institution-guard-evidence';
+import {
+  type FormalProvenanceResolverV1,
+  type FreshActiveMembershipProviderV1,
+} from '@/modules/security/server/institution-guard-evidence';
 import type { InstitutionGuardReferenceCodecV1 } from '@/modules/security/server/institution-guard-reference';
+import {
+  createRequestBoundFreshActiveMembershipProviderV1,
+  isFreshActiveMembershipProviderV1,
+  type AuthoritativeInstitutionMembershipFactReaderV1,
+} from '@/modules/security/server/institution-membership-provider';
 
 export const FORMAL_SERVER_SESSION_COOKIE_V1 =
   'zmtg_server_session_v1' as const;
@@ -28,6 +37,13 @@ const PROVENANCE_TTL_MS = 5 * 60 * 1_000;
 const FACTORY_INPUT_KEYS = Object.freeze([
   'cookieHeader',
   'sessionKeyRing',
+  'referenceCodec',
+  'now',
+] as const);
+const REQUEST_OWNER_FACTORY_INPUT_KEYS = Object.freeze([
+  'cookieHeader',
+  'sessionKeyRing',
+  'membershipFactReader',
   'referenceCodec',
   'now',
 ] as const);
@@ -106,6 +122,23 @@ type OwnerFailureResolutionV1 = Extract<
   FormalRequestProvenanceOwnerResolutionV1,
   { kind: 'rejected' | 'unavailable' }
 >;
+
+declare const formalServerSessionRequestOwnerMarkerV1: unique symbol;
+
+export type FormalServerSessionRequestOwnerV1 = Readonly<{
+  readonly [formalServerSessionRequestOwnerMarkerV1]: 'formal_server_session_request_owner_v1';
+}>;
+
+export type FormalServerSessionRequestOwnerConsumptionV1 = Readonly<{
+  provenanceResolver: FormalProvenanceResolverV1;
+  membershipProvider: FreshActiveMembershipProviderV1;
+}>;
+
+const formalServerSessionRequestOwnerHandlesV1 = new WeakSet<object>();
+const formalServerSessionRequestOwnerConsumptionsV1 = new WeakMap<
+  object,
+  FormalServerSessionRequestOwnerConsumptionV1
+>();
 
 const missing = Object.freeze({
   kind: 'rejected',
@@ -507,45 +540,56 @@ function resolveSessionOwner(
   return Object.freeze({ kind: 'verified', ownerInput });
 }
 
-/**
- * Verifies one formal server-session cookie snapshot and returns a genuine central provenance
- * resolver. No caller supplies scope, subject, source, proof, request identifier, or timestamps.
- */
-export function createFormalServerSessionProvenanceResolverV1(
-  input: Readonly<{
-    cookieHeader: string | null;
-    sessionKeyRing: FormalServerSessionKeyRingV1;
-    referenceCodec: InstitutionGuardReferenceCodecV1;
-    now: () => Date;
-  }>,
-): FormalProvenanceResolverV1 {
-  const composition = snapshotExactPlainRecord(input, FACTORY_INPUT_KEYS);
+type SessionOwnerCompositionV1 = Readonly<{
+  ownerResolution: FormalRequestProvenanceOwnerResolutionV1;
+  referenceCodec: InstitutionGuardReferenceCodecV1 | null;
+  now: (() => Date) | null;
+  nowEpochMs: number | null;
+}>;
+
+function composeSessionOwnerResolutionV1(
+  input: unknown,
+  expectedKeys: readonly string[],
+): SessionOwnerCompositionV1 {
+  const composition = snapshotExactPlainRecord(input, expectedKeys);
   const cookieHeader = composition?.cookieHeader;
   if (
     !composition ||
     (typeof cookieHeader !== 'string' && cookieHeader !== null)
   ) {
-    return createFormalRequestProvenanceResolverFromOwnerResolutionV1({
+    return Object.freeze({
       ownerResolution: unavailable,
+      referenceCodec: null,
+      now: null,
+      nowEpochMs: null,
     });
   }
   const cookie = readFormalCookie(cookieHeader);
   if (typeof cookie !== 'string') {
-    return createFormalRequestProvenanceResolverFromOwnerResolutionV1({
+    return Object.freeze({
       ownerResolution: cookie,
+      referenceCodec: composition.referenceCodec as InstitutionGuardReferenceCodecV1,
+      now: null,
+      nowEpochMs: null,
     });
   }
 
   const keyRing = snapshotKeyRing(composition.sessionKeyRing);
   if (!keyRing) {
-    return createFormalRequestProvenanceResolverFromOwnerResolutionV1({
+    return Object.freeze({
       ownerResolution: unavailable,
+      referenceCodec: composition.referenceCodec as InstitutionGuardReferenceCodecV1,
+      now: null,
+      nowEpochMs: null,
     });
   }
   const parsedToken = parseToken(cookie);
   if (!parsedToken) {
-    return createFormalRequestProvenanceResolverFromOwnerResolutionV1({
+    return Object.freeze({
       ownerResolution: invalid,
+      referenceCodec: composition.referenceCodec as InstitutionGuardReferenceCodecV1,
+      now: null,
+      nowEpochMs: null,
     });
   }
   const verificationKey = findVerificationKey(
@@ -553,12 +597,15 @@ export function createFormalServerSessionProvenanceResolverV1(
     parsedToken.keyVersion,
   );
   if (!verificationKey) {
-    return createFormalRequestProvenanceResolverFromOwnerResolutionV1({
+    return Object.freeze({
       ownerResolution: invalid,
+      referenceCodec: composition.referenceCodec as InstitutionGuardReferenceCodecV1,
+      now: null,
+      nowEpochMs: null,
     });
   }
 
-  const now = composition?.now;
+  const now = composition.now;
   let nowEpochMs: number | null = null;
   if (typeof now === 'function' && !isProxy(now)) {
     try {
@@ -572,14 +619,120 @@ export function createFormalServerSessionProvenanceResolverV1(
     nowEpochMs !== null
       ? resolveSessionOwner(parsedToken, verificationKey, nowEpochMs)
       : unavailable;
+  return Object.freeze({
+    ownerResolution,
+    referenceCodec: composition.referenceCodec as InstitutionGuardReferenceCodecV1,
+    now: typeof now === 'function' && !isProxy(now) ? (now as () => Date) : null,
+    nowEpochMs,
+  });
+}
+
+function provenanceResolverFromCompositionV1(
+  composition: SessionOwnerCompositionV1,
+): FormalProvenanceResolverV1 {
+  const ownerResolution = composition.ownerResolution;
   if (ownerResolution.kind !== 'verified') {
     return createFormalRequestProvenanceResolverFromOwnerResolutionV1({
       ownerResolution,
     });
   }
+  if (composition.nowEpochMs === null) {
+    return createFormalRequestProvenanceResolverFromOwnerResolutionV1({
+      ownerResolution: unavailable,
+    });
+  }
   return createFormalRequestProvenanceResolverFromOwnerResolutionV1({
     ownerResolution,
     referenceCodec: composition.referenceCodec as InstitutionGuardReferenceCodecV1,
-    now: () => new Date(nowEpochMs as number),
+    now: () => new Date(composition.nowEpochMs as number),
   });
+}
+
+/**
+ * Verifies one formal server-session cookie snapshot and returns a genuine central provenance
+ * resolver. No caller supplies scope, subject, source, proof, request identifier, or timestamps.
+ */
+export function createFormalServerSessionProvenanceResolverV1(
+  input: Readonly<{
+    cookieHeader: string | null;
+    sessionKeyRing: FormalServerSessionKeyRingV1;
+    referenceCodec: InstitutionGuardReferenceCodecV1;
+    now: () => Date;
+  }>,
+): FormalProvenanceResolverV1 {
+  return provenanceResolverFromCompositionV1(
+    composeSessionOwnerResolutionV1(input, FACTORY_INPUT_KEYS),
+  );
+}
+
+/**
+ * Auth-owner composition root. The returned handle is opaque and single-use; raw session and
+ * account facts never leave this module. Invalid dependencies still yield an authentic handle
+ * whose two genuine child handles fail closed.
+ */
+export function createFormalServerSessionRequestOwnerV1(input: Readonly<{
+  cookieHeader: string | null;
+  sessionKeyRing: FormalServerSessionKeyRingV1;
+  membershipFactReader: AuthoritativeInstitutionMembershipFactReaderV1;
+  referenceCodec: InstitutionGuardReferenceCodecV1;
+  now: () => Date;
+}>): FormalServerSessionRequestOwnerV1 {
+  const inputSnapshot = snapshotExactPlainRecord(
+    input,
+    REQUEST_OWNER_FACTORY_INPUT_KEYS,
+  );
+  const composition = composeSessionOwnerResolutionV1(
+    input,
+    REQUEST_OWNER_FACTORY_INPUT_KEYS,
+  );
+  const provenanceResolver = provenanceResolverFromCompositionV1(composition);
+  const accountId =
+    composition.ownerResolution.kind === 'verified'
+      ? composition.ownerResolution.ownerInput.accountId
+      : '';
+  const membershipProvider = createRequestBoundFreshActiveMembershipProviderV1({
+    accountId,
+    factReader: inputSnapshot?.membershipFactReader as AuthoritativeInstitutionMembershipFactReaderV1,
+    referenceCodec: composition.referenceCodec as InstitutionGuardReferenceCodecV1,
+    now: composition.now as () => Date,
+  });
+  const consumption = Object.freeze({
+    provenanceResolver,
+    membershipProvider,
+  });
+  const owner = Object.freeze({}) as FormalServerSessionRequestOwnerV1;
+  if (
+    !isFormalProvenanceResolverV1(provenanceResolver) ||
+    !isFreshActiveMembershipProviderV1(membershipProvider)
+  ) {
+    return owner;
+  }
+  formalServerSessionRequestOwnerHandlesV1.add(owner);
+  formalServerSessionRequestOwnerConsumptionsV1.set(owner, consumption);
+  return owner;
+}
+
+export function isFormalServerSessionRequestOwnerV1(
+  value: unknown,
+): value is FormalServerSessionRequestOwnerV1 {
+  try {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      !isProxy(value) &&
+      formalServerSessionRequestOwnerHandlesV1.has(value)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function consumeFormalServerSessionRequestOwnerV1(
+  value: unknown,
+): FormalServerSessionRequestOwnerConsumptionV1 | null {
+  if (!isFormalServerSessionRequestOwnerV1(value)) return null;
+  const consumption = formalServerSessionRequestOwnerConsumptionsV1.get(value);
+  if (!consumption) return null;
+  formalServerSessionRequestOwnerConsumptionsV1.delete(value);
+  return consumption;
 }

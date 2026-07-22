@@ -26,9 +26,10 @@ import {
   type MembershipRejectionCodeV1,
   type SafeGuardReferenceV1,
 } from '@/modules/security/server/institution-guard-evidence';
-import type {
-  InstitutionGuardReferenceCodecV1,
-  InstitutionGuardReferenceOwnerSubjectV1,
+import {
+  isInstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceOwnerSubjectV1,
 } from '@/modules/security/server/institution-guard-reference';
 
 export type InstitutionMembershipFactRepositoryV1 =
@@ -77,6 +78,23 @@ export type AuthoritativeInstitutionMembershipFactReaderV1 = Readonly<{
     input: InstitutionMembershipFactQueryV1,
   ) => Promise<AuthoritativeInstitutionMembershipFactResolutionV1>;
 }>;
+
+const authoritativeInstitutionMembershipFactReaderHandlesV1 = new WeakSet<object>();
+
+function isAuthoritativeInstitutionMembershipFactReaderV1(
+  value: unknown,
+): value is AuthoritativeInstitutionMembershipFactReaderV1 {
+  try {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      !isProxy(value) &&
+      authoritativeInstitutionMembershipFactReaderHandlesV1.has(value)
+    );
+  } catch {
+    return false;
+  }
+}
 
 const QUERY_KEYS = Object.freeze([
   'accountId',
@@ -423,7 +441,7 @@ export function createAuthoritativeInstitutionMembershipFactReaderV1(input: Read
         ? (nowValue as () => Date)
         : null;
 
-  return Object.freeze({
+  const reader = Object.freeze({
     async resolve(queryValue) {
       const query = parseQuery(queryValue);
       if (!query) return reject('membership_invalid');
@@ -462,7 +480,9 @@ export function createAuthoritativeInstitutionMembershipFactReaderV1(input: Read
         observedAt: new Date(nowEpochMs).toISOString(),
       });
     },
-  });
+  }) as AuthoritativeInstitutionMembershipFactReaderV1;
+  authoritativeInstitutionMembershipFactReaderHandlesV1.add(reader);
+  return reader;
 }
 
 const MEMBERSHIP_EVIDENCE_TTL_MS = 60_000;
@@ -838,11 +858,16 @@ const freshActiveMembershipProviderHandlesV1 = new WeakSet<object>();
 export function isFreshActiveMembershipProviderV1(
   value: unknown,
 ): value is FreshActiveMembershipProviderV1 {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    freshActiveMembershipProviderHandlesV1.has(value)
-  );
+  try {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      !isProxy(value) &&
+      freshActiveMembershipProviderHandlesV1.has(value)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -859,11 +884,17 @@ export function createRequestBoundFreshActiveMembershipProviderV1(input: Readonl
   const factorySnapshot =
     snapshotExactPlainRecord(input, REQUEST_BOUND_FACTORY_WITH_NOW_KEYS) ??
     snapshotExactPlainRecord(input, REQUEST_BOUND_FACTORY_KEYS);
-  const factReaderSnapshot = factorySnapshot
-    ? snapshotExactPlainRecord(factorySnapshot.factReader, FACT_READER_KEYS)
+  const factReaderIsGenuine =
+    factorySnapshot !== null &&
+    isAuthoritativeInstitutionMembershipFactReaderV1(factorySnapshot.factReader);
+  const referenceCodecIsGenuine =
+    factorySnapshot !== null &&
+    isInstitutionGuardReferenceCodecV1(factorySnapshot.referenceCodec);
+  const factReaderSnapshot = factReaderIsGenuine
+    ? snapshotExactPlainRecord(factorySnapshot?.factReader, FACT_READER_KEYS)
     : null;
-  const codecSnapshot = factorySnapshot
-    ? snapshotExactPlainRecord(factorySnapshot.referenceCodec, REFERENCE_CODEC_KEYS)
+  const codecSnapshot = referenceCodecIsGenuine
+    ? snapshotExactPlainRecord(factorySnapshot?.referenceCodec, REFERENCE_CODEC_KEYS)
     : null;
   const accountId =
     factorySnapshot && isInstitutionScopeIdV1(factorySnapshot.accountId)
@@ -881,9 +912,13 @@ export function createRequestBoundFreshActiveMembershipProviderV1(input: Readonl
     codecSnapshot && isNonProxyFunction(codecSnapshot.verify)
       ? (codecSnapshot.verify as InstitutionGuardReferenceCodecV1['verify'])
       : null;
-  const nowValue = factorySnapshot?.now;
+  const nowValue = factReaderIsGenuine && referenceCodecIsGenuine
+    ? factorySnapshot?.now
+    : null;
   const now =
-    nowValue === undefined
+    !factReaderIsGenuine || !referenceCodecIsGenuine
+      ? null
+      : nowValue === undefined
       ? () => new Date()
       : isNonProxyFunction(nowValue)
         ? (nowValue as () => Date)

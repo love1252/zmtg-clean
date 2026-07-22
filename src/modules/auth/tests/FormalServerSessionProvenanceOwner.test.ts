@@ -4,15 +4,25 @@ import { resolve } from 'node:path';
 
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
+import type { CurrentInstitutionMembershipFactRow } from '@/modules/auth/server/auth-account-repository';
 import {
+  consumeFormalServerSessionRequestOwnerV1,
+  createFormalServerSessionRequestOwnerV1,
   createFormalServerSessionProvenanceResolverV1,
   FORMAL_SERVER_SESSION_COOKIE_V1,
+  isFormalServerSessionRequestOwnerV1,
+  type FormalServerSessionRequestOwnerV1,
   type FormalServerSessionKeyRingV1,
 } from '@/modules/auth/server/formal-server-session-provenance-owner';
 import {
   isFormalProvenanceResolverV1,
 } from '@/modules/security/server/formal-request-provenance-owner';
 import type { FormalProvenanceResolverV1 } from '@/modules/security/server/institution-guard-evidence';
+import {
+  createAuthoritativeInstitutionMembershipFactReaderV1,
+  isFreshActiveMembershipProviderV1,
+  type AuthoritativeInstitutionMembershipFactReaderV1,
+} from '@/modules/security/server/institution-membership-provider';
 import { createInstitutionGuardReferenceCodecV1 } from '@/modules/security/server/institution-guard-reference';
 
 const SESSION_KEY = new Uint8Array(32).fill(0x73);
@@ -92,7 +102,279 @@ function resolver(input: Readonly<{
   });
 }
 
+const membershipRow: CurrentInstitutionMembershipFactRow = {
+  accountId: payload.accountId,
+  accountStatus: 'active',
+  accountPasswordResetRequired: false,
+  accountLockedUntil: null,
+  membershipId: 'membership-001',
+  membershipTenantId: payload.tenantId,
+  membershipUserId: payload.accountId,
+  membershipRole: 'tenant_admin',
+  membershipUpdatedAt: new Date('2026-07-22T08:01:00.000Z'),
+  bindingId: 'binding-001',
+  bindingAccountId: payload.accountId,
+  bindingTenantId: payload.tenantId,
+  bindingInstitutionId: payload.institutionId,
+  bindingStatus: 'active',
+  bindingSource: 'manual_admin',
+  bindingAssignedAt: new Date('2026-07-22T08:00:00.000Z'),
+  bindingExpiresAt: null,
+  bindingRevokedAt: null,
+  bindingVersion: 1,
+};
+
+function requestOwner(input: Readonly<{
+  cookieHeader?: string | null;
+  sessionKeyRing?: FormalServerSessionKeyRingV1;
+  membershipFactReader?: AuthoritativeInstitutionMembershipFactReaderV1;
+  referenceCodec?: ReturnType<typeof referenceCodec>;
+  now?: () => Date;
+}> = {}) {
+  const findCurrentInstitutionMembershipFacts = vi.fn(async () => [membershipRow]);
+  const membershipFactReader =
+    input.membershipFactReader ??
+    createAuthoritativeInstitutionMembershipFactReaderV1({
+      repository: { findCurrentInstitutionMembershipFacts },
+      now: input.now ?? (() => VERIFIED_AT),
+    });
+  return {
+    findCurrentInstitutionMembershipFacts,
+    owner: createFormalServerSessionRequestOwnerV1({
+      cookieHeader:
+        input.cookieHeader === undefined
+          ? `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken()}`
+          : input.cookieHeader,
+      sessionKeyRing: input.sessionKeyRing ?? keyRing(),
+      membershipFactReader,
+      referenceCodec: input.referenceCodec ?? referenceCodec(),
+      now: input.now ?? (() => VERIFIED_AT),
+    }),
+  };
+}
+
 describe('AUTH-SESSION-01A formal server session provenance owner', () => {
+  it('issues an opaque authentic request owner with atomic single-use consumption', () => {
+    const { owner } = requestOwner();
+
+    expectTypeOf(owner).toEqualTypeOf<FormalServerSessionRequestOwnerV1>();
+    expect(Object.isFrozen(owner)).toBe(true);
+    expect(Object.keys(owner)).toEqual([]);
+    expect(isFormalServerSessionRequestOwnerV1(owner)).toBe(true);
+    const consumption = consumeFormalServerSessionRequestOwnerV1(owner);
+    expect(consumption).not.toBeNull();
+    expect(Object.isFrozen(consumption)).toBe(true);
+    expect(isFormalProvenanceResolverV1(consumption?.provenanceResolver)).toBe(true);
+    expect(isFreshActiveMembershipProviderV1(consumption?.membershipProvider)).toBe(true);
+    expect(consumeFormalServerSessionRequestOwnerV1(owner)).toBeNull();
+  });
+
+  it('seals the factory and consumer APIs against raw caller account or scope input', () => {
+    type FactoryInput = Parameters<typeof createFormalServerSessionRequestOwnerV1>[0];
+    type ConsumptionInput = Parameters<typeof consumeFormalServerSessionRequestOwnerV1>[0];
+    expectTypeOf<keyof FactoryInput>().toEqualTypeOf<
+      | 'cookieHeader'
+      | 'sessionKeyRing'
+      | 'membershipFactReader'
+      | 'referenceCodec'
+      | 'now'
+    >();
+    expectTypeOf<ConsumptionInput>().toEqualTypeOf<unknown>();
+  });
+
+  it('privately binds the verified session account to both genuine child handles', async () => {
+    const { owner, findCurrentInstitutionMembershipFacts } = requestOwner();
+    const consumption = consumeFormalServerSessionRequestOwnerV1(owner);
+    if (!consumption) throw new Error('expected one owner consumption');
+    const provenance = await consumption.provenanceResolver.resolveCurrentRequest();
+    if (provenance.kind !== 'verified') throw new Error('expected verified provenance');
+
+    await expect(
+      consumption.membershipProvider.resolve({
+        provenance: provenance.evidence,
+        requestedScope: {
+          tenantId: payload.tenantId,
+          institutionId: payload.institutionId,
+        },
+      }),
+    ).resolves.toMatchObject({
+      kind: 'fresh_active',
+      tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
+    });
+    expect(findCurrentInstitutionMembershipFacts).toHaveBeenCalledWith({
+      accountId: payload.accountId,
+      tenantId: payload.tenantId,
+    });
+    const serialized = JSON.stringify(consumption);
+    expect(serialized).not.toContain(payload.accountId);
+    expect(serialized).not.toContain(payload.sessionId);
+    expect(serialized).not.toContain(payload.tenantId);
+    expect(serialized).not.toContain(payload.institutionId);
+  });
+
+  it('rejects owner lookalikes, clones and hostile proxies without property access', () => {
+    const { owner } = requestOwner();
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor: Record<string, unknown> = {};
+    Object.defineProperty(accessor, 'consume', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('owner getter must not run');
+      },
+    });
+    const traps: ProxyHandler<object> = {
+      get() {
+        proxyTraps += 1;
+        throw new Error('owner proxy get must not run');
+      },
+      getOwnPropertyDescriptor() {
+        proxyTraps += 1;
+        throw new Error('owner descriptor trap must not run');
+      },
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('owner prototype trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('owner ownKeys trap must not run');
+      },
+    };
+    const proxy = new Proxy(owner, traps);
+    const revocable = Proxy.revocable(owner, traps);
+    revocable.revoke();
+    for (const value of [
+      {},
+      { ...owner },
+      Object.assign({}, owner),
+      Object.create(owner) as object,
+      accessor,
+      proxy,
+      revocable.proxy,
+    ]) {
+      expect(isFormalServerSessionRequestOwnerV1(value)).toBe(false);
+      expect(consumeFormalServerSessionRequestOwnerV1(value)).toBeNull();
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  it.each([
+    ['missing', null, keyRing(), 'provenance_missing'],
+    ['demo', 'zmtg_demo_session=present', keyRing(), 'provenance_source_denied'],
+    [
+      'tampered',
+      `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken().slice(0, -1)}A`,
+      keyRing(),
+      'provenance_invalid',
+    ],
+    [
+      'expired',
+      `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken({
+        ...payload,
+        expiresAt: VERIFIED_AT.toISOString(),
+      })}`,
+      keyRing(),
+      'provenance_expired',
+    ],
+    [
+      'unavailable',
+      `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken()}`,
+      keyRing({ currentKey: { keyVersion: 2, keyMaterial: null } }),
+      'provenance_unavailable',
+    ],
+  ] as const)(
+    'keeps an authentic fail-closed owner for %s session input',
+    async (_label, cookieHeader, sessionKeyRing, expectedCode) => {
+      const validProvenance = await resolver().resolveCurrentRequest();
+      if (validProvenance.kind !== 'verified') {
+        throw new Error('expected valid comparison provenance');
+      }
+      const { owner, findCurrentInstitutionMembershipFacts } = requestOwner({
+        cookieHeader,
+        sessionKeyRing,
+      });
+      expect(isFormalServerSessionRequestOwnerV1(owner)).toBe(true);
+      const consumption = consumeFormalServerSessionRequestOwnerV1(owner);
+      if (!consumption) throw new Error('expected one owner consumption');
+      expect(isFormalProvenanceResolverV1(consumption.provenanceResolver)).toBe(true);
+      expect(isFreshActiveMembershipProviderV1(consumption.membershipProvider)).toBe(true);
+      await expect(
+        consumption.provenanceResolver.resolveCurrentRequest(),
+      ).resolves.toMatchObject({ code: expectedCode });
+      await expect(
+        consumption.membershipProvider.resolve({
+          provenance: validProvenance.evidence,
+          requestedScope: {
+            tenantId: payload.tenantId,
+            institutionId: payload.institutionId,
+          },
+        }),
+      ).resolves.toEqual({ kind: 'rejected', code: 'membership_unavailable' });
+      expect(findCurrentInstitutionMembershipFacts).not.toHaveBeenCalled();
+    },
+  );
+
+  it('fails fake reader and codec dependencies closed without getters, traps or facts', async () => {
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const fakeReader: Record<string, unknown> = {};
+    Object.defineProperty(fakeReader, 'resolve', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('reader getter must not run');
+      },
+    });
+    const realCodec = referenceCodec();
+    const fakeCodec = new Proxy(realCodec, {
+      get() {
+        proxyTraps += 1;
+        throw new Error('codec get trap must not run');
+      },
+      getOwnPropertyDescriptor() {
+        proxyTraps += 1;
+        throw new Error('codec descriptor trap must not run');
+      },
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('codec prototype trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('codec ownKeys trap must not run');
+      },
+    });
+    const validProvenance = await resolver().resolveCurrentRequest();
+    if (validProvenance.kind !== 'verified') throw new Error('expected provenance');
+
+    for (const created of [
+      requestOwner({
+        membershipFactReader: fakeReader as AuthoritativeInstitutionMembershipFactReaderV1,
+      }),
+      requestOwner({ referenceCodec: fakeCodec }),
+    ]) {
+      expect(isFormalServerSessionRequestOwnerV1(created.owner)).toBe(true);
+      const consumption = consumeFormalServerSessionRequestOwnerV1(created.owner);
+      if (!consumption) throw new Error('expected one owner consumption');
+      await expect(
+        consumption.membershipProvider.resolve({
+          provenance: validProvenance.evidence,
+          requestedScope: {
+            tenantId: payload.tenantId,
+            institutionId: payload.institutionId,
+          },
+        }),
+      ).resolves.toEqual({ kind: 'rejected', code: 'membership_unavailable' });
+      expect(created.findCurrentInstitutionMembershipFacts).not.toHaveBeenCalled();
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
   it('returns an authentic centrally registered, single-use resolver', async () => {
     const owner = resolver();
 
@@ -580,7 +862,6 @@ describe('AUTH-SESSION-01A formal server session provenance owner', () => {
       'drizzle',
       'DATABASE_URL',
       'role:',
-      'membership',
     ]) {
       expect(source).not.toContain(forbidden);
     }
