@@ -1,7 +1,19 @@
 import { createHmac } from 'node:crypto';
 
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+
+const workbenchRuntimeMocks = vi.hoisted(() => ({
+  resolveInstitutionWorkbenchRuntimeV1: vi.fn(),
+}));
+
+vi.mock(
+  '@/modules/institution-workbench/server/institution-workbench-runtime',
+  () => ({
+    resolveInstitutionWorkbenchRuntimeV1:
+      workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1,
+  }),
+);
 
 import HospitalPage from '@/app/hospital/page';
 import type { CurrentInstitutionMembershipFactRow } from '@/modules/auth/server/auth-account-repository';
@@ -420,20 +432,31 @@ describe('WB-ENTRY-02A server-owned 工作台入口', () => {
 });
 
 describe('WB-ENTRY-02A /hospital capability-off 页面', () => {
+  beforeEach(() => {
+    workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockReset();
+    workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockResolvedValue({
+      kind: 'blocked',
+      view: 'capability_off',
+    });
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('不读浏览器 demo session，以冻结顺序展示七栏与移动五入口', () => {
+  it('不读浏览器 demo session，以冻结顺序展示七栏与移动五入口', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<HospitalPage />);
+    render(await HospitalPage());
 
     expect(screen.getByRole('heading', { name: '工作台', level: 1 })).toBeInTheDocument();
     expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByText('正在检查登录状态...')).not.toBeInTheDocument();
+    expect(
+      workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1,
+    ).toHaveBeenCalledTimes(1);
     expect(
       screen.getByText('当前仅展示导航入口，不代表已授权或能力已开放'),
     ).toBeInTheDocument();
@@ -480,8 +503,8 @@ describe('WB-ENTRY-02A /hospital capability-off 页面', () => {
     }
   });
 
-  it('保持低敏阻断外观，不渲染授权细节、假事实、业务入口或零值', () => {
-    render(<HospitalPage />);
+  it('保持低敏阻断外观，不渲染授权细节、假事实、业务入口或零值', async () => {
+    render(await HospitalPage());
 
     expect(
       screen.getByRole('heading', { name: '数据服务/能力尚未安全开放', level: 2 }),
@@ -515,4 +538,34 @@ describe('WB-ENTRY-02A /hospital capability-off 页面', () => {
       expect(screen.queryByText(forbidden)).not.toBeInTheDocument();
     }
   });
+
+  it.each(['allowed', 'blocked', 'throw'] as const)(
+    'runtime %s 时均只渲染同一 capability-off UI',
+    async (runtimeCase) => {
+      if (runtimeCase === 'throw') {
+        workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockRejectedValueOnce(
+          new Error('runtime unavailable'),
+        );
+      } else {
+        workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockResolvedValueOnce({
+          kind: runtimeCase,
+          view: 'capability_off',
+        });
+      }
+
+      render(await HospitalPage());
+
+      expect(
+        screen.getByRole('heading', {
+          name: '数据服务/能力尚未安全开放',
+          level: 2,
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: '行动队列' })).not.toBeInTheDocument();
+      expect(screen.queryByText(/accountId|tenantId|institutionId|policy|key/iu)).not.toBeInTheDocument();
+      expect(
+        workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1,
+      ).toHaveBeenCalledTimes(1);
+    },
+  );
 });
