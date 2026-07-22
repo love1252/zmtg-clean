@@ -69,6 +69,13 @@ const CURRENT_FACT_KEYS = Object.freeze([
 ] as const);
 const REJECTION_KEYS = Object.freeze(['kind', 'code'] as const);
 const ISSUED_REFERENCE_KEYS = Object.freeze(['kind', 'reference'] as const);
+const ACTIVE_PROVIDER_INPUT_KEYS = Object.freeze([
+  'factReader',
+  'referenceCodec',
+  'now',
+] as const);
+const FACT_READER_KEYS = Object.freeze(['resolve'] as const);
+const REFERENCE_CODEC_KEYS = Object.freeze(['issue', 'verify'] as const);
 
 const ACTIVE_ANCHOR_FRESHNESS_TTL_MS = 60_000;
 const ANCHOR_REFERENCE_OWNER_DOMAIN = 'security.institution-anchor';
@@ -294,6 +301,50 @@ function parseIssuedReference<Prefix extends 'anc' | 'arv'>(
     | AnchorRevisionReferenceV1;
 }
 
+type ActiveProviderDependenciesV1 = Readonly<{
+  resolveFact: AuthoritativeInstitutionAnchorFactReaderV1['resolve'];
+  issueReference: InstitutionGuardReferenceCodecV1['issue'];
+  now: () => Date;
+}>;
+
+function snapshotActiveProviderDependencies(
+  value: unknown,
+): ActiveProviderDependenciesV1 | null {
+  const input = snapshotExactPlainRecord(value, ACTIVE_PROVIDER_INPUT_KEYS);
+  if (!input || typeof input.now !== 'function' || isProxy(input.now)) {
+    return null;
+  }
+
+  const factReader = snapshotExactPlainRecord(
+    input.factReader,
+    FACT_READER_KEYS,
+  );
+  const referenceCodec = snapshotExactPlainRecord(
+    input.referenceCodec,
+    REFERENCE_CODEC_KEYS,
+  );
+  if (
+    !factReader ||
+    typeof factReader.resolve !== 'function' ||
+    isProxy(factReader.resolve) ||
+    !referenceCodec ||
+    typeof referenceCodec.issue !== 'function' ||
+    isProxy(referenceCodec.issue) ||
+    typeof referenceCodec.verify !== 'function' ||
+    isProxy(referenceCodec.verify)
+  ) {
+    return null;
+  }
+
+  return Object.freeze({
+    resolveFact:
+      factReader.resolve as AuthoritativeInstitutionAnchorFactReaderV1['resolve'],
+    issueReference:
+      referenceCodec.issue as InstitutionGuardReferenceCodecV1['issue'],
+    now: input.now as () => Date,
+  });
+}
+
 function resolveCurrentRow(input: {
   rowValue: unknown;
   query: InstitutionAnchorFactQueryV1;
@@ -376,18 +427,17 @@ export function createActiveInstitutionAnchorProviderV1(input: {
   referenceCodec: InstitutionGuardReferenceCodecV1;
   now: () => Date;
 }): ActiveInstitutionAnchorProviderV1 {
-  const factReader = input.factReader;
-  const referenceCodec = input.referenceCodec;
-  const now = input.now;
+  const dependencies = snapshotActiveProviderDependencies(input);
 
   return Object.freeze({
     async resolve(queryValue: InstitutionAnchorFactQueryV1) {
+      if (!dependencies) return unavailable;
       const query = parseQuery(queryValue);
       if (!query) return unavailable;
 
       let rawResolution: unknown;
       try {
-        rawResolution = await factReader.resolve(query);
+        rawResolution = await dependencies.resolveFact(query);
       } catch {
         return unavailable;
       }
@@ -405,7 +455,7 @@ export function createActiveInstitutionAnchorProviderV1(input: {
         observedAt.epochMs + ACTIVE_ANCHOR_FRESHNESS_TTL_MS;
       if (!Number.isSafeInteger(freshUntilEpochMs)) return unavailable;
 
-      const beforeIssueEpochMs = readTrustedNowEpochMs(now);
+      const beforeIssueEpochMs = readTrustedNowEpochMs(dependencies.now);
       if (
         beforeIssueEpochMs === null ||
         observedAt.epochMs > beforeIssueEpochMs ||
@@ -416,7 +466,7 @@ export function createActiveInstitutionAnchorProviderV1(input: {
 
       let anchorReferenceValue: unknown;
       try {
-        anchorReferenceValue = referenceCodec.issue({
+        anchorReferenceValue = dependencies.issueReference({
           prefix: 'anc',
           ownerDomain: ANCHOR_REFERENCE_OWNER_DOMAIN,
           tenantId: factResolution.tenantId,
@@ -434,7 +484,7 @@ export function createActiveInstitutionAnchorProviderV1(input: {
 
       let anchorRevisionValue: unknown;
       try {
-        anchorRevisionValue = referenceCodec.issue({
+        anchorRevisionValue = dependencies.issueReference({
           prefix: 'arv',
           ownerDomain: ANCHOR_REFERENCE_OWNER_DOMAIN,
           tenantId: factResolution.tenantId,
@@ -450,7 +500,7 @@ export function createActiveInstitutionAnchorProviderV1(input: {
       ) as AnchorRevisionReferenceV1 | null;
       if (!anchorRevision) return unavailable;
 
-      const afterIssueEpochMs = readTrustedNowEpochMs(now);
+      const afterIssueEpochMs = readTrustedNowEpochMs(dependencies.now);
       if (
         afterIssueEpochMs === null ||
         afterIssueEpochMs < beforeIssueEpochMs ||

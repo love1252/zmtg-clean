@@ -327,6 +327,78 @@ describe('机构锚点 owner-sealed provider', () => {
     expect(result).not.toHaveProperty('revision');
   });
 
+  it('factory 对 accessor、symbol、额外字段、原型和 Proxy 依赖零读取且构造失败关闭 provider', async () => {
+    let getterReads = 0;
+    let queryTrapReads = 0;
+    const resolveFact = vi.fn(async () => currentFact());
+    const now = vi.fn(() => new Date('2026-07-22T05:00:01.000Z'));
+    const validInput = {
+      factReader: { resolve: resolveFact },
+      referenceCodec: referenceCodec(),
+      now,
+    };
+    const accessorInput = { ...validInput };
+    Object.defineProperty(accessorInput, 'factReader', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        return validInput.factReader;
+      },
+    });
+    const accessorReader = {};
+    Object.defineProperty(accessorReader, 'resolve', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        return resolveFact;
+      },
+    });
+    const hostileInput = new Proxy(validInput, {
+      ownKeys() {
+        throw new Error('factory input trap');
+      },
+    });
+    const invalidInputs = [
+      accessorInput,
+      { ...validInput, [Symbol('dependency')]: 'hidden' },
+      { ...validInput, extra: 'must-not-flow' },
+      Object.assign(Object.create({ inherited: true }), validInput),
+      hostileInput,
+      { ...validInput, factReader: accessorReader },
+      { ...validInput, referenceCodec: new Proxy(referenceCodec(), {}) },
+      { ...validInput, now: new Proxy(now, {}) },
+    ];
+
+    for (const invalidInput of invalidInputs) {
+      const provider = createActiveInstitutionAnchorProviderV1(
+        invalidInput as never,
+      );
+      const hostileQuery = new Proxy(
+        { ...requestedAnchor },
+        {
+          ownKeys() {
+            queryTrapReads += 1;
+            throw new Error('query trap');
+          },
+        },
+      );
+
+      expect(Object.isFrozen(provider)).toBe(true);
+      await expect(provider.resolve(requestedAnchor)).resolves.toEqual({
+        kind: 'unavailable',
+        code: 'institution_anchor_unavailable',
+      });
+      await expect(provider.resolve(hostileQuery)).resolves.toEqual({
+        kind: 'unavailable',
+        code: 'institution_anchor_unavailable',
+      });
+    }
+    expect(getterReads).toBe(0);
+    expect(queryTrapReads).toBe(0);
+    expect(resolveFact).not.toHaveBeenCalled();
+    expect(now).not.toHaveBeenCalled();
+  });
+
   it('每次 resolve 都重读事实且 anc 跨 revision 稳定、arv 随 revision 变化', async () => {
     const { provider, resolveFact } = activeProvider({
       resolutions: [currentFact({ revision: 7 }), currentFact({ revision: 8 })],
