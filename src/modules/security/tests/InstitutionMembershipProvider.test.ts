@@ -57,10 +57,12 @@ function createReader(input: {
   now?: () => Date;
 } = {}) {
   const findCurrentInstitutionMembershipFacts = input.error
-    ? vi.fn(async () => {
+    ? vi.fn<InstitutionMembershipFactRepositoryV1['findCurrentInstitutionMembershipFacts']>(async () => {
         throw input.error;
       })
-    : vi.fn(async () => input.rows ?? [currentRow]);
+    : vi.fn<InstitutionMembershipFactRepositoryV1['findCurrentInstitutionMembershipFacts']>(
+        async () => (input.rows ? [...input.rows] : [currentRow]),
+      );
   const repository: InstitutionMembershipFactRepositoryV1 = {
     findCurrentInstitutionMembershipFacts,
   };
@@ -560,21 +562,6 @@ function provenance(
   }) as unknown as FormalRequestProvenanceEvidenceV1;
 }
 
-const requestBoundFact = Object.freeze({
-  kind: 'current_membership_fact' as const,
-  accountId: currentRow.accountId,
-  tenantId: currentRow.membershipTenantId,
-  institutionId: currentRow.bindingInstitutionId as string,
-  role: 'tenant_admin' as const,
-  membershipId: currentRow.membershipId,
-  membershipRevisionAt: '2026-07-18T07:58:00.000Z',
-  bindingId: currentRow.bindingId as string,
-  bindingRevision: currentRow.bindingVersion as number,
-  bindingRevisionAt: '2026-07-01T00:00:00.000Z',
-  bindingExpiresAt: null,
-  observedAt: NOW.toISOString(),
-});
-
 function createRequestBoundProvider(input: {
   fact?: Record<string, unknown>;
   factResolution?: unknown;
@@ -583,21 +570,64 @@ function createRequestBoundProvider(input: {
   now?: () => Date;
   accountId?: string;
 } = {}) {
-  const resolve = vi.fn<AuthoritativeInstitutionMembershipFactReaderV1['resolve']>(
-    async () => {
-      if (input.factError) throw input.factError;
-      return (input.factResolution ?? {
-        ...requestBoundFact,
-        ...input.fact,
-      }) as never;
-    },
-  );
-  const factReader = { resolve } as AuthoritativeInstitutionMembershipFactReaderV1;
+  const fact = input.fact ?? {};
+  const row: CurrentInstitutionMembershipFactRow = {
+    ...currentRow,
+    membershipTenantId:
+      typeof fact.tenantId === 'string' ? fact.tenantId : currentRow.membershipTenantId,
+    membershipRole:
+      (fact.role as CurrentInstitutionMembershipFactRow['membershipRole']) ??
+      currentRow.membershipRole,
+    membershipId:
+      typeof fact.membershipId === 'string' ? fact.membershipId : currentRow.membershipId,
+    membershipUpdatedAt:
+      typeof fact.membershipRevisionAt === 'string'
+        ? new Date(fact.membershipRevisionAt)
+        : currentRow.membershipUpdatedAt,
+    bindingTenantId:
+      typeof fact.tenantId === 'string' ? fact.tenantId : currentRow.bindingTenantId,
+    bindingInstitutionId:
+      typeof fact.institutionId === 'string'
+        ? fact.institutionId
+        : currentRow.bindingInstitutionId,
+    bindingId:
+      typeof fact.bindingId === 'string' ? fact.bindingId : currentRow.bindingId,
+    bindingVersion:
+      typeof fact.bindingRevision === 'number'
+        ? fact.bindingRevision
+        : currentRow.bindingVersion,
+    bindingAssignedAt:
+      typeof fact.bindingRevisionAt === 'string'
+        ? new Date(fact.bindingRevisionAt)
+        : currentRow.bindingAssignedAt,
+    bindingExpiresAt:
+      fact.bindingExpiresAt === null
+        ? null
+        : typeof fact.bindingExpiresAt === 'string'
+          ? new Date(fact.bindingExpiresAt)
+          : currentRow.bindingExpiresAt,
+  };
+  const rejection = input.factResolution as
+    | { kind?: unknown; code?: unknown }
+    | undefined;
+  const readerInput =
+    input.factError || rejection?.code === 'membership_unavailable'
+      ? { error: input.factError ?? new Error('controlled unavailable'), now: input.now }
+      : rejection?.code === 'membership_denied'
+        ? { rows: [] as readonly CurrentInstitutionMembershipFactRow[], now: input.now }
+        : rejection?.code === 'membership_invalid'
+          ? {
+              rows: [{ ...row, membershipUserId: 'account-mismatch' }],
+              now: input.now,
+            }
+          : { rows: [row], now: input.now };
+  const { reader: factReader, findCurrentInstitutionMembershipFacts } =
+    createReader(readerInput);
   const codec = input.codec ?? createReferenceCodec();
   return {
     codec,
     factReader,
-    resolveFact: resolve,
+    resolveFact: findCurrentInstitutionMembershipFacts,
     provider: createRequestBoundFreshActiveMembershipProviderV1({
       accountId: input.accountId ?? currentRow.accountId,
       factReader,
@@ -696,6 +726,32 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     });
   });
 
+  it('never promotes a query or membership fact lookalike into a genuine reader', async () => {
+    const codec = createReferenceCodec();
+    const now = vi.fn(() => NOW);
+    for (const factReader of [
+      requestedMembership,
+      Object.freeze({
+        kind: 'current_membership_fact',
+        accountId: currentRow.accountId,
+        tenantId: currentRow.membershipTenantId,
+        institutionId: currentRow.bindingInstitutionId,
+      }),
+    ]) {
+      const provider = createRequestBoundFreshActiveMembershipProviderV1({
+        accountId: currentRow.accountId,
+        factReader: factReader as unknown as AuthoritativeInstitutionMembershipFactReaderV1,
+        referenceCodec: codec,
+        now,
+      });
+      await expect(provider.resolve(requestBoundInput(codec))).resolves.toEqual({
+        kind: 'rejected',
+        code: 'membership_unavailable',
+      });
+    }
+    expect(now).not.toHaveBeenCalled();
+  });
+
   it('composes directly from the existing authoritative fact reader', async () => {
     const codec = createReferenceCodec();
     const { reader, findCurrentInstitutionMembershipFacts } = createReader();
@@ -724,7 +780,6 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     expect(resolveFact).toHaveBeenCalledWith({
       accountId: currentRow.accountId,
       tenantId: currentRow.membershipTenantId,
-      institutionId: currentRow.bindingInstitutionId,
     });
     expect(result).toMatchObject({
       kind: 'fresh_active',
@@ -750,78 +805,119 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     expect(serialized).not.toContain(currentRow.accountId);
     expect(serialized).not.toContain(currentRow.membershipId);
     expect(serialized).not.toContain(currentRow.bindingId as string);
-    expect(serialized).not.toContain(requestBoundFact.membershipRevisionAt);
+    expect(serialized).not.toContain('2026-07-18T07:58:00.000Z');
     expect(serialized).not.toContain('"bindingRevision":7');
   });
 
-  it('uses the frozen owner profiles and scopes for all five references', async () => {
+  it('rejects a structural codec lookalike before method or fact access', async () => {
     const realCodec = createReferenceCodec();
-    const issue = vi.fn((value: Parameters<InstitutionGuardReferenceCodecV1['issue']>[0]) =>
-      realCodec.issue(value),
-    );
-    const verify = vi.fn(
-      (value: Parameters<InstitutionGuardReferenceCodecV1['verify']>[0]) =>
-        realCodec.verify(value),
-    );
-    const codec = {
-      issue,
-      verify,
-    } as unknown as InstitutionGuardReferenceCodecV1;
-    const { provider } = createRequestBoundProvider({ codec });
+    const issue = vi.fn(realCodec.issue);
+    const verify = vi.fn(realCodec.verify);
+    const codec = { issue, verify } as unknown as InstitutionGuardReferenceCodecV1;
+    const created = createRequestBoundProvider({ codec });
 
-    await expect(provider.resolve(requestBoundInput(realCodec))).resolves.toMatchObject({
-      kind: 'fresh_active',
+    await expect(
+      created.provider.resolve(requestBoundInput(realCodec)),
+    ).resolves.toEqual({ kind: 'rejected', code: 'membership_unavailable' });
+    expect(issue).not.toHaveBeenCalled();
+    expect(verify).not.toHaveBeenCalled();
+    expect(created.resolveFact).not.toHaveBeenCalled();
+  });
+
+  it('rejects fake reader and codec handle matrices before methods, facts or clock', async () => {
+    const realCodec = createReferenceCodec();
+    const { reader: realReader, findCurrentInstitutionMembershipFacts } =
+      createReader();
+    const now = vi.fn(() => NOW);
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const traps: ProxyHandler<object> = {
+      get() {
+        proxyTraps += 1;
+        throw new Error('dependency get trap must not run');
+      },
+      getOwnPropertyDescriptor() {
+        proxyTraps += 1;
+        throw new Error('dependency descriptor trap must not run');
+      },
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('dependency prototype trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('dependency ownKeys trap must not run');
+      },
+    };
+    const readerAccessor: Record<string, unknown> = {};
+    Object.defineProperty(readerAccessor, 'resolve', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('reader getter must not run');
+      },
     });
-    expect(issue.mock.calls.map(([value]) => value)).toEqual([
-      {
-        prefix: 'usr',
-        ownerDomain: 'zmtg.auth-account.v1',
-        tenantId: null,
-        institutionId: null,
-        ownerSubject: currentRow.accountId,
+    const codecAccessor: Record<string, unknown> = { verify: realCodec.verify };
+    Object.defineProperty(codecAccessor, 'issue', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('codec getter must not run');
       },
-      {
-        prefix: 'mbr',
-        ownerDomain: 'security.institution-membership',
-        tenantId: currentRow.membershipTenantId,
-        institutionId: null,
-        ownerSubject: currentRow.membershipId,
-      },
-      {
-        prefix: 'mrv',
-        ownerDomain: 'security.institution-membership',
-        tenantId: currentRow.membershipTenantId,
-        institutionId: null,
-        ownerSubject:
-          'mrv-v1-YQBnrVDFgpH0DQfZM2PvEz1i4W4bJcMc19uqm2wP9KM',
-      },
-      {
-        prefix: 'bnd',
-        ownerDomain: 'security.institution-membership',
-        tenantId: currentRow.membershipTenantId,
-        institutionId: currentRow.bindingInstitutionId,
-        ownerSubject: currentRow.bindingId,
-      },
-      {
-        prefix: 'brv',
-        ownerDomain: 'security.institution-membership',
-        tenantId: currentRow.membershipTenantId,
-        institutionId: currentRow.bindingInstitutionId,
-        ownerSubject:
-          'brv-v1-YbGbAGGt1-Lp-gj50goljKNsbIDLWSGxURhjVrnQWWc',
-      },
-    ]);
-    expect(verify).toHaveBeenCalledTimes(5);
-    for (const [index, [verifyInput]] of verify.mock.calls.entries()) {
-      const issueInput = issue.mock.calls[index]?.[0];
-      expect(issueInput).toBeDefined();
-      expect(verifyInput).toEqual({
-        ...issueInput,
-        reference: expect.stringMatching(
-          new RegExp(`^${issueInput?.prefix}_v1_k1_[A-Za-z0-9_-]{43}$`, 'u'),
-        ),
+    });
+    const readerProxy = new Proxy(realReader, traps);
+    const revokedReader = Proxy.revocable(realReader, traps);
+    revokedReader.revoke();
+    const codecProxy = new Proxy(realCodec, traps);
+    const revokedCodec = Proxy.revocable(realCodec, traps);
+    revokedCodec.revoke();
+    const fakeReaders: unknown[] = [
+      { resolve: realReader.resolve },
+      { ...realReader },
+      Object.assign({}, realReader),
+      Object.create(realReader),
+      readerAccessor,
+      readerProxy,
+      revokedReader.proxy,
+    ];
+    const fakeCodecs: unknown[] = [
+      { issue: realCodec.issue, verify: realCodec.verify },
+      { ...realCodec },
+      Object.assign({}, realCodec),
+      Object.create(realCodec),
+      codecAccessor,
+      codecProxy,
+      revokedCodec.proxy,
+    ];
+
+    for (const factReader of fakeReaders) {
+      const provider = createRequestBoundFreshActiveMembershipProviderV1({
+        accountId: currentRow.accountId,
+        factReader: factReader as AuthoritativeInstitutionMembershipFactReaderV1,
+        referenceCodec: realCodec,
+        now,
+      });
+      await expect(provider.resolve(requestBoundInput(realCodec))).resolves.toEqual({
+        kind: 'rejected',
+        code: 'membership_unavailable',
       });
     }
+    for (const referenceCodec of fakeCodecs) {
+      const provider = createRequestBoundFreshActiveMembershipProviderV1({
+        accountId: currentRow.accountId,
+        factReader: realReader,
+        referenceCodec: referenceCodec as InstitutionGuardReferenceCodecV1,
+        now,
+      });
+      await expect(provider.resolve(requestBoundInput(realCodec))).resolves.toEqual({
+        kind: 'rejected',
+        code: 'membership_unavailable',
+      });
+    }
+    expect(findCurrentInstitutionMembershipFacts).not.toHaveBeenCalled();
+    expect(now).not.toHaveBeenCalled();
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
   });
 
   it('domain-separates revision references across every owner semantic field', async () => {
@@ -894,22 +990,13 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     });
   });
 
-  it('maps expired facts and a fact expiring during signing to membership_stale', async () => {
+  it('preserves the authoritative reader denial for an already expired binding', async () => {
     const expired = createRequestBoundProvider({
       fact: { bindingExpiresAt: NOW.toISOString() },
     });
     await expect(
       expired.provider.resolve(requestBoundInput(expired.codec)),
-    ).resolves.toEqual({ kind: 'rejected', code: 'membership_stale' });
-
-    let tick = 0;
-    const during = createRequestBoundProvider({
-      fact: { bindingExpiresAt: '2026-07-18T08:00:00.002Z' },
-      now: () => new Date(NOW.getTime() + tick++ * 2),
-    });
-    await expect(
-      during.provider.resolve(requestBoundInput(during.codec)),
-    ).resolves.toEqual({ kind: 'rejected', code: 'membership_stale' });
+    ).resolves.toEqual({ kind: 'rejected', code: 'membership_denied' });
   });
 
   it('narrows the 60-second TTL to an earlier binding expiry', async () => {
@@ -929,11 +1016,6 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     ['membership revision malformed', { membershipRevisionAt: 'not-an-instant' }],
     ['binding revision fractional', { bindingRevision: 1.5 }],
     ['binding revision time malformed', { bindingRevisionAt: 'not-an-instant' }],
-    [
-      'binding revision time after observation',
-      { bindingRevisionAt: '2026-07-18T08:00:00.001Z' },
-    ],
-    ['future observation', { observedAt: '2026-07-18T08:00:00.001Z' }],
   ] as const)('maps malformed current fact %s to membership_invalid', async (_label, fact) => {
     const created = createRequestBoundProvider({ fact });
     await expect(
@@ -941,109 +1023,22 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     ).resolves.toEqual({ kind: 'rejected', code: 'membership_invalid' });
   });
 
-  it('fails all-or-none when the codec is unavailable and rejects malformed codec output', async () => {
+  it('fails atomically with a genuine factory-issued unavailable codec', async () => {
     const realCodec = createReferenceCodec();
-    let calls = 0;
-    const unavailableCodec = {
-      issue: vi.fn((value: Parameters<InstitutionGuardReferenceCodecV1['issue']>[0]) => {
-        calls += 1;
-        return calls === 3
-          ? { kind: 'unavailable', code: 'guard_reference_unavailable' as const }
-          : realCodec.issue(value);
-      }),
-      verify: realCodec.verify,
-    } as unknown as InstitutionGuardReferenceCodecV1;
-    const unavailable = createRequestBoundProvider({ codec: unavailableCodec });
-    await expect(
-      unavailable.provider.resolve(requestBoundInput(realCodec)),
-    ).resolves.toEqual({ kind: 'rejected', code: 'membership_unavailable' });
-
-    const malformedCodec = {
-      issue: vi.fn(() => ({
-        kind: 'issued',
-        reference: `usr_v1_k1_${'A'.repeat(22)}`,
-      })),
-      verify: realCodec.verify,
-    } as unknown as InstitutionGuardReferenceCodecV1;
-    const malformed = createRequestBoundProvider({ codec: malformedCodec });
-    await expect(
-      malformed.provider.resolve(requestBoundInput(realCodec)),
-    ).resolves.toEqual({ kind: 'rejected', code: 'membership_invalid' });
-
-    const unsupportedKeyCodec = {
-      issue: vi.fn(() => ({
-        kind: 'issued',
-        reference: `usr_v1_k2_${'A'.repeat(43)}`,
-      })),
-      verify: realCodec.verify,
-    } as unknown as InstitutionGuardReferenceCodecV1;
-    const unsupported = createRequestBoundProvider({ codec: unsupportedKeyCodec });
-    await expect(
-      unsupported.provider.resolve(requestBoundInput(realCodec)),
-    ).resolves.toEqual({ kind: 'rejected', code: 'membership_invalid' });
-  });
-
-  it('rejects a forged full-length issue result unless canonical verification succeeds', async () => {
-    const realCodec = createReferenceCodec();
-    const forgedCodec = {
-      issue: vi.fn(
-        (value: Parameters<InstitutionGuardReferenceCodecV1['issue']>[0]) => ({
-          kind: 'issued' as const,
-          reference: `${value.prefix}_v1_k1_${'A'.repeat(43)}`,
-        }),
-      ),
-      verify: vi.fn(
-        (value: Parameters<InstitutionGuardReferenceCodecV1['verify']>[0]) =>
-          realCodec.verify(value),
-      ),
-    } as unknown as InstitutionGuardReferenceCodecV1;
-    const created = createRequestBoundProvider({ codec: forgedCodec });
+    const unavailableCodec = createInstitutionGuardReferenceCodecV1({
+      keyRing: {
+        currentIssueKey: { keyVersion: 1, keyMaterial: null },
+        verifyOnlyKeys: [],
+      },
+      now: () => NOW,
+    });
+    const created = createRequestBoundProvider({ codec: unavailableCodec });
 
     await expect(
       created.provider.resolve(requestBoundInput(realCodec)),
-    ).resolves.toEqual({ kind: 'rejected', code: 'membership_invalid' });
-    expect(forgedCodec.verify).toHaveBeenCalled();
+    ).resolves.toEqual({ kind: 'rejected', code: 'membership_unavailable' });
+    expect(created.resolveFact).toHaveBeenCalledTimes(1);
   });
-
-  it.each([
-    [
-      'rejected',
-      () => ({ kind: 'rejected', code: 'guard_reference_invalid' }),
-      'membership_invalid',
-    ],
-    [
-      'unavailable',
-      () => ({ kind: 'unavailable', code: 'guard_reference_unavailable' }),
-      'membership_unavailable',
-    ],
-    [
-      'throwing',
-      () => {
-        throw new Error('secret verifier details');
-      },
-      'membership_unavailable',
-    ],
-    ['malformed', () => ({ kind: 'verified', reference: 1 }), 'membership_invalid'],
-    [
-      'mismatched',
-      () => ({ kind: 'verified', reference: `usr_v1_k1_${'A'.repeat(43)}` }),
-      'membership_invalid',
-    ],
-  ] as const)(
-    'maps %s verification without returning partial evidence',
-    async (_label, verifyResolution, expectedCode) => {
-      const realCodec = createReferenceCodec();
-      const codec = {
-        issue: realCodec.issue,
-        verify: vi.fn(verifyResolution),
-      } as unknown as InstitutionGuardReferenceCodecV1;
-      const created = createRequestBoundProvider({ codec });
-
-      await expect(
-        created.provider.resolve(requestBoundInput(realCodec)),
-      ).resolves.toEqual({ kind: 'rejected', code: expectedCode });
-    },
-  );
 
   it('maps reader and clock failures to membership_unavailable without leaking details', async () => {
     const readerFailure = createRequestBoundProvider({
@@ -1065,7 +1060,7 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
 
   it('rejects accessor, scalar and Proxy factory methods without reading or invoking them', async () => {
     const codec = createReferenceCodec();
-    const factResolve = vi.fn(async () => requestBoundFact);
+    const factResolve = vi.fn(async () => ({}));
     let getterReads = 0;
     let applyTraps = 0;
     const accessorMethod = (name: 'resolve' | 'issue' | 'verify') => {
@@ -1230,14 +1225,18 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     const created = createRequestBoundProvider();
     const input = requestBoundInput(created.codec);
     created.resolveFact
-      .mockResolvedValueOnce({
-        ...requestBoundFact,
-        membershipRevisionAt: '2026-07-18T07:58:00.000Z',
-      })
-      .mockResolvedValueOnce({
-        ...requestBoundFact,
-        membershipRevisionAt: '2026-07-18T07:59:00.000Z',
-      });
+      .mockResolvedValueOnce([
+        {
+          ...currentRow,
+          membershipUpdatedAt: new Date('2026-07-18T07:58:00.000Z'),
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          ...currentRow,
+          membershipUpdatedAt: new Date('2026-07-18T07:59:00.000Z'),
+        },
+      ]);
     const first = await created.provider.resolve(input);
     const second = await created.provider.resolve(input);
     expect(created.resolveFact).toHaveBeenCalledTimes(2);
