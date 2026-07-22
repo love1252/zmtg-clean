@@ -349,6 +349,7 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [indexingCapabilityStatus, setIndexingCapabilityStatus] = useState<IndexingCapabilityStatus>('checking');
   const [indexingJobMessage, setIndexingJobMessage] = useState('正在确认索引任务能力状态...');
   const [isIndexingJobLoading, setIsIndexingJobLoading] = useState(false);
+  const indexingJobRequestRevisionRef = useRef(0);
   const [pageInfo, setPageInfo] = useState<InstitutionKnowledgeListResponse['pageInfo']>({
     page: 1,
     pageSize: 10,
@@ -695,32 +696,29 @@ export function InstitutionKnowledgeReadonlyShell() {
   }
 
   async function loadIndexingJobs() {
+    const requestRevision = indexingJobRequestRevisionRef.current + 1;
+    indexingJobRequestRevisionRef.current = requestRevision;
     setIsIndexingJobLoading(true);
     setIndexingCapabilityStatus('checking');
     setIndexingJobs([]);
     setIndexingJobMessage('正在确认索引任务能力状态...');
     try {
-      const response = await fetch('/api/institution/knowledge-management/indexing-jobs?limit=10', {
+      await fetch('/api/institution/knowledge-management/indexing-jobs?limit=10', {
         cache: 'no-store',
       });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload || !Array.isArray(payload.records)) {
-        setIndexingJobs([]);
-        setIndexingCapabilityStatus('disabled');
-        setIndexingJobMessage(indexingCapabilityDisabledMessage);
-        return;
-      }
-
-      const records = payload.records as InstitutionKnowledgeIndexingJobRecord[];
-      setIndexingJobs(records);
-      setIndexingCapabilityStatus('ready');
-      setIndexingJobMessage(records.length > 0 ? `已读取 ${records.length} 条最近任务` : '暂无索引任务');
+      if (indexingJobRequestRevisionRef.current !== requestRevision) return;
+      setIndexingJobs([]);
+      setIndexingCapabilityStatus('disabled');
+      setIndexingJobMessage(indexingCapabilityDisabledMessage);
     } catch {
+      if (indexingJobRequestRevisionRef.current !== requestRevision) return;
       setIndexingJobs([]);
       setIndexingCapabilityStatus('disabled');
       setIndexingJobMessage(indexingCapabilityDisabledMessage);
     } finally {
-      setIsIndexingJobLoading(false);
+      if (indexingJobRequestRevisionRef.current === requestRevision) {
+        setIsIndexingJobLoading(false);
+      }
     }
   }
 
@@ -1143,7 +1141,6 @@ export function InstitutionKnowledgeReadonlyShell() {
           <button
             type="button"
             onClick={loadIndexingJobs}
-            disabled={isIndexingJobLoading}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCw className={cn('h-4 w-4', isIndexingJobLoading ? 'animate-spin' : '')} />
