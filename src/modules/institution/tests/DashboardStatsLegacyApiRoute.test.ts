@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from '@/app/api/institution/dashboard-stats/route';
 import type { DecodedAuthSession } from '@/modules/auth/domain/session';
@@ -72,6 +74,11 @@ const tenantAdminSession: DecodedAuthSession = {
   source: 'demo_session',
 };
 
+const routeSource = readFileSync(
+  join(process.cwd(), 'src/app/api/institution/dashboard-stats/route.ts'),
+  'utf8',
+);
+
 function request(session?: DecodedAuthSession) {
   return new Request('http://localhost/api/institution/dashboard-stats', {
     headers: session
@@ -91,6 +98,7 @@ function expectLegacyDataChainUnused() {
 
 async function expectLegacyDisabled(response: Response) {
   expect(response.status).toBe(410);
+  expect(response.headers.get('cache-control')).toBe('no-store');
   const payload = await response.json() as Record<string, unknown>;
   expect(payload).toEqual({
     error: '旧经营看板统计不提供机构级经营分析数据',
@@ -100,6 +108,10 @@ async function expectLegacyDisabled(response: Response) {
   expect(payload).not.toHaveProperty('customerCount');
   expect(payload).not.toHaveProperty('customers');
   expect(payload).not.toHaveProperty('records');
+  expect(payload).not.toHaveProperty('treatments');
+  expect(payload).not.toHaveProperty('amount');
+  expect(payload).not.toHaveProperty('ranking');
+  expect(payload).not.toHaveProperty('balance');
 }
 
 beforeEach(() => {
@@ -108,7 +120,10 @@ beforeEach(() => {
 
 describe('legacy dashboard-stats API route', () => {
   it('returns the fixed disabled response before parsing an unsigned request', async () => {
-    await expectLegacyDisabled(await GET(request()));
+    const response = GET(request());
+
+    expect(response).toBeInstanceOf(Response);
+    await expectLegacyDisabled(response);
     expectLegacyDataChainUnused();
   });
 
@@ -117,17 +132,55 @@ describe('legacy dashboard-stats API route', () => {
     expectLegacyDataChainUnused();
   });
 
+  it('ignores forged query, header, and cookie input without echoing it', async () => {
+    const forgedValue = 'forged-institution-input';
+    const response = await GET(
+      new Request(
+        `http://localhost/api/institution/dashboard-stats?tenantId=${forgedValue}&customerId=${forgedValue}`,
+        {
+          headers: {
+            cookie: `${DEMO_SESSION_COOKIE}=${forgedValue}`,
+            'x-institution-id': forgedValue,
+          },
+        },
+      ),
+    );
+
+    const replayableResponse = response.clone();
+    await expectLegacyDisabled(response);
+    expect(JSON.stringify(await replayableResponse.json())).not.toContain(forgedValue);
+    expectLegacyDataChainUnused();
+  });
+
   it('does not access a hostile Request proxy', async () => {
-    let propertyReads = 0;
+    let trapCount = 0;
     const hostileRequest = new Proxy({} as Request, {
       get() {
-        propertyReads += 1;
+        trapCount += 1;
+        throw new Error('request_must_not_be_read');
+      },
+      getOwnPropertyDescriptor() {
+        trapCount += 1;
+        throw new Error('request_must_not_be_read');
+      },
+      ownKeys() {
+        trapCount += 1;
         throw new Error('request_must_not_be_read');
       },
     });
 
     await expectLegacyDisabled(await GET(hostileRequest));
-    expect(propertyReads).toBe(0);
+    expect(trapCount).toBe(0);
     expectLegacyDataChainUnused();
+  });
+
+  it('imports only NextResponse and forbids request or legacy data-chain dependencies', () => {
+    const importLines = routeSource.match(/^import .+;$/gmu) ?? [];
+
+    expect(importLines).toEqual(["import { NextResponse } from 'next/server';"]);
+    expect(routeSource).not.toMatch(/\b_?request\s*(?:\.|\[)/u);
+    expect(routeSource).not.toMatch(
+      /getDemoAccessContextFromRequest|canAccessResource|getDatabase|createTenantBusinessRepository|generateOpportunityPools|createAuditEventRepository|deriveSafetySwitchViewModel/u,
+    );
   });
 });
