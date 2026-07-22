@@ -539,8 +539,8 @@ describe('WB-ENTRY-02A /hospital capability-off 页面', () => {
     }
   });
 
-  it.each(['allowed', 'blocked', 'reject', 'sync_throw'] as const)(
-    'runtime %s 时均只渲染同一 capability-off UI',
+  it.each(['fake_allowed', 'blocked', 'reject', 'sync_throw'] as const)(
+    'runtime %s 时保持原 capability-off UI',
     async (runtimeCase) => {
       if (runtimeCase === 'reject') {
         workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockRejectedValueOnce(
@@ -554,7 +554,7 @@ describe('WB-ENTRY-02A /hospital capability-off 页面', () => {
         );
       } else {
         workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockResolvedValueOnce({
-          kind: runtimeCase,
+          kind: runtimeCase === 'fake_allowed' ? 'allowed' : 'blocked',
           view: 'capability_off',
         });
       }
@@ -574,4 +574,112 @@ describe('WB-ENTRY-02A /hospital capability-off 页面', () => {
       ).toHaveBeenCalledTimes(1);
     },
   );
+
+  it('仅 genuine allowed 进入低敏 authorized-boundary，仍保留桌面七栏和移动五入口', async () => {
+    const created = authorizationFixture();
+    const genuineDecision = await createControlledInstitutionWorkbenchEntryV1({
+      authorization: created.authorization,
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockResolvedValueOnce(
+      genuineDecision,
+    );
+
+    render(await HospitalPage());
+
+    const main = screen.getByRole('main');
+    expect(
+      main.querySelector('[data-capability-state="authorized-boundary"]'),
+    ).toBeInTheDocument();
+    expect(
+      within(main).getByRole('heading', { name: '工作台访问已核验', level: 2 }),
+    ).toBeInTheDocument();
+    expect(
+      within(main).getByText('当前仅确认工作台访问边界；业务数据、操作入口和实时统计仍未开放。'),
+    ).toBeInTheDocument();
+    expect(within(main).queryByRole('region', { name: '行动队列' })).not.toBeInTheDocument();
+    expect(within(main).queryAllByRole('link')).toHaveLength(0);
+    expect(within(main).queryAllByRole('button')).toHaveLength(0);
+    expect(within(main).queryByText('0')).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const desktopNavigation = screen.getByRole('navigation', { name: '机构端桌面导航' });
+    expect(
+      within(desktopNavigation)
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('aria-label')),
+    ).toEqual(DESKTOP_NAVIGATION.map(([label]) => label));
+    const mobileNavigation = screen.getByRole('navigation', { name: '机构端移动导航' });
+    expect(
+      Array.from(mobileNavigation.querySelectorAll('a, button')).map((entry) =>
+        entry.textContent?.trim(),
+      ),
+    ).toEqual(MOBILE_NAVIGATION_LABELS);
+
+    for (const forbidden of [
+      /accountId|tenantId|institutionId|role|scope|policy|key|reference|resolution/iu,
+      /Care 行动概览|机构能力|查看|新建/u,
+    ]) {
+      expect(within(main).queryByText(forbidden)).not.toBeInTheDocument();
+    }
+  });
+
+  it('plain fake、clone、accessor、Proxy 与 revoked allowed 均不能打开 authorized-boundary', async () => {
+    const created = authorizationFixture();
+    const genuineDecision = await createControlledInstitutionWorkbenchEntryV1({
+      authorization: created.authorization,
+    });
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor: Record<string, unknown> = {};
+    Object.defineProperty(accessor, 'kind', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('decision getter must not run');
+      },
+    });
+    const hostileProxy = new Proxy(genuineDecision, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('decision proxy trap must not run');
+      },
+    });
+    const revoked = Proxy.revocable(genuineDecision, {
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('revoked decision trap must not run');
+      },
+    });
+    revoked.revoke();
+
+    for (const forgedDecision of [
+      Object.freeze({ kind: 'allowed', view: 'capability_off' }),
+      Object.freeze({ ...genuineDecision }),
+      accessor,
+      hostileProxy,
+      revoked.proxy,
+    ]) {
+      workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockResolvedValueOnce(
+        forgedDecision as never,
+      );
+      const { unmount } = render(await HospitalPage());
+
+      expect(
+        screen
+          .getByRole('main')
+          .querySelector('[data-capability-state="blocked"]'),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('heading', { name: '工作台访问已核验', level: 2 }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: '数据服务/能力尚未安全开放', level: 2 }),
+      ).toBeInTheDocument();
+      unmount();
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
 });
