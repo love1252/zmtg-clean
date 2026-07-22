@@ -110,6 +110,7 @@ describe('机构成员资格权威事实读取器', () => {
       membershipRevisionAt: '2026-07-18T07:58:00.000Z',
       bindingId: 'auth-binding-chenlei',
       bindingRevision: 7,
+      bindingRevisionAt: '2026-07-01T00:00:00.000Z',
       bindingExpiresAt: null,
       observedAt: '2026-07-18T08:00:00.000Z',
     });
@@ -422,6 +423,92 @@ describe('机构成员资格权威事实读取器', () => {
     });
     expect(findCurrentInstitutionMembershipFacts).toHaveBeenCalledTimes(1);
   });
+
+  it('严格快照 factory 与依赖方法，恶意 getter 和 Proxy 不得执行', async () => {
+    const findFacts = vi.fn(async () => [currentRow]);
+    const validRepository = {
+      findCurrentInstitutionMembershipFacts: findFacts,
+    };
+    let getterReads = 0;
+    let applyTraps = 0;
+    const accessorFactory = {} as Record<string, unknown>;
+    Object.defineProperty(accessorFactory, 'repository', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('repository getter must not run');
+      },
+    });
+    Object.defineProperty(accessorFactory, 'now', {
+      enumerable: true,
+      value: () => NOW,
+    });
+    const repositoryAccessor = {} as Record<string, unknown>;
+    Object.defineProperty(repositoryAccessor, 'findCurrentInstitutionMembershipFacts', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('find getter must not run');
+      },
+    });
+    const nowAccessorFactory = { repository: validRepository } as Record<
+      string,
+      unknown
+    >;
+    Object.defineProperty(nowAccessorFactory, 'now', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('now getter must not run');
+      },
+    });
+    const proxiedMethod = new Proxy(findFacts, {
+      apply() {
+        applyTraps += 1;
+        throw new Error('find apply trap must not run');
+      },
+    });
+    const proxiedNow = new Proxy(() => NOW, {
+      apply() {
+        applyTraps += 1;
+        throw new Error('now apply trap must not run');
+      },
+    });
+    const baseFactory = { repository: validRepository, now: () => NOW };
+    const factories: unknown[] = [
+      new Proxy(baseFactory, {
+        get() {
+          getterReads += 1;
+          throw new Error('factory getter must not run');
+        },
+      }),
+      accessorFactory,
+      { ...baseFactory, extra: 'forbidden' },
+      Object.assign({ ...baseFactory }, { [Symbol('scope')]: 'forbidden' }),
+      Object.assign(Object.create({ inherited: true }), baseFactory),
+      Object.assign(Object.create(null), baseFactory),
+      { repository: repositoryAccessor, now: () => NOW },
+      {
+        repository: { findCurrentInstitutionMembershipFacts: proxiedMethod },
+        now: () => NOW,
+      },
+      { repository: validRepository, now: proxiedNow },
+      nowAccessorFactory,
+    ];
+
+    for (const factory of factories) {
+      const reader = createAuthoritativeInstitutionMembershipFactReaderV1(
+        factory as never,
+      );
+      await expect(reader.resolve(requestedMembership)).resolves.toEqual({
+        kind: 'rejected',
+        code: 'membership_unavailable',
+      });
+    }
+    expect(getterReads).toBe(0);
+    expect(applyTraps).toBe(0);
+    expect(findFacts).not.toHaveBeenCalled();
+  });
 });
 
 const REFERENCE_KEY = new Uint8Array(32).fill(0x31);
@@ -482,6 +569,7 @@ const requestBoundFact = Object.freeze({
   membershipRevisionAt: '2026-07-18T07:58:00.000Z',
   bindingId: currentRow.bindingId as string,
   bindingRevision: currentRow.bindingVersion as number,
+  bindingRevisionAt: '2026-07-01T00:00:00.000Z',
   bindingExpiresAt: null,
   observedAt: NOW.toISOString(),
 });
@@ -592,9 +680,13 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     const issue = vi.fn((value: Parameters<InstitutionGuardReferenceCodecV1['issue']>[0]) =>
       realCodec.issue(value),
     );
+    const verify = vi.fn(
+      (value: Parameters<InstitutionGuardReferenceCodecV1['verify']>[0]) =>
+        realCodec.verify(value),
+    );
     const codec = {
       issue,
-      verify: realCodec.verify,
+      verify,
     } as unknown as InstitutionGuardReferenceCodecV1;
     const { provider } = createRequestBoundProvider({ codec });
 
@@ -637,9 +729,20 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
         tenantId: currentRow.membershipTenantId,
         institutionId: currentRow.bindingInstitutionId,
         ownerSubject:
-          'brv-v1-juD46e6dviNpqZyYrY1SmfLcRFKWepzyGnIY1bKqCVc',
+          'brv-v1-YbGbAGGt1-Lp-gj50goljKNsbIDLWSGxURhjVrnQWWc',
       },
     ]);
+    expect(verify).toHaveBeenCalledTimes(5);
+    for (const [index, [verifyInput]] of verify.mock.calls.entries()) {
+      const issueInput = issue.mock.calls[index]?.[0];
+      expect(issueInput).toBeDefined();
+      expect(verifyInput).toEqual({
+        ...issueInput,
+        reference: expect.stringMatching(
+          new RegExp(`^${issueInput?.prefix}_v1_k1_[A-Za-z0-9_-]{43}$`, 'u'),
+        ),
+      });
+    }
   });
 
   it('domain-separates revision references across every owner semantic field', async () => {
@@ -671,6 +774,9 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
       bindingId: 'auth-binding-other',
     });
     const bindingRevisionChanged = await resolveVariant({ bindingRevision: 8 });
+    const bindingRevisionAtChanged = await resolveVariant({
+      bindingRevisionAt: '2026-07-02T00:00:00.000Z',
+    });
     const bindingExpiryChanged = await resolveVariant({
       bindingExpiresAt: '2026-07-18T08:00:30.000Z',
     });
@@ -679,9 +785,10 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
         baseline.bindingRevision,
         bindingIdChanged.bindingRevision,
         bindingRevisionChanged.bindingRevision,
+        bindingRevisionAtChanged.bindingRevision,
         bindingExpiryChanged.bindingRevision,
       ]).size,
-    ).toBe(4);
+    ).toBe(5);
   });
 
   it('reissues usr from the captured account and requires exact provenance equality', async () => {
@@ -742,6 +849,11 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     ['unknown role', { role: 'unknown-role' }],
     ['membership revision malformed', { membershipRevisionAt: 'not-an-instant' }],
     ['binding revision fractional', { bindingRevision: 1.5 }],
+    ['binding revision time malformed', { bindingRevisionAt: 'not-an-instant' }],
+    [
+      'binding revision time after observation',
+      { bindingRevisionAt: '2026-07-18T08:00:00.001Z' },
+    ],
     ['future observation', { observedAt: '2026-07-18T08:00:00.001Z' }],
   ] as const)('maps malformed current fact %s to membership_invalid', async (_label, fact) => {
     const created = createRequestBoundProvider({ fact });
@@ -791,6 +903,68 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
       unsupported.provider.resolve(requestBoundInput(realCodec)),
     ).resolves.toEqual({ kind: 'rejected', code: 'membership_invalid' });
   });
+
+  it('rejects a forged full-length issue result unless canonical verification succeeds', async () => {
+    const realCodec = createReferenceCodec();
+    const forgedCodec = {
+      issue: vi.fn(
+        (value: Parameters<InstitutionGuardReferenceCodecV1['issue']>[0]) => ({
+          kind: 'issued' as const,
+          reference: `${value.prefix}_v1_k1_${'A'.repeat(43)}`,
+        }),
+      ),
+      verify: vi.fn(
+        (value: Parameters<InstitutionGuardReferenceCodecV1['verify']>[0]) =>
+          realCodec.verify(value),
+      ),
+    } as unknown as InstitutionGuardReferenceCodecV1;
+    const created = createRequestBoundProvider({ codec: forgedCodec });
+
+    await expect(
+      created.provider.resolve(requestBoundInput(realCodec)),
+    ).resolves.toEqual({ kind: 'rejected', code: 'membership_invalid' });
+    expect(forgedCodec.verify).toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'rejected',
+      () => ({ kind: 'rejected', code: 'guard_reference_invalid' }),
+      'membership_invalid',
+    ],
+    [
+      'unavailable',
+      () => ({ kind: 'unavailable', code: 'guard_reference_unavailable' }),
+      'membership_unavailable',
+    ],
+    [
+      'throwing',
+      () => {
+        throw new Error('secret verifier details');
+      },
+      'membership_unavailable',
+    ],
+    ['malformed', () => ({ kind: 'verified', reference: 1 }), 'membership_invalid'],
+    [
+      'mismatched',
+      () => ({ kind: 'verified', reference: `usr_v1_k1_${'A'.repeat(43)}` }),
+      'membership_invalid',
+    ],
+  ] as const)(
+    'maps %s verification without returning partial evidence',
+    async (_label, verifyResolution, expectedCode) => {
+      const realCodec = createReferenceCodec();
+      const codec = {
+        issue: realCodec.issue,
+        verify: vi.fn(verifyResolution),
+      } as unknown as InstitutionGuardReferenceCodecV1;
+      const created = createRequestBoundProvider({ codec });
+
+      await expect(
+        created.provider.resolve(requestBoundInput(realCodec)),
+      ).resolves.toEqual({ kind: 'rejected', code: expectedCode });
+    },
+  );
 
   it('maps reader and clock failures to membership_unavailable without leaking details', async () => {
     const readerFailure = createRequestBoundProvider({
