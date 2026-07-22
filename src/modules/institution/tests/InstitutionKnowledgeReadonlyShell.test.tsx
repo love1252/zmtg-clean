@@ -263,6 +263,9 @@ describe('机构端知识库只读列表 UI', () => {
         }
 
         return Response.json({
+          requestId: 'institution-knowledge-management-files',
+          readonly: true,
+          dataSource: 'repository',
           records: [
             {
               fileId: 'institution-file-a',
@@ -423,6 +426,126 @@ describe('机构端知识库只读列表 UI', () => {
 
     expect(await screen.findByText('解析片段暂时不可用')).toBeInTheDocument();
     expect(screen.queryByText('机构端授权可见解析片段')).not.toBeInTheDocument();
+  });
+
+  it('文件列表先成功后 pending/503/异常/非法 payload 均清除旧敏感元数据且不冒充空态', async () => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+
+    await screen.findByRole('heading', { name: '授权可见术后护理' });
+    const filesButton = screen.getByRole('button', { name: '查看文件' });
+    const knowledgeArticle = screen.getByRole('heading', { name: '授权可见术后护理' }).closest('article');
+    expect(knowledgeArticle).not.toBeNull();
+    const knowledgeFiles = within(knowledgeArticle as HTMLElement);
+    fireEvent.click(filesButton);
+    expect(await knowledgeFiles.findByText('机构文件.pdf')).toBeInTheDocument();
+    expect(knowledgeFiles.getByText('解析成功 · OCR 待触发 · 1 片段')).toBeInTheDocument();
+    expect(knowledgeFiles.getByText('解析失败 · 需要 OCR · 0 片段')).toBeInTheDocument();
+
+    let resolvePendingFiles!: (response: Response) => void;
+    vi.mocked(globalThis.fetch).mockImplementation(
+      () => new Promise<Response>((resolve) => {
+        resolvePendingFiles = resolve;
+      }),
+    );
+
+    fireEvent.click(filesButton);
+
+    await waitFor(() => {
+      expect(knowledgeFiles.queryByText('机构文件.pdf')).not.toBeInTheDocument();
+      expect(knowledgeFiles.queryByText('术后照片.png')).not.toBeInTheDocument();
+      expect(knowledgeFiles.queryByText('解析成功 · OCR 待触发 · 1 片段')).not.toBeInTheDocument();
+      expect(knowledgeFiles.queryByText('解析失败 · 需要 OCR · 0 片段')).not.toBeInTheDocument();
+    });
+    expect(knowledgeFiles.getByText('正在读取知识库文件...')).toBeInTheDocument();
+    expect(knowledgeFiles.queryByText('暂无可下载文件')).not.toBeInTheDocument();
+
+    resolvePendingFiles(Response.json({
+      status: 'capability_disabled',
+      code: 'knowledge_files_capability_disabled',
+      error: '机构知识库文件列表暂未启用。',
+    }, {
+      status: 503,
+      headers: { 'Cache-Control': 'no-store' },
+    }));
+
+    expect(await knowledgeFiles.findByText('知识库文件暂时不可用')).toBeInTheDocument();
+    expect(knowledgeFiles.queryByText('机构文件.pdf')).not.toBeInTheDocument();
+    expect(knowledgeFiles.queryByText('术后照片.png')).not.toBeInTheDocument();
+    expect(knowledgeFiles.queryByText('暂无可下载文件')).not.toBeInTheDocument();
+
+    let resolveOlderSuccess!: (response: Response) => void;
+    vi.mocked(globalThis.fetch).mockImplementationOnce(
+      () => new Promise<Response>((resolve) => {
+        resolveOlderSuccess = resolve;
+      }),
+    );
+    fireEvent.click(filesButton);
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({
+      status: 'capability_disabled',
+      code: 'knowledge_files_capability_disabled',
+      error: '机构知识库文件列表暂未启用。',
+    }, { status: 503 }));
+    fireEvent.click(filesButton);
+    expect(await knowledgeFiles.findByText('知识库文件暂时不可用')).toBeInTheDocument();
+
+    resolveOlderSuccess(Response.json({
+      requestId: 'institution-knowledge-management-files',
+      readonly: true,
+      dataSource: 'repository',
+      records: [{
+        fileId: 'stale-file',
+        originalFilename: '过期敏感文件名.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 1,
+        status: 'active',
+        fileType: 'PDF',
+        sizeLabel: '1 B',
+        parseStatus: 'succeeded',
+        ocrStatus: 'succeeded',
+        safeFailureMessage: null,
+        chunkCount: 1,
+      }],
+    }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(knowledgeFiles.queryByText('过期敏感文件名.pdf')).not.toBeInTheDocument();
+    expect(knowledgeFiles.queryByText('暂无可下载文件')).not.toBeInTheDocument();
+
+    vi.mocked(globalThis.fetch).mockRejectedValueOnce(new Error('files request failed'));
+    fireEvent.click(filesButton);
+    expect(await knowledgeFiles.findByText('知识库文件暂时不可用')).toBeInTheDocument();
+    expect(knowledgeFiles.queryByText('机构文件.pdf')).not.toBeInTheDocument();
+    expect(knowledgeFiles.queryByText('暂无可下载文件')).not.toBeInTheDocument();
+
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({
+      requestId: 'institution-knowledge-management-files',
+      readonly: true,
+      dataSource: 'repository',
+      records: 'not-an-array',
+    }));
+    fireEvent.click(filesButton);
+    expect(await knowledgeFiles.findByText('知识库文件暂时不可用')).toBeInTheDocument();
+    expect(knowledgeFiles.queryByText('机构文件.pdf')).not.toBeInTheDocument();
+    expect(knowledgeFiles.queryByText('暂无可下载文件')).not.toBeInTheDocument();
+  });
+
+  it('文件列表仅在权威成功且 records 为空时显示确认空态', async () => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+
+    await screen.findByRole('heading', { name: '授权可见术后护理' });
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({
+      requestId: 'institution-knowledge-management-files',
+      readonly: true,
+      dataSource: 'repository',
+      records: [],
+      pageInfo,
+    }));
+
+    fireEvent.click(screen.getByRole('button', { name: '查看文件' }));
+
+    expect(await screen.findByText('暂无可下载文件')).toBeInTheDocument();
+    expect(screen.queryByText('知识库文件暂时不可用')).not.toBeInTheDocument();
   });
 
   it('索引 root API 返回 503 时隐藏任务、OCR、重建和取消动作，仅保留刷新', async () => {

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   PlatformKnowledgeFileRepositoryRecord,
@@ -7,13 +9,14 @@ import type { PlatformKnowledgeRepositoryRecord } from '@/modules/open-platform/
 import * as platformFilesRoute from '@/app/api/v1/open-platform/knowledge-management/items/[knowledgeId]/files/route';
 import * as platformFileRoute from '@/app/api/v1/open-platform/knowledge-management/items/[knowledgeId]/files/[fileId]/route';
 import * as platformDownloadRoute from '@/app/api/v1/open-platform/knowledge-management/items/[knowledgeId]/files/[fileId]/download/route';
-import * as institutionFilesRoute from '@/app/api/institution/knowledge-management/items/[knowledgeId]/files/route';
 import * as institutionDownloadRoute from '@/app/api/institution/knowledge-management/items/[knowledgeId]/files/[fileId]/download/route';
 import { getDatabase } from '@/server/db/client';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
 import type { AccessContext } from '@/modules/security/domain/access-control';
 import { createPlatformKnowledgeManagementRepository } from '@/modules/open-platform/server/platform-knowledge-management-repository';
 import { createLocalPlatformKnowledgeFileStorage } from '@/modules/open-platform/server/platform-knowledge-file-storage';
+
+type InstitutionFilesRoute = typeof import('@/app/api/institution/knowledge-management/items/[knowledgeId]/files/route');
 
 const database = { database: 'knowledge-file-route-db' };
 const now = new Date('2026-06-13T08:00:00.000Z');
@@ -83,14 +86,11 @@ const unsafeFragments = [
   'storageKey',
 ];
 
-const tenantAccessContext = {
-  userId: 'demo-user-a',
-  role: 'tenant_admin',
-  scope: 'tenant',
-  tenantId: 'tenant-route-a',
-  institutionId: 'inst-visible-a',
-  source: 'demo_session',
-} as const;
+const institutionFilesDisabledPayload = Object.freeze({
+  status: 'capability_disabled',
+  code: 'knowledge_files_capability_disabled',
+  error: '机构知识库文件列表暂未启用。',
+});
 
 const deniedPlatformContexts: Array<{
   label: string;
@@ -177,6 +177,39 @@ function buildMultipartUploadRequest() {
       'content-type': 'application/json',
     },
   });
+}
+
+async function expectInstitutionFilesDisabled(response: Response) {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  await expect(response.json()).resolves.toEqual(institutionFilesDisabledPayload);
+}
+
+function hostileProxy<T extends object>() {
+  const counts = {
+    get: 0,
+    set: 0,
+    has: 0,
+    ownKeys: 0,
+    getOwnPropertyDescriptor: 0,
+    getPrototypeOf: 0,
+  };
+  const trap = <K extends keyof typeof counts>(name: K): never => {
+    counts[name] += 1;
+    throw new Error(`${name} must not run`);
+  };
+
+  return {
+    value: new Proxy({}, {
+      get: () => trap('get'),
+      set: () => trap('set'),
+      has: () => trap('has'),
+      ownKeys: () => trap('ownKeys'),
+      getOwnPropertyDescriptor: () => trap('getOwnPropertyDescriptor'),
+      getPrototypeOf: () => trap('getPrototypeOf'),
+    }) as T,
+    counts,
+  };
 }
 
 describe('知识库文件管理 API route', () => {
@@ -353,26 +386,54 @@ describe('知识库文件管理 API route', () => {
     });
   });
 
-  it('机构端 files-root 保持只读，下载入口固定 capability disabled', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantAccessContext);
+  it('机构端 files-root 对普通、伪造和非法输入固定 capability disabled 且不回显输入', async () => {
+    const institutionFilesRoute = await import(
+      '@/app/api/institution/knowledge-management/items/[knowledgeId]/files/route'
+    );
+    const invokeGet = institutionFilesRoute.GET as unknown as (
+      request?: unknown,
+      context?: unknown,
+    ) => Response | Promise<Response>;
+    const sensitiveMarkers = [
+      'private-knowledge-id',
+      'private-file-name.pdf',
+      'private-provider-token',
+    ];
 
     expect(Object.keys(institutionFilesRoute).sort()).toEqual(['GET']);
     expect(Object.keys(institutionDownloadRoute).sort()).toEqual(['GET']);
 
-    const listResponse = await institutionFilesRoute.GET(
-      new Request('http://localhost/api/institution/knowledge-management/items/knowledge-route-a/files'),
-      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) },
-    );
-    const listPayload = await readJson(listResponse);
-    expect(listResponse.status).toBe(200);
-    expect(listPayload.records).toEqual([
-      expect.objectContaining({
-        fileId: 'file-route-a',
-        originalFilename: '术后护理.pdf',
-        status: 'active',
-      }),
-    ]);
-    expect(JSON.stringify(listPayload)).not.toContain('storageKey');
+    const responses = [
+      invokeGet(),
+      invokeGet(
+        new Request(
+          `http://localhost/api/institution/knowledge-management/items/${sensitiveMarkers[0]}/files?fileName=${sensitiveMarkers[1]}`,
+          { headers: { authorization: `Bearer ${sensitiveMarkers[2]}` } },
+        ),
+        { params: Promise.resolve({ knowledgeId: sensitiveMarkers[0] }) },
+      ),
+      invokeGet(null, { params: null }),
+    ];
+
+    for (const pendingResponse of responses) {
+      const response = await pendingResponse;
+      const replay = response.clone();
+      await expectInstitutionFilesDisabled(response);
+      const serialized = JSON.stringify(await replay.json());
+      sensitiveMarkers.forEach((marker) => expect(serialized).not.toContain(marker));
+      expect(serialized).not.toContain('originalFilename');
+      expect(serialized).not.toContain('ocrStatus');
+      expect(serialized).not.toContain('parseStatus');
+      expect(serialized).not.toContain('failureReasonCode');
+    }
+
+    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(createLocalPlatformKnowledgeFileStorage).not.toHaveBeenCalled();
+    expect(repository.findKnowledgeItem).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeFiles).not.toHaveBeenCalled();
+    expect(storage.read).not.toHaveBeenCalled();
 
     const downloadResponse = await institutionDownloadRoute.GET(
       new Request(
@@ -389,37 +450,90 @@ describe('知识库文件管理 API route', () => {
     });
   });
 
-  it('机构端未授权、跨 institution 或底层异常时安全返回', async () => {
-    vi.mocked(getDemoAccessContextFromRequest).mockReturnValue(tenantAccessContext);
-
-    repository.findKnowledgeItem.mockResolvedValueOnce({
-      ...knowledgeRecord,
-      visibleInstitutionIds: [],
-      institutionId: 'inst-owner-other',
-    });
-
-    const forbidden = await institutionFilesRoute.GET(
-      new Request('http://localhost/api/institution/knowledge-management/items/knowledge-route-a/files'),
-      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) },
+  it('机构端 files-root 不触碰 hostile Request/context/params 的任一 trap', async () => {
+    const institutionFilesRoute = await import(
+      '@/app/api/institution/knowledge-management/items/[knowledgeId]/files/route'
     );
-    expect(forbidden.status).toBe(403);
-    expect(await readJson(forbidden)).toEqual({ code: 'forbidden', error: '没有访问权限' });
+    const invokeGet = institutionFilesRoute.GET as unknown as (
+      request?: unknown,
+      context?: unknown,
+    ) => Response | Promise<Response>;
+    const request = hostileProxy<Request>();
+    const params = hostileProxy<Record<string, string>>();
+    const context = hostileProxy<{ params: unknown }>();
 
-    repository.findKnowledgeItem.mockRejectedValueOnce(unsafeError);
-    const failed = await institutionFilesRoute.GET(
-      new Request('http://localhost/api/institution/knowledge-management/items/knowledge-route-a/files'),
-      { params: Promise.resolve({ knowledgeId: 'knowledge-route-a' }) },
+    const responses = [
+      await invokeGet(request.value, { params: params.value }),
+      await invokeGet({}, context.value),
+    ];
+
+    for (const response of responses) {
+      await expectInstitutionFilesDisabled(response);
+    }
+    [request.counts, context.counts, params.counts].forEach((counts) => {
+      expect(counts).toEqual({
+        get: 0,
+        set: 0,
+        has: 0,
+        ownKeys: 0,
+        getOwnPropertyDescriptor: 0,
+        getPrototypeOf: 0,
+      });
+    });
+    expect(getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(getDatabase).not.toHaveBeenCalled();
+    expect(createPlatformKnowledgeManagementRepository).not.toHaveBeenCalled();
+    expect(repository.findKnowledgeItem).not.toHaveBeenCalled();
+    expect(repository.listKnowledgeFiles).not.toHaveBeenCalled();
+  });
+
+  it('机构端 files-root 源码仅依赖 NextResponse 且不含旧数据链或输入读取', () => {
+    const source = readFileSync(
+      resolve(
+        process.cwd(),
+        'src/app/api/institution/knowledge-management/items/[knowledgeId]/files/route.ts',
+      ),
+      'utf8',
     );
-    const payload = await readJson(failed);
-    const serialized = JSON.stringify(payload);
+    const imports = source.match(/^import .+;$/gmu) ?? [];
 
-    expect(failed.status).toBe(503);
-    expect(payload).toEqual({
-      code: 'service_unavailable',
-      error: '知识库文件暂时不可用',
+    expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
+    expect(source).not.toMatch(
+      /getDemoAccessContextFromRequest|getDatabase|repository|storage|provider|listInstitutionKnowledgeFilesService|\b_?(?:request|context|params)\s*(?:\.|\[)|fetch\(/u,
+    );
+  });
+
+  it('机构端 files-root 动态加载与调用均不初始化旧依赖或 fetch', async () => {
+    vi.resetModules();
+    const initialized: string[] = [];
+    const forbiddenModules = [
+      ['@/modules/security/server/access-context', 'auth'],
+      ['@/server/db/client', 'db'],
+      ['@/modules/open-platform/server/platform-knowledge-management-repository', 'repository'],
+      ['@/modules/institution/server/institution-knowledge-file-management-service', 'file-service'],
+      ['@/modules/open-platform/server/platform-knowledge-file-storage', 'storage'],
+    ] as const;
+    forbiddenModules.forEach(([modulePath, label]) => {
+      vi.doMock(modulePath, () => {
+        initialized.push(label);
+        throw new Error(`${label} must not initialize`);
+      });
     });
-    unsafeFragments.forEach((fragment) => {
-      expect(serialized).not.toContain(fragment);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw new Error('fetch must not run');
     });
+
+    try {
+      const route = await import(
+        '@/app/api/institution/knowledge-management/items/[knowledgeId]/files/route'
+      ) as InstitutionFilesRoute;
+      const response = route.GET();
+
+      expect(initialized).toEqual([]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      await expectInstitutionFilesDisabled(response);
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 });
