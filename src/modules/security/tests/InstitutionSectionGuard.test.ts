@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
+import type { CurrentInstitutionMembershipFactRow } from '@/modules/auth/server/auth-account-repository';
 import {
   INSTITUTION_NAVIGATION_SECTION_IDS_V1,
   INSTITUTION_ROLES_V1,
@@ -24,8 +25,8 @@ import {
   type InstitutionGuardReferenceOwnerSubjectV1,
 } from '@/modules/security/server/institution-guard-reference';
 import {
+  createAuthoritativeInstitutionMembershipFactReaderV1,
   createRequestBoundFreshActiveMembershipProviderV1,
-  type AuthoritativeInstitutionMembershipFactReaderV1,
 } from '@/modules/security/server/institution-membership-provider';
 import {
   createInstitutionScopeGuardV1,
@@ -121,28 +122,40 @@ function genuineScopeComposition(
     referenceCodec: provenanceCodec,
     now: provenanceNow,
   });
-  const resolveMembershipFact = vi.fn(async () =>
-    Object.freeze({
-      kind: 'current_membership_fact',
-      accountId: 'account-a',
-      tenantId: 'tenant-a',
-      institutionId: 'institution-a',
-      role,
-      membershipId: 'membership-a',
-      membershipRevisionAt: '2026-07-22T07:58:00.000Z',
-      bindingId: 'binding-a',
-      bindingRevision: 7,
-      bindingRevisionAt: '2026-07-01T00:00:00.000Z',
-      bindingExpiresAt: null,
-      observedAt:
-        timing.membershipObservedAt ?? '2026-07-22T08:00:00.000Z',
-    }),
-  );
+  const membershipObservedAt =
+    timing.membershipObservedAt ?? '2026-07-22T08:00:00.000Z';
+  const membershipRow: CurrentInstitutionMembershipFactRow = {
+    accountId: 'account-a',
+    accountStatus: 'active',
+    accountPasswordResetRequired: false,
+    accountLockedUntil: null,
+    membershipId: 'membership-a',
+    membershipTenantId: 'tenant-a',
+    membershipUserId: 'account-a',
+    membershipRole: role,
+    membershipUpdatedAt: new Date('2026-07-22T07:58:00.000Z'),
+    bindingId: 'binding-a',
+    bindingAccountId: 'account-a',
+    bindingTenantId: 'tenant-a',
+    bindingInstitutionId: 'institution-a',
+    bindingStatus: 'active',
+    bindingSource: 'manual_admin',
+    bindingAssignedAt: new Date('2026-07-01T00:00:00.000Z'),
+    bindingExpiresAt: null,
+    bindingRevokedAt: null,
+    bindingVersion: 7,
+  };
+  const resolveMembershipFact = vi.fn(async () => [membershipRow]);
+  const membershipFactReader =
+    createAuthoritativeInstitutionMembershipFactReaderV1({
+      repository: {
+        findCurrentInstitutionMembershipFacts: resolveMembershipFact,
+      },
+      now: () => new Date(membershipObservedAt),
+    });
   const membershipProvider = createRequestBoundFreshActiveMembershipProviderV1({
     accountId: 'account-a',
-    factReader: Object.freeze({
-      resolve: resolveMembershipFact,
-    }) as AuthoritativeInstitutionMembershipFactReaderV1,
+    factReader: membershipFactReader,
     referenceCodec: membershipCodec,
     now: () => SCOPE_NOW,
   });

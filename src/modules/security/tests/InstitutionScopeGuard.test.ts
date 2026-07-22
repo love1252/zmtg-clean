@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
+import type { CurrentInstitutionMembershipFactRow } from '@/modules/auth/server/auth-account-repository';
 import {
   createActiveInstitutionAnchorProviderV1,
   type AuthoritativeInstitutionAnchorFactReaderV1,
@@ -23,10 +24,11 @@ import {
   createInstitutionGuardReferenceCodecV1,
   isInstitutionGuardReferenceCodecV1,
   type InstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceOwnerSubjectV1,
 } from '@/modules/security/server/institution-guard-reference';
 import {
+  createAuthoritativeInstitutionMembershipFactReaderV1,
   createRequestBoundFreshActiveMembershipProviderV1,
-  type AuthoritativeInstitutionMembershipFactReaderV1,
 } from '@/modules/security/server/institution-membership-provider';
 import {
   createInstitutionScopeGuardV1,
@@ -122,6 +124,7 @@ type HarnessOptions = Readonly<{
   anchorNow?: () => Date;
   order?: string[];
   membershipAccountId?: string;
+  membershipCodec?: InstitutionGuardReferenceCodecV1;
   controlledReferenceCodecStage?: 'provenance' | 'membership' | 'anchor';
 }>;
 
@@ -247,7 +250,8 @@ function ownerHarness(options: HarnessOptions = {}) {
         })
       : genuineCodec();
   const membershipCodec =
-    options.controlledReferenceCodecStage === 'membership'
+    options.membershipCodec ??
+    (options.controlledReferenceCodecStage === 'membership'
       ? controlledCodec({
           usr: membershipEvidence.userReference,
           mbr: membershipEvidence.membershipReference,
@@ -255,7 +259,7 @@ function ownerHarness(options: HarnessOptions = {}) {
           bnd: membershipEvidence.bindingReference,
           brv: membershipEvidence.bindingRevision,
         })
-      : genuineCodec();
+      : genuineCodec());
   const anchorCodec = options.controlledReferenceCodecStage === 'anchor'
     ? controlledCodec({
         anc: anchorEvidence.anchorReference,
@@ -307,51 +311,75 @@ function ownerHarness(options: HarnessOptions = {}) {
     Number.isFinite(membershipFreshUntil) &&
     Number.isFinite(membershipObservedEpochMs) &&
     membershipFreshUntil - membershipObservedEpochMs > 60_000;
+  const membershipObservedAtForReader =
+    membershipResolution?.kind === 'rejected' &&
+    membershipResolution.code === 'membership_stale'
+      ? '2026-07-22T07:59:00.000Z'
+      : typeof membershipEvidence.freshUntil === 'string' &&
+          membershipEvidence.freshUntil !== '2026-07-22T08:01:00.000Z' &&
+          !membershipTtlIsInvalid
+        ? new Date(
+            Date.parse(membershipEvidence.freshUntil) - 60_000,
+          ).toISOString()
+        : membershipObservedAt;
+  const membershipAccountId = options.membershipAccountId ?? 'account-a';
+  const membershipRow: CurrentInstitutionMembershipFactRow = {
+    accountId: membershipAccountId,
+    accountStatus: 'active',
+    accountPasswordResetRequired: false,
+    accountLockedUntil: null,
+    membershipId: 'membership-a',
+    membershipTenantId: membershipEvidence.tenantId as string,
+    membershipUserId: membershipAccountId,
+    membershipRole:
+      membershipEvidence.role as CurrentInstitutionMembershipFactRow['membershipRole'],
+    membershipUpdatedAt: new Date('2026-07-22T07:58:00.000Z'),
+    bindingId: 'binding-a',
+    bindingAccountId: membershipAccountId,
+    bindingTenantId: membershipEvidence.tenantId as string,
+    bindingInstitutionId: membershipEvidence.institutionId as string,
+    bindingStatus: 'active',
+    bindingSource: 'manual_admin',
+    bindingAssignedAt: new Date('2026-07-01T00:00:00.000Z'),
+    bindingExpiresAt: null,
+    bindingRevokedAt: null,
+    bindingVersion: 7,
+  };
   const resolveMembershipFact = vi.fn(async () => {
     options.order?.push('membership');
-    if (options.membershipError !== undefined) throw options.membershipError;
-    if (membershipTtlIsInvalid) return Object.freeze({ kind: 'invalid' }) as never;
+    if (
+      options.membershipError !== undefined ||
+      (membershipResolution?.kind === 'rejected' &&
+        membershipResolution.code === 'membership_unavailable')
+    ) {
+      throw options.membershipError ?? new Error('controlled membership unavailable');
+    }
     if (
       membershipResolution?.kind === 'rejected' &&
-      membershipResolution.code !== 'membership_stale'
+      membershipResolution.code === 'membership_denied'
     ) {
-      return options.membershipResolution as never;
+      return [];
     }
-    if (membershipResolution?.kind === 'unknown') {
-      return options.membershipResolution as never;
+    if (
+      membershipResolution?.kind === 'unknown' ||
+      (membershipResolution?.kind === 'rejected' &&
+        membershipResolution.code === 'membership_invalid')
+    ) {
+      return [{ ...membershipRow, membershipUserId: 'account-mismatch' }];
     }
-    const observedAt =
-      membershipResolution?.kind === 'rejected' &&
-      membershipResolution.code === 'membership_stale'
-        ? '2026-07-22T07:59:00.000Z'
-        : typeof membershipEvidence.freshUntil === 'string' &&
-            membershipEvidence.freshUntil !== '2026-07-22T08:01:00.000Z' &&
-            !membershipTtlIsInvalid
-          ? new Date(
-              Date.parse(membershipEvidence.freshUntil) - 60_000,
-            ).toISOString()
-          : membershipObservedAt;
-    return Object.freeze({
-      kind: 'current_membership_fact',
-      accountId: options.membershipAccountId ?? 'account-a',
-      tenantId: membershipEvidence.tenantId,
-      institutionId: membershipEvidence.institutionId,
-      role: membershipEvidence.role,
-      membershipId: 'membership-a',
-      membershipRevisionAt: '2026-07-22T07:58:00.000Z',
-      bindingId: 'binding-a',
-      bindingRevision: 7,
-      bindingRevisionAt: '2026-07-01T00:00:00.000Z',
-      bindingExpiresAt: null,
-      observedAt,
-    }) as never;
+    return [membershipRow];
   });
+  const membershipFactReader =
+    createAuthoritativeInstitutionMembershipFactReaderV1({
+      repository: {
+        findCurrentInstitutionMembershipFacts: resolveMembershipFact,
+      },
+      now: () => new Date(membershipObservedAtForReader),
+    });
   const membershipProvider =
     createRequestBoundFreshActiveMembershipProviderV1({
-      accountId: options.membershipAccountId ?? 'account-a',
-      factReader: Object.freeze({
-        resolve: resolveMembershipFact,
-      }) as AuthoritativeInstitutionMembershipFactReaderV1,
+      accountId: membershipAccountId,
+      factReader: membershipFactReader,
       referenceCodec: membershipCodec,
       now: options.membershipNow ?? (() => NOW),
     });
@@ -546,6 +574,79 @@ describe('BASE-02B institution scope guard composition', () => {
       ]);
     },
   );
+
+  it('rejects a hostile controlled membership codec before reader or anchor access', async () => {
+    const controlled = controlledCodec();
+    let applyTraps = 0;
+    const membershipCodec = Object.freeze({
+      issue: new Proxy(controlled.issue, {
+        apply() {
+          applyTraps += 1;
+          throw new Error('controlled issue must not run');
+        },
+      }),
+      verify: new Proxy(controlled.verify, {
+        apply() {
+          applyTraps += 1;
+          throw new Error('controlled verify must not run');
+        },
+      }),
+    }) as unknown as InstitutionGuardReferenceCodecV1;
+    const harness = ownerHarness({ membershipCodec });
+
+    await expect(harness.guard.authorizeCurrentRequest()).resolves.toEqual({
+      kind: 'rejected',
+      code: 'membership_unavailable',
+    });
+    expect(harness.resolveCurrentRequest).toHaveBeenCalledTimes(1);
+    expect(harness.resolveMembership).not.toHaveBeenCalled();
+    expect(harness.resolveAnchor).not.toHaveBeenCalled();
+    expect(controlled.issue).not.toHaveBeenCalled();
+    expect(controlled.verify).not.toHaveBeenCalled();
+    expect(applyTraps).toBe(0);
+  });
+
+  it('keeps a tampered membership revision closed at the genuine codec owner', () => {
+    const codec = genuineCodec();
+    const input = {
+      prefix: 'mrv' as const,
+      ownerDomain: 'security.institution-membership',
+      tenantId: 'tenant-a',
+      institutionId: null,
+      ownerSubject:
+        'membership-revision-a' as InstitutionGuardReferenceOwnerSubjectV1,
+    };
+    const issued = codec.issue(input);
+    if (issued.kind !== 'issued') throw new Error('expected genuine reference');
+    const last = issued.reference.at(-1);
+    const tampered = `${issued.reference.slice(0, -1)}${last === 'A' ? 'B' : 'A'}`;
+
+    expect(codec.verify({ ...input, reference: tampered })).toEqual({
+      kind: 'rejected',
+      code: 'guard_reference_invalid',
+    });
+  });
+
+  it('keeps an unknown membership key version closed at the genuine codec owner', () => {
+    const codec = genuineCodec();
+    const input = {
+      prefix: 'brv' as const,
+      ownerDomain: 'security.institution-membership',
+      tenantId: 'tenant-a',
+      institutionId: 'institution-a',
+      ownerSubject:
+        'binding-revision-a' as InstitutionGuardReferenceOwnerSubjectV1,
+    };
+    const issued = codec.issue(input);
+    if (issued.kind !== 'issued') throw new Error('expected genuine reference');
+
+    expect(
+      codec.verify({
+        ...input,
+        reference: issued.reference.replace('_k1_', '_k999_'),
+      }),
+    ).toEqual({ kind: 'rejected', code: 'guard_reference_invalid' });
+  });
 
   it.each(OWNER_LOOKALIKE_KINDS)(
     'rejects a %s provenance resolver lookalike before invoking any owner method',
@@ -749,7 +850,6 @@ describe('BASE-02B institution scope guard composition', () => {
     expect(harness.resolveMembership).toHaveBeenCalledWith({
       accountId: 'account-a',
       tenantId: 'tenant-owner',
-      institutionId: 'institution-owner',
     });
     expect(harness.resolveAnchor).toHaveBeenCalledWith({
       tenantId: 'tenant-owner',
@@ -821,7 +921,7 @@ describe('BASE-02B institution scope guard composition', () => {
     },
   );
 
-  it('maps thrown and malformed membership results without calling anchor', async () => {
+  it('maps thrown and invalid authoritative membership facts without calling anchor', async () => {
     for (const options of [
       { membershipError: new Error('private membership failure') },
       { membershipResolution: Object.freeze({ kind: 'unknown' }) },
@@ -945,11 +1045,6 @@ describe('BASE-02B institution scope guard composition', () => {
 
   it.each([
     [
-      'membership TTL over sixty seconds',
-      { membershipResolution: membership({ freshUntil: '2026-07-22T08:01:00.001Z' }) },
-      'membership_invalid',
-    ],
-    [
       'anchor TTL over sixty seconds',
       { anchorResolution: anchor({ freshUntil: '2026-07-22T08:01:00.001Z' }) },
       'institution_anchor_unavailable',
@@ -982,6 +1077,19 @@ describe('BASE-02B institution scope guard composition', () => {
     ).resolves.toEqual({ kind: 'rejected', code });
   });
 
+  it('caps requested membership timing at the genuine provider TTL before scope consumption', async () => {
+    await expect(
+      ownerHarness({
+        membershipResolution: membership({
+          freshUntil: '2026-07-22T08:01:00.001Z',
+        }),
+      }).guard.authorizeCurrentRequest(),
+    ).resolves.toMatchObject({
+      kind: 'institution_scope_allow',
+      membershipFreshUntil: '2026-07-22T08:01:00.000Z',
+    });
+  });
+
   it('uses the owner-capped five-minute provenance deadline', async () => {
     await expect(
       ownerHarness({
@@ -1004,10 +1112,7 @@ describe('BASE-02B institution scope guard composition', () => {
     [
       'provenance and membership user',
       {
-        membershipResolution: membership({
-          userReference: reference('usr', 'Q'.repeat(43)),
-        }),
-        controlledReferenceCodecStage: 'membership',
+        membershipAccountId: 'account-b',
       },
       'membership_invalid',
     ],
@@ -1034,16 +1139,6 @@ describe('BASE-02B institution scope guard composition', () => {
         controlledReferenceCodecStage: 'provenance',
       },
       'provenance_unavailable',
-    ],
-    [
-      'noncanonical membership revision',
-      {
-        membershipResolution: membership({
-          membershipRevision: reference('mrv', `${'A'.repeat(42)}B`),
-        }),
-        controlledReferenceCodecStage: 'membership',
-      },
-      'membership_invalid',
     ],
     [
       'noncanonical anchor revision',
@@ -1074,16 +1169,6 @@ describe('BASE-02B institution scope guard composition', () => {
         controlledReferenceCodecStage: 'provenance',
       },
       'provenance_unavailable',
-    ],
-    [
-      'unknown membership key version',
-      {
-        membershipResolution: membership({
-          bindingRevision: reference('brv', TOKEN, 2),
-        }),
-        controlledReferenceCodecStage: 'membership',
-      },
-      'membership_invalid',
     ],
     [
       'short anchor tag',
@@ -1239,9 +1324,8 @@ describe('BASE-02B institution scope guard composition', () => {
     expect(ownKeyTraps).toBe(0);
   });
 
-  it('rejects hostile owner output shapes without accessor or Proxy enumeration', async () => {
+  it('rejects hostile provenance owner output without accessor enumeration', async () => {
     let getterReads = 0;
-    let proxyTraps = 0;
     const harness = ownerHarness();
     const accessorOwnerInput = {
       accountId: 'account-a',
@@ -1273,48 +1357,7 @@ describe('BASE-02B institution scope guard composition', () => {
     await expect(
       provenanceGuard.authorizeCurrentRequest(),
     ).resolves.toEqual({ kind: 'rejected', code: 'provenance_invalid' });
-
-    const hostileFact = new Proxy(
-      Object.freeze({
-        kind: 'current_membership_fact',
-        accountId: 'account-a',
-        tenantId: 'tenant-a',
-        institutionId: 'institution-a',
-        role: 'tenant_admin',
-        membershipId: 'membership-a',
-        membershipRevisionAt: '2026-07-22T07:58:00.000Z',
-        bindingId: 'binding-a',
-        bindingRevision: 7,
-        bindingRevisionAt: '2026-07-01T00:00:00.000Z',
-        bindingExpiresAt: null,
-        observedAt: '2026-07-22T08:00:00.000Z',
-      }),
-      {
-        ownKeys() {
-          proxyTraps += 1;
-          throw new Error('membership ownKeys trap');
-        },
-      },
-    );
-    const membershipProvider =
-      createRequestBoundFreshActiveMembershipProviderV1({
-        accountId: 'account-a',
-        factReader: Object.freeze({
-          resolve: vi.fn(async () => hostileFact),
-        }) as AuthoritativeInstitutionMembershipFactReaderV1,
-        referenceCodec: controlledCodec(),
-        now: () => NOW,
-      });
-    const membershipHarness = ownerHarness();
-    const membershipGuard = createInstitutionScopeGuardV1({
-      ...membershipHarness.factoryInput,
-      membershipProvider,
-    });
-    await expect(
-      membershipGuard.authorizeCurrentRequest(),
-    ).resolves.toEqual({ kind: 'rejected', code: 'membership_invalid' });
     expect(getterReads).toBe(0);
-    expect(proxyTraps).toBe(0);
   });
 
   it('returns only the frozen low-sensitive allow projection', async () => {
