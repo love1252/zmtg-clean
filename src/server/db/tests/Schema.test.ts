@@ -31,6 +31,9 @@ import {
   customers,
   followUpTasks,
   hisConnectionCredentialCompensationOperations,
+  institutionOperatingContexts,
+  institutionOperatingContextVersions,
+  institutionScopes,
   institutionChannelDryRunSnapshots,
   tenantMembers,
   tenants,
@@ -1156,7 +1159,7 @@ describe('数据库结构', () => {
       '6c36ba5c25344c33aab904ff1c09a091011e9d7373fcf053776106e26ecd8987',
     );
     expect(migration0035.toLowerCase()).toContain('"allow_real_send" = false and "external_channel_enabled" = false and "real_send_allowed" = false and "dry_run_only" = true');
-    expect(journal.entries.at(-2)).toEqual({
+    expect(journal.entries.find((entry) => entry.idx === 36)).toEqual({
       idx: 36,
       tag: '0036_v08_05b_a_single_real_send_proof_foundation',
       version: '7',
@@ -1373,14 +1376,14 @@ describe('数据库结构', () => {
     expect(createHash('sha256').update(migration0036).digest('hex')).toBe(
       '62328524a4f1a36a619e23a8ebbfb4bd70b25da6aede1db5751d6f795e8c2329',
     );
-    expect(journal.entries.at(-2)).toEqual({
+    expect(journal.entries.find((entry) => entry.idx === 36)).toEqual({
       idx: 36,
       tag: '0036_v08_05b_a_single_real_send_proof_foundation',
       version: '7',
       when: 1783843200000,
       breakpoints: true,
     });
-    expect(journal.entries.at(-1)).toEqual({
+    expect(journal.entries.find((entry) => entry.idx === 37)).toEqual({
       idx: 37,
       tag: '0037_v08_05b_b3a_real_task_readiness_foundation',
       version: '7',
@@ -1614,6 +1617,7 @@ describe('数据库结构', () => {
       expect.arrayContaining([
         'id',
         'tenant_id',
+        'institution_id',
         'customer_id',
         'appointment_id',
         'treatment_date',
@@ -1634,7 +1638,7 @@ describe('数据库结构', () => {
         'updated_at',
       ]),
     );
-    expect(treatmentColumns).toHaveLength(20);
+    expect(treatmentColumns).toHaveLength(21);
     expect(JSON.stringify(treatmentColumns)).not.toMatch(
       /treatment_record|medical_record|diagnosis_text|clinical_note|consultation_transcript|phone_number|id_number|request_body|metadata|raw_payload|ai_generated|external_sync|token|secret|database_url/i,
     );
@@ -3154,6 +3158,196 @@ describe('数据库结构', () => {
     expect(migrationSql).not.toMatch(/\bdrop\s+table\b|\bdrop\s+column\b|\balter\s+column\b/i);
     expect(migrationSql).not.toMatch(
       /embedding_vector_json|storage_key|text_content|raw_content|full_text|ocr|openai|ai_provider|training_content|token|secret|password|database_url|"sql"|"stack"/i,
+    );
+  });
+
+  it('MIG-01A1 定义机构锚点和版本化运行上下文且 revision 无默认值', () => {
+    const scopeConfig = getTableConfig(institutionScopes);
+    const contextConfig = getTableConfig(institutionOperatingContexts);
+    const versionConfig = getTableConfig(institutionOperatingContextVersions);
+    const scopeRevision = scopeConfig.columns.find((column) => column.name === 'revision');
+    const contextRevision = contextConfig.columns.find((column) => column.name === 'revision');
+    const latestVersion = contextConfig.columns.find((column) => column.name === 'latest_version');
+    const scopePrimaryKey = scopeConfig.primaryKeys[0];
+    const contextPrimaryKey = contextConfig.primaryKeys[0];
+    const versionPrimaryKey = versionConfig.primaryKeys[0];
+    const contextScopeFk = contextConfig.foreignKeys.find(
+      (foreignKey) => foreignKey.getName() === 'institution_operating_contexts_scope_fk',
+    );
+    const contextLatestVersionFk = contextConfig.foreignKeys.find(
+      (foreignKey) =>
+        foreignKey.getName() === 'institution_operating_contexts_latest_version_fk',
+    );
+    const versionScopeFk = versionConfig.foreignKeys.find(
+      (foreignKey) =>
+        foreignKey.getName() === 'institution_operating_context_versions_scope_fk',
+    );
+
+    expect(schema.institutionScopeStatusEnum.enumValues).toEqual(['active', 'suspended']);
+    expect(schema.institutionProvisioningSourceEnum.enumValues).toEqual([
+      'formal_onboarding',
+      'approved_migration_manifest',
+    ]);
+    expect(schema.institutionOperatingContextSourceEnum.enumValues).toEqual([
+      'institution_config',
+      'product_default',
+    ]);
+    expect(columnNames(scopeConfig.columns)).toEqual([
+      'tenant_id',
+      'institution_id',
+      'status',
+      'revision',
+      'provisioning_source',
+      'provisioning_reference_digest',
+      'approved_by',
+      'approved_at',
+      'created_at',
+      'updated_at',
+    ]);
+    expect(scopeRevision?.notNull).toBe(true);
+    expect(scopeRevision?.hasDefault).toBe(false);
+    expect(columnNames(scopePrimaryKey?.columns ?? [])).toEqual(['tenant_id', 'institution_id']);
+    expect(scopeConfig.checks.map((constraint) => constraint.name)).toContain(
+      'institution_scopes_revision_positive_check',
+    );
+
+    expect(columnNames(versionConfig.columns)).toEqual([
+      'tenant_id',
+      'institution_id',
+      'version',
+      'timezone',
+      'currency',
+      'effective_from_business_date',
+      'effective_at',
+      'source',
+      'migration_provenance',
+      'created_at',
+      'created_by',
+    ]);
+    expect(columnNames(versionPrimaryKey?.columns ?? [])).toEqual([
+      'tenant_id',
+      'institution_id',
+      'version',
+    ]);
+    expect(foreignKeyColumns(versionScopeFk)).toEqual({
+      columns: ['tenant_id', 'institution_id'],
+      foreignColumns: ['tenant_id', 'institution_id'],
+    });
+
+    expect(columnNames(contextConfig.columns)).toEqual([
+      'tenant_id',
+      'institution_id',
+      'revision',
+      'latest_version',
+      'updated_by',
+      'created_at',
+      'updated_at',
+    ]);
+    expect(contextRevision?.notNull).toBe(true);
+    expect(contextRevision?.hasDefault).toBe(false);
+    expect(latestVersion?.notNull).toBe(true);
+    expect(latestVersion?.hasDefault).toBe(false);
+    expect(columnNames(contextPrimaryKey?.columns ?? [])).toEqual([
+      'tenant_id',
+      'institution_id',
+    ]);
+    expect(foreignKeyColumns(contextScopeFk)).toEqual({
+      columns: ['tenant_id', 'institution_id'],
+      foreignColumns: ['tenant_id', 'institution_id'],
+    });
+    expect(foreignKeyColumns(contextLatestVersionFk)).toEqual({
+      columns: ['tenant_id', 'institution_id', 'latest_version'],
+      foreignColumns: ['tenant_id', 'institution_id', 'version'],
+    });
+  });
+
+  it('MIG-01A1 只扩展可空机构归属和可空审计归因', () => {
+    const businessTables = [appointments, treatmentSummaries, followUpTasks];
+
+    for (const table of businessTables) {
+      const institutionColumn = getTableConfig(table).columns.find(
+        (column) => column.name === 'institution_id',
+      );
+      expect(institutionColumn?.notNull).toBe(false);
+      expect(institutionColumn?.hasDefault).toBe(false);
+    }
+
+    const auditConfig = getTableConfig(auditEvents);
+    const auditInstitution = auditConfig.columns.find(
+      (column) => column.name === 'institution_id',
+    );
+    const auditAttribution = auditConfig.columns.find(
+      (column) => column.name === 'institution_attribution',
+    );
+
+    expect(schema.auditInstitutionAttributionEnum.enumValues).toEqual([
+      'not_applicable',
+      'verified',
+      'legacy_unattributed',
+    ]);
+    expect(auditInstitution?.notNull).toBe(false);
+    expect(auditInstitution?.hasDefault).toBe(false);
+    expect(auditAttribution?.notNull).toBe(false);
+    expect(auditAttribution?.hasDefault).toBe(false);
+  });
+
+  it('0038 MIG-01A1 migration 仅执行 expand，不 provision、回填或收紧约束', () => {
+    const migrationSql = readMigrationSql('0038_mig_01a1_institution_isolation_expand');
+    const journal = JSON.parse(
+      readFileSync(join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8'),
+    ) as { entries: Array<{ idx: number; tag: string }> };
+
+    expect(journal.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          idx: 38,
+          tag: '0038_mig_01a1_institution_isolation_expand',
+        }),
+      ]),
+    );
+    expect(migrationSql).toContain('create table if not exists "institution_scopes"');
+    expect(migrationSql).toContain(
+      'create table if not exists "institution_operating_context_versions"',
+    );
+    expect(migrationSql).toContain(
+      'create table if not exists "institution_operating_contexts"',
+    );
+    expect(migrationSql).toContain(
+      'constraint "institution_scopes_revision_positive_check" check ("revision" > 0)',
+    );
+    const institutionScopesSql = migrationSql.slice(
+      migrationSql.indexOf('create table if not exists "institution_scopes"'),
+      migrationSql.indexOf(
+        'create table if not exists "institution_operating_context_versions"',
+      ),
+    );
+    expect(institutionScopesSql).toContain('"revision" integer not null');
+    expect(institutionScopesSql).not.toMatch(/"revision" integer default/i);
+    for (const tableName of [
+      'appointments',
+      'treatment_summaries',
+      'follow_up_tasks',
+      'audit_events',
+    ]) {
+      expect(migrationSql).toContain(
+        `alter table "${tableName}" add column "institution_id" varchar(64)`,
+      );
+      expect(migrationSql).not.toMatch(
+        new RegExp(`alter table "${tableName}" add column "institution_id"[^;]*(default|not null)`, 'i'),
+      );
+    }
+    expect(migrationSql).toContain(
+      'alter table "audit_events" add column "institution_attribution" "audit_institution_attribution"',
+    );
+    expect(migrationSql).not.toMatch(
+      /(^|;)\s*(insert\s+into|update\s+|delete\s+from|truncate)\b/im,
+    );
+    expect(migrationSql).not.toMatch(
+      /\b(drop\s+(table|column)|alter\s+column|set\s+not\s+null)\b/i,
+    );
+    expect(migrationSql).not.toMatch(/migration_placeholder|demo|fixture|default_institution/i);
+    expect(migrationSql).not.toMatch(
+      /alter table "(auth_account_institution_bindings|customers|appointments|treatment_summaries|follow_up_tasks|audit_events)" add constraint/i,
     );
   });
 });

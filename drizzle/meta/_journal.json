@@ -267,6 +267,13 @@
       "when": 1783846800000,
       "tag": "0037_v08_05b_b3a_real_task_readiness_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1784688468000,
+      "tag": "0038_mig_01a1_institution_isolation_expand",
+      "breakpoints": true
     }
   ]
 }
