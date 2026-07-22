@@ -45,6 +45,7 @@ const ISSUED_KEYS = Object.freeze(['kind', 'reference'] as const);
 const CANONICAL_UTC_INSTANT =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const FULL_HMAC_TAG = /^[A-Za-z0-9_-]{43}$/u;
+const authenticFormalProvenanceResolvers = new WeakSet<object>();
 
 declare const formalRequestProvenanceOwnerInputMarkerV1: unique symbol;
 
@@ -317,6 +318,21 @@ function resolveOwnerInput(
   return Object.freeze({ kind: 'verified', evidence });
 }
 
+export function isFormalProvenanceResolverV1(
+  value: unknown,
+): value is FormalProvenanceResolverV1 {
+  try {
+    return (
+      value !== null &&
+      typeof value === 'object' &&
+      !isProxy(value) &&
+      authenticFormalProvenanceResolvers.has(value)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Composes a single-consumption resolver around one owner-verified request snapshot. It neither
  * reads authentication state nor accepts caller-selected scope, domains, or timestamps.
@@ -343,7 +359,7 @@ export function createFormalRequestProvenanceResolverV1(input: Readonly<{
       : null;
   let consumed = false;
 
-  return Object.freeze({
+  const resolver = Object.freeze({
     async resolveCurrentRequest(): Promise<ProvenanceResolutionV1> {
       if (consumed) return sourceDenied;
       consumed = true;
@@ -353,5 +369,7 @@ export function createFormalRequestProvenanceResolverV1(input: Readonly<{
       if (!issue || !now) return unavailable;
       return resolveOwnerInput(ownerInputSnapshot, issue, now);
     },
-  }) as unknown as FormalProvenanceResolverV1;
+  });
+  authenticFormalProvenanceResolvers.add(resolver);
+  return resolver as unknown as FormalProvenanceResolverV1;
 }
