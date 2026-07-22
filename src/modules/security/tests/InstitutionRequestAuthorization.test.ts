@@ -9,6 +9,7 @@ import {
   type FormalServerSessionKeyRingV1,
   type FormalServerSessionRequestOwnerV1,
 } from '@/modules/auth/server/formal-server-session-provenance-owner';
+import type { InstitutionRoleV1 } from '@/modules/institution-contracts/v1/institution-navigation';
 import {
   createActiveInstitutionAnchorProviderV1,
   createAuthoritativeInstitutionAnchorFactReaderV1,
@@ -28,7 +29,9 @@ import {
   type InstitutionRequestAuthorizationV1,
 } from '@/modules/security/server/institution-request-authorization';
 import {
+  isInstitutionNavigationAuthorizationV1,
   isInstitutionSectionAllowV1,
+  type InstitutionNavigationAuthorizationInputV1,
   type InstitutionSectionGuardInputV1,
 } from '@/modules/security/server/institution-section-guard';
 
@@ -115,11 +118,17 @@ type FixtureOptions = Readonly<{
   cookieHeader?: string | null;
   sessionKeyRing?: FormalServerSessionKeyRingV1;
   compositionNow?: () => Date;
+  membershipRole?: InstitutionRoleV1;
 }>;
 
 function fixture(options: FixtureOptions = {}) {
   const codec = referenceCodec();
-  const membershipRead = vi.fn(async () => [membershipRow]);
+  const membershipRead = vi.fn(async () => [
+    {
+      ...membershipRow,
+      membershipRole: options.membershipRole ?? membershipRow.membershipRole,
+    },
+  ]);
   const membershipFactReader =
     createAuthoritativeInstitutionMembershipFactReaderV1({
       repository: { findCurrentInstitutionMembershipFacts: membershipRead },
@@ -652,5 +661,233 @@ describe('AUTH-COMPOSE-01C institution request authorization', () => {
     ).resolves.toMatchObject({ kind: 'institution_section_allow' });
     expect(created.membershipRead).toHaveBeenCalledTimes(1);
     expect(created.anchorRead).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('BASE-NAV-01 request navigation composition', () => {
+  it('exposes one exact target-only method and returns a low-sensitive sealed snapshot', async () => {
+    type NavigationInput = Parameters<
+      InstitutionRequestAuthorizationV1['authorizeCurrentInstitutionNavigationV1']
+    >[0];
+    expectTypeOf<NavigationInput>().toEqualTypeOf<InstitutionNavigationAuthorizationInputV1>();
+    expectTypeOf<keyof NavigationInput>().toEqualTypeOf<'targetSectionId'>();
+
+    const created = fixture();
+    const authorization = compose(created);
+    const result = await authorization.authorizeCurrentInstitutionNavigationV1({
+      targetSectionId: 'system',
+    });
+
+    expect(result).toEqual({
+      kind: 'institution_navigation_authorization',
+      targetSectionId: 'system',
+      targetAccess: 'allowed',
+      availableSectionIds: [
+        'workbench',
+        'customers',
+        'conversations',
+        'care',
+        'knowledge',
+        'analytics',
+        'system',
+      ],
+    });
+    expect(isInstitutionNavigationAuthorizationV1(result)).toBe(true);
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(result.availableSectionIds)).toBe(true);
+    expect(created.membershipRead).toHaveBeenCalledTimes(1);
+    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+    expect(Object.keys(result)).toEqual([
+      'kind',
+      'targetSectionId',
+      'targetAccess',
+      'availableSectionIds',
+    ]);
+  });
+
+  it('rejects hostile navigation inputs before spending the owner or reading dependencies', async () => {
+    const created = fixture();
+    const authorization = compose(created);
+    let getterReads = 0;
+    let traps = 0;
+    const accessor: Record<string, unknown> = {};
+    Object.defineProperty(accessor, 'targetSectionId', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('target getter must not run');
+      },
+    });
+    const proxy = new Proxy(
+      { targetSectionId: 'workbench' },
+      {
+        getPrototypeOf() {
+          traps += 1;
+          throw new Error('target prototype trap must not run');
+        },
+        ownKeys() {
+          traps += 1;
+          throw new Error('target keys trap must not run');
+        },
+      },
+    );
+    const revoked = Proxy.revocable({ targetSectionId: 'workbench' }, {});
+    revoked.revoke();
+
+    for (const input of [
+      {},
+      { targetSectionId: 'unknown' },
+      { targetSectionId: 'workbench', role: 'tenant_admin' },
+      Object.assign({ targetSectionId: 'workbench' }, { [Symbol('raw')]: true }),
+      Object.assign(Object.create({ role: 'tenant_admin' }), {
+        targetSectionId: 'workbench',
+      }),
+      accessor,
+      proxy,
+      revoked.proxy,
+    ]) {
+      const result = await authorization.authorizeCurrentInstitutionNavigationV1(
+        input as InstitutionNavigationAuthorizationInputV1,
+      );
+      expect(result).toEqual({
+        kind: 'institution_navigation_authorization',
+        targetSectionId: null,
+        targetAccess: 'blocked',
+        availableSectionIds: [],
+      });
+      expect(isInstitutionNavigationAuthorizationV1(result)).toBe(true);
+    }
+    expect(getterReads).toBe(0);
+    expect(traps).toBe(0);
+    expect(created.compositionNow).not.toHaveBeenCalled();
+    expect(created.membershipRead).not.toHaveBeenCalled();
+    expect(created.anchorRead).not.toHaveBeenCalled();
+
+    await expect(
+      authorization.authorizeCurrentInstitutionNavigationV1({
+        targetSectionId: 'workbench',
+      }),
+    ).resolves.toMatchObject({ targetAccess: 'allowed' });
+  });
+
+  it('shares the single owner consumption across old and new authorization methods', async () => {
+    const created = fixture();
+    const authorization = compose(created);
+
+    await expect(
+      authorization.authorizeCurrentInstitutionNavigationV1({
+        targetSectionId: 'workbench',
+      }),
+    ).resolves.toMatchObject({ targetAccess: 'allowed' });
+    await expect(
+      authorization.authorizeCurrentInstitutionSectionV1(workbenchInput),
+    ).resolves.toEqual({ kind: 'rejected', code: 'scope_unavailable' });
+    await expect(
+      authorization.authorizeCurrentInstitutionNavigationV1({
+        targetSectionId: 'system',
+      }),
+    ).resolves.toEqual({
+      kind: 'institution_navigation_authorization',
+      targetSectionId: 'system',
+      targetAccess: 'blocked',
+      availableSectionIds: [],
+    });
+    expect(created.membershipRead).toHaveBeenCalledTimes(1);
+    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+
+    const reverse = fixture();
+    const reverseAuthorization = compose(reverse);
+    await expect(
+      reverseAuthorization.authorizeCurrentInstitutionSectionV1(workbenchInput),
+    ).resolves.toMatchObject({ kind: 'institution_section_allow' });
+    await expect(
+      reverseAuthorization.authorizeCurrentInstitutionNavigationV1({
+        targetSectionId: 'system',
+      }),
+    ).resolves.toEqual({
+      kind: 'institution_navigation_authorization',
+      targetSectionId: 'system',
+      targetAccess: 'blocked',
+      availableSectionIds: [],
+    });
+    expect(reverse.membershipRead).toHaveBeenCalledTimes(1);
+    expect(reverse.anchorRead).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows at most one concurrent result across duplicate and cross-method calls', async () => {
+    const duplicateFixture = fixture();
+    const duplicateAuthorization = compose(duplicateFixture);
+    const duplicateResults = await Promise.all([
+      duplicateAuthorization.authorizeCurrentInstitutionNavigationV1({
+        targetSectionId: 'workbench',
+      }),
+      duplicateAuthorization.authorizeCurrentInstitutionNavigationV1({
+        targetSectionId: 'system',
+      }),
+    ]);
+    expect(
+      duplicateResults.filter((result) => result.targetAccess === 'allowed'),
+    ).toHaveLength(1);
+    expect(duplicateFixture.membershipRead).toHaveBeenCalledTimes(1);
+    expect(duplicateFixture.anchorRead).toHaveBeenCalledTimes(1);
+
+    const crossFixture = fixture();
+    const crossAuthorization = compose(crossFixture);
+    const [sectionResult, navigationResult] = await Promise.all([
+      crossAuthorization.authorizeCurrentInstitutionSectionV1(workbenchInput),
+      crossAuthorization.authorizeCurrentInstitutionNavigationV1({
+        targetSectionId: 'system',
+      }),
+    ]);
+    const successes =
+      Number(sectionResult.kind === 'institution_section_allow') +
+      Number(navigationResult.targetAccess === 'allowed');
+    expect(successes).toBe(1);
+    expect(crossFixture.membershipRead).toHaveBeenCalledTimes(1);
+    expect(crossFixture.anchorRead).toHaveBeenCalledTimes(1);
+  });
+
+  it('derives the target and navigation from the same low-privilege scope role', async () => {
+    const created = fixture({ membershipRole: 'consultant' });
+    const result = await compose(
+      created,
+    ).authorizeCurrentInstitutionNavigationV1({
+      targetSectionId: 'analytics',
+    });
+
+    expect(result).toEqual({
+      kind: 'institution_navigation_authorization',
+      targetSectionId: 'analytics',
+      targetAccess: 'blocked',
+      availableSectionIds: [
+        'workbench',
+        'customers',
+        'conversations',
+        'care',
+      ],
+    });
+    expect(created.membershipRead).toHaveBeenCalledTimes(1);
+    expect(created.anchorRead).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps unavailable scope and policy to sealed blocked empty navigation', async () => {
+    const invalidScope = fixture({ cookieHeader: null });
+    const unavailablePolicy = fixture();
+
+    for (const authorization of [
+      compose(invalidScope),
+      compose(unavailablePolicy, { referenceCodec: referenceCodec(null) }),
+    ]) {
+      const result = await authorization.authorizeCurrentInstitutionNavigationV1({
+        targetSectionId: 'workbench',
+      });
+      expect(result).toEqual({
+        kind: 'institution_navigation_authorization',
+        targetSectionId: 'workbench',
+        targetAccess: 'blocked',
+        availableSectionIds: [],
+      });
+      expect(isInstitutionNavigationAuthorizationV1(result)).toBe(true);
+    }
   });
 });
