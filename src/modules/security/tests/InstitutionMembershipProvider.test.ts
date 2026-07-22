@@ -6,6 +6,7 @@ import type {
 import {
   createAuthoritativeInstitutionMembershipFactReaderV1,
   createRequestBoundFreshActiveMembershipProviderV1,
+  isFreshActiveMembershipProviderV1,
   type AuthoritativeInstitutionMembershipFactReaderV1,
   type InstitutionMembershipFactRepositoryV1,
 } from '@/modules/security/server/institution-membership-provider';
@@ -617,6 +618,84 @@ function requestBoundInput(codec: InstitutionGuardReferenceCodecV1) {
 }
 
 describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
+  it('recognizes only the exact frozen provider handle created by the factory', () => {
+    const { provider } = createRequestBoundProvider();
+    const plain = { resolve: provider.resolve };
+    const spread = { ...provider };
+    const castOnly = { resolve: provider.resolve } as FreshActiveMembershipProviderV1;
+    const customPrototype = Object.create({ resolve: provider.resolve }) as object;
+
+    expect(Object.isFrozen(provider)).toBe(true);
+    expect(isFreshActiveMembershipProviderV1(provider)).toBe(true);
+    expect(isFreshActiveMembershipProviderV1(plain)).toBe(false);
+    expect(isFreshActiveMembershipProviderV1(spread)).toBe(false);
+    expect(isFreshActiveMembershipProviderV1(castOnly)).toBe(false);
+    expect(isFreshActiveMembershipProviderV1(customPrototype)).toBe(false);
+    expect(isFreshActiveMembershipProviderV1(null)).toBe(false);
+    expect(isFreshActiveMembershipProviderV1(() => undefined)).toBe(false);
+  });
+
+  it('checks authenticity without reading getters or invoking Proxy traps', () => {
+    const { provider } = createRequestBoundProvider();
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor: Record<string, unknown> = {};
+    Object.defineProperty(accessor, 'resolve', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('authenticity check must not read resolve');
+      },
+    });
+    const traps: ProxyHandler<object> = {
+      get() {
+        proxyTraps += 1;
+        throw new Error('get trap must not run');
+      },
+      getOwnPropertyDescriptor() {
+        proxyTraps += 1;
+        throw new Error('descriptor trap must not run');
+      },
+      getPrototypeOf() {
+        proxyTraps += 1;
+        throw new Error('prototype trap must not run');
+      },
+      has() {
+        proxyTraps += 1;
+        throw new Error('has trap must not run');
+      },
+      ownKeys() {
+        proxyTraps += 1;
+        throw new Error('ownKeys trap must not run');
+      },
+    };
+    const proxy = new Proxy(provider, traps);
+    const revocable = Proxy.revocable(provider, traps);
+    revocable.revoke();
+
+    expect(isFreshActiveMembershipProviderV1(accessor)).toBe(false);
+    expect(isFreshActiveMembershipProviderV1(proxy)).toBe(false);
+    expect(isFreshActiveMembershipProviderV1(revocable.proxy)).toBe(false);
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  it('keeps a factory-created handle authentic when invalid dependencies resolve unavailable', async () => {
+    const codec = createReferenceCodec();
+    const provider = createRequestBoundFreshActiveMembershipProviderV1({
+      accountId: currentRow.accountId,
+      factReader: { resolve: 1 } as never,
+      referenceCodec: codec,
+      now: () => NOW,
+    });
+
+    expect(isFreshActiveMembershipProviderV1(provider)).toBe(true);
+    await expect(provider.resolve(requestBoundInput(codec))).resolves.toEqual({
+      kind: 'rejected',
+      code: 'membership_unavailable',
+    });
+  });
+
   it('composes directly from the existing authoritative fact reader', async () => {
     const codec = createReferenceCodec();
     const { reader, findCurrentInstitutionMembershipFacts } = createReader();

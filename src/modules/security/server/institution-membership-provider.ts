@@ -833,6 +833,18 @@ function membershipReject(
   return Object.freeze({ kind: 'rejected', code });
 }
 
+const freshActiveMembershipProviderHandlesV1 = new WeakSet<object>();
+
+export function isFreshActiveMembershipProviderV1(
+  value: unknown,
+): value is FreshActiveMembershipProviderV1 {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    freshActiveMembershipProviderHandlesV1.has(value)
+  );
+}
+
 /**
  * Composes request-bound membership evidence. The factory belongs inside the auth composition
  * root: it captures the canonical non-PII account ID once, while public resolve accepts only
@@ -877,7 +889,7 @@ export function createRequestBoundFreshActiveMembershipProviderV1(input: Readonl
         ? (nowValue as () => Date)
         : null;
 
-  return Object.freeze({
+  const provider = Object.freeze({
     async resolve(
       value: Parameters<FreshActiveMembershipProviderV1['resolve']>[0],
     ) {
@@ -1030,4 +1042,6 @@ export function createRequestBoundFreshActiveMembershipProviderV1(input: Readonl
       }) as unknown as FreshActiveMembershipEvidenceV1;
     },
   }) as unknown as FreshActiveMembershipProviderV1;
+  freshActiveMembershipProviderHandlesV1.add(provider);
+  return provider;
 }
