@@ -55,6 +55,7 @@ export type AuthoritativeInstitutionMembershipFactV1 = Readonly<{
   membershipRevisionAt: string;
   bindingId: string;
   bindingRevision: number;
+  bindingRevisionAt: string;
   bindingExpiresAt: string | null;
   observedAt: string;
 }>;
@@ -81,6 +82,14 @@ const QUERY_KEYS = Object.freeze([
   'accountId',
   'tenantId',
   'institutionId',
+] as const);
+const AUTHORITATIVE_READER_FACTORY_KEYS = Object.freeze(['repository'] as const);
+const AUTHORITATIVE_READER_FACTORY_WITH_NOW_KEYS = Object.freeze([
+  ...AUTHORITATIVE_READER_FACTORY_KEYS,
+  'now',
+] as const);
+const AUTHORITATIVE_REPOSITORY_KEYS = Object.freeze([
+  'findCurrentInstitutionMembershipFacts',
 ] as const);
 
 const ROW_KEYS = Object.freeze([
@@ -381,26 +390,50 @@ function resolveCurrentRow(input: {
     membershipRevisionAt: new Date(membershipUpdatedAt).toISOString(),
     bindingId: row.bindingId,
     bindingRevision: row.bindingVersion as number,
+    bindingRevisionAt: new Date(bindingAssignedAt).toISOString(),
     bindingExpiresAt:
       bindingExpiresAt === null ? null : new Date(bindingExpiresAt).toISOString(),
     observedAt: input.observedAt,
   });
 }
 
-export function createAuthoritativeInstitutionMembershipFactReaderV1(input: {
+export function createAuthoritativeInstitutionMembershipFactReaderV1(input: Readonly<{
   repository: InstitutionMembershipFactRepositoryV1;
   now?: () => Date;
-}): AuthoritativeInstitutionMembershipFactReaderV1 {
-  const now = input.now ?? (() => new Date());
+}>): AuthoritativeInstitutionMembershipFactReaderV1 {
+  const factorySnapshot =
+    snapshotExactPlainRecord(input, AUTHORITATIVE_READER_FACTORY_WITH_NOW_KEYS) ??
+    snapshotExactPlainRecord(input, AUTHORITATIVE_READER_FACTORY_KEYS);
+  const repositorySnapshot = factorySnapshot
+    ? snapshotExactPlainRecord(
+        factorySnapshot.repository,
+        AUTHORITATIVE_REPOSITORY_KEYS,
+      )
+    : null;
+  const findCurrentInstitutionMembershipFacts =
+    repositorySnapshot &&
+    isNonProxyFunction(repositorySnapshot.findCurrentInstitutionMembershipFacts)
+      ? (repositorySnapshot.findCurrentInstitutionMembershipFacts as InstitutionMembershipFactRepositoryV1['findCurrentInstitutionMembershipFacts'])
+      : null;
+  const nowValue = factorySnapshot?.now;
+  const now =
+    nowValue === undefined
+      ? () => new Date()
+      : isNonProxyFunction(nowValue)
+        ? (nowValue as () => Date)
+        : null;
 
   return Object.freeze({
     async resolve(queryValue) {
       const query = parseQuery(queryValue);
       if (!query) return reject('membership_invalid');
+      if (!findCurrentInstitutionMembershipFacts || !now) {
+        return reject('membership_unavailable');
+      }
 
       let rowsValue: unknown;
       try {
-        rowsValue = await input.repository.findCurrentInstitutionMembershipFacts({
+        rowsValue = await findCurrentInstitutionMembershipFacts({
           accountId: query.accountId,
           tenantId: query.tenantId,
         });
@@ -445,6 +478,7 @@ const REQUEST_BOUND_FACT_KEYS = Object.freeze([
   'membershipRevisionAt',
   'bindingId',
   'bindingRevision',
+  'bindingRevisionAt',
   'bindingExpiresAt',
   'observedAt',
 ] as const);
@@ -594,6 +628,9 @@ function parseRequestBoundFactResolution(
   const membershipRevisionAtEpochMs = parseCanonicalUtcEpochMs(
     snapshot.membershipRevisionAt,
   );
+  const bindingRevisionAtEpochMs = parseCanonicalUtcEpochMs(
+    snapshot.bindingRevisionAt,
+  );
   const bindingExpiresAtEpochMs =
     snapshot.bindingExpiresAt === null
       ? null
@@ -610,10 +647,14 @@ function parseRequestBoundFactResolution(
     membershipRevisionAtEpochMs === null ||
     !isInstitutionScopeIdV1(snapshot.bindingId) ||
     !isPositiveSafeInteger(snapshot.bindingRevision) ||
+    bindingRevisionAtEpochMs === null ||
     observedAtEpochMs === null ||
     (membershipRevisionAtEpochMs !== null &&
       observedAtEpochMs !== null &&
       membershipRevisionAtEpochMs > observedAtEpochMs) ||
+    (bindingRevisionAtEpochMs !== null &&
+      observedAtEpochMs !== null &&
+      bindingRevisionAtEpochMs > observedAtEpochMs) ||
     (snapshot.bindingExpiresAt !== null && bindingExpiresAtEpochMs === null)
   ) {
     return null;
@@ -631,6 +672,7 @@ function parseRequestBoundFactResolution(
       membershipRevisionAt: snapshot.membershipRevisionAt as string,
       bindingId: snapshot.bindingId,
       bindingRevision: snapshot.bindingRevision,
+      bindingRevisionAt: snapshot.bindingRevisionAt as string,
       bindingExpiresAt: snapshot.bindingExpiresAt as string | null,
       observedAt: snapshot.observedAt as string,
       observedAtEpochMs,
@@ -706,6 +748,7 @@ function isFullAcceptedReferenceProfile(
 
 function issueOwnedReference<Prefix extends InstitutionGuardReferencePrefixV1>(
   issue: InstitutionGuardReferenceCodecV1['issue'],
+  verify: InstitutionGuardReferenceCodecV1['verify'],
   input: Readonly<{
     prefix: Prefix;
     ownerDomain: string;
@@ -714,9 +757,16 @@ function issueOwnedReference<Prefix extends InstitutionGuardReferencePrefixV1>(
     ownerSubject: InstitutionGuardReferenceOwnerSubjectV1;
   }>,
 ): ReferenceIssueResultV1<Prefix> {
+  const canonicalInput = Object.freeze({
+    prefix: input.prefix,
+    ownerDomain: input.ownerDomain,
+    tenantId: input.tenantId,
+    institutionId: input.institutionId,
+    ownerSubject: input.ownerSubject,
+  });
   let value: unknown;
   try {
-    value = issue(input);
+    value = issue(canonicalInput);
   } catch {
     return Object.freeze({ kind: 'unavailable' });
   }
@@ -736,9 +786,44 @@ function issueOwnedReference<Prefix extends InstitutionGuardReferencePrefixV1>(
   ) {
     return Object.freeze({ kind: 'invalid' });
   }
+  const reference = snapshot.reference;
+  let verification: unknown;
+  try {
+    verification = verify(Object.freeze({
+      ...canonicalInput,
+      reference,
+    }));
+  } catch {
+    return Object.freeze({ kind: 'unavailable' });
+  }
+  const verificationKind = readOwnDataKind(verification);
+  if (verificationKind === 'unavailable') {
+    const unavailableSnapshot = snapshotExactPlainRecord(verification, [
+      'kind',
+      'code',
+    ]);
+    return unavailableSnapshot?.code === 'guard_reference_unavailable'
+      ? Object.freeze({ kind: 'unavailable' })
+      : Object.freeze({ kind: 'invalid' });
+  }
+  if (verificationKind !== 'verified') {
+    return Object.freeze({ kind: 'invalid' });
+  }
+  const verifiedSnapshot = snapshotExactPlainRecord(verification, [
+    'kind',
+    'reference',
+  ]);
+  if (
+    !verifiedSnapshot ||
+    verifiedSnapshot.reference !== reference ||
+    !isGuardReferenceCandidateV1(verifiedSnapshot.reference, input.prefix) ||
+    !isFullAcceptedReferenceProfile(verifiedSnapshot.reference, input.prefix)
+  ) {
+    return Object.freeze({ kind: 'invalid' });
+  }
   return Object.freeze({
     kind: 'issued',
-    reference: snapshot.reference as unknown as SafeGuardReferenceV1<Prefix>,
+    reference: verifiedSnapshot.reference as unknown as SafeGuardReferenceV1<Prefix>,
   });
 }
 
@@ -847,6 +932,7 @@ export function createRequestBoundFreshActiveMembershipProviderV1(input: Readonl
       const bindingRevisionSubject = digestOwnerSubject('brv', [
         fact.bindingId,
         String(fact.bindingRevision),
+        fact.bindingRevisionAt,
         fact.bindingExpiresAt === null
           ? 'binding-expires-at:null'
           : `binding-expires-at:value:${fact.bindingExpiresAt}`,
@@ -855,35 +941,35 @@ export function createRequestBoundFreshActiveMembershipProviderV1(input: Readonl
         return membershipReject('membership_unavailable');
       }
 
-      const userReference = issueOwnedReference(issue, {
+      const userReference = issueOwnedReference(issue, verify, {
         prefix: 'usr',
         ownerDomain: AUTH_ACCOUNT_OWNER_DOMAIN,
         tenantId: null,
         institutionId: null,
         ownerSubject: ownerSubject(accountId),
       });
-      const membershipReference = issueOwnedReference(issue, {
+      const membershipReference = issueOwnedReference(issue, verify, {
         prefix: 'mbr',
         ownerDomain: MEMBERSHIP_OWNER_DOMAIN,
         tenantId: fact.tenantId,
         institutionId: null,
         ownerSubject: ownerSubject(fact.membershipId),
       });
-      const membershipRevision = issueOwnedReference(issue, {
+      const membershipRevision = issueOwnedReference(issue, verify, {
         prefix: 'mrv',
         ownerDomain: MEMBERSHIP_OWNER_DOMAIN,
         tenantId: fact.tenantId,
         institutionId: null,
         ownerSubject: membershipRevisionSubject,
       });
-      const bindingReference = issueOwnedReference(issue, {
+      const bindingReference = issueOwnedReference(issue, verify, {
         prefix: 'bnd',
         ownerDomain: MEMBERSHIP_OWNER_DOMAIN,
         tenantId: fact.tenantId,
         institutionId: fact.institutionId,
         ownerSubject: ownerSubject(fact.bindingId),
       });
-      const bindingRevision = issueOwnedReference(issue, {
+      const bindingRevision = issueOwnedReference(issue, verify, {
         prefix: 'brv',
         ownerDomain: MEMBERSHIP_OWNER_DOMAIN,
         tenantId: fact.tenantId,
