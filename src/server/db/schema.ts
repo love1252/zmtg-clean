@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   boolean,
   check,
+  date,
   foreignKey,
   index,
   integer,
@@ -9,6 +10,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -106,6 +108,22 @@ export const authInstitutionBindingStatusEnum = pgEnum(
 export const authInstitutionBindingSourceEnum = pgEnum(
   'auth_institution_binding_source',
   ['manual_admin', 'migration_placeholder', 'system'],
+);
+export const institutionScopeStatusEnum = pgEnum('institution_scope_status', [
+  'active',
+  'suspended',
+]);
+export const institutionProvisioningSourceEnum = pgEnum(
+  'institution_provisioning_source',
+  ['formal_onboarding', 'approved_migration_manifest'],
+);
+export const institutionOperatingContextSourceEnum = pgEnum(
+  'institution_operating_context_source',
+  ['institution_config', 'product_default'],
+);
+export const auditInstitutionAttributionEnum = pgEnum(
+  'audit_institution_attribution',
+  ['not_applicable', 'verified', 'legacy_unattributed'],
 );
 export const weComCustomerBroadcastTaskDispatchStateEnum = pgEnum(
   'wecom_customer_broadcast_task_dispatch_state',
@@ -358,6 +376,127 @@ export const tenants = pgTable('tenants', {
   status: tenantStatusEnum('status').notNull().default('active'),
   ...timestamps,
 });
+
+export const institutionScopes = pgTable(
+  'institution_scopes',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    status: institutionScopeStatusEnum('status').notNull(),
+    revision: integer('revision').notNull(),
+    provisioningSource: institutionProvisioningSourceEnum('provisioning_source').notNull(),
+    provisioningReferenceDigest: varchar('provisioning_reference_digest', {
+      length: 64,
+    }).notNull(),
+    approvedBy: varchar('approved_by', { length: 96 }).notNull(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'institution_scopes_pk',
+      columns: [table.tenantId, table.institutionId],
+    }),
+    tenantFk: foreignKey({
+      name: 'institution_scopes_tenant_fk',
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id],
+    }),
+    revisionPositiveCheck: check(
+      'institution_scopes_revision_positive_check',
+      sql`${table.revision} > 0`,
+    ),
+    provisioningReferenceDigestLengthCheck: check(
+      'institution_scopes_provisioning_reference_digest_length_check',
+      sql`length(${table.provisioningReferenceDigest}) = 64`,
+    ),
+  }),
+);
+
+export const institutionOperatingContextVersions = pgTable(
+  'institution_operating_context_versions',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    version: integer('version').notNull(),
+    timezone: varchar('timezone', { length: 64 }).notNull(),
+    currency: varchar('currency', { length: 3 }).notNull(),
+    effectiveFromBusinessDate: date('effective_from_business_date', {
+      mode: 'string',
+    }).notNull(),
+    effectiveAt: timestamp('effective_at', { withTimezone: true }).notNull(),
+    source: institutionOperatingContextSourceEnum('source').notNull(),
+    migrationProvenance: varchar('migration_provenance', { length: 128 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: varchar('created_by', { length: 96 }).notNull(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'institution_operating_context_versions_pk',
+      columns: [table.tenantId, table.institutionId, table.version],
+    }),
+    scopeFk: foreignKey({
+      name: 'institution_operating_context_versions_scope_fk',
+      columns: [table.tenantId, table.institutionId],
+      foreignColumns: [institutionScopes.tenantId, institutionScopes.institutionId],
+    }),
+    effectiveAtUnique: unique(
+      'institution_operating_context_versions_effective_at_unique',
+    ).on(table.tenantId, table.institutionId, table.effectiveAt),
+    versionPositiveCheck: check(
+      'institution_operating_context_versions_version_positive_check',
+      sql`${table.version} > 0`,
+    ),
+    timezonePresentCheck: check(
+      'institution_operating_context_versions_timezone_present_check',
+      sql`length(trim(${table.timezone})) > 0`,
+    ),
+    currencyFormatCheck: check(
+      'institution_operating_context_versions_currency_format_check',
+      sql`length(${table.currency}) = 3 AND ${table.currency} = upper(${table.currency})`,
+    ),
+  }),
+);
+
+export const institutionOperatingContexts = pgTable(
+  'institution_operating_contexts',
+  {
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    institutionId: varchar('institution_id', { length: 64 }).notNull(),
+    revision: integer('revision').notNull(),
+    latestVersion: integer('latest_version').notNull(),
+    updatedBy: varchar('updated_by', { length: 96 }).notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      name: 'institution_operating_contexts_pk',
+      columns: [table.tenantId, table.institutionId],
+    }),
+    scopeFk: foreignKey({
+      name: 'institution_operating_contexts_scope_fk',
+      columns: [table.tenantId, table.institutionId],
+      foreignColumns: [institutionScopes.tenantId, institutionScopes.institutionId],
+    }),
+    latestVersionFk: foreignKey({
+      name: 'institution_operating_contexts_latest_version_fk',
+      columns: [table.tenantId, table.institutionId, table.latestVersion],
+      foreignColumns: [
+        institutionOperatingContextVersions.tenantId,
+        institutionOperatingContextVersions.institutionId,
+        institutionOperatingContextVersions.version,
+      ],
+    }),
+    revisionPositiveCheck: check(
+      'institution_operating_contexts_revision_positive_check',
+      sql`${table.revision} > 0`,
+    ),
+    latestVersionPositiveCheck: check(
+      'institution_operating_contexts_latest_version_positive_check',
+      sql`${table.latestVersion} > 0`,
+    ),
+  }),
+);
 
 export const authUsers = pgTable(
   'auth_users',
@@ -2315,6 +2454,7 @@ export const appointments = pgTable(
     tenantId: varchar('tenant_id', { length: 64 })
       .notNull()
       .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
     customerId: varchar('customer_id', { length: 64 }).notNull(),
     customerDisplayName: varchar('customer_display_name', { length: 120 }).notNull(),
     project: varchar('project', { length: 160 }).notNull(),
@@ -2342,6 +2482,7 @@ export const treatmentSummaries = pgTable(
     tenantId: varchar('tenant_id', { length: 64 })
       .notNull()
       .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
     customerId: varchar('customer_id', { length: 64 }).notNull(),
     appointmentId: varchar('appointment_id', { length: 64 }),
     treatmentDate: timestamp('treatment_date', { withTimezone: true }).notNull(),
@@ -2401,6 +2542,7 @@ export const followUpTasks = pgTable(
     tenantId: varchar('tenant_id', { length: 64 })
       .notNull()
       .references(() => tenants.id),
+    institutionId: varchar('institution_id', { length: 64 }),
     customerId: varchar('customer_id', { length: 64 }).notNull(),
     customerDisplayName: varchar('customer_display_name', { length: 120 }).notNull(),
     journeyId: varchar('journey_id', { length: 96 }).notNull(),
@@ -2739,6 +2881,8 @@ export const auditEvents = pgTable(
     actorId: varchar('actor_id', { length: 96 }).notNull(),
     actorRole: authRoleEnum('actor_role').notNull(),
     tenantId: varchar('tenant_id', { length: 64 }),
+    institutionId: varchar('institution_id', { length: 64 }),
+    institutionAttribution: auditInstitutionAttributionEnum('institution_attribution'),
     scope: varchar('scope', { length: 24 }).$type<AccessContext['scope']>().notNull(),
     resource: varchar('resource', { length: 64 }).$type<ProtectedResource>().notNull(),
     resourceId: varchar('resource_id', { length: 96 }),
