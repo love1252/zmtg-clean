@@ -9,8 +9,6 @@ import {
 } from '@/app/api/institution/followup-paths/enrollments/route';
 import { GET as enrollmentGet } from '@/app/api/institution/followup-paths/enrollments/[enrollmentId]/route';
 import { POST as enrollmentCancelPost } from '@/app/api/institution/followup-paths/enrollments/[enrollmentId]/cancel/route';
-import type { FollowUpPathEnrollmentDto } from '@/modules/institution/domain/followup-path-enrollment';
-import type { AccessContext } from '@/modules/security/domain/access-control';
 
 const routeMocks = vi.hoisted(() => {
   const auditRecord = vi.fn();
@@ -33,6 +31,7 @@ const routeMocks = vi.hoisted(() => {
     getDatabase: vi.fn(),
     getDemoAccessContextFromRequest: vi.fn(),
     getFollowUpPathEnrollment: vi.fn(),
+    listFollowUpPathTemplates: vi.fn(),
     listFollowUpPathEnrollments: vi.fn(),
     transactionDatabase,
   };
@@ -87,45 +86,10 @@ vi.mock('@/modules/institution/server/followup-path-enrollment-service', async (
     cancelFollowUpPathEnrollment: routeMocks.cancelFollowUpPathEnrollment,
     createEnrollmentFromTreatmentSummary: routeMocks.createEnrollmentFromTreatmentSummary,
     getFollowUpPathEnrollment: routeMocks.getFollowUpPathEnrollment,
+    listFollowUpPathTemplates: routeMocks.listFollowUpPathTemplates,
     listFollowUpPathEnrollments: routeMocks.listFollowUpPathEnrollments,
   };
 });
-
-const tenantContext: AccessContext = {
-  userId: 'demo-user-admin',
-  role: 'tenant_admin',
-  scope: 'tenant',
-  tenantId: 'demo-tenant-001',
-  institutionId: 'inst-001',
-  source: 'demo_session',
-};
-
-const enrollmentRecord: FollowUpPathEnrollmentDto = {
-  enrollmentId: 'enrollment_001',
-  customerId: 'cust_001',
-  customerDisplayName: '陈女士',
-  templateKey: 'hydro_injection_care',
-  status: 'active',
-  stageCount: 3,
-  taskCount: 3,
-  dueAt: '2026-07-02T00:00:00.000Z',
-  safeMessage: '路径任务需人工处理，不会主动向客户发送消息。',
-  stages: [
-    {
-      nodeKey: 'hydro_injection_d1_check',
-      stageKey: 'D1',
-      dueAt: '2026-07-02T00:00:00.000Z',
-      status: 'scheduled',
-      followUpTaskId: 'task_001',
-      handlerRole: 'medical_assistant',
-      riskLevel: 'normal',
-      safeMessage: '路径任务需人工处理，不会主动向客户发送消息。',
-    },
-  ],
-  taskIds: ['task_001'],
-  createdAt: '2026-07-01T00:00:00.000Z',
-  updatedAt: '2026-07-01T00:00:00.000Z',
-};
 
 function request(path: string, init?: RequestInit) {
   return new Request(`http://localhost${path}`, init);
@@ -150,26 +114,80 @@ beforeEach(() => {
   routeMocks.getDatabase.mockReset();
   routeMocks.getDatabase.mockReturnValue(routeMocks.database);
   routeMocks.getDemoAccessContextFromRequest.mockReset();
-  routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
   routeMocks.getFollowUpPathEnrollment.mockReset();
+  routeMocks.listFollowUpPathTemplates.mockReset();
   routeMocks.listFollowUpPathEnrollments.mockReset();
 });
 
 describe('follow-up path enrollment API routes', () => {
-  it('GET templates 返回模板目录且不暴露敏感字段', async () => {
-    const response = await templatesGet(request('/api/institution/followup-paths/templates'));
-    const payload = await json(response);
+  it('GET templates 对任意普通输入固定关闭且不回显输入或初始化下游', async () => {
+    const expectedPayload = {
+      code: 'capability_disabled',
+      error: '随访路径模板能力暂未启用',
+    };
+    const responses = await Promise.all([
+      templatesGet(request('/api/institution/followup-paths/templates')),
+      templatesGet(
+        request('/api/institution/followup-paths/templates?tenantId=secret-tenant&include=private'),
+      ),
+    ]);
 
-    expect(response.status).toBe(200);
-    expect(payload.records).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ templateKey: 'hydro_injection_care' }),
-        expect.objectContaining({ templateKey: 'photoelectric_care' }),
-        expect.objectContaining({ templateKey: 'post_surgery_repair' }),
-      ]),
-    );
-    expect(JSON.stringify(payload)).not.toContain('tenantId');
-    expect(JSON.stringify(payload)).not.toContain('DATABASE_URL');
+    for (const response of responses) {
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      const payload = await json(response);
+      expect(payload).toEqual(expectedPayload);
+      expect(JSON.stringify(payload)).not.toMatch(/secret-tenant|private|records|templateKey|tenantId/i);
+    }
+
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.listFollowUpPathTemplates).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+  });
+
+  it('GET templates 对 hostile Request 不触发 trap、外部请求或下游调用', async () => {
+    let requestTraps = 0;
+    const hostileRequest = new Proxy(
+      {},
+      {
+        get() {
+          requestTraps += 1;
+          throw new Error('request must not be read');
+        },
+        has() {
+          requestTraps += 1;
+          throw new Error('request must not be checked');
+        },
+        ownKeys() {
+          requestTraps += 1;
+          throw new Error('request must not be enumerated');
+        },
+      },
+    ) as unknown as Request;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const response = await templatesGet(hostileRequest);
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(await json(response)).toEqual({
+        code: 'capability_disabled',
+        error: '随访路径模板能力暂未启用',
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(requestTraps).toBe(0);
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.listFollowUpPathTemplates).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
   });
 
   it('GET enrollments 固定关闭且不读取普通请求或查询参数', async () => {
@@ -450,25 +468,105 @@ describe('follow-up path enrollment API routes', () => {
     expect(routeMocks.auditRecord).not.toHaveBeenCalled();
   });
 
-  it('POST cancel 保持按 enrollmentId 返回低敏 DTO', async () => {
-    routeMocks.cancelFollowUpPathEnrollment.mockResolvedValue({
-      kind: 'cancelled',
-      enrollment: { ...enrollmentRecord, status: 'cancelled' },
-    });
+  it('POST cancel 对任意普通输入固定关闭且不回显或调用下游', async () => {
+    const expectedPayload = {
+      code: 'capability_disabled',
+      error: '随访路径取消能力暂未启用',
+    };
+    const responses = await Promise.all([
+      enrollmentCancelPost(
+        request('/api/institution/followup-paths/enrollments/enrollment_001/cancel', {
+          method: 'POST',
+        }),
+        { params: Promise.resolve({ enrollmentId: 'enrollment_001' }) },
+      ),
+      enrollmentCancelPost(
+        request(
+          '/api/institution/followup-paths/enrollments/secret-enrollment/cancel?tenantId=secret-tenant',
+          { method: 'POST', body: 'secret-body' },
+        ),
+        { params: Promise.resolve({ enrollmentId: 'secret-enrollment' }) },
+      ),
+    ]);
 
-    const cancelResponse = await enrollmentCancelPost(
-      request('/api/institution/followup-paths/enrollments/enrollment_001/cancel', {
-        method: 'POST',
-      }),
-      { params: Promise.resolve({ enrollmentId: 'enrollment_001' }) },
-    );
+    for (const response of responses) {
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      const payload = await json(response);
+      expect(payload).toEqual(expectedPayload);
+      expect(JSON.stringify(payload)).not.toMatch(/secret|enrollment_001|record|customer|audit/i);
+    }
 
-    expect(cancelResponse.status).toBe(200);
-    expect(await json(cancelResponse)).toEqual({
-      record: { ...enrollmentRecord, status: 'cancelled' },
-    });
-    expect(routeMocks.cancelFollowUpPathEnrollment).toHaveBeenCalledWith(
-      expect.objectContaining({ enrollmentId: 'enrollment_001' }),
-    );
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.database.transaction).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+    expect(routeMocks.cancelFollowUpPathEnrollment).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+  });
+
+  it('POST cancel 对 hostile Request/context/params 不触发 trap、外部请求或下游调用', async () => {
+    let requestTraps = 0;
+    let contextTraps = 0;
+    const hostileRequest = new Proxy(
+      {},
+      {
+        get() {
+          requestTraps += 1;
+          throw new Error('request must not be read');
+        },
+        has() {
+          requestTraps += 1;
+          throw new Error('request must not be checked');
+        },
+        ownKeys() {
+          requestTraps += 1;
+          throw new Error('request must not be enumerated');
+        },
+      },
+    ) as unknown as Request;
+    const hostileContext = new Proxy(
+      {},
+      {
+        get() {
+          contextTraps += 1;
+          throw new Error('context and params must not be read');
+        },
+        has() {
+          contextTraps += 1;
+          throw new Error('context and params must not be checked');
+        },
+        ownKeys() {
+          contextTraps += 1;
+          throw new Error('context and params must not be enumerated');
+        },
+      },
+    ) as unknown as { params: Promise<{ enrollmentId: string }> };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const response = await enrollmentCancelPost(hostileRequest, hostileContext);
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(await json(response)).toEqual({
+        code: 'capability_disabled',
+        error: '随访路径取消能力暂未启用',
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(requestTraps).toBe(0);
+    expect(contextTraps).toBe(0);
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.database.transaction).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+    expect(routeMocks.cancelFollowUpPathEnrollment).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
   });
 });
