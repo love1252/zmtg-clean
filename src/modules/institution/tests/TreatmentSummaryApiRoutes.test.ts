@@ -64,6 +64,7 @@ type DisabledMutationHandler = (
 type DisabledMutationContract = {
   error: string;
   handler: DisabledMutationHandler;
+  isAsync: boolean;
   method: 'PATCH' | 'POST';
   path: string;
   sourcePath: string;
@@ -167,8 +168,9 @@ function describeDisabledMutation(contract: DisabledMutationContract) {
       async ({ request }) => {
         const result = contract.handler(request, routeContext());
 
-        expect(result).toBeInstanceOf(Response);
-        await expectDisabledResponse(result as Response, contract.error);
+        expectNoDownstreamCalls();
+        expect(result).toBeInstanceOf(contract.isAsync ? Promise : Response);
+        await expectDisabledResponse(await result, contract.error);
         expectNoDownstreamCalls();
       },
     );
@@ -182,8 +184,9 @@ function describeDisabledMutation(contract: DisabledMutationContract) {
         hostileContext.proxy as unknown as RouteContext,
       );
 
-      expect(result).toBeInstanceOf(Response);
-      await expectDisabledResponse(result as Response, contract.error);
+      expectNoDownstreamCalls();
+      expect(result).toBeInstanceOf(contract.isAsync ? Promise : Response);
+      await expectDisabledResponse(await result, contract.error);
       expect(hostileRequest.trap).not.toHaveBeenCalled();
       expect(hostileContext.trap).not.toHaveBeenCalled();
       expectNoDownstreamCalls();
@@ -196,8 +199,9 @@ function describeDisabledMutation(contract: DisabledMutationContract) {
         { params: hostileParams.proxy } as unknown as RouteContext,
       );
 
-      expect(result).toBeInstanceOf(Response);
-      await expectDisabledResponse(result as Response, contract.error);
+      expectNoDownstreamCalls();
+      expect(result).toBeInstanceOf(contract.isAsync ? Promise : Response);
+      await expectDisabledResponse(await result, contract.error);
       expect(hostileParams.trap).not.toHaveBeenCalled();
       expectNoDownstreamCalls();
     });
@@ -206,13 +210,14 @@ function describeDisabledMutation(contract: DisabledMutationContract) {
       const source = readFileSync(join(process.cwd(), contract.sourcePath), 'utf8');
       const importLines = source.split('\n').filter((line) => line.startsWith('import '));
       const signature = new RegExp(
-        `export function ${contract.sourceExport}\\(\\s*_request: Request,\\s*_context: [A-Za-z]+,\\s*\\)`,
+        `export ${contract.isAsync ? 'async ' : ''}function ${contract.sourceExport}\\(\\s*_request: Request,\\s*_context: [A-Za-z]+,\\s*\\)`,
         'u',
       );
 
       expect(importLines).toEqual(["import { NextResponse } from 'next/server';"]);
       expect(source).toMatch(signature);
       expect(source).not.toMatch(/_request\?:|_context\?:/u);
+      expect(source).not.toMatch(/\bawait\b/u);
       expect(source).not.toMatch(
         /getDemoAccessContextFromRequest|canAccessResource|getDatabase|createTenantBusinessRepository|createTreatmentSummaryRepository|createAuditEventRepository|readJsonBody|parseUpdateTreatmentSummaryPayload|parseVoidTreatmentSummaryPayload|\.transaction\(|\b_?request\s*(?:\.|\[)|\b_?context\s*(?:\.|\[)|fetch\s*\(/u,
       );
@@ -251,6 +256,7 @@ describe('已关闭的客户治疗摘要创建 route 回归', () => {
 describeDisabledMutation({
   error: '治疗摘要编辑能力暂未启用',
   handler: treatmentSummaryPatch,
+  isAsync: true,
   method: 'PATCH',
   path: '/api/institution/treatment-summaries/caller_marker_summary',
   sourcePath: 'src/app/api/institution/treatment-summaries/[summaryId]/route.ts',
@@ -260,6 +266,7 @@ describeDisabledMutation({
 describeDisabledMutation({
   error: '治疗摘要作废能力暂未启用',
   handler: treatmentSummaryVoidPost,
+  isAsync: false,
   method: 'POST',
   path: '/api/institution/treatment-summaries/caller_marker_summary/void',
   sourcePath: 'src/app/api/institution/treatment-summaries/[summaryId]/void/route.ts',

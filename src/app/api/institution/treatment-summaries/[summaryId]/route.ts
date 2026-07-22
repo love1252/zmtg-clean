@@ -13,7 +13,7 @@ const treatmentSummaryUpdateDisabled = Object.freeze({
  * Capability-off until a formally released institution/object guard and write chain exist.
  * Request, route params, session, RBAC, body, persistence, and audit dependencies stay untouched.
  */
-export function PATCH(
+export async function PATCH(
   _request: Request,
   _context: TreatmentSummaryUpdateRouteContext,
 ) {
