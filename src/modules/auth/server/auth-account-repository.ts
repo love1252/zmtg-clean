@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { isProxy } from 'node:util/types';
 import {
   isAuthAccountStatus,
@@ -304,6 +304,49 @@ export function consumeFormalServerSessionUserSnapshotV1(
   return sessionUser;
 }
 
+export type ExpectedLoginAccountState = Readonly<{
+  passwordHash: string;
+  passwordUpdatedAt: Date;
+  passwordResetRequired: boolean;
+  status: AuthAccountStatus;
+  lastLoginAt: Date | null;
+  failedLoginCount: number;
+  lockedUntil: Date | null;
+  updatedAt: Date;
+}>;
+
+export type LoginAccountStateWriteResult = 'recorded' | 'state_changed';
+
+function loginAccountStateCondition(
+  accountId: string,
+  expectedState: ExpectedLoginAccountState,
+) {
+  return and(
+    eq(authUsers.id, accountId),
+    eq(authUsers.passwordHash, expectedState.passwordHash),
+    eq(authUsers.passwordUpdatedAt, expectedState.passwordUpdatedAt),
+    eq(authUsers.passwordResetRequired, expectedState.passwordResetRequired),
+    eq(authUsers.status, expectedState.status),
+    expectedState.lastLoginAt === null
+      ? isNull(authUsers.lastLoginAt)
+      : eq(authUsers.lastLoginAt, expectedState.lastLoginAt),
+    eq(authUsers.failedLoginCount, expectedState.failedLoginCount),
+    expectedState.lockedUntil === null
+      ? isNull(authUsers.lockedUntil)
+      : eq(authUsers.lockedUntil, expectedState.lockedUntil),
+    eq(authUsers.updatedAt, expectedState.updatedAt),
+  );
+}
+
+function loginAccountStateWriteResult(
+  rows: Array<{ accountId: string }>,
+  accountId: string,
+): LoginAccountStateWriteResult {
+  return rows.length === 1 && rows[0]?.accountId === accountId
+    ? 'recorded'
+    : 'state_changed';
+}
+
 export type AuthAccountRepository = {
   createAccount(record: AuthAccountRecord): Promise<AuthAccountRecord>;
   findAccountByUsername(username: string): Promise<AuthAccountRecord | null>;
@@ -314,18 +357,20 @@ export type AuthAccountRepository = {
   }): Promise<AuthAccountInstitutionBindingRecord[]>;
   recordLoginFailure(input: {
     accountId: string;
+    expectedState: ExpectedLoginAccountState;
     failedAt: Date;
     updatedBy: string;
     failedLoginCount: number;
     status: AuthAccountStatus;
     lockedUntil: Date | null;
-  }): Promise<void>;
+  }): Promise<LoginAccountStateWriteResult>;
   recordLoginSuccess(input: {
     accountId: string;
+    expectedState: ExpectedLoginAccountState;
     loggedInAt: Date;
     updatedBy: string;
     status: AuthAccountStatus;
-  }): Promise<void>;
+  }): Promise<LoginAccountStateWriteResult>;
   updateAccountStatus(input: {
     accountId: string;
     status: AuthAccountStatus;
@@ -583,7 +628,7 @@ export function createAuthAccountRepository(
     },
 
     async recordLoginFailure(input) {
-      await database
+      const rows = await database
         .update(authUsers)
         .set({
           failedLoginCount: input.failedLoginCount,
@@ -592,11 +637,14 @@ export function createAuthAccountRepository(
           updatedAt: input.failedAt,
           updatedBy: input.updatedBy,
         })
-        .where(eq(authUsers.id, input.accountId));
+        .where(loginAccountStateCondition(input.accountId, input.expectedState))
+        .returning({ accountId: authUsers.id });
+
+      return loginAccountStateWriteResult(rows, input.accountId);
     },
 
     async recordLoginSuccess(input) {
-      await database
+      const rows = await database
         .update(authUsers)
         .set({
           failedLoginCount: 0,
@@ -606,7 +654,10 @@ export function createAuthAccountRepository(
           updatedAt: input.loggedInAt,
           updatedBy: input.updatedBy,
         })
-        .where(eq(authUsers.id, input.accountId));
+        .where(loginAccountStateCondition(input.accountId, input.expectedState))
+        .returning({ accountId: authUsers.id });
+
+      return loginAccountStateWriteResult(rows, input.accountId);
     },
 
     async updateAccountStatus(input) {
