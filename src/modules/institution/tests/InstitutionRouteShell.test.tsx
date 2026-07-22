@@ -4,10 +4,62 @@ import {
   INSTITUTION_NAVIGATION_SECTION_IDS_V1,
   INSTITUTION_NAVIGATION_SECTIONS_V1,
 } from '@/modules/institution-contracts/v1/institution-navigation';
-import { InstitutionCapabilityOffPage, resolveInstitutionRouteSectionV1 } from '@/modules/institution/components/InstitutionCapabilityOffPage';
+import {
+  InstitutionCapabilityOffPage,
+  resolveInstitutionCapabilityOffRouteV1,
+  resolveInstitutionRouteSectionV1,
+} from '@/modules/institution/components/InstitutionCapabilityOffPage';
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
 
 const allSectionIds = INSTITUTION_NAVIGATION_SECTION_IDS_V1;
+
+const capabilityOffRouteCases = [
+  [['customers'], 'customer_list', '客户列表'],
+  [['customers', 'treatments'], 'customer_treatments', '治疗记录'],
+  [['customers', 'treatments', 'summary-001'], 'customer_treatment_detail', '治疗记录详情'],
+  [['customers', 'customer-001'], 'customer_detail', '客户详情'],
+  [['conversations'], 'conversation_queue', '会话队列'],
+  [['conversations', 'automations'], 'conversation_automations', '自动触达'],
+  [['conversations', 'automations', 'journey-001'], 'conversation_automation_detail', '自动触达详情'],
+  [['conversations', 'conversation-001'], 'conversation_detail', '会话详情'],
+  [['care'], 'care_today_queue', '今日队列'],
+  [['care', 'appointments'], 'care_appointments', '预约管理'],
+  [['care', 'appointments', 'appointment-001'], 'care_appointment_detail', '预约详情'],
+  [['care', 'followups'], 'care_followups', '随访任务'],
+  [['care', 'followups', 'followup-001'], 'care_followup_detail', '随访详情'],
+  [['care', 'paths'], 'care_paths', '路径管理'],
+  [['care', 'paths', 'path-001'], 'care_path_detail', '路径详情'],
+  [['knowledge'], 'knowledge_library', '资料库'],
+  [['knowledge', 'search'], 'knowledge_search', '检索测试'],
+  [['knowledge', 'qa'], 'knowledge_qa', '问答与引用'],
+  [['knowledge', 'qa', 'audits', 'audit-001'], 'knowledge_qa_audit_detail', '问答审计详情'],
+  [['knowledge', 'jobs'], 'knowledge_jobs', '任务记录'],
+  [['knowledge', 'items', 'knowledge-001'], 'knowledge_item_detail', '资料详情'],
+  [['analytics'], 'analytics_overview', '经营总览'],
+  [['analytics', 'consumption'], 'analytics_consumption', '消费分析'],
+  [['analytics', 'consumption', 'record-001'], 'analytics_consumption_detail', '消费详情'],
+  [['analytics', 'projects'], 'analytics_projects', '项目分析'],
+  [['analytics', 'projects', 'project-001'], 'analytics_project_detail', '项目详情'],
+  [['analytics', 'opportunities'], 'analytics_opportunities', '客户与机会'],
+  [['analytics', 'opportunities', 'customer-001'], 'analytics_opportunity_detail', '客户机会详情'],
+  [['analytics', 'reports'], 'analytics_reports', 'AI 经营报告'],
+  [['analytics', 'reports', 'report-001'], 'analytics_report_detail', '经营报告详情'],
+  [['system'], 'system_overview', '系统概览'],
+  [['system', 'organization'], 'system_organization', '机构与成员'],
+  [['system', 'organization', 'members', 'member-001'], 'system_member_detail', '成员详情'],
+  [['system', 'channels'], 'system_channels', '渠道接入'],
+  [['system', 'channels', 'connections', 'connection-001'], 'system_channel_connection_detail', '渠道连接详情'],
+  [['system', 'channels', 'mappings'], 'system_channel_mappings', '身份匹配'],
+  [['system', 'channels', 'mappings', 'mapping-001'], 'system_channel_mapping_detail', '身份匹配详情'],
+  [['system', 'data'], 'system_data', '数据接入与治理'],
+  [['system', 'data', 'sources', 'source-001'], 'system_data_source_detail', '数据源详情'],
+  [['system', 'data', 'imports', 'batch-001'], 'system_data_import_detail', '导入批次详情'],
+  [['system', 'ai-usage'], 'system_ai_usage', 'AI 与额度'],
+  [['system', 'ai-usage', 'services', 'knowledge_qa'], 'system_ai_usage_service_detail', 'AI 服务用量详情'],
+  [['system', 'privacy'], 'system_privacy', '数据与隐私'],
+  [['system', 'audit'], 'system_audit', '审计与安全'],
+  [['system', 'audit', 'event-001'], 'system_audit_detail', '审计详情'],
+] as const;
 
 describe('BASE-01A-R1 机构端稳定路由壳', () => {
   it('按冻结顺序展示桌面七栏目和移动五入口，并安全管理更多栏目焦点', async () => {
@@ -127,6 +179,17 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
     expect(resolveInstitutionRouteSectionV1([])).toBeNull();
   });
 
+  it.each(capabilityOffRouteCases)(
+    '为合法深链 %j 返回冻结页面名称',
+    (slug, routeId, pageLabel) => {
+      const route = resolveInstitutionCapabilityOffRouteV1(slug);
+
+      expect(route?.routeId).toBe(routeId);
+      expect(route?.pageLabel).toBe(pageLabel);
+      expect(route?.pageLabel).not.toContain(slug.at(-1) ?? '');
+    },
+  );
+
   it('为未发布深链显示统一安全状态，不渲染业务空壳或假数字', () => {
     const customers = INSTITUTION_NAVIGATION_SECTIONS_V1.find(
       (section) => section.id === 'customers',
@@ -134,10 +197,10 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
 
     if (!customers) throw new Error('customers section must exist');
 
-    render(<InstitutionCapabilityOffPage section={customers} />);
+    render(<InstitutionCapabilityOffPage section={customers} pageLabel="客户列表" />);
 
-    expect(screen.getByRole('heading', { name: '客户中心能力未开放', level: 1 })).toBeInTheDocument();
-    expect(screen.getByText('客户中心尚未开放')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '客户中心 · 客户列表能力未开放', level: 1 })).toBeInTheDocument();
+    expect(screen.getByText('客户列表尚未开放')).toBeInTheDocument();
     expect(screen.getByText(/当前机构尚未获得该能力的生产放行。/u)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '返回工作台' })).toHaveAttribute(
       'href',
@@ -167,16 +230,16 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
     ];
 
     for (const slug of canonicalAnalyticsSlugs) {
-      expect(resolveInstitutionRouteSectionV1(slug)?.id).toBe('analytics');
+      expect(resolveInstitutionCapabilityOffRouteV1(slug)?.section.id).toBe('analytics');
     }
 
-    render(<InstitutionCapabilityOffPage section={analytics} />);
+    render(<InstitutionCapabilityOffPage section={analytics} pageLabel="经营总览" />);
 
-    expect(screen.getByRole('heading', { name: '经营分析能力未开放', level: 1 }).parentElement).toHaveAttribute(
+    expect(screen.getByRole('heading', { name: '经营分析 · 经营总览能力未开放', level: 1 }).parentElement).toHaveAttribute(
       'data-capability-state',
       'blocked',
     );
-    expect(screen.getByText('经营分析尚未开放')).toBeInTheDocument();
+    expect(screen.getByText('经营总览尚未开放')).toBeInTheDocument();
     expect(screen.queryByText(/unknown|stale|empty|mock|demo/iu)).not.toBeInTheDocument();
     expect(screen.queryByText('0')).not.toBeInTheDocument();
   });
@@ -189,14 +252,20 @@ describe('BASE-01A-R1 机构端稳定路由壳', () => {
   });
 
   it('正式会话根路由仍解析为 capability-off，且不显示模拟会话控件', () => {
-    const conversations = resolveInstitutionRouteSectionV1(['conversations']);
+    const conversationRoute = resolveInstitutionCapabilityOffRouteV1(['conversations']);
+    const conversations = conversationRoute?.section;
 
     expect(conversations?.rootPath).toBe('/hospital/conversations');
     if (!conversations) throw new Error('conversations section must resolve');
 
-    render(<InstitutionCapabilityOffPage section={conversations} />);
+    render(
+      <InstitutionCapabilityOffPage
+        section={conversations}
+        pageLabel={conversationRoute.pageLabel}
+      />,
+    );
 
-    expect(screen.getByText('会话工作台尚未开放')).toBeInTheDocument();
+    expect(screen.getByText('会话队列尚未开放')).toBeInTheDocument();
     expect(screen.getByText(/当前机构尚未获得该能力的生产放行。/u)).toBeInTheDocument();
     expect(screen.queryByText(/fixture|mock_sent|dry-run|模拟发送|不真实发送/u)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '接管会话' })).not.toBeInTheDocument();
