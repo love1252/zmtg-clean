@@ -810,6 +810,146 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     ).resolves.toEqual({ kind: 'rejected', code: 'membership_unavailable' });
   });
 
+  it('rejects accessor, scalar and Proxy factory methods without reading or invoking them', async () => {
+    const codec = createReferenceCodec();
+    const factResolve = vi.fn(async () => requestBoundFact);
+    let getterReads = 0;
+    let applyTraps = 0;
+    const accessorMethod = (name: 'resolve' | 'issue' | 'verify') => {
+      const value: Record<string, unknown> = {};
+      Object.defineProperty(value, name, {
+        enumerable: true,
+        get() {
+          getterReads += 1;
+          throw new Error(`${name} getter must not run`);
+        },
+      });
+      return value;
+    };
+    const accessorCodec = (name: 'issue' | 'verify') => {
+      const value: Record<string, unknown> =
+        name === 'issue' ? { verify: codec.verify } : { issue: codec.issue };
+      Object.defineProperty(value, name, {
+        enumerable: true,
+        get() {
+          getterReads += 1;
+          throw new Error(`${name} getter must not run`);
+        },
+      });
+      return value;
+    };
+    const proxyMethod = <T extends (...args: never[]) => unknown>(method: T) =>
+      new Proxy(method, {
+        apply() {
+          applyTraps += 1;
+          throw new Error('proxy apply must not run');
+        },
+      });
+    const validReader = { resolve: factResolve };
+    const validCodec = { issue: codec.issue, verify: codec.verify };
+    const factories: unknown[] = [
+      {
+        accountId: currentRow.accountId,
+        factReader: accessorMethod('resolve'),
+        referenceCodec: validCodec,
+        now: () => NOW,
+      },
+      {
+        accountId: currentRow.accountId,
+        factReader: { resolve: 1 },
+        referenceCodec: validCodec,
+        now: () => NOW,
+      },
+      {
+        accountId: currentRow.accountId,
+        factReader: { resolve: proxyMethod(factResolve as never) },
+        referenceCodec: validCodec,
+        now: () => NOW,
+      },
+      {
+        accountId: currentRow.accountId,
+        factReader: validReader,
+        referenceCodec: accessorCodec('issue'),
+        now: () => NOW,
+      },
+      {
+        accountId: currentRow.accountId,
+        factReader: validReader,
+        referenceCodec: { issue: 1, verify: codec.verify },
+        now: () => NOW,
+      },
+      {
+        accountId: currentRow.accountId,
+        factReader: validReader,
+        referenceCodec: {
+          issue: proxyMethod(codec.issue as never),
+          verify: codec.verify,
+        },
+        now: () => NOW,
+      },
+      {
+        accountId: currentRow.accountId,
+        factReader: validReader,
+        referenceCodec: accessorCodec('verify'),
+        now: () => NOW,
+      },
+      {
+        accountId: currentRow.accountId,
+        factReader: validReader,
+        referenceCodec: { issue: codec.issue, verify: 1 },
+        now: () => NOW,
+      },
+      {
+        accountId: currentRow.accountId,
+        factReader: validReader,
+        referenceCodec: {
+          issue: codec.issue,
+          verify: proxyMethod(codec.verify as never),
+        },
+        now: () => NOW,
+      },
+      {
+        accountId: currentRow.accountId,
+        factReader: validReader,
+        referenceCodec: validCodec,
+        now: 1,
+      },
+      {
+        accountId: currentRow.accountId,
+        factReader: validReader,
+        referenceCodec: validCodec,
+        now: proxyMethod((() => NOW) as never),
+      },
+    ];
+    const nowAccessorFactory = {
+      accountId: currentRow.accountId,
+      factReader: validReader,
+      referenceCodec: validCodec,
+    };
+    Object.defineProperty(nowAccessorFactory, 'now', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('now getter must not run');
+      },
+    });
+    factories.push(nowAccessorFactory);
+
+    const validResolveInput = requestBoundInput(codec);
+    for (const factory of factories) {
+      const provider = createRequestBoundFreshActiveMembershipProviderV1(
+        factory as never,
+      );
+      await expect(provider.resolve(validResolveInput)).resolves.toEqual({
+        kind: 'rejected',
+        code: 'membership_unavailable',
+      });
+    }
+    expect(getterReads).toBe(0);
+    expect(applyTraps).toBe(0);
+    expect(factResolve).not.toHaveBeenCalled();
+  });
+
   it('rejects caller account injection and hostile resolve inputs before reading facts', async () => {
     const created = createRequestBoundProvider();
     const normal = requestBoundInput(created.codec);

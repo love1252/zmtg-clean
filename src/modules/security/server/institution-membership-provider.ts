@@ -510,6 +510,14 @@ function isPositiveSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) > 0;
 }
 
+function isNonProxyFunction(value: unknown): value is (...args: never[]) => unknown {
+  try {
+    return typeof value === 'function' && !isProxy(value);
+  } catch {
+    return false;
+  }
+}
+
 function readOwnDataKind(value: unknown): unknown {
   try {
     if (
@@ -765,18 +773,22 @@ export function createRequestBoundFreshActiveMembershipProviderV1(input: Readonl
       ? factorySnapshot.accountId
       : null;
   const resolveFact =
-    factReaderSnapshot && typeof factReaderSnapshot.resolve === 'function'
+    factReaderSnapshot && isNonProxyFunction(factReaderSnapshot.resolve)
       ? (factReaderSnapshot.resolve as AuthoritativeInstitutionMembershipFactReaderV1['resolve'])
       : null;
   const issue =
-    codecSnapshot && typeof codecSnapshot.issue === 'function'
+    codecSnapshot && isNonProxyFunction(codecSnapshot.issue)
       ? (codecSnapshot.issue as InstitutionGuardReferenceCodecV1['issue'])
+      : null;
+  const verify =
+    codecSnapshot && isNonProxyFunction(codecSnapshot.verify)
+      ? (codecSnapshot.verify as InstitutionGuardReferenceCodecV1['verify'])
       : null;
   const nowValue = factorySnapshot?.now;
   const now =
     nowValue === undefined
       ? () => new Date()
-      : typeof nowValue === 'function'
+      : isNonProxyFunction(nowValue)
         ? (nowValue as () => Date)
         : null;
 
@@ -785,8 +797,8 @@ export function createRequestBoundFreshActiveMembershipProviderV1(input: Readonl
       value: Parameters<FreshActiveMembershipProviderV1['resolve']>[0],
     ) {
       const request = parseRequestBoundResolveInput(value);
-      if (!request || !accountId) return membershipReject('membership_invalid');
-      if (!resolveFact || !issue || !now) {
+      if (!request) return membershipReject('membership_invalid');
+      if (!accountId || !resolveFact || !issue || !verify || !now) {
         return membershipReject('membership_unavailable');
       }
 
