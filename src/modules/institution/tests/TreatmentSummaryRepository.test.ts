@@ -275,6 +275,7 @@ function createTreatmentSummaryVoidDatabase(input: {
 const treatmentSummaryRow = {
   id: 'trt_001',
   tenantId: 'demo-tenant-001',
+  institutionId: 'inst-001',
   customerId: 'cust_qin_review',
   appointmentId: 'appt_qin_arrived',
   treatmentDate: new Date('2026-05-30T03:45:00.000Z'),

@@ -192,6 +192,7 @@ const customerRow = {
 const appointmentRow = {
   id: 'appt_001',
   tenantId: 'demo-tenant-001',
+  institutionId: 'inst-001',
   customerId: 'cust_001',
   customerDisplayName: '王女士',
   project: '水光补水',
@@ -206,6 +207,7 @@ const appointmentRow = {
 const followUpTaskRow = {
   id: 'fu_001',
   tenantId: 'demo-tenant-001',
+  institutionId: 'inst-001',
   customerId: 'cust_001',
   customerDisplayName: '王女士',
   journeyId: 'journey_repurchase',
@@ -224,6 +226,7 @@ const followUpTaskRow = {
 const sourceTreatmentSummaryRow = {
   id: 'ts_001',
   tenantId: 'demo-tenant-001',
+  institutionId: 'inst-001',
   customerId: 'cust_001',
   appointmentId: 'appt_001',
   treatmentDate: new Date('2026-05-29T02:00:00.000Z'),
