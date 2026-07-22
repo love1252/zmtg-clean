@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BookOpen, Brain, ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search, Upload } from 'lucide-react';
 import type {
   InstitutionKnowledgeItemDto,
@@ -16,6 +16,7 @@ import { InstitutionKnowledgeBaseCardPanel } from '@/modules/institution/compone
 import { cn } from '@/shared/utils/cn';
 
 type LoadStatus = 'loading' | 'success' | 'error';
+type FileListLoadStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
 type QaAuditLoadStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
 type InstitutionKnowledgeFileRecord = {
   fileId: string;
@@ -305,6 +306,8 @@ export function InstitutionKnowledgeReadonlyShell() {
   const [records, setRecords] = useState<InstitutionKnowledgeItemDto[]>([]);
   const [expandedKnowledgeId, setExpandedKnowledgeId] = useState<string | null>(null);
   const [filesByKnowledgeId, setFilesByKnowledgeId] = useState<Record<string, InstitutionKnowledgeFileRecord[]>>({});
+  const [fileListStatusByKnowledgeId, setFileListStatusByKnowledgeId] = useState<Record<string, FileListLoadStatus>>({});
+  const fileListRequestRevisionRef = useRef<Record<string, number>>({});
   const [chunksByFileId, setChunksByFileId] = useState<Record<string, InstitutionKnowledgeChunkRecord[]>>({});
   const [expandedChunkFileId, setExpandedChunkFileId] = useState<string | null>(null);
   const [fileMessage, setFileMessage] = useState<string | null>(null);
@@ -526,7 +529,13 @@ export function InstitutionKnowledgeReadonlyShell() {
   }
 
   async function loadKnowledgeFiles(knowledgeId: string) {
+    const requestRevision = (fileListRequestRevisionRef.current[knowledgeId] ?? 0) + 1;
+    fileListRequestRevisionRef.current[knowledgeId] = requestRevision;
     setExpandedKnowledgeId(knowledgeId);
+    setFileListStatusByKnowledgeId((current) => ({ ...current, [knowledgeId]: 'loading' }));
+    setFilesByKnowledgeId((current) => ({ ...current, [knowledgeId]: [] }));
+    setChunksByFileId({});
+    setExpandedChunkFileId(null);
     setFileMessage(null);
     try {
       const response = await fetch(
@@ -534,7 +543,15 @@ export function InstitutionKnowledgeReadonlyShell() {
         { cache: 'no-store' },
       );
       const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+      if (fileListRequestRevisionRef.current[knowledgeId] !== requestRevision) return;
+      const isAuthoritativePayload = payload
+        && payload.requestId === 'institution-knowledge-management-files'
+        && payload.readonly === true
+        && payload.dataSource === 'repository'
+        && Array.isArray(payload.records);
+      if (!response.ok || !isAuthoritativePayload) {
+        setFilesByKnowledgeId((current) => ({ ...current, [knowledgeId]: [] }));
+        setFileListStatusByKnowledgeId((current) => ({ ...current, [knowledgeId]: 'unavailable' }));
         setFileMessage('知识库文件暂时不可用');
         return;
       }
@@ -542,7 +559,12 @@ export function InstitutionKnowledgeReadonlyShell() {
         ...current,
         [knowledgeId]: payload.records as InstitutionKnowledgeFileRecord[],
       }));
+      setFileListStatusByKnowledgeId((current) => ({ ...current, [knowledgeId]: 'ready' }));
+      setFileMessage(null);
     } catch {
+      if (fileListRequestRevisionRef.current[knowledgeId] !== requestRevision) return;
+      setFilesByKnowledgeId((current) => ({ ...current, [knowledgeId]: [] }));
+      setFileListStatusByKnowledgeId((current) => ({ ...current, [knowledgeId]: 'unavailable' }));
       setFileMessage('知识库文件暂时不可用');
     }
   }
@@ -1956,11 +1978,20 @@ export function InstitutionKnowledgeReadonlyShell() {
                       </div>
                     ) : null}
 
-                    {(filesByKnowledgeId[item.knowledgeId] ?? []).length === 0 ? (
+                    {fileListStatusByKnowledgeId[item.knowledgeId] === 'loading' ? (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                        正在读取知识库文件...
+                      </div>
+                    ) : fileListStatusByKnowledgeId[item.knowledgeId] === 'unavailable' ? (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                        —
+                      </div>
+                    ) : fileListStatusByKnowledgeId[item.knowledgeId] === 'ready'
+                      && (filesByKnowledgeId[item.knowledgeId] ?? []).length === 0 ? (
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
                         暂无可下载文件
                       </div>
-                    ) : (
+                    ) : fileListStatusByKnowledgeId[item.knowledgeId] === 'ready' ? (
                       (filesByKnowledgeId[item.knowledgeId] ?? []).map((file) => (
                         <div
                           key={file.fileId}
@@ -2055,7 +2086,7 @@ export function InstitutionKnowledgeReadonlyShell() {
                           ) : null}
                         </div>
                       ))
-                    )}
+                    ) : null}
                   </div>
                 ) : null}
               </div>
