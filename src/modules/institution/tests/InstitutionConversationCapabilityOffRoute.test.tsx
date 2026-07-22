@@ -1,6 +1,46 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const serverAuthorizationSeam = vi.hoisted(() => {
+  const navigationDecision = Object.freeze({
+    kind: 'institution_navigation_authorization' as const,
+    targetSectionId: 'conversations' as const,
+    targetAccess: 'allowed' as const,
+    availableSectionIds: Object.freeze([
+      'workbench',
+      'customers',
+      'conversations',
+      'care',
+      'knowledge',
+      'analytics',
+      'system',
+    ] as const),
+  });
+  const authorization = Object.freeze({
+    authorizeCurrentInstitutionNavigationV1: vi.fn(async () => navigationDecision),
+  });
+
+  return { authorization, navigationDecision };
+});
+
+vi.mock('@/modules/institution/server/institution-server-runtime', () => ({
+  resolveInstitutionServerAuthorizationV1: vi.fn(async () =>
+    serverAuthorizationSeam.authorization,
+  ),
+}));
+
+vi.mock('@/modules/security/server/institution-request-authorization', () => ({
+  isInstitutionRequestAuthorizationV1: vi.fn(
+    (value: unknown) => value === serverAuthorizationSeam.authorization,
+  ),
+}));
+
+vi.mock('@/modules/security/server/institution-section-guard', () => ({
+  isInstitutionNavigationAuthorizationV1: vi.fn(
+    (value: unknown) => value === serverAuthorizationSeam.navigationDecision,
+  ),
+}));
+
 import HospitalCapabilityOffRoute from '@/app/hospital/[...slug]/page';
 
 const DESKTOP_NAVIGATION = [
