@@ -627,7 +627,7 @@ describe('经营分析按机构与币种聚合', () => {
     ]);
     expect(currencyChanged.currencies[0].comparisons.paidAmountMinor).toEqual({
       status: 'not_comparable',
-      reasonCode: 'currency_set_changed',
+      reasonCode: 'metric_unavailable',
       delta: null,
       percentageRatio: null,
     });
@@ -652,7 +652,7 @@ describe('经营分析按机构与币种聚合', () => {
       },
       {
         status: 'not_comparable',
-        reasonCode: 'currency_set_changed',
+        reasonCode: 'metric_unavailable',
         delta: null,
         percentageRatio: null,
       },
@@ -683,6 +683,84 @@ describe('经营分析按机构与币种聚合', () => {
       delta: null,
       percentageRatio: null,
     });
+  });
+
+  it('调用方自报完整时，缺失期间仍不可作为权威空集或可信 0', () => {
+    const metricUnavailable = {
+      status: 'not_comparable',
+      reasonCode: 'metric_unavailable',
+      delta: null,
+      percentageRatio: null,
+    } as const;
+    const previousOnly = expectAggregation([
+      fact('previous-only-complete-claim', {
+        eventAt: '2026-07-08T04:00:00.000Z',
+        amountMinor: 700,
+      }),
+    ]);
+    const previousOnlyCny = previousOnly.currencies[0];
+
+    expect(previousOnlyCny.current).toEqual({
+      dataAvailability: 'not_available',
+      completeness: 'complete',
+      hasFinancialFacts: false,
+      paidAmountMinor: null,
+      refundAmountMinor: null,
+      netAmountMinor: null,
+      paidCustomerCount: null,
+      averageNetAmountPerPaidCustomer: null,
+      consumptionRecordCount: null,
+      countAvailability: 'not_available',
+      mappedProjectRanking: [],
+      quality: null,
+    });
+    expect(previousOnlyCny.comparisons).toEqual({
+      paidAmountMinor: metricUnavailable,
+      refundAmountMinor: metricUnavailable,
+      netAmountMinor: metricUnavailable,
+      paidCustomerCount: metricUnavailable,
+      averageNetAmountPerPaidCustomer: metricUnavailable,
+    });
+
+    const currentOnly = expectAggregation([
+      fact('current-only-complete-claim', {
+        eventAt: '2026-07-10T04:00:00.000Z',
+        amountMinor: 900,
+      }),
+    ]);
+    const currentOnlyCny = currentOnly.currencies[0];
+
+    expect(currentOnlyCny.previous).toEqual({
+      dataAvailability: 'not_available',
+      completeness: 'complete',
+      hasFinancialFacts: false,
+      paidAmountMinor: null,
+      refundAmountMinor: null,
+      netAmountMinor: null,
+      paidCustomerCount: null,
+      averageNetAmountPerPaidCustomer: null,
+      consumptionRecordCount: null,
+      countAvailability: 'not_available',
+      mappedProjectRanking: [],
+      quality: null,
+    });
+    expect(currentOnlyCny.comparisons).toEqual({
+      paidAmountMinor: metricUnavailable,
+      refundAmountMinor: metricUnavailable,
+      netAmountMinor: metricUnavailable,
+      paidCustomerCount: metricUnavailable,
+      averageNetAmountPerPaidCustomer: metricUnavailable,
+    });
+    expect(JSON.stringify({ previousOnly, currentOnly })).not.toContain(
+      'authoritative_empty',
+    );
+  });
+
+  it('两期全空时不创建默认币种、空桶或 0', () => {
+    const value = expectAggregation([]);
+
+    expect(value.currencies).toEqual([]);
+    expect(JSON.stringify(value)).not.toContain('authoritative_empty');
   });
 
   it('非完整期间缺失币种返回不可用而非可信 0，并保留期间完整性', () => {
