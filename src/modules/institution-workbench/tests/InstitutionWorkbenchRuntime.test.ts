@@ -124,17 +124,20 @@ function signToken() {
 }
 
 function availableRuntimeConfig() {
-  return {
+  return Object.freeze({
     kind: 'available' as const,
-    formalServerSessionKeyRing: {
-      currentKey: { keyVersion: 2, keyMaterial: SESSION_KEY },
-      verifyOnlyKeys: [],
-    },
-    institutionGuardReferenceKeyRing: {
-      currentIssueKey: { keyVersion: 1, keyMaterial: REFERENCE_KEY },
-      verifyOnlyKeys: [],
-    },
-  };
+    formalServerSessionKeyRing: Object.freeze({
+      currentKey: Object.freeze({ keyVersion: 2, keyMaterial: SESSION_KEY }),
+      verifyOnlyKeys: Object.freeze([]),
+    }),
+    institutionGuardReferenceKeyRing: Object.freeze({
+      currentIssueKey: Object.freeze({
+        keyVersion: 1,
+        keyMaterial: REFERENCE_KEY,
+      }),
+      verifyOnlyKeys: Object.freeze([]),
+    }),
+  });
 }
 
 function expectExactDecision(
@@ -215,6 +218,87 @@ describe('WB-ENTRY-02B institution workbench runtime', () => {
     },
   );
 
+  it.each([
+    [
+      'forwarding Proxy',
+      () => new Proxy(availableRuntimeConfig(), {}),
+    ],
+    [
+      'fake available',
+      () => {
+        const config = availableRuntimeConfig();
+        return Object.freeze({
+          ...config,
+          formalServerSessionKeyRing: {
+            ...config.formalServerSessionKeyRing,
+          },
+        });
+      },
+    ],
+    ['unknown', () => Object.freeze({ kind: 'unknown' })],
+    [
+      'symbol',
+      () => Object.freeze(Object.assign(
+        { ...availableRuntimeConfig() },
+        { [Symbol('runtime-config')]: 'hidden' },
+      )),
+    ],
+    [
+      'extra',
+      () => Object.freeze({ ...availableRuntimeConfig(), extra: 'hidden' }),
+    ],
+    [
+      'nonplain',
+      () => Object.freeze(Object.assign(
+        Object.create({ inherited: true }),
+        availableRuntimeConfig(),
+      )),
+    ],
+  ] as const)(
+    'runtime config %s 时在 cookies 前 exact blocked',
+    async (_label, createConfig) => {
+      runtimeMocks.resolveInstitutionGuardRuntimeConfigV1.mockReturnValueOnce(
+        createConfig() as never,
+      );
+
+      const result = await resolveInstitutionWorkbenchRuntimeV1();
+
+      expectExactDecision(result, 'blocked');
+      expectNoRuntimeComposition();
+    },
+  );
+
+  it('runtime config accessor 不执行 getter 且在 cookies 前 blocked', async () => {
+    let getterReads = 0;
+    const config = availableRuntimeConfig();
+    const accessor = Object.defineProperties({}, {
+      kind: {
+        enumerable: true,
+        get() {
+          getterReads += 1;
+          return 'available';
+        },
+      },
+      formalServerSessionKeyRing: {
+        enumerable: true,
+        value: config.formalServerSessionKeyRing,
+      },
+      institutionGuardReferenceKeyRing: {
+        enumerable: true,
+        value: config.institutionGuardReferenceKeyRing,
+      },
+    });
+    runtimeMocks.resolveInstitutionGuardRuntimeConfigV1.mockReturnValueOnce(
+      Object.freeze(accessor) as never,
+    );
+
+    const result = await resolveInstitutionWorkbenchRuntimeV1();
+
+    expectExactDecision(result, 'blocked');
+    expect(getterReads).toBe(0);
+    expectNoRuntimeComposition();
+  });
+
   it.each(['missing', 'invalid'] as const)(
     '%s formal cookie 只读指定 cookie 一次且零 DB',
     async (cookieCase) => {
@@ -284,6 +368,34 @@ describe('WB-ENTRY-02B institution workbench runtime', () => {
     ).toHaveBeenCalledTimes(1);
     expect(runtimeMocks.anchorRead).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['null', 'undefined', 'hostile', 'throw'] as const)(
+    'database %s 时底层最多调用一次且 exact blocked',
+    async (databaseCase) => {
+      if (databaseCase === 'throw') {
+        runtimeMocks.getDatabase.mockImplementationOnce(() => {
+          throw new Error('database unavailable');
+        });
+      } else if (databaseCase === 'hostile') {
+        runtimeMocks.getDatabase.mockReturnValueOnce(new Proxy({}, {}) as never);
+      } else {
+        runtimeMocks.getDatabase.mockReturnValueOnce(
+          (databaseCase === 'null' ? null : undefined) as never,
+        );
+      }
+
+      const result = await resolveInstitutionWorkbenchRuntimeV1();
+
+      expectExactDecision(result, 'blocked');
+      expect(runtimeMocks.getDatabase).toHaveBeenCalledTimes(1);
+      expect(runtimeMocks.createAuthAccountRepository).not.toHaveBeenCalled();
+      expect(
+        runtimeMocks.createInstitutionAnchorFactRepositoryV1,
+      ).not.toHaveBeenCalled();
+      expect(runtimeMocks.membershipRead).not.toHaveBeenCalled();
+      expect(runtimeMocks.anchorRead).not.toHaveBeenCalled();
+    },
+  );
 
   it('membership denied 时 blocked 且 anchor repository/query 均为零', async () => {
     runtimeMocks.membershipRead.mockResolvedValueOnce([]);

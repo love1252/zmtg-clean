@@ -4,7 +4,11 @@ import { InstitutionWorkbenchCapabilityOff } from '@/modules/institution-workben
 import { resolveInstitutionWorkbenchRuntimeV1 } from '@/modules/institution-workbench/server/institution-workbench-runtime';
 
 export default async function HospitalPage() {
-  await resolveInstitutionWorkbenchRuntimeV1().catch(() => undefined);
+  try {
+    await resolveInstitutionWorkbenchRuntimeV1();
+  } catch {
+    // The capability-off page remains identical for synchronous and async runtime failures.
+  }
 
   return (
     <InstitutionNavigationShell

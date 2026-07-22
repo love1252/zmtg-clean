@@ -1,3 +1,5 @@
+import { isProxy } from 'node:util/types';
+
 import { cookies } from 'next/headers';
 
 import { createAuthAccountRepository } from '@/modules/auth/server/auth-account-repository';
@@ -22,15 +24,258 @@ import { createAuthoritativeInstitutionMembershipFactReaderV1 } from '@/modules/
 import { createInstitutionRequestAuthorizationV1 } from '@/modules/security/server/institution-request-authorization';
 import { getDatabase, type TenantDatabase } from '@/server/db/client';
 
+const RUNTIME_CONFIG_KEYS = Object.freeze([
+  'kind',
+  'formalServerSessionKeyRing',
+  'institutionGuardReferenceKeyRing',
+] as const);
+const FORMAL_KEY_RING_KEYS = Object.freeze([
+  'currentKey',
+  'verifyOnlyKeys',
+] as const);
+const GUARD_KEY_RING_KEYS = Object.freeze([
+  'currentIssueKey',
+  'verifyOnlyKeys',
+] as const);
+const CURRENT_KEY_KEYS = Object.freeze(['keyVersion', 'keyMaterial'] as const);
+const VERIFY_ONLY_KEY_KEYS = Object.freeze([
+  'keyVersion',
+  'keyMaterial',
+  'verifyUntil',
+] as const);
+const CANONICAL_UTC_INSTANT =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
+const MAX_VERIFY_ONLY_KEYS = 16;
+const HMAC_KEY_BYTES = 32;
+
+type AvailableRuntimeConfigV1 = Extract<
+  ReturnType<typeof resolveInstitutionGuardRuntimeConfigV1>,
+  Readonly<{ kind: 'available' }>
+>;
+
+function snapshotFrozenExactPlainRecord(
+  value: unknown,
+  expectedKeys: readonly string[],
+): Readonly<Record<string, unknown>> | null {
+  try {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      isProxy(value) ||
+      Array.isArray(value) ||
+      Object.getPrototypeOf(value) !== Object.prototype ||
+      !Object.isFrozen(value)
+    ) {
+      return null;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value) as unknown as Record<
+      PropertyKey,
+      PropertyDescriptor
+    >;
+    const ownKeys = Reflect.ownKeys(descriptors);
+    if (
+      ownKeys.length !== expectedKeys.length ||
+      ownKeys.some((key) => typeof key !== 'string') ||
+      expectedKeys.some(
+        (key) => !Object.prototype.hasOwnProperty.call(descriptors, key),
+      )
+    ) {
+      return null;
+    }
+
+    const snapshot: Record<string, unknown> = Object.create(null) as Record<
+      string,
+      unknown
+    >;
+    for (const key of expectedKeys) {
+      const descriptor = descriptors[key];
+      if (
+        !descriptor ||
+        !descriptor.enumerable ||
+        descriptor.configurable ||
+        !('value' in descriptor) ||
+        descriptor.writable
+      ) {
+        return null;
+      }
+      Object.defineProperty(snapshot, key, {
+        value: descriptor.value,
+        enumerable: true,
+        configurable: false,
+        writable: false,
+      });
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
+}
+
+function snapshotFrozenDenseArray(value: unknown): readonly unknown[] | null {
+  try {
+    if (
+      !Array.isArray(value) ||
+      isProxy(value) ||
+      Object.getPrototypeOf(value) !== Array.prototype ||
+      !Object.isFrozen(value)
+    ) {
+      return null;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value) as unknown as Record<
+      PropertyKey,
+      PropertyDescriptor
+    >;
+    const lengthDescriptor = descriptors.length;
+    if (
+      !lengthDescriptor ||
+      lengthDescriptor.enumerable ||
+      lengthDescriptor.configurable ||
+      !('value' in lengthDescriptor) ||
+      lengthDescriptor.writable ||
+      typeof lengthDescriptor.value !== 'number' ||
+      !Number.isSafeInteger(lengthDescriptor.value) ||
+      lengthDescriptor.value < 0 ||
+      lengthDescriptor.value > MAX_VERIFY_ONLY_KEYS ||
+      Reflect.ownKeys(descriptors).length !== lengthDescriptor.value + 1
+    ) {
+      return null;
+    }
+
+    const snapshot: unknown[] = [];
+    for (let index = 0; index < lengthDescriptor.value; index += 1) {
+      const descriptor = descriptors[String(index)];
+      if (
+        !descriptor ||
+        !descriptor.enumerable ||
+        descriptor.configurable ||
+        !('value' in descriptor) ||
+        descriptor.writable
+      ) {
+        return null;
+      }
+      snapshot.push(descriptor.value);
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
+}
+
+function isExactHmacKeyMaterial(value: unknown): value is Uint8Array {
+  try {
+    const keyMaterial = value as Uint8Array;
+    return (
+      value !== null &&
+      typeof value === 'object' &&
+      !isProxy(value) &&
+      Object.getPrototypeOf(value) === Uint8Array.prototype &&
+      keyMaterial.byteLength === HMAC_KEY_BYTES &&
+      keyMaterial.length === HMAC_KEY_BYTES
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isCanonicalKeyVersion(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 1 &&
+    value <= 999
+  );
+}
+
+function isExactCurrentKey(value: unknown): boolean {
+  const snapshot = snapshotFrozenExactPlainRecord(value, CURRENT_KEY_KEYS);
+  return Boolean(
+    snapshot &&
+      isCanonicalKeyVersion(snapshot.keyVersion) &&
+      isExactHmacKeyMaterial(snapshot.keyMaterial),
+  );
+}
+
+function isExactVerifyOnlyKeys(value: unknown): boolean {
+  const entries = snapshotFrozenDenseArray(value);
+  if (!entries) return false;
+  const versions = new Set<number>();
+  for (const entry of entries) {
+    const snapshot = snapshotFrozenExactPlainRecord(
+      entry,
+      VERIFY_ONLY_KEY_KEYS,
+    );
+    if (
+      !snapshot ||
+      !isCanonicalKeyVersion(snapshot.keyVersion) ||
+      versions.has(snapshot.keyVersion) ||
+      !isExactHmacKeyMaterial(snapshot.keyMaterial) ||
+      typeof snapshot.verifyUntil !== 'string' ||
+      !CANONICAL_UTC_INSTANT.test(snapshot.verifyUntil)
+    ) {
+      return false;
+    }
+    versions.add(snapshot.keyVersion);
+  }
+  return true;
+}
+
+function snapshotAvailableRuntimeConfig(
+  value: unknown,
+): AvailableRuntimeConfigV1 | null {
+  const snapshot = snapshotFrozenExactPlainRecord(value, RUNTIME_CONFIG_KEYS);
+  if (!snapshot || snapshot.kind !== 'available') return null;
+
+  const formalKeyRing = snapshotFrozenExactPlainRecord(
+    snapshot.formalServerSessionKeyRing,
+    FORMAL_KEY_RING_KEYS,
+  );
+  const guardKeyRing = snapshotFrozenExactPlainRecord(
+    snapshot.institutionGuardReferenceKeyRing,
+    GUARD_KEY_RING_KEYS,
+  );
+  if (
+    !formalKeyRing ||
+    !guardKeyRing ||
+    !isExactCurrentKey(formalKeyRing.currentKey) ||
+    !isExactVerifyOnlyKeys(formalKeyRing.verifyOnlyKeys) ||
+    !isExactCurrentKey(guardKeyRing.currentIssueKey) ||
+    !isExactVerifyOnlyKeys(guardKeyRing.verifyOnlyKeys)
+  ) {
+    return null;
+  }
+
+  return value as AvailableRuntimeConfigV1;
+}
+
 function blocked(): InstitutionWorkbenchEntryDecisionV1 {
   return createDisabledInstitutionWorkbenchEntryV1({});
 }
 
 function createDatabaseOnce(): () => TenantDatabase {
+  let state: 'pending' | 'resolved' | 'failed' = 'pending';
   let database: TenantDatabase | null = null;
+  const unavailable = new Error('institution workbench database unavailable');
+
   return () => {
-    database ??= getDatabase();
-    return database;
+    if (state === 'resolved') return database as TenantDatabase;
+    if (state === 'failed') throw unavailable;
+
+    state = 'failed';
+    try {
+      const candidate: unknown = getDatabase();
+      if (
+        candidate === null ||
+        (typeof candidate !== 'object' && typeof candidate !== 'function') ||
+        isProxy(candidate)
+      ) {
+        throw unavailable;
+      }
+      database = candidate as TenantDatabase;
+      state = 'resolved';
+      return database;
+    } catch {
+      throw unavailable;
+    }
   };
 }
 
@@ -39,15 +284,15 @@ function createDatabaseOnce(): () => TenantDatabase {
  * has verified the formal cookie and asks for the first authoritative membership fact.
  */
 export async function resolveInstitutionWorkbenchRuntimeV1(): Promise<InstitutionWorkbenchEntryDecisionV1> {
-  let runtimeConfig: ReturnType<
-    typeof resolveInstitutionGuardRuntimeConfigV1
-  >;
+  let runtimeConfig: AvailableRuntimeConfigV1 | null = null;
   try {
-    runtimeConfig = resolveInstitutionGuardRuntimeConfigV1();
-    if (runtimeConfig.kind !== 'available') return blocked();
+    runtimeConfig = snapshotAvailableRuntimeConfig(
+      resolveInstitutionGuardRuntimeConfigV1(),
+    );
   } catch {
     return blocked();
   }
+  if (!runtimeConfig) return blocked();
 
   let cookieHeader: string | null;
   try {

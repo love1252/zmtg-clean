@@ -539,12 +539,18 @@ describe('WB-ENTRY-02A /hospital capability-off 页面', () => {
     }
   });
 
-  it.each(['allowed', 'blocked', 'throw'] as const)(
+  it.each(['allowed', 'blocked', 'reject', 'sync_throw'] as const)(
     'runtime %s 时均只渲染同一 capability-off UI',
     async (runtimeCase) => {
-      if (runtimeCase === 'throw') {
+      if (runtimeCase === 'reject') {
         workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockRejectedValueOnce(
           new Error('runtime unavailable'),
+        );
+      } else if (runtimeCase === 'sync_throw') {
+        workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockImplementationOnce(
+          () => {
+            throw new Error('runtime unavailable');
+          },
         );
       } else {
         workbenchRuntimeMocks.resolveInstitutionWorkbenchRuntimeV1.mockResolvedValueOnce({
