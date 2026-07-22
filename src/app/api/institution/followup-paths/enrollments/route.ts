@@ -20,7 +20,10 @@ const noStoreHeaders = Object.freeze({
  * audit, or service side effects from untrusted input.
  */
 export async function GET(_request: Request) {
-  return NextResponse.json(disabledListResponse, { status: 503 });
+  return NextResponse.json(disabledListResponse, {
+    status: 503,
+    headers: noStoreHeaders,
+  });
 }
 
 /**
