@@ -70,7 +70,13 @@ const capabilityDisabledPayload = {
   error: '随访消息草稿能力当前未启用',
 } as const;
 
+const templateCapabilityDisabledPayload = {
+  code: 'capability_disabled',
+  error: '随访消息模板能力当前未启用',
+} as const;
+
 const disabledRoutePaths = [
+  'src/app/api/institution/followup-message-templates/route.ts',
   'src/app/api/institution/followup-message-drafts/route.ts',
   'src/app/api/institution/followup-message-drafts/[draftId]/route.ts',
   'src/app/api/institution/followup-message-drafts/[draftId]/approve/route.ts',
@@ -81,6 +87,14 @@ const disabledRoutePaths = [
 const forbiddenResponseKeys = [
   'record',
   'records',
+  'templateId',
+  'templateKey',
+  'templateName',
+  'templateType',
+  'applicableTemplateKey',
+  'applicableNodeKey',
+  'safePreview',
+  'channelType',
   'delivery',
   'draftId',
   'customerId',
@@ -156,6 +170,17 @@ async function expectCapabilityDisabled(response: Response, secret = '') {
   if (secret) expect(JSON.stringify(payload)).not.toContain(secret);
 }
 
+async function expectTemplateCapabilityDisabled(response: Response, secret = '') {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  const payload = await response.json();
+  expect(payload).toEqual(templateCapabilityDisabledPayload);
+  for (const key of forbiddenResponseKeys) {
+    expect(payload).not.toHaveProperty(key);
+  }
+  if (secret) expect(JSON.stringify(payload)).not.toContain(secret);
+}
+
 function expectDisabledRouteDownstreamsIdle() {
   for (const dependency of [
     routeMocks.approveMessageDraft,
@@ -194,30 +219,22 @@ beforeEach(() => {
 });
 
 describe('follow-up message draft API routes', () => {
-  it('GET templates 保持既有白名单读取契约', async () => {
-    routeMocks.listFollowUpMessageTemplates.mockResolvedValue({
-      kind: 'success',
-      templates: [{
-        id: 'tpl_001',
-        templateKey: 'hydro_manual',
-        templateName: '水光人工话术',
-        templateType: 'post_care',
-        applicableTemplateKey: 'hydro_injection_care',
-        applicableNodeKey: null,
-        channelType: 'manual',
-        status: 'active',
-        requiresHumanApproval: true,
-        forbidAutoSend: true,
-        safePreview: '低敏预览',
-        createdAt: '2026-07-06T08:00:00.000Z',
-        updatedAt: '2026-07-06T08:00:00.000Z',
-      }],
-    });
+  it('GET templates 对普通、查询和非法输入同步固定关闭且不回显输入', async () => {
+    const secret = 'template-input-must-not-echo';
+    const responses = await Promise.all([
+      templatesGet(request('/api/institution/followup-message-templates')),
+      templatesGet(
+        request(
+          `/api/institution/followup-message-templates?tenantId=other-tenant&templateKey=${secret}`,
+        ),
+      ),
+      templatesGet(request('/api/institution/followup-message-templates?include=&channel=unknown')),
+    ]);
 
-    const response = await templatesGet(request('/api/institution/followup-message-templates'));
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual(expect.objectContaining({ records: expect.any(Array) }));
-    expect(routeMocks.listFollowUpMessageTemplates).toHaveBeenCalledOnce();
+    for (const response of responses) {
+      await expectTemplateCapabilityDisabled(response, secret);
+    }
+    expectDisabledRouteDownstreamsIdle();
   });
 
   it('所有草稿 handler 对普通与非法输入固定 fail-closed，且不回显输入', async () => {
@@ -252,7 +269,8 @@ describe('follow-up message draft API routes', () => {
     expectDisabledRouteDownstreamsIdle();
   });
 
-  it('所有草稿 handler 对 hostile Request/params 既不读 body 也不触发下游', async () => {
+  it('所有关闭模板和草稿 handler 对 hostile Request/params 既不读 body 也不触发下游', async () => {
+    const templateRequest = hostileRequest();
     const getRequest = hostileRequest();
     const postRequest = hostileRequest();
     const patchRequest = hostileRequest();
@@ -263,6 +281,8 @@ describe('follow-up message draft API routes', () => {
     const approveParams = hostileParams();
     const rejectParams = hostileParams();
     const markSentParams = hostileParams();
+
+    await expectTemplateCapabilityDisabled(await templatesGet(templateRequest.request));
 
     for (const invoke of [
       () => draftsGet(getRequest.request),
@@ -276,7 +296,7 @@ describe('follow-up message draft API routes', () => {
     }
 
     for (const hostile of [
-      getRequest, postRequest, patchRequest, approveRequest, rejectRequest, markSentRequest,
+      templateRequest, getRequest, postRequest, patchRequest, approveRequest, rejectRequest, markSentRequest,
       patchParams, approveParams, rejectParams, markSentParams,
     ]) {
       expect(hostile.trapCount()).toBe(0);
@@ -284,7 +304,7 @@ describe('follow-up message draft API routes', () => {
     expectDisabledRouteDownstreamsIdle();
   });
 
-  it('所有关闭 route 只保留 NextResponse，且不装配 request、params、session、DB、审计或交付下游', () => {
+  it('所有关闭模板和草稿 route 只保留 NextResponse，且不装配 request、params、session、DB、审计或交付下游', () => {
     for (const routePath of disabledRoutePaths) {
       const source = readFileSync(resolve(process.cwd(), routePath), 'utf8');
       expect(source).toContain("import { NextResponse } from 'next/server';");
