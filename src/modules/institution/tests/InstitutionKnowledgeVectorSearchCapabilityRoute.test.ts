@@ -57,6 +57,7 @@ describe('机构端知识库向量检索 capability route', () => {
     ]) {
       const response = await route.GET(request);
       expect(response.status).toBe(503);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(expectedPayload);
       expect(forbidden.initialized).toEqual([]);
       assertNoFetch();
@@ -68,6 +69,7 @@ describe('机构端知识库向量检索 capability route', () => {
     const poisoned = trappedRequest();
     const response = await route.GET(poisoned.request);
     expect(response.status).toBe(503);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     await expect(response.json()).resolves.toEqual(expectedPayload);
     expect(poisoned.counts).toEqual({ get: 0, set: 0, has: 0, ownKeys: 0, getOwnPropertyDescriptor: 0, getPrototypeOf: 0 });
     expect(forbidden.initialized).toEqual([]);
