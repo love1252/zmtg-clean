@@ -5,6 +5,7 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import {
   createFormalRequestProvenanceResolverV1,
+  isFormalProvenanceResolverV1,
   type FormalRequestProvenanceOwnerInputV1,
 } from '@/modules/security/server/formal-request-provenance-owner';
 import {
@@ -148,6 +149,91 @@ describe('BASE-02B formal request provenance owner', () => {
       .returns.toEqualTypeOf<Promise<ProvenanceResolutionV1>>();
   });
 
+  it('authenticates only factory-created resolver handles without reading lookalikes', () => {
+    const genuine = resolver();
+    let getterReads = 0;
+    let proxyTraps = 0;
+    const accessor = {};
+    Object.defineProperty(accessor, 'resolveCurrentRequest', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        return genuine.resolveCurrentRequest;
+      },
+    });
+    const customPrototype = Object.assign(
+      Object.create({ owner: 'lookalike' }),
+      { resolveCurrentRequest: genuine.resolveCurrentRequest },
+    );
+    const proxy = new Proxy(
+      { resolveCurrentRequest: genuine.resolveCurrentRequest },
+      {
+        get() {
+          proxyTraps += 1;
+          throw new Error('lookalike getter trap');
+        },
+        getPrototypeOf() {
+          proxyTraps += 1;
+          throw new Error('lookalike prototype trap');
+        },
+        ownKeys() {
+          proxyTraps += 1;
+          throw new Error('lookalike ownKeys trap');
+        },
+      },
+    );
+    const revoked = Proxy.revocable(
+      { resolveCurrentRequest: genuine.resolveCurrentRequest },
+      {
+        get() {
+          proxyTraps += 1;
+          throw new Error('revoked getter trap');
+        },
+      },
+    );
+    revoked.revoke();
+
+    expect(Object.isFrozen(genuine)).toBe(true);
+    expect(isFormalProvenanceResolverV1(genuine)).toBe(true);
+    for (const value of [
+      {},
+      { resolveCurrentRequest: genuine.resolveCurrentRequest },
+      Object.freeze({ ...genuine }),
+      {
+        resolveCurrentRequest: genuine.resolveCurrentRequest,
+      } as unknown as FormalProvenanceResolverV1,
+      customPrototype,
+      Object.assign(Object.create(null), {
+        resolveCurrentRequest: genuine.resolveCurrentRequest,
+      }),
+      accessor,
+      proxy,
+      revoked.proxy,
+    ]) {
+      expect(isFormalProvenanceResolverV1(value)).toBe(false);
+    }
+    expect(getterReads).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  it('keeps an invalid-dependency factory handle authentic while resolution fails closed', async () => {
+    const owner = createFormalRequestProvenanceResolverV1({
+      ownerInput: ownerInput(),
+      referenceCodec: {
+        issue: 'not-a-function',
+        verify: 'not-a-function',
+      } as never,
+      now: () => VERIFIED_AT,
+    });
+
+    expect(Object.isFrozen(owner)).toBe(true);
+    expect(isFormalProvenanceResolverV1(owner)).toBe(true);
+    await expect(owner.resolveCurrentRequest()).resolves.toEqual({
+      kind: 'unavailable',
+      code: 'provenance_unavailable',
+    });
+  });
+
   it('exports no raw owner-input promotion helper', async () => {
     const moduleExports = await import(
       '@/modules/security/server/formal-request-provenance-owner'
@@ -155,6 +241,14 @@ describe('BASE-02B formal request provenance owner', () => {
     expect(moduleExports).not.toHaveProperty('createOwnerInput');
     expect(moduleExports).not.toHaveProperty('parseOwnerInput');
     expect(moduleExports).not.toHaveProperty('readAuthentication');
+    for (const forbidden of [
+      'registerFormalProvenanceResolverV1',
+      'rehydrateFormalProvenanceResolverV1',
+      'promoteFormalProvenanceResolverV1',
+      'authenticFormalProvenanceResolvers',
+    ]) {
+      expect(moduleExports).not.toHaveProperty(forbidden);
+    }
   });
 
   it('issues the fixed global user profile and source-bound institution request profiles', async () => {
