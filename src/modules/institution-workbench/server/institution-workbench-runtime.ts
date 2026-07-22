@@ -18,6 +18,7 @@ import {
   createAuthoritativeInstitutionAnchorFactReaderV1,
 } from '@/modules/security/server/institution-anchor-provider';
 import { createInstitutionAnchorFactRepositoryV1 } from '@/modules/security/server/institution-anchor-repository';
+import { INSTITUTION_GUARD_ACCEPTED_KEY_VERSIONS_V1 } from '@/modules/security/server/institution-guard-evidence';
 import { createInstitutionGuardReferenceCodecV1 } from '@/modules/security/server/institution-guard-reference';
 import { resolveInstitutionGuardRuntimeConfigV1 } from '@/modules/security/server/institution-guard-runtime-config';
 import { createAuthoritativeInstitutionMembershipFactReaderV1 } from '@/modules/security/server/institution-membership-provider';
@@ -186,19 +187,70 @@ function isCanonicalKeyVersion(value: unknown): value is number {
   );
 }
 
-function isExactCurrentKey(value: unknown): boolean {
-  const snapshot = snapshotFrozenExactPlainRecord(value, CURRENT_KEY_KEYS);
-  return Boolean(
-    snapshot &&
-      isCanonicalKeyVersion(snapshot.keyVersion) &&
-      isExactHmacKeyMaterial(snapshot.keyMaterial),
+function isAcceptedInstitutionGuardKeyVersion(
+  value: unknown,
+): value is number {
+  return (
+    isCanonicalKeyVersion(value) &&
+    INSTITUTION_GUARD_ACCEPTED_KEY_VERSIONS_V1.some(
+      (accepted) => accepted === value,
+    )
   );
 }
 
-function isExactVerifyOnlyKeys(value: unknown): boolean {
+function snapshotExactCurrentKeyVersion(
+  value: unknown,
+  isValidKeyVersion: (candidate: unknown) => candidate is number,
+): number | null {
+  const snapshot = snapshotFrozenExactPlainRecord(value, CURRENT_KEY_KEYS);
+  if (
+    !snapshot ||
+    !isValidKeyVersion(snapshot.keyVersion) ||
+    !isExactHmacKeyMaterial(snapshot.keyMaterial)
+  ) {
+    return null;
+  }
+  return snapshot.keyVersion;
+}
+
+function isCanonicalFutureInstant(
+  value: unknown,
+  nowEpochMs: number,
+): value is string {
+  try {
+    if (typeof value !== 'string' || !CANONICAL_UTC_INSTANT.test(value)) {
+      return false;
+    }
+    const epochMs = Date.parse(value);
+    return (
+      Number.isFinite(epochMs) &&
+      new Date(epochMs).toISOString() === value &&
+      epochMs > nowEpochMs
+    );
+  } catch {
+    return false;
+  }
+}
+
+function readCurrentEpochMs(): number | null {
+  try {
+    const epochMs = Date.now();
+    return Number.isFinite(epochMs) ? epochMs : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasExactVerifyOnlyKeys(
+  value: unknown,
+  currentKeyVersion: number,
+  nowEpochMs: number,
+  isValidKeyVersion: (candidate: unknown) => candidate is number,
+  requireOlderVersion: boolean,
+): boolean {
   const entries = snapshotFrozenDenseArray(value);
   if (!entries) return false;
-  const versions = new Set<number>();
+  const versions = new Set<number>([currentKeyVersion]);
   for (const entry of entries) {
     const snapshot = snapshotFrozenExactPlainRecord(
       entry,
@@ -206,11 +258,11 @@ function isExactVerifyOnlyKeys(value: unknown): boolean {
     );
     if (
       !snapshot ||
-      !isCanonicalKeyVersion(snapshot.keyVersion) ||
+      !isValidKeyVersion(snapshot.keyVersion) ||
       versions.has(snapshot.keyVersion) ||
+      (requireOlderVersion && snapshot.keyVersion >= currentKeyVersion) ||
       !isExactHmacKeyMaterial(snapshot.keyMaterial) ||
-      typeof snapshot.verifyUntil !== 'string' ||
-      !CANONICAL_UTC_INSTANT.test(snapshot.verifyUntil)
+      !isCanonicalFutureInstant(snapshot.verifyUntil, nowEpochMs)
     ) {
       return false;
     }
@@ -233,13 +285,37 @@ function snapshotAvailableRuntimeConfig(
     snapshot.institutionGuardReferenceKeyRing,
     GUARD_KEY_RING_KEYS,
   );
+  if (!formalKeyRing || !guardKeyRing) {
+    return null;
+  }
+
+  const nowEpochMs = readCurrentEpochMs();
+  const formalCurrentVersion = snapshotExactCurrentKeyVersion(
+    formalKeyRing.currentKey,
+    isCanonicalKeyVersion,
+  );
+  const guardCurrentVersion = snapshotExactCurrentKeyVersion(
+    guardKeyRing.currentIssueKey,
+    isAcceptedInstitutionGuardKeyVersion,
+  );
   if (
-    !formalKeyRing ||
-    !guardKeyRing ||
-    !isExactCurrentKey(formalKeyRing.currentKey) ||
-    !isExactVerifyOnlyKeys(formalKeyRing.verifyOnlyKeys) ||
-    !isExactCurrentKey(guardKeyRing.currentIssueKey) ||
-    !isExactVerifyOnlyKeys(guardKeyRing.verifyOnlyKeys)
+    nowEpochMs === null ||
+    formalCurrentVersion === null ||
+    guardCurrentVersion === null ||
+    !hasExactVerifyOnlyKeys(
+      formalKeyRing.verifyOnlyKeys,
+      formalCurrentVersion,
+      nowEpochMs,
+      isCanonicalKeyVersion,
+      true,
+    ) ||
+    !hasExactVerifyOnlyKeys(
+      guardKeyRing.verifyOnlyKeys,
+      guardCurrentVersion,
+      nowEpochMs,
+      isAcceptedInstitutionGuardKeyVersion,
+      false,
+    )
   ) {
     return null;
   }

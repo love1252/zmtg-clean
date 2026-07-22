@@ -72,8 +72,12 @@ vi.mock(
 
 const NOW = new Date('2026-07-22T08:02:00.000Z');
 const SESSION_KEY = new Uint8Array(32).fill(0x73);
+const SESSION_CURRENT_KEY = new Uint8Array(32).fill(0x74);
+const SESSION_OLD_KEY = new Uint8Array(32).fill(0x75);
 const REFERENCE_KEY = new Uint8Array(32).fill(0x72);
+const REFERENCE_OLD_KEY = new Uint8Array(32).fill(0x71);
 const SESSION_PROTOCOL = 'zmtg.formal-server-session-cookie.v1';
+const FUTURE_VERIFY_UNTIL = '2026-07-22T08:12:00.000Z';
 const database = Object.freeze({ kind: 'database' });
 const payload = Object.freeze({
   source: 'server_session' as const,
@@ -123,19 +127,51 @@ function signToken() {
   return `v1.k2.${payloadSegment}.${tag}`;
 }
 
-function availableRuntimeConfig() {
+type VerifyOnlyKeyFixture = Readonly<{
+  keyVersion: number;
+  keyMaterial: Uint8Array;
+  verifyUntil: string;
+}>;
+
+type RuntimeConfigFixtureOptions = Readonly<{
+  formalCurrentKey?: Readonly<{
+    keyVersion: number;
+    keyMaterial: Uint8Array;
+  }>;
+  formalVerifyOnlyKeys?: readonly VerifyOnlyKeyFixture[];
+  guardCurrentKey?: Readonly<{
+    keyVersion: number;
+    keyMaterial: Uint8Array;
+  }>;
+  guardVerifyOnlyKeys?: readonly VerifyOnlyKeyFixture[];
+}>;
+
+function frozenVerifyOnlyKeys(
+  entries: readonly VerifyOnlyKeyFixture[] = [],
+) {
+  return Object.freeze(entries.map((entry) => Object.freeze({ ...entry })));
+}
+
+function availableRuntimeConfig(options: RuntimeConfigFixtureOptions = {}) {
   return Object.freeze({
     kind: 'available' as const,
     formalServerSessionKeyRing: Object.freeze({
-      currentKey: Object.freeze({ keyVersion: 2, keyMaterial: SESSION_KEY }),
-      verifyOnlyKeys: Object.freeze([]),
+      currentKey: Object.freeze(
+        options.formalCurrentKey ?? {
+          keyVersion: 2,
+          keyMaterial: SESSION_KEY,
+        },
+      ),
+      verifyOnlyKeys: frozenVerifyOnlyKeys(options.formalVerifyOnlyKeys),
     }),
     institutionGuardReferenceKeyRing: Object.freeze({
-      currentIssueKey: Object.freeze({
-        keyVersion: 1,
-        keyMaterial: REFERENCE_KEY,
-      }),
-      verifyOnlyKeys: Object.freeze([]),
+      currentIssueKey: Object.freeze(
+        options.guardCurrentKey ?? {
+          keyVersion: 1,
+          keyMaterial: REFERENCE_KEY,
+        },
+      ),
+      verifyOnlyKeys: frozenVerifyOnlyKeys(options.guardVerifyOnlyKeys),
     }),
   });
 }
@@ -297,6 +333,137 @@ describe('WB-ENTRY-02B institution workbench runtime', () => {
     expectExactDecision(result, 'blocked');
     expect(getterReads).toBe(0);
     expectNoRuntimeComposition();
+  });
+
+  it.each([
+    [
+      'guard current=999',
+      () => availableRuntimeConfig({
+        guardCurrentKey: { keyVersion: 999, keyMaterial: REFERENCE_KEY },
+      }),
+    ],
+    [
+      'guard verify-only 非 accepted version',
+      () => availableRuntimeConfig({
+        guardVerifyOnlyKeys: [{
+          keyVersion: 999,
+          keyMaterial: REFERENCE_OLD_KEY,
+          verifyUntil: FUTURE_VERIFY_UNTIL,
+        }],
+      }),
+    ],
+    [
+      'formal verify-only 不旧于 current',
+      () => availableRuntimeConfig({
+        formalVerifyOnlyKeys: [{
+          keyVersion: 3,
+          keyMaterial: SESSION_OLD_KEY,
+          verifyUntil: FUTURE_VERIFY_UNTIL,
+        }],
+      }),
+    ],
+    [
+      'current 与 verify-only version 重复',
+      () => availableRuntimeConfig({
+        guardVerifyOnlyKeys: [{
+          keyVersion: 1,
+          keyMaterial: REFERENCE_OLD_KEY,
+          verifyUntil: FUTURE_VERIFY_UNTIL,
+        }],
+      }),
+    ],
+    [
+      'verifyUntil 已过期',
+      () => availableRuntimeConfig({
+        formalVerifyOnlyKeys: [{
+          keyVersion: 1,
+          keyMaterial: SESSION_OLD_KEY,
+          verifyUntil: '2026-07-22T08:01:59.999Z',
+        }],
+      }),
+    ],
+    [
+      'verifyUntil canonical 形状但日期无效',
+      () => availableRuntimeConfig({
+        formalVerifyOnlyKeys: [{
+          keyVersion: 1,
+          keyMaterial: SESSION_OLD_KEY,
+          verifyUntil: '2026-02-30T08:12:00.000Z',
+        }],
+      }),
+    ],
+  ] as const)(
+    'runtime config %s 时在 cookies 前 blocked 且零 DB/repository',
+    async (_label, createConfig) => {
+      runtimeMocks.resolveInstitutionGuardRuntimeConfigV1.mockReturnValueOnce(
+        createConfig() as never,
+      );
+
+      const result = await resolveInstitutionWorkbenchRuntimeV1();
+
+      expectExactDecision(result, 'blocked');
+      expectNoRuntimeComposition();
+    },
+  );
+
+  it.each(['Date.now throw', 'Date.parse throw'] as const)(
+    'runtime config %s 时在 cookies 前 blocked 且零 DB/repository',
+    async (clockCase) => {
+      runtimeMocks.resolveInstitutionGuardRuntimeConfigV1.mockReturnValueOnce(
+        availableRuntimeConfig({
+          formalVerifyOnlyKeys: [{
+            keyVersion: 1,
+            keyMaterial: SESSION_OLD_KEY,
+            verifyUntil: FUTURE_VERIFY_UNTIL,
+          }],
+        }),
+      );
+      if (clockCase === 'Date.now throw') {
+        vi.mocked(Date.now).mockImplementationOnce(() => {
+          throw new Error('clock unavailable');
+        });
+      } else {
+        vi.spyOn(Date, 'parse').mockImplementationOnce(() => {
+          throw new Error('instant parser unavailable');
+        });
+      }
+
+      const result = await resolveInstitutionWorkbenchRuntimeV1();
+
+      expectExactDecision(result, 'blocked');
+      expectNoRuntimeComposition();
+    },
+  );
+
+  it('exact、冻结且语义合法的完整 config 仍进入 allowed', async () => {
+    runtimeMocks.resolveInstitutionGuardRuntimeConfigV1.mockReturnValueOnce(
+      availableRuntimeConfig({
+        formalCurrentKey: {
+          keyVersion: 3,
+          keyMaterial: SESSION_CURRENT_KEY,
+        },
+        formalVerifyOnlyKeys: [
+          {
+            keyVersion: 2,
+            keyMaterial: SESSION_KEY,
+            verifyUntil: FUTURE_VERIFY_UNTIL,
+          },
+          {
+            keyVersion: 1,
+            keyMaterial: SESSION_OLD_KEY,
+            verifyUntil: FUTURE_VERIFY_UNTIL,
+          },
+        ],
+      }),
+    );
+
+    const result = await resolveInstitutionWorkbenchRuntimeV1();
+
+    expectExactDecision(result, 'allowed');
+    expect(runtimeMocks.cookies).toHaveBeenCalledTimes(1);
+    expect(runtimeMocks.getDatabase).toHaveBeenCalledTimes(1);
+    expect(runtimeMocks.membershipRead).toHaveBeenCalledTimes(1);
+    expect(runtimeMocks.anchorRead).toHaveBeenCalledTimes(1);
   });
 
   it.each(['missing', 'invalid'] as const)(
