@@ -126,6 +126,10 @@ function auditField(label: string, value: string | null) {
   );
 }
 
+function copyAuditRecords(records: InstitutionAuditEventRecord[]) {
+  return records.map((record) => ({ ...record }));
+}
+
 export function InstitutionAuditEventsShell() {
   const [records, setRecords] = useState<InstitutionAuditEventRecord[]>([]);
   const [pageInfo, setPageInfo] = useState<InstitutionAuditEventsPageInfo | null>(null);
@@ -188,9 +192,10 @@ export function InstitutionAuditEventsShell() {
       if (!isCurrentRequest(revision)) return;
 
       if (result.ok) {
+        const receivedRecords = copyAuditRecords(result.records);
         const nextRecords = mode === 'append'
-          ? [...authoritativeRecordsRef.current, ...result.records]
-          : [...result.records];
+          ? [...authoritativeRecordsRef.current, ...receivedRecords]
+          : receivedRecords;
         authoritativeRecordsRef.current = nextRecords;
         setRecords(nextRecords);
         setPageInfo(result.pageInfo);
@@ -232,7 +237,9 @@ export function InstitutionAuditEventsShell() {
         if (!isCurrentRequest(revision)) return;
 
         if (result.ok) {
-          setRecords(result.records);
+          const nextRecords = copyAuditRecords(result.records);
+          authoritativeRecordsRef.current = nextRecords;
+          setRecords(nextRecords);
           setPageInfo(result.pageInfo);
           setHasAuthoritativeSnapshot(true);
         } else {
