@@ -137,7 +137,8 @@ export type FormalRequestProvenanceEvidenceV1 =
 
 export type ProvenanceResolutionV1 =
   | Readonly<{ kind: 'verified'; evidence: FormalRequestProvenanceEvidenceV1 }>
-  | Readonly<{ kind: 'rejected'; code: ProvenanceRejectionCodeV1 }>;
+  | Readonly<{ kind: 'rejected'; code: ProvenanceRejectionCodeV1 }>
+  | Readonly<{ kind: 'unavailable'; code: 'provenance_unavailable' }>;
 
 export type FreshActiveMembershipEvidenceV1 =
   FreshActiveMembershipEvidenceSealV1 &
