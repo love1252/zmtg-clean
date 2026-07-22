@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import * as anchorProviderModule from '@/modules/security/server/institution-anchor-provider';
 import {
   createActiveInstitutionAnchorProviderV1,
   createAuthoritativeInstitutionAnchorFactReaderV1,
+  isActiveInstitutionAnchorProviderV1,
   type AuthoritativeInstitutionAnchorFactReaderV1,
   type InstitutionAnchorFactRepositoryV1,
 } from '@/modules/security/server/institution-anchor-provider';
@@ -305,6 +307,103 @@ function activeProvider(input: {
 }
 
 describe('机构锚点 owner-sealed provider', () => {
+  it('只认可 factory 实际创建的冻结 handle，克隆、伪造和代理均不可提升真实性', () => {
+    const { provider } = activeProvider();
+    const plain = Object.freeze({ resolve: provider.resolve });
+    const spread = { ...provider };
+    const cast = Object.freeze({ resolve: provider.resolve }) as ReturnType<
+      typeof createActiveInstitutionAnchorProviderV1
+    >;
+    const customPrototype = Object.create(provider) as object;
+    const clone = Object.freeze({ ...provider });
+    const proxiedProvider = new Proxy(provider, {});
+    const revocable = Proxy.revocable(provider, {});
+    revocable.revoke();
+
+    expect(isActiveInstitutionAnchorProviderV1(provider)).toBe(true);
+    expect(Object.isFrozen(provider)).toBe(true);
+    for (const candidate of [
+      plain,
+      spread,
+      cast,
+      customPrototype,
+      clone,
+      proxiedProvider,
+      revocable.proxy,
+      null,
+      undefined,
+      'provider',
+    ]) {
+      expect(isActiveInstitutionAnchorProviderV1(candidate)).toBe(false);
+    }
+  });
+
+  it('真实性检查不读取任意属性，也不触发 getter 或 Proxy trap', () => {
+    let getterReads = 0;
+    let trapReads = 0;
+    const accessor = {};
+    Object.defineProperty(accessor, 'resolve', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        return vi.fn();
+      },
+    });
+    const hostile = new Proxy(
+      {},
+      {
+        get() {
+          trapReads += 1;
+          throw new Error('get trap');
+        },
+        getPrototypeOf() {
+          trapReads += 1;
+          throw new Error('prototype trap');
+        },
+        ownKeys() {
+          trapReads += 1;
+          throw new Error('keys trap');
+        },
+        getOwnPropertyDescriptor() {
+          trapReads += 1;
+          throw new Error('descriptor trap');
+        },
+      },
+    );
+    const revoked = Proxy.revocable({}, {
+      get() {
+        trapReads += 1;
+        throw new Error('revoked get trap');
+      },
+    });
+    revoked.revoke();
+
+    expect(isActiveInstitutionAnchorProviderV1(accessor)).toBe(false);
+    expect(isActiveInstitutionAnchorProviderV1(hostile)).toBe(false);
+    expect(isActiveInstitutionAnchorProviderV1(revoked.proxy)).toBe(false);
+    expect(getterReads).toBe(0);
+    expect(trapReads).toBe(0);
+  });
+
+  it('无效依赖仍只产生真实 factory handle，但 resolve 保持 unavailable', async () => {
+    const provider = createActiveInstitutionAnchorProviderV1({} as never);
+
+    expect(isActiveInstitutionAnchorProviderV1(provider)).toBe(true);
+    expect(Object.isFrozen(provider)).toBe(true);
+    await expect(provider.resolve(requestedAnchor)).resolves.toEqual({
+      kind: 'unavailable',
+      code: 'institution_anchor_unavailable',
+    });
+  });
+
+  it('模块不导出 handle 注册、集合、解析、rehydrate 或 promotion 能力', () => {
+    expect(Object.keys(anchorProviderModule).sort()).toEqual([
+      'createActiveInstitutionAnchorProviderV1',
+      'createAuthoritativeInstitutionAnchorFactReaderV1',
+      'isActiveInstitutionAnchorProviderV1',
+    ]);
+  });
+
   it('在同一权威事实上成功签发 anc/arv 后原子返回60秒 active evidence', async () => {
     const { provider, resolveFact, now } = activeProvider();
 

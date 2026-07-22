@@ -76,6 +76,7 @@ const ACTIVE_PROVIDER_INPUT_KEYS = Object.freeze([
 ] as const);
 const FACT_READER_KEYS = Object.freeze(['resolve'] as const);
 const REFERENCE_CODEC_KEYS = Object.freeze(['issue', 'verify'] as const);
+const activeInstitutionAnchorProviderHandlesV1 = new WeakSet<object>();
 
 const ACTIVE_ANCHOR_FRESHNESS_TTL_MS = 60_000;
 const ANCHOR_REFERENCE_OWNER_DOMAIN = 'security.institution-anchor';
@@ -92,6 +93,20 @@ const unavailable = Object.freeze({
   kind: 'unavailable',
   code: 'institution_anchor_unavailable',
 } as const);
+
+/**
+ * Checks factory-issued handle identity only. It reads no properties and does not parse,
+ * rehydrate, register, or promote arbitrary values into an active provider.
+ */
+export function isActiveInstitutionAnchorProviderV1(
+  value: unknown,
+): value is ActiveInstitutionAnchorProviderV1 {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    activeInstitutionAnchorProviderHandlesV1.has(value)
+  );
+}
 
 function snapshotExactPlainRecord(
   value: unknown,
@@ -429,7 +444,7 @@ export function createActiveInstitutionAnchorProviderV1(input: {
 }): ActiveInstitutionAnchorProviderV1 {
   const dependencies = snapshotActiveProviderDependencies(input);
 
-  return Object.freeze({
+  const provider = Object.freeze({
     async resolve(queryValue: InstitutionAnchorFactQueryV1) {
       if (!dependencies) return unavailable;
       const query = parseQuery(queryValue);
@@ -520,4 +535,7 @@ export function createActiveInstitutionAnchorProviderV1(input: {
       }) as ActiveInstitutionAnchorEvidenceV1;
     },
   }) as unknown as ActiveInstitutionAnchorProviderV1;
+
+  activeInstitutionAnchorProviderHandlesV1.add(provider);
+  return provider;
 }
