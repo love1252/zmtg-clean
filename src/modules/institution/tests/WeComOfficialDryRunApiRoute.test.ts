@@ -1,237 +1,302 @@
 import { readFileSync } from 'node:fs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { resolve } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const downstreams = vi.hoisted(() => ({
+  canAccessResource: vi.fn(),
+  createAuditEvent: vi.fn(),
+  createAuditEventRepository: vi.fn(),
+  createDefaultWeComOfficialDryRunInput: vi.fn(),
+  createDeniedAccessAuditEvent: vi.fn(),
+  evaluateWeComOfficialDryRun: vi.fn(),
+  fetch: vi.fn(),
+  getDatabase: vi.fn(),
+  getDemoAccessContextFromRequest: vi.fn(),
+  initialized: {
+    accessContext: 0,
+    accessControl: 0,
+    auditDomain: 0,
+    auditRepository: 0,
+    database: 0,
+    dryRunDomain: 0,
+  },
+}));
+
+vi.mock('@/modules/security/server/access-context', () => {
+  downstreams.initialized.accessContext += 1;
+  return {
+    getDemoAccessContextFromRequest: downstreams.getDemoAccessContextFromRequest,
+  };
+});
+
+vi.mock('@/modules/security/domain/access-control', () => {
+  downstreams.initialized.accessControl += 1;
+  return {
+    canAccessResource: downstreams.canAccessResource,
+  };
+});
+
+vi.mock('@/modules/audit/domain/audit-events', () => {
+  downstreams.initialized.auditDomain += 1;
+  return {
+    createAuditEvent: downstreams.createAuditEvent,
+    createDeniedAccessAuditEvent: downstreams.createDeniedAccessAuditEvent,
+  };
+});
+
+vi.mock('@/modules/audit/server/audit-event-repository', () => {
+  downstreams.initialized.auditRepository += 1;
+  return {
+    createAuditEventRepository: downstreams.createAuditEventRepository,
+  };
+});
+
+vi.mock('@/modules/institution/domain/wecom-official-dry-run', () => {
+  downstreams.initialized.dryRunDomain += 1;
+  return {
+    createDefaultWeComOfficialDryRunInput:
+      downstreams.createDefaultWeComOfficialDryRunInput,
+    evaluateWeComOfficialDryRun: downstreams.evaluateWeComOfficialDryRun,
+  };
+});
+
+vi.mock('@/server/db/client', () => {
+  downstreams.initialized.database += 1;
+  return {
+    getDatabase: downstreams.getDatabase,
+  };
+});
+
 import { POST } from '@/app/api/institution/wecom-official-dry-run/evaluate/route';
 import { GET } from '@/app/api/institution/wecom-official-dry-run/route';
-import type { AccessContext } from '@/modules/security/domain/access-control';
 
-const routeMocks = vi.hoisted(() => {
-  const auditRecord = vi.fn();
-  const database = { database: 'test-db' };
-
-  return {
-    auditRecord,
-    createAuditEventRepository: vi.fn(() => ({ record: auditRecord })),
-    database,
-    getDatabase: vi.fn(),
-    getDemoAccessContextFromRequest: vi.fn(),
-  };
+const getRouteSourcePath = resolve(
+  process.cwd(),
+  'src/app/api/institution/wecom-official-dry-run/route.ts',
+);
+const postRouteSourcePath = resolve(
+  process.cwd(),
+  'src/app/api/institution/wecom-official-dry-run/evaluate/route.ts',
+);
+const endpoint = 'https://institution.example.test/api/institution/wecom-official-dry-run';
+const getCapabilityDisabledPayload = Object.freeze({
+  code: 'capability_disabled',
+  error: '企业微信官方 dry-run 能力当前未启用',
 });
-
-vi.mock('@/server/db/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/server/db/client')>();
-  return {
-    ...actual,
-    getDatabase: routeMocks.getDatabase,
-  };
-});
-
-vi.mock('@/modules/security/server/access-context', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/security/server/access-context')>();
-  return {
-    ...actual,
-    getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
-  };
-});
-
-vi.mock('@/modules/audit/server/audit-event-repository', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/audit/server/audit-event-repository')>();
-  return {
-    ...actual,
-    createAuditEventRepository: routeMocks.createAuditEventRepository,
-  };
-});
-
-const tenantAdminContext: AccessContext = {
-  userId: 'tenant-admin',
-  role: 'tenant_admin',
-  scope: 'tenant',
-  tenantId: 'tenant-a',
-  institutionId: 'inst-a',
-  source: 'demo_session',
-};
-
-const readyBody = {
-  tenantId: 'tenant-low-sensitive-001',
-  institutionId: 'institution-low-sensitive-001',
-  operatorRole: 'tenant_admin',
-  officialRoute: 'official_wecom_self_built',
-  dryRunConfigStatus: 'dry_run_ready',
-  preflightStatus: 'mock_ready',
-  proofEligibleMock: true,
-  hasManualConfirmation: true,
-  hasSecretPlaceholder: true,
-  hasCallbackUrlPlaceholder: true,
-  networkMode: 'mock',
-  allowRealSend: false,
-  externalChannelEnabled: false,
-  realSendAllowed: false,
-  noSecretRead: true,
-  noRealSend: true,
-  dryRunOnly: true,
-};
-
-const capabilityDisabledPayload = {
+const postCapabilityDisabledPayload = Object.freeze({
   code: 'capability_disabled',
   error: '企业微信官方 dry-run 评估能力当前未启用',
-};
+});
+const forbiddenResponseKeys = [
+  'allowRealSend',
+  'audit',
+  'boundary',
+  'dryRun',
+  'dryRunPlanReady',
+  'dryRunStatus',
+  'externalChannelEnabled',
+  'institutionId',
+  'labels',
+  'mockDryRunCompleted',
+  'realSendAllowed',
+  'scope',
+  'tenantId',
+] as const;
 
-function request(method: 'GET' | 'POST', body?: unknown) {
-  return new Request('http://localhost/api/institution/wecom-official-dry-run', {
+function request(
+  method: 'GET' | 'POST',
+  suffix = '',
+  body?: string,
+): Request {
+  return new Request(`${endpoint}${suffix}`, {
     method,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: {
+      cookie: 'demo_session=forged-session; wecom_secret=do-not-read',
+      'content-type': 'application/json',
+      'x-institution-id': 'forged-institution',
+      'x-tenant-id': 'forged-tenant',
+    },
+    body: method === 'POST' ? body : undefined,
   });
 }
 
-async function json(response: Response) {
-  return (await response.json()) as Record<string, unknown>;
+function hostileRequest() {
+  let trapCount = 0;
+  const value = new Proxy(Object.create(null), {
+    get() {
+      trapCount += 1;
+      throw new Error('request must not be read');
+    },
+    getOwnPropertyDescriptor() {
+      trapCount += 1;
+      throw new Error('request must not be inspected');
+    },
+    getPrototypeOf() {
+      trapCount += 1;
+      throw new Error('request prototype must not be inspected');
+    },
+    has() {
+      trapCount += 1;
+      throw new Error('request must not be inspected');
+    },
+    ownKeys() {
+      trapCount += 1;
+      throw new Error('request must not be enumerated');
+    },
+  }) as Request;
+
+  return { value, trapCount: () => trapCount };
 }
 
-function expectLowSensitivePayload(payload: unknown) {
-  const text = JSON.stringify(payload);
-  expect(text).not.toContain('corp-real');
-  expect(text).not.toContain('secret-real');
-  expect(text).not.toContain('access_token_real');
-  expect(text).not.toContain('encoding-key-real');
-  expect(text).not.toContain('webhook-secret-real');
-  expect(text).not.toContain('external_userid_real');
-  expect(text).not.toContain('userid_real');
-  expect(text).not.toContain('agent-real');
-  expect(text).not.toContain('wx-real-app');
-  expect(text).not.toContain('postgres://real-db');
-  expect(text).not.toContain('HIS payload raw body');
-  expect(text).not.toContain('qyapi.weixin.qq.com');
+async function expectCapabilityDisabled(
+  response: Response,
+  expectedPayload: Readonly<Record<string, string>>,
+  forbiddenInput = '',
+) {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  const payload = await response.json();
+  expect(payload).toEqual(expectedPayload);
+  for (const key of forbiddenResponseKeys) expect(payload).not.toHaveProperty(key);
+  if (forbiddenInput) expect(JSON.stringify(payload)).not.toContain(forbiddenInput);
 }
 
-async function expectCapabilityDisabled(input: Request) {
-  const fetchSpy = vi.spyOn(globalThis, 'fetch');
-
-  try {
-    const response = await POST(input);
-    const payload = await json(response);
-
-    expect(response.status).toBe(503);
-    expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(payload).toStrictEqual(capabilityDisabledPayload);
-    expectLowSensitivePayload(payload);
-    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
-    expect(fetchSpy).not.toHaveBeenCalled();
-  } finally {
-    fetchSpy.mockRestore();
+function expectDownstreamsIdle() {
+  expect(downstreams.initialized).toEqual({
+    accessContext: 0,
+    accessControl: 0,
+    auditDomain: 0,
+    auditRepository: 0,
+    database: 0,
+    dryRunDomain: 0,
+  });
+  for (const dependency of [
+    downstreams.canAccessResource,
+    downstreams.createAuditEvent,
+    downstreams.createAuditEventRepository,
+    downstreams.createDefaultWeComOfficialDryRunInput,
+    downstreams.createDeniedAccessAuditEvent,
+    downstreams.evaluateWeComOfficialDryRun,
+    downstreams.getDatabase,
+    downstreams.getDemoAccessContextFromRequest,
+  ]) {
+    expect(dependency).not.toHaveBeenCalled();
   }
+  expect(downstreams.fetch).not.toHaveBeenCalled();
 }
 
 beforeEach(() => {
-  routeMocks.getDatabase.mockReset();
-  routeMocks.getDatabase.mockReturnValue(routeMocks.database);
-  routeMocks.getDemoAccessContextFromRequest.mockReset();
-  routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantAdminContext);
-  routeMocks.createAuditEventRepository.mockClear();
-  routeMocks.auditRecord.mockReset();
-  routeMocks.auditRecord.mockResolvedValue(undefined);
+  vi.clearAllMocks();
+  vi.stubGlobal('fetch', downstreams.fetch);
 });
 
-describe('wecom official route dry-run API route', () => {
-  it('未登录 GET 仍返回 401 且不记录 audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
-    const response = await GET(request('GET'));
+describe('企业微信官方 dry-run API capability-off', () => {
+  it.each([
+    ['普通请求', () => request('GET')],
+    ['query 与 cookie', () => request('GET', '?scope=forged&secret=input-must-not-echo')],
+    ['带 body 的 Request', () => request('POST', '', JSON.stringify({
+      dryRun: 'input-must-not-echo',
+      secret: 'input-must-not-echo',
+    }))],
+  ])('GET 对%s固定返回低敏 503，且不初始化或调用下游', async (_name, createRequest) => {
+    const input = createRequest();
+    const text = vi.spyOn(input, 'text');
+    const json = vi.spyOn(input, 'json');
+    const arrayBuffer = vi.spyOn(input, 'arrayBuffer');
+    const formData = vi.spyOn(input, 'formData');
 
-    expect(response.status).toBe(401);
-    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+    await expectCapabilityDisabled(
+      GET(input),
+      getCapabilityDisabledPayload,
+      'input-must-not-echo',
+    );
+
+    expect(text).not.toHaveBeenCalled();
+    expect(json).not.toHaveBeenCalled();
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(formData).not.toHaveBeenCalled();
+    expectDownstreamsIdle();
   });
 
-  it('GET 保持返回当前机构 dry-run 计划状态并记录 viewed audit reason', async () => {
-    const response = await GET(request('GET'));
-    const payload = await json(response);
+  it('GET 对 hostile Request Proxy 零 trap、零副作用', async () => {
+    const hostile = hostileRequest();
 
-    expect(response.status).toBe(200);
-    expect(payload).toMatchObject({
-      dryRun: {
-        dryRunStatus: 'blocked_config_not_ready',
-        dryRunPlanReady: false,
-        mockDryRunCompleted: false,
-        noRealSend: true,
-        noRealNetwork: true,
-        noSecretRead: true,
-        noSecretOutput: true,
-        allowRealSend: false,
-        externalChannelEnabled: false,
-        realSendAllowed: false,
-      },
-      boundary: {
-        localSimulationOnly: true,
-        noSecretRead: true,
-        noSecretOutput: true,
-        noRealNetwork: true,
-        noRealSend: true,
-      },
-    });
-    expectLowSensitivePayload(payload);
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resource: 'real_channel',
-        action: 'read',
-        reason: 'wecom_official_dry_run_viewed',
-      }),
-    );
+    await expectCapabilityDisabled(GET(hostile.value), getCapabilityDisabledPayload);
+
+    expect(hostile.trapCount()).toBe(0);
+    expectDownstreamsIdle();
   });
 
   it.each([
-    ['普通请求', () => request('POST', {})],
-    ['未认证请求', () => request('POST')],
-    ['伪造 scope 与角色', () => request('POST', {
-      tenantId: 'tenant-forged',
-      institutionId: 'institution-forged',
-      operatorRole: 'platform_admin',
-    })],
-    ['非法 JSON', () => new Request(
-      'http://localhost/api/institution/wecom-official-dry-run/evaluate',
-      { method: 'POST', body: '{invalid-json' },
-    )],
-    ['超大 body', () => request('POST', { padding: 'x'.repeat(2_000_000) })],
-    ['敏感和 mock-ready 输入', () => request('POST', {
-      ...readyBody,
+    ['普通请求', () => request('POST', '/evaluate', '{}')],
+    ['非法 JSON', () => request('POST', '/evaluate', '{not-json')],
+    ['敏感与伪造 scope 输入', () => request('POST', '/evaluate', JSON.stringify({
+      tenantId: 'forged-tenant',
+      institutionId: 'forged-institution',
       corpId: 'corp-real',
-      secret: 'secret-real',
-      token: 'access_token_real',
-      endpoint: 'https://qyapi.weixin.qq.com/cgi-bin/gettoken',
-      auditReason: 'caller-forged-audit',
-    })],
-  ])('POST 对%s在读取输入前固定返回 capability-disabled', async (_name, createRequest) => {
-    await expectCapabilityDisabled(createRequest());
-  });
-
-  it('POST 对 hostile Request 不触发任何 trap', async () => {
-    let traps = 0;
-    const fail = () => {
-      traps += 1;
-      throw new Error('request must not be inspected');
-    };
-    const hostileRequest = new Proxy({} as Request, {
-      get: fail,
-      getOwnPropertyDescriptor: fail,
-      getPrototypeOf: fail,
-      has: fail,
-      ownKeys: fail,
-    });
-
-    await expectCapabilityDisabled(hostileRequest);
-    expect(traps).toBe(0);
-  });
-
-  it('evaluate route 源码只装配 NextResponse 且不读取输入或下游依赖', () => {
-    const source = readFileSync(
-      'src/app/api/institution/wecom-official-dry-run/evaluate/route.ts',
-      'utf8',
+      secret: 'input-must-not-echo',
+      token: 'input-must-not-echo',
+    }))],
+  ])('evaluate POST 对%s保持既有 capability-off 边界', async (_name, createRequest) => {
+    await expectCapabilityDisabled(
+      POST(createRequest()),
+      postCapabilityDisabledPayload,
+      'input-must-not-echo',
     );
-    const imports = source.match(/^import .+;$/gm) ?? [];
+    expectDownstreamsIdle();
+  });
 
-    expect(imports).toStrictEqual(["import { NextResponse } from 'next/server';"]);
+  it('evaluate POST 对 hostile Request Proxy 零 trap、零副作用', async () => {
+    const hostile = hostileRequest();
+
+    await expectCapabilityDisabled(POST(hostile.value), postCapabilityDisabledPayload);
+
+    expect(hostile.trapCount()).toBe(0);
+    expectDownstreamsIdle();
+  });
+
+  it('GET route 源码只保留 NextResponse，且可接收但不读取 Request', () => {
+    const source = readFileSync(getRouteSourcePath, 'utf8');
+    const imports = source.match(/^import .+;$/gmu) ?? [];
+
+    expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
+    expect(source).toContain('export function GET(_request?: Request)');
+    expect(source.match(/_request/gmu)).toHaveLength(1);
+    for (const forbidden of [
+      '@/modules/',
+      '@/server/',
+      'access-context',
+      'audit',
+      'boundary',
+      'canAccessResource',
+      'createDefaultWeComOfficialDryRunInput',
+      'dryRun',
+      'evaluateWeComOfficialDryRun',
+      'fetch(',
+      'getDatabase',
+      'getDemoAccessContextFromRequest',
+      'process.env',
+      'request.',
+      'request[',
+      'scope',
+      'session',
+    ]) {
+      expect(source).not.toContain(forbidden);
+    }
+  });
+
+  it('evaluate POST route 保持只装配 NextResponse 的既有关闭状态', () => {
+    const source = readFileSync(postRouteSourcePath, 'utf8');
+    const imports = source.match(/^import .+;$/gmu) ?? [];
+
+    expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
     expect(source).toContain('export function POST(_request: Request)');
-    expect(source.match(/_request/g)).toHaveLength(1);
+    expect(source.match(/_request/gmu)).toHaveLength(1);
     for (const forbidden of [
       '@/modules/',
       '@/server/',
@@ -240,14 +305,8 @@ describe('wecom official route dry-run API route', () => {
       'createAuditEventRepository',
       'evaluateWeComOfficialDryRun',
       'process.env',
-      '.json()',
-      '.text()',
-      '.headers',
-      '.cookies',
-      '.url',
+      'request.',
       'fetch(',
-      'mockDryRunCompleted',
-      'auditReason',
     ]) {
       expect(source).not.toContain(forbidden);
     }
