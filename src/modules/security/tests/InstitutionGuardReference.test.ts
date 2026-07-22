@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import {
   createInstitutionGuardReferenceCodecV1,
+  isInstitutionGuardReferenceCodecV1,
   type InstitutionGuardReferenceCodecV1,
   type InstitutionGuardReferenceKeyRingV1,
   type InstitutionGuardReferenceOwnerSubjectV1,
@@ -105,6 +106,7 @@ describe('BASE-02B guard reference HMAC codec', () => {
     expectTypeOf<Unbranded<InstitutionGuardReferenceCodecV1>>().not.toMatchTypeOf<
       InstitutionGuardReferenceCodecV1
     >();
+    expect(isInstitutionGuardReferenceCodecV1(createCodec())).toBe(true);
   });
 
   it('separates prefix, owner domain, scope and owner-local subject', () => {

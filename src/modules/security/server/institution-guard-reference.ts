@@ -43,6 +43,7 @@ const CANONICAL_UTC_INSTANT =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const REFERENCE_PROFILE =
   /^(usr|mbr|bnd|anc|prf|req|cor|objd|mrv|brv|arv|prv|srv|crv)_v1_k([1-9][0-9]{0,2})_([A-Za-z0-9_-]{43})$/u;
+const authenticInstitutionGuardReferenceCodecsV1 = new WeakSet<object>();
 
 declare const ownerSubjectMarkerV1: unique symbol;
 declare class InstitutionGuardReferenceCodecSealV1 {
@@ -123,6 +124,20 @@ export type InstitutionGuardReferenceCodecV1 =
           Readonly<{ reference: string }>,
       ) => InstitutionGuardReferenceVerificationResolutionV1<Prefix>;
     }>;
+
+/**
+ * Checks factory-issued handle identity only. It reads no properties and does not parse,
+ * rehydrate, register or promote arbitrary values into an authoritative codec.
+ */
+export function isInstitutionGuardReferenceCodecV1(
+  value: unknown,
+): value is InstitutionGuardReferenceCodecV1 {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    authenticInstitutionGuardReferenceCodecsV1.has(value)
+  );
+}
 
 type ParsedReferenceInputV1 = Readonly<{
   prefix: InstitutionGuardReferencePrefixV1;
@@ -558,13 +573,14 @@ export function createInstitutionGuardReferenceCodecV1(input: Readonly<{
   now: () => Date;
 }>): InstitutionGuardReferenceCodecV1 {
   const snapshot = snapshotExactPlainRecord(input, CODEC_INPUT_KEYS);
-  const ring = snapshot ? snapshotKeyRing(snapshot.keyRing) : null;
   const now =
-    snapshot && typeof snapshot.now === 'function'
+    snapshot && typeof snapshot.now === 'function' && !isProxy(snapshot.now)
       ? (snapshot.now as () => Date)
       : null;
+  const ringSnapshot = snapshot ? snapshotKeyRing(snapshot.keyRing) : null;
+  const ring = now ? ringSnapshot : null;
 
-  return Object.freeze({
+  const codec = Object.freeze({
     issue: <Prefix extends InstitutionGuardReferencePrefixV1>(
       value: InstitutionGuardReferenceInputV1<Prefix>,
     ) => issueReference(ring, value),
@@ -572,5 +588,7 @@ export function createInstitutionGuardReferenceCodecV1(input: Readonly<{
       value: InstitutionGuardReferenceInputV1<Prefix> &
         Readonly<{ reference: string }>,
     ) => verifyReference(ring, now, value),
-  }) as unknown as InstitutionGuardReferenceCodecV1;
+  });
+  authenticInstitutionGuardReferenceCodecsV1.add(codec);
+  return codec as unknown as InstitutionGuardReferenceCodecV1;
 }
