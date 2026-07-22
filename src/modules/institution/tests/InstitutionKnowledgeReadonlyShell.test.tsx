@@ -11,12 +11,14 @@ const indexingRouteModulePaths = [
   '@/modules/open-platform/server/platform-knowledge-management-repository',
   '@/modules/open-platform/server/platform-knowledge-file-storage',
   '@/modules/open-platform/server/platform-knowledge-indexing-job-service',
+  '@/modules/open-platform/server/platform-knowledge-ocr-provider',
+  '@/modules/open-platform/server/platform-knowledge-embedding-vector-search-service',
 ] as const;
 
 const indexingCapabilityDisabledPayload = {
   status: 'capability_disabled',
   code: 'knowledge_indexing_jobs_capability_disabled',
-  message: '机构知识库索引任务暂未启用。',
+  error: '机构知识库索引任务暂未启用。',
 };
 
 let indexingJobsEnabled = true;
@@ -345,9 +347,10 @@ describe('机构端知识库只读列表 UI', () => {
     expect(screen.getByText('平台授权')).toBeInTheDocument();
     const indexingSection = screen.getByLabelText('机构端知识库索引任务');
     expect(within(indexingSection).getByText('索引任务')).toBeInTheDocument();
-    expect(within(indexingSection).getByText('当前索引任务仅展示已确认的机构范围任务状态。')).toBeInTheDocument();
-    expect(within(indexingSection).getByText('重建文件向量索引')).toBeInTheDocument();
-    expect(within(indexingSection).getByText('向量索引任务已完成')).toBeInTheDocument();
+    expect(await within(indexingSection).findByText('机构知识库索引任务暂未启用。')).toBeInTheDocument();
+    expect(within(indexingSection).getByText('索引任务未获得生产放行，当前不展示任务数据或执行入口。')).toBeInTheDocument();
+    expect(within(indexingSection).queryByText('重建文件向量索引')).not.toBeInTheDocument();
+    expect(within(indexingSection).queryByText('向量索引任务已完成')).not.toBeInTheDocument();
     expect(screen.getByLabelText('机构端 OCR-ready 边界说明').textContent).toContain('OCR-ready 最小闭环');
     expect(screen.getByLabelText('机构端 OCR-ready 边界说明').textContent).toContain('不接外部云 OCR');
     expect(screen.getByLabelText('机构端 OCR-ready 边界说明').textContent).toContain('不做生产级批量 OCR');
@@ -370,19 +373,8 @@ describe('机构端知识库只读列表 UI', () => {
       expect.objectContaining({ method: 'GET' }),
     );
 
-    expect(screen.getAllByRole('button', { name: '执行 OCR / 重建 OCR 索引' })[1]).toBeInTheDocument();
-    await act(async () => {
-      fireEvent.click(screen.getAllByRole('button', { name: '执行 OCR / 重建 OCR 索引' })[1]);
-    });
-    await waitFor(() => {
-      expect(globalThis.fetch).toHaveBeenCalledWith(
-        '/api/institution/knowledge-management/indexing-jobs',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({ jobType: 'ocr_file', knowledgeId: 'knowledge-ui-a', fileId: 'institution-file-image' }),
-        }),
-      );
-    });
+    expect(screen.queryByRole('button', { name: '执行 OCR / 重建 OCR 索引' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '生成 / 重建向量索引' })).not.toBeInTheDocument();
 
     await act(async () => {
       fireEvent.change(screen.getByLabelText('搜索机构知识库'), {
@@ -563,6 +555,100 @@ describe('机构端知识库只读列表 UI', () => {
     await screen.findByText('机构文件.pdf');
     expect(screen.queryByRole('button', { name: '执行 OCR / 重建 OCR 索引' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '生成 / 重建向量索引' })).not.toBeInTheDocument();
+  });
+
+  it('索引任务不信任旧式 200 records，且较早成功响应不得在较新 503 后回填', async () => {
+    let resolveOlderResponse!: (response: Response) => void;
+    const olderResponse = new Promise<Response>((resolve) => {
+      resolveOlderResponse = resolve;
+    });
+    const originalFetch = vi.mocked(globalThis.fetch).getMockImplementation();
+    let indexingRequestCount = 0;
+    vi.mocked(globalThis.fetch).mockImplementation(async (url, init) => {
+      if (String(url).includes('/api/institution/knowledge-management/indexing-jobs')) {
+        indexingRequestCount += 1;
+        if (indexingRequestCount === 1) return olderResponse;
+        return Response.json(indexingCapabilityDisabledPayload, { status: 503 });
+      }
+      if (!originalFetch) throw new Error('missing default fetch mock');
+      return originalFetch(url, init);
+    });
+
+    render(<InstitutionKnowledgeReadonlyShell />);
+    await screen.findByRole('heading', { name: '授权可见术后护理' });
+    const section = screen.getByLabelText('机构端知识库索引任务');
+    const refreshButton = within(section).getByRole('button', { name: '刷新任务' });
+    fireEvent.click(refreshButton);
+
+    await waitFor(() => expect(indexingRequestCount).toBe(2));
+    expect(await within(section).findByText('机构知识库索引任务暂未启用。')).toBeInTheDocument();
+
+    resolveOlderResponse(Response.json({
+      records: [{
+        jobId: 'stale-sensitive-job-id',
+        jobType: 'rebuild_embeddings',
+        status: 'succeeded',
+        knowledgeId: 'stale-sensitive-knowledge-id',
+        fileId: 'stale-sensitive-file-id',
+        totalCount: 99,
+        processedCount: 99,
+        failedCount: 0,
+        failureReasonCode: null,
+        safeMessage: 'stale-sensitive-safe-message',
+        createdAt: '2026-07-22T00:00:00.000Z',
+        startedAt: '2026-07-22T00:00:01.000Z',
+        finishedAt: '2026-07-22T00:00:02.000Z',
+        updatedAt: '2026-07-22T00:00:02.000Z',
+      }],
+    }));
+
+    await act(async () => {
+      await olderResponse;
+    });
+    expect(within(section).getByText('机构知识库索引任务暂未启用。')).toBeInTheDocument();
+    expect(within(section).queryByText('stale-sensitive-safe-message')).not.toBeInTheDocument();
+    expect(within(section).queryByText('重建文件向量索引')).not.toBeInTheDocument();
+    expect(within(section).queryByText('暂无索引任务')).not.toBeInTheDocument();
+    expect(within(section).queryByRole('button', { name: '取消等待任务' })).not.toBeInTheDocument();
+  });
+
+  it('索引任务刷新对非法 payload、异常和恶意响应对象均保持清空且不读取响应', async () => {
+    render(<InstitutionKnowledgeReadonlyShell />);
+    await screen.findByRole('heading', { name: '授权可见术后护理' });
+    const section = screen.getByLabelText('机构端知识库索引任务');
+    const refreshButton = within(section).getByRole('button', { name: '刷新任务' });
+    const fetchMock = vi.mocked(globalThis.fetch);
+
+    fetchMock.mockResolvedValueOnce(Response.json({ records: 'invalid-records' }));
+    const invalidPayloadCallCount = fetchMock.mock.calls.length;
+    fireEvent.click(refreshButton);
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBe(invalidPayloadCallCount + 1));
+    expect(await within(section).findByText('机构知识库索引任务暂未启用。')).toBeInTheDocument();
+    expect(within(section).queryByText('暂无索引任务')).not.toBeInTheDocument();
+
+    let jsonGetterCount = 0;
+    const hostileResponse = new Response('sensitive legacy indexing payload', { status: 200 });
+    Object.defineProperty(hostileResponse, 'json', {
+      configurable: true,
+      get: () => {
+        jsonGetterCount += 1;
+        throw new Error('response body must not be read');
+      },
+    });
+    fetchMock.mockResolvedValueOnce(hostileResponse);
+    const hostileResponseCallCount = fetchMock.mock.calls.length;
+    fireEvent.click(refreshButton);
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBe(hostileResponseCallCount + 1));
+    expect(jsonGetterCount).toBe(0);
+    expect(within(section).getByText('机构知识库索引任务暂未启用。')).toBeInTheDocument();
+
+    fetchMock.mockRejectedValueOnce(new Error('indexing route unavailable'));
+    const exceptionCallCount = fetchMock.mock.calls.length;
+    fireEvent.click(refreshButton);
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBe(exceptionCallCount + 1));
+    expect(within(section).getByText('机构知识库索引任务暂未启用。')).toBeInTheDocument();
+    expect(within(section).queryByText('向量索引任务已完成')).not.toBeInTheDocument();
+    expect(within(section).queryByRole('button', { name: '取消等待任务' })).not.toBeInTheDocument();
   });
 
   it('机构端知识库入口展示卡片功能壳且操作仍受控', async () => {
@@ -1464,6 +1550,8 @@ describe('机构端知识库只读列表 UI', () => {
     rejectInitialization('@/modules/open-platform/server/platform-knowledge-management-repository', 'repository');
     rejectInitialization('@/modules/open-platform/server/platform-knowledge-file-storage', 'storage');
     rejectInitialization('@/modules/open-platform/server/platform-knowledge-indexing-job-service', 'job-service');
+    rejectInitialization('@/modules/open-platform/server/platform-knowledge-ocr-provider', 'ocr-provider');
+    rejectInitialization('@/modules/open-platform/server/platform-knowledge-embedding-vector-search-service', 'embedding-provider');
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
       throw new Error('fetch must not run');
     });
@@ -1497,6 +1585,7 @@ describe('机构端知识库只读列表 UI', () => {
     ] as const) {
       const response = await route[method](request);
       expect(response.status).toBe(503);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(indexingCapabilityDisabledPayload);
       expect(initialized).toEqual([]);
       expect(fetchSpy).not.toHaveBeenCalled();
@@ -1506,6 +1595,7 @@ describe('机构端知识库只读列表 UI', () => {
       const { request, counts } = hostileRequest();
       const response = await route[method](request);
       expect(response.status).toBe(503);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(indexingCapabilityDisabledPayload);
       expect(counts).toEqual({ get: 0, set: 0, has: 0, ownKeys: 0, getOwnPropertyDescriptor: 0, getPrototypeOf: 0 });
       expect(initialized).toEqual([]);
