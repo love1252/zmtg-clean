@@ -212,37 +212,40 @@ describe('工作台看板领域模型', () => {
     expect(JSON.stringify(summary)).not.toContain('实时同步');
   });
 
-  it('dashboard 摘要展示安全开关低敏状态', () => {
-    const summary = buildInstitutionDashboardSummary({
-      customers: [...customerRecords],
-      appointments: [...appointmentRecords],
-      followUpTasks: [...followUpTasks],
-    });
+  it('dashboard 摘要不把默认 safety-switch 模型投影成当前事实', () => {
+    const summaries = [
+      buildInstitutionDashboardSummary({
+        customers: [...customerRecords],
+        appointments: [...appointmentRecords],
+        followUpTasks: [...followUpTasks],
+      }),
+      buildInstitutionDashboardSummary({
+        customers: [],
+        appointments: [],
+        followUpTasks: [],
+      }),
+    ];
+    const forbiddenProjectionFields = [
+      'safetySwitch',
+      'mock_only',
+      'realChannelBlocked',
+      'tenantRealChannelEnabled',
+      'institutionRealChannelEnabled',
+      'weComRealSendEnabled',
+      'smsRealSendEnabled',
+      'webhookEnabled',
+      'emergencyStopEnabled',
+      'allowRealSend',
+      'externalChannelEnabled',
+    ];
 
-    expect(summary.safetySwitch).toMatchObject({
-      tenantRealChannelEnabled: false,
-      institutionRealChannelEnabled: false,
-      weComRealSendEnabled: false,
-      smsRealSendEnabled: false,
-      webhookEnabled: false,
-      emergencyStopEnabled: true,
-      allowRealSend: false,
-      externalChannelEnabled: false,
-      realChannelBlocked: true,
-      status: 'mock_only',
-    });
-    expect(summary.safetySwitch.boundaryLabels).toEqual(
-      expect.arrayContaining([
-        '当前权限 / 安全边界：机构内角色按最小权限访问',
-        '真实渠道默认关闭',
-        '企业微信真实发送关闭',
-        '短信真实发送关闭',
-        'webhook 关闭',
-        '当前仍为 mock',
-        '不接真实 HIS / 企业微信 / 短信 / webhook',
-        '不真实发送 / 不真实出网',
-      ]),
-    );
+    for (const summary of summaries) {
+      expect(summary).not.toHaveProperty('safetySwitch');
+      const serializedSummary = JSON.stringify(summary);
+      for (const field of forbiddenProjectionFields) {
+        expect(serializedSummary).not.toContain(field);
+      }
+    }
   });
 
   it('基于演示数据派生近期行动摘要', () => {

@@ -841,13 +841,8 @@ function InstitutionDashboardHome({
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-600">
               {status === 'loading' ? '数据加载中' : status === 'error' ? '数据暂不可用' : '数据已更新'}
             </span>
-            <span className={cn(
-              'rounded-full border px-3 py-1.5',
-              summary.safetySwitch.realChannelBlocked
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : 'border-amber-200 bg-amber-50 text-amber-700',
-            )}>
-              真实渠道{summary.safetySwitch.realChannelBlocked ? '已阻断' : '可用'}
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-amber-700">
+              真实渠道状态不可用
             </span>
             <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-blue-700">
               低敏导入 {status === 'success' ? lowSensitiveImportCustomerCount : '--'}
@@ -929,34 +924,41 @@ function InstitutionDashboardHome({
           <span className="hidden text-xs font-medium text-slate-400 group-open:inline">收起详情</span>
         </summary>
         <div className="space-y-4 border-t border-slate-200/70 p-4">
-      <section className="rounded-[22px] border border-emerald-100 bg-emerald-50/80 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl">
+      <section
+        aria-label="真实渠道安全边界"
+        className="rounded-[22px] border border-amber-100 bg-amber-50/80 p-5 shadow-[0_20px_70px_rgba(32,61,104,0.10)] backdrop-blur-xl"
+      >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
-              <ShieldCheck className="h-5 w-5" />
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-amber-600 text-white shadow-lg shadow-amber-600/20">
+              <ShieldQuestion className="h-5 w-5" />
             </div>
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">
-                权限与安全开关
+                真实渠道安全边界
               </h2>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                当前权限 / 安全边界按最小权限展示；真实渠道默认关闭，当前仍为 mock。
+                真实渠道权威状态未接入；状态不可用，操作保持不可用。
               </p>
             </div>
           </div>
-          <div className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-right">
+          <div className="rounded-2xl border border-amber-200 bg-white px-4 py-3 text-right">
             <div className="text-xs font-semibold text-slate-400">真实渠道</div>
-            <div className="mt-1 text-sm font-semibold text-emerald-700">
-              {summary.safetySwitch.realChannelBlocked ? '已阻断' : '可用'}
+            <div className="mt-1 text-sm font-semibold text-amber-700">
+              状态不可用
             </div>
           </div>
         </div>
-        <div className="mt-4 grid gap-2 text-xs font-semibold text-emerald-800 sm:grid-cols-3 xl:grid-cols-5">
-          {summary.safetySwitch.boundaryLabels.map((label) => (
-            <span key={label} className="rounded-full border border-emerald-200 bg-white px-3 py-2">
-              {label}
-            </span>
-          ))}
+        <div className="mt-4 grid gap-2 text-xs font-semibold text-amber-800 sm:grid-cols-3">
+          <span className="rounded-full border border-amber-200 bg-white px-3 py-2">
+            真实渠道权威状态未接入
+          </span>
+          <span className="rounded-full border border-amber-200 bg-white px-3 py-2">
+            不使用默认模型推断当前配置
+          </span>
+          <span className="rounded-full border border-amber-200 bg-white px-3 py-2">
+            真实渠道操作保持不可用
+          </span>
         </div>
       </section>
 

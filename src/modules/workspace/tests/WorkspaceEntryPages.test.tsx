@@ -2467,6 +2467,27 @@ function expectNoPlatformTenantMutation(fetchMock: ReturnType<typeof mockWorkspa
   }
 }
 
+function expectNeutralRealChannelSafetyBoundary() {
+  expect(screen.getByText('真实渠道状态不可用')).toBeInTheDocument();
+  const boundary = screen.getByRole('region', { name: '真实渠道安全边界' });
+  const boundaryView = within(boundary);
+
+  expect(boundaryView.getByRole('heading', { name: '真实渠道安全边界' })).toBeInTheDocument();
+  expect(
+    boundaryView.getByText('真实渠道权威状态未接入；状态不可用，操作保持不可用。'),
+  ).toBeInTheDocument();
+  expect(boundaryView.getByText('不使用默认模型推断当前配置')).toBeInTheDocument();
+  expect(boundaryView.queryByRole('button')).not.toBeInTheDocument();
+  expect(boundaryView.queryByRole('switch')).not.toBeInTheDocument();
+
+  expect(screen.queryByText('真实渠道已阻断')).not.toBeInTheDocument();
+  expect(screen.queryByText('真实渠道可用')).not.toBeInTheDocument();
+  expect(screen.queryByText('已阻断')).not.toBeInTheDocument();
+  expect(screen.queryByText('当前仍为 mock')).not.toBeInTheDocument();
+  expect(screen.queryByText('真实渠道默认关闭')).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '权限与安全开关' })).not.toBeInTheDocument();
+}
+
 describe('工作台入口页面', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -2476,6 +2497,8 @@ describe('工作台入口页面', () => {
     const fetchMock = mockWorkspaceFetch();
     const { container } = render(<HospitalPage />);
 
+    expect(screen.getByText('数据加载中')).toBeInTheDocument();
+    expectNeutralRealChannelSafetyBoundary();
     expect(await screen.findByRole('heading', { name: /今日治疗后随访重点/ })).toBeInTheDocument();
     expect(screen.getByText('待人工确认的后续动作')).toBeInTheDocument();
     expect(await screen.findByText('当前为 API 数据')).toBeInTheDocument();
@@ -2495,6 +2518,9 @@ describe('工作台入口页面', () => {
     await expectMetric('重复来源任务冲突数', '1');
     expect(screen.getByText('运营聚合')).toBeInTheDocument();
     expect(screen.getByTestId('dashboard-system-details')).not.toHaveAttribute('open');
+    expectNeutralRealChannelSafetyBoundary();
+    expect(screen.getByRole('navigation', { name: '机构端桌面导航' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: '机构端移动导航' })).toBeInTheDocument();
     expect(screen.queryByText('数据范围')).not.toBeInTheDocument();
     expect(screen.queryByText('数据口径')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '开发边界' })).not.toBeInTheDocument();
@@ -4542,6 +4568,7 @@ describe('工作台入口页面', () => {
     expect(screen.queryByText('今日高意向客户 18 位')).not.toBeInTheDocument();
     expect(screen.queryByText('AI 已按承接优先级排序')).not.toBeInTheDocument();
     expect(screen.queryByText('实时同步')).not.toBeInTheDocument();
+    expectNeutralRealChannelSafetyBoundary();
     expectNoInstitutionMutation(fetchMock);
   });
 
