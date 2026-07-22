@@ -4,6 +4,7 @@ import { listCustomerFollowUpTimelineEvents } from '@/modules/institution/client
 
 const routeMocks = vi.hoisted(() => ({
   auditRecord: vi.fn(),
+  canAccessResource: vi.fn(),
   createAuditEventRepository: vi.fn(),
   createTenantBusinessRepository: vi.fn(),
   getDatabase: vi.fn(),
@@ -14,6 +15,9 @@ const routeMocks = vi.hoisted(() => ({
 vi.mock('@/server/db/client', () => ({ getDatabase: routeMocks.getDatabase }));
 vi.mock('@/modules/security/server/access-context', () => ({
   getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
+}));
+vi.mock('@/modules/security/domain/access-control', () => ({
+  canAccessResource: routeMocks.canAccessResource,
 }));
 vi.mock('@/modules/institution/server/tenant-business-repository', () => ({
   createTenantBusinessRepository: routeMocks.createTenantBusinessRepository,
@@ -30,6 +34,41 @@ beforeEach(() => {
 });
 
 describe('机构端客户随访时间线 capability gate', () => {
+  it('普通、查询和 Cookie 请求固定返回同一低敏且不缓存的 503，不回显输入或触发下游', async () => {
+    const expectedPayload = {
+      code: 'customer_followup_timeline_capability_disabled',
+      error: '客户随访时间线能力暂未启用',
+    };
+
+    for (const request of [
+      new Request('http://localhost/api/institution/customers/customer_safe_001/followup-timeline'),
+      new Request(
+        'http://localhost/api/institution/customers/customer_safe_001/followup-timeline?tenantId=other-tenant&include=private',
+        { headers: { cookie: 'session=secret-cookie' } },
+      ),
+    ]) {
+      const response = await customerFollowUpTimelineGet(request, {
+        params: Promise.resolve({ customerId: 'customer_safe_001' }),
+      });
+      const payload = await response.json();
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(payload).toEqual(expectedPayload);
+      expect(JSON.stringify(payload)).not.toMatch(
+        /other-tenant|private|secret-cookie|customer_safe_001/i,
+      );
+    }
+
+    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+    expect(routeMocks.canAccessResource).not.toHaveBeenCalled();
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
+    expect(routeMocks.listCustomerFollowUpTimelineEvents).not.toHaveBeenCalled();
+    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
+    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
+  });
+
   it('固定返回低敏 503，且 hostile Request 和 context 不触发任何读取或服务副作用', async () => {
     const requestTraps = { get: 0, ownKeys: 0, descriptor: 0 };
     const contextTraps = { get: 0, ownKeys: 0, descriptor: 0 };
@@ -50,6 +89,7 @@ describe('机构端客户随访时间线 capability gate', () => {
       const payload = await response.json();
 
       expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
       expect(payload).toEqual({
         code: 'customer_followup_timeline_capability_disabled',
         error: '客户随访时间线能力暂未启用',
@@ -62,6 +102,7 @@ describe('机构端客户随访时间线 capability gate', () => {
       expect(contextTraps).toEqual({ get: 0, ownKeys: 0, descriptor: 0 });
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
+      expect(routeMocks.canAccessResource).not.toHaveBeenCalled();
       expect(routeMocks.getDatabase).not.toHaveBeenCalled();
       expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
       expect(routeMocks.listCustomerFollowUpTimelineEvents).not.toHaveBeenCalled();
