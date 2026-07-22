@@ -10,10 +10,11 @@ import {
   INSTITUTION_GUARD_ACCEPTED_KEY_VERSIONS_V1,
   type PolicyRevisionReferenceV1,
 } from '@/modules/security/server/institution-guard-evidence';
-import type {
-  InstitutionGuardReferenceCodecV1,
-  InstitutionGuardReferenceInputV1,
-  InstitutionGuardReferenceOwnerSubjectV1,
+import {
+  isInstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceInputV1,
+  type InstitutionGuardReferenceOwnerSubjectV1,
 } from '@/modules/security/server/institution-guard-reference';
 import {
   isInstitutionScopeAllowV1,
@@ -143,6 +144,7 @@ export type InstitutionSectionGuardV1 = InstitutionSectionGuardSealV1 &
   }>;
 
 type DependenciesV1 = Readonly<{
+  preflightFailure: 'scope_unavailable' | 'policy_unavailable' | null;
   authorizeCurrentRequest: (() => ReturnType<InstitutionScopeGuardV1['authorizeCurrentRequest']>) | null;
   issue: InstitutionGuardReferenceCodecV1['issue'] | null;
   verify: InstitutionGuardReferenceCodecV1['verify'] | null;
@@ -216,13 +218,37 @@ function snapshotExactPlainRecord(
 
 function snapshotDependencies(value: unknown): DependenciesV1 {
   const input = snapshotExactPlainRecord(value, FACTORY_INPUT_KEYS);
-  const scopeGuardCandidate = input?.scopeGuard;
+  const referenceCodecCandidate = input?.referenceCodec;
+  const genuineReferenceCodec = isInstitutionGuardReferenceCodecV1(
+    referenceCodecCandidate,
+  );
+  if (!input) {
+    return Object.freeze({
+      preflightFailure: 'scope_unavailable',
+      authorizeCurrentRequest: null,
+      issue: null,
+      verify: null,
+      now: null,
+    });
+  }
+  if (!genuineReferenceCodec) {
+    return Object.freeze({
+      preflightFailure: 'policy_unavailable',
+      authorizeCurrentRequest: null,
+      issue: null,
+      verify: null,
+      now: null,
+    });
+  }
+  const scopeGuardCandidate = input.scopeGuard;
   const genuineScopeGuard = isInstitutionScopeGuardV1(scopeGuardCandidate);
-  const codec = input
-    ? snapshotExactPlainRecord(input.referenceCodec, REFERENCE_CODEC_KEYS)
-    : null;
-  const now = input?.now;
+  const codec = snapshotExactPlainRecord(
+    referenceCodecCandidate,
+    REFERENCE_CODEC_KEYS,
+  );
+  const now = input.now;
   return Object.freeze({
+    preflightFailure: null,
     authorizeCurrentRequest:
       genuineScopeGuard &&
       typeof scopeGuardCandidate.authorizeCurrentRequest === 'function' &&
@@ -346,6 +372,9 @@ async function authorizeCurrentSection(
   dependencies: DependenciesV1,
   value: InstitutionSectionGuardInputV1,
 ): Promise<InstitutionSectionGuardResolutionV1> {
+  if (dependencies.preflightFailure) {
+    return reject(dependencies.preflightFailure);
+  }
   if (!dependencies.authorizeCurrentRequest) return reject('scope_unavailable');
   let rawScopeResolution: unknown;
   try {
