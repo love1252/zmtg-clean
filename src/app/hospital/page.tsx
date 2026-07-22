@@ -1,8 +1,7 @@
 import { InstitutionNavigationShell } from '@/modules/institution/components/InstitutionNavigationShell';
+import { INSTITUTION_NAVIGATION_SECTION_IDS_V1 } from '@/modules/institution-contracts/v1/institution-navigation';
 import { InstitutionWorkbenchCapabilityOff } from '@/modules/institution-workbench/components/InstitutionWorkbenchCapabilityOff';
 import { createDisabledInstitutionWorkbenchEntryV1 } from '@/modules/institution-workbench/server/institution-workbench-entry';
-
-const AVAILABLE_SECTION_IDS = ['workbench'] as const;
 
 export default function HospitalPage() {
   const entry = createDisabledInstitutionWorkbenchEntryV1({});
@@ -12,7 +11,7 @@ export default function HospitalPage() {
   return (
     <InstitutionNavigationShell
       activeSectionId="workbench"
-      availableSectionIds={AVAILABLE_SECTION_IDS}
+      availableSectionIds={INSTITUTION_NAVIGATION_SECTION_IDS_V1}
     >
       <InstitutionWorkbenchCapabilityOff />
     </InstitutionNavigationShell>
