@@ -43,6 +43,21 @@ const pageInfo = {
   hasNextPage: false,
 };
 
+function authoritativeHybridRetrievalPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    requestId: 'institution-knowledge-hybrid-search',
+    readonly: true,
+    dataSource: 'repository',
+    records: [],
+    pageInfo: { ...pageInfo, total: 0, pageCount: 0 },
+    emptyState: {
+      title: '暂无检索命中',
+      description: '当前范围没有命中已解析知识片段。',
+    },
+    ...overrides,
+  };
+}
+
 describe('机构端知识库只读列表 UI', () => {
   beforeEach(() => {
     indexingJobsEnabled = true;
@@ -1064,6 +1079,120 @@ describe('机构端知识库只读列表 UI', () => {
   });
 
   it.each([
+    ['裸 records', { records: [] }],
+    ['错误 requestId', authoritativeHybridRetrievalPayload({ requestId: 'legacy-hybrid-search' })],
+    ['缺失 requestId', (() => {
+      const { requestId: _requestId, ...payload } = authoritativeHybridRetrievalPayload();
+      return payload;
+    })()],
+    ['错误 readonly', authoritativeHybridRetrievalPayload({ readonly: false })],
+    ['缺失 readonly', (() => {
+      const { readonly: _readonly, ...payload } = authoritativeHybridRetrievalPayload();
+      return payload;
+    })()],
+    ['错误 dataSource', authoritativeHybridRetrievalPayload({ dataSource: 'demo' })],
+    ['缺失 dataSource', (() => {
+      const { dataSource: _dataSource, ...payload } = authoritativeHybridRetrievalPayload();
+      return payload;
+    })()],
+    ['非法 pageInfo', authoritativeHybridRetrievalPayload({ pageInfo: { page: 1 } })],
+    ['缺失 pageInfo', (() => {
+      const { pageInfo: _pageInfo, ...payload } = authoritativeHybridRetrievalPayload();
+      return payload;
+    })()],
+    ['非法 emptyState', authoritativeHybridRetrievalPayload({ emptyState: { title: '暂无检索命中' } })],
+    ['缺失 emptyState', (() => {
+      const { emptyState: _emptyState, ...payload } = authoritativeHybridRetrievalPayload();
+      return payload;
+    })()],
+    ['包含非法 records 的部分数据', authoritativeHybridRetrievalPayload({
+      records: [{
+        knowledgeId: 'knowledge-partial',
+        knowledgeTitle: '不应发布的部分记录',
+        fileId: 'file-partial',
+        fileName: 'partial.pdf',
+        chunkId: 'chunk-partial',
+        chunkIndex: -1,
+        textPreview: '不应显示的部分检索结果',
+        retrievalMode: 'hybrid',
+        matchReason: 'invalid',
+      }],
+    })],
+  ] as const)('检索 %s 的 200 伪造信封必须不可用而非空态', async (_label, payload) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/retrieval')) {
+          return Response.json(payload);
+        }
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+
+    render(<InstitutionKnowledgeReadonlyShell />);
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    fireEvent.change(within(searchSection).getByLabelText('输入片段检索内容'), {
+      target: { value: '冷敷' },
+    });
+    fireEvent.click(within(searchSection).getByRole('button', { name: '检索片段' }));
+
+    expect(await within(searchSection).findByText('知识库检索暂时不可用')).toBeInTheDocument();
+    expect(within(searchSection).queryByText('暂无匹配片段')).not.toBeInTheDocument();
+    expect(within(searchSection).getByText('检索结果暂不可用')).toBeInTheDocument();
+    expect(within(searchSection).queryByText('不应显示的部分检索结果')).not.toBeInTheDocument();
+  });
+
+  it('仅精确合法的权威信封才能发布空态与结果', async () => {
+    let retrievalCall = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/institution/knowledge-management/retrieval')) {
+          retrievalCall += 1;
+          if (retrievalCall === 1) return Response.json(authoritativeHybridRetrievalPayload());
+          return Response.json(authoritativeHybridRetrievalPayload({
+            records: [{
+              knowledgeId: 'knowledge-authoritative',
+              knowledgeTitle: '权威知识条目',
+              fileId: 'file-authoritative',
+              fileName: '权威文件.pdf',
+              chunkId: 'chunk-authoritative',
+              chunkIndex: 0,
+              textPreview: '权威检索结果',
+              retrievalMode: 'hybrid',
+              keywordScore: 1,
+              vectorScore: 0.8,
+              rerankScore: 0.9,
+              matchReason: '权威匹配',
+            }],
+            pageInfo,
+          }));
+        }
+        return Response.json({ records: [], pageInfo });
+      }),
+    );
+
+    render(<InstitutionKnowledgeReadonlyShell />);
+    expect(await screen.findByRole('heading', { name: '授权可见术后护理' })).toBeInTheDocument();
+
+    const searchSection = screen.getByLabelText('机构端知识片段检索');
+    const input = within(searchSection).getByLabelText('输入片段检索内容');
+    const form = within(searchSection).getByRole('button', { name: '检索片段' }).closest('form');
+    expect(form).not.toBeNull();
+
+    fireEvent.change(input, { target: { value: '无结果' } });
+    fireEvent.submit(form as HTMLFormElement);
+    expect(await within(searchSection).findByText('暂无匹配片段')).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: '有结果' } });
+    fireEvent.submit(form as HTMLFormElement);
+    expect(await within(searchSection).findByText('权威检索结果')).toBeInTheDocument();
+    expect(within(searchSection).queryByText('暂无匹配片段')).not.toBeInTheDocument();
+  });
+
+  it.each([
     ['503', () => Response.json({ code: 'capability_disabled' }, { status: 503 })],
     ['非法 payload', () => Response.json({ records: null })],
     ['异常', () => { throw new Error('retrieval failed'); }],
@@ -1120,7 +1249,7 @@ describe('机构端知识库只读列表 UI', () => {
 
     expect(within(searchSection).getByText('正在执行 hybrid/vector/keyword 检索并重排片段...')).toBeInTheDocument();
     expect(within(searchSection).queryByText('暂无匹配片段')).not.toBeInTheDocument();
-    resolveRetrieval(Response.json({ records: [], pageInfo }));
+    resolveRetrieval(Response.json(authoritativeHybridRetrievalPayload()));
     expect(await within(searchSection).findByText('暂无匹配片段')).toBeInTheDocument();
   });
 
@@ -1226,7 +1355,7 @@ describe('机构端知识库只读列表 UI', () => {
               rejectOlder = reject;
             });
           }
-          return Response.json({ records: [], pageInfo });
+          return Response.json(authoritativeHybridRetrievalPayload());
         }
         return Response.json({ records: [], pageInfo });
       }),

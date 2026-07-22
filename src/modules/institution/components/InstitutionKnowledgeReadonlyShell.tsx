@@ -76,6 +76,20 @@ type InstitutionKnowledgeSearchResultRecord = {
   rerankScore?: number;
   matchReason: string;
 };
+
+type InstitutionKnowledgeHybridPageInfo = {
+  page: number;
+  pageSize: number;
+  total: number;
+  pageCount: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+};
+
+type InstitutionKnowledgeHybridEmptyState = {
+  title: string;
+  description: string;
+};
 type InstitutionKnowledgeVectorSearchResultRecord = InstitutionKnowledgeSearchResultRecord & {
   score?: number;
 };
@@ -209,6 +223,151 @@ const indexingJobStatusLabels: Record<InstitutionKnowledgeIndexingJobRecord['sta
 };
 
 const controlledTrialReadiness = getKnowledgeBaseControlledTrialReadiness();
+
+function isDataDescriptor(
+  descriptor: PropertyDescriptor | undefined,
+): descriptor is PropertyDescriptor & { value: unknown } {
+  return Boolean(descriptor && 'value' in descriptor && !descriptor.get && !descriptor.set);
+}
+
+function isEnumerableDataDescriptor(
+  descriptor: PropertyDescriptor | undefined,
+): descriptor is PropertyDescriptor & { value: unknown } {
+  return Boolean(isDataDescriptor(descriptor) && descriptor.enumerable);
+}
+
+function snapshotPlainDataRecord(value: unknown): Readonly<Record<string, unknown>> | null {
+  try {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+    if (Object.getPrototypeOf(value) !== Object.prototype || Object.getOwnPropertySymbols(value).length > 0) return null;
+
+    const descriptors = Object.getOwnPropertyDescriptors(value) as Record<string, PropertyDescriptor>;
+    const snapshot = Object.create(null) as Record<string, unknown>;
+    for (const [key, descriptor] of Object.entries(descriptors)) {
+      if (!isEnumerableDataDescriptor(descriptor)) return null;
+      snapshot[key] = descriptor.value;
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
+}
+
+function snapshotDenseDataArray(value: unknown): readonly unknown[] | null {
+  try {
+    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype || Object.getOwnPropertySymbols(value).length > 0) {
+      return null;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value) as Record<string, PropertyDescriptor>;
+    const lengthDescriptor = descriptors.length;
+    if (!isDataDescriptor(lengthDescriptor) || typeof lengthDescriptor.value !== 'number') return null;
+    const { value: length } = lengthDescriptor;
+    if (!Number.isSafeInteger(length) || length < 0) return null;
+
+    const snapshot: unknown[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = descriptors[String(index)];
+      if (!isEnumerableDataDescriptor(descriptor)) return null;
+      snapshot.push(descriptor.value);
+    }
+    if (Object.keys(descriptors).some((key) => key !== 'length' && !/^(?:0|[1-9]\d*)$/u.test(key))) return null;
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function snapshotHybridPageInfo(value: unknown): InstitutionKnowledgeHybridPageInfo | null {
+  const pageInfo = snapshotPlainDataRecord(value);
+  if (!pageInfo) return null;
+  const { page, pageSize, total, pageCount, hasPreviousPage, hasNextPage } = pageInfo;
+  if (!isNonNegativeSafeInteger(page) || page < 1) return null;
+  if (!isNonNegativeSafeInteger(pageSize) || pageSize < 1) return null;
+  if (!isNonNegativeSafeInteger(total) || !isNonNegativeSafeInteger(pageCount)) return null;
+  if (typeof hasPreviousPage !== 'boolean' || typeof hasNextPage !== 'boolean') return null;
+  return {
+    page,
+    pageSize,
+    total,
+    pageCount,
+    hasPreviousPage,
+    hasNextPage,
+  };
+}
+
+function snapshotHybridEmptyState(value: unknown): InstitutionKnowledgeHybridEmptyState | null {
+  const emptyState = snapshotPlainDataRecord(value);
+  if (!emptyState) return null;
+  const { title, description } = emptyState;
+  if (typeof title !== 'string' || typeof description !== 'string' || !title.trim() || !description.trim()) return null;
+  return { title, description };
+}
+
+function snapshotHybridSearchRecord(value: unknown): InstitutionKnowledgeSearchResultRecord | null {
+  const record = snapshotPlainDataRecord(value);
+  if (!record) return null;
+  const { knowledgeId, knowledgeTitle, fileId, fileName, chunkId, chunkIndex, textPreview, retrievalMode, matchReason } = record;
+  if (
+    !isNonBlankString(knowledgeId)
+    || !isNonBlankString(knowledgeTitle)
+    || !isNonBlankString(fileId)
+    || !isNonBlankString(fileName)
+    || !isNonBlankString(chunkId)
+    || !isNonBlankString(textPreview)
+    || !isNonBlankString(matchReason)
+  ) return null;
+  if (!isNonNegativeSafeInteger(chunkIndex)) return null;
+  if (retrievalMode !== 'keyword' && retrievalMode !== 'vector' && retrievalMode !== 'hybrid') return null;
+
+  const optionalScores = ['keywordScore', 'vectorScore', 'rerankScore'] as const;
+  if (optionalScores.some((field) => Object.hasOwn(record, field) && (typeof record[field] !== 'number' || !Number.isFinite(record[field])))) {
+    return null;
+  }
+
+  return {
+    knowledgeId,
+    knowledgeTitle,
+    fileId,
+    fileName,
+    chunkId,
+    chunkIndex,
+    textPreview,
+    retrievalMode,
+    ...(Object.hasOwn(record, 'keywordScore') ? { keywordScore: record.keywordScore as number } : {}),
+    ...(Object.hasOwn(record, 'vectorScore') ? { vectorScore: record.vectorScore as number } : {}),
+    ...(Object.hasOwn(record, 'rerankScore') ? { rerankScore: record.rerankScore as number } : {}),
+    matchReason,
+  };
+}
+
+function snapshotAuthoritativeInstitutionHybridSearchResponse(
+  value: unknown,
+): InstitutionKnowledgeSearchResultRecord[] | null {
+  const payload = snapshotPlainDataRecord(value);
+  if (!payload) return null;
+  if (payload.requestId !== 'institution-knowledge-hybrid-search' || payload.readonly !== true || payload.dataSource !== 'repository') {
+    return null;
+  }
+  if (!snapshotHybridPageInfo(payload.pageInfo) || !snapshotHybridEmptyState(payload.emptyState)) return null;
+
+  const records = snapshotDenseDataArray(payload.records);
+  if (!records) return null;
+  const snapshot: InstitutionKnowledgeSearchResultRecord[] = [];
+  for (const record of records) {
+    const capturedRecord = snapshotHybridSearchRecord(record);
+    if (!capturedRecord) return null;
+    snapshot.push(capturedRecord);
+  }
+  return snapshot;
+}
 
 function visibleErrorMessage(error: TenantBusinessClientError | null) {
   if (!error) return '知识库只读数据暂时不可用';
@@ -653,14 +812,14 @@ export function InstitutionKnowledgeReadonlyShell() {
       });
       const payload = await response.json().catch(() => null);
       if (chunkSearchRequestRevisionRef.current !== requestRevision) return;
-      if (!response.ok || !payload || !Array.isArray(payload.records)) {
+      const records = response.ok ? snapshotAuthoritativeInstitutionHybridSearchResponse(payload) : null;
+      if (!records) {
         setChunkSearchResults([]);
         setChunkSearchStatus('unavailable');
         setChunkSearchMessage('知识库检索暂时不可用');
         return;
       }
 
-      const records = payload.records as InstitutionKnowledgeSearchResultRecord[];
       setChunkSearchResults(records);
       setChunkSearchStatus('ready');
       setChunkSearchMessage(records.length > 0 ? `已按 rerank 排序命中 ${records.length} 个引用片段` : '权威检索结果为空');
