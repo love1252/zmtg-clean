@@ -32,7 +32,7 @@ export function InstitutionLoginClient({ config }: { config: HomepageBrandConfig
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, scope: 'institution' }),
       });
 
       const result = await response.json().catch(() => null);
