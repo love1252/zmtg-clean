@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   InstitutionLoginClient,
@@ -12,6 +12,7 @@ import {
 describe('登录页外壳', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it('渲染机构登录文案', () => {
@@ -56,6 +57,62 @@ describe('登录页外壳', () => {
     expect(screen.queryByText('开发环境入口')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '填入开发账号' })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain('admin123');
+  });
+
+  it('机构登录提交显式 institution scope', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ code: 401, message: '用户名或密码错误' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<InstitutionLoginClient config={defaultHomepageBrandConfig} />);
+    fireEvent.change(screen.getByLabelText('用户名 / 手机号'), {
+      target: { value: 'institution-user' },
+    });
+    fireEvent.change(screen.getByLabelText('密码'), {
+      target: { value: 'institution-password' },
+    });
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: defaultHomepageBrandConfig.login.institution.submitLabel,
+      }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      username: 'institution-user',
+      password: 'institution-password',
+      scope: 'institution',
+    });
+  });
+
+  it('平台登录继续提交显式 platform scope', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ code: 401, message: '平台管理员账号或密码错误' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<PlatformLoginClient config={defaultHomepageBrandConfig} />);
+    fireEvent.change(screen.getByLabelText('管理员账号'), {
+      target: { value: 'platform-user' },
+    });
+    fireEvent.change(screen.getByLabelText('密码'), {
+      target: { value: 'platform-password' },
+    });
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: defaultHomepageBrandConfig.login.platform.submitLabel,
+      }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      username: 'platform-user',
+      password: 'platform-password',
+      scope: 'platform',
+    });
   });
 
 
