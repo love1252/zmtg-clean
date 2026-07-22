@@ -233,6 +233,98 @@ describe('InstitutionKnowledgeBaseCardPanel', () => {
     expect(screen.queryByLabelText('选择知识库上传文件')).not.toBeInTheDocument();
   });
 
+  it('刷新资料库时立即清除旧条目和文件，503 不得把 unknown 冒充为空数据', async () => {
+    await renderLoaded();
+
+    expect(screen.getByText('知识条目：本机构术后护理知识')).toBeInTheDocument();
+    expect(screen.getByText('术后护理.md')).toBeInTheDocument();
+
+    let resolveRefresh!: (result: Awaited<ReturnType<typeof listInstitutionKnowledgeItems>>) => void;
+    vi.mocked(listInstitutionKnowledgeItems).mockImplementationOnce(
+      () => new Promise((resolve) => { resolveRefresh = resolve; }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('正在加载机构知识库卡片数据...')).toBeInTheDocument();
+      expect(screen.queryByText('知识条目：本机构术后护理知识')).not.toBeInTheDocument();
+      expect(screen.queryByText('术后护理.md')).not.toBeInTheDocument();
+    });
+    const metrics = screen.getByLabelText('机构知识库顶部指标');
+    expect(within(metrics).getAllByText('--')).toHaveLength(4);
+
+    await act(async () => {
+      resolveRefresh({
+        ok: false,
+        error: { kind: 'service_unavailable', message: '机构知识库资料库暂未启用。', status: 503 },
+      });
+    });
+
+    expect(await screen.findByText('机构知识库资料库暂未启用。')).toBeInTheDocument();
+    expect(screen.queryByText('知识条目：本机构术后护理知识')).not.toBeInTheDocument();
+    expect(screen.queryByText('术后护理.md')).not.toBeInTheDocument();
+    expect(screen.queryByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).not.toBeInTheDocument();
+  });
+
+  it('过期 files 回包不能在较新的 root 503 后回填旧文件名或解析元数据', async () => {
+    let resolveOldFiles!: (response: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string | URL | Request) => {
+        if (requestUrl(input).includes('/files')) {
+          return new Promise<Response>((resolve) => { resolveOldFiles = resolve; });
+        }
+        return Promise.resolve(Response.json({ records: [], pageInfo }));
+      }),
+    );
+    mockKnowledgeList();
+    render(<InstitutionKnowledgeBaseCardPanel />);
+
+    expect(await screen.findByText('知识条目：本机构术后护理知识')).toBeInTheDocument();
+    vi.mocked(listInstitutionKnowledgeItems).mockResolvedValueOnce({
+      ok: false,
+      error: { kind: 'service_unavailable', message: '机构知识库资料库暂未启用。', status: 503 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+    expect(await screen.findByText('机构知识库资料库暂未启用。')).toBeInTheDocument();
+
+    await act(async () => {
+      resolveOldFiles(Response.json({ records: files, pageInfo }));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('术后护理.md')).not.toBeInTheDocument();
+      expect(screen.queryByText('已读取 1 个真实文件记录。')).not.toBeInTheDocument();
+    });
+  });
+
+  it('仅当前 revision 的权威空结果显示空态；非法结果和异常保持 unavailable', async () => {
+    await renderLoaded();
+
+    vi.mocked(listInstitutionKnowledgeItems).mockResolvedValueOnce({
+      ok: true,
+      records: [],
+      pageInfo: { ...pageInfo, total: 0 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+    expect(await screen.findByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).toBeInTheDocument();
+    expect(within(screen.getByLabelText('机构知识库顶部指标')).getAllByText('0')).toHaveLength(2);
+
+    vi.mocked(listInstitutionKnowledgeItems).mockRejectedValueOnce(new Error('unexpected client failure'));
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+    expect(await screen.findByText('机构知识库数据暂时不可用')).toBeInTheDocument();
+    expect(screen.queryByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).not.toBeInTheDocument();
+
+    vi.mocked(listInstitutionKnowledgeItems).mockResolvedValueOnce({
+      ok: false,
+      error: { kind: 'unknown', message: '非法资料库响应', status: 200 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '刷新真实数据' }));
+    expect(await screen.findByText('非法资料库响应')).toBeInTheDocument();
+    expect(screen.queryByText('当前目录暂无真实知识条目；不会展示静态示例冒充生产数据。')).not.toBeInTheDocument();
+  });
+
   it('支持目录本地切换并只显示当前目录真实数据', async () => {
     await renderLoaded();
 

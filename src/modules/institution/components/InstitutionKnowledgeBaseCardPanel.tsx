@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import {
   AlertTriangle,
   Archive,
@@ -263,8 +263,32 @@ export function InstitutionKnowledgeBaseCardPanel() {
   const [answerMessage, setAnswerMessage] = useState('当前基于机构知识库内容回答，先使用关键词 / chunk 召回；仅供内部运营参考，需人工确认。');
   const [answerText, setAnswerText] = useState('');
   const [answerSources, setAnswerSources] = useState<InstitutionKnowledgeAnswerSource[]>([]);
+  const rootSnapshotRevisionRef = useRef(0);
 
-  const loadKnowledgeFiles = useCallback(async (items: InstitutionKnowledgeItemDto[]) => {
+  const clearRootSnapshotState = useCallback(() => {
+    setKnowledgeItems([]);
+    setFilesByKnowledgeId({});
+    setFileMessage('资料库刷新中，未展示文件、解析或失败状态。');
+    setChunkPanelFile(null);
+    setChunkRecords([]);
+    setChunkStatus('idle');
+    setChunkMessage('资料库刷新中，未展示解析片段。');
+    setReparseStatusByFileId({});
+    setReparseMessageByFileId({});
+    setArchiveConfirmKnowledgeId(null);
+    setSearchResults([]);
+    setActiveSearchKeyword('');
+    setSearchStatus('idle');
+    setSearchMessage('资料库刷新中，未展示检索结果。');
+    setAnswerText('');
+    setAnswerSources([]);
+    setAnswerStatus('idle');
+    setAnswerMessage('资料库刷新中，未展示问答结果。');
+  }, []);
+
+  const loadKnowledgeFiles = useCallback(async (items: InstitutionKnowledgeItemDto[], rootSnapshotRevision: number) => {
+    if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return {};
+
     if (items.length === 0) {
       setFilesByKnowledgeId({});
       setFileMessage('当前没有真实文件记录。');
@@ -282,11 +306,13 @@ export function InstitutionKnowledgeBaseCardPanel() {
           return [item.knowledgeId, payload.records as InstitutionKnowledgeFileRecord[]] as const;
         }),
       );
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return {};
       setFilesByKnowledgeId(Object.fromEntries(entries));
       const total = entries.reduce((sum, [, files]) => sum + files.length, 0);
       setFileMessage(total > 0 ? `已读取 ${total} 个真实文件记录。` : '当前知识条目暂无真实文件记录。');
       return Object.fromEntries(entries) as Record<string, InstitutionKnowledgeFileRecord[]>;
     } catch {
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return {};
       setFilesByKnowledgeId({});
       setFileMessage('文件列表暂时不可用，知识条目仍可查看。');
       return {};
@@ -294,40 +320,18 @@ export function InstitutionKnowledgeBaseCardPanel() {
   }, []);
 
   const loadKnowledgeItems = useCallback(async ({ showLoading = true }: { showLoading?: boolean } = {}) => {
+    const rootSnapshotRevision = rootSnapshotRevisionRef.current + 1;
+    rootSnapshotRevisionRef.current = rootSnapshotRevision;
+    clearRootSnapshotState();
     if (showLoading) {
       setKnowledgeStatus('loading');
       setKnowledgeMessage('正在读取机构可见知识库数据...');
     }
-    const result = await listInstitutionKnowledgeItems({ page: 1, pageSize: 20 });
-
-    if (!result.ok) {
-      setKnowledgeItems([]);
-      setFilesByKnowledgeId({});
-      setKnowledgeStatus('error');
-      setKnowledgeMessage(result.error.message || '机构知识库数据暂时不可用');
-      return;
-    }
-
-    setKnowledgeItems(result.records);
-    setKnowledgeStatus('success');
-    setKnowledgeMessage(
-      result.records.length > 0
-        ? `已读取 ${result.pageInfo.total} 条机构可见知识，统计基于现有 API 返回。`
-        : '当前机构暂无可见知识库数据，请上传 TXT / MD / PDF / DOCX / XLSX / CSV 后查看。',
-    );
-    await loadKnowledgeFiles(result.records);
-  }, [loadKnowledgeFiles]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadInitialKnowledgeItems() {
+    try {
       const result = await listInstitutionKnowledgeItems({ page: 1, pageSize: 20 });
-      if (!isMounted) return;
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
 
       if (!result.ok) {
-        setKnowledgeItems([]);
-        setFilesByKnowledgeId({});
         setKnowledgeStatus('error');
         setKnowledgeMessage(result.error.message || '机构知识库数据暂时不可用');
         return;
@@ -340,13 +344,50 @@ export function InstitutionKnowledgeBaseCardPanel() {
           ? `已读取 ${result.pageInfo.total} 条机构可见知识，统计基于现有 API 返回。`
           : '当前机构暂无可见知识库数据，请上传 TXT / MD / PDF / DOCX / XLSX / CSV 后查看。',
       );
-      await loadKnowledgeFiles(result.records);
+      await loadKnowledgeFiles(result.records, rootSnapshotRevision);
+    } catch {
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
+      setKnowledgeStatus('error');
+      setKnowledgeMessage('机构知识库数据暂时不可用');
+    }
+  }, [clearRootSnapshotState, loadKnowledgeFiles]);
+
+  useEffect(() => {
+    const rootSnapshotRevision = rootSnapshotRevisionRef.current + 1;
+    rootSnapshotRevisionRef.current = rootSnapshotRevision;
+
+    async function loadInitialKnowledgeItems() {
+      try {
+        const result = await listInstitutionKnowledgeItems({ page: 1, pageSize: 20 });
+        if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
+
+        if (!result.ok) {
+          setKnowledgeStatus('error');
+          setKnowledgeMessage(result.error.message || '机构知识库数据暂时不可用');
+          return;
+        }
+
+        setKnowledgeItems(result.records);
+        setKnowledgeStatus('success');
+        setKnowledgeMessage(
+          result.records.length > 0
+            ? `已读取 ${result.pageInfo.total} 条机构可见知识，统计基于现有 API 返回。`
+            : '当前机构暂无可见知识库数据，请上传 TXT / MD / PDF / DOCX / XLSX / CSV 后查看。',
+        );
+        await loadKnowledgeFiles(result.records, rootSnapshotRevision);
+      } catch {
+        if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
+        setKnowledgeStatus('error');
+        setKnowledgeMessage('机构知识库数据暂时不可用');
+      }
     }
 
     void loadInitialKnowledgeItems();
 
     return () => {
-      isMounted = false;
+      if (rootSnapshotRevisionRef.current === rootSnapshotRevision) {
+        rootSnapshotRevisionRef.current += 1;
+      }
     };
   }, [loadKnowledgeFiles]);
 
@@ -547,6 +588,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
   }
 
   async function loadFileChunks(file: InstitutionKnowledgeFileRecord) {
+    const rootSnapshotRevision = rootSnapshotRevisionRef.current;
     setChunkPanelFile(file);
     setChunkStatus('loading');
     setChunkRecords([]);
@@ -557,6 +599,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
         { cache: 'no-store' },
       );
       const payload = await response.json().catch(() => null);
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
       if (!response.ok || !payload || !Array.isArray(payload.records)) {
         setChunkStatus('error');
         setChunkMessage(getVisibleError(payload, '解析片段暂时不可用。'));
@@ -567,12 +610,14 @@ export function InstitutionKnowledgeBaseCardPanel() {
       setChunkStatus(records.length > 0 ? 'success' : 'empty');
       setChunkMessage(records.length > 0 ? `已读取 ${records.length} 个解析片段。` : '当前文件暂无解析片段。');
     } catch {
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
       setChunkStatus('error');
       setChunkMessage('解析片段暂时不可用。');
     }
   }
 
   async function reparseFile(file: InstitutionKnowledgeFileRecord) {
+    const rootSnapshotRevision = rootSnapshotRevisionRef.current;
     if (!isReparseEnabled(file)) {
       setReparseStatusByFileId((current) => ({ ...current, [file.fileId]: 'error' }));
       setReparseMessageByFileId((current) => ({
@@ -590,6 +635,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
         { method: 'POST' },
       );
       const payload = await response.json().catch(() => null);
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
       if (!response.ok) {
         setReparseStatusByFileId((current) => ({ ...current, [file.fileId]: 'error' }));
         setReparseMessageByFileId((current) => ({ ...current, [file.fileId]: getVisibleError(payload, '文件重新解析失败。') }));
@@ -601,10 +647,12 @@ export function InstitutionKnowledgeBaseCardPanel() {
       setSearchResults([]);
       setSearchStatus('idle');
       setSearchMessage('重新解析后已清空旧检索结果，请重新输入关键词复验。');
-      const nextFiles = await loadKnowledgeFiles(knowledgeItems);
+      const nextFiles = await loadKnowledgeFiles(knowledgeItems, rootSnapshotRevision);
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
       const refreshedFile = nextFiles[file.knowledgeId]?.find((candidate) => candidate.fileId === file.fileId) ?? file;
       await loadFileChunks(refreshedFile);
     } catch {
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
       setReparseStatusByFileId((current) => ({ ...current, [file.fileId]: 'error' }));
       setReparseMessageByFileId((current) => ({ ...current, [file.fileId]: '文件重新解析失败。' }));
     }
@@ -612,6 +660,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
 
   async function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const rootSnapshotRevision = rootSnapshotRevisionRef.current;
     const keyword = searchInput.trim();
     setSearchResults([]);
     setActiveSearchKeyword(keyword);
@@ -629,6 +678,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
         cache: 'no-store',
       });
       const payload = await response.json().catch(() => null);
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
       if (!response.ok || !payload || !Array.isArray(payload.records)) {
         setSearchStatus('error');
         setSearchResults([]);
@@ -641,6 +691,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
       setSearchStatus(records.length > 0 ? 'success' : 'empty');
       setSearchMessage(records.length > 0 ? `已命中 ${records.length} 个真实解析片段，topK=${searchTopK}。` : '暂无匹配片段。');
     } catch {
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
       setSearchStatus('error');
       setSearchResults([]);
       setSearchMessage('关键词检索暂时不可用。');
@@ -649,6 +700,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
 
   async function submitAnswer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const rootSnapshotRevision = rootSnapshotRevisionRef.current;
     const question = answerQuestion.trim();
     setAnswerText('');
     setAnswerSources([]);
@@ -667,6 +719,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
         body: JSON.stringify({ question, topK: answerTopK }),
       });
       const payload = await response.json().catch(() => null) as InstitutionKnowledgeAnswerPayload | null;
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
       if (!response.ok || !payload || !Array.isArray(payload.sources)) {
         setAnswerStatus('error');
         setAnswerMessage(getVisibleError(payload, response.status === 400 ? '问题不符合问答要求。' : '知识库问答服务暂时不可用，请稍后重试。'));
@@ -703,6 +756,7 @@ export function InstitutionKnowledgeBaseCardPanel() {
       setAnswerStatus('error');
       setAnswerMessage(payload.message || '知识库问答服务暂时不可用，请稍后重试。');
     } catch {
+      if (rootSnapshotRevisionRef.current !== rootSnapshotRevision) return;
       setAnswerStatus('error');
       setAnswerMessage('知识库问答服务暂时不可用，请稍后重试。');
     }
