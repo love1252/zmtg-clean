@@ -1,14 +1,25 @@
 import { NextResponse } from 'next/server';
 
-const capabilityOffBody = Object.freeze({
-  code: 'institution_wecom_customer_contact_proof_mock_capability_off',
-  error: '企业微信客户联系只读 proof mock 能力当前未开放。',
+const capabilityDisabledPayload = Object.freeze({
+  code: 'capability_disabled',
+  error: '企业微信客户联系只读凭据能力当前未启用',
 });
 
-export async function GET(_request?: Request) {
-  return NextResponse.json(capabilityOffBody, { status: 410 });
+const noStoreHeaders = Object.freeze({
+  'Cache-Control': 'no-store',
+});
+
+function capabilityDisabledResponse() {
+  return NextResponse.json(capabilityDisabledPayload, {
+    status: 503,
+    headers: noStoreHeaders,
+  });
 }
 
-export async function POST(_request?: Request) {
-  return NextResponse.json(capabilityOffBody, { status: 410 });
+export function GET(_request: Request) {
+  return capabilityDisabledResponse();
+}
+
+export function POST(_request: Request) {
+  return capabilityDisabledResponse();
 }
