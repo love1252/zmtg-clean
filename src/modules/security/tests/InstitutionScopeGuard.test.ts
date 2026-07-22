@@ -19,7 +19,11 @@ import type {
   FreshActiveMembershipEvidenceV1,
   FreshActiveMembershipProviderV1,
 } from '@/modules/security/server/institution-guard-evidence';
-import type { InstitutionGuardReferenceCodecV1 } from '@/modules/security/server/institution-guard-reference';
+import {
+  createInstitutionGuardReferenceCodecV1,
+  isInstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceCodecV1,
+} from '@/modules/security/server/institution-guard-reference';
 import {
   createRequestBoundFreshActiveMembershipProviderV1,
   type AuthoritativeInstitutionMembershipFactReaderV1,
@@ -35,6 +39,7 @@ import {
 
 const NOW = new Date('2026-07-22T08:00:30.000Z');
 const TOKEN = 'A'.repeat(43);
+const TEST_REFERENCE_KEY = new Uint8Array(32).fill(0x31);
 
 type Unbranded<T> = {
   [Key in keyof T as Key extends symbol ? never : Key]: T[Key];
@@ -42,6 +47,12 @@ type Unbranded<T> = {
 
 function reference(prefix: string, token = TOKEN, keyVersion = 1) {
   return `${prefix}_v1_k${keyVersion}_${token}`;
+}
+
+function genuineReference(prefix: string) {
+  return expect.stringMatching(
+    new RegExp(`^${prefix}_v1_k1_[A-Za-z0-9_-]{43}$`, 'u'),
+  );
 }
 
 function provenance(
@@ -111,6 +122,7 @@ type HarnessOptions = Readonly<{
   anchorNow?: () => Date;
   order?: string[];
   membershipAccountId?: string;
+  referenceCodecMode?: 'genuine' | 'controlled';
 }>;
 
 function ownRecord(value: unknown): Record<string, unknown> | null {
@@ -146,6 +158,19 @@ function controlledCodec(
       }),
     ),
   }) as unknown as InstitutionGuardReferenceCodecV1;
+}
+
+function genuineCodec(): InstitutionGuardReferenceCodecV1 {
+  return createInstitutionGuardReferenceCodecV1({
+    keyRing: {
+      currentIssueKey: {
+        keyVersion: 1,
+        keyMaterial: TEST_REFERENCE_KEY,
+      },
+      verifyOnlyKeys: [],
+    },
+    now: () => NOW,
+  });
 }
 
 function ownerInputFromResolution(
@@ -213,22 +238,29 @@ function ownerHarness(options: HarnessOptions = {}) {
     throw new Error('expected owner evidence fixtures');
   }
 
-  const provenanceCodec = controlledCodec({
-    usr: provenanceEvidence.userReference,
-    req: provenanceEvidence.requestReference,
-    prf: provenanceEvidence.proofReference,
-  });
-  const membershipCodec = controlledCodec({
-    usr: membershipEvidence.userReference,
-    mbr: membershipEvidence.membershipReference,
-    mrv: membershipEvidence.membershipRevision,
-    bnd: membershipEvidence.bindingReference,
-    brv: membershipEvidence.bindingRevision,
-  });
-  const anchorCodec = controlledCodec({
-    anc: anchorEvidence.anchorReference,
-    arv: anchorEvidence.anchorRevision,
-  });
+  const useControlledCodec = options.referenceCodecMode === 'controlled';
+  const provenanceCodec = useControlledCodec
+    ? controlledCodec({
+        usr: provenanceEvidence.userReference,
+        req: provenanceEvidence.requestReference,
+        prf: provenanceEvidence.proofReference,
+      })
+    : genuineCodec();
+  const membershipCodec = useControlledCodec
+    ? controlledCodec({
+        usr: membershipEvidence.userReference,
+        mbr: membershipEvidence.membershipReference,
+        mrv: membershipEvidence.membershipRevision,
+        bnd: membershipEvidence.bindingReference,
+        brv: membershipEvidence.bindingRevision,
+      })
+    : genuineCodec();
+  const anchorCodec = useControlledCodec
+    ? controlledCodec({
+        anc: anchorEvidence.anchorReference,
+        arv: anchorEvidence.anchorRevision,
+      })
+    : genuineCodec();
 
   const requestedProvenanceResolution = ownRecord(options.provenanceResolution);
   const provenanceNowValue =
@@ -381,6 +413,11 @@ function ownerHarness(options: HarnessOptions = {}) {
     provenanceResolver,
     membershipProvider,
     anchorProvider,
+    referenceCodecs: Object.freeze([
+      provenanceCodec,
+      membershipCodec,
+      anchorCodec,
+    ]),
     provenanceNow,
     resolveMembershipFact,
     resolveAnchorFact,
@@ -484,6 +521,15 @@ function ownerLookalike(
 }
 
 describe('BASE-02B institution scope guard composition', () => {
+  it('uses only genuine reference codecs in the positive owner harness', () => {
+    const harness = ownerHarness();
+    expect(
+      harness.referenceCodecs.every((codec) =>
+        isInstitutionGuardReferenceCodecV1(codec),
+      ),
+    ).toBe(true);
+  });
+
   it.each(OWNER_LOOKALIKE_KINDS)(
     'rejects a %s provenance resolver lookalike before invoking any owner method',
     async (kind) => {
@@ -583,15 +629,15 @@ describe('BASE-02B institution scope guard composition', () => {
 
         expect(result).toEqual({
           kind: 'institution_scope_allow',
-          requestReference: reference('req'),
-          userReference: reference('usr'),
+          requestReference: genuineReference('req'),
+          userReference: genuineReference('usr'),
           role,
           source,
           tenantId: 'tenant-a',
           institutionId: 'institution-a',
-          membershipRevision: reference('mrv'),
-          bindingRevision: reference('brv'),
-          anchorRevision: reference('arv'),
+          membershipRevision: genuineReference('mrv'),
+          bindingRevision: genuineReference('brv'),
+          anchorRevision: genuineReference('arv'),
           provenanceValidUntil: '2026-07-22T08:04:00.000Z',
           membershipFreshUntil: '2026-07-22T08:01:00.000Z',
           anchorFreshUntil: '2026-07-22T08:01:00.000Z',
@@ -940,7 +986,12 @@ describe('BASE-02B institution scope guard composition', () => {
     ],
     [
       'provenance and membership user',
-      { membershipResolution: membership({ userReference: reference('usr', 'Q'.repeat(43)) }) },
+      {
+        membershipResolution: membership({
+          userReference: reference('usr', 'Q'.repeat(43)),
+        }),
+        referenceCodecMode: 'controlled',
+      },
       'membership_invalid',
     ],
     [
@@ -957,17 +1008,34 @@ describe('BASE-02B institution scope guard composition', () => {
   it.each([
     [
       'provenance request reference',
-      { provenanceResolution: verified(provenance({ requestReference: reference('req', `${'A'.repeat(42)}B`) })) },
+      {
+        provenanceResolution: verified(
+          provenance({
+            requestReference: reference('req', `${'A'.repeat(42)}B`),
+          }),
+        ),
+        referenceCodecMode: 'controlled',
+      },
       'invalid_context_shape',
     ],
     [
       'membership revision',
-      { membershipResolution: membership({ membershipRevision: reference('mrv', `${'A'.repeat(42)}B`) }) },
+      {
+        membershipResolution: membership({
+          membershipRevision: reference('mrv', `${'A'.repeat(42)}B`),
+        }),
+        referenceCodecMode: 'controlled',
+      },
       'membership_invalid',
     ],
     [
       'anchor revision',
-      { anchorResolution: anchor({ anchorRevision: reference('arv', `${'A'.repeat(42)}B`) }) },
+      {
+        anchorResolution: anchor({
+          anchorRevision: reference('arv', `${'A'.repeat(42)}B`),
+        }),
+        referenceCodecMode: 'controlled',
+      },
       'institution_anchor_unavailable',
     ],
   ] as const)(
@@ -982,17 +1050,32 @@ describe('BASE-02B institution scope guard composition', () => {
   it.each([
     [
       'wrong prefix',
-      { provenanceResolution: verified(provenance({ requestReference: reference('prf') })) },
+      {
+        provenanceResolution: verified(
+          provenance({ requestReference: reference('prf') }),
+        ),
+        referenceCodecMode: 'controlled',
+      },
       'provenance_unavailable',
     ],
     [
       'unknown key version',
-      { membershipResolution: membership({ bindingRevision: reference('brv', TOKEN, 2) }) },
+      {
+        membershipResolution: membership({
+          bindingRevision: reference('brv', TOKEN, 2),
+        }),
+        referenceCodecMode: 'controlled',
+      },
       'membership_invalid',
     ],
     [
       'short tag',
-      { anchorResolution: anchor({ anchorRevision: reference('arv', 'A'.repeat(22)) }) },
+      {
+        anchorResolution: anchor({
+          anchorRevision: reference('arv', 'A'.repeat(22)),
+        }),
+        referenceCodecMode: 'controlled',
+      },
       'institution_anchor_unavailable',
     ],
   ] as const)('rejects %s reference shape', async (_name, options, code) => {

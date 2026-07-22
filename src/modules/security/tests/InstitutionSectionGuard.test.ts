@@ -16,10 +16,12 @@ import {
   createFormalRequestProvenanceResolverV1,
   type FormalRequestProvenanceOwnerInputV1,
 } from '@/modules/security/server/formal-request-provenance-owner';
-import type {
-  InstitutionGuardReferenceCodecV1,
-  InstitutionGuardReferenceInputV1,
-  InstitutionGuardReferenceOwnerSubjectV1,
+import {
+  createInstitutionGuardReferenceCodecV1,
+  isInstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceCodecV1,
+  type InstitutionGuardReferenceInputV1,
+  type InstitutionGuardReferenceOwnerSubjectV1,
 } from '@/modules/security/server/institution-guard-reference';
 import {
   createRequestBoundFreshActiveMembershipProviderV1,
@@ -42,6 +44,7 @@ import {
 const SCOPE_NOW = new Date('2026-07-22T08:00:30.000Z');
 const SECTION_NOW = new Date('2026-07-22T08:00:31.000Z');
 const TOKEN = 'A'.repeat(43);
+const TEST_REFERENCE_KEY = new Uint8Array(32).fill(0x32);
 
 function reference(prefix: string): string {
   return `${prefix}_v1_k1_${TOKEN}`;
@@ -61,19 +64,32 @@ function controlledCodec() {
   };
 }
 
+function genuineCodec(): InstitutionGuardReferenceCodecV1 {
+  return createInstitutionGuardReferenceCodecV1({
+    keyRing: {
+      currentIssueKey: {
+        keyVersion: 1,
+        keyMaterial: TEST_REFERENCE_KEY,
+      },
+      verifyOnlyKeys: [],
+    },
+    now: () => SECTION_NOW,
+  });
+}
+
 type ScopeTimingOptions = Readonly<{
   provenanceValidUntil?: string;
   membershipObservedAt?: string;
   anchorObservedAt?: string;
 }>;
 
-function genuineScopeGuard(
+function genuineScopeComposition(
   role: InstitutionRoleV1 = 'tenant_admin',
   timing: ScopeTimingOptions = {},
 ) {
-  const provenanceCodec = controlledCodec().codec;
-  const membershipCodec = controlledCodec().codec;
-  const anchorCodec = controlledCodec().codec;
+  const provenanceCodec = genuineCodec();
+  const membershipCodec = genuineCodec();
+  const anchorCodec = genuineCodec();
   const provenanceResolver = createFormalRequestProvenanceResolverV1({
     ownerInput: {
       source: 'server_session',
@@ -128,12 +144,26 @@ function genuineScopeGuard(
     referenceCodec: anchorCodec,
     now: () => SCOPE_NOW,
   });
-  return createInstitutionScopeGuardV1({
-    provenanceResolver,
-    membershipProvider,
-    anchorProvider,
-    now: () => SCOPE_NOW,
-  });
+  return {
+    guard: createInstitutionScopeGuardV1({
+      provenanceResolver,
+      membershipProvider,
+      anchorProvider,
+      now: () => SCOPE_NOW,
+    }),
+    referenceCodecs: Object.freeze([
+      provenanceCodec,
+      membershipCodec,
+      anchorCodec,
+    ]),
+  };
+}
+
+function genuineScopeGuard(
+  role: InstitutionRoleV1 = 'tenant_admin',
+  timing: ScopeTimingOptions = {},
+) {
+  return genuineScopeComposition(role, timing).guard;
 }
 
 function sectionHarness(
@@ -144,13 +174,13 @@ function sectionHarness(
     now?: () => Date;
   }> = {},
 ) {
-  const policy = controlledCodec();
+  const referenceCodec = options.referenceCodec ?? genuineCodec();
   const guard = createInstitutionSectionGuardV1({
     scopeGuard: options.scopeGuard ?? genuineScopeGuard(role),
-    referenceCodec: options.referenceCodec ?? policy.codec,
+    referenceCodec,
     now: options.now ?? (() => SECTION_NOW),
   });
-  return { guard, policy };
+  return { guard, referenceCodec };
 }
 
 const ROLE_MATRIX = INSTITUTION_NAVIGATION_SECTION_IDS_V1.flatMap((sectionId) =>
@@ -252,6 +282,16 @@ function expectedPolicyOwnerSubject(): InstitutionGuardReferenceOwnerSubjectV1 {
 }
 
 describe('WB-BASE-SECTION-GUARD-04A', () => {
+  it('uses only genuine reference codecs in positive scope and section fixtures', () => {
+    const scope = genuineScopeComposition();
+    const section = sectionHarness();
+    expect(
+      [...scope.referenceCodecs, section.referenceCodec].every((codec) =>
+        isInstitutionGuardReferenceCodecV1(codec),
+      ),
+    ).toBe(true);
+  });
+
   it.each(ROLE_MATRIX)(
     'enforces the private 7x4 matrix: $sectionId / $role',
     async ({ sectionId, role, allowed }) => {
@@ -420,7 +460,10 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
         revocable.revoke();
         value = revocable.proxy;
       }
-      const { guard, policy } = sectionHarness();
+      const policy = controlledCodec();
+      const { guard } = sectionHarness('tenant_admin', {
+        referenceCodec: policy.codec,
+      });
       await expect(guard.authorizeCurrentSection(value as never)).resolves.toEqual({
         kind: 'rejected',
         code: 'action_unregistered',
@@ -442,7 +485,10 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
     'tenantId',
     'institutionId',
   ] as const)('rejects caller-controlled %s without a policy call', async (key) => {
-    const { guard, policy } = sectionHarness();
+    const policy = controlledCodec();
+    const { guard } = sectionHarness('tenant_admin', {
+      referenceCodec: policy.codec,
+    });
     await expect(
       guard.authorizeCurrentSection({ sectionId: 'workbench', [key]: 'caller-value' } as never),
     ).resolves.toEqual({ kind: 'rejected', code: 'action_unregistered' });
@@ -478,24 +524,39 @@ describe('WB-BASE-SECTION-GUARD-04A', () => {
     expect(verify).not.toHaveBeenCalled();
   });
 
-  it('issues and verifies one prv with the exact same private manifest input', async () => {
-    const { guard, policy } = sectionHarness();
+  it('issues a prv that verifies only with the exact private manifest input', async () => {
+    const { guard, referenceCodec } = sectionHarness();
     const result = await guard.authorizeCurrentSection({ sectionId: 'workbench' });
-    expect(result).toMatchObject({ kind: 'institution_section_allow', policyRevision: reference('prv') });
-    expect(policy.issue).toHaveBeenCalledTimes(1);
-    expect(policy.verify).toHaveBeenCalledTimes(1);
-    const issuedInput = policy.issue.mock.calls[0]?.[0] as InstitutionGuardReferenceInputV1<'prv'>;
-    const verifiedInput = policy.verify.mock.calls[0]?.[0] as InstitutionGuardReferenceInputV1<'prv'> & {
-      reference: string;
-    };
-    expect(issuedInput).toMatchObject({
+    expect(result).toMatchObject({
+      kind: 'institution_section_allow',
+      policyRevision: expect.stringMatching(/^prv_v1_k1_[A-Za-z0-9_-]{43}$/u),
+    });
+    if (result.kind !== 'institution_section_allow') {
+      throw new Error('expected section allow fixture');
+    }
+    const exactInput: InstitutionGuardReferenceInputV1<'prv'> = {
       prefix: 'prv',
       ownerDomain: 'security.institution-section-policy',
       tenantId: null,
       institutionId: null,
+      ownerSubject: expectedPolicyOwnerSubject(),
+    };
+    expect(
+      referenceCodec.verify({
+        ...exactInput,
+        reference: result.policyRevision,
+      }),
+    ).toEqual({
+      kind: 'verified',
+      reference: result.policyRevision,
     });
-    expect(issuedInput.ownerSubject).toBe(expectedPolicyOwnerSubject());
-    expect(verifiedInput).toEqual({ ...issuedInput, reference: reference('prv') });
+    expect(
+      referenceCodec.verify({
+        ...exactInput,
+        ownerDomain: 'security.institution-section-policy.other',
+        reference: result.policyRevision,
+      }),
+    ).toEqual({ kind: 'rejected', code: 'guard_reference_invalid' });
   });
 
   it.each([
