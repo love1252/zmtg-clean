@@ -3,30 +3,91 @@ import {
   INSTITUTION_NAVIGATION_SECTIONS_V1,
   type InstitutionNavigationSectionV1,
 } from '@/modules/institution-contracts/v1/institution-navigation';
-import { INSTITUTION_CANONICAL_ROUTES_V1 } from '@/modules/institution-contracts/v1/institution-routes';
+import {
+  INSTITUTION_CANONICAL_ROUTES_V1,
+  type InstitutionCanonicalRouteIdV1,
+} from '@/modules/institution-contracts/v1/institution-routes';
 import { InstitutionPageState } from '@/modules/institution/components/InstitutionPageState';
+
+type CapabilityOffRouteIdV1 = Exclude<InstitutionCanonicalRouteIdV1, 'workbench'>;
+
+const CAPABILITY_OFF_PAGE_LABELS_V1 = Object.freeze({
+  customer_list: '客户列表',
+  customer_treatments: '治疗记录',
+  customer_treatment_detail: '治疗记录详情',
+  customer_detail: '客户详情',
+  conversation_queue: '会话队列',
+  conversation_automations: '自动触达',
+  conversation_automation_detail: '自动触达详情',
+  conversation_detail: '会话详情',
+  care_today_queue: '今日队列',
+  care_appointments: '预约管理',
+  care_appointment_detail: '预约详情',
+  care_followups: '随访任务',
+  care_followup_detail: '随访详情',
+  care_paths: '路径管理',
+  care_path_detail: '路径详情',
+  knowledge_library: '资料库',
+  knowledge_search: '检索测试',
+  knowledge_qa: '问答与引用',
+  knowledge_qa_audit_detail: '问答审计详情',
+  knowledge_jobs: '任务记录',
+  knowledge_item_detail: '资料详情',
+  analytics_overview: '经营总览',
+  analytics_consumption: '消费分析',
+  analytics_consumption_detail: '消费详情',
+  analytics_projects: '项目分析',
+  analytics_project_detail: '项目详情',
+  analytics_opportunities: '客户与机会',
+  analytics_opportunity_detail: '客户机会详情',
+  analytics_reports: 'AI 经营报告',
+  analytics_report_detail: '经营报告详情',
+  system_overview: '系统概览',
+  system_organization: '机构与成员',
+  system_member_detail: '成员详情',
+  system_channels: '渠道接入',
+  system_channel_connection_detail: '渠道连接详情',
+  system_channel_mappings: '身份匹配',
+  system_channel_mapping_detail: '身份匹配详情',
+  system_data: '数据接入与治理',
+  system_data_source_detail: '数据源详情',
+  system_data_import_detail: '导入批次详情',
+  system_ai_usage: 'AI 与额度',
+  system_ai_usage_service_detail: 'AI 服务用量详情',
+  system_privacy: '数据与隐私',
+  system_audit: '审计与安全',
+  system_audit_detail: '审计详情',
+} satisfies Readonly<Record<CapabilityOffRouteIdV1, string>>);
 
 const sectionById = new Map(
   INSTITUTION_NAVIGATION_SECTIONS_V1.map((section) => [section.id, section] as const),
 );
 const safeRouteParameterPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const capabilityOffRoutes = INSTITUTION_CANONICAL_ROUTES_V1.flatMap((route) => {
-  if (route.sectionId === 'workbench') return [];
+  if (route.id === 'workbench') return [];
 
   const section = sectionById.get(route.sectionId);
   if (!section) return [];
 
   return [
     {
+      pageLabel: CAPABILITY_OFF_PAGE_LABELS_V1[route.id],
+      routeId: route.id,
       section,
       segments: route.pathnamePattern.split('/').filter(Boolean).slice(1),
     },
   ];
 });
 
-export function resolveInstitutionRouteSectionV1(
+export type InstitutionCapabilityOffRouteV1 = Readonly<{
+  pageLabel: string;
+  routeId: CapabilityOffRouteIdV1;
+  section: InstitutionNavigationSectionV1;
+}>;
+
+export function resolveInstitutionCapabilityOffRouteV1(
   slug: readonly string[],
-): InstitutionNavigationSectionV1 | null {
+): InstitutionCapabilityOffRouteV1 | null {
   const route = capabilityOffRoutes.find((candidate) => {
     if (candidate.segments.length !== slug.length) return false;
 
@@ -40,16 +101,30 @@ export function resolveInstitutionRouteSectionV1(
     });
   });
 
-  return route?.section ?? null;
+  if (!route) return null;
+
+  return Object.freeze({
+    pageLabel: route.pageLabel,
+    routeId: route.routeId,
+    section: route.section,
+  });
+}
+
+export function resolveInstitutionRouteSectionV1(
+  slug: readonly string[],
+): InstitutionNavigationSectionV1 | null {
+  return resolveInstitutionCapabilityOffRouteV1(slug)?.section ?? null;
 }
 
 export function InstitutionCapabilityOffPage({
+  pageLabel,
   section,
 }: {
+  pageLabel: string;
   section: InstitutionNavigationSectionV1;
 }) {
-  const title = `${section.label}尚未开放`;
-  const semanticTitle = `${section.label}能力未开放`;
+  const title = `${pageLabel}尚未开放`;
+  const semanticTitle = `${section.label} · ${pageLabel}能力未开放`;
 
   return (
     <div
