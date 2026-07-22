@@ -1,943 +1,274 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as treatmentSummariesPost } from '@/app/api/institution/customers/[customerId]/treatment-summaries/route';
 import { PATCH as treatmentSummaryPatch } from '@/app/api/institution/treatment-summaries/[summaryId]/route';
 import { POST as treatmentSummaryVoidPost } from '@/app/api/institution/treatment-summaries/[summaryId]/void/route';
-import type { AccessContext } from '@/modules/security/domain/access-control';
 
 const routeMocks = vi.hoisted(() => {
-  const tenantBusinessRepository = {
-    getCustomerByTenant: vi.fn(),
-  };
-  const treatmentSummaryRepository = {
-    checkAppointmentBelongsToTenantAndCustomer: vi.fn(),
-    createTreatmentSummary: vi.fn(),
-    getTreatmentSummaryByTenant: vi.fn(),
-    updateTreatmentSummaryByTenant: vi.fn(),
-    voidTreatmentSummaryByTenant: vi.fn(),
-  };
-  const auditRecord = vi.fn();
-  const transactionDatabase = { database: 'transaction-db' };
-  const database = {
-    database: 'test-db',
-    transaction: vi.fn(async (operation: (tx: typeof transactionDatabase) => unknown) =>
-      operation(transactionDatabase),
-    ),
-  };
+  const transaction = vi.fn();
 
   return {
-    auditRecord,
-    createAuditEventRepository: vi.fn(() => ({ record: auditRecord })),
-    createTenantBusinessRepository: vi.fn(() => tenantBusinessRepository),
-    createTreatmentSummaryRepository: vi.fn(() => treatmentSummaryRepository),
-    database,
-    getDatabase: vi.fn(),
+    canAccessResource: vi.fn(),
+    createAuditEventRepository: vi.fn(),
+    createTenantBusinessRepository: vi.fn(),
+    createTreatmentSummaryRepository: vi.fn(),
+    getDatabase: vi.fn(() => ({ transaction })),
     getDemoAccessContextFromRequest: vi.fn(),
-    tenantBusinessRepository,
-    transactionDatabase,
-    treatmentSummaryRepository,
+    parseCreateTreatmentSummaryPayload: vi.fn(),
+    parseUpdateTreatmentSummaryPayload: vi.fn(),
+    parseVoidTreatmentSummaryPayload: vi.fn(),
+    transaction,
   };
 });
 
-vi.mock('@/server/db/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/server/db/client')>();
-  return {
-    ...actual,
-    getDatabase: routeMocks.getDatabase,
-  };
-});
+vi.mock('@/modules/security/server/access-context', () => ({
+  getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
+}));
 
-vi.mock('@/modules/security/server/access-context', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/security/server/access-context')>();
-  return {
-    ...actual,
-    getDemoAccessContextFromRequest: routeMocks.getDemoAccessContextFromRequest,
-  };
-});
+vi.mock('@/modules/security/domain/access-control', () => ({
+  canAccessResource: routeMocks.canAccessResource,
+}));
 
-vi.mock('@/modules/institution/server/tenant-business-repository', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('@/modules/institution/server/tenant-business-repository')
-  >();
-  return {
-    ...actual,
-    createTenantBusinessRepository: routeMocks.createTenantBusinessRepository,
-  };
-});
+vi.mock('@/server/db/client', () => ({
+  getDatabase: routeMocks.getDatabase,
+}));
 
-vi.mock('@/modules/institution/server/treatment-summary-repository', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('@/modules/institution/server/treatment-summary-repository')
-  >();
-  return {
-    ...actual,
-    createTreatmentSummaryRepository: routeMocks.createTreatmentSummaryRepository,
-  };
-});
+vi.mock('@/modules/institution/server/tenant-business-repository', () => ({
+  createTenantBusinessRepository: routeMocks.createTenantBusinessRepository,
+}));
 
-vi.mock('@/modules/audit/server/audit-event-repository', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/audit/server/audit-event-repository')>();
-  return {
-    ...actual,
-    createAuditEventRepository: routeMocks.createAuditEventRepository,
-  };
-});
+vi.mock('@/modules/institution/server/treatment-summary-repository', () => ({
+  createTreatmentSummaryRepository: routeMocks.createTreatmentSummaryRepository,
+}));
 
-const tenantContext: AccessContext = {
-  userId: 'demo-user-admin',
-  role: 'tenant_admin',
-  scope: 'tenant',
-  tenantId: 'demo-tenant-001',
-  source: 'demo_session',
+vi.mock('@/modules/audit/server/audit-event-repository', () => ({
+  createAuditEventRepository: routeMocks.createAuditEventRepository,
+}));
+
+vi.mock('@/modules/institution/server/treatment-summary-write-input', () => ({
+  parseCreateTreatmentSummaryPayload: routeMocks.parseCreateTreatmentSummaryPayload,
+  parseUpdateTreatmentSummaryPayload: routeMocks.parseUpdateTreatmentSummaryPayload,
+  parseVoidTreatmentSummaryPayload: routeMocks.parseVoidTreatmentSummaryPayload,
+}));
+
+type RouteContext = {
+  params: Promise<{ summaryId: string }>;
 };
 
-const platformContext: AccessContext = {
-  userId: 'demo-user-platform',
-  role: 'platform_admin',
-  scope: 'platform',
-  tenantId: null,
-  source: 'demo_session',
+type DisabledMutationHandler = (
+  request: Request,
+  context: RouteContext,
+) => Response | Promise<Response>;
+
+type DisabledMutationContract = {
+  error: string;
+  handler: DisabledMutationHandler;
+  isAsync: boolean;
+  method: 'PATCH' | 'POST';
+  path: string;
+  sourcePath: string;
+  sourceExport: 'PATCH' | 'POST';
 };
 
-const customerRecord = {
-  id: 'cust_001',
-  tenantId: 'demo-tenant-001',
-  displayName: '王女士',
-};
+const downstreamMocks = [
+  routeMocks.getDemoAccessContextFromRequest,
+  routeMocks.canAccessResource,
+  routeMocks.getDatabase,
+  routeMocks.createTenantBusinessRepository,
+  routeMocks.createTreatmentSummaryRepository,
+  routeMocks.createAuditEventRepository,
+  routeMocks.parseCreateTreatmentSummaryPayload,
+  routeMocks.parseUpdateTreatmentSummaryPayload,
+  routeMocks.parseVoidTreatmentSummaryPayload,
+  routeMocks.transaction,
+] as const;
 
-const validCreateTreatmentSummaryPayload = {
-  treatmentDate: '2026-06-01T12:00:00+08:00',
-  treatmentProject: '光电修复',
-  treatmentCategory: 'laser_repair',
-  treatmentStage: 'D7 复诊',
-  recoveryStage: 'D7',
-  riskLevel: 'watch',
-  ownerUserId: 'doctor-lin',
-  summary: '结构化摘要：红肿减轻，安排补水护理。',
-  nextCareAction: 'D14 人工回访恢复阶段。',
-  tags: ['结构化摘要', '术后关怀'],
-  appointmentId: 'appt_001',
-};
-
-const createdTreatmentSummaryRecord = {
-  id: 'trt_created_001',
-  tenantId: 'demo-tenant-001',
-  customerId: 'cust_001',
-  appointmentId: 'appt_001',
-  treatmentDate: '2026-06-01T04:00:00.000Z',
-  treatmentProject: '光电修复',
-  treatmentCategory: 'laser_repair',
-  treatmentStage: 'D7 复诊',
-  recoveryStage: 'D7',
-  riskLevel: 'watch',
-  ownerUserId: 'doctor-lin',
-  summary: '结构化摘要：红肿减轻，安排补水护理。',
-  nextCareAction: 'D14 人工回访恢复阶段。',
-  tags: ['结构化摘要', '术后关怀'],
-  createdAt: '2026-06-01T04:01:00.000Z',
-  updatedAt: '2026-06-01T04:01:00.000Z',
-  phoneNumber: '13800000000',
-  fullTreatmentRecord: '完整治疗记录正文',
-  medicalRecordText: '完整病历正文',
-  consultationTranscript: '咨询对话全文',
-  requestBody: { tenantId: 'other-tenant' },
-  stack: 'Error: DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
-  token: 'sk_test_should_not_return',
-};
-
-const existingTreatmentSummaryRecord = {
-  id: 'trt_edit_001',
-  tenantId: 'demo-tenant-001',
-  customerId: 'cust_001',
-  appointmentId: 'appt_001',
-  treatmentDate: '2026-06-01T04:00:00.000Z',
-  treatmentProject: '光电修复',
-  treatmentCategory: 'laser_repair',
-  treatmentStage: 'D7 复诊',
-  recoveryStage: 'D7',
-  riskLevel: 'watch',
-  ownerUserId: 'doctor-lin',
-  summary: '结构化摘要：红肿减轻，安排补水护理。',
-  nextCareAction: 'D14 人工回访恢复阶段。',
-  tags: ['结构化摘要', '术后关怀'],
-  createdAt: '2026-06-01T04:01:00.000Z',
-  updatedAt: '2026-06-01T04:01:00.000Z',
-};
-
-const updatedTreatmentSummaryRecord = {
-  ...existingTreatmentSummaryRecord,
-  appointmentId: 'appt_edit_002',
-  treatmentDate: '2026-06-02T02:30:00.000Z',
-  riskLevel: 'urgent',
-  summary: '复诊后恢复稳定，提醒人工观察。',
-  tags: ['复诊', '风险观察'],
-  updatedAt: '2026-06-02T02:31:00.000Z',
-  phoneNumber: '13800000000',
-  fullTreatmentRecord: '完整治疗记录正文',
-  medicalRecordText: '完整病历正文',
-  consultationTranscript: '咨询对话全文',
-  requestBody: { tenantId: 'other-tenant' },
-  stack: 'Error: DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
-  token: 'sk_test_should_not_return',
-};
-
-const voidedTreatmentSummaryRecord = {
-  id: 'trt_void_001',
-  customerId: 'cust_001',
-  appointmentId: 'appt_001',
-  treatmentDate: '2026-06-01T04:00:00.000Z',
-  treatmentProject: '光电修复',
-  treatmentCategory: 'laser_repair',
-  treatmentStage: 'D7 复诊',
-  recoveryStage: 'D7',
-  riskLevel: 'watch',
-  ownerUserId: 'doctor-lin',
-  summary: '结构化摘要：红肿减轻，安排补水护理。',
-  nextCareAction: 'D14 人工回访恢复阶段。',
-  tags: ['结构化摘要', '术后关怀'],
-  status: 'voided',
-  voidedAt: '2026-06-02T09:00:00.000Z',
-  voidedBy: 'demo-user-admin',
-  voidReasonCode: 'duplicate_summary',
-  voidReason: '重复录入，保留较新的治疗摘要',
-  createdAt: '2026-06-01T04:01:00.000Z',
-  updatedAt: '2026-06-02T09:00:00.000Z',
-  tenantId: 'demo-tenant-001',
-  phoneNumber: '13800000000',
-  fullTreatmentRecord: '完整治疗记录正文',
-  medicalRecordText: '完整病历正文',
-  consultationTranscript: '咨询对话全文',
-  requestBody: { tenantId: 'other-tenant' },
-  stack: 'Error: DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg',
-  token: 'sk_test_should_not_return',
-};
-
-function routeContext(customerId = 'cust_001') {
-  return { params: Promise.resolve({ customerId }) };
-}
-
-function postRequest(payload: unknown, init?: RequestInit) {
-  return new Request(
-    'http://localhost/api/institution/customers/cust_001/treatment-summaries?tenantId=other-tenant',
-    {
-      method: 'POST',
-      headers: { 'x-tenant-id': 'other-tenant', ...(init?.headers ?? {}) },
-      body: JSON.stringify(payload),
-      ...init,
-    },
-  );
-}
-
-function patchRouteContext(summaryId = 'trt_edit_001') {
+function routeContext(summaryId = 'summary_safe_001'): RouteContext {
   return { params: Promise.resolve({ summaryId }) };
 }
 
-function patchRequest(payload: unknown, init?: RequestInit) {
-  return new Request(
-    'http://localhost/api/institution/treatment-summaries/trt_edit_001?tenantId=other-tenant',
+function requestVariants(method: 'PATCH' | 'POST', path: string) {
+  return [
     {
-      method: 'PATCH',
-      headers: { 'x-tenant-id': 'other-tenant', ...(init?.headers ?? {}) },
-      body: JSON.stringify(payload),
-      ...init,
+      label: '普通请求',
+      request: new Request(`http://localhost${path}`, {
+        method,
+        body: JSON.stringify({ summary: 'caller_marker_summary' }),
+      }),
     },
+    {
+      label: 'query、header 与 cookie 注入请求',
+      request: new Request(
+        `http://localhost${path}?tenantId=caller_marker_tenant&institutionId=caller_marker_institution`,
+        {
+          method,
+          headers: {
+            cookie: 'session=caller_marker_cookie',
+            'x-tenant-id': 'caller_marker_header',
+          },
+          body: JSON.stringify({
+            customer: 'caller_marker_customer',
+            nextCareAction: 'caller_marker_action',
+            voidReason: 'caller_marker_reason',
+          }),
+        },
+      ),
+    },
+    {
+      label: '非法 JSON 请求',
+      request: new Request(`http://localhost${path}`, {
+        method,
+        body: '{caller_marker_invalid_json',
+      }),
+    },
+  ] as const;
+}
+
+function createHostileProxy(label: string) {
+  const trap = vi.fn(() => {
+    throw new Error(`${label} trap must not run`);
+  });
+  const proxy = new Proxy({}, {
+    get: trap,
+    getOwnPropertyDescriptor: trap,
+    getPrototypeOf: trap,
+    has: trap,
+    ownKeys: trap,
+    set: trap,
+  });
+
+  return { proxy, trap };
+}
+
+function expectNoDownstreamCalls() {
+  for (const downstream of downstreamMocks) {
+    expect(downstream).not.toHaveBeenCalled();
+  }
+  expect(globalThis.fetch).not.toHaveBeenCalled();
+}
+
+async function expectDisabledResponse(response: Response, error: string) {
+  const expected = { code: 'capability_disabled', error };
+  const text = await response.text();
+
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  expect(text).toBe(JSON.stringify(expected));
+  expect(Object.keys(JSON.parse(text) as Record<string, unknown>)).toEqual(['code', 'error']);
+  expect(text).not.toMatch(
+    /caller_marker|summary|nextCareAction|voidReason|customer|record|tenantId|institutionId/u,
   );
 }
 
-function voidRouteContext(summaryId = 'trt_void_001') {
-  return { params: Promise.resolve({ summaryId }) };
-}
+function describeDisabledMutation(contract: DisabledMutationContract) {
+  describe(`${contract.sourceExport} ${contract.path} capability-off 边界`, () => {
+    it.each(requestVariants(contract.method, contract.path))(
+      '$label 同步返回固定低敏 503，且不读取或初始化下游',
+      async ({ request }) => {
+        const result = contract.handler(request, routeContext());
 
-function voidRequest(payload: unknown, init?: RequestInit) {
-  return new Request(
-    'http://localhost/api/institution/treatment-summaries/trt_void_001/void?tenantId=other-tenant',
-    {
-      method: 'POST',
-      headers: { 'x-tenant-id': 'other-tenant', ...(init?.headers ?? {}) },
-      body: JSON.stringify(payload),
-      ...init,
-    },
-  );
-}
+        expectNoDownstreamCalls();
+        expect(result).toBeInstanceOf(contract.isAsync ? Promise : Response);
+        await expectDisabledResponse(await result, contract.error);
+        expectNoDownstreamCalls();
+      },
+    );
 
-function expectNoPrivateData(
-  payload: unknown,
-  options: { allowTenantBoundaryFields?: boolean; allowRejectedFieldNames?: boolean } = {},
-) {
-  const serialized = JSON.stringify(payload);
+    it('不读取 hostile Request 或 context Proxy', async () => {
+      const hostileRequest = createHostileProxy('request');
+      const hostileContext = createHostileProxy('context');
 
-  if (!options.allowTenantBoundaryFields) {
-    expect(serialized).not.toContain('tenantId');
-    expect(serialized).not.toContain('customerId');
-  }
+      const result = contract.handler(
+        hostileRequest.proxy as unknown as Request,
+        hostileContext.proxy as unknown as RouteContext,
+      );
 
-  expect(serialized).not.toContain('13800000000');
-  expect(serialized).not.toContain('110101199001010011');
-  expect(serialized).not.toContain('MR-RAW-001');
-  expect(serialized).not.toContain('完整治疗记录正文');
-  expect(serialized).not.toContain('完整病历正文');
-  expect(serialized).not.toContain('诊疗原文');
-  expect(serialized).not.toContain('咨询对话全文');
+      expectNoDownstreamCalls();
+      expect(result).toBeInstanceOf(contract.isAsync ? Promise : Response);
+      await expectDisabledResponse(await result, contract.error);
+      expect(hostileRequest.trap).not.toHaveBeenCalled();
+      expect(hostileContext.trap).not.toHaveBeenCalled();
+      expectNoDownstreamCalls();
+    });
 
-  if (!options.allowRejectedFieldNames) {
-    expect(serialized).not.toContain('imageUrl');
-    expect(serialized).not.toContain('fileUrl');
-    expect(serialized).not.toContain('aiGeneratedContent');
-    expect(serialized).not.toContain('externalSystemPayload');
-  }
+    it('不读取 context 内嵌 params Proxy', async () => {
+      const hostileParams = createHostileProxy('params');
+      const result = contract.handler(
+        new Request(`http://localhost${contract.path}`, { method: contract.method }),
+        { params: hostileParams.proxy } as unknown as RouteContext,
+      );
 
-  expect(serialized).not.toContain('requestBody');
-  expect(serialized).not.toContain('DATABASE_URL');
-  expect(serialized).not.toContain('postgres://');
-  expect(serialized).not.toContain('stack');
-  expect(serialized).not.toContain('token');
-  expect(serialized).not.toContain('secret');
-}
+      expectNoDownstreamCalls();
+      expect(result).toBeInstanceOf(contract.isAsync ? Promise : Response);
+      await expectDisabledResponse(await result, contract.error);
+      expect(hostileParams.trap).not.toHaveBeenCalled();
+      expectNoDownstreamCalls();
+    });
 
-function expectAuditEventDoesNotContainPrivateBody(event: unknown) {
-  expectNoPrivateData(event, {
-    allowRejectedFieldNames: true,
-    allowTenantBoundaryFields: true,
+    it('生产 source 仅导入 NextResponse，保留必填双参数且不恢复旧链', () => {
+      const source = readFileSync(join(process.cwd(), contract.sourcePath), 'utf8');
+      const importLines = source.split('\n').filter((line) => line.startsWith('import '));
+      const signature = new RegExp(
+        `export ${contract.isAsync ? 'async ' : ''}function ${contract.sourceExport}\\(\\s*_request: Request,\\s*_context: [A-Za-z]+,\\s*\\)`,
+        'u',
+      );
+
+      expect(importLines).toEqual(["import { NextResponse } from 'next/server';"]);
+      expect(source).toMatch(signature);
+      expect(source).not.toMatch(/_request\?:|_context\?:/u);
+      expect(source).not.toMatch(/\bawait\b/u);
+      expect(source).not.toMatch(
+        /getDemoAccessContextFromRequest|canAccessResource|getDatabase|createTenantBusinessRepository|createTreatmentSummaryRepository|createAuditEventRepository|readJsonBody|parseUpdateTreatmentSummaryPayload|parseVoidTreatmentSummaryPayload|\.transaction\(|\b_?request\s*(?:\.|\[)|\b_?context\s*(?:\.|\[)|fetch\s*\(/u,
+      );
+    });
   });
 }
 
 beforeEach(() => {
-  routeMocks.getDatabase.mockReset();
-  routeMocks.getDatabase.mockReturnValue(routeMocks.database);
-  routeMocks.database.transaction.mockReset();
-  routeMocks.database.transaction.mockImplementation(async (operation) =>
-    operation(routeMocks.transactionDatabase),
-  );
-  routeMocks.getDemoAccessContextFromRequest.mockReset();
-  routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
-  routeMocks.createTenantBusinessRepository.mockClear();
-  routeMocks.createTreatmentSummaryRepository.mockClear();
-  routeMocks.createAuditEventRepository.mockClear();
-  routeMocks.auditRecord.mockReset();
-  routeMocks.auditRecord.mockResolvedValue(undefined);
-  routeMocks.tenantBusinessRepository.getCustomerByTenant.mockReset();
-  routeMocks.tenantBusinessRepository.getCustomerByTenant.mockResolvedValue(customerRecord);
-  routeMocks.treatmentSummaryRepository.checkAppointmentBelongsToTenantAndCustomer.mockReset();
-  routeMocks.treatmentSummaryRepository.checkAppointmentBelongsToTenantAndCustomer.mockResolvedValue({
-    kind: 'matched',
-  });
-  routeMocks.treatmentSummaryRepository.createTreatmentSummary.mockReset();
-  routeMocks.treatmentSummaryRepository.createTreatmentSummary.mockResolvedValue(
-    createdTreatmentSummaryRecord,
-  );
-  routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant.mockReset();
-  routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant.mockResolvedValue(
-    existingTreatmentSummaryRecord,
-  );
-  routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant.mockReset();
-  routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant.mockResolvedValue({
-    kind: 'updated',
-    record: updatedTreatmentSummaryRecord,
-  });
-  routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant.mockReset();
-  routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant.mockResolvedValue({
-    kind: 'voided',
-    record: voidedTreatmentSummaryRecord,
+  vi.clearAllMocks();
+  vi.stubGlobal('fetch', vi.fn());
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('已关闭的客户治疗摘要创建 route 回归', () => {
+  it('仍固定返回低敏 503，且不进入旧创建链', async () => {
+    const response = treatmentSummariesPost(
+      new Request(
+        'http://localhost/api/institution/customers/caller_marker_customer/treatment-summaries',
+        {
+          method: 'POST',
+          body: JSON.stringify({ summary: 'caller_marker_summary' }),
+        },
+      ),
+      { params: Promise.resolve({ customerId: 'caller_marker_customer' }) },
+    );
+
+    expect(response).toBeInstanceOf(Response);
+    await expectDisabledResponse(response, '客户治疗摘要创建能力暂未启用');
+    expectNoDownstreamCalls();
   });
 });
 
-describe('治疗摘要创建 API route', () => {
-  const disabledResponse = {
-    code: 'capability_disabled',
-    error: '客户治疗摘要创建能力暂未启用',
-  };
-
-  it.each([
-    ['原合法创建请求', postRequest(validCreateTreatmentSummaryPayload), routeContext()],
-    [
-      '原跨边界请求',
-      postRequest({ ...validCreateTreatmentSummaryPayload, tenantId: 'other-tenant' }),
-      routeContext('cust_other_tenant'),
-    ],
-    [
-      '原非法 JSON 请求',
-      new Request('http://localhost/api/institution/customers/cust_001/treatment-summaries', {
-        method: 'POST',
-        body: '{not-json',
-      }),
-      routeContext(),
-    ],
-  ])('%s 固定返回低敏 503，且不进入旧创建链', async (_label, request, context) => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await treatmentSummariesPost(request, context);
-
-    expect(response.status).toBe(503);
-    expect(response.headers.get('cache-control')).toBe('no-store');
-    await expect(response.json()).resolves.toEqual(disabledResponse);
-    expect(routeMocks.getDemoAccessContextFromRequest).not.toHaveBeenCalled();
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-    expect(routeMocks.database.transaction).not.toHaveBeenCalled();
-    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
-    expect(routeMocks.createTreatmentSummaryRepository).not.toHaveBeenCalled();
-    expect(routeMocks.createAuditEventRepository).not.toHaveBeenCalled();
-    expect(routeMocks.tenantBusinessRepository.getCustomerByTenant).not.toHaveBeenCalled();
-    expect(
-      routeMocks.treatmentSummaryRepository.checkAppointmentBelongsToTenantAndCustomer,
-    ).not.toHaveBeenCalled();
-    expect(routeMocks.treatmentSummaryRepository.createTreatmentSummary).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).not.toHaveBeenCalled();
-  });
+describeDisabledMutation({
+  error: '治疗摘要编辑能力暂未启用',
+  handler: treatmentSummaryPatch,
+  isAsync: true,
+  method: 'PATCH',
+  path: '/api/institution/treatment-summaries/caller_marker_summary',
+  sourcePath: 'src/app/api/institution/treatment-summaries/[summaryId]/route.ts',
+  sourceExport: 'PATCH',
 });
 
-describe('治疗摘要作废 API route', () => {
-  it('合法 payload 作废成功，返回安全 DTO，并写 allowed audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await treatmentSummaryVoidPost(
-      voidRequest({
-        reasonCode: 'duplicate_summary',
-        reasonText: '重复录入，保留较新的治疗摘要',
-      }),
-      voidRouteContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(payload).toEqual({
-      record: {
-        id: 'trt_void_001',
-        appointmentId: 'appt_001',
-        treatmentDate: '2026-06-01T04:00:00.000Z',
-        treatmentProject: '光电修复',
-        treatmentCategory: 'laser_repair',
-        treatmentStage: 'D7 复诊',
-        recoveryStage: 'D7',
-        riskLevel: 'watch',
-        ownerUserId: 'doctor-lin',
-        summary: '结构化摘要：红肿减轻，安排补水护理。',
-        nextCareAction: 'D14 人工回访恢复阶段。',
-        tags: ['结构化摘要', '术后关怀'],
-        status: 'voided',
-        voidedAt: '2026-06-02T09:00:00.000Z',
-        voidedBy: 'demo-user-admin',
-        voidReasonCode: 'duplicate_summary',
-        voidReason: '重复录入，保留较新的治疗摘要',
-        createdAt: '2026-06-01T04:01:00.000Z',
-        updatedAt: '2026-06-02T09:00:00.000Z',
-      },
-    });
-    expectNoPrivateData(payload);
-    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      summaryId: 'trt_void_001',
-      voidedBy: 'demo-user-admin',
-      reasonCode: 'duplicate_summary',
-      reasonText: '重复录入，保留较新的治疗摘要',
-    });
-    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).not.toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'other-tenant' }),
-    );
-    expect(routeMocks.database.transaction).toHaveBeenCalledTimes(1);
-    expect(routeMocks.createTreatmentSummaryRepository).toHaveBeenCalledWith(
-      routeMocks.transactionDatabase,
-    );
-    expect(routeMocks.createAuditEventRepository).toHaveBeenCalledWith(
-      routeMocks.transactionDatabase,
-    );
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      reason: 'treatment_summary_voided',
-      resource: 'treatment_summary',
-      resourceId: 'trt_void_001',
-      result: 'allowed',
-      tenantId: 'demo-tenant-001',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('未登录返回 401，且不初始化数据库', async () => {
-    const response = await treatmentSummaryVoidPost(
-      voidRequest({
-        reasonCode: 'duplicate_summary',
-        reasonText: '重复录入',
-      }),
-      voidRouteContext(),
-    );
-
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({ error: '请先登录' });
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).not.toHaveBeenCalled();
-  });
-
-  it('无权限返回 403，写 denied audit，且不作废治疗摘要', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
-
-    const response = await treatmentSummaryVoidPost(
-      voidRequest({
-        reasonCode: 'duplicate_summary',
-        reasonText: '重复录入',
-      }),
-      voidRouteContext(),
-    );
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
-    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      reason: 'role_denied',
-      resource: 'treatment_summary',
-      result: 'denied',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('summary 不存在或跨租户时返回 404，并写 not_found audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant.mockResolvedValueOnce({
-      kind: 'not_found_or_not_owned',
-    });
-
-    const response = await treatmentSummaryVoidPost(
-      voidRequest({
-        reasonCode: 'wrong_customer_or_appointment',
-        reasonText: '误关联其他客户或预约',
-      }),
-      voidRouteContext('trt_other_tenant'),
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      summaryId: 'trt_other_tenant',
-      voidedBy: 'demo-user-admin',
-      reasonCode: 'wrong_customer_or_appointment',
-      reasonText: '误关联其他客户或预约',
-    });
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      reason: 'not_found_or_not_owned',
-      resource: 'treatment_summary',
-      resourceId: 'trt_other_tenant',
-      result: 'denied',
-      tenantId: 'demo-tenant-001',
-    }));
-  });
-
-  it('已作废 summary 重复作废返回稳定 409，并写 already voided audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant.mockResolvedValueOnce({
-      kind: 'already_voided',
-      record: voidedTreatmentSummaryRecord,
-    });
-
-    const response = await treatmentSummaryVoidPost(
-      voidRequest({
-        reasonCode: 'duplicate_summary',
-        reasonText: '重复录入',
-      }),
-      voidRouteContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(409);
-    expect(payload).toEqual({
-      error: '治疗摘要已作废',
-      record: expect.objectContaining({
-        id: 'trt_void_001',
-        status: 'voided',
-        voidedAt: '2026-06-02T09:00:00.000Z',
-      }),
-    });
-    expectNoPrivateData(payload);
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      reason: 'treatment_summary_already_voided',
-      resource: 'treatment_summary',
-      resourceId: 'trt_void_001',
-      result: 'allowed',
-      tenantId: 'demo-tenant-001',
-    }));
-  });
-
-  it.each([
-    ['tenantId 注入', { tenantId: 'other-tenant' }],
-    ['未知字段', { unexpectedField: 'x' }],
-    ['完整治疗正文', { reasonText: '完整治疗记录正文：逐字治疗记录' }],
-    ['完整病历正文', { reasonText: '完整病历正文：主诉和病史原文' }],
-    ['诊疗原文', { reasonText: '诊疗原文：医生原始记录' }],
-    ['咨询全文', { reasonText: '咨询对话全文：客户逐字回复' }],
-    ['手机号原文', { reasonText: '手机号原文 13800000000' }],
-    ['身份证号', { reasonText: '身份证号 110101199001010011' }],
-    ['病历号原文', { reasonText: '病历号原文 MR-RAW-001' }],
-    ['图片原文', { reasonText: '图片 / 文件原文 imageUrl=https://example.test/a.png' }],
-    ['文件原文', { reasonText: '图片 / 文件原文 fileUrl=https://example.test/a.pdf' }],
-    ['AI 生成内容', { reasonText: 'AI 生成内容 aiGeneratedContent' }],
-    ['外部系统原文', { reasonText: '外部系统同步原文 externalSystemPayload' }],
-    ['请求体', { reasonText: '请求体 requestBody' }],
-    ['SQL', { reasonText: 'SQL select * from treatment_summaries' }],
-    ['stack / token / secret / DATABASE_URL', { reasonText: 'stack trace token secret DATABASE_URL=postgres://example' }],
-  ])('作废原因含 %s 时返回 400，并写 invalid void payload audit', async (_label, patch) => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await treatmentSummaryVoidPost(
-      voidRequest({
-        reasonCode: 'duplicate_summary',
-        reasonText: '重复录入',
-        ...patch,
-      }),
-      voidRouteContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(payload).toHaveProperty('error');
-    expectNoPrivateData(payload, {
-      allowRejectedFieldNames: true,
-      allowTenantBoundaryFields: true,
-    });
-    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      reason: 'invalid_treatment_summary_void_payload',
-      resource: 'treatment_summary',
-      resourceId: 'trt_void_001',
-      result: 'denied',
-      tenantId: 'demo-tenant-001',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('非法 JSON 返回 400，并写 invalid void payload audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await treatmentSummaryVoidPost(
-      new Request('http://localhost/api/institution/treatment-summaries/trt_void_001/void', {
-        method: 'POST',
-        body: '{not-json',
-      }),
-      voidRouteContext(),
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: '请求格式不正确' });
-    expect(routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'invalid_treatment_summary_void_payload',
-      result: 'denied',
-    }));
-  });
-
-  it('数据异常返回 503，错误响应不泄露 SQL、stack、DATABASE_URL、token 或 secret', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.voidTreatmentSummaryByTenant.mockRejectedValueOnce(
-      new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg token stack'),
-    );
-
-    const response = await treatmentSummaryVoidPost(
-      voidRequest({
-        reasonCode: 'duplicate_summary',
-        reasonText: '重复录入',
-      }),
-      voidRouteContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(503);
-    expect(payload).toEqual({ error: '数据服务暂时不可用' });
-    expectNoPrivateData(payload);
-  });
-});
-
-describe('治疗摘要编辑 API route', () => {
-  it('合法 payload 编辑成功，返回安全 DTO，并写 allowed audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await treatmentSummaryPatch(
-      patchRequest({
-        treatmentDate: '2026-06-02T10:30:00+08:00',
-        riskLevel: 'urgent',
-        summary: '复诊后恢复稳定，提醒人工观察。',
-        tags: [' 复诊 ', '风险观察', '复诊'],
-        appointmentId: ' appt_edit_002 ',
-      }),
-      patchRouteContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(payload).toEqual({
-      record: {
-        id: 'trt_edit_001',
-        appointmentId: 'appt_edit_002',
-        treatmentDate: '2026-06-02T02:30:00.000Z',
-        treatmentProject: '光电修复',
-        treatmentCategory: 'laser_repair',
-        treatmentStage: 'D7 复诊',
-        recoveryStage: 'D7',
-        riskLevel: 'urgent',
-        ownerUserId: 'doctor-lin',
-        summary: '复诊后恢复稳定，提醒人工观察。',
-        nextCareAction: 'D14 人工回访恢复阶段。',
-        tags: ['复诊', '风险观察'],
-        createdAt: '2026-06-01T04:01:00.000Z',
-        updatedAt: '2026-06-02T02:31:00.000Z',
-      },
-    });
-    expectNoPrivateData(payload);
-    expect(routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      id: 'trt_edit_001',
-    });
-    expect(routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      summaryId: 'trt_edit_001',
-      values: {
-        treatmentDate: new Date('2026-06-02T02:30:00.000Z'),
-        riskLevel: 'urgent',
-        summary: '复诊后恢复稳定，提醒人工观察。',
-        tags: ['复诊', '风险观察'],
-        appointmentId: 'appt_edit_002',
-      },
-    });
-    expect(routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        values: expect.objectContaining({
-          tenantId: 'other-tenant',
-          customerId: 'cust_other',
-        }),
-      }),
-    );
-    expect(routeMocks.createTenantBusinessRepository).not.toHaveBeenCalled();
-    expect(routeMocks.database.transaction).toHaveBeenCalledTimes(1);
-    expect(routeMocks.createTreatmentSummaryRepository).toHaveBeenCalledWith(
-      routeMocks.transactionDatabase,
-    );
-    expect(routeMocks.createAuditEventRepository).toHaveBeenCalledWith(
-      routeMocks.transactionDatabase,
-    );
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      reason: 'allowed_by_policy',
-      resource: 'treatment_summary',
-      resourceId: 'trt_edit_001',
-      result: 'allowed',
-      tenantId: 'demo-tenant-001',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('未登录返回 401，且不初始化数据库', async () => {
-    const response = await treatmentSummaryPatch(
-      patchRequest({ summary: '复诊后恢复稳定。' }),
-      patchRouteContext(),
-    );
-
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({ error: '请先登录' });
-    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
-    expect(routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant).not.toHaveBeenCalled();
-  });
-
-  it('无权限返回 403，写 denied audit，且不更新治疗摘要', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformContext);
-
-    const response = await treatmentSummaryPatch(
-      patchRequest({ summary: '复诊后恢复稳定。' }),
-      patchRouteContext(),
-    );
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ error: '没有访问权限' });
-    expect(routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      reason: 'role_denied',
-      resource: 'treatment_summary',
-      result: 'denied',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('summary 不存在或跨租户时返回 404，并写 not_found audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant.mockResolvedValueOnce(null);
-
-    const response = await treatmentSummaryPatch(
-      patchRequest({ summary: '复诊后恢复稳定。' }),
-      patchRouteContext('trt_other_tenant'),
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      id: 'trt_other_tenant',
-    });
-    expect(routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      reason: 'not_found_or_not_owned',
-      resource: 'treatment_summary',
-      result: 'denied',
-    }));
-  });
-
-  it.each([
-    ['tenantId 注入', { tenantId: 'other-tenant' }],
-    ['customerId 注入', { customerId: 'cust_other' }],
-    ['id 注入', { id: 'trt_other' }],
-    ['createdAt 注入', { createdAt: '2026-06-02T00:00:00.000Z' }],
-    ['updatedAt 注入', { updatedAt: '2026-06-02T00:00:00.000Z' }],
-    ['未知字段', { unexpectedField: 'x' }],
-    ['空 payload', {}],
-    ['完整治疗正文', { fullTreatmentRecord: '完整治疗记录正文' }],
-    ['完整病历正文', { medicalRecordText: '完整病历正文' }],
-    ['诊疗原文', { summary: '诊疗原文：医生原始记录' }],
-    ['咨询全文', { consultationTranscript: '咨询对话全文' }],
-    ['手机号原文', { summary: '客户手机号 13800000000' }],
-    ['身份证号', { summary: '身份证号 110101199001010011' }],
-    ['病历号原文', { summary: '病历号原文 MR-RAW-001' }],
-    ['图片原文', { imageUrl: 'https://example.com/raw.png' }],
-    ['文件原文', { fileUrl: 'https://example.com/raw.pdf' }],
-    ['AI 生成内容', { aiGeneratedContent: 'AI 生成治疗建议' }],
-    ['外部系统原文', { externalSystemPayload: { raw: true } }],
-  ])('payload 含 %s 时返回 400，并写 invalid payload audit', async (_label, payloadPatch) => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await treatmentSummaryPatch(
-      patchRequest(payloadPatch),
-      patchRouteContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(payload).toHaveProperty('error');
-    expectNoPrivateData(payload, {
-      allowRejectedFieldNames: true,
-      allowTenantBoundaryFields: true,
-    });
-    expect(routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      id: 'trt_edit_001',
-    });
-    expect(routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      reason: 'invalid_treatment_summary_payload',
-      resource: 'treatment_summary',
-      result: 'denied',
-      tenantId: 'demo-tenant-001',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('非法 JSON 返回 400，并写 invalid payload audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-
-    const response = await treatmentSummaryPatch(
-      new Request('http://localhost/api/institution/treatment-summaries/trt_edit_001', {
-        method: 'PATCH',
-        body: '{not-json',
-      }),
-      patchRouteContext(),
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: '请求格式不正确' });
-    expect(routeMocks.treatmentSummaryRepository.getTreatmentSummaryByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      id: 'trt_edit_001',
-    });
-    expect(routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant).not.toHaveBeenCalled();
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'invalid_treatment_summary_payload',
-      result: 'denied',
-    }));
-  });
-
-  it('appointmentId 不存在或跨租户时返回 404，并写 not_found audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant.mockResolvedValueOnce({
-      kind: 'invalid_reference',
-      reason: 'not_found_or_not_owned',
-    });
-
-    const response = await treatmentSummaryPatch(
-      patchRequest({ appointmentId: 'appt_other_tenant' }),
-      patchRouteContext(),
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant).toHaveBeenCalledWith({
-      tenantId: 'demo-tenant-001',
-      summaryId: 'trt_edit_001',
-      values: { appointmentId: 'appt_other_tenant' },
-    });
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      reason: 'not_found_or_not_owned',
-      resource: 'treatment_summary',
-      result: 'denied',
-    }));
-  });
-
-  it('appointmentId 不属于当前 customer 时返回 409，并写 invalid reference audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant.mockResolvedValueOnce({
-      kind: 'invalid_reference',
-      reason: 'customer_mismatch',
-    });
-
-    const response = await treatmentSummaryPatch(
-      patchRequest({ appointmentId: 'appt_other_customer' }),
-      patchRouteContext(),
-    );
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({ error: '预约不属于当前客户' });
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      reason: 'invalid_treatment_summary_reference',
-      resource: 'treatment_summary',
-      result: 'denied',
-    }));
-    expectAuditEventDoesNotContainPrivateBody(routeMocks.auditRecord.mock.lastCall?.[0]);
-  });
-
-  it('repository update 竞争态查不到时返回 404，并写 not_found audit', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant.mockResolvedValueOnce({
-      kind: 'not_found_or_not_owned',
-    });
-
-    const response = await treatmentSummaryPatch(
-      patchRequest({ summary: '复诊后恢复稳定。' }),
-      patchRouteContext(),
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({ error: '记录不存在' });
-    expect(routeMocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'update',
-      reason: 'not_found_or_not_owned',
-      resource: 'treatment_summary',
-      result: 'denied',
-    }));
-  });
-
-  it('数据异常返回 503，错误响应不泄露 SQL、stack、DATABASE_URL、token 或 secret', async () => {
-    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(tenantContext);
-    routeMocks.treatmentSummaryRepository.updateTreatmentSummaryByTenant.mockRejectedValueOnce(
-      new Error('DATABASE_URL=postgres://tenant:secret@localhost:5432/zmtg token stack'),
-    );
-
-    const response = await treatmentSummaryPatch(
-      patchRequest({ summary: '复诊后恢复稳定。' }),
-      patchRouteContext(),
-    );
-    const payload = await response.json();
-
-    expect(response.status).toBe(503);
-    expect(payload).toEqual({ error: '数据服务暂时不可用' });
-    expectNoPrivateData(payload);
-  });
+describeDisabledMutation({
+  error: '治疗摘要作废能力暂未启用',
+  handler: treatmentSummaryVoidPost,
+  isAsync: false,
+  method: 'POST',
+  path: '/api/institution/treatment-summaries/caller_marker_summary/void',
+  sourcePath: 'src/app/api/institution/treatment-summaries/[summaryId]/void/route.ts',
+  sourceExport: 'POST',
 });
