@@ -18,3 +18,6 @@ coverage/
 var/knowledge-files/
 var/homepage-brand-local-store.json
 var/homepage-brand-assets/
+
+# Local code-index cache
+.gitnexus/
