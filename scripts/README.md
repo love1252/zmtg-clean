@@ -10,7 +10,8 @@
 - `scripts/demo/`：演示数据和低敏示例数据脚本。
 - `scripts/deploy/`：部署实现。
 - `scripts/dev/`：本地开发与验收辅助脚本。
-- `scripts/runtime/`：Node、Next.js、Vitest 等运行时辅助实现。
+- `scripts/runtime/`：Node 与 Next.js 运行时辅助实现。
+- `scripts/testing/`：测试命令与 Vitest 实现。
 
 ## 稳定入口
 
@@ -23,12 +24,12 @@
   - 实际实现位于 `scripts/runtime/resolve-runtime-node.mjs`。
 
 - `scripts/run-next.mjs`
-  - Next.js 命令入口。
-  - 路径暂时保持不变。
+  - Next.js 命令兼容入口。
+  - 实际实现位于 `scripts/runtime/run-next.mjs`。
 
 - `scripts/run-vitest.mjs`
-  - Vitest 命令入口。
-  - 路径暂时保持不变。
+  - Vitest 命令兼容入口。
+  - 实际实现位于 `scripts/testing/run-vitest.mjs`。
 
 ## 安全边界
 

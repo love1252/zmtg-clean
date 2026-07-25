@@ -1,11 +1,7 @@
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { resolveRuntimeNode } from './runtime-node.mjs';
-
-const vitestCli = fileURLToPath(new URL('../node_modules/vitest/vitest.mjs', import.meta.url));
-const result = spawnSync(resolveRuntimeNode(), [vitestCli, ...process.argv.slice(2)], {
-  stdio: 'inherit',
-  env: process.env,
-});
-
-process.exit(result.status ?? 1);
+/**
+ * Vitest 命令的稳定兼容入口。
+ *
+ * 实际实现位于：
+ * scripts/testing/run-vitest.mjs
+ */
+import './testing/run-vitest.mjs';
