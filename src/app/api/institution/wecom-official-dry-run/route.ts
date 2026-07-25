@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-export function GET(_request?: Request) {
+export function GET(_request: Request) {
   return NextResponse.json(
     {
       code: 'capability_disabled',

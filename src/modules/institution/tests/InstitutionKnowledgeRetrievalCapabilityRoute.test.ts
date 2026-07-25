@@ -62,7 +62,7 @@ describe('机构端知识库 retrieval capability route', () => {
       new Request('http://localhost/api/institution/knowledge-management/retrieval?query=%E5%86%B7%E6%95%B7&mode=keyword&mode=keyword'),
       new Request('http://localhost/api/institution/knowledge-management/retrieval?query=%E5%86%B7%E6%95%B7&mode=keyword&mode=vector'),
     ]) {
-      const response = await route.GET(request);
+      const response = await route.GET(request as Request);
       expect(response.status).toBe(503);
       expect(response.headers.get('cache-control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(disabledPayload);
@@ -82,7 +82,7 @@ describe('机构端知识库 retrieval capability route', () => {
       getOwnPropertyDescriptor: () => trap('getOwnPropertyDescriptor'), getPrototypeOf: () => trap('getPrototypeOf'),
     }) as Request;
 
-    const response = await route.GET(request);
+    const response = await route.GET(request as Request);
     expect(response.status).toBe(503);
     expect(response.headers.get('cache-control')).toBe('no-store');
     await expect(response.json()).resolves.toEqual(disabledPayload);

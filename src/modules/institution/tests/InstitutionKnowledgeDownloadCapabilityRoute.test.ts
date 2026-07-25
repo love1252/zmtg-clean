@@ -121,7 +121,7 @@ describe('机构端知识库文件下载 capability route', () => {
         null,
       ],
     ] as const) {
-      await expectDisabled(await route.GET(request, context), marker);
+      await expectDisabled(await route.GET(request as Request, context), marker);
       assertNoSideEffects();
     }
   });

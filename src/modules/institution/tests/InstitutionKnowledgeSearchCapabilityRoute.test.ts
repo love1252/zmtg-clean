@@ -80,7 +80,7 @@ describe('机构端知识库 search capability route', () => {
       new Request('http://localhost/api/institution/knowledge-management/search?keyword=%E5%86%B7%E6%95%B7'),
       new Request('http://localhost/api/institution/knowledge-management/search?keyword=%E5%86%B7%E6%95%B7&tenantId=forged&institutionId=forged&knowledgeId=forged&fileId=forged'),
     ]) {
-      const response = await route.GET(request);
+      const response = await route.GET(request as Request);
       expect(response.status).toBe(503);
       expect(response.headers.get('cache-control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(disabledPayload);

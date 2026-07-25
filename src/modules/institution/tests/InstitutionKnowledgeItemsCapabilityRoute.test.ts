@@ -87,7 +87,7 @@ describe('机构端知识库资料库 capability route', () => {
         method: 'PATCH', body: JSON.stringify({ action: 'archive', knowledgeId: 'forged' }),
       })],
     ] as const) {
-      const response = await route[method](request);
+      const response = await route[method](request as Request);
       expect(response.status).toBe(503);
       expect(response.headers.get('cache-control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(disabledPayload);
@@ -100,7 +100,7 @@ describe('机构端知识库资料库 capability route', () => {
 
     for (const method of ['GET', 'POST', 'PATCH'] as const) {
       const { request, counts } = hostileRequest();
-      const response = await route[method](request);
+      const response = await route[method](request as Request);
       expect(response.status).toBe(503);
       expect(response.headers.get('cache-control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(disabledPayload);

@@ -7,7 +7,7 @@ const capabilityDisabledPayload = Object.freeze({
   citations: [],
 });
 
-export async function POST(_request?: Request) {
+export async function POST(_request: Request) {
   return NextResponse.json(capabilityDisabledPayload, {
     status: 503,
     headers: { 'Cache-Control': 'no-store' },

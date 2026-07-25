@@ -265,7 +265,7 @@ describe('企业微信官方 dry-run API capability-off', () => {
     const imports = source.match(/^import .+;$/gmu) ?? [];
 
     expect(imports).toEqual(["import { NextResponse } from 'next/server';"]);
-    expect(source).toContain('export function GET(_request?: Request)');
+    expect(source).toContain('export function GET(_request: Request)');
     expect(source.match(/_request/gmu)).toHaveLength(1);
     for (const forbidden of [
       '@/modules/',
