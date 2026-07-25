@@ -605,7 +605,7 @@ src/app/api/institution/treatment-summaries/[summaryId]/route.ts,institution-app
 src/app/api/institution/treatment-summaries/[summaryId]/void/route.ts,institution-app,API_VERSION_REVIEW,src/app/api/v1/<scope>/,high,9,yes,pending,非版本化 API，先检查调用方和兼容方案。
 src/app/api/institution/treatment-summaries/route.ts,institution-app,API_VERSION_REVIEW,src/app/api/v1/<scope>/,high,9,yes,pending,非版本化 API，先检查调用方和兼容方案。
 src/app/api/institution/wecom-customer-contact-precheck/route.ts,institution-app,API_VERSION_REVIEW,src/app/api/v1/<scope>/,high,9,yes,pending,非版本化 API，先检查调用方和兼容方案。
-src/app/api/institution/wecom-customer-contact-readonly-proof-mock/route.ts,institution-app,AUDIT_KEEP_RUNTIME_API_BOUNDARY,src/app/api/institution/wecom-customer-contact-readonly-proof-mock/route.ts,high,5,yes,audit_completed,属于运行时路由，禁止按文件名直接搬入测试目录。
+src/app/api/institution/wecom-customer-contact-readonly-proof-mock/route.ts,institution-app,RUNTIME_BOUNDARY_CONFIRMED_KEEP_CURRENT,src/app/api/institution/wecom-customer-contact-readonly-proof-mock/route.ts,high,8,yes,runtime_boundary_confirmed,保持 API 路由位置；后续启用真实能力时重新设计认证、权限、配置开关和只读访问边界。
 src/app/api/institution/wecom-customer-contact-readonly-proof/route.ts,institution-app,API_VERSION_REVIEW,src/app/api/v1/<scope>/,high,9,yes,pending,非版本化 API，先检查调用方和兼容方案。
 src/app/api/institution/wecom-customer-mapping/route.ts,institution-app,API_VERSION_REVIEW,src/app/api/v1/<scope>/,high,9,yes,pending,非版本化 API，先检查调用方和兼容方案。
 src/app/api/institution/wecom-official-dry-run-config/evaluate/route.ts,institution-app,API_VERSION_REVIEW,src/app/api/v1/<scope>/,high,9,yes,pending,非版本化 API，先检查调用方和兼容方案。
@@ -627,7 +627,7 @@ src/app/api/open-platform/audit-events/route.ts,api-route,API_VERSION_REVIEW,src
 src/app/api/open-platform/tenants/route.ts,api-route,API_VERSION_REVIEW,src/app/api/v1/<scope>/,high,9,yes,pending,非版本化 API，先检查调用方和兼容方案。
 src/app/api/open-platform/wecom/customer-data-governance/route.ts,api-route,API_VERSION_REVIEW,src/app/api/v1/<scope>/,high,9,yes,pending,非版本化 API，先检查调用方和兼容方案。
 src/app/api/v1/institution/ai-models/route.ts,institution-app,KEEP_REVIEW,src/app/api/v1/institution/ai-models/route.ts,low,review,yes,pending,需要人工确认职责。
-src/app/api/v1/knowledge-base/demo-readonly/route.ts,api-route,AUDIT_KEEP_RUNTIME_API_BOUNDARY,src/app/api/v1/knowledge-base/demo-readonly/route.ts,high,5,yes,audit_completed,属于运行时路由，禁止按文件名直接搬入测试目录。
+src/app/api/v1/knowledge-base/demo-readonly/route.ts,api-route,RUNTIME_BOUNDARY_CONFIRMED_KEEP_CURRENT,src/app/api/v1/knowledge-base/demo-readonly/route.ts,high,8,yes,runtime_boundary_confirmed,保持 API 路由位置；后续真实运行时替换需单独设计兼容、停用和回退策略。
 src/app/api/v1/knowledge-base/runtime/documents/route.ts,api-route,KEEP_REVIEW,src/app/api/v1/knowledge-base/runtime/documents/route.ts,low,review,yes,pending,需要人工确认职责。
 src/app/api/v1/knowledge-base/runtime/documents/upload/route.ts,api-route,KEEP_REVIEW,src/app/api/v1/knowledge-base/runtime/documents/upload/route.ts,low,review,yes,pending,需要人工确认职责。
 src/app/api/v1/knowledge-base/runtime/index-jobs/route.ts,api-route,KEEP_REVIEW,src/app/api/v1/knowledge-base/runtime/index-jobs/route.ts,low,review,yes,pending,需要人工确认职责。
@@ -705,14 +705,14 @@ src/modules/audit/tests/AuditEventsDomain.test.ts,business-module,KEEP_WITH_MODU
 src/modules/audit/tests/InstitutionAuditEventsApiRoute.test.ts,business-module,KEEP_WITH_MODULE,src/modules/audit/tests/InstitutionAuditEventsApiRoute.test.ts,medium,2-8,yes,pending,优先保持模块内测试共置。
 src/modules/audit/tests/OpenPlatformAuditEventsApiRoute.test.ts,business-module,KEEP_WITH_MODULE,src/modules/audit/tests/OpenPlatformAuditEventsApiRoute.test.ts,medium,2-8,yes,pending,优先保持模块内测试共置。
 src/modules/auth/components/ConfiguredLoginPages.tsx,business-module,KEEP_MODULE_REVIEW,src/modules/auth/components/ConfiguredLoginPages.tsx,medium,4-8,yes,pending,检查是否符合模块职责和依赖方向。
-src/modules/auth/components/DemoSessionGate.tsx,business-module,AUDIT_KEEP_RUNTIME_DEMO_BOUNDARY,src/modules/auth/components/DemoSessionGate.tsx,medium,5,yes,audit_completed,保持当前模块边界，禁止本阶段移动。
+src/modules/auth/components/DemoSessionGate.tsx,business-module,RUNTIME_BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/auth/components/DemoSessionGate.tsx,medium,8,yes,runtime_boundary_confirmed,保持认证组件边界；后续必须与正式 Session、租户和权限策略联合治理。
 src/modules/auth/components/LogoutButton.tsx,business-module,KEEP_MODULE_REVIEW,src/modules/auth/components/LogoutButton.tsx,medium,4-8,yes,pending,检查是否符合模块职责和依赖方向。
 src/modules/auth/components/LuxuryLoginShell.tsx,business-module,KEEP_MODULE_REVIEW,src/modules/auth/components/LuxuryLoginShell.tsx,medium,4-8,yes,pending,检查是否符合模块职责和依赖方向。
 src/modules/auth/domain/auth-account.ts,business-module,KEEP_MODULE_REVIEW,src/modules/auth/domain/auth-account.ts,medium,4-8,yes,pending,检查是否符合模块职责和依赖方向。
 src/modules/auth/domain/session.ts,business-module,KEEP_MODULE_REVIEW,src/modules/auth/domain/session.ts,medium,4-8,yes,pending,检查是否符合模块职责和依赖方向。
 src/modules/auth/server/auth-account-repository.ts,business-module,KEEP_MODULE_REVIEW,src/modules/auth/server/auth-account-repository.ts,medium,4-8,yes,pending,检查是否符合模块职责和依赖方向。
 src/modules/auth/server/auth-account-service.ts,business-module,KEEP_MODULE_REVIEW,src/modules/auth/server/auth-account-service.ts,medium,4-8,yes,pending,检查是否符合模块职责和依赖方向。
-src/modules/auth/server/demo-session.ts,business-module,AUDIT_KEEP_RUNTIME_AUTH_BOUNDARY,src/modules/auth/server/demo-session.ts,high,5,yes,audit_completed,属于认证运行时边界，需单独安全设计。
+src/modules/auth/server/demo-session.ts,business-module,RUNTIME_BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/auth/server/demo-session.ts,high,8,yes,runtime_boundary_confirmed,保持认证服务位置；后续替换必须单独设计认证、权限、租户隔离和回退方案。
 src/modules/auth/server/formal-server-session-provenance-owner.ts,business-module,KEEP_MODULE_REVIEW,src/modules/auth/server/formal-server-session-provenance-owner.ts,medium,4-8,yes,pending,检查是否符合模块职责和依赖方向。
 src/modules/auth/server/password-hash.ts,business-module,KEEP_MODULE_REVIEW,src/modules/auth/server/password-hash.ts,medium,4-8,yes,pending,检查是否符合模块职责和依赖方向。
 src/modules/auth/tests/AuthAccountDomain.test.ts,business-module,KEEP_WITH_MODULE,src/modules/auth/tests/AuthAccountDomain.test.ts,medium,2-8,yes,pending,优先保持模块内测试共置。
@@ -929,7 +929,7 @@ src/modules/institution/domain/wecom-controlled-reachout.ts,business-module,SPLI
 src/modules/institution/domain/wecom-customer-broadcast-task-outcome.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/domain/wecom-customer-broadcast-task-provider.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/domain/wecom-customer-contact-precheck.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
-src/modules/institution/domain/wecom-customer-contact-readonly-proof-mock.ts,business-module,AUDIT_KEEP_RUNTIME_MOCK_BOUNDARY,src/modules/institution/domain/wecom-customer-contact-readonly-proof-mock.ts,medium,5,yes,audit_completed,保持当前模块边界，后续按调用方拆批。
+src/modules/institution/domain/wecom-customer-contact-readonly-proof-mock.ts,business-module,DORMANT_DOMAIN_MOCK_CONFIRMED_KEEP_CURRENT,src/modules/institution/domain/wecom-customer-contact-readonly-proof-mock.ts,medium,8,yes,dormant_boundary_confirmed,暂时保持机构领域位置；后续单独评估删除、归档或迁入测试 Fixture，本阶段不直接移动。
 src/modules/institution/domain/wecom-customer-contact-readonly-proof.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/domain/wecom-customer-contact.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/domain/wecom-customer-mapping-review-actions.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
@@ -940,7 +940,7 @@ src/modules/institution/domain/wecom-official-dry-run-config.ts,business-module,
 src/modules/institution/domain/wecom-official-dry-run.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/domain/wecom-official-internal-message-proof.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/domain/wecom-official-secret-precheck.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
-src/modules/institution/domain/wecom-reachout-mock.ts,business-module,AUDIT_KEEP_RUNTIME_MOCK_BOUNDARY,src/modules/institution/domain/wecom-reachout-mock.ts,medium,5,yes,audit_completed,保持当前模块边界，后续按调用方拆批。
+src/modules/institution/domain/wecom-reachout-mock.ts,business-module,RUNTIME_BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/institution/domain/wecom-reachout-mock.ts,medium,8,yes,runtime_boundary_confirmed,保持机构领域位置；后续先拆分领域类型、样例数据和真实渠道 Provider。
 src/modules/institution/domain/wecom-real-send-proof.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/server/ai-credit-metering-rules-repository.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/server/customer-import.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
@@ -1004,7 +1004,7 @@ src/modules/institution/server/trusted-reachout-safety-service.ts,business-modul
 src/modules/institution/server/trusted-reachout-safety-transaction.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/server/wecom-controlled-reachout-service.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/server/wecom-controlled-reachout-transaction.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
-src/modules/institution/server/wecom-customer-broadcast-task-mock-provider.ts,business-module,AUDIT_KEEP_RUNTIME_MOCK_BOUNDARY,src/modules/institution/server/wecom-customer-broadcast-task-mock-provider.ts,medium,5,yes,audit_completed,保持当前模块边界，后续按调用方拆批。
+src/modules/institution/server/wecom-customer-broadcast-task-mock-provider.ts,business-module,RUNTIME_BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/institution/server/wecom-customer-broadcast-task-mock-provider.ts,medium,8,yes,runtime_boundary_confirmed,保持服务目录；禁止注册为默认真实发送 Provider，后续与 Provider 契约联合治理。
 src/modules/institution/server/wecom-customer-broadcast-task-outcome-repository.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/server/wecom-customer-broadcast-task-outcome-service.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/server/wecom-customer-broadcast-task-provider-contract.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
@@ -1015,7 +1015,7 @@ src/modules/institution/server/wecom-customer-contact-readonly-proof-runtime.ts,
 src/modules/institution/server/wecom-customer-mapping-candidates-reader.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/server/wecom-customer-mapping-repository.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/server/wecom-customer-mapping-review-action-default-runtime.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
-src/modules/institution/server/wecom-customer-mapping-review-action-mock-runtime.ts,business-module,AUDIT_KEEP_RUNTIME_MOCK_BOUNDARY,src/modules/institution/server/wecom-customer-mapping-review-action-mock-runtime.ts,medium,5,yes,audit_completed,保持当前模块边界，后续按调用方拆批。
+src/modules/institution/server/wecom-customer-mapping-review-action-mock-runtime.ts,business-module,RUNTIME_BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/institution/server/wecom-customer-mapping-review-action-mock-runtime.ts,medium,8,yes,runtime_boundary_confirmed,保持服务目录；后续持久化替换需保留幂等、审计、容量和故障关闭语义。
 src/modules/institution/server/wecom-customer-mapping-service.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/server/wecom-customer-mapping-transaction.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/institution/server/wecom-dry-run-snapshot-service.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
@@ -1193,9 +1193,9 @@ src/modules/institution/view-models/wecom-customer-mapping-candidates.ts,busines
 src/modules/institution/view-models/wecom-external-contact-readonly-view-model.ts,business-module,SPLIT_REVIEW,src/modules/<business-domain>/,high,4-8,yes,pending,大型聚合模块，按业务领域分批拆分。
 src/modules/knowledge-base/domain/v1-knowledge-base-audit-readonly-view-models.ts,business-module,MOVE_CANDIDATE,src/modules/knowledge/domain/v1-knowledge-base-audit-readonly-view-models.ts,high,7,yes,pending,知识库共享领域候选。
 src/modules/knowledge-base/domain/v1-knowledge-base-controlled-trial-readiness.ts,business-module,MOVE_CANDIDATE,src/modules/knowledge/domain/v1-knowledge-base-controlled-trial-readiness.ts,high,7,yes,pending,知识库共享领域候选。
-src/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-api-contract.ts,business-module,AUDIT_KEEP_RUNTIME_DEMO_BOUNDARY,src/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-api-contract.ts,medium,5,yes,audit_completed,保持当前模块边界，禁止本阶段移动。
-src/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-facade.ts,business-module,AUDIT_KEEP_RUNTIME_DEMO_BOUNDARY,src/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-facade.ts,medium,5,yes,audit_completed,保持当前模块边界，禁止本阶段移动。
-src/modules/knowledge-base/domain/v1-knowledge-base-demo-source-contract.ts,business-module,AUDIT_KEEP_RUNTIME_DEMO_BOUNDARY,src/modules/knowledge-base/domain/v1-knowledge-base-demo-source-contract.ts,medium,5,yes,audit_completed,保持当前模块边界，禁止本阶段移动。
+src/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-api-contract.ts,business-module,RUNTIME_BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-api-contract.ts,medium,8,yes,runtime_boundary_confirmed,保持知识库领域位置；后续将通用 API 契约与 Demo 默认数据解耦。
+src/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-facade.ts,business-module,RUNTIME_BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/knowledge-base/domain/v1-knowledge-base-demo-readonly-facade.ts,medium,8,yes,runtime_boundary_confirmed,保持知识库领域位置；使用真实只读 Repository 替换时保持响应契约兼容。
+src/modules/knowledge-base/domain/v1-knowledge-base-demo-source-contract.ts,business-module,RUNTIME_BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/knowledge-base/domain/v1-knowledge-base-demo-source-contract.ts,medium,8,yes,runtime_boundary_confirmed,保持知识库领域位置；后续先引入正式数据源接口，再停用 Demo 数据源。
 src/modules/knowledge-base/domain/v1-knowledge-base-governance-readonly-view-models.ts,business-module,MOVE_CANDIDATE,src/modules/knowledge/domain/v1-knowledge-base-governance-readonly-view-models.ts,high,7,yes,pending,知识库共享领域候选。
 src/modules/knowledge-base/domain/v1-knowledge-base-runtime-foundation-api-contract.ts,business-module,MOVE_CANDIDATE,src/modules/knowledge/domain/v1-knowledge-base-runtime-foundation-api-contract.ts,high,7,yes,pending,知识库共享领域候选。
 src/modules/knowledge-base/server/v1-knowledge-base-embedding-vector-index-runtime.ts,business-module,MOVE_CANDIDATE,src/modules/knowledge/server/v1-knowledge-base-embedding-vector-index-runtime.ts,high,7,yes,pending,知识库共享领域候选。
