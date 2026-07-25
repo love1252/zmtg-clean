@@ -1,0 +1,26 @@
+path,source_group,file_role,owner_area,ownership_type,test_kind,current_location_confirmed,move_now,risk,manual_review_required,ownership_status,reference_scope,reference_file_count,ownership_reason
+docs/product/handoffs/2026-06-12-v1-readonly-demo-internal-handoff-01.md,A-文档历史,历史文档,产品交接资料,产品内部交接文档,,yes,no,low,no,ownership_confirmed_keep_current,文档,3,归属于“产品交接资料”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/product/demo/2026-07-07-v06-demo-data-and-pilot-script-01.md,A-文档历史,历史文档,产品演示资料,产品演示历史文档,,yes,no,low,no,ownership_confirmed_keep_current,文档,3,归属于“产品演示资料”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/product/demo/2026-07-07-v06-demo-seed-low-sensitive-01.md,A-文档历史,历史文档,产品演示资料,产品演示历史文档,,yes,no,low,no,ownership_confirmed_keep_current,文档,3,归属于“产品演示资料”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/product/zhimei-demo-readiness-playbook.md,A-文档历史,历史文档,产品演示资料,智美天工演示运行资料,,yes,no,low,no,ownership_confirmed_keep_current,文档,6,归属于“产品演示资料”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/product/zhimei-demo-rehearsal-checklist.md,A-文档历史,历史文档,产品演示资料,智美天工演示运行资料,,yes,no,low,no,ownership_confirmed_keep_current,文档,3,归属于“产品演示资料”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/product/zhimei-demo-script.md,A-文档历史,历史文档,产品演示资料,智美天工演示运行资料,,yes,no,low,no,ownership_confirmed_keep_current,文档,6,归属于“产品演示资料”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/product/zhimei-demo-seed-data-plan.md,A-文档历史,历史文档,产品演示资料,智美天工演示运行资料,,yes,no,low,no,ownership_confirmed_keep_current,文档,5,归属于“产品演示资料”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/product/zhimei-demo-ui-polish-and-rehearsal-plan.md,A-文档历史,历史文档,产品演示资料,智美天工演示运行资料,,yes,no,low,no,ownership_confirmed_keep_current,文档,3,归属于“产品演示资料”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/product/plans/v1-knowledge-base-demo-readonly-ui-plan-01.md,A-文档历史,历史文档,产品规划资料,产品实施规划文档,,yes,no,low,no,ownership_confirmed_keep_current,文档,3,归属于“产品规划资料”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/product/reviews/2026-06-12-v1-readonly-demo-release-candidate-review-01.md,A-文档历史,历史文档,产品评审资料,产品评审与验收记录,,yes,no,low,no,ownership_confirmed_keep_current,文档,4,归属于“产品评审资料”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/superpowers/plans/2026-06-02-demo-seed-data-v1.md,A-文档历史,历史文档,历史实施计划,历史开发实施计划,,yes,no,low,no,ownership_confirmed_keep_current,文档,4,归属于“历史实施计划”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/superpowers/plans/2026-06-22-demo-mock-runtime-data-cleanup-implementation-plan.md,A-文档历史,历史文档,历史实施计划,历史开发实施计划,,yes,no,low,no,ownership_confirmed_keep_current,文档,3,归属于“历史实施计划”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/superpowers/specs/2026-06-02-demo-seed-data-v1-design.md,A-文档历史,历史文档,历史设计规格,历史技术设计规格,,yes,no,low,no,ownership_confirmed_keep_current,文档,5,归属于“历史设计规格”；保留当前位置，作为历史记录，不参与源码迁移。
+docs/superpowers/specs/2026-06-22-demo-mock-runtime-data-cleanup-design.md,A-文档历史,历史文档,历史设计规格,历史技术设计规格,,yes,no,low,no,ownership_confirmed_keep_current,文档,3,归属于“历史设计规格”；保留当前位置，作为历史记录，不参与源码迁移。
+src/modules/workspace/tests/V1ReadonlyDemoGateAcceptance.test.tsx,B-测试归属,纯测试文件,工作台模块,模块测试,验收测试,yes,no,low,no,ownership_confirmed_keep_current,文档,5,归属于“工作台模块”；继续随所属模块或脚本目录保留。
+src/modules/open-platform/tests/PlatformKnowledgeMockContract.test.ts,B-测试归属,纯测试文件,开放平台模块,模块测试,契约测试,yes,no,low,no,ownership_confirmed_keep_current,文档,4,归属于“开放平台模块”；继续随所属模块或脚本目录保留。
+src/server/db/tests/SeedGuard.test.ts,B-测试归属,纯测试文件,数据库边界,数据库安全测试,安全守卫测试,yes,no,low,no,ownership_confirmed_keep_current,文档,2,归属于“数据库边界”；继续随所属模块或脚本目录保留。
+src/modules/institution/tests/WeComCustomerContactReadonlyProofMockApiRoute.test.ts,B-测试归属,纯测试文件,机构端模块,模块测试,API 路由测试,yes,no,low,no,ownership_confirmed_keep_current,文档,3,归属于“机构端模块”；继续随所属模块或脚本目录保留。
+src/modules/institution/tests/WeComCustomerContactReadonlyProofMockDomain.test.ts,B-测试归属,纯测试文件,机构端模块,模块测试,领域测试,yes,no,low,no,ownership_confirmed_keep_current,文档,3,归属于“机构端模块”；继续随所属模块或脚本目录保留。
+scripts/demo/seed-v06-low-sensitive-demo.test.ts,B-测试归属,纯测试文件,演示脚本测试,脚本级测试,演示脚本测试,yes,no,low,no,ownership_confirmed_keep_current,文档,4,归属于“演示脚本测试”；继续随所属模块或脚本目录保留。
+src/modules/knowledge-base/tests/V1KnowledgeBaseDemoReadonlyApiContract.test.ts,B-测试归属,纯测试文件,知识库模块,模块测试,契约测试,yes,no,low,no,ownership_confirmed_keep_current,文档,6,归属于“知识库模块”；继续随所属模块或脚本目录保留。
+src/modules/knowledge-base/tests/V1KnowledgeBaseDemoReadonlyApiRoute.test.ts,B-测试归属,纯测试文件,知识库模块,模块测试,API 路由测试,yes,no,low,no,ownership_confirmed_keep_current,文档,5,归属于“知识库模块”；继续随所属模块或脚本目录保留。
+src/modules/knowledge-base/tests/V1KnowledgeBaseDemoReadonlyFacade.test.ts,B-测试归属,纯测试文件,知识库模块,模块测试,模块行为测试,yes,no,low,no,ownership_confirmed_keep_current,文档,6,归属于“知识库模块”；继续随所属模块或脚本目录保留。
+src/modules/knowledge-base/tests/V1KnowledgeBaseDemoSourceContract.test.ts,B-测试归属,纯测试文件,知识库模块,模块测试,契约测试,yes,no,low,no,ownership_confirmed_keep_current,文档,4,归属于“知识库模块”；继续随所属模块或脚本目录保留。
+src/modules/auth/tests/DemoAuthRoutes.test.ts,B-测试归属,纯测试文件,认证模块,模块测试,API 路由测试,yes,no,low,no,ownership_confirmed_keep_current,文档,9,归属于“认证模块”；继续随所属模块或脚本目录保留。
