@@ -526,11 +526,11 @@ scripts/db/guarded-migrate.d.mts,scripts,KEEP_OR_RECLASSIFY,scripts/db/guarded-m
 scripts/db/guarded-migrate.mjs,scripts,KEEP_OR_RECLASSIFY,scripts/db/guarded-migrate.mjs,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
 scripts/demo/seed-v06-low-sensitive-demo.test.ts,tests,KEEP_OR_RECLASSIFY,scripts/demo/seed-v06-low-sensitive-demo.test.ts,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
 scripts/demo/seed-v06-low-sensitive-demo.ts,scripts,KEEP_OR_RECLASSIFY,scripts/demo/seed-v06-low-sensitive-demo.ts,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
-scripts/deploy-test-server.mjs,scripts,KEEP_OR_RECLASSIFY,scripts/deploy-test-server.mjs,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
+scripts/deploy-test-server.mjs,scripts,KEEP_ENTRYPOINT_MOVE_IMPLEMENTATION,scripts/deploy/test-server.mjs,low,3,no,completed,保留原路径作为稳定兼容入口，部署实现已下沉至 scripts/deploy/。
 scripts/dev/local-acceptance-db.sh,scripts,KEEP_OR_RECLASSIFY,scripts/dev/local-acceptance-db.sh,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
 scripts/run-next.mjs,scripts,KEEP_OR_RECLASSIFY,scripts/run-next.mjs,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
 scripts/run-vitest.mjs,scripts,KEEP_OR_RECLASSIFY,scripts/run-vitest.mjs,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
-scripts/runtime-node.mjs,scripts,KEEP_OR_RECLASSIFY,scripts/runtime-node.mjs,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
+scripts/runtime-node.mjs,scripts,KEEP_ENTRYPOINT_MOVE_IMPLEMENTATION,scripts/runtime/resolve-runtime-node.mjs,low,3,no,completed,保留原路径作为稳定兼容入口，Node 运行时解析实现已下沉至 scripts/runtime/。
 src/.DS_Store,other,KEEP_REVIEW,src/.DS_Store,low,review,yes,pending,需要人工确认职责。
 src/app/(auth)/login/page.tsx,app,KEEP_REVIEW,src/app/(auth)/login/page.tsx,low,review,yes,pending,需要人工确认职责。
 src/app/(auth)/platform-login/page.tsx,app,KEEP_REVIEW,src/app/(auth)/platform-login/page.tsx,low,review,yes,pending,需要人工确认职责。

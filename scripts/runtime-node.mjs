@@ -1,7 +1,9 @@
-import { existsSync } from 'node:fs';
-
-const codexSignedNode = '/Users/dongxiaolong/.cache/zmtg-runtime/node';
-
-export function resolveRuntimeNode() {
-  return existsSync(codexSignedNode) ? codexSignedNode : process.execPath;
-}
+/**
+ * Node 运行时解析器的稳定兼容入口。
+ *
+ * 实际实现位于：
+ * scripts/runtime/resolve-runtime-node.mjs
+ */
+export {
+  resolveRuntimeNode,
+} from './runtime/resolve-runtime-node.mjs';
