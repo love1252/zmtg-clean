@@ -1255,11 +1255,11 @@ src/modules/open-platform/domain/vendor-catalog.ts,business-module,SPLIT_REVIEW,
 src/modules/open-platform/domain/wecom-customer-data-governance.ts,business-module,SPLIT_REVIEW,src/modules/<platform-domain>/,high,8,yes,pending,平台聚合模块，按租户、套餐、AI、品牌和审计拆分。
 src/modules/open-platform/lib/platformAiReadonlyViewLoader.ts,business-module,SPLIT_REVIEW,src/modules/<platform-domain>/,high,8,yes,pending,平台聚合模块，按租户、套餐、AI、品牌和审计拆分。
 src/modules/open-platform/lib/platformKnowledgeManagementViewLoader.ts,business-module,SPLIT_REVIEW,src/modules/<platform-domain>/,high,8,yes,pending,平台聚合模块，按租户、套餐、AI、品牌和审计拆分。
-src/modules/open-platform/mock/platformAiModelConfig.ts,business-module,AUDIT_KEEP_MODULE_MOCK_BOUNDARY,src/modules/open-platform/mock/platformAiModelConfig.ts,medium,5,yes,audit_completed,保持模块内位置，先区分运行时与测试调用。
-src/modules/open-platform/mock/platformAiModelRegistry.ts,business-module,AUDIT_KEEP_MODULE_MOCK_BOUNDARY,src/modules/open-platform/mock/platformAiModelRegistry.ts,medium,5,yes,audit_completed,保持模块内位置，先区分运行时与测试调用。
-src/modules/open-platform/mock/platformAiReadonly.ts,business-module,AUDIT_KEEP_MODULE_MOCK_BOUNDARY,src/modules/open-platform/mock/platformAiReadonly.ts,medium,5,yes,audit_completed,保持模块内位置，先区分运行时与测试调用。
-src/modules/open-platform/mock/platformAiUsageCost.ts,business-module,AUDIT_KEEP_MODULE_MOCK_BOUNDARY,src/modules/open-platform/mock/platformAiUsageCost.ts,medium,5,yes,audit_completed,保持模块内位置，先区分运行时与测试调用。
-src/modules/open-platform/mock/platformKnowledge.ts,business-module,AUDIT_KEEP_MODULE_MOCK_BOUNDARY,src/modules/open-platform/mock/platformKnowledge.ts,medium,5,yes,audit_completed,保持模块内位置，先区分运行时与测试调用。
+src/modules/open-platform/mock/platformAiModelConfig.ts,business-module,BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/open-platform/mock/platformAiModelConfig.ts,medium,7,yes,boundary_confirmed,保持当前位置；后续若治理，先拆分共享类型、运行时默认值和受控样例数据。
+src/modules/open-platform/mock/platformAiModelRegistry.ts,business-module,BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/open-platform/mock/platformAiModelRegistry.ts,medium,7,yes,boundary_confirmed,保持当前位置；后续通过显式运行时 Provider 替代直接 Mock 数据依赖。
+src/modules/open-platform/mock/platformAiReadonly.ts,business-module,BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/open-platform/mock/platformAiReadonly.ts,medium,7,yes,boundary_confirmed,保持当前位置；该文件组合模型注册表和用量成本样例，不得单独移动。
+src/modules/open-platform/mock/platformAiUsageCost.ts,business-module,BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/open-platform/mock/platformAiUsageCost.ts,medium,7,yes,boundary_confirmed,保持当前位置；后续先分离用量类型契约、样例数据和真实计量读取接口。
+src/modules/open-platform/mock/platformKnowledge.ts,business-module,BOUNDARY_CONFIRMED_KEEP_CURRENT,src/modules/open-platform/mock/platformKnowledge.ts,medium,7,yes,boundary_confirmed,保持当前位置；后续优先将共享类型迁出 mock，再决定测试值样例的归属。
 src/modules/open-platform/server/ai-credit-metering-rules-management.ts,business-module,SPLIT_REVIEW,src/modules/<platform-domain>/,high,8,yes,pending,平台聚合模块，按租户、套餐、AI、品牌和审计拆分。
 src/modules/open-platform/server/ai-usage-credits.ts,business-module,SPLIT_REVIEW,src/modules/<platform-domain>/,high,8,yes,pending,平台聚合模块，按租户、套餐、AI、品牌和审计拆分。
 src/modules/open-platform/server/homepage-brand-asset-storage.ts,business-module,SPLIT_REVIEW,src/modules/<platform-domain>/,high,8,yes,pending,平台聚合模块，按租户、套餐、AI、品牌和审计拆分。
