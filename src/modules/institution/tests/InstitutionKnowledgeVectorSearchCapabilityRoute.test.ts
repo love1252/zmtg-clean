@@ -55,7 +55,7 @@ describe('机构端知识库向量检索 capability route', () => {
         headers: { authorization: 'Bearer forged', 'x-institution-id': 'forged' },
       }),
     ]) {
-      const response = await route.GET(request);
+      const response = await route.GET(request as Request);
       expect(response.status).toBe(503);
       expect(response.headers.get('Cache-Control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(expectedPayload);

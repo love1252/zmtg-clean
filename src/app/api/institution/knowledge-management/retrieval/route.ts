@@ -8,7 +8,7 @@ const capabilityDisabledPayload = Object.freeze({
 
 const noStoreHeaders = { 'Cache-Control': 'no-store' } as const;
 
-export async function GET(_request?: Request) {
+export async function GET(_request: Request) {
   return NextResponse.json(capabilityDisabledPayload, {
     status: 503,
     headers: noStoreHeaders,

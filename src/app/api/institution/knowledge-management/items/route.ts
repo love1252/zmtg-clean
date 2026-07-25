@@ -11,14 +11,14 @@ const capabilityDisabledResponseInit = Object.freeze({
   headers: { 'Cache-Control': 'no-store' },
 });
 
-export async function GET(_request?: Request) {
+export async function GET(_request: Request) {
   return NextResponse.json(capabilityDisabledPayload, capabilityDisabledResponseInit);
 }
 
-export async function POST(_request?: Request) {
+export async function POST(_request: Request) {
   return NextResponse.json(capabilityDisabledPayload, capabilityDisabledResponseInit);
 }
 
-export async function PATCH(_request?: Request) {
+export async function PATCH(_request: Request) {
   return NextResponse.json(capabilityDisabledPayload, capabilityDisabledResponseInit);
 }

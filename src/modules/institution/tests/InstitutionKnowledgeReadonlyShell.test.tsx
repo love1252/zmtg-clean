@@ -2027,7 +2027,7 @@ describe('机构端知识库只读列表 UI', () => {
         method: 'POST', body: JSON.stringify({ jobType: 'ocr_file', knowledgeId: 'forged', fileId: 'forged' }),
       })],
     ] as const) {
-      const response = await route[method](request);
+      const response = await route[method](request as Request);
       expect(response.status).toBe(503);
       expect(response.headers.get('Cache-Control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(indexingCapabilityDisabledPayload);
@@ -2037,7 +2037,7 @@ describe('机构端知识库只读列表 UI', () => {
 
     for (const method of ['GET', 'POST'] as const) {
       const { request, counts } = hostileRequest();
-      const response = await route[method](request);
+      const response = await route[method](request as Request);
       expect(response.status).toBe(503);
       expect(response.headers.get('Cache-Control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(indexingCapabilityDisabledPayload);

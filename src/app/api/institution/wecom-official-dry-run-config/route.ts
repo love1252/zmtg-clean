@@ -12,10 +12,10 @@ function capabilityDisabledResponse() {
   });
 }
 
-export function GET(_request?: Request) {
+export function GET(_request: Request) {
   return capabilityDisabledResponse();
 }
 
-export function POST(_request?: Request) {
+export function POST(_request: Request) {
   return capabilityDisabledResponse();
 }

@@ -82,7 +82,7 @@ describe('机构端 AI 调用 capability route', () => {
       new Request('http://localhost/api/institution/knowledge-management/ai-call', { method: 'POST' }),
       new Request('http://localhost/api/institution/knowledge-management/ai-call', { method: 'POST', headers: { authorization: 'Bearer forged', 'content-type': 'application/json' }, body: JSON.stringify({ provider: 'forged', model: 'forged', question: 'ignored' }) }),
     ]) {
-      const response = await route.POST(request);
+      const response = await route.POST(request as Request);
       expect(response.status).toBe(503);
       expect(response.headers.get('cache-control')).toBe('no-store');
       await expect(response.json()).resolves.toEqual(disabledPayload);

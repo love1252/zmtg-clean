@@ -8,7 +8,7 @@ const legacyDashboardStatsDisabled = Object.freeze({
 /**
  * This retired tenant/demo endpoint must never inspect untrusted requests or legacy data.
  */
-export function GET(_request?: Request) {
+export function GET(_request: Request) {
   return NextResponse.json(legacyDashboardStatsDisabled, {
     status: 410,
     headers: { 'Cache-Control': 'no-store' },

@@ -82,7 +82,7 @@ async function expectCapabilityDisabled(
   assertNoFetch: () => void,
   request?: Request,
 ) {
-  const response = await route.POST(request);
+  const response = await route.POST(request as Request);
 
   expect(response.status).toBe(503);
   expect(response.headers.get('cache-control')).toBe('no-store');

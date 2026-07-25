@@ -6,7 +6,7 @@ const capabilityDisabledPayload = {
   message: '机构知识库检索暂未启用。',
 } as const;
 
-export async function GET(_request?: Request) {
+export async function GET(_request: Request) {
   return NextResponse.json(capabilityDisabledPayload, {
     status: 503,
     headers: { 'Cache-Control': 'no-store' },
