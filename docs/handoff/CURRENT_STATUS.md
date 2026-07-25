@@ -1,9 +1,9 @@
 # 智美天工当前项目状态
 
-- 更新时间：2026-07-25
+- 更新时间：2026-07-26
 - 仓库：`love1252/zmtg-clean`
-- 当前重构分支：`refactor/runtime-testing-entrypoints-20260725-235624`
-- 重构基线：`a2f69cce3d91188581226974b43946bda2778b60`
+- 当前重构分支：`refactor/demo-mock-seed-audit-20260726-002033`
+- 重构基线：`b833f9a6fa4a3faf275cf07f0a58560576250889`
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
@@ -50,3 +50,12 @@
 - Vitest 命令实现已下沉至 `scripts/testing/`。
 - `package.json` 和锁文件保持不变。
 - 未执行真实部署、数据库迁移或 Seed。
+
+## 第五阶段 Demo、Mock、Fixture、Seed 审计状态
+
+- 已复核第二阶段列出的 44 个候选文件。
+- 已生成逐文件调用关系和风险分组清单。
+- 已更新迁移矩阵中的 44 条审计记录。
+- 本阶段移动业务文件数量为 0。
+- Seed、认证和运行时 API 候选继续保持原位。
+- 未运行 Migration、Seed 或真实外部调用。
