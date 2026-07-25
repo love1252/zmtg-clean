@@ -513,15 +513,15 @@ public/ai-vendor-logos/deepseek.svg,public,KEEP_OR_DEDUPLICATE,public/ai-vendor-
 public/ai-vendor-logos/doubao.svg,public,KEEP_OR_DEDUPLICATE,public/ai-vendor-logos/doubao.svg,low,3,yes,pending,检查重复静态资源和实际引用。
 public/ai-vendor-logos/kimi.svg,public,KEEP_OR_DEDUPLICATE,public/ai-vendor-logos/kimi.svg,low,3,yes,pending,检查重复静态资源和实际引用。
 public/ai-vendor-logos/qwen.svg,public,KEEP_OR_DEDUPLICATE,public/ai-vendor-logos/qwen.svg,low,3,yes,pending,检查重复静态资源和实际引用。
-public/brand/logo-horizontal-luxury.png,public,KEEP_OR_DEDUPLICATE,public/brand/logo-horizontal-luxury.png,low,3,yes,pending,检查重复静态资源和实际引用。
-public/brand/logo-horizontal-night.png,public,KEEP_OR_DEDUPLICATE,public/brand/logo-horizontal-night.png,low,3,yes,pending,检查重复静态资源和实际引用。
+public/brand/logo-horizontal-luxury.png,public,REMOVE_DUPLICATE,public/brand/zmtg-logo-horizontal-luxury-clean.png,low,2,no,completed,内容完全一致，第二阶段删除重复资源。
+public/brand/logo-horizontal-night.png,public,REMOVE_DUPLICATE,public/brand/zmtg-logo-horizontal-night-clean.png,low,2,no,completed,内容完全一致，第二阶段删除重复资源。
 public/brand/logo-horizontal.png,public,KEEP_OR_DEDUPLICATE,public/brand/logo-horizontal.png,low,3,yes,pending,检查重复静态资源和实际引用。
 public/brand/logo-mark.png,public,KEEP_OR_DEDUPLICATE,public/brand/logo-mark.png,low,3,yes,pending,检查重复静态资源和实际引用。
 public/brand/logo-stacked.png,public,KEEP_OR_DEDUPLICATE,public/brand/logo-stacked.png,low,3,yes,pending,检查重复静态资源和实际引用。
-public/brand/zmtg-logo-horizontal-luxury-clean.png,public,KEEP_OR_DEDUPLICATE,public/brand/zmtg-logo-horizontal-luxury-clean.png,low,3,yes,pending,检查重复静态资源和实际引用。
-public/brand/zmtg-logo-horizontal-night-clean.png,public,KEEP_OR_DEDUPLICATE,public/brand/zmtg-logo-horizontal-night-clean.png,low,3,yes,pending,检查重复静态资源和实际引用。
-public/homepage/luxury-clinic-bg.png,public,DEDUPLICATE_CANDIDATE,public/homepage/<canonical-name>.png,medium,3,yes,pending,内容重复，统一引用后保留一份。
-public/homepage/zmtg-luxury-clinic-bg.png,public,DEDUPLICATE_CANDIDATE,public/homepage/<canonical-name>.png,medium,3,yes,pending,内容重复，统一引用后保留一份。
+public/brand/zmtg-logo-horizontal-luxury-clean.png,public,KEEP_CANONICAL,public/brand/zmtg-logo-horizontal-luxury-clean.png,low,2,no,completed,第二阶段确认为浅色品牌 Logo 统一资源。
+public/brand/zmtg-logo-horizontal-night-clean.png,public,KEEP_CANONICAL,public/brand/zmtg-logo-horizontal-night-clean.png,low,2,no,completed,第二阶段确认为深色品牌 Logo 统一资源。
+public/homepage/luxury-clinic-bg.png,public,REMOVE_DUPLICATE,public/homepage/zmtg-luxury-clinic-bg.png,low,2,no,completed,内容完全一致，第二阶段删除重复资源。
+public/homepage/zmtg-luxury-clinic-bg.png,public,KEEP_CANONICAL,public/homepage/zmtg-luxury-clinic-bg.png,low,2,no,completed,第二阶段确认为首页背景统一资源。
 scripts/db/guarded-migrate.d.mts,scripts,KEEP_OR_RECLASSIFY,scripts/db/guarded-migrate.d.mts,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
 scripts/db/guarded-migrate.mjs,scripts,KEEP_OR_RECLASSIFY,scripts/db/guarded-migrate.mjs,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
 scripts/demo/seed-v06-low-sensitive-demo.test.ts,tests,KEEP_OR_RECLASSIFY,scripts/demo/seed-v06-low-sensitive-demo.test.ts,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
