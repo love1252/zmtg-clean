@@ -1,0 +1,3 @@
+family_key,path,route_url,http_methods,responsibility,permission_action,service_or_repository,success_contract,compatibility_role,source_sha256,move_now
+/api/open-platform/tenants,src/app/api/open-platform/tenants/route.ts,/api/open-platform/tenants,GET,读取租户管理列表,tenant/read_detail,createTenantManagementRepository；listTenantManagementRecords,200；{ records: [...] },独立读取入口，不是 v1 POST 的别名,05f8c446bcd66feb65580e6fa578c0f4371fac14496b73c8804e11cce970a739,no
+/api/open-platform/tenants,src/app/api/v1/open-platform/tenants/route.ts,/api/v1/open-platform/tenants,POST,创建租户并绑定套餐,tenant/manage_status,createTenantPlanBindingRepository；createTenantWithPlanService,"201；{ ok: true, ...result }",独立创建入口，不是非版本化 GET 的别名,f519fc639854a084394d354e1ab07a8c4f25ef812a60ae96e355b2f2024ade38,no
