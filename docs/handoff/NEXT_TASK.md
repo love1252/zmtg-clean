@@ -2,53 +2,64 @@
 
 ## 当前任务
 
-执行第二十阶段：WeCom official dry-run 单一版本化兼容入口试点实施。
+执行第二十一阶段：API 试点闭环与后续批次计划。
 
-## 当前入口
+## 已实施试点
 
-- URL：`/api/institution/wecom-official-dry-run`
-- 文件：`src/app/api/institution/wecom-official-dry-run/route.ts`
-- 方法：`GET`
-- 修改权限：只读，不得修改
+- 原入口：`/api/institution/wecom-official-dry-run`
+- 新入口：`/api/v1/institution/wecom-official-dry-run`
+- 实现：新入口直接 re-export 旧 `GET`
+- 旧入口：继续保留
+- 旧入口退役：未授权
 
-## 新版本化入口
+## 闭环审计目标
 
-- URL：`/api/v1/institution/wecom-official-dry-run`
-- 文件：`src/app/api/v1/institution/wecom-official-dry-run/route.ts`
-- 方法：`GET`
+1. 核对新旧入口是否仍为同一 `GET` 函数引用。
+2. 核对固定低敏 `503`、响应 JSON 和 `Cache-Control=no-store`。
+3. 核对 Request、下游、数据库和外部调用仍为 0。
+4. 核对旧路由、现有测试和调用方无修改。
+5. 核对 build 同时包含新旧入口。
+6. 核对精确回退只需删除新路由、新测试并恢复交接文档。
+7. 更新全仓 API 路由数量和重叠路由族统计。
+8. 判断该试点模式能否复制到后续候选。
+9. 将剩余 API 候选分为：
+   - 可复制试点模式；
+   - 需要客户端迁移；
+   - 需要观测后退役；
+   - 保持当前；
+   - 阻断，等待人工决策。
 
-新路由必须只包含：
+## 预期统计变化
 
-```ts
-export { GET } from '@/app/api/institution/wecom-official-dry-run/route';
-```
+第二十阶段新增 1 个 `route.ts`，因此第二十一阶段应重新核对：
 
-## 精确文件白名单
+- 全仓 `route.ts`：预计由 145 增至 146；
+- 版本化路由：预计由 56 增至 57；
+- 非版本化路由：预计保持 89；
+- 路由族：预计保持 144；
+- 版本化／非版本化精确重叠族：预计由 1 增至 2。
 
-1. `src/app/api/v1/institution/wecom-official-dry-run/route.ts`
-2. `src/modules/institution/tests/V1WeComOfficialDryRunCompatibilityApiRoute.test.ts`
-3. `docs/handoff/CURRENT_STATUS.md`
-4. `docs/handoff/NEXT_TASK.md`
-5. `docs/handoff/RELEASE_HISTORY.md`
+以上为待审计预期值，不得直接覆盖既有清单或迁移矩阵。
 
-## 必须保持
+## 必须输出
 
-- HTTP `503`
-- `code=capability_disabled`
-- `Cache-Control=no-store`
-- Request 读取为 0
-- 下游、数据库和外部调用为 0
-- 旧入口继续可用
+1. 第二十阶段试点闭环审计文档。
+2. 新旧入口契约复核记录。
+3. 全仓 API 数量变化复核。
+4. 剩余 API 后续批次计划。
+5. 可复制条件、阻断条件和回退结论。
 
 ## 禁止范围
 
-- 不修改旧路由、任何现有测试或调用方；
-- 不新增 Wrapper、重定向、代理或弃用 Header；
-- 不扩大到 `/evaluate`、config、snapshot 或其他路由；
-- 不修改迁移矩阵、Schema、Migration、package 或锁文件；
-- 不连接数据库或真实外部服务；
-- 不扩大到第二个路由族。
+- 本阶段默认 audit-only。
+- 不修改、删除或移动任何 API。
+- 不修改调用方。
+- 不退役旧入口。
+- 不修改 `file-migration-matrix.csv`。
+- 不修改 Schema、Migration、package 或锁文件。
+- 不连接数据库或真实外部服务。
+- 不实施第二个路由族。
 
 ## 后续阶段
 
-第二十一阶段审计该试点结果并形成剩余 API 分批治理计划。
+第二十二阶段进入机构端职责与依赖图审计。API 后续批次只能依据第二十一阶段结论另行授权。

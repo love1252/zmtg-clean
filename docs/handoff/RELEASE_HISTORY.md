@@ -201,3 +201,16 @@
 - 明确第二十阶段 5 个文件白名单。
 - 未修改 API、调用方或迁移矩阵。
 - 未改变运行时行为。
+
+## 2026-07-26：第二十阶段 WeCom official dry-run v1 兼容入口试点实施
+
+- 新增版本化入口：`/api/v1/institution/wecom-official-dry-run`。
+- 新路由直接 re-export 旧 `GET`。
+- 新旧入口保持同一函数引用。
+- 旧入口 `/api/institution/wecom-official-dry-run` 保持原样并继续可用。
+- 固定低敏 `503`、响应 JSON 和 `Cache-Control=no-store` 保持不变。
+- 新增独立兼容契约测试。
+- 未修改旧路由、现有测试或调用方。
+- 未修改迁移矩阵、Schema、Migration、package 或锁文件。
+- 未连接数据库或真实外部服务。
+- 本阶段只实施一个路由族。

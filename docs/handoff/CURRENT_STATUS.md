@@ -2,10 +2,10 @@
 
 - 更新时间：2026-07-26
 - 仓库：`love1252/zmtg-clean`
-- 当前重构分支：`docs/wecom-dry-run-version-pilot-design-20260726-185158`
-- 重构基线：`d7a5d27a992a0f2dc3e945109ce28835a6870573`
-- 当前阶段：第十九阶段，WeCom official dry-run API 试点设计
-- 下一阶段：第二十阶段，单一版本化兼容入口试点实施
+- 当前重构分支：`feat/wecom-dry-run-v1-compatibility-20260726-191102`
+- 重构基线：`af81fc5c68878491a803370937905db67833a523`
+- 当前阶段：第二十阶段，WeCom official dry-run v1 兼容入口试点实施
+- 下一阶段：第二十一阶段，API 试点闭环与后续批次计划
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
@@ -239,3 +239,18 @@
 - 调用方修改：0。
 - 迁移矩阵修改：0。
 - 运行时行为修改：0。
+
+## 第二十阶段 WeCom official dry-run v1 兼容入口状态
+
+- 已新增版本化入口：`/api/v1/institution/wecom-official-dry-run`。
+- 新路由文件：`src/app/api/v1/institution/wecom-official-dry-run/route.ts`。
+- 新入口直接 re-export 旧 `GET`。
+- 新旧入口为同一函数引用。
+- 旧入口 `/api/institution/wecom-official-dry-run` 保持原样并继续可用。
+- HTTP `503`、`code=capability_disabled`、
+  固定低敏错误信息和 `Cache-Control=no-store` 保持不变。
+- Request 读取、下游初始化、数据库和外部调用仍为 0。
+- 已新增独立兼容契约测试：`src/modules/institution/tests/V1WeComOfficialDryRunCompatibilityApiRoute.test.ts`。
+- 未修改旧路由、现有测试或调用方。
+- 未修改迁移矩阵、Schema、Migration、package 或锁文件。
+- 本阶段只实施一个路由族。
