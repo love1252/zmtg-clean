@@ -1,0 +1,6 @@
+file_path,file_state,permission,phase20_action
+src/app/api/v1/institution/wecom-official-dry-run/route.ts,new,create_only,re_export_GET
+src/modules/institution/tests/V1WeComOfficialDryRunCompatibilityApiRoute.test.ts,new,create_only,add_compatibility_tests
+docs/handoff/CURRENT_STATUS.md,existing,modify,record_phase20_result
+docs/handoff/NEXT_TASK.md,existing,modify,set_phase21_task
+docs/handoff/RELEASE_HISTORY.md,existing,modify,record_phase20_history
