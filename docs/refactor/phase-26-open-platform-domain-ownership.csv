@@ -1,0 +1,10 @@
+owner,file_count,role_counts,runtime_boundary_file_count,cross_module_outbound_file_count,cross_module_inbound_file_count,cycle_file_count,reverse_dependency_file_count,stable_entry_suggestion
+ai_runtime,11,client:2；component:1；server_service:3；test:5,9,2,1,0,0,src/modules/open-platform/ai_runtime/index.ts
+audit,2,component:1；test:1,1,1,1,0,0,src/modules/open-platform/audit/index.ts
+commercial_entitlement,39,client:1；component:3；domain:5；server_repository:4；server_service:4；test:22,22,13,2,0,2,src/modules/open-platform/commercial_entitlement/index.ts
+homepage_brand,14,component:1；server_repository:3；server_service:1；test:9,13,9,2,0,3,src/modules/open-platform/homepage_brand/index.ts
+knowledge,48,component:5；other:2；server_repository:2；server_service:12；test:27,37,16,11,8,2,src/modules/open-platform/knowledge/index.ts
+platform_config,11,component:1；other:1；server_repository:1；server_service:4；test:4,11,5,1,0,1,src/modules/open-platform/platform_config/index.ts
+provider_config,13,domain:1；server_repository:2；server_service:5；test:5,13,8,1,0,2,src/modules/open-platform/provider_config/index.ts
+shared,29,component:5；domain:2；other:4；server_service:3；test:15,20,7,4,0,0,src/modules/open-platform/shared/index.ts
+tenant_governance,19,client:1；component:3；domain:2；server_repository:2；server_service:2；test:9,13,6,6,0,1,src/modules/open-platform/tenant_governance/index.ts
