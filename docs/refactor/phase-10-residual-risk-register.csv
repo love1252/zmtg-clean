@@ -1,0 +1,9 @@
+risk_id,domain,risk,affected_count,severity,current_decision,next_gate
+R01,机构端模块,页面、领域、服务和业务能力仍集中于 institution 模块,316,high,not_closed,先形成机构端模块拆分计划，禁止直接批量移动
+R02,开放平台模块,开放平台职责仍高度聚合,180,high,not_closed,按平台配置、商业、知识库和运行时能力分域规划
+R03,API 路径,版本化与非版本化 API 并存,91,high,not_closed,先完成调用方、兼容期、重定向和退役计划
+R04,跨模块职责,知识库与工作台等模块仍存在职责交叉,45,medium,not_closed,先建立领域所有权和依赖方向图
+R05,数据库边界,数据库基础设施和安全边界仍被锁定,62,high,protected,Schema、Migration、Client 和 Seed 必须单独授权
+R06,Demo Seed,Demo CLI 数据库地址策略比核心 Seed Guard 更宽,1,high,recorded_not_fixed,统一复用核心 loopback Seed Guard
+R07,认证测试,旧 DemoAuthRoutes 测试与当前认证契约存在漂移,1,medium,recorded_not_fixed,单独决定测试更新、拆分或退役
+R08,迁移矩阵,仍有大量 pending 记录等待后续分域处理,1455,medium,backlog,按风险和依赖关系选择下一批规划对象
