@@ -154,3 +154,26 @@
 - 本阶段未创建正式辅助标记注册表。
 - 未修改迁移矩阵。
 - 未修改或移动任何 API 文件。
+
+## 2026-07-26：第十六阶段正式 API 版本治理辅助标记注册表
+
+- 创建 `docs/refactor/api-version-governance-auxiliary-markers.csv`。
+- 首次登记 2 条运行时边界记录。
+- 固定标记为 `api_version_governance=review_required`。
+- 标记权威级别为 `supplemental_non_overriding`。
+- 主动作和主状态均保持不变。
+- 未修改迁移矩阵。
+- 未修改或移动任何 API 文件。
+- PR #759 已合并。
+- 合并提交：`f5802888ec70c1fc02e21b2938de0d740411c933`。
+
+## 2026-07-26：第十七阶段交接更新与后续路线图固化
+
+- 更新 `CURRENT_STATUS.md`。
+- 更新 `NEXT_TASK.md`。
+- 更新 `RELEASE_HISTORY.md`。
+- 创建第十七至第三十一阶段目录重构路线图。
+- 明确最终完成不等于移动全部文件，
+  已确认归属并保留当前位置也可视为闭环。
+- 明确数据库、Schema、Migration 和 Seed 继续保持保护边界。
+- 本阶段未修改迁移矩阵、API 或正式业务源码。
