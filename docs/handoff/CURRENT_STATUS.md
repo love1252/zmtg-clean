@@ -2,10 +2,10 @@
 
 - 更新时间：2026-07-26
 - 仓库：`love1252/zmtg-clean`
-- 当前重构分支：`refactor/institution-appointment-domain-pilot-20260726-212620`
-- 重构基线：`b2a23b2b753ba27400e5c09f6c34957778603b20`
-- 当前阶段：第二十三阶段，机构端预约空态领域模型试点
-- 下一阶段：第二十四阶段，机构端服务边界试点
+- 当前重构分支：`refactor/institution-entitlement-service-pilot-20260726-221222`
+- 重构基线：`cbe14e660b8d31f864dde2854211dddc0feb2d15`
+- 当前阶段：第二十四阶段，机构端套餐额度只读服务边界试点
+- 下一阶段：第二十五阶段，机构端阶段闭环
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
@@ -16,7 +16,7 @@
 2. `src/modules/open-platform/` 聚合了较多平台端职责。
 3. 客户、随访、知识库和工作台存在职责重叠。
 4. API 同时存在版本化与非版本化路径。
-5. 正式业务源码移动累计为 1，当前仅完成预约空态领域模型单文件试点。
+5. 正式业务源码移动累计为 2，已完成预约纯领域和套餐额度只读服务两个单文件试点。
 
 ## 当前重构边界
 
@@ -307,3 +307,26 @@
 - API、数据库、权限、租户隔离和错误响应修改：0。
 - `file-migration-matrix.csv` 修改：0。
 - 第二个机构端候选实施：0。
+
+## 第二十四阶段机构端服务边界试点状态
+
+- 预检文档：`docs/refactor/phase-24-institution-service-pilot-preflight.md`。
+- 精确白名单：`docs/refactor/phase-24-institution-service-pilot-allowed-files.csv`。
+- 唯一候选原路径：`src/modules/institution/server/package-ai-quota-readonly-source.ts`。
+- 稳定目标路径：`src/modules/institution/entitlement/package-ai-quota-readonly-source.ts`。
+- 候选职责：`server_service`。
+- 领域所有者：`entitlement`。
+- 文件内容 blob：`177ad4c2d5ef7fb849d955996755beba12b3cc0f`，移动前后完全一致。
+- export 契约：4 个 type、6 个 function，共 10 个，保持不变。
+- 候选 import：仅依赖机构端套餐额度 domain 契约，保持不变。
+- 运行时调用方：`src/modules/institution/server/institution-ai-service-usage.ts`，仅修正 import。
+- 直接测试：`src/modules/institution/tests/PackageAiQuotaReadonlySource.test.ts`，仅修正 import。
+- 旧源码 import：0。
+- 新源码 import：2。
+- 跨模块出向依赖：0。
+- 新增循环依赖：0。
+- 新增反向依赖：0。
+- 正式业务源码累计移动：2 个。
+- API、数据库、权限、租户隔离和错误响应修改：0。
+- `file-migration-matrix.csv` 修改：0。
+- 第二个服务候选实施：0。

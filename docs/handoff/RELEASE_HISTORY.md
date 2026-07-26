@@ -263,3 +263,23 @@
 - 未修改 API、数据库、权限、租户隔离或错误响应。
 - 未修改 `file-migration-matrix.csv`。
 - 未实施第二个机构端候选。
+
+## 2026-07-26：第二十四阶段机构端套餐额度只读服务边界试点
+
+- 先完成实施前预检：
+  `docs/refactor/phase-24-institution-service-pilot-preflight.md`。
+- 精确白名单：
+  `docs/refactor/phase-24-institution-service-pilot-allowed-files.csv`。
+- 将 `src/modules/institution/server/package-ai-quota-readonly-source.ts` 移动至
+  `src/modules/institution/entitlement/package-ai-quota-readonly-source.ts`。
+- 移动前后 blob 均为 `177ad4c2d5ef7fb849d955996755beba12b3cc0f`。
+- 4 个 type 与 6 个 function export 保持不变。
+- 候选唯一 import 继续指向机构端套餐额度 domain 契约。
+- 运行时调用方 `src/modules/institution/server/institution-ai-service-usage.ts` 仅修正 import。
+- 直接测试 `src/modules/institution/tests/PackageAiQuotaReadonlySource.test.ts` 仅修正 import。
+- 旧源码 import 已归零，新源码 import 恰好 2 个。
+- 跨模块出向依赖为 0，未新增循环依赖或反向依赖。
+- 正式业务源码累计移动 2 个。
+- 未修改 API、数据库、权限、租户隔离或错误响应。
+- 未修改 `file-migration-matrix.csv`。
+- 未实施第二个服务候选。
