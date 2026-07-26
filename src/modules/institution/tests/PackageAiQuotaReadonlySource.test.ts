@@ -14,7 +14,7 @@ import {
   createPackageAiQuotaFixtureBackedReadonlySource,
   createPackageAiQuotaFixtureBackedReadonlySourceRepository,
   createPackageAiQuotaReadonlySourceFacade,
-} from '@/modules/institution/server/package-ai-quota-readonly-source';
+} from '@/modules/institution/entitlement/package-ai-quota-readonly-source';
 
 const baseLookup = {
   tenantId: 'tenant-readonly-source-test',

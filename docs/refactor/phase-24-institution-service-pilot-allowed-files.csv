@@ -1,0 +1,10 @@
+file_path,file_state,permission,phase24_action,reason
+src/modules/institution/server/package-ai-quota-readonly-source.ts,existing,move_from_only,move_without_behavior_change,selected_service_candidate
+src/modules/institution/entitlement/package-ai-quota-readonly-source.ts,new,create_by_move,stable_entitlement_service_location
+src/modules/institution/server/institution-ai-service-usage.ts,existing,modify_import_only,replace_candidate_import_path,runtime_caller
+src/modules/institution/tests/PackageAiQuotaReadonlySource.test.ts,existing,modify_import_only,replace_candidate_import_path,direct_test
+docs/refactor/phase-24-institution-service-pilot-preflight.md,new,create,record_preflight,phase24_governance
+docs/refactor/phase-24-institution-service-pilot-allowed-files.csv,new,create,record_exact_allowlist,phase24_governance
+docs/handoff/CURRENT_STATUS.md,existing,modify,record_phase24_result,handoff
+docs/handoff/NEXT_TASK.md,existing,modify,record_phase25_task,handoff
+docs/handoff/RELEASE_HISTORY.md,existing,modify,record_phase24_result,handoff
