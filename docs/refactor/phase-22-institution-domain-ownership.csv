@@ -1,0 +1,15 @@
+owner,file_count,domain_count,contract_count,component_count,client_count,server_count,test_count,other_count,cross_module_outbound_edges,cross_module_inbound_edges,reverse_dependency_files,cycle_files,phase23_eligible_files,stable_domain_entry,stable_contract_entry,ownership_conclusion
+ai,10,4,0,0,0,3,3,0,10,2,0,2,2,src/modules/institution/domain/ai/index.ts,src/modules/institution/contracts/ai/index.ts,domain_owner_identified
+appointment,3,2,0,1,0,0,0,0,2,4,0,0,1,src/modules/institution/domain/appointment/index.ts,src/modules/institution/contracts/appointment/index.ts,domain_owner_identified
+audit,2,0,0,1,0,1,0,0,5,1,0,0,0,src/modules/institution/domain/audit/index.ts,src/modules/institution/contracts/audit/index.ts,domain_owner_identified
+conversation,3,0,0,1,0,0,2,0,2,0,0,0,0,src/modules/institution/domain/conversation/index.ts,src/modules/institution/contracts/conversation/index.ts,domain_owner_identified
+customer,14,4,0,2,0,1,7,0,7,5,0,0,2,src/modules/institution/domain/customer/index.ts,src/modules/institution/contracts/customer/index.ts,domain_owner_identified
+dashboard,1,0,0,0,0,0,1,0,3,0,0,0,0,src/modules/institution/domain/dashboard/index.ts,src/modules/institution/contracts/dashboard/index.ts,domain_owner_identified
+entitlement,18,3,0,1,1,5,8,0,18,11,0,0,3,src/modules/institution/domain/entitlement/index.ts,src/modules/institution/contracts/entitlement/index.ts,domain_owner_identified
+followup,41,10,0,1,0,9,21,0,40,6,0,2,5,src/modules/institution/domain/followup/index.ts,src/modules/institution/contracts/followup/index.ts,domain_owner_identified
+his,33,0,0,1,0,15,17,0,51,2,0,0,0,src/modules/institution/domain/his/index.ts,src/modules/institution/contracts/his/index.ts,domain_owner_identified
+knowledge,31,1,0,2,0,10,18,0,40,5,1,0,0,src/modules/institution/domain/knowledge/index.ts,src/modules/institution/contracts/knowledge/index.ts,domain_owner_identified
+opportunity,5,1,0,1,0,1,2,0,1,1,0,0,1,src/modules/institution/domain/opportunity/index.ts,src/modules/institution/contracts/opportunity/index.ts,domain_owner_identified
+shared,49,2,0,5,2,11,29,0,62,10,0,1,1,src/modules/institution/domain/shared/index.ts,src/modules/institution/contracts/shared/index.ts,shared_boundary_requires_manual_review
+treatment,18,3,0,1,0,4,10,0,10,3,0,0,2,src/modules/institution/domain/treatment/index.ts,src/modules/institution/contracts/treatment/index.ts,domain_owner_identified
+wecom,95,18,1,3,2,21,47,3,74,9,2,3,5,src/modules/institution/domain/wecom/index.ts,src/modules/institution/contracts/wecom/index.ts,domain_owner_identified

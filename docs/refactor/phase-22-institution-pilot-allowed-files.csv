@@ -1,0 +1,7 @@
+file_path,file_state,permission,phase23_action,reason
+src/modules/institution/domain/appointments.ts,existing,move_from_only,move_without_behavior_change,selected_candidate
+src/modules/institution/domain/appointment/appointments.ts,new,create_by_move,stable_domain_location,selected_pure_domain_target
+src/modules/institution/tests/InstitutionBusinessDomain.test.ts,existing,modify_import_only,replace_candidate_import_path,direct_consumer
+docs/handoff/CURRENT_STATUS.md,existing,modify,record_phase23_result,handoff
+docs/handoff/NEXT_TASK.md,existing,modify,record_phase23_result,handoff
+docs/handoff/RELEASE_HISTORY.md,existing,modify,record_phase23_result,handoff

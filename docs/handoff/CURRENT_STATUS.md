@@ -2,10 +2,10 @@
 
 - 更新时间：2026-07-26
 - 仓库：`love1252/zmtg-clean`
-- 当前重构分支：`docs/api-pilot-closeout-batch-plan-20260726-194630`
-- 重构基线：`b41a8b170e59ab28df9ab7586fc461043d09b51f`
-- 当前阶段：第二十一阶段，API 试点闭环与后续批次计划
-- 下一阶段：第二十二阶段，机构端职责与依赖图审计
+- 当前重构分支：`docs/institution-responsibility-dependency-audit-20260726-202140`
+- 重构基线：`d2d790ee577a622cfbec13dd5420861914fda10d`
+- 当前阶段：第二十二阶段，机构端职责与依赖图审计
+- 下一阶段：第二十三阶段，机构端纯领域／纯类型唯一试点
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
@@ -272,3 +272,20 @@
 - 旧入口继续保留，未授权退役。
 - API、调用方和迁移矩阵修改：0。
 - 第二个路由族实施：0。
+
+## 第二十二阶段机构端职责与依赖图状态
+
+- 受审计机构端文件：323。
+- 依赖边：1325。
+- 跨模块内部依赖边：384。
+- 反向依赖边：4。
+- 循环依赖组：2。
+- 涉及循环文件：8。
+- 基础纯领域／纯类型安全候选文件：22。
+- 领域所有者：14。
+- 第二十三阶段唯一候选：`src/modules/institution/domain/appointments.ts`。
+- 候选性质：纯领域空态模型，不是纯类型文件。
+- 选择层级：`B_pure_domain_with_existing_tests`。
+- 建议目标：`src/modules/institution/domain/appointment/appointments.ts`。
+- 第二十三阶段当前授权：否。
+- 机构端源码、API 和迁移矩阵修改：0。
