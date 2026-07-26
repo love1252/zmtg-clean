@@ -2,8 +2,8 @@
 
 - 更新时间：2026-07-26
 - 仓库：`love1252/zmtg-clean`
-- 当前重构分支：`refactor/api-matrix-proposal-review-20260726-124531`
-- 重构基线：`f3ed23f3ed59e2a29d79c0e41245e1ff3166956a`
+- 当前重构分支：`refactor/apply-api-version-matrix-actions-20260726-131421`
+- 重构基线：`6498508c20ec448d7ad80004372acbd6e7af4364`
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
@@ -153,3 +153,14 @@
 - 两个入口不是行为等价的兼容别名。
 - 本阶段未修改迁移矩阵。
 - 本阶段未移动或修改 API 文件。
+
+## 第十四阶段 API 版本治理矩阵动作应用状态
+
+- 已应用 55 条审核通过的矩阵动作修改。
+- 55 条记录仅将 `recommended_action` 从 `KEEP_REVIEW` 修改为 `API_VERSION_REVIEW`。
+- 修改前 `API_VERSION_REVIEW`：91 条。
+- 修改后 `API_VERSION_REVIEW`：146 条。
+- 两条运行时边界记录保持原动作和状态。
+- 迁移矩阵行数和路径集合均未变化。
+- 本阶段未修改或移动 API 文件。
+- 本阶段未修改 API 源码。
