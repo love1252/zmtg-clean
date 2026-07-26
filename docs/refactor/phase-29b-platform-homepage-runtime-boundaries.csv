@@ -1,0 +1,3 @@
+current_path,runtime_boundary,runtime_markers,database_access,external_network_access,environment_access,evidence
+src/modules/platform-homepage/domain/homepage-content.ts,no,,no,no,no,none
+src/modules/platform-homepage/tests/PlatformHomepageContentContract.test.ts,no,,no,no,no,none

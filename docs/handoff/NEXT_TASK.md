@@ -2,13 +2,21 @@
 
 ## 当前任务
 
-执行第二十九阶段 B：`src/modules/platform-homepage/` 职责与依赖审计。
+执行第二十九阶段 C：`src/modules/institution-knowledge/` 职责与依赖审计。
+
+## 前置结论
+
+- `src/modules/platform-homepage/` 详细审计已完成；
+- platform-homepage 领域所有者为 `platform_homepage_content`；
+- platform-homepage 低风险源码试点结论为 `no_candidate`；
+- 不需要对 platform-homepage 执行源码移动；
+- 下一模块来自修正后候选排序第 2 名。
 
 ## 审计范围
 
 只读审计：
 
-- `src/modules/platform-homepage/` 内全部 TypeScript 文件；
+- `src/modules/institution-knowledge/` 内全部 TypeScript 文件；
 - 直接指向该模块的入向源文件；
 - 该模块直接指向的跨模块目标；
 - 该模块的代表性测试入口；
@@ -29,7 +37,7 @@
 - 本阶段 audit-only；
 - 不修改或移动任何 `src/` 文件；
 - 不修改 API；
-- 不修改 `file-migration-matrix.csv`；
+- 不修改 `docs/refactor/file-migration-matrix.csv`；
 - 不修改 Schema、Migration、package 或锁文件；
 - 不连接真实数据库或外部服务；
 - 不读取或输出真实凭证；
@@ -40,13 +48,15 @@
 ## 选择依据
 
 - 候选清单：`docs/refactor/phase-29-module-candidate-inventory.csv`；
-- 选择结论：`docs/refactor/phase-29-next-module-selection.md`；
-- 唯一模块：`src/modules/platform-homepage/`；
-- 选择分数：105.8203；
-- 代表性测试入口：1；
+- platform-homepage 审计：`docs/refactor/phase-29b-platform-homepage-audit.md`；
+- platform-homepage 试点结论：`no_candidate`；
+- 下一模块：`src/modules/institution-knowledge/`；
+- TypeScript 文件：8；
+- 代表性测试入口：4；
 - 运行时边界文件：0；
 - 跨模块出向边：0；
-- 跨模块入向边：0。
+- 跨模块入向边：0；
+- 选择分数：96.0406（相对排序值）。
 
 ## 验证
 
