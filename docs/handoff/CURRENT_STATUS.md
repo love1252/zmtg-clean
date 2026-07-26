@@ -2,8 +2,8 @@
 
 - 更新时间：2026-07-26
 - 仓库：`love1252/zmtg-clean`
-- 当前重构分支：`refactor/apply-api-version-matrix-actions-20260726-131421`
-- 重构基线：`6498508c20ec448d7ad80004372acbd6e7af4364`
+- 当前重构分支：`refactor/api-version-auxiliary-marker-plan-20260726-134857`
+- 重构基线：`0ec768bbbad7271431bfa1c8ca098e6f064c676e`
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
@@ -164,3 +164,13 @@
 - 迁移矩阵行数和路径集合均未变化。
 - 本阶段未修改或移动 API 文件。
 - 本阶段未修改 API 源码。
+
+## 第十五阶段 API 版本治理辅助标记规划状态
+
+- 已确认需要辅助标记的运行时边界记录为 2 条。
+- 推荐使用独立 sidecar 注册表，不覆盖迁移矩阵主动作。
+- 建议标记为 `api_version_governance=review_required`。
+- 标记权威级别为 `supplemental_non_overriding`。
+- 本阶段未创建正式辅助标记注册表。
+- 本阶段未修改迁移矩阵。
+- 本阶段未修改或移动 API 文件。
