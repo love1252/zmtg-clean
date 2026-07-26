@@ -283,3 +283,25 @@
 - 未修改 API、数据库、权限、租户隔离或错误响应。
 - 未修改 `file-migration-matrix.csv`。
 - 未实施第二个服务候选。
+
+## 2026-07-26：第二十五阶段机构端阶段闭环
+
+- 完成第二十二至第二十四阶段闭环审计：
+  `docs/refactor/phase-25-institution-stage-closeout.md`。
+- 生成 323 条机构端治理分类：
+  `docs/refactor/phase-25-institution-remaining-classification.csv`。
+- 生成两个试点追溯表：
+  `docs/refactor/phase-25-institution-pilot-traceability.csv`。
+- 生成非阻断 backlog：
+  `docs/refactor/phase-25-institution-nonblocking-backlog.csv`。
+- 已完成试点：2。
+- 可迁移：22。
+- 保持当前位置：195。
+- 保护边界：96。
+- 延期处理：8。
+- 剩余文件：321。
+- 未分类文件：0。
+- 正式业务源码累计移动 2 个。
+- 本阶段未修改或移动 `src/` 文件。
+- 未修改 API、迁移矩阵、Schema、Migration、package 或锁文件。
+- 机构端剩余项不阻断第二十六阶段开放平台审计。
