@@ -6,7 +6,7 @@
 - 模式：audit-only
 - 候选模块数：17
 - 唯一下一模块：`src/modules/platform-homepage/`
-- 第一与第二候选分差：9.7797
+- 第一与第二候选分差：6.0797
 - 本任务不构成源码移动或试点实施授权
 
 ## 选择方法
@@ -30,7 +30,7 @@
 
 | 排名 | 模块 | TS/TSX | 测试入口 | 运行时边界 | 出向边 | 入向边 | 已闭环模块耦合 | 分数 | 选择 |
 |---:|---|---:|---:|---:|---:|---:|---:|---:|---|
-| 1 | `src/modules/platform-homepage/` | 2 | 1 | 0 | 0 | 0 | 0 | 105.82 | 是 |
+| 1 | `src/modules/platform-homepage/` | 2 | 1 | 0 | 0 | 0 | 0 | 102.12 | 是 |
 | 2 | `src/modules/institution-knowledge/` | 8 | 4 | 0 | 0 | 0 | 0 | 96.04 | 否 |
 | 3 | `src/modules/customer-center/` | 14 | 8 | 0 | 3 | 0 | 0 | 93.94 | 否 |
 | 4 | `src/modules/institution-conversations/` | 24 | 15 | 0 | 4 | 0 | 0 | 93.25 | 否 |
@@ -58,7 +58,20 @@
 - 跨模块入向边：0
 - 与已闭环模块耦合边：0
 - 双向模块依赖：0
-- 选择分数：105.8203
+- 选择分数：102.1203
+
+## 第二十九阶段 B 详细语义校正
+
+详细审计确认：
+
+- `domain/homepage-content.ts` 是生产 domain／contract 文件；
+- `tests/PlatformHomepageContentContract.test.ts` 是测试证据，不是生产稳定入口；
+- 生产 domain／contract 文件数由启发式统计 2 修正为 1；
+- 稳定入口文件数由启发式统计 1 修正为 0；
+- 选择分数由 105.8203 修正为 102.1203；
+- `platform-homepage` 仍保持排名 1，唯一选择结论不变。
+
+本校正只修正文档机器证据，不修改源码。
 
 ## 下一任务精确审计范围
 

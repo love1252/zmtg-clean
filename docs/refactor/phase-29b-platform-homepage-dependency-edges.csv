@@ -1,0 +1,2 @@
+source_path,target_path,specifier,edge_scope,import_kind,runtime_reachable,evidence
+src/modules/platform-homepage/tests/PlatformHomepageContentContract.test.ts,src/modules/platform-homepage/domain/homepage-content.ts,../domain/homepage-content,internal,static_or_dynamic_reference,no,src/modules/platform-homepage/tests/PlatformHomepageContentContract.test.ts -> ../domain/homepage-content
