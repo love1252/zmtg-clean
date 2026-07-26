@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildTenantPlanChangePreview,
   parseTenantPlanChangePayload,
-} from '@/modules/open-platform/domain/tenant-plan-change';
+} from '@/modules/open-platform/domain/commercial_entitlement/tenant-plan-change';
 import type { TenantPlanPublishedVersionRecord } from '@/modules/open-platform/domain/tenant-plan-binding';
 
 const currentPlanVersion: TenantPlanPublishedVersionRecord = {

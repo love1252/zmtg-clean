@@ -32,7 +32,7 @@ import {
   buildTenantCommercialRecordOverview,
   type TenantCommercialRecordDto,
 } from '@/modules/open-platform/domain/tenant-commercial-records';
-import type { TenantPlanChangePreview } from '@/modules/open-platform/domain/tenant-plan-change';
+import type { TenantPlanChangePreview } from '@/modules/open-platform/domain/commercial_entitlement/tenant-plan-change';
 import type { TenantPlanOptionDto } from '@/modules/open-platform/domain/tenant-plan-binding';
 import {
   buildTenantManagementOverview,
