@@ -2,53 +2,65 @@
 
 ## 当前任务
 
-执行第二十三阶段：机构端纯领域／纯类型唯一试点。
+执行第二十四阶段：机构端服务边界试点。
 
-## 唯一候选
+## 启动原则
 
-- 当前文件：`src/modules/institution/domain/appointments.ts`
-- 候选性质：纯领域空态模型，不是纯类型文件
-- 建议目标：`src/modules/institution/domain/appointment/appointments.ts`
-- 选择层级：`B_pure_domain_with_existing_tests`
-- 职责：`domain`
-- 领域所有者：`appointment`
-- 直接调用方：1
-- 直接测试调用方：1
+第二十四阶段开始时，必须先基于第二十二阶段的职责清单、
+依赖边和领域所有权结果完成只读预检，再选择恰好一个
+已有清晰领域归属的服务能力。
 
-## 精确文件白名单
+没有满足条件的服务候选时，只提交阻断审计，不移动源码。
 
-1. `src/modules/institution/domain/appointments.ts`
-2. `src/modules/institution/domain/appointment/appointments.ts`
-3. `src/modules/institution/tests/InstitutionBusinessDomain.test.ts`
-4. `docs/handoff/CURRENT_STATUS.md`
-5. `docs/handoff/NEXT_TASK.md`
-6. `docs/handoff/RELEASE_HISTORY.md`
+## 唯一候选准入条件
 
-机器可读白名单：
+候选必须同时满足：
 
-- `docs/refactor/phase-22-institution-pilot-allowed-files.csv`
+1. 当前职责为 `server_service`；
+2. 领域所有者明确且不能是 `shared`；
+3. 不属于循环依赖；
+4. 不存在反向依赖；
+5. 不直接依赖 React、页面、测试或 API route；
+6. 不改变数据库访问、权限、租户隔离或错误响应；
+7. 不改变 HIS、企业微信或其他真实渠道行为；
+8. 直接调用方和测试范围能够完整列出；
+9. 可通过单一文件移动和 import 恢复独立回退；
+10. 目标路径不得已存在。
+
+## 实施前必须输出
+
+1. 唯一服务候选当前路径；
+2. 建议稳定目标路径；
+3. 全部直接调用方；
+4. 全部直接测试；
+5. 当前 import 和 export 契约；
+6. 精确允许文件白名单；
+7. 循环依赖和反向依赖对比；
+8. 回退步骤。
+
+以上内容未完成前，不得修改服务源码。
 
 ## 必须保持
 
-- export 名称、数量及类型／运行时值边界不变；
-- 类型、函数签名和运行时行为不变；
+- 文件内容和 export 契约不变；
+- 只允许移动唯一服务候选；
 - 直接调用方只允许修正 import；
+- 不新增 barrel 扩散；
 - 不增加跨模块出向依赖；
-- 不产生循环依赖；
+- 不产生新的循环依赖或反向依赖；
 - 原有定向测试必须通过；
-- 无现有直接测试时，必须新增白名单中的边界测试；
 - 可独立回退。
 
 ## 禁止范围
 
-- 不扩大到第二个候选；
-- 不修改白名单外任何机构端文件；
+- 不扩大到第二个服务候选；
+- 不修改白名单外机构端源码；
 - 不修改 API；
 - 不修改 `file-migration-matrix.csv`；
 - 不修改 Schema、Migration、package 或锁文件；
-- 不连接数据库、HIS、企业微信或真实外部服务；
-- 不改变权限、租户隔离或错误响应；
-- 不提前进入第二十四阶段服务边界试点；
+- 不连接真实数据库、HIS 或企业微信；
+- 不改变权限、租户隔离、错误响应或真实渠道行为；
+- 不提前进入第二十五阶段机构端闭环；
 - API 后续批次继续冻结。
 
 ## 验证
@@ -56,19 +68,21 @@
 1. `git diff --check`
 2. `pnpm typecheck`
 3. `pnpm lint`
-4. 候选直接测试及边界测试
-5. `pnpm build`
-6. 新旧 export 契约对比
-7. 依赖图无新增循环和反向依赖
+4. 唯一候选的全部直接测试
+5. 机构端代表性测试
+6. `pnpm build`
+7. 移动前后文件 blob 与 export 契约一致
+8. 旧 import 归零且新 import 覆盖全部直接调用方
+9. 依赖图无新增循环和反向依赖
 
 ## 回退
 
-1. 恢复候选原路径；
+1. 将服务候选恢复至原路径；
 2. 恢复全部直接调用方 import；
-3. 删除新增边界测试；
-4. 恢复 3 个交接文件。
+3. 恢复 3 个交接文件；
+4. 删除第二十四阶段新增的审计文件。
 
 ## 后续阶段
 
-第二十四阶段只能在第二十三阶段试点闭环后，
-选择一组已有清晰领域归属的服务能力。
+第二十五阶段只能在第二十四阶段服务边界试点闭环后，
+审计第二十二至第二十四阶段并形成机构端剩余项计划。
