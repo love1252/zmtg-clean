@@ -2,10 +2,10 @@
 
 - 更新时间：2026-07-26
 - 仓库：`love1252/zmtg-clean`
-- 当前重构分支：`refactor/institution-entitlement-service-pilot-20260726-221222`
-- 重构基线：`cbe14e660b8d31f864dde2854211dddc0feb2d15`
-- 当前阶段：第二十四阶段，机构端套餐额度只读服务边界试点
-- 下一阶段：第二十五阶段，机构端阶段闭环
+- 当前重构分支：`docs/institution-stage-closeout-20260726-224203`
+- 重构基线：`f8592fd256dd1cb691de493d6a25451b8b7cfb0f`
+- 当前阶段：第二十五阶段，机构端阶段闭环
+- 下一阶段：第二十六阶段，开放平台职责与依赖图
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
@@ -330,3 +330,24 @@
 - API、数据库、权限、租户隔离和错误响应修改：0。
 - `file-migration-matrix.csv` 修改：0。
 - 第二个服务候选实施：0。
+
+## 第二十五阶段机构端阶段闭环状态
+
+- 闭环审计：`docs/refactor/phase-25-institution-stage-closeout.md`。
+- 剩余治理分类：`docs/refactor/phase-25-institution-remaining-classification.csv`。
+- 两个试点追溯表：`docs/refactor/phase-25-institution-pilot-traceability.csv`。
+- 非阻断 backlog：`docs/refactor/phase-25-institution-nonblocking-backlog.csv`。
+- 机构端文件基线：323。
+- 已完成试点：2。
+- 可迁移：22。
+- 保持当前位置：195。
+- 保护边界：96。
+- 延期处理：8。
+- 剩余文件：321。
+- 未分类文件：0。
+- 正式业务源码累计移动：2 个。
+- 第二十五阶段源码移动：0。
+- `src/` 修改：0。
+- API 修改：0。
+- `file-migration-matrix.csv` 修改：0。
+- 机构端剩余项均为非阻断 backlog。
