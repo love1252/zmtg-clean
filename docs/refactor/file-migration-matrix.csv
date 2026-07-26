@@ -525,7 +525,7 @@ public/homepage/zmtg-luxury-clinic-bg.png,public,KEEP_CANONICAL,public/homepage/
 scripts/db/guarded-migrate.d.mts,scripts,KEEP_OR_RECLASSIFY,scripts/db/guarded-migrate.d.mts,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
 scripts/db/guarded-migrate.mjs,scripts,KEEP_OR_RECLASSIFY,scripts/db/guarded-migrate.mjs,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
 scripts/demo/seed-v06-low-sensitive-demo.test.ts,tests,OWNERSHIP_CONFIRMED_KEEP_CURRENT,scripts/demo/seed-v06-low-sensitive-demo.test.ts,low,6,no,ownership_confirmed,归属于“演示脚本测试”；继续随所属模块或脚本目录保留。
-scripts/demo/seed-v06-low-sensitive-demo.ts,scripts,AUDIT_KEEP_DEMO_SCRIPT_BOUNDARY,scripts/demo/seed-v06-low-sensitive-demo.ts,medium,5,yes,audit_completed,保持 scripts/demo，先核对调用入口和数据边界。
+scripts/demo/seed-v06-low-sensitive-demo.ts,scripts,GUARDED_DEMO_SCRIPT_CONFIRMED_KEEP_CURRENT,scripts/demo/seed-v06-low-sensitive-demo.ts,medium,9,yes,script_boundary_confirmed,保持 scripts/demo；后续统一接入核心 Seed Guard，收紧为 loopback、本地目标和人工确认三重条件。
 scripts/deploy-test-server.mjs,scripts,KEEP_ENTRYPOINT_MOVE_IMPLEMENTATION,scripts/deploy/test-server.mjs,low,3,no,completed,保留原路径作为稳定兼容入口，部署实现已下沉至 scripts/deploy/。
 scripts/dev/local-acceptance-db.sh,scripts,KEEP_OR_RECLASSIFY,scripts/dev/local-acceptance-db.sh,medium,2,yes,pending,按 dev、demo、seed、verify 和 maintenance 分类。
 scripts/run-next.mjs,scripts,KEEP_ENTRYPOINT_MOVE_IMPLEMENTATION,scripts/runtime/run-next.mjs,low,4,no,completed,保留原路径作为稳定兼容入口，Next.js 命令实现已下沉至 scripts/runtime/。
@@ -1478,8 +1478,8 @@ src/modules/workspace/tests/WorkspaceEntryPages.test.tsx,business-module,RESPONS
 src/server/context/request-context.ts,other,KEEP_REVIEW,src/server/context/request-context.ts,low,review,yes,pending,需要人工确认职责。
 src/server/db/client.ts,other,KEEP_LOCKED,src/server/db/client.ts,high,none,yes,pending,数据库运行时基础设施，普通目录重构中禁止移动。
 src/server/db/schema.ts,other,KEEP_LOCKED,src/server/db/schema.ts,high,none,yes,pending,数据库运行时基础设施，普通目录重构中禁止移动。
-src/server/db/seed-demo-data.ts,other,AUDIT_KEEP_GUARDED_DB_ENTRY,src/server/db/seed-demo-data.ts,high,5,yes,audit_completed,保持数据库边界，后续只能单独审核。
-src/server/db/seed-guard.ts,other,AUDIT_KEEP_SECURITY_GUARD,src/server/db/seed-guard.ts,high,5,yes,audit_completed,保持原位，禁止与普通 Demo 文件混合移动。
+src/server/db/seed-demo-data.ts,other,GUARDED_DB_SEED_ENTRY_CONFIRMED_KEEP_CURRENT,src/server/db/seed-demo-data.ts,high,9,yes,seed_entry_boundary_confirmed,保持 src/server/db 数据库边界；禁止与普通 Demo 文件混合移动，后续变更必须独立安全审查。
+src/server/db/seed-guard.ts,other,SEED_SECURITY_GUARD_CONFIRMED_KEEP_CURRENT,src/server/db/seed-guard.ts,high,9,yes,seed_guard_boundary_confirmed,保持数据库安全边界；所有 Demo Seed 写入入口应统一复用该守卫，不得复制更宽松的地址判断。
 src/server/db/tests/DatabaseClient.test.ts,tests,KEEP_LOCKED,src/server/db/tests/DatabaseClient.test.ts,high,none,yes,pending,数据库运行时基础设施，普通目录重构中禁止移动。
 src/server/db/tests/MigrationGuard.test.ts,tests,KEEP_LOCKED,src/server/db/tests/MigrationGuard.test.ts,high,none,yes,pending,数据库运行时基础设施，普通目录重构中禁止移动。
 src/server/db/tests/ProductionReadinessDocs.test.ts,tests,KEEP_LOCKED,src/server/db/tests/ProductionReadinessDocs.test.ts,high,none,yes,pending,数据库运行时基础设施，普通目录重构中禁止移动。

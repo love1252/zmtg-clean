@@ -2,8 +2,8 @@
 
 - 更新时间：2026-07-26
 - 仓库：`love1252/zmtg-clean`
-- 当前重构分支：`refactor/runtime-demo-boundary-20260726-012707`
-- 重构基线：`77cb5ab73762b4c1ffa8e0eb2137a0a60c84f33e`
+- 当前重构分支：`refactor/demo-seed-safety-boundary-20260726-103153`
+- 重构基线：`dc4bc53778c473ce34a1fd948e95c1a844275192`
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
@@ -90,3 +90,14 @@
 - 11 个候选均继续保留当前位置。
 - 本阶段文件移动数量为 0。
 - 第五阶段仍有 3 个 Demo 脚本或 Seed 候选等待审核。
+
+## 第九阶段 Demo 脚本与 Seed 安全边界状态
+
+- 最后 3 个第五阶段候选已完成边界审核。
+- Demo Seed CLI 边界 1 个。
+- 数据库 Seed 写入入口 1 个。
+- Seed 安全守卫 1 个。
+- 发现 Demo CLI 守卫策略比核心 Seed Guard 更宽，已记录为后续治理项。
+- 第五阶段 `audit_completed` 候选已归零。
+- 本阶段未执行 Seed、Migration 或数据库连接。
+- 本阶段文件移动数量为 0。
