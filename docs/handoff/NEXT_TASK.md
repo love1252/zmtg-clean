@@ -2,54 +2,73 @@
 
 ## 当前任务
 
-执行第二十二阶段：机构端职责与依赖图审计。
+执行第二十三阶段：机构端纯领域／纯类型唯一试点。
 
-## 审计范围
+## 唯一候选
 
-只读审计 `src/modules/institution/`，至少区分：
+- 当前文件：`src/modules/institution/domain/appointments.ts`
+- 候选性质：纯领域空态模型，不是纯类型文件
+- 建议目标：`src/modules/institution/domain/appointment/appointments.ts`
+- 选择层级：`B_pure_domain_with_existing_tests`
+- 职责：`domain`
+- 领域所有者：`appointment`
+- 直接调用方：1
+- 直接测试调用方：1
 
-1. 页面与路由外壳；
-2. React 组件；
-3. client 与前端请求封装；
-4. domain 与纯领域规则；
-5. types、contracts 与 schema-free 类型；
-6. server、service 与 repository；
-7. tests；
-8. 与 auth、audit、knowledge-base、workspace、
-   open-platform 的跨模块依赖。
+## 精确文件白名单
 
-## 必须输出
+1. `src/modules/institution/domain/appointments.ts`
+2. `src/modules/institution/domain/appointment/appointments.ts`
+3. `src/modules/institution/tests/InstitutionBusinessDomain.test.ts`
+4. `docs/handoff/CURRENT_STATUS.md`
+5. `docs/handoff/NEXT_TASK.md`
+6. `docs/handoff/RELEASE_HISTORY.md`
 
-1. 机构端职责分类说明文档。
-2. 逐文件机器可读职责清单。
-3. 模块依赖边清单。
-4. 领域所有权和稳定入口建议。
-5. 循环依赖、反向依赖和跨模块越界风险。
-6. 第二十三阶段唯一纯领域或纯类型低风险试点候选。
-7. 试点精确允许文件清单、调用方清单和回退条件。
+机器可读白名单：
 
-## 试点候选准入条件
+- `docs/refactor/phase-22-institution-pilot-allowed-files.csv`
 
-- 只能选择纯领域、纯类型或无副作用契约文件；
-- 不读取数据库、环境变量或真实凭证；
-- 不调用网络、HIS、企业微信或其他外部服务；
-- 不包含 React 页面、组件或 API route；
-- 调用方向清晰；
-- 无循环依赖；
+## 必须保持
+
+- export 名称、数量及类型／运行时值边界不变；
+- 类型、函数签名和运行时行为不变；
+- 直接调用方只允许修正 import；
+- 不增加跨模块出向依赖；
+- 不产生循环依赖；
+- 原有定向测试必须通过；
+- 无现有直接测试时，必须新增白名单中的边界测试；
 - 可独立回退。
 
 ## 禁止范围
 
-- 本阶段 audit-only。
-- 不移动、重命名或修改机构端源码。
-- 不批量拆分 316 个影响项。
-- 不修改 API。
-- 不修改 Schema、Migration、package 或锁文件。
-- 不连接数据库或真实外部服务。
-- 不提前实施第二十三阶段试点。
+- 不扩大到第二个候选；
+- 不修改白名单外任何机构端文件；
+- 不修改 API；
+- 不修改 `file-migration-matrix.csv`；
+- 不修改 Schema、Migration、package 或锁文件；
+- 不连接数据库、HIS、企业微信或真实外部服务；
+- 不改变权限、租户隔离或错误响应；
+- 不提前进入第二十四阶段服务边界试点；
 - API 后续批次继续冻结。
+
+## 验证
+
+1. `git diff --check`
+2. `pnpm typecheck`
+3. `pnpm lint`
+4. 候选直接测试及边界测试
+5. `pnpm build`
+6. 新旧 export 契约对比
+7. 依赖图无新增循环和反向依赖
+
+## 回退
+
+1. 恢复候选原路径；
+2. 恢复全部直接调用方 import；
+3. 删除新增边界测试；
+4. 恢复 3 个交接文件。
 
 ## 后续阶段
 
-第二十三阶段只能实施第二十二阶段批准的一个
-纯领域或纯类型试点。
+第二十四阶段只能在第二十三阶段试点闭环后，
+选择一组已有清晰领域归属的服务能力。

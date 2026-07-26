@@ -232,3 +232,20 @@
 - 旧入口继续保留，未授权退役。
 - 未修改 API、调用方或迁移矩阵。
 - 未实施第二个路由族。
+
+## 2026-07-26：第二十二阶段机构端职责与依赖图审计
+
+- 审计 `src/modules/institution/` 共 323 个文件。
+- 形成 1325 条内部及跨模块依赖边。
+- 跨模块内部依赖边 384 条。
+- 反向依赖边 4 条。
+- 循环依赖组 2 个，涉及文件 8 个。
+- 识别领域所有者 14 个。
+- 基础纯领域／纯类型安全候选文件 22 个。
+- 第二十三阶段唯一候选：
+  `src/modules/institution/domain/appointments.ts`。
+- 建议目标：`src/modules/institution/domain/appointment/appointments.ts`。
+- 候选确认为纯领域空态模型，不是纯类型文件。
+- 选择层级：`B_pure_domain_with_existing_tests`。
+- 未修改机构端源码、API 或迁移矩阵。
+- 未连接数据库或真实外部服务。
