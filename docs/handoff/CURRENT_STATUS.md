@@ -2,10 +2,10 @@
 
 - 更新时间：2026-07-26
 - 仓库：`love1252/zmtg-clean`
-- 当前重构分支：`refactor/open-platform-commercial-entitlement-pilot-20260726-234916`
-- 重构基线：`606bef79f1443eaa1cdd2bdaa780e7cb108165d8`
-- 当前阶段：第二十七阶段，开放平台商业权益领域试点
-- 下一阶段：第二十八阶段，开放平台阶段闭环
+- 当前重构分支：`docs/open-platform-stage-closeout-20260727-002211`
+- 重构基线：`ee4047b3c5d6b667745c8ce56eea468121dc6b88`
+- 当前阶段：第二十八阶段，开放平台阶段闭环
+- 下一阶段：第二十九阶段，下一模块选择与审计启动决策
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
@@ -399,3 +399,25 @@
 - 正式业务源码累计移动：3 个。
 - 第二十七阶段源码移动：1 个。
 - API、迁移矩阵和运行时配置修改：0。
+
+## 第二十八阶段开放平台阶段闭环状态
+
+- 闭环文档：`docs/refactor/phase-28-open-platform-stage-closeout.md`。
+- 剩余分类：`docs/refactor/phase-28-open-platform-remaining-classification.csv`。
+- 试点追溯：`docs/refactor/phase-28-open-platform-pilot-traceability.csv`。
+- 非阻断 backlog：`docs/refactor/phase-28-open-platform-nonblocking-backlog.csv`。
+- 开放平台文件基线：186。
+- 已完成试点：1。
+- 可迁移：1。
+- 保持当前位置：27。
+- 保护边界：156。
+- 延期处理：1。
+- 剩余文件：185。
+- 未分类文件：0。
+- 正式业务源码累计移动：3 个。
+- 第二十八阶段源码移动：0。
+- `src/` 修改：0。
+- API 修改：0。
+- `file-migration-matrix.csv` 修改：0。
+- 开放平台剩余项均为非阻断 backlog。
+- 动态模块路径补扫：发现 26 个遗漏依赖对，影响 12 个开放平台目标文件。
