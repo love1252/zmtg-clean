@@ -121,12 +121,12 @@
 - 对账基线：第二十六阶段 `docs/refactor/phase-26-open-platform-dependency-edges.csv` 的 684 条已识别依赖边。
 - 补扫范围：全部 `src/**/*.ts` 和 `src/**/*.tsx` 中引用开放平台模块的字符串字面量。
 - 判定方式：仅将“源文件—目标文件”不在既有依赖边中的引用记为遗漏动态路径依赖。
-- 新发现动态依赖对：26。
-- 受影响目标文件：12。
-- 修正统计的目标文件：11。
+- 已知移动源路径规范化：对第二十七阶段 `src/modules/open-platform/domain/tenant-plan-change.ts` → `src/modules/open-platform/domain/commercial_entitlement/tenant-plan-change.ts` 先统一映射为同一逻辑源文件，再执行依赖差集。
+- 新发现动态依赖对：25。
+- 受影响目标文件：11。
+- 修正统计的目标文件：10。
 - 当前分类总数仍为 186，未分类文件仍为 0。
 
-- `src/modules/open-platform/domain/tenant-plan-binding.ts`：inbound 10 → 11，tests 3 → 3，cross-module inbound 0 → 0，分类 `defer` → `defer`；新增动态来源：`src/modules/open-platform/domain/commercial_entitlement/tenant-plan-change.ts`。
 - `src/modules/open-platform/server/homepage-brand-repository.ts`：inbound 5 → 6，tests 2 → 3，cross-module inbound 0 → 1，分类 `protected_boundary` → `protected_boundary`；新增动态来源：`src/modules/marketing/tests/MarketingPage.test.tsx`。
 - `src/modules/open-platform/server/platform-knowledge-ai-provider-adapter.ts`：inbound 5 → 6，tests 4 → 5，cross-module inbound 0 → 0，分类 `protected_boundary` → `protected_boundary`；新增动态来源：`src/modules/open-platform/tests/PlatformKnowledgeQaApiRoute.test.ts`。
 - `src/modules/open-platform/server/platform-knowledge-embedding-vector-search-service.ts`：inbound 13 → 15，tests 6 → 8，cross-module inbound 4 → 5，分类 `protected_boundary` → `protected_boundary`；新增动态来源：`src/modules/institution/tests/InstitutionKnowledgeReadonlyShell.test.tsx`、`src/modules/open-platform/tests/PlatformKnowledgeQaApiRoute.test.ts`。
