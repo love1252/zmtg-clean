@@ -7,7 +7,7 @@ import {
 import {
   appointmentAlerts,
   appointmentPipelineGroups,
-} from '@/modules/institution/domain/appointments';
+} from '@/modules/institution/domain/appointment/appointments';
 import {
   followUpJourneys,
   followUpTasks,

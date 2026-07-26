@@ -249,3 +249,17 @@
 - 选择层级：`B_pure_domain_with_existing_tests`。
 - 未修改机构端源码、API 或迁移矩阵。
 - 未连接数据库或真实外部服务。
+
+## 2026-07-26：第二十三阶段机构端预约空态领域模型试点
+
+- 将 `src/modules/institution/domain/appointments.ts` 移动至
+  `src/modules/institution/domain/appointment/appointments.ts`。
+- 移动前后 blob 均为 `d5d88fcc24bec0a92c09223e5da4a329a462676f`。
+- 3 个 type 与 2 个运行时空数组 export 保持不变。
+- 唯一直接调用方 `src/modules/institution/tests/InstitutionBusinessDomain.test.ts` 仅修正 import。
+- 旧源码 import 已归零，新源码 import 恰好 1 个。
+- 候选内部 import 为 0，未新增循环依赖或反向依赖。
+- 正式业务源码累计移动 1 个。
+- 未修改 API、数据库、权限、租户隔离或错误响应。
+- 未修改 `file-migration-matrix.csv`。
+- 未实施第二个机构端候选。
