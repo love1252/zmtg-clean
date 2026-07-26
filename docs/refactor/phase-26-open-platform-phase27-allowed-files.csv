@@ -1,0 +1,10 @@
+file_path,file_state,permission,phase27_action,reason
+src/modules/open-platform/domain/tenant-plan-change.ts,existing,move_from_only,move_without_behavior_change,selected_unique_low_risk_candidate
+src/modules/open-platform/domain/commercial_entitlement/tenant-plan-change.ts,new,create_by_move,stable_owner_location,phase26_target_suggestion
+src/modules/open-platform/client/platform-tenant-management-client.ts,existing,modify_import_only,replace_candidate_import_path,direct_caller
+src/modules/open-platform/components/OpenPlatformTenantManagementPanel.tsx,existing,modify_import_only,replace_candidate_import_path,direct_caller
+src/modules/open-platform/server/tenant-plan-change-service.ts,existing,modify_import_only,replace_candidate_import_path,direct_caller
+src/modules/open-platform/tests/TenantPlanChangeDomain.test.ts,existing,modify_import_only,replace_candidate_import_path,direct_test
+docs/handoff/CURRENT_STATUS.md,existing,modify,record_phase27_result,handoff_current_status
+docs/handoff/NEXT_TASK.md,existing,modify,record_phase27_result,handoff_next_task
+docs/handoff/RELEASE_HISTORY.md,existing,modify,record_phase27_result,handoff_release_history

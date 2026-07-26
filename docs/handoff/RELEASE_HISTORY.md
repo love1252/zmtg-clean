@@ -305,3 +305,23 @@
 - 本阶段未修改或移动 `src/` 文件。
 - 未修改 API、迁移矩阵、Schema、Migration、package 或锁文件。
 - 机构端剩余项不阻断第二十六阶段开放平台审计。
+
+## 2026-07-26：第二十六阶段开放平台职责与依赖图
+
+- 只读审计 `src/modules/open-platform/`。
+- 开放平台文件：186。
+- 依赖边：684。
+- 领域所有者：9。
+- 运行时边界文件：139。
+- 跨模块出向文件：67。
+- 跨模块入向文件：29。
+- 反向依赖文件：11。
+- 循环依赖组：1。
+- 循环依赖文件：8。
+- 安全候选总数：2。
+- 第二十七阶段唯一候选：`src/modules/open-platform/domain/tenant-plan-change.ts`。
+- 建议目标：`src/modules/open-platform/domain/commercial_entitlement/tenant-plan-change.ts`。
+- 候选 blob：`59c7d6bed836ed8b56cc0376b3203b156c41eb88`。
+- 未修改或移动 `src/` 文件。
+- 未修改 API、迁移矩阵、Schema、Migration、package 或锁文件。
+- 第二十七阶段试点未授权。

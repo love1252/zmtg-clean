@@ -2,57 +2,76 @@
 
 ## 当前任务
 
-执行第二十六阶段：开放平台职责与依赖图。
+执行第二十七阶段：开放平台唯一低风险试点。
 
-## 审计范围
+## 唯一候选
 
-只读审计 `src/modules/open-platform/`，至少区分：
+- 当前路径：`src/modules/open-platform/domain/tenant-plan-change.ts`
+- 建议目标：`src/modules/open-platform/domain/commercial_entitlement/tenant-plan-change.ts`
+- 职责：`domain`
+- 领域所有者：`commercial_entitlement`
+- 文件 blob：`59c7d6bed836ed8b56cc0376b3203b156c41eb88`
+- import 数量：1
+- runtime import 数量：0
+- export 数量：7
+- 直接调用方：4
+- 直接测试：1
+- 第二十七阶段当前授权：否
 
-1. 平台配置；
-2. 商业、套餐和权益；
-3. 知识库；
-4. AI 运行时和供应商配置；
-5. 页面、组件、客户端、领域、契约、服务、仓储和测试。
+## 全部直接调用方
 
-## 必须输出
+- `src/modules/open-platform/client/platform-tenant-management-client.ts`
+- `src/modules/open-platform/components/OpenPlatformTenantManagementPanel.tsx`
+- `src/modules/open-platform/server/tenant-plan-change-service.ts`
+- `src/modules/open-platform/tests/TenantPlanChangeDomain.test.ts`
 
-1. 开放平台逐文件职责清单；
-2. 开放平台依赖边清单；
-3. 领域所有权与稳定入口建议；
-4. 跨模块入向和出向依赖；
-5. 循环依赖和反向依赖；
-6. 运行时边界和保护项；
-7. 第二十七阶段唯一低风险候选；
-8. 精确允许文件、全部调用方、测试和回退方案。
+## 全部直接测试
 
-## 默认边界
+- `src/modules/open-platform/tests/TenantPlanChangeDomain.test.ts`
 
-- 本阶段 audit-only；
-- 不直接批量移动开放平台源码；
+## 精确白名单
+
+- `docs/refactor/phase-26-open-platform-phase27-allowed-files.csv`
+- 白名单路径：9
+
+## 必须保持
+
+- 只移动唯一候选；
+- 文件内容、blob、import、export 和运行时行为保持不变；
+- 直接调用方只允许修正 import；
+- 不新增 barrel 扩散；
+- 不新增跨模块依赖、循环依赖或反向依赖；
+- 可独立回退。
+
+## 禁止范围
+
+- 不扩大到第二个开放平台候选；
+- 不修改白名单外源码；
 - 不修改 API；
 - 不修改 `file-migration-matrix.csv`；
 - 不修改 Schema、Migration、package 或锁文件；
 - 不连接真实数据库或外部服务；
 - 不读取或输出真实凭证；
 - 不改变权限、租户隔离、错误响应或真实渠道行为；
-- 第二十七阶段源码试点不自动授权。
+- 不提前进入第二十八阶段；
+- 当前未授权，不得直接实施。
 
 ## 验证
 
 1. `git diff --check`
-2. 开放平台文件总数与逐文件清单一致
-3. 依赖边可追溯
-4. 领域所有权覆盖全部开放平台文件
-5. 循环、反向依赖和运行时边界均有证据
-6. 无源码、API、迁移矩阵或运行时配置修改
-7. `pnpm typecheck`
-8. `pnpm lint`
-9. 开放平台代表性测试
+2. 移动前后 blob 一致
+3. import 和 export 契约一致
+4. 旧 import 归零且新 import 覆盖全部直接调用方
+5. 无新增跨模块依赖、循环依赖或反向依赖
+6. 全部直接测试
+7. 开放平台代表性测试
+8. `pnpm typecheck`
+9. `pnpm lint`
 10. `pnpm build`
 
-## 退出条件
+## 回退
 
-- 开放平台不存在未归类文件；
-- 第二十七阶段只选择一个低风险领域或契约候选；
-- 不要求一次移动全部开放平台文件；
-- 第二十七阶段必须单独授权。
+1. 将目标文件恢复至原路径；
+2. 恢复全部调用方 import；
+3. 恢复 3 个交接文件；
+4. 删除第二十七阶段新增的边界测试。

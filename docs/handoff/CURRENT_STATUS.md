@@ -2,10 +2,10 @@
 
 - 更新时间：2026-07-26
 - 仓库：`love1252/zmtg-clean`
-- 当前重构分支：`docs/institution-stage-closeout-20260726-224203`
-- 重构基线：`f8592fd256dd1cb691de493d6a25451b8b7cfb0f`
-- 当前阶段：第二十五阶段，机构端阶段闭环
-- 下一阶段：第二十六阶段，开放平台职责与依赖图
+- 当前重构分支：`docs/open-platform-responsibility-dependency-audit-20260726-231835`
+- 重构基线：`8c8de92eb3bd5c480fb0d7df5fbc05bb3f9864f5`
+- 当前阶段：第二十六阶段，开放平台职责与依赖图
+- 下一阶段：第二十七阶段，开放平台唯一低风险试点
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
@@ -351,3 +351,28 @@
 - API 修改：0。
 - `file-migration-matrix.csv` 修改：0。
 - 机构端剩余项均为非阻断 backlog。
+
+## 第二十六阶段开放平台职责与依赖图状态
+
+- 逐文件职责：`docs/refactor/phase-26-open-platform-file-responsibility-inventory.csv`。
+- 依赖边：`docs/refactor/phase-26-open-platform-dependency-edges.csv`。
+- 领域所有权：`docs/refactor/phase-26-open-platform-domain-ownership.csv`。
+- 审计结论：`docs/refactor/phase-26-open-platform-responsibility-dependency-audit.md`。
+- 第二十七阶段候选：`docs/refactor/phase-26-open-platform-phase27-candidate.md`。
+- 第二十七阶段白名单：`docs/refactor/phase-26-open-platform-phase27-allowed-files.csv`。
+- 开放平台文件：186。
+- 依赖边：684。
+- 领域所有者：9。
+- 运行时边界文件：139。
+- 跨模块出向文件：67。
+- 跨模块入向文件：29。
+- 反向依赖文件：11。
+- 循环依赖组：1。
+- 循环依赖文件：8。
+- 安全候选总数：2。
+- 唯一候选：`src/modules/open-platform/domain/tenant-plan-change.ts`。
+- 建议目标：`src/modules/open-platform/domain/commercial_entitlement/tenant-plan-change.ts`。
+- 候选 blob：`59c7d6bed836ed8b56cc0376b3203b156c41eb88`。
+- 第二十六阶段源码修改：0。
+- API、迁移矩阵和运行时配置修改：0。
+- 第二十七阶段当前授权：否。
