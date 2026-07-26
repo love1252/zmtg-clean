@@ -10,7 +10,7 @@ import type { TenantManagementListItem } from '@/modules/open-platform/domain/te
 import type {
   TenantPlanChangePayload,
   TenantPlanChangePreview,
-} from '@/modules/open-platform/domain/tenant-plan-change';
+} from '@/modules/open-platform/domain/commercial_entitlement/tenant-plan-change';
 import type { TenantCommercialRecordDto } from '@/modules/open-platform/domain/tenant-commercial-records';
 import type { TenantPlanOptionDto } from '@/modules/open-platform/domain/tenant-plan-binding';
 

@@ -10,7 +10,7 @@ import {
   buildInitialPlanAssignmentPreview,
   parseTenantPlanChangePayload,
   type TenantPlanChangePreview,
-} from '@/modules/open-platform/domain/tenant-plan-change';
+} from '@/modules/open-platform/domain/commercial_entitlement/tenant-plan-change';
 import {
   buildAuthorizationSnapshotPayload,
   buildSecurityBoundarySnapshot,

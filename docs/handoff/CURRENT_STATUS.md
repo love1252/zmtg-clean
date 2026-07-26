@@ -2,10 +2,10 @@
 
 - 更新时间：2026-07-26
 - 仓库：`love1252/zmtg-clean`
-- 当前重构分支：`docs/open-platform-responsibility-dependency-audit-20260726-231835`
-- 重构基线：`8c8de92eb3bd5c480fb0d7df5fbc05bb3f9864f5`
-- 当前阶段：第二十六阶段，开放平台职责与依赖图
-- 下一阶段：第二十七阶段，开放平台唯一低风险试点
+- 当前重构分支：`refactor/open-platform-commercial-entitlement-pilot-20260726-234916`
+- 重构基线：`606bef79f1443eaa1cdd2bdaa780e7cb108165d8`
+- 当前阶段：第二十七阶段，开放平台商业权益领域试点
+- 下一阶段：第二十八阶段，开放平台阶段闭环
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
@@ -376,3 +376,26 @@
 - 第二十六阶段源码修改：0。
 - API、迁移矩阵和运行时配置修改：0。
 - 第二十七阶段当前授权：否。
+
+## 第二十七阶段开放平台商业权益领域试点状态
+
+- 原路径：`src/modules/open-platform/domain/tenant-plan-change.ts`。
+- 当前路径：`src/modules/open-platform/domain/commercial_entitlement/tenant-plan-change.ts`。
+- 文件 blob：`59c7d6bed836ed8b56cc0376b3203b156c41eb88`。
+- 职责：`domain`。
+- 领域所有者：`commercial_entitlement`。
+- type export：4。
+- function export：3。
+- export 总数：7。
+- 候选 import：1 个 type-only。
+- 直接调用方：4。
+- 直接测试：1。
+- 旧 import：0。
+- 新 import：4。
+- 移动前后 blob：一致。
+- 新增跨模块依赖：0。
+- 新增循环依赖：0。
+- 新增反向依赖：0。
+- 正式业务源码累计移动：3 个。
+- 第二十七阶段源码移动：1 个。
+- API、迁移矩阵和运行时配置修改：0。

@@ -325,3 +325,21 @@
 - 未修改或移动 `src/` 文件。
 - 未修改 API、迁移矩阵、Schema、Migration、package 或锁文件。
 - 第二十七阶段试点未授权。
+
+## 2026-07-26：第二十七阶段开放平台商业权益领域试点
+
+- 纯移动：
+  `src/modules/open-platform/domain/tenant-plan-change.ts`
+  → `src/modules/open-platform/domain/commercial_entitlement/tenant-plan-change.ts`。
+- 移动前后 blob：`59c7d6bed836ed8b56cc0376b3203b156c41eb88`。
+- 候选 import：1 个 type-only。
+- type export：4。
+- function export：3。
+- 直接调用方：4。
+- 直接测试：1。
+- 旧 import：0。
+- 新 import：4。
+- 未新增跨模块依赖、循环依赖或反向依赖。
+- 未修改 API、迁移矩阵、Schema、Migration、package 或锁文件。
+- 正式业务源码累计移动 3 个。
+- 下一阶段为第二十八阶段开放平台阶段闭环。

@@ -2,76 +2,59 @@
 
 ## 当前任务
 
-执行第二十七阶段：开放平台唯一低风险试点。
+执行第二十八阶段：开放平台阶段闭环。
 
-## 唯一候选
+## 审计范围
 
-- 当前路径：`src/modules/open-platform/domain/tenant-plan-change.ts`
-- 建议目标：`src/modules/open-platform/domain/commercial_entitlement/tenant-plan-change.ts`
-- 职责：`domain`
-- 领域所有者：`commercial_entitlement`
-- 文件 blob：`59c7d6bed836ed8b56cc0376b3203b156c41eb88`
-- import 数量：1
-- runtime import 数量：0
-- export 数量：7
-- 直接调用方：4
-- 直接测试：1
-- 第二十七阶段当前授权：否
+只读复核第二十六至第二十七阶段，包括：
 
-## 全部直接调用方
+1. 第二十六阶段开放平台职责、依赖、所有权和运行时边界基线；
+2. 第二十七阶段商业权益领域单文件试点；
+3. 试点的文件 blob、import、export、调用方、测试和回退路径；
+4. 开放平台剩余文件的后续治理分类；
+5. 第二十六阶段其余安全候选的非阻断处理结论。
 
-- `src/modules/open-platform/client/platform-tenant-management-client.ts`
-- `src/modules/open-platform/components/OpenPlatformTenantManagementPanel.tsx`
-- `src/modules/open-platform/server/tenant-plan-change-service.ts`
-- `src/modules/open-platform/tests/TenantPlanChangeDomain.test.ts`
+## 必须输出
 
-## 全部直接测试
+1. 第二十六至第二十七阶段闭环审计；
+2. 已完成试点结果与契约证据；
+3. 正式业务源码累计移动统计；
+4. 开放平台剩余项分类：
+   - 可迁移；
+   - 保持当前位置；
+   - 保护边界；
+   - 延期处理；
+5. 后续非阻断 backlog；
+6. 下一模块审计启动条件。
 
-- `src/modules/open-platform/tests/TenantPlanChangeDomain.test.ts`
+## 默认边界
 
-## 精确白名单
-
-- `docs/refactor/phase-26-open-platform-phase27-allowed-files.csv`
-- 白名单路径：9
-
-## 必须保持
-
-- 只移动唯一候选；
-- 文件内容、blob、import、export 和运行时行为保持不变；
-- 直接调用方只允许修正 import；
-- 不新增 barrel 扩散；
-- 不新增跨模块依赖、循环依赖或反向依赖；
-- 可独立回退。
-
-## 禁止范围
-
-- 不扩大到第二个开放平台候选；
-- 不修改白名单外源码；
+- 本阶段 audit-only；
+- 不移动第二个开放平台源码文件；
 - 不修改 API；
 - 不修改 `file-migration-matrix.csv`；
 - 不修改 Schema、Migration、package 或锁文件；
 - 不连接真实数据库或外部服务；
 - 不读取或输出真实凭证；
 - 不改变权限、租户隔离、错误响应或真实渠道行为；
-- 不提前进入第二十八阶段；
-- 当前未授权，不得直接实施。
+- 下一阶段源码试点不自动授权。
 
 ## 验证
 
 1. `git diff --check`
-2. 移动前后 blob 一致
-3. import 和 export 契约一致
-4. 旧 import 归零且新 import 覆盖全部直接调用方
-5. 无新增跨模块依赖、循环依赖或反向依赖
-6. 全部直接测试
-7. 开放平台代表性测试
-8. `pnpm typecheck`
-9. `pnpm lint`
-10. `pnpm build`
+2. 第二十六阶段 186 个文件基线可追溯
+3. 第二十七阶段路径、blob、import、export、调用方和测试可追溯
+4. 开放平台剩余分类总数与基线一致
+5. 无源码、API、迁移矩阵或运行时配置修改
+6. `pnpm typecheck`
+7. `pnpm lint`
+8. 开放平台代表性测试
+9. `pnpm build`
 
-## 回退
+## 退出条件
 
-1. 将目标文件恢复至原路径；
-2. 恢复全部调用方 import；
-3. 恢复 3 个交接文件；
-4. 删除第二十七阶段新增的边界测试。
+- 第二十六至第二十七阶段无未解释差异；
+- 第二十七阶段具备明确回退路径；
+- 开放平台剩余项全部获得治理分类；
+- 不要求一次移动全部开放平台文件；
+- 后续阶段必须单独授权。
