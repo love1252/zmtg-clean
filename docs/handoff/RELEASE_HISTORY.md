@@ -191,3 +191,13 @@
 - 未修改迁移矩阵。
 - 未修改或移动任何 API 文件。
 - 未改变运行时行为。
+
+## 2026-07-26：第十九阶段 WeCom official dry-run API 试点设计
+
+- 唯一路由族：`/api/institution/wecom-official-dry-run`。
+- 建议目标：`/api/v1/institution/wecom-official-dry-run`。
+- 采用直接 re-export 旧 `GET` 的兼容方案。
+- 旧入口继续保留，不设置 sunset 日期。
+- 明确第二十阶段 5 个文件白名单。
+- 未修改 API、调用方或迁移矩阵。
+- 未改变运行时行为。

@@ -2,10 +2,10 @@
 
 - 更新时间：2026-07-26
 - 仓库：`love1252/zmtg-clean`
-- 当前重构分支：`docs/api-caller-compatibility-baseline-20260726-175645`
-- 重构基线：`5332a26f6aa71b91dfb4f3fe442566b31530bf10`
-- 当前阶段：第十八阶段，API 调用方与兼容策略基线
-- 下一阶段：第十九阶段，API 单一路由族试点设计
+- 当前重构分支：`docs/wecom-dry-run-version-pilot-design-20260726-185158`
+- 重构基线：`d7a5d27a992a0f2dc3e945109ce28835a6870573`
+- 当前阶段：第十九阶段，WeCom official dry-run API 试点设计
+- 下一阶段：第二十阶段，单一版本化兼容入口试点实施
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
@@ -226,4 +226,16 @@
 - 迁移矩阵修改：0。
 - API 文件移动：0。
 - API 源码修改：0。
+- 运行时行为修改：0。
+
+## 第十九阶段 WeCom official dry-run 试点设计状态
+
+- 唯一路由族：`/api/institution/wecom-official-dry-run`。
+- 建议目标：`/api/v1/institution/wecom-official-dry-run`。
+- 采用直接 re-export 旧 `GET` 的方案。
+- 旧入口继续可用，不设置 sunset 日期。
+- 已形成兼容契约、调用方计划、5 文件白名单、验证和回退计划。
+- API 修改：0。
+- 调用方修改：0。
+- 迁移矩阵修改：0。
 - 运行时行为修改：0。

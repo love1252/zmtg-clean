@@ -1,0 +1,11 @@
+contract_id,dimension,legacy_value,target_required_value,equivalence_rule,phase20_action,rollback
+handler_identity,handler,legacy_GET,same_function_reference,target_GET===legacy_GET,re_export_legacy_GET,delete_target_route
+status,http_status,503,503,exact,inherit,delete_target_route
+code,payload.code,capability_disabled,capability_disabled,exact,inherit,delete_target_route
+error,payload.error,企业微信官方 dry-run 能力当前未启用,企业微信官方 dry-run 能力当前未启用,exact,inherit,delete_target_route
+cache,Cache-Control,no-store,no-store,exact,inherit,delete_target_route
+request,request_access,zero,zero,hostile_proxy_zero_trap,no_wrapper,delete_target_route
+downstream,downstream_access,zero,zero,no_initialization_no_call,re_export_only,delete_target_route
+sensitive,sensitive_data_access,zero,zero,no_read_no_echo,inherit,delete_target_route
+legacy,legacy_entry,available,remain_available,no_legacy_change,retain,legacy_unchanged
+deprecation,deprecation_signal,none,none,no_new_headers,do_not_add,legacy_unchanged
