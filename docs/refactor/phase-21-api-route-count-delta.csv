@@ -1,0 +1,6 @@
+metric,phase18_value,phase21_actual_value,delta,verification,evidence
+total_routes,145,146,1,pass,git_ls_files_src_app_api_route_ts
+versioned_routes,56,57,1,pass,route_url_version_prefix_scan
+unversioned_routes,89,89,0,pass,route_url_version_prefix_scan
+route_families,144,144,0,pass,version_prefix_normalized_family_key
+exact_overlap_families,1,2,1,pass,versioned_and_unversioned_family_membership
