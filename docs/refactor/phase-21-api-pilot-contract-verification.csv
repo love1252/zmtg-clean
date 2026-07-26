@@ -1,0 +1,11 @@
+contract_id,dimension,expected,actual,result,evidence_file,rollback_effect
+handler_identity,new_old_GET_identity,same_function_reference,verified_by_test_contract,pass,src/modules/institution/tests/V1WeComOfficialDryRunCompatibilityApiRoute.test.ts,delete_versioned_route_and_test
+http_status,status,503,503,pass,src/app/api/institution/wecom-official-dry-run/route.ts|src/modules/institution/tests/V1WeComOfficialDryRunCompatibilityApiRoute.test.ts,legacy_unchanged
+payload_code,payload.code,capability_disabled,capability_disabled,pass,src/app/api/institution/wecom-official-dry-run/route.ts|src/modules/institution/tests/V1WeComOfficialDryRunCompatibilityApiRoute.test.ts,legacy_unchanged
+payload_error,payload.error,企业微信官方 dry-run 能力当前未启用,企业微信官方 dry-run 能力当前未启用,pass,src/app/api/institution/wecom-official-dry-run/route.ts|src/modules/institution/tests/V1WeComOfficialDryRunCompatibilityApiRoute.test.ts,legacy_unchanged
+cache_control,Cache-Control,no-store,no-store,pass,src/app/api/institution/wecom-official-dry-run/route.ts|src/modules/institution/tests/V1WeComOfficialDryRunCompatibilityApiRoute.test.ts,legacy_unchanged
+request_access,Request_read,zero,zero_and_hostile_proxy_zero_trap,pass,src/app/api/institution/wecom-official-dry-run/route.ts|src/modules/institution/tests/V1WeComOfficialDryRunCompatibilityApiRoute.test.ts,legacy_unchanged
+downstream_access,downstream_db_external,zero,same_legacy_GET_no_new_wrapper,pass,src/app/api/v1/institution/wecom-official-dry-run/route.ts|src/modules/institution/tests/WeComOfficialDryRunApiRoute.test.ts,legacy_unchanged
+legacy_retention,legacy_entry,available,available,pass,src/app/api/institution/wecom-official-dry-run/route.ts,legacy_unchanged
+versioned_source,versioned_route_source,single_GET_re_export,export { GET } from '@/app/api/institution/wecom-official-dry-run/route';,pass,src/app/api/v1/institution/wecom-official-dry-run/route.ts,delete_versioned_route
+rollback_scope,rollback,delete_new_route_new_test_restore_handoff,independent_no_db_no_caller_change,pass,docs/refactor/phase-19-wecom-official-dry-run-validation-rollback.md,fully_reversible
