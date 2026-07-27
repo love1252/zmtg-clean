@@ -2,12 +2,12 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## 架构 V2 第一阶段状态
+## 架构 V2 第一阶段与文档建设状态
 
-- 更新日期：2026-07-27
-- 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 阶段：`V2-01`
-- 结果：统一目标架构、当前到目标模块映射、七线重启基线与架构决策已冻结
+- 更新日期：2026-07-28
+- V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
+- 当前阶段：`V2-ARCH-DOCS-00`
+- 结果：V2-01 已完成；代码证据审计与三阶段架构文档建设顺序已校准
 - runtime 修改：0
 - Schema／Migration 修改：0
 - MIG-01 状态：仅 A1 expand 已存在；A2、BASE-02／writer 门禁、B 回填和 C enforce 尚未关闭
@@ -19,8 +19,10 @@
 - 七线业务综合完成度：约 25%（规划估算）
 - 公共底座完成度：约 65%（规划估算）
 - 正式发布：0/7
-- 下一阶段：`V2-02` 公共路由与访问控制底座预检
+- 下一阶段：`V2-ARCH-DOCS-01` 业务架构、应用架构与架构索引建设
+- 后续顺序：`V2-ARCH-DOCS-01 → V2-ARCH-DOCS-02 → V2-ARCH-DOCS-03 → V2-02B → V2-02C`
 - 权威架构：`docs/architecture/architecture-v2.md`
+- 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
 <!-- PHASE31_FINAL_AUDIT_START -->
