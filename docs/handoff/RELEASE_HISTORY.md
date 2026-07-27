@@ -389,3 +389,15 @@
 - 最终决策：`closed`；目录重构总任务：`completed`。
 - 本阶段只修改审计、架构、交接和发布历史 Markdown 文档。
 - 未修改生产源码、测试、脚本、配置、原迁移矩阵、Schema、Migration、package 或锁文件。
+
+
+## 2026-07-27：架构 V2 第一阶段统一基线
+
+- 在已完成的目录治理基础上启动独立的架构 V2 演进计划。
+- 冻结最终逻辑结构、当前到目标模块映射和旧目录写入政策。
+- 将机构端七线按“领域 → 持久化／权威 reader → API → 页面 → 权限审计 → capability → 验收”重新建立完成尺度。
+- 固定 MIG-02～MIG-06 串行队列。
+- 固定 `institution` 不再新增业务事实、`open-platform` 不再新增跨领域巨型文件。
+- 固定 HIS、企业微信、AI、Excel 和 webhook 进入 `src/integrations/`。
+- 正式发布保持 0/7。
+- 本阶段未修改 runtime、Schema、Migration、package 或锁文件。
