@@ -1,0 +1,30 @@
+record_type,dimension,key,count,value,interpretation
+metadata,source,path,,docs/refactor/file-migration-matrix.csv,原迁移矩阵保持只读
+metadata,source,sha256,,5827e216946b9d94e34b91bdbffda2b026106ef2b5a75ab0a13d5df007afa8db,第三十阶段 C 启动时矩阵内容哈希
+count,total,all,1509,,迁移矩阵数据行总数
+count,status,boundary_confirmed,5,,已形成阶段性状态证据
+count,status,completed,10,,已形成阶段性状态证据
+count,status,dormant_boundary_confirmed,1,,已形成阶段性状态证据
+count,status,ownership_confirmed,25,,已形成阶段性状态证据
+count,status,pending,1455,,历史规划待办，作为第三十一阶段审计输入，不代表已授权移动
+count,status,runtime_boundary_confirmed,10,,已形成阶段性状态证据
+count,status,script_boundary_confirmed,1,,已形成阶段性状态证据
+count,status,seed_entry_boundary_confirmed,1,,已形成阶段性状态证据
+count,status,seed_guard_boundary_confirmed,1,,已形成阶段性状态证据
+count,risk,high,693,,行级迁移风险标记，要求保护或独立授权，不等于当前活动阻断
+count,risk,low,574,,行级迁移风险统计
+count,risk,medium,242,,行级迁移风险统计
+count,manual_review_required,no,35,,人工复核门禁统计
+count,manual_review_required,yes,1474,,人工复核门禁统计
+count,current_category,api-route,68,,当前文件类别统计
+count,current_category,app,9,,当前文件类别统计
+count,current_category,business-module,783,,当前文件类别统计
+count,current_category,docs,366,,当前文件类别统计
+count,current_category,institution-app,83,,当前文件类别统计
+count,current_category,other,168,,当前文件类别统计
+count,current_category,public,15,,当前文件类别统计
+count,current_category,scripts,8,,当前文件类别统计
+count,current_category,shared,3,,当前文件类别统计
+count,current_category,tests,6,,当前文件类别统计
+count,risk_status,high|pending,688,,高风险待审行，继续受保护边界和独立授权约束
+count,status_manual,pending|yes,1455,,需要人工复核的 pending 行
