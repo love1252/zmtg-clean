@@ -1,18 +1,51 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   DEMO_INSTITUTION_ID,
-  DEMO_SEED_ENV_FLAG,
   DEMO_SEED_KEY,
   DEMO_TENANT_ID,
   assertLowSensitiveSeed,
   assertWriteGuards,
   buildDemoSeedRecords,
-  checkSafeDatabaseUrl,
+  createGuardedDemoSeedClient,
   getCleanupPlan,
   parseCliArgs,
   summarizeSeedRecords,
+  type DemoSeedClientFactory,
 } from './seed-v06-low-sensitive-demo';
+
+function localSeedEnv(
+  overrides: Partial<NodeJS.ProcessEnv> = {},
+): NodeJS.ProcessEnv {
+  return {
+    NODE_ENV: 'development',
+    ZMTG_DEMO_SEED_TARGET: 'local',
+    ZMTG_DEMO_SEED_CONFIRMATION: 'SEED_LOCAL_DEMO',
+    DATABASE_URL: 'postgres://seed-user:seed-password@localhost:5432/zmtg_demo',
+    ...overrides,
+  };
+}
+
+const forbiddenEnvironmentCases: Array<[string, Partial<NodeJS.ProcessEnv>]> = [
+  ['NODE_ENV=production', { NODE_ENV: 'production' }],
+  ['ZMTG_ENV=staging', { ZMTG_ENV: 'staging' }],
+  ['VERCEL_ENV=preview', { VERCEL_ENV: 'preview' }],
+  ['NODE_ENV=test', { NODE_ENV: 'test' }],
+];
+
+const unsafeDatabaseUrlCases: Array<[string, string]> = [
+  ['非 PostgreSQL 协议', 'mysql://seed-user:seed-password@localhost:3306/zmtg_demo'],
+  ['缺少安全数据库标记', 'postgres://seed-user:seed-password@localhost:5432/zmtg'],
+  ['production 数据库名', 'postgres://seed-user:seed-password@localhost:5432/zmtg_production'],
+  ['staging 数据库名', 'postgres://seed-user:seed-password@localhost:5432/mystaging_demo'],
+];
+
+const safeLoopbackUrlCases: Array<[string, string, string]> = [
+  ['localhost', 'postgres://seed-user:seed-password@localhost:5432/zmtg_demo', 'localhost'],
+  ['IPv4 loopback', 'postgres://seed-user:seed-password@127.0.0.1:5432/zmtg_local', '127.0.0.1'],
+  ['IPv6 loopback', 'postgres://seed-user:seed-password@[::1]:5432/zmtg_dev', '::1'],
+  ['postgresql 协议', 'postgresql://seed-user:seed-password@localhost:5432/zmtg_test', 'localhost'],
+];
 
 describe('V0.6 low sensitive demo seed', () => {
   it('默认 dry-run，只有显式 --apply 或 --cleanup 才进入写入模式', () => {
@@ -33,37 +66,131 @@ describe('V0.6 low sensitive demo seed', () => {
     expect(() => assertLowSensitiveSeed(records)).not.toThrow();
   });
 
-  it('写入和清理必须同时满足环境变量与安全数据库 host', () => {
-    expect(() => assertWriteGuards({ DATABASE_URL: 'postgres://localhost:5432/zmtg' })).toThrow(
-      `${DEMO_SEED_ENV_FLAG}=1`,
-    );
+  it('写入和清理复用核心 Seed Guard，旧放行变量单独存在不能执行', () => {
     expect(() =>
-      assertWriteGuards({
-        [DEMO_SEED_ENV_FLAG]: '1',
-        DATABASE_URL: 'postgres://prod.example.com:5432/zmtg',
-      }),
-    ).toThrow(/unsafe_host/);
-    expect(() =>
-      assertWriteGuards({
-        [DEMO_SEED_ENV_FLAG]: '1',
-        DATABASE_URL: 'postgres://localhost:5432/zmtg_local',
-      }),
-    ).not.toThrow();
-    expect(() =>
-      assertWriteGuards({
-        [DEMO_SEED_ENV_FLAG]: '1',
-        DATABASE_URL: 'postgres://demo-db.internal:5432/zmtg_demo',
-      }),
-    ).not.toThrow();
+      assertWriteGuards(
+        localSeedEnv({
+          ZMTG_ALLOW_DEMO_SEED: '1',
+          ZMTG_DEMO_SEED_TARGET: undefined,
+          ZMTG_DEMO_SEED_CONFIRMATION: undefined,
+        }),
+      ),
+    ).toThrow(/ZMTG_DEMO_SEED_TARGET/);
+
+    expect(assertWriteGuards(localSeedEnv())).toMatchObject({
+      target: 'local',
+      host: 'localhost',
+      database: 'zmtg_demo',
+    });
   });
 
-  it('数据库 URL 校验只允许 localhost / 127.0.0.1 / demo 标识，且测试只使用 mock 字符串', () => {
-    expect(checkSafeDatabaseUrl(undefined)).toMatchObject({ allowed: false, reason: 'missing_database_url' });
-    expect(checkSafeDatabaseUrl('not-a-url')).toMatchObject({ allowed: false, reason: 'invalid_database_url' });
-    expect(checkSafeDatabaseUrl('postgres://127.0.0.1:5432/zmtg')).toMatchObject({ allowed: true, reason: 'localhost' });
-    expect(checkSafeDatabaseUrl('postgres://localhost:5432/zmtg')).toMatchObject({ allowed: true, reason: 'localhost' });
-    expect(checkSafeDatabaseUrl('postgres://demo-db.internal:5432/zmtg')).toMatchObject({ allowed: true, reason: 'demo_marker' });
-    expect(checkSafeDatabaseUrl('postgres://db.internal:5432/zmtg')).toMatchObject({ allowed: false, reason: 'unsafe_host' });
+  it.each(forbiddenEnvironmentCases)('%s 一律拒绝', (_label, overrides) => {
+    expect(() => assertWriteGuards(localSeedEnv(overrides))).toThrow(
+      /production\/staging/,
+    );
+  });
+
+  it('远程 Demo 标记数据库不再放行', () => {
+    expect(() =>
+      assertWriteGuards(
+        localSeedEnv({
+          DATABASE_URL:
+            'postgres://seed-user:seed-password@demo-db.internal:5432/zmtg_demo',
+        }),
+      ),
+    ).toThrow(/loopback/);
+  });
+
+  it('必须提供 local target 和固定人工确认', () => {
+    expect(() =>
+      assertWriteGuards(
+        localSeedEnv({ ZMTG_DEMO_SEED_TARGET: undefined }),
+      ),
+    ).toThrow(/ZMTG_DEMO_SEED_TARGET/);
+
+    expect(() =>
+      assertWriteGuards(
+        localSeedEnv({ ZMTG_DEMO_SEED_CONFIRMATION: undefined }),
+      ),
+    ).toThrow(/人工确认/);
+
+    expect(() =>
+      assertWriteGuards(
+        localSeedEnv({ ZMTG_DEMO_SEED_CONFIRMATION: 'WRONG' }),
+      ),
+    ).toThrow(/人工确认/);
+  });
+
+  it.each(unsafeDatabaseUrlCases)('%s 拒绝', (_label, databaseUrl) => {
+    expect(() =>
+      assertWriteGuards(localSeedEnv({ DATABASE_URL: databaseUrl })),
+    ).toThrow();
+  });
+
+  it.each(safeLoopbackUrlCases)(
+    '%s 和安全数据库名允许',
+    (_label, databaseUrl, host) => {
+      expect(
+        assertWriteGuards(localSeedEnv({ DATABASE_URL: databaseUrl })),
+      ).toMatchObject({
+        target: 'local',
+        host,
+      });
+    },
+  );
+
+  it('守卫拒绝错误不泄露数据库密码或完整连接串', () => {
+    const password = 'phase30b-seed-secret-password';
+    const databaseUrl =
+      `postgres://seed-user:${password}@demo-db.internal:5432/zmtg_demo`;
+    let message = '';
+
+    try {
+      assertWriteGuards(localSeedEnv({ DATABASE_URL: databaseUrl }));
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(message).not.toContain(password);
+    expect(message).not.toContain(databaseUrl);
+  });
+
+  it('守卫失败时不会创建 PostgreSQL Client', () => {
+    const createClient = vi.fn();
+
+    expect(() =>
+      createGuardedDemoSeedClient(
+        localSeedEnv({
+          DATABASE_URL:
+            'postgres://seed-user:seed-password@demo-db.internal:5432/zmtg_demo',
+        }),
+        createClient as unknown as DemoSeedClientFactory,
+      ),
+    ).toThrow(/loopback/);
+
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it('Client 使用核心守卫校验过的同一数据库 URL', () => {
+    const databaseUrl =
+      'postgresql://seed-user:seed-password@127.0.0.1:5432/zmtg_local';
+    const fakeClient = { end: vi.fn() };
+    const createClient = vi.fn(
+      () => fakeClient,
+    ) as unknown as DemoSeedClientFactory;
+
+    expect(
+      createGuardedDemoSeedClient(
+        localSeedEnv({ DATABASE_URL: databaseUrl }),
+        createClient,
+      ),
+    ).toBe(fakeClient);
+
+    expect(createClient).toHaveBeenCalledOnce();
+    expect(createClient).toHaveBeenCalledWith(databaseUrl, {
+      max: 1,
+      prepare: false,
+    });
   });
 
   it('seed 使用固定 demoSeedKey，且全部核心记录可追踪到该 seedKey', () => {

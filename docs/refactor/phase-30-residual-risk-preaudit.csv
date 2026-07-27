@@ -4,6 +4,6 @@ R02,开放平台模块,开放平台职责仍高度聚合,180,high,not_closed,按
 R03,API 路径,版本化与非版本化 API 并存,91,high,not_closed,先完成调用方、兼容期、重定向和退役计划,governed_deferred_backlog,docs/refactor/phase-21-api-pilot-closeout-audit.md,nonblocking
 R04,跨模块职责,知识库与工作台等模块仍存在职责交叉,45,medium,not_closed,先建立领域所有权和依赖方向图,closed_no_safe_candidate,docs/refactor/phase-29-cross-module-realignment-audit.md,nonblocking
 R05,数据库边界,数据库基础设施和安全边界仍被锁定,62,high,protected,Schema、Migration、Client 和 Seed 必须单独授权,protected_boundary,docs/refactor/phase-17-restructure-roadmap.md,nonblocking_if_unchanged
-R06,Demo Seed,Demo CLI 数据库地址策略比核心 Seed Guard 更宽,1,high,recorded_not_fixed,统一复用核心 loopback Seed Guard,planned_fix,docs/refactor/phase-30-seed-guard-allowed-files.csv,blocking_phase31_until_resolved
+R06,Demo Seed,Demo CLI 数据库地址策略比核心 Seed Guard 更宽,1,high,recorded_not_fixed,统一复用核心 loopback Seed Guard,resolved_in_phase30b,docs/refactor/phase-30b-seed-guard-alignment.md,nonblocking
 R07,认证测试,旧 DemoAuthRoutes 测试与当前认证契约存在漂移,1,medium,recorded_not_fixed,单独决定测试更新、拆分或退役,planned_fix,docs/refactor/phase-30-auth-test-allowed-files.csv,blocking_phase31_until_resolved
 R08,迁移矩阵,仍有大量 pending 记录等待后续分域处理,1455,medium,backlog,按风险和依赖关系选择下一批规划对象,final_preaudit_required,docs/refactor/phase-30-migration-matrix-preaudit.csv,blocking_phase31_until_explained

@@ -6,8 +6,8 @@
 - 任务：V0.6-DEMO-SEED-LOW-SENSITIVE-01
 - 脚本：`scripts/demo/seed-v06-low-sensitive-demo.ts`
 - seedKey：`v06_demo_low_sensitive_01`
-- 范围：本地 / 受控 demo 环境限定，低敏演示数据，可重复执行，可清理
-- 状态：不提交、不 push、不创建 PR
+- 范围：仅本地 loopback 的 demo / local / dev / test 数据库，低敏演示数据，可重复执行，可清理
+- 状态：操作指南，随核心 Seed Guard 契约同步维护
 
 本 seed 用于把 V0.6 演示链路落成可重复准备的数据：演示租户、演示机构、低敏客户、治疗摘要、知识库 SOP、随访路径、D1 / D3 / D7 阶段任务、消息草稿、客户时间线和运营看板可见数据。
 
@@ -70,11 +70,21 @@ dry-run 只输出低敏摘要、记录数量和跳过数量，不连接数据库
 写入必须同时满足：
 
 1. 显式传入 `--apply`。
-2. 显式设置 `ZMTG_ALLOW_DEMO_SEED=1`。
-3. 数据库 host 只允许 `localhost`、`127.0.0.1`、`::1` 或包含 `demo` 标识。
+2. 显式设置 `ZMTG_DEMO_SEED_TARGET=local`。
+3. 显式设置 `ZMTG_DEMO_SEED_CONFIRMATION=SEED_LOCAL_DEMO`。
+4. `DATABASE_URL` 必须使用 `postgres:` 或 `postgresql:` 协议。
+5. 数据库 host 只允许 `localhost`、`127.0.0.1` 或 `::1`。
+6. 数据库名必须明确包含 `demo`、`local`、`dev` 或 `test` 标记，且不得包含 `production`、`staging`、`prod` 或 `stage`。
+
+旧变量 `ZMTG_ALLOW_DEMO_SEED=1` 已不再作为放行条件，单独设置不会执行写入。
+
+以下示例使用本地占位账号和本地 loopback 数据库，不代表真实凭证：
 
 ```bash
-ZMTG_ALLOW_DEMO_SEED=1 ./node_modules/.bin/tsx scripts/demo/seed-v06-low-sensitive-demo.ts --apply
+ZMTG_DEMO_SEED_TARGET=local \
+ZMTG_DEMO_SEED_CONFIRMATION=SEED_LOCAL_DEMO \
+DATABASE_URL='postgres://demo:demo@127.0.0.1:5432/zmtg_demo' \
+./node_modules/.bin/tsx scripts/demo/seed-v06-low-sensitive-demo.ts --apply
 ```
 
 apply 输出低敏摘要和每张表的 `created`、`alreadyExists`、`skipped` 数量。重复执行通过确定性主键和 `on conflict (id) do nothing` 保持幂等，不重复创建。
@@ -84,11 +94,17 @@ apply 输出低敏摘要和每张表的 `created`、`alreadyExists`、`skipped` 
 清理必须同时满足：
 
 1. 显式传入 `--cleanup`。
-2. 显式设置 `ZMTG_ALLOW_DEMO_SEED=1`。
-3. 数据库 host 只允许 `localhost`、`127.0.0.1`、`::1` 或包含 `demo` 标识。
+2. 显式设置 `ZMTG_DEMO_SEED_TARGET=local`。
+3. 显式设置 `ZMTG_DEMO_SEED_CONFIRMATION=SEED_LOCAL_DEMO`。
+4. `DATABASE_URL` 必须使用 PostgreSQL 协议、loopback host 和安全数据库名，规则与 apply 完全一致。
+
+以下示例仅用于本地受控数据库：
 
 ```bash
-ZMTG_ALLOW_DEMO_SEED=1 ./node_modules/.bin/tsx scripts/demo/seed-v06-low-sensitive-demo.ts --cleanup
+ZMTG_DEMO_SEED_TARGET=local \
+ZMTG_DEMO_SEED_CONFIRMATION=SEED_LOCAL_DEMO \
+DATABASE_URL='postgres://demo:demo@127.0.0.1:5432/zmtg_demo' \
+./node_modules/.bin/tsx scripts/demo/seed-v06-low-sensitive-demo.ts --cleanup
 ```
 
 cleanup 只删除 `v06_demo_low_sensitive_01` 对应的确定性主键范围，先删时间线、草稿、阶段、路径、任务、模板、知识库派生数据，再删治疗摘要、客户、成员、租户和演示账号。租户记录仅在本 seed 成员清理后再删除。
@@ -97,10 +113,15 @@ cleanup 输出每张表的 `cleaned` 和 `skipped` 数量，不删除非本 seed
 
 ## 7. 安全保护条件
 
-- 默认 dry-run，不写库。
+- 默认 dry-run，不连接数据库、不写库。
 - `--apply` 和 `--cleanup` 不能同时传入。
-- 写库和清理必须设置 `ZMTG_ALLOW_DEMO_SEED=1`。
-- 数据库 host 必须是 localhost / 127.0.0.1 / ::1 / demo 标识。
+- 写库和清理必须同时设置 local target 与固定人工确认。
+- 只允许 PostgreSQL 协议。
+- 数据库 host 必须是 localhost / 127.0.0.1 / ::1。
+- 数据库名必须带 demo / local / dev / test 标记，并拒绝 production / staging / prod / stage 标记。
+- 旧 `ZMTG_ALLOW_DEMO_SEED` 不再具有放行作用。
+- 核心 Seed Guard 在 PostgreSQL Client 创建之前执行。
+- Client 只使用核心守卫校验并返回的同一 `databaseUrl`。
 - 脚本输出只包含低敏摘要和数量。
 - 脚本不输出连接串明文、secret、token 或完整 SQL payload。
 - 脚本不修改 schema / migration / package / lock。
