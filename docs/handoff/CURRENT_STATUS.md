@@ -1,6 +1,30 @@
 # 智美天工当前项目状态
 
+<!-- ARCHITECTURE_V2_PHASE1_START -->
+
+## 架构 V2 第一阶段状态
+
+- 更新日期：2026-07-27
+- 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
+- 阶段：`V2-01`
+- 结果：统一目标架构、当前到目标模块映射、七线重启基线与架构决策已冻结
+- runtime 修改：0
+- Schema／Migration 修改：0
+- MIG-01 状态：仅 A1 expand 已存在；A2、BASE-02／writer 门禁、B 回填和 C enforce 尚未关闭
+- 真实 reader 基础门禁：MIG-01C + 当前成员服务端双键上下文
+- Knowledge 正式 reader 追加门禁：MIG-03
+- Analytics 事实／确定性聚合门禁：MIG-05
+- Analytics snapshot repository/API、正式 providers 与五页 UI 门禁：MIG-06 + AN-03C
+- API 路径政策：新实现默认 v1；旧七线非版本化端点仅允许逐路由薄兼容例外
+- 七线业务综合完成度：约 25%（规划估算）
+- 公共底座完成度：约 65%（规划估算）
+- 正式发布：0/7
+- 下一阶段：`V2-02` 公共路由与访问控制底座预检
+- 权威架构：`docs/architecture/architecture-v2.md`
+<!-- ARCHITECTURE_V2_PHASE1_END -->
+
 <!-- PHASE31_FINAL_AUDIT_START -->
+
 ## 第三十一阶段最终目录重构审计状态
 
 - 更新日期：2026-07-27
@@ -15,6 +39,7 @@
 <!-- PHASE31_FINAL_AUDIT_END -->
 
 <!-- PHASE30_CLOSEOUT_START -->
+
 ## 第三十阶段遗留安全治理闭环状态
 
 - 更新日期：2026-07-27
@@ -30,6 +55,7 @@
 <!-- PHASE30_CLOSEOUT_END -->
 
 <!-- PHASE29_REALIGNMENT_START -->
+
 ## 第二十九阶段重新对齐状态
 
 - 更新日期：2026-07-27
