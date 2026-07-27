@@ -34,7 +34,7 @@ import { getDatabase, type TenantDatabase } from '@/server/db/client';
 type LoginPayload = Readonly<{
   username: string;
   password: string;
-  scope: 'institution';
+  scope: 'institution' | 'platform';
 }>;
 
 type FormalLoginResult =
@@ -126,13 +126,17 @@ function snapshotLoginPayload(value: unknown): LoginPayload | null {
     !payload ||
     typeof payload.username !== 'string' ||
     typeof payload.password !== 'string' ||
-    payload.scope !== 'institution'
+    (payload.scope !== 'institution' && payload.scope !== 'platform')
   ) {
     return null;
   }
   const username = payload.username.trim();
   if (!username || !payload.password) return null;
-  return Object.freeze({ username, password: payload.password, scope: 'institution' });
+  return Object.freeze({
+    username,
+    password: payload.password,
+    scope: payload.scope,
+  });
 }
 
 function snapshotSessionUser(value: unknown): AuthSessionUser | null {
@@ -354,6 +358,35 @@ export async function POST(request: Request) {
     return json({ code: 400, message: '请求格式不正确' }, 400);
   }
   if (!payload) return json({ code: 400, message: '请求格式不正确' }, 400);
+
+  if (payload.scope === 'platform') {
+    let demoEnabled: unknown;
+    try {
+      demoEnabled = isDemoAuthEnabled();
+    } catch {
+      return json({ code: 503, message: '登录暂不可用' }, 503);
+    }
+    if (demoEnabled !== true) {
+      return json({ code: 401, message: '用户名或密码错误' }, 401);
+    }
+
+    let demoUser: AuthSessionUser | null = null;
+    try {
+      demoUser = snapshotSessionUser(
+        authenticateDemoUser({
+          username: payload.username,
+          password: payload.password,
+          scope: 'platform',
+        }),
+      );
+    } catch {
+      return json({ code: 503, message: '登录暂不可用' }, 503);
+    }
+
+    return demoUser
+      ? createDemoLoginResponse(demoUser)
+      : json({ code: 401, message: '用户名或密码错误' }, 401);
+  }
 
   const formalLogin = await authenticateFormalAccount(payload);
   if (formalLogin.kind === 'not_found') {

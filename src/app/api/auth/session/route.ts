@@ -265,8 +265,23 @@ function snapshotFormalSessionLookup(
 }
 
 function snapshotDemoSession(value: unknown): AuthSessionUser | null {
-  const session = snapshotExactPlainRecord(value, ['source', 'user']);
-  if (!session || session.source !== 'demo_session') return null;
+  const session = snapshotExactPlainRecord(value, [
+    'user',
+    'expiresAt',
+    'source',
+  ]);
+  const expiresAt = session?.expiresAt;
+
+  if (
+    !session ||
+    session.source !== 'demo_session' ||
+    typeof expiresAt !== 'number' ||
+    !Number.isSafeInteger(expiresAt) ||
+    expiresAt <= Date.now()
+  ) {
+    return null;
+  }
+
   return snapshotSessionUser(session.user);
 }
 

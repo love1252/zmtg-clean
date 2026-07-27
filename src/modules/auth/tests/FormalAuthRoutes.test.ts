@@ -307,6 +307,82 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
   });
 
+  it('platform scope 仅走 Demo 分支且零 DB、零 formal runtime', async () => {
+    const platformUser = Object.freeze({
+      id: 'demo-user-platform',
+      username: 'platform',
+      name: '超级管理员',
+      role: 'platform_admin' as const,
+      tenantId: null,
+      institutionId: null,
+    });
+    routeMocks.authenticateDemoUser.mockReturnValue(platformUser);
+    routeMocks.createDemoSession.mockReturnValue({
+      user: platformUser,
+      expiresAt: Date.now() + 60_000,
+      source: 'demo_session',
+    });
+    routeMocks.encodeDemoSession.mockReturnValue(
+      'platform-demo-session',
+    );
+
+    const { POST } = await import('@/app/api/auth/login/route');
+    const response = await POST(
+      loginRequest({
+        username: 'platform',
+        password: 'demo-password',
+        scope: 'platform',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expectNoStore(response);
+    await expect(response.json()).resolves.toEqual({
+      code: 0,
+      data: { user: platformUser },
+    });
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(
+      routeMocks.createAuthAccountRepository,
+    ).not.toHaveBeenCalled();
+    expect(routeMocks.resolveRuntimeConfig).not.toHaveBeenCalled();
+    expect(routeMocks.authenticateDemoUser).toHaveBeenCalledWith({
+      username: 'platform',
+      password: 'demo-password',
+      scope: 'platform',
+    });
+    expect(response.headers.get('set-cookie')).toContain(
+      `${DEMO_SESSION_COOKIE}=platform-demo-session`,
+    );
+    expectCookieCleared(
+      response,
+      FORMAL_SERVER_SESSION_COOKIE_V1,
+    );
+  });
+
+  it('platform scope 在 Demo 关闭时 fail-closed 且零 DB', async () => {
+    routeMocks.isDemoAuthEnabled.mockReturnValue(false);
+
+    const { POST } = await import('@/app/api/auth/login/route');
+    const response = await POST(
+      loginRequest({
+        username: 'platform',
+        password: 'demo-password',
+        scope: 'platform',
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    expectNoStore(response);
+    expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(
+      routeMocks.createAuthAccountRepository,
+    ).not.toHaveBeenCalled();
+    expect(routeMocks.resolveRuntimeConfig).not.toHaveBeenCalled();
+    expect(routeMocks.authenticateDemoUser).not.toHaveBeenCalled();
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
   it('DB 可用但 formal account 不存在时才允许 demo 登录，并清 formal cookie', async () => {
     routeMocks.repository.findAccountByUsername.mockResolvedValue(null);
     routeMocks.authenticateDemoUser.mockReturnValue(routeMocks.user);
@@ -595,8 +671,12 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     expect(routeMocks.decodeDemoSession).not.toHaveBeenCalled();
   });
 
-  it('demo only 仅在 enabled 时解码，且不读取 runtime config/DB', async () => {
-    routeMocks.decodeDemoSession.mockReturnValue({ source: 'demo_session', user: routeMocks.user });
+  it('demo only 接受真实 user/expiresAt/source 结构，且不读取 runtime config/DB', async () => {
+    routeMocks.decodeDemoSession.mockReturnValue({
+      user: routeMocks.user,
+      expiresAt: Date.now() + 60_000,
+      source: 'demo_session',
+    });
     const { GET } = await import('@/app/api/auth/session/route');
     const response = await GET(sessionRequest(`${DEMO_SESSION_COOKIE}=demo`));
 
@@ -610,7 +690,16 @@ describe('AUTH-FORMAL-COOKIE-02B', () => {
     ['enable throws', () => routeMocks.isDemoAuthEnabled.mockImplementation(() => { throw new Error('disabled'); })],
     ['enable unknown', () => routeMocks.isDemoAuthEnabled.mockReturnValue({ enabled: true })],
     ['decoder throws', () => routeMocks.decodeDemoSession.mockImplementation(() => { throw new Error('invalid'); })],
-    ['decoder unknown', () => routeMocks.decodeDemoSession.mockReturnValue({ source: 'demo_session', user: { id: 'truthy-only' } })],
+    ['decoder unknown', () => routeMocks.decodeDemoSession.mockReturnValue({
+      user: { id: 'truthy-only' },
+      expiresAt: Date.now() + 60_000,
+      source: 'demo_session',
+    })],
+    ['decoder expired', () => routeMocks.decodeDemoSession.mockReturnValue({
+      user: routeMocks.user,
+      expiresAt: Date.now() - 1,
+      source: 'demo_session',
+    })],
     ['decoder proxy', () => routeMocks.decodeDemoSession.mockReturnValue(hostileProxy())],
   ])('demo session hostile %s 返回 401 且不发布 truthy user', async (_label, arrange) => {
     arrange();
