@@ -114,3 +114,20 @@
 - `docs/handoff/NEXT_TASK.md`
 
 可通过删除本任务分支并恢复启动基线完整回退。
+
+## 第二十九阶段重新对齐
+
+- 日期：2026-07-27
+- 状态：`superseded`
+- 原因：一级模块风险排序无法直接回答“跨模块职责归属与单一试点”的原路线图目标。
+- `platform-homepage` 的已完成职责审计和 `no_candidate` 结论继续有效。
+- `institution-knowledge` 不再作为独立阶段 C 串行审计。
+- 后续以四类跨模块链路为单位统一审计。
+- 依赖边去重键：`source_path + target_path + specifier`
+- 伪模块所有者不参与模块循环和候选判断。
+- 候选淘汰证据：`docs/refactor/phase-29-cross-module-pilot-candidates.csv`
+- 最终决策：`no_safe_candidate`
+- 决策原因：`no_eligible_candidate`
+- 唯一试点：`none`
+
+原排名仅作为历史机器证据保留，不再生成 C、D、E 等逐模块任务。
