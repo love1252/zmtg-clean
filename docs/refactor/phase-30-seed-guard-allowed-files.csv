@@ -1,0 +1,6 @@
+path,access,role,required_change,forbidden_change
+scripts/demo/seed-v06-low-sensitive-demo.ts,modify,demo_seed_cli_guard_alignment,remove_broad_demo_marker_allowance;delegate_write_guard_to_core_assertDemoSeedAllowed;guard_before_postgres_client,seed_data_shape|database_mutation_order|schema|migration|real_execution
+scripts/demo/seed-v06-low-sensitive-demo.test.ts,modify,demo_seed_cli_guard_contract_test,remote_demo_host_rejected;target_and_confirmation_required;loopback_safe_database_allowed;legacy_flag_alone_rejected,real_database|real_credentials|network|seed_execution
+src/server/db/seed-guard.ts,read_only,authoritative_seed_guard,none,all_source_changes
+src/server/db/tests/SeedGuard.test.ts,read_only,authoritative_guard_regression,none,all_test_changes
+src/server/db/seed-demo-data.ts,read_only,guard_before_client_reference,none,all_source_changes
