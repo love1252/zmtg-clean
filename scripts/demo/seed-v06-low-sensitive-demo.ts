@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 import postgres from 'postgres';
 
+import { assertDemoSeedAllowed } from '../../src/server/db/seed-guard';
+
 export const DEMO_SEED_KEY = 'v06_demo_low_sensitive_01';
-export const DEMO_SEED_ENV_FLAG = 'ZMTG_ALLOW_DEMO_SEED';
 export const DEMO_TENANT_ID = 'v06-demo-low-sensitive-01-tenant';
 export const DEMO_TENANT_NAME = '智美天工 V0.6 演示租户';
 export const DEMO_INSTITUTION_ID = 'v06-demo-low-sensitive-01-xinglan-institution';
@@ -33,14 +34,11 @@ export type CliMode = 'dry-run' | 'apply' | 'cleanup';
 export type CliOptions = {
   mode: CliMode;
 };
-export type SafeDatabaseUrlCheck =
-  | { allowed: true; host: string; reason: 'localhost' | 'demo_marker' }
-  | { allowed: false; host: string | null; reason: 'missing_database_url' | 'invalid_database_url' | 'unsafe_host' };
 
-type DbClient = ReturnType<typeof postgres>;
+export type DemoSeedClientFactory = typeof postgres;
+type DbClient = ReturnType<DemoSeedClientFactory>;
 type DemoDatabase = DbClient;
 type SeedRecordSet = ReturnType<typeof buildDemoSeedRecords>;
-type DemoSeedEnv = Record<string, string | undefined>;
 type DbScalar = string | number | boolean | Date | null | Record<string, unknown> | readonly string[];
 type DbRecord = Record<string, DbScalar>;
 type RowId = { id: string };
@@ -633,43 +631,16 @@ export function parseCliArgs(argv: string[]): CliOptions {
   return { mode: 'dry-run' };
 }
 
-export function checkDemoSeedEnv(env: DemoSeedEnv = process.env) {
-  if (env[DEMO_SEED_ENV_FLAG] !== '1') {
-    throw new Error(`${DEMO_SEED_ENV_FLAG}=1 is required for --apply or --cleanup`);
-  }
+export function assertWriteGuards(env: NodeJS.ProcessEnv = process.env) {
+  return assertDemoSeedAllowed(env);
 }
 
-export function checkSafeDatabaseUrl(databaseUrl: string | undefined): SafeDatabaseUrlCheck {
-  if (!databaseUrl) {
-    return { allowed: false, host: null, reason: 'missing_database_url' };
-  }
-
-  try {
-    const url = new URL(databaseUrl);
-    const hostname = url.hostname.toLowerCase();
-    const hostText = `${hostname} ${url.pathname.toLowerCase()} ${url.username.toLowerCase()}`;
-
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]') {
-      return { allowed: true, host: hostname, reason: 'localhost' };
-    }
-
-    if (/demo|demonstration|preview|staging-demo|local-demo/u.test(hostText)) {
-      return { allowed: true, host: hostname, reason: 'demo_marker' };
-    }
-
-    return { allowed: false, host: hostname, reason: 'unsafe_host' };
-  } catch {
-    return { allowed: false, host: null, reason: 'invalid_database_url' };
-  }
-}
-
-export function assertWriteGuards(env: DemoSeedEnv = process.env) {
-  checkDemoSeedEnv(env);
-  const check = checkSafeDatabaseUrl(env.DATABASE_URL);
-
-  if (!check.allowed) {
-    throw new Error(`DATABASE_URL host is not allowed for demo seed: ${check.reason}`);
-  }
+export function createGuardedDemoSeedClient(
+  env: NodeJS.ProcessEnv = process.env,
+  createClient: DemoSeedClientFactory = postgres,
+) {
+  const { databaseUrl } = assertWriteGuards(env);
+  return createClient(databaseUrl, { max: 1, prepare: false });
 }
 
 function ids<T extends { id: string }>(records: readonly T[]) {
@@ -875,8 +846,7 @@ async function runCli() {
 
   if (options.mode === 'dry-run') return;
 
-  assertWriteGuards();
-  const client = postgres(process.env.DATABASE_URL as string, { max: 1, prepare: false });
+  const client = createGuardedDemoSeedClient();
   const db = client;
 
   try {

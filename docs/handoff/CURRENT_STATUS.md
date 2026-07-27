@@ -1,19 +1,18 @@
 # 智美天工当前项目状态
 
-<!-- PHASE30_PREFLIGHT_START -->
-## 第三十阶段遗留安全治理预审状态
+<!-- PHASE30_GOVERNANCE_START -->
+## 第三十阶段遗留安全治理状态
 
 - 更新日期：2026-07-27
-- 启动基线：`dd03a38374250e4bedf5ad610773be2ad977360c`
-- 预审模式：`audit_only_preflight`
-- R06 Demo Seed Guard：`fix_in_phase30b`
+- 阶段 B 启动基线：`69657fa8decf448bf0e575827a8542262ad2c948`
+- R06 Demo Seed Guard：`resolved_in_phase30b`
+- R06 证据：`docs/refactor/phase-30b-seed-guard-alignment.md`
 - R07 DemoAuthRoutes：`update_test_only_preserve_unique_route_coverage_in_phase30c`
 - R08 迁移矩阵与遗留风险：`reconcile_in_phase30c`
-- 两项代码治理白名单：已固定
-- 第三十阶段剩余正式分支：2
-- 源码修改：0
+- 第三十阶段剩余正式分支：1
+- 正式业务源码移动：0
 - Seed／Migration／数据库连接：0
-<!-- PHASE30_PREFLIGHT_END -->
+<!-- PHASE30_GOVERNANCE_END -->
 
 <!-- PHASE29_REALIGNMENT_START -->
 ## 第二十九阶段重新对齐状态
@@ -37,9 +36,9 @@
 - 更新时间：2026-07-27
 - 仓库：`love1252/zmtg-clean`
 - 当前重构分支：`main`
-- 重构基线：`dd03a38374250e4bedf5ad610773be2ad977360c`
-- 当前阶段：第三十阶段，遗留安全治理与闭环预审
-- 下一阶段：第三十阶段 B，Demo Seed CLI 守卫对齐
+- 重构基线：`69657fa8decf448bf0e575827a8542262ad2c948`
+- 当前阶段：第三十阶段 B，Demo Seed CLI 守卫对齐
+- 下一阶段：第三十阶段 C，DemoAuthRoutes 测试治理与阶段闭环
 - 架构形态：模块化单体
 - 数据库迁移目录：`drizzle/`
 - 数据库运行时入口：`src/server/db/`
