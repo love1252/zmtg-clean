@@ -2,78 +2,30 @@
 
 ## 当前任务
 
-执行第二十九阶段 C：`src/modules/institution-knowledge/` 职责与依赖审计。
+执行第三十阶段：遗留安全治理与闭环预审。
 
-## 前置结论
+## 第二十九阶段结论
 
-- `src/modules/platform-homepage/` 详细审计已完成；
-- platform-homepage 领域所有者为 `platform_homepage_content`；
-- platform-homepage 低风险源码试点结论为 `no_candidate`；
-- 不需要对 platform-homepage 执行源码移动；
-- 下一模块来自修正后候选排序第 2 名。
+- 四类跨模块责任链路已完成去重后的统一审计；
+- 文件级依赖以 `source_path + target_path + specifier` 去重；
+- 伪模块所有者未参与循环和候选判断；
+- 候选模块对及逐项淘汰原因已写入 `docs/refactor/phase-29-cross-module-pilot-candidates.csv`；
+- 未发现同时满足低风险规则且具有明确职责收益的唯一候选；
+- 决策：`no_safe_candidate`；
+- 决策原因：`no_eligible_candidate`；
+- 不创建第二十九阶段源码实施分支；
+- `platform-homepage` 的 `no_candidate` 结论继续有效；
+- 逐模块串行审计方案已停止。
 
-## 审计范围
+## 第三十阶段范围
 
-只读审计：
+1. Demo Seed CLI 守卫策略与核心 Seed Guard 一致性；
+2. 旧 `DemoAuthRoutes` 测试与当前认证契约漂移；
+3. 迁移矩阵和遗留风险最终预审。
 
-- `src/modules/institution-knowledge/` 内全部 TypeScript 文件；
-- 直接指向该模块的入向源文件；
-- 该模块直接指向的跨模块目标；
-- 该模块的代表性测试入口；
-- 稳定入口、domain、contract、types 和 runtime 边界。
+## 默认保护边界
 
-## 必须输出
-
-1. 逐文件职责清单；
-2. 模块内部依赖边；
-3. 跨模块入向和出向依赖边；
-4. 运行时边界清单；
-5. 领域所有权建议；
-6. 最多一个后续低风险试点候选；
-7. 精确允许文件、禁止范围和回退边界。
-
-## 默认边界
-
-- 本阶段 audit-only；
-- 不修改或移动任何 `src/` 文件；
-- 不修改 API；
-- 不修改 `docs/refactor/file-migration-matrix.csv`；
-- 不修改 Schema、Migration、package 或锁文件；
-- 不连接真实数据库或外部服务；
+- 两项代码治理分别固定允许文件；
+- 不执行真实 Seed、Migration 或数据库连接；
 - 不读取或输出真实凭证；
-- 不改变权限、租户隔离、错误响应或真实渠道行为；
-- 不创建无边界的全局 shared 目录；
-- 不自动实施源码试点。
-
-## 选择依据
-
-- 候选清单：`docs/refactor/phase-29-module-candidate-inventory.csv`；
-- platform-homepage 审计：`docs/refactor/phase-29b-platform-homepage-audit.md`；
-- platform-homepage 试点结论：`no_candidate`；
-- 下一模块：`src/modules/institution-knowledge/`；
-- TypeScript 文件：8；
-- 代表性测试入口：4；
-- 运行时边界文件：0；
-- 跨模块出向边：0；
-- 跨模块入向边：0；
-- 选择分数：96.0406（相对排序值）。
-
-## 验证
-
-1. `git diff --check`
-2. 逐文件清单与实际文件集合一致
-3. 依赖边可追溯
-4. 唯一领域所有权建议可解释
-5. 无源码、API、迁移矩阵或运行时配置修改
-6. `pnpm typecheck`
-7. `pnpm lint`
-8. 代表性测试
-9. `pnpm build`
-
-## 退出条件
-
-- 模块内全部文件均有职责；
-- 入向、出向和运行时边界无遗漏；
-- 领域所有权建议明确；
-- 最多一个低风险试点候选已选定或明确无候选；
-- 后续试点设计必须单独授权。
+- 不修改未授权 Schema、Migration、package 或锁文件。
