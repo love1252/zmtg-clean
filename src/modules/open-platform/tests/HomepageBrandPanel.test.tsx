@@ -155,6 +155,18 @@ function normalizeMarkup(markup: string) {
   return container.innerHTML;
 }
 
+async function waitForHomepageBrandLoaded() {
+  return screen.findByRole('tab', { name: '品牌概览' });
+}
+
+async function openDraftPreview() {
+  await waitForHomepageBrandLoaded();
+  const previewButton = screen.getByRole('button', { name: '草稿预览' });
+  await waitFor(() => expect(previewButton).toBeEnabled());
+  fireEvent.click(previewButton);
+  return screen.findByTitle('真实首页草稿预览画布');
+}
+
 describe('首页与品牌面板', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -214,8 +226,9 @@ describe('首页与品牌面板', () => {
     const banner = heading.closest('[data-platform-banner="true"]');
     expect(banner).toHaveClass('rounded-xl', 'py-4', 'lg:py-5');
     expect(heading).toHaveClass('text-2xl', 'sm:text-[28px]');
+    const activeTab = await waitForHomepageBrandLoaded();
     expect(screen.queryByText('第二阶段')).not.toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '品牌概览' })).toHaveAttribute('aria-selected', 'true');
+    expect(activeTab).toHaveAttribute('aria-selected', 'true');
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       '品牌概览',
       '登录页管理',
@@ -258,7 +271,8 @@ describe('首页与品牌面板', () => {
 
     render(<HomepageBrandPanel />);
 
-    expect(await screen.findByRole('heading', { name: '首页与品牌' })).toBeInTheDocument();
+    await waitForHomepageBrandLoaded();
+    expect(screen.getByRole('heading', { name: '首页与品牌' })).toBeInTheDocument();
     expect(screen.queryByText('配置加载失败，当前显示默认配置')).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain('配置加载失败');
     expect(document.body.textContent).not.toContain('当前显示默认配置');
@@ -310,7 +324,7 @@ describe('首页与品牌面板', () => {
     const fetchMock = vi.mocked(fetch);
     render(<HomepageBrandPanel />);
 
-    await screen.findByRole('heading', { name: '首页与品牌' });
+    await waitForHomepageBrandLoaded();
     fireEvent.change(screen.getByLabelText('平台名称'), { target: { value: '智美天工新版' } });
     expect(screen.getByText('有未保存修改')).toBeInTheDocument();
 
@@ -360,7 +374,7 @@ describe('首页与品牌面板', () => {
     const fetchMock = vi.mocked(fetch);
     render(<HomepageBrandPanel />);
 
-    await screen.findByRole('heading', { name: '首页与品牌' });
+    await waitForHomepageBrandLoaded();
     fireEvent.change(screen.getByLabelText('平台名称'), { target: { value: '发布前保存品牌' } });
     fireEvent.click(screen.getByRole('button', { name: '保存并发布' }));
     const dialog = await screen.findByRole('dialog', { name: '确认发布' });
@@ -460,8 +474,7 @@ describe('首页与品牌面板', () => {
   it('草稿预览可点击首页区块并在右侧轻量编辑后实时更新预览', async () => {
     render(<HomepageBrandPanel />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '草稿预览' }));
-    const previewFrame = screen.getByTitle('真实首页草稿预览画布');
+    const previewFrame = await openDraftPreview();
     expect(screen.getByText('可编辑区块')).toBeInTheDocument();
     fireEvent(
       window,
@@ -489,7 +502,7 @@ describe('首页与品牌面板', () => {
   it('草稿预览点击不可编辑区域时给出明确提示', async () => {
     render(<HomepageBrandPanel />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '草稿预览' }));
+    await openDraftPreview();
     fireEvent(
       window,
       new MessageEvent('message', {
@@ -503,8 +516,7 @@ describe('首页与品牌面板', () => {
   it('草稿预览区块按钮会滚动 iframe 到对应真实首页区域', async () => {
     render(<HomepageBrandPanel />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '草稿预览' }));
-    const previewFrame = screen.getByTitle('真实首页草稿预览画布') as HTMLIFrameElement;
+    const previewFrame = (await openDraftPreview()) as HTMLIFrameElement;
     const postMessage = vi.fn();
     Object.defineProperty(previewFrame, 'contentWindow', {
       configurable: true,
@@ -528,8 +540,7 @@ describe('首页与品牌面板', () => {
   it('草稿预览右侧编辑覆盖导航、品牌、图片、页脚和二维码字段', async () => {
     render(<HomepageBrandPanel />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '草稿预览' }));
-    const previewFrame = screen.getByTitle('真实首页草稿预览画布');
+    const previewFrame = await openDraftPreview();
 
     fireEvent.click(screen.getByRole('button', { name: '顶部导航' }));
     fireEvent.change(screen.getByLabelText('可视化编辑导航名称：增长诊断'), {
@@ -577,8 +588,7 @@ describe('首页与品牌面板', () => {
   it('草稿预览支持首屏按钮和增长指标的专属编辑器', async () => {
     render(<HomepageBrandPanel />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '草稿预览' }));
-    const previewFrame = screen.getByTitle('真实首页草稿预览画布');
+    const previewFrame = await openDraftPreview();
 
     fireEvent(
       window,
@@ -618,7 +628,7 @@ describe('首页与品牌面板', () => {
   it('草稿预览点击业务内容区块时右侧不静默并进入模块编辑状态', async () => {
     render(<HomepageBrandPanel />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '草稿预览' }));
+    await openDraftPreview();
     fireEvent(
       window,
       new MessageEvent('message', {
@@ -642,8 +652,7 @@ describe('首页与品牌面板', () => {
   it('草稿预览业务内容区块支持字段编辑并实时更新真实首页预览', async () => {
     render(<HomepageBrandPanel />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '草稿预览' }));
-    const previewFrame = screen.getByTitle('真实首页草稿预览画布');
+    const previewFrame = await openDraftPreview();
 
     fireEvent(
       window,
@@ -681,8 +690,7 @@ describe('首页与品牌面板', () => {
   it('草稿预览业务内容区块支持编辑非首项卡片、图标和套餐', async () => {
     render(<HomepageBrandPanel />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '草稿预览' }));
-    const previewFrame = screen.getByTitle('真实首页草稿预览画布');
+    const previewFrame = await openDraftPreview();
 
     fireEvent(
       window,
@@ -720,8 +728,7 @@ describe('首页与品牌面板', () => {
   it('草稿预览右侧可以直接上传标识、背景图和二维码素材并实时更新预览', async () => {
     render(<HomepageBrandPanel />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '草稿预览' }));
-    const previewFrame = screen.getByTitle('真实首页草稿预览画布');
+    const previewFrame = await openDraftPreview();
     const imageFile = new File(['preview-image'], 'preview-image.png', { type: 'image/png' });
 
     fireEvent.click(screen.getByRole('button', { name: '品牌文字' }));
@@ -755,7 +762,7 @@ describe('首页与品牌面板', () => {
   it('草稿预览上传的素材会进入素材上传列表并标记当前用途', async () => {
     render(<HomepageBrandPanel />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '草稿预览' }));
+    await openDraftPreview();
     fireEvent.click(screen.getByRole('button', { name: '公众号二维码' }));
     fireEvent.change(screen.getByLabelText('上传可视化编辑公众号二维码'), {
       target: { files: [new File(['qr-image'], '公众号二维码.png', { type: 'image/png' })] },
@@ -788,7 +795,7 @@ describe('首页与品牌面板', () => {
   it('品牌概览将品牌和页面基础信息合并，并把 SEO 与页脚合规拆成独立卡片', async () => {
     render(<HomepageBrandPanel />);
 
-    await screen.findByRole('heading', { name: '首页与品牌' });
+    await waitForHomepageBrandLoaded();
     const brandAndBasicInfo = screen.getByRole('article', { name: '品牌与页面基础信息' });
     expect(within(brandAndBasicInfo).getByRole('heading', { name: '品牌文字' })).toBeInTheDocument();
     expect(within(brandAndBasicInfo).getByRole('heading', { name: '页面展示信息' })).toBeInTheDocument();
@@ -825,7 +832,7 @@ describe('首页与品牌面板', () => {
     const fetchMock = vi.mocked(fetch);
     render(<HomepageBrandPanel />);
 
-    await screen.findByRole('heading', { name: '首页与品牌' });
+    await waitForHomepageBrandLoaded();
     const footerInfo = screen.getByRole('article', { name: '页脚与合规信息' });
     fireEvent.change(within(footerInfo).getByLabelText('上传公众号二维码'), {
       target: { files: [new File([new TextEncoder().encode('qr bytes')], '公众号.png', { type: 'image/png' })] },
