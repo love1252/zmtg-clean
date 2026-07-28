@@ -1,8 +1,8 @@
 # 智美天工架构文档索引
 
-- 任务：`V2-02B-HANDOFF-CLOSEOUT-TO-V2-02C`
+- 任务：`V2-02C-HANDOFF-CLOSEOUT-TO-V2-QUALITY-CI-01`
 - 日期：`2026-07-28 CST +0800`
-- 审计基线：`af9393d15bbfb10391576640a01f9bd5e57f1206`
+- 审计基线：`99560c98faa987ecf79e66d18a4df1aa76d77c9e`
 - 状态：`current`
 - 文档性质：架构导航索引，不是第二套架构事实源
 - runtime、Schema、Migration、API、UI 修改：`0`
@@ -94,6 +94,7 @@ MIG-01A1 Expand
 | [`institution-seven-stream-restart-baseline.md`](./institution-seven-stream-restart-baseline.md) | `current + target` | 七线完成度、依赖、发布门禁和重启顺序 |
 | [`architecture-v2-evidence-audit-20260728.md`](./architecture-v2-evidence-audit-20260728.md) | `current + proposed` | 用当前代码、Schema、测试和历史 PR 对 V2 进行独立核验 |
 | [`v2-02b-mig01-closure-preflight.md`](./v2-02b-mig01-closure-preflight.md) | `current + target + proposed` | MIG-01 A1～C 静态证据、完整影响面、阻断状态和内部候选实施切片。 |
+| [`v2-02c-platform-auth-route-preflight.md`](./v2-02c-platform-auth-route-preflight.md) | `current + target + proposed` | 平台正式 Session、授权根、页面与 API 路由族、legacy／v1 影响面、阻断状态和候选实施切片 |
 | [`business-architecture.md`](./business-architecture.md) | `current + target` | 角色、价值流、两平面职责、七线业务闭环、AI 人工确认和正式发布尺度 |
 | [`application-architecture.md`](./application-architecture.md) | `current + target` | 官网、认证、机构端、平台端、API、Webhook、权限、Capability 和应用依赖方向 |
 | [`data-architecture.md`](./data-architecture.md) | `current + target + proposed` | 数据事实所有权、机构隔离、来源、证据和 MIG 序列 |
@@ -107,6 +108,8 @@ MIG-01A1 Expand
 业务、应用、数据、软件、部署、开发六类架构视图已经完成 `6/6`。`V2-ARCH-DOCS-03` 已通过 PR #787 合并，开发架构、根 `README.md` 项目入口和 `CURRENT_STATUS` 同步均已完成，不再标记为 `planned`。
 
 `V2-02B-MIG01-CLOSURE-PREFLIGHT` 已通过 PR #789 完成并合并，其预检文档现作为 MIG-01 当前静态证据和候选实施切片入口。该结果不表示 MIG-01 已实施或关闭。
+
+`V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT` 已通过 PR #791 完成并合并，其预检文档现作为平台正式授权与路由族的当前静态证据和候选实施切片入口。该预检确认正式平台服务端授权根为“缺失”、平台 Runtime／发布准入为“阻断”；本阶段没有实施平台 Runtime，七个平台候选实施切片均未启动。
 
 文档完成只代表同一套架构 V2 的视图与入口已经建立，不代表 runtime、Schema、Migration、API、UI、Capability、环境或七线正式发布已经完成。
 
@@ -143,9 +146,10 @@ MIG-01A1 Expand
 
 1. [`application-architecture.md`](./application-architecture.md)
 2. [`architecture-v2.md`](./architecture-v2.md)
-3. `src/modules/institution-contracts/v1/institution-navigation.ts`
-4. `src/modules/institution-contracts/v1/institution-routes.ts`
-5. `src/modules/institution-contracts/v1/institution-capability-registry.ts`
+3. [`v2-02c-platform-auth-route-preflight.md`](./v2-02c-platform-auth-route-preflight.md)
+4. `src/modules/institution-contracts/v1/institution-navigation.ts`
+5. `src/modules/institution-contracts/v1/institution-routes.ts`
+6. `src/modules/institution-contracts/v1/institution-capability-registry.ts`
 
 ### 后端、数据和安全开发
 
@@ -153,9 +157,10 @@ MIG-01A1 Expand
 2. [`architecture-v2-module-map.md`](./architecture-v2-module-map.md)
 3. [`architecture-v2-evidence-audit-20260728.md`](./architecture-v2-evidence-audit-20260728.md)
 4. [`v2-02b-mig01-closure-preflight.md`](./v2-02b-mig01-closure-preflight.md)
-5. [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md)
-6. [`data-architecture.md`](./data-architecture.md)
-7. [`software-architecture.md`](./software-architecture.md)
+5. [`v2-02c-platform-auth-route-preflight.md`](./v2-02c-platform-auth-route-preflight.md)
+6. [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md)
+7. [`data-architecture.md`](./data-architecture.md)
+8. [`software-architecture.md`](./software-architecture.md)
 
 ### 部署和运维
 
@@ -182,16 +187,16 @@ MIG-01A1 Expand
 7. docs-only 合并不构成 runtime、Schema、Migration、API、UI、Capability 或发布授权；
 8. 发现代码与文档不一致时，优先记录差距，不把目标状态伪装为当前状态。
 
-## 11. 当前实施顺序
+## 11. 当前项目级顺序
 
 ```text
-V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT
-→ 最小 Architecture／Quality CI
+V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE
+→ 独立 handoff
 → MIG-01 后续独立数据 PR
 → 后续既定顺序
 ```
 
-`V2-02B` 已通过 PR #789 合并。唯一下一任务切换为 `V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT`，但尚未启动；它仍须独立用户授权，且不得自动启动 Architecture／Quality CI、MIG-01A2 或其他 MIG-01 实施切片。
+`V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT` 已通过 PR #791 完成并合并，但没有实施平台 Runtime。唯一下一任务切换为 `V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE`，该任务尚未启动；CI 完成也不构成 MIG-01A2、其他 MIG-01 数据切片或平台 Runtime 的实施授权，后续仍须独立 handoff 和用户明确授权。
 
 MIG-01 内部候选顺序继续保持：
 
@@ -204,6 +209,8 @@ A2
 → C
 → Reader
 ```
+
+该顺序只冻结 MIG-01 内部候选切片的串行关系，不是当前项目级 `NEXT_TASK`，也不表示任一切片已获实施授权。
 
 后续既定数据顺序保持：
 

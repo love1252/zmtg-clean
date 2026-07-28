@@ -2,242 +2,280 @@
 
 ## 当前交接状态
 
-`V2-02B-MIG01-CLOSURE-PREFLIGHT` 已通过 PR #789 完成并合并。MIG-01A1 只有仓库静态 Expand 证据达到“已具备”；A2 缺失；BASE-02 部分具备；Writer、Audit／模板、B、C、Reader 均为阻断。该结果只冻结静态证据、影响面和 MIG-01 内部候选实施顺序，不表示 MIG-01 已启动、实施或关闭。
+`V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT` 已通过 PR #791 完成并合并：
 
-项目级参考顺序保持：
+- PR Head：`cf7423f51906ce92a6de01c0a3cd0e02b2a774da`
+- Merge Commit：`99560c98faa987ecf79e66d18a4df1aa76d77c9e`
+- 完成文档：`docs/architecture/v2-02c-platform-auth-route-preflight.md`
+- 正式平台服务端授权根：`缺失`
+- 平台 Runtime／发布准入：`阻断`
+- Runtime、Schema、Migration 修改：`0`
+
+该结果只冻结平台入口、Session、授权根、页面与 API 路由族、legacy／v1 影响面、阻断状态和七个候选实施切片，不表示平台 Runtime、Route Group 或任何候选切片已经实施。
+
+当前项目级顺序为：
 
 ```text
-V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT
-→ 最小 Architecture／Quality CI
+V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE
+→ 独立 handoff
 → MIG-01 后续独立数据 PR
 → 后续既定顺序
 ```
 
-本文件只冻结未来 V2-02C 的 docs-only 静态预检范围。V2-02C、Architecture／Quality CI、MIG-01A2 和机构端旧任务均未启动。
+MIG-01 内部候选顺序继续保持：
+
+```text
+A2
+→ BASE-02
+→ Writer
+→ Audit／模板
+→ B
+→ C
+→ Reader
+```
+
+该内部顺序不是当前项目级 `NEXT_TASK`，也不表示任何 MIG-01 切片已获实施授权。
+
+最小 Architecture／Quality CI、七个平台候选实施切片、MIG-01A2 和机构端旧任务均未启动。
 
 ## 唯一下一任务
 
 ```text
-V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT
-平台正式授权与路由族静态预检
+V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE
+最小架构与质量 CI 门禁
 ```
 
-`V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT` 是唯一下一任务，但尚未启动。只有用户在后续任务中明确授权后，才可按本文边界开展仓库内静态审计；本次 handoff 不构成对源码、Route、Session、权限、Capability 或环境操作的授权。
+该任务是唯一下一任务，但尚未启动。只有用户在后续任务中明确授权后，才可按本文白名单创建 Workflow、检查器、自测、规则配置并修改 `package.json`；本次 handoff 不构成 CI、Runtime、环境、分支保护或发布授权。
 
 ## 一、未来任务的精确文件范围
 
-未来 V2-02C 只允许创建：
+未来 `V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE` 只允许修改或创建：
 
 ```text
-docs/architecture/v2-02c-platform-auth-route-preflight.md
+.github/workflows/architecture-quality.yml
+scripts/verify/architecture-quality.mjs
+scripts/verify/architecture-quality-rules.json
+scripts/verify/architecture-quality.test.mjs
+package.json
 ```
 
-不得修改或创建其他文件。若该路径已经存在，必须停止并报告，不得覆盖、复用同名历史内容或创建同义文档。
+不得修改 `pnpm-lock.yaml`，不得新增依赖。若实现需要第六个文件、第三方依赖或锁文件变化，必须停止并重新申请授权。
 
-该预检文档只展开同一套架构 V2 的平台授权与路由证据，不是第二套权限模型、路由事实源、API 规范或实施授权。
+未来任务只建立最小架构增量检查与现有质量命令的 CI 编排，不修改业务源码、Schema、Migration、API 或 UI，也不配置分支保护或 Required Check。
 
-## 二、任务定位与事实边界
+## 二、本地命令契约
 
-未来 V2-02C 只允许读取当前 `main` 内可验证的代码、测试、配置和已合并文档，静态回答：
+未来任务必须在 `package.json` 新增以下命令：
 
-1. 平台入口、登录入口和 Session 来源当前如何接线；
-2. 平台角色、资源、动作、目标租户和服务端策略当前具备什么；
-3. 正式平台授权根缺少哪些 Session、Scope、Guard、Entitlement、Audit 和 fail-closed 证据；
-4. 平台页面、现有 API 路由族、调用方和数据来源的完整影响面；
-5. 旧路由与 v1 路由应如何逐路由兼容、迁移、观测和退出；
-6. 后续独立实施切片的依赖、允许范围、测试、停止、回退和授权条件。
+```json
+{
+  "check:architecture": "node scripts/verify/architecture-quality.mjs",
+  "check:architecture:test": "node --test scripts/verify/architecture-quality.test.mjs",
+  "ci:quality": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+}
+```
 
-当前 `main` 的代码、测试、Schema、Migration、配置和已合并记录决定 `current` 事实；`docs/architecture/architecture-v2.md` 与已接受 ADR 决定最高级 `target` 约束；`architecture-v2-module-map.md`、六类架构视图、代码证据审计、架构索引和 handoff 只负责展开、导航、核验与记录状态，不得独立改写模块所有权、权限根、路由政策、Migration 顺序或发布门禁。本预检只能记录证据、缺口和候选切片。仓库外调用方、真实 Session、环境配置、部署状态和生产授权统一标记为“待确认”，不得从文件名、类型定义、Demo、Mock、测试通过或角色常量推断为已上线。
+命令职责固定为：
 
-## 三、必须审计的内容
+- `check:architecture`：基于 PR Base 与 Head 的差异执行静态架构增量检查；
+- `check:architecture:test`：使用 Node 内置 test runner 执行检查器自测；
+- `ci:quality`：串行运行现有 `lint`、`typecheck`、`test` 和 `build`。
 
-### 3.1 平台应用入口与 Session 来源
+不得改变现有 `dev`、`start`、`preflight`、`db:*`、`lint`、`typecheck`、`test` 或 `build` 命令语义。检查器应复用仓库现有 TypeScript 能力，不得为 AST 解析新增依赖。
 
-至少审计：
+## 三、增量检查模型
 
-- `src/app/open-platform/page.tsx`；
-- `DemoSessionGate`；
-- `PlatformConsole`；
-- `/api/auth/session`；
-- 平台登录入口；
-- 页面和 API 实际消费的 Session、Actor、tenant 与 provenance 来源。
+### 3.1 Base 与 Head
 
-必须区分 Demo 门禁、客户端展示、登录态存在和正式服务端授权。任何客户端角色判断、Demo Session 或页面可访问证据都不能单独证明平台授权已完成。
-
-### 3.2 平台角色、资源、动作与策略
-
-至少核对：
-
-- `platform_admin`；
-- `platform_operator`；
-- `security_auditor`；
-- 当前 `ProtectedResource`；
-- 当前 `ProtectedAction`；
-- 角色与资源／动作的映射；
-- 已存在但未接线、只覆盖部分入口或完全缺失的服务端策略。
-
-不得把角色 Audience、导航可见性、Capability 或类型常量等同于对象和动作级服务端授权。
-
-### 3.3 正式平台授权根
-
-预检必须分别记录以下目标能力的当前证据和缺口：
-
-1. 正式服务端 Session 解析；
-2. 可追溯的 Actor／Provenance；
-3. platform Scope；
-4. 页面 Guard 与 Route Guard；
-5. target tenant／目标对象／Action 授权；
-6. Entitlement、Capability 与 Release Gate 的独立职责；
-7. Audit attribution；
-8. fail-closed；
-9. 面向调用方的低敏错误。
-
-缺少正式 Session、Scope、目标对象或策略时必须按入口 fail-closed，不得用默认 tenant、客户端状态或宽泛平台角色兜底。
-
-### 3.4 平台页面与 API 路由族完整清单
-
-静态清单至少覆盖：
+检查器必须以明确的 Base 和 Head 为输入：
 
 ```text
-src/app/open-platform/**
-src/app/api/open-platform/**
-src/app/api/v1/open-platform/**
+--base <PR base SHA>
+--head <PR head SHA>
 ```
 
-并追踪相关 `auth`、`security`、`open-platform`、`workspace` 模块、Repository、Service、测试和仓库内调用方。不能因某个目录为空、缺失或只有部分路由，就省略缺口记录。
+Workflow 必须传入 GitHub PR 事件中的 Base SHA 与 Head SHA。本地调用也必须提供可解析的 Base／Head，或使用检查器明确支持且可验证的等价输入。
 
-### 3.5 每个页面与 Route 的记录字段
+出现以下任一情况必须非零退出：
 
-每一项至少记录：
+- Base 或 Head 缺失；
+- SHA／ref 无法解析；
+- Base 对象或 Head 对象不存在；
+- Base 与 Head 没有可验证的共同历史；
+- 无法取得 Base 与 Head 的差异；
+- 配置无效、规则未知或检查过程异常。
 
-- 当前文件路径和公开 URL；
-- 当前业务 Owner；
-- 当前认证／授权方式；
-- 允许角色；
-- 受保护资源和动作；
-- target tenant 或目标对象；
-- 数据来源、Service 和 Repository；
-- Audit 状态；
-- legacy／v1 状态；
-- 仓库内调用方；
-- 仓库外调用方是否待确认；
-- 兼容条件；
-- 回退条件；
-- 旧入口退出条件。
+不得在 Base 不明时退化为全仓扫描后放行，也不得默认使用可能错误的 `main`、`HEAD^` 或空差异。
 
-所有结论必须引用真实路径、符号或测试；未找到证据时明确写“缺失”或“待确认”。
+### 3.2 差异语义
 
-### 3.6 Route Group 目标
+检查器必须基于 Git 可验证的 Base 与 Head 差异处理新增、修改、复制、重命名和删除：
 
-目标页面路径为：
+- 既有且未修改的历史债务不得导致本 PR 失败；
+- 新增或复制到受限路径的文件按新增处理；
+- 重命名进入受限路径的目标文件按新增处理；
+- 删除或迁出受限路径本身不得被误报为新增违规；
+- 修改既有文件时，新增的违规依赖边必须失败；
+- 已存在且本次没有新增的违规依赖边不得因全仓历史债务被重复判失败；
+- 正常 `/api/v1/**` 文件不得因 legacy Route 规则被误报。
+
+实现必须使用 NUL 安全或等价可靠的 Git 差异读取方式，并正确处理含空格路径、rename 和 delete。
+
+## 四、最小架构规则
+
+检查器至少阻止本次差异新增以下内容：
+
+1. 根目录 `database/**`，防止建立第二套数据库资产；
+2. `src/app/api/institution/**` 下新的非版本化 `route.ts`；
+3. `src/app/api/open-platform/**` 下新的非版本化 `route.ts`；
+4. `src/modules/institution/**` 中未经精确例外登记的新文件；
+5. `src/modules/open-platform/**` 中未经精确例外登记的新文件；
+6. Domain 文件新增指向 `src/app/**`、`src/server/db/**`、`src/integrations/**`、React 或 Next.js 的依赖边；
+7. 一个业务模块新增直接导入另一业务模块 `server/**` 或 Repository 实现的依赖边。
+
+规则只约束增量，不得借首个 CI PR 一次性清算全部历史债务。任何新增违规路径或依赖边都必须非零退出，不得只打印 warning。
+
+### 4.1 依赖解析
+
+检查器必须使用 TypeScript AST 或等价可靠方式读取并规范化：
+
+- 静态 `import`；
+- `export ... from`；
+- 动态 `import()`；
+- 相对路径和仓库现有 alias。
+
+不得仅依赖普通子串、正则扫描源文件或文件名猜测依赖。解析失败、无法归一化本应受检查的依赖或发现绕过形式时必须 fail-closed。
+
+### 4.2 精确例外
+
+所有例外只能记录在：
 
 ```text
-src/app/(platform)/open-platform
+scripts/verify/architecture-quality-rules.json
 ```
 
-公开 URL 继续保持：
+每条例外至少包含：
 
-```text
-/open-platform
-```
+- 规则类型；
+- 精确文件路径，或精确的 `from`／`to` 依赖边；
+- 任务编号；
+- 原因；
+- 所有者；
+- 删除条件或复核条件。
 
-未来预检只核验移动影响面、服务端 Guard 前置条件和公开 URL 不变的证明方案，不得移动页面、创建 Route Group、改变 URL 或修改任何调用方。
+例外只能豁免完全匹配的违规身份。禁止：
 
-### 3.7 API 路径政策
+- `*`、`**`、`?`、字符组或其他通配表达式；
+- 只登记目录前缀；
+- 空任务编号、空原因、空所有者或无复核条件；
+- 未知规则类型；
+- 重复或相互覆盖的例外；
+- 用例外放宽整个模块、Route 族或依赖方向。
 
-- 新平台 API 默认使用 `/api/v1/open-platform/**`；
-- 旧 `/api/open-platform/**` 只能作为逐路由薄兼容候选；
-- 每个旧路由必须有单一业务 Owner、明确调用方、观测窗口和退出条件；
-- 不允许批量代理、批量迁移、通配兼容或复制第二套业务逻辑；
-- 预检不得新建 API、兼容代理、Route Handler 或占位实现。
+无效配置、宽泛例外和无法解释的例外必须 fail-closed。
 
-### 3.8 状态词
+## 五、检查器自测
 
-每个审计单元必须且只能使用：
+`scripts/verify/architecture-quality.test.mjs` 必须使用 Node 内置 test runner，至少覆盖：
 
-- `已具备`：当前仓库存在完整、一致、可追溯的静态证据；
-- `部分具备`：存在部分结构或接线，但不足以关闭；
-- `缺失`：仓库中没有所需实现或证据；
-- `阻断`：存在必须先解决的授权、安全、依赖或兼容问题；
-- `待确认`：仅凭仓库无法确定，或必须由后续获批环境核验。
+1. 新建根 `database/**` 被拒绝；
+2. 新增 institution 或 open-platform legacy Route 被拒绝；
+3. 冻结聚合模块新增文件被拒绝；
+4. 完全匹配的精确例外可通过；
+5. Domain 越层依赖被拒绝；
+6. 跨业务模块 server／Repository 依赖被拒绝；
+7. 当前已有债务在未修改时不会失败；
+8. 修改旧文件并新增违规边时失败；
+9. 错误 Base、缺失对象、无效配置和宽泛例外 fail-closed；
+10. rename、delete 和正常 v1 文件处理正确。
 
-代码存在、Route 存在、测试通过、Demo、Mock、Seed、客户端 Guard 或 Capability 均不能单独把正式授权标为“已具备”。
+自测 fixture 必须在测试运行期间创建和清理，不得为 fixture 新增第六个仓库文件。测试不得使用 skip、only、静默吞错或永远返回 `0` 的替身实现。
 
-### 3.9 后续候选实施切片
+## 六、GitHub Workflow
 
-未来预检必须冻结但不得启动以下候选切片：
+`.github/workflows/architecture-quality.yml` 必须：
 
-1. 正式平台 Session／Provenance；
-2. 平台 Access Context 与 Action Policy；
-3. 服务端页面 Guard 与 Route Group 证明；
-4. v1 平台 API 逐路由 Guard；
-5. target tenant／对象授权；
-6. Entitlement、Audit 与低敏错误；
-7. legacy Route 调用方迁移、观测与退出。
+- 使用 `pull_request`，禁止 `pull_request_target`；
+- 只授予 `contents: read`；
+- 不读取或传递 Secret；
+- 不连接数据库或业务外部系统；
+- checkout 使用完整历史或足以可靠取得 PR Base／Head 的历史；
+- 使用 Node 20、pnpm 9，并执行 `pnpm install --frozen-lockfile`；
+- 将 PR Base SHA 与 Head SHA 显式传给 `check:architecture`；
+- 设置合理的 job timeout；
+- 设置并发组和 `cancel-in-progress: true`；
+- 使用官方 GitHub Action，并在未来任务执行时核验后固定到完整 commit SHA；
+- 为 PR 产生真实、可见且失败会阻断该 Workflow 的状态检查。
 
-每个候选切片必须写明：
+Workflow 必须按以下顺序运行：
 
-- 前置依赖；
-- 允许文件类型与禁止范围；
-- 单元测试、契约测试、架构测试和未来环境验证要求；
-- 启动条件与完成证据；
-- 立即停止条件；
-- 可回退步骤或必须前向修复的条件；
-- 所需的用户、Runtime、安全、环境或发布授权。
+1. `pnpm check:architecture:test`
+2. `pnpm check:architecture -- --base <PR base SHA> --head <PR head SHA>`
+3. `pnpm lint`
+4. `pnpm typecheck`
+5. `pnpm test`
+6. `pnpm build`
 
-候选队列只用于冻结依赖和风险，不构成任何实施许可，也不得因预检完成自动启动第一个切片。
+未来任务不配置分支保护或 Required Check。任何仓库设置变更都需要后续独立授权。
 
-## 四、停止条件
+## 七、未来任务的启动和停止条件
 
-遇到以下任一情况，未来 V2-02C 必须停止并报告：
+未来任务启动前必须再次确认：
 
-- 基线、任务编号、唯一允许路径或 working tree 不符合授权；
-- 目标文档已经存在；
-- 无法确认平台页面、Route、角色、策略、调用方或 Repository 的完整影响面；
-- 当前实现与已接受架构存在无法解释的矛盾；
-- 需要读取凭证、环境变量值或真实 Session 才能继续；
-- 需要连接数据库、外部系统、测试服务器或生产环境；
-- 需要修改唯一允许文件之外的内容；
-- 需要创建代码、Route、Session、Guard、API、测试、配置或占位实现；
-- 需要启动 Architecture／Quality CI、MIG-01A2 或机构端旧任务；
-- 出现未获授权的文件改动或其他 Agent 并发写入。
+- `main` 与 `origin/main` 同步；
+- working tree 干净；
+- 五文件白名单没有被其他任务占用；
+- 当前 `lint`、`typecheck`、`test` 和 `build` 命令仍存在；
+- GitHub Actions 和 package manager 版本由当前仓库证据核验。
 
-## 五、禁止范围
+遇到以下任一情况必须停止：
 
-未来 V2-02C 不得：
+- 冻结 `main` 上现有 `lint`、`typecheck`、`test` 或 `build` 失败；
+- 需要修改业务源码或现有测试以掩盖失败；
+- 需要新增依赖或修改 `pnpm-lock.yaml`；
+- 无法可靠确定或取得 Base／Head；
+- AST／路径归一化无法可靠覆盖目标规则；
+- 需要宽泛例外才能通过；
+- Workflow 必须读取 Secret、连接环境或扩大权限；
+- 需要配置分支保护、Required Check 或其他仓库设置；
+- 出现五文件外改动、并发写入或未获授权范围。
 
-- 修改 `src/**`、`drizzle/**`、`scripts/**`、`tests/**`、package、lock、配置或现有文档；
-- 修改源码、Route、Session、认证、授权、Audit、Entitlement、Capability 或 Release Gate；
-- 移动 `src/app/open-platform` 或创建 `src/app/(platform)`；
-- 改变公开 URL；
-- 新建 API、Route Handler、兼容代理或第二套业务逻辑；
-- 修改 Schema 或 Migration；
-- 运行测试、Build、`db:generate`、Migration、Seed 或部署；
-- 连接数据库、HIS、企业微信、AI 厂商、对象存储、CI、监控、测试服务器或生产环境；
-- 读取 `.env.local`、`DATABASE_URL`、Secret、Token、私钥、凭证、真实 Session 或环境变量值；
-- 启动 Architecture／Quality CI；
-- 启动 MIG-01A2 或任何 MIG-01 实施切片；
+失败时必须报告真实基线结果，不得通过降低规则、跳过命令、吞掉异常或让检查器固定返回成功来绕过。
+
+## 八、禁止范围
+
+未来 `V2-QUALITY-CI-01` 不得：
+
+- 修改 `src/**`、`drizzle/**`、业务测试、Schema、Migration、API 或 UI；
+- 修改现有测试以掩盖失败；
+- 删除、跳过或放宽既有门禁；
+- 使用 test skip、only、静默吞错或永远返回 `0`；
+- 新增依赖或修改 `pnpm-lock.yaml`；
+- 修改现有 `dev`、`start`、`preflight`、`db:*` 命令语义；
+- 使用 `pull_request_target`；
+- 读取 `.env.local`、`DATABASE_URL`、Token、Secret、私钥或凭证；
+- 连接数据库、HIS、企业微信、AI 厂商、对象存储、测试服务器或生产环境；
+- 配置分支保护或 Required Check；
+- 启动平台 Session、Policy、页面 Guard、Route Guard 或其他平台 Runtime；
+- 启动 MIG-01A2 或其他 MIG-01 实施切片；
 - 恢复或启动机构端旧任务；
-- 自动进入正式审查（Ready）或自动合并（Merge）；
-- 因预检完成自动启动任何候选实施切片。
+- 自动进入正式审查（Ready）或自动合并（Merge）。
 
-## 六、未来预检的验证与交付
+## 九、未来任务的验证与交付
 
 未来任务至少必须确认：
 
-1. `git diff --check` 通过；
-2. 修改文件精确为新建的 `docs/architecture/v2-02c-platform-auth-route-preflight.md`；
-3. 平台入口、Session、角色、策略、授权根、页面和 API 路由族影响面均已覆盖；
-4. 每个页面／Route 均记录本文规定的字段；
-5. Route Group 目标与公开 URL 不变被明确区分；
-6. v1 路径和逐路由薄兼容政策保持一致；
-7. 所有审计单元只使用五种规定状态；
-8. 七个候选切片均写明依赖、范围、测试、停止、回退和授权；
-9. Runtime、Schema、Migration 修改均为 `0`；
-10. 未运行测试、Build、`db:generate`、Migration、Seed 或部署；
-11. 未读取凭证或环境变量值，未连接数据库或外部环境；
-12. 工作树在提交后干净，最终只有一个同主题提交；
-13. 只创建草稿 PR，不自动进入正式审查，不自动合并；
-14. 未启动 V2-02C 的 Runtime 实施、Architecture／Quality CI、MIG-01A2 或机构端旧任务。
+1. 修改文件精确为五文件白名单；
+2. `pnpm-lock.yaml` 未修改，新增依赖为 `0`；
+3. `pnpm check:architecture:test` 通过；
+4. `pnpm check:architecture -- --base <基线> --head <任务 Head>` 通过；
+5. `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build` 依次通过；
+6. PR 上产生真实 Architecture／Quality 状态检查并通过；
+7. `git diff --check` 通过；
+8. 业务 Runtime、Schema、Migration 修改均为 `0`；
+9. 未读取凭证或环境变量值，未连接数据库或业务外部环境；
+10. 工作树提交后干净，最终只有一个同主题提交；
+11. 只创建草稿 PR，不自动进入正式审查，不自动合并；
+12. 未启动平台候选切片、MIG-01A2 或机构端旧任务。
 
-未来 V2-02C 的完成定义仅是：平台正式授权根、页面与 API 路由族的当前静态证据、缺口、完整影响面和后续候选实施切片被文档化并冻结。它不代表平台授权已经实施、Route Group 已移动、v1 API 已创建或任何 Capability 已发布。
+未来 `V2-QUALITY-CI-01` 的完成定义仅是：最小增量架构检查、检查器自测、现有质量命令编排和真实 PR 状态检查已经建立并验证。它不表示历史架构债务已经清零、分支保护已经配置、平台授权已经实施、MIG-01 已获实施授权或七线已经正式发布。
