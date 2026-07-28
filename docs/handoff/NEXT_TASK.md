@@ -1,300 +1,270 @@
 # 下一任务
 
-## 当前状态
+## 当前交接状态
 
-架构 V2 前两批架构视图已经完成：
+`V2-ARCH-DOCS-03` 已通过 PR #787 合并，六类架构视图已经完成 `6/6`，根 `README.md` 已成为项目入口。
 
-- PR #783：完成 `V2-ARCH-DOCS-01`，新增架构索引、业务架构和应用架构；
-- PR #784：收口 `V2-ARCH-DOCS-01` 并将唯一下一任务切换到 `V2-ARCH-DOCS-02`；
-- PR #785：完成 `V2-ARCH-DOCS-02`，新增数据架构、软件架构和部署架构；
-- PR #785 merge commit：`1159be40e25e4a36639731c81fedf826bc26e479`；
-- 六类架构视图目前完成 5 类，开发架构尚未完成；
-- MIG-01、平台正式服务端授权和七线正式发布 `0/7` 等既有门禁保持不变。
+本文件只把后续唯一任务切换为 MIG-01 完整关闭链的静态审计与预检，并冻结其允许范围、证据要求和停止条件。它不启动 `V2-02B`、MIG-01、`V2-02C` 或任何机构端旧开发任务。
 
-当前架构入口为：
+当前固定事实和门禁保持不变：
 
-```text
-docs/architecture/README.md
-docs/architecture/architecture-v2.md
-docs/architecture/architecture-v2-evidence-audit-20260728.md
-docs/architecture/architecture-v2-module-map.md
-docs/architecture/institution-seven-stream-restart-baseline.md
-docs/architecture/business-architecture.md
-docs/architecture/application-architecture.md
-docs/architecture/data-architecture.md
-docs/architecture/software-architecture.md
-docs/architecture/deployment-architecture.md
-docs/decisions/architecture-v2-decisions.md
-```
-
-## 唯一下一任务
-
-```text
-V2-ARCH-DOCS-03
-开发架构、项目入口与状态同步
-```
-
-`V2-ARCH-DOCS-03` 是唯一下一任务。它仍需用户独立授权后才能启动；本次交接只冻结未来范围，不创建开发架构正文、不重写根 README，也不实际执行 DOCS-03。
-
-## 一、精确文件范围
-
-未来任务只允许：
-
-1. 创建 `docs/architecture/development-architecture.md`；
-2. 修改根 `README.md`；
-3. 修改 `docs/handoff/CURRENT_STATUS.md`。
-
-最终修改文件（changed files）必须精确为以上 3 个 Markdown。若 `development-architecture.md` 已存在，必须先审计并停止报告，不得覆盖或创建同义文件。
-
-不得在 DOCS-03 中修改本文件、`docs/handoff/RELEASE_HISTORY.md`、`docs/architecture/README.md`、其他架构正文或 ADR。
-
-## 二、开发架构文档要求
-
-### 2.1 文档定位和状态
-
-`development-architecture.md` 必须是同一套架构 V2 的开发视图，不建立第二套开发流程或架构事实源，并且：
-
-- 以当前 `main` 的代码、测试、Schema、Migration、配置和 package 命令作为当前（`current`）证据；
-- 以 `architecture-v2.md`、模块映射和已接受 ADR 作为已确认的目标（`target`）约束；
-- 将建议流程标记为建议（`proposed`），将仓库外流程和环境状态标记为“待核验”；
-- 明确区分当前（`current`）、目标（`target`）、建议（`proposed`）和“待核验”，不得把建议流程写成已经执行。
-
-### 2.2 分支、提交和 PR 生命周期
-
-至少覆盖以下受控流程：
-
-```text
-确认任务编号、基线和文件范围
-→ 创建本地 backup/* 回退分支
-→ 创建单任务工作分支
-→ 完成范围内改动和验证
-→ 保留一个同主题提交
-→ 推送工作分支
-→ 创建草稿 PR（Draft PR）
-→ 完成审查（Review）并关闭阻断项
-→ 经明确授权进入正式审查（Ready）
-→ 经明确授权合并（Merge）
-→ 同步本地 main 与 origin/main
-→ 验证后清理已合并工作分支
-```
-
-必须说明：
-
-- backup/* 只用于回退，不自动删除；
-- 草稿（Draft）、正式审查（Ready）、合并（Merge）是不同授权门禁；
-- 未经用户明确授权不得自动进入正式审查（Ready）、合并（Merge）或启动下一任务；
-- 合并后先验证 PR 和 main，再删除本地及远端工作分支；
-- 不使用 force push、admin 绕过或其他破坏性手段，除非任务单独、精确授权。
-
-### 2.3 已确认的长期协作模式
-
-#### Codex 主开发模式
-
-- Codex 是默认主开发和仓库执行者；
-- 覆盖 Domain、Contract、Application Service、Repository、API、UI、必要测试、文档和 Git／PR 流程；
-- 每次仍受当前任务编号、基线、允许文件、禁止范围、验证要求和停止条件限制；
-- 进入正式审查（Ready）、合并（Merge）、Migration、真实外部连接和正式发布必须获得用户对当前任务的明确授权；
-- “默认主开发”只表示默认执行者，不是对所有 Runtime、数据库、外部系统、backlog 或后续阶段的长期授权。
-
-#### ChatGPT 网页版
-
-- 负责任务目标设计、范围拆分和架构讨论；
-- 审查 Codex 回报和 PR 证据；
-- 协助用户判断进入正式审查（Ready）、合并（Merge）和后续任务；
-- 不根据计划、backlog 或模型建议自动授权 Codex 开发。
-
-#### Claude Code
-
-- 默认不参与；
-- 只有用户在当前任务中明确点名时，才作为临时独立复核工具或备用执行者；
-- 启用后必须服从 `AGENTS.md` 和统一治理规则；
-- 不得与 Codex 并发写入同一分支、文件或 Git 索引；
-- 单次启用不改变 Codex 的长期默认主开发地位。
-
-Git 仓库、已合并文档、代码、测试、Schema 和 Migration 才是事实源，模型输出不是事实源。架构决策、任务授权、高风险操作和正式发布仍由用户决定；任一工具都不得根据 backlog、计划或“下一步”描述自动启动未授权任务。
-
-### 2.4 开发顺序与依赖方向
-
-文档必须说明 Domain、Contract、Repository、API、UI 和 Migration 的开发顺序，并保持目标依赖方向：
-
-```text
-Domain 不变量
-→ 版本化 Contract
-→ Application Service／Port
-→ Repository／Adapter
-→ API
-→ UI
-→ 分层验证和发布门禁
-```
-
-涉及数据结构变化时，Migration 不得作为上述链路的附带步骤，必须单独设计、授权和验证：
-
-```text
-Migration 需求与所有权
-→ 独立设计和影响审计
-→ 明确授权
-→ Expand／兼容 Writer／回填／Enforce
-→ 升级验证
-→ 回退或前向修复验证
-→ Reader／API／UI 放行
-```
-
-不得改变 `MIG-01～MIG-06` 的既定顺序，也不得让共享 Migration 变成共享 Repository 或跨域事实所有权。
-
-### 2.5 测试分层与 Architecture CI
-
-至少覆盖：
-
-- Domain 单元测试；
-- Contract 兼容测试；
-- Repository／Adapter 集成测试；
-- API 授权、解析和错误语义测试；
-- UI 状态、权限和交互测试；
-- typecheck、静态检查、Build 和发布前验证的职责边界；
-- 当前只有局部架构边界测试、仓库内没有完整 Architecture CI 的当前（`current`）缺口；
-- 目标 Architecture CI 的依赖方向、冻结目录、Route 兼容白名单和失败策略；
-- 测试通过、Build 通过或 CI 通过均不能单独证明正式发布。
-
-DOCS-03 只记录当前证据和目标门禁，不创建 CI Workflow、测试、脚本或配置。
-
-### 2.6 Migration、Secret 和外部连接
-
-开发架构必须明确：
-
-- 每个 Migration 独立设计、独立授权、独立提交，并包含升级、备份、恢复、停止和回退条件；
-- Schema、Migration、Writer、Reader 和发布顺序必须可审计，不得在 docs-only 任务中实施；
-- `.env.local`、`DATABASE_URL`、Secret、Token、私钥和业务凭证不得读取或写入文档；
-- 外部 HIS、企业微信、AI 厂商、对象存储、CI、监控、测试服务器和生产环境只能通过获批 Port／Adapter 与独立环境任务接入；
-- 无法由仓库证明的环境、部署和运行状态统一标记为“待核验”。
-
-### 2.7 完成定义（Definition of Done）与正式发布尺度
-
-文档必须区分：
-
-- 代码存在；
-- Domain／Contract／Repository／API／UI 完成；
-- 测试或 Build 通过；
-- Capability、Mock、Demo 或 Seed 可用；
-- 已合并；
-- 已部署；
-- 已完成权限、持久化、数据、监控、回滚和业务验收；
-- 正式发布。
-
-完成定义（Definition of Done）至少包含范围、所有权、依赖方向、测试证据、权限、数据迁移、审计、发布证据和回滚条件。当前七线正式发布仍为 `0/7`，不得因文档、Capability、Mock、Demo、Seed、测试或代码存在而改写。
-
-## 三、根 README 重写要求
-
-根 `README.md` 只作为项目入口，至少包含：
-
-- 项目定位；
-- 当前模块化单体和七线状态摘要；
-- 本地启动前提与现有 package 命令；
-- 架构、开发、运维和交接文档导航；
-- 当前状态和唯一下一任务链接；
-- 当前事实、目标状态和待核验边界；
-- 不承载长篇 Phase 历史，历史统一链接到 `docs/handoff/RELEASE_HISTORY.md`；
-- 不把 `0/7`、Demo、Mock、Capability、测试通过或代码存在写成正式上线。
-
-不得在 README 中复制完整架构正文、发明新的启动命令、写入凭证示例值或把仓库外环境描述成当前事实。
-
-### 中文优先要求
-
-1. `development-architecture.md` 的标题、正文、状态说明和流程描述默认使用中文。
-2. 根 `README.md` 的面向人内容默认使用中文。
-3. Git、GitHub、API、代码、路径、字段、环境变量和技术栈名称可以保留英文原文。
-4. `current`、`target`、`proposed`、`planned`、`historical` 等架构状态标识可以保留，但必须在首次使用或上下文中附带中文解释。
-5. GitHub 状态在正文中优先写为“草稿（Draft）”“已进入正式审查（Ready）”“已合并（Merged）”。
-6. 历史文件进入 DOCS-03 允许范围并被修改时，普通英文标题、说明和状态应在不改变事实的前提下尽量中文化。
-7. 不得为了翻译历史文件修改 `docs/handoff/NEXT_TASK.md`、`docs/handoff/RELEASE_HISTORY.md`、其他架构正文或治理规则，也不得新增第 4 个修改文件。
-8. 不能安全翻译的英文应保留原文并补充中文说明；直接引语、日志、代码、命令、测试锁定字符串和兼容契约不得机械翻译。
-9. DOCS-03 验证必须检查新增或修改内容不存在无必要的整段英文模板残留。
-
-## 四、CURRENT_STATUS 同步要求
-
-DOCS-03 完成时只同步 `docs/handoff/CURRENT_STATUS.md` 的架构 V2 状态块，明确：
-
-- 六类架构文档全部完成；
-- `docs/architecture/development-architecture.md` 已创建；
-- 根 `README.md` 已重写为项目入口；
-- 候选后续阶段为 `V2-02B-MIG01-CLOSURE-PREFLIGHT`；
-- `V2-02B` 仍需后续独立 handoff 和用户明确授权，才能成为正式启动任务；
-- MIG-01、平台正式服务端授权、Knowledge、Analytics 和七线 `0/7` 等既有门禁保持不变。
-
-不得修改该状态块外的历史阶段记录。
-
-## 五、固定门禁和后续顺序
-
-- MIG-01 仅 A1 expand 已存在，A2、Writer／Guard、回填和 Enforce 尚未关闭；
-- Customers／System Reader 等待 MIG-01C；
+- MIG-01 当前只有 A1 Expand 已存在；
+- A2、`BASE-02B／BASE-02`、全部 Writer 双写与 Guard、MIG-01B 和 MIG-01C 尚未形成完整关闭证据；
+- Customers／Institution System Reader 等待 MIG-01C 和当前成员服务端 `tenantId + institutionId` 双键上下文；
 - Care 等待 MIG-02；
 - Knowledge 等待 MIG-03；
 - Conversations 等待 MIG-04；
 - Analytics Facts 等待 MIG-05；
 - Analytics Snapshot／五页等待 MIG-06 + AN-03C；
-- Workbench 最后接线；
+- Workbench 最后接线，只消费正式 Provider；
 - 平台正式服务端授权仍是独立缺口；
 - 七线正式发布仍为 `0/7`。
 
-后续候选顺序保持：
+## 唯一下一任务
 
 ```text
-V2-ARCH-DOCS-03
-→ V2-02B-MIG01-CLOSURE-PREFLIGHT
-→ V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT
-→ 后续既定顺序
+V2-02B-MIG01-CLOSURE-PREFLIGHT
+MIG-01 完整关闭链审计与实施切片冻结
 ```
 
-完成 DOCS-03 后只允许把 `V2-02B` 记录为候选后续阶段，不得在同一任务中启动；必须另建 handoff 任务完成正式切换。
+`V2-02B-MIG01-CLOSURE-PREFLIGHT` 是唯一下一任务，但尚未启动。必须由用户在后续任务中明确授权后，才可开展本文定义的 docs-only 静态预检。
 
-## 六、验证要求
+预检完成也不等于 MIG-01 已启动、正在实施或已经关闭，不等于真实机构级 Reader 已解锁，不构成任何 Schema、Migration、数据操作、Capability 或发布授权。
 
-未来任务必须验证：
+## 一、未来任务的精确文件范围
+
+未来 `V2-02B` 只允许创建：
+
+```text
+docs/architecture/v2-02b-mig01-closure-preflight.md
+```
+
+不得修改或创建其他文件。若该路径已经存在，必须先停止并报告，不得覆盖、复用同名历史内容或创建同义文档。
+
+未来预检文档是同一套架构 V2 的静态证据视图，不是第二套数据库、Migration、模块所有权、实施计划或运行事实源。
+
+## 二、任务定位与事实边界
+
+未来 `V2-02B` 只允许读取仓库内可验证的静态证据，用于回答：
+
+1. MIG-01 从 A1 到 C 的每个关闭单元目前具备哪些证据；
+2. 哪些表、Writer、Reader、Route、Repository 和测试受影响；
+3. 哪些单元已具备、部分具备、缺失、阻断或待确认；
+4. 后续独立实施 PR 应如何切分；
+5. 每个实施切片在什么条件下必须停止、回退或采用前向修复。
+
+当前 `main` 的代码、测试、Schema、Migration、配置和 package 命令决定 `current` 事实；`architecture-v2.md` 和已接受 ADR 决定最高级 `target` 约束；数据架构、模块映射、证据审计、七线基线和 handoff 只负责展开、核验和记录状态。发现冲突时必须同时记录实现事实与目标约束，不得静默覆盖任一事实层。
+
+仓库外数据库状态、实际执行 journal、行数、数据冲突、备份、恢复点、环境配置和发布状态均不能由本地仓库推断，事实统一标记为“待核验”；若缺少该事实会阻止关闭单元判定，该单元状态标记为“待确认”。
+
+## 三、MIG-01 固定关闭链
+
+未来预检必须按以下顺序审计，不得跳步、并行改写或因 A1 已存在而宣称 MIG-01 已关闭：
+
+```text
+MIG-01A1 Expand
+→ MIG-01A2 锚点 provisioning
+→ BASE-02B／BASE-02 双键上下文、scope revision、Guard 与全部 Writer 双写
+→ 审计 institution attribution 与模板 fail-closed
+→ MIG-01B 确定性回填、高水位追赶、冲突识别与清零
+→ MIG-01C 非空、外键、attribution 与 shape enforce
+→ 真实机构级 Reader 重新核验与后续独立放行
+```
+
+只有 MIG-01C 完成，且 `BASE-02` 当前成员服务端 `tenantId + institutionId` 双键上下文可用，MIG-01 才能标记关闭并启动真实机构级 Reader。预检文档不得提前改变这一门禁。
+
+## 四、必须审计的十类内容
+
+### 4.1 MIG-01A1 当前证据
+
+至少核对：
+
+- `drizzle/0038_mig_01a1_institution_isolation_expand.sql`；
+- Schema、Migration journal、相关测试和架构文档中的对应证据；
+- A1 只属于 Expand 的边界；
+- A1 是否只增加兼容结构，而未替代 A2、Writer 双写、回填或 Enforce；
+- 不得把新增列、索引或约束候选写成已经完成数据归属、回填或强约束。
+
+### 4.2 MIG-01A2 锚点 provisioning
+
+至少审计：
+
+- 租户、机构和成员锚点的来源及事实所有者；
+- provisioning 的候选入口、幂等要求和顺序；
+- 锚点缺失、冲突、停用或归属不明时的 fail-closed 条件；
+- 是否需要 revision 或上下文版本；
+- 哪些内容属于当前仓库证据，哪些仍是 `target`、`proposed` 或“待确认”。
+
+不得填写真实机构值、真实租户值、PII、凭证或环境数据。
+
+### 4.3 BASE-02B／BASE-02
+
+至少审计：
+
+- 当前成员服务端 `tenantId + institutionId` 双键上下文；
+- membership、anchor 和 provenance 的当前证据；
+- scope revision 或等价上下文版本；
+- 入口 Guard 和业务 Guard 的职责；
+- fail-closed、跨机构拒绝和陈旧上下文处理；
+- 全部 Writer 双写清单及每个 Writer 的所有者、入口和测试证据；
+- 旧 Writer、Seed、脚本、导入、维护任务或测试夹具是否会绕过双写。
+
+任何“部分存在”的组件都必须逐入口核验，不能据此宣称 `BASE-02B／BASE-02` 已完成。
+
+### 4.4 审计与模板保护
+
+至少审计：
+
+- 审计记录的 tenant attribution 与 institution attribution；
+- 平台／租户控制面 Audit 与机构业务数据面的 scope 边界；
+- 缺少机构归属时是否 fail-closed；
+- 模板、默认数据和共享配置是否可能被错误归属到业务机构；
+- 兼容写入是否保留可追溯 Source、Version、Evidence 和 Audit；
+- 当前统一 runtime 尚未被仓库证明的部分必须标记为“待确认”。
+
+### 4.5 MIG-01B
+
+至少冻结以下预检要求：
+
+- 确定性回填规则和稳定排序；
+- 每类存量数据的归属来源与不可判定处理；
+- 初始高水位、增量追赶和最终收敛窗口；
+- 双写期间新增或更新数据的追赶方式；
+- 冲突分类、重复归属、缺失锚点和跨机构污染识别；
+- 冲突清零、行数守恒和证据留存门槛；
+- 停止条件、回退条件和前向修复要求。
+
+不得执行回填、统计真实数据库数据或把仓库外结果写成当前事实。
+
+### 4.6 MIG-01C
+
+至少冻结以下 Enforce 预检：
+
+- `NOT NULL`／非空约束；
+- 外键及其删除、更新语义；
+- tenant 与 institution attribution 一致性；
+- shape enforce 或等价数据形态约束；
+- 约束增加前的零冲突与完整性证据；
+- 升级顺序、兼容窗口、停止条件；
+- 回退不可行时的前向修复策略；
+- Reader 重新核验所需的服务端授权和双键上下文证据。
+
+不得把目标约束、字段、索引或 Migration 编号写成已经存在。
+
+### 4.7 全部静态影响面
+
+预检必须形成可追溯清单，至少覆盖：
+
+- 所有受影响表；
+- 所有 Writer；
+- 所有 Reader；
+- 所有 Route；
+- 所有 Repository；
+- 所有相关测试；
+- 所有 Schema、Migration、脚本、导入、Seed、维护入口和 fixture 候选；
+- 每项的当前路径、事实所有者、证据位置、依赖和状态。
+
+共享 Migration 不等于共享 Repository，也不改变领域事实所有权。
+
+### 4.8 Migration 元数据与历史漂移
+
+必须核对并区分：
+
+- 仓库内 Migration journal 已到 `0038`；
+- 仓库内 snapshot 已到 `0026`；
+- 旧运维文档、旧测试或历史计划可能仍引用较早基线；
+- 上述 journal／snapshot 差异和历史漂移是否构成后续实施阻断；
+- 各环境数据库实际 Migration 执行状态／journal 只能标记为“待核验”。
+
+不得运行 `db:generate` 修正漂移，不得创建 `0039`，不得把仓库内 journal 等同于任何环境的实际执行状态。
+
+### 4.9 单元状态
+
+每个关闭单元必须且只能从以下状态中选择，并附路径和理由：
+
+- `已具备`：当前仓库有完整、相互一致且可追溯的静态证据；
+- `部分具备`：已有部分实现或证据，但尚不足以关闭；
+- `缺失`：当前仓库未找到要求的实现或证据；
+- `阻断`：存在必须先解决的冲突、门禁或安全问题；
+- `待确认`：仅凭仓库无法确定，或需要后续获批环境核验。
+
+测试通过、Build 通过、代码存在、Mock、Demo、Seed 或 Capability 均不能单独把单元标记为 `已具备`。
+
+### 4.10 后续独立实施 PR 冻结
+
+未来预检文档必须给出后续独立实施 PR 的精确队列，至少依次拆分：
+
+1. MIG-01A2 锚点 provisioning；
+2. `BASE-02B／BASE-02` 双键上下文、scope revision 与 Guard；
+3. 全部 Writer 双写与旧 Writer 封堵；
+4. 审计 attribution 和模板 fail-closed；
+5. MIG-01B 确定性回填与追赶；
+6. MIG-01C Enforce；
+7. 真实机构级 Reader 重新核验与独立放行。
+
+对每个候选实施 PR，必须冻结：
+
+- 任务目标和依赖；
+- 允许的文件类型与禁止范围；
+- Schema、Migration、runtime、测试和文档是否涉及；
+- 静态验证与未来环境验证要求；
+- 开始条件和完成证据；
+- 立即停止条件；
+- 可回退步骤或只能前向修复时的要求；
+- 是否需要用户、数据、环境、安全或发布的独立授权。
+
+这份队列只是未来切片建议，不构成任何实施授权。
+
+## 五、未来预检的停止条件
+
+遇到以下任一情况，未来 `V2-02B` 必须停止并报告，不得扩大文件范围或转入实现：
+
+- 基线、任务编号、唯一允许路径或 working tree 不符合授权；
+- 目标文档已存在；
+- 当前实现与已接受架构存在未能解释的冲突；
+- MIG-01A1、journal、snapshot、Schema 或测试证据相互矛盾；
+- 无法确定表、Writer、Reader、Route、Repository 或测试的完整影响面；
+- 需要读取凭证、连接数据库或核验真实环境才能继续；
+- 预检结论依赖创建 Schema、Migration、代码、测试、脚本或配置；
+- 需要启动 `V2-02C`、平台授权、真实 Reader、Capability 或旧机构任务；
+- 出现任何未获授权的文件改动或并发写入。
+
+## 六、未来预检的禁止范围
+
+未来 `V2-02B` 不得：
+
+- 修改 Schema 或 Migration；
+- 创建 `0039`；
+- 运行 `db:generate`、Migration、Seed、回填、对账或数据库命令；
+- 连接数据库、HIS、企业微信、AI 厂商、对象存储、CI、监控、测试服务器或生产环境；
+- 读取 `.env.local`、`DATABASE_URL`、Secret、Token、私钥、业务凭证、环境变量值、真实 manifest 值或 PII；
+- 修改 `src/**`、`drizzle/**`、`scripts/**`、`tests/**`、package、lock、配置或现有架构正文；
+- 创建真实 Reader、Writer、Guard、Route、Repository、API、UI、Provider、Adapter 或占位实现；
+- 开启 Capability；
+- 改变 MIG-01～MIG-06 的相对顺序；
+- 改变 Customers、Care、Knowledge、Conversations、Analytics 或 Workbench 的既定门禁；
+- 启动 `V2-02C`；
+- 恢复或启动任何机构端旧开发任务；
+- 自动进入正式审查（Ready）或自动合并（Merge）；
+- 因预检完成自动启动任何后续实施 PR。
+
+## 七、未来预检的验证与交付
+
+未来任务至少必须确认：
 
 1. `git diff --check` 通过；
-2. 修改文件（changed files）精确为 `development-architecture.md`、根 `README.md` 和 `CURRENT_STATUS.md`；
-3. 开发架构覆盖分支、提交、PR、协作职责、开发顺序、测试、Migration、Secret、Definition of Done 和发布尺度；
-4. 根 README 只承担项目入口职责，链接与现有 package 命令可在仓库验证；
-5. CURRENT_STATUS 明确六类架构文档完成，并只把 `V2-02B` 记录为候选；
-6. 当前（`current`）、目标（`target`）、建议（`proposed`）和“待核验”分离；
-7. `development-architecture.md` 准确引用 Codex 默认主开发治理；
-8. 不得继续把 Claude Code 写成默认主开发；
-9. 明确区分默认执行者、单任务授权和 Migration／外部连接／进入正式审查（Ready）／合并（Merge）／正式发布等高风险人工门禁；
-10. DOCS-03 不得再次修改 `AGENTS.md`、`CLAUDE.md`、`docs/ai-agent-governance.md`、`docs/agent-guardrails/**` 或 `.claude/skills/**`；
-11. 其他架构正文、handoff、ADR、源码、Schema、Migration、API、UI、配置、package 和 lock 修改均为 0；
-12. 未创建代码、目录、测试、CI Workflow、Schema、Migration、Seed 或占位实现；
-13. 未运行 Migration、Seed 或部署，未读取凭证，未连接数据库或外部环境；
-14. 提交后工作树干净（working tree clean），最终只保留一个同主题提交；
-15. 面向人内容以中文为主，允许保留的技术原文符合中文优先规则的白名单；
-16. 不存在固定英文状态模板或无必要的整段英文说明；
-17. 历史内容中文化未改变事实、技术契约、测试锁定字符串或兼容语义；
-18. 未因中文化扩大修改文件（changed files）范围；
-19. `current`、`target`、`proposed`、`planned`、`historical` 等技术状态具有中文解释或明确中文上下文。
+2. 修改文件精确为新建的 `docs/architecture/v2-02b-mig01-closure-preflight.md`；
+3. 文档完整覆盖本文件规定的十类审计内容；
+4. 所有单元使用 `已具备`、`部分具备`、`缺失`、`阻断` 或 `待确认`；
+5. 当前事实、目标约束、建议切片和仓库外待核验状态严格分离；
+6. 当前路径真实存在，目标路径和候选文件类型明确标记；
+7. journal `0038`、snapshot `0026` 和历史漂移已被审计；
+8. 未建立第二套数据库、Migration、Repository、模块所有权或运行事实源；
+9. runtime、Schema、Migration 修改均为 `0`；
+10. 未运行测试、Build、Migration、Seed、部署、`db:generate` 或数据库命令；
+11. 未读取凭证或环境变量值，未连接任何外部系统；
+12. 工作树在提交后干净，最终只有一个同主题提交；
+13. 只创建草稿 PR，不自动进入正式审查，不自动合并；
+14. 未启动 MIG-01、`V2-02C` 或任何机构端旧任务。
 
-本任务为 docs-only，不因文档任务运行全量测试或 Build。
-
-## 七、禁止范围
-
-未来 DOCS-03 禁止：
-
-- 修改 `docs/handoff/NEXT_TASK.md` 或 `docs/handoff/RELEASE_HISTORY.md`；
-- 修改 `docs/architecture/README.md`、其他架构正文或 ADR；
-- 再次修改 `AGENTS.md`、`CLAUDE.md`、`docs/ai-agent-governance.md`、`docs/agent-guardrails/**` 或 `.claude/skills/**`；
-- 修改 `src/**`、`drizzle/**`、`scripts/**`、`tests/**`；
-- 修改源码、Schema、Migration、API、UI、配置、package 或 lock；
-- 创建代码目录、空模块、占位 Port／Provider、Adapter、Repository、Runner、Scheduler、Worker、Queue 或 Cron；
-- 运行 Migration、Seed 或部署；
-- 读取环境变量值、Secret、Token、私钥或业务凭证；
-- 连接数据库、HIS、企业微信、AI 厂商、对象存储、CI、监控、测试服务器或生产环境；
-- 启动 `V2-02B`、`V2-02C` 或任何 Runtime；
-- 自动进入正式审查（Ready）或自动合并（Merge）。
-
-## 八、交付要求
-
-1. 从最新 `main` 创建独立 docs 分支和本地 backup/* 回退分支；
-2. 最终只保留一个同主题提交；
-3. 推送工作分支并创建草稿 PR（Draft PR）；
-4. PR 描述必须说明三文件范围、当前事实、目标流程、待核验事项和既有门禁；
-5. PR 描述必须说明 runtime、Schema、Migration 修改为 0，且未读取凭证或连接环境；
-6. 不自动进入正式审查（Ready），不自动合并；
-7. 不启动 `V2-02B`、`V2-02C` 或任何 Runtime；
-8. 最终报告分支、提交、草稿 PR（Draft PR）、修改文件（changed files）、验证结果、主要结论和仍需用户确认的后续交接（handoff）。
+未来预检的完成定义仅是：MIG-01 完整关闭条件、静态证据状态、影响面和后续实施切片被文档化并冻结。它不代表 MIG-01 已启动、实施或关闭。

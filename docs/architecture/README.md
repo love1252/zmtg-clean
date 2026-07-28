@@ -1,8 +1,8 @@
 # 智美天工架构文档索引
 
-- 任务：`V2-ARCH-DOCS-01`
+- 任务：`V2-ARCH-DOCS-03-HANDOFF-CLOSEOUT-TO-V2-02B`
 - 日期：`2026-07-28 CST +0800`
-- 审计基线：`9bfd7c5889832bd9c364b76338f614b120db9d5a`
+- 审计基线：`401a4fc5522c2ab6ca4dfe00791817ae1534360c`
 - 状态：`current`
 - 文档性质：架构导航索引，不是第二套架构事实源
 - runtime、Schema、Migration、API、UI 修改：`0`
@@ -95,17 +95,14 @@ MIG-01A1
 | [`data-architecture.md`](./data-architecture.md) | `current + target + proposed` | 数据事实所有权、机构隔离、来源、证据和 MIG 序列 |
 | [`software-architecture.md`](./software-architecture.md) | `current + target + proposed` | 模块分层、依赖方向、Port／Adapter 和兼容层 |
 | [`deployment-architecture.md`](./deployment-architecture.md) | `current + target + proposed` | 当前仓库部署证据、目标环境、发布、回滚和待核验事项 |
+| [`development-architecture.md`](./development-architecture.md) | `current + target + proposed` | 开发协作、任务与 PR 生命周期、分层开发、测试、Migration 门禁和完成定义 |
 | [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md) | `target` | 已接受架构决策及其约束 |
 
-## 6. 后续架构视图
+## 6. 架构视图完成状态
 
-以下文件在本阶段只保留计划入口，不得以空文件或占位正文提前创建：
+业务、应用、数据、软件、部署、开发六类架构视图已经完成 `6/6`。`V2-ARCH-DOCS-03` 已通过 PR #787 合并，开发架构、根 `README.md` 项目入口和 `CURRENT_STATUS` 同步均已完成，不再标记为 `planned`。
 
-| 阶段 | 计划文档 | 状态 |
-|---|---|---|
-| `V2-ARCH-DOCS-03` | `development-architecture.md` | `planned` |
-| `V2-ARCH-DOCS-03` | 根 `README.md` 重写 | `planned` |
-| `V2-ARCH-DOCS-03` | `docs/handoff/CURRENT_STATUS.md` 收口同步 | `planned` |
+文档完成只代表同一套架构 V2 的视图与入口已经建立，不代表 runtime、Schema、Migration、API、UI、Capability、环境或七线正式发布已经完成。
 
 ## 7. 历史资料
 
@@ -160,6 +157,13 @@ MIG-01A1
 3. `docs/operations/local-development.md`
 4. `scripts/README.md`
 
+### 开发与协作
+
+1. [`development-architecture.md`](./development-architecture.md)
+2. [`../../AGENTS.md`](../../AGENTS.md)
+3. [`../ai-agent-governance.md`](../ai-agent-governance.md)
+4. [`../agent-guardrails/zmtg-pr-gatekeeper.md`](../agent-guardrails/zmtg-pr-gatekeeper.md)
+
 ## 10. 架构文档更新规则
 
 1. 先核对当前 `main`，再修改架构文档；
@@ -174,14 +178,22 @@ MIG-01A1
 ## 11. 当前实施顺序
 
 ```text
-V2-ARCH-DOCS-03
-→ V2-02B-MIG01-CLOSURE-PREFLIGHT
+V2-02B-MIG01-CLOSURE-PREFLIGHT
 → V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT
 → 最小 Architecture／Quality CI
-→ MIG-01A2／Writer 双写／MIG-01B／MIG-01C
-→ 七线垂直切片
-→ 外部接入正式发布
-→ 旧实现退出
+→ MIG-01 后续独立数据 PR
+→ 后续既定顺序
+```
+
+`V2-02B` 是唯一下一任务，但尚未启动；它只允许在获得后续明确授权后执行 docs-only 静态预检，不构成 MIG-01 runtime 实施许可。后续既定数据顺序保持：
+
+```text
+MIG-01
+→ MIG-02
+→ MIG-03
+→ MIG-04
+→ MIG-05
+→ MIG-06
 ```
 
 ## 12. 本文禁止的解释
