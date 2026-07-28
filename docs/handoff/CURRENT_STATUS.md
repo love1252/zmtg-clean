@@ -6,29 +6,31 @@
 
 - 更新日期：2026-07-28
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-ARCH-DOCS-02` 已完成
-- 结果：V2-ARCH-DOCS-02 已完成；数据架构、软件架构与部署架构已建设
-- 完成 PR：#785
-- merge commit：`1159be40e25e4a36639731c81fedf826bc26e479`
-- 本阶段新增完成文档：
-  - `docs/architecture/data-architecture.md`
-  - `docs/architecture/software-architecture.md`
-  - `docs/architecture/deployment-architecture.md`
-- 架构视图完成度：六类架构视图已完成 5 类，开发架构尚未完成
+- 当前阶段：`V2-ARCH-DOCS-03` 已完成
+- 结果：开发架构已创建；根 README 已从 Phase 历史账本重写为项目入口；本状态块已同步
+- 本阶段交付 PR：#787
+- 本阶段 PR Head：以 GitHub PR #787 的记录为准；合并状态与 merge commit 将在本 PR 合并后的独立 handoff 中回填
+- 本阶段完成文档：`docs/architecture/development-architecture.md`
+- 架构视图完成度：业务、应用、数据、软件、部署、开发共 6/6
+- 默认协作：Codex 为默认主开发和仓库执行者；ChatGPT 网页版负责设计与审查；Claude Code 仅在用户明确点名时启用
+- 治理语言：面向人的仓库文档、PR 与回报默认中文，中文优先治理已生效
 - runtime 修改：0
 - Schema／Migration 修改：0
 - MIG-01 状态：仅 A1 expand 已存在；A2、BASE-02／writer 门禁、B 回填和 C enforce 尚未关闭
-- 真实 reader 基础门禁：MIG-01C + 当前成员服务端双键上下文
+- Customers／Institution System Reader 门禁：MIG-01C + 当前成员服务端双键上下文
+- Care 门禁：等待 MIG-02
 - 平台正式服务端授权：仍为独立缺口，留待 `V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT`
 - Knowledge 正式 reader 追加门禁：MIG-03
+- Conversations 门禁：等待 MIG-04
 - Analytics 事实／确定性聚合门禁：MIG-05
 - Analytics snapshot repository/API、正式 providers 与五页 UI 门禁：MIG-06 + AN-03C
+- Workbench 门禁：最后接线，只消费正式 Provider
 - API 路径政策：新实现默认 v1；旧七线非版本化端点仅允许逐路由薄兼容例外
 - 七线业务综合完成度：约 25%（规划估算）
 - 公共底座完成度：约 65%（规划估算）
 - 正式发布：0/7
-- 下一阶段：`V2-ARCH-DOCS-03` 开发架构、根 README 与状态同步
-- 后续顺序：`V2-ARCH-DOCS-03 → V2-02B-MIG01-CLOSURE-PREFLIGHT → V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT`
+- 候选后续阶段：`V2-02B-MIG01-CLOSURE-PREFLIGHT`
+- 授权状态：`V2-02B` 尚未获得启动授权；必须通过后续独立 handoff 和用户明确授权，才能成为唯一下一任务
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->
