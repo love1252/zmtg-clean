@@ -1146,8 +1146,8 @@ describe('机构业务页面壳', () => {
     resolveCreate?.(jsonResponse({ record: { ...customerRecord, id: 'cust_created' } }));
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: '新建客户' })).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
     });
-    expect(trigger).toHaveFocus();
   });
 
   it('客户中心展示低敏导入预检、失败原因和执行结果', async () => {
