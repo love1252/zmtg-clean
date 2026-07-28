@@ -1,0 +1,80 @@
+name: 架构与质量门禁
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: architecture-quality-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  architecture-quality:
+    name: 最小架构与质量门禁
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      TZ: Asia/Shanghai
+
+    steps:
+      - name: 检出 PR Head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20.20.2"
+
+      - name: 配置 pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.0.0 --activate
+
+      - name: 核对运行环境
+        shell: bash
+        run: |
+          node_version="$(node --version)"
+          icu_version="$(node -p 'process.versions.icu')"
+          printf 'Node: %s\n' "$node_version"
+          printf 'ICU: %s\n' "$icu_version"
+          printf 'TZ: %s\n' "$TZ"
+
+          if [[ "$node_version" != "v20.20.2" ]]; then
+            printf 'Node 版本不符合预期：%s\n' "$node_version" >&2
+            exit 1
+          fi
+
+          if [[ "$TZ" != "Asia/Shanghai" ]]; then
+            printf 'TZ 不符合预期：%s\n' "$TZ" >&2
+            exit 1
+          fi
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 验证架构检查器
+        run: pnpm check:architecture:test
+
+      - name: 执行增量架构检查
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: pnpm check:architecture -- --base "$BASE_SHA" --head "$HEAD_SHA"
+
+      - name: 代码检查
+        run: pnpm lint
+
+      - name: 类型检查
+        run: pnpm typecheck
+
+      - name: 完整测试
+        run: pnpm test
+
+      - name: 构建
+        run: pnpm build
