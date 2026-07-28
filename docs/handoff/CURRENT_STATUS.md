@@ -6,12 +6,19 @@
 
 - 更新日期：2026-07-28
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-ARCH-DOCS-00`
-- 结果：V2-01 已完成；代码证据审计与三阶段架构文档建设顺序已校准
+- 当前阶段：`V2-ARCH-DOCS-01` 已完成
+- 结果：V2-ARCH-DOCS-01 已完成；架构索引、业务架构与应用架构已建设
+- 完成 PR：#783
+- merge commit：`47136da59c5d4cfe7a8727f4f8c2c1d12a547213`
+- 已完成文档：
+  - `docs/architecture/README.md`
+  - `docs/architecture/business-architecture.md`
+  - `docs/architecture/application-architecture.md`
 - runtime 修改：0
 - Schema／Migration 修改：0
 - MIG-01 状态：仅 A1 expand 已存在；A2、BASE-02／writer 门禁、B 回填和 C enforce 尚未关闭
 - 真实 reader 基础门禁：MIG-01C + 当前成员服务端双键上下文
+- 平台正式服务端授权：仍为独立缺口，留待 `V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT`
 - Knowledge 正式 reader 追加门禁：MIG-03
 - Analytics 事实／确定性聚合门禁：MIG-05
 - Analytics snapshot repository/API、正式 providers 与五页 UI 门禁：MIG-06 + AN-03C
@@ -19,8 +26,8 @@
 - 七线业务综合完成度：约 25%（规划估算）
 - 公共底座完成度：约 65%（规划估算）
 - 正式发布：0/7
-- 下一阶段：`V2-ARCH-DOCS-01` 业务架构、应用架构与架构索引建设
-- 后续顺序：`V2-ARCH-DOCS-01 → V2-ARCH-DOCS-02 → V2-ARCH-DOCS-03 → V2-02B → V2-02C`
+- 下一阶段：`V2-ARCH-DOCS-02` 数据架构、软件架构与部署架构
+- 后续顺序：`V2-ARCH-DOCS-02 → V2-ARCH-DOCS-03 → V2-02B-MIG01-CLOSURE-PREFLIGHT → V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT`
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->
