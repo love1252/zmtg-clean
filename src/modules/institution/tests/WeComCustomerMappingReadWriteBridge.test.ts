@@ -5,6 +5,40 @@ import { POST } from '@/app/api/institution/wecom/customer-mapping-reviews/[mapp
 import { DEMO_SESSION_COOKIE, encodeDemoSession } from '@/modules/auth/server/demo-session';
 
 const origin = 'http://localhost';
+const capabilityDisabledPayload = Object.freeze({ code: 'capability_disabled' });
+
+const getForbiddenFields = [
+  'mappingId',
+  'mappingVersion',
+  'mappingReviewStatus',
+  'mappingStatus',
+  'manualReviewStatus',
+  'mockDemo',
+  'candidates',
+] as const;
+
+const postForbiddenFields = [
+  ...getForbiddenFields,
+  'sourceKind',
+  'dataMode',
+  'candidateReference',
+  'authorizationStatus',
+  'providerStatus',
+  'confidenceLevel',
+  'conflictSummary',
+  'nextStatus',
+  'previousStatus',
+  'nextVersion',
+  'previousVersion',
+  'idempotentReplay',
+  'idempotencyKey',
+  'auditSummary',
+  'acceptedMutationCount',
+  'replayCount',
+  'autoMergePerformed',
+  'realCustomerRelationshipWritten',
+  'persistenceMode',
+] as const;
 
 function getRequest(tenantId: string, institutionId: string) {
   return new Request(`${origin}/api/institution/wecom/customer-mapping-candidates`, {
@@ -25,7 +59,23 @@ function getRequest(tenantId: string, institutionId: string) {
   });
 }
 
-describe('WeCom customer mapping default read/write runtime bridge', () => {
+async function expectCapabilityDisabled(
+  response: Response,
+  forbiddenFields: readonly string[],
+) {
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+
+  const body = await response.json() as Record<string, unknown>;
+  expect(body).toEqual(capabilityDisabledPayload);
+  for (const field of forbiddenFields) {
+    expect(body).not.toHaveProperty(field);
+  }
+
+  return body;
+}
+
+describe('企业微信客户映射默认 GET／POST Route 能力关闭一致性', () => {
   it.each([
     [
       'trial-tenant-yunlan',
@@ -64,20 +114,16 @@ describe('WeCom customer mapping default read/write runtime bridge', () => {
       'default-bridge-qingmang-01',
     ],
   ] as const)(
-    '%s 的默认 GET tuple 提交到已关闭 POST 时不产生任何 mapping 事实变化',
+    '%s 的默认 GET／POST Route 均保持能力关闭，不建立 read/write bridge',
     async (tenantId, institutionId, mappingId, idempotencyKey) => {
       const request = getRequest(tenantId, institutionId);
-      const initial = await (await GET(request)).json();
-      expect(initial).toMatchObject({
-        mappingId,
-        mappingVersion: 0,
-        mappingReviewStatus: 'pending_review',
-        mappingStatus: 'manual_review_required',
-        manualReviewStatus: 'required',
-      });
+      const initial = await expectCapabilityDisabled(
+        GET(request),
+        getForbiddenFields,
+      );
 
       const mutationRequest = new Request(
-        `${origin}/api/institution/wecom/customer-mapping-reviews/${initial.mappingId}/actions`,
+        `${origin}/api/institution/wecom/customer-mapping-reviews/${mappingId}/actions`,
         {
           method: 'POST',
           headers: {
@@ -88,40 +134,34 @@ describe('WeCom customer mapping default read/write runtime bridge', () => {
           },
           body: JSON.stringify({
             action: 'approve_candidate',
-            expectedVersion: initial.mappingVersion,
+            expectedVersion: 0,
             idempotencyKey,
             reasonCode: 'manual_evidence_confirmed',
           }),
         },
       );
       const mutation = await POST(mutationRequest.clone(), {
-        params: Promise.resolve({ mappingId: initial.mappingId }),
+        params: Promise.resolve({ mappingId }),
       });
-      expect(mutation.status).toBe(503);
-      expect(mutation.headers.get('cache-control')).toBe('no-store');
-      const mutationBody = await mutation.json();
-      expect(mutationBody).toEqual({ code: 'capability_disabled' });
-      expect(mutationBody).not.toHaveProperty('mockDemo');
-      expect(mutationBody).not.toHaveProperty('nextStatus');
-      expect(mutationBody).not.toHaveProperty('nextVersion');
-      expect(mutationBody).not.toHaveProperty('idempotentReplay');
-      expect(mutationBody).not.toHaveProperty('mappingId');
+      const mutationBody = await expectCapabilityDisabled(
+        mutation,
+        postForbiddenFields,
+      );
 
       const replay = await POST(mutationRequest.clone(), {
-        params: Promise.resolve({ mappingId: initial.mappingId }),
+        params: Promise.resolve({ mappingId }),
       });
-      expect(replay.status).toBe(503);
-      expect(replay.headers.get('cache-control')).toBe('no-store');
-      expect(await replay.json()).toEqual({ code: 'capability_disabled' });
+      const replayBody = await expectCapabilityDisabled(
+        replay,
+        postForbiddenFields,
+      );
+      expect(replayBody).toEqual(mutationBody);
 
-      const next = await (await GET(getRequest(tenantId, institutionId))).json();
-      expect(next).toMatchObject({
-        mappingId: initial.mappingId,
-        mappingVersion: initial.mappingVersion,
-        mappingReviewStatus: initial.mappingReviewStatus,
-        mappingStatus: 'manual_review_required',
-        manualReviewStatus: 'required',
-      });
+      const next = await expectCapabilityDisabled(
+        GET(getRequest(tenantId, institutionId)),
+        getForbiddenFields,
+      );
+      expect(next).toEqual(initial);
     },
   );
 });
