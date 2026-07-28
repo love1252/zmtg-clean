@@ -1956,7 +1956,7 @@ function expectSafeTreatmentSummaryEditBody(body: Record<string, unknown>) {
 }
 
 async function expectMetric(label: string, value: string) {
-  const metricCard = screen.getByText(label).closest('article');
+  const metricCard = (await screen.findByText(label)).closest('article');
   expect(metricCard).not.toBeNull();
   expect(await within(metricCard as HTMLElement).findByText(value)).toBeInTheDocument();
 }
@@ -2528,6 +2528,7 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByText('系统与数据详情'));
     expect(screen.getByTestId('dashboard-system-details')).toHaveAttribute('open');
     expect(screen.getByRole('heading', { name: '知识库只读入口' })).toBeInTheDocument();
+    expect(await screen.findByText('知识库只读入口已就绪')).toBeInTheDocument();
     expect(screen.getByText('只读入口')).toBeInTheDocument();
     expect(screen.getAllByText('未接入真实数据').length).toBeGreaterThan(0);
     expect(screen.getByText('只调用现有 GET API')).toBeInTheDocument();
@@ -2538,7 +2539,6 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('不读取凭证')).toBeInTheDocument();
     expect(screen.getByText('不使用真实业务个人数据')).toBeInTheDocument();
     expect(screen.getByText('不展示智能推断细节')).toBeInTheDocument();
-    expect(await screen.findByText('知识库只读入口已就绪')).toBeInTheDocument();
     expect(screen.getAllByText('ready / readonly').length).toBeGreaterThan(0);
     expect(screen.getByText('知识库只读入口API 可用于低敏只读预览')).toBeInTheDocument();
     expect(screen.getByText('知识库只读入口API 契约')).toBeInTheDocument();
@@ -2568,7 +2568,9 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('低敏导入客户')).toBeInTheDocument();
     expect(screen.getByText('当前暂无低敏导入客户，可在客户中心使用预检 API 后执行合法行导入。')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'workspace dashboard readonly aggregation' })).toBeInTheDocument();
-    expect(screen.getByText('workspace dashboard readonly aggregation 已就绪')).toBeInTheDocument();
+    expect(
+      await screen.findByText('workspace dashboard readonly aggregation 已就绪'),
+    ).toBeInTheDocument();
     expect(screen.getByText('businessLoopSummary')).toBeInTheDocument();
     expect(screen.getByText('managementConfigSummary')).toBeInTheDocument();
     expect(screen.getByText('knowledgeGovernanceSummary')).toBeInTheDocument();
@@ -2888,9 +2890,9 @@ describe('工作台入口页面', () => {
 
     expect(await knowledgeBaseEntryView.findByText('知识库只读入口已就绪')).toBeInTheDocument();
     expect(knowledgeBaseEntryView.getByText('只读搜索 / 受控本地索引')).toBeInTheDocument();
-    expect(knowledgeBaseEntryView.getByLabelText('知识库只读搜索查询')).toBeInTheDocument();
+    expect(await knowledgeBaseEntryView.findByLabelText('知识库只读搜索查询')).toBeInTheDocument();
 
-    fireEvent.change(knowledgeBaseEntryView.getByLabelText('知识库只读搜索查询'), {
+    fireEvent.change(await knowledgeBaseEntryView.findByLabelText('知识库只读搜索查询'), {
       target: { value: '水光 护理' },
     });
 
@@ -2931,7 +2933,7 @@ describe('工作台入口页面', () => {
       name: '知识库只读入口',
     })).at(-1)?.closest('section');
     const emptyEntryView = within(emptyEntry as HTMLElement);
-    fireEvent.change(emptyEntryView.getByLabelText('知识库只读搜索查询'), {
+    fireEvent.change(await emptyEntryView.findByLabelText('知识库只读搜索查询'), {
       target: { value: '无结果' },
     });
     expect(await emptyEntryView.findByText('暂无只读搜索结果')).toBeInTheDocument();
@@ -2948,7 +2950,7 @@ describe('工作台入口页面', () => {
       name: '知识库只读入口',
     })).at(-1)?.closest('section');
     const errorEntryView = within(errorEntry as HTMLElement);
-    fireEvent.change(errorEntryView.getByLabelText('知识库只读搜索查询'), {
+    fireEvent.change(await errorEntryView.findByLabelText('知识库只读搜索查询'), {
       target: { value: '错误' },
     });
     expect(await errorEntryView.findByText('知识库只读搜索暂时不可用')).toBeInTheDocument();
@@ -2963,7 +2965,7 @@ describe('工作台入口页面', () => {
       name: '知识库只读入口',
     })).at(-1)?.closest('section');
     const pendingEntryView = within(pendingEntry as HTMLElement);
-    fireEvent.change(pendingEntryView.getByLabelText('知识库只读搜索查询'), {
+    fireEvent.change(await pendingEntryView.findByLabelText('知识库只读搜索查询'), {
       target: { value: '等待' },
     });
     expect(await pendingEntryView.findByText('正在加载知识库只读搜索...')).toBeInTheDocument();
@@ -3208,8 +3210,8 @@ describe('工作台入口页面', () => {
     expect(screen.getByText('唐以沫')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看详情 沈知夏' }));
     const drawer = await screen.findByRole('dialog', { name: '客户详情时间线' });
+    expect(await within(drawer).findByText('光子嫩肤治疗预约')).toBeInTheDocument();
     expect(within(drawer).getAllByText('沈知夏').length).toBeGreaterThan(0);
-    expect(within(drawer).getByText('光子嫩肤治疗预约')).toBeInTheDocument();
     expect(within(drawer).getByText('光子嫩肤 · 术后即时护理')).toBeInTheDocument();
     expect(within(drawer).getAllByText('D3 光子术后回访').length).toBeGreaterThan(0);
     fireEvent.click(within(drawer).getByRole('button', { name: '关闭客户详情' }));
@@ -3279,8 +3281,9 @@ describe('工作台入口页面', () => {
     expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
 
-    expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
-    expect(screen.getAllByText('云澜轻美诊所').length).toBeGreaterThan(0);
+    const yunlanTenantLabels = await screen.findAllByText('云澜轻美诊所');
+    expect(screen.getByRole('heading', { name: '租户管理' })).toBeInTheDocument();
+    expect(yunlanTenantLabels.length).toBeGreaterThan(0);
     expect(screen.getAllByText('柏悦皮肤管理中心').length).toBeGreaterThan(0);
     expect(screen.getAllByText('星禾医美门诊').length).toBeGreaterThan(0);
     expect(screen.getAllByText('予白皮肤管理').length).toBeGreaterThan(0);
@@ -3641,8 +3644,8 @@ describe('工作台入口页面', () => {
 
     const dialog = await screen.findByRole('dialog', { name: '客户详情时间线' });
     const drawer = within(dialog);
+    expect((await drawer.findAllByText('Phase19 作废时间线摘要')).length).toBeGreaterThan(0);
     expect(drawer.getByText('治疗后结构化摘要')).toBeInTheDocument();
-    expect(drawer.getAllByText('Phase19 作废时间线摘要').length).toBeGreaterThan(0);
     expect(drawer.getAllByText('已作废').length).toBeGreaterThan(0);
     expect(drawer.getByText('作废不是删除，该治疗摘要仅保留历史追溯。')).toBeInTheDocument();
     expect(drawer.getByText('不再作为后续运营依据，也不会主动向客户发送消息。')).toBeInTheDocument();
@@ -3984,7 +3987,8 @@ describe('工作台入口页面', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
 
-    expect(await screen.findByRole('dialog', { name: '客户详情时间线' })).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: '客户详情时间线' });
+    const auditEvent = await within(dialog).findByText('audit_phase7_smoke');
     expect(screen.getAllByText('脱敏手机号：138****1252').length).toBeGreaterThan(0);
     expect(screen.getAllByText('脱敏病历号：MR****525').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Phase5 预约复诊').length).toBeGreaterThan(0);
@@ -4006,7 +4010,7 @@ describe('工作台入口页面', () => {
     expect(screen.getAllByText('术后关怀').length).toBeGreaterThan(0);
     expect(screen.getByText('Phase12 光电修复 · Phase12 D7 复诊')).toBeInTheDocument();
     expect(screen.getByText('审计：read')).toBeInTheDocument();
-    expect(screen.getByText('audit_phase7_smoke')).toBeInTheDocument();
+    expect(auditEvent).toBeInTheDocument();
     expect(screen.getAllByText('allowed / allowed_by_policy').length).toBeGreaterThan(0);
 
     const timelineCall = fetchMock.mock.calls.find(
@@ -4042,9 +4046,10 @@ describe('工作台入口页面', () => {
     expect(await screen.findByText('Phase5 客户A')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看详情 Phase5 客户A' }));
 
-    expect(await screen.findByRole('dialog', { name: '客户详情时间线' })).toBeInTheDocument();
-    expect(screen.getByText('治疗后结构化摘要')).toBeInTheDocument();
-    expect(screen.getByText('暂无治疗后结构化摘要')).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: '客户详情时间线' });
+    const drawer = within(dialog);
+    expect(await drawer.findByText('暂无治疗后结构化摘要')).toBeInTheDocument();
+    expect(drawer.getByText('治疗后结构化摘要')).toBeInTheDocument();
   });
 
   it('机构入口 smoke 覆盖治疗摘要结构化录入成功后刷新时间线', async () => {
@@ -4060,7 +4065,7 @@ describe('工作台入口页面', () => {
 
     const drawer = await screen.findByRole('dialog', { name: '客户详情时间线' });
     const drawerView = within(drawer);
-    fireEvent.click(drawerView.getByRole('button', { name: '添加治疗摘要' }));
+    fireEvent.click(await drawerView.findByRole('button', { name: '添加治疗摘要' }));
 
     expect(drawerView.getByLabelText('治疗时间')).toBeInTheDocument();
     expect(drawerView.getByLabelText('治疗项目')).toBeInTheDocument();
@@ -4119,7 +4124,7 @@ describe('工作台入口页面', () => {
 
     const drawer = await screen.findByRole('dialog', { name: '客户详情时间线' });
     const drawerView = within(drawer);
-    fireEvent.click(drawerView.getByRole('button', { name: '添加治疗摘要' }));
+    fireEvent.click(await drawerView.findByRole('button', { name: '添加治疗摘要' }));
     fillTreatmentSummaryForm(drawer);
     fireEvent.click(drawerView.getByRole('button', { name: '保存治疗摘要' }));
 
@@ -4290,7 +4295,7 @@ describe('工作台入口页面', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'AI 服务使用' }));
 
     expect(await screen.findByRole('heading', { name: 'AI 服务使用' })).toBeInTheDocument();
-    expect(screen.getByText('AI 服务使用次数')).toBeInTheDocument();
+    expect(await screen.findByText('AI 服务使用次数')).toBeInTheDocument();
     expect(screen.getByText('AI 服务额度使用量')).toBeInTheDocument();
     expect(screen.getAllByText('成功率').length).toBeGreaterThan(0);
     expect(screen.getByText('未完成调用')).toBeInTheDocument();
@@ -4577,7 +4582,7 @@ describe('工作台入口页面', () => {
     render(<OpenPlatformPage />);
 
     expect(await screen.findByRole('heading', { name: '平台总览' })).toBeInTheDocument();
-    expect(screen.getByText('有效套餐覆盖率')).toBeInTheDocument();
+    expect(await screen.findByText('有效套餐覆盖率')).toBeInTheDocument();
     expect(screen.getByText('拒绝审计信号')).toBeInTheDocument();
     expect(screen.getByText('治理工作队列')).toBeInTheDocument();
     expect(screen.getByText('能力边界')).toBeInTheDocument();
@@ -4616,7 +4621,7 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AI 积分规则' }));
 
     expect(await screen.findByRole('heading', { name: 'AI 积分计量规则' })).toBeInTheDocument();
-    expect(screen.getByText('v06-stage-verify-workspace')).toBeInTheDocument();
+    expect(await screen.findByText('v06-stage-verify-workspace')).toBeInTheDocument();
     expect(screen.getByText('deepseek-v4-flash')).toBeInTheDocument();
     expect(container.textContent ?? '').not.toMatch(/sk_test_ai_credits_rule_should_not_render|apiKey|baseUrl|Authorization|rawResponse|signedUrl|storageKey/i);
 
@@ -4690,7 +4695,9 @@ describe('工作台入口页面', () => {
     fireEvent.click(within(desktopNav).getByRole('button', { name: '租户管理' }));
 
     expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/tenants', { cache: 'no-store' });
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/tenants', { cache: 'no-store' }),
+    );
 
     fireEvent.click(screen.getByRole('button', { name: '展开侧边栏' }));
 
@@ -4711,10 +4718,11 @@ describe('工作台入口页面', () => {
 
     expect(screen.getByText('正在加载租户管理数据...')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
+    const demoInstitutionLabels = await screen.findAllByText('智美天工演示机构');
     expect(screen.queryByRole('heading', { name: '商业化健康' })).not.toBeInTheDocument();
     expect(screen.queryByText('套餐覆盖率')).not.toBeInTheDocument();
     expect(screen.queryByText('暂无需要收尾关注的商业化健康信号')).not.toBeInTheDocument();
-    expect(screen.getAllByText('智美天工演示机构').length).toBeGreaterThan(0);
+    expect(demoInstitutionLabels.length).toBeGreaterThan(0);
     expect(screen.getByText('运行中')).toBeInTheDocument();
     expect(screen.getByText('成长版')).toBeInTheDocument();
     expect(screen.getByText('套餐编号：growth-care')).toBeInTheDocument();
@@ -4751,11 +4759,12 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByRole('button', { name: '租户管理' }));
 
     expect(await screen.findByRole('heading', { name: '租户管理' })).toBeInTheDocument();
+    const riskTenantLabels = await screen.findAllByText('Phase11 配额风险机构');
     expect(screen.queryByRole('heading', { name: '商业化健康' })).not.toBeInTheDocument();
     expect(screen.queryByText('只读运营辅助')).not.toBeInTheDocument();
     expect(screen.queryByText('套餐覆盖率')).not.toBeInTheDocument();
     expect(screen.queryByText(/quota denied/)).not.toBeInTheDocument();
-    expect(screen.getAllByText('Phase11 配额风险机构').length).toBeGreaterThan(0);
+    expect(riskTenantLabels.length).toBeGreaterThan(0);
     expect(screen.getAllByText('Phase11 配置缺失机构').length).toBeGreaterThan(0);
 
     expect(fetchMock).toHaveBeenCalledWith('/api/open-platform/tenants', { cache: 'no-store' });
@@ -4806,13 +4815,14 @@ describe('工作台入口页面', () => {
     fireEvent.click(screen.getByRole('button', { name: '平台审计日志' }));
 
     expect(await screen.findByRole('heading', { name: '平台审计日志' })).toBeInTheDocument();
+    const platformAuditEvent = await screen.findByText('audit_phase8_platform');
     expect(screen.queryByRole('heading', { name: '开放平台基础治理' })).not.toBeInTheDocument();
     expect(screen.queryByText('租户隔离原则')).not.toBeInTheDocument();
     expect(screen.queryByText('权限样例矩阵')).not.toBeInTheDocument();
     expect(screen.queryByText('连接生命周期')).not.toBeInTheDocument();
     expect(screen.queryByText('审计事件词汇')).not.toBeInTheDocument();
     expect(screen.getByText(/只展示白名单字段/)).toBeInTheDocument();
-    expect(screen.getByText('audit_phase8_platform')).toBeInTheDocument();
+    expect(platformAuditEvent).toBeInTheDocument();
     expect(screen.getByText('租户 ID：demo-tenant-001')).toBeInTheDocument();
     expect(screen.getByText('资源类型：客户')).toBeInTheDocument();
     expect(screen.getByText('结果：通过')).toBeInTheDocument();

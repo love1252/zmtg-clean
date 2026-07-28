@@ -272,6 +272,25 @@ export function toInstitutionBusinessDate(input: {
     return { ok: false, reasonCode: 'invalid_instant' };
   }
 
+  if (input.timeZone === 'UTC') {
+    const instant = new Date(timestamp);
+    const businessDate = localDateFromParts(
+      instant.getUTCFullYear(),
+      instant.getUTCMonth() + 1,
+      instant.getUTCDate(),
+    );
+    const parsedBusinessDate = parseAnalyticsLocalDate(businessDate);
+    if (
+      !parsedBusinessDate ||
+      parsedBusinessDate.year !== instant.getUTCFullYear() ||
+      parsedBusinessDate.month !== instant.getUTCMonth() + 1 ||
+      parsedBusinessDate.day !== instant.getUTCDate()
+    ) {
+      return { ok: false, reasonCode: 'invalid_instant' };
+    }
+    return { ok: true, businessDate };
+  }
+
   const formatter = createDateFormatter(input.timeZone);
   if (!formatter) {
     return { ok: false, reasonCode: 'invalid_time_zone' };
@@ -290,6 +309,26 @@ export function resolveAnalyticsLocalDateStartInstant(input: {
   const localDate = parseAnalyticsLocalDate(input?.localDate);
   if (!localDate) {
     return { ok: false, reasonCode: 'invalid_local_date' };
+  }
+
+  if (input.timeZone === 'UTC') {
+    const timestamp = localDate.ordinal * millisecondsPerCalendarDay;
+    const instant = new Date(timestamp);
+    const expectedInstant = `${input.localDate}T00:00:00.000Z`;
+    if (
+      !Number.isFinite(timestamp) ||
+      instant.getUTCFullYear() !== localDate.year ||
+      instant.getUTCMonth() !== localDate.month - 1 ||
+      instant.getUTCDate() !== localDate.day ||
+      instant.getUTCHours() !== 0 ||
+      instant.getUTCMinutes() !== 0 ||
+      instant.getUTCSeconds() !== 0 ||
+      instant.getUTCMilliseconds() !== 0 ||
+      instant.toISOString() !== expectedInstant
+    ) {
+      return { ok: false, reasonCode: 'unresolvable_local_date_start' };
+    }
+    return { ok: true, instant: expectedInstant };
   }
 
   const formatter = createDateFormatter(input?.timeZone);

@@ -842,7 +842,7 @@ describe('平台端租户管理面板', () => {
 
     const drawer = screen.getByRole('dialog', { name: '租户详情' });
     expect(await within(drawer).findByText('商业化预留')).toBeInTheDocument();
-    expect(within(drawer).getByText('ORD-2026-0001')).toBeInTheDocument();
+    expect(await within(drawer).findByText('ORD-2026-0001')).toBeInTheDocument();
     expect(within(drawer).getByText('待人工确认')).toBeInTheDocument();
     expect(within(drawer).getByText('CON-2026-0001')).toBeInTheDocument();
     expect(within(drawer).getByText('人工复核')).toBeInTheDocument();

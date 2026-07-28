@@ -385,7 +385,7 @@ describe('WeCom customer mapping review workbench', () => {
 
     const panel = await screen.findByRole('region', { name: '企业微信客户匹配复核工作台' });
     expect(within(panel).getByText('MOCK / DEMO · 人工复核')).toBeInTheDocument();
-    expect(within(panel).getByTestId('mapping-status-strip')).toBeInTheDocument();
+    expect(await within(panel).findByTestId('mapping-status-strip')).toBeInTheDocument();
     expect(within(panel).getByTestId('mapping-comparison')).toBeInTheDocument();
     expect(within(panel).getByText('外部联系人低敏摘要')).toBeInTheDocument();
     expect(within(panel).getByText('系统客户候选低敏摘要')).toBeInTheDocument();
@@ -402,6 +402,9 @@ describe('WeCom customer mapping review workbench', () => {
     render(<WeComCustomerMappingCandidatesReadonlyPanel />);
 
     const panel = await screen.findByRole('region', { name: '企业微信客户匹配复核工作台' });
+    expect(
+      await within(panel).findByText('当前账号仅可查看候选，不能执行人工复核。'),
+    ).toBeInTheDocument();
     const text = panel.textContent ?? '';
     expect(text).not.toMatch(/138\d|external_?userid|userId|secret|token|聊天内容|会话内容/iu);
     expect(within(panel).queryByRole('button', { name: '确认候选' })).not.toBeInTheDocument();
@@ -410,7 +413,6 @@ describe('WeCom customer mapping review workbench', () => {
     expect(within(panel).queryByRole('button', { name: '标记冲突' })).not.toBeInTheDocument();
     expect(within(panel).queryByRole('button', { name: '重新打开' })).not.toBeInTheDocument();
     expect(within(panel).queryByText(/批量审批|真实同步|发送入口|会话内容入口/u)).not.toBeInTheDocument();
-    expect(within(panel).getByText('当前账号仅可查看候选，不能执行人工复核。')).toBeInTheDocument();
   });
 
   it('有复核权限时按当前状态展示动作，并对必填说明做行内校验', async () => {
