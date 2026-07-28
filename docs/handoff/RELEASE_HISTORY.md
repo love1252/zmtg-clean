@@ -401,3 +401,12 @@
 - 固定 HIS、企业微信、AI、Excel 和 webhook 进入 `src/integrations/`。
 - 正式发布保持 0/7。
 - 本阶段未修改 runtime、Schema、Migration、package 或锁文件。
+
+## 2026-07-28：架构 V2 文档第一阶段收口
+
+- PR #782：架构代码证据审计与文档顺序校准。
+- PR #783：`V2-ARCH-DOCS-01`。
+- PR #783 merge commit：`47136da59c5d4cfe7a8727f4f8c2c1d12a547213`。
+- 新增架构索引、业务架构和应用架构。
+- runtime、Schema、Migration 修改均为 0。
+- 下一阶段为 `V2-ARCH-DOCS-02` 数据架构、软件架构与部署架构建设。
