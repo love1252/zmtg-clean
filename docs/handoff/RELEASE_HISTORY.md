@@ -410,3 +410,13 @@
 - 新增架构索引、业务架构和应用架构。
 - runtime、Schema、Migration 修改均为 0。
 - 下一阶段为 `V2-ARCH-DOCS-02` 数据架构、软件架构与部署架构建设。
+
+## 2026-07-28：架构 V2 文档第二阶段收口
+
+- PR #784：收口 `V2-ARCH-DOCS-01` 并切换至 `V2-ARCH-DOCS-02`。
+- PR #784 merge commit：`5ceb3eb69f2d755c2ec20a4414c8d57c5ebd4961`。
+- PR #785：`V2-ARCH-DOCS-02`。
+- PR #785 merge commit：`1159be40e25e4a36639731c81fedf826bc26e479`。
+- 新增数据架构、软件架构和部署架构。
+- runtime、Schema、Migration 修改均为 0。
+- 下一阶段为 `V2-ARCH-DOCS-03` 开发架构、项目入口与状态同步。

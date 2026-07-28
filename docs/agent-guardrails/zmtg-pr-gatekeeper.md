@@ -2,7 +2,7 @@
 
 ## 使用场景
 
-每次 Claude 创建或更新 PR 时，都必须检查本规则。
+每次 Codex 或其他经当前任务明确授权的执行者创建或更新 PR 时，都必须检查本规则。默认执行者为 Codex。
 
 ## 必须检查
 
@@ -10,23 +10,30 @@
 
 - 功能分支必须从最新 `main` 创建。
 - `main` 必须与 `origin/main` 一致。
-- working tree 在创建分支前必须 clean。
+- 创建分支前，工作树必须干净（working tree clean）。
 
 ### PR 状态
 
-- Claude 默认只能创建 **Draft PR**。
-- 未经用户明确授权，**禁止自动转 Ready**。
+- Codex 或其他经明确授权的执行者默认只能创建**草稿 PR（Draft PR）**。
+- 未经用户明确授权，**禁止自动进入正式审查（Ready）**。
 - 未经用户明确授权，**禁止自动合并**。
-- PR 的 Draft / Ready / Merged 状态必须与 `gh pr view` 实际返回一致。
+- PR 的草稿（Draft）、正式审查（Ready）和已合并（Merged）状态必须与 `gh pr view` 实际返回一致。
 
-### PR body 一致性
+### PR 描述（body）一致性
 
-PR body 必须与以下内容一致：
+PR 描述必须与以下内容一致：
 
-1. **文件数**：body 写的 changed files 数量必须等于 `gh pr diff --name-only` 的行数。
-2. **测试数**：body 写的测试结果（如"8/8 passed"）必须与实际 `npx vitest run` 结果一致。
-3. **未包含内容**：body 必须写清本次 PR 未包含的内容（不改 schema / migration / smoke / UI 等）。
-4. **状态行**：Draft 必须写明"Draft — not Ready for merge. Awaiting review."，不允许出现矛盾描述（如已 Ready 但还写 Draft）。
+1. **文件数**：PR 描述中的修改文件（changed files）数量必须等于 `gh pr diff --name-only` 的行数。
+2. **测试数**：PR 描述中的测试结果（如 `8/8 passed`）必须与实际 `npx vitest run` 结果一致。
+3. **未包含内容**：PR 描述必须写清本次 PR 未包含的内容（不改 schema / migration / smoke / UI 等）。
+4. **状态行**：草稿 PR 必须明确写明“当前为草稿、尚未进入正式审查（Ready），且尚未获得合并授权”。不要求使用固定英文句式。需要引用 GitHub 原生状态时，可以写为“草稿（Draft）”。“技术上可合并（mergeable）”只表示 GitHub 当前未发现阻止合并的结构性冲突，不代表已经获得用户的合并授权。PR 转入正式审查或完成合并后，必须同步更新状态行，不得保留与 GitHub 实际状态冲突的草稿描述。
+
+### 中文优先
+
+- PR 标题、描述中的标题、说明和其他面向人内容默认使用中文。
+- 技术路径、命令、字段、代码标识和 GitHub 原生状态值可以保留英文；需要引用状态原始值时优先采用“中文说明（英文原始状态）”。
+- PR 描述出现大量无必要英文说明时，必须先在授权范围内中文化，再进入正式审查（Ready）。
+- 不得因为中文化改写代码、测试数据、测试锁定字符串或技术契约，也不得扩大本次任务文件范围。
 
 ### PR 体量
 
@@ -39,20 +46,20 @@ PR body 必须与以下内容一致：
 
 每次任务结束后，回报中的：
 
-- changed files 必须等于 `git diff --stat` 的实际文件；
+- 修改文件（changed files）必须等于 `git diff --stat` 的实际文件；
 - 测试结果必须等于实际运行结果；
 - 分支 / HEAD / PR 编号必须等于实际值。
 
 ## 禁止事项
 
-- 禁止 PR body 写"不做测试文件"但实际有测试文件。
-- 禁止 PR body 写"8/8"但实际只有 7 个测试。
+- 禁止 PR 描述写“不做测试文件”但实际有测试文件。
+- 禁止 PR 描述写“8/8”但实际只有 7 个测试。
 - 禁止回报中说"不改 smoke"但实际 diff 包含 smoke 文件。
-- 禁止 body 写 Draft 但 GitHub 上已经是 Ready。
+- 禁止 PR 描述写为草稿（Draft），但 GitHub 实际已进入正式审查（Ready）。
 
 ## 停止条件
 
-- 发现 PR body 与实际不一致，必须先修正再继续。
+- 发现 PR 描述与实际不一致，必须先修正再继续。
 - 发现 diff 包含未授权文件，必须停止并回报。
 - 不确定文件是否在本任务允许范围内，必须停止。
 
@@ -60,15 +67,15 @@ PR body 必须与以下内容一致：
 
 ```
 PR 门禁检查：
-- 分支/HEAD:
-- changed files (实际):
-- changed files (PR body):
-- 是否一致:
-- 测试结果 (实际):
-- 测试结果 (PR body):
-- 是否一致:
-- Draft/Ready 状态 (实际):
-- Draft/Ready 状态 (PR body):
-- 是否有越界文件:
-- 结论: PASS / FAIL
+- 分支／HEAD：
+- 实际修改文件（changed files）：
+- PR 描述中的修改文件：
+- 是否一致：
+- 实际测试结果：
+- PR 描述中的测试结果：
+- 是否一致：
+- 实际草稿／正式审查状态（Draft／Ready）：
+- PR 描述中的状态：
+- 是否有越界文件：
+- 结论：通过（PASS）／失败（FAIL）
 ```
