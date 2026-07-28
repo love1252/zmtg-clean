@@ -92,6 +92,9 @@ MIG-01A1
 | [`architecture-v2-evidence-audit-20260728.md`](./architecture-v2-evidence-audit-20260728.md) | `current + proposed` | 用当前代码、Schema、测试和历史 PR 对 V2 进行独立核验 |
 | [`business-architecture.md`](./business-architecture.md) | `current + target` | 角色、价值流、两平面职责、七线业务闭环、AI 人工确认和正式发布尺度 |
 | [`application-architecture.md`](./application-architecture.md) | `current + target` | 官网、认证、机构端、平台端、API、Webhook、权限、Capability 和应用依赖方向 |
+| [`data-architecture.md`](./data-architecture.md) | `current + target + proposed` | 数据事实所有权、机构隔离、来源、证据和 MIG 序列 |
+| [`software-architecture.md`](./software-architecture.md) | `current + target + proposed` | 模块分层、依赖方向、Port／Adapter 和兼容层 |
+| [`deployment-architecture.md`](./deployment-architecture.md) | `current + target + proposed` | 当前仓库部署证据、目标环境、发布、回滚和待核验事项 |
 | [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md) | `target` | 已接受架构决策及其约束 |
 
 ## 6. 后续架构视图
@@ -100,9 +103,6 @@ MIG-01A1
 
 | 阶段 | 计划文档 | 状态 |
 |---|---|---|
-| `V2-ARCH-DOCS-02` | `data-architecture.md` | `planned` |
-| `V2-ARCH-DOCS-02` | `software-architecture.md` | `planned` |
-| `V2-ARCH-DOCS-02` | `deployment-architecture.md` | `planned` |
 | `V2-ARCH-DOCS-03` | `development-architecture.md` | `planned` |
 | `V2-ARCH-DOCS-03` | 根 `README.md` 重写 | `planned` |
 | `V2-ARCH-DOCS-03` | `docs/handoff/CURRENT_STATUS.md` 收口同步 | `planned` |
@@ -150,11 +150,12 @@ MIG-01A1
 2. [`architecture-v2-module-map.md`](./architecture-v2-module-map.md)
 3. [`architecture-v2-evidence-audit-20260728.md`](./architecture-v2-evidence-audit-20260728.md)
 4. [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md)
-5. 后续 `data-architecture.md` 和 `software-architecture.md`
+5. [`data-architecture.md`](./data-architecture.md)
+6. [`software-architecture.md`](./software-architecture.md)
 
 ### 部署和运维
 
-1. 后续 `deployment-architecture.md`
+1. [`deployment-architecture.md`](./deployment-architecture.md)
 2. `docs/operations/production-migration-runbook.md`
 3. `docs/operations/local-development.md`
 4. `scripts/README.md`
@@ -173,9 +174,7 @@ MIG-01A1
 ## 11. 当前实施顺序
 
 ```text
-V2-ARCH-DOCS-01
-→ V2-ARCH-DOCS-02
-→ V2-ARCH-DOCS-03
+V2-ARCH-DOCS-03
 → V2-02B-MIG01-CLOSURE-PREFLIGHT
 → V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT
 → 最小 Architecture／Quality CI
