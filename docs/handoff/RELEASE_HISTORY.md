@@ -454,3 +454,20 @@
 - Runtime、Schema、Migration 修改均为 0。
 - 唯一下一任务为 `V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE`。
 - 七个平台候选实施切片、MIG-01A2 和机构端旧任务均未启动。
+
+## 2026-07-29：V2-QUALITY-CI-01 最小架构与质量门禁收口
+
+- PR #792：收口 V2-02C 并切换至最小架构质量 CI。
+- PR #792 Merge Commit：`37c42129ceccad4dcd1680a80214df7ea92348f0`。
+- PR #793：修复质量门禁前置测试基线。
+- PR #793 Merge Commit：`d451486804e9405659424006ca5f1bc58c43b42a`。
+- PR #795：修复 Node 20 与 CI 运行器测试基线。
+- PR #795 Merge Commit：`6bf4ed5b414984ad22eb3af1eb6e0c6c32770afa`。
+- PR #794：建立最小架构与质量门禁。
+- PR #794 Merge Commit：`f9f948d00687fa4311e625cd51c9453d87ad0820`。
+- 最小增量架构检查、检查器自测及现有 lint、typecheck、完整测试、build 质量命令编排已经建立。
+- GitHub Actions Run `30386375532`／Job `90366597304` 在 PR #794 Head `836465f169104e6f5943ca076d0b98b1bfde2b94` 上完成，结论为 `success`。
+- PR #794 新增或修改五个质量基础设施文件，业务源码、API、UI、Schema、Migration 修改为 0。
+- 本次 handoff 文档回填的 Runtime、Schema、Migration 修改均为 0。
+- GitHub 只读核对结果为 `main.protected=false`，branch API 当前无可验证的 Required Check 强制；本轮未修改仓库设置。
+- 唯一下一任务为 `V2-MIG01-A2-PROVISIONING-PREFLIGHT-01`；本次只完成 handoff，尚未启动 A2 实施。

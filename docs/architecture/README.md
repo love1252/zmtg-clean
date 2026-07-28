@@ -1,8 +1,8 @@
 # 智美天工架构文档索引
 
-- 任务：`V2-02C-HANDOFF-CLOSEOUT-TO-V2-QUALITY-CI-01`
-- 日期：`2026-07-28 CST +0800`
-- 审计基线：`99560c98faa987ecf79e66d18a4df1aa76d77c9e`
+- 任务：`V2-QUALITY-CI-01-HANDOFF-CLOSEOUT-TO-MIG01-A2-PREFLIGHT`
+- 日期：`2026-07-29 CST +0800`
+- 审计基线：`f9f948d00687fa4311e625cd51c9453d87ad0820`
 - 状态：`current`
 - 文档性质：架构导航索引，不是第二套架构事实源
 - runtime、Schema、Migration、API、UI 修改：`0`
@@ -111,7 +111,27 @@ MIG-01A1 Expand
 
 `V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT` 已通过 PR #791 完成并合并，其预检文档现作为平台正式授权与路由族的当前静态证据和候选实施切片入口。该预检确认正式平台服务端授权根为“缺失”、平台 Runtime／发布准入为“阻断”；本阶段没有实施平台 Runtime，七个平台候选实施切片均未启动。
 
+`V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE` 已通过 PR #794 完成并合并，最小架构与质量门禁已经进入 `main`。该结果只证明检查器、增量规则、现有质量命令编排及真实 PR Workflow 已建立并验证，不表示历史架构债务已清零、分支保护已启用或任何业务已正式发布。
+
 文档完成只代表同一套架构 V2 的视图与入口已经建立，不代表 runtime、Schema、Migration、API、UI、Capability、环境或七线正式发布已经完成。
+
+### 6.1 当前架构与质量门禁
+
+- Workflow：`.github/workflows/architecture-quality.yml`；
+- 检查器：`scripts/verify/architecture-quality.mjs`；
+- 差异模型：显式接收 PR `Base`／`Head`，只阻止本次差异新增的架构违规；
+- 真实验证：PR #794 的 Run `30386375532`／Job `90366597304` 已完成架构自测、增量检查、lint、typecheck、完整测试和 build，结论为 `success`；
+- `AQ001`：禁止新增第二套根级 `database/**`；
+- `AQ002`：禁止新增机构端 legacy Route；
+- `AQ003`：禁止新增平台端 legacy Route；
+- `AQ004`：冻结聚合模块 `institution` 的未登记新增文件；
+- `AQ005`：冻结聚合模块 `open-platform` 的未登记新增文件；
+- `AQ006`：禁止 Domain 层新增对应用、数据库、集成或框架层的依赖；
+- `AQ007`：禁止业务模块间新增对 `server/**` 或 Repository 实现的直接依赖。
+
+GitHub 只读核对结果为 `main.protected=false`，branch API 当前无可验证的 Required Check 强制。因此 CI 已建立并可在 PR 上产生真实状态检查，但还不是 GitHub 服务端合并硬门。本轮不修改仓库设置；测试或 CI 通过也不得写成正式发布。
+
+`development-architecture.md` 与 `software-architecture.md` 中“Architecture CI 尚未建立”的表述属于各自较早审计基线，不能覆盖最新 `main` 中已经合并的 Workflow 与检查器事实；本次 handoff 不越权重写这些架构正文。
 
 ## 7. 历史资料
 
@@ -190,13 +210,20 @@ MIG-01A1 Expand
 ## 11. 当前项目级顺序
 
 ```text
-V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE
+V2-MIG01-A2-PROVISIONING-PREFLIGHT-01
 → 独立 handoff
-→ MIG-01 后续独立数据 PR
-→ 后续既定顺序
+→ A2-P1 manifest 驱动 provisioning
+→ 独立 handoff
+→ A2-P2 复合键／索引／NOT VALID 关系
+→ BASE-02
+→ Writer
+→ Audit／模板
+→ MIG-01B
+→ MIG-01C
+→ Reader
 ```
 
-`V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT` 已通过 PR #791 完成并合并，但没有实施平台 Runtime。唯一下一任务切换为 `V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE`，该任务尚未启动；CI 完成也不构成 MIG-01A2、其他 MIG-01 数据切片或平台 Runtime 的实施授权，后续仍须独立 handoff 和用户明确授权。
+`V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE` 已通过 PR #794 完成并合并。唯一下一任务切换为 `V2-MIG01-A2-PROVISIONING-PREFLIGHT-01`，该任务尚未启动；它只允许进行 A2 锚点 provisioning 的 docs-only 静态预检和候选切片冻结，不构成 A2-P1、A2-P2、BASE-02、Writer、Reader、数据库操作或环境核验的实施授权。
 
 MIG-01 内部候选顺序继续保持：
 
@@ -210,7 +237,7 @@ A2
 → Reader
 ```
 
-该顺序只冻结 MIG-01 内部候选切片的串行关系，不是当前项目级 `NEXT_TASK`，也不表示任一切片已获实施授权。
+新的项目级顺序进一步把 A2 拆分为 A2-P1 与 A2-P2，并要求在预检及 A2-P1 后分别完成独立 handoff。该顺序只冻结候选切片的串行关系，不表示任一实施切片已获授权，也不改变 MIG-01～MIG-06 的相对顺序。
 
 后续既定数据顺序保持：
 

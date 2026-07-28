@@ -4,20 +4,36 @@
 
 ## 架构 V2 第一阶段与预检状态
 
-- 更新日期：2026-07-28
+- 更新日期：2026-07-29
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT` 已完成并已合并
-- 结果：平台正式授权与路由族的仓库静态证据、阻断状态和候选实施切片已冻结；本轮未实施平台 Runtime
-- 完成 PR：#791
-- PR Head：`cf7423f51906ce92a6de01c0a3cd0e02b2a774da`
-- Merge Commit：`99560c98faa987ecf79e66d18a4df1aa76d77c9e`
-- 本阶段完成文档：`docs/architecture/v2-02c-platform-auth-route-preflight.md`
+- 当前阶段：`V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE` 已完成并已合并
+- 结果：最小架构增量检查、检查器自测和现有质量命令编排已进入 `main`，并通过真实 GitHub Actions 验证
+- 完成 PR：#794
+- PR Head：`836465f169104e6f5943ca076d0b98b1bfde2b94`
+- Merge Commit：`f9f948d00687fa4311e625cd51c9453d87ad0820`
+- 前置基线修复：
+  - PR #793：质量门禁前置测试基线修复；Head `2cf2a800d47c55fd14ee6aa40c866814be9786c8`；Merge Commit `d451486804e9405659424006ca5f1bc58c43b42a`
+  - PR #795：Node 20 与 CI 运行器可移植性基线修复；Head `71cae1d8f88b67437bb735fd009eaf137ad3b7d6`；Merge Commit `6bf4ed5b414984ad22eb3af1eb6e0c6c32770afa`
+- 成功 Actions：Run `30386375532`／Job `90366597304`
+- 架构检查器自测：67/67 通过
+- 增量架构检查：通过
+- lint／typecheck：通过
+- 完整测试：408 个测试文件、5679 个测试全部通过
+- build：101/101 静态页面生成完成
+- 架构规则：`AQ001`～`AQ007` 七条规则已进入 `main`
+- Workflow：`.github/workflows/architecture-quality.yml`
+- 检查器：`scripts/verify/architecture-quality.mjs`
+- PR #794 文件边界：新增 Workflow、检查器、检查器自测与规则配置，并在 `package.json` 只新增三个质量命令
+- PR #794 业务源码／API／UI／Schema／Migration 修改：0
+- PR #794 `pnpm-lock.yaml` 修改：0；新增依赖：0
 - 架构视图完成度：业务、应用、数据、软件、部署、开发共 6/6
 - 默认协作：Codex 为默认主开发和仓库执行者；ChatGPT 网页版负责设计与审查；Claude Code 仅在用户明确点名时启用
 - 治理语言：面向人的仓库文档、PR 与回报默认中文，中文优先治理已生效
-- Runtime 修改：0
-- Schema 修改：0
-- Migration 修改：0
+- 本次 handoff Runtime 修改：0
+- 本次 handoff Schema 修改：0
+- 本次 handoff Migration 修改：0
+- 分支保护／Required Check：只读核对结果为 `main.protected=false`，branch API 当前无可验证的 Required Check 强制；本轮未修改仓库设置
+- 已知非阻断风险：`src/modules/institution/tests/InstitutionBusinessShells.test.tsx` 仍有既有 post-fetch 竞态候选；当前完整测试与 Actions 均通过，尚未单独修复
 - 正式平台服务端授权根：`缺失`
 - 平台 Runtime／发布准入：`阻断`
 - 静态影响面：
@@ -44,9 +60,9 @@
 - 七线业务综合完成度：约 25%（规划估算）
 - 公共底座完成度：约 65%（规划估算）
 - 正式发布：0/7
-- 唯一下一任务：`V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE`
-- CI 状态：`V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE` 尚未启动
-- 未启动事项：七个平台候选实施切片、MIG-01A2 和机构端旧任务均未启动
+- 唯一下一任务：`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01`
+- 下一任务状态：尚未启动；只允许进行 A2 锚点 Provisioning 的 docs-only 静态预检与候选切片冻结
+- 未启动事项：A2-P1、A2-P2、后续 MIG-01 实施、数据库操作、七个平台候选实施切片和机构端旧任务均未启动且未获授权
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->
