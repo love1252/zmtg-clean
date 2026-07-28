@@ -2,22 +2,25 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## 架构 V2 第一阶段与文档建设状态
+## 架构 V2 第一阶段与预检状态
 
 - 更新日期：2026-07-28
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-ARCH-DOCS-03` 已完成并已合并
-- 结果：开发架构已创建；根 README 已成为项目入口；本状态块已完成合并结果回填
-- 完成 PR：#787
-- PR Head：`08cae998b9da09edd175c0739be8e5a0712736c1`
-- Merge Commit：`401a4fc5522c2ab6ca4dfe00791817ae1534360c`
-- 本阶段完成文档：`docs/architecture/development-architecture.md`
+- 当前阶段：`V2-02B-MIG01-CLOSURE-PREFLIGHT` 已完成并已合并
+- 结果：MIG-01 完整关闭链的仓库静态证据、影响面、阻断状态和内部候选实施切片已冻结；本轮未实施 MIG-01
+- 完成 PR：#789
+- PR Head：`3ae6886b428344e0894e79a245a1127734423261`
+- Merge Commit：`af9393d15bbfb10391576640a01f9bd5e57f1206`
+- 本阶段完成文档：`docs/architecture/v2-02b-mig01-closure-preflight.md`
 - 架构视图完成度：业务、应用、数据、软件、部署、开发共 6/6
 - 默认协作：Codex 为默认主开发和仓库执行者；ChatGPT 网页版负责设计与审查；Claude Code 仅在用户明确点名时启用
 - 治理语言：面向人的仓库文档、PR 与回报默认中文，中文优先治理已生效
-- runtime 修改：0
-- Schema／Migration 修改：0
-- MIG-01 状态：仅 A1 expand 已存在；A2、BASE-02／writer 门禁、B 回填和 C enforce 尚未关闭
+- Runtime 修改：0
+- Schema 修改：0
+- Migration 修改：0
+- V2-02B 关闭状态：A1 `已具备`，仅限仓库静态 Expand 证据；A2 `缺失`；BASE-02 `部分具备`；Writer、Audit／模板、B、C、Reader 均为 `阻断`
+- Migration 元数据：journal 到 `0038`，snapshot 到 `0026`；各环境实际状态仍须独立核验
+- MIG-01 状态：尚未关闭，内部候选顺序保持 A2 → BASE-02 → Writer → Audit／模板 → B → C → Reader
 - Customers／Institution System Reader 门禁：MIG-01C + 当前成员服务端双键上下文
 - Care 门禁：等待 MIG-02
 - 平台正式服务端授权：仍为独立缺口，留待 `V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT`
@@ -30,8 +33,9 @@
 - 七线业务综合完成度：约 25%（规划估算）
 - 公共底座完成度：约 65%（规划估算）
 - 正式发布：0/7
-- 唯一下一任务：`V2-02B-MIG01-CLOSURE-PREFLIGHT`
-- 授权状态：`V2-02B` 尚未启动；本次 handoff 只冻结其 docs-only 静态审计与预检范围，仍须用户后续明确授权
+- 唯一下一任务：`V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT`
+- 授权状态：`V2-02C` 尚未启动；本次 handoff 只冻结其 docs-only 静态审计范围，仍须用户后续明确授权
+- 未启动事项：MIG-01A2、Architecture／Quality CI 和机构端旧任务均未启动
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->

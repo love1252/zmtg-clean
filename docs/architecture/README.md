@@ -1,8 +1,8 @@
 # 智美天工架构文档索引
 
-- 任务：`V2-ARCH-DOCS-03-HANDOFF-CLOSEOUT-TO-V2-02B`
+- 任务：`V2-02B-HANDOFF-CLOSEOUT-TO-V2-02C`
 - 日期：`2026-07-28 CST +0800`
-- 审计基线：`401a4fc5522c2ab6ca4dfe00791817ae1534360c`
+- 审计基线：`af9393d15bbfb10391576640a01f9bd5e57f1206`
 - 状态：`current`
 - 文档性质：架构导航索引，不是第二套架构事实源
 - runtime、Schema、Migration、API、UI 修改：`0`
@@ -70,11 +70,14 @@ SaaS 控制平面
 数据库演进顺序保持：
 
 ```text
-MIG-01A1
-→ MIG-01A2
-→ BASE-02／全部 Writer 双写
-→ MIG-01B
-→ MIG-01C
+MIG-01A1 Expand
+→ MIG-01A2 锚点 provisioning
+→ BASE-02B／BASE-02 双键上下文、scope revision、Guard
+→ 全部 Writer 双写与旧 Writer 封堵
+→ Audit／模板保护
+→ MIG-01B 确定性回填、追赶和冲突清零
+→ MIG-01C 非空、外键、attribution 与 shape enforce
+→ Reader 重新核验与独立放行
 → MIG-02
 → MIG-03
 → MIG-04
@@ -90,6 +93,7 @@ MIG-01A1
 | [`architecture-v2-module-map.md`](./architecture-v2-module-map.md) | `target` | 当前路径到目标所有者和目标路径的映射 |
 | [`institution-seven-stream-restart-baseline.md`](./institution-seven-stream-restart-baseline.md) | `current + target` | 七线完成度、依赖、发布门禁和重启顺序 |
 | [`architecture-v2-evidence-audit-20260728.md`](./architecture-v2-evidence-audit-20260728.md) | `current + proposed` | 用当前代码、Schema、测试和历史 PR 对 V2 进行独立核验 |
+| [`v2-02b-mig01-closure-preflight.md`](./v2-02b-mig01-closure-preflight.md) | `current + target + proposed` | MIG-01 A1～C 静态证据、完整影响面、阻断状态和内部候选实施切片。 |
 | [`business-architecture.md`](./business-architecture.md) | `current + target` | 角色、价值流、两平面职责、七线业务闭环、AI 人工确认和正式发布尺度 |
 | [`application-architecture.md`](./application-architecture.md) | `current + target` | 官网、认证、机构端、平台端、API、Webhook、权限、Capability 和应用依赖方向 |
 | [`data-architecture.md`](./data-architecture.md) | `current + target + proposed` | 数据事实所有权、机构隔离、来源、证据和 MIG 序列 |
@@ -101,6 +105,8 @@ MIG-01A1
 ## 6. 架构视图完成状态
 
 业务、应用、数据、软件、部署、开发六类架构视图已经完成 `6/6`。`V2-ARCH-DOCS-03` 已通过 PR #787 合并，开发架构、根 `README.md` 项目入口和 `CURRENT_STATUS` 同步均已完成，不再标记为 `planned`。
+
+`V2-02B-MIG01-CLOSURE-PREFLIGHT` 已通过 PR #789 完成并合并，其预检文档现作为 MIG-01 当前静态证据和候选实施切片入口。该结果不表示 MIG-01 已实施或关闭。
 
 文档完成只代表同一套架构 V2 的视图与入口已经建立，不代表 runtime、Schema、Migration、API、UI、Capability、环境或七线正式发布已经完成。
 
@@ -146,9 +152,10 @@ MIG-01A1
 1. [`architecture-v2.md`](./architecture-v2.md)
 2. [`architecture-v2-module-map.md`](./architecture-v2-module-map.md)
 3. [`architecture-v2-evidence-audit-20260728.md`](./architecture-v2-evidence-audit-20260728.md)
-4. [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md)
-5. [`data-architecture.md`](./data-architecture.md)
-6. [`software-architecture.md`](./software-architecture.md)
+4. [`v2-02b-mig01-closure-preflight.md`](./v2-02b-mig01-closure-preflight.md)
+5. [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md)
+6. [`data-architecture.md`](./data-architecture.md)
+7. [`software-architecture.md`](./software-architecture.md)
 
 ### 部署和运维
 
@@ -178,14 +185,27 @@ MIG-01A1
 ## 11. 当前实施顺序
 
 ```text
-V2-02B-MIG01-CLOSURE-PREFLIGHT
-→ V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT
+V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT
 → 最小 Architecture／Quality CI
 → MIG-01 后续独立数据 PR
 → 后续既定顺序
 ```
 
-`V2-02B` 是唯一下一任务，但尚未启动；它只允许在获得后续明确授权后执行 docs-only 静态预检，不构成 MIG-01 runtime 实施许可。后续既定数据顺序保持：
+`V2-02B` 已通过 PR #789 合并。唯一下一任务切换为 `V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT`，但尚未启动；它仍须独立用户授权，且不得自动启动 Architecture／Quality CI、MIG-01A2 或其他 MIG-01 实施切片。
+
+MIG-01 内部候选顺序继续保持：
+
+```text
+A2
+→ BASE-02
+→ Writer
+→ Audit／模板
+→ B
+→ C
+→ Reader
+```
+
+后续既定数据顺序保持：
 
 ```text
 MIG-01

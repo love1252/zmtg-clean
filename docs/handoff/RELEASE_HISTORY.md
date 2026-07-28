@@ -432,3 +432,14 @@
 - 六类架构视图完成 `6/6`。
 - Runtime、Schema、Migration 修改均为 0。
 - 唯一下一任务为 `V2-02B-MIG01-CLOSURE-PREFLIGHT`；本次只完成 handoff，尚未启动该任务。
+
+## 2026-07-28：V2-02B MIG-01 关闭预检收口
+
+- PR #788：DOCS-03 交接收口并切换至 V2-02B。
+- PR #788 Merge Commit：`1d2691a60fd021af815a7449af8c5c1b33d8d274`。
+- PR #789：V2-02B MIG-01 完整关闭链静态预检。
+- PR #789 Merge Commit：`af9393d15bbfb10391576640a01f9bd5e57f1206`。
+- MIG-01A1 仓库静态证据已具备，A2 缺失，BASE-02 部分具备，Writer、Audit／模板、B、C、Reader 均为阻断。
+- Runtime、Schema、Migration 修改均为 0。
+- 唯一下一任务为 `V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT`。
+- 平台授权 Runtime、Architecture／Quality CI、MIG-01A2 和机构端旧任务均未启动。
