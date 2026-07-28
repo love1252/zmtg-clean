@@ -420,3 +420,15 @@
 - 新增数据架构、软件架构和部署架构。
 - runtime、Schema、Migration 修改均为 0。
 - 下一阶段为 `V2-ARCH-DOCS-03` 开发架构、项目入口与状态同步。
+
+## 2026-07-28：架构 V2 文档第三阶段与治理收口
+
+- PR #786：DOCS-02 收口、Codex 主开发与中文优先治理。
+- PR #786 Merge Commit：`27ff132dd850dba790bc1d7c2e6776b882722b5d`。
+- PR #787：`V2-ARCH-DOCS-03`。
+- PR #787 Merge Commit：`401a4fc5522c2ab6ca4dfe00791817ae1534360c`。
+- 新增开发架构。
+- 根 README 已重写为项目入口。
+- 六类架构视图完成 `6/6`。
+- Runtime、Schema、Migration 修改均为 0。
+- 唯一下一任务为 `V2-02B-MIG01-CLOSURE-PREFLIGHT`；本次只完成 handoff，尚未启动该任务。

@@ -6,10 +6,11 @@
 
 - 更新日期：2026-07-28
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-ARCH-DOCS-03` 已完成
-- 结果：开发架构已创建；根 README 已从 Phase 历史账本重写为项目入口；本状态块已同步
-- 本阶段交付 PR：#787
-- 本阶段 PR Head：以 GitHub PR #787 的记录为准；合并状态与 merge commit 将在本 PR 合并后的独立 handoff 中回填
+- 当前阶段：`V2-ARCH-DOCS-03` 已完成并已合并
+- 结果：开发架构已创建；根 README 已成为项目入口；本状态块已完成合并结果回填
+- 完成 PR：#787
+- PR Head：`08cae998b9da09edd175c0739be8e5a0712736c1`
+- Merge Commit：`401a4fc5522c2ab6ca4dfe00791817ae1534360c`
 - 本阶段完成文档：`docs/architecture/development-architecture.md`
 - 架构视图完成度：业务、应用、数据、软件、部署、开发共 6/6
 - 默认协作：Codex 为默认主开发和仓库执行者；ChatGPT 网页版负责设计与审查；Claude Code 仅在用户明确点名时启用
@@ -29,8 +30,8 @@
 - 七线业务综合完成度：约 25%（规划估算）
 - 公共底座完成度：约 65%（规划估算）
 - 正式发布：0/7
-- 候选后续阶段：`V2-02B-MIG01-CLOSURE-PREFLIGHT`
-- 授权状态：`V2-02B` 尚未获得启动授权；必须通过后续独立 handoff 和用户明确授权，才能成为唯一下一任务
+- 唯一下一任务：`V2-02B-MIG01-CLOSURE-PREFLIGHT`
+- 授权状态：`V2-02B` 尚未启动；本次 handoff 只冻结其 docs-only 静态审计与预检范围，仍须用户后续明确授权
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->
