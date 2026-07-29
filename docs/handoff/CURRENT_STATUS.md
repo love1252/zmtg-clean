@@ -2,18 +2,26 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## 架构 V2 第一阶段与预检状态
+## 架构 V2 第一阶段、A2 决策与治理基础状态
 
 - 更新日期：2026-07-29
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已完成并已合并
-- 结果：MIG-01A2 Provisioning 的仓库静态证据、Owner 候选、Manifest 契约、P1／P2 拆分、Migration 元数据、幂等矩阵、环境门禁与实施阻断已冻结；本轮未实施 A2
-- 完成 PR：#797
-- PR Head：`cf87ac63474436d404a8e15675db083b5654e78d`
-- Merge Commit：`d9a47773cb4914b0f0534093f5c8f47f6516b9d6`
-- 完成文档：`docs/architecture/v2-mig01-a2-provisioning-preflight.md`
-- 成功 Actions：Run `30417750587`／Job `90467828716`
-- 质量门禁：环境核对、安装依赖、架构检查器自测、增量架构检查、lint、typecheck、完整测试和 build 全部通过
+- 当前阶段：`V2-MIG01-A2-DECISION-PACK-01` 已完成并已合并；用户接受的 A2 治理组合已冻结
+- 完成 PR：#799
+- PR Head：`79016701b0e20b86a575c7206dacb5ed4d6f95a0`
+- Merge Commit：`1438894dd07a68cf767b49207795388b0bc814a6`
+- proposed 决策包：`docs/decisions/mig01-a2-provisioning-decision-pack.md`
+- accepted 决策记录：`docs/decisions/mig01-a2-provisioning-accepted-decisions.md`
+- 成功 Actions：Run `30458524990`／Job `90598262749`
+- 质量门禁：PR #799 冻结 Head 的环境核对、安装依赖、架构检查器自测、增量架构检查、lint、typecheck、完整测试和 build 全部通过
+- accepted 组合：D01-A、D02-A、D03-A、D04-A、D05-A、D06-B、D07-B、D08-C、D09-A、D10-B、D11-B、D12-A（方向）
+- D01：Tenancy 是 Scope、Context Version／Head、Manifest、Scope Revision 与 Provisioning Provenance 原始事实的唯一语义 Owner
+- D02：Access Control 通过版本化 Port／Reader 和低敏投影单向消费；当前直接读共享表仅为限期兼容
+- D03～D05：严格版本化低敏 Manifest、固定位置数组 canonicalization + SHA-256、Context 全字段显式已经接受
+- D06／D07／D11：仓库外真实 Manifest + 唯一一次性受控 Runner + Runner 文件集绑定接受
+- D08／D09：分阶段 Metadata 治理 + 用户授予的任务级排他执行／Migration Lease 绑定接受
+- D10：`main` 保护和“最小架构与质量门禁”Required Check 已接受为 P1／P2 启动硬门，但尚未配置
+- D12：只接受最小 Anchor Bridge 方向；精确名称、列序、Catalog Shape、编号、锁／timeout 与目标环境后置
 - 架构规则：`AQ001`～`AQ007` 七条规则已进入 `main`
 - Workflow：`.github/workflows/architecture-quality.yml`
 - 检查器：`scripts/verify/architecture-quality.mjs`
@@ -23,7 +31,10 @@
 - 本次 handoff Runtime 修改：0
 - 本次 handoff Schema 修改：0
 - 本次 handoff Migration 修改：0
-- 分支保护／Required Check：只读核对结果为 `main.protected=false`，branch API 当前无可验证的 Required Check 强制；本轮未修改仓库设置
+- 分支保护／Required Check：当前仍未配置；本轮只记录 D10-B 的 accepted 目标，不修改仓库设置
+- Runner：尚未创建，Parser、Runbook、低敏输入通道和权限撤销规则均未实现
+- Lease：执行 Lease／Migration Lease 均未签发；`0039` 仍只是静态候选，不是已批准编号
+- 环境核验：真实 Manifest、环境 journal、目标数据库 Shape、tenant 父记录、备份／恢复点、Operator／Reviewer 与目标环境均未核验
 - 已知非阻断风险：`src/modules/institution/tests/InstitutionBusinessShells.test.tsx` 仍有既有 post-fetch 竞态候选；当前完整测试与 Actions 均通过，尚未单独修复
 - 正式平台服务端授权根：`缺失`
 - 平台 Runtime／发布准入：`阻断`
@@ -38,17 +49,14 @@
 - 平台 Route 授权现状：49 个依赖 Demo Context，5 个无认证授权
 - legacy 路由现状：6 个 legacy Route 均不是薄兼容层
 - A1 状态：仅具备仓库静态 Expand
-- A2 状态：Provisioning 实现缺失且启动受阻
-- Owner 状态：候选可枚举，但具体实现 Owner 未唯一冻结
+- A2 状态：治理选择已接受，但 Provisioning 实现缺失，P1／P2 均未启动
+- Owner 状态：Tenancy 唯一语义 Owner 已接受；物理模块、Port、Writer 和 Repository 边界仍待治理基础阶段冻结
 - 关键阻断：
-  - Owner
-  - Manifest 正式契约
-  - P1 输入承载方式
-  - metadata 策略
-  - P2 exact constraint allowlist
-  - 唯一 Migration lease
-  - `main` 保护与 Required Check
-  - 环境证据
+  - 阶段 A 仓库硬门尚未配置和验证
+  - 阶段 B Runner 治理、Runbook 与实现尚未完成
+  - 执行 Lease 尚未签发
+  - 真实 Manifest、环境 journal、数据库 Shape 和备份／恢复点尚未授权核验
+  - D12 实施细节尚未在 P1 handoff 后冻结
 - Migration journal：到 `0038`
 - Migration snapshot：到 `0026`，且不覆盖 A1
 - Migration metadata 门禁：`db:generate` 与 snapshot-diff Migration 继续阻断
@@ -64,9 +72,9 @@
 - 七线业务综合完成度：约 25%（规划估算）
 - 公共底座完成度：约 65%（规划估算）
 - 正式发布：0/7
-- 唯一下一任务：`V2-MIG01-A2-DECISION-PACK-01`
-- 下一任务状态：尚未启动；只允许制作 MIG-01A2 Owner、Manifest、输入承载、Metadata 与硬门决策包，不实施任何决策
-- 未启动事项：A2-P1、A2-P2、数据库操作以及 BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 等下游任务，连同平台切片和机构端旧任务均未启动且未获授权
+- 唯一下一任务：`V2-MIG01-A2-GOVERNANCE-FOUNDATION-01`
+- 下一任务状态：尚未启动；这是包含阶段 A 仓库硬门和阶段 B 受控 Runner 治理基础的 Ultra 大目标，两阶段不得混成一个 PR
+- 未启动事项：阶段 A、阶段 B、Runner、Lease、A2-P1、A2-P2、数据库操作以及 BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 等下游任务，连同平台切片和机构端旧任务均未启动且未获执行授权
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->

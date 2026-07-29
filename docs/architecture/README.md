@@ -1,8 +1,8 @@
 # 智美天工架构文档索引
 
-- 任务：`V2-MIG01-A2-PREFLIGHT-HANDOFF-CLOSEOUT-TO-DECISION-PACK-01`
+- 任务：`V2-MIG01-A2-ACCEPTED-DECISIONS-HANDOFF-01`
 - 日期：`2026-07-29 CST +0800`
-- 审计基线：`d9a47773cb4914b0f0534093f5c8f47f6516b9d6`
+- 审计基线：`1438894dd07a68cf767b49207795388b0bc814a6`
 - 状态：`current`
 - 文档性质：架构导航索引，不是第二套架构事实源
 - runtime、Schema、Migration、API、UI 修改：`0`
@@ -18,9 +18,9 @@
 发生冲突时，按以下顺序处理：
 
 1. 当前 `main` 的代码、测试、Schema、Migration 和配置；
-2. [`architecture-v2.md`](./architecture-v2.md)、已接受 ADR 和模块映射；
-3. 当前架构视图与代码证据审计；
-4. 七线技术计划、已合并 PR 和交接文档；
+2. [`architecture-v2.md`](./architecture-v2.md) 与已接受 ADR 决定最高级 `target` 约束；
+3. 专项 accepted 决策记录只在既有 `target` 内解释用户选择；模块映射、架构视图、代码证据审计和本索引负责展开、导航与核验；
+4. 七线技术计划、已合并 PR 和交接文档负责记录实施状态与历史；
 5. 历史草案、旧系统和旧对话记录。
 
 低优先级资料只能用于解释历史原因，不能覆盖当前实现或已接受决策。发现冲突时应记录差异、提出 ADR 或预检任务，不得静默修改权威结论。
@@ -104,6 +104,15 @@ MIG-01A1 Expand
 | [`development-architecture.md`](./development-architecture.md) | `current + target + proposed` | 开发协作、任务与 PR 生命周期、分层开发、测试、Migration 门禁和完成定义 |
 | [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md) | `target` | 已接受架构决策及其约束 |
 
+### 5.1 MIG-01A2 专项决策入口
+
+| 文档 | 决策状态 | 职责 |
+|---|---|---|
+| [`../decisions/mig01-a2-provisioning-accepted-decisions.md`](../decisions/mig01-a2-provisioning-accepted-decisions.md) | `accepted` | 记录 D01～D11 已接受选择，以及 D12 仅接受最小 Anchor Bridge 方向、实施细节后置的边界 |
+| [`../decisions/mig01-a2-provisioning-decision-pack.md`](../decisions/mig01-a2-provisioning-decision-pack.md) | `proposed` | 保留 D01～D12 的选项、推荐、风险、代价、证据和未决定时阻断 |
+
+这里的 `accepted` 是专项决策生命周期状态，不等于 `current` 实现或交付完成。accepted 文件只在“用户已经选择什么”上优先解释 proposed decision pack，不得覆盖 `architecture-v2.md` 或已接受 ADR；两份文档均不表示仓库硬门、Runner、Runtime、Schema、Migration、A2-P1 或 A2-P2 已完成。
+
 ## 6. 架构视图完成状态
 
 业务、应用、数据、软件、部署、开发六类架构视图已经完成 `6/6`。`V2-ARCH-DOCS-03` 已通过 PR #787 合并，开发架构、根 `README.md` 项目入口和 `CURRENT_STATUS` 同步均已完成，不再标记为 `planned`。
@@ -111,6 +120,8 @@ MIG-01A1 Expand
 `V2-02B-MIG01-CLOSURE-PREFLIGHT` 已通过 PR #789 完成并合并，其预检文档现作为 MIG-01 当前静态证据和候选实施切片入口。该结果不表示 MIG-01 已实施或关闭。
 
 `V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，其专项预检文档现作为 A2 当前静态证据与决策阻断入口。该结果只完成预检，没有实施 A2；A2-P1、A2-P2 和数据库操作均未启动。
+
+`V2-MIG01-A2-DECISION-PACK-01` 已通过 PR #799 完成并合并，proposed decision pack 继续保留为选项、推荐、风险和证据材料。用户随后明确接受 D01-A、D02-A、D03-A、D04-A、D05-A、D06-B、D07-B、D08-C、D09-A、D10-B、D11-B 和 D12-A 方向；D12 的精确名称、列序、Catalog Shape、编号、锁／timeout 和环境仍后置。该接受结果没有配置仓库硬门，没有创建 Runner 或签发 Lease，也没有启动 A2-P1／P2。
 
 `V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT` 已通过 PR #791 完成并合并，其预检文档现作为平台正式授权与路由族的当前静态证据和候选实施切片入口。该预检确认正式平台服务端授权根为“缺失”、平台 Runtime／发布准入为“阻断”；本阶段没有实施平台 Runtime，七个平台候选实施切片均未启动。
 
@@ -181,10 +192,12 @@ GitHub 只读核对结果为 `main.protected=false`，branch API 当前无可验
 3. [`architecture-v2-evidence-audit-20260728.md`](./architecture-v2-evidence-audit-20260728.md)
 4. [`v2-02b-mig01-closure-preflight.md`](./v2-02b-mig01-closure-preflight.md)
 5. [`v2-mig01-a2-provisioning-preflight.md`](./v2-mig01-a2-provisioning-preflight.md)
-6. [`v2-02c-platform-auth-route-preflight.md`](./v2-02c-platform-auth-route-preflight.md)
-7. [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md)
-8. [`data-architecture.md`](./data-architecture.md)
-9. [`software-architecture.md`](./software-architecture.md)
+6. [`../decisions/mig01-a2-provisioning-accepted-decisions.md`](../decisions/mig01-a2-provisioning-accepted-decisions.md)
+7. [`../decisions/mig01-a2-provisioning-decision-pack.md`](../decisions/mig01-a2-provisioning-decision-pack.md)
+8. [`v2-02c-platform-auth-route-preflight.md`](./v2-02c-platform-auth-route-preflight.md)
+9. [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md)
+10. [`data-architecture.md`](./data-architecture.md)
+11. [`software-architecture.md`](./software-architecture.md)
 
 ### 部署和运维
 
@@ -214,10 +227,12 @@ GitHub 只读核对结果为 `main.protected=false`，branch API 当前无可验
 ## 11. 当前项目级顺序
 
 ```text
-V2-MIG01-A2-DECISION-PACK-01
-→ 用户决策／独立 handoff
-→ 仓库硬门配置任务（仅在决策批准时）
-→ A2-P1 manifest 驱动 provisioning
+V2-MIG01-A2-GOVERNANCE-FOUNDATION-01
+→ 阶段 A：仓库硬门配置与验证
+→ 阶段 B：受控 Runner 治理、Runbook 与实现
+→ 独立 handoff
+→ 真实 Manifest／环境／数据库 Shape 只读预检
+→ A2-P1 受控执行
 → 独立 handoff
 → A2-P2
 → BASE-02
@@ -228,7 +243,9 @@ V2-MIG01-A2-DECISION-PACK-01
 → Reader
 ```
 
-`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，但没有实施 A2。唯一下一任务切换为 `V2-MIG01-A2-DECISION-PACK-01`，该任务只允许制作关键决策包，不构成 A2-P1、A2-P2、仓库设置、Schema、Migration、数据库操作或环境核验授权。
+`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 也已将 proposed decision pack 合并到 `main`。用户已经接受 D01～D12 的上述组合，唯一下一任务切换为 `V2-MIG01-A2-GOVERNANCE-FOUNDATION-01`；该任务只建设 A2 前置治理基础，不构成 A2-P1、A2-P2、数据库操作或环境核验授权。
+
+这是一个 Ultra 大目标，但阶段 A 与阶段 B 必须保持独立变更域并使用不同验证与回退证据，禁止混成一个 PR。阶段 A 是 GitHub 外部状态修改；阶段 A 完成并以无害 PR 验证前，不得启动阶段 B 的正式交付。阶段 B 是仓库代码修改，但不得连接真实数据库、读取真实 Manifest 或执行 P1。阶段 A、B 完成后仍必须通过独立 handoff 冻结后续唯一任务。
 
 MIG-01 内部候选顺序继续保持：
 
@@ -242,7 +259,7 @@ A2
 → Reader
 ```
 
-新的项目级顺序在 A2 实施前插入决策包和用户决策／独立 handoff。决策包完成也不自动授权 A2-P1；仓库硬门是否启用只能由后续明确决策决定。该顺序只冻结候选切片的串行关系，不表示任一实施切片已获授权，也不改变 MIG-01～MIG-06 的相对顺序。
+新的项目级顺序在 A2 实施前插入已接受的仓库硬门与 Runner 治理基础。已接受 D10-B 不表示仓库硬门已经配置，已接受 D06-B／D07-B／D11-B 也不表示 Runner 已创建。该顺序只冻结候选切片的串行关系，不表示任一配置或实施切片已获执行授权，也不改变 MIG-01～MIG-06 的相对顺序。
 
 后续既定数据顺序保持：
 
