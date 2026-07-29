@@ -2,280 +2,286 @@
 
 ## 当前交接状态
 
-`V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT` 已通过 PR #791 完成并合并：
+`V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE` 已通过 PR #794 完成并合并：
 
-- PR Head：`cf7423f51906ce92a6de01c0a3cd0e02b2a774da`
-- Merge Commit：`99560c98faa987ecf79e66d18a4df1aa76d77c9e`
-- 完成文档：`docs/architecture/v2-02c-platform-auth-route-preflight.md`
-- 正式平台服务端授权根：`缺失`
-- 平台 Runtime／发布准入：`阻断`
-- Runtime、Schema、Migration 修改：`0`
+- PR Head：`836465f169104e6f5943ca076d0b98b1bfde2b94`
+- Merge Commit：`f9f948d00687fa4311e625cd51c9453d87ad0820`
+- 前置测试基线修复：PR #793，Merge Commit `d451486804e9405659424006ca5f1bc58c43b42a`
+- 前置可移植性基线修复：PR #795，Merge Commit `6bf4ed5b414984ad22eb3af1eb6e0c6c32770afa`
+- 成功 Actions：Run `30386375532`／Job `90366597304`
+- 架构检查器自测：67/67 通过
+- 完整测试：408 个测试文件、5679 个测试全部通过
+- build：101/101 静态页面生成完成
+- `AQ001`～`AQ007` 七条规则已经进入 `main`
+- PR #794 新增或修改五个质量基础设施文件，业务源码、API、UI、Schema、Migration 修改为 `0`
+- 本次 docs-only handoff 的 Runtime、Schema、Migration 修改为 `0`
 
-该结果只冻结平台入口、Session、授权根、页面与 API 路由族、legacy／v1 影响面、阻断状态和七个候选实施切片，不表示平台 Runtime、Route Group 或任何候选切片已经实施。
-
-当前项目级顺序为：
-
-```text
-V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE
-→ 独立 handoff
-→ MIG-01 后续独立数据 PR
-→ 后续既定顺序
-```
-
-MIG-01 内部候选顺序继续保持：
-
-```text
-A2
-→ BASE-02
-→ Writer
-→ Audit／模板
-→ B
-→ C
-→ Reader
-```
-
-该内部顺序不是当前项目级 `NEXT_TASK`，也不表示任何 MIG-01 切片已获实施授权。
-
-最小 Architecture／Quality CI、七个平台候选实施切片、MIG-01A2 和机构端旧任务均未启动。
+GitHub 只读核对结果为 `main.protected=false`，branch API 当前无可验证的 Required Check 强制。最小架构与质量 CI 已建立，但还不是 GitHub 服务端合并硬门。CI 和测试通过不表示 MIG-01 已关闭，也不表示七线已经正式发布。
 
 ## 唯一下一任务
 
 ```text
-V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE
-最小架构与质量 CI 门禁
+V2-MIG01-A2-PROVISIONING-PREFLIGHT-01
+MIG-01A2 锚点 Provisioning 实施前置审计与切片冻结
 ```
 
-该任务是唯一下一任务，但尚未启动。只有用户在后续任务中明确授权后，才可按本文白名单创建 Workflow、检查器、自测、规则配置并修改 `package.json`；本次 handoff 不构成 CI、Runtime、环境、分支保护或发布授权。
+该任务是唯一下一任务，但尚未启动。它只能进行仓库内 docs-only 静态预检，负责冻结 A2 锚点 provisioning 的事实边界、待确认决策、候选实施切片、停止条件和前向修复要求；不得直接实施 A2-P1、A2-P2 或任何后续数据切片。
 
-## 一、未来任务的精确文件范围
+## 一、唯一允许文件
 
-未来 `V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE` 只允许修改或创建：
+未来任务只允许创建：
 
 ```text
-.github/workflows/architecture-quality.yml
-scripts/verify/architecture-quality.mjs
-scripts/verify/architecture-quality-rules.json
-scripts/verify/architecture-quality.test.mjs
-package.json
+docs/architecture/v2-mig01-a2-provisioning-preflight.md
 ```
 
-不得修改 `pnpm-lock.yaml`，不得新增依赖。若实现需要第六个文件、第三方依赖或锁文件变化，必须停止并重新申请授权。
+不得修改其他文件。若目标文件已经存在、需要第二个文件或需要同步 handoff、ADR、代码、测试、Schema、Migration、脚本或配置，必须停止并重新申请授权。
 
-未来任务只建立最小架构增量检查与现有质量命令的 CI 编排，不修改业务源码、Schema、Migration、API 或 UI，也不配置分支保护或 Required Check。
+## 二、任务定位与事实边界
 
-## 二、本地命令契约
+未来预检必须以执行时最新 `main` 为基线，只读取仓库内可验证的代码、测试、Schema、Migration、配置、已接受 ADR、架构文档和已合并记录。
 
-未来任务必须在 `package.json` 新增以下命令：
+结论必须区分：
 
-```json
-{
-  "check:architecture": "node scripts/verify/architecture-quality.mjs",
-  "check:architecture:test": "node --test scripts/verify/architecture-quality.test.mjs",
-  "ci:quality": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
-}
-```
+- `current`：当前 `main` 可验证的事实；
+- `target`：`docs/architecture/architecture-v2.md` 与已接受 ADR 确定的目标约束；
+- `proposed`：尚需独立授权或决策的候选方案；
+- `待授权核验`：需要环境、数据库、真实 manifest、备份或凭证边界才能确认的事项。
 
-命令职责固定为：
+文件名、类型、测试通过、Demo、Mock、Seed、Capability 或历史计划均不能单独证明 provisioning、归属、回填、约束或发布已经完成。
 
-- `check:architecture`：基于 PR Base 与 Head 的差异执行静态架构增量检查；
-- `check:architecture:test`：使用 Node 内置 test runner 执行检查器自测；
-- `ci:quality`：串行运行现有 `lint`、`typecheck`、`test` 和 `build`。
+## 三、未来预检的十三项必审内容
 
-不得改变现有 `dev`、`start`、`preflight`、`db:*`、`lint`、`typecheck`、`test` 或 `build` 命令语义。检查器应复用仓库现有 TypeScript 能力，不得为 AST 解析新增依赖。
+### 3.1 最新 main 上的 A1／A2 静态证据
 
-## 三、增量检查模型
+必须重新核对：
 
-### 3.1 Base 与 Head
+- `drizzle/0038_mig_01a1_institution_isolation_expand.sql`；
+- `drizzle/meta/_journal.json`；
+- `drizzle/meta/0026_snapshot.json`；
+- `src/server/db/schema.ts`；
+- 与 tenant、institution、member、membership、anchor、scope 和 provisioning 有关的代码与测试；
+- 已合并 MIG-01 预检、数据架构、软件架构、模块映射和 ADR。
 
-检查器必须以明确的 Base 和 Head 为输入：
+必须明确 A1 只具备静态 Expand 证据，不得把可空结构写成 A2 provisioning、双键上下文、回填或 Enforce 已完成。
+
+### 3.2 Scope、Context Version 与 Context Head 的唯一 Owner
+
+必须找出并比较当前候选所有者，冻结以下对象的唯一事实所有者与消费方向：
+
+- tenant／institution scope；
+- context version；
+- context head；
+- anchor 与 membership provenance；
+- scope revision。
+
+如果仓库内存在多源、循环依赖、无唯一 Owner 或 current／target 冲突，必须记录为阻断，不得在预检中凭偏好选定实现。
+
+Owner 候选可以从仓库证据中枚举，但无法唯一冻结时，该结果本身属于本预检必须交付的阻断结论，不导致整个 docs-only 预检停止。预检应继续完成其余审计，但不得凭偏好选定 Owner，也不得据此授权 A2-P1 或 A2-P2。
+
+### 3.3 Tenancy 持久化与 Access Control 消费边界
+
+必须说明：
+
+- Tenancy 持久化负责哪些事实；
+- Access Control 只能消费哪些低敏、已验证上下文；
+- provisioning、membership、Guard 和业务模块之间的依赖方向；
+- 缺失、冲突、停用、陈旧 revision 或归属不明时如何 fail-closed；
+- 哪些边界属于 A2，哪些必须留给 BASE-02。
+
+不得让 Access Control 成为第二套 Tenancy 事实源，也不得提前实现 BASE-02。
+
+### 3.4 Manifest 契约
+
+必须冻结或明确列为待确认：
+
+- manifest version；
+- 来源与唯一所有者；
+- 审批人与审批状态；
+- digest／完整性校验；
+- 低敏字段白名单；
+- 生效、撤销和替换语义；
+- 仓库记录与真实 manifest 的边界。
+
+不得读取真实 manifest 值，也不得把示例或测试 fixture 写成生产事实。
+
+### 3.5 锚点字段规则
+
+至少逐项审计：
+
+- `tenantId`；
+- `institutionId`；
+- `status`；
+- `revision`；
+- `timezone`；
+- `currency`；
+- effective date。
+
+每个字段必须说明来源、格式、唯一性、默认值政策、可变性、冲突处理、审计要求和缺失时的停止条件。不得在没有证据时发明当前字段、默认值、约束或索引。
+
+### 3.6 A2-P1 与 A2-P2 的严格拆分
+
+未来预检必须保持：
 
 ```text
---base <PR base SHA>
---head <PR head SHA>
+A2-P1 manifest 驱动 provisioning
+→ 独立 handoff
+→ A2-P2 复合键／索引／NOT VALID 关系
 ```
 
-Workflow 必须传入 GitHub PR 事件中的 Base SHA 与 Head SHA。本地调用也必须提供可解析的 Base／Head，或使用检查器明确支持且可验证的等价输入。
+- A2-P1 只负责 manifest 契约、确定性锚点 provisioning、幂等与冲突封堵；
+- A2-P2 才能候选处理复合键、索引和 `NOT VALID` 关系；
+- A2-P1 不得夹带 A2-P2 约束；
+- A2-P2 不得在 A2-P1、独立 handoff 和所需授权完成前启动。
 
-出现以下任一情况必须非零退出：
+### 3.7 Migration 元数据处理决策
 
-- Base 或 Head 缺失；
-- SHA／ref 无法解析；
-- Base 对象或 Head 对象不存在；
-- Base 与 Head 没有可验证的共同历史；
-- 无法取得 Base 与 Head 的差异；
-- 配置无效、规则未知或检查过程异常。
+必须记录：
 
-不得在 Base 不明时退化为全仓扫描后放行，也不得默认使用可能错误的 `main`、`HEAD^` 或空差异。
+- journal 当前到 `0038`；
+- snapshot 当前到 `0026`；
+- 该漂移对手写 Migration、`db:generate`、snapshot diff 和验证方式的影响；
+- 哪些事项是仓库静态事实，哪些只能通过环境 journal 核验；
+- 在形成明确决策前是否构成 A2-P1 或 A2-P2 的阻断。
 
-### 3.2 差异语义
+不得运行 `db:generate`，不得创建 snapshot-diff Migration。
 
-检查器必须基于 Git 可验证的 Base 与 Head 差异处理新增、修改、复制、重命名和删除：
+### 3.8 下一 Migration、候选编号与唯一 lease
 
-- 既有且未修改的历史债务不得导致本 PR 失败；
-- 新增或复制到受限路径的文件按新增处理；
-- 重命名进入受限路径的目标文件按新增处理；
-- 删除或迁出受限路径本身不得被误报为新增违规；
-- 修改既有文件时，新增的违规依赖边必须失败；
-- 已存在且本次没有新增的违规依赖边不得因全仓历史债务被重复判失败；
-- 正常 `/api/v1/**` 文件不得因 legacy Route 规则被误报。
+必须作为待确认决策逐项回答：
 
-实现必须使用 NUL 安全或等价可靠的 Git 差异读取方式，并正确处理含空格路径、rename 和 delete。
+- 是否允许手写下一 Migration；
+- 候选编号如何确定；
+- 谁持有唯一 Migration lease；
+- lease 的起止、冲突、失效和交接条件；
+- 与并发 Schema／Migration 任务的互斥方式。
 
-## 四、最小架构规则
+预检只能记录决策证据和候选方案，不得创建 Migration 或取得实施 lease。
 
-检查器至少阻止本次差异新增以下内容：
+### 3.9 幂等、冲突、回滚和计数
 
-1. 根目录 `database/**`，防止建立第二套数据库资产；
-2. `src/app/api/institution/**` 下新的非版本化 `route.ts`；
-3. `src/app/api/open-platform/**` 下新的非版本化 `route.ts`；
-4. `src/modules/institution/**` 中未经精确例外登记的新文件；
-5. `src/modules/open-platform/**` 中未经精确例外登记的新文件；
-6. Domain 文件新增指向 `src/app/**`、`src/server/db/**`、`src/integrations/**`、React 或 Next.js 的依赖边；
-7. 一个业务模块新增直接导入另一业务模块 `server/**` 或 Repository 实现的依赖边。
+必须为未来 A2-P1／A2-P2 分别冻结：
 
-规则只约束增量，不得借首个 CI PR 一次性清算全部历史债务。任何新增违规路径或依赖边都必须非零退出，不得只打印 warning。
+- 空库；
+- 已有一致行；
+- 重复执行；
+- 部分存在；
+- 内容冲突；
+- 事务失败与回滚；
+- 行数、插入数、复用数、冲突数和零意外变更证明；
+- 失败后的停止、回退或前向修复要求。
 
-### 4.1 依赖解析
+不得把破坏性回滚作为默认方案；已经进入共享环境的 Migration 必须优先定义前向修复边界。
 
-检查器必须使用 TypeScript AST 或等价可靠方式读取并规范化：
+### 3.10 仓库外事项统一标记为待授权核验
 
-- 静态 `import`；
-- `export ... from`；
-- 动态 `import()`；
-- 相对路径和仓库现有 alias。
+以下事项不得在静态预检中写成已确认：
 
-不得仅依赖普通子串、正则扫描源文件或文件名猜测依赖。解析失败、无法归一化本应受检查的依赖或发现绕过形式时必须 fail-closed。
+- 各环境真实 journal；
+- 备份和恢复点；
+- 真实 manifest；
+- 目标数据库及其数据状态；
+- 环境配置、凭证和部署状态。
 
-### 4.2 精确例外
+任何核验都必须等待后续独立任务对环境、目标、命令和风险的明确授权。
 
-所有例外只能记录在：
+### 3.11 分支保护与 Required Check 是否成为硬门
+
+当前只读事实为 `main.protected=false`。未来预检必须提出并记录：分支保护和“最小架构与质量门禁” Required Check 是否应在 A2 实施前成为硬门、由谁授权、如何验证以及缺失时是否阻断 A2-P1／A2-P2。
+
+未来预检不得修改 GitHub 仓库设置，也不得把建议写成已启用事实。
+
+### 3.12 A2-P1／A2-P2 实施切片冻结
+
+必须分别列出：
+
+- 依赖与启动条件；
+- 允许的精确文件类型；
+- Schema／Migration／脚本／测试各自是否需要及其边界；
+- 定向测试、迁移验证、质量门禁和环境证据；
+- 停止条件；
+- 回退或前向修复；
+- 所需用户授权、Migration lease 和环境授权；
+- 完成定义与独立 handoff 要求。
+
+预检只冻结候选切片，不创建这些文件，也不运行实施命令。
+
+### 3.13 不得直接启动下游
+
+未来预检不得直接启动：
+
+- BASE-02；
+- Writer 双写或旧 Writer 封堵；
+- Audit／模板保护；
+- MIG-01B；
+- MIG-01C；
+- Reader 放行；
+- 平台候选切片；
+- 机构端旧任务。
+
+## 四、项目级候选顺序
+
+当前项目级顺序冻结为：
 
 ```text
-scripts/verify/architecture-quality-rules.json
+V2-MIG01-A2-PROVISIONING-PREFLIGHT-01
+→ 独立 handoff
+→ A2-P1 manifest 驱动 provisioning
+→ 独立 handoff
+→ A2-P2 复合键／索引／NOT VALID 关系
+→ BASE-02
+→ Writer
+→ Audit／模板
+→ MIG-01B
+→ MIG-01C
+→ Reader
 ```
 
-每条例外至少包含：
+该顺序不构成任何实施授权，不改变 MIG-01～MIG-06 的相对顺序。每个实施切片都必须在其前置条件满足后，由独立任务重新冻结基线、文件范围、环境范围、停止条件和授权。
 
-- 规则类型；
-- 精确文件路径，或精确的 `from`／`to` 依赖边；
-- 任务编号；
-- 原因；
-- 所有者；
-- 删除条件或复核条件。
-
-例外只能豁免完全匹配的违规身份。禁止：
-
-- `*`、`**`、`?`、字符组或其他通配表达式；
-- 只登记目录前缀；
-- 空任务编号、空原因、空所有者或无复核条件；
-- 未知规则类型；
-- 重复或相互覆盖的例外；
-- 用例外放宽整个模块、Route 族或依赖方向。
-
-无效配置、宽泛例外和无法解释的例外必须 fail-closed。
-
-## 五、检查器自测
-
-`scripts/verify/architecture-quality.test.mjs` 必须使用 Node 内置 test runner，至少覆盖：
-
-1. 新建根 `database/**` 被拒绝；
-2. 新增 institution 或 open-platform legacy Route 被拒绝；
-3. 冻结聚合模块新增文件被拒绝；
-4. 完全匹配的精确例外可通过；
-5. Domain 越层依赖被拒绝；
-6. 跨业务模块 server／Repository 依赖被拒绝；
-7. 当前已有债务在未修改时不会失败；
-8. 修改旧文件并新增违规边时失败；
-9. 错误 Base、缺失对象、无效配置和宽泛例外 fail-closed；
-10. rename、delete 和正常 v1 文件处理正确。
-
-自测 fixture 必须在测试运行期间创建和清理，不得为 fixture 新增第六个仓库文件。测试不得使用 skip、only、静默吞错或永远返回 `0` 的替身实现。
-
-## 六、GitHub Workflow
-
-`.github/workflows/architecture-quality.yml` 必须：
-
-- 使用 `pull_request`，禁止 `pull_request_target`；
-- 只授予 `contents: read`；
-- 不读取或传递 Secret；
-- 不连接数据库或业务外部系统；
-- checkout 使用完整历史或足以可靠取得 PR Base／Head 的历史；
-- 使用 Node 20、pnpm 9，并执行 `pnpm install --frozen-lockfile`；
-- 将 PR Base SHA 与 Head SHA 显式传给 `check:architecture`；
-- 设置合理的 job timeout；
-- 设置并发组和 `cancel-in-progress: true`；
-- 使用官方 GitHub Action，并在未来任务执行时核验后固定到完整 commit SHA；
-- 为 PR 产生真实、可见且失败会阻断该 Workflow 的状态检查。
-
-Workflow 必须按以下顺序运行：
-
-1. `pnpm check:architecture:test`
-2. `pnpm check:architecture -- --base <PR base SHA> --head <PR head SHA>`
-3. `pnpm lint`
-4. `pnpm typecheck`
-5. `pnpm test`
-6. `pnpm build`
-
-未来任务不配置分支保护或 Required Check。任何仓库设置变更都需要后续独立授权。
-
-## 七、未来任务的启动和停止条件
-
-未来任务启动前必须再次确认：
-
-- `main` 与 `origin/main` 同步；
-- working tree 干净；
-- 五文件白名单没有被其他任务占用；
-- 当前 `lint`、`typecheck`、`test` 和 `build` 命令仍存在；
-- GitHub Actions 和 package manager 版本由当前仓库证据核验。
+## 五、未来预检的停止条件
 
 遇到以下任一情况必须停止：
 
-- 冻结 `main` 上现有 `lint`、`typecheck`、`test` 或 `build` 失败；
-- 需要修改业务源码或现有测试以掩盖失败；
-- 需要新增依赖或修改 `pnpm-lock.yaml`；
-- 无法可靠确定或取得 Base／Head；
-- AST／路径归一化无法可靠覆盖目标规则；
-- 需要宽泛例外才能通过；
-- Workflow 必须读取 Secret、连接环境或扩大权限；
-- 需要配置分支保护、Required Check 或其他仓库设置；
-- 出现五文件外改动、并发写入或未获授权范围。
+- 最新 `main` 与交接事实不一致；
+- A1／A2、Schema、Migration、journal、snapshot、测试或架构证据矛盾且无法解释；
+- 无法枚举 Scope、Context Version 或 Context Head 的 Owner 候选，无法定位其代码、Schema、Migration、ADR 或架构证据，或者只有读取环境、真实 manifest、凭证或扩大文件范围才能继续判断；
+- 需要读取环境变量、凭证、真实 manifest 或连接数据库才能继续；
+- 需要创建唯一允许文件以外的内容；
+- 需要提前决定或实施 Schema、Migration、Runtime、脚本或测试；
+- 需要修改 CI、分支保护、Required Check 或仓库设置；
+- 出现并发写入或 Migration lease 冲突；
+- 需要启动 A2、BASE-02、Writer、Reader、平台切片或机构端旧任务。
 
-失败时必须报告真实基线结果，不得通过降低规则、跳过命令、吞掉异常或让检查器固定返回成功来绕过。
+## 六、严格禁止
 
-## 八、禁止范围
+未来预检不得：
 
-未来 `V2-QUALITY-CI-01` 不得：
-
-- 修改 `src/**`、`drizzle/**`、业务测试、Schema、Migration、API 或 UI；
-- 修改现有测试以掩盖失败；
-- 删除、跳过或放宽既有门禁；
-- 使用 test skip、only、静默吞错或永远返回 `0`；
-- 新增依赖或修改 `pnpm-lock.yaml`；
-- 修改现有 `dev`、`start`、`preflight`、`db:*` 命令语义；
-- 使用 `pull_request_target`；
+- 创建或修改 Migration、Schema、Runtime、脚本或测试；
+- 创建 `0039` 或其他 Migration；
+- 运行 `db:generate`、Migration、Seed、部署或数据库命令；
+- 连接数据库、测试服务器、生产环境或业务外部系统；
 - 读取 `.env.local`、`DATABASE_URL`、Token、Secret、私钥或凭证；
-- 连接数据库、HIS、企业微信、AI 厂商、对象存储、测试服务器或生产环境；
-- 配置分支保护或 Required Check；
-- 启动平台 Session、Policy、页面 Guard、Route Guard 或其他平台 Runtime；
-- 启动 MIG-01A2 或其他 MIG-01 实施切片；
-- 恢复或启动机构端旧任务；
-- 自动进入正式审查（Ready）或自动合并（Merge）。
+- 读取真实 manifest 值或 PII；
+- 修改 `.github/**`、`package.json`、`pnpm-lock.yaml`；
+- 修改分支保护或 Required Check；
+- 自动进入正式审查（Ready）；
+- 自动合并；
+- 启动任何候选实施切片。
 
-## 九、未来任务的验证与交付
+## 七、未来预检的验证与交付
 
 未来任务至少必须确认：
 
-1. 修改文件精确为五文件白名单；
-2. `pnpm-lock.yaml` 未修改，新增依赖为 `0`；
-3. `pnpm check:architecture:test` 通过；
-4. `pnpm check:architecture -- --base <基线> --head <任务 Head>` 通过；
-5. `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build` 依次通过；
-6. PR 上产生真实 Architecture／Quality 状态检查并通过；
-7. `git diff --check` 通过；
-8. 业务 Runtime、Schema、Migration 修改均为 `0`；
-9. 未读取凭证或环境变量值，未连接数据库或业务外部环境；
-10. 工作树提交后干净，最终只有一个同主题提交；
-11. 只创建草稿 PR，不自动进入正式审查，不自动合并；
-12. 未启动平台候选切片、MIG-01A2 或机构端旧任务。
+1. 只新增 `docs/architecture/v2-mig01-a2-provisioning-preflight.md`；
+2. `git diff --check` 通过；
+3. A1／A2 事实、Owner、manifest、字段、P1／P2、元数据漂移和实施切片均有真实仓库证据；
+4. 所有仓库外事项均标记为 `待授权核验`；
+5. Runtime、Schema、Migration、脚本、测试、CI、package 和 lock 修改均为 `0`；
+6. 未运行 `db:generate`、Migration、Seed、部署或数据库命令；
+7. 未读取凭证、真实 manifest 或连接环境；
+8. 工作树提交后干净，最终只有一个同主题提交；
+9. 只创建草稿 PR，并等待真实“最小架构与质量门禁”执行；
+10. 不自动进入 Ready、不自动合并、不启动任何后续切片。
 
-未来 `V2-QUALITY-CI-01` 的完成定义仅是：最小增量架构检查、检查器自测、现有质量命令编排和真实 PR 状态检查已经建立并验证。它不表示历史架构债务已经清零、分支保护已经配置、平台授权已经实施、MIG-01 已获实施授权或七线已经正式发布。
+未来 `V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 的完成定义仅是：A2 锚点 provisioning 的 current 证据、target 边界、待确认决策、A2-P1／A2-P2 候选实施切片及其停止／修复条件已经冻结。它不表示 A2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C 或 Reader 已经实施或获授权。
