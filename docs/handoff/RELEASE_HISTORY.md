@@ -484,3 +484,18 @@
 - Runtime、Schema、Migration 修改均为 0。
 - 唯一下一任务为 `V2-MIG01-A2-DECISION-PACK-01` A2 关键决策包。
 - A2-P1、A2-P2 和下游任务均未启动。
+
+## 2026-07-29：MIG-01A2 关键决策接受与治理基础切换
+
+- PR #798：收口 MIG-01A2 预检并切换至关键决策包。
+- PR #798 Merge Commit：`5fbeffbbbb89b2d39eaf4fc40101edbfbb12ee75`。
+- PR #800：修复平台知识库问答审计异步测试竞态。
+- PR #800 Merge Commit：`65b6049243adc63ada41f5c6b09d112451ec1fc5`。
+- PR #799：提交 MIG-01A2 Owner 与实施门禁 proposed decision pack。
+- PR #799 Merge Commit：`1438894dd07a68cf767b49207795388b0bc814a6`。
+- `docs/decisions/mig01-a2-provisioning-decision-pack.md` 已合并并继续保留为 proposed 决策材料。
+- 用户已接受 D01-A、D02-A、D03-A、D04-A、D05-A、D06-B、D07-B、D08-C、D09-A、D10-B、D11-B 和 D12-A（方向）。
+- D12 只接受最小 Anchor Bridge 方向；精确名称、列序、Catalog Shape、编号、锁／timeout 和目标环境后置。
+- 本次 accepted 决策与 handoff 的 Runtime、Schema、Migration 修改均为 0。
+- 唯一下一任务为 `V2-MIG01-A2-GOVERNANCE-FOUNDATION-01` MIG-01A2 仓库硬门与受控 Runner 治理基础。
+- 仓库硬门、Required Check、Runner、Runbook、Lease、真实 Manifest、环境核验、A2-P1 和 A2-P2 均未启动。
