@@ -1689,10 +1689,12 @@ describe('平台端知识库管理只读看板', () => {
     const auditSection = screen.getByLabelText('平台端问答审计');
     fireEvent.click(within(auditSection).getByRole('button', { name: '刷新审计' }));
 
-    expect(await screen.findByText('冷敷后怎么护理？')).toBeInTheDocument();
-    expect(screen.getByText('基于已召回的知识片段：平台端审计回答预览。')).toBeInTheDocument();
-    expect(screen.getByText('混合检索 · 引用 2')).toBeInTheDocument();
-    expect(screen.getByText('answered')).toBeInTheDocument();
+    expect(
+      await within(auditSection).findByText('基于已召回的知识片段：平台端审计回答预览。'),
+    ).toBeInTheDocument();
+    expect(within(auditSection).getByText('冷敷后怎么护理？')).toBeInTheDocument();
+    expect(within(auditSection).getByText('混合检索 · 引用 2')).toBeInTheDocument();
+    expect(within(auditSection).getByText('answered')).toBeInTheDocument();
     await waitFor(() =>
       expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/api/v1/open-platform/knowledge-management/qa/audits?'),
