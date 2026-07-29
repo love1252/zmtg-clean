@@ -677,6 +677,10 @@ describe('机构端知识库只读列表 UI', () => {
     const refreshButton = within(section).getByRole('button', { name: '刷新任务' });
     const fetchMock = vi.mocked(globalThis.fetch);
 
+    expect(
+      await within(section).findByText('机构知识库索引任务暂未启用。'),
+    ).toBeInTheDocument();
+
     fetchMock.mockResolvedValueOnce(Response.json({ records: 'invalid-records' }));
     const invalidPayloadCallCount = fetchMock.mock.calls.length;
     fireEvent.click(refreshButton);
@@ -697,14 +701,18 @@ describe('机构端知识库只读列表 UI', () => {
     const hostileResponseCallCount = fetchMock.mock.calls.length;
     fireEvent.click(refreshButton);
     await waitFor(() => expect(fetchMock.mock.calls.length).toBe(hostileResponseCallCount + 1));
+    expect(
+      await within(section).findByText('机构知识库索引任务暂未启用。'),
+    ).toBeInTheDocument();
     expect(jsonGetterCount).toBe(0);
-    expect(within(section).getByText('机构知识库索引任务暂未启用。')).toBeInTheDocument();
 
     fetchMock.mockRejectedValueOnce(new Error('indexing route unavailable'));
     const exceptionCallCount = fetchMock.mock.calls.length;
     fireEvent.click(refreshButton);
     await waitFor(() => expect(fetchMock.mock.calls.length).toBe(exceptionCallCount + 1));
-    expect(within(section).getByText('机构知识库索引任务暂未启用。')).toBeInTheDocument();
+    expect(
+      await within(section).findByText('机构知识库索引任务暂未启用。'),
+    ).toBeInTheDocument();
     expect(within(section).queryByText('向量索引任务已完成')).not.toBeInTheDocument();
     expect(within(section).queryByRole('button', { name: '取消等待任务' })).not.toBeInTheDocument();
   });
