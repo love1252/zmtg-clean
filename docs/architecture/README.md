@@ -1,8 +1,8 @@
 # 智美天工架构文档索引
 
-- 任务：`V2-QUALITY-CI-01-HANDOFF-CLOSEOUT-TO-MIG01-A2-PREFLIGHT`
+- 任务：`V2-MIG01-A2-PREFLIGHT-HANDOFF-CLOSEOUT-TO-DECISION-PACK-01`
 - 日期：`2026-07-29 CST +0800`
-- 审计基线：`f9f948d00687fa4311e625cd51c9453d87ad0820`
+- 审计基线：`d9a47773cb4914b0f0534093f5c8f47f6516b9d6`
 - 状态：`current`
 - 文档性质：架构导航索引，不是第二套架构事实源
 - runtime、Schema、Migration、API、UI 修改：`0`
@@ -94,6 +94,7 @@ MIG-01A1 Expand
 | [`institution-seven-stream-restart-baseline.md`](./institution-seven-stream-restart-baseline.md) | `current + target` | 七线完成度、依赖、发布门禁和重启顺序 |
 | [`architecture-v2-evidence-audit-20260728.md`](./architecture-v2-evidence-audit-20260728.md) | `current + proposed` | 用当前代码、Schema、测试和历史 PR 对 V2 进行独立核验 |
 | [`v2-02b-mig01-closure-preflight.md`](./v2-02b-mig01-closure-preflight.md) | `current + target + proposed` | MIG-01 A1～C 静态证据、完整影响面、阻断状态和内部候选实施切片。 |
+| [`v2-mig01-a2-provisioning-preflight.md`](./v2-mig01-a2-provisioning-preflight.md) | `current + target + proposed` | A1／A2 状态、Owner 候选、Manifest 契约、P1／P2 拆分、Migration 元数据、幂等矩阵、环境门禁与实施阻断 |
 | [`v2-02c-platform-auth-route-preflight.md`](./v2-02c-platform-auth-route-preflight.md) | `current + target + proposed` | 平台正式 Session、授权根、页面与 API 路由族、legacy／v1 影响面、阻断状态和候选实施切片 |
 | [`business-architecture.md`](./business-architecture.md) | `current + target` | 角色、价值流、两平面职责、七线业务闭环、AI 人工确认和正式发布尺度 |
 | [`application-architecture.md`](./application-architecture.md) | `current + target` | 官网、认证、机构端、平台端、API、Webhook、权限、Capability 和应用依赖方向 |
@@ -108,6 +109,8 @@ MIG-01A1 Expand
 业务、应用、数据、软件、部署、开发六类架构视图已经完成 `6/6`。`V2-ARCH-DOCS-03` 已通过 PR #787 合并，开发架构、根 `README.md` 项目入口和 `CURRENT_STATUS` 同步均已完成，不再标记为 `planned`。
 
 `V2-02B-MIG01-CLOSURE-PREFLIGHT` 已通过 PR #789 完成并合并，其预检文档现作为 MIG-01 当前静态证据和候选实施切片入口。该结果不表示 MIG-01 已实施或关闭。
+
+`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，其专项预检文档现作为 A2 当前静态证据与决策阻断入口。该结果只完成预检，没有实施 A2；A2-P1、A2-P2 和数据库操作均未启动。
 
 `V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT` 已通过 PR #791 完成并合并，其预检文档现作为平台正式授权与路由族的当前静态证据和候选实施切片入口。该预检确认正式平台服务端授权根为“缺失”、平台 Runtime／发布准入为“阻断”；本阶段没有实施平台 Runtime，七个平台候选实施切片均未启动。
 
@@ -177,10 +180,11 @@ GitHub 只读核对结果为 `main.protected=false`，branch API 当前无可验
 2. [`architecture-v2-module-map.md`](./architecture-v2-module-map.md)
 3. [`architecture-v2-evidence-audit-20260728.md`](./architecture-v2-evidence-audit-20260728.md)
 4. [`v2-02b-mig01-closure-preflight.md`](./v2-02b-mig01-closure-preflight.md)
-5. [`v2-02c-platform-auth-route-preflight.md`](./v2-02c-platform-auth-route-preflight.md)
-6. [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md)
-7. [`data-architecture.md`](./data-architecture.md)
-8. [`software-architecture.md`](./software-architecture.md)
+5. [`v2-mig01-a2-provisioning-preflight.md`](./v2-mig01-a2-provisioning-preflight.md)
+6. [`v2-02c-platform-auth-route-preflight.md`](./v2-02c-platform-auth-route-preflight.md)
+7. [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md)
+8. [`data-architecture.md`](./data-architecture.md)
+9. [`software-architecture.md`](./software-architecture.md)
 
 ### 部署和运维
 
@@ -210,11 +214,12 @@ GitHub 只读核对结果为 `main.protected=false`，branch API 当前无可验
 ## 11. 当前项目级顺序
 
 ```text
-V2-MIG01-A2-PROVISIONING-PREFLIGHT-01
-→ 独立 handoff
+V2-MIG01-A2-DECISION-PACK-01
+→ 用户决策／独立 handoff
+→ 仓库硬门配置任务（仅在决策批准时）
 → A2-P1 manifest 驱动 provisioning
 → 独立 handoff
-→ A2-P2 复合键／索引／NOT VALID 关系
+→ A2-P2
 → BASE-02
 → Writer
 → Audit／模板
@@ -223,7 +228,7 @@ V2-MIG01-A2-PROVISIONING-PREFLIGHT-01
 → Reader
 ```
 
-`V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE` 已通过 PR #794 完成并合并。唯一下一任务切换为 `V2-MIG01-A2-PROVISIONING-PREFLIGHT-01`，该任务尚未启动；它只允许进行 A2 锚点 provisioning 的 docs-only 静态预检和候选切片冻结，不构成 A2-P1、A2-P2、BASE-02、Writer、Reader、数据库操作或环境核验的实施授权。
+`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，但没有实施 A2。唯一下一任务切换为 `V2-MIG01-A2-DECISION-PACK-01`，该任务只允许制作关键决策包，不构成 A2-P1、A2-P2、仓库设置、Schema、Migration、数据库操作或环境核验授权。
 
 MIG-01 内部候选顺序继续保持：
 
@@ -237,7 +242,7 @@ A2
 → Reader
 ```
 
-新的项目级顺序进一步把 A2 拆分为 A2-P1 与 A2-P2，并要求在预检及 A2-P1 后分别完成独立 handoff。该顺序只冻结候选切片的串行关系，不表示任一实施切片已获授权，也不改变 MIG-01～MIG-06 的相对顺序。
+新的项目级顺序在 A2 实施前插入决策包和用户决策／独立 handoff。决策包完成也不自动授权 A2-P1；仓库硬门是否启用只能由后续明确决策决定。该顺序只冻结候选切片的串行关系，不表示任一实施切片已获授权，也不改变 MIG-01～MIG-06 的相对顺序。
 
 后续既定数据顺序保持：
 

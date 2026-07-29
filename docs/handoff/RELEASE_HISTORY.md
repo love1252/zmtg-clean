@@ -471,3 +471,16 @@
 - 本次 handoff 文档回填的 Runtime、Schema、Migration 修改均为 0。
 - GitHub 只读核对结果为 `main.protected=false`，branch API 当前无可验证的 Required Check 强制；本轮未修改仓库设置。
 - 唯一下一任务为 `V2-MIG01-A2-PROVISIONING-PREFLIGHT-01`；本次只完成 handoff，尚未启动 A2 实施。
+
+## 2026-07-29：MIG-01A2 Provisioning 静态预检收口
+
+- PR #796：收口质量 CI 并切换至 A2 预检。
+- PR #796 Merge Commit：`bebdd3afca9773b4ac9764572a4372349440ea10`。
+- PR #797：MIG-01A2 Provisioning 静态预检。
+- PR #797 Merge Commit：`d9a47773cb4914b0f0534093f5c8f47f6516b9d6`。
+- A1 仅具备静态 Expand。
+- A2 Provisioning 缺失且启动受阻。
+- Owner、Manifest、输入承载、Metadata、唯一 Migration lease 和仓库硬门尚未关闭。
+- Runtime、Schema、Migration 修改均为 0。
+- 唯一下一任务为 `V2-MIG01-A2-DECISION-PACK-01` A2 关键决策包。
+- A2-P1、A2-P2 和下游任务均未启动。
