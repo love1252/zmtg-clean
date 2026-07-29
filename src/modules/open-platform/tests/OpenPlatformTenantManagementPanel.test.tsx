@@ -1033,13 +1033,27 @@ describe('平台端租户管理面板', () => {
     expect(screen.getByText('成功')).toBeInTheDocument();
     expect(screen.getByText('失败')).toBeInTheDocument();
 
-    // AI 用量表格中有 quotaboundcount = 3 显示在超限拒绝列
+    // 等待异步记录真实渲染，再按列验证成功、失败与超限拒绝互不混淆
     const tables = screen.getAllByRole('table');
     const aiTable = tables.find((t) => within(t).queryByText('超限拒绝'));
     expect(aiTable).toBeDefined();
-    // 3（succeededCount）会出现在多个单元格，用 getAllByText 检查至少有一个
-    const threeCells = within(aiTable!).getAllByText('3');
-    expect(threeCells.length).toBeGreaterThanOrEqual(1);
+
+    const tenantCell = await within(aiTable!).findByText('demo-tenant-001');
+    const usageRow = tenantCell.closest('tr');
+    expect(usageRow).not.toBeNull();
+
+    const usageCells = within(usageRow!)
+      .getAllByRole('cell')
+      .map((cell) => cell.textContent?.trim() ?? '');
+
+    expect(usageCells).toEqual([
+      'demo-tenant-001',
+      '8',
+      '3',
+      '2',
+      '3',
+      '500',
+    ]);
 
     // 验证 fetch 被调用
     expect(fetchMock.mock.calls.some(([input, init]) => (
