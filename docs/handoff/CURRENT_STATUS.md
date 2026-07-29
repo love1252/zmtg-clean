@@ -6,26 +6,17 @@
 
 - 更新日期：2026-07-29
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE` 已完成并已合并
-- 结果：最小架构增量检查、检查器自测和现有质量命令编排已进入 `main`，并通过真实 GitHub Actions 验证
-- 完成 PR：#794
-- PR Head：`836465f169104e6f5943ca076d0b98b1bfde2b94`
-- Merge Commit：`f9f948d00687fa4311e625cd51c9453d87ad0820`
-- 前置基线修复：
-  - PR #793：质量门禁前置测试基线修复；Head `2cf2a800d47c55fd14ee6aa40c866814be9786c8`；Merge Commit `d451486804e9405659424006ca5f1bc58c43b42a`
-  - PR #795：Node 20 与 CI 运行器可移植性基线修复；Head `71cae1d8f88b67437bb735fd009eaf137ad3b7d6`；Merge Commit `6bf4ed5b414984ad22eb3af1eb6e0c6c32770afa`
-- 成功 Actions：Run `30386375532`／Job `90366597304`
-- 架构检查器自测：67/67 通过
-- 增量架构检查：通过
-- lint／typecheck：通过
-- 完整测试：408 个测试文件、5679 个测试全部通过
-- build：101/101 静态页面生成完成
+- 当前阶段：`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已完成并已合并
+- 结果：MIG-01A2 Provisioning 的仓库静态证据、Owner 候选、Manifest 契约、P1／P2 拆分、Migration 元数据、幂等矩阵、环境门禁与实施阻断已冻结；本轮未实施 A2
+- 完成 PR：#797
+- PR Head：`cf87ac63474436d404a8e15675db083b5654e78d`
+- Merge Commit：`d9a47773cb4914b0f0534093f5c8f47f6516b9d6`
+- 完成文档：`docs/architecture/v2-mig01-a2-provisioning-preflight.md`
+- 成功 Actions：Run `30417750587`／Job `90467828716`
+- 质量门禁：环境核对、安装依赖、架构检查器自测、增量架构检查、lint、typecheck、完整测试和 build 全部通过
 - 架构规则：`AQ001`～`AQ007` 七条规则已进入 `main`
 - Workflow：`.github/workflows/architecture-quality.yml`
 - 检查器：`scripts/verify/architecture-quality.mjs`
-- PR #794 文件边界：新增 Workflow、检查器、检查器自测与规则配置，并在 `package.json` 只新增三个质量命令
-- PR #794 业务源码／API／UI／Schema／Migration 修改：0
-- PR #794 `pnpm-lock.yaml` 修改：0；新增依赖：0
 - 架构视图完成度：业务、应用、数据、软件、部署、开发共 6/6
 - 默认协作：Codex 为默认主开发和仓库执行者；ChatGPT 网页版负责设计与审查；Claude Code 仅在用户明确点名时启用
 - 治理语言：面向人的仓库文档、PR 与回报默认中文，中文优先治理已生效
@@ -46,8 +37,21 @@
   - 核心相关测试文件：56 个
 - 平台 Route 授权现状：49 个依赖 Demo Context，5 个无认证授权
 - legacy 路由现状：6 个 legacy Route 均不是薄兼容层
-- V2-02B 关闭状态：A1 `已具备`，仅限仓库静态 Expand 证据；A2 `缺失`；BASE-02 `部分具备`；Writer、Audit／模板、B、C、Reader 均为 `阻断`
-- Migration 元数据：journal 到 `0038`，snapshot 到 `0026`；各环境实际状态仍须独立核验
+- A1 状态：仅具备仓库静态 Expand
+- A2 状态：Provisioning 实现缺失且启动受阻
+- Owner 状态：候选可枚举，但具体实现 Owner 未唯一冻结
+- 关键阻断：
+  - Owner
+  - Manifest 正式契约
+  - P1 输入承载方式
+  - metadata 策略
+  - P2 exact constraint allowlist
+  - 唯一 Migration lease
+  - `main` 保护与 Required Check
+  - 环境证据
+- Migration journal：到 `0038`
+- Migration snapshot：到 `0026`，且不覆盖 A1
+- Migration metadata 门禁：`db:generate` 与 snapshot-diff Migration 继续阻断
 - MIG-01 状态：尚未关闭，内部候选顺序保持 A2 → BASE-02 → Writer → Audit／模板 → B → C → Reader
 - Customers／Institution System Reader 门禁：MIG-01C + 当前成员服务端双键上下文
 - Care 门禁：等待 MIG-02
@@ -60,9 +64,9 @@
 - 七线业务综合完成度：约 25%（规划估算）
 - 公共底座完成度：约 65%（规划估算）
 - 正式发布：0/7
-- 唯一下一任务：`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01`
-- 下一任务状态：尚未启动；只允许进行 A2 锚点 Provisioning 的 docs-only 静态预检与候选切片冻结
-- 未启动事项：A2-P1、A2-P2、后续 MIG-01 实施、数据库操作、七个平台候选实施切片和机构端旧任务均未启动且未获授权
+- 唯一下一任务：`V2-MIG01-A2-DECISION-PACK-01`
+- 下一任务状态：尚未启动；只允许制作 MIG-01A2 Owner、Manifest、输入承载、Metadata 与硬门决策包，不实施任何决策
+- 未启动事项：A2-P1、A2-P2、数据库操作以及 BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 等下游任务，连同平台切片和机构端旧任务均未启动且未获授权
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->
