@@ -664,3 +664,17 @@
 - 数据库写入、Lease、`--execute`、Migration、Seed、DDL、DML 均为 0；Stage D 已完成并收口。
 - 本次四文件 handoff 的 Runtime、Schema、Migration、scripts、tests、CI、package、lock 修改均为 0。
 - 唯一下一任务沿用既有名称 `A2-P1 manifest 驱动 provisioning`；仓库尚无正式任务编号，该任务尚未启动、尚未获得执行授权。
+
+## 2026-07-31：A2-P1 受控执行计划与 Write Adapter Runtime 收口
+
+- PR #828 建立 A2-P1 受控执行计划，Head `77be8e4ac835ce76e77a6bf5c7026c63d83b58fc`，Merge Commit `184b0320be1bedaace5d72ff0b0e453f343ad52e`。
+- PR #828 Required Check Run `30565599037`／Job `90949208935` 对应冻结 Head，全部质量步骤成功。
+- PR #829 建立唯一 Write Adapter、Write 合成事务测试、ReadOnly／Write parity 测试并更新 Runbook，Head `aa465a64aa146a43f766413caa53dfc88a1bd39b`，Merge Commit `bbf15be8f5acd66d80db5ac7b6e9250a57d5744e`。
+- PR #829 Required Check Run `30568943508`／Job `90960419070` 对应最终 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- Write Adapter 只读取 `tenants` 与三张 A1 表，只向三张 A1 表执行参数化纯 `INSERT`，并提供单一 `SERIALIZABLE READ WRITE` 事务、固定 timeout 与双键事务级 advisory lock；既有 Kernel 强制 affected rows 逐项等于 1，并在提交前完成全批重检。
+- ReadOnly Adapter 与永久拒写边界未修改；禁止 UPDATE、UPSERT、DELETE、DDL、自动重试、savepoint 和原始数据库错误泄漏。
+- 定向 Write／Parity／ReadOnly／Kernel 为 4 个文件、109 个测试通过；完整 Provisioning 契约为 14 个文件、510 个测试通过；完整质量基线为 422 个测试文件、6190 个测试通过，build 101／101。
+- Runtime 阶段未连接数据库、未读取真实 Manifest、未签发或消费真实 Lease、未运行 Runner dry-run／`--execute`，Migration、Seed、DDL、DML 与数据库写入均为 0。
+- 本次四文件 handoff 的 Runtime、Schema、Migration、scripts、tests、CI、package、lock 修改均为 0。
+- Write Adapter 进入 `main` 不表示 A2-P1 已执行或完成；真实 Authority、仓库外一次性组合根、client 生命周期、grant／revoke、真实 Lease release 与数据库执行证据仍未关闭。
+- 唯一下一阶段沿用 Runbook 名称 `Authority／组合根无写准备`；当前总任务已授权在本 handoff 合并后串行执行，但本次 handoff 未启动该阶段。
