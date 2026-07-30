@@ -565,3 +565,28 @@
 - `real_manifest_missing`、`readonly_adapter_unavailable`、`real_environment_dry_run_unavailable` 仍未关闭。
 - 唯一下一任务为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-B`：MIG-01A2 只读 Repository Adapter 与 Context Policy。
 - Stage B、Stage C、Stage D、Manifest 候选、真实 dry-run、Lease、A2-P1 和 A2-P2 均未启动。
+
+## 2026-07-30：MIG-01A2 本地就绪修复 Stage B 完成并切换至 Stage C
+
+- PR #812 完成 Stage A handoff，Head `ea716f56ec2ec9619d6cd1e54dcb1d0fd6059faf`，Merge Commit `63a6ddff4fe192b0aa01c40f72dc45317889291a`，Run `30516545750`／Job `90787584951` 成功。
+- PR #813 独立修复治疗摘要入口异步断言竞态，Head `3243456aa65bc0a47df2b74711d78b27e9afdb20`，Merge Commit `40836d26f79a127b5958533b65f955faa970dfcd`，Run `30516129057`／Job `90786236239` 成功；该测试修复不属于 Stage B 六文件业务范围。
+- PR #814 完成本地验收 Context Policy、只读 PostgreSQL Adapter、测试、Runbook 与 Stage B 证据报告，Head `c5ad29e2775789cc28b47e0724f64e165b0eff9e`，Merge Commit `19f2dbe55799e533e609c7cece9eaad1b623babd`。
+- PR #814 Required Check Run `30519856557`／Job `90797620311` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- Stage B 精确六文件：
+  1. `docs/operations/mig01-a2-local-readiness-stage-b-20260730.md`
+  2. `docs/operations/mig01-a2-provisioning-runbook.md`
+  3. `src/modules/tenancy/provisioning/provisioning-context-policy.ts`
+  4. `src/modules/tenancy/provisioning/server/provisioning-readonly-postgres-adapter.ts`
+  5. `src/modules/tenancy/provisioning/tests/ProvisioningContextPolicy.test.ts`
+  6. `src/modules/tenancy/provisioning/tests/ProvisioningReadonlyPostgresAdapter.test.ts`
+- Context Policy version 为 `mig01-a2-local-acceptance-context-policy/v1`，目标环境只允许 `local_acceptance`，timezone 只允许 `Asia/Shanghai`，currency 只允许 `CNY`。
+- 只读 Adapter 位于 Tenancy 模块，只访问 `public.tenants`、`public.institution_scopes`、`public.institution_operating_context_versions` 和 `public.institution_operating_contexts`。
+- 所有读取使用 `REPEATABLE READ + READ ONLY`；statement timeout `5s`、lock timeout `1s`、idle transaction timeout `5s`，connect timeout `5s` 由调用方 client 负责；写方法永久拒绝，数据库错误只映射为固定低敏错误。
+- Context Policy 23 个测试、Adapter 26 个测试、Stage B 新增 49 个测试、Provisioning 定向契约集 6 文件／112 个测试全部通过；完整测试 414 文件／5791 个通过，build 101／101。
+- localhost-only smoke 结果为 `local_readonly_adapter_smoke=pass`；前后 Journal 均为 39、`tenants` 均为 2、三个 A1 表均为 0，没有数据库写入或业务数据变化。
+- PR #814 新增两个 Tenancy Runtime 文件和两个测试文件；Schema、Migration、journal、snapshot、CI、package、lock、业务 API／UI 与新增依赖修改均为 0。
+- 本次四文件 handoff 的 Runtime、Schema、Migration、scripts、tests、CI、package 和 lock 修改均为 0。
+- `readonly_adapter_unavailable` 已关闭；`real_manifest_missing` 与 `real_environment_dry_run_unavailable` 继续阻断。当前 Runner CLI 尚未组合真实 Context Policy 与只读 Adapter。
+- Stage B 未创建或读取真实 Manifest，未运行 Runner dry-run／`--execute`，未签发 Lease，未执行 Provisioning，未启动 A2-P1／A2-P2。
+- 唯一下一任务为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C`：MIG-01A2 本地验收 Manifest 候选与审批包。
+- Stage C、Stage D、Manifest 候选、真实 dry-run、Lease、A2-P1 和 A2-P2 均未启动；Stage C 完成也不得自动启动 Stage D。

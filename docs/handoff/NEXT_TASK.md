@@ -2,168 +2,183 @@
 
 ## 当前交接状态
 
-MIG-01A2 的 accepted 决策、仓库硬门、受控 Runner 治理基础、本地环境只读预检和本地就绪修复 Stage A 已分别通过独立 PR 完成：
+MIG-01A2 的 accepted 决策、仓库硬门、受控 Runner 治理基础、本地环境只读预检、本地就绪修复 Stage A 和 Stage B 已分别通过独立 PR 完成：
 
 - accepted 决策：PR #801；
 - 治理 Stage A 仓库硬门：PR #804，handoff PR #805；
 - 治理 Stage B Runner 基础：PR #807，handoff PR #808；
 - 本地环境只读预检：PR #809，handoff PR #810；
-- 本地就绪修复 Stage A 报告：PR #811；
-- PR #811 Head：`50b007820b7fdb68ff35b6ef0e2a53b9e8e61880`；
-- PR #811 Merge Commit：`fc08de343456a1f0d05092f1aedd389118b32b26`；
-- PR #811 Required Check：Run `30514884226`／Job `90782386213`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功；
+- 本地就绪修复 Stage A：PR #811，handoff PR #812；
+- 本地就绪修复 Stage B：PR #814；
+- PR #814 Head：`c5ad29e2775789cc28b47e0724f64e165b0eff9e`；
+- PR #814 Merge Commit：`19f2dbe55799e533e609c7cece9eaad1b623babd`；
+- PR #814 Required Check：Run `30519856557`／Job `90797620311`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功；
 - 当前 `main` 保护和“最小架构与质量门禁”Required Check 继续生效。
 
-Stage A 只关闭固定 localhost-only 本地验收环境的 Journal、A1 Shape 与备份恢复点阻断。它没有创建真实 Manifest、只读 Repository Adapter、执行 Adapter 或 Lease，也没有运行真实 Runner dry-run 或启动 A2-P1／P2。
+Stage B 已建立固定本地验收 Context Policy 与可注入只读 PostgreSQL Adapter，并通过合成测试、localhost-only 只读 smoke 和完整质量门禁。它没有创建或读取真实 Manifest，没有运行 Runner dry-run／`--execute`，没有签发 Lease，也没有启动 A2-P1／P2。
 
 ## 唯一下一任务
 
 ```text
-V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-B
-MIG-01A2 只读 Repository Adapter 与 Context Policy
+V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C
+MIG-01A2 本地验收 Manifest 候选与审批包
 ```
 
-Stage B 当前尚未启动。只有用户对 Stage B 的冻结 Base、允许文件、测试、数据库只读边界和风险作出独立明确授权后，才能创建其工作分支或修改 Runtime／测试。
+Stage C 当前尚未启动。本文只冻结未来任务边界，不创建、读取或批准 Manifest 候选，不创建 Stage C 分支或临时文件，不运行 Runner，不签发 Lease，也不启动 Stage D。
 
 ## 一、事实源与 accepted 边界
 
-Stage B 必须遵守以下权威关系：
+Stage C 必须遵守以下权威关系：
 
 1. 最新 `main` 的代码、测试、Schema、Migration、配置和已合并记录决定仓库 `current` 事实；
 2. 经独立授权取得的固定 localhost-only 本地验收环境证据，只决定该指定环境的 `current` 事实；
 3. `docs/architecture/architecture-v2.md` 与已接受 ADR 决定最高级 `target`；
 4. `docs/decisions/mig01-a2-provisioning-accepted-decisions.md` 在既有 `target` 内记录 D01～D12 的用户选择；
-5. proposed 决策包、六类架构视图、模块映射、架构索引和 handoff 只负责解释、展开、核验与记录状态，不得独立改写事实所有权、Migration 顺序或发布门禁；
-6. `docs/operations/mig01-a2-local-acceptance-stage-a-20260730.md` 是本地环境 Stage A 的 `current evidence`，不构成 Stage B 或 A2-P1 授权。
+5. 架构视图、模块映射、证据报告、索引和 handoff 只负责解释、展开、核验与记录状态，不得独立改写事实所有权、Migration 顺序或发布门禁。
 
-以下 accepted 结果不得在 Stage B 中静默重开：
+以下 accepted 结果不得在 Stage C 中静默重开：
 
-- D01-A：Tenancy 是 Scope、Context Version／Head、Manifest、Scope Revision 与 Provisioning Provenance 原始事实的唯一语义 Owner；
-- D02-A：Access Control 通过版本化 Port／Reader 和低敏投影单向消费；
-- D03-A：Manifest 使用严格版本、审批状态和低敏白名单；
-- D04-A：固定位置 JSON 数组 canonicalization + SHA-256；
-- D05-A：Context 字段显式提供，禁止隐式默认；
-- D06-B／D07-B／D11-B：仓库外真实 Manifest、唯一一次性受控 Runner 和 Runner 文件集绑定；
-- D08-C：Metadata 分阶段治理，继续禁止 `db:generate` 和 snapshot-diff Migration；
-- D09-A：用户授权的任务级排他执行／Migration Lease；
-- D10-B：`main` 保护和 Required Check 是 P1／P2 启动硬门；
-- D12-A：只接受最小 Anchor Bridge 方向，精确实施细节继续后置。
+- Tenancy 是 Scope、Context Version／Head、Manifest、Scope Revision 与 Provisioning Provenance 原始事实的唯一语义 Owner；
+- Access Control 只通过版本化 Port／Reader 和低敏投影单向消费，不建立第二套事实源；
+- Manifest 使用 `mig01-a2/v1`、严格审批状态、exact shape、固定低敏字段、`c14n-v1` 与 SHA-256；
+- Context 字段必须显式提供，禁止从数据库现状、系统时区、执行时钟、Demo、Seed 或模型偏好推断；
+- 真实 Manifest 只允许保存在仓库外受控路径；
+- 审批人与未来 Operator 必须分离；
+- `main` 保护和 Required Check 继续是后续 P1／P2 的硬门；
+- Metadata 继续禁止 `db:generate` 和 snapshot-diff Migration。
 
-如需改变 accepted 选择、`architecture-v2.md` 或既有 ADR，必须停止 Stage B 并创建独立决策／ADR 任务。
+如需改变 accepted 选择、`architecture-v2.md`、既有 ADR、Context Policy 或 Adapter 边界，必须停止 Stage C 并创建独立决策／ADR 或实现任务。
 
-## 二、Stage A 已完成事实
+## 二、Stage A 与 Stage B 已完成事实
+
+### 2.1 固定本地验收环境
 
 - 容器：`zmtg-local-acceptance-pg`；
 - 网络边界：只绑定 `127.0.0.1:55432`；
 - 数据库：`zmtg_clean_local_acceptance`；
 - 仓库与本地验收库 Journal：均为 39 项，最新项内部匹配 `0038_mig_01a1_institution_isolation_expand`；
-- 本地验收环境只应用仓库既有 0038，未创建新 Migration；
-- `tenants` 低敏计数：迁移前后均为 2；
+- `tenants` 低敏计数：2；
 - `institution_scopes`、`institution_operating_context_versions`、`institution_operating_contexts`：Shape 与 0038／Schema 一致且均为空；
-- 迁移前备份：`zmtg_clean_local_acceptance-pre-0038-20260730-124114`，完整性校验和隔离恢复验证通过；
-- 迁移后备份：`zmtg_clean_local_acceptance-post-0038-20260730-124114`，完整性校验和隔离恢复验证通过；
-- 两个恢复点继续保留，删除必须独立授权；
-- `journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing` 已关闭；
-- `real_manifest_missing`、`readonly_adapter_unavailable`、`real_environment_dry_run_unavailable` 仍未关闭；
-- 未运行 `db:generate`、Seed、Reset、原数据库 Restore、Runner dry-run 或 `--execute`；
-- 未创建、读取或批准真实 Manifest，未签发执行 Lease／Migration Lease；
-- Stage A 报告 PR 的仓库 Runtime、Schema、Migration 修改均为 0。
+- 迁移前与迁移后两个 Stage A 恢复点继续保留，完整性校验和隔离恢复验证均通过；
+- `journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing` 已关闭。
 
-## 三、Stage B 目标
+### 2.2 Stage B Context Policy
 
-通过未来独立代码 PR，为 MIG-01A2 Runner 的真实 dry-run 提供最小只读 Repository Adapter 和受控 Context Policy，同时保持 Tenancy 单一事实源、固定表白名单、低敏输出和 fail-closed。
+- Policy version：`mig01-a2-local-acceptance-context-policy/v1`；
+- target environment：`local_acceptance`；
+- timezone：只允许 `Asia/Shanghai`；
+- currency：只允许 `CNY`；
+- Policy 使用 exact shape 与冻结集合，不从环境变量、数据库、系统 locale、系统时区或执行时钟补默认值。
 
-Stage B 只建立“可安全读取并判定 Context”的能力，不执行 Provisioning，不写数据库，不生成或批准真实 Manifest，也不调用业务 API／UI。
+### 2.3 Stage B 只读 Adapter
 
-## 四、Stage B 未来允许范围
+- 路径：`src/modules/tenancy/provisioning/server/provisioning-readonly-postgres-adapter.ts`；
+- 业务读取白名单：
+  - `public.tenants`
+  - `public.institution_scopes`
+  - `public.institution_operating_context_versions`
+  - `public.institution_operating_contexts`
+- 每次读取使用 `REPEATABLE READ + READ ONLY`，核验事务只读状态与隔离级别；
+- timeout：statement `5s`、lock `1s`、idle transaction `5s`；connect `5s` 由调用方 client 负责；
+- 三个 Repository insert 与 Transaction Port write 永久拒绝；
+- 固定低敏错误、事务生命周期失效保护、完整 Version 排序和时间 canonicalization 已通过测试；
+- localhost-only smoke：`local_readonly_adapter_smoke=pass`；
+- smoke 前后 Journal 39、`tenants` 2、三个 A1 表 0 的低敏计数不变；
+- `readonly_adapter_unavailable` 已关闭。
 
-未来独立 Stage B 任务只可在再次冻结路径后实现：
+Stage B 只建立可注入只读资产。当前 Runner CLI 尚未组合真实 Context Policy 与 Adapter；`real_manifest_missing` 和 `real_environment_dry_run_unavailable` 仍为阻断。
 
-1. 最小只读 Repository Adapter；
-2. 数据读取白名单精确为：
-   - `tenants`
-   - `institution_scopes`
-   - `institution_operating_context_versions`
-   - `institution_operating_contexts`
-3. 复用已接受的 Repository／Transaction Port 和五项低敏守恒计数，不建立第二套事实源或事务语义；
-4. 每次数据库读取使用显式 `READ ONLY` 事务；
-5. 设置并验证有限的连接、语句和锁等待超时；
-6. 只暴露固定低敏状态码，不返回连接串、SQL、数据库原始异常、双键、digest、审批引用或业务行；
-7. 实现由任务明确批准的 IANA timezone 子集；
-8. 实现由任务明确批准的 ISO 4217 currency 子集；
-9. 对缺失、冲突、陈旧 Context、越过白名单和未知枚举值保持 fail-closed；
-10. 增加必要的合成测试、Adapter 定向测试、Context Policy 测试和架构门禁验证。
+## 三、Stage C 唯一目标
 
-批准的 timezone／currency 子集必须在 Stage B 任务中根据仓库证据和用户授权精确冻结；不得从真实 Manifest、业务数据、环境默认值或模型偏好推断。
+未来 Stage C 只有在用户对当次任务、候选来源、低敏字段、受控临时路径、Reviewer／Approver、保留期限和风险作出独立明确授权后，才允许：
 
-## 五、Stage B 禁止范围
+1. 从固定 localhost-only 本地验收环境和用户明确批准的来源形成低敏 Manifest 候选；
+2. 使用已冻结的 `mig01-a2-local-acceptance-context-policy/v1`，timezone 只允许 `Asia/Shanghai`，currency 只允许 `CNY`；
+3. 逐字段记录来源，禁止对缺失值使用数据库现状、系统默认、执行时钟、Demo、Seed 或模型偏好补全；
+4. 将候选正文只保存在受控的仓库外临时路径；
+5. 将“候选已形成”“契约验证通过”“用户已批准”保持为三个独立状态；
+6. 在用户独立确认前保持 `candidate_pending_approval`，不得自动写成 `approved`；
+7. 只输出候选数量、版本、布尔验证结果和低敏审批摘要，不输出正文、双键、digest、审批引用或业务行；
+8. 由用户对当次候选作出独立审批决定。
 
-Stage B 不得：
+推荐、候选生成或契约通过均不等于批准。用户未明确批准时，`real_manifest_missing` 继续保持阻断。
 
-- 实现或接入 execute Adapter；
-- 提供 INSERT、UPDATE、DELETE、UPSERT、DDL、Migration 或提交写事务的能力；
-- 创建新 Migration、修改 Schema／journal／snapshot，或运行 `db:generate`；
-- 运行 Seed、Reset、原数据库 Restore 或数据修复；
-- 签发、伪造或消费执行 Lease／Migration Lease；
-- 创建、读取、批准或提交真实 Manifest；
-- 运行 synthetic 或真实 Runner dry-run／execute；
-- 修改业务 API、UI、正式 Reader、Capability 或发布状态；
-- 连接测试服务器、生产数据库、HIS、企业微信或业务外部环境；
-- 读取 `.env.local`、非 localhost `DATABASE_URL`、Secret、Token、PII 或真实业务数据；
-- 启动 Stage C、Stage D、A2-P1、A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader、平台切片或机构端旧任务。
+## 四、Manifest 候选与审批安全边界
 
-## 六、Stage B 启动硬门
+- Manifest 正文不得进入 Git、PR、Issue、文档、日志、环境变量、argv、测试 fixture 或聊天；
+- 候选文件必须位于本轮独立授权的受控临时路径，不得使用仓库目录或共享公共路径；
+- 候选正文、双键、digest、审批引用和原始验证异常不得出现在 handoff 或普通输出中；
+- 低敏输出只允许候选数量、Manifest／Policy version、固定布尔结果、固定状态码和审批摘要；
+- 候选必须绑定冻结 Base、目标环境、Policy version、Manifest version、Reviewer／Approver 职责和失效／撤销条件；
+- Stage C 不授予未来 Operator、Runner、数据库写入或 Lease 权限；
+- Stage C 结束时必须按独立批准的保留期限处理临时正文，并只记录低敏删除结果。
 
-未来 Stage B 任务启动前必须重新确认：
+## 五、Stage C 启动硬门
+
+未来 Stage C 启动前必须重新确认：
 
 - `main` 与 `origin/main` 一致，工作树干净；
 - `main` 保护和 Required Check 继续启用；
-- Stage A 报告与本 handoff 已合并；
-- 固定本地验收容器身份、localhost-only 端口、数据库名称和 Journal 0038 状态未漂移；
-- 两个 Stage A 备份仍存在且本地完整性校验通过；
-- 允许的 Runtime／测试文件精确冻结，且与其他 Agent 没有写入冲突；
-- 四表白名单、`READ ONLY` 事务、timeout、低敏错误和 Context Policy 测试可以在授权范围内完成。
+- PR #814 与本 handoff 已合并；
+- 固定本地验收容器身份、localhost-only 端口、Journal 39、A1 Shape 和低敏计数未漂移；
+- 两个 Stage A 恢复点仍存在且本地完整性校验通过；
+- Stage B Context Policy 与只读 Adapter 的路径、版本、白名单和测试证据未漂移；
+- 用户已经明确批准候选来源、低敏字段、受控临时路径、Reviewer／Approver、保留期限和允许的只读环境范围；
+- 不存在其他 Agent 对同一工作树、Git 索引或受控临时路径的并发写入。
 
-任一硬门不满足时停止，不扩大文件范围，不以写操作或环境默认值绕过。
+任一硬门不满足时停止，不创建候选，不读取环境补值，不扩大文件或数据范围。
 
-## 七、Stage B 停止条件
+## 六、Stage C 严格禁止
+
+Stage C 不得：
+
+- 自动创建、读取或批准真实 Manifest；
+- 将候选正文写入 Git、PR、Issue、日志、环境变量、argv、fixture 或聊天；
+- 从未知来源、真实业务数据、系统默认、数据库现状或执行时钟推断字段；
+- 静默扩展 timezone 或 currency 批准集合；
+- 连接非 localhost 数据库、测试服务器、生产数据库、HIS、企业微信或业务外部环境；
+- 运行 Runner，包括 synthetic／真实 dry-run 和 `--execute`；
+- 签发、伪造、读取、验证或消费执行 Lease／Migration Lease；
+- 修改 Context Policy、只读 Adapter、Runner、Schema、Migration、journal、snapshot、CI、package、lock、业务 API／UI、正式 Reader 或 Capability；
+- 运行 `db:generate`、Migration、Seed、Reset、Restore、DDL、DML 或 Provisioning；
+- 启动 Stage D、A2-P1、A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader、平台切片或机构端旧任务。
+
+## 七、Stage C 停止条件
 
 出现以下任一情况必须停止：
 
-- 需要读取四表以外的数据库对象或业务行才能实现；
-- 无法证明事务为 `READ ONLY`，或 Adapter 可能提交写入；
-- 无法冻结有限 timeout 或固定低敏错误；
-- timezone／currency 子集没有仓库证据和用户批准；
-- 需要修改 Schema、Migration、业务 API／UI、正式 Reader、Capability、CI、package 或 lock；
-- 需要真实 Manifest、Lease、Runner dry-run／execute 或外部环境；
-- 出现数据库、Git 或 Agent 并发写入；
-- 需要自动启动 Stage C 或任何下游任务。
+- 候选来源、字段 provenance、Reviewer／Approver、临时路径、保留期限或批准状态无法明确；
+- 需要读取未获授权的数据库对象、真实业务行、凭证、环境变量、Secret、Token 或 PII；
+- 需要从环境现状或模型偏好推断缺失字段；
+- 候选出现额外字段、未知版本、未批准 timezone／currency 或非低敏内容；
+- 必须扩大到第二事实源、Runtime、Schema、Migration、Runner、Adapter、Policy、CI、package 或 lock；
+- 用户尚未明确批准却要求标记为 `approved`；
+- 需要运行 Runner、签发 Lease、写数据库或自动启动 Stage D；
+- 出现无法确认的环境、Git 或 Agent 并发写入。
 
-## 八、验证与交付边界
+## 八、交付与完成定义
 
-未来 Stage B PR 至少必须验证：
+本 handoff 只把 Stage C 冻结为唯一下一任务，不创建 Stage C 分支、仓库文件或仓库外候选。
 
-- Adapter 只可读取四个白名单表；
-- 数据库事务显式为 `READ ONLY`；
-- 连接、语句和锁等待 timeout 生效；
-- 所有错误输出满足低敏白名单；
-- timezone 与 currency 只接受批准子集；
-- 缺失、冲突、陈旧和未知输入均 fail-closed；
-- 合成测试、Adapter 定向测试和 Context Policy 测试通过；
-- `git diff --check`、增量架构检查、lint、typecheck、完整测试和 build 通过；
-- Required Check 真实运行并通过；
-- Schema、Migration、journal、snapshot、CI、package、lock 和业务 API／UI 修改为 0；
-- Stage C、真实 Manifest、真实 Runner dry-run、Lease 和 A2-P1 均未启动。
+未来 Stage C 的完成证据最多记录：
 
-进入正式审查、合并和 handoff 均需用户对当次任务明确授权。Stage B 合并不自动启动 Stage C。
+- 冻结 Base 与任务引用；
+- 候选数量；
+- Manifest／Policy version；
+- 来源、exact shape、canonicalization、批准集合和安全属性的布尔验证；
+- Reviewer／Approver 分离与用户审批摘要；
+- 正文保管和删除的低敏结果；
+- `real_manifest_missing` 是否经用户独立批准后关闭。
+
+即使 Stage C 完成并经用户批准，`real_environment_dry_run_unavailable` 仍必须由 Stage D 独立关闭。Stage C 不运行 Runner、不签发 Lease、不执行 Provisioning，合并后仍须独立 handoff，不能自动启动 Stage D。
 
 ## 九、项目级顺序
 
 ```text
 就绪修复 Stage A：本地验收数据库安全恢复点与 A1 基线（已完成）
-→ 就绪修复 Stage B：只读 Repository Adapter 与 Context Policy（唯一下一任务，尚未启动）
-→ 独立 handoff
-→ 就绪修复 Stage C：本地验收 Manifest 候选与审批包
+→ 就绪修复 Stage B：只读 Repository Adapter 与 Context Policy（已完成）
+→ 独立 handoff（本任务）
+→ 就绪修复 Stage C：本地验收 Manifest 候选与审批包（唯一下一任务，尚未启动）
 → 独立 handoff
 → 就绪修复 Stage D：真实本地 Runner dry-run
 → 独立 handoff
@@ -178,8 +193,6 @@ Stage B 不得：
 → Reader
 ```
 
-这里的“就绪修复 Stage B”与已完成的“治理 Stage B Runner 基础”不是同一任务。前者只补齐真实 dry-run 所需的只读 Adapter 和 Context Policy；后者只建立了 Runner、Port、Lease 低敏契约、合成测试和 Runbook。
-
 该顺序不改变 MIG-01～MIG-06 的相对顺序：
 
 ```text
@@ -191,4 +204,4 @@ MIG-01
 → MIG-06
 ```
 
-本 handoff 只收口 Stage A 并冻结唯一下一任务，不自动授权或启动 Stage B。
+Stage C 尚未启动；必须等待本 handoff 合并并取得用户对当次 Stage C 任务的独立明确授权。

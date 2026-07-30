@@ -2,17 +2,18 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## 架构 V2 第一阶段与 MIG-01A2 本地就绪修复 Stage A 收口状态
+## 架构 V2 第一阶段与 MIG-01A2 本地就绪修复 Stage B 收口状态
 
 - 更新日期：2026-07-30
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-A-COMPLETE` 已完成并合并
-- 完成 PR：#811
-- PR Head：`50b007820b7fdb68ff35b6ef0e2a53b9e8e61880`
-- Merge Commit：`fc08de343456a1f0d05092f1aedd389118b32b26`
-- Required Check：Run `30514884226`／Job `90782386213`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- Stage A 报告：`docs/operations/mig01-a2-local-acceptance-stage-a-20260730.md`
-- 报告性质：`current evidence`；只证明固定 localhost-only 本地验收环境的 Stage A 结果，不构成 Stage B 或 A2-P1 授权
+- 当前阶段：`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-B-COMPLETE` 已完成并合并
+- 完成 PR：#814
+- PR Base：`63a6ddff4fe192b0aa01c40f72dc45317889291a`
+- PR Head：`c5ad29e2775789cc28b47e0724f64e165b0eff9e`
+- Merge Commit：`19f2dbe55799e533e609c7cece9eaad1b623babd`
+- Required Check：Run `30519856557`／Job `90797620311`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- Stage B 报告：`docs/operations/mig01-a2-local-readiness-stage-b-20260730.md`
+- 报告性质：`current evidence`；只证明固定 localhost-only 本地验收环境的 Stage B 只读能力，不构成 Stage C、Runner dry-run、Lease、A2-P1 或 A2-P2 授权
 
 ### 已接受边界与治理基础
 
@@ -30,7 +31,7 @@
 - 检查器：`scripts/verify/architecture-quality.mjs`
 - 架构规则：`AQ001`～`AQ007` 已进入 `main`
 
-### 本地验收环境 Stage A 结果
+### 本地验收环境 Stage A 基线
 
 - 本地验收容器：`zmtg-local-acceptance-pg`
 - 网络边界：仅 `127.0.0.1:55432` 映射至容器 PostgreSQL
@@ -47,21 +48,45 @@
 - 迁移后隔离恢复验证：通过；Journal 39 完整匹配 0038、`tenants` 为 2、A1 三表存在且为空、Catalog 与原验收库一致
 - 备份状态：两个备份及其 hash／metadata 均保留，删除需独立授权
 - 临时恢复数据库：两次验证后均已删除
-- real Manifest：`real_manifest_missing`
 - synthetic Manifest：`synthetic_contract_validation=pass`
-- 只读 Repository Adapter：`readonly_adapter_unavailable`
-- 真实 Runner dry-run：`real_environment_dry_run_unavailable`
 - 本地数据库变更：只通过既有脚本应用仓库已有 0038 Migration；原数据库未 Restore
-- 本轮未创建 Migration，未运行 `db:generate`、Seed、Reset、原数据库 Drop、Runner dry-run 或 `--execute`
+- Stage A 未创建 Migration，未运行 `db:generate`、Seed、Reset、原数据库 Drop、Runner dry-run 或 `--execute`
 - 执行 Lease／Migration Lease：均未签发
+
+### 本地就绪修复 Stage B 结果
+
+- Stage B 精确包含六个文件：
+  1. `docs/operations/mig01-a2-local-readiness-stage-b-20260730.md`
+  2. `docs/operations/mig01-a2-provisioning-runbook.md`
+  3. `src/modules/tenancy/provisioning/provisioning-context-policy.ts`
+  4. `src/modules/tenancy/provisioning/server/provisioning-readonly-postgres-adapter.ts`
+  5. `src/modules/tenancy/provisioning/tests/ProvisioningContextPolicy.test.ts`
+  6. `src/modules/tenancy/provisioning/tests/ProvisioningReadonlyPostgresAdapter.test.ts`
+- Context Policy：`mig01-a2-local-acceptance-context-policy/v1`，目标环境仅 `local_acceptance`，timezone 仅 `Asia/Shanghai`，currency 仅 `CNY`
+- Policy 使用 exact shape、冻结对象与 fail-closed；不从环境变量、数据库、系统 locale、系统时区或执行时钟补默认值
+- 只读 Adapter：`src/modules/tenancy/provisioning/server/provisioning-readonly-postgres-adapter.ts`
+- 四表白名单：`public.tenants`、`public.institution_scopes`、`public.institution_operating_context_versions`、`public.institution_operating_contexts`
+- 每次读取使用 `REPEATABLE READ + READ ONLY`，并核验只读状态与隔离级别
+- timeout：`statement_timeout=5s`、`lock_timeout=1s`、`idle_in_transaction_session_timeout=5s`；`connect_timeout=5s` 由调用方 client 负责
+- 未知 enum、非法时间、Shape 漂移、timeout 与数据库异常均映射为固定低敏错误
+- 三个 Repository insert 与 Transaction Port write 永久返回 `provisioning_readonly_write_forbidden`；逃逸 Repository 在事务结束后永久拒绝读取且不再发送 SQL
+- 测试：Context Policy 23 个、Adapter 26 个、Stage B 新增 49 个、Provisioning 定向契约集 6 文件／112 个全部通过
+- 完整质量：lint、typecheck 通过；完整测试 414 文件／5791 个通过；build 101／101；增量架构检查通过
+- localhost-only smoke：`local_readonly_adapter_smoke=pass`；临时脚本权限 `0600`，验证后已删除
+- smoke 前后低敏计数：Applied Migration 39 → 39，`tenants` 2 → 2，三个 A1 表均 0 → 0
+- Stage B 数据库写入、Provisioning 行、Journal 变化与业务数据变化均为 0
+- Stage B Schema、Migration、journal、snapshot、package、lock、CI、业务 API／UI、Runner 和新增依赖修改均为 0
+- Stage B 未创建或读取真实 Manifest，未运行 Runner dry-run／`--execute`，未签发 Lease，未执行 Provisioning，未启动 A2-P1／A2-P2
 
 ### 当前阻断与实施状态
 
 - Stage A 已关闭：`journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing`
-- 仍阻断：`real_manifest_missing`、`readonly_adapter_unavailable`、`real_environment_dry_run_unavailable`
+- Stage B 已关闭：`readonly_adapter_unavailable`
+- 仍阻断：`real_manifest_missing`、`real_environment_dry_run_unavailable`
+- 当前 Runner CLI 尚未组合真实 Context Policy 与只读 Adapter
 - A1 状态：仓库静态 Expand 已在固定本地验收环境应用到 0038；归属、Provisioning、回填、Enforce 和 Reader 放行均未因此完成
-- A2 状态：治理决策、仓库硬门、Runner 基础、只读预检和本地就绪修复 Stage A 已完成；Stage B、Stage C、Stage D、A2-P1、A2-P2 均未启动
-- 本次 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：0
+- A2 状态：治理决策、仓库硬门、Runner 基础、只读预检、本地就绪修复 Stage A 和 Stage B 已完成；Stage C、Stage D、A2-P1、A2-P2 均未启动
+- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：0
 - 正式平台服务端授权根：`缺失`
 - 平台 Runtime／发布准入：`阻断`
 - 七线业务综合完成度：约 25%（规划估算）
@@ -83,11 +108,13 @@
 
 ### 唯一下一任务
 
-- 任务编号：`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-B`
-- 任务名称：MIG-01A2 只读 Repository Adapter 与 Context Policy
-- 当前状态：Stage A 已收口；Stage B 尚未启动
-- 启动边界：必须独立授权、冻结 Base、精确 runtime／测试范围、独立分支和独立 PR
-- 当前未启动：只读 Adapter、Context Policy、Stage C、Stage D、Manifest 候选、真实 dry-run、执行 Lease／Migration Lease、A2-P1、A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader、平台切片和机构端旧任务
+- 任务编号：`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C`
+- 任务名称：MIG-01A2 本地验收 Manifest 候选与审批包
+- 当前状态：Stage B 已收口；Stage C 尚未启动
+- 启动边界：必须通过独立 handoff 和用户明确授权，冻结 Base、候选来源、受控临时路径、审批角色、保留期限和精确允许范围
+- Manifest 边界：候选正文不得进入 Git、PR、日志或聊天，不得自动标记为 `approved`
+- 当前未启动：Stage C、Stage D、真实 Manifest 审批、Runner dry-run／`--execute`、执行 Lease／Migration Lease、A2-P1、A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader、平台切片和机构端旧任务
+- Stage C 完成也不得自动启动 Stage D
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->
