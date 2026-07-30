@@ -518,3 +518,21 @@
 - Stage A 只新增低敏验证 Markdown；Runtime、Schema、Migration、CI、package、lock 修改均为 0。
 - Stage B、Runner、真实 Manifest、真实 Lease、A2-P1 和 A2-P2 均未启动。
 - 唯一下一任务为 `V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-B`：MIG-01A2 受控 Runner 治理、Runbook 与实现。
+
+## 2026-07-30：MIG-01A2 Stage B Runner 治理基础完成并切换至只读环境预检
+
+- PR #804 完成 Stage A 仓库硬门配置与验证，Head `1948597d5349017485578723fd32535e84e2bd97`，Merge Commit `97a21fa6ba8517a9d5dd5ab28e90670b371e52cb`。
+- PR #805 完成 Stage A handoff；首轮 Run `30504427490`／Job `90750966473` 暴露既有开放平台知识库安全错误异步断言竞态，该失败不属于 Stage A 硬门或四份 handoff 文档缺陷。
+- PR #806 独立修复上述既有测试竞态，Head `6f2dac34e4a74ee9e62c67444c0afc88d3185971`，Merge Commit `08acc2f0b5f6a10df5e7adde457c050c10bd79dd`，Run `30505183208`／Job `90753276031` 成功。
+- PR #805 在四份文档内容不变的前提下重放到 PR #806 合并后的 `main`，最终 Head `5d5c4e746f9de079088f62bb8585c1856e9f0a44`，Run `30505641202`／Job `90754678015` 成功，Merge Commit `c52fef48e71f760017c8e39909b610ae6de180d8`。
+- PR #807 基于 Stage A handoff main `c52fef48e71f760017c8e39909b610ae6de180d8` 建立 MIG-01A2 受控 provisioning Runner 治理基础，Head `d7abdc52c64be367b988db15bfbdaa251be33fd4`，Merge Commit `e50999ebc33dd07a4447fa8f9274e974e9beae63`。
+- PR #807 精确修改 12 个文件：1 个 Runbook、1 个 package 命令、2 个 `scripts/db` Runner 文件、5 个 Tenancy provisioning 源文件和 3 个契约／内核测试文件。
+- Manifest 版本为 `mig01-a2/v1`；canonicalization 版本为 `c14n-v1`，采用固定位置数组、UTF-8 稳定排序与 SHA-256，固定 digest 向量为 `sha256:a42fda705e6256a3fd36d74f2d243f27fefcb19dc0ad63c3a00970d42d16de1a`。
+- dry-run 只产生 `input`、`insertedCandidate`、`reusedCandidate`、`conflict`、`unexpected` 五项低敏守恒计数；Repository／Transaction Port、原子写入顺序、提交前重检、回滚与并发漂移封堵已建立。
+- Lease 版本为 `mig01-a2-execution-lease/v1`，只实现低敏契约和 Authority Port；未签发真实执行 Lease／Migration Lease。
+- Stage B 本地定向 4 个文件、63 个测试通过；完整 412 个文件、5742 个测试通过；lint、typecheck、build 101/101、`git diff --check` 与增量架构检查全部通过。
+- PR #807 Required Check Run `30508177604`／Job `90762357307` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部实际执行并成功。
+- Stage B 未读取真实 Manifest、未连接数据库、未对真实环境执行 Runner、未签发真实 Lease、未执行 A2-P1；Schema、Migration、journal、snapshot 修改均为 0，`pnpm-lock.yaml` 未修改，新增依赖为 0。
+- `main` 保护和 Required Check 继续生效；全部 `backup/*` 保留。
+- 唯一下一任务为 `V2-MIG01-A2-ENVIRONMENT-MANIFEST-READONLY-PREFLIGHT-01`：真实 Manifest、环境 Journal、数据库 Shape、备份恢复点与 Dry-run 只读预检。
+- 下一任务尚未启动，仍需独立授权；只读、不提交事务、不执行 P1、不创建 Migration、不签发执行 Lease，也不自动进入 A2-P1。

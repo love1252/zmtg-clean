@@ -1,11 +1,11 @@
 # 智美天工架构文档索引
 
-- 任务：`V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-A-HANDOFF-CLOSEOUT`
+- 任务：`V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-B-HANDOFF-CLOSEOUT`
 - 日期：`2026-07-30 CST +0800`
-- 审计基线：`97a21fa6ba8517a9d5dd5ab28e90670b371e52cb`
+- 审计基线：`e50999ebc33dd07a4447fa8f9274e974e9beae63`
 - 状态：`current`
 - 文档性质：架构导航索引，不是第二套架构事实源
-- runtime、Schema、Migration、API、UI 修改：`0`
+- 本次 Stage B handoff 文档差异中的 Runtime、Schema、Migration、API、UI 修改：`0`
 
 ## 1. 文档定位
 
@@ -95,6 +95,7 @@ MIG-01A1 Expand
 | [`architecture-v2-evidence-audit-20260728.md`](./architecture-v2-evidence-audit-20260728.md) | `current + proposed` | 用当前代码、Schema、测试和历史 PR 对 V2 进行独立核验 |
 | [`v2-02b-mig01-closure-preflight.md`](./v2-02b-mig01-closure-preflight.md) | `current + target + proposed` | MIG-01 A1～C 静态证据、完整影响面、阻断状态和内部候选实施切片。 |
 | [`v2-mig01-a2-provisioning-preflight.md`](./v2-mig01-a2-provisioning-preflight.md) | `current + target + proposed` | A1／A2 状态、Owner 候选、Manifest 契约、P1／P2 拆分、Migration 元数据、幂等矩阵、环境门禁与实施阻断 |
+| [`../operations/mig01-a2-provisioning-runbook.md`](../operations/mig01-a2-provisioning-runbook.md) | `current + proposed` | Stage B 受控 Runner 的 Manifest、输入文件、dry-run、事务 Port、Lease、审计、撤权、停止与 forward-fix 运行边界 |
 | [`v2-02c-platform-auth-route-preflight.md`](./v2-02c-platform-auth-route-preflight.md) | `current + target + proposed` | 平台正式 Session、授权根、页面与 API 路由族、legacy／v1 影响面、阻断状态和候选实施切片 |
 | [`../verification/github-main-hard-gate-validation-20260730.md`](../verification/github-main-hard-gate-validation-20260730.md) | `current` | Stage A 仓库硬门、Required Check、服务端拒绝探针、负向／正向 PR 验证和回退证据 |
 | [`business-architecture.md`](./business-architecture.md) | `current + target` | 角色、价值流、两平面职责、七线业务闭环、AI 人工确认和正式发布尺度 |
@@ -126,7 +127,9 @@ MIG-01A1 Expand
 
 `V2-02C-PLATFORM-AUTH-ROUTE-PREFLIGHT` 已通过 PR #791 完成并合并，其预检文档现作为平台正式授权与路由族的当前静态证据和候选实施切片入口。该预检确认正式平台服务端授权根为“缺失”、平台 Runtime／发布准入为“阻断”；本阶段没有实施平台 Runtime，七个平台候选实施切片均未启动。
 
-`V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE` 已通过 PR #794 完成并合并，最小架构与质量门禁已经进入 `main`。Stage A 随后通过 PR #804 完成仓库硬门配置与验证。该结果只证明检查器、增量规则、现有质量命令编排和 GitHub 服务端合并门禁已建立并验证，不表示历史架构债务已清零或任何业务已正式发布。
+`V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE` 已通过 PR #794 完成并合并，最小架构与质量门禁已经进入 `main`。Stage A 随后通过 PR #804 完成仓库硬门配置与验证，并通过 PR #805 完成交接收口；PR #806 独立修复了交接门禁暴露的既有异步测试竞态。该结果只证明检查器、增量规则、现有质量命令编排和 GitHub 服务端合并门禁已建立并验证，不表示历史架构债务已清零或任何业务已正式发布。
+
+`V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-B` 已通过 PR #807 完成并合并。Tenancy 现已拥有版本化低敏 Manifest、`c14n-v1`／SHA-256、dry-run 分类、Repository／Transaction Port、低敏 Lease 契约和一次性 CLI 治理基础，配套 Runbook 已进入 `main`。该结果不表示真实 Manifest、环境 journal、数据库 Shape、备份／恢复点、真实 Lease 或 P1 已核验、签发或执行。
 
 文档完成只代表同一套架构 V2 的视图与入口已经建立，不代表 runtime、Schema、Migration、API、UI、Capability、环境或七线正式发布已经完成。
 
@@ -137,6 +140,8 @@ MIG-01A1 Expand
 - 差异模型：显式接收 PR `Base`／`Head`，只阻止本次差异新增的架构违规；
 - 真实验证：PR #794 的 Run `30386375532`／Job `90366597304` 已完成架构自测、增量检查、lint、typecheck、完整测试和 build，结论为 `success`；
 - Stage A 验证：PR #804 的最终 Run `30482219056`／Job `90678924630` 在冻结 Head `1948597d5349017485578723fd32535e84e2bd97` 上完成全部质量步骤，结论为 `success`；
+- Stage A handoff：PR #805 Head `5d5c4e746f9de079088f62bb8585c1856e9f0a44`／Merge Commit `c52fef48e71f760017c8e39909b610ae6de180d8`，Run `30505641202`／Job `90754678015` 全部成功；
+- Stage B Runner：PR #807 Head `d7abdc52c64be367b988db15bfbdaa251be33fd4`／Merge Commit `e50999ebc33dd07a4447fa8f9274e974e9beae63`，Run `30508177604`／Job `90762357307` 的环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功；
 - 服务端硬门：`main.protected=true`，Required Check Context 为 `最小架构与质量门禁`，App ID／slug 为 `15368`／`github-actions`，`strict=true`、`enforce_admins=true`、审批数为 `0`；
 - 服务端拒绝：普通 direct push、显式 force-with-lease 和删除受保护分支均被 GitHub 拒绝；不允许管理员 bypass；
 - 合并策略：Stage A 验证 PR 使用 Merge Commit 合并；未启用 Linear History，仓库其他既有合并方法设置未在 Stage A 修改；
@@ -199,17 +204,19 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 5. [`v2-mig01-a2-provisioning-preflight.md`](./v2-mig01-a2-provisioning-preflight.md)
 6. [`../decisions/mig01-a2-provisioning-accepted-decisions.md`](../decisions/mig01-a2-provisioning-accepted-decisions.md)
 7. [`../decisions/mig01-a2-provisioning-decision-pack.md`](../decisions/mig01-a2-provisioning-decision-pack.md)
-8. [`v2-02c-platform-auth-route-preflight.md`](./v2-02c-platform-auth-route-preflight.md)
-9. [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md)
-10. [`data-architecture.md`](./data-architecture.md)
-11. [`software-architecture.md`](./software-architecture.md)
+8. [`../operations/mig01-a2-provisioning-runbook.md`](../operations/mig01-a2-provisioning-runbook.md)
+9. [`v2-02c-platform-auth-route-preflight.md`](./v2-02c-platform-auth-route-preflight.md)
+10. [`../decisions/architecture-v2-decisions.md`](../decisions/architecture-v2-decisions.md)
+11. [`data-architecture.md`](./data-architecture.md)
+12. [`software-architecture.md`](./software-architecture.md)
 
 ### 部署和运维
 
 1. [`deployment-architecture.md`](./deployment-architecture.md)
-2. `docs/operations/production-migration-runbook.md`
-3. `docs/operations/local-development.md`
-4. `scripts/README.md`
+2. [`../operations/mig01-a2-provisioning-runbook.md`](../operations/mig01-a2-provisioning-runbook.md)
+3. `docs/operations/production-migration-runbook.md`
+4. `docs/operations/local-development.md`
+5. `scripts/README.md`
 
 ### 开发与协作
 
@@ -232,10 +239,8 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 ## 11. 当前项目级顺序
 
 ```text
-V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-B
-→ MIG-01A2 受控 Runner 治理、Runbook 与实现
+V2-MIG01-A2-ENVIRONMENT-MANIFEST-READONLY-PREFLIGHT-01
 → 独立 handoff
-→ 真实 Manifest／环境／数据库 Shape 只读预检
 → A2-P1 受控执行
 → 独立 handoff
 → A2-P2
@@ -247,9 +252,9 @@ V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-B
 → Reader
 ```
 
-`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 也已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804 已完成 Stage A 仓库硬门验证。唯一下一任务切换为 `V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-B`；该任务只建设受控 Runner 治理基础，不构成真实 Manifest 核验、A2-P1、A2-P2、数据库操作或环境核验授权。
+`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成 Stage A 仓库硬门与交接，PR #807 已完成 Stage B Runner 治理基础。唯一下一任务切换为 `V2-MIG01-A2-ENVIRONMENT-MANIFEST-READONLY-PREFLIGHT-01`；该任务仍需单独授权，并且只允许只读核验，不提交事务、不执行 P1、不创建 Migration、不签发执行 Lease，也不自动进入 A2-P1。
 
-Stage A 与 Stage B 保持独立变更域和独立 PR。Stage A 的 GitHub 外部状态修改已完成并由无害 PR 验证；Stage B 是仓库代码修改，但不得连接真实数据库、读取真实 Manifest、签发真实 Lease 或执行 P1。Stage B 完成后仍必须通过独立 handoff 冻结后续唯一任务。
+Stage A 与 Stage B 已通过独立变更域和独立 PR 完成。Stage B 的 Runner、Port、Lease 和 Runbook 只是治理与可测试执行基础；真实 Manifest 尚未读取，数据库尚未连接，真实 Lease 尚未签发，Runner 未对真实环境执行，A2-P1／P2 均未启动。
 
 MIG-01 内部候选顺序继续保持：
 
@@ -263,7 +268,7 @@ A2
 → Reader
 ```
 
-新的项目级顺序在 A2 实施前插入已接受的仓库硬门与 Runner 治理基础。D10-B 对应的 Stage A 硬门已配置并验证；已接受 D06-B／D07-B／D11-B 仍不表示 Runner 已创建。该顺序只冻结候选切片的串行关系，不表示真实 Manifest、环境、数据库、Lease 或 A2 实施已获授权，也不改变 MIG-01～MIG-06 的相对顺序。
+新的项目级顺序在 A2 实施前插入已接受的仓库硬门、Runner 治理基础和只读环境预检。D10-B 对应的 Stage A 硬门已配置并验证，D06-B／D07-B／D11-B 对应的 Stage B 治理基础已进入 `main`，但真实输入、环境、数据库、Lease 和执行授权仍未具备。该顺序只冻结候选切片的串行关系，不表示 A2 实施已获授权，也不改变 MIG-01～MIG-06 的相对顺序。
 
 后续既定数据顺序保持：
 
