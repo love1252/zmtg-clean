@@ -2,26 +2,35 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## 架构 V2 第一阶段、A2 决策与治理基础状态
+## 架构 V2 第一阶段、A2 Stage A 与治理基础状态
 
-- 更新日期：2026-07-29
+- 更新日期：2026-07-30
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-MIG01-A2-DECISION-PACK-01` 已完成并已合并；用户接受的 A2 治理组合已冻结
-- 完成 PR：#799
-- PR Head：`79016701b0e20b86a575c7206dacb5ed4d6f95a0`
-- Merge Commit：`1438894dd07a68cf767b49207795388b0bc814a6`
+- 当前阶段：`V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-A` 已完成并合并
+- accepted 决策 PR：#801
+- accepted 决策 PR Head：`2a62d65393b4f96a3ead7ec6daeed5708f5a2b62`
+- accepted 决策 Merge Commit：`56638dc3595d7bd60a47b08810c50df256d0b87c`
+- Stage A 验证 PR：#804
+- Stage A PR Head：`1948597d5349017485578723fd32535e84e2bd97`
+- Stage A Merge Commit：`97a21fa6ba8517a9d5dd5ab28e90670b371e52cb`
+- Stage A 验证文档：`docs/verification/github-main-hard-gate-validation-20260730.md`
 - proposed 决策包：`docs/decisions/mig01-a2-provisioning-decision-pack.md`
 - accepted 决策记录：`docs/decisions/mig01-a2-provisioning-accepted-decisions.md`
-- 成功 Actions：Run `30458524990`／Job `90598262749`
-- 质量门禁：PR #799 冻结 Head 的环境核对、安装依赖、架构检查器自测、增量架构检查、lint、typecheck、完整测试和 build 全部通过
 - accepted 组合：D01-A、D02-A、D03-A、D04-A、D05-A、D06-B、D07-B、D08-C、D09-A、D10-B、D11-B、D12-A（方向）
 - D01：Tenancy 是 Scope、Context Version／Head、Manifest、Scope Revision 与 Provisioning Provenance 原始事实的唯一语义 Owner
 - D02：Access Control 通过版本化 Port／Reader 和低敏投影单向消费；当前直接读共享表仅为限期兼容
 - D03～D05：严格版本化低敏 Manifest、固定位置数组 canonicalization + SHA-256、Context 全字段显式已经接受
 - D06／D07／D11：仓库外真实 Manifest + 唯一一次性受控 Runner + Runner 文件集绑定接受
 - D08／D09：分阶段 Metadata 治理 + 用户授予的任务级排他执行／Migration Lease 绑定接受
-- D10：`main` 保护和“最小架构与质量门禁”Required Check 已接受为 P1／P2 启动硬门，但尚未配置
+- D10：`main` 保护和“最小架构与质量门禁”Required Check 已配置、验证并生效
 - D12：只接受最小 Anchor Bridge 方向；精确名称、列序、Catalog Shape、编号、锁／timeout 与目标环境后置
+- Required Check Context：`最小架构与质量门禁`
+- Required Check App：ID `15368`／slug `github-actions`
+- Branch Protection：`main.protected=true`、`strict=true`、`enforce_admins=true`、required approvals `0`
+- 保护边界：禁止 direct push、force push 和删除 `main`；无管理员 bypass；未启用 Linear History
+- 服务端探针：普通 direct push、显式 force-with-lease 和受保护分支删除均被 GitHub 拒绝，临时探针分支已清理
+- Negative 验证：Run `30481398548`／Job `90676107324`，Head `4f65ce0170817d8928abe1e41319fbf22a8251eb`，增量架构检查因 `AQ001_SECOND_DATABASE_ROOT` 失败且合并被阻断
+- Final Positive 验证：Run `30482219056`／Job `90678924630`，Head `1948597d5349017485578723fd32535e84e2bd97`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
 - 架构规则：`AQ001`～`AQ007` 七条规则已进入 `main`
 - Workflow：`.github/workflows/architecture-quality.yml`
 - 检查器：`scripts/verify/architecture-quality.mjs`
@@ -31,8 +40,7 @@
 - 本次 handoff Runtime 修改：0
 - 本次 handoff Schema 修改：0
 - 本次 handoff Migration 修改：0
-- 分支保护／Required Check：当前仍未配置；本轮只记录 D10-B 的 accepted 目标，不修改仓库设置
-- Runner：尚未创建，Parser、Runbook、低敏输入通道和权限撤销规则均未实现
+- Runner：Stage B 尚未启动，Parser、Runbook、低敏输入通道和权限撤销规则均未实现
 - Lease：执行 Lease／Migration Lease 均未签发；`0039` 仍只是静态候选，不是已批准编号
 - 环境核验：真实 Manifest、环境 journal、目标数据库 Shape、tenant 父记录、备份／恢复点、Operator／Reviewer 与目标环境均未核验
 - 已知非阻断风险：`src/modules/institution/tests/InstitutionBusinessShells.test.tsx` 仍有既有 post-fetch 竞态候选；当前完整测试与 Actions 均通过，尚未单独修复
@@ -49,11 +57,10 @@
 - 平台 Route 授权现状：49 个依赖 Demo Context，5 个无认证授权
 - legacy 路由现状：6 个 legacy Route 均不是薄兼容层
 - A1 状态：仅具备仓库静态 Expand
-- A2 状态：治理选择已接受，但 Provisioning 实现缺失，P1／P2 均未启动
-- Owner 状态：Tenancy 唯一语义 Owner 已接受；物理模块、Port、Writer 和 Repository 边界仍待治理基础阶段冻结
+- A2 状态：治理选择与 Stage A 硬门已关闭；Stage B、P1／P2 均未启动
+- Owner 状态：Tenancy 唯一语义 Owner 已接受；Stage B 仍需冻结物理模块、Port、Writer 和 Repository 边界
 - 关键阻断：
-  - 阶段 A 仓库硬门尚未配置和验证
-  - 阶段 B Runner 治理、Runbook 与实现尚未完成
+  - Stage B Runner 治理、Runbook 与实现尚未完成
   - 执行 Lease 尚未签发
   - 真实 Manifest、环境 journal、数据库 Shape 和备份／恢复点尚未授权核验
   - D12 实施细节尚未在 P1 handoff 后冻结
@@ -72,9 +79,10 @@
 - 七线业务综合完成度：约 25%（规划估算）
 - 公共底座完成度：约 65%（规划估算）
 - 正式发布：0/7
-- 唯一下一任务：`V2-MIG01-A2-GOVERNANCE-FOUNDATION-01`
-- 下一任务状态：尚未启动；这是包含阶段 A 仓库硬门和阶段 B 受控 Runner 治理基础的 Ultra 大目标，两阶段不得混成一个 PR
-- 未启动事项：阶段 A、阶段 B、Runner、Lease、A2-P1、A2-P2、数据库操作以及 BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 等下游任务，连同平台切片和机构端旧任务均未启动且未获执行授权
+- 唯一下一任务：`V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-B`
+- 下一任务名称：MIG-01A2 受控 Runner 治理、Runbook 与实现
+- 下一任务状态：尚未启动；必须使用独立分支、独立文件 allowlist 和独立 PR
+- 未启动事项：Stage B、真实 Manifest 核验、数据库连接、真实 Lease、A2-P1、A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader、平台切片和机构端旧任务均未启动
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->
