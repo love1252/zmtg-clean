@@ -17,7 +17,7 @@
 
 当前实现明确不提供：
 
-- 真实数据库 Adapter；
+- 真实数据库 client、连接参数或长期连接；
 - 真实 Lease Authority 或签发入口；
 - 真实 Manifest、真实环境批准集合或数据库连接；
 - A2-P1／A2-P2 实施、Migration、回填、Reader 或正式 onboarding Runtime。
@@ -185,6 +185,8 @@ execute 必须在真实执行授权任务中同时具备：
 
 审批人与执行者必须分离。结构正确的 Lease payload 不等于真实授权；只有 Authority Port 验证成功后才能进入写事务。
 
+真实执行前还必须以独立只读 catalog／权限证据确认：执行角色具备 `public` schema、所需 enum/type、固定 `SELECT`／`INSERT` 和 `pg_catalog.pg_advisory_xact_lock`、`pg_catalog.hashtext` 等实际依赖函数的精确最小权限，且三张目标表不存在未审计的 trigger、rule 或 RLS 副作用。同时必须结合已冻结的完整 Writer 清单与执行窗口排他控制，证明不存在绕过同一事务级 advisory lock 协议的并发 Writer。任一事实不明确即停止，不得用扩大权限、关闭保护或重复执行规避。
+
 执行时必须在同一数据库事务内重新读取完整批次并重新分类，然后只允许按以下顺序插入全缺失三元组：
 
 ```text
@@ -197,7 +199,7 @@ Institution Scope
 
 Transaction Adapter 必须从首次分类到提交保持稳定视图，使用 `SERIALIZABLE` 或等价的行锁与缺失键竞争保护；serialization failure 必须 fail-closed。内核在写入后、提交前再次核验完整批次全部为严格一致复用，任何并发漂移都必须回滚。
 
-提交后的数据库事实不能依赖 Git revert 回退。失败时必须停止重复执行，保留低敏分类计数与授权记录，使用独立批准的前向修复任务；只有经过验证的数据库恢复流程才可执行恢复。
+提交后的数据库事实不能依赖 Git revert 回退。明确的事务内失败按数据库原子事务回滚；但 COMMIT 回包丢失、连接在提交确认阶段中断或其他 outcome-unknown 场景不得声称已经回滚，也不得再次 execute。此时必须停止，先由独立只读核验确认三张表的实际状态，再由审查决定是否接受既有提交或启动独立批准的前向修复。只有经过验证的数据库恢复流程才可执行恢复。
 
 ## 8. Lease 与职责分离
 
@@ -274,6 +276,29 @@ Stage B 合并不自动：
 - smoke 前后 Journal 均为 39、`tenants` 均为 2，三个 A1 表均为 0；
 - smoke 只使用明显不存在的合成双键，不读取真实 tenantId 或业务行，临时脚本已经删除。
 
-当前 Runner CLI 仍未组合该 Context Policy 与真实 Adapter，execute Adapter 仍不存在，直接运行仍按既有契约 fail-closed。本阶段没有创建或读取真实 Manifest，没有运行 Runner dry-run／`--execute`，没有签发 Lease，没有执行 Provisioning，也没有启动 A2-P1／P2。真实本地 Runner dry-run 只能在独立 handoff 与用户明确授权后的 Stage D 中运行。
+当前 Runner CLI 仍未组合该 Context Policy、数据库 client、Authority 或 Lease，直接运行仍按既有契约 fail-closed。Stage D 已通过仓库外受控组合完成一次只读 dry-run；该历史结果不构成 execute 授权，也不表示下述 Write Adapter 已连接数据库。
 
-Stage C 仍需通过独立 handoff 和用户授权形成本地验收 Manifest 候选与审批包。Stage B 完成不代表真实 Manifest 已批准、真实 dry-run 已执行、A2-P1 已就绪、MIG-01 已关闭或 Reader 已放行。
+Stage C 与 Stage D 已通过独立任务完成 Approved Manifest 治理、只读 dry-run 和 handoff；其低敏证据不代表 A2-P1 已写入、MIG-01 已关闭或 Reader 已放行。
+
+## 12. A2-P1 Write Adapter Runtime 准备
+
+`V2-MIG01-A2-P1-MANIFEST-PROVISIONING-END-TO-END-01` 只在独立 Runtime PR 中新增：
+
+- `createProvisioningWritePostgresAdapter`；
+- Write Adapter 合成事务测试；
+- ReadOnly／Write Adapter 读取语义一致性测试。
+
+Write Adapter 只接收调用方注入的 postgres.js client，不读取环境变量，不创建、缓存或关闭连接。`read` 继续复用永久只读 Adapter；`write` 使用单一 `SERIALIZABLE READ WRITE` 事务，设置并核验固定 statement、lock 和 idle-in-transaction timeout，并以事务级双键 advisory lock 覆盖目标行尚不存在时的竞争窗口。
+
+可写 Repository 只允许：
+
+- 从 `tenants`、`institution_scopes`、`institution_operating_context_versions`、`institution_operating_contexts` 读取冻结字段；
+- 按 Scope → Context Version 1 → Context Head 1 的 Kernel 顺序，向后三张 A1 表执行参数化纯 `INSERT`；
+- 返回数据库报告的精确 affected row count，由 Kernel 强制逐项等于 1；
+- 在提交前复用同一事务重新读取完整批次。
+
+Adapter 不提供通用 query，不执行 UPDATE、UPSERT、DELETE、DDL、自动重试、savepoint 或回调外补写。serialization、deadlock、timeout、constraint、连接和未知数据库错误只映射为固定低敏错误码；Kernel 回调错误保持原语义，使任一冲突、affected rows 异常或提交前漂移触发整批回滚。
+
+固定低敏连接／事务错误码只表示 fail-closed，不证明 COMMIT 是否已生效。任何写尝试返回连接／事务错误，且无法由独立证据证明 COMMIT 未生效时，必须按第 7 节的 outcome-unknown 流程停止并独立只读核验，禁止由 Runner 或操作人员自动重试。当前 Adapter 不单独识别 outcome-unknown，合成测试也不代表该场景已被 Runtime 判定；它是后续真实执行必须执行的运维停止分类。
+
+该 Runtime 资产存在不等于 A2-P1 已完成。仓库内仍没有真实 Authority 或签发入口；本次已授权采用的仓库外一次性组合根尚未实现并通过独立无写验证，client 生命周期、grant／revoke、真实 Lease release 和数据库执行证据也仍然缺失。上述阻断必须由独立 Runtime handoff 和后续 Authority／组合根无写准备关闭；在此之前禁止运行 `--execute`。
