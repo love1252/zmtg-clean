@@ -8,7 +8,7 @@
 
 ## 1. 使用说明
 
-本模板只定义未来仓库外审批包的低敏字段和人工流程。当前只实现 test-only `local_acceptance_fixture` Source；真实审批包必须等待未来独立授权的 real source contract。在此之前，Source 必须留空，不得据此生成真实 Candidate 或进入 Stage C。使用本模板不表示 Candidate 已生成、Reviewer／Approver 已指定、审批已完成或 Stage C 已获授权。
+本模板只定义未来仓库外审批包的低敏字段和人工流程。Candidate v1 `local_acceptance_fixture` 继续仅用于 test-only；当前 Source／Candidate v2 治理合约允许后续独立 Stage C 接收用户明确授权的低敏 Source。所有字段仍必须留空，使用本模板不表示 Source 或 Candidate 已生成、Reviewer／Approver 已指定、人工审核已完成、Approved Manifest 已创建或 Stage C 已启动。
 
 未来真实审批包必须：
 
@@ -26,10 +26,15 @@
 | Task ID | `[留空]` | 必须对应独立授权任务 |
 | Frozen Base | `[留空]` | 只记录 Commit SHA |
 | Candidate ID | `[留空]` | 低敏跟踪引用，不替代 digest |
-| Candidate Version | `[留空]` | 必须为 `mig01-a2-candidate/v1` |
-| Candidate Canonicalization | `[留空]` | 必须为 `candidate-canonicalization-v1` |
-| Candidate Source Version | `[留空]` | 当前 test-only 实现为 `mig01-a2-candidate-source/v1`；真实审批包等待独立 real source contract |
-| Source | `[留空]` | `local_acceptance_fixture` 仅用于合成测试；真实来源契约获批前不得填写 |
+| Candidate Version | `[留空]` | Stage C 必须为 `mig01-a2-candidate/v2`；v1 继续 test-only |
+| Candidate Canonicalization | `[留空]` | Stage C 必须为 `candidate-canonicalization-v2` |
+| Candidate Source Version | `[留空]` | Stage C 必须为 `mig01-a2-candidate-source/v2` |
+| Candidate Source Type | `[留空]` | Stage C 必须为 `local_acceptance_user_authorized_input` |
+| Candidate Source Canonicalization | `[留空]` | Stage C 必须为 `candidate-source-canonicalization-v1` |
+| Source Authorization Status | `[留空]` | 只允许记录低敏布尔状态，不回填授权引用 |
+| Source Authorization Time | `[留空]` | UTC 毫秒 instant；不得写入未来时间 |
+| Source Digest | `[仓库外填写]` | `sha256:<64 lowercase hex>`；不得回填到本 Git 模板 |
+| Source | `[留空]` | v2 Source 正文只允许位于仓库外受控位置 |
 | Target Environment | `[留空]` | 必须由任务明确授权，不得从环境推断 |
 | Generated Time | `[留空]` | UTC 毫秒 instant |
 | Generator Reference | `[留空]` | 低敏引用；Generator 不是 Approver |
@@ -53,7 +58,9 @@
 
 | 检查 | 结果 |
 |---|---|
-| Source version／type | `[留空]` |
+| Source version／type／authorization | `[留空]` |
+| Source exact shape | `[留空]` |
+| Source digest | `[留空]` |
 | Candidate exact shape | `[留空]` |
 | Entry exact shape | `[留空]` |
 | UTF-8／NFC | `[留空]` |
@@ -68,7 +75,7 @@
 | 敏感字段拒绝 | `[留空]` |
 | approval 字段不存在 | `[留空]` |
 
-任何一项为 `fail` 或 `not_run` 时不得进入人工批准。
+任何一项为 `fail` 或 `not_run` 时不得进入人工审核。
 
 ## 5. Reviewer／Approver 生命周期
 
@@ -77,7 +84,6 @@ Candidate payload 的 `candidateStatus` 始终为 `candidate`。审核状态独�
 ```text
 generated
 → review_pending
-→ approved（未来人工流程；本治理任务不实现）
 ```
 
 | 字段 | 待填写值 | 规则 |
@@ -85,11 +91,11 @@ generated
 | Review Status | `[留空]` | 本治理阶段只允许 `generated | review_pending` |
 | Reviewer | `[留空]` | 必须由用户指定；不得是 Generator |
 | Review Time | `[留空]` | UTC 毫秒 instant |
-| Approver | `[留空]` | 未来用户指定人工主体；本任务必须留空 |
-| Decision Time | `[留空]` | 本任务必须留空 |
+| Approver | `[留空]` | 属于未来独立 Approved Manifest 流程；本模板必须留空 |
+| Decision Time | `[留空]` | 属于未来独立 Approved Manifest 流程；本模板必须留空 |
 | Future Operator | `[留空]` | 不得兼任 Approver；本任务不授权 |
 
-Reviewer、Approver 和 Future Operator 只能使用低敏、稳定的 opaque reference；禁止填写姓名、邮箱、手机号、PII 或自由文本。本 Git 模板中的真实身份引用必须保持空白。
+Reviewer、Approver 和 Future Operator 只能使用低敏、稳定的 opaque reference；禁止填写姓名、邮箱、手机号、PII 或自由文本。本 Git 模板中的真实身份引用必须保持空白。Candidate v2 只允许 `generated → review_pending`；未来 Approved Manifest 是独立新资产，不是 Candidate 的 `approved` 状态。
 
 Codex 不是 Approver。未来 Operator 不是 Approver。Reviewer 与 Approver 必须职责分离；Candidate 不得原地修改为 Approved。
 
