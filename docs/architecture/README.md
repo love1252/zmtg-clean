@@ -115,6 +115,14 @@ MIG-01A1 Expand
 
 这里的 `accepted` 是专项决策生命周期状态，不等于 `current` 实现或交付完成。accepted 文件只在“用户已经选择什么”上优先解释 proposed decision pack，不得覆盖 `architecture-v2.md` 或已接受 ADR；两份文档均不表示仓库硬门、Runner、Runtime、Schema、Migration、A2-P1 或 A2-P2 已完成。
 
+### 5.2 MIG-01A2 当前专项证据
+
+| 文档 | 状态 | 职责 |
+|---|---|---|
+| [`v2-mig01-a2-environment-manifest-readonly-preflight.md`](./v2-mig01-a2-environment-manifest-readonly-preflight.md) | `current evidence` | 记录 Mac 本地安全验收环境的 Journal、A1 Shape、Manifest、CLI、备份恢复点和真实 dry-run 可用性 |
+
+该报告已经完成并通过 PR #809 合并，但报告中的六项阻断均未被修复；报告合并不表示 A2-P1 可以启动。
+
 ## 6. 架构视图完成状态
 
 业务、应用、数据、软件、部署、开发六类架构视图已经完成 `6/6`。`V2-ARCH-DOCS-03` 已通过 PR #787 合并，开发架构、根 `README.md` 项目入口和 `CURRENT_STATUS` 同步均已完成，不再标记为 `planned`。
@@ -130,6 +138,8 @@ MIG-01A1 Expand
 `V2-QUALITY-CI-01-MINIMUM-ARCHITECTURE-QUALITY-GATE` 已通过 PR #794 完成并合并，最小架构与质量门禁已经进入 `main`。Stage A 随后通过 PR #804 完成仓库硬门配置与验证，并通过 PR #805 完成交接收口；PR #806 独立修复了交接门禁暴露的既有异步测试竞态。该结果只证明检查器、增量规则、现有质量命令编排和 GitHub 服务端合并门禁已建立并验证，不表示历史架构债务已清零或任何业务已正式发布。
 
 `V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-B` 已通过 PR #807 完成并合并。Tenancy 现已拥有版本化低敏 Manifest、`c14n-v1`／SHA-256、dry-run 分类、Repository／Transaction Port、低敏 Lease 契约和一次性 CLI 治理基础，配套 Runbook 已进入 `main`。该结果不表示真实 Manifest、环境 journal、数据库 Shape、备份／恢复点、真实 Lease 或 P1 已核验、签发或执行。
+
+`V2-MIG01-A2-ENVIRONMENT-MANIFEST-READONLY-PREFLIGHT-01` 已通过 PR #809 完成并合并，但结论为 `blocked`：本地验收库 Journal 只有 38 项且未到仓库 0038，A1 三表缺失，真实 Manifest、正式备份／恢复点和只读 Repository Adapter 缺失，真实 Runner dry-run 不可用。该报告只形成只读证据，没有修复环境或启动 A2-P1／P2。
 
 文档完成只代表同一套架构 V2 的视图与入口已经建立，不代表 runtime、Schema、Migration、API、UI、Capability、环境或七线正式发布已经完成。
 
@@ -239,7 +249,11 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 ## 11. 当前项目级顺序
 
 ```text
-V2-MIG01-A2-ENVIRONMENT-MANIFEST-READONLY-PREFLIGHT-01
+V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01
+→ 就绪修复阶段 A：本地验收数据库安全恢复点与 A1 基线
+→ 就绪修复阶段 B：只读 Repository Adapter 与 Context Policy
+→ 就绪修复阶段 C：本地验收 Manifest 候选与审批包
+→ 就绪修复阶段 D：真实本地 Runner dry-run
 → 独立 handoff
 → A2-P1 受控执行
 → 独立 handoff
@@ -252,9 +266,9 @@ V2-MIG01-A2-ENVIRONMENT-MANIFEST-READONLY-PREFLIGHT-01
 → Reader
 ```
 
-`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成 Stage A 仓库硬门与交接，PR #807 已完成 Stage B Runner 治理基础。唯一下一任务切换为 `V2-MIG01-A2-ENVIRONMENT-MANIFEST-READONLY-PREFLIGHT-01`；该任务仍需单独授权，并且只允许只读核验，不提交事务、不执行 P1、不创建 Migration、不签发执行 Lease，也不自动进入 A2-P1。
+`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809 已完成本地环境只读预检。唯一下一任务切换为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01`；当前 handoff 只冻结该大目标，四个就绪修复阶段均未启动。
 
-Stage A 与 Stage B 已通过独立变更域和独立 PR 完成。Stage B 的 Runner、Port、Lease 和 Runbook 只是治理与可测试执行基础；真实 Manifest 尚未读取，数据库尚未连接，真实 Lease 尚未签发，Runner 未对真实环境执行，A2-P1／P2 均未启动。
+治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。PR #809 只读连接了受控 localhost 本地验收库并确认真实 Manifest 缺失、环境未到 0038、A1 三表缺失、正式恢复点缺失且真实 dry-run 不可用；没有运行 Migration、创建 Adapter／Manifest、签发 Lease 或执行 A2-P1／P2。
 
 MIG-01 内部候选顺序继续保持：
 
@@ -268,7 +282,7 @@ A2
 → Reader
 ```
 
-新的项目级顺序在 A2 实施前插入已接受的仓库硬门、Runner 治理基础和只读环境预检。D10-B 对应的 Stage A 硬门已配置并验证，D06-B／D07-B／D11-B 对应的 Stage B 治理基础已进入 `main`，但真实输入、环境、数据库、Lease 和执行授权仍未具备。该顺序只冻结候选切片的串行关系，不表示 A2 实施已获授权，也不改变 MIG-01～MIG-06 的相对顺序。
+新的项目级顺序在 A2 实施前加入四个就绪修复阶段。每个阶段都必须单独授权并使用独立 PR；即使四阶段全部完成，也仍需独立 handoff 才能申请 A2-P1。该顺序只冻结候选切片的串行关系，不表示环境修复、Manifest 审批、真实 dry-run 或 A2 实施已获授权，也不改变 MIG-01～MIG-06 的相对顺序。
 
 后续既定数据顺序保持：
 
