@@ -606,3 +606,21 @@
 - 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改均为 0。
 - 唯一下一任务为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C`：本地验收 Manifest Candidate 生成与审批包。
 - Stage C 尚未启动；它只允许从用户明确批准的真实 Source 合约与来源生成 Candidate、输出低敏审核摘要并交由用户审核，不创建 Approved Manifest、不运行 Runner、不执行 dry-run、不签发 Lease、不启动 A2-P1／A2-P2。
+
+## 2026-07-30：MIG-01A2 Source／Candidate v2 Governance 完成并切换至 Stage C
+
+- PR #817 完成 Stage C-0 handoff，Head `7ea19efccc5dd17a5e30c7c35571465d0d986f3f`，Merge Commit `c1be2e45389a74f653717a2a47a81a5559f3c35b`。
+- PR #817 Required Check Run `30526410379`／Job `90818243458` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #818 基于 `c1be2e45389a74f653717a2a47a81a5559f3c35b` 建立 Source／Candidate v2 Governance，Head `29ee87fa7f7b3ab3749e4adedaf89457471d21ef`，Merge Commit `ff3528d703c00703998d62f69c1ded8f5f6a3350`。
+- PR #818 Required Check Run `30529676907`／Job `90828769200` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #818 精确变更 8 个文件：3 个 Source／Candidate v2 合约模块、3 个 v2 测试文件、1 份 Source v2 治理文档和 1 份空白审批模板。
+- Candidate v1 `mig01-a2-candidate/v1`、Source v1 `mig01-a2-candidate-source/v1`、test-only type `local_acceptance_fixture`、v1 测试、治理文档与固定向量均保持不变。
+- Candidate v2 为 `mig01-a2-candidate/v2`，canonicalization 为 `candidate-canonicalization-v2`。
+- Source v2 为 `mig01-a2-candidate-source/v2`，type 为 `local_acceptance_user_authorized_input`，canonicalization 为 `candidate-source-canonicalization-v1`。
+- Source authorization、Candidate review 与 Approved Manifest 是三个独立门；Candidate v2 Review lifecycle 只允许 `generated → review_pending`。
+- v2 定向契约测试 3 文件／225 个场景通过；完整测试 420 文件／6121 个测试通过；build 101／101。
+- Source／Candidate v2 Governance 没有生成 Source／Candidate 实例，没有创建 Approved Manifest，没有运行 Runner／dry-run，也没有签发 Lease。
+- `real_manifest_missing` 与 `real_environment_dry_run_unavailable` 继续阻断；Stage D、A2-P1 与 A2-P2 均未启动。
+- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package 和 lock 修改均为 0。
+- 唯一下一任务继续为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C`：使用 Source v2 生成本地验收 Candidate 并提交低敏审批包。
+- 当前 Ultra 任务已授权在本 handoff 合并后串行执行 Stage C；本条记录本身未生成 Candidate，也未启动 Stage C。
