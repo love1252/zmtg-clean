@@ -624,3 +624,19 @@
 - 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package 和 lock 修改均为 0。
 - 唯一下一任务继续为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C`：使用 Source v2 生成本地验收 Candidate 并提交低敏审批包。
 - 当前 Ultra 任务已授权在本 handoff 合并后串行执行 Stage C；本条记录本身未生成 Candidate，也未启动 Stage C。
+
+## 2026-07-30：MIG-01A2 Stage C Candidate 人工审核收口并切换至 Approved Manifest 创建
+
+- PR #818 建立 Source／Candidate v2 Governance，Head `29ee87fa7f7b3ab3749e4adedaf89457471d21ef`，Merge Commit `ff3528d703c00703998d62f69c1ded8f5f6a3350`。
+- PR #819 完成 Source v2 handoff，Head `4c964a167ad4e729681067ba319e4b9cb1940d3f`，Merge Commit `2e14cfd2cec73cd3d8dc08274ba70763402798bb`，Required Check Run `30530766787`／Job `90832302970` 成功。
+- PR #820 完成 Candidate 生成、私有输出卫生重新签发和用户人工审核记录，最终 Head `bc3ad6155df5ce071442183b85a301dd6366ec51`，Merge Commit `172526e15775fc99768e1d739fc3c0d947bc1363`。
+- PR #820 Required Check Run `30540499970`／Job `90863892886` 对应最终 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- 当前有效 Candidate 数量为 1；Candidate version 为 `mig01-a2-candidate/v2`，Source version 为 `mig01-a2-candidate-source/v2`，Context Policy version 为 `mig01-a2-local-acceptance-context-policy/v1`。
+- Source／Candidate exact shape、Source／Candidate digest、Context Policy、tenant 父记录与私有权限均已通过低敏验证。
+- 用户人工审核结论为 `accepted_for_approved_manifest_preparation`；该结论只允许当前 Candidate 作为未来独立 Approved Manifest 创建任务的审核依据。
+- Candidate payload 仍为 `candidate`，私有 Review State 仍为 `review_pending`；没有创建或伪造 Candidate `approved` 状态。
+- Candidate digest 未被复用；未来 Approved Manifest 必须使用独立 approval 字段、`c14n-v1` 和新的 SHA-256 digest。
+- `candidate_human_approval_missing` 已关闭；`real_manifest_missing` 与 `real_environment_dry_run_unavailable` 继续阻断。
+- Approved Manifest 尚未创建；Runner、dry-run、`--execute`、Lease、数据库写入、Stage D、A2-P1 与 A2-P2 均未启动。
+- PR #820 与本次 handoff 的 Runtime、Schema、Migration 修改均为 0。
+- 唯一下一任务为 `V2-MIG01-A2-APPROVED-MANIFEST-CREATION-VALIDATION-01`：基于已审核 Candidate 创建并校验独立 Approved Manifest。

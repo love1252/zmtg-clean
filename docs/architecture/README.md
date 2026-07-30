@@ -1,11 +1,11 @@
 # 智美天工架构文档索引
 
-- 任务：`V2-MIG01-A2-STAGE-C-REAL-SOURCE-AND-CANDIDATE-01`（Source／Candidate v2 Governance handoff 收口）
+- 任务：`V2-MIG01-A2-STAGE-C-HUMAN-REVIEW-MERGE-AND-HANDOFF-01`（Stage C Candidate 人工审核 handoff 收口）
 - 日期：`2026-07-30 CST +0800`
-- 审计基线：`ff3528d703c00703998d62f69c1ded8f5f6a3350`
+- 审计基线：`172526e15775fc99768e1d739fc3c0d947bc1363`
 - 状态：`current`
 - 文档性质：架构导航索引，不是第二套架构事实源
-- 本次 Source v2 handoff 文档差异中的 Runtime、Schema、Migration、API、UI 修改：`0`
+- 本次 Stage C handoff 文档差异中的 Runtime、Schema、Migration、API、UI 修改：`0`
 
 ## 1. 文档定位
 
@@ -125,8 +125,11 @@ MIG-01A1 Expand
 | [`../operations/mig01-a2-manifest-candidate-governance-20260730.md`](../operations/mig01-a2-manifest-candidate-governance-20260730.md) | `current evidence` | 记录不可变的 Candidate v1 test-only Contract、canonicalization、digest、合成 Source 与 Reviewer 生命周期 |
 | [`../operations/mig01-a2-manifest-real-source-v2-governance-20260730.md`](../operations/mig01-a2-manifest-real-source-v2-governance-20260730.md) | `current evidence` | 记录用户授权 Source v2、Candidate v2、独立 digest 与三道治理门；不包含 Source／Candidate 实例 |
 | [`../operations/mig01-a2-manifest-candidate-approval-template-20260730.md`](../operations/mig01-a2-manifest-candidate-approval-template-20260730.md) | `current + proposed` | 提供仓库外审批包的空白低敏 v2 模板；Git 文件未回填真实 Source、Candidate、digest、审批引用、路径或业务数据 |
+| [`../operations/mig01-a2-local-manifest-candidate-approval-pack-20260730.md`](../operations/mig01-a2-local-manifest-candidate-approval-pack-20260730.md) | `current evidence + human reviewed` | 记录重新签发 Candidate 的低敏验证与用户人工审核结论；不包含 Candidate 正文、双键或 digest，不代表 Approved Manifest 已创建，也不授权 Stage D 或 A2-P1 |
 
-PR #809 的只读预检报告记录了六项阻断。PR #811 随后完成本地就绪修复 Stage A，将环境 Journal 从 38 推进到 39、使 A1 三表 Shape 与仓库 0038 一致，并建立迁移前后两个已验证恢复点；`journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing` 已关闭。PR #814 进一步建立只读 Adapter 与本地验收 Context Policy，关闭 `readonly_adapter_unavailable`。PR #816 建立 Candidate v1 Governance 基础并关闭 `candidate_contract_missing`；PR #817 完成 Stage C-0 handoff。PR #818 建立用户授权 Source／Candidate v2 治理合约，但尚未生成 Source／Candidate 实例或 Approved Manifest。`real_manifest_missing` 与 `real_environment_dry_run_unavailable` 仍未关闭；上述证据合并不表示 Stage D 或 A2-P1 可以启动。
+这里的 `human reviewed` 只表示用户允许当前重新签发的 Candidate 作为未来 Approved Manifest 准备依据。Candidate payload 仍为 `candidate`，私有 Review State 仍为 `review_pending`；它不是 Candidate `approved` 状态，也不是 Approved Manifest 的 `approved` 状态。
+
+PR #809 的只读预检报告记录了六项阻断。PR #811 随后完成本地就绪修复 Stage A，将环境 Journal 从 38 推进到 39、使 A1 三表 Shape 与仓库 0038 一致，并建立迁移前后两个已验证恢复点；`journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing` 已关闭。PR #814 进一步建立只读 Adapter 与本地验收 Context Policy，关闭 `readonly_adapter_unavailable`。PR #816 建立 Candidate v1 Governance 基础并关闭 `candidate_contract_missing`；PR #817 完成 Stage C-0 handoff；PR #818 建立用户授权 Source／Candidate v2 治理合约；PR #819 完成 Source v2 handoff；PR #820 生成、重新签发并记录人工审核通过的 Candidate 低敏证据。Candidate 数量为 1，Source／Candidate／Context Policy 与 tenant 父记录均已核验，用户结论为 `accepted_for_approved_manifest_preparation`；Candidate payload 仍为 `candidate`，私有 Review State 仍为 `review_pending`。`candidate_human_approval_missing` 已关闭；`real_manifest_missing` 与 `real_environment_dry_run_unavailable` 仍未关闭。Approved Manifest、Runner、dry-run、Lease、Stage D 与 A2-P1 均未启动。
 
 ## 6. 架构视图完成状态
 
@@ -154,6 +157,8 @@ PR #809 的只读预检报告记录了六项阻断。PR #811 随后完成本地�
 
 `V2-MIG01-A2-STAGE-C-REAL-SOURCE-AND-CANDIDATE-01` 阶段一已通过 PR #818 完成并以 Merge Commit `ff3528d703c00703998d62f69c1ded8f5f6a3350` 合并。Candidate v1 继续保持 test-only 且不可变；Tenancy 新增 `mig01-a2-candidate-source/v2`／`local_acceptance_user_authorized_input` Source Contract 与 `mig01-a2-candidate/v2` Candidate Contract。Source authorization、Candidate review 与 Approved Manifest 是三个独立门。PR #818 只建立合约、测试和治理文档，没有生成 Source／Candidate 实例，没有读取数据库或运行 Runner，也没有创建 Approved Manifest；`real_manifest_missing` 继续阻断。
 
+Source v2 handoff 已通过 PR #819 完成并以 Merge Commit `2e14cfd2cec73cd3d8dc08274ba70763402798bb` 合并。Stage C Candidate 审批包随后通过 PR #820 完成并以 Merge Commit `172526e15775fc99768e1d739fc3c0d947bc1363` 合并：最终 Head 为 `bc3ad6155df5ce071442183b85a301dd6366ec51`，Candidate 数量为 1，Source／Candidate exact shape、digest、Context Policy 与 tenant 父记录均已验证；用户人工审核结论为 `accepted_for_approved_manifest_preparation`。Candidate payload 仍为 `candidate`，私有 Review State 仍为 `review_pending`，Candidate digest 不得复用。Approved Manifest 尚未创建，`real_manifest_missing` 与 `real_environment_dry_run_unavailable` 继续阻断。
+
 文档完成只代表同一套架构 V2 的视图与入口已经建立，不代表 runtime、Schema、Migration、API、UI、Capability、环境或七线正式发布已经完成。
 
 ### 6.1 当前架构与质量门禁
@@ -170,6 +175,8 @@ PR #809 的只读预检报告记录了六项阻断。PR #811 随后完成本地�
 - Candidate Governance／Stage C-0：PR #816 Base `0be5faf5b089fdf3b5e0c84f3dac09d1283368d2`／Head `4df7cac76887b5cc3336650911dfc7f0448516e5`／Merge Commit `eb7cde613c38e262aeb8519c53e7e3d21704b18f`，Run `30524750504`／Job `90813002538` 的环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功；Candidate 定向契约集 3 文件／105 个、完整测试 417 文件／5896 个、build 101／101 通过；
 - Candidate Governance／Stage C-0 handoff：PR #817 Base `eb7cde613c38e262aeb8519c53e7e3d21704b18f`／Head `7ea19efccc5dd17a5e30c7c35571465d0d986f3f`／Merge Commit `c1be2e45389a74f653717a2a47a81a5559f3c35b`，Run `30526410379`／Job `90818243458` 成功；
 - Source／Candidate v2 Governance：PR #818 Base `c1be2e45389a74f653717a2a47a81a5559f3c35b`／Head `29ee87fa7f7b3ab3749e4adedaf89457471d21ef`／Merge Commit `ff3528d703c00703998d62f69c1ded8f5f6a3350`，Run `30529676907`／Job `90828769200` 的环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功；v2 定向契约集 3 文件／225 个、完整测试 420 文件／6121 个、build 101／101 通过；
+- Source v2 handoff：PR #819 Base `ff3528d703c00703998d62f69c1ded8f5f6a3350`／Head `4c964a167ad4e729681067ba319e4b9cb1940d3f`／Merge Commit `2e14cfd2cec73cd3d8dc08274ba70763402798bb`，Run `30530766787`／Job `90832302970` 成功；
+- Stage C Candidate 人工审核：PR #820 Base `2e14cfd2cec73cd3d8dc08274ba70763402798bb`／Head `bc3ad6155df5ce071442183b85a301dd6366ec51`／Merge Commit `172526e15775fc99768e1d739fc3c0d947bc1363`，Run `30540499970`／Job `90863892886` 的环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功；Candidate payload 仍为 `candidate`，私有 Review State 仍为 `review_pending`；
 - 服务端硬门：`main.protected=true`，Required Check Context 为 `最小架构与质量门禁`，App ID／slug 为 `15368`／`github-actions`，`strict=true`、`enforce_admins=true`、审批数为 `0`；
 - 服务端拒绝：普通 direct push、显式 force-with-lease 和删除受保护分支均被 GitHub 拒绝；不允许管理员 bypass；
 - 合并策略：Stage A 验证 PR 使用 Merge Commit 合并；未启用 Linear History，仓库其他既有合并方法设置未在 Stage A 修改；
@@ -282,9 +289,10 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 → Candidate Governance：Candidate Contract、Source 与 Reviewer 生命周期（已完成，PR #816）
 → Stage C-0 独立 handoff（已完成，PR #817）
 → Source／Candidate v2 Governance（已完成，PR #818）
-→ Source v2 handoff（本任务）
-→ V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C：使用 Source v2 生成本地验收 Candidate 并提交低敏审批包（唯一下一任务，尚未启动）
-→ 独立 handoff（重新冻结 Approved Manifest 创建／校验与 Stage D 前置；Approved Manifest 缺失时不得启动 Stage D）
+→ Source v2 handoff（已完成，PR #819）
+→ Stage C：Candidate 生成、重新签发与用户人工审核（已完成，PR #820）
+→ V2-MIG01-A2-APPROVED-MANIFEST-CREATION-VALIDATION-01：基于已审核 Candidate 创建并校验独立 Approved Manifest（唯一下一任务，尚未启动）
+→ 独立 handoff（重新冻结 Stage D；Approved Manifest 缺失或未独立审核时不得启动 Stage D）
 → 就绪修复阶段 D：真实本地 Runner dry-run
 → 独立 handoff
 → A2-P1 受控执行
@@ -298,9 +306,9 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 → Reader
 ```
 
-`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809 已完成本地环境只读预检，PR #811／#812 已完成本地就绪修复 Stage A 与交接，PR #814 已完成本地就绪修复 Stage B，PR #816／#817 已完成 Candidate Governance／Stage C-0 与 handoff，PR #818 已完成 Source／Candidate v2 Governance。唯一下一任务继续为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C`；Stage C 尚未生成 Candidate。
+`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809 已完成本地环境只读预检，PR #811／#812 已完成本地就绪修复 Stage A 与交接，PR #814 已完成本地就绪修复 Stage B，PR #816／#817 已完成 Candidate Governance／Stage C-0 与 handoff，PR #818／#819 已完成 Source／Candidate v2 Governance 与 handoff，PR #820 已完成 Candidate 生成、重新签发和用户人工审核。唯一下一任务为 `V2-MIG01-A2-APPROVED-MANIFEST-CREATION-VALIDATION-01`；Approved Manifest 尚未创建。
 
-治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。PR #809 只读连接了受控 localhost 本地验收库并确认六项阻断；PR #811 关闭本地环境 Journal、A1 Shape 与恢复点三项阻断；PR #814 建立只读 Adapter 与 Context Policy 并关闭 `readonly_adapter_unavailable`；PR #816 建立 Candidate v1 test-only 契约并关闭 `candidate_contract_missing`；PR #818 建立用户授权 Source／Candidate v2 治理合约。真实 Manifest 与真实 dry-run 仍不可用；尚未生成 Source／Candidate 实例、创建 Approved Manifest、签发 Lease、运行 Runner dry-run 或执行 A2-P1／P2。
+治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。PR #809 只读连接了受控 localhost 本地验收库并确认六项阻断；PR #811 关闭本地环境 Journal、A1 Shape 与恢复点三项阻断；PR #814 建立只读 Adapter 与 Context Policy 并关闭 `readonly_adapter_unavailable`；PR #816 建立 Candidate v1 test-only 契约并关闭 `candidate_contract_missing`；PR #818 建立用户授权 Source／Candidate v2 治理合约；PR #820 记录当前 Candidate 的低敏验证与人工审核结论。真实 Approved Manifest 与真实 dry-run 仍不可用；尚未签发 Lease、运行 Runner dry-run 或执行 A2-P1／P2。
 
 MIG-01 内部候选顺序继续保持：
 
@@ -314,7 +322,7 @@ A2
 → Reader
 ```
 
-本地就绪修复 Stage A、Stage B、Candidate Governance／Stage C-0 与 Source／Candidate v2 Governance 已完成。本 Ultra 任务已明确授权在本 handoff 合并后串行执行 Stage C；该授权只覆盖按固定优先顺序核验两组已授权来源、生成一个仓库外 Candidate v2、进入 `review_pending` 并提交低敏 Draft 审批包。Stage C 不等于创建 `mig01-a2/v1` Approved Manifest，`real_manifest_missing` 不会自动关闭，且不得启动 Stage D。后续阶段仍需独立 handoff 和授权；该顺序不改变 MIG-01～MIG-06 的相对顺序。
+本地就绪修复 Stage A、Stage B、Candidate Governance／Stage C-0、Source／Candidate v2 Governance 与 Stage C Candidate 人工审核已经完成。当前 Candidate payload 仍为 `candidate`，私有 Review State 仍为 `review_pending`；用户结论 `accepted_for_approved_manifest_preparation` 只允许后续独立创建并校验 Approved Manifest。Approved Manifest 尚未创建，`real_manifest_missing` 不会自动关闭，且不得启动 Runner、dry-run、Lease、Stage D 或 A2-P1。后续阶段仍需独立 handoff 和授权；该顺序不改变 MIG-01～MIG-06 的相对顺序。
 
 后续既定数据顺序保持：
 
