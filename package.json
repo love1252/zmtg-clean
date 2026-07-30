@@ -22,6 +22,7 @@
     "preflight": "pnpm typecheck && pnpm test && pnpm build",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/db/guarded-migrate.mjs",
+    "db:mig01-a2:provisioning": "tsx scripts/db/mig01-a2-provisioning-runner.mjs",
     "db:seed": "tsx src/server/db/seed-demo-data.ts"
   },
   "dependencies": {
