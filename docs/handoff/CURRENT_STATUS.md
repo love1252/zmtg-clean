@@ -2,50 +2,52 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## MIG-01A2 Stage D 收口状态
+## MIG-01A2 A2-P1 Runtime handoff 状态
 
 - 更新日期：2026-07-31
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-MIG01-A2-STAGE-D-CLOSEOUT-AND-HANDOFF-01`；Stage D 本地只读 dry-run 与独立审查均已合并，本 handoff 正在收口
-- Stage D 报告：PR #825，Head `151b6316e42bd6f9b0d5d6efcf96afe568675a4d`，Merge Commit `e6bfd470fb521fcd18e8093024efcdf0a56ab63c`
-- PR #825 Required Check：Run `30558783297`／Job `90926083649`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- Stage D 独立审查：PR #826，重放后 Head `3e364afb7e1880c4b06ad92788cfb1a8d3972839`，Merge Commit `b514ee04c35c7ddb830787e0ad579f3b0469379c`
-- PR #826 Required Check：Run `30561620736`／Job `90935814730`，全部质量步骤成功，build 未跳过
-- 当前证据：`docs/operations/mig01-a2-stage-d-local-dry-run-validation-20260730.md` 与 `docs/operations/mig01-a2-stage-d-independent-review-20260730.md`
+- 当前总任务：`V2-MIG01-A2-P1-MANIFEST-PROVISIONING-END-TO-END-01`
+- 当前阶段：A2-P1 Write Adapter Runtime 已合并，本 handoff 正在收口
+- 受控执行计划：PR #828，Head `77be8e4ac835ce76e77a6bf5c7026c63d83b58fc`，Merge Commit `184b0320be1bedaace5d72ff0b0e453f343ad52e`
+- PR #828 Required Check：Run `30565599037`／Job `90949208935`，全部质量步骤成功
+- Runtime Write Adapter：PR #829，Head `aa465a64aa146a43f766413caa53dfc88a1bd39b`，Merge Commit `bbf15be8f5acd66d80db5ac7b6e9250a57d5744e`
+- PR #829 Required Check：Run `30568943508`／Job `90960419070`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- 当前证据：`docs/operations/mig01-a2-p1-execution-plan-20260731.md`、`docs/operations/mig01-a2-provisioning-runbook.md` 与 PR #829 的当前代码／测试
 - 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：0
 
-### Stage D 当前事实
+### Runtime 当前事实
 
-- Runner 模式：本地只读 `--dry-run`
-- 五项低敏计数 `input／insertedCandidate／reusedCandidate／conflict／unexpected`：`1／1／0／0／0`
-- 计数守恒：通过；`insertedCandidate` 仅是候选分类，不表示实际插入
-- Runner ReadOnly Adapter 只负责 tenant 存在性、Manifest 对应 triplet 分类与五项计数
-- Journal、实际 Schema Shape 和四表总数来自独立临时只读 pre／post 探针
-- dry-run 前后数据库状态：一致
-- F01：`closed`
-- 独立审查：`stage_d_independent_review=passed`
-- Stage D handoff 准入：`eligible_for_stage_d_handoff=true`
-- A2-P1 准入：`eligible_for_a2_p1=false`
-- 数据库写入、Lease、`--execute`、Migration、Seed、DDL、DML：`0`
-- Stage D 已完成并收口；该结论不构成 A2-P1 执行授权
+- 唯一可写数据库 Adapter：`createProvisioningWritePostgresAdapter`
+- Write Adapter 只接收调用方注入的 postgres.js client，不读取环境变量，不创建、缓存或关闭连接
+- 读取只允许 `tenants` 与三张 A1 表；写入只允许三张 A1 表的参数化纯 `INSERT`
+- Kernel 顺序固定为 Scope → Context Version 1 → Context Head 1，affected rows 逐项必须等于 1
+- 写事务为单一 `SERIALIZABLE READ WRITE`，具备固定 timeout、双键事务级 advisory lock、提交前全批重检和零自动重试
+- ReadOnly Adapter 文件与永久拒写边界未修改
+- 定向 Write／Parity／ReadOnly／Kernel：4 个文件、109 个测试通过
+- 完整 Provisioning 契约：14 个文件、510 个测试通过
+- 完整质量基线：422 个测试文件、6190 个测试通过，build 101／101
+- 本阶段数据库连接、真实 Manifest 读取、真实 Lease、Runner dry-run／`--execute`、Migration、Seed、DDL、DML：`0`
+- Write Adapter 进入 `main` 不表示 A2-P1 已执行或完成
 
-### 已接受边界与当前门禁
+### 已接受边界与当前阻断
 
-- `main` 已启用保护，Required Check `最小架构与质量门禁` 对所有人强制
-- Source authorization、Candidate review、Approved Manifest、Stage D dry-run 与 A2-P1 执行授权继续是彼此独立的门
-- A2-P1 只允许沿用 accepted decisions、专项预检和 Runbook 的受控 Runner 单一入口，不得建立第二写入口
-- A2-P1、A2-P2、BASE-02、Writer、Reader 与机构端旧任务均未启动
-- A1 仅完成 Expand；归属、Provisioning、回填、Enforce 和 Reader 放行均未因此完成
+- Runner 继续是 A2-P1 唯一写入口；不得建立第二 Runner、通用 SQL 或旁路写入口
+- 仓库内仍没有真实 Authority 或签发入口
+- 仓库外一次性组合根尚未完成独立无写验证；client 生命周期、grant／revoke、真实 Lease release 与数据库执行证据仍缺失
+- outcome-unknown 是后续真实执行的运维停止分类；当前 Runtime 不声称已识别或测试 COMMIT 回包丢失
+- A2-P1 尚未完成，真实执行尚未启动；A2-P2、BASE-02、Writer、Reader 与机构端旧任务均未启动
+- A1 仍只完成 Expand；回填、Enforce 和 Reader 放行均未因此完成
 - 正式平台服务端授权根仍为缺失，七线正式发布仍为 0/7
 
-### 唯一下一任务
+### 唯一下一阶段
 
-- 任务名称：`A2-P1 manifest 驱动 provisioning`
-- 名称来源：`docs/architecture/v2-mig01-a2-provisioning-preflight.md`；仓库尚无正式任务编号，本 handoff 不自行创建编号
-- 当前状态：尚未启动、尚未获得执行授权；本 handoff 只冻结唯一下一任务及其既有硬门
-- 启动前必须由新的用户授权任务冻结最新 main、工作分支、目标环境、Approved Manifest、恢复点、Operator／Reviewer、有效执行 Lease、Authority 和 Repository／Transaction Adapter
-- 只允许候选处理 Scope、Context Version 1、Context Head 1 的原子创建或严格一致复用、幂等分类和整批回滚
-- 禁止在本 handoff 中运行 Runner、使用 `--execute`、签发或消费 Lease、执行数据库写入，或启动 A2-P1／A2-P2 及任何后续任务
+- 名称：`Authority／组合根无写准备`
+- 名称来源：`docs/operations/mig01-a2-provisioning-runbook.md`；仓库尚无正式任务编号，本 handoff 不自行创建编号
+- 验证动作：`Authority／组合根无写验证`
+- 当前状态：本 handoff 中尚未启动；当前总任务已明确授权在本 handoff 合并后串行执行
+- 只允许使用合成资产冻结 Authority 信任根、仓库外一次性组合根职责、client 清理、撤权与 Lease release 负向证据
+- 禁止连接数据库、读取真实 Manifest、签发或消费真实 Lease、授予真实权限或使用 `--execute`
+- 完成后必须创建独立低敏证据 PR 与独立 Authority／组合根 handoff；数据库执行仍不得由本 handoff 自动开始
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
 <!-- PHASE31_FINAL_AUDIT_START -->
