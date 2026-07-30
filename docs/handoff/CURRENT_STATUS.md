@@ -2,120 +2,91 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## 架构 V2 第一阶段、MIG-01A2 Stage B 与只读预检状态
+## 架构 V2 第一阶段与 MIG-01A2 只读预检收口状态
 
 - 更新日期：2026-07-30
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-B` 已完成并合并
-- accepted 决策 PR：#801
-- accepted 决策 PR Head：`2a62d65393b4f96a3ead7ec6daeed5708f5a2b62`
-- accepted 决策 Merge Commit：`56638dc3595d7bd60a47b08810c50df256d0b87c`
-- Stage A 验证 PR：#804
-- Stage A PR Head：`1948597d5349017485578723fd32535e84e2bd97`
-- Stage A Merge Commit：`97a21fa6ba8517a9d5dd5ab28e90670b371e52cb`
-- Stage A 验证文档：`docs/verification/github-main-hard-gate-validation-20260730.md`
-- Stage A handoff PR：#805
-- Stage A handoff PR Head：`5d5c4e746f9de079088f62bb8585c1856e9f0a44`
-- Stage A handoff Merge Commit：`c52fef48e71f760017c8e39909b610ae6de180d8`
-- Stage A handoff Actions：Run `30505641202`／Job `90754678015`，全部质量步骤成功
-- 前置异步测试竞态修复 PR：#806
-- 前置异步测试竞态修复 PR Head：`6f2dac34e4a74ee9e62c67444c0afc88d3185971`
-- 前置异步测试竞态修复 Merge Commit：`08acc2f0b5f6a10df5e7adde457c050c10bd79dd`
-- 前置异步测试竞态修复 Actions：Run `30505183208`／Job `90753276031`，全部质量步骤成功
-- Stage B PR：#807
-- Stage B PR Head：`d7abdc52c64be367b988db15bfbdaa251be33fd4`
-- Stage B Merge Commit：`e50999ebc33dd07a4447fa8f9274e974e9beae63`
-- Stage B Actions：Run `30508177604`／Job `90762357307`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- proposed 决策包：`docs/decisions/mig01-a2-provisioning-decision-pack.md`
-- accepted 决策记录：`docs/decisions/mig01-a2-provisioning-accepted-decisions.md`
+- 当前阶段：`V2-MIG01-A2-ENVIRONMENT-MANIFEST-READONLY-PREFLIGHT-01` 已完成并合并，但结果为 `blocked`
+- 完成 PR：#809
+- PR Head：`7ccd75a9fd20e48d424920c7545d3b8d99838cf6`
+- Merge Commit：`e6b0a23ba3b30003f0327493b350a1929030e4fc`
+- Required Check：Run `30511790906`／Job `90773241559`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- 只读预检报告：`docs/architecture/v2-mig01-a2-environment-manifest-readonly-preflight.md`
+- 报告性质：`current evidence`；报告已完成，但阻断没有被修复，不构成 A2-P1 授权
+
+### 已接受边界与治理基础
+
+- accepted 决策 PR：#801，Merge Commit `56638dc3595d7bd60a47b08810c50df256d0b87c`
 - accepted 组合：D01-A、D02-A、D03-A、D04-A、D05-A、D06-B、D07-B、D08-C、D09-A、D10-B、D11-B、D12-A（方向）
-- D01：Tenancy 是 Scope、Context Version／Head、Manifest、Scope Revision 与 Provisioning Provenance 原始事实的唯一语义 Owner
-- D02：Access Control 通过版本化 Port／Reader 和低敏投影单向消费；当前直接读共享表仅为限期兼容
-- D03～D05：严格版本化低敏 Manifest、固定位置数组 canonicalization + SHA-256、Context 全字段显式已经接受
-- D06／D07／D11：仓库外真实 Manifest + 唯一一次性受控 Runner + Runner 文件集绑定接受
-- D08／D09：分阶段 Metadata 治理 + 用户授予的任务级排他执行／Migration Lease 绑定接受
-- D10：`main` 保护和“最小架构与质量门禁”Required Check 已配置、验证并生效
-- D12：只接受最小 Anchor Bridge 方向；精确名称、列序、Catalog Shape、编号、锁／timeout 与目标环境后置
-- Required Check Context：`最小架构与质量门禁`
-- Required Check App：ID `15368`／slug `github-actions`
-- Branch Protection：`main.protected=true`、`strict=true`、`enforce_admins=true`、required approvals `0`
-- 保护边界：禁止 direct push、force push 和删除 `main`；无管理员 bypass；未启用 Linear History
-- 服务端探针：普通 direct push、显式 force-with-lease 和受保护分支删除均被 GitHub 拒绝，临时探针分支已清理
-- Negative 验证：Run `30481398548`／Job `90676107324`，Head `4f65ce0170817d8928abe1e41319fbf22a8251eb`，增量架构检查因 `AQ001_SECOND_DATABASE_ROOT` 失败且合并被阻断
-- Final Positive 验证：Run `30482219056`／Job `90678924630`，Head `1948597d5349017485578723fd32535e84e2bd97`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- 架构规则：`AQ001`～`AQ007` 七条规则已进入 `main`
+- Owner：Tenancy 是 Scope、Context Version／Head、Manifest、Scope Revision 与 Provisioning Provenance 原始事实的唯一语义 Owner
+- Access Control：只通过版本化 Port／Reader 和低敏投影单向消费，不建立第二套事实源
+- Manifest／canonicalization：`mig01-a2/v1`、`c14n-v1`、exact shape、SHA-256 和低敏白名单
+- 治理 Stage A：PR #804／#805 已完成 `main` 保护、Required Check 和 handoff
+- 治理 Stage B：PR #807／#808 已完成 Runner、Port、Lease 低敏契约、合成测试、Runbook 和 handoff
+- `main` 保护：`protected=true`、`strict=true`、`enforce_admins=true`、required approvals `0`
+- Required Check：`最小架构与质量门禁`，App ID `15368`
+- 保护边界：禁止 direct push、force push 和删除 `main`；无管理员 bypass
 - Workflow：`.github/workflows/architecture-quality.yml`
 - 检查器：`scripts/verify/architecture-quality.mjs`
-- 公开仓库低敏审计：在启动基线 `97a21fa6ba8517a9d5dd5ab28e90670b371e52cb` 的 1551 个 tracked files 与 1962 个历史提交中未确认真实凭证、私钥、带凭证连接串或真实敏感数据；本任务后续只合并低敏 handoff、合成测试和 Stage B 治理基础；GitHub Secret Scanning 未启用且 alerts API 返回 404，此结果属于覆盖缺口，不得解释为“零告警证明”
-- 架构视图完成度：业务、应用、数据、软件、部署、开发共 6/6
-- 默认协作：Codex 为默认主开发和仓库执行者；ChatGPT 网页版负责设计与审查；Claude Code 仅在用户明确点名时启用
-- 治理语言：面向人的仓库文档、PR 与回报默认中文，中文优先治理已生效
+- 架构规则：`AQ001`～`AQ007` 已进入 `main`
+
+### 本地验收环境只读结果
+
+- 本地验收容器：`zmtg-local-acceptance-pg`
+- 网络边界：仅 `127.0.0.1:55432` 映射至容器 PostgreSQL
+- 仓库 Journal：39 项，最新为 `0038_mig_01a1_institution_isolation_expand`
+- 本地验收库 Journal：38 项，未到 0038
+- Migration snapshot：到 `0026`，且不覆盖 A1
+- `tenants` Shape：与仓库期望一致
+- `tenants` 低敏计数：2
+- A1 三表：`institution_scopes`、`institution_operating_context_versions`、`institution_operating_contexts` 均缺失
+- 缺失表计数：无法核验，未伪报为 0
+- real Manifest：`real_manifest_missing`
+- synthetic Manifest：`synthetic_contract_validation=pass`
+- CLI：只使用 `--dry-run`，固定返回 `runner_context_policy_unavailable`
+- CLI 数据库连接／写入：均为否
+- 正式备份／恢复点：`backup_recovery_point_missing`
+- 只读 Repository Adapter：`readonly_adapter_unavailable`
+- 真实 Runner dry-run：`real_environment_dry_run_unavailable`
+- 只读 SQL：全部在 `READ ONLY` 事务中执行并 `ROLLBACK`
+- 本轮未运行 Migration、Seed、DDL、DML、`db:generate` 或 `--execute`
+- 执行 Lease／Migration Lease：均未签发
+
+### 当前阻断与实施状态
+
+- 六项阻断：`journal_not_at_0038`、`schema_shape_missing`、`real_manifest_missing`、`backup_recovery_point_missing`、`readonly_adapter_unavailable`、`real_environment_dry_run_unavailable`
+- A1 状态：仓库具备静态 Expand；本地验收环境尚未应用到 0038，A1 三表缺失
+- A2 状态：治理决策、仓库硬门、Runner 基础和只读预检已完成；本地就绪修复、A2-P1、A2-P2 均未启动
 - 本次 handoff Runtime 修改：0
 - 本次 handoff Schema 修改：0
 - 本次 handoff Migration 修改：0
-- Stage B 精确文件范围：
-  - `docs/operations/mig01-a2-provisioning-runbook.md`
-  - `package.json`
-  - `scripts/db/mig01-a2-provisioning-runner.mjs`
-  - `scripts/db/mig01-a2-provisioning-runner.test.mjs`
-  - `src/modules/tenancy/provisioning/provisioning-canonicalization.ts`
-  - `src/modules/tenancy/provisioning/provisioning-kernel.ts`
-  - `src/modules/tenancy/provisioning/provisioning-lease.ts`
-  - `src/modules/tenancy/provisioning/provisioning-manifest.ts`
-  - `src/modules/tenancy/provisioning/provisioning-ports.ts`
-  - `src/modules/tenancy/provisioning/tests/ProvisioningKernel.test.ts`
-  - `src/modules/tenancy/provisioning/tests/ProvisioningLeaseContract.test.ts`
-  - `src/modules/tenancy/provisioning/tests/ProvisioningManifestContract.test.ts`
-- Manifest 契约：`mig01-a2/v1`，只接受 `approved`、exact shape、整批 fail-closed、审批人与执行者分离、双键去重及低敏白名单；拒绝 PII、Secret、Token、连接串和自由文本
-- Canonicalization／Digest：`c14n-v1` 固定位置数组、按双键 UTF-8 稳定排序、NFC／非法 Unicode 拒绝、SHA-256；固定向量为 `sha256:a42fda705e6256a3fd36d74f2d243f27fefcb19dc0ad63c3a00970d42d16de1a`
-- Dry-run：只输出 `input`、`insertedCandidate`、`reusedCandidate`、`conflict`、`unexpected` 五项低敏计数并验证守恒，不写数据库
-- Transaction Port：稳定视图／可串行化等价契约、Scope → Version → Head 原子顺序、受影响行数与提交前全批重检、失败回滚和并发漂移封堵已实现；真实数据库 Adapter 仍不存在
-- Lease：`mig01-a2-execution-lease/v1` 低敏契约与 Authority Port 已实现；执行 Lease／Migration Lease 均未签发，`0039` 仍只是静态候选，不是已批准编号
-- Runner：一次性 CLI 与安全文件读取边界已进入 `main`；仅使用合成低敏数据完成测试，未读取真实 Manifest、未连接数据库、未对真实环境执行 dry-run 或 execute
-- Stage B 本地验证：定向 4 文件、63 测试通过；lint、typecheck、完整 412 文件／5742 测试和 build 101/101 全部通过；`git diff --check` 与增量架构检查通过
-- Stage B 依赖与数据变更：`pnpm-lock.yaml` 未修改，新增依赖 0，Schema、Migration、journal、snapshot 修改均为 0
-- 环境核验：真实 Manifest、环境 journal、目标数据库 Shape、tenant 父记录、备份／恢复点、Operator／Reviewer 与目标环境均未核验
-- 已知非阻断风险：`src/modules/institution/tests/InstitutionBusinessShells.test.tsx` 仍有既有 post-fetch 竞态候选；当前完整测试与 Actions 均通过，尚未单独修复
+- package、lock、CI、脚本和测试修改：0
 - 正式平台服务端授权根：`缺失`
 - 平台 Runtime／发布准入：`阻断`
-- 静态影响面：
-  - 页面：2 个
-  - legacy Route：6 个
-  - v1 Route：48 个
-  - Handler：65 个
-  - Service／Repository：28 个
-  - 生产 HTTP 调用方：12 个
-  - 核心相关测试文件：56 个
-- 平台 Route 授权现状：49 个依赖 Demo Context，5 个无认证授权
-- legacy 路由现状：6 个 legacy Route 均不是薄兼容层
-- A1 状态：仅具备仓库静态 Expand
-- A2 状态：治理选择、Stage A 硬门与 Stage B Runner 治理基础已关闭；只读环境预检、P1／P2 均未启动
-- Owner 状态：Tenancy 唯一语义 Owner 已接受并承载 Stage B 契约与 Port；Access Control 仍只通过后续版本化 Port／Reader 消费低敏投影
-- 关键阻断：
-  - 真实 Manifest、环境 journal、数据库 Shape、tenant 父记录和备份／恢复点尚未完成单独授权的只读预检
-  - 执行 Lease 尚未签发
-  - 真实数据库 Adapter、执行授权和 P1 事务尚未建立
-  - D12 实施细节尚未在 P1 handoff 后冻结
-- Migration journal：到 `0038`
-- Migration snapshot：到 `0026`，且不覆盖 A1
-- Migration metadata 门禁：`db:generate` 与 snapshot-diff Migration 继续阻断
-- MIG-01 状态：尚未关闭，内部候选顺序保持 A2 → BASE-02 → Writer → Audit／模板 → B → C → Reader
-- Customers／Institution System Reader 门禁：MIG-01C + 当前成员服务端双键上下文
-- Care 门禁：等待 MIG-02
-- Knowledge 正式 reader 追加门禁：MIG-03
-- Conversations 门禁：等待 MIG-04
-- Analytics 事实／确定性聚合门禁：MIG-05
-- Analytics snapshot repository/API、正式 providers 与五页 UI 门禁：MIG-06 + AN-03C
-- Workbench 门禁：最后接线，只消费正式 Provider
-- API 路径政策：新实现默认 v1；旧七线非版本化端点仅允许逐路由薄兼容例外
 - 七线业务综合完成度：约 25%（规划估算）
 - 公共底座完成度：约 65%（规划估算）
 - 正式发布：0/7
-- 唯一下一任务：`V2-MIG01-A2-ENVIRONMENT-MANIFEST-READONLY-PREFLIGHT-01`
-- 下一任务名称：真实 Manifest、环境 Journal、数据库 Shape、备份恢复点与 Dry-run 只读预检
-- 下一任务状态：尚未启动；需要对真实目标、字段、读取方式和脱敏输出进行独立授权
-- 下一任务硬边界：只读、不提交事务、不执行 P1、不创建 Migration、不签发执行 Lease、不自动进入 A2-P1
-- 未启动事项：只读环境预检、真实数据库连接、真实 Lease、A2-P1、A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader、平台切片和机构端旧任务均未启动
+
+### 不变的 MIG 与发布门禁
+
+- MIG-01 尚未关闭，内部顺序保持 A2 → BASE-02 → Writer → Audit／模板 → B → C → Reader
+- Customers／Institution System Reader：等待 MIG-01C 与当前成员服务端双键上下文
+- Care：等待 MIG-02
+- Knowledge 正式 Reader：等待 MIG-03
+- Conversations：等待 MIG-04
+- Analytics 事实／确定性聚合：等待 MIG-05
+- Analytics Snapshot／正式 Provider／五页 UI：等待 MIG-06 + AN-03C
+- Workbench：最后接线，只消费正式 Provider
+- API 路径政策：新实现默认 v1；旧七线非版本化端点仅允许逐路由薄兼容例外
+- Migration metadata 门禁：`db:generate` 与 snapshot-diff Migration 继续阻断
+
+### 唯一下一任务
+
+- 任务编号：`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01`
+- 任务名称：MIG-01A2 本地验收环境基线、Adapter、Manifest 候选与 Dry-run 就绪修复
+- 当前状态：只完成 handoff 冻结；就绪修复阶段 A／B／C／D 均未启动
+- 启动边界：每个阶段必须独立授权、独立分支和独立 PR，不得混成一个 PR
+- 当前未启动：备份、恢复验证、Migration、Adapter、Manifest 候选、真实 dry-run、A2-P1、A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader、平台切片和机构端旧任务
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->

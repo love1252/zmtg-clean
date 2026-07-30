@@ -536,3 +536,16 @@
 - `main` 保护和 Required Check 继续生效；全部 `backup/*` 保留。
 - 唯一下一任务为 `V2-MIG01-A2-ENVIRONMENT-MANIFEST-READONLY-PREFLIGHT-01`：真实 Manifest、环境 Journal、数据库 Shape、备份恢复点与 Dry-run 只读预检。
 - 下一任务尚未启动，仍需独立授权；只读、不提交事务、不执行 P1、不创建 Migration、不签发执行 Lease，也不自动进入 A2-P1。
+
+## 2026-07-30：MIG-01A2 只读预检收口并切换至本地就绪修复
+
+- PR #808 完成 Stage B handoff，Merge Commit `3fe7d0991fa9d530410261270e70c9af46215222`。
+- PR #809 完成 Mac 本地验收环境只读预检，Head `7ccd75a9fd20e48d424920c7545d3b8d99838cf6`，Merge Commit `e6b0a23ba3b30003f0327493b350a1929030e4fc`。
+- PR #809 Required Check Run `30511790906`／Job `90773241559` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- 仓库 Journal 共 39 项且最新为 0038；localhost 本地验收库只有 38 项，未到 0038。
+- `tenants` Shape 与仓库期望一致且低敏计数为 2；A1 三表缺失，缺失表计数未伪报为 0。
+- real Manifest 缺失，synthetic validation 通过，CLI 以 `runner_context_policy_unavailable` fail-closed。
+- 正式 backup recovery point 缺失，只读 Repository Adapter 缺失，真实 Runner dry-run 不可用。
+- PR #809 和本次 handoff 的 Runtime、Schema、Migration 修改均为 0。
+- 唯一下一任务为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01`：MIG-01A2 本地验收环境基线、Adapter、Manifest 候选与 Dry-run 就绪修复。
+- 当前只冻结由四个独立原子阶段组成的大目标；备份、Migration、Adapter、Manifest、真实 dry-run、A2-P1 和 A2-P2 均未启动。
