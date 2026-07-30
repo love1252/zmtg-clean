@@ -1533,8 +1533,11 @@ describe('机构业务页面壳', () => {
     const drawer = await screen.findByRole('dialog', { name: '客户详情时间线' });
     const drawerView = within(drawer);
 
-    expect(drawerView.getByRole('button', { name: '添加治疗摘要' })).toBeInTheDocument();
-    fireEvent.click(drawerView.getByRole('button', { name: '添加治疗摘要' }));
+    const addTreatmentSummaryButton = await drawerView.findByRole('button', {
+      name: '添加治疗摘要',
+    });
+    expect(addTreatmentSummaryButton).toBeInTheDocument();
+    fireEvent.click(addTreatmentSummaryButton);
     expect(drawerView.getByLabelText('治疗时间')).toBeInTheDocument();
     expect(drawerView.getByLabelText('治疗项目')).toBeInTheDocument();
     expect(drawerView.getByLabelText('治疗类别')).toBeInTheDocument();
@@ -1634,7 +1637,10 @@ describe('机构业务页面壳', () => {
 
     const drawer = await screen.findByRole('dialog', { name: '客户详情时间线' });
     const drawerView = within(drawer);
-    fireEvent.click(drawerView.getByRole('button', { name: '添加治疗摘要' }));
+    const addTreatmentSummaryButton = await drawerView.findByRole('button', {
+      name: '添加治疗摘要',
+    });
+    fireEvent.click(addTreatmentSummaryButton);
     fillTreatmentSummaryForm(drawer);
     fireEvent.click(drawerView.getByRole('button', { name: '保存治疗摘要' }));
 
