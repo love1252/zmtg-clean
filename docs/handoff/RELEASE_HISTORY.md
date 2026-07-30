@@ -590,3 +590,19 @@
 - Stage B 未创建或读取真实 Manifest，未运行 Runner dry-run／`--execute`，未签发 Lease，未执行 Provisioning，未启动 A2-P1／A2-P2。
 - 唯一下一任务为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C`：MIG-01A2 本地验收 Manifest 候选与审批包。
 - Stage C、Stage D、Manifest 候选、真实 dry-run、Lease、A2-P1 和 A2-P2 均未启动；Stage C 完成也不得自动启动 Stage D。
+
+## 2026-07-30：MIG-01A2 Candidate Governance／Stage C-0 完成并切换至 Stage C
+
+- PR #816 完成 Candidate Governance 基础，Base `0be5faf5b089fdf3b5e0c84f3dac09d1283368d2`，Head `4df7cac76887b5cc3336650911dfc7f0448516e5`，Merge Commit `eb7cde613c38e262aeb8519c53e7e3d21704b18f`。
+- PR #816 Required Check Run `30524750504`／Job `90813002538` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #816 精确新增 8 个文件：3 个 Candidate Runtime 模块、3 个测试文件和 2 个治理文档。
+- Candidate Contract 为 `mig01-a2-candidate/v1`，domain 为 `zmtg.mig01-a2.provisioning-candidate-manifest`，Source Contract 为 `mig01-a2-candidate-source/v1`。
+- 当前唯一 Source type `local_acceptance_fixture` 明确为 test-only；没有提供 Stage C 的真实 Source，没有生成真实 Candidate。
+- Candidate canonicalization／SHA-256 digest 与 `mig01-a2/v1` Approved Manifest 完全分离；Candidate digest 不得复用为 Approved digest。
+- Reviewer 生命周期只实现 `generated → review_pending`；当前没有 Candidate `approved` 状态，也没有创建 Approved Manifest。
+- Candidate 定向契约集 3 文件／105 个测试通过；完整测试 417 文件／5896 个通过；build 101／101。
+- `candidate_contract_missing` 已关闭；`real_manifest_missing` 与 `real_environment_dry_run_unavailable` 继续阻断。
+- PR #816 未运行 Runner／dry-run，未签发执行 Lease／Migration Lease，未启动 A2-P1／A2-P2。
+- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改均为 0。
+- 唯一下一任务为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C`：本地验收 Manifest Candidate 生成与审批包。
+- Stage C 尚未启动；它只允许从用户明确批准的真实 Source 合约与来源生成 Candidate、输出低敏审核摘要并交由用户审核，不创建 Approved Manifest、不运行 Runner、不执行 dry-run、不签发 Lease、不启动 A2-P1／A2-P2。

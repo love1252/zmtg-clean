@@ -2,7 +2,7 @@
 
 ## 当前交接状态
 
-MIG-01A2 的 accepted 决策、仓库硬门、受控 Runner 治理基础、本地环境只读预检、本地就绪修复 Stage A 和 Stage B 已分别通过独立 PR 完成：
+MIG-01A2 的 accepted 决策、仓库硬门、受控 Runner 治理基础、本地环境只读预检、本地就绪修复 Stage A、Stage B 和 Candidate Governance 已分别通过独立 PR 完成；本四文件 handoff 负责收口 Stage C-0：
 
 - accepted 决策：PR #801；
 - 治理 Stage A 仓库硬门：PR #804，handoff PR #805；
@@ -10,21 +10,23 @@ MIG-01A2 的 accepted 决策、仓库硬门、受控 Runner 治理基础、本�
 - 本地环境只读预检：PR #809，handoff PR #810；
 - 本地就绪修复 Stage A：PR #811，handoff PR #812；
 - 本地就绪修复 Stage B：PR #814；
-- PR #814 Head：`c5ad29e2775789cc28b47e0724f64e165b0eff9e`；
-- PR #814 Merge Commit：`19f2dbe55799e533e609c7cece9eaad1b623babd`；
-- PR #814 Required Check：Run `30519856557`／Job `90797620311`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功；
+- Candidate Governance／Stage C-0：PR #816；
+- PR #816 Base：`0be5faf5b089fdf3b5e0c84f3dac09d1283368d2`；
+- PR #816 Head：`4df7cac76887b5cc3336650911dfc7f0448516e5`；
+- PR #816 Merge Commit：`eb7cde613c38e262aeb8519c53e7e3d21704b18f`；
+- PR #816 Required Check：Run `30524750504`／Job `90813002538`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功；
 - 当前 `main` 保护和“最小架构与质量门禁”Required Check 继续生效。
 
-Stage B 已建立固定本地验收 Context Policy 与可注入只读 PostgreSQL Adapter，并通过合成测试、localhost-only 只读 smoke 和完整质量门禁。它没有创建或读取真实 Manifest，没有运行 Runner dry-run／`--execute`，没有签发 Lease，也没有启动 A2-P1／P2。
+Stage B 已建立固定本地验收 Context Policy 与可注入只读 PostgreSQL Adapter。PR #816 随后建立 `mig01-a2-candidate/v1` Candidate Contract、独立 canonicalization／digest、低敏 Source 契约和 `generated → review_pending` Reviewer 生命周期，关闭 `candidate_contract_missing`。当前 Source 只有 test-only `local_acceptance_fixture`，不能作为 Stage C 的真实来源；没有生成真实 Candidate、创建 Approved Manifest、运行 Runner dry-run／`--execute`、签发 Lease，也未启动 A2-P1／P2。`real_manifest_missing` 与 `real_environment_dry_run_unavailable` 继续阻断。
 
 ## 唯一下一任务
 
 ```text
 V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C
-MIG-01A2 本地验收 Manifest 候选与审批包
+本地验收 Manifest Candidate 生成与审批包
 ```
 
-Stage C 当前尚未启动。本文只冻结未来任务边界，不创建、读取或批准 Manifest 候选，不创建 Stage C 分支或临时文件，不运行 Runner，不签发 Lease，也不启动 Stage D。
+Stage C 当前尚未启动。本文只冻结未来任务边界，不生成或读取真实 Candidate，不创建 Approved Manifest，不创建 Stage C 分支或临时文件，不运行 Runner，不签发 Lease，也不启动 Stage D。
 
 ## 一、事实源与 accepted 边界
 
@@ -49,7 +51,7 @@ Stage C 必须遵守以下权威关系：
 
 如需改变 accepted 选择、`architecture-v2.md`、既有 ADR、Context Policy 或 Adapter 边界，必须停止 Stage C 并创建独立决策／ADR 或实现任务。
 
-## 二、Stage A 与 Stage B 已完成事实
+## 二、Stage A、Stage B 与 Stage C-0 已完成事实
 
 ### 2.1 固定本地验收环境
 
@@ -88,30 +90,43 @@ Stage C 必须遵守以下权威关系：
 
 Stage B 只建立可注入只读资产。当前 Runner CLI 尚未组合真实 Context Policy 与 Adapter；`real_manifest_missing` 和 `real_environment_dry_run_unavailable` 仍为阻断。
 
+### 2.4 Candidate Governance／Stage C-0
+
+- Candidate Contract：`mig01-a2-candidate/v1`；
+- Candidate domain：`zmtg.mig01-a2.provisioning-candidate-manifest`；
+- Candidate Source Contract：`mig01-a2-candidate-source/v1`；
+- 当前唯一 Source type `local_acceptance_fixture` 明确为 test-only，不是 Stage C 的真实来源；
+- Candidate canonicalization、digest preimage 与 `mig01-a2/v1` Approved Manifest 完全分离；
+- Reviewer 生命周期只实现 `generated → review_pending`，没有 Candidate `approved` 状态；
+- Candidate digest 不得写入或复用为 Approved Manifest digest；
+- 空白审批模板只定义未来仓库外低敏审批包结构，未回填真实 Candidate、digest、审批引用、路径或业务数据；
+- `candidate_contract_missing` 已关闭；`real_manifest_missing` 未关闭。
+
 ## 三、Stage C 唯一目标
 
-未来 Stage C 只有在用户对当次任务、候选来源、低敏字段、受控临时路径、Reviewer／Approver、保留期限和风险作出独立明确授权后，才允许：
+未来 Stage C 只有在用户对当次任务、真实 Source 合约与来源、低敏字段、受控临时路径、Reviewer、保留期限和风险作出独立明确授权后，才允许：
 
-1. 从固定 localhost-only 本地验收环境和用户明确批准的来源形成低敏 Manifest 候选；
+1. 从用户明确批准的真实 Source 合约与来源生成 Candidate；不得复用 test-only `local_acceptance_fixture` 作为真实来源；
 2. 使用已冻结的 `mig01-a2-local-acceptance-context-policy/v1`，timezone 只允许 `Asia/Shanghai`，currency 只允许 `CNY`；
 3. 逐字段记录来源，禁止对缺失值使用数据库现状、系统默认、执行时钟、Demo、Seed 或模型偏好补全；
-4. 将候选正文只保存在受控的仓库外临时路径；
-5. 将“候选已形成”“契约验证通过”“用户已批准”保持为三个独立状态；
-6. 在用户独立确认前保持 `candidate_pending_approval`，不得自动写成 `approved`；
-7. 只输出候选数量、版本、布尔验证结果和低敏审批摘要，不输出正文、双键、digest、审批引用或业务行；
-8. 由用户对当次候选作出独立审批决定。
+4. 将 Candidate 正文只保存在受控的仓库外临时路径；
+5. 将“Candidate 已生成”“Candidate 契约验证通过”“用户已完成审核”作为独立证据；
+6. Reviewer 生命周期最多从 `generated` 单向进入 `review_pending`，不得产生或伪造 Candidate `approved` 状态；
+7. 只输出 Candidate 数量、版本、布尔验证结果和低敏审核摘要，不输出正文、双键、digest、审核引用或业务行；
+8. 将 Candidate 与低敏审核摘要交由用户审核；用户审核不等于创建或批准 `mig01-a2/v1` Approved Manifest。
 
-推荐、候选生成或契约通过均不等于批准。用户未明确批准时，`real_manifest_missing` 继续保持阻断。
+推荐、Candidate 生成、契约通过或用户审核均不等于 Approved Manifest 已创建。Stage C 不负责 Candidate→Approved 转换，不能复用 Candidate digest，也不能关闭 `real_manifest_missing`；该阻断只有在未来独立授权任务创建并校验新的 `mig01-a2/v1` Approved Manifest 后才能重新核验。
 
-## 四、Manifest 候选与审批安全边界
+## 四、Candidate 与审核安全边界
 
-- Manifest 正文不得进入 Git、PR、Issue、文档、日志、环境变量、argv、测试 fixture 或聊天；
-- 候选文件必须位于本轮独立授权的受控临时路径，不得使用仓库目录或共享公共路径；
-- 候选正文、双键、digest、审批引用和原始验证异常不得出现在 handoff 或普通输出中；
-- 低敏输出只允许候选数量、Manifest／Policy version、固定布尔结果、固定状态码和审批摘要；
-- 候选必须绑定冻结 Base、目标环境、Policy version、Manifest version、Reviewer／Approver 职责和失效／撤销条件；
+- Candidate 正文不得进入 Git、PR、Issue、文档、日志、环境变量、argv、测试 fixture 或聊天；
+- Candidate 文件必须位于本轮独立授权的受控临时路径，不得使用仓库目录或共享公共路径；
+- Candidate 正文、双键、digest、审核引用和原始验证异常不得出现在 handoff 或普通输出中；
+- 低敏输出只允许 Candidate 数量、Candidate／Policy version、固定布尔结果、固定状态码和审核摘要；
+- Candidate 必须绑定冻结 Base、目标环境、Policy version、Candidate version、Reviewer 职责和失效／撤销条件；
 - Stage C 不授予未来 Operator、Runner、数据库写入或 Lease 权限；
-- Stage C 结束时必须按独立批准的保留期限处理临时正文，并只记录低敏删除结果。
+- Stage C 结束时必须按独立批准的保留期限处理临时正文，并只记录低敏删除结果；
+- 用户审核完成后仍不得把 `review_pending` 写成 `approved`，不得把 Candidate 或其 digest 当作 Approved Manifest。
 
 ## 五、Stage C 启动硬门
 
@@ -119,11 +134,13 @@ Stage B 只建立可注入只读资产。当前 Runner CLI 尚未组合真实 Co
 
 - `main` 与 `origin/main` 一致，工作树干净；
 - `main` 保护和 Required Check 继续启用；
-- PR #814 与本 handoff 已合并；
+- PR #816 与本 handoff 已合并；
 - 固定本地验收容器身份、localhost-only 端口、Journal 39、A1 Shape 和低敏计数未漂移；
 - 两个 Stage A 恢复点仍存在且本地完整性校验通过；
 - Stage B Context Policy 与只读 Adapter 的路径、版本、白名单和测试证据未漂移；
-- 用户已经明确批准候选来源、低敏字段、受控临时路径、Reviewer／Approver、保留期限和允许的只读环境范围；
+- Candidate Contract、Source Contract、canonicalization、digest 与 Reviewer 生命周期未漂移；
+- 用户已经明确批准真实 Source 合约与来源、低敏字段、受控临时路径、Reviewer、保留期限和允许的只读环境范围；
+- 真实 Source 不得使用或伪装为 test-only `local_acceptance_fixture`；
 - 不存在其他 Agent 对同一工作树、Git 索引或受控临时路径的并发写入。
 
 任一硬门不满足时停止，不创建候选，不读取环境补值，不扩大文件或数据范围。
@@ -132,9 +149,11 @@ Stage B 只建立可注入只读资产。当前 Runner CLI 尚未组合真实 Co
 
 Stage C 不得：
 
-- 自动创建、读取或批准真实 Manifest；
-- 将候选正文写入 Git、PR、Issue、日志、环境变量、argv、fixture 或聊天；
+- 创建 Approved Manifest，或把 Candidate、Candidate digest、用户审核结果当作 Approved Manifest；
+- 自动产生 Candidate `approved` 状态，或把 `review_pending` 标记为 `approved`；
+- 将 Candidate 正文写入 Git、PR、Issue、日志、环境变量、argv、fixture 或聊天；
 - 从未知来源、真实业务数据、系统默认、数据库现状或执行时钟推断字段；
+- 将 test-only `local_acceptance_fixture` 用作真实 Source；
 - 静默扩展 timezone 或 currency 批准集合；
 - 连接非 localhost 数据库、测试服务器、生产数据库、HIS、企业微信或业务外部环境；
 - 运行 Runner，包括 synthetic／真实 dry-run 和 `--execute`；
@@ -147,12 +166,12 @@ Stage C 不得：
 
 出现以下任一情况必须停止：
 
-- 候选来源、字段 provenance、Reviewer／Approver、临时路径、保留期限或批准状态无法明确；
+- 真实 Source 合约与来源、字段 provenance、Reviewer、临时路径、保留期限或审核状态无法明确；
 - 需要读取未获授权的数据库对象、真实业务行、凭证、环境变量、Secret、Token 或 PII；
 - 需要从环境现状或模型偏好推断缺失字段；
-- 候选出现额外字段、未知版本、未批准 timezone／currency 或非低敏内容；
+- Candidate 出现额外字段、未知版本、未批准 timezone／currency 或非低敏内容；
 - 必须扩大到第二事实源、Runtime、Schema、Migration、Runner、Adapter、Policy、CI、package 或 lock；
-- 用户尚未明确批准却要求标记为 `approved`；
+- 要求产生 `approved` 状态、将 Candidate 转换为 Approved Manifest、复用 Candidate digest 或关闭 `real_manifest_missing`；
 - 需要运行 Runner、签发 Lease、写数据库或自动启动 Stage D；
 - 出现无法确认的环境、Git 或 Agent 并发写入。
 
@@ -163,23 +182,24 @@ Stage C 不得：
 未来 Stage C 的完成证据最多记录：
 
 - 冻结 Base 与任务引用；
-- 候选数量；
-- Manifest／Policy version；
+- Candidate 数量；
+- Candidate／Source／Policy version；
 - 来源、exact shape、canonicalization、批准集合和安全属性的布尔验证；
-- Reviewer／Approver 分离与用户审批摘要；
+- Reviewer 生命周期与用户低敏审核摘要；
 - 正文保管和删除的低敏结果；
-- `real_manifest_missing` 是否经用户独立批准后关闭。
+- `real_manifest_missing` 继续阻断，且未因 Candidate 生成、契约通过或用户审核而关闭。
 
-即使 Stage C 完成并经用户批准，`real_environment_dry_run_unavailable` 仍必须由 Stage D 独立关闭。Stage C 不运行 Runner、不签发 Lease、不执行 Provisioning，合并后仍须独立 handoff，不能自动启动 Stage D。
+即使 Stage C 完成并经过用户审核，`real_manifest_missing` 仍需未来独立授权的 Approved Manifest 创建与校验任务处理，`real_environment_dry_run_unavailable` 仍必须由 Stage D 独立关闭。Stage C 不运行 Runner、不签发 Lease、不执行 Provisioning，合并后仍须独立 handoff，不能自动启动 Stage D。
 
 ## 九、项目级顺序
 
 ```text
 就绪修复 Stage A：本地验收数据库安全恢复点与 A1 基线（已完成）
 → 就绪修复 Stage B：只读 Repository Adapter 与 Context Policy（已完成）
-→ 独立 handoff（本任务）
-→ 就绪修复 Stage C：本地验收 Manifest 候选与审批包（唯一下一任务，尚未启动）
-→ 独立 handoff
+→ Candidate Governance：Candidate Contract、Source 与 Reviewer 生命周期（已完成，PR #816）
+→ Stage C-0 独立 handoff（本任务）
+→ 就绪修复 Stage C：本地验收 Manifest Candidate 生成与审批包（唯一下一任务，尚未启动）
+→ 独立 handoff（重新冻结 Approved Manifest 创建／校验与 Stage D 前置；Approved Manifest 缺失时不得启动 Stage D）
 → 就绪修复 Stage D：真实本地 Runner dry-run
 → 独立 handoff
 → A2-P1 受控执行
