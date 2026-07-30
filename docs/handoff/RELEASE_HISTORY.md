@@ -549,3 +549,19 @@
 - PR #809 和本次 handoff 的 Runtime、Schema、Migration 修改均为 0。
 - 唯一下一任务为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01`：MIG-01A2 本地验收环境基线、Adapter、Manifest 候选与 Dry-run 就绪修复。
 - 当前只冻结由四个独立原子阶段组成的大目标；备份、Migration、Adapter、Manifest、真实 dry-run、A2-P1 和 A2-P2 均未启动。
+
+## 2026-07-30：MIG-01A2 本地就绪修复 Stage A 完成并切换至 Stage B
+
+- PR #810 完成本地环境只读预检 handoff，Head `e2921c4f5951bb9128640cf044688d753a1eaea2`，Merge Commit `16363eb4093e72fdd8371821c12df363d624ee86`，Run `30513347110`／Job `90777852238` 成功。
+- PR #811 完成固定 localhost-only 本地验收库的 Stage A 基线与恢复点证据，Head `50b007820b7fdb68ff35b6ef0e2a53b9e8e61880`，Merge Commit `fc08de343456a1f0d05092f1aedd389118b32b26`。
+- PR #811 Required Check Run `30514884226`／Job `90782386213` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- 本地验收容器保持为 `zmtg-local-acceptance-pg`，只绑定 `127.0.0.1:55432`；没有连接测试服务器、生产数据库或业务外部环境。
+- 本地验收库 Journal 由 38 推进到 39，最新项内部匹配 `0038_mig_01a1_institution_isolation_expand`。
+- `tenants` 低敏计数迁移前后均为 2；`institution_scopes`、`institution_operating_context_versions`、`institution_operating_contexts` Shape 与 0038／Schema 一致且均为空。
+- 迁移前备份 `zmtg_clean_local_acceptance-pre-0038-20260730-124114` 已完成隔离恢复验证。
+- 迁移后备份 `zmtg_clean_local_acceptance-post-0038-20260730-124114` 已完成隔离恢复验证；两个备份继续保留，删除需独立授权。
+- `journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing` 三项本地环境阻断已关闭。
+- 本阶段只对本地验收环境应用仓库既有 0038；仓库 Runtime、Schema、Migration 修改均为 0，没有创建新 Migration，没有运行 `db:generate`、Seed、Reset 或 Runner dry-run。
+- `real_manifest_missing`、`readonly_adapter_unavailable`、`real_environment_dry_run_unavailable` 仍未关闭。
+- 唯一下一任务为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-B`：MIG-01A2 只读 Repository Adapter 与 Context Policy。
+- Stage B、Stage C、Stage D、Manifest 候选、真实 dry-run、Lease、A2-P1 和 A2-P2 均未启动。
