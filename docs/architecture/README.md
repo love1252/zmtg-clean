@@ -1,11 +1,11 @@
 # 智美天工架构文档索引
 
-- 任务：`V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-B-HANDOFF-CLOSEOUT`
+- 任务：`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-A-COMPLETE`（Stage A handoff 收口）
 - 日期：`2026-07-30 CST +0800`
-- 审计基线：`e50999ebc33dd07a4447fa8f9274e974e9beae63`
+- 审计基线：`fc08de343456a1f0d05092f1aedd389118b32b26`
 - 状态：`current`
 - 文档性质：架构导航索引，不是第二套架构事实源
-- 本次 Stage B handoff 文档差异中的 Runtime、Schema、Migration、API、UI 修改：`0`
+- 本次本地就绪修复 Stage A handoff 文档差异中的 Runtime、Schema、Migration、API、UI 修改：`0`
 
 ## 1. 文档定位
 
@@ -120,8 +120,9 @@ MIG-01A1 Expand
 | 文档 | 状态 | 职责 |
 |---|---|---|
 | [`v2-mig01-a2-environment-manifest-readonly-preflight.md`](./v2-mig01-a2-environment-manifest-readonly-preflight.md) | `current evidence` | 记录 Mac 本地安全验收环境的 Journal、A1 Shape、Manifest、CLI、备份恢复点和真实 dry-run 可用性 |
+| [`../operations/mig01-a2-local-acceptance-stage-a-20260730.md`](../operations/mig01-a2-local-acceptance-stage-a-20260730.md) | `current evidence` | 记录固定 localhost-only 本地验收库推进到 0038、A1 Shape、低敏计数、迁移前后备份及两次隔离恢复验证 |
 
-该报告已经完成并通过 PR #809 合并，但报告中的六项阻断均未被修复；报告合并不表示 A2-P1 可以启动。
+PR #809 的只读预检报告记录了六项阻断。PR #811 随后完成本地就绪修复 Stage A，将环境 Journal 从 38 推进到 39、使 A1 三表 Shape 与仓库 0038 一致，并建立迁移前后两个已验证恢复点；`journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing` 已关闭。其余三项阻断仍未关闭，报告合并不表示 Stage B、Stage C、Stage D 或 A2-P1 可以启动。
 
 ## 6. 架构视图完成状态
 
@@ -141,6 +142,8 @@ MIG-01A1 Expand
 
 `V2-MIG01-A2-ENVIRONMENT-MANIFEST-READONLY-PREFLIGHT-01` 已通过 PR #809 完成并合并，但结论为 `blocked`：本地验收库 Journal 只有 38 项且未到仓库 0038，A1 三表缺失，真实 Manifest、正式备份／恢复点和只读 Repository Adapter 缺失，真实 Runner dry-run 不可用。该报告只形成只读证据，没有修复环境或启动 A2-P1／P2。
 
+`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-A-COMPLETE` 已通过 PR #811 完成并合并。固定本地验收库现有 39 条 Applied Migration，最新项内部匹配 0038；`tenants` 低敏计数保持 2，三个 A1 表 Shape 与仓库一致且均为空。迁移前备份 `zmtg_clean_local_acceptance-pre-0038-20260730-124114` 与迁移后备份 `zmtg_clean_local_acceptance-post-0038-20260730-124114` 均已完成隔离恢复验证并继续保留。本阶段只对本地验收环境应用仓库既有 0038，仓库 Runtime、Schema、Migration 修改均为 0；Stage B 尚未启动。
+
 文档完成只代表同一套架构 V2 的视图与入口已经建立，不代表 runtime、Schema、Migration、API、UI、Capability、环境或七线正式发布已经完成。
 
 ### 6.1 当前架构与质量门禁
@@ -152,6 +155,7 @@ MIG-01A1 Expand
 - Stage A 验证：PR #804 的最终 Run `30482219056`／Job `90678924630` 在冻结 Head `1948597d5349017485578723fd32535e84e2bd97` 上完成全部质量步骤，结论为 `success`；
 - Stage A handoff：PR #805 Head `5d5c4e746f9de079088f62bb8585c1856e9f0a44`／Merge Commit `c52fef48e71f760017c8e39909b610ae6de180d8`，Run `30505641202`／Job `90754678015` 全部成功；
 - Stage B Runner：PR #807 Head `d7abdc52c64be367b988db15bfbdaa251be33fd4`／Merge Commit `e50999ebc33dd07a4447fa8f9274e974e9beae63`，Run `30508177604`／Job `90762357307` 的环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功；
+- 本地就绪修复 Stage A：PR #811 Head `50b007820b7fdb68ff35b6ef0e2a53b9e8e61880`／Merge Commit `fc08de343456a1f0d05092f1aedd389118b32b26`，Run `30514884226`／Job `90782386213` 的环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功；
 - 服务端硬门：`main.protected=true`，Required Check Context 为 `最小架构与质量门禁`，App ID／slug 为 `15368`／`github-actions`，`strict=true`、`enforce_admins=true`、审批数为 `0`；
 - 服务端拒绝：普通 direct push、显式 force-with-lease 和删除受保护分支均被 GitHub 拒绝；不允许管理员 bypass；
 - 合并策略：Stage A 验证 PR 使用 Merge Commit 合并；未启用 Linear History，仓库其他既有合并方法设置未在 Stage A 修改；
@@ -249,10 +253,10 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 ## 11. 当前项目级顺序
 
 ```text
-V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01
-→ 就绪修复阶段 A：本地验收数据库安全恢复点与 A1 基线
-→ 就绪修复阶段 B：只读 Repository Adapter 与 Context Policy
+V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-B：只读 Repository Adapter 与 Context Policy
+→ 独立 handoff
 → 就绪修复阶段 C：本地验收 Manifest 候选与审批包
+→ 独立 handoff
 → 就绪修复阶段 D：真实本地 Runner dry-run
 → 独立 handoff
 → A2-P1 受控执行
@@ -266,9 +270,9 @@ V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01
 → Reader
 ```
 
-`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809 已完成本地环境只读预检。唯一下一任务切换为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01`；当前 handoff 只冻结该大目标，四个就绪修复阶段均未启动。
+`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809 已完成本地环境只读预检，PR #811 已完成本地就绪修复 Stage A。唯一下一任务切换为 `V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-B`；Stage B 尚未启动。
 
-治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。PR #809 只读连接了受控 localhost 本地验收库并确认真实 Manifest 缺失、环境未到 0038、A1 三表缺失、正式恢复点缺失且真实 dry-run 不可用；没有运行 Migration、创建 Adapter／Manifest、签发 Lease 或执行 A2-P1／P2。
+治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。PR #809 只读连接了受控 localhost 本地验收库并确认六项阻断；PR #811 只关闭本地环境 Journal、A1 Shape 与恢复点三项阻断。真实 Manifest、只读 Adapter 和真实 dry-run 仍不可用；没有创建 Adapter／Manifest、签发 Lease、运行 Runner dry-run 或执行 A2-P1／P2。
 
 MIG-01 内部候选顺序继续保持：
 
@@ -282,7 +286,7 @@ A2
 → Reader
 ```
 
-新的项目级顺序在 A2 实施前加入四个就绪修复阶段。每个阶段都必须单独授权并使用独立 PR；即使四阶段全部完成，也仍需独立 handoff 才能申请 A2-P1。该顺序只冻结候选切片的串行关系，不表示环境修复、Manifest 审批、真实 dry-run 或 A2 实施已获授权，也不改变 MIG-01～MIG-06 的相对顺序。
+本地就绪修复 Stage A 已完成；Stage B、Stage C 和 Stage D 仍必须逐阶段单独授权并使用独立 PR／handoff。即使剩余阶段全部完成，也仍需独立 handoff 才能申请 A2-P1。该顺序不表示 Adapter、Manifest 审批、真实 dry-run 或 A2 实施已获授权，也不改变 MIG-01～MIG-06 的相对顺序。
 
 后续既定数据顺序保持：
 

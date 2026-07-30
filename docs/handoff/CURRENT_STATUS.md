@@ -2,17 +2,17 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## 架构 V2 第一阶段与 MIG-01A2 只读预检收口状态
+## 架构 V2 第一阶段与 MIG-01A2 本地就绪修复 Stage A 收口状态
 
 - 更新日期：2026-07-30
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-MIG01-A2-ENVIRONMENT-MANIFEST-READONLY-PREFLIGHT-01` 已完成并合并，但结果为 `blocked`
-- 完成 PR：#809
-- PR Head：`7ccd75a9fd20e48d424920c7545d3b8d99838cf6`
-- Merge Commit：`e6b0a23ba3b30003f0327493b350a1929030e4fc`
-- Required Check：Run `30511790906`／Job `90773241559`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- 只读预检报告：`docs/architecture/v2-mig01-a2-environment-manifest-readonly-preflight.md`
-- 报告性质：`current evidence`；报告已完成，但阻断没有被修复，不构成 A2-P1 授权
+- 当前阶段：`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-A-COMPLETE` 已完成并合并
+- 完成 PR：#811
+- PR Head：`50b007820b7fdb68ff35b6ef0e2a53b9e8e61880`
+- Merge Commit：`fc08de343456a1f0d05092f1aedd389118b32b26`
+- Required Check：Run `30514884226`／Job `90782386213`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- Stage A 报告：`docs/operations/mig01-a2-local-acceptance-stage-a-20260730.md`
+- 报告性质：`current evidence`；只证明固定 localhost-only 本地验收环境的 Stage A 结果，不构成 Stage B 或 A2-P1 授权
 
 ### 已接受边界与治理基础
 
@@ -30,37 +30,38 @@
 - 检查器：`scripts/verify/architecture-quality.mjs`
 - 架构规则：`AQ001`～`AQ007` 已进入 `main`
 
-### 本地验收环境只读结果
+### 本地验收环境 Stage A 结果
 
 - 本地验收容器：`zmtg-local-acceptance-pg`
 - 网络边界：仅 `127.0.0.1:55432` 映射至容器 PostgreSQL
 - 仓库 Journal：39 项，最新为 `0038_mig_01a1_institution_isolation_expand`
-- 本地验收库 Journal：38 项，未到 0038
+- 本地验收库 Journal：39 项，最新项内部匹配 0038
 - Migration snapshot：到 `0026`，且不覆盖 A1
 - `tenants` Shape：与仓库期望一致
 - `tenants` 低敏计数：2
-- A1 三表：`institution_scopes`、`institution_operating_context_versions`、`institution_operating_contexts` 均缺失
-- 缺失表计数：无法核验，未伪报为 0
+- A1 三表：`institution_scopes`、`institution_operating_context_versions`、`institution_operating_contexts` Shape 均与 0038／Schema 一致
+- A1 三表低敏计数：均为 0
+- 迁移前备份：`zmtg_clean_local_acceptance-pre-0038-20260730-124114`
+- 迁移前隔离恢复验证：通过；Journal 38 严格匹配仓库前缀、`tenants` 为 2、A1 三表缺失
+- 迁移后备份：`zmtg_clean_local_acceptance-post-0038-20260730-124114`
+- 迁移后隔离恢复验证：通过；Journal 39 完整匹配 0038、`tenants` 为 2、A1 三表存在且为空、Catalog 与原验收库一致
+- 备份状态：两个备份及其 hash／metadata 均保留，删除需独立授权
+- 临时恢复数据库：两次验证后均已删除
 - real Manifest：`real_manifest_missing`
 - synthetic Manifest：`synthetic_contract_validation=pass`
-- CLI：只使用 `--dry-run`，固定返回 `runner_context_policy_unavailable`
-- CLI 数据库连接／写入：均为否
-- 正式备份／恢复点：`backup_recovery_point_missing`
 - 只读 Repository Adapter：`readonly_adapter_unavailable`
 - 真实 Runner dry-run：`real_environment_dry_run_unavailable`
-- 只读 SQL：全部在 `READ ONLY` 事务中执行并 `ROLLBACK`
-- 本轮未运行 Migration、Seed、DDL、DML、`db:generate` 或 `--execute`
+- 本地数据库变更：只通过既有脚本应用仓库已有 0038 Migration；原数据库未 Restore
+- 本轮未创建 Migration，未运行 `db:generate`、Seed、Reset、原数据库 Drop、Runner dry-run 或 `--execute`
 - 执行 Lease／Migration Lease：均未签发
 
 ### 当前阻断与实施状态
 
-- 六项阻断：`journal_not_at_0038`、`schema_shape_missing`、`real_manifest_missing`、`backup_recovery_point_missing`、`readonly_adapter_unavailable`、`real_environment_dry_run_unavailable`
-- A1 状态：仓库具备静态 Expand；本地验收环境尚未应用到 0038，A1 三表缺失
-- A2 状态：治理决策、仓库硬门、Runner 基础和只读预检已完成；本地就绪修复、A2-P1、A2-P2 均未启动
-- 本次 handoff Runtime 修改：0
-- 本次 handoff Schema 修改：0
-- 本次 handoff Migration 修改：0
-- package、lock、CI、脚本和测试修改：0
+- Stage A 已关闭：`journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing`
+- 仍阻断：`real_manifest_missing`、`readonly_adapter_unavailable`、`real_environment_dry_run_unavailable`
+- A1 状态：仓库静态 Expand 已在固定本地验收环境应用到 0038；归属、Provisioning、回填、Enforce 和 Reader 放行均未因此完成
+- A2 状态：治理决策、仓库硬门、Runner 基础、只读预检和本地就绪修复 Stage A 已完成；Stage B、Stage C、Stage D、A2-P1、A2-P2 均未启动
+- 本次 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：0
 - 正式平台服务端授权根：`缺失`
 - 平台 Runtime／发布准入：`阻断`
 - 七线业务综合完成度：约 25%（规划估算）
@@ -82,11 +83,11 @@
 
 ### 唯一下一任务
 
-- 任务编号：`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01`
-- 任务名称：MIG-01A2 本地验收环境基线、Adapter、Manifest 候选与 Dry-run 就绪修复
-- 当前状态：只完成 handoff 冻结；就绪修复阶段 A／B／C／D 均未启动
-- 启动边界：每个阶段必须独立授权、独立分支和独立 PR，不得混成一个 PR
-- 当前未启动：备份、恢复验证、Migration、Adapter、Manifest 候选、真实 dry-run、A2-P1、A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader、平台切片和机构端旧任务
+- 任务编号：`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-B`
+- 任务名称：MIG-01A2 只读 Repository Adapter 与 Context Policy
+- 当前状态：Stage A 已收口；Stage B 尚未启动
+- 启动边界：必须独立授权、冻结 Base、精确 runtime／测试范围、独立分支和独立 PR
+- 当前未启动：只读 Adapter、Context Policy、Stage C、Stage D、Manifest 候选、真实 dry-run、执行 Lease／Migration Lease、A2-P1、A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader、平台切片和机构端旧任务
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->
