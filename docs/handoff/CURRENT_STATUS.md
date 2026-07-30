@@ -2,18 +2,19 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## 架构 V2 第一阶段与 MIG-01A2 本地就绪修复 Stage B 收口状态
+## 架构 V2 第一阶段与 MIG-01A2 Candidate Governance／Stage C-0 收口状态
 
 - 更新日期：2026-07-30
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-B-COMPLETE` 已完成并合并
-- 完成 PR：#814
-- PR Base：`63a6ddff4fe192b0aa01c40f72dc45317889291a`
-- PR Head：`c5ad29e2775789cc28b47e0724f64e165b0eff9e`
-- Merge Commit：`19f2dbe55799e533e609c7cece9eaad1b623babd`
-- Required Check：Run `30519856557`／Job `90797620311`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- Stage B 报告：`docs/operations/mig01-a2-local-readiness-stage-b-20260730.md`
-- 报告性质：`current evidence`；只证明固定 localhost-only 本地验收环境的 Stage B 只读能力，不构成 Stage C、Runner dry-run、Lease、A2-P1 或 A2-P2 授权
+- 当前阶段：`V2-MIG01-A2-CANDIDATE-GOVERNANCE-HANDOFF-01` 已完成；Candidate Governance PR #816 已合并，Stage C-0 已收口
+- 完成 PR：#816
+- PR Base：`0be5faf5b089fdf3b5e0c84f3dac09d1283368d2`
+- PR Head：`4df7cac76887b5cc3336650911dfc7f0448516e5`
+- Merge Commit：`eb7cde613c38e262aeb8519c53e7e3d21704b18f`
+- Required Check：Run `30524750504`／Job `90813002538`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- Candidate Governance：`docs/operations/mig01-a2-manifest-candidate-governance-20260730.md`
+- 审批包空白模板：`docs/operations/mig01-a2-manifest-candidate-approval-template-20260730.md`
+- 交付性质：`current evidence`；只建立 Candidate Contract、Source、canonicalization、digest 与 Reviewer 生命周期，不构成 Stage C、Approved Manifest、Runner dry-run、Lease、A2-P1 或 A2-P2 授权
 
 ### 已接受边界与治理基础
 
@@ -78,14 +79,29 @@
 - Stage B Schema、Migration、journal、snapshot、package、lock、CI、业务 API／UI、Runner 和新增依赖修改均为 0
 - Stage B 未创建或读取真实 Manifest，未运行 Runner dry-run／`--execute`，未签发 Lease，未执行 Provisioning，未启动 A2-P1／A2-P2
 
+### Candidate Governance／Stage C-0 结果
+
+- PR #816 精确新增 8 个文件：3 个 Candidate Runtime 模块、3 个测试文件、2 个治理文档
+- Candidate Contract：`mig01-a2-candidate/v1`
+- Candidate domain：`zmtg.mig01-a2.provisioning-candidate-manifest`
+- Candidate Source：`mig01-a2-candidate-source/v1`；当前只实现 test-only `local_acceptance_fixture`
+- Candidate canonicalization／digest 与 `mig01-a2/v1` Approved Manifest 使用不同协议和 SHA-256 preimage，Candidate digest 不得复用为 Approved digest
+- Reviewer 生命周期只实现 `generated → review_pending` 单向转换；当前没有 Candidate `approved` 状态
+- Candidate 定向契约集 3 文件／105 个测试通过；完整测试 417 文件／5896 个通过；build 101／101
+- `candidate_contract_missing` 已关闭
+- `real_manifest_missing` 继续阻断；test-only Source、Candidate 契约通过或用户审核均不等于创建 Approved Manifest
+- PR #816 未生成真实 Candidate、未创建 Approved Manifest、未运行 Runner／dry-run、未签发 Lease、未启动 A2-P1／A2-P2
+- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改均为 0
+
 ### 当前阻断与实施状态
 
 - Stage A 已关闭：`journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing`
 - Stage B 已关闭：`readonly_adapter_unavailable`
+- Candidate Governance／Stage C-0 已关闭：`candidate_contract_missing`
 - 仍阻断：`real_manifest_missing`、`real_environment_dry_run_unavailable`
 - 当前 Runner CLI 尚未组合真实 Context Policy 与只读 Adapter
 - A1 状态：仓库静态 Expand 已在固定本地验收环境应用到 0038；归属、Provisioning、回填、Enforce 和 Reader 放行均未因此完成
-- A2 状态：治理决策、仓库硬门、Runner 基础、只读预检、本地就绪修复 Stage A 和 Stage B 已完成；Stage C、Stage D、A2-P1、A2-P2 均未启动
+- A2 状态：治理决策、仓库硬门、Runner 基础、只读预检、本地就绪修复 Stage A、Stage B 与 Candidate Governance／Stage C-0 已完成；Stage C、Stage D、A2-P1、A2-P2 均未启动
 - 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：0
 - 正式平台服务端授权根：`缺失`
 - 平台 Runtime／发布准入：`阻断`
@@ -109,11 +125,13 @@
 ### 唯一下一任务
 
 - 任务编号：`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C`
-- 任务名称：MIG-01A2 本地验收 Manifest 候选与审批包
-- 当前状态：Stage B 已收口；Stage C 尚未启动
-- 启动边界：必须通过独立 handoff 和用户明确授权，冻结 Base、候选来源、受控临时路径、审批角色、保留期限和精确允许范围
-- Manifest 边界：候选正文不得进入 Git、PR、日志或聊天，不得自动标记为 `approved`
-- 当前未启动：Stage C、Stage D、真实 Manifest 审批、Runner dry-run／`--execute`、执行 Lease／Migration Lease、A2-P1、A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader、平台切片和机构端旧任务
+- 任务名称：本地验收 Manifest Candidate 生成与审批包
+- 当前状态：Candidate Governance／Stage C-0 已收口；Stage C 尚未启动
+- 启动边界：必须通过独立 handoff 和用户明确授权，冻结 Base、用户批准的真实 Source 合约与来源、受控临时路径、Reviewer、保留期限和精确允许范围
+- Stage C 允许：只从上述 Source 生成 Candidate、输出低敏审批摘要并交由用户审核
+- Manifest 边界：Candidate 正文不得进入 Git、PR、日志或聊天；不得自动产生 `approved` 状态，不得将 Candidate digest 复用为 Approved digest，也不得将 `review_pending` 写成 Approved Manifest
+- `real_manifest_missing` 边界：Stage C 和用户审核均不能自动关闭；只有未来独立授权任务创建并校验新的 `mig01-a2/v1` Approved Manifest 后才能重新核验
+- 当前未启动：Stage C、Stage D、Approved Manifest 创建、Runner dry-run／`--execute`、执行 Lease／Migration Lease、A2-P1、A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader、平台切片和机构端旧任务
 - Stage C 完成也不得自动启动 Stage D
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
