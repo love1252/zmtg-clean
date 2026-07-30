@@ -2,137 +2,82 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## 架构 V2 第一阶段与 MIG-01A2 Candidate Governance／Stage C-0 收口状态
+## MIG-01A2 Source／Candidate v2 Governance handoff 收口状态
 
 - 更新日期：2026-07-30
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-MIG01-A2-CANDIDATE-GOVERNANCE-HANDOFF-01` 已完成；Candidate Governance PR #816 已合并，Stage C-0 已收口
-- 完成 PR：#816
-- PR Base：`0be5faf5b089fdf3b5e0c84f3dac09d1283368d2`
-- PR Head：`4df7cac76887b5cc3336650911dfc7f0448516e5`
-- Merge Commit：`eb7cde613c38e262aeb8519c53e7e3d21704b18f`
-- Required Check：Run `30524750504`／Job `90813002538`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- Candidate Governance：`docs/operations/mig01-a2-manifest-candidate-governance-20260730.md`
-- 审批包空白模板：`docs/operations/mig01-a2-manifest-candidate-approval-template-20260730.md`
-- 交付性质：`current evidence`；只建立 Candidate Contract、Source、canonicalization、digest 与 Reviewer 生命周期，不构成 Stage C、Approved Manifest、Runner dry-run、Lease、A2-P1 或 A2-P2 授权
+- 当前阶段：`V2-MIG01-A2-STAGE-C-REAL-SOURCE-AND-CANDIDATE-01` 阶段二；Source／Candidate v2 Governance 已合并，handoff 正在收口
+- Stage C-0 handoff：PR #817，Head `7ea19efccc5dd17a5e30c7c35571465d0d986f3f`，Merge Commit `c1be2e45389a74f653717a2a47a81a5559f3c35b`
+- Stage C-0 Required Check：Run `30526410379`／Job `90818243458` 成功
+- Source／Candidate v2 Governance：PR #818
+- PR #818 Base：`c1be2e45389a74f653717a2a47a81a5559f3c35b`
+- PR #818 Head：`29ee87fa7f7b3ab3749e4adedaf89457471d21ef`
+- PR #818 Merge Commit：`ff3528d703c00703998d62f69c1ded8f5f6a3350`
+- PR #818 Required Check：Run `30529676907`／Job `90828769200`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- Source v2 Governance：`docs/operations/mig01-a2-manifest-real-source-v2-governance-20260730.md`
+- 空白审批模板：`docs/operations/mig01-a2-manifest-candidate-approval-template-20260730.md`
+- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：0
 
-### 已接受边界与治理基础
+### 已接受边界与现有门禁
 
-- accepted 决策 PR：#801，Merge Commit `56638dc3595d7bd60a47b08810c50df256d0b87c`
-- accepted 组合：D01-A、D02-A、D03-A、D04-A、D05-A、D06-B、D07-B、D08-C、D09-A、D10-B、D11-B、D12-A（方向）
-- Owner：Tenancy 是 Scope、Context Version／Head、Manifest、Scope Revision 与 Provisioning Provenance 原始事实的唯一语义 Owner
-- Access Control：只通过版本化 Port／Reader 和低敏投影单向消费，不建立第二套事实源
-- Manifest／canonicalization：`mig01-a2/v1`、`c14n-v1`、exact shape、SHA-256 和低敏白名单
-- 治理 Stage A：PR #804／#805 已完成 `main` 保护、Required Check 和 handoff
-- 治理 Stage B：PR #807／#808 已完成 Runner、Port、Lease 低敏契约、合成测试、Runbook 和 handoff
-- `main` 保护：`protected=true`、`strict=true`、`enforce_admins=true`、required approvals `0`
-- Required Check：`最小架构与质量门禁`，App ID `15368`
-- 保护边界：禁止 direct push、force push 和删除 `main`；无管理员 bypass
-- Workflow：`.github/workflows/architecture-quality.yml`
-- 检查器：`scripts/verify/architecture-quality.mjs`
-- 架构规则：`AQ001`～`AQ007` 已进入 `main`
+- accepted 决策：PR #801；D01-A、D02-A、D03-A、D04-A、D05-A、D06-B、D07-B、D08-C、D09-A、D10-B、D11-B、D12-A（方向）保持不变
+- Tenancy 继续是 Scope、Context Version／Head、Manifest、Scope Revision 与 Provisioning Provenance 原始事实的唯一语义 Owner
+- Approved Manifest `mig01-a2/v1`／`c14n-v1` 未修改；Candidate digest 不得复用为 Approved digest
+- `main`：`protected=true`、`strict=true`、`enforce_admins=true`；Required Check 为 `最小架构与质量门禁`
+- Stage A 本地验收环境：容器只绑定 `127.0.0.1:55432`，Journal 39，`tenants` 低敏计数 2，三个 A1 表均为 0
+- Stage A 两个恢复点及完整性证据继续保留，删除需独立授权
+- Stage B Context Policy：`mig01-a2-local-acceptance-context-policy/v1`／`local_acceptance`／`Asia/Shanghai`／`CNY`
+- Stage B 只读 Adapter 继续使用 `REPEATABLE READ + READ ONLY`，写方法永久拒绝
 
-### 本地验收环境 Stage A 基线
+### v1 与 v2 当前事实
 
-- 本地验收容器：`zmtg-local-acceptance-pg`
-- 网络边界：仅 `127.0.0.1:55432` 映射至容器 PostgreSQL
-- 仓库 Journal：39 项，最新为 `0038_mig_01a1_institution_isolation_expand`
-- 本地验收库 Journal：39 项，最新项内部匹配 0038
-- Migration snapshot：到 `0026`，且不覆盖 A1
-- `tenants` Shape：与仓库期望一致
-- `tenants` 低敏计数：2
-- A1 三表：`institution_scopes`、`institution_operating_context_versions`、`institution_operating_contexts` Shape 均与 0038／Schema 一致
-- A1 三表低敏计数：均为 0
-- 迁移前备份：`zmtg_clean_local_acceptance-pre-0038-20260730-124114`
-- 迁移前隔离恢复验证：通过；Journal 38 严格匹配仓库前缀、`tenants` 为 2、A1 三表缺失
-- 迁移后备份：`zmtg_clean_local_acceptance-post-0038-20260730-124114`
-- 迁移后隔离恢复验证：通过；Journal 39 完整匹配 0038、`tenants` 为 2、A1 三表存在且为空、Catalog 与原验收库一致
-- 备份状态：两个备份及其 hash／metadata 均保留，删除需独立授权
-- 临时恢复数据库：两次验证后均已删除
-- synthetic Manifest：`synthetic_contract_validation=pass`
-- 本地数据库变更：只通过既有脚本应用仓库已有 0038 Migration；原数据库未 Restore
-- Stage A 未创建 Migration，未运行 `db:generate`、Seed、Reset、原数据库 Drop、Runner dry-run 或 `--execute`
-- 执行 Lease／Migration Lease：均未签发
+- Candidate v1：`mig01-a2-candidate/v1`
+- Candidate v1 Source：`mig01-a2-candidate-source/v1`
+- Candidate v1 Source type：`local_acceptance_fixture`
+- v1 状态：test-only、不可变；PR #818 未修改 v1 实现、测试、治理文档或固定向量
+- Candidate v2：`mig01-a2-candidate/v2`
+- Candidate v2 canonicalization：`candidate-canonicalization-v2`
+- Source v2：`mig01-a2-candidate-source/v2`
+- Source v2 type：`local_acceptance_user_authorized_input`
+- Source v2 canonicalization：`candidate-source-canonicalization-v1`
+- PR #818 新增 3 个合约模块、3 个测试文件和 1 份治理文档，并更新 1 份空白审批模板
+- v2 定向契约测试：3 文件、225 个场景通过；完整测试 420 文件／6121 个，build 101／101
+- Source authorization、Candidate review、Approved Manifest 是三个独立门
+- Candidate v2 Review lifecycle 只允许 `generated → review_pending`；Generator 与 Reviewer 必须不同
+- 当前没有 Source／Candidate v2 实例，没有 Candidate `approved` 状态，也没有 Approved Manifest
 
-### 本地就绪修复 Stage B 结果
+### 当前任务已授权的 Stage C 边界
 
-- Stage B 精确包含六个文件：
-  1. `docs/operations/mig01-a2-local-readiness-stage-b-20260730.md`
-  2. `docs/operations/mig01-a2-provisioning-runbook.md`
-  3. `src/modules/tenancy/provisioning/provisioning-context-policy.ts`
-  4. `src/modules/tenancy/provisioning/server/provisioning-readonly-postgres-adapter.ts`
-  5. `src/modules/tenancy/provisioning/tests/ProvisioningContextPolicy.test.ts`
-  6. `src/modules/tenancy/provisioning/tests/ProvisioningReadonlyPostgresAdapter.test.ts`
-- Context Policy：`mig01-a2-local-acceptance-context-policy/v1`，目标环境仅 `local_acceptance`，timezone 仅 `Asia/Shanghai`，currency 仅 `CNY`
-- Policy 使用 exact shape、冻结对象与 fail-closed；不从环境变量、数据库、系统 locale、系统时区或执行时钟补默认值
-- 只读 Adapter：`src/modules/tenancy/provisioning/server/provisioning-readonly-postgres-adapter.ts`
-- 四表白名单：`public.tenants`、`public.institution_scopes`、`public.institution_operating_context_versions`、`public.institution_operating_contexts`
-- 每次读取使用 `REPEATABLE READ + READ ONLY`，并核验只读状态与隔离级别
-- timeout：`statement_timeout=5s`、`lock_timeout=1s`、`idle_in_transaction_session_timeout=5s`；`connect_timeout=5s` 由调用方 client 负责
-- 未知 enum、非法时间、Shape 漂移、timeout 与数据库异常均映射为固定低敏错误
-- 三个 Repository insert 与 Transaction Port write 永久返回 `provisioning_readonly_write_forbidden`；逃逸 Repository 在事务结束后永久拒绝读取且不再发送 SQL
-- 测试：Context Policy 23 个、Adapter 26 个、Stage B 新增 49 个、Provisioning 定向契约集 6 文件／112 个全部通过
-- 完整质量：lint、typecheck 通过；完整测试 414 文件／5791 个通过；build 101／101；增量架构检查通过
-- localhost-only smoke：`local_readonly_adapter_smoke=pass`；临时脚本权限 `0600`，验证后已删除
-- smoke 前后低敏计数：Applied Migration 39 → 39，`tenants` 2 → 2，三个 A1 表均 0 → 0
-- Stage B 数据库写入、Provisioning 行、Journal 变化与业务数据变化均为 0
-- Stage B Schema、Migration、journal、snapshot、package、lock、CI、业务 API／UI、Runner 和新增依赖修改均为 0
-- Stage B 未创建或读取真实 Manifest，未运行 Runner dry-run／`--execute`，未签发 Lease，未执行 Provisioning，未启动 A2-P1／A2-P2
-
-### Candidate Governance／Stage C-0 结果
-
-- PR #816 精确新增 8 个文件：3 个 Candidate Runtime 模块、3 个测试文件、2 个治理文档
-- Candidate Contract：`mig01-a2-candidate/v1`
-- Candidate domain：`zmtg.mig01-a2.provisioning-candidate-manifest`
-- Candidate Source：`mig01-a2-candidate-source/v1`；当前只实现 test-only `local_acceptance_fixture`
-- Candidate canonicalization／digest 与 `mig01-a2/v1` Approved Manifest 使用不同协议和 SHA-256 preimage，Candidate digest 不得复用为 Approved digest
-- Reviewer 生命周期只实现 `generated → review_pending` 单向转换；当前没有 Candidate `approved` 状态
-- Candidate 定向契约集 3 文件／105 个测试通过；完整测试 417 文件／5896 个通过；build 101／101
-- `candidate_contract_missing` 已关闭
-- `real_manifest_missing` 继续阻断；test-only Source、Candidate 契约通过或用户审核均不等于创建 Approved Manifest
-- PR #816 未生成真实 Candidate、未创建 Approved Manifest、未运行 Runner／dry-run、未签发 Lease、未启动 A2-P1／A2-P2
-- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改均为 0
+- 当前 Ultra 任务已经授权本 handoff 合并后串行执行 Stage C；无需另行扩大为新的开发授权
+- Source 候选只有两组用户已授权固定配对，按“首选 → 备用”顺序核验；首选存在即停止，首选不存在才核验备用
+- 只允许调用只读 Adapter 的 `tenantExists`；不得枚举或输出其他 tenant，institution 使用对应授权固定值且不得从数据库推断
+- 固定 entry：`active`、`product_default`、`Asia/Shanghai`、`CNY`、业务日期 `2026-07-30`、`effectiveAt=2026-07-29T16:00:00.000Z`
+- Source Authority、Generator、Reviewer 已由任务指定为低敏 opaque reference；handoff 不记录其原值，Generator 与 Reviewer 必须分离
+- Source authorization time 已按任务启动时的真实 UTC 毫秒时间冻结；Candidate `generatedAt` 必须使用实际生成时的真实 UTC 毫秒时间
+- Candidate 保留 7 个自然日；用户拒绝、Source／Base／Policy／Candidate 内容、文件权限或身份、digest、Reviewer 发生变化时提前失效
+- 仓库外私有目录和子目录必须为 `0700`，四个私有 JSON 必须为 `0600`；handoff 不记录实际路径
+- 两组授权 tenant 均不存在时 Candidate 数量必须为 0，只提交固定阻断码 `authorized_candidate_tenant_missing` 的低敏 Draft 报告并停止
 
 ### 当前阻断与实施状态
 
-- Stage A 已关闭：`journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing`
-- Stage B 已关闭：`readonly_adapter_unavailable`
-- Candidate Governance／Stage C-0 已关闭：`candidate_contract_missing`
+- 已关闭：`journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing`、`readonly_adapter_unavailable`、`candidate_contract_missing`
 - 仍阻断：`real_manifest_missing`、`real_environment_dry_run_unavailable`
+- Source／Candidate v2 Governance 合并不关闭 `real_manifest_missing`
 - 当前 Runner CLI 尚未组合真实 Context Policy 与只读 Adapter
-- A1 状态：仓库静态 Expand 已在固定本地验收环境应用到 0038；归属、Provisioning、回填、Enforce 和 Reader 放行均未因此完成
-- A2 状态：治理决策、仓库硬门、Runner 基础、只读预检、本地就绪修复 Stage A、Stage B 与 Candidate Governance／Stage C-0 已完成；Stage C、Stage D、A2-P1、A2-P2 均未启动
-- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：0
-- 正式平台服务端授权根：`缺失`
-- 平台 Runtime／发布准入：`阻断`
-- 七线业务综合完成度：约 25%（规划估算）
-- 公共底座完成度：约 65%（规划估算）
-- 正式发布：0/7
-
-### 不变的 MIG 与发布门禁
-
-- MIG-01 尚未关闭，内部顺序保持 A2 → BASE-02 → Writer → Audit／模板 → B → C → Reader
-- Customers／Institution System Reader：等待 MIG-01C 与当前成员服务端双键上下文
-- Care：等待 MIG-02
-- Knowledge 正式 Reader：等待 MIG-03
-- Conversations：等待 MIG-04
-- Analytics 事实／确定性聚合：等待 MIG-05
-- Analytics Snapshot／正式 Provider／五页 UI：等待 MIG-06 + AN-03C
-- Workbench：最后接线，只消费正式 Provider
-- API 路径政策：新实现默认 v1；旧七线非版本化端点仅允许逐路由薄兼容例外
-- Migration metadata 门禁：`db:generate` 与 snapshot-diff Migration 继续阻断
+- Stage C 尚未生成 Candidate，未创建私有 Source／Candidate、Approved Manifest、Runner dry-run 或 Lease
+- A1 仅完成 Expand；归属、Provisioning、回填、Enforce 和 Reader 放行均未因此完成
+- 正式平台服务端授权根仍为缺失，七线正式发布仍为 0/7
 
 ### 唯一下一任务
 
 - 任务编号：`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-C`
-- 任务名称：本地验收 Manifest Candidate 生成与审批包
-- 当前状态：Candidate Governance／Stage C-0 已收口；Stage C 尚未启动
-- 启动边界：必须通过独立 handoff 和用户明确授权，冻结 Base、用户批准的真实 Source 合约与来源、受控临时路径、Reviewer、保留期限和精确允许范围
-- Stage C 允许：只从上述 Source 生成 Candidate、输出低敏审批摘要并交由用户审核
-- Manifest 边界：Candidate 正文不得进入 Git、PR、日志或聊天；不得自动产生 `approved` 状态，不得将 Candidate digest 复用为 Approved digest，也不得将 `review_pending` 写成 Approved Manifest
-- `real_manifest_missing` 边界：Stage C 和用户审核均不能自动关闭；只有未来独立授权任务创建并校验新的 `mig01-a2/v1` Approved Manifest 后才能重新核验
-- 当前未启动：Stage C、Stage D、Approved Manifest 创建、Runner dry-run／`--execute`、执行 Lease／Migration Lease、A2-P1、A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader、平台切片和机构端旧任务
-- Stage C 完成也不得自动启动 Stage D
+- 任务名称：使用 Source v2 生成本地验收 Candidate 并提交低敏审批包
+- 当前状态：Stage C 尚未生成 Candidate；本 handoff 合并后按当前 Ultra 任务授权串行执行
+- 仓库范围：只允许新增 `docs/operations/mig01-a2-local-manifest-candidate-approval-pack-20260730.md`
+- 成功路径：Source v2 → Source 校验 → Candidate v2 → digest 校验 → `generated → review_pending`
+- PR 状态：只能保持开放（Open）＋草稿（Draft）；Required Check 通过后也不得 Ready、Merge 或创建 handoff
+- 禁止：Approved Manifest、Runner、dry-run、Lease、Provisioning、数据库写入、Stage D、A2-P1、A2-P2、BASE-02、Writer、Reader 和机构端旧任务
+- `real_manifest_missing` 继续阻断，Stage D 仍不可启动
 - 权威架构：`docs/architecture/architecture-v2.md`
 - 代码证据审计：`docs/architecture/architecture-v2-evidence-audit-20260728.md`
 <!-- ARCHITECTURE_V2_PHASE1_END -->
