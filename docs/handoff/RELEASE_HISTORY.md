@@ -499,3 +499,22 @@
 - 本次 accepted 决策与 handoff 的 Runtime、Schema、Migration 修改均为 0。
 - 唯一下一任务为 `V2-MIG01-A2-GOVERNANCE-FOUNDATION-01` MIG-01A2 仓库硬门与受控 Runner 治理基础。
 - 仓库硬门、Required Check、Runner、Runbook、Lease、真实 Manifest、环境核验、A2-P1 和 A2-P2 均未启动。
+
+## 2026-07-30：MIG-01A2 Stage A 仓库硬门完成并切换至 Stage B
+
+- PR #801：记录 MIG-01A2 accepted 决策。
+- PR #801 Head：`2a62d65393b4f96a3ead7ec6daeed5708f5a2b62`。
+- PR #801 Merge Commit：`56638dc3595d7bd60a47b08810c50df256d0b87c`。
+- PR #804：配置并验证 `main` 仓库硬门。
+- PR #804 Head：`1948597d5349017485578723fd32535e84e2bd97`。
+- PR #804 Merge Commit：`97a21fa6ba8517a9d5dd5ab28e90670b371e52cb`。
+- Stage A 验证文档：`docs/verification/github-main-hard-gate-validation-20260730.md`。
+- Required Check Context：`最小架构与质量门禁`。
+- Required Check App：ID `15368`／slug `github-actions`。
+- 最终保护：`main.protected=true`、`strict=true`、`enforce_admins=true`、required approvals `0`、禁止 force push、禁止删除、未启用 Linear History、无管理员 bypass。
+- 普通 direct push、显式 force-with-lease 和删除受保护分支均被 GitHub 服务端拒绝，临时探针已清理。
+- Negative Run／Job：`30481398548`／`90676107324`，预期因 `AQ001_SECOND_DATABASE_ROOT` 失败并阻断合并。
+- Final Positive Run／Job：`30482219056`／`90678924630`，冻结 Head 的环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- Stage A 只新增低敏验证 Markdown；Runtime、Schema、Migration、CI、package、lock 修改均为 0。
+- Stage B、Runner、真实 Manifest、真实 Lease、A2-P1 和 A2-P2 均未启动。
+- 唯一下一任务为 `V2-MIG01-A2-GOVERNANCE-FOUNDATION-01-STAGE-B`：MIG-01A2 受控 Runner 治理、Runbook 与实现。
