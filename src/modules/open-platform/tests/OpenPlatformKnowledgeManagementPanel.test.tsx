@@ -1864,7 +1864,7 @@ describe('平台端知识库管理只读看板', () => {
     );
     expect(screen.getAllByText('机构名称异常').length).toBeGreaterThan(0);
     expect(screen.getAllByText('未命名机构').length).toBeGreaterThan(0);
-    expect(screen.getByText('PDF 解析服务异常')).toBeInTheDocument();
+    expect(await screen.findByText('PDF 解析服务异常')).toBeInTheDocument();
     expectNoRawRuntimeError(container);
   });
 
