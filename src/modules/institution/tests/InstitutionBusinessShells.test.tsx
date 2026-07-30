@@ -2323,7 +2323,7 @@ describe('机构业务页面壳', () => {
 
     expect(await screen.findByText('智能随访运营看板')).toBeInTheDocument();
     expect(screen.getByText('运营看板 / 路径效果')).toBeInTheDocument();
-    expect(screen.getByText('今日待随访')).toBeInTheDocument();
+    expect(await screen.findByText('今日待随访')).toBeInTheDocument();
     expect(screen.getByText('逾期任务')).toBeInTheDocument();
     expect(screen.getByText('高风险 / 已升级')).toBeInTheDocument();
     expect(screen.getByText('已确认待人工发送')).toBeInTheDocument();
