@@ -2,49 +2,50 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## MIG-01A2 Approved Manifest handoff 收口状态
+## MIG-01A2 Stage D 收口状态
 
-- 更新日期：2026-07-30
+- 更新日期：2026-07-31
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-MIG01-A2-APPROVED-MANIFEST-HANDOFF-01`；Approved Manifest 低敏创建与校验报告已合并，Stage D 前 handoff 正在收口
-- Approved Manifest 校验报告：PR #823，Head `78eff467a158baf4d70995cb59bd774c35327785`，Merge Commit `3f042172734c0dc9cc583a09f347e38df7db1e02`
-- PR #823 Required Check：Run `30548606044`／Job `90891106206`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- 低敏校验证据：`docs/operations/mig01-a2-approved-manifest-validation-20260730.md`
+- 当前阶段：`V2-MIG01-A2-STAGE-D-CLOSEOUT-AND-HANDOFF-01`；Stage D 本地只读 dry-run 与独立审查均已合并，本 handoff 正在收口
+- Stage D 报告：PR #825，Head `151b6316e42bd6f9b0d5d6efcf96afe568675a4d`，Merge Commit `e6bfd470fb521fcd18e8093024efcdf0a56ab63c`
+- PR #825 Required Check：Run `30558783297`／Job `90926083649`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- Stage D 独立审查：PR #826，重放后 Head `3e364afb7e1880c4b06ad92788cfb1a8d3972839`，Merge Commit `b514ee04c35c7ddb830787e0ad579f3b0469379c`
+- PR #826 Required Check：Run `30561620736`／Job `90935814730`，全部质量步骤成功，build 未跳过
+- 当前证据：`docs/operations/mig01-a2-stage-d-local-dry-run-validation-20260730.md` 与 `docs/operations/mig01-a2-stage-d-independent-review-20260730.md`
 - 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：0
 
-### Approved Manifest 当前事实
+### Stage D 当前事实
 
-- Approved Manifest 数量：1
-- version：`mig01-a2/v1`
-- approvalStatus：`approved`
-- canonicalization：`c14n-v1`
-- exact shape 与独立 digest 校验：通过
-- Candidate digest 复用：`false`
-- Candidate／Approved 文件隔离：`true`
-- Candidate 继续作为独立资产保留，payload 仍为 `candidate`，私有 Review State 仍为 `review_pending`
-- Future Operator：未分配；后续必须与 Approver 保持职责分离
-- Approved Manifest 的合约状态与当前用户审核记录不等于 Runner、Stage D 或数据库写入授权
+- Runner 模式：本地只读 `--dry-run`
+- 五项低敏计数 `input／insertedCandidate／reusedCandidate／conflict／unexpected`：`1／1／0／0／0`
+- 计数守恒：通过；`insertedCandidate` 仅是候选分类，不表示实际插入
+- Runner ReadOnly Adapter 只负责 tenant 存在性、Manifest 对应 triplet 分类与五项计数
+- Journal、实际 Schema Shape 和四表总数来自独立临时只读 pre／post 探针
+- dry-run 前后数据库状态：一致
+- F01：`closed`
+- 独立审查：`stage_d_independent_review=passed`
+- Stage D handoff 准入：`eligible_for_stage_d_handoff=true`
+- A2-P1 准入：`eligible_for_a2_p1=false`
+- 数据库写入、Lease、`--execute`、Migration、Seed、DDL、DML：`0`
+- Stage D 已完成并收口；该结论不构成 A2-P1 执行授权
 
 ### 已接受边界与当前门禁
 
-- Source authorization、Candidate review、Approved Manifest 与执行授权继续是彼此独立的门
-- `main`：`protected=true`、`strict=true`、`enforce_admins=true`；Required Check 为 `最小架构与质量门禁`
-- Stage A 本地验收环境与两个恢复点继续保留；Stage B 只读 Adapter 继续使用 `REPEATABLE READ + READ ONLY`，写方法永久拒绝
-- 已关闭：`journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing`、`readonly_adapter_unavailable`、`candidate_contract_missing`、`candidate_human_approval_missing`、`real_manifest_missing`、`approved_manifest_validation_missing`、`approved_manifest_independent_review_pending`
-- 继续阻断：`real_environment_dry_run_unavailable`
-- Runner、dry-run、`--execute`、执行 Lease／Migration Lease、数据库写入均未启动
-- Stage D、A2-P1、A2-P2、BASE-02、Writer、Reader 与机构端旧任务均未启动
+- `main` 已启用保护，Required Check `最小架构与质量门禁` 对所有人强制
+- Source authorization、Candidate review、Approved Manifest、Stage D dry-run 与 A2-P1 执行授权继续是彼此独立的门
+- A2-P1 只允许沿用 accepted decisions、专项预检和 Runbook 的受控 Runner 单一入口，不得建立第二写入口
+- A2-P1、A2-P2、BASE-02、Writer、Reader 与机构端旧任务均未启动
 - A1 仅完成 Expand；归属、Provisioning、回填、Enforce 和 Reader 放行均未因此完成
 - 正式平台服务端授权根仍为缺失，七线正式发布仍为 0/7
 
 ### 唯一下一任务
 
-- 任务编号：`V2-MIG01-A2-STAGE-D-LOCAL-DRY-RUN-VALIDATION-01`
-- 任务名称：基于已审核 Approved Manifest 的本地只读 dry-run 验证
-- 当前状态：尚未启动；本 handoff 只冻结下一任务，不运行 Runner 或 dry-run
-- 启动前必须重新冻结 Approved Manifest 与 Candidate 的有效性、Context Policy、只读 Adapter、数据库 Shape、Journal、Recovery Point 与 Lease 状态
-- Stage D 只允许 localhost-only、`--dry-run`、`READ ONLY`、五项低敏守恒计数和零写入
-- 禁止：`--execute`、签发或消费 Lease、Migration、Provisioning 写入、A2-P1、A2-P2 或其他后续任务
+- 任务名称：`A2-P1 manifest 驱动 provisioning`
+- 名称来源：`docs/architecture/v2-mig01-a2-provisioning-preflight.md`；仓库尚无正式任务编号，本 handoff 不自行创建编号
+- 当前状态：尚未启动、尚未获得执行授权；本 handoff 只冻结唯一下一任务及其既有硬门
+- 启动前必须由新的用户授权任务冻结最新 main、工作分支、目标环境、Approved Manifest、恢复点、Operator／Reviewer、有效执行 Lease、Authority 和 Repository／Transaction Adapter
+- 只允许候选处理 Scope、Context Version 1、Context Head 1 的原子创建或严格一致复用、幂等分类和整批回滚
+- 禁止在本 handoff 中运行 Runner、使用 `--execute`、签发或消费 Lease、执行数据库写入，或启动 A2-P1／A2-P2 及任何后续任务
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
 <!-- PHASE31_FINAL_AUDIT_START -->
