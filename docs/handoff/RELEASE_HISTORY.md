@@ -640,3 +640,15 @@
 - Approved Manifest 尚未创建；Runner、dry-run、`--execute`、Lease、数据库写入、Stage D、A2-P1 与 A2-P2 均未启动。
 - PR #820 与本次 handoff 的 Runtime、Schema、Migration 修改均为 0。
 - 唯一下一任务为 `V2-MIG01-A2-APPROVED-MANIFEST-CREATION-VALIDATION-01`：基于已审核 Candidate 创建并校验独立 Approved Manifest。
+
+## 2026-07-30：MIG-01A2 Approved Manifest 校验收口并切换至 Stage D
+
+- PR #823 完成 Approved Manifest 独立创建与低敏校验报告，Head `78eff467a158baf4d70995cb59bd774c35327785`，Merge Commit `3f042172734c0dc9cc583a09f347e38df7db1e02`。
+- PR #823 Required Check Run `30548606044`／Job `90891106206` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- Approved Manifest 数量为 1，version 为 `mig01-a2/v1`，`approvalStatus=approved`，`c14n-v1`、exact shape 和独立 digest 校验全部通过。
+- Candidate 与 Approved Manifest 作为独立文件保留，Candidate digest 未被复用；Future Operator 尚未分配，后续必须与 Approver 保持职责分离。
+- `real_manifest_missing`、`approved_manifest_validation_missing` 与 `approved_manifest_independent_review_pending` 已关闭；`real_environment_dry_run_unavailable` 继续阻断。
+- 本阶段未运行 Runner、synthetic／真实 dry-run 或 `--execute`，未签发、读取、验证或消费 Lease，未执行数据库写入、Migration、Seed、DDL、DML 或 Provisioning。
+- PR #823 与本次四文件 handoff 的 Runtime、Schema、Migration 修改均为 0。
+- 唯一下一任务为 `V2-MIG01-A2-STAGE-D-LOCAL-DRY-RUN-VALIDATION-01`：基于已审核 Approved Manifest 的本地只读 dry-run 验证。
+- Stage D、A2-P1、A2-P2、BASE-02、Writer、Reader、平台切片与机构端旧任务均未启动。

@@ -2,45 +2,36 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## MIG-01A2 Stage C Candidate 人工审核收口状态
+## MIG-01A2 Approved Manifest handoff 收口状态
 
 - 更新日期：2026-07-30
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前阶段：`V2-MIG01-A2-STAGE-C-HUMAN-REVIEW-MERGE-AND-HANDOFF-01`；Candidate 人工审核已完成，独立 handoff 正在收口
-- Source／Candidate v2 Governance：PR #818，Head `29ee87fa7f7b3ab3749e4adedaf89457471d21ef`，Merge Commit `ff3528d703c00703998d62f69c1ded8f5f6a3350`
-- PR #818 Required Check：Run `30529676907`／Job `90828769200` 成功
-- Source v2 handoff：PR #819，Head `4c964a167ad4e729681067ba319e4b9cb1940d3f`，Merge Commit `2e14cfd2cec73cd3d8dc08274ba70763402798bb`
-- PR #819 Required Check：Run `30530766787`／Job `90832302970` 成功
-- Candidate 审批包：PR #820，Head `bc3ad6155df5ce071442183b85a301dd6366ec51`，Merge Commit `172526e15775fc99768e1d739fc3c0d947bc1363`
-- PR #820 Required Check：Run `30540499970`／Job `90863892886`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- Candidate 审批证据：`docs/operations/mig01-a2-local-manifest-candidate-approval-pack-20260730.md`
+- 当前阶段：`V2-MIG01-A2-APPROVED-MANIFEST-HANDOFF-01`；Approved Manifest 低敏创建与校验报告已合并，Stage D 前 handoff 正在收口
+- Approved Manifest 校验报告：PR #823，Head `78eff467a158baf4d70995cb59bd774c35327785`，Merge Commit `3f042172734c0dc9cc583a09f347e38df7db1e02`
+- PR #823 Required Check：Run `30548606044`／Job `90891106206`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- 低敏校验证据：`docs/operations/mig01-a2-approved-manifest-validation-20260730.md`
 - 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：0
 
-### Candidate 与人工审核事实
+### Approved Manifest 当前事实
 
-- Candidate 数量：1
-- Candidate version：`mig01-a2-candidate/v2`
-- Source version：`mig01-a2-candidate-source/v2`
-- Source type：`local_acceptance_user_authorized_input`
-- Context Policy version：`mig01-a2-local-acceptance-context-policy/v1`
-- tenant 父记录存在：`true`
-- Source／Candidate exact shape、Source／Candidate digest 与 Context Policy 校验：全部通过
-- 用户人工审核结论：`accepted_for_approved_manifest_preparation`
-- Candidate payload 状态仍为 `candidate`
-- 私有 Review State 仍为 `review_pending`
-- 人工审核结论与 Candidate／Review State 生命周期相互独立；没有伪造 Candidate `approved` 状态
-- Candidate digest 不得复用为 Approved Manifest digest
-- Approved Manifest 尚未创建
+- Approved Manifest 数量：1
+- version：`mig01-a2/v1`
+- approvalStatus：`approved`
+- canonicalization：`c14n-v1`
+- exact shape 与独立 digest 校验：通过
+- Candidate digest 复用：`false`
+- Candidate／Approved 文件隔离：`true`
+- Candidate 继续作为独立资产保留，payload 仍为 `candidate`，私有 Review State 仍为 `review_pending`
+- Future Operator：未分配；后续必须与 Approver 保持职责分离
+- Approved Manifest 的合约状态与当前用户审核记录不等于 Runner、Stage D 或数据库写入授权
 
 ### 已接受边界与当前门禁
 
-- Source authorization、Candidate review 与 Approved Manifest 继续是三个独立门
-- Approved Manifest 必须是独立的 `mig01-a2/v1` 文件，使用自己的 approval 字段、`c14n-v1` 和新的 SHA-256 digest
-- 未来 Approver 与未来 Operator 必须职责分离
+- Source authorization、Candidate review、Approved Manifest 与执行授权继续是彼此独立的门
 - `main`：`protected=true`、`strict=true`、`enforce_admins=true`；Required Check 为 `最小架构与质量门禁`
 - Stage A 本地验收环境与两个恢复点继续保留；Stage B 只读 Adapter 继续使用 `REPEATABLE READ + READ ONLY`，写方法永久拒绝
-- 已关闭：`journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing`、`readonly_adapter_unavailable`、`candidate_contract_missing`、`candidate_human_approval_missing`
-- 继续阻断：`real_manifest_missing`、`real_environment_dry_run_unavailable`
+- 已关闭：`journal_not_at_0038`、`schema_shape_missing`、`backup_recovery_point_missing`、`readonly_adapter_unavailable`、`candidate_contract_missing`、`candidate_human_approval_missing`、`real_manifest_missing`、`approved_manifest_validation_missing`、`approved_manifest_independent_review_pending`
+- 继续阻断：`real_environment_dry_run_unavailable`
 - Runner、dry-run、`--execute`、执行 Lease／Migration Lease、数据库写入均未启动
 - Stage D、A2-P1、A2-P2、BASE-02、Writer、Reader 与机构端旧任务均未启动
 - A1 仅完成 Expand；归属、Provisioning、回填、Enforce 和 Reader 放行均未因此完成
@@ -48,14 +39,12 @@
 
 ### 唯一下一任务
 
-- 任务编号：`V2-MIG01-A2-APPROVED-MANIFEST-CREATION-VALIDATION-01`
-- 任务名称：基于已审核 Candidate 创建并校验独立 Approved Manifest
-- 当前状态：尚未启动；本 handoff 只冻结下一任务，不创建 Approved Manifest
-- 启动前必须重新冻结最新 `main`、PR #820 合并结果、私有 Candidate 存在性与有效期、Candidate／Source／Policy／digest 无漂移、用户人工审核结论、Approver 低敏引用、Approved Manifest 私有目录、保留期限和删除／失效规则
-- 成功边界：创建独立 `mig01-a2/v1` Approved Manifest，使用显式 approval 字段、`c14n-v1` 与新的 Approved digest；Candidate 与 Approved Manifest 必须作为两个独立文件保留
-- 禁止：修改 Candidate、将 Candidate 状态改为 `approved`、复用 Candidate digest、Runner、dry-run、`--execute`、Lease、数据库写入、Stage D、A2-P1、A2-P2 或其他后续任务
-- Candidate 到期时不得创建 Approved Manifest；必须先重新签发 Candidate 并重新人工审核
-- 未来任务完成后仍需用户独立审核 Approved Manifest 低敏摘要、独立 handoff，并重新冻结是否允许 Stage D
+- 任务编号：`V2-MIG01-A2-STAGE-D-LOCAL-DRY-RUN-VALIDATION-01`
+- 任务名称：基于已审核 Approved Manifest 的本地只读 dry-run 验证
+- 当前状态：尚未启动；本 handoff 只冻结下一任务，不运行 Runner 或 dry-run
+- 启动前必须重新冻结 Approved Manifest 与 Candidate 的有效性、Context Policy、只读 Adapter、数据库 Shape、Journal、Recovery Point 与 Lease 状态
+- Stage D 只允许 localhost-only、`--dry-run`、`READ ONLY`、五项低敏守恒计数和零写入
+- 禁止：`--execute`、签发或消费 Lease、Migration、Provisioning 写入、A2-P1、A2-P2 或其他后续任务
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
 <!-- PHASE31_FINAL_AUDIT_START -->
