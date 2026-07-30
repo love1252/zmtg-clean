@@ -2,38 +2,35 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## MIG-01A2 A2-P1 Runtime handoff 状态
+## MIG-01A2 A2-P1 Authority／组合根 handoff 状态
 
 - 更新日期：2026-07-31
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
 - 当前总任务：`V2-MIG01-A2-P1-MANIFEST-PROVISIONING-END-TO-END-01`
-- 当前阶段：A2-P1 Write Adapter Runtime 已合并，本 handoff 正在收口
-- 受控执行计划：PR #828，Head `77be8e4ac835ce76e77a6bf5c7026c63d83b58fc`，Merge Commit `184b0320be1bedaace5d72ff0b0e453f343ad52e`
-- PR #828 Required Check：Run `30565599037`／Job `90949208935`，全部质量步骤成功
-- Runtime Write Adapter：PR #829，Head `aa465a64aa146a43f766413caa53dfc88a1bd39b`，Merge Commit `bbf15be8f5acd66d80db5ac7b6e9250a57d5744e`
-- PR #829 Required Check：Run `30568943508`／Job `90960419070`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- 当前证据：`docs/operations/mig01-a2-p1-execution-plan-20260731.md`、`docs/operations/mig01-a2-provisioning-runbook.md` 与 PR #829 的当前代码／测试
+- 当前阶段：Authority／组合根无写准备、验证与低敏证据已合并，本独立 handoff 正在收口
+- Runtime handoff：PR #830，Head `1d28b6a91bf3b7076f66478861a3a7cc46fdcb18`，Merge Commit `2ca100af132adf6676c09073f5d527c1b608d3ed`
+- PR #830 Required Check：Run `30570185023`／Job `90964638309`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- Authority／组合根低敏证据：PR #831，Head `e427b57cdf810c9021d6beb1738a69f365bd7218`，Merge Commit `2da175330a4e15601c9806f75184df303e8cf2f9`
+- PR #831 Required Check：Run `30571861343`／Job `90970298323`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- 当前证据：`docs/operations/mig01-a2-p1-authority-composition-root-no-write-validation-20260731.md`
 - 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：0
 
-### Runtime 当前事实
+### Authority／组合根当前事实
 
-- 唯一可写数据库 Adapter：`createProvisioningWritePostgresAdapter`
-- Write Adapter 只接收调用方注入的 postgres.js client，不读取环境变量，不创建、缓存或关闭连接
-- 读取只允许 `tenants` 与三张 A1 表；写入只允许三张 A1 表的参数化纯 `INSERT`
-- Kernel 顺序固定为 Scope → Context Version 1 → Context Head 1，affected rows 逐项必须等于 1
-- 写事务为单一 `SERIALIZABLE READ WRITE`，具备固定 timeout、双键事务级 advisory lock、提交前全批重检和零自动重试
-- ReadOnly Adapter 文件与永久拒写边界未修改
-- 定向 Write／Parity／ReadOnly／Kernel：4 个文件、109 个测试通过
-- 完整 Provisioning 契约：14 个文件、510 个测试通过
-- 完整质量基线：422 个测试文件、6190 个测试通过，build 101／101
-- 本阶段数据库连接、真实 Manifest 读取、真实 Lease、Runner dry-run／`--execute`、Migration、Seed、DDL、DML：`0`
-- Write Adapter 进入 `main` 不表示 A2-P1 已执行或完成
+- 已接受的执行方式为仓库外、权限受控、一次性组合根；它只调用既有 `runProvisioningCli`，注入 Context Policy、Write Adapter、Lease 与 Authority，不直接执行 SQL，也不复制 Kernel、Manifest parser 或 Repository 映射
+- 合成 Authority 矩阵为 23 个用例：1 个完整匹配允许，22 个漂移、失效、未知或不可用用例全部拒绝
+- 生命周期矩阵 12 个场景通过；client close、权限 revoke 与负向复核、Lease release 与 release 后拒绝、临时资产删除均被独立尝试
+- 静态边界检查 6 项通过；一次性组合根不含 SQL、第二 Runner、Kernel／Manifest parser、Repository 映射或环境变量读取
+- 合成 Runner `--dry-run` 五项计数为 `1／1／0／0／0`
+- 临时 Helper、合成输入和私有临时目录已删除，残留为 0
+- 本阶段真实 Approved Manifest 读取、数据库连接／写入、真实 Authority／Lease 操作、真实 grant／revoke、`--execute`、Migration、Seed、DDL、DML：`0`
+- Authority／组合根无写准备完成不表示真实执行前置已经实时满足，也不表示 A2-P1 已完成
 
 ### 已接受边界与当前阻断
 
 - Runner 继续是 A2-P1 唯一写入口；不得建立第二 Runner、通用 SQL 或旁路写入口
-- 仓库内仍没有真实 Authority 或签发入口
-- 仓库外一次性组合根尚未完成独立无写验证；client 生命周期、grant／revoke、真实 Lease release 与数据库执行证据仍缺失
+- 仓库内不引入真实 Authority、私钥、连接或一次性组合根；真实资产必须继续留在仓库外受控边界
+- 真实签名锚、活动 Authority 记录、Execution Lease、Operator 职责分离、权限窗口、最新恢复点和数据库执行证据仍须在唯一执行窗口实时证明
 - outcome-unknown 是后续真实执行的运维停止分类；当前 Runtime 不声称已识别或测试 COMMIT 回包丢失
 - A2-P1 尚未完成，真实执行尚未启动；A2-P2、BASE-02、Writer、Reader 与机构端旧任务均未启动
 - A1 仍只完成 Expand；回填、Enforce 和 Reader 放行均未因此完成
@@ -41,13 +38,13 @@
 
 ### 唯一下一阶段
 
-- 名称：`Authority／组合根无写准备`
-- 名称来源：`docs/operations/mig01-a2-provisioning-runbook.md`；仓库尚无正式任务编号，本 handoff 不自行创建编号
-- 验证动作：`Authority／组合根无写验证`
-- 当前状态：本 handoff 中尚未启动；当前总任务已明确授权在本 handoff 合并后串行执行
-- 只允许使用合成资产冻结 Authority 信任根、仓库外一次性组合根职责、client 清理、撤权与 Lease release 负向证据
-- 禁止连接数据库、读取真实 Manifest、签发或消费真实 Lease、授予真实权限或使用 `--execute`
-- 完成后必须创建独立低敏证据 PR 与独立 Authority／组合根 handoff；数据库执行仍不得由本 handoff 自动开始
+- 名称：`一次受控 local_acceptance execute`
+- 名称来源：沿用上一 handoff 与架构索引已经冻结的项目级名称；仓库尚无正式任务编号，本 handoff 不自行创建编号
+- 当前状态：本 handoff 中尚未启动；当前总任务已明确授权在本 handoff 合并并完成全部实时前置核验后串行执行
+- 只允许固定 localhost-only `local_acceptance`，使用有效 Approved Manifest、独立 Authority、最长 10 分钟且不可续期的真实 Execution Lease、新 Operator、最新已验证恢复点和精确临时 SELECT／INSERT 权限
+- 执行前预分类必须精确为 `1／1／0／0／0`；只允许既有 Runner 调用一次 `--execute`，禁止重试
+- 任一 Authority、Lease、职责分离、最小权限、Manifest、Journal、Shape、恢复点、并发或计数事实无法证明时立即停止
+- 下一阶段完成后必须创建独立低敏执行证据 PR 与独立审查 PR；不得自动标记 A2-P1 完成或启动 A2-P2
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
 <!-- PHASE31_FINAL_AUDIT_START -->

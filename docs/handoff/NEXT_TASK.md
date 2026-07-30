@@ -2,112 +2,155 @@
 
 ## 当前交接状态
 
-A2-P1 受控执行计划与 Runtime Write Adapter 已完成独立合并：
+Authority／组合根无写准备、验证与低敏证据已经完成独立合并：
 
-- 受控执行计划 PR #828 Head：`77be8e4ac835ce76e77a6bf5c7026c63d83b58fc`；
-- PR #828 Merge Commit：`184b0320be1bedaace5d72ff0b0e453f343ad52e`；
-- PR #828 Required Check：Run `30565599037`／Job `90949208935` 成功；
-- Runtime PR #829 Head：`aa465a64aa146a43f766413caa53dfc88a1bd39b`；
-- PR #829 Merge Commit：`bbf15be8f5acd66d80db5ac7b6e9250a57d5744e`；
-- PR #829 Required Check：Run `30568943508`／Job `90960419070` 成功；
-- Write Adapter、Write 合成事务测试、ReadOnly／Write parity 测试与 Runbook 已进入 `main`；
-- 定向 Write／Parity／ReadOnly／Kernel 为 4 个文件、109 个测试通过；
-- 完整 Provisioning 契约为 14 个文件、510 个测试通过；
-- 完整质量基线为 422 个测试文件、6190 个测试通过，build 101／101；
-- 本阶段未连接数据库、未读取真实 Manifest、未签发或消费真实 Lease、未运行 Runner dry-run／`--execute`，数据库写入为 0；
-- Write Adapter 进入 `main` 不表示 A2-P1 已执行或完成。
+- Runtime handoff PR #830 Head：`1d28b6a91bf3b7076f66478861a3a7cc46fdcb18`；
+- PR #830 Merge Commit：`2ca100af132adf6676c09073f5d527c1b608d3ed`；
+- PR #830 Required Check：Run `30570185023`／Job `90964638309` 成功；
+- Authority／组合根低敏证据 PR #831 Head：`e427b57cdf810c9021d6beb1738a69f365bd7218`；
+- PR #831 Merge Commit：`2da175330a4e15601c9806f75184df303e8cf2f9`；
+- PR #831 Required Check：Run `30571861343`／Job `90970298323` 成功；
+- Authority 合成矩阵为 1 个完整匹配允许、22 个负向用例拒绝；生命周期 12 个场景和静态边界 6 项均通过；
+- 合成 Runner `--dry-run` 五项计数为 `1／1／0／0／0`；
+- 数据库连接／写入、真实 Manifest 读取、真实 Authority／Lease 操作、真实权限变更和 `--execute` 均为 0；
+- 临时 Helper、合成输入和私有临时目录已删除；
+- Authority／组合根无写准备完成不表示 A2-P1 已执行或完成。
 
 ## 唯一下一阶段
 
 ```text
-Authority／组合根无写准备
+一次受控 local_acceptance execute
 ```
 
-该名称逐字沿用 `docs/operations/mig01-a2-provisioning-runbook.md`。仓库尚未冻结正式任务编号，本 handoff 不自行创建编号。阶段内的验证动作名称沿用受控执行计划：`Authority／组合根无写验证`。
+该名称沿用上一 handoff 与架构索引已经冻结的项目级名称。仓库尚未冻结正式任务编号，本 handoff 不自行创建编号。
 
-本 handoff 中该阶段尚未启动。当前总任务 `V2-MIG01-A2-P1-MANIFEST-PROVISIONING-END-TO-END-01` 已明确授权在本 handoff 合并后串行执行；此处只冻结边界，不能被解释为数据库执行、真实 Lease、权限授予或 `--execute` 已获准开始。
+本 handoff 中该阶段尚未启动。当前总任务 `V2-MIG01-A2-P1-MANIFEST-PROVISIONING-END-TO-END-01` 已明确授权在本 handoff 合并后串行执行，但只有下列实时硬门全部满足时才允许进入唯一执行窗口。
 
-## 一、权威边界与目标
+## 一、执行前冻结
 
-下一阶段只允许关闭 Authority 与仓库外一次性组合根的准备阻断：
+必须按顺序重新证明：
 
-1. 冻结真实 Authority 的信任根、实现方式、签发者、撤销者、释放者与审计责任；
-2. 证明 Authority 对 task、Base、目标环境、Manifest、Operator、时间窗、撤销、释放和未知授权全部 fail-closed；
-3. 证明无条件返回 `true` 只存在于合成测试，不进入真实组合；
-4. 冻结仓库外、权限受控、一次性组合根的完整性、Owner、权限、保留和删除规则；
-5. 使用合成资产完成正常与负向无写验证；
-6. 形成独立低敏证据 PR，并在其合并后完成独立 Authority／组合根 handoff。
+1. 最新 `main`、执行分支、Base／Head、工作树、Required Check 和受保护分支状态均无漂移；
+2. 目标精确为固定 localhost-only `local_acceptance`，任何非本地目标立即停止；
+3. Approved Manifest 数量为 1，version、审批状态、canonicalization、exact shape、digest 和条目数量有效，且未撤销、未替换；
+4. Candidate 与 Approved Manifest 的文件、目录、协议和 digest 继续隔离；
+5. Context Policy 仍只允许 `local_acceptance`、`Asia/Shanghai` 和 `CNY`；
+6. 独立固定 SELECT-only 探针确认 Journal 为 39、最新项内部匹配仓库 0038、A1 Shape 与仓库一致、`tenants` 为 2、三张目标表均为 0；
+7. 三张目标表不存在未审计的 trigger、rule、RLS 副作用，也不存在无法确认的并发 Writer；
+8. 最新执行前恢复点已创建，archive、hash、metadata 均有效，并已在隔离临时数据库完成恢复验证；不得 Restore 目标库；
+9. 使用既有 ReadOnly Adapter 完成一次实时预分类 dry-run，五项计数精确为 `1／1／0／0／0`。
 
-Authority／组合根准备不是 accepted ADR，也不得改写现有 Contract、Kernel、Port、Runner、ReadOnly Adapter、Write Adapter、Schema 或 Migration。
+任一事实不满足时不得调整 Manifest、数据或权限追求绿灯。
 
-## 二、一次性组合根严格职责
+## 二、Authority、Lease 与职责分离
 
-仓库外一次性组合根只能：
+- 新 Operator 必须与 Approver、Reviewer、Lease Authority 和审计责任人分离；
+- Operator 与一次性组合根不得取得 Authority 私钥，只能使用冻结的验证公钥；
+- 活动 Authority 记录必须由独立信任锚验证，并精确绑定当前 task、branch、Base、0038、Operator、`local_acceptance`、Manifest、条目数量与时间窗；
+- 未知、签名错误、未生效、过期、撤销、释放、字段漂移或 Authority 不可用必须 fail-closed；
+- Execution Lease 使用既有 `mig01-a2-execution-lease/v1`，最长 10 分钟，不得续期或在执行中更换；
+- Lease 必须由独立 Lease Authority 签发，精确绑定当前 task、Base、环境、Operator、Manifest 与条目数量；
+- 写入前 Lease 必须已 claim，且 Authority 必须使用受信主机时间再次核验；
+- 执行结束必须 release，并证明 release 后原 payload 也无法重放。
 
-- 调用既有 `runProvisioningCli`，不得成为第二 Runner；
-- 在未来真实执行中负责创建并关闭数据库 client；本阶段只使用不可连接数据库的合成 client 验证生命周期；
-- 注入当前 Context Policy、已合并 Write Adapter、Lease payload 与 Authority；
-- 编排低敏生命周期和 `finally` 清理；
-- 使用 `0600` 私有资产和不回显 Helper；
-- 在任务结束后删除临时 Helper、输入目录和临时副本。
+职责分离、信任锚、活动记录、Lease 当前状态或最短剩余时间任一无法证明时立即停止。
 
-它不得：
+## 三、精确最小权限
 
-- 直接执行 SQL；
-- 解析、规范化、改写或复制 Manifest；
-- 复制 Kernel、Repository 映射、Lease Contract 或业务分类；
-- 绕过 Runner、Authority 或 Write Adapter；
-- 读取环境变量值后回显；
-- 持久化 Manifest、Lease、连接、角色或双键敏感值；
-- 保留窗口外可复用的写入口、权限或 client。
+执行角色只允许：
 
-本阶段的仓库交付只允许创建单一低敏证据文档 `docs/operations/mig01-a2-p1-authority-composition-root-no-write-validation-20260731.md`。如 Authority 或组合根实现需要进入 Git，或需要修改该证据文档以外的 Runtime、脚本、测试、配置、package、lock、Schema、Migration、Runbook 或 handoff，必须停止并取得新的精确 allowlist。
+- 数据库连接和 `public` schema 使用；
+- 对 `tenants` 与三张 A1 表的精确 `SELECT`；
+- 对三张 A1 表的精确 `INSERT`；
 
-## 三、无写验证矩阵
+禁止授予通用 query、全库表权限、CREATE、UPDATE、UPSERT、DELETE、TRUNCATE、REFERENCES、TRIGGER、sequence 或长期继承权限。
 
-只使用合成、低敏、不可用于真实执行的资产，至少验证：
+不得以笼统“系统能力”作为额外权限兜底。运行时依赖的 advisory lock、hash、时间和约束函数必须在静态与实时核验中证明不需要额外 grant；若发现额外权限依赖，必须停止，不得现场扩大授权。
 
-- 正确 task／Base／环境／Manifest／Operator／时间窗且未撤销、未释放时，Authority 仅通过授权判断；
-- task、Base、环境、Manifest、Operator 任一不匹配时拒绝；
-- 未生效、过期、撤销、释放或未知授权时拒绝；
-- 正常路径和所有可捕获失败路径均关闭 client；
-- 正常路径和失败路径均触发撤权与 Lease release 生命周期；
-- 不可捕获终止依赖的短 TTL、外部撤销／回收和重试前失效核验已冻结；
-- 组合根不直接执行 SQL，不复制 Runner／Kernel／Manifest 解析；
-- 日志与交付只含固定低敏结果，不泄漏原始输入或环境信息。
+独立权限 Controller 激活后必须先完成允许项正向探针和禁止项负向探针；任一权限超出或依赖不明时先撤权并停止。结束时撤销全部临时授权，再以负向探针确认 SELECT／INSERT 不再可用。
 
-这些合成验证不得连接数据库，不得读取真实 Approved Manifest，不得签发、读取、消费或释放真实 Lease，也不得授予或撤销真实数据库权限。
+## 四、唯一 Runner 调用
 
-## 四、硬停止条件
+一次性组合根必须满足：
 
-以下任一情况必须停止：
+- 只调用既有 `runProvisioningCli`；
+- 注入当前 Context Policy、已合并 Write Adapter、真实 Lease payload／expectation 与真实 Authority；
+- 不含 SQL、Kernel、Manifest parser、Repository 映射、第二 Runner 或环境变量回显；
+- Manifest 私有路径只允许由受控 Helper 传给既有 Runner 的 `--manifest-file`，不得进入日志、交付、shell history 或低敏证据；
+- client 创建一次并在所有可捕获路径关闭；
+- `--execute` 调用计数精确为 1，重试为 0。
 
-- Authority 信任根、唯一责任人或撤销／释放语义无法证明；
-- 需要无条件 `true`、测试 fake 或固定成功结果才能继续；
-- 组合根需要直接 SQL、复制 Kernel／Manifest 解析或形成第二 Runner；
-- 需要连接数据库、读取真实 Manifest、签发真实 Lease、授予真实权限或使用 `--execute`；
-- 需要修改当前未授权的仓库文件；
-- client 关闭、撤权、Lease release 或临时资产删除无法在合成路径证明；
-- 日志、Helper 或证据可能暴露私有路径、双键、digest、角色引用、连接参数、凭证、PII 或原始错误；
-- Base、Required Check、Runtime 资产或当前 handoff 发生漂移。
+事务继续固定为：
 
-停止时只允许报告固定低敏阻断类别和工作树状态，不得通过扩大权限或连接环境补证。
+```text
+SERIALIZABLE READ WRITE
+→ 双键事务级 advisory lock
+→ 重读 tenant 与完整 triplet
+→ Scope INSERT
+→ Context Version 1 INSERT
+→ Context Head 1 INSERT
+→ affected rows 各为 1
+→ 提交前全批重读为严格一致 reusedCandidate
+→ commit
+```
 
-## 五、完成与后续顺序
+任何 serialization、deadlock、timeout、constraint、affected rows 非 1、提交前漂移或连接在提交确认阶段中断都必须停止。禁止自动重试或第二次 `--execute`；outcome-unknown 只能先独立只读核验，不能再次执行。
+
+## 五、执行后核验与清理
+
+独立固定只读探针必须确认：
+
+- 三张 A1 表分别由 0 变 1，净变化各为 `+1`；
+- `tenants` 仍为 2；
+- Journal 仍为 39，最新项仍内部匹配 0038；
+- Schema Shape 不变；
+- `conflict=0`、`unexpected=0`；
+- 无其他表写入。
+
+随后创建执行后恢复点并完成隔离恢复验证，不得 Restore 目标库。
+
+所有可捕获路径必须分别尝试：
+
+1. client close；
+2. 权限 revoke；
+3. 撤权负向探针；
+4. Lease release；
+5. release 后 Authority 拒绝复核；
+6. Manifest 临时副本、Helper 与临时目录删除。
+
+某一项清理失败不得跳过其余清理，整体结果固定为 `composition_cleanup_incomplete` 并停止。
+
+## 六、真正硬停止
+
+出现以下任一情况立即停止并只报告低敏固定类别：
+
+- 发现 Secret、Token、密码、私钥、PII 或非本地连接暴露；
+- 目标不是固定 localhost-only `local_acceptance`；
+- Approved Manifest、Candidate 隔离、Journal、Shape、tenant、恢复点或 Context Policy 异常；
+- Authority、Lease、职责分离或最小权限无法证明；
+- 执行前五项计数不是精确 `1／1／0／0／0`；
+- `conflict` 或 `unexpected` 非零；
+- 需要修改 Contract、Kernel、Port、Runner、ReadOnly Adapter、Write Adapter、Schema 或 Migration；
+- 需要目标库 DDL、UPDATE、UPSERT、DELETE、Drop、Restore 或第二次 `--execute`；
+- 存在无法确认的并发写入；
+- COMMIT 结果未知、Git 状态无法安全恢复，或回退／forward-fix 路径无法证明。
+
+## 七、低敏交付与后续顺序
+
+执行证据只允许记录状态、布尔值、固定版本、计数、Run／Job 和零越界结论。不得记录实际私有路径、连接参数、双键、digest 值、角色引用、Manifest 正文、SQL、原始行、签名、私钥、Secret、Token、凭证、PII 或原始异常。
 
 ```text
 受控执行计划（已完成，PR #828）
 → Write Adapter Runtime（已完成，PR #829）
-→ Runtime handoff（本次收口）
-→ Authority／组合根无写准备
-→ Authority／组合根无写验证
-→ Authority／组合根低敏证据 PR
-→ 独立 Authority／组合根 handoff
-→ 一次受控 local_acceptance execute
+→ Runtime handoff（已完成，PR #830）
+→ Authority／组合根无写准备与验证（已完成）
+→ Authority／组合根低敏证据 PR（已完成，PR #831）
+→ 独立 Authority／组合根 handoff（本次收口）
+→ 一次受控 local_acceptance execute（唯一下一阶段）
 → 低敏执行证据
 → 独立审查
 → A2-P1 最终 handoff
 → A2-P2
 ```
 
-Authority／组合根 handoff 合并前，禁止启动真实数据库执行。下一阶段完成也不自动接受任何非 localhost 目标，不自动签发 Lease，不自动运行第二次 `--execute`，不自动启动 A2-P2、BASE-02、Writer、Reader、平台切片或机构端旧任务。
+唯一执行窗口完成后必须先创建独立低敏执行证据 PR 与独立审查 PR。不得自动把 A2-P1 标记为完成，不得自动启动 A2-P2、BASE-02、Writer、Reader、平台切片或机构端旧任务。

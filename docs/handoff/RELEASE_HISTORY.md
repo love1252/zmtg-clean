@@ -678,3 +678,19 @@
 - 本次四文件 handoff 的 Runtime、Schema、Migration、scripts、tests、CI、package、lock 修改均为 0。
 - Write Adapter 进入 `main` 不表示 A2-P1 已执行或完成；真实 Authority、仓库外一次性组合根、client 生命周期、grant／revoke、真实 Lease release 与数据库执行证据仍未关闭。
 - 唯一下一阶段沿用 Runbook 名称 `Authority／组合根无写准备`；当前总任务已授权在本 handoff 合并后串行执行，但本次 handoff 未启动该阶段。
+
+## 2026-07-31：A2-P1 Authority／组合根无写准备收口
+
+- PR #830 完成 Runtime handoff，Head `1d28b6a91bf3b7076f66478861a3a7cc46fdcb18`，Merge Commit `2ca100af132adf6676c09073f5d527c1b608d3ed`。
+- PR #830 Required Check Run `30570185023`／Job `90964638309` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #831 完成 Authority／组合根无写准备与低敏证据，Head `e427b57cdf810c9021d6beb1738a69f365bd7218`，Merge Commit `2da175330a4e15601c9806f75184df303e8cf2f9`。
+- PR #831 Required Check Run `30571861343`／Job `90970298323` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- 合成 Authority 矩阵为 23 个用例：1 个完整匹配允许，22 个漂移、失效、未知或不可用用例全部拒绝。
+- 生命周期矩阵 12 个场景与静态边界 6 项通过；合成 Runner `--dry-run` 五项计数为 `1／1／0／0／0`。
+- 无写验证中的一次性组合根只调用既有 Runner，并注入当前 Context Policy、已合并 Write Adapter、合成 Lease 与合成 Authority；不直接执行 SQL，不复制 Kernel、Manifest parser、Repository 映射或第二 Runner。
+- 本阶段真实数据库连接／写入、真实 Manifest 读取、真实 Authority／Lease 操作、真实 grant／revoke、`--execute`、Migration、Seed、DDL、DML 均为 0。
+- 临时 Helper、合成输入和私有临时目录已删除；低敏证据未记录私有路径、连接参数、双键、digest、角色引用、Manifest 正文、SQL、Secret、Token、凭证或 PII。
+- 本次四文件 handoff 的 Runtime、Schema、Migration、scripts、tests、CI、package、lock 修改均为 0。
+- Authority／组合根无写准备已完成并收口，但真实签名锚、活动 Authority 记录、Execution Lease、职责分离、权限窗口、最新恢复点和数据库执行前置仍须在唯一执行窗口实时证明。
+- 唯一下一阶段沿用既有名称 `一次受控 local_acceptance execute`；本次 handoff 未连接数据库、未签发 Lease、未授予权限，也未启动 `--execute`。
+- A2-P1 尚未完成；A2-P2、BASE-02、Writer、Reader、平台切片与机构端旧任务均未启动。
