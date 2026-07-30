@@ -244,3 +244,36 @@ Stage B 合并不自动：
 - 启动 A2-P1、A2-P2、BASE-02、Writer、MIG-01B、MIG-01C 或 Reader；
 - 修改 journal `0038`、snapshot `0026`、Schema、Migration 或仓库设置；
 - 证明任何机构业务线已正式发布。
+
+## 11. 本地就绪修复 Stage B 只读能力
+
+`V2-MIG01-A2-LOCAL-READINESS-REMEDIATION-01-STAGE-B-COMPLETE` 与前述“治理 Stage B Runner 基础”不是同一阶段。本节记录固定 localhost-only 本地验收环境的只读能力现状，不改写 Runner、Lease、Manifest 或 execute 边界。
+
+当前已经建立：
+
+- Context Policy version：`mig01-a2-local-acceptance-context-policy/v1`；
+- 目标环境：`local_acceptance`；
+- 唯一批准 timezone：`Asia/Shanghai`；
+- 唯一批准 currency：`CNY`；
+- Policy 对象和批准数组均冻结，重复值、未知值、未批准值、版本或环境漂移均使用固定低敏错误码 fail-closed；
+- 只读 Adapter：`src/modules/tenancy/provisioning/server/provisioning-readonly-postgres-adapter.ts`；
+- Adapter 只接收调用方注入的 postgres.js `Sql` client，不读取 `DATABASE_URL`，不创建、缓存或关闭全局连接；
+- 静态读取白名单仅为 `public.tenants`、`public.institution_scopes`、`public.institution_operating_context_versions`、`public.institution_operating_contexts`；
+- 每次 `read` 使用 `REPEATABLE READ + READ ONLY` 事务，并在事务内核验 `transaction_read_only=on` 与 `transaction_isolation=repeatable read`；
+- Adapter 直接设置并核验 `statement_timeout=5s`、`lock_timeout=1s`、`idle_in_transaction_session_timeout=5s`；`connect_timeout=5s` 仍由创建 client 的调用方负责；
+- timestamptz 以 UTC 六位微秒文本读取，只允许毫秒对齐后规范化为三位毫秒 ISO UTC；business date 固定映射为 `YYYY-MM-DD`；
+- Repository 三个 insert 方法和 Transaction Port `write` 均永久返回 `provisioning_readonly_write_forbidden`，且不调用写回调；
+- 数据库、连接、timeout、行 Shape、enum 和时间异常只映射为固定低敏错误码，不向调用方返回 SQL、连接信息、双键、数据库正文或原始异常。
+
+验证结果：
+
+- Context Policy 测试：23 个通过；
+- 只读 PostgreSQL Adapter 测试：26 个通过；
+- Provisioning 定向契约集：6 个测试文件、112 个测试通过；
+- 固定本地验收库只读 smoke：`local_readonly_adapter_smoke=pass`；
+- smoke 前后 Journal 均为 39、`tenants` 均为 2，三个 A1 表均为 0；
+- smoke 只使用明显不存在的合成双键，不读取真实 tenantId 或业务行，临时脚本已经删除。
+
+当前 Runner CLI 仍未组合该 Context Policy 与真实 Adapter，execute Adapter 仍不存在，直接运行仍按既有契约 fail-closed。本阶段没有创建或读取真实 Manifest，没有运行 Runner dry-run／`--execute`，没有签发 Lease，没有执行 Provisioning，也没有启动 A2-P1／P2。真实本地 Runner dry-run 只能在独立 handoff 与用户明确授权后的 Stage D 中运行。
+
+Stage C 仍需通过独立 handoff 和用户授权形成本地验收 Manifest 候选与审批包。Stage B 完成不代表真实 Manifest 已批准、真实 dry-run 已执行、A2-P1 已就绪、MIG-01 已关闭或 Reader 已放行。
