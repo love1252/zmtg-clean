@@ -652,3 +652,15 @@
 - PR #823 与本次四文件 handoff 的 Runtime、Schema、Migration 修改均为 0。
 - 唯一下一任务为 `V2-MIG01-A2-STAGE-D-LOCAL-DRY-RUN-VALIDATION-01`：基于已审核 Approved Manifest 的本地只读 dry-run 验证。
 - Stage D、A2-P1、A2-P2、BASE-02、Writer、Reader、平台切片与机构端旧任务均未启动。
+
+## 2026-07-31：MIG-01A2 Stage D 收口并冻结 A2-P1 下一任务
+
+- PR #825 完成 Stage D 本地只读 dry-run 报告，最终 Head `151b6316e42bd6f9b0d5d6efcf96afe568675a4d`，Merge Commit `e6bfd470fb521fcd18e8093024efcdf0a56ab63c`。
+- PR #825 Required Check Run `30558783297`／Job `90926083649` 对应最终 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #826 保留首轮 F01 历史并完成归因修正复审，重放后 Head `3e364afb7e1880c4b06ad92788cfb1a8d3972839`，Merge Commit `b514ee04c35c7ddb830787e0ad579f3b0469379c`。
+- PR #826 Required Check Run `30561620736`／Job `90935814730` 对应重放后 Head，全部质量步骤成功，build 未跳过。
+- Stage D 五项低敏计数 `input／insertedCandidate／reusedCandidate／conflict／unexpected` 为 `1／1／0／0／0`，计数守恒；dry-run 前后数据库状态一致。
+- F01 已关闭；独立审查结论为 `stage_d_independent_review=passed`，Stage D handoff 准入为 `true`，A2-P1 准入仍为 `false`。
+- 数据库写入、Lease、`--execute`、Migration、Seed、DDL、DML 均为 0；Stage D 已完成并收口。
+- 本次四文件 handoff 的 Runtime、Schema、Migration、scripts、tests、CI、package、lock 修改均为 0。
+- 唯一下一任务沿用既有名称 `A2-P1 manifest 驱动 provisioning`；仓库尚无正式任务编号，该任务尚未启动、尚未获得执行授权。
