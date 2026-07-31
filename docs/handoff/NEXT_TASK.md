@@ -2,18 +2,16 @@
 
 ## 当前交接状态
 
-数据库级 `PUBLIC TEMPORARY` 权限调整已经完成低敏证据和独立审查，并依次合并：
+Approved Manifest 重新签发已经完成低敏证据和独立审查，并依次合并：
 
-- 权限决策 PR #833：Head `ab5762bf0ce2442ed021b638164fb258874e0d48`，Merge Commit `8afcc301bae4e4ad7eac03917b906b0ca9d18c0c`，Run `30598201520`／Job `91055097125` 成功；
-- ACL 低敏证据 PR #834：Head `eb6e76b23afd03a4447e082b1e735c59ca3d4990`，Merge Commit `2cf55056ad1182297fb9cc1d2c5c22d4e2ee20c0`，Run `30599333356`／Job `91058440874` 成功；
-- 独立审查 PR #835：Head `00d460f05e8f639738a28b78d4f35d1f38d5cc94`，Merge Commit `66953dfc5086a5d5209b34f709886b0a245f7192`，Run `30599838548`／Job `91059915905` 成功；
-- `PUBLIC TEMPORARY` 已由 `true` 变为 `false`，`PUBLIC CONNECT` 保持 `true`，TEMPORARY allowlist 为 `0`；
-- 撤销执行 `1` 次，条件化回退未命中，回退执行 `0` 次；
-- 其他数据库 ACL、Schema／表／序列／Default Privileges、角色目录与成员关系、Journal、A1 Shape 和固定四表低敏计数均未变化；
-- 固定四表低敏计数前后均为 `2／0／0／0`；
-- 未创建、修改或删除数据库角色，未授予表级 SELECT／INSERT，未签发或消费 Lease，未运行 Runner、dry-run 或 `--execute`；
-- Migration、Seed 和业务 DDL／DML 为 `0`；
-- 独立审查已通过，但专用角色预置与 A2-P1 准入仍为 `false`。
+- 重新签发低敏证据 PR #837：Head `f1c0a92c40eb2de99cb064231c76a201ebfb36eb`，Merge Commit `18bb00356a0f282ca3a9cd75c3f9c6b23f9c10e1`，Run `30624937873`／Job `91137882392` 成功；
+- 独立审查 PR #838：Head `1caa7eaaae8c533e0b957f93e6b3d86c97e18fa8`，Merge Commit `809f7273be8090dc7a8c4e0cf66087309201c10a`，Run `30625623297`／Job `91140082028` 成功；
+- 当前有效 Candidate v2 和 Approved Manifest 数量均精确为 `1`；旧 Approved Manifest 没有恢复、复制或复用；
+- Approved Contract 为 `mig01-a2/v1`，`approvalStatus=approved`，`canonicalization=c14n-v1`；exact shape 和独立 digest 校验通过；
+- Candidate／Approved 文件、目录和 digest 分离，Candidate、Source 与 Review State 未漂移；
+- Generator、Reviewer、Approver 职责分离，Future Operator 未分配；临时资产残留为 `0`；
+- 独立审查结论为 `approved_manifest_reissue_review=passed`，handoff 准入为 `true`，A2-P1 execute 准入仍为 `false`；
+- 数据库连接、角色或 ACL、Lease、Runner、dry-run、`--execute`、Migration、Seed、DDL、DML 均为 `0`。
 
 ## 唯一下一任务
 
@@ -22,7 +20,7 @@ V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01
 专用角色预置与 A2-P1 恢复执行
 ```
 
-该任务名称来自现有 accepted decisions、A2-P1 专项预检、执行计划和 Runbook 的既定边界。本 handoff 只冻结唯一下一任务，不构成专用角色创建、权限授予、Lease 或 A2-P1 执行授权；下一任务尚未启动。
+该任务名称来自现有 accepted decisions、A2-P1 专项预检、执行计划和 Runbook 的既定边界。本 handoff 只重新冻结唯一下一任务，不构成专用角色创建、权限授予、Lease、Runner、dry-run 或 A2-P1 execute 授权；下一任务尚未启动、尚未获得授权。
 
 ## 一、启动前冻结
 
@@ -32,11 +30,11 @@ V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01
 2. 目标仍精确为固定 localhost-only 本地验收数据库，任何非本地目标立即停止；
 3. `PUBLIC TEMPORARY=false`、`PUBLIC CONNECT=true`，其他数据库 ACL、Schema／表／序列／Default Privileges 与已合并证据一致；
 4. 非超级用户登录角色、活动非管理员连接、临时 Schema、临时对象和 TEMPORARY allowlist 仍为 `0`；
-5. Approved Manifest、Candidate 隔离、Context Policy、Journal、A1 Shape、固定四表低敏计数和最新已验证恢复点均有效；
+5. Approved Manifest 数量、权限、有效期、撤销状态、Candidate 隔离、Context Policy、Journal、A1 Shape、固定四表低敏计数和最新已验证恢复点均有效；
 6. 独立 Authority、Execution Lease、Operator 职责分离和受信时间边界可以实时证明；
 7. 既有 Runner、ReadOnly Adapter 与 Write Adapter 契约均未漂移，A2-P1 仍只有一个写入口。
 
-本次 ACL 调整后的状态不得作为永久事实继承。任一实时事实不满足时，未来任务必须保持零角色变更、零权限授予、零 Lease 和零 A2-P1 执行并停止。
+本次 Approved Manifest 重新签发与既有 ACL 调整状态均不得作为永久事实继承。任一实时事实不满足时，未来任务必须保持零角色变更、零权限授予、零 Lease、零 Runner 执行和零 A2-P1 execute 并停止。
 
 ## 二、专用角色与权限边界
 
@@ -81,7 +79,10 @@ V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01
 PUBLIC TEMPORARY 权限决策（已完成，PR #833）
 → ACL 调整低敏证据（已完成，PR #834）
 → ACL 独立审查（已完成，PR #835）
-→ ACL handoff（本次收口）
+→ ACL handoff（已完成）
+→ Approved Manifest 重新签发低敏证据（已完成，PR #837）
+→ Approved Manifest 重新签发独立审查（已完成，PR #838）
+→ Approved Manifest 重新签发 handoff（本次收口）
 → 专用角色预置与 A2-P1 恢复执行（唯一下一任务，未启动、未授权）
 → A2-P1 低敏执行证据
 → A2-P1 独立审查
