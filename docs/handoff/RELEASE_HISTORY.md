@@ -762,3 +762,17 @@
 - metadata 实施边界冻结为独立 P0 两文件校准／handoff，再申请 P1 四文件核心 Schema／Migration；`0039` 未批准、未预留、未占用。
 - 本阶段数据库写入、Schema、Migration、journal、snapshot、DDL、DML、Seed、Restore、Migration Lease 和编号占用均为 `0`；Runtime、scripts、tests、CI、package、lock 修改均为 `0`。
 - 唯一下一任务为 `A2-P2 Schema／Migration 实施`，仓库尚无正式任务编号；P0、P1、数据库执行、BASE-02、Writer、MIG-01B／C 和 Reader 均未启动、未授权。
+
+## 2026-07-31：A2-P2 P0 metadata current 校准、独立审查与 handoff
+
+- PR #846 完成 P0 两文件 current 口径校准，Head `df15c70436f4cda3085847e1b221202a74a2b299`，Merge Commit `daf07fbd632cb4276fde911e073521483e409baf`。
+- PR #846 Required Check Run `30637892951`／Job `91180059088` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #847 完成 P0 独立审查，Head `b9632ab3a8c4bc1fb83e808f4ec98af2c75cb2e9`，Merge Commit `326260fec24112ffcb2ff3828c8c4398ad43f2b9`。
+- PR #847 Required Check Run `30638717649`／Job `91182885954` 对应冻结 Head，全部质量步骤成功，完整测试和 build 均实际执行。
+- P0 实际修改为 `docs/operations/drizzle-migration-snapshot-strategy.md` 与 `src/server/db/tests/ProductionReadinessDocs.test.ts`；current journal 改为从 `_journal.json` 最后一条 tag 动态推导并与实际 SQL 集合核验，不再依赖陈旧编号断言。
+- PR #846／#847 审查时 journal 为 `39` 条、对应 `39` 个 SQL，末项为 0038；该数值只作为合并时证据，不是永久硬编码的 current 契约。
+- snapshot 保持 `0026_snapshot.json`；journal 与 snapshot 可以阶段性不同步，`db:generate` 与 snapshot-diff Migration 禁令未弱化。
+- P0 修改运维文档 `1`、测试文件 `1`；Runtime、Schema、Migration SQL、journal、snapshot、数据库、CI、package 和 lock 修改均为 `0`。本次四文件 handoff 的上述修改同样均为 `0`。
+- 未创建 Migration Lease，未连接数据库，未运行 `db:generate`、Migration、Seed、DDL 或 DML；`0039` 未批准、未预留、未占用，未来编号只能在独立 Migration Lease 下实时分配。
+- 独立审查结论为 `a2_p2_p0_review=passed`，面向 P1 的 handoff 准入为 `true`（仅可申请授权），Schema／Migration 执行准入为 `false`。
+- 唯一下一任务为 `A2-P2 P1 核心 Schema／Migration 实施`，仓库尚无正式任务编号；P1、BASE-02、Writer、MIG-01B／C 和 Reader 均未启动、未授权。

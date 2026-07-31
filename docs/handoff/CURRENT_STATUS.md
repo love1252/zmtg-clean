@@ -2,68 +2,65 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## MIG-01A2 A2-P2 只读预检与独立审查 handoff 状态
+## MIG-01A2 A2-P2 P0 metadata current 校准 handoff 状态
 
 - 更新日期：2026-07-31
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前任务：`A2-P2 复合键／索引／NOT VALID 关系只读预检、独立审查与实施冻结`
+- 当前任务：`A2-P2 P0 metadata current 口径校准、独立审查与 handoff`
 - 正式任务编号：无；本轮未新增 `V2-*` 编号
-- 当前阶段：A2-P2 只读 Catalog／数据 Shape 预检、独立审查与 handoff 已完成
-- 只读预检：PR #843，Head `0d5cf44273d4ca6a12c857f605c8bd07e4656759`，Merge Commit `683668a584670bb9b9431582cb5eae918d38eee1`
-- PR #843 Required Check：Run `30633506572`／Job `91165285987`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- 独立审查：PR #844，Head `eba90d153e25f00e43651e6ce01fd8f7ef6be156`，Merge Commit `6460516d9a172a9bdaa5681b4b3407a7d212f54c`
-- PR #844 Required Check：Run `30634548162`／Job `91168725451`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- 当前证据：`docs/operations/mig01-a2-p2-catalog-data-shape-readonly-preflight-20260731.md`、`docs/operations/mig01-a2-p2-catalog-data-shape-independent-review-20260731.md`
-- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：`0`
+- 当前阶段：P0 两文件校准、独立审查与 handoff 已完成
+- P0 校准：PR #846，Head `df15c70436f4cda3085847e1b221202a74a2b299`，Merge Commit `daf07fbd632cb4276fde911e073521483e409baf`
+- PR #846 Required Check：Run `30637892951`／Job `91180059088`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- P0 独立审查：PR #847，Head `b9632ab3a8c4bc1fb83e808f4ec98af2c75cb2e9`，Merge Commit `326260fec24112ffcb2ff3828c8c4398ad43f2b9`
+- PR #847 Required Check：Run `30638717649`／Job `91182885954`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- 当前证据：`docs/operations/drizzle-migration-snapshot-strategy.md`、`src/server/db/tests/ProductionReadinessDocs.test.ts`、`docs/operations/a2-p2-p0-metadata-current-independent-review-20260731.md`
+- P0 实际修改为运维文档 `1`、测试文件 `1`；Runtime、Schema、Migration SQL、journal、snapshot、数据库、CI、package、lock 修改均为 `0`
+- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改均为 `0`
 
-### Catalog 与数据 Shape 当前事实
+### P0 current 口径当前事实
 
-- 只读探针固定使用 localhost-only `local_acceptance`、`REPEATABLE READ + READ ONLY`、固定 SELECT 白名单和事务回滚；数据库写入为 `0`
-- `institution_scopes_pk` 为 `(tenant_id, institution_id)` 当前复合主键，列序和引用目标唯一
-- `auth_account_institution_bindings` 的 tenant／institution 列均为 `varchar(64) NOT NULL`，Catalog 序位为 `3／4`
-- 候选对象分类为 `all_missing`；部分对象、同名异定义、等价异名和未知依赖均为 `0`
-- Binding 总行数为 `1`，tenant／institution NULL 为 `0／0`，重复复合键为 `0`，历史 orphan 为 `1`
-- 历史 orphan 已解释为 A2-P1 前的 Binding，但尚未修复或验证；它支持窄范围 `NOT VALID` 创建，不支持 `VALIDATE`、回填、BASE-02 完成或 Reader 放行
-- Scope、Context Version 1、Context Head 1 保持 `1／1／1`；三类关系异常为 `0／0／0`
-- Applied Migration 为 `39`，环境 latest 与仓库 0038 一致，A1 Schema Shape 未漂移；snapshot 仍为 0026
+- current journal 由 `drizzle/meta/_journal.json` 最后一条 tag 动态推导，并与实际 Migration SQL stem 集合核验，不再依赖陈旧编号断言
+- PR #846／#847 审查时 journal 为 `39` 条、对应 `39` 个 SQL，末项为 0038；这些数值是合并时证据，不是永久硬编码的 current 契约
+- snapshot 当前仍停留在 `0026_snapshot.json`；journal 与 snapshot 可以在受控边界内阶段性不同步
+- `db:generate` 与 snapshot-diff Migration 继续禁止；未来 snapshot 基线治理必须独立授权
+- 目标环境的实际 Migration 执行状态仍须在未来获授权窗口独立核验，仓库 metadata 不替代环境事实
+- `0039` 仍未批准、未预留、未占用；未来编号只能在独立 Migration Lease 下基于届时最新 journal 实时分配
+- P0 独立审查结论：`a2_p2_p0_review=passed`，`eligible_for_p1_handoff=true`，`eligible_for_schema_migration_execution=false`
 
-### 已冻结的精确方案
+### 已冻结的 P1 边界
 
 - 普通索引：`auth_account_institution_bindings_scope_idx`，表 `public.auth_account_institution_bindings`，列序 `(tenant_id, institution_id)`，非唯一、无 predicate／include／expression
 - `NOT VALID` FK：`auth_account_institution_bindings_scope_fk`，源 `(tenant_id, institution_id)` 指向 `public.institution_scopes(tenant_id, institution_id)`，`MATCH SIMPLE`、`NO ACTION／NO ACTION`、不可延迟并保持未验证
-- metadata 必须先由独立 P0 两文件 PR及 handoff 校准 current 口径；P1 核心 Schema／Migration PR 只允许实时编号 SQL、journal、`schema.ts` 和 `Schema.test.ts`
-- `0039` 只是当前数值候选，未批准、未预留、未占用；编号必须在未来 Migration Lease 下实时分配
+- P1 精确文件候选仍仅为实时编号 SQL、`drizzle/meta/_journal.json`、`src/server/db/schema.ts` 和 `src/server/db/tests/Schema.test.ts`
 - 未来 DDL 与 journal insert 必须位于当前锁定版 Drizzle migrator 的同一外层事务；SQL 文件禁止显式事务控制，并须在 timeout、固定取锁、锁内 guard 和提交前重检下执行
-- 独立审查结论：`a2_p2_preflight_review=passed`，`eligible_for_a2_p2_implementation_handoff=true`，`eligible_for_schema_migration_execution=false`
 
 ### 当前授权与后续门禁
 
-- A2-P1 已完成；A2-P2 Schema／Migration 实施、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 与机构端旧任务均未启动
-- 本轮 Schema／Migration 文件、journal、snapshot 修改，以及 DDL、DML、Migration／Seed／Restore 执行、Migration Lease 和编号占用均为 `0`
-- handoff 澄清：历史 orphan 的修复 Owner／动作尚未授权；未来只能由 Access Control／BASE-02
-  Binding 生命周期或独立专项数据修复任务明确处理，禁止从 Binding 反推创建 Scope，也不得由
-  A2-P2／MIG-01B 静默接管
-- 该 orphan 清零前不得完成 BASE-02，MIG-01C 不得执行 `VALIDATE`；这一门禁不表示本轮已经
-  修复、回填、重绑或删除历史 Binding
+- A2-P1 与 P0 已完成；A2-P2 P1 Schema／Migration、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 与机构端旧任务均未启动
+- 本轮未创建 Migration Lease，未连接数据库，未运行 `db:generate`、Migration、Seed、DDL 或 DML
+- historical orphan 数量冻结为 `1`：已解释但未修复／未验证，只支持窄范围 `NOT VALID` 创建，不支持回填、`VALIDATE`、BASE-02 完成或 Reader 放行
+- orphan 修复 Owner／动作尚未授权；只能由未来 Access Control／BASE-02 Binding 生命周期或独立专项数据修复任务处理，禁止从 Binding 反推 Scope，也不得由 A2-P2／MIG-01B 静默接管
+- orphan 清零前不得完成 BASE-02，MIG-01C 不得执行 `VALIDATE`；本 handoff 未修复、回填、重绑或删除历史 Binding
 - A2-P2 不得夹带回填、`VALIDATE CONSTRAINT`、`SET NOT NULL`、Reader 放行、Audit attribution／shape 收紧或 MIG-01C
 - 正式平台服务端授权根仍为缺失，七线正式发布仍为 `0/7`
 
 ### 唯一下一任务
 
-- 任务名称：`A2-P2 Schema／Migration 实施`
+- 任务名称：`A2-P2 P1 核心 Schema／Migration 实施`
 - 任务编号：仓库尚无正式编号，本 handoff 不自行创造
 - 当前状态：尚未启动、尚未获得 Schema／Migration／环境／Migration Lease 或数据库执行授权
-- 该任务内部必须先完成 P0 metadata current 口径独立校准与 handoff，之后才可重新申请 P1 核心 Schema／Migration 授权
-- exact index／FK 已冻结，但未来仍须基于最新 `main` 重做 Catalog／Shape／A2-P1／journal hard gate，并实时取得编号、Lease、恢复点、锁窗口和权限授权
+- P0 与独立审查已合并，只满足未来申请 P1 授权的一项前置，不构成 P1 自动授权
+- P1 仍须基于最新 `main` 重做 Catalog／Shape／A2-P1／journal hard gate，并实时取得编号、Lease、恢复点、锁窗口和权限授权
 - 任何 Base、Catalog、Shape、A2-P1、journal、并发、环境、权限或 Required Check 漂移都必须停止
-- 只有用户对未来任务及对应 P0／P1 文件、Schema、Migration、环境、锁窗口和风险再次明确授权后，才可启动
+- 只有用户对未来 P1 任务及其四文件、Schema、Migration、环境、锁窗口和风险再次明确授权后，才可启动
 
 ```text
-a2_p2_preflight_handoff=completed
-a2_p2_orphan_ownership_clarification=closed
-eligible_for_a2_p2_implementation_authorization=true
+a2_p2_p0_metadata_current=completed
+a2_p2_p0_review=passed
+a2_p2_p0_handoff=completed
+eligible_for_a2_p2_p1_authorization=true
 eligible_for_schema_migration_execution=false
-a2_p2_schema_migration_started=false
+a2_p2_p1_started=false
 ```
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
