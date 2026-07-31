@@ -776,3 +776,24 @@
 - 未创建 Migration Lease，未连接数据库，未运行 `db:generate`、Migration、Seed、DDL 或 DML；`0039` 未批准、未预留、未占用，未来编号只能在独立 Migration Lease 下实时分配。
 - 独立审查结论为 `a2_p2_p0_review=passed`，面向 P1 的 handoff 准入为 `true`（仅可申请授权），Schema／Migration 执行准入为 `false`。
 - 唯一下一任务为 `A2-P2 P1 核心 Schema／Migration 实施`，仓库尚无正式任务编号；P1、BASE-02、Writer、MIG-01B／C 和 Reader 均未启动、未授权。
+
+## 2026-08-01：A2-P2 P1 实施、受控 Migration、独立审查与最终 handoff
+
+- PR #849 完成 P1 四文件核心 Schema／Migration 实施，Head `4b0a0f89f5aa36a9c2283a6a8af18a18fd12fe08`，Merge Commit `036c3198ee038186c36d19f8f57a7a45b965b963`。
+- PR #849 Required Check Run `30645227980`／Job `91204848506` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #850 完成 P1 实施独立审查，Head `24370a0071dd40e01b5d601013e45a28f45d285c`，Merge Commit `57b77a76e55846d14a28bfdf3a8794ba67241a54`。
+- PR #850 Required Check Run `30646526891`／Job `91209147172` 对应冻结 Head，全部质量步骤成功；审查结论为 `a2_p2_p1_implementation_review=passed`。
+- 实时 Migration 编号为 `0039`；P1 实际修改 Migration SQL `1`、journal `1`、Schema `1`、Schema 测试 `1`，snapshot 修改为 `0`。
+- 目标对象为普通非唯一索引 `auth_account_institution_bindings_scope_idx` 和 `NOT VALID` 外键 `auth_account_institution_bindings_scope_fk`；外键最终 `convalidated=false`。
+- 固定 localhost-only 本地验收环境只调用一次 guarded `pnpm db:migrate`，attempt／retry 为 `1／0`，`planned／created／reused／conflict／unexpected = 2／2／0／0／0`。
+- 环境 Applied Migration 从 `39` 到 `40`；业务 DML 为 `0`，环境 Migration journal metadata 增加 `1`。
+- A2-P1 Scope／Context Version／Context Head 保持 `1／1／1`；Binding 总数／NULL／重复／historical orphan 保持 `1／0／0／1`。
+- Migration Lease claim／consume／release 为 `1／1／1`，renewal／retry 为 `0／0`；执行前后恢复点、完整性与隔离恢复验证均通过。
+- PR #851 合并 Migration 执行低敏证据，Head `1a832883b20f8e37879f3f740db0cc9cb098aea8`，Merge Commit `e93d180fb7e34a33d2f7e2e70eb4f2eed66790cf`。
+- PR #851 Required Check Run `30648638669`／Job `91216191655` 对应冻结 Head，全部质量步骤成功，完整测试和 build 均实际执行。
+- PR #852 合并执行独立审查，Head `31fdec07abbccb461e7d21299fb8f7f135add7ae`，Merge Commit `96fe2b80f75bc3c2e1f8044b27ff84df64bba2b2`。
+- PR #852 Required Check Run `30649674973`／Job `91219568724` 对应冻结 Head，全部质量步骤成功，build 未跳过。
+- 执行独立审查结论为 `a2_p2_p1_execution_review=passed`、`a2_p2_complete=true`、`eligible_for_base02_handoff=true`、`eligible_for_base02_implementation=false`。
+- 当前主动私有参数披露和真正敏感信息披露均为 `0`；没有第二次 Migration、直接 SQL、回填、外键 `VALIDATE`、`SET NOT NULL` 或第三个人工目标对象。
+- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
+- 唯一下一任务为 `BASE-02 前置规划／准入`，仓库尚无正式任务编号；该任务、historical orphan 数据修复、BASE-02 Runtime、Writer、MIG-01B／C 和 Reader 均未启动、未授权。
