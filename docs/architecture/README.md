@@ -1,11 +1,11 @@
 # 智美天工架构文档索引
 
-- 任务：A2-P2 P0 metadata current 口径校准、独立审查与 handoff（无正式 `V2-*` 编号）
-- 日期：`2026-07-31 CST +0800`
-- 审计基线：`326260fec24112ffcb2ff3828c8c4398ad43f2b9`
+- 任务：A2-P2 P1 核心 Schema／Migration 实施、执行、独立审查与 handoff（无正式 `V2-*` 编号）
+- 日期：`2026-08-01 CST +0800`
+- 审计基线：`96fe2b80f75bc3c2e1f8044b27ff84df64bba2b2`
 - 状态：`current`
 - 文档性质：架构导航索引，不是第二套架构事实源
-- 本次 P0 handoff 文档差异中的 Runtime、Schema、Migration、journal、snapshot、数据库、API、UI 修改：`0`
+- 本次 P1 handoff 文档差异中的 Runtime、Schema、Migration、journal、snapshot、数据库、API、UI 修改：`0`
 
 ## 1. 文档定位
 
@@ -141,6 +141,9 @@ MIG-01A1 Expand
 | [`../operations/mig01-a2-p2-catalog-data-shape-independent-review-20260731.md`](../operations/mig01-a2-p2-catalog-data-shape-independent-review-20260731.md) | `current evidence` | 独立核验对象名称与列序、Catalog 归因、Shape、历史 orphan、P0／P1、事务／锁及 forward-fix；只准入 handoff，不授权 Schema／Migration 执行 |
 | [`../operations/drizzle-migration-snapshot-strategy.md`](../operations/drizzle-migration-snapshot-strategy.md) | `current + target` | 以 journal 最后一条 tag 和实际 SQL 集合动态核验 current Migration，保护 snapshot 0026 事实、阶段性 metadata 差异与 `db:generate`／snapshot-diff 禁令 |
 | [`../operations/a2-p2-p0-metadata-current-independent-review-20260731.md`](../operations/a2-p2-p0-metadata-current-independent-review-20260731.md) | `current evidence` | 独立核验 P0 两文件范围、动态 journal current 口径、snapshot 0026、零 Schema／Migration／metadata／数据库改动与 P1 未授权边界 |
+| [`../operations/mig01-a2-p2-p1-implementation-independent-review-20260731.md`](../operations/mig01-a2-p2-p1-implementation-independent-review-20260731.md) | `current evidence` | 独立核验实时编号 0039、四文件实施、SQL／Schema／journal 一致性、snapshot 不变和 local_acceptance Migration 准入 |
+| [`../operations/mig01-a2-p2-p1-local-acceptance-migration-validation-20260801.md`](../operations/mig01-a2-p2-p1-local-acceptance-migration-validation-20260801.md) | `current evidence` | 记录一次受控 local_acceptance Migration、精确索引与未验证外键、前后低敏计数、Lease、恢复点和零业务 DML 证据 |
+| [`../operations/mig01-a2-p2-p1-local-acceptance-migration-independent-review-20260801.md`](../operations/mig01-a2-p2-p1-local-acceptance-migration-independent-review-20260801.md) | `current evidence` | 独立核验唯一 attempt、事实归因、Catalog、数据不变量、Lease／恢复点终态和 A2-P2 handoff 准入 |
 
 这里的 `human reviewed` 只表示用户允许当前重新签发的 Candidate 作为未来 Approved Manifest 准备依据。Candidate payload 仍为 `candidate`，私有 Review State 仍为 `review_pending`；它不是 Candidate `approved` 状态，也不是 Approved Manifest 的 `approved` 状态。
 
@@ -187,6 +190,8 @@ PR #833 已将数据库级 `PUBLIC TEMPORARY` 权限阻断的方案 A 作为 acc
 PR #843 已完成 A2-P2 localhost-only 显式只读 Catalog／数据 Shape 预检：`institution_scopes_pk(tenant_id, institution_id)` 是唯一引用目标，`auth_account_institution_bindings_scope_idx` 与 `auth_account_institution_bindings_scope_fk` 均为 `all_missing`，部分对象、同名异定义、等价异名和未知依赖为 `0`。Binding 总行数 `1`、NULL `0`、重复 `0`、历史 orphan `1`；该 orphan 已解释但未修复／未验证，只支持窄范围 `NOT VALID` 创建。PR #844 独立审查通过并确认 handoff 准入为 `true`、Schema／Migration 执行准入为 `false`。PR #845 handoff 进一步澄清该 orphan 不属于 MIG-01B，并把后续实施串行为先完成 metadata P0 校准与 handoff、再单独申请 P1；当时 P1 未启动、未授权。
 
 PR #846 已完成 P0 两文件校准：current journal 由 `_journal.json` 最后一条 tag 动态推导并与实际 SQL 集合核验，snapshot 保持 `0026`，`db:generate` 与 snapshot-diff Migration 禁令未弱化。PR #847 独立审查结论为 `a2_p2_p0_review=passed`，面向 P1 的 handoff 准入为 `true`（仅可申请授权）、Schema／Migration 执行准入为 `false`。P0 实际修改为运维文档 `1`、测试文件 `1`；Runtime、Schema、Migration SQL、journal、snapshot、数据库、CI、package 和 lock 修改均为 `0`。P0 收口不批准或占用 `0039`，也不自动授权 P1。
+
+PR #849 在唯一 Migration Lease 下实时分配并实施 `0039_mig_01a2_anchor_bridge`，只修改 Migration SQL、journal、Schema 和 Schema 测试四个文件；PR #850 独立审查通过。随后固定 localhost-only 本地验收环境通过 guarded `pnpm db:migrate` 完成一次且仅一次受控执行，PR #851 合并低敏执行证据，PR #852 完成执行独立审查。环境 Applied Migration 从 `39` 到 `40`，目标索引和外键均精确存在，外键保持 `NOT VALID`；A2-P1 三表保持 `1／1／1`，Binding 总数／NULL／重复／historical orphan 保持 `1／0／0／1`，业务 DML 为 `0`。A2-P2 已具备 handoff 收口条件，但 historical orphan 清零前不得完成 BASE-02、执行外键 `VALIDATE` 或放行 Reader。
 
 文档完成只代表同一套架构 V2 的视图与入口已经建立，不代表 runtime、Schema、Migration、API、UI、Capability、环境或七线正式发布已经完成。
 
@@ -355,9 +360,13 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 → A2-P2 预检 handoff（已完成，PR #845）
 → A2-P2 P0 metadata current 校准（已完成，PR #846）
 → A2-P2 P0 独立审查（已完成，PR #847）
-→ A2-P2 P0 handoff（本次收口）
-→ A2-P2 P1 核心 Schema／Migration 实施（唯一下一任务，未启动、未授权）
-→ BASE-02
+→ A2-P2 P0 handoff（已完成，PR #848）
+→ A2-P2 P1 四文件实施（已完成，PR #849）
+→ A2-P2 P1 实施独立审查（已完成，PR #850）
+→ local_acceptance 单次受控 Migration 与执行证据（已完成，PR #851）
+→ A2-P2 P1 执行独立审查（已完成，PR #852）
+→ A2-P2 P1 最终 handoff（本次收口）
+→ BASE-02 前置规划／准入（唯一下一任务，未启动、未授权）
 → Writer
 → Audit／模板
 → MIG-01B
@@ -365,9 +374,9 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 → Reader
 ```
 
-`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809 已完成本地环境只读预检，PR #811／#812 已完成本地就绪修复 Stage A 与交接，PR #814 已完成本地就绪修复 Stage B，PR #816／#817 已完成 Candidate Governance／Stage C-0 与 handoff，PR #818／#819 已完成 Source／Candidate v2 Governance 与 handoff，PR #820 已完成 Candidate 生成、重新签发和用户人工审核，PR #823 已完成 Approved Manifest 创建与低敏校验，PR #825／#826／#827 已完成 Stage D 与 handoff，PR #828～#832 已完成受控执行计划、Write Adapter Runtime、Authority／组合根无写准备及 handoff，PR #833～#836 已完成数据库级 `PUBLIC TEMPORARY` 权限决策、低敏调整、独立审查及 handoff，PR #837～#839 已完成 Approved Manifest 重新签发、独立审查及 handoff，PR #840～#842 已完成 A2-P1 受控执行、独立审查与 handoff，PR #843～#845 已完成 A2-P2 只读预检、独立审查与 handoff，PR #846／#847 已完成 P0 metadata current 校准与独立审查。本次 handoff 收口后，唯一下一任务为 `A2-P2 P1 核心 Schema／Migration 实施`；仓库尚无正式任务编号，P1 尚未启动、尚未获得 Schema／Migration／环境／Migration Lease 或执行授权。
+`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809 已完成本地环境只读预检，PR #811／#812 已完成本地就绪修复 Stage A 与交接，PR #814 已完成本地就绪修复 Stage B，PR #816／#817 已完成 Candidate Governance／Stage C-0 与 handoff，PR #818／#819 已完成 Source／Candidate v2 Governance 与 handoff，PR #820 已完成 Candidate 生成、重新签发和用户人工审核，PR #823 已完成 Approved Manifest 创建与低敏校验，PR #825／#826／#827 已完成 Stage D 与 handoff，PR #828～#832 已完成受控执行计划、Write Adapter Runtime、Authority／组合根无写准备及 handoff，PR #833～#836 已完成数据库级 `PUBLIC TEMPORARY` 权限决策、低敏调整、独立审查及 handoff，PR #837～#839 已完成 Approved Manifest 重新签发、独立审查及 handoff，PR #840～#842 已完成 A2-P1 受控执行、独立审查与 handoff，PR #843～#845 已完成 A2-P2 只读预检、独立审查与 handoff，PR #846～#848 已完成 P0 metadata current 校准、独立审查与 handoff，PR #849～#852 已完成 P1 四文件实施、两轮独立审查和 local_acceptance 单次受控 Migration。本次 handoff 收口后，唯一下一任务为 `BASE-02 前置规划／准入`；仓库尚无正式任务编号，该任务尚未启动、尚未获得 Runtime、数据修复或数据库执行授权。
 
-治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。PR #809 只读连接了受控 localhost 本地验收库并确认六项阻断；PR #811 关闭本地环境 Journal、A1 Shape 与恢复点三项阻断；PR #814 建立只读 Adapter 与 Context Policy 并关闭 `readonly_adapter_unavailable`；PR #816 建立 Candidate v1 test-only 契约并关闭 `candidate_contract_missing`；PR #818 建立用户授权 Source／Candidate v2 Governance；PR #820 记录 Candidate 低敏验证与人工审核；PR #823 记录 Approved Manifest 创建与校验；PR #825／#826 完成 Stage D；PR #829 建立 Write Adapter；PR #831 完成合成 Authority／组合根无写验证；PR #833～#836 关闭 `PUBLIC TEMPORARY` 阻断；PR #837～#839 完成 Approved Manifest 重新签发；PR #840～#842 完成 A2-P1。PR #843／#844 随后冻结并独立审查 A2-P2 exact index／FK、Catalog、Shape、metadata 和锁边界，PR #846／#847 完成 P0 校准与独立审查；A2-P2 P1 Schema／Migration 实施尚未启动、尚未授权。
+治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。PR #809 只读连接了受控 localhost 本地验收库并确认六项阻断；PR #811 关闭本地环境 Journal、A1 Shape 与恢复点三项阻断；PR #814 建立只读 Adapter 与 Context Policy 并关闭 `readonly_adapter_unavailable`；PR #816 建立 Candidate v1 test-only 契约并关闭 `candidate_contract_missing`；PR #818 建立用户授权 Source／Candidate v2 Governance；PR #820 记录 Candidate 低敏验证与人工审核；PR #823 记录 Approved Manifest 创建与校验；PR #825／#826 完成 Stage D；PR #829 建立 Write Adapter；PR #831 完成合成 Authority／组合根无写验证；PR #833～#836 关闭 `PUBLIC TEMPORARY` 阻断；PR #837～#839 完成 Approved Manifest 重新签发；PR #840～#842 完成 A2-P1。PR #843／#844 随后冻结并独立审查 A2-P2 exact index／FK、Catalog、Shape、metadata 和锁边界，PR #846～#848 完成 P0，PR #849～#852 完成 P1 实施、执行与独立审查；A2-P2 已完成，BASE-02 前置规划／准入尚未启动、尚未授权。
 
 MIG-01 内部候选顺序继续保持：
 
@@ -381,7 +390,7 @@ A2
 → Reader
 ```
 
-本地就绪修复 Stage A、Stage B、Candidate Governance／Stage C-0、Source／Candidate v2 Governance、Stage C Candidate 人工审核、Approved Manifest 创建／校验、Stage D、A2-P1 全链、A2-P2 只读预检与独立审查，以及 metadata P0 校准与独立审查均已完成。exact index／FK、Catalog Shape、historical orphan、P1 metadata 边界和锁／事务边界已经冻结；这不自动授权 A2-P2 P1 实施。唯一下一任务为 `A2-P2 P1 核心 Schema／Migration 实施`，仍须取得独立授权。该顺序不改变 MIG-01～MIG-06 的相对顺序。
+本地就绪修复 Stage A、Stage B、Candidate Governance／Stage C-0、Source／Candidate v2 Governance、Stage C Candidate 人工审核、Approved Manifest 创建／校验、Stage D、A2-P1 全链和 A2-P2 P0／P1 均已完成。索引和 `NOT VALID` FK 已精确进入仓库与固定本地验收环境，historical orphan 仍为 `1`。唯一下一任务为 `BASE-02 前置规划／准入`；它只允许重新冻结静态证据、范围与实施准入，不自动授权 BASE-02 Runtime、orphan 数据修复、FK `VALIDATE`、Writer 或 Reader。该顺序不改变 MIG-01～MIG-06 的相对顺序。
 
 后续既定数据顺序保持：
 

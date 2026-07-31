@@ -2,65 +2,73 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## MIG-01A2 A2-P2 P0 metadata current 校准 handoff 状态
+## MIG-01A2 A2-P2 P1 实施、执行与 handoff 状态
 
-- 更新日期：2026-07-31
+- 更新日期：2026-08-01
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前任务：`A2-P2 P0 metadata current 口径校准、独立审查与 handoff`
+- 当前任务：`A2-P2 P1 核心 Schema／Migration 实施、执行、独立审查与 handoff`
 - 正式任务编号：无；本轮未新增 `V2-*` 编号
-- 当前阶段：P0 两文件校准、独立审查与 handoff 已完成
-- P0 校准：PR #846，Head `df15c70436f4cda3085847e1b221202a74a2b299`，Merge Commit `daf07fbd632cb4276fde911e073521483e409baf`
-- PR #846 Required Check：Run `30637892951`／Job `91180059088`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- P0 独立审查：PR #847，Head `b9632ab3a8c4bc1fb83e808f4ec98af2c75cb2e9`，Merge Commit `326260fec24112ffcb2ff3828c8c4398ad43f2b9`
-- PR #847 Required Check：Run `30638717649`／Job `91182885954`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- 当前证据：`docs/operations/drizzle-migration-snapshot-strategy.md`、`src/server/db/tests/ProductionReadinessDocs.test.ts`、`docs/operations/a2-p2-p0-metadata-current-independent-review-20260731.md`
-- P0 实际修改为运维文档 `1`、测试文件 `1`；Runtime、Schema、Migration SQL、journal、snapshot、数据库、CI、package、lock 修改均为 `0`
-- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改均为 `0`
+- 当前阶段：P1 四文件实施、实施独立审查、local_acceptance 单次受控 Migration 与执行独立审查已完成；本 handoff 正在收口
+- P1 实施：PR #849，Head `4b0a0f89f5aa36a9c2283a6a8af18a18fd12fe08`，Merge Commit `036c3198ee038186c36d19f8f57a7a45b965b963`
+- PR #849 Required Check：Run `30645227980`／Job `91204848506`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- 实施独立审查：PR #850，Head `24370a0071dd40e01b5d601013e45a28f45d285c`，Merge Commit `57b77a76e55846d14a28bfdf3a8794ba67241a54`
+- PR #850 Required Check：Run `30646526891`／Job `91209147172`，全部质量步骤成功
+- 执行低敏证据：PR #851，Head `1a832883b20f8e37879f3f740db0cc9cb098aea8`，Merge Commit `e93d180fb7e34a33d2f7e2e70eb4f2eed66790cf`
+- PR #851 Required Check：Run `30648638669`／Job `91216191655`，全部质量步骤成功
+- 执行独立审查：PR #852，Head `31fdec07abbccb461e7d21299fb8f7f135add7ae`，Merge Commit `96fe2b80f75bc3c2e1f8044b27ff84df64bba2b2`
+- PR #852 Required Check：Run `30649674973`／Job `91219568724`，全部质量步骤成功
+- 当前证据：`docs/operations/mig01-a2-p2-p1-implementation-independent-review-20260731.md`、`docs/operations/mig01-a2-p2-p1-local-acceptance-migration-validation-20260801.md`、`docs/operations/mig01-a2-p2-p1-local-acceptance-migration-independent-review-20260801.md`
+- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
 
-### P0 current 口径当前事实
+### P1 仓库实施终态
 
-- current journal 由 `drizzle/meta/_journal.json` 最后一条 tag 动态推导，并与实际 Migration SQL stem 集合核验，不再依赖陈旧编号断言
-- PR #846／#847 审查时 journal 为 `39` 条、对应 `39` 个 SQL，末项为 0038；这些数值是合并时证据，不是永久硬编码的 current 契约
-- snapshot 当前仍停留在 `0026_snapshot.json`；journal 与 snapshot 可以在受控边界内阶段性不同步
-- `db:generate` 与 snapshot-diff Migration 继续禁止；未来 snapshot 基线治理必须独立授权
-- 目标环境的实际 Migration 执行状态仍须在未来获授权窗口独立核验，仓库 metadata 不替代环境事实
-- `0039` 仍未批准、未预留、未占用；未来编号只能在独立 Migration Lease 下基于届时最新 journal 实时分配
-- P0 独立审查结论：`a2_p2_p0_review=passed`，`eligible_for_p1_handoff=true`，`eligible_for_schema_migration_execution=false`
+- 实时 Migration 编号：`0039`；tag 为 `0039_mig_01a2_anchor_bridge`
+- P1 实际只修改：Migration SQL `1`、journal `1`、Schema `1`、Schema 测试 `1`
+- 仓库 journal 为 `40` 项，最新为 `0039`；snapshot 仍停留在 `0026_snapshot.json`，blob 未变化
+- 普通索引 `auth_account_institution_bindings_scope_idx` 精确为非唯一 btree，列序 `tenant_id, institution_id`，无 predicate／include／expression
+- 外键 `auth_account_institution_bindings_scope_fk` 精确引用 `institution_scopes(tenant_id, institution_id)`，`MATCH SIMPLE`、`NO ACTION／NO ACTION`、非 deferrable，并保持 `NOT VALID`
+- 实施独立审查结论：`a2_p2_p1_implementation_review=passed`，local_acceptance Migration 准入为 `true`，BASE-02 准入为 `false`
 
-### 已冻结的 P1 边界
+### local_acceptance 执行终态
 
-- 普通索引：`auth_account_institution_bindings_scope_idx`，表 `public.auth_account_institution_bindings`，列序 `(tenant_id, institution_id)`，非唯一、无 predicate／include／expression
-- `NOT VALID` FK：`auth_account_institution_bindings_scope_fk`，源 `(tenant_id, institution_id)` 指向 `public.institution_scopes(tenant_id, institution_id)`，`MATCH SIMPLE`、`NO ACTION／NO ACTION`、不可延迟并保持未验证
-- P1 精确文件候选仍仅为实时编号 SQL、`drizzle/meta/_journal.json`、`src/server/db/schema.ts` 和 `src/server/db/tests/Schema.test.ts`
-- 未来 DDL 与 journal insert 必须位于当前锁定版 Drizzle migrator 的同一外层事务；SQL 文件禁止显式事务控制，并须在 timeout、固定取锁、锁内 guard 和提交前重检下执行
+- guarded `pnpm db:migrate` 调用／重试为 `1／0`
+- `planned／created／reused／conflict／unexpected = 2／2／0／0／0`，且 `planned=created+reused`
+- 环境 Applied Migration 从 `39` 到 `40`；准确口径为环境 journal metadata `+1`、业务 DML `0`
+- 索引与外键均精确存在，外键 `convalidated=false`
+- A2-P1 Scope／Context Version／Context Head 保持 `1／1／1`
+- Binding 总数／NULL／重复／historical orphan 保持 `1／0／0／1`
+- 全部公开业务表低敏行数前后不变；没有回填、`VALIDATE`、`SET NOT NULL` 或第三个人工目标对象
+- Migration Lease claim／consume／release 为 `1／1／1`，renewal／retry 为 `0／0`；最终 inactive／consumed／released 为 `true`
+- 执行前后 custom-format 恢复点、archive parse、完整性和隔离恢复验证均通过
+- 当前主动私有参数披露为 `0`，真正敏感信息披露为 `0`；自动本地运维元数据回显事件只累计次数，不复述具体值
+- 执行独立审查结论：`a2_p2_p1_execution_review=passed`，`a2_p2_complete=true`
 
 ### 当前授权与后续门禁
 
-- A2-P1 与 P0 已完成；A2-P2 P1 Schema／Migration、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 与机构端旧任务均未启动
-- 本轮未创建 Migration Lease，未连接数据库，未运行 `db:generate`、Migration、Seed、DDL 或 DML
-- historical orphan 数量冻结为 `1`：已解释但未修复／未验证，只支持窄范围 `NOT VALID` 创建，不支持回填、`VALIDATE`、BASE-02 完成或 Reader 放行
-- orphan 修复 Owner／动作尚未授权；只能由未来 Access Control／BASE-02 Binding 生命周期或独立专项数据修复任务处理，禁止从 Binding 反推 Scope，也不得由 A2-P2／MIG-01B 静默接管
-- orphan 清零前不得完成 BASE-02，MIG-01C 不得执行 `VALIDATE`；本 handoff 未修复、回填、重绑或删除历史 Binding
-- A2-P2 不得夹带回填、`VALIDATE CONSTRAINT`、`SET NOT NULL`、Reader 放行、Audit attribution／shape 收紧或 MIG-01C
+- A2-P2 已具备最终 handoff 收口条件；`eligible_for_base02_handoff=true` 不等于 BASE-02 实施授权
+- historical orphan 仍为 `1`；其 Owner、处理方式、验证与回退必须由未来独立任务冻结
+- orphan 清零前不得完成 BASE-02，不得执行外键 `VALIDATE`，不得放行 Reader
+- Access Control 继续拥有 Membership、Authorization Provenance、Fresh Membership、Anchor 授权证据、Guard 和 Action Policy；不得建立第二套事实源
+- BASE-02 Runtime、Binding 数据修复、Guard、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 与机构端旧任务均未启动、未授权
 - 正式平台服务端授权根仍为缺失，七线正式发布仍为 `0/7`
 
 ### 唯一下一任务
 
-- 任务名称：`A2-P2 P1 核心 Schema／Migration 实施`
+- 任务名称：`BASE-02 前置规划／准入`
 - 任务编号：仓库尚无正式编号，本 handoff 不自行创造
-- 当前状态：尚未启动、尚未获得 Schema／Migration／环境／Migration Lease 或数据库执行授权
-- P0 与独立审查已合并，只满足未来申请 P1 授权的一项前置，不构成 P1 自动授权
-- P1 仍须基于最新 `main` 重做 Catalog／Shape／A2-P1／journal hard gate，并实时取得编号、Lease、恢复点、锁窗口和权限授权
-- 任何 Base、Catalog、Shape、A2-P1、journal、并发、环境、权限或 Required Check 漂移都必须停止
-- 只有用户对未来 P1 任务及其四文件、Schema、Migration、环境、锁窗口和风险再次明确授权后，才可启动
+- 当前状态：尚未启动、尚未授权
+- 只允许未来独立任务重新核对静态证据、冻结范围、风险、测试、停止／回退条件和实施准入
+- 不授权数据库连接、Runtime、Schema、Migration、DML、orphan 修复、FK `VALIDATE`、Writer 或 Reader
+- 只有用户对未来 BASE-02 任务及其文件、数据、环境和风险再次明确授权后，才可启动
 
 ```text
-a2_p2_p0_metadata_current=completed
-a2_p2_p0_review=passed
-a2_p2_p0_handoff=completed
-eligible_for_a2_p2_p1_authorization=true
-eligible_for_schema_migration_execution=false
-a2_p2_p1_started=false
+a2_p2_p1_implementation_review=passed
+a2_p2_p1_execution_review=passed
+a2_p2_p1_handoff=completed
+a2_p2_complete=true
+eligible_for_base02_handoff=true
+eligible_for_base02_implementation=false
+base02_started=false
 ```
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
