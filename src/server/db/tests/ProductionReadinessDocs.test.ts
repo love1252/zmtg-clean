@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -15,6 +15,18 @@ const operationDocs = [
 const migrationRunbook = operationDocs[0];
 const secretRunbook = operationDocs[1];
 const snapshotStrategy = operationDocs[2];
+
+type MigrationJournal = {
+  version: string;
+  dialect: string;
+  entries: Array<{
+    idx: number;
+    version: string;
+    when: number;
+    tag: string;
+    breakpoints: boolean;
+  }>;
+};
 
 describe('production readiness 文档与脚本契约', () => {
   it('db:migrate 不再裸执行 drizzle-kit migrate', () => {
@@ -61,12 +73,53 @@ describe('production readiness 文档与脚本契约', () => {
     expect(migrationRunbook).toContain('不转发 `drizzle-kit` 的 stdout/stderr');
   });
 
-  it('snapshot 策略明确 0034 与 0035 均为已评审手写 SQL 和 journal 记录', () => {
-    expect(snapshotStrategy).toContain('0034_v08_04f_ea_customer_mapping_data_foundation');
-    expect(snapshotStrategy).toContain('0035_v08_04f_fa_trusted_reachout_safety_foundation');
-    expect(snapshotStrategy).toContain('经评审的手写 SQL');
-    expect(snapshotStrategy).toContain('已登记到 journal');
-    expect(snapshotStrategy).toContain('本任务不新增 `0036`');
+  it('current journal 动态决定 latest 并与 Migration SQL 精确一致', () => {
+    const journal = JSON.parse(
+      readFileSync(resolve(rootDir, 'drizzle/meta/_journal.json'), 'utf8'),
+    ) as MigrationJournal;
+    const journalTags = journal.entries.map((entry) => entry.tag);
+    const sqlTags = readdirSync(resolve(rootDir, 'drizzle'))
+      .filter((fileName) => fileName.endsWith('.sql'))
+      .map((fileName) => fileName.slice(0, -'.sql'.length))
+      .sort();
+
+    expect(journal.version).toBe('7');
+    expect(journal.dialect).toBe('postgresql');
+    expect(journal.entries.length).toBeGreaterThan(0);
+    expect(journal.entries.map((entry) => entry.idx)).toEqual(
+      journal.entries.map((_, index) => index),
+    );
+    expect(journal.entries.every((entry) => entry.version === journal.version)).toBe(true);
+    expect(journal.entries.every((entry) => entry.breakpoints)).toBe(true);
+    expect(new Set(journalTags).size).toBe(journalTags.length);
+    expect(
+      journal.entries.slice(1).every((entry, index) => entry.when > journal.entries[index].when),
+    ).toBe(true);
+    expect(sqlTags).toEqual([...journalTags].sort());
+
+    const currentTag = journal.entries.at(-1)?.tag;
+    expect(currentTag).toMatch(/^\d{4}_[a-z0-9_]+$/);
+    expect(snapshotStrategy).toContain(
+      '`current journal` 由 `drizzle/meta/_journal.json` 的最后一项 `tag` 唯一决定',
+    );
+    expect(snapshotStrategy).not.toMatch(/当前 journal 已登记到 `\d{4}`/);
+    expect(snapshotStrategy).not.toMatch(/本任务不新增 `\d{4}`/);
+  });
+
+  it('snapshot 策略保持 0026 baseline 与 db:generate 禁令', () => {
+    const snapshotIndexes = readdirSync(resolve(rootDir, 'drizzle/meta'))
+      .map((fileName) => fileName.match(/^(\d{4})(?:_[^/]*)?_snapshot\.json$/)?.[1])
+      .filter((index): index is string => index !== undefined)
+      .map(Number);
+
+    expect(readdirSync(resolve(rootDir, 'drizzle/meta'))).toContain('0026_snapshot.json');
+    expect(Math.max(...snapshotIndexes)).toBe(26);
+    expect(snapshotStrategy).toContain('最新 snapshot 当前仍为 `drizzle/meta/0026_snapshot.json`');
+    expect(snapshotStrategy).toContain('journal 与 snapshot 可以阶段性不同步');
+    expect(snapshotStrategy).toContain('snapshot 不作为生产执行来源');
+    expect(snapshotStrategy).toContain('禁止运行 `db:generate`');
+    expect(snapshotStrategy).toContain('禁止新增 snapshot-diff Migration');
+    expect(snapshotStrategy).toContain('本文不批准、预留或占用下一个 Migration 编号');
   });
 
   it('secret runbook 只记录变量名并要求 masked existence check', () => {
