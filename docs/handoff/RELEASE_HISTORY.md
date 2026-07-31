@@ -694,3 +694,20 @@
 - Authority／组合根无写准备已完成并收口，但真实签名锚、活动 Authority 记录、Execution Lease、职责分离、权限窗口、最新恢复点和数据库执行前置仍须在唯一执行窗口实时证明。
 - 唯一下一阶段沿用既有名称 `一次受控 local_acceptance execute`；本次 handoff 未连接数据库、未签发 Lease、未授予权限，也未启动 `--execute`。
 - A2-P1 尚未完成；A2-P2、BASE-02、Writer、Reader、平台切片与机构端旧任务均未启动。
+
+## 2026-07-31：A2-P1 PUBLIC TEMPORARY ACL 调整与独立审查收口
+
+- PR #833 合并数据库级 `PUBLIC TEMPORARY` 权限阻断决策，Head `ab5762bf0ce2442ed021b638164fb258874e0d48`，Merge Commit `8afcc301bae4e4ad7eac03917b906b0ca9d18c0c`。
+- PR #833 Required Check Run `30598201520`／Job `91055097125` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- 仅对固定 localhost-only 本地验收数据库执行一次已授权的 `PUBLIC TEMPORARY` 撤销；撤销次数为 `1`，条件化回退未命中，回退次数为 `0`。
+- `PUBLIC TEMPORARY` 由 `true` 变为 `false`，`PUBLIC CONNECT` 保持 `true`，TEMPORARY allowlist 为 `0`。
+- 其他数据库 ACL、Schema／表／序列／Default Privileges、角色目录与成员关系、Journal、A1 Shape 均未变化；固定四表低敏计数前后均为 `2／0／0／0`。
+- PR #834 合并 ACL 调整低敏证据，Head `eb6e76b23afd03a4447e082b1e735c59ca3d4990`，Merge Commit `2cf55056ad1182297fb9cc1d2c5c22d4e2ee20c0`。
+- PR #834 Required Check Run `30599333356`／Job `91058440874` 对应冻结 Head，全部质量步骤成功，build 未跳过。
+- PR #835 合并独立审查，Head `00d460f05e8f639738a28b78d4f35d1f38d5cc94`，Merge Commit `66953dfc5086a5d5209b34f709886b0a245f7192`。
+- PR #835 Required Check Run `30599838548`／Job `91059915905` 对应冻结 Head，全部质量步骤成功，build 未跳过。
+- 独立审查结论为 `public_temporary_acl_independent_review=passed`，ACL handoff 准入为 `true`，专用角色预置和 A2-P1 准入仍为 `false`。
+- 本阶段未创建、修改或删除数据库角色，未授予表级 SELECT／INSERT，未签发或消费 Lease，未运行 Runner、dry-run 或 `--execute`；Migration、Seed 和业务 DDL／DML 为 `0`。
+- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改均为 `0`。
+- 唯一下一任务为 `V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01`（专用角色预置与 A2-P1 恢复执行）；本次只冻结任务名称与边界，尚未启动、尚未获得任务授权。
+- A2-P1 尚未执行；A2-P2、BASE-02、Writer、Reader、平台切片与机构端旧任务均未启动。

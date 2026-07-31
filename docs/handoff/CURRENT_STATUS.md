@@ -2,49 +2,51 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## MIG-01A2 A2-P1 Authority／组合根 handoff 状态
+## MIG-01A2 A2-P1 PUBLIC TEMPORARY ACL handoff 状态
 
 - 更新日期：2026-07-31
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前总任务：`V2-MIG01-A2-P1-MANIFEST-PROVISIONING-END-TO-END-01`
-- 当前阶段：Authority／组合根无写准备、验证与低敏证据已合并，本独立 handoff 正在收口
-- Runtime handoff：PR #830，Head `1d28b6a91bf3b7076f66478861a3a7cc46fdcb18`，Merge Commit `2ca100af132adf6676c09073f5d527c1b608d3ed`
-- PR #830 Required Check：Run `30570185023`／Job `90964638309`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- Authority／组合根低敏证据：PR #831，Head `e427b57cdf810c9021d6beb1738a69f365bd7218`，Merge Commit `2da175330a4e15601c9806f75184df303e8cf2f9`
-- PR #831 Required Check：Run `30571861343`／Job `90970298323`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- 当前证据：`docs/operations/mig01-a2-p1-authority-composition-root-no-write-validation-20260731.md`
+- 当前总任务：`V2-MIG01-A2-P1-PUBLIC-TEMPORARY-ACL-REMEDIATION-01`
+- 当前阶段：数据库级 `PUBLIC TEMPORARY` 权限调整、低敏证据和独立审查均已完成并合并，本独立 handoff 正在收口
+- 权限决策：PR #833，Head `ab5762bf0ce2442ed021b638164fb258874e0d48`，Merge Commit `8afcc301bae4e4ad7eac03917b906b0ca9d18c0c`
+- PR #833 Required Check：Run `30598201520`／Job `91055097125`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- ACL 低敏证据：PR #834，Head `eb6e76b23afd03a4447e082b1e735c59ca3d4990`，Merge Commit `2cf55056ad1182297fb9cc1d2c5c22d4e2ee20c0`
+- PR #834 Required Check：Run `30599333356`／Job `91058440874`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- 独立审查：PR #835，Head `00d460f05e8f639738a28b78d4f35d1f38d5cc94`，Merge Commit `66953dfc5086a5d5209b34f709886b0a245f7192`
+- PR #835 Required Check：Run `30599838548`／Job `91059915905`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- 当前证据：`docs/operations/mig01-a2-p1-public-temporary-acl-remediation-20260731.md`、`docs/operations/mig01-a2-p1-public-temporary-acl-independent-review-20260731.md`
 - 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：0
 
-### Authority／组合根当前事实
+### PUBLIC TEMPORARY ACL 当前事实
 
-- 已接受的执行方式为仓库外、权限受控、一次性组合根；它只调用既有 `runProvisioningCli`，注入 Context Policy、Write Adapter、Lease 与 Authority，不直接执行 SQL，也不复制 Kernel、Manifest parser 或 Repository 映射
-- 合成 Authority 矩阵为 23 个用例：1 个完整匹配允许，22 个漂移、失效、未知或不可用用例全部拒绝
-- 生命周期矩阵 12 个场景通过；client close、权限 revoke 与负向复核、Lease release 与 release 后拒绝、临时资产删除均被独立尝试
-- 静态边界检查 6 项通过；一次性组合根不含 SQL、第二 Runner、Kernel／Manifest parser、Repository 映射或环境变量读取
-- 合成 Runner `--dry-run` 五项计数为 `1／1／0／0／0`
-- 临时 Helper、合成输入和私有临时目录已删除，残留为 0
-- 本阶段真实 Approved Manifest 读取、数据库连接／写入、真实 Authority／Lease 操作、真实 grant／revoke、`--execute`、Migration、Seed、DDL、DML：`0`
-- Authority／组合根无写准备完成不表示真实执行前置已经实时满足，也不表示 A2-P1 已完成
+- 固定 localhost-only 本地验收数据库的变更前硬门全部通过：非超级用户登录角色、活动非管理员连接、临时 Schema、临时对象和既有受控角色 TEMPORARY allowlist 均为 `0`
+- 只执行一次已授权的数据库级 `PUBLIC TEMPORARY` 撤销；撤销次数为 `1`，条件化回退未命中，回退次数为 `0`
+- `PUBLIC TEMPORARY` 由 `true` 变为 `false`；`PUBLIC CONNECT` 保持 `true`
+- 其他数据库 ACL、Schema／表／序列／Default Privileges、角色目录与成员关系均未变化
+- Journal 与 A1 Shape 未变化；固定四表低敏计数前后均为 `2／0／0／0`
+- Migration、Seed 和业务 DDL／DML 为 `0`
+- 独立审查结论为 `public_temporary_acl_independent_review=passed`，ACL handoff 准入为 `true`，专用角色预置和 A2-P1 准入仍为 `false`
+- 本阶段未创建、修改或删除数据库角色，未授予表级 SELECT／INSERT，未签发或消费 Lease，未运行 Runner、dry-run 或 `--execute`
 
 ### 已接受边界与当前阻断
 
+- `PUBLIC TEMPORARY=false` 只关闭数据库级临时对象权限阻断，不构成专用角色创建、表级授权、Execution Lease 或 A2-P1 执行授权
+- 下一任务必须重新实时只读核验 `PUBLIC TEMPORARY=false`、`PUBLIC CONNECT=true` 及完整有效权限；不得把本次执行后状态视为永久事实
 - Runner 继续是 A2-P1 唯一写入口；不得建立第二 Runner、通用 SQL 或旁路写入口
-- 仓库内不引入真实 Authority、私钥、连接或一次性组合根；真实资产必须继续留在仓库外受控边界
-- 真实签名锚、活动 Authority 记录、Execution Lease、Operator 职责分离、权限窗口、最新恢复点和数据库执行证据仍须在唯一执行窗口实时证明
-- outcome-unknown 是后续真实执行的运维停止分类；当前 Runtime 不声称已识别或测试 COMMIT 回包丢失
-- A2-P1 尚未完成，真实执行尚未启动；A2-P2、BASE-02、Writer、Reader 与机构端旧任务均未启动
+- 真实签名锚、活动 Authority 记录、Execution Lease、Operator 职责分离、精确权限窗口、最新恢复点和数据库执行证据仍须重新证明
+- A2-P1 尚未执行；A2-P2、BASE-02、Writer、Reader 与机构端旧任务均未启动
 - A1 仍只完成 Expand；回填、Enforce 和 Reader 放行均未因此完成
 - 正式平台服务端授权根仍为缺失，七线正式发布仍为 0/7
 
-### 唯一下一阶段
+### 唯一下一任务
 
-- 名称：`一次受控 local_acceptance execute`
-- 名称来源：沿用上一 handoff 与架构索引已经冻结的项目级名称；仓库尚无正式任务编号，本 handoff 不自行创建编号
-- 当前状态：本 handoff 中尚未启动；当前总任务已明确授权在本 handoff 合并并完成全部实时前置核验后串行执行
-- 只允许固定 localhost-only `local_acceptance`，使用有效 Approved Manifest、独立 Authority、最长 10 分钟且不可续期的真实 Execution Lease、新 Operator、最新已验证恢复点和精确临时 SELECT／INSERT 权限
-- 执行前预分类必须精确为 `1／1／0／0／0`；只允许既有 Runner 调用一次 `--execute`，禁止重试
-- 任一 Authority、Lease、职责分离、最小权限、Manifest、Journal、Shape、恢复点、并发或计数事实无法证明时立即停止
-- 下一阶段完成后必须创建独立低敏执行证据 PR 与独立审查 PR；不得自动标记 A2-P1 完成或启动 A2-P2
+- 任务编号：`V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01`
+- 任务名称：`专用角色预置与 A2-P1 恢复执行`
+- 当前状态：尚未启动、尚未获得该任务授权；本 handoff 只冻结名称、依赖和停止边界
+- 启动前必须重新冻结最新 `main`、Approved Manifest、Context Policy、恢复点、Authority、Lease、职责分离、连接并发、Journal、Shape、计数和完整有效权限
+- 只有显式授权后，未来任务才可创建专用执行角色、授予并验证精确临时权限，以及在全部硬门满足时恢复一次 A2-P1 执行
+- 任一事实漂移、权限超出 allowlist、对象或数据异常、清理路径不可证明时必须保持 A2-P1 未执行并停止
+- 未来任务完成后仍须独立低敏执行证据、独立审查与最终 handoff；不得自动启动 A2-P2
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
 <!-- PHASE31_FINAL_AUDIT_START -->
