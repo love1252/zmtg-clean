@@ -1,11 +1,11 @@
 # 智美天工架构文档索引
 
-- 任务：`V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01`（A2-P1 最终 handoff 收口）
+- 任务：A2-P2 复合键／索引／`NOT VALID` 关系只读预检、独立审查与实施冻结（无正式 `V2-*` 编号）
 - 日期：`2026-07-31 CST +0800`
-- 审计基线：`3d18054b10eab741b4f0fd6a0d70249a6d36ca97`
+- 审计基线：`6460516d9a172a9bdaa5681b4b3407a7d212f54c`
 - 状态：`current`
 - 文档性质：架构导航索引，不是第二套架构事实源
-- 本次 A2-P1 最终 handoff 文档差异中的 Runtime、Schema、Migration、API、UI 修改：`0`
+- 本次 A2-P2 预检 handoff 文档差异中的 Runtime、Schema、Migration、API、UI 修改：`0`
 
 ## 1. 文档定位
 
@@ -137,6 +137,8 @@ MIG-01A1 Expand
 | [`../operations/mig01-a2-p1-public-temporary-acl-independent-review-20260731.md`](../operations/mig01-a2-p1-public-temporary-acl-independent-review-20260731.md) | `current evidence` | 独立核验 ACL 证据来源、变更前后不变量、零回退与零越界结论；只准入 ACL handoff，不准入专用角色预置或 A2-P1 |
 | [`../operations/mig01-a2-p1-execution-validation-20260731.md`](../operations/mig01-a2-p1-execution-validation-20260731.md) | `current evidence` | 记录固定 localhost-only 本地验收环境的一次 A2-P1 dry-run、一次 `--execute`、三张 A1 表净新增、Execution Lease、临时专用角色最小权限及完整清理；不授权 A2-P2 |
 | [`../operations/mig01-a2-p1-execution-independent-review-20260731.md`](../operations/mig01-a2-p1-execution-independent-review-20260731.md) | `current evidence` | 独立核验 A2-P1 执行状态机、原子事务、数据净影响、恢复点边界、角色／权限／Lease 清理及 `fixed_table_count_drift` 裁决；只准入最终 handoff，不授权 A2-P2 |
+| [`../operations/mig01-a2-p2-catalog-data-shape-readonly-preflight-20260731.md`](../operations/mig01-a2-p2-catalog-data-shape-readonly-preflight-20260731.md) | `current evidence + proposed implementation freeze` | 记录 localhost-only 显式只读 Catalog／Shape 探针、候选四分类、历史 orphan 低敏归因、精确索引／`NOT VALID` FK、metadata 串行前置和零数据库变更边界 |
+| [`../operations/mig01-a2-p2-catalog-data-shape-independent-review-20260731.md`](../operations/mig01-a2-p2-catalog-data-shape-independent-review-20260731.md) | `current evidence` | 独立核验对象名称与列序、Catalog 归因、Shape、历史 orphan、P0／P1、事务／锁及 forward-fix；只准入 handoff，不授权 Schema／Migration 执行 |
 
 这里的 `human reviewed` 只表示用户允许当前重新签发的 Candidate 作为未来 Approved Manifest 准备依据。Candidate payload 仍为 `candidate`，私有 Review State 仍为 `review_pending`；它不是 Candidate `approved` 状态，也不是 Approved Manifest 的 `approved` 状态。
 
@@ -180,6 +182,8 @@ PR #833 已将数据库级 `PUBLIC TEMPORARY` 权限阻断的方案 A 作为 acc
 
 旧 Approved Manifest 不再可用后，PR #837 基于当前有效 Candidate v2 完成全新的 Approved Manifest 重新签发并合并低敏证据，PR #838 完成独立只读审查。当前 Candidate 与 Approved Manifest 数量均精确为 `1`；Approved Contract、exact shape、独立 digest、文件隔离、职责分离和临时资产清理均通过。该结果只准入本次 handoff；数据库连接、角色或 ACL、Lease、Runner、dry-run、`--execute` 和 A2-P1 execute 均未发生。
 
+PR #843 已完成 A2-P2 localhost-only 显式只读 Catalog／数据 Shape 预检：`institution_scopes_pk(tenant_id, institution_id)` 是唯一引用目标，`auth_account_institution_bindings_scope_idx` 与 `auth_account_institution_bindings_scope_fk` 均为 `all_missing`，部分对象、同名异定义、等价异名和未知依赖为 `0`。Binding 总行数 `1`、NULL `0`、重复 `0`、历史 orphan `1`；该 orphan 已解释但未修复／未验证，只支持窄范围 `NOT VALID` 创建。PR #844 独立审查通过并确认 handoff 准入为 `true`、Schema／Migration 执行准入为 `false`。handoff 进一步澄清该 orphan 不属于 MIG-01B：修复 Owner／动作尚未授权，只能由 Access Control／BASE-02 Binding 生命周期或独立专项数据修复任务明确处理，禁止从 Binding 反推 Scope。未来唯一任务为 `A2-P2 Schema／Migration 实施`，但必须先独立完成 metadata P0 校准与 handoff，P1 仍未启动、未授权。
+
 文档完成只代表同一套架构 V2 的视图与入口已经建立，不代表 runtime、Schema、Migration、API、UI、Capability、环境或七线正式发布已经完成。
 
 ### 6.1 当前架构与质量门禁
@@ -203,6 +207,8 @@ PR #833 已将数据库级 `PUBLIC TEMPORARY` 权限阻断的方案 A 作为 acc
 - A2-P1 Write Adapter Runtime：PR #829 Base `184b0320be1bedaace5d72ff0b0e453f343ad52e`／Head `aa465a64aa146a43f766413caa53dfc88a1bd39b`／Merge Commit `bbf15be8f5acd66d80db5ac7b6e9250a57d5744e`，Run `30568943508`／Job `90960419070` 的环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功；定向 4 文件／109 个、完整 Provisioning 14 文件／510 个、完整基线 422 文件／6190 个测试与 build 101／101 通过；
 - A2-P1 Runtime handoff：PR #830 Base `bbf15be8f5acd66d80db5ac7b6e9250a57d5744e`／Head `1d28b6a91bf3b7076f66478861a3a7cc46fdcb18`／Merge Commit `2ca100af132adf6676c09073f5d527c1b608d3ed`，Run `30570185023`／Job `90964638309` 的全部质量步骤成功；
 - A2-P1 Authority／组合根无写证据：PR #831 Base `2ca100af132adf6676c09073f5d527c1b608d3ed`／Head `e427b57cdf810c9021d6beb1738a69f365bd7218`／Merge Commit `2da175330a4e15601c9806f75184df303e8cf2f9`，Run `30571861343`／Job `90970298323` 的环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功；
+- A2-P2 只读预检：PR #843 Base `053108d995e5e0b1ac3cdd7d9ff6ae9e904821ec`／Head `0d5cf44273d4ca6a12c857f605c8bd07e4656759`／Merge Commit `683668a584670bb9b9431582cb5eae918d38eee1`，Run `30633506572`／Job `91165285987` 的全部质量步骤成功；
+- A2-P2 独立审查：PR #844 Base `683668a584670bb9b9431582cb5eae918d38eee1`／Head `eba90d153e25f00e43651e6ce01fd8f7ef6be156`／Merge Commit `6460516d9a172a9bdaa5681b4b3407a7d212f54c`，Run `30634548162`／Job `91168725451` 的全部质量步骤成功；
 - 服务端硬门：`main.protected=true`，Required Check Context 为 `最小架构与质量门禁`，App ID／slug 为 `15368`／`github-actions`，`strict=true`、`enforce_admins=true`、审批数为 `0`；
 - 服务端拒绝：普通 direct push、显式 force-with-lease 和删除受保护分支均被 GitHub 拒绝；不允许管理员 bypass；
 - 合并策略：Stage A 验证 PR 使用 Merge Commit 合并；未启用 Linear History，仓库其他既有合并方法设置未在 Stage A 修改；
@@ -337,8 +343,11 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 → Approved Manifest 重新签发 handoff（已完成，PR #839）
 → 专用角色预置、A2-P1 execute 与低敏证据（已完成，PR #840）
 → A2-P1 独立审查（已完成，PR #841）
-→ A2-P1 最终 handoff（本次收口）
-→ A2-P2 复合键／索引／NOT VALID 关系（唯一下一任务，未启动、未授权）
+→ A2-P1 最终 handoff（已完成，PR #842）
+→ A2-P2 只读 Catalog／数据 Shape 预检（已完成，PR #843）
+→ A2-P2 独立审查（已完成，PR #844）
+→ A2-P2 预检 handoff（本次收口）
+→ A2-P2 Schema／Migration 实施（唯一下一任务，未启动、未授权）
 → BASE-02
 → Writer
 → Audit／模板
@@ -347,9 +356,9 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 → Reader
 ```
 
-`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809 已完成本地环境只读预检，PR #811／#812 已完成本地就绪修复 Stage A 与交接，PR #814 已完成本地就绪修复 Stage B，PR #816／#817 已完成 Candidate Governance／Stage C-0 与 handoff，PR #818／#819 已完成 Source／Candidate v2 Governance 与 handoff，PR #820 已完成 Candidate 生成、重新签发和用户人工审核，PR #823 已完成 Approved Manifest 创建与低敏校验，PR #825／#826／#827 已完成 Stage D 与 handoff，PR #828～#832 已完成受控执行计划、Write Adapter Runtime、Authority／组合根无写准备及 handoff，PR #833～#836 已完成数据库级 `PUBLIC TEMPORARY` 权限决策、低敏调整、独立审查及 handoff，PR #837～#839 已完成 Approved Manifest 重新签发、独立审查及 handoff，PR #840／#841 已完成 A2-P1 受控执行证据和独立审查。本次最终 handoff 收口后，唯一下一任务沿用既有名称 `A2-P2 复合键／索引／NOT VALID 关系`；仓库尚无正式任务编号，该任务尚未启动、尚未获得实施授权。
+`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809 已完成本地环境只读预检，PR #811／#812 已完成本地就绪修复 Stage A 与交接，PR #814 已完成本地就绪修复 Stage B，PR #816／#817 已完成 Candidate Governance／Stage C-0 与 handoff，PR #818／#819 已完成 Source／Candidate v2 Governance 与 handoff，PR #820 已完成 Candidate 生成、重新签发和用户人工审核，PR #823 已完成 Approved Manifest 创建与低敏校验，PR #825／#826／#827 已完成 Stage D 与 handoff，PR #828～#832 已完成受控执行计划、Write Adapter Runtime、Authority／组合根无写准备及 handoff，PR #833～#836 已完成数据库级 `PUBLIC TEMPORARY` 权限决策、低敏调整、独立审查及 handoff，PR #837～#839 已完成 Approved Manifest 重新签发、独立审查及 handoff，PR #840～#842 已完成 A2-P1 受控执行、独立审查与 handoff，PR #843／#844 已完成 A2-P2 只读预检与独立审查。本次 handoff 收口后，唯一下一任务为 `A2-P2 Schema／Migration 实施`；仓库尚无正式任务编号，该任务内部须先完成 metadata P0 独立校准与 handoff，P1 尚未启动、尚未获得 Schema／Migration／环境／Migration Lease 或执行授权。
 
-治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。PR #809 只读连接了受控 localhost 本地验收库并确认六项阻断；PR #811 关闭本地环境 Journal、A1 Shape 与恢复点三项阻断；PR #814 建立只读 Adapter 与 Context Policy 并关闭 `readonly_adapter_unavailable`；PR #816 建立 Candidate v1 test-only 契约并关闭 `candidate_contract_missing`；PR #818 建立用户授权 Source／Candidate v2 治理合约；PR #820 记录当前 Candidate 的低敏验证与人工审核结论；PR #823 记录 Approved Manifest 创建、独立 digest 校验和 Candidate／Approved 分离事实；PR #825／#826 完成 Stage D 只读 dry-run、F01 关闭和独立复审；PR #829 已建立 Write Adapter；PR #831 已完成合成 Authority／组合根无写验证；PR #833～#836 已关闭数据库级 `PUBLIC TEMPORARY` 权限阻断并完成 handoff；PR #837～#839 已完成 Approved Manifest 重新签发与 handoff；PR #840／#841 已完成 A2-P1 一次受控执行的低敏证据和独立审查。dry-run 与 execute 五项计数均为 `1／1／0／0／0`，提交后严格复用分类为 `1／0／1／0／0`，Scope、Context Version 1、Context Head 1 各净新增 `1`；tenant 父表、Journal、Schema Shape 与其他公开业务表计数未发生额外变化。Execution Lease 已释放，client 已关闭，角色已 NOLOGIN、撤权并删除，凭证和临时资产残留为 `0`。独立审查已关闭 `A2P1-F01`；A2-P2 尚未启动、尚未授权。
+治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。PR #809 只读连接了受控 localhost 本地验收库并确认六项阻断；PR #811 关闭本地环境 Journal、A1 Shape 与恢复点三项阻断；PR #814 建立只读 Adapter 与 Context Policy 并关闭 `readonly_adapter_unavailable`；PR #816 建立 Candidate v1 test-only 契约并关闭 `candidate_contract_missing`；PR #818 建立用户授权 Source／Candidate v2 Governance；PR #820 记录 Candidate 低敏验证与人工审核；PR #823 记录 Approved Manifest 创建与校验；PR #825／#826 完成 Stage D；PR #829 建立 Write Adapter；PR #831 完成合成 Authority／组合根无写验证；PR #833～#836 关闭 `PUBLIC TEMPORARY` 阻断；PR #837～#839 完成 Approved Manifest 重新签发；PR #840～#842 完成 A2-P1。PR #843／#844 随后冻结并独立审查 A2-P2 exact index／FK、Catalog、Shape、metadata 和锁边界；A2-P2 Schema／Migration 实施尚未启动、尚未授权。
 
 MIG-01 内部候选顺序继续保持：
 
@@ -363,7 +372,7 @@ A2
 → Reader
 ```
 
-本地就绪修复 Stage A、Stage B、Candidate Governance／Stage C-0、Source／Candidate v2 Governance、Stage C Candidate 人工审核、Approved Manifest 创建／校验、Stage D、A2-P1 受控执行计划、Write Adapter Runtime、Authority／组合根无写准备、数据库级 `PUBLIC TEMPORARY` 权限阻断关闭、Approved Manifest 重新签发以及 A2-P1 一次受控执行与独立审查均已完成。A2-P1 完成不自动授权 A2-P2；D12-A 当前只接受最小 Anchor Bridge 方向，精确对象名称、列序、Catalog Shape、Migration 编号、Migration Lease、锁／timeout 和目标环境仍须在下一独立任务中冻结。该顺序不改变 MIG-01～MIG-06 的相对顺序。
+本地就绪修复 Stage A、Stage B、Candidate Governance／Stage C-0、Source／Candidate v2 Governance、Stage C Candidate 人工审核、Approved Manifest 创建／校验、Stage D、A2-P1 全链以及 A2-P2 只读预检与独立审查均已完成。exact index／FK、Catalog Shape、historical orphan、metadata P0／P1 和锁／事务边界已经冻结；这不自动授权 A2-P2 实施。唯一下一任务 `A2-P2 Schema／Migration 实施` 必须先完成 P0 独立校准与 handoff，再申请 P1 授权。该顺序不改变 MIG-01～MIG-06 的相对顺序。
 
 后续既定数据顺序保持：
 

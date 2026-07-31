@@ -745,3 +745,20 @@
 - 独立审查结论为 `a2_p1_independent_review=passed`，最终 handoff 准入为 `true`，A2-P2 准入为 `false`。
 - 本次最终 handoff 收口 A2-P1；唯一下一任务沿用既有名称 `A2-P2 复合键／索引／NOT VALID 关系`，仓库尚无正式任务编号，该任务尚未启动、尚未获得 Schema／Migration／环境／Migration Lease 或实施授权。
 - D12-A 当前只接受最小 Anchor Bridge 方向；精确对象名称、列序、Catalog Shape、Migration 编号、锁／timeout 和目标环境仍须在未来独立任务中重新冻结。A2-P2 不得包含回填、`VALIDATE CONSTRAINT`、`SET NOT NULL`、Reader 放行、Audit attribution／shape 收紧或 MIG-01C。
+
+## 2026-07-31：A2-P2 只读预检、独立审查与实施冻结 handoff
+
+- PR #842 完成 A2-P1 最终 handoff，Head `49c2b5f25f8f9600cb3fb411b4fbc033ae783cd3`，Merge Commit `053108d995e5e0b1ac3cdd7d9ff6ae9e904821ec`。
+- PR #842 Required Check Run `30630446646`／Job `91155295387` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #843 完成 A2-P2 localhost-only 显式 `READ ONLY` Catalog／数据 Shape 预检，Head `0d5cf44273d4ca6a12c857f605c8bd07e4656759`，Merge Commit `683668a584670bb9b9431582cb5eae918d38eee1`。
+- PR #843 Required Check Run `30633506572`／Job `91165285987` 对应冻结 Head，全部质量步骤成功，build 未跳过。
+- PR #844 完成 A2-P2 独立审查，Head `eba90d153e25f00e43651e6ce01fd8f7ef6be156`，Merge Commit `6460516d9a172a9bdaa5681b4b3407a7d212f54c`。
+- PR #844 Required Check Run `30634548162`／Job `91168725451` 对应冻结 Head，全部质量步骤成功，build 未跳过。
+- `institution_scopes_pk(tenant_id, institution_id)` 已冻结为唯一引用目标；普通索引 `auth_account_institution_bindings_scope_idx` 与 `NOT VALID` 外键 `auth_account_institution_bindings_scope_fk` 均为 `all_missing`。
+- Binding 总行数为 `1`，NULL 和重复均为 `0`，historical orphan 为 `1`；该 orphan 已解释但未修复／未验证，支持窄范围 `NOT VALID` 创建，不支持回填、`VALIDATE`、BASE-02 完成或 Reader 放行。
+- handoff 澄清 historical orphan 不属于 MIG-01B：修复 Owner／动作尚未授权，只能由未来独立授权的 Access Control／BASE-02 Binding 生命周期或专项数据修复任务处理；禁止从 Binding 反推创建 Scope，也不得由 A2-P2／MIG-01B 静默接管。
+- Scope、Context Version 1、Context Head 1 保持 `1／1／1`，环境 latest 与仓库 0038 一致，A1 Shape 未漂移；snapshot 仍为 0026。
+- 独立审查结论为 `a2_p2_preflight_review=passed`，handoff 准入为 `true`，Schema／Migration 执行准入为 `false`。
+- metadata 实施边界冻结为独立 P0 两文件校准／handoff，再申请 P1 四文件核心 Schema／Migration；`0039` 未批准、未预留、未占用。
+- 本阶段数据库写入、Schema、Migration、journal、snapshot、DDL、DML、Seed、Restore、Migration Lease 和编号占用均为 `0`；Runtime、scripts、tests、CI、package、lock 修改均为 `0`。
+- 唯一下一任务为 `A2-P2 Schema／Migration 实施`，仓库尚无正式任务编号；P0、P1、数据库执行、BASE-02、Writer、MIG-01B／C 和 Reader 均未启动、未授权。
