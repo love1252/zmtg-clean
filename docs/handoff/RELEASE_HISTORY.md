@@ -711,3 +711,18 @@
 - 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改均为 `0`。
 - 唯一下一任务为 `V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01`（专用角色预置与 A2-P1 恢复执行）；本次只冻结任务名称与边界，尚未启动、尚未获得任务授权。
 - A2-P1 尚未执行；A2-P2、BASE-02、Writer、Reader、平台切片与机构端旧任务均未启动。
+
+## 2026-07-31：Approved Manifest 重新签发与独立审查收口
+
+- 任务 `V2-MIG01-A2-P1-APPROVED-MANIFEST-REISSUE-AND-REAPPROVAL-01` 在旧 Approved Manifest 不再可用后，基于当前有效 Candidate v2 重新签发全新的 Approved Manifest。
+- PR #837 合并重新签发低敏证据，Head `f1c0a92c40eb2de99cb064231c76a201ebfb36eb`，Merge Commit `18bb00356a0f282ca3a9cd75c3f9c6b23f9c10e1`。
+- PR #837 Required Check Run `30624937873`／Job `91137882392` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #838 合并独立审查，Head `1caa7eaaae8c533e0b957f93e6b3d86c97e18fa8`，Merge Commit `809f7273be8090dc7a8c4e0cf66087309201c10a`。
+- PR #838 Required Check Run `30625623297`／Job `91140082028` 对应冻结 Head，全部质量步骤成功，build 未跳过。
+- 当前 Candidate v2 和 Approved Manifest 数量均精确为 `1`；旧 Approved Manifest 没有恢复、复制或复用。
+- Approved Contract 为 `mig01-a2/v1`，`approvalStatus=approved`，`canonicalization=c14n-v1`；exact shape、独立 digest、Candidate／Approved 文件与 digest 分离均通过。
+- Generator、Reviewer、Approver 职责分离，Future Operator 未分配；私有权限和临时资产清理通过。
+- 独立审查结论为 `approved_manifest_reissue_review=passed`，handoff 准入为 `true`，A2-P1 execute 准入为 `false`。
+- 本阶段数据库连接、角色或 ACL、Lease、Runner、dry-run、`--execute`、Migration、Seed、DDL、DML 均为 `0`；Runtime、Schema、scripts、tests、CI、package、lock 修改均为 `0`。
+- 唯一下一任务重新冻结为 `V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01`；尚未启动，尚未授权角色创建、ACL、Lease、Runner、dry-run 或 `--execute`。
+- A2-P1 execute 尚未启动；A2-P2、BASE-02、Writer、Reader、平台切片与机构端旧任务均未启动。
