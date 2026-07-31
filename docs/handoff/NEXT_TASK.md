@@ -2,92 +2,183 @@
 
 ## 当前交接状态
 
-Approved Manifest 重新签发已经完成低敏证据和独立审查，并依次合并：
+MIG-01A2 A2-P1 已完成一次受控执行、低敏证据与独立审查：
 
-- 重新签发低敏证据 PR #837：Head `f1c0a92c40eb2de99cb064231c76a201ebfb36eb`，Merge Commit `18bb00356a0f282ca3a9cd75c3f9c6b23f9c10e1`，Run `30624937873`／Job `91137882392` 成功；
-- 独立审查 PR #838：Head `1caa7eaaae8c533e0b957f93e6b3d86c97e18fa8`，Merge Commit `809f7273be8090dc7a8c4e0cf66087309201c10a`，Run `30625623297`／Job `91140082028` 成功；
-- 当前有效 Candidate v2 和 Approved Manifest 数量均精确为 `1`；旧 Approved Manifest 没有恢复、复制或复用；
-- Approved Contract 为 `mig01-a2/v1`，`approvalStatus=approved`，`canonicalization=c14n-v1`；exact shape 和独立 digest 校验通过；
-- Candidate／Approved 文件、目录和 digest 分离，Candidate、Source 与 Review State 未漂移；
-- Generator、Reviewer、Approver 职责分离，Future Operator 未分配；临时资产残留为 `0`；
-- 独立审查结论为 `approved_manifest_reissue_review=passed`，handoff 准入为 `true`，A2-P1 execute 准入仍为 `false`；
-- 数据库连接、角色或 ACL、Lease、Runner、dry-run、`--execute`、Migration、Seed、DDL、DML 均为 `0`。
+- 执行低敏证据 PR #840：Head `9a6fb23f1e6a34346cc91e56eacbd6c8c14c6295`，Merge Commit `6c0839a4dc38f51f11449f03548142fa5653a80c`，Run `30628614371`／Job `91149548637` 成功；
+- 独立审查 PR #841：Head `c93b9a0235f799c913bf41dae849a02a0d805867`，Merge Commit `3d18054b10eab741b4f0fd6a0d70249a6d36ca97`，Run `30629405987`／Job `91152028768` 成功；
+- dry-run 与 execute 五项计数均为 `1／1／0／0／0`，execute attempt 为 `1`、retry 为 `0`；
+- 提交后严格复用分类为 `1／0／1／0／0`；
+- Institution Scope、Context Version 1、Context Head 1 各净新增 `1`；
+- tenant 父表、Journal、Schema Shape 和其他公开业务表计数未发生额外变化；
+- `A2P1-F01=closed`，`a2_p1_independent_review=passed`；
+- Execution Lease 已释放，client 已关闭，临时角色已 NOLOGIN、撤权并删除；
+- 活动连接、direct ACL、membership、ownership、sequence 权限、凭证和临时资产残留均为 `0`；
+- 原 Candidate 与原 Approved Manifest 持续保留且未修改；
+- Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package 和 lock 修改均为 `0`。
+
+A2-P1 已完成。该结果不自动授权 A2-P2，不表示 MIG-01A2 或 MIG-01 已关闭，也不放行
+BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C 或 Reader。
 
 ## 唯一下一任务
 
 ```text
-V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01
-专用角色预置与 A2-P1 恢复执行
+A2-P2 复合键／索引／NOT VALID 关系
 ```
 
-该任务名称来自现有 accepted decisions、A2-P1 专项预检、执行计划和 Runbook 的既定边界。本 handoff 只重新冻结唯一下一任务，不构成专用角色创建、权限授予、Lease、Runner、dry-run 或 A2-P1 execute 授权；下一任务尚未启动、尚未获得授权。
+该名称来自 `docs/architecture/v2-mig01-a2-provisioning-preflight.md` 的既有 A2-P1／A2-P2
+严格拆分与候选实施切片。仓库当前没有 `V2-MIG01-A2-P2-*` 正式任务编号，本 handoff 不自行
+创造编号。
 
-## 一、启动前冻结
+当前状态为：未启动、未授权。
 
-未来任务必须先获得用户对任务、数据库权限操作、角色生命周期、Lease 和一次受控执行的明确授权，并按顺序重新证明：
+本文件只冻结唯一下一任务、D12-A 已接受方向、未接受细节、启动硬门和停止边界，不构成
+Schema、Migration、环境、Migration Lease、DDL、数据库连接、Ready 或 Merge 授权。
 
-1. 最新 `main`、执行分支、Base／Head、工作树、Required Check 和受保护分支状态均无漂移；
-2. 目标仍精确为固定 localhost-only 本地验收数据库，任何非本地目标立即停止；
-3. `PUBLIC TEMPORARY=false`、`PUBLIC CONNECT=true`，其他数据库 ACL、Schema／表／序列／Default Privileges 与已合并证据一致；
-4. 非超级用户登录角色、活动非管理员连接、临时 Schema、临时对象和 TEMPORARY allowlist 仍为 `0`；
-5. Approved Manifest 数量、权限、有效期、撤销状态、Candidate 隔离、Context Policy、Journal、A1 Shape、固定四表低敏计数和最新已验证恢复点均有效；
-6. 独立 Authority、Execution Lease、Operator 职责分离和受信时间边界可以实时证明；
-7. 既有 Runner、ReadOnly Adapter 与 Write Adapter 契约均未漂移，A2-P1 仍只有一个写入口。
+## 一、D12-A 已接受方向
 
-本次 Approved Manifest 重新签发与既有 ACL 调整状态均不得作为永久事实继承。任一实时事实不满足时，未来任务必须保持零角色变更、零权限授予、零 Lease、零 Runner 执行和零 A2-P1 execute 并停止。
+当前 accepted 决策只接受最小 Anchor Bridge 方向：
 
-## 二、专用角色与权限边界
+- 复用 `institution_scopes` 当前复合主键方向，不新建第二套 Scope 事实源；
+- 为 `auth_account_institution_bindings` 的 tenant／institution 双键关系建立普通索引候选；
+- 建立指向 `institution_scopes` tenant／institution 关系的 `NOT VALID` FK 候选；
+- 只创建获批关系，不提前验证历史行；
+- 不把更广业务关系、Audit attribution／shape 或 MIG-01C 职责并入 A2-P2。
 
-只有未来任务取得精确授权且启动硬门全部满足后，才允许：
+以上只是方向，不是 exact allowlist 或实施授权。
 
-- 创建单个短生命周期专用执行角色；
-- 只授予数据库连接、目标 Schema 使用、精确表级 SELECT／INSERT 及现有契约证明必需的最小权限；
-- 执行正向允许探针和负向拒绝探针；
-- 在所有可捕获路径撤销临时权限并删除专用角色；
-- 用独立只读探针确认撤权、删除和权限回归。
+## 二、仍未接受和必须重新冻结的细节
 
-不得授予数据库 TEMPORARY、Schema CREATE、全库表权限、UPDATE、UPSERT、DELETE、TRUNCATE、REFERENCES、TRIGGER、sequence、长期继承或未审计权限。若现有 Runtime 需要额外权限，必须停止并形成独立决策，不得现场扩大 allowlist。
+以下事项仍为阻断，不得从 proposed decision pack、历史设计或文件名推断为已接受：
 
-## 三、A2-P1 恢复执行边界
+1. 精确对象名称；
+2. 精确列序；
+3. 当前 Catalog Shape 与依赖关系；
+4. 精确普通索引定义及 predicate；
+5. 精确 `NOT VALID` FK 定义、引用目标和 validation 状态；
+6. 是否存在同名异定义、部分对象或可安全复用对象；
+7. Migration 编号；
+8. Migration Lease 的任务、Holder、分支、Base、Journal、环境、开始、失效、释放和交接；
+9. journal／snapshot metadata 处理方式；
+10. DDL 锁窗口、`lock_timeout`、`statement_timeout` 和事务边界；
+11. 目标环境、恢复点和前向修复窗口；
+12. 最终文件 allowlist、测试 allowlist 和独立用户授权。
 
-专用角色完成最小权限验证不等于 A2-P1 自动获准。恢复执行前仍须重新确认：
+`0039` 不是已批准编号。A2-P2 必须在未来任务中取得新的 Migration Lease 和届时重新分配的
+编号。
 
-- 有效 Approved Manifest、独立 Authority、最长 10 分钟且不可续期的 Execution Lease、新 Operator 和最新恢复点；
-- 执行前预分类五项计数精确为 `1／1／0／0／0`；
-- 不存在并发 Writer、未审计 trigger／rule／RLS 副作用或对象漂移；
-- 既有 Runner 只调用一次 `--execute`，重试为 `0`；
-- outcome-unknown、撤权、Lease release、角色删除和前向修复路径均可证明。
+## 三、启动前硬门
 
-只有以上事实全部通过且用户对未来任务作出明确执行授权，才可恢复一次 A2-P1。任何失败均不得通过调整 Manifest、放宽权限、重复执行或旁路写入追求绿灯。
+未来任务只有在用户对任务、Schema、Migration、环境、锁窗口、风险和 Migration Lease 作出
+新的明确授权后，才可开始。开始前必须逐项实时证明：
 
-## 四、低敏证据与停止条件
+1. 最新 `main`、`origin/main`、分支、Base／Head、工作树、受保护分支和 Required Check 无漂移；
+2. PR #840、PR #841 和本最终 handoff 已合并，A2-P1 低敏计数、独立审查和清理证据完整；
+3. A2-P1 三张目标表仍保持获批终态，`conflict=0`、`unexpected=0`，不存在未解释的额外行或部分 triplet；
+4. tenant 父表、Journal、Schema Shape、enum、约束和索引无漂移；
+5. 对候选对象完成只读 Catalog inventory，能够区分全缺、全一致、部分存在和同名异定义；
+6. 当前数据 shape 能支持获批 `NOT VALID` 关系，且不会把 P1 之外的关系静默纳入；
+7. 首个 journal-backed A2 切片前所需的 metadata current 口径处理已经明确；继续禁止 `db:generate` 和 snapshot-diff Migration；
+8. 新 Migration 编号和 Migration Lease 唯一，作用域、环境、持有者、失效、释放和交接可证明；
+9. DDL 事务、锁、timeout、失败回滚和共享环境 forward-fix 路径已冻结；
+10. 当前恢复点、环境并发、Migration 执行者和部署基线均已获授权核验；
+11. 精确文件列表、约束 allowlist、测试和停止条件获得用户批准。
 
-后续证据只允许记录状态、布尔值、固定版本、计数、Run／Job 和零越界结论；不得记录私有路径、连接参数、双键、digest、角色引用、Manifest 正文、SQL、原始行、签名、私钥、Secret、Token、凭证、PII 或原始异常。
+任一项不能证明时，未来任务保持零 Schema、零 Migration、零 DDL 并停止。
+
+## 四、未来获授权后的候选文件边界
+
+以下只是既有专项预检中的候选文件类型，不是当前授权：
+
+- `drizzle/<届时获批编号>_*.sql`；
+- `src/server/db/schema.ts`；
+- `drizzle/meta/_journal.json`；
+- 经独立 metadata 决策明确允许的必要 metadata；
+- 精确相关的 Schema／Migration／升级回退测试；
+- 必要的低敏执行和独立 handoff 文档。
+
+未来任务必须重新列出精确路径。不得把候选类型解释为通配写权限，也不得顺带修改 API、UI、
+Runner、Kernel、Adapter、package、lock、CI、BASE-02、Writer、Audit、MIG-01B／C 或 Reader。
+
+## 五、A2-P2 实施边界
+
+获得独立授权后，A2-P2 只能：
+
+- 创建 exact allowlist 中的普通索引和 `NOT VALID` 关系；
+- 对全缺且数据 shape、锁窗口满足的对象执行获批创建；
+- 对全量定义一致的既有对象执行只读复用；
+- 在事务和 Catalog 证据中记录 `planned／created／reused／conflict／unexpected`；
+- 保持 `conflict=0`、`unexpected=0`；
+- 保持约束为未验证状态；
+- 在失败时证明事务回滚或按获批前向修复路径停止。
+
+A2-P2 不得：
+
+- 回填任何数据；
+- 执行 `VALIDATE CONSTRAINT`；
+- 执行 `SET NOT NULL`；
+- 删除或替换 tenant-only 历史约束；
+- 预铺未列入 exact allowlist 的业务关系；
+- 收紧 Audit attribution／shape；
+- 修改模板正式版本；
+- 放行 Reader；
+- 启动 BASE-02、Writer、MIG-01B、MIG-01C 或其他后续任务；
+- 使用 `db:generate`、snapshot-diff Migration、管理员绕过、直接 push、force push、Squash 或 Rebase Merge。
+
+## 六、必要验证
+
+未来获授权任务至少必须验证：
+
+1. Schema、SQL、journal 和获批 metadata 一致；
+2. 对象类型、名称、列序、引用目标、predicate 和 validation 状态精确匹配；
+3. 全缺、全一致、部分存在和同名异定义四类 Catalog 场景；
+4. `NOT VALID` 关系保持未验证；
+5. 没有数据回填、数据重写、`VALIDATE` 或 `NOT NULL`；
+6. DDL 事务失败时净对象变化为 `0`；
+7. `planned = created + reused`，且 `conflict=unexpected=0`；
+8. 锁与 timeout 行为符合获批窗口；
+9. `git diff --check`、架构检查器自测、增量架构检查、lint、typecheck、完整测试和 build 全部实际成功；
+10. 新 Head 对应真实 Required Check，build 不得跳过；
+11. 独立审查与后续 handoff 完成前，不得把 A2-P2 标记完成。
+
+## 七、停止与前向修复
 
 出现以下任一情况立即停止：
 
-- 目标、Manifest、Context Policy、Journal、Shape、计数、恢复点或权限状态漂移；
-- 需要修改 Contract、Kernel、Port、Runner、Adapter、Schema 或 Migration；
-- 权限超出 allowlist，或角色撤权／删除、Lease release、client close 无法证明；
-- 需要第二次 `--execute`、自动重试、目标库 Restore 或未授权 DDL／DML；
-- 存在并发写入、未知 COMMIT 结果或无法证明的前向修复路径；
-- 暴露 Secret、Token、密码、私钥、PII、私有路径、连接参数、双键、digest、角色引用或 Manifest 正文。
+- A2-P1 handoff 或计数证据不完整；
+- 最新 Base、Journal、Catalog、数据 shape、恢复点、编号或 Migration Lease 漂移；
+- exact allowlist、对象名称、列序、引用目标、predicate 或 validation 状态不唯一；
+- 出现部分对象、同名异定义、未知依赖或未解释的历史关系；
+- 要求提前回填、`VALIDATE`、`SET NOT NULL`、Reader 放行或扩大到更广业务关系；
+- 需要修改未授权文件、运行 `db:generate` 或建立第二套事实源；
+- 需要绕过 Required Check、分支保护或管理员限制；
+- 无法证明事务回滚、锁窗口、timeout 或共享环境前向修复；
+- 需要读取未授权凭证、连接参数、数据库或业务外部环境。
 
-## 五、后续顺序
+未共享的事务失败必须整体回滚。已在共享环境执行后不得修改旧 SQL／journal、破坏性删除已消费
+关系或伪造成功；必须取得新编号、新 Migration Lease 和新授权，以独立 forward-fix 修复。
+
+## 八、低敏与交付边界
+
+未来文档和 PR 只允许记录必要状态、布尔值、对象类型、获批名称、固定版本、计数、Run／Job 和
+零越界结论。不得记录凭证、连接参数、私有路径、Manifest 正文、双引用、digest、角色引用、
+原始 SQL 结果、Secret、Token、私钥或 PII。
+
+A2-P2 必须使用独立分支、独立单主题 PR 和 Merge Commit。进入 Ready、Merge、环境连接、
+Schema／Migration 变更、Migration Lease 和 DDL 均需要用户对未来任务的明确授权；本 handoff
+不授予这些权限。
+
+## 九、后续顺序
 
 ```text
-PUBLIC TEMPORARY 权限决策（已完成，PR #833）
-→ ACL 调整低敏证据（已完成，PR #834）
-→ ACL 独立审查（已完成，PR #835）
-→ ACL handoff（已完成）
-→ Approved Manifest 重新签发低敏证据（已完成，PR #837）
-→ Approved Manifest 重新签发独立审查（已完成，PR #838）
-→ Approved Manifest 重新签发 handoff（本次收口）
-→ 专用角色预置与 A2-P1 恢复执行（唯一下一任务，未启动、未授权）
-→ A2-P1 低敏执行证据
-→ A2-P1 独立审查
-→ A2-P1 最终 handoff
-→ A2-P2
+A2-P1 最终 handoff（已完成）
+→ A2-P2 复合键／索引／NOT VALID 关系（唯一下一任务，未启动、未授权）
+→ A2-P2 独立审查与 handoff
+→ BASE-02
+→ Writer
+→ Audit／模板
+→ MIG-01B
+→ MIG-01C
+→ Reader
 ```
 
-未来任务不得自动启动 A2-P2、BASE-02、Writer、Reader、平台切片或机构端旧任务。
+未来任务不得自动启动 A2-P2 或任何后续任务。

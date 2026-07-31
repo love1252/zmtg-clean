@@ -2,51 +2,60 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## MIG-01A2 Approved Manifest 重新签发 handoff 状态
+## MIG-01A2 A2-P1 最终 handoff 状态
 
 - 更新日期：2026-07-31
 - V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前总任务：`V2-MIG01-A2-P1-APPROVED-MANIFEST-REISSUE-AND-REAPPROVAL-01`
-- 当前阶段：Approved Manifest 已重新签发，低敏证据和独立审查均已完成并合并，本独立 handoff 正在收口
-- 重新签发低敏证据：PR #837，Head `f1c0a92c40eb2de99cb064231c76a201ebfb36eb`，Merge Commit `18bb00356a0f282ca3a9cd75c3f9c6b23f9c10e1`
-- PR #837 Required Check：Run `30624937873`／Job `91137882392`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- 独立审查：PR #838，Head `1caa7eaaae8c533e0b957f93e6b3d86c97e18fa8`，Merge Commit `809f7273be8090dc7a8c4e0cf66087309201c10a`
-- PR #838 Required Check：Run `30625623297`／Job `91140082028`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- 当前证据：`docs/operations/mig01-a2-approved-manifest-reissue-validation-20260731.md`、`docs/operations/mig01-a2-approved-manifest-reissue-independent-review-20260731.md`
-- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：0
+- 当前总任务：`V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01`
+- 当前阶段：A2-P1 一次受控执行、低敏证据、独立审查与最终 handoff 已完成
+- 执行低敏证据：PR #840，Head `9a6fb23f1e6a34346cc91e56eacbd6c8c14c6295`，Merge Commit `6c0839a4dc38f51f11449f03548142fa5653a80c`
+- PR #840 Required Check：Run `30628614371`／Job `91149548637`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- 独立审查：PR #841，Head `c93b9a0235f799c913bf41dae849a02a0d805867`，Merge Commit `3d18054b10eab741b4f0fd6a0d70249a6d36ca97`
+- PR #841 Required Check：Run `30629405987`／Job `91152028768`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- 当前证据：`docs/operations/mig01-a2-p1-execution-validation-20260731.md`、`docs/operations/mig01-a2-p1-execution-independent-review-20260731.md`
+- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、scripts、tests、CI、package、lock 修改：`0`
 
-### Approved Manifest 重新签发当前事实
+### A2-P1 执行与数据当前事实
 
-- 重新签发启动时 Candidate v2 精确为 `1` 且门禁有效，Approved Manifest 数量为 `0`；旧 Approved Manifest 没有被恢复、复制或复用
-- 新 Approved Manifest 从当前有效 Candidate 重新生成，最终有效数量精确为 `1`
-- Contract 为 `mig01-a2/v1`，`approvalStatus=approved`，`canonicalization=c14n-v1`；exact shape 和独立 digest 校验通过
-- Candidate／Approved 文件、目录和 digest 保持分离；Candidate、Source 与 Review State 未发生内容或文件身份漂移
-- Generator、Reviewer、Approver 职责分离；Future Operator 未分配，后续分配时仍须与 Approver 重新核对
-- 私有治理根权限为 `0700`，相关私有文件为 `0600`，临时 staging／Helper／副本残留为 `0`
-- 独立审查结论为 `approved_manifest_reissue_review=passed`，handoff 准入为 `true`，A2-P1 execute 准入为 `false`
-- 本阶段数据库连接、数据库角色或 ACL、Lease、Runner、dry-run、`--execute`、Migration、Seed、DDL、DML 均为 `0`
+- 使用临时专用非超级用户角色执行一次 dry-run 和一次且仅一次 `--execute`；execute 重试为 `0`
+- dry-run 五项计数为 `input／insertedCandidate／reusedCandidate／conflict／unexpected = 1／1／0／0／0`
+- execute 五项计数为 `1／1／0／0／0`，提交前完整重检通过，提交后严格复用分类为 `1／0／1／0／0`
+- Institution Scope、Context Version 1、Context Head 1 各净新增 `1`
+- tenant 父表、Applied Migration／Journal、Schema Shape 及其他公开业务表计数未发生额外变化；`conflict／unexpected = 0／0`
+- 事务使用既有唯一 Runner、Write Adapter 和单一 `SERIALIZABLE READ WRITE` 边界；没有 UPDATE、UPSERT、DELETE、TRUNCATE、DDL、第二次 `--execute` 或 Runner 外写入
+- `fixed_table_count_drift` 已由独立审查确认为 commit 后复用执行前零行断言产生的过时收尾断言，`A2P1-F01=closed`；无需回滚、前向修复、重试或第二次执行
+- 独立审查结论为 `a2_p1_independent_review=passed`，最终 handoff 准入为 `true`，A2-P2 准入为 `false`
+
+### 角色、Lease、恢复点与低敏清理
+
+- 执行前恢复点 archive parse 与 SHA-256 完整性通过；本轮没有 Restore，也没有新建隔离数据库
+- Execution Lease issue／claim／consume／release 均为 `1`，renewal 为 `0`，release 后重放被拒绝
+- Runner client 已关闭；临时角色已 NOLOGIN、撤销直接权限并删除
+- 最终活动连接、direct ACL、membership、ownership、sequence 权限和非超级用户登录角色均为 `0`
+- 凭证、Authority／Lease 状态、输入副本、Helper 与临时目录残留为 `0`
+- 原 Candidate 和原 Approved Manifest 持续保留且未修改
+- 最终 `PUBLIC TEMPORARY=false`、`PUBLIC CONNECT=true`
+- 私有或敏感输出为 `0`
 
 ### 已接受边界与当前阻断
 
-- 新 Approved Manifest 只恢复了未来执行输入的当前低敏门禁，不构成专用角色创建、表级授权、Execution Lease、Runner 或 A2-P1 execute 授权
-- 下一任务必须重新实时核验 Approved Manifest 数量、权限、有效期、撤销状态、Candidate 隔离、Context Policy 与职责分离；不得把本次审查时点状态视为永久事实
-- 数据库级 `PUBLIC TEMPORARY=false`、`PUBLIC CONNECT=true` 及完整有效权限仍须在未来获授权任务中实时重新证明
-- Runner 继续是 A2-P1 唯一写入口；不得建立第二 Runner、通用 SQL 或旁路写入口
-- 真实签名锚、活动 Authority 记录、Execution Lease、Operator 职责分离、精确权限窗口、最新恢复点和数据库执行证据仍须重新证明
-- A2-P1 尚未执行；A2-P2、BASE-02、Writer、Reader 与机构端旧任务均未启动
-- A1 仍只完成 Expand；回填、Enforce 和 Reader 放行均未因此完成
-- 正式平台服务端授权根仍为缺失，七线正式发布仍为 0/7
+- A2-P1 已完成；该结论不表示 MIG-01A2、MIG-01 或后续数据关闭链已经完成
+- A2-P2、BASE-02、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 与机构端旧任务均未启动
+- D12-A 只接受最小 Anchor Bridge 方向，不接受或授权精确对象名称、列序、Catalog Shape、Migration 编号、锁／timeout 或目标环境
+- A2-P2 必须重新取得 Migration Lease、届时分配的编号、精确 Schema／Migration／环境授权和独立 Required Check；`0039` 不是已批准编号
+- A2-P2 不得包含回填、`VALIDATE CONSTRAINT`、`SET NOT NULL`、Reader 放行、Audit attribution／shape 收紧或 MIG-01C
+- A1 仍只完成 Expand；A2-P1 只完成获批 Scope／Context／Head provisioning，A2-P2 与后续 MIG-01B／C 门禁保持不变
+- 正式平台服务端授权根仍为缺失，七线正式发布仍为 `0/7`
 
 ### 唯一下一任务
 
-- 任务编号：`V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01`
-- 任务名称：`专用角色预置与 A2-P1 恢复执行`
-- 当前状态：尚未启动、尚未获得该任务授权；本 handoff 只冻结名称、依赖和停止边界
-- 当前没有创建角色、修改 ACL、签发或消费 Lease、运行 Runner／dry-run／`--execute` 的授权
-- 启动前必须重新冻结最新 `main`、Approved Manifest、Candidate 隔离、Context Policy、恢复点、Authority、Lease、职责分离、连接并发、Journal、Shape、计数和完整有效权限
-- 只有用户对未来任务再次作出明确授权后，才可创建专用执行角色、授予并验证精确临时权限，以及在全部硬门满足时恢复一次 A2-P1 执行
-- 任一事实漂移、权限超出 allowlist、对象或数据异常、清理路径不可证明时必须保持 A2-P1 未执行并停止
-- 未来任务完成后仍须独立低敏执行证据、独立审查与最终 handoff；不得自动启动 A2-P2
+- 任务名称：`A2-P2 复合键／索引／NOT VALID 关系`
+- 任务编号：仓库尚无正式编号，本 handoff 不自行创造
+- 当前状态：尚未启动、尚未获得 Schema／Migration／环境／Migration Lease 或实施授权
+- 本 handoff 只冻结既有任务名称、D12-A 已接受方向、未接受细节和停止边界
+- 下一任务必须先冻结精确 allowlist、Catalog Shape、对象名称、列序、编号、Migration Lease、metadata 处理、锁／timeout、目标环境、恢复点和完整文件范围
+- 任一事实漂移、部分对象、同名异定义、数据 shape 不明、编号／Lease 冲突或要求提前回填／VALIDATE／NOT NULL 时必须停止
+- 只有用户对未来任务、Schema、Migration、环境、锁窗口和风险再次作出明确授权后，才可启动 A2-P2
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
 <!-- PHASE31_FINAL_AUDIT_START -->

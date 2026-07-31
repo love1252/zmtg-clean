@@ -726,3 +726,22 @@
 - 本阶段数据库连接、角色或 ACL、Lease、Runner、dry-run、`--execute`、Migration、Seed、DDL、DML 均为 `0`；Runtime、Schema、scripts、tests、CI、package、lock 修改均为 `0`。
 - 唯一下一任务重新冻结为 `V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01`；尚未启动，尚未授权角色创建、ACL、Lease、Runner、dry-run 或 `--execute`。
 - A2-P1 execute 尚未启动；A2-P2、BASE-02、Writer、Reader、平台切片与机构端旧任务均未启动。
+
+## 2026-07-31：A2-P1 受控执行、独立审查与最终 handoff 收口
+
+- 任务 `V2-MIG01-A2-P1-DEDICATED-ROLE-PROVISION-AND-EXECUTE-RESUME-01` 在固定 localhost-only 本地验收环境完成一次专用角色 dry-run 和一次且仅一次 A2-P1 `--execute`。
+- PR #840 合并 A2-P1 执行低敏证据，Head `9a6fb23f1e6a34346cc91e56eacbd6c8c14c6295`，Merge Commit `6c0839a4dc38f51f11449f03548142fa5653a80c`。
+- PR #840 Required Check Run `30628614371`／Job `91149548637` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #841 合并 A2-P1 独立审查，Head `c93b9a0235f799c913bf41dae849a02a0d805867`，Merge Commit `3d18054b10eab741b4f0fd6a0d70249a6d36ca97`。
+- PR #841 Required Check Run `30629405987`／Job `91152028768` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- dry-run 五项计数为 `input／insertedCandidate／reusedCandidate／conflict／unexpected = 1／1／0／0／0`；Runner dry-run 调用为 `1`，重试为 `0`。
+- Execution Lease issue／claim／consume／release 均为 `1`，renewal 为 `0`，release 后重放被拒绝。
+- `--execute` attempt 为 `1`、retry 为 `0`，五项计数为 `1／1／0／0／0`；提交后严格复用分类为 `1／0／1／0／0`。
+- Institution Scope、Context Version 1、Context Head 1 各净新增 `1`；tenant 父表、Journal、Schema Shape 与其他公开业务表计数未发生额外变化，`conflict／unexpected = 0／0`。
+- 独立审查关闭 `A2P1-F01`：`fixed_table_count_drift` 是 commit 后复用执行前零行断言产生的过时收尾断言，不是事务失败、数据库漂移或清理失败；无需回滚、前向修复、重试或第二次 `--execute`。
+- Runner client 已关闭；临时角色已 NOLOGIN、撤销直接权限并删除；活动连接、direct ACL、membership、ownership、sequence 权限、凭证、Authority／Lease 状态、输入副本、Helper 与临时目录残留均为 `0`。
+- 原 Candidate 与原 Approved Manifest 持续保留且未修改；最终 `PUBLIC TEMPORARY=false`、`PUBLIC CONNECT=true`。
+- 本阶段 Schema、Migration、Seed、UPDATE、UPSERT、DELETE、TRUNCATE、Runtime／Runner／Kernel／Adapter 修改以及 scripts、tests、CI、package、lock 修改均为 `0`；非 localhost 连接和私有敏感输出均为 `0`。
+- 独立审查结论为 `a2_p1_independent_review=passed`，最终 handoff 准入为 `true`，A2-P2 准入为 `false`。
+- 本次最终 handoff 收口 A2-P1；唯一下一任务沿用既有名称 `A2-P2 复合键／索引／NOT VALID 关系`，仓库尚无正式任务编号，该任务尚未启动、尚未获得 Schema／Migration／环境／Migration Lease 或实施授权。
+- D12-A 当前只接受最小 Anchor Bridge 方向；精确对象名称、列序、Catalog Shape、Migration 编号、锁／timeout 和目标环境仍须在未来独立任务中重新冻结。A2-P2 不得包含回填、`VALIDATE CONSTRAINT`、`SET NOT NULL`、Reader 放行、Audit attribution／shape 收紧或 MIG-01C。
