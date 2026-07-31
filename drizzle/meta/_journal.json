@@ -274,6 +274,13 @@
       "when": 1784688468000,
       "tag": "0038_mig_01a1_institution_isolation_expand",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1785511299153,
+      "tag": "0039_mig_01a2_anchor_bridge",
+      "breakpoints": true
     }
   ]
 }

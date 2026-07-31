@@ -930,6 +930,17 @@ export const authAccountInstitutionBindings = pgTable(
       columns: [table.tenantId, table.accountId],
       foreignColumns: [tenantMembers.tenantId, tenantMembers.userId],
     }),
+    scopeFk: foreignKey({
+      name: 'auth_account_institution_bindings_scope_fk',
+      columns: [table.tenantId, table.institutionId],
+      foreignColumns: [institutionScopes.tenantId, institutionScopes.institutionId],
+    })
+      .onUpdate('no action')
+      .onDelete('no action'),
+    scopeIdx: index('auth_account_institution_bindings_scope_idx').on(
+      table.tenantId,
+      table.institutionId,
+    ),
     activeAccountTenantUniqueIdx: uniqueIndex(
       'auth_account_institution_bindings_active_account_tenant_unique_idx',
     ).on(table.accountId, table.tenantId).where(sql`${table.status} = 'active'`),

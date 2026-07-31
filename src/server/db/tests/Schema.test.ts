@@ -52,6 +52,7 @@ type NamedForeignKey = {
   reference(): {
     columns: readonly NamedColumn[];
     foreignColumns: readonly NamedColumn[];
+    foreignTable?: unknown;
   };
 };
 
@@ -1225,6 +1226,22 @@ describe('数据库结构', () => {
     expect(bindingConfig.indexes.find(index =>
       index.config.name === 'auth_account_institution_bindings_active_account_tenant_unique_idx')
       ?.config.where).toBeDefined();
+    const bindingScopeIndex = bindingConfig.indexes.find(index =>
+      index.config.name === 'auth_account_institution_bindings_scope_idx');
+    expect({
+      name: bindingScopeIndex?.config.name,
+      unique: bindingScopeIndex?.config.unique,
+      method: bindingScopeIndex?.config.method,
+      columns: columnNames((bindingScopeIndex?.config.columns ?? []) as NamedColumn[]),
+    }).toEqual({
+      name: 'auth_account_institution_bindings_scope_idx',
+      unique: false,
+      method: 'btree',
+      columns: ['tenant_id', 'institution_id'],
+    });
+    expect(bindingScopeIndex?.config.where).toBeUndefined();
+    expect(bindingScopeIndex?.config.concurrently).not.toBe(true);
+    expect(bindingScopeIndex?.config.with ?? {}).toEqual({});
     expect(recipientConfig.indexes.find(index =>
       index.config.name === 'wecom_customer_broadcast_recipient_bindings_active_operation_unique_idx')
       ?.config.unique).toBe(true);
@@ -1244,8 +1261,18 @@ describe('数据库结构', () => {
       columns: ['tenant_id', 'account_id'],
       foreignColumns: ['tenant_id', 'user_id'],
     });
+    const bindingScopeFk = bindingConfig.foreignKeys.find(foreignKey =>
+      foreignKey.getName() === 'auth_account_institution_bindings_scope_fk');
+    expect(foreignKeyColumns(bindingScopeFk)).toEqual({
+      columns: ['tenant_id', 'institution_id'],
+      foreignColumns: ['tenant_id', 'institution_id'],
+    });
+    expect(bindingScopeFk?.reference().foreignTable).toBe(institutionScopes);
+    expect((bindingScopeFk as unknown as { onUpdate?: string }).onUpdate).toBe('no action');
+    expect((bindingScopeFk as unknown as { onDelete?: string }).onDelete).toBe('no action');
     expect(bindingConfig.foreignKeys.map(foreignKey => foreignKey.getName())).toEqual([
       'auth_account_institution_bindings_tenant_account_fk',
+      'auth_account_institution_bindings_scope_fk',
     ]);
     expect(foreignKeyColumns(attemptConfig.foreignKeys.find(foreignKey =>
       foreignKey.getName() ===
@@ -3349,5 +3376,263 @@ describe('数据库结构', () => {
     expect(migrationSql).not.toMatch(
       /alter table "(auth_account_institution_bindings|customers|appointments|treatment_summaries|follow_up_tasks|audit_events)" add constraint/i,
     );
+  });
+
+  it('A2-P2 P1 只建立普通双键索引与 NOT VALID Scope 关系', () => {
+    const drizzleDir = join(process.cwd(), 'drizzle');
+    const migrationFiles = readdirSync(drizzleDir).filter((fileName) =>
+      /^\d{4}_mig_01a2_anchor_bridge\.sql$/u.test(fileName));
+    const journal = JSON.parse(
+      readFileSync(join(drizzleDir, 'meta/_journal.json'), 'utf8'),
+    ) as {
+      version: string;
+      dialect: string;
+      entries: Array<{
+        idx: number;
+        tag: string;
+        version: string;
+        when: number;
+        breakpoints: boolean;
+      }>;
+    };
+
+    expect(migrationFiles).toHaveLength(1);
+    const migrationFile = migrationFiles[0]!;
+    const migrationStem = migrationFile.replace(/\.sql$/u, '');
+    const migrationNumber = Number(migrationFile.slice(0, 4));
+    const migrationSql = readFileSync(join(drizzleDir, migrationFile), 'utf8').toLowerCase();
+    const latestEntry = journal.entries.at(-1);
+    const predecessorEntry = journal.entries.at(-2);
+    const predecessorSql = readFileSync(
+      join(drizzleDir, `${predecessorEntry?.tag}.sql`),
+      'utf8',
+    );
+    const predecessorHash = createHash('sha256').update(predecessorSql).digest('hex');
+
+    expect(journal.version).toBe('7');
+    expect(journal.dialect).toBe('postgresql');
+    expect(latestEntry).toEqual({
+      idx: migrationNumber,
+      tag: migrationStem,
+      version: '7',
+      when: expect.any(Number),
+      breakpoints: true,
+    });
+    expect(latestEntry?.when).toBeGreaterThan(predecessorEntry?.when ?? 0);
+    expect(journal.entries.map((entry) => entry.idx)).toEqual(
+      journal.entries.map((_, index) => index),
+    );
+    expect(migrationSql).toContain(
+      `expected_predecessor_count constant integer := ${journal.entries.length - 1}`,
+    );
+    expect(migrationSql).toContain(String(predecessorEntry?.when));
+    expect(migrationSql).toContain(predecessorHash);
+    expect(migrationSql).toContain('expected_predecessor_hash');
+    expect(migrationSql).toContain('a2_p2_p1_journal_drift');
+    expect(migrationSql).toContain('a2_p2_p1_journal_postcheck_failed');
+
+    for (const terminalStateGuard of [
+      'approved_migration_manifest',
+      "source in ('institution_config', 'product_default')",
+      "timezone = 'asia/shanghai'",
+      "currency = 'cny'",
+      'revision = 1',
+      'version = 1',
+      'latest_version = 1',
+      'a2_p2_p1_terminal_state_drift',
+    ]) {
+      expect(migrationSql).toContain(terminalStateGuard);
+    }
+    expect(migrationSql).toMatch(
+      /from public\.institution_scopes\s+where status = 'active'\s+and revision = 1\s+and provisioning_source = 'approved_migration_manifest'/u,
+    );
+    expect(migrationSql).toMatch(
+      /from public\.institution_operating_context_versions\s+where version = 1\s+and source in \('institution_config', 'product_default'\)\s+and timezone = 'asia\/shanghai'\s+and currency = 'cny'/u,
+    );
+    expect(migrationSql).toMatch(
+      /from public\.institution_operating_contexts\s+where revision = 1\s+and latest_version = 1/u,
+    );
+
+    expect(migrationSql).toContain("set local lock_timeout = '1s'");
+    expect(migrationSql).toContain("set local statement_timeout = '5s'");
+    expect(migrationSql).toContain('set local search_path = pg_catalog, public;');
+    const bindingLock =
+      'lock table "public"."auth_account_institution_bindings" in share row exclusive mode;';
+    const scopeLock =
+      'lock table "public"."institution_scopes" in share row exclusive mode;';
+    expect(migrationSql.split(bindingLock)).toHaveLength(2);
+    expect(migrationSql.split(scopeLock)).toHaveLength(2);
+    expect(migrationSql.indexOf(bindingLock)).toBeGreaterThanOrEqual(0);
+    expect(migrationSql.indexOf(scopeLock)).toBeGreaterThanOrEqual(0);
+    expect(migrationSql.indexOf(bindingLock)).toBeLessThan(migrationSql.indexOf(scopeLock));
+    expect(migrationSql).toContain('all_missing');
+    expect(migrationSql).toContain('all_exact');
+    expect(migrationSql).toContain('a2_p2_p1_catalog_conflict');
+    expect(migrationSql).toContain('planned_count <> created_count + reused_count');
+    expect(migrationSql).toContain('conflict_count <> 0');
+    expect(migrationSql).toContain('unexpected_count <> 0');
+    for (const catalogGuard of [
+      'pg_trigger',
+      'pg_rewrite',
+      'relrowsecurity',
+      'relforcerowsecurity',
+      'pg_policy',
+      'pg_inherits',
+      'pg_publication_rel',
+      'pg_depend',
+      "dependency_row.refclassid = 'pg_class'::regclass",
+      'institution_scopes_pk',
+      'a2_p2_p1_scope_primary_index_drift',
+      'auth_account_institution_bindings_pkey',
+      'auth_account_institution_bindings_tenant_account_fk',
+      'auth_account_institution_bindings_active_account_tenant_unique_',
+      'auth_account_institution_bindings_account_tenant_status_idx',
+      'auth_account_institution_bindings_status_shape_check',
+      'auth_account_institution_bindings_expiry_check',
+      'auth_account_institution_bindings_source_authority_check',
+      'auth_account_institution_bindings_version_positive_check',
+      'a2_p2_p1_binding_primary_key_drift',
+      'a2_p2_p1_binding_tenant_account_fk_drift',
+      'a2_p2_p1_binding_index_drift',
+      'a2_p2_p1_binding_check_drift',
+      'a2_p2_p1_binding_catalog_set_drift',
+      'a2_p2_p1_binding_catalog_postcheck_failed',
+      'pre_binding_historical_orphan_count',
+      'post_binding_historical_orphan_count',
+      "binding_row.status = 'active'",
+      'binding_row.created_at <',
+      'regexp_replace(',
+      'pg_get_expr(constraint_row.conbin, constraint_row.conrelid, false)',
+    ]) {
+      expect(migrationSql).toContain(catalogGuard);
+    }
+    const migrationSqlWithAdjacentLiteralsJoined = migrationSql.replace(
+      /'[ \t]*\n[ \t]*'/gu,
+      '',
+    );
+    for (const exactCheckExpression of [
+      "(((status=''active''::auth_institution_binding_status)and(revoked_atisnull)and"
+        + "(institution_idisnotnull))or((status=''revoked''::auth_institution_binding_status)"
+        + 'and(revoked_atisnotnull)and(institution_idisnotnull)and'
+        + '(revoked_at>=assigned_at)))',
+      '((expires_atisnull)or(expires_at>assigned_at))',
+      "((status<>''active''::auth_institution_binding_status)or(source=any(array["
+        + "''manual_admin''::auth_institution_binding_source,"
+        + "''system''::auth_institution_binding_source])))",
+      '(version>0)',
+    ]) {
+      expect(migrationSqlWithAdjacentLiteralsJoined).toContain(exactCheckExpression);
+    }
+    expect(migrationSql).not.toContain(
+      "'auth_account_institution_bindings_active_account_tenant_unique_idx'",
+    );
+
+    const preCatalogSetStart = migrationSql.indexOf('if array(');
+    const preCatalogSetEnd = migrationSql.indexOf(
+      "raise exception using message = 'a2_p2_p1_binding_catalog_set_drift'",
+    );
+    const postCatalogSetStart = migrationSql.indexOf('if array(', preCatalogSetStart + 1);
+    const postCatalogSetEnd = migrationSql.indexOf(
+      "raise exception using message = 'a2_p2_p1_binding_catalog_postcheck_failed'",
+    );
+    expect(preCatalogSetStart).toBeGreaterThanOrEqual(0);
+    expect(preCatalogSetEnd).toBeGreaterThan(preCatalogSetStart);
+    expect(postCatalogSetStart).toBeGreaterThan(preCatalogSetEnd);
+    expect(postCatalogSetEnd).toBeGreaterThan(postCatalogSetStart);
+    const preCatalogSetGuard = migrationSql.slice(preCatalogSetStart, preCatalogSetEnd);
+    const postCatalogSetGuard = migrationSql.slice(postCatalogSetStart, postCatalogSetEnd);
+    expect(preCatalogSetGuard).toContain(
+      "constraint_row.conname <> 'auth_account_institution_bindings_scope_fk'",
+    );
+    expect(preCatalogSetGuard).toContain(
+      "index_relation.relname <> 'auth_account_institution_bindings_scope_idx'",
+    );
+    expect(postCatalogSetGuard).not.toContain(' <> ');
+    for (const knownCatalogName of [
+      'auth_account_institution_bindings_expiry_check',
+      'auth_account_institution_bindings_pkey',
+      'auth_account_institution_bindings_source_authority_check',
+      'auth_account_institution_bindings_status_shape_check',
+      'auth_account_institution_bindings_tenant_account_fk',
+      'auth_account_institution_bindings_version_positive_check',
+      'auth_account_institution_bindings_account_tenant_status_idx',
+      'auth_account_institution_bindings_active_account_tenant_unique_',
+    ]) {
+      expect(preCatalogSetGuard).toContain(knownCatalogName);
+      expect(postCatalogSetGuard).toContain(knownCatalogName);
+    }
+    expect(postCatalogSetGuard).toContain('auth_account_institution_bindings_scope_fk');
+    expect(postCatalogSetGuard).toContain('auth_account_institution_bindings_scope_idx');
+
+    for (const phase of ['pre', 'post']) {
+      expect(migrationSql).toMatch(
+        new RegExp(
+          `select count\\(\\*\\) into ${phase}_binding_historical_orphan_count\\s+`
+          + 'from public\\.auth_account_institution_bindings binding_row\\s+'
+          + 'left join public\\.institution_scopes scope_row\\s+'
+          + 'using \\(tenant_id, institution_id\\)\\s+'
+          + 'where scope_row\\.tenant_id is null\\s+'
+          + "and binding_row\\.status = 'active'\\s+"
+          + 'and binding_row\\.created_at < \\(\\s+'
+          + 'select min\\(scope_created\\.created_at\\)\\s+'
+          + 'from public\\.institution_scopes scope_created\\s+\\)',
+          'u',
+        ),
+      );
+    }
+    expect(migrationSql).toContain('or pre_binding_historical_orphan_count <> 1');
+
+    const executedDdl = [...migrationSql.matchAll(/execute\s+((?:'[^']*'\s*)+);/gu)]
+      .map((match) => match[1]!
+        .replace(/'\s*'/gu, '')
+        .replace(/^'|'$/gu, '')
+        .replace(/\s+/gu, ' ')
+        .trim());
+    expect(migrationSql.match(/\bexecute\s+/gu)).toHaveLength(2);
+    expect(migrationSql.match(/\bcreate\s+index\b/gu)).toHaveLength(1);
+    expect(migrationSql.match(/\badd\s+constraint\b/gu)).toHaveLength(1);
+    expect(executedDdl).toHaveLength(2);
+    expect(executedDdl).toEqual([
+      'create index "auth_account_institution_bindings_scope_idx" '
+        + 'on "public"."auth_account_institution_bindings" '
+        + 'using btree ("tenant_id", "institution_id")',
+      'alter table "public"."auth_account_institution_bindings" '
+        + 'add constraint "auth_account_institution_bindings_scope_fk" '
+        + 'foreign key ("tenant_id", "institution_id") '
+        + 'references "public"."institution_scopes" ("tenant_id", "institution_id") '
+        + 'match simple on update no action on delete no action '
+        + 'not deferrable initially immediate not valid',
+    ]);
+    expect(migrationSql).toContain('not constraint_row.convalidated');
+
+    expect(migrationSql).toMatch(
+      /if\s+index_named_count = 0\s+and index_exact_named_count = 0\s+and index_equivalent_count = 0\s+and fk_named_count = 0\s+and fk_exact_named_count = 0\s+and fk_equivalent_count = 0\s+then/iu,
+    );
+    expect(migrationSql).toMatch(
+      /elsif\s+index_named_count = 1\s+and index_exact_named_count = 1\s+and index_equivalent_count = 1\s+and fk_named_count = 1\s+and fk_exact_named_count = 1\s+and fk_equivalent_count = 1\s+then/iu,
+    );
+    expect(migrationSql.match(/a2_p2_p1_catalog_conflict/gu)).toHaveLength(1);
+
+    const sqlWithoutStringLiterals = migrationSql.replace(/'(?:''|[^'])*'/gu, "''");
+    expect(migrationSql).not.toContain('if not exists');
+    expect(migrationSql).not.toContain('duplicate_object');
+    expect(migrationSql).not.toContain('create index concurrently');
+    expect(sqlWithoutStringLiterals).not.toMatch(
+      /\b(start\s+transaction|begin\s+(transaction|work)|commit|rollback|savepoint|release\s+savepoint)\b/iu,
+    );
+    expect(migrationSql).not.toMatch(/(^|\n)\s*begin\s*;/mu);
+    expect(sqlWithoutStringLiterals).not.toMatch(
+      /\b(insert\s+into|update|upsert|delete\s+from|truncate)\b/iu,
+    );
+    expect(migrationSql).not.toMatch(
+      /validate\s+constraint|set\s+not\s+null|alter\s+column|\bdrop\b|\bcascade\b/iu,
+    );
+    expect(migrationSql).not.toMatch(
+      /create\s+unique\s+index|add\s+constraint[^;]+\b(unique|check)\b/iu,
+    );
+    expect(sqlWithoutStringLiterals).not.toMatch(
+      /\b(create\s+(table|type|function|trigger|sequence|view|materialized\s+view|extension)|alter\s+(table|type|column)|grant|revoke|comment\s+on|security\s+label)\b/iu,
+    );
+    expect(migrationSql).not.toContain('retry');
   });
 });
