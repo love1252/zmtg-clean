@@ -596,7 +596,7 @@ BEGIN
   END IF;
 
   IF (
-    SELECT array_agg(enum_row.enumlabel ORDER BY enum_row.enumsortorder)
+    SELECT array_agg(enum_row.enumlabel::text ORDER BY enum_row.enumsortorder)
       IS DISTINCT FROM ARRAY['active', 'revoked', 'deleted']::text[]
     FROM pg_type type_row
     JOIN pg_namespace namespace_row ON namespace_row.oid = type_row.typnamespace
@@ -604,7 +604,7 @@ BEGIN
     WHERE namespace_row.nspname = 'public'
       AND type_row.typname = 'membership_lifecycle_status'
   ) OR (
-    SELECT array_agg(enum_row.enumlabel ORDER BY enum_row.enumsortorder)
+    SELECT array_agg(enum_row.enumlabel::text ORDER BY enum_row.enumsortorder)
       IS DISTINCT FROM
         ARRAY['formal_onboarding', 'access_control_command', 'legacy_calibration']::text[]
     FROM pg_type type_row
@@ -613,7 +613,7 @@ BEGIN
     WHERE namespace_row.nspname = 'public'
       AND type_row.typname = 'membership_provenance_source'
   ) OR (
-    SELECT array_agg(enum_row.enumlabel ORDER BY enum_row.enumsortorder)
+    SELECT array_agg(enum_row.enumlabel::text ORDER BY enum_row.enumsortorder)
       IS DISTINCT FROM
         ARRAY['create', 'refresh', 'revoke', 'reactivate', 'delete', 'legacy_calibration']::text[]
     FROM pg_type type_row

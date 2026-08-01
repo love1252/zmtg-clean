@@ -3952,6 +3952,14 @@ describe('数据库结构', () => {
     expect(migrationSql).toContain(predecessorHash);
     expect(migrationSql).toContain('base02_membership_m1_journal_drift');
     expect(migrationSql).toContain('base02_membership_m1_journal_postcheck_failed');
+    expect(
+      migrationSql.match(
+        /array_agg\(enum_row\.enumlabel::text order by enum_row\.enumsortorder\)/gu,
+      ),
+    ).toHaveLength(3);
+    expect(migrationSql).not.toMatch(
+      /array_agg\(enum_row\.enumlabel\s+order by enum_row\.enumsortorder\)/u,
+    );
 
     expect(migrationSql).toContain("set local lock_timeout = '1s'");
     expect(migrationSql).toContain("set local statement_timeout = '5s'");
