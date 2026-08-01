@@ -147,6 +147,15 @@ describe('租户套餐绑定 service', () => {
         createdAt: new Date('2026-06-23T03:00:00.000Z'),
         updatedAt: new Date('2026-06-23T03:00:00.000Z'),
       },
+      membershipIntent: {
+        membershipId: 'tenant-member-fixed',
+        tenantId: 'tenant-fixed',
+        userId: 'auth-user-fixed',
+        role: 'tenant_admin',
+        displayName: '星澜医美中心',
+        actorId: 'demo-user-platform',
+        occurredAt: '2026-06-23T03:00:00.000Z',
+      },
       assignment: {
         id: 'tenant-plan-assignment-fixed',
         tenantId: 'tenant-fixed',
@@ -263,14 +272,14 @@ describe('租户套餐绑定 service', () => {
           createdBy: 'demo-user-platform',
           updatedBy: 'demo-user-platform',
         }),
-        tenantMember: {
-          id: 'tenant-member-fixed',
+        membershipIntent: {
+          membershipId: 'tenant-member-fixed',
           tenantId: 'tenant-fixed',
           userId: 'auth-user-fixed',
           role: 'tenant_admin',
           displayName: '陈磊',
-          createdAt: new Date('2026-06-25T08:00:00.000Z'),
-          updatedAt: new Date('2026-06-25T08:00:00.000Z'),
+          actorId: 'demo-user-platform',
+          occurredAt: '2026-06-25T08:00:00.000Z',
         },
         tenantContact: {
           id: 'tenant-contact-fixed',
@@ -302,6 +311,18 @@ describe('租户套餐绑定 service', () => {
     );
 
     const call = vi.mocked(repository.createTenantWithPlanAuthorization).mock.calls[0][0];
+    expect(Object.keys(call.membershipIntent).sort()).toEqual([
+      'actorId',
+      'displayName',
+      'membershipId',
+      'occurredAt',
+      'role',
+      'tenantId',
+      'userId',
+    ]);
+    expect(JSON.stringify(call.membershipIntent)).not.toMatch(
+      /commandId|revision|lifecycleStatus|provenance|transition|binding|createdAt|updatedAt/i,
+    );
     expect(JSON.stringify([call.authorizationSnapshot, call.auditEvent, call.accountAuditEvent])).not.toMatch(
       /Init#2026-Strong|scrypt\$|passwordHash|requestBody|select \* from tenants/i,
     );

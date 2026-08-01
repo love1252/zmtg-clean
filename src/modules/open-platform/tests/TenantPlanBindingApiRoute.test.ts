@@ -11,13 +11,34 @@ const routeMocks = vi.hoisted(() => {
     createTenantWithPlanAuthorization: vi.fn(),
   };
   const database = { database: 'tenant-plan-binding-db' };
+  const membershipCommandExternalTransaction = {
+    transactionOptions: {
+      isolationLevel: 'serializable',
+      accessMode: 'read write',
+    },
+    run: vi.fn(),
+  };
 
   return {
     createTenantPlanBindingRepository: vi.fn(() => repository),
+    createMembershipCommandExternalTransactionAdapter: vi.fn(
+      () => membershipCommandExternalTransaction,
+    ),
     database,
     getDatabase: vi.fn(),
     getDemoAccessContextFromRequest: vi.fn(),
+    membershipCommandExternalTransaction,
     repository,
+  };
+});
+
+vi.mock('@/modules/access-control/server/membership-command-external-transaction', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/modules/access-control/server/membership-command-external-transaction')>();
+  return {
+    ...actual,
+    createMembershipCommandExternalTransactionAdapter:
+      routeMocks.createMembershipCommandExternalTransactionAdapter,
   };
 });
 
@@ -134,7 +155,13 @@ beforeEach(() => {
   routeMocks.getDatabase.mockReturnValue(routeMocks.database);
   routeMocks.getDemoAccessContextFromRequest.mockReset();
   routeMocks.getDemoAccessContextFromRequest.mockReturnValue(null);
-  routeMocks.createTenantPlanBindingRepository.mockClear();
+  routeMocks.createMembershipCommandExternalTransactionAdapter.mockReset();
+  routeMocks.createMembershipCommandExternalTransactionAdapter.mockReturnValue(
+    routeMocks.membershipCommandExternalTransaction,
+  );
+  routeMocks.membershipCommandExternalTransaction.run.mockReset();
+  routeMocks.createTenantPlanBindingRepository.mockReset();
+  routeMocks.createTenantPlanBindingRepository.mockReturnValue(routeMocks.repository);
   routeMocks.repository.listPublishedPlanVersions.mockReset();
   routeMocks.repository.findPublishedPlanVersionById.mockReset();
   routeMocks.repository.createTenantWithPlanAuthorization.mockReset();
@@ -191,6 +218,7 @@ describe('租户套餐绑定 API', () => {
 
     expect(response.status).toBe(200);
     expect(routeMocks.createTenantPlanBindingRepository).toHaveBeenCalledWith(routeMocks.database);
+    expect(routeMocks.createMembershipCommandExternalTransactionAdapter).not.toHaveBeenCalled();
     expect(payload.options).toEqual([
       expect.objectContaining({
         planVersionId: 'plan-version-professional-published',
@@ -224,6 +252,15 @@ describe('租户套餐绑定 API', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(201);
+    expect(routeMocks.getDatabase).toHaveBeenCalledTimes(1);
+    expect(routeMocks.createMembershipCommandExternalTransactionAdapter).toHaveBeenCalledTimes(1);
+    expect(routeMocks.createTenantPlanBindingRepository).toHaveBeenCalledWith(
+      routeMocks.database,
+      {
+        membershipCommandExternalTransaction:
+          routeMocks.membershipCommandExternalTransaction,
+      },
+    );
     expect(payload.status).toBe('tenant_created');
     expect(payload.tenant).toEqual(
       expect.objectContaining({
@@ -262,6 +299,8 @@ describe('租户套餐绑定 API', () => {
     expect(optionsResponse.status).toBe(401);
     expect(createResponse.status).toBe(401);
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createMembershipCommandExternalTransactionAdapter).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantPlanBindingRepository).not.toHaveBeenCalled();
   });
 
   it('非 platform_admin 写入返回 403 且不初始化数据库', async () => {
@@ -278,6 +317,8 @@ describe('租户套餐绑定 API', () => {
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ ok: false, errorCode: 'FORBIDDEN' });
     expect(routeMocks.getDatabase).not.toHaveBeenCalled();
+    expect(routeMocks.createMembershipCommandExternalTransactionAdapter).not.toHaveBeenCalled();
+    expect(routeMocks.createTenantPlanBindingRepository).not.toHaveBeenCalled();
   });
 
   it('非法 payload 返回 400 且不泄露请求体敏感字段', async () => {
@@ -334,6 +375,33 @@ describe('租户套餐绑定 API', () => {
     expect(response.status).toBe(503);
     expect(payload).toEqual({ ok: false, errorCode: 'TENANT_PLAN_BINDING_UNAVAILABLE' });
     expectNoSensitivePayload(payload);
+  });
+
+  it('正式 onboarding 组合失败映射为稳定低敏 503', async () => {
+    routeMocks.getDemoAccessContextFromRequest.mockReturnValue(platformAdminContext);
+    routeMocks.createMembershipCommandExternalTransactionAdapter.mockImplementation(
+      () => {
+        throw new Error('DATABASE_URL=postgres://private composition detail');
+      },
+    );
+
+    const response = await tenantCreateRoute.POST(
+      createTenantRequest({
+        organizationName: '星澜医美中心',
+        planVersionId: 'plan-version-professional-published',
+        reason: '测试正式组合失败',
+      }),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      ok: false,
+      errorCode: 'TENANT_PLAN_BINDING_UNAVAILABLE',
+    });
+    expectNoSensitivePayload(payload);
+    expect(routeMocks.createTenantPlanBindingRepository).not.toHaveBeenCalled();
+    expect(routeMocks.repository.createTenantWithPlanAuthorization).not.toHaveBeenCalled();
   });
 
   it('maxStaffSeats 有效时创建租户成功', async () => {

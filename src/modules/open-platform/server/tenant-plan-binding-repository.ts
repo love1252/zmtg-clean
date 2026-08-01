@@ -7,14 +7,17 @@ import {
 } from '@/modules/open-platform/domain/tenant-management';
 import type { TenantPlanPublishedVersionRecord } from '@/modules/open-platform/domain/tenant-plan-binding';
 import { insertOneCommercialRecord } from '@/modules/open-platform/server/tenant-commercial-records-repository';
-import type { TenantPlanBindingRepository } from '@/modules/open-platform/server/tenant-plan-binding-service';
+import type {
+  TenantOnboardingMembershipIntent,
+  TenantPlanBindingReadRepository,
+  TenantPlanBindingRepository,
+} from '@/modules/open-platform/server/tenant-plan-binding-service';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   authUsers,
   auditEvents,
   tenantContacts,
   tenantAuthorizationSnapshots,
-  tenantMembers,
   tenantPlanAssignments,
   tenantPlanVersions,
   tenantPlans,
@@ -28,6 +31,35 @@ type PlanVersionQueryRow = {
   plan: PlanRow;
   version: VersionRow;
 };
+
+export type TenantOnboardingMembershipCommands = Readonly<{
+  createMembership(intent: TenantOnboardingMembershipIntent): Promise<void>;
+}>;
+
+export type TenantOnboardingMembershipExternalTransactionPort = Readonly<{
+  transactionOptions: Readonly<{
+    isolationLevel: 'serializable';
+    accessMode: 'read write';
+  }>;
+  run<T>(
+    transaction: TenantDatabase,
+    work: (commands: TenantOnboardingMembershipCommands) => Promise<T>,
+  ): Promise<T>;
+}>;
+
+export type TenantPlanBindingRepositoryDependencies = Readonly<{
+  membershipCommandExternalTransaction:
+    TenantOnboardingMembershipExternalTransactionPort;
+}>;
+
+export class TenantPlanBindingRepositoryError extends Error {
+  readonly code = 'tenant_onboarding_membership_command_unavailable';
+
+  constructor() {
+    super('tenant_onboarding_membership_command_unavailable');
+    this.name = 'TenantPlanBindingRepositoryError';
+  }
+}
 
 function readStringList(json: unknown, key: string) {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return [];
@@ -65,7 +97,17 @@ function mapPublishedPlanVersionRow(row: PlanVersionQueryRow): TenantPlanPublish
   };
 }
 
-export function createTenantPlanBindingRepository(database: TenantDatabase): TenantPlanBindingRepository {
+export function createTenantPlanBindingRepository(
+  database: TenantDatabase,
+): TenantPlanBindingReadRepository;
+export function createTenantPlanBindingRepository(
+  database: TenantDatabase,
+  dependencies: TenantPlanBindingRepositoryDependencies,
+): TenantPlanBindingRepository;
+export function createTenantPlanBindingRepository(
+  database: TenantDatabase,
+  dependencies?: TenantPlanBindingRepositoryDependencies,
+): TenantPlanBindingRepository {
   return {
     async listPublishedPlanVersions() {
       const rows = await database
@@ -102,50 +144,58 @@ export function createTenantPlanBindingRepository(database: TenantDatabase): Ten
     },
 
     async createTenantWithPlanAuthorization(input) {
+      const membershipCommandExternalTransaction =
+        dependencies?.membershipCommandExternalTransaction;
+      if (!membershipCommandExternalTransaction) {
+        throw new TenantPlanBindingRepositoryError();
+      }
+
       await database.transaction(async (transactionDatabase) => {
         const tx = transactionDatabase as unknown as TenantDatabase;
-        await tx.insert(tenants).values(input.tenant);
-        await tx.insert(authUsers).values(input.authAccount);
-        await tx.insert(tenantMembers).values(input.tenantMember);
-        await tx.insert(tenantContacts).values(input.tenantContact);
-        await tx.insert(tenantPlanAssignments).values(input.assignment);
-        await tx.insert(tenantAuthorizationSnapshots).values(input.authorizationSnapshot);
-        await tx.insert(auditEvents).values(mapAuditEventToInsert(input.auditEvent));
-        await tx.insert(auditEvents).values(mapAuditEventToInsert(input.accountAuditEvent));
-        // 机构开通商业记录
-        await insertOneCommercialRecord(tx, {
-          id: `${input.tenant.id}-commercial-tenant-opening`,
-          tenantId: input.tenant.id,
-          recordType: 'tenant_opening',
-          displayCode: `机构开通-${input.tenant.name}`,
-          note: `机构“${input.tenant.name}”开通，套餐：${input.planVersion.displayName}`,
-          occurredAt: input.tenant.createdAt,
-          createdBy: input.authAccount.createdBy,
-          updatedBy: input.authAccount.createdBy,
+        await membershipCommandExternalTransaction.run(tx, async (commands) => {
+          await tx.insert(tenants).values(input.tenant);
+          await tx.insert(authUsers).values(input.authAccount);
+          await commands.createMembership(input.membershipIntent);
+          await tx.insert(tenantContacts).values(input.tenantContact);
+          await tx.insert(tenantPlanAssignments).values(input.assignment);
+          await tx.insert(tenantAuthorizationSnapshots).values(input.authorizationSnapshot);
+          await tx.insert(auditEvents).values(mapAuditEventToInsert(input.auditEvent));
+          await tx.insert(auditEvents).values(mapAuditEventToInsert(input.accountAuditEvent));
+          // 机构开通商业记录
+          await insertOneCommercialRecord(tx, {
+            id: `${input.tenant.id}-commercial-tenant-opening`,
+            tenantId: input.tenant.id,
+            recordType: 'tenant_opening',
+            displayCode: `机构开通-${input.tenant.name}`,
+            note: `机构“${input.tenant.name}”开通，套餐：${input.planVersion.displayName}`,
+            occurredAt: input.tenant.createdAt,
+            createdBy: input.authAccount.createdBy,
+            updatedBy: input.authAccount.createdBy,
+          });
+          // 账号开通商业记录
+          await insertOneCommercialRecord(tx, {
+            id: `${input.tenant.id}-commercial-account-opening`,
+            tenantId: input.tenant.id,
+            recordType: 'account_opening',
+            displayCode: `账号开通-${input.authAccount.username}`,
+            note: `初始管理员账号“${input.authAccount.displayName}”开通`,
+            occurredAt: input.authAccount.createdAt,
+            createdBy: input.authAccount.createdBy,
+            updatedBy: input.authAccount.createdBy,
+          });
+          // 套餐绑定商业记录
+          await insertOneCommercialRecord(tx, {
+            id: `${input.tenant.id}-commercial-plan-binding`,
+            tenantId: input.tenant.id,
+            recordType: 'plan_binding',
+            displayCode: `套餐绑定-${input.planVersion.displayName}`,
+            note: `初始套餐绑定：${input.planVersion.planName}（${input.planVersion.displayName}）`,
+            occurredAt: input.assignment.createdAt,
+            createdBy: input.authAccount.createdBy,
+            updatedBy: input.authAccount.createdBy,
+          });
         });
-        // 账号开通商业记录
-        await insertOneCommercialRecord(tx, {
-          id: `${input.tenant.id}-commercial-account-opening`,
-          tenantId: input.tenant.id,
-          recordType: 'account_opening',
-          displayCode: `账号开通-${input.authAccount.username}`,
-          note: `初始管理员账号“${input.authAccount.displayName}”开通`,
-          occurredAt: input.authAccount.createdAt,
-          createdBy: input.authAccount.createdBy,
-          updatedBy: input.authAccount.createdBy,
-        });
-        // 套餐绑定商业记录
-        await insertOneCommercialRecord(tx, {
-          id: `${input.tenant.id}-commercial-plan-binding`,
-          tenantId: input.tenant.id,
-          recordType: 'plan_binding',
-          displayCode: `套餐绑定-${input.planVersion.displayName}`,
-          note: `初始套餐绑定：${input.planVersion.planName}（${input.planVersion.displayName}）`,
-          occurredAt: input.assignment.createdAt,
-          createdBy: input.authAccount.createdBy,
-          updatedBy: input.authAccount.createdBy,
-        });
-      });
+      }, membershipCommandExternalTransaction.transactionOptions);
 
       return mapTenantManagementRecordToDto({
         tenantId: input.tenant.id,
