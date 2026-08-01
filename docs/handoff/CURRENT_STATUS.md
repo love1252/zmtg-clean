@@ -2,69 +2,90 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-02 Membership Revision 物理模型前置预检与独立审查状态
+## BASE-02 Membership Revision M1 Expand 实施、纠错与受控执行状态
 
 - 更新日期：2026-08-01
-- 本轮起始基线：`e4f6a822fc52dd46d52c7d6accb0bae5c2a428a5`
-- 当前任务：`BASE-02 ULTRA：Membership Revision Schema／Migration 前置预检、物理模型决策包、独立审查与 handoff`
+- 本轮 handoff 基线：`7dde569cdb8d512a978dc04e63c2008f6a74d583`
+- 当前任务：`BASE-02 ULTRA：Membership Revision M0～M7、BASE-B1～B6 全链实施与最终收口`
+- 当前切片：M1 Expand 实施、纠错、固定 localhost-only 受控 Migration、独立审查与 handoff
 - 正式任务编号：无；本轮未新增 `V2-*` 编号
-- 前置预检与 proposed 决策包：PR #864，Head `3e9f2f8992e9923dc5261be8f40c8e8f9f9b18a0`，Merge Commit `59e5ef94fe9a462b29e0792f2b661a84e3d10de2`
-- PR #864 Required Check：Run `30696216677`／Job `91359466603` 成功，完整测试和 build 均实际执行
-- 独立审查：PR #865，Head `9e20fcef4756eae0c9cec273fe5ec7e7039236c2`，Merge Commit `511de2c22000ae3494e7745a2dac7cfe82f21042`
-- PR #865 Required Check：Run `30696574699`／Job `91360387951` 成功，完整测试和 build 均实际执行
-- 当前证据：`docs/operations/base02-membership-revision-schema-migration-preflight-20260801.md`、`docs/decisions/base02-membership-revision-physical-model-decision-pack-20260801.md`、`docs/operations/base02-membership-revision-schema-preflight-independent-review-20260801.md`
+- 物理模型接受：PR #867，Head `cc85aada6f087e755ea06497cfb24e2c9eac7a7c`，Run `30698918831`／Job `91366363952`，Merge Commit `64d4b72d6e3ccd2f0b1afd41f05788650fb3240d`
+- 接受独立审查：PR #868，Head `bb9556dc28e413e54fcc19576b64c6172c286e91`，Run `30699359617`／Job `91367471685`，Merge Commit `734f0df0c5715134cf5d2d2c03833b4cb3fb7127`
+- M1 四文件实施：PR #869，Head `2b57222beb0c8734853bbef184f8566bbd032074`，Run `30701389089`／Job `91372887624`，Merge Commit `314af071bb180ce0a1095c5d21f31baa3cc15e4a`
+- 独立质量修复：PR #870，Head `81a4e3b0e72e97e29b6d4bfd411799d8072fc1e4`，Run `30700920653`／Job `91371673110`，Merge Commit `17840a7a90d712b2776256a19e90127bf3deeb89`；不归入 M1 文件范围
+- M1 实施独立审查：PR #871，Head `fe223f959c04cd73f5b911a0cbe0b8cf9a8514bb`，Run `30701940533`／Job `91374361799`，Merge Commit `eb71d2ab628032ef39182a96ea0b82f89b6dd49e`
+- `0040` 原子纠错：PR #872，Head `fea420a03f793a8aeb1d33f1cfacbe914ce21423`，Run `30703279028`／Job `91377908764`，Merge Commit `75f3c6663e7decce63634b1ee05579a454fb97ac`
+- 纠错独立审查：PR #873，Head `cb600fb3ea9c15f84f920c57af6e75a0b6487bcb`，Run `30703993626`／Job `91379807583`，Merge Commit `781fde457c38a28dc9fd8f4d8e05bd16198f46db`
+- 执行低敏证据：PR #874，Head `5f7a5f64dfb48768193ca8510392d8a9146a1b7b`，Run `30705415873`／Job `91383565350`，Merge Commit `17e1a1d04691878809d0caf533960b99705529dd`
+- 执行独立审查：PR #875，Head `2d15e1540527dc95f71f34f3b6ecc91200ec5a32`，Run `30705922589`／Job `91384912500`，Merge Commit `7dde569cdb8d512a978dc04e63c2008f6a74d583`
 - 本次 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
 
-### 静态影响面与 current 结论
+### M1 current 终态
 
-- A-full accepted decision、Identity／Access Control／Tenancy／Security Owner 与 Membership／Binding／Scope 三个独立 revision 域未漂移
-- `tenant_members` current 仍为 7 列、2 索引、2 FK，没有 lifecycle、revision、provenance、tombstone、业务 CHECK 或业务 trigger
-- current authoritative Membership Writer 为 `0`
-- direct Writer 为 4 文件／6 符号：`direct_writer_to_migrate=1`，`direct_writer_to_disable=5`
-- 核心 compatibility Reader 为 6 个；正式 Guard 核心链测试 15 个，次级 lifecycle Reader 测试 2 个
-- journal／SQL current 为 `40／40`，snapshot 共 15 个、末项为 0026；没有预留或批准下一 Migration 编号
+- P01～P12 与 M0→M7 已由 PR #867 绑定接受，A-full、Identity／Access Control／Tenancy／Security Owner 和 Membership／Binding／Scope 三个独立 revision 域未漂移
+- 仓库与固定 local_acceptance 环境 journal 均为 `41`，最新为已消费且不可再改写的 `0040_base02_membership_revision_expand`；pending Migration 为 `0`
+- snapshot 仍为 `0026`，没有运行 `db:generate` 或创建 snapshot-diff Migration
+- M1 Catalog 为 `all_exact`：enum `3`、current envelope 新列 `10`、current 新约束 `2`、transition table `1`／列 `16`／约束 `8`／显式普通索引 `1`、append-only function `1`／trigger `2`
+- Membership／Binding 为 `1／1`，A2-P1 Scope／Context Version／Context Head 为 `1／1／1`
+- 完整 current envelope／transition evidence 行为 `0／0`；M1 只完成 Expand，没有 legacy calibration
+- active historical orphan／Scope relation orphan 继续为 `1／1`；A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`
+- 首轮数据库尝试因类型错误失败并完整回滚；未消费旧 `0040` 后才允许 PR #872／#873 原子纠错
+- 第二次授权执行使用全新恢复点、全新唯一 Lease 和不可覆盖 marker；实际数据库尝试累计 `2`，自动重试 `0`，业务 DML `0`
+- 全新 Lease `claim／consume／release=1／1／1`、renewal `0`、活动 Lease `0`；执行前后恢复点和隔离恢复验证均通过
+- 当前 authoritative Membership Writer 仍为 `0`；M2 尚未启动
 
-### proposed 物理模型与串行切片
+### M2 唯一下一切片边界
 
-- recommended proposed 方向为 `tenant_members` 规范化同表 current＋`tenant_membership_transitions` append-only evidence
-- P01～P12 冻结 revision、lifecycle、incarnation、current provenance、transition evidence、CAS、legacy calibration、Writer／Reader cutover 与 Binding 联动候选
-- `id／tenant_id／user_id／display_name` 初版不可变，role 是初版唯一可变授权字段；deleted 为终态
-- duplicate command identity 一律 fail-closed；canonical current 与 evidence 必须同事务，Membership 与 Binding 独立推进版本
-- proposed 串行为 M0 metadata → M1 Expand → M2 Owner Writer／CAS → M3 旧 Writer 委托／封堵 → M4 legacy calibration → M5 高水位追赶／冲突清零 → M6 Reader 切换 → M7 Enforce
-- `membership_revision_physical_model_accepted=false`；上述推荐尚未成为 accepted decision
+- 唯一下一任务为 `BASE-02 Membership Revision M2 Access Control Owner Writer／CAS`
+- M2 允许创建 `src/modules/access-control/**`，建立 create／refresh／revoke／reactivate／delete 命令、transaction-bound UoW、current CAS、Binding 联动和同事务 transition evidence
+- command／evidence identity、expected-absence／expectedRevision、固定锁序、affected rows 精确为 1、无自动重试和 fail-closed 错误必须遵守 accepted decision
+- Membership revision 与 Binding version 独立推进；Access Control 不得成为第二套 Tenancy／Identity／Security 事实源
+- legacy all-null row 在 M4 前继续 `legacy_membership_not_calibrated`；M2 不执行 calibration、数据库连接、Schema 或 Migration
+- 本 handoff 合并前 M2 未启动；合并后可按当前 ULTRA 用户授权开始，不再要求逐阶段确认
+- M3～M7、BASE-B1～B6、orphan 处置、FK `VALIDATE`、项目级 Writer／Reader 均不得由 M2 提前启动
 
 ### 独立审查与持续阻断
 
-- 独立审查结论：`membership_revision_schema_preflight_review=passed`
-- `eligible_for_physical_model_acceptance_handoff=true`
-- `eligible_for_schema_migration_implementation=false`
-- BASE-B1 Runtime 继续 `blocked`；BASE-B2～B6、Membership lifecycle Writer、项目级 Writer 与业务 Reader 均未启动
+- M1 实施独立审查：`base02_membership_revision_m1_implementation_review=passed`
+- `0040` 纠错独立审查：`base02_membership_m1_0040_correction_review=passed`
+- M1 执行独立审查：`base02_membership_revision_m1_execution_review=passed`
+- `m1_expand_migration_executed=true`，`m1_catalog_state=all_exact`，`eligible_for_m1_handoff=true`
+- M1 handoff 合并前 `eligible_for_m2=false`；handoff 合并后只准入 M2，不表示 M3 或 BASE-B1 已完成
+- BASE-B1 Runtime 继续 `blocked`；BASE-B2～B6、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 均未启动
 - active historical orphan 与 Scope relation orphan 保持 `1／1`，未修改、未授权修复
 - A2-P2 Scope FK 保持 `NOT VALID`／`convalidated=false`，未执行 `VALIDATE`
 - 正式平台服务端授权根仍为缺失，七线正式发布仍为 `0/7`
 
 ### 唯一下一任务
 
-- 任务名称：`BASE-02 Membership Revision 物理模型与 Migration 切片接受`
+- 任务名称：`BASE-02 Membership Revision M2 Access Control Owner Writer／CAS`
 - 任务编号：仓库尚无正式编号，本 handoff 不自行创造
-- 当前状态：尚未启动、尚未授权
-- 任务边界：只允许用户明确接受、拒绝或调整 P01～P12 及 M0～M7 proposed 组合，并形成独立 accepted decision、审查与 handoff
-- 当前不授权 Schema、Migration、journal、snapshot、数据库、Migration Lease、Runtime、BASE-B1 或任何后续实施
+- 当前状态：尚未启动；已由当前 ULTRA 用户指令授权在本 handoff 合并后启动
+- 任务边界：只实现 Access Control Membership／Binding 生命周期 Owner command、transaction-bound UoW、CAS、同事务 current／Binding／transition evidence 和合成／事务测试
+- 当前不授权 Schema、Migration、journal、snapshot、数据库、Migration Lease、M3～M7、BASE-B1～B6、orphan、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 或业务 Reader
 
 ```text
 membership_revision_direction=A-full_same_table_lifecycle
 membership_revision_decision_accepted=true
-membership_revision_schema_preflight=completed
-membership_revision_schema_preflight_review=passed
-membership_revision_static_impact_inventory=complete
-membership_revision_physical_model_status=proposed_not_accepted
-membership_revision_physical_model_accepted=false
-membership_revision_migration_sequence=M0_to_M7_proposed
-eligible_for_physical_model_acceptance_handoff=true
-physical_model_acceptance_started=false
-physical_model_acceptance_authorized=false
-eligible_for_schema_migration_implementation=false
-schema_migration_implementation_authorized=false
+membership_revision_physical_model_accepted=true
+membership_revision_migration_sequence=M0_to_M7_accepted
+m0_complete=true
+m1_expand_migration_executed=true
+m1_environment_journal_entries=41
+m1_catalog_state=all_exact
+m1_first_failure_history_preserved=true
+m1_database_attempt_cumulative=2
+m1_automatic_retry_count=0
+m1_execution_review=passed
+m1_complete=true
+eligible_for_m2_after_handoff=true
+m2_started=false
+m2_authorized_under_ultra=true
+m3_started=false
+m4_started=false
+m5_started=false
+m6_started=false
+m7_started=false
 eligible_for_base_b1_runtime=false
 base_b1_runtime=blocked
 base_b2_started=false
@@ -80,9 +101,9 @@ a2_p2_scope_fk_validated=false
 writer_started=false
 reader_started=false
 eligible_for_reader=false
-next_task=BASE-02 Membership Revision 物理模型与 Migration 切片接受
+next_task=BASE-02 Membership Revision M2 Access Control Owner Writer／CAS
 next_task_started=false
-next_task_authorized=false
+next_task_authorized_under_ultra=true
 ```
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

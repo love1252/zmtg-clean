@@ -860,3 +860,25 @@
 - 本次前置预检、决策包、独立审查与四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
 - BASE-B1 Runtime 继续 `blocked`；BASE-B2～B6、Membership lifecycle Writer、项目级 Writer 和 Reader 均未启动；active historical orphan 与 Scope relation orphan 保持 `1／1`，A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`。
 - 唯一下一任务更新为 `BASE-02 Membership Revision 物理模型与 Migration 切片接受`；仓库尚无正式任务编号，该任务尚未启动、尚未授权，不自动授权 Schema、Migration、数据库、Migration Lease 或 Runtime。
+
+## 2026-08-01：BASE-02 Membership Revision 物理模型接受与 M1 Expand 收口
+
+- PR #866 完成物理模型前置预检 handoff，Head `6d8f3e07070a250f9b05afec9a437e89a03bc92f`，Run `30697128370`／Job `91361781557`，Merge Commit `9393ca8c0c5402ea575ab95e8f4ea6016fa41a84`。
+- PR #867 接受 P01～P12 绑定组合和 M0→M7 唯一串行，Head `cc85aada6f087e755ea06497cfb24e2c9eac7a7c`，Run `30698918831`／Job `91366363952`，Merge Commit `64d4b72d6e3ccd2f0b1afd41f05788650fb3240d`。
+- PR #868 完成物理模型接受独立审查，Head `bb9556dc28e413e54fcc19576b64c6172c286e91`，Run `30699359617`／Job `91367471685`，Merge Commit `734f0df0c5715134cf5d2d2c03833b4cb3fb7127`。
+- PR #870 是独立质量修复，Head `81a4e3b0e72e97e29b6d4bfd411799d8072fc1e4`，Run `30700920653`／Job `91371673110`，Merge Commit `17840a7a90d712b2776256a19e90127bf3deeb89`；只修复既有测试异步收尾竞态，不归入 M1 四文件范围。
+- PR #869 在 PR #870 后无冲突重放并完成 M1 四文件 Expand，Head `2b57222beb0c8734853bbef184f8566bbd032074`，Run `30701389089`／Job `91372887624`，Merge Commit `314af071bb180ce0a1095c5d21f31baa3cc15e4a`。
+- PR #871 完成 M1 实施独立审查，Head `fe223f959c04cd73f5b911a0cbe0b8cf9a8514bb`，Run `30701940533`／Job `91374361799`，Merge Commit `eb71d2ab628032ef39182a96ea0b82f89b6dd49e`。
+- M1 实时 Migration 编号为 `0040`；四文件范围为手写 SQL、journal、Schema 与 Schema 测试，snapshot 保持 0026，M1 不包含 legacy DML。
+- 首轮 pre-entry 目标门禁拒绝发生在数据库调用前，数据库 attempt 增量为 0；首轮实际数据库尝试随后因枚举聚合类型不匹配失败，事务完整回滚，环境 journal 40、M1 `all_missing`、业务数据净变化 0，Lease `claim／consume／release=1／1／1` 后释放，自动重试 0。
+- PR #872 只在所有允许环境均未消费旧 `0040` 时增加三处显式 `enumlabel::text` 并补测试，Head `fea420a03f793a8aeb1d33f1cfacbe914ce21423`，Run `30703279028`／Job `91377908764`，Merge Commit `75f3c6663e7decce63634b1ee05579a454fb97ac`；没有创建 `0041` 或修改 journal、Schema、snapshot。
+- PR #873 完成纠错独立审查，Head `cb600fb3ea9c15f84f920c57af6e75a0b6487bcb`，Run `30703993626`／Job `91379807583`，Merge Commit `781fde457c38a28dc9fd8f4d8e05bd16198f46db`。
+- 纠错后第二次授权执行使用全新恢复点、全新唯一 Lease、全新不可覆盖 marker 和唯一 guarded `pnpm db:migrate`；实际数据库尝试累计为 2，自动重试为 0。
+- PR #874 合并执行低敏证据，Head `5f7a5f64dfb48768193ca8510392d8a9146a1b7b`，Run `30705415873`／Job `91383565350`，Merge Commit `17e1a1d04691878809d0caf533960b99705529dd`。
+- PR #875 完成执行独立审查，Head `2d15e1540527dc95f71f34f3b6ecc91200ec5a32`，Run `30705922589`／Job `91384912500`，Merge Commit `7dde569cdb8d512a978dc04e63c2008f6a74d583`；结论为 `base02_membership_revision_m1_execution_review=passed`。
+- 环境 journal 从 40 到 41，pending 从 1 到 0，M1 Catalog 从 `all_missing` 到 `all_exact`；`0040` 已消费且不得再次改写。
+- M1 对象类别为 enum 3、current envelope 新列 10、current 新约束 2、transition table 1／列 16／约束 8／显式普通索引 1、append-only function 1／trigger 2。
+- Membership／Binding 保持 `1／1`，A2-P1 三表保持 `1／1／1`，完整 envelope／transition 行保持 `0／0`，active historical orphan／Scope relation orphan 保持 `1／1`，业务 DML 为 0，A2-P2 FK 继续 `NOT VALID`。
+- 第二次 Lease `claim／consume／release=1／1／1`、renewal 0、活动 Lease 0；执行前后恢复点及隔离恢复验证通过。当前主动私有参数披露 0，真正敏感信息披露 0。
+- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 0。
+- M1 完成并收口；唯一下一任务为 `BASE-02 Membership Revision M2 Access Control Owner Writer／CAS`。M2 在 handoff 合并前尚未启动，合并后按当前 ULTRA 用户授权继续；M3～M7、BASE-B1～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader仍未启动。
