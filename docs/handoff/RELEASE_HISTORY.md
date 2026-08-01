@@ -811,3 +811,18 @@
 - 独立审查结论为 `base02_readiness_review=passed`、`eligible_for_base02_implementation_handoff=true`、`eligible_for_base02_implementation=false`。
 - 本轮数据库写入、DDL、DML、Migration、Seed、Lease、Runner、外键 `VALIDATE`、Runtime、Schema、scripts、tests、CI、package 和 lock 修改均为 `0`；Reader 继续阻断。
 - 唯一下一任务冻结为 `BASE-02 实施`；仓库尚无正式任务编号，该任务尚未启动、尚未授权，首个候选切片为 `BASE-B1 Owner、Port 与 revision 契约`。
+
+## 2026-08-01：BASE-02 Membership Revision 决策包、独立审查与 handoff
+
+- PR #857 记录 BASE-B1 因 Membership revision 证据不足而硬停止，Head `6eb2fb4e26371904be063463968d5744fd8edc65`，Merge Commit `1edb71ca6a87df15b284c710ef80d0442ef97fe2`；Required Check Run `30688242614`／Job `91338121169` 成功，完整测试和 build 均实际执行。
+- PR #858 提交 Membership Revision Architecture Decision Pack，Head `95109315b0366f9a7f2b6bb45dd7498e4e2dbfa6`，Merge Commit `1712b357cea3ef8147e87e7812c67a39e07c13f0`；Required Check Run `30689389362`／Job `91341284170` 成功，完整测试和 build 均实际执行。
+- PR #859 提交独立审查，最终 Head `e6a5e403bb8ea1f85ba763d4251ad1ed010b1e38`，Merge Commit `aa7c8d53b9605a900dac461b1859084f2219ab8f`；Required Check Run `30689872741`／Job `91342595113` 成功，完整测试和 build 均实际执行。
+- 当前 `tenant_members` 没有显式、稳定、严格单调且可 CAS 的 Membership revision；`updated_at`、Binding version 与 hash／HMAC 均不能替代该事实。
+- A-literal 仅可作为 BASE-B1 interim carrier；proposed 推荐为 A-full，即保持 `tenant_members` 为 Access Control 唯一 canonical current，并补齐显式 revision、lifecycle envelope、tombstone／current provenance 和同事务 immutable transition evidence。
+- 永久 sidecar 作为第二套 current 事实源已排除；canonical replacement 必须 ADR-first 并具备旧表退出计划；现有字段组合方案因无法证明单调性、CAS、ABA 与并发一致性而淘汰。
+- 独立审查结论为 `base02_membership_revision_architecture_review=passed`；A-full 仍为 `proposed`，`membership_revision_decision_accepted=false`。
+- Identity／Access Control／Tenancy／Security Owner 边界保持冻结，Access Control 继续拥有 Membership 与 Binding 生命周期；Operating Context Head／Version 不进入本轮 BASE-02 授权组合，也不成为新的持久化 Owner。
+- BASE-B1 Runtime 继续阻断；BASE-B2～B6、Membership lifecycle Writer、项目级 Writer、Audit／模板、MIG-01B、MIG-01C 与 Reader 均未启动。
+- active historical orphan 与 Scope 关系 orphan 保持 `1／1`，未修改、未授权修复；A2-P2 外键继续 `NOT VALID`／`convalidated=false`，未执行 `VALIDATE`。
+- 本次决策、审查与 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
+- 唯一下一任务更新为 `BASE-02 Membership Revision 架构决策接受`；仓库尚无正式任务编号，该任务尚未启动、尚未授权。只有用户明确接受 proposed 推荐并完成独立 handoff 后，才可另行申请 Schema／Migration 前置预检。
