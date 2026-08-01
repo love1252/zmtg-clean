@@ -797,3 +797,17 @@
 - 当前主动私有参数披露和真正敏感信息披露均为 `0`；没有第二次 Migration、直接 SQL、回填、外键 `VALIDATE`、`SET NOT NULL` 或第三个人工目标对象。
 - 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
 - 唯一下一任务为 `BASE-02 前置规划／准入`，仓库尚无正式任务编号；该任务、historical orphan 数据修复、BASE-02 Runtime、Writer、MIG-01B／C 和 Reader 均未启动、未授权。
+
+## 2026-08-01：BASE-02 前置规划、准入审计与实施冻结交付
+
+- 冻结基线为 `443033b7f06ba9d5a08b37ddeddf112162cea4b8`；本阶段没有新增正式 `V2-*` 任务编号。
+- PR #854 提交 BASE-02 准入方案，Head `c0265653d84fdde53d8d1bed8ce14a25620c1172`，Merge Commit `b87fad849770b83276d0572f73c7c507825c3bca`；Required Check Run `30685590234`／Job `91330576040` 的环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #855 提交独立审查，重放后 Head `33030add36f7e6d3b87784368054e24e157537bd`，Merge Commit `8e3b9de6d472be9fc586b14a2eba24e51e928dfb`；Required Check Run `30687136765`／Job `91335093086` 的全部质量步骤成功，完整测试和 build 均实际执行。
+- PR #856 负责本次 handoff 收口；方案、审查与 handoff 均不授权 BASE-02 Runtime、数据修复或数据库执行。
+- 只读审计确认仓库／环境 journal 为 `40`、snapshot 为 `0026`、A2-P1 三表为 `1／1／1`，A2-P2 精确索引与 `NOT VALID` 外键存在且 `convalidated=false`。
+- Binding 总数／NULL／重复为 `1／0／0`，active historical orphan 与 Scope 关系 orphan 均为 `1`；tenant 父关系缺失与 Membership 父关系缺失均为 `0`。
+- historical orphan 的语义 Owner 冻结为 Access Control 的 Binding 生命周期；独立数据修复专项仅可作为经授权的执行载体，Tenancy 不得从 Binding 反推创建 Scope，A2-P2 与 MIG-01B 不得静默处理。
+- 实施方案冻结为 BASE-B1～B6；BASE-02 不是简单清理 orphan。具体数据修复动作、Operating Context Head／Version、Runtime 与环境操作仍须未来独立授权。
+- 独立审查结论为 `base02_readiness_review=passed`、`eligible_for_base02_implementation_handoff=true`、`eligible_for_base02_implementation=false`。
+- 本轮数据库写入、DDL、DML、Migration、Seed、Lease、Runner、外键 `VALIDATE`、Runtime、Schema、scripts、tests、CI、package 和 lock 修改均为 `0`；Reader 继续阻断。
+- 唯一下一任务冻结为 `BASE-02 实施`；仓库尚无正式任务编号，该任务尚未启动、尚未授权，首个候选切片为 `BASE-B1 Owner、Port 与 revision 契约`。
