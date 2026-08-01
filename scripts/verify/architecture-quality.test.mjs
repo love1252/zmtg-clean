@@ -43,6 +43,10 @@ const internalDependencyTargets = Object.freeze({
   'src/integrations/his/client.ts':
     'export const integration = true;\n',
 });
+const membershipSchemaFixture = Object.freeze({
+  'src/server/db/schema.ts':
+    'export const tenantMembers = { tableName: "tenant_members" };\n',
+});
 
 function run(command, args, cwd, options = {}) {
   const result = spawnSync(command, args, {
@@ -1200,4 +1204,664 @@ test('规则配置读取 Head commit blob，不受工作树配置污染', async 
   );
 
   assertPassed(await runChecker(context, { head }));
+});
+
+test('AQ008 识别 Drizzle Membership insert、update、delete 与别名', async (t) => {
+  const cases = [
+    {
+      name: 'named import insert',
+      source: [
+        "import { tenantMembers } from '@/server/db/schema';",
+        'export const write = (db) => db.insert(tenantMembers);',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'named alias update',
+      source: [
+        "import { tenantMembers as membershipCurrent } from '@/server/db/schema';",
+        'export const write = (db) => db.update(membershipCurrent);',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'namespace delete',
+      source: [
+        "import * as tables from '@/server/db/schema';",
+        'export const write = (db) => db.delete(tables.tenantMembers);',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'local alias delete',
+      source: [
+        "import { tenantMembers } from '@/server/db/schema';",
+        'const currentMembership = tenantMembers;',
+        'export const write = (db) => db.delete(currentMembership);',
+        '',
+      ].join('\n'),
+    },
+  ];
+
+  for (const [index, item] of cases.entries()) {
+    await t.test(item.name, async (subtest) => {
+      const context = await createRepository(subtest, membershipSchemaFixture);
+      const head = await commitChanges(context, {
+        [`src/server/membership-writer-${index}.ts`]: item.source,
+      });
+
+      assertViolation(
+        await runChecker(context, { head }),
+        'AQ008_MEMBERSHIP_DIRECT_WRITER',
+      );
+    });
+  }
+});
+
+test('AQ008 识别 raw SQL 四类写入、引号与 schema qualified 目标', async (t) => {
+  const statements = [
+    'INSERT INTO tenant_members (id) VALUES (1)',
+    'UPDATE ONLY public.tenant_members SET id = 1',
+    'DELETE FROM "public"."tenant_members" WHERE id = 1',
+    'TRUNCATE TABLE "tenant_members"',
+    'TRUNCATE TABLE tenant_members, audit_events',
+  ];
+
+  for (const [index, statement] of statements.entries()) {
+    await t.test(statement.split(' ')[0], async (subtest) => {
+      const context = await createRepository(subtest);
+      const head = await commitChanges(context, {
+        [`scripts/future-membership-raw-${index}.ts`]: [
+          'export const write = (sql) =>',
+          `  sql\`${statement}\`;`,
+          '',
+        ].join('\n'),
+      });
+
+      assertViolation(
+        await runChecker(context, { head }),
+        'AQ008_MEMBERSHIP_DIRECT_WRITER',
+      );
+    });
+  }
+});
+
+test('AQ008 追踪本地 mutation helper 的动态表参数与 wrapper', async (t) => {
+  const context = await createRepository(t, membershipSchemaFixture);
+  const head = await commitChanges(context, {
+    'scripts/future-membership-helper.ts': [
+      "import { tenantMembers as current } from '@/server/db/schema';",
+      'async function insertRows(db, tableName, rows) {',
+      '  return db`insert into ${db(tableName)} ${db(rows)}`;',
+      '}',
+      'function wrapper(db, target, rows) {',
+      '  return insertRows(db, target, rows);',
+      '}',
+      'export const writeLiteral = (db, rows) => wrapper(db, "tenant_members", rows);',
+      'export const writeBinding = (db, rows) => wrapper(db, current, rows);',
+      '',
+    ].join('\n'),
+  });
+
+  assertViolation(
+    await runChecker(context, { head }),
+    'AQ008_MEMBERSHIP_DIRECT_WRITER',
+  );
+});
+
+test('AQ008 识别导入 mutation helper 的 tenant_members 字面量目标', async (t) => {
+  const context = await createRepository(t, {
+    'scripts/writer-helper.ts': [
+      'export const insertRows = (db, target, rows) =>',
+      '  db.insert(target).values(rows);',
+      '',
+    ].join('\n'),
+  });
+  const head = await commitChanges(context, {
+    'scripts/future-membership-imported-helper.ts': [
+      "import { insertRows } from './writer-helper';",
+      'export const write = (db, rows) => insertRows(db, "tenant_members", rows);',
+      '',
+    ].join('\n'),
+  });
+
+  assertViolation(
+    await runChecker(context, { head }),
+    'AQ008_MEMBERSHIP_DIRECT_WRITER',
+  );
+});
+
+test('AQ008 拒绝 Membership 间接别名、SQL 与 helper 绕过', async (t) => {
+  const cases = [
+    {
+      name: 'barrel 重导出',
+      initial: {
+        ...membershipSchemaFixture,
+        'src/server/db/index.ts':
+          "export { tenantMembers } from './schema';\n",
+      },
+      source: [
+        "import { tenantMembers as current } from '@/server/db';",
+        'export const write = (db) => db.insert(current);',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'namespace 解构',
+      initial: membershipSchemaFixture,
+      source: [
+        "import * as tables from '@/server/db/schema';",
+        'const { tenantMembers: current } = tables;',
+        'export const write = (db) => db.delete(current);',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: '赋值别名',
+      initial: membershipSchemaFixture,
+      source: [
+        "import { tenantMembers } from '@/server/db/schema';",
+        'let current;',
+        'current = tenantMembers;',
+        'export const write = (db) => db.update(current);',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'const SQL',
+      initial: {},
+      source: [
+        "const statement = 'DELETE FROM tenant_members';",
+        'export const write = (client) => client.query(statement);',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: '对象 helper',
+      initial: membershipSchemaFixture,
+      source: [
+        "import { tenantMembers } from '@/server/db/schema';",
+        'function insertRows(db, target) { return db.insert(target); }',
+        'const helpers = { insertRows };',
+        'export const write = (db) => helpers.insertRows(db, tenantMembers);',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: '类 helper',
+      initial: membershipSchemaFixture,
+      source: [
+        "import { tenantMembers } from '@/server/db/schema';",
+        'class Writer {',
+        '  insertRows(db, target) { return db.insert(target); }',
+        '}',
+        'export const write = (db) => new Writer().insertRows(db, tenantMembers);',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'identifier 数组',
+      initial: {},
+      source: [
+        'export const write = (sql) =>',
+        "  sql`DELETE FROM ${sql.identifier(['tenant_members'])}`;",
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'TRUNCATE 非首位目标',
+      initial: {},
+      source: [
+        'export const write = (sql) =>',
+        '  sql`TRUNCATE TABLE audit_events, tenant_members`;',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'TRUNCATE 非首位动态目标',
+      initial: {},
+      source: [
+        'export const write = (sql) =>',
+        "  sql`TRUNCATE TABLE audit_events, ${sql.identifier(['tenant_members'])}`;",
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'query 对象参数',
+      initial: {},
+      source: [
+        'export const write = (client) =>',
+        "  client.query({ text: 'DELETE FROM tenant_members' });",
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'query shorthand 参数',
+      initial: {},
+      source: [
+        "const text = 'DELETE FROM tenant_members';",
+        'export const write = (client) => client.query({ text });',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'SQL executor const 别名',
+      initial: {},
+      source: [
+        'export const write = (client) => {',
+        '  const first = client;',
+        '  const second = first;',
+        "  return second.query('DELETE FROM tenant_members');",
+        '};',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'SQL tag const 别名',
+      initial: {},
+      source: [
+        'export const write = (sql) => {',
+        '  const query = sql;',
+        '  return query`DELETE FROM tenant_members`;',
+        '};',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'const SQL 词法遮蔽不覆盖真实引用',
+      initial: {},
+      source: [
+        "const statement = 'DELETE FROM tenant_members';",
+        'function unrelated() {',
+        "  const statement = 'SELECT 1';",
+        '  return statement;',
+        '}',
+        'export const write = (client) => client.query(statement);',
+        'export { unrelated };',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'const table helper',
+      initial: {},
+      source: [
+        'function insertRows(db, target) { return db.insert(target); }',
+        "const table = 'tenant_members';",
+        'export const write = (db) => insertRows(db, table);',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: '非关键词 helper',
+      initial: {},
+      source: [
+        'function persistRows(db, target) { return db.insert(target); }',
+        "export const write = (db) => persistRows(db, 'tenant_members');",
+        '',
+      ].join('\n'),
+    },
+    {
+      name: '嵌套 helper',
+      initial: {},
+      source: [
+        'export function write(db) {',
+        '  function nested(target) { return db.delete(target); }',
+        "  return nested('tenant_members');",
+        '}',
+        '',
+      ].join('\n'),
+    },
+  ];
+
+  for (const [index, item] of cases.entries()) {
+    await t.test(item.name, async (subtest) => {
+      const context = await createRepository(subtest, item.initial);
+      const head = await commitChanges(context, {
+        [`src/server/aq008-adversarial-${index}.ts`]: item.source,
+      });
+
+      assertViolation(
+        await runChecker(context, { head }),
+        'AQ008_MEMBERSHIP_DIRECT_WRITER',
+      );
+    });
+  }
+});
+
+test('AQ008 拒绝 changed generic sink 激活未修改 Membership caller', async (t) => {
+  const context = await createRepository(t, {
+    ...membershipSchemaFixture,
+    'src/server/generic-helper.ts':
+      'export const mutate = (db, target) => db.select().from(target);\n',
+    'src/server/existing-caller.ts': [
+      "import { tenantMembers } from '@/server/db/schema';",
+      "import { mutate } from './generic-helper';",
+      'export const run = (db) => mutate(db, tenantMembers);',
+      '',
+    ].join('\n'),
+  });
+
+  const head = await commitChanges(context, {
+    'src/server/generic-helper.ts':
+      'export const mutate = (db, target) => db.insert(target);\n',
+  });
+
+  assertViolation(
+    await runChecker(context, { head }),
+    'AQ008_MEMBERSHIP_DIRECT_WRITER',
+  );
+});
+
+test('AQ008 反向扫描经 barrel 重导出的 changed generic sink', async (t) => {
+  const context = await createRepository(t, {
+    ...membershipSchemaFixture,
+    'src/server/generic-helper.ts':
+      'export const mutate = (db, target) => db.select().from(target);\n',
+    'src/server/generic-index.ts':
+      "export { mutate } from './generic-helper';\n",
+    'src/server/existing-caller.ts': [
+      "import { tenantMembers } from '@/server/db/schema';",
+      "import { mutate } from './generic-index';",
+      'export const run = (db) => mutate(db, tenantMembers);',
+      '',
+    ].join('\n'),
+  });
+  const head = await commitChanges(context, {
+    'src/server/generic-helper.ts':
+      'export const mutate = (db, target) => db.insert(target);\n',
+  });
+  assertViolation(
+    await runChecker(context, { head }),
+    'AQ008_MEMBERSHIP_DIRECT_WRITER',
+  );
+});
+
+test('AQ008 只在 changed generic sink 存在 Membership caller 时失败', async (t) => {
+  const context = await createRepository(t, {
+    'src/server/generic-helper.ts':
+      'export const mutate = (db, target) => db.select().from(target);\n',
+    'src/server/customer-caller.ts': [
+      "import { mutate } from './generic-helper';",
+      "export const run = (db) => mutate(db, 'customers');",
+      '',
+    ].join('\n'),
+  });
+  const head = await commitChanges(context, {
+    'src/server/generic-helper.ts':
+      'export const mutate = (db, target) => db.insert(target);\n',
+  });
+  assertPassed(await runChecker(context, { head }));
+});
+
+test('AQ008 反向扫描 default、object 与 class exported sink 的既有 caller', async (t) => {
+  const cases = [
+    {
+      name: 'default function',
+      before: 'export default (db, target) => db.select().from(target);\n',
+      after: 'export default (db, target) => db.insert(target);\n',
+      caller: [
+        "import mutate from './generic-helper';",
+        "import { tenantMembers } from '@/server/db/schema';",
+        'export const run = (db) => mutate(db, tenantMembers);',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'exported object',
+      before: 'export const helpers = { mutate(db, target) { return db.select().from(target); } };\n',
+      after: 'export const helpers = { mutate(db, target) { return db.insert(target); } };\n',
+      caller: [
+        "import { helpers } from './generic-helper';",
+        "import { tenantMembers } from '@/server/db/schema';",
+        'const { mutate } = helpers;',
+        'export const run = (db) => mutate(db, tenantMembers);',
+        '',
+      ].join('\n'),
+    },
+    {
+      name: 'exported class',
+      before: 'export class Writer { mutate(db, target) { return db.select().from(target); } }\n',
+      after: 'export class Writer { mutate(db, target) { return db.insert(target); } }\n',
+      caller: [
+        "import { Writer } from './generic-helper';",
+        "import { tenantMembers } from '@/server/db/schema';",
+        'const writer = new Writer();',
+        'export const run = (db) => writer.mutate(db, tenantMembers);',
+        '',
+      ].join('\n'),
+    },
+  ];
+
+  for (const item of cases) {
+    await t.test(item.name, async (subtest) => {
+      const context = await createRepository(subtest, {
+        ...membershipSchemaFixture,
+        'src/server/generic-helper.ts': item.before,
+        'src/server/existing-caller.ts': item.caller,
+      });
+      const head = await commitChanges(context, {
+        'src/server/generic-helper.ts': item.after,
+      });
+      assertViolation(
+        await runChecker(context, { head }),
+        'AQ008_MEMBERSHIP_DIRECT_WRITER',
+      );
+    });
+  }
+});
+
+test('AQ008 不误报非 SQL query 与纯文本 tag', async (t) => {
+  const cases = [
+    "export const find = (search) => search.query('DELETE FROM tenant_members');\n",
+    'export const example = String.raw`DELETE FROM tenant_members`;\n',
+    "export const writeAuditEvent = (value) => value;\nexport const run = () => writeAuditEvent('tenant_members');\n",
+    'export const example = markdown.raw`DELETE FROM tenant_members`;\n',
+    [
+      "import { tenantMembers } from '@/server/db/schema';",
+      'export const write = (db, tenantMembers) => db.insert(tenantMembers);',
+      '',
+    ].join('\n'),
+    [
+      "const statement = 'DELETE FROM tenant_members';",
+      'export function read(client) {',
+      "  const statement = 'SELECT 1';",
+      '  return client.query(statement);',
+      '}',
+      '',
+    ].join('\n'),
+    [
+      "import { tenantMembers } from '@/server/db/schema';",
+      "const customers = { tableName: 'customers' };",
+      'export function write(db) {',
+      '  const tenantMembers = customers;',
+      '  return db.insert(tenantMembers);',
+      '}',
+      '',
+    ].join('\n'),
+    [
+      "import { tenantMembers } from '@/server/db/schema';",
+      'const writer = { mutate(db, target) { return db.insert(target); } };',
+      'const reader = { mutate(db, target) { return db.select().from(target); } };',
+      'export const read = (db) => reader.mutate(db, tenantMembers);',
+      'export { writer };',
+      '',
+    ].join('\n'),
+  ];
+
+  for (const [index, source] of cases.entries()) {
+    await t.test(String(index), async (subtest) => {
+      const context = await createRepository(subtest, membershipSchemaFixture);
+      const head = await commitChanges(context, {
+        [`src/server/aq008-negative-${index}.ts`]: source,
+      });
+      assertPassed(await runChecker(context, { head }));
+    });
+  }
+});
+
+test('AQ008 忽略本地 CSS 与 JSON import 的非源码内容', async (t) => {
+  const cases = [
+    {
+      initial: { 'src/app/globals.css': 'body { color: red; }\n' },
+      path: 'src/app/layout.tsx',
+      source: "import './globals.css';\nexport default function Layout() { return null; }\n",
+    },
+    {
+      initial: { 'src/server/config.json': '{"enabled":true}\n' },
+      path: 'src/server/config-reader.ts',
+      source: "import config from './config.json';\nexport const enabled = config.enabled;\n",
+    },
+  ];
+  for (const [index, item] of cases.entries()) {
+    await t.test(String(index), async (subtest) => {
+      const context = await createRepository(subtest, item.initial);
+      const head = await commitChanges(context, { [item.path]: item.source });
+      assertPassed(await runChecker(context, { head }));
+    });
+  }
+});
+
+test('AQ008 唯一内建 allowlist 不随复制或重命名扩散', async (t) => {
+  const ownerPath =
+    'src/modules/access-control/server/membership-command-repository.ts';
+  const ownerSource = [
+    "import { tenantMembers } from '@/server/db/schema';",
+    'export const write = (db) => db.insert(tenantMembers);',
+    '',
+  ].join('\n');
+
+  await t.test('精确 Owner Repository 允许', async (subtest) => {
+    const context = await createRepository(subtest, membershipSchemaFixture);
+    const head = await commitChanges(context, { [ownerPath]: ownerSource });
+    assertPassed(await runChecker(context, { head }));
+  });
+
+  await t.test('复制到相邻路径失败', async (subtest) => {
+    const context = await createRepository(subtest, {
+      ...membershipSchemaFixture,
+      [ownerPath]: ownerSource,
+    });
+    const head = await copyAndCommit(
+      context,
+      ownerPath,
+      'src/modules/access-control/server/membership-command-repository-copy.ts',
+    );
+    assertViolation(
+      await runChecker(context, { head }),
+      'AQ008_MEMBERSHIP_DIRECT_WRITER',
+    );
+  });
+
+  await t.test('重命名后失去 allowlist', async (subtest) => {
+    const context = await createRepository(subtest, {
+      ...membershipSchemaFixture,
+      [ownerPath]: ownerSource,
+    });
+    const head = await renameAndCommit(
+      context,
+      ownerPath,
+      'src/modules/access-control/server/renamed-membership-writer.ts',
+    );
+    assertViolation(
+      await runChecker(context, { head }),
+      'AQ008_MEMBERSHIP_DIRECT_WRITER',
+    );
+  });
+});
+
+test('AQ008 对修改后的旧文件检查完整 Head 内容，但不追溯未改历史债务', async (t) => {
+  const legacyPath = 'src/server/legacy-membership-writer.ts';
+  const legacySource = [
+    "import { tenantMembers } from '@/server/db/schema';",
+    'export const write = (db) => db.insert(tenantMembers);',
+    '',
+  ].join('\n');
+  const context = await createRepository(t, {
+    ...membershipSchemaFixture,
+    [legacyPath]: legacySource,
+  });
+
+  const docsHead = await commitChanges(context, {
+    'README.md': '# 只修改文档，不触碰历史 Writer\n',
+  });
+  assertPassed(await runChecker(context, { head: docsHead }));
+
+  const changedWriterHead = await commitChanges(context, {
+    [legacyPath]: `${legacySource}\nexport const unrelated = true;\n`,
+  });
+  assertViolation(
+    await runChecker(context, { base: docsHead, head: changedWriterHead }),
+    'AQ008_MEMBERSHIP_DIRECT_WRITER',
+  );
+});
+
+test('AQ008 不误报 Reader、普通字符串、注释、相邻表或测试文件', async (t) => {
+  const context = await createRepository(t, membershipSchemaFixture);
+  const head = await commitChanges(context, {
+    'src/server/membership-reader.ts': [
+      "import { tenantMembers } from '@/server/db/schema';",
+      'const note = "delete from tenant_members";',
+      'export const read = (db, sql) => {',
+      '  // db.delete(tenantMembers);',
+      '  sql`-- DELETE FROM tenant_members',
+      '      SELECT * FROM tenant_membership_transitions',
+      "      WHERE note = 'TRUNCATE tenant_members'`;",
+      '  return db.select().from(tenantMembers);',
+      '};',
+      'export { note };',
+      '',
+    ].join('\n'),
+    'src/server/tests/future-membership-writer.test.ts': [
+      "import { tenantMembers } from '@/server/db/schema';",
+      'export const fixtureWrite = (db) => db.delete(tenantMembers);',
+      '',
+    ].join('\n'),
+  });
+
+  assertPassed(await runChecker(context, { head }));
+});
+
+test('AQ008 不接受 rules.json 配置例外', async (t) => {
+  const writerPath = 'src/server/future-membership-writer.ts';
+  const context = await createRepository(t, {
+    ...membershipSchemaFixture,
+    [writerPath]: [
+      "import { tenantMembers } from '@/server/db/schema';",
+      'export const write = (db) => db.insert(tenantMembers);',
+      '',
+    ].join('\n'),
+  });
+
+  const result = await runChecker(context, {
+    head: context.base,
+    config: {
+      version: 1,
+      exceptions: [{
+        ruleId: 'AQ008_MEMBERSHIP_DIRECT_WRITER',
+        path: writerPath,
+        ...exceptionMetadata(),
+      }],
+    },
+  });
+
+  assertCheckerError(result);
+  assert.match(result.output, /未知 ruleId/);
+});
+
+test('AQ008 从提交 blob 取证，不受 Head 后工作树清理影响', async (t) => {
+  const writerPath = 'src/server/committed-membership-writer.ts';
+  const context = await createRepository(t, membershipSchemaFixture);
+  const head = await commitChanges(context, {
+    [writerPath]: [
+      "import { tenantMembers } from '@/server/db/schema';",
+      'export const write = (db) => db.insert(tenantMembers);',
+      '',
+    ].join('\n'),
+  });
+  await writeFixtureFile(context.repository, writerPath, 'export const safe = true;\n');
+
+  assertViolation(
+    await runChecker(context, { head }),
+    'AQ008_MEMBERSHIP_DIRECT_WRITER',
+  );
 });

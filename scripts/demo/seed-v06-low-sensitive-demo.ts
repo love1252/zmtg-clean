@@ -2,8 +2,6 @@ import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import postgres from 'postgres';
-
 import { assertDemoSeedAllowed } from '../../src/server/db/seed-guard';
 
 export const DEMO_SEED_KEY = 'v06_demo_low_sensitive_01';
@@ -12,6 +10,8 @@ export const DEMO_TENANT_NAME = '智美天工 V0.6 演示租户';
 export const DEMO_INSTITUTION_ID = 'v06-demo-low-sensitive-01-xinglan-institution';
 export const DEMO_INSTITUTION_NAME = '星澜医美演示机构';
 export const DEMO_WORKSPACE_ID = 'v06-demo-low-sensitive-01-workspace';
+export const demoSeedDatabaseWriteDisabledMessage =
+  '低敏 demo seed 数据库写入已关闭；Membership 必须由 Access Control Owner command 管理';
 
 const seedActorId = 'v06-demo-low-sensitive-01-system';
 const seedStartedAt = new Date('2026-07-07T09:00:00+08:00');
@@ -35,22 +35,7 @@ export type CliOptions = {
   mode: CliMode;
 };
 
-export type DemoSeedClientFactory = typeof postgres;
-type DbClient = ReturnType<DemoSeedClientFactory>;
-type DemoDatabase = DbClient;
 type SeedRecordSet = ReturnType<typeof buildDemoSeedRecords>;
-type DbScalar = string | number | boolean | Date | null | Record<string, unknown> | readonly string[];
-type DbRecord = Record<string, DbScalar>;
-type RowId = { id: string };
-type TableMutationSummary = {
-  tableName: string;
-  created?: number;
-  already_exists?: number;
-  cleaned?: number;
-  skipped: number;
-};
-type SeedApplySummary = { mode: 'apply'; seedKey: string; tables: TableMutationSummary[] };
-type SeedCleanupSummary = { mode: 'cleanup'; seedKey: string; tables: TableMutationSummary[] };
 
 function deterministicId(...parts: string[]) {
   const fullId = [demoSeedIdPrefix, ...parts].join('-');
@@ -635,14 +620,6 @@ export function assertWriteGuards(env: NodeJS.ProcessEnv = process.env) {
   return assertDemoSeedAllowed(env);
 }
 
-export function createGuardedDemoSeedClient(
-  env: NodeJS.ProcessEnv = process.env,
-  createClient: DemoSeedClientFactory = postgres,
-) {
-  const { databaseUrl } = assertWriteGuards(env);
-  return createClient(databaseUrl, { max: 1, prepare: false });
-}
-
 function ids<T extends { id: string }>(records: readonly T[]) {
   return records.map((record) => record.id);
 }
@@ -706,114 +683,28 @@ export function assertLowSensitiveSeed(records: SeedRecordSet = buildDemoSeedRec
   }
 }
 
-function toSnakeCase(value: string) {
-  return value.replace(/[A-Z]/gu, (match) => `_${match.toLowerCase()}`);
-}
-
-function toDbRecord(record: Record<string, unknown>): DbRecord {
-  return Object.fromEntries(
-    Object.entries(record).map(([key, value]) => [toSnakeCase(key), value as DbScalar]),
-  );
-}
-
-async function insertIfMissing<T extends { id: string }>(
-  db: DemoDatabase,
-  tableName: string,
-  records: readonly T[],
-): Promise<TableMutationSummary> {
-  if (records.length === 0) return { tableName, created: 0, already_exists: 0, skipped: 0 };
-  const rows = records.map((record) => toDbRecord(record));
-  const createdRows = await db<RowId[]>`
-    insert into ${db(tableName)} ${db(rows)} on conflict (id) do nothing returning id
-  `;
-  const created = createdRows.length;
-  return {
-    tableName,
-    created,
-    already_exists: records.length - created,
-    skipped: 0,
-  };
-}
-
-async function deleteByIds(
-  db: DemoDatabase,
-  tableName: string,
-  columnName: string,
-  recordIds: string[],
-): Promise<TableMutationSummary> {
-  if (recordIds.length === 0) return { tableName, cleaned: 0, skipped: 0 };
-  const deletedRows = await db<RowId[]>`
-    delete from ${db(tableName)} where ${db(columnName)} in ${db(recordIds)} returning id
-  `;
-  const cleaned = deletedRows.length;
-  return {
-    tableName,
-    cleaned,
-    skipped: recordIds.length - cleaned,
-  };
-}
-
+/**
+ * 写模式已关闭；保留函数签名只用于让既有调用方收到固定低敏失败。
+ */
 export async function applyDemoSeed(
-  db: DemoDatabase,
+  database: unknown,
   records: SeedRecordSet = buildDemoSeedRecords(),
-): Promise<SeedApplySummary> {
-  assertLowSensitiveSeed(records);
-
-  const tables = [
-    await insertIfMissing(db, 'auth_users', records.authUsers),
-    await insertIfMissing(db, 'tenants', records.tenants),
-    await insertIfMissing(db, 'tenant_members', records.tenantMembers),
-    await insertIfMissing(db, 'customers', records.customers),
-    await insertIfMissing(db, 'treatment_summaries', records.treatmentSummaries),
-    await insertIfMissing(db, 'follow_up_tasks', records.followUpTasks),
-    await insertIfMissing(db, 'follow_up_path_enrollments', records.followUpPathEnrollments),
-    await insertIfMissing(db, 'follow_up_path_stages', records.followUpPathStages),
-    await insertIfMissing(db, 'follow_up_message_templates', records.followUpMessageTemplates),
-    await insertIfMissing(db, 'follow_up_message_drafts', records.followUpMessageDrafts),
-    await insertIfMissing(db, 'follow_up_customer_timeline_events', records.followUpCustomerTimelineEvents),
-    await insertIfMissing(db, 'knowledge_sources', records.knowledgeSources),
-    await insertIfMissing(db, 'knowledge_documents', records.knowledgeDocuments),
-    await insertIfMissing(db, 'knowledge_chunks', records.knowledgeChunks),
-    await insertIfMissing(db, 'knowledge_index_jobs', records.knowledgeIndexJobs),
-  ];
-
-  return { mode: 'apply', seedKey: DEMO_SEED_KEY, tables };
+): Promise<never> {
+  void database;
+  void records;
+  throw new Error(demoSeedDatabaseWriteDisabledMessage);
 }
 
+/**
+ * 清理模式已关闭；禁止把旧 Membership deleter 改名或迁移到 helper／raw SQL。
+ */
 export async function cleanupDemoSeed(
-  db: DemoDatabase,
+  database: unknown,
   records: SeedRecordSet = buildDemoSeedRecords(),
-): Promise<SeedCleanupSummary> {
-  const cleanupPlan = getCleanupPlan(records);
-  const tables = [
-    await deleteByIds(db, 'follow_up_customer_timeline_events', 'id', cleanupPlan.followUpCustomerTimelineEvents),
-    await deleteByIds(db, 'follow_up_message_drafts', 'id', cleanupPlan.followUpMessageDrafts),
-    await deleteByIds(db, 'follow_up_path_stages', 'id', cleanupPlan.followUpPathStages),
-    await deleteByIds(db, 'follow_up_path_enrollments', 'id', cleanupPlan.followUpPathEnrollments),
-    await deleteByIds(db, 'follow_up_tasks', 'id', cleanupPlan.followUpTasks),
-    await deleteByIds(db, 'follow_up_message_templates', 'id', cleanupPlan.followUpMessageTemplates),
-    await deleteByIds(db, 'knowledge_index_jobs', 'id', cleanupPlan.knowledgeIndexJobs),
-    await deleteByIds(db, 'knowledge_chunks', 'id', cleanupPlan.knowledgeChunks),
-    await deleteByIds(db, 'knowledge_documents', 'id', cleanupPlan.knowledgeDocuments),
-    await deleteByIds(db, 'knowledge_sources', 'id', cleanupPlan.knowledgeSources),
-    await deleteByIds(db, 'treatment_summaries', 'id', cleanupPlan.treatmentSummaries),
-    await deleteByIds(db, 'customers', 'id', cleanupPlan.customers),
-    await deleteByIds(db, 'tenant_members', 'id', cleanupPlan.tenantMembers),
-  ];
-
-  const remainingSeedScopedRows = await db<RowId[]>`
-    select id from tenant_members where tenant_id = ${DEMO_TENANT_ID}
-  `;
-
-  if (remainingSeedScopedRows.length === 0) {
-    tables.push(await deleteByIds(db, 'tenants', 'id', cleanupPlan.tenants));
-  } else {
-    tables.push({ tableName: 'tenants', cleaned: 0, skipped: cleanupPlan.tenants.length });
-  }
-
-  tables.push(await deleteByIds(db, 'auth_users', 'id', cleanupPlan.authUsers));
-
-  return { mode: 'cleanup', seedKey: DEMO_SEED_KEY, tables };
+): Promise<never> {
+  void database;
+  void records;
+  throw new Error(demoSeedDatabaseWriteDisabledMessage);
 }
 
 function printPlan(mode: CliMode, records: SeedRecordSet) {
@@ -834,30 +725,16 @@ function printPlan(mode: CliMode, records: SeedRecordSet) {
   }, null, 2));
 }
 
-function printMutationSummary(summary: SeedApplySummary | SeedCleanupSummary) {
-  console.log(JSON.stringify(summary, null, 2));
-}
-
-async function runCli() {
-  const options = parseCliArgs(process.argv.slice(2));
+export async function runDemoSeedCli(
+  argv: string[] = process.argv.slice(2),
+): Promise<void> {
+  const options = parseCliArgs(argv);
   const records = buildDemoSeedRecords();
   assertLowSensitiveSeed(records);
   printPlan(options.mode, records);
 
   if (options.mode === 'dry-run') return;
-
-  const client = createGuardedDemoSeedClient();
-  const db = client;
-
-  try {
-    if (options.mode === 'apply') {
-      printMutationSummary(await applyDemoSeed(db, records));
-    } else {
-      printMutationSummary(await cleanupDemoSeed(db, records));
-    }
-  } finally {
-    await client.end();
-  }
+  throw new Error(demoSeedDatabaseWriteDisabledMessage);
 }
 
 function isDirectRun() {
@@ -865,7 +742,7 @@ function isDirectRun() {
 }
 
 if (isDirectRun()) {
-  runCli().catch((error) => {
+  runDemoSeedCli().catch((error) => {
     console.error(error instanceof Error ? error.message : 'demo seed failed');
     process.exit(1);
   });

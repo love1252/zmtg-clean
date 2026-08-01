@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createPostgresClient, type TenantDatabase } from '@/server/db/client';
-import { demoSeedProductionGuardMessage, runSeed } from '@/server/db/seed-demo-data';
+import { demoSeedDatabaseWriteDisabledMessage, runSeed } from '@/server/db/seed-demo-data';
 import { assertDemoSeedAllowed } from '@/server/db/seed-guard';
 
 function localSeedEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): NodeJS.ProcessEnv {
@@ -112,7 +111,7 @@ describe('demo seed guard', () => {
     expect(message).not.toContain(password);
   });
 
-  it('guard 失败时不会创建数据库 client', async () => {
+  it('任意环境的 runSeed 均固定关闭且不会创建数据库 client', async () => {
     const createClient = vi.fn();
     const dependencies = {
       createPostgresClient: createClient,
@@ -120,32 +119,14 @@ describe('demo seed guard', () => {
       seedDemoData: vi.fn(),
     } as unknown as NonNullable<Parameters<typeof runSeed>[1]>;
 
+    await expect(runSeed(localSeedEnv(), dependencies)).rejects.toThrow(
+      demoSeedDatabaseWriteDisabledMessage,
+    );
     await expect(runSeed(localSeedEnv({ NODE_ENV: 'test' }), dependencies)).rejects.toThrow(
-      demoSeedProductionGuardMessage,
+      demoSeedDatabaseWriteDisabledMessage,
     );
     expect(createClient).not.toHaveBeenCalled();
-  });
-
-  it('实际数据库 client 使用 guard 校验过的同一 URL', async () => {
-    const databaseUrl = 'postgres://seed-user:seed-password@127.0.0.1:5432/zmtg_demo';
-    const end = vi.fn().mockResolvedValue(undefined);
-    const queryClient = { end } as unknown as ReturnType<typeof createPostgresClient>;
-    const db = {} as TenantDatabase;
-    const createClient = vi.fn(() => queryClient);
-    const createDb = vi.fn(() => db);
-    const executeSeed = vi.fn().mockResolvedValue(undefined);
-    const dependencies = {
-      createPostgresClient: createClient,
-      createDatabase: createDb,
-      seedDemoData: executeSeed,
-    } as unknown as NonNullable<Parameters<typeof runSeed>[1]>;
-
-    await runSeed(localSeedEnv({ DATABASE_URL: databaseUrl }), dependencies);
-
-    expect(createClient).toHaveBeenCalledOnce();
-    expect(createClient).toHaveBeenCalledWith(databaseUrl);
-    expect(createDb).toHaveBeenCalledWith(queryClient);
-    expect(executeSeed).toHaveBeenCalledWith(db);
-    expect(end).toHaveBeenCalledOnce();
+    expect(dependencies.createDatabase).not.toHaveBeenCalled();
+    expect(dependencies.seedDemoData).not.toHaveBeenCalled();
   });
 });

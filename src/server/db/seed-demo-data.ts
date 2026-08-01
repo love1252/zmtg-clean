@@ -1,8 +1,8 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { eq, inArray, or, sql } from 'drizzle-orm';
-import { createDatabase, createPostgresClient, type TenantDatabase } from '@/server/db/client';
+import { inArray, or } from 'drizzle-orm';
+import type { TenantDatabase } from '@/server/db/client';
 import { assertDemoSeedAllowed } from '@/server/db/seed-guard';
 import {
   appointments,
@@ -14,7 +14,6 @@ import {
   tenantCommercialRecords,
   tenantMembers,
   tenantPlanAssignments,
-  tenantPlanChangeRecords,
   tenantPlans,
   tenantPlanVersions,
   tenantQuotaSnapshots,
@@ -35,24 +34,12 @@ const demoTenantId = primaryDemoTenantId;
 const secondaryTenantId = starterXingheTenantId;
 const demoSeedStartedAt = new Date('2026-06-01T09:00:00+08:00');
 const demoSeedSnapshotAt = new Date('2026-06-02T09:00:00+08:00');
-const legacyDemoTenantIds = [
-  'demo-tenant-001',
-  'demo-tenant-002',
-  'demo-tenant-003',
-  'demo-tenant-004',
-];
-const legacyDemoPlanIds = ['plan-enterprise-care'];
-const legacyDemoPlanVersionIds = [
-  'plan-version-starter-care-2026-v1',
-  'plan-version-growth-care-2026-v1',
-  'plan-version-trial-care-2026-v1',
-  'plan-version-enterprise-care-2026-v1',
-];
-
 export const demoSeedProductionGuardMessage =
   'demo seed 仅允许明确确认的 local/demo loopback 数据库；production/staging 环境始终拒绝';
 export const demoSeedAuthUserOwnershipConflictMessage =
   'demo seed auth user ownership conflict';
+export const demoSeedDatabaseWriteDisabledMessage =
+  'demo seed 数据库写入已关闭；Membership 必须由 Access Control Owner command 管理';
 
 type DemoCustomerReference = {
   source: 'appointment' | 'follow_up_task' | 'treatment_summary';
@@ -1508,359 +1495,30 @@ export function assertDemoSeedExecutionAllowed(env: NodeJS.ProcessEnv = process.
   }
 }
 
-async function cleanupLegacyDemoSeedRecords(db: TenantDatabase) {
-  await db.delete(auditEvents).where(inArray(auditEvents.tenantId, legacyDemoTenantIds));
-  await db.delete(followUpTasks).where(inArray(followUpTasks.tenantId, legacyDemoTenantIds));
-  await db.delete(treatmentSummaries).where(inArray(treatmentSummaries.tenantId, legacyDemoTenantIds));
-  await db.delete(appointments).where(inArray(appointments.tenantId, legacyDemoTenantIds));
-  await db.delete(customers).where(inArray(customers.tenantId, legacyDemoTenantIds));
-  await db.delete(tenantCommercialRecords).where(inArray(tenantCommercialRecords.tenantId, legacyDemoTenantIds));
-  await db.delete(tenantPlanChangeRecords).where(inArray(tenantPlanChangeRecords.tenantId, legacyDemoTenantIds));
-  await db.delete(tenantAuthorizationSnapshots).where(
-    inArray(tenantAuthorizationSnapshots.tenantId, legacyDemoTenantIds),
-  );
-  await db.delete(tenantQuotaSnapshots).where(inArray(tenantQuotaSnapshots.tenantId, legacyDemoTenantIds));
-  await db.delete(tenantMembers).where(inArray(tenantMembers.tenantId, legacyDemoTenantIds));
-  await db.delete(tenantPlanAssignments).where(inArray(tenantPlanAssignments.tenantId, legacyDemoTenantIds));
-  await db.delete(tenants).where(inArray(tenants.id, legacyDemoTenantIds));
-  await db.delete(tenantPlanVersions).where(inArray(tenantPlanVersions.id, legacyDemoPlanVersionIds));
-  await db.delete(tenantPlanVersions).where(inArray(tenantPlanVersions.planId, legacyDemoPlanIds));
-  await db.delete(tenantPlans).where(inArray(tenantPlans.id, legacyDemoPlanIds));
-}
-
-export async function seedDemoData(db: TenantDatabase) {
-  assertDemoSeedAuthUserReferenceCoverage();
-  assertDemoCustomerReferenceCoverage();
-  assertDemoTreatmentAppointmentReferenceCoverage();
-  assertDemoFollowUpSourceReferenceCoverage();
-  await assertDemoSeedAuthUserOwnership(db);
-  await cleanupLegacyDemoSeedRecords(db);
-
-  await db
-    .insert(authUsers)
-    .values(getDemoSeedAuthUserRecords())
-    .onConflictDoUpdate({
-      target: authUsers.id,
-      set: {
-        displayName: sql`excluded.display_name`,
-        phone: sql`excluded.phone`,
-        email: sql`excluded.email`,
-        passwordHash: sql`excluded.password_hash`,
-        passwordUpdatedAt: sql`excluded.password_updated_at`,
-        passwordResetRequired: sql`excluded.password_reset_required`,
-        status: sql`excluded.status`,
-        lastLoginAt: sql`excluded.last_login_at`,
-        failedLoginCount: sql`excluded.failed_login_count`,
-        lockedUntil: sql`excluded.locked_until`,
-        createdBy: sql`excluded.created_by`,
-        updatedBy: sql`excluded.updated_by`,
-        updatedAt: sql`excluded.updated_at`,
-      },
-    });
-
-  await db
-    .insert(tenants)
-    .values(getDemoTenantSeedRecords())
-    .onConflictDoUpdate({
-      target: tenants.id,
-      set: {
-        name: sql`excluded.name`,
-        status: sql`excluded.status`,
-        updatedAt: sql`now()`,
-      },
-    });
-
-  await db
-    .insert(tenantPlans)
-    .values(getDemoTenantPlanSeedRecords())
-    .onConflictDoUpdate({
-      target: tenantPlans.id,
-      set: {
-        name: sql`excluded.name`,
-        code: sql`excluded.code`,
-        description: sql`excluded.description`,
-        status: sql`excluded.status`,
-        updatedAt: sql`now()`,
-      },
-    });
-
-  await db
-    .insert(tenantPlanVersions)
-    .values(getDemoTenantPlanVersionSeedRecords())
-    .onConflictDoUpdate({
-      target: tenantPlanVersions.id,
-      set: {
-        planId: sql`excluded.plan_id`,
-        versionCode: sql`excluded.version_code`,
-        status: sql`excluded.status`,
-        displayName: sql`excluded.display_name`,
-        displayPrice: sql`excluded.display_price`,
-        priceNote: sql`excluded.price_note`,
-        agentLimit: sql`excluded.agent_limit`,
-        seatLimit: sql`excluded.seat_limit`,
-        monthlyAiCallLimit: sql`excluded.monthly_ai_call_limit`,
-        knowledgeStorageGb: sql`excluded.knowledge_storage_gb`,
-        connectorEntitlementsJson: sql`excluded.connector_entitlements_json`,
-        serviceEntitlementsJson: sql`excluded.service_entitlements_json`,
-        featureEntitlementsJson: sql`excluded.feature_entitlements_json`,
-        quotaEntitlementsJson: sql`excluded.quota_entitlements_json`,
-        changeSummary: sql`excluded.change_summary`,
-        createdBy: sql`excluded.created_by`,
-        updatedBy: sql`excluded.updated_by`,
-        publishedBy: sql`excluded.published_by`,
-        publishedAt: sql`excluded.published_at`,
-        retiredAt: sql`excluded.retired_at`,
-        updatedAt: sql`excluded.updated_at`,
-      },
-    });
-
-  for (const plan of getDemoTenantPlanSeedRecords()) {
-    await db
-      .update(tenantPlanVersions)
-      .set({ displayName: plan.name })
-      .where(eq(tenantPlanVersions.planId, plan.id));
-  }
-
-  for (const plan of getDemoTenantPlanSeedRecords().filter((record) => record.status === 'retired')) {
-    await db
-      .update(tenantPlanVersions)
-      .set({
-        status: 'retired',
-        retiredAt: demoSeedSnapshotAt,
-        updatedAt: demoSeedSnapshotAt,
-      })
-      .where(eq(tenantPlanVersions.planId, plan.id));
-  }
-
-  await db
-    .insert(tenantPlanAssignments)
-    .values(getDemoTenantPlanAssignmentSeedRecords())
-    .onConflictDoUpdate({
-      target: tenantPlanAssignments.id,
-      set: {
-        tenantId: sql`excluded.tenant_id`,
-        planId: sql`excluded.plan_id`,
-        planVersionId: sql`excluded.plan_version_id`,
-        status: sql`excluded.status`,
-        startedAt: sql`excluded.started_at`,
-        expiresAt: sql`excluded.expires_at`,
-        updatedAt: sql`now()`,
-      },
-    });
-
-  await db
-    .insert(tenantAuthorizationSnapshots)
-    .values(getDemoTenantAuthorizationSnapshotSeedRecords())
-    .onConflictDoUpdate({
-      target: tenantAuthorizationSnapshots.id,
-      set: {
-        tenantId: sql`excluded.tenant_id`,
-        planAssignmentId: sql`excluded.plan_assignment_id`,
-        planVersionId: sql`excluded.plan_version_id`,
-        status: sql`excluded.status`,
-        snapshotJson: sql`excluded.snapshot_json`,
-        quotaJson: sql`excluded.quota_json`,
-        connectorJson: sql`excluded.connector_json`,
-        serviceJson: sql`excluded.service_json`,
-        sourceChangeRecordId: sql`excluded.source_change_record_id`,
-        generatedBy: sql`excluded.generated_by`,
-        generatedAt: sql`excluded.generated_at`,
-        supersededAt: sql`excluded.superseded_at`,
-        createdAt: sql`excluded.created_at`,
-      },
-    });
-
-  await db
-    .insert(tenantQuotaSnapshots)
-    .values(getDemoTenantQuotaSnapshotSeedRecords())
-    .onConflictDoUpdate({
-      target: tenantQuotaSnapshots.id,
-      set: {
-        tenantId: sql`excluded.tenant_id`,
-        planAssignmentId: sql`excluded.plan_assignment_id`,
-        maxCustomers: sql`excluded.max_customers`,
-        maxAppointments: sql`excluded.max_appointments`,
-        maxFollowUps: sql`excluded.max_follow_ups`,
-        maxAiCalls: sql`excluded.max_ai_calls`,
-        currentCustomers: sql`excluded.current_customers`,
-        currentAppointments: sql`excluded.current_appointments`,
-        currentFollowUps: sql`excluded.current_follow_ups`,
-        currentAiCalls: sql`excluded.current_ai_calls`,
-        snapshotAt: sql`excluded.snapshot_at`,
-      },
-    });
-
-  await db
-    .insert(tenantCommercialRecords)
-    .values(getDemoTenantCommercialRecordSeedRecords())
-    .onConflictDoUpdate({
-      target: tenantCommercialRecords.id,
-      set: {
-        tenantId: sql`excluded.tenant_id`,
-        recordType: sql`excluded.record_type`,
-        status: sql`excluded.status`,
-        displayCode: sql`excluded.display_code`,
-        displayAmount: sql`excluded.display_amount`,
-        periodLabel: sql`excluded.period_label`,
-        relatedPlanChangeId: sql`excluded.related_plan_change_id`,
-        note: sql`excluded.note`,
-        occurredAt: sql`excluded.occurred_at`,
-        createdBy: sql`excluded.created_by`,
-        updatedBy: sql`excluded.updated_by`,
-        updatedAt: sql`excluded.updated_at`,
-      },
-    });
-
-  await db
-    .insert(tenantMembers)
-    .values(getDemoTenantMemberSeedRecords())
-    .onConflictDoUpdate({
-      target: tenantMembers.id,
-      set: {
-        tenantId: sql`excluded.tenant_id`,
-        userId: sql`excluded.user_id`,
-        role: sql`excluded.role`,
-        displayName: sql`excluded.display_name`,
-        updatedAt: sql`now()`,
-      },
-    });
-
-  await db
-    .insert(customers)
-    .values(getDemoCustomerSeedRecords())
-    .onConflictDoUpdate({
-      target: customers.id,
-      set: {
-        tenantId: sql`excluded.tenant_id`,
-        institutionId: sql`excluded.institution_id`,
-        displayName: sql`excluded.display_name`,
-        lifecycle: sql`excluded.lifecycle`,
-        priority: sql`excluded.priority`,
-        ownerUserId: sql`excluded.owner_user_id`,
-        projectInterest: sql`excluded.project_interest`,
-        maskedPhone: sql`excluded.masked_phone`,
-        maskedMedicalRecordNo: sql`excluded.masked_medical_record_no`,
-        lastTouchSummary: sql`excluded.last_touch_summary`,
-        nextAction: sql`excluded.next_action`,
-        tags: sql`excluded.tags`,
-        updatedAt: sql`now()`,
-      },
-    });
-
-  await db
-    .insert(appointments)
-    .values(getDemoAppointmentSeedRecords())
-    .onConflictDoUpdate({
-      target: appointments.id,
-      set: {
-        tenantId: sql`excluded.tenant_id`,
-        customerId: sql`excluded.customer_id`,
-        customerDisplayName: sql`excluded.customer_display_name`,
-        project: sql`excluded.project`,
-        scheduledAt: sql`excluded.scheduled_at`,
-        consultantUserId: sql`excluded.consultant_user_id`,
-        status: sql`excluded.status`,
-        note: sql`excluded.note`,
-        updatedAt: sql`now()`,
-      },
-    });
-
-  await db
-    .insert(treatmentSummaries)
-    .values(getDemoTreatmentSummarySeedRecords())
-    .onConflictDoUpdate({
-      target: treatmentSummaries.id,
-      set: {
-        tenantId: sql`excluded.tenant_id`,
-        customerId: sql`excluded.customer_id`,
-        appointmentId: sql`excluded.appointment_id`,
-        treatmentDate: sql`excluded.treatment_date`,
-        treatmentProject: sql`excluded.treatment_project`,
-        treatmentCategory: sql`excluded.treatment_category`,
-        treatmentStage: sql`excluded.treatment_stage`,
-        recoveryStage: sql`excluded.recovery_stage`,
-        riskLevel: sql`excluded.risk_level`,
-        ownerUserId: sql`excluded.owner_user_id`,
-        summary: sql`excluded.summary`,
-        nextCareAction: sql`excluded.next_care_action`,
-        tags: sql`excluded.tags`,
-        voidedAt: sql`excluded.voided_at`,
-        voidedBy: sql`excluded.voided_by`,
-        voidReasonCode: sql`excluded.void_reason_code`,
-        voidReason: sql`excluded.void_reason`,
-        updatedAt: sql`excluded.updated_at`,
-      },
-    });
-
-  await db
-    .insert(followUpTasks)
-    .values(getDemoFollowUpTaskSeedRecords())
-    .onConflictDoUpdate({
-      target: followUpTasks.id,
-      set: {
-        tenantId: sql`excluded.tenant_id`,
-        customerId: sql`excluded.customer_id`,
-        customerDisplayName: sql`excluded.customer_display_name`,
-        journeyId: sql`excluded.journey_id`,
-        stage: sql`excluded.stage`,
-        status: sql`excluded.status`,
-        dueAt: sql`excluded.due_at`,
-        suggestedAction: sql`excluded.suggested_action`,
-        riskLevel: sql`excluded.risk_level`,
-        sourceTreatmentSummaryId: sql`excluded.source_treatment_summary_id`,
-        sourceSuggestionKey: sql`excluded.source_suggestion_key`,
-        updatedBy: sql`excluded.updated_by`,
-        updatedAt: sql`excluded.updated_at`,
-      },
-    });
-
-  await db
-    .insert(auditEvents)
-    .values(getDemoAuditEventSeedRecords())
-    .onConflictDoUpdate({
-      target: auditEvents.eventId,
-      set: {
-        actorId: sql`excluded.actor_id`,
-        actorRole: sql`excluded.actor_role`,
-        tenantId: sql`excluded.tenant_id`,
-        scope: sql`excluded.scope`,
-        resource: sql`excluded.resource`,
-        resourceId: sql`excluded.resource_id`,
-        action: sql`excluded.action`,
-        result: sql`excluded.result`,
-        reason: sql`excluded.reason`,
-        occurredAt: sql`excluded.occurred_at`,
-        source: sql`excluded.source`,
-      },
-    });
+/**
+ * 旧 demo seed 写入口已关闭。
+ *
+ * 静态低敏 fixture 仍可供测试和只读预览使用；任何数据库写入必须经其事实 Owner 的独立命令
+ * 边界。传入的 database 不得被读取，也不得通过 helper 或 raw SQL 恢复旧 Membership Writer。
+ */
+export async function seedDemoData(database: TenantDatabase): Promise<never> {
+  void database;
+  throw new Error(demoSeedDatabaseWriteDisabledMessage);
 }
 
 type SeedRuntimeDependencies = {
-  createPostgresClient: typeof createPostgresClient;
-  createDatabase: typeof createDatabase;
+  createPostgresClient: (...args: never[]) => unknown;
+  createDatabase: (...args: never[]) => unknown;
   seedDemoData: typeof seedDemoData;
-};
-
-const defaultSeedRuntimeDependencies: SeedRuntimeDependencies = {
-  createPostgresClient,
-  createDatabase,
-  seedDemoData,
 };
 
 export async function runSeed(
   env: NodeJS.ProcessEnv = process.env,
-  dependencies: SeedRuntimeDependencies = defaultSeedRuntimeDependencies,
-) {
-  const { databaseUrl } = assertDemoSeedExecutionAllowed(env);
-
-  const queryClient = dependencies.createPostgresClient(databaseUrl);
-  const db = dependencies.createDatabase(queryClient);
-
-  try {
-    await dependencies.seedDemoData(db);
-  } finally {
-    await queryClient.end();
-  }
+  dependencies?: SeedRuntimeDependencies,
+): Promise<never> {
+  void env;
+  void dependencies;
+  throw new Error(demoSeedDatabaseWriteDisabledMessage);
 }
 
 function isDirectRun() {

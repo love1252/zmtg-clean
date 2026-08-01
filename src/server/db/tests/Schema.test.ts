@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDatabaseUrlErrorMessage, type TenantDatabase } from '@/server/db/client';
 import { authenticateDemoUser } from '@/modules/auth/server/demo-session';
 import {
-  demoSeedAuthUserOwnershipConflictMessage,
+  demoSeedDatabaseWriteDisabledMessage,
   getDemoSeedAuthUserRecords,
   getDemoCustomerSeedRecords,
   getDemoTenantAuthorizationSnapshotSeedRecords,
@@ -96,56 +96,6 @@ function serializeSeedRecords(records: unknown[]) {
   return JSON.stringify(records);
 }
 
-type DemoSeedAuthUserRow = {
-  id: string;
-  username: string;
-  createdBy: string;
-};
-
-function createDemoSeedDatabaseMock(existingAuthUsers: DemoSeedAuthUserRow[] = []) {
-  const operationCalls: string[] = [];
-  const upsertCalls: Array<{ table: unknown; config: Record<string, unknown> }> = [];
-  const select = vi.fn(() => ({
-    from: vi.fn(() => ({
-      where: vi.fn(async () => existingAuthUsers),
-    })),
-  }));
-  const deleteMock = vi.fn(() => {
-    operationCalls.push('delete');
-    return { where: vi.fn(async () => undefined) };
-  });
-  const updateMock = vi.fn(() => {
-    operationCalls.push('update');
-    return {
-      set: vi.fn(() => ({ where: vi.fn(async () => undefined) })),
-    };
-  });
-  const insertMock = vi.fn((table: unknown) => ({
-    values: vi.fn(() => ({
-      onConflictDoUpdate: vi.fn(async (config: Record<string, unknown>) => {
-        operationCalls.push(
-          table === authUsers ? 'insert:auth_users' : table === tenantMembers ? 'insert:tenant_members' : 'insert',
-        );
-        upsertCalls.push({ table, config });
-      }),
-    })),
-  }));
-
-  return {
-    db: {
-      select,
-      delete: deleteMock,
-      update: updateMock,
-      insert: insertMock,
-    } as unknown as TenantDatabase,
-    deleteMock,
-    insertMock,
-    operationCalls,
-    select,
-    updateMock,
-    upsertCalls,
-  };
-}
 
 const sensitiveDemoSeedPattern =
   /(1[3-9]\d{9}|[1-9]\d{16}[\dXx]|DATABASE_URL|token|secret|password|Bearer\s+|mysql:\/\/|postgres:\/\/|stack trace|SQLSTATE|完整治疗记录|完整病历|咨询对话全文|图片原文|文件原文)/i;
@@ -2172,106 +2122,26 @@ describe('数据库结构', () => {
     );
   });
 
-  it.each([
-    [
-      '同 ID 的非 seed-owned 账号',
-      () => {
-        const expected = getDemoSeedAuthUserRecords()[0];
-        return {
-          id: expected.id,
-          username: 'manual-account',
-          createdBy: 'manual-operator',
-        };
+  it('旧 demo seed 写入口固定关闭且不读取传入数据库', async () => {
+    const databaseAccess = vi.fn();
+    const database = new Proxy(
+      {},
+      {
+        get(_target, property) {
+          databaseAccess(property);
+          throw new Error('database_must_not_be_used');
+        },
       },
-    ],
-    [
-      '同 ID 但 username 不匹配的账号',
-      () => {
-        const expected = getDemoSeedAuthUserRecords()[0];
-        return {
-          id: expected.id,
-          username: 'manual-account',
-          createdBy: 'legacy-demo-seed-actor',
-        };
-      },
-    ],
-    [
-      '同 ID 但 createdBy 不匹配的账号',
-      () => {
-        const expected = getDemoSeedAuthUserRecords()[0];
-        return {
-          id: expected.id,
-          username: expected.username,
-          createdBy: 'manual-operator',
-        };
-      },
-    ],
-    [
-      '预期 username 被其他 ID 占用的账号',
-      () => {
-        const expected = getDemoSeedAuthUserRecords()[0];
-        return {
-          id: 'manual-auth-user',
-          username: expected.username,
-          createdBy: 'legacy-demo-seed-actor',
-        };
-      },
-    ],
-  ])('旧演示 auth user 预检在%s时 fail-closed，且不执行任何写入', async (_scenario, createRow) => {
-    const mock = createDemoSeedDatabaseMock([createRow()]);
+    ) as TenantDatabase;
 
-    await expect(seedDemoData.seedDemoData(mock.db)).rejects.toThrow(
-      demoSeedAuthUserOwnershipConflictMessage,
+    await expect(seedDemoData.seedDemoData(database)).rejects.toThrow(
+      demoSeedDatabaseWriteDisabledMessage,
+    );
+    await expect(seedDemoData.seedDemoData(database)).rejects.toThrow(
+      demoSeedDatabaseWriteDisabledMessage,
     );
 
-    expect(mock.select).toHaveBeenCalledTimes(1);
-    expect(mock.deleteMock).not.toHaveBeenCalled();
-    expect(mock.insertMock).not.toHaveBeenCalled();
-    expect(mock.updateMock).not.toHaveBeenCalled();
-    expect(mock.operationCalls).toEqual([]);
-  });
-
-  it('旧演示 auth user 预检允许全新空库继续', async () => {
-    const mock = createDemoSeedDatabaseMock();
-
-    await expect(seedDemoData.seedDemoData(mock.db)).resolves.toBeUndefined();
-
-    expect(mock.select).toHaveBeenCalledTimes(1);
-    expect(mock.deleteMock).toHaveBeenCalled();
-    expect(mock.insertMock).toHaveBeenCalled();
-  });
-
-  it('旧演示 auth user 预检允许正常 seed-owned 账号继续并保持幂等顺序', async () => {
-    const mock = createDemoSeedDatabaseMock(
-      getDemoSeedAuthUserRecords().map(({ id, username, createdBy }) => ({
-        id,
-        username,
-        createdBy,
-      })),
-    );
-
-    await seedDemoData.seedDemoData(mock.db);
-    await seedDemoData.seedDemoData(mock.db);
-
-    expect(mock.select).toHaveBeenCalledTimes(2);
-    expect(mock.operationCalls.filter((call) => call === 'insert:auth_users')).toHaveLength(2);
-    expect(mock.operationCalls.filter((call) => call === 'insert:tenant_members')).toHaveLength(2);
-    expect(mock.operationCalls.indexOf('insert:auth_users')).toBeLessThan(
-      mock.operationCalls.indexOf('insert:tenant_members'),
-    );
-    expect(mock.operationCalls.lastIndexOf('insert:auth_users')).toBeLessThan(
-      mock.operationCalls.lastIndexOf('insert:tenant_members'),
-    );
-    expect(
-      mock.upsertCalls
-        .filter(({ table }) => table === authUsers)
-        .every(
-          ({ config }) =>
-            config.target === authUsers.id &&
-            config.setWhere === undefined &&
-            !Object.hasOwn(config.set as object, 'username'),
-        ),
-    ).toBe(true);
+    expect(databaseAccess).not.toHaveBeenCalled();
   });
 
   it('旧演示客户数量和 admin、platform 会话映射保持不变', () => {
@@ -2600,33 +2470,26 @@ describe('数据库结构', () => {
     expect(serializeSeedRecords(allSeedRecords)).not.toMatch(sensitiveDemoSeedPattern);
   });
 
-  it('演示 seed 入口采用可重复执行的 upsert 策略', () => {
+  it('演示 seed 数据库写入口已物理移除且保持固定关闭', () => {
     const seedSource = readFileSync(join(process.cwd(), 'src/server/db/seed-demo-data.ts'), 'utf8');
 
-    expect(seedSource).toContain('onConflictDoUpdate');
-    expect(seedSource).not.toContain('onConflictDoNothing');
-    expect(seedSource).toContain('.insert(tenantPlanVersions)');
-    expect(seedSource).toContain('.insert(tenantAuthorizationSnapshots)');
-    expect(seedSource).toContain('.insert(tenantCommercialRecords)');
-    expect(seedSource).toContain('institutionId: sql`excluded.institution_id`');
-    expect(seedSource).toContain('.update(tenantPlanVersions)');
-    expect(seedSource).toContain('displayName: plan.name');
+    expect(seedSource).toContain('demoSeedDatabaseWriteDisabledMessage');
+    expect(seedSource).not.toContain('.insert(tenantMembers)');
+    expect(seedSource).not.toContain('.update(tenantMembers)');
+    expect(seedSource).not.toContain('.delete(tenantMembers)');
+    expect(seedSource).not.toContain('cleanupLegacyDemoSeedRecords');
+    expect(seedSource).not.toContain('dependencies.createPostgresClient(');
+    expect(seedSource).not.toContain('dependencies.createDatabase(');
   });
 
-  it('商业试用 seed 会清理旧 demo 租户和旧集团版套餐残留', () => {
+  it('静态 demo fixture 保留，但不再携带旧 Membership 清理路径', () => {
     const seedSource = readFileSync(join(process.cwd(), 'src/server/db/seed-demo-data.ts'), 'utf8');
 
-    expect(seedSource).toContain('cleanupLegacyDemoSeedRecords');
-    expect(seedSource).toContain('legacyDemoTenantIds');
-    expect(seedSource).toContain('demo-tenant-004');
-    expect(seedSource).toContain('plan-enterprise-care');
-    expect(seedSource).toContain('.delete(tenantPlanAssignments)');
-    expect(seedSource).toContain('.delete(tenantAuthorizationSnapshots)');
-    expect(seedSource).toContain('.delete(tenantQuotaSnapshots)');
-    expect(seedSource).toContain('.delete(tenantPlanVersions)');
-    expect(seedSource).toContain('inArray(tenantPlanVersions.planId, legacyDemoPlanIds)');
-    expect(seedSource).toContain('.delete(tenantPlans)');
-    expect(seedSource).toContain('await cleanupLegacyDemoSeedRecords(db)');
+    expect(getDemoTenantSeedRecords()).not.toHaveLength(0);
+    expect(getDemoTenantMemberSeedRecords()).not.toHaveLength(0);
+    expect(seedSource).not.toContain('legacyDemoTenantIds');
+    expect(seedSource).not.toContain('legacyDemoPlanIds');
+    expect(seedSource).not.toContain('legacyDemoPlanVersionIds');
   });
 
   it('演示 seed 不写入 HIS 连接配置或凭证引用数据', () => {
