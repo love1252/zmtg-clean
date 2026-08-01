@@ -35,6 +35,7 @@ import {
   institutionOperatingContextVersions,
   institutionScopes,
   institutionChannelDryRunSnapshots,
+  tenantMembershipTransitions,
   tenantMembers,
   tenants,
   treatmentSummaries,
@@ -791,6 +792,268 @@ describe('数据库结构', () => {
           columns: ['tenant_id', 'role'],
         },
       ]),
+    );
+  });
+
+  it('Membership M1 Expand 只增加 nullable current envelope 与 immutable transition evidence', () => {
+    expect(schema.membershipLifecycleStatusEnum.enumValues).toEqual([
+      'active',
+      'revoked',
+      'deleted',
+    ]);
+    expect(schema.membershipProvenanceSourceEnum.enumValues).toEqual([
+      'formal_onboarding',
+      'access_control_command',
+      'legacy_calibration',
+    ]);
+    expect(schema.membershipTransitionTypeEnum.enumValues).toEqual([
+      'create',
+      'refresh',
+      'revoke',
+      'reactivate',
+      'delete',
+      'legacy_calibration',
+    ]);
+
+    const memberConfig = getTableConfig(tenantMembers);
+    const memberColumns = Object.fromEntries(
+      memberConfig.columns.map((column) => [column.name, column]),
+    );
+    const envelopeColumnNames = [
+      'revision',
+      'lifecycle_status',
+      'current_provenance_source',
+      'current_provenance_actor_id',
+      'current_provenance_reason_code',
+      'current_provenance_command_id',
+      'current_provenance_occurred_at',
+      'current_provenance_recorded_at',
+      'revoked_at',
+      'deleted_at',
+    ];
+
+    expect(tenantMembers.id.primary).toBe(true);
+    expect(tenantMembers.id.getSQLType()).toBe('varchar(64)');
+
+    for (const columnName of envelopeColumnNames) {
+      expect(memberColumns[columnName]).toBeDefined();
+      expect(memberColumns[columnName]?.notNull).toBe(false);
+      expect(memberColumns[columnName]?.hasDefault).toBe(false);
+    }
+    expect(memberColumns.revision?.getSQLType()).toBe('integer');
+    expect(memberColumns.lifecycle_status?.getSQLType()).toBe('membership_lifecycle_status');
+    expect(memberColumns.current_provenance_source?.getSQLType()).toBe(
+      'membership_provenance_source',
+    );
+    expect(memberColumns.current_provenance_actor_id?.getSQLType()).toBe('varchar(96)');
+    expect(memberColumns.current_provenance_reason_code?.getSQLType()).toBe('varchar(96)');
+    expect(memberColumns.current_provenance_command_id?.getSQLType()).toBe('varchar(128)');
+    expect(memberColumns.current_provenance_occurred_at?.getSQLType()).toBe(
+      'timestamp with time zone',
+    );
+    expect(memberColumns.current_provenance_recorded_at?.getSQLType()).toBe(
+      'timestamp with time zone',
+    );
+
+    const tenantIdentityUnique = memberConfig.uniqueConstraints.find(
+      (constraint) => constraint.getName() === 'tenant_members_tenant_id_id_unique',
+    );
+    expect(columnNames(tenantIdentityUnique?.columns ?? [])).toEqual(['tenant_id', 'id']);
+
+    const dialect = new PgDialect();
+    const envelopeCheck = memberConfig.checks.find(
+      (constraint) => constraint.name === 'tenant_members_current_envelope_shape_check',
+    );
+    expect(envelopeCheck).toBeDefined();
+    const envelopeCheckSql = dialect.sqlToQuery(envelopeCheck!.value).sql.toLowerCase();
+    for (const requiredFragment of [
+      'revision',
+      'between 1 and 2147483647',
+      'legacy_calibration',
+      'legacy_unknown',
+      'formal_onboarding',
+      'access_control_command',
+      'revoked_at',
+      'deleted_at',
+      'current_provenance_recorded_at',
+      'current_provenance_occurred_at',
+    ]) {
+      expect(envelopeCheckSql).toContain(requiredFragment);
+    }
+    expect(envelopeCheckSql).toMatch(/revision"? is not null/u);
+    expect(envelopeCheckSql).toMatch(
+      /current_provenance_source"? = 'formal_onboarding'.*revision"? = 1.*lifecycle_status"? = 'active'/su,
+    );
+    expect(envelopeCheckSql).toMatch(
+      /lifecycle_status"? = 'revoked'.*revision"? >= 2/su,
+    );
+    expect(envelopeCheckSql).toMatch(
+      /lifecycle_status"? = 'deleted'.*revision"? >= 2/su,
+    );
+
+    const transitionConfig = getTableConfig(tenantMembershipTransitions);
+    expect(columnNames(transitionConfig.columns)).toEqual([
+      'id',
+      'tenant_id',
+      'membership_id',
+      'command_id',
+      'transition_type',
+      'source',
+      'actor_id',
+      'reason_code',
+      'from_revision',
+      'to_revision',
+      'from_lifecycle_status',
+      'to_lifecycle_status',
+      'from_role',
+      'to_role',
+      'occurred_at',
+      'recorded_at',
+    ]);
+    expect(tenantMembershipTransitions.id.primary).toBe(true);
+    expect(tenantMembershipTransitions.id.getSQLType()).toBe('varchar(96)');
+    expect(tenantMembershipTransitions.commandId.getSQLType()).toBe('varchar(128)');
+    expect(tenantMembershipTransitions.fromRevision.notNull).toBe(false);
+    expect(tenantMembershipTransitions.toRevision.notNull).toBe(true);
+    expect(tenantMembershipTransitions.actorId.notNull).toBe(false);
+    expect(tenantMembershipTransitions.occurredAt.notNull).toBe(false);
+    expect(tenantMembershipTransitions.recordedAt.notNull).toBe(true);
+    const transitionColumnShape = Object.fromEntries(
+      transitionConfig.columns.map((column) => [
+        column.name,
+        {
+          type: column.getSQLType(),
+          notNull: column.notNull,
+          hasDefault: column.hasDefault,
+        },
+      ]),
+    );
+    expect(transitionColumnShape).toEqual({
+      id: { type: 'varchar(96)', notNull: true, hasDefault: false },
+      tenant_id: { type: 'varchar(64)', notNull: true, hasDefault: false },
+      membership_id: { type: 'varchar(64)', notNull: true, hasDefault: false },
+      command_id: { type: 'varchar(128)', notNull: true, hasDefault: false },
+      transition_type: {
+        type: 'membership_transition_type',
+        notNull: true,
+        hasDefault: false,
+      },
+      source: {
+        type: 'membership_provenance_source',
+        notNull: true,
+        hasDefault: false,
+      },
+      actor_id: { type: 'varchar(96)', notNull: false, hasDefault: false },
+      reason_code: { type: 'varchar(96)', notNull: true, hasDefault: false },
+      from_revision: { type: 'integer', notNull: false, hasDefault: false },
+      to_revision: { type: 'integer', notNull: true, hasDefault: false },
+      from_lifecycle_status: {
+        type: 'membership_lifecycle_status',
+        notNull: false,
+        hasDefault: false,
+      },
+      to_lifecycle_status: {
+        type: 'membership_lifecycle_status',
+        notNull: true,
+        hasDefault: false,
+      },
+      from_role: { type: 'auth_role', notNull: false, hasDefault: false },
+      to_role: { type: 'auth_role', notNull: true, hasDefault: false },
+      occurred_at: {
+        type: 'timestamp with time zone',
+        notNull: false,
+        hasDefault: false,
+      },
+      recorded_at: {
+        type: 'timestamp with time zone',
+        notNull: true,
+        hasDefault: false,
+      },
+    });
+
+    const membershipFk = transitionConfig.foreignKeys.find(
+      (foreignKey) =>
+        foreignKey.getName() === 'tenant_membership_transitions_tenant_membership_fk',
+    );
+    expect(foreignKeyColumns(membershipFk)).toEqual({
+      columns: ['tenant_id', 'membership_id'],
+      foreignColumns: ['tenant_id', 'id'],
+    });
+    expect(membershipFk?.reference().foreignTable).toBe(tenantMembers);
+    expect((membershipFk as unknown as { onUpdate?: string }).onUpdate).toBe('no action');
+    expect((membershipFk as unknown as { onDelete?: string }).onDelete).toBe('no action');
+    expect(transitionConfig.foreignKeys.map((foreignKey) => foreignKey.getName())).toEqual([
+      'tenant_membership_transitions_tenant_membership_fk',
+    ]);
+
+    const transitionUniques = transitionConfig.uniqueConstraints.map((constraint) => ({
+      name: constraint.getName(),
+      columns: columnNames(constraint.columns),
+    }));
+    expect(transitionUniques).toEqual([
+      {
+        name: 'tenant_membership_transitions_tenant_command_unique',
+        columns: ['tenant_id', 'command_id'],
+      },
+      {
+        name: 'tenant_membership_transitions_membership_revision_unique',
+        columns: ['membership_id', 'to_revision'],
+      },
+    ]);
+    expect(
+      transitionConfig.indexes.map((index) => ({
+        name: index.config.name,
+        unique: index.config.unique,
+        columns: columnNames(index.config.columns as NamedColumn[]),
+      })),
+    ).toEqual([
+      {
+        name: 'tenant_membership_transitions_tenant_membership_revision_idx',
+        unique: false,
+        columns: ['tenant_id', 'membership_id', 'to_revision'],
+      },
+    ]);
+
+    const transitionChecks = new Map(
+      transitionConfig.checks.map((constraint) => [
+        constraint.name,
+        dialect.sqlToQuery(constraint.value).sql.toLowerCase(),
+      ]),
+    );
+    expect([...transitionChecks.keys()]).toEqual([
+      'tenant_membership_transitions_revision_shape_check',
+      'tenant_membership_transitions_lifecycle_shape_check',
+      'tenant_membership_transitions_role_shape_check',
+      'tenant_membership_transitions_provenance_shape_check',
+    ]);
+    expect(transitionChecks.get('tenant_membership_transitions_revision_shape_check')).toContain(
+      'from_revision',
+    );
+    expect(transitionChecks.get('tenant_membership_transitions_revision_shape_check')).toContain(
+      'to_revision',
+    );
+    expect(transitionChecks.get('tenant_membership_transitions_revision_shape_check')).toMatch(
+      /from_revision"? is not null.*from_revision"? between 1 and 2147483646/su,
+    );
+    const lifecycleCheckSql = transitionChecks.get(
+      'tenant_membership_transitions_lifecycle_shape_check',
+    );
+    for (const transition of [
+      'create',
+      'refresh',
+      'revoke',
+      'reactivate',
+      'delete',
+      'legacy_calibration',
+    ]) {
+      expect(lifecycleCheckSql).toContain(transition);
+    }
+    expect(lifecycleCheckSql?.match(/from_lifecycle_status"? is not null/gu)).toHaveLength(4);
+    expect(transitionChecks.get('tenant_membership_transitions_role_shape_check')).toMatch(
+      /refresh.*from_role.*to_role/su,
+    );
+    expect(transitionChecks.get('tenant_membership_transitions_provenance_shape_check')).toMatch(
+      /legacy_calibration.*legacy_unknown.*formal_onboarding.*access_control_command/su,
     );
   });
 
@@ -3401,8 +3664,8 @@ describe('数据库结构', () => {
     const migrationStem = migrationFile.replace(/\.sql$/u, '');
     const migrationNumber = Number(migrationFile.slice(0, 4));
     const migrationSql = readFileSync(join(drizzleDir, migrationFile), 'utf8').toLowerCase();
-    const latestEntry = journal.entries.at(-1);
-    const predecessorEntry = journal.entries.at(-2);
+    const migrationEntry = journal.entries.find((entry) => entry.tag === migrationStem);
+    const predecessorEntry = journal.entries[(migrationEntry?.idx ?? 0) - 1];
     const predecessorSql = readFileSync(
       join(drizzleDir, `${predecessorEntry?.tag}.sql`),
       'utf8',
@@ -3411,19 +3674,19 @@ describe('数据库结构', () => {
 
     expect(journal.version).toBe('7');
     expect(journal.dialect).toBe('postgresql');
-    expect(latestEntry).toEqual({
+    expect(migrationEntry).toEqual({
       idx: migrationNumber,
       tag: migrationStem,
       version: '7',
       when: expect.any(Number),
       breakpoints: true,
     });
-    expect(latestEntry?.when).toBeGreaterThan(predecessorEntry?.when ?? 0);
+    expect(migrationEntry?.when).toBeGreaterThan(predecessorEntry?.when ?? 0);
     expect(journal.entries.map((entry) => entry.idx)).toEqual(
       journal.entries.map((_, index) => index),
     );
     expect(migrationSql).toContain(
-      `expected_predecessor_count constant integer := ${journal.entries.length - 1}`,
+      `expected_predecessor_count constant integer := ${migrationEntry?.idx}`,
     );
     expect(migrationSql).toContain(String(predecessorEntry?.when));
     expect(migrationSql).toContain(predecessorHash);
@@ -3633,6 +3896,154 @@ describe('数据库结构', () => {
     expect(sqlWithoutStringLiterals).not.toMatch(
       /\b(create\s+(table|type|function|trigger|sequence|view|materialized\s+view|extension)|alter\s+(table|type|column)|grant|revoke|comment\s+on|security\s+label)\b/iu,
     );
+    expect(migrationSql).not.toContain('retry');
+  });
+
+  it('Membership M1 migration 只执行 Expand 并保持 legacy 数据不变', () => {
+    const drizzleDir = join(process.cwd(), 'drizzle');
+    const migrationFiles = readdirSync(drizzleDir).filter((fileName) =>
+      /^\d{4}_base02_membership_revision_expand\.sql$/u.test(fileName),
+    );
+    const journal = JSON.parse(
+      readFileSync(join(drizzleDir, 'meta/_journal.json'), 'utf8'),
+    ) as {
+      version: string;
+      dialect: string;
+      entries: Array<{
+        idx: number;
+        tag: string;
+        version: string;
+        when: number;
+        breakpoints: boolean;
+      }>;
+    };
+
+    expect(migrationFiles).toHaveLength(1);
+    const migrationFile = migrationFiles[0]!;
+    const migrationStem = migrationFile.replace(/\.sql$/u, '');
+    const migrationNumber = Number(migrationFile.slice(0, 4));
+    const migrationSql = readFileSync(join(drizzleDir, migrationFile), 'utf8').toLowerCase();
+    const migrationEntry = journal.entries.find((entry) => entry.tag === migrationStem);
+    expect(migrationEntry).toBeDefined();
+    const predecessorEntry = journal.entries[(migrationEntry?.idx ?? 0) - 1];
+    const predecessorSql = readFileSync(
+      join(drizzleDir, `${predecessorEntry?.tag}.sql`),
+      'utf8',
+    );
+    const predecessorHash = createHash('sha256').update(predecessorSql).digest('hex');
+
+    expect(journal.version).toBe('7');
+    expect(journal.dialect).toBe('postgresql');
+    expect(migrationEntry).toEqual({
+      idx: migrationNumber,
+      tag: migrationStem,
+      version: '7',
+      when: expect.any(Number),
+      breakpoints: true,
+    });
+    expect(migrationEntry?.when).toBeGreaterThan(predecessorEntry?.when ?? 0);
+    expect(journal.entries.map((entry) => entry.idx)).toEqual(
+      journal.entries.map((_, index) => index),
+    );
+    expect(migrationSql).toContain(
+      `expected_predecessor_count constant integer := ${migrationEntry?.idx}`,
+    );
+    expect(migrationSql).toContain(String(predecessorEntry?.when));
+    expect(migrationSql).toContain(predecessorHash);
+    expect(migrationSql).toContain('base02_membership_m1_journal_drift');
+    expect(migrationSql).toContain('base02_membership_m1_journal_postcheck_failed');
+
+    expect(migrationSql).toContain("set local lock_timeout = '1s'");
+    expect(migrationSql).toContain("set local statement_timeout = '5s'");
+    expect(migrationSql).toContain('set local search_path = pg_catalog, public;');
+    const memberLock =
+      'lock table "public"."tenant_members" in share row exclusive mode;';
+    const bindingLock =
+      'lock table "public"."auth_account_institution_bindings" in share mode;';
+    expect(migrationSql.indexOf(memberLock)).toBeGreaterThanOrEqual(0);
+    expect(migrationSql.indexOf(bindingLock)).toBeGreaterThan(migrationSql.indexOf(memberLock));
+
+    for (const requiredFragment of [
+      "create type public.membership_lifecycle_status as enum",
+      "create type public.membership_provenance_source as enum",
+      "create type public.membership_transition_type as enum",
+      'add column revision integer',
+      'add column lifecycle_status public.membership_lifecycle_status',
+      'tenant_members_tenant_id_id_unique',
+      'tenant_members_current_envelope_shape_check',
+      'create table public.tenant_membership_transitions',
+      'tenant_membership_transitions_tenant_membership_fk',
+      'tenant_membership_transitions_tenant_command_unique',
+      'tenant_membership_transitions_membership_revision_unique',
+      'tenant_membership_transitions_tenant_membership_revision_idx',
+      'tenant_membership_transitions_revision_shape_check',
+      'tenant_membership_transitions_lifecycle_shape_check',
+      'tenant_membership_transitions_role_shape_check',
+      'tenant_membership_transitions_provenance_shape_check',
+      'reject_tenant_membership_transition_mutation',
+      'tenant_membership_transitions_reject_row_mutation',
+      'tenant_membership_transitions_reject_truncate',
+      'before update or delete',
+      'before truncate',
+      'all_missing',
+      'base02_membership_m1_preexisting_catalog',
+      'base02_membership_m1_data_drift',
+      'from_revision is not null',
+      'from_lifecycle_status is not null',
+      "tgenabled = 'o'",
+      'tgtype = 27',
+      'tgtype = 34',
+      'pg_index index_row',
+      "index_relation.relname = 'tenant_members_tenant_user_unique_idx'",
+      "constraint_row.conname = 'tenant_members_pkey'",
+      'base02_membership_m1_existing_primary_key_drift',
+      'base02_membership_m1_equivalent_unique_preexists',
+      'select count(*) <> 1 from public.institution_scopes',
+      'select count(*) <> 1 from public.institution_operating_context_versions',
+      'select count(*) <> 1 from public.institution_operating_contexts',
+      'left join public.institution_scopes scope_row using (tenant_id, institution_id)',
+      'left join public.institution_operating_context_versions version_row',
+    ]) {
+      expect(migrationSql).toContain(requiredFragment);
+    }
+
+    const currentAlterStart = migrationSql.indexOf('alter table public.tenant_members');
+    const transitionTableStart = migrationSql.indexOf(
+      'create table public.tenant_membership_transitions',
+    );
+    const currentAlterSql = migrationSql.slice(currentAlterStart, transitionTableStart);
+    for (const columnName of [
+      'revision',
+      'lifecycle_status',
+      'current_provenance_source',
+      'current_provenance_actor_id',
+      'current_provenance_reason_code',
+      'current_provenance_command_id',
+      'current_provenance_occurred_at',
+      'current_provenance_recorded_at',
+      'revoked_at',
+      'deleted_at',
+    ]) {
+      expect(currentAlterSql).toMatch(new RegExp(`add column ${columnName}\\b`, 'u'));
+    }
+    expect(currentAlterSql).not.toMatch(/add column[^,;]+\b(default|not null)\b/iu);
+
+    const sqlWithoutStringLiterals = migrationSql.replace(/'(?:''|[^'])*'/gu, "''");
+    expect(sqlWithoutStringLiterals).not.toMatch(
+      /\b(start\s+transaction|begin\s+(transaction|work)|commit|rollback|savepoint|release\s+savepoint)\b/iu,
+    );
+    expect(migrationSql).not.toMatch(/(^|\n)\s*begin\s*;/mu);
+    expect(sqlWithoutStringLiterals).not.toMatch(
+      /(^|;)\s*(insert\s+into|update\s+|upsert\s+|delete\s+from|truncate\s+(table\s+)?)[a-z_"]/imu,
+    );
+    expect(migrationSql).not.toMatch(
+      /validate\s+constraint|set\s+not\s+null|alter\s+column|\bdrop\b|\bcascade\b|create\s+index\s+concurrently/iu,
+    );
+    expect(sqlWithoutStringLiterals).not.toMatch(/\b(grant|revoke)\b/iu);
+    expect(migrationSql).not.toContain('if not exists');
+    expect(migrationSql).not.toContain('duplicate_object');
+    expect(migrationSql).not.toContain('db:generate');
+    expect(migrationSql).not.toContain('auth_account_institution_bindings_scope_fk not valid');
     expect(migrationSql).not.toContain('retry');
   });
 });
