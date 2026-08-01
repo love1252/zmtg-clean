@@ -4061,8 +4061,22 @@ describe('数据库结构', () => {
     expect(plannedSql).toContain(
       'if planned_count <= 0 or planned_count <> pre_all_null_count then',
     );
+    const candidateLoopStart = migrationSql.indexOf('for candidate_row in');
+    const preCandidateLoopSql = migrationSql.slice(0, candidateLoopStart);
+    expect(candidateLoopStart).toBeGreaterThan(0);
+    expect(migrationSql.search(/\bcandidate_row\.[a-z_]+/u)).toBeGreaterThan(
+      candidateLoopStart,
+    );
+    expect(migrationSql).not.toMatch(/from public\.tenant_members candidate_row\b/u);
+    expect(preCandidateLoopSql).not.toContain(
+      'from public.tenant_members candidate_row',
+    );
+    expect(preCandidateLoopSql).toContain(
+      'from public.tenant_members candidate_member',
+    );
+    expect(preCandidateLoopSql).toMatch(exactAllNullPredicate('candidate_member'));
     const loopCandidateSql = migrationSql.slice(
-      migrationSql.indexOf('for candidate_row in'),
+      candidateLoopStart,
       migrationSql.indexOf('loop\n    command_identity'),
     );
     expect(loopCandidateSql).toMatch(exactAllNullPredicate('member_row'));
