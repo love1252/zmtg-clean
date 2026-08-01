@@ -2,73 +2,66 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## MIG-01A2 A2-P2 P1 实施、执行与 handoff 状态
+## BASE-02 前置规划、准入审计与实施冻结状态
 
 - 更新日期：2026-08-01
-- V2-01 启动基线：`035c4516f448ca3bfcd95ba835c32ac367e0d964`
-- 当前任务：`A2-P2 P1 核心 Schema／Migration 实施、执行、独立审查与 handoff`
+- 审计基线：`443033b7f06ba9d5a08b37ddeddf112162cea4b8`
+- 当前任务：`BASE-02 前置规划、准入审计、风险收口与实施冻结大目标`
 - 正式任务编号：无；本轮未新增 `V2-*` 编号
-- 当前阶段：P1 四文件实施、实施独立审查、local_acceptance 单次受控 Migration 与执行独立审查已完成；本 handoff 正在收口
-- P1 实施：PR #849，Head `4b0a0f89f5aa36a9c2283a6a8af18a18fd12fe08`，Merge Commit `036c3198ee038186c36d19f8f57a7a45b965b963`
-- PR #849 Required Check：Run `30645227980`／Job `91204848506`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- 实施独立审查：PR #850，Head `24370a0071dd40e01b5d601013e45a28f45d285c`，Merge Commit `57b77a76e55846d14a28bfdf3a8794ba67241a54`
-- PR #850 Required Check：Run `30646526891`／Job `91209147172`，全部质量步骤成功
-- 执行低敏证据：PR #851，Head `1a832883b20f8e37879f3f740db0cc9cb098aea8`，Merge Commit `e93d180fb7e34a33d2f7e2e70eb4f2eed66790cf`
-- PR #851 Required Check：Run `30648638669`／Job `91216191655`，全部质量步骤成功
-- 执行独立审查：PR #852，Head `31fdec07abbccb461e7d21299fb8f7f135add7ae`，Merge Commit `96fe2b80f75bc3c2e1f8044b27ff84df64bba2b2`
-- PR #852 Required Check：Run `30649674973`／Job `91219568724`，全部质量步骤成功
-- 当前证据：`docs/operations/mig01-a2-p2-p1-implementation-independent-review-20260731.md`、`docs/operations/mig01-a2-p2-p1-local-acceptance-migration-validation-20260801.md`、`docs/operations/mig01-a2-p2-p1-local-acceptance-migration-independent-review-20260801.md`
-- 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
+- 方案交付：PR #854，Head `c0265653d84fdde53d8d1bed8ce14a25620c1172`，Merge Commit `b87fad849770b83276d0572f73c7c507825c3bca`
+- PR #854 Required Check：Run `30685590234`／Job `91330576040`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
+- 独立审查：PR #855，重放后 Head `33030add36f7e6d3b87784368054e24e157537bd`，Merge Commit `8e3b9de6d472be9fc586b14a2eba24e51e928dfb`
+- PR #855 Required Check：Run `30687136765`／Job `91335093086`，全部质量步骤成功，完整测试和 build 均实际执行
+- 当前证据：`docs/operations/base02-readiness-plan-20260801.md`、`docs/operations/base02-readiness-independent-review-20260801.md`
+- PR #854、#855 已依次使用 Merge Commit 合并；本 handoff 由 PR #856 收口，且不扩大 BASE-02 Runtime、数据修复或数据库执行授权
+- 本次 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
 
-### P1 仓库实施终态
+### 准入审计结论
 
-- 实时 Migration 编号：`0039`；tag 为 `0039_mig_01a2_anchor_bridge`
-- P1 实际只修改：Migration SQL `1`、journal `1`、Schema `1`、Schema 测试 `1`
-- 仓库 journal 为 `40` 项，最新为 `0039`；snapshot 仍停留在 `0026_snapshot.json`，blob 未变化
-- 普通索引 `auth_account_institution_bindings_scope_idx` 精确为非唯一 btree，列序 `tenant_id, institution_id`，无 predicate／include／expression
-- 外键 `auth_account_institution_bindings_scope_fk` 精确引用 `institution_scopes(tenant_id, institution_id)`，`MATCH SIMPLE`、`NO ACTION／NO ACTION`、非 deferrable，并保持 `NOT VALID`
-- 实施独立审查结论：`a2_p2_p1_implementation_review=passed`，local_acceptance Migration 准入为 `true`，BASE-02 准入为 `false`
+- 仓库 journal 为 `40` 项，最新为 `0039_mig_01a2_anchor_bridge`；snapshot 仍为 `0026_snapshot.json`
+- A2-P1 Scope／Context Version／Context Head 为 `1／1／1`
+- A2-P2 普通索引和 `NOT VALID` 外键定义精确存在；外键保持 `convalidated=false`
+- Binding 总数／NULL／重复为 `1／0／0`
+- active historical orphan 与 Scope 关系 orphan 均为 `1`；二者都必须清零后，BASE-02 才能完成
+- 只读探针确认 tenant 父关系缺失和 Membership 父关系缺失均为 `0`；当前孤儿 Binding 先于 A2-P1 Scope，且为 active、未过期的历史记录
+- 本轮只使用固定 localhost-only、显式 `REPEATABLE READ READ ONLY`、SELECT-only 白名单探针；数据库写入、DDL、DML、Migration、Seed、Lease、Runner 和 `VALIDATE` 均为 `0`
 
-### local_acceptance 执行终态
+### Owner 与阶段边界
 
-- guarded `pnpm db:migrate` 调用／重试为 `1／0`
-- `planned／created／reused／conflict／unexpected = 2／2／0／0／0`，且 `planned=created+reused`
-- 环境 Applied Migration 从 `39` 到 `40`；准确口径为环境 journal metadata `+1`、业务 DML `0`
-- 索引与外键均精确存在，外键 `convalidated=false`
-- A2-P1 Scope／Context Version／Context Head 保持 `1／1／1`
-- Binding 总数／NULL／重复／historical orphan 保持 `1／0／0／1`
-- 全部公开业务表低敏行数前后不变；没有回填、`VALIDATE`、`SET NOT NULL` 或第三个人工目标对象
-- Migration Lease claim／consume／release 为 `1／1／1`，renewal／retry 为 `0／0`；最终 inactive／consumed／released 为 `true`
-- 执行前后 custom-format 恢复点、archive parse、完整性和隔离恢复验证均通过
-- 当前主动私有参数披露为 `0`，真正敏感信息披露为 `0`；自动本地运维元数据回显事件只累计次数，不复述具体值
-- 执行独立审查结论：`a2_p2_p1_execution_review=passed`，`a2_p2_complete=true`
+- historical orphan 的语义 Owner 冻结为 Access Control 的 Binding 生命周期；独立数据修复专项只能作为经授权的执行载体，不成为第二事实源
+- Tenancy 不得从 Binding 反推或自动创建 Scope；该行不属于 A2-P2 或 MIG-01B 的静默处理范围
+- 具体处置动作、权威目标 Scope、影响行数、验证、回退或 forward-fix 仍是阻断决策，本轮没有授权 UPDATE、DELETE、重绑、撤销或补数据
+- “仅撤销 Binding”只能降低 active 授权风险，不能清除 Scope 关系 orphan，因此不能独立满足 BASE-02 完成、外键 `VALIDATE` 或 Reader 放行条件
+- BASE-02 不等于清理 orphan；实施冻结为 BASE-B1 Owner／Port／revision、BASE-B2 Membership／Binding 生命周期、BASE-B3 Session／上下文刷新、BASE-B4 Guard、BASE-B5 独立 orphan 修复、BASE-B6 完成证明
+- Operating Context Head／Version 是否成为持久化权威仍留给 BASE-B1 决定；不得把 proposed 设计写成已接受 current
 
 ### 当前授权与后续门禁
 
-- A2-P2 已具备最终 handoff 收口条件；`eligible_for_base02_handoff=true` 不等于 BASE-02 实施授权
-- historical orphan 仍为 `1`；其 Owner、处理方式、验证与回退必须由未来独立任务冻结
-- orphan 清零前不得完成 BASE-02，不得执行外键 `VALIDATE`，不得放行 Reader
-- Access Control 继续拥有 Membership、Authorization Provenance、Fresh Membership、Anchor 授权证据、Guard 和 Action Policy；不得建立第二套事实源
-- BASE-02 Runtime、Binding 数据修复、Guard、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 与机构端旧任务均未启动、未授权
+- 独立审查结论：`base02_readiness_review=passed`
+- 准入材料可以进入 handoff，但 BASE-02 实施仍未获得授权
+- 外键 `VALIDATE`、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 与机构端旧任务继续阻断
+- Reader 只有在 BASE-02 完成、active historical orphan 与 Scope 关系 orphan 均为 `0`、后续既定门禁满足并经独立放行后才可启动
 - 正式平台服务端授权根仍为缺失，七线正式发布仍为 `0/7`
 
 ### 唯一下一任务
 
-- 任务名称：`BASE-02 前置规划／准入`
+- 任务名称：`BASE-02 实施`
 - 任务编号：仓库尚无正式编号，本 handoff 不自行创造
 - 当前状态：尚未启动、尚未授权
-- 只允许未来独立任务重新核对静态证据、冻结范围、风险、测试、停止／回退条件和实施准入
-- 不授权数据库连接、Runtime、Schema、Migration、DML、orphan 修复、FK `VALIDATE`、Writer 或 Reader
-- 只有用户对未来 BASE-02 任务及其文件、数据、环境和风险再次明确授权后，才可启动
+- 首个候选切片：`BASE-B1 Owner、Port 与 revision 契约`
+- 只有本 handoff 合并且用户对当次文件、Runtime、数据、环境和风险再次明确授权后，才可启动
 
 ```text
-a2_p2_p1_implementation_review=passed
-a2_p2_p1_execution_review=passed
-a2_p2_p1_handoff=completed
-a2_p2_complete=true
-eligible_for_base02_handoff=true
+base02_readiness_audit=completed_with_blocking_decisions
+base02_readiness_review=passed
+eligible_for_base02_implementation_handoff=true
 eligible_for_base02_implementation=false
+base02_implementation_authorized=false
 base02_started=false
+active_historical_orphan_count=1
+scope_relation_orphan_count=1
+a2_p2_scope_fk_validated=false
+eligible_for_reader=false
 ```
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 
