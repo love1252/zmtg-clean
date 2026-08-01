@@ -1837,6 +1837,7 @@ describe('平台端知识库管理只读看板', () => {
         expect.objectContaining({ method: 'GET' }),
       ),
     );
+    expect(await screen.findByText('2 个文件打包下载已准备')).toBeInTheDocument();
   });
 
   it('展示中文安全错误文案、空状态和异常机构名称兜底', async () => {
