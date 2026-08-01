@@ -843,3 +843,20 @@
 - active historical orphan 与 Scope relation orphan 保持 `1／1`，未修改、未授权修复；A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`，未执行 `VALIDATE`。
 - 本次 Accepted Decision、独立审查与 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
 - 唯一下一任务更新为 `BASE-02 Membership Revision Schema／Migration 前置预检`；仓库尚无正式任务编号，该任务尚未启动、尚未授权。Schema、Migration、数据库、Migration Lease 与 BASE-B1 Runtime 仍未授权。
+
+## 2026-08-01：BASE-02 Membership Revision 物理模型前置预检、独立审查与 handoff
+
+- PR #864 完成 Schema／Migration 前置预检与 proposed 物理模型决策包，Head `3e9f2f8992e9923dc5261be8f40c8e8f9f9b18a0`，Merge Commit `59e5ef94fe9a462b29e0792f2b661a84e3d10de2`。
+- PR #864 Required Check Run `30696216677`／Job `91359466603` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #865 完成独立审查，Head `9e20fcef4756eae0c9cec273fe5ec7e7039236c2`，Merge Commit `511de2c22000ae3494e7745a2dac7cfe82f21042`。
+- PR #865 Required Check Run `30696574699`／Job `91360387951` 对应冻结 Head，全部质量步骤成功，完整测试和 build 均实际执行。
+- 静态审计确认 current `tenant_members` 为 7 列、2 索引、2 FK，没有 lifecycle、revision、provenance、tombstone、业务 CHECK 或业务 trigger；authoritative Membership Writer 为 `0`。
+- direct Membership Writer 为 4 文件／6 符号，其中 `direct_writer_to_migrate=1`、`direct_writer_to_disable=5`；核心 compatibility Reader 为 6 个，正式 Guard 核心链测试为 15 个，次级 lifecycle Reader 测试为 2 个。
+- journal／SQL current 为 `40／40`，snapshot 共 15 个、末项为 0026；本轮没有预留、批准或占用下一 Migration 编号，没有创建 Migration Lease。
+- proposed 推荐为 `tenant_members` 规范化同表 canonical current＋`tenant_membership_transitions` append-only immutable evidence；P01～P12 冻结 revision、lifecycle、incarnation、current provenance、transition evidence、CAS、legacy calibration、Writer／Reader cutover 与 Binding 联动候选。
+- proposed 串行实施候选为 M0 metadata → M1 Expand → M2 Owner Writer／CAS → M3 旧 Writer 委托／封堵 → M4 legacy calibration → M5 高水位追赶／冲突清零 → M6 Reader 切换 → M7 Enforce；每个切片仍须独立授权、审查与 handoff。
+- 独立审查结论为 `membership_revision_schema_preflight_review=passed`、`eligible_for_physical_model_acceptance_handoff=true`、`eligible_for_schema_migration_implementation=false`、`eligible_for_base_b1_runtime=false`。
+- P01～P12 仍为 proposed，`membership_revision_physical_model_accepted=false`；A-full、Owner 与 Membership／Binding／Scope 三个独立 revision 域没有重开。
+- 本次前置预检、决策包、独立审查与四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
+- BASE-B1 Runtime 继续 `blocked`；BASE-B2～B6、Membership lifecycle Writer、项目级 Writer 和 Reader 均未启动；active historical orphan 与 Scope relation orphan 保持 `1／1`，A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`。
+- 唯一下一任务更新为 `BASE-02 Membership Revision 物理模型与 Migration 切片接受`；仓库尚无正式任务编号，该任务尚未启动、尚未授权，不自动授权 Schema、Migration、数据库、Migration Lease 或 Runtime。
