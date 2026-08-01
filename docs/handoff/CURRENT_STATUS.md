@@ -2,65 +2,75 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-02 前置规划、准入审计与实施冻结状态
+## BASE-02 Membership Revision 架构决策与独立审查状态
 
 - 更新日期：2026-08-01
-- 审计基线：`443033b7f06ba9d5a08b37ddeddf112162cea4b8`
-- 当前任务：`BASE-02 前置规划、准入审计、风险收口与实施冻结大目标`
+- 本轮起始基线：`1edb71ca6a87df15b284c710ef80d0442ef97fe2`
+- 当前任务：`BASE-02 Membership Revision Architecture Decision Pack`
 - 正式任务编号：无；本轮未新增 `V2-*` 编号
-- 方案交付：PR #854，Head `c0265653d84fdde53d8d1bed8ce14a25620c1172`，Merge Commit `b87fad849770b83276d0572f73c7c507825c3bca`
-- PR #854 Required Check：Run `30685590234`／Job `91330576040`，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功
-- 独立审查：PR #855，重放后 Head `33030add36f7e6d3b87784368054e24e157537bd`，Merge Commit `8e3b9de6d472be9fc586b14a2eba24e51e928dfb`
-- PR #855 Required Check：Run `30687136765`／Job `91335093086`，全部质量步骤成功，完整测试和 build 均实际执行
-- 当前证据：`docs/operations/base02-readiness-plan-20260801.md`、`docs/operations/base02-readiness-independent-review-20260801.md`
-- PR #854、#855 已依次使用 Merge Commit 合并；本 handoff 由 PR #856 收口，且不扩大 BASE-02 Runtime、数据修复或数据库执行授权
+- 前置硬停止证据：PR #857，Head `6eb2fb4e26371904be063463968d5744fd8edc65`，Merge Commit `1edb71ca6a87df15b284c710ef80d0442ef97fe2`
+- PR #857 Required Check：Run `30688242614`／Job `91338121169` 成功，完整测试和 build 均实际执行
+- 决策包：PR #858，Head `95109315b0366f9a7f2b6bb45dd7498e4e2dbfa6`，Merge Commit `1712b357cea3ef8147e87e7812c67a39e07c13f0`
+- PR #858 Required Check：Run `30689389362`／Job `91341284170` 成功，完整测试和 build 均实际执行
+- 独立审查：PR #859，Head `e6a5e403bb8ea1f85ba763d4251ad1ed010b1e38`，Merge Commit `aa7c8d53b9605a900dac461b1859084f2219ab8f`
+- PR #859 Required Check：Run `30689872741`／Job `91342595113` 成功，完整测试和 build 均实际执行
+- 当前证据：`docs/decisions/base02-membership-revision-lifecycle-decision-pack-20260801.md`、`docs/decisions/base02-membership-revision-architecture-decision-pack.md`、`docs/operations/base02-membership-revision-architecture-independent-review-20260801.md`
 - 本次 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
 
-### 准入审计结论
+### 当前问题与推荐
 
-- 仓库 journal 为 `40` 项，最新为 `0039_mig_01a2_anchor_bridge`；snapshot 仍为 `0026_snapshot.json`
-- A2-P1 Scope／Context Version／Context Head 为 `1／1／1`
-- A2-P2 普通索引和 `NOT VALID` 外键定义精确存在；外键保持 `convalidated=false`
-- Binding 总数／NULL／重复为 `1／0／0`
-- active historical orphan 与 Scope 关系 orphan 均为 `1`；二者都必须清零后，BASE-02 才能完成
-- 只读探针确认 tenant 父关系缺失和 Membership 父关系缺失均为 `0`；当前孤儿 Binding 先于 A2-P1 Scope，且为 active、未过期的历史记录
-- 本轮只使用固定 localhost-only、显式 `REPEATABLE READ READ ONLY`、SELECT-only 白名单探针；数据库写入、DDL、DML、Migration、Seed、Lease、Runner 和 `VALIDATE` 均为 `0`
+- `tenant_members` 当前没有显式、稳定、严格单调且可 CAS 的 Membership revision；`tenant_members.updated_at` 不具备该证明
+- Binding version 属于不同事实域，不能替代 Membership revision；hash／HMAC 只能验证受控编码，不能创造单调性或 ABA 防护
+- A-literal 只增加显式 revision，仅可作为 BASE-B1 临时载体，不能关闭完整 Membership 生命周期
+- proposed 推荐为 A-full：保持 `tenant_members` 为 Access Control 唯一 canonical current，补齐显式 revision、lifecycle envelope、tombstone／current provenance 和同事务 immutable transition evidence
+- 方案 B 的永久 sidecar 会形成第二套 current 事实源，已排除；canonical replacement 必须先有独立 ADR 与旧表退出计划
+- 方案 C 无法证明单调性、CAS、ABA 与并发一致性，已淘汰
+- A-full 仍为 `proposed`，用户尚未接受；Schema／Migration 方向需要但尚未进入预检、实施或编号分配
 
 ### Owner 与阶段边界
 
-- historical orphan 的语义 Owner 冻结为 Access Control 的 Binding 生命周期；独立数据修复专项只能作为经授权的执行载体，不成为第二事实源
-- Tenancy 不得从 Binding 反推或自动创建 Scope；该行不属于 A2-P2 或 MIG-01B 的静默处理范围
-- 具体处置动作、权威目标 Scope、影响行数、验证、回退或 forward-fix 仍是阻断决策，本轮没有授权 UPDATE、DELETE、重绑、撤销或补数据
-- “仅撤销 Binding”只能降低 active 授权风险，不能清除 Scope 关系 orphan，因此不能独立满足 BASE-02 完成、外键 `VALIDATE` 或 Reader 放行条件
-- BASE-02 不等于清理 orphan；实施冻结为 BASE-B1 Owner／Port／revision、BASE-B2 Membership／Binding 生命周期、BASE-B3 Session／上下文刷新、BASE-B4 Guard、BASE-B5 独立 orphan 修复、BASE-B6 完成证明
-- Operating Context Head／Version 是否成为持久化权威仍留给 BASE-B1 决定；不得把 proposed 设计写成已接受 current
+- Identity 继续拥有用户、账号与正式 Session；Access Control 继续拥有 Membership、Binding 生命周期、Authorization Provenance、Fresh Membership、Anchor 授权证据、Guard 和 Action Policy
+- Tenancy 已冻结拥有 Scope、Context Version、Context Head、Manifest、Scope Revision 与 Provisioning Provenance 原始事实；Operating Context Head／Version 不进入本轮 BASE-02 授权组合，也不成为新的持久化 Owner
+- Security 继续拥有密钥、低敏输出、安全开关与通用安全能力；本轮没有重开上述 Owner 边界
+- BASE-B1 Runtime 继续阻断；BASE-B2 lifecycle、BASE-B3 Session／上下文刷新、BASE-B4 Guard／绕过闭环、BASE-B5 orphan 处置与 BASE-B6 完成证明均未启动
+- Membership lifecycle Writer 与项目级 Writer 均未启动；业务 Reader 继续阻断
+- active historical orphan 与 Scope 关系 orphan 仍为 `1／1`，未修改、未授权修复；A2-P2 外键保持 `NOT VALID`／`convalidated=false`
 
-### 当前授权与后续门禁
+### 独立审查与当前授权
 
-- 独立审查结论：`base02_readiness_review=passed`
-- 准入材料可以进入 handoff，但 BASE-02 实施仍未获得授权
-- 外键 `VALIDATE`、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 与机构端旧任务继续阻断
-- Reader 只有在 BASE-02 完成、active historical orphan 与 Scope 关系 orphan 均为 `0`、后续既定门禁满足并经独立放行后才可启动
+- 独立审查结论：`base02_membership_revision_architecture_review=passed`
+- 审查确认 A／B／C 证据、A-full proposed 状态、BASE-B1～B6 映射及 Reader／Writer 边界一致
+- 当前只具备进入架构决策接受任务的资格；不具备 Schema／Migration 预检或 BASE-B1 Runtime 资格
+- 外键 `VALIDATE`、orphan 修复、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 与机构端旧任务继续阻断
 - 正式平台服务端授权根仍为缺失，七线正式发布仍为 `0/7`
 
 ### 唯一下一任务
 
-- 任务名称：`BASE-02 实施`
+- 任务名称：`BASE-02 Membership Revision 架构决策接受`
 - 任务编号：仓库尚无正式编号，本 handoff 不自行创造
 - 当前状态：尚未启动、尚未授权
-- 首个候选切片：`BASE-B1 Owner、Port 与 revision 契约`
-- 只有本 handoff 合并且用户对当次文件、Runtime、数据、环境和风险再次明确授权后，才可启动
+- 任务边界：只允许用户接受、拒绝或调整 A-full proposed 推荐；不实施 Schema、Migration 或 Runtime
+- 只有用户明确接受决策并完成后续独立 handoff，才可另行申请 Membership Revision Schema／Migration 前置预检
 
 ```text
-base02_readiness_audit=completed_with_blocking_decisions
-base02_readiness_review=passed
-eligible_for_base02_implementation_handoff=true
-eligible_for_base02_implementation=false
-base02_implementation_authorized=false
-base02_started=false
+membership_revision_decision_pack=completed
+base02_membership_revision_architecture_review=passed
+membership_revision_recommendation=A-full_same_table_lifecycle
+membership_revision_recommendation_status=proposed
+membership_revision_decision_accepted=false
+membership_revision_schema_required=true
+membership_revision_migration_required=true
+eligible_for_membership_revision_acceptance=true
+eligible_for_schema_migration_preflight=false
+base_b1_runtime=blocked
+base_b2_started=false
+base02_complete=false
+orphan_remediation_authorized=false
 active_historical_orphan_count=1
 scope_relation_orphan_count=1
 a2_p2_scope_fk_validated=false
+writer_started=false
+reader_started=false
 eligible_for_reader=false
 ```
 <!-- ARCHITECTURE_V2_PHASE1_END -->
