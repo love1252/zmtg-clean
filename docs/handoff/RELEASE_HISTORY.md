@@ -882,3 +882,17 @@
 - 第二次 Lease `claim／consume／release=1／1／1`、renewal 0、活动 Lease 0；执行前后恢复点及隔离恢复验证通过。当前主动私有参数披露 0，真正敏感信息披露 0。
 - 本次四文件 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 0。
 - M1 完成并收口；唯一下一任务为 `BASE-02 Membership Revision M2 Access Control Owner Writer／CAS`。M2 在 handoff 合并前尚未启动，合并后按当前 ULTRA 用户授权继续；M3～M7、BASE-B1～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader仍未启动。
+
+## 2026-08-02：BASE-02 Membership Revision M2 Owner Writer／CAS 收口
+
+- PR #877 完成 Access Control Membership Owner Writer／CAS 实现，Head `828ebb69e62267a67dff2d8cc21d7ddafb1d454b`，Run `30708477043`／Job `91391614603`，Merge Commit `e6add6403a7a502192c450615397304a74c4b8e7`。
+- PR #878 完成 M2 实施独立审查，Head `ac76fe06ad5700d52e86f7c3622a2db65bbd441c`，Run `30708982932`／Job `91392949050`，Merge Commit `287b1d7cf66550424e304c6cc1354df334bb1e56`。
+- M2 精确新增 4 个 Runtime 文件和 3 个测试文件，共 7 个文件；create／refresh／revoke／reactivate／delete、expected-absence／`expectedRevision` CAS、transaction-bound UoW、Binding 独立 version 与同事务 transition evidence 已建立。
+- 定向测试 3 个文件／41 项、架构自测 67／67、完整测试 425 个文件／6235 项及 build 101／101 均通过。
+- 独立审查结论为 `base02_membership_revision_m2_implementation_review=passed`、`m2_owner_writer_implemented=true`、`m2_transactional_cas_verified=true`、`m2_replay_fail_closed=true`。
+- M2 未连接数据库，Schema、Migration、journal、snapshot、scripts、CI、package、lock 修改均为 0；legacy calibration、Reader、M3～M7 与 BASE-B1～B6 均未启动。
+- M1 冻结事实未被 M2 改动：仓库／环境 journal 保持 41，已消费 `0040` 不可改写，M1 Catalog 保持 `all_exact`，完整 current envelope／transition evidence 行仍为 `0／0`。
+- Owner 外 direct Membership mutation 仍为 4 个文件／6 个符号，其中 onboarding 委托候选 1、必须封堵 5；不得虚报已经归零。
+- 本次 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 0。
+- 唯一下一任务冻结为 `BASE-02 Membership Revision M3 onboarding 委托、旧 Writer／Deleter 封堵`；handoff 合并前 M3 尚未启动，合并后按当前 ULTRA 用户授权继续。
+- M4～M7、BASE-B1～B6、active historical orphan／Scope relation orphan 修复、A2-P2 FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断。
