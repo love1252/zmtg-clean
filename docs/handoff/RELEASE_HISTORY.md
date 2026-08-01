@@ -896,3 +896,17 @@
 - 本次 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 0。
 - 唯一下一任务冻结为 `BASE-02 Membership Revision M3 onboarding 委托、旧 Writer／Deleter 封堵`；handoff 合并前 M3 尚未启动，合并后按当前 ULTRA 用户授权继续。
 - M4～M7、BASE-B1～B6、active historical orphan／Scope relation orphan 修复、A2-P2 FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断。
+
+## 2026-08-02：BASE-02 Membership Revision M3 onboarding 委托与旧 Writer／Deleter 封堵收口
+
+- PR #880 完成 M3-A 正式 onboarding Owner 委托，Head `c690789f341434fd7bb33e819151849e6c2a7afa`，Run `30711226980`／Job `91398940037`，Merge Commit `2d34177f0d2eb77ccaba0829ab3224e69911853f`。
+- PR #881 完成 M3-B 旧 Writer／Deleter 封堵与 `AQ008_MEMBERSHIP_DIRECT_WRITER`，Head `b405403d6fea87e1d022d7e027e22d9f8600ae61`，Run `30714150218`／Job `91406737286`，Merge Commit `f8909e098def3810e0e336c9491facf83d4c3a57`。
+- PR #882 完成 M3 实施独立审查，Head `6f0b95b246aa115d63be49758ca66202f09ae589`，Run `30714716713`／Job `91408247113`，Merge Commit `df83b9527e3569c0997f0438a68d086592f3a36b`；结论为 `base02_membership_revision_m3_implementation_review=passed`。
+- M3-A 精确修改 9 个 Runtime／测试文件；正式 onboarding 复用一个 serializable／read-write 外层事务，通过 app-level 组合根委托 Access Control external-transaction Adapter，不再直接 INSERT `tenant_members`。
+- M3-B 精确修改 11 个 Runtime／测试／架构检查器文件；启动基线 1 个旧 Writer 已委托，5 个旧 Writer／Deleter 已固定 fail-closed，旧 Membership DML 未被迁移到 helper、raw SQL 或其他脚本。
+- Owner 外 direct Membership mutation 文件数／符号数为 `0／0`；唯一 Owner allowlist 文件数为 `1`；AQ008 rules exceptions 保持为空。
+- M3-A 定向测试 `32／32`、完整测试 426 文件／6248 项、build 101／101；M3-B 定向测试 `123／123`、架构自测 `125／125`、完整测试 426 文件／6253 项、build 101／101。三个 PR 的 Required Check 均完整成功。
+- M3 没有连接数据库，没有执行 DDL、DML、Migration、Seed 或 Lease；Schema、Migration、journal、snapshot、数据库、package、lock 与 CI Workflow 修改均为 `0`。
+- 继承状态未变：journal 为 `41`、最新为已消费 `0040`、snapshot 为 `0026`、legacy complete current／transition 为 `0／0`、active historical orphan／Scope relation orphan 为 `1／1`、A2-P2 Scope FK 继续 `NOT VALID`。
+- 唯一下一任务冻结为 `BASE-02 Membership Revision M4 deterministic legacy calibration`；handoff 合并前 M4 尚未启动，合并后按当前 ULTRA 用户授权继续。
+- M5～M7、BASE-B1～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断。
