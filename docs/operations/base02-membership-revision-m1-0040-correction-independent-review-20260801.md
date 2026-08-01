@@ -10,6 +10,7 @@
 - 被审查提交数：1。
 - 被审查文件数：2。
 - Required Check：Run `30703279028` / Job `91377908764`，结论为成功。
+- PR #872 已于审查通过后使用 Merge Commit 合并，Merge Commit 为 `75f3c6663e7decce63634b1ee05579a454fb97ac`；其两个父提交分别为审查基线与上述被审查 Head，Merge tree 与被审查 Head tree 一致。
 
 本审查只判断纠错是否精确修复首轮 Migration 的类型错误，以及是否具备合并条件；不构成数据库执行、恢复点、Migration Lease 或 M2 授权。
 
@@ -110,3 +111,10 @@ eligible_for_m2=false
 ```
 
 PR #872 的两文件纠错精确、可审查且没有扩大 accepted 范围，可以进入正式审查并使用 Merge Commit 合并。数据库第二次执行仍须等待纠错合并、审查记录回填以及执行前全量重新冻结。
+
+## 8. 合并后回填
+
+- PR #872 最终状态：已合并（Merged）。
+- PR #872 Merge Commit：`75f3c6663e7decce63634b1ee05579a454fb97ac`。
+- 本回填不改变首轮 F01 历史、回滚事实或独立审查结论。
+- 本回填不构成数据库执行；新的恢复点、唯一 Migration Lease 与第二次受控 Migration 仍须在独立审查合并后的最新 `main` 上重新冻结。
