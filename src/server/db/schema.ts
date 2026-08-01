@@ -55,6 +55,24 @@ export const authRoleEnum = pgEnum('auth_role', [
   'platform_operator',
   'security_auditor',
 ]);
+export const membershipLifecycleStatusEnum = pgEnum('membership_lifecycle_status', [
+  'active',
+  'revoked',
+  'deleted',
+]);
+export const membershipProvenanceSourceEnum = pgEnum('membership_provenance_source', [
+  'formal_onboarding',
+  'access_control_command',
+  'legacy_calibration',
+]);
+export const membershipTransitionTypeEnum = pgEnum('membership_transition_type', [
+  'create',
+  'refresh',
+  'revoke',
+  'reactivate',
+  'delete',
+  'legacy_calibration',
+]);
 export const customerLifecycleEnum = pgEnum('customer_lifecycle', [
   'consulting',
   'scheduled',
@@ -897,6 +915,20 @@ export const tenantMembers = pgTable(
       .references(() => authUsers.id),
     role: authRoleEnum('role').notNull(),
     displayName: varchar('display_name', { length: 120 }).notNull(),
+    revision: integer('revision'),
+    lifecycleStatus: membershipLifecycleStatusEnum('lifecycle_status'),
+    currentProvenanceSource: membershipProvenanceSourceEnum('current_provenance_source'),
+    currentProvenanceActorId: varchar('current_provenance_actor_id', { length: 96 }),
+    currentProvenanceReasonCode: varchar('current_provenance_reason_code', { length: 96 }),
+    currentProvenanceCommandId: varchar('current_provenance_command_id', { length: 128 }),
+    currentProvenanceOccurredAt: timestamp('current_provenance_occurred_at', {
+      withTimezone: true,
+    }),
+    currentProvenanceRecordedAt: timestamp('current_provenance_recorded_at', {
+      withTimezone: true,
+    }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
     ...timestamps,
   },
   (table) => ({
@@ -905,6 +937,195 @@ export const tenantMembers = pgTable(
       table.userId,
     ),
     tenantRoleIdx: index('tenant_members_tenant_role_idx').on(table.tenantId, table.role),
+    tenantIdIdUnique: unique('tenant_members_tenant_id_id_unique').on(
+      table.tenantId,
+      table.id,
+    ),
+    currentEnvelopeShapeCheck: check(
+      'tenant_members_current_envelope_shape_check',
+      sql`(
+        ${table.revision} IS NULL
+        AND ${table.lifecycleStatus} IS NULL
+        AND ${table.currentProvenanceSource} IS NULL
+        AND ${table.currentProvenanceActorId} IS NULL
+        AND ${table.currentProvenanceReasonCode} IS NULL
+        AND ${table.currentProvenanceCommandId} IS NULL
+        AND ${table.currentProvenanceOccurredAt} IS NULL
+        AND ${table.currentProvenanceRecordedAt} IS NULL
+        AND ${table.revokedAt} IS NULL
+        AND ${table.deletedAt} IS NULL
+      ) OR (
+        ${table.revision} IS NOT NULL
+        AND ${table.revision} BETWEEN 1 AND 2147483647
+        AND ${table.lifecycleStatus} IS NOT NULL
+        AND ${table.currentProvenanceSource} IS NOT NULL
+        AND ${table.currentProvenanceReasonCode} IS NOT NULL
+        AND ${table.currentProvenanceCommandId} IS NOT NULL
+        AND ${table.currentProvenanceRecordedAt} IS NOT NULL
+        AND (
+          (
+            ${table.currentProvenanceSource} = 'legacy_calibration'
+            AND ${table.revision} = 1
+            AND ${table.lifecycleStatus} = 'active'
+            AND ${table.currentProvenanceActorId} IS NULL
+            AND ${table.currentProvenanceReasonCode} = 'legacy_unknown'
+            AND ${table.currentProvenanceOccurredAt} IS NULL
+          ) OR (
+            ${table.currentProvenanceSource} = 'formal_onboarding'
+            AND ${table.revision} = 1
+            AND ${table.lifecycleStatus} = 'active'
+            AND ${table.currentProvenanceActorId} IS NOT NULL
+            AND ${table.currentProvenanceOccurredAt} IS NOT NULL
+            AND ${table.currentProvenanceRecordedAt} >= ${table.currentProvenanceOccurredAt}
+          ) OR (
+            ${table.currentProvenanceSource} = 'access_control_command'
+            AND ${table.currentProvenanceActorId} IS NOT NULL
+            AND ${table.currentProvenanceOccurredAt} IS NOT NULL
+            AND ${table.currentProvenanceRecordedAt} >= ${table.currentProvenanceOccurredAt}
+          )
+        )
+        AND (
+          (
+            ${table.lifecycleStatus} = 'active'
+            AND ${table.revokedAt} IS NULL
+            AND ${table.deletedAt} IS NULL
+          ) OR (
+            ${table.lifecycleStatus} = 'revoked'
+            AND ${table.revision} >= 2
+            AND ${table.revokedAt} IS NOT NULL
+            AND ${table.revokedAt} = ${table.currentProvenanceOccurredAt}
+            AND ${table.deletedAt} IS NULL
+          ) OR (
+            ${table.lifecycleStatus} = 'deleted'
+            AND ${table.revision} >= 2
+            AND ${table.deletedAt} IS NOT NULL
+            AND ${table.deletedAt} = ${table.currentProvenanceOccurredAt}
+            AND (${table.revokedAt} IS NULL OR ${table.revokedAt} <= ${table.deletedAt})
+          )
+        )
+      )`,
+    ),
+  }),
+);
+
+export const tenantMembershipTransitions = pgTable(
+  'tenant_membership_transitions',
+  {
+    id: varchar('id', { length: 96 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    membershipId: varchar('membership_id', { length: 64 }).notNull(),
+    commandId: varchar('command_id', { length: 128 }).notNull(),
+    transitionType: membershipTransitionTypeEnum('transition_type').notNull(),
+    source: membershipProvenanceSourceEnum('source').notNull(),
+    actorId: varchar('actor_id', { length: 96 }),
+    reasonCode: varchar('reason_code', { length: 96 }).notNull(),
+    fromRevision: integer('from_revision'),
+    toRevision: integer('to_revision').notNull(),
+    fromLifecycleStatus: membershipLifecycleStatusEnum('from_lifecycle_status'),
+    toLifecycleStatus: membershipLifecycleStatusEnum('to_lifecycle_status').notNull(),
+    fromRole: authRoleEnum('from_role'),
+    toRole: authRoleEnum('to_role').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    tenantMembershipFk: foreignKey({
+      name: 'tenant_membership_transitions_tenant_membership_fk',
+      columns: [table.tenantId, table.membershipId],
+      foreignColumns: [tenantMembers.tenantId, tenantMembers.id],
+    })
+      .onUpdate('no action')
+      .onDelete('no action'),
+    tenantCommandUnique: unique('tenant_membership_transitions_tenant_command_unique').on(
+      table.tenantId,
+      table.commandId,
+    ),
+    membershipRevisionUnique: unique(
+      'tenant_membership_transitions_membership_revision_unique',
+    ).on(table.membershipId, table.toRevision),
+    tenantMembershipRevisionIdx: index(
+      'tenant_membership_transitions_tenant_membership_revision_idx',
+    ).on(table.tenantId, table.membershipId, table.toRevision),
+    revisionShapeCheck: check(
+      'tenant_membership_transitions_revision_shape_check',
+      sql`${table.toRevision} BETWEEN 1 AND 2147483647 AND (
+        (
+          ${table.transitionType} IN ('create', 'legacy_calibration')
+          AND ${table.fromRevision} IS NULL
+          AND ${table.toRevision} = 1
+        ) OR (
+          ${table.transitionType} IN ('refresh', 'revoke', 'reactivate', 'delete')
+          AND ${table.fromRevision} IS NOT NULL
+          AND ${table.fromRevision} BETWEEN 1 AND 2147483646
+          AND ${table.toRevision} = ${table.fromRevision} + 1
+        )
+      )`,
+    ),
+    lifecycleShapeCheck: check(
+      'tenant_membership_transitions_lifecycle_shape_check',
+      sql`(
+        ${table.transitionType} IN ('create', 'legacy_calibration')
+        AND ${table.fromLifecycleStatus} IS NULL
+        AND ${table.toLifecycleStatus} = 'active'
+      ) OR (
+        ${table.transitionType} = 'refresh'
+        AND ${table.fromLifecycleStatus} IS NOT NULL
+        AND ${table.fromLifecycleStatus} = 'active'
+        AND ${table.toLifecycleStatus} = 'active'
+      ) OR (
+        ${table.transitionType} = 'revoke'
+        AND ${table.fromLifecycleStatus} IS NOT NULL
+        AND ${table.fromLifecycleStatus} = 'active'
+        AND ${table.toLifecycleStatus} = 'revoked'
+      ) OR (
+        ${table.transitionType} = 'reactivate'
+        AND ${table.fromLifecycleStatus} IS NOT NULL
+        AND ${table.fromLifecycleStatus} = 'revoked'
+        AND ${table.toLifecycleStatus} = 'active'
+      ) OR (
+        ${table.transitionType} = 'delete'
+        AND ${table.fromLifecycleStatus} IS NOT NULL
+        AND ${table.fromLifecycleStatus} IN ('active', 'revoked')
+        AND ${table.toLifecycleStatus} = 'deleted'
+      )`,
+    ),
+    roleShapeCheck: check(
+      'tenant_membership_transitions_role_shape_check',
+      sql`(
+        ${table.transitionType} IN ('create', 'legacy_calibration')
+        AND ${table.fromRole} IS NULL
+      ) OR (
+        ${table.transitionType} = 'refresh'
+        AND ${table.fromRole} IS NOT NULL
+        AND ${table.fromRole} <> ${table.toRole}
+      ) OR (
+        ${table.transitionType} IN ('revoke', 'reactivate', 'delete')
+        AND ${table.fromRole} IS NOT NULL
+        AND ${table.fromRole} = ${table.toRole}
+      )`,
+    ),
+    provenanceShapeCheck: check(
+      'tenant_membership_transitions_provenance_shape_check',
+      sql`(
+        ${table.transitionType} = 'legacy_calibration'
+        AND ${table.source} = 'legacy_calibration'
+        AND ${table.actorId} IS NULL
+        AND ${table.reasonCode} = 'legacy_unknown'
+        AND ${table.occurredAt} IS NULL
+      ) OR (
+        ${table.transitionType} = 'create'
+        AND ${table.source} IN ('formal_onboarding', 'access_control_command')
+        AND ${table.actorId} IS NOT NULL
+        AND ${table.occurredAt} IS NOT NULL
+        AND ${table.recordedAt} >= ${table.occurredAt}
+      ) OR (
+        ${table.transitionType} IN ('refresh', 'revoke', 'reactivate', 'delete')
+        AND ${table.source} = 'access_control_command'
+        AND ${table.actorId} IS NOT NULL
+        AND ${table.occurredAt} IS NOT NULL
+        AND ${table.recordedAt} >= ${table.occurredAt}
+      )`,
+    ),
   }),
 );
 
