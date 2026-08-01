@@ -288,6 +288,13 @@
       "when": 1785587487000,
       "tag": "0040_base02_membership_revision_expand",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1785614756000,
+      "tag": "0041_base02_membership_revision_legacy_calibration",
+      "breakpoints": true
     }
   ]
 }

@@ -3917,4 +3917,466 @@ describe('数据库结构', () => {
     expect(migrationSql).not.toContain('auth_account_institution_bindings_scope_fk not valid');
     expect(migrationSql).not.toContain('retry');
   });
+
+  it('Membership M4 migration 确定性校准 legacy current 并原子建立 baseline evidence', () => {
+    const drizzleDir = join(process.cwd(), 'drizzle');
+    const migrationFiles = readdirSync(drizzleDir).filter((fileName) =>
+      /^\d{4}_base02_membership_revision_legacy_calibration\.sql$/u.test(fileName),
+    );
+    const journal = JSON.parse(
+      readFileSync(join(drizzleDir, 'meta/_journal.json'), 'utf8'),
+    ) as {
+      version: string;
+      dialect: string;
+      entries: Array<{
+        idx: number;
+        tag: string;
+        version: string;
+        when: number;
+        breakpoints: boolean;
+      }>;
+    };
+
+    expect(migrationFiles).toHaveLength(1);
+    const migrationFile = migrationFiles[0]!;
+    expect(migrationFile).toBe('0041_base02_membership_revision_legacy_calibration.sql');
+    const migrationStem = migrationFile.replace(/\.sql$/u, '');
+    const migrationNumber = Number(migrationFile.slice(0, 4));
+    const migrationSqlRaw = readFileSync(join(drizzleDir, migrationFile), 'utf8');
+    const migrationSql = migrationSqlRaw.toLowerCase();
+    const migrationEntry = journal.entries.find((entry) => entry.tag === migrationStem);
+    expect(migrationEntry).toBeDefined();
+    const predecessorEntry = journal.entries[(migrationEntry?.idx ?? 0) - 1];
+    const predecessorSql = readFileSync(
+      join(drizzleDir, `${predecessorEntry?.tag}.sql`),
+      'utf8',
+    );
+    const predecessorHash = createHash('sha256').update(predecessorSql).digest('hex');
+
+    expect(journal.version).toBe('7');
+    expect(journal.dialect).toBe('postgresql');
+    expect(migrationNumber).toBe(41);
+    expect(migrationEntry).toEqual({
+      idx: 41,
+      tag: '0041_base02_membership_revision_legacy_calibration',
+      version: '7',
+      when: 1785614756000,
+      breakpoints: true,
+    });
+    expect(journal.entries.at(-1)).toEqual(migrationEntry);
+    expect(
+      readdirSync(drizzleDir)
+        .filter((fileName) => /^\d{4}_.+\.sql$/u.test(fileName))
+        .sort(),
+    ).toEqual(journal.entries.map((entry) => `${entry.tag}.sql`));
+    expect(migrationEntry?.when).toBeGreaterThan(predecessorEntry?.when ?? 0);
+    expect(journal.entries.map((entry) => entry.idx)).toEqual(
+      journal.entries.map((_, index) => index),
+    );
+    expect(migrationSql).toContain(
+      `expected_predecessor_count constant integer := ${migrationEntry?.idx}`,
+    );
+    expect(migrationSql).toContain(String(predecessorEntry?.when));
+    expect(migrationSql).toContain(predecessorHash);
+    expect(createHash('sha256').update(predecessorSql).digest('hex')).toBe(
+      '41b6572cb725ed5f7ff79a0e1d6172110caab52ad63c7971be87d3e2fe034641',
+    );
+    expect(
+      createHash('sha256')
+        .update(readFileSync(join(drizzleDir, 'meta/0026_snapshot.json'), 'utf8'))
+        .digest('hex'),
+    ).toBe('d7b1c85f42c9be783503d73abd1fa34d356d71450ec40f9f57e5be9427260e95');
+
+    expect(migrationSql).toContain("set local lock_timeout = '1s';");
+    expect(migrationSql).toContain("set local statement_timeout = '30s';");
+    expect(migrationSql).toContain('set local search_path = pg_catalog, public;');
+    const memberLock =
+      'lock table "public"."tenant_members" in share row exclusive mode;';
+    const transitionLock =
+      'lock table "public"."tenant_membership_transitions" in share row exclusive mode;';
+    expect(migrationSql.match(/lock table "public"\."tenant_members"/gu)).toHaveLength(1);
+    expect(
+      migrationSql.match(/lock table "public"\."tenant_membership_transitions"/gu),
+    ).toHaveLength(1);
+    expect(migrationSql.indexOf(memberLock)).toBeGreaterThanOrEqual(0);
+    expect(migrationSql.indexOf(transitionLock)).toBeGreaterThan(migrationSql.indexOf(memberLock));
+
+    const highWaterStart = migrationSql.indexOf(
+      'select member_row.created_at, member_row.id\n  into high_water_created_at, high_water_id',
+    );
+    const currentUpdateStart = migrationSql.indexOf(
+      'update public.tenant_members as target_member',
+    );
+    const transitionInsertStart = migrationSql.indexOf(
+      'insert into public.tenant_membership_transitions',
+    );
+    expect(highWaterStart).toBeGreaterThan(migrationSql.indexOf(transitionLock));
+    expect(currentUpdateStart).toBeGreaterThan(highWaterStart);
+    expect(transitionInsertStart).toBeGreaterThan(currentUpdateStart);
+    expect(migrationSql).toContain(
+      'order by member_row.created_at desc, member_row.id collate "c" desc',
+    );
+    expect(migrationSql).toContain(
+      'order by member_row.created_at asc, member_row.id collate "c" asc',
+    );
+    expect(migrationSql).toContain(
+      'member_row.id collate "c" <= high_water_id collate "c"',
+    );
+    expect(
+      migrationSql.match(
+        /member_row\.created_at < high_water_created_at\s+or \(\s+member_row\.created_at = high_water_created_at\s+and member_row\.id collate "c" <= high_water_id collate "c"\s+\)/gu,
+      ),
+    ).toHaveLength(2);
+    const highWaterSql = migrationSql.slice(
+      highWaterStart,
+      migrationSql.indexOf('select count(*) into planned_count', highWaterStart),
+    );
+    expect(highWaterSql).toContain('pg_catalog.num_nonnulls(');
+    expect(highWaterSql).toContain(') = 0');
+    expect(highWaterSql).toContain('limit 1;');
+    const envelopeColumns = [
+      'revision',
+      'lifecycle_status',
+      'current_provenance_source',
+      'current_provenance_actor_id',
+      'current_provenance_reason_code',
+      'current_provenance_command_id',
+      'current_provenance_occurred_at',
+      'current_provenance_recorded_at',
+      'revoked_at',
+      'deleted_at',
+    ];
+    const exactAllNullPredicate = (alias: string) => new RegExp(
+      `pg_catalog\\.num_nonnulls\\(\\s*${envelopeColumns
+        .map((columnName) => `${alias}\\.${columnName}`)
+        .join(',\\s*')}\\s*\\) = 0`,
+      'u',
+    );
+    expect(highWaterSql).toMatch(exactAllNullPredicate('member_row'));
+    const plannedSql = migrationSql.slice(
+      migrationSql.indexOf('select count(*) into planned_count'),
+      migrationSql.indexOf('calibration_recorded_at :='),
+    );
+    expect(plannedSql).toMatch(exactAllNullPredicate('member_row'));
+    expect(plannedSql).toContain(
+      'if planned_count <= 0 or planned_count <> pre_all_null_count then',
+    );
+    const loopCandidateSql = migrationSql.slice(
+      migrationSql.indexOf('for candidate_row in'),
+      migrationSql.indexOf('loop\n    command_identity'),
+    );
+    expect(loopCandidateSql).toMatch(exactAllNullPredicate('member_row'));
+    expect(
+      migrationSql.match(/calibration_recorded_at := pg_catalog\.clock_timestamp\(\);/gu),
+    ).toHaveLength(1);
+
+    for (const identityFragment of [
+      'zmtg:membership-calibration-command:v1',
+      'zmtg:membership-calibration-transition:v1',
+      'tenant_synthetic_m4',
+      'membership_synthetic_m4',
+      'mcal1_fdbd37decb6f6af2edafaf56fd3f9fa0bd73b8cf6f6f152856a96d71f36c11d6',
+      'mtcl1_77ad99278836422ed1074f3a3ca2fe9254f6607cbef4e6ae3028388b51ba11b6',
+      "pg_catalog.convert_to(command_domain, 'utf8')",
+      "pg_catalog.convert_to(transition_domain, 'utf8')",
+      "pg_catalog.decode('00', 'hex')",
+      'pg_catalog.sha256(',
+      "pg_catalog.encode(\n      pg_catalog.sha256(",
+      "'^mcal1_[0-9a-f]{64}$'",
+      "'^mtcl1_[0-9a-f]{64}$'",
+    ]) {
+      expect(migrationSql).toContain(identityFragment);
+    }
+    expect(migrationSql).toContain("pg_catalog.current_setting('server_version_num')");
+    expect(migrationSql).toContain("pg_catalog.to_regprocedure('pg_catalog.sha256(bytea)')");
+    expect(migrationSql).toMatch(
+      /command_identity := 'mcal1_' \|\| pg_catalog\.encode\(\s+pg_catalog\.sha256\(\s+pg_catalog\.convert_to\(command_domain, 'utf8'\)\s+\|\| pg_catalog\.decode\('00', 'hex'\)\s+\|\| pg_catalog\.convert_to\(candidate_row\.tenant_id, 'utf8'\)\s+\|\| pg_catalog\.decode\('00', 'hex'\)\s+\|\| pg_catalog\.convert_to\(candidate_row\.id, 'utf8'\)\s+\),\s+'hex'\s+\);/u,
+    );
+    expect(migrationSql).toMatch(
+      /evidence_identity := 'mtcl1_' \|\| pg_catalog\.encode\(\s+pg_catalog\.sha256\(\s+pg_catalog\.convert_to\(transition_domain, 'utf8'\)\s+\|\| pg_catalog\.decode\('00', 'hex'\)\s+\|\| pg_catalog\.convert_to\(candidate_row\.tenant_id, 'utf8'\)\s+\|\| pg_catalog\.decode\('00', 'hex'\)\s+\|\| pg_catalog\.convert_to\(candidate_row\.id, 'utf8'\)\s+\),\s+'hex'\s+\);/u,
+    );
+
+    const catalogFingerprintArrays = [
+      ...migrationSql.matchAll(/is distinct from array\[\s*([\s\S]*?)\s*\]::text\[\]/gu),
+    ]
+      .map((match) => [...(match[1] ?? '').matchAll(/'([^']+:[0-9a-f]{64})'/gu)]
+        .map((fingerprintMatch) => fingerprintMatch[1]))
+      .filter((fingerprints) => fingerprints.length > 0);
+    expect(catalogFingerprintArrays).toEqual([
+      [
+        'tenant_members_current_envelope_shape_check:82796868c10f6bcd25a49786b9652badcf88c577b7b440da3545cd518016ec1f',
+        'tenant_members_pkey:8c8464f42472e42ee190fc91ca8db79b5351d3a4609040516578d229c56f6fa5',
+        'tenant_members_tenant_id_id_unique:df85201802c68cde29d160aa847142747ee29b47a7699f4a3b0d143b054cad73',
+        'tenant_members_tenant_id_tenants_id_fk:d931da577fc120910fe105fe12727c52721a31800b4baf73445d56de61900526',
+        'tenant_members_user_id_auth_users_id_fk:058d1e81ee627f1b5d45598b07bd6cdfe67fc541654147b661297e10fbf101b0',
+      ],
+      [
+        'tenant_members_pkey:7ae73a32a715719614e05bafb26e3b6bd9e1d2eb32d6c6a2fa014899f9f0da16',
+        'tenant_members_tenant_id_id_unique:6e43c3122c3333c08151edda05e61e552d7bba6fc9373fe3b2b297996437a926',
+        'tenant_members_tenant_role_idx:902c85e1272f42eb13ec1621649a530485879cfb5c0319fff87e0bc45e8151ec',
+        'tenant_members_tenant_user_unique_idx:7acc4c982277001f8457e34060eac78374584e3bf21f9be0818a5ac8789c0cdb',
+      ],
+      [
+        'tenant_membership_transitions_lifecycle_shape_check:70dfcaf4c8bf10950f8ef6922785eb7ddf86074c62755582891cb857f64c66de',
+        'tenant_membership_transitions_membership_revision_unique:cd57b2e0e2769a37d38f06102279ea2c2a09080002d3977d9621e4817a585b0c',
+        'tenant_membership_transitions_pkey:8c8464f42472e42ee190fc91ca8db79b5351d3a4609040516578d229c56f6fa5',
+        'tenant_membership_transitions_provenance_shape_check:4cf86510af7b437df78fdabd5ba51f2ba1db5c050687502978eff5109d97197b',
+        'tenant_membership_transitions_revision_shape_check:fb4db87e5708fc21c06e70b23f6890f02c0a78ec1d7e27ea839576fade715df3',
+        'tenant_membership_transitions_role_shape_check:8563ca26c2662fd0a4b177ab2019c556dafe79035e74d8e5796c39e0480c2d97',
+        'tenant_membership_transitions_tenant_command_unique:bf606fb60edbc83eafa9136366009a69ac18a74fb9c02fb17a41ebbaa024cb08',
+        'tenant_membership_transitions_tenant_membership_fk:e6c34612976e004d31887ffaf8801efee9fbf10c7a5b07f11454acf58053e5cc',
+      ],
+      [
+        'tenant_membership_transitions_membership_revision_unique:56dd77b2f14f6e15b878cf31e73912138521d484ca64e7ef21c959da8eef2d9a',
+        'tenant_membership_transitions_pkey:ca8a0aa892429195d3dd8e245587e0a56a3c9e8d28a13611c72f1c4470980e37',
+        'tenant_membership_transitions_tenant_command_unique:1cec9eef095a4b7c6845707649db8965a33d5cfba5ae82a69c463b50ac250687',
+        'tenant_membership_transitions_tenant_membership_revision_idx:271306c04b53ae45db169680d91245ef45a9e8b007bec0444f2c34d662019b8c',
+      ],
+      [
+        'tenant_membership_transitions_reject_row_mutation:ccf75bfb2a4814e1a2ac74288abc8d11b0f574dde0c2c9674ddca92346652ef6',
+        'tenant_membership_transitions_reject_truncate:ba2700919090be08fc1666d3c10b24d4f3cbf34ed280979a4c068f7c871bcdf0',
+      ],
+    ]);
+    expect(migrationSql).toMatch(
+      /pg_catalog\.encode\(pg_catalog\.sha256\(pg_catalog\.convert_to\(\s+pg_catalog\.pg_get_functiondef\(function_row\.oid\),\s+'utf8'\s+\)\), 'hex'\) = '076415514e37e9d4c6ebc4dfd3b6cb9f12f02c0ff5ed4f9935177d6b588e1a64'/u,
+    );
+    for (const exactCatalogFunction of [
+      'pg_catalog.pg_get_constraintdef(',
+      'pg_catalog.pg_get_indexdef(',
+      'pg_catalog.pg_get_triggerdef(',
+      'pg_catalog.pg_get_functiondef(',
+    ]) {
+      expect(migrationSql).toContain(exactCatalogFunction);
+    }
+    for (const fkFragment of [
+      "constraint_row.confmatchtype = 's'",
+      "constraint_row.confupdtype = 'a'",
+      "constraint_row.confdeltype = 'a'",
+      'not constraint_row.condeferrable',
+      'not constraint_row.condeferred',
+      "constraint_row.confrelid = 'public.auth_users'::regclass",
+      "constraint_row.confrelid = 'public.institution_scopes'::regclass",
+      "= array['user_id']::text[]",
+      "= array['tenant_id', 'institution_id']::text[]",
+    ]) {
+      expect(migrationSql).toContain(fkFragment);
+    }
+    for (const repeatedFkFragment of [
+      "constraint_row.confmatchtype = 's'",
+      "constraint_row.confupdtype = 'a'",
+      "constraint_row.confdeltype = 'a'",
+      'not constraint_row.condeferrable',
+      'not constraint_row.condeferred',
+    ]) {
+      expect(migrationSql.split(repeatedFkFragment)).toHaveLength(3);
+    }
+    expect(migrationSql.split("= array['tenant_id', 'institution_id']::text[]"))
+      .toHaveLength(3);
+    expect(migrationSql.split("= array['user_id']::text[]")).toHaveLength(2);
+    expect(migrationSql.split("= array['id']::text[]")).toHaveLength(2);
+
+    const updateMatch = migrationSql.match(
+      /update public\.tenant_members as target_member\s+set([\s\S]*?)\s+where target_member\.id/u,
+    );
+    expect(updateMatch).not.toBeNull();
+    const currentUpdateSql = migrationSql.slice(
+      currentUpdateStart,
+      migrationSql.indexOf('returning', currentUpdateStart),
+    );
+    expect(currentUpdateSql).toMatch(exactAllNullPredicate('target_member'));
+    expect(currentUpdateSql).toContain('target_member.id = candidate_row.id');
+    expect(currentUpdateSql).toContain('target_member.tenant_id = candidate_row.tenant_id');
+    const updatedColumns = [...(updateMatch?.[1] ?? '').matchAll(/^\s*([a-z_]+)\s*=/gmu)]
+      .map((match) => match[1]);
+    expect(updatedColumns).toEqual([
+      'revision',
+      'lifecycle_status',
+      'current_provenance_source',
+      'current_provenance_actor_id',
+      'current_provenance_reason_code',
+      'current_provenance_command_id',
+      'current_provenance_occurred_at',
+      'current_provenance_recorded_at',
+      'revoked_at',
+      'deleted_at',
+    ]);
+    expect(updateMatch?.[1]).toContain('revision = 1');
+    expect(updateMatch?.[1]).toContain("lifecycle_status = 'active'");
+    expect(updateMatch?.[1]).toContain("current_provenance_source = 'legacy_calibration'");
+    expect(updateMatch?.[1]).toContain('current_provenance_actor_id = null');
+    expect(updateMatch?.[1]).toContain("current_provenance_reason_code = 'legacy_unknown'");
+    expect(updateMatch?.[1]).toContain('current_provenance_command_id = command_identity');
+    expect(updateMatch?.[1]).toContain('current_provenance_occurred_at = null');
+    expect(updateMatch?.[1]).toContain(
+      'current_provenance_recorded_at = calibration_recorded_at',
+    );
+    for (const immutableColumn of [
+      'id',
+      'tenant_id',
+      'user_id',
+      'role',
+      'display_name',
+      'created_at',
+      'updated_at',
+    ]) {
+      expect(updatedColumns).not.toContain(immutableColumn);
+    }
+    for (const immutableColumn of [
+      'id',
+      'tenant_id',
+      'user_id',
+      'role',
+      'display_name',
+      'created_at',
+      'updated_at',
+    ]) {
+      expect(migrationSql).toContain(
+        `updated_row.${immutableColumn} is distinct from candidate_row.${immutableColumn}`,
+      );
+    }
+
+    const insertMatch = migrationSql.match(
+      /insert into public\.tenant_membership_transitions\s*\(([\s\S]*?)\)\s*values\s*\(([\s\S]*?)\)\s*;/u,
+    );
+    expect(insertMatch).not.toBeNull();
+    expect((insertMatch?.[1] ?? '').split(',').map((column) => column.trim())).toEqual([
+      'id',
+      'tenant_id',
+      'membership_id',
+      'command_id',
+      'transition_type',
+      'source',
+      'actor_id',
+      'reason_code',
+      'from_revision',
+      'to_revision',
+      'from_lifecycle_status',
+      'to_lifecycle_status',
+      'from_role',
+      'to_role',
+      'occurred_at',
+      'recorded_at',
+    ]);
+    expect((insertMatch?.[2] ?? '').split(',').map((value) => value.trim())).toEqual([
+      'evidence_identity',
+      'candidate_row.tenant_id',
+      'candidate_row.id',
+      'command_identity',
+      "'legacy_calibration'",
+      "'legacy_calibration'",
+      'null',
+      "'legacy_unknown'",
+      'null',
+      '1',
+      'null',
+      "'active'",
+      'null',
+      'candidate_row.role',
+      'null',
+      'calibration_recorded_at',
+    ]);
+
+    for (const countInvariant of [
+      'planned_count <> created_count + reused_count',
+      'updated_count <> inserted_count',
+      'updated_count <> created_count',
+      'inserted_count <> created_count',
+      'created_count <> planned_count',
+      'reused_count <> 0',
+      'conflict_count <> 0',
+      'unexpected_count <> 0',
+      'pre_membership_count <> 1',
+      'pre_transition_count <> 0',
+      'pre_binding_count <> 1',
+      'pre_scope_count <> 1',
+      'pre_context_version_count <> 1',
+      'pre_context_head_count <> 1',
+      'pre_all_null_count <> 1',
+      'pre_partial_count <> 0',
+      'pre_complete_count <> 0',
+      'pre_scope_relation_orphan_count <> 1',
+      'pre_active_historical_orphan_count <> 1',
+      'post_membership_count <> pre_membership_count',
+      'post_transition_count <> pre_transition_count + created_count',
+      'post_binding_count <> pre_binding_count',
+      'post_scope_count <> pre_scope_count',
+      'post_context_version_count <> pre_context_version_count',
+      'post_context_head_count <> pre_context_head_count',
+      'post_all_null_count <> pre_all_null_count - planned_count',
+      'post_partial_count <> 0',
+      'post_complete_count <> pre_complete_count + created_count',
+      'post_scope_relation_orphan_count <> pre_scope_relation_orphan_count',
+      'post_active_historical_orphan_count <> pre_active_historical_orphan_count',
+    ]) {
+      expect(migrationSql).toContain(countInvariant);
+    }
+    for (const failClosedCode of [
+      'base02_membership_m4_journal_drift',
+      'base02_membership_m4_current_catalog_drift',
+      'base02_membership_m4_transition_catalog_drift',
+      'base02_membership_m4_user_fk_drift',
+      'base02_membership_m4_scope_fk_drift',
+      'base02_membership_m4_data_baseline_drift',
+      'base02_membership_m4_candidate_parent_missing',
+      'base02_membership_m4_identity_conflict',
+      'base02_membership_m4_current_update_drift',
+      'base02_membership_m4_transition_insert_drift',
+      'base02_membership_m4_count_postcheck_failed',
+      'base02_membership_m4_current_evidence_postcheck_failed',
+      'base02_membership_m4_journal_postcheck_failed',
+    ]) {
+      expect(migrationSql).toContain(failClosedCode);
+    }
+
+    const sqlWithoutStringLiterals = migrationSql.replace(/'(?:''|[^'])*'/gu, "''");
+    expect(
+      sqlWithoutStringLiterals.match(/update\s+public\.tenant_members\s+as\s+target_member/gu),
+    ).toHaveLength(1);
+    expect(
+      sqlWithoutStringLiterals.match(/insert\s+into\s+public\.tenant_membership_transitions/gu),
+    ).toHaveLength(1);
+    expect(sqlWithoutStringLiterals.match(/(^|[;\n])\s*update\s+/gmu)).toHaveLength(1);
+    expect(sqlWithoutStringLiterals.match(/(^|[;\n])\s*insert\s+into\s+/gmu)).toHaveLength(1);
+    expect(migrationSql.match(/get diagnostics (update|insert)_row_count = row_count;/gu))
+      .toHaveLength(2);
+    expect(migrationSql).toContain('if update_row_count <> 1');
+    expect(migrationSql).toContain('if insert_row_count <> 1');
+    expect(migrationSql).toContain('updated_count := updated_count + update_row_count');
+    expect(migrationSql).toContain('inserted_count := inserted_count + insert_row_count');
+    expect(migrationSql).toContain('created_count := created_count + 1');
+    const updateDiagnosticsStart = migrationSql.indexOf(
+      'get diagnostics update_row_count = row_count;',
+      currentUpdateStart,
+    );
+    const updateRowCountGuardStart = migrationSql.indexOf(
+      'if update_row_count <> 1',
+      updateDiagnosticsStart,
+    );
+    const insertDiagnosticsStart = migrationSql.indexOf(
+      'get diagnostics insert_row_count = row_count;',
+      transitionInsertStart,
+    );
+    const insertRowCountGuardStart = migrationSql.indexOf(
+      'if insert_row_count <> 1',
+      insertDiagnosticsStart,
+    );
+    expect(updateDiagnosticsStart).toBeGreaterThan(currentUpdateStart);
+    expect(updateRowCountGuardStart).toBeGreaterThan(updateDiagnosticsStart);
+    expect(transitionInsertStart).toBeGreaterThan(updateRowCountGuardStart);
+    expect(insertDiagnosticsStart).toBeGreaterThan(transitionInsertStart);
+    expect(insertRowCountGuardStart).toBeGreaterThan(insertDiagnosticsStart);
+    expect(sqlWithoutStringLiterals).not.toMatch(
+      /\b(update\s+(?!public\.tenant_members\b)|insert\s+into\s+(?!public\.tenant_membership_transitions\b)|upsert|delete\s+from|truncate\s+(table\s+)?)/iu,
+    );
+    expect(sqlWithoutStringLiterals).not.toMatch(
+      /\b(start\s+transaction|begin\s+(transaction|work)|commit|rollback|savepoint|release\s+savepoint)\b/iu,
+    );
+    expect(migrationSql).not.toMatch(/(^|\n)\s*begin\s*;/mu);
+    expect(sqlWithoutStringLiterals).not.toMatch(
+      /\b(create|alter|drop|grant|revoke|comment\s+on|security\s+label|execute|merge|copy|call)\b/iu,
+    );
+    expect(migrationSql).not.toMatch(
+      /on\s+conflict|if\s+not\s+exists|duplicate_object|validate\s+constraint|set\s+not\s+null|\bcascade\b|create\s+extension|\bdigest\s*\(|db:generate|retry/iu,
+    );
+  });
 });
