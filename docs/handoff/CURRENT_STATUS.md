@@ -2,68 +2,78 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-02 Membership Revision 架构决策与独立审查状态
+## BASE-02 Membership Revision A-full 接受与独立审查状态
 
 - 更新日期：2026-08-01
-- 本轮起始基线：`1edb71ca6a87df15b284c710ef80d0442ef97fe2`
-- 当前任务：`BASE-02 Membership Revision Architecture Decision Pack`
+- 本轮起始基线：`8f3b0a3550a23ac13824fe2c3a1773d0b643a87a`
+- 当前任务：`BASE-02 Membership Revision A-full 架构决策接受、独立审查与 handoff`
 - 正式任务编号：无；本轮未新增 `V2-*` 编号
-- 前置硬停止证据：PR #857，Head `6eb2fb4e26371904be063463968d5744fd8edc65`，Merge Commit `1edb71ca6a87df15b284c710ef80d0442ef97fe2`
-- PR #857 Required Check：Run `30688242614`／Job `91338121169` 成功，完整测试和 build 均实际执行
-- 决策包：PR #858，Head `95109315b0366f9a7f2b6bb45dd7498e4e2dbfa6`，Merge Commit `1712b357cea3ef8147e87e7812c67a39e07c13f0`
-- PR #858 Required Check：Run `30689389362`／Job `91341284170` 成功，完整测试和 build 均实际执行
-- 独立审查：PR #859，Head `e6a5e403bb8ea1f85ba763d4251ad1ed010b1e38`，Merge Commit `aa7c8d53b9605a900dac461b1859084f2219ab8f`
-- PR #859 Required Check：Run `30689872741`／Job `91342595113` 成功，完整测试和 build 均实际执行
-- 当前证据：`docs/decisions/base02-membership-revision-lifecycle-decision-pack-20260801.md`、`docs/decisions/base02-membership-revision-architecture-decision-pack.md`、`docs/operations/base02-membership-revision-architecture-independent-review-20260801.md`
+- Accepted Decision：PR #861，Head `ac22a0bd8e5197c5641c3d0ddd8e1abd8649e841`，Merge Commit `b74cad648a46421b0a04f5f6b868f2f7a2240319`
+- PR #861 Required Check：Run `30691379044`／Job `91346604424` 成功，完整测试和 build 均实际执行
+- 接受独立审查：PR #862，Head `46ec582001989416dd6cd8a7c333f13d68de3499`，Merge Commit `1478c2693d6a21216169babad5ff9d4147e3afb0`
+- PR #862 Required Check：Run `30691699252`／Job `91347460065` 成功，完整测试和 build 均实际执行
+- 当前证据：`docs/decisions/base02-membership-revision-accepted-decision.md`、`docs/operations/base02-membership-revision-acceptance-independent-review-20260801.md`
+- 两份历史 proposed Decision Pack 保持原文与状态不变；本次 accepted 记录没有回填历史材料
 - 本次 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
 
-### 当前问题与推荐
+### 已接受架构决定
 
-- `tenant_members` 当前没有显式、稳定、严格单调且可 CAS 的 Membership revision；`tenant_members.updated_at` 不具备该证明
-- Binding version 属于不同事实域，不能替代 Membership revision；hash／HMAC 只能验证受控编码，不能创造单调性或 ABA 防护
-- A-literal 只增加显式 revision，仅可作为 BASE-B1 临时载体，不能关闭完整 Membership 生命周期
-- proposed 推荐为 A-full：保持 `tenant_members` 为 Access Control 唯一 canonical current，补齐显式 revision、lifecycle envelope、tombstone／current provenance 和同事务 immutable transition evidence
-- 方案 B 的永久 sidecar 会形成第二套 current 事实源，已排除；canonical replacement 必须先有独立 ADR 与旧表退出计划
-- 方案 C 无法证明单调性、CAS、ABA 与并发一致性，已淘汰
-- A-full 仍为 `proposed`，用户尚未接受；Schema／Migration 方向需要但尚未进入预检、实施或编号分配
+- 用户已正式接受 A-full，`membership_revision_decision_accepted=true`
+- `tenant_members` 继续作为 Access Control 唯一 canonical Membership current；永久 sidecar current 继续排除
+- Membership 必须具备显式、稳定、严格单调的 revision、`expectedRevision` CAS、同一旧 revision 并发命令最多一个成功
+- create、授权相关 refresh、revoke、delete、tombstone、incarnation identity 与 ABA 防护组成完整生命周期，Membership identity 与 revision 不得复用或重置
+- current provenance 与 immutable transition evidence 必须和 canonical current 在同一事务原子形成；transition evidence 不得成为第二 current
+- Membership 只能经 Access Control 唯一命令／Writer 边界修改
+- A-literal 仍仅为 interim；canonical replacement 只有未来独立 ADR 才可重开；方案 C 继续淘汰
+- 本次没有接受具体字段名、枚举、表结构、Migration 编号、SQL、回填方案或执行环境
 
-### Owner 与阶段边界
+### Owner、版本域与阶段边界
 
-- Identity 继续拥有用户、账号与正式 Session；Access Control 继续拥有 Membership、Binding 生命周期、Authorization Provenance、Fresh Membership、Anchor 授权证据、Guard 和 Action Policy
-- Tenancy 已冻结拥有 Scope、Context Version、Context Head、Manifest、Scope Revision 与 Provisioning Provenance 原始事实；Operating Context Head／Version 不进入本轮 BASE-02 授权组合，也不成为新的持久化 Owner
-- Security 继续拥有密钥、低敏输出、安全开关与通用安全能力；本轮没有重开上述 Owner 边界
+- Identity 继续拥有用户、账号与正式 Session；Access Control 唯一拥有 Membership 与 Binding 生命周期
+- Tenancy 继续拥有 Scope、Context 与 Scope revision 原始事实；Security 继续拥有通用安全能力
+- Membership revision、Binding version 与 Scope revision 是三个独立版本域，互不替代
+- Operating Context Head／Version 不进入本轮 BASE-02 授权组合，也不成为新的持久化 Owner
 - BASE-B1 Runtime 继续阻断；BASE-B2 lifecycle、BASE-B3 Session／上下文刷新、BASE-B4 Guard／绕过闭环、BASE-B5 orphan 处置与 BASE-B6 完成证明均未启动
 - Membership lifecycle Writer 与项目级 Writer 均未启动；业务 Reader 继续阻断
-- active historical orphan 与 Scope 关系 orphan 仍为 `1／1`，未修改、未授权修复；A2-P2 外键保持 `NOT VALID`／`convalidated=false`
+- active historical orphan 与 Scope relation orphan 仍为 `1／1`，未修改、未授权修复；A2-P2 外键保持 `NOT VALID`／`convalidated=false`
 
 ### 独立审查与当前授权
 
-- 独立审查结论：`base02_membership_revision_architecture_review=passed`
-- 审查确认 A／B／C 证据、A-full proposed 状态、BASE-B1～B6 映射及 Reader／Writer 边界一致
-- 当前只具备进入架构决策接受任务的资格；不具备 Schema／Migration 预检或 BASE-B1 Runtime 资格
+- 独立审查结论：`membership_revision_acceptance_review=passed`
+- 审查确认 A-full 的 lifecycle、CAS、ABA、provenance、同事务 evidence 与唯一 Writer 均未遗漏
+- Owner 与三个版本域未被重开，未形成第二套 current，未提前决定物理 Schema／Migration
+- 当前 handoff 只准入 docs-only Schema／Migration 前置预检；不准入 Schema／Migration 实施或 BASE-B1 Runtime
 - 外键 `VALIDATE`、orphan 修复、Writer、Audit／模板、MIG-01B、MIG-01C、Reader 与机构端旧任务继续阻断
 - 正式平台服务端授权根仍为缺失，七线正式发布仍为 `0/7`
 
 ### 唯一下一任务
 
-- 任务名称：`BASE-02 Membership Revision 架构决策接受`
+- 任务名称：`BASE-02 Membership Revision Schema／Migration 前置预检`
 - 任务编号：仓库尚无正式编号，本 handoff 不自行创造
 - 当前状态：尚未启动、尚未授权
-- 任务边界：只允许用户接受、拒绝或调整 A-full proposed 推荐；不实施 Schema、Migration 或 Runtime
-- 只有用户明确接受决策并完成后续独立 handoff，才可另行申请 Membership Revision Schema／Migration 前置预检
+- 任务边界：只允许重新冻结字段、状态机、transition evidence 载体、数据校准、Writer 影响面、Migration 边界和回滚方案
+- 当前不授权 Schema、Migration、数据库、Migration Lease、BASE-B1 Runtime 或任何后续实施
 
 ```text
 membership_revision_decision_pack=completed
 base02_membership_revision_architecture_review=passed
-membership_revision_recommendation=A-full_same_table_lifecycle
-membership_revision_recommendation_status=proposed
-membership_revision_decision_accepted=false
+membership_revision_acceptance_review=passed
+membership_revision_direction=A-full_same_table_lifecycle
+membership_revision_architecture_decision_status=accepted
+membership_revision_decision_accepted=true
 membership_revision_schema_required=true
 membership_revision_migration_required=true
-eligible_for_membership_revision_acceptance=true
-eligible_for_schema_migration_preflight=false
+eligible_for_schema_migration_preflight=true
+schema_migration_preflight_started=false
+schema_migration_preflight_authorized=false
+eligible_for_schema_migration_implementation=false
+eligible_for_base_b1_runtime=false
 base_b1_runtime=blocked
 base_b2_started=false
+base_b3_started=false
+base_b4_started=false
+base_b5_started=false
+base_b6_complete=false
 base02_complete=false
 orphan_remediation_authorized=false
 active_historical_orphan_count=1
@@ -72,6 +82,9 @@ a2_p2_scope_fk_validated=false
 writer_started=false
 reader_started=false
 eligible_for_reader=false
+next_task=BASE-02 Membership Revision Schema／Migration 前置预检
+next_task_started=false
+next_task_authorized=false
 ```
 <!-- ARCHITECTURE_V2_PHASE1_END -->
 

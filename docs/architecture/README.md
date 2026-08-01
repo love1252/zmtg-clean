@@ -1,9 +1,9 @@
 # 智美天工架构文档索引
 
-- 任务：BASE-02 Membership Revision 架构决策、独立审查与 handoff（无正式 `V2-*` 编号）
+- 任务：BASE-02 Membership Revision A-full 架构决策接受、独立审查与 handoff（无正式 `V2-*` 编号）
 - 日期：`2026-08-01 CST +0800`
-- 审计基线：`aa7c8d53b9605a900dac461b1859084f2219ab8f`
-- 状态：`current evidence + proposed decision handoff`
+- 审计基线：`1478c2693d6a21216169babad5ff9d4147e3afb0`
+- 状态：`current evidence + accepted decision handoff`
 - 文档性质：架构导航索引，不是第二套架构事实源
 - 本次 Membership Revision docs-only handoff 差异中的 Runtime、Schema、Migration、journal、snapshot、数据库、API、UI 修改：`0`
 
@@ -149,6 +149,8 @@ MIG-01A1 Expand
 | [`../decisions/base02-membership-revision-lifecycle-decision-pack-20260801.md`](../decisions/base02-membership-revision-lifecycle-decision-pack-20260801.md) | `current evidence + proposed decisions` | 记录 BASE-B1 因缺少稳定 Membership revision 而硬停止，并冻结 Owner、生命周期、Binding version 与 Operating Context 排除边界；不构成 accepted decision |
 | [`../decisions/base02-membership-revision-architecture-decision-pack.md`](../decisions/base02-membership-revision-architecture-decision-pack.md) | `proposed decision pack` | 比较 A-literal、A-full、canonical replacement 与现有字段组合；推荐 A-full，但未接受、未授权 Schema／Migration 或 Runtime |
 | [`../operations/base02-membership-revision-architecture-independent-review-20260801.md`](../operations/base02-membership-revision-architecture-independent-review-20260801.md) | `current evidence` | 独立核验三方案、BASE-B1～B6、Reader／Writer 与 orphan／FK 边界；只准入决策 handoff，不准入 Schema／Migration 或 BASE-B1 Runtime |
+| [`../decisions/base02-membership-revision-accepted-decision.md`](../decisions/base02-membership-revision-accepted-decision.md) | `accepted decision` | 记录用户接受 A-full：`tenant_members` 继续作为 Access Control 唯一 canonical Membership current，并绑定显式单调 revision、CAS、完整生命周期、ABA、provenance、同事务 transition evidence 与唯一 Writer；不决定具体 Schema／Migration |
+| [`../operations/base02-membership-revision-acceptance-independent-review-20260801.md`](../operations/base02-membership-revision-acceptance-independent-review-20260801.md) | `current evidence` | 独立确认 A-full 接受完整、Owner 与三个版本域未漂移、未形成第二 current、未夹带物理 Schema 或 Runtime 授权；只准入 acceptance handoff |
 
 这里的 `human reviewed` 只表示用户允许当前重新签发的 Candidate 作为未来 Approved Manifest 准备依据。Candidate payload 仍为 `candidate`，私有 Review State 仍为 `review_pending`；它不是 Candidate `approved` 状态，也不是 Approved Manifest 的 `approved` 状态。
 
@@ -200,7 +202,7 @@ PR #849 在唯一 Migration Lease 下实时分配并实施 `0039_mig_01a2_anchor
 
 BASE-02 准入方案已由 PR #854 以 Merge Commit `b87fad849770b83276d0572f73c7c507825c3bca` 合并；独立审查已由 PR #855 在重放后以 Merge Commit `8e3b9de6d472be9fc586b14a2eba24e51e928dfb` 合并。只读审计确认 active historical orphan 与 Scope 关系 orphan 均为 `1`，语义 Owner 为 Access Control 的 Binding 生命周期；独立数据修复专项只能作为经授权的执行载体，Tenancy 不得从 Binding 反推创建 Scope。方案冻结 BASE-B1～B6，但没有授权任何 Runtime、数据修复、外键 `VALIDATE`、Writer 或 Reader；PR #856 只负责 handoff 收口。
 
-BASE-B1 随后因 Membership revision 证据不足硬停止。PR #857 证明 `tenant_members.updated_at` 与 Binding version 均不能替代稳定 Membership revision，并冻结 Identity／Access Control／Tenancy／Security Owner 与 Operating Context 排除边界；PR #858 提交三方案决策包，proposed 推荐 A-full，即保持 `tenant_members` 为 Access Control 唯一 canonical current，并补齐显式 revision、lifecycle envelope、tombstone／current provenance 与同事务 immutable transition evidence。PR #859 独立审查通过。A-full 尚未被用户接受，BASE-B1 Runtime 继续阻断；Schema／Migration、BASE-B2～B6、orphan 修复、FK `VALIDATE`、Writer 和 Reader 均未启动。
+BASE-B1 随后因 Membership revision 证据不足硬停止。PR #857 证明 `tenant_members.updated_at` 与 Binding version 均不能替代稳定 Membership revision，并冻结 Identity／Access Control／Tenancy／Security Owner 与 Operating Context 排除边界；PR #858 提交三方案决策包，proposed 推荐 A-full；PR #859 独立审查通过。用户随后正式接受 A-full，PR #861 将 `tenant_members` 唯一 canonical current、显式严格单调 revision、`expectedRevision` CAS、完整 lifecycle、tombstone／incarnation／ABA、current provenance、同事务 immutable transition evidence 与 Access Control 唯一 Writer 记录为 accepted，PR #862 独立审查结论为 `membership_revision_acceptance_review=passed`。该接受不决定具体字段、表结构、Migration 编号、SQL 或环境；BASE-B1 Runtime 继续阻断，Schema／Migration 前置预检尚未启动，BASE-B2～B6、orphan 修复、FK `VALIDATE`、Writer 和 Reader 均未启动。
 
 文档完成只代表同一套架构 V2 的视图与入口已经建立，不代表 runtime、Schema、Migration、API、UI、Capability、环境或七线正式发布已经完成。
 
@@ -381,10 +383,11 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 → Membership Revision 硬停止证据（已完成，PR #857）
 → Membership Revision Architecture Decision Pack（已完成，PR #858）
 → Membership Revision 独立审查（已完成，PR #859）
-→ Membership Revision 决策 handoff（本次收口）
-→ BASE-02 Membership Revision 架构决策接受（唯一下一任务，未启动、未授权）
-→ Membership Revision 决策接受后的独立 handoff
-→ Membership Revision Schema／Migration 前置预检
+→ Membership Revision 决策 handoff（已完成，PR #860）
+→ Membership Revision A-full Accepted Decision（已完成，PR #861）
+→ Membership Revision A-full 接受独立审查（已完成，PR #862）
+→ Membership Revision A-full 接受 handoff（本次收口）
+→ BASE-02 Membership Revision Schema／Migration 前置预检（唯一下一任务，未启动、未授权）
 → 独立 Schema／Migration 实施与验证
 → BASE-B1 Runtime 重新准入与关闭
 → BASE-B2～B6 独立实施与关闭
@@ -395,9 +398,9 @@ GitHub 最终只读核对结果为 `main.protected=true`，Required Check 已绑
 → Reader
 ```
 
-`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809 已完成本地环境只读预检，PR #811／#812 已完成本地就绪修复 Stage A 与交接，PR #814 已完成本地就绪修复 Stage B，PR #816／#817 已完成 Candidate Governance／Stage C-0 与 handoff，PR #818／#819 已完成 Source／Candidate v2 Governance 与 handoff，PR #820 已完成 Candidate 生成、重新签发和用户人工审核，PR #823 已完成 Approved Manifest 创建与低敏校验，PR #825／#826／#827 已完成 Stage D 与 handoff，PR #828～#832 已完成受控执行计划、Write Adapter Runtime、Authority／组合根无写准备及 handoff，PR #833～#836 已完成数据库级 `PUBLIC TEMPORARY` 权限决策、低敏调整、独立审查及 handoff，PR #837～#839 已完成 Approved Manifest 重新签发、独立审查及 handoff，PR #840～#842 已完成 A2-P1 受控执行、独立审查与 handoff，PR #843～#845 已完成 A2-P2 只读预检、独立审查与 handoff，PR #846～#848 已完成 P0 metadata current 校准、独立审查与 handoff，PR #849～#853 已完成 P1 四文件实施、两轮独立审查、local_acceptance 单次受控 Migration 与最终 handoff。PR #854～#856 已完成 BASE-02 前置方案、独立审查与 handoff；PR #857～#859 已完成 Membership revision 硬停止证据、proposed Decision Pack 与独立审查。唯一下一任务冻结为 `BASE-02 Membership Revision 架构决策接受`。仓库尚无正式任务编号，该任务尚未启动、尚未获得接受决策授权；Schema／Migration 预检、Runtime、数据修复与数据库执行仍未授权。
+`V2-MIG01-A2-PROVISIONING-PREFLIGHT-01` 已通过 PR #797 完成并合并，PR #799 已将 proposed decision pack 合并到 `main`，PR #801 已记录 accepted 选择，PR #804／#805 已完成治理 Stage A 仓库硬门与交接，PR #807／#808 已完成治理 Stage B Runner 基础与交接，PR #809 已完成本地环境只读预检，PR #811／#812 已完成本地就绪修复 Stage A 与交接，PR #814 已完成本地就绪修复 Stage B，PR #816／#817 已完成 Candidate Governance／Stage C-0 与 handoff，PR #818／#819 已完成 Source／Candidate v2 Governance 与 handoff，PR #820 已完成 Candidate 生成、重新签发和用户人工审核，PR #823 已完成 Approved Manifest 创建与低敏校验，PR #825／#826／#827 已完成 Stage D 与 handoff，PR #828～#832 已完成受控执行计划、Write Adapter Runtime、Authority／组合根无写准备及 handoff，PR #833～#836 已完成数据库级 `PUBLIC TEMPORARY` 权限决策、低敏调整、独立审查及 handoff，PR #837～#839 已完成 Approved Manifest 重新签发、独立审查及 handoff，PR #840～#842 已完成 A2-P1 受控执行、独立审查与 handoff，PR #843～#845 已完成 A2-P2 只读预检、独立审查与 handoff，PR #846～#848 已完成 P0 metadata current 校准、独立审查与 handoff，PR #849～#853 已完成 P1 四文件实施、两轮独立审查、local_acceptance 单次受控 Migration 与最终 handoff。PR #854～#856 已完成 BASE-02 前置方案、独立审查与 handoff；PR #857～#860 已完成 Membership revision 硬停止证据、proposed Decision Pack、独立审查与决策 handoff；PR #861／#862 已完成 A-full accepted decision 与独立接受审查。唯一下一任务冻结为 `BASE-02 Membership Revision Schema／Migration 前置预检`。仓库尚无正式任务编号，该任务尚未启动，Schema、Migration、数据库、Migration Lease 与 BASE-B1 Runtime 均未授权。
 
-治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。PR #809 只读连接了受控 localhost 本地验收库并确认六项阻断；PR #811 关闭本地环境 Journal、A1 Shape 与恢复点三项阻断；PR #814 建立只读 Adapter 与 Context Policy 并关闭 `readonly_adapter_unavailable`；PR #816 建立 Candidate v1 test-only 契约并关闭 `candidate_contract_missing`；PR #818 建立用户授权 Source／Candidate v2 Governance；PR #820 记录 Candidate 低敏验证与人工审核；PR #823 记录 Approved Manifest 创建与校验；PR #825／#826 完成 Stage D；PR #829 建立 Write Adapter；PR #831 完成合成 Authority／组合根无写验证；PR #833～#836 关闭 `PUBLIC TEMPORARY` 阻断；PR #837～#839 完成 Approved Manifest 重新签发；PR #840～#842 完成 A2-P1。PR #843／#844 随后冻结并独立审查 A2-P2 exact index／FK、Catalog、Shape、metadata 和锁边界，PR #846～#848 完成 P0，PR #849～#853 完成 P1 实施、执行、独立审查与 handoff；A2-P2 已完成。PR #854～#856 已完成 BASE-02 前置方案、独立审查与 handoff；PR #857～#859 进一步确认 Membership revision 阻断、形成 A-full proposed 推荐并通过独立审查。推荐尚未接受，BASE-B1 Runtime 与数据修复仍未启动、未授权。
+治理 Stage A 与治理 Stage B 已通过独立变更域和独立 PR 完成。PR #809 只读连接了受控 localhost 本地验收库并确认六项阻断；PR #811 关闭本地环境 Journal、A1 Shape 与恢复点三项阻断；PR #814 建立只读 Adapter 与 Context Policy 并关闭 `readonly_adapter_unavailable`；PR #816 建立 Candidate v1 test-only 契约并关闭 `candidate_contract_missing`；PR #818 建立用户授权 Source／Candidate v2 Governance；PR #820 记录 Candidate 低敏验证与人工审核；PR #823 记录 Approved Manifest 创建与校验；PR #825／#826 完成 Stage D；PR #829 建立 Write Adapter；PR #831 完成合成 Authority／组合根无写验证；PR #833～#836 关闭 `PUBLIC TEMPORARY` 阻断；PR #837～#839 完成 Approved Manifest 重新签发；PR #840～#842 完成 A2-P1。PR #843／#844 随后冻结并独立审查 A2-P2 exact index／FK、Catalog、Shape、metadata 和锁边界，PR #846～#848 完成 P0，PR #849～#853 完成 P1 实施、执行、独立审查与 handoff；A2-P2 已完成。PR #854～#856 已完成 BASE-02 前置方案、独立审查与 handoff；PR #857～#860 确认 Membership revision 阻断、形成 A-full proposed 推荐并完成决策 handoff，PR #861／#862 随后完成 A-full 正式接受与独立审查。BASE-B1 Runtime 与数据修复仍未启动、未授权。
 
 MIG-01 内部候选顺序继续保持：
 
@@ -411,7 +414,7 @@ A2
 → Reader
 ```
 
-本地就绪修复 Stage A、Stage B、Candidate Governance／Stage C-0、Source／Candidate v2 Governance、Stage C Candidate 人工审核、Approved Manifest 创建／校验、Stage D、A2-P1 全链和 A2-P2 P0／P1 均已完成。索引和 `NOT VALID` FK 已精确进入仓库与固定本地验收环境；active historical orphan 与 Scope 关系 orphan 仍均为 `1`。BASE-02 前置方案、独立审查与 handoff 已合并，Membership Revision Decision Pack 及独立审查也已合并。唯一下一任务为 `BASE-02 Membership Revision 架构决策接受`；A-full 仍为 proposed，不自动授权 Schema／Migration、BASE-B1 Runtime、orphan 数据修复、FK `VALIDATE`、Writer 或 Reader。该顺序不改变 MIG-01～MIG-06 的相对顺序。
+本地就绪修复 Stage A、Stage B、Candidate Governance／Stage C-0、Source／Candidate v2 Governance、Stage C Candidate 人工审核、Approved Manifest 创建／校验、Stage D、A2-P1 全链和 A2-P2 P0／P1 均已完成。索引和 `NOT VALID` FK 已精确进入仓库与固定本地验收环境；active historical orphan 与 Scope 关系 orphan 仍均为 `1`。BASE-02 前置方案、独立审查与 handoff 已合并，Membership Revision Decision Pack、A-full accepted decision 与两轮独立审查也已合并。唯一下一任务为 `BASE-02 Membership Revision Schema／Migration 前置预检`；该任务尚未启动、尚未授权，且不自动授权 Schema／Migration 实施、BASE-B1 Runtime、orphan 数据修复、FK `VALIDATE`、Writer 或 Reader。该顺序不改变 MIG-01～MIG-06 的相对顺序。
 
 后续既定数据顺序保持：
 

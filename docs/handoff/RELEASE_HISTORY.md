@@ -826,3 +826,20 @@
 - active historical orphan 与 Scope 关系 orphan 保持 `1／1`，未修改、未授权修复；A2-P2 外键继续 `NOT VALID`／`convalidated=false`，未执行 `VALIDATE`。
 - 本次决策、审查与 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
 - 唯一下一任务更新为 `BASE-02 Membership Revision 架构决策接受`；仓库尚无正式任务编号，该任务尚未启动、尚未授权。只有用户明确接受 proposed 推荐并完成独立 handoff 后，才可另行申请 Schema／Migration 前置预检。
+
+## 2026-08-01：BASE-02 Membership Revision A-full 接受、独立审查与 handoff
+
+- 用户正式接受 `A-full_same_table_lifecycle`；本阶段只接受架构语义，不接受具体字段、枚举、表结构、Migration 编号、SQL、回填方案或执行环境。
+- PR #861 新增 A-full Accepted Decision，Head `ac22a0bd8e5197c5641c3d0ddd8e1abd8649e841`，Merge Commit `b74cad648a46421b0a04f5f6b868f2f7a2240319`。
+- PR #861 Required Check Run `30691379044`／Job `91346604424` 对应冻结 Head，环境、依赖、架构自测、增量检查、lint、typecheck、完整测试和 build 全部成功。
+- PR #862 新增接受独立审查，Head `46ec582001989416dd6cd8a7c333f13d68de3499`，Merge Commit `1478c2693d6a21216169babad5ff9d4147e3afb0`。
+- PR #862 Required Check Run `30691699252`／Job `91347460065` 对应冻结 Head，全部质量步骤成功，完整测试和 build 均实际执行。
+- `tenant_members` 继续作为 Access Control 唯一 canonical Membership current；Identity、Access Control、Tenancy 与 Security Owner 边界没有重开。
+- Membership revision、Binding version 与 Scope revision 继续作为三个独立版本域；Operating Context Head／Version 不进入本轮 BASE-02 授权组合。
+- A-full 已绑定显式严格单调 revision、`expectedRevision` CAS、完整 lifecycle、tombstone／incarnation／ABA、current provenance、同事务 immutable transition evidence 与 Access Control 唯一 Writer。
+- A-literal 继续仅为 interim；永久 sidecar current 继续排除；canonical replacement 仅可由未来独立 ADR 重开；方案 C 继续淘汰。
+- 独立审查结论为 `membership_revision_acceptance_review=passed`、`membership_revision_decision_accepted=true`、`membership_revision_direction=A-full_same_table_lifecycle`。
+- BASE-B1 Runtime 继续 `blocked`；BASE-B2～B6、Membership lifecycle Writer、项目级 Writer、Audit／模板、MIG-01B、MIG-01C 与 Reader 均未启动。
+- active historical orphan 与 Scope relation orphan 保持 `1／1`，未修改、未授权修复；A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`，未执行 `VALIDATE`。
+- 本次 Accepted Decision、独立审查与 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
+- 唯一下一任务更新为 `BASE-02 Membership Revision Schema／Migration 前置预检`；仓库尚无正式任务编号，该任务尚未启动、尚未授权。Schema、Migration、数据库、Migration Lease 与 BASE-B1 Runtime 仍未授权。
