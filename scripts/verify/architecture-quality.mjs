@@ -42,6 +42,10 @@ const EDGE_RULE_IDS = new Set([
   'AQ007_CROSS_MODULE_SERVER_REPOSITORY',
 ]);
 const ALL_RULE_IDS = new Set([...PATH_RULE_IDS, ...EDGE_RULE_IDS]);
+const MEMBERSHIP_WRITER_RULE_ID = 'AQ008_MEMBERSHIP_DIRECT_WRITER';
+const MEMBERSHIP_WRITER_ALLOWLIST = new Set([
+  'src/modules/access-control/server/membership-command-repository.ts',
+]);
 const REQUIRED_METADATA_KEYS = [
   'ruleId',
   'taskId',
@@ -57,6 +61,7 @@ const RULE_MESSAGES = {
   AQ005_FROZEN_PLATFORM_MODULE_NEW_FILE: '冻结模块 open-platform 禁止新增未登记文件。',
   AQ006_DOMAIN_LAYER_DEPENDENCY: 'Domain 层禁止新增对应用、数据库、集成或框架层的依赖。',
   AQ007_CROSS_MODULE_SERVER_REPOSITORY: '模块间禁止新增对 server 或 Repository 实现的直接依赖。',
+  AQ008_MEMBERSHIP_DIRECT_WRITER: 'Membership 只能由 Access Control Owner Repository 直接写入。',
 };
 
 class ArchitectureQualityError extends Error {}
@@ -771,6 +776,1380 @@ function addedDependencyViolations(ts, repositoryRoot, baseTree, headTree, chang
   );
 }
 
+function isMembershipWriterSource(filePath) {
+  if (!/^(?:src|scripts)\/.+/u.test(filePath)) {
+    return false;
+  }
+  if (!SOURCE_EXTENSIONS.some((extension) => filePath.endsWith(extension))) {
+    return false;
+  }
+  if (/(?:^|\/)(?:tests|__tests__)(?:\/|$)/iu.test(filePath)) {
+    return false;
+  }
+  return !/\.(?:test|spec)\.[^/]+$/iu.test(filePath);
+}
+
+function unwrapExpression(ts, expression) {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current)
+    || ts.isAsExpression(current)
+    || ts.isTypeAssertionExpression(current)
+    || ts.isNonNullExpression(current)
+    || (ts.isSatisfiesExpression && ts.isSatisfiesExpression(current))
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function propertyNameText(ts, expression) {
+  const current = unwrapExpression(ts, expression);
+  if (ts.isIdentifier(current)) {
+    return current.text;
+  }
+  if (ts.isPropertyAccessExpression(current)) {
+    return current.name.text;
+  }
+  if (
+    ts.isElementAccessExpression(current)
+    && current.argumentExpression
+    && (ts.isStringLiteral(current.argumentExpression)
+      || ts.isNoSubstitutionTemplateLiteral(current.argumentExpression))
+  ) {
+    return current.argumentExpression.text;
+  }
+  return null;
+}
+
+function literalText(ts, expression) {
+  const current = unwrapExpression(ts, expression);
+  if (ts.isStringLiteral(current) || ts.isNoSubstitutionTemplateLiteral(current)) {
+    return current.text;
+  }
+  return null;
+}
+
+function collectConstInitializers(ts, sourceFile) {
+  const initializers = new Map();
+  const visit = (node) => {
+    if (
+      ts.isVariableDeclaration(node)
+      && ts.isIdentifier(node.name)
+      && node.initializer
+      && ts.isVariableDeclarationList(node.parent)
+      && (node.parent.flags & ts.NodeFlags.Const) !== 0
+    ) {
+      const entries = initializers.get(node.name.text) ?? [];
+      entries.push({ declaration: node, initializer: node.initializer });
+      initializers.set(node.name.text, entries);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return initializers;
+}
+
+function lexicalConstInitializer(ts, identifier, initializers) {
+  const entries = initializers.get(identifier.text) ?? [];
+  let selected = null;
+  let selectedWidth = Number.POSITIVE_INFINITY;
+  for (const entry of entries) {
+    let scope = entry.declaration.parent;
+    while (
+      scope
+      && !ts.isSourceFile(scope)
+      && !ts.isBlock(scope)
+      && !ts.isFunctionLike(scope)
+    ) {
+      scope = scope.parent;
+    }
+    if (!scope || identifier.pos < scope.pos || identifier.end > scope.end) continue;
+    const width = scope.end - scope.pos;
+    if (
+      width < selectedWidth
+      || (width === selectedWidth && entry.declaration.pos < identifier.pos
+        && (!selected || entry.declaration.pos > selected.declaration.pos))
+    ) {
+      selected = entry;
+      selectedWidth = width;
+    }
+  }
+  return selected?.initializer ?? null;
+}
+
+function staticStringText(ts, expression, initializers, seen = new Set()) {
+  const current = unwrapExpression(ts, expression);
+  const direct = literalText(ts, current);
+  if (direct !== null) return direct;
+
+  if (ts.isIdentifier(current) && !seen.has(current.text)) {
+    const initializer = lexicalConstInitializer(ts, current, initializers);
+    if (!initializer) return null;
+    const nextSeen = new Set(seen);
+    nextSeen.add(current.text);
+    return staticStringText(ts, initializer, initializers, nextSeen);
+  }
+
+  if (ts.isBinaryExpression(current) && current.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const left = staticStringText(ts, current.left, initializers, seen);
+    const right = staticStringText(ts, current.right, initializers, seen);
+    return left === null || right === null ? null : `${left}${right}`;
+  }
+
+  if (ts.isTemplateExpression(current)) {
+    let value = current.head.text;
+    for (const span of current.templateSpans) {
+      const part = staticStringText(ts, span.expression, initializers, seen);
+      if (part === null) return null;
+      value += `${part}${span.literal.text}`;
+    }
+    return value;
+  }
+
+  return null;
+}
+
+function staticSqlTexts(ts, expression, initializers, seen = new Set()) {
+  const current = unwrapExpression(ts, expression);
+  const direct = staticStringText(ts, current, initializers);
+  if (direct !== null) return [direct];
+
+  if (ts.isIdentifier(current) && !seen.has(current.text)) {
+    const initializer = lexicalConstInitializer(ts, current, initializers);
+    if (initializer) {
+      const nextSeen = new Set(seen);
+      nextSeen.add(current.text);
+      return staticSqlTexts(ts, initializer, initializers, nextSeen);
+    }
+  }
+
+  if (!ts.isObjectLiteralExpression(current)) return [];
+  const values = [];
+  for (const property of current.properties) {
+    if (!ts.isPropertyAssignment(property)) continue;
+    const name = propertyNameText(ts, property.name);
+    if (name !== 'text' && name !== 'sql') continue;
+    const text = staticStringText(ts, property.initializer, initializers);
+    if (text !== null) values.push(text);
+  }
+  for (const property of current.properties) {
+    if (!ts.isShorthandPropertyAssignment(property)) continue;
+    if (property.name.text !== 'text' && property.name.text !== 'sql') continue;
+    const text = staticStringText(ts, property.name, initializers);
+    if (text !== null) values.push(text);
+  }
+  return values;
+}
+
+function rootExpressionIdentifier(ts, expression) {
+  let current = unwrapExpression(ts, expression);
+  while (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
+    current = unwrapExpression(ts, current.expression);
+  }
+  return ts.isIdentifier(current) ? current : null;
+}
+
+function resolvedConstRootName(ts, expression, initializers, seen = new Set()) {
+  const root = rootExpressionIdentifier(ts, expression);
+  if (!root) return null;
+  if (seen.has(root.text)) return root.text;
+  const initializer = lexicalConstInitializer(ts, root, initializers);
+  if (!initializer) return root.text;
+  const nextSeen = new Set(seen);
+  nextSeen.add(root.text);
+  return resolvedConstRootName(ts, initializer, initializers, nextSeen) ?? root.text;
+}
+
+function isSqlTaggedTemplate(ts, node, initializers) {
+  if (!ts.isTaggedTemplateExpression(node)) return false;
+  const tag = unwrapExpression(ts, node.tag);
+  if (
+    ts.isPropertyAccessExpression(tag)
+    && ts.isIdentifier(tag.expression)
+    && tag.expression.text === 'String'
+    && tag.name.text === 'raw'
+  ) {
+    return false;
+  }
+  const root = resolvedConstRootName(ts, tag, initializers);
+  return Boolean(
+    root && /^(?:sql|db|database|tx|transaction|client|pool|connection)$/iu.test(root),
+  );
+}
+
+function stripSqlStringsAndComments(sqlText) {
+  let output = '';
+  let index = 0;
+  while (index < sqlText.length) {
+    if (sqlText.startsWith('--', index)) {
+      const newline = sqlText.indexOf('\n', index + 2);
+      if (newline < 0) break;
+      output += '\n';
+      index = newline + 1;
+      continue;
+    }
+    if (sqlText.startsWith('/*', index)) {
+      const end = sqlText.indexOf('*/', index + 2);
+      if (end < 0) return output;
+      output += ' ';
+      index = end + 2;
+      continue;
+    }
+    if (sqlText[index] === "'") {
+      index += 1;
+      while (index < sqlText.length) {
+        if (sqlText[index] === "'" && sqlText[index + 1] === "'") {
+          index += 2;
+          continue;
+        }
+        if (sqlText[index] === "'") {
+          index += 1;
+          break;
+        }
+        index += 1;
+      }
+      output += ' ';
+      continue;
+    }
+    if (sqlText[index] === '$') {
+      const delimiter = /^\$[a-zA-Z_0-9]*\$/u.exec(sqlText.slice(index))?.[0];
+      if (delimiter) {
+        const end = sqlText.indexOf(delimiter, index + delimiter.length);
+        if (end < 0) return output;
+        output += ' ';
+        index = end + delimiter.length;
+        continue;
+      }
+    }
+    output += sqlText[index];
+    index += 1;
+  }
+  return output;
+}
+
+function containsMembershipMutationSql(sqlText) {
+  const executable = stripSqlStringsAndComments(sqlText);
+  const qualifier = '(?:(?:"(?:[^"]|"")*"|[a-zA-Z_][a-zA-Z0-9_$]*)\\s*\\.\\s*)?';
+  const target = '(?:"tenant_members"|tenant_members)';
+  const rowMutation = '(?:insert\\s+into|update|delete\\s+from)';
+  if (
+    new RegExp(
+      `\\b${rowMutation}\\s+(?:only\\s+)?${qualifier}${target}(?=$|[\\s;(,])`,
+      'iu',
+    ).test(executable)
+  ) {
+    return true;
+  }
+
+  const truncateTarget = new RegExp(
+    `(?:^|,)\\s*(?:only\\s+)?${qualifier}${target}(?=$|[\\s,(])`,
+    'iu',
+  );
+  for (const statement of executable.split(';')) {
+    const truncate = /\btruncate(?:\s+table)?\s+([\s\S]*)$/iu.exec(statement);
+    if (truncate && truncateTarget.test(truncate[1])) return true;
+  }
+  return false;
+}
+
+function templateEvidence(ts, template) {
+  if (ts.isNoSubstitutionTemplateLiteral(template)) {
+    return { text: template.text, expressions: [] };
+  }
+  let text = template.head.text;
+  const expressions = [];
+  for (const [index, span] of template.templateSpans.entries()) {
+    expressions.push(span.expression);
+    text += ` __AQ_EXPR_${index}__ ${span.literal.text}`;
+  }
+  return { text, expressions };
+}
+
+function dynamicMutationTargets(ts, template) {
+  const evidence = templateEvidence(ts, template);
+  const executable = stripSqlStringsAndComments(evidence.text);
+  const pattern = /\b(?:insert\s+into|update|delete\s+from|truncate(?:\s+table)?)\s+(?:only\s+)?__AQ_EXPR_(\d+)__/giu;
+  const indexes = new Set();
+  for (const match of executable.matchAll(pattern)) {
+    indexes.add(Number(match[1]));
+  }
+  for (const statement of executable.split(';')) {
+    const truncate = /\btruncate(?:\s+table)?\s+([\s\S]*)$/iu.exec(statement);
+    if (!truncate) continue;
+    for (const match of truncate[1].matchAll(/(?:^|,)\s*(?:only\s+)?__AQ_EXPR_(\d+)__/giu)) {
+      indexes.add(Number(match[1]));
+    }
+  }
+  return [...indexes]
+    .map((index) => evidence.expressions[index])
+    .filter(Boolean);
+}
+
+function dynamicTableExpression(ts, expression) {
+  const current = unwrapExpression(ts, expression);
+  if (ts.isCallExpression(current) && current.arguments.length > 0) {
+    return unwrapExpression(ts, current.arguments[0]);
+  }
+  return current;
+}
+
+function createMembershipWriterSourceFile(ts, filePath, content) {
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKindForFile(ts, filePath),
+  );
+  const diagnostics = sourceFile.parseDiagnostics ?? [];
+  if (diagnostics.length > 0) {
+    const diagnostic = [...diagnostics].sort(
+      (left, right) => (left.start ?? 0) - (right.start ?? 0),
+    )[0];
+    const position = diagnostic.start === undefined
+      ? '未知位置'
+      : (() => {
+          const point = sourceFile.getLineAndCharacterOfPosition(diagnostic.start);
+          return `${point.line + 1}:${point.character + 1}`;
+        })();
+    fail(`源码解析失败：${filePath}（${position}）`);
+  }
+  return sourceFile;
+}
+
+function hasExportModifier(ts, node) {
+  return Boolean(node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword));
+}
+
+function hasDefaultModifier(ts, node) {
+  return Boolean(node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword));
+}
+
+function resolvedInternalModule(ts, tree, filePath, moduleSpecifier) {
+  const specifier = literalModuleSpecifier(ts, moduleSpecifier);
+  if (!specifier) return null;
+  const target = resolveModuleSpecifier(tree, filePath, specifier);
+  return target.startsWith('package:') ? null : target;
+}
+
+function bindingNameContains(ts, bindingName, identifierName) {
+  if (ts.isIdentifier(bindingName)) return bindingName.text === identifierName;
+  return bindingName.elements.some((element) =>
+    ts.isBindingElement(element) && bindingNameContains(ts, element.name, identifierName));
+}
+
+function isShadowedByFunctionParameter(ts, identifier) {
+  let current = identifier.parent;
+  while (current && !ts.isSourceFile(current)) {
+    if (
+      ts.isFunctionLike(current)
+      && current.parameters.some((parameter) =>
+        bindingNameContains(ts, parameter.name, identifier.text))
+    ) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
+function collectLocalBindings(ts, sourceFile) {
+  const bindings = new Map();
+  const add = (name, declaration, kind) => {
+    let scope = kind === 'parameter' ? declaration.parent : declaration.parent;
+    while (
+      scope
+      && !ts.isSourceFile(scope)
+      && !ts.isBlock(scope)
+      && !ts.isFunctionLike(scope)
+    ) {
+      scope = scope.parent;
+    }
+    if (!scope) return;
+    const entries = bindings.get(name) ?? [];
+    entries.push({ declaration, kind, scope });
+    bindings.set(name, entries);
+  };
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+      add(node.name.text, node, 'variable');
+    } else if (ts.isParameter(node) && ts.isIdentifier(node.name)) {
+      add(node.name.text, node, 'parameter');
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return bindings;
+}
+
+function lexicalLocalBinding(identifier, bindings) {
+  let selected = null;
+  let selectedWidth = Number.POSITIVE_INFINITY;
+  for (const entry of bindings.get(identifier.text) ?? []) {
+    if (identifier.pos < entry.scope.pos || identifier.end > entry.scope.end) continue;
+    const width = entry.scope.end - entry.scope.pos;
+    if (
+      width < selectedWidth
+      || (width === selectedWidth && entry.declaration.pos < identifier.pos
+        && (!selected || entry.declaration.pos > selected.declaration.pos))
+    ) {
+      selected = entry;
+      selectedWidth = width;
+    }
+  }
+  return selected;
+}
+
+function latestAssignmentBefore(ts, scope, identifier) {
+  let selected = null;
+  const visit = (node) => {
+    if (node !== scope && ts.isFunctionLike(node)) return;
+    if (
+      ts.isBinaryExpression(node)
+      && node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      && ts.isIdentifier(unwrapExpression(ts, node.left))
+      && unwrapExpression(ts, node.left).text === identifier.text
+      && node.pos < identifier.pos
+      && (!selected || node.pos > selected.pos)
+    ) {
+      selected = node;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(scope);
+  return selected?.right ?? null;
+}
+
+function collectMembershipBindings(
+  ts,
+  repositoryRoot,
+  tree,
+  filePath,
+  sourceFile,
+  exportCache = new Map(),
+  visiting = new Set(),
+) {
+  const identifiers = new Set();
+  const namespaces = new Map();
+  const localBindings = collectLocalBindings(ts, sourceFile);
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    const target = resolvedInternalModule(ts, tree, filePath, statement.moduleSpecifier);
+    if (!target) continue;
+    const exported = membershipExportNames(
+      ts,
+      repositoryRoot,
+      tree,
+      target,
+      exportCache,
+      visiting,
+    );
+    if (exported.size === 0) continue;
+    const clause = statement.importClause;
+    if (!clause?.namedBindings) continue;
+    if (ts.isNamespaceImport(clause.namedBindings)) {
+      namespaces.set(clause.namedBindings.name.text, exported);
+      continue;
+    }
+    for (const element of clause.namedBindings.elements) {
+      const importedName = element.propertyName?.text ?? element.name.text;
+      if (exported.has(importedName)) identifiers.add(element.name.text);
+    }
+  }
+
+  const isMembershipTable = (expression, seen = new Set()) => {
+    const current = unwrapExpression(ts, expression);
+    if (ts.isIdentifier(current)) {
+      if (!identifiers.has(current.text) || seen.has(current)) return false;
+      const binding = lexicalLocalBinding(current, localBindings);
+      if (!binding) return !isShadowedByFunctionParameter(ts, current);
+      if (binding.kind === 'parameter') return false;
+      const nextSeen = new Set(seen);
+      nextSeen.add(current);
+      if (binding.declaration.initializer) {
+        return isMembershipTable(binding.declaration.initializer, nextSeen);
+      }
+      const assignment = latestAssignmentBefore(ts, binding.scope, current);
+      return assignment ? isMembershipTable(assignment, nextSeen) : false;
+    }
+    if (
+      ts.isPropertyAccessExpression(current)
+      && ts.isIdentifier(current.expression)
+      && !isShadowedByFunctionParameter(ts, current.expression)
+      && namespaces.get(current.expression.text)?.has(current.name.text)
+    ) {
+      return true;
+    }
+    if (
+      ts.isElementAccessExpression(current)
+      && ts.isIdentifier(current.expression)
+      && !isShadowedByFunctionParameter(ts, current.expression)
+      && current.argumentExpression
+    ) {
+      const property = literalText(ts, current.argumentExpression);
+      return Boolean(property && namespaces.get(current.expression.text)?.has(property));
+    }
+    return false;
+  };
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const visit = (node) => {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+        if (isMembershipTable(node.initializer) && !identifiers.has(node.name.text)) {
+          identifiers.add(node.name.text);
+          changed = true;
+        }
+        const initializer = unwrapExpression(ts, node.initializer);
+        if (ts.isIdentifier(initializer)) {
+          const sourceNamespace = namespaces.get(initializer.text);
+          if (sourceNamespace && namespaces.get(node.name.text) !== sourceNamespace) {
+            namespaces.set(node.name.text, sourceNamespace);
+            changed = true;
+          }
+        }
+      }
+      if (
+        ts.isVariableDeclaration(node)
+        && ts.isObjectBindingPattern(node.name)
+        && node.initializer
+        && ts.isIdentifier(unwrapExpression(ts, node.initializer))
+      ) {
+        const exported = namespaces.get(unwrapExpression(ts, node.initializer).text);
+        if (exported) {
+          for (const element of node.name.elements) {
+            if (!ts.isIdentifier(element.name)) continue;
+            const property = element.propertyName
+              ? propertyNameText(ts, element.propertyName)
+              : element.name.text;
+            if (property && exported.has(property) && !identifiers.has(element.name.text)) {
+              identifiers.add(element.name.text);
+              changed = true;
+            }
+          }
+        }
+      }
+      if (
+        ts.isBinaryExpression(node)
+        && node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+        && ts.isIdentifier(unwrapExpression(ts, node.left))
+      ) {
+        const targetName = unwrapExpression(ts, node.left).text;
+        if (isMembershipTable(node.right) && !identifiers.has(targetName)) {
+          identifiers.add(targetName);
+          changed = true;
+        }
+        const right = unwrapExpression(ts, node.right);
+        if (ts.isIdentifier(right)) {
+          const sourceNamespace = namespaces.get(right.text);
+          if (sourceNamespace && namespaces.get(targetName) !== sourceNamespace) {
+            namespaces.set(targetName, sourceNamespace);
+            changed = true;
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+
+  return { identifiers, namespaces, isMembershipTable };
+}
+
+function membershipExportNames(
+  ts,
+  repositoryRoot,
+  tree,
+  filePath,
+  cache = new Map(),
+  visiting = new Set(),
+) {
+  if (!SOURCE_EXTENSIONS.some((extension) => filePath.endsWith(extension))) {
+    return new Set();
+  }
+  if (filePath === 'src/server/db/schema.ts') return new Set(['tenantMembers']);
+  if (cache.has(filePath)) return new Set(cache.get(filePath));
+  if (visiting.has(filePath)) return new Set();
+
+  visiting.add(filePath);
+  const sourceFile = createMembershipWriterSourceFile(
+    ts,
+    filePath,
+    readBlob(repositoryRoot, tree, filePath),
+  );
+  const bindings = collectMembershipBindings(
+    ts,
+    repositoryRoot,
+    tree,
+    filePath,
+    sourceFile,
+    cache,
+    visiting,
+  );
+  const exportedNames = new Set();
+
+  for (const statement of sourceFile.statements) {
+    if (ts.isExportDeclaration(statement)) {
+      const target = statement.moduleSpecifier
+        ? resolvedInternalModule(ts, tree, filePath, statement.moduleSpecifier)
+        : null;
+      if (statement.moduleSpecifier && !target) continue;
+      const targetExports = target
+        ? membershipExportNames(ts, repositoryRoot, tree, target, cache, visiting)
+        : null;
+      if (!statement.exportClause && targetExports) {
+        for (const name of targetExports) exportedNames.add(name);
+        continue;
+      }
+      if (!statement.exportClause || !ts.isNamedExports(statement.exportClause)) continue;
+      for (const element of statement.exportClause.elements) {
+        const originalName = element.propertyName?.text ?? element.name.text;
+        if (
+          (targetExports && targetExports.has(originalName))
+          || (!targetExports && bindings.identifiers.has(originalName))
+        ) {
+          exportedNames.add(element.name.text);
+        }
+      }
+      continue;
+    }
+    if (ts.isVariableStatement(statement) && hasExportModifier(ts, statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (ts.isIdentifier(declaration.name) && bindings.identifiers.has(declaration.name.text)) {
+          exportedNames.add(declaration.name.text);
+        }
+      }
+    }
+  }
+
+  visiting.delete(filePath);
+  cache.set(filePath, exportedNames);
+  return new Set(exportedNames);
+}
+
+function localFunctionDescriptors(ts, sourceFile) {
+  const descriptors = new Set();
+  const byName = new Map();
+  const byQualifiedName = new Map();
+
+  const register = (name, node, body, parameters, exportNames = [], owner = null) => {
+    if (!name || !body) return;
+    const descriptor = {
+      name,
+      owner,
+      node,
+      body,
+      parameters,
+      exportNames: new Set(exportNames),
+      targetParameterIndexes: new Set(),
+    };
+    descriptors.add(descriptor);
+    const named = byName.get(name) ?? new Set();
+    named.add(descriptor);
+    byName.set(name, named);
+    if (owner) {
+      const qualifiedName = `${owner}.${name}`;
+      const qualified = byQualifiedName.get(qualifiedName) ?? new Set();
+      qualified.add(descriptor);
+      byQualifiedName.set(qualifiedName, qualified);
+    }
+  };
+
+  const visit = (node) => {
+    if (ts.isFunctionDeclaration(node) && node.name && node.body) {
+      const exportNames = hasExportModifier(ts, node)
+        ? [hasDefaultModifier(ts, node) ? 'default' : node.name.text]
+        : [];
+      register(node.name.text, node, node.body, node.parameters, exportNames);
+    } else if (
+      ts.isVariableDeclaration(node)
+      && ts.isIdentifier(node.name)
+      && node.initializer
+      && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
+    ) {
+      const statement = ts.isVariableDeclarationList(node.parent) ? node.parent.parent : null;
+      register(
+        node.name.text,
+        node.initializer,
+        node.initializer.body,
+        node.initializer.parameters,
+        statement && ts.isVariableStatement(statement) && hasExportModifier(ts, statement)
+          ? [node.name.text]
+          : [],
+      );
+    } else if (ts.isMethodDeclaration(node) && node.body) {
+      const methodName = propertyNameText(ts, node.name);
+      let owner = null;
+      let exportNames = [];
+      if (ts.isClassDeclaration(node.parent) && node.parent.name) {
+        owner = node.parent.name.text;
+        if (hasExportModifier(ts, node.parent)) {
+          const exportedOwner = hasDefaultModifier(ts, node.parent) ? 'default' : owner;
+          exportNames = [`${exportedOwner}.${methodName}`];
+        }
+      } else if (
+        ts.isObjectLiteralExpression(node.parent)
+        && ts.isVariableDeclaration(node.parent.parent)
+        && ts.isIdentifier(node.parent.parent.name)
+      ) {
+        owner = node.parent.parent.name.text;
+        const statement = ts.isVariableDeclarationList(node.parent.parent.parent)
+          ? node.parent.parent.parent.parent
+          : null;
+        if (statement && ts.isVariableStatement(statement) && hasExportModifier(ts, statement)) {
+          exportNames = [`${owner}.${methodName}`];
+        }
+      }
+      register(methodName, node, node.body, node.parameters, exportNames, owner);
+    } else if (
+      ts.isPropertyAssignment(node)
+      && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
+    ) {
+      const methodName = propertyNameText(ts, node.name);
+      let owner = null;
+      let exportNames = [];
+      if (
+        ts.isObjectLiteralExpression(node.parent)
+        && ts.isVariableDeclaration(node.parent.parent)
+        && ts.isIdentifier(node.parent.parent.name)
+      ) {
+        owner = node.parent.parent.name.text;
+        const statement = ts.isVariableDeclarationList(node.parent.parent.parent)
+          ? node.parent.parent.parent.parent
+          : null;
+        if (statement && ts.isVariableStatement(statement) && hasExportModifier(ts, statement)) {
+          exportNames = [`${owner}.${methodName}`];
+        }
+      }
+      register(
+        methodName,
+        node.initializer,
+        node.initializer.body,
+        node.initializer.parameters,
+        exportNames,
+        owner,
+      );
+    } else if (
+      ts.isExportAssignment(node)
+      && (ts.isArrowFunction(node.expression) || ts.isFunctionExpression(node.expression))
+    ) {
+      register(
+        'default',
+        node.expression,
+        node.expression.body,
+        node.expression.parameters,
+        ['default'],
+      );
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+
+  const addQualifiedAlias = (qualifiedName, sourceName) => {
+    const qualified = byQualifiedName.get(qualifiedName) ?? new Set();
+    for (const descriptor of byName.get(sourceName) ?? []) {
+      if (!descriptor.owner) qualified.add(descriptor);
+    }
+    if (qualified.size > 0) byQualifiedName.set(qualifiedName, qualified);
+  };
+  const collectObjectAliases = (node) => {
+    if (
+      ts.isVariableDeclaration(node)
+      && ts.isIdentifier(node.name)
+      && node.initializer
+      && ts.isObjectLiteralExpression(unwrapExpression(ts, node.initializer))
+    ) {
+      for (const property of unwrapExpression(ts, node.initializer).properties) {
+        if (ts.isShorthandPropertyAssignment(property)) {
+          addQualifiedAlias(`${node.name.text}.${property.name.text}`, property.name.text);
+        } else if (
+          ts.isPropertyAssignment(property)
+          && ts.isIdentifier(unwrapExpression(ts, property.initializer))
+        ) {
+          const methodName = propertyNameText(ts, property.name);
+          if (methodName) {
+            addQualifiedAlias(
+              `${node.name.text}.${methodName}`,
+              unwrapExpression(ts, property.initializer).text,
+            );
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, collectObjectAliases);
+  };
+  collectObjectAliases(sourceFile);
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isExportDeclaration(statement) || !statement.exportClause) continue;
+    if (!ts.isNamedExports(statement.exportClause) || statement.moduleSpecifier) continue;
+    for (const element of statement.exportClause.elements) {
+      const localName = element.propertyName?.text ?? element.name.text;
+      for (const descriptor of descriptors) {
+        if (descriptor.name === localName) descriptor.exportNames.add(element.name.text);
+        if (descriptor.owner === localName) {
+          descriptor.exportNames.add(`${element.name.text}.${descriptor.name}`);
+        }
+      }
+    }
+  }
+
+  return { descriptors, byName, byQualifiedName };
+}
+
+function visitFunctionBody(ts, descriptor, callback) {
+  const visit = (node) => {
+    if (node !== descriptor.body && ts.isFunctionLike(node)) return;
+    callback(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(descriptor.body);
+}
+
+function parameterIndexForExpression(ts, descriptor, expression, initializers = new Map(), seen = new Set()) {
+  const current = dynamicTableExpression(ts, expression);
+  if (ts.isIdentifier(current)) {
+    const direct = descriptor.parameters.findIndex(
+      (parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === current.text,
+    );
+    if (direct >= 0) return direct;
+    if (!seen.has(current.text)) {
+      const initializer = lexicalConstInitializer(ts, current, initializers);
+      if (!initializer) return -1;
+      const nextSeen = new Set(seen);
+      nextSeen.add(current.text);
+      return parameterIndexForExpression(
+        ts,
+        descriptor,
+        initializer,
+        initializers,
+        nextSeen,
+      );
+    }
+  }
+  if (ts.isArrayLiteralExpression(current)) {
+    for (const element of current.elements) {
+      const index = parameterIndexForExpression(ts, descriptor, element, initializers, seen);
+      if (index >= 0) return index;
+    }
+  }
+  return -1;
+}
+
+function isDrizzleMutationCall(ts, node, isMembershipTable) {
+  if (!ts.isCallExpression(node) || node.arguments.length === 0) return false;
+  const operation = propertyNameText(ts, node.expression);
+  return (
+    (operation === 'insert' || operation === 'update' || operation === 'delete')
+    && isMembershipTable(node.arguments[0])
+  );
+}
+
+function executableSqlCall(ts, node, initializers) {
+  if (!ts.isCallExpression(node)) return false;
+  const name = propertyNameText(ts, node.expression);
+  if (!name || !/^(?:raw|unsafe|query|execute|executeRaw|\$executeRaw)$/iu.test(name)) {
+    return false;
+  }
+  const expression = unwrapExpression(ts, node.expression);
+  if (ts.isIdentifier(expression)) return name !== 'query';
+  const root = resolvedConstRootName(ts, expression, initializers);
+  if (name === 'query') {
+    return Boolean(root && /^(?:db|database|tx|transaction|client|pool|connection)$/iu.test(root));
+  }
+  return Boolean(
+    root && /^(?:sql|db|database|tx|transaction|client|pool|connection)$/iu.test(root),
+  );
+}
+
+function calledFunctionDescriptors(ts, functions, expression) {
+  const current = unwrapExpression(ts, expression);
+  if (ts.isIdentifier(current)) {
+    return functions.byName.get(current.text) ?? new Set();
+  }
+  if (ts.isPropertyAccessExpression(current)) {
+    if (ts.isIdentifier(current.expression)) {
+      return functions.byQualifiedName.get(
+        `${current.expression.text}.${current.name.text}`,
+      ) ?? new Set();
+    }
+    if (
+      ts.isNewExpression(current.expression)
+      && ts.isIdentifier(current.expression.expression)
+    ) {
+      return functions.byQualifiedName.get(
+        `${current.expression.expression.text}.${current.name.text}`,
+      ) ?? new Set();
+    }
+  }
+  if (
+    ts.isElementAccessExpression(current)
+    && ts.isIdentifier(current.expression)
+    && current.argumentExpression
+  ) {
+    const name = literalText(ts, current.argumentExpression);
+    return name
+      ? functions.byQualifiedName.get(`${current.expression.text}.${name}`) ?? new Set()
+      : new Set();
+  }
+  return new Set();
+}
+
+function isMembershipTargetExpression(ts, expression, bindings, initializers, seen = new Set()) {
+  const current = unwrapExpression(ts, expression);
+  if (bindings.isMembershipTable(current)) return true;
+  if (staticStringText(ts, current, initializers) === 'tenant_members') return true;
+
+  if (ts.isIdentifier(current) && !seen.has(current.text)) {
+    const initializer = lexicalConstInitializer(ts, current, initializers);
+    if (!initializer) return false;
+    const nextSeen = new Set(seen);
+    nextSeen.add(current.text);
+    return isMembershipTargetExpression(
+      ts,
+      initializer,
+      bindings,
+      initializers,
+      nextSeen,
+    );
+  }
+  if (ts.isArrayLiteralExpression(current)) {
+    return current.elements.some((element) =>
+      isMembershipTargetExpression(ts, element, bindings, initializers, seen));
+  }
+  if (ts.isCallExpression(current)) {
+    const name = propertyNameText(ts, current.expression);
+    if (name === 'identifier' || name === 'ident') {
+      return current.arguments.some((argument) =>
+        isMembershipTargetExpression(ts, argument, bindings, initializers, seen));
+    }
+  }
+  return false;
+}
+
+function analyzeLocalMutationSinks(ts, sourceFile, functions, initializers) {
+  for (const descriptor of functions.descriptors) {
+    visitFunctionBody(ts, descriptor, (node) => {
+      if (ts.isCallExpression(node) && node.arguments.length > 0) {
+        const operation = propertyNameText(ts, node.expression);
+        if (operation === 'insert' || operation === 'update' || operation === 'delete') {
+          const parameterIndex = parameterIndexForExpression(
+            ts,
+            descriptor,
+            node.arguments[0],
+            initializers,
+          );
+          if (parameterIndex >= 0) descriptor.targetParameterIndexes.add(parameterIndex);
+        }
+      }
+      if (isSqlTaggedTemplate(ts, node, initializers)) {
+        for (const target of dynamicMutationTargets(ts, node.template)) {
+          const parameterIndex = parameterIndexForExpression(
+            ts,
+            descriptor,
+            target,
+            initializers,
+          );
+          if (parameterIndex >= 0) descriptor.targetParameterIndexes.add(parameterIndex);
+        }
+      }
+    });
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const descriptor of functions.descriptors) {
+      visitFunctionBody(ts, descriptor, (node) => {
+        if (!ts.isCallExpression(node)) return;
+        for (const called of calledFunctionDescriptors(ts, functions, node.expression)) {
+          for (const targetIndex of called.targetParameterIndexes) {
+            const argument = node.arguments[targetIndex];
+            if (!argument) continue;
+            const parameterIndex = parameterIndexForExpression(
+              ts,
+              descriptor,
+              argument,
+              initializers,
+            );
+            if (parameterIndex >= 0 && !descriptor.targetParameterIndexes.has(parameterIndex)) {
+              descriptor.targetParameterIndexes.add(parameterIndex);
+              changed = true;
+            }
+          }
+        }
+      });
+    }
+  }
+}
+
+function exportedMutationSinksForModule(
+  ts,
+  repositoryRoot,
+  tree,
+  filePath,
+  cache = new Map(),
+  visiting = new Set(),
+) {
+  if (!SOURCE_EXTENSIONS.some((extension) => filePath.endsWith(extension))) {
+    return new Map();
+  }
+  if (cache.has(filePath)) return cache.get(filePath);
+  if (visiting.has(filePath)) return new Map();
+  visiting.add(filePath);
+
+  const sourceFile = createMembershipWriterSourceFile(
+    ts,
+    filePath,
+    readBlob(repositoryRoot, tree, filePath),
+  );
+  const functions = localFunctionDescriptors(ts, sourceFile);
+  const initializers = collectConstInitializers(ts, sourceFile);
+  analyzeLocalMutationSinks(ts, sourceFile, functions, initializers);
+  const exported = new Map();
+  for (const descriptor of functions.descriptors) {
+    if (descriptor.targetParameterIndexes.size === 0) continue;
+    for (const exportName of descriptor.exportNames) {
+      exported.set(exportName, new Set(descriptor.targetParameterIndexes));
+    }
+  }
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isExportDeclaration(statement) || !statement.moduleSpecifier) continue;
+    const target = resolvedInternalModule(ts, tree, filePath, statement.moduleSpecifier);
+    if (!target) continue;
+    const targetSinks = exportedMutationSinksForModule(
+      ts,
+      repositoryRoot,
+      tree,
+      target,
+      cache,
+      visiting,
+    );
+    if (!statement.exportClause) {
+      for (const [name, indexes] of targetSinks) exported.set(name, new Set(indexes));
+      continue;
+    }
+    if (!ts.isNamedExports(statement.exportClause)) continue;
+    for (const element of statement.exportClause.elements) {
+      const originalName = element.propertyName?.text ?? element.name.text;
+      for (const [targetName, indexes] of targetSinks) {
+        if (targetName === originalName) {
+          exported.set(element.name.text, new Set(indexes));
+        } else if (targetName.startsWith(`${originalName}.`)) {
+          exported.set(
+            `${element.name.text}${targetName.slice(originalName.length)}`,
+            new Set(indexes),
+          );
+        }
+      }
+    }
+  }
+
+  visiting.delete(filePath);
+  cache.set(filePath, exported);
+  return exported;
+}
+
+function collectImportedMutationSinks(
+  ts,
+  repositoryRoot,
+  tree,
+  filePath,
+  sourceFile,
+  moduleFilter = null,
+) {
+  const identifiers = new Map();
+  const objects = new Map();
+  const namespaces = new Map();
+  const cache = new Map();
+
+  const bindExport = (localName, exportedName, sinks) => {
+    const direct = sinks.get(exportedName);
+    if (direct) identifiers.set(localName, direct);
+    const methods = new Map();
+    for (const [name, indexes] of sinks) {
+      const prefix = `${exportedName}.`;
+      if (name.startsWith(prefix)) methods.set(name.slice(prefix.length), indexes);
+    }
+    if (methods.size > 0) objects.set(localName, methods);
+  };
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    const target = resolvedInternalModule(ts, tree, filePath, statement.moduleSpecifier);
+    if (!target) continue;
+    if (moduleFilter && !moduleFilter.has(target)) continue;
+    const sinks = exportedMutationSinksForModule(ts, repositoryRoot, tree, target, cache);
+    if (sinks.size === 0) continue;
+    const clause = statement.importClause;
+    if (!clause) continue;
+    if (clause.name) bindExport(clause.name.text, 'default', sinks);
+    if (!clause.namedBindings) continue;
+    if (ts.isNamespaceImport(clause.namedBindings)) {
+      namespaces.set(clause.namedBindings.name.text, sinks);
+      continue;
+    }
+    for (const element of clause.namedBindings.elements) {
+      const importedName = element.propertyName?.text ?? element.name.text;
+      bindExport(element.name.text, importedName, sinks);
+    }
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const visit = (node) => {
+      if (ts.isVariableDeclaration(node) && node.initializer) {
+        const initializer = unwrapExpression(ts, node.initializer);
+        if (ts.isIdentifier(node.name)) {
+          let methods = null;
+          if (ts.isIdentifier(initializer)) methods = objects.get(initializer.text) ?? null;
+          if (
+            ts.isNewExpression(initializer)
+            && ts.isIdentifier(initializer.expression)
+          ) {
+            methods = objects.get(initializer.expression.text) ?? null;
+          }
+          if (methods && objects.get(node.name.text) !== methods) {
+            objects.set(node.name.text, methods);
+            changed = true;
+          }
+        }
+        if (ts.isObjectBindingPattern(node.name) && ts.isIdentifier(initializer)) {
+          const methods = objects.get(initializer.text);
+          if (methods) {
+            for (const element of node.name.elements) {
+              if (!ts.isIdentifier(element.name)) continue;
+              const property = element.propertyName
+                ? propertyNameText(ts, element.propertyName)
+                : element.name.text;
+              const indexes = property ? methods.get(property) : null;
+              if (indexes && identifiers.get(element.name.text) !== indexes) {
+                identifiers.set(element.name.text, indexes);
+                changed = true;
+              }
+            }
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+
+  return {
+    hasAny: identifiers.size > 0 || objects.size > 0 || namespaces.size > 0,
+    indexesFor(expression) {
+      const current = unwrapExpression(ts, expression);
+      if (ts.isIdentifier(current)) return identifiers.get(current.text) ?? new Set();
+      if (
+        ts.isPropertyAccessExpression(current)
+      ) {
+        if (ts.isIdentifier(current.expression)) {
+          const objectMethod = objects.get(current.expression.text)?.get(current.name.text);
+          if (objectMethod) return objectMethod;
+          return namespaces.get(current.expression.text)?.get(current.name.text) ?? new Set();
+        }
+        if (
+          ts.isNewExpression(current.expression)
+          && ts.isIdentifier(current.expression.expression)
+        ) {
+          return objects.get(current.expression.expression.text)?.get(current.name.text) ?? new Set();
+        }
+      }
+      if (
+        ts.isElementAccessExpression(current)
+        && ts.isIdentifier(current.expression)
+        && current.argumentExpression
+      ) {
+        const name = literalText(ts, current.argumentExpression);
+        if (!name) return new Set();
+        const objectMethod = objects.get(current.expression.text)?.get(name);
+        if (objectMethod) return objectMethod;
+        return namespaces.get(current.expression.text)?.get(name) ?? new Set();
+      }
+      return new Set();
+    },
+  };
+}
+
+function reexportClosure(ts, repositoryRoot, tree, originPath) {
+  const affected = new Set([originPath]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const candidatePath of tree.keys()) {
+      if (
+        affected.has(candidatePath)
+        || !SOURCE_EXTENSIONS.some((extension) => candidatePath.endsWith(extension))
+      ) {
+        continue;
+      }
+      const sourceFile = createMembershipWriterSourceFile(
+        ts,
+        candidatePath,
+        readBlob(repositoryRoot, tree, candidatePath),
+      );
+      const reexportsAffected = sourceFile.statements.some((statement) => {
+        if (!ts.isExportDeclaration(statement) || !statement.moduleSpecifier) return false;
+        const target = resolvedInternalModule(ts, tree, candidatePath, statement.moduleSpecifier);
+        return Boolean(target && affected.has(target));
+      });
+      if (reexportsAffected) {
+        affected.add(candidatePath);
+        changed = true;
+      }
+    }
+  }
+  return affected;
+}
+
+function headHasMembershipCallToChangedSink(ts, repositoryRoot, tree, changedFilePath) {
+  const changedSinks = exportedMutationSinksForModule(
+    ts,
+    repositoryRoot,
+    tree,
+    changedFilePath,
+  );
+  if (changedSinks.size === 0) return false;
+  const affectedModules = reexportClosure(ts, repositoryRoot, tree, changedFilePath);
+
+  for (const candidatePath of tree.keys()) {
+    if (!isMembershipWriterSource(candidatePath) || candidatePath === changedFilePath) continue;
+    const sourceFile = createMembershipWriterSourceFile(
+      ts,
+      candidatePath,
+      readBlob(repositoryRoot, tree, candidatePath),
+    );
+    const importedSinks = collectImportedMutationSinks(
+      ts,
+      repositoryRoot,
+      tree,
+      candidatePath,
+      sourceFile,
+      affectedModules,
+    );
+    if (!importedSinks.hasAny) continue;
+    const bindings = collectMembershipBindings(
+      ts,
+      repositoryRoot,
+      tree,
+      candidatePath,
+      sourceFile,
+    );
+    const initializers = collectConstInitializers(ts, sourceFile);
+    let found = false;
+    const visit = (node) => {
+      if (found) return;
+      if (ts.isCallExpression(node)) {
+        for (const targetIndex of importedSinks.indexesFor(node.expression)) {
+          const argument = node.arguments[targetIndex];
+          if (
+            argument
+            && isMembershipTargetExpression(ts, argument, bindings, initializers)
+          ) {
+            found = true;
+            return;
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+    if (found) return true;
+  }
+  return false;
+}
+
+function hasMembershipDirectWriter(ts, repositoryRoot, tree, filePath) {
+  const sourceFile = createMembershipWriterSourceFile(
+    ts,
+    filePath,
+    readBlob(repositoryRoot, tree, filePath),
+  );
+  const bindings = collectMembershipBindings(ts, repositoryRoot, tree, filePath, sourceFile);
+  const functions = localFunctionDescriptors(ts, sourceFile);
+  const initializers = collectConstInitializers(ts, sourceFile);
+  const importedSinks = collectImportedMutationSinks(
+    ts,
+    repositoryRoot,
+    tree,
+    filePath,
+    sourceFile,
+  );
+  analyzeLocalMutationSinks(ts, sourceFile, functions, initializers);
+  let directViolation = headHasMembershipCallToChangedSink(
+    ts,
+    repositoryRoot,
+    tree,
+    filePath,
+  );
+
+  const visit = (node) => {
+    if (directViolation) return;
+    if (
+      isDrizzleMutationCall(
+        ts,
+        node,
+        (target) => isMembershipTargetExpression(ts, target, bindings, initializers),
+      )
+    ) {
+      directViolation = true;
+      return;
+    }
+    if (isSqlTaggedTemplate(ts, node, initializers)) {
+      const evidence = templateEvidence(ts, node.template);
+      if (containsMembershipMutationSql(evidence.text)) {
+        directViolation = true;
+        return;
+      }
+      for (const target of dynamicMutationTargets(ts, node.template)) {
+        if (isMembershipTargetExpression(ts, target, bindings, initializers)) {
+          directViolation = true;
+          return;
+        }
+      }
+    }
+    if (executableSqlCall(ts, node, initializers)) {
+      for (const argument of node.arguments) {
+        if (staticSqlTexts(ts, argument, initializers).some(containsMembershipMutationSql)) {
+          directViolation = true;
+          return;
+        }
+      }
+    }
+    if (ts.isCallExpression(node)) {
+      for (const called of calledFunctionDescriptors(ts, functions, node.expression)) {
+        for (const targetIndex of called.targetParameterIndexes) {
+          const argument = node.arguments[targetIndex];
+          if (!argument) continue;
+          if (isMembershipTargetExpression(ts, argument, bindings, initializers)) {
+            directViolation = true;
+            return;
+          }
+        }
+      }
+      for (const targetIndex of importedSinks.indexesFor(node.expression)) {
+        const argument = node.arguments[targetIndex];
+        if (
+          argument
+          && isMembershipTargetExpression(ts, argument, bindings, initializers)
+        ) {
+          directViolation = true;
+          return;
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return directViolation;
+}
+
 function collectViolations(ts, repositoryRoot, baseTree, headTree, changes, exceptions) {
   const violations = [];
 
@@ -789,6 +2168,15 @@ function collectViolations(ts, repositoryRoot, baseTree, headTree, changes, exce
         }
         violations.push({ ruleId, path: change.path });
       }
+    }
+
+    if (
+      isMembershipWriterSource(change.path)
+      && !MEMBERSHIP_WRITER_ALLOWLIST.has(change.path)
+      && headTree.has(change.path)
+      && hasMembershipDirectWriter(ts, repositoryRoot, headTree, change.path)
+    ) {
+      violations.push({ ruleId: MEMBERSHIP_WRITER_RULE_ID, path: change.path });
     }
 
     if (!isProductionModuleSource(change.path)) {

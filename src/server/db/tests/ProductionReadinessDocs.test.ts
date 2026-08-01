@@ -34,19 +34,18 @@ describe('production readiness 文档与脚本契约', () => {
     expect(packageJson.scripts['db:migrate']).not.toBe('drizzle-kit migrate');
   });
 
-  it('db:seed 入口本身调用硬阻断 guard，失败时不会创建数据库客户端', async () => {
+  it('db:seed 入口固定关闭并在任何数据库客户端创建前失败', async () => {
     const source = readFileSync(resolve(rootDir, 'src/server/db/seed-demo-data.ts'), 'utf8');
-    const guardCall = source.indexOf('assertDemoSeedExecutionAllowed(env);');
-    const clientCreation = source.indexOf('createPostgresClient(');
-
-    expect(guardCall).toBeGreaterThan(-1);
-    expect(clientCreation).toBeGreaterThan(guardCall);
-    expect(source).toContain('dependencies.createPostgresClient(databaseUrl)');
+    expect(source).toContain('demoSeedDatabaseWriteDisabledMessage');
+    expect(source).toContain('void env;');
+    expect(source).toContain('void dependencies;');
+    expect(source).not.toContain('dependencies.createPostgresClient(');
+    expect(source).not.toContain('dependencies.createDatabase(');
     expect(source).not.toContain('ZMTG_ENABLE_DEMO_SEED !==');
 
     const { runSeed } = await import('@/server/db/seed-demo-data');
     await expect(runSeed({ NODE_ENV: 'production' })).rejects.toThrow(
-      'production/staging 环境始终拒绝',
+      'demo seed 数据库写入已关闭',
     );
   });
 

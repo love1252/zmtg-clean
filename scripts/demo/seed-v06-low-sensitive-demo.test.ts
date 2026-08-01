@@ -1,17 +1,22 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
   DEMO_INSTITUTION_ID,
   DEMO_SEED_KEY,
   DEMO_TENANT_ID,
+  applyDemoSeed,
   assertLowSensitiveSeed,
   assertWriteGuards,
   buildDemoSeedRecords,
-  createGuardedDemoSeedClient,
+  cleanupDemoSeed,
+  demoSeedDatabaseWriteDisabledMessage,
   getCleanupPlan,
   parseCliArgs,
+  runDemoSeedCli,
   summarizeSeedRecords,
-  type DemoSeedClientFactory,
 } from './seed-v06-low-sensitive-demo';
 
 function localSeedEnv(
@@ -155,42 +160,53 @@ describe('V0.6 low sensitive demo seed', () => {
     expect(message).not.toContain(databaseUrl);
   });
 
-  it('守卫失败时不会创建 PostgreSQL Client', () => {
-    const createClient = vi.fn();
+  it.each([
+    ['apply', applyDemoSeed],
+    ['cleanup', cleanupDemoSeed],
+  ] as const)('%s 直接入口固定关闭且不触碰传入 client', async (_mode, execute) => {
+    const databaseAccess = vi.fn();
+    const database = new Proxy(
+      {},
+      {
+        get(_target, property) {
+          databaseAccess(property);
+          throw new Error('database_must_not_be_used');
+        },
+      },
+    );
 
-    expect(() =>
-      createGuardedDemoSeedClient(
-        localSeedEnv({
-          DATABASE_URL:
-            'postgres://seed-user:seed-password@demo-db.internal:5432/zmtg_demo',
-        }),
-        createClient as unknown as DemoSeedClientFactory,
-      ),
-    ).toThrow(/loopback/);
-
-    expect(createClient).not.toHaveBeenCalled();
+    await expect(execute(database)).rejects.toThrow(
+      demoSeedDatabaseWriteDisabledMessage,
+    );
+    expect(databaseAccess).not.toHaveBeenCalled();
   });
 
-  it('Client 使用核心守卫校验过的同一数据库 URL', () => {
-    const databaseUrl =
-      'postgresql://seed-user:seed-password@127.0.0.1:5432/zmtg_local';
-    const fakeClient = { end: vi.fn() };
-    const createClient = vi.fn(
-      () => fakeClient,
-    ) as unknown as DemoSeedClientFactory;
+  it.each([['--apply'], ['--cleanup']])(
+    'CLI %s 在任何 client 创建前固定关闭',
+    async (mode) => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      await expect(runDemoSeedCli([mode])).rejects.toThrow(
+        demoSeedDatabaseWriteDisabledMessage,
+      );
+      log.mockRestore();
 
-    expect(
-      createGuardedDemoSeedClient(
-        localSeedEnv({ DATABASE_URL: databaseUrl }),
-        createClient,
-      ),
-    ).toBe(fakeClient);
+      const source = readFileSync(
+        resolve(process.cwd(), 'scripts/demo/seed-v06-low-sensitive-demo.ts'),
+        'utf8',
+      );
+      expect(source).not.toContain('createGuardedDemoSeedClient');
+      expect(source).not.toContain("'tenant_members'");
+      expect(source).not.toMatch(/(?:insert|update|delete|truncate)\s+(?:into\s+|from\s+)?tenant_members/iu);
+    },
+  );
 
-    expect(createClient).toHaveBeenCalledOnce();
-    expect(createClient).toHaveBeenCalledWith(databaseUrl, {
-      max: 1,
-      prepare: false,
-    });
+  it('CLI 默认 dry-run 只打印低敏计划并正常返回', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    await expect(runDemoSeedCli([])).resolves.toBeUndefined();
+
+    expect(log).toHaveBeenCalledOnce();
+    log.mockRestore();
   });
 
   it('seed 使用固定 demoSeedKey，且全部核心记录可追踪到该 seedKey', () => {
