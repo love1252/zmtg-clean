@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 
 import { canAccessResource, type AccessContext } from '@/modules/security/domain/access-control';
 import { getDemoAccessContextFromRequest } from '@/modules/security/server/access-context';
-import { createTenantPlanBindingRepository } from '@/modules/open-platform/server/tenant-plan-binding-repository';
 import { createTenantWithPlanService } from '@/modules/open-platform/server/tenant-plan-binding-service';
 import { getDatabase } from '@/server/db/client';
 import { getTenantPlanQuotaLimitsByCode } from '@/modules/institution/domain/quota-enforcement';
+
+import { createTenantPlanBindingRepositoryForTenantOnboarding } from './_membership-command-composition';
 
 function lowSensitiveError(status: number, errorCode: string) {
   return NextResponse.json({ ok: false, errorCode }, { status });
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
   try {
     const payload = await readJsonBody(request);
     const db = getDatabase();
-    const repository = createTenantPlanBindingRepository(db);
+    const repository = createTenantPlanBindingRepositoryForTenantOnboarding(db);
 
     // 创建租户前检查目标套餐的 maxStaffSeats（受信常量来源，与 checkTenantQuotaForCreate 一致）
     const rawPlanVersionId = typeof payload === 'object' && payload !== null && 'planVersionId' in payload

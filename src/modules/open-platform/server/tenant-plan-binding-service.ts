@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import {
   normalizeAuthUsername,
   type AuthAccountRecord,
-  type AuthTenantMembershipRecord,
 } from '@/modules/auth/domain/auth-account';
 import { hashPasswordScrypt } from '@/modules/auth/server/password-hash';
 import type { AuthAccountPasswordHasher } from '@/modules/auth/server/auth-account-service';
@@ -33,6 +32,21 @@ type TenantContactRecord = {
   updatedAt: Date;
 };
 
+export type TenantOnboardingMembershipIntent = Readonly<{
+  membershipId: string;
+  tenantId: string;
+  userId: string;
+  role: 'tenant_admin';
+  displayName: string;
+  actorId: string;
+  occurredAt: string;
+}>;
+
+export type TenantPlanBindingReadRepository = Pick<
+  TenantPlanBindingRepository,
+  'listPublishedPlanVersions' | 'findPublishedPlanVersionById'
+>;
+
 export type TenantPlanBindingRepository = {
   listPublishedPlanVersions(): Promise<TenantPlanPublishedVersionRecord[]>;
   findPublishedPlanVersionById(versionId: string): Promise<TenantPlanPublishedVersionRecord | null>;
@@ -46,7 +60,7 @@ export type TenantPlanBindingRepository = {
       updatedAt: Date;
     };
     authAccount: AuthAccountRecord;
-    tenantMember: AuthTenantMembershipRecord;
+    membershipIntent: TenantOnboardingMembershipIntent;
     tenantContact: TenantContactRecord;
     assignment: {
       id: string;
@@ -121,7 +135,7 @@ function parseAdminContact(input: {
 }
 
 export async function listTenantPlanOptionsService(input: {
-  repository: TenantPlanBindingRepository;
+  repository: TenantPlanBindingReadRepository;
 }) {
   const records = await input.repository.listPublishedPlanVersions();
   return {
@@ -213,14 +227,14 @@ export async function createTenantWithPlanService(input: {
       createdAt: current,
       updatedAt: current,
     },
-    tenantMember: {
-      id: tenantMemberId,
+    membershipIntent: {
+      membershipId: tenantMemberId,
       tenantId,
       userId: authUserId,
       role: 'tenant_admin',
       displayName: adminDisplayName,
-      createdAt: current,
-      updatedAt: current,
+      actorId: input.actorId,
+      occurredAt: current.toISOString(),
     },
     tenantContact: {
       id: tenantContactId,

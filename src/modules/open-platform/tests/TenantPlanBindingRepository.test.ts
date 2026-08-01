@@ -1,12 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTenantPlanBindingRepository } from '@/modules/open-platform/server/tenant-plan-binding-repository';
+import {
+  createTenantPlanBindingRepository,
+  type TenantOnboardingMembershipCommands,
+  type TenantOnboardingMembershipExternalTransactionPort,
+} from '@/modules/open-platform/server/tenant-plan-binding-repository';
+import type {
+  TenantOnboardingMembershipIntent,
+  TenantPlanBindingRepository,
+} from '@/modules/open-platform/server/tenant-plan-binding-service';
 import type { TenantDatabase } from '@/server/db/client';
 import {
   authUsers,
   auditEvents,
   tenantContacts,
   tenantAuthorizationSnapshots,
-  tenantMembers,
   tenantPlanAssignments,
   tenantPlanVersions,
   tenantPlans,
@@ -104,18 +111,70 @@ function createSelectChain(rows: unknown[]) {
   };
 }
 
-function createDatabase(input: { selectRows?: unknown[][] } = {}) {
+type WriteMutation = Readonly<{
+  kind: 'insert' | 'membership-current' | 'membership-transition';
+  table?: unknown;
+  values?: unknown;
+}>;
+
+function tableLabel(table: unknown): string {
+  const labels = new Map<unknown, string>([
+    [tenants, 'tenants'],
+    [authUsers, 'authUsers'],
+    [tenantContacts, 'tenantContacts'],
+    [tenantPlanAssignments, 'tenantPlanAssignments'],
+    [tenantAuthorizationSnapshots, 'tenantAuthorizationSnapshots'],
+    [auditEvents, 'auditEvents'],
+    [tenantCommercialRecords, 'tenantCommercialRecords'],
+  ]);
+  return labels.get(table) ?? 'unknown';
+}
+
+function createDatabase(input: {
+  selectRows?: unknown[][];
+  failOnTable?: unknown;
+  failure?: Error;
+} = {}) {
   const allSelectChains = (input.selectRows ?? []).map(createSelectChain);
   const selectChains = [...allSelectChains];
-  const inserted: Array<{ table: unknown; values: unknown }> = [];
-  const transactionInsert = vi.fn((table: unknown) => ({
-    values: vi.fn(async (values: unknown) => {
-      inserted.push({ table, values });
-    }),
-  }));
-  const transaction = vi.fn(async (callback: (database: unknown) => Promise<unknown>) =>
-    callback({ insert: transactionInsert }),
-  );
+  const attempted: WriteMutation[] = [];
+  const committed: WriteMutation[] = [];
+  const events: string[] = [];
+  const transactionDatabases: object[] = [];
+  const stagedByTransaction = new WeakMap<object, WriteMutation[]>();
+  const transaction = vi.fn(async (
+    callback: (database: unknown) => Promise<unknown>,
+    _options: unknown,
+  ) => {
+    const staged: WriteMutation[] = [];
+    const transactionDatabase = {
+      insert: vi.fn((table: unknown) => ({
+        values: vi.fn(async (values: unknown) => {
+          const mutation = { kind: 'insert', table, values } as const;
+          attempted.push(mutation);
+          events.push(`insert:${tableLabel(table)}`);
+          if (table === input.failOnTable) {
+            throw input.failure ?? new Error('transaction insert failed');
+          }
+          staged.push(mutation);
+        }),
+      })),
+    };
+    transactionDatabases.push(transactionDatabase);
+    stagedByTransaction.set(transactionDatabase, staged);
+    events.push('begin');
+    try {
+      const result = await callback(transactionDatabase);
+      committed.push(...staged);
+      events.push('commit');
+      return result;
+    } catch (error) {
+      events.push('rollback');
+      throw error;
+    } finally {
+      stagedByTransaction.delete(transactionDatabase);
+    }
+  });
   const select = vi.fn(() => {
     const next = selectChains.shift();
     if (!next) throw new Error('没有配置更多 select chain');
@@ -124,11 +183,206 @@ function createDatabase(input: { selectRows?: unknown[][] } = {}) {
 
   return {
     database: { select, transaction } as unknown as TenantDatabase,
-    inserted,
+    attempted,
+    committed,
+    events,
     select,
     selectChains: allSelectChains,
+    stageExternal(
+      transactionDatabase: TenantDatabase,
+      mutation: WriteMutation,
+    ) {
+      const staged = stagedByTransaction.get(transactionDatabase as object);
+      if (!staged) throw new Error('external mutation escaped transaction');
+      attempted.push(mutation);
+      staged.push(mutation);
+    },
     transaction,
-    transactionInsert,
+    transactionDatabases,
+  };
+}
+
+function createMembershipExternalTransaction(
+  databaseState: ReturnType<typeof createDatabase>,
+  input: Readonly<{ failureAfterCurrent?: Error }> = {},
+) {
+  const createMembership = vi.fn(async (
+    intent: TenantOnboardingMembershipIntent,
+  ) => {
+    const transactionDatabase = activeTransaction;
+    if (!transactionDatabase) throw new Error('missing active transaction');
+    databaseState.events.push('membership-current');
+    databaseState.stageExternal(transactionDatabase, {
+      kind: 'membership-current',
+      values: intent,
+    });
+    if (input.failureAfterCurrent) throw input.failureAfterCurrent;
+    databaseState.events.push('membership-transition');
+    databaseState.stageExternal(transactionDatabase, {
+      kind: 'membership-transition',
+      values: { membershipId: intent.membershipId },
+    });
+  });
+  let activeTransaction: TenantDatabase | null = null;
+  const run = vi.fn(async (
+    transactionDatabase: TenantDatabase,
+    work: (commands: TenantOnboardingMembershipCommands) => Promise<unknown>,
+  ): Promise<unknown> => {
+    databaseState.events.push('timeouts-ready');
+    activeTransaction = transactionDatabase;
+    try {
+      return await work({ createMembership });
+    } finally {
+      activeTransaction = null;
+    }
+  });
+  const port: TenantOnboardingMembershipExternalTransactionPort = {
+    transactionOptions: {
+      isolationLevel: 'serializable',
+      accessMode: 'read write',
+    },
+    run: run as TenantOnboardingMembershipExternalTransactionPort['run'],
+  };
+  return { createMembership, port, run };
+}
+
+function createTenantOnboardingInput(
+  now = new Date('2026-06-23T03:00:00.000Z'),
+): Parameters<
+  TenantPlanBindingRepository['createTenantWithPlanAuthorization']
+>[0] {
+  return {
+    planVersion: {
+      planId: 'plan-professional',
+      planCode: 'professional',
+      planName: 'Professional 专业版',
+      planStatus: 'active',
+      versionId: 'plan-version-professional-published',
+      versionCode: '2026-06-v1',
+      status: 'published',
+      displayName: 'Professional 专业版 2026-06',
+      displayPrice: '¥2999/月',
+      priceNote: '展示价格，人工确认口径',
+      agentLimit: 3,
+      seatLimit: 40,
+      monthlyAiCallLimit: 300000,
+      knowledgeStorageGb: 100,
+      connectorEntitlementsJson: { connectors: ['企微', 'HIS'] },
+      serviceEntitlementsJson: { services: ['上线培训'] },
+      featureEntitlementsJson: {},
+      quotaEntitlementsJson: {},
+    },
+    tenant: {
+      id: 'tenant-fixed',
+      name: '星澜医美中心',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    },
+    authAccount: {
+      id: 'auth-user-fixed',
+      username: 'xinglan_admin',
+      displayName: '李静',
+      phone: null,
+      email: 'admin@example.com',
+      passwordHash: 'scrypt$16384$8$1$salt$hash',
+      passwordUpdatedAt: now,
+      passwordResetRequired: true,
+      status: 'password_reset_required',
+      lastLoginAt: null,
+      failedLoginCount: 0,
+      lockedUntil: null,
+      createdBy: 'demo-user-platform',
+      updatedBy: 'demo-user-platform',
+      createdAt: now,
+      updatedAt: now,
+    },
+    membershipIntent: {
+      membershipId: 'tenant-member-fixed',
+      tenantId: 'tenant-fixed',
+      userId: 'auth-user-fixed',
+      role: 'tenant_admin',
+      displayName: '李静',
+      actorId: 'demo-user-platform',
+      occurredAt: now.toISOString(),
+    },
+    tenantContact: {
+      id: 'tenant-contact-fixed',
+      tenantId: 'tenant-fixed',
+      contactName: '陈磊',
+      contactPhone: '13800000000',
+      contactEmail: 'contact@example.com',
+      initialAdminUserId: 'auth-user-fixed',
+      createdBy: 'demo-user-platform',
+      updatedBy: 'demo-user-platform',
+      createdAt: now,
+      updatedAt: now,
+    },
+    assignment: {
+      id: 'tenant-plan-assignment-fixed',
+      tenantId: 'tenant-fixed',
+      planId: 'plan-professional',
+      planVersionId: 'plan-version-professional-published',
+      status: 'active',
+      startedAt: now,
+      expiresAt: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+    authorizationSnapshot: {
+      id: 'tenant-authorization-snapshot-fixed',
+      tenantId: 'tenant-fixed',
+      planAssignmentId: 'tenant-plan-assignment-fixed',
+      planVersionId: 'plan-version-professional-published',
+      status: 'active',
+      snapshotJson: {
+        planCode: 'professional',
+        openingContact: {
+          contactName: '陈磊',
+          contactPhone: '13800000000',
+          contactEmail: 'contact@example.com',
+          adminName: '李静',
+          adminAccount: 'xinglan_admin',
+          adminContact: 'admin@example.com',
+        },
+      },
+      quotaJson: { monthlyAiCallLimit: 300000 },
+      connectorJson: { connectors: ['企微', 'HIS'] },
+      serviceJson: { services: ['上线培训'] },
+      sourceChangeRecordId: null,
+      generatedBy: 'demo-user-platform',
+      generatedAt: now,
+      supersededAt: null,
+      createdAt: now,
+    },
+    auditEvent: {
+      eventId: 'audit-event-fixed',
+      actorId: 'demo-user-platform',
+      actorRole: 'platform_admin',
+      tenantId: 'tenant-fixed',
+      scope: 'platform',
+      resource: 'tenant',
+      resourceId: 'tenant-fixed',
+      action: 'create',
+      result: 'allowed',
+      reason: 'tenant_plan_assignment_created',
+      occurredAt: now.toISOString(),
+      source: 'demo_session',
+    },
+    accountAuditEvent: {
+      eventId: 'audit-event-account-fixed',
+      actorId: 'demo-user-platform',
+      actorRole: 'platform_admin',
+      tenantId: 'tenant-fixed',
+      scope: 'platform',
+      resource: 'tenant_member',
+      resourceId: 'tenant-member-fixed',
+      action: 'create',
+      result: 'allowed',
+      reason: 'tenant_account_created',
+      occurredAt: now.toISOString(),
+      source: 'demo_session',
+    },
   };
 }
 
@@ -208,149 +462,52 @@ describe('租户套餐绑定 repository', () => {
     expect(result?.versionId).toBe('plan-version-professional-published');
   });
 
+  it('读取型工厂缺少 Membership Adapter 时，写路径在事务与 DML 前 fail-closed', async () => {
+    const query = createDatabase();
+    const readRepository = createTenantPlanBindingRepository(query.database);
+    const repository = readRepository as unknown as TenantPlanBindingRepository;
+
+    await expect(repository.createTenantWithPlanAuthorization(
+      createTenantOnboardingInput(),
+    )).rejects.toMatchObject({
+      code: 'tenant_onboarding_membership_command_unavailable',
+      message: 'tenant_onboarding_membership_command_unavailable',
+    });
+    expect(query.transaction).not.toHaveBeenCalled();
+    expect(query.attempted).toEqual([]);
+    expect(query.committed).toEqual([]);
+  });
+
   it('事务内写入租户、套餐分配、active 授权快照和开通审计，并返回低敏租户 DTO', async () => {
     const query = createDatabase();
     const now = new Date('2026-06-23T03:00:00.000Z');
 
-    const result = await createTenantPlanBindingRepository(query.database).createTenantWithPlanAuthorization({
-      planVersion: {
-        planId: 'plan-professional',
-        planCode: 'professional',
-        planName: 'Professional 专业版',
-        planStatus: 'active',
-        versionId: 'plan-version-professional-published',
-        versionCode: '2026-06-v1',
-        status: 'published',
-        displayName: 'Professional 专业版 2026-06',
-        displayPrice: '¥2999/月',
-        priceNote: '展示价格，人工确认口径',
-        agentLimit: 3,
-        seatLimit: 40,
-        monthlyAiCallLimit: 300000,
-        knowledgeStorageGb: 100,
-        connectorEntitlementsJson: { connectors: ['企微', 'HIS'] },
-        serviceEntitlementsJson: { services: ['上线培训'] },
-        featureEntitlementsJson: {},
-        quotaEntitlementsJson: {},
-      },
-      tenant: {
-        id: 'tenant-fixed',
-        name: '星澜医美中心',
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-      },
-      authAccount: {
-        id: 'auth-user-fixed',
-        username: 'xinglan_admin',
-        displayName: '李静',
-        phone: null,
-        email: 'admin@example.com',
-        passwordHash: 'scrypt$16384$8$1$salt$hash',
-        passwordUpdatedAt: now,
-        passwordResetRequired: true,
-        status: 'password_reset_required',
-        lastLoginAt: null,
-        failedLoginCount: 0,
-        lockedUntil: null,
-        createdBy: 'demo-user-platform',
-        updatedBy: 'demo-user-platform',
-        createdAt: now,
-        updatedAt: now,
-      },
-      tenantMember: {
-        id: 'tenant-member-fixed',
-        tenantId: 'tenant-fixed',
-        userId: 'auth-user-fixed',
-        role: 'tenant_admin',
-        displayName: '李静',
-        createdAt: now,
-        updatedAt: now,
-      },
-      tenantContact: {
-        id: 'tenant-contact-fixed',
-        tenantId: 'tenant-fixed',
-        contactName: '陈磊',
-        contactPhone: '13800000000',
-        contactEmail: 'contact@example.com',
-        initialAdminUserId: 'auth-user-fixed',
-        createdBy: 'demo-user-platform',
-        updatedBy: 'demo-user-platform',
-        createdAt: now,
-        updatedAt: now,
-      },
-      assignment: {
-        id: 'tenant-plan-assignment-fixed',
-        tenantId: 'tenant-fixed',
-        planId: 'plan-professional',
-        planVersionId: 'plan-version-professional-published',
-        status: 'active',
-        startedAt: now,
-        expiresAt: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-      authorizationSnapshot: {
-        id: 'tenant-authorization-snapshot-fixed',
-        tenantId: 'tenant-fixed',
-        planAssignmentId: 'tenant-plan-assignment-fixed',
-        planVersionId: 'plan-version-professional-published',
-        status: 'active',
-        snapshotJson: {
-          planCode: 'professional',
-          openingContact: {
-            contactName: '陈磊',
-            contactPhone: '13800000000',
-            contactEmail: 'contact@example.com',
-            adminName: '李静',
-            adminAccount: 'xinglan_admin',
-            adminContact: 'admin@example.com',
-          },
-        },
-        quotaJson: { monthlyAiCallLimit: 300000 },
-        connectorJson: { connectors: ['企微', 'HIS'] },
-        serviceJson: { services: ['上线培训'] },
-        sourceChangeRecordId: null,
-        generatedBy: 'demo-user-platform',
-        generatedAt: now,
-        supersededAt: null,
-        createdAt: now,
-      },
-      auditEvent: {
-        eventId: 'audit-event-fixed',
-        actorId: 'demo-user-platform',
-        actorRole: 'platform_admin',
-        tenantId: 'tenant-fixed',
-        scope: 'platform',
-        resource: 'tenant',
-        resourceId: 'tenant-fixed',
-        action: 'create',
-        result: 'allowed',
-        reason: 'tenant_plan_assignment_created',
-        occurredAt: now.toISOString(),
-        source: 'demo_session',
-      },
-      accountAuditEvent: {
-        eventId: 'audit-event-account-fixed',
-        actorId: 'demo-user-platform',
-        actorRole: 'platform_admin',
-        tenantId: 'tenant-fixed',
-        scope: 'platform',
-        resource: 'tenant_member',
-        resourceId: 'tenant-member-fixed',
-        action: 'create',
-        result: 'allowed',
-        reason: 'tenant_account_created',
-        occurredAt: now.toISOString(),
-        source: 'demo_session',
-      },
-    });
+    const membership = createMembershipExternalTransaction(query);
+    const input = createTenantOnboardingInput(now);
+    const result = await createTenantPlanBindingRepository(query.database, {
+      membershipCommandExternalTransaction: membership.port,
+    }).createTenantWithPlanAuthorization(input);
 
     expect(query.transaction).toHaveBeenCalledTimes(1);
-    expect(query.inserted.map((item) => item.table)).toEqual([
+    expect(query.transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      membership.port.transactionOptions,
+    );
+    expect(membership.run).toHaveBeenCalledTimes(1);
+    expect(membership.run.mock.calls[0]?.[0]).toBe(
+      query.transactionDatabases[0],
+    );
+    expect(membership.createMembership).toHaveBeenCalledOnce();
+    expect(membership.createMembership).toHaveBeenCalledWith(
+      input.membershipIntent,
+    );
+    expect(query.committed).toEqual(query.attempted);
+    const inserted = query.committed.filter(
+      (mutation) => mutation.kind === 'insert',
+    );
+    expect(inserted.map((item) => item.table)).toEqual([
       tenants,
       authUsers,
-      tenantMembers,
       tenantContacts,
       tenantPlanAssignments,
       tenantAuthorizationSnapshots,
@@ -360,7 +517,24 @@ describe('租户套餐绑定 repository', () => {
       tenantCommercialRecords,
       tenantCommercialRecords,
     ]);
-    expect(query.inserted[1].values).toEqual(
+    expect(query.events).toEqual([
+      'begin',
+      'timeouts-ready',
+      'insert:tenants',
+      'insert:authUsers',
+      'membership-current',
+      'membership-transition',
+      'insert:tenantContacts',
+      'insert:tenantPlanAssignments',
+      'insert:tenantAuthorizationSnapshots',
+      'insert:auditEvents',
+      'insert:auditEvents',
+      'insert:tenantCommercialRecords',
+      'insert:tenantCommercialRecords',
+      'insert:tenantCommercialRecords',
+      'commit',
+    ]);
+    expect(inserted[1].values).toEqual(
       expect.objectContaining({
         id: 'auth-user-fixed',
         username: 'xinglan_admin',
@@ -368,16 +542,7 @@ describe('租户套餐绑定 repository', () => {
         status: 'password_reset_required',
       }),
     );
-    expect(query.inserted[2].values).toEqual({
-      id: 'tenant-member-fixed',
-      tenantId: 'tenant-fixed',
-      userId: 'auth-user-fixed',
-      role: 'tenant_admin',
-      displayName: '李静',
-      createdAt: now,
-      updatedAt: now,
-    });
-    expect(query.inserted[3].values).toEqual(
+    expect(inserted[2].values).toEqual(
       expect.objectContaining({
         tenantId: 'tenant-fixed',
         contactName: '陈磊',
@@ -385,18 +550,18 @@ describe('租户套餐绑定 repository', () => {
         initialAdminUserId: 'auth-user-fixed',
       }),
     );
-    expect(query.inserted[4].values).toEqual(
+    expect(inserted[3].values).toEqual(
       expect.objectContaining({
         planVersionId: 'plan-version-professional-published',
       }),
     );
-    expect(query.inserted[5].values).toEqual(
+    expect(inserted[4].values).toEqual(
       expect.objectContaining({
         status: 'active',
         planVersionId: 'plan-version-professional-published',
       }),
     );
-    expect(query.inserted[6].values).toEqual(
+    expect(inserted[5].values).toEqual(
       expect.objectContaining({
         eventId: 'audit-event-fixed',
         tenantId: 'tenant-fixed',
@@ -407,7 +572,7 @@ describe('租户套餐绑定 repository', () => {
         reason: 'tenant_plan_assignment_created',
       }),
     );
-    expect(query.inserted[7].values).toEqual(
+    expect(inserted[6].values).toEqual(
       expect.objectContaining({
         eventId: 'audit-event-account-fixed',
         tenantId: 'tenant-fixed',
@@ -436,8 +601,98 @@ describe('租户套餐绑定 repository', () => {
         },
       }),
     );
-    expect(JSON.stringify(query.inserted.map((item) => item.values))).not.toMatch(
+    expect(JSON.stringify(query.committed.map((item) => item.values))).not.toMatch(
       /PlaintextPasswordShouldNotPass|select \* from tenants|payment_token|webhook_secret|client_secret|api_key/i,
     );
+  });
+
+  it('Membership current／evidence 失败时外层事务不提交任何部分状态', async () => {
+    const failure = new Error('membership evidence failed');
+    const query = createDatabase();
+    const membership = createMembershipExternalTransaction(query, {
+      failureAfterCurrent: failure,
+    });
+    const repository = createTenantPlanBindingRepository(query.database, {
+      membershipCommandExternalTransaction: membership.port,
+    });
+
+    await expect(repository.createTenantWithPlanAuthorization(
+      createTenantOnboardingInput(),
+    )).rejects.toBe(failure);
+    expect(query.events).toEqual([
+      'begin',
+      'timeouts-ready',
+      'insert:tenants',
+      'insert:authUsers',
+      'membership-current',
+      'rollback',
+    ]);
+    expect(query.attempted.map((mutation) => mutation.kind)).toEqual([
+      'insert',
+      'insert',
+      'membership-current',
+    ]);
+    expect(query.committed).toEqual([]);
+  });
+
+  it('Membership Adapter 在首个 DML 前失败时外层事务以零尝试写回滚', async () => {
+    const failure = new Error('membership timeout setup failed');
+    const query = createDatabase();
+    const run = vi.fn(async () => {
+      query.events.push('timeouts-failed');
+      throw failure;
+    });
+    const port: TenantOnboardingMembershipExternalTransactionPort = {
+      transactionOptions: {
+        isolationLevel: 'serializable',
+        accessMode: 'read write',
+      },
+      run: run as TenantOnboardingMembershipExternalTransactionPort['run'],
+    };
+    const repository = createTenantPlanBindingRepository(query.database, {
+      membershipCommandExternalTransaction: port,
+    });
+
+    await expect(repository.createTenantWithPlanAuthorization(
+      createTenantOnboardingInput(),
+    )).rejects.toBe(failure);
+    expect(query.events).toEqual(['begin', 'timeouts-failed', 'rollback']);
+    expect(query.attempted).toEqual([]);
+    expect(query.committed).toEqual([]);
+  });
+
+  it('Membership 与 evidence 完成后下游失败仍回滚同一外层事务', async () => {
+    const failure = new Error('downstream contact failed');
+    const query = createDatabase({
+      failOnTable: tenantContacts,
+      failure,
+    });
+    const membership = createMembershipExternalTransaction(query);
+    const repository = createTenantPlanBindingRepository(query.database, {
+      membershipCommandExternalTransaction: membership.port,
+    });
+
+    await expect(repository.createTenantWithPlanAuthorization(
+      createTenantOnboardingInput(),
+    )).rejects.toBe(failure);
+    expect(query.events).toEqual([
+      'begin',
+      'timeouts-ready',
+      'insert:tenants',
+      'insert:authUsers',
+      'membership-current',
+      'membership-transition',
+      'insert:tenantContacts',
+      'rollback',
+    ]);
+    expect(query.attempted.map((mutation) => mutation.kind)).toEqual([
+      'insert',
+      'insert',
+      'membership-current',
+      'membership-transition',
+      'insert',
+    ]);
+    expect(query.committed).toEqual([]);
+    expect(query.events).not.toContain('commit');
   });
 });
