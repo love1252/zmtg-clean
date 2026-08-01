@@ -598,20 +598,20 @@ BEGIN
 
   IF EXISTS (
     SELECT 1
-    FROM public.tenant_members candidate_row
-    LEFT JOIN public.tenants tenant_row ON tenant_row.id = candidate_row.tenant_id
-    LEFT JOIN public.auth_users user_row ON user_row.id = candidate_row.user_id
+    FROM public.tenant_members candidate_member
+    LEFT JOIN public.tenants tenant_row ON tenant_row.id = candidate_member.tenant_id
+    LEFT JOIN public.auth_users user_row ON user_row.id = candidate_member.user_id
     WHERE pg_catalog.num_nonnulls(
-      candidate_row.revision,
-      candidate_row.lifecycle_status,
-      candidate_row.current_provenance_source,
-      candidate_row.current_provenance_actor_id,
-      candidate_row.current_provenance_reason_code,
-      candidate_row.current_provenance_command_id,
-      candidate_row.current_provenance_occurred_at,
-      candidate_row.current_provenance_recorded_at,
-      candidate_row.revoked_at,
-      candidate_row.deleted_at
+      candidate_member.revision,
+      candidate_member.lifecycle_status,
+      candidate_member.current_provenance_source,
+      candidate_member.current_provenance_actor_id,
+      candidate_member.current_provenance_reason_code,
+      candidate_member.current_provenance_command_id,
+      candidate_member.current_provenance_occurred_at,
+      candidate_member.current_provenance_recorded_at,
+      candidate_member.revoked_at,
+      candidate_member.deleted_at
     ) = 0
       AND (tenant_row.id IS NULL OR user_row.id IS NULL)
   ) THEN
