@@ -2,119 +2,127 @@
 
 ## 当前交接状态
 
-BASE-02 Membership Revision 的 accepted 架构方向、Schema／Migration 前置预检、proposed 物理模型与独立审查已经进入 `main`：
+BASE-02 Membership Revision 的 P01～P12、M0→M7、M1 Expand 与执行证据已经进入 `main`：
 
-- PR #861：A-full Accepted Decision，Merge Commit `b74cad648a46421b0a04f5f6b868f2f7a2240319`；
-- PR #862：A-full 接受独立审查，Merge Commit `1478c2693d6a21216169babad5ff9d4147e3afb0`；
-- PR #863：A-full 接受 handoff，Merge Commit `e4f6a822fc52dd46d52c7d6accb0bae5c2a428a5`；
-- PR #864：Schema／Migration 前置预检与 proposed 物理模型决策包，Head `3e9f2f8992e9923dc5261be8f40c8e8f9f9b18a0`，Merge Commit `59e5ef94fe9a462b29e0792f2b661a84e3d10de2`，Run `30696216677`／Job `91359466603` 成功；
-- PR #865：独立审查，Head `9e20fcef4756eae0c9cec273fe5ec7e7039236c2`，Merge Commit `511de2c22000ae3494e7745a2dac7cfe82f21042`，Run `30696574699`／Job `91360387951` 成功；
-- 独立审查结论：`membership_revision_schema_preflight_review=passed`；
-- 接受方向：`A-full_same_table_lifecycle`；
-- 精确物理模型状态：`proposed_not_accepted`；
-- `eligible_for_schema_migration_implementation=false`；
-- `eligible_for_base_b1_runtime=false`。
+- PR #867／#868：物理模型与切片绑定接受及独立审查，Merge Commit 分别为 `64d4b72d6e3ccd2f0b1afd41f05788650fb3240d`／`734f0df0c5715134cf5d2d2c03833b4cb3fb7127`；
+- PR #869：M1 四文件 Expand，Head `2b57222beb0c8734853bbef184f8566bbd032074`，Merge Commit `314af071bb180ce0a1095c5d21f31baa3cc15e4a`，Run `30701389089`／Job `91372887624` 成功；
+- PR #870：独立质量修复，不属于 M1 文件范围；M1 在其合并后无冲突重放；
+- PR #871：M1 实施独立审查，Merge Commit `eb71d2ab628032ef39182a96ea0b82f89b6dd49e`；
+- 首轮实际 Migration 尝试因枚举聚合类型错误失败并完整回滚，环境 journal 保持 40、Catalog `all_missing`、业务数据净变化 0；
+- PR #872／#873：仅在旧 `0040` 未被允许环境消费时完成三处显式类型纠错与独立审查，Merge Commit 分别为 `75f3c6663e7decce63634b1ee05579a454fb97ac`／`781fde457c38a28dc9fd8f4d8e05bd16198f46db`；
+- PR #874：第二次授权执行低敏证据，Head `5f7a5f64dfb48768193ca8510392d8a9146a1b7b`，Run `30705415873`／Job `91383565350`，Merge Commit `17e1a1d04691878809d0caf533960b99705529dd`；
+- PR #875：执行独立审查，Head `2d15e1540527dc95f71f34f3b6ecc91200ec5a32`，Run `30705922589`／Job `91384912500`，Merge Commit `7dde569cdb8d512a978dc04e63c2008f6a74d583`；
+- 当前仓库／环境 journal 为 `41／41`，最新为已消费且不可改写的 `0040`，snapshot 仍为 0026；
+- M1 Catalog `all_exact`，完整 current envelope／transition 行仍为 `0／0`，业务 DML 为 0；
+- `base02_membership_revision_m1_execution_review=passed`，`eligible_for_m1_handoff=true`。
 
-本轮只完成 docs-only 静态预检、候选冻结与独立审查。它没有接受 P01～P12，没有实施 Schema、Migration、Runtime 或数据库，也不构成下一任务的自动启动授权。
+M1 只完成 Expand，没有建立 Runtime Owner Writer、没有校准 legacy row，也没有切换 Reader。当前 ULTRA 用户指令已授权在本 handoff 合并后继续 M2；M2 在此刻尚未启动。
 
 ## 唯一下一任务
 
 ```text
-BASE-02 Membership Revision 物理模型与 Migration 切片接受
+BASE-02 Membership Revision M2 Access Control Owner Writer／CAS
 ```
 
 仓库当前没有该任务的正式 `V2-*` 编号，本 handoff 不自行创造编号。
 
-当前状态：**尚未启动、尚未授权**。
+当前状态：**尚未启动；已由当前 ULTRA 用户指令授权在本 handoff 合并后启动**。
 
-下一任务只允许对 P01～P12 和 M0～M7 proposed 组合进行明确接受、拒绝或调整，并形成独立 accepted decision、独立审查与 handoff。它不得直接创建 Schema、Migration、Migration Lease、Runtime 或数据库变更。
+下一任务只实现 Access Control 唯一 Membership／Binding 生命周期命令边界、transaction-bound Unit of Work（UoW）、`expectedRevision` CAS、同事务 current／Binding／transition evidence 和合成／事务测试。它不得修改 Schema／Migration，不得连接数据库，也不得提前启动 M3、legacy calibration、Reader 切换或 BASE-B1。
 
 ## 一、不得重开的 accepted 约束
 
-下一任务必须以 A-full accepted decision 为上位约束，不得重新选择架构方向：
+M2 必须以 A-full、P01～P12 accepted decision 和已经执行的 M1 物理 Shape 为上位约束：
 
-1. `tenant_members` 继续作为 Access Control 唯一 canonical Membership current；
-2. Identity 继续拥有用户、账号和正式 Session；
-3. Access Control 唯一拥有 Membership 与 Binding 生命周期；
-4. Tenancy 继续拥有 Scope、Context 与 Scope revision 原始事实；
-5. Membership revision、Binding version 与 Scope revision 是三个独立版本域，互不替代；
-6. Membership revision 必须显式、稳定、严格单调，并使用 `expectedRevision` CAS；
-7. create、授权相关 refresh、revoke、delete、tombstone、incarnation identity 与 ABA 防护组成完整生命周期；
-8. current provenance 与 immutable transition evidence 必须和 canonical current 在同一事务原子形成；
-9. transition evidence 不得成为第二套 current；
-10. Membership 只能经 Access Control 唯一命令／Writer 边界修改；
-11. A-literal 只可能是明确标记的 interim carrier；永久 sidecar current 继续排除；
-12. Operating Context Head／Version 不进入本轮 BASE-02 授权组合。
+1. `tenant_members` 继续作为 Access Control 唯一 canonical Membership current；`tenant_membership_transitions` 只保存 immutable evidence；
+2. Identity 继续拥有用户、账号和正式 Session；Tenancy 继续拥有 Scope、Context 与 Scope revision 原始事实；Security 继续拥有通用安全能力；
+3. Access Control 唯一拥有 Membership 与 Binding 生命周期；不得创建第二套 Membership／Binding current；
+4. Membership revision、Binding version 与 Scope revision 是三个独立版本域，互不替代；
+5. `id／tenant_id／user_id／created_at／display_name` 初版不可变，只有 `role` 可通过 refresh 推进 revision；
+6. lifecycle 固定为 active／revoked／deleted；revoked 可 reactivate，deleted 为终态且不支持新 incarnation；
+7. Runtime command identity 为 `mcmd1_`＋随机 32 字节 base64url 无填充，evidence identity 为 `mtr1_`＋随机 32 字节 base64url 无填充；
+8. 重复 command identity 一律返回 `command_replay_rejected`，不得比较 payload、返回历史成功或自动重试；
+9. 每个非 create 命令必须携带 `expectedRevision`，current CAS 使用 identity＋expected revision＋expected lifecycle，成功 affected rows 精确为 1；
+10. current provenance、Membership current、必要的 Binding 动作与 transition evidence 必须由同一 Access Control 外层事务原子形成；
+11. 固定锁序为 current Membership → active Binding（仅涉及时）→ transition append；Owner command 接收 transaction-bound UoW，不得开启嵌套事务；
+12. Operating Context Head／Version、historical orphan、A2-P2 FK `VALIDATE`、项目级 Writer 和业务 Reader 不进入 M2。
 
-## 二、必须由用户明确决定的 proposed 绑定组合
+## 二、M2 命令与状态机契约
 
-P01～P12 当前全部为空白、未接受。建议作为一个绑定组合审议，避免 revision、状态机、provenance、evidence、Binding 联动与 Migration 顺序相互失配：
+M2 必须提供 create／refresh／revoke／reactivate／delete 五类 Owner command：
 
-| 编号 | 主题 | 当前 proposed 推荐 | 接受状态 |
-| --- | --- | --- | --- |
-| P01 | canonical current 字段 envelope | `tenant_members` 同表规范化列、legacy all-null／new all-complete | 未接受 |
-| P02 | revision | `integer`，初值 `1`、正值、严格 `+1`、上限 `2147483647`、无隐式 default | 未接受 |
-| P03 | lifecycle | `active／revoked／deleted`；revoked 可 reactivate，deleted 为终态 | 未接受 |
-| P04 | incarnation | 初版复用现有 `tenant_members.id` 作为不可变 identity，不支持同 tenant/user 新 incarnation | 未接受 |
-| P05 | current provenance | 规范化低敏列，不使用 JSONB current；冻结 source／actor／reason／command／时间语义 | 未接受 |
-| P06 | immutable transition evidence | 新建 `tenant_membership_transitions` append-only evidence，不成为第二 current | 未接受 |
-| P07 | transition 状态机 | 六种 transition，冻结 from／to revision、status 与 current 同事务 Shape | 未接受 |
-| P08 | legacy calibration | revision `1`＋`legacy_calibration` baseline，不伪造历史 actor 或发生时间 | 未接受 |
-| P09 | Migration 串行 | M0→M7；每个数据／DDL 切片独立编号、Lease、审查与 handoff | 未接受 |
-| P10 | Reader／Writer cutover | Owner Writer 先行，旧 Writer 封堵后校准，再切 Reader | 未接受 |
-| P11 | mutable Membership 字段 | identity 字段不可变；初版只允许 `role` 推进 revision，`display_name` 不可变 | 未接受 |
-| P12 | Membership／Binding 联动 | 同一 Access Control 外层事务、独立版本域；冻结 lifecycle 对应 Binding 动作 | 未接受 |
+| command | Membership 前置与结果 | Binding 联动 | revision／version |
+|---|---|---|---|
+| create | expected-absence → active revision 1；同 tenant/user 以事务级 advisory lock 或等价机制串行 | 不猜 institution；由调用方显式请求时才在同一外层事务创建 | 两个版本域独立创建 |
+| refresh | 仅 active 且 role 实际变化；纯观察 refresh 不写入 | 不变 | Membership `n→n+1` |
+| revoke | active→revoked，设置 `revoked_at` | 同一外层事务撤销 active Binding（若存在） | 分别推进 revision／version |
+| reactivate | revoked→active，清空 `revoked_at` | 不自动恢复旧 Binding | 只推进 Membership revision |
+| delete | active／revoked→deleted tombstone | 有 active Binding 时先在同一事务撤销；历史 Binding 保留 | 分别推进 revision／version |
 
-用户可以要求调整任一项，但调整必须继续满足 A-full、唯一 canonical current、同事务 evidence、CAS／ABA 与 Owner 边界。若调整导致这些 accepted 约束失效，必须停止当前接受流程并另立 ADR，不能由本任务静默改写 target。
+统一 fail-closed 结果至少包括：
 
-## 三、必须一并确认的串行切片
+- legacy all-null 非 create：`legacy_membership_not_calibrated`；
+- 重放：`command_replay_rejected`；
+- revision 上限：`revision_exhausted`；
+- stale／future revision、非法 lifecycle、identity／role 不允许变化、affected rows 不是 1、并发 CAS 失败：固定低敏错误且整批回滚；
+- deleted row 的 reactivate／新 incarnation：拒绝；
+- 任一步骤失败不得自动重试，不得回退到 `updated_at` 或旧 Writer。
 
-```text
-M0 metadata 校准
-→ M1 Expand current envelope 与 transition evidence
-→ M2 Access Control Owner Writer／CAS
-→ M3 旧 Writer 委托／封堵
-→ M4 deterministic legacy calibration
-→ M5 高水位追赶与冲突清零
-→ M6 Reader 从 updated_at 切换到显式 revision
-→ M7 Enforce 与旧路径退出
-```
+## 三、M2 实施层次与候选文件范围
 
-- M0 只实时核对 journal、SQL 与 snapshot，不分配编号、不创建 Lease；
-- M1 只做 Expand，不夹带 legacy DML；
-- M2／M3 先建立唯一 Owner Writer 与旧 Writer=0，legacy all-null row 继续 fail-closed；
-- M4／M5 必须是独立手写数据 Migration，稳定排序、行数守恒、冲突清零，不以 Migration 时间伪造历史事实；
-- M6 才允许 compatibility Reader 切到显式 revision，Formal Session 继续不承载授权事实；
-- M7 只有数据与 Writer／Reader 切换全部完成后才可 Enforce；不得夹带 BASE-B1、orphan 修复或 FK `VALIDATE`；
-- 每个未来切片都需要独立任务、精确文件范围、必要的 Migration Lease／恢复点、测试、审查、handoff 与用户授权。
+M2 以一个清晰回退域实现，不为微小文件创建无意义 PR。初始候选范围为：
 
-## 四、接受任务的交付边界
+1. `src/modules/access-control/domain/membership-lifecycle.ts`；
+2. `src/modules/access-control/ports/membership-command-unit-of-work.ts`；
+3. `src/modules/access-control/application/membership-command-service.ts`；
+4. `src/modules/access-control/server/membership-command-repository.ts`；
+5. `src/modules/access-control/tests/MembershipLifecycle.test.ts`；
+6. `src/modules/access-control/tests/MembershipCommandService.test.ts`；
+7. `src/modules/access-control/tests/MembershipCommandRepository.test.ts`。
 
-未来接受任务应只新增独立 accepted decision，并在其合并后另建独立审查与 handoff。accepted decision 至少必须：
+若仓库证据证明单 PR 超出可审查范围，可拆成 M2a 纯 domain／port／application 与 M2b transaction repository；两个 PR 必须保持同一 accepted contract，不能让任一半成品成为正式调用入口。新增现有组合根／调用方文件前必须先证明它属于 M2，而不是 M3 onboarding 委托。
 
-- 逐项记录 P01～P12 的用户选择，并说明是否作为绑定组合接受；
-- 记录 M0～M7 的顺序及任何获准调整；
-- 明确字段名、状态机、transition evidence、CAS、legacy calibration、Writer／Reader cutover 与 Binding 联动的接受边界；
-- 保留 Migration 编号实时分配、`db:generate` 禁止、snapshot 不修改与共享环境 forward-fix 规则；
-- 明确接受不等于实施授权，不得取得 Migration Lease或启动 M0～M7；
-- 继续记录 BASE-B1 Runtime、orphan、FK `VALIDATE`、Writer 与 Reader 的阻断状态。
-
-建议 accepted decision 候选路径为：
+固定层次为：
 
 ```text
-docs/decisions/base02-membership-revision-physical-model-accepted-decision.md
+Domain lifecycle state machine
+→ Application Owner command service
+→ transaction-bound UoW Port
+→ PostgreSQL Repository／Adapter
+→ synthetic + transaction tests
 ```
 
-实际文件范围仍须由用户在下一任务中明确授权，本 handoff 不预先创建文件或分支。
+M2 不修改现有 Auth／Security 的 `updated_at` compatibility Reader；该切换只属于 M6。
+
+## 四、M2 验证与交付边界
+
+M2 至少必须验证：
+
+- 五类 command 的合法状态转换与全部非法状态拒绝；
+- create expected-absence 并发串行化；
+- 同一旧 revision 的并发命令最多一个成功；
+- stale／future revision、revision 溢出、command replay 和 partial legacy envelope 全部 fail-closed；
+- current CAS、可选 Binding mutation 与 transition append 同一事务，任一步骤失败整批回滚；
+- current provenance 与 transition evidence 字段一致；
+- revoke／delete 的 Binding 撤销、reactivate 不恢复 Binding、refresh 不改 Binding；
+- Membership revision 与 Binding version 独立推进；
+- Repository affected rows 精确为 1，固定锁序和无自动重试；
+- M2 后 Owner command 可供 M3 onboarding 委托，但本轮不修改 M3 direct Writer。
+
+交付必须包括：实现 PR、独立审查 PR 和 M2 handoff PR；每个 PR 都绑定冻结 Head、真实 Required Check、Merge Commit 与同步后的 `main`。M2 只运行合成与事务测试，不连接真实数据库，不签发 Lease。
 
 ## 五、持续阻断
 
-- BASE-B1 Runtime：继续 `blocked`；
+- M2 handoff 合并前 Access Control authoritative Membership Writer 仍为 `0`；
+- M3 direct Writer 委托／封堵：未启动，Owner 外 4 文件／6 符号现状不得在 M2 中虚报归零；
+- M4／M5 legacy calibration 与追赶：未启动，完整 envelope／transition 行保持 `0／0`；
+- M6／M7 Reader 切换与 Enforce：未启动，`updated_at` compatibility fallback 仍待 M6；
+- BASE-B1 Runtime：继续 `blocked`，必须等待 M7；
 - BASE-B2～B4：lifecycle Runtime、Session／上下文刷新、Guard 与绕过闭环未启动；
 - BASE-B5：active historical orphan 与 Scope relation orphan 仍为 `1／1`，修复未授权；
 - BASE-B6：完成证明不具备；
 - A2-P2 Scope FK：继续 `NOT VALID`／`convalidated=false`，不得执行 `VALIDATE`；
-- Membership lifecycle Writer 与项目级 Writer：未启动；
+- 项目级 Writer：未启动；M2 的 Access Control Owner Writer 不等于项目级双写已启动；
 - Audit／模板、MIG-01B、MIG-01C、Reader：继续阻断；
 - 正式平台服务端授权根仍为独立缺口，七线正式发布仍为 `0/7`。
 
@@ -122,50 +130,64 @@ docs/decisions/base02-membership-revision-physical-model-accepted-decision.md
 
 ## 六、当前禁止范围
 
-当前不授权：
+M2 当前授权不包括：
 
-- 修改 `src/**`、`drizzle/**`、scripts、tests、CI、package 或 lock；
-- 创建或修改 Schema、Migration、journal、snapshot 或 Migration Lease；
-- 数据库连接、DDL、DML、Migration、Seed、回填、校准或环境操作；
+- 修改 `drizzle/**`、Schema、Migration、journal、snapshot、scripts、CI、package 或 lock；
+- 连接数据库，创建 Migration／Execution Lease，执行 DDL、DML、Migration、Seed、回填、校准或环境操作；
 - 预留、批准或占用下一 Migration 编号，或运行 `db:generate`；
+- 修改 M1 已消费 `0040`；
+- M3 onboarding／reset／Seed／CLI direct Writer 委托或封堵；
+- M4／M5 legacy 数据 Migration；
+- M6 Reader、Session 或 Guard 切换；
+- M7 NOT NULL／Enforce；
 - BASE-B1～B6 Runtime；
 - orphan UPDATE、DELETE、INSERT、重绑、撤销或补 Scope；
-- FK `VALIDATE`、`SET NOT NULL`；
-- Writer、Audit／模板、MIG-01B、MIG-01C 或 Reader；
-- 自动开始本文冻结的接受任务或后续实施切片。
+- FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B、MIG-01C 或业务 Reader；
+- 输出凭证、连接参数、真实双键、自由文本 reason 或 PII。
 
 ## 七、停止条件
 
 出现以下任一情况必须停止：
 
-- 需要重开 A-full、Owner 或三个独立版本域；
-- 只接受 revision 字段，却遗漏 lifecycle、ABA、provenance 或 transition evidence；
-- 无法保持 canonical current 与 transition evidence 同事务原子形成；
+- accepted P01～P12 无法在当前 PostgreSQL／Drizzle 与 TypeScript 栈中实现，且必须重开 A-full；
+- 无法维持 Access Control 单一 Owner、唯一 canonical current 或三个独立版本域；
+- 无法让 current、Binding 联动与 transition evidence 在同一外层事务原子形成；
+- transaction-bound UoW 必须退化为嵌套事务或跨事务补偿；
+- CAS 无法证明 affected rows 精确为 1、同一旧 revision 最多一个成功或无自动重试；
+- 必须让 legacy all-null row 在 M4 前通过、使用 `updated_at` fallback 或修改 Auth Reader；
+- 需要 Schema、Migration、数据库、Lease、M3～M7、orphan 或 FK `VALIDATE` 才能完成 M2；
 - 需要永久第二套 Membership current；
-- P01～P12 或 M0～M7 的调整相互矛盾，且无法在 accepted 约束下解释；
-- 必须读取环境、凭证、真实数据或扩大明确文件范围才能继续；
-- 需要在接受任务中创建 Migration、分配 Lease、连接数据库或实施 Runtime；
-- 需要夹带 orphan 修复、FK `VALIDATE`、Writer／Reader 放行或 BASE-B1～B6 实施；
-- current、accepted target、Owner、基线或工作树出现无法解释的漂移。
+- current、accepted target、Owner、基线、文件范围、工作树或并发 Agent 出现无法解释的漂移；
+- 出现 Secret、Token、密码、私钥或 PII 泄漏，或 Git 状态无法安全恢复。
 
 ## 八、交付判定
 
 ```text
-next_task=BASE-02 Membership Revision 物理模型与 Migration 切片接受
+next_task=BASE-02 Membership Revision M2 Access Control Owner Writer／CAS
 next_task_started=false
-next_task_authorized=false
+next_task_authorized_under_ultra=true
 membership_revision_direction=A-full_same_table_lifecycle
 membership_revision_decision_accepted=true
-membership_revision_schema_preflight=completed
-membership_revision_schema_preflight_review=passed
-membership_revision_physical_model_status=proposed_not_accepted
-membership_revision_physical_model_accepted=false
-membership_revision_migration_sequence=M0_to_M7_proposed
-eligible_for_physical_model_acceptance_handoff=true
-physical_model_acceptance_started=false
-physical_model_acceptance_authorized=false
-eligible_for_schema_migration_implementation=false
-schema_migration_implementation_authorized=false
+membership_revision_physical_model_accepted=true
+membership_revision_migration_sequence=M0_to_M7_accepted
+m0_complete=true
+m1_expand_migration_executed=true
+m1_execution_review=passed
+m1_complete=true
+m1_environment_journal_entries=41
+m1_catalog_state=all_exact
+m1_database_attempt_cumulative=2
+m1_automatic_retry_count=0
+eligible_for_m2_after_handoff=true
+m2_started=false
+m2_runtime_file_scope=access_control_only
+m2_database_access_allowed=false
+m2_schema_migration_allowed=false
+m3_started=false
+m4_started=false
+m5_started=false
+m6_started=false
+m7_started=false
 eligible_for_base_b1_runtime=false
 base_b1_runtime=blocked
 orphan_remediation_authorized=false
