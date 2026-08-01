@@ -161,11 +161,11 @@ export async function runGuardedMigration({
   const state = assertMigrationAllowed(env, rootDir);
   logger.info(`migration guard 通过：target=${state.target}，migration=${state.latestMigration}`);
 
-  const executable = resolve(rootDir, 'node_modules/.bin/drizzle-kit');
+  const drizzleKitEntry = resolve(rootDir, 'node_modules/drizzle-kit/bin.cjs');
   const exitCode = await new Promise((resolveExit, reject) => {
     let child;
     try {
-      child = spawnImpl(executable, ['migrate'], {
+      child = spawnImpl(process.execPath, [drizzleKitEntry, 'migrate'], {
         cwd: rootDir,
         env,
         shell: false,

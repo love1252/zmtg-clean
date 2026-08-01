@@ -285,8 +285,8 @@ describe('production migration guard', () => {
     expect(`${message} ${logged}`).not.toContain(secret);
     expect(`${message} ${logged}`).not.toContain(databaseUrl);
     expect(spawnImpl).toHaveBeenCalledWith(
-      join(rootDir, 'node_modules/.bin/drizzle-kit'),
-      ['migrate'],
+      process.execPath,
+      [join(rootDir, 'node_modules/drizzle-kit/bin.cjs'), 'migrate'],
       expect.objectContaining({ stdio: ['ignore', 'ignore', 'ignore'] }),
     );
   });
@@ -341,7 +341,7 @@ describe('production migration guard', () => {
     expect(message).not.toContain(databaseUrl);
   });
 
-  it('检查全部通过后以固定参数调用 drizzle-kit 且忽略子进程输出', async () => {
+  it('检查全部通过后使用当前 Node 直接调用 drizzle-kit 且忽略子进程输出', async () => {
     const child = new EventEmitter();
     const spawnImpl = vi.fn(() => child);
     const logger = { info: vi.fn() };
@@ -350,8 +350,8 @@ describe('production migration guard', () => {
     await promise;
 
     expect(spawnImpl).toHaveBeenCalledWith(
-      join(rootDir, 'node_modules/.bin/drizzle-kit'),
-      ['migrate'],
+      process.execPath,
+      [join(rootDir, 'node_modules/drizzle-kit/bin.cjs'), 'migrate'],
       expect.objectContaining({
         cwd: rootDir,
         shell: false,
