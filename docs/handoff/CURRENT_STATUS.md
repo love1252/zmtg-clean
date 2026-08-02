@@ -3,43 +3,46 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-02 Binding transition evidence 前置预检 handoff 状态
+## BASE-02 Binding transition evidence `0044` 执行收口状态
 
-- 更新日期：2026-08-02
+- 更新日期：2026-08-03
 - 当前 ULTRA 任务：`BASE-02 ULTRA：Membership Revision M0～M7、BASE-B1～B6 全链实施与最终收口`
-- 当前切片：BASE-B2 Binding transition evidence Schema／Migration 前置预检、独立审查与 handoff
-- PR #917：Head `97c02f1250f5f5fbff468b17953074db5b67eb4c`，Merge Commit `77a626ed182230f91b6d27daeaa4b0f297b377d9`，Run `30750704426` 成功
-- 独立审查 PR #918：Head `749bb269393c50bc9638ab7f76f97b04df2a610b`，Merge Commit `32b08e5e7bca4331c421ac5a637a846a884e2bf1`，Run `30751540734` 成功
-- `binding_transition_evidence_preflight_review=passed`
-- `binding_physical_model_decision_required=false`
-- Binding canonical current 继续为 `auth_account_institution_bindings`
-- Binding transition evidence 只保存 Access Control 同事务 append-only 历史，不是第二 current
-- historical orphan 未处理；A2-P2 Scope FK 继续 `NOT VALID／convalidated=false`
-- Schema、Migration、journal、snapshot、Runtime 和数据库修改均为 `0`
+- 当前切片：BASE-B2 Binding transition evidence Expand DDL、唯一执行、恢复核验、独立审查与 handoff
+- 实施 PR #920：Merge Commit `a4b99e6a6384bdc1ee43047be5ebef644eeff90a`
+- 实施独立审查 PR #921：Merge Commit `a15fb7fd8df7c72d4f81a319b7686ed2594e7f42`
+- 执行恢复证据 PR #922：Merge Commit `8c0c7f9059a5b435b9440f40602a8d2927147b4f`，Run `30757517642`／Job `91522148572` 成功
+- 执行独立审查 PR #923：Head `6841736775cb797eb4a2cd2c7c142c29315476ed`，Merge Commit `40256214931e5916e8566929003c3875cdb8698c`，Run `30758476855`／Job `91524686785` 成功
+- `0044` 已在固定 localhost-only `local_acceptance` 唯一消费
+- guarded command `1`，自动重试 `0`，第二次 Migration 调用 `0`
+- 环境 journal `44 → 45`，Catalog `all_missing → all_exact`
+- transition evidence rows `0`，business DML `0`，sequence advance `0`
+- 59 张既有 public 表确定性事实指纹一致；public sequence 数量 `0`
+- 执行前、执行后恢复点及隔离恢复均通过
+- active Execution Lease `0`
+- historical orphan 未处理；Scope FK 继续 `NOT VALID`
 
 ### 唯一下一任务
 
-`BASE-B2 Binding transition evidence Expand DDL Schema／Migration 实施`
-
-该任务尚未启动；在当前 ULTRA 用户授权下可于本 handoff 合并后继续，但必须实时冻结 Migration 编号、唯一 Lease、恢复点、local_acceptance、锁窗口和精确四文件 allowlist。
+`BASE-B2 Binding Runtime Writer／same-transaction transition evidence 前置预检`
 
 ```text
 base_b1_complete=true
 base_b2_started=true
-binding_provenance_decision=M09-A_accepted
-binding_transition_evidence_required=true
-binding_schema_migration_preflight_complete=true
-binding_schema_migration_preflight_review=passed
-binding_physical_model_decision_required=false
-eligible_for_binding_schema_migration_implementation_after_handoff=true
-binding_schema_migration_implementation_started=false
-base_b2_complete=false
-base_b3_started=false
+binding_transition_expand_implementation_complete=true
+binding_transition_expand_execution_complete=true
+binding_transition_expand_execution_review=passed
+migration_0044_consumed=true
+environment_journal_entries=45
+binding_runtime_writer_preflight_started=false
+binding_runtime_writer_started=false
+legacy_calibration_started=false
 historical_orphan_modified=false
 a2_p2_scope_fk_validated=false
+base_b2_complete=false
+base_b3_started=false
 project_writer_started=false
 business_reader_started=false
-next_task=BASE-B2 Binding transition evidence Expand DDL Schema／Migration 实施
+next_task=BASE-B2 Binding Runtime Writer／same-transaction transition evidence 前置预检
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```
