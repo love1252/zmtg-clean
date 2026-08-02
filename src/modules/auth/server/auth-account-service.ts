@@ -2,7 +2,6 @@ import {
   buildFailedPasswordLoginState,
   canStartPasswordCredentialLogin,
   normalizeAuthUsername,
-  toAuthSessionUser,
   toSafeAuthAccount,
   type AuthAccountRecord,
   type AuthAccountStatus,
@@ -217,21 +216,12 @@ export function createAuthAccountService(input: {
         };
       }
 
-      const membership = await input.repository.findPrimaryTenantMembershipByUserId(
-        accountSnapshot.id,
-      );
-      if (!membership || command.scope !== 'institution') {
+      if (command.scope !== 'institution') {
         return {
           status: 'rejected' as const,
           reason: 'tenant_membership_missing' as const,
         };
       }
-
-      const institutionBindings =
-        await input.repository.listActiveInstitutionBindingsByAccountAndTenant({
-          accountId: accountSnapshot.id,
-          tenantId: membership.tenantId,
-        });
 
       const status = nextSuccessStatus(accountSnapshot);
       const writeResult = await input.repository.recordLoginSuccess({
@@ -252,12 +242,7 @@ export function createAuthAccountService(input: {
       return {
         status: 'authenticated' as const,
         passwordResetRequired: loginDecision.passwordResetRequired,
-        user: toAuthSessionUser({
-          account: accountSnapshot,
-          membership,
-          institutionBindings,
-          now: timestamp,
-        }),
+        account: toSafeAuthAccount(accountSnapshot),
       };
     },
 

@@ -59,6 +59,8 @@ const memberRow = {
   userId: 'auth-user-zhengpu-admin',
   role: 'tenant_admin',
   displayName: '陈磊',
+  revision: 1,
+  lifecycleStatus: 'active',
   createdAt: new Date('2026-06-25T08:00:00.000Z'),
   updatedAt: new Date('2026-06-25T08:00:00.000Z'),
 };
@@ -156,6 +158,7 @@ describe('租户初始管理员账号管理 repository', () => {
       conditions: [
         { column: tenantMembers.tenantId, operator: 'eq', value: tenantContacts.tenantId },
         { column: tenantMembers.userId, operator: 'eq', value: authUsers.id },
+        { column: tenantMembers.lifecycleStatus, operator: 'eq', value: 'active' },
       ],
       operator: 'and',
     });

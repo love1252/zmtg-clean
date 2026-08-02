@@ -7,6 +7,11 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 const cryptoMocks = vi.hoisted(() => ({
   randomUUID: vi.fn<typeof import('node:crypto').randomUUID>(),
 }));
+const readerProvenance = vi.hoisted(() => ({
+  identity: new WeakSet<object>(),
+  membership: new WeakSet<object>(),
+  scope: new WeakSet<object>(),
+}));
 
 vi.mock('node:crypto', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:crypto')>();
@@ -17,13 +22,75 @@ vi.mock('node:crypto', async (importOriginal) => {
   };
 });
 
+vi.mock(
+  '@/modules/auth/application/authoritative-formal-session-identity-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/auth/application/authoritative-formal-session-identity-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeFormalSessionIdentityFactReaderV1(value: unknown) {
+        return (
+          value !== null &&
+          typeof value === 'object' &&
+          readerProvenance.identity.has(value)
+        );
+      },
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/access-control/application/authoritative-membership-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/access-control/application/authoritative-membership-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeMembershipFactReaderV1(value: unknown) {
+        return (
+          value !== null &&
+          typeof value === 'object' &&
+          readerProvenance.membership.has(value)
+        );
+      },
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/tenancy/application/authoritative-institution-scope-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/tenancy/application/authoritative-institution-scope-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeInstitutionScopeFactReaderV1(value: unknown) {
+        return (
+          value !== null &&
+          typeof value === 'object' &&
+          readerProvenance.scope.has(value)
+        );
+      },
+    };
+  },
+);
+
 import {
   consumeFormalServerSessionUserSnapshotV1,
-  createAuthAccountRepository,
+  createFormalInstitutionSessionContextResolverV1,
   isFormalServerSessionUserSnapshotV1,
-  type CurrentInstitutionMembershipFactRow,
   type FormalServerSessionUserSnapshotV1,
-} from '@/modules/auth/server/auth-account-repository';
+} from '@/modules/auth/application/formal-institution-session-context';
+import type { AuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/ports/authoritative-formal-session-identity-reader';
+import type { AuthoritativeMembershipFactReaderV1 as AuthoritativeInstitutionMembershipFactReaderV1 } from '@/modules/access-control/ports/authoritative-membership-reader';
+import {
+  createAuthoritativeInstitutionMembershipFactReaderV1,
+  type CurrentInstitutionMembershipFactRow,
+} from '@/modules/access-control/server/authoritative-membership-reader';
 import {
   consumeFormalServerSessionVerifiedClaimsV1,
   consumeFormalServerSessionRequestOwnerV1,
@@ -43,12 +110,10 @@ import {
 } from '@/modules/security/server/formal-request-provenance-owner';
 import type { FormalProvenanceResolverV1 } from '@/modules/security/server/institution-guard-evidence';
 import {
-  createAuthoritativeInstitutionMembershipFactReaderV1,
   isFreshActiveMembershipProviderV1,
-  type AuthoritativeInstitutionMembershipFactReaderV1,
 } from '@/modules/security/server/institution-membership-provider';
 import { createInstitutionGuardReferenceCodecV1 } from '@/modules/security/server/institution-guard-reference';
-import type { TenantDatabase } from '@/server/db/client';
+import { createAuthoritativeInstitutionScopeFactReaderV1 } from '@/modules/tenancy/server/authoritative-institution-scope-reader';
 
 const SESSION_KEY = new Uint8Array(32).fill(0x73);
 const OLD_SESSION_KEY = new Uint8Array(32).fill(0x6f);
@@ -110,6 +175,23 @@ function referenceCodec() {
   });
 }
 
+function genuineIdentityReader(
+  resolve: AuthoritativeFormalSessionIdentityFactReaderV1['resolve'] = vi.fn(
+    async () => ({
+      kind: 'current_identity_fact' as const,
+      accountId: payload.accountId,
+      username: 'account_operator',
+      displayName: '账号操作员',
+      status: 'active' as const,
+      observedAt: VERIFIED_AT.toISOString(),
+    }),
+  ),
+) {
+  const reader = Object.freeze({ resolve }) satisfies AuthoritativeFormalSessionIdentityFactReaderV1;
+  readerProvenance.identity.add(reader);
+  return reader;
+}
+
 function resolver(input: Readonly<{
   cookieHeader?: string | null;
   sessionKeyRing?: FormalServerSessionKeyRingV1;
@@ -129,14 +211,21 @@ function resolver(input: Readonly<{
 
 const membershipRow: CurrentInstitutionMembershipFactRow = {
   accountId: payload.accountId,
-  accountStatus: 'active',
-  accountPasswordResetRequired: false,
-  accountLockedUntil: null,
   membershipId: 'membership-001',
   membershipTenantId: payload.tenantId,
   membershipUserId: payload.accountId,
   membershipRole: 'tenant_admin',
-  membershipUpdatedAt: new Date('2026-07-22T08:01:00.000Z'),
+  membershipDisplayName: '机构管理员',
+  membershipRevision: 1,
+  membershipLifecycleStatus: 'active',
+  membershipProvenanceSource: 'legacy_calibration',
+  membershipProvenanceActorId: null,
+  membershipProvenanceReasonCode: 'legacy_unknown',
+  membershipProvenanceCommandId: `mcal1_${'a'.repeat(64)}`,
+  membershipProvenanceOccurredAt: null,
+  membershipProvenanceRecordedAt: new Date('2026-07-22T08:01:00.000Z'),
+  membershipRevokedAt: null,
+  membershipDeletedAt: null,
   bindingId: 'binding-001',
   bindingAccountId: payload.accountId,
   bindingTenantId: payload.tenantId,
@@ -153,6 +242,7 @@ function requestOwner(input: Readonly<{
   cookieHeader?: string | null;
   sessionKeyRing?: FormalServerSessionKeyRingV1;
   membershipFactReader?: AuthoritativeInstitutionMembershipFactReaderV1;
+  identityFactReader?: AuthoritativeFormalSessionIdentityFactReaderV1;
   referenceCodec?: ReturnType<typeof referenceCodec>;
   now?: () => Date;
 }> = {}) {
@@ -163,6 +253,9 @@ function requestOwner(input: Readonly<{
       repository: { findCurrentInstitutionMembershipFacts },
       now: input.now ?? (() => VERIFIED_AT),
     });
+  if (!input.membershipFactReader) {
+    readerProvenance.membership.add(membershipFactReader);
+  }
   return {
     findCurrentInstitutionMembershipFacts,
     owner: createFormalServerSessionRequestOwnerV1({
@@ -171,6 +264,7 @@ function requestOwner(input: Readonly<{
           ? `${FORMAL_SERVER_SESSION_COOKIE_V1}=${signToken()}`
           : input.cookieHeader,
       sessionKeyRing: input.sessionKeyRing ?? keyRing(),
+      identityFactReader: input.identityFactReader ?? genuineIdentityReader(),
       membershipFactReader,
       referenceCodec: input.referenceCodec ?? referenceCodec(),
       now: input.now ?? (() => VERIFIED_AT),
@@ -179,45 +273,53 @@ function requestOwner(input: Readonly<{
 }
 
 const formalSessionUserRow = Object.freeze({
-  accountId: payload.accountId,
-  accountUsername: 'account_operator',
-  accountDisplayName: '账号操作员',
-  accountStatus: 'active',
-  accountPasswordResetRequired: false,
-  accountLockedUntil: null,
-  membershipTenantId: payload.tenantId,
-  membershipUserId: payload.accountId,
-  membershipRole: 'tenant_operator',
-  membershipDisplayName: '机构操作员',
-  bindingId: 'binding-001',
-  bindingAccountId: payload.accountId,
-  bindingTenantId: payload.tenantId,
-  bindingInstitutionId: payload.institutionId,
-  bindingStatus: 'active',
-  bindingSource: 'manual_admin',
-  bindingAssignedAt: new Date('2026-07-22T08:00:00.000Z'),
-  bindingExpiresAt: null,
-  bindingRevokedAt: null,
-  bindingVersion: 1,
+  id: payload.accountId,
+  username: 'account_operator',
+  name: '机构操作员',
+  role: 'tenant_operator',
+  tenantId: payload.tenantId,
+  institutionId: payload.institutionId,
 });
 
-async function repositorySessionUserSnapshot(): Promise<FormalServerSessionUserSnapshotV1> {
-  const limit = vi.fn(async () => [formalSessionUserRow]);
-  const chain = {
-    from: vi.fn(),
-    innerJoin: vi.fn(),
-    limit,
-    where: vi.fn(),
-  };
-  chain.from.mockReturnValue(chain);
-  chain.innerJoin.mockReturnValue(chain);
-  chain.where.mockReturnValue(chain);
-  const database = {
-    select: vi.fn(() => chain),
-  } as unknown as TenantDatabase;
-  const snapshot = await createAuthAccountRepository(
-    database,
-  ).findCurrentFormalSessionUser({
+async function formalContextSessionUserSnapshot(): Promise<FormalServerSessionUserSnapshotV1> {
+  const contextMembershipRow = Object.freeze({
+    ...membershipRow,
+    membershipRole: 'tenant_operator',
+    membershipDisplayName: '机构操作员',
+  });
+  const membershipFactReader =
+    createAuthoritativeInstitutionMembershipFactReaderV1({
+      repository: {
+        findCurrentInstitutionMembershipFacts: vi.fn(async () => [
+          contextMembershipRow,
+        ]),
+        findSingleInstitutionMembershipFacts: vi.fn(async () => [
+          contextMembershipRow,
+        ]),
+      },
+      now: () => VERIFIED_AT,
+    });
+  readerProvenance.membership.add(membershipFactReader);
+  const scopeReader = createAuthoritativeInstitutionScopeFactReaderV1({
+    repository: {
+      findCurrentInstitutionScopeFacts: vi.fn(async () => [
+        {
+          tenantId: payload.tenantId,
+          institutionId: payload.institutionId,
+          status: 'active',
+          revision: 1,
+        },
+      ]),
+    },
+    now: () => VERIFIED_AT,
+  });
+  readerProvenance.scope.add(scopeReader);
+  const context = createFormalInstitutionSessionContextResolverV1({
+    identityReader: genuineIdentityReader(),
+    membershipReader: membershipFactReader,
+    scopeReader,
+  });
+  const snapshot = await context.resolveForSession({
     accountId: payload.accountId,
     tenantId: payload.tenantId,
     institutionId: payload.institutionId,
@@ -229,8 +331,8 @@ async function repositorySessionUserSnapshot(): Promise<FormalServerSessionUserS
 }
 
 describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
-  it('issues one canonical current-key V1 cookie only from a genuine repository snapshot', async () => {
-    const sessionUserSnapshot = await repositorySessionUserSnapshot();
+  it('issues one canonical current-key V1 cookie only from a genuine formal context snapshot', async () => {
+    const sessionUserSnapshot = await formalContextSessionUserSnapshot();
     const now = vi.fn(() => VERIFIED_AT);
     cryptoMocks.randomUUID.mockClear();
     const result = issueFormalServerSessionCookieV1({
@@ -288,7 +390,7 @@ describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
   });
 
   it('round-trips issued cookies through an authentic opaque single-use verified-claims handle', async () => {
-    const sessionUserSnapshot = await repositorySessionUserSnapshot();
+    const sessionUserSnapshot = await formalContextSessionUserSnapshot();
     const issued = issueFormalServerSessionCookieV1({
       sessionUserSnapshot,
       sessionKeyRing: keyRing(),
@@ -356,7 +458,7 @@ describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
   });
 
   it('never falls back to verify-only signing material and consumes the snapshot on failure', async () => {
-    const sessionUserSnapshot = await repositorySessionUserSnapshot();
+    const sessionUserSnapshot = await formalContextSessionUserSnapshot();
     const sessionKeyRing = keyRing({
       currentKey: { keyVersion: 2, keyMaterial: null },
       verifyOnlyKeys: [
@@ -387,7 +489,7 @@ describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
   });
 
   it('rejects forged or revoked snapshots before key, clock, or random access', async () => {
-    const revoked = await repositorySessionUserSnapshot();
+    const revoked = await formalContextSessionUserSnapshot();
     expect(consumeFormalServerSessionUserSnapshotV1(revoked)).not.toBeNull();
     let getterReads = 0;
     let proxyTraps = 0;
@@ -443,7 +545,7 @@ describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
   });
 
   it('atomically consumes once so dependency failure cannot be retried', async () => {
-    const sessionUserSnapshot = await repositorySessionUserSnapshot();
+    const sessionUserSnapshot = await formalContextSessionUserSnapshot();
     const now = vi.fn(() => VERIFIED_AT);
     cryptoMocks.randomUUID.mockClear();
     expect(issueFormalServerSessionCookieV1({
@@ -489,7 +591,7 @@ describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
       },
       () => new Date(Number.NaN),
     ]) {
-      const sessionUserSnapshot = await repositorySessionUserSnapshot();
+      const sessionUserSnapshot = await formalContextSessionUserSnapshot();
       cryptoMocks.randomUUID.mockClear();
       expect(issueFormalServerSessionCookieV1({
         sessionUserSnapshot,
@@ -523,7 +625,7 @@ describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
     ];
 
     for (const randomFailure of randomFailures) {
-      const sessionUserSnapshot = await repositorySessionUserSnapshot();
+      const sessionUserSnapshot = await formalContextSessionUserSnapshot();
       cryptoMocks.randomUUID.mockImplementationOnce(randomFailure);
       const callsBefore = cryptoMocks.randomUUID.mock.calls.length;
       expect(issueFormalServerSessionCookieV1({
@@ -550,7 +652,7 @@ describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
   });
 
   it('copies current key before clock-side mutation and never signs with verify-only keys', async () => {
-    const sessionUserSnapshot = await repositorySessionUserSnapshot();
+    const sessionUserSnapshot = await formalContextSessionUserSnapshot();
     const mutableCurrentKey = Uint8Array.from(SESSION_KEY);
     const issued = issueFormalServerSessionCookieV1({
       sessionUserSnapshot,
@@ -617,7 +719,7 @@ describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
     };
 
     for (const sessionKeyRing of [accessorRing, poisonRing]) {
-      const sessionUserSnapshot = await repositorySessionUserSnapshot();
+      const sessionUserSnapshot = await formalContextSessionUserSnapshot();
       expect(issueFormalServerSessionCookieV1({
         sessionUserSnapshot,
         sessionKeyRing: sessionKeyRing as FormalServerSessionKeyRingV1,
@@ -654,7 +756,7 @@ describe('AUTH-FORMAL-COOKIE-02A formal cookie infrastructure', () => {
     const now = vi.fn(() => VERIFIED_AT);
     cryptoMocks.randomUUID.mockClear();
     for (const sessionKeyRing of [accessorCurrentKeyRing, proxyKeyRing]) {
-      const sessionUserSnapshot = await repositorySessionUserSnapshot();
+      const sessionUserSnapshot = await formalContextSessionUserSnapshot();
       expect(issueFormalServerSessionCookieV1({
         sessionUserSnapshot,
         sessionKeyRing: sessionKeyRing as FormalServerSessionKeyRingV1,
@@ -730,6 +832,7 @@ describe('AUTH-SESSION-01A formal server session provenance owner', () => {
     expectTypeOf<keyof FactoryInput>().toEqualTypeOf<
       | 'cookieHeader'
       | 'sessionKeyRing'
+      | 'identityFactReader'
       | 'membershipFactReader'
       | 'referenceCodec'
       | 'now'
@@ -760,6 +863,7 @@ describe('AUTH-SESSION-01A formal server session provenance owner', () => {
     expect(findCurrentInstitutionMembershipFacts).toHaveBeenCalledWith({
       accountId: payload.accountId,
       tenantId: payload.tenantId,
+      institutionId: payload.institutionId,
     });
     const serialized = JSON.stringify(consumption);
     expect(serialized).not.toContain(payload.accountId);

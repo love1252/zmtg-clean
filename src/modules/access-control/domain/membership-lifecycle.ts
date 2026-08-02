@@ -273,8 +273,20 @@ function isPositiveRevision(value: unknown): value is number {
   );
 }
 
-function isRuntimeCommandId(value: unknown): value is string {
+export function isRuntimeMembershipCommandId(value: unknown): value is string {
   return typeof value === 'string' && RUNTIME_COMMAND_ID_PATTERN.test(value);
+}
+
+export function isLegacyMembershipCalibrationCommandId(
+  value: unknown,
+): value is string {
+  return typeof value === 'string' && LEGACY_COMMAND_ID_PATTERN.test(value);
+}
+
+export function isMembershipProvenanceReasonCode(
+  value: unknown,
+): value is string {
+  return typeof value === 'string' && REASON_CODE_PATTERN.test(value);
 }
 
 export function isRuntimeMembershipTransitionId(value: unknown): value is string {
@@ -364,7 +376,7 @@ export function validateMembershipOwnerCommandIdentity(
     return 'membership_command_shape_invalid';
   }
   if (
-    !isRuntimeCommandId(value.commandId) ||
+    !isRuntimeMembershipCommandId(value.commandId) ||
     !isCanonicalText(value.tenantId, 64) ||
     !isCanonicalText(value.membershipId, 64)
   ) {
@@ -434,7 +446,7 @@ export function classifyMembershipCurrent(current: MembershipCurrent): EnvelopeK
     }
   } else if (
     !isCanonicalText(current.provenanceActorId, 96) ||
-    !isRuntimeCommandId(current.provenanceCommandId) ||
+    !isRuntimeMembershipCommandId(current.provenanceCommandId) ||
     !isCanonicalInstant(current.provenanceOccurredAt) ||
     current.provenanceRecordedAt < current.provenanceOccurredAt
   ) {

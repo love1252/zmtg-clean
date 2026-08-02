@@ -78,6 +78,7 @@ export function createTenantAccountManagementRepository(
           and(
             eq(tenantMembers.tenantId, tenantContacts.tenantId),
             eq(tenantMembers.userId, authUsers.id),
+            eq(tenantMembers.lifecycleStatus, 'active'),
           ),
         )
         .where(eq(tenantContacts.tenantId, tenantId))

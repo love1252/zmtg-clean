@@ -1,14 +1,55 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
-import type {
-  CurrentInstitutionMembershipFactRow,
-} from '@/modules/auth/server/auth-account-repository';
+const readerProvenance = vi.hoisted(() => ({
+  identity: new WeakSet<object>(),
+  membership: new WeakSet<object>(),
+}));
+
+vi.mock(
+  '@/modules/auth/application/authoritative-formal-session-identity-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/auth/application/authoritative-formal-session-identity-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeFormalSessionIdentityFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.identity.has(value);
+      },
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/access-control/application/authoritative-membership-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/access-control/application/authoritative-membership-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeMembershipFactReaderV1(value: unknown) {
+        return (
+          value !== null &&
+          typeof value === 'object' &&
+          readerProvenance.membership.has(value)
+        );
+      },
+    };
+  },
+);
+
+import type { AuthoritativeMembershipFactReaderV1 as AuthoritativeInstitutionMembershipFactReaderV1 } from '@/modules/access-control/ports/authoritative-membership-reader';
+import type { AuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/ports/authoritative-formal-session-identity-reader';
+import { MEMBERSHIP_MAX_REVISION } from '@/modules/access-control/domain/membership-lifecycle';
 import {
-  createAuthoritativeInstitutionMembershipFactReaderV1,
+  createAuthoritativeInstitutionMembershipFactReaderV1 as createUnbrandedMembershipFactReaderV1,
+  type CurrentInstitutionMembershipFactRow,
+  type InstitutionMembershipFactRepositoryV1,
+} from '@/modules/access-control/server/authoritative-membership-reader';
+import {
   createRequestBoundFreshActiveMembershipProviderV1,
   isFreshActiveMembershipProviderV1,
-  type AuthoritativeInstitutionMembershipFactReaderV1,
-  type InstitutionMembershipFactRepositoryV1,
 } from '@/modules/security/server/institution-membership-provider';
 import {
   createInstitutionGuardReferenceCodecV1,
@@ -22,17 +63,34 @@ import {
 } from '@/modules/security/server/institution-guard-evidence';
 
 const NOW = new Date('2026-07-18T08:00:00.000Z');
+const LEGACY_MEMBERSHIP_COMMAND_ID = `mcal1_${'a'.repeat(64)}`;
+const RUNTIME_MEMBERSHIP_COMMAND_ID = `mcmd1_${'A'.repeat(43)}`;
+
+function createAuthoritativeInstitutionMembershipFactReaderV1(
+  input: Parameters<typeof createUnbrandedMembershipFactReaderV1>[0],
+) {
+  const reader = createUnbrandedMembershipFactReaderV1(input);
+  readerProvenance.membership.add(reader);
+  return reader;
+}
 
 const currentRow: CurrentInstitutionMembershipFactRow = {
   accountId: 'auth-user-chenlei',
-  accountStatus: 'active',
-  accountPasswordResetRequired: false,
-  accountLockedUntil: null,
   membershipId: 'tenant-member-chenlei',
   membershipTenantId: 'tenant-zhengpu',
   membershipUserId: 'auth-user-chenlei',
   membershipRole: 'tenant_admin',
-  membershipUpdatedAt: new Date('2026-07-18T07:58:00.000Z'),
+  membershipDisplayName: '陈蕾',
+  membershipRevision: 1,
+  membershipLifecycleStatus: 'active',
+  membershipProvenanceSource: 'legacy_calibration',
+  membershipProvenanceActorId: null,
+  membershipProvenanceReasonCode: 'legacy_unknown',
+  membershipProvenanceCommandId: LEGACY_MEMBERSHIP_COMMAND_ID,
+  membershipProvenanceOccurredAt: null,
+  membershipProvenanceRecordedAt: new Date('2026-07-18T07:58:00.000Z'),
+  membershipRevokedAt: null,
+  membershipDeletedAt: null,
   bindingId: 'auth-binding-chenlei',
   bindingAccountId: 'auth-user-chenlei',
   bindingTenantId: 'tenant-zhengpu',
@@ -50,6 +108,33 @@ const requestedMembership = Object.freeze({
   tenantId: 'tenant-zhengpu',
   institutionId: 'institution-zhengpu',
 });
+
+function identityFact(
+  accountId = currentRow.accountId,
+  overrides: Partial<{
+    username: string;
+    displayName: string;
+  }> = {},
+) {
+  return Object.freeze({
+    kind: 'current_identity_fact' as const,
+    accountId,
+    username: overrides.username ?? 'membership_operator',
+    displayName: overrides.displayName ?? '成员操作员',
+    status: 'active' as const,
+    observedAt: NOW.toISOString(),
+  });
+}
+
+function genuineIdentityReader(
+  resolve: AuthoritativeFormalSessionIdentityFactReaderV1['resolve'] = vi.fn(
+    async (input) => identityFact(input.accountId),
+  ),
+): AuthoritativeFormalSessionIdentityFactReaderV1 {
+  const reader = Object.freeze({ resolve });
+  readerProvenance.identity.add(reader);
+  return reader;
+}
 
 function createReader(input: {
   rows?: readonly CurrentInstitutionMembershipFactRow[];
@@ -102,6 +187,7 @@ describe('机构成员资格权威事实读取器', () => {
     expect(findCurrentInstitutionMembershipFacts).toHaveBeenCalledWith({
       accountId: 'auth-user-chenlei',
       tenantId: 'tenant-zhengpu',
+      institutionId: 'institution-zhengpu',
     });
     expect(result).toEqual({
       kind: 'current_membership_fact',
@@ -109,8 +195,10 @@ describe('机构成员资格权威事实读取器', () => {
       tenantId: 'tenant-zhengpu',
       institutionId: 'institution-zhengpu',
       role: 'tenant_admin',
+      membershipDisplayName: '陈蕾',
       membershipId: 'tenant-member-chenlei',
-      membershipRevisionAt: '2026-07-18T07:58:00.000Z',
+      membershipRevision: 1,
+      membershipLifecycleStatus: 'active',
       bindingId: 'auth-binding-chenlei',
       bindingRevision: 7,
       bindingRevisionAt: '2026-07-01T00:00:00.000Z',
@@ -138,18 +226,7 @@ describe('机构成员资格权威事实读取器', () => {
   });
 
   it.each([
-    ['账号不存在或租户成员不存在', []],
-    ['账号 disabled', [{ ...currentRow, accountStatus: 'disabled' }]],
-    ['账号 locked', [{ ...currentRow, accountStatus: 'locked' }]],
-    [
-      '账号 password_reset_required',
-      [{ ...currentRow, accountStatus: 'password_reset_required' }],
-    ],
-    ['账号仍要求重置密码', [{ ...currentRow, accountPasswordResetRequired: true }]],
-    [
-      '账号仍在锁定窗口',
-      [{ ...currentRow, accountLockedUntil: new Date('2026-07-18T08:01:00.000Z') }],
-    ],
+    ['租户成员不存在', []],
     ['没有 active 绑定', [bindingMissingRow()]],
     [
       '绑定属于其他机构',
@@ -172,9 +249,36 @@ describe('机构成员资格权威事实读取器', () => {
       [{ ...currentRow, bindingRevokedAt: new Date('2026-07-18T07:59:00.000Z') }],
     ],
     ['绑定状态已撤销', [{ ...currentRow, bindingStatus: 'revoked' }]],
-    ['平台管理员不是机构角色', [{ ...currentRow, membershipRole: 'platform_admin' }]],
-    ['平台运营不是机构角色', [{ ...currentRow, membershipRole: 'platform_operator' }]],
-    ['安全审计员不是机构角色', [{ ...currentRow, membershipRole: 'security_auditor' }]],
+    [
+      '成员已撤销',
+      [{
+        ...currentRow,
+        membershipRevision: 2,
+        membershipLifecycleStatus: 'revoked',
+        membershipProvenanceSource: 'access_control_command',
+        membershipProvenanceActorId: 'account-admin',
+        membershipProvenanceReasonCode: 'membership_revoked',
+        membershipProvenanceCommandId: RUNTIME_MEMBERSHIP_COMMAND_ID,
+        membershipProvenanceOccurredAt: new Date('2026-07-18T07:59:00.000Z'),
+        membershipProvenanceRecordedAt: new Date('2026-07-18T07:59:00.000Z'),
+        membershipRevokedAt: new Date('2026-07-18T07:59:00.000Z'),
+      }],
+    ],
+    [
+      '成员已删除',
+      [{
+        ...currentRow,
+        membershipRevision: 2,
+        membershipLifecycleStatus: 'deleted',
+        membershipProvenanceSource: 'access_control_command',
+        membershipProvenanceActorId: 'account-admin',
+        membershipProvenanceReasonCode: 'membership_deleted',
+        membershipProvenanceCommandId: RUNTIME_MEMBERSHIP_COMMAND_ID,
+        membershipProvenanceOccurredAt: new Date('2026-07-18T07:59:00.000Z'),
+        membershipProvenanceRecordedAt: new Date('2026-07-18T07:59:00.000Z'),
+        membershipDeletedAt: new Date('2026-07-18T07:59:00.000Z'),
+      }],
+    ],
   ] as const)('%s 时统一拒绝且不泄露细节', async (_label, rows) => {
     const { reader } = createReader({
       rows: rows as readonly CurrentInstitutionMembershipFactRow[],
@@ -183,6 +287,21 @@ describe('机构成员资格权威事实读取器', () => {
     await expect(reader.resolve(requestedMembership)).resolves.toEqual({
       kind: 'rejected',
       code: 'membership_denied',
+    });
+  });
+
+  it.each([
+    'platform_admin',
+    'platform_operator',
+    'security_auditor',
+  ] as const)('平台角色 %s 不是机构 Membership 角色并按无效事实拒绝', async (membershipRole) => {
+    const { reader } = createReader({
+      rows: [{ ...currentRow, membershipRole }],
+    });
+
+    await expect(reader.resolve(requestedMembership)).resolves.toEqual({
+      kind: 'rejected',
+      code: 'membership_invalid',
     });
   });
 
@@ -207,9 +326,57 @@ describe('机构成员资格权威事实读取器', () => {
     ],
     ['租户成员包含未知角色', [{ ...currentRow, membershipRole: 'unknown_role' }]],
     ['绑定版本非正整数', [{ ...currentRow, bindingVersion: 0 }]],
+    ['成员 revision 非正整数', [{ ...currentRow, membershipRevision: 0 }]],
     [
-      '成员更新时间晚于权威读取时间',
-      [{ ...currentRow, membershipUpdatedAt: new Date('2026-07-18T08:00:00.001Z') }],
+      '成员 revision 超过上限',
+      [{ ...currentRow, membershipRevision: MEMBERSHIP_MAX_REVISION + 1 }],
+    ],
+    ['成员生命周期缺失', [{ ...currentRow, membershipLifecycleStatus: null }]],
+    [
+      'legacy command ID 不规范',
+      [{ ...currentRow, membershipProvenanceCommandId: 'legacy-membership-a' }],
+    ],
+    [
+      'runtime command ID 不规范',
+      [{
+        ...currentRow,
+        membershipRevision: 2,
+        membershipProvenanceSource: 'access_control_command',
+        membershipProvenanceActorId: 'account-admin',
+        membershipProvenanceReasonCode: 'membership_refreshed',
+        membershipProvenanceCommandId: 'command-refresh-001',
+        membershipProvenanceOccurredAt: new Date('2026-07-18T07:59:00.000Z'),
+        membershipProvenanceRecordedAt: new Date('2026-07-18T07:59:00.000Z'),
+      }],
+    ],
+    [
+      'provenance reason code 不规范',
+      [{ ...currentRow, membershipProvenanceReasonCode: 'Membership.Refresh' }],
+    ],
+    [
+      'formal onboarding provenance 位于未来',
+      [{
+        ...currentRow,
+        membershipProvenanceSource: 'formal_onboarding',
+        membershipProvenanceActorId: 'account-admin',
+        membershipProvenanceReasonCode: 'membership_created',
+        membershipProvenanceCommandId: RUNTIME_MEMBERSHIP_COMMAND_ID,
+        membershipProvenanceOccurredAt: new Date('2026-07-18T08:00:00.001Z'),
+        membershipProvenanceRecordedAt: new Date('2026-07-18T08:00:00.001Z'),
+      }],
+    ],
+    [
+      'runtime provenance 位于未来',
+      [{
+        ...currentRow,
+        membershipRevision: 2,
+        membershipProvenanceSource: 'access_control_command',
+        membershipProvenanceActorId: 'account-admin',
+        membershipProvenanceReasonCode: 'membership_refreshed',
+        membershipProvenanceCommandId: RUNTIME_MEMBERSHIP_COMMAND_ID,
+        membershipProvenanceOccurredAt: new Date('2026-07-18T08:00:00.001Z'),
+        membershipProvenanceRecordedAt: new Date('2026-07-18T08:00:00.001Z'),
+      }],
     ],
     [
       '绑定字段部分缺失',
@@ -569,8 +736,14 @@ function createRequestBoundProvider(input: {
   codec?: InstitutionGuardReferenceCodecV1;
   now?: () => Date;
   accountId?: string;
+  identityResolve?: AuthoritativeFormalSessionIdentityFactReaderV1['resolve'];
 } = {}) {
   const fact = input.fact ?? {};
+  const membershipRevision =
+    typeof fact.membershipRevision === 'number'
+      ? fact.membershipRevision
+      : currentRow.membershipRevision;
+  const revisionChanged = membershipRevision !== 1;
   const row: CurrentInstitutionMembershipFactRow = {
     ...currentRow,
     membershipTenantId:
@@ -580,10 +753,29 @@ function createRequestBoundProvider(input: {
       currentRow.membershipRole,
     membershipId:
       typeof fact.membershipId === 'string' ? fact.membershipId : currentRow.membershipId,
-    membershipUpdatedAt:
-      typeof fact.membershipRevisionAt === 'string'
-        ? new Date(fact.membershipRevisionAt)
-        : currentRow.membershipUpdatedAt,
+    membershipRevision,
+    membershipLifecycleStatus:
+      typeof fact.membershipLifecycleStatus === 'string'
+        ? fact.membershipLifecycleStatus
+        : currentRow.membershipLifecycleStatus,
+    membershipProvenanceSource: revisionChanged
+      ? 'access_control_command'
+      : currentRow.membershipProvenanceSource,
+    membershipProvenanceActorId: revisionChanged
+      ? 'account-admin'
+      : currentRow.membershipProvenanceActorId,
+    membershipProvenanceReasonCode: revisionChanged
+      ? 'membership_refreshed'
+      : currentRow.membershipProvenanceReasonCode,
+    membershipProvenanceCommandId: revisionChanged
+      ? RUNTIME_MEMBERSHIP_COMMAND_ID
+      : currentRow.membershipProvenanceCommandId,
+    membershipProvenanceOccurredAt: revisionChanged
+      ? new Date('2026-07-18T07:59:00.000Z')
+      : currentRow.membershipProvenanceOccurredAt,
+    membershipProvenanceRecordedAt: revisionChanged
+      ? new Date('2026-07-18T07:59:00.000Z')
+      : currentRow.membershipProvenanceRecordedAt,
     bindingTenantId:
       typeof fact.tenantId === 'string' ? fact.tenantId : currentRow.bindingTenantId,
     bindingInstitutionId:
@@ -624,12 +816,16 @@ function createRequestBoundProvider(input: {
   const { reader: factReader, findCurrentInstitutionMembershipFacts } =
     createReader(readerInput);
   const codec = input.codec ?? createReferenceCodec();
+  const identityFactReader = genuineIdentityReader(input.identityResolve);
   return {
     codec,
     factReader,
+    identityFactReader,
+    resolveIdentity: identityFactReader.resolve,
     resolveFact: findCurrentInstitutionMembershipFacts,
     provider: createRequestBoundFreshActiveMembershipProviderV1({
       accountId: input.accountId ?? currentRow.accountId,
+      identityFactReader,
       factReader,
       referenceCodec: codec,
       now: input.now ?? (() => NOW),
@@ -714,6 +910,7 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     const codec = createReferenceCodec();
     const provider = createRequestBoundFreshActiveMembershipProviderV1({
       accountId: currentRow.accountId,
+      identityFactReader: genuineIdentityReader(),
       factReader: { resolve: 1 } as never,
       referenceCodec: codec,
       now: () => NOW,
@@ -740,6 +937,7 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     ]) {
       const provider = createRequestBoundFreshActiveMembershipProviderV1({
         accountId: currentRow.accountId,
+        identityFactReader: genuineIdentityReader(),
         factReader: factReader as unknown as AuthoritativeInstitutionMembershipFactReaderV1,
         referenceCodec: codec,
         now,
@@ -757,6 +955,7 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     const { reader, findCurrentInstitutionMembershipFacts } = createReader();
     const provider = createRequestBoundFreshActiveMembershipProviderV1({
       accountId: currentRow.accountId,
+      identityFactReader: genuineIdentityReader(),
       factReader: reader,
       referenceCodec: codec,
       now: () => NOW,
@@ -767,19 +966,21 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
       userReference: provenance(codec).userReference,
       membershipRevision: expect.stringMatching(/^mrv_v1_k1_[A-Za-z0-9_-]{43}$/u),
     });
-    expect(findCurrentInstitutionMembershipFacts).toHaveBeenCalledTimes(1);
+    expect(findCurrentInstitutionMembershipFacts).toHaveBeenCalledTimes(2);
   });
 
-  it('returns a nominal fresh-active result from one current reread and five all-or-none references', async () => {
-    const { codec, provider, resolveFact } = createRequestBoundProvider();
+  it('returns a nominal fresh-active result from two stable current snapshots and five all-or-none references', async () => {
+    const { codec, provider, resolveFact, resolveIdentity } = createRequestBoundProvider();
     expectTypeOf(provider).toMatchTypeOf<FreshActiveMembershipProviderV1>();
 
     const result = await provider.resolve(requestBoundInput(codec));
 
-    expect(resolveFact).toHaveBeenCalledTimes(1);
+    expect(resolveFact).toHaveBeenCalledTimes(2);
+    expect(resolveIdentity).toHaveBeenCalledTimes(2);
     expect(resolveFact).toHaveBeenCalledWith({
       accountId: currentRow.accountId,
       tenantId: currentRow.membershipTenantId,
+      institutionId: currentRow.bindingInstitutionId,
     });
     expect(result).toMatchObject({
       kind: 'fresh_active',
@@ -807,6 +1008,68 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     expect(serialized).not.toContain(currentRow.bindingId as string);
     expect(serialized).not.toContain('2026-07-18T07:58:00.000Z');
     expect(serialized).not.toContain('"bindingRevision":7');
+  });
+
+  it.each([
+    ['identity_denied', 'membership_denied'],
+    ['identity_invalid', 'membership_invalid'],
+    ['identity_unavailable', 'membership_unavailable'],
+  ] as const)(
+    'I1 %s 时映射为 %s 且零 Membership 读取',
+    async (identityCode, membershipCode) => {
+      const resolveIdentity = vi.fn<
+        AuthoritativeFormalSessionIdentityFactReaderV1['resolve']
+      >(async () => ({ kind: 'rejected', code: identityCode }));
+      const created = createRequestBoundProvider({ identityResolve: resolveIdentity });
+
+      await expect(
+        created.provider.resolve(requestBoundInput(created.codec)),
+      ).resolves.toEqual({ kind: 'rejected', code: membershipCode });
+      expect(resolveIdentity).toHaveBeenCalledTimes(1);
+      expect(created.resolveFact).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['identity_denied', 'membership_denied'],
+    ['identity_invalid', 'membership_invalid'],
+    ['identity_unavailable', 'membership_unavailable'],
+  ] as const)(
+    'I2 %s 时映射为 %s 且不发布事实',
+    async (identityCode, membershipCode) => {
+      const resolveIdentity = vi.fn<
+        AuthoritativeFormalSessionIdentityFactReaderV1['resolve']
+      >();
+      resolveIdentity
+        .mockResolvedValueOnce(identityFact())
+        .mockResolvedValueOnce({ kind: 'rejected', code: identityCode });
+      const created = createRequestBoundProvider({ identityResolve: resolveIdentity });
+
+      await expect(
+        created.provider.resolve(requestBoundInput(created.codec)),
+      ).resolves.toEqual({ kind: 'rejected', code: membershipCode });
+      expect(resolveIdentity).toHaveBeenCalledTimes(2);
+      expect(created.resolveFact).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each([
+    ['username', identityFact(currentRow.accountId, { username: 'other_operator' })],
+    ['displayName', identityFact(currentRow.accountId, { displayName: '另一操作员' })],
+  ] as const)('I1／I2 %s 漂移时返回 membership_stale', async (_field, secondFact) => {
+    const resolveIdentity = vi.fn<
+      AuthoritativeFormalSessionIdentityFactReaderV1['resolve']
+    >();
+    resolveIdentity
+      .mockResolvedValueOnce(identityFact())
+      .mockResolvedValueOnce(secondFact);
+    const created = createRequestBoundProvider({ identityResolve: resolveIdentity });
+
+    await expect(
+      created.provider.resolve(requestBoundInput(created.codec)),
+    ).resolves.toEqual({ kind: 'rejected', code: 'membership_stale' });
+    expect(resolveIdentity).toHaveBeenCalledTimes(2);
+    expect(created.resolveFact).toHaveBeenCalledTimes(2);
   });
 
   it('rejects a structural codec lookalike before method or fact access', async () => {
@@ -893,6 +1156,7 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     for (const factReader of fakeReaders) {
       const provider = createRequestBoundFreshActiveMembershipProviderV1({
         accountId: currentRow.accountId,
+        identityFactReader: genuineIdentityReader(),
         factReader: factReader as AuthoritativeInstitutionMembershipFactReaderV1,
         referenceCodec: realCodec,
         now,
@@ -905,6 +1169,7 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     for (const referenceCodec of fakeCodecs) {
       const provider = createRequestBoundFreshActiveMembershipProviderV1({
         accountId: currentRow.accountId,
+        identityFactReader: genuineIdentityReader(),
         factReader: realReader,
         referenceCodec: referenceCodec as InstitutionGuardReferenceCodecV1,
         now,
@@ -932,9 +1197,7 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     const membershipIdChanged = await resolveVariant({
       membershipId: 'tenant-member-other',
     });
-    const membershipRevisionChanged = await resolveVariant({
-      membershipRevisionAt: '2026-07-18T07:59:00.000Z',
-    });
+    const membershipRevisionChanged = await resolveVariant({ membershipRevision: 2 });
     const roleChanged = await resolveVariant({ role: 'consultant' });
     expect(
       new Set([
@@ -1013,7 +1276,7 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
   it.each([
     ['scope mismatch', { tenantId: 'tenant-other' }],
     ['unknown role', { role: 'unknown-role' }],
-    ['membership revision malformed', { membershipRevisionAt: 'not-an-instant' }],
+    ['membership revision malformed', { membershipRevision: 1.5 }],
     ['binding revision fractional', { bindingRevision: 1.5 }],
     ['binding revision time malformed', { bindingRevisionAt: 'not-an-instant' }],
   ] as const)('maps malformed current fact %s to membership_invalid', async (_label, fact) => {
@@ -1061,6 +1324,7 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
   it('rejects accessor, scalar and Proxy factory methods without reading or invoking them', async () => {
     const codec = createReferenceCodec();
     const factResolve = vi.fn(async () => ({}));
+    const identityResolve = vi.fn(async () => ({}));
     let getterReads = 0;
     let applyTraps = 0;
     const accessorMethod = (name: 'resolve' | 'issue' | 'verify') => {
@@ -1093,41 +1357,69 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
           throw new Error('proxy apply must not run');
         },
       });
-    const validReader = { resolve: factResolve };
-    const validCodec = { issue: codec.issue, verify: codec.verify };
+    const validReader = createReader().reader;
+    const validIdentityReader = genuineIdentityReader();
+    const validCodec = codec;
     const factories: unknown[] = [
       {
         accountId: currentRow.accountId,
+        identityFactReader: accessorMethod('resolve'),
+        factReader: validReader,
+        referenceCodec: validCodec,
+        now: () => NOW,
+      },
+      {
+        accountId: currentRow.accountId,
+        identityFactReader: { resolve: 1 },
+        factReader: validReader,
+        referenceCodec: validCodec,
+        now: () => NOW,
+      },
+      {
+        accountId: currentRow.accountId,
+        identityFactReader: { resolve: proxyMethod(identityResolve as never) },
+        factReader: validReader,
+        referenceCodec: validCodec,
+        now: () => NOW,
+      },
+      {
+        accountId: currentRow.accountId,
+        identityFactReader: validIdentityReader,
         factReader: accessorMethod('resolve'),
         referenceCodec: validCodec,
         now: () => NOW,
       },
       {
         accountId: currentRow.accountId,
+        identityFactReader: validIdentityReader,
         factReader: { resolve: 1 },
         referenceCodec: validCodec,
         now: () => NOW,
       },
       {
         accountId: currentRow.accountId,
+        identityFactReader: validIdentityReader,
         factReader: { resolve: proxyMethod(factResolve as never) },
         referenceCodec: validCodec,
         now: () => NOW,
       },
       {
         accountId: currentRow.accountId,
+        identityFactReader: validIdentityReader,
         factReader: validReader,
         referenceCodec: accessorCodec('issue'),
         now: () => NOW,
       },
       {
         accountId: currentRow.accountId,
+        identityFactReader: validIdentityReader,
         factReader: validReader,
         referenceCodec: { issue: 1, verify: codec.verify },
         now: () => NOW,
       },
       {
         accountId: currentRow.accountId,
+        identityFactReader: validIdentityReader,
         factReader: validReader,
         referenceCodec: {
           issue: proxyMethod(codec.issue as never),
@@ -1137,18 +1429,21 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
       },
       {
         accountId: currentRow.accountId,
+        identityFactReader: validIdentityReader,
         factReader: validReader,
         referenceCodec: accessorCodec('verify'),
         now: () => NOW,
       },
       {
         accountId: currentRow.accountId,
+        identityFactReader: validIdentityReader,
         factReader: validReader,
         referenceCodec: { issue: codec.issue, verify: 1 },
         now: () => NOW,
       },
       {
         accountId: currentRow.accountId,
+        identityFactReader: validIdentityReader,
         factReader: validReader,
         referenceCodec: {
           issue: codec.issue,
@@ -1158,12 +1453,14 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
       },
       {
         accountId: currentRow.accountId,
+        identityFactReader: validIdentityReader,
         factReader: validReader,
         referenceCodec: validCodec,
         now: 1,
       },
       {
         accountId: currentRow.accountId,
+        identityFactReader: validIdentityReader,
         factReader: validReader,
         referenceCodec: validCodec,
         now: proxyMethod((() => NOW) as never),
@@ -1171,6 +1468,7 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     ];
     const nowAccessorFactory = {
       accountId: currentRow.accountId,
+      identityFactReader: validIdentityReader,
       factReader: validReader,
       referenceCodec: validCodec,
     };
@@ -1196,6 +1494,7 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
     expect(getterReads).toBe(0);
     expect(applyTraps).toBe(0);
     expect(factResolve).not.toHaveBeenCalled();
+    expect(identityResolve).not.toHaveBeenCalled();
   });
 
   it('rejects caller account injection and hostile resolve inputs before reading facts', async () => {
@@ -1228,18 +1527,42 @@ describe('BASE-02B-MEMBERSHIP-02A request-bound owner composer', () => {
       .mockResolvedValueOnce([
         {
           ...currentRow,
-          membershipUpdatedAt: new Date('2026-07-18T07:58:00.000Z'),
+          membershipRevision: 1,
         },
       ])
       .mockResolvedValueOnce([
         {
           ...currentRow,
-          membershipUpdatedAt: new Date('2026-07-18T07:59:00.000Z'),
+          membershipRevision: 1,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          ...currentRow,
+          membershipRevision: 2,
+          membershipProvenanceSource: 'access_control_command',
+          membershipProvenanceActorId: 'account-admin',
+          membershipProvenanceReasonCode: 'membership_refreshed',
+          membershipProvenanceCommandId: RUNTIME_MEMBERSHIP_COMMAND_ID,
+          membershipProvenanceOccurredAt: new Date('2026-07-18T07:59:00.000Z'),
+          membershipProvenanceRecordedAt: new Date('2026-07-18T07:59:00.000Z'),
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          ...currentRow,
+          membershipRevision: 2,
+          membershipProvenanceSource: 'access_control_command',
+          membershipProvenanceActorId: 'account-admin',
+          membershipProvenanceReasonCode: 'membership_refreshed',
+          membershipProvenanceCommandId: RUNTIME_MEMBERSHIP_COMMAND_ID,
+          membershipProvenanceOccurredAt: new Date('2026-07-18T07:59:00.000Z'),
+          membershipProvenanceRecordedAt: new Date('2026-07-18T07:59:00.000Z'),
         },
       ]);
     const first = await created.provider.resolve(input);
     const second = await created.provider.resolve(input);
-    expect(created.resolveFact).toHaveBeenCalledTimes(2);
+    expect(created.resolveFact).toHaveBeenCalledTimes(4);
     expect(first).toMatchObject({ kind: 'fresh_active' });
     expect(second).toMatchObject({ kind: 'fresh_active' });
     if (first.kind !== 'fresh_active' || second.kind !== 'fresh_active') {

@@ -1,49 +1,8 @@
-import { and, eq } from 'drizzle-orm';
-
-import type { TenantDatabase } from '@/server/db/client';
-import { institutionScopes } from '@/server/db/schema';
-
-export type CurrentInstitutionAnchorFactRowV1 = Readonly<{
-  tenantId: string;
-  institutionId: string;
-  status: 'active' | 'suspended';
-  revision: number;
-}>;
-
-export type InstitutionAnchorFactRepositoryV1 = Readonly<{
-  findCurrentInstitutionAnchorFacts: (input: Readonly<{
-    tenantId: string;
-    institutionId: string;
-  }>) => Promise<CurrentInstitutionAnchorFactRowV1[]>;
-}>;
-
 /**
- * Reads only the low-sensitivity fields needed to revalidate an institution anchor. The
- * repository deliberately returns up to two rows so the owner reader can fail closed if a
- * supposedly unique scope is duplicated. It does not issue guard evidence or authorize access.
+ * 已退役：Security 不再暴露 Scope 数据库 Repository。Tenancy 是 Scope 原始事实的
+ * 唯一 Owner；Security 只能消费 Tenancy application Reader 的 genuine handle。
+ *
+ * 保留该空模块仅用于让历史路径以可审查方式失败关闭，不提供兼容 facade、类型或
+ * 数据库入口。
  */
-export function createInstitutionAnchorFactRepositoryV1(
-  database: TenantDatabase,
-): InstitutionAnchorFactRepositoryV1 {
-  return Object.freeze({
-    async findCurrentInstitutionAnchorFacts(input) {
-      const rows = await database
-        .select({
-          tenantId: institutionScopes.tenantId,
-          institutionId: institutionScopes.institutionId,
-          status: institutionScopes.status,
-          revision: institutionScopes.revision,
-        })
-        .from(institutionScopes)
-        .where(
-          and(
-            eq(institutionScopes.tenantId, input.tenantId),
-            eq(institutionScopes.institutionId, input.institutionId),
-          ),
-        )
-        .limit(2);
-
-      return rows as CurrentInstitutionAnchorFactRowV1[];
-    },
-  });
-}
+export {};

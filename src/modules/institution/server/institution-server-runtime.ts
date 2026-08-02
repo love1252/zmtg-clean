@@ -2,26 +2,26 @@ import { isProxy } from 'node:util/types';
 
 import { cookies } from 'next/headers';
 
-import { createAuthAccountRepository } from '@/modules/auth/server/auth-account-repository';
+import {
+  createAccessControlAuthoritativeMembershipFactReaderV1,
+} from '@/modules/access-control/application/authoritative-membership-reader';
+import { createIdentityAuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/application/authoritative-formal-session-identity-reader';
 import {
   createFormalServerSessionRequestOwnerV1,
   FORMAL_SERVER_SESSION_COOKIE_V1,
 } from '@/modules/auth/server/formal-server-session-provenance-owner';
 import {
   createActiveInstitutionAnchorProviderV1,
-  createAuthoritativeInstitutionAnchorFactReaderV1,
 } from '@/modules/security/server/institution-anchor-provider';
-import { createInstitutionAnchorFactRepositoryV1 } from '@/modules/security/server/institution-anchor-repository';
 import { INSTITUTION_GUARD_ACCEPTED_KEY_VERSIONS_V1 } from '@/modules/security/server/institution-guard-evidence';
 import { createInstitutionGuardReferenceCodecV1 } from '@/modules/security/server/institution-guard-reference';
 import { resolveInstitutionGuardRuntimeConfigV1 } from '@/modules/security/server/institution-guard-runtime-config';
-import { createAuthoritativeInstitutionMembershipFactReaderV1 } from '@/modules/security/server/institution-membership-provider';
 import {
   createInstitutionRequestAuthorizationV1,
   isInstitutionRequestAuthorizationV1,
   type InstitutionRequestAuthorizationV1,
 } from '@/modules/security/server/institution-request-authorization';
-import { getDatabase, type TenantDatabase } from '@/server/db/client';
+import { createTenancyAuthoritativeInstitutionScopeFactReaderV1 } from '@/modules/tenancy/application/authoritative-institution-scope-reader';
 
 const RUNTIME_CONFIG_KEYS = Object.freeze([
   'kind',
@@ -317,34 +317,6 @@ function snapshotAvailableRuntimeConfig(
   return value as AvailableRuntimeConfigV1;
 }
 
-function createDatabaseOnce(): () => TenantDatabase {
-  let state: 'pending' | 'resolved' | 'failed' = 'pending';
-  let database: TenantDatabase | null = null;
-  const unavailable = new Error('institution server database unavailable');
-
-  return () => {
-    if (state === 'resolved') return database as TenantDatabase;
-    if (state === 'failed') throw unavailable;
-
-    state = 'failed';
-    try {
-      const candidate: unknown = getDatabase();
-      if (
-        candidate === null ||
-        (typeof candidate !== 'object' && typeof candidate !== 'function') ||
-        isProxy(candidate)
-      ) {
-        throw unavailable;
-      }
-      database = candidate as TenantDatabase;
-      state = 'resolved';
-      return database;
-    } catch {
-      throw unavailable;
-    }
-  };
-}
-
 /**
  * Server-only institution authorization root. Configuration is validated before cookies, and
  * persistence remains lazy until a genuine authorization performs its first scope resolution.
@@ -378,35 +350,20 @@ export async function resolveInstitutionServerAuthorizationV1(): Promise<Institu
       keyRing: runtimeConfig.institutionGuardReferenceKeyRing,
       now,
     });
-    const databaseOnce = createDatabaseOnce();
     const membershipFactReader =
-      createAuthoritativeInstitutionMembershipFactReaderV1({
-        repository: Object.freeze({
-          async findCurrentInstitutionMembershipFacts(input) {
-            return createAuthAccountRepository(
-              databaseOnce(),
-            ).findCurrentInstitutionMembershipFacts(input);
-          },
-        }),
-        now,
-      });
+      createAccessControlAuthoritativeMembershipFactReaderV1();
+    const identityFactReader =
+      createIdentityAuthoritativeFormalSessionIdentityFactReaderV1();
     const requestOwner = createFormalServerSessionRequestOwnerV1({
       cookieHeader,
       sessionKeyRing: runtimeConfig.formalServerSessionKeyRing,
+      identityFactReader,
       membershipFactReader,
       referenceCodec,
       now,
     });
-    const anchorFactReader = createAuthoritativeInstitutionAnchorFactReaderV1({
-      repository: Object.freeze({
-        async findCurrentInstitutionAnchorFacts(input) {
-          return createInstitutionAnchorFactRepositoryV1(
-            databaseOnce(),
-          ).findCurrentInstitutionAnchorFacts(input);
-        },
-      }),
-      now,
-    });
+    const anchorFactReader =
+      createTenancyAuthoritativeInstitutionScopeFactReaderV1();
     const anchorProvider = createActiveInstitutionAnchorProviderV1({
       factReader: anchorFactReader,
       referenceCodec,

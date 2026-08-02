@@ -3,11 +3,64 @@ import { resolve } from 'node:path';
 
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
-import type { CurrentInstitutionMembershipFactRow } from '@/modules/auth/server/auth-account-repository';
+const readerProvenance = vi.hoisted(() => ({
+  identity: new WeakSet<object>(),
+  membership: new WeakSet<object>(),
+  scope: new WeakSet<object>(),
+}));
+
+vi.mock(
+  '@/modules/auth/application/authoritative-formal-session-identity-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/auth/application/authoritative-formal-session-identity-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeFormalSessionIdentityFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.identity.has(value);
+      },
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/access-control/application/authoritative-membership-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/access-control/application/authoritative-membership-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeMembershipFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.membership.has(value);
+      },
+    };
+  },
+);
+
+vi.mock(
+  '@/modules/tenancy/application/authoritative-institution-scope-reader',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@/modules/tenancy/application/authoritative-institution-scope-reader')
+    >();
+    return {
+      ...actual,
+      isAuthoritativeInstitutionScopeFactReaderV1(value: unknown) {
+        return value !== null && typeof value === 'object' && readerProvenance.scope.has(value);
+      },
+    };
+  },
+);
+
 import {
-  createActiveInstitutionAnchorProviderV1,
-  type AuthoritativeInstitutionAnchorFactReaderV1,
-} from '@/modules/security/server/institution-anchor-provider';
+  createAuthoritativeInstitutionMembershipFactReaderV1 as createUnbrandedMembershipFactReaderV1,
+  type CurrentInstitutionMembershipFactRow,
+} from '@/modules/access-control/server/authoritative-membership-reader';
+import type { AuthoritativeFormalSessionIdentityFactReaderV1 } from '@/modules/auth/ports/authoritative-formal-session-identity-reader';
+import { createActiveInstitutionAnchorProviderV1 } from '@/modules/security/server/institution-anchor-provider';
+import type { AuthoritativeInstitutionScopeFactReaderV1 } from '@/modules/tenancy/ports/authoritative-institution-scope-reader';
 import {
   createFormalRequestProvenanceResolverV1,
   type FormalRequestProvenanceOwnerInputV1,
@@ -27,7 +80,6 @@ import {
   type InstitutionGuardReferenceOwnerSubjectV1,
 } from '@/modules/security/server/institution-guard-reference';
 import {
-  createAuthoritativeInstitutionMembershipFactReaderV1,
   createRequestBoundFreshActiveMembershipProviderV1,
 } from '@/modules/security/server/institution-membership-provider';
 import {
@@ -38,6 +90,36 @@ import {
   type InstitutionScopeAllowV1,
   type InstitutionScopeGuardV1,
 } from '@/modules/security/server/institution-scope-guard';
+
+function createAuthoritativeInstitutionMembershipFactReaderV1(
+  input: Parameters<typeof createUnbrandedMembershipFactReaderV1>[0],
+) {
+  const reader = createUnbrandedMembershipFactReaderV1(input);
+  readerProvenance.membership.add(reader);
+  return reader;
+}
+
+function genuineScopeFactReaderForTest<T extends object>(reader: T): T {
+  readerProvenance.scope.add(reader);
+  return reader;
+}
+
+function genuineIdentityFactReaderForTest(
+  accountId: string,
+): AuthoritativeFormalSessionIdentityFactReaderV1 {
+  const reader = Object.freeze({
+    resolve: vi.fn(async () => ({
+      kind: 'current_identity_fact' as const,
+      accountId,
+      username: 'scope_operator',
+      displayName: '范围操作员',
+      status: 'active' as const,
+      observedAt: NOW.toISOString(),
+    })),
+  });
+  readerProvenance.identity.add(reader);
+  return reader;
+}
 
 const NOW = new Date('2026-07-22T08:00:30.000Z');
 const TOKEN = 'A'.repeat(43);
@@ -325,15 +407,22 @@ function ownerHarness(options: HarnessOptions = {}) {
   const membershipAccountId = options.membershipAccountId ?? 'account-a';
   const membershipRow: CurrentInstitutionMembershipFactRow = {
     accountId: membershipAccountId,
-    accountStatus: 'active',
-    accountPasswordResetRequired: false,
-    accountLockedUntil: null,
     membershipId: 'membership-a',
     membershipTenantId: membershipEvidence.tenantId as string,
     membershipUserId: membershipAccountId,
     membershipRole:
       membershipEvidence.role as CurrentInstitutionMembershipFactRow['membershipRole'],
-    membershipUpdatedAt: new Date('2026-07-22T07:58:00.000Z'),
+    membershipDisplayName: '机构成员',
+    membershipRevision: 1,
+    membershipLifecycleStatus: 'active',
+    membershipProvenanceSource: 'legacy_calibration',
+    membershipProvenanceActorId: null,
+    membershipProvenanceReasonCode: 'legacy_unknown',
+    membershipProvenanceCommandId: `mcal1_${'e'.repeat(64)}`,
+    membershipProvenanceOccurredAt: null,
+    membershipProvenanceRecordedAt: new Date('2026-07-22T07:58:00.000Z'),
+    membershipRevokedAt: null,
+    membershipDeletedAt: null,
     bindingId: 'binding-a',
     bindingAccountId: membershipAccountId,
     bindingTenantId: membershipEvidence.tenantId as string,
@@ -379,6 +468,7 @@ function ownerHarness(options: HarnessOptions = {}) {
   const membershipProvider =
     createRequestBoundFreshActiveMembershipProviderV1({
       accountId: membershipAccountId,
+      identityFactReader: genuineIdentityFactReaderForTest(membershipAccountId),
       factReader: membershipFactReader,
       referenceCodec: membershipCodec,
       now: options.membershipNow ?? (() => NOW),
@@ -402,11 +492,13 @@ function ownerHarness(options: HarnessOptions = {}) {
     options.order?.push('anchor');
     if (options.anchorError !== undefined) throw options.anchorError;
     if (anchorTtlIsInvalid) return Object.freeze({ kind: 'invalid' }) as never;
-    if (
-      anchorResolution?.kind === 'denied' ||
-      anchorResolution?.kind === 'unavailable' ||
-      anchorResolution?.kind === 'unknown'
-    ) {
+    if (anchorResolution?.kind === 'denied') {
+      return Object.freeze({ kind: 'rejected', code: 'scope_denied' }) as never;
+    }
+    if (anchorResolution?.kind === 'unavailable') {
+      return Object.freeze({ kind: 'rejected', code: 'scope_unavailable' }) as never;
+    }
+    if (anchorResolution?.kind === 'unknown') {
       return options.anchorResolution as never;
     }
     const observedAt =
@@ -416,17 +508,20 @@ function ownerHarness(options: HarnessOptions = {}) {
         ? new Date(Date.parse(anchorEvidence.freshUntil) - 60_000).toISOString()
         : anchorObservedAt;
     return Object.freeze({
-      kind: 'current_anchor_fact',
+      kind: 'current_scope_fact',
       tenantId: anchorEvidence.tenantId,
       institutionId: anchorEvidence.institutionId,
+      status: 'active',
       revision: 7,
       observedAt,
     }) as never;
   });
   const anchorProvider = createActiveInstitutionAnchorProviderV1({
-    factReader: Object.freeze({
-      resolve: resolveAnchorFact,
-    }) as AuthoritativeInstitutionAnchorFactReaderV1,
+    factReader: genuineScopeFactReaderForTest(
+      Object.freeze({
+        resolve: resolveAnchorFact,
+      }) as AuthoritativeInstitutionScopeFactReaderV1,
+    ),
     referenceCodec: anchorCodec,
     now: options.anchorNow ?? (() => NOW),
   });
@@ -449,6 +544,7 @@ function ownerHarness(options: HarnessOptions = {}) {
     ]),
     provenanceNow,
     resolveMembershipFact,
+    membershipRow,
     resolveAnchorFact,
     resolveCurrentRequest: provenanceNow,
     resolveMembership: resolveMembershipFact,
@@ -721,7 +817,7 @@ describe('BASE-02B institution scope guard composition', () => {
         code: 'institution_anchor_unavailable',
       });
       expect(harness.resolveCurrentRequest).toHaveBeenCalledTimes(1);
-      expect(harness.resolveMembership).toHaveBeenCalledTimes(1);
+      expect(harness.resolveMembership).toHaveBeenCalledTimes(2);
       expect(lookalike.fakeMethod).not.toHaveBeenCalled();
       expect(lookalike.getterReads()).toBe(0);
       expect(lookalike.proxyTraps()).toBe(0);
@@ -846,16 +942,97 @@ describe('BASE-02B institution scope guard composition', () => {
       tenantId: 'tenant-owner',
       institutionId: 'institution-owner',
     });
-    expect(calls).toEqual(['provenance', 'membership', 'anchor']);
+    expect(calls).toEqual([
+      'provenance',
+      'membership',
+      'membership',
+      'anchor',
+      'anchor',
+      'membership',
+      'membership',
+    ]);
     expect(harness.resolveMembership).toHaveBeenCalledWith({
       accountId: 'account-a',
       tenantId: 'tenant-owner',
+      institutionId: 'institution-owner',
     });
     expect(harness.resolveAnchor).toHaveBeenCalledWith({
       tenantId: 'tenant-owner',
       institutionId: 'institution-owner',
     });
   });
+
+  it.each([
+    ['stale', 1, 2],
+    ['future', 2, 1],
+  ] as const)(
+    'fails closed when the request-bound expected reference becomes %s',
+    async (_label, expectedRevision, currentRevision) => {
+      const harness = ownerHarness();
+      const revisionRow = (revision: number) =>
+        revision === 1
+          ? { ...harness.membershipRow, membershipRevision: 1 }
+          : {
+              ...harness.membershipRow,
+              membershipRevision: revision,
+              membershipProvenanceSource: 'access_control_command',
+              membershipProvenanceActorId: 'account-admin',
+              membershipProvenanceReasonCode: 'membership_refreshed',
+              membershipProvenanceCommandId: `mcmd1_${'A'.repeat(43)}`,
+              membershipProvenanceOccurredAt: new Date(
+                '2026-07-22T07:59:00.000Z',
+              ),
+              membershipProvenanceRecordedAt: new Date(
+                '2026-07-22T07:59:00.000Z',
+              ),
+            };
+      harness.resolveMembershipFact
+        .mockResolvedValueOnce([revisionRow(expectedRevision)])
+        .mockResolvedValueOnce([revisionRow(currentRevision)]);
+
+      await expect(
+        harness.guard.authorizeCurrentRequest(),
+      ).resolves.toEqual({ kind: 'rejected', code: 'membership_stale' });
+      expect(harness.resolveMembershipFact).toHaveBeenCalledTimes(2);
+      expect(harness.resolveAnchorFact).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['revoked', 'deleted'] as const)(
+    'fails closed when the second current read becomes %s',
+    async (lifecycleStatus) => {
+      const harness = ownerHarness();
+      const occurredAt = new Date('2026-07-22T07:59:00.000Z');
+      harness.resolveMembershipFact
+        .mockResolvedValueOnce([harness.membershipRow])
+        .mockResolvedValueOnce([
+          {
+            ...harness.membershipRow,
+            membershipRevision: 2,
+            membershipLifecycleStatus: lifecycleStatus,
+            membershipProvenanceSource: 'access_control_command',
+            membershipProvenanceActorId: 'account-admin',
+            membershipProvenanceReasonCode:
+              lifecycleStatus === 'revoked'
+                ? 'membership_revoked'
+                : 'membership_deleted',
+            membershipProvenanceCommandId: `mcmd1_${'A'.repeat(43)}`,
+            membershipProvenanceOccurredAt: occurredAt,
+            membershipProvenanceRecordedAt: occurredAt,
+            membershipRevokedAt:
+              lifecycleStatus === 'revoked' ? occurredAt : null,
+            membershipDeletedAt:
+              lifecycleStatus === 'deleted' ? occurredAt : null,
+          },
+        ]);
+
+      await expect(
+        harness.guard.authorizeCurrentRequest(),
+      ).resolves.toEqual({ kind: 'rejected', code: 'membership_denied' });
+      expect(harness.resolveMembershipFact).toHaveBeenCalledTimes(2);
+      expect(harness.resolveAnchorFact).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['provenance_missing', 'provenance_missing'],
@@ -974,8 +1151,8 @@ describe('BASE-02B institution scope guard composition', () => {
       code: 'provenance_source_denied',
     });
     expect(harness.resolveCurrentRequest).toHaveBeenCalledTimes(1);
-    expect(harness.resolveMembership).toHaveBeenCalledTimes(1);
-    expect(harness.resolveAnchor).toHaveBeenCalledTimes(1);
+    expect(harness.resolveMembership).toHaveBeenCalledTimes(4);
+    expect(harness.resolveAnchor).toHaveBeenCalledTimes(2);
   });
 
   it.each([
@@ -1186,12 +1363,75 @@ describe('BASE-02B institution scope guard composition', () => {
     ).resolves.toEqual({ kind: 'rejected', code });
   });
 
-  it('uses one trusted clock snapshot per authorization', async () => {
+  it('uses three monotonic trusted clock checkpoints per authorization', async () => {
     const now = vi.fn(() => NOW);
     await expect(
       ownerHarness({ now }).guard.authorizeCurrentRequest(),
     ).resolves.toMatchObject({ kind: 'institution_scope_allow' });
-    expect(now).toHaveBeenCalledTimes(1);
+    expect(now).toHaveBeenCalledTimes(3);
+  });
+
+  it('accepts facts observed after earlier checkpoints but before their read completes', async () => {
+    const checkpoints = [
+      new Date('2026-07-22T08:00:30.000Z'),
+      new Date('2026-07-22T08:00:30.010Z'),
+      new Date('2026-07-22T08:00:30.020Z'),
+    ];
+    const now = vi.fn(() => checkpoints.shift() ?? new Date(Number.NaN));
+    const result = await ownerHarness({
+      now,
+      membershipNow: () => new Date('2026-07-22T08:00:30.010Z'),
+      anchorNow: () => new Date('2026-07-22T08:00:30.020Z'),
+      membershipResolution: membership({
+        observedAt: '2026-07-22T08:00:30.005Z',
+        freshUntil: '2026-07-22T08:01:30.005Z',
+      }),
+      anchorResolution: anchor({
+        observedAt: '2026-07-22T08:00:30.015Z',
+        freshUntil: '2026-07-22T08:01:30.015Z',
+      }),
+    }).guard.authorizeCurrentRequest();
+
+    expect(result).toMatchObject({
+      kind: 'institution_scope_allow',
+      decidedAt: '2026-07-22T08:00:30.020Z',
+    });
+    expect(now).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    ['invalid second checkpoint', [NOW, new Date(Number.NaN)], 'membership_unavailable'],
+    [
+      'second checkpoint rollback',
+      [NOW, new Date('2026-07-22T08:00:29.999Z')],
+      'membership_unavailable',
+    ],
+    [
+      'invalid final checkpoint',
+      [NOW, NOW, new Date(Number.NaN)],
+      'institution_anchor_unavailable',
+    ],
+    [
+      'final checkpoint rollback',
+      [NOW, NOW, new Date('2026-07-22T08:00:29.999Z')],
+      'institution_anchor_unavailable',
+    ],
+  ] as const)('fails closed for %s', async (_label, values, code) => {
+    const queue = [...values];
+    const now = vi.fn(() => queue.shift() ?? new Date(Number.NaN));
+    const harness = ownerHarness({ now });
+
+    await expect(harness.guard.authorizeCurrentRequest()).resolves.toEqual({
+      kind: 'rejected',
+      code,
+    });
+    if (code === 'membership_unavailable') {
+      expect(harness.resolveAnchorFact).not.toHaveBeenCalled();
+      expect(harness.resolveMembershipFact).toHaveBeenCalledTimes(2);
+    } else {
+      expect(harness.resolveAnchorFact).toHaveBeenCalledTimes(2);
+      expect(harness.resolveMembershipFact).toHaveBeenCalledTimes(4);
+    }
   });
 
   it.each([
