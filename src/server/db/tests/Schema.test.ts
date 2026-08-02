@@ -4867,7 +4867,8 @@ describe('数据库结构', () => {
       when: 1785656610916,
       breakpoints: true,
     });
-    expect(journal.entries.at(-1)).toEqual(migrationEntry);
+    expect(journal.entries[migrationEntry?.idx ?? -1]).toEqual(migrationEntry);
+    expect(journal.entries.filter((entry) => entry.tag === migrationStem)).toHaveLength(1);
     expect(predecessorEntry?.tag).toBe(
       '0042_base02_membership_revision_high_water_catch_up',
     );
@@ -5008,6 +5009,82 @@ describe('数据库结构', () => {
     );
     expect(sqlWithoutStringLiterals).not.toMatch(
       /drop\s+(table|type|index|schema)|create\s+(table|type|index|schema|trigger|function)/iu,
+    );
+  });
+});
+
+describe('BASE-B2 Binding transition evidence Expand Schema', () => {
+  it('定义独立 Binding transition evidence 表与 accepted 枚举', () => {
+    const schemaModule = schema as typeof schema & Record<string, unknown>;
+    const transitionEnum = schemaModule.authInstitutionBindingTransitionTypeEnum as
+      | { enumValues?: string[] }
+      | undefined;
+    const transitionTable = schemaModule.authAccountInstitutionBindingTransitions;
+
+    expect(transitionEnum?.enumValues).toEqual([
+      'create',
+      'rebind',
+      'revoke',
+      'expire',
+      'legacy_calibration',
+    ]);
+    expect(transitionTable).toBeDefined();
+
+    const transitionColumns = columnNames(getTableConfig(transitionTable as never).columns);
+    expect(transitionColumns).toEqual([
+      'id',
+      'tenant_id',
+      'binding_id',
+      'replacement_binding_id',
+      'command_id',
+      'transition_type',
+      'provenance_source',
+      'assignment_source',
+      'actor_id',
+      'reason_code',
+      'from_status',
+      'to_status',
+      'from_version',
+      'to_version',
+      'membership_revision',
+      'scope_revision',
+      'occurred_at',
+      'recorded_at',
+    ]);
+  });
+
+  it('Binding transition Expand Migration 锁定不可变历史且不夹带业务 DML', () => {
+    const migrationSql = readMigrationSql('base02_binding_transition_expand');
+
+    expect(migrationSql).toContain(
+      'create table "public"."auth_account_institution_binding_transitions"',
+    );
+    expect(migrationSql).toContain(
+      'create type "public"."auth_institution_binding_transition_type"',
+    );
+    expect(migrationSql).toContain(
+      'auth_account_institution_bindings_tenant_id_id_unique',
+    );
+    expect(migrationSql).toContain('auth_binding_transitions_tenant_command_unique');
+    expect(migrationSql).toContain('auth_binding_transitions_binding_version_unique');
+    expect(migrationSql).toContain('auth_binding_transitions_reject_row_mutation');
+    expect(migrationSql).toContain('auth_binding_transitions_reject_truncate');
+    expect(migrationSql).toContain('auth_binding_current_enforce_update');
+    expect(migrationSql).toContain('auth_binding_current_reject_delete');
+    expect(migrationSql).toContain('auth_binding_current_reject_truncate');
+    expect(migrationSql).toContain(
+      'array_agg(enum_value.enumlabel::text order by enum_value.enumsortorder)',
+    );
+    expect(migrationSql).not.toContain(
+      'array_agg(enum_value.enumlabel order by enum_value.enumsortorder)',
+    );
+    expect(migrationSql).not.toContain('validate constraint');
+    expect(migrationSql).not.toContain('create index concurrently');
+    expect(migrationSql).not.toMatch(
+      /\b(?:insert\s+into|delete\s+from|truncate\s+table)\s+"?public"?\."?auth_account_institution_bindings"?/u,
+    );
+    expect(migrationSql).not.toMatch(
+      /\bupdate\s+"?public"?\."?auth_account_institution_bindings"?\s+set\b/u,
     );
   });
 });

@@ -127,6 +127,10 @@ export const authInstitutionBindingSourceEnum = pgEnum(
   'auth_institution_binding_source',
   ['manual_admin', 'migration_placeholder', 'system'],
 );
+export const authInstitutionBindingTransitionTypeEnum = pgEnum(
+  'auth_institution_binding_transition_type',
+  ['create', 'rebind', 'revoke', 'expire', 'legacy_calibration'],
+);
 export const institutionScopeStatusEnum = pgEnum('institution_scope_status', [
   'active',
   'suspended',
@@ -1141,6 +1145,9 @@ export const authAccountInstitutionBindings = pgTable(
     ...timestamps,
   },
   (table) => ({
+    tenantIdIdUnique: unique(
+      'auth_account_institution_bindings_tenant_id_id_unique',
+    ).on(table.tenantId, table.id),
     tenantAccountFk: foreignKey({
       name: 'auth_account_institution_bindings_tenant_account_fk',
       columns: [table.tenantId, table.accountId],
@@ -1178,6 +1185,152 @@ export const authAccountInstitutionBindings = pgTable(
     versionPositiveCheck: check(
       'auth_account_institution_bindings_version_positive_check',
       sql`${table.version} > 0`,
+    ),
+  }),
+);
+
+
+export const authAccountInstitutionBindingTransitions = pgTable(
+  'auth_account_institution_binding_transitions',
+  {
+    id: varchar('id', { length: 96 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 64 }).notNull(),
+    bindingId: varchar('binding_id', { length: 64 }).notNull(),
+    replacementBindingId: varchar('replacement_binding_id', { length: 64 }),
+    commandId: varchar('command_id', { length: 128 }).notNull(),
+    transitionType: authInstitutionBindingTransitionTypeEnum('transition_type').notNull(),
+    provenanceSource: membershipProvenanceSourceEnum('provenance_source').notNull(),
+    assignmentSource: authInstitutionBindingSourceEnum('assignment_source').notNull(),
+    actorId: varchar('actor_id', { length: 96 }),
+    reasonCode: varchar('reason_code', { length: 96 }).notNull(),
+    fromStatus: authInstitutionBindingStatusEnum('from_status'),
+    toStatus: authInstitutionBindingStatusEnum('to_status').notNull(),
+    fromVersion: integer('from_version'),
+    toVersion: integer('to_version').notNull(),
+    membershipRevision: integer('membership_revision').notNull(),
+    scopeRevision: integer('scope_revision'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    tenantBindingFk: foreignKey({
+      name: 'auth_binding_transitions_binding_fk',
+      columns: [table.tenantId, table.bindingId],
+      foreignColumns: [
+        authAccountInstitutionBindings.tenantId,
+        authAccountInstitutionBindings.id,
+      ],
+    })
+      .onUpdate('no action')
+      .onDelete('no action'),
+    tenantReplacementBindingFk: foreignKey({
+      name: 'auth_binding_transitions_replacement_fk',
+      columns: [table.tenantId, table.replacementBindingId],
+      foreignColumns: [
+        authAccountInstitutionBindings.tenantId,
+        authAccountInstitutionBindings.id,
+      ],
+    })
+      .onUpdate('no action')
+      .onDelete('no action'),
+    tenantCommandUnique: unique(
+      'auth_binding_transitions_tenant_command_unique',
+    ).on(table.tenantId, table.commandId),
+    bindingVersionUnique: unique(
+      'auth_binding_transitions_binding_version_unique',
+    ).on(table.bindingId, table.toVersion),
+    tenantBindingVersionIdx: index(
+      'auth_binding_transitions_tenant_binding_version_idx',
+    ).on(table.tenantId, table.bindingId, table.toVersion),
+    identityPresentCheck: check(
+      'auth_binding_transitions_identity_present_check',
+      sql`length(trim(${table.id})) > 0
+        AND length(trim(${table.commandId})) > 0
+        AND length(trim(${table.reasonCode})) > 0`,
+    ),
+    versionShapeCheck: check(
+      'auth_binding_transitions_version_shape_check',
+      sql`${table.toVersion} BETWEEN 1 AND 2147483647
+        AND ${table.membershipRevision} BETWEEN 1 AND 2147483647
+        AND (
+          (
+            ${table.transitionType} = 'create'
+            AND ${table.fromVersion} IS NULL
+            AND ${table.toVersion} = 1
+          ) OR (
+            ${table.transitionType} = 'legacy_calibration'
+            AND ${table.fromVersion} IS NULL
+          ) OR (
+            ${table.transitionType} IN ('rebind', 'revoke', 'expire')
+            AND ${table.fromVersion} BETWEEN 1 AND 2147483646
+            AND ${table.toVersion} = ${table.fromVersion} + 1
+          )
+        )`,
+    ),
+    statusShapeCheck: check(
+      'auth_binding_transitions_status_shape_check',
+      sql`(
+          ${table.transitionType} = 'create'
+          AND ${table.fromStatus} IS NULL
+          AND ${table.toStatus} = 'active'
+          AND ${table.replacementBindingId} IS NULL
+        ) OR (
+          ${table.transitionType} = 'legacy_calibration'
+          AND ${table.fromStatus} IS NULL
+          AND ${table.toStatus} IN ('active', 'revoked')
+          AND ${table.replacementBindingId} IS NULL
+        ) OR (
+          ${table.transitionType} = 'rebind'
+          AND ${table.fromStatus} = 'active'
+          AND ${table.toStatus} = 'revoked'
+          AND ${table.replacementBindingId} IS NOT NULL
+          AND ${table.replacementBindingId} <> ${table.bindingId}
+        ) OR (
+          ${table.transitionType} IN ('revoke', 'expire')
+          AND ${table.fromStatus} = 'active'
+          AND ${table.toStatus} = 'revoked'
+          AND ${table.replacementBindingId} IS NULL
+        )`,
+    ),
+    observationShapeCheck: check(
+      'auth_binding_transitions_observation_shape_check',
+      sql`(
+          ${table.transitionType} IN ('create', 'rebind')
+          AND ${table.scopeRevision} BETWEEN 1 AND 2147483647
+        ) OR (
+          ${table.transitionType} IN ('revoke', 'expire', 'legacy_calibration')
+          AND ${table.scopeRevision} IS NULL
+        )`,
+    ),
+    provenanceShapeCheck: check(
+      'auth_binding_transitions_provenance_shape_check',
+      sql`(
+          ${table.transitionType} = 'legacy_calibration'
+          AND ${table.provenanceSource} = 'legacy_calibration'
+          AND ${table.actorId} IS NULL
+          AND ${table.reasonCode} = 'legacy_unknown'
+          AND ${table.occurredAt} IS NULL
+        ) OR (
+          ${table.transitionType} = 'create'
+          AND ${table.provenanceSource} IN ('formal_onboarding', 'access_control_command')
+          AND ${table.assignmentSource} IN ('manual_admin', 'system')
+          AND ${table.actorId} IS NOT NULL
+          AND ${table.occurredAt} IS NOT NULL
+          AND ${table.recordedAt} >= ${table.occurredAt}
+        ) OR (
+          ${table.transitionType} = 'rebind'
+          AND ${table.provenanceSource} = 'access_control_command'
+          AND ${table.assignmentSource} IN ('manual_admin', 'system')
+          AND ${table.actorId} IS NOT NULL
+          AND ${table.occurredAt} IS NOT NULL
+          AND ${table.recordedAt} >= ${table.occurredAt}
+        ) OR (
+          ${table.transitionType} IN ('revoke', 'expire')
+          AND ${table.provenanceSource} = 'access_control_command'
+          AND ${table.actorId} IS NOT NULL
+          AND ${table.occurredAt} IS NOT NULL
+          AND ${table.recordedAt} >= ${table.occurredAt}
+        )`,
     ),
   }),
 );
