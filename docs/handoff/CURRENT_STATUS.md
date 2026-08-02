@@ -2,12 +2,12 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-02 BASE-B1 Owner／Port／revision 契约闭环完成状态
+## BASE-02 Binding provenance accepted decision handoff 状态
 
 - 更新日期：2026-08-02
-- 本轮 handoff 基线：`3a84c576f9c2a376c49964983d95cce9170164d6`
+- 本轮 handoff 基线：`85bac25f48f930f260dbed2ac9b8dd16b23cbe68`
 - 当前任务：`BASE-02 ULTRA：Membership Revision M0～M7、BASE-B1～B6 全链实施与最终收口`
-- 当前切片：BASE-B1 Owner／Port／revision 契约关闭证据、独立审查与 handoff
+- 当前切片：BASE-B2 reactivate 冲突保护、M09-A Binding provenance 接受、独立审查与 handoff
 - 正式任务编号：无；本轮未新增 `V2-*` 编号
 - M6 实施：PR #898，Head `e1cc9e4e97c18a80d3bf8ce55ed588b259898f19`，Run `30734941015`／Job `91461924228`，Merge Commit `fe79267264f228cac217908365aa42f3f7408109`
 - M6 实施独立审查：PR #899，Head `b105d566416b7d8ad5d10a38388c666d244a2f21`，Run `30735331035`／Job `91462991272`，Merge Commit `005f1bfee5e1d94b003feb47c5f1f091463c483c`
@@ -18,7 +18,10 @@
 - M7 handoff：PR #909，Head `3d627c3c90cbd9da205bd2eeff80ffaed11b90ec`，Run `30742856457`／Job `91483266364`，Merge Commit `af58246675787536b6439404582d0b320ab4eba8`
 - BASE-B1 契约关闭证据：PR #910，Head `5fc7234daf6dd67fcaea72747a859aa081621b58`，Run `30743380150`／Job `91484669720`，Merge Commit `e01f62a2c413cb563c1ac3433f5cbac684147503`
 - BASE-B1 独立审查：PR #911，Head `8c440bc11e7c656e40146a1ca07ba34b996b7265`，Run `30743753276`／Job `91485660898`，Merge Commit `3a84c576f9c2a376c49964983d95cce9170164d6`
-- PR #901～#911 的环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试与 build 均在各自冻结 Head 上实际执行并成功
+- BASE-B2 reactivate 安全修复：PR #913，Head `b2dec88dad1d5033fd09e4a861029864f0f58b11`，Run `30744780046`／Job `91488404398`，Merge Commit `3194bc53fa5e0291d4a74f838b33e658c139d9b7`
+- BASE-B2 M09-A accepted decision：PR #914，Head `599b38526232c9005a867a43820087f646b75e7f`，Run `30745547158`／Job `91490427015`，Merge Commit `edc0bd8b5dacce08612b65f2dd2618fea176de58`
+- BASE-B2 M09-A 独立审查：PR #915，Head `b874b819d3dfbb927f8e54d96fcb48e860030ad9`，Run `30745968589`／Job `91491518552`，Merge Commit `85bac25f48f930f260dbed2ac9b8dd16b23cbe68`
+- PR #901～#915 的环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试与 build 均在各自冻结 Head 上实际执行并成功
 - 本次四文件 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
 
 ### M6 current 终态
@@ -62,10 +65,20 @@
 - Owner 外 direct Membership Writer／Deleter 为 `0／0`；授权 `tenant_members.updated_at` 读取与时间戳兼容映射为 `0／0`
 - `operating_context_in_authorization_combination=false`、`second_authorization_fact_source_count=0`、`multiple_membership_selection=explicit_or_fail_closed`
 
+### BASE-B2 current 进度与 M09-A 完成门
+
+- PR #913 已在 Membership reactivate 的 transaction-bound UoW 内先锁定 active Binding；存在任何 status=`active` 的 Binding（包括业务时钟下已过期但尚未撤销的行）时，返回 `binding_active_conflict`，Membership／Binding／evidence 写入均为 `0`
+- M09-A 已接受：`auth_account_institution_bindings` 继续作为 Access Control 唯一 Binding canonical current／lifecycle history；Binding transition evidence 与 current 同 Owner、同事务、append-only，但不得回答 current 或成为第二套事实源
+- create／revoke／expire／rebind 与 Membership revoke／delete 联动均必须原子形成 current 和 transition evidence；rebind 只推进 Binding version，不推进 Membership revision
+- provenanceSource 与 assignmentSource 已拆分；受信任服务端时间、current tuple 不可变、legacy calibration Shape、`UNIQUE (tenant_id, command_id)` 与 AQ008 扩展均已绑定为后续物理实现门禁
+- 独立审查结论为 `base02_binding_provenance_acceptance_review=passed`，F01～F05 全部关闭
+- `binding_transition_evidence_required=true`、`binding_transition_evidence_schema_migration_required=true`、`binding_current_extra_revocation_columns_required=false`
+- Schema／Migration 前置预检尚未启动；BASE-B2 尚未完成，`eligible_for_base_b3=false`
+
 ### 持续阻断
 
 - M7 已完成；`0043` 已消费且不得改写，后续问题只能使用独立 forward-fix
-- M7 与 BASE-B1 均已关闭；BASE-B2～B6 均未启动
+- M7 与 BASE-B1 均已关闭；BASE-B2 已启动并完成 reactivate 冲突保护及 M09-A 决策接受，但 transition evidence 的物理模型、Migration、Writer、legacy calibration、AQ008 扩展、独立审查与 handoff 尚未完成；BASE-B3～B6 均未启动
 - active historical orphan 与 Scope relation orphan 保持 `1／1`，未修改、未授权修复
 - A2-P2 Scope FK 保持 `NOT VALID`／`convalidated=false`，未执行 `VALIDATE`
 - 项目级 Writer、Audit／模板、MIG-01B、MIG-01C 与业务 Reader 继续阻断
@@ -73,11 +86,11 @@
 
 ### 唯一下一任务
 
-- 任务名称：`BASE-B2 Membership／Binding 生命周期`
+- 任务名称：`BASE-B2 Binding transition evidence Schema／Migration 前置预检`
 - 任务编号：仓库尚无正式编号，本 handoff 不自行创造
 - 当前状态：本 handoff 合并前尚未启动；合并后按当前 ULTRA 用户授权继续
-- 任务边界：在 Access Control 单一 Owner 与既有 transaction-bound UoW 内补齐 standalone Binding create／rebind／revoke／expire；Membership revoke 必须同事务撤销 active Binding，reactivate 不得恢复 Binding，rebind 只推进 Binding version，多 Membership 必须显式 tenant／institution 或失败关闭
-- 不得夹带 historical orphan 修复、Scope 创建、FK `VALIDATE`、对象 Guard／Action Policy、项目级 Writer／Audit／MIG-01B／C 或业务 Reader；若需要新的 Schema、Migration 或第二事实源，必须按硬停止条件如实处理
+- 任务边界：只以单个 operations Markdown 冻结 Binding transition evidence 物理 Shape、不可变保护、同事务 Writer、legacy calibration、AQ008、完整影响面、Migration 切片、未来文件 allowlist、恢复点与 Lease 门禁；允许固定 localhost-only `local_acceptance` 显式 `READ ONLY` 低敏探针
+- 不得在预检中修改 Schema、Migration、journal、snapshot、Runtime、数据库、scripts、tests、CI、package 或 lock，不得预分配 Migration 编号或创建 Lease，也不得夹带 historical orphan 修复、Scope 创建、FK `VALIDATE`、BASE-B3、项目级 Writer／Audit／MIG-01B／C 或业务 Reader
 
 ```text
 membership_revision_direction=A-full_same_table_lifecycle
@@ -226,7 +239,20 @@ base_b1_independent_review=passed
 base_b1_complete=true
 base_b1_handoff_complete=true
 eligible_for_base_b2_after_handoff=true
-base_b2_started=false
+base_b2_started=true
+base_b2_authorized_under_ultra=true
+base_b2_reactivate_guard_complete=true
+base_b2_reactivate_guard_pr=913
+binding_provenance_decision=M09-A_accepted
+binding_provenance_acceptance_review=passed
+binding_transition_evidence_required=true
+binding_transition_evidence_schema_migration_required=true
+binding_current_extra_revocation_columns_required=false
+binding_transition_is_second_current=false
+eligible_for_binding_schema_migration_preflight_after_handoff=true
+binding_schema_migration_preflight_started=false
+binding_schema_migration_implementation_started=false
+base_b2_complete=false
 base_b3_started=false
 base_b4_started=false
 base_b5_started=false
@@ -239,7 +265,7 @@ a2_p2_scope_fk_validated=false
 project_writer_started=false
 business_reader_started=false
 eligible_for_reader=false
-next_task=BASE-B2 Membership／Binding 生命周期
+next_task=BASE-B2 Binding transition evidence Schema／Migration 前置预检
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```

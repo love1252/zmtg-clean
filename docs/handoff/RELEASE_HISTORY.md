@@ -996,3 +996,16 @@
 - 继承状态未变：环境 journal 为 `44／0043`、snapshot 为 `0026`、active historical orphan／Scope relation orphan 为 `1／1`，A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`。
 - BASE-B1 完成并收口；唯一下一任务冻结为 `BASE-B2 Membership／Binding 生命周期`。BASE-B2 尚未启动，本 handoff 合并后按当前 ULTRA 授权和动态硬门继续。
 - BASE-B3～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。
+
+## 2026-08-02：BASE-B2 reactivate 安全修复与 M09-A provenance 决策收口
+
+- PR #913 完成 Membership reactivate 的 active Binding 冲突保护，Head `b2dec88dad1d5033fd09e4a861029864f0f58b11`，Run `30744780046`／Job `91488404398`，Merge Commit `3194bc53fa5e0291d4a74f838b33e658c139d9b7`。
+- PR #913 在 transaction-bound UoW 内先锁定 active Binding；存在任何 status=`active` 的 Binding 时均以 `binding_active_conflict` 失败关闭，Membership／Binding／evidence 写入为 `0`。实现只修改 2 个 Access Control 文件，定向测试 `21／21`、相关测试 `53／53` 通过。
+- PR #914 接受 M09-A，Head `599b38526232c9005a867a43820087f646b75e7f`，Run `30745547158`／Job `91490427015`，Merge Commit `edc0bd8b5dacce08612b65f2dd2618fea176de58`。
+- M09-A 绑定 `auth_account_institution_bindings` 为 Access Control 唯一 Binding canonical current／lifecycle history；Binding transition evidence 与 current 同 Owner、同事务、append-only，但不得回答 current 或成为第二套事实源。M09-B 的 current 冗余 `revokedBy／reason／reboundFrom` 不作为 BASE-B2 最小硬门。
+- PR #915 完成独立审查，Head `b874b819d3dfbb927f8e54d96fcb48e860030ad9`，Run `30745968589`／Job `91491518552`，Merge Commit `85bac25f48f930f260dbed2ac9b8dd16b23cbe68`；结论为 `base02_binding_provenance_acceptance_review=passed`，F01～F05 全部关闭。
+- 已冻结 provenanceSource／assignmentSource 分离、expire 受信任服务端时间、current identity／assignment 不可变、legacy calibration Shape、`UNIQUE (tenant_id, command_id)`、同事务 evidence 与 AQ008 扩展门禁。
+- PR #914／#915 均为单文件 docs-only；Schema、Migration、journal、snapshot、数据库、Runtime、scripts、tests、CI、package 和 lock 修改为 `0`。
+- 继承状态未变：环境 journal 为 `44／0043`、snapshot 为 `0026`、active historical orphan／Scope relation orphan 为 `1／1`，A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`。
+- BASE-B2 已启动但尚未完成；唯一下一任务冻结为 `BASE-B2 Binding transition evidence Schema／Migration 前置预检`，handoff 合并后按当前 ULTRA 授权和动态硬门继续。
+- BASE-B3～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。
