@@ -950,3 +950,18 @@
 - 本次四文件 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
 - M5 完成并收口；唯一下一任务冻结为 `BASE-02 Membership Revision M6 Reader 从 updated_at 切换到显式 revision＋lifecycle`。M6 尚未启动，本 handoff 合并后按当前 ULTRA 授权和动态硬门继续。
 - M7、BASE-B1～B6、active historical orphan／Scope relation orphan 修复、A2-P2 FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。
+
+## 2026-08-02：BASE-02 Membership Revision M6 Reader／Session／Guard 切换收口
+
+- PR #898 完成 M6 authoritative Reader、Formal Session 与 Guard 切换，Head `e1cc9e4e97c18a80d3bf8ce55ed588b259898f19`，Run `30734941015`／Job `91461924228`，Merge Commit `fe79267264f228cac217908365aa42f3f7408109`。
+- PR #899 完成 M6 实施独立审查，重放后 Head `b105d566416b7d8ad5d10a38388c666d244a2f21`，Run `30735331035`／Job `91462991272`，Merge Commit `005f1bfee5e1d94b003feb47c5f1f091463c483c`；结论为 `m6_implementation_review=passed`。
+- 实施范围为单提交 42 文件：生产文件 24 个、测试文件 18 个；独立审查为单提交、单个 operations Markdown。
+- Access Control、Identity、Tenancy 分别提供 Membership／Binding、正式账号、Scope 的 genuine application Reader；Security 只消费 Owner Reader，不建立第二套事实源。
+- 正式登录、Session 恢复与受保护请求按 `Identity I1 → Membership／Binding M1 → Scope S1 → M2 → S2 → Identity I2` 双重读取，selector、lifecycle、revision、Binding version、Scope revision 或 Provider 漂移均 fail-closed。
+- `fresh_membership_reader_cutover=true`、`session_restore_refresh_reread=true`、`guard_reference_cutover=true`、`explicit_membership_revision_lifecycle_source=true`。
+- `authorization_tenant_members_updated_at_reads=0`、`authorization_membership_updated_at_compatibility_mappings=0`；通用更新时间列保留普通审计语义，不再承担授权 fallback。
+- M6 精确／支撑测试矩阵为 22 文件、755/755；完整测试为 430 文件、6341/6341；build 101/101。两个 PR 的 Required Check 均完整成功。
+- M6 未连接数据库，没有执行 DDL、DML、Migration、Seed 或 Lease；Schema、Migration、journal、snapshot、数据库、package、lock 与 CI Workflow 修改均为 `0`。
+- 继承状态未变：环境 journal 为 `43／0042`、snapshot 为 `0026`、Membership complete／transition／exact current-head 为 `1／1／1`、active historical orphan／Scope relation orphan 为 `1／1`，A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`。
+- M6 完成并收口；唯一下一任务冻结为 `BASE-02 Membership Revision M7 Enforce 与旧路径退出`。M7 尚未启动，本 handoff 合并后按当前 ULTRA 授权和动态硬门继续。
+- BASE-B1～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。
