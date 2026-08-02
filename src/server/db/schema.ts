@@ -915,18 +915,24 @@ export const tenantMembers = pgTable(
       .references(() => authUsers.id),
     role: authRoleEnum('role').notNull(),
     displayName: varchar('display_name', { length: 120 }).notNull(),
-    revision: integer('revision'),
-    lifecycleStatus: membershipLifecycleStatusEnum('lifecycle_status'),
-    currentProvenanceSource: membershipProvenanceSourceEnum('current_provenance_source'),
+    revision: integer('revision').notNull(),
+    lifecycleStatus: membershipLifecycleStatusEnum('lifecycle_status').notNull(),
+    currentProvenanceSource: membershipProvenanceSourceEnum(
+      'current_provenance_source',
+    ).notNull(),
     currentProvenanceActorId: varchar('current_provenance_actor_id', { length: 96 }),
-    currentProvenanceReasonCode: varchar('current_provenance_reason_code', { length: 96 }),
-    currentProvenanceCommandId: varchar('current_provenance_command_id', { length: 128 }),
+    currentProvenanceReasonCode: varchar('current_provenance_reason_code', {
+      length: 96,
+    }).notNull(),
+    currentProvenanceCommandId: varchar('current_provenance_command_id', {
+      length: 128,
+    }).notNull(),
     currentProvenanceOccurredAt: timestamp('current_provenance_occurred_at', {
       withTimezone: true,
     }),
     currentProvenanceRecordedAt: timestamp('current_provenance_recorded_at', {
       withTimezone: true,
-    }),
+    }).notNull(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     ...timestamps,
@@ -944,17 +950,6 @@ export const tenantMembers = pgTable(
     currentEnvelopeShapeCheck: check(
       'tenant_members_current_envelope_shape_check',
       sql`(
-        ${table.revision} IS NULL
-        AND ${table.lifecycleStatus} IS NULL
-        AND ${table.currentProvenanceSource} IS NULL
-        AND ${table.currentProvenanceActorId} IS NULL
-        AND ${table.currentProvenanceReasonCode} IS NULL
-        AND ${table.currentProvenanceCommandId} IS NULL
-        AND ${table.currentProvenanceOccurredAt} IS NULL
-        AND ${table.currentProvenanceRecordedAt} IS NULL
-        AND ${table.revokedAt} IS NULL
-        AND ${table.deletedAt} IS NULL
-      ) OR (
         ${table.revision} IS NOT NULL
         AND ${table.revision} BETWEEN 1 AND 2147483647
         AND ${table.lifecycleStatus} IS NOT NULL
