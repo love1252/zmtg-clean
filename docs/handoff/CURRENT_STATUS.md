@@ -1,276 +1,51 @@
 # 智美天工当前项目状态
 
+
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-02 Binding provenance accepted decision handoff 状态
+## BASE-02 Binding transition evidence 前置预检 handoff 状态
 
 - 更新日期：2026-08-02
-- 本轮 handoff 基线：`85bac25f48f930f260dbed2ac9b8dd16b23cbe68`
-- 当前任务：`BASE-02 ULTRA：Membership Revision M0～M7、BASE-B1～B6 全链实施与最终收口`
-- 当前切片：BASE-B2 reactivate 冲突保护、M09-A Binding provenance 接受、独立审查与 handoff
-- 正式任务编号：无；本轮未新增 `V2-*` 编号
-- M6 实施：PR #898，Head `e1cc9e4e97c18a80d3bf8ce55ed588b259898f19`，Run `30734941015`／Job `91461924228`，Merge Commit `fe79267264f228cac217908365aa42f3f7408109`
-- M6 实施独立审查：PR #899，Head `b105d566416b7d8ad5d10a38388c666d244a2f21`，Run `30735331035`／Job `91462991272`，Merge Commit `005f1bfee5e1d94b003feb47c5f1f091463c483c`
-- M7 前置 handoff 修正：PR #901，Head `7120e4d5f36e09b5b0121f4c2aafb58b8ddd2d3b`，Run `30736438955`／Job `91465972519`，Merge Commit `22a1e6cdba2b81fb8aa743c253cec1e66a28136b`
-- M7 写入契约实施／审查：PR #902／#903，Head `0b09b329012100386b8bc7638eaf818fb89cf8c6`／`2e22955c77e0d086e1de38ffe66adba930f6960a`，Run `30737402318`／`30737726950`，Job `91468617520`／`91469473175`，Merge Commit `24aba48ced5eb1c0588de88b45757958222cc010`／`5de9dc694b0de072eb68d43f2fbccab49c5bcb37`
-- M7 Schema／Migration 实施／审查：PR #904／#905，Head `f43ce1b9ba554ca034441440c1a57781cbddc198`／`7f39cc27c7cbfd5f9587cc8881d725f767a8ac27`，Run `30739072657`／`30739700515`，Job `91473075000`／`91474768876`，Merge Commit `65d12f7e0f9a47df3279a9052b9b21fb54a8e3ad`／`ffafaa8ac0c70f74cbf9b73ed0e43bd5aa7e6e56`
-- M7 执行证据／归因纠错／执行独立审查：PR #906／#907／#908，Head `097a0e837c7afaf4a89c818cf5c6860aac0f08c9`／`571bbbdc8fe0a3b881edff25d1fbe10c27c81bd6`／`1fccdb4a45b9d588c46745a57e2436ca12ef2cbb`，Run `30741583818`／`30741960782`／`30742394742`，Job `91479870752`／`91480843159`／`91482000103`，Merge Commit `58521283d6c28f3b7b6b0b4254109bb1340c5066`／`ceb7f8c3f75c06c93a845c2769cd59b199a46ebe`／`1ecc84f4e3749adbd15822582d992352340a1d44`
-- M7 handoff：PR #909，Head `3d627c3c90cbd9da205bd2eeff80ffaed11b90ec`，Run `30742856457`／Job `91483266364`，Merge Commit `af58246675787536b6439404582d0b320ab4eba8`
-- BASE-B1 契约关闭证据：PR #910，Head `5fc7234daf6dd67fcaea72747a859aa081621b58`，Run `30743380150`／Job `91484669720`，Merge Commit `e01f62a2c413cb563c1ac3433f5cbac684147503`
-- BASE-B1 独立审查：PR #911，Head `8c440bc11e7c656e40146a1ca07ba34b996b7265`，Run `30743753276`／Job `91485660898`，Merge Commit `3a84c576f9c2a376c49964983d95cce9170164d6`
-- BASE-B2 reactivate 安全修复：PR #913，Head `b2dec88dad1d5033fd09e4a861029864f0f58b11`，Run `30744780046`／Job `91488404398`，Merge Commit `3194bc53fa5e0291d4a74f838b33e658c139d9b7`
-- BASE-B2 M09-A accepted decision：PR #914，Head `599b38526232c9005a867a43820087f646b75e7f`，Run `30745547158`／Job `91490427015`，Merge Commit `edc0bd8b5dacce08612b65f2dd2618fea176de58`
-- BASE-B2 M09-A 独立审查：PR #915，Head `b874b819d3dfbb927f8e54d96fcb48e860030ad9`，Run `30745968589`／Job `91491518552`，Merge Commit `85bac25f48f930f260dbed2ac9b8dd16b23cbe68`
-- PR #901～#915 的环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试与 build 均在各自冻结 Head 上实际执行并成功
-- 本次四文件 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
-
-### M6 current 终态
-
-- 实施范围为单提交 42 文件：24 个生产文件、18 个测试文件；独立审查为单提交、单个 operations Markdown
-- Access Control、Identity、Tenancy 分别提供 Membership／Binding、正式账号、Scope 的 genuine application Reader；Security 只消费 Owner Reader
-- 正式登录、Session 恢复与受保护请求按 `Identity I1 → Membership／Binding M1 → Scope S1 → M2 → S2 → Identity I2` 双重读取并比较稳定事实
-- Membership revision、Binding version 与 Scope revision 保持三个独立版本域；selector 不一致、生命周期无效、版本漂移和 Provider 不可用均 fail-closed
-- Formal Session 只持久化 provenance 与账号／租户／机构 selector；Guard 对 identity／revision 只传播不透明 reference，并仅携带受控低敏 role、scope 与时效包络
-- 生产授权路径 `tenantMembers.updatedAt` 读取与 Membership 时间戳兼容映射均归零为 `0／0`
-- 次级配额与平台租户账号 Reader 只过滤 active Membership，不建立第二套 current，也不承担 Session／Guard 授权
-- M6 精确／支撑测试矩阵为 22 文件、755/755；完整测试为 430 文件、6341/6341；build 101/101
-- 仓库与固定环境的 M5 继承证据保持 journal `43／0042`、snapshot `0026`、Membership complete／transition／exact current-head `1／1／1`
-- active historical orphan／Scope relation orphan 保持 `1／1`；A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`
-- M6 未连接数据库、未创建 Migration Lease、未执行 DDL／DML、Migration、Seed、orphan 修复或 FK `VALIDATE`
-
-### M7 current 终态
-
-- `0043_base02_membership_revision_enforce` 已在固定 localhost-only `local_acceptance` 通过唯一一次 guarded `pnpm db:migrate` 执行；自动重试与第二次调用为 `0`
-- `planned／created／reused／conflict／unexpected=7／7／0／0／0`，执行结果确定；环境 journal 从 `43／0042` 推进到 `44／0043`，snapshot 保持 `0026`
-- 六个无条件 current envelope 列已为 `NOT NULL`，最终同名 CHECK 精确；transition DDL、Binding、Scope、Context 与 A2-P2 Scope FK 未变化
-- Membership complete／transition／exact current-head 为 `1／1／1`，Binding／Scope／Context Version／Context Head 为 `1／1／1／1`
-- 全部 `public` 表数据和序列的低敏稳定指纹未变化，业务 DML 为 `0`
-- active historical orphan／Scope relation orphan 保持 `1／1`；A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`
-- Allocation Lease 已释放；Execution Lease claim／consume／renewal／release／active 为 `1／1／0／1／0`
-- 执行前后恢复点均通过同集群空隔离数据库的选定 schema／data 恢复验证；该结论不扩大为 ACL、全局角色、异集群或完整灾备证明
-- PR #907 已关闭执行证据 Git 归因 F01；PR #908 结论为 `base02_membership_revision_m7_execution_review=passed`
-- 当前主动私有参数披露为 `0`；Secret、Token、密码、私钥、PII 与真实凭证披露为 `0`
-
-### 独立审查与完成门
-
-- M6 独立审查结论为 `m6_implementation_review=passed`
-- `fresh_membership_reader_cutover=true`、`session_restore_refresh_reread=true`、`guard_reference_cutover=true`
-- `explicit_membership_revision_lifecycle_source=true`
-- `authorization_tenant_members_updated_at_reads=0`、`authorization_membership_updated_at_compatibility_mappings=0`
-- `m6_complete=true`、`m6_handoff_complete=true`
-- M7 写入契约与 Schema／Migration 独立审查均为 `passed`；执行证据归因和执行独立审查均为 `passed`
-- `m7_execution_complete=true`；本 handoff 合并后 `m7_handoff_complete=true`、`m7_complete=true`、`eligible_for_base_b1_after_handoff=true`
-- BASE-B1 关闭证据结论为 `base_b1_owner_port_revision_contract=all_exact`、`base_b1_runtime_change_required=false`
-- BASE-B1 独立审查结论为 `base_b1_independent_review=passed`；本 handoff 合并后 `base_b1_complete=true`、`base_b1_handoff_complete=true`、`eligible_for_base_b2_after_handoff=true`
-- Owner 外 direct Membership Writer／Deleter 为 `0／0`；授权 `tenant_members.updated_at` 读取与时间戳兼容映射为 `0／0`
-- `operating_context_in_authorization_combination=false`、`second_authorization_fact_source_count=0`、`multiple_membership_selection=explicit_or_fail_closed`
-
-### BASE-B2 current 进度与 M09-A 完成门
-
-- PR #913 已在 Membership reactivate 的 transaction-bound UoW 内先锁定 active Binding；存在任何 status=`active` 的 Binding（包括业务时钟下已过期但尚未撤销的行）时，返回 `binding_active_conflict`，Membership／Binding／evidence 写入均为 `0`
-- M09-A 已接受：`auth_account_institution_bindings` 继续作为 Access Control 唯一 Binding canonical current／lifecycle history；Binding transition evidence 与 current 同 Owner、同事务、append-only，但不得回答 current 或成为第二套事实源
-- create／revoke／expire／rebind 与 Membership revoke／delete 联动均必须原子形成 current 和 transition evidence；rebind 只推进 Binding version，不推进 Membership revision
-- provenanceSource 与 assignmentSource 已拆分；受信任服务端时间、current tuple 不可变、legacy calibration Shape、`UNIQUE (tenant_id, command_id)` 与 AQ008 扩展均已绑定为后续物理实现门禁
-- 独立审查结论为 `base02_binding_provenance_acceptance_review=passed`，F01～F05 全部关闭
-- `binding_transition_evidence_required=true`、`binding_transition_evidence_schema_migration_required=true`、`binding_current_extra_revocation_columns_required=false`
-- Schema／Migration 前置预检尚未启动；BASE-B2 尚未完成，`eligible_for_base_b3=false`
-
-### 持续阻断
-
-- M7 已完成；`0043` 已消费且不得改写，后续问题只能使用独立 forward-fix
-- M7 与 BASE-B1 均已关闭；BASE-B2 已启动并完成 reactivate 冲突保护及 M09-A 决策接受，但 transition evidence 的物理模型、Migration、Writer、legacy calibration、AQ008 扩展、独立审查与 handoff 尚未完成；BASE-B3～B6 均未启动
-- active historical orphan 与 Scope relation orphan 保持 `1／1`，未修改、未授权修复
-- A2-P2 Scope FK 保持 `NOT VALID`／`convalidated=false`，未执行 `VALIDATE`
-- 项目级 Writer、Audit／模板、MIG-01B、MIG-01C 与业务 Reader 继续阻断
-- 正式平台服务端授权根仍为独立缺口，七线正式发布仍为 `0/7`
+- 当前 ULTRA 任务：`BASE-02 ULTRA：Membership Revision M0～M7、BASE-B1～B6 全链实施与最终收口`
+- 当前切片：BASE-B2 Binding transition evidence Schema／Migration 前置预检、独立审查与 handoff
+- PR #917：Head `97c02f1250f5f5fbff468b17953074db5b67eb4c`，Merge Commit `77a626ed182230f91b6d27daeaa4b0f297b377d9`，Run `30750704426` 成功
+- 独立审查 PR #918：Head `749bb269393c50bc9638ab7f76f97b04df2a610b`，Merge Commit `32b08e5e7bca4331c421ac5a637a846a884e2bf1`，Run `30751540734` 成功
+- `binding_transition_evidence_preflight_review=passed`
+- `binding_physical_model_decision_required=false`
+- Binding canonical current 继续为 `auth_account_institution_bindings`
+- Binding transition evidence 只保存 Access Control 同事务 append-only 历史，不是第二 current
+- historical orphan 未处理；A2-P2 Scope FK 继续 `NOT VALID／convalidated=false`
+- Schema、Migration、journal、snapshot、Runtime 和数据库修改均为 `0`
 
 ### 唯一下一任务
 
-- 任务名称：`BASE-B2 Binding transition evidence Schema／Migration 前置预检`
-- 任务编号：仓库尚无正式编号，本 handoff 不自行创造
-- 当前状态：本 handoff 合并前尚未启动；合并后按当前 ULTRA 用户授权继续
-- 任务边界：只以单个 operations Markdown 冻结 Binding transition evidence 物理 Shape、不可变保护、同事务 Writer、legacy calibration、AQ008、完整影响面、Migration 切片、未来文件 allowlist、恢复点与 Lease 门禁；允许固定 localhost-only `local_acceptance` 显式 `READ ONLY` 低敏探针
-- 不得在预检中修改 Schema、Migration、journal、snapshot、Runtime、数据库、scripts、tests、CI、package 或 lock，不得预分配 Migration 编号或创建 Lease，也不得夹带 historical orphan 修复、Scope 创建、FK `VALIDATE`、BASE-B3、项目级 Writer／Audit／MIG-01B／C 或业务 Reader
+`BASE-B2 Binding transition evidence Expand DDL Schema／Migration 实施`
+
+该任务尚未启动；在当前 ULTRA 用户授权下可于本 handoff 合并后继续，但必须实时冻结 Migration 编号、唯一 Lease、恢复点、local_acceptance、锁窗口和精确四文件 allowlist。
 
 ```text
-membership_revision_direction=A-full_same_table_lifecycle
-membership_revision_decision_accepted=true
-membership_revision_physical_model_accepted=true
-membership_revision_migration_sequence=M0_to_M7_accepted
-m0_complete=true
-m1_complete=true
-m1_expand_migration_executed=true
-m1_catalog_state=all_exact
-m2_owner_writer_implemented=true
-m2_transactional_cas_verified=true
-m2_replay_fail_closed=true
-m2_database_execution=false
-m2_implementation_review=passed
-m2_complete=true
-m3_onboarding_delegated=true
-m3_single_outer_transaction_verified=true
-m3_legacy_writer_deleter_blocked=true
-m3_owner_outside_direct_writer_files=0
-m3_owner_outside_direct_writer_symbols=0
-m3_owner_allowlist_files=1
-m3_aq008_membership_direct_writer_passed=true
-m3_implementation_review=passed
-m3_database_execution=false
-m3_complete=true
-m4_migration=0041
-m4_environment_journal_entries=42
-m4_target_guarded_migration_calls_cumulative=3
-m4_automatic_retry_count=0
-m4_planned=1
-m4_created=1
-m4_reused=0
-m4_conflict=0
-m4_unexpected=0
-m4_current_envelope_complete=1
-m4_baseline_transition_count=1
-m4_execution_review=passed
-m4_execution_complete=true
-m4_handoff_complete=true
-m4_non_target_guard_bootstrap_rejections=1
-m4_fourth_target_migration_started=false
-m4_lease_active=false
-m4_outcome_known=true
-m4_complete=true
-eligible_for_m5_after_handoff=true
-m5_started=true
-m5_authorized_under_ultra=true
-m5_migration=0042
-m5_environment_journal_entries=43
-m5_environment_latest=0042
-m5_snapshot_latest=0026
-m5_zero_candidate_branch=true
-m5_planned=0
-m5_created=0
-m5_reused=0
-m5_conflict=0
-m5_unexpected=0
-m5_target_guarded_migration_calls_cumulative=1
-m5_automatic_retry_count=0
-m5_allocation_lease_consumed=false
-m5_allocation_lease_released=true
-m5_allocation_lease_active=false
-m5_execution_lease_claim=1
-m5_execution_lease_consume=1
-m5_execution_lease_renewal=0
-m5_execution_lease_release=1
-m5_execution_lease_active=false
-m5_current_envelope_complete=1
-m5_transition_count=1
-m5_exact_current_head_count=1
-m5_active_historical_orphan=1
-m5_scope_relation_orphan=1
-m5_scope_fk_validated=false
-m5_execution_review=passed
-m5_execution_complete=true
-m5_handoff_complete=true
-m5_outcome_known=true
-m5_complete=true
-eligible_for_m6_after_handoff=true
-m6_started=true
-m6_authorized_under_ultra=true
-m6_implementation_review=passed
-fresh_membership_reader_cutover=true
-session_restore_refresh_reread=true
-guard_reference_cutover=true
-authorization_tenant_members_updated_at_reads=0
-authorization_membership_updated_at_compatibility_mappings=0
-explicit_membership_revision_lifecycle_source=true
-m6_complete=true
-m6_handoff_complete=true
-eligible_for_m7_after_handoff=true
-m7_started=true
-m7_authorized_under_ultra=true
-m7_write_contract_review=passed
-m7_schema_migration_review=passed
-m7_execution_evidence_attribution=passed
-m7_execution_evidence_correction_pr=907
-m7_execution_review=passed
-m7_migration=0043
-m7_environment_journal_entries=44
-m7_environment_latest=0043
-m7_snapshot_latest=0026
-m7_planned=7
-m7_created=7
-m7_reused=0
-m7_conflict=0
-m7_unexpected=0
-m7_target_guarded_migration_calls_cumulative=1
-m7_automatic_retry_count=0
-m7_allocation_lease_released=true
-m7_allocation_lease_active=false
-m7_execution_lease_claim=1
-m7_execution_lease_consume=1
-m7_execution_lease_renewal=0
-m7_execution_lease_release=1
-m7_execution_lease_active=false
-m7_current_envelope_not_null_columns=6
-m7_post_all_null=0
-m7_post_partial=0
-m7_current_envelope_complete=1
-m7_transition_count=1
-m7_exact_current_head_count=1
-m7_owner_outside_direct_writer_files=0
-m7_owner_outside_direct_writer_symbols=0
-m7_authorization_tenant_members_updated_at_reads=0
-m7_authorization_membership_updated_at_compatibility_mappings=0
-m7_active_historical_orphan=1
-m7_scope_relation_orphan=1
-m7_scope_fk_validated=false
-m7_business_dml=0
-m7_public_table_data_changed=false
-m7_sequences_changed=false
-m7_pre_recovery_verified=true
-m7_post_recovery_verified=true
-m7_outcome_known=true
-m7_execution_complete=true
-m7_handoff_complete=true
-m7_complete=true
-eligible_for_base_b1_after_handoff=true
-base_b1_started=true
-base_b1_authorized_under_ultra=true
-base_b1_owner_port_revision_contract=all_exact
-base_b1_runtime_change_required=false
-base_b1_independent_review=passed
 base_b1_complete=true
-base_b1_handoff_complete=true
-eligible_for_base_b2_after_handoff=true
 base_b2_started=true
-base_b2_authorized_under_ultra=true
-base_b2_reactivate_guard_complete=true
-base_b2_reactivate_guard_pr=913
 binding_provenance_decision=M09-A_accepted
-binding_provenance_acceptance_review=passed
 binding_transition_evidence_required=true
-binding_transition_evidence_schema_migration_required=true
-binding_current_extra_revocation_columns_required=false
-binding_transition_is_second_current=false
-eligible_for_binding_schema_migration_preflight_after_handoff=true
-binding_schema_migration_preflight_started=false
+binding_schema_migration_preflight_complete=true
+binding_schema_migration_preflight_review=passed
+binding_physical_model_decision_required=false
+eligible_for_binding_schema_migration_implementation_after_handoff=true
 binding_schema_migration_implementation_started=false
 base_b2_complete=false
 base_b3_started=false
-base_b4_started=false
-base_b5_started=false
-base_b6_complete=false
-base02_complete=false
-orphan_remediation_authorized=false
-active_historical_orphan_count=1
-scope_relation_orphan_count=1
+historical_orphan_modified=false
 a2_p2_scope_fk_validated=false
 project_writer_started=false
 business_reader_started=false
-eligible_for_reader=false
-next_task=BASE-B2 Binding transition evidence Schema／Migration 前置预检
+next_task=BASE-B2 Binding transition evidence Expand DDL Schema／Migration 实施
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```
 
 <!-- ARCHITECTURE_V2_PHASE1_END -->
+
 
 <!-- PHASE31_FINAL_AUDIT_START -->
 
