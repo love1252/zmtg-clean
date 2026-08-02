@@ -2,194 +2,200 @@
 
 ## 当前交接状态
 
-BASE-02 Membership Revision M4 deterministic legacy calibration 已完成执行、独立审查与 handoff：
+BASE-02 Membership Revision M5 高水位追赶与冲突清零已完成实施、独立审查、一次受控执行、执行证据、
+执行独立审查与 handoff：
 
-- M4 执行证据 PR #890：Head `90ca634ced30c7386d5c0a3c5338fda5df6bd911`，Run `30725188721`／Job `91435449482`，Merge Commit `167e1193e474237e5a612a7df9860adcad8b7e8c`；
-- M4 执行独立审查 PR #891：Head `38c821ffe247306dc211e450923d0379f49036fe`，Run `30725621418`／Job `91436644462`，Merge Commit `4b79cdf39775fa7827be89a33fa339e8fda90faa`；
-- Migration `0041` 已在固定 localhost-only local_acceptance 环境完成第三次且仅一次授权目标执行；环境 journal 为 `42／0041`，snapshot 保持 `0026`；
-- `planned／created／reused／conflict／unexpected=1／1／0／0／0`；Membership all-null／partial／complete 为 `0／0／1`，baseline transition 为 `1`；
-- 目标 guarded Migration 累计调用为 `3`，自动重试为 `0`，执行结果已知；Lease、client、进程、锁、marker、Helper 和隔离数据库活动残留均为 `0`；
-- active historical orphan／Scope relation orphan 保持 `1／1`，A2-P2 Scope FK 保持 `NOT VALID`；
-- 执行后一次无目标 Guard 启动在首道目标门禁拒绝，数据库连接和数据库变化均为 `0`，F01 已由独立审查关闭；
-- M4 交付不启动 M5、M6、M7、BASE-B1～B6、项目级 Writer、Audit／模板、MIG-01B／C 或业务 Reader。
+- M5 实施 PR #893：Head `43440e3f38c3c6ba3576dba1788b3fad586cfb5a`，Run `30727616873`／Job `91442118293`，Merge Commit `72c7568df3fd1078b813733eda472c01b0f8672d`；
+- M5 实施独立审查 PR #894：Head `14c7e6e4419203dacd5d20b3bec2b3d8bc43c285`，Run `30728269902`／Job `91443866416`，Merge Commit `33c52ee41e20385e8541594fa92b4c5c6ce21cf9`；
+- M5 执行证据 PR #895：Head `53e7f1c0ad257fdff935d3ce1234be0054a19b34`，Run `30729433131`／Job `91446923309`，Merge Commit `804444789d135903a737bc0721c452bcc74511b5`；
+- M5 执行独立审查 PR #896：Head `a768ddac965d42c96e59f2a2881a66961d9f3cf7`，Run `30729838933`／Job `91448020103`，Merge Commit `ea4a59df15fa14e64d7b7c5ad8a18b80452cc0c0`；
+- Migration `0042` 已在固定 localhost-only local_acceptance 环境完成唯一授权 guarded 目标调用；仓库／环境 journal 为 `43／0042`，snapshot 保持 `0026`；
+- 零候选结果为 `planned／created／reused／conflict／unexpected=0／0／0／0／0`；Membership total／all-null／partial／complete 保持 `1／0／0／1`，transition／exact current-head／M4 baseline 保持 `1／1／1`；
+- 目标 guarded 调用为 `1`，直接 SQL、第二次目标调用和自动重试均为 `0`，执行结果已知；
+- Allocation Lease 未消费且已释放；Execution Lease `claim／consume／renewal／release／active=1／1／0／1／0`；执行前后恢复点与隔离恢复通过，原目标 Restore 为 `0`；
+- active historical orphan／Scope relation orphan 保持 `1／1`，A2-P2 Scope FK 保持 `NOT VALID`／`convalidated=false`；
+- F01／F02 已由执行独立审查关闭；当前主动私有参数披露、真正敏感信息披露与非 localhost 连接均为 `0`；
+- M5 交付不启动 M6、M7、BASE-B1～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 或业务 Reader。
 
 ## 唯一下一任务
 
 ```text
-BASE-02 Membership Revision M5 高水位追赶与冲突清零
+BASE-02 Membership Revision M6 Reader 从 updated_at 切换到显式 revision＋lifecycle
 ```
 
 仓库当前没有该任务的正式 `V2-*` 编号，本 handoff 不自行创造编号。
 
-当前状态：**仅冻结且尚未启动；M4 handoff 合并后已由当前 ULTRA 用户指令授权继续**。
+当前状态：**仅冻结且尚未启动；M5 handoff 合并后已由当前 ULTRA 用户指令授权继续**。
 
-M5 只负责以独立手写追赶数据 Migration 处理 M4 冻结后遗留的合法 all-null Membership，复用已接受的
-`legacy_calibration` current／transition 语义和确定性 identity，并证明 all-null、partial、duplicate、
-conflict 与 unexpected 全部清零。M5 不是 MIG-01B 业务回填，不处理 Binding、Scope 或 historical orphan。
+本任务中的 Reader 特指 Access Control Membership 授权事实 Reader、Formal Session 与 Guard 消费链，
+不是项目级业务 Reader 或 Capability 放行。M6 只完成显式 Membership revision＋lifecycle 的读取切换、
+逐请求 Fresh Membership／Binding／Scope 重读和 fail-closed 语义；不实施 M7 Enforce 或 BASE-B1～B6。
 
 ## 一、不得重开的 accepted 约束
 
-1. `tenant_members` 继续是 Access Control 唯一 canonical Membership current；`tenant_membership_transitions` 只保存 append-only immutable evidence。
-2. Identity、Access Control、Tenancy 与 Security Owner 边界不重开；Membership revision、Binding version 与 Scope revision 继续是三个独立版本域。
-3. M5 只处理 current envelope 十列全部为 `NULL` 的合法 legacy residual；partial envelope、complete current／evidence 不一致、parent 缺失或未知归属必须 fail-closed。
-4. 每条合法 residual 固定形成 revision `1`、active、`legacy_calibration／legacy_unknown` current，actor／occurredAt 为 `NULL`，并在同一事务原子追加恰好一条 revision `1` baseline transition。
-5. M5 不修改 Membership `id`、tenant／user 归属、role、display_name、created_at、updated_at，不修改 Binding、Scope、Context 或 orphan。
-6. M5 必须允许 `planned=0`；无 residual 时仍须完成冲突清零证明，不能因零候选失败。
-7. M5 不允许 exact reuse：all-null current 已存在 command、evidence 或 revision `1` transition 属于证据矛盾。
-8. 共享环境消费后不得改写 SQL／journal；新问题只能使用独立 forward-fix，禁止自动重试。
+1. `tenant_members` 继续是 Access Control 唯一 canonical Membership current；`tenant_membership_transitions` 只保存 append-only immutable evidence，不参与 current 判定。
+2. Identity 拥有用户、账号和 Formal Session；Access Control 拥有 Membership／Binding 生命周期与 Fresh Membership；Tenancy 拥有 Scope／Context／Scope revision；Security 只提供通用安全能力和受控 Guard evidence。
+3. Membership revision、Binding version 与 Scope revision 是三个独立版本域，不得互相替代或串线。
+4. `updated_at`、Binding version、Scope revision、Session claim、hash／HMAC 或缓存均不得作为 Membership revision 或授权 fallback。
+5. Formal Session 只保存 selector／provenance，不固化 role、lifecycle、Membership revision、Binding version、Scope revision 或其他授权事实。
+6. 每次受保护请求必须重新读取 canonical Membership、active Binding 与 active Scope；request-bound evidence 只能由本次 fresh 读取形成。
+7. lifecycle 非 `active`、stale／future revision、缺失／多候选 tenant、Provider 不可用、版本域冲突或证据不完整全部 fail-closed。
+8. Operating Context Head／Version 不进入 M6 授权组合，不成为第四版本域或 Membership fallback。
+9. M6 不接受新的查询优化索引，不创建第二套 current，不重开新 incarnation、Owner、P01～P12 或 M0→M7 顺序。
 
 ## 二、启动只读冻结
 
-M4 handoff 合并后开始 M5 时，改文件前必须动态确认：
+M5 handoff 合并后开始 M6 时，改文件前必须动态确认：
 
-1. 最新 `main=origin/main`、工作树干净、分支保护和 Required Check 状态稳定；
-2. M4 handoff 已合并，`base02_membership_revision_m4_execution_review=passed`；
-3. 仓库 journal、SQL 集合与固定 localhost-only local_acceptance 环境 latest 一致；预期继承 `42／0041`，但不得写死，必须实时核验；
-4. snapshot 仍为 `0026`，禁止 `db:generate` 和 snapshot-diff Migration；
-5. 已消费 `0041` SQL／journal 不可改写，M1 Catalog 仍为 `all_exact`；
-6. AQ008 Owner 外 direct Writer／Deleter 仍为 `0／0`，唯一 allowlist 为 `1`；
-7. Membership total、all-null、partial、complete、transition、duplicate command、duplicate membership revision 和 identity collision 均能由低敏计数解释；
-8. 所有 all-null residual 的 tenant 与 `auth_users` parent 缺失数均为 `0`；
-9. Binding／Scope／Context Version／Context Head、A2-P1 资产与 M4 终态未漂移；
-10. active historical orphan／Scope relation orphan 仍为 `1／1`，Scope FK 仍为 `NOT VALID`；
-11. PostgreSQL major 及 `pg_catalog.sha256／convert_to／decode／encode` 精确签名未漂移；
-12. 无活动 Migration 执行者、并发 Writer、编号冲突或其他 Agent 写入；
-13. guarded `pnpm db:migrate` 仍为唯一执行入口。
+1. 最新 `main=origin/main`、工作树干净、分支保护与 Required Check 状态稳定；
+2. M5 handoff 已合并，`base02_membership_revision_m5_execution_review=passed`、`m5_execution_complete=true`、`m5_handoff_complete=true`；
+3. 仓库 journal 与 SQL 集合在最新 main 上实时核验为 current；固定环境 `43／0042` 只从已合并 M5 执行证据、独立审查与 handoff 交叉核对，不在 M6 重新连接数据库；`0040`、`0041`、`0042` 均已消费且不得改写；
+4. Membership all-null／partial `0／0`、complete／transition／exact current-head `1／1／1`，以及 duplicate、identity mismatch、parent missing、conflict、unexpected 均为 `0`，只作为已合并 M5 证据链的继承门禁；
+5. AQ008 Owner 外 direct Membership Writer／Deleter 仍为 `0／0`，唯一 Owner allowlist 为 `1`；
+6. active historical orphan／Scope relation orphan `1／1` 与 Scope FK `NOT VALID` 只从已合并证据核对，M6 不重新探测或修改环境；
+7. 当前 Auth、Access Control、Security、Institution 组合根、次级 Reader 和测试影响面能够完整枚举；
+8. `tenantMembers.updatedAt`、`membershipUpdatedAt`、`membershipRevisionAt` 与相邻兼容语义的当前生产／测试命中已重新计数并分类；
+9. 没有其他 Agent 写入、未解释 Git／代码漂移或需要数据库、Migration Lease、恢复点与环境执行的前置条件。
 
-AQ008 只作为 Git／CI 门禁，不能伪装成 SQL 事务内数据库事实。
+M6 是 Runtime／测试切片，不创建 Migration Lease，不连接数据库，不创建恢复点，也不执行 DDL、DML、
+Migration、Seed、`db:generate` 或 snapshot 变更。若最新仓库证据不足以确认上述环境继承事实且必须实时
+重探数据库，应立即停止 M6 并申请独立只读环境授权，不得在本 Runtime 切片内扩大范围。
 
-## 三、候选实施文件范围
+## 三、当前候选影响面与精确冻结要求
 
-M5 候选实施 PR 只允许以下三个文件类型，文件 stem 与编号必须在未来启动冻结中最终确认：
+最新已合并前置预检定位的生产候选为：
 
-1. `drizzle/<实时编号>_base02_membership_revision_high_water_catch_up.sql`；
-2. `drizzle/meta/_journal.json`；
-3. `src/server/db/tests/Schema.test.ts`。
+1. `src/modules/auth/server/auth-account-repository.ts`：Membership／Binding current 查询与 Formal Session 用户复核；
+2. Access Control authoritative Membership Reader Port／Adapter：必须在 M6 启动冻结中从最新 main 选定精确文件，不得凭空建立第二事实源；
+3. `src/modules/security/server/institution-membership-provider.ts`：Security 兼容桥与 request-bound Fresh Membership evidence；
+4. `src/modules/institution/server/institution-server-runtime.ts`：服务端唯一组合根接线；
+5. `src/modules/institution/server/tenant-quota-enforcement.ts`：次级 lifecycle-aware Reader；
+6. `src/modules/open-platform/server/tenant-account-management-repository.ts`：次级 lifecycle-aware Reader。
 
-M5 不改变物理 Schema，因此不修改 `src/server/db/schema.ts`；不得修改 snapshot、Runtime、scripts、
-package、lock、CI 或 handoff 之外的文件。Migration 编号不得由本 handoff 预留或批准。
+受保护边界包括 Formal Session provenance owner、Institution Scope／Section／Action Guard、request
+authorization、Anchor Reader／Provider 与 onboarding 外层事务。启动实现前必须重新形成精确文件
+allowlist；上述目录或模块名称不构成整目录空白授权。若影响面无法完整解释，立即停止。
 
-## 四、Migration Lease、恢复点与环境边界
+## 四、authoritative Reader 契约
 
-- 只在启动冻结全部通过后实时分配下一 Migration 编号；
-- 创建全新、唯一、短时、不可续期且不可复用的 Migration Lease；
-- Lease 绑定任务、Holder、Base、前驱 journal／SQL hash、固定目标、实时编号、执行前恢复点、时窗、失效、消费、释放和交接；
-- 实施与独立审查合并后，从最新 main 重新冻结全部事实；
-- 执行前创建全新恢复点并完成隔离恢复验证；成功后再创建并验证执行后恢复点；
-- 自动重试为 `0`，不得复用 M4 Lease、恢复点、attempt 或 terminal record；
-- 仅固定 localhost-only local_acceptance 可作为未来授权候选，任何其他环境均不在范围。
+- 输入必须具备明确 user selector 和显式 tenant selector；多 Membership 却无 tenant 选择必须拒绝；
+- authoritative current 输出至少包含 Membership identity、严格正整数 `revision`、`lifecycleStatus` 与 `role`；
+- 只允许 `active` Membership 形成 fresh 授权事实；`revoked`、`deleted`、未知或缺失状态全部拒绝；
+- 查询必须直接读取 canonical current 的显式 revision／lifecycle 列，禁止从 `updated_at` 转换或双读回退；
+- 只清除生产授权链的时间戳 fallback；通用 `tenant_members.updated_at` 审计时间列继续保留，不删除、不改写，也不赋予新授权语义；
+- expected reference 与 current revision 不一致时，无论 stale 或 future 均 fail-closed；
+- Provider／Repository 超时、不可用、返回多行、部分 Shape 或跨 tenant 冲突均 fail-closed；
+- transition evidence 只可用于审计或一致性校验，不可替代 canonical current；
+- Reader query 沿用当前连接 timeout，M6 不新增数据库对象或环境配置。
 
-## 五、高水位与事务边界
+## 五、Formal Session、Binding、Scope 与 Guard
 
-- SQL 不写显式 `BEGIN／COMMIT／ROLLBACK`；
-- 固定 `SET LOCAL lock_timeout='1s'` 与 `SET LOCAL statement_timeout='30s'`；
-- 固定锁序为 `tenant_members` 后 `tenant_membership_transitions`，均使用 `SHARE ROW EXCLUSIVE`；
-- 取得两把锁后再冻结 residual 集合；
-- 稳定排序与高水位使用 `(created_at ASC, id COLLATE "C" ASC)`；
-- residual 非零时捕获最大 `(created_at,id)` 并使用 inclusive lexicographic predicate；为零时允许空批次；
-- 单批次只捕获一个 `recordedAt`；业务写入顺序固定为 current `UPDATE` 后 transition `INSERT`；
-- 唯一允许 DML 为 `UPDATE tenant_members` 与 `INSERT tenant_membership_transitions`；
-- 禁止其他表 DML、upsert、`ON CONFLICT`、DELETE、TRUNCATE、DDL、动态 SQL、SAVEPOINT、自动重试、FK `VALIDATE`、SET NOT NULL、DROP 或 CASCADE；
-- affected rows 必须逐项精确，任一不一致整批回滚。
-
-## 六、成功计数与数据不变量
+固定授权链为：
 
 ```text
-planned=created+reused
-created=planned
-reused=0
-conflict=0
-unexpected=0
-post_all_null=0
-post_partial=0
-duplicate_command=0
-duplicate_membership_revision=0
-identity_collision=0
+Formal Session selector／provenance
+→ Access Control Fresh active Membership + independent active Binding
+→ Tenancy Fresh active Scope
+→ request-bound scope／section／action authorization
 ```
 
-若无 residual，则 `planned=created=0`。同时必须证明：
+- 登录、Session 恢复与刷新不能仅凭 Session claim、客户端 tenant／institution 或旧 Anchor 授权；
+- 每次请求都重读 Membership、Binding 与 Scope，各自核对 identity、状态和独立版本域；
+- Membership 变化只推进 Membership revision，Binding rebind 只推进 Binding version，Scope 变化只推进 Scope revision；
+- request-bound evidence 不得跨请求缓存为新的授权事实；敏感授权事实不得进入 cookie、日志或公开响应；
+- Security 兼容桥只消费 Access Control Port，不得直接成为 Membership Repository 或 Owner；
+- M6 不放行业务对象 Reader、Capability 或七线正式发布。
 
-- Membership 总行数守恒，transition 总行数净增 `created`；
-- 每条新 complete current 恰好对应一条 revision `1` baseline transition；
-- role、display_name、tenant／user、created_at、updated_at 均不变化；
-- Binding、Scope、Context、A2-P1、orphan 与 Scope FK validation 状态均不变化；
-- M1 Catalog 和 snapshot 不变化；
-- 环境执行后 latest 与新 journal 项一致。
+## 六、次级 Reader
+
+- staff seat 统计只计算 `active` Membership，不得把 revoked／deleted 或 legacy 时间戳存在性计为 active；
+- 初始管理员查找必须识别 lifecycle，不能只以 Membership 行存在作为有效依据；
+- 次级 Reader 不得建立独立 Membership current、私有生命周期枚举或 `updated_at` fallback；
+- 次级 Reader 的行为变化必须与 authoritative Reader 的状态语义一致，但不得越权承担 Formal Session 或 Guard 授权。
 
 ## 七、测试与质量门禁
 
-`Schema.test.ts` 至少锁定：
+既有前置预检冻结 15 个核心链测试，并增加 2 个次级 Reader 测试：
 
-- 唯一新增 SQL 与唯一 journal entry，前驱和 snapshot blob 未变化；
-- 实时编号、stem、`idx／when／tag` 一致；
-- 两个确定性 identity domain、UTF-8、单字节 NUL、SHA-256、lowercase hex 和公开合成向量；
-- Catalog 聚合使用稳定显式类型，避免再次出现多态 enum 聚合漂移；
-- all-null residual 选择、零候选合法分支、稳定排序、高水位和 inclusive predicate；
-- 单一 `recordedAt`、精确 current／transition Shape 与不修改 `updated_at`；
-- 两表锁序、timeout、`UPDATE→INSERT`、DML allowlist 与全部禁止项；
-- `planned／created／reused／conflict／unexpected` 守恒及 post 状态清零；
-- 已消费 `0041` SQL／journal 未被改写。
+- Auth：`AuthAccountRepository.test.ts`、`AuthAccountService.test.ts`、`FormalAuthRoutes.test.ts`、`FormalServerSessionProvenanceOwner.test.ts`；
+- Security／Guard：`InstitutionMembershipProvider.test.ts`、`InstitutionGuardEvidence.test.ts`、`InstitutionGuardEvidenceBoundary.test.ts`、`InstitutionScopeGuard.test.ts`、`InstitutionSectionGuard.test.ts`、`InstitutionRequestAuthorization.test.ts`、`InstitutionAnchorProvider.test.ts`；
+- Institution：`InstitutionServerRuntime.test.ts`、`HospitalWorkbenchEntry.test.tsx`、`InstitutionWorkbenchRuntime.test.ts`、`InstitutionRouteShell.test.tsx` 及 capability-off Route 边界；
+- 次级：`TenantQuotaEnforcement.test.ts`、`TenantAccountManagementRepository.test.ts`。
 
-未来验证链必须包含定向 Schema／Migration 测试、Migration Guard、架构检查器自测、增量架构检查、
-lint、typecheck、完整测试、build 和真实 Required Check。
+M6 启动冻结必须将上列逻辑集合映射为最新 main 的精确路径和去重文件数，不能机械把描述中的测试族
+当作文件数。定向测试至少覆盖：active 允许、revoked／deleted 拒绝、整数 revision、stale／future、
+Provider unavailable、多 Membership 无 tenant、Binding／Scope 非 active、三个版本域独立、Session 不携带
+授权事实、每请求重读、次级 Reader lifecycle 过滤，以及生产代码不再使用时间戳授权 fallback。
+
+完整验证链必须包含定向测试、架构检查器自测、增量架构检查、lint、typecheck、完整测试、build 和
+真实 Required Check；完整测试和 build 不得跳过。
+
+M6 成功门必须同时满足：
+
+```text
+fresh_membership_reader_cutover=true
+session_restore_refresh_reread=true
+guard_reference_cutover=true
+authorization_tenant_members_updated_at_reads=0
+authorization_membership_updated_at_compatibility_mappings=0
+explicit_membership_revision_lifecycle_source=true
+```
+
+上述归零仅针对生产授权链，不要求全仓通用 `updated_at` 字段或普通审计读取机械归零，也不表示业务
+Reader 或 Capability 已放行。
 
 ## 八、未来交付链
 
-M4 handoff 合并后按当前 ULTRA 授权执行的交付顺序为：
+M5 handoff 合并后按当前 ULTRA 授权执行的交付顺序为：
 
-1. 三文件 Draft 实施 PR；
-2. 单文件实施独立审查 PR；
-3. 实施 PR Ready 并使用 Merge Commit 合并；
-4. 审查 PR 重放至最新 main，经新 Required Check 后 Ready 并使用 Merge Commit 合并；
-5. 最新 main 上重新冻结环境、全新恢复点、隔离恢复和 Lease；
-6. 固定 localhost-only local_acceptance 运行一次且仅一次 guarded `pnpm db:migrate`；
-7. M5 执行低敏证据 PR；
-8. M5 执行独立审查 PR；
-9. M5 handoff PR；只在该 handoff 中冻结 M6，不启动 M6。
+1. 最新 main 上完成 M6 精确符号、文件和测试影响面冻结；
+2. 单一回退域 Draft Runtime／测试实施 PR；
+3. 单文件独立审查 PR，冻结实施 Head、契约、影响面、测试与零越界；
+4. 实施 PR Required Check 成功后 Ready 并使用 Merge Commit 合并；
+5. 审查 PR 重放至最新 main，经新 Required Check 后 Ready 并使用 Merge Commit 合并；
+6. M6 handoff PR；只在该 handoff 中冻结 M7，不夹带 M7 Schema／Migration。
 
-上述链路已由当前 ULTRA 目标授权连续执行，但仍必须逐项通过本文件的动态冻结、文件范围、恢复点、
-Lease、数据库目标、独立审查和 Required Check 硬门；任何硬门失败均不得以 ULTRA 授权为由绕过。
+上述链路已由当前 ULTRA 目标授权连续执行，但仍必须逐项通过动态冻结、精确文件范围、独立审查和
+Required Check 硬门；不得以 ULTRA 授权绕过 Owner、Session、版本域或 fail-closed 约束。
 
-## 九、失败、回退与 forward-fix
+## 九、失败与 forward-fix
 
-- 事务前门禁失败：数据库 attempt 为 `0`，释放未消费 Lease；
-- 事务内失败：依赖 guarded 外层事务整批回滚，只做 READ ONLY 低敏核验；
-- 结果不确定：立即停止，只读分类，不得第二次执行；
-- 实施已合并但环境未消费：独立纠错 PR、重新审查、全新 Lease 与恢复点；
-- 环境已消费：SQL／journal 不可改写，只能使用全新编号的独立 forward-fix；
-- 禁止破坏性 down migration、自动重试或恢复旧 Writer。
+- 实施合并前失败：保持新 Reader 切换未发生，既有兼容读取继续按当前边界保留；修正同一回退域后重新验证；
+- 新 Reader 发现问题：关闭新入口并使用独立 forward-fix，不恢复 `updated_at` 授权 fallback；
+- Provider／依赖不可用：保持 fail-closed，不以 Session claim、缓存、Demo 或 Mock 兜底；
+- 已消费 Migration `0040`～`0042` 不得因 Reader 问题改写；M6 不创建补偿 Migration；
+- 任何版本域串线、授权事实泄漏或 Owner 越界都必须回到独立审查，不得用测试例外掩盖。
 
 ## 十、真正硬停止
 
-- M4 handoff、journal、SQL、Catalog、Shape、AQ008、Membership 数据或 orphan 出现未解释漂移；
-- residual 无法证明为 accepted all-null legacy Shape，或 parent 缺失；
-- 出现 partial envelope、重复 baseline、command／revision／identity 冲突；
-- Migration 编号、Lease、恢复点、固定 localhost-only 目标、事务回滚或执行结果无法证明；
-- 出现并发 Writer／Migration 执行者；
-- 需要三个候选文件之外修改，或需要 Schema、snapshot、`db:generate`、额外 Runtime／脚本；
-- 需要修改业务语义、role、归属、Binding、Scope、orphan 或 FK validation；
-- `conflict`／`unexpected` 非零，或守恒、原子性无法证明；
-- 需要第二次执行、自动重试、非 localhost 环境或敏感信息输出；
-- Git 状态无法安全恢复。
+- M5 handoff、journal、Membership current／transition、AQ008、orphan 或 Scope FK 出现未解释漂移；
+- 无法删除授权语义中的 `updated_at` fallback，或仍把时间戳、Binding／Scope revision 当 Membership revision；
+- authoritative Reader 无法返回显式 identity／revision／lifecycle／role，或需要第二套 Membership current；
+- lifecycle 非 active、stale／future revision、Provider 不可用、缺失／多候选 tenant 无法 fail-closed；
+- Formal Session 必须固化授权事实，或请求链无法逐请求重读 Membership／Binding／Scope；
+- Membership／Binding／Scope 三个版本域串线，或 Identity／Access Control／Tenancy／Security Owner 被重开；
+- 15 个核心链＋2 个次级 Reader 的影响面无法完整解释；
+- 需要 Schema、Migration、journal、snapshot、Lease、数据库、orphan 修复、FK `VALIDATE`、M7、BASE-B1、项目级 Writer、Audit／模板、MIG-01B／C 或业务 Reader；
+- Required Check 需要绕过、出现敏感信息泄漏、其他 Agent 写入或 Git 状态无法安全恢复。
 
 ## 十一、持续阻断
 
-- M6 Reader 切换、M7 Enforce 未启动；
-- BASE-B1～B6 未启动；
-- Auth Reader 继续使用既有 `updated_at` 兼容读取，M6 前不得提前删除 fallback；
-- active historical orphan／Scope relation orphan 保持 `1／1`；
-- A2-P2 Scope FK 保持 `NOT VALID／convalidated=false`；
-- 不启动 orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 或业务 Reader；
-- 不改变 Identity／Access Control／Tenancy／Security Owner 和三个独立 revision 域；
-- 七线正式发布继续为 `0/7`。
+- M7 Enforce 尚未启动；M6 未完成前不得进入 M7；
+- BASE-B1～B6 尚未启动；M7 完成前不得宣称 BASE-B1 Runtime 关闭；
+- active historical orphan／Scope relation orphan 保持 `1／1`，未授权修复；
+- A2-P2 Scope FK 保持 `NOT VALID／convalidated=false`，未执行 `VALIDATE`；
+- 项目级 Writer、Audit／模板、MIG-01B、MIG-01C 与业务 Reader继续阻断；
+- 正式平台服务端授权根仍是独立缺口，七线正式发布继续为 `0/7`。
 
 ```text
-next_task=BASE-02 Membership Revision M5 高水位追赶与冲突清零
+next_task=BASE-02 Membership Revision M6 Reader 从 updated_at 切换到显式 revision＋lifecycle
 next_task_started=false
 next_task_authorized_under_ultra=true
-m5_started=false
-m5_authorized_under_ultra=true
+m5_complete=true
+m5_handoff_complete=true
+eligible_for_m6_after_handoff=true
 m6_started=false
+m6_authorized_under_ultra=true
 m7_started=false
 eligible_for_base_b1_runtime=false
 eligible_for_reader=false

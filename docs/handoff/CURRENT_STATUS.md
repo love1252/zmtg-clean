@@ -2,45 +2,48 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-02 Membership Revision M4 deterministic legacy calibration 完成状态
+## BASE-02 Membership Revision M5 高水位追赶与冲突清零完成状态
 
 - 更新日期：2026-08-02
-- 本轮 handoff 基线：`4b79cdf39775fa7827be89a33fa339e8fda90faa`
+- 本轮 handoff 基线：`ea4a59df15fa14e64d7b7c5ad8a18b80452cc0c0`
 - 当前任务：`BASE-02 ULTRA：Membership Revision M0～M7、BASE-B1～B6 全链实施与最终收口`
-- 当前切片：M4 实施、两轮精确纠错、第三次且仅一次受控 Migration、执行证据、独立审查与 handoff
+- 当前切片：M5 实施、实施独立审查、一次受控 Migration、执行证据、执行独立审查与 handoff
 - 正式任务编号：无；本轮未新增 `V2-*` 编号
-- M4 执行证据：PR #890，Head `90ca634ced30c7386d5c0a3c5338fda5df6bd911`，Run `30725188721`／Job `91435449482`，Merge Commit `167e1193e474237e5a612a7df9860adcad8b7e8c`
-- M4 执行独立审查：PR #891，Head `38c821ffe247306dc211e450923d0379f49036fe`，Run `30725621418`／Job `91436644462`，Merge Commit `4b79cdf39775fa7827be89a33fa339e8fda90faa`
-- 两个 PR 的环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试与 build 均实际执行并成功
+- M5 实施：PR #893，Head `43440e3f38c3c6ba3576dba1788b3fad586cfb5a`，Run `30727616873`／Job `91442118293`，Merge Commit `72c7568df3fd1078b813733eda472c01b0f8672d`
+- M5 实施独立审查：PR #894，Head `14c7e6e4419203dacd5d20b3bec2b3d8bc43c285`，Run `30728269902`／Job `91443866416`，Merge Commit `33c52ee41e20385e8541594fa92b4c5c6ce21cf9`
+- M5 执行证据：PR #895，Head `53e7f1c0ad257fdff935d3ce1234be0054a19b34`，Run `30729433131`／Job `91446923309`，Merge Commit `804444789d135903a737bc0721c452bcc74511b5`
+- M5 执行独立审查：PR #896，Head `a768ddac965d42c96e59f2a2881a66961d9f3cf7`，Run `30729838933`／Job `91448020103`，Merge Commit `ea4a59df15fa14e64d7b7c5ad8a18b80452cc0c0`
+- 四个 PR 的环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试与 build 均实际执行并成功
 - 本次 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
 
-### M4 current 终态
+### M5 current 终态
 
-- 实时 Migration 编号为 `0041`；仓库／固定 localhost-only local_acceptance 环境 journal 均为 `42／0041`，snapshot 保持 `0026`
-- 第一次目标 guarded 调用在 shell shim 启动边界失败且未进入 PostgreSQL；第二次进入事务后失败并完整回滚；第三次在独立纠错、全新恢复点和全新唯一不可续期 Lease 下成功
-- 目标 guarded Migration 累计调用为 `3`，第三次窗口调用为 `1`，自动重试为 `0`，第四次目标 Migration 未启动
-- `planned／created／reused／conflict／unexpected=1／1／0／0／0`，且 `planned=created+reused`
-- Membership total 保持 `1`；all-null／partial／complete 从 `1／0／0` 变为 `0／0／1`；baseline transition 从 `0` 变为 `1`
-- 唯一 current 为 revision `1`、active、`legacy_calibration／legacy_unknown`，与唯一 baseline transition 在同一事务原子形成
-- Membership identity、tenant／user 归属、role、display_name、created_at 与 updated_at 稳定指纹未变化
-- Binding／Scope／Context Version／Context Head 保持 `1／1／1／1`，tenant／user parent 缺失保持 `0／0`
+- 实时 Migration 编号为 `0042`；仓库／固定 localhost-only local_acceptance 环境 journal 均为 `43／0042`，snapshot 保持 `0026`
+- `0042` 的唯一目标 guarded Migration 调用为 `1`，直接 SQL 与第二次目标调用为 `0`，自动重试为 `0`，执行结果已知
+- 执行前合法 all-null residual 为 `0`；零候选结果 `planned／created／reused／conflict／unexpected=0／0／0／0／0`，且 `planned=created+reused`
+- Membership total／all-null／partial／complete 保持 `1／0／0／1`；transition／exact current-head／M4 baseline 保持 `1／1／1`
+- duplicate command／revision、identity mismatch 与 tenant／user parent 缺失均保持 `0`
+- Membership identity、tenant／user 归属、role、display_name、created_at 与 updated_at 稳定指纹未变化；八张关键业务表稳定指纹前后相同，业务 DML 为 `0`
+- Binding／Scope／Context Version／Context Head 保持 `1／1／1／1`
 - active historical orphan／Scope relation orphan 保持 `1／1`；A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`
-- 新执行前／后恢复点及隔离恢复为 `2／2`；连同目标连续性验证，总隔离恢复为 `3／3`，原目标 Restore 为 `0`
-- Lease claim／consume／renewal／release／active 为 `1／1／0／1／0`；client、进程、锁、marker、Helper 与隔离数据库活动残留均为 `0`
-- `0041` 已消费且不可改写；后续发现只能使用独立 forward-fix
+- 全新执行前／后恢复点各 `1／1`，非空、parse、完整性和隔离恢复均通过；原目标 Restore 为 `0`，隔离数据库活动残留为 `0`
+- Allocation Lease 未消费、已释放且 active=`0`；Execution Lease claim／consume／renewal／release／active 为 `1／1／0／1／0`
+- client、进程组、Lease／run lock、attempt marker、Helper、私有配置副本与隔离数据库活动残留均为 `0`；不可覆盖 terminal record 保持 `1`
+- `0042` 已消费且不可改写；后续发现只能使用独立 forward-fix
 
-### F01 与独立审查
+### F01／F02 与独立审查
 
-- PR 描述维护期间发生一次不带目标参数的 Guard 启动拒绝；Guard 在首道目标门禁拒绝，目标选择、连接参数读取、数据库连接、Lease、Migrator、SQL／DDL／DML、仓库变化与数据库变化均为 `0`
-- 该事件不是第四次目标 Migration，也不是自动重试；`m4_post_execution_guard_bootstrap_rejection_review=passed`，F01 已关闭
-- 当前主动私有参数披露为 `0`；Secret、Token、密码、私钥、PII 与真实凭证披露为 `0`
-- 独立审查结论为 `base02_membership_revision_m4_execution_review=passed`
-- `m4_execution_complete=true`，本 handoff 合并后 `m4_handoff_complete=true`
-- `eligible_for_m5_after_handoff=true`；M5 尚未启动，本 handoff 合并后按当前 ULTRA 授权继续，但不得绕过动态硬门
+- F01：恢复点 dump／restore deparser 只对一个公开 CHECK 去除一对冗余括号；token 顺序、validated 状态及其他 Catalog／Shape 精确一致，该窄范围规则不得泛化；F01 已关闭
+- F02：编排器首次因私有输入权限不满足门禁而在目标调用、数据库连接和 Lease claim 前拒绝；目标调用、Lease、DDL／DML 和数据库变化均为 `0`，从头重检后完成唯一目标调用；F02 已关闭
+- 执行前 helper 校准的 `9` 次未通过隔离验证均发生在 Lease 与目标调用之前，未 Restore 原目标，临时隔离数据库均已删除，不构成 Migration attempt 或自动重试
+- 当前主动私有参数披露、Secret、Token、密码、私钥、PII、真实凭证披露与非 localhost 连接均为 `0`
+- 独立审查结论为 `base02_membership_revision_m5_execution_review=passed`
+- `m5_execution_complete=true`，本 handoff 合并后 `m5_handoff_complete=true`
+- `eligible_for_m6_after_handoff=true`；M6 尚未启动，本 handoff 合并后按当前 ULTRA 授权继续，但不得绕过动态硬门
 
 ### 持续阻断
 
-- M5、M6、M7 尚未启动；M6 前既有 Auth Reader 继续保留 `updated_at` 兼容读取
+- M6、M7 尚未启动；M6 完成前既有 Auth Reader 继续保留 `updated_at` 兼容读取，不得把本 handoff 写成 Reader 已切换
 - BASE-B1 Runtime 继续 `blocked`；BASE-B2～B6 均未启动
 - active historical orphan 与 Scope relation orphan 保持 `1／1`，未修改、未授权修复
 - A2-P2 Scope FK 保持 `NOT VALID`／`convalidated=false`，未执行 `VALIDATE`
@@ -49,11 +52,11 @@
 
 ### 唯一下一任务
 
-- 任务名称：`BASE-02 Membership Revision M5 高水位追赶与冲突清零`
+- 任务名称：`BASE-02 Membership Revision M6 Reader 从 updated_at 切换到显式 revision＋lifecycle`
 - 任务编号：仓库尚无正式编号，本 handoff 不自行创造
 - 当前状态：仅冻结且尚未启动；本 handoff 合并后已由当前 ULTRA 用户指令授权继续
-- 任务边界：以独立手写追赶数据 Migration 处理 M4 高水位后的合法 all-null residual，完成冲突清零；不得重开 accepted 语义、处理 orphan、切换 Reader 或夹带 M6／M7
-- M5 启动前必须重新冻结最新 main、journal、Catalog、数据 Shape、AQ008、实时编号、独立恢复点与全新唯一 Lease
+- 任务边界：将 Access Control authoritative Membership Reader 从 `updated_at` 授权 fallback 切换到显式 identity／revision／lifecycle／role；Formal Session 只保留 selector／provenance，每次请求重读 Membership、Binding 与 Scope，并使非 active、revision 漂移或 Provider 不可用 fail-closed
+- M6 启动前必须重新冻结最新 main、M1～M5 证据链、当前 Reader／Session／Guard 影响面和 15 个核心链＋2 个次级 Reader 测试；不得创建 Migration Lease、连接数据库、处理 orphan、执行 FK `VALIDATE` 或夹带 M7／BASE-B1
 
 ```text
 membership_revision_direction=A-full_same_table_lifecycle
@@ -100,9 +103,42 @@ m4_lease_active=false
 m4_outcome_known=true
 m4_complete=true
 eligible_for_m5_after_handoff=true
-m5_started=false
+m5_started=true
 m5_authorized_under_ultra=true
+m5_migration=0042
+m5_environment_journal_entries=43
+m5_environment_latest=0042
+m5_snapshot_latest=0026
+m5_zero_candidate_branch=true
+m5_planned=0
+m5_created=0
+m5_reused=0
+m5_conflict=0
+m5_unexpected=0
+m5_target_guarded_migration_calls_cumulative=1
+m5_automatic_retry_count=0
+m5_allocation_lease_consumed=false
+m5_allocation_lease_released=true
+m5_allocation_lease_active=false
+m5_execution_lease_claim=1
+m5_execution_lease_consume=1
+m5_execution_lease_renewal=0
+m5_execution_lease_release=1
+m5_execution_lease_active=false
+m5_current_envelope_complete=1
+m5_transition_count=1
+m5_exact_current_head_count=1
+m5_active_historical_orphan=1
+m5_scope_relation_orphan=1
+m5_scope_fk_validated=false
+m5_execution_review=passed
+m5_execution_complete=true
+m5_handoff_complete=true
+m5_outcome_known=true
+m5_complete=true
+eligible_for_m6_after_handoff=true
 m6_started=false
+m6_authorized_under_ultra=true
 m7_started=false
 eligible_for_base_b1_runtime=false
 base_b1_runtime=blocked
@@ -119,7 +155,7 @@ a2_p2_scope_fk_validated=false
 project_writer_started=false
 reader_started=false
 eligible_for_reader=false
-next_task=BASE-02 Membership Revision M5 高水位追赶与冲突清零
+next_task=BASE-02 Membership Revision M6 Reader 从 updated_at 切换到显式 revision＋lifecycle
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```
