@@ -2484,9 +2484,20 @@ describe('数据库结构', () => {
 
   it('静态 demo fixture 保留，但不再携带旧 Membership 清理路径', () => {
     const seedSource = readFileSync(join(process.cwd(), 'src/server/db/seed-demo-data.ts'), 'utf8');
+    const membershipPreviewRecords = getDemoTenantMemberSeedRecords();
 
     expect(getDemoTenantSeedRecords()).not.toHaveLength(0);
-    expect(getDemoTenantMemberSeedRecords()).not.toHaveLength(0);
+    expect(membershipPreviewRecords).not.toHaveLength(0);
+    expect(seedSource).not.toContain('tenantMembers.$inferInsert');
+    for (const record of membershipPreviewRecords) {
+      expect(Object.keys(record).sort()).toEqual([
+        'displayName',
+        'id',
+        'role',
+        'tenantId',
+        'userId',
+      ]);
+    }
     expect(seedSource).not.toContain('legacyDemoTenantIds');
     expect(seedSource).not.toContain('legacyDemoPlanIds');
     expect(seedSource).not.toContain('legacyDemoPlanVersionIds');

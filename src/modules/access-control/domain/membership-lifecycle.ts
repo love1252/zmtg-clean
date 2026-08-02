@@ -59,6 +59,21 @@ export interface MembershipCurrent {
   readonly updatedAt: string;
 }
 
+/**
+ * Owner Writer 可以持久化的完整 Membership current。
+ *
+ * 读取边界继续接收 nullable `MembershipCurrent`，用于拒绝历史 legacy／partial Shape；
+ * 写入边界只接受该细化类型，避免在 M7 物理 Enforce 后依赖类型断言或隐式默认值。
+ */
+export interface CompleteMembershipCurrent extends MembershipCurrent {
+  readonly revision: number;
+  readonly lifecycleStatus: MembershipLifecycleStatus;
+  readonly provenanceSource: MembershipProvenanceSource;
+  readonly provenanceReasonCode: string;
+  readonly provenanceCommandId: string;
+  readonly provenanceRecordedAt: string;
+}
+
 export interface MembershipTransition {
   readonly transitionId: string;
   readonly tenantId: string;
@@ -151,13 +166,13 @@ export type MembershipBindingAction =
 export type MembershipLifecycleDecision =
   | Readonly<{
       kind: 'apply';
-      nextCurrent: MembershipCurrent;
+      nextCurrent: CompleteMembershipCurrent;
       transition: MembershipTransition;
       bindingAction: MembershipBindingAction;
     }>
   | Readonly<{
       kind: 'observed';
-      current: MembershipCurrent;
+      current: CompleteMembershipCurrent;
       bindingAction: Readonly<{ kind: 'none' }>;
     }>
   | Readonly<{ kind: 'blocked'; code: MembershipLifecycleBlockCode }>;
@@ -478,6 +493,12 @@ export function classifyMembershipCurrent(current: MembershipCurrent): EnvelopeK
   return 'complete';
 }
 
+export function isCompleteMembershipCurrent(
+  current: MembershipCurrent,
+): current is CompleteMembershipCurrent {
+  return classifyMembershipCurrent(current) === 'complete';
+}
+
 function blocked(code: MembershipLifecycleBlockCode): MembershipLifecycleDecision {
   return { kind: 'blocked', code };
 }
@@ -486,8 +507,8 @@ function createTransition(input: {
   command: MembershipOwnerCommand;
   transitionId: string;
   recordedAt: string;
-  current: MembershipCurrent | null;
-  next: MembershipCurrent;
+  current: CompleteMembershipCurrent | null;
+  next: CompleteMembershipCurrent;
 }): MembershipTransition {
   return Object.freeze({
     transitionId: input.transitionId,
@@ -501,9 +522,9 @@ function createTransition(input: {
     actorId: input.command.actorId,
     reasonCode: input.command.reasonCode,
     fromRevision: input.current?.revision ?? null,
-    toRevision: input.next.revision as number,
+    toRevision: input.next.revision,
     fromLifecycleStatus: input.current?.lifecycleStatus ?? null,
-    toLifecycleStatus: input.next.lifecycleStatus as MembershipLifecycleStatus,
+    toLifecycleStatus: input.next.lifecycleStatus,
     fromRole: input.current?.role ?? null,
     toRole: input.next.role,
     occurredAt: input.command.occurredAt,
@@ -512,18 +533,18 @@ function createTransition(input: {
 }
 
 function createNextCurrent(input: {
-  current: MembershipCurrent;
+  current: CompleteMembershipCurrent;
   command: Exclude<MembershipOwnerCommand, CreateMembershipCommand>;
   recordedAt: string;
   role: MembershipRole;
   status: MembershipLifecycleStatus;
   revokedAt: string | null;
   deletedAt: string | null;
-}): MembershipCurrent {
+}): CompleteMembershipCurrent {
   return Object.freeze({
     ...input.current,
     role: input.role,
-    revision: (input.current.revision as number) + 1,
+    revision: input.current.revision + 1,
     lifecycleStatus: input.status,
     provenanceSource: 'access_control_command',
     provenanceActorId: input.command.actorId,
@@ -569,7 +590,7 @@ export function decideMembershipLifecycle(input: Readonly<{
       }
       return blocked('membership_already_exists');
     }
-    const nextCurrent: MembershipCurrent = Object.freeze({
+    const nextCurrent: CompleteMembershipCurrent = Object.freeze({
       membershipId: input.command.membershipId,
       tenantId: input.command.tenantId,
       userId: input.command.userId,
@@ -617,48 +638,52 @@ export function decideMembershipLifecycle(input: Readonly<{
   }
 
   if (input.current === null) return blocked('membership_not_found');
-  const envelopeKind = classifyMembershipCurrent(input.current);
+  const current = input.current;
+  const envelopeKind = classifyMembershipCurrent(current);
   if (envelopeKind === 'legacy') {
     return blocked('legacy_membership_not_calibrated');
   }
   if (envelopeKind === 'invalid') {
     return blocked('membership_current_envelope_invalid');
   }
+  if (!isCompleteMembershipCurrent(current)) {
+    return blocked('membership_current_envelope_invalid');
+  }
   if (
-    input.current.tenantId !== input.command.tenantId ||
-    input.current.membershipId !== input.command.membershipId
+    current.tenantId !== input.command.tenantId ||
+    current.membershipId !== input.command.membershipId
   ) {
     return blocked('membership_identity_mismatch');
   }
-  if (input.command.expectedRevision < (input.current.revision as number)) {
+  if (input.command.expectedRevision < current.revision) {
     return blocked('membership_revision_stale');
   }
-  if (input.command.expectedRevision > (input.current.revision as number)) {
+  if (input.command.expectedRevision > current.revision) {
     return blocked('membership_revision_future');
   }
-  if (input.command.kind === 'refresh' && input.command.role === input.current.role) {
-    if (input.current.lifecycleStatus !== 'active') {
+  if (input.command.kind === 'refresh' && input.command.role === current.role) {
+    if (current.lifecycleStatus !== 'active') {
       return blocked('membership_transition_not_allowed');
     }
     return Object.freeze({
       kind: 'observed',
-      current: input.current,
+      current,
       bindingAction: { kind: 'none' as const },
     });
   }
-  if ((input.current.revision as number) >= MEMBERSHIP_MAX_REVISION) {
+  if (current.revision >= MEMBERSHIP_MAX_REVISION) {
     return blocked('revision_exhausted');
   }
 
-  let nextCurrent: MembershipCurrent;
+  let nextCurrent: CompleteMembershipCurrent;
   let bindingAction: MembershipBindingAction = { kind: 'none' };
   switch (input.command.kind) {
     case 'refresh':
-      if (input.current.lifecycleStatus !== 'active') {
+      if (current.lifecycleStatus !== 'active') {
         return blocked('membership_transition_not_allowed');
       }
       nextCurrent = createNextCurrent({
-        current: input.current,
+        current,
         command: input.command,
         recordedAt: input.recordedAt,
         role: input.command.role,
@@ -668,14 +693,14 @@ export function decideMembershipLifecycle(input: Readonly<{
       });
       break;
     case 'revoke':
-      if (input.current.lifecycleStatus !== 'active') {
+      if (current.lifecycleStatus !== 'active') {
         return blocked('membership_transition_not_allowed');
       }
       nextCurrent = createNextCurrent({
-        current: input.current,
+        current,
         command: input.command,
         recordedAt: input.recordedAt,
-        role: input.current.role,
+        role: current.role,
         status: 'revoked',
         revokedAt: input.command.occurredAt,
         deletedAt: null,
@@ -683,14 +708,14 @@ export function decideMembershipLifecycle(input: Readonly<{
       bindingAction = { kind: 'revoke_active' };
       break;
     case 'reactivate':
-      if (input.current.lifecycleStatus !== 'revoked') {
+      if (current.lifecycleStatus !== 'revoked') {
         return blocked('membership_transition_not_allowed');
       }
       nextCurrent = createNextCurrent({
-        current: input.current,
+        current,
         command: input.command,
         recordedAt: input.recordedAt,
-        role: input.current.role,
+        role: current.role,
         status: 'active',
         revokedAt: null,
         deletedAt: null,
@@ -698,24 +723,24 @@ export function decideMembershipLifecycle(input: Readonly<{
       break;
     case 'delete':
       if (
-        input.current.lifecycleStatus !== 'active' &&
-        input.current.lifecycleStatus !== 'revoked'
+        current.lifecycleStatus !== 'active' &&
+        current.lifecycleStatus !== 'revoked'
       ) {
         return blocked('membership_transition_not_allowed');
       }
       if (
-        input.current.revokedAt !== null &&
-        input.current.revokedAt > input.command.occurredAt
+        current.revokedAt !== null &&
+        current.revokedAt > input.command.occurredAt
       ) {
         return blocked('membership_command_time_invalid');
       }
       nextCurrent = createNextCurrent({
-        current: input.current,
+        current,
         command: input.command,
         recordedAt: input.recordedAt,
-        role: input.current.role,
+        role: current.role,
         status: 'deleted',
-        revokedAt: input.current.revokedAt,
+        revokedAt: current.revokedAt,
         deletedAt: input.command.occurredAt,
       });
       bindingAction = { kind: 'revoke_active' };
@@ -729,7 +754,7 @@ export function decideMembershipLifecycle(input: Readonly<{
       command: input.command,
       transitionId: input.transitionId,
       recordedAt: input.recordedAt,
-      current: input.current,
+      current,
       next: nextCurrent,
     }),
     bindingAction,

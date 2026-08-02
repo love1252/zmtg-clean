@@ -295,9 +295,7 @@ export function createTransactionBoundMembershipCommandUnitOfWork(
             currentProvenanceOccurredAt: current.provenanceOccurredAt === null
               ? null
               : new Date(current.provenanceOccurredAt),
-            currentProvenanceRecordedAt: current.provenanceRecordedAt === null
-              ? null
-              : new Date(current.provenanceRecordedAt),
+            currentProvenanceRecordedAt: new Date(current.provenanceRecordedAt),
             revokedAt: current.revokedAt === null ? null : new Date(current.revokedAt),
             deletedAt: current.deletedAt === null ? null : new Date(current.deletedAt),
             createdAt: new Date(current.createdAt),
@@ -323,9 +321,7 @@ export function createTransactionBoundMembershipCommandUnitOfWork(
             currentProvenanceOccurredAt: input.next.provenanceOccurredAt === null
               ? null
               : new Date(input.next.provenanceOccurredAt),
-            currentProvenanceRecordedAt: input.next.provenanceRecordedAt === null
-              ? null
-              : new Date(input.next.provenanceRecordedAt),
+            currentProvenanceRecordedAt: new Date(input.next.provenanceRecordedAt),
             revokedAt: input.next.revokedAt === null
               ? null
               : new Date(input.next.revokedAt),

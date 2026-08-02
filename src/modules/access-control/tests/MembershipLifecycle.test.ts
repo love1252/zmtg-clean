@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import {
   MEMBERSHIP_MAX_REVISION,
   classifyMembershipCurrent,
   decideMembershipLifecycle,
+  isCompleteMembershipCurrent,
+  type CompleteMembershipCurrent,
   type MembershipCurrent,
   type MembershipOwnerCommand,
 } from '@/modules/access-control/domain/membership-lifecycle';
@@ -357,6 +359,15 @@ describe('Access Control Membership 生命周期状态机', () => {
     const partial = { ...legacy, revision: 1 };
     expect(classifyMembershipCurrent(legacy)).toBe('legacy');
     expect(classifyMembershipCurrent(partial)).toBe('invalid');
+    expect(isCompleteMembershipCurrent(legacy)).toBe(false);
+    expect(isCompleteMembershipCurrent(partial)).toBe(false);
+
+    const complete = current();
+    expect(isCompleteMembershipCurrent(complete)).toBe(true);
+    if (!isCompleteMembershipCurrent(complete)) {
+      throw new Error('expected complete membership current');
+    }
+    expectTypeOf(complete).toMatchTypeOf<CompleteMembershipCurrent>();
 
     for (const kind of ['refresh', 'revoke', 'reactivate', 'delete'] as const) {
       expect(decide({ current: legacy, command: command(kind) })).toEqual({

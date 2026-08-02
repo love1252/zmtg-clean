@@ -1,4 +1,5 @@
 import type {
+  CompleteMembershipCurrent,
   MembershipCurrent,
   MembershipLifecycleStatus,
   MembershipTransition,
@@ -78,10 +79,10 @@ export interface MembershipCommandUnitOfWork {
     tenantId: string;
     commandId: string;
   }>): Promise<boolean>;
-  insertMembership(current: MembershipCurrent): Promise<number>;
+  insertMembership(current: CompleteMembershipCurrent): Promise<number>;
   updateMembershipByCas(input: Readonly<{
-    previous: MembershipCurrent;
-    next: MembershipCurrent;
+    previous: CompleteMembershipCurrent;
+    next: CompleteMembershipCurrent;
     expectedRevision: number;
     expectedLifecycleStatus: MembershipLifecycleStatus;
   }>): Promise<number>;
