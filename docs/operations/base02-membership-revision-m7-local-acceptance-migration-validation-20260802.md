@@ -37,18 +37,22 @@ stdout／stderr 被编排器内部捕获，没有进入对话、Git 或 PR。
 
 | 项目 | 结果 |
 |---|---|
-| M7 实施前 handoff 修正 PR | #901，Head `7120e4d20dc8e87e21dc84740d3d194916052325`，Merge Commit `22a1e6cd39ad77e0b0b87ee029e6f85fb1799040` |
-| M7 写入契约实施 PR | #902，Head `0b09b329ceef85e7fd6b7d3c26dd99621ab172d0`，Merge Commit `24aba48cc5e8e70c881752152d91ac1d49b90c95` |
-| M7 写入契约独立审查 PR | #903，Head `2e22955af85ce50e9e38ea25c95dc8ec3818debd`，Merge Commit `5de9dc694b0de072eb68d43f2fbccab49c5bcb37` |
+| M7 实施前 handoff 修正 PR | #901，Head `7120e4d5f36e09b5b0121f4c2aafb58b8ddd2d3b`，Merge Commit `22a1e6cdba2b81fb8aa743c253cec1e66a28136b` |
+| M7 写入契约实施 PR | #902，Head `0b09b329012100386b8bc7638eaf818fb89cf8c6`，Merge Commit `24aba48ced5eb1c0588de88b45757958222cc010` |
+| M7 写入契约独立审查 PR | #903，Head `2e22955c77e0d086e1de38ffe66adba930f6960a`，Merge Commit `5de9dc694b0de072eb68d43f2fbccab49c5bcb37` |
 | M7 Schema／Migration 实施 PR | #904，Head `f43ce1b9ba554ca034441440c1a57781cbddc198`，Merge Commit `65d12f7e0f9a47df3279a9052b9b21fb54a8e3ad` |
 | M7 实施 Required Check | Run `30739072657`／Job `91473075000`，成功 |
-| M7 Schema／Migration 独立审查 PR | #905，Head `7f39cc2798375524d9511ae189d883385fd47c3c`，Merge Commit／执行 Base `ffafaa8ac0c70f74cbf9b73ed0e43bd5aa7e6e56` |
+| M7 Schema／Migration 独立审查 PR | #905，Head `7f39cc27c7cbfd5f9587cc8881d725f767a8ac27`，Merge Commit／执行 Base `ffafaa8ac0c70f74cbf9b73ed0e43bd5aa7e6e56` |
 | M7 实施审查 Required Check | Run `30739700515`／Job `91474768876`，成功 |
 | 实施文件范围 | `0043` SQL、journal、Schema、Schema 测试，精确 4 文件 |
 | 执行前工作树／并发仓库写入 | 干净／`0` |
 
 执行 Base 上仓库 journal 与 SQL 集合的最新状态为 `44／0043`；snapshot 仍停留在 `0026`。环境
 Applied Migration 为 `43／0042`，前驱与仓库前缀一致，唯一 pending 为 `0043`。
+
+独立审查在 PR #906 合并后发现上述四个历史 PR 的部分手工转录 SHA 有字符偏差。本次已按 GitHub
+原生 PR 记录逐项校准；该修正只涉及公开 Git 证据归因，不改变 M7 执行 Base、执行计数、Catalog、
+数据不变量、Lease、恢复点或清理结论。
 
 ## 4. `0043` 实施边界
 
