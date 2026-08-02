@@ -910,3 +910,22 @@
 - 继承状态未变：journal 为 `41`、最新为已消费 `0040`、snapshot 为 `0026`、legacy complete current／transition 为 `0／0`、active historical orphan／Scope relation orphan 为 `1／1`、A2-P2 Scope FK 继续 `NOT VALID`。
 - 唯一下一任务冻结为 `BASE-02 Membership Revision M4 deterministic legacy calibration`；handoff 合并前 M4 尚未启动，合并后按当前 ULTRA 用户授权继续。
 - M5～M7、BASE-B1～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断。
+
+## 2026-08-02：BASE-02 Membership Revision M4 deterministic legacy calibration 收口
+
+- PR #884／#885 完成 M4 `0041` 三文件实施与独立审查；PR #886／#887 完成 Guard CLI 启动边界精确纠错与独立审查；PR #888／#889 在所有允许环境均未消费 `0041` 的前提下完成 record／relation alias 原子纠错与独立审查。
+- M4 第一次目标 guarded 调用在 shell shim 启动边界失败且未进入 PostgreSQL；第二次进入事务后失败并完整回滚，环境保持 `41／0040`；第三次经用户单独授权，使用最新 main、全新恢复点和全新唯一不可续期 Lease 成功。目标调用累计为 `3`，自动重试为 `0`，第四次目标 Migration 未启动。
+- PR #890 完成 M4 执行低敏证据，Head `90ca634ced30c7386d5c0a3c5338fda5df6bd911`，Run `30725188721`／Job `91435449482`，Merge Commit `167e1193e474237e5a612a7df9860adcad8b7e8c`。
+- PR #891 完成 M4 执行独立审查，Head `38c821ffe247306dc211e450923d0379f49036fe`，Run `30725621418`／Job `91436644462`，Merge Commit `4b79cdf39775fa7827be89a33fa339e8fda90faa`；结论为 `base02_membership_revision_m4_execution_review=passed`。
+- 两个 PR 的环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试和 build 均在冻结 Head 上实际执行并成功。
+- 环境 journal 从 `41／0040` 推进到 `42／0041`，snapshot 保持 `0026`；`0041` 已消费且不可改写，后续问题只能使用独立 forward-fix。
+- `planned／created／reused／conflict／unexpected=1／1／0／0／0`；Membership total 保持 `1`，all-null／partial／complete 从 `1／0／0` 变为 `0／0／1`，baseline transition 从 `0` 变为 `1`。
+- 唯一 revision `1` active current 与唯一 baseline transition 在同一事务原子形成；Membership identity、tenant／user 归属、role、display_name、created_at 与 updated_at 稳定指纹未变化。
+- Binding／Scope／Context Version／Context Head 保持 `1／1／1／1`；active historical orphan／Scope relation orphan 保持 `1／1`；A2-P2 Scope FK 保持 `NOT VALID`／`convalidated=false`。
+- 新执行前／后恢复点与隔离恢复为 `2／2`，连同目标连续性验证总隔离恢复为 `3／3`；原目标 Restore 为 `0`。
+- Lease claim／consume／renewal／release／active 为 `1／1／0／1／0`；client、进程、锁、marker、Helper 和隔离数据库活动残留均为 `0`。
+- 执行后 PR 描述维护期间发生一次无目标 Guard 启动拒绝；目标选择、连接参数读取、数据库连接、Lease、Migrator、SQL／DDL／DML、仓库变化与数据库变化均为 `0`，不构成第四次目标 Migration 或自动重试；F01 已由 PR #891 关闭。
+- 当前主动私有参数披露为 `0`；Secret、Token、密码、私钥、PII 与真实凭证披露为 `0`。
+- 本次四文件 docs-only handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package 和 lock 修改均为 `0`。
+- M4 完成并收口；唯一下一任务冻结为 `BASE-02 Membership Revision M5 高水位追赶与冲突清零`。M5 尚未启动，本 handoff 合并后按当前 ULTRA 授权和动态硬门继续。
+- M6～M7、BASE-B1～B6、orphan 修复、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader 继续未启动或阻断；七线正式发布保持 `0/7`。

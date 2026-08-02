@@ -2,58 +2,45 @@
 
 <!-- ARCHITECTURE_V2_PHASE1_START -->
 
-## BASE-02 Membership Revision M3 onboarding 委托与旧 Writer／Deleter 封堵完成状态
+## BASE-02 Membership Revision M4 deterministic legacy calibration 完成状态
 
 - 更新日期：2026-08-02
-- 本轮 handoff 基线：`df83b9527e3569c0997f0438a68d086592f3a36b`
+- 本轮 handoff 基线：`4b79cdf39775fa7827be89a33fa339e8fda90faa`
 - 当前任务：`BASE-02 ULTRA：Membership Revision M0～M7、BASE-B1～B6 全链实施与最终收口`
-- 当前切片：M3-A onboarding Owner 委托、M3-B 旧 Writer／Deleter 封堵、独立审查与 handoff
+- 当前切片：M4 实施、两轮精确纠错、第三次且仅一次受控 Migration、执行证据、独立审查与 handoff
 - 正式任务编号：无；本轮未新增 `V2-*` 编号
-- M3-A 实施：PR #880，Head `c690789f341434fd7bb33e819151849e6c2a7afa`，Run `30711226980`／Job `91398940037`，Merge Commit `2d34177f0d2eb77ccaba0829ab3224e69911853f`
-- M3-B 实施：PR #881，Head `b405403d6fea87e1d022d7e027e22d9f8600ae61`，Run `30714150218`／Job `91406737286`，Merge Commit `f8909e098def3810e0e336c9491facf83d4c3a57`
-- M3 实施独立审查：PR #882，Head `6f0b95b246aa115d63be49758ca66202f09ae589`，Run `30714716713`／Job `91408247113`，Merge Commit `df83b9527e3569c0997f0438a68d086592f3a36b`
-- M3-A 精确修改 9 个 Runtime／测试文件；M3-B 精确修改 11 个 Runtime／测试／架构检查器文件
-- M3 与本次 handoff 的 Schema、Migration、journal、snapshot、数据库、package、lock 与 CI Workflow 修改均为 `0`
+- M4 执行证据：PR #890，Head `90ca634ced30c7386d5c0a3c5338fda5df6bd911`，Run `30725188721`／Job `91435449482`，Merge Commit `167e1193e474237e5a612a7df9860adcad8b7e8c`
+- M4 执行独立审查：PR #891，Head `38c821ffe247306dc211e450923d0379f49036fe`，Run `30725621418`／Job `91436644462`，Merge Commit `4b79cdf39775fa7827be89a33fa339e8fda90faa`
+- 两个 PR 的环境核对、依赖安装、架构自测、增量检查、lint、typecheck、完整测试与 build 均实际执行并成功
 - 本次 handoff 的 Runtime、Schema、Migration、journal、snapshot、数据库、scripts、tests、CI、package、lock 修改均为 `0`
 
-### M3 current 终态
+### M4 current 终态
 
-- 正式 onboarding 已通过 app-level 组合根在既有单一 serializable／read-write 外层事务内委托 Access Control transaction-bound Owner command
-- Access Control external-transaction Adapter 是既有事务接入的唯一新增品牌转换点；`open-platform/server` 未直接依赖 `access-control/server`，AQ007 exceptions 保持为空
-- onboarding 调用方不再直接 INSERT `tenant_members`，也不能构造 revision、current provenance、transition identity 或 evidence
-- `resetTrialData`、`seedDemoData`、`applyDemoSeed` 与 `cleanupDemoSeed` 固定 fail-closed；旧 `cleanupLegacyDemoSeedRecords` Membership DML 已删除
-- trial reset POST、主 Seed 与低敏 CLI apply／cleanup 均在读取 body、取得 database 或创建 client 前拒绝；显式 dry-run 只保留低敏计划能力
-- `AQ008_MEMBERSHIP_DIRECT_WRITER` 已建立，唯一内建 allowlist 为 `src/modules/access-control/server/membership-command-repository.ts`，rules exceptions 保持为空
-- Owner 外 direct Membership mutation 文件数／符号数为 `0／0`；唯一 Owner allowlist 文件数为 `1`
-- M3-A 定向测试 `32／32`、完整测试 426 文件／6248 项、build 101／101；M3-B 定向测试 `123／123`、架构自测 `125／125`、完整测试 426 文件／6253 项、build 101／101
-- 独立审查结论为 `base02_membership_revision_m3_implementation_review=passed`
-- M3 没有连接数据库，没有执行 DDL、DML、Migration、Seed，没有签发 Lease，也没有修改现有 Reader
-- 继承的 M1 冻结事实未由 M3 改动：journal 为 `41`、最新 Migration 为已消费的 `0040`、snapshot 为 `0026`
-- 完整 current envelope／transition evidence 的既有环境计数仍为 `0／0`
-- active historical orphan／Scope relation orphan 继续为 `1／1`
-- A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`
+- 实时 Migration 编号为 `0041`；仓库／固定 localhost-only local_acceptance 环境 journal 均为 `42／0041`，snapshot 保持 `0026`
+- 第一次目标 guarded 调用在 shell shim 启动边界失败且未进入 PostgreSQL；第二次进入事务后失败并完整回滚；第三次在独立纠错、全新恢复点和全新唯一不可续期 Lease 下成功
+- 目标 guarded Migration 累计调用为 `3`，第三次窗口调用为 `1`，自动重试为 `0`，第四次目标 Migration 未启动
+- `planned／created／reused／conflict／unexpected=1／1／0／0／0`，且 `planned=created+reused`
+- Membership total 保持 `1`；all-null／partial／complete 从 `1／0／0` 变为 `0／0／1`；baseline transition 从 `0` 变为 `1`
+- 唯一 current 为 revision `1`、active、`legacy_calibration／legacy_unknown`，与唯一 baseline transition 在同一事务原子形成
+- Membership identity、tenant／user 归属、role、display_name、created_at 与 updated_at 稳定指纹未变化
+- Binding／Scope／Context Version／Context Head 保持 `1／1／1／1`，tenant／user parent 缺失保持 `0／0`
+- active historical orphan／Scope relation orphan 保持 `1／1`；A2-P2 Scope FK 继续 `NOT VALID`／`convalidated=false`
+- 新执行前／后恢复点及隔离恢复为 `2／2`；连同目标连续性验证，总隔离恢复为 `3／3`，原目标 Restore 为 `0`
+- Lease claim／consume／renewal／release／active 为 `1／1／0／1／0`；client、进程、锁、marker、Helper 与隔离数据库活动残留均为 `0`
+- `0041` 已消费且不可改写；后续发现只能使用独立 forward-fix
 
-### M4 唯一下一切片边界
+### F01 与独立审查
 
-- 唯一下一任务为 `BASE-02 Membership Revision M4 deterministic legacy calibration`
-- M4 只处理 legacy all-null Membership：写入 revision `1`、lifecycle `active`、`legacy_calibration／legacy_unknown` current provenance，并为每条 current 原子建立恰好一条 baseline transition
-- actor 与 occurredAt 必须为 `NULL`；只记录实际 calibration `recordedAt`，不得伪造历史发生时间
-- M4 不修改 role、display_name、tenant／user 归属、Binding、Scope、historical orphan 或 A2-P2 FK
-- M4 必须实时分配 Migration 编号和唯一 Migration Lease，使用独立恢复点、稳定排序、短事务与受控执行；不得预留编号、运行 `db:generate` 或修改 snapshot
-- M4 必须记录 planned／created／reused／conflict／unexpected 与行数守恒，且 conflict／unexpected 必须为 `0`
-- 本 handoff 合并前 M4 未启动；合并后按当前 ULTRA 用户授权继续，不再要求逐阶段确认
-- M5～M7、BASE-B1～B6、项目级 Writer、Audit／模板、MIG-01B／C 与业务 Reader不得由 M4 提前启动
+- PR 描述维护期间发生一次不带目标参数的 Guard 启动拒绝；Guard 在首道目标门禁拒绝，目标选择、连接参数读取、数据库连接、Lease、Migrator、SQL／DDL／DML、仓库变化与数据库变化均为 `0`
+- 该事件不是第四次目标 Migration，也不是自动重试；`m4_post_execution_guard_bootstrap_rejection_review=passed`，F01 已关闭
+- 当前主动私有参数披露为 `0`；Secret、Token、密码、私钥、PII 与真实凭证披露为 `0`
+- 独立审查结论为 `base02_membership_revision_m4_execution_review=passed`
+- `m4_execution_complete=true`，本 handoff 合并后 `m4_handoff_complete=true`
+- `eligible_for_m5_after_handoff=true`；M5 尚未启动，本 handoff 合并后按当前 ULTRA 授权继续，但不得绕过动态硬门
 
-### 独立审查与持续阻断
+### 持续阻断
 
-- M3 实施独立审查：`base02_membership_revision_m3_implementation_review=passed`
-- `m3_onboarding_delegated=true`
-- `m3_single_outer_transaction_verified=true`
-- `m3_legacy_writer_deleter_blocked=true`
-- `m3_owner_outside_direct_writer_files=0`
-- `m3_owner_outside_direct_writer_symbols=0`
-- `m3_owner_allowlist_files=1`
-- M3 handoff 合并后只准入 M4，不表示 M5、BASE-B1 或项目级 Writer 已启动
+- M5、M6、M7 尚未启动；M6 前既有 Auth Reader 继续保留 `updated_at` 兼容读取
 - BASE-B1 Runtime 继续 `blocked`；BASE-B2～B6 均未启动
 - active historical orphan 与 Scope relation orphan 保持 `1／1`，未修改、未授权修复
 - A2-P2 Scope FK 保持 `NOT VALID`／`convalidated=false`，未执行 `VALIDATE`
@@ -62,11 +49,11 @@
 
 ### 唯一下一任务
 
-- 任务名称：`BASE-02 Membership Revision M4 deterministic legacy calibration`
+- 任务名称：`BASE-02 Membership Revision M5 高水位追赶与冲突清零`
 - 任务编号：仓库尚无正式编号，本 handoff 不自行创造
-- 当前状态：尚未启动；已由当前 ULTRA 用户指令授权在本 handoff 合并后启动
-- 任务边界：独立手写 deterministic legacy calibration 数据 Migration，实时编号／Lease／恢复点，稳定校准 legacy all-null row 并建立 baseline transition；不得修改业务归属或夹带后续阶段
-- 当前不授权 M5～M7、BASE-B1～B6、orphan、FK `VALIDATE`、项目级 Writer、Audit／模板、MIG-01B／C 或业务 Reader
+- 当前状态：仅冻结且尚未启动；本 handoff 合并后已由当前 ULTRA 用户指令授权继续
+- 任务边界：以独立手写追赶数据 Migration 处理 M4 高水位后的合法 all-null residual，完成冲突清零；不得重开 accepted 语义、处理 orphan、切换 Reader 或夹带 M6／M7
+- M5 启动前必须重新冻结最新 main、journal、Catalog、数据 Shape、AQ008、实时编号、独立恢复点与全新唯一 Lease
 
 ```text
 membership_revision_direction=A-full_same_table_lifecycle
@@ -76,7 +63,6 @@ membership_revision_migration_sequence=M0_to_M7_accepted
 m0_complete=true
 m1_complete=true
 m1_expand_migration_executed=true
-m1_environment_journal_entries=41
 m1_catalog_state=all_exact
 m2_owner_writer_implemented=true
 m2_transactional_cas_verified=true
@@ -94,10 +80,28 @@ m3_aq008_membership_direct_writer_passed=true
 m3_implementation_review=passed
 m3_database_execution=false
 m3_complete=true
-eligible_for_m4_after_handoff=true
-m4_started=false
-m4_authorized_under_ultra=true
+m4_migration=0041
+m4_environment_journal_entries=42
+m4_target_guarded_migration_calls_cumulative=3
+m4_automatic_retry_count=0
+m4_planned=1
+m4_created=1
+m4_reused=0
+m4_conflict=0
+m4_unexpected=0
+m4_current_envelope_complete=1
+m4_baseline_transition_count=1
+m4_execution_review=passed
+m4_execution_complete=true
+m4_handoff_complete=true
+m4_non_target_guard_bootstrap_rejections=1
+m4_fourth_target_migration_started=false
+m4_lease_active=false
+m4_outcome_known=true
+m4_complete=true
+eligible_for_m5_after_handoff=true
 m5_started=false
+m5_authorized_under_ultra=true
 m6_started=false
 m7_started=false
 eligible_for_base_b1_runtime=false
@@ -115,7 +119,7 @@ a2_p2_scope_fk_validated=false
 project_writer_started=false
 reader_started=false
 eligible_for_reader=false
-next_task=BASE-02 Membership Revision M4 deterministic legacy calibration
+next_task=BASE-02 Membership Revision M5 高水位追赶与冲突清零
 next_task_started=false
 next_task_authorized_under_ultra=true
 ```
