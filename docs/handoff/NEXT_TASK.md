@@ -54,16 +54,24 @@ M7 是 M0→M7 唯一串行的最终物理 Enforce 切片。它只在 M1～M6 �
 
 任一事实无法证明时，保持数据库零变化，只做低敏只读核验并按 ULTRA 硬停止规则处理。
 
-## 三、默认实施文件范围
+## 三、旧路径退出与回退域拆分
 
-M7 默认只允许一个 Schema／Migration 回退域，精确候选为：
+M7 的写入旧路径退出必须先于物理 `NOT NULL` Enforce 完成。当前 Domain／Port／Owner Repository 的写入契约仍以 nullable `MembershipCurrent` 表达六个无条件 current envelope 字段；若直接把 Drizzle Schema 收紧为 `.notNull()`，四文件 Migration PR 将无法在不使用类型绕过的前提下通过严格 typecheck。因此必须先创建独立、可回退的 Runtime 类型细化 PR：
+
+- 只收紧 Access Control Membership Owner 写入边界的完整类型和相关测试，不改变 accepted 生命周期语义或新增能力；
+- 写入 Repository 只能接收经显式类型守卫证明完整的 current envelope，不得使用 cast、非空断言、虚假 nullable 类型或默认值掩盖 legacy Shape；
+- 读取／解析边界可以继续保留 nullable `MembershipCurrent` 与 `legacy_membership_not_calibrated` 的防御性 fail-closed 分支；M7 的“旧路径退出”指合法 Writer 与授权 fallback 归零，不要求删除对历史非法输入的拒绝能力；
+- Runtime 类型细化必须有独立实施 PR、独立审查、真实 Required Check 和 Merge Commit；在两者合并前不得申请 Migration Lease、分配编号或创建四文件 Migration PR；
+- 精确 Runtime 文件 allowlist 必须在最新 main 上由符号与测试影响面审计冻结；发现第二事实源、Owner 外 Writer／Deleter 或需要改变 accepted 语义时 fail-closed，不得以扩大 Migration PR 解决。
+
+Runtime 旧路径退出合并后，M7 Schema／Migration 仍保持独立回退域，精确候选为：
 
 1. `drizzle/<实时分配编号>_base02_membership_revision_enforce.sql`；
 2. `drizzle/meta/_journal.json`；
 3. `src/server/db/schema.ts`；
 4. `src/server/db/tests/Schema.test.ts`。
 
-实时审计若证明必须增加第五个测试或 AQ 规则文件，应拆为独立原子 PR，不得静默扩大四文件 Migration PR。不得修改 snapshot，不运行 `db:generate`，不得预留或预先批准编号。
+实时审计若证明必须增加第五个测试或 AQ 规则文件，应拆为独立原子 PR，不得静默扩大四文件 Migration PR。不得把 Runtime 类型细化夹入四文件 Migration PR；不得修改 snapshot，不运行 `db:generate`，不得预留或预先批准编号。
 
 ## 四、M7 Enforce 目标
 
@@ -72,7 +80,7 @@ M7 默认只允许一个 Schema／Migration 回退域，精确候选为：
 3. `revision` 继续限制在 `1..2147483647`；不添加 default，不由 trigger 自动推进 revision。
 4. transition 最终约束必须与 accepted 六种 transition、`from+1`、role、lifecycle、provenance 与 legacy null Shape 精确一致；不得引入第二套 current 或墙钟排序。
 5. append-only UPDATE／DELETE／TRUNCATE 拒绝、复合 FK、两项 UNIQUE 与顺序索引保持精确；不得删除、放宽或以 Runtime 约定替代。
-6. 旧路径退出以仓库静态门禁证明：Owner 外 Writer／Deleter `0／0`，生产 `updated_at` 授权 fallback `0／0`，Session／Guard 已使用显式 Membership revision＋lifecycle。
+6. 旧路径退出必须同时由 Runtime 类型与仓库静态门禁证明：Owner 写入 Repository 不再接受未细化的 nullable legacy envelope，Owner 外 Writer／Deleter `0／0`，生产 `updated_at` 授权 fallback `0／0`，Session／Guard 已使用显式 Membership revision＋lifecycle；读取边界的防御性 legacy 拒绝不计为旧写入路径。
 7. M7 只实施约束，不执行历史回填、业务 DML、orphan 修复、Binding／Scope 变更、FK `VALIDATE`、Reader 放行或 BASE-B1 Runtime。
 
 ## 五、SQL、事务与 Lease 边界
@@ -80,8 +88,8 @@ M7 默认只允许一个 Schema／Migration 回退域，精确候选为：
 - 实时分配唯一 Migration 编号，并创建绑定任务、Holder、Base、journal、环境、编号、时窗、失效、释放和交接的唯一不可复用 Lease。
 - SQL 不写显式外层 `BEGIN／COMMIT／ROLLBACK`；使用 `SET LOCAL lock_timeout='1s'` 与有界 `statement_timeout`。
 - 固定顺序锁定 `tenant_members` 与 `tenant_membership_transitions`，并在同一事务内重新核验 journal、Catalog、Shape、M1～M6 终态和零候选条件。
-- 严格支持三个合法入口：`all_missing` 创建、`all_exact` 复用，或精确 `expected_m1_predecessor` 收紧。`expected_m1_predecessor` 必须同时证明六个无条件必填列仍 nullable 且无 default，并且同名 `tenant_members_current_envelope_shape_check` 精确等于已接受的 M1 “全 NULL 或完整 envelope”定义；只有该 predecessor 才允许在同一受控事务中删除同名旧 CHECK、以同名最终 complete-only CHECK 重建，并完成六列 `SET NOT NULL`。
-- 除精确 `expected_m1_predecessor` 外，部分对象、未知同名异定义、等价异名、未知依赖或 Shape 漂移全部 fail-closed。禁止 `IF NOT EXISTS`、duplicate catch、自动重试、`CREATE INDEX CONCURRENTLY`、DML、回填、A2-P2 FK `VALIDATE`、`CASCADE` 或范围外对象。
+- 严格支持两个合法入口：精确 `expected_m1_predecessor` 收紧，或 `all_exact` 复用。`expected_m1_predecessor` 必须同时证明六个无条件必填列仍 nullable 且无 default，并且同名 `tenant_members_current_envelope_shape_check` 精确等于已接受的 M1 “全 NULL 或完整 envelope”定义；只有该 predecessor 才允许在同一受控事务中删除同名旧 CHECK、以同名最终 complete-only CHECK 重建，并完成六列 `SET NOT NULL`。
+- `all_missing` 不是 M7 合法入口，因为 M1～M6 完成和 M1 物理对象精确存在是 M7 启动硬门；缺列、缺约束、部分对象、未知同名异定义、等价异名、未知依赖或 Shape 漂移全部 fail-closed。禁止 `IF NOT EXISTS`、duplicate catch、自动重试、`CREATE INDEX CONCURRENTLY`、DML、回填、A2-P2 FK `VALIDATE`、`CASCADE` 或范围外对象。
 - 事务开始后的失败不得自动重试；结果不确定时只做显式 READ ONLY 核验并停止，已消费 Migration 不得改写，只允许后续独立 forward-fix。
 
 ## 六、测试与完成门
@@ -91,7 +99,7 @@ M7 默认只允许一个 Schema／Migration 回退域，精确候选为：
 - Schema 与 SQL 的六个 current `NOT NULL`、最终 CHECK、条件 nullability、revision 上下界和无 default；
 - transition 六种状态机、`from+1`、role、provenance、legacy null Shape、FK／UNIQUE／索引与 append-only trigger；
 - SQL 无 DML、回填、`VALIDATE`、`SET NOT NULL` 之外的范围外 DDL、`DROP TABLE`、`CASCADE`、显式事务或自动重试；仅允许精确 `expected_m1_predecessor` 分支删除并同名重建 `tenant_members_current_envelope_shape_check`，任何其他 `DROP CONSTRAINT` 均失败；
-- Owner 外 Writer／Deleter `0／0`、AQ008 通过、授权 fallback `0／0`；
+- Owner 写入 Repository 的完整类型守卫、legacy envelope 不可写、无类型绕过，Owner 外 Writer／Deleter `0／0`、AQ008 通过、授权 fallback `0／0`；读取边界保留的防御性 legacy 拒绝必须继续 fail-closed；
 - historical orphan 与 A2-P2 FK 保持排除，项目业务 Reader／Capability 未启动。
 
 实施 PR、独立审查 PR、执行证据 PR、执行独立审查 PR 和 handoff PR 均须执行：
@@ -104,15 +112,18 @@ M7 默认只允许一个 Schema／Migration 回退域，精确候选为：
 
 ## 七、交付顺序
 
-1. 最新 main 上完成 M7 Catalog／Shape、精确对象、文件和测试冻结，实时分配编号并签发唯一 Migration Lease；
-2. 创建单一四文件 Draft Schema／Migration PR，完成本地静态验证；
-3. 创建单文件独立实施审查 PR，冻结实施 Head、编号、Lease、Schema／SQL／journal／测试一致性和零越界结论；
-4. 两个 PR 检查成功后先 Merge Commit 合并实施，再重放审查 PR、重新跑检查并 Merge Commit 合并；
-5. 从最新 main 创建全新执行前恢复点并完成隔离恢复验证，重新核验 Lease 和固定 localhost-only 环境；
-6. 只通过 guarded `pnpm db:migrate` 完成一次授权目标调用；自动重试为 `0`，失败或结果不确定时只读核验并停止；
-7. 释放 Lease，创建并验证执行后恢复点；依次完成执行低敏证据 PR 与执行独立审查 PR；
-8. 创建四文件 M7 handoff PR，回填全部 Head、Run、Job、Merge Commit 与环境终态，冻结 BASE-B1；
-9. 每个 PR 在真实 Required Check 成功后按当前 ULTRA 授权转 Ready、使用 Merge Commit 合并、同步 main并清理工作分支；全部 `backup/*` 保留。
+1. 最新 main 上完成 Runtime nullable 影响面、M7 Catalog／Shape、精确对象、文件和测试冻结；此时不分配 Migration 编号、不签发 Lease；
+2. 创建独立 Runtime 类型细化 Draft PR，收紧 Owner Repository 完整写入类型并证明 legacy envelope 不可写，同时保留读取边界的防御性拒绝；
+3. 创建单文件 Runtime 独立审查 PR，冻结实施 Head、文件范围、类型边界、零绕过和 Owner 外 Writer／Deleter `0／0`；
+4. 两个 Runtime PR 检查成功后先 Merge Commit 合并实施，再重放审查 PR、重新跑检查并 Merge Commit 合并；
+5. 从最新 main 重新冻结仓库与环境，实时分配编号并签发唯一 Migration Lease，创建单一四文件 Draft Schema／Migration PR；
+6. 创建单文件 Migration 独立实施审查 PR，冻结实施 Head、编号、Lease、Schema／SQL／journal／测试一致性和零越界结论；
+7. 两个 Migration PR 检查成功后先 Merge Commit 合并实施，再重放审查 PR、重新跑检查并 Merge Commit 合并；
+8. 从最新 main 创建全新执行前恢复点并完成隔离恢复验证，重新核验 Lease 和固定 localhost-only 环境；
+9. 只通过受控且具备精确 pending allowlist 的 guarded `pnpm db:migrate` 完成一次授权目标调用；自动重试为 `0`，失败或结果不确定时只读核验并停止；
+10. 释放 Lease，创建并验证执行后恢复点；依次完成执行低敏证据 PR 与执行独立审查 PR；
+11. 创建四文件 M7 handoff PR，回填全部 Head、Run、Job、Merge Commit 与环境终态，冻结 BASE-B1；
+12. 每个 PR 在真实 Required Check 成功后按当前 ULTRA 授权转 Ready、使用 Merge Commit 合并、同步 main并清理工作分支；全部 `backup/*` 保留。
 
 ## 八、硬停止与未启动范围
 
